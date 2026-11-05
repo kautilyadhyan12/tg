@@ -265,7 +265,7 @@ d("an early cancellation fee on a minimum term (real Postgres)", () => {
       clock = new Date("2026-10-15T17:00:00Z");
       const owner = await makeUser("race-owner");
       const gymId = await makeGym(owner, "Leave Race Gym");
-      const rate = await post(`/v1/orgs/${gymId}/register/tax-rates`, { name: "GST", bp: 1800 }, owner);
+      const rate = await post(`/v1/orgs/${gymId}/register/tax-rates`, { name: "GST", pcm: 18000 }, owner);
       expect(rate.statusCode, rate.body).toBe(201);
       const [gst] = await sql<{ id: string }[]>`SELECT id FROM gym_tax_rates WHERE gym_id = ${gymId} AND name = 'GST'`;
       const gold = await addType(gymId, owner, monthly({ taxRateId: gst?.id }));
@@ -280,9 +280,9 @@ d("an early cancellation fee on a minimum term (real Postgres)", () => {
       const presses = await Promise.all(Array.from({ length: 6 }, () => post(`${heldUrl(gymId, hal)}/${halGold}/cancel`, leave(), owner)));
       expect(presses.map((r) => r.statusCode)).toEqual([200, 200, 200, 200, 200, 200]);
       // The fee is the amount the gym set, its 18% inside it: 9,900 x 18 / 118 is 1,510.17.
-      const [fee] = await sql<{ id: string; amount_minor: number; tax_minor: number; tax_bp: number; tax_name: string | null; tax_included: boolean | null }[]>`
-        SELECT id, amount_minor, tax_minor, tax_bp, tax_name, tax_included FROM gym_member_bills WHERE held_membership_id = ${halGold} AND fee = 'leave_early'`;
-      expect(fee).toMatchObject({ amount_minor: 9900, tax_minor: 1510, tax_bp: 1800, tax_name: "GST", tax_included: true });
+      const [fee] = await sql<{ id: string; amount_minor: number; tax_minor: number; tax_pcm: number; tax_name: string | null; tax_included: boolean | null }[]>`
+        SELECT id, amount_minor, tax_minor, tax_pcm, tax_name, tax_included FROM gym_member_bills WHERE held_membership_id = ${halGold} AND fee = 'leave_early'`;
+      expect(fee).toMatchObject({ amount_minor: 9900, tax_minor: 1510, tax_pcm: 1800, tax_name: "GST", tax_included: true });
       expect(await leaveFees(halGold)).toHaveLength(1);
 
       // Waived: neither another press nor the opening itself puts it on again.

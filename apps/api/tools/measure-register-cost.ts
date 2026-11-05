@@ -72,7 +72,7 @@ async function makeGym(people: number, salesADay: number): Promise<Made> {
   await sql`INSERT INTO users (id, email, display_name) VALUES (${owner}, ${`${PREFIX}${owner}@example.com`}, 'Cost Owner')`;
   const gymId = randomUUID();
   await sql`INSERT INTO gyms (id, slug, name, timezone, country, owner_user_id, sales_tax_included) VALUES (${gymId}, ${PREFIX + gymId}, 'Cost Gym', ${TZ}, 'GB', ${owner}, true)`;
-  const [vat] = await sql<{ id: string }[]>`INSERT INTO gym_tax_rates (gym_id, name, rate_bp) VALUES (${gymId}, 'VAT', 2000) RETURNING id`;
+  const [vat] = await sql<{ id: string }[]>`INSERT INTO gym_tax_rates (gym_id, name, rate_pcm) VALUES (${gymId}, 'VAT', 20000) RETURNING id`;
   if (vat === undefined) throw new Error("no tax rate");
   await sql`INSERT INTO gym_staff (gym_id, user_id, role) VALUES (${gymId}, ${owner}, 'owner')`;
 
@@ -92,8 +92,11 @@ async function makeGym(people: number, salesADay: number): Promise<Made> {
   });
   for (let i = 0; i < entries.length; i += 1000) await sql`INSERT INTO gym_member_list_entries ${sql(entries.slice(i, i + 1000))}`;
 
-  const products = Array.from({ length: PRODUCTS }, (_, i) => ({ id: randomUUID(), gym_id: gymId, name: `Product ${String(i)}`, price_minor: 100 + i * 25, currency: "GBP", tax_rate_id: i % 5 !== 0 ? vat.id : null, stock: i % 2 === 0 ? 100_000 : null }));
+  const products = Array.from({ length: PRODUCTS }, (_, i) => ({ id: randomUUID(), gym_id: gymId, name: `Product ${String(i)}`, price_minor: 100 + i * 25, currency: "GBP", stock: i % 2 === 0 ? 100_000 : null }));
   await sql`INSERT INTO gym_products ${sql(products)}`;
+  // Four in five charge VAT (18b-v-a: a product's rates are rows of their own).
+  const taxed = products.filter((_, i) => i % 5 !== 0).map((p) => ({ gym_id: gymId, product_id: p.id, tax_rate_id: vat.id, position: 1 }));
+  await sql`INSERT INTO gym_product_tax_rates ${sql(taxed)}`;
   const productIds = products.map((p) => p.id);
   // As many discounts as a gym can have, half of them limited to five products.
   const discounts = Array.from({ length: DISCOUNTS_MAX }, (_, i) => ({ id: randomUUID(), gym_id: gymId, name: `Discount ${String(i)}`, code: `CODE${String(i)}`, kind: "percent", percent_bp: 1000, all_products: i % 2 === 0 }));
@@ -107,10 +110,10 @@ async function makeGym(people: number, salesADay: number): Promise<Made> {
     WITH base AS (SELECT receipts_issued AS b FROM gyms WHERE id = ${gymId}),
     ins AS (
       INSERT INTO gym_sales (gym_id, request_key, product_id, entry_id, item_name, quantity, unit_price_minor, net_minor, tax_minor, total_minor,
-                             tax_bp, tax_included, currency, method, sold_on, recorded_by, created_at, receipt_number, for_member)
+                             tax_pcm, taxes, tax_included, currency, method, sold_on, recorded_by, created_at, receipt_number, for_member)
       SELECT ${gymId}, gen_random_uuid(), (${productIds}::uuid[])[1 + (n % ${PRODUCTS})],
              CASE WHEN n % 3 = 0 THEN NULL ELSE (${entryIds}::uuid[])[1 + (n % ${people})] END,
-             'Product ' || (n % ${PRODUCTS}), 1, 240, 200, 40, 240, 2000, true, 'GBP',
+             'Product ' || (n % ${PRODUCTS}), 1, 240, 200, 40, 240, 20000, '[{"name":"VAT","pcm":20000,"minor":40}]'::jsonb, true, 'GBP',
              (ARRAY['cash','card_at_desk','bank_transfer'])[1 + (n % 3)],
              ${today}::date - d, ${owner}, ${now}::timestamptz - make_interval(days => d, mins => n), base.b + row_number() OVER (), n % 3 <> 0
       FROM generate_series(0, ${DAYS - 1}) AS d, generate_series(0, ${salesADay - 1}) AS n, base
@@ -144,7 +147,7 @@ try {
     if (found.people.length === 0) throw new Error("the search found nobody");
   };
   // Not taxed, not counted: the price is the total, and the day's count is put back after.
-  const product = (gym: Made) => sql<{ id: string; price_minor: number }[]>`SELECT id, price_minor FROM gym_products WHERE gym_id = ${gym.gymId} AND tax_rate_id IS NULL AND stock IS NULL LIMIT 1`;
+  const product = (gym: Made) => sql<{ id: string; price_minor: number }[]>`SELECT p.id, p.price_minor FROM gym_products p WHERE p.gym_id = ${gym.gymId} AND p.stock IS NULL AND NOT EXISTS (SELECT 1 FROM gym_product_tax_rates x WHERE x.gym_id = p.gym_id AND x.product_id = p.id) LIMIT 1`;
   const [untaxed] = await product(big);
   if (untaxed === undefined) throw new Error("no product to sell");
   // Sold with a discount of 10%, which is one more row read and one more written.
@@ -204,15 +207,16 @@ try {
   // A basket (18q): the most a page lists is 100 sales of 20 products each. A day long ago
   // holds that many, all bought by one person, so their purchases are 20 sales of 20 too.
   const OLD_DAY = 400;
-  const items = await sql<{ id: string; price_minor: number; tax_rate_id: string | null }[]>`
-    SELECT id, price_minor, tax_rate_id FROM gym_products WHERE gym_id = ${big.gymId} ORDER BY id LIMIT ${SALE_LINES_MAX}`;
+  const items = await sql<{ id: string; price_minor: number; taxed: boolean }[]>`
+    SELECT p.id, p.price_minor, EXISTS (SELECT 1 FROM gym_product_tax_rates x WHERE x.gym_id = p.gym_id AND x.product_id = p.id) AS taxed
+    FROM gym_products p WHERE p.gym_id = ${big.gymId} ORDER BY p.id LIMIT ${SALE_LINES_MAX}`;
   await sql`
     WITH base AS (SELECT receipts_issued AS b FROM gyms WHERE id = ${big.gymId}),
     ins AS (
       INSERT INTO gym_sales (gym_id, request_key, product_id, entry_id, item_name, quantity, unit_price_minor, net_minor, tax_minor, total_minor,
-                             tax_bp, tax_included, currency, method, sold_on, recorded_by, created_at, receipt_number, for_member, line_no)
+                             tax_pcm, taxes, tax_included, currency, method, sold_on, recorded_by, created_at, receipt_number, for_member, line_no)
       SELECT ${big.gymId}, md5(${big.gymId}::text || n::text)::uuid, (${items.map((i) => i.id)}::uuid[])[l], ${big.buyer}, 'Product ' || l::text,
-             1, 240, 200, 40, 240, 2000, true, 'GBP', 'cash', ${today}::date - ${OLD_DAY}::int, ${big.owner},
+             1, 240, 200, 40, 240, 20000, '[{"name":"VAT","pcm":20000,"minor":40}]'::jsonb, true, 'GBP', 'cash', ${today}::date - ${OLD_DAY}::int, ${big.owner},
              ${now}::timestamptz - make_interval(days => ${OLD_DAY}, mins => n), base.b + n, true, l
       FROM generate_series(1, ${SALES_SHOWN}) AS n, generate_series(1, ${SALE_LINES_MAX}) AS l, base
       RETURNING 1)
@@ -228,7 +232,7 @@ try {
     if (found.sales.length !== PURCHASES_SHOWN * SALE_LINES_MAX) throw new Error(`read ${String(found.sales.length)} lines`);
   });
   const basketLines = items.map((i) => {
-    const amounts = saleAmounts({ unitPriceMinor: i.price_minor, quantity: 1, taxed: i.tax_rate_id !== null, taxBp: 2000, taxIncluded: true });
+    const amounts = saleAmounts({ unitPriceMinor: i.price_minor, quantity: 1, taxPcms: i.taxed ? [20000] : [], taxIncluded: true });
     if (!amounts.ok) throw new Error("a product with no price");
     return { productId: i.id, quantity: 1, discountId: null, memberGift: null, totalMinor: amounts.totalMinor };
   });

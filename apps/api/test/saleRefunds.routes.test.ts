@@ -129,7 +129,7 @@ d("refund a sale at the desk (real Postgres)", () => {
     return page(res);
   };
   const addProduct = async (gymId: string, cookies: Cookies, name: string, priceMinor: number, stock: number | null): Promise<GymProduct> => {
-    const res = await post(`${register(gymId)}/products`, { name, priceMinor, taxRateId: null, stock }, cookies);
+    const res = await post(`${register(gymId)}/products`, { name, priceMinor, taxRateIds: [], stock }, cookies);
     expect(res.statusCode, res.body).toBe(201);
     const found = page(res).products.find((p) => p.name === name);
     if (found === undefined) throw new Error(`no product named ${name}`);

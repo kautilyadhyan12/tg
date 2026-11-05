@@ -420,7 +420,7 @@ d("Refer a friend: the friend's gift (real Postgres)", () => {
     it(
       "a desk sale with the gift: never to a walk-in, never to somebody nobody invited, once to the friend",
       async () => {
-        const product = await post(`/v1/orgs/${gymB.org.id}/register/products`, { name: "Protein bar", priceMinor: 200, taxRateId: null, stock: null }, ownerB.cookies);
+        const product = await post(`/v1/orgs/${gymB.org.id}/register/products`, { name: "Protein bar", priceMinor: 200, taxRateIds: [], stock: null }, ownerB.cookies);
         expect(product.statusCode, product.body).toBe(201);
         const [bar] = await sql<{ id: string }[]>`SELECT id FROM gym_products WHERE gym_id = ${gymB.org.id} AND name = 'Protein bar'`;
         if (bar === undefined) throw new Error("no product");
@@ -441,7 +441,7 @@ d("Refer a friend: the friend's gift (real Postgres)", () => {
         const offered = await get(`/v1/orgs/${gymB.org.id}/member-list/entries/${leo.entryId}/friend-gift`, ownerB.cookies);
         expect(friendGiftResponseSchema.parse(JSON.parse(offered.body)).friendGift?.discount.id).toBe(gift);
         // A basket (18q): the gift goes on one product of a sale; on two, nothing is sold.
-        const shakerRes = await post(`/v1/orgs/${gymB.org.id}/register/products`, { name: "Shaker", priceMinor: 400, taxRateId: null, stock: null }, ownerB.cookies);
+        const shakerRes = await post(`/v1/orgs/${gymB.org.id}/register/products`, { name: "Shaker", priceMinor: 400, taxRateIds: [], stock: null }, ownerB.cookies);
         expect(shakerRes.statusCode, shakerRes.body).toBe(201);
         const [shaker] = await sql<{ id: string }[]>`SELECT id FROM gym_products WHERE gym_id = ${gymB.org.id} AND name = 'Shaker'`;
         if (shaker === undefined) throw new Error("no shaker");

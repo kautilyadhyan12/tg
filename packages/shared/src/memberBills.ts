@@ -12,6 +12,7 @@
 // counted paid with no bill is one the gym's own list said was paid, or one marked
 // before bills were kept.
 import { z } from "zod";
+import { SALES_TAX_PCM_MAX } from "./memberships.js";
 import { cardDeclinedSchema, cardSeenSchema, cardUncheckedSchema } from "./cardCharges.js";
 import { chargeStopSchema, chargebackSeenSchema } from "./chargebacks.js";
 
@@ -262,7 +263,7 @@ export const memberBillSchema = z
     /** The tax in `amountMinor` (18b-iii), as the bill was opened: the rate's name and
      *  percentage then, whether the price held it, and how much it is. Null for none. */
     tax: z
-      .object({ name: z.string(), bp: z.number().int().min(1).max(3000), included: z.boolean(), minor: minorSchema })
+      .object({ name: z.string(), pcm: z.number().int().min(1).max(SALES_TAX_PCM_MAX), included: z.boolean(), minor: minorSchema })
       .strict()
       .nullable(),
     /** The joining fee in `amountMinor`, before any tax added on top (18t): on the bill the
@@ -324,7 +325,7 @@ export const memberFeeSchema = z
     to: daySchema.nullable().default(null),
     amountMinor: minorSchema,
     tax: z
-      .object({ name: z.string(), bp: z.number().int().min(1).max(3000), included: z.boolean(), minor: minorSchema })
+      .object({ name: z.string(), pcm: z.number().int().min(1).max(SALES_TAX_PCM_MAX), included: z.boolean(), minor: minorSchema })
       .strict()
       .nullable(),
     dueOn: daySchema,

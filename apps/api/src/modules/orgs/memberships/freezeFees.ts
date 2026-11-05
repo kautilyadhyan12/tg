@@ -37,7 +37,7 @@ type Frozen = {
   type_name: string;
   timezone: string;
   tax_name: string | null;
-  tax_bp: number | null;
+  tax_pcm: number | null;
   /** The months of this freeze that already have a fee that stands, or one staff waived. */
   billed: string[];
   /** An earlier freeze's fee still owed covers the freeze day: unfrozen and frozen again inside
@@ -52,7 +52,7 @@ const frozen = (sql: Sql | TransactionSql, gymIds: readonly string[] | null, mem
   const ids = membershipIds === null ? null : [...membershipIds];
   return sql<Frozen[]>`
     SELECT h.id, h.gym_id, h.frozen_on::text AS frozen_on, h.freeze_fee_minor AS fee, h.currency,
-           left(t.name, 80) AS type_name, g.timezone, r.name AS tax_name, r.rate_bp AS tax_bp,
+           left(t.name, 80) AS type_name, g.timezone, r.name AS tax_name, r.rate_pcm AS tax_pcm,
            ARRAY(SELECT b.covers_from::text FROM gym_member_bills b
                  WHERE b.gym_id = h.gym_id AND b.held_membership_id = h.id AND b.fee = 'freeze'
                    AND b.covers_from >= h.frozen_on AND (b.status <> 'void' OR b.void_reason = 'waived')) AS billed,
@@ -90,13 +90,13 @@ function owedFees(rows: readonly Frozen[], now: Date): Map<string, Opening[]> {
     if (month === null || row.billed.includes(month.from)) continue;
     if (row.covered && month.from === row.frozen_on) continue;
     // The amount the gym set is what the person pays: the membership's rate is inside it, as a late cancel's is.
-    const tax = row.tax_name === null || row.tax_bp === null ? null : { name: row.tax_name, bp: row.tax_bp, included: true };
+    const tax = row.tax_name === null || row.tax_pcm === null ? null : { name: row.tax_name, pcm: row.tax_pcm, included: true };
     const bill = billOf(row.fee, tax);
     const opening: Opening = {
       m: row.id,
       a: bill.amountMinor,
       tm: bill.tax?.minor ?? 0,
-      tb: bill.tax?.bp ?? 0,
+      tb: bill.tax?.pcm ?? 0,
       tn: bill.tax?.name ?? null,
       ti: bill.tax?.included ?? null,
       c: row.currency,
@@ -115,7 +115,7 @@ async function insertFreezeFees(tx: TransactionSql, gymId: string, opening: read
   if (opening.length === 0) return 0;
   const opened = await tx<{ id: string }[]>`
     INSERT INTO gym_member_bills
-      (gym_id, held_membership_id, period_index, fee, fee_for, amount_minor, tax_minor, tax_bp, tax_name, tax_included,
+      (gym_id, held_membership_id, period_index, fee, fee_for, amount_minor, tax_minor, tax_pcm, tax_name, tax_included,
        currency, due_on, covers_from, covers_to, created_at, updated_at)
     SELECT ${gymId}, r.m, NULL, 'freeze', r.n, r.a, r.tm, r.tb, r.tn, r.ti, r.c, r.from, r.from, r.to, ${now}, ${now}
     FROM jsonb_to_recordset(${tx.json(opening)}) AS r(m uuid, a int, tm int, tb int, tn text, ti boolean, c text, n text, "from" date, "to" date)

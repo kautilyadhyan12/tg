@@ -137,7 +137,7 @@ d("my membership: a member's own memberships, payments and receipts (real Postgr
     expect(type.statusCode, type.body).toBe(201);
     const thirty = (JSON.parse(type.body) as { types: { id: string; name: string }[] }).types.find((t) => t.name === THIRTY_DAYS.name)?.id;
     if (thirty === undefined) throw new Error("no type");
-    const product = await inject("POST", `/v1/orgs/${id}/register/products`, owner.cookies, { name: "Water", priceMinor: 250, taxRateId: null, stock: null });
+    const product = await inject("POST", `/v1/orgs/${id}/register/products`, owner.cookies, { name: "Water", priceMinor: 250, taxRateIds: [], stock: null });
     expect(product.statusCode, product.body).toBe(201);
     const water = (JSON.parse(product.body) as { products: { id: string; name: string }[] }).products.find((p) => p.name === "Water")?.id;
     if (water === undefined) throw new Error("no product");

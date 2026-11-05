@@ -123,16 +123,16 @@ d("the register: products, sales and tax (real Postgres)", () => {
     expect(res.statusCode, res.body).toBe(200);
     return page(res);
   };
-  const addProduct = async (gymId: string, cookies: Cookies, body: { name: string; priceMinor: number; taxRateId?: string | null; stock?: number | null }) => {
-    const res = await post(`${base(gymId)}/products`, { taxRateId: null, stock: null, ...body }, cookies);
+  const addProduct = async (gymId: string, cookies: Cookies, body: { name: string; priceMinor: number; taxRateIds?: string[]; stock?: number | null }) => {
+    const res = await post(`${base(gymId)}/products`, { taxRateIds: [], stock: null, ...body }, cookies);
     expect(res.statusCode, res.body).toBe(201);
     const found = page(res).products.find((p) => p.name === body.name);
     if (found === undefined) throw new Error(`no product named ${body.name}`);
     return found;
   };
   /** A named tax rate, made through the route (18b-iii). */
-  const addRate = async (gymId: string, cookies: Cookies, name: string, bp: number): Promise<string> => {
-    const res = await post(`${base(gymId)}/tax-rates`, { name, bp }, cookies);
+  const addRate = async (gymId: string, cookies: Cookies, name: string, pcm: number): Promise<string> => {
+    const res = await post(`${base(gymId)}/tax-rates`, { name, pcm }, cookies);
     expect(res.statusCode, res.body).toBe(201);
     const found = page(res).tax.rates.find((r) => r.name === name);
     if (found === undefined) throw new Error(`no rate named ${name}`);
@@ -151,9 +151,9 @@ d("the register: products, sales and tax (real Postgres)", () => {
 
   /** What is in the tables, read directly. */
   const salesOf = (gymId: string) => sql<
-    { id: string; product_id: string; entry_id: string | null; item_name: string; quantity: number; unit_price_minor: number; net_minor: number; tax_minor: number; total_minor: number; tax_bp: number; tax_name: string | null; tax_included: boolean; currency: string; method: string; sold_on: string; recorded_by: string | null; undone: boolean }[]
+    { id: string; product_id: string; entry_id: string | null; item_name: string; quantity: number; unit_price_minor: number; net_minor: number; tax_minor: number; total_minor: number; tax_pcm: number; tax_name: string | null; tax_included: boolean; currency: string; method: string; sold_on: string; recorded_by: string | null; undone: boolean }[]
   >`
-    SELECT id, product_id, entry_id, item_name, quantity, unit_price_minor, net_minor, tax_minor, total_minor, tax_bp, tax_name, tax_included,
+    SELECT id, product_id, entry_id, item_name, quantity, unit_price_minor, net_minor, tax_minor, total_minor, tax_pcm, tax_name, tax_included,
            currency, method, sold_on::text AS sold_on, recorded_by, undone_at IS NOT NULL AS undone
     FROM gym_sales WHERE gym_id = ${gymId} ORDER BY seq`;
   const stockOf = async (productId: string) => (await sql<{ stock: number | null }[]>`SELECT stock FROM gym_products WHERE id = ${productId}`)[0]?.stock;
@@ -252,7 +252,7 @@ d("the register: products, sales and tax (real Postgres)", () => {
       expect(eight.filter((r) => r.statusCode === 409 && errorOf(r) === "out_of_stock")).toHaveLength(5);
       expect(await stockOf(few.id)).toBe(0);
       // More than are left says how many.
-      const refill = await put(`${base(gymId)}/products/${few.id}`, { name: "Protein bar", priceMinor: 300, taxRateId: null, stock: 2, updatedAt: (await read(gymId, owner.cookies)).products.find((p) => p.id === few.id)?.updatedAt }, owner.cookies);
+      const refill = await put(`${base(gymId)}/products/${few.id}`, { name: "Protein bar", priceMinor: 300, taxRateIds: [], stock: 2, updatedAt: (await read(gymId, owner.cookies)).products.find((p) => p.id === few.id)?.updatedAt }, owner.cookies);
       expect(refill.statusCode, refill.body).toBe(200);
       const tooMany = await sell(gymId, owner.cookies, sale(few.id, 900, { quantity: 3 }));
       expect(tooMany.statusCode).toBe(409);
@@ -318,7 +318,7 @@ d("the register: products, sales and tax (real Postgres)", () => {
       // The owner's own read of the same page does name them: the check above can fail.
       expect((await get(base(gymId), owner.cookies)).body).toContain("Pat Quinn");
       const saleId = (JSON.parse(sold.body) as { saleId: string }).saleId;
-      const product = { name: "Towel", priceMinor: 500, taxRateId: null, stock: null };
+      const product = { name: "Towel", priceMinor: 500, taxRateIds: [], stock: null };
       const fresh = async () => (await read(gymId, owner.cookies)).products.find((p) => p.id === water.id)?.updatedAt;
 
       /** Every route, as one person asks it. */
@@ -328,9 +328,9 @@ d("the register: products, sales and tax (real Postgres)", () => {
         sell: (await sell(gymId, cookies, sale(water.id, 199))).statusCode,
         undo: (await post(`${base(gymId)}/sales/${saleId}/void`, { reason: "mistake" }, cookies)).statusCode,
         tax: (await put(`${base(gymId)}/tax`, { included: true }, cookies)).statusCode,
-        rate: (await post(`${base(gymId)}/tax-rates`, { name: "Sales tax", bp: 825 }, cookies)).statusCode,
+        rate: (await post(`${base(gymId)}/tax-rates`, { name: "Sales tax", pcm: 8250 }, cookies)).statusCode,
         add: (await post(`${base(gymId)}/products`, product, cookies)).statusCode,
-        change: (await put(`${base(gymId)}/products/${water.id}`, { name: "Water", priceMinor: 199, taxRateId: null, stock: 50, updatedAt: await fresh() }, cookies)).statusCode,
+        change: (await put(`${base(gymId)}/products/${water.id}`, { name: "Water", priceMinor: 199, taxRateIds: [], stock: 50, updatedAt: await fresh() }, cookies)).statusCode,
         archive: (await del(`${base(gymId)}/products/${water.id}`, cookies)).statusCode,
         restore: (await post(`${base(gymId)}/products/${water.id}/restore`, {}, cookies)).statusCode,
         purchases: (await get(`/v1/orgs/${gymId}/member-list/entries/${person}/purchases`, cookies)).statusCode,
@@ -378,7 +378,7 @@ d("the register: products, sales and tax (real Postgres)", () => {
       for (const bad of [{ ...product, priceMinor: 0 }, { ...product, name: " " }, { ...product, stock: -1 }, { ...product, currency: "INR" }]) {
         expect((await post(`${base(gymId)}/products`, bad, owner.cookies)).statusCode).toBe(400);
       }
-      for (const bad of [{ included: "yes" }, {}, { bp: 825, included: false }]) {
+      for (const bad of [{ included: "yes" }, {}, { pcm: 8250, included: false }]) {
         expect((await put(`${base(gymId)}/tax`, bad, owner.cookies)).statusCode).toBe(400);
       }
       expect((await get(`${base(gymId)}/people?query=p`, owner.cookies)).statusCode).toBe(400);
@@ -395,7 +395,7 @@ d("the register: products, sales and tax (real Postgres)", () => {
       expect(errorOf(refusedSale)).toBe("gym_not_on_plan");
       expect((await post(`${base(lapsed)}/products`, product, lapsedOwner.cookies)).statusCode).toBe(409);
       expect((await put(`${base(lapsed)}/tax`, { included: true }, lapsedOwner.cookies)).statusCode).toBe(409);
-      expect((await post(`${base(lapsed)}/tax-rates`, { name: "Sales tax", bp: 825 }, lapsedOwner.cookies)).statusCode).toBe(409);
+      expect((await post(`${base(lapsed)}/tax-rates`, { name: "Sales tax", pcm: 8250 }, lapsedOwner.cookies)).statusCode).toBe(409);
       expect(await salesOf(lapsed)).toHaveLength(0);
       expect(await stockOf(made.id)).toBe(4);
     },
@@ -425,9 +425,9 @@ d("the register: products, sales and tax (real Postgres)", () => {
       // No tax set: the price is the total.
       expect((await sell(us, owner.cookies, sale(water.id, 199))).statusCode).toBe(201);
       // Texas, 8.25% on top, charged on the water.
-      const salesTax = await addRate(us, owner.cookies, "Sales tax", 825);
+      const salesTax = await addRate(us, owner.cookies, "Sales tax", 8250);
       const water1 = (await read(us, owner.cookies)).products.find((p) => p.id === water.id);
-      expect((await put(`${base(us)}/products/${water.id}`, { name: "Water", priceMinor: 199, taxRateId: salesTax, stock: null, updatedAt: water1?.updatedAt }, owner.cookies)).statusCode).toBe(200);
+      expect((await put(`${base(us)}/products/${water.id}`, { name: "Water", priceMinor: 199, taxRateIds: [salesTax], stock: null, updatedAt: water1?.updatedAt }, owner.cookies)).statusCode).toBe(200);
       // The form still open at the old total sells nothing.
       const stale = await sell(us, owner.cookies, sale(water.id, 199));
       expect(stale.statusCode).toBe(409);
@@ -443,25 +443,25 @@ d("the register: products, sales and tax (real Postgres)", () => {
       expect((await sell(us, owner.cookies, sale(card.id, 2706))).statusCode).toBe(409);
 
       // Leeds, 20% VAT inside the price.
-      const vat = await addRate(uk, ukOwner.cookies, "VAT", 2000);
+      const vat = await addRate(uk, ukOwner.cookies, "VAT", 20000);
       const drink1 = (await read(uk, ukOwner.cookies)).products.find((p) => p.id === drink.id);
-      expect((await put(`${base(uk)}/products/${drink.id}`, { name: "Protein shake", priceMinor: 199, taxRateId: vat, stock: null, updatedAt: drink1?.updatedAt }, ukOwner.cookies)).statusCode).toBe(200);
+      expect((await put(`${base(uk)}/products/${drink.id}`, { name: "Protein shake", priceMinor: 199, taxRateIds: [vat], stock: null, updatedAt: drink1?.updatedAt }, ukOwner.cookies)).statusCode).toBe(200);
       expect((await sell(uk, ukOwner.cookies, sale(drink.id, 199))).statusCode).toBe(201);
       expect((await sell(uk, ukOwner.cookies, sale(drink.id, 239))).statusCode).toBe(409);
 
-      expect((await salesOf(us)).map((s) => [s.item_name, s.quantity, s.unit_price_minor, s.net_minor, s.tax_minor, s.total_minor, s.tax_bp, s.tax_name, s.tax_included, s.currency, s.method])).toEqual([
+      expect((await salesOf(us)).map((s) => [s.item_name, s.quantity, s.unit_price_minor, s.net_minor, s.tax_minor, s.total_minor, s.tax_pcm, s.tax_name, s.tax_included, s.currency, s.method])).toEqual([
         ["Water", 1, 199, 199, 0, 199, 0, null, false, "USD", "cash"],
-        ["Water", 1, 199, 199, 16, 215, 825, "Sales tax", false, "USD", "cash"],
-        ["Water", 3, 199, 597, 49, 646, 825, "Sales tax", false, "USD", "bank_transfer"],
+        ["Water", 1, 199, 199, 16, 215, 8250, "Sales tax", false, "USD", "cash"],
+        ["Water", 3, 199, 597, 49, 646, 8250, "Sales tax", false, "USD", "bank_transfer"],
         ["Gift card", 1, 2500, 2500, 0, 2500, 0, null, false, "USD", "card_at_desk"],
       ]);
-      expect((await salesOf(uk)).map((s) => [s.item_name, s.net_minor, s.tax_minor, s.total_minor, s.tax_bp, s.tax_name, s.tax_included, s.currency])).toEqual([["Protein shake", 166, 33, 199, 2000, "VAT", true, "GBP"]]);
+      expect((await salesOf(uk)).map((s) => [s.item_name, s.net_minor, s.tax_minor, s.total_minor, s.tax_pcm, s.tax_name, s.tax_included, s.currency])).toEqual([["Protein shake", 166, 33, 199, 20000, "VAT", true, "GBP"]]);
 
       // The price, the name and the tax change: no sale already made is rewritten.
       const usBefore = await salesOf(us);
       const nowWater = (await read(us, owner.cookies)).products.find((p) => p.id === water.id);
-      expect((await put(`${base(us)}/products/${water.id}`, { name: "Spring water", priceMinor: 249, taxRateId: salesTax, stock: null, updatedAt: nowWater?.updatedAt }, owner.cookies)).statusCode).toBe(200);
-      expect((await put(`${base(us)}/tax-rates/${salesTax}`, { name: "State tax", bp: 625 }, owner.cookies)).statusCode).toBe(200);
+      expect((await put(`${base(us)}/products/${water.id}`, { name: "Spring water", priceMinor: 249, taxRateIds: [salesTax], stock: null, updatedAt: nowWater?.updatedAt }, owner.cookies)).statusCode).toBe(200);
+      expect((await put(`${base(us)}/tax-rates/${salesTax}`, { name: "State tax", pcm: 6250 }, owner.cookies)).statusCode).toBe(200);
       expect((await put(`${base(us)}/tax`, { included: true }, owner.cookies)).statusCode).toBe(200);
       expect(await salesOf(us)).toEqual(usBefore);
       const after = await read(us, owner.cookies);
@@ -469,10 +469,10 @@ d("the register: products, sales and tax (real Postgres)", () => {
       expect(after.totals).toEqual({ count: 4, payments: 0, totalMinor: 199 + 215 + 646 + 2500, taxMinor: 16 + 49, cash: 199 + 215, upi: 0, card_at_desk: 2500, bank_transfer: 646, link: 0, company: 0, terminal: 0, refundedMinor: 0, discountMinor: 0, otherCurrency: 0 });
       // The tax changes are written to the gym's record once each, and a save that changes nothing is not.
       expect((await put(`${base(us)}/tax`, { included: true }, owner.cookies)).statusCode).toBe(200);
-      expect((await put(`${base(us)}/tax-rates/${salesTax}`, { name: "State tax", bp: 625 }, owner.cookies)).statusCode).toBe(200);
+      expect((await put(`${base(us)}/tax-rates/${salesTax}`, { name: "State tax", pcm: 6250 }, owner.cookies)).statusCode).toBe(200);
       expect((await auditOf(us, "org.sales_tax_changed")).map((a) => a.meta)).toEqual([{ includedBefore: "false", includedAfter: "true" }]);
-      expect((await auditOf(us, "org.tax_rate_created")).map((a) => a.meta)).toEqual([{ name: "Sales tax", bp: "825" }]);
-      expect((await auditOf(us, "org.tax_rate_updated")).map((a) => a.meta)).toEqual([{ before: "Sales tax", after: "State tax", bpBefore: "825", bpAfter: "625" }]);
+      expect((await auditOf(us, "org.tax_rate_created")).map((a) => a.meta)).toEqual([{ name: "Sales tax", pcm: "8250" }]);
+      expect((await auditOf(us, "org.tax_rate_updated")).map((a) => a.meta)).toEqual([{ before: "Sales tax", after: "State tax", pcmBefore: "8250", pcmAfter: "6250" }]);
       // No sale's note holds a name of a person or anything of a card.
       for (const note of await auditOf(us, "org.sale_recorded")) {
         expect(Object.keys(note.meta).sort()).toEqual(["currency", "method", "product", "productId", "quantity", "receiptNumber", "taxMinor", "totalMinor"]);
@@ -518,7 +518,7 @@ d("the register: products, sales and tax (real Postgres)", () => {
       const thirdId = (JSON.parse(third.body) as { saleId: string }).saleId;
       expect(await stockOf(bar.id)).toBe(4);
       const barNow = (await read(gymId, owner.cookies)).products.find((p) => p.id === bar.id);
-      expect((await put(`${base(gymId)}/products/${bar.id}`, { name: "Bar", priceMinor: 300, taxRateId: null, stock: null, updatedAt: barNow?.updatedAt }, owner.cookies)).statusCode).toBe(200);
+      expect((await put(`${base(gymId)}/products/${bar.id}`, { name: "Bar", priceMinor: 300, taxRateIds: [], stock: null, updatedAt: barNow?.updatedAt }, owner.cookies)).statusCode).toBe(200);
       expect((await post(`${base(gymId)}/sales/${thirdId}/void`, { reason: "mistake" }, owner.cookies)).statusCode).toBe(200);
       expect(await stockOf(bar.id)).toBeNull();
 
@@ -549,13 +549,13 @@ d("the register: products, sales and tax (real Postgres)", () => {
       const owner = await makeUser("prod-owner");
       const gymId = await makeGym(owner, "Reg Products Gym");
       const water = await addProduct(gymId, owner.cookies, { name: "Water", priceMinor: 199, stock: 6 });
-      const taken = await post(`${base(gymId)}/products`, { name: " water ", priceMinor: 250, taxRateId: null, stock: null }, owner.cookies);
+      const taken = await post(`${base(gymId)}/products`, { name: " water ", priceMinor: 250, taxRateIds: [], stock: null }, owner.cookies);
       expect(taken.statusCode).toBe(409);
       expect(errorOf(taken)).toBe("product_name_taken");
 
       // One is sold while the form is open: the form's save would put the old count back, so it is refused.
       expect((await sell(gymId, owner.cookies, sale(water.id, 199))).statusCode).toBe(201);
-      const staleSave = await put(`${base(gymId)}/products/${water.id}`, { name: "Water", priceMinor: 199, taxRateId: null, stock: 6, updatedAt: water.updatedAt }, owner.cookies);
+      const staleSave = await put(`${base(gymId)}/products/${water.id}`, { name: "Water", priceMinor: 199, taxRateIds: [], stock: 6, updatedAt: water.updatedAt }, owner.cookies);
       expect(staleSave.statusCode).toBe(409);
       expect(errorOf(staleSave)).toBe("product_changed");
       expect(await stockOf(water.id)).toBe(5);
@@ -583,7 +583,7 @@ d("the register: products, sales and tax (real Postgres)", () => {
       const other = await makeUser("prod-other");
       const otherGym = await makeGym(other, "Reg Products Other");
       const theirs = await addProduct(otherGym, other.cookies, { name: "Towel", priceMinor: 500 });
-      expect((await put(`${base(gymId)}/products/${theirs.id}`, { name: "Mine now", priceMinor: 1, taxRateId: null, stock: null, updatedAt: theirs.updatedAt }, owner.cookies)).statusCode).toBe(404);
+      expect((await put(`${base(gymId)}/products/${theirs.id}`, { name: "Mine now", priceMinor: 1, taxRateIds: [], stock: null, updatedAt: theirs.updatedAt }, owner.cookies)).statusCode).toBe(404);
       expect((await del(`${base(gymId)}/products/${theirs.id}`, owner.cookies)).statusCode).toBe(404);
       expect((await read(otherGym, other.cookies)).products.map((p) => [p.name, p.priceMinor])).toEqual([["Towel", 500]]);
 
@@ -591,7 +591,7 @@ d("the register: products, sales and tax (real Postgres)", () => {
       await sql`
         INSERT INTO gym_products (gym_id, name, price_minor, currency)
         SELECT ${gymId}, 'Filler ' || n, 100, 'USD' FROM generate_series(1, ${PRODUCTS_MAX}) AS n`;
-      const over = await post(`${base(gymId)}/products`, { name: "One more", priceMinor: 100, taxRateId: null, stock: null }, owner.cookies);
+      const over = await post(`${base(gymId)}/products`, { name: "One more", priceMinor: 100, taxRateIds: [], stock: null }, owner.cookies);
       expect(over.statusCode).toBe(409);
       expect(errorOf(over)).toBe("too_many_products");
       now = await read(gymId, owner.cookies);
@@ -765,7 +765,7 @@ d("the register: products, sales and tax (real Postgres)", () => {
       expect(await stockOf(water.id)).toBe(7);
 
       // Its price saved again is in pounds, and it sells; a product made now is in pounds.
-      const saved = await put(`${base(gymId)}/products/${water.id}`, { name: "Water", priceMinor: 150, taxRateId: null, stock: 7, updatedAt: now.products[0]?.updatedAt }, owner.cookies);
+      const saved = await put(`${base(gymId)}/products/${water.id}`, { name: "Water", priceMinor: 150, taxRateIds: [], stock: 7, updatedAt: now.products[0]?.updatedAt }, owner.cookies);
       expect(saved.statusCode, saved.body).toBe(200);
       expect(page(saved).products.map((p) => [p.name, p.currency, p.priceMinor])).toEqual([["Water", "GBP", 150]]);
       const bar = await addProduct(gymId, owner.cookies, { name: "Bar", priceMinor: 200 });

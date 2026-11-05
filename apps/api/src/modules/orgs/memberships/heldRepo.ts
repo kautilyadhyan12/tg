@@ -168,7 +168,7 @@ const rawSchema = z.object({
   discount_minor: z.number().int(),
   discount_payments: z.enum(MEMBERSHIP_PAYMENTS).nullable(),
   tax_name: z.string().nullable(),
-  tax_bp: z.number().int().nullable(),
+  tax_pcm: z.number().int().nullable(),
   tax_included: z.boolean().nullable(),
 });
 
@@ -180,7 +180,7 @@ function partOf(r: z.infer<typeof rawSchema>): number {
 
 function shape(row: unknown): HeldRow {
   const r = rawSchema.parse(row);
-  const tax = r.tax_name === null || r.tax_bp === null ? null : { name: r.tax_name, bp: r.tax_bp };
+  const tax = r.tax_name === null || r.tax_pcm === null ? null : { name: r.tax_name, pcm: r.tax_pcm };
   // Whether its price held the tax is the membership's own, kept when it was sold.
   const taxApplied = tax === null ? null : { ...tax, included: r.tax_included ?? false };
   return {
@@ -242,7 +242,7 @@ const typeSchema = z.object({
   pack_days: z.number().int().nullable(),
   tax_rate_id: z.string().nullable(),
   tax_name: z.string().nullable(),
-  tax_bp: z.number().int().nullable(),
+  tax_pcm: z.number().int().nullable(),
   joining_fee_minor: z.number().int(),
   contract_periods: z.number().int().nullable(),
   contract_then: contractThenSchema.nullable(),
@@ -263,7 +263,7 @@ const rawTypePrice = (row: unknown): number => typeSchema.parse(row).price_minor
 export function typeChoice(row: unknown): HeldMembershipTypeChoice {
   const t = typeSchema.parse(row);
   return {
-    tax: t.tax_name === null || t.tax_bp === null ? null : { name: t.tax_name, bp: t.tax_bp },
+    tax: t.tax_name === null || t.tax_pcm === null ? null : { name: t.tax_name, pcm: t.tax_pcm },
     id: t.id,
     name: t.name,
     kind: t.kind,
@@ -287,7 +287,7 @@ export const liveTypes = (sql: Sql | TransactionSql, gymId: string, typeId: stri
   SELECT id, name, kind, price_minor, currency, term_count, term_unit, pack_classes, pack_days, updated_at, tax_rate_id, joining_fee_minor,
          contract_periods, contract_then, notice_days, leave_fee_minor, cooling_off_days,
          (SELECT r.name FROM gym_tax_rates r WHERE r.gym_id = gym_membership_types.gym_id AND r.id = gym_membership_types.tax_rate_id) AS tax_name,
-         (SELECT r.rate_bp FROM gym_tax_rates r WHERE r.gym_id = gym_membership_types.gym_id AND r.id = gym_membership_types.tax_rate_id) AS tax_bp
+         (SELECT r.rate_pcm FROM gym_tax_rates r WHERE r.gym_id = gym_membership_types.gym_id AND r.id = gym_membership_types.tax_rate_id) AS tax_pcm
   FROM gym_membership_types
   WHERE gym_id = ${gymId} AND archived_at IS NULL
     AND (${typeId}::uuid IS NULL OR id = ${typeId}::uuid)
@@ -313,7 +313,7 @@ const COLUMNS = (sql: Sql | TransactionSql) => sql`
   END AS cooling_off_signed,
   h.freeze_fee_minor, h.discount_name, h.discount_minor, h.discount_payments,
   (SELECT r.name FROM gym_tax_rates r WHERE r.gym_id = h.gym_id AND r.id = h.tax_rate_id) AS tax_name,
-  (SELECT r.rate_bp FROM gym_tax_rates r WHERE r.gym_id = h.gym_id AND r.id = h.tax_rate_id) AS tax_bp,
+  (SELECT r.rate_pcm FROM gym_tax_rates r WHERE r.gym_id = h.gym_id AND r.id = h.tax_rate_id) AS tax_pcm,
   h.tax_included`;
 
 /** The record's memberships of the statuses named, newest start first. */
@@ -792,7 +792,7 @@ export async function giveHeldIn(tx: TransactionSql, input: GiveHeldInput): Prom
   // A free membership opens no bill, so it charges no tax.
   const rate = taxRateId === null || rawTypePrice(rawType) === 0 ? null : await rateOf(tx, input.gymId, taxRateId);
   const included = await taxIncludedOf(tx, input.gymId);
-  const tax: TaxApplied | null = rate === null || included === null ? null : { name: rate.name, bp: rate.bp, included };
+  const tax: TaxApplied | null = rate === null || included === null ? null : { name: rate.name, pcm: rate.pcm, included };
 
   // The discount is this gym's own, read under its lock, judged on the gym's own day,
   // and what it takes off is worked out again here: nothing is given at any other price.
@@ -904,7 +904,7 @@ export async function giveHeldIn(tx: TransactionSql, input: GiveHeldInput): Prom
       priceMinor: String(priceMinor),
       currency: type.currency,
       ...(used === null ? {} : { discountId: used.id, discount: used.name, discountMinor: String(used.offMinor), discountPayments: used.payments }),
-      ...(tax === null ? {} : { tax: tax.name, taxBp: String(tax.bp) }),
+      ...(tax === null ? {} : { tax: tax.name, taxPcm: String(tax.pcm) }),
       ...(joiningFeeMinor > 0 ? { joiningFeeMinor: String(joiningFeeMinor) } : {}),
       ...(waivedFeeMinor > 0 ? { joiningFeeWaivedMinor: String(waivedFeeMinor) } : {}),
       ...(change === null ? {} : { replaces: change.fromId, changeCreditMinor: String(creditMinor) }),

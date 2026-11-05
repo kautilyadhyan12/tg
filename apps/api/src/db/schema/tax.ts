@@ -6,7 +6,7 @@ import { check, integer, pgTable, text, timestamp, unique, uniqueIndex, uuid } f
 import { createdAt } from "./common.js";
 import { gyms } from "./tenancy.js";
 
-/** One named rate: `rate_bp` is hundredths of a percent, 825 for 8.25%. */
+/** One named rate: `rate_pcm` is thousandths of a percent (0205), 8250 for 8.25%, 9975 for 9.975%. */
 export const gymTaxRates = pgTable(
   "gym_tax_rates",
   {
@@ -15,14 +15,14 @@ export const gymTaxRates = pgTable(
       .notNull()
       .references(() => gyms.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
-    rateBp: integer("rate_bp").notNull(),
+    ratePcm: integer("rate_pcm").notNull(),
     createdAt: createdAt(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     unique("gym_tax_rates_gym_id_uq").on(t.gymId, t.id),
     check("gym_tax_rates_name_check", sql`char_length(${t.name}) BETWEEN 1 AND 30`),
-    check("gym_tax_rates_rate_check", sql`${t.rateBp} BETWEEN 1 AND 3000`),
+    check("gym_tax_rates_rate_check", sql`${t.ratePcm} BETWEEN 1 AND 30000`),
     uniqueIndex("gym_tax_rates_name_uq").on(t.gymId, sql`lower(${t.name})`),
   ],
 );

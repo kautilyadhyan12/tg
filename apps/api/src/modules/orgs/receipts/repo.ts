@@ -13,10 +13,12 @@ import {
   partPeriod,
   receiptAmounts,
   receiptBalance,
+  saleTaxSchema,
   type PaymentReceipt,
   type RefundReceipt,
   type SaleReceipt,
 } from "@app/shared";
+import { z } from "zod";
 import { billItemSql } from "../memberships/billsSql.js";
 
 /** The gym's next receipt number, as the CTE `n` (`number`) of the statement that writes
@@ -35,8 +37,13 @@ const personName = (name: string | null): string => (name === null || name.trim(
 /** A receipt as its row holds it: the gym's name and address are the caller's. */
 export type ReceiptRow = Omit<SaleReceipt, "gym"> | Omit<PaymentReceipt, "gym"> | Omit<RefundReceipt, "gym">;
 
-const taxOf = (r: { tax_bp: number; tax_name: string | null; tax_included: boolean | null; tax_minor: number }) =>
-  r.tax_bp > 0 ? { name: r.tax_name, bp: r.tax_bp, included: r.tax_included === true, minor: r.tax_minor } : null;
+/** A bill's one tax (18b-iii), as a receipt names it; null for none. */
+const taxOf = (r: { tax_pcm: number; tax_name: string | null; tax_included: boolean | null; tax_minor: number }) =>
+  r.tax_pcm > 0 ? { name: r.tax_name, pcm: r.tax_pcm, included: r.tax_included === true, minor: r.tax_minor } : null;
+
+/** A sale line's taxes (18b-v-a), each as it was sold: parsed, as a column of kept JSON. */
+const saleTaxesOf = (r: { taxes: unknown; tax_included: boolean }) =>
+  z.array(saleTaxSchema).parse(r.taxes).map((t) => ({ ...t, included: r.tax_included }));
 
 const coversOf = (r: { covers_from: string | null; covers_to: string | null }) =>
   r.covers_from === null || r.covers_to === null ? null : { from: r.covers_from, to: r.covers_to };
@@ -49,10 +56,8 @@ async function saleReceipt(sql: Sql, gymId: string, number: number): Promise<Rec
       item_name: string;
       quantity: number;
       unit_price_minor: number;
-      tax_minor: number;
       total_minor: number;
-      tax_bp: number;
-      tax_name: string | null;
+      taxes: unknown;
       tax_included: boolean;
       discount_name: string | null;
       discount_minor: number;
@@ -66,7 +71,7 @@ async function saleReceipt(sql: Sql, gymId: string, number: number): Promise<Rec
       cancelled: boolean;
     }[]
   >`
-    SELECT s.id, s.for_member, s.item_name, s.quantity, s.unit_price_minor, s.tax_minor, s.total_minor, s.tax_bp, s.tax_name, s.tax_included,
+    SELECT s.id, s.for_member, s.item_name, s.quantity, s.unit_price_minor, s.total_minor, s.taxes, s.tax_included,
            s.discount_name, s.discount_minor, s.currency, s.method, s.sold_on::text AS sold_on, u.display_name AS by,
            s.entry_id, e.full_name, s.undone_at IS NOT NULL AS cancelled
     FROM gym_sales s
@@ -101,7 +106,7 @@ async function saleReceipt(sql: Sql, gymId: string, number: number): Promise<Rec
       amounts: receiptAmounts({
         totalMinor: line.total_minor,
         listedMinor: line.unit_price_minor * line.quantity,
-        tax: taxOf(line),
+        taxes: saleTaxesOf(line),
         discount: line.discount_name === null ? null : { name: line.discount_name, minor: line.discount_minor },
       }),
     })),
@@ -167,7 +172,7 @@ function billReceiptAmounts(r: {
   bill_minor: number;
   joining_fee: number;
   tax_minor: number;
-  tax_bp: number;
+  tax_pcm: number;
   tax_name: string | null;
   tax_included: boolean | null;
   held_price: number;
@@ -176,7 +181,8 @@ function billReceiptAmounts(r: {
   discount_payments: string | null;
 }, part: { days: number; fullDays: number } | null) {
   const tax = taxOf(r);
-  const plain = receiptAmounts({ totalMinor: r.bill_minor, tax, discount: null });
+  const taxes = tax === null ? [] : [tax];
+  const plain = receiptAmounts({ totalMinor: r.bill_minor, taxes, discount: null });
   if (r.discount_name === null || r.discount_minor <= 0 || r.discount_payments === null) return plain;
   const share = (minor: number): number => (part === null ? minor : partMinor(minor, part));
   // The full price and the price after the discount, for the bill's days.
@@ -184,10 +190,10 @@ function billReceiptAmounts(r: {
   const off = full - share(r.discount_payments === "every" ? r.held_price : r.held_price - r.discount_minor);
   // A joining fee (18t) is listed with the membership's price, and no discount comes off it.
   const listed = full + r.joining_fee;
-  const applied = tax === null ? null : { name: tax.name ?? "", bp: tax.bp, included: tax.included };
+  const applied = tax === null ? null : { name: tax.name ?? "", pcm: tax.pcm, included: tax.included };
   const came = billAmounts(listed - off, applied);
   if (off <= 0 || !came.ok || came.totalMinor !== r.bill_minor) return plain;
-  return receiptAmounts({ totalMinor: r.bill_minor, listedMinor: listed, tax, discount: { name: r.discount_name, minor: off } });
+  return receiptAmounts({ totalMinor: r.bill_minor, listedMinor: listed, taxes, discount: { name: r.discount_name, minor: off } });
 }
 
 /** The part month's days of the membership a part bill is for (18y), by the one rule. */
@@ -225,7 +231,7 @@ async function paymentReceipt(sql: Sql, gymId: string, number: number): Promise<
       starts_on: string;
       full_from: string | null;
       tax_minor: number;
-      tax_bp: number;
+      tax_pcm: number;
       tax_name: string | null;
       tax_included: boolean | null;
       paid_before: number;
@@ -242,7 +248,7 @@ async function paymentReceipt(sql: Sql, gymId: string, number: number): Promise<
             WHERE o.gym_id = h.gym_id AND o.id = h.replaces_id) AS change_from,
            b.covers_from::text AS covers_from, b.covers_to::text AS covers_to, (b.period_index = 0 AND h.full_from IS NOT NULL) AS part,
            h.kind, h.term_count, h.term_unit, h.starts_on::text AS starts_on, h.full_from::text AS full_from,
-           b.tax_minor, b.tax_bp, b.tax_name, b.tax_included,
+           b.tax_minor, b.tax_pcm, b.tax_name, b.tax_included,
            COALESCE((SELECT sum(q.amount_minor) FROM gym_member_payments q
                      WHERE q.gym_id = p.gym_id AND q.bill_id = p.bill_id AND q.undone_at IS NULL AND q.seq < p.seq), 0)::int AS paid_before
     FROM gym_member_payments p

@@ -24,6 +24,8 @@ import {
   refundSale as refundSaleCheck,
   refundVoidKeptSchema,
   saleAmounts,
+  saleTaxSchema,
+  SALES_TAX_PCM_MAX,
   saleRefundMethodSchema,
   saleRefundReasonKeptSchema,
   saleVoidReasonSchema,
@@ -35,6 +37,7 @@ import {
   type SaleRefundReason,
   type SaleRefundReasonKept,
   type SalesTax,
+  type SaleTax,
   type MemberPaymentByHand,
   type SalePaymentMethod,
   type SaleVoidReason,
@@ -44,14 +47,15 @@ import { nextReceipt } from "../receipts/repo.js";
 import { countUse, lockedDiscount, returnUse, takeUse, type DiscountRow } from "./discountsRepo.js";
 import { friendGiftOpen } from "../referrals/friendGiftRepo.js";
 import { friendPaymentGone, giftUseUndone, giveMemberGift, lockedWaitingGift, markUsed } from "../referrals/memberGiftRepo.js";
-import { rateOf, readRates, taxIncludedOf } from "./taxRepo.js";
+import { ratesOf, readRates, taxIncludedOf } from "./taxRepo.js";
 
 export interface ProductRow {
   id: string;
   name: string;
   priceMinor: number;
   currency: string;
-  taxRateId: string | null;
+  /** Its rates, in the order picked (18b-v-a). */
+  taxRateIds: string[];
   stock: number | null;
   archivedAt: Date | null;
   updatedAt: Date;
@@ -62,7 +66,7 @@ interface RawProduct {
   name: string;
   price_minor: number;
   currency: string;
-  tax_rate_id: string | null;
+  tax_rate_ids: string[];
   stock: number | null;
   archived_at: Date | null;
   updated_at: Date;
@@ -73,7 +77,7 @@ const product = (r: RawProduct): ProductRow => ({
   name: r.name,
   priceMinor: r.price_minor,
   currency: r.currency,
-  taxRateId: r.tax_rate_id,
+  taxRateIds: r.tax_rate_ids,
   stock: r.stock,
   archivedAt: r.archived_at,
   updatedAt: r.updated_at,
@@ -88,8 +92,8 @@ export interface SaleRow {
   netMinor: number;
   taxMinor: number;
   totalMinor: number;
-  taxBp: number;
-  taxName: string | null;
+  /** Each tax, as it was sold (18b-v-a). */
+  taxes: SaleTax[];
   taxIncluded: boolean;
   discountName: string | null;
   discountMinor: number;
@@ -147,8 +151,7 @@ interface RawSale {
   net_minor: number;
   tax_minor: number;
   total_minor: number;
-  tax_bp: number;
-  tax_name: string | null;
+  taxes: unknown;
   tax_included: boolean;
   discount_name: string | null;
   discount_minor: number;
@@ -183,8 +186,8 @@ const sale = (r: RawSale): SaleRow => ({
   netMinor: r.net_minor,
   taxMinor: r.tax_minor,
   totalMinor: r.total_minor,
-  taxBp: r.tax_bp,
-  taxName: r.tax_name,
+  // Kept JSON, written below from a priced line: parsed, so a row that is not a list of taxes fails here.
+  taxes: z.array(saleTaxSchema).parse(r.taxes),
   taxIncluded: r.tax_included,
   discountName: r.discount_name,
   discountMinor: r.discount_minor,
@@ -431,10 +434,16 @@ async function refundsOf(sql: Sql | TransactionSql, gymId: string, sales: SaleRo
   return sales.map((s) => ({ ...s, refunds: bySale.get(s.id) ?? [], cardRefund: open.get(s.id) ?? null, toPlace: toPlace.filter((p) => p.sale_id === s.id).map((p) => ({ pressId: p.id, chargeback: p.reason === "chargeback", amountMinor: p.amount_minor, on: p.on_day, room: roomOf(s, p) })) }));
 }
 
+/** A product's rates as `tax_rate_ids`, from `gym_products p`, in the order picked (18b-v-a). */
+const productRates = (sql: Sql | TransactionSql) => sql`
+  ARRAY(SELECT x.tax_rate_id FROM gym_product_tax_rates x
+        WHERE x.gym_id = p.gym_id AND x.product_id = p.id
+        ORDER BY x.position, x.tax_rate_id)::text[] AS tax_rate_ids`;
+
 /** The columns every read of a sale takes, from `gym_sales s` with its two joins. Who
  *  voided one and on what day are read on their own, for the few that were. */
 const saleColumns = (sql: Sql | TransactionSql) => sql`
-  s.id, s.product_id, s.item_name, s.quantity, s.unit_price_minor, s.net_minor, s.tax_minor, s.total_minor, s.tax_bp, s.tax_name, s.tax_included,
+  s.id, s.product_id, s.item_name, s.quantity, s.unit_price_minor, s.net_minor, s.tax_minor, s.total_minor, s.taxes, s.tax_included,
   s.discount_name, s.discount_minor,
   CASE WHEN s.member_gift THEN (
     SELECT NULLIF(btrim(f.full_name), '') FROM gym_referral_member_gifts g
@@ -478,10 +487,10 @@ export async function readRegister(
   withSales: boolean,
 ): Promise<RegisterRow | null> {
   const readProducts = (archived: boolean, limit: number) => sql<RawProduct[]>`
-    SELECT id, name, price_minor, currency, tax_rate_id, stock, archived_at, updated_at
-    FROM gym_products
-    WHERE gym_id = ${gymId} AND (archived_at IS NOT NULL) = ${archived}
-    ORDER BY ${archived ? sql`archived_at DESC, id` : sql`lower(name), id`}
+    SELECT p.id, p.name, p.price_minor, p.currency, ${productRates(sql)}, p.stock, p.archived_at, p.updated_at
+    FROM gym_products p
+    WHERE p.gym_id = ${gymId} AND (p.archived_at IS NOT NULL) = ${archived}
+    ORDER BY ${archived ? sql`p.archived_at DESC, p.id` : sql`lower(p.name), p.id`}
     LIMIT ${limit}`;
   const [gymRows, included, rates, live, archived, archivedTotal, sales, totals, refunds] = await Promise.all([
     sql<{ country: string | null }[]>`SELECT country FROM gyms WHERE id = ${gymId}`,
@@ -555,7 +564,7 @@ export async function readRegister(
 export interface ProductInput {
   name: string;
   priceMinor: number;
-  taxRateId: string | null;
+  taxRateIds: readonly string[];
   stock: number | null;
 }
 
@@ -568,8 +577,28 @@ export type ProductWriteOutcome =
   | { kind: "changed" }
   /** The gym's country has no money to price in. */
   | { kind: "no_currency" }
-  /** The tax rate named is not one of this gym's. */
-  | { kind: "rate_not_found" };
+  /** A tax rate named is not one of this gym's. */
+  | { kind: "rate_not_found" }
+  /** Its rates come to more than 30% in all (18b-v-a). */
+  | { kind: "taxes_over_cap" };
+
+/** The rates a product is saved with: each this gym's, at most 30% in all. */
+async function checkRates(tx: TransactionSql, gymId: string, rateIds: readonly string[]): Promise<ProductWriteOutcome | null> {
+  const rates = await ratesOf(tx, gymId, rateIds);
+  if (rates === null) return { kind: "rate_not_found" };
+  if (rates.reduce((n, r) => n + r.pcm, 0) > SALES_TAX_PCM_MAX) return { kind: "taxes_over_cap" };
+  return null;
+}
+
+/** A product's rates, replaced by these in this order. */
+async function writeRates(tx: TransactionSql, gymId: string, productId: string, rateIds: readonly string[]): Promise<void> {
+  await tx`DELETE FROM gym_product_tax_rates WHERE gym_id = ${gymId} AND product_id = ${productId}`;
+  if (rateIds.length === 0) return;
+  await tx`
+    INSERT INTO gym_product_tax_rates (gym_id, product_id, tax_rate_id, position)
+    SELECT ${gymId}, ${productId}, r.id, r.n
+    FROM unnest(${rateIds}::uuid[]) WITH ORDINALITY AS r(id, n)`;
+}
 
 async function liveCount(tx: TransactionSql, gymId: string): Promise<number> {
   const [row] = await tx<{ n: number }[]>`
@@ -595,12 +624,14 @@ export async function createProduct(sql: Sql, input: ProductInput & { gymId: str
     if (currency === null) return { kind: "no_currency" };
     if ((await liveCount(tx, input.gymId)) >= PRODUCTS_MAX) return { kind: "too_many", cap: PRODUCTS_MAX };
     if (await nameTaken(tx, input.gymId, input.name, null)) return { kind: "name_taken" };
-    if (input.taxRateId !== null && (await rateOf(tx, input.gymId, input.taxRateId)) === null) return { kind: "rate_not_found" };
+    const refused = await checkRates(tx, input.gymId, input.taxRateIds);
+    if (refused !== null) return refused;
     const [created] = await tx<{ id: string }[]>`
-      INSERT INTO gym_products (gym_id, name, price_minor, currency, tax_rate_id, stock)
-      VALUES (${input.gymId}, ${input.name}, ${input.priceMinor}, ${currency}, ${input.taxRateId}, ${input.stock})
+      INSERT INTO gym_products (gym_id, name, price_minor, currency, stock)
+      VALUES (${input.gymId}, ${input.name}, ${input.priceMinor}, ${currency}, ${input.stock})
       RETURNING id`;
     if (created === undefined) throw new Error("product insert returned no row");
+    await writeRates(tx, input.gymId, created.id, input.taxRateIds);
     await insertAudit(tx, {
       actorUserId: input.actorUserId,
       gymId: input.gymId,
@@ -628,7 +659,8 @@ export async function updateProduct(
     // To the millisecond, which is what the list sends and a form can send back.
     if (before.updated_at.getTime() !== input.readAt.getTime()) return { kind: "changed" };
     if (await nameTaken(tx, input.gymId, input.name, input.productId)) return { kind: "name_taken" };
-    if (input.taxRateId !== null && (await rateOf(tx, input.gymId, input.taxRateId)) === null) return { kind: "rate_not_found" };
+    const refused = await checkRates(tx, input.gymId, input.taxRateIds);
+    if (refused !== null) return refused;
     // The price typed is in the gym's money as it is now: a product made before the gym
     // changed its country takes the new one with its new price.
     const [gym] = await tx<{ country: string | null }[]>`SELECT country FROM gyms WHERE id = ${input.gymId}`;
@@ -636,8 +668,9 @@ export async function updateProduct(
     if (currency === null) return { kind: "no_currency" };
     await tx`
       UPDATE gym_products
-      SET name = ${input.name}, price_minor = ${input.priceMinor}, currency = ${currency}, tax_rate_id = ${input.taxRateId}, stock = ${input.stock}, updated_at = ${input.now}
+      SET name = ${input.name}, price_minor = ${input.priceMinor}, currency = ${currency}, stock = ${input.stock}, updated_at = ${input.now}
       WHERE id = ${input.productId} AND gym_id = ${input.gymId}`;
+    await writeRates(tx, input.gymId, input.productId, input.taxRateIds);
     await insertAudit(tx, {
       actorUserId: input.actorUserId,
       gymId: input.gymId,
@@ -775,7 +808,8 @@ export const pricedSaleLineSchema = z
     quantity: z.number().int().min(1).max(99),
     used: z.object({ id: z.string().uuid(), name: z.string().min(1), offMinor: z.number().int().min(1) }).strict().nullable(),
     gift: z.object({ id: z.string().uuid(), offMinor: z.number().int().min(1) }).strict().nullable(),
-    rate: z.object({ name: z.string().min(1), bp: z.number().int().min(0) }).strict().nullable(),
+    /** Each tax, as priced (18b-v-a); empty for none. */
+    taxes: z.array(z.object({ name: z.string().min(1), pcm: z.number().int().min(1), minor: z.number().int().min(0) }).strict()).max(10),
     netMinor: z.number().int().min(0),
     taxMinor: z.number().int().min(0),
     totalMinor: z.number().int().min(1),
@@ -807,10 +841,20 @@ export async function priceBasket(
   const [gym] = await tx<{ country: string | null }[]>`SELECT country FROM gyms WHERE id = ${input.gymId}`;
   const included = await taxIncludedOf(tx, input.gymId);
   if (gym === undefined || included === null) return { kind: "product_not_found" };
+  const productIds = input.lines.map((l) => l.productId);
   const items = await tx<RawProduct[]>`
-    SELECT id, name, price_minor, currency, tax_rate_id, stock, archived_at, updated_at FROM gym_products
-    WHERE gym_id = ${input.gymId} AND id = ANY(${input.lines.map((l) => l.productId)}::uuid[]) AND archived_at IS NULL`;
+    SELECT p.id, p.name, p.price_minor, p.currency, ${productRates(tx)}, p.stock, p.archived_at, p.updated_at FROM gym_products p
+    WHERE p.gym_id = ${input.gymId} AND p.id = ANY(${productIds}::uuid[]) AND p.archived_at IS NULL`;
   const itemOf = new Map(items.map((i) => [i.id, i]));
+  // Each product's rates as they are now, in its order, read under the gym's lock that their changes take.
+  const rateRows = await tx<{ product_id: string; name: string; rate_pcm: number }[]>`
+    SELECT x.product_id, r.name, r.rate_pcm
+    FROM gym_product_tax_rates x
+    JOIN gym_tax_rates r ON r.gym_id = x.gym_id AND r.id = x.tax_rate_id
+    WHERE x.gym_id = ${input.gymId} AND x.product_id = ANY(${productIds}::uuid[])
+    ORDER BY x.product_id, x.position, x.tax_rate_id`;
+  const ratesOfProduct = (id: string): { name: string; pcm: number }[] =>
+    rateRows.filter((r) => r.product_id === id).map((r) => ({ name: r.name, pcm: r.rate_pcm }));
 
   // A past member can buy a bottle of water: any record of this gym's, and no other's.
   if (input.entryId !== null) {
@@ -858,13 +902,11 @@ export async function priceBasket(
       gift = { id: found.id, offMinor: off };
     }
 
-    // The product's rate as it is now, read under the gym's lock that its changes take.
-    const rate = item.tax_rate_id === null ? null : await rateOf(tx, input.gymId, item.tax_rate_id);
+    const rates = ratesOfProduct(item.id);
     const amounts = saleAmounts({
       unitPriceMinor: item.price_minor,
       quantity: line.quantity,
-      taxed: rate !== null,
-      taxBp: rate?.bp ?? 0,
+      taxPcms: rates.map((r) => r.pcm),
       taxIncluded: included,
       discountMinor: used?.offMinor ?? gift?.offMinor ?? 0,
     });
@@ -879,7 +921,7 @@ export async function priceBasket(
       quantity: line.quantity,
       used,
       gift,
-      rate: rate === null ? null : { name: rate.name, bp: rate.bp },
+      taxes: rates.map((r, i) => ({ name: r.name, pcm: r.pcm, minor: amounts.taxParts[i] ?? 0 })),
       netMinor: amounts.netMinor,
       taxMinor: amounts.taxMinor,
       totalMinor: amounts.totalMinor,
@@ -1005,10 +1047,11 @@ async function writeSale(
     const [created] = await tx<{ id: string }[]>`
       INSERT INTO gym_sales
         (gym_id, request_key, product_id, entry_id, item_name, quantity, unit_price_minor, net_minor, tax_minor, total_minor,
-         tax_bp, tax_name, tax_included, currency, method, square_payment_id, sold_on, recorded_by, stock_counted, created_at,
+         tax_pcm, tax_name, taxes, tax_included, currency, method, square_payment_id, sold_on, recorded_by, stock_counted, created_at,
          discount_id, discount_name, discount_minor, receipt_number, for_member, member_gift, line_no)
       VALUES (${input.gymId}, ${input.requestKey}, ${p.productId}, ${input.entryId}, ${p.name}, ${p.quantity}, ${p.unitPriceMinor},
-              ${p.netMinor}, ${p.taxMinor}, ${p.totalMinor}, ${p.rate?.bp ?? 0}, ${p.rate?.name ?? null}, ${sale.included}, ${p.currency},
+              ${p.netMinor}, ${p.taxMinor}, ${p.totalMinor}, ${p.taxes.reduce((n, t) => n + t.pcm, 0)}, ${p.taxes.length === 1 ? (p.taxes[0]?.name ?? null) : null},
+              ${tx.json(p.taxes)}, ${sale.included}, ${p.currency},
               ${input.method}, ${input.squarePaymentId}, ${input.today}::date, ${input.actorUserId}, ${counted.length === 1}, ${input.now},
               ${p.used?.id ?? null}, ${p.used?.name ?? (p.gift === null ? null : MEMBER_GIFT_SALE_NAME)}, ${p.used?.offMinor ?? p.gift?.offMinor ?? 0},
               ${receiptNumber}, ${input.forMember}, ${p.gift !== null}, ${i + 1})

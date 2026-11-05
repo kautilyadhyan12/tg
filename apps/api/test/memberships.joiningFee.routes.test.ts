@@ -454,7 +454,7 @@ d("a joining fee on a membership type (real Postgres)", () => {
       const owner = await makeUser("tax-owner");
       const gymId = (await makeGym(owner, "Jfee Tax Gym")).org.id;
       const register = `/v1/orgs/${gymId}/register`;
-      const rateRes = await post(`${register}/tax-rates`, { name: "GST", bp: 1800 }, owner.cookies);
+      const rateRes = await post(`${register}/tax-rates`, { name: "GST", pcm: 18000 }, owner.cookies);
       expect(rateRes.statusCode, rateRes.body).toBe(201);
       const gst = sellPage(rateRes).tax.rates.find((r) => r.name === "GST");
       if (gst === undefined) throw new Error("no rate");
@@ -504,7 +504,7 @@ d("a joining fee on a membership type (real Postgres)", () => {
       expect(receipt).toMatchObject({
         kind: "payment",
         joiningFeeMinor: 2500,
-        amounts: { listedMinor: 7500, discount: { name: "First month", minor: 1000 }, tax: { bp: 1800, minor: 1170, included: false }, totalMinor: 7670 },
+        amounts: { listedMinor: 7500, discount: { name: "First month", minor: 1000 }, taxes: [{ pcm: 18000, minor: 1170, included: false }], totalMinor: 7670 },
         paidMinor: 7670,
       });
     },

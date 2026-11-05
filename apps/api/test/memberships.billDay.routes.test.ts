@@ -299,7 +299,7 @@ d("billing everyone on one day of the month (real Postgres)", () => {
       clock = at("2026-10-15");
       const owner = await makeUser("tax-owner");
       const gymId = (await makeGym(owner, "Bday Tax Gym")).org.id;
-      const rateRes = await post(`/v1/orgs/${gymId}/register/tax-rates`, { name: "Sales tax", bp: 1000 }, owner.cookies);
+      const rateRes = await post(`/v1/orgs/${gymId}/register/tax-rates`, { name: "Sales tax", pcm: 10000 }, owner.cookies);
       expect(rateRes.statusCode, rateRes.body).toBe(201);
       const rate = sellPageResponseSchema.parse(JSON.parse(rateRes.body)).tax.rates.find((r) => r.name === "Sales tax");
       if (rate === undefined) throw new Error("no rate");

@@ -40,6 +40,9 @@ export const MEMBERSHIP_PRICE_MINOR_MAX = 99_999_999;
 /** The highest price of a taxed membership type (18b-iii): at the highest tax rate, 30%,
  *  added on top, its bill still fits under a bill's cap. 76,923,076 bills 99,999,999. */
 export const TAXED_PRICE_MINOR_MAX = 76_923_076;
+/** A tax rate in thousandths of a percent ("pcm", per cent mille; 18b-v-a): 9975 is 9.975%,
+ *  8250 is 8.25%. 30% is the most one rate, or all of one thing's rates together, can be. */
+export const SALES_TAX_PCM_MAX = 30_000;
 export const MEMBERSHIP_TERM_COUNT_MAX = 365;
 export const MEMBERSHIP_PACK_CLASSES_MAX = 500;
 export const MEMBERSHIP_PACK_DAYS_MAX = 730;
@@ -233,7 +236,7 @@ export const gymMembershipTypesResponseSchema = z
     archivedTotal: z.number().int().min(0),
     classChoices: z.array(z.object({ id: z.string().uuid(), name: z.string().min(1).max(80) }).strict()),
     /** The gym's tax rates, for "Tax" (18b-iii), and whether its prices hold the tax. */
-    taxRates: z.array(z.object({ id: z.string().uuid(), name: z.string(), bp: z.number().int().min(1).max(3000) }).strict()),
+    taxRates: z.array(z.object({ id: z.string().uuid(), name: z.string(), pcm: z.number().int().min(1).max(SALES_TAX_PCM_MAX) }).strict()),
     taxIncluded: z.boolean(),
     /** The day of the month the gym bills everyone on (18y); null where each is billed from its start. */
     billDay: z.number().int().min(1).max(28).nullable().default(null),

@@ -11,7 +11,7 @@ import { z } from "zod";
 import { gymDiscountSchema } from "./discounts.js";
 import { chargebackSeenSchema } from "./chargebacks.js";
 import { cardRefundOpenSchema, memberPaymentByHandSchema, memberPaymentMethodSchema, receiptNumberSchema, salePaymentMethodSchema } from "./memberBills.js";
-import { MEMBERSHIP_PRICE_MINOR_MAX } from "./memberships.js";
+import { MEMBERSHIP_PRICE_MINOR_MAX, SALES_TAX_PCM_MAX } from "./memberships.js";
 import { isRealDay } from "./discounts.js";
 import { saleRefundSchema } from "./saleRefunds.js";
 import { VISIBLE_TEXT } from "./visibleText.js";
@@ -31,8 +31,8 @@ export const SALES_SHOWN = 100;
 export const PURCHASES_SHOWN = 20;
 export const SALE_PEOPLE_FOUND = 8;
 
-/** A tax rate in hundredths of a percent: 825 is 8.25%. 0 is no tax. */
-export const SALES_TAX_BP_MAX = 3000;
+/** The thousandths of a percent in a whole: 100% is 100,000. */
+const PCM_WHOLE = 100_000;
 /** How many named tax rates a gym can have (18b-iii). */
 export const TAX_RATES_MAX = 10;
 export const TAX_NAME_MAX = 30;
@@ -67,27 +67,30 @@ export function taxNameForCountry(country: string | null): string | null {
   return parsed.success ? COUNTRY_TAX_NAME[parsed.data] : null;
 }
 
-/** A typed rate as hundredths of a percent, or null where it is not plainly a rate:
- *  digits and at most one point, no more than two decimals, no more than the cap. */
-export function taxRateToBp(text: string): number | null {
-  const match = /^(\d{1,2})(?:\.(\d{1,2}))?$/.exec(text.trim());
+/** A typed rate as thousandths of a percent, or null where it is not plainly a rate:
+ *  digits and at most one point, no more than three decimals, no more than the cap. */
+export function taxRateToPcm(text: string): number | null {
+  const match = /^(\d{1,2})(?:\.(\d{1,3}))?$/.exec(text.trim());
   if (match === null) return null;
-  const bp = Number(match[1] ?? "0") * 100 + Number((match[2] ?? "").padEnd(2, "0") || "0");
-  return bp <= SALES_TAX_BP_MAX ? bp : null;
+  const pcm = Number(match[1] ?? "0") * 1000 + Number((match[2] ?? "").padEnd(3, "0") || "0");
+  return pcm <= SALES_TAX_PCM_MAX ? pcm : null;
 }
 
-/** 825 → "8.25", 2000 → "20": the inverse of `taxRateToBp`. */
-export function bpToTaxRateText(bp: number): string {
-  const whole = Math.trunc(bp / 100);
-  const rest = bp % 100;
+/** 9975 → "9.975", 8250 → "8.25", 20000 → "20": the inverse of `taxRateToPcm`. */
+export function pcmToTaxRateText(pcm: number): string {
+  const whole = Math.trunc(pcm / 1000);
+  const rest = pcm % 1000;
   if (rest === 0) return String(whole);
-  return `${String(whole)}.${String(rest).padStart(2, "0").replace(/0$/, "")}`;
+  return `${String(whole)}.${String(rest).padStart(3, "0").replace(/0+$/, "")}`;
 }
 
 export interface SaleAmounts {
   /** The price before tax. */
   netMinor: number;
+  /** All of its tax: `taxParts` added up. */
   taxMinor: number;
+  /** Each rate's tax, in the order the rates were given (18b-v-a). */
+  taxParts: number[];
   /** What the person pays. */
   totalMinor: number;
 }
@@ -98,16 +101,20 @@ export type SaleAmountsResult = ({ ok: true } & SaleAmounts) | { ok: false; reas
  *  whether the gym's prices hold it. */
 export interface TaxApplied {
   name: string;
-  bp: number;
+  pcm: number;
   included: boolean;
 }
 
-/** WHAT ONE SALE COMES TO. Whole-number arithmetic throughout, the tax rounded to the
+/** WHAT ONE SALE COMES TO. Whole-number arithmetic throughout, each tax rounded to the
  *  nearest minor unit (a half goes up).
  *
- *  Tax on top: the price is before tax, and the tax is added. Tax in the price: the price
- *  is what the person pays, and the tax is the part of it that is tax. Either way the
- *  three numbers add up: `netMinor + taxMinor === totalMinor`.
+ *  Tax on top: the price is before tax, and each rate's tax is worked out on that price on
+ *  its own, never tax on tax (as Revenu Québec has GST and QST worked out since 2013), and
+ *  added. Tax in the price: the price is what the person pays; the tax inside it is worked
+ *  out at all the rates together, and shared between them in proportion, each part within
+ *  a minor unit of its exact share, the units left over going to the largest remainders
+ *  (the first rate where two are equal). Either way the numbers add up:
+ *  `netMinor + taxMinor === totalMinor`, and `taxParts` add up to `taxMinor`.
  *
  *  A discount comes off the price as the gym lists it (before tax where tax is added, with
  *  it where it is included), and the tax is worked out on what is left. A sale has to
@@ -115,42 +122,59 @@ export interface TaxApplied {
 export function saleAmounts(input: {
   unitPriceMinor: number;
   quantity: number;
-  /** Whether tax is charged on this product at all. */
-  taxed: boolean;
-  taxBp: number;
+  /** Each rate charged on it, thousandths of a percent; empty for no tax. */
+  taxPcms: readonly number[];
   taxIncluded: boolean;
   /** What a discount takes off the price times how many (`discountOff`); 0 for none. */
   discountMinor?: number;
 }): SaleAmountsResult {
-  const { unitPriceMinor, quantity, taxBp } = input;
+  const { unitPriceMinor, quantity, taxPcms } = input;
   const discountMinor = input.discountMinor ?? 0;
   if (!Number.isSafeInteger(unitPriceMinor) || unitPriceMinor < 1) return { ok: false, reason: "not_an_amount" };
   if (!Number.isSafeInteger(quantity) || quantity < 1 || quantity > SALE_QUANTITY_MAX) return { ok: false, reason: "not_an_amount" };
-  if (!Number.isSafeInteger(taxBp) || taxBp < 0 || taxBp > SALES_TAX_BP_MAX) return { ok: false, reason: "not_an_amount" };
+  if (taxPcms.length > TAX_RATES_MAX || taxPcms.some((p) => !Number.isSafeInteger(p) || p < 1 || p > SALES_TAX_PCM_MAX)) return { ok: false, reason: "not_an_amount" };
+  const together = taxPcms.reduce((n, p) => n + p, 0);
+  if (together > SALES_TAX_PCM_MAX) return { ok: false, reason: "not_an_amount" };
   const full = unitPriceMinor * quantity;
   if (!Number.isSafeInteger(discountMinor) || discountMinor < 0 || discountMinor > full) return { ok: false, reason: "not_an_amount" };
   const listed = full - discountMinor;
   if (listed < 1) return { ok: false, reason: "nothing_to_pay" };
-  const rate = input.taxed ? taxBp : 0;
   let amounts: SaleAmounts;
-  if (rate === 0) {
-    amounts = { netMinor: listed, taxMinor: 0, totalMinor: listed };
+  if (together === 0) {
+    amounts = { netMinor: listed, taxMinor: 0, taxParts: [], totalMinor: listed };
   } else if (input.taxIncluded) {
-    const taxMinor = Math.floor((2 * listed * rate + (10_000 + rate)) / (2 * (10_000 + rate)));
-    amounts = { netMinor: listed - taxMinor, taxMinor, totalMinor: listed };
+    const taxMinor = Math.floor((2 * listed * together + (PCM_WHOLE + together)) / (2 * (PCM_WHOLE + together)));
+    amounts = { netMinor: listed - taxMinor, taxMinor, taxParts: shareTax(taxMinor, taxPcms), totalMinor: listed };
   } else {
-    const taxMinor = Math.floor((listed * rate + 5_000) / 10_000);
-    amounts = { netMinor: listed, taxMinor, totalMinor: listed + taxMinor };
+    const taxParts = taxPcms.map((p) => Math.floor((listed * p + PCM_WHOLE / 2) / PCM_WHOLE));
+    const taxMinor = taxParts.reduce((n, m) => n + m, 0);
+    amounts = { netMinor: listed, taxMinor, taxParts, totalMinor: listed + taxMinor };
   }
   if (amounts.totalMinor > MEMBERSHIP_PRICE_MINOR_MAX) return { ok: false, reason: "too_much" };
   return { ok: true, ...amounts };
+}
+
+/** The tax inside a price shared between its rates in proportion: each part its exact share
+ *  rounded down, then one more unit to each of the largest remainders until the parts add up
+ *  to `taxMinor`. */
+function shareTax(taxMinor: number, pcms: readonly number[]): number[] {
+  const together = pcms.reduce((n, p) => n + p, 0);
+  const parts = pcms.map((p) => Math.floor((taxMinor * p) / together));
+  let left = taxMinor - parts.reduce((n, m) => n + m, 0);
+  const byRemainder = pcms.map((p, i) => ({ i, rest: (taxMinor * p) % together })).sort((a, b) => b.rest - a.rest || a.i - b.i);
+  for (const { i } of byRemainder) {
+    if (left === 0) break;
+    parts[i] = (parts[i] ?? 0) + 1;
+    left -= 1;
+  }
+  return parts;
 }
 
 /** WHAT ONE MEMBERSHIP BILL COMES TO (18b-iii): its price, after any discount, with the tax
  *  of the rate its membership was sold with, by `saleAmounts`' own arithmetic. The bill's
  *  amount is `totalMinor`, what the person pays; `taxMinor` is the part of it that is tax. */
 export function billAmounts(listedMinor: number, tax: TaxApplied | null): SaleAmountsResult {
-  return saleAmounts({ unitPriceMinor: listedMinor, quantity: 1, taxed: tax !== null, taxBp: tax?.bp ?? 0, taxIncluded: tax?.included ?? false });
+  return saleAmounts({ unitPriceMinor: listedMinor, quantity: 1, taxPcms: tax === null ? [] : [tax.pcm], taxIncluded: tax?.included ?? false });
 }
 
 // ── The wire ────────────────────────────────────────────────────────────────
@@ -158,9 +182,8 @@ export function billAmounts(listedMinor: number, tax: TaxApplied | null): SaleAm
 const daySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const minorSchema = z.number().int().min(0).max(MEMBERSHIP_PRICE_MINOR_MAX);
 const currencySchema = z.string().regex(/^[A-Z]{3}$/);
-const taxBpSchema = z.number().int().min(0).max(SALES_TAX_BP_MAX);
 /** A named rate's percentage: a rate of 0 is no rate, and is "No tax" instead. */
-const rateBpSchema = z.number().int().min(1).max(SALES_TAX_BP_MAX);
+const ratePcmSchema = z.number().int().min(1).max(SALES_TAX_PCM_MAX);
 /** Trimmed, one line, nothing hidden: a tax's name is printed on a bill and a receipt. */
 const taxNameSchema = z.string().trim().min(1).max(TAX_NAME_MAX).regex(VISIBLE_TEXT);
 /** Trimmed, one line, nothing hidden: a product's name is printed on a receipt (18g). */
@@ -173,8 +196,8 @@ export const gymProductSchema = z
     name: z.string(),
     priceMinor: minorSchema,
     currency: currencySchema,
-    /** The gym's tax rate charged on it; null for no tax. */
-    taxRateId: z.string().uuid().nullable(),
+    /** The gym's tax rates charged on it, in the order they were picked; empty for no tax (18b-v-a). */
+    taxRateIds: z.array(z.string().uuid()).max(TAX_RATES_MAX),
     /** How many are left; null where the gym does not count it. */
     stock: stockSchema.nullable(),
     archivedAt: z.string().datetime().nullable(),
@@ -187,7 +210,11 @@ export const saveGymProductRequestSchema = z
   .object({
     name: productNameSchema,
     priceMinor: z.number().int().min(1).max(MEMBERSHIP_PRICE_MINOR_MAX),
-    taxRateId: z.string().uuid().nullable(),
+    /** The gym's rates it charges, each once; together at most 30% (checked on the server). */
+    taxRateIds: z
+      .array(z.string().uuid())
+      .max(TAX_RATES_MAX)
+      .refine((ids) => new Set(ids).size === ids.length, "rate_twice"),
     stock: stockSchema.nullable(),
   })
   .strict();
@@ -204,7 +231,7 @@ export const gymTaxRateSchema = z
   .object({
     id: z.string().uuid(),
     name: z.string(),
-    bp: rateBpSchema,
+    pcm: ratePcmSchema,
     /** Products on sale that charge it. */
     products: z.number().int().min(0),
     /** Membership types on the price list that charge it. */
@@ -224,13 +251,14 @@ export type SalesTax = z.infer<typeof salesTaxSchema>;
 export const taxModeRequestSchema = z.object({ included: z.boolean() }).strict();
 export type TaxModeRequest = z.infer<typeof taxModeRequestSchema>;
 
-export const saveTaxRateRequestSchema = z.object({ name: taxNameSchema, bp: rateBpSchema }).strict();
+export const saveTaxRateRequestSchema = z.object({ name: taxNameSchema, pcm: ratePcmSchema }).strict();
 export type SaveTaxRateRequest = z.infer<typeof saveTaxRateRequestSchema>;
 
 /** WHAT CHARGES ONE RATE, set in one press (18b-iii): the gym's membership types, or its
  *  products, that charge it, every one of them. One of that kind on the list now charges
- *  this rate; one not on it that charged this rate charges none. A type or product that
- *  charged another rate and is on the list charges this one instead. */
+ *  this rate; one not on it that charged this rate no longer does. A type that charged
+ *  another rate and is on the list charges this one instead; a product keeps its other
+ *  rates and charges this one as well (18b-v-a). */
 export const chargeTaxRateRequestSchema = z
   .object({
     use: z.enum(["memberships", "products"]),
@@ -251,6 +279,11 @@ export const SALE_VOID_REASON_WORDS: Readonly<Record<SaleVoidReason, string>> = 
   other: "Something else",
 };
 
+/** One tax a sale line was sold with (18b-v-a). `name` is null for a sale made before a
+ *  gym's rates had names. */
+export const saleTaxSchema = z.object({ name: z.string().nullable(), pcm: ratePcmSchema, minor: minorSchema }).strict();
+export type SaleTax = z.infer<typeof saleTaxSchema>;
+
 export const gymSaleSchema = z
   .object({
     id: z.string().uuid(),
@@ -261,10 +294,9 @@ export const gymSaleSchema = z
     netMinor: minorSchema,
     taxMinor: minorSchema,
     totalMinor: minorSchema,
-    taxBp: taxBpSchema,
-    /** The tax's name when it was sold; null where none was charged, or for a sale made
-     *  before a gym's rates had names. */
-    taxName: z.string().nullable(),
+    /** Each tax it was sold with, by its name and rate then, and how much (18b-v-a); empty
+     *  where none was charged. `minor` adds up to `taxMinor`. */
+    taxes: z.array(saleTaxSchema).max(TAX_RATES_MAX),
     taxIncluded: z.boolean(),
     /** The discount it was sold with, as it was named then, and what it took off; null and
      *  0 where there was none. */
@@ -612,6 +644,7 @@ export const REGISTER_WORDS = {
   rate_name_taken: "You already have a tax rate with this name. Pick another name.",
   too_many_rates: `You can have ${String(TAX_RATES_MAX)} tax rates. Remove one you no longer charge first.`,
   taxed_price_too_high: "This price is too high to charge tax on. Lower the price, or choose No tax.",
+  taxes_over_cap: "A product's taxes can come to 30% at most together. Untick one, or lower a rate.",
   request_reused: "That form was already used for another sale. Nothing was sold: start the sale again.",
   sale_not_found: "That sale was not found.",
   sale_not_today: "Only a sale made today can be voided here.",
@@ -646,6 +679,12 @@ export function taxRateInUseWords(name: string, uses: { products: number; member
       ? ` A membership keeps the tax it was sold with, so ${name} can be removed once nobody holds one. You can still change its name or rate.`
       : "";
   return first + change + held;
+}
+
+/** Why a change to a rate, or to what it is charged on, was refused (18b-v-a): one product's
+ *  taxes would come to more than 30% together. */
+export function taxesOverCapWords(product: string): string {
+  return `Nothing was saved: the taxes on ${product} would come to more than 30% together. Take a tax off ${product} first, or lower the rate.`;
 }
 
 /** A discount that takes a set amount off, or Refer a friend's gift, on more than one product
