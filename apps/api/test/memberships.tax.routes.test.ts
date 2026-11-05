@@ -361,11 +361,11 @@ d("tax on memberships (real Postgres)", () => {
       ]);
       // Every taxed bill says the rate it was opened at, and that the tax was on top.
       expect((await billsOf(gymId, mayaGold.id)).map((b) => [b.tax_pcm, b.tax_included])).toEqual([
-        [1800, false],
-        [1800, false],
-        [1800, false],
-        [1200, false],
-        [1200, false],
+        [18000, false],
+        [18000, false],
+        [18000, false],
+        [12000, false],
+        [12000, false],
       ]);
 
       // A person's page says the same: each bill's amount and its tax, and what is left to pay.
@@ -658,7 +658,7 @@ d("tax on memberships (real Postgres)", () => {
       expect((await put(`${register(gymId)}/tax-rates/${gst.id}`, { name: "GST", pcm: 1000 }, desk.cookies)).statusCode).toBe(403);
       expect((await del(`${register(gymId)}/tax-rates/${gst.id}`, desk.cookies)).statusCode).toBe(403);
       expect((await put(`${register(gymId)}/tax`, { included: true }, desk.cookies)).statusCode).toBe(403);
-      expect((await sql<{ name: string; rate_pcm: number }[]>`SELECT name, rate_pcm FROM gym_tax_rates WHERE gym_id = ${gymId}`)).toEqual([{ name: "GST", rate_pcm: 1800 }]);
+      expect((await sql<{ name: string; rate_pcm: number }[]>`SELECT name, rate_pcm FROM gym_tax_rates WHERE gym_id = ${gymId}`)).toEqual([{ name: "GST", rate_pcm: 18000 }]);
 
       // A form that is wrong: no name, 0%, over 30%, a fraction of a hundredth.
       for (const bad of [{ name: "", pcm: 18000 }, { name: "GST", pcm: 0 }, { name: "GST", pcm: 30010 }, { name: "GST", pcm: 18.5 }, { name: "GST" }]) {

@@ -282,7 +282,7 @@ d("an early cancellation fee on a minimum term (real Postgres)", () => {
       // The fee is the amount the gym set, its 18% inside it: 9,900 x 18 / 118 is 1,510.17.
       const [fee] = await sql<{ id: string; amount_minor: number; tax_minor: number; tax_pcm: number; tax_name: string | null; tax_included: boolean | null }[]>`
         SELECT id, amount_minor, tax_minor, tax_pcm, tax_name, tax_included FROM gym_member_bills WHERE held_membership_id = ${halGold} AND fee = 'leave_early'`;
-      expect(fee).toMatchObject({ amount_minor: 9900, tax_minor: 1510, tax_pcm: 1800, tax_name: "GST", tax_included: true });
+      expect(fee).toMatchObject({ amount_minor: 9900, tax_minor: 1510, tax_pcm: 18000, tax_name: "GST", tax_included: true });
       expect(await leaveFees(halGold)).toHaveLength(1);
 
       // Waived: neither another press nor the opening itself puts it on again.
