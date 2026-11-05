@@ -152,6 +152,8 @@ d("the workout and meal reminders (real Postgres)", () => {
     // Asha switches hers off in Settings.
     const off = await save(asha, "workout", { on: false, time: "18:30", days: [1, 2, 3, 4, 5, 6, 7] });
     expect(off.statusCode, off.body).toBe(200);
+    // Owed today as far as the day goes: only the switch may keep it from her phone.
+    await sql`UPDATE training_reminders SET sent_day = NULL WHERE user_id = ${asha.userId}`;
     sent.length = 0;
     await sweep(india(18, 30));
     expect(sentTo(asha.token)).toEqual([]);
@@ -174,6 +176,13 @@ d("the workout and meal reminders (real Postgres)", () => {
     await sql`UPDATE training_reminders SET sent_day = NULL WHERE user_id = ${meera.userId}`;
     await sweep(india(13, 1));
     expect(sentTo(meera.token)).toEqual([]);
+    // A phone sign-in that ran out keeps its address on the server, and is told nothing.
+    const ranOut = await phone("ranout");
+    await set(ranOut, "lunch", "13:00");
+    await sql`UPDATE refresh_tokens SET expires_at = ${india(9, 0, -1)} WHERE user_id = ${ranOut.userId}`;
+    expect((await sql`SELECT 1 FROM push_tokens WHERE token = ${ranOut.token}`).length).toBe(1);
+    await sweep(india(13, 0));
+    expect(sentTo(ranOut.token)).toEqual([]);
   }, TIMEOUT_MS);
 
   // ── The routes ──
