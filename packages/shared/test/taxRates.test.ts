@@ -99,8 +99,11 @@ describe("what one membership bill comes to with several taxes", () => {
     ["India, ₹1,000 with CGST and SGST inside: ₹76.27 each", 100000, { rates: rates(["CGST", 9000], ["SGST", 9000]), included: true }, { netMinor: 84746, taxParts: [7627, 7627], totalMinor: 100000 }],
     // India, inside, an odd paisa: ₹999.99 holds 152.5408 → ₹152.54 again, 7627 + 7627.
     ["India, ₹999.99 with CGST and SGST inside", 99999, { rates: rates(["CGST", 9000], ["SGST", 9000]), included: true }, { netMinor: 84745, taxParts: [7627, 7627], totalMinor: 99999 }],
-    // India, inside, ₹500.01: 18/118 of 50001 is 7627.27 → 7627; halves 3813.5 each, the odd paisa to the first.
-    ["India, ₹500.01 inside: the odd paisa goes to the first rate", 50001, { rates: rates(["CGST", 9000], ["SGST", 9000]), included: true }, { netMinor: 42374, taxParts: [3814, 3813], totalMinor: 50001 }],
+    // India, inside, ₹500.01: ₹423.74 before tax; 9% of it is 38.1366, ₹38.14 each. Equal rates show equal amounts,
+    // as on an Indian GST invoice; the price before tax takes the rounding: ₹500.01 less ₹76.28 is ₹423.73.
+    ["India, ₹500.01 inside: equal rates, equal amounts", 50001, { rates: rates(["CGST", 9000], ["SGST", 9000]), included: true }, { netMinor: 42373, taxParts: [3814, 3814], totalMinor: 50001 }],
+    // India, inside, ₹100.00: ₹84.75 before tax (84.7458); 9% is 7.6275, ₹7.63 each; ₹84.74 is left before tax.
+    ["India, ₹100.00 inside: ₹7.63 each", 10000, { rates: rates(["CGST", 9000], ["SGST", 9000]), included: true }, { netMinor: 8474, taxParts: [763, 763], totalMinor: 10000 }],
     // Three taxes on top, 5% + 7% + 2.5% of $80.00: $4.00, $5.60, $2.00. $91.60.
     ["three taxes on $80.00 is $91.60", 8000, { rates: rates(["GST", 5000], ["PST", 7000], ["Levy", 2500]), included: false }, { netMinor: 8000, taxParts: [400, 560, 200], totalMinor: 9160 }],
     // Two rates of 15% each is the most together, 30%: $100.00 is $130.00.
@@ -109,6 +112,18 @@ describe("what one membership bill comes to with several taxes", () => {
   it.each(table)("%s", (_name, listed, tax, want) => {
     const taxMinor = want.taxParts.reduce((n, m) => n + m, 0);
     expect(billAmounts(listed, tax)).toEqual({ ok: true, netMinor: want.netMinor, taxMinor, taxParts: want.taxParts, totalMinor: want.totalMinor });
+  });
+
+  it("equal rates inside the price always show equal amounts, and nothing goes below zero", () => {
+    for (let listed = 1; listed <= 5000; listed += 1) {
+      for (const pcms of [[9000, 9000], [2500, 2500], [6000, 6000, 6000], [15000, 15000]]) {
+        const got = billAmounts(listed, { rates: pcms.map((pcm, i) => ({ name: `T${String(i)}`, pcm })), included: true });
+        if (!got.ok) throw new Error(`refused ${String(listed)}`);
+        expect(new Set(got.taxParts).size).toBe(1);
+        expect(got.netMinor).toBeGreaterThanOrEqual(0);
+        expect(got.netMinor + got.taxMinor).toBe(listed);
+      }
+    }
   });
 
   it("over 30% together is refused, never a bill", () => {

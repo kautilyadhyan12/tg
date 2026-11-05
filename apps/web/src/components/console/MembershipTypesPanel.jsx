@@ -207,7 +207,11 @@ function TypeForm({ gymId, orgType, country, currency, options, taxRates, onRate
   const hasTerm = choice === 'recurring' || choice === 'one_time' || choice === 'trial';
   const picksClasses = !(hasTerm && draft.access === 'gym_only') && options.length > 0;
   const tickedRates = taxRates.filter((r) => draft.taxRateIds.includes(r.id));
-  const tickRate = (rateId, on) => set({ taxRateIds: on ? [...draft.taxRateIds.filter((x) => x !== rateId), rateId] : draft.taxRateIds.filter((x) => x !== rateId) });
+  // Saved in the order the form lists them, which is the order every bill and receipt names them in.
+  const tickRate = (rateId, on) => {
+    const next = on ? [...draft.taxRateIds, rateId] : draft.taxRateIds.filter((x) => x !== rateId);
+    set({ taxRateIds: taxRates.filter((r) => next.includes(r.id)).map((r) => r.id) });
+  };
   const toggleClass = (classId) =>
     set({ classIds: draft.classIds.includes(classId) ? draft.classIds.filter((c) => c !== classId) : [...draft.classIds, classId] });
   const first = firstProblem(problems);
@@ -839,6 +843,7 @@ export default function MembershipTypesPanel({ org, readOnly, openBox = null, on
   const run = async (request, fallback) => {
     setBusy(true);
     setActionError(null);
+    setRestored(null);
     try {
       const res = await request();
       setList(res.data);
@@ -937,11 +942,13 @@ export default function MembershipTypesPanel({ org, readOnly, openBox = null, on
     setActionError(null);
     setShowProblems(false);
     setDraftWord(word);
+    setRestored(null);
     setDraft({ ...emptyDraft(), name: word.word });
   };
 
   const startDraft = (next) => {
     setActionError(null);
+    setRestored(null);
     setShowProblems(false);
     setDraft(next);
   };
@@ -1114,7 +1121,7 @@ export default function MembershipTypesPanel({ org, readOnly, openBox = null, on
           />
 
           {restored !== null ? (
-            <p className="c-s15 m-0" style={{ color: 'var(--good)' }} role="status">
+            <p className="c-s15 m-0" style={{ color: 'var(--warn)' }} role="status">
               {restored}
             </p>
           ) : null}

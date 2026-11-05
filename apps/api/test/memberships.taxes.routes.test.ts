@@ -6,7 +6,7 @@
 // Montreal gym's $100.00 a month with GST 5% and QST 9.975%, which Revenu Québec works out as $5.00
 // and $9.98 ("Calculating the Taxes": each on the price, never QST on the GST), $114.98 the first
 // month and every month after, each named on the bill, on the member's page and on the receipt; and
-// India's CGST 9% and SGST 9% inside ₹100.00, ₹7.63 and ₹7.62. Every refusal is checked by reading the
+// India's CGST 9% and SGST 9% inside ₹100.00, ₹7.63 each. Every refusal is checked by reading the
 // tables, not the reply.
 import { readFileSync } from "node:fs";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -24,6 +24,8 @@ import {
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { openDueBills } from "../src/modules/orgs/memberships/billsRepo.js";
+import { openClassFees, openPtFees } from "../src/modules/orgs/memberships/feesRepo.js";
+import { giftsOntoOpenBills } from "../src/modules/orgs/referrals/memberGiftRepo.js";
 import { createMemoryRedis } from "../src/redis.js";
 
 const url = process.env["DATABASE_URL"];
@@ -80,6 +82,12 @@ d("several taxes on one membership (real Postgres)", () => {
 
   const cleanup = async () => {
     const mine = sql`SELECT id FROM gyms WHERE owner_user_id IN (SELECT id FROM users WHERE email LIKE 'mtxs-t-%@example.com')`;
+    await sql`DELETE FROM gym_referral_member_gifts WHERE gym_id IN (${mine})`;
+    await sql`DELETE FROM gym_class_bookings WHERE gym_id IN (${mine})`;
+    await sql`DELETE FROM gym_pt_appointments WHERE gym_id IN (${mine})`;
+    await sql`DELETE FROM gym_class_sessions WHERE gym_id IN (${mine})`;
+    await sql`DELETE FROM gym_class_types WHERE gym_id IN (${mine})`;
+    await sql`DELETE FROM gym_members WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM gym_held_memberships WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM gym_membership_types WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM gym_tax_rates WHERE gym_id IN (${mine})`;
@@ -293,7 +301,7 @@ d("several taxes on one membership (real Postgres)", () => {
   );
 
   it(
-    "India, prices that hold the tax: ₹100.00 a month holds CGST ₹7.63 and SGST ₹7.62, and the bill is ₹100.00",
+    "India, prices that hold the tax: ₹100.00 a month holds CGST ₹7.63 and SGST ₹7.63, and the bill is ₹100.00",
     async () => {
       clock = new Date("2026-10-15T06:30:00Z");
       const owner = await makeUser("india-owner");
@@ -308,9 +316,9 @@ d("several taxes on one membership (real Postgres)", () => {
       // Her membership keeps both rates, for every bill after this one.
       const ashaGold = await membershipOf(gymId, asha);
       expect(await heldRates(ashaGold)).toEqual(["CGST", "SGST"]);
-      // 10000 × 18 / 118 is 1525.42: 1525 paise, shared 762.5 and 762.5, the odd paisa to the first.
+      // ₹100.00 / 1.18 is ₹84.75 before tax; 9% of it is 7.6275, ₹7.63 each, as an Indian GST invoice shows them.
       expect(await billsOf(ashaGold)).toEqual([
-        { period_index: 0, amount_minor: 10000, tax_minor: 1525, tax_pcm: 18000, tax_included: true, taxes: [{ name: "CGST", pcm: 9000, minor: 763 }, { name: "SGST", pcm: 9000, minor: 762 }] },
+        { period_index: 0, amount_minor: 10000, tax_minor: 1526, tax_pcm: 18000, tax_included: true, taxes: [{ name: "CGST", pcm: 9000, minor: 763 }, { name: "SGST", pcm: 9000, minor: 763 }] },
       ]);
     },
     T,
@@ -332,9 +340,9 @@ d("several taxes on one membership (real Postgres)", () => {
       clock = new Date("2026-11-10T17:00:00Z");
       const out = await post(`${heldUrl(gymId, hal)}/${halGold}/cancel`, { when: "leave_early", leaveFeeMinor: 9900 }, owner);
       expect(out.statusCode, out.body).toBe(200);
-      // 9,900 × 14.975 / 114.975 is 1,289.43: 1,289. GST's share 430.39, QST's 858.61: 430 and 859.
+      // CA$99.00 / 1.14975 is CA$86.11 before tax (8610.57); GST 5% of it is 430.55, CA$4.31; QST 9.975% is 858.95, CA$8.59; CA$86.10 is left.
       const fee = (await billsOf(halGold)).find((b) => b.period_index === null);
-      expect(fee).toEqual({ period_index: null, amount_minor: 9900, tax_minor: 1289, tax_pcm: 14975, tax_included: true, taxes: [{ name: "GST", pcm: 5000, minor: 430 }, { name: "QST", pcm: 9975, minor: 859 }] });
+      expect(fee).toEqual({ period_index: null, amount_minor: 9900, tax_minor: 1290, tax_pcm: 14975, tax_included: true, taxes: [{ name: "GST", pcm: 5000, minor: 431 }, { name: "QST", pcm: 9975, minor: 859 }] });
     },
     T,
   );
@@ -415,6 +423,72 @@ d("several taxes on one membership (real Postgres)", () => {
       expect((await put(`${register(otherGym)}/tax-rates/${theirs}/charged-on`, { use: "memberships", ids: [gold] }, nextDoor)).statusCode).toBe(409);
       expect((await put(`${register(gymId)}/tax-rates/${gst}/charged-on`, { use: "memberships", ids: [] }, nextDoor)).statusCode).toBe(404);
       expect(await typeRates(gold)).toEqual(["GST"]);
+    },
+    T,
+  );
+
+  it(
+    "a freeze fee, a class's and a session's no-show fee, and a Refer a friend gift each charge both taxes, and their parts add up",
+    async () => {
+      clock = new Date("2026-10-15T16:00:00Z");
+      const owner = await makeUser("fees-owner");
+      const gymId = await makeGym(owner, "Mtxs Fees Gym");
+      const gst = await addRate(gymId, owner, "GST", 5000);
+      const qst = await addRate(gymId, owner, "QST", 9975);
+      const gold = await addType(gymId, owner, monthly({ taxRateIds: [gst, qst] }));
+      const [me] = await sql<{ id: string }[]>`SELECT id FROM users WHERE email = 'mtxs-t-fees-owner@example.com'`;
+      if (me === undefined) throw new Error("no owner");
+      await sql`UPDATE gyms SET class_no_show_fee_minor = 1000, pt_no_show_fee_minor = 1000 WHERE id = ${gymId}`;
+      // A fee holds its taxes (as every fee does): CA$10.00 / 1.14975 is CA$8.70 before tax (869.75);
+      // GST 5% of it is 43.5, CA$0.44; QST 9.975% is 86.78, CA$0.87; CA$8.69 is left before tax.
+      const feeTaxes = { amount_minor: 1000, tax_minor: 131, tax_pcm: 14975, tax_included: true, taxes: [{ name: "GST", pcm: 5000, minor: 44 }, { name: "QST", pcm: 9975, minor: 87 }] };
+      const maya = await addPerson(gymId, owner, "Maya Fortin");
+      expect((await give(gymId, maya, owner, gold, 10000, 11498)).statusCode).toBe(201);
+      const mayaGold = await membershipOf(gymId, maya);
+
+      // A class she did not come to.
+      const [type] = await sql<{ id: string }[]>`INSERT INTO gym_class_types (gym_id, name, minutes, places, colour, open_gym) VALUES (${gymId}, 'Spin', 45, NULL, 'blue', false) RETURNING id`;
+      const [session] = await sql<{ id: string }[]>`
+        INSERT INTO gym_class_sessions (gym_id, class_type_id, local_date, local_start_minute, starts_at, minutes, places, status)
+        VALUES (${gymId}, ${type?.id ?? ""}, '2026-10-14', 600, '2026-10-14T14:00:00Z', 45, NULL, 'scheduled') RETURNING id`;
+      const [booking] = await sql<{ id: string }[]>`
+        INSERT INTO gym_class_bookings (gym_id, session_id, user_id, entry_id, held_membership_id, status, request_key, booked_at)
+        VALUES (${gymId}, ${session?.id ?? ""}, ${me.id}, ${maya}, ${mayaGold}, 'no_show', gen_random_uuid(), '2026-10-13T12:00:00Z') RETURNING id`;
+      expect(await sql.begin((tx) => openClassFees(tx, gymId, [booking?.id ?? ""], "no_show", clock))).toBe(1);
+      // A personal training session she did not come to.
+      const [session2] = await sql<{ id: string }[]>`
+        INSERT INTO gym_pt_appointments (gym_id, trainer_user_id, entry_id, held_membership_id, local_date, local_start_minute, starts_at, ends_at, minutes, status, request_key)
+        VALUES (${gymId}, ${me.id}, ${maya}, ${mayaGold}, '2026-10-14', 660, '2026-10-14T15:00:00Z', '2026-10-14T16:00:00Z', 60, 'no_show', gen_random_uuid()) RETURNING id`;
+      expect(await sql.begin((tx) => openPtFees(tx, gymId, [session2?.id ?? ""], "no_show", clock))).toBe(1);
+      // Frozen with the gym's CA$10.00 fee: its first month at once.
+      const settings = await put(`/v1/orgs/${gymId}/bill-settings`, { overdueAfterDays: 0, freezeFeeMinor: 1000 }, owner);
+      expect(settings.statusCode, settings.body).toBe(200);
+      const frozen = await post(`${heldUrl(gymId, maya)}/${mayaGold}/freeze`, { feeMinor: 1000 }, owner);
+      expect(frozen.statusCode, frozen.body).toBe(200);
+      const fees = await sql<{ fee: string; amount_minor: number; tax_minor: number; tax_pcm: number; tax_included: boolean | null; taxes: unknown }[]>`
+        SELECT fee, amount_minor, tax_minor, tax_pcm, tax_included, taxes FROM gym_member_bills WHERE held_membership_id = ${mayaGold} AND fee IS NOT NULL ORDER BY fee`;
+      expect(fees).toEqual([
+        { fee: "freeze", ...feeTaxes },
+        { fee: "no_show", ...feeTaxes },
+        { fee: "no_show", ...feeTaxes },
+      ]);
+
+      // Ben holds Gold, his first bill not yet paid, and a CA$10.00 Refer a friend gift waits for him:
+      // CA$90.00, GST CA$4.50, QST 8.9775 is CA$8.98, CA$103.48; each tax again by name.
+      await makeUser("fees-ben");
+      const [ben] = await sql<{ id: string }[]>`SELECT id FROM users WHERE email = 'mtxs-t-fees-ben@example.com'`;
+      const benEntry = await addPerson(gymId, owner, "Ben Gagnon");
+      await sql`INSERT INTO gym_members (gym_id, user_id, entry_id) VALUES (${gymId}, ${ben?.id ?? ""}, ${benEntry})`;
+      const unpaid = await post(heldUrl(gymId, benEntry), { requestKey: nextForm(), typeId: gold, startsOn: "2026-10-15", paid: false, priceMinor: 10000, totalMinor: 11498 }, owner);
+      expect(unpaid.statusCode, unpaid.body).toBe(201);
+      const benGold = await membershipOf(gymId, benEntry);
+      await sql`
+        INSERT INTO gym_referral_member_gifts (gym_id, member_user_id, kind, amount_minor, currency, given_at, given_on)
+        VALUES (${gymId}, ${ben?.id ?? ""}, 'amount', 1000, 'CAD', now(), '2026-10-15')`;
+      expect(await sql.begin((tx) => giftsOntoOpenBills(tx, gymId, clock))).toBe(1);
+      expect(await billsOf(benGold)).toEqual([
+        { period_index: 0, amount_minor: 10348, tax_minor: 1348, tax_pcm: 14975, tax_included: false, taxes: [{ name: "GST", pcm: 5000, minor: 450 }, { name: "QST", pcm: 9975, minor: 898 }] },
+      ]);
     },
     T,
   );

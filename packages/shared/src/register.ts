@@ -107,10 +107,11 @@ export interface TaxApplied {
  *
  *  Tax on top: the price is before tax, and each rate's tax is worked out on that price on
  *  its own, never tax on tax (as Revenu Québec has GST and QST worked out since 2013), and
- *  added. Tax in the price: the price is what the person pays; the tax inside it is worked
- *  out at all the rates together, and shared between them in proportion, each part within
- *  a minor unit of its exact share, the units left over going to the largest remainders
- *  (the first rate where two are equal). Either way the numbers add up:
+ *  added. Tax in the price: the price is what the person pays. With one rate, the tax inside
+ *  it is worked out at that rate. With several (18b-v-b), the price before tax is worked out
+ *  at all of them together, each rate's tax is that price times the rate, rounded, as an
+ *  Indian GST invoice shows CGST and SGST (equal rates, equal amounts), and the price before
+ *  tax is what is left, so it takes the rounding. Either way the numbers add up:
  *  `netMinor + taxMinor === totalMinor`, and `taxParts` add up to `taxMinor`.
  *
  *  A discount comes off the price as the gym lists it (before tax where tax is added, with
@@ -139,9 +140,14 @@ export function saleAmounts(input: {
   let amounts: SaleAmounts;
   if (together === 0) {
     amounts = { netMinor: listed, taxMinor: 0, taxParts: [], totalMinor: listed };
-  } else if (input.taxIncluded) {
+  } else if (input.taxIncluded && taxPcms.length === 1) {
     const taxMinor = Math.floor((2 * listed * together + (PCM_WHOLE + together)) / (2 * (PCM_WHOLE + together)));
-    amounts = { netMinor: listed - taxMinor, taxMinor, taxParts: shareTax(taxMinor, taxPcms), totalMinor: listed };
+    amounts = { netMinor: listed - taxMinor, taxMinor, taxParts: [taxMinor], totalMinor: listed };
+  } else if (input.taxIncluded) {
+    const before = Math.floor((2 * listed * PCM_WHOLE + (PCM_WHOLE + together)) / (2 * (PCM_WHOLE + together)));
+    const taxParts = taxPcms.map((p) => Math.floor((before * p + PCM_WHOLE / 2) / PCM_WHOLE));
+    const taxMinor = taxParts.reduce((n, m) => n + m, 0);
+    amounts = { netMinor: listed - taxMinor, taxMinor, taxParts, totalMinor: listed };
   } else {
     const taxParts = taxPcms.map((p) => Math.floor((listed * p + PCM_WHOLE / 2) / PCM_WHOLE));
     const taxMinor = taxParts.reduce((n, m) => n + m, 0);
@@ -149,22 +155,6 @@ export function saleAmounts(input: {
   }
   if (amounts.totalMinor > MEMBERSHIP_PRICE_MINOR_MAX) return { ok: false, reason: "too_much" };
   return { ok: true, ...amounts };
-}
-
-/** The tax inside a price shared between its rates in proportion: each part its exact share
- *  rounded down, then one more unit to each of the largest remainders until the parts add up
- *  to `taxMinor`. */
-function shareTax(taxMinor: number, pcms: readonly number[]): number[] {
-  const together = pcms.reduce((n, p) => n + p, 0);
-  const parts = pcms.map((p) => Math.floor((taxMinor * p) / together));
-  let left = taxMinor - parts.reduce((n, m) => n + m, 0);
-  const byRemainder = pcms.map((p, i) => ({ i, rest: (taxMinor * p) % together })).sort((a, b) => b.rest - a.rest || a.i - b.i);
-  for (const { i } of byRemainder) {
-    if (left === 0) break;
-    parts[i] = (parts[i] ?? 0) + 1;
-    left -= 1;
-  }
-  return parts;
 }
 
 /** WHAT ONE MEMBERSHIP BILL COMES TO (18b-iii; 18b-v-b): its price, after any discount, with
@@ -686,11 +676,11 @@ export function taxesOverCapWords(product: string): string {
   return `Nothing was saved: the taxes on ${product} would come to more than 30% together. Take a tax off ${product} first, or lower the rate.`;
 }
 
-/** Why a rate was not raised (18b-v-b): a membership keeps the taxes it was sold with, and these
- *  would come to more than 30% together. */
+/** Why a rate was not raised (18b-v-b): a membership keeps the taxes it was sold with, ended ones
+ *  too (a late fee can still be opened on one), and these would come to more than 30% together. */
 export function heldTaxesOverCapWords(count: number): string {
-  const which = count === 1 ? "1 membership charges" : `${String(count)} memberships charge`;
-  return `Nothing was saved: ${which} this tax with another, and together they would come to more than 30%. A membership keeps the taxes it was sold with. Choose a lower rate.`;
+  const which = count === 1 ? "1 membership, ended ones included, charges" : `${String(count)} memberships, ended ones included, charge`;
+  return `Nothing was saved: ${which} this tax with another, and at this rate they would come to more than 30% together. A membership keeps the taxes it was sold with. Check the rate you typed.`;
 }
 
 /** A discount that takes a set amount off, or Refer a friend's gift, on more than one product
