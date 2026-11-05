@@ -117,6 +117,7 @@ d("DPDP data export (real Postgres)", () => {
     await sql`INSERT INTO diet_plans (user_id, days) VALUES (${userId}, '[[],[],[],[],[],[],[]]'::jsonb)`;
     // Their pick for Recommended For You (31f).
     await sql`INSERT INTO recommended_choices (user_id, kind, choice) VALUES (${userId}, 'food', 'suggested')`;
+    await sql`INSERT INTO training_reminders (user_id, kind, is_on, minute) VALUES (${userId}, 'workout', true, 1080)`;
     // A day's food targets (34f-i).
     await sql`INSERT INTO food_day_targets (user_id, day, kcal, protein_g, carbs_g, fat_g) VALUES (${userId}, '2026-10-01', 1800, 120, 200, 60)`;
     await sql`INSERT INTO weekly_challenges (user_id, week_start, time_zone, codes) VALUES (${userId}, '2026-09-28', 'UTC', ARRAY['train_days_3'])`;

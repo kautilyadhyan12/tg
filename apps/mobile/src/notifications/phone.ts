@@ -8,9 +8,11 @@ import {
   GYM_COMMENTS_CHANNEL,
   GYM_MESSAGES_CHANNEL,
   GYM_PLACES_CHANNEL,
+  TRAINING_REMINDERS_CHANNEL,
   gymCommentPushDataSchema,
   gymMessagePushDataSchema,
   gymPlacePushDataSchema,
+  trainingReminderPushDataSchema,
   type GymPlacePushData,
 } from "@app/shared";
 
@@ -36,7 +38,14 @@ export function gymOfNotification(data: unknown): string | null {
 
 /** What a tapped notification asks the app to open: a gym's Inbox, a class or an event of a gym, or the
  *  comments of a post on a gym's Updates. */
-export type Tapped = { kind: "inbox"; gymId: string } | ({ kind: "place" } & Omit<GymPlacePushData, "kind">) | { kind: "comment"; gymId: string; postId: string };
+export type Tapped =
+  | { kind: "inbox"; gymId: string }
+  | ({ kind: "place" } & Omit<GymPlacePushData, "kind">)
+  | { kind: "comment"; gymId: string; postId: string }
+  | { kind: "training"; open: "workout" | "food" };
+
+/** A tap that opens a place's page on the Gym tab. */
+export type GymTapped = Exclude<Tapped, { kind: "training" }>;
 
 /** What a notification of ours asks to open, or null for anything else. */
 export function tappedOf(data: unknown): Tapped | null {
@@ -44,6 +53,8 @@ export function tappedOf(data: unknown): Tapped | null {
   if (inbox.success) return { kind: "inbox", gymId: inbox.data.gymId };
   const comment = gymCommentPushDataSchema.safeParse(data);
   if (comment.success) return { kind: "comment", gymId: comment.data.gymId, postId: comment.data.postId };
+  const training = trainingReminderPushDataSchema.safeParse(data);
+  if (training.success) return { kind: "training", open: training.data.open };
   const place = gymPlacePushDataSchema.safeParse(data);
   if (!place.success) return null;
   const { gymId, what, id, day } = place.data;
@@ -75,11 +86,18 @@ export function weekOfDay(day: string, zone: string, nowMs: number): number {
 export function identifierOf(tapped: Tapped): string {
   if (tapped.kind === "inbox") return `inbox:${tapped.gymId}`;
   if (tapped.kind === "comment") return `comments:${tapped.gymId}`;
+  if (tapped.kind === "training") return "training-reminder";
   return `place:${tapped.id}`;
 }
 
 export const channelOf = (tapped: Tapped): string =>
-  tapped.kind === "inbox" ? GYM_MESSAGES_CHANNEL.id : tapped.kind === "comment" ? GYM_COMMENTS_CHANNEL.id : GYM_PLACES_CHANNEL.id;
+  tapped.kind === "inbox"
+    ? GYM_MESSAGES_CHANNEL.id
+    : tapped.kind === "comment"
+      ? GYM_COMMENTS_CHANNEL.id
+      : tapped.kind === "training"
+        ? TRAINING_REMINDERS_CHANNEL.id
+        : GYM_PLACES_CHANNEL.id;
 
 /** When the tabs open: the channel the phone's settings name, and what shows in the app. Safe to repeat. */
 export function startNotifications(): void {
@@ -91,7 +109,7 @@ export function startNotifications(): void {
       return Promise.resolve({ shouldShowBanner: show, shouldShowList: show, shouldPlaySound: false, shouldSetBadge: false });
     },
   });
-  for (const channel of [GYM_MESSAGES_CHANNEL, GYM_PLACES_CHANNEL, GYM_COMMENTS_CHANNEL]) {
+  for (const channel of [GYM_MESSAGES_CHANNEL, GYM_PLACES_CHANNEL, GYM_COMMENTS_CHANNEL, TRAINING_REMINDERS_CHANNEL]) {
     void Notifications.setNotificationChannelAsync(channel.id, {
       name: channel.name,
       importance: Notifications.AndroidImportance.DEFAULT,

@@ -121,6 +121,7 @@ export async function deleteUserOwnedRows(tx: TransactionSql, userId: string): P
   await tx`DELETE FROM diet_plans WHERE user_id = ${userId}`;
   // Which plan Recommended For You shows (tables.ts, 0200).
   await tx`DELETE FROM recommended_choices WHERE user_id = ${userId}`;
+  await tx`DELETE FROM training_reminders WHERE user_id = ${userId}`;
   // Each day's food targets (tables.ts, 0110).
   await tx`DELETE FROM food_day_targets WHERE user_id = ${userId}`;
   // The weekly challenges picked for the person (tables.ts, 0111).

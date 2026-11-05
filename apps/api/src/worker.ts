@@ -29,6 +29,7 @@ import { createFcmSender, readServiceAccount } from "./modules/push/fcm.adapter.
 import { sendCommentNotifications } from "./modules/push/commentsSweep.js";
 import { sendPlaceNotifications } from "./modules/push/placesSweep.js";
 import { sendGymMessageNotifications } from "./modules/push/sweep.js";
+import { sendTrainingReminders } from "./modules/reminders/sweep.js";
 import { createResendEmailReader, createResendInviteTransport, createResendTransport } from "./email/resend.js";
 import { cachedMailDomainCheck, systemResolver } from "./modules/orgs/invites/mailDomain.js";
 import { operatorTeller } from "./modules/orgs/invites/operatorNote.js";
@@ -862,6 +863,24 @@ if (pushAccount === null) {
         });
         if (commentsRun.sent + commentsRun.skipped + commentsRun.failed > 0) {
           log.info({ ...commentsRun, durationMs: Date.now() - commentsStartedAt, event: "job.finished", job: "push.comments" }, "job finished");
+        }
+      } catch (err) {
+        failure ??= err instanceof Error ? err : new Error(String(err));
+      }
+      // The workout and meal reminders the person set (19e-i), in the same minute.
+      const remindersStartedAt = Date.now();
+      try {
+        const remindersRun = await sendTrainingReminders({
+          sql,
+          sender: pushSender,
+          now: () => new Date(),
+          onError: (err) => {
+            const e = err instanceof Error ? err : new Error(String(err));
+            log.warn({ errName: e.name, errMessage: e.message, event: "job.item_failed", job: "push.reminders" }, "a reminder failed and was kept for the next run");
+          },
+        });
+        if (remindersRun.sent + remindersRun.skipped + remindersRun.failed > 0) {
+          log.info({ ...remindersRun, durationMs: Date.now() - remindersStartedAt, event: "job.finished", job: "push.reminders" }, "job finished");
         }
       } catch (err) {
         failure ??= err instanceof Error ? err : new Error(String(err));
