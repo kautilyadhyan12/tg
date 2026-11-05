@@ -293,13 +293,19 @@ jest.mock("expo-secure-store", () => {
 // reads what was asked of it; the points themselves are handed in by the test, as Android hands them
 // to the run's task.
 jest.mock("expo-location", () => {
-  const state = { services: true, granted: true, canAskAgain: true, accuracy: "fine", asked: 0, started: [], running: false, watching: 0 };
+  const state = { services: true, granted: true, canAskAgain: true, accuracy: "fine", asked: 0, started: [], running: false, watching: 0, acceptsTurnOn: true };
   const answer = () => ({ granted: state.granted, canAskAgain: state.canAskAgain, status: state.granted ? "granted" : "denied", android: { accuracy: state.granted ? state.accuracy : "none" } });
   return {
     state,
     Accuracy: { BestForNavigation: 6 },
     ActivityType: { Fitness: 3 },
     hasServicesEnabledAsync: () => Promise.resolve(state.services),
+    // Google's Turn on box: a test sets whether the person accepts it.
+    enableNetworkProviderAsync: () => {
+      if (!state.acceptsTurnOn) return Promise.reject(new Error("declined"));
+      state.services = true;
+      return Promise.resolve();
+    },
     getForegroundPermissionsAsync: () => Promise.resolve(answer()),
     requestForegroundPermissionsAsync: () => {
       state.asked += 1;

@@ -20,7 +20,7 @@ const PATH = "/v1/geo/runs";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 // The phone's location, as the setup's stand-in holds it.
-const location = jest.requireMock<{ state: { services: boolean; granted: boolean; canAskAgain: boolean; accuracy: string; asked: number; started: { task: string; options: { foregroundService?: { notificationTitle: string } } }[]; running: boolean } }>("expo-location").state;
+const location = jest.requireMock<{ state: { services: boolean; granted: boolean; canAskAgain: boolean; accuracy: string; asked: number; started: { task: string; options: { foregroundService?: { notificationTitle: string } } }[]; running: boolean; acceptsTurnOn: boolean } }>("expo-location").state;
 
 let handlers: ((state: "active") => void)[] = [];
 const comeBack = () => {
@@ -33,7 +33,7 @@ beforeEach(async () => {
     handlers.push(handler);
     return { remove: () => undefined };
   });
-  Object.assign(location, { services: true, granted: true, canAskAgain: true, accuracy: "fine", asked: 0, started: [], running: false });
+  Object.assign(location, { services: true, granted: true, canAskAgain: true, accuracy: "fine", asked: 0, started: [], running: false, acceptsTurnOn: true });
   for (const name of ["run-now.json", "run-now-0.json", "run-now-1.json", "run-settings.json"]) phoneRunFiles.remove(name);
   resetRecorder();
   await Promise.resolve();
@@ -225,16 +225,40 @@ describe("the location, before a run", () => {
     ["not allowed", { granted: false, canAskAgain: true }, "Allow location to record your run.", "Allow location"],
     ["turned off for the app", { granted: false, canAskAgain: false }, "Location is off for this app. Turn it on in Settings.", "Open settings"],
     ["approximate only", { accuracy: "coarse" }, "Turn on Precise location to measure your run.", "Allow precise location"],
-    ["the phone's location off", { services: false }, "Turn on your phone's location to record your run.", null],
+    ["the phone's location off", { services: false }, "Turn on your phone's location to record your run.", "Turn on location"],
   ] as const)("%s: says what to do, with its button, and starts nothing", async (_, answer, words, button) => {
     Object.assign(location, answer);
     const s = runServer();
     await openRunning(s);
     await fireEvent.press(screen.getByRole("button", { name: "Start run" }));
     expect(await screen.findByText(words)).toBeTruthy();
-    if (button !== null) expect(screen.getByRole("button", { name: button })).toBeTruthy();
+    expect(screen.getByRole("button", { name: button })).toBeTruthy();
     expect(screen.queryByText("Get ready")).toBeNull();
     expect(location.started).toHaveLength(0);
+  });
+
+  it("the phone's location off: Turn on location opens Android's own box, and once it is on the run starts", async () => {
+    location.services = false;
+    const s = runServer();
+    await openRunning(s);
+    await fireEvent.press(screen.getByRole("button", { name: "Start run" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Turn on location" }));
+    expect(await screen.findByText("Get ready")).toBeTruthy();
+    expect(location.services).toBe(true);
+  });
+
+  it("the phone's location off and the box declined: Android's Location page opens, and nothing starts", async () => {
+    Object.assign(location, { services: false, acceptsTurnOn: false });
+    const opened = jest.spyOn(Linking, "sendIntent").mockResolvedValue(undefined);
+    const s = runServer();
+    await openRunning(s);
+    await fireEvent.press(screen.getByRole("button", { name: "Start run" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Turn on location" }));
+    await waitFor(() => {
+      expect(opened).toHaveBeenCalledWith("android.settings.LOCATION_SOURCE_SETTINGS");
+    });
+    expect(screen.queryByText("Get ready")).toBeNull();
+    expect(screen.getByText("Turn on your phone's location to record your run.")).toBeTruthy();
   });
 });
 

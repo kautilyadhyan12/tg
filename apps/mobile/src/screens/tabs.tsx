@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import { useCallback, useRef, useState } from "react";
+import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { Button } from "../look/Button";
 import { Avatar, Badge, Card, PictureCard } from "../look/Card";
 import { sizes } from "../look/colours";
@@ -39,9 +39,16 @@ export function WorkoutScreen() {
   const units = (state.kind === "in" ? accountUnits(state.user.units) : null) ?? "metric";
   const [part, setPart] = useState<WorkoutPart>("exercises");
   const parts = <Segments options={WORKOUT_PARTS} selected={part} onPick={setPart} />;
+  const scroller = useRef<ScrollView>(null);
+  const showEnd = useCallback(() => {
+    requestAnimationFrame(() => {
+      scroller.current?.scrollToEnd({ animated: true });
+    });
+  }, []);
   // The three lie just under the picture, never over it (Kd, 37a's click-through: over it they cut it).
   return part === "running" ? (
     <Page
+      scroller={scroller}
       top={
         <PictureTop
           picture="track"
@@ -56,7 +63,7 @@ export function WorkoutScreen() {
       }
     >
       {parts}
-      <RunningTab units={units} />
+      <RunningTab units={units} showEnd={showEnd} />
     </Page>
   ) : (
     <Page top={<PictureTop picture="exhero" tall={0.62} eyebrow="Exercise Library" title="Exercises" />}>

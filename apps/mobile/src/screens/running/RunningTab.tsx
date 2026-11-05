@@ -56,7 +56,9 @@ function useGpsBefore(watching: boolean, asked: number): ReturnType<typeof gpsLi
   return allowed ? gpsLight(fix, now) : null;
 }
 
-export function RunningTab({ units }: { units: Units }) {
+/** `showEnd` scrolls the page to its end: what Start says, and a run just saved, are said under
+ *  START, which on a phone sits at the screen's foot (37a-ii, found on Kd's phone). */
+export function RunningTab({ units, showEnd }: { units: Units; showEnd?: () => void }) {
   const focused = useIsFocused();
   const layer = useRunLayer();
   const { view, outbox } = useRunOutbox();
@@ -76,6 +78,11 @@ export function RunningTab({ units }: { units: Units }) {
   const gps = useGpsBefore(focused && !going, asked);
   const last = useRead("/v1/geo/runs?limit=1", runPageSchema, view.sent);
   const lastRun = last.read.kind === "ok" ? (last.read.data.items[0] ?? null) : null;
+
+  const saidUnderStart = problem !== null || layer.done !== null || view.refused.length > 0;
+  useEffect(() => {
+    if (saidUnderStart) showEnd?.();
+  }, [saidUnderStart, problem, layer.done, showEnd]);
 
   const start = async () => {
     setProblem(null);
@@ -181,6 +188,8 @@ export function RunningTab({ units }: { units: Units }) {
             <Button kind="link" label="Open settings" onPress={openAppSettings} />
           ) : problem === "denied" ? (
             <Button kind="link" label="Allow location" onPress={() => void start()} />
+          ) : problem === "off" ? (
+            <Button kind="link" label="Turn on location" onPress={() => void turnOnLocation().then((on) => (on ? start() : undefined))} />
           ) : null}
         </View>
       )}
@@ -282,6 +291,18 @@ function useCanSpeak(asking: boolean): boolean {
     };
   }, [asking, back]);
   return can;
+}
+
+/** The phone's location turned on in Android's own box (Google's, as the GPS light asks); its
+ *  Location page where a phone has no such box. True once it is on. */
+async function turnOnLocation(): Promise<boolean> {
+  try {
+    await Location.enableNetworkProviderAsync();
+    return true;
+  } catch {
+    await Linking.sendIntent("android.settings.LOCATION_SOURCE_SETTINGS").catch(() => Linking.openSettings());
+    return false;
+  }
 }
 
 /** Android's own Text-to-speech page; the app's settings where a phone has none by that name. */
