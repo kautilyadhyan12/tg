@@ -97,8 +97,8 @@ export type GymMealPlanResponse = z.infer<typeof gymMealPlanResponseSchema>;
 export const GYM_MEAL_PLAN_WORDS = {
   not_found: "This meal plan was deleted.",
   plan_changed: "This day was changed by someone else. Open it again to make this change.",
-  too_many: `Your gym has ${String(GYM_MEAL_PLANS_MOST)} meal plans, the most it can keep. Delete one to add another.`,
+  too_many: `You have ${String(GYM_MEAL_PLANS_MOST)} meal plans, the most you can keep. Delete one to add another.`,
   name_taken: "Another meal plan has this name. Give this one another name.",
   not_for_plan: "can’t go in a meal plan. Take it off, then save.",
-  label_food: "A food from your own scanned label can’t go in your gym’s meal plan. Add it as your own food instead.",
+  label_food: "A food from your own scanned label can’t go in this meal plan. Add it as your own food instead.",
 } as const;
