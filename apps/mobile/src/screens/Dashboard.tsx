@@ -54,6 +54,7 @@ import { useRead, type Read } from "./dashboard/useRead";
 import { IDEAS_READ } from "./food/MealIdeas";
 import { Recommended } from "./food/MealPlan";
 import { useMealOutbox } from "./food/MealOutbox";
+import { useRunOutbox } from "./running/RunOutbox";
 import { GOALS_READ, GoalsBox, GoalsPage, type GoalsOpen } from "./Goals";
 import { LeaderboardPage, type LeaderboardPlace } from "./gym/Leaderboard";
 import { rankWords } from "./gym/leaderboardView";
@@ -87,12 +88,15 @@ export function DashboardScreen() {
   const go = useNavigation<NavigationProp<ParamListBase>>();
   // The week, the streak and the totals are keyed by day in the person's zone: read again once it is saved.
   const zoneSaved = useZoneSaved();
-  const overview = useRead(DASHBOARD_READS.overview, progressOverviewSchema, zoneSaved);
-  const me = useRead(DASHBOARD_READS.me, gamificationMeSchema, zoneSaved);
-  const week = useRead(DASHBOARD_READS.week, progressTrendSchema, zoneSaved);
+  // A run the server has just taken changes the sessions, the XP, the week and Recent Activity (37a).
+  const { view: runsSent } = useRunOutbox();
+  const fresh = zoneSaved + runsSent.sent;
+  const overview = useRead(DASHBOARD_READS.overview, progressOverviewSchema, fresh);
+  const me = useRead(DASHBOARD_READS.me, gamificationMeSchema, fresh);
+  const week = useRead(DASHBOARD_READS.week, progressTrendSchema, fresh);
   const challenges = useRead(DASHBOARD_READS.challenges, weeklyChallengesSchema);
   const recent = useRead(DASHBOARD_READS.recent, workoutPageSchema);
-  const runs = useRead(DASHBOARD_READS.runs, runPageSchema);
+  const runs = useRead(DASHBOARD_READS.runs, runPageSchema, runsSent.sent);
   // A meal logged from the Recommended box shows in Recent Activity once the server has it.
   const { view: mealsSent } = useMealOutbox();
   const meals = useRead(DASHBOARD_READS.meals, mealPageSchema, mealsSent.sent);

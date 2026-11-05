@@ -8,8 +8,10 @@ import { Page } from "../look/Page";
 import { PictureTop } from "../look/PictureTop";
 import { Txt } from "../look/Txt";
 import { useSession } from "../session/SessionProvider";
+import { Segments } from "../look/Choice";
+import { RunningTab } from "./running/RunningTab";
 import { SettingsPage } from "./Settings";
-import { Setup } from "./setup/Setup";
+import { Setup, accountUnits } from "./setup/Setup";
 import { SignOutAsk } from "./SignOutAsk";
 import { ProgressPage } from "./progress/ProgressPage";
 import { AchievementsPage } from "./achievements/AchievementsPage";
@@ -21,10 +23,45 @@ import { Soon } from "./Soon";
 // No page says its tab's name again above itself: the lit tab below already does.
 // What a page holds comes with each feature's own job; the Dashboard has its own file.
 
+type WorkoutPart = "exercises" | "mine" | "running";
+
+const WORKOUT_PARTS = [
+  { value: "exercises", label: "Exercises" },
+  { value: "mine", label: "My Workout" },
+  { value: "running", label: "Running" },
+] as const;
+
+/** Exercises, My Workout and Running across the picture's top, as drawn (docs/design/phone/pages/Workout):
+ *  it opens on Exercises, where the Dashboard's Browse Exercises points. Running is 37a's; the other two come
+ *  with exercise folder 2's jobs. */
 export function WorkoutScreen() {
-  return (
+  const { state } = useSession();
+  const units = (state.kind === "in" ? accountUnits(state.user.units) : null) ?? "metric";
+  const [part, setPart] = useState<WorkoutPart>("exercises");
+  const parts = <Segments options={WORKOUT_PARTS} selected={part} onPick={setPart} />;
+  // The three lie just under the picture, never over it (Kd, 37a's click-through: over it they cut it).
+  return part === "running" ? (
+    <Page
+      top={
+        <PictureTop
+          picture="track"
+          tall={0.8}
+          foot={
+            <View style={styles.runTitle}>
+              <Icon name="footprints" size={26} colour="orange" />
+              <Txt kind="h1">Run</Txt>
+            </View>
+          }
+        />
+      }
+    >
+      {parts}
+      <RunningTab units={units} />
+    </Page>
+  ) : (
     <Page top={<PictureTop picture="exhero" tall={0.62} eyebrow="Exercise Library" title="Exercises" />}>
-      <Soon icon="dumbbell" title="Your workouts" />
+      {parts}
+      <Soon icon="dumbbell" title={part === "mine" ? "My Workout" : "Your workouts"} />
     </Page>
   );
 }
@@ -204,6 +241,7 @@ function SignOut() {
 }
 
 const styles = StyleSheet.create({
+  runTitle: { flexDirection: "row", alignItems: "center", gap: 10 },
   two: { flexDirection: "row", gap: 10 },
   half: { flex: 1 },
   row: { flexDirection: "row", alignItems: "center", gap: 12 },

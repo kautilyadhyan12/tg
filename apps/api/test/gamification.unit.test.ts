@@ -484,6 +484,7 @@ describe("XP curve + accrual (badges.py port; DECISIONS 2026-07-24)", () => {
     expect(
       computeTotalXp({
         workoutCount: 4,
+        runCount: 0,
         perfectFormWorkouts: 0,
         excellentFormWorkouts: 4,
         streakContinuationDays: 2,
@@ -494,11 +495,16 @@ describe("XP curve + accrual (badges.py port; DECISIONS 2026-07-24)", () => {
     expect(
       computeTotalXp({
         workoutCount: 1,
+        runCount: 0,
         perfectFormWorkouts: 1,
         excellentFormWorkouts: 0,
         streakContinuationDays: 0,
         badgeXp: 0,
       }),
+    ).toBe(100);
+    // A run of 200 m or more is worth what a workout is (ROADMAP 37a): two runs, nothing else.
+    expect(
+      computeTotalXp({ workoutCount: 0, runCount: 2, perfectFormWorkouts: 0, excellentFormWorkouts: 0, streakContinuationDays: 0, badgeXp: 0 }),
     ).toBe(100);
   });
 

@@ -6,7 +6,11 @@
 // candidates only.
 import type { FastifyBaseLogger } from "fastify";
 import type { Sql } from "postgres";
-import type { GenerateRoutesRequest, RouteCandidate, SavedRoute, SavedRouteCreate, RunDetail, RunSummary } from "@app/shared";
+import { RUN_CALC_VERSION, encodePolyline, runSplitSchema, runSums } from "@app/shared";
+import type { GenerateRoutesRequest, RouteCandidate, SavedRoute, SavedRouteCreate, RunDetail, RunSummary, SaveRunRequest, SavedRun } from "@app/shared";
+import { z } from "zod";
+import { onWorkoutSynced } from "../gamification/service.js";
+import { getUserSyncContext } from "../users/service.js";
 import { GeoError } from "./errors.js";
 import type { RouteProvider } from "./ors.adapter.js";
 import * as repo from "./repo.js";
@@ -135,4 +139,81 @@ export async function getRun(deps: ReadDeps, userId: string, id: string): Promis
   // Detail includes the polyline (owner-only — the route WHERE already bound it
   // to userId; it is never logged or returned to any other user).
   return row === null ? null : { ...asRunSummary(row), polyline: row.polyline };
+}
+
+// ── Record a run (ROADMAP 37a) ─────────────────────────────────────────────────────────────────
+
+/** A saved run's splits, and where each stretch of its line begins (a pause, a stretch left out):
+ *  whatever draws it later starts the line again there, never across the gap. */
+const splitsStoredSchema = z.object({
+  km: z.array(runSplitSchema),
+  mi: z.array(runSplitSchema),
+  starts: z.array(z.number().int().nonnegative()).optional(),
+});
+
+const asSavedRun = (r: repo.SavedRunRow): SavedRun => {
+  const splits = splitsStoredSchema.safeParse(r.splits);
+  return {
+    id: r.id,
+    startedAt: r.startedAt.toISOString(),
+    name: r.name ?? "Run",
+    effort: r.effort,
+    note: r.note,
+    distanceM: r.distanceM,
+    movingS: r.movingS,
+    elapsedS: r.elapsedS ?? r.movingS,
+    leftOutM: r.leftOutM ?? 0,
+    leftOutS: r.leftOutS ?? 0,
+    kcal: r.kcal ?? 0,
+    splitsKm: splits.success ? splits.data.km : [],
+    splitsMi: splits.success ? splits.data.mi : [],
+    polyline: r.polyline ?? "",
+    trackStarts: splits.success ? (splits.data.starts ?? [0]) : [0],
+  };
+};
+
+/** A run this person has already saved under this id, read before any of its points are: a send
+ *  repeated is answered from the row at no cost (round one of 37a, H2). null when there is none. */
+export async function savedRunIfAny(deps: ReadDeps, userId: string, runId: string): Promise<SavedRun | null> {
+  const row = await repo.getSavedRun(deps.sql, userId, runId);
+  return row === null ? null : asSavedRun(row);
+}
+
+/** A phone's clock can be fast. A run that seems to end after the server's own now is moved back
+ *  to end now: the run is kept, never refused (round one of 37a, H1). */
+export function startedAtKept(sent: Date, elapsedMs: number, now: Date): Date {
+  return sent.getTime() + elapsedMs > now.getTime() ? new Date(now.getTime() - elapsedMs) : sent;
+}
+
+/** Works every number out from the points with the shared rules and saves the run once. The
+ *  person's weight is the one they keep (70 kg when there is none), as workouts' calories are. */
+export async function saveRun(
+  deps: ReadDeps & { now: () => Date },
+  userId: string,
+  input: SaveRunRequest,
+): Promise<{ status: "created" | "duplicate"; run: SavedRun }> {
+  const startedAt = startedAtKept(new Date(input.startedAt), input.elapsedMs, deps.now());
+  const ctx = await getUserSyncContext(deps.sql, userId);
+  const sums = runSums(input.points, input.pauses, input.elapsedMs, ctx.weightKg ?? 0);
+  const note = input.note === null || input.note === "" ? null : input.note;
+  const saved = await repo.insertRun(deps.sql, userId, {
+    id: input.runId,
+    startedAt,
+    name: input.name,
+    effort: input.effort,
+    note,
+    distanceM: sums.distanceM,
+    movingS: sums.movingS,
+    elapsedS: sums.elapsedS,
+    leftOutM: sums.leftOutM,
+    leftOutS: sums.leftOutS,
+    kcal: sums.kcal,
+    splits: { km: sums.splitsKm, mi: sums.splitsMi, starts: sums.trackStarts },
+    polyline: encodePolyline(sums.track),
+    calcVersion: RUN_CALC_VERSION,
+  });
+  // On every send, a repeat included, as a workout's sync does: the streak, badges and XP are
+  // worked out again from history, so a send whose first try failed here heals on the next.
+  await onWorkoutSynced({ sql: deps.sql }, userId, ctx.timezone);
+  return { status: saved.created ? "created" : "duplicate", run: asSavedRun(saved.row) };
 }
