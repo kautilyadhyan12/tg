@@ -355,6 +355,12 @@ function ChangeEmail({ open, saves, onClose, onChanged }: { open: boolean; saves
       return;
     }
     if (answer.kind === "refused") setCode("");
+    // The address is taken, or the account moved elsewhere meanwhile: no code for it can help, so back
+    // to the address, filled in, with the server's sentence under it.
+    if (answer.kind === "refused" && (answer.error === "email_in_use" || answer.error === "email_changed")) {
+      setTyped(sentTo);
+      setStep("address");
+    }
     setProblem(answer.kind === "refused" ? answer.message : NO_ANSWER);
   };
   return (

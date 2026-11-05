@@ -123,6 +123,21 @@ describe("Change email (the worst thing: the phone shows or keeps an address the
     expect(keptUser(store)?.email).toBe(RAVI.email);
   });
 
+  it.each([
+    ["email_in_use", "That address already has an account. Sign in with it instead, or choose another address."],
+    ["email_changed", "Your email address was changed on another device. Close this and check it."],
+  ])("%s at the code step goes back to the address, filled in, with the server's sentence", async (error, words) => {
+    const server = fakeServer(routes({ [CHANGE]: () => refusal(409, error, words) }));
+    const store = await openSettings(server.ask);
+    await upToTheCode();
+    await fireEvent.changeText(screen.getByPlaceholderText("6-digit code"), "123456");
+    await fireEvent.press(screen.getByLabelText("Confirm"));
+    expect(await screen.findByText(words)).toBeTruthy();
+    expect(screen.getByLabelText("New email address").props.value).toBe(NEW);
+    expect(screen.queryByPlaceholderText("6-digit code")).toBeNull();
+    expect(keptUser(store)?.email).toBe(RAVI.email);
+  });
+
   it("Email me a new code asks again for the same address and says so; Cancel and open again starts empty", async () => {
     const server = fakeServer(routes());
     await openSettings(server.ask);
