@@ -10,6 +10,7 @@ import {
   giveHeldMembership,
   heldMembershipView,
   membershipTermLines,
+  membershipTerms,
   moveHeldMembership,
   noticeAsked,
   releaseAsked,
@@ -244,6 +245,11 @@ describe("the Terminal names the terms before it keeps a card (Kd, 2026-11-04)",
     expect(terminalKeepWords("Gold 12: $50.00 every month. Renews until you cancel.", "I agree.", membershipTermLines(term))).toBe(
       "Gold 12: $50.00 every month. Renews until you cancel.\nMinimum term: 12 months, to 3 Nov 2027.\nEarly cancellation fee: $99.00.\nNotice to cancel: 30 days.\nCooling-off period: until 7 Nov 2026, to cancel with a full refund.\n\nI agree.",
     );
+  });
+
+  it("each term carries what it is, so My membership can leave the money ones off for a member who is paid for (16d)", () => {
+    const term = item({ ...monthly, contractPeriods: 12, contractThen: "renews", leaveFeeMinor: 9900, noticeDays: 30 });
+    expect(membershipTerms(term).map((t) => t.key)).toEqual(["minimum_term", "early_cancellation_fee", "notice", "cooling_off"]);
   });
 
   it("no cooling-off line once its days are over, on the Terminal or in an agreement signed then (round one, H2)", () => {

@@ -347,6 +347,7 @@ d("my membership: a member's own memberships, payments and receipts (real Postgr
         payments: [],
         olderPeriodsNotShown: 0,
         fees: [],
+        terms: [],
       },
     ]);
     expect(numbersIn(his)).toEqual([aaravBought.receipt]);

@@ -12,6 +12,7 @@ import { z } from "zod";
 import { memberFeeKindSchema, memberPaymentMethodSchema, receiptNumberSchema } from "./memberBills.js";
 import { heldMembershipShownSchema } from "./heldMemberships.js";
 import { membershipKindSchema } from "./memberships.js";
+import { membershipTermSchema } from "./membershipAgreement.js";
 
 const daySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const minorSchema = z.number().int().min(0).max(99_999_999);
@@ -80,6 +81,9 @@ export const myMembershipSchema = z
     /** Older periods' payments kept off this answer; the gym holds them. */
     olderPeriodsNotShown: z.number().int().min(0),
     fees: z.array(myFeeSchema),
+    /** Its terms as its agreement says them (16d): the minimum term, early cancellation fee, notice to cancel and
+     *  cooling-off period it has. Where somebody else pays for it, the fee and the cooling-off period are theirs to read. */
+    terms: z.array(membershipTermSchema).max(4).default([]),
   })
   .strict();
 export type MyMembership = z.infer<typeof myMembershipSchema>;
