@@ -40,7 +40,9 @@ function useGpsBefore(watching: boolean, asked: number): ReturnType<typeof gpsLi
       else stop = () => {
         sub.remove();
       };
-    }, () => undefined);
+      // Refused when the person said No, thanks to Android's location accuracy: the light stays
+      // on Finding GPS, and Start asks again.
+    }).catch(() => undefined);
     const timer = setInterval(() => {
       setNow(Date.now());
     }, 2000);
