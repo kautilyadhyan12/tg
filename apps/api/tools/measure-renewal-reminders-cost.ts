@@ -55,7 +55,7 @@ async function seedGym(people: number): Promise<Gym> {
   const owner = randomUUID();
   await sql`INSERT INTO users (id, email, display_name) VALUES (${owner}, ${`${PREFIX}${owner}@example.com`}, 'Cost Owner')`;
   const id = randomUUID();
-  // Noon on the clock below is afternoon in London: the gym's morning has begun.
+
   await sql`INSERT INTO gyms (id, slug, name, timezone, country, owner_user_id) VALUES (${id}, ${PREFIX + id}, 'Cost Gym', 'Europe/London', 'GB', ${owner})`;
   await sql`INSERT INTO gym_staff (gym_id, user_id, role) VALUES (${id}, ${owner}, 'owner')`;
   await sql`INSERT INTO subscriptions (owner_type, owner_id, plan_id, status, provider) VALUES ('gym', ${id}, (SELECT id FROM plans WHERE code = ${PLAN}), 'active', 'pilot')`;
@@ -114,11 +114,14 @@ delay.enable();
 const line = (name: string, t: { wall: number; js: number }, more = "") => {
   console.log(`${name.padEnd(52)} total ${fmt(t.wall)} · thread busy ${fmt(t.js)}${more}`);
 };
-const now = () => new Date();
+// Noon on the gyms' own clock: their morning has begun, whatever hour this is run.
+const londonToday = (await sql<{ d: string }[]>`SELECT ((now() AT TIME ZONE 'Europe/London')::date)::text AS d`)[0]?.d ?? "";
+const noon = new Date(`${londonToday}T12:00:00Z`);
+const now = () => noon;
 
 let queued = 0;
 line(
-  "the morning's queue, all 21 gyms, every one due",
+  "the first look, all 21 gyms, every one due",
   await time(async () => {
     queued = await queueDueRenewalReminders({ sql, now, gymIds: ids });
   }),
@@ -126,14 +129,14 @@ line(
 );
 await sql`UPDATE gyms SET renewal_reminders_checked_at = NULL WHERE id = ANY(${ids}::uuid[])`;
 line(
-  "a morning with every one written already",
+  "each hourly look after, every one written already",
   await time(async () => {
     queued = await queueDueRenewalReminders({ sql, now, gymIds: ids });
   }),
   ` · ${String(queued)} written`,
 );
 line(
-  "a minute when every gym was looked at today",
+  "a minute within the hour of a look",
   await time(async () => {
     queued = await queueDueRenewalReminders({ sql, now, gymIds: ids });
   }),
