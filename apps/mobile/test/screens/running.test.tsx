@@ -250,13 +250,65 @@ describe("Auto-pause", () => {
       takeLocations({ locations: Array.from({ length: 20 }, (_, i) => ({ timestamp: run.startedAt + (60 + i) * 1000, coords: { latitude: stillAt, longitude: 91.7362, accuracy: 5, speed: 0 } })) }),
     );
     expect(await screen.findByText("Auto-paused")).toBeTruthy();
-    expect(runNow()?.pauses).toEqual([[60_000, null]]);
+    // From where the person stopped: the last moving point, at 59 s.
+    expect(runNow()?.pauses).toEqual([[59_000, null]]);
     await feed(80, 10, 3, stillAt - (80 * 3) / 111_132);
     await waitFor(() => {
       expect(runNow()?.phase).toBe("running");
     });
-    expect(runNow()?.pauses).toEqual([[60_000, 80_000]]);
+    expect(runNow()?.pauses).toEqual([[59_000, 80_000]]);
     expect(screen.queryByText("Auto-paused")).toBeNull();
     expect(clock(0)).toBe("0:00");
+  });
+});
+
+describe("Auto-pause turned off during a run (Kd's click-through, 2026-11-05)", () => {
+  /** A run of a minute, then the person standing still long enough for Auto-pause. */
+  async function autoPaused() {
+    await startRunning();
+    await feed(0, 60, 3);
+    const run = runNow();
+    if (run === null) throw new Error("no run");
+    const stillAt = 26.1445 + (59 * 3) / 111_132;
+    await act(() =>
+      takeLocations({ locations: Array.from({ length: 12 }, (_, i) => ({ timestamp: run.startedAt + (60 + i) * 1000, coords: { latitude: stillAt, longitude: 91.7362, accuracy: 5, speed: 0 } })) }),
+    );
+    expect(await screen.findByText("Auto-paused")).toBeTruthy();
+  }
+
+  it("on the run's own screen: Turn off Auto-pause starts the clock again at once, and it stays off", async () => {
+    const s = runServer();
+    await openRunning(s);
+    await autoPaused();
+    await fireEvent.press(screen.getByRole("button", { name: "Turn off Auto-pause" }));
+    await waitFor(() => {
+      expect(runNow()?.phase).toBe("running");
+    });
+    expect(runNow()?.autoPause).toBe(false);
+    expect(runNow()?.pauses[0]?.[1]).not.toBeNull();
+    // Standing still again changes nothing now.
+    const run = runNow();
+    if (run === null) throw new Error("no run");
+    const stillAt = 26.1445 + (59 * 3) / 111_132;
+    await act(() =>
+      takeLocations({ locations: Array.from({ length: 20 }, (_, i) => ({ timestamp: run.startedAt + (200 + i) * 1000, coords: { latitude: stillAt, longitude: 91.7362, accuracy: 5, speed: 0 } })) }),
+    );
+    expect(runNow()?.phase).toBe("running");
+    expect(screen.queryByText("Auto-paused")).toBeNull();
+  });
+
+  it("on the Running page, with the run behind it: the switch changes the run going on", async () => {
+    const s = runServer();
+    await openRunning(s);
+    await autoPaused();
+    await fireEvent.press(screen.getByRole("button", { name: "Back to the app" }));
+    const toggle = await screen.findByRole("switch", { name: "Auto-pause" });
+    expect(toggle.props.value).toBe(true);
+    await fireEvent(toggle, "valueChange", false);
+    await waitFor(() => {
+      expect(runNow()?.phase).toBe("running");
+    });
+    expect(runNow()?.autoPause).toBe(false);
+    expect(screen.getByRole("switch", { name: "Auto-pause" }).props.value).toBe(false);
   });
 });

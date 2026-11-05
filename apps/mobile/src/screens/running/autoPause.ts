@@ -1,19 +1,23 @@
 // Auto-pause (ROADMAP Stage 5 item 37a): the clock stops when the person stops and starts again
 // when they move, as Strava's and Nike Run Club's do. Pure: each new point, and what it changes.
 //
-// A point's speed is the phone's own (Android measures it from the signal's Doppler shift, far
-// steadier than the distance between two points); where the phone gives none, the distance from the
-// point before over the time between. Below STOP for HOLD, the run pauses from the moment it slowed,
-// so the stop is never counted; GO points in a row above GO start it again from the first of them.
-// A slow walk (about 1 m a second) never pauses; a person standing at a light always does.
+// Judged from where the person is, not from one speed reading: Android reports a speed of 0 when it
+// does not know one (expo-location passes Location.getSpeed() on as it is), so a 0 is never taken as
+// standing still. Kd's walk of 2026-11-05 paused again and again for that reason.
+//
+// Stopped: every point of the last STILL_MS lies within STILL_M of the first of them, and the
+// phone does not report a speed of GO_MPS or more. The run pauses from that first point, so the
+// stop is never counted. Moving again: GO_POINTS points in a row more than GO_M from where the
+// person stopped, or the phone's speed over GO_MPS that many times; the clock starts again from
+// the first of them. A point less sure of where it is than WORST_ACCURACY_M is not judged at all:
+// under trees the signal wanders as far as a walk.
 
-export const STOP_MPS = 0.6;
-export const HOLD_MS = 4000;
-export const GO_MPS = 1.2;
-export const GO_POINTS = 3;
-/** A point less sure of where it is than this never starts the clock again by itself: under trees
- *  or between buildings the signal wanders as fast as a walk. */
-export const GO_WORST_ACCURACY_M = 20;
+export const STILL_MS = 8000;
+export const STILL_M = 3;
+export const GO_M = 5;
+export const GO_MPS = 1.0;
+export const GO_POINTS = 2;
+export const WORST_ACCURACY_M = 20;
 
 export interface Fix {
   /** Milliseconds since the run started. */
@@ -21,55 +25,55 @@ export interface Fix {
   lat: number;
   lng: number;
   accuracyM: number | null;
-  /** The phone's own speed, metres a second; null when it gave none. */
+  /** The phone's own speed, metres a second; 0 or null when it does not know one. */
   speed: number | null;
 }
 
 export interface AutoPauseState {
   paused: boolean;
-  /** When the person slowed below STOP, while still running. */
-  slowSince: number | null;
-  /** When the points above GO began, while paused, and how many in a row. */
+  /** The sure points of the last STILL_MS and a little more, oldest first, while running. */
+  recent: Fix[];
+  /** Where the person stopped, while paused. */
+  anchor: Fix | null;
+  /** The points in a row that showed movement, while paused, and when the first of them came. */
   goSince: number | null;
   goCount: number;
-  last: Fix | null;
 }
 
-export const AUTO_START: AutoPauseState = { paused: false, slowSince: null, goSince: null, goCount: 0, last: null };
+export const AUTO_START: AutoPauseState = { paused: false, recent: [], anchor: null, goSince: null, goCount: 0 };
 
 export type AutoPauseChange = { kind: "pause"; at: number } | { kind: "resume"; at: number } | null;
 
 const RAD = Math.PI / 180;
-function metres(a: Fix, b: Fix): number {
+export function metresApart(a: Fix, b: Fix): number {
   const north = (b.lat - a.lat) * 111_132;
   const east = (b.lng - a.lng) * 111_320 * Math.cos(a.lat * RAD);
   return Math.hypot(north, east);
 }
 
-function speedOf(fix: Fix, last: Fix | null): number | null {
-  if (fix.speed !== null && fix.speed >= 0) return fix.speed;
-  if (last === null || fix.at <= last.at) return null;
-  return metres(last, fix) / ((fix.at - last.at) / 1000);
-}
+const sure = (fix: Fix): boolean => fix.accuracyM === null || fix.accuracyM <= WORST_ACCURACY_M;
+const fast = (fix: Fix): boolean => fix.speed !== null && fix.speed >= GO_MPS;
 
 export function nextAutoPause(state: AutoPauseState, fix: Fix): { state: AutoPauseState; change: AutoPauseChange } {
-  const speed = speedOf(fix, state.last);
-  const base = { ...state, last: fix };
-  if (speed === null) return { state: base, change: null };
+  if (!sure(fix)) return { state, change: null };
   if (!state.paused) {
-    if (speed >= STOP_MPS) return { state: { ...base, slowSince: null }, change: null };
-    const since = state.slowSince ?? fix.at;
-    if (fix.at - since >= HOLD_MS) {
-      return { state: { ...base, paused: true, slowSince: null, goSince: null, goCount: 0 }, change: { kind: "pause", at: since } };
-    }
-    return { state: { ...base, slowSince: since }, change: null };
+    if (fast(fix)) return { state: { ...state, recent: [fix] }, change: null };
+    // Keep the points of the last STILL_MS, and the one just before them, so the window is full.
+    const recent = [...state.recent, fix];
+    while (recent.length > 2 && fix.at - (recent[1]?.at ?? fix.at) >= STILL_MS) recent.shift();
+    const first = recent[0];
+    if (first === undefined || fix.at - first.at < STILL_MS) return { state: { ...state, recent }, change: null };
+    const still = recent.every((p) => metresApart(first, p) <= STILL_M);
+    if (!still) return { state: { ...state, recent }, change: null };
+    return { state: { paused: true, recent: [], anchor: first, goSince: null, goCount: 0 }, change: { kind: "pause", at: first.at } };
   }
-  const sure = fix.accuracyM === null || fix.accuracyM <= GO_WORST_ACCURACY_M;
-  if (speed < GO_MPS || !sure) return { state: { ...base, goSince: null, goCount: 0 }, change: null };
+  const anchor = state.anchor ?? fix;
+  const moved = fast(fix) || metresApart(anchor, fix) > GO_M;
+  if (!moved) return { state: { ...state, anchor, goSince: null, goCount: 0 }, change: null };
   const goSince = state.goSince ?? fix.at;
   const goCount = state.goCount + 1;
   if (goCount >= GO_POINTS) {
-    return { state: { ...base, paused: false, goSince: null, goCount: 0, slowSince: null }, change: { kind: "resume", at: goSince } };
+    return { state: { paused: false, recent: [fix], anchor: null, goSince: null, goCount: 0 }, change: { kind: "resume", at: goSince } };
   }
-  return { state: { ...base, goSince, goCount }, change: null };
+  return { state: { ...state, anchor, goSince, goCount }, change: null };
 }

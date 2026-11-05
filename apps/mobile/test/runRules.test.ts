@@ -1,8 +1,12 @@
 // A run's words and Auto-pause (ROADMAP Stage 5 item 37a). Auto-pause is a rule that thresholds, so
-// every kind of moment is in the table below: a light, a stumble, a slow walk, a start again, two
-// steps and a stop, a wandering signal, a phone that gives no speed.
+// every kind of moment is in the table below: a light, a stumble, a slow walk, a shuffle, a start
+// again, one stride, a wandering signal, and Android's speed of 0 when it does not know one (Kd's
+// walk of 2026-11-05 paused again and again on it). His walk itself, as the phone recorded it, is
+// the last case.
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { AUTO_START, nextAutoPause, type AutoPauseChange, type Fix } from "../src/screens/running/autoPause";
+import { fitPath, unitMarks } from "../src/screens/running/routeShape";
 import { clock, distance, leftOutLine, pace, runName, runWhen, splitLabel } from "../src/screens/running/runWords";
 
 describe("a run's words", () => {
@@ -24,12 +28,15 @@ describe("a run's words", () => {
   });
 });
 
-/** One point a second from `fromS`, going north at each of `speeds`, with the phone's own speed or none. */
-function points(fromS: number, speeds: readonly number[], opts: { phoneSpeed?: boolean; accuracyM?: number; startLat?: number } = {}): Fix[] {
-  let lat = opts.startLat ?? 26.1445;
+/** What the phone says of its speed: the true one, Android's 0 when it does not know, or nothing. */
+type PhoneSpeed = "true" | "zero" | "none";
+
+/** One point a second from `fromS`, going north at each of `speeds` metres a second. */
+function points(fromS: number, speeds: readonly number[], phone: PhoneSpeed = "true", accuracyM = 5): Fix[] {
+  let lat = 26.1445;
   return speeds.map((v, i) => {
     lat += v / 111_132;
-    return { at: (fromS + i) * 1000, lat, lng: 91.7362, accuracyM: opts.accuracyM ?? 5, speed: opts.phoneSpeed === false ? null : v };
+    return { at: (fromS + i) * 1000, lat, lng: 91.7362, accuracyM, speed: phone === "true" ? v : phone === "zero" ? 0 : null };
   });
 }
 
@@ -44,35 +51,59 @@ function changes(fixes: readonly Fix[], startPaused = false): AutoPauseChange[] 
   return out;
 }
 
-const run = (n: number) => Array.from({ length: n }, () => 3);
-const still = (n: number) => Array.from({ length: n }, () => 0);
+const at = (speed: number, n: number) => Array.from({ length: n }, () => speed);
 
 describe("Auto-pause", () => {
   it.each<[string, Fix[], AutoPauseChange[]]>([
-    ["stopping at a light pauses from the moment of stopping", points(0, [...run(10), ...still(10)]), [{ kind: "pause", at: 10_000 }]],
-    ["a stumble of three seconds does not pause", points(0, [...run(10), ...still(3), ...run(10)]), []],
-    ["a slow walk at 1 m a second never pauses", points(0, [...run(10), ...Array.from({ length: 60 }, () => 1)]), []],
-    ["running again starts the clock from the first step", points(0, [...run(10), ...still(10), ...run(5)]), [{ kind: "pause", at: 10_000 }, { kind: "resume", at: 20_000 }]],
-    ["two steps and a stop stay paused", points(0, [...run(10), ...still(10), 3, 3, ...still(5)]), [{ kind: "pause", at: 10_000 }]],
-    ["with no speed from the phone, the distance between points counts", points(0, [...run(10), ...still(10), ...run(5)], { phoneSpeed: false }), [{ kind: "pause", at: 10_000 }, { kind: "resume", at: 20_000 }]],
+    ["stopping at a light pauses from the moment of stopping", points(0, [...at(3, 10), ...at(0, 12)]), [{ kind: "pause", at: 9000 }]],
+    ["a stumble of three seconds does not pause", points(0, [...at(3, 10), ...at(0, 3), ...at(3, 10)]), []],
+    ["a slow walk at 1 m a second never pauses", points(0, [...at(3, 10), ...at(1, 60)]), []],
+    ["walking while Android says 0 for its speed never pauses", points(0, at(1.2, 120), "zero"), []],
+    ["running while Android says 0 never pauses", points(0, at(3, 120), "zero"), []],
+    ["a shuffle at 0.2 m a second is standing: it pauses", points(0, [...at(3, 10), ...at(0.2, 20)]), [{ kind: "pause", at: 9000 }]],
+    ["running on starts the clock from the first step", points(0, [...at(3, 10), ...at(0, 10), ...at(3, 5)]), [{ kind: "pause", at: 9000 }, { kind: "resume", at: 20_000 }]],
+    ["running on, Android saying 0, starts it once 5 m from the stop", points(0, [...at(3, 10), ...at(0, 10), ...at(3, 5)], "zero"), [{ kind: "pause", at: 9000 }, { kind: "resume", at: 21_000 }]],
+    ["one stride and a stop stays paused", points(0, [...at(3, 10), ...at(0, 10), 3, ...at(0, 10)], "zero"), [{ kind: "pause", at: 9000 }]],
   ])("%s", (_, fixes, expected) => {
     expect(changes(fixes)).toEqual(expected);
   });
 
-  it("a signal wandering under trees, as fast as a walk, never starts the clock", () => {
-    // Paused, the phone lying still: each point lands up to 25 m from the last, the phone sure only to 30 m.
-    const wander: Fix[] = Array.from({ length: 30 }, (_, i) => ({
-      at: i * 1000,
-      lat: 26.1445 + (i % 2 === 0 ? 0.0002 : -0.0002),
-      lng: 91.7362,
-      accuracyM: 30,
-      speed: null,
-    }));
+  it("a signal wandering under trees, as fast as a walk, never starts the clock or stops it", () => {
+    // Each point lands up to 25 m from the last, the phone sure only to 30 m.
+    const wander: Fix[] = Array.from({ length: 30 }, (_, i) => ({ at: i * 1000, lat: 26.1445 + (i % 2 === 0 ? 0.0002 : -0.0002), lng: 91.7362, accuracyM: 30, speed: null }));
     expect(changes(wander, true)).toEqual([]);
+    expect(changes(wander, false)).toEqual([]);
   });
 
-  it("a phone that says its speed is unknown (-1) is read by the distance instead", () => {
-    const fixes = points(0, [...run(10), ...still(10)]).map((f) => ({ ...f, speed: -1 }));
-    expect(changes(fixes)).toEqual([{ kind: "pause", at: 10_000 }]);
+  it("Kd's walk inside his house: the six still minutes stay paused, without pausing again and again", () => {
+    const walk = JSON.parse(readFileSync(new URL("./fixtures/indoor-walk.json", import.meta.url), "utf8")) as { points: [number, number, number, number][] };
+    // The phone kept no speed: Android's 0, as it reported it on the walk.
+    const seen = changes(walk.points.map(([t, lat, lng, acc]) => ({ at: t, lat, lng, accuracyM: acc, speed: 0 })));
+    const pauses = seen.filter((c) => c?.kind === "pause");
+    expect(pauses.length).toBeLessThanOrEqual(3);
+    const last = seen[seen.length - 1];
+    expect(last?.kind).toBe("pause");
+    expect(last?.at ?? Infinity).toBeLessThan(4 * 60_000); // from before the still minutes began
+    expect(seen[0]?.at ?? Infinity).toBeGreaterThan(8000); // never in the first eight seconds
+  });
+});
+
+describe("a route laid flat", () => {
+  const box = 300;
+  const spanOf = (pts: [number, number][]) => Math.max(...pts.map((p) => p[0])) - Math.min(...pts.map((p) => p[0]));
+
+  it("is true to its size: a 10 m wander is drawn small, a 2 km line fills the box", () => {
+    const ten: [number, number][] = [[0, 0], [0, 10 / 111_320]];
+    const two: [number, number][] = [[0, 0], [0, 2000 / 111_320]];
+    expect(spanOf(fitPath(ten, box, box, 10))).toBeLessThan(20);
+    expect(spanOf(fitPath(two, box, box, 10))).toBeCloseTo(280, 0);
+  });
+
+  it("puts a stone at each whole kilometre, never counting the gap across a pause", () => {
+    // A degree of latitude at the equator is 110,574 m on the WGS84 ellipsoid.
+    const north = (m: number): [number, number] => [m / 110_574, 0];
+    // 1.5 km, a pause during which the person moved 3 km, then 0.6 km more.
+    const track = [north(0), north(500), north(1000), north(1500), north(4500), north(5100)];
+    expect(unitMarks(track, [0, 4], "metric")).toEqual([2, 5]);
   });
 });

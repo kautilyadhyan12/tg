@@ -4,52 +4,17 @@
 import { useState } from "react";
 import { StyleSheet, View, type LayoutChangeEvent } from "react-native";
 import Svg, { Circle, Defs, G, LinearGradient, Path, Stop } from "react-native-svg";
-import { geodesicMetres, type RunSplit, type Units } from "@app/shared";
+import type { RunSplit, Units } from "@app/shared";
 import { colours } from "../../look/colours";
 import { fonts, Txt } from "../../look/Txt";
-import { METRES_PER_MILE, pace, splitLabel } from "./runWords";
+import { fitPath, pathOf, unitMarks } from "./routeShape";
+import { pace, splitLabel } from "./runWords";
 
 const GOLD = colours.gold;
 const PALE = colours.flamePale;
 
-/** The path laid flat in a box `w` by `h`, `pad` from its edges, north up and true to its shape. */
-export function fitPath(track: readonly (readonly [number, number])[], w: number, h: number, pad: number): [number, number][] {
-  const first = track[0];
-  if (first === undefined || w <= 0 || h <= 0) return [];
-  const cos = Math.cos((first[0] * Math.PI) / 180);
-  const xy = track.map(([lat, lng]): [number, number] => [(lng - first[1]) * cos, -(lat - first[0])]);
-  const xs = xy.map((p) => p[0]);
-  const ys = xy.map((p) => p[1]);
-  const minX = Math.min(...xs);
-  const minY = Math.min(...ys);
-  const spanX = Math.max(...xs) - minX;
-  const spanY = Math.max(...ys) - minY;
-  const scale = Math.min((w - 2 * pad) / (spanX || 1), (h - 2 * pad) / (spanY || 1));
-  const offX = (w - spanX * scale) / 2;
-  const offY = (h - spanY * scale) / 2;
-  return xy.map(([x, y]) => [offX + (x - minX) * scale, offY + (y - minY) * scale]);
-}
-
-/** Where along the path each whole kilometre or mile falls, as indexes into it. */
-export function unitMarks(track: readonly (readonly [number, number])[], units: Units): number[] {
-  const every = units === "imperial" ? METRES_PER_MILE : 1000;
-  const marks: number[] = [];
-  let walked = 0;
-  for (let i = 1; i < track.length; i++) {
-    const a = track[i - 1];
-    const b = track[i];
-    if (a === undefined || b === undefined) continue;
-    walked += geodesicMetres(a[0], a[1], b[0], b[1]);
-    if (walked >= every * (marks.length + 1)) marks.push(i);
-  }
-  return marks;
-}
-
-const pathOf = (points: readonly (readonly [number, number])[]): string =>
-  points.map(([x, y], i) => `${i === 0 ? "M" : "L"}${x.toFixed(1)} ${y.toFixed(1)}`).join(" ");
-
 /** The route: soft gold where it began, brightening to white where it is now or ended. */
-export function RouteLine({ track, units, height, marks = true, testID }: { track: readonly (readonly [number, number])[]; units: Units; height: number; marks?: boolean; testID?: string }) {
+export function RouteLine({ track, starts, units, height, marks = true, testID }: { track: readonly (readonly [number, number])[]; starts: readonly number[]; units: Units; height: number; marks?: boolean; testID?: string }) {
   const [width, setWidth] = useState(0);
   const onLayout = (e: LayoutChangeEvent) => {
     setWidth(Math.round(e.nativeEvent.layout.width));
@@ -58,8 +23,8 @@ export function RouteLine({ track, units, height, marks = true, testID }: { trac
   const points = fitPath(track, width, height, pad);
   const first = points[0];
   const last = points[points.length - 1];
-  const d = pathOf(points);
-  const stones = marks ? unitMarks(track, units) : [];
+  const d = pathOf(points, starts);
+  const stones = marks ? unitMarks(track, starts, units) : [];
   return (
     <View onLayout={onLayout} style={{ height }} testID={testID} accessible accessibilityLabel="Your route">
       {width > 0 && first !== undefined && last !== undefined ? (

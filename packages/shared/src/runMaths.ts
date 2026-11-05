@@ -215,6 +215,9 @@ export interface RunSums {
   splitsMi: RunSplit[];
   /** The path counted, for the route's line: latitude, longitude. */
   track: [number, number][];
+  /** Where in `track` each stretch begins: after a pause, or a stretch left out, the line starts
+   *  again there and is never drawn across the gap. The first is 0. */
+  trackStarts: number[];
 }
 
 interface Fix {
@@ -456,6 +459,7 @@ export function runSums(points: readonly RunPoint[], pauses: readonly RunPause[]
   const pausedMs = cleaned.reduce((sum, [from, to]) => sum + (to - from), 0);
   const steps: Step[] = [];
   const track: [number, number][] = [];
+  const trackStarts: number[] = [];
   let leftOutM = 0;
   let leftOutMs = 0;
   for (const raw of piecesBetweenPauses(points, cleaned, elapsed)) {
@@ -482,6 +486,7 @@ export function runSums(points: readonly RunPoint[], pauses: readonly RunPause[]
       const path = smoothed(p);
       let last = path[0];
       if (last === undefined) continue;
+      trackStarts.push(track.length);
       track.push([last.lat, last.lng]);
       for (let i = 1; i < path.length; i++) {
         const fix = path[i];
@@ -515,6 +520,7 @@ export function runSums(points: readonly RunPoint[], pauses: readonly RunPause[]
     splitsKm: splitsKm.map((x) => ({ m: Math.round(x.m), s: Math.round(x.s) })),
     splitsMi: splitsOf(steps, 1609.344).map((x) => ({ m: Math.round(x.m), s: Math.round(x.s) })),
     track,
+    trackStarts,
   };
 }
 

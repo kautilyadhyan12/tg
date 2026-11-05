@@ -290,7 +290,7 @@ export async function pauseRun(now: number = Date.now()): Promise<void> {
   if (run.phase === "running") run.pauses.push([Math.max(now - run.startedAt, lastOpenEnd(run)), null]);
   run.phase = "paused";
   run.pausedByPerson = true;
-  auto = { ...auto, paused: true, goSince: null, goCount: 0 };
+  auto = { ...AUTO_START, paused: true };
   current = { ...run };
   await keep(current);
   tell();
@@ -302,7 +302,7 @@ export async function resumeRun(now: number = Date.now()): Promise<void> {
   closePause(run, now - run.startedAt);
   run.phase = "running";
   run.pausedByPerson = false;
-  auto = { ...AUTO_START, last: auto.last };
+  auto = AUTO_START;
   current = { ...run };
   await keep(current);
   tell();
@@ -310,11 +310,18 @@ export async function resumeRun(now: number = Date.now()): Promise<void> {
   if (!(await Location.hasStartedLocationUpdatesAsync(RUN_TASK))) await Location.startLocationUpdatesAsync(RUN_TASK, RUN_LOCATION_OPTIONS);
 }
 
-export async function setAutoPause(on: boolean): Promise<void> {
+/** Auto-pause turned on or off while a run goes on: off, a run Auto-pause had paused starts again
+ *  at once; on, it judges from the next point. */
+export async function setAutoPause(on: boolean, now: number = Date.now()): Promise<void> {
   const run = current;
-  if (run === null) return;
+  if (run === null || run.phase === "finished" || run.autoPause === on) return;
+  if (!on && run.phase === "paused" && !run.pausedByPerson) {
+    closePause(run, elapsedMs(run, now));
+    run.phase = "running";
+  }
+  auto = run.phase === "paused" ? { ...AUTO_START, paused: true } : AUTO_START;
   current = { ...run, autoPause: on };
-  await writeState(current);
+  await keep(current);
   tell();
 }
 

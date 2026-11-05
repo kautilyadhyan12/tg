@@ -25,6 +25,7 @@ import {
   loadRun,
   pauseRun,
   resumeRun,
+  setAutoPause as setRunAutoPause,
   runNow,
   startRun,
   subscribeRun,
@@ -314,10 +315,15 @@ function Live({ run, units, kg, onHide }: { run: LiveRun; units: Units; kg: numb
       {isPaused ? <View style={styles.pausedBar} /> : null}
       <View style={styles.liveTop}>
         {isPaused ? (
-          <View style={styles.pausedTag}>
-            <Txt kind="small" colour="orange">
-              {run.pausedByPerson ? "Paused" : "Auto-paused"}
-            </Txt>
+          <View style={styles.pausedRow}>
+            <View style={styles.pausedTag}>
+              <Txt kind="small" colour="orange">
+                {run.pausedByPerson ? "Paused" : "Auto-paused"}
+              </Txt>
+            </View>
+            {run.pausedByPerson ? null : (
+              <Button kind="link" label="Turn off Auto-pause" onPress={press(() => setRunAutoPause(false))} />
+            )}
           </View>
         ) : (
           <GpsPill gps={gpsLight(run.lastFix, now)} />
@@ -345,12 +351,12 @@ function Live({ run, units, kg, onHide }: { run: LiveRun; units: Units; kg: numb
           </View>
           {sums !== null && sums.track.length > 1 ? (
             <View style={styles.trace}>
-              <RouteLine track={sums.track} units={units} height={110} marks={false} testID="live-route" />
+              <RouteLine track={sums.track} starts={sums.trackStarts} units={units} height={110} marks={false} testID="live-route" />
             </View>
           ) : null}
         </View>
         <View style={styles.pairs}>
-          <Figure label="Pace now" value={paceNow(run, units)} unit={paceWord(units)} dim={isPaused} />
+          <Figure label="Current pace" value={paceNow(run, units)} unit={paceWord(units)} dim={isPaused} />
           {/* No average until there is ground to average: a standing start reads as no pace. */}
           <Figure label="Average pace" value={pace(moving, metres < 50 ? 0 : metres, units)} unit={paceWord(units)} dim={isPaused} />
         </View>
@@ -497,12 +503,17 @@ function Summary({ run, units, kg, onSaved }: { run: LiveRun; units: Units; kg: 
         </Txt>
         <View style={styles.three}>
           <Tile value={clock(sums.movingS)} label="Moving time" />
-          <Tile value={pace(sums.movingS, sums.distanceM, units)} label={`Avg pace ${paceWord(units)}`} />
+          <Tile value={clock(sums.elapsedS)} label="Total time" />
+        </View>
+        <View style={styles.three}>
+          <Tile value={pace(sums.movingS, sums.distanceM < 50 ? 0 : sums.distanceM, units)} label={`Avg pace ${paceWord(units)}`} />
           <Tile value={String(sums.kcal)} label="Calories" />
         </View>
-        <Txt kind="small" colour="textFaint">
-          {`Elapsed time ${clock(sums.elapsedS)}${pausedS > 0 ? ` · Paused ${clock(pausedS)}` : ""}`}
-        </Txt>
+        {pausedS > 0 ? (
+          <Txt kind="small" colour="textFaint">
+            {`Paused for ${clock(pausedS)}`}
+          </Txt>
+        ) : null}
         {sums.leftOutM > 0 ? (
           <View style={styles.leftOut}>
             <Icon name="warn" size={18} colour="gold" />
@@ -515,7 +526,7 @@ function Summary({ run, units, kg, onSaved }: { run: LiveRun; units: Units; kg: 
           <View style={styles.card}>
             <Txt kind="h3">Route</Txt>
             <View style={styles.routeBox}>
-              <RouteLine track={sums.track} units={units} height={200} testID="summary-route" />
+              <RouteLine track={sums.track} starts={sums.trackStarts} units={units} height={200} testID="summary-route" />
             </View>
           </View>
         ) : null}
@@ -667,6 +678,7 @@ const styles = StyleSheet.create({
   dotGood: { backgroundColor: colours.good, boxShadow: `0 0 10px ${colours.good}` },
   dotWeak: { backgroundColor: colours.gold },
   dotNone: { backgroundColor: colours.textFaint },
+  pausedRow: { flexDirection: "row", alignItems: "center", gap: 12, flexShrink: 1 },
   pausedTag: { paddingHorizontal: 13, paddingVertical: 7, borderRadius: sizes.round, backgroundColor: colours.orangeFill, borderWidth: 1, borderColor: colours.orangeLine },
   liveNumbers: { paddingTop: 22, gap: 6, paddingBottom: 24 },
   bigTime: { fontFamily: fonts.bold, fontSize: 92, lineHeight: 100, letterSpacing: -3, color: colours.text },

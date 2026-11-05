@@ -10,7 +10,7 @@ import { colours, orangeGradient, shadows, sizes } from "../../look/colours";
 import { fonts, Txt } from "../../look/Txt";
 import { useRead } from "../dashboard/useRead";
 import { SettingsPage } from "../Settings";
-import { phoneRunFiles } from "./recorder";
+import { phoneRunFiles, setAutoPause as setRunAutoPause } from "./recorder";
 import { gpsLight, openAppSettings, START_PROBLEM_WORDS, useRunLayer, type StartProblem } from "./RunLayer";
 import { useRunOutbox } from "./RunOutbox";
 import { clock, distance, unitWord } from "./runWords";
@@ -84,6 +84,8 @@ export function RunningTab({ units }: { units: Units }) {
   const [problem, setProblem] = useState<StartProblem | null>(null);
   const [settings, setSettings] = useState(false);
   const going = layer.run !== null;
+  // A run going on shows its own Auto-pause, and the switch changes it at once (Kd, 37a's click-through).
+  const shownAuto = layer.run !== null && layer.run.phase !== "finished" ? layer.run.autoPause : autoPause;
   const [asked, setAsked] = useState(0);
   const gps = useGpsBefore(focused && !going, asked);
   const last = useRead("/v1/geo/runs?limit=1", runPageSchema, view.sent);
@@ -109,6 +111,42 @@ export function RunningTab({ units }: { units: Units }) {
           {`Last run · ${DAYS[new Date(lastRun.startedAt).getDay()] ?? ""} · ${distance(lastRun.distanceM, units)} ${unitWord(units)} in ${clock(lastRun.durationS)}`}
         </Txt>
       )}
+      <View style={styles.rows}>
+        <View style={styles.row}>
+          <View style={styles.grow}>
+            <Txt kind="body">Auto-pause</Txt>
+            <Txt kind="small" colour="textFaint">
+              Stops the clock when you stop
+            </Txt>
+          </View>
+          <Switch
+            accessibilityLabel="Auto-pause"
+            value={shownAuto}
+            onValueChange={(on) => {
+              setAutoPause(on);
+              void setRunAutoPause(on);
+            }}
+            trackColor={{ false: colours.lineStrong, true: colours.orange }}
+            thumbColor={colours.text}
+          />
+        </View>
+        <View style={[styles.row, styles.rowLine]}>
+          <View style={styles.grow}>
+            <Txt kind="body">Units</Txt>
+            <Txt kind="small" colour="textFaint">
+              {units === "imperial" ? "Miles" : "Kilometres"}
+            </Txt>
+          </View>
+          <Button
+            kind="link"
+            label="Change"
+            say="Change units"
+            onPress={() => {
+              setSettings(true);
+            }}
+          />
+        </View>
+      </View>
       {going ? (
         <View style={styles.centre}>
           <Txt kind="h3">{layer.run?.phase === "finished" ? "Your run is waiting to be saved." : "Your run is going."}</Txt>
@@ -155,39 +193,6 @@ export function RunningTab({ units }: { units: Units }) {
           />
         </View>
       ))}
-      <View style={styles.rows}>
-        <View style={styles.row}>
-          <View style={styles.grow}>
-            <Txt kind="body">Auto-pause</Txt>
-            <Txt kind="small" colour="textFaint">
-              Stops the clock when you stop
-            </Txt>
-          </View>
-          <Switch
-            accessibilityLabel="Auto-pause"
-            value={autoPause}
-            onValueChange={setAutoPause}
-            trackColor={{ false: colours.lineStrong, true: colours.orange }}
-            thumbColor={colours.text}
-          />
-        </View>
-        <View style={[styles.row, styles.rowLine]}>
-          <View style={styles.grow}>
-            <Txt kind="body">Units</Txt>
-            <Txt kind="small" colour="textFaint">
-              {units === "imperial" ? "Miles" : "Kilometres"}
-            </Txt>
-          </View>
-          <Button
-            kind="link"
-            label="Change"
-            say="Change units"
-            onPress={() => {
-              setSettings(true);
-            }}
-          />
-        </View>
-      </View>
       <SettingsPage
         open={settings}
         onClose={() => {

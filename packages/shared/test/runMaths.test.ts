@@ -168,6 +168,10 @@ describe("a run's distance", () => {
     expect(Math.abs(sums.distanceM - 1800)).toBeLessThan(10);
     expect(sums.movingS).toBe(600);
     expect(sums.elapsedS).toBe(720);
+    // The route starts again after the pause: never a straight line across it.
+    expect(sums.trackStarts).toHaveLength(2);
+    expect(sums.trackStarts[0]).toBe(0);
+    expect(sums.trackStarts[1]).toBeGreaterThan(0);
   });
 });
 
