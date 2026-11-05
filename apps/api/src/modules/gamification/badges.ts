@@ -7,6 +7,8 @@
 // Meal/photo criteria are seeded but their stats evaluate to 0 until
 // those modules land (P2.5/P2.6) — data, not code.
 import { z } from "zod";
+import type { Badge } from "@app/shared";
+import { bandOf } from "../nutrition/foodWeek.js";
 import { TIER_XP, type BadgeTier } from "./xp.js";
 
 /** criteria jsonb shape (Part 4 §3.8). stat = key into the evaluator's
@@ -87,4 +89,55 @@ export function evaluate(criteria: Criteria, stats: Stats): boolean {
 
 export function earnedCodes(stats: Stats): string[] {
   return ACHIEVEMENTS.filter((a) => evaluate(a.criteria, stats)).map((a) => a.code);
+}
+
+/** A day of food as Macro Master reads it: the protein logged that day and the day's
+ *  own protein target, as "Your week in food" kept it (food_day_targets). */
+export interface ProteinDay {
+  day: string; // YYYY-MM-DD in the person's time zone
+  eatenG: number;
+  targetG: number;
+}
+
+/** The days in a row the person hit their protein target (ROADMAP 35c-iii; Macro Master),
+ *  ending today, or yesterday while today has not hit it yet. A day hits when its protein
+ *  is not under the target as "Your week in food" bands it (within 10 % counts), so the
+ *  two screens agree; a day with no target kept, or a target of 0, never counts. */
+export function proteinRun(days: readonly ProteinDay[], today: string): number {
+  const hit = new Set(days.filter((d) => d.targetG > 0 && bandOf(d.eatenG, d.targetG) !== "under").map((d) => d.day));
+  let day = hit.has(today) ? today : dayBefore(today);
+  let run = 0;
+  while (hit.has(day)) {
+    run += 1;
+    day = dayBefore(day);
+  }
+  return run;
+}
+
+function dayBefore(day: string): string {
+  const [y, m, d] = day.split("-").map(Number);
+  if (y === undefined || m === undefined || d === undefined) throw new Error(`not a day: ${day}`);
+  return new Date(Date.UTC(y, m - 1, d - 1)).toISOString().slice(0, 10);
+}
+
+/** Every badge for the person (ROADMAP 35c-iii): earned ones with their day, the rest
+ *  with how far along they are. `current` never passes the target, and is floored, so
+ *  an average of 89.6 reads 89 of 90 and never as reached. */
+export function badgeList(stats: Stats, earned: ReadonlyMap<string, Date>): Badge[] {
+  return ACHIEVEMENTS.map((a): Badge => {
+    const at = earned.get(a.code);
+    const { gte, minWorkouts } = a.criteria;
+    const value = Math.floor(stats[a.criteria.stat] ?? 0);
+    const workouts = Math.floor(stats["total_workouts"] ?? 0);
+    return {
+      code: a.code,
+      tier: a.tier,
+      xp: TIER_XP[a.tier],
+      earnedAt: at === undefined ? null : at.toISOString(),
+      current: at === undefined ? Math.min(Math.max(value, 0), gte) : gte,
+      target: gte,
+      workoutsFirst:
+        minWorkouts === undefined ? null : { current: at === undefined ? Math.min(workouts, minWorkouts) : minWorkouts, target: minWorkouts },
+    };
+  });
 }

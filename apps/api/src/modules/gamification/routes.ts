@@ -3,7 +3,7 @@
 import type { FastifyInstance } from "fastify";
 import type { Sql } from "postgres";
 import { getUserSyncContext } from "../users/service.js";
-import { weeklyChallengesQuerySchema } from "@app/shared";
+import { badgeListQuerySchema, weeklyChallengesQuerySchema } from "@app/shared";
 import * as service from "./service.js";
 
 export function registerGamificationRoutes(app: FastifyInstance, deps: { sql: Sql }): void {
@@ -28,5 +28,21 @@ export function registerGamificationRoutes(app: FastifyInstance, deps: { sql: Sq
       });
     }
     return reply.status(200).send(await service.getWeeklyChallenges({ sql: deps.sql }, userId));
+  });
+
+  // Every badge, earned or not, with how far along the person is (ROADMAP 35c-iii). Their own; nothing to send.
+  app.get("/v1/gamification/badges", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const userId = req.authUser?.id;
+    if (userId === undefined) throw new Error("authenticate preHandler did not run");
+    const query = badgeListQuerySchema.safeParse(req.query);
+    if (!query.success) {
+      return reply.status(400).send({
+        error: "validation_error",
+        message: query.error.issues.map((i) => `${i.path.join(".")}: ${i.code}`).join("; "),
+        requestId: req.id,
+      });
+    }
+    const ctx = await getUserSyncContext(deps.sql, userId);
+    return reply.status(200).send(await service.getBadges({ sql: deps.sql }, userId, ctx.timezone));
   });
 }

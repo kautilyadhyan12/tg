@@ -250,6 +250,32 @@ export async function getStats(
   };
 }
 
+/** Each day from `from` to `to` with a meal: its protein and the day's kept protein target
+ *  (food_day_targets), for Macro Master (ROADMAP 35c-iii). A day with no target kept is
+ *  left out. Days are the person's own, in `timeZone`. */
+export async function proteinDays(
+  sql: SqlOrTx,
+  userId: string,
+  timeZone: string,
+  from: string,
+  to: string,
+): Promise<{ day: string; eatenG: number; targetG: number }[]> {
+  const rows = await sql<{ day: string; eaten: string; target: number }[]>`
+    SELECT m.day::text AS day, coalesce(sum(m.protein_g), 0)::text AS eaten, t.protein_g AS target
+    FROM (
+      SELECT (taken_at AT TIME ZONE ${timeZone})::date AS day, protein_g
+      FROM meal_logs
+      WHERE user_id = ${userId}
+        AND taken_at >= (${from}::date - 1)::timestamp AT TIME ZONE 'UTC'
+        AND taken_at < (${to}::date + 2)::timestamp AT TIME ZONE 'UTC'
+        AND (taken_at AT TIME ZONE ${timeZone})::date BETWEEN ${from}::date AND ${to}::date
+    ) m
+    JOIN food_day_targets t ON t.user_id = ${userId} AND t.day = m.day
+    GROUP BY m.day, t.protein_g
+    ORDER BY m.day`;
+  return rows.map((r) => ({ day: r.day, eatenG: Number(r.eaten), targetG: r.target }));
+}
+
 // ── Weekly challenges (ROADMAP 35b) ─────────────────────────────────────────
 
 export interface WeekPicksRow {
