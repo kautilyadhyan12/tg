@@ -134,6 +134,6 @@ export type GymMealPlanGroupsResponse = z.infer<typeof gymMealPlanGroupsResponse
 export const GYM_MEAL_PLAN_GIVING_WORDS = {
   type_not_found: "This membership was deleted. Pick another.",
   tag_not_found: "This tag was deleted. Pick another.",
-  not_member: "You aren’t a member of this gym.",
+  not_member: "You aren’t a member here.",
   entry_not_found: "This person is no longer on your list.",
 } as const;

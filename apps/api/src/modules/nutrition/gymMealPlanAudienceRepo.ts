@@ -176,6 +176,20 @@ export async function groupChoices(sql: SqlOrTx, gymId: string): Promise<{ membe
   return { membershipTypes: [...membershipTypes], tags: [...tags] };
 }
 
+/** Two records joined (Merge duplicate): a plan chosen for either is the kept record's; chosen for
+ *  both, the one given last stands. */
+export async function moveChosen(tx: SqlOrTx, gymId: string, goneId: string, keepId: string): Promise<void> {
+  await tx`
+    DELETE FROM gym_meal_plan_audiences a
+    WHERE a.gym_id = ${gymId} AND a.kind = 'member' AND a.entry_id IN (${goneId}, ${keepId})
+      AND EXISTS (
+        SELECT 1 FROM gym_meal_plan_audiences b
+        WHERE b.gym_id = a.gym_id AND b.kind = 'member' AND b.entry_id IN (${goneId}, ${keepId}) AND b.id <> a.id
+          AND (b.given_at, b.id) > (a.given_at, a.id)
+      )`;
+  await tx`UPDATE gym_meal_plan_audiences SET entry_id = ${keepId} WHERE gym_id = ${gymId} AND kind = 'member' AND entry_id = ${goneId}`;
+}
+
 /** A live member of this gym. */
 export async function isLiveMember(sql: SqlOrTx, gymId: string, userId: string): Promise<boolean> {
   const rows = await sql<{ one: number }[]>`

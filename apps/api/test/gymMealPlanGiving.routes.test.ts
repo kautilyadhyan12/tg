@@ -448,6 +448,29 @@ d("who gets a gym's meal plan (real Postgres)", () => {
     expect(careGiven.members.map((m) => m.instead)).toEqual(["Lean week"]);
   });
 
+  it("Merge duplicate keeps a plan chosen for either record, the one given last if both", { timeout: T }, async () => {
+    const owner = await makeUser("m-owner");
+    const iron = await makeGym(owner, "Giving Merge");
+    const gymId = iron.org.id;
+    const first = await record(gymId, "Ann Lee");
+    const second = await record(gymId, "Ann Lee");
+    const third = await record(gymId, "Cy Day");
+    const care = await makePlan(gymId, owner.cookies, "Care week");
+    const lean = await makePlan(gymId, owner.cookies, "Lean week");
+    await giveTicked(gymId, care, owner.cookies, [first]);
+    await giveTicked(gymId, lean, owner.cookies, [second]);
+    await sql`UPDATE gym_meal_plan_audiences SET given_at = now() - interval '1 hour' WHERE entry_id = ${first}`;
+    const merged = await post(`/v1/orgs/${gymId}/member-list/entries/${first}/merge`, { keepEntryId: second }, owner.cookies);
+    expect(merged.statusCode, merged.body).toBe(200);
+    expect((await forRecord(gymId, second, owner.cookies)).plan?.name).toBe("Lean week");
+    // Chosen for the record merged away only: it moves onto the kept one.
+    const fourth = await record(gymId, "Cy Day");
+    await giveTicked(gymId, care, owner.cookies, [third]);
+    expect((await post(`/v1/orgs/${gymId}/member-list/entries/${third}/merge`, { keepEntryId: fourth }, owner.cookies)).statusCode).toBe(200);
+    expect((await forRecord(gymId, fourth, owner.cookies)).plan?.name).toBe("Care week");
+    expect(await sql`SELECT entry_id FROM gym_meal_plan_audiences WHERE gym_id = ${gymId} ORDER BY entry_id`).toHaveLength(2);
+  });
+
   it("refuses a bad request, another gym's tag or type, and a plan or group that has gone", { timeout: T }, async () => {
     const owner = await makeUser("v-owner");
     const iron = await makeGym(owner, "Giving Checks");
