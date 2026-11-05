@@ -97,7 +97,7 @@ d("phone notifications for comments and replies (real Postgres)", () => {
   };
 
   const request = (
-    method: "GET" | "POST" | "PUT" | "DELETE",
+    method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE",
     path: string,
     opts: { payload?: unknown; cookies?: Cookies; bearer?: string } = {},
   ) =>
@@ -251,6 +251,32 @@ d("phone notifications for comments and replies (real Postgres)", () => {
   });
 
   // ── Who a comment is owed to ──
+
+  it("Comments switched off in Settings: that person's phone is told nothing, another writer with theirs on still is, and on again tells nothing old (19d)", { timeout: TIMEOUT_MS }, async () => {
+    const gym = await makeGym("Switch Gym");
+    const at = noonIndia();
+    const asha = await member(gym, "Asha", true);
+    const ben = await member(gym, "Ben", true);
+    const cara = await member(gym, "Cara");
+    const switchTo = async (who: Phone, on: boolean) => {
+      const res = await request("PATCH", "/v1/users/me", { bearer: who.accessToken, payload: { pushComments: on } });
+      expect(res.statusCode, res.body).toBe(200);
+    };
+    await switchTo(asha.who, false);
+    const ashas = await postBy(gym, asha.who);
+    const bens = await postBy(gym, ben.who, "Week two");
+    await comment(gym, cara.who, ashas, "Great start");
+    await comment(gym, cara.who, bens, "Keep going");
+    await writtenAt(gym, minutes(at, -1));
+
+    await sweep(at);
+    expect(sentTo(asha.token)).toHaveLength(0);
+    expect(sentTo(ben.token).map((m) => m.body)).toEqual(["Cara commented on your post: Keep going"]);
+    // Handled: on again, the old comment is never told.
+    await switchTo(asha.who, true);
+    await sweep(minutes(at, 40));
+    expect(sentTo(asha.token)).toHaveLength(0);
+  });
 
   it("owes a comment to the post's member writer and a reply to the comment's writer, never to the writer themselves or for a staff post", { timeout: TIMEOUT_MS }, async () => {
     const gym = await makeGym("Owed Gym");
