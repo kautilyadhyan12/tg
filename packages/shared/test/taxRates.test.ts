@@ -111,13 +111,13 @@ describe("a gym's named rates", () => {
   });
 
   it("says why a rate in use was not removed, with only what charges it", () => {
-    expect(taxRateInUseWords("GST", { products: 2, membershipTypes: 0, memberships: 0 })).toBe("GST was not removed: it is charged on 2 products. Take it off them first.");
-    expect(taxRateInUseWords("GST", { products: 1, membershipTypes: 1, memberships: 0 })).toBe("GST was not removed: it is charged on 1 product and 1 membership type. Take it off them first.");
+    expect(taxRateInUseWords("GST", { products: 2, membershipTypes: 0, memberships: 0 })).toBe("GST was not removed: it is charged on 2 products. Untick it on them first.");
+    expect(taxRateInUseWords("GST", { products: 1, membershipTypes: 1, memberships: 0 })).toBe("GST was not removed: it is charged on 1 product and 1 membership type. Untick it on the products, and change the membership types to another rate or No tax first.");
     expect(taxRateInUseWords("VAT", { products: 0, membershipTypes: 0, memberships: 14 })).toBe(
       "VAT was not removed: it is charged on 14 members' memberships. A membership keeps the tax it was sold with, so VAT can be removed once nobody holds one. You can still change its name or rate.",
     );
     expect(taxRateInUseWords("GST", { products: 3, membershipTypes: 2, memberships: 1 })).toBe(
-      "GST was not removed: it is charged on 3 products, 2 membership types and 1 member's membership. Take it off them first. A membership keeps the tax it was sold with, so GST can be removed once nobody holds one. You can still change its name or rate.",
+      "GST was not removed: it is charged on 3 products, 2 membership types and 1 member's membership. Untick it on the products, and change the membership types to another rate or No tax first. A membership keeps the tax it was sold with, so GST can be removed once nobody holds one. You can still change its name or rate.",
     );
   });
 });

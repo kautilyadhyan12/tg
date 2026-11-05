@@ -728,7 +728,7 @@ describe('products and tax', () => {
     await screen.findByRole('region', { name: 'Tax' });
     fireEvent.click(within(taxBox()).getByRole('button', { name: 'Remove Sales tax' }));
     expect(within(taxBox()).getByRole('alert').textContent).toBe(
-      "Sales tax can't be removed: it is charged on 2 products and 3 members' memberships. Take it off those first. A membership keeps the tax it was sold with, so Sales tax can be removed once nobody holds one.",
+      "Sales tax can't be removed: it is charged on 2 products and 3 members' memberships. Untick it on those first. A membership keeps the tax it was sold with, so Sales tax can be removed once nobody holds one.",
     );
     fireEvent.click(within(taxBox()).getByRole('button', { name: 'OK' }));
     expect(svc.removeTaxRate).not.toHaveBeenCalled();
@@ -802,7 +802,7 @@ describe('products and tax', () => {
     await waitFor(() => expect(svc.addProduct).toHaveBeenCalledWith('g1', { name: 'Shake', priceMinor: 400, taxRateIds: ['r2'], stock: null }));
   });
 
-  it("a product with several taxes sends them in the Tax box's order, and taxes past 30% together are said before anything is sent (18b-v-a)", async () => {
+  it("a product with several taxes sends them in the order they were ticked, and taxes past 30% together are said before anything is sent (18b-v-a)", async () => {
     const GST = { id: 'r2', name: 'GST', pcm: 5000, products: 0, membershipTypes: 0, memberships: 0 };
     const QST = { id: 'r3', name: 'QST', pcm: 9975, products: 0, membershipTypes: 0, memberships: 0 };
     const BIG = { id: 'r4', name: 'State tax', pcm: 25000, products: 0, membershipTypes: 0, memberships: 0 };
@@ -826,8 +826,8 @@ describe('products and tax', () => {
     fireEvent.click(taxes.getByRole('checkbox', { name: 'GST 5%' }));
     expect(taxes.getByText('Together: 14.975%')).toBeTruthy();
     fireEvent.click(form.getByRole('button', { name: 'Add product' }));
-    // Ticked QST, then GST: sent GST, then QST, as the Tax box lists them and a receipt names them.
-    await waitFor(() => expect(svc.addProduct).toHaveBeenCalledWith('g1', { name: 'Day pass', priceMinor: 10000, taxRateIds: ['r2', 'r3'], stock: null }));
+    // Ticked QST, then GST: sent in that order, the order a receipt names them.
+    await waitFor(() => expect(svc.addProduct).toHaveBeenCalledWith('g1', { name: 'Day pass', priceMinor: 10000, taxRateIds: ['r3', 'r2'], stock: null }));
   });
 
   it('a gym with no country is sent to set it, and has no Add button', async () => {

@@ -674,7 +674,7 @@ d("tax on memberships (real Postgres)", () => {
       expect(inUse.statusCode).toBe(409);
       expect(errorOf(inUse)).toBe("tax_rate_in_use");
       expect(messageOf(inUse)).toBe(
-        "GST was not removed: it is charged on 1 membership type and 1 member's membership. Take it off them first. A membership keeps the tax it was sold with, so GST can be removed once nobody holds one. You can still change its name or rate.",
+        "GST was not removed: it is charged on 1 membership type and 1 member's membership. Change them to another rate or No tax first. A membership keeps the tax it was sold with, so GST can be removed once nobody holds one. You can still change its name or rate.",
       );
       expect(page(await get(register(gymId), owner.cookies)).tax.rates[0]).toMatchObject({ name: "GST", products: 0, membershipTypes: 1, memberships: 1 });
       // One nothing charges: removed.

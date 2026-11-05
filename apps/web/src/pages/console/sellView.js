@@ -147,8 +147,12 @@ export function productCurrencyLine(product, currency) {
 }
 
 /** Why the Take payment button is off, or null where it can be pressed. */
-export function saleProblem({ product, quantity, who, person, currency, discount = null }) {
+export function saleProblem({ product, quantity, who, person, currency, discount = null, tax = null }) {
   if (product === null || product === undefined) return 'Pick a product.';
+  // Taxes past 30% together (18b-v-a): the server sells it at no total, so say why and where.
+  if (tax !== null && productRates(tax, product).reduce((n, r) => n + r.pcm, 0) > SALES_TAX_PCM_MAX) {
+    return `The taxes on ${product.name} come to more than 30% together. Press Change on ${product.name} under Products and untick one.`;
+  }
   // Priced before the gym changed its country: the server will not sell it either.
   if (typeof currency === 'string' && product.currency !== currency) return productCurrencyLine(product, currency);
   if (product.stock === 0) return `${product.name} is out of stock. Change its stock count under Products if you have more.`;
@@ -499,17 +503,27 @@ export function productProblems(draft, currency, rates = []) {
   return problems;
 }
 
-/** The form as the server takes it. Call only with no problems. The rates ticked go in the
- *  order the Tax box lists them, which is the order a receipt names them. */
-export function productBody(draft, currency, rates = []) {
-  const listed = rates.map((r) => r.id).filter((id) => draft.taxRateIds.includes(id));
+/** The form as the server takes it. Call only with no problems. The rates go in the order they
+ *  were picked, the order a receipt names them: those the product already had keep their places,
+ *  and one ticked now goes after them, as a rate's Choose box adds it. */
+export function productBody(draft, currency) {
   const body = {
     name: draft.name.trim(),
     priceMinor: priceToMinor(draft.price, currency),
-    taxRateIds: [...listed, ...draft.taxRateIds.filter((id) => !listed.includes(id))],
+    taxRateIds: [...draft.taxRateIds],
     stock: draft.counts ? Number(draft.stock.trim()) : null,
   };
   return draft.id === null ? body : { ...body, updatedAt: draft.updatedAt };
+}
+
+/** Said once an archived product is put back. Where its taxes came to more than 30% together (a rate
+ *  was raised while it was archived), the server took its last ones off: say which (18b-v-a). */
+export function restoredWords(product, page) {
+  const now = page.products.find((p) => p.id === product.id);
+  const taken = productRates(page.tax, product).filter((r) => now !== undefined && !(now.taxRateIds ?? []).includes(r.id));
+  if (taken.length === 0) return `${product.name} is for sale again.`;
+  const were = taken.length === 1 ? 'was' : 'were';
+  return `${product.name} is for sale again. ${ratesLabel(taken)} ${were} taken off it, as its taxes came to more than 30% together. Press Change on ${product.name} to check its tax.`;
 }
 
 /** One product in the Products list. */
@@ -615,10 +629,19 @@ export function rateUses(rate) {
   return `Charged on ${list}.`;
 }
 
+/** What to do first, where products or membership types charge a rate: a product's tick is
+ *  unticked; a type, which charges one rate, is changed to another or to No tax. */
+function takeOffWords(products, types, them) {
+  if (products > 0 && types > 0) return ' Untick it on the products, and change the membership types to another rate or No tax first.';
+  if (products > 0) return ` Untick it on ${them} first.`;
+  if (types > 0) return ` Change ${them} to another rate or No tax first.`;
+  return '';
+}
+
 /** Why a rate cannot be removed now, or null where it can. */
 export function rateRemoveBlock(rate) {
   if (rate.products === 0 && rate.membershipTypes === 0 && rate.memberships === 0) return null;
-  const change = rate.products > 0 || rate.membershipTypes > 0 ? ' Take it off those first.' : '';
+  const change = takeOffWords(rate.products, rate.membershipTypes, 'those');
   const held = rate.memberships > 0 ? ` A membership keeps the tax it was sold with, so ${rate.name} can be removed once nobody holds one.` : '';
   return `${rate.name} can't be removed: ${rateUses(rate).replace(/^Charged on /, 'it is charged on ')}${change}${held}`;
 }

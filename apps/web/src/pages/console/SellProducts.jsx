@@ -15,6 +15,7 @@ import {
   productBody,
   productProblems,
   productRow,
+  restoredWords,
   rateLabel,
   togetherPercent,
 } from './sellView';
@@ -161,8 +162,9 @@ export default function SellProducts({ gymId, country = null, page, locked, lock
   const run = async (work, done) => {
     setState({ busy: true, error: null, done: null });
     try {
-      onPage(await work());
-      setState({ busy: false, error: null, done });
+      const next = await work();
+      onPage(next);
+      setState({ busy: false, error: null, done: typeof done === 'function' ? done(next) : done });
       return true;
     } catch (err) {
       setState({ busy: false, error: errorText(err, "We couldn't save that. Try again."), done: null });
@@ -178,7 +180,7 @@ export default function SellProducts({ gymId, country = null, page, locked, lock
       setDraft((was) => ({ ...was, pressed: true }));
       return;
     }
-    const body = productBody(draft, page.currency, page.tax.rates);
+    const body = productBody(draft, page.currency);
     const ok = await run(
       () => (draft.id === null ? registerService.addProduct(gymId, body) : registerService.changeProduct(gymId, draft.id, body)),
       draft.id === null ? `${body.name} added. It is now on the Sell form above.` : `${body.name} saved.`,
@@ -268,7 +270,7 @@ export default function SellProducts({ gymId, country = null, page, locked, lock
                 <li key={product.id} className="flex flex-wrap items-center justify-between gap-2 py-2" data-testid="archived-product-row">
                   <span className="c-s14 c-t2">{product.name}</span>
                   {canManage ? (
-                    <button type="button" className="c-btn c-btn-s c-btn-sm" disabled={locked || state.busy} onClick={() => void run(() => registerService.restoreProduct(gymId, product.id), `${product.name} is for sale again.`)} aria-label={`Put ${product.name} back`}>
+                    <button type="button" className="c-btn c-btn-s c-btn-sm" disabled={locked || state.busy} onClick={() => void run(() => registerService.restoreProduct(gymId, product.id), (next) => restoredWords(product, next))} aria-label={`Put ${product.name} back`}>
                       Put back
                     </button>
                   ) : null}

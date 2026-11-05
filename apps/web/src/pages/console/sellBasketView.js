@@ -123,7 +123,7 @@ export function basketView({ page, lines, who, person, memberGift = null, giftRe
     const discount = usable.find((d) => d.id === line.discountId) ?? null;
     const gift = giftUsed && index === giftAt ? memberGift : null;
     const off = discount ?? (gift === null ? null : { ...gift, name: MEMBER_GIFT_SALE_NAME });
-    const problem = product === null ? GONE_LINE : saleProblem({ product, quantity, who: 'walkin', person: null, currency: page.currency, discount });
+    const problem = product === null ? GONE_LINE : saleProblem({ product, quantity, who: 'walkin', person: null, currency: page.currency, discount, tax: page.tax });
     const summary = product !== null && Number.isInteger(quantity) ? saleSummary(product, quantity, page.tax, off) : null;
     const offMinor = summary === null ? 0 : discountMinorFor(product, quantity, off);
     return {

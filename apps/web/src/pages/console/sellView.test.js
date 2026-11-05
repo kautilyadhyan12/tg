@@ -20,6 +20,7 @@ import {
   purchaseLine,
   quantityMax,
   saleProblem,
+  restoredWords,
   saleSummary,
   soldWords,
   rowsOfKind,
@@ -394,9 +395,19 @@ describe('products and tax', () => {
     const draft = draftFromProduct(water({ stock: 8, taxRateIds: [] }));
     expect(draft).toEqual({ id: 'p1', name: 'Water', price: '1.99', taxRateIds: [], counts: true, stock: '8', updatedAt: '2026-10-12T10:00:00.000Z' });
     expect(productBody({ ...draft, stock: '12' }, 'USD')).toEqual({ name: 'Water', priceMinor: 199, taxRateIds: [], stock: 12, updatedAt: '2026-10-12T10:00:00.000Z' });
-    // Rates ticked in any order are sent in the order the Tax box lists them, the order a receipt names them.
-    const listed = [rate({ id: 'gst', name: 'GST' }), rate({ id: 'qst', name: 'QST' })];
-    expect(productBody({ ...draft, taxRateIds: ['qst', 'gst'] }, 'USD', listed).taxRateIds).toEqual(['gst', 'qst']);
+    // Rates go in the order they were picked: a product keeps the places of the rates it had (round one, Low).
+    const had = draftFromProduct(water({ taxRateIds: ['qst', 'gst'] }));
+    expect(productBody({ ...had, taxRateIds: [...had.taxRateIds, 'city'] }, 'USD').taxRateIds).toEqual(['qst', 'gst', 'city']);
+  });
+  it('a product whose taxes came to more than 30% says why it is not sold, and where to fix it; one put back says what was taken off (round one, High)', () => {
+    const tax = { included: false, rates: [rate({ id: 's', name: 'State tax', pcm: 20000 }), rate({ id: 'c', name: 'City tax', pcm: 15000 })] };
+    const bar = water({ name: 'Bar', taxRateIds: ['s', 'c'] });
+    expect(saleProblem({ product: bar, quantity: 1, who: 'walkin', person: null, tax })).toBe('The taxes on Bar come to more than 30% together. Press Change on Bar under Products and untick one.');
+    expect(saleProblem({ product: water({ taxRateIds: ['s'] }), quantity: 1, who: 'walkin', person: null, tax })).toBeNull();
+    expect(restoredWords(bar, { tax, products: [{ ...bar, taxRateIds: ['s'] }] })).toBe(
+      'Bar is for sale again. City tax 15% was taken off it, as its taxes came to more than 30% together. Press Change on Bar to check its tax.',
+    );
+    expect(restoredWords(water(), { tax: TEXAS, products: [water()] })).toBe('Water is for sale again.');
   });
   it('a product in the list says its price, its tax only where the gym charges one, and its stock', () => {
     expect(productRow(water(), NO_TAX)).toBe('$1.99 · stock not counted');
@@ -479,7 +490,7 @@ describe('products and tax', () => {
     expect(rateRemoveBlock(rate())).toBeNull();
     expect(rateUses(rate({ products: 1 }))).toBe('Charged on 1 product.');
     expect(rateUses(rate({ products: 3, membershipTypes: 1, memberships: 12 }))).toBe("Charged on 3 products, 1 membership type and 12 members' memberships.");
-    expect(rateRemoveBlock(rate({ products: 2 }))).toBe("Sales tax can't be removed: it is charged on 2 products. Take it off those first.");
+    expect(rateRemoveBlock(rate({ products: 2 }))).toBe("Sales tax can't be removed: it is charged on 2 products. Untick it on those first.");
     expect(rateRemoveBlock(rate({ memberships: 1 }))).toBe(
       "Sales tax can't be removed: it is charged on 1 member's membership. A membership keeps the tax it was sold with, so Sales tax can be removed once nobody holds one.",
     );

@@ -590,6 +590,31 @@ async function checkRates(tx: TransactionSql, gymId: string, rateIds: readonly s
   return null;
 }
 
+/** A product put back on sale charges at most 30% in all (18b-v-a): a rate may have been raised while
+ *  it was archived, and nothing could then sell it. Its last rates are taken off until it fits; their
+ *  names, for the gym's record. The screen says which, from the product as it reads it back. */
+async function takeOffOverCap(tx: TransactionSql, gymId: string, productId: string): Promise<string[]> {
+  const rates = await tx<{ tax_rate_id: string; name: string; rate_pcm: number }[]>`
+    SELECT x.tax_rate_id, r.name, r.rate_pcm
+    FROM gym_product_tax_rates x
+    JOIN gym_tax_rates r ON r.gym_id = x.gym_id AND r.id = x.tax_rate_id
+    WHERE x.gym_id = ${gymId} AND x.product_id = ${productId}
+    ORDER BY x.position, x.tax_rate_id`;
+  let together = rates.reduce((n, r) => n + r.rate_pcm, 0);
+  const off: { id: string; name: string }[] = [];
+  for (const rate of [...rates].reverse()) {
+    if (together <= SALES_TAX_PCM_MAX) break;
+    together -= rate.rate_pcm;
+    off.push({ id: rate.tax_rate_id, name: rate.name });
+  }
+  if (off.length > 0) {
+    await tx`
+      DELETE FROM gym_product_tax_rates
+      WHERE gym_id = ${gymId} AND product_id = ${productId} AND tax_rate_id = ANY(${off.map((r) => r.id)}::uuid[])`;
+  }
+  return off.map((r) => r.name);
+}
+
 /** A product's rates, replaced by these in this order. */
 async function writeRates(tx: TransactionSql, gymId: string, productId: string, rateIds: readonly string[]): Promise<void> {
   await tx`DELETE FROM gym_product_tax_rates WHERE gym_id = ${gymId} AND product_id = ${productId}`;
@@ -726,13 +751,14 @@ export async function restoreProduct(sql: Sql, input: { gymId: string; productId
     await tx`
       UPDATE gym_products SET archived_at = NULL, updated_at = ${input.now}
       WHERE id = ${input.productId} AND gym_id = ${input.gymId}`;
+    const taken = await takeOffOverCap(tx, input.gymId, input.productId);
     await insertAudit(tx, {
       actorUserId: input.actorUserId,
       gymId: input.gymId,
       action: "org.product_restored",
       targetType: "gym_product",
       targetId: input.productId,
-      meta: { name: before.name },
+      meta: taken.length === 0 ? { name: before.name } : { name: before.name, taxesTakenOff: taken.join(", ") },
     });
     return { kind: "ok" };
   });

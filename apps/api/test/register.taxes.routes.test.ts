@@ -295,11 +295,41 @@ d("several taxes on one product (real Postgres)", () => {
       expect([403, 404]).toContain(
         (await put(`${base(gymId)}/products/${towel.id}`, { name: "Mine", priceMinor: 1, taxRateIds: [], stock: null, updatedAt: towel.updatedAt }, nextDoorOwner)).statusCode,
       );
+      expect([403, 404]).toContain((await get(base(gymId), nextDoorOwner)).statusCode);
       expect(await ratesOfProduct(towel.id)).toEqual([state, city]);
       // Saving a product with no rates takes them all off.
       const towelNow = (await read(gymId, owner)).products.find((p) => p.id === towel.id);
       expect((await put(`${base(gymId)}/products/${towel.id}`, { name: "Towel", priceMinor: 1000, taxRateIds: [], stock: null, updatedAt: towelNow?.updatedAt }, owner)).statusCode).toBe(200);
       expect(await ratesOfProduct(towel.id)).toEqual([]);
+    },
+    T,
+  );
+
+  it(
+    "a product archived while a rate is raised comes back charging at most 30%: its last rate taken off, and it sells (round one, High)",
+    async () => {
+      const owner = await makeUser("restore-owner");
+      const gymId = await makeGym(owner, "Austin Barbell", "US", "America/Chicago");
+      const state = await addRate(gymId, owner, "State tax", 20000);
+      const city = await addRate(gymId, owner, "City tax", 8875);
+      const bar = await addProduct(gymId, owner, "Bar", 1000, [state, city]);
+      expect((await send("DELETE", `${base(gymId)}/products/${bar.id}`, owner)).statusCode).toBe(200);
+      // Archived, it does not stop the rate being raised.
+      expect((await put(`${base(gymId)}/tax-rates/${city}`, { name: "City tax", pcm: 15000 }, owner)).statusCode).toBe(200);
+      const back = await post(`${base(gymId)}/products/${bar.id}/restore`, {}, owner);
+      expect(back.statusCode, back.body).toBe(200);
+      expect(page(back).products.find((p) => p.id === bar.id)?.taxRateIds).toEqual([state]);
+      expect(await ratesOfProduct(bar.id)).toEqual([state]);
+      const [note] = await sql<{ meta: Record<string, string> }[]>`
+        SELECT meta FROM audit_log WHERE gym_id = ${gymId} AND action = 'org.product_restored'`;
+      expect(note?.meta).toEqual({ name: "Bar", taxesTakenOff: "City tax" });
+      // It sells, at its one tax: $10.00 plus 20%.
+      expect((await sell(gymId, owner, bar.id, 1200)).statusCode).toBe(201);
+      // One whose taxes still fit keeps them all.
+      const lock = await addProduct(gymId, owner, "Lock", 500, [state]);
+      expect((await send("DELETE", `${base(gymId)}/products/${lock.id}`, owner)).statusCode).toBe(200);
+      expect((await post(`${base(gymId)}/products/${lock.id}/restore`, {}, owner)).statusCode).toBe(200);
+      expect(await ratesOfProduct(lock.id)).toEqual([state]);
     },
     T,
   );
@@ -313,7 +343,12 @@ d("several taxes on one product (real Postgres)", () => {
       const statements = text.split("--> statement-breakpoint").map((s) => s.replace(/^\s*--.*$/gm, "").trim());
       const sales = statements.find((s) => s.startsWith('UPDATE "gym_sales"'));
       const baskets = statements.find((s) => s.startsWith('UPDATE "gym_terminal_payments"'));
-      if (sales === undefined || baskets === undefined) throw new Error("the migration's data statements were not found");
+      const rates = statements.find((s) => s.startsWith('UPDATE "gym_tax_rates"'));
+      const bills = statements.find((s) => s.startsWith('UPDATE "gym_member_bills"'));
+      const productRates = statements.find((s) => s.startsWith('INSERT INTO "gym_product_tax_rates"'));
+      if (sales === undefined || baskets === undefined || rates === undefined || bills === undefined || productRates === undefined) {
+        throw new Error("the migration's data statements were not found");
+      }
       const productId = "00000000-0000-4000-8000-0000000000c1";
       const oldBasket = {
         included: false,
@@ -331,11 +366,33 @@ d("several taxes on one product (real Postgres)", () => {
         await tx`INSERT INTO gym_terminal_payments (id, sale) VALUES (1, ${tx.json(oldBasket)}), (2, NULL), (3, ${tx.json({ ...oldBasket, lines: [] })})`;
         await tx.unsafe(sales);
         await tx.unsafe(baskets);
+        // Rates and bills, times ten; a bill with no tax stays at none.
+        await tx`CREATE TEMP TABLE gym_tax_rates (id int PRIMARY KEY, rate_pcm integer NOT NULL) ON COMMIT DROP`;
+        await tx`INSERT INTO gym_tax_rates (id, rate_pcm) VALUES (1, 825), (2, 3000), (3, 1)`;
+        await tx.unsafe(rates);
+        await tx`CREATE TEMP TABLE gym_member_bills (id int PRIMARY KEY, tax_pcm integer NOT NULL) ON COMMIT DROP`;
+        await tx`INSERT INTO gym_member_bills (id, tax_pcm) VALUES (1, 1800), (2, 0)`;
+        await tx.unsafe(bills);
+        // Every product's one rate becomes its first, archived ones too; one with none gets none.
+        const [g, p1, p2, p3, r] = ["00000000-0000-4000-8000-0000000000d0", "00000000-0000-4000-8000-0000000000d1", "00000000-0000-4000-8000-0000000000d2", "00000000-0000-4000-8000-0000000000d3", "00000000-0000-4000-8000-0000000000d9"];
+        await tx`CREATE TEMP TABLE gym_products (id uuid PRIMARY KEY, gym_id uuid NOT NULL, tax_rate_id uuid, archived_at timestamptz) ON COMMIT DROP`;
+        await tx`INSERT INTO gym_products (id, gym_id, tax_rate_id, archived_at) VALUES (${p1}, ${g}, ${r}, NULL), (${p2}, ${g}, NULL, NULL), (${p3}, ${g}, ${r}, now())`;
+        await tx`CREATE TEMP TABLE gym_product_tax_rates (gym_id uuid, product_id uuid, tax_rate_id uuid, position int) ON COMMIT DROP`;
+        await tx.unsafe(productRates);
         return {
+          rates: (await tx<{ rate_pcm: number }[]>`SELECT rate_pcm FROM gym_tax_rates ORDER BY id`).map((x) => x.rate_pcm),
+          bills: (await tx<{ tax_pcm: number }[]>`SELECT tax_pcm FROM gym_member_bills ORDER BY id`).map((x) => x.tax_pcm),
+          productRates: await tx<{ product_id: string; tax_rate_id: string; position: number }[]>`SELECT product_id, tax_rate_id, position FROM gym_product_tax_rates ORDER BY product_id`,
           sales: await tx<{ id: number; tax_pcm: number; taxes: unknown }[]>`SELECT id, tax_pcm, taxes FROM gym_sales ORDER BY id`,
           baskets: await tx<{ id: number; sale: unknown }[]>`SELECT id, sale FROM gym_terminal_payments ORDER BY id`,
         };
       });
+      expect(got.rates).toEqual([8250, 30000, 10]);
+      expect(got.bills).toEqual([18000, 0]);
+      expect(got.productRates).toEqual([
+        { product_id: "00000000-0000-4000-8000-0000000000d1", tax_rate_id: "00000000-0000-4000-8000-0000000000d9", position: 1 },
+        { product_id: "00000000-0000-4000-8000-0000000000d3", tax_rate_id: "00000000-0000-4000-8000-0000000000d9", position: 1 },
+      ]);
       expect(got.sales).toEqual([
         { id: 1, tax_pcm: 8250, taxes: [{ name: "Sales tax", pcm: 8250, minor: 16 }] },
         { id: 2, tax_pcm: 0, taxes: [] },
