@@ -147,7 +147,7 @@ function SettingsLink() {
           <Badge icon="settings" />
           <View style={styles.grow}>
             <Txt kind="strong">Settings</Txt>
-            <Txt kind="small">Name, units, privacy and account</Txt>
+            <Txt kind="small">Name, notifications, privacy and account</Txt>
           </View>
           <Icon name="go" size={18} colour="textFaint" />
         </Card>
