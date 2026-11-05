@@ -70,6 +70,7 @@ import { OrgsError, requirePrivilege, requireWritablePrivilege } from "../servic
 import { refuseMethodElsewhere } from "../paymentMethods.js";
 import { endMembershipBookings, membershipBookingsAsk } from "../classes/bookingChanges.js";
 import { endingPerson, type BookingsAnswer } from "../classes/service.js";
+import { remindersOfRecord } from "./renewalReminders.js";
 import * as repo from "./heldRepo.js";
 import * as billsRepo from "./billsRepo.js";
 import * as changeRepo from "./changeRepo.js";
@@ -512,6 +513,7 @@ async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: 
     })),
     agreementInUse: anyAsked,
     unsignedStopsBookings: anyAsked && unsignedStops,
+    renewalReminders: list.past ? [] : await remindersOfRecord(deps.sql, deps.emailKey ?? null, gymId, entryId, today),
     earlierNotShown: over.length - shown.length + stored,
     types: list.types,
     listed: list.listed,

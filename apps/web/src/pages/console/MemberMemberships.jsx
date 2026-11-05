@@ -29,6 +29,7 @@ import ChargebackLines, { ChargeStopHolder } from './ChargebackLines';
 import { cardRefundSaidNow, refundReasonsFor, waitsOnSquare } from './cardRefundView';
 import MembershipAgreement from './MembershipAgreement';
 import { noteDay } from './memberListPeople';
+import { reminderStatusLine } from './renewalReminderView';
 import {
   ENDING_CLASSES_SHOWN,
   ENDING_MOVED,
@@ -2239,6 +2240,16 @@ export default function MemberMemberships({
             {pay.text}
           </span>
         ) : null}
+        {/* Its reminders (18v-iv): emailed, when they will be, or why they cannot be. */}
+        {(shown.renewalReminders ?? [])
+          .filter((r) => r.membershipId === m.id)
+          .map((r) => ({ when: r.when, line: reminderStatusLine(r.status, r.when) }))
+          .filter((r) => r.line !== null)
+          .map((r) => (
+            <span key={r.when} className="c-s14 c-t2" data-testid="held-renewal-reminder">
+              {r.line}
+            </span>
+          ))}
         <MembershipAgreement
           gymId={gymId}
           entryId={entryId}
