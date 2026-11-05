@@ -28,6 +28,9 @@ export interface ProfileRow {
   timezone: string | null;
   weightKg: number | null;
   leaderboardOptOut: boolean;
+  pushGymMessages: boolean;
+  pushPlaces: boolean;
+  pushComments: boolean;
   onboardingCompleted: boolean;
   signUpDisclaimerAgreed: boolean;
   createdAt: Date;
@@ -41,6 +44,9 @@ interface ProfileDbRow {
   units: string;
   timezone: string | null;
   leaderboard_opt_out: boolean;
+  push_gym_messages: boolean;
+  push_places: boolean;
+  push_comments: boolean;
   onboarding_completed: boolean;
   sign_up_disclaimer_agreed: boolean;
   created_at: Date;
@@ -55,6 +61,9 @@ const toProfile = (r: ProfileDbRow, weightKg: number | null): ProfileRow => ({
   timezone: r.timezone,
   weightKg,
   leaderboardOptOut: r.leaderboard_opt_out,
+  pushGymMessages: r.push_gym_messages,
+  pushPlaces: r.push_places,
+  pushComments: r.push_comments,
   onboardingCompleted: r.onboarding_completed,
   signUpDisclaimerAgreed: r.sign_up_disclaimer_agreed,
   createdAt: r.created_at,
@@ -69,7 +78,7 @@ const toProfile = (r: ProfileDbRow, weightKg: number | null): ProfileRow => ({
 async function selectProfile(sql: SqlOrTx, userId: string): Promise<ProfileRow | null> {
   const rows = await sql<ProfileDbRow[]>`
     SELECT u.id, u.email, u.display_name, u.locale, u.units, u.timezone,
-           u.leaderboard_opt_out, u.created_at,
+           u.leaderboard_opt_out, u.push_gym_messages, u.push_places, u.push_comments, u.created_at,
            COALESCE(f.onboarding_completed, false) AS onboarding_completed,
            EXISTS (
              SELECT 1 FROM consent_log c
@@ -121,6 +130,9 @@ export async function updateProfile(
     if (patch.units !== undefined) cols["units"] = patch.units;
     if (patch.timezone !== undefined) cols["timezone"] = patch.timezone;
     if (patch.leaderboardOptOut !== undefined) cols["leaderboard_opt_out"] = patch.leaderboardOptOut;
+    if (patch.pushGymMessages !== undefined) cols["push_gym_messages"] = patch.pushGymMessages;
+    if (patch.pushPlaces !== undefined) cols["push_places"] = patch.pushPlaces;
+    if (patch.pushComments !== undefined) cols["push_comments"] = patch.pushComments;
 
     if (Object.keys(cols).length > 0) {
       await tx`

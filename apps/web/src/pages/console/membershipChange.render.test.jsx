@@ -44,7 +44,7 @@ const typeOf = (n, over = {}) => ({
   termUnit: 'month',
   packClasses: null,
   packDays: null,
-  tax: null,
+  taxes: [],
   ...over,
 });
 const BASIC = typeOf(1);
@@ -58,7 +58,7 @@ function basic(paid) {
   if (!made.ok) throw new Error(made.reason);
   const m = made.membership;
   const billing = billingFor(1, m, m, 5000, TODAY);
-  const facts = billing.bills.map((b) => ({ ...b, status: b.state === 'paid' ? 'paid' : 'open', tax: null, joiningFeeMinor: 0, changeCreditMinor: 0, refundedMinor: 0 }));
+  const facts = billing.bills.map((b) => ({ ...b, status: b.state === 'paid' ? 'paid' : 'open', taxes: [], joiningFeeMinor: 0, changeCreditMinor: 0, refundedMinor: 0 }));
   const from = changeFrom(m, 5000, facts, TODAY);
   return {
     id: '44444444-4444-4444-8444-000000000001',
@@ -78,7 +78,7 @@ function basic(paid) {
     notCharged: false,
     refundedInFull: false,
     discount: null,
-    tax: null,
+    taxes: [],
     view: heldMembershipView(m, TODAY),
     billing: { ...billing, change: from.ok ? { ok: true, creditMinor: from.creditMinor, daysLeft: from.daysLeft, nextOn: from.nextOn } : { ok: false, reason: from.reason } },
   };

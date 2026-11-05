@@ -51,7 +51,7 @@ export async function sendCommentNotifications(deps: {
       result.skipped += 1;
       return;
     }
-    const tokens = await repo.liveTokens(sql, pair.userId, now);
+    const tokens = await repo.liveTokens(sql, pair.userId, now, "comments");
     // The notification replaces the gym's last one, so it counts what that one held and was not seen.
     const earlier = tokens.length === 0 ? [] : await comments.toldUnseen(sql, pair.userId, pair.gymId, since);
     const seen = tokens.length === 0 ? null : await commentsToTell({ sql, now: () => now }, pair.userId, pair.gymId, [...new Set([...fresh, ...earlier])]);

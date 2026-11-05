@@ -338,8 +338,8 @@ d("move to another membership (real Postgres)", () => {
       expect(rate.statusCode, rate.body).toBe(201);
       const [taxRow] = await sql<{ id: string }[]>`SELECT id FROM gym_tax_rates WHERE gym_id = ${gymId}`;
       const taxRateId = taxRow?.id ?? null;
-      const basic = await addType(gymId, owner.cookies, monthly("Basic Monthly", 5000, { taxRateId }));
-      const gold = await addType(gymId, owner.cookies, monthly("Gold Monthly", 8000, { taxRateId }));
+      const basic = await addType(gymId, owner.cookies, monthly("Basic Monthly", 5000, { taxRateIds: taxRateId === null ? [] : [taxRateId] }));
+      const gold = await addType(gymId, owner.cookies, monthly("Gold Monthly", 8000, { taxRateIds: taxRateId === null ? [] : [taxRateId] }));
       const silver = await addType(gymId, owner.cookies, monthly("Silver Monthly", 5000));
       const maya = await addPerson(gymId, owner.cookies, "Maya Tax");
       // $50.00 and 10% on top: $55.00 paid for October.
@@ -352,7 +352,7 @@ d("move to another membership (real Postgres)", () => {
       const mayaGold = (await rows(gymId, maya))[1]?.id ?? "";
       expect(await bills(gymId, mayaGold)).toEqual([["2026-10-16", 5962, 2580, "paid"]]);
       const bill = held(res).memberships.find((m) => m.id === mayaGold)?.billing?.bills[0];
-      expect([bill?.amountMinor, bill?.changeCreditMinor, bill?.tax?.minor]).toEqual([5962, 2580, 542]);
+      expect([bill?.amountMinor, bill?.changeCreditMinor, bill?.taxes[0]?.minor]).toEqual([5962, 2580, 542]);
       const [receipt] = await sql<{ n: number }[]>`SELECT receipt_number AS n FROM gym_member_payments WHERE gym_id = ${gymId} ORDER BY seq DESC LIMIT 1`;
       const printed = await get(`/v1/orgs/${gymId}/receipts/${String(receipt?.n)}`, owner.cookies);
       expect(printed.statusCode, printed.body).toBe(200);

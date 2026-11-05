@@ -75,7 +75,8 @@ import { lockEntries, lockGym } from "../memberList/repo.js";
 import { lockedDiscount, takeUse } from "../register/discountsRepo.js";
 import { friendGiftOpen } from "../referrals/friendGiftRepo.js";
 import { giftUseUndone, giveMemberGift, lockedWaitingGift, markUsed } from "../referrals/memberGiftRepo.js";
-import { rateOf, taxIncludedOf } from "../register/taxRepo.js";
+import { ratesOf, taxIncludedOf } from "../register/taxRepo.js";
+import { appliedOf, heldTaxesSql, keepHeldRates, ratesOfJson, typeTaxesSql, typeTaxRateIdsSql } from "./taxesSql.js";
 import { feesFor, openLeaveFee, type FeePaymentRow, type FeeRow } from "./feesRepo.js";
 import { freezeFeeOf, openFreezeFee, removeFreezeFees } from "./freezeFees.js";
 import {
@@ -110,9 +111,9 @@ export interface HeldRow {
   fromList: boolean;
   /** The discount it was given with, as it was then (18b-ii-b). */
   discount: { name: string; offMinor: number; payments: MembershipPayments } | null;
-  /** The tax rate it was sold with, as the rate is now (18b-iii); null for none. */
-  tax: HeldTax | null;
-  /** That tax as a bill opened today charges it; null for none. */
+  /** The tax rates it was sold with, in order, as each rate is now (18b-iii; 18b-v-b); empty for none. */
+  taxes: HeldTax[];
+  /** Those taxes as a bill opened today charges them; null for none. */
   taxApplied: TaxApplied | null;
   /** What the bill of the first period not paid comes to when opened today, its tax in (the part
    *  month's, 18y, where that is the first period); 0 for a free one. */
@@ -167,8 +168,7 @@ const rawSchema = z.object({
   discount_name: z.string().nullable(),
   discount_minor: z.number().int(),
   discount_payments: z.enum(MEMBERSHIP_PAYMENTS).nullable(),
-  tax_name: z.string().nullable(),
-  tax_pcm: z.number().int().nullable(),
+  taxes: z.unknown(),
   tax_included: z.boolean().nullable(),
 });
 
@@ -180,11 +180,11 @@ function partOf(r: z.infer<typeof rawSchema>): number {
 
 function shape(row: unknown): HeldRow {
   const r = rawSchema.parse(row);
-  const tax = r.tax_name === null || r.tax_pcm === null ? null : { name: r.tax_name, pcm: r.tax_pcm };
-  // Whether its price held the tax is the membership's own, kept when it was sold.
-  const taxApplied = tax === null ? null : { ...tax, included: r.tax_included ?? false };
+  const taxes = ratesOfJson(r.taxes);
+  // Whether its price held the taxes is the membership's own, kept when it was sold.
+  const taxApplied = appliedOf(taxes, r.tax_included ?? false);
   return {
-    tax,
+    taxes,
     taxApplied,
     freezeFeeMinor: r.freeze_fee_minor,
     contractRelease: r.contract_release,
@@ -240,9 +240,8 @@ const typeSchema = z.object({
   term_unit: membershipTermUnitSchema.nullable(),
   pack_classes: z.number().int().nullable(),
   pack_days: z.number().int().nullable(),
-  tax_rate_id: z.string().nullable(),
-  tax_name: z.string().nullable(),
-  tax_pcm: z.number().int().nullable(),
+  tax_rate_ids: z.array(z.string()),
+  taxes: z.unknown(),
   joining_fee_minor: z.number().int(),
   contract_periods: z.number().int().nullable(),
   contract_then: contractThenSchema.nullable(),
@@ -251,19 +250,18 @@ const typeSchema = z.object({
   cooling_off_days: z.number().int().nullable(),
 });
 
-/** The tax rate a type charges, by id: what a membership given from it keeps. None for a
- *  free type: it opens no bill. */
-export function typeTaxRateId(row: unknown): string | null {
+/** The tax rates a type charges, by id, in order: what a membership given from it keeps. None
+ *  for a free type: it opens no bill. */
+export function typeTaxRateIds(row: unknown): string[] {
   const t = typeSchema.parse(row);
-  return t.price_minor === 0 ? null : t.tax_rate_id;
+  return t.price_minor === 0 ? [] : t.tax_rate_ids;
 }
 
-const rawTypePrice = (row: unknown): number => typeSchema.parse(row).price_minor;
 
 export function typeChoice(row: unknown): HeldMembershipTypeChoice {
   const t = typeSchema.parse(row);
   return {
-    tax: t.tax_name === null || t.tax_pcm === null ? null : { name: t.tax_name, pcm: t.tax_pcm },
+    taxes: ratesOfJson(t.taxes),
     id: t.id,
     name: t.name,
     kind: t.kind,
@@ -284,14 +282,13 @@ export function typeChoice(row: unknown): HeldMembershipTypeChoice {
 
 /** A gym's live types, or the one named; a gym has at most 60. */
 export const liveTypes = (sql: Sql | TransactionSql, gymId: string, typeId: string | null) => sql`
-  SELECT id, name, kind, price_minor, currency, term_count, term_unit, pack_classes, pack_days, updated_at, tax_rate_id, joining_fee_minor,
-         contract_periods, contract_then, notice_days, leave_fee_minor, cooling_off_days,
-         (SELECT r.name FROM gym_tax_rates r WHERE r.gym_id = gym_membership_types.gym_id AND r.id = gym_membership_types.tax_rate_id) AS tax_name,
-         (SELECT r.rate_pcm FROM gym_tax_rates r WHERE r.gym_id = gym_membership_types.gym_id AND r.id = gym_membership_types.tax_rate_id) AS tax_pcm
-  FROM gym_membership_types
-  WHERE gym_id = ${gymId} AND archived_at IS NULL
-    AND (${typeId}::uuid IS NULL OR id = ${typeId}::uuid)
-  ORDER BY lower(name), id`;
+  SELECT t.id, t.name, t.kind, t.price_minor, t.currency, t.term_count, t.term_unit, t.pack_classes, t.pack_days, t.updated_at, t.joining_fee_minor,
+         t.contract_periods, t.contract_then, t.notice_days, t.leave_fee_minor, t.cooling_off_days,
+         ${typeTaxRateIdsSql(sql)} AS tax_rate_ids, ${typeTaxesSql(sql)} AS taxes
+  FROM gym_membership_types t
+  WHERE t.gym_id = ${gymId} AND t.archived_at IS NULL
+    AND (${typeId}::uuid IS NULL OR t.id = ${typeId}::uuid)
+  ORDER BY lower(t.name), t.id`;
 
 const COLUMNS = (sql: Sql | TransactionSql) => sql`
   h.id, h.membership_type_id, t.name AS type_name, h.kind, h.price_minor, h.currency,
@@ -312,8 +309,7 @@ const COLUMNS = (sql: Sql | TransactionSql) => sql`
           WHERE s.gym_id = h.gym_id AND s.held_membership_id = h.id)
   END AS cooling_off_signed,
   h.freeze_fee_minor, h.discount_name, h.discount_minor, h.discount_payments,
-  (SELECT r.name FROM gym_tax_rates r WHERE r.gym_id = h.gym_id AND r.id = h.tax_rate_id) AS tax_name,
-  (SELECT r.rate_pcm FROM gym_tax_rates r WHERE r.gym_id = h.gym_id AND r.id = h.tax_rate_id) AS tax_pcm,
+  ${heldTaxesSql(sql)} AS taxes,
   h.tax_included`;
 
 /** The record's memberships of the statuses named, newest start first. */
@@ -786,13 +782,12 @@ export async function giveHeldIn(tx: TransactionSql, input: GiveHeldInput): Prom
   if (input.shownNoticeDays !== undefined && input.shownNoticeDays !== type.noticeDays) return { kind: "notice_changed" };
   // And a cooling-off period (18v-iii).
   if (input.shownCoolingOffDays !== undefined && input.shownCoolingOffDays !== type.coolingOffDays) return { kind: "cooling_off_changed" };
-  // The type's rate as it is now, read under the gym's lock that its changes take: the
-  // membership keeps it, and its first bill charges it.
-  const taxRateId = typeTaxRateId(rawType);
-  // A free membership opens no bill, so it charges no tax.
-  const rate = taxRateId === null || rawTypePrice(rawType) === 0 ? null : await rateOf(tx, input.gymId, taxRateId);
+  // The type's rates as they are now, read under the gym's lock that their changes take: the
+  // membership keeps them, in the type's order, and its first bill charges them. A free
+  // membership opens no bill, so it charges no tax (`typeTaxRateIds`).
+  const rates = (await ratesOf(tx, input.gymId, typeTaxRateIds(rawType))) ?? [];
   const included = await taxIncludedOf(tx, input.gymId);
-  const tax: TaxApplied | null = rate === null || included === null ? null : { name: rate.name, pcm: rate.pcm, included };
+  const tax: TaxApplied | null = included === null ? null : appliedOf(rates, included);
 
   // The discount is this gym's own, read under its lock, judged on the gym's own day,
   // and what it takes off is worked out again here: nothing is given at any other price.
@@ -850,7 +845,7 @@ export async function giveHeldIn(tx: TransactionSql, input: GiveHeldInput): Prom
     gift = { id: found.id, offMinor: off };
   }
   const firstBill =
-    type.priceMinor === 0 || paidByChange ? { amountMinor: 0, tax: null } : billOf(firstPart - (gift?.offMinor ?? 0) + joiningFeeMinor - creditMinor, tax);
+    type.priceMinor === 0 || paidByChange ? { amountMinor: 0, taxes: [] } : billOf(firstPart - (gift?.offMinor ?? 0) + joiningFeeMinor - creditMinor, tax);
   if (input.shownTotalMinor !== null && input.shownTotalMinor !== firstBill.amountMinor) return { kind: "price_changed" };
   // Paid by the change: its first period counts as paid as one before it was given does, so
   // no mark is ever taken back into it and no bill is asked for it.
@@ -877,18 +872,19 @@ export async function giveHeldIn(tx: TransactionSql, input: GiveHeldInput): Prom
       (gym_id, entry_id, membership_type_id, request_key, kind, price_minor, currency,
        term_count, term_unit, pack_classes, pack_days, starts_on, status,
        paid_periods, paid_floor, renews, classes_left,
-       discount_id, discount_name, discount_minor, discount_payments, tax_rate_id, tax_included, replaces_id, replaced_stopped, full_from,
+       discount_id, discount_name, discount_minor, discount_payments, tax_included, replaces_id, replaced_stopped, full_from,
        contract_periods, contract_then, notice_days, leave_fee_minor, cooling_off_days, cooling_off_added)
     VALUES (${input.gymId}, ${input.entryId}, ${input.typeId}, ${input.requestKey}, ${m.kind},
             ${priceMinor}, ${type.currency}, ${m.termCount}, ${m.termUnit}, ${m.packClasses},
             ${m.packDays}, ${m.startsOn}::date, ${m.status},
             ${m.paidPeriods}, ${m.paidFloor}, ${m.renews}, ${m.classesLeft},
-            ${used?.id ?? null}, ${used?.name ?? null}, ${used?.offMinor ?? 0}, ${used?.payments ?? null}, ${rate?.id ?? null}, ${tax?.included ?? null},
+            ${used?.id ?? null}, ${used?.name ?? null}, ${used?.offMinor ?? 0}, ${used?.payments ?? null}, ${tax?.included ?? null},
             ${change?.fromId ?? null}, ${change?.stoppedOld ?? false}, ${m.fullFrom}::date,
             ${m.contractPeriods ?? null}, ${m.contractThen ?? null}, ${m.noticeDays ?? null}, ${m.leaveFeeMinor ?? null},
             ${change === null ? (m.coolingOffDays ?? null) : null}, ${change === null && (m.coolingOffDays ?? null) !== null ? input.today : null}::date)
     RETURNING id`;
   if (created === undefined) throw new Error("held membership insert returned no row");
+  if (tax !== null) await keepHeldRates(tx, input.gymId, [created.id], rates.map((r) => r.id));
 
   await insertAudit(tx, {
     actorUserId: input.actorUserId,
@@ -904,7 +900,7 @@ export async function giveHeldIn(tx: TransactionSql, input: GiveHeldInput): Prom
       priceMinor: String(priceMinor),
       currency: type.currency,
       ...(used === null ? {} : { discountId: used.id, discount: used.name, discountMinor: String(used.offMinor), discountPayments: used.payments }),
-      ...(tax === null ? {} : { tax: tax.name, taxPcm: String(tax.pcm) }),
+      ...(tax === null ? {} : { tax: tax.rates.map((r) => r.name).join(", "), taxPcm: tax.rates.map((r) => String(r.pcm)).join(", ") }),
       ...(joiningFeeMinor > 0 ? { joiningFeeMinor: String(joiningFeeMinor) } : {}),
       ...(waivedFeeMinor > 0 ? { joiningFeeWaivedMinor: String(waivedFeeMinor) } : {}),
       ...(change === null ? {} : { replaces: change.fromId, changeCreditMinor: String(creditMinor) }),
@@ -917,7 +913,7 @@ export async function giveHeldIn(tx: TransactionSql, input: GiveHeldInput): Prom
     const [opened] = await insertBills(
       tx,
       input.gymId,
-      [{ membershipId: created.id, periodIndex: due.periodIndex, amountMinor: firstBill.amountMinor, tax: firstBill.tax, joiningFeeMinor, changeCreditMinor: creditMinor, currency: type.currency, dueOn: due.dueOn, covers: due.covers }],
+      [{ membershipId: created.id, periodIndex: due.periodIndex, amountMinor: firstBill.amountMinor, taxes: firstBill.taxes, joiningFeeMinor, changeCreditMinor: creditMinor, currency: type.currency, dueOn: due.dueOn, covers: due.covers }],
       input.now,
     );
     if (opened === undefined) throw new Error("a new membership's bill was not opened");
@@ -1423,12 +1419,14 @@ function listHeld(row: ListHeldColumns): ListHeld {
  *  is not counted, nor a past member's, nor a free one). What a rate's line in the Tax box
  *  says, and what keeps it from being removed. A plain read, bounded by the gym's list. */
 export async function taxedInUse(sql: Sql | TransactionSql, gymId: string, today: string): Promise<Map<string, number>> {
+  // One row a membership and a rate it charges (18b-v-b): one with two rates counts for each.
   const rows = await sql<(ListHeldColumns & { tax_rate_id: string })[]>`
-    SELECT ${LIST_COLUMNS(sql)}, h.tax_rate_id
+    SELECT ${LIST_COLUMNS(sql)}, x.tax_rate_id
     FROM gym_held_memberships h
+    JOIN gym_held_membership_tax_rates x ON x.gym_id = h.gym_id AND x.held_membership_id = h.id
     JOIN gym_membership_types t ON t.gym_id = h.gym_id AND t.id = h.membership_type_id
     JOIN gym_member_list_entries e ON e.gym_id = h.gym_id AND e.id = h.entry_id AND e.former_at IS NULL
-    WHERE h.gym_id = ${gymId} AND h.tax_rate_id IS NOT NULL AND h.price_minor > 0
+    WHERE h.gym_id = ${gymId} AND h.price_minor > 0
       AND h.status = ANY(${[...IN_USE]}::text[])`;
   const counts = new Map<string, number>();
   for (const row of rows) {

@@ -11,7 +11,7 @@ const fee = (over = {}) => ({
   forName: 'Personal training with Sam Trainer',
   on: '2026-10-09',
   amountMinor: 800,
-  tax: null,
+  taxes: [],
   dueOn: '2026-10-09',
   state: 'due',
   waived: null,

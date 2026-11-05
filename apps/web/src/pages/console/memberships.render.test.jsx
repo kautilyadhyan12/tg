@@ -162,7 +162,7 @@ describe('discounts for memberships (18b-ii-b)', () => {
     discounts,
     archivedDiscounts: [],
     archivedDiscountsTotal: 0,
-    membershipTypes: [{ id: type().id, name: 'Gold Monthly', taxRateId: null }],
+    membershipTypes: [{ id: type().id, name: 'Gold Monthly', taxRateIds: [] }],
     canSell: true,
     canManage: true,
     sales: [],
@@ -216,7 +216,7 @@ describe('tax on memberships (18b-iii)', () => {
     discounts: [],
     archivedDiscounts: [],
     archivedDiscountsTotal: 0,
-    membershipTypes: [{ id: type().id, name: 'Gold Monthly', taxRateId: null }],
+    membershipTypes: [{ id: type().id, name: 'Gold Monthly', taxRateIds: [] }],
     canSell: true,
     canManage: true,
     sales: [],
@@ -227,7 +227,7 @@ describe('tax on memberships (18b-iii)', () => {
   });
 
   it('a taxed type says its tax on its row, and the Tax box is under the price list with the gym’s rates', async () => {
-    orgService.getMembershipTypes.mockResolvedValue({ data: listOf({ types: [type({ taxRateId: GST.id })], taxRates: [GST], taxIncluded: false }) });
+    orgService.getMembershipTypes.mockResolvedValue({ data: listOf({ types: [type({ taxRateIds: [GST.id] })], taxRates: [GST], taxIncluded: false }) });
     register.get.mockResolvedValue(sellPage([rateRow(GST, { membershipTypes: 1, memberships: 12 })]));
     draw([gym()]);
     expect(await screen.findByText('Plus GST 18% on each payment')).toBeTruthy();
@@ -238,7 +238,7 @@ describe('tax on memberships (18b-iii)', () => {
   it('a rate added in the Tax box opens what charges it: Gold Monthly ticked and saved is charged, and its row says so (Kd’s click-through)', async () => {
     register.get.mockResolvedValue(sellPage([]));
     register.addTaxRate.mockResolvedValue(sellPage([rateRow(GST, { membershipTypes: 0 })]));
-    register.chargeTaxRate.mockResolvedValue({ ...sellPage([rateRow(GST)]), membershipTypes: [{ id: type().id, name: 'Gold Monthly', taxRateId: GST.id }] });
+    register.chargeTaxRate.mockResolvedValue({ ...sellPage([rateRow(GST)]), membershipTypes: [{ id: type().id, name: 'Gold Monthly', taxRateIds: [GST.id] }] });
     draw([gym()]);
     const box = await screen.findByRole('region', { name: 'Tax' });
     fireEvent.click(within(box).getByRole('button', { name: 'Add a tax rate' }));
@@ -246,7 +246,7 @@ describe('tax on memberships (18b-iii)', () => {
     fireEvent.change(form.getByLabelText('Tax name'), { target: { value: 'GST' } });
     fireEvent.change(form.getByLabelText('Rate (%)'), { target: { value: '18' } });
     // The price list is read again once the rate is charged.
-    orgService.getMembershipTypes.mockResolvedValue({ data: listOf({ types: [type({ taxRateId: GST.id })], taxRates: [GST], taxIncluded: false }) });
+    orgService.getMembershipTypes.mockResolvedValue({ data: listOf({ types: [type({ taxRateIds: [GST.id] })], taxRates: [GST], taxIncluded: false }) });
     // Read again after the add, the Sell page has the new rate, as the server answers.
     register.get.mockResolvedValue(sellPage([rateRow(GST, { membershipTypes: 0 })]));
     fireEvent.click(form.getByRole('button', { name: 'Add tax rate' }));
@@ -265,7 +265,7 @@ describe('tax on memberships (18b-iii)', () => {
     for (const [country, name] of [['JP', 'Consumption tax'], ['CA', 'GST'], ['IE', 'VAT']]) {
       cleanup();
       resetConsoleOrgs();
-      orgService.getMembershipTypes.mockResolvedValue({ data: listOf({ types: [type({ taxRateId: null })], taxRates: [], taxIncluded: country !== 'CA' }) });
+      orgService.getMembershipTypes.mockResolvedValue({ data: listOf({ types: [type({ taxRateIds: [] })], taxRates: [], taxIncluded: country !== 'CA' }) });
       register.get.mockResolvedValue(sellPage([]));
       draw([gym({ country })]);
       const box = await screen.findByRole('region', { name: 'Tax' });
@@ -282,45 +282,51 @@ describe('tax on memberships (18b-iii)', () => {
   });
 
   it('where the gym’s prices hold the tax, the row says the price includes it', async () => {
-    orgService.getMembershipTypes.mockResolvedValue({ data: listOf({ types: [type({ taxRateId: VAT.id })], taxRates: [VAT], taxIncluded: true }) });
+    orgService.getMembershipTypes.mockResolvedValue({ data: listOf({ types: [type({ taxRateIds: [VAT.id] })], taxRates: [VAT], taxIncluded: true }) });
     draw([gym()]);
     expect(await screen.findByText('Includes VAT 20%')).toBeTruthy();
   });
 
-  it('the type form picks its tax, a rate added from inside it is picked there at once, and the save sends it', async () => {
-    orgService.getMembershipTypes.mockResolvedValue({ data: listOf({ types: [type({ taxRateId: null })], taxRates: [GST], taxIncluded: false }) });
+  it('the type form ticks its taxes, a rate added from inside it is ticked there at once after the others, and refuses more than 30% together, and the save sends what is ticked', async () => {
+    orgService.getMembershipTypes.mockResolvedValue({ data: listOf({ types: [type({ taxRateIds: [] })], taxRates: [GST], taxIncluded: false }) });
     register.addTaxRate.mockResolvedValue(sellPage([rateRow(GST), rateRow(VAT, { membershipTypes: 0 })]));
-    orgService.updateMembershipType.mockResolvedValue({ data: listOf({ types: [type({ taxRateId: VAT.id })], taxRates: [GST, VAT], taxIncluded: false }) });
+    orgService.updateMembershipType.mockResolvedValue({ data: listOf({ types: [type({ taxRateIds: [VAT.id] })], taxRates: [GST, VAT], taxIncluded: false }) });
     draw([gym()]);
     fireEvent.click(await screen.findByRole('button', { name: 'Change Gold Monthly' }));
     const form = within(screen.getByRole('form', { name: 'Change membership type' }));
-    const tax = form.getByLabelText('Tax');
-    expect(tax.value).toBe('');
-    expect([...tax.querySelectorAll('option')].map((o) => o.textContent)).toEqual(['No tax', 'GST 18%']);
-    expect(form.getByText('Members who already hold it keep the tax they were sold with.')).toBeTruthy();
+    const tax = within(form.getByRole('group', { name: 'Tax' }));
+    expect(tax.getAllByRole('checkbox').map((box) => [box.parentElement?.textContent, box.checked])).toEqual([['GST 18%', false]]);
+    expect(form.getByText('Members who already hold it keep the taxes they were sold with.')).toBeTruthy();
+    fireEvent.click(tax.getByRole('checkbox', { name: 'GST 18%' }));
     fireEvent.click(form.getByRole('button', { name: 'Add a tax rate' }));
     const rate = within(form.getByRole('group', { name: 'Add a tax rate' }));
     fireEvent.change(rate.getByLabelText('Tax name'), { target: { value: 'VAT' } });
     fireEvent.change(rate.getByLabelText('Rate (%)'), { target: { value: '20' } });
     fireEvent.click(rate.getByRole('button', { name: 'Add tax rate' }));
     await waitFor(() => expect(register.addTaxRate).toHaveBeenCalledWith(IRON, { name: 'VAT', pcm: 20000 }));
-    await waitFor(() => expect(form.getByLabelText('Tax').value).toBe(VAT.id));
+    await waitFor(() => expect(within(form.getByRole('group', { name: 'Tax' })).getByRole('checkbox', { name: 'VAT 20%' }).checked).toBe(true));
+    // GST 18% and VAT 20% are 38%: said under Tax on the press, and nothing is sent.
+    fireEvent.click(form.getByRole('button', { name: 'Save changes' }));
+    expect(await form.findByText("These taxes come to 38% together. A membership's taxes can come to 30% at most. Untick one.")).toBeTruthy();
+    expect(orgService.updateMembershipType).not.toHaveBeenCalled();
+    // GST unticked, VAT alone is sent.
+    fireEvent.click(within(form.getByRole('group', { name: 'Tax' })).getByRole('checkbox', { name: 'GST 18%' }));
     // Adding the rate saved nothing of the type.
     expect(orgService.updateMembershipType).not.toHaveBeenCalled();
     fireEvent.click(form.getByRole('button', { name: 'Save changes' }));
     await waitFor(() => expect(orgService.updateMembershipType).toHaveBeenCalledTimes(1));
-    expect(orgService.updateMembershipType.mock.calls[0][2]).toMatchObject({ name: 'Gold Monthly', priceMinor: 4999, taxRateId: VAT.id });
+    expect(orgService.updateMembershipType.mock.calls[0][2]).toMatchObject({ name: 'Gold Monthly', priceMinor: 4999, taxRateIds: [VAT.id] });
     expect(await screen.findByText('Plus VAT 20% on each payment')).toBeTruthy();
   });
 
   it('a taxed price too high to bill is said under the price, and nothing is sent', async () => {
-    orgService.getMembershipTypes.mockResolvedValue({ data: listOf({ types: [type({ taxRateId: GST.id })], taxRates: [GST], taxIncluded: false }) });
+    orgService.getMembershipTypes.mockResolvedValue({ data: listOf({ types: [type({ taxRateIds: [GST.id] })], taxRates: [GST], taxIncluded: false }) });
     draw([gym()]);
     fireEvent.click(await screen.findByRole('button', { name: 'Change Gold Monthly' }));
     const form = within(screen.getByRole('form', { name: 'Change membership type' }));
     fireEvent.change(form.getByLabelText('Price (USD)'), { target: { value: '800000' } });
     fireEvent.click(form.getByRole('button', { name: 'Save changes' }));
-    expect(await form.findByText('A price with tax can be at most $769,230.76. Lower the price, or choose No tax.')).toBeTruthy();
+    expect(await form.findByText('A price with tax can be at most $769,230.76. Lower the price, or untick the taxes.')).toBeTruthy();
     expect(orgService.updateMembershipType).not.toHaveBeenCalled();
   });
 });

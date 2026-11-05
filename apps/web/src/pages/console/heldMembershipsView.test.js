@@ -49,7 +49,7 @@ function held(type, startsOn, paid, { givenOn = startsOn, moves = [], today = TO
     notCharged: false,
     refundedInFull: false,
     discount: null,
-    tax: null,
+    taxes: [],
     view: heldMembershipView(m, today),
     billing: null,
   });

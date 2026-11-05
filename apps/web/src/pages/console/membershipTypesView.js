@@ -23,6 +23,7 @@ import {
   MEMBERSHIP_PRICE_MINOR_MAX,
   TAXED_PRICE_MINOR_MAX,
   pcmToTaxRateText,
+  SALES_TAX_PCM_MAX,
 } from '@app/shared';
 import { reminderDayOptions } from './renewalReminderView';
 
@@ -192,14 +193,39 @@ export function archivedNote(list) {
   return `Showing the newest ${String(list.archived.length)} of ${String(list.archivedTotal)}.`;
 }
 
-/** The tax a type's bills charge, in one line; null for none. "Plus GST 18% on each
- *  payment", or "Includes GST 18%" where the gym's prices hold the tax. */
+/** "GST 5% and QST 9.975%": rates in one phrase, in the order given. */
+export function taxRatesPhrase(rates) {
+  const labels = rates.map((r) => `${r.name} ${pcmToTaxRateText(r.pcm)}%`);
+  return labels.length <= 1 ? (labels[0] ?? '') : `${labels.slice(0, -1).join(', ')} and ${labels[labels.length - 1]}`;
+}
+
+/** The gym's rates a type charges, in its order (18b-v-b); a rate since removed is left out. */
+export function typeRates(type, list) {
+  const rates = list?.taxRates ?? [];
+  return (type.taxRateIds ?? []).map((id) => rates.find((r) => r.id === id)).filter((r) => r !== undefined);
+}
+
+/** The taxes a type's bills charge, in one line; null for none. "Plus GST 5% and QST 9.975%
+ *  on each payment", or "Includes GST 18%" where the gym's prices hold the tax. */
 export function typeTaxLine(type, list) {
-  if (type.taxRateId === null || type.taxRateId === undefined || list === null) return null;
-  const rate = (list.taxRates ?? []).find((r) => r.id === type.taxRateId);
-  if (rate === undefined) return null;
-  const label = `${rate.name} ${pcmToTaxRateText(rate.pcm)}%`;
+  if (list === null) return null;
+  const rates = typeRates(type, list);
+  if (rates.length === 0) return null;
+  const label = taxRatesPhrase(rates);
   return list.taxIncluded ? `Includes ${label}` : `Plus ${label} on each payment`;
+}
+
+/** "14.975%": what rates come to together. */
+export const togetherText = (rates) => `${pcmToTaxRateText(rates.reduce((n, r) => n + r.pcm, 0))}%`;
+
+/** Said once an archived type is put back. Where its taxes came to more than 30% together (a rate
+ *  was raised while it was archived), the server took its last ones off: say which (18b-v-b). */
+export function restoredTypeWords(type, list) {
+  const now = (list?.types ?? []).find((t) => t.id === type.id);
+  const taken = typeRates(type, list).filter((r) => now !== undefined && !(now.taxRateIds ?? []).includes(r.id));
+  if (taken.length === 0) return null;
+  const were = taken.length === 1 ? 'was' : 'were';
+  return `${type.name} is back on your price list. ${taxRatesPhrase(taken)} ${were} taken off it, as its taxes came to more than 30% together. Press Change on ${type.name} to check its tax.`;
 }
 
 /** Whether a kind can have a joining fee (18t): one that opens a first bill to carry it. */
@@ -286,7 +312,7 @@ export function emptyDraft() {
     ptAccess: 'none',
     ptLimit: '4',
     ptPeriod: 'month',
-    taxRateId: '',
+    taxRateIds: [],
     joiningFee: '',
     contract: 'none',
     contractPeriods: '12',
@@ -324,7 +350,7 @@ export function draftFromType(type) {
     ptAccess: hasPtLimit(type) ? 'limited' : 'none',
     ptLimit: hasPtLimit(type) ? String(type.ptLimit) : base.ptLimit,
     ptPeriod: hasPtLimit(type) ? type.ptPeriod : base.ptPeriod,
-    taxRateId: type.taxRateId ?? '',
+    taxRateIds: [...(type.taxRateIds ?? [])],
     joiningFee: type.joiningFeeMinor > 0 ? minorToPriceText(type.joiningFeeMinor, type.currency) : '',
     contract: type.contractPeriods === null || type.contractPeriods === undefined ? 'none' : 'fixed',
     contractPeriods: type.contractPeriods === null || type.contractPeriods === undefined ? base.contractPeriods : String(type.contractPeriods),
@@ -405,8 +431,10 @@ export const PACK_IS_DAY_PASS = '1 class used within 1 day is a day pass. Add it
 /** A name or description holding a character nobody can see, usually pasted in. */
 export const HIDDEN_TEXT = 'Something hidden was pasted in with this. Delete it and type it again.';
 
-/** What is wrong with the form, one sentence a field, or null when it can be saved. */
-export function draftProblems(draft, currency) {
+/** What is wrong with the form, one sentence a field, or null when it can be saved. `rates` are
+ *  the gym's, to say what the taxes ticked come to together (18b-v-b). */
+export function draftProblems(draft, currency, rates = []) {
+  const taxed = draft.taxRateIds.length > 0;
   const problems = {};
   const name = draft.name.trim();
   if (name === '') problems.name = 'Give it a name, like Gold Monthly.';
@@ -420,10 +448,14 @@ export function draftProblems(draft, currency) {
   const priceMinor = priceToMinor(draft.price, currency);
   if (priceMinor === null) {
     problems.price = `Type the price as a number, like ${priceExample(currency)}. Type 0 for free.`;
-  } else if (draft.taxRateId !== '' && priceMinor > TAXED_PRICE_MINOR_MAX) {
-    problems.price = `A price with tax can be at most ${formatMinor(TAXED_PRICE_MINOR_MAX, currency)}. Lower the price, or choose No tax.`;
-  } else if (draft.taxRateId !== '' && priceMinor === 0) {
-    problems.tax = 'A free membership charges no tax. Choose No tax.';
+  } else if (taxed && priceMinor > TAXED_PRICE_MINOR_MAX) {
+    problems.price = `A price with tax can be at most ${formatMinor(TAXED_PRICE_MINOR_MAX, currency)}. Lower the price, or untick the taxes.`;
+  } else if (taxed && priceMinor === 0) {
+    problems.tax = 'A free membership charges no tax. Untick the taxes.';
+  }
+  const ticked = rates.filter((r) => draft.taxRateIds.includes(r.id));
+  if (problems.tax === undefined && ticked.reduce((n, r) => n + r.pcm, 0) > SALES_TAX_PCM_MAX) {
+    problems.tax = `These taxes come to ${togetherText(ticked)} together. A membership's taxes can come to 30% at most. Untick one.`;
   }
   const feeMinor = draftJoiningFee(draft, currency);
   if (feeMinor === null) {
@@ -431,7 +463,7 @@ export function draftProblems(draft, currency) {
   } else if (feeMinor > 0 && priceMinor === 0) {
     problems.joiningFee = 'A free membership has no joining fee. Leave it empty.';
   } else if (feeMinor > 0 && priceMinor !== null) {
-    const cap = draft.taxRateId === '' ? MEMBERSHIP_PRICE_MINOR_MAX : TAXED_PRICE_MINOR_MAX;
+    const cap = taxed ? TAXED_PRICE_MINOR_MAX : MEMBERSHIP_PRICE_MINOR_MAX;
     if (priceMinor + feeMinor > cap) problems.joiningFee = `The price and joining fee together can be at most ${formatMinor(cap, currency)}.`;
   }
   if (usesTerm(draft.choice) && wholeNumber(draft.termCount, 1, MEMBERSHIP_TERM_COUNT_MAX) === null) {
@@ -572,7 +604,7 @@ export function draftBody(draft, currency) {
     includesPt: draftIncludesPt(draft),
     ptLimit: draftLimitsPt(draft) ? wholeNumber(draft.ptLimit, 1, MEMBERSHIP_PT_LIMIT_MAX) : null,
     ptPeriod: draftLimitsPt(draft) ? draft.ptPeriod : null,
-    taxRateId: draft.taxRateId === '' ? null : draft.taxRateId,
+    taxRateIds: [...draft.taxRateIds],
     joiningFeeMinor: draftJoiningFee(draft, currency),
     contractPeriods: draftHasContract(draft) ? wholeNumber(draft.contractPeriods, 1, MEMBERSHIP_CONTRACT_PERIODS_MAX) : null,
     contractThen: draftHasContract(draft) ? draft.contractThen : null,

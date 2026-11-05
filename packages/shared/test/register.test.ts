@@ -30,7 +30,8 @@ describe("several taxes on one thing: what the person pays is what the taxes say
     ["Quebec, $114.98 with both inside: $100.00 and the same two taxes", 11498, [5000, 9975], true, { netMinor: 10000, taxParts: [500, 998], totalMinor: 11498 }],
     ["India, ₹1,000 with CGST and SGST on top", 100000, [9000, 9000], false, { netMinor: 100000, taxParts: [9000, 9000], totalMinor: 118000 }],
     ["India, ₹1,180 with both inside", 118000, [9000, 9000], true, { netMinor: 100000, taxParts: [9000, 9000], totalMinor: 118000 }],
-    ["India, ₹50 with both inside: the odd paisa to the first", 5000, [9000, 9000], true, { netMinor: 4237, taxParts: [382, 381], totalMinor: 5000 }],
+    // ₹50.00 / 1.18 is ₹42.37 before tax; 9% of it is ₹3.81 for each, as an Indian GST invoice shows them (18b-v-b).
+    ["India, ₹50 with both inside: equal rates, equal amounts", 5000, [9000, 9000], true, { netMinor: 4238, taxParts: [381, 381], totalMinor: 5000 }],
     ["British Columbia, $10.00, GST 5% and PST 7%", 1000, [5000, 7000], false, { netMinor: 1000, taxParts: [50, 70], totalMinor: 1120 }],
     ["Texas, $10.00, state 6.25% and city 2%", 1000, [6250, 2000], false, { netMinor: 1000, taxParts: [63, 20], totalMinor: 1083 }],
     ["New York City, $10.00 at 8.875%, to the nearest cent", 1000, [8875], false, { netMinor: 1000, taxParts: [89], totalMinor: 1089 }],

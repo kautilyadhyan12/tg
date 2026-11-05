@@ -72,7 +72,7 @@ export async function sendGymMessageNotifications(deps: {
 
   // `reached`: some phone has it. `again`: Firebase did not answer for any phone, so the next run tries again.
   const tell = async (pair: repo.PendingPair, state: { reached: boolean; again: boolean }): Promise<void> => {
-    const tokens = pair.fresh ? await repo.liveTokens(sql, pair.userId, now) : [];
+    const tokens = pair.fresh ? await repo.liveTokens(sql, pair.userId, now, "gym_messages") : [];
     // The Inbox's own count and rule: a former member, a closed gym or one on no plan has none.
     const unread = tokens.length === 0 ? 0 : ((await unreadCounts(sql, pair.userId, now)).get(pair.gymId) ?? 0);
     const newest = unread === 0 ? null : await repo.newestUnread(sql, pair.userId, pair.gymId, now);

@@ -30,6 +30,7 @@ import {
   type MemberGiftTerms,
 } from "@app/shared";
 import { billOf } from "../memberships/billsSql.js";
+import { appliedOf, keptTaxes, taxColumns } from "../memberships/taxesSql.js";
 import { addGiftDaysTo, takeGiftDaysBack } from "../memberships/heldRepo.js";
 import { insertMessages } from "../messages/repo.js";
 import { insertAudit, insertAudits } from "../repo.js";
@@ -147,7 +148,7 @@ interface RawOpenBill extends RawTerms {
   amount_minor_bill: number;
   tax_minor: number;
   tax_pcm: number;
-  tax_name: string | null;
+  taxes: unknown;
   tax_included: boolean | null;
   joining_fee_minor: number;
   bill_currency: string;
@@ -156,12 +157,12 @@ interface RawOpenBill extends RawTerms {
 /** TAKES WAITING GIFTS OFF OPEN BILLS: each gift (oldest first) off the earliest open bill,
  *  with nothing paid on it, of a membership in use on the record its member's account holds
  *  today, where it fits (`memberGiftOff`). One gift a bill. The bill is opened again at its
- *  own price less the gift, with its own tax rate. Under the gym's lock, which every bill
+ *  own price less the gift, with its own tax rates. Under the gym's lock, which every bill
  *  write takes first. `onlyGiftId`: the one gift just given. Answers how many were used. */
 export async function giftsOntoOpenBills(tx: TransactionSql, gymId: string, now: Date, onlyGiftId: string | null = null): Promise<number> {
   const rows = await tx<RawOpenBill[]>`
     SELECT g.id AS gift_id, g.kind, g.percent_bp, g.amount_minor, g.currency,
-           b.id AS bill_id, b.amount_minor AS amount_minor_bill, b.tax_minor, b.tax_pcm, b.tax_name, b.tax_included, b.joining_fee_minor, b.currency AS bill_currency
+           b.id AS bill_id, b.amount_minor AS amount_minor_bill, b.tax_minor, b.tax_pcm, b.taxes, b.tax_included, b.joining_fee_minor, b.currency AS bill_currency
     FROM gym_referral_member_gifts g
     JOIN gym_members m ON m.gym_id = g.gym_id AND m.user_id = g.member_user_id AND m.removed_at IS NULL
     JOIN users u ON u.id = m.user_id AND u.status = 'active'
@@ -175,17 +176,19 @@ export async function giftsOntoOpenBills(tx: TransactionSql, gymId: string, now:
     ORDER BY g.given_at, g.id, b.due_on, b.period_index, b.id`;
   const done = new Set<string>();
   const billsTaken = new Set<string>();
-  const picks: { gift: string; bill: string; amount: number; tax: number; off: number; currency: string }[] = [];
+  const picks: ({ gift: string; bill: string; amount: number; off: number; currency: string } & ReturnType<typeof taxColumns>)[] = [];
   for (const row of rows) {
     if (done.has(row.gift_id) || billsTaken.has(row.bill_id)) continue;
-    const tax = row.tax_name === null || row.tax_included === null ? null : { name: row.tax_name, pcm: row.tax_pcm, included: row.tax_included };
+    // Its own taxes, each at the rate it was opened with (18b-v-b).
+    const kept = keptTaxes(row);
+    const tax = row.tax_included === null ? null : appliedOf(kept, row.tax_included);
     // The bill's own price before tax: a price that held its tax is the amount itself. A
     // joining fee in it (18t) is not the membership's price: the gift never comes off it.
     const listed = tax === null || tax.included ? row.amount_minor_bill : row.amount_minor_bill - row.tax_minor;
     const off = memberGiftOff(terms(row), listed - row.joining_fee_minor, row.bill_currency);
     if (off === 0) continue;
     const bill = billOf(listed - off, tax);
-    picks.push({ gift: row.gift_id, bill: row.bill_id, amount: bill.amountMinor, tax: bill.tax?.minor ?? 0, off, currency: row.bill_currency });
+    picks.push({ gift: row.gift_id, bill: row.bill_id, amount: bill.amountMinor, ...taxColumns(bill.taxes), off, currency: row.bill_currency });
     done.add(row.gift_id);
     billsTaken.add(row.bill_id);
   }
@@ -193,14 +196,14 @@ export async function giftsOntoOpenBills(tx: TransactionSql, gymId: string, now:
   // One statement each, however many: a gym's hourly run holds its lock for as short a time as
   // it can (200 gifts one at a time held it 1.4 to 3.4 s; measured 2026-10-16).
   const lowered = await tx<{ id: string }[]>`
-    UPDATE gym_member_bills b SET amount_minor = r.amount, tax_minor = r.tax, updated_at = ${now}
-    FROM jsonb_to_recordset(${tx.json(picks)}) AS r(gift uuid, bill uuid, amount int, tax int, off int, currency text)
+    UPDATE gym_member_bills b SET amount_minor = r.amount, tax_minor = r.tm, taxes = COALESCE(r.tx, '[]'::jsonb), updated_at = ${now}
+    FROM jsonb_to_recordset(${tx.json(picks)}) AS r(gift uuid, bill uuid, amount int, tm int, tx jsonb, off int, currency text)
     WHERE b.gym_id = ${gymId} AND b.id = r.bill AND b.status = 'open'
     RETURNING b.id`;
   const marked = await tx<{ id: string }[]>`
     UPDATE gym_referral_member_gifts g
     SET used_at = ${now}, used_bill_id = r.bill, used_off_minor = r.off, used_currency = r.currency
-    FROM jsonb_to_recordset(${tx.json(picks)}) AS r(gift uuid, bill uuid, amount int, tax int, off int, currency text)
+    FROM jsonb_to_recordset(${tx.json(picks)}) AS r(gift uuid, bill uuid, off int, currency text)
     WHERE g.gym_id = ${gymId} AND g.id = r.gift AND g.used_at IS NULL AND g.taken_back_at IS NULL
     RETURNING g.id`;
   if (lowered.length !== picks.length || marked.length !== picks.length) throw new Error("a Refer a friend gift was used that was not waiting");

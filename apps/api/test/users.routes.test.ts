@@ -277,6 +277,34 @@ d("users routes (real Postgres)", () => {
     expect((JSON.parse(bMe.body) as { user: { displayName: string } }).user.displayName).toBe("Bob Untouched");
   });
 
+  it("notification switches (19d): each on at first, one saved alone, a bad value refused, A's never touches B's, none without sign-in", { timeout: 30_000 }, async () => {
+    const a = await makeUser("p22u-push-a@example.com");
+    const b = await makeUser("p22u-push-b@example.com");
+    type Switches = { pushGymMessages: boolean; pushPlaces: boolean; pushComments: boolean };
+    const switches = async (cookies: Record<string, string>): Promise<Switches> => {
+      const res = await inject({ method: "GET", url: "/v1/users/me", cookies });
+      expect(res.statusCode).toBe(200);
+      const { pushGymMessages, pushPlaces, pushComments } = (JSON.parse(res.body) as { user: Switches }).user;
+      return { pushGymMessages, pushPlaces, pushComments };
+    };
+    expect(await switches(a.cookies)).toEqual({ pushGymMessages: true, pushPlaces: true, pushComments: true });
+
+    const off = await inject({ method: "PATCH", url: "/v1/users/me", cookies: a.cookies, body: { pushComments: false } });
+    expect(off.statusCode).toBe(200);
+    expect((JSON.parse(off.body) as { user: Switches }).user).toMatchObject({ pushGymMessages: true, pushPlaces: true, pushComments: false });
+    const off2 = await inject({ method: "PATCH", url: "/v1/users/me", cookies: a.cookies, body: { pushPlaces: false } });
+    expect(off2.statusCode).toBe(200);
+    // The first switch stayed as saved: each press changes only its own.
+    expect(await switches(a.cookies)).toEqual({ pushGymMessages: true, pushPlaces: false, pushComments: false });
+    expect(await switches(b.cookies)).toEqual({ pushGymMessages: true, pushPlaces: true, pushComments: true });
+
+    for (const body of [{ pushComments: "no" }, { pushPlaces: null }, { pushBadges: false }]) {
+      expect((await inject({ method: "PATCH", url: "/v1/users/me", cookies: a.cookies, body })).statusCode).toBe(400);
+    }
+    expect((await inject({ method: "PATCH", url: "/v1/users/me", body: { pushComments: false } })).statusCode).toBe(401);
+    expect(await switches(a.cookies)).toEqual({ pushGymMessages: true, pushPlaces: false, pushComments: false });
+  });
+
   it("DELETE runs the §5.2 Day-0 flow; deleted user 401s on authenticate AND refresh (CORRECTION 2)", { timeout: 30_000 }, async () => {
     const { userId, cookies } = await makeUser("p22u-delete@example.com");
     // Fixtures the Day-0 flow must touch: a membership and a push token. The gym is somebody

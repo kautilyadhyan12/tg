@@ -184,7 +184,7 @@ d("a joining fee on a membership type (real Postgres)", () => {
     includesPt: t.includesPt,
     ptLimit: t.ptLimit,
     ptPeriod: t.ptPeriod,
-    taxRateId: t.taxRateId,
+    taxRateIds: t.taxRateIds,
     joiningFeeMinor: t.joiningFeeMinor,
     contractPeriods: t.contractPeriods,
     contractThen: t.contractThen,
@@ -458,7 +458,7 @@ d("a joining fee on a membership type (real Postgres)", () => {
       expect(rateRes.statusCode, rateRes.body).toBe(201);
       const gst = sellPage(rateRes).tax.rates.find((r) => r.name === "GST");
       if (gst === undefined) throw new Error("no rate");
-      const gold = await addType(gymId, owner.cookies, monthly({ joiningFeeMinor: 2500, taxRateId: gst.id }));
+      const gold = await addType(gymId, owner.cookies, monthly({ joiningFeeMinor: 2500, taxRateIds: [gst.id] }));
       const discountRes = await post(
         `${register}/discounts`,
         {

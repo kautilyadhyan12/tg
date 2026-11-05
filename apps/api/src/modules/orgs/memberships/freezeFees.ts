@@ -17,6 +17,7 @@ import { dayInTz } from "../../gamification/streak.js";
 import { lockGym } from "../memberList/repo.js";
 import { insertAudit } from "../repo.js";
 import { billOf } from "./billsSql.js";
+import { appliedOf, heldTaxesSql, ratesOfJson, taxColumns } from "./taxesSql.js";
 
 /** The gym's freeze fee a month, in minor units; 0 is none. */
 export async function freezeFeeOf(sql: Sql | TransactionSql, gymId: string): Promise<number> {
@@ -36,8 +37,8 @@ type Frozen = {
   currency: string;
   type_name: string;
   timezone: string;
-  tax_name: string | null;
-  tax_pcm: number | null;
+  /** The rates the membership was sold with, as each is now (18b-v-b). */
+  taxes: unknown;
   /** The months of this freeze that already have a fee that stands, or one staff waived. */
   billed: string[];
   /** An earlier freeze's fee still owed covers the freeze day: unfrozen and frozen again inside
@@ -52,7 +53,7 @@ const frozen = (sql: Sql | TransactionSql, gymIds: readonly string[] | null, mem
   const ids = membershipIds === null ? null : [...membershipIds];
   return sql<Frozen[]>`
     SELECT h.id, h.gym_id, h.frozen_on::text AS frozen_on, h.freeze_fee_minor AS fee, h.currency,
-           left(t.name, 80) AS type_name, g.timezone, r.name AS tax_name, r.rate_pcm AS tax_pcm,
+           left(t.name, 80) AS type_name, g.timezone, ${heldTaxesSql(sql)} AS taxes,
            ARRAY(SELECT b.covers_from::text FROM gym_member_bills b
                  WHERE b.gym_id = h.gym_id AND b.held_membership_id = h.id AND b.fee = 'freeze'
                    AND b.covers_from >= h.frozen_on AND (b.status <> 'void' OR b.void_reason = 'waived')) AS billed,
@@ -64,13 +65,12 @@ const frozen = (sql: Sql | TransactionSql, gymIds: readonly string[] | null, mem
     JOIN gyms g ON g.id = h.gym_id AND g.status = 'active'
     JOIN gym_membership_types t ON t.gym_id = h.gym_id AND t.id = h.membership_type_id
     JOIN gym_member_list_entries e ON e.gym_id = h.gym_id AND e.id = h.entry_id AND e.former_at IS NULL
-    LEFT JOIN gym_tax_rates r ON r.gym_id = h.gym_id AND r.id = h.tax_rate_id
     WHERE h.status = 'frozen' AND h.freeze_fee_minor > 0 AND h.frozen_on IS NOT NULL
       AND (${gyms}::uuid[] IS NULL OR h.gym_id = ANY(${gyms}::uuid[]))
       AND (${ids}::uuid[] IS NULL OR h.id = ANY(${ids}::uuid[]))`;
 };
 
-type Opening = { m: string; a: number; tm: number; tb: number; tn: string | null; ti: boolean | null; c: string; n: string; from: string; to: string };
+type Opening = { m: string; a: number; c: string; n: string; from: string; to: string } & ReturnType<typeof taxColumns>;
 
 function owedFees(rows: readonly Frozen[], now: Date): Map<string, Opening[]> {
   const byGym = new Map<string, Opening[]>();
@@ -89,16 +89,13 @@ function owedFees(rows: readonly Frozen[], now: Date): Map<string, Opening[]> {
     const month = freezeFeeMonth(row.frozen_on, dayIn(row.timezone));
     if (month === null || row.billed.includes(month.from)) continue;
     if (row.covered && month.from === row.frozen_on) continue;
-    // The amount the gym set is what the person pays: the membership's rate is inside it, as a late cancel's is.
-    const tax = row.tax_name === null || row.tax_pcm === null ? null : { name: row.tax_name, pcm: row.tax_pcm, included: true };
+    // The amount the gym set is what the person pays: the membership's rates are inside it, as a late cancel's are.
+    const tax = appliedOf(ratesOfJson(row.taxes), true);
     const bill = billOf(row.fee, tax);
     const opening: Opening = {
       m: row.id,
       a: bill.amountMinor,
-      tm: bill.tax?.minor ?? 0,
-      tb: bill.tax?.pcm ?? 0,
-      tn: bill.tax?.name ?? null,
-      ti: bill.tax?.included ?? null,
+      ...taxColumns(bill.taxes),
       c: row.currency,
       n: row.type_name,
       from: month.from,
@@ -115,10 +112,10 @@ async function insertFreezeFees(tx: TransactionSql, gymId: string, opening: read
   if (opening.length === 0) return 0;
   const opened = await tx<{ id: string }[]>`
     INSERT INTO gym_member_bills
-      (gym_id, held_membership_id, period_index, fee, fee_for, amount_minor, tax_minor, tax_pcm, tax_name, tax_included,
+      (gym_id, held_membership_id, period_index, fee, fee_for, amount_minor, tax_minor, tax_pcm, taxes, tax_included,
        currency, due_on, covers_from, covers_to, created_at, updated_at)
-    SELECT ${gymId}, r.m, NULL, 'freeze', r.n, r.a, r.tm, r.tb, r.tn, r.ti, r.c, r.from, r.from, r.to, ${now}, ${now}
-    FROM jsonb_to_recordset(${tx.json(opening)}) AS r(m uuid, a int, tm int, tb int, tn text, ti boolean, c text, n text, "from" date, "to" date)
+    SELECT ${gymId}, r.m, NULL, 'freeze', r.n, r.a, r.tm, r.tb, r.tx, r.ti, r.c, r.from, r.from, r.to, ${now}, ${now}
+    FROM jsonb_to_recordset(${tx.json(opening)}) AS r(m uuid, a int, tm int, tb int, tx jsonb, ti boolean, c text, n text, "from" date, "to" date)
     ON CONFLICT (held_membership_id, covers_from) WHERE fee = 'freeze' AND (status <> 'void' OR void_reason = 'waived') DO NOTHING
     RETURNING id`;
   if (opened.length > 0) {

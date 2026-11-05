@@ -668,11 +668,12 @@ export function joiningFeeFor(type, choice, canBill, alreadyMember) {
   return { feeMinor: charged ? fee : 0, tick: true, note };
 }
 
-/** A price-list type with the tax its bills charge, as the Add form reads it (18b-iii). */
+/** A price-list type with the taxes its bills charge, in order, as the Add form reads it (18b-iii; 18b-v-b). */
 export function typeWithTax(type, list) {
-  const rate = (list?.taxRates ?? []).find((r) => r.id === type.taxRateId);
+  const rates = list?.taxRates ?? [];
+  const taxes = (type.taxRateIds ?? []).map((id) => rates.find((r) => r.id === id)).filter((r) => r !== undefined).map((r) => ({ name: r.name, pcm: r.pcm }));
   // With the gym's day of the month it bills everyone on (18y), for the first bill's part month.
-  return { ...type, tax: rate === undefined ? null : { name: rate.name, pcm: rate.pcm }, billDay: list?.billDay ?? null };
+  return { ...type, taxes, billDay: list?.billDay ?? null };
 }
 
 /** A key the server takes one membership for, however often the request arrives. */

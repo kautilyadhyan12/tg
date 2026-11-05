@@ -135,10 +135,10 @@ describe('what a membership with a discount comes to', () => {
   const GST = { name: 'GST', pcm: 18000 };
   it.each([
     // [what, type, discount, the gym's prices hold the tax, the lines, later payments, the first bill]
-    ['GST on top of $50.00', { ...GOLD, tax: GST }, null, false, [['Price', '$50.00'], ['GST 18%', '$9.00'], ['Total', '$59.00']], null, 5900],
+    ['GST on top of $50.00', { ...GOLD, taxes: [GST] }, null, false, [['Price', '$50.00'], ['GST 18%', '$9.00'], ['Total', '$59.00']], null, 5900],
     [
       'GST on top, 20% off the first month',
-      { ...GOLD, tax: GST },
+      { ...GOLD, taxes: [GST] },
       FIRST,
       false,
       [['Price', '$50.00'], ['Discount (First month)', '-$10.00'], ['GST 18%', '$7.20'], ['Total', '$47.20']],
@@ -147,16 +147,20 @@ describe('what a membership with a discount comes to', () => {
     ],
     [
       'GST on top, $10.00 off every month',
-      { ...GOLD, tax: GST },
+      { ...GOLD, taxes: [GST] },
       FOUNDERS,
       false,
       [['Price', '$50.00'], ['Discount (Founders)', '-$10.00'], ['GST 18%', '$7.20'], ['Total', '$47.20']],
       'Every payment is $47.20 while the membership lasts.',
       4720,
     ],
-    ['VAT inside £50.00', { ...GOLD, currency: 'GBP', tax: { name: 'VAT', pcm: 20000 } }, null, true, [['Total', '£50.00'], ['Includes VAT 20%', '£8.33']], null, 5000],
+    ['VAT inside £50.00', { ...GOLD, currency: 'GBP', taxes: [{ name: 'VAT', pcm: 20000 }] }, null, true, [['Total', '£50.00'], ['Includes VAT 20%', '£8.33']], null, 5000],
+    // Quebec (18b-v-b): each tax on the price before tax, one line each, $5.00 and $9.98: $114.98.
+    ['GST and QST on top of $100.00', { ...GOLD, priceMinor: 10000, currency: 'CAD', taxes: [{ name: 'GST', pcm: 5000 }, { name: 'QST', pcm: 9975 }] }, null, false, [['Price', 'CA$100.00'], ['GST 5%', 'CA$5.00'], ['QST 9.975%', 'CA$9.98'], ['Total', 'CA$114.98']], null, 11498],
+    // India: CGST and SGST inside ₹1,000.00, ₹76.27 each.
+    ['CGST and SGST inside ₹1,000.00', { ...GOLD, priceMinor: 100000, currency: 'INR', taxes: [{ name: 'CGST', pcm: 9000 }, { name: 'SGST', pcm: 9000 }] }, null, true, [['Total', '₹1,000.00'], ['Includes CGST 9%', '₹76.27'], ['Includes SGST 9%', '₹76.27']], null, 100000],
     ['a type with no tax, at a gym whose prices hold it', GOLD, null, true, [['Total', '$50.00']], null, 5000],
-    ['a free type is free, tax or none', { ...STAFF, tax: GST }, null, false, [['Total', 'Free']], null, 0],
+    ['a free type is free, tax or none', { ...STAFF, taxes: [GST] }, null, false, [['Total', 'Free']], null, 0],
   ])('%s', (_what, type, d, included, lines, later, totalMinor) => {
     const summary = membershipSummary(type, d, included);
     expect(summary.lines.map((l) => [l.label, l.value])).toEqual(lines);
@@ -167,8 +171,8 @@ describe('what a membership with a discount comes to', () => {
   it('the box under the form is drawn only where there is more to say than the price', () => {
     expect(membershipSummary(GOLD, null).shows).toBe(false);
     expect(membershipSummary(GOLD, FIRST).shows).toBe(true);
-    expect(membershipSummary({ ...GOLD, tax: GST }, null).shows).toBe(true);
-    expect(membershipSummary({ ...STAFF, tax: GST }, null).shows).toBe(false);
+    expect(membershipSummary({ ...GOLD, taxes: [GST] }, null).shows).toBe(true);
+    expect(membershipSummary({ ...STAFF, taxes: [GST] }, null).shows).toBe(false);
   });
 
   it('nothing to show for no type, or a discount that would take the whole price', () => {
@@ -180,9 +184,11 @@ describe('what a membership with a discount comes to', () => {
 
 describe('what a person page says of a membership’s tax', () => {
   it('names the rate its bills charge, and nothing where there is none', () => {
-    expect(heldTaxLine({ tax: { name: 'GST', pcm: 18000 } })).toBe('Each bill charges GST 18%.');
-    expect(heldTaxLine({ tax: { name: 'Sales tax', pcm: 8250 } })).toBe('Each bill charges Sales tax 8.25%.');
-    expect(heldTaxLine({ tax: null })).toBeNull();
+    expect(heldTaxLine({ taxes: [{ name: 'GST', pcm: 18000 }] })).toBe('Each bill charges GST 18%.');
+    expect(heldTaxLine({ taxes: [{ name: 'Sales tax', pcm: 8250 }] })).toBe('Each bill charges Sales tax 8.25%.');
+    expect(heldTaxLine({ taxes: [] })).toBeNull();
+    // Several taxes, each named in the order charged (18b-v-b).
+    expect(heldTaxLine({ taxes: [{ name: 'GST', pcm: 5000 }, { name: 'QST', pcm: 9975 }] })).toBe('Each bill charges GST 5% and QST 9.975%.');
   });
 });
 

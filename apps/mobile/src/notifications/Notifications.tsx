@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { StyleSheet, View } from "react-native";
 import { pushTokenResponseSchema } from "@app/shared";
 import { Button } from "../look/Button";
@@ -15,6 +15,7 @@ import {
   phoneAddress,
   saidNotNowAt,
   startNotifications,
+  type NotificationsAllowed,
   type Tapped,
 } from "./phone";
 
@@ -23,7 +24,8 @@ import {
 // person signed in, each time the app opens and whenever Firebase changes it. Drawn under the
 // sign-in's own key, so somebody else signing in starts it again and the address moves to them.
 // A tap on a gym's notification asks for that gym's Inbox, or for the class or event it is about
-// (`useTapAsked`).
+// (`useTapAsked`). Settings reads whether Android lets the app show them, and turns them on (19d:
+// `usePhoneAllows`).
 
 interface Asked {
   /** What a tapped notification asked for, until the Gym tab has opened it. */
@@ -34,15 +36,30 @@ interface Asked {
 const AskedContext = createContext<Asked>({ tapAsked: null, tapOpened: () => undefined });
 export const useTapAsked = () => useContext(AskedContext);
 
+interface PhoneAllows {
+  /** Whether Android lets the app show notifications; null until read. */
+  allowed: NotificationsAllowed | null;
+  /** Reads it again (back from the phone's settings); allowed, the server is given this phone's address. */
+  readAgain: () => Promise<void>;
+  /** Android's own question, then reads it again. */
+  turnOn: () => Promise<void>;
+}
+
+const AllowsContext = createContext<PhoneAllows>({ allowed: null, readAgain: () => Promise.resolve(), turnOn: () => Promise.resolve() });
+export const usePhoneAllows = () => useContext(AllowsContext);
+
 export const NOTIFICATIONS_ASK = {
   title: "Turn on notifications?",
-  line: "Get your gym's messages, class reminders and places from the waitlist, even when the app is closed.",
+  line: "Get messages, free places and comments, even when the app is closed.",
 } as const;
 
 export function NotificationsProvider({ children, onTapped }: { children: ReactNode; onTapped?: () => void }) {
   const { session } = useSession();
   const [asking, setAsking] = useState(false);
   const [tapAsked, setTapAsked] = useState<Tapped | null>(null);
+  const [allowed, setAllowed] = useState<NotificationsAllowed | null>(null);
+  // The last answer read, so the address is given only when notifications have just been allowed.
+  const lastAllowed = useRef<NotificationsAllowed | null>(null);
 
   const give = useCallback(
     async (known?: string) => {
@@ -61,6 +78,8 @@ export function NotificationsProvider({ children, onTapped }: { children: ReactN
     void (async () => {
       const allowed = await notificationsAllowed();
       if (!live()) return;
+      lastAllowed.current = allowed;
+      setAllowed(allowed);
       if (allowed === "yes") {
         await give();
         return;
@@ -86,17 +105,29 @@ export function NotificationsProvider({ children, onTapped }: { children: ReactN
     setAsking(false);
     void keepNotNow(Date.now());
   };
+  const readAgain = useCallback(async () => {
+    const now = await notificationsAllowed();
+    const was = lastAllowed.current;
+    lastAllowed.current = now;
+    setAllowed(now);
+    if (now === "yes" && was !== "yes") await give();
+  }, [give]);
   const allow = async () => {
     setAsking(false);
-    if (await askNotifications()) await give();
+    await askNotifications();
+    await readAgain();
   };
+  const turnOn = useCallback(async () => {
+    await askNotifications();
+    await readAgain();
+  }, [readAgain]);
   const tapOpened = useCallback(() => {
     setTapAsked(null);
   }, []);
 
   return (
     <AskedContext.Provider value={{ tapAsked, tapOpened }}>
-      {children}
+      <AllowsContext.Provider value={{ allowed, readAgain, turnOn }}>{children}</AllowsContext.Provider>
       <Sheet open={asking} title={NOTIFICATIONS_ASK.title} onClose={notNow}>
         <Txt kind="body">{NOTIFICATIONS_ASK.line}</Txt>
         <View style={styles.two}>

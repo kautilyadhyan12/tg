@@ -188,7 +188,7 @@ describe("what a membership is given, what a gym may type, what a cancel may sen
 
   it("the signed agreement says the fee beside the minimum term, and its tax inside it", () => {
     const m = ana();
-    const facts = (tax: { name: string; pcm: number } | null) =>
+    const facts = (taxes: { name: string; pcm: number }[]) =>
       agreementFacts({
         gym: { name: "Iron Works", postalAddress: null, contactPhone: null, contactEmail: null },
         personName: "Ana Silva",
@@ -202,7 +202,7 @@ describe("what a membership is given, what a gym may type, what a cancel may sen
           packClasses: null,
           startsOn: "2026-10-01",
           discount: null,
-          tax,
+          taxes,
           view: heldMembershipView(m, "2026-10-01"),
           contractPeriods: 12,
           leaveFeeMinor: 9900,
@@ -210,7 +210,9 @@ describe("what a membership is given, what a gym may type, what a cancel may sen
         firstBill: null,
         taxIncluded: false,
       });
-    expect(facts(null)).toContainEqual({ label: "Early cancellation fee", value: "$99.00" });
-    expect(facts({ name: "Sales tax", pcm: 8250 })).toContainEqual({ label: "Early cancellation fee", value: "$99.00, Sales tax included" });
+    expect(facts([])).toContainEqual({ label: "Early cancellation fee", value: "$99.00" });
+    expect(facts([{ name: "Sales tax", pcm: 8250 }])).toContainEqual({ label: "Early cancellation fee", value: "$99.00, Sales tax included" });
+    // Several taxes are each named (18b-v-b).
+    expect(facts([{ name: "GST", pcm: 5000 }, { name: "QST", pcm: 9975 }])).toContainEqual({ label: "Early cancellation fee", value: "$99.00, GST and QST included" });
   });
 });

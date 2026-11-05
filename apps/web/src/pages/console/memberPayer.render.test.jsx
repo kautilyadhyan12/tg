@@ -50,7 +50,7 @@ const GOLD = {
   termUnit: 'month',
   packClasses: null,
   packDays: null,
-  tax: null,
+  taxes: [],
 };
 /** Gold Monthly that began on `startsOn`, nothing paid, as the server sends it. */
 function held(n, startsOn) {
@@ -75,7 +75,7 @@ function held(n, startsOn) {
     notCharged: false,
     refundedInFull: false,
     discount: null,
-    tax: null,
+    taxes: [],
     view: heldMembershipView(m, TODAY),
     billing: billingFor(n, m, m, GOLD.priceMinor, TODAY),
   };

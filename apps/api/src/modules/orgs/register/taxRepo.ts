@@ -53,8 +53,9 @@ export async function readRates(sql: Sql | TransactionSql, gymId: string, today:
              (SELECT count(*) FROM gym_product_tax_rates x
               JOIN gym_products p ON p.gym_id = x.gym_id AND p.id = x.product_id
               WHERE x.gym_id = r.gym_id AND x.tax_rate_id = r.id AND p.archived_at IS NULL)::int AS products,
-             (SELECT count(*) FROM gym_membership_types t
-              WHERE t.gym_id = r.gym_id AND t.tax_rate_id = r.id AND t.archived_at IS NULL)::int AS types
+             (SELECT count(*) FROM gym_membership_type_tax_rates x
+              JOIN gym_membership_types t ON t.gym_id = x.gym_id AND t.id = x.membership_type_id
+              WHERE x.gym_id = r.gym_id AND x.tax_rate_id = r.id AND t.archived_at IS NULL)::int AS types
       FROM gym_tax_rates r
       WHERE r.gym_id = ${gymId}
       ORDER BY lower(r.name), r.id
@@ -71,8 +72,12 @@ export type RateWriteOutcome =
   | { kind: "name_taken" }
   /** Something live still charges it: say what, so staff can change it first. */
   | { kind: "in_use"; name: string; products: number; membershipTypes: number; memberships: number }
-  /** A product on sale would charge more than 30% in all (18b-v-a): which one. */
-  | { kind: "taxes_over_cap"; product: string };
+  /** A product on sale, or a type on the price list, would charge more than 30% in all (18b-v-a;
+   *  18b-v-b): which one. */
+  | { kind: "taxes_over_cap"; product: string }
+  /** Memberships people were given keep their rates, and these would charge more than 30% in all
+   *  (18b-v-b): how many. */
+  | { kind: "held_taxes_over_cap"; count: number };
 
 /** The first product on sale, of those charging `rateId` (or of `productIds`), whose rates would
  *  come to more than the cap with `rateId` at `pcm`; null where none would. */
@@ -93,6 +98,42 @@ async function productOverCap(
     ORDER BY lower(p.name), p.id
     LIMIT 1`;
   return over?.name ?? null;
+}
+
+/** The same for the gym's live membership types (18b-v-b). */
+async function typeOverCap(
+  tx: TransactionSql,
+  gymId: string,
+  rateId: string,
+  pcm: number,
+  typeIds: readonly string[] | null,
+): Promise<string | null> {
+  const [over] = await tx<{ name: string }[]>`
+    SELECT t.name FROM gym_membership_types t
+    WHERE t.gym_id = ${gymId} AND t.archived_at IS NULL
+      AND ${typeIds === null ? tx`EXISTS (SELECT 1 FROM gym_membership_type_tax_rates x WHERE x.gym_id = t.gym_id AND x.membership_type_id = t.id AND x.tax_rate_id = ${rateId})` : tx`t.id = ANY(${typeIds}::uuid[])`}
+      AND ${pcm} + COALESCE((SELECT sum(r.rate_pcm) FROM gym_membership_type_tax_rates x
+                             JOIN gym_tax_rates r ON r.gym_id = x.gym_id AND r.id = x.tax_rate_id
+                             WHERE x.gym_id = t.gym_id AND x.membership_type_id = t.id AND x.tax_rate_id <> ${rateId}), 0) > ${SALES_TAX_PCM_MAX}
+    ORDER BY lower(t.name), t.id
+    LIMIT 1`;
+  return over?.name ?? null;
+}
+
+/** How many memberships of the gym's records charging `rateId` would charge more than 30% in all
+ *  with it at `pcm` (18b-v-b). A membership keeps the rates it was sold with, and each of its
+ *  bills and fees charges them as they are that day, ended ones too where a fee comes late, so
+ *  every one on a record counts. Bounded by the gym's own memberships. */
+async function heldOverCap(tx: TransactionSql, gymId: string, rateId: string, pcm: number): Promise<number> {
+  const [row] = await tx<{ n: number }[]>`
+    SELECT count(*)::int AS n
+    FROM gym_held_membership_tax_rates x
+    JOIN gym_held_memberships h ON h.gym_id = x.gym_id AND h.id = x.held_membership_id AND h.entry_id IS NOT NULL
+    WHERE x.gym_id = ${gymId} AND x.tax_rate_id = ${rateId}
+      AND ${pcm} + COALESCE((SELECT sum(r.rate_pcm) FROM gym_held_membership_tax_rates y
+                             JOIN gym_tax_rates r ON r.gym_id = y.gym_id AND r.id = y.tax_rate_id
+                             WHERE y.gym_id = x.gym_id AND y.held_membership_id = x.held_membership_id AND y.tax_rate_id <> ${rateId}), 0) > ${SALES_TAX_PCM_MAX}`;
+  return row?.n ?? 0;
 }
 
 async function nameTaken(tx: TransactionSql, gymId: string, name: string, exceptId: string | null): Promise<boolean> {
@@ -127,8 +168,8 @@ export async function createRate(sql: Sql, input: { gymId: string; name: string;
 }
 
 /** A new name or percentage. Sales and bills already made keep theirs; every one made from
- *  now on charges the new one. A percentage that would take a product's taxes past 30% in all
- *  is refused (18b-v-a). */
+ *  now on charges the new one. A percentage that would take a product's, a type's or a
+ *  membership's taxes past 30% in all is refused (18b-v-a; 18b-v-b). */
 export async function updateRate(sql: Sql, input: { gymId: string; rateId: string; name: string; pcm: number; actorUserId: string; now: Date }): Promise<RateWriteOutcome> {
   return await sql.begin(async (tx): Promise<RateWriteOutcome> => {
     await lockOrgRow(tx, input.gymId);
@@ -137,8 +178,10 @@ export async function updateRate(sql: Sql, input: { gymId: string; rateId: strin
     if (before.name === input.name && before.pcm === input.pcm) return { kind: "ok" };
     if (await nameTaken(tx, input.gymId, input.name, input.rateId)) return { kind: "name_taken" };
     if (input.pcm > before.pcm) {
-      const over = await productOverCap(tx, input.gymId, input.rateId, input.pcm, null);
+      const over = (await productOverCap(tx, input.gymId, input.rateId, input.pcm, null)) ?? (await typeOverCap(tx, input.gymId, input.rateId, input.pcm, null));
       if (over !== null) return { kind: "taxes_over_cap", product: over };
+      const held = await heldOverCap(tx, input.gymId, input.rateId, input.pcm);
+      if (held > 0) return { kind: "held_taxes_over_cap", count: held };
     }
     await tx`
       UPDATE gym_tax_rates SET name = ${input.name}, rate_pcm = ${input.pcm}, updated_at = ${input.now}
@@ -188,9 +231,8 @@ export type ChargeOutcome =
   | { kind: "free"; name: string };
 
 /** WHAT CHARGES ONE RATE, in one press: every live type (or product) on the list charges
- *  it; one off the list that charged it no longer does. A type charges one rate, so one on the
- *  list leaves the rate it had; a product keeps its other rates (18b-v-a), and one whose rates
- *  would come to more than 30% in all refuses the press. Memberships people already hold keep
+ *  it; one off the list that charged it no longer does. Each keeps its other rates (18b-v-a;
+ *  18b-v-b), and one whose rates would come to more than 30% in all refuses the press. Memberships people already hold keep
  *  the rate they were sold with. Each row changed is stamped, so a form opened on it before
  *  is refused rather than saved over this. */
 export async function chargeRate(
@@ -214,7 +256,7 @@ export async function chargeRate(
       const free = listed.find((row) => row.price_minor === 0);
       if (free !== undefined) return { kind: "free", name: free.name };
     }
-    const charged = input.use === "memberships" ? await chargeTypes(tx, input, ids) : await chargeProducts(tx, input, rate.pcm, ids);
+    const charged = input.use === "memberships" ? await chargeTypes(tx, input, rate.pcm, ids) : await chargeProducts(tx, input, rate.pcm, ids);
     if ("over" in charged) return { kind: "taxes_over_cap", product: charged.over };
     const { on, off } = charged;
     if (on.length > 0 || off.length > 0) {
@@ -233,18 +275,36 @@ export async function chargeRate(
 
 type Charging = { gymId: string; rateId: string; now: Date };
 
-/** A type charges one rate: on the list, this one in place of any other; off it, none. */
-async function chargeTypes(tx: TransactionSql, input: Charging, ids: readonly string[]): Promise<{ on: { id: string }[]; off: { id: string }[] }> {
+/** A type charges as many rates as it needs (18b-v-b), as a product does: on the list, this one as
+ *  well, after its others; off it, not this one. Refused, with the type's name, where one on the
+ *  list would charge more than 30% in all. Memberships already given keep their own. */
+async function chargeTypes(
+  tx: TransactionSql,
+  input: Charging,
+  pcm: number,
+  ids: readonly string[],
+): Promise<{ on: { id: string }[]; off: { id: string }[] } | { over: string }> {
+  const over = await typeOverCap(tx, input.gymId, input.rateId, pcm, ids);
+  if (over !== null) return { over };
   const on = await tx<{ id: string }[]>`
-    UPDATE gym_membership_types SET tax_rate_id = ${input.rateId}, updated_at = ${input.now}
-    WHERE gym_id = ${input.gymId} AND archived_at IS NULL AND id = ANY(${ids}::uuid[])
-      AND tax_rate_id IS DISTINCT FROM ${input.rateId}::uuid
-    RETURNING id`;
+    INSERT INTO gym_membership_type_tax_rates (gym_id, membership_type_id, tax_rate_id, position)
+    SELECT t.gym_id, t.id, ${input.rateId},
+           COALESCE((SELECT max(x.position) FROM gym_membership_type_tax_rates x WHERE x.gym_id = t.gym_id AND x.membership_type_id = t.id), 0) + 1
+    FROM gym_membership_types t
+    WHERE t.gym_id = ${input.gymId} AND t.archived_at IS NULL AND t.id = ANY(${ids}::uuid[])
+    ON CONFLICT (membership_type_id, tax_rate_id) DO NOTHING
+    RETURNING membership_type_id AS id`;
   const off = await tx<{ id: string }[]>`
-    UPDATE gym_membership_types SET tax_rate_id = NULL, updated_at = ${input.now}
-    WHERE gym_id = ${input.gymId} AND archived_at IS NULL AND tax_rate_id = ${input.rateId}
-      AND NOT (id = ANY(${ids}::uuid[]))
-    RETURNING id`;
+    DELETE FROM gym_membership_type_tax_rates x
+    USING gym_membership_types t
+    WHERE x.gym_id = ${input.gymId} AND x.tax_rate_id = ${input.rateId}
+      AND t.gym_id = x.gym_id AND t.id = x.membership_type_id AND t.archived_at IS NULL
+      AND NOT (x.membership_type_id = ANY(${ids}::uuid[]))
+    RETURNING x.membership_type_id AS id`;
+  const changed = [...on, ...off].map((r) => r.id);
+  if (changed.length > 0) {
+    await tx`UPDATE gym_membership_types SET updated_at = ${input.now} WHERE gym_id = ${input.gymId} AND id = ANY(${changed}::uuid[])`;
+  }
   return { on, off };
 }
 

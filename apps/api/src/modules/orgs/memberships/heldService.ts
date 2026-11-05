@@ -170,7 +170,7 @@ function billingOf(
       covers: b.covers,
       part: b.periodIndex === 0 && row.membership.fullFrom !== null,
       amountMinor: b.amountMinor,
-      tax: b.tax,
+      taxes: b.taxes,
       joiningFeeMinor: b.joiningFeeMinor,
       changeCreditMinor: b.changeCreditMinor,
       movedMinor: b.movedMinor,
@@ -293,7 +293,7 @@ function feeOf(
     on: f.on,
     to: f.to,
     amountMinor: f.amountMinor,
-    tax: f.tax,
+    taxes: f.taxes,
     dueOn: f.dueOn,
     state:
       f.waived !== null
@@ -473,7 +473,7 @@ async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: 
       ),
       discount: row.discount,
       freeDays: freeDays.get(row.id) ?? [],
-      tax: row.tax,
+      taxes: row.taxes,
       view: viewOf(row, list.bills, list.fees, today, list.past),
       changedFrom: ((c) => (c === undefined ? null : { typeName: c.oldName, stopped: c.stopped }))(changedFrom(row.id)),
       changedTo: ((c) => (c === undefined ? null : { typeName: c.newName, startsOn: c.startsOn }))(changedTo(row.id)),

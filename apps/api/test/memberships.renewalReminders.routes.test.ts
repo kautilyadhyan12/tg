@@ -356,7 +356,7 @@ d("A reminder before a renewal or a minimum term's end (real Postgres)", { timeo
     await sql`UPDATE gyms SET renewal_reminders_checked_at = ${clock} WHERE id = ${gym.id}`;
     const saved = (JSON.parse((await send("GET", `/v1/orgs/${gym.id}/membership-types`, gym.cookies)).body) as GymMembershipTypesResponse).types.find((t) => t.id === line);
     const put = await send("PUT", `/v1/orgs/${gym.id}/membership-types/${line}`, gym.cookies, {
-      ...weekly, includesPt: false, ptLimit: null, ptPeriod: null, taxRateId: null, joiningFeeMinor: 0, contractPeriods: null, contractThen: null,
+      ...weekly, includesPt: false, ptLimit: null, ptPeriod: null, taxRateIds: [], joiningFeeMinor: 0, contractPeriods: null, contractThen: null,
       noticeDays: null, leaveFeeMinor: null, coolingOffDays: null, renewalReminderDays: 3, termReminderDays: null, updatedAt: saved?.updatedAt,
     });
     expect(put.statusCode, put.body).toBe(200);
