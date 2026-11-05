@@ -7,12 +7,12 @@
 // Meal/photo criteria are seeded but their stats evaluate to 0 until
 // those modules land (P2.5/P2.6) — data, not code.
 import { z } from "zod";
-import type { Badge } from "@app/shared";
-import { bandOf } from "../nutrition/foodWeek.js";
+import type { Badge, FoodWeekDay } from "@app/shared";
 import { TIER_XP, type BadgeTier } from "./xp.js";
 
 /** criteria jsonb shape (Part 4 §3.8). stat = key into the evaluator's
- *  stats record; minWorkouts = form_master's "over 5 workouts" guard
+ *  stats record; minWorkouts = form_master's "over 5 workouts" guard, counted in
+ *  workouts the camera scored, as the average it guards is (35c-iii's review)
  *  (badges.py:284). */
 export const criteriaSchema = z
   .object({
@@ -81,7 +81,7 @@ export type Stats = Readonly<Record<string, number>>;
  *  produce yet simply reads 0 (never earned, never crashes). */
 export function evaluate(criteria: Criteria, stats: Stats): boolean {
   const value = stats[criteria.stat] ?? 0;
-  if (criteria.minWorkouts !== undefined && (stats["total_workouts"] ?? 0) < criteria.minWorkouts) {
+  if (criteria.minWorkouts !== undefined && (stats["scored_workouts"] ?? 0) < criteria.minWorkouts) {
     return false;
   }
   return value >= criteria.gte;
@@ -91,34 +91,27 @@ export function earnedCodes(stats: Stats): string[] {
   return ACHIEVEMENTS.filter((a) => evaluate(a.criteria, stats)).map((a) => a.code);
 }
 
-/** A day of food as Macro Master reads it: the protein logged that day and the day's
- *  own protein target, as "Your week in food" kept it (food_day_targets). */
-export interface ProteinDay {
-  day: string; // YYYY-MM-DD in the person's time zone
-  eatenG: number;
-  targetG: number;
-}
+/** A day of Your week in food, as Macro Master reads it: whether it is today, and its bands
+ *  (null on a day with no meal, or no target to read it against). */
+export type ProteinDay = Pick<FoodWeekDay, "day" | "today" | "bands">;
 
 /** The days in a row the person hit their protein target (ROADMAP 35c-iii; Macro Master),
- *  ending today, or yesterday while today has not hit it yet. A day hits when its protein
- *  is not under the target as "Your week in food" bands it (within 10 % counts), so the
- *  two screens agree; a day with no target kept, or a target of 0, never counts. */
-export function proteinRun(days: readonly ProteinDay[], today: string): number {
-  const hit = new Set(days.filter((d) => d.targetG > 0 && bandOf(d.eatenG, d.targetG) !== "under").map((d) => d.day));
-  let day = hit.has(today) ? today : dayBefore(today);
+ *  ending today, or yesterday while today has not hit it yet. A day hits when Your week in
+ *  food bands its protein on or over the target, read by that screen's own function
+ *  (`foodWeek`): a day against the targets kept on it or else today's, today always
+ *  against today's. So the two screens cannot disagree about a day. */
+export function proteinRun(days: readonly ProteinDay[]): number {
+  const hit = (d: ProteinDay) => d.bands !== null && d.bands.proteinG !== "under";
+  const newestFirst = [...days].sort((x, y) => (x.day < y.day ? 1 : -1));
+  const from = newestFirst[0]?.today === true && !hit(newestFirst[0]) ? 1 : 0;
   let run = 0;
-  while (hit.has(day)) {
+  for (const d of newestFirst.slice(from)) {
+    if (!hit(d)) break;
     run += 1;
-    day = dayBefore(day);
   }
   return run;
 }
 
-function dayBefore(day: string): string {
-  const [y, m, d] = day.split("-").map(Number);
-  if (y === undefined || m === undefined || d === undefined) throw new Error(`not a day: ${day}`);
-  return new Date(Date.UTC(y, m - 1, d - 1)).toISOString().slice(0, 10);
-}
 
 /** Every badge for the person (ROADMAP 35c-iii): earned ones with their day, the rest
  *  with how far along they are. `current` never passes the target, and is floored, so
@@ -128,7 +121,7 @@ export function badgeList(stats: Stats, earned: ReadonlyMap<string, Date>): Badg
     const at = earned.get(a.code);
     const { gte, minWorkouts } = a.criteria;
     const value = Math.floor(stats[a.criteria.stat] ?? 0);
-    const workouts = Math.floor(stats["total_workouts"] ?? 0);
+    const workouts = Math.floor(stats["scored_workouts"] ?? 0);
     return {
       code: a.code,
       tier: a.tier,

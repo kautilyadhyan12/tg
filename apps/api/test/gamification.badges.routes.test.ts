@@ -6,10 +6,11 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
-import { badgeListSchema, gamificationMeSchema, type Badge, type BadgeList } from "@app/shared";
+import { badgeListSchema, foodWeekResponseSchema, gamificationMeSchema, nutritionTargetsResponseSchema, type Badge, type BadgeList } from "@app/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import type { EmailSender } from "../src/modules/auth/email.js";
+import { onMealLogged } from "../src/modules/gamification/service.js";
 import { dayInTz } from "../src/modules/gamification/streak.js";
 
 const url = process.env["DATABASE_URL"];
@@ -45,7 +46,7 @@ d("every badge (real Postgres)", () => {
     if (app === undefined) throw new Error("beforeAll did not build the app");
     return app;
   };
-  const inject = (opts: { method: "GET" | "POST"; url: string; body?: unknown; cookies?: Cookies }) =>
+  const inject = (opts: { method: "GET" | "POST" | "PUT" | "PATCH"; url: string; body?: unknown; cookies?: Cookies }) =>
     api().inject({
       method: opts.method,
       url: opts.url,
@@ -94,11 +95,33 @@ d("every badge (real Postgres)", () => {
     if (b === undefined) throw new Error(`no ${code}`);
     return b;
   };
+  const makePlanned = async (name: string): Promise<{ cookies: Cookies; id: string }> => {
+    const person = await makeUser(name);
+    const answers = {
+      weightGoal: "maintain", age: 30, gender: "female", heightCm: 165, weightKg: 70,
+      dayActivity: "sitting", trainingDays: 3, sessionMinutes: 45, fitnessLevel: "intermediate",
+    };
+    expect((await inject({ method: "PATCH", url: "/v1/users/me/onboarding", body: answers, cookies: person.cookies })).statusCode).toBe(200);
+    expect((await inject({ method: "PUT", url: "/v1/users/me/health-screening", body: { hasCondition: false }, cookies: person.cookies })).statusCode).toBe(200);
+    expect((await inject({ method: "PATCH", url: "/v1/users/me/onboarding", body: { diet: "non_vegetarian", mealsPerDay: 3, onboardingCompleted: true }, cookies: person.cookies })).statusCode).toBe(200);
+    return person;
+  };
+  const proteinTarget = async (cookies: Cookies): Promise<number> => {
+    const res = await inject({ method: "GET", url: "/v1/nutrition/targets", cookies });
+    const targets = nutritionTargetsResponseSchema.parse(JSON.parse(res.body)).targets;
+    if (targets === null) throw new Error("the planned fixture has no targets");
+    return Math.round(targets.proteinG);
+  };
+  const meRead = async (cookies: Cookies) =>
+    gamificationMeSchema.parse(JSON.parse((await inject({ method: "GET", url: "/v1/gamification/me", cookies })).body)).achievements;
+  /** A moment of `today` (UTC) at most `ago` ms before now, never before the day began. */
+  const inToday = (today: string, ago: number) => new Date(Math.max(Date.parse(`${today}T00:00:01Z`), Date.now() - ago));
   const xpOf = async (userId: string) => (await sql<{ total_xp: number }[]>`SELECT total_xp FROM user_xp WHERE user_id = ${userId}`)[0]?.total_xp ?? 0;
   const plus = (day: string, n: number) => new Date(Date.parse(`${day}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
 
   const mine = sql`SELECT id FROM users WHERE email LIKE 'badges-%@example.com'`;
   const clear = async () => {
+    await sql`DELETE FROM user_achievements WHERE user_id IN (${mine})`;
     await sql`DELETE FROM meal_logs WHERE user_id IN (${mine})`;
     await sql`DELETE FROM food_day_targets WHERE user_id IN (${mine})`;
     await sql`DELETE FROM workouts WHERE user_id IN (${mine})`;
@@ -149,42 +172,82 @@ d("every badge (real Postgres)", () => {
     expect(fromList.sort((a, b) => a.code.localeCompare(b.code))).toEqual([...earned].sort((a, b) => a.code.localeCompare(b.code)));
   });
 
-  it("a badge reached before the list is read is awarded once, with its XP", async () => {
+  it("a badge reached before the list is read is awarded once, with its XP, and the Dashboard's read then agrees", async () => {
     const late = await makeUser("late");
     await putWorkouts(late.id, 1); // straight into the table: no sync hook has awarded First Workout
     expect(await sql`SELECT 1 FROM user_achievements WHERE user_id = ${late.id}`).toHaveLength(0);
+    expect(await meRead(late.cookies)).toEqual([]);
     const before = await xpOf(late.id);
     const [a, b] = await Promise.all([read(late.cookies), read(late.cookies)]);
     expect(one(a, "first_workout").earnedAt).not.toBeNull();
     expect(one(b, "first_workout").earnedAt).toBe(one(a, "first_workout").earnedAt);
     expect(await sql`SELECT 1 FROM user_achievements WHERE user_id = ${late.id} AND code = 'first_workout'`).toHaveLength(1);
     expect(await xpOf(late.id)).toBeGreaterThan(before);
+    expect(await meRead(late.cookies)).toEqual([{ code: "first_workout", earnedAt: one(a, "first_workout").earnedAt }]);
   });
 
-  it("Macro Master counts the days the protein target was hit, against each day's own target", async () => {
-    const eater = await makeUser("eater");
-    const today = dayInTz(new Date(), "UTC");
-    // Six days in a row up to yesterday, each at or over its own target.
-    for (let back = 6; back >= 1; back--) {
-      const day = plus(today, -back);
-      await keepTarget(eater.id, day, 100);
-      await putMeal(eater.id, new Date(`${day}T12:00:00Z`), 95);
-    }
-    expect(one(await read(eater.cookies), "macro_master")).toMatchObject({ current: 6, target: 7, earnedAt: null });
+  describe("Macro Master reads each day as Your week in food does", () => {
+    it("a day whose meals reached the server later, with no target kept, counts as Your week in food counts it", async () => {
+      const eater = await makePlanned("late-meals");
+      const target = await proteinTarget(eater.cookies);
+      const today = dayInTz(new Date(), "UTC");
+      // Six days up to yesterday, each saved afterwards: no target was kept on any of them.
+      for (let back = 6; back >= 1; back--) await putMeal(eater.id, new Date(`${plus(today, -back)}T12:00:00Z`), target + 5);
+      expect(await sql`SELECT 1 FROM food_day_targets WHERE user_id = ${eater.id}`).toHaveLength(0);
+      const week = foodWeekResponseSchema.parse(JSON.parse((await inject({ method: "GET", url: "/v1/nutrition/food-week?days=7", cookies: eater.cookies })).body));
+      const onInWeek = week.days.filter((d) => !d.today && d.bands?.proteinG !== undefined && d.bands.proteinG !== "under").length;
+      expect(onInWeek).toBe(6);
+      expect(one(await read(eater.cookies), "macro_master")).toMatchObject({ current: 6, target: 7, earnedAt: null });
 
-    // Today under: still six. Then a second meal takes today over, and the badge is earned.
-    await keepTarget(eater.id, today, 100);
-    await putMeal(eater.id, new Date(Date.now() - 60_000), 40);
-    expect(one(await read(eater.cookies), "macro_master")).toMatchObject({ current: 6, earnedAt: null });
-    await putMeal(eater.id, new Date(Date.now() - 30_000), 60);
-    expect(one(await read(eater.cookies), "macro_master").earnedAt).not.toBeNull();
-  });
+      // Today under the target: still six. A second meal of today takes it over, and the badge is earned.
+      await putMeal(eater.id, inToday(today, 120_000), Math.floor(target / 3));
+      expect(one(await read(eater.cookies), "macro_master")).toMatchObject({ current: 6, earnedAt: null });
+      await putMeal(eater.id, inToday(today, 60_000), target);
+      expect(one(await read(eater.cookies), "macro_master").earnedAt).not.toBeNull();
+    });
 
-  it("a day with no target kept does not count toward Macro Master", async () => {
-    const noTarget = await makeUser("notarget");
-    const today = dayInTz(new Date(), "UTC");
-    await putMeal(noTarget.id, new Date(`${plus(today, -1)}T12:00:00Z`), 300);
-    expect(one(await read(noTarget.cookies), "macro_master").current).toBe(0);
+    it("each day against its own kept target, never another day's or today's", async () => {
+      const eater = await makePlanned("own-target");
+      const target = await proteinTarget(eater.cookies);
+      const today = dayInTz(new Date(), "UTC");
+      // Two days back: kept high, eaten under it, though over today's target.
+      const high = Math.round(target * 1.3);
+      await keepTarget(eater.id, plus(today, -2), high);
+      await putMeal(eater.id, new Date(`${plus(today, -2)}T12:00:00Z`), Math.round(target * 1.1));
+      // Yesterday: kept low, eaten over it, though under today's target.
+      const low = Math.max(Math.round(target * 0.5), 1);
+      await keepTarget(eater.id, plus(today, -1), low);
+      await putMeal(eater.id, new Date(`${plus(today, -1)}T12:00:00Z`), Math.round(target * 0.6));
+      expect(one(await read(eater.cookies), "macro_master").current).toBe(1);
+    });
+
+    it("days are the person's own: a meal at 1 am in Kolkata is that day's, not the day before in UTC", async () => {
+      const eater = await makePlanned("kolkata");
+      await sql`UPDATE users SET timezone = 'Asia/Kolkata' WHERE id = ${eater.id}`;
+      const target = await proteinTarget(eater.cookies);
+      const yesterday = plus(dayInTz(new Date(), "Asia/Kolkata"), -1);
+      // 01:00 in Kolkata is 19:30 UTC of the day before.
+      await putMeal(eater.id, new Date(Date.parse(`${yesterday}T01:00:00+05:30`)), target + 5);
+      expect(one(await read(eater.cookies), "macro_master").current).toBe(1);
+    });
+
+    it("a person with no protein target and no day kept has no run, whoever else kept one that day", async () => {
+      const noTarget = await makeUser("notarget");
+      const other = await makePlanned("other-kept");
+      const yesterday = plus(dayInTz(new Date(), "UTC"), -1);
+      await keepTarget(other.id, yesterday, 50);
+      await putMeal(noTarget.id, new Date(`${yesterday}T12:00:00Z`), 300);
+      expect(one(await read(noTarget.cookies), "macro_master").current).toBe(0);
+    });
+
+    it("the meal hook awards it with no read of the list", async () => {
+      const eater = await makePlanned("hook");
+      const target = await proteinTarget(eater.cookies);
+      const today = dayInTz(new Date(), "UTC");
+      for (let back = 7; back >= 1; back--) await putMeal(eater.id, new Date(`${plus(today, -back)}T12:00:00Z`), target + 5);
+      await onMealLogged({ sql }, eater.id, null);
+      expect(await sql`SELECT 1 FROM user_achievements WHERE user_id = ${eater.id} AND code = 'macro_master'`).toHaveLength(1);
+    });
   });
 
   it("refuses nobody signed in, and a query", async () => {

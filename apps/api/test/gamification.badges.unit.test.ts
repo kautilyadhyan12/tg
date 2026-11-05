@@ -22,12 +22,12 @@ describe("badgeList: an unearned badge never reads as reached", () => {
   });
 
   it("an average of 89.6 reads 89 of 90, never 90", () => {
-    const one = badgeList({ avg_form_last5: 89.6, total_workouts: 9 }, NONE).find((b) => b.code === "form_master");
+    const one = badgeList({ avg_form_last5: 89.6, total_workouts: 12, scored_workouts: 9 }, NONE).find((b) => b.code === "form_master");
     expect(one).toMatchObject({ current: 89, target: 90, workoutsFirst: { current: 5, target: 5 }, earnedAt: null });
   });
 
-  it("Form Master with 3 workouts says 3 of 5 workouts first", () => {
-    const one = badgeList({ avg_form_last5: 95, total_workouts: 3 }, NONE).find((b) => b.code === "form_master");
+  it("Form Master with 3 scored workouts of 9 says 3 of 5 first: the average is of scored workouts", () => {
+    const one = badgeList({ avg_form_last5: 95, total_workouts: 9, scored_workouts: 3 }, NONE).find((b) => b.code === "form_master");
     expect(one?.workoutsFirst).toEqual({ current: 3, target: 5 });
   });
 
@@ -64,29 +64,29 @@ describe("badgeList: an earned badge", () => {
 });
 
 describe("proteinRun: the days in a row the protein target was hit (Macro Master)", () => {
-  const day = (d: string, eatenG: number, targetG = 100): ProteinDay => ({ day: d, eatenG, targetG });
+  // Days as Your week in food bands them: the run reads that screen's own bands, so the two agree.
+  type Band = "under" | "on" | "over";
   const TODAY = "2026-11-05";
+  const back = (n: number) => new Date(Date.parse(`${TODAY}T00:00:00Z`) - n * 86_400_000).toISOString().slice(0, 10);
+  const day = (n: number, protein: Band | null): ProteinDay => ({
+    day: back(n),
+    today: n === 0,
+    bands: protein === null ? null : { kcal: "on", proteinG: protein, carbsG: "on", fatG: "on" },
+  });
 
   it.each([
-    { name: "nothing logged", days: [], run: 0 },
-    { name: "today alone, hit", days: [day("2026-11-05", 100)], run: 1 },
-    { name: "today not hit yet: the run up to yesterday stands", days: [day("2026-11-04", 120), day("2026-11-05", 30)], run: 1 },
-    { name: "yesterday missed: today starts again", days: [day("2026-11-03", 120), day("2026-11-05", 100)], run: 1 },
-    { name: "a gap two days back ends the run", days: [day("2026-11-02", 120), day("2026-11-04", 120), day("2026-11-05", 120)], run: 2 },
-    {
-      name: "seven in a row up to today",
-      days: ["2026-10-30", "2026-10-31", "2026-11-01", "2026-11-02", "2026-11-03", "2026-11-04", "2026-11-05"].map((d) => day(d, 110)),
-      run: 7,
-    },
-    // Within 10 % is on target, as "Your week in food" bands it: 90 g of 100 counts, 89.9 g does not.
-    { name: "90 g of 100 counts", days: [day("2026-11-05", 90)], run: 1 },
-    { name: "89.9 g of 100 does not", days: [day("2026-11-05", 89.9)], run: 0 },
-    { name: "over the target counts", days: [day("2026-11-05", 250)], run: 1 },
-    { name: "a target of 0 never counts", days: [day("2026-11-05", 50, 0)], run: 0 },
-    { name: "the month's edge", days: [day("2026-10-31", 100), day("2026-11-01", 100)], today: "2026-11-01", run: 2 },
-    { name: "the year's edge", days: [day("2025-12-31", 100), day("2026-01-01", 100)], today: "2026-01-01", run: 2 },
-  ])("$name → $run", ({ days, run, today }) => {
-    expect(proteinRun(days, today ?? TODAY)).toBe(run);
+    { name: "nothing logged", days: [day(1, null), day(0, null)], run: 0 },
+    { name: "today alone, on", days: [day(0, "on")], run: 1 },
+    { name: "today under so far: the run up to yesterday stands", days: [day(1, "over"), day(0, "under")], run: 1 },
+    { name: "today with no meal yet: the run up to yesterday stands", days: [day(2, "on"), day(1, "on"), day(0, null)], run: 2 },
+    { name: "yesterday missed: today starts again", days: [day(2, "on"), day(1, null), day(0, "on")], run: 1 },
+    { name: "yesterday under: the run ends there", days: [day(2, "on"), day(1, "under"), day(0, "on")], run: 1 },
+    { name: "seven in a row up to today", days: [6, 5, 4, 3, 2, 1, 0].map((n) => day(n, "on")), run: 7 },
+    { name: "seven in a row up to yesterday, today not yet", days: [...[7, 6, 5, 4, 3, 2, 1].map((n) => day(n, "on")), day(0, "under")], run: 7 },
+    { name: "over counts as on", days: [day(1, "over"), day(0, "over")], run: 2 },
+    { name: "the order the days come in does not matter", days: [day(0, "on"), day(2, "on"), day(1, "on")], run: 3 },
+  ])("$name → $run", ({ days, run }) => {
+    expect(proteinRun(days)).toBe(run);
   });
 
   it("seven days earn Macro Master, six do not", () => {

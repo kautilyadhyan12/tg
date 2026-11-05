@@ -209,6 +209,7 @@ export async function getStats(
   const [agg] = await sql<
     {
       total_workouts: string;
+      scored_workouts: string;
       total_kcal: string;
       perfect_form_count: string;
       morning_workouts: string;
@@ -216,6 +217,7 @@ export async function getStats(
     }[]
   >`
     SELECT count(*) AS total_workouts,
+           count(*) FILTER (WHERE avg_form_score IS NOT NULL) AS scored_workouts,
            coalesce(sum(kcal_point), 0) AS total_kcal,
            count(*) FILTER (WHERE avg_form_score = 100) AS perfect_form_count,
            -- badges.py:129 "before 8am" / :137 "after 9pm" (R0.4)
@@ -239,6 +241,7 @@ export async function getStats(
     FROM meal_logs WHERE user_id = ${userId}`;
   return {
     total_workouts: Number(agg?.total_workouts ?? 0),
+    scored_workouts: Number(agg?.scored_workouts ?? 0),
     total_kcal: Number(agg?.total_kcal ?? 0),
     perfect_form_count: Number(agg?.perfect_form_count ?? 0),
     morning_workouts: Number(agg?.morning_workouts ?? 0),
@@ -248,32 +251,6 @@ export async function getStats(
     total_meals: Number(meals?.total_meals ?? 0),
     photo_meals_logged: Number(meals?.photo_meals_logged ?? 0),
   };
-}
-
-/** Each day from `from` to `to` with a meal: its protein and the day's kept protein target
- *  (food_day_targets), for Macro Master (ROADMAP 35c-iii). A day with no target kept is
- *  left out. Days are the person's own, in `timeZone`. */
-export async function proteinDays(
-  sql: SqlOrTx,
-  userId: string,
-  timeZone: string,
-  from: string,
-  to: string,
-): Promise<{ day: string; eatenG: number; targetG: number }[]> {
-  const rows = await sql<{ day: string; eaten: string; target: number }[]>`
-    SELECT m.day::text AS day, coalesce(sum(m.protein_g), 0)::text AS eaten, t.protein_g AS target
-    FROM (
-      SELECT (taken_at AT TIME ZONE ${timeZone})::date AS day, protein_g
-      FROM meal_logs
-      WHERE user_id = ${userId}
-        AND taken_at >= (${from}::date - 1)::timestamp AT TIME ZONE 'UTC'
-        AND taken_at < (${to}::date + 2)::timestamp AT TIME ZONE 'UTC'
-        AND (taken_at AT TIME ZONE ${timeZone})::date BETWEEN ${from}::date AND ${to}::date
-    ) m
-    JOIN food_day_targets t ON t.user_id = ${userId} AND t.day = m.day
-    GROUP BY m.day, t.protein_g
-    ORDER BY m.day`;
-  return rows.map((r) => ({ day: r.day, eatenG: Number(r.eaten), targetG: r.target }));
 }
 
 // ── Weekly challenges (ROADMAP 35b) ─────────────────────────────────────────

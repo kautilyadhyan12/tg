@@ -1,4 +1,4 @@
-import type { Badge, BadgeTier, WeeklyChallenge, WeeklyChallengeMeasure } from "@app/shared";
+import type { Badge, BadgeTier, LeaderboardBoard, WeeklyChallenge, WeeklyChallengeMeasure } from "@app/shared";
 import { BADGE_NAMES } from "../dashboard/words";
 
 // Achievements' rules and words (ROADMAP Stage 5 35c-iii; Kd's drawing of 2026-11-05,
@@ -43,12 +43,12 @@ export const BADGE_WORDS: Readonly<Record<string, BadgeWords>> = {
   ten_workouts: { group: "milestones", unit: "workouts", takes: (n) => `Finish ${plural(n, "workout", "workouts")}.` },
   fifty_workouts: { group: "milestones", unit: "workouts", takes: (n) => `Finish ${plural(n, "workout", "workouts")}.` },
   hundred_workouts: { group: "milestones", unit: "workouts", takes: (n) => `Finish ${plural(n, "workout", "workouts")}.` },
-  streak_3: { group: "streaks", unit: "days", takes: (n) => `Train ${plural(n, "day", "days")} in a row.` },
-  streak_7: { group: "streaks", unit: "days", takes: (n) => `Train ${plural(n, "day", "days")} in a row.` },
-  streak_30: { group: "streaks", unit: "days", takes: (n) => `Train ${plural(n, "day", "days")} in a row.` },
-  streak_100: { group: "streaks", unit: "days", takes: (n) => `Train ${plural(n, "day", "days")} in a row.` },
+  streak_3: { group: "streaks", unit: "days", takes: (n) => `Keep your streak going ${plural(n, "day", "days")}.` },
+  streak_7: { group: "streaks", unit: "days", takes: (n) => `Keep your streak going ${plural(n, "day", "days")}.` },
+  streak_30: { group: "streaks", unit: "days", takes: (n) => `Keep your streak going ${plural(n, "day", "days")}.` },
+  streak_100: { group: "streaks", unit: "days", takes: (n) => `Keep your streak going ${plural(n, "day", "days")}.` },
   form_perfect: { group: "form", unit: "workouts", takes: () => "Finish a workout with form 100." },
-  form_master: { group: "form", unit: "form", takes: (n) => `Average form ${count(n)} or higher over your last 5 workouts.` },
+  form_master: { group: "form", unit: "form", takes: (n) => `Average form ${count(n)} or higher over your last 5 scored workouts.` },
   calorie_1k: { group: "calories", unit: "kcal", takes: (n) => `Burn ${count(n)} kcal in workouts.` },
   calorie_10k: { group: "calories", unit: "kcal", takes: (n) => `Burn ${count(n)} kcal in workouts.` },
   early_bird: { group: "habits", unit: "workouts", takes: (n) => `Start ${plural(n, "workout", "workouts")} before 8 am.` },
@@ -108,7 +108,7 @@ const UNIT_WORDS: Record<Unit, [string, string]> = {
 export function progressWords(b: ShownBadge): string {
   const { current, target, workoutsFirst } = b.badge;
   if (workoutsFirst !== null && workoutsFirst.current < workoutsFirst.target) {
-    return `${count(workoutsFirst.current)} of ${plural(workoutsFirst.target, "workout", "workouts")} first`;
+    return `${count(workoutsFirst.current)} of ${plural(workoutsFirst.target, "scored workout", "scored workouts")} first`;
   }
   if (b.unit === "form") return `Form ${count(current)} of ${count(target)}`;
   const [one, many] = UNIT_WORDS[b.unit];
@@ -118,7 +118,7 @@ export function progressWords(b: ShownBadge): string {
 /** The words under the figure in a badge's box: "of 10 workouts", "of 90 average form", "of 5 workouts first". */
 export function ofWords(b: ShownBadge): string {
   const { target, workoutsFirst } = b.badge;
-  if (workoutsFirst !== null && workoutsFirst.current < workoutsFirst.target) return `of ${plural(workoutsFirst.target, "workout", "workouts")} first`;
+  if (workoutsFirst !== null && workoutsFirst.current < workoutsFirst.target) return `of ${plural(workoutsFirst.target, "scored workout", "scored workouts")} first`;
   if (b.unit === "form") return `of ${count(target)} average form`;
   const [one, many] = UNIT_WORDS[b.unit];
   return `of ${count(target)} ${target === 1 ? one : many}`;
@@ -129,7 +129,7 @@ export function toGoWords(b: ShownBadge): string {
   const { current, target, workoutsFirst } = b.badge;
   if (workoutsFirst !== null && workoutsFirst.current < workoutsFirst.target) {
     const left = workoutsFirst.target - workoutsFirst.current;
-    return `${plural(left, "more workout", "more workouts")} first, then your average counts.`;
+    return `${plural(left, "more scored workout", "more scored workouts")} first, then your average counts.`;
   }
   if (b.unit === "form") return `Your average is ${count(current)}. It needs ${count(target)}.`;
   const left = Math.max(target - current, 0);
@@ -181,6 +181,17 @@ export function challengeToGo(c: Pick<WeeklyChallenge, "current" | "target" | "m
   const left = Math.max(c.target - c.current, 0);
   const unit: Partial<Record<WeeklyChallengeMeasure, string>> = { kcal_burned: " kcal", training_minutes: " min" };
   return `${count(left)}${unit[c.measure] ?? ""} to go`;
+}
+
+/** The word under a lane's number: what the board counts, as Your place says it. */
+const LANE_UNITS: Record<LeaderboardBoard, readonly [string, string]> = {
+  gym_days: ["visit", "visits"],
+  workout_days: ["workout day", "workout days"],
+  streak: ["week", "weeks"],
+};
+export function laneUnit(value: number, board: LeaderboardBoard): string {
+  const [one, many] = LANE_UNITS[board];
+  return value === 1 ? one : many;
 }
 
 /** A lane's length: the person's figure against the leader's, a little showing for anyone on the

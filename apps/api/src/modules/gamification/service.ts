@@ -179,9 +179,10 @@ export async function reconciledStreak(
   deps: GamificationDeps,
   userId: string,
   timezone: string | null,
+  now: Date = new Date(),
 ): Promise<StreakState> {
   const tz = safeTimeZone(timezone);
-  const today = dayInTz(new Date(), tz);
+  const today = dayInTz(now, tz);
   return await deps.sql.begin(async (tx) => {
     const before = await repo.getStreakForUpdate(tx, userId);
     const after = reconcile(before, today);
@@ -246,13 +247,14 @@ export async function getMe(
 }
 
 /** The figures the badges are judged on: the workouts' and meals' counts, and the days in a
- *  row the person hit their protein target (Macro Master, ROADMAP 35c-iii). */
+ *  row the person hit their protein target (Macro Master, ROADMAP 35c-iii), read from Your
+ *  week in food itself so the two screens give one answer about a day. Its last 30 days are
+ *  more than the badge's 7 in a row ending today or yesterday need. Loaded when called:
+ *  nutrition's service calls this module at a meal's save. */
 async function badgeStats(deps: GamificationDeps, userId: string, tz: string, now: Date = new Date()): Promise<Record<string, number>> {
-  const today = dayInTz(now, tz);
-  // Seven days before today are enough: the badge asks for 7 in a row, ending today or yesterday.
-  const from = new Date(Date.parse(`${today}T00:00:00Z`) - 7 * 86_400_000).toISOString().slice(0, 10);
-  const [stats, protein] = await Promise.all([repo.getStats(deps.sql, userId, tz), repo.proteinDays(deps.sql, userId, tz, from, today)]);
-  return { ...stats, protein_target_streak: proteinRun(protein, today) };
+  const { getFoodWeek } = await import("../nutrition/service.js");
+  const [stats, week] = await Promise.all([repo.getStats(deps.sql, userId, tz), getFoodWeek({ sql: deps.sql }, userId, 30, now)]);
+  return { ...stats, protein_target_streak: proteinRun(week.days) };
 }
 
 /** Every badge for the person, earned or not, with how far along they are (ROADMAP 35c-iii).
@@ -261,7 +263,7 @@ async function badgeStats(deps: GamificationDeps, userId: string, tz: string, no
  *  list never shows a badge as reached and not earned, and XP follows the award. */
 export async function getBadges(deps: GamificationDeps, userId: string, timezone: string | null, now: Date = new Date()): Promise<BadgeList> {
   const tz = safeTimeZone(timezone);
-  const streak = await reconciledStreak(deps, userId, timezone);
+  const streak = await reconciledStreak(deps, userId, timezone, now);
   const stats = { ...(await badgeStats(deps, userId, tz, now)), current_streak: streak.current };
   let earned = await repo.listEarned(deps.sql, userId);
   const owed = earnedCodes(stats).filter((code) => !earned.some((e) => e.code === code));

@@ -13,7 +13,7 @@ import { BOARD_TABS, hiddenText, nextPlaceText, ordinal, rankWords, statusText, 
 import { PersonProfile, type ProfilePerson } from "../gym/PersonProfile";
 import { useGymRank } from "../gym/useGymRank";
 import { COMING_SOON } from "../Soon";
-import { laneShare } from "./achievementsRules";
+import { laneShare, laneUnit } from "./achievementsRules";
 import { PaintBox, Torch } from "./parts";
 
 // Leaderboard: the person's gym's board, the same read as the Dashboard's Your Rank (this week, from Visits, moving on
@@ -174,6 +174,9 @@ function Lane({ row, leader, board, onPress }: { row: LeaderboardRow; leader: nu
       <View style={styles.value}>
         <Txt kind="big" colour={row.isMe ? "orange" : "text"}>
           {String(row.value)}
+        </Txt>
+        <Txt kind="tiny" numberOfLines={1}>
+          {laneUnit(row.value, board.board)}
         </Txt>
       </View>
     </Pressable>

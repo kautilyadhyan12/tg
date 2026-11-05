@@ -1551,15 +1551,15 @@ async function writeMeal(
   if (id === undefined) {
     await claim?.();
     const row = await repo.createMeal(deps.sql, userId, write);
-    await awardMealBadges(deps, userId);
     await keepTodaysTargets(deps, userId, row.takenAt);
+    await awardMealBadges(deps, userId);
     return { meal: asMeal(row), created: true };
   }
   const saved = await repo.createMealOnce(deps.sql, userId, id, write, claim);
   if (saved === null) throw new NutritionError(404, "not_found", "Meal not found.");
   if (saved.created) {
-    await awardMealBadges(deps, userId);
     await keepTodaysTargets(deps, userId, saved.meal.takenAt);
+    await awardMealBadges(deps, userId);
   }
   return { meal: asMeal(saved.meal), created: saved.created };
 }
@@ -1964,8 +1964,9 @@ export async function patchMeal(
     });
     if (row === null) return null;
     await keepTodaysTargets(deps, userId, row.takenAt);
-    // A meal moved to another day can finish or undo a week's food challenge (35b).
-    if (input.takenAt !== undefined) await awardMealBadges(deps, userId);
+    // A meal moved to another day can finish or undo a week's food challenge (35b); one whose foods
+    // changed can reach the day's protein target (Macro Master, 35c-iii).
+    if (input.takenAt !== undefined || items !== undefined) await awardMealBadges(deps, userId);
     return asMeal(row);
   } catch (err) {
     const changed = err instanceof repo.MealChangedError || (err instanceof NutritionError && err.code === "meal_changed");
