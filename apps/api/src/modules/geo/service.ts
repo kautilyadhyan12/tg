@@ -143,7 +143,13 @@ export async function getRun(deps: ReadDeps, userId: string, id: string): Promis
 
 // ── Record a run (ROADMAP 37a) ─────────────────────────────────────────────────────────────────
 
-const splitsStoredSchema = z.object({ km: z.array(runSplitSchema), mi: z.array(runSplitSchema) });
+/** A saved run's splits, and where each stretch of its line begins (a pause, a stretch left out):
+ *  whatever draws it later starts the line again there, never across the gap. */
+const splitsStoredSchema = z.object({
+  km: z.array(runSplitSchema),
+  mi: z.array(runSplitSchema),
+  starts: z.array(z.number().int().nonnegative()).optional(),
+});
 
 const asSavedRun = (r: repo.SavedRunRow): SavedRun => {
   const splits = splitsStoredSchema.safeParse(r.splits);
@@ -162,18 +168,21 @@ const asSavedRun = (r: repo.SavedRunRow): SavedRun => {
     splitsKm: splits.success ? splits.data.km : [],
     splitsMi: splits.success ? splits.data.mi : [],
     polyline: r.polyline ?? "",
+    trackStarts: splits.success ? (splits.data.starts ?? [0]) : [0],
   };
 };
 
-/** A run starting later than this past the server's own clock is refused: a phone's clock is
- *  never that far out. */
-const FUTURE_LEEWAY_MS = 10 * 60_000;
+/** A run this person has already saved under this id, read before any of its points are: a send
+ *  repeated is answered from the row at no cost (round one of 37a, H2). null when there is none. */
+export async function savedRunIfAny(deps: ReadDeps, userId: string, runId: string): Promise<SavedRun | null> {
+  const row = await repo.getSavedRun(deps.sql, userId, runId);
+  return row === null ? null : asSavedRun(row);
+}
 
-export class RunInFutureError extends Error {
-  constructor() {
-    super("run starts in the future");
-    this.name = "RunInFutureError";
-  }
+/** A phone's clock can be fast. A run that seems to end after the server's own now is moved back
+ *  to end now: the run is kept, never refused (round one of 37a, H1). */
+export function startedAtKept(sent: Date, elapsedMs: number, now: Date): Date {
+  return sent.getTime() + elapsedMs > now.getTime() ? new Date(now.getTime() - elapsedMs) : sent;
 }
 
 /** Works every number out from the points with the shared rules and saves the run once. The
@@ -183,8 +192,7 @@ export async function saveRun(
   userId: string,
   input: SaveRunRequest,
 ): Promise<{ status: "created" | "duplicate"; run: SavedRun }> {
-  const startedAt = new Date(input.startedAt);
-  if (startedAt.getTime() > deps.now().getTime() + FUTURE_LEEWAY_MS) throw new RunInFutureError();
+  const startedAt = startedAtKept(new Date(input.startedAt), input.elapsedMs, deps.now());
   const ctx = await getUserSyncContext(deps.sql, userId);
   const sums = runSums(input.points, input.pauses, input.elapsedMs, ctx.weightKg ?? 0);
   const note = input.note === null || input.note === "" ? null : input.note;
@@ -200,7 +208,7 @@ export async function saveRun(
     leftOutM: sums.leftOutM,
     leftOutS: sums.leftOutS,
     kcal: sums.kcal,
-    splits: { km: sums.splitsKm, mi: sums.splitsMi },
+    splits: { km: sums.splitsKm, mi: sums.splitsMi, starts: sums.trackStarts },
     polyline: encodePolyline(sums.track),
     calcVersion: RUN_CALC_VERSION,
   });

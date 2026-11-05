@@ -104,6 +104,8 @@ d("record a run (real Postgres)", () => {
     await sql`DELETE FROM user_xp WHERE user_id IN (${mine})`;
     await sql`DELETE FROM streaks WHERE user_id IN (${mine})`;
     await sql`DELETE FROM runs WHERE user_id IN (${mine})`;
+    await sql`DELETE FROM workouts WHERE user_id IN (${mine})`;
+    await sql`DELETE FROM body_measurements WHERE user_id IN (${mine})`;
     await sql`DELETE FROM users WHERE email LIKE 'runrec-%@example.com'`;
   };
 
@@ -144,7 +146,8 @@ d("record a run (real Postgres)", () => {
     it("no gym's code reads the runs table: a gym never sees where its members run", () => {
       // Every file under src that reads `runs` is named here; a new reader must be added on purpose.
       // A query may name a part of itself `runs` (the gym board's weeks in a row): not the table.
-      const readsRuns = (text: string) => /\b(FROM|JOIN|INTO)\s+runs\b/.test(text) && !/\bruns AS \(/.test(text);
+      const readsRuns = (text: string) =>
+        /\b(FROM|JOIN|INTO|UPDATE)\s+(public\.)?"?runs"?\b|\.(from|insert|update|delete)\(\s*runs\b|schema\.runs\b/i.test(text) && !/\bruns AS \(/.test(text);
       const readers: string[] = [];
       const walk = (dir: string) => {
         for (const name of readdirSync(dir)) {
@@ -170,11 +173,13 @@ d("record a run (real Postgres)", () => {
 
   it("works every number out itself, from the points, with the same rules the phone shows", async () => {
     const me = await makeUser("numbers");
+    await sql`INSERT INTO body_measurements (user_id, measured_at, weight_kg, metrics, source) VALUES (${me.id}, now() - interval '1 day', 82, ${sql.json({})}, 'manual')`;
     const run = body({ points: northRun(1720, 5120 / 1720), elapsedMs: 1_900_000, pauses: [[1_720_000, 1_900_000]] });
     const res = await save(me.cookies, run);
     expect(res.statusCode, res.body).toBe(201);
     const saved = saveRunResponseSchema.parse(JSON.parse(res.body));
-    const expected = runSums(run.points, run.pauses, run.elapsedMs, 70); // no weight kept: 70 kg, as workouts
+    const expected = runSums(run.points, run.pauses, run.elapsedMs, 82); // the person's own weight
+    expect(expected.kcal).not.toBe(runSums(run.points, run.pauses, run.elapsedMs, 70).kcal);
     expect(saved).toMatchObject({
       status: "created",
       run: {
@@ -208,14 +213,13 @@ d("record a run (real Postgres)", () => {
     expect((await sql`SELECT 1 FROM runs WHERE user_id = ${me.id}`).length).toBe(1);
   });
 
-  it("refuses a broken send: a bad point, a key that is not the run's, a start in the future", async () => {
+  it("refuses a broken send: a bad point, a key that is not the run's", async () => {
     const me = await makeUser("refused");
     const bad = await save(me.cookies, { ...body(), points: [[0, 91, 0, 5]] });
     expect(bad.statusCode).toBe(400);
     expect(bad.body).not.toContain("91"); // what was sent is never echoed
     const run = body();
     expect((await save(me.cookies, run, randomUUID())).statusCode).toBe(400);
-    expect((await save(me.cookies, body({ startedAt: new Date(Date.now() + 3_600_000).toISOString() }))).statusCode).toBe(400);
     expect((await sql`SELECT 1 FROM runs WHERE user_id = ${me.id}`).length).toBe(0);
   });
 
@@ -228,5 +232,153 @@ d("record a run (real Postgres)", () => {
     expect(await xpOf(me.id)).toBe(before + 50);
     const streak = await sql<{ current: number }[]>`SELECT current FROM streaks WHERE user_id = ${me.id}`;
     expect(streak[0]?.current).toBe(1);
+  });
+});
+
+describe("round one of 37a: nothing a person ran is refused for the phone's clock, and the server is never kept busy", () => {
+  const sql = postgres(url ?? "", { prepare: false, max: 5 });
+  let app: App | undefined;
+  const api = (): App => {
+    if (app === undefined) throw new Error("beforeAll did not build the app");
+    return app;
+  };
+  const post = (cookies: Cookies, run: unknown, key: string, ip = "10.39.0.1") =>
+    api().inject({ method: "POST", url: "/v1/geo/runs", remoteAddress: ip, headers: { "content-type": "application/json", "idempotency-key": key }, cookies, payload: JSON.stringify(run) });
+  const makeUser = async (name: string): Promise<{ cookies: Cookies; id: string }> => {
+    const email = `runrec-r1-${name}@example.com`;
+    expect((await api().inject({ method: "POST", url: "/v1/auth/register", remoteAddress: nextIp(), headers: { "content-type": "application/json" }, payload: JSON.stringify({ email, password: PASSWORD, displayName: "Run Fixture" }) })).statusCode).toBe(201);
+    const login = await api().inject({ method: "POST", url: "/v1/auth/login", remoteAddress: nextIp(), headers: { "content-type": "application/json" }, payload: JSON.stringify({ email, password: PASSWORD }) });
+    const id = (await sql<{ id: string }[]>`SELECT id FROM users WHERE email = ${email}`)[0]?.id;
+    if (id === undefined) throw new Error(`no fixture ${name}`);
+    return { cookies: cookieMap(login), id };
+  };
+  const mine = sql`SELECT id FROM users WHERE email LIKE 'runrec-r1-%@example.com'`;
+  const clear = async () => {
+    await sql`DELETE FROM user_achievements WHERE user_id IN (${mine})`;
+    await sql`DELETE FROM user_xp WHERE user_id IN (${mine})`;
+    await sql`DELETE FROM streaks WHERE user_id IN (${mine})`;
+    await sql`DELETE FROM runs WHERE user_id IN (${mine})`;
+    await sql`DELETE FROM workouts WHERE user_id IN (${mine})`;
+    await sql`DELETE FROM users WHERE email LIKE 'runrec-r1-%@example.com'`;
+  };
+  beforeAll(async () => {
+    await clear();
+    app = await buildApp(loadConfig(baseEnv), { emailSender: silentAuthSender() });
+  });
+  afterAll(async () => {
+    await clear();
+    await app?.close();
+    await sql.end();
+  });
+
+  it("H1: a phone clock an hour fast keeps the run, moved back to end now", async () => {
+    const me = await makeUser("clock");
+    const run = body({ startedAt: new Date(Date.now() + 3_600_000).toISOString() });
+    expect((await post(me.cookies, run, run.runId)).statusCode).toBe(201);
+    const kept = await sql<{ started_at: Date }[]>`SELECT started_at FROM runs WHERE id = ${run.runId}`;
+    expect(kept[0]?.started_at.getTime() ?? Infinity).toBeLessThanOrEqual(Date.now() - run.elapsedMs + 1000);
+  });
+
+  it("L2: a NUL in the name or the note is taken out, and the run is saved", async () => {
+    const me = await makeUser("nul");
+    const run = body({ name: "Morning\u0000 Run", note: "hill\u0000 repeats" });
+    expect((await post(me.cookies, run, run.runId)).statusCode).toBe(201);
+    expect(await sql`SELECT name, note FROM runs WHERE id = ${run.runId}`).toEqual([{ name: "Morning Run", note: "hill repeats" }]);
+  });
+
+  it("L3: the saved line says where it starts again after a pause", async () => {
+    const me = await makeUser("starts");
+    const run = body({ points: northRun(600, 3), elapsedMs: 600_000, pauses: [[200_000, 300_000]] });
+    const saved = saveRunResponseSchema.parse(JSON.parse((await post(me.cookies, run, run.runId)).body));
+    expect(saved.run.trackStarts).toHaveLength(2);
+    expect(saved.run.trackStarts[0]).toBe(0);
+  });
+
+  it("H2: a run sent again is answered from the row, before its points are read", async () => {
+    const me = await makeUser("repeat");
+    const run = body();
+    expect((await post(me.cookies, run, run.runId)).statusCode).toBe(201);
+    // The same key with a body the server could never read: answered from the row, not refused.
+    const again = await post(me.cookies, { nonsense: true }, run.runId);
+    expect(again.statusCode).toBe(200);
+    expect(saveRunResponseSchema.parse(JSON.parse(again.body)).status).toBe("duplicate");
+  });
+
+  it("H2: eleven sends in a minute from one person: the eleventh waits; somebody else at the same address does not", async () => {
+    const me = await makeUser("loop");
+    const other = await makeUser("loop-other");
+    const run = body();
+    for (let i = 0; i < 10; i++) expect((await post(me.cookies, run, run.runId)).statusCode).toBeLessThan(300);
+    expect((await post(me.cookies, run, run.runId)).statusCode).toBe(429);
+    const theirs = body();
+    expect((await post(other.cookies, theirs, theirs.runId)).statusCode).toBe(201);
+  });
+
+  it("T3: one run sent four times at the same instant is one row; two people's first sends of one id give it to one", async () => {
+    const me = await makeUser("instant");
+    const run = body();
+    const codes = (await Promise.all([1, 2, 3, 4].map(() => post(me.cookies, run, run.runId)))).map((r) => r.statusCode).sort();
+    expect(codes[0]).toBe(200);
+    expect(codes.filter((c) => c === 201)).toHaveLength(1);
+    expect((await sql`SELECT 1 FROM runs WHERE id = ${run.runId}`).length).toBe(1);
+
+    const a = await makeUser("race-a");
+    const b = await makeUser("race-b");
+    const shared = body();
+    const both = await Promise.all([post(a.cookies, shared, shared.runId), post(b.cookies, { ...shared, name: "Not theirs" }, shared.runId)]);
+    expect(both.map((r) => r.statusCode).sort()).toEqual([201, 404]);
+    const owner = await sql<{ user_id: string }[]>`SELECT user_id FROM runs WHERE id = ${shared.runId}`;
+    const winner = both[0]?.statusCode === 201 ? a.id : b.id;
+    expect(owner).toEqual([{ user_id: winner }]);
+  });
+});
+
+describe("which runs count for the streak and XP (round one of 37a, T1, T2, L6)", () => {
+  const sql = postgres(url ?? "", { prepare: false, max: 5 });
+  const USER = "6f1d2c3b-4a59-4e6f-8a7b-9c0d1e2f3a4b";
+  const at = (day: string, hour: number) => new Date(`${day}T${String(hour).padStart(2, "0")}:00:00Z`);
+  const putRun = async (day: string, hour: number, metres: number, recorded = true) => {
+    await sql`
+      INSERT INTO runs (id, user_id, started_at, duration_s, distance_m, source, run_calc_version)
+      VALUES (${randomUUID()}, ${USER}, ${at(day, hour)}, 600, ${metres}, 'mobile', ${recorded ? 1 : null})`;
+  };
+  const clear = async () => {
+    await sql`DELETE FROM runs WHERE user_id = ${USER}`;
+    await sql`DELETE FROM workouts WHERE user_id = ${USER}`;
+    await sql`DELETE FROM users WHERE id = ${USER}`;
+  };
+  beforeAll(async () => {
+    await clear();
+    await sql`INSERT INTO users (id, email, display_name) VALUES (${USER}, 'runrec-days@example.com', 'Days Fixture')`;
+  });
+  afterAll(async () => {
+    await clear();
+    await sql.end();
+  });
+
+  it("a short run, alone on a day between two counted ones, keeps no streak and earns nothing; nor does a run from before", async () => {
+    await putRun("2026-10-01", 7, 5000);
+    await putRun("2026-10-02", 7, 120); // a few steps
+    await putRun("2026-10-03", 7, 4000);
+    await putRun("2026-10-04", 7, 9000, false); // imported from before: never recorded by this app
+    const { getActivityDays, getStreakDays, getXpAccrualCounts } = await import("../src/modules/gamification/repo.js");
+    await sql.begin(async (tx) => {
+      expect(await getStreakDays(tx, USER, "UTC")).toEqual(["2026-10-01", "2026-10-03"]);
+      expect(await getActivityDays(tx, USER, "UTC")).toEqual(["2026-10-01", "2026-10-03"]);
+      expect((await getXpAccrualCounts(tx, USER)).runCount).toBe(2);
+    });
+  });
+
+  it("a counted run earlier the same day takes the day's streak bonus from a workout after it; a later or short one does not", async () => {
+    const { hasEarlierWorkoutOnDay } = await import("../src/modules/workouts/repo.js");
+    const workoutAt = at("2026-10-10", 9);
+    const workoutId = randomUUID();
+    expect(await hasEarlierWorkoutOnDay(sql, USER, workoutId, workoutAt, "UTC")).toBe(false);
+    await putRun("2026-10-10", 10, 5000); // after the workout
+    expect(await hasEarlierWorkoutOnDay(sql, USER, workoutId, workoutAt, "UTC")).toBe(false);
+    await putRun("2026-10-10", 7, 150); // before, but a few steps
+    expect(await hasEarlierWorkoutOnDay(sql, USER, workoutId, workoutAt, "UTC")).toBe(false);
+    await putRun("2026-10-10", 8, 3000); // before, and counted
+    expect(await hasEarlierWorkoutOnDay(sql, USER, workoutId, workoutAt, "UTC")).toBe(true);
   });
 });

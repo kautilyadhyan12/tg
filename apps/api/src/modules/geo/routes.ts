@@ -8,6 +8,7 @@ import type { Sql } from "postgres";
 import { z } from "zod";
 import type { AppConfig } from "../../config.js";
 import type { RedisLike } from "../../redis.js";
+import { createDualRateLimit } from "../auth/rateLimit.js";
 import { requireQuota } from "../quotas/service.js";
 import type { GeocodeResolver } from "./geocode.js";
 import { createOrsRouteProvider, type RouteProvider } from "./ors.adapter.js";
@@ -156,12 +157,29 @@ export function registerGeoRoutes(
   );
 
   // ── record a run (ROADMAP 37a) ────────────────────────────────────────────
+  // Ten a minute for a person, wherever they are (never by address: a gym's members share one). A
+  // phone sends its waiting runs one after another; nobody records ten runs in a minute.
+  const runLimit = createDualRateLimit({
+    name: "geo_run_save",
+    max: 10,
+    ipMax: null,
+    windowMs: 60 * 1000,
+    identifier: (req) => req.authUser?.id ?? null,
+    redis: deps.redis,
+  });
   // Twelve hours of points at one a second is about 2 MB of JSON; anything past this is refused
   // before it is read.
   app.post(
     "/v1/geo/runs",
-    { preHandler: [app.authenticate], bodyLimit: 3 * 1024 * 1024 },
+    { preHandler: [app.authenticate, runLimit], bodyLimit: 3 * 1024 * 1024 },
     async (req, reply) => {
+      // A run sent again is answered from the row before its points are read or worked out: a
+      // repeat costs the server a lookup, never the maths (round one of 37a, H2).
+      const key = req.headers["idempotency-key"];
+      if (typeof key === "string" && UUID.test(key)) {
+        const already = await service.savedRunIfAny(readDeps, authedUserId(req), key);
+        if (already !== null) return await reply.status(200).send({ status: "duplicate", run: already });
+      }
       const input = parse(saveRunRequestSchema, req.body, req, reply);
       if (input === null) return;
       // The run's own id is its Idempotency-Key (as a workout's is): a mismatch is a broken phone.
@@ -177,9 +195,6 @@ export function registerGeoRoutes(
         return await reply.status(saved.status === "created" ? 201 : 200).send(saved);
       } catch (err) {
         if (err instanceof ForeignRunError) return notFound(req, reply);
-        if (err instanceof service.RunInFutureError) {
-          return reply.status(400).send({ error: "validation_error", message: "startedAt: in the future", requestId: req.id });
-        }
         throw err;
       }
     },

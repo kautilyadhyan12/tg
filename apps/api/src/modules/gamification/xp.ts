@@ -76,7 +76,9 @@ import { dayDiff } from "./streak.js";
  *  class as the calendar `xp_earned`), and inventing that accrual would add a
  *  feature the spec is silent on (R0.2). */
 /** A run counts for the streak and XP from this many metres (ROADMAP 37a): an accidental Start
- *  and Finish, or a phone left lying while its signal wanders, earns nothing. */
+ *  and Finish, or a phone left lying while its signal wanders, earns nothing. Only a run this app
+ *  recorded and worked out counts (`run_calc_version`): one imported from before never added XP
+ *  on the old app, and never adds it unseen now (round one of 37a, L6). */
 export const RUN_COUNTS_FROM_M = 200;
 
 export const XP_REWARDS = {

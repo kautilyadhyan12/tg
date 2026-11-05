@@ -244,7 +244,7 @@ export interface NewRun {
   leftOutM: number;
   leftOutS: number;
   kcal: number;
-  splits: { km: { m: number; s: number }[]; mi: { m: number; s: number }[] };
+  splits: { km: { m: number; s: number }[]; mi: { m: number; s: number }[]; starts: number[] };
   polyline: string;
   calcVersion: number;
 }
@@ -304,10 +304,11 @@ export async function insertRun(sql: Sql, userId: string, run: NewRun): Promise<
   return await sql.begin(async (tx) => {
     const inserted = await tx`
       INSERT INTO runs (id, user_id, started_at, duration_s, distance_m, polyline, splits, kcal_point,
-                        source, name, effort, note, elapsed_s, left_out_m, left_out_s, run_calc_version)
+                        kcal_calc_version, source, name, effort, note, elapsed_s, left_out_m, left_out_s,
+                        run_calc_version)
       VALUES (${run.id}, ${userId}, ${run.startedAt}, ${run.movingS}, ${run.distanceM}, ${run.polyline},
-              ${tx.json(run.splits)}, ${run.kcal}, 'mobile', ${run.name}, ${run.effort}, ${run.note},
-              ${run.elapsedS}, ${run.leftOutM}, ${run.leftOutS}, ${run.calcVersion})
+              ${tx.json(run.splits)}, ${run.kcal}, ${run.calcVersion}, 'mobile', ${run.name}, ${run.effort},
+              ${run.note}, ${run.elapsedS}, ${run.leftOutM}, ${run.leftOutS}, ${run.calcVersion})
       ON CONFLICT (id) DO NOTHING`;
     const rows = await tx<(SavedRunDbRow & { user_id: string })[]>`
       SELECT id, user_id, started_at, name, effort, note, distance_m, duration_s, elapsed_s, left_out_m,
@@ -317,4 +318,13 @@ export async function insertRun(sql: Sql, userId: string, run: NewRun): Promise<
     if (row === undefined || row.user_id !== userId) throw new ForeignRunError();
     return { created: inserted.count === 1, row: toSavedRun(row) };
   });
+}
+
+/** A run of this person's by its id, as saved; null when they have none by it. */
+export async function getSavedRun(sql: Sql, userId: string, id: string): Promise<SavedRunRow | null> {
+  const rows = await sql<SavedRunDbRow[]>`
+    SELECT id, started_at, name, effort, note, distance_m, duration_s, elapsed_s, left_out_m, left_out_s,
+           kcal_point, splits, polyline
+    FROM runs WHERE id = ${id} AND user_id = ${userId}`;
+  return rows[0] === undefined ? null : toSavedRun(rows[0]);
 }

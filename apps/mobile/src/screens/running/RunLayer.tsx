@@ -25,6 +25,7 @@ import {
   loadRun,
   pauseRun,
   resumeRun,
+  runIsFull,
   chooseAutoPause,
   runNow,
   startRun,
@@ -116,12 +117,13 @@ export function RunLayerProvider({ children }: { children: ReactNode }) {
   // The person's weight, for the calories as the run goes (the server works them out again): read
   // when a run is there, never at every opening of the app.
   const hasRun = run !== null;
+  const finished = run?.phase === "finished";
   useEffect(() => {
     if (me === null || !hasRun) return;
     void session.signedIn({ method: "GET", path: "/v1/users/me" }, userProfileResponseSchema).then((answer) => {
       if (answer.kind === "ok") setKg(answer.data.user.weightKg ?? 0);
     });
-  }, [me, session, hasRun]);
+  }, [me, session, hasRun, finished]);
 
   const start = useCallback(async (autoPause: boolean): Promise<StartProblem | null> => {
     const problem = await askLocation();
@@ -249,6 +251,9 @@ function useLiveNumbers(run: LiveRun, kg: number): { now: number; sums: RunSums 
     };
   }, []);
   const count = run.points.length;
+  useEffect(() => {
+    if (runIsFull(run, now)) void finishRun();
+  }, [run, now]);
   useEffect(() => {
     const every = 2000 + count * 0.1;
     if (sums !== null && now - lastWork.current < every) return;
@@ -435,6 +440,7 @@ function Summary({ run, units, kg, onSaved }: { run: LiveRun; units: Units; kg: 
   const [note, setNote] = useState("");
   const [asking, setAsking] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [notKept, setNotKept] = useState(false);
   const pausedS = Math.max(0, sums.elapsedS - sums.movingS - sums.leftOutS);
 
   const save = async () => {
@@ -451,7 +457,12 @@ function Summary({ run, units, kg, onSaved }: { run: LiveRun; units: Units; kg: 
       points: run.points.map(([at, lat, lng, acc]) => [Math.round(at), lat, lng, acc]),
       pauses: closedPauses(run, finished).map(([a, b]) => [Math.round(a), Math.round(b)]),
     };
-    await outbox.add(body);
+    // The recorder's own files go only once the outbox holds the run on the phone (round one, L1).
+    if (!(await outbox.add(body))) {
+      setBusy(false);
+      setNotKept(true);
+      return;
+    }
     await forgetRun();
     await outbox.send();
     onSaved(kept, outbox.view().waiting.some((r) => r.runId === body.runId));
@@ -589,6 +600,11 @@ function Summary({ run, units, kg, onSaved }: { run: LiveRun; units: Units; kg: 
           />
         </View>
         <Button label="Save run" onPress={() => void save()} busy={busy} wide style={styles.save} />
+        {notKept ? (
+          <Txt kind="small" colour="badText" style={styles.centredWords}>
+            Your run couldn't be kept on this phone. Press Save run again.
+          </Txt>
+        ) : null}
         <Button
           kind="dangerLink"
           label="Discard run"
@@ -726,4 +742,5 @@ const styles = StyleSheet.create({
   note: { minHeight: 74, borderRadius: 14, backgroundColor: colours.field, borderWidth: 1, borderColor: colours.fieldLine, padding: 14, fontFamily: fonts.regular, fontSize: 15, color: colours.text, textAlignVertical: "top" },
   save: { marginTop: 10 },
   centred: { alignSelf: "center" },
+  centredWords: { textAlign: "center" },
 });

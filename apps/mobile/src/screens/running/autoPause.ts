@@ -11,9 +11,10 @@
 // person stopped, or the phone's speed over GO_MPS that many times; the clock starts again from
 // the first of them. A point less sure of where it is than WORST_ACCURACY_M is not judged at all:
 // under trees the signal wanders as far as a walk.
+import { STILL_M, STILL_MS } from "@app/shared";
 
-export const STILL_MS = 8000;
-export const STILL_M = 3;
+// Standing is the shared maths' own test, so the clock and the saved moving time agree.
+export { STILL_M, STILL_MS };
 export const GO_M = 5;
 export const GO_MPS = 1.0;
 export const GO_POINTS = 2;

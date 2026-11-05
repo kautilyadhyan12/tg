@@ -123,7 +123,7 @@ export async function getXpAccrualCounts(
 ): Promise<{ workoutCount: number; runCount: number; perfectFormWorkouts: number; excellentFormWorkouts: number }> {
   const [r] = await sql<{ workout_count: string; run_count: string; perfect: string; excellent: string }[]>`
     SELECT count(*) AS workout_count,
-           (SELECT count(*) FROM runs WHERE user_id = ${userId} AND distance_m >= ${RUN_COUNTS_FROM_M}) AS run_count,
+           (SELECT count(*) FROM runs WHERE user_id = ${userId} AND distance_m >= ${RUN_COUNTS_FROM_M} AND run_calc_version IS NOT NULL) AS run_count,
            count(*) FILTER (WHERE avg_form_score >= 100) AS perfect,
            count(*) FILTER (WHERE avg_form_score >= 80 AND avg_form_score < 100) AS excellent
     FROM workouts WHERE user_id = ${userId}`;
@@ -154,7 +154,7 @@ export async function getActivityDays(
     FROM workouts WHERE user_id = ${userId}
     UNION
     SELECT to_char(started_at AT TIME ZONE ${timeZone}, 'YYYY-MM-DD') AS day
-    FROM runs WHERE user_id = ${userId} AND distance_m >= ${RUN_COUNTS_FROM_M}
+    FROM runs WHERE user_id = ${userId} AND distance_m >= ${RUN_COUNTS_FROM_M} AND run_calc_version IS NOT NULL
     ORDER BY day ASC`;
   return rows.map((r) => r.day);
 }
@@ -200,7 +200,7 @@ export async function getStreakDays(
     FROM workouts WHERE user_id = ${userId}
     UNION
     SELECT to_char(started_at AT TIME ZONE ${timeZone}, 'YYYY-MM-DD') AS day
-    FROM runs WHERE user_id = ${userId} AND distance_m >= ${RUN_COUNTS_FROM_M}
+    FROM runs WHERE user_id = ${userId} AND distance_m >= ${RUN_COUNTS_FROM_M} AND run_calc_version IS NOT NULL
     UNION
     SELECT day::text AS day
     FROM gym_attendance WHERE user_id = ${userId}

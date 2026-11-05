@@ -6,7 +6,16 @@
 import * as Location from "expo-location";
 import * as TaskManager from "expo-task-manager";
 import { File, Paths } from "expo-file-system";
-import { keptRunPointsSchema, keptRunStateSchema, phoneLocationsSchema, type RunPause, type RunPoint } from "@app/shared";
+import {
+  RUN_MAX_ELAPSED_MS,
+  RUN_MAX_PAUSES,
+  RUN_MAX_POINTS,
+  keptRunPointsSchema,
+  keptRunStateSchema,
+  phoneLocationsSchema,
+  type RunPause,
+  type RunPoint,
+} from "@app/shared";
 import { colours } from "../../look/colours";
 import { AUTO_START, nextAutoPause, type AutoPauseState } from "./autoPause";
 
@@ -75,6 +84,9 @@ const listeners = new Set<() => void>();
 /** Points of the open file not yet written, and when the file was last written. */
 let unwritten = 0;
 let writtenAt = 0;
+/** The last points taken while paused, and how many are kept. */
+const PAUSED_TAIL = 4;
+let pausedTail: RunPoint[] = [];
 /** Raised at each Start and each Save or Discard: points handed over while one of those happened
  *  belong to no run, and never bring a saved or thrown-away run back. */
 let generation = 0;
@@ -131,6 +143,7 @@ export function resetRecorder(withFiles: RunFiles = phoneRunFiles): void {
   files = withFiles;
   current = null;
   auto = AUTO_START;
+  pausedTail = [];
   loaded = false;
   unwritten = 0;
   writtenAt = 0;
@@ -221,37 +234,56 @@ export async function takeLocations(data: unknown): Promise<void> {
   const mine = generation;
   const run = current ?? (await loadRun());
   if (run === null || run.phase === "finished" || mine !== generation) return;
+  let full = false;
   for (const location of parsed.data.locations) {
     const at = location.timestamp - run.startedAt;
-    const lastAt = run.points[run.points.length - 1]?.[0] ?? -1;
+    const lastAt = Math.max(run.points[run.points.length - 1]?.[0] ?? -1, pausedTail[pausedTail.length - 1]?.[0] ?? -1);
     if (at < 0 || at <= lastAt) continue;
+    // The server takes a day at most: a run left going past it ends there, kept whole.
+    if (at > RUN_MAX_ELAPSED_MS) {
+      full = true;
+      break;
+    }
     const accuracyM = location.coords.accuracy ?? null;
-    run.points.push([at, location.coords.latitude, location.coords.longitude, accuracyM === null ? null : Math.round(accuracyM * 10) / 10]);
-    unwritten += 1;
+    const point: RunPoint = [at, location.coords.latitude, location.coords.longitude, accuracyM === null ? null : Math.round(accuracyM * 10) / 10];
     run.lastFix = { at: location.timestamp, accuracyM };
-    if (!run.autoPause) continue;
-    const next = nextAutoPause(auto, {
-      at,
-      lat: location.coords.latitude,
-      lng: location.coords.longitude,
-      accuracyM,
-      speed: location.coords.speed ?? null,
-    });
-    auto = next.state;
-    const change = next.change;
-    if (change?.kind === "pause" && run.phase === "running") {
-      run.pauses.push([Math.max(change.at, lastOpenEnd(run)), null]);
-      run.phase = "paused";
-      run.pausedByPerson = false;
-      writtenAt = 0; // a change of phase is written at once
-    } else if (change?.kind === "resume" && run.phase === "paused" && !run.pausedByPerson) {
-      closePause(run, change.at);
-      run.phase = "running";
-      writtenAt = 0;
+    if (run.autoPause && run.pauses.length < RUN_MAX_PAUSES) {
+      const next = nextAutoPause(auto, { at, lat: point[1], lng: point[2], accuracyM, speed: location.coords.speed ?? null });
+      auto = next.state;
+      const change = next.change;
+      if (change?.kind === "pause" && run.phase === "running") {
+        run.pauses.push([Math.max(change.at, lastOpenEnd(run)), null]);
+        run.phase = "paused";
+        run.pausedByPerson = false;
+        writtenAt = 0; // a change of phase is written at once
+      } else if (change?.kind === "resume" && run.phase === "paused" && !run.pausedByPerson) {
+        closePause(run, change.at);
+        run.phase = "running";
+        // The steps that started the clock again were taken while paused: they are the run's.
+        for (const kept of pausedTail) if (kept[0] >= change.at) run.points.push(kept);
+        writtenAt = 0;
+      }
+    }
+    // While paused no point is kept but the last few, for the steps that may start the clock again:
+    // the server leaves points inside a pause out, and a run left paused never fills the phone.
+    if (run.phase === "paused") pausedTail = [...pausedTail, point].slice(-PAUSED_TAIL);
+    else {
+      pausedTail = [];
+      run.points.push(point);
+      unwritten += 1;
+    }
+    if (run.points.length >= RUN_MAX_POINTS) {
+      full = true;
+      break;
     }
   }
   if (mine !== generation || current?.runId !== run.runId) return;
   current = { ...run };
+  if (full) {
+    // Twelve hours of points, or a day since Go: the run ends there and waits to be saved.
+    await finishRun();
+    return;
+  }
   if (Date.now() - writtenAt >= WRITE_EVERY_MS) {
     writtenAt = Date.now();
     await keep(current);
@@ -310,6 +342,7 @@ export async function startRun(userId: string, runId: string, autoPause: boolean
   generation += 1;
   current = run;
   auto = AUTO_START;
+  pausedTail = [];
   loaded = true;
   unwritten = 0;
   writtenAt = now;
@@ -338,6 +371,7 @@ export async function resumeRun(now: number = Date.now()): Promise<void> {
   run.phase = "running";
   run.pausedByPerson = false;
   auto = AUTO_START;
+  pausedTail = [];
   current = { ...run };
   await keep(current);
   tell();
@@ -374,7 +408,8 @@ export async function finishRun(now: number = Date.now()): Promise<LiveRun | nul
   if (run === null) return null;
   await stopLocations();
   if (run.phase === "finished") return run;
-  const end = Math.max(now - run.startedAt, run.points[run.points.length - 1]?.[0] ?? 0);
+  // Never past a day: the most the server takes.
+  const end = Math.min(RUN_MAX_ELAPSED_MS, Math.max(now - run.startedAt, run.points[run.points.length - 1]?.[0] ?? 0));
   closePause(run, end);
   current = { ...run, phase: "finished", finishedMs: end };
   await keep(current);
@@ -392,6 +427,7 @@ export async function forgetRun(): Promise<void> {
   files.remove(STATE_FILE);
   current = null;
   auto = AUTO_START;
+  pausedTail = [];
   tell();
 }
 
@@ -403,4 +439,8 @@ export function closedPauses(run: LiveRun, nowMs: number): RunPause[] {
 /** Milliseconds from Go to now, or to Finish. A point's time is the GPS's own, which can be a second
  *  ahead of the phone's clock: the run is never shorter than its last point. */
 export const elapsedMs = (run: LiveRun, now: number): number =>
-  run.finishedMs ?? Math.max(0, now - run.startedAt, run.points[run.points.length - 1]?.[0] ?? 0);
+  run.finishedMs ?? Math.min(RUN_MAX_ELAPSED_MS, Math.max(0, now - run.startedAt, run.points[run.points.length - 1]?.[0] ?? 0));
+
+/** A run left going a day or more: it ends there by itself, and waits to be saved. */
+export const runIsFull = (run: LiveRun, now: number): boolean =>
+  run.phase !== "finished" && (now - run.startedAt >= RUN_MAX_ELAPSED_MS || run.points.length >= RUN_MAX_POINTS);

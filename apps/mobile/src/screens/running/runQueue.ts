@@ -27,9 +27,13 @@ export interface RunOutbox {
   start: () => Promise<void>;
   view: () => RunOutboxView;
   subscribe: (listener: () => void) => () => void;
-  add: (run: SaveRunRequest) => Promise<void>;
+  /** false: the run is held in memory only, the phone's file could not be written. */
+  add: (run: SaveRunRequest) => Promise<boolean>;
   send: () => Promise<void>;
-  forgetRefused: (runId: string) => void;
+  /** A refused run sent again, from the start of the queue's end. */
+  retryRefused: (runId: string) => Promise<void>;
+  /** A refused run removed from the phone: the person asked. */
+  removeRefused: (runId: string) => void;
   stop: () => void;
 }
 
@@ -108,7 +112,7 @@ export function createRunOutbox(store: TextStore, send: RunSender): RunOutbox {
       if (result.kind === "done") {
         set({ ...view, waiting, saved: [result.run, ...view.saved.filter((r) => r.id !== result.run.id)], sent: view.sent + 1 });
       } else {
-        set({ ...view, waiting, refused: [...view.refused, { runId: next.runId, name: next.name, message: result.message }] });
+        set({ ...view, waiting, refused: [...view.refused, { runId: next.runId, name: next.name, message: result.message, run: next }] });
       }
       await write();
     }
@@ -138,9 +142,9 @@ export function createRunOutbox(store: TextStore, send: RunSender): RunOutbox {
       return () => listeners.delete(listener);
     },
     add: async (run) => {
-      if (view.waiting.some((r) => r.runId === run.runId)) return;
-      set({ ...view, waiting: [...view.waiting, run] });
+      if (!view.waiting.some((r) => r.runId === run.runId)) set({ ...view, waiting: [...view.waiting, run] });
       await write();
+      return !view.unsaved;
     },
     send: async () => {
       if (!fileRead) return;
@@ -150,7 +154,13 @@ export function createRunOutbox(store: TextStore, send: RunSender): RunOutbox {
       });
       return sending;
     },
-    forgetRefused: (runId) => {
+    retryRefused: async (runId) => {
+      const refused = view.refused.find((r) => r.runId === runId);
+      if (refused?.run === undefined) return;
+      set({ ...view, refused: view.refused.filter((r) => r.runId !== runId), waiting: [...view.waiting.filter((r) => r.runId !== runId), refused.run] });
+      await write();
+    },
+    removeRefused: (runId) => {
       set({ ...view, refused: view.refused.filter((r) => r.runId !== runId) });
       void write();
     },

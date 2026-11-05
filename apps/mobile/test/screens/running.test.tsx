@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
 import { AppState } from "react-native";
-import { runSums, saveRunRequestSchema, type RunPoint, type SaveRunRequest } from "@app/shared";
+import { RUN_MAX_POINTS, runSums, saveRunRequestSchema, type RunPoint, type SaveRunRequest } from "@app/shared";
 import { App } from "../../src/App";
 import { phoneRunFiles, resetRecorder, runNow, takeLocations } from "../../src/screens/running/recorder";
 import { readRunFile } from "../../src/screens/running/runQueue";
@@ -59,7 +59,7 @@ function runServer() {
           status: "created",
           run: {
             id: run.runId, startedAt: run.startedAt, name: run.name, effort: run.effort, note: run.note, distanceM: sums.distanceM, movingS: sums.movingS,
-            elapsedS: sums.elapsedS, leftOutM: sums.leftOutM, leftOutS: sums.leftOutS, kcal: sums.kcal, splitsKm: sums.splitsKm, splitsMi: sums.splitsMi, polyline: "",
+            elapsedS: sums.elapsedS, leftOutM: sums.leftOutM, leftOutS: sums.leftOutS, kcal: sums.kcal, splitsKm: sums.splitsKm, splitsMi: sums.splitsMi, polyline: "", trackStarts: sums.trackStarts,
           },
         },
       };
@@ -313,5 +313,36 @@ describe("Auto-pause turned off during a run (Kd's click-through, 2026-11-05)", 
     });
     expect(runNow()?.autoPause).toBe(false);
     expect(screen.getByRole("switch", { name: "Auto-pause" }).props.value).toBe(false);
+  });
+});
+
+describe("a run stays inside what the server takes (round one of 37a, H1)", () => {
+  it("keeps no points while paused, so a run left paused never fills the phone", async () => {
+    const s = runServer();
+    await openRunning(s);
+    await startRunning();
+    await feed(0, 61, 3);
+    await fireEvent.press(await screen.findByRole("button", { name: "Pause" }));
+    expect(await screen.findByText("Paused")).toBeTruthy();
+    const before = runNow()?.points.length ?? 0;
+    await feed(61, 600, 0);
+    expect(runNow()?.points.length).toBe(before);
+  });
+
+  it("a run reaching twelve hours of points ends by itself, and is saved whole", async () => {
+    const s = runServer();
+    await openRunning(s);
+    await startRunning();
+    // Twelve hours and a minute of points at once, as Android may hand them over after a long sleep.
+    await feed(0, RUN_MAX_POINTS + 60, 2.5);
+    await waitFor(() => {
+      expect(runNow()?.phase).toBe("finished");
+    });
+    expect(runNow()?.points).toHaveLength(RUN_MAX_POINTS);
+    await fireEvent.press(await screen.findByRole("button", { name: "Save run" }, { timeout: 10_000 }));
+    await waitFor(() => {
+      expect(s.saved).toHaveLength(1);
+    });
+    expect(s.saved[0]?.points).toHaveLength(RUN_MAX_POINTS);
   });
 });

@@ -175,6 +175,20 @@ describe("a run's distance", () => {
   });
 });
 
+describe("moving time", () => {
+  it("leaves out a minute standing at a light, with no pause pressed (as Strava's server does)", () => {
+    const run = track([...steady(300, 3), ...steady(60, 0), ...steady(300, 3)], { wobble: phoneError(1), acc: () => 5 });
+    const sums = runSums(run.points, [], 660_000, 70);
+    expect(sums.elapsedS).toBe(660);
+    expect(Math.abs(sums.movingS - 600)).toBeLessThanOrEqual(3);
+  });
+
+  it("never takes a slow walk for standing", () => {
+    const run = track(steady(600, 1), { wobble: phoneError(1), acc: () => 5 });
+    expect(runSums(run.points, [], 600_000, 70).movingS).toBe(600);
+  });
+});
+
 describe("a stretch faster than anybody has run", () => {
   it("is left out, with its distance and time, and the rest counted", () => {
     const run = track([...steady(600, 3), ...steady(300, 15), ...steady(600, 3)]); // 54 km/h for five minutes

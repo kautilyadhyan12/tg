@@ -19,7 +19,7 @@ const run = (n: number): SaveRunRequest => ({
 
 const saved = (r: SaveRunRequest): SavedRun => ({
   id: r.runId, startedAt: r.startedAt, name: r.name, effort: r.effort, note: r.note, distanceM: 3, movingS: 60, elapsedS: 60,
-  leftOutM: 0, leftOutS: 0, kcal: 1, splitsKm: [], splitsMi: [], polyline: "",
+  leftOutM: 0, leftOutS: 0, kcal: 1, splitsKm: [], splitsMi: [], polyline: "", trackStarts: [0],
 });
 
 function memory(text: string | null = null) {
@@ -71,7 +71,7 @@ describe("the run outbox", () => {
     expect(outbox.view().saved.map((r) => r.id)).toEqual([run(1).runId]);
   });
 
-  it("keeps a run with no answer, in order, and tells once of one the server refused", async () => {
+  it("keeps a run with no answer, in order; one the server refused stays on the phone whole, to send again or remove", async () => {
     const m = memory();
     const answers: RunSendResult[] = [{ kind: "later" }];
     const outbox = createRunOutbox(m.store, () => Promise.resolve(answers.shift() ?? { kind: "refused", message: "This run couldn't be saved." }));
@@ -82,12 +82,19 @@ describe("the run outbox", () => {
     expect(outbox.view().waiting.map((r) => r.runId)).toEqual([run(1).runId, run(2).runId]);
     await outbox.send();
     expect(outbox.view().waiting).toEqual([]);
+    // Every point is still on the phone, and in its file (round one of 37a, H1): nothing is lost.
     expect(outbox.view().refused).toEqual([
-      { runId: run(1).runId, name: "Morning Run", message: "This run couldn't be saved." },
-      { runId: run(2).runId, name: "Morning Run", message: "This run couldn't be saved." },
+      { runId: run(1).runId, name: "Morning Run", message: "This run couldn't be saved.", run: run(1) },
+      { runId: run(2).runId, name: "Morning Run", message: "This run couldn't be saved.", run: run(2) },
     ]);
-    outbox.forgetRefused(run(1).runId);
-    expect(outbox.view().refused.map((r) => r.runId)).toEqual([run(2).runId]);
+    expect(readRunFile(m.file.text ?? "").refused.map((r) => r.run)).toEqual([run(1), run(2)]);
+    // Try again: back in the queue, whole.
+    await outbox.retryRefused(run(1).runId);
+    expect(outbox.view().waiting).toEqual([run(1)]);
+    // Remove, which the person asked for: gone from the phone.
+    outbox.removeRefused(run(2).runId);
+    expect(outbox.view().refused).toEqual([]);
+    expect(readRunFile(m.file.text ?? "").refused).toEqual([]);
   });
 
   it("reads a file it cannot read as holding nothing to send, and a bad run in it is left out", () => {

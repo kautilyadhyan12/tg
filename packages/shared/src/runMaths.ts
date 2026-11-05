@@ -26,6 +26,11 @@ const MIN_STEP_M = 3;
 /** How fast a runner may change speed, in metres a second: how far the smoothing lets a position
  *  move between points before it trusts the new one. */
 const SMOOTHING_M_PER_S = 4;
+/** Standing: every point of at least STILL_MS within STILL_M of the first of them. Moving time leaves
+ *  such a stretch out, as Strava's server does for a run with no pauses; the phone's Auto-pause
+ *  pauses on the same test (`apps/mobile/src/screens/running/autoPause.ts`). */
+export const STILL_MS = 8000;
+export const STILL_M = 3;
 
 // ── The Earth's shape: WGS84, the ellipsoid GPS itself uses ───────────────────────────────────
 const WGS84_A = 6_378_137;
@@ -452,6 +457,31 @@ function splitsOf(steps: readonly Step[], every: number): RunSplit[] {
   return out;
 }
 
+/** The time in a piece spent standing: each longest stretch whose points all lie within STILL_M of
+ *  its first, when it lasts STILL_MS or more. */
+function standingMs(piece: Fix[]): number {
+  let total = 0;
+  let i = 0;
+  while (i < piece.length) {
+    const first = piece[i];
+    if (first === undefined) break;
+    let j = i;
+    while (j + 1 < piece.length) {
+      const next = piece[j + 1];
+      if (next === undefined || quickMetres(first, next) > STILL_M) break;
+      j++;
+    }
+    const last = piece[j];
+    if (last !== undefined && j > i && last.at - first.at >= STILL_MS) {
+      total += last.at - first.at;
+      i = j;
+    } else {
+      i++;
+    }
+  }
+  return total;
+}
+
 /** Everything a run's summary shows, from its points and pauses. `kg` is the person's weight. */
 export function runSums(points: readonly RunPoint[], pauses: readonly RunPause[], elapsedMs: number, kg: number): RunSums {
   const elapsed = Math.max(0, Math.min(elapsedMs, RUN_MAX_ELAPSED_MS));
@@ -462,8 +492,10 @@ export function runSums(points: readonly RunPoint[], pauses: readonly RunPause[]
   const trackStarts: number[] = [];
   let leftOutM = 0;
   let leftOutMs = 0;
+  let stillMs = 0;
   for (const raw of piecesBetweenPauses(points, cleaned, elapsed)) {
     const piece = withoutSpikes(raw);
+    stillMs += standingMs(piece);
     const flagged = tooFastSteps(piece);
     // The piece is cut where a too-fast stretch is left out; each part is smoothed on its own.
     let part: Fix[] = [];
@@ -500,7 +532,7 @@ export function runSums(points: readonly RunPoint[], pauses: readonly RunPause[]
     }
   }
   const distanceM = steps.reduce((sum, step) => sum + step.m, 0);
-  const movingS = Math.max(0, (elapsed - pausedMs - leftOutMs) / 1000);
+  const movingS = Math.max(0, (elapsed - pausedMs - leftOutMs - stillMs) / 1000);
   const splitsKm = splitsOf(steps, 1000);
   // Calories: each kilometre at its own speed, and any moving time no step covers (before the first
   // point, a gap in the signal) at the run's average speed.

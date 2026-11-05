@@ -37,7 +37,7 @@ export const runs = pgTable(
     source: text("source").notNull().default("mobile"),
     legacyMongoId: text("legacy_mongo_id").unique(),
     createdAt: createdAt(),
-    // 0208 (ROADMAP 37a): what the person gave it, and the numbers worked out beside duration_s
+    // 0210 (ROADMAP 37a): what the person gave it, and the numbers worked out beside duration_s
     // (the moving time) by the rules of runMaths.ts's run_calc_version.
     name: text("name"),
     effort: smallint("effort"),

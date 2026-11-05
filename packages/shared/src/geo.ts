@@ -83,16 +83,18 @@ export type RunDetail = z.infer<typeof runDetailSchema>;
 // from them (`runMaths.ts`), so a typed distance can never be saved. Sent twice, saved once: the
 // run's id is the Idempotency-Key.
 const msIntoRun = z.number().int().min(0).max(RUN_MAX_ELAPSED_MS);
+const noNul = (text: string): string => text.replace(/\u0000/g, "");
 
 export const saveRunRequestSchema = z
   .object({
     runId: z.string().uuid(),
     startedAt: z.string().datetime(),
     elapsedMs: msIntoRun,
-    name: z.string().trim().min(1).max(60),
+    // A NUL is stripped, never refused: Postgres cannot keep one, and a refusal would lose the run.
+    name: z.string().max(200).transform(noNul).pipe(z.string().trim().min(1).max(60)),
     /** How it felt, 1 (easy) to 10 (max effort); null when not given. */
     effort: z.number().int().min(1).max(10).nullable(),
-    note: z.string().trim().max(1000).nullable(),
+    note: z.string().max(3000).transform(noNul).pipe(z.string().trim().max(1000)).nullable(),
     points: z
       .array(z.tuple([msIntoRun, z.number().min(-90).max(90), z.number().min(-180).max(180), z.number().min(0).max(100_000).nullable()]))
       .max(RUN_MAX_POINTS),
@@ -119,6 +121,8 @@ export const savedRunSchema = z.object({
   splitsKm: z.array(runSplitSchema),
   splitsMi: z.array(runSplitSchema),
   polyline: z.string(),
+  /** Where in the polyline's points each stretch begins: the line starts again there. */
+  trackStarts: z.array(z.number().int().nonnegative()),
 });
 export type SavedRun = z.infer<typeof savedRunSchema>;
 
@@ -163,7 +167,8 @@ export const phoneLocationsSchema = z.object({
   ),
 });
 
-/** A saved run the server refused, kept to tell the person once. */
-export const refusedRunSchema = z.object({ runId: z.string(), name: z.string(), message: z.string() });
+/** A saved run the server refused, kept whole on the phone: the person may send it again or
+ *  remove it, and nothing they ran is ever thrown away by the app (round one of 37a, H1). */
+export const refusedRunSchema = z.object({ runId: z.string(), name: z.string(), message: z.string(), run: saveRunRequestSchema.optional() });
 export type RefusedRun = z.infer<typeof refusedRunSchema>;
 export const runOutboxFileSchema = z.object({ version: z.literal(1), waiting: z.array(z.unknown()), refused: z.array(z.unknown()) });

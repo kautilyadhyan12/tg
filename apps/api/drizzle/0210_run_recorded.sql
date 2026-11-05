@@ -6,7 +6,9 @@
 -- note), and the numbers the server works out from its points beside the ones `runs` already keeps:
 -- `duration_s` is the moving time; `elapsed_s` is Start to Finish; a stretch faster than anybody
 -- has run is left out and kept apart (`left_out_m`, `left_out_s`); `run_calc_version` names the
--- rules that made them (`packages/shared/src/runMaths.ts`). Rows from before keep nulls.
+-- rules that made them (`packages/shared/src/runMaths.ts`), and `kcal_calc_version` takes the same
+-- number, the calories being theirs. `name` is the person's own ("Morning Run"); `route_name`
+-- stays the place a route is named for, filled by the routes job. Rows from before keep nulls.
 ALTER TABLE "runs" ADD COLUMN "name" text;--> statement-breakpoint
 ALTER TABLE "runs" ADD COLUMN "effort" smallint;--> statement-breakpoint
 ALTER TABLE "runs" ADD COLUMN "note" text;--> statement-breakpoint

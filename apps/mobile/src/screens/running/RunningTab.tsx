@@ -6,6 +6,7 @@ import * as Location from "expo-location";
 import { useIsFocused } from "@react-navigation/native";
 import { runPageSchema, type Units } from "@app/shared";
 import { Button } from "../../look/Button";
+import { Sheet } from "../../look/Sheet";
 import { colours, orangeGradient, shadows, sizes } from "../../look/colours";
 import { fonts, Txt } from "../../look/Txt";
 import { useRead } from "../dashboard/useRead";
@@ -62,6 +63,7 @@ export function RunningTab({ units }: { units: Units }) {
   }, []);
   const [problem, setProblem] = useState<StartProblem | null>(null);
   const [settings, setSettings] = useState(false);
+  const [removing, setRemoving] = useState<{ runId: string; name: string } | null>(null);
   const going = layer.run !== null;
   // A run going on shows its own Auto-pause, and the switch changes it at once (Kd, 37a's click-through).
   const shownAuto = layer.run !== null && layer.run.phase !== "finished" ? layer.run.autoPause : autoPause;
@@ -162,15 +164,56 @@ export function RunningTab({ units }: { units: Units }) {
           <Txt kind="small" colour="badText">
             {`${r.name}: ${r.message}`}
           </Txt>
-          <Button
-            kind="quiet"
-            label="OK"
-            onPress={() => {
-              outbox?.forgetRefused(r.runId);
-            }}
-          />
+          <View style={styles.choices}>
+            {r.run === undefined ? null : (
+              <Button
+                kind="link"
+                label="Try again"
+                say={`Send ${r.name} again`}
+                onPress={() => {
+                  void outbox?.retryRefused(r.runId).then(() => outbox.send());
+                }}
+              />
+            )}
+            <Button
+              kind="dangerLink"
+              label="Remove"
+              say={`Remove ${r.name}`}
+              onPress={() => {
+                setRemoving({ runId: r.runId, name: r.name });
+              }}
+            />
+          </View>
         </View>
       ))}
+      <Sheet
+        open={removing !== null}
+        title="Remove this run?"
+        onClose={() => {
+          setRemoving(null);
+        }}
+      >
+        <Txt kind="body" colour="textSoft">
+          {`${removing?.name ?? "This run"} will be deleted from this phone. It was never saved.`}
+        </Txt>
+        <Button
+          kind="danger"
+          label="Remove run"
+          wide
+          onPress={() => {
+            if (removing !== null) outbox?.removeRefused(removing.runId);
+            setRemoving(null);
+          }}
+        />
+        <Button
+          kind="link"
+          label="Keep it"
+          style={styles.middle}
+          onPress={() => {
+            setRemoving(null);
+          }}
+        />
+      </Sheet>
       <SettingsPage
         open={settings}
         onClose={() => {
