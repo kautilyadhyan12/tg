@@ -224,24 +224,26 @@ function TimeBox({ reminder, onClose, onSave, busy }: { reminder: Reminder | nul
     <Sheet open={reminder !== null} title={reminder === null ? "" : LABEL[reminder.kind]} onClose={onClose}>
       {reminder === null ? null : (
         <View style={styles.wheels}>
+          <View pointerEvents="none" style={[styles.band, { top: wheelRow() * 2, height: wheelRow() }]} />
           <Wheel label="Hour" rows={HOURS.map(String)} index={hour} onPick={setHour} />
           <Wheel label="Minute" rows={MINUTES.map((m) => String(m).padStart(2, "0"))} index={minute} onPick={setMinute} />
           <Wheel label="AM or PM" rows={[...HALVES]} index={half} onPick={setHalf} />
         </View>
       )}
-      <Button label="Save" busy={busy} disabled={busy} onPress={() => void onSave(wheelTime(hour, minute, half))} />
+      <Button label="Save" busy={busy} disabled={busy} style={styles.save} onPress={() => void onSave(wheelTime(hour, minute, half))} />
     </Sheet>
   );
 }
 
 const SHOWN_ROWS = 5;
+/** A wheel's row grows with the phone's text size, so a large word is never cut. */
+const wheelRow = () => Math.round(40 * Math.min(PixelRatio.getFontScale(), 1.6));
 const DAY_SLOP = { top: 4, bottom: 4, left: 0, right: 0 };
 
 /** A wheel of choices to spin, as a phone's own alarm clock has; the middle row is the pick. A screen
  *  reader moves it a row at a time. */
 function Wheel({ label, rows, index, onPick }: { label: string; rows: readonly string[]; index: number; onPick: (index: number) => void }) {
-  // Each row grows with the phone's text size, so a large word is never cut.
-  const row = Math.round(40 * Math.min(PixelRatio.getFontScale(), 1.6));
+  const row = wheelRow();
   const list = useRef<ScrollView>(null);
   const last = rows.length - 1;
   const settle = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -266,7 +268,6 @@ function Wheel({ label, rows, index, onPick }: { label: string; rows: readonly s
       }}
       testID={`wheel-${label}`}
     >
-      <View pointerEvents="none" style={[styles.band, { top: row * 2, height: row }]} />
       <ScrollView
         ref={list}
         showsVerticalScrollIndicator={false}
@@ -333,11 +334,12 @@ const styles = StyleSheet.create({
   },
   foot: { marginTop: 4 },
   wheels: { flexDirection: "row", justifyContent: "center", gap: 18, marginVertical: 12 },
+  save: { alignSelf: "stretch" },
   wheel: { width: 72, overflow: "hidden" },
   band: {
     position: "absolute",
-    left: 0,
-    right: 0,
+    left: 24,
+    right: 24,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: colours.orangeLine,

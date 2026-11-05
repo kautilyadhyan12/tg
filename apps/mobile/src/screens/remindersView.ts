@@ -23,11 +23,13 @@ export function daysWords(days: readonly number[]): string {
   return names.length === 1 ? (names[0] ?? "") : `${names.slice(0, -1).join(", ")} and ${names.at(-1) ?? ""}`;
 }
 
-/** The line under a reminder's name; a pause is said in its own box under it. */
+/** The line under a reminder's name; a pause is said in its own box under it. The time and its AM or PM
+ *  never break onto two lines. */
 export function reminderLine(reminder: Reminder): string {
   if (!reminder.on) return "Off.";
-  if (reminder.kind === "workout") return `${daysWords(reminder.days)} at ${clockWords(reminder.time)}.`;
-  return `Every day at ${clockWords(reminder.time)}.`;
+  const at = clockWords(reminder.time).replace(" ", "\u00a0");
+  if (reminder.kind === "workout") return `${daysWords(reminder.days)} at ${at}.`;
+  return `Every day at ${at}.`;
 }
 
 export const PAUSED_LINE = "Paused because you haven’t opened the app in a week.";

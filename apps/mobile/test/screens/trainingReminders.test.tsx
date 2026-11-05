@@ -80,7 +80,7 @@ describe("Your training shows and saves only the server's answer", () => {
     });
     expect(saves(server.asked, "workout")).toEqual([{ on: true, time: "18:00", days: [1, 2, 3, 4, 5, 6, 7] }]);
     expect(acct.held[0]?.on).toBe(true);
-    expect(screen.getByText("Every day at 6:00 PM.")).toBeTruthy();
+    expect(screen.getByText("Every day at 6:00\u00a0PM.")).toBeTruthy();
     expect(screen.getByLabelText("Monday").props.accessibilityState).toMatchObject({ checked: true });
     expect(screen.getByLabelText("Workout reminder time, 6:00 PM")).toBeTruthy();
   });
@@ -108,14 +108,14 @@ describe("Your training shows and saves only the server's answer", () => {
     const acct = account({ workout: { on: true, days: [1, 3], time: "18:30" } });
     const server = fakeServer(routes(acct.routes));
     await openSettings(server.ask);
-    expect(screen.getByText("Mon and Wed at 6:30 PM.")).toBeTruthy();
+    expect(screen.getByText("Mon and Wed at 6:30\u00a0PM.")).toBeTruthy();
     await act(() => fireEvent.press(screen.getByLabelText("Friday")));
-    expect(await screen.findByText("Mon, Wed and Fri at 6:30 PM.")).toBeTruthy();
+    expect(await screen.findByText("Mon, Wed and Fri at 6:30\u00a0PM.")).toBeTruthy();
     await act(() => fireEvent.press(screen.getByLabelText("Monday")));
-    expect(await screen.findByText("Wed and Fri at 6:30 PM.")).toBeTruthy();
+    expect(await screen.findByText("Wed and Fri at 6:30\u00a0PM.")).toBeTruthy();
     // Down to one day: pressing it says so and saves nothing.
     await act(() => fireEvent.press(screen.getByLabelText("Wednesday")));
-    expect(await screen.findByText("Fri at 6:30 PM.")).toBeTruthy();
+    expect(await screen.findByText("Fri at 6:30\u00a0PM.")).toBeTruthy();
     expect(saves(server.asked, "workout").map((b) => (b as { days: number[] }).days)).toEqual([
       [1, 3, 5],
       [3, 5],
@@ -138,7 +138,7 @@ describe("Your training shows and saves only the server's answer", () => {
     await act(() => fireEvent(screen.getByTestId("wheel-Hour"), "accessibilityAction", { nativeEvent: { actionName: "increment" } }));
     await act(() => fireEvent(screen.getByTestId("wheel-Hour"), "accessibilityAction", { nativeEvent: { actionName: "increment" } }));
     await act(() => fireEvent.press(screen.getByText("Save")));
-    expect(await screen.findByText("Every day at 2:30 PM.")).toBeTruthy();
+    expect(await screen.findByText("Every day at 2:30\u00a0PM.")).toBeTruthy();
     expect(saves(server.asked, "lunch")).toEqual([{ on: true, time: "14:30", days: [1, 2, 3, 4, 5, 6, 7] }]);
   });
 
@@ -152,7 +152,7 @@ describe("Your training shows and saves only the server's answer", () => {
       expect(screen.queryByText(PAUSED_LINE)).toBeNull();
     });
     expect(saves(server.asked, "workout")).toEqual([{ on: true, time: "07:00", days: [1, 2, 3, 4, 5] }]);
-    expect(screen.getByText("Weekdays at 7:00 AM.")).toBeTruthy();
+    expect(screen.getByText("Weekdays at 7:00\u00a0AM.")).toBeTruthy();
   });
 
   it("not loaded: no switch to read wrongly, and Try again reads them", async () => {

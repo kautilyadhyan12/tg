@@ -32,9 +32,9 @@ describe("the reminders' words", () => {
   it("a line for off, a workout and a meal; a paused one keeps its times (its box says why)", () => {
     const base = { time: "18:30", days: [1, 3, 5], paused: false };
     expect(reminderLine({ ...base, kind: "workout", on: false })).toBe("Off.");
-    expect(reminderLine({ ...base, kind: "workout", on: true })).toBe("Mon, Wed and Fri at 6:30 PM.");
-    expect(reminderLine({ ...base, kind: "dinner", on: true, days: [1, 2, 3, 4, 5, 6, 7] })).toBe("Every day at 6:30 PM.");
-    expect(reminderLine({ ...base, kind: "workout", on: true, paused: true })).toBe("Mon, Wed and Fri at 6:30 PM.");
+    expect(reminderLine({ ...base, kind: "workout", on: true })).toBe("Mon, Wed and Fri at 6:30\u00a0PM.");
+    expect(reminderLine({ ...base, kind: "dinner", on: true, days: [1, 2, 3, 4, 5, 6, 7] })).toBe("Every day at 6:30\u00a0PM.");
+    expect(reminderLine({ ...base, kind: "workout", on: true, paused: true })).toBe("Mon, Wed and Fri at 6:30\u00a0PM.");
   });
 });
 
