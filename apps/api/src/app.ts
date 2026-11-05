@@ -32,6 +32,7 @@ import { createDevAgreementEmailSender, createResendAgreementEmailSender, type A
 import { registerUserRoutes } from "./modules/users/routes.js";
 import { registerPrivacyRoutes } from "./modules/privacy/routes.js";
 import { registerPushRoutes } from "./modules/push/routes.js";
+import { registerReminderRoutes } from "./modules/reminders/routes.js";
 import { registerExerciseRoutes } from "./modules/exercises/routes.js";
 import { registerGamificationRoutes } from "./modules/gamification/routes.js";
 import { registerGoalRoutes } from "./modules/goals/routes.js";
@@ -387,6 +388,7 @@ export async function buildApp(
   // privacy module, next to the Day-14 delete list it must stay in step with.
   registerPrivacyRoutes(app, { sql, redis });
   registerPushRoutes(app, { sql, redis });
+  registerReminderRoutes(app, { sql, redis });
   registerExerciseRoutes(app, { sql });
   registerGamificationRoutes(app, { sql });
   registerGoalRoutes(app, { sql, ...(overrides.goals?.now === undefined ? {} : { now: overrides.goals.now }) });

@@ -1,0 +1,123 @@
+// THE WORKOUT AND MEAL REMINDERS, SENT (ROADMAP Stage 5 item 19e-i). Every minute the worker works out
+// each person's clock, reads the reminders owed near now, and for each person sends at most ONE
+// notification: the reminders due now, with any due within the next hour (`remindersToSend`). Never
+// bombarded (Kd, 2026-11-05): each goes at most once a day (claimed on its row before anything is sent,
+// so a second run sends nothing twice); one already done today (a workout or a visit; that meal logged)
+// is skipped; and somebody who has not opened the app for a week gets none: what came due pauses itself.
+import {
+  REMINDER_BUNDLE_MINUTES,
+  REMINDER_DUE_MINUTES,
+  REMINDER_PAUSE_DAYS,
+  TRAINING_REMINDERS_CHANNEL,
+  mealTypeAtHour,
+  reminderNotification,
+  remindersToSend,
+  type ReminderKind,
+} from "@app/shared";
+import type { Sql } from "postgres";
+import type { PushSender } from "../push/fcm.adapter.js";
+import * as push from "../push/repo.js";
+import type { PushSweepResult } from "../push/sweep.js";
+import { localClock, localHourOf, reminderZone } from "./clock.js";
+import * as repo from "./repo.js";
+
+const AT_ONCE = 10;
+const DAY_MS = 86_400_000;
+
+export async function sendTrainingReminders(deps: {
+  sql: Sql;
+  sender: PushSender;
+  now: () => Date;
+  /** For tests on a shared database. */
+  userIds?: readonly string[];
+  onError?: (err: unknown) => void;
+}): Promise<PushSweepResult> {
+  const { sql, sender } = deps;
+  const now = deps.now();
+  const onError = deps.onError ?? (() => undefined);
+  const result: PushSweepResult = { sent: 0, skipped: 0, waiting: 0, failed: 0 };
+
+  const zones = await repo.liveZones(sql, deps.userIds);
+  const clocks = zones.map((zone) => ({ zone, ...localClock(zone === "" ? null : zone, now) }));
+  const owed = await repo.owedNear(sql, { clocks, before: REMINDER_DUE_MINUTES - 1, ahead: REMINDER_BUNDLE_MINUTES, userIds: deps.userIds });
+  const byPerson = new Map<string, repo.OwedRow[]>();
+  for (const row of owed) byPerson.set(row.userId, [...(byPerson.get(row.userId) ?? []), row]);
+  const clockOf = new Map(clocks.map((c) => [c.zone, c]));
+
+  const handle = async (userId: string, rows: repo.OwedRow[]): Promise<void> => {
+    const first = rows[0];
+    const clock = first === undefined ? undefined : clockOf.get(first.zone);
+    if (first === undefined || clock === undefined) return;
+    const going = remindersToSend(rows, clock.minute);
+    if (going.length === 0) {
+      result.waiting += 1;
+      return;
+    }
+    const taken = await repo.claim(sql, userId, going, clock.day);
+    if (taken.length === 0) return;
+    let reached = false;
+    try {
+      const zone = reminderZone(first.zone === "" ? null : first.zone);
+      // Not opened for a week: nothing goes, and what came due pauses itself until they turn it on.
+      if (!(await repo.openedSince(sql, userId, new Date(now.getTime() - REMINDER_PAUSE_DAYS * DAY_MS)))) {
+        await repo.pause(sql, userId, taken.map((t) => t.kind), now);
+        result.skipped += 1;
+        return;
+      }
+      const left = await notDone(sql, userId, zone, clock.day, taken.map((t) => t.kind), now);
+      const shown = reminderNotification(left);
+      const tokens = shown === null ? [] : await push.liveTokens(sql, userId, now, "training");
+      if (shown === null || tokens.length === 0) {
+        result.skipped += 1;
+        return;
+      }
+      let failed = false;
+      for (const token of tokens) {
+        const sent = await sender.send({
+          token,
+          userId,
+          title: shown.title,
+          body: shown.body,
+          tag: "training-reminder",
+          channelId: TRAINING_REMINDERS_CHANNEL.id,
+          data: { kind: "training_reminder", open: left.includes("workout") ? "workout" : "food" },
+        });
+        if (sent === "sent") {
+          result.sent += 1;
+          reached = true;
+        } else if (sent === "gone") {
+          await push.forgetToken(sql, userId, token);
+        } else {
+          result.failed += 1;
+          failed = true;
+        }
+      }
+      if (failed && !reached) await repo.unclaim(sql, userId, taken, clock.day);
+    } catch (err) {
+      // A failure after the claim: owed again unless a phone already has it; the rest of the run goes on.
+      onError(err);
+      result.failed += 1;
+      if (!reached) await repo.unclaim(sql, userId, taken, clock.day).catch(onError);
+    }
+  };
+
+  const people = [...byPerson.entries()];
+  for (let i = 0; i < people.length; i += AT_ONCE) {
+    await Promise.all(people.slice(i, i + AT_ONCE).map(([userId, rows]) => handle(userId, rows).catch(onError)));
+  }
+  return result;
+}
+
+/** The reminders still worth sending: a workout reminder unless the person trained today, a meal's unless
+ *  they logged it today. A meal with no kind chosen counts where the Food screen shows it, by its hour. */
+async function notDone(sql: Sql, userId: string, zone: string, day: string, kinds: readonly ReminderKind[], now: Date): Promise<ReminderKind[]> {
+  const since = new Date(now.getTime() - 2 * DAY_MS);
+  const trained = kinds.includes("workout") ? await repo.trainedOn(sql, userId, zone, day, since) : false;
+  const meals = kinds.some((kind) => kind !== "workout") ? await repo.recentMeals(sql, userId, since) : [];
+  const logged = new Set(
+    meals
+      .filter((meal) => localClock(zone, meal.takenAt).day === day)
+      .map((meal) => meal.mealType ?? mealTypeAtHour(localHourOf(zone, meal.takenAt))),
+  );
+  return kinds.filter((kind) => (kind === "workout" ? !trained : !logged.has(kind)));
+}
