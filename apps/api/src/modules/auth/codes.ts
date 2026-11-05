@@ -12,9 +12,12 @@
 //   · asking for a code never says whether the address has an account, and
 //     never creates one — the account is created when the code is PROVED
 //
-// The same mechanism serves two purposes: the sign-in door and the code
-// Settings asks for before deleting an account. They are counted separately
+// The same mechanism serves three purposes: the sign-in door, the code
+// Settings asks for before deleting an account, and the code sent to a NEW
+// address before the account moves to it. They are counted separately
 // (purpose is in every key), so asking to delete never spends a sign-in.
+// A code may be bound to an account (`boundTo`): the account's id is in its
+// hash, so only the account that asked for it can prove it.
 import { timingSafeEqual } from "node:crypto";
 import type { FastifyBaseLogger } from "fastify";
 import type { Sql } from "postgres";
@@ -81,6 +84,10 @@ function tooSoon(retryAfterMs: number): AuthError {
  *     person in is a sign-in, not a send to cap (Kd 2026-09-08).
  *   · The sixty-second gap is measured from the newest code of ANY state — a
  *     sign-in does not open the door to an immediate resend. */
+/** The purpose as the hash reads it: an account's id joins it when the code is bound to one. */
+const hashPurpose = (purpose: CodePurpose, boundTo: string | undefined): string =>
+  boundTo === undefined ? purpose : `${purpose}:${boundTo}`;
+
 function refuseIfOverRules(recent: SignInCodeRow[], now: number, robot: RobotAnswer | undefined): void {
   const unproved = recent.filter((r) => r.usedAt === null);
   // A door with no robot check (the delete-account code) stops at the free three.
@@ -109,7 +116,7 @@ export type RobotAnswer = "passed" | "not_passed";
  *  the address has an account. */
 export async function requestCode(
   deps: CodeDeps,
-  input: { email: string; purpose: CodePurpose; robot?: RobotAnswer },
+  input: { email: string; purpose: CodePurpose; robot?: RobotAnswer; boundTo?: string },
   send: CodeSender,
 ): Promise<{ resendAfterSeconds: number; expiresInSeconds: number }> {
   const now = Date.now();
@@ -117,7 +124,7 @@ export async function requestCode(
   const issued = await repo.issueCode(deps.sql, {
     email: input.email,
     purpose: input.purpose,
-    codeHash: signInCodeHash(deps.config.JWT_SECRET, { purpose: input.purpose, email: input.email, code }),
+    codeHash: signInCodeHash(deps.config.JWT_SECRET, { purpose: hashPurpose(input.purpose, input.boundTo), email: input.email, code }),
     expiresAt: new Date(now + SIGN_IN_CODE_RULES.ttlSeconds * 1000),
     pruneBefore: new Date(now - PRUNE_AFTER_MS),
     since: new Date(now - DAY_MS),
@@ -157,7 +164,7 @@ const invalidCode = () => new AuthError(400, "invalid_code", WRONG_CODE_WORDS);
  *  code is consumed, single use, and the caller may act for the address. */
 export async function redeemCode(
   deps: CodeDeps,
-  input: { email: string; purpose: CodePurpose; code: string },
+  input: { email: string; purpose: CodePurpose; code: string; boundTo?: string },
 ): Promise<void> {
   const live = await repo.findLiveCode(deps.sql, input.email, input.purpose);
   if (live === null) throw invalidCode();
@@ -169,7 +176,7 @@ export async function redeemCode(
 
   const expected = Buffer.from(live.codeHash, "hex");
   const presented = Buffer.from(
-    signInCodeHash(deps.config.JWT_SECRET, { purpose: input.purpose, email: input.email, code: input.code }),
+    signInCodeHash(deps.config.JWT_SECRET, { purpose: hashPurpose(input.purpose, input.boundTo), email: input.email, code: input.code }),
     "hex",
   );
   const matches = expected.length === presented.length && timingSafeEqual(expected, presented);

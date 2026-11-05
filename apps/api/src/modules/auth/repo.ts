@@ -93,6 +93,44 @@ export async function createUser(
   }
 }
 
+/** Whether any account, a deleted one in its undo days too, holds this address. */
+export async function emailTaken(sql: Sql, email: string): Promise<boolean> {
+  const rows = await sql<{ one: number }[]>`SELECT 1 AS one FROM users WHERE email = ${email} LIMIT 1`;
+  return rows.length > 0;
+}
+
+export type MovedEmail =
+  | { kind: "moved"; email: string; displayName: string; nameWas: string }
+  | { kind: "taken" }
+  | { kind: "stale" };
+
+/** Change email (19c), in ONE transaction: the account moves to the new address, a name that was
+ *  only the old address's first part becomes the new one's, and the Google sign-in tied to the old
+ *  address ends. Only an active account still on `from` moves ("stale" otherwise: deleted, or changed
+ *  meanwhile by another request); an address another account took meanwhile is "taken". */
+export async function moveEmail(
+  sql: Sql,
+  input: { userId: string; from: string | null; to: string; nameFrom: string | null; nameTo: string },
+): Promise<MovedEmail> {
+  try {
+    return await sql.begin(async (tx): Promise<MovedEmail> => {
+      const before = await tx<{ display_name: string }[]>`
+        SELECT display_name FROM users
+        WHERE id = ${input.userId} AND status = 'active' AND email IS NOT DISTINCT FROM ${input.from}::citext
+        FOR UPDATE`;
+      const was = before[0];
+      if (was === undefined) return { kind: "stale" };
+      const name = input.nameFrom !== null && was.display_name === input.nameFrom ? input.nameTo : was.display_name;
+      await tx`UPDATE users SET email = ${input.to}, display_name = ${name} WHERE id = ${input.userId}`;
+      await tx`DELETE FROM auth_identities WHERE user_id = ${input.userId} AND provider = 'google'`;
+      return { kind: "moved", email: input.to, displayName: name, nameWas: was.display_name };
+    });
+  } catch (err) {
+    if (isUniqueViolation(err)) return { kind: "taken" };
+    throw err;
+  }
+}
+
 function isUniqueViolation(err: unknown): boolean {
   // TS narrows via the `in` check — no cast needed (R2.2).
   return typeof err === "object" && err !== null && "code" in err && err.code === "23505";
@@ -618,7 +656,7 @@ export async function consumeOneTimeToken(
 // WHERE, so a code asked for by one address can never be found through another
 // (R3.2 in the shape this table has — the address is the tenant).
 
-export type CodePurpose = "sign_in" | "delete_account";
+export type CodePurpose = "sign_in" | "delete_account" | "change_email";
 
 export interface SignInCodeRow {
   id: string;
