@@ -8,7 +8,7 @@
 import type { FastifyBaseLogger } from "fastify";
 import type { Sql } from "postgres";
 import type { AppConfig } from "../../config.js";
-import { emailTaken, moveAccountEmail, redeemEmailCode, requestEmailCode } from "../auth/service.js";
+import { emailTaken, moveAccountEmail, movedHereLately, redeemEmailCode, requestEmailCode } from "../auth/service.js";
 import type { ChangeEmailSender } from "./changeEmailSender.js";
 import * as repo from "./repo.js";
 import { UsersError } from "./service.js";
@@ -21,6 +21,9 @@ export interface ChangeEmailDeps {
 }
 
 const sameAddress = () => new UsersError(400, "same_email", "That’s already your email address.");
+
+/** A Confirm sent again within this long of the move, its answer lost on the way, is told it worked. */
+const SENT_AGAIN_MINUTES = 15;
 
 async function profileOf(deps: ChangeEmailDeps, userId: string): Promise<repo.ProfileRow> {
   const row = await repo.getProfile(deps.sql, userId);
@@ -53,11 +56,23 @@ export async function changeEmail(
   input: { email: string; code: string },
 ): Promise<{ email: string; displayName: string }> {
   const row = await profileOf(deps, userId);
-  if (row.email?.toLowerCase() === input.email) throw sameAddress();
-  await redeemEmailCode(
-    { sql: deps.sql, config: deps.config, log: deps.log },
-    { email: input.email, purpose: "change_email", code: input.code, boundTo: userId },
-  );
+  // Already moved: by this same Confirm, sent again after its answer was lost (or sent twice at once).
+  const movedAlready = async (now: repo.ProfileRow) =>
+    now.email?.toLowerCase() === input.email && (await movedHereLately(deps.sql, { userId, email: input.email, minutes: SENT_AGAIN_MINUTES }));
+  if (row.email?.toLowerCase() === input.email) {
+    if (await movedAlready(row)) return { email: input.email, displayName: row.displayName };
+    throw sameAddress();
+  }
+  try {
+    await redeemEmailCode(
+      { sql: deps.sql, config: deps.config, log: deps.log },
+      { email: input.email, purpose: "change_email", code: input.code, boundTo: userId },
+    );
+  } catch (err) {
+    const now = await profileOf(deps, userId);
+    if (await movedAlready(now)) return { email: input.email, displayName: now.displayName };
+    throw err;
+  }
   const moved = await moveAccountEmail(deps.sql, { userId, from: row.email, to: input.email });
   if (moved.kind === "taken") {
     throw new UsersError(409, "email_in_use", "That address already has an account. Sign in with it instead, or choose another address.");

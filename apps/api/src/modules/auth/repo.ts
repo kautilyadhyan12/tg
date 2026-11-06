@@ -93,6 +93,20 @@ export async function createUser(
   }
 }
 
+/** Whether a code of this purpose, bound to this account, was proved for this address in the last
+ *  `minutes`. */
+export async function usedCodeSince(
+  sql: Sql,
+  input: { email: string; purpose: CodePurpose; userId: string; minutes: number },
+): Promise<boolean> {
+  const rows = await sql<{ one: number }[]>`
+    SELECT 1 AS one FROM sign_in_codes
+    WHERE email = ${input.email} AND purpose = ${input.purpose} AND user_id = ${input.userId}
+      AND used_at > now() - make_interval(mins => ${input.minutes})
+    LIMIT 1`;
+  return rows.length > 0;
+}
+
 /** Whether any account, a deleted one in its undo days too, holds this address. */
 export async function emailTaken(sql: Sql, email: string): Promise<boolean> {
   const rows = await sql<{ one: number }[]>`SELECT 1 AS one FROM users WHERE email = ${email} LIMIT 1`;
@@ -190,14 +204,20 @@ export async function createPasswordlessUser(
 export async function recordVerifiedEmail(
   sql: Sql,
   userId: string,
+  /** The address just proved. False, with nothing written, when the account no longer holds it
+   *  (a Change email committed after the sign-in found the account by it: item 19's
+   *  data-integrity pass, H1 and L2) or is no longer active; the caller looks the address up again. */
+  email: string,
   markerHash: string,
   /** A sign-in's link (Google), written in the proof's own transaction: a request cut
    *  between the two would leave a link whose address was never proved, and every later
    *  sign-in by that link would skip the proof (data-integrity pass on item 12, H2). */
   link?: { provider: string; subject: string },
-): Promise<void> {
-  await sql.begin(async (tx) => {
-    await tx`SELECT 1 FROM users WHERE id = ${userId} FOR UPDATE`;
+): Promise<boolean> {
+  return await sql.begin(async (tx) => {
+    const holds = await tx<{ one: number }[]>`
+      SELECT 1 AS one FROM users WHERE id = ${userId} AND email = ${email} AND status = 'active' FOR UPDATE`;
+    if (holds.length === 0) return false;
     if (link !== undefined) {
       await tx`
         INSERT INTO auth_identities (user_id, provider, subject)
@@ -208,11 +228,12 @@ export async function recordVerifiedEmail(
       SELECT 1 AS one FROM one_time_tokens
       WHERE user_id = ${userId} AND purpose = 'verify_email' AND used_at IS NOT NULL
       LIMIT 1`;
-    if (proved.length > 0) return;
+    if (proved.length > 0) return true;
     await tx`
       INSERT INTO one_time_tokens (user_id, purpose, token_hash, expires_at, used_at)
       VALUES (${userId}, 'verify_email', ${markerHash}, now(), now())`;
     await forgetWhatCameBeforeProof(tx, userId);
+    return true;
   });
 }
 

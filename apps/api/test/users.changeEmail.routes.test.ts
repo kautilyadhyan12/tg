@@ -340,7 +340,9 @@ d("change email (real Postgres)", { timeout: T }, () => {
     const code = changeCodes.get(leeNew);
     if (code === undefined) throw new Error("no change code was sent");
     const both = await Promise.all([confirm(lee, leeNew, code), confirm(lee, leeNew, code)]);
-    expect(both.map((r) => r.statusCode).sort()).toEqual([200, 400]);
+    // The one that lost the code is told the move worked once the move is in, else that the code was used.
+    expect(both.map((r) => (r.statusCode === 200 ? "moved" : errorOf(r))).sort()).toContain("moved");
+    expect(both.filter((r) => r.statusCode !== 200).map(errorOf)).not.toContain("same_email");
     expect(await emailOf(lee.userId)).toBe(leeNew);
     expect(told.filter((t) => t.oldEmail === lee.email)).toHaveLength(1);
   });
@@ -440,6 +442,101 @@ d("change email (real Postgres)", { timeout: T }, () => {
     expect(sent.map((m) => m.to)).toEqual(["old@example.com"]);
     expect(sent[0]?.text).toContain("write to us at help@kwazo.example");
     expect(sent[0]?.text).toContain("n***@example.com");
+  });
+
+  // ── Item 19's data-integrity pass (reviews/19-integrity-findings.md) ──
+
+  /** Holds the person's row, as a request inside its own work would; the returned call lets it go. */
+  const holdRow = async (userId: string): Promise<() => Promise<void>> => {
+    const held = await sql.reserve();
+    await held`BEGIN`;
+    await held`SELECT 1 FROM users WHERE id = ${userId} FOR UPDATE`;
+    return async () => {
+      await held`COMMIT`;
+      held.release();
+    };
+  };
+  /** Waits until `count` requests are queued behind that held row. */
+  const queuedOn = async (count: number) => {
+    await expect
+      .poll(
+        async () =>
+          (await sql<{ n: number }[]>`
+            SELECT count(*)::int AS n FROM pg_stat_activity
+            WHERE datname = current_database() AND wait_event_type = 'Lock' AND query ILIKE '%FROM users%FOR UPDATE%'`)[0]?.n ?? 0,
+        { timeout: 10_000, interval: 25 },
+      )
+      .toBeGreaterThanOrEqual(count);
+  };
+
+  it("a Google sign-in at the old address while the account moves off it never links Google to the moved account (H1)", async () => {
+    const rae = await person("rae");
+    const raeNew = address("rae-new");
+    changeCodes.delete(raeNew);
+    expect((await askCode(rae, raeNew)).statusCode).toBe(200);
+    const code = changeCodes.get(raeNew);
+    if (code === undefined) throw new Error("no change code was sent");
+    const oldGoogle = `google-rae-old-${randomUUID()}`;
+
+    const release = await holdRow(rae.userId);
+    const moving = confirm(rae, raeNew, code);
+    await queuedOn(1);
+    const signingIn = google(oldGoogle, rae.email);
+    await queuedOn(2);
+    await release();
+    const [moved, signedIn] = await Promise.all([moving, signingIn]);
+
+    expect(moved.statusCode, moved.body).toBe(200);
+    expect(await emailOf(rae.userId)).toBe(raeNew);
+    expect(signedIn.userId).not.toBe(rae.userId);
+    expect((await sql`SELECT 1 FROM auth_identities WHERE user_id = ${rae.userId}`).length).toBe(0);
+    expect((await google(oldGoogle, rae.email)).userId).not.toBe(rae.userId);
+  });
+
+  it("a sign-in by code at the old address while the account moves off it opens a new account, never the moved one (L2)", async () => {
+    const sam = await person("sam");
+    const samNew = address("sam-new");
+    changeCodes.delete(samNew);
+    expect((await askCode(sam, samNew)).statusCode).toBe(200);
+    const code = changeCodes.get(samNew);
+    if (code === undefined) throw new Error("no change code was sent");
+    await pastTheGap(sam.email);
+    signInCodes.delete(sam.email);
+    expect((await inject("POST", "/v1/auth/code/send", {}, { email: sam.email })).statusCode).toBe(200);
+    const signInCode = signInCodes.get(sam.email);
+    if (signInCode === undefined) throw new Error("no sign-in code was sent");
+
+    const release = await holdRow(sam.userId);
+    const moving = confirm(sam, samNew, code);
+    await queuedOn(1);
+    const signingIn = inject("POST", "/v1/auth/code/verify", {}, { email: sam.email, code: signInCode });
+    await queuedOn(2);
+    await release();
+    const [moved, signedIn] = await Promise.all([moving, signingIn]);
+
+    expect(moved.statusCode, moved.body).toBe(200);
+    expect(signedIn.statusCode, signedIn.body).toBe(200);
+    const body = JSON.parse(signedIn.body) as { user: { id: string; email: string }; isNewAccount: boolean };
+    expect(body).toMatchObject({ user: { email: sam.email }, isNewAccount: true });
+    expect(body.user.id).not.toBe(sam.userId);
+  });
+
+  it("Confirm sent again after its answer was lost says the move worked, and tells the old address once (H2)", async () => {
+    const tia = await person("tia");
+    const tiaNew = address("tia-new");
+    changeCodes.delete(tiaNew);
+    expect((await askCode(tia, tiaNew)).statusCode).toBe(200);
+    const code = changeCodes.get(tiaNew);
+    if (code === undefined) throw new Error("no change code was sent");
+    const first = await confirm(tia, tiaNew, code);
+    expect(first.statusCode, first.body).toBe(200);
+    const again = await confirm(tia, tiaNew, code);
+    expect(again.statusCode, again.body).toBe(200);
+    expect(JSON.parse(again.body)).toEqual(JSON.parse(first.body));
+    expect(told.filter((t) => t.oldEmail === tia.email)).toHaveLength(1);
+    // Fifteen minutes later the address is simply hers already.
+    await sql`UPDATE sign_in_codes SET used_at = used_at - interval '16 minutes' WHERE email = ${tiaNew}`;
+    expect(errorOf(await confirm(tia, tiaNew, code))).toBe("same_email");
   });
 
   // The person's gyms read again: their page shows the address, and the name where it changed with it.
