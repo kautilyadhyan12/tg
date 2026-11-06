@@ -60,7 +60,8 @@ describe("a person's page", () => {
     expect(line('sent')).toBe('Price goes up to $30.00 from the payment on 3 Dec. Notice emailed on 26 Nov.');
     expect(line('not_renewing')).toBe("Price stays $25.00: it won't renew before the new price would start.");
     expect(line('address_blocked')).toBe('Price stays $25.00: the notice could not be delivered to their email address.');
-    expect(line('not_sent')).toBe('Price stays $25.00 for now: the notice could not be delivered. It is tried again tomorrow.');
+    expect(line('not_sent')).toBe('Price stays $25.00 for now: the notice could not be delivered. It is tried again before the next payment.');
+    expect(line('sent', { startsOn: null })).toBe('Price goes up to $30.00 once it is back from its freeze. Notice emailed on 26 Nov.');
     expect(line('maybe_sent')).toBe("Price stays $25.00: we couldn't tell whether the notice was emailed.");
     expect(line('former_payer')).toBe('Price stays $25.00: whoever pays for it is a past member.');
     expect(line('billed_elsewhere')).toBe('Price stays $25.00: it is paid in your other software.');

@@ -420,6 +420,8 @@ d("Raise the price for members already on a line (real Postgres)", { timeout: T 
     // Frozen tomorrow, back 30 days later: every payment moves 30 days, the one the email named to day 60.
     clock = noon(addDays(today, 1));
     expect((await send("POST", `${entryUrl(gym, eve)}/memberships/${eveM}/freeze`, gym.cookies, { feeMinor: 0 })).statusCode).toBe(200);
+    // While frozen its day is not known, so no day is named.
+    expect((await pageOf(gym, eve)).priceRaises.map((r) => [r.status.state, r.status.startsOn])).toEqual([["sent", null]]);
     clock = noon(addDays(today, 31));
     expect((await send("POST", `${entryUrl(gym, eve)}/memberships/${eveM}/unfreeze`, gym.cookies, {})).statusCode).toBe(200);
     const page = await pageOf(gym, eve);

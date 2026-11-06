@@ -59,10 +59,11 @@ function standingOf(row: HeldRow, billedTo: number, today: string, written: Writ
   return charged ? "charged" : "sent";
 }
 
-/** The payment a raise starts with, as its dates stand now: the one its email named, moved by any freeze since. */
+/** The payment a raise starts with, as its dates stand now: the one its email named, moved by any freeze since. None
+ *  while frozen: its day is not known until it is back (re-check, N2). */
 function startsOnOf(row: HeldRow, written: Written): string | null {
   const raise = row.raise;
-  if (raise === null) return null;
+  if (raise === null || row.membership.status === "frozen") return null;
   return raise.fromPeriod !== null ? periodStart(row.membership, raise.fromPeriod) : (emailOf(written, row)?.aboutOn ?? null);
 }
 
@@ -70,7 +71,8 @@ function startsOnOf(row: HeldRow, written: Written): string | null {
  *  written again, naming the payment the rule names then. One that may have gone is never sent again. */
 const RETRY_FAILED_AFTER_MS = 24 * 60 * 60_000;
 function retriable(email: reminders.ReminderWritten, now: Date): boolean {
-  return email.state === "failed" && email.reason !== "send_unknown" && email.finishedAt !== null && now.getTime() - email.finishedAt.getTime() >= RETRY_FAILED_AFTER_MS;
+  const passing = (email.state === "failed" && email.reason !== "send_unknown") || (email.state === "skipped" && email.reason !== "address_blocked");
+  return passing && email.finishedAt !== null && now.getTime() - email.finishedAt.getTime() >= RETRY_FAILED_AFTER_MS;
 }
 
 /** The facts each membership's status is read from, all read at once for many. */
@@ -153,8 +155,8 @@ export function standingStatus(held: reminders.PayerHeld, facts: Facts): { statu
   if (standing === "emailing") return said("sending", email?.aboutOn ?? null, null);
   if (email !== undefined && (email.state === "failed" || email.state === "skipped")) {
     // Handed to the email service, which never confirmed it: it may have gone (round one, L2).
-    // A failed one is written again a day after; a skipped one was the address, which a new one may fix.
-    const state = email.reason === "address_blocked" ? "address_blocked" : email.reason === "send_unknown" ? "maybe_sent" : email.state === "failed" ? "not_sent" : "no_email";
+    // Written again once a day has passed and the next one falls due (`retriable`); never one that bounced or may have gone.
+    const state = email.reason === "address_blocked" ? "address_blocked" : email.reason === "send_unknown" ? "maybe_sent" : "not_sent";
     return said(state, null, null);
   }
   if (plan.kind === "none") return said(plan.reason === "frozen" ? "after_freeze" : "not_renewing", null, null);

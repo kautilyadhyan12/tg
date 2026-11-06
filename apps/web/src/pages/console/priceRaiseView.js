@@ -131,7 +131,11 @@ export function priceRaiseLine(status, currency) {
     case 'sending':
       return starts === null ? `Price goes up to ${to}. The notice is being emailed.` : `Price goes up to ${to} from the payment on ${starts}. The notice is being emailed.`;
     case 'sent':
-      return starts === null || status.on === null ? null : `Price goes up to ${to} from the payment on ${starts}. Notice emailed on ${shortDay(status.on, false)}.`;
+      if (status.on === null) return null;
+      // While frozen its day is not known: it is said once it is back.
+      return starts === null
+        ? `Price goes up to ${to} once it is back from its freeze. Notice emailed on ${shortDay(status.on, false)}.`
+        : `Price goes up to ${to} from the payment on ${starts}. Notice emailed on ${shortDay(status.on, false)}.`;
     case 'not_renewing':
       return `Price stays ${from}: it won't renew before the new price would start.`;
     case 'no_email':
@@ -139,7 +143,7 @@ export function priceRaiseLine(status, currency) {
     case 'address_blocked':
       return `Price stays ${from}: the notice could not be delivered to their email address.`;
     case 'not_sent':
-      return `Price stays ${from} for now: the notice could not be delivered. It is tried again tomorrow.`;
+      return `Price stays ${from} for now: the notice could not be delivered. It is tried again before the next payment.`;
     case 'maybe_sent':
       return `Price stays ${from}: we couldn't tell whether the notice was emailed.`;
     case 'former_payer':

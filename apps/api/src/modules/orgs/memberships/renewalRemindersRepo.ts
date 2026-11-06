@@ -201,10 +201,11 @@ export async function remindersOf(sql: SqlOrTx, gymId: string, heldIds: readonly
   return rows.map((r) => ({ id: r.id, heldId: r.held_membership_id, occasion: r.occasion, state: r.state, on: r.on, reason: r.reason, aboutOn: r.about_on, finishedAt: r.finished_at }));
 }
 
-/** These failed emails are taken off, to be written again (a price raise's, 18w). Never one that may have gone. */
+/** These failed or skipped emails are taken off, to be written again (a price raise's, 18w). Never one that may have
+ *  gone, nor an address that bounced. */
 export async function dropFailedReminders(sql: SqlOrTx, gymId: string, ids: readonly string[]): Promise<void> {
   if (ids.length === 0) return;
-  await sql`DELETE FROM gym_renewal_reminders WHERE gym_id = ${gymId} AND id = ANY(${[...ids]}::uuid[]) AND state = 'failed' AND reason <> 'send_unknown'`;
+  await sql`DELETE FROM gym_renewal_reminders WHERE gym_id = ${gymId} AND id = ANY(${[...ids]}::uuid[]) AND ((state = 'failed' AND reason <> 'send_unknown') OR (state = 'skipped' AND reason <> 'address_blocked'))`;
 }
 
 /** The gym's day now. */
