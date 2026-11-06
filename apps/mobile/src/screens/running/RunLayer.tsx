@@ -175,6 +175,16 @@ export function RunLayerProvider({ children }: { children: ReactNode }) {
   return (
     <RunLayerContext.Provider value={value}>
       {children}
+      {run !== null && counting === null && !shown ? (
+        <RunBar
+          run={run}
+          units={units}
+          kg={kg}
+          onOpen={() => {
+            setShown(true);
+          }}
+        />
+      ) : null}
       <Modal visible={counting !== null || (run !== null && shown)} animationType="slide" statusBarTranslucent navigationBarTranslucent onRequestClose={() => { setShown(false); }}>
         {counting !== null ? (
           <Countdown onGo={() => void go()} />
@@ -307,14 +317,51 @@ function GpsPill({ gps }: { gps: Gps }) {
   );
 }
 
+/** The run's moving time in seconds, as the summary gives it: pauses, stretches left out and standing
+ *  with no pause pressed are all left out. */
+function movingSeconds(run: LiveRun, now: number, sums: RunSums | null): number {
+  const elapsed = elapsedMs(run, now);
+  const paused = closedPauses(run, elapsed).reduce((t, [a, b]) => t + (b - a), 0);
+  return Math.max(0, elapsed - paused - ((sums?.leftOutS ?? 0) + (sums?.stillS ?? 0)) * 1000) / 1000;
+}
+
+/** Room the run's own bar keeps over a page's foot, above the tab bar (37b-i). */
+export const RUN_BAR_ROOM = 92;
+
+/** The run that is on, seen from every tab once its own screen is put away (Kd, 37b-i: "when I am out
+ *  of running page mid a run there is no pop up or button of run that is still on"): what it is doing,
+ *  its time and distance, and a tap opens it again. */
+function RunBar({ run, units, kg, onOpen }: { run: LiveRun; units: Units; kg: number; onOpen: () => void }) {
+  const insets = useSafeAreaInsets();
+  const { now, sums } = useLiveNumbers(run, kg);
+  const word = run.phase === "finished" ? "Run finished" : run.phase === "paused" ? "Run paused" : "Run in progress";
+  const line = run.phase === "finished" ? "Waiting to be saved" : `${clock(movingSeconds(run, now, sums))} · ${distance(sums?.distanceM ?? 0, units)} ${unitWord(units)}`;
+  return (
+    <View pointerEvents="box-none" style={[styles.barWrap, { bottom: sizes.tabBar + insets.bottom + 10 }]}>
+      <Pressable accessibilityRole="button" accessibilityLabel="Open run" onPress={onOpen} style={({ pressed }) => [styles.bar, pressed ? styles.pressed : null]}>
+        <View style={[styles.barDot, run.phase === "running" ? styles.barDotOn : styles.barDotOff]} />
+        <View style={styles.grow}>
+          <Txt kind="strong" numberOfLines={1}>
+            {word}
+          </Txt>
+          <Txt kind="small" colour="textSoft" numberOfLines={1}>
+            {line}
+          </Txt>
+        </View>
+        <Txt kind="small" colour="orange" style={styles.barOpen}>
+          Open
+        </Txt>
+      </Pressable>
+    </View>
+  );
+}
+
 function Live({ run, units, kg, onHide }: { run: LiveRun; units: Units; kg: number; onHide: () => void }) {
   const insets = useSafeAreaInsets();
   const { session } = useSession();
   const { now, sums } = useLiveNumbers(run, kg);
-  const elapsed = elapsedMs(run, now);
-  const paused = closedPauses(run, elapsedMs(run, now)).reduce((t, [a, b]) => t + (b - a), 0);
   // The same moving time the summary gives: standing with no pause pressed is left out too.
-  const moving = Math.max(0, elapsed - paused - ((sums?.leftOutS ?? 0) + (sums?.stillS ?? 0)) * 1000) / 1000;
+  const moving = movingSeconds(run, now, sums);
   const metres = sums?.distanceM ?? 0;
   const per = units === "imperial" ? METRES_PER_MILE : 1000;
   const isPaused = run.phase === "paused";
@@ -822,6 +869,25 @@ const styles = StyleSheet.create({
   pausedBar: { position: "absolute", top: 0, left: 0, right: 0, height: 5, backgroundColor: colours.orange, boxShadow: shadows.dotGlow },
   liveTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", minHeight: sizes.press },
   hide: { width: sizes.press, height: sizes.press, alignItems: "center", justifyContent: "center" },
+  // The run's own bar, over every tab while its screen is put away (37b-i).
+  barWrap: { position: "absolute", left: 12, right: 12 },
+  bar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    minHeight: 60,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: sizes.boxRadius,
+    backgroundColor: colours.raised,
+    borderWidth: 1,
+    borderColor: colours.orangeLine,
+    boxShadow: shadows.sheet,
+  },
+  barDot: { width: 10, height: 10, borderRadius: sizes.round },
+  barDotOn: { backgroundColor: colours.orange, boxShadow: shadows.dotGlow },
+  barDotOff: { backgroundColor: colours.textFaint },
+  barOpen: { fontFamily: fonts.bold },
   // Over the map: a round of the page's own dark, so the arrow reads on a light map too.
   hideOnMap: { borderRadius: sizes.round, backgroundColor: colours.veil, borderWidth: 1, borderColor: colours.lineStrong },
   // The run on the map (37b-i): the map under everything, the top over it, the numbers at the foot.

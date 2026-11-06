@@ -823,3 +823,42 @@ describe("the map under the run (37b-i)", () => {
     });
   });
 });
+
+describe("from Kd's click-through of 37b-i", () => {
+  it("a run put away shows its bar on every tab, with its state, and the bar opens it again", async () => {
+    const s = runServer();
+    await openRunning(s);
+    await startRunning();
+    await feed(0, 61, 3);
+    await fireEvent.press(screen.getByRole("button", { name: "Back to the app" }));
+    const bar = await screen.findByRole("button", { name: "Open run" });
+    expect(within(bar).getByText("Run in progress")).toBeTruthy();
+    // Another tab: the bar is still there.
+    await fireEvent.press(screen.getByRole("tab", { name: "Food" }));
+    expect(screen.getByRole("button", { name: "Open run" })).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "Open run" }));
+    expect(await screen.findByTestId("live-map")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Open run" })).toBeNull();
+    // Paused and put away: the bar says so.
+    await fireEvent.press(screen.getByRole("button", { name: "Pause" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Back to the app" }));
+    expect(within(await screen.findByRole("button", { name: "Open run" })).getByText("Run paused")).toBeTruthy();
+  });
+
+  it("the map's credit folds into (i) at the first touch of the map, and (i) shows it again", async () => {
+    const s = runServer();
+    await openRunning(s);
+    await startRunning();
+    await feed(0, 31, 3);
+    expect(await screen.findByText(OPENFREEMAP.credit)).toBeTruthy();
+    await waitFor(() => {
+      expect(drawnMap("live-map-view")).toBeTruthy();
+    });
+    await act(() => {
+      drawnMap("live-map-view").props.onRegionWillChange?.({ nativeEvent: { userInteraction: true } });
+    });
+    expect(screen.queryByText(OPENFREEMAP.credit)).toBeNull();
+    await fireEvent.press(screen.getByRole("button", { name: "Map credits" }));
+    expect(screen.getByText(OPENFREEMAP.credit)).toBeTruthy();
+  });
+});

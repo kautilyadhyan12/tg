@@ -106,6 +106,9 @@ export const pictureFade =
 export const pictureFadeUnderWords =
   "linear-gradient(to top, rgba(10,9,8,1) 0%, rgba(10,9,8,0.82) 20%, rgba(10,9,8,0.18) 55%, rgba(10,9,8,0.62) 100%)";
 
+/** Under the Running page's START, over the page's foot: the page fading out as it scrolls under it. */
+export const dockShade = "linear-gradient(to bottom, rgba(10,9,8,0) 0%, rgba(10,9,8,0.9) 30%, rgba(10,9,8,1) 100%)";
+
 /** The same, kept off the picture's lower part, where its own light is the point (the Dashboard's fire). */
 export const pictureFadeLight =
   "linear-gradient(to top, rgba(10,9,8,1) 0%, rgba(10,9,8,0.45) 7%, rgba(10,9,8,0) 13%, rgba(10,9,8,0) 72%, rgba(10,9,8,0.55) 100%)";

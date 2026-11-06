@@ -23,6 +23,9 @@ export type RunMapMode = "live" | "box" | "full";
 
 /** The closest the map comes: a walk round a room is a few metres in the middle, never a blur. */
 const NEAREST_ZOOM = 17.5;
+/** How long the map's credit stays open before it folds into (i): OpenStreetMap's guidelines allow
+ *  folding it after five seconds, or at the first touch of the map. */
+export const CREDIT_SHOWN_MS = 5000;
 /** How close the map follows a run going on. */
 const FOLLOW_ZOOM = 16.2;
 
@@ -66,6 +69,18 @@ export function RunMap({ track, starts, units, mode, scheme, source, under = 0, 
   const front = track[track.length - 1];
   const bearing = mode === "live" ? frontBearing(track, starts) : null;
   const [following, setFollowing] = useState(true);
+  // The map's credit shows when it opens, then folds into (i) after CREDIT_SHOWN_MS or at the first
+  // touch of the map, as OpenStreetMap's attribution guidelines allow; (i) shows it again (Kd, 37b-i).
+  const [credit, setCredit] = useState(true);
+  useEffect(() => {
+    if (!credit) return undefined;
+    const fold = setTimeout(() => {
+      setCredit(false);
+    }, CREDIT_SHOWN_MS);
+    return () => {
+      clearTimeout(fold);
+    };
+  }, [credit]);
   const t = trailColours[scheme];
   const bold = mapFonts(source.maker).bold;
   const still = mode === "box";
@@ -100,7 +115,9 @@ export function RunMap({ track, starts, units, mode, scheme, source, under = 0, 
         touchRotate={false}
         touchPitch={false}
         onRegionWillChange={(event) => {
-          if (mode === "live" && event.nativeEvent.userInteraction) setFollowing(false);
+          if (!event.nativeEvent.userInteraction) return;
+          setCredit(false);
+          if (mode === "live") setFollowing(false);
         }}
       >
         <Camera maxZoom={NEAREST_ZOOM} {...(camera ?? {})} />
@@ -160,13 +177,27 @@ export function RunMap({ track, starts, units, mode, scheme, source, under = 0, 
           <Icon name="locate" size={22} />
         </Pressable>
       ) : null}
-      <View pointerEvents="none" style={[styles.credit, { bottom: under + 6 }]}>
-        <View style={[styles.creditBack, { backgroundColor: t.credit }]}>
-          <Txt kind="small" style={[styles.creditWords, { color: t.creditWord }]}>
-            {source.credit}
-          </Txt>
+      {credit ? (
+        <View pointerEvents="none" style={[styles.credit, { bottom: under + 6 }]}>
+          <View style={[styles.creditBack, { backgroundColor: t.credit }]}>
+            <Txt kind="small" style={[styles.creditWords, { color: t.creditWord }]}>
+              {source.credit}
+            </Txt>
+          </View>
         </View>
-      </View>
+      ) : (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Map credits"
+          hitSlop={10}
+          onPress={() => {
+            setCredit(true);
+          }}
+          style={[styles.creditButton, { bottom: under + 8 }]}
+        >
+          <Icon name="info" size={18} />
+        </Pressable>
+      )}
     </View>
   );
 }
@@ -231,6 +262,18 @@ const styles = StyleSheet.create({
   credit: { position: "absolute", right: 8, left: 8, alignItems: "flex-end" },
   creditBack: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 },
   creditWords: { fontSize: 11, lineHeight: 14 },
+  creditButton: {
+    position: "absolute",
+    right: 8,
+    width: 32,
+    height: 32,
+    borderRadius: sizes.round,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colours.veil,
+    borderWidth: 1,
+    borderColor: colours.grab,
+  },
   front: { width: BEAM * 2, height: BEAM * 2, alignItems: "center", justifyContent: "center" },
   beam: { position: "absolute" },
   pulse: { position: "absolute", width: 36, height: 36, borderRadius: sizes.round },
