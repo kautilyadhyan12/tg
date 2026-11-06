@@ -1,0 +1,17 @@
+// The run's voice (ROADMAP Stage 5 item 37a-ii): this app's own Android code, linked by Expo from
+// apps/mobile/modules as any Expo package is.
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'expo.modules.runvoice'
+version = '1.0.0'
+
+android {
+  namespace "expo.modules.runvoice"
+  defaultConfig {
+    versionCode 1
+    versionName "1.0.0"
+  }
+}

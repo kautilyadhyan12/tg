@@ -152,6 +152,15 @@ export const keptRunStateSchema = z.object({
 });
 export const keptRunPointsSchema = z.array(z.tuple([z.number(), z.number(), z.number(), z.number().nullable()]));
 
+/** The run's choices (37a, 37a-ii): Auto-pause, the voice, and the account's units, kept for a run the
+ *  phone carries on with the app closed. One missing or unreadable keeps its default. */
+export const keptRunChoicesSchema = z.object({
+  autoPause: z.boolean().catch(true),
+  voice: z.boolean().catch(true),
+  units: z.enum(["metric", "imperial"]).catch("metric"),
+});
+export type KeptRunChoices = z.infer<typeof keptRunChoicesSchema>;
+
 /** What Android hands the app with each batch of a run's points (expo-location's task data). */
 export const phoneLocationsSchema = z.object({
   locations: z.array(
