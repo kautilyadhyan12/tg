@@ -344,14 +344,23 @@ export interface WaitingClimb {
   splits: unknown;
 }
 
-/** Runs whose elevation gain waits for a piece of the height map, the longest waiting first. */
+/** Runs whose elevation gain waits for a piece of the height map, the newest first: one that never
+ *  stops waiting can hold up none saved after it (round one of 37b-ii, L3). */
 export async function listWaitingClimbs(sql: Sql, limit: number): Promise<WaitingClimb[]> {
   const rows = await sql<{ id: string; user_id: string; polyline: string | null; splits: unknown }[]>`
     SELECT id, user_id, polyline, splits FROM runs
     WHERE climb_state = 'waiting'
-    ORDER BY created_at, id
+    ORDER BY created_at DESC, id
     LIMIT ${limit}`;
   return rows.map((r) => ({ id: r.id, userId: r.user_id, polyline: r.polyline, splits: r.splits }));
+}
+
+/** Runs still waiting this many days after they were saved have no number: their map never came. */
+export async function giveUpOldClimbs(sql: Sql, days: number): Promise<number> {
+  const done = await sql`
+    UPDATE runs SET climb_state = 'none'
+    WHERE climb_state = 'waiting' AND created_at < now() - ${days} * interval '1 day'`;
+  return done.count;
 }
 
 /** Keeps a run's elevation gain once it is known, only while it still waits: a second worker, or the

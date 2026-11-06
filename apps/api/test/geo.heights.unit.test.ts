@@ -2,24 +2,40 @@
 // thing: another company learning where a person ran. The only thing the server ever asks of either
 // map's source is a whole degree square by its name, once; never a run, a place, a person or a
 // sign-in. Then what is kept, what is refused, the lower of the two maps, and Copernicus's real bytes.
-import { mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, readdirSync, rmSync, truncateSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { deflateSync, gzipSync } from "node:zlib";
 import { afterEach, describe, expect, it } from "vitest";
-import { createHeightMap, heightTileHeader, mapzenTileName, type HeightMapDeps } from "../src/modules/geo/heights.adapter.js";
+import { copernicusHasSquare, COPERNICUS_SQUARE_COUNT } from "../src/modules/geo/copernicusSquares.js";
+import { HEIGHT_MOST_SQUARES, createHeightMap, heightTileHeader, mapzenTileName, type HeightMapDeps } from "../src/modules/geo/heights.adapter.js";
 
 const COP = "https://copernicus.test";
 const MZ = "https://mapzen.test";
 const quiet = { info: () => undefined, warn: () => undefined, error: () => undefined };
+const urlOf = (input: string | URL | Request): string => (typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+/** A log that keeps what it is given. */
+function keptLog(): { log: HeightMapDeps["log"]; said: Record<string, unknown>[] } {
+  const said: Record<string, unknown>[] = [];
+  const keep = (o: Record<string, unknown>) => {
+    said.push(o);
+  };
+  return { log: { info: keep, warn: keep, error: keep }, said };
+}
 
 // ── Files in each map's own layout ───────────────────────────────────────────────────────────────
 
 /** A Copernicus-style file for the square whose south-west corner is (south, west): classic TIFF,
  *  3600 x 3600 32-bit floats in 1024 x 1024 blocks, DEFLATE and the floating-point predictor, "pixel
  *  is point". `height(row, col)` gives each pixel; a block where `flat(index)` gives a number is that
- *  number throughout. */
-function copernicusFile(south: number, west: number, height: (row: number, col: number) => number, flat: (block: number) => number | null = () => null): Buffer {
+ *  number throughout; block `bigBlock` unpacks to twice the size the header gives a block. */
+function copernicusFile(
+  south: number,
+  west: number,
+  height: (row: number, col: number) => number,
+  flat: (block: number) => number | null = () => null,
+  bigBlock = -1,
+): Buffer {
   const W = 3600;
   const B = 1024;
   const across = Math.ceil(W / B);
@@ -40,7 +56,7 @@ function copernicusFile(south: number, west: number, height: (row: number, col: 
       }
       for (let i = start + B * 4 - 1; i > start; i--) raw[i] = ((raw[i] ?? 0) - (raw[i - 1] ?? 0)) & 0xff;
     }
-    blocks.push(deflateSync(raw));
+    blocks.push(deflateSync(k === bigBlock ? Buffer.concat([raw, Buffer.alloc(B * B * 4)]) : raw));
   }
   // The header: 16 entries, then the arrays, then the blocks.
   const entries: [number, number, number[]][] = [
@@ -215,17 +231,98 @@ describe("the worst thing: nothing about a run or a person ever leaves our serve
   });
 });
 
-describe("what is kept, and what is refused", () => {
-  it("a square a map has no file for (the sea) is remembered as having none, and never asked again", async () => {
+describe("no request can fill the server's memory or disk (round one of 37b-ii, C1)", () => {
+  /** Places in `n` land squares along latitude 26 in India and Myanmar, each square's own name served. */
+  const squaresAlong = (n: number) => {
+    const served = new Map<string, Buffer | number>();
+    const places: [number, number][] = [];
+    for (let k = 0; k < n; k++) {
+      const west = 86 + k;
+      served.set(copUrl(26, west), copernicusFile(26, west, () => 0, () => 30));
+      served.set(mzUrl(26, west), files.mzGuwahati);
+      places.push([26.5, west + 0.5]);
+    }
+    return { served, places };
+  };
+
+  it(`a run in more than ${String(HEIGHT_MOST_SQUARES)} squares (no runner's) has no heights, and nothing is asked`, async () => {
     const calls: Call[] = [];
-    const dir = newDir();
-    const sea: [number, number][] = [[30.5, -40.5]];
-    const map = mapOn(dir, fakeFetch(new Map(), calls));
-    expect(await map.heightsAt(sea, 5000)).toEqual([null]);
-    expect(calls).toHaveLength(2);
-    expect(readdirSync(dir).sort()).toEqual(["Copernicus_DSM_COG_10_N30_00_W041_00_DEM.copernicus.none", "N30W041.mapzen.none"]);
-    expect(await mapOn(dir, fakeFetch(new Map(), calls)).heightsAt(sea, 5000)).toEqual([null]);
-    expect(calls).toHaveLength(2);
+    const { served, places } = squaresAlong(HEIGHT_MOST_SQUARES + 1);
+    expect(places.every(([lat, lng]) => copernicusHasSquare(lat, lng))).toBe(true);
+    expect(await mapOn(newDir(), fakeFetch(served, calls)).heightsAt(places, 5000)).toEqual(places.map(() => null));
+    expect(calls).toHaveLength(0);
+  });
+
+  it(`a run in ${String(HEIGHT_MOST_SQUARES)} squares is read, one download at a time for each map`, async () => {
+    const calls: Call[] = [];
+    const { served, places } = squaresAlong(HEIGHT_MOST_SQUARES);
+    let open = { copernicus: 0, mapzen: 0 };
+    let most = { copernicus: 0, mapzen: 0 };
+    const inner = fakeFetch(served, calls, 20);
+    const counting: typeof fetch = async (input, init) => {
+      const which = urlOf(input).startsWith(COP) ? "copernicus" : "mapzen";
+      open = { ...open, [which]: open[which] + 1 };
+      most = { copernicus: Math.max(most.copernicus, open.copernicus), mapzen: Math.max(most.mapzen, open.mapzen) };
+      try {
+        const res = await inner(input, init);
+        // The body is read before the next may start: one whole download at a time.
+        return new Response(await res.arrayBuffer(), { status: res.status, headers: res.headers });
+      } finally {
+        open = { ...open, [which]: open[which] - 1 };
+      }
+    };
+    const got = await mapOn(newDir(), counting).heightsAt(places, 20_000);
+    expect(got).toEqual(places.map(() => 30));
+    expect(calls).toHaveLength(HEIGHT_MOST_SQUARES * 2);
+    expect(most).toEqual({ copernicus: 1, mapzen: 1 });
+  });
+
+  it("past the new squares an hour allows, 'waiting' with nothing more asked; an hour on, the rest", async () => {
+    const calls: Call[] = [];
+    let now = 5_000_000;
+    const { served, places } = squaresAlong(3);
+    const map = mapOn(newDir(), fakeFetch(served, calls), { now: () => now, newSquaresAnHour: 2 });
+    expect(await map.heightsAt(places, 5000)).toBe("waiting");
+    expect(calls).toHaveLength(4);
+    expect(await map.heightsAt(places, 5000)).toBe("waiting");
+    expect(calls).toHaveLength(4);
+    now += 61 * 60 * 1000;
+    expect(await map.heightsAt(places, 5000)).toEqual(places.map(() => 30));
+    expect(calls).toHaveLength(6);
+  });
+});
+
+describe("what is kept, and what is refused", () => {
+  it("a place off Copernicus's own list of land (the open Atlantic, Armenia) has no height, and nothing is asked", async () => {
+    const calls: Call[] = [];
+    // Copernicus's own list (tileList.txt, read 2026-11-06): the Atlantic's N30 W041 and Armenia's N40 E044 are
+    // not on it; Guwahati's N26 E091 and New York's N40 W074 are.
+    expect(COPERNICUS_SQUARE_COUNT).toBe(26_450);
+    expect([copernicusHasSquare(30.5, -40.5), copernicusHasSquare(40.5, 44.5), copernicusHasSquare(26.1, 91.7), copernicusHasSquare(40.7, -73.9)]).toEqual([false, false, true, true]);
+    const map = mapOn(newDir(), fakeFetch(new Map(), calls));
+    expect(await map.heightsAt([[30.5, -40.5], [40.18, 44.51]], 5000)).toEqual([null, null]);
+    expect(calls).toHaveLength(0);
+  });
+
+  it("a 404 from either source on land is a failure, never 'no heights here': waiting, and asked again ten minutes on", async () => {
+    let now = 1_000_000;
+    for (const gone of [copUrl(...GUWAHATI), mzUrl(...GUWAHATI)]) {
+      const calls: Call[] = [];
+      const served = new Map<string, Buffer | number>([
+        [copUrl(...GUWAHATI), files.copGuwahati],
+        [mzUrl(...GUWAHATI), files.mzGuwahati],
+        [gone, 404],
+      ]);
+      const dir = newDir();
+      const map = mapOn(dir, fakeFetch(served, calls), { now: () => now });
+      expect(await map.heightsAt(guwahatiRun(), 5000)).toBe("waiting");
+      expect(readdirSync(dir).filter((f) => f.endsWith(".none"))).toEqual([]);
+      const asked = calls.filter((c) => c.url === gone).length;
+      now += 11 * 60 * 1000;
+      served.set(gone, gone.endsWith(".tif") ? files.copGuwahati : files.mzGuwahati);
+      expect(await map.heightsAt(guwahatiRun(), 5000)).not.toBe("waiting");
+      expect(calls.filter((c) => c.url === gone).length).toBe(asked + 1);
+    }
   });
 
   it("a file that is not the square asked for is not kept, and the square is not fetched again for ten minutes", async () => {
@@ -276,6 +373,59 @@ describe("what is kept, and what is refused", () => {
     expect(readdirSync(dir).filter((f) => f.endsWith(".hgt"))).toEqual([]);
   });
 
+  it("a good file sent with no length is cut off once it passes the most a file may be, and not kept", async () => {
+    const served = new Map<string, Buffer>([
+      [copUrl(...GUWAHATI), files.copGuwahati],
+      [mzUrl(...GUWAHATI), files.mzGuwahati],
+    ]);
+    // Each file in small pieces, its length never said.
+    const streamed: typeof fetch = (input) => {
+      const bytes = served.get(urlOf(input)) ?? Buffer.alloc(0);
+      let at = 0;
+      const body = new ReadableStream<Uint8Array>({
+        pull(controller) {
+          if (at >= bytes.length) controller.close();
+          else controller.enqueue(new Uint8Array(bytes.subarray(at, (at += 4096))));
+        },
+      });
+      return Promise.resolve(new Response(body, { status: 200 }));
+    };
+    const smaller = Math.min(files.copGuwahati.length, files.mzGuwahati.length);
+    const dir = newDir();
+    expect(await mapOn(dir, streamed, { mostBytes: smaller - 1 }).heightsAt(guwahatiRun(), 5000)).toBe("waiting");
+    expect(readdirSync(dir)).toEqual([]);
+    // The same files, the limit past them: kept and read.
+    expect(await mapOn(newDir(), streamed, { mostBytes: Math.max(files.copGuwahati.length, files.mzGuwahati.length) }).heightsAt(guwahatiRun(), 5000)).not.toBe("waiting");
+  });
+
+  it("a Mapzen file that unpacks bigger than a square is refused", async () => {
+    const served = new Map<string, Buffer | number>([
+      [copUrl(...GUWAHATI), files.copGuwahati],
+      [mzUrl(...GUWAHATI), gzipSync(Buffer.alloc(3601 * 3601 * 2 + 4096))],
+    ]);
+    const dir = newDir();
+    const { log, said } = keptLog();
+    expect(await mapOn(dir, fakeFetch(served, []), { log }).heightsAt(guwahatiRun(), 5000)).toBe("waiting");
+    expect(readdirSync(dir).filter((f) => f.endsWith(".hgt"))).toEqual([]);
+    // Stopped by zlib at the size of a square, not unpacked whole and measured after.
+    expect(said).toContainEqual(expect.objectContaining({ event: "geo.heights_bad_file", map: "mapzen", errName: "RangeError" }));
+  });
+
+  it("a Copernicus block that unpacks bigger than its header says is not read: no height there, and no other block lost", async () => {
+    // Block 15 is the square's south-east corner; Guwahati's run is in block 0's north-west.
+    const served = new Map<string, Buffer | number>([
+      [copUrl(...GUWAHATI), copernicusFile(26, 91, () => 0, () => 60, 15)],
+      // Mapzen has no height anywhere here, so each place reads Copernicus alone.
+      [mzUrl(...GUWAHATI), mapzenFile(() => -32768)],
+    ]);
+    const { log, said } = keptLog();
+    const map = mapOn(newDir(), fakeFetch(served, []), { log });
+    expect(await map.heightsAt([[26.01, 91.99]], 5000)).toEqual([null]);
+    // Stopped by zlib at the size the header gives a block, not unpacked whole and measured after.
+    expect(said).toContainEqual(expect.objectContaining({ event: "geo.heights_block_failed", errName: "RangeError" }));
+    expect(await map.heightsAt([[26.99, 91.01]], 5000)).toEqual([60]);
+  });
+
   it("a file said to be over 100 MB is not read", async () => {
     const big: typeof fetch = () => Promise.resolve(new Response(new Uint8Array(10), { status: 200, headers: { "content-length": String(101 * 1024 * 1024) } }));
     expect(await mapOn(newDir(), big).heightsAt(guwahatiRun(), 5000)).toBe("waiting");
@@ -289,10 +439,12 @@ describe("what is kept, and what is refused", () => {
     ]);
     const map = mapOn(newDir(), fakeFetch(served, calls, 300));
     expect(await map.heightsAt(guwahatiRun(), 20)).toBe("waiting");
-    await new Promise((ok) => setTimeout(ok, 600));
-    const later = await map.heightsAt(guwahatiRun(), 20);
+    // Asked again with time to wait: the same downloads, still going, are waited for; none is started again.
+    const later = await map.heightsAt(guwahatiRun(), 30_000);
     expect(later).not.toBe("waiting");
     expect(calls).toHaveLength(2);
+    // Kept now: read at once, even with no time to wait.
+    expect(await map.heightsAt(guwahatiRun(), 0)).not.toBe("waiting");
   });
 
   it("a source that cannot be reached gives 'waiting', never a height", async () => {
@@ -320,10 +472,25 @@ describe("a place's height is the lower of the two maps (the ground is never abo
     expect(got === "waiting" ? got : got[0]).toBe(want);
   });
 
-  it("a square only one map has (a country Copernicus withholds) reads that map", async () => {
-    const served = new Map<string, Buffer | number>([[mzUrl(...GUWAHATI), files.mzGuwahati]]);
-    const got = await mapOn(newDir(), fakeFetch(served, [])).heightsAt(at, 5000);
-    expect(got).toEqual([55]);
+  it("Copernicus's sea (exactly 0) is never read below 0 for Mapzen's sea floor off a shore", async () => {
+    const got = await mapOn(newDir(), fakeFetch(serve(copernicusFile(26, 91, () => 0, () => 0), mapzenFile(() => -21)), [])).heightsAt(at, 5000);
+    expect(got).toEqual([0]);
+    // Below the sea on land (the Netherlands' polders), Copernicus's own height is kept.
+    const polder = await mapOn(newDir(), fakeFetch(serve(copernicusFile(26, 91, () => 0, () => -4.5), mapzenFile(() => -3)), [])).heightsAt(at, 5000);
+    expect(polder).toEqual([-4.5]);
+  });
+
+  it("a kept Copernicus square whose picture is cut short is fetched again, not trusted on its header", async () => {
+    const calls: Call[] = [];
+    const served = new Map<string, Buffer | number>([
+      [copUrl(...GUWAHATI), files.copGuwahati],
+      [mzUrl(...GUWAHATI), files.mzGuwahati],
+    ]);
+    const dir = newDir();
+    expect(await mapOn(dir, fakeFetch(served, calls)).heightsAt(guwahatiRun(), 5000)).not.toBe("waiting");
+    truncateSync(join(dir, `${copName(...GUWAHATI)}.tif`), 2000);
+    expect(await mapOn(dir, fakeFetch(served, calls)).heightsAt(guwahatiRun(), 5000)).toEqual((await mapOn(newDir(), fakeFetch(served, [])).heightsAt(guwahatiRun(), 5000)));
+    expect(calls.filter((c) => c.url === copUrl(...GUWAHATI))).toHaveLength(2);
   });
 });
 

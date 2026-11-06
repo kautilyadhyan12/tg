@@ -10,7 +10,7 @@ import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import type { EmailSender } from "../src/modules/auth/email.js";
 import type { HeightMap } from "../src/modules/geo/heights.adapter.js";
-import { keepWaitingClimb } from "../src/modules/geo/repo.js";
+import { keepWaitingClimb, listWaitingClimbs } from "../src/modules/geo/repo.js";
 import { workOutWaitingClimbs } from "../src/modules/geo/service.js";
 
 const url = process.env["DATABASE_URL"];
@@ -202,15 +202,15 @@ d("a run's elevation gain (real Postgres)", () => {
 
       // Still waiting when the worker comes: left waiting.
       const log = { error: () => undefined };
-      const first = await workOutWaitingClimbs({ sql, heights, log }, { limit: 500, waitMs: 1000 });
+      const first = await workOutWaitingClimbs({ sql, heights, log }, { limit: 500, waitMs: 1000, mostMs: 60_000 });
       expect(first.stillWaiting).toBeGreaterThanOrEqual(1);
       expect(await row(run.runId)).toEqual({ climb_m: null, climb_state: "waiting" });
 
       heights.mode = "hill";
       // Two workers at once keep it once.
       const [a, b] = await Promise.all([
-        workOutWaitingClimbs({ sql, heights, log }, { limit: 500, waitMs: 1000 }),
-        workOutWaitingClimbs({ sql, heights, log }, { limit: 500, waitMs: 1000 }),
+        workOutWaitingClimbs({ sql, heights, log }, { limit: 500, waitMs: 1000, mostMs: 60_000 }),
+        workOutWaitingClimbs({ sql, heights, log }, { limit: 500, waitMs: 1000, mostMs: 60_000 }),
       ]);
       expect(await row(run.runId)).toEqual({ climb_m: 72, climb_state: "done" });
       expect(a.kept + b.kept).toBeGreaterThanOrEqual(1);
@@ -218,6 +218,32 @@ d("a run's elevation gain (real Postgres)", () => {
       expect(mineKept).toHaveLength(1);
       // The phone, sending it again, now reads the climb.
       expect(saveRunResponseSchema.parse(JSON.parse((await save(me.cookies, run)).body)).run.climbM).toBe(72);
+    });
+
+    it("the sweep takes the newest waiting runs first, stops at its time, and gives up on a run waiting past three days", async () => {
+      heights.mode = "waiting";
+      const me = await makeUser("sweep");
+      const old = body();
+      const newer = body();
+      expect((await save(me.cookies, old)).statusCode).toBe(201);
+      expect((await save(me.cookies, newer)).statusCode).toBe(201);
+      await sql`UPDATE runs SET created_at = now() - interval '4 days' WHERE id = ${old.runId}`;
+      heights.mode = "hill";
+      const log = { error: () => undefined };
+      // No time at all: nothing is worked out, and the old run gives up.
+      const none = await workOutWaitingClimbs({ sql, heights, log }, { limit: 500, waitMs: 1000, mostMs: 0 });
+      expect(none.kept).toBe(0);
+      expect(none.gaveUp).toBeGreaterThanOrEqual(1);
+      expect(await row(old.runId)).toEqual({ climb_m: null, climb_state: "none" });
+      expect(await row(newer.runId)).toEqual({ climb_m: null, climb_state: "waiting" });
+      // Newest first: a run saved a day before the newer one comes after it in the list.
+      const middle = body();
+      expect((await save(me.cookies, { ...middle })).statusCode).toBe(201);
+      await sql`UPDATE runs SET climb_m = NULL, climb_state = 'waiting', created_at = now() - interval '1 day' WHERE id = ${middle.runId}`;
+      const order = (await listWaitingClimbs(sql, 100_000)).map((r) => r.id).filter((id) => id === newer.runId || id === middle.runId);
+      expect(order).toEqual([newer.runId, middle.runId]);
+      await workOutWaitingClimbs({ sql, heights, log }, { limit: 100_000, waitMs: 1000, mostMs: 60_000 });
+      expect(await row(newer.runId)).toEqual({ climb_m: 72, climb_state: "done" });
     });
 
     it("a height map that breaks: the run is saved, its climb waiting", async () => {

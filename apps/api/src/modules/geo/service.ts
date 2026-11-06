@@ -211,16 +211,27 @@ export async function askClimb(deps: { heights: HeightMap }, input: RunClimbRequ
   return await climbOfLine(deps.heights, encodePolyline(sums.track), sums.trackStarts, ASK_CLIMB_WAIT_MS);
 }
 
-/** The runs whose climb waited for the height map, worked out again now: up to `limit` of them, each
- *  kept only while it still waits, so two workers at once change nothing twice. */
+/** A run still waiting this long after it was saved gives up: its map never came. */
+export const CLIMB_GIVE_UP_DAYS = 3;
+
+/** The runs whose climb waited for the height map, worked out again now: up to `limit` of them, newest
+ *  first, for `mostMs` at most (the worker's queue is shared), each kept only while it still waits, so
+ *  two workers at once change nothing twice. Runs waiting past CLIMB_GIVE_UP_DAYS have none. */
 export async function workOutWaitingClimbs(
-  deps: { sql: Sql; heights: HeightMap; log: Pick<FastifyBaseLogger, "error"> },
-  opts: { limit: number; waitMs: number },
-): Promise<{ looked: number; kept: number; stillWaiting: number }> {
+  deps: { sql: Sql; heights: HeightMap; log: Pick<FastifyBaseLogger, "error">; now?: () => number },
+  opts: { limit: number; waitMs: number; mostMs: number },
+): Promise<{ looked: number; kept: number; stillWaiting: number; gaveUp: number }> {
+  const now = deps.now ?? Date.now;
+  const until = now() + opts.mostMs;
+  const gaveUp = await repo.giveUpOldClimbs(deps.sql, CLIMB_GIVE_UP_DAYS);
   const runs = await repo.listWaitingClimbs(deps.sql, opts.limit);
   let kept = 0;
   let stillWaiting = 0;
   for (const run of runs) {
+    if (now() >= until) {
+      stillWaiting++;
+      continue;
+    }
     const splits = splitsStoredSchema.safeParse(run.splits);
     let climb: RunClimb;
     try {
@@ -235,7 +246,7 @@ export async function workOutWaitingClimbs(
     }
     if (await repo.keepWaitingClimb(deps.sql, run, climb)) kept++;
   }
-  return { looked: runs.length, kept, stillWaiting };
+  return { looked: runs.length, kept, stillWaiting, gaveUp };
 }
 
 /** A run this person has already saved under this id, read before any of its points are: a send

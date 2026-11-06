@@ -13,24 +13,22 @@
 // was off by up to 146 m. With only one map known at a place, that one is read.
 //
 // The only thing ever asked of either source is a whole degree square by its name, once: never a run,
-// a point, a person or a sign-in. A square a source has no file for (the sea; the two countries
-// Copernicus withholds) is remembered as having none there. A file is checked before it is kept.
+// a point, a person or a sign-in. Only squares on Copernicus's own list of land are asked
+// (`copernicusSquares.ts`): the sea is never fetched, and a place there has no height. A run in more than
+// HEIGHT_MOST_SQUARES squares (no runner's) has none at all. Each map fetches one square at a time, and
+// at most HEIGHT_NEW_SQUARES_AN_HOUR new ones an hour, so no request can fill the server's memory or
+// disk (round one of 37b-ii, C1). A file is checked before it is kept, and unpacked no bigger than it
+// says it is.
 import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import { mkdir, open, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { gunzip, inflate } from "node:zlib";
-import {
-  HEIGHT_HIGHEST_M,
-  HEIGHT_LOWEST_M,
-  HEIGHT_TILE_NAME,
-  heightTileHeaderSchema,
-  heightTileName,
-  type HeightTileHeader,
-} from "@app/shared";
+import { HEIGHT_HIGHEST_M, HEIGHT_LOWEST_M, heightTileHeaderSchema, heightTileName, type HeightTileHeader } from "@app/shared";
 import type { FastifyBaseLogger } from "fastify";
 import type { AppConfig } from "../../config.js";
+import { copernicusHasSquare } from "./copernicusSquares.js";
 
 const inflateAsync = promisify(inflate);
 const gunzipAsync = promisify(gunzip);
@@ -50,6 +48,9 @@ export interface HeightMapDeps {
   fetch: typeof fetch;
   log: Pick<FastifyBaseLogger, "info" | "warn" | "error">;
   now?: () => number;
+  /** For the tests: the most bytes a fetched file may have, and the new squares an hour. */
+  mostBytes?: number;
+  newSquaresAnHour?: number;
 }
 
 /** The biggest of the seven Copernicus files measured on 2026-11-06 was 48.6 MB, of the Mapzen ones
@@ -57,6 +58,11 @@ export interface HeightMapDeps {
 export const HEIGHT_FILE_MOST_BYTES = 100 * 1024 * 1024;
 /** A fetch that failed is not tried again for this long, so a broken square cannot be fetched over and over. */
 export const HEIGHT_RETRY_AFTER_MS = 10 * 60 * 1000;
+/** A run is in at most this many degree squares: 12 hours of running is about 130 km, three squares in a
+ *  line, six along a corner. Past it, no height is read and nothing is fetched. */
+export const HEIGHT_MOST_SQUARES = 6;
+/** New squares each map fetches in an hour, for every request together; past it, "waiting". */
+export const HEIGHT_NEW_SQUARES_AN_HOUR = 30;
 /** How long one fetch may take before it is given up. */
 const FETCH_MOST_MS = 120_000;
 /** Copernicus blocks kept unpacked, 4 MB each (1024 x 1024 32-bit floats). */
@@ -68,6 +74,7 @@ const HGT_BYTES = HGT_SIDE * HGT_SIDE * 2;
 const ROWS_AT_ONCE = 256;
 /** Mapzen's two marks for a place with no height. */
 const HGT_NONE = new Set([-32768, 32767]);
+const HOUR_MS = 3_600_000;
 
 const why = (err: unknown): string => (err instanceof Error ? err.name : typeof err);
 const believable = (h: number): number | null => (Number.isFinite(h) && h >= HEIGHT_LOWEST_M && h <= HEIGHT_HIGHEST_M ? h : null);
@@ -81,23 +88,27 @@ interface SquareKind<T> {
   url(name: string): string;
   /** Checks the fetched bytes and keeps them in `dir`; what reading the square then needs. */
   keep(name: string, bytes: Buffer): Promise<T | null>;
-  /** The square as kept before, or null. */
+  /** The square as kept before, whole, or null. */
   kept(name: string): Promise<T | null>;
 }
-type Got<T> = { kind: "kept"; value: T } | { kind: "none" };
 
 function squareStore<T>(deps: Omit<HeightMapDeps, "copernicus" | "mapzen">, kind: SquareKind<T>, made: () => Promise<void>) {
   const now = deps.now ?? Date.now;
-  const known = new Map<string, Got<T>>();
-  const going = new Map<string, Promise<Got<T> | null>>();
+  const mostBytes = deps.mostBytes ?? HEIGHT_FILE_MOST_BYTES;
+  const anHour = deps.newSquaresAnHour ?? HEIGHT_NEW_SQUARES_AN_HOUR;
+  const known = new Map<string, T>();
+  const going = new Map<string, Promise<T | null>>();
   const failedAt = new Map<string, number>();
-  const noneFile = (name: string): string => join(deps.dir, `${name}.${kind.map}.none`);
+  /** When each fetch of the last hour began. */
+  const began: number[] = [];
+  /** One fetch at a time for this map: each waits for the one before it to end. */
+  let line: Promise<unknown> = Promise.resolve();
 
-  async function fetchIt(name: string): Promise<Got<T> | null> {
+  async function fetchIt(name: string): Promise<T | null> {
     await made();
     const startedAt = now();
     const notFetched = (more: Record<string, string | number>): null => {
-      deps.log.warn({ event: "geo.heights_fetch_failed", map: kind.map, tile: name, ...more }, "height map piece not fetched");
+      deps.log.error({ event: "geo.heights_fetch_failed", map: kind.map, tile: name, ...more }, "height map piece not fetched");
       return null;
     };
     let res: Response;
@@ -106,13 +117,9 @@ function squareStore<T>(deps: Omit<HeightMapDeps, "copernicus" | "mapzen">, kind
     } catch (err) {
       return notFetched({ errName: why(err) });
     }
-    if (res.status === 404) {
-      await res.body?.cancel();
-      await writeFile(noneFile(name), "");
-      deps.log.info({ event: "geo.heights_none", map: kind.map, tile: name }, "no height map piece for this square");
-      return { kind: "none" };
-    }
-    if (res.status !== 200 || Number(res.headers.get("content-length") ?? "0") > HEIGHT_FILE_MOST_BYTES || res.body === null) {
+    // Every square asked is on Copernicus's list of land, and Mapzen covers the whole world, so a 404 is a
+    // source gone or moved, never "no heights here": a failure, tried again later (round one, H1).
+    if (res.status !== 200 || Number(res.headers.get("content-length") ?? "0") > mostBytes || res.body === null) {
       await res.body?.cancel();
       return notFetched({ status: res.status });
     }
@@ -124,7 +131,7 @@ function squareStore<T>(deps: Omit<HeightMapDeps, "copernicus" | "mapzen">, kind
         const chunk: unknown = part.value;
         if (!(chunk instanceof Uint8Array)) return notFetched({ reason: "not_bytes" });
         total += chunk.byteLength;
-        if (total > HEIGHT_FILE_MOST_BYTES) return notFetched({ reason: "too_big" });
+        if (total > mostBytes) return notFetched({ reason: "too_big" });
         parts.push(chunk);
       }
     } catch (err) {
@@ -138,28 +145,39 @@ function squareStore<T>(deps: Omit<HeightMapDeps, "copernicus" | "mapzen">, kind
       return null;
     }
     deps.log.info({ event: "geo.heights_kept", map: kind.map, tile: name, bytes: total, durationMs: now() - startedAt }, "height map piece kept");
-    return { kind: "kept", value };
+    return value;
   }
 
-  /** The square, or null when it could not be had now (tried again HEIGHT_RETRY_AFTER_MS after a failure). */
-  return function square(name: string): Promise<Got<T> | null> {
+  /** The fetch, in this map's line; "full" when this hour's new squares are used up (not a failure). */
+  function inLine(name: string): Promise<T | null | "full"> {
+    const turn = line.then(async (): Promise<T | null | "full"> => {
+      while (began.length > 0 && now() - (began[0] ?? 0) >= HOUR_MS) began.shift();
+      if (began.length >= anHour) {
+        deps.log.warn({ event: "geo.heights_hour_full", map: kind.map, tile: name }, "new height map pieces this hour used up");
+        return "full";
+      }
+      began.push(now());
+      return await fetchIt(name);
+    });
+    line = turn.catch(() => undefined);
+    return turn;
+  }
+
+  /** The square kept, or null when it could not be had now (tried again HEIGHT_RETRY_AFTER_MS after a failure). */
+  return function square(name: string): Promise<T | null> {
     const had = known.get(name);
     if (had !== undefined) return Promise.resolve(had);
     const already = going.get(name);
     if (already !== undefined) return already;
-    const job = (async (): Promise<Got<T> | null> => {
-      try {
-        await stat(noneFile(name));
-        return { kind: "none" };
-      } catch {
-        // not marked as having none
-      }
-      const value = await kind.kept(name);
-      if (value !== null) return { kind: "kept", value };
+    const job = (async (): Promise<T | null> => {
+      const kept = await kind.kept(name);
+      if (kept !== null) return kept;
       const failed = failedAt.get(name);
       if (failed !== undefined && now() - failed < HEIGHT_RETRY_AFTER_MS) return null;
-      // Only a fetch that was tried and failed starts the wait again; one skipped above does not.
-      const got = await fetchIt(name);
+      // Only a fetch that was tried and failed starts the wait again: one skipped above, or past this
+      // hour's squares, does not.
+      const got = await inLine(name);
+      if (got === "full") return null;
       if (got === null) failedAt.set(name, now());
       return got;
     })()
@@ -350,7 +368,10 @@ function copernicusReader(deps: HeightMapDeps, made: () => Promise<void>) {
       async kept(name) {
         try {
           const header = heightTileHeaderSchema.safeParse(JSON.parse(await readFile(json(name), "utf8")));
-          return header.success ? { header: header.data, file: tif(name) } : null;
+          if (!header.success) return null;
+          // The .tif whole: at least as long as its last block's end (round one of 37b-ii, L2).
+          const end = Math.max(...header.data.blockOffsets.map((at, i) => at + (header.data.blockLengths[i] ?? 0)));
+          return (await stat(tif(name))).size >= end ? { header: header.data, file: tif(name) } : null;
         } catch {
           return null;
         }
@@ -380,8 +401,9 @@ function copernicusReader(deps: HeightMapDeps, made: () => Promise<void>) {
       } finally {
         await handle.close();
       }
-      const bytes = await inflateAsync(packed);
       const { blockWidth, blockHeight, predictor } = s.header;
+      // Never unpacked past the size the header gives a block (round one of 37b-ii, H2): zlib stops there.
+      const bytes = await inflateAsync(packed, { maxOutputLength: blockWidth * blockHeight * 4 });
       if (bytes.length !== blockWidth * blockHeight * 4) return null;
       // With no predictor the bytes are little-endian floats already: every row is ready.
       const rowReady = new Uint8Array(blockHeight).fill(predictor === 1 ? 1 : 0);
@@ -435,7 +457,6 @@ export function mapzenTileName(lat: number, lng: number): string {
   const lo = Math.floor(lng);
   return `${la >= 0 ? "N" : "S"}${String(Math.abs(la)).padStart(2, "0")}${lo >= 0 ? "E" : "W"}${String(Math.abs(lo)).padStart(3, "0")}`;
 }
-const MAPZEN_NAME = /^[NS]\d{2}[EW]\d{3}$/;
 
 function mapzenReader(deps: HeightMapDeps, made: () => Promise<void>) {
   const hgt = (name: string): string => join(deps.dir, `${name}.hgt`);
@@ -447,8 +468,10 @@ function mapzenReader(deps: HeightMapDeps, made: () => Promise<void>) {
       async keep(name, bytes) {
         let unpacked: Buffer;
         try {
+          // Never unpacked past one square and a byte: zlib stops there (round one of 37b-ii).
           unpacked = await gunzipAsync(bytes, { maxOutputLength: HGT_BYTES + 1 });
-        } catch {
+        } catch (err) {
+          deps.log.error({ event: "geo.heights_bad_file", map: "mapzen", tile: name, errName: why(err) }, "height map piece does not unpack");
           return null;
         }
         if (unpacked.length !== HGT_BYTES) return null;
@@ -515,7 +538,7 @@ export function createHeightMap(deps: HeightMapDeps): HeightMap {
   /** Each place's height from one map, or "waiting" when a square of it could not be had in time. */
   async function fromMap<T>(
     reader: {
-      square(lat: number, lng: number): Promise<Got<T> | null>;
+      square(lat: number, lng: number): Promise<T | null>;
       nameOf(lat: number, lng: number): string;
       read(name: string, value: T, places: readonly (readonly [number, number])[]): Promise<(number | null)[]>;
     },
@@ -538,8 +561,8 @@ export function createHeightMap(deps: HeightMapDeps): HeightMap {
       const g = got[k];
       const name = names[k];
       const at = name === undefined ? undefined : groups.get(name);
-      if (g === undefined || g === null || g.kind === "none" || name === undefined || at === undefined) continue;
-      const heights = await reader.read(name, g.value, at.map((i) => places[i] ?? [0, 0]));
+      if (g === undefined || g === null || name === undefined || at === undefined) continue;
+      const heights = await reader.read(name, g, at.map((i) => places[i] ?? [0, 0]));
       at.forEach((i, j) => {
         out[i] = heights[j] ?? null;
       });
@@ -549,8 +572,17 @@ export function createHeightMap(deps: HeightMapDeps): HeightMap {
 
   return {
     async heightsAt(places, waitMs) {
-      const real = places.filter(([lat, lng]) => HEIGHT_TILE_NAME.test(heightTileName(lat, lng)) && MAPZEN_NAME.test(mapzenTileName(lat, lng)));
-      if (real.length !== places.length) return places.map(() => null);
+      // A run in more squares than any runner's: nothing is read and nothing fetched (round one, C1).
+      const squares = new Set(places.map(([lat, lng]) => `${String(Math.floor(lat))},${String(Math.floor(lng))}`));
+      if (squares.size > HEIGHT_MOST_SQUARES) {
+        deps.log.warn({ event: "geo.heights_too_many_squares", squares: squares.size }, "a run in too many squares");
+        return places.map(() => null);
+      }
+      // Only places on Copernicus's list of land are read: the sea, and the squares it withholds, have none.
+      const onLand = places.flatMap(([lat, lng], i) => (copernicusHasSquare(lat, lng) ? [i] : []));
+      const landPlaces = onLand.map((i): readonly [number, number] => places[i] ?? [0, 0]);
+      const out: (number | null)[] = places.map(() => null);
+      if (landPlaces.length === 0) return out;
       let timer: NodeJS.Timeout | undefined;
       const late = new Promise<"late">((resolve) => {
         timer = setTimeout(() => {
@@ -558,13 +590,15 @@ export function createHeightMap(deps: HeightMapDeps): HeightMap {
         }, waitMs);
       });
       try {
-        const [surface, ground] = await Promise.all([fromMap(copernicus, places, late), fromMap(mapzen, places, late)]);
+        const [surface, ground] = await Promise.all([fromMap(copernicus, landPlaces, late), fromMap(mapzen, landPlaces, late)]);
         if (surface === "waiting" || ground === "waiting") return "waiting";
-        return places.map((_, i) => {
-          const s = surface[i] ?? null;
-          const g = ground[i] ?? null;
-          return s === null ? g : g === null ? s : Math.min(s, g);
+        onLand.forEach((at, j) => {
+          const s = surface[j] ?? null;
+          const g = ground[j] ?? null;
+          // Copernicus reads its sea as exactly 0, where Mapzen holds the sea floor: never below it (L1).
+          out[at] = s === null ? g : g === null ? s : s === 0 ? Math.max(0, Math.min(s, g)) : Math.min(s, g);
         });
+        return out;
       } finally {
         clearTimeout(timer);
       }

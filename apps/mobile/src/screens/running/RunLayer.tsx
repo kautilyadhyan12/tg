@@ -687,7 +687,7 @@ function Summary({ run, units, kg, onSaved }: { run: LiveRun; units: Units; kg: 
           {climb.kind === "done" ? (
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Elevation credits"
+              accessibilityLabel="Elevation data"
               hitSlop={10}
               onPress={() => {
                 setCredits(true);

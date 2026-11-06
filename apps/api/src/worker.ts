@@ -1090,7 +1090,8 @@ const worker = new Worker(
       return;
     }
     if (job.name === GEO_CLIMB_SWEEP_JOB) {
-      const climbs = await workOutWaitingClimbs({ sql, heights, log }, { limit: 50, waitMs: 60_000 });
+      // A minute at most: the queue is every rollup job's.
+      const climbs = await workOutWaitingClimbs({ sql, heights, log }, { limit: 50, waitMs: 15_000, mostMs: 60_000 });
       log.info({ ...climbs, durationMs: Date.now() - startedAt, event: "job.finished", job: job.name }, "job finished");
       return;
     }

@@ -1052,7 +1052,7 @@ describe("Elevation gain on the summary (37b-ii)", () => {
     const s = runServer();
     await toSummary(s);
     expect(await screen.findByText("28 m")).toBeTruthy();
-    await fireEvent.press(screen.getByRole("button", { name: "Elevation credits" }));
+    await fireEvent.press(screen.getByRole("button", { name: "Elevation data" }));
     expect(await screen.findByText("Elevation data")).toBeTruthy();
     for (const line of HEIGHT_MAP_CREDITS) expect(screen.getByText(line)).toBeTruthy();
   });
@@ -1068,7 +1068,7 @@ describe("Elevation gain on the summary (37b-ii)", () => {
       expect(s.climbAsks).toHaveLength(1);
     });
     expect(screen.getByText("--")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Elevation credits" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Elevation data" })).toBeNull();
   });
 
   it("with no signal at Finish: \"--\", and the run is saved all the same when the signal is back", async () => {
