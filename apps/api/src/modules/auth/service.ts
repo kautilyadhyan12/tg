@@ -104,25 +104,30 @@ export interface SessionTokens {
 
 const refreshExpiry = (deps: AuthDeps): Date => new Date(Date.now() + deps.config.REFRESH_TTL_DAYS * 24 * 60 * 60 * 1000);
 
+/** A new sign-in session on the account, begun only while it still holds `address`, the address the
+ *  sign-in found it by (null for an account with none): null, with nothing written, once an Undo this
+ *  change or a Change email has moved it, and the caller looks the address up again (item 19's
+ *  data-integrity re-check, N1). */
 async function issueSession(
   deps: AuthDeps,
   userId: string,
+  address: string | null,
   meta: RequestMeta,
   client: SessionClient = "web",
-): Promise<SessionTokens> {
+): Promise<SessionTokens | null> {
   const familyId = newFamilyId();
   const refreshToken = mintOpaqueToken();
   const row = {
     userId,
+    address,
     familyId,
     tokenHash: sha256Hex(refreshToken),
     expiresAt: refreshExpiry(deps),
     ip: meta.ip,
     userAgent: meta.userAgent,
   };
-  if (client === "phone") await repo.startPhoneSession(deps.sql, row);
-  else await repo.insertRefreshToken(deps.sql, row);
-  return { accessToken: signAccessToken(userId, deps.config, familyId), refreshToken };
+  const begun = client === "phone" ? await repo.startPhoneSession(deps.sql, row) : await repo.insertRefreshToken(deps.sql, row);
+  return begun ? { accessToken: signAccessToken(userId, deps.config, familyId), refreshToken } : null;
 }
 
 async function toAuthUser(sql: Sql, row: repo.UserAuthRow): Promise<AuthUser> {
@@ -279,21 +284,24 @@ export async function googleSignIn(
   meta: RequestMeta,
   client: SessionClient = "web",
 ): Promise<{ user: AuthUser; tokens: SessionTokens; isNewAccount: boolean }> {
-  // 1. Known Google identity → straight login.
-  const linkedUserId = await repo.findUserIdByAuthIdentity(deps.sql, "google", identity.subject);
-  if (linkedUserId !== null) {
-    const user = await repo.findUserById(deps.sql, linkedUserId);
-    if (user === null || user.status !== "active") throw googleUnavailable();
-    // A link saved before 12d's fix could lack its proof: Google still vouches for this
-    // address, so it is proved now (once; a no-op when it already is).
-    if (user.email?.toLowerCase() === identity.email.toLowerCase()) await ensureEmailVerified(deps, user.id, identity.email);
-    return { user: await toAuthUser(deps.sql, user), tokens: await issueSession(deps, user.id, meta, client), isNewAccount: false };
-  }
-
-  // The account found by the address is linked only if it still holds it under its row's lock: a
-  // Change email that commits between the read and the link moves it away, and the address is
-  // looked up again (item 19's data-integrity pass, H1). So is a create that lost a race on it.
+  // The account found is linked and signed in only if it still holds the address it was found by, under
+  // its row's lock: a Change email or an Undo this change that commits between the read and the write
+  // moves it away, and the sign-in looks again (item 19's data-integrity pass, H1, and re-check, N1). So
+  // does a create that lost a race on the address.
   for (let look = 0; look < ADDRESS_LOOKS; look += 1) {
+    // 1. Known Google identity → straight login.
+    const linkedUserId = await repo.findUserIdByAuthIdentity(deps.sql, "google", identity.subject);
+    if (linkedUserId !== null) {
+      const user = await repo.findUserById(deps.sql, linkedUserId);
+      if (user === null || user.status !== "active") throw googleUnavailable();
+      // A link saved before 12d's fix could lack its proof: Google still vouches for this
+      // address, so it is proved now (once; a no-op when it already is).
+      if (user.email?.toLowerCase() === identity.email.toLowerCase() && !(await ensureEmailVerified(deps, user.id, identity.email))) continue;
+      const tokens = await issueSession(deps, user.id, user.email, meta, client);
+      if (tokens === null) continue;
+      return { user: await toAuthUser(deps.sql, user), tokens, isNewAccount: false };
+    }
+
     // 2. Existing account with this email → link Google to it, then log in. A
     //    password stays only if the address was proved before it; one set on an
     //    address nobody had proved ends here (ensureEmailVerified).
@@ -301,7 +309,9 @@ export async function googleSignIn(
     if (byEmail !== null) {
       if (byEmail.status !== "active") throw googleUnavailable();
       if (!(await ensureEmailVerified(deps, byEmail.id, identity.email, identity.subject))) continue;
-      return { user: await toAuthUser(deps.sql, byEmail), tokens: await issueSession(deps, byEmail.id, meta, client), isNewAccount: false };
+      const tokens = await issueSession(deps, byEmail.id, identity.email, meta, client);
+      if (tokens === null) continue;
+      return { user: await toAuthUser(deps.sql, byEmail), tokens, isNewAccount: false };
     }
 
     // 3. Brand-new OAuth-only user from the Google profile.
@@ -314,7 +324,9 @@ export async function googleSignIn(
     if (!(await ensureEmailVerified(deps, newUserId, identity.email, identity.subject))) continue;
     const created = await repo.findUserById(deps.sql, newUserId);
     if (created === null) throw new Error("created Google user could not be re-read");
-    return { user: await toAuthUser(deps.sql, created), tokens: await issueSession(deps, newUserId, meta, client), isNewAccount: true };
+    const tokens = await issueSession(deps, newUserId, identity.email, meta, client);
+    if (tokens === null) continue;
+    return { user: await toAuthUser(deps.sql, created), tokens, isNewAccount: true };
   }
   throw googleUnavailable();
 }
@@ -383,11 +395,9 @@ export async function signInWithCode(
       );
     }
     if (!(await ensureEmailVerified(deps, user.id, input.email))) continue;
-    return {
-      user: await toAuthUser(deps.sql, user),
-      tokens: await issueSession(deps, user.id, meta, input.client ?? "web"),
-      isNewAccount,
-    };
+    const tokens = await issueSession(deps, user.id, input.email, meta, input.client ?? "web");
+    if (tokens === null) continue;
+    return { user: await toAuthUser(deps.sql, user), tokens, isNewAccount };
   }
   throw new Error("code sign-in found no account that kept the address");
 }
@@ -585,10 +595,11 @@ export async function verifyEmail(
     throw new AuthError(400, "invalid_token", "Invalid or expired verification token");
   }
   const user = await repo.findUserById(deps.sql, userId);
-  if (user === null || user.status !== "active") {
+  const tokens = user === null || user.status !== "active" ? null : await issueSession(deps, userId, user.email, meta);
+  if (user === null || tokens === null) {
     throw new AuthError(400, "invalid_token", "Invalid or expired verification token");
   }
-  return { user: await toAuthUser(deps.sql, user), tokens: await issueSession(deps, userId, meta) };
+  return { user: await toAuthUser(deps.sql, user), tokens };
 }
 
 // ── forgot / reset password ─────────────────────────────────────────────────

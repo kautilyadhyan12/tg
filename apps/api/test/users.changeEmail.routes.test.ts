@@ -250,7 +250,10 @@ d("change email (real Postgres)", { timeout: T }, () => {
       expect((await sql`SELECT 1 FROM auth_identities WHERE user_id = ${maya.userId}`).length).toBe(0);
       expect((await refresh(maya.cookies)).statusCode).toBe(401);
       expect((await refresh(laptop.cookies)).statusCode).toBe(401);
-      // The stranger's access token, still inside its 15 minutes, can neither change nor delete anything.
+      // The stranger's access token, still inside its 15 minutes, reads nothing more, and can neither
+      // change nor delete anything: "everyone signed in to it has been signed out" is true at once.
+      expect((await inject("GET", "/v1/users/me", maya.cookies)).statusCode).toBe(401);
+      expect((await inject("GET", "/v1/users/me", laptop.cookies)).statusCode).toBe(401);
       expect((await askCode(maya, address("thief-three"))).statusCode).toBe(401);
       expect((await inject("POST", "/v1/users/me/delete-code", maya.cookies, {})).statusCode).toBe(401);
       // Google at the stranger's address opens their own new account, never hers.
@@ -678,14 +681,15 @@ d("change email (real Postgres)", { timeout: T }, () => {
       held.release();
     };
   };
-  /** Waits until `count` requests are queued behind that held row. */
-  const queuedOn = async (count: number) => {
+  /** Waits until `count` requests are queued on a lock, in a statement like `pattern` (by default, behind
+   *  the held row). */
+  const queuedOn = async (count: number, pattern = "%FROM users%FOR UPDATE%") => {
     await expect
       .poll(
         async () =>
           (await sql<{ n: number }[]>`
             SELECT count(*)::int AS n FROM pg_stat_activity
-            WHERE datname = current_database() AND wait_event_type = 'Lock' AND query ILIKE '%FROM users%FOR UPDATE%'`)[0]?.n ?? 0,
+            WHERE datname = current_database() AND wait_event_type = 'Lock' AND query ILIKE ${pattern}`)[0]?.n ?? 0,
         { timeout: 10_000, interval: 25 },
       )
       .toBeGreaterThanOrEqual(count);
@@ -758,6 +762,109 @@ d("change email (real Postgres)", { timeout: T }, () => {
     // Fifteen minutes later the address is simply hers already.
     await sql`UPDATE sign_in_codes SET used_at = used_at - interval '16 minutes' WHERE email = ${tiaNew}`;
     expect(errorOf(await confirm(tia, tiaNew, code))).toBe("same_email");
+  });
+
+  // ── The re-checks of item 19's two passes ──
+
+  it("a password account at the old address in its 14 days is refused; one that holds it all the same, never proved, gives it back to the Undo (security re-check, H1-a)", async () => {
+    const sue = await person("sue");
+    expect((await change(sue, address("sue-new"))).statusCode).toBe(200);
+    const token = tokenOf(undoLinks.get(sue.email));
+    const PASSWORD = "a-Perfectly-fine-pw-1";
+    const planted = await inject("POST", "/v1/auth/register", {}, { email: sue.email, password: PASSWORD, displayName: "Planted" });
+    expect([planted.statusCode, errorOf(planted)]).toEqual([400, "email_taken"]);
+    expect((await sql`SELECT 1 FROM users WHERE email = ${sue.email}`).length).toBe(0);
+
+    // One made in the instant of the move, past that check (written straight onto the address): never
+    // proved, it gives the address back, with its sign-in.
+    const other = address("sue-planted");
+    const made = await inject("POST", "/v1/auth/register", {}, { email: other, password: PASSWORD, displayName: "Planted" });
+    expect(made.statusCode, made.body).toBe(201);
+    const plantedId = (JSON.parse(made.body) as { userId: string }).userId;
+    const plantedIn = await inject("POST", "/v1/auth/login", {}, { email: other, password: PASSWORD });
+    expect(plantedIn.statusCode).toBe(200);
+    await sql`UPDATE users SET email = ${sue.email} WHERE id = ${plantedId}`;
+    try {
+      const done = await undo(token);
+      expect([done.statusCode, JSON.parse(done.body)]).toEqual([200, { state: "done", oldEmail: sue.email }]);
+      expect([await emailOf(sue.userId), await emailOf(plantedId)]).toEqual([sue.email, null]);
+      expect((await refresh(cookieMap(plantedIn))).statusCode).toBe(401);
+      expect((await inject("POST", "/v1/auth/login", {}, { email: sue.email, password: PASSWORD })).statusCode).toBe(401);
+    } finally {
+      await sql`DELETE FROM users WHERE id = ${plantedId}`;
+    }
+  });
+
+  it("the stranger moves the address twice and undoes their own change: the owner's link still puts the account back (security re-check, H1-b)", async () => {
+    const tom = await person("tom");
+    const [t3a, t3b] = [address("tom-t3a"), address("tom-t3b")];
+    expect((await change(tom, t3a)).statusCode).toBe(200);
+    expect((await change(tom, t3b)).statusCode).toBe(200);
+    const strangers = tokenOf(undoLinks.get(t3a));
+    expect((await undo(strangers)).statusCode).toBe(200);
+    expect(await emailOf(tom.userId)).toBe(t3a);
+
+    const owners = tokenOf(undoLinks.get(tom.email));
+    expect(JSON.parse((await readLink(owners)).body)).toMatchObject({ state: "open", oldEmail: tom.email });
+    expect(JSON.parse((await undo(owners)).body)).toEqual({ state: "done", oldEmail: tom.email });
+    expect(await emailOf(tom.userId)).toBe(tom.email);
+    // The stranger's spent link no longer says the account uses their address, and moves nothing.
+    expect(JSON.parse((await readLink(strangers)).body)).toEqual({ state: "closed", supportEmail: null });
+    expect(errorOf(await undo(strangers))).toBe("link_closed");
+    expect(await emailOf(tom.userId)).toBe(tom.email);
+    // Their address opens only a new account of its own.
+    const atT3a = await codeSignIn(t3a);
+    expect([atT3a.userId === tom.userId, atT3a.isNewAccount]).toEqual([false, true]);
+  });
+
+  it("a sign-in already past its check when Undo this change is pressed begins no session on the account put back (integrity re-check, N1)", async () => {
+    const una = await person("una");
+    const unaNew = address("una-new");
+    expect((await change(una, unaNew)).statusCode).toBe(200);
+    const token = tokenOf(undoLinks.get(una.email));
+    await pastTheGap(unaNew);
+    signInCodes.delete(unaNew);
+    expect((await inject("POST", "/v1/auth/code/send", {}, { email: unaNew })).statusCode).toBe(200);
+    const code = signInCodes.get(unaNew) ?? "";
+
+    // The sign-in's check first in the queue for the person's row, the undo behind it.
+    const release = await holdRow(una.userId);
+    const signingIn = inject("POST", "/v1/auth/code/verify", {}, { email: unaNew, code });
+    await queuedOn(1);
+    const undoing = undo(token);
+    await queuedOn(2);
+    await release();
+    const [signedIn, undone] = await Promise.all([signingIn, undoing]);
+
+    expect(undone.statusCode, undone.body).toBe(200);
+    expect(await emailOf(una.userId)).toBe(una.email);
+    // The new address's holder is signed into an account of their own, never hers.
+    expect(signedIn.statusCode, signedIn.body).toBe(200);
+    expect((JSON.parse(signedIn.body) as { user: { id: string } }).user.id).not.toBe(una.userId);
+    expect((await sql`SELECT 1 FROM refresh_tokens WHERE user_id = ${una.userId} AND revoked_at IS NULL`).length).toBe(0);
+  });
+
+  it("a sign-in at the old address while its Undo is being pressed waits, then opens the account put back (integrity re-check, N2)", async () => {
+    const val = await person("val");
+    expect((await change(val, address("val-new"))).statusCode).toBe(200);
+    const token = tokenOf(undoLinks.get(val.email));
+    await pastTheGap(val.email);
+    signInCodes.delete(val.email);
+    expect((await inject("POST", "/v1/auth/code/send", {}, { email: val.email })).statusCode).toBe(200);
+    const code = signInCodes.get(val.email) ?? "";
+
+    // The undo holds its change and waits on the person's row; the sign-in waits on the change.
+    const release = await holdRow(val.userId);
+    const undoing = undo(token);
+    await queuedOn(1);
+    const signingIn = inject("POST", "/v1/auth/code/verify", {}, { email: val.email, code });
+    await queuedOn(1, "%FROM email_changes%FOR SHARE%");
+    await release();
+    const [undone, signedIn] = await Promise.all([undoing, signingIn]);
+
+    expect(undone.statusCode, undone.body).toBe(200);
+    expect(signedIn.statusCode, signedIn.body).toBe(200);
+    expect(JSON.parse(signedIn.body)).toMatchObject({ user: { id: val.userId }, isNewAccount: false });
   });
 
   // The person's gyms read again: their page shows the address, and the name where it changed with it.

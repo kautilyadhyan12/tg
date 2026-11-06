@@ -77,7 +77,8 @@ export async function findUserById(sql: Sql, userId: string): Promise<UserAuthRo
   return rows[0] === undefined ? null : userAuthColumns(rows[0]);
 }
 
-/** null = email already taken (23505 on users_email_unique). */
+/** null = email already taken (23505 on users_email_unique), or held for the 14 days its account may
+ *  undo a Change email back to it (item 19's security re-check, H1-a). */
 export async function createUser(
   sql: Sql,
   input: { email: string; passwordHash: string; algo: HashAlgo; displayName: string },
@@ -85,7 +86,10 @@ export async function createUser(
   try {
     const rows = await sql<{ id: string }[]>`
       INSERT INTO users (email, password_hash, hash_algo, display_name)
-      VALUES (${input.email}, ${input.passwordHash}, ${input.algo}, ${input.displayName})
+      SELECT ${input.email}, ${input.passwordHash}, ${input.algo}, ${input.displayName}
+      WHERE NOT EXISTS (
+        SELECT 1 FROM email_changes
+        WHERE old_email = ${input.email} AND undone_at IS NULL AND ended_at IS NULL AND expires_at > now())
       RETURNING id`;
     return rows[0]?.id ?? null;
   } catch (err) {
@@ -173,11 +177,14 @@ export async function moveEmail(
 /** The newest change that moved an account off this address and can still be undone, with the address
  *  it went to; null when there is none. While there is one, nobody starts a new account with it. */
 export async function liveMoveOff(sql: Sql, email: string): Promise<{ newEmail: string } | null> {
+  // FOR SHARE waits out an Undo this change in flight on the row, then reads it again: once undone it is
+  // not live, and the sign-in looks the address up again (item 19's data-integrity re-check, N2).
   const rows = await sql<{ new_email: string }[]>`
     SELECT new_email::text AS new_email FROM email_changes
     WHERE old_email = ${email} AND undone_at IS NULL AND ended_at IS NULL AND expires_at > now()
     ORDER BY created_at DESC
-    LIMIT 1`;
+    LIMIT 1
+    FOR SHARE`;
   const row = rows[0];
   return row === undefined ? null : { newEmail: row.new_email };
 }
@@ -196,16 +203,18 @@ const restorable = (status: string, deletedAt: Date | null, now: Date): boolean 
 
 export async function readEmailChange(sql: Sql, tokenHash: string): Promise<EmailChangeLink> {
   const rows = await sql<
-    { old_email: string; new_email: string; live: boolean; undone: boolean; status: string; deleted_at: Date | null; now: Date }[]
+    { old_email: string; new_email: string; live: boolean; undone: boolean; holds: boolean; status: string; deleted_at: Date | null; now: Date }[]
   >`
     SELECT c.old_email::text AS old_email, c.new_email::text AS new_email,
            (c.undone_at IS NULL AND c.ended_at IS NULL AND c.expires_at > now()) AS live,
-           c.undone_at IS NOT NULL AS undone, u.status, u.deleted_at, now() AS now
+           c.undone_at IS NOT NULL AS undone, u.email IS NOT DISTINCT FROM c.old_email AS holds,
+           u.status, u.deleted_at, now() AS now
     FROM email_changes c JOIN users u ON u.id = c.user_id
     WHERE c.token_hash = ${tokenHash}`;
   const row = rows[0];
   if (row === undefined) return { kind: "unknown" };
-  if (row.undone) return { kind: "done", oldEmail: row.old_email };
+  // "Your account uses it again" only while it does: an earlier change's link may have moved it since.
+  if (row.undone) return row.holds && row.status === "active" ? { kind: "done", oldEmail: row.old_email } : { kind: "closed" };
   if (!row.live || !restorable(row.status, row.deleted_at, row.now)) return { kind: "closed" };
   return { kind: "open", oldEmail: row.old_email, newEmail: row.new_email };
 }
@@ -217,41 +226,75 @@ export type UndoneEmailChange =
   | { kind: "done"; oldEmail: string; userId: string; already: boolean };
 
 /** Undo this change, in ONE transaction: the account goes back to the address the link was sent to (an
- *  account deleted meanwhile comes back too), every sign-in and Google link on it ends, and every other
- *  Undo link of the account stops working, so a later change's link cannot move it away again. */
+ *  account deleted meanwhile comes back too), every sign-in and Google link on it ends, and the links of
+ *  every later change stop working, so none of them can move it away again. */
 export async function undoEmailChange(sql: Sql, tokenHash: string): Promise<UndoneEmailChange> {
   try {
     return await sql.begin(async (tx): Promise<UndoneEmailChange> => {
-      const changes = await tx<{ id: string; user_id: string; old_email: string; live: boolean; undone: boolean }[]>`
-        SELECT id, user_id, old_email::text AS old_email,
+      const changes = await tx<{ id: string; user_id: string; old_email: string; live: boolean; undone: boolean; created_at: string }[]>`
+        SELECT id, user_id, old_email::text AS old_email, created_at::text AS created_at,
                (undone_at IS NULL AND ended_at IS NULL AND expires_at > now()) AS live,
                undone_at IS NOT NULL AS undone
         FROM email_changes WHERE token_hash = ${tokenHash}
         FOR UPDATE`;
       const change = changes[0];
       if (change === undefined) return { kind: "unknown" };
-      if (change.undone) return { kind: "done", oldEmail: change.old_email, userId: change.user_id, already: true };
+      if (change.undone) {
+        // Pressed again: the same answer while the account still holds the address, closed once an
+        // earlier change's link has moved it on.
+        const still = await tx<{ one: number }[]>`
+          SELECT 1 AS one FROM users WHERE id = ${change.user_id} AND email = ${change.old_email} AND status = 'active'`;
+        return still.length > 0 ? { kind: "done", oldEmail: change.old_email, userId: change.user_id, already: true } : { kind: "closed" };
+      }
       if (!change.live) return { kind: "closed" };
       const people = await tx<{ status: string; deleted_at: Date | null; now: Date }[]>`
         SELECT status, deleted_at, now() AS now FROM users WHERE id = ${change.user_id} FOR UPDATE`;
       const person = people[0];
       if (person === undefined || !restorable(person.status, person.deleted_at, person.now)) return { kind: "closed" };
-      const holder = await tx<{ one: number }[]>`
-        SELECT 1 AS one FROM users WHERE email = ${change.old_email} AND id <> ${change.user_id}`;
-      if (holder.length > 0) return { kind: "taken" };
+      // Another account at the address: one that proved it keeps it; one nobody proved it for (a password
+      // set at sign-up, never verified) gives it back, with its password and sign-ins, as the first proof
+      // of an address takes it from such an account (item 19's security re-check, H1-a).
+      const holders = await tx<{ id: string; proved: boolean }[]>`
+        SELECT u.id, EXISTS (
+          SELECT 1 FROM one_time_tokens t WHERE t.user_id = u.id AND t.purpose = 'verify_email' AND t.used_at IS NOT NULL
+        ) AS proved
+        FROM users u WHERE u.email = ${change.old_email} AND u.id <> ${change.user_id}
+        FOR UPDATE`;
+      const holder = holders[0];
+      if (holder !== undefined && holder.proved) return { kind: "taken" };
+      if (holder !== undefined) {
+        await tx`UPDATE users SET email = NULL, password_hash = NULL, hash_algo = NULL WHERE id = ${holder.id}`;
+        await tx`UPDATE refresh_tokens SET revoked_at = now() WHERE user_id = ${holder.id} AND revoked_at IS NULL`;
+      }
       await tx`UPDATE users SET email = ${change.old_email}, status = 'active', deleted_at = NULL WHERE id = ${change.user_id}`;
       await tx`DELETE FROM auth_identities WHERE user_id = ${change.user_id} AND provider = 'google'`;
       await tx`UPDATE refresh_tokens SET revoked_at = now() WHERE user_id = ${change.user_id} AND revoked_at IS NULL`;
       await tx`UPDATE email_changes SET undone_at = now(), note_next_try_at = NULL WHERE id = ${change.id}`;
+      // Only the changes made after this one end: an earlier change's link (the owner's, when the stranger
+      // moved the address twice and undid their own) still works (item 19's security re-check, H1-b).
       await tx`
         UPDATE email_changes SET ended_at = now(), note_next_try_at = NULL
-        WHERE user_id = ${change.user_id} AND id <> ${change.id} AND undone_at IS NULL AND ended_at IS NULL`;
+        WHERE user_id = ${change.user_id} AND id <> ${change.id} AND created_at > ${change.created_at}::text::timestamptz
+          AND undone_at IS NULL AND ended_at IS NULL`;
       return { kind: "done", oldEmail: change.old_email, userId: change.user_id, already: false };
     });
   } catch (err) {
     if (isUniqueViolation(err)) return { kind: "taken" };
     throw err;
   }
+}
+
+/** The account an access token names, while it is active and the sign-in session the token was issued
+ *  under is still live; null otherwise. One statement on every signed-in request (the users key and
+ *  `refresh_tokens_user_family_idx`). */
+export async function activeUserInSession(sql: Sql, userId: string, familyId: string): Promise<string | null> {
+  const rows = await sql<{ id: string }[]>`
+    SELECT u.id FROM users u
+    WHERE u.id = ${userId} AND u.status = 'active'
+      AND EXISTS (
+        SELECT 1 FROM refresh_tokens r
+        WHERE r.user_id = u.id AND r.family_id = ${familyId} AND r.revoked_at IS NULL AND r.expires_at > now())`;
+  return rows[0]?.id ?? null;
 }
 
 /** Whether this sign-in session is still live: an undo ends every one of the account's, and an access
@@ -296,8 +339,9 @@ export async function findUserIdByAuthIdentity(
 
 /** Create a user with NO password: password_hash / hash_algo stay NULL
  *  (identity.ts: both nullable). Google sign-in and the email-code door both
- *  create accounts this way. null = email already taken (23505), so the
- *  service re-resolves instead. */
+ *  create accounts this way. null = email already taken (23505), or held for the
+ *  14 days its account may undo a Change email back to it, so the service
+ *  re-resolves instead. */
 export async function createPasswordlessUser(
   sql: Sql,
   input: { email: string; displayName: string },
@@ -305,7 +349,10 @@ export async function createPasswordlessUser(
   try {
     const rows = await sql<{ id: string }[]>`
       INSERT INTO users (email, display_name)
-      VALUES (${input.email}, ${input.displayName})
+      SELECT ${input.email}, ${input.displayName}
+      WHERE NOT EXISTS (
+        SELECT 1 FROM email_changes
+        WHERE old_email = ${input.email} AND undone_at IS NULL AND ended_at IS NULL AND expires_at > now())
       RETURNING id`;
     return rows[0]?.id ?? null;
   } catch (err) {
@@ -504,29 +551,41 @@ export async function changePasswordIfUnchanged(
 
 // ── refresh tokens (rotation + reuse detection, v1 §6.1 / Part 4 §3.1) ──────
 
+/** Whether the account is active and still holds the address the sign-in found it by (null for an
+ *  account with none), under its row lock: an Undo this change takes the same lock, so a sign-in that
+ *  found the account at the address the undo moves it off begins no session on it (item 19's
+ *  data-integrity re-check, N1). */
+async function holdsAddress(tx: TransactionSql, userId: string, address: string | null): Promise<boolean> {
+  const rows = await tx<{ one: number }[]>`
+    SELECT 1 AS one FROM users
+    WHERE id = ${userId} AND status = 'active' AND email IS NOT DISTINCT FROM ${address}::citext
+    FOR UPDATE`;
+  return rows.length > 0;
+}
+
+/** A browser sign-in, begun only while the account holds `address` (`holdsAddress`); false, with
+ *  nothing written, otherwise. */
 export async function insertRefreshToken(
   sql: Sql,
   input: {
     userId: string;
+    address: string | null;
     familyId: string;
     tokenHash: string;
     expiresAt: Date;
     ip: string | null;
     userAgent: string | null;
   },
-): Promise<string> {
-  const rows = await sql.begin(async (tx) => {
-    const inserted = await tx<{ id: string }[]>`
+): Promise<boolean> {
+  return await sql.begin(async (tx) => {
+    if (!(await holdsAddress(tx, input.userId, input.address))) return false;
+    await tx`
       INSERT INTO refresh_tokens (user_id, family_id, token_hash, expires_at, ip, user_agent)
       VALUES (${input.userId}, ${input.familyId}, ${input.tokenHash}, ${input.expiresAt},
-              ${input.ip}, ${input.userAgent})
-      RETURNING id`;
+              ${input.ip}, ${input.userAgent})`;
     await markUsed(tx, input.userId);
-    return inserted;
+    return true;
   });
-  const id = rows[0]?.id;
-  if (id === undefined) throw new Error("refresh token insert returned no row");
-  return id;
 }
 
 /** ONE PHONE AT A TIME (spec Part 3 §10.5): the new phone's sign-in and the end of that
@@ -537,15 +596,18 @@ export async function startPhoneSession(
   sql: Sql,
   input: {
     userId: string;
+    /** The address the sign-in found the account by: nothing is begun once it no longer holds it. */
+    address: string | null;
     familyId: string;
     tokenHash: string;
     expiresAt: Date;
     ip: string | null;
     userAgent: string | null;
   },
-): Promise<void> {
-  await sql.begin(async (tx) => {
-    await waitOutRotations(tx, input.userId);
+): Promise<boolean> {
+  return await sql.begin(async (tx) => {
+    // The row lock waits out a rotation in flight on the old phone (waitOutRotations' lock).
+    if (!(await holdsAddress(tx, input.userId, input.address))) return false;
     await tx`
       UPDATE refresh_tokens SET revoked_at = now(), revoked_reason = 'signed_in_elsewhere'
       WHERE user_id = ${input.userId} AND client = 'phone' AND revoked_at IS NULL`;
@@ -556,6 +618,7 @@ export async function startPhoneSession(
       VALUES (${input.userId}, ${input.familyId}, ${input.tokenHash}, ${input.expiresAt},
               ${input.ip}, ${input.userAgent}, 'phone')`;
     await markUsed(tx, input.userId);
+    return true;
   });
 }
 

@@ -412,7 +412,9 @@ d("live updates: the console's open line (real Postgres)", () => {
     "a line ends when the sign-in it was opened with runs out, and that sign-in opens no other",
     async () => {
       const a = await makeBusiness("Live Token Gym");
-      const token = jwt.sign({ sub: a.owner.userId, typ: "access", fid: randomUUID() }, SECRET, { algorithm: "HS256", expiresIn: 2 });
+      // The owner's own sign-in session: a token is let in only while its session is live (item 19's passes).
+      const fid = (await sql<{ family_id: string }[]>`SELECT family_id FROM refresh_tokens WHERE user_id = ${a.owner.userId} AND revoked_at IS NULL ORDER BY created_at DESC LIMIT 1`)[0]?.family_id;
+      const token = jwt.sign({ sub: a.owner.userId, typ: "access", fid }, SECRET, { algorithm: "HS256", expiresIn: 2 });
       const opened = Date.now();
       const line = await openLine(base, a.gymId, { bearer: token });
       expect(line.status).toBe(200);
