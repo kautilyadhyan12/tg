@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
-import { AppState, Linking, StyleSheet } from "react-native";
+import { AppState, Linking } from "react-native";
 import type { StyleSpecification } from "@maplibre/maplibre-react-native";
 import { OPENFREEMAP, RUN_MAX_POINTS, runSums, saveRunRequestSchema, type MapSource, type RunPoint, type SaveRunRequest } from "@app/shared";
 import { App } from "../../src/App";
@@ -896,6 +896,16 @@ describe("the map under the run (37b-i)", () => {
   });
 });
 
+/** The room a page keeps at its foot: the last paddingBottom in its style. */
+function footRoom(style: unknown): number {
+  let room = 0;
+  const parts: unknown[] = Array.isArray(style) ? style : [style];
+  for (const part of parts) {
+    if (typeof part === "object" && part !== null && "paddingBottom" in part && typeof part.paddingBottom === "number") room = part.paddingBottom;
+  }
+  return room;
+}
+
 describe("from Kd's click-through of 37b-i", () => {
   it("a run put away shows its bar on every tab, with its state, and the bar opens it again", async () => {
     const s = runServer();
@@ -909,7 +919,7 @@ describe("from Kd's click-through of 37b-i", () => {
     await fireEvent.press(screen.getByRole("tab", { name: "Food" }));
     expect(screen.getByRole("button", { name: "Open run" })).toBeTruthy();
     // Every page keeps room for the bar at its foot, so the last of it can be seen and pressed.
-    const foot = () => screen.getAllByTestId("page-boxes", { includeHiddenElements: true }).map((page) => Number(StyleSheet.flatten(page.props.style).paddingBottom));
+    const foot = () => screen.getAllByTestId("page-boxes", { includeHiddenElements: true }).map((page) => footRoom(page.props["style"]));
     expect(foot().length).toBeGreaterThan(1);
     expect(foot().every((room) => room >= 24 + RUN_BAR_ROOM)).toBe(true);
     await fireEvent.press(screen.getByRole("button", { name: "Open run" }));
@@ -932,11 +942,9 @@ describe("from Kd's click-through of 37b-i", () => {
     await fireEvent.press(await screen.findByRole("button", { name: "Finish" }));
     expect(await screen.findByRole("button", { name: "Save run" })).toBeTruthy();
     // The phone's own back, as Android hands it to the run's screen.
-    const back = screen.container.queryAll((node) => node.props["visible"] === true && typeof node.props["onRequestClose"] === "function").at(-1)?.props["onRequestClose"];
-    if (typeof back !== "function") throw new Error("no run screen");
-    await act(() => {
-      back();
-    });
+    const runScreen = screen.container.queryAll((node) => node.props["visible"] === true && typeof node.props["onRequestClose"] === "function").at(-1);
+    if (runScreen === undefined) throw new Error("no run screen");
+    await fireEvent(runScreen, "requestClose");
     const bar = await screen.findByRole("button", { name: "Open run" });
     expect(within(bar).getByText("Run finished")).toBeTruthy();
     expect(within(bar).getByText("Not saved yet · Open to save")).toBeTruthy();
