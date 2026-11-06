@@ -400,7 +400,7 @@ try {
   process.exit(1);
 }
 
-// THE NOTE TO AN OLD ADDRESS AFTER CHANGE EMAIL (19c; item 19's data-integrity pass, L3): every
+// THE NOTE TO AN OLD ADDRESS AFTER CHANGE EMAIL, WITH ITS UNDO LINK (19c; item 19's two extra passes): every
 // five minutes, on minutes 1, 6, 11 …, off the other schedules' minutes. The request sends it at
 // once; this sends what it could not, until the provider takes it.
 try {
@@ -1081,7 +1081,7 @@ const worker = new Worker(
         config.RESEND_API_KEY !== undefined && config.EMAIL_FROM !== undefined
           ? createResendTransport({ apiKey: config.RESEND_API_KEY, from: config.EMAIL_FROM })
           : null;
-      const notes = await sendDueEmailChangedNotes({ sql, sender: changeEmailSenderFor(config, transport, log), log });
+      const notes = await sendDueEmailChangedNotes({ sql, sender: changeEmailSenderFor(config, transport, log), log, config });
       log.info({ ...notes, durationMs: Date.now() - startedAt, event: "job.finished", job: job.name }, "job finished");
       return;
     }

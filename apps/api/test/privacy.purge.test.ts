@@ -244,7 +244,7 @@ d("DPDP Day-14 purge (real Postgres)", () => {
       VALUES (${mealId}, 'grams', ${sql.json({ g: 100 })}, ${sql.json({ g: 120 })})
       RETURNING id`;
     await sql`INSERT INTO meal_removed_ids (id, user_id) VALUES (gen_random_uuid(), ${userId})`;
-    await sql`INSERT INTO email_changed_notes (user_id, old_email, new_email) VALUES (${userId}, 'old-fixture@example.com', 'new-fixture@example.com')`;
+    await sql`INSERT INTO email_changes (id, user_id, old_email, new_email, token_hash, expires_at) VALUES (gen_random_uuid(), ${userId}, ${`old-purge-${userId}@example.com`}, ${`new-purge-${userId}@example.com`}, md5(random()::text), now() + interval '14 days')`;
     await sql`INSERT INTO body_measurement_removed_ids (id, user_id) VALUES (gen_random_uuid(), ${userId})`;
     await sql`INSERT INTO member_label_foods (id, user_id, name, unit, kcal, protein_g, carbs_g, fat_g) VALUES (gen_random_uuid(), ${userId}, 'Fixture label', 'g', 100, 1, 1, 1)`;
     await sql`INSERT INTO user_dishware (user_id, label, container_class, volume_ml)

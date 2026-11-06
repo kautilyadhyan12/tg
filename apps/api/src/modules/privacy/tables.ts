@@ -35,9 +35,9 @@ export const DIRECT_DELETE_TABLES = [
   // The ids of meals the person removed (migration 0169, ROADMAP Stage 5 32b-i): kept so a late
   // save from the phone cannot bring a removed meal back. Their own record, deleted and exported.
   "meal_removed_ids",
-  // The note to the old address after Change email (migration 0217), kept until it is sent: it holds
-  // both addresses, so it goes with the account.
-  "email_changed_notes",
+  // Each Change email, kept for the 14 days its Undo link works (migration 0217): the person's own
+  // addresses, deleted and exported (the link's hash and the note's tries are left out of the export).
+  "email_changes",
   "user_dishware", // §5.2 "dishware"
   // Foods the person kept from a pack's label (ROADMAP Stage 5 33b-iii-c): their own record, deleted and exported.
   "member_label_foods",
@@ -205,9 +205,6 @@ export const EXPORT_EXCLUDED_TABLES = {
   // Only which of OTHER people's comments the phone was told of, and when: their ids, none of
   // the person's own words or choices (the comments themselves are in the export).
   gym_post_comment_notices: "a send queue of other people's comment ids, not the person's content",
-  // One email waiting to go to the old address, deleted once it is sent; the account's own address is
-  // in the export's account.
-  email_changed_notes: "a send queue of one email, emptied once it is sent, not the person's content",
 } as const;
 
 /** Tables whose rows go into the user's export = the delete list minus the

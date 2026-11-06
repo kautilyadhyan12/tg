@@ -2,7 +2,7 @@
 // `email.ts` (log-only · dev · resend), for the same reasons. The log-only sender rejects, so the
 // screen never says "we emailed" for a code that did not go.
 import type { FastifyBaseLogger } from "fastify";
-import { SIGN_IN_CODE_RULES } from "@app/shared";
+import { EMAIL_CHANGE_WORDS, SIGN_IN_CODE_RULES } from "@app/shared";
 import type { AppConfig } from "../../config.js";
 import type { EmailTransport } from "../../email/resend.js";
 import { changeEmailCodeEmail, emailChangedEmail, emailInUseEmail } from "../../email/templates.js";
@@ -12,8 +12,8 @@ export interface ChangeEmailSender {
   sendCode(email: string, code: string): Promise<void>;
   /** In place of that code, when the new address already has an account. */
   sendInUse(email: string): Promise<void>;
-  /** To the OLD address once the account has moved. */
-  sendChanged(oldEmail: string, newEmail: string): Promise<void>;
+  /** To the OLD address once the account has moved, with the change's Undo link. */
+  sendChanged(oldEmail: string, newEmail: string, undoLink: string): Promise<void>;
 }
 
 const notDelivered = (what: string) => Promise.reject(new Error(`log-only email sender: the ${what} was NOT sent`));
@@ -49,8 +49,8 @@ export function createDevChangeEmailSender(log: FastifyBaseLogger, config: AppCo
       log.info({ event: "email.email_in_use.dev", email }, "DEV ONLY — the address already has an account (no RESEND_API_KEY set)");
       return Promise.resolve();
     },
-    sendChanged: (oldEmail) => {
-      log.info({ event: "email.email_changed.dev", email: oldEmail }, "DEV ONLY — email-changed note (no RESEND_API_KEY set)");
+    sendChanged: (oldEmail, _newEmail, undoLink) => {
+      log.info({ event: "email.email_changed.dev", email: oldEmail, undoLink }, "DEV ONLY — email-changed note and its Undo link (no RESEND_API_KEY set)");
       return Promise.resolve();
     },
   };
@@ -78,8 +78,8 @@ export function createResendChangeEmailSender(
       await transport.send(emailInUseEmail(email));
       log.info({ event: "email.email_in_use.sent" }, "address-in-use note sent");
     },
-    sendChanged: async (oldEmail, newEmail) => {
-      await transport.send(emailChangedEmail({ to: oldEmail, newAddress: newEmail, supportEmail }));
+    sendChanged: async (oldEmail, newEmail, undoLink) => {
+      await transport.send(emailChangedEmail({ to: oldEmail, newAddress: newEmail, supportEmail, undoLink, days: EMAIL_CHANGE_WORDS.days }));
       log.info({ event: "email.email_changed.sent" }, "email-changed note sent");
     },
   };

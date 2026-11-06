@@ -843,9 +843,10 @@ export async function restoreUser(sql: Sql, userId: string): Promise<boolean> {
   return rows.length > 0;
 }
 
-// ── The note to an old address after Change email (item 19's data-integrity pass, L3) ──
+// ── The note to an old address after Change email, with its Undo link (item 19's two extra passes) ──
 
 export interface DueEmailChangedNote {
+  /** The change's id: its Undo link is worked out from it. */
   id: string;
   oldEmail: string;
   newEmail: string;
@@ -857,22 +858,29 @@ export interface DueEmailChangedNote {
  *  (5, 10, 20 … minutes, at most 6 hours), so a second run at once, or a run after a crash, takes none
  *  of them again until then. */
 export async function takeDueEmailChangedNotes(sql: Sql, limit: number): Promise<DueEmailChangedNote[]> {
-  const rows = await sql<{ id: string; old_email: string; new_email: string; tries: number }[]>`
+  const rows = await sql<{ id: string; old_email: string; new_email: string; note_tries: number }[]>`
     WITH due AS (
-      SELECT id FROM email_changed_notes
-      WHERE next_try_at <= now()
-      ORDER BY next_try_at
+      SELECT id FROM email_changes
+      WHERE note_next_try_at <= now()
+      ORDER BY note_next_try_at
       LIMIT ${limit}
       FOR UPDATE SKIP LOCKED
     )
-    UPDATE email_changed_notes AS n
-    SET tries = n.tries + 1, next_try_at = now() + make_interval(mins => LEAST(5 * power(2, n.tries)::int, 360))
-    FROM due WHERE n.id = due.id
-    RETURNING n.id, n.old_email::text AS old_email, n.new_email::text AS new_email, n.tries`;
-  return rows.map((row) => ({ id: row.id, oldEmail: row.old_email, newEmail: row.new_email, tries: row.tries }));
+    UPDATE email_changes AS c
+    SET note_tries = c.note_tries + 1,
+        note_next_try_at = now() + make_interval(mins => LEAST(5 * power(2, c.note_tries)::int, 360))
+    FROM due WHERE c.id = due.id
+    RETURNING c.id, c.old_email::text AS old_email, c.new_email::text AS new_email, c.note_tries`;
+  return rows.map((row) => ({ id: row.id, oldEmail: row.old_email, newEmail: row.new_email, tries: row.note_tries }));
 }
 
-/** Sent, or given up on: the old address is kept no longer. */
-export async function dropEmailChangedNote(sql: Sql, id: string): Promise<void> {
-  await sql`DELETE FROM email_changed_notes WHERE id = ${id}`;
+/** Sent, or given up on: no more tries. */
+export async function emailChangedNoteDone(sql: Sql, id: string): Promise<void> {
+  await sql`UPDATE email_changes SET note_next_try_at = NULL WHERE id = ${id}`;
+}
+
+/** Changes whose Undo days are over: the old address is kept no longer. */
+export async function dropEndedEmailChanges(sql: Sql): Promise<number> {
+  const rows = await sql<{ id: string }[]>`DELETE FROM email_changes WHERE expires_at <= now() RETURNING id`;
+  return rows.length;
 }

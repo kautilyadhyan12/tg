@@ -74,7 +74,7 @@ export async function changeEmail(
     if (await movedAlready(now)) return { email: input.email, displayName: now.displayName };
     throw err;
   }
-  const moved = await moveAccountEmail(deps.sql, { userId, from: row.email, to: input.email });
+  const moved = await moveAccountEmail(deps.sql, deps.config, { userId, from: row.email, to: input.email });
   if (moved.kind === "taken") {
     throw new UsersError(409, "email_in_use", "That address already has an account. Sign in with it instead, or choose another address.");
   }
@@ -82,8 +82,8 @@ export async function changeEmail(
     throw new UsersError(409, "email_changed", "Your email address was changed on another device. Close this and check it.");
   }
   // The move stands whatever happens to the note: a note not sent now is the worker's.
-  if (row.email !== null && moved.noteId !== null) {
-    await sendEmailChangedNoteNow(deps, { id: moved.noteId, oldEmail: row.email, newEmail: moved.email });
+  if (row.email !== null && moved.changeId !== null) {
+    await sendEmailChangedNoteNow(deps, { id: moved.changeId, oldEmail: row.email, newEmail: moved.email });
   }
   return { email: moved.email, displayName: moved.displayName };
 }

@@ -1,11 +1,11 @@
 // Change email (ROADMAP Stage 5 19c; RULINGS 2026-09-23, E): a code goes to the NEW address, and the
 // account moves to it only when that code comes back from the same account. Real Postgres; people
 // signed in through the real code door, Google through the real phone route with a stand-in verifier.
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
 import { Redis } from "ioredis";
-import { changeEmailResponseSchema, sendCodeResponseSchema } from "@app/shared";
+import { EMAIL_CHANGE_WORDS, changeEmailResponseSchema, emailChangeLinkResponseSchema, sendCodeResponseSchema } from "@app/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { createIoRedis, createMemoryRedis, type RedisLike } from "../src/redis.js";
@@ -57,6 +57,8 @@ d("change email (real Postgres)", { timeout: T }, () => {
     sendInUse: () => Promise.resolve(),
     sendChanged: () => Promise.resolve(),
   };
+  /** The newest Undo this change link each old address was sent. */
+  const undoLinks = new Map<string, string>();
   /** Old addresses whose "changed" note the provider refuses, until taken out. */
   const failChanged = new Set<string>();
   const receive = (to: string, what: string) => {
@@ -130,11 +132,14 @@ d("change email (real Postgres)", { timeout: T }, () => {
   };
 
   /** Google on the phone: the stand-in verifier reads the claims it is handed, the route does the rest. */
-  const google = async (subject: string, email: string): Promise<{ userId: string; isNewAccount: boolean }> => {
+  const googleReply = async (subject: string, email: string): Promise<Reply> => {
     const start = await inject("POST", "/v1/auth/google/phone/start", {}, {});
     expect(start.statusCode, start.body).toBe(200);
     const { nonce } = JSON.parse(start.body) as { nonce: string };
-    const res = await inject("POST", "/v1/auth/google/phone", {}, { idToken: JSON.stringify({ subject, email, name: null, nonce }) });
+    return await inject("POST", "/v1/auth/google/phone", {}, { idToken: JSON.stringify({ subject, email, name: null, nonce }) });
+  };
+  const google = async (subject: string, email: string): Promise<{ userId: string; isNewAccount: boolean }> => {
+    const res = await googleReply(subject, email);
     expect(res.statusCode, res.body).toBe(200);
     const body = JSON.parse(res.body) as { user: { id: string }; isNewAccount: boolean };
     return { userId: body.user.id, isNewAccount: body.isNewAccount };
@@ -150,9 +155,10 @@ d("change email (real Postgres)", { timeout: T }, () => {
       receive(to, "in use");
       return Promise.resolve();
     },
-    sendChanged: (oldEmail, newEmail) => {
+    sendChanged: (oldEmail, newEmail, undoLink) => {
       if (failChanged.has(oldEmail)) return Promise.reject(new Error("provider refused"));
       told.push({ oldEmail, newEmail });
+      undoLinks.set(oldEmail.toLowerCase(), undoLink);
       receive(oldEmail, "changed");
       return Promise.resolve();
     },
@@ -192,6 +198,128 @@ d("change email (real Postgres)", { timeout: T }, () => {
     await redis?.close();
     await sql.end({ timeout: 5 });
   }, T);
+
+  // ── Undo this change (item 19's security pass, H1; Kd 2026-11-06) ──
+
+  const tokenOf = (link: string | undefined): string => {
+    const token = link?.split("#")[1];
+    if (token === undefined) throw new Error("no Undo link was sent");
+    return token;
+  };
+  const readLink = (token: string) => inject("POST", "/v1/email-change/read", {}, { token });
+  const undo = (token: string) => inject("POST", "/v1/email-change/undo", {}, { token });
+  const refresh = (cookies: Cookies) => inject("POST", "/v1/auth/refresh", cookies, {});
+
+  it(
+    "THE WORST THING (security pass, H1): a stranger who changes the email on a phone left signed in, links Google, changes it again and deletes the account, loses it all to one press of Undo this change",
+    async () => {
+      const maya = await person("maya");
+      // Her laptop is signed in too: the same account, a second sign-in.
+      const laptop = await codeSignIn(maya.email);
+      expect(laptop.userId).toBe(maya.userId);
+
+      // The stranger, on her phone: their own address, their own Google, then a second address of theirs.
+      const thief = address("thief");
+      expect((await change(maya, thief)).statusCode).toBe(200);
+      const thiefGoogle = `google-thief-${randomUUID()}`;
+      expect((await google(thiefGoogle, thief)).userId).toBe(maya.userId);
+      const thief2 = address("thief-two");
+      expect((await change(maya, thief2)).statusCode).toBe(200);
+      await sql`UPDATE users SET status = 'deleted', deleted_at = now() WHERE id = ${maya.userId}`;
+
+      // Her inbox has the link; opening the page changes nothing.
+      const token = tokenOf(undoLinks.get(maya.email));
+      const page = await readLink(token);
+      expect(page.statusCode, page.body).toBe(200);
+      expect(emailChangeLinkResponseSchema.parse(JSON.parse(page.body))).toEqual({
+        state: "open",
+        oldEmail: maya.email,
+        newEmail: maskedAddress(thief),
+        supportEmail: null,
+      });
+      expect(await emailOf(maya.userId)).toBe(thief2);
+
+      // One press: her address, her account back, everybody signed out, the stranger's Google gone.
+      const done = await undo(token);
+      expect([done.statusCode, JSON.parse(done.body)]).toEqual([200, { state: "done", oldEmail: maya.email }]);
+      expect(await emailOf(maya.userId)).toBe(maya.email);
+      expect((await sql<{ status: string }[]>`SELECT status FROM users WHERE id = ${maya.userId}`)[0]?.status).toBe("active");
+      expect((await sql`SELECT 1 FROM auth_identities WHERE user_id = ${maya.userId}`).length).toBe(0);
+      expect((await refresh(maya.cookies)).statusCode).toBe(401);
+      expect((await refresh(laptop.cookies)).statusCode).toBe(401);
+      // The stranger's access token, still inside its 15 minutes, can neither change nor delete anything.
+      expect((await askCode(maya, address("thief-three"))).statusCode).toBe(401);
+      expect((await inject("POST", "/v1/users/me/delete-code", maya.cookies, {})).statusCode).toBe(401);
+      // Google at the stranger's address opens their own new account, never hers.
+      expect((await google(thiefGoogle, thief)).userId).not.toBe(maya.userId);
+      // The stranger's own link, from their second change, works no more.
+      const theirs = tokenOf(undoLinks.get(thief));
+      expect(JSON.parse((await readLink(theirs)).body)).toEqual({ state: "closed", supportEmail: null });
+      expect(errorOf(await undo(theirs))).toBe("link_closed");
+      expect(await emailOf(maya.userId)).toBe(maya.email);
+
+      // She signs in with her own address, into her own account; pressing again is the same answer.
+      const back = await codeSignIn(maya.email);
+      expect([back.userId, back.isNewAccount]).toEqual([maya.userId, false]);
+      expect(JSON.parse((await undo(token)).body)).toEqual({ state: "done", oldEmail: maya.email });
+      expect(JSON.parse((await readLink(token)).body)).toEqual({ state: "done", oldEmail: maya.email });
+    },
+  );
+
+  it("a link that was never sent, one of the wrong shape, one run out, and one for an account purged for good undo nothing", async () => {
+    expect([(await readLink("a".repeat(64))).statusCode, (await undo("a".repeat(64))).statusCode]).toEqual([404, 404]);
+    expect(errorOf(await undo("a".repeat(64)))).toBe("link_not_valid");
+    expect([(await readLink("not-a-token")).statusCode, (await undo("not-a-token")).statusCode]).toEqual([400, 400]);
+
+    const nat = await person("nat");
+    const natNew = address("nat-new");
+    expect((await change(nat, natNew)).statusCode).toBe(200);
+    const token = tokenOf(undoLinks.get(nat.email));
+    await sql`UPDATE email_changes SET expires_at = now() - interval '1 second' WHERE user_id = ${nat.userId}`;
+    expect(JSON.parse((await readLink(token)).body)).toMatchObject({ state: "closed" });
+    expect([(await undo(token)).statusCode, await emailOf(nat.userId)]).toEqual([409, natNew]);
+
+    const oto = await person("oto");
+    expect((await change(oto, address("oto-new"))).statusCode).toBe(200);
+    const otoToken = tokenOf(undoLinks.get(oto.email));
+    await sql`UPDATE users SET status = 'deleted', deleted_at = now() - interval '15 days' WHERE id = ${oto.userId}`;
+    expect(JSON.parse((await readLink(otoToken)).body)).toMatchObject({ state: "closed" });
+    expect(errorOf(await undo(otoToken))).toBe("link_closed");
+    expect((await sql<{ status: string }[]>`SELECT status FROM users WHERE id = ${oto.userId}`)[0]?.status).toBe("deleted");
+  });
+
+  it("for its 14 days no other account moves onto the old address; one that holds it anyway is named, and nothing moves", async () => {
+    const pia = await person("pia");
+    const piaNew = address("pia-new");
+    expect((await change(pia, piaNew)).statusCode).toBe(200);
+    const token = tokenOf(undoLinks.get(pia.email));
+    // Another account asks for her old address: the move is refused as taken.
+    const quin = await person("quin");
+    const moved = await change(quin, pia.email);
+    expect([moved.statusCode, errorOf(moved)]).toEqual([409, "email_in_use"]);
+    expect(await emailOf(quin.userId)).toBe(quin.email);
+    // An account that holds it all the same (written straight in): the undo says so, and moves nobody.
+    await sql`UPDATE users SET email = ${pia.email} WHERE id = ${quin.userId}`;
+    const refused = await undo(token);
+    expect([refused.statusCode, errorOf(refused)]).toEqual([409, "email_in_use"]);
+    expect([await emailOf(pia.userId), await emailOf(quin.userId)]).toEqual([piaNew, pia.email]);
+    // She may still move back to it herself.
+    await sql`UPDATE users SET email = ${quin.email} WHERE id = ${quin.userId}`;
+    expect((await change(pia, pia.email)).statusCode).toBe(200);
+  });
+
+  it("two presses of the same link at once put the account back once", async () => {
+    const ray = await person("ray");
+    expect((await change(ray, address("ray-new"))).statusCode).toBe(200);
+    const token = tokenOf(undoLinks.get(ray.email));
+    const both = await Promise.all([undo(token), undo(token)]);
+    expect(both.map((r) => r.statusCode)).toEqual([200, 200]);
+    expect(both.map((r) => JSON.parse(r.body) as unknown)).toEqual([
+      { state: "done", oldEmail: ray.email },
+      { state: "done", oldEmail: ray.email },
+    ]);
+    expect((await sql`SELECT 1 FROM email_changes WHERE user_id = ${ray.userId} AND undone_at IS NOT NULL`).length).toBe(1);
+  });
 
   it(
     "THE WORST THING: an account never moves onto an address it did not prove, nor onto another person's: another account's code, a wrong code and a taken address all leave both accounts as they were",
@@ -243,7 +371,7 @@ d("change email (real Postgres)", { timeout: T }, () => {
     },
   );
 
-  it("the account is the same account at its new address: the session goes on, a sign-in there opens it, and the old address opens a new, empty one", async () => {
+  it("the account is the same account at its new address: the session goes on, a sign-in there opens it, and the old address starts no new account until its 14 days are over", async () => {
     const dev = await person("dev");
     const devNew = address("dev-new");
     expect((await change(dev, devNew)).statusCode).toBe(200);
@@ -254,6 +382,16 @@ d("change email (real Postgres)", { timeout: T }, () => {
 
     const atNew = await codeSignIn(devNew);
     expect([atNew.userId, atNew.isNewAccount]).toEqual([dev.userId, false]);
+    // Whoever holds the old inbox proves it, and is told where the account went and how to undo it.
+    await pastTheGap(dev.email);
+    signInCodes.delete(dev.email);
+    expect((await inject("POST", "/v1/auth/code/send", {}, { email: dev.email })).statusCode).toBe(200);
+    const refused = await inject("POST", "/v1/auth/code/verify", {}, { email: dev.email, code: signInCodes.get(dev.email) ?? "" });
+    expect([refused.statusCode, errorOf(refused)]).toEqual([409, "email_moved"]);
+    expect(JSON.parse(refused.body)).toMatchObject({ message: EMAIL_CHANGE_WORDS.movedOff(maskedAddress(devNew)) });
+    expect((await sql`SELECT 1 FROM users WHERE email = ${dev.email}`).length).toBe(0);
+    // Its 14 days over: the old address opens a new, empty account.
+    await sql`UPDATE email_changes SET expires_at = now() - interval '1 second' WHERE user_id = ${dev.userId}`;
     const atOld = await codeSignIn(dev.email);
     expect(atOld.isNewAccount).toBe(true);
     expect(atOld.userId).not.toBe(dev.userId);
@@ -273,9 +411,17 @@ d("change email (real Postgres)", { timeout: T }, () => {
 
     expect((await confirm(eve, eveNew, code)).statusCode).toBe(200);
     expect(told.filter((t) => t.oldEmail === eve.email)).toEqual([{ oldEmail: eve.email, newEmail: eveNew }]);
-    const note = emailChangedEmail({ to: eve.email, newAddress: eveNew, supportEmail: "help@example.com" });
+    const link = undoLinks.get(eve.email) ?? "";
+    expect(link).toMatch(/^http:\/\/localhost:5173\/undo-email-change#[0-9a-f]{64}$/);
+    const note = emailChangedEmail({ to: eve.email, newAddress: eveNew, supportEmail: "help@example.com", undoLink: link, days: 14 });
     expect(note.text).toContain(maskedAddress(eveNew));
     expect(note.text).not.toContain(eveNew);
+    expect(note.text).toContain(`press Undo this change within 14 days`);
+    expect(note.text).toContain(link);
+    expect(note.html).toContain(`>Undo this change</a>`);
+    // Only the link's hash is kept.
+    const kept = await sql<{ token_hash: string }[]>`SELECT token_hash FROM email_changes WHERE user_id = ${eve.userId}`;
+    expect(kept.map((r) => r.token_hash)).toEqual([createHash("sha256").update(link.split("#")[1] ?? "").digest("hex")]);
     expect(maskedAddress("kate.smith@gmail.com")).toBe("k***@gmail.com");
   });
 
@@ -302,6 +448,8 @@ d("change email (real Postgres)", { timeout: T }, () => {
     expect((await change(hal, halNew)).statusCode).toBe(200);
     expect((await sql`SELECT 1 FROM auth_identities WHERE user_id = ${hal.userId}`).length).toBe(0);
 
+    expect(errorOf(await googleReply(oldGoogle, hal.email))).toBe("email_moved");
+    await sql`UPDATE email_changes SET expires_at = now() - interval '1 second' WHERE user_id = ${hal.userId}`;
     const oldOne = await google(oldGoogle, hal.email);
     expect(oldOne.userId).not.toBe(hal.userId);
     expect(oldOne.isNewAccount).toBe(true);
@@ -447,10 +595,11 @@ d("change email (real Postgres)", { timeout: T }, () => {
     const sent: { to: string; text: string }[] = [];
     const transport = { send: (message: { to: string; text: string }) => { sent.push(message); return Promise.resolve(); } };
     const sender = changeEmailSenderFor(loadConfig({ ...baseEnv, SUPPORT_EMAIL: "help@kwazo.example" }), transport, api().log);
-    await sender.sendChanged("old@example.com", "new.person@example.com");
+    await sender.sendChanged("old@example.com", "new.person@example.com", "http://localhost:5173/undo-email-change#abc");
     expect(sent.map((m) => m.to)).toEqual(["old@example.com"]);
     expect(sent[0]?.text).toContain("write to us at help@kwazo.example");
     expect(sent[0]?.text).toContain("n***@example.com");
+    expect(sent[0]?.text).toContain("http://localhost:5173/undo-email-change#abc");
   });
 
   it("past an account's third change-email code of the day it asks for the robot check, for that person alone: twelve people at one internet address each ask freely (security L2)", async () => {
@@ -483,8 +632,8 @@ d("change email (real Postgres)", { timeout: T }, () => {
   });
 
   it("the old address is told even when the first send fails: the note waits, and the worker sends it once (L3)", async () => {
-    const notesOf = (userId: string) => sql`SELECT tries FROM email_changed_notes WHERE user_id = ${userId}`;
-    const run = () => sendDueEmailChangedNotes({ sql, sender: changeSender, log: api().log });
+    const notesOf = (userId: string) => sql`SELECT note_tries AS tries FROM email_changes WHERE user_id = ${userId} AND note_next_try_at IS NOT NULL`;
+    const run = () => sendDueEmailChangedNotes({ sql, sender: changeSender, log: api().log, config: loadConfig(baseEnv) });
     // Sent at once: no note is left.
     const wes = await person("wes");
     expect((await change(wes, address("wes-new"))).statusCode).toBe(200);
@@ -498,17 +647,19 @@ d("change email (real Postgres)", { timeout: T }, () => {
     // Not before its time, and a failed try waits again.
     await run();
     expect(told.filter((t) => t.oldEmail === vic.email)).toHaveLength(0);
-    await sql`UPDATE email_changed_notes SET next_try_at = now() - interval '1 second' WHERE user_id = ${vic.userId}`;
+    await sql`UPDATE email_changes SET note_next_try_at = now() - interval '1 second' WHERE user_id = ${vic.userId}`;
     await run();
     expect(told.filter((t) => t.oldEmail === vic.email)).toHaveLength(0);
     expect(await notesOf(vic.userId)).toEqual([{ tries: 2 }]);
     // The provider takes it: told once, the note gone, and a run after sends nothing more.
     failChanged.delete(vic.email);
-    await sql`UPDATE email_changed_notes SET next_try_at = now() - interval '1 second' WHERE user_id = ${vic.userId}`;
+    await sql`UPDATE email_changes SET note_next_try_at = now() - interval '1 second' WHERE user_id = ${vic.userId}`;
     await Promise.all([run(), run()]);
     await run();
     expect(told.filter((t) => t.oldEmail === vic.email)).toHaveLength(1);
     expect(await notesOf(vic.userId)).toHaveLength(0);
+    const kept = await sql<{ token_hash: string }[]>`SELECT token_hash FROM email_changes WHERE user_id = ${vic.userId}`;
+    expect(kept.map((r) => r.token_hash)).toEqual([createHash("sha256").update(undoLinks.get(vic.email)?.split("#")[1] ?? "").digest("hex")]);
   });
 
   // ── Item 19's data-integrity pass (reviews/19-integrity-findings.md) ──
@@ -536,7 +687,7 @@ d("change email (real Postgres)", { timeout: T }, () => {
       .toBeGreaterThanOrEqual(count);
   };
 
-  it("a Google sign-in at the old address while the account moves off it never links Google to the moved account (H1)", async () => {
+  it("a Google sign-in at the old address while the account moves off it never links Google to the moved account (integrity H1)", async () => {
     const rae = await person("rae");
     const raeNew = address("rae-new");
     changeCodes.delete(raeNew);
@@ -548,19 +699,20 @@ d("change email (real Postgres)", { timeout: T }, () => {
     const release = await holdRow(rae.userId);
     const moving = confirm(rae, raeNew, code);
     await queuedOn(1);
-    const signingIn = google(oldGoogle, rae.email);
+    const signingIn = googleReply(oldGoogle, rae.email);
     await queuedOn(2);
     await release();
     const [moved, signedIn] = await Promise.all([moving, signingIn]);
 
     expect(moved.statusCode, moved.body).toBe(200);
     expect(await emailOf(rae.userId)).toBe(raeNew);
-    expect(signedIn.userId).not.toBe(rae.userId);
+    // The old address has just left the account: Google there is told so, and is linked to nothing.
+    expect([signedIn.statusCode, errorOf(signedIn)]).toEqual([409, "email_moved"]);
     expect((await sql`SELECT 1 FROM auth_identities WHERE user_id = ${rae.userId}`).length).toBe(0);
-    expect((await google(oldGoogle, rae.email)).userId).not.toBe(rae.userId);
+    expect(errorOf(await googleReply(oldGoogle, rae.email))).toBe("email_moved");
   });
 
-  it("a sign-in by code at the old address while the account moves off it opens a new account, never the moved one (L2)", async () => {
+  it("a sign-in by code at the old address while the account moves off it never opens the moved one (L2)", async () => {
     const sam = await person("sam");
     const samNew = address("sam-new");
     changeCodes.delete(samNew);
@@ -582,10 +734,8 @@ d("change email (real Postgres)", { timeout: T }, () => {
     const [moved, signedIn] = await Promise.all([moving, signingIn]);
 
     expect(moved.statusCode, moved.body).toBe(200);
-    expect(signedIn.statusCode, signedIn.body).toBe(200);
-    const body = JSON.parse(signedIn.body) as { user: { id: string; email: string }; isNewAccount: boolean };
-    expect(body).toMatchObject({ user: { email: sam.email }, isNewAccount: true });
-    expect(body.user.id).not.toBe(sam.userId);
+    expect([signedIn.statusCode, errorOf(signedIn)]).toEqual([409, "email_moved"]);
+    expect(signedIn.cookies).toEqual([]);
   });
 
   it("Confirm sent again after its answer was lost says the move worked, and tells the old address once (H2)", async () => {

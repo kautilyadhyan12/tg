@@ -4,11 +4,16 @@
 // their own row (R3.2). /restore is unauthenticated by nature (a deleted user
 // cannot log in) and rate-limited like password reset (GAP-4 ruling: 5/hr,
 // dual-key — no identifier in the body, so the IP bucket carries it).
+import { createHash } from "node:crypto";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { Sql } from "postgres";
 import { z } from "zod";
 import {
+  EMAIL_CHANGE_WORDS,
   SIGN_IN_ROBOT_WORDS,
+  emailChangeLinkRequestSchema,
+  type EmailChangeLinkResponse,
+  type EmailChangeUndoResponse,
   changeEmailCodeRequestSchema,
   changeEmailRequestSchema,
   onboardingQuerySchema,
@@ -16,6 +21,8 @@ import {
   type DeleteAccountResponse,
 } from "@app/shared";
 import { createDualRateLimit, giveBackRateLimit, type DualRateLimitOptions } from "../auth/rateLimit.js";
+import { readEmailChangeLink, sessionStillLive, undoEmailChangeLink } from "../auth/service.js";
+import { maskedAddress } from "../../email/templates.js";
 import type { AppConfig } from "../../config.js";
 import type { RedisLike } from "../../redis.js";
 import type { RobotCheck } from "../orgs/gymPage/robotCheck.js";
@@ -312,15 +319,23 @@ export function registerUserRoutes(
     return reply.status(201).send({ consent });
   });
 
+  // Changing the address and deleting the account need a sign-in that is still live: an Undo this
+  // change ends every one of the account's, and an access token already out would otherwise go on for
+  // its 15 minutes (item 19's security pass, H1). The phone and the browser sign in again.
+  const liveSession = async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
+    if (await sessionStillLive(deps.sql, authedUserId(req), req.authUser?.familyId ?? null)) return;
+    await reply.status(401).send({ error: "unauthorized", message: "authentication required", requestId: req.id });
+  };
+
   // Step 1 of deleting: a code goes to the account's own address. The day cap
   // and resend gap are the sign-in code's (counted separately, by purpose).
-  app.post("/v1/users/me/delete-code", { preHandler: [app.authenticate] }, async (req, reply) => {
+  app.post("/v1/users/me/delete-code", { preHandler: [app.authenticate, liveSession] }, async (req, reply) => {
     const rules = await service.requestDeleteCode(usersDeps, authedUserId(req));
     return reply.status(200).send({ message: "We emailed you a 6-digit code.", ...rules });
   });
 
   // Step 2: the code in the body proves it is the account holder deleting.
-  app.delete("/v1/users/me", { preHandler: [app.authenticate] }, async (req, reply) => {
+  app.delete("/v1/users/me", { preHandler: [app.authenticate, liveSession] }, async (req, reply) => {
     const input = parseBody(deleteAccountRequestSchema, req, reply);
     if (input === null) return;
     // The gyms the deletion itself took the person out of, a gym joined in that same instant too.
@@ -390,15 +405,61 @@ export function registerUserRoutes(
   };
 
   // Step 1: a code to the new address.
-  app.post("/v1/users/me/email-code", { preHandler: [app.authenticate, changeEmailRobotGate, changeEmailCodeLimit] }, async (req, reply) => {
+  app.post("/v1/users/me/email-code", { preHandler: [app.authenticate, liveSession, changeEmailRobotGate, changeEmailCodeLimit] }, async (req, reply) => {
     const input = parseBody(changeEmailCodeRequestSchema, req, reply);
     if (input === null) return;
     const rules = await requestChangeEmailCode(changeEmailDeps, authedUserId(req), input.email);
     return reply.status(200).send({ message: `We emailed a 6-digit code to ${input.email}.`, ...rules });
   });
 
+  // UNDO THIS CHANGE (item 19's security pass, H1; Kd 2026-11-06): the page the note to the old address
+  // opens. No sign-in: the token is the whole request, in the body; it names one change and nothing else.
+  // Limited by the link and by the internet address, as an emailed link to sign is. Opening the page
+  // changes nothing: only the page's own button undoes, so a mail program that opens links cannot.
+  const byLink = (req: FastifyRequest): string | null => {
+    const token = (req.body as { token?: unknown } | null | undefined)?.token;
+    return typeof token === "string" ? createHash("sha256").update(token, "utf8").digest("hex") : null;
+  };
+  const HOUR = 60 * 60 * 1000;
+  const undoReadLimit = createDualRateLimit({ name: "email_change_read", max: 60, ipMax: 600, windowMs: HOUR, identifier: byLink, redis: deps.redis });
+  const undoLimit = createDualRateLimit({ name: "email_change_undo", max: 20, ipMax: 200, windowMs: HOUR, identifier: byLink, redis: deps.redis });
+  const supportEmail = deps.config.SUPPORT_EMAIL ?? null;
+  const notValid = (req: FastifyRequest, reply: FastifyReply) =>
+    reply.status(404).header("cache-control", "no-store").send({ error: "link_not_valid", message: EMAIL_CHANGE_WORDS.notValid, requestId: req.id });
+
+  app.post("/v1/email-change/read", { preHandler: [undoReadLimit] }, async (req, reply) => {
+    const input = parseBody(emailChangeLinkRequestSchema, req, reply);
+    if (input === null) return;
+    const link = await readEmailChangeLink(deps.sql, input.token);
+    if (link.kind === "unknown") return notValid(req, reply);
+    const page: EmailChangeLinkResponse =
+      link.kind === "open"
+        ? { state: "open", oldEmail: link.oldEmail, newEmail: maskedAddress(link.newEmail), supportEmail }
+        : link.kind === "done"
+          ? { state: "done", oldEmail: link.oldEmail }
+          : { state: "closed", supportEmail };
+    return reply.status(200).header("cache-control", "no-store").send(page);
+  });
+
+  app.post("/v1/email-change/undo", { preHandler: [undoLimit] }, async (req, reply) => {
+    const input = parseBody(emailChangeLinkRequestSchema, req, reply);
+    if (input === null) return;
+    const undone = await undoEmailChangeLink(deps.sql, input.token);
+    if (undone.kind === "unknown") return notValid(req, reply);
+    if (undone.kind === "closed") {
+      return reply.status(409).header("cache-control", "no-store").send({ error: "link_closed", message: `${EMAIL_CHANGE_WORDS.closedTitle}. ${EMAIL_CHANGE_WORDS.closed}`, requestId: req.id });
+    }
+    if (undone.kind === "taken") {
+      const help = supportEmail === null ? "" : ` ${EMAIL_CHANGE_WORDS.writeToUs(supportEmail)}`;
+      return reply.status(409).header("cache-control", "no-store").send({ error: "email_in_use", message: `${EMAIL_CHANGE_WORDS.taken}${help}`, requestId: req.id });
+    }
+    // The person's gyms show the address on their page.
+    if (!undone.already) tellMembersGyms(deps.sql, deps.news, app.log, undone.userId, { what: "people" });
+    return reply.status(200).header("cache-control", "no-store").send({ state: "done", oldEmail: undone.oldEmail } satisfies EmailChangeUndoResponse);
+  });
+
   // Step 2: the code proves the new address; the account moves to it.
-  app.post("/v1/users/me/email", { preHandler: [app.authenticate, changeEmailLimit] }, async (req, reply) => {
+  app.post("/v1/users/me/email", { preHandler: [app.authenticate, liveSession, changeEmailLimit] }, async (req, reply) => {
     const input = parseBody(changeEmailRequestSchema, req, reply);
     if (input === null) return;
     const userId = authedUserId(req);

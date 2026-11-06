@@ -5,12 +5,14 @@
 //   · "Invalid email or password" NEVER distinguishes no-user / wrong-password
 //   · one-time tokens stored as SHA-256 only
 //   · refresh reuse kills the whole family
+import { createHmac, randomUUID } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { hash as argon2Hash, hashSync as argon2HashSync, verify as argon2Verify } from "@node-rs/argon2";
 import type { FastifyBaseLogger } from "fastify";
 import type { Sql } from "postgres";
-import { SIGNED_IN_ELSEWHERE, type SessionClient } from "@app/shared";
+import { EMAIL_CHANGE_WORDS, SIGNED_IN_ELSEWHERE, type SessionClient } from "@app/shared";
 import type { AppConfig } from "../../config.js";
+import { maskedAddress } from "../../email/templates.js";
 import { DPDP_RETENTION_MS } from "../../retention.js";
 import * as codes from "./codes.js";
 import type { CodePurpose, CodeSender } from "./codes.js";
@@ -256,6 +258,14 @@ async function ensureEmailVerified(deps: AuthDeps, userId: string, email: string
   );
 }
 
+/** An address an account moved off in the last 14 days starts no new account: whoever holds it is told
+ *  where it went, partly hidden, and how to undo it (item 19's security pass, H1). They have just proved
+ *  the address, so this tells a stranger nothing. */
+async function refuseIfMovedOff(deps: AuthDeps, email: string): Promise<void> {
+  const moved = await repo.liveMoveOff(deps.sql, email);
+  if (moved !== null) throw new AuthError(409, "email_moved", EMAIL_CHANGE_WORDS.movedOff(maskedAddress(moved.newEmail)));
+}
+
 /** How many times a sign-in looks an address up while other requests move or take it. */
 const ADDRESS_LOOKS = 3;
 
@@ -295,6 +305,7 @@ export async function googleSignIn(
     }
 
     // 3. Brand-new OAuth-only user from the Google profile.
+    await refuseIfMovedOff(deps, identity.email);
     const newUserId = await repo.createPasswordlessUser(deps.sql, {
       email: identity.email,
       displayName: oauthDisplayName(identity.name),
@@ -351,6 +362,7 @@ export async function signInWithCode(
     let user = await repo.findUserByEmail(deps.sql, input.email);
     let isNewAccount = false;
     if (user === null) {
+      await refuseIfMovedOff(deps, input.email);
       const newUserId = await repo.createPasswordlessUser(deps.sql, {
         email: input.email,
         displayName: displayNameFromEmail(input.email),
@@ -418,15 +430,39 @@ export async function emailTaken(sql: Sql, email: string): Promise<boolean> {
  *  the old address ends. */
 export async function moveAccountEmail(
   sql: Sql,
+  config: Pick<AppConfig, "JWT_SECRET">,
   input: { userId: string; from: string | null; to: string },
 ): Promise<repo.MovedEmail> {
+  const id = randomUUID();
   return await repo.moveEmail(sql, {
     userId: input.userId,
     from: input.from,
     to: input.to,
     nameFrom: input.from === null ? null : displayNameFromEmail(input.from),
     nameTo: displayNameFromEmail(input.to),
+    change: { id, tokenHash: sha256Hex(emailChangeUndoToken(config, id)) },
   });
+}
+
+/** A change's Undo link token: worked out from its id and the server's secret, so the note can be sent
+ *  again with the same link while only the token's SHA-256 is stored. 64 hex characters. */
+export function emailChangeUndoToken(config: Pick<AppConfig, "JWT_SECRET">, changeId: string): string {
+  return createHmac("sha256", config.JWT_SECRET).update(`email-change-undo:${changeId}`).digest("hex");
+}
+
+/** What an Undo link's page shows. */
+export async function readEmailChangeLink(sql: Sql, token: string): Promise<repo.EmailChangeLink> {
+  return await repo.readEmailChange(sql, sha256Hex(token));
+}
+
+/** Undo the change an Undo link names (repo: one transaction). */
+export async function undoEmailChangeLink(sql: Sql, token: string): Promise<repo.UndoneEmailChange> {
+  return await repo.undoEmailChange(sql, sha256Hex(token));
+}
+
+/** Whether the sign-in session an access token was issued under is still live (an undo ends them all). */
+export async function sessionStillLive(sql: Sql, userId: string, familyId: string | null): Promise<boolean> {
+  return familyId !== null && (await repo.sessionLive(sql, userId, familyId));
 }
 
 // ── refresh (rotation + reuse detection) ────────────────────────────────────

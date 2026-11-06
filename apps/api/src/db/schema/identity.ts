@@ -127,23 +127,35 @@ export const signInCodes = pgTable(
   ],
 );
 
-/** The note to an account's old address once Change email has moved it (19c), kept until it is sent:
- *  the request tries it at once, and the worker again until the provider takes it (item 19's
- *  data-integrity pass, L3). Deleted once sent, or after its last try. */
-export const emailChangedNotes = pgTable(
-  "email_changed_notes",
+/** Each Change email (19c), kept for the 14 days its Undo link works (item 19's two extra passes,
+ *  migration 0217): the note to the old address and its tries, and the link's SHA-256 (the token is
+ *  worked out again from the id and the server's secret, never stored). */
+export const emailChanges = pgTable(
+  "email_changes",
   {
-    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    id: uuid("id").primaryKey(),
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     oldEmail: citext("old_email").notNull(),
     newEmail: citext("new_email").notNull(),
-    tries: smallint("tries").notNull().default(0),
-    nextTryAt: timestamp("next_try_at", { withTimezone: true }).notNull().defaultNow(),
+    tokenHash: text("token_hash").notNull().unique(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    undoneAt: timestamp("undone_at", { withTimezone: true }),
+    /** Ended by a later undo of the same account. */
+    endedAt: timestamp("ended_at", { withTimezone: true }),
+    noteTries: smallint("note_tries").notNull().default(0),
+    /** Null once the note is sent, or given up on. */
+    noteNextTryAt: timestamp("note_next_try_at", { withTimezone: true }),
     createdAt: createdAt(),
   },
-  (t) => [check("email_changed_notes_tries_check", sql`${t.tries} >= 0`), index("email_changed_notes_next_try_idx").on(t.nextTryAt)],
+  (t) => [
+    check("email_changes_note_tries_check", sql`${t.noteTries} >= 0`),
+    index("email_changes_user_idx").on(t.userId),
+    index("email_changes_old_email_idx").on(t.oldEmail),
+    index("email_changes_note_next_try_idx").on(t.noteNextTryAt).where(sql`${t.noteNextTryAt} IS NOT NULL`),
+    index("email_changes_expires_idx").on(t.expiresAt),
+  ],
 );
 
 export const refreshTokens = pgTable(
