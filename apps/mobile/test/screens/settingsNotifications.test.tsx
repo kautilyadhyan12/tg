@@ -167,11 +167,12 @@ describe("the words fit every kind of place", () => {
     expect(screen.getByText(words("pushGymMessages").on)).toBeTruthy();
   });
 
-  it("somebody who belongs to no place has nothing to set yet, so no switches are drawn", async () => {
+  it("somebody who belongs to no place gets no place switches, and has Your training's reminders (19e-i)", async () => {
     await openSettings(fakeServer(routes({ [ME]: account().me, "/v1/orgs/mine": mine() })).ask);
-    expect(await screen.findByText("Units")).toBeTruthy();
-    expect(screen.queryByText("Notifications")).toBeNull();
+    expect(await screen.findByText("Your training")).toBeTruthy();
+    expect(screen.getByText("Notifications")).toBeTruthy();
     expect(screen.queryByLabelText("Messages notifications")).toBeNull();
+    expect(screen.getByLabelText("Workout reminder")).toBeTruthy();
   });
 });
 

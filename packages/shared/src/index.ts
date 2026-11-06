@@ -110,5 +110,7 @@ export * from "./autopay.js";
 export * from "./liveUpdates.js";
 export * from "./setupScreens.js";
 export * from "./phoneNotifications.js";
+export * from "./trainingReminders.js";
 export * from "./deletedForms.js";
 export * from "./gymMealPlans.js";
+export * from "./gymMealPlanGiving.js";

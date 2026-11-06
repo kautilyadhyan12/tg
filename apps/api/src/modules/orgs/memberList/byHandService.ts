@@ -72,6 +72,7 @@ import { unlistedDigest, unlistedGroup, unlistedPage } from "./unlisted.js";
 import { moveGiftLinks } from "../referrals/memberGiftRepo.js";
 import { movePayerLinks } from "../payers/repo.js";
 import { movePauses } from "../payments/autopayRepo.js";
+import { moveChosen } from "../../nutrition/gymMealPlanAudienceRepo.js";
 import { moveCards } from "../payments/cardsRepo.js";
 import { oweDeletes, rollUp, standingOf } from "../payments/squareDeletesRepo.js";
 
@@ -927,6 +928,8 @@ export async function mergeEntries(
     await moveCards(tx, gymId, goneId, keepId, at);
     // A pause of automatic payments on either stands on the kept record (18d-iv-f).
     await movePauses(tx, gymId, goneId, keepId, at);
+    // A meal plan chosen for either is the kept record's, the one given last if both (24a-ii).
+    await moveChosen(tx, gymId, goneId, keepId);
     // Who pays for either, and whom either pays for (18i): one person keeps one payer.
     const payers = await movePayerLinks(tx, gymId, goneId, keepId);
     if (payers !== null) throw new OrgsError(409, payers, MEMBER_PAYER_WORDS[payers]);

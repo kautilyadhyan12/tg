@@ -1,4 +1,8 @@
-import { foodSearchResponseSchema, gymMealPlanResponseSchema, gymMealPlansResponseSchema, mealMeasuresResponseSchema } from '@app/shared';
+import {
+  foodSearchResponseSchema, gymMealPlanForEntryResponseSchema, gymMealPlanGivePreviewResponseSchema, gymMealPlanGivenResponseSchema,
+  gymMealPlanGivenToSelectedResponseSchema, gymMealPlanGroupsResponseSchema, gymMealPlanResponseSchema, gymMealPlansResponseSchema,
+  mealMeasuresResponseSchema,
+} from '@app/shared';
 import authApi from './authApi';
 
 // THE MEAL PLANS A GYM GIVES ITS MEMBERS (spec Part 6 §16.6; ROADMAP Stage 2 24a-i), for staff
@@ -36,4 +40,22 @@ export const mealPlansService = {
     readThrough(mealMeasuresResponseSchema, 'the amounts', authApi.get(`${dayPath(gymId, planId, day)}/meals/${encodeURIComponent(String(meal))}/measures`)).then((d) => d.measures),
   /** The food list's search, the phone's own. */
   searchFoods: (q) => readThrough(foodSearchResponseSchema, 'the foods', authApi.get('/v1/nutrition/foods', { params: { q, limit: 10 } })).then((d) => d.items),
+  // Who gets a plan (24a-ii).
+  /** The gym's membership types and tags a plan can be given to. */
+  groups: (gymId) => readThrough(gymMealPlanGroupsResponseSchema, 'the memberships and tags', authApi.get(`${plansPath(gymId)}/groups`)),
+  given: (gymId, planId) => readThrough(gymMealPlanGivenResponseSchema, 'who gets this plan', authApi.get(`${planPath(gymId, planId)}/given`)).then((d) => d.given),
+  /** `to`: `{ kind: 'everyone' }`, `{ kind: 'membership_type', membershipTypeId }` or `{ kind: 'tag', tagId }`. */
+  givePreview: (gymId, planId, to) =>
+    readThrough(gymMealPlanGivePreviewResponseSchema, 'who would get it', authApi.post(`${planPath(gymId, planId)}/give-preview`, { to })).then((d) => d.preview),
+  give: (gymId, planId, to) => readThrough(gymMealPlanGivenResponseSchema, 'who gets this plan', authApi.post(`${planPath(gymId, planId)}/give`, { to })).then((d) => d.given),
+  stop: (gymId, planId, audienceIds) =>
+    readThrough(gymMealPlanGivenResponseSchema, 'who gets this plan', authApi.post(`${planPath(gymId, planId)}/stop`, { audienceIds })).then((d) => d.given),
+  /** A person's page: the plan this record gets. */
+  forRecord: (gymId, entryId) =>
+    readThrough(gymMealPlanForEntryResponseSchema, 'their meal plan', authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/entries/${encodeURIComponent(entryId)}/meal-plan`)),
+  /** The people selected on Members. A "Select all" that moved is refused as every selected press is. */
+  previewSelected: (gymId, planId, selection) =>
+    readThrough(gymMealPlanGivePreviewResponseSchema, 'who would get it', authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/selected/meal-plan-preview`, { planId, selection })).then((d) => d.preview),
+  giveSelected: (gymId, planId, selection) =>
+    readThrough(gymMealPlanGivenToSelectedResponseSchema, 'the meal plan given', authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/selected/meal-plan`, { planId, selection })).then((d) => d.given),
 };

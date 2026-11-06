@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AGREEMENT_NOT_SIGNED_SHOW, PAST_PAYMENT_DUE_SHOW, PAYMENT_DUE_SHOW } from './weekView';
 import { Link, useParams } from 'react-router-dom';
-import { AlertTriangle, Check, ChevronRight, Download, ListChecks, Loader2, Mail, MessageSquare, Minus, Search, SlidersHorizontal, Tag, Trash2, Upload, UserMinus, UserPlus, X } from 'lucide-react';
+import { AlertTriangle, Check, ChevronRight, Download, ListChecks, Loader2, Mail, MessageSquare, Minus, Search, SlidersHorizontal, Tag, Trash2, Upload, UserMinus, UserPlus, Utensils, X } from 'lucide-react';
 import { HELD_PAYMENT_WORDS, MEMBER_APP_FILTER_WORDS, MEMBER_LIST_QUERY_MAX_CHARS, MEMBER_LIST_TICKED_MAX } from '@app/shared';
 import { orgService, errorText, blobError, selectionChanged } from '../../api/orgsApi';
 import { ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
@@ -12,6 +12,8 @@ import MemberListRemove from './MemberListRemove';
 import MemberListDelete from './MemberListDelete';
 import { MemberTagsManage, MemberTagsSelected } from './MemberListTags';
 import MemberListMessage from './MemberListMessage';
+import { GiveMealPlanSheet } from './MealPlanGiving';
+import { canManagePlans } from './mealPlansView';
 import MemberListUpload from './MemberListUpload';
 import { saveFile } from './saveFile';
 import { staffTag, viewerPrivileges } from './consoleView';
@@ -493,6 +495,8 @@ export default function MemberListPanel({
   const [managingTags, setManagingTags] = useState(false);
   /** The selection the Send message box is open for (20f-i). */
   const [messageFor, setMessageFor] = useState(null);
+  /** The selection the Meal plan box is open for (24a-ii). */
+  const [mealPlanFor, setMealPlanFor] = useState(null);
   /** The newest request for a page: an answer to an older one is dropped. */
   const latest = useRef(0);
   /** How many names were loaded when a change asked for the list again, so the re-read
@@ -920,6 +924,12 @@ export default function MemberListPanel({
           Keep on list
         </button>
       ) : null}
+      {current && !readOnly && canManagePlans(viewerPrivileges(gym)) ? (
+        <button type="button" onClick={() => setMealPlanFor(selection)} data-testid="bar-meal-plan" className="c-btn c-btn-s c-btn-sm">
+          <Utensils aria-hidden="true" className="w-4 h-4" />
+          Meal plan
+        </button>
+      ) : null}
       {!readOnly ? (
         <button type="button" onClick={() => setTaggingFor(selection)} data-testid="bar-tags" className="c-btn c-btn-s c-btn-sm">
           <Tag aria-hidden="true" className="w-4 h-4" />
@@ -1177,6 +1187,20 @@ export default function MemberListPanel({
             setOpenId(entryId);
           }}
           onClose={() => setMessageFor(null)}
+        />
+      ) : null}
+
+      {mealPlanFor !== null ? (
+        <GiveMealPlanSheet
+          gymId={gymId}
+          gymSlug={gym?.slug ?? ''}
+          selection={mealPlanFor}
+          words={words}
+          onSelectionChanged={(fresh) => {
+            selectionMoved(fresh);
+            setMealPlanFor(null);
+          }}
+          onClose={() => setMealPlanFor(null)}
         />
       ) : null}
 

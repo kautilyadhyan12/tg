@@ -7,19 +7,22 @@ import { mealPlansService } from '../../api/mealPlansApi';
 import { ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
 import { Field } from './ClassFields';
 import MealPlanMealBox from './MealPlanMealBox';
+import { GivenSection } from './MealPlanGiving';
+import { placeFor } from './consolePlaces';
 import {
-  DAY_NAMES, DAY_SHORT, MEAL_TYPES, MOST_PLAN_MEALS, PLAN_WORDS, byLine, dayMeals, itemAmount, mealNumbers, mealToJoin, mealTypeName, mealsLine, numbersLine, rowOfItem,
+  DAY_NAMES, DAY_SHORT, GIVE_WORDS, MEAL_TYPES, MOST_PLAN_MEALS, PLAN_WORDS, byLine, givenLine, dayMeals, itemAmount, mealNumbers, mealToJoin, mealTypeName, mealsLine, numbersLine, rowOfItem,
 } from './mealPlansView';
 import { useConsoleOrg } from './useConsoleOrg';
-import { orgWords } from './consoleView';
+import { orgWords, viewerPrivileges } from './consoleView';
 import { consoleIsReadOnly, readOnlyNote } from './billingView';
 
 // PLANS: the meal plans a gym gives its members (ROADMAP Stage 2 24a-i; spec Part 6 §16.6). The
 // list of the gym's plans, and one plan written a day at a time as the phone's own meal plan
-// is. `plans.manage`'s; the server refuses anyone else whatever this screen shows.
+// is, and who it is given to (24a-ii). `plans.manage`'s; the server refuses anyone else whatever
+// this screen shows.
 
 const newId = () => globalThis.crypto.randomUUID();
-const REFUSED = 'Only the owner, and staff the owner has given Write meal plans on the Staff page, can open Plans.';
+const REFUSED = 'Only the owner, and staff the owner has given Write meal plans on the Staff page, can open Fitness plans.';
 
 function Notice({ notice, error }) {
   return (
@@ -122,7 +125,7 @@ function PlanList({ org, gymId, readOnly, words, notice: startNotice }) {
     <Page>
       <header className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between min-w-0">
         <div className="flex flex-col gap-1.5 min-w-0">
-          <h1 className="c-h1">Plans</h1>
+          <h1 className="c-h1">Fitness plans</h1>
           <p className="c-sub">{PLAN_WORDS.pageSub(words)}</p>
         </div>
         {!readOnly && !state.refused && plans !== null && !adding ? (
@@ -169,6 +172,7 @@ function PlanList({ org, gymId, readOnly, words, notice: startNotice }) {
                         {p.name}
                       </Link>
                       <p className="c-s13 c-t2">{`${mealsLine(p.meals)} · ${byLine(p, org.timezone)}`}</p>
+                      <p className="c-s13 c-t2" data-testid="plan-given">{givenLine(p, words)}</p>
                     </div>
                     <Link to={`/console/${orgSlug}/plans/${p.id}`} className="c-btn c-btn-s c-btn-sm self-start md:self-auto">
                       Open
@@ -229,7 +233,7 @@ function MealCard({ meal, at, dayName, readOnly, busy, onChange, onRemove, askin
   );
 }
 
-function PlanPage({ org, gymId, planId, readOnly, notice: startNotice }) {
+function PlanPage({ org, gymId, planId, readOnly, words, notice: startNotice }) {
   const { orgSlug } = useParams();
   const navigate = useNavigate();
   const listTo = `/console/${orgSlug}/plans`;
@@ -245,6 +249,8 @@ function PlanPage({ org, gymId, planId, readOnly, notice: startNotice }) {
   const [boxHeld, setBoxHeld] = useState(false);
   /** Somewhere else was pressed while it did: `{ then }`, done once the box's question is answered. */
   const [leaving, setLeaving] = useState(null);
+  /** Who the plan is given to (24a-ii), read with it. */
+  const [given, setGiven] = useState(null);
 
   const load = useCallback(
     () =>
@@ -262,6 +268,15 @@ function PlanPage({ org, gymId, planId, readOnly, notice: startNotice }) {
     [gymId, planId],
   );
   useReadOnReturn(load);
+  const loadGiven = useCallback(
+    () =>
+      mealPlansService.given(gymId, planId).then(
+        (g) => setGiven(g),
+        () => setGiven((was) => was),
+      ),
+    [gymId, planId],
+  );
+  useReadOnReturn(loadGiven);
 
   // While a meal box holds unsaved foods, a link anywhere (the menu, All meal plans) asks first, and so does
   // closing the tab.
@@ -523,7 +538,7 @@ function PlanPage({ org, gymId, planId, readOnly, notice: startNotice }) {
       {open?.kind === 'delete' ? (
         <section className="c-card p-5 flex flex-col gap-3" role="dialog" aria-label={PLAN_WORDS.deleteAsk(plan.name)}>
           <h2 className="c-s16 c-w6 c-t1">{PLAN_WORDS.deleteAsk(plan.name)}</h2>
-          <p className="c-s14 c-t2">{PLAN_WORDS.deleteWhy}</p>
+          <p className="c-s14 c-t2">{GIVE_WORDS.deleteWhy(given?.gets ?? 0, words)}</p>
           <Notice notice={null} error={error} />
           <div className="flex flex-wrap gap-2">
             <button type="button" onClick={remove} disabled={busy} className="c-btn c-btn-danger">
@@ -535,6 +550,23 @@ function PlanPage({ org, gymId, planId, readOnly, notice: startNotice }) {
           </div>
         </section>
       ) : null}
+
+      <GivenSection
+        gymId={gymId}
+        plan={plan}
+        given={given}
+        readOnly={readOnly}
+        words={words}
+        membersTo={placeFor(orgSlug, viewerPrivileges(org), 'members')}
+        membershipsTo={placeFor(orgSlug, viewerPrivileges(org), 'memberships')}
+        onGiven={setGiven}
+        boxOpen={open?.kind === 'give'}
+        onOpenBox={guard(() => {
+          say(null);
+          setOpen({ kind: 'give' });
+        })}
+        onCloseBox={() => setOpen(null)}
+      />
 
       <p className="c-s13 c-t2">{plan.caution}</p>
 
@@ -563,7 +595,7 @@ function PlanPage({ org, gymId, planId, readOnly, notice: startNotice }) {
           <h2 className="c-h2">{dayName}</h2>
           <p className="c-s14 c-t2">{day.meals.length === 0 ? PLAN_WORDS.dayEmpty(dayName) : numbersLine(day.planned)}</p>
         </div>
-        {open?.kind === 'meal' || open?.kind === 'pick' || open?.kind === 'remove' || open === null ? <Notice notice={notice} error={error} /> : null}
+        {open?.kind === 'meal' || open?.kind === 'pick' || open?.kind === 'remove' || open?.kind === 'give' || open === null ? <Notice notice={notice} error={error} /> : null}
         {mealItems.length > 0 ? <ul className="flex flex-col gap-3">{mealItems}</ul> : null}
 
         {!readOnly && open?.kind === 'meal' && open.at === null ? box(open) : null}
@@ -582,7 +614,7 @@ function PlanPage({ org, gymId, planId, readOnly, notice: startNotice }) {
             </button>
           </div>
         ) : null}
-        {!readOnly && (open === null || open.kind === 'remove' || open.kind === 'rename' || open.kind === 'delete') ? (
+        {!readOnly && (open === null || open.kind === 'remove' || open.kind === 'rename' || open.kind === 'delete' || open.kind === 'give') ? (
           full ? (
             <p className="c-s14 c-t2">{PLAN_WORDS.dayFull}</p>
           ) : (
@@ -639,6 +671,6 @@ export default function MealPlans() {
   return planId === undefined ? (
     <PlanList key="list" org={org} gymId={org.id} readOnly={readOnly} words={words} notice={notice} />
   ) : (
-    <PlanPage key={planId} org={org} gymId={org.id} planId={planId} readOnly={readOnly} notice={notice} />
+    <PlanPage key={planId} org={org} gymId={org.id} planId={planId} readOnly={readOnly} words={words} notice={notice} />
   );
 }

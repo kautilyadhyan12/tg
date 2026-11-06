@@ -1459,6 +1459,31 @@ export async function inUseForList(
   return rows.map((row) => ({ entryId: row.entry_id, noEmail: row.no_email, held: listHeld(row) }));
 }
 
+/** Every membership stored in use of the current records named (or every current record), with
+ *  its type's id: which type a record is in, by the one rule (`heldMembershipFacts`) on the gym's
+ *  day (24a-ii, a meal plan given to a membership type). A plain read. */
+export async function inUseTypesForList(
+  sql: Sql | TransactionSql,
+  gymId: string,
+  entryIds: readonly string[] | null,
+  /** Only memberships of these types, and every one of these records. */
+  narrow: { typeIds: readonly string[]; entryIds: readonly string[] } | null = null,
+): Promise<{ entryId: string; typeId: string; membership: HeldMembership }[]> {
+  if (entryIds !== null && entryIds.length === 0) return [];
+  const ids = entryIds === null ? null : [...entryIds];
+  const types = narrow === null ? null : [...narrow.typeIds];
+  const also = narrow === null ? [] : [...narrow.entryIds];
+  const rows = await sql<(ListHeldColumns & { entry_id: string; membership_type_id: string })[]>`
+    SELECT ${LIST_COLUMNS(sql)}, h.entry_id, h.membership_type_id
+    FROM gym_held_memberships h
+    JOIN gym_membership_types t ON t.gym_id = h.gym_id AND t.id = h.membership_type_id
+    JOIN gym_member_list_entries e ON e.gym_id = h.gym_id AND e.id = h.entry_id AND e.former_at IS NULL
+    WHERE h.gym_id = ${gymId} AND h.status = ANY(${[...IN_USE]}::text[])
+      AND (${ids}::uuid[] IS NULL OR h.entry_id = ANY(${ids}::uuid[]))
+      AND (${types}::uuid[] IS NULL OR h.membership_type_id = ANY(${types}::uuid[]) OR h.entry_id = ANY(${also}::uuid[]))`;
+  return rows.map((row) => ({ entryId: row.entry_id, typeId: row.membership_type_id, membership: listHeld(row).membership }));
+}
+
 /** Every membership stored in use of the gym's current records, sold in `currency`, with
  *  its type and the price it was sold at: what Reports' money figures read (21b-i). */
 export async function inUseForMoney(

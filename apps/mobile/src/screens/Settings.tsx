@@ -10,6 +10,7 @@ import {
   GYM_COMMENTS_CHANNEL,
   GYM_MESSAGES_CHANNEL,
   GYM_PLACES_CHANNEL,
+  TRAINING_REMINDERS_CHANNEL,
   myOrgsResponseSchema,
   onboardingResponseSchema,
   orgWords,
@@ -37,6 +38,7 @@ import { useSession } from "../session/SessionProvider";
 import { HideMe, useHideMe } from "./gym/hideMe";
 import { CanSee } from "./Invitation";
 import { tabWord } from "./placesHeading";
+import { TrainingReminders } from "./TrainingReminders";
 import { Setup, accountUnits } from "./setup/Setup";
 import { UNIT_OPTIONS } from "./setup/SetupScreens";
 import { setupPath } from "./setup/useSetupAnswers";
@@ -267,8 +269,8 @@ export function messagesFrom(places: Places): string | null {
   return only !== undefined && more.length === 0 ? `From ${only.name}.` : null;
 }
 
-// Every notification the app sends today is about a place the person belongs to, so somebody in none
-// has nothing to set here yet; while their places are still being read, nothing is drawn.
+// A place's switches show for somebody who belongs to one; Your training's reminders (19e-i) for everyone.
+// While the account and the places are still being read, nothing is drawn.
 function NotificationsPart(props: { push: Push; setPush: (push: Push) => void; saves: RefObject<number>; places: Places; onAgain: () => void }) {
   const { push, setPush, saves, places, onAgain } = props;
   const { session } = useSession();
@@ -282,7 +284,7 @@ function NotificationsPart(props: { push: Push; setPush: (push: Push) => void; s
   useEffect(() => {
     const run = { live: true };
     const readChannels = () => {
-      void channelsOff(PUSH_SWITCHES.map((row) => row.channel)).then((off) => {
+      void channelsOff([...PUSH_SWITCHES.map((row) => row.channel), TRAINING_REMINDERS_CHANNEL.id]).then((off) => {
         if (run.live) setOffOnPhone(off);
       });
     };
@@ -297,7 +299,8 @@ function NotificationsPart(props: { push: Push; setPush: (push: Push) => void; s
       back.remove();
     };
   }, [readAgain]);
-  if (push.kind === "loading" || places.kind === "loading" || (places.kind === "ok" && places.orgs.length === 0)) return null;
+  if (push.kind === "loading" || places.kind === "loading") return null;
+  const belongs = places.kind === "failed" || places.orgs.length > 0;
   // The same word as the person's tab: "Gym", "Studio", "Trainer", "Clinic", or "Places".
   const heading = places.kind === "ok" ? tabWord(places.orgs.map((org) => org.orgType)) : null;
   const from = messagesFrom(places);
@@ -327,7 +330,7 @@ function NotificationsPart(props: { push: Push; setPush: (push: Push) => void; s
           )}
         </View>
       ) : null}
-      {push.kind === "failed" ? (
+      {!belongs ? null : push.kind === "failed" ? (
         <View style={styles.between}>
           <Txt kind="small" style={styles.grow}>
             Couldn’t load your notifications.
@@ -372,6 +375,13 @@ function NotificationsPart(props: { push: Push; setPush: (push: Push) => void; s
         </>
       )}
       <Said words={said} bad />
+      <TrainingReminders
+        phoneAllowed={phone.allowed === "yes"}
+        offOnPhone={offOnPhone.includes(TRAINING_REMINDERS_CHANNEL.id)}
+        onTurnedOn={() => {
+          if (phone.allowed === "ask") void phone.turnOn();
+        }}
+      />
     </Part>
   );
 }
