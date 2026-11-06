@@ -41,6 +41,7 @@ import {
   billsAtCancel,
   billsToOpen,
   periodListedMinor,
+  raisedListedMinor,
   partMinor,
   partPeriod,
   countAfterGap,
@@ -124,7 +125,31 @@ export interface HeldRow {
   contractRelease: ContractRelease | null;
   /** Why it was ended before its notice allowed (18v-ii-a). */
   noticeWaived: ContractRelease | null;
+  /** Its price raised by staff (18w): charged only from `fromPeriod`, written once its email has gone. */
+  raise: HeldRaise | null;
   membership: HeldMembership;
+}
+
+export interface HeldRaise {
+  id: string;
+  /** Its own price at the raise, as `priceMinor` holds its own. */
+  priceMinor: number;
+  noticeDays: number;
+  fromPeriod: number | null;
+  fromOn: string | null;
+  sentOn: string | null;
+}
+
+/** What period `index` of this membership is listed at: its own price, or its raise's from the period its email
+ *  named (18w). Every bill opened, and every amount said of a period to come, reads this. */
+export function periodPriceMinor(row: Pick<HeldRow, "priceMinor" | "raise">, index: number): number {
+  return raisedListedMinor(row.priceMinor, row.raise, index);
+}
+
+/** The price it is paying now (18w): its raise's once today has reached the payment its email named. */
+export function priceNowMinor(row: Pick<HeldRow, "priceMinor" | "raise">, today: string): number {
+  const raise = row.raise;
+  return raise !== null && raise.fromOn !== null && today >= raise.fromOn ? raise.priceMinor : row.priceMinor;
 }
 
 // Text columns under a CHECK: parsed, so a value the rule does not know fails here.
@@ -170,6 +195,17 @@ const rawSchema = z.object({
   discount_payments: z.enum(MEMBERSHIP_PAYMENTS).nullable(),
   taxes: z.unknown(),
   tax_included: z.boolean().nullable(),
+  raise: z
+    .object({
+      id: z.string(),
+      priceMinor: z.number().int(),
+      noticeDays: z.number().int(),
+      fromPeriod: z.number().int().nullable(),
+      fromOn: z.string().nullable(),
+      sentOn: z.string().nullable(),
+    })
+    .strict()
+    .nullable(),
 });
 
 /** The part month's price of a membership billed from the gym's day (18y), before tax. */
@@ -189,7 +225,8 @@ function shape(row: unknown): HeldRow {
     freezeFeeMinor: r.freeze_fee_minor,
     contractRelease: r.contract_release,
     noticeWaived: r.notice_waived,
-    nextBillMinor: r.price_minor === 0 ? 0 : billOf(r.full_from !== null && r.paid_periods === 0 ? partOf(r) : r.price_minor, taxApplied).amountMinor,
+    nextBillMinor: r.price_minor === 0 ? 0 : billOf(r.full_from !== null && r.paid_periods === 0 ? partOf(r) : raisedListedMinor(r.price_minor, r.raise, r.paid_periods), taxApplied).amountMinor,
+    raise: r.raise,
     id: r.id,
     typeId: r.membership_type_id,
     typeName: r.type_name,
@@ -310,7 +347,11 @@ const COLUMNS = (sql: Sql | TransactionSql) => sql`
   END AS cooling_off_signed,
   h.freeze_fee_minor, h.discount_name, h.discount_minor, h.discount_payments,
   ${heldTaxesSql(sql)} AS taxes,
-  h.tax_included`;
+  h.tax_included,
+  -- Its price raised by staff (18w), if it is.
+  (SELECT json_build_object('id', rz.id, 'priceMinor', rz.price_minor, 'noticeDays', rz.notice_days, 'fromPeriod', rz.from_period,
+                            'fromOn', rz.from_on::text, 'sentOn', rz.sent_on::text)
+   FROM gym_price_raises rz WHERE rz.gym_id = h.gym_id AND rz.held_membership_id = h.id) AS raise`;
 
 /** The record's memberships of the statuses named, newest start first. */
 const held = (sql: Sql | TransactionSql, gymId: string, entryId: string, statuses: readonly string[], limit: number) => sql`
