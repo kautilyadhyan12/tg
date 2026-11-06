@@ -96,11 +96,19 @@ export async function owedNear(
   return rows.map((row) => ({ userId: row.user_id, kind: row.kind, minute: row.minute, zone: row.zone }));
 }
 
+/** A reminder taken for today: the day it held before, and the save it was taken from (`updated_at` as
+ *  text, to the millionth; a Date keeps only the thousandth). */
+export interface Taken {
+  kind: ReminderKind;
+  prev: string | null;
+  saved: string;
+}
+
 /** Takes the person's reminders for today, once: a second run at the same instant gets none back. Each
  *  comes back with the day it held before, to be put back if no phone could be reached. */
-export async function claim(sql: SqlOrTx, userId: string, kinds: readonly ReminderKind[], day: string): Promise<{ kind: ReminderKind; prev: string | null }[]> {
+export async function claim(sql: SqlOrTx, userId: string, kinds: readonly ReminderKind[], day: string): Promise<Taken[]> {
   if (kinds.length === 0) return [];
-  return sql<{ kind: ReminderKind; prev: string | null }[]>`
+  return sql<Taken[]>`
     WITH o AS (
       SELECT kind, sent_day AS prev FROM training_reminders
       WHERE user_id = ${userId} AND kind IN ${sql(kinds)} AND is_on AND paused_at IS NULL
@@ -109,7 +117,7 @@ export async function claim(sql: SqlOrTx, userId: string, kinds: readonly Remind
     )
     UPDATE training_reminders t SET sent_day = ${day}::date
     FROM o WHERE t.user_id = ${userId} AND t.kind = o.kind
-    RETURNING t.kind, o.prev::text AS prev`;
+    RETURNING t.kind, o.prev::text AS prev, t.updated_at::text AS saved`;
 }
 
 /** Of these, the reminders still on and not paused: read again just before a send, so a switch-off made
@@ -122,12 +130,14 @@ export async function stillOn(sql: SqlOrTx, userId: string, kinds: readonly Remi
   return rows.map((row) => row.kind);
 }
 
-/** Firebase reached no phone: today's is owed again, unless the person changed it since. */
-export async function unclaim(sql: SqlOrTx, userId: string, taken: readonly { kind: ReminderKind; prev: string | null }[], day: string): Promise<void> {
+/** Firebase reached no phone: today's is owed again, unless the person saved it since (a save at a time
+ *  already past holds today as well, and waits for tomorrow). */
+export async function unclaim(sql: SqlOrTx, userId: string, taken: readonly Taken[], day: string): Promise<void> {
   for (const one of taken) {
     await sql`
       UPDATE training_reminders SET sent_day = ${one.prev}::date
-      WHERE user_id = ${userId} AND kind = ${one.kind} AND sent_day = ${day}::date`;
+      WHERE user_id = ${userId} AND kind = ${one.kind} AND sent_day = ${day}::date
+        AND updated_at = ${one.saved}::text::timestamptz`;
   }
 }
 

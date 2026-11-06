@@ -63,11 +63,16 @@ d("the workout and meal reminders (real Postgres)", () => {
   const answers = new Map<string, PushResult>();
   /** Addresses whose next send throws, as a dropped connection would. */
   const throwOnce = new Set<string>();
+  /** Run while a send to this address is out, before Firebase answers. */
+  const duringSend = new Map<string, () => Promise<void>>();
   const sender: PushSender = {
-    send: (message) => {
-      if (throwOnce.delete(message.token)) return Promise.reject(new Error("connection dropped"));
+    send: async (message) => {
+      if (throwOnce.delete(message.token)) throw new Error("connection dropped");
+      const meanwhile = duringSend.get(message.token);
+      duringSend.delete(message.token);
+      if (meanwhile !== undefined) await meanwhile();
       sent.push(message);
-      return Promise.resolve(answers.get(message.token) ?? "sent");
+      return answers.get(message.token) ?? "sent";
     },
   };
   /** The moment the routes read "today" from; the real clock unless a test sets it. */
@@ -443,5 +448,29 @@ d("the workout and meal reminders (real Postgres)", () => {
     await sweep(india(13, 1));
     await sweep(india(13, 2));
     expect(sentTo(dropped.token)).toHaveLength(1);
+  }, TIMEOUT_MS);
+
+  // ── Item 19's data-integrity pass (reviews/19-integrity-findings.md) ──
+
+  it("saved at a time already past while its send is failing, it waits for tomorrow (L1)", async () => {
+    const midsave = await phone("midsave");
+    await set(midsave, "breakfast", "08:00");
+    answers.set(midsave.token, "failed");
+    duringSend.set(midsave.token, async () => {
+      routesNow = india(8, 0);
+      try {
+        expect((await save(midsave, "breakfast", { on: true, time: "07:55", days: [1, 2, 3, 4, 5, 6, 7] })).statusCode).toBe(200);
+      } finally {
+        routesNow = null;
+      }
+    });
+    sent.length = 0;
+    await sweep(india(8, 0));
+    answers.delete(midsave.token);
+    await sweep(india(8, 1));
+    await sweep(india(8, 2));
+    expect(sentTo(midsave.token)).toHaveLength(1);
+    await sweep(india(7, 55, 1));
+    expect(sentTo(midsave.token)).toHaveLength(2);
   }, TIMEOUT_MS);
 });
