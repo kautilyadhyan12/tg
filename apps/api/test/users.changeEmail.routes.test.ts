@@ -858,7 +858,8 @@ d("change email (real Postgres)", { timeout: T }, () => {
     const undoing = undo(token);
     await queuedOn(1);
     const signingIn = inject("POST", "/v1/auth/code/verify", {}, { email: val.email, code });
-    await queuedOn(1, "%FROM email_changes%FOR SHARE%");
+    // Queued on the change, or (were it not to wait) already answered.
+    await Promise.race([queuedOn(1, "%FROM email_changes%FOR SHARE%"), signingIn]);
     await release();
     const [undone, signedIn] = await Promise.all([undoing, signingIn]);
 
