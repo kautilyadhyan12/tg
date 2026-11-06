@@ -339,13 +339,14 @@ function NotificationsPart(props: { push: Push; setPush: (push: Push) => void; s
     setBusy(null);
   };
   // One switch, its line, and a word when the phone's own settings turned its kind off.
-  const switchRow = (row: (typeof PUSH_SWITCHES)[number], heldLine?: string) => {
+  // `lined`: under Your training, drawn as its reminders are, a line above each.
+  const switchRow = (row: (typeof PUSH_SWITCHES)[number], heldLine?: string, lined = false) => {
     if (push.kind !== "ok") return null;
       const on = push.now[row.key];
       const line = on && heldLine !== undefined ? heldLine : on ? (row.key === "pushGymMessages" && from !== null ? from : row.on) : row.off;
       const phoneOff = on && phone.allowed === "yes" && offOnPhone.includes(row.channel);
       return (
-        <View key={row.key} style={styles.email}>
+        <View key={row.key} style={[styles.email, lined ? styles.lined : null]}>
           <View style={styles.between}>
             <View style={styles.grow}>
               <Txt kind="h3">{row.label}</Txt>
@@ -419,9 +420,11 @@ function NotificationsPart(props: { push: Push; setPush: (push: Push) => void; s
           ) : (
             <>
               {/* Safe mode: the streak reminder waits, as the workout reminder does. */}
-              {PROGRESS_SWITCHES.map((row) => switchRow(row, row.key === "pushStreak" && safeMode === true ? SAFE_MODE_LINE : undefined))}
+              {PROGRESS_SWITCHES.map((row) => switchRow(row, row.key === "pushStreak" && safeMode === true ? SAFE_MODE_LINE : undefined, true))}
               <Said words={said?.progress === true ? said.words : null} bad />
-              <Txt kind="tiny">{PROGRESS_FOOT}</Txt>
+              <Txt kind="tiny" style={styles.foot}>
+                {PROGRESS_FOOT}
+              </Txt>
             </>
           )
         }
@@ -935,6 +938,8 @@ const styles = StyleSheet.create({
   rule: { height: 1, backgroundColor: colours.line },
   start: { alignSelf: "flex-start" },
   email: { gap: 6 },
+  lined: { paddingVertical: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colours.line },
+  foot: { marginTop: 4 },
   ask: { gap: 14 },
   two: { flexDirection: "row", gap: 10 },
   // One above the other, the whole width: a box's words never spill out of its buttons on a small phone or in large text.
