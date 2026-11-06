@@ -67,10 +67,11 @@ export const appPaymentOpenSchema = z
 export type AppPaymentOpen = z.infer<typeof appPaymentOpenSchema>;
 
 /** A page that ended with money Square may have taken and that is not on the bill, while that bill is still owed: Square
- *  took another amount than asked or the bill could not take it (`taken`), or Square never said how it ended
- *  (`unknown`). The card on file is not charged for that bill by itself while it stands. */
+ *  took another amount than asked or the bill could not take it (`taken`, with what Square took where it named it in the
+ *  page's money), or Square never said how it ended (`unknown`). `payerName`: the record of whoever opened the page. The
+ *  card on file is not charged for that bill by itself while it stands. */
 export const appPaymentCheckSchema = z
-  .object({ why: z.enum(["taken", "unknown"]), amountMinor: minorSchema, on: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), payerName: z.string().nullable() })
+  .object({ why: z.enum(["taken", "unknown"]), amountMinor: z.number().int().min(0).max(99_999_999).nullable(), on: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), payerName: z.string().nullable() })
   .strict();
 export type AppPaymentCheck = z.infer<typeof appPaymentCheckSchema>;
 
@@ -114,9 +115,9 @@ export const APP_PAYMENT_STAFF_WORDS = {
 export const appPayingLine = (payerName: string | null, at: string): string =>
   `${payerName ?? "The member"} is paying this in the app. The payment page closes at ${at} if it isn't paid.`;
 
-/** The bill's line for a page that ended needing a check (`appPaymentCheckSchema`). `money`: its amount, `day`: when, both
- *  in the gym's words. */
-export const appCheckLine = (check: Pick<AppPaymentCheck, "why" | "payerName">, money: string, day: string): string =>
+/** The bill's line for a page that ended needing a check (`appPaymentCheckSchema`). `money`: what Square took, or null where
+ *  that is not known; `day`: when; both in the gym's words. */
+export const appCheckLine = (check: Pick<AppPaymentCheck, "why" | "payerName">, money: string | null, day: string): string =>
   check.why === "taken"
-    ? `Square took ${money} from ${check.payerName ?? "the member"} in the app on ${day}, but it couldn't go on this bill. Check it in Square before taking this payment again. It won't be charged to the card on file automatically.`
+    ? `Square took ${money ?? "a payment"} from ${check.payerName ?? "the member"} in the app on ${day}, but it couldn't go on this bill. Check it in Square before taking this payment again. It won't be charged to the card on file automatically.`
     : `${check.payerName ?? "The member"}'s payment page in the app ended on ${day} without an answer from Square, so it may have been paid. Check it in Square before taking this payment again. It won't be charged to the card on file automatically.`;

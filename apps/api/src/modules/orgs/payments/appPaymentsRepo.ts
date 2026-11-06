@@ -141,8 +141,8 @@ export async function readOpenOf(sql: SqlOrTx, gymId: string, userId: string): P
   return rows.map(toRow);
 }
 
-/** The page open on each of these memberships, for staff on the person's page: who pays for the person holding it (the
- *  payer's name, or the person's own), and when it closes. */
+/** The page open on each of these memberships, for staff on the person's page: who opened it (the name of the record
+ *  their account holds at the gym), and when it closes. */
 export async function openOnMemberships(
   sql: SqlOrTx,
   gymId: string,
@@ -152,12 +152,10 @@ export async function openOnMemberships(
   if (membershipIds.length === 0) return found;
   const rows = await sql<{ id: string; held_membership_id: string; closes_at: Date; payer_name: string | null }[]>`
     SELECT a.id, a.held_membership_id, a.closes_at,
-           COALESCE((SELECT pe.full_name FROM gym_member_payers l
-                     JOIN gym_member_list_entries pe ON pe.gym_id = l.gym_id AND pe.id = l.payer_entry_id
-                     WHERE l.gym_id = h.gym_id AND l.entry_id = h.entry_id), e.full_name) AS payer_name
+           (SELECT o.full_name FROM gym_members gm
+            JOIN gym_member_list_entries o ON o.gym_id = gm.gym_id AND o.id = gm.entry_id
+            WHERE gm.gym_id = a.gym_id AND gm.user_id = a.opened_by LIMIT 1) AS payer_name
     FROM gym_app_payments a
-    JOIN gym_held_memberships h ON h.gym_id = a.gym_id AND h.id = a.held_membership_id
-    LEFT JOIN gym_member_list_entries e ON e.gym_id = h.gym_id AND e.id = h.entry_id
     WHERE a.gym_id = ${gymId} AND a.state = 'open' AND a.held_membership_id = ANY(${[...membershipIds]}::uuid[])`;
   for (const r of rows) found.set(r.held_membership_id, { id: r.id, payerName: r.payer_name === "" ? null : r.payer_name, closesAt: r.closes_at });
   return found;
@@ -340,7 +338,7 @@ export async function finish(sql: SqlOrTx, gymId: string, id: string, outcome: "
  *  longer take it, kept as not recorded with Square's payment. Null when another request finished it first. */
 export async function recordPaid(
   sql: Sql,
-  p: { row: AppPayRow; squarePaymentId: string; card: { brand: string; last4: string } | null; today: string; now: Date; refuse?: string },
+  p: { row: AppPayRow; squarePaymentId: string; card: { brand: string; last4: string } | null; taken: number | null; today: string; now: Date; refuse?: string },
 ): Promise<{ outcome: "paid" | "not_recorded" } | null> {
   const { row } = p;
   return await sql.begin(async (tx) => {
@@ -371,7 +369,7 @@ export async function recordPaid(
     if (done?.kind === "recorded") {
       await tx`
         UPDATE gym_app_payments SET state = 'done', outcome = 'paid', square_payment_id = ${p.squarePaymentId}, member_payment_id = ${done.paymentId},
-               card_brand = ${p.card?.brand ?? null}, card_last4 = ${p.card?.last4 ?? null}, entry_id = ${holder}, finished_at = ${p.now}, checking_until = NULL
+               card_brand = ${p.card?.brand ?? null}, card_last4 = ${p.card?.last4 ?? null}, taken_minor = ${p.taken}, entry_id = ${holder}, finished_at = ${p.now}, checking_until = NULL
         WHERE gym_id = ${row.gymId} AND id = ${row.id}`;
       await insertAudit(tx, {
         actorUserId: row.openedBy,
@@ -385,7 +383,7 @@ export async function recordPaid(
     }
     await tx`
       UPDATE gym_app_payments SET state = 'done', outcome = 'not_recorded', square_payment_id = ${p.squarePaymentId},
-             card_brand = ${p.card?.brand ?? null}, card_last4 = ${p.card?.last4 ?? null}, finished_at = ${p.now}, checking_until = NULL
+             card_brand = ${p.card?.brand ?? null}, card_last4 = ${p.card?.last4 ?? null}, taken_minor = ${p.taken}, finished_at = ${p.now}, checking_until = NULL
       WHERE gym_id = ${row.gymId} AND id = ${row.id}`;
     await insertAudit(tx, {
       actorUserId: row.openedBy,
@@ -424,35 +422,34 @@ export async function outcomeOf(sql: SqlOrTx, gymId: string, id: string): Promis
 
 export interface AppCheckRow {
   periodIndex: number;
-  amountMinor: number;
+  /** What Square took, where it named it in the page's money; null where that is not known. */
+  amountMinor: number | null;
   /** The day it ended, on the gym's calendar. */
   on: string;
   why: "taken" | "unknown";
   payerName: string | null;
 }
 
-/** For each of these memberships, the newest page that ended needing a check (`CHECK_OUTCOMES`), and who pays for the
- *  person holding it. The caller shows it while that bill is the one owed. */
+/** For each of these memberships, the newest page that ended needing a check (`CHECK_OUTCOMES`), what Square took where it
+ *  is known, and who opened it. The caller shows it while that bill is the one owed. */
 export async function checksOnMemberships(sql: SqlOrTx, gymId: string, membershipIds: readonly string[]): Promise<Map<string, AppCheckRow>> {
   const found = new Map<string, AppCheckRow>();
   if (membershipIds.length === 0) return found;
-  const rows = await sql<{ held_membership_id: string; period_index: number; amount_minor: number; on: string; outcome: string; payer_name: string | null }[]>`
-    SELECT DISTINCT ON (a.held_membership_id) a.held_membership_id, a.period_index, a.amount_minor, a.outcome,
+  const rows = await sql<{ held_membership_id: string; period_index: number; taken_minor: number | null; on: string; outcome: string; payer_name: string | null }[]>`
+    SELECT DISTINCT ON (a.held_membership_id) a.held_membership_id, a.period_index, a.taken_minor, a.outcome,
            ((a.finished_at AT TIME ZONE g.timezone)::date)::text AS on,
-           COALESCE((SELECT pe.full_name FROM gym_member_payers l
-                     JOIN gym_member_list_entries pe ON pe.gym_id = l.gym_id AND pe.id = l.payer_entry_id
-                     WHERE l.gym_id = h.gym_id AND l.entry_id = h.entry_id), e.full_name) AS payer_name
+           (SELECT o.full_name FROM gym_members gm
+            JOIN gym_member_list_entries o ON o.gym_id = gm.gym_id AND o.id = gm.entry_id
+            WHERE gm.gym_id = a.gym_id AND gm.user_id = a.opened_by LIMIT 1) AS payer_name
     FROM gym_app_payments a
     JOIN gyms g ON g.id = a.gym_id
-    JOIN gym_held_memberships h ON h.gym_id = a.gym_id AND h.id = a.held_membership_id
-    LEFT JOIN gym_member_list_entries e ON e.gym_id = h.gym_id AND e.id = h.entry_id
     WHERE a.gym_id = ${gymId} AND a.state = 'done' AND a.outcome IN ('not_recorded','gone','no_answer')
       AND a.held_membership_id = ANY(${[...membershipIds]}::uuid[])
     ORDER BY a.held_membership_id, a.finished_at DESC`;
   for (const r of rows) {
     found.set(r.held_membership_id, {
       periodIndex: r.period_index,
-      amountMinor: r.amount_minor,
+      amountMinor: r.outcome === "not_recorded" ? r.taken_minor : null,
       on: r.on,
       why: r.outcome === "not_recorded" ? "taken" : "unknown",
       payerName: r.payer_name === "" ? null : r.payer_name,

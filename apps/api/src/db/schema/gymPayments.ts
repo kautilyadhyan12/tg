@@ -917,9 +917,12 @@ export const gymAppPayments = pgTable(
     memberPaymentId: uuid("member_payment_id"),
     cardBrand: text("card_brand"),
     cardLast4: text("card_last4"),
+    /** What Square took, in the page's money, where it named it in that money. */
+    takenMinor: integer("taken_minor"),
     finishedAt: timestamp("finished_at", { withTimezone: true }),
   },
   (t) => [
+    check("gym_app_payments_taken_check", sql`${t.takenMinor} IS NULL OR ${t.takenMinor} BETWEEN 0 AND 99999999`),
     check("gym_app_payments_environment_check", sql`${t.environment} IN ('sandbox','production')`),
     check(
       "gym_app_payments_ids_check",

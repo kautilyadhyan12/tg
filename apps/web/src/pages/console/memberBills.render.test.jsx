@@ -865,6 +865,13 @@ describe('a member paying in the app (18k-ii-a)', () => {
     expect(within(screen.getByTestId('held-app-payment')).queryByRole('button')).toBeNull();
   });
 
+  it("where Square named no amount in the gym's money, the line names none", async () => {
+    const m = held(1, GOLD, TODAY, false);
+    orgService.getHeldMemberships.mockResolvedValue(answer([{ ...m, billing: { ...m.billing, appCheck: { why: 'taken', amountMinor: null, on: TODAY, payerName: null } } }]));
+    render(draw());
+    expect((await screen.findByTestId('held-app-check')).textContent).toMatch(/^Square took a payment from the member in the app on 20 October 2026, but it couldn't go on this bill./);
+  });
+
   it('Close payment page says to check Square where it may have been paid', async () => {
     orgService.getHeldMemberships.mockResolvedValue(answer([paying()]));
     orgService.closeAppPayment.mockResolvedValue({ data: { outcome: 'check' } });

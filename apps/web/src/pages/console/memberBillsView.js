@@ -708,7 +708,7 @@ export function appPayingNotice(m, timezone) {
 /** A member's page that ended with money Square may have taken and that is not on the bill owed: what to check; null for none. */
 export function appCheckNotice(m) {
   const check = m?.billing?.appCheck ?? null;
-  return check === null ? null : appCheckLine(check, formatMinor(check.amountMinor, m.currency), dayWords(check.on));
+  return check === null ? null : appCheckLine(check, check.amountMinor === null ? null : formatMinor(check.amountMinor, m.currency), dayWords(check.on));
 }
 
 /** What Close payment page says when done, in the place it was pressed. */

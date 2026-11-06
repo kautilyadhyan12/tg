@@ -655,7 +655,8 @@ d("Pay what they owe in the app: charged once, on this bill alone (real Postgres
     expect((await check(gym, taraApp, page.payment.id)).payment.state).toBe("check");
     const view = (await held(gym, gym.owner, tara.entryId)).memberships[0]?.billing;
     expect(view?.appPayment).toBeNull();
-    expect(view?.appCheck).toMatchObject({ why: "taken", amountMinor: 4999, payerName: "Tara Card" });
+    // What Square really took, never the bill's amount.
+    expect(view?.appCheck).toMatchObject({ why: "taken", amountMinor: 5499, payerName: "Tara Card" });
     clock = new Date(clock.getTime() + APP_PAYMENT.idleMs + 1000);
     await work([gym.id]);
     expect(chargedFrom(card)).toEqual([]);
@@ -730,7 +731,7 @@ d("Pay what they owe in the app: charged once, on this bill alone (real Postgres
       clock = new Date(clock.getTime() + APP_PAYMENT.giveUpMs + 60_000);
       await work([gym.id]);
       expect((await check(gym, piaApp, page.payment.id)).payment.state, what).toBe("check");
-      expect((await held(gym, gym.owner, pia.entryId)).memberships[0]?.billing?.appCheck, what).toMatchObject({ why: "unknown" });
+      expect((await held(gym, gym.owner, pia.entryId)).memberships[0]?.billing?.appCheck, what).toMatchObject({ why: "unknown", amountMinor: null, payerName: "Pia Exact" });
       expect((await held(gym, gym.owner, pia.entryId)).memberships[0]?.billing?.appPayment, what).toBeNull();
     }
     // A FAILED payment on a page the member leaves is no payment: the page closes and its order is cancelled.
@@ -803,7 +804,7 @@ d("Pay what they owe in the app: charged once, on this bill alone (real Postgres
     };
     const res = await staffClose(gym, gym.owner, una);
     expect(appPaymentCloseResponseSchema.parse(JSON.parse(res.body)).outcome).toBe("check");
-    expect((await held(gym, gym.owner, una.entryId)).memberships[0]?.billing?.appCheck).toMatchObject({ why: "taken", amountMinor: 4999 });
+    expect((await held(gym, gym.owner, una.entryId)).memberships[0]?.billing?.appCheck).toMatchObject({ why: "taken", amountMinor: 5099, payerName: "Una Honest" });
 
     // A past member paying a bill they left owing: Delete permanently waits for their page to close.
     const vic = await owing(gym, typeId, "Vic Past");

@@ -196,7 +196,10 @@ async function settle(a: Asking, order: SquareOrder): Promise<"none" | "wait" | 
   // One payment, exactly what was asked: anything else Square took is kept, never put on the bill.
   const refuse = taken.length !== 1 || !exactly(row, payment) ? "amount_differs" : undefined;
   if (refuse !== undefined) deps.log.error({ event: "square.app_payment_unexpected", gymId: row.gymId }, "Square took another amount than a payment page asked");
-  const kept = await pays.recordPaid(deps.sql, { row, squarePaymentId: payment.id, card: cardSeen, today, now, ...(refuse === undefined ? {} : { refuse }) });
+  // What Square took, in the page's money, so a line about it names what really went: the bill's amount, or another.
+  const total = payment.total_money ?? payment.amount_money;
+  const tookMinor = total.currency === row.currency ? total.amount : null;
+  const kept = await pays.recordPaid(deps.sql, { row, squarePaymentId: payment.id, card: cardSeen, taken: tookMinor, today, now, ...(refuse === undefined ? {} : { refuse }) });
   if (kept?.outcome === "not_recorded") deps.log.error({ event: "square.app_payment_not_recorded", gymId: row.gymId }, "money taken in the app could not be recorded on its bill");
   return "done";
 }

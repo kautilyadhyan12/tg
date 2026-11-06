@@ -39,6 +39,7 @@ CREATE TABLE "gym_app_payments" (
 	"member_payment_id" uuid,
 	"card_brand" text,
 	"card_last4" text,
+	"taken_minor" integer,
 	"finished_at" timestamp with time zone,
 	CONSTRAINT "gym_app_payments_environment_check" CHECK ("environment" IN ('sandbox','production')),
 	CONSTRAINT "gym_app_payments_ids_check" CHECK ("account_id" ~ '^[A-Za-z0-9_-]{1,64}$' AND "location_id" ~ '^[A-Za-z0-9_-]{1,64}$' AND "link_id" ~ '^[A-Za-z0-9_-]{1,64}$' AND "order_id" ~ '^[A-Za-z0-9_-]{1,192}$' AND char_length("url") <= 300 AND ("square_payment_id" IS NULL OR "square_payment_id" ~ '^[A-Za-z0-9_-]{1,192}$')),
@@ -49,6 +50,8 @@ CREATE TABLE "gym_app_payments" (
 	-- nothing on the bill.
 	CONSTRAINT "gym_app_payments_paid_check" CHECK ((("outcome" IS NOT DISTINCT FROM 'paid') = ("member_payment_id" IS NOT NULL)) AND ("outcome" NOT IN ('paid','not_recorded') OR "square_payment_id" IS NOT NULL)),
 	CONSTRAINT "gym_app_payments_close_check" CHECK (("close_wanted_at" IS NULL) = ("close_wanted_by" IS NULL) AND ("close_wanted_by" IS NULL OR "close_wanted_by" IN ('member','staff','expired'))),
+	-- What Square took, in the page's money: the bill's amount when paid, and what it really took when that could not go on the bill.
+	CONSTRAINT "gym_app_payments_taken_check" CHECK ("taken_minor" IS NULL OR "taken_minor" BETWEEN 0 AND 99999999),
 	CONSTRAINT "gym_app_payments_card_check" CHECK (("card_brand" IS NULL) = ("card_last4" IS NULL) AND ("card_last4" IS NULL OR "card_last4" ~ '^[0-9]{4}$') AND ("card_brand" IS NULL OR char_length("card_brand") <= 40))
 );--> statement-breakpoint
 ALTER TABLE "gym_app_payments" ADD CONSTRAINT "gym_app_payments_gym_id_gyms_id_fk" FOREIGN KEY ("gym_id") REFERENCES "public"."gyms"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
