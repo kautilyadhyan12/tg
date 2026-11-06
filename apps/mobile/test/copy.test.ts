@@ -6,7 +6,7 @@ describe("a folder's copy of the app", () => {
   it("each folder has its own name, application id, api and bundler port", () => {
     const all = COPY_KEYS.map(copyFor);
     expect(all.map((c) => c.name)).toEqual(["Feature 1", "Feature 2", "Exercise 1", "Exercise 2"]);
-    for (const field of ["name", "applicationId", "scheme", "apiUrl", "metroPort"] as const) {
+    for (const field of ["name", "applicationId", "scheme", "apiUrl", "webUrl", "metroPort"] as const) {
       expect(new Set(all.map((c) => c[field])).size).toBe(all.length);
     }
   });
@@ -16,6 +16,7 @@ describe("a folder's copy of the app", () => {
       name: "Feature 1",
       applicationId: "com.aihomegym.dev.feature1",
       apiUrl: "http://localhost:3000",
+      webUrl: "http://localhost:5173",
       metroPort: 8091,
     });
   });
@@ -27,6 +28,7 @@ describe("a folder's copy of the app", () => {
     expect(phoneAppExtraSchema.parse(config.extra)).toEqual({
       copyName: "Exercise 2",
       apiUrl: "http://localhost:3003",
+      webUrl: "http://localhost:5176",
     });
   });
 

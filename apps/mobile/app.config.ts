@@ -16,6 +16,8 @@ export interface Copy {
   scheme: string;
   /** Reached through the USB cable (`adb reverse`), so the phone's own localhost. */
   apiUrl: string;
+  /** The folder's website, the start of the links a member shares; opened on the phone through the cable too. */
+  webUrl: string;
   metroPort: number;
 }
 
@@ -33,13 +35,14 @@ export function copyFor(written: string): Copy {
       `apps/mobile/.copy must hold one of: ${COPY_KEYS.join(", ")}. It holds "${key}".`,
     );
   }
-  const { name, apiPort, metroPort } = copies[key];
+  const { name, apiPort, metroPort, webPort } = copies[key];
   return {
     key,
     name,
     applicationId: `com.aihomegym.dev.${key}`,
     scheme: `aihomegym-${key}`,
     apiUrl: `http://localhost:${String(apiPort)}`,
+    webUrl: `http://localhost:${String(webPort)}`,
     metroPort,
   };
 }
@@ -50,7 +53,7 @@ export function copyFor(written: string): Copy {
 export const GOOGLE_SERVICES_FILE = "./google-services.json";
 
 export function configFor(copy: Copy, firebase = false): ExpoConfig {
-  const extra: PhoneAppExtra = { copyName: copy.name, apiUrl: copy.apiUrl };
+  const extra: PhoneAppExtra = { copyName: copy.name, apiUrl: copy.apiUrl, webUrl: copy.webUrl };
   return {
     name: copy.name,
     slug: "ai-home-gym",

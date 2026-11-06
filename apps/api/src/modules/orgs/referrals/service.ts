@@ -23,6 +23,7 @@ import {
   referralGiftWords,
   referralMemberGiftWords,
   referralOfferLines,
+  referralTickets,
   referralPath,
   type MemberReferralResponse,
   type PublicInvite,
@@ -302,7 +303,7 @@ export async function getMemberReferral(deps: ReferralDeps, userId: string, gymI
   if (gate === null || !gate.member) throw notFound();
   if (!(await limit())) return null;
   const settings = await repo.settingsFor(deps.sql, gymId);
-  if (!settings.on || !gate.open || !gate.live) return { status: "off", gymName: gate.name };
+  if (!settings.on || !gate.open || !gate.live) return { status: "off", gymId, gymName: gate.name };
   const tz = await timezoneOf(deps.sql, gymId);
   const today = dayInTz(deps.now(), tz);
   const discounts = await referralDiscounts(deps.sql, gymId, settings.friendDiscountId === null ? [] : [settings.friendDiscountId]);
@@ -312,11 +313,13 @@ export async function getMemberReferral(deps: ReferralDeps, userId: string, gymI
   const firstName = greetingName(await repo.memberNameAt(deps.sql, userId));
   return {
     status: "on",
+    gymId,
     gymName: gate.name,
     path: referralPath(code),
     memberGift: member?.gift ?? null,
     friendGift: friend?.words ?? null,
     lines: referralOfferLines(gate.name, member, friend?.words ?? null, firstName),
+    tickets: referralTickets(gate.name, member, friend?.words ?? null, firstName),
   };
 }
 

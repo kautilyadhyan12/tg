@@ -12,9 +12,19 @@ export const phoneAppExtraSchema = z
     /** The folder's name under the icon, on a laptop's copy; absent in the store's app. */
     copyName: z.string().min(1).optional(),
     apiUrl: z.string().url(),
+    /** The app's website, an address alone (`http://localhost:5173`): the start of every link a
+     *  member shares, which opens there (Invite a friend, Stage 5 item 20a). */
+    webUrl: z
+      .string()
+      .regex(/^https?:\/\/[^/?#@\s]+$/)
+      .optional(),
   })
   .refine((extra) => extra.copyName !== undefined || extra.apiUrl.startsWith("https://"), {
     path: ["apiUrl"],
     message: "the store's app reaches its server over https only",
+  })
+  .refine((extra) => extra.copyName !== undefined || extra.webUrl === undefined || extra.webUrl.startsWith("https://"), {
+    path: ["webUrl"],
+    message: "the store's app shares https links only",
   });
 export type PhoneAppExtra = z.infer<typeof phoneAppExtraSchema>;

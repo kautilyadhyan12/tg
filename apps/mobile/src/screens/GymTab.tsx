@@ -30,6 +30,7 @@ import { DaysYouCame } from "./gym/DaysYouCame";
 import { ChallengesPage, type ChallengesPlace } from "./gym/Challenges";
 import { EventsPage, type EventsPlace } from "./gym/Events";
 import { InboxPage, type InboxPlace } from "./gym/Inbox";
+import { InviteFriendPage, InviteLine, type InvitePlace } from "./gym/InviteFriend";
 import { inboxButtonLabel, inboxButtonSay } from "./gym/inboxView";
 import { LeaderboardPage, type LeaderboardPlace } from "./gym/Leaderboard";
 import { MembershipPage, type MembershipPlace } from "./gym/Membership";
@@ -40,7 +41,8 @@ import { makePhonePass, phoneDay } from "./gym/phonePass";
 import { NO_ANSWER } from "./SignIn";
 
 // The Gym tab (docs/design/phone/pages/Gym and GymNone): the places the person joined, each with
-// Show my pass, its Inbox, its Updates, its Classes, its Events, its Personal training, My membership and the days they came there, a place that removed them, and every invitation still open for their address. It reads again when the
+// Show my pass, its Inbox, its Updates, its Classes, its Events, its Personal training, My membership, Invite a friend where it
+// has switched Refer a friend on, and the days they came there, a place that removed them, and every invitation still open for their address. It reads again when the
 // tab is opened or the app comes back, at most every 30 seconds. With the internet it also asks for
 // this sign-in's keys for passes with no signal, today's and tomorrow's, whenever the phone lacks
 // tomorrow's; with none, Show my pass stands alone where the places could not be read, or are more
@@ -96,6 +98,8 @@ export function GymScreen() {
   const [updatesAt, setUpdatesAt] = useState<UpdatesPlace | null>(null);
   // The place whose Inbox is open over the tab, or null.
   const [inboxAt, setInboxAt] = useState<InboxPlace | null>(null);
+  // The place whose Invite a friend is open over the tab, or null.
+  const [inviteAt, setInviteAt] = useState<InvitePlace | null>(null);
 
   const fetchPass = useCallback(() => session.signedIn({ method: "GET", path: PASS_PATH }, checkinPassResponseSchema), [session]);
   const makeOwnPass = useMemo(
@@ -325,6 +329,15 @@ export function GymScreen() {
                 }}
               />
             </View>
+            <InviteLine
+              key={org.id}
+              gymId={org.id}
+              gymName={org.name}
+              read={visitsRead}
+              onOpen={(first) => {
+                setInviteAt({ id: org.id, name: org.name, first });
+              }}
+            />
           </Card>
           <DaysYouCame gymId={org.id} read={visitsRead} fetchVisits={fetchVisits} />
         </Fragment>
@@ -386,6 +399,12 @@ export function GymScreen() {
         place={updatesAt}
         onClose={() => {
           setUpdatesAt(null);
+        }}
+      />
+      <InviteFriendPage
+        place={inviteAt}
+        onClose={() => {
+          setInviteAt(null);
         }}
       />
 

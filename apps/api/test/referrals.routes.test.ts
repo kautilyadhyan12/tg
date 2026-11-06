@@ -288,6 +288,38 @@ d("Refer a friend (real Postgres)", () => {
     );
 
     it(
+      "the phone's worst thing (Stage 5 item 20a): two members of one business each get their own link, it names them alone, and their own first name",
+      async () => {
+        const mayaRes = JSON.parse((await get(memberUrl(gymA.org.id), maya.cookies)).body) as MemberReferralResponse;
+        const raviRes = JSON.parse((await get(memberUrl(gymA.org.id), ravi.cookies)).body) as MemberReferralResponse;
+        if (mayaRes.status !== "on" || raviRes.status !== "on") throw new Error("the offer is off");
+        expect(mayaRes.path).not.toBe(raviRes.path);
+        expect(mayaRes.tickets.small[0]).toBe("Your link shows your first name, Maya, to whoever opens it.");
+        expect(raviRes.tickets.small[0]).toBe("Your link shows your first name, Ravi, to whoever opens it.");
+        const rows = await sql<{ user_id: string; code: string }[]>`SELECT user_id::text AS user_id, code FROM gym_referral_links WHERE gym_id = ${gymA.org.id} AND user_id IN (${maya.id}, ${ravi.id})`;
+        expect(new Map(rows.map((r) => [r.user_id, `/invite/${r.code}`]))).toEqual(
+          new Map([
+            [maya.id, mayaRes.path],
+            [ravi.id, raviRes.path],
+          ]),
+        );
+        // Each link opens a page that names the member it was given to, and nobody else.
+        for (const [res, first, other] of [
+          [mayaRes, "Maya", "Ravi"],
+          [raviRes, "Ravi", "Maya"],
+        ] as const) {
+          const page = await get(inviteUrl(res.path.replace("/invite/", "")));
+          expect((JSON.parse(page.body) as { invite: PublicInvite }).invite.inviterFirstName).toBe(first);
+          expect(page.body).not.toContain(other);
+        }
+        // A business the person is not a member of gives them nothing, not another's link.
+        expect((await get(memberUrl(gymB.org.id), ravi.cookies)).statusCode).toBe(404);
+        expect((await get(memberUrl(gymA.org.id), stranger.cookies)).statusCode).toBe(404);
+      },
+      TIMEOUT_MS,
+    );
+
+    it(
       "one member of two businesses has two links, and each brings its lead to its own business alone, marked as theirs",
       async () => {
         const codeA = await linkOf(gymA, maya);
@@ -397,7 +429,7 @@ d("Refer a friend (real Postgres)", () => {
         expect((await get(inviteUrl(codeA))).statusCode).toBe(404);
         expect((await post(formUrl(codeA), enquiry({ email: "while.off@example.com" }))).statusCode).toBe(404);
         const member = JSON.parse((await get(memberUrl(gymA.org.id), maya.cookies)).body) as MemberReferralResponse;
-        expect(member).toEqual({ status: "off", gymName: "Northside Refer A" });
+        expect(member).toEqual({ status: "off", gymId: gymA.org.id, gymName: "Northside Refer A" });
         await switchOn(gymA, ownerA.cookies, mine(10), pct(20));
 
         await sql`UPDATE subscriptions SET status = 'canceled' WHERE owner_type = 'gym' AND owner_id = ${gymA.org.id}`;
@@ -766,6 +798,7 @@ d("Refer a friend (real Postgres)", () => {
         const body = JSON.parse(res.body) as MemberReferralResponse;
         expect(body).toMatchObject({
           status: "on",
+          gymId: gymA.org.id,
           gymName: "Northside Refer A",
           memberGift: "10% off your next membership payment",
           friendGift: "20% off the first payment of a membership",
@@ -775,7 +808,31 @@ d("Refer a friend (real Postgres)", () => {
             "Your link shows your first name, Maya, to whoever opens it.",
             "This offer is set by Northside Refer A and may change.",
           ],
+          // The phone's tickets (Stage 5 item 20a): the same offer, each gift on its own.
+          tickets: {
+            you: {
+              gift: "10% off your next membership payment",
+              notes: ["When a friend you invite joins Northside Refer A and makes their first payment. It comes off by itself, and we'll tell you in your inbox."],
+            },
+            friend: { gift: "20% off the first payment of a membership", note: "Northside Refer A adds it for them when they join." },
+            plain: null,
+            small: ["Your link shows your first name, Maya, to whoever opens it.", "This offer is set by Northside Refer A and may change."],
+          },
         });
+      },
+      TIMEOUT_MS,
+    );
+
+    it(
+      "never switched on, the reply says so under the business asked, holds no link and makes none",
+      async () => {
+        const ownerC = await makeUser("owner-c", "Owner C");
+        const gymC = await makeOrg(ownerC.cookies, "Westside Refer C");
+        await join(gymC, ownerC.cookies, maya);
+        const res = await get(memberUrl(gymC.org.id), maya.cookies);
+        expect(JSON.parse(res.body)).toEqual({ status: "off", gymId: gymC.org.id, gymName: "Westside Refer C" });
+        const [count] = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM gym_referral_links WHERE gym_id = ${gymC.org.id}`;
+        expect(count?.n).toBe(0);
       },
       TIMEOUT_MS,
     );
