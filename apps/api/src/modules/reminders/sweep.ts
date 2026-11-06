@@ -60,7 +60,7 @@ export async function sendTrainingReminders(deps: {
     }
     const taken = await repo.claim(sql, userId, dueNow, clock.day);
     if (taken.length === 0) return;
-    const later: { kind: ReminderKind; prev: string | null }[] = [];
+    const later: repo.Taken[] = [];
     let reached = false;
     try {
       const zone = reminderZone(first.zone === "" ? null : first.zone);

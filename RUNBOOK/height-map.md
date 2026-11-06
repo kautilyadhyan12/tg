@@ -37,7 +37,7 @@ Azerbaijan, which Copernicus withholds). At 20 gyms in about 15 cities that is 1
    every 30 s, for 15 minutes at most.
 2. Save works it out again from the same points and keeps it (`runs.climb_m`, `runs.climb_state`).
    It waits up to 10 s for a missing square, then saves the run `waiting`.
-3. The worker (`geo.climb_sweep`, minutes 6, 16, 26 …) works out up to 50 `waiting` runs each time.
+3. The worker (`geo.climb_sweep`, minutes 14, 29, 44 and 59) works out up to 50 `waiting` runs each time.
 
 A square that failed to arrive is not fetched again for 10 minutes. A file that is not one this server
 reads is logged as `geo.heights_bad_file` and not kept.

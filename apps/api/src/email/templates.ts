@@ -68,15 +68,24 @@ export function maskedAddress(email: string): string {
 }
 
 /** Change email (19c): the OLD address is told, as banks and Google tell it. */
-export function emailChangedEmail(words: { to: string; newAddress: string; supportEmail: string | null }): EmailMessage {
-  const lines = [
-    `The email address of your ${APP_NAME} account was changed to ${maskedAddress(words.newAddress)}. You now sign in with that address.`,
-    words.supportEmail === null
-      ? "If you did this, there is nothing to do."
-      : `If you did this, there is nothing to do. If you didn't, write to us at ${words.supportEmail} straight away.`,
-  ];
-  const text = `${lines.join("\n\n")}\n\n— ${APP_NAME}`;
-  const html = `${lines.map((line) => `<p>${escapeHtml(line)}</p>`).join("")}<p>— ${APP_NAME}</p>`;
+export function emailChangedEmail(words: {
+  to: string;
+  newAddress: string;
+  supportEmail: string | null;
+  /** Undo this change (item 19's security pass, H1): the page that puts the account back. */
+  undoLink: string;
+  days: number;
+}): EmailMessage {
+  const lead = `The email address of your ${APP_NAME} account was changed to ${maskedAddress(words.newAddress)}. You now sign in with that address.`;
+  const yours = "If you did this, there is nothing to do.";
+  const undo = `If you didn't, press Undo this change within ${String(words.days)} days. Your account goes back to this address, and everyone signed in to it is signed out:`;
+  const help = words.supportEmail === null ? null : `If you need help, write to us at ${words.supportEmail}.`;
+  const text = [lead, yours, `${undo}\n${words.undoLink}`, ...(help === null ? [] : [help])].join("\n\n") + `\n\n— ${APP_NAME}`;
+  const html =
+    `<p>${escapeHtml(lead)}</p><p>${escapeHtml(yours)}</p><p>${escapeHtml(undo)}</p>` +
+    `<p><a href="${escapeHtml(words.undoLink)}">Undo this change</a></p>` +
+    (help === null ? "" : `<p>${escapeHtml(help)}</p>`) +
+    `<p>— ${APP_NAME}</p>`;
   return { to: words.to, subject: `Your ${APP_NAME} email address was changed`, text, html };
 }
 

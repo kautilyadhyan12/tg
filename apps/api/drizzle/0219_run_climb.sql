@@ -1,5 +1,6 @@
 -- A run's elevation gain (ROADMAP Stage 5 item 37b-ii). Forward-only. Hand-written, as `0016` onwards
--- are; its journal entry is part of this commit.
+-- are; its journal entry is part of this commit. Written as 0218 and renumbered 0219 when another
+-- folder's 0218 merged first.
 --
 -- `climb_m` is the metres the run climbed, worked out by the server from its saved line and the height
 -- map it keeps (`packages/shared/src/runClimb.ts`). `climb_state` says where that stands: `done` with a

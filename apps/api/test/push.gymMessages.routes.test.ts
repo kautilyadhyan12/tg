@@ -315,7 +315,8 @@ d("phone notifications for a gym's messages (real Postgres)", () => {
     await message(gymA, phone.userId, "After it ran out.", minutes(at, -1));
     await sweep(at);
     expect(sentTo(token)).toEqual([]);
-    expect((await giveAddress(phone, address("ran-out-2"))).statusCode).toBe(403);
+    // Refused at the door since item 19's passes: a session that ran out signs nothing in.
+    expect((await giveAddress(phone, address("ran-out-2"))).statusCode).toBe(401);
   });
 
   // ── The phone's address ──

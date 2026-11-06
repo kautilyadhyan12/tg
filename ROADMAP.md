@@ -623,7 +623,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
         - 18b-ii. **A place is free, and a comment or reply on your post** (split 2026-11-03: places first).
           - 18b-ii-a. [x] **A place in a class or an event** · merged 2026-11-03 · PR #451
           - 18b-ii-b. [x] **A comment or reply on your post** · merged 2026-11-03 · PR #453
-19. **Settings and account** (split 2026-11-03 in four: Settings first).
+19. **Settings and account** (split 2026-11-03 in four: Settings first). Risky; the two extra passes ran once, after the last of them (2026-11-06, PR #486).
     - 19a. [x] **Settings on the phone** — merged 2026-11-04 (PR #459).
     - 19b. [x] **Download my data, delete my account and undo** · merged 2026-11-04 · PR #465
     - 19b-ii. [x] **An owner hands the gym over before deleting their account** · merged 2026-11-05 · PR #468

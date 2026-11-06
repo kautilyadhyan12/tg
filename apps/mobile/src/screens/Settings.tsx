@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type RefObject } from "react";
+import { useContext, useEffect, useRef, useState, type RefObject } from "react";
 import { AppState, Linking, Pressable, StyleSheet, Switch, View } from "react-native";
 import {
   ACCOUNT_UNDO_DAYS,
@@ -44,7 +44,9 @@ import { TrainingReminders } from "./TrainingReminders";
 import { Setup, accountUnits } from "./setup/Setup";
 import { UNIT_OPTIONS } from "./setup/SetupScreens";
 import { setupPath } from "./setup/useSetupAnswers";
+import { RobotCheck } from "./RobotCheck";
 import { NO_ANSWER } from "./SignIn";
+import { CopyContext } from "./ThisCopy";
 
 // Settings on the phone (ROADMAP Stage 5 item 19a): the browser's Profile name, Units, Hide me, what
 // each place can see and Account, opened over Me. Each part saves on its own and says so in its own
@@ -509,6 +511,10 @@ export function changedEmailLine(email: string): string {
 /** Change email (19c; RULINGS 2026-09-23, E): the new address, then the code emailed to it. */
 function ChangeEmail({ open, saves, onClose, onChanged }: { open: boolean; saves: RefObject<number>; onClose: () => void; onChanged: (email: string) => void }) {
   const { session } = useSession();
+  const apiUrl = useContext(CopyContext).extra?.apiUrl ?? "";
+  /** The server asked for the robot check before it sends a code (past the person's third of the day):
+   *  its key, its sentence, and the ask it stands in front of. */
+  const [robot, setRobot] = useState<{ key: string; line: string; to: string; again: boolean } | null>(null);
   const [step, setStep] = useState<"address" | "code">("address");
   const [typed, setTyped] = useState("");
   const [sentTo, setSentTo] = useState("");
@@ -532,13 +538,18 @@ function ChangeEmail({ open, saves, onClose, onChanged }: { open: boolean; saves
     if (address.success) void sendCode(address.data, false);
     else setProblem(typed.trim() === "" ? "Enter your new email address." : "Enter a valid email address.");
   };
-  const sendCode = async (to: string, again: boolean) => {
+  const sendCode = async (to: string, again: boolean, robotToken?: string) => {
     if (busy) return;
     setBusy(true);
     setProblem(null);
     setResent(false);
-    const answer = await session.signedIn({ method: "POST", path: "/v1/users/me/email-code", body: { email: to } }, sendCodeResponseSchema);
+    const body = robotToken === undefined ? { email: to } : { email: to, robotToken };
+    const answer = await session.signedIn({ method: "POST", path: "/v1/users/me/email-code", body }, sendCodeResponseSchema);
     setBusy(false);
+    if (answer.kind === "refused" && answer.robotCheckKey !== null && (answer.error === "robot_check" || answer.error === "robot_failed")) {
+      setRobot({ key: answer.robotCheckKey, line: answer.message, to, again });
+      return;
+    }
     if (answer.kind === "ok") {
       setSentTo(to);
       setCode("");
@@ -569,8 +580,21 @@ function ChangeEmail({ open, saves, onClose, onChanged }: { open: boolean; saves
     }
     setProblem(answer.kind === "refused" ? answer.message : NO_ANSWER);
   };
+  /** The check passed: the ask it stood in front of goes with its answer. */
+  const robotPassed = (token: string) => {
+    const asked = robot;
+    setRobot(null);
+    if (asked !== null) void sendCode(asked.to, asked.again, token);
+  };
+  /** Closed before it passed: the box says why, and the same button asks again. */
+  const robotClosed = () => {
+    if (robot !== null) setProblem(robot.line);
+    setRobot(null);
+  };
   return (
-    <Sheet open={open} title="Change email" onClose={onClose}>
+    <>
+    <RobotCheck siteKey={open ? (robot?.key ?? null) : null} apiUrl={apiUrl} line={robot?.line ?? ""} onToken={robotPassed} onClose={robotClosed} />
+    <Sheet open={open && robot === null} title="Change email" onClose={onClose}>
       <View style={styles.ask}>
         {step === "address" ? (
           <>
@@ -631,6 +655,7 @@ function ChangeEmail({ open, saves, onClose, onChanged }: { open: boolean; saves
         )}
       </View>
     </Sheet>
+    </>
   );
 }
 

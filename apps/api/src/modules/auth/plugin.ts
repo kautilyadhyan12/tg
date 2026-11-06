@@ -6,7 +6,7 @@ import "@fastify/cookie"; // module augmentation: req.cookies
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { Sql } from "postgres";
 import type { AppConfig } from "../../config.js";
-import { findUserById } from "./repo.js";
+import { activeUserInSession } from "./repo.js";
 import { ACCESS_COOKIE, verifyAccessTokenClaims } from "./tokens.js";
 
 declare module "fastify" {
@@ -62,12 +62,15 @@ export function registerAuthenticate(
       return;
     }
 
-    // Ported authGuard.js:24-38: the user must still exist and be active.
-    const user = await findUserById(deps.sql, claims.userId);
-    if (user === null || user.status !== "active") {
+    // Ported authGuard.js:24-38: the user must still exist and be active. And the sign-in session
+    // the token was issued under must still be live, read in the same statement: a sign-out, a
+    // phone signed in elsewhere or an Undo this change ends a session at once, not when its access
+    // token runs out 15 minutes later (item 19's security pass, H1).
+    const userId = claims.familyId === null ? null : await activeUserInSession(deps.sql, claims.userId, claims.familyId);
+    if (userId === null) {
       await unauthorized();
       return;
     }
-    req.authUser = { id: user.id, familyId: claims.familyId };
+    req.authUser = { id: userId, familyId: claims.familyId };
   });
 }

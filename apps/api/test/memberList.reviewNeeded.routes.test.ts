@@ -116,6 +116,9 @@ d("member list: review needed (real Postgres)", () => {
   const patch = (path: string, payload: unknown, cookies: Record<string, string>) => send("PATCH", path, cookies, payload);
   const del = (path: string, cookies: Record<string, string>) => send("DELETE", path, cookies);
 
+  /** Each person's cookies by address: verifying an address signs them in again (the first proof ends
+   *  the sign-in begun before it, at once), and `verify` puts the new cookies in the same object. */
+  const signedIn = new Map<string, Record<string, string>>();
   const makeUser = async (local: string): Promise<User> => {
     const email = `mrev-t-${local}@example.com`;
     const reg = await post("/v1/auth/register", { email, password: PASSWORD, displayName: `Review ${local}` }, {});
@@ -123,13 +126,18 @@ d("member list: review needed (real Postgres)", () => {
     const { userId } = JSON.parse(reg.body) as { userId: string };
     const login = await post("/v1/auth/login", { email, password: PASSWORD }, {});
     expect(login.statusCode).toBe(200);
-    return { userId, email, cookies: cookieMap(login) };
+    const cookies = cookieMap(login);
+    signedIn.set(email.toLowerCase(), cookies);
+    return { userId, email, cookies };
   };
 
   const verify = async (email: string) => {
     const token = tokens.get(email.toLowerCase());
     if (token === undefined) throw new Error(`no verification token was sent to ${email}`);
-    expect((await post("/v1/auth/verify-email", { token }, {})).statusCode).toBe(200);
+    const verified = await post("/v1/auth/verify-email", { token }, {});
+    expect(verified.statusCode).toBe(200);
+    const jar = signedIn.get(email.toLowerCase());
+    if (jar !== undefined) Object.assign(jar, cookieMap(verified));
   };
 
   const makeOrg = async (owner: User, name: string): Promise<CreatedOrg> => {
