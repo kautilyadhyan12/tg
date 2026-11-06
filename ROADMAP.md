@@ -341,7 +341,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
      - 18k-i. [x] **Sell in the app** — merged 2026-11-06 (PR #485).
      - 18k-ii. **Pay what they owe**, in two parts since 2026-11-06 (`handoff/2026-11-06-18k-ii-a.md` keeps its line as first written):
        - 18k-ii-a. [x] **A membership's bill** — merged 2026-11-06 (PR #487).
-       - 18k-ii-b. [ ] **A fee** (late cancel, no-show, freeze, early cancellation) the same way.
+       - 18k-ii-b. [x] **A fee** — merged 2026-11-07 (PR #488).
      - 18k-iii. [ ] **Buy something paid once** on that page, given when Square says it is paid; the gym's membership agreement signed in the same step.
      - 18k-iv. [ ] **Buy a repeating membership**: its own tick, kept with its time and words, a card typed on Square's form and kept; on sale only once 18l is built.
      - 18k-v. [ ] **A promo code typed in the app** (spec Part 3 §14.3).
@@ -701,7 +701,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
     - 37a-ii. [x] **A voice each kilometre or mile** · merged 2026-11-06 · PR #481
     - 37b. **The map under the run, and hills climbed** (split 2026-11-06: the map first; Kd's "go", `rulings/2026-11-06-37b-i.md`).
       - 37b-i. [x] **The map under the run** · merged 2026-11-06 · PR #484
-      - 37b-ii. [ ] **Hills climbed**, from a free public height map on our server (Strava's rule: a climb counts past 10 m).
+      - 37b-ii. [x] **Elevation gain** · merged 2026-11-07 · PR #489
     - 37c. [ ] **Your runs**: the list, a run's page, records (fastest 1 km or mile, 5 km, 10 km, longest run), the pace chart.
     - 37d. [ ] **The run plan**, run-walk intervals with voice, and Recommended For You's Running tab.
     - 37e. [ ] **Routes.**

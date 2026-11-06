@@ -539,9 +539,10 @@ export type SavePtTrainerRequest = z.infer<typeof savePtTrainerRequestSchema>;
 
 /** A session's fee as a list shows it (18h-ii): which fee it is (its own, never read from
  *  the session's mark, which staff can change after it is paid), its amount, and owed, paid,
- *  part refunded, with Square, refunded or waived. */
+ *  part refunded, with Square, refunded or waived; or held or check while the member's payment page in the app decides it, as a
+ *  class's list says (18k-ii-b). */
 export const ptFeeStateSchema = z
-  .object({ kind: z.enum(["late_cancel", "no_show"]), amountMinor: z.number().int().min(1), state: z.enum(["owed", "paid", "part_refunded", "refund_pending", "refunded", "waived"]) })
+  .object({ kind: z.enum(["late_cancel", "no_show"]), amountMinor: z.number().int().min(1), state: z.enum(["owed", "paid", "part_refunded", "refund_pending", "refunded", "waived", "held", "check"]) })
   .strict();
 export type PtFeeState = z.infer<typeof ptFeeStateSchema>;
 

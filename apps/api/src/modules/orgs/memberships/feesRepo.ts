@@ -18,6 +18,8 @@
 //
 // A fee is paid on the gym's Square Terminal too (18d-vi-b-i): while that payment waits, nothing
 // else pays or waives the fee, and a payment taken there is refunded in Square, never voided here.
+// A member pays one in the app as well (18k-ii-b): while that page is open the same holds, and the fee
+// is not taken off either (`feesBeingPaid`).
 //
 // An early cancellation fee (18v-ii-b) is the membership's own: opened once, when staff end it inside
 // its minimum term with the fee it was given (`openLeaveFee`), and owed until paid or waived.
@@ -80,12 +82,27 @@ export const feeRefundSql = (sql: Sql | TransactionSql) => sql`
                                           WHERE p.gym_id = f.gym_id AND p.bill_id = f.id AND p.undone_at IS NULL AND r.undone_at IS NULL) THEN 'part'
   END`;
 
-export type FeeListState = "owed" | "paid" | "part_refunded" | "refund_pending" | "refunded" | "waived";
+/** In a statement that names a fee's bill `f`, with its `id` and `gym_id` (18k-ii-b): whether it is still owed, read on the
+ *  bill itself by `stillOwedSql`, and whether a member's payment page in the app is open on it. */
+export const feeHeldSql = (sql: Sql | TransactionSql) => sql`
+  (SELECT ${stillOwedSql(sql)} FROM gym_member_bills b WHERE b.gym_id = f.gym_id AND b.id = f.id) AS fee_still_owed,
+  EXISTS (SELECT 1 FROM gym_app_payments ap WHERE ap.gym_id = f.gym_id AND ap.fee_bill_id = f.id AND ap.state = 'open') AS fee_paying`;
 
-/** One answer about a fee on a class's list and a personal training session, as its bills read on the person's page. */
-export function feeListState(r: { fee_waived: boolean | null; fee_status: string | null; fee_refund: string | null }): FeeListState {
+/** `held`: no longer owed, and it comes off once the member's payment page in the app closes with nothing paid; `check`: no
+ *  longer owed, and that page ended with money Square may have taken, so staff check Square, then waive it (18k-ii-b). */
+export type FeeListState = "owed" | "paid" | "part_refunded" | "refund_pending" | "refunded" | "waived" | "held" | "check";
+
+/** One answer about a fee on a class's list and a personal training session, as its bills read on the person's page. A fee
+ *  still open that its booking or session no longer owes is one a payment page in the app holds (`feesBeingPaid`). */
+export function feeListState(r: {
+  fee_waived: boolean | null;
+  fee_status: string | null;
+  fee_refund: string | null;
+  fee_still_owed?: boolean | null;
+  fee_paying?: boolean | null;
+}): FeeListState {
   if (r.fee_waived === true) return "waived";
-  if (r.fee_status === "open") return "owed";
+  if (r.fee_status === "open") return r.fee_still_owed === false ? (r.fee_paying === true ? "held" : "check") : "owed";
   if (r.fee_refund === "pending") return "refund_pending";
   if (r.fee_status === "refunded") return "refunded";
   return r.fee_refund === "part" ? "part_refunded" : "paid";
@@ -221,15 +238,32 @@ export async function openLeaveFee(tx: TransactionSql, gymId: string, membership
   return opened.length > 0;
 }
 
+/** The unpaid fees of these bookings or sessions that a member is paying in the app right now (18k-ii-b): each page is asked
+ *  closed, and its fee is not taken off while it is open. Once Square says nothing was paid the fee comes off (`finish` in
+ *  `appPaymentsRepo.ts`); paid meanwhile, it is paid, and as it is no longer owed it goes on Refunds to review. In the
+ *  caller's transaction, under the gym's lock, which a page's own write takes too. Answers the fees held. */
+async function feesBeingPaid(tx: TransactionSql, gymId: string, of: { bookings: readonly string[] } | { sessions: readonly string[] }, now: Date): Promise<string[]> {
+  const rows = await tx<{ fee_bill_id: string }[]>`
+    UPDATE gym_app_payments a SET close_wanted_at = COALESCE(a.close_wanted_at, ${now}), close_wanted_by = COALESCE(a.close_wanted_by, 'removed')
+    FROM gym_member_bills b
+    WHERE a.gym_id = ${gymId} AND a.state = 'open' AND b.gym_id = a.gym_id AND b.id = a.fee_bill_id AND b.status = 'open'
+      AND ${"bookings" in of ? tx`b.class_booking_id = ANY(${[...of.bookings]}::uuid[])` : tx`b.pt_appointment_id = ANY(${[...of.sessions]}::uuid[])`}
+    RETURNING a.fee_bill_id`;
+  return rows.map((r) => r.fee_bill_id);
+}
+
 /** THESE BOOKINGS NO LONGER OWE A FEE: marked came after a no-show, or their class did not
  *  run. An unpaid fee is taken off, kept and marked; one paid stays paid, for staff to void
- *  its payment if they mean to. In the caller's transaction, under the gym's lock. Answers
- *  how many it took off. */
+ *  its payment if they mean to; one a member is paying in the app waits for its page
+ *  (`feesBeingPaid`). In the caller's transaction, under the gym's lock. Answers how many it
+ *  took off. */
 export async function removeClassFees(tx: TransactionSql, gymId: string, bookingIds: readonly string[], now: Date): Promise<number> {
   if (bookingIds.length === 0) return 0;
+  const paying = await feesBeingPaid(tx, gymId, { bookings: bookingIds }, now);
   const rows = await tx<{ id: string }[]>`
     UPDATE gym_member_bills SET status = 'void', updated_at = ${now}
     WHERE gym_id = ${gymId} AND class_booking_id = ANY(${[...bookingIds]}::uuid[]) AND status = 'open'
+      AND NOT (id = ANY(${paying}::uuid[]))
     RETURNING id`;
   if (rows.length > 0) {
     await insertAudit(tx, {
@@ -334,12 +368,15 @@ export async function openPtFees(tx: TransactionSql, gymId: string, appointmentI
 }
 
 /** THESE SESSIONS NO LONGER OWE A FEE: marked came after a no-show. An unpaid fee is taken
- *  off, kept and marked; one paid stays paid, for staff to void its payment if they mean to. */
+ *  off, kept and marked; one paid stays paid, for staff to void its payment if they mean to;
+ *  one a member is paying in the app waits for its page (`feesBeingPaid`). */
 export async function removePtFees(tx: TransactionSql, gymId: string, appointmentIds: readonly string[], now: Date): Promise<number> {
   if (appointmentIds.length === 0) return 0;
+  const paying = await feesBeingPaid(tx, gymId, { sessions: appointmentIds }, now);
   const rows = await tx<{ id: string }[]>`
     UPDATE gym_member_bills SET status = 'void', updated_at = ${now}
     WHERE gym_id = ${gymId} AND pt_appointment_id = ANY(${[...appointmentIds]}::uuid[]) AND status = 'open'
+      AND NOT (id = ANY(${paying}::uuid[]))
     RETURNING id`;
   if (rows.length > 0) {
     await insertAudit(tx, {

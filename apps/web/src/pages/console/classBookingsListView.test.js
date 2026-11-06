@@ -101,6 +101,13 @@ describe('a late cancel or no-show fee on the list (18h-i)', () => {
     expect(feeLine({ status: 'no_show', fee: null }, 'GBP')).toBeNull();
     // Paid, then changed to came: still paid, and said so.
     expect(feeLine({ status: 'attended', fee: { amountMinor: 800, state: 'paid' } }, 'GBP')).toBe('No-show fee £8.00 · paid before they were marked Came');
+    // Marked Came while they were paying it in the app (18k-ii-b): as their own page says it.
+    expect(feeLine({ status: 'attended', fee: { amountMinor: 800, state: 'held' } }, 'GBP')).toBe(
+      'No-show fee £8.00 · comes off once their payment page in the app closes, if nothing was paid',
+    );
+    expect(feeLine({ status: 'attended', fee: { amountMinor: 800, state: 'check' } }, 'GBP')).toBe(
+      'No-show fee £8.00 · may have been paid in the app: check Square, then waive it on their page',
+    );
     // A coach's own list carries no fee and no money.
     expect(bookingRow({ name: 'Maya Shah', status: 'no_show', membership: null, packCharged: null, fee: null }, null).detail).toBe('');
   });

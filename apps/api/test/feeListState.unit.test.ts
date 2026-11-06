@@ -12,6 +12,14 @@ describe("what a list says of a fee", () => {
     ["all of it with Square", { fee_waived: false, fee_status: "refunded", fee_refund: "pending" }, "refund_pending"],
     ["part of it with Square", { fee_waived: false, fee_status: "paid", fee_refund: "pending" }, "refund_pending"],
     ["no waive recorded", { fee_waived: null, fee_status: "paid", fee_refund: null }, "paid"],
+    // 18k-ii-b: open, but its booking or session no longer owes it, as a payment page in the app holds it.
+    ["owed, still owed", { fee_waived: false, fee_status: "open", fee_refund: null, fee_still_owed: true, fee_paying: true }, "owed"],
+    ["no longer owed, its page open", { fee_waived: false, fee_status: "open", fee_refund: null, fee_still_owed: false, fee_paying: true }, "held"],
+    ["no longer owed, its page ended", { fee_waived: false, fee_status: "open", fee_refund: null, fee_still_owed: false, fee_paying: false }, "check"],
+    ["no longer owed, not known whether a page is open", { fee_waived: false, fee_status: "open", fee_refund: null, fee_still_owed: false, fee_paying: null }, "check"],
+    ["owed, not known whether still owed", { fee_waived: false, fee_status: "open", fee_refund: null, fee_still_owed: null, fee_paying: false }, "owed"],
+    ["paid, no longer owed", { fee_waived: false, fee_status: "paid", fee_refund: null, fee_still_owed: false, fee_paying: false }, "paid"],
+    ["waived, no longer owed", { fee_waived: true, fee_status: "void", fee_refund: null, fee_still_owed: false, fee_paying: false }, "waived"],
   ])("%s", (_case, row, state) => {
     expect(feeListState(row)).toBe(state);
   });

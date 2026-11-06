@@ -356,6 +356,11 @@ export const memberFeeSchema = z
     cardDeclined: cardDeclinedSchema.nullable().default(null),
     cardUnchecked: cardUncheckedSchema.nullable().default(null),
     charging: z.boolean().default(false),
+    /** A member's payment page open on Square for this fee (18k-ii-b): nothing else is paid, voided or changed on the
+     *  membership until it closes, and the fee is not taken off meanwhile. */
+    appPayment: appPaymentOpenSchema.nullable().default(null),
+    /** A member's page for this fee that ended with money Square may have taken and that is not on it, while it is owed. */
+    appCheck: appPaymentCheckSchema.nullable().default(null),
     can: z
       .object({
         pay: z.boolean(),
@@ -413,7 +418,7 @@ export const memberBillingSchema = z
      *  `bills`. Null otherwise, and once nothing is left. */
     coolingOffRefund: z.object({ leftMinor: z.number().int().min(1), paymentId: z.string().uuid() }).strict().nullable().default(null),
     /** A member's payment page open on Square for `pay`'s bill (18k-ii-a): nothing else is paid, voided or changed on the
-     *  membership until it closes. */
+     *  membership until it closes. A page for one of its fees is that fee's (`memberFeeSchema.appPayment`). */
     appPayment: appPaymentOpenSchema.nullable().default(null),
     /** A member's page that ended with money Square may have taken and that is not on `pay`'s bill (18k-ii-a). */
     appCheck: appPaymentCheckSchema.nullable().default(null),

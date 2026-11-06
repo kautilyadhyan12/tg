@@ -14,6 +14,8 @@ import { createMemoryRedis } from "../src/redis.js";
 const COP = "https://copernicus.test";
 const MZ = "https://mapzen.test";
 const quiet = { info: () => undefined, warn: () => undefined, error: () => undefined };
+/** These tests build and read full-size map files (a Mapzen square is 26 MB): seconds on GitHub's machines. */
+const HEAVY_MS = 30_000;
 const urlOf = (input: string | URL | Request): string => (typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
 /** A log that keeps what it is given. */
 function keptLog(): { log: HeightMapDeps["log"]; said: Record<string, unknown>[] } {
@@ -30,6 +32,9 @@ function keptLog(): { log: HeightMapDeps["log"]; said: Record<string, unknown>[]
  *  3600 x 3600 32-bit floats in 1024 x 1024 blocks, DEFLATE and the floating-point predictor, "pixel
  *  is point". `height(row, col)` gives each pixel; a block where `flat(index)` gives a number is that
  *  number throughout; block `bigBlock` unpacks to twice the size the header gives a block. */
+/** A block of one height throughout, packed, made once for each height and size: a flat square's 16
+ *  blocks are the same bytes, and packing 4 MB sixteen times over is too slow on GitHub's machines. */
+const flatBlocks = new Map<string, Buffer>();
 function copernicusFile(
   south: number,
   west: number,
@@ -45,6 +50,12 @@ function copernicusFile(
     const br = Math.floor(k / across);
     const bc = k % across;
     const same = flat(k);
+    const key = `${String(same)}|${String(k === bigBlock)}`;
+    const made = same === null ? undefined : flatBlocks.get(key);
+    if (made !== undefined) {
+      blocks.push(made);
+      continue;
+    }
     const raw = Buffer.alloc(B * B * 4);
     const value = new DataView(new ArrayBuffer(4));
     for (let r = 0; r < B; r++) {
@@ -57,7 +68,9 @@ function copernicusFile(
       }
       for (let i = start + B * 4 - 1; i > start; i--) raw[i] = ((raw[i] ?? 0) - (raw[i - 1] ?? 0)) & 0xff;
     }
-    blocks.push(deflateSync(k === bigBlock ? Buffer.concat([raw, Buffer.alloc(B * B * 4)]) : raw));
+    const packed = deflateSync(k === bigBlock ? Buffer.concat([raw, Buffer.alloc(B * B * 4)]) : raw);
+    if (same !== null) flatBlocks.set(key, packed);
+    blocks.push(packed);
   }
   // The header: 16 entries, then the arrays, then the blocks.
   const entries: [number, number, number[]][] = [
@@ -175,7 +188,7 @@ const mapOn = (dir: string, fetcher: typeof fetch, more: Partial<HeightMapDeps> 
 const guwahatiRun = (from: [number, number] = [26.1445, 91.7362]): [number, number][] =>
   Array.from({ length: 100 }, (_, i) => [from[0] + i * 0.00008, from[1] + i * 0.00005]);
 
-describe("the worst thing: nothing about a run or a person ever leaves our server", () => {
+describe("the worst thing: nothing about a run or a person ever leaves our server", { timeout: HEAVY_MS }, () => {
   it("only a whole degree square is asked of each map, by its name, with nothing else", async () => {
     const calls: Call[] = [];
     const served = new Map<string, Buffer | number>([
@@ -232,7 +245,7 @@ describe("the worst thing: nothing about a run or a person ever leaves our serve
   });
 });
 
-describe("no request can fill the server's memory or disk (round one of 37b-ii, C1)", () => {
+describe("no request can fill the server's memory or disk (round one of 37b-ii, C1)", { timeout: HEAVY_MS }, () => {
   /** Places in `n` land squares along latitude 26 in India and Myanmar, each square's own name served. */
   const squaresAlong = (n: number) => {
     const served = new Map<string, Buffer | number>();
@@ -355,7 +368,7 @@ describe("no request can fill the server's memory or disk (round one of 37b-ii, 
   });
 });
 
-describe("what is kept, and what is refused", () => {
+describe("what is kept, and what is refused", { timeout: HEAVY_MS }, () => {
   it("a place off Copernicus's own list of land (the open Atlantic) has no height, and nothing is asked", async () => {
     const calls: Call[] = [];
     // Copernicus's own list (tileList.txt, read 2026-11-06): the Atlantic's N30 W041 and Armenia's N40 E044 are
@@ -523,7 +536,7 @@ describe("what is kept, and what is refused", () => {
   });
 });
 
-describe("a place's height is the lower of the two maps (the ground is never above a roof)", () => {
+describe("a place's height is the lower of the two maps (the ground is never above a roof)", { timeout: HEAVY_MS }, () => {
   const serve = (cop: Buffer, mz: Buffer) =>
     new Map<string, Buffer | number>([
       [copUrl(...GUWAHATI), cop],
@@ -564,7 +577,7 @@ describe("a place's height is the lower of the two maps (the ground is never abo
   });
 });
 
-describe("where in a square a place is read", () => {
+describe("where in a square a place is read", { timeout: HEAVY_MS }, () => {
   it("Copernicus: a pixel's middle is its own height, and between two pixels a straight line", async () => {
     // Each pixel's height is its row: 26.5° N is row 1800 of the square 26..27.
     const cop = copernicusFile(26, 91, (row) => row);
@@ -599,7 +612,7 @@ describe("where in a square a place is read", () => {
   });
 });
 
-describe("Copernicus's own bytes (a real block, fixtures/heights/NOTICE.md)", () => {
+describe("Copernicus's own bytes (a real block, fixtures/heights/NOTICE.md)", { timeout: HEAVY_MS }, () => {
   const real = readFileSync(join(import.meta.dirname, "fixtures", "heights", "Copernicus_DSM_COG_10_N40_00_W074_00_DEM-block7.tif"));
   const name = "Copernicus_DSM_COG_10_N40_00_W074_00_DEM";
 

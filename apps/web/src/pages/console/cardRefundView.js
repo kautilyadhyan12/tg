@@ -97,11 +97,13 @@ export function cardRefundSaidNow(sent, payment, line, readSince = true) {
 }
 
 /** Whether anything on this person's page is waiting on Square: a refund it has not answered or not finished, or a
- *  member's payment page open in the app (18k-ii-a), which the worker may find paid with nobody telling this page. */
+ *  member's payment page open in the app for a bill (18k-ii-a) or a fee (18k-ii-b), which the worker may find paid with
+ *  nobody telling this page. */
 export function waitsOnSquare(memberships) {
   return (memberships ?? []).some(
     (m) =>
       (m.billing?.appPayment ?? null) !== null ||
+      (m.billing?.fees ?? []).some((f) => (f.appPayment ?? null) !== null) ||
       [...(m.billing?.bills ?? []), ...(m.billing?.fees ?? [])].some((b) => b.payments.some((p) => (p.cardRefund !== null && p.cardRefund !== undefined && !p.cardRefund.lost) || p.refunds.some((r) => r.square?.state === 'pending'))),
   );
 }

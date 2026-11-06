@@ -340,7 +340,16 @@ function noShowFee(appointment, currency) {
   return minor > 0 && typeof currency === 'string' ? formatMinor(minor, currency) : null;
 }
 
-const FEE_STATE_WORDS = { owed: 'Payment due', paid: 'Paid', part_refunded: 'Part refunded', refund_pending: 'Refund pending', refunded: 'Refunded', waived: 'Waived' };
+const FEE_STATE_WORDS = {
+  owed: 'Payment due',
+  paid: 'Paid',
+  part_refunded: 'Part refunded',
+  refund_pending: 'Refund pending',
+  refunded: 'Refunded',
+  waived: 'Waived',
+  held: 'Comes off once their payment page in the app closes, if nothing was paid',
+  check: 'May have been paid in the app: check Square, then waive it on their page',
+};
 
 /** A no-show's fee, said under its mark: owed, paid or waived, for staff who may open the
  *  person's page. A trainer who may not is told nothing of it: what a fee did is the
@@ -350,6 +359,16 @@ function noShowFeeNote(appointment, currency) {
   const amount = formatMinor(appointment.fee.amountMinor, currency);
   const state = FEE_STATE_WORDS[appointment.fee.state] ?? 'Payment due';
   return appointment.fee.state === 'owed' ? `One-time no-show fee ${amount} · ${state}. Changing to came takes it off.` : `One-time no-show fee ${amount} · ${state}.`;
+}
+
+/** A no-show fee still open on a session marked Came, because they were paying it in the app (18k-ii-b); null otherwise. */
+function heldFeeNote(appointment, currency) {
+  const state = appointment?.fee?.state;
+  if (typeof currency !== 'string' || (state !== 'held' && state !== 'check')) return null;
+  const amount = formatMinor(appointment.fee.amountMinor, currency);
+  return state === 'held'
+    ? `Their ${amount} no-show fee comes off once their payment page in the app closes, if nothing was paid.`
+    : `Their ${amount} no-show fee may have been paid in the app. Check Square, then waive it on their page.`;
 }
 
 const joinedNote = (...parts) => parts.filter((p) => p !== '').join(' ');
@@ -362,7 +381,9 @@ export function markRow(appointment, currency = null) {
   if (appointment.status === 'attended') {
     return {
       tag: { label: 'Came', tone: 'good' },
-      note: fee === null ? '' : `Changing to no-show adds a one-time ${fee} fee.`,
+      // Marked Came while they were paying its fee in the app (18k-ii-b): that fee waits for the payment page, and changing
+      // back to no-show owes it again rather than adding one.
+      note: heldFeeNote(appointment, currency) ?? (fee === null ? '' : `Changing to no-show adds a one-time ${fee} fee.`),
       actions: [{ status: 'no_show', label: 'Change to no-show', aria: `Change ${name} to no-show` }],
     };
   }

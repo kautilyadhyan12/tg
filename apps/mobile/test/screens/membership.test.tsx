@@ -38,7 +38,7 @@ const payment = (receiptNumber: number, over: Row = {}): Row => ({
   refunds: [],
   ...over,
 });
-const fee = (over: Row = {}): Row => ({ fee: "late_cancel", forName: "Yoga Flow", on: "2026-10-12", amountMinor: 20_000, dueOn: "2026-10-13", state: "due", receiptNumber: null, ...over });
+const fee = (over: Row = {}): Row => ({ id: "5d0f2f8e-6b0a-4c1e-9a43-2f6c1d9e7a01", fee: "late_cancel", forName: "Yoga Flow", on: "2026-10-12", amountMinor: 20_000, dueOn: "2026-10-13", state: "due", receiptNumber: null, ...over });
 const membership = (id: string, name: string, over: Row = {}): Row => ({
   id,
   name,
