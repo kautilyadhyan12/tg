@@ -269,12 +269,14 @@ describe('the form', () => {
     expect(squareSellState(box({ square: square('removed') }))).toBe('connect');
     expect(squareSellState(box({ square: square('choose_location') }))).toBe('location');
     expect(squareSellState(box({ availability: 'india_soon', square: null }))).toBe('country');
-    expect(squareSellState(box({ squareReady: false }))).toBe('country');
+    expect(squareSellState(box({ squareReady: false }))).toBe('off');
+    expect(squareSellState(box({ availability: 'india_soon', squareReady: false }))).toBe('country');
     const sold = type({ soldInApp: true });
     expect(soldInAppWords(type(), 'ready')).toBeNull();
     expect(soldInAppWords(sold, 'ready')).toEqual({ tag: 'Sold in the app', line: null });
     expect(soldInAppWords(sold, 'connect')).toEqual({ tag: null, line: "Members can't buy it in the app until Square is connected." });
     expect(soldInAppWords(sold, 'location')).toEqual({ tag: null, line: "Members can't buy it in the app until your Square location is chosen." });
+    expect(soldInAppWords(sold, 'off')).toEqual({ tag: null, line: "Members can't buy it in the app yet." });
     expect(soldInAppWords(sold, null)).toEqual({ tag: 'Sell in the app: on', line: null });
   });
 
