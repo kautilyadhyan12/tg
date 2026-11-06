@@ -11,6 +11,7 @@ import AppLayout from './components/common/AppLayout';
 import Login           from './pages/Login';
 import GoogleAuthSuccess from './pages/GoogleAuthSuccess';
 import RestoreAccount  from './pages/RestoreAccount';
+import UndoEmailChange from './pages/UndoEmailChange';
 import Onboarding      from './pages/Onboarding';
 import Dashboard       from './pages/Dashboard';
 import ExerciseLibrary from './pages/ExerciseLibrary';
@@ -100,6 +101,9 @@ export default function App() {
             {/* The deletion email's undo link (Part 4 §5.2). Bare route: the
                 account is deleted, so there is no session to gate on. */}
             <Route path="/restore-account" element={<RestoreAccount />} />
+            {/* The note to an old email address's Undo this change (item 19's security pass, H1). Bare
+                route, the token after "#": whoever holds the old inbox has no session here. */}
+            <Route path="/undo-email-change" element={<UndoEmailChange />} />
             {/* Google OAuth landing. Bare route (NOT PublicRoute): the callback
                 set the session cookies, so this page reads the restored session
                 and routes to onboarding/dashboard itself (web-repoint Google half). */}
