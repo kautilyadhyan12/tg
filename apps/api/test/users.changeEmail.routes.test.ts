@@ -106,7 +106,9 @@ d("change email (real Postgres)", { timeout: T }, () => {
     return { userId, cookies, email };
   };
 
-  const askCode = (who: Person, email: string) => inject("POST", "/v1/users/me/email-code", who.cookies, { email });
+  /** Past a person's third code of the day the server asks for the robot check: the stand-in passes "pass". */
+  const askCode = (who: Person, email: string, robotToken: string | null = "pass") =>
+    inject("POST", "/v1/users/me/email-code", who.cookies, robotToken === null ? { email } : { email, robotToken });
   const confirm = (who: Person, email: string, code: string) => inject("POST", "/v1/users/me/email", who.cookies, { email, code });
   const emailOf = async (userId: string): Promise<string | undefined> =>
     (await sql<{ email: string }[]>`SELECT email::text AS email FROM users WHERE id = ${userId}`)[0]?.email;
@@ -169,6 +171,7 @@ d("change email (real Postgres)", { timeout: T }, () => {
           return Promise.resolve();
         },
       },
+      robotCheck: { siteKey: "change-site-key", verify: (token) => Promise.resolve(token === "pass" ? ("passed" as const) : ("failed" as const)) },
       googlePhoneVerifier: {
         clientId: "change-email-test-client",
         verify: (idToken) => Promise.resolve(JSON.parse(idToken) as { subject: string; email: string; name: null; nonce: string }),
@@ -442,6 +445,35 @@ d("change email (real Postgres)", { timeout: T }, () => {
     expect(sent.map((m) => m.to)).toEqual(["old@example.com"]);
     expect(sent[0]?.text).toContain("write to us at help@kwazo.example");
     expect(sent[0]?.text).toContain("n***@example.com");
+  });
+
+  it("past an account's third change-email code of the day it asks for the robot check, for that person alone: twelve people at one internet address each ask freely (security L2)", async () => {
+    const uma = await person("uma");
+    const ask = (to: string, robotToken: string | null) => askCode(uma, to, robotToken);
+    for (let i = 0; i < 3; i++) expect((await ask(address(`uma-${String(i)}`), null)).statusCode).toBe(200);
+    const fourth = await ask(address("uma-3"), null);
+    expect([fourth.statusCode, JSON.parse(fourth.body)]).toEqual([403, expect.objectContaining({ error: "robot_check", robotCheckKey: "change-site-key" })]);
+    expect(errorOf(await ask(address("uma-4"), "fail"))).toBe("robot_failed");
+    const passed = address("uma-5");
+    changeCodes.delete(passed);
+    expect((await ask(passed, "pass")).statusCode).toBe(200);
+    expect(changeCodes.has(passed)).toBe(true);
+
+    // A gym's members share its wi-fi: one internet address, twelve people, each their own count.
+    const members = await Promise.all(Array.from({ length: 12 }, (_, i) => person(`wifi-${String(i)}`)));
+    const answers = await Promise.all(
+      members.map((m) =>
+        api().inject({
+          method: "POST",
+          url: "/v1/users/me/email-code",
+          remoteAddress: "203.0.113.19",
+          cookies: m.cookies,
+          headers: { "content-type": "application/json" },
+          payload: JSON.stringify({ email: address("wifi-new") }),
+        }),
+      ),
+    );
+    expect(answers.map((r) => r.statusCode)).toEqual(Array.from({ length: 12 }, () => 200));
   });
 
   // ── Item 19's data-integrity pass (reviews/19-integrity-findings.md) ──

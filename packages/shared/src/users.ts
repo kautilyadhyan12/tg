@@ -3,6 +3,7 @@
 // auth.ts. All request bodies are .strict() (Part IV #5).
 import { z } from "zod";
 import { authEmailSchema, oneTimeTokenSchema, signInCodeSchema } from "./auth.js";
+import { ROBOT_CHECK_TOKEN_MAX_CHARS } from "./robotCheck.js";
 
 /** Part 4 §3.1 users columns exposed to the owner. emailVerified is DERIVED
  *  from a consumed verify_email one-time token (DECISIONS 2026-07-11). */
@@ -85,7 +86,11 @@ export const deleteAccountRequestSchema = z.object({ code: signInCodeSchema }).s
 export type DeleteAccountRequest = z.infer<typeof deleteAccountRequestSchema>;
 /** Change email (ROADMAP Stage 5 19c; RULINGS 2026-09-23, E): a code goes to the NEW address, and the
  *  change is made only when that code comes back from the same account. */
-export const changeEmailCodeRequestSchema = z.object({ email: authEmailSchema }).strict();
+/** `robotToken`: Cloudflare Turnstile's answer, sent only once the server asked for it (past an
+ *  account's third change-email code of the day). */
+export const changeEmailCodeRequestSchema = z
+  .object({ email: authEmailSchema, robotToken: z.string().min(1).max(ROBOT_CHECK_TOKEN_MAX_CHARS).optional() })
+  .strict();
 export type ChangeEmailCodeRequest = z.infer<typeof changeEmailCodeRequestSchema>;
 export const changeEmailRequestSchema = z.object({ email: authEmailSchema, code: signInCodeSchema }).strict();
 export type ChangeEmailRequest = z.infer<typeof changeEmailRequestSchema>;

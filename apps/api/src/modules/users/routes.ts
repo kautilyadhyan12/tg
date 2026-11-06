@@ -8,6 +8,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { Sql } from "postgres";
 import { z } from "zod";
 import {
+  SIGN_IN_ROBOT_WORDS,
   changeEmailCodeRequestSchema,
   changeEmailRequestSchema,
   onboardingQuerySchema,
@@ -17,6 +18,7 @@ import {
 import { createDualRateLimit, giveBackRateLimit, type DualRateLimitOptions } from "../auth/rateLimit.js";
 import type { AppConfig } from "../../config.js";
 import type { RedisLike } from "../../redis.js";
+import type { RobotCheck } from "../orgs/gymPage/robotCheck.js";
 import { DPDP_RETENTION_DAYS } from "../../retention.js";
 import { onHealthAnswered } from "../gamification/service.js";
 import { safeTimeZone } from "../gamification/streak.js";
@@ -85,6 +87,7 @@ export function registerUserRoutes(
     redis: RedisLike;
     emailSender?: UsersEmailSender;
     changeEmailSender?: ChangeEmailSender;
+    robotCheck: RobotCheck;
     news: LiveNewsSender;
     now?: () => Date;
   },
@@ -358,8 +361,36 @@ export function registerUserRoutes(
     message: "You’ve tried many codes in the last hour. Please try again later.",
   });
 
+  // THE ROBOT CHECK past an account's third change-email code of the day (item 19's security pass,
+  // L2): without it, accounts made at the sign-in door could each send the app's email to ten
+  // strangers a day with no check. Keyed on the person, never the internet address (a gym's members
+  // share its wi-fi). Every answer is put to Cloudflare, once; Redis down: every ask needs the check.
+  const CHANGE_EMAIL_FREE_CODES_PER_DAY = 3;
+  const changeEmailPassedRobot = new WeakSet<FastifyRequest>();
+  const askForRobot = (req: FastifyRequest, reply: FastifyReply, error: "robot_check" | "robot_failed") =>
+    reply.status(403).send({ error, message: SIGN_IN_ROBOT_WORDS[error], robotCheckKey: deps.robotCheck.siteKey, requestId: req.id });
+  const changeEmailRobotGate = async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
+    const body = parseBody(changeEmailCodeRequestSchema, req, reply);
+    if (body === null) return;
+    if (body.robotToken !== undefined) {
+      const answer = await deps.robotCheck.verify(body.robotToken, "sign_in");
+      if (answer === "unavailable") {
+        await reply.status(503).send({ error: "robot_unavailable", message: SIGN_IN_ROBOT_WORDS.robot_unavailable, requestId: req.id });
+        return;
+      }
+      if (answer !== "passed") {
+        await askForRobot(req, reply, "robot_failed");
+        return;
+      }
+      changeEmailPassedRobot.add(req);
+    }
+    const asked = await deps.redis.incrWithTtl(`rl:change_email_free:user:${authedUserId(req)}`, 24 * 60 * 60);
+    const free = asked !== null && asked <= CHANGE_EMAIL_FREE_CODES_PER_DAY;
+    if (!free && !changeEmailPassedRobot.has(req)) await askForRobot(req, reply, "robot_check");
+  };
+
   // Step 1: a code to the new address.
-  app.post("/v1/users/me/email-code", { preHandler: [app.authenticate, changeEmailCodeLimit] }, async (req, reply) => {
+  app.post("/v1/users/me/email-code", { preHandler: [app.authenticate, changeEmailRobotGate, changeEmailCodeLimit] }, async (req, reply) => {
     const input = parseBody(changeEmailCodeRequestSchema, req, reply);
     if (input === null) return;
     const rules = await requestChangeEmailCode(changeEmailDeps, authedUserId(req), input.email);

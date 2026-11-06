@@ -371,7 +371,7 @@ export async function buildApp(
   const changeEmailSender = overrides.changeEmailSender ?? changeEmailSenderFor(config, transport, app.log);
 
   // One robot check for the whole app: the sign-in code past an address's first 20
-  // an hour, and a gym page's enquiry form.
+  // an hour, Change email's code past an account's third a day, and a gym page's enquiry form.
   const robotCheck = overrides.robotCheck ?? createRobotCheck(config);
   registerAuthRoutes(app, {
     sql,
@@ -385,7 +385,7 @@ export async function buildApp(
   });
   registerWorkoutRoutes(app, { sql, redis, news });
   // Deleting an account ends things at its gyms, so it reads the gyms' clock.
-  registerUserRoutes(app, { sql, config, redis, emailSender: usersEmailSender, changeEmailSender, news,...(overrides.orgs?.now === undefined ? {} : { now: overrides.orgs.now }) });
+  registerUserRoutes(app, { sql, config, redis, emailSender: usersEmailSender, changeEmailSender, robotCheck, news,...(overrides.orgs?.now === undefined ? {} : { now: overrides.orgs.now }) });
   // Part 4 §5.2's export right. Serves /v1/users/me/export but lives in the
   // privacy module, next to the Day-14 delete list it must stay in step with.
   registerPrivacyRoutes(app, { sql, redis });
