@@ -27,7 +27,7 @@ import {
   type ClassFees,
   type PtFeeState,
 } from "@app/shared";
-import { feeListState, feeRefundSql } from "../memberships/feesRepo.js";
+import { feeHeldSql, feeListState, feeRefundSql } from "../memberships/feesRepo.js";
 
 type SqlOrTx = Sql | TransactionSql;
 
@@ -225,9 +225,19 @@ const rawFee = {
   fee_status: z.string().nullable(),
   fee_waived: z.boolean().nullable(),
   fee_refund: z.string().nullable(),
+  fee_still_owed: z.boolean().nullable(),
+  fee_paying: z.boolean().nullable(),
 };
 
-function feeState(r: { fee_kind: "late_cancel" | "no_show" | null; fee_minor: number | null; fee_status: string | null; fee_waived: boolean | null; fee_refund: string | null }): PtFeeState | null {
+function feeState(r: {
+  fee_kind: "late_cancel" | "no_show" | null;
+  fee_minor: number | null;
+  fee_status: string | null;
+  fee_waived: boolean | null;
+  fee_refund: string | null;
+  fee_still_owed: boolean | null;
+  fee_paying: boolean | null;
+}): PtFeeState | null {
   if (r.fee_kind === null || r.fee_minor === null || r.fee_status === null) return null;
   return { kind: r.fee_kind, amountMinor: r.fee_minor, state: feeListState(r) };
 }
@@ -240,7 +250,8 @@ const FEE_OF = (sql: SqlOrTx) => sql`
     ORDER BY x.created_at DESC LIMIT 1
   ) f ON true`;
 
-const FEE_COLUMNS = (sql: SqlOrTx) => sql`f.fee AS fee_kind, f.amount_minor AS fee_minor, f.status AS fee_status, (f.void_reason = 'waived') AS fee_waived, ${feeRefundSql(sql)} AS fee_refund`;
+const FEE_COLUMNS = (sql: SqlOrTx) => sql`f.fee AS fee_kind, f.amount_minor AS fee_minor, f.status AS fee_status, (f.void_reason = 'waived') AS fee_waived, ${feeRefundSql(sql)} AS fee_refund,
+  ${feeHeldSql(sql)}`;
 
 const rawAppointment = z.object({
   id: z.string(),

@@ -300,7 +300,18 @@ export function ptBookAsk(view: MemberPtResponse, time: BookTime, pay: Pay | nul
   return { title: "Book this session?", lines: fees === null ? lines : [...lines, ...noShowLine(fees, gym)], yes: "Book session", no: "Not now" };
 }
 
-const FEE_STATE_WORDS = { owed: "Payment due", paid: "Paid", part_refunded: "Part refunded", refund_pending: "Refund pending", refunded: "Refunded", waived: "Waived" } as const;
+// `held`: marked Came while paying it in the app, it comes off once that payment page closes; `check`: that page ended with
+// money Square may have taken (18k-ii-b).
+const FEE_STATE_WORDS = {
+  owed: "Payment due",
+  paid: "Paid",
+  part_refunded: "Part refunded",
+  refund_pending: "Refund pending",
+  refunded: "Refunded",
+  waived: "Waived",
+  held: "No longer owed",
+  check: "The front desk is checking it",
+} as const;
 
 /** A session's own fee, under it in the list: "One-time late cancel fee ₹500.00 · Payment due"; null for none. */
 export function ptFeeText(s: MemberPtSession): string | null {

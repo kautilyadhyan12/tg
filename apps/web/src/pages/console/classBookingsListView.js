@@ -26,7 +26,17 @@ export function lateHeading(list) {
   return total > shown ? `Cancelled late · ${count(total)} (the first ${count(shown)} are listed)` : `Cancelled late · ${count(total)}`;
 }
 
-const FEE_STATE_WORDS = { owed: 'on their bills', paid: 'paid', part_refunded: 'part refunded', refund_pending: 'refund pending', refunded: 'refunded', waived: 'waived' };
+const FEE_STATE_WORDS = {
+  owed: 'on their bills',
+  paid: 'paid',
+  part_refunded: 'part refunded',
+  refund_pending: 'refund pending',
+  refunded: 'refunded',
+  waived: 'waived',
+  // Marked Came while they were paying it in the app (18k-ii-b), as their own page says it.
+  held: 'comes off once their payment page in the app closes, if nothing was paid',
+  check: 'may have been paid in the app: check Square, then waive it on their page',
+};
 
 /** A booking's late cancel or no-show fee (18h-i): "No-show fee £8.00 · on their bills";
  *  null for none. */

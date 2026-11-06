@@ -17,6 +17,7 @@ import {
   MEMBER_PAYMENT_BY_HAND,
   MEMBER_PAYMENT_METHOD_WORDS,
   APP_PAYMENT_STAFF_WORDS,
+  APP_PAYMENT_FEE_STAFF_WORDS,
   appCheckLine,
   appPayingLine,
   paymentMethodsByHand,
@@ -334,6 +335,9 @@ export function feeRow(fee, currency, today) {
         ? `Waived ${dayWords(fee.waived.on)}${fee.waived.by === null ? '' : ` by ${fee.waived.by}`}`
         : fee.state === 'removed'
           ? noLongerOwed(fee)
+          : (fee.state === 'due' || fee.state === 'overdue') && fee.stillOwed === false
+            ? // Taken off while a member was paying it in the app (18k-ii-b): it stands until their page has closed.
+              `${capital(whyNotOwed(fee))}.${(fee.appPayment ?? null) !== null ? ' It comes off once their payment page in the app closes, if nothing was paid.' : (fee.appCheck ?? null) !== null ? ' Waive this fee once you have checked Square.' : ''}`
           : fee.state === 'paid' && fee.stillOwed === false
             ? // Paid on the Terminal or from the card on file: it goes back through Square, and Void payment
               // is not offered (18d-vi-b-i, 18d-iii-i, 18d-iv-b-i).
@@ -718,4 +722,23 @@ export const APP_CLOSE_WORDS = {
   check: APP_PAYMENT_STAFF_WORDS.check,
   waiting: APP_PAYMENT_STAFF_WORDS.waiting,
 };
+
+/** Whether a member's payment page in the app is open on this membership, for its bill or one of its fees (18k-ii-b):
+ *  nothing else is paid on it meanwhile, so Record payment is not offered. */
+export const appPageOpenOn = (m) => (m?.billing?.appPayment ?? null) !== null || (m?.billing?.fees ?? []).some((f) => (f.appPayment ?? null) !== null);
+
+/** The same, pressed under a fee (18k-ii-b). */
+export const APP_CLOSE_FEE_WORDS = { ...APP_CLOSE_WORDS, check: APP_PAYMENT_FEE_STAFF_WORDS.check };
+
+/** A member's payment page open on this fee (18k-ii-b): who is paying it, and when it closes if not paid; null for none. */
+export function feeAppPayingNotice(fee, timezone) {
+  const open = fee?.appPayment ?? null;
+  return open === null ? null : { id: open.id, line: appPayingLine(open.payerName, closesAtWords(open.closesAt, timezone), true) };
+}
+
+/** A member's page for this fee that ended with money Square may have taken and that is not on it: what to check; null for none. */
+export function feeAppCheckNotice(fee, currency) {
+  const check = fee?.appCheck ?? null;
+  return check === null ? null : appCheckLine(check, check.amountMinor === null ? null : formatMinor(check.amountMinor, currency), dayWords(check.on), fee.fee);
+}
 export const APP_CLOSE_BUTTON = 'Close payment page';
