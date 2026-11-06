@@ -298,7 +298,7 @@ d("users routes (real Postgres)", () => {
     expect(await switches(a.cookies)).toEqual({ pushGymMessages: true, pushPlaces: false, pushComments: false });
     expect(await switches(b.cookies)).toEqual({ pushGymMessages: true, pushPlaces: true, pushComments: true });
 
-    for (const body of [{ pushComments: "no" }, { pushPlaces: null }, { pushBadges: false }]) {
+    for (const body of [{ pushComments: "no" }, { pushPlaces: null }, { pushEverything: false }]) {
       expect((await inject({ method: "PATCH", url: "/v1/users/me", cookies: a.cookies, body })).statusCode).toBe(400);
     }
     expect((await inject({ method: "PATCH", url: "/v1/users/me", body: { pushComments: false } })).statusCode).toBe(401);

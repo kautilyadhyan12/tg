@@ -8,10 +8,12 @@ import {
   GYM_COMMENTS_CHANNEL,
   GYM_MESSAGES_CHANNEL,
   GYM_PLACES_CHANNEL,
+  TRAINING_PROGRESS_CHANNEL,
   TRAINING_REMINDERS_CHANNEL,
   gymCommentPushDataSchema,
   gymMessagePushDataSchema,
   gymPlacePushDataSchema,
+  trainingNudgePushDataSchema,
   trainingReminderPushDataSchema,
   type GymPlacePushData,
 } from "@app/shared";
@@ -42,10 +44,11 @@ export type Tapped =
   | { kind: "inbox"; gymId: string }
   | ({ kind: "place" } & Omit<GymPlacePushData, "kind">)
   | { kind: "comment"; gymId: string; postId: string }
-  | { kind: "training"; open: "workout" | "food" };
+  | { kind: "training"; open: "workout" | "food" }
+  | { kind: "progress"; open: "running" | "achievements" | "dashboard" };
 
 /** A tap that opens a place's page on the Gym tab. */
-export type GymTapped = Exclude<Tapped, { kind: "training" }>;
+export type GymTapped = Exclude<Tapped, { kind: "training" } | { kind: "progress" }>;
 
 /** What a notification of ours asks to open, or null for anything else. */
 export function tappedOf(data: unknown): Tapped | null {
@@ -55,6 +58,8 @@ export function tappedOf(data: unknown): Tapped | null {
   if (comment.success) return { kind: "comment", gymId: comment.data.gymId, postId: comment.data.postId };
   const training = trainingReminderPushDataSchema.safeParse(data);
   if (training.success) return { kind: "training", open: training.data.open };
+  const progress = trainingNudgePushDataSchema.safeParse(data);
+  if (progress.success) return { kind: "progress", open: progress.data.open };
   const place = gymPlacePushDataSchema.safeParse(data);
   if (!place.success) return null;
   const { gymId, what, id, day } = place.data;
@@ -87,6 +92,7 @@ export function identifierOf(tapped: Tapped): string {
   if (tapped.kind === "inbox") return `inbox:${tapped.gymId}`;
   if (tapped.kind === "comment") return `comments:${tapped.gymId}`;
   if (tapped.kind === "training") return "training-reminder";
+  if (tapped.kind === "progress") return "training-progress";
   return `place:${tapped.id}`;
 }
 
@@ -97,6 +103,8 @@ export const channelOf = (tapped: Tapped): string =>
       ? GYM_COMMENTS_CHANNEL.id
       : tapped.kind === "training"
         ? TRAINING_REMINDERS_CHANNEL.id
+        : tapped.kind === "progress"
+          ? TRAINING_PROGRESS_CHANNEL.id
         : GYM_PLACES_CHANNEL.id;
 
 /** When the tabs open: the channel the phone's settings name, and what shows in the app. Safe to repeat. */
@@ -109,7 +117,7 @@ export function startNotifications(): void {
       return Promise.resolve({ shouldShowBanner: show, shouldShowList: show, shouldPlaySound: false, shouldSetBadge: false });
     },
   });
-  for (const channel of [GYM_MESSAGES_CHANNEL, GYM_PLACES_CHANNEL, GYM_COMMENTS_CHANNEL, TRAINING_REMINDERS_CHANNEL]) {
+  for (const channel of [GYM_MESSAGES_CHANNEL, GYM_PLACES_CHANNEL, GYM_COMMENTS_CHANNEL, TRAINING_REMINDERS_CHANNEL, TRAINING_PROGRESS_CHANNEL]) {
     void Notifications.setNotificationChannelAsync(channel.id, {
       name: channel.name,
       importance: Notifications.AndroidImportance.DEFAULT,

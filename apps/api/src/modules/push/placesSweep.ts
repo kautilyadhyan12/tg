@@ -130,6 +130,7 @@ export async function sendPlaceNotifications(deps: {
       }
     }
     state.again = failed && !state.reached;
+    if (state.reached) await repo.noteReached(sql, place.userId, now).catch(onError);
   };
 
   const handle = async (place: places.DuePlace): Promise<void> => {

@@ -162,6 +162,9 @@ d("record a run (real Postgres)", () => {
         "modules/geo/repo.ts",
         "modules/privacy/exportRepo.ts",
         "modules/privacy/repo.ts",
+        // The streak reminder and the Sunday summary (19e-ii) count the person's own runs for themselves: no
+        // route, no place, no gym.
+        "modules/reminders/nudgesRepo.ts",
         "modules/workouts/repo.ts",
       ]);
     });

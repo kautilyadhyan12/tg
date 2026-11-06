@@ -22,6 +22,10 @@ export const userProfileSchema = z.object({
   pushGymMessages: z.boolean(),
   pushPlaces: z.boolean(),
   pushComments: z.boolean(),
+  /** The streak reminder, badges and the Sunday summary (19e-ii): on until switched off. */
+  pushStreak: z.boolean(),
+  pushBadges: z.boolean(),
+  pushSummary: z.boolean(),
   /** Onboarding gate (v1 §6.1:442 — a users-module concern, which is why it is
    *  absent from the auth view). Stored on user_fitness_profiles; false when
    *  the user has no profile row yet (onboarding-storage card). */
@@ -62,6 +66,9 @@ export const updateProfileRequestSchema = z
     pushGymMessages: z.boolean().optional(),
     pushPlaces: z.boolean().optional(),
     pushComments: z.boolean().optional(),
+    pushStreak: z.boolean().optional(),
+    pushBadges: z.boolean().optional(),
+    pushSummary: z.boolean().optional(),
   })
   .strict()
   .refine((o) => Object.keys(o).length > 0, { message: "at least one field required" });
