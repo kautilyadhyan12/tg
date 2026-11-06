@@ -288,9 +288,9 @@ describe("what a gym may save as a membership type", () => {
     expect(ok({ ...monthly, updatedAt: "2026-10-04T10:00:00.000Z" })).toBe(false);
   });
 
-  it("Sell in the app only on a membership or a pack with a price, never a trial (18k-i)", () => {
+  it("Sell in the app only on a paid-once membership or a pack with a price; a repeating one waits for 18k-iv (18k-i)", () => {
     expect(saveGymMembershipTypeRequestSchema.parse(monthly).soldInApp).toBe(false);
-    expect(ok({ ...monthly, soldInApp: true })).toBe(true);
+    expect(ok({ ...monthly, soldInApp: true })).toBe(false);
     expect(ok({ ...monthly, kind: "one_time", termCount: 3, termUnit: "month", soldInApp: true })).toBe(true);
     expect(ok({ ...pack, soldInApp: true })).toBe(true);
     expect(ok({ ...pack, packClasses: 1, packDays: 1, soldInApp: true })).toBe(true);

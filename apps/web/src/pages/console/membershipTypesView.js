@@ -24,6 +24,7 @@ import {
   TAXED_PRICE_MINOR_MAX,
   pcmToTaxRateText,
   SALES_TAX_PCM_MAX,
+  canSellInApp,
 } from '@app/shared';
 import { reminderDayOptions } from './renewalReminderView';
 import { RAISE_DRAFT, raiseBody, raiseProblem } from './priceRaiseView';
@@ -264,8 +265,9 @@ export function coolingOffLine(type) {
   return `Cooling-off period: ${String(type.coolingOffDays)} day${type.coolingOffDays === 1 ? '' : 's'}`;
 }
 
-/** The ways of paying a member can buy in the app (18k-i): a membership or a pack, never a trial. */
-export const usesSellInApp = (choice) => choice === 'recurring' || choice === 'one_time' || choice === 'pack' || choice === 'day_pass';
+/** The ways of paying a member can buy in the app (18k-i): a paid-once membership or a pack (a day pass is one). A
+ *  repeating membership waits for 18k-iv, once members can cancel it in the app (18l); never a trial. */
+export const usesSellInApp = (choice) => choice === 'one_time' || choice === 'pack' || choice === 'day_pass';
 
 /** WHETHER SQUARE CAN TAKE A MEMBER'S PAYMENT NOW (18k-i), from the Payments box: `ready`; `connect` or `location` for
  *  what the owner still has to do; `country` where Square is not offered; `off` where it can't be connected here yet;
@@ -285,13 +287,17 @@ export function sellInAppHint(state, canConnect) {
   if (state === 'location') return canConnect ? { text: 'Choose your Square location to sell in the app.', button: 'Choose location' } : { text: 'Only the owner can choose the Square location.', button: null };
   if (state === 'country') return { text: "Selling in the app isn't available in your country yet.", button: null };
   if (state === 'off') return { text: "Selling in the app isn't available yet.", button: null };
-  return { text: 'Members can buy it in the app and pay by card through Square.', button: null };
+  if (state === 'ready') return { text: 'Members can buy it in the app and pay by card through Square.', button: null };
+  // Square's state not known yet (still loading, or its read failed): what the tick does, and no more.
+  return { text: 'Lets members buy it in the app.', button: null };
 }
 
 /** The row's word for a line sold in the app: the tag while members can buy it, a sentence while Square still has to
- *  be set up, and null for a line not ticked. Not known yet, it says only that it is on. */
-export function soldInAppWords(type, state) {
-  if (type?.soldInApp !== true) return null;
+ *  be set up or the business has no plan with us (`no_plan`; `it` is "gym", "studio"), and null for a line not ticked
+ *  or one that cannot be sold in the app. Not known yet, it says only that it is on. */
+export function soldInAppWords(type, state, it = 'gym') {
+  if (type?.soldInApp !== true || !canSellInApp(type)) return null;
+  if (state === 'no_plan') return { tag: null, line: `Members can't buy it in the app until this ${it} has a plan.` };
   if (state === 'ready') return { tag: 'Sold in the app', line: null };
   if (state === 'connect') return { tag: null, line: "Members can't buy it in the app until Square is connected." };
   if (state === 'location') return { tag: null, line: "Members can't buy it in the app until your Square location is chosen." };

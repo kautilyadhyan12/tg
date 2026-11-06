@@ -347,9 +347,10 @@ const membershipTypeFields = {
 };
 const membershipTypeObject = z.object(membershipTypeFields);
 
-/** The kinds members may buy in the app (18k-i): a repeating or paid-once membership, or a pack. A trial
- *  has its own rules for who may have one, and a product is bought at the desk (Kd, 2026-11-06). */
-export const SOLD_IN_APP_KINDS: readonly MembershipKind[] = ["recurring", "one_time", "pack"];
+/** The kinds members may buy in the app (18k-i): a paid-once membership or a pack. A repeating one joins them with
+ *  18k-iv, once members can cancel it in the app (18l; RULINGS 2026-10-22). A trial has its own rules for who may have
+ *  one, and a product is bought at the desk (Kd, 2026-11-06). */
+export const SOLD_IN_APP_KINDS: readonly MembershipKind[] = ["one_time", "pack"];
 export const canSellInApp = (type: { kind: MembershipKind; priceMinor: number }): boolean => SOLD_IN_APP_KINDS.includes(type.kind) && type.priceMinor > 0;
 
 /** The rules between the fields: each kind in its own shape. */
@@ -411,7 +412,7 @@ function refineMembershipType(value: z.infer<typeof membershipTypeObject>, ctx: 
     else if (!renewalReminderDaysOffered("every_renewal", value.termCount, value.termUnit).includes(value.renewalReminderDays)) wrong("renewalReminderDays");
   }
   if (value.termReminderDays !== null && value.contractPeriods === null) wrong("termReminderDays");
-  // Sold in the app: a membership or a pack with a price (18k-i).
+  // Sold in the app: a paid-once membership or a pack with a price (18k-i).
   if (value.soldInApp && !canSellInApp(value)) wrong("soldInApp");
 }
 

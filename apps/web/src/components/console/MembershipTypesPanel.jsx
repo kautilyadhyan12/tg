@@ -889,7 +889,7 @@ function TypeRow({ type, orgType, taxLine = null, agreementLine = null, agreemen
   const [asking, setAsking] = useState(false);
   // Sold in the app (18k-i): the tag while members can buy it; while Square still has to be set up, why not, and the
   // button to that place for whoever may.
-  const sold = sell === null ? null : soldInAppWords(type, sell.state);
+  const sold = sell === null ? null : soldInAppWords(type, readOnly ? 'no_plan' : sell.state, orgWords(orgType).it);
   const fix = sold?.line ? sellInAppHint(sell.state, sell.canConnect).button : null;
   return (
     <li className="px-5 py-4 md:px-6 flex flex-col gap-3" style={LINE}>

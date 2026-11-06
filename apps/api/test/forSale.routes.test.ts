@@ -6,8 +6,9 @@
 // first payment other than the one the list showed, and the bill it opens and the agreement it words must say what
 // the list said, line for line.
 //
-// Then: a stranger to the gym reads nothing (404, as every member route answers); nothing is listed while the gym
-// cannot take a payment through Square; a trial, a free line and a line not ticked are never listed.
+// Then: a stranger to the gym reads nothing (404, as every member route answers, and never a 429); nothing is listed
+// while the gym cannot take a payment through Square; a repeating line (until 18k-iv), a trial, a free line and a line
+// not ticked are never listed.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
 import {
@@ -52,9 +53,10 @@ let formCounter = 0;
 const nextForm = () => `00000000-0000-4000-8000-${String(++formCounter).padStart(12, "0")}`;
 const cookieMap = (res: { cookies: { name: string; value: string }[] }): Cookies => Object.fromEntries(res.cookies.map((c) => [c.name, c.value]));
 
+/** A paid-once month, ticked: what may be sold in the app until 18k-iv. */
 const line = (over: Record<string, unknown>) => ({
   description: null,
-  kind: "recurring",
+  kind: "one_time",
   priceMinor: 5000,
   termCount: 1,
   termUnit: "month",
@@ -69,9 +71,10 @@ const line = (over: Record<string, unknown>) => ({
 });
 const pack = (over: Record<string, unknown>) => line({ kind: "pack", termCount: null, termUnit: null, packClasses: 10, packDays: 60, ...over });
 
-/** Noon in Chicago on 10 November 2026. */
-const NOW = new Date("2026-11-10T18:00:00Z");
-const TODAY = "2026-11-10";
+/** 03:00 UTC on 11 November 2026: still the 10th in Chicago, the 11th in London. Each gym's own day counts. */
+const NOW = new Date("2026-11-11T03:00:00Z");
+const CHICAGO_TODAY = "2026-11-10";
+const LONDON_TODAY = "2026-11-11";
 
 d("what a gym sells in the app (real Postgres)", () => {
   const sql = postgres(url ?? "", { prepare: false, max: 5 });
@@ -117,9 +120,9 @@ d("what a gym sells in the app (real Postgres)", () => {
     expect(login.statusCode, login.body).toBe(200);
     return { id: (JSON.parse(reg.body) as { userId: string }).userId, cookies: cookieMap(login) };
   };
-  /** A gym in the US (tax added on top), with its details for the agreement and a live plan. */
-  const makeGym = async (owner: Cookies, name: string): Promise<string> => {
-    const res = await send("POST", "/v1/orgs", owner, { trainsHere: true, name, city: "Austin", country: "US", timezone: "America/Chicago" });
+  /** A gym, in the US (tax added on top) unless said, with its details for the agreement and a live plan. */
+  const makeGym = async (owner: Cookies, name: string, where = { country: "US", timezone: "America/Chicago", city: "Austin" }): Promise<string> => {
+    const res = await send("POST", "/v1/orgs", owner, { trainsHere: true, name, ...where });
     expect(res.statusCode, res.body).toBe(201);
     const id = (JSON.parse(res.body) as { org: { id: string } }).org.id;
     await sql`DELETE FROM subscriptions WHERE owner_type = 'gym' AND owner_id = ${id}`;
@@ -130,11 +133,11 @@ d("what a gym sells in the app (real Postgres)", () => {
     return id;
   };
   /** Square connected in this server's environment, its location chosen: ready to take a payment. */
-  const connectSquare = async (gymId: string, ownerId: string, over: { state?: string; locationId?: string | null } = {}) => {
+  const connectSquare = async (gymId: string, ownerId: string, over: { state?: string; locationId?: string | null; country?: string; currency?: string } = {}) => {
     await sql`
       INSERT INTO gym_payment_connections (gym_id, provider, environment, state, account_id, business_name, country, currency,
         location_id, location_name, access_token, refresh_token, access_expires_at, refresh_due_at, connected_at, connected_by)
-      VALUES (${gymId}, 'square', 'production', ${over.state ?? "connected"}, ${`MLSALE${String(++formCounter)}`}, 'Iron House LLC', 'US', 'USD',
+      VALUES (${gymId}, 'square', 'production', ${over.state ?? "connected"}, ${`MLSALE${String(++formCounter)}`}, 'Iron House LLC', ${over.country ?? "US"}, ${over.currency ?? "USD"},
         ${over.locationId === undefined ? "LSALE" : over.locationId}, ${over.locationId === null ? null : "Main"}, 'v1.sealed-access', 'v1.sealed-refresh',
         now() + interval '30 days', now() + interval '6 days', now(), ${ownerId})`;
   };
@@ -189,36 +192,20 @@ d("what a gym sells in the app (real Postgres)", () => {
   }, T);
 
   it(
-    "THE WORST THING: for every kind of line, the price, first payment and terms a member reads are what Add membership charges and the agreement says",
+    "THE WORST THING: for every kind of line, in a gym that adds tax and one whose prices hold it, the price, first payment and terms a member reads are what Add membership charges and the agreement says",
     async () => {
-      const owner = await makeUser("w-owner");
-      const gymId = await makeGym(owner.cookies, "Iron House");
-      await connectSquare(gymId, owner.id);
-      const state = await addRate(gymId, "State tax", 6250);
-      const city = await addRate(gymId, "City tax", 2000);
-      // Every term a line can hold, on lines of every kind; one billed from the gym's day comes after.
-      await addType(gymId, owner.cookies, line({ name: "Gold 12", priceMinor: 4999, taxRateIds: [state, city], joiningFeeMinor: 2500, contractPeriods: 12, contractThen: "renews", leaveFeeMinor: 9900, noticeDays: 30, coolingOffDays: 3 }));
-      await addType(gymId, owner.cookies, line({ name: "Silver ends", priceMinor: 3000, contractPeriods: 6, contractThen: "ends" }));
-      await addType(gymId, owner.cookies, line({ name: "Quarter", kind: "one_time", priceMinor: 12000, termCount: 3, termUnit: "month", taxRateIds: [state], joiningFeeMinor: 1000 }));
-      await addType(gymId, owner.cookies, pack({ name: "10 classes", priceMinor: 9000, taxRateIds: [city], coolingOffDays: 7 }));
-      await addType(gymId, owner.cookies, pack({ name: "Drop-in", priceMinor: 1500, packClasses: 1, packDays: 1 }));
-      await addType(gymId, owner.cookies, line({ name: "Yearly", priceMinor: 50000, termUnit: "year", noticeDays: 14 }));
-
-      const maya = await makeUser("w-maya");
-      const entryId = await addPerson(gymId, owner.cookies, "Maya Patel");
-      await inApp(gymId, maya.id, entryId);
-
-      const check = async (name: string) => {
-        const list = await forSale(gymId, maya.cookies);
+      /** Staff give the member that very line today, showing what the list showed (Add membership refuses any first
+       *  payment, joining fee or part month other than its own); the bill it opens and the agreement it words must say
+       *  what the list said. `today` is the gym's own day, which at 03:00 UTC is not UTC's in Chicago. */
+      const check = async (gymId: string, owner: Cookies, member: Cookies, entryId: string, today: string, name: string): Promise<ForSaleItem> => {
+        const list = await forSale(gymId, member);
         expect(list.record).toBe("own");
         const item = itemNamed(list, name);
-        // The desk gives that very membership today, showing what the list showed: refused if the server's first
-        // payment, joining fee or part month is anything else.
         const covers = item.firstPayment.covers;
-        const given = await send("POST", `/v1/orgs/${gymId}/member-list/entries/${entryId}/memberships`, owner.cookies, {
+        const given = await send("POST", `/v1/orgs/${gymId}/member-list/entries/${entryId}/memberships`, owner, {
           requestKey: nextForm(),
           typeId: item.typeId,
-          startsOn: TODAY,
+          startsOn: today,
           paid: false,
           priceMinor: item.priceMinor,
           totalMinor: item.firstPayment.amountMinor,
@@ -228,46 +215,110 @@ d("what a gym sells in the app (real Postgres)", () => {
         expect(given.statusCode, `${name}: ${given.body}`).toBe(201);
         const held = heldMembershipsResponseSchema.parse(JSON.parse(given.body)).memberships.find((m) => m.typeId === item.typeId);
         if (held === undefined || held.billing === null) throw new Error(`${name} was not given with its bills`);
-        const bill = held.billing.bills.find((b) => b.periodIndex === 0) ?? held.billing.bills[0];
+        const bill = held.billing.bills.find((b) => b.periodIndex === 0);
         expect(bill, name).toBeDefined();
         expect({ amountMinor: bill?.amountMinor, joiningFeeMinor: bill?.joiningFeeMinor, part: bill?.part, covers: bill?.covers ?? null, dueOn: bill?.dueOn }, name).toEqual(item.firstPayment);
-        const words = await send("GET", `/v1/orgs/${gymId}/member-list/entries/${entryId}/memberships/${held.id}/agreement`, owner.cookies);
+        expect(item.firstPayment.dueOn, name).toBe(today);
+        const words = await send("GET", `/v1/orgs/${gymId}/member-list/entries/${entryId}/memberships/${held.id}/agreement`, owner);
         expect(words.statusCode, words.body).toBe(200);
         expect(membershipAgreementResponseSchema.parse(JSON.parse(words.body)).facts, name).toEqual(item.facts);
         return item;
       };
 
-      const gold = await check("Gold 12");
+      // A US gym: tax added on top. Its day is the 10th while UTC's is the 11th.
+      const owner = await makeUser("w-owner");
+      const gymId = await makeGym(owner.cookies, "Iron House");
+      await connectSquare(gymId, owner.id);
+      const state = await addRate(gymId, "State tax", 6250);
+      const city = await addRate(gymId, "City tax", 2000);
+      await addType(gymId, owner.cookies, line({ name: "Quarter", kind: "one_time", priceMinor: 12000, termCount: 3, termUnit: "month", taxRateIds: [state], joiningFeeMinor: 1000, coolingOffDays: 3 }));
+      await addType(gymId, owner.cookies, line({ name: "Month pass", kind: "one_time", priceMinor: 6000, termCount: 1, termUnit: "month", taxRateIds: [state, city] }));
+      await addType(gymId, owner.cookies, pack({ name: "10 classes", priceMinor: 9000, taxRateIds: [city], coolingOffDays: 7 }));
+      await addType(gymId, owner.cookies, pack({ name: "Drop-in", priceMinor: 1500, packClasses: 1, packDays: 1 }));
+      const maya = await makeUser("w-maya");
+      const entryId = await addPerson(gymId, owner.cookies, "Maya Patel");
+      await inApp(gymId, maya.id, entryId);
+
+      const quarter = await check(gymId, owner.cookies, maya.cookies, entryId, CHICAGO_TODAY, "Quarter");
       // Read aloud, the lines a member reads before paying: tax on top, the joining fee in the first payment.
-      expect(gold.facts).toEqual([
+      expect(quarter.facts).toEqual([
         { label: "Business", value: "Iron House" },
         { label: "Address", value: "12 Main Street, Austin TX 78701" },
         { label: "Phone", value: "+1 512 555 0100" },
         { label: "Email", value: "desk@ironhouse.example" },
         { label: "Member", value: "Maya Patel" },
-        { label: "Membership", value: "Gold 12" },
-        { label: "Price", value: "$49.99 every month, plus State tax 6.25% and City tax 2%" },
-        { label: "First payment", value: "$81.18, including the joining fee of $25.00, due 10 Nov 2026" },
+        { label: "Membership", value: "Quarter" },
+        { label: "Price", value: "$120.00, paid once, plus State tax 6.25%" },
+        { label: "First payment", value: "$138.13, including the joining fee of $10.00, due 10 Nov 2026" },
         { label: "Starts", value: "10 Nov 2026" },
-        { label: "Minimum term", value: "12 months, to 9 Nov 2027" },
-        { label: "Early cancellation fee", value: "$99.00, State tax and City tax included" },
-        { label: "Renews", value: "Every month after the minimum term until you cancel" },
-        { label: "Notice to cancel", value: "30 days" },
+        { label: "Ends", value: "9 Feb 2027" },
         { label: "Cooling-off period", value: "3 days after signing, to cancel with a full refund" },
       ]);
-      expect(gold.repeats).toBe(true);
-      expect((await check("Silver ends")).facts.find((f) => f.label === "Ends")?.value).toBe("9 May 2027");
-      expect((await check("Quarter")).repeats).toBe(false);
-      expect((await check("10 classes")).facts.find((f) => f.label === "Use by")?.value).toBe("8 Jan 2027");
-      expect((await check("Drop-in")).dayPass).toBe(true);
-      await check("Yearly");
+      expect(quarter.repeats).toBe(false);
+      expect((await check(gymId, owner.cookies, maya.cookies, entryId, CHICAGO_TODAY, "Month pass")).firstPayment.amountMinor).toBe(6495);
+      expect((await check(gymId, owner.cookies, maya.cookies, entryId, CHICAGO_TODAY, "10 classes")).facts.find((f) => f.label === "Use by")?.value).toBe("8 Jan 2027");
+      expect((await check(gymId, owner.cookies, maya.cookies, entryId, CHICAGO_TODAY, "Drop-in")).dayPass).toBe(true);
 
-      // Billed from the gym's day (18y): the first payment is the part month, as Add membership opens it.
-      await sql`UPDATE gyms SET bills_day = 1 WHERE id = ${gymId}`;
-      await addType(gymId, owner.cookies, line({ name: "Gold from the 1st", priceMinor: 6000, taxRateIds: [state], joiningFeeMinor: 2000, contractPeriods: 12, contractThen: "renews" }));
-      const part = await check("Gold from the 1st");
-      expect(part.firstPayment).toMatchObject({ part: true, covers: { from: "2026-11-10", to: "2026-11-30" }, dueOn: TODAY });
-      expect(part.facts.find((f) => f.label === "Minimum term")?.value).toBe("12 months from 1 Dec 2026, to 30 Nov 2027");
+      // A UK gym: its prices hold the VAT. Its day is the 11th.
+      const ukOwner = await makeUser("w-uk-owner");
+      const ukGym = await makeGym(ukOwner.cookies, "Leeds Iron", { country: "GB", timezone: "Europe/London", city: "Leeds" });
+      await connectSquare(ukGym, ukOwner.id, { country: "GB", currency: "GBP" });
+      const vat = await addRate(ukGym, "VAT", 20000);
+      await addType(ukGym, ukOwner.cookies, line({ name: "Quarter UK", kind: "one_time", priceMinor: 12000, termCount: 3, termUnit: "month", taxRateIds: [vat], joiningFeeMinor: 1000 }));
+      await addType(ukGym, ukOwner.cookies, pack({ name: "5 classes", priceMinor: 5000, packClasses: 5, packDays: 30, taxRateIds: [vat] }));
+      const tom = await makeUser("w-tom");
+      const ukEntry = await addPerson(ukGym, ukOwner.cookies, "Tom Hale");
+      await inApp(ukGym, tom.id, ukEntry);
+      const uk = await check(ukGym, ukOwner.cookies, tom.cookies, ukEntry, LONDON_TODAY, "Quarter UK");
+      expect(uk.facts.filter((f) => ["Price", "First payment", "Starts"].includes(f.label))).toEqual([
+        { label: "Price", value: "£120.00, paid once, VAT 20% included" },
+        { label: "First payment", value: "£130.00, including the joining fee of £10.00, due 11 Nov 2026" },
+        { label: "Starts", value: "11 Nov 2026" },
+      ]);
+      expect((await check(ukGym, ukOwner.cookies, tom.cookies, ukEntry, LONDON_TODAY, "5 classes")).firstPayment.amountMinor).toBe(5000);
+    },
+    T,
+  );
+
+  it(
+    "a repeating membership is not sold in the app before members can cancel it there (18l): it cannot be ticked, and one ticked by hand is never listed",
+    async () => {
+      const owner = await makeUser("p-owner");
+      const gymId = await makeGym(owner.cookies, "Repeat Gym");
+      await connectSquare(gymId, owner.id);
+      const refused = await send("POST", `/v1/orgs/${gymId}/membership-types`, owner.cookies, line({ name: "Gold Monthly", kind: "recurring" }));
+      expect(refused.statusCode, refused.body).toBe(400);
+      await addType(gymId, owner.cookies, line({ name: "Gold Monthly", kind: "recurring", soldInApp: false }));
+      await addType(gymId, owner.cookies, pack({ name: "10 classes" }));
+      await sql`UPDATE gym_membership_types SET sold_in_app = true WHERE gym_id = ${gymId} AND name = 'Gold Monthly'`;
+      const ana = await makeUser("p-ana");
+      await inApp(gymId, ana.id, await addPerson(gymId, owner.cookies, "Ana Ruiz"));
+      expect((await forSale(gymId, ana.cookies)).items.map((i) => i.name)).toEqual(["10 classes"]);
+    },
+    T,
+  );
+
+  it(
+    "the limit is a member's own and comes after the gym's check: a stranger's 404 is never a 429",
+    async () => {
+      const owner = await makeUser("rl-owner");
+      const gymId = await makeGym(owner.cookies, "Limit Gym");
+      await connectSquare(gymId, owner.id);
+      await addType(gymId, owner.cookies, pack({ name: "10 classes" }));
+      const ana = await makeUser("rl-ana");
+      await inApp(gymId, ana.id, await addPerson(gymId, owner.cookies, "Ana Ruiz"));
+      const ben = await makeUser("rl-ben");
+      await inApp(gymId, ben.id, await addPerson(gymId, owner.cookies, "Ben Stone"));
+      const stranger = await makeUser("rl-stranger");
+      // An hour's 600 reads, counted already for Ana and for the stranger.
+      for (let i = 0; i < 600; i += 1) {
+        await redis.incrWithTtl(`rl:for_sale_read:id:${ana.id}`, 3600);
+        await redis.incrWithTtl(`rl:for_sale_read:id:${stranger.id}`, 3600);
+      }
+      expect((await send("GET", `/v1/orgs/${gymId}/for-sale`, ana.cookies)).statusCode).toBe(429);
+      expect((await send("GET", `/v1/orgs/${gymId}/for-sale`, stranger.cookies)).statusCode).toBe(404);
+      // Another member is not held by Ana's count.
+      expect((await forSale(gymId, ben.cookies)).items).toHaveLength(1);
     },
     T,
   );

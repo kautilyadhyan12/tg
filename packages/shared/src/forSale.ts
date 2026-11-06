@@ -10,7 +10,7 @@ import { z } from "zod";
 import { billsToOpen } from "./memberBillRules.js";
 import { giveHeldMembership, heldMembershipView, periodListedMinor, type HeldTax } from "./heldMemberships.js";
 import { agreementFactSchema, agreementFacts, type AgreementFact, type AgreementFactsInput } from "./membershipAgreement.js";
-import { MEMBERSHIP_TYPES_MAX, canSellInApp, membershipKindSchema, type ContractThen, type MembershipKind, type MembershipTermUnit } from "./memberships.js";
+import { MEMBERSHIP_TYPES_MAX, canSellInApp, isDayPass, membershipKindSchema, type ContractThen, type MembershipKind, type MembershipTermUnit } from "./memberships.js";
 import { billAmounts } from "./register.js";
 
 const daySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
@@ -94,7 +94,8 @@ export interface ForSaleInput {
 }
 
 /** ONE LINE AS A MEMBER READS IT: the membership as Add membership would give it today, from today, with no discount;
- *  null for a line that cannot be sold in the app (a trial, a free one) or that gives nothing today. */
+ *  null for a line that cannot be sold in the app (a repeating one until 18k-iv, a trial, a free one) or that gives
+ *  nothing today. A Refer a friend gift waiting for the member is not taken off here: buying works it out (18k-iii). */
 export function forSaleItem(input: ForSaleInput): ForSaleItem | null {
   const { type, today } = input;
   if (!canSellInApp(type)) return null;
@@ -135,7 +136,7 @@ export function forSaleItem(input: ForSaleInput): ForSaleItem | null {
     name: type.name,
     description: type.description,
     kind: type.kind,
-    dayPass: type.kind === "pack" && type.packClasses === 1 && type.packDays === 1,
+    dayPass: isDayPass(type),
     priceMinor: type.priceMinor,
     currency: type.currency,
     firstPayment,
