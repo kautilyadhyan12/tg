@@ -770,7 +770,7 @@ d("change email (real Postgres)", { timeout: T }, () => {
     const sue = await person("sue");
     expect((await change(sue, address("sue-new"))).statusCode).toBe(200);
     const token = tokenOf(undoLinks.get(sue.email));
-    const PASSWORD = "a-Perfectly-fine-pw-1";
+    const PASSWORD = "a-Perfectly-fine-pw-1"; // dummy fixture, gitleaks:allow
     const planted = await inject("POST", "/v1/auth/register", {}, { email: sue.email, password: PASSWORD, displayName: "Planted" });
     expect([planted.statusCode, errorOf(planted)]).toEqual([400, "email_taken"]);
     expect((await sql`SELECT 1 FROM users WHERE email = ${sue.email}`).length).toBe(0);
