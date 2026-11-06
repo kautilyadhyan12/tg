@@ -712,10 +712,14 @@ d("Pay what they owe in the app: charged once, on this bill alone (real Postgres
       ["another location", { location_id: "LELSEWHERE" }, 1],
       ["two payments", {}, 2],
     ] as const) {
+      // A second on: the bill's line names the newest page that ended.
+      clock = new Date(clock.getTime() + 1000);
       const page = await pay(gym, piaApp, pia);
       square.payLink(linksOf(acct).find((l) => l.referenceId === page.payment.id)?.id ?? "", over, times);
       expect((await check(gym, piaApp, page.payment.id)).payment.state, what).toBe("check");
       expect(await paymentsOf(gym.id), what).toEqual([]);
+      // The line names all Square took: both payments where the order names two.
+      expect((await held(gym, gym.owner, pia.entryId)).memberships[0]?.billing?.appCheck?.amountMinor, what).toBe(times === 2 ? 9998 : 4999);
     }
 
     // A payment Square never finishes, or one that FAILED on a page nobody closes: the page holds the membership no longer
