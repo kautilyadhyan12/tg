@@ -20,10 +20,12 @@ lower of the two was within 2 m on every case where either alone was off by up t
 
 In `HEIGHTS_DIR`, per square: `<copernicus name>.tif` and `.json` (its checked header) and `<N28W081>.hgt`.
 Only squares on Copernicus's own list of land are ever asked (`apps/api/src/modules/geo/copernicusSquares.ts`,
-made from its `tileList.txt`, 26,450 squares): the sea, and Armenia and Azerbaijan, which Copernicus withholds,
-have no heights and are never fetched. At 20 gyms in about 15 cities that is 15 to 30 squares, about 2 GB;
-it grows only where members run, and at most 30 new squares an hour for each map (one download at a time),
-so nobody can fill the disk with made-up runs. A run in more than 6 squares (no runner's) has no number.
+made from its `tileList.txt`, 26,450 squares): the sea has no heights and is never fetched; in Armenia and
+Azerbaijan, which Copernicus withholds, the Mapzen map alone is read. At 20 gyms in about 15 cities that is
+15 to 30 squares, about 2 GB; it grows only where members run. It never passes `HEIGHTS_MOST_SQUARES_KEPT`
+squares for each map (200 unless set: about 5.2 GB of Mapzen, 9.7 GB of Copernicus at most). Each map downloads
+one square at a time, 30 new squares an hour at most, and one person's runs bring at most 6 new squares a
+day (counted in Redis). A run in more than 6 squares (no runner's) has no number.
 
 ## Settings
 
@@ -31,6 +33,9 @@ so nobody can fill the disk with made-up runs. A run in more than 6 squares (no 
   the system's temporary one).
 - `HEIGHTS_COPERNICUS`, `HEIGHTS_MAPZEN`: where each map is fetched from; the AWS copies above unless
   set, `https://` in production. Under the tests nothing is ever fetched.
+- `HEIGHTS_MOST_SQUARES_KEPT`: the most squares each map keeps (200 unless set). Reaching it logs
+  `geo.heights_disk_full` at error: new places then wait, and after three days have no number. Raise it
+  when real members reach that many places and the disk has room (ls `HEIGHTS_DIR`: `*.json` and `*.hgt`).
 
 ## How a run gets its number
 
