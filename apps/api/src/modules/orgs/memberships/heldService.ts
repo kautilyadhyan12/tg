@@ -85,7 +85,7 @@ import * as agreementRepo from "../agreement/repo.js";
 import { recordStopped, unsignedStopsRecord } from "../classes/bookingStops.js";
 import { freezeFeeOf } from "./freezeFees.js";
 import { chargesOfBills } from "../payments/cardChargesRepo.js";
-import { openOnMemberships } from "../payments/appPaymentsRepo.js";
+import { checksOnMemberships, openOnMemberships, type AppCheckRow } from "../payments/appPaymentsRepo.js";
 import { openPressesOf } from "../payments/cardRefundsRepo.js";
 import { chargeStopsOfBills } from "../payments/cardChargesRepo.js";
 import { chargebacksOfPayments } from "../payments/chargebacksRepo.js";
@@ -130,6 +130,8 @@ function billingOf(
     chargeStops: Map<string, ChargeStop>;
     /** A member's payment page open on each membership (18k-ii-a). */
     appOpen: Map<string, { id: string; payerName: string | null; closesAt: Date }>;
+    /** The newest page on each that ended with money Square may have taken and that is not on its bill. */
+    appChecks: Map<string, AppCheckRow>;
   },
 ): Omit<MemberBilling, "change"> {
   const view = heldMembershipView(row.membership, ctx.today);
@@ -236,8 +238,13 @@ function billingOf(
     fees: fees.fees.map((f) => feeOf(f, fees.payments, ctx, { refunds: refundsOf, voided: voidedRefundsOf })),
     coolingOffRefund,
     appPayment: appPaymentOn(ctx.appOpen.get(row.id)),
+    // Said while that bill is still the one owed: once it is paid or cancelled, staff have dealt with it.
+    appCheck: appCheckOn(ctx.appChecks.get(row.id), pay?.periodIndex ?? null),
   };
 }
+
+const appCheckOn = (check: AppCheckRow | undefined, owedPeriod: number | null): MemberBilling["appCheck"] =>
+  check === undefined || owedPeriod !== check.periodIndex ? null : { why: check.why, amountMinor: check.amountMinor, on: check.on, payerName: check.payerName };
 
 const appPaymentOn = (open: { id: string; payerName: string | null; closesAt: Date } | undefined): MemberBilling["appPayment"] =>
   open === undefined ? null : { id: open.id, payerName: open.payerName, closesAt: open.closesAt.toISOString() };
@@ -403,8 +410,10 @@ async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: 
   const presses = canBill ? await openPressesOf(deps.sql, gymId, [...list.payments, ...list.feePayments.filter((p) => p.voided === null)].map((p) => p.id)) : new Map<string, CardRefundOpen>();
   const chargebacks = canBill ? await chargebacksOfPayments(deps.sql, gymId, [...list.payments, ...list.feePayments.filter((p) => p.voided === null)].map((p) => p.id), deps.now()) : new Map<string, ChargebackSeen[]>();
   const chargeStops = canBill ? await chargeStopsOfBills(deps.sql, gymId, [...list.bills.map((b) => b.id), ...list.fees.map((f) => f.id)], deps.now()) : new Map<string, ChargeStop>();
-  const appOpen = canBill ? await openOnMemberships(deps.sql, gymId, [...list.inUse, ...list.over].map((row) => row.id)) : new Map<string, { id: string; payerName: string | null; closesAt: Date }>();
-  const ctx = { today, past: list.past, overdueAfterDays: list.overdueAfterDays, gifts, charges, presses, chargebacks, chargeStops, appOpen };
+  const heldIds = [...list.inUse, ...list.over].map((row) => row.id);
+  const appOpen = canBill ? await openOnMemberships(deps.sql, gymId, heldIds) : new Map<string, { id: string; payerName: string | null; closesAt: Date }>();
+  const appChecks = canBill ? await checksOnMemberships(deps.sql, gymId, heldIds) : new Map<string, AppCheckRow>();
+  const ctx = { today, past: list.past, overdueAfterDays: list.overdueAfterDays, gifts, charges, presses, chargebacks, chargeStops, appOpen, appChecks };
   // The page reads a membership as the next write will find it: with its count moved
   // over the periods nobody was asked for (`countAfterGap`), which `settle` then writes.
   const asOfToday = (row: repo.HeldRow): repo.HeldRow => {

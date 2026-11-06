@@ -855,6 +855,24 @@ describe('a member paying in the app (18k-ii-a)', () => {
     expect((await screen.findByRole('status')).textContent).toBe('It was paid in the app before the page closed.');
   });
 
+  it('a page that ended with money Square may have taken says to check Square, under the bill owed', async () => {
+    const m = held(1, GOLD, TODAY, false);
+    orgService.getHeldMemberships.mockResolvedValue(answer([{ ...m, billing: { ...m.billing, appCheck: { why: 'taken', amountMinor: 4999, on: TODAY, payerName: 'Ada Lovelace' } } }]));
+    render(draw());
+    expect((await screen.findByTestId('held-app-check')).textContent).toBe(
+      'Square took £49.99 from Ada Lovelace in the app on 20 October 2026, but it couldn\x27t go on this bill. Check it in Square before taking this payment again. It won\x27t be charged to the card on file automatically.',
+    );
+    expect(within(screen.getByTestId('held-app-payment')).queryByRole('button')).toBeNull();
+  });
+
+  it('Close payment page says to check Square where it may have been paid', async () => {
+    orgService.getHeldMemberships.mockResolvedValue(answer([paying()]));
+    orgService.closeAppPayment.mockResolvedValue({ data: { outcome: 'check' } });
+    render(draw());
+    fireEvent.click(within(await screen.findByTestId('held-app-payment')).getByRole('button', { name: 'Close payment page' }));
+    expect((await screen.findByRole('status')).textContent).toBe("Square may have taken a payment on this page that isn't on the bill. Check it in Square before taking this payment again.");
+  });
+
   it('a read-only page says it with no button', async () => {
     orgService.getHeldMemberships.mockResolvedValue(answer([paying()]));
     render(draw({ readOnly: true }));

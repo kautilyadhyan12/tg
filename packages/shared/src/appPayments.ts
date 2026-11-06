@@ -28,9 +28,9 @@ export const appPaymentRequestSchema = z
   .strict();
 export type AppPaymentRequest = z.infer<typeof appPaymentRequestSchema>;
 
-/** `open`: Square's page can be paid; `paid`: on the bill, with its receipt; `closed`: nothing was paid; `not_recorded`:
- *  Square took money the bill could not take, which the gym has to check in Square. */
-export const APP_PAYMENT_STATES = ["open", "paid", "closed", "not_recorded"] as const;
+/** `open`: Square's page can be paid; `paid`: on the bill, with its receipt; `closed`: nothing was paid; `check`: Square
+ *  took money the bill could not take, or never said how the page ended, so the front desk checks it in Square. */
+export const APP_PAYMENT_STATES = ["open", "paid", "closed", "check"] as const;
 export const appPaymentStateSchema = z.enum(APP_PAYMENT_STATES);
 export type AppPaymentState = z.infer<typeof appPaymentStateSchema>;
 
@@ -66,8 +66,17 @@ export const appPaymentOpenSchema = z
   .strict();
 export type AppPaymentOpen = z.infer<typeof appPaymentOpenSchema>;
 
-/** Close payment page, for staff: closed with nothing paid, paid in the app just before, or Square not answering yet. */
-export const appPaymentCloseResponseSchema = z.object({ outcome: z.enum(["closed", "paid", "waiting"]) }).strict();
+/** A page that ended with money Square may have taken and that is not on the bill, while that bill is still owed: Square
+ *  took another amount than asked or the bill could not take it (`taken`), or Square never said how it ended
+ *  (`unknown`). The card on file is not charged for that bill by itself while it stands. */
+export const appPaymentCheckSchema = z
+  .object({ why: z.enum(["taken", "unknown"]), amountMinor: minorSchema, on: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), payerName: z.string().nullable() })
+  .strict();
+export type AppPaymentCheck = z.infer<typeof appPaymentCheckSchema>;
+
+/** Close payment page, for staff: closed with nothing paid, paid in the app just before, Square may have taken money that
+ *  is not on the bill (`check`), or Square not answering yet. */
+export const appPaymentCloseResponseSchema = z.object({ outcome: z.enum(["closed", "paid", "check", "waiting"]) }).strict();
 export type AppPaymentCloseResponse = z.infer<typeof appPaymentCloseResponseSchema>;
 
 /** The server's answers, as the member reads them on the phone. */
@@ -79,6 +88,8 @@ export const APP_PAYMENT_WORDS = {
   square_down: "Square isn't answering. Try again in a minute.",
   refused: "Square couldn't open the payment page. Pay at the front desk.",
   not_found: "That payment wasn't found.",
+  /** `check`: said on the phone where the page ended that way. */
+  check: "We couldn't confirm this payment. The front desk will check it with Square.",
 } as const;
 
 /** What staff read while a member has a page open (`appPaymentOpenSchema`), and after Close payment page. */
@@ -88,9 +99,12 @@ export const APP_PAYMENT_STAFF_WORDS = {
   closed: "Payment page closed. Nothing was paid in the app.",
   paid: "It was paid in the app before the page closed.",
   waiting: "Square isn't answering, so the payment page is still open. Try again in a minute.",
+  check: "Square may have taken a payment on this page that isn't on the bill. Check it in Square before taking this payment again.",
   none: "No payment page is open on this membership now.",
   /** Disconnect Square while a member's page is open: it could still be paid, with nothing here to record it. */
-  disconnect_open: "A member is paying in the app right now. Disconnect Square once their payment page closes, within 15 minutes.",
+  disconnect_open: "A member is paying in the app right now. Disconnect Square once their payment page closes.",
+  /** Delete permanently while one of the person's pages is open: what Square took would have no bill to go on. */
+  delete_open: "This person is paying in the app right now. Delete them once their payment page closes.",
   /** Void payment on a payment made in the app: Square holds the money. */
   void_app: "This was paid in the app. To give the money back, press Refund on the payment.",
 } as const;
@@ -99,3 +113,10 @@ export const APP_PAYMENT_STAFF_WORDS = {
  *  isn't paid." `at`: the time, in the gym's words. */
 export const appPayingLine = (payerName: string | null, at: string): string =>
   `${payerName ?? "The member"} is paying this in the app. The payment page closes at ${at} if it isn't paid.`;
+
+/** The bill's line for a page that ended needing a check (`appPaymentCheckSchema`). `money`: its amount, `day`: when, both
+ *  in the gym's words. */
+export const appCheckLine = (check: Pick<AppPaymentCheck, "why" | "payerName">, money: string, day: string): string =>
+  check.why === "taken"
+    ? `Square took ${money} from ${check.payerName ?? "the member"} in the app on ${day}, but it couldn't go on this bill. Check it in Square before taking this payment again. It won't be charged to the card on file automatically.`
+    : `${check.payerName ?? "The member"}'s payment page in the app ended on ${day} without an answer from Square, so it may have been paid. Check it in Square before taking this payment again. It won't be charged to the card on file automatically.`;

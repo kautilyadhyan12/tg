@@ -18,11 +18,14 @@ import {
   myMembershipResponseSchema,
   squareConnectResponseSchema,
   squareFinishResponseSchema,
+  terminalPaymentsResponseSchema,
   type AppPaymentResponse,
   type GymMembershipTypesResponse,
   type HeldMembershipsResponse,
 } from "@app/shared";
 import { buildApp } from "../src/app.js";
+import { createMemoryRedis } from "../src/redis.js";
+import { openDueBills } from "../src/modules/orgs/memberships/billsRepo.js";
 import { loadConfig } from "../src/config.js";
 import { APP_PAYMENT } from "../src/modules/orgs/payments/appPayments.js";
 import { squareSettings } from "../src/modules/orgs/payments/settings.js";
@@ -93,6 +96,7 @@ d("Pay what they owe in the app: charged once, on this bill alone (real Postgres
   const sql = postgres(url ?? "", { prepare: false, max: 6 });
   const square = fakeSquare();
   const hub = recordingHub();
+  const redis = createMemoryRedis();
   let clock = new Date();
   let app: App | undefined;
   const api = (): App => {
@@ -111,6 +115,9 @@ d("Pay what they owe in the app: charged once, on this bill alone (real Postgres
     await sql`DELETE FROM gym_app_payments WHERE gym_id IN (${mineSql})`;
     await sql`DELETE FROM gym_terminal_payments WHERE gym_id IN (${mineSql})`;
     await sql`DELETE FROM gym_square_refunds WHERE gym_id IN (${mineSql})`;
+    await sql`DELETE FROM gym_card_charges WHERE gym_id IN (${mineSql})`;
+    await sql`DELETE FROM gym_member_cards WHERE gym_id IN (${mineSql})`;
+    await sql`DELETE FROM gym_card_agreements WHERE gym_id IN (${mineSql})`;
     await sql`DELETE FROM gym_held_memberships WHERE gym_id IN (${mineSql})`;
     await sql`DELETE FROM gym_membership_types WHERE gym_id IN (${mineSql})`;
     await sql`DELETE FROM gym_square_terminals WHERE gym_id IN (${mineSql})`;
@@ -136,6 +143,16 @@ d("Pay what they owe in the app: charged once, on this bill alone (real Postgres
       method,
       url: path,
       remoteAddress: nextIp(),
+      cookies,
+      ...(payload === undefined ? {} : { headers: { "content-type": "application/json" }, payload: JSON.stringify(payload) }),
+    });
+
+  /** The same, from one fixed address: a whole gym on its wi-fi. */
+  const sendFrom = (ip: string, method: "GET" | "POST", path: string, cookies: Cookies, payload?: unknown) =>
+    api().inject({
+      method,
+      url: path,
+      remoteAddress: ip,
       cookies,
       ...(payload === undefined ? {} : { headers: { "content-type": "application/json" }, payload: JSON.stringify(payload) }),
     });
@@ -231,6 +248,7 @@ d("Pay what they owe in the app: charged once, on this bill alone (real Postgres
       ON CONFLICT (code) DO UPDATE SET active = true`;
     square.state.now = () => clock;
     app = await buildApp(config(), {
+      redis,
       squareApi: square.api,
       live: { hub },
       orgs: { now: () => clock, gymLimits: { perAccount: 1000, perAddress: 1000, unpaid: 1000 } },
@@ -469,7 +487,7 @@ d("Pay what they owe in the app: charged once, on this bill alone (real Postgres
       const page = await pay(gym, kimApp, kim);
       const link = linksOf(acct).find((l) => l.referenceId === page.payment.id);
       square.payLink(link?.id ?? "", over);
-      expect((await check(gym, kimApp, page.payment.id)).payment.state, what).toBe("not_recorded");
+      expect((await check(gym, kimApp, page.payment.id)).payment.state, what).toBe("check");
       expect(await paymentsOf(gym.id), what).toEqual([]);
       const [kept] = await sql<{ square_payment_id: string | null }[]>`SELECT square_payment_id FROM gym_app_payments WHERE id = ${page.payment.id}`;
       expect(kept?.square_payment_id, what).toBe(link?.paymentIds[0]);
@@ -555,5 +573,248 @@ d("Pay what they owe in the app: charged once, on this bill alone (real Postgres
     await sql`DELETE FROM subscriptions WHERE owner_type = 'gym' AND owner_id = ${unpaid.id}`;
     expect(myAppPaymentsResponseSchema.parse(JSON.parse((await send("GET", payUrl(unpaid), joeApp.cookies)).body)).inApp).toBe(false);
     expect(errorOf(await payPress(unpaid, joeApp, joe))).toBe("app_payment_not_offered");
+  });
+  /** A Terminal paired by the gym, in the fake Square, that waits for the person (pairing is `squareTerminals.routes.test.ts`'s). */
+  const terminalOf = async (gym: Gym, acct: Account): Promise<string> => {
+    const deviceId = `R5${randomUUID().replace(/-/g, "").slice(0, 12).toUpperCase()}`;
+    square.devices.set(deviceId, { accountId: acct.merchantId, behaviour: "person" });
+    const [row] = await sql<{ id: string }[]>`
+      INSERT INTO gym_square_terminals (gym_id, environment, account_id, state, device_id, paired_at, created_by)
+      VALUES (${gym.id}, 'production', ${acct.merchantId}, 'paired', ${deviceId}, ${clock}, ${gym.owner.userId})
+      RETURNING id`;
+    if (row === undefined) throw new Error("no terminal");
+    return row.id;
+  };
+  /** A card on file for a record, as Card on file keeps one, and in the fake Square account. */
+  const cardFor = async (gym: Gym, entryId: string, acct: Account): Promise<string> => {
+    const cardId = `ccof:${randomUUID()}`;
+    const customerId = `CUST${uniq()}`;
+    const [agreed] = await sql<{ id: string }[]>`
+      INSERT INTO gym_card_agreements (gym_id, entry_id, words, screen, screen_user_id, brand, last4, agreed_at)
+      VALUES (${gym.id}, ${entryId}, 'I agree that this gym may save this card and charge it for my membership.', 'desk', ${gym.owner.userId}, 'VISA', '1111', now())
+      RETURNING id`;
+    await sql`
+      INSERT INTO gym_member_cards (gym_id, entry_id, environment, account_id, customer_id, card_id, brand, last4, exp_month, exp_year, saved_from, saved_by, agreement_id, saved_at, updated_at)
+      VALUES (${gym.id}, ${entryId}, 'production', ${acct.merchantId}, ${customerId}, ${cardId}, 'VISA', '1111', 12, 2031, 'desk', ${gym.owner.userId}, ${agreed?.id ?? null}, now(), now())`;
+    square.card(cardId, acct.merchantId, customerId, "pays");
+    return cardId;
+  };
+  /** The membership moved a month back, so its second month's bill falls due today; the run opens it. */
+  const monthOn = async (gym: Gym, h: Holder) => {
+    await sql`UPDATE gym_held_memberships SET starts_on = (starts_on - interval '1 month')::date WHERE gym_id = ${gym.id} AND id = ${h.membershipId}`;
+    await sql`UPDATE gym_member_bills SET due_on = (due_on - interval '1 month')::date, covers_from = (covers_from - interval '1 month')::date, covers_to = (covers_to - interval '1 month')::date WHERE gym_id = ${gym.id} AND held_membership_id = ${h.membershipId}`;
+    await openDueBills({ sql, log: quiet }, { now: clock, gymIds: [gym.id] });
+  };
+  const chargedFrom = (cardId: string) => square.charged.filter((p) => p.cardId === cardId);
+
+  it("the card on file is never charged while a page is open, nor for a bill a page may have paid; the Terminal waits too", async () => {
+    // Midday in Austin: the worker charges a card from 6 in the morning on the gym's clock.
+    clock = new Date();
+    clock.setUTCHours(18, 0, 0, 0);
+    const gym = await makeGym("App Pay Card");
+    const acct = account(`APK${uniq().slice(-6)}`);
+    await connect(gym, acct);
+    const typeId = await typeOf(gym);
+    const tara = await owing(gym, typeId, "Tara Card");
+    const taraApp = await signedIn("Tara Card");
+    await inApp(gym, taraApp, tara.entryId);
+    // Her first month paid at the desk; her second falls due today, with a card on file the worker charges by itself.
+    expect((await byHand(gym, tara)).statusCode).toBe(200);
+    await monthOn(gym, tara);
+    const card = await cardFor(gym, tara.entryId, acct);
+    const owed = (await held(gym, gym.owner, tara.entryId)).memberships[0]?.billing?.pay;
+    expect(owed).toMatchObject({ periodIndex: 1, leftMinor: 4999 });
+
+    // Her page open: the worker's minute charges nothing; staff's Charge card on file and Take payment on Terminal wait.
+    const page = await pay(gym, taraApp, tara, { periodIndex: 1 });
+    await work([gym.id]);
+    expect(chargedFrom(card)).toEqual([]);
+    const box = terminalPaymentsResponseSchema.parse(JSON.parse((await send("GET", `${entryUrl(gym, tara.entryId)}/terminal-payments`, gym.owner.cookies)).body));
+    const staffCharge = await send("POST", `${entryUrl(gym, tara.entryId)}/memberships/${tara.membershipId}/card-charge`, gym.owner.cookies, {
+      requestKey: randomUUID(),
+      periodIndex: 1,
+      amountMinor: 4999,
+      cardRef: box.cardOnFile?.ref ?? "",
+    });
+    expect(staffCharge.statusCode, staffCharge.body).toBe(409);
+    expect(errorOf(staffCharge)).toBe("app_payment_open");
+    const desk = await terminalOf(gym, acct);
+    const onTerminal = await send("POST", `${entryUrl(gym, tara.entryId)}/memberships/${tara.membershipId}/terminal-payment`, gym.owner.cookies, {
+      terminalId: desk,
+      requestKey: randomUUID(),
+      periodIndex: 1,
+      amountMinor: 4999,
+    });
+    expect(onTerminal.statusCode, onTerminal.body).toBe(409);
+    expect(errorOf(onTerminal)).toBe("app_payment_open");
+
+    // Square takes another amount than asked: kept, not on the bill. Staff read what to check, the phone says so too, and the
+    // worker still charges nothing for that bill.
+    const link = linksOf(acct).find((l) => l.referenceId === page.payment.id);
+    square.payLink(link?.id ?? "", { tip_money: { amount: 500, currency: "USD" }, total_money: { amount: 5499, currency: "USD" } });
+    expect((await check(gym, taraApp, page.payment.id)).payment.state).toBe("check");
+    const view = (await held(gym, gym.owner, tara.entryId)).memberships[0]?.billing;
+    expect(view?.appPayment).toBeNull();
+    expect(view?.appCheck).toMatchObject({ why: "taken", amountMinor: 4999, payerName: "Tara Card" });
+    clock = new Date(clock.getTime() + APP_PAYMENT.idleMs + 1000);
+    await work([gym.id]);
+    expect(chargedFrom(card)).toEqual([]);
+    // Once staff have checked Square and taken it at the desk, the line goes.
+    const cash = await send("POST", `${entryUrl(gym, tara.entryId)}/memberships/${tara.membershipId}/payments`, gym.owner.cookies, { requestKey: randomUUID(), periodIndex: 1, amountMinor: 4999, method: "cash" });
+    expect(cash.statusCode, cash.body).toBe(200);
+    expect((await held(gym, gym.owner, tara.entryId)).memberships[0]?.billing?.appCheck).toBeNull();
+  });
+
+  it("a Terminal payment waiting, or the card being charged, keeps the member's Pay away", async () => {
+    clock = new Date();
+    const gym = await makeGym("App Pay Desk");
+    const acct = account(`APD${uniq().slice(-6)}`);
+    await connect(gym, acct);
+    const typeId = await typeOf(gym);
+    const ravi = await owing(gym, typeId, "Ravi Desk");
+    const raviApp = await signedIn("Ravi Desk");
+    await inApp(gym, raviApp, ravi.entryId);
+    const desk = await terminalOf(gym, acct);
+    const started = await send("POST", `${entryUrl(gym, ravi.entryId)}/memberships/${ravi.membershipId}/terminal-payment`, gym.owner.cookies, {
+      terminalId: desk,
+      requestKey: randomUUID(),
+      periodIndex: 0,
+      amountMinor: 4999,
+    });
+    expect(started.statusCode, started.body).toBe(200);
+    const atDesk = await payPress(gym, raviApp, ravi);
+    expect(atDesk.statusCode, atDesk.body).toBe(409);
+    expect(errorOf(atDesk)).toBe("app_payment_at_desk");
+    expect(linksOf(acct)).toHaveLength(0);
+    // The card on file being charged holds it the same way.
+    await sql`UPDATE gym_terminal_payments SET state = 'done', outcome = 'cancelled', finished_at = now() WHERE gym_id = ${gym.id}`;
+    const card = await cardFor(gym, ravi.entryId, acct);
+    await sql`
+      INSERT INTO gym_card_charges (gym_id, entry_id, held_membership_id, period_index, customer_id, card_id, brand, last4, amount_minor, currency, environment, account_id,
+                                    location_id, request_key, payment_key, state, by_schedule, started_by, started_at, checked_at, checking_until)
+      VALUES (${gym.id}, ${ravi.entryId}, ${ravi.membershipId}, 0, 'CUSTDESK', ${card}, 'VISA', '1111', 4999, 'USD', 'production', ${acct.merchantId},
+              ${acct.locations[0]?.id ?? ""}, ${randomUUID()}, ${randomUUID()}, 'charging', false, ${gym.owner.userId}, now(), now(), now())`;
+    expect(errorOf(await payPress(gym, raviApp, ravi))).toBe("app_payment_at_desk");
+  });
+
+  it("only exactly what was asked goes on the bill: another order, another location, two payments, or one that never finishes", async () => {
+    clock = new Date();
+    const gym = await makeGym("App Pay Exact");
+    const acct = account(`APE${uniq().slice(-6)}`);
+    await connect(gym, acct);
+    const typeId = await typeOf(gym);
+    const pia = await owing(gym, typeId, "Pia Exact");
+    const piaApp = await signedIn("Pia Exact");
+    await inApp(gym, piaApp, pia.entryId);
+    for (const [what, over, times] of [
+      ["another order", { order_id: "someotherorder" }, 1],
+      ["another location", { location_id: "LELSEWHERE" }, 1],
+      ["two payments", {}, 2],
+    ] as const) {
+      const page = await pay(gym, piaApp, pia);
+      square.payLink(linksOf(acct).find((l) => l.referenceId === page.payment.id)?.id ?? "", over, times);
+      expect((await check(gym, piaApp, page.payment.id)).payment.state, what).toBe("check");
+      expect(await paymentsOf(gym.id), what).toEqual([]);
+    }
+
+    // A payment Square never finishes, or one that FAILED on a page nobody closes: the page holds the membership no longer
+    // than a day, then the bill says to check Square, and the desk can take it.
+    for (const [what, status] of [
+      ["never finishes", "APPROVED"],
+      ["failed", "FAILED"],
+    ] as const) {
+      clock = new Date();
+      const page = await pay(gym, piaApp, pia);
+      square.payLink(linksOf(acct).find((l) => l.referenceId === page.payment.id)?.id ?? "", { status });
+      expect((await check(gym, piaApp, page.payment.id)).payment.state, what).toBe("open");
+      clock = new Date(clock.getTime() + APP_PAYMENT.giveUpMs + 60_000);
+      await work([gym.id]);
+      expect((await check(gym, piaApp, page.payment.id)).payment.state, what).toBe("check");
+      expect((await held(gym, gym.owner, pia.entryId)).memberships[0]?.billing?.appCheck, what).toMatchObject({ why: "unknown" });
+      expect((await held(gym, gym.owner, pia.entryId)).memberships[0]?.billing?.appPayment, what).toBeNull();
+    }
+    // A FAILED payment on a page the member leaves is no payment: the page closes and its order is cancelled.
+    clock = new Date();
+    const left = await pay(gym, piaApp, pia);
+    const leftLink = linksOf(acct).find((l) => l.referenceId === left.payment.id);
+    if (leftLink !== undefined) {
+      leftLink.paymentIds.push("failedpay1");
+      square.payments.set("failedpay1", { id: "failedpay1", status: "FAILED", amount_money: { amount: 4999, currency: "USD" }, order_id: leftLink.orderId, accountId: acct.merchantId });
+    }
+    expect((await close(gym, piaApp, left.payment.id)).payment.state).toBe("closed");
+    expect(leftLink?.orderState).toBe("CANCELED");
+  });
+
+  it("three presses at once open one page; another gym's staff cannot close it; many members share one address", async () => {
+    clock = new Date();
+    const gymA = await makeGym("App Pay Race A");
+    const gymB = await makeGym("App Pay Race B");
+    const acct = account(`APX${uniq().slice(-6)}`);
+    await connect(gymA, acct);
+    await connect(gymB, account(`APY${uniq().slice(-6)}`));
+    const typeId = await typeOf(gymA);
+    const ola = await owing(gymA, typeId, "Ola Race");
+    const olaApp = await signedIn("Ola Race");
+    await inApp(gymA, olaApp, ola.entryId);
+    const presses = await Promise.all([payPress(gymA, olaApp, ola), payPress(gymA, olaApp, ola), payPress(gymA, olaApp, ola)]);
+    expect(presses.map((r) => r.statusCode)).toEqual([200, 200, 200]);
+    expect(new Set(presses.map((r) => appPaymentResponseSchema.parse(JSON.parse(r.body)).payment.id)).size).toBe(1);
+    expect((await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM gym_app_payments WHERE gym_id = ${gymA.id} AND state = 'open'`)[0]?.n).toBe(1);
+    // Any page Square made for a press that lost is deleted there: one can be paid.
+    expect(linksOf(acct).filter((l) => !l.deleted)).toHaveLength(1);
+
+    // Another gym's owner, on A's address or their own, reaches nothing.
+    for (const gym of [gymA, gymB]) {
+      const res = await staffClose(gym, gymB.owner, ola);
+      expect(res.statusCode, res.body).toBe(404);
+    }
+    expect((await sql<{ close_wanted_at: Date | null }[]>`SELECT close_wanted_at FROM gym_app_payments WHERE gym_id = ${gymA.id} AND state = 'open'`)[0]?.close_wanted_at).toBeNull();
+
+    // One gym's wi-fi address: the address's allowance is many members' (a member's own is 30 an hour).
+    const shared = "10.77.0.1";
+    for (let i = 0; i < 2000; i++) await redis.incrWithTtl(`rl:app_payment:ip:${shared}`, 3600);
+    for (const name of ["Ann Wifi", "Bo Wifi", "Cy Wifi"]) {
+      const who = await owing(gymA, typeId, name);
+      const app = await signedIn(name);
+      await inApp(gymA, app, who.entryId);
+      const res = await sendFrom(shared, "POST", payUrl(gymA), app.cookies, { requestKey: randomUUID(), membershipId: who.membershipId, periodIndex: 0, amountMinor: 4999 });
+      expect(res.statusCode, `${name} ${res.body}`).toBe(200);
+    }
+    // One member who used up their own is refused, and the next member at the same address is not.
+    for (let i = 0; i < 30; i++) await redis.incrWithTtl(`rl:app_payment:id:${olaApp.userId}`, 3600);
+    const spent = await sendFrom(shared, "POST", payUrl(gymA), olaApp.cookies, { requestKey: randomUUID(), membershipId: ola.membershipId, periodIndex: 0, amountMinor: 4999 });
+    expect(spent.statusCode).toBe(429);
+  });
+
+  it("Close payment page never says nothing was paid when Square may have taken money, and Delete permanently waits", async () => {
+    clock = new Date();
+    const gym = await makeGym("App Pay Honest");
+    const acct = account(`APH${uniq().slice(-6)}`);
+    await connect(gym, acct);
+    const typeId = await typeOf(gym);
+    const una = await owing(gym, typeId, "Una Honest");
+    const unaApp = await signedIn("Una Honest");
+    await inApp(gym, unaApp, una.entryId);
+    // Paid with another amount at the very moment staff close it.
+    const page = await pay(gym, unaApp, una);
+    const link = linksOf(acct).find((l) => l.referenceId === page.payment.id);
+    square.linkState.beforeLinkDelete = () => {
+      square.payLink(link?.id ?? "", { tip_money: { amount: 100, currency: "USD" }, total_money: { amount: 5099, currency: "USD" } });
+    };
+    const res = await staffClose(gym, gym.owner, una);
+    expect(appPaymentCloseResponseSchema.parse(JSON.parse(res.body)).outcome).toBe("check");
+    expect((await held(gym, gym.owner, una.entryId)).memberships[0]?.billing?.appCheck).toMatchObject({ why: "taken", amountMinor: 4999 });
+
+    // A past member paying a bill they left owing: Delete permanently waits for their page to close.
+    const vic = await owing(gym, typeId, "Vic Past");
+    const vicApp = await signedIn("Vic Past");
+    await inApp(gym, vicApp, vic.entryId);
+    const open = await pay(gym, vicApp, vic);
+    await sql`UPDATE gym_member_list_entries SET former_at = now() WHERE gym_id = ${gym.id} AND id = ${vic.entryId}`;
+    const deleted = await send("DELETE", `/v1/orgs/${gym.id}/member-list/former/${vic.entryId}`, gym.owner.cookies);
+    expect(deleted.statusCode, deleted.body).toBe(409);
+    expect(errorOf(deleted)).toBe("app_payment_open");
+    await close(gym, vicApp, open.payment.id);
+    expect((await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM gym_member_list_entries WHERE id = ${vic.entryId}`)[0]?.n).toBe(1);
   });
 });

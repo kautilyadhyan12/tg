@@ -44,8 +44,9 @@ import type { SquareSettings } from "./settings.js";
 
 export const APP_PAYMENT = {
   openMs: APP_PAYMENT_LIMITS.openMinutes * 60_000,
-  /** One request asks Square about a page at a time, for at most this long. */
-  leaseMs: 20_000,
+  /** One request asks Square about a page at a time, for at most this long: a look makes up to four calls of
+   *  `SQUARE_TIMEOUT_MS` each, and more where an order names several payments. */
+  leaseMs: 60_000,
   /** Close waits this long for a request already asking Square, then leaves its mark for it. */
   closeWaitMs: 2_000,
   /** Nobody has asked for this long: the worker asks. */
@@ -162,32 +163,42 @@ function exactly(row: pays.AppPayRow, payment: SquarePayment): boolean {
   );
 }
 
-/** Square says the order was paid: its payment is read and, when it is exactly what was asked, recorded on the bill;
- *  anything else Square took is kept as not recorded. Null to ask again later. */
-async function paid(a: Asking, order: SquareOrder): Promise<"paid" | "not_recorded" | null> {
+/** What Square's order says was paid, read from its payments: `none` where no payment took money (none named, or each
+ *  FAILED or CANCELED, so the page can still close); `wait` while one is on its way or cannot be read; `done` once a
+ *  payment Square took is recorded on the bill, or, where it is not exactly what was asked, kept as not recorded. */
+async function settle(a: Asking, order: SquareOrder): Promise<"none" | "wait" | "done"> {
   const { deps, square, token, row } = a;
   const ids = (order.tenders ?? []).flatMap((t) => (t.payment_id == null ? [] : [t.payment_id]));
-  const [id] = ids;
-  if (id === undefined) return null;
-  const got = await square.api.getPayment(token, id);
-  if (got.kind !== "ok" || got.value.id !== id) return null;
-  const payment = got.value;
-  // On its way: asked again on the next look.
-  if (payment.status === "APPROVED" || payment.status === "PENDING") return null;
-  if (payment.status !== "COMPLETED") {
-    deps.log.error({ event: "square.app_payment_unfinished", gymId: row.gymId, status: payment.status }, "a paid order's payment is not completed");
-    return null;
+  if (ids.length === 0) return "none";
+  const read: SquarePayment[] = [];
+  for (const id of ids) {
+    const got = await square.api.getPayment(token, id);
+    if (got.kind !== "ok" || got.value.id !== id) return "wait";
+    read.push(got.value);
   }
+  // On its way: asked again on the next look.
+  if (read.some((p) => p.status === "APPROVED" || p.status === "PENDING")) return "wait";
+  const taken = read.filter((p) => p.status === "COMPLETED");
+  if (taken.length === 0) {
+    if (read.some((p) => p.status !== "FAILED" && p.status !== "CANCELED")) {
+      deps.log.error({ event: "square.app_payment_unknown_status", gymId: row.gymId }, "a payment page's order names a payment in a state nobody has placed");
+      return "wait";
+    }
+    return "none";
+  }
+  const [payment] = taken;
+  if (payment === undefined) return "none";
   const card = payment.card_details?.card;
   const cardSeen = card?.card_brand != null && card.last_4 != null ? { brand: card.card_brand, last4: card.last_4 } : null;
   const gym = await repo.readGym(deps.sql, row.gymId);
   const now = deps.now();
   const today = dayInTz(now, gym?.timezone ?? "UTC");
-  const refuse = ids.length !== 1 || !exactly(row, payment) ? "amount_differs" : undefined;
+  // One payment, exactly what was asked: anything else Square took is kept, never put on the bill.
+  const refuse = taken.length !== 1 || !exactly(row, payment) ? "amount_differs" : undefined;
   if (refuse !== undefined) deps.log.error({ event: "square.app_payment_unexpected", gymId: row.gymId }, "Square took another amount than a payment page asked");
-  const kept = await pays.recordPaid(deps.sql, { row, squarePaymentId: id, card: cardSeen, today, now, ...(refuse === undefined ? {} : { refuse }) });
+  const kept = await pays.recordPaid(deps.sql, { row, squarePaymentId: payment.id, card: cardSeen, today, now, ...(refuse === undefined ? {} : { refuse }) });
   if (kept?.outcome === "not_recorded") deps.log.error({ event: "square.app_payment_not_recorded", gymId: row.gymId }, "money taken in the app could not be recorded on its bill");
-  return kept?.outcome ?? null;
+  return "done";
 }
 
 /** One look at Square for a page this request holds: paid, closed, or still open. A page past its time, or one somebody
@@ -200,37 +211,27 @@ async function step(a: Asking): Promise<void> {
   if (read.kind === "ok") {
     const order = read.value;
     if (order.id !== row.orderId) return;
-    if ((order.tenders ?? []).some((t) => t.payment_id != null)) {
-      await paid(a, order);
-      return;
-    }
+    if ((await settle(a, order)) !== "none") return;
     if (order.state === "CANCELED") {
-      await pays.finish(deps.sql, row.id, "closed", now);
+      await pays.finish(deps.sql, row.gymId, row.id, "closed", now);
       return;
     }
-    if (!closing) return;
-  } else {
-    if (read.kind === "refused") deps.log.warn({ event: "square.app_payment_order_refused", gymId: row.gymId, status: read.status, code: read.code }, "Square refused a payment page's order");
-    if (now.getTime() - row.openedAt.getTime() >= APP_PAYMENT.giveUpMs) {
-      deps.log.error({ event: "square.app_payment_given_up", gymId: row.gymId }, "Square never said how a payment page ended");
-      await pays.finish(deps.sql, row.id, "no_answer", now);
-      return;
-    }
-    if (!closing) return;
+  } else if (read.kind === "refused") {
+    deps.log.warn({ event: "square.app_payment_order_refused", gymId: row.gymId, status: read.status, code: read.code }, "Square refused a payment page's order");
   }
+  if (!closing) return;
   const deleted = await square.api.deletePaymentLink(token, row.linkId);
   if (deleted.kind === "unavailable") return;
   // Square's answer to the delete is a doorbell: the order says how it ended.
   const after = await square.api.getOrder(token, row.orderId);
   if (after.kind !== "ok" || after.value.id !== row.orderId) return;
-  if ((after.value.tenders ?? []).some((t) => t.payment_id != null)) {
-    await paid(a, after.value);
-    return;
-  }
-  if (after.value.state === "CANCELED") await pays.finish(deps.sql, row.id, "closed", now);
+  if ((await settle(a, after.value)) !== "none") return;
+  if (after.value.state === "CANCELED") await pays.finish(deps.sql, row.gymId, row.id, "closed", now);
 }
 
-/** Ask Square about a page this request holds until `until`, then let it go. */
+/** Ask Square about a page this request holds until `until`, then let it go. A page Square has not said the end of within a
+ *  day of opening, whatever it answered meanwhile, is given up on (`no_answer`): it holds the membership no longer, and its
+ *  bill says to check Square before taking the payment again. */
 async function advance(deps: PaymentsDeps, square: SquareSettings, row: pays.AppPayRow, until: Date): Promise<void> {
   try {
     const now = deps.now();
@@ -238,12 +239,15 @@ async function advance(deps: PaymentsDeps, square: SquareSettings, row: pays.App
     if (token === null) {
       // The gym left that Square account: the page can no longer be read or closed from here.
       deps.log.warn({ event: "square.app_payment_unfollowed", gymId: row.gymId }, "a payment page's Square connection went while it was open");
-      await pays.finish(deps.sql, row.id, "gone", now);
+      await pays.finish(deps.sql, row.gymId, row.id, "gone", now);
       return;
     }
     await step({ deps, square, token, row, now });
+    if (now.getTime() - row.openedAt.getTime() >= APP_PAYMENT.giveUpMs && (await pays.finish(deps.sql, row.gymId, row.id, "no_answer", now))) {
+      deps.log.error({ event: "square.app_payment_given_up", gymId: row.gymId }, "Square never said how a payment page ended");
+    }
   } finally {
-    await pays.release(deps.sql, row.id, until);
+    await pays.release(deps.sql, row.gymId, row.id, until);
   }
 }
 
@@ -428,8 +432,8 @@ export async function closeAppPaymentByStaff(deps: PaymentsDeps, userId: string,
     await pays.staffClose(deps.sql, { gymId, id: found.id, entryId, membershipId, staffUserId: userId, now: deps.now() });
     await lookNow(deps, deps.square, gymId, found.id, APP_PAYMENT.closeWaitMs);
   }
-  const [row] = await deps.sql<{ state: string; outcome: string | null }[]>`SELECT state, outcome FROM gym_app_payments WHERE gym_id = ${gymId} AND id = ${found.id}`;
-  const outcome = row === undefined || row.state === "open" ? "waiting" : row.outcome === "paid" || row.outcome === "not_recorded" ? "paid" : "closed";
+  const ended = await pays.outcomeOf(deps.sql, gymId, found.id);
+  const outcome = ended === null ? "waiting" : ended === "paid" ? "paid" : pays.CHECK_OUTCOMES.includes(ended) ? "check" : "closed";
   return appPaymentCloseResponseSchema.parse({ outcome });
 }
 

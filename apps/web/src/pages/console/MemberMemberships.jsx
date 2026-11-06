@@ -106,6 +106,7 @@ import {
   waiveFeeWords,
   APP_CLOSE_BUTTON,
   APP_CLOSE_WORDS,
+  appCheckNotice,
   appPayingNotice,
 } from './memberBillsView';
 
@@ -1573,9 +1574,15 @@ export default function MemberMemberships({
     const said = appClose !== null && appClose.membershipId === m.id ? appClose.said : null;
     // Once Square has said how it ended, the line goes at once, before the page reads again.
     const open = said !== null && appClose.ended === true ? null : appPayingNotice(m, gym?.timezone ?? null);
-    if (open === null && said === null) return null;
+    const check = appCheckNotice(m);
+    if (open === null && said === null && check === null) return null;
     return (
       <div className="flex flex-col items-start gap-1.5 pt-1" data-testid="held-app-payment">
+        {check !== null ? (
+          <span className="c-s13 c-w5" style={{ color: 'var(--bad)' }} data-testid="held-app-check">
+            {check}
+          </span>
+        ) : null}
         {open !== null ? (
           <span className="c-s13 c-w5" style={{ color: 'var(--warn)' }}>
             {open.line}

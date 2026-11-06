@@ -110,12 +110,16 @@ const COLUMNS = (sql: SqlOrTx) =>
       a.close_wanted_at, a.close_wanted_by, a.square_payment_id, a.finished_at,
       (SELECT p.receipt_number FROM gym_member_payments p WHERE p.gym_id = a.gym_id AND p.id = a.member_payment_id) AS receipt_number`;
 
-/** How a press reads to the member: `open` while the page can be paid; `paid` on the bill; `closed` with nothing paid,
- *  however it ended (Square never answering is `closed` too: the page was given up on); `not_recorded`. */
+/** Ended with money Square may have taken that is not on the bill: Square took another amount or the bill could not
+ *  take it, the gym left that Square account while the page was open, or Square never said how it ended. */
+export const CHECK_OUTCOMES: readonly AppPayOutcome[] = ["not_recorded", "gone", "no_answer"];
+
+/** How a press reads to the member: `open` while the page can be paid; `paid` on the bill; `closed` with nothing paid;
+ *  `check` where Square may have taken money that is not on the bill. */
 export function stateOf(row: Pick<AppPayRow, "state" | "outcome">): AppPaymentState {
   if (row.state === "open") return "open";
   if (row.outcome === "paid") return "paid";
-  return row.outcome === "not_recorded" ? "not_recorded" : "closed";
+  return row.outcome !== null && CHECK_OUTCOMES.includes(row.outcome) ? "check" : "closed";
 }
 
 /** The press this key made, at this gym. */
@@ -242,7 +246,7 @@ export async function writeOpen(sql: Sql, s: NewAppPay): Promise<OpenOutcome> {
       VALUES (${s.id}, ${s.gymId}, ${s.entryId}, ${s.membershipId}, ${s.periodIndex}, ${s.amountMinor}, ${check.currency}, ${s.environment},
               ${s.accountId}, ${s.locationId}, ${s.requestKey}, ${s.openedBy}, ${s.now}, ${s.closesAt}, ${s.linkKey}, ${s.linkId}, ${s.orderId},
               ${s.url}, 'open', ${s.now})`;
-    const [written] = await tx<RawPay[]>`SELECT ${COLUMNS(tx)} FROM gym_app_payments a WHERE a.id = ${s.id}`;
+    const [written] = await tx<RawPay[]>`SELECT ${COLUMNS(tx)} FROM gym_app_payments a WHERE a.gym_id = ${s.gymId} AND a.id = ${s.id}`;
     if (written === undefined) throw new Error("a payment page just written was not read back");
     return { kind: "new", row: toRow(written) };
   });
@@ -291,8 +295,8 @@ export async function claimIdle(
 }
 
 /** Let go of it, while this request still holds it. */
-export async function release(sql: SqlOrTx, id: string, until: Date): Promise<void> {
-  await sql`UPDATE gym_app_payments SET checking_until = NULL WHERE id = ${id} AND checking_until = ${until}`;
+export async function release(sql: SqlOrTx, gymId: string, id: string, until: Date): Promise<void> {
+  await sql`UPDATE gym_app_payments SET checking_until = NULL WHERE gym_id = ${gymId} AND id = ${id} AND checking_until = ${until}`;
 }
 
 /** Somebody asked for it closed: kept, so whichever request asks Square next deletes the page first. The first reason
@@ -323,10 +327,10 @@ export async function staffClose(sql: Sql, s: { gymId: string; id: string; entry
 }
 
 /** Ended with no money recorded. False when it was not open any more. */
-export async function finish(sql: SqlOrTx, id: string, outcome: "closed" | "gone" | "no_answer", at: Date): Promise<boolean> {
+export async function finish(sql: SqlOrTx, gymId: string, id: string, outcome: "closed" | "gone" | "no_answer", at: Date): Promise<boolean> {
   const rows = await sql<{ id: string }[]>`
     UPDATE gym_app_payments SET state = 'done', outcome = ${outcome}, finished_at = ${at}, checking_until = NULL
-    WHERE id = ${id} AND state = 'open'
+    WHERE gym_id = ${gymId} AND id = ${id} AND state = 'open'
     RETURNING id`;
   return rows.length === 1;
 }
@@ -344,7 +348,7 @@ export async function recordPaid(
     await lockGym(tx, row.gymId);
     const holder = await holderOf(tx, row.gymId, row.membershipId);
     if (holder !== null) await lockedEntry(tx, row.gymId, holder);
-    const [still] = await tx<{ id: string }[]>`SELECT id FROM gym_app_payments WHERE id = ${row.id} AND state = 'open' FOR UPDATE`;
+    const [still] = await tx<{ id: string }[]>`SELECT id FROM gym_app_payments WHERE gym_id = ${row.gymId} AND id = ${row.id} AND state = 'open' FOR UPDATE`;
     if (still === undefined) return null;
     const done =
       holder === null || p.refuse !== undefined
@@ -368,7 +372,7 @@ export async function recordPaid(
       await tx`
         UPDATE gym_app_payments SET state = 'done', outcome = 'paid', square_payment_id = ${p.squarePaymentId}, member_payment_id = ${done.paymentId},
                card_brand = ${p.card?.brand ?? null}, card_last4 = ${p.card?.last4 ?? null}, entry_id = ${holder}, finished_at = ${p.now}, checking_until = NULL
-        WHERE id = ${row.id}`;
+        WHERE gym_id = ${row.gymId} AND id = ${row.id}`;
       await insertAudit(tx, {
         actorUserId: row.openedBy,
         gymId: row.gymId,
@@ -382,7 +386,7 @@ export async function recordPaid(
     await tx`
       UPDATE gym_app_payments SET state = 'done', outcome = 'not_recorded', square_payment_id = ${p.squarePaymentId},
              card_brand = ${p.card?.brand ?? null}, card_last4 = ${p.card?.last4 ?? null}, finished_at = ${p.now}, checking_until = NULL
-      WHERE id = ${row.id}`;
+      WHERE gym_id = ${row.gymId} AND id = ${row.id}`;
     await insertAudit(tx, {
       actorUserId: row.openedBy,
       gymId: row.gymId,
@@ -410,6 +414,62 @@ export async function forgetDone(sql: Sql, before: Date, gymIds: readonly string
       AND (${gymIds === null}::boolean OR gym_id = ANY(${[...(gymIds ?? [])]}::uuid[]))
     RETURNING id`;
   return rows.length;
+}
+
+/** How a page ended, read afresh: null while it is open, or where there is no such page at the gym. */
+export async function outcomeOf(sql: SqlOrTx, gymId: string, id: string): Promise<AppPayOutcome | null> {
+  const [row] = await sql<{ outcome: string | null }[]>`SELECT outcome FROM gym_app_payments WHERE gym_id = ${gymId} AND id = ${id}`;
+  return OUTCOMES.find((o) => o === row?.outcome) ?? null;
+}
+
+export interface AppCheckRow {
+  periodIndex: number;
+  amountMinor: number;
+  /** The day it ended, on the gym's calendar. */
+  on: string;
+  why: "taken" | "unknown";
+  payerName: string | null;
+}
+
+/** For each of these memberships, the newest page that ended needing a check (`CHECK_OUTCOMES`), and who pays for the
+ *  person holding it. The caller shows it while that bill is the one owed. */
+export async function checksOnMemberships(sql: SqlOrTx, gymId: string, membershipIds: readonly string[]): Promise<Map<string, AppCheckRow>> {
+  const found = new Map<string, AppCheckRow>();
+  if (membershipIds.length === 0) return found;
+  const rows = await sql<{ held_membership_id: string; period_index: number; amount_minor: number; on: string; outcome: string; payer_name: string | null }[]>`
+    SELECT DISTINCT ON (a.held_membership_id) a.held_membership_id, a.period_index, a.amount_minor, a.outcome,
+           ((a.finished_at AT TIME ZONE g.timezone)::date)::text AS on,
+           COALESCE((SELECT pe.full_name FROM gym_member_payers l
+                     JOIN gym_member_list_entries pe ON pe.gym_id = l.gym_id AND pe.id = l.payer_entry_id
+                     WHERE l.gym_id = h.gym_id AND l.entry_id = h.entry_id), e.full_name) AS payer_name
+    FROM gym_app_payments a
+    JOIN gyms g ON g.id = a.gym_id
+    JOIN gym_held_memberships h ON h.gym_id = a.gym_id AND h.id = a.held_membership_id
+    LEFT JOIN gym_member_list_entries e ON e.gym_id = h.gym_id AND e.id = h.entry_id
+    WHERE a.gym_id = ${gymId} AND a.state = 'done' AND a.outcome IN ('not_recorded','gone','no_answer')
+      AND a.held_membership_id = ANY(${[...membershipIds]}::uuid[])
+    ORDER BY a.held_membership_id, a.finished_at DESC`;
+  for (const r of rows) {
+    found.set(r.held_membership_id, {
+      periodIndex: r.period_index,
+      amountMinor: r.amount_minor,
+      on: r.on,
+      why: r.outcome === "not_recorded" ? "taken" : "unknown",
+      payerName: r.payer_name === "" ? null : r.payer_name,
+    });
+  }
+  return found;
+}
+
+/** Whether a page is open on any membership these records hold: Delete permanently waits for it, as what Square took would
+ *  have no bill to go on. */
+export async function anyOpenOfEntries(tx: TransactionSql, gymId: string, entryIds: readonly string[]): Promise<boolean> {
+  if (entryIds.length === 0) return false;
+  const [row] = await tx<{ id: string }[]>`
+    SELECT a.id FROM gym_app_payments a
+    JOIN gym_held_memberships h ON h.gym_id = a.gym_id AND h.id = a.held_membership_id
+    WHERE a.gym_id = ${gymId} AND a.state = 'open' AND h.entry_id = ANY(${[...entryIds]}::uuid[]) LIMIT 1`;
+  return row !== undefined;
 }
 
 /** The card each of these payments was paid with in the app, for the person's page. */

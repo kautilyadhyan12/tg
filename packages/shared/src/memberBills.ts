@@ -15,7 +15,7 @@ import { z } from "zod";
 import { SALES_TAX_PCM_MAX, TAX_RATES_MAX } from "./memberships.js";
 import { cardDeclinedSchema, cardSeenSchema, cardUncheckedSchema } from "./cardCharges.js";
 import { chargeStopSchema, chargebackSeenSchema } from "./chargebacks.js";
-import { appPaymentOpenSchema } from "./appPayments.js";
+import { appPaymentCheckSchema, appPaymentOpenSchema } from "./appPayments.js";
 
 export const MEMBER_BILL_STATUSES = ["open", "paid", "void", "refunded"] as const;
 export const memberBillStatusSchema = z.enum(MEMBER_BILL_STATUSES);
@@ -415,6 +415,8 @@ export const memberBillingSchema = z
     /** A member's payment page open on Square for `pay`'s bill (18k-ii-a): nothing else is paid, voided or changed on the
      *  membership until it closes. */
     appPayment: appPaymentOpenSchema.nullable().default(null),
+    /** A member's page that ended with money Square may have taken and that is not on `pay`'s bill (18k-ii-a). */
+    appCheck: appPaymentCheckSchema.nullable().default(null),
   })
   .strict();
 export type MemberBilling = z.infer<typeof memberBillingSchema>;

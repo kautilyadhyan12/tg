@@ -384,11 +384,17 @@ export function fakeSquare() {
     total_money: { amount: linkState.linkTotal ?? l.amount, currency: l.currency },
     ...(l.paymentIds.length === 0 ? {} : { tenders: l.paymentIds.map((id) => ({ id, payment_id: id, amount_money: { amount: l.amount, currency: l.currency }, type: "CARD" })) }),
   });
-  /** The member pays the page on Square's site: refused (false) once it is deleted or paid. `over` changes what Square took. */
-  const payLink = (linkId: string, over: Partial<SquarePayment> = {}): boolean => {
+  /** The member pays the page on Square's site: refused (false) once it is deleted or paid. `over` changes what Square took;
+   *  `times`: how many payments the order names. */
+  const payLink = (linkId: string, over: Partial<SquarePayment> = {}, times = 1): boolean => {
     const l = links.get(linkId);
     if (l === undefined) throw new Error("no such payment page at the fake Square");
     if (l.deleted || l.orderState !== "DRAFT") return false;
+    for (let i = 0; i < times; i++) payOnce(l, over);
+    l.orderState = "OPEN";
+    return true;
+  };
+  const payOnce = (l: FakeLink, over: Partial<SquarePayment>): void => {
     n += 1;
     const id = `apppay${String(n)}${randomBytes(4).toString("hex")}`;
     payments.set(id, {
@@ -404,8 +410,6 @@ export function fakeSquare() {
       accountId: l.accountId,
     });
     l.paymentIds.push(id);
-    l.orderState = "OPEN";
-    return true;
   };
   const linkApi: Pick<SquareApi, "createPaymentLink" | "deletePaymentLink" | "getOrder"> = {
     createPaymentLink(token, l) {

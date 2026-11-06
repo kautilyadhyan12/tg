@@ -561,7 +561,10 @@ const chargesNow = (sql: SqlOrTx) => sql`
       d.hour >= 6
       AND NOT EXISTS (SELECT 1 FROM gym_card_charges x WHERE x.gym_id = b.gym_id AND x.held_membership_id = b.held_membership_id AND x.state = 'charging')
       AND NOT EXISTS (SELECT 1 FROM gym_terminal_payments t WHERE t.gym_id = b.gym_id AND t.held_membership_id = b.held_membership_id AND t.state = 'waiting')
-      AND NOT EXISTS (SELECT 1 FROM gym_app_payments a WHERE a.gym_id = b.gym_id AND a.held_membership_id = b.held_membership_id AND a.state = 'open')`;
+      AND NOT EXISTS (SELECT 1 FROM gym_app_payments a WHERE a.gym_id = b.gym_id AND a.held_membership_id = b.held_membership_id AND a.state = 'open')
+      -- Nor a bill a member's page in the app may have paid already: its bill says to check Square first.
+      AND NOT EXISTS (SELECT 1 FROM gym_app_payments a WHERE a.gym_id = b.gym_id AND a.held_membership_id = b.held_membership_id
+                      AND a.period_index = b.period_index AND a.outcome IN ('not_recorded','gone','no_answer'))`;
 
 /** The card the app would charge for the bill's membership: its payer's, in the connected account. */
 const payerCard = (sql: SqlOrTx) => sql`
