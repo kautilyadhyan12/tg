@@ -7,7 +7,6 @@ import * as Location from "expo-location";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   HEIGHT_MAP_CREDITS,
-  HEIGHT_MAP_SHORT_CREDIT,
   RUN_MAX_POINTS,
   geodesicMetres,
   runSums,
@@ -677,31 +676,26 @@ function Summary({ run, units, kg, onSaved }: { run: LiveRun; units: Units; kg: 
           <Tile value={pace(sums.movingS, sums.distanceM < 50 ? 0 : sums.distanceM, units)} label={`Avg pace ${paceWord(units)}`} />
           <Tile value={String(sums.kcal)} label="Calories" />
         </View>
-        <View style={styles.tile}>
+        <View style={[styles.tile, styles.climbTile]}>
           <Txt style={styles.tileValue} fit numberOfLines={1}>
             {climbWords(climb, units)}
           </Txt>
           <Txt kind="small" colour="textFaint">
             Elevation gain
           </Txt>
+          {/* The maps' credits behind a small (i), as the run map's own (Kd, 37b-ii's click-through). */}
           {climb.kind === "done" ? (
-            <View style={styles.creditRow}>
-              <Txt kind="tiny" style={styles.grow}>
-                {HEIGHT_MAP_SHORT_CREDIT}
-              </Txt>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Elevation credits"
-                hitSlop={10}
-                onPress={() => {
-                  setCredits(true);
-                }}
-              >
-                <Txt kind="tiny" colour="textSoft" style={styles.link}>
-                  Credits
-                </Txt>
-              </Pressable>
-            </View>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Elevation credits"
+              hitSlop={10}
+              onPress={() => {
+                setCredits(true);
+              }}
+              style={styles.creditButton}
+            >
+              <Icon name="info" size={18} />
+            </Pressable>
           ) : null}
         </View>
         {pausedS > 0 ? (
@@ -915,10 +909,23 @@ export const openAppSettings = (): void => {
 
 const styles = StyleSheet.create({
   grow: { flex: 1 },
-  creditRow: { flexDirection: "row", alignItems: "flex-start", gap: 8, paddingTop: 4 },
+  creditButton: {
+    position: "absolute",
+    top: 12,
+    right: 12,
+    width: 32,
+    height: 32,
+    borderRadius: sizes.round,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colours.veil,
+    borderWidth: 1,
+    borderColor: colours.grab,
+  },
+  // Room on the right for the (i), so a long number never runs under it.
+  climbTile: { paddingRight: 56 },
   creditList: { gap: 12 },
   shrink: { flexShrink: 1 },
-  link: { textDecorationLine: "underline" },
   between: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   dim: { color: colours.textDim },
   pressed: { opacity: 0.85 },

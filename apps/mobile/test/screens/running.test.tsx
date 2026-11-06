@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
 import { AppState, Linking } from "react-native";
 import type { StyleSpecification } from "@maplibre/maplibre-react-native";
-import { HEIGHT_MAP_CREDITS, HEIGHT_MAP_SHORT_CREDIT, OPENFREEMAP, RUN_MAX_POINTS, runSums, saveRunRequestSchema, type MapSource, type RunClimb, type RunPoint, type SaveRunRequest } from "@app/shared";
+import { HEIGHT_MAP_CREDITS, OPENFREEMAP, RUN_MAX_POINTS, runSums, saveRunRequestSchema, type MapSource, type RunClimb, type RunPoint, type SaveRunRequest } from "@app/shared";
 import { App } from "../../src/App";
 import { resetMapSource } from "../../src/screens/running/mapSource";
 import { RUN_BAR_ROOM } from "../../src/screens/running/RunLayer";
@@ -1048,10 +1048,10 @@ describe("Elevation gain on the summary (37b-ii)", () => {
     expect(await screen.findByText("92 ft")).toBeTruthy();
   });
 
-  it("with the map's credit under the number, and Credits opens every line its licences ask for", async () => {
+  it("with a small (i) beside the number, as the map's, that opens every line the maps' licences ask for", async () => {
     const s = runServer();
     await toSummary(s);
-    expect(await screen.findByText(HEIGHT_MAP_SHORT_CREDIT)).toBeTruthy();
+    expect(await screen.findByText("28 m")).toBeTruthy();
     await fireEvent.press(screen.getByRole("button", { name: "Elevation credits" }));
     expect(await screen.findByText("Elevation data")).toBeTruthy();
     for (const line of HEIGHT_MAP_CREDITS) expect(screen.getByText(line)).toBeTruthy();
@@ -1068,7 +1068,6 @@ describe("Elevation gain on the summary (37b-ii)", () => {
       expect(s.climbAsks).toHaveLength(1);
     });
     expect(screen.getByText("--")).toBeTruthy();
-    expect(screen.queryByText(HEIGHT_MAP_SHORT_CREDIT)).toBeNull();
     expect(screen.queryByRole("button", { name: "Elevation credits" })).toBeNull();
   });
 

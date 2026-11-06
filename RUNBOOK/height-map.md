@@ -70,6 +70,6 @@ as before. Delete a square's `.none` files to have it asked again.
 
 `HEIGHT_MAP_CREDITS` in `packages/shared/src/runClimb.ts` holds every line both licences ask for: the
 Copernicus WorldDEM-30 licence's Article 6(b) and 6(c), word for word, and the Mapzen tiles' list
-(`github.com/tilezen/joerd/blob/master/docs/attribution.md`). The run's summary shows a short line under
-the number and the whole list behind Credits. The Terms (Stage 5 item 21) also carry Copernicus's
+(`github.com/tilezen/joerd/blob/master/docs/attribution.md`). The run's summary shows a small (i) beside the
+number, as the run map's own, that opens the whole list. The Terms (Stage 5 item 21) also carry Copernicus's
 sentence that its organisations "do not incur any liability for any use of the Copernicus WorldDEM-30".

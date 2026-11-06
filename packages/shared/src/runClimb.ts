@@ -213,9 +213,6 @@ export function heightTileName(lat: number, lng: number): string {
 }
 export const HEIGHT_TILE_NAME = /^Copernicus_DSM_COG_10_[NS]\d{2}_00_[EW]\d{3}_00_DEM$/;
 
-/** Under a run's elevation gain, the short line; Credits beside it opens HEIGHT_MAP_CREDITS. */
-export const HEIGHT_MAP_SHORT_CREDIT = "Elevation: Copernicus, U.S. Geological Survey and others";
-
 /** What each map's licence asks to be shown where heights made from it are: the Copernicus
  *  WorldDEM-30 licence's Article 6(b) and 6(c), word for word, and the Mapzen terrain tiles' own list
  *  of required attribution (github.com/tilezen/joerd, docs/attribution.md, read 2026-11-06). */
