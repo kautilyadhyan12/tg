@@ -71,6 +71,7 @@ import { refuseMethodElsewhere } from "../paymentMethods.js";
 import { endMembershipBookings, membershipBookingsAsk } from "../classes/bookingChanges.js";
 import { endingPerson, type BookingsAnswer } from "../classes/service.js";
 import { remindersOfRecord } from "./renewalReminders.js";
+import { keepOldPrice as keepRaise, raisesOfRecord } from "./priceRaises.js";
 import * as repo from "./heldRepo.js";
 import * as billsRepo from "./billsRepo.js";
 import * as changeRepo from "./changeRepo.js";
@@ -408,7 +409,7 @@ async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: 
   const changeOf = (row: repo.HeldRow): MemberBilling["change"] => {
     if (list.past || !list.inUse.some((r) => r.id === row.id)) return null;
     if (replaced.has(row.id)) return { ok: false, reason: "changed_already" };
-    const from = changeFrom(row.membership, row.priceMinor, list.bills.filter((b) => b.membershipId === row.id).map(changeRepo.changeBillFacts), today);
+    const from = changeFrom(row.membership, (index) => repo.periodPriceMinor(row, index), list.bills.filter((b) => b.membershipId === row.id).map(changeRepo.changeBillFacts), today);
     return from.ok ? { ok: true, creditMinor: from.creditMinor, daysLeft: from.daysLeft, nextOn: from.nextOn } : { ok: false, reason: from.reason };
   };
   const changedTo = (id: string) => list.changes.find((c) => c.oldId === id && c.newStatus !== "cancelled");
@@ -436,7 +437,8 @@ async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: 
       typeId: row.typeId,
       typeName: row.typeName,
       kind: row.membership.kind,
-      priceMinor: row.priceMinor,
+      // A raise is its price once its first payment's day has come (18w); before it the page says it is to come.
+      priceMinor: repo.priceNowMinor(row, today),
       currency: row.currency,
       termCount: row.membership.termCount,
       termUnit: row.membership.termUnit,
@@ -514,6 +516,7 @@ async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: 
     agreementInUse: anyAsked,
     unsignedStopsBookings: anyAsked && unsignedStops,
     renewalReminders: list.past ? [] : await remindersOfRecord(deps.sql, deps.emailKey ?? null, gymId, entryId, today),
+    priceRaises: list.past ? [] : await raisesOfRecord(deps.sql, deps.emailKey ?? null, gymId, entryId, today),
     earlierNotShown: over.length - shown.length + stored,
     types: list.types,
     listed: list.listed,
@@ -1046,6 +1049,18 @@ export async function voidMemberFeePayment(
   const { today, now } = await requireBilling(deps, userId, gymId);
   throwOnFeeFailure(await feesRepo.voidFeePayment(deps.sql, { gymId, entryId, membershipId, billId, paymentId, reason: req.reason, actorUserId: userId, now }));
   return await readOr404(deps, gymId, entryId, today, true);
+}
+
+/** Keep the old price (18w): the raise of one of their memberships is taken off, while nothing has been charged at it
+ *  and its email is not on its way. Whoever may change the price list, on a person's page. */
+export async function keepOldPrice(deps: HeldDeps, userId: string, gymId: string, entryId: string, membershipId: string): Promise<HeldMembershipsResponse> {
+  const { org, privileges } = await requireWritablePrivilege(deps, gymId, userId, "members.confirm");
+  if (!privileges.includes("memberships.manage")) throw new OrgsError(403, "forbidden", "Your role doesn't allow that.");
+  const now = deps.now();
+  const kept = await keepRaise(deps.sql, { gymId, entryId, heldId: membershipId, now });
+  if (kept.kind === "not_found") throw new OrgsError(404, "price_raise_not_found", "That price change was not found. It may have started already.");
+  if (kept.kind === "emailing") throw new OrgsError(409, "price_raise_emailing", "The email about the new price is being sent right now, so the new price stays.");
+  return await readOr404(deps, gymId, entryId, dayInTz(now, org.timezone), privileges.includes(BILLING));
 }
 
 /** Takes back a mark that has no payment behind it. A count that would go up is

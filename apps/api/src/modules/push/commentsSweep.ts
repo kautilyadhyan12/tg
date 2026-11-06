@@ -84,6 +84,7 @@ export async function sendCommentNotifications(deps: {
       }
     }
     state.again = failed && !state.reached;
+    if (state.reached) await repo.noteReached(sql, pair.userId, now).catch(onError);
   };
 
   const handle = async (pair: comments.CommentPair): Promise<void> => {

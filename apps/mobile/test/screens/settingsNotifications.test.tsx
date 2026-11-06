@@ -2,7 +2,8 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-
 import { AppState, Linking } from "react-native";
 import { App } from "../../src/App";
 import { NO_ANSWER } from "../../src/screens/SignIn";
-import { PUSH_SWITCHES } from "../../src/screens/Settings";
+import { PROGRESS_FOOT, PROGRESS_SWITCHES, PUSH_SWITCHES } from "../../src/screens/Settings";
+import { SAFE_MODE_LINE } from "../../src/screens/remindersView";
 import type { Ask } from "../../src/session/calls";
 import { fakeServer, kept, lost, memoryStore, profile, refusal, tokens, type Reply, type Route } from "../kit";
 
@@ -19,10 +20,10 @@ const noWait = () => Promise.resolve();
 const ok = (body: unknown) => (): Reply => ({ status: 200, body });
 const ME = "/v1/users/me";
 
-type Held = { pushGymMessages: boolean; pushPlaces: boolean; pushComments: boolean };
+type Held = { pushGymMessages: boolean; pushPlaces: boolean; pushComments: boolean; pushStreak: boolean; pushBadges: boolean; pushSummary: boolean };
 /** The server's own switches: only its answers change them. */
 function account(start: Partial<Held> = {}) {
-  const held: Held = { pushGymMessages: true, pushPlaces: true, pushComments: true, ...start };
+  const held: Held = { pushGymMessages: true, pushPlaces: true, pushComments: true, pushStreak: true, pushBadges: true, pushSummary: true, ...start };
   const me: Route = (body) => {
     if (body !== undefined) Object.assign(held, body);
     return { status: 200, body: { user: { ...profile(true).user, ...held } } };
@@ -102,7 +103,7 @@ describe("the notification switches show and save only the server's answer", () 
       expect(screen.getByLabelText("Comments notifications").props.value).toBe(false);
     });
     expect(server.asked.filter((a) => a.path === ME && a.method === "PATCH").map((a) => a.body)).toEqual([{ pushComments: false }]);
-    expect(acct.held).toEqual({ pushGymMessages: true, pushPlaces: true, pushComments: false });
+    expect(acct.held).toMatchObject({ pushGymMessages: true, pushPlaces: true, pushComments: false });
     expect(screen.getByText(words("pushComments").off)).toBeTruthy();
     // And on again.
     await act(() => fireEvent(screen.getByLabelText("Comments notifications"), "valueChange", true));
@@ -173,6 +174,75 @@ describe("the words fit every kind of place", () => {
     expect(screen.getByText("Notifications")).toBeTruthy();
     expect(screen.queryByLabelText("Messages notifications")).toBeNull();
     expect(screen.getByLabelText("Workout reminder")).toBeTruthy();
+  });
+});
+
+describe("Your training's streak reminder, badges and Sunday summary (19e-ii)", () => {
+  const progressWords = (key: keyof Held) => {
+    const row = PROGRESS_SWITCHES.find((one) => one.key === key);
+    if (row === undefined) throw new Error(`no switch ${key}`);
+    return row;
+  };
+  const reminders = (safeMode: boolean) =>
+    ok({
+      reminders: [
+        { kind: "workout", on: true, time: "18:00", days: [1, 2, 3, 4, 5, 6, 7], paused: false },
+        { kind: "breakfast", on: false, time: "08:00", days: [1, 2, 3, 4, 5, 6, 7], paused: false },
+        { kind: "lunch", on: false, time: "13:00", days: [1, 2, 3, 4, 5, 6, 7], paused: false },
+        { kind: "dinner", on: false, time: "19:30", days: [1, 2, 3, 4, 5, 6, 7], paused: false },
+      ],
+      safeMode,
+    });
+
+  it("somebody who belongs to no place has all three, each as the server holds it, with the one-a-day line", async () => {
+    await openSettings(fakeServer(routes({ [ME]: account({ pushSummary: false }).me, "/v1/orgs/mine": mine(), "/v1/users/me/reminders": reminders(false) })).ask);
+    expect((await switchOf("Streak reminder")).props.value).toBe(true);
+    expect((await switchOf("Badges")).props.value).toBe(true);
+    expect((await switchOf("Sunday summary")).props.value).toBe(false);
+    expect(screen.getByText(progressWords("pushStreak").on)).toBeTruthy();
+    expect(screen.getByText(progressWords("pushBadges").on)).toBeTruthy();
+    expect(screen.getAllByText("Off.").length).toBeGreaterThan(0);
+    expect(screen.getByText(PROGRESS_FOOT)).toBeTruthy();
+    expect(screen.queryByLabelText("Messages notifications")).toBeNull();
+  });
+
+  it("Badges off: the server is sent that switch alone, and the line says where badges still show", async () => {
+    const acct = account();
+    const server = fakeServer(routes({ [ME]: acct.me, "/v1/users/me/reminders": reminders(false) }));
+    await openSettings(server.ask);
+    await act(async () => fireEvent(await switchOf("Badges"), "valueChange", false));
+    await waitFor(() => {
+      expect(screen.getByLabelText("Badges notifications").props.value).toBe(false);
+    });
+    expect(server.asked.filter((a) => a.path === ME && a.method === "PATCH").map((a) => a.body)).toEqual([{ pushBadges: false }]);
+    expect(acct.held.pushBadges).toBe(false);
+    expect(screen.getByText(progressWords("pushBadges").off)).toBeTruthy();
+  });
+
+  it("in Safe mode the streak reminder says it waits, as the workout reminder does", async () => {
+    await openSettings(fakeServer(routes({ [ME]: account().me, "/v1/users/me/reminders": reminders(true) })).ask);
+    await switchOf("Streak reminder");
+    expect(screen.getAllByText(SAFE_MODE_LINE)).toHaveLength(2);
+    expect(screen.queryByText(progressWords("pushStreak").on)).toBeNull();
+  });
+
+  it("a refused save keeps the switch and says the server's words under Your training", async () => {
+    const acct = account();
+    const me: Route = (body) => (body !== undefined ? refusal(429, "rate_limited", "Too many changes. Please try again later.") : acct.me(body));
+    await openSettings(fakeServer(routes({ [ME]: me, "/v1/users/me/reminders": reminders(false) })).ask);
+    await act(async () => fireEvent(await switchOf("Sunday summary"), "valueChange", false));
+    expect(await screen.findByText("Too many changes. Please try again later.")).toBeTruthy();
+    expect(screen.getByLabelText("Sunday summary notifications").props.value).toBe(true);
+  });
+
+  it("switched on with Android not yet asked: Android is asked", async () => {
+    notifications.permission = ASK;
+    await openSettings(fakeServer(routes({ [ME]: account({ pushStreak: false }).me, "/v1/users/me/reminders": reminders(false) })).ask);
+    const before = notifications.asked;
+    await act(async () => fireEvent(await switchOf("Streak reminder"), "valueChange", true));
+    await waitFor(() => {
+      expect(notifications.asked).toBe(before + 1);
+    });
   });
 });
 

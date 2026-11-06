@@ -260,6 +260,9 @@ d("a place in a class or an event, told to the phone (real Postgres)", () => {
     expect(gymPlacePushDataSchema.parse(sentTo(bina)[0]?.data)).toEqual({ kind: "gym_place", gymId: gym.id, what: "class", id: flow, day: "2026-11-13" });
     expect(sentTo(asha)).toHaveLength(0);
     expect(sentTo(chen)).toHaveLength(0);
+    // Kept as reaching the phone, so the streak reminder, badges and the summary give way to it (19e-ii).
+    const [kept] = await sql<{ n: number }[]>`SELECT cardinality(u.recent_pushes) AS n FROM users u WHERE u.id = ${bina.userId}`;
+    expect(kept?.n).toBe(1);
     // Told once.
     expect((await sweep()).sent).toBe(1 - 1);
   });

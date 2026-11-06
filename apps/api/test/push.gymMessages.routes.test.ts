@@ -266,6 +266,9 @@ d("phone notifications for a gym's messages (real Postgres)", () => {
     await message(gymA, kiran.userId, "Holiday hours this week.", minutes(at, -1));
     await sweep(at);
     expect(sentTo(phone).map((m) => m.body)).toEqual(["Holiday hours this week."]);
+    // Kept as reaching the phone, so the streak reminder, badges and the summary give way to it (19e-ii).
+    const [kept] = await sql<{ n: number }[]>`SELECT cardinality(u.recent_pushes) AS n FROM users u WHERE u.id = ${kiran.userId}`;
+    expect(kept?.n).toBe(1);
   });
 
   it("a phone that Asha left without signing out, now signed in as Meera, is told only Meera's", { timeout: TIMEOUT_MS }, async () => {

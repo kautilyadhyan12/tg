@@ -30,6 +30,7 @@ import { sendCommentNotifications } from "./modules/push/commentsSweep.js";
 import { sendPlaceNotifications } from "./modules/push/placesSweep.js";
 import { sendGymMessageNotifications } from "./modules/push/sweep.js";
 import { sendTrainingReminders } from "./modules/reminders/sweep.js";
+import { sendTrainingNudges } from "./modules/reminders/nudges.js";
 import { createResendEmailReader, createResendInviteTransport, createResendTransport } from "./email/resend.js";
 import { cachedMailDomainCheck, systemResolver } from "./modules/orgs/invites/mailDomain.js";
 import { operatorTeller } from "./modules/orgs/invites/operatorNote.js";
@@ -881,6 +882,25 @@ if (pushAccount === null) {
         });
         if (remindersRun.sent + remindersRun.skipped + remindersRun.failed > 0) {
           log.info({ ...remindersRun, durationMs: Date.now() - remindersStartedAt, event: "job.finished", job: "push.reminders" }, "job finished");
+        }
+      } catch (err) {
+        failure ??= err instanceof Error ? err : new Error(String(err));
+      }
+      // The streak reminder, badges and the Sunday summary (19e-ii), after every other kind, so a
+      // notification sent in this same minute is seen by its two-hour rule.
+      const nudgesStartedAt = Date.now();
+      try {
+        const nudgesRun = await sendTrainingNudges({
+          sql,
+          sender: pushSender,
+          now: () => new Date(),
+          onError: (err) => {
+            const e = err instanceof Error ? err : new Error(String(err));
+            log.warn({ errName: e.name, errMessage: e.message, event: "job.item_failed", job: "push.nudges" }, "a streak, badge or summary notification failed and was kept for the next run");
+          },
+        });
+        if (nudgesRun.sent + nudgesRun.skipped + nudgesRun.failed > 0) {
+          log.info({ ...nudgesRun, durationMs: Date.now() - nudgesStartedAt, event: "job.finished", job: "push.nudges" }, "job finished");
         }
       } catch (err) {
         failure ??= err instanceof Error ? err : new Error(String(err));

@@ -26,7 +26,7 @@ import { giftUseUndone } from "../referrals/memberGiftRepo.js";
 import type { HasBookings } from "../classes/bookingChanges.js";
 import type { MembershipScope } from "../classes/bookingsRepo.js";
 import { billDayOf, billsFor, refundAsking, squareMoneyOut, voidBills, type BillRow } from "./billsSql.js";
-import { giveHeldIn, liveTypes, lockedEntry, lockedHeld, settle, typeChoice, type CancelBookings, type HeldWriteOutcome } from "./heldRepo.js";
+import { giveHeldIn, liveTypes, lockedEntry, lockedHeld, periodPriceMinor, settle, typeChoice, type CancelBookings, type HeldWriteOutcome } from "./heldRepo.js";
 
 export type ChangeOutcome =
   | HeldWriteOutcome
@@ -118,7 +118,8 @@ export async function changeHeld(
       if ((await changedAlready(tx, input.gymId, input.entryId)).has(before.id)) return { kind: "change_refused", reason: "changed_already" };
 
       const bills = await billsFor(tx, input.gymId, [before.id]);
-      const from = changeFrom(before.membership, before.priceMinor, bills.map(changeBillFacts), input.today);
+      // Each period at its own price, a raise's from the period its email named (18w; round one, H3).
+      const from = changeFrom(before.membership, (index) => periodPriceMinor(before, index), bills.map(changeBillFacts), input.today);
       if (!from.ok) return { kind: "change_refused", reason: from.reason };
       const [rawType] = await liveTypes(tx, input.gymId, input.typeId);
       if (rawType === undefined) return { kind: "type_not_found" };

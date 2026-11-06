@@ -116,6 +116,7 @@ import {
   gymClassWeekResponseSchema,
   gymMembershipTypesResponseSchema,
   renewalReminderPreviewResponseSchema,
+  priceRaisePreviewResponseSchema,
   heldMembershipsResponseSchema,
   memberGymTagsResponseSchema,
   memberPayersResponseSchema,
@@ -1752,6 +1753,13 @@ export const orgService = {
       renewalReminderPreviewResponseSchema,
       'who gets the reminder',
       authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/membership-types/${encodeURIComponent(typeId)}/renewal-reminders/preview`, { renewalReminder }),
+    ),
+  /** Who a higher price would raise among those already on a line, and from when (18w). */
+  previewPriceRaise: (gymId, typeId, body) =>
+    readThrough(
+      priceRaisePreviewResponseSchema,
+      'who pays the new price',
+      authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/membership-types/${encodeURIComponent(typeId)}/price-raise/preview`, body),
     ),
   archiveMembershipType: (gymId, typeId) =>
     readThrough(

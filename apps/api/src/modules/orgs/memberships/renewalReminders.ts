@@ -17,6 +17,7 @@ import {
   heldMembershipView,
   leadFirstName,
   leadGreeting,
+  priceRaiseWords,
   renewalReminderDue,
   renewalReminderNext,
   renewalReminderWords,
@@ -31,6 +32,8 @@ import { emailHmac } from "../invites/address.js";
 import { cleanGymText, GYM_TEXT_IN_EMAIL_CHARS, gymNameForEmail } from "../invites/gymText.js";
 import { INVITE_SENDING } from "../invites/sender.js";
 import type { InviteSender, InviteSettings } from "../invites/settings.js";
+import { priceRaiseStillDue, queueDuePriceRaises, raiseAmounts } from "./priceRaises.js";
+import { markRaiseSent } from "./priceRaisesRepo.js";
 import * as repo from "./renewalRemindersRepo.js";
 
 /** The tag the email carries: its row in `gym_renewal_reminders`. */
@@ -86,6 +89,8 @@ export async function sendDueRenewalReminders(deps: RenewalReminderDeps): Promis
   const run: RenewalReminderRun = { queued: 0, sent: 0, skipped: 0, dropped: 0, failed: 0, retried: 0, stoppedByProvider: false };
   if (deps.settings.paused) return run;
   run.queued = await queueDueRenewalReminders(deps);
+  // A price raise's email (18w) goes through the same queue.
+  run.queued += await queueDuePriceRaises(deps);
   for (let taken = 0; taken < INVITE_SENDING.perRun; taken++) {
     const claim = await repo.claimNext(deps.sql, { now: deps.now(), leaseMs: INVITE_SENDING.leaseMs, gymIds: deps.gymIds ?? null });
     if (claim === null) break;
@@ -137,6 +142,7 @@ async function sendOne(deps: RenewalReminderDeps, claim: repo.ClaimedReminder): 
   const gym = await repo.gymContact(deps.sql, claim.gymId);
   const gymName = gym === null ? "" : gymNameForEmail(gym.name);
   if (gym === null || gymName === "") return await stop(deps, claim, "gym_gone");
+  if (claim.what === "price") return await sendPriceOne(deps, claim, email, hmac, gymName, gym);
 
   // The check and the mark in one hold: what is sent is what the membership is at that moment.
   const checked = await deps.sql.begin(async (tx): Promise<{ letter: Letter } | "not_due" | "lost"> => {
@@ -167,6 +173,85 @@ async function sendOne(deps: RenewalReminderDeps, claim: repo.ClaimedReminder): 
     }
     case "unclear": {
       deps.log.warn({ event: "renewal_reminder.send_unclear", reminderId: claim.id, gymId: claim.gymId, status: result.status }, "a renewal reminder may not have gone; it will be tried again under the same key");
+      await repo.retryReminder(deps.sql, claim, new Date(now.getTime() + retryAfter(claim)));
+      return "retried";
+    }
+  }
+}
+
+/** A PRICE RAISE'S EMAIL (18w). The check and the mark in one hold, as a reminder's; once it has gone, the raise is
+ *  charged from the period it named, written with the email's own finish. */
+async function sendPriceOne(
+  deps: RenewalReminderDeps,
+  claim: repo.ClaimedReminder,
+  email: string,
+  hmac: string,
+  gymName: string,
+  gym: { contactEmail: string | null; contactPhone: string | null },
+): Promise<Tally | "stop"> {
+  const now = deps.now();
+  const checked = await deps.sql.begin(async (tx) => {
+    await repo.holdMembership(tx, claim.gymId, claim.heldId);
+    const today = await repo.gymToday(tx, claim.gymId, now);
+    const due = today === null ? null : await priceRaiseStillDue(tx, claim, email, today);
+    if (today === null || due === null) return "not_due" as const;
+    return (await repo.markMaybeSent(tx, claim, hmac, now)) ? { ...due, today } : ("lost" as const);
+  });
+  if (checked === "not_due" || checked === "lost") return await notDue(deps, claim, hmac);
+
+  const { held, fromPeriod, fromOn, today } = checked;
+  const raise = held.row.raise;
+  if (raise === null) throw new Error("a raise's email checked with no raise");
+  const m = held.row.membership;
+  const view = heldMembershipView(m, today);
+  const clean = (text: string): string => cleanGymText(text, GYM_TEXT_IN_EMAIL_CHARS);
+  const words = priceRaiseWords({
+    gymName,
+    typeName: clean(held.row.typeName),
+    forName: held.payerEntryId === held.entryId ? null : clean(held.holderName) || "somebody you pay for",
+    ...raiseAmounts(held.row, fromPeriod),
+    currency: held.row.currency,
+    every: m.termCount === null || m.termUnit === null ? "period" : everyWords(m.termCount, m.termUnit),
+    startsOn: fromOn,
+    notice: view.notice !== null && !view.notice.given && view.can.noticeEnds !== null ? { days: view.notice.days, lastDay: view.can.noticeEnds } : null,
+  });
+  const contact = [gym.contactPhone === null ? null : `call ${gym.contactPhone}`, gym.contactEmail === null ? null : `email ${gym.contactEmail}`].filter((x): x is string => x !== null);
+  const message = renewalReminderEmail({
+    to: email,
+    gymName,
+    greeting: leadGreeting(clean(leadFirstName(held.payerName))),
+    subject: words.subject,
+    lines: words.lines,
+    contact: contact.length === 0 ? null : `If you have any questions, you can ${contact.join(" or ")}.`,
+  });
+  const result = await deps.transport.send({
+    ...message,
+    from: deps.sender.from === null ? "" : memberInviteFrom(deps.sender.from, gymName),
+    headers: {},
+    idempotencyKey: `renewal-reminder-${claim.id}`,
+    tags: [{ name: RENEWAL_REMINDER_SEND_TAG, value: claim.id }],
+    ...(gym.contactEmail === null ? {} : { replyTo: gym.contactEmail }),
+  });
+  switch (result.kind) {
+    case "sent": {
+      const finished = await deps.sql.begin(async (tx) => {
+        if (!(await repo.finishReminder(tx, claim, { kind: "sent", providerId: result.id }, deps.now()))) return false;
+        await markRaiseSent(tx, { gymId: claim.gymId, raiseId: raise.id, fromPeriod, fromOn, sentOn: today });
+        return true;
+      });
+      if (!finished) {
+        deps.log.warn({ event: "renewal_reminder.lease_lost", reminderId: claim.id, gymId: claim.gymId }, "a renewal reminder's lease was taken over");
+        return "retried";
+      }
+      return "sent";
+    }
+    case "not_sent": {
+      deps.log.warn({ event: "renewal_reminder.send_refused", reminderId: claim.id, gymId: claim.gymId, status: result.status }, "the email service refused a price raise email; it waits");
+      const held = await hold(deps, claim, result.status === 400 || result.status === 422 ? "provider_refused" : "provider_unavailable");
+      return held === "retried" && [401, 403, 429].includes(result.status) ? "stop" : held;
+    }
+    case "unclear": {
+      deps.log.warn({ event: "renewal_reminder.send_unclear", reminderId: claim.id, gymId: claim.gymId, status: result.status }, "a price raise email may not have gone; it will be tried again under the same key");
       await repo.retryReminder(deps.sql, claim, new Date(now.getTime() + retryAfter(claim)));
       return "retried";
     }

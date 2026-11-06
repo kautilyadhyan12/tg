@@ -355,7 +355,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
        - 18v-ii-b. [x] **An early cancellation fee** — merged 2026-11-04 (PR #464).
      - 18v-iii. [x] **Days to change their mind** — merged 2026-11-04 (PR #466).
      - 18v-iv. [x] **A reminder before a renewal or a minimum term's end** — merged 2026-11-05 (PR #469).
-   - 18w. [ ] **Raise the price for existing members** from their next payment, with each place's notice (Kd, 2026-10-22). Web folder 2.
+   - 18w. [x] **Raise the price for existing members** — merged 2026-11-06 (PR #483).
    - 18x. [x] **Move to another membership** · merged 2026-10-22 · PR #338
    - 18y. [x] **Bill everyone on one day of the month** · merged 2026-10-22 · PR #340
    - 18z. [x] **A fee while frozen** · merged 2026-10-23 · PR #342
@@ -624,7 +624,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
     - 19d. [x] **Notification switches that save** · merged 2026-11-05 · PR #475
     - 19e. **Your training's notifications** (split 2026-11-05: what the person sets first): a workout reminder (days and a time), a meal reminder, a streak reminder, badges and the weekly summary, each with its switch, for everyone (Kd, 2026-11-05, `rulings/2026-11-05-19d.md`); taken from item 38.
       - 19e-i. [x] **Workout and meal reminders** · merged 2026-11-06 · PR #479
-      - 19e-ii. [ ] **The streak reminder, badges and the Sunday summary**: at most one a day, none at night.
+      - 19e-ii. [x] **The streak reminder, badges and the Sunday summary** · merged 2026-11-06 · PR #482
 20. [ ] **What the gym side adds for members**, each after its web job: the waiver (3e), the membership agreement signed in the app (18u), the referral link (20e), the member photo (5b-vi), saving their card (18d-ii), buying from the gym (18k), stopping a membership (18l), a gym's plan for a member (19e).
 21. [ ] **Paying, the stores and release**: the $10 plan through the stores (item 6), one device one trial (Stage 3's 2c), the store pages rated 18+, the Terms and Privacy pages that Get started's line opens (it opens nothing today, as the browser's), Google's closed test, then the iPhone version with Apple sign-in.
 

@@ -341,6 +341,9 @@ d("phone notifications for comments and replies (real Postgres)", () => {
     // A second run sends nothing again.
     await sweep(minutes(at, 1));
     expect(sentTo(asha.token)).toHaveLength(1);
+    // Kept as reaching the phone, so the streak reminder, badges and the summary give way to it (19e-ii).
+    const [kept] = await sql<{ n: number }[]>`SELECT cardinality(u.recent_pushes) AS n FROM users u WHERE u.id = (SELECT p.user_id FROM push_tokens p WHERE p.token = ${asha.token})`;
+    expect(kept?.n).toBe(1);
   });
 
   it("a reply to the person's comment says so", { timeout: TIMEOUT_MS }, async () => {

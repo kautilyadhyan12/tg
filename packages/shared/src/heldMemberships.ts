@@ -51,6 +51,7 @@ import {
   membershipTermUnitSchema,
   contractThenSchema,
   renewalReminderStatusSchema,
+  priceRaiseStatusSchema,
   renewalReminderWhenSchema,
   SALES_TAX_PCM_MAX,
   TAX_RATES_MAX,
@@ -1299,6 +1300,9 @@ export const heldMembershipsResponseSchema = z
     agreementInUse: z.boolean().default(false),
     /** Each membership in use whose line asks for a renewal reminder (18v-iv), and what happens to it. */
     renewalReminders: z.array(z.object({ membershipId: z.string().uuid(), when: renewalReminderWhenSchema, status: renewalReminderStatusSchema }).strict()).default([]),
+    /** Each membership in use whose price staff raised and that is not yet charged at it (18w): what happens to it,
+     *  and whether staff who change the price list may keep its old price. */
+    priceRaises: z.array(z.object({ membershipId: z.string().uuid(), status: priceRaiseStatusSchema, canKeep: z.boolean() }).strict()).default([]),
   })
   .strict();
 export type HeldMembershipsResponse = z.infer<typeof heldMembershipsResponseSchema>;

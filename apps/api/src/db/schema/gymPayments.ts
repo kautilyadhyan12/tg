@@ -801,8 +801,8 @@ export const gymRenewalReminders = pgTable(
     finishedAt: timestamp("finished_at", { withTimezone: true }),
   },
   (t) => [
-    check("gym_renewal_reminders_occasion_check", sql`${t.occasion} ~ '^(renew:[0-9]{1,5}|term)$'`),
-    check("gym_renewal_reminders_what_check", sql`${t.what} IN ('renews','term_renews','ends')`),
+    check("gym_renewal_reminders_occasion_check", sql`${t.occasion} ~ '^(renew:[0-9]{1,5}|term|price:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$'`),
+    check("gym_renewal_reminders_what_check", sql`${t.what} IN ('renews','term_renews','ends','price')`),
     check("gym_renewal_reminders_state_check", sql`${t.state} IN ('queued','sending','sent','skipped','failed')`),
     check("gym_renewal_reminders_email_check", sql`(${t.state} IN ('queued','sending') OR ${t.email} IS NULL) AND (${t.email} IS NULL OR length(${t.email}) <= 254)`),
     check("gym_renewal_reminders_waiting_check", sql`${t.state} NOT IN ('queued','sending') OR ${t.email} IS NOT NULL`),
@@ -814,6 +814,38 @@ export const gymRenewalReminders = pgTable(
     uniqueIndex("gym_renewal_reminders_occasion_uq").on(t.gymId, t.heldMembershipId, t.occasion),
     index("gym_renewal_reminders_due_idx").on(t.notBefore, t.id).where(sql`${t.state} IN ('queued','sending')`),
     index("gym_renewal_reminders_entry_idx").on(t.gymId, t.entryId),
+  ],
+);
+
+/** A membership's price raised by staff for members already on its line (0215; 18w): the price it goes to and the days
+ *  of notice. `from_period`, `from_on` and `sent_on` are written once its email has gone, and only then is anything
+ *  charged at it. One a membership. Its link to the membership is in the migration only. */
+export const gymPriceRaises = pgTable(
+  "gym_price_raises",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    gymId: uuid("gym_id")
+      .notNull()
+      .references(() => gyms.id, { onDelete: "cascade" }),
+    heldMembershipId: uuid("held_membership_id").notNull(),
+    priceMinor: integer("price_minor").notNull(),
+    noticeDays: integer("notice_days").notNull(),
+    raisedBy: uuid("raised_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    fromPeriod: integer("from_period"),
+    fromOn: date("from_on"),
+    sentOn: date("sent_on"),
+  },
+  (t) => [
+    check("gym_price_raises_price_check", sql`${t.priceMinor} BETWEEN 1 AND 99999999`),
+    check("gym_price_raises_notice_check", sql`${t.noticeDays} IN (7,14,30)`),
+    check(
+      "gym_price_raises_sent_check",
+      sql`(${t.fromPeriod} IS NULL) = (${t.fromOn} IS NULL) AND (${t.fromPeriod} IS NULL) = (${t.sentOn} IS NULL) AND (${t.fromPeriod} IS NULL OR ${t.fromPeriod} >= 1)`,
+    ),
+    uniqueIndex("gym_price_raises_held_uq").on(t.gymId, t.heldMembershipId),
+    index("gym_price_raises_waiting_idx").on(t.gymId).where(sql`${t.fromPeriod} IS NULL`),
+    index("gym_price_raises_raised_by_idx").on(t.raisedBy).where(sql`${t.raisedBy} IS NOT NULL`),
   ],
 );
 

@@ -17,6 +17,7 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
       archiveMembershipType: vi.fn(),
       restoreMembershipType: vi.fn(),
       previewRenewalReminder: vi.fn(),
+      previewPriceRaise: vi.fn(() => Promise.resolve({ data: { currency: 'GBP', people: [] } })),
       // The list's own words (17a-iii) have their own test: none here.
       getMembershipWords: vi.fn(() => Promise.resolve({ data: { words: [], types: [] } })),
     },
@@ -493,6 +494,84 @@ describe('a renewal reminder (18v-iv)', () => {
     await waitFor(() => expect(orgService.updateMembershipType).toHaveBeenCalledTimes(1));
     expect(orgService.updateMembershipType.mock.calls[0][2]).toMatchObject({ renewalReminderDays: 7, termReminderDays: 30 });
     expect(await screen.findByText('Minimum term reminder: 30 days before it ends')).toBeTruthy();
+  });
+});
+
+describe('a higher price for members already on it (18w)', () => {
+  const ANA = '66666666-6666-4666-8666-000000000001';
+  const BEN = '66666666-6666-4666-8666-000000000002';
+  const NELL = '66666666-6666-4666-8666-000000000003';
+  const status = (state, over = {}) => ({ state, fromMinor: 4999, toMinor: 5499, startsOn: '2026-12-03', on: '2026-11-03', ...over });
+  const person = (membershipId, name, s) => ({ membershipId, entryId: membershipId.replace('6666-4666', '7777-4777'), name, paidBy: null, status: s });
+  const offer = {
+    currency: 'GBP',
+    people: [
+      person(ANA, 'Ana Ruiz', status('will_send')),
+      person(BEN, 'Ben Okafor', status('will_send')),
+      person(NELL, 'Nell Phone', status('no_email', { toMinor: 4999, startsOn: null, on: null })),
+    ],
+  };
+  afterEach(() => orgService.previewPriceRaise.mockImplementation(() => Promise.resolve({ data: { currency: 'GBP', people: [] } })));
+
+  it('asks what the members already on it pay, names who goes up and who won\'t, and sends only those ticked', async () => {
+    const gold = type({ name: 'Gold Monthly', priceMinor: 4999 });
+    orgService.previewPriceRaise.mockResolvedValue({ data: offer });
+    orgService.updateMembershipType.mockResolvedValue({ data: { ...listOf({ types: [{ ...gold, priceMinor: 5499 }] }), raised: 1 } });
+    open(listOf({ types: [gold] }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Change Gold Monthly' }));
+    // A lower price asks nothing.
+    type_('Price (GBP)', '45.00');
+    expect(screen.queryByTestId('raise-field')).toBeNull();
+    type_('Price (GBP)', '54.99');
+    const field = await screen.findByTestId('raise-field');
+    expect(orgService.previewPriceRaise).toHaveBeenLastCalledWith(ORG.id, gold.id, { priceMinor: 5499, noticeDays: 30 });
+    expect(within(field).getByText('They go on paying £49.99. Only members who join from now on pay the new price.')).toBeTruthy();
+
+    // Nothing chosen: Save is refused with the reason under the question, and nothing is sent.
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    expect(await within(field).findByText('Choose what the members already on it pay.')).toBeTruthy();
+    expect(orgService.updateMembershipType).not.toHaveBeenCalled();
+
+    fireEvent.click(within(field).getByRole('radio', { name: /^Move them to the new price/ }));
+    const box = await screen.findByTestId('raise-box');
+    expect(within(box).getByText('Pays the new price (2)')).toBeTruthy();
+    expect(within(box).getByText("Won't change: no email address to send the notice to (1)")).toBeTruthy();
+    expect(within(box).getByText('Nell Phone')).toBeTruthy();
+    const ben = within(box).getByRole('checkbox', { name: 'Ben Okafor · £49.99 to £54.99 from 3 Dec · emailed 3 Nov' });
+    expect(ben.checked).toBe(true);
+    fireEvent.click(ben);
+    expect(ben.checked).toBe(false);
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    await waitFor(() => expect(orgService.updateMembershipType).toHaveBeenCalledTimes(1));
+    expect(orgService.updateMembershipType.mock.calls[0][2]).toMatchObject({ priceMinor: 5499, raise: { noticeDays: 30, membershipIds: [ANA] } });
+    // Said in the line's own row.
+    expect(await screen.findByText('Saved. 1 member pays the new price from their first payment at least 30 days away, and each is emailed 30 days before it.')).toBeTruthy();
+  });
+
+  it('a shorter notice asks again; Keep their price sends no raise; nobody on it asks nothing', async () => {
+    const gold = type({ name: 'Gold Monthly', priceMinor: 4999 });
+    orgService.previewPriceRaise.mockResolvedValue({ data: offer });
+    orgService.updateMembershipType.mockResolvedValue({ data: listOf({ types: [{ ...gold, priceMinor: 5499 }] }) });
+    open(listOf({ types: [gold] }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Change Gold Monthly' }));
+    type_('Price (GBP)', '54.99');
+    const field = await screen.findByTestId('raise-field');
+    fireEvent.click(within(field).getByRole('radio', { name: /^Move them to the new price/ }));
+    type_('Email them', '7');
+    await waitFor(() => expect(orgService.previewPriceRaise).toHaveBeenLastCalledWith(ORG.id, gold.id, { priceMinor: 5499, noticeDays: 7 }));
+    fireEvent.click(within(field).getByRole('radio', { name: /^Keep their price/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    await waitFor(() => expect(orgService.updateMembershipType).toHaveBeenCalledTimes(1));
+    expect(orgService.updateMembershipType.mock.calls[0][2].raise).toBeUndefined();
+    cleanup();
+
+    orgService.previewPriceRaise.mockResolvedValue({ data: { currency: 'GBP', people: [] } });
+    open(listOf({ types: [gold] }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Change Gold Monthly' }));
+    type_('Price (GBP)', '54.99');
+    await waitFor(() => expect(orgService.previewPriceRaise).toHaveBeenCalled());
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(screen.queryByTestId('raise-field')).toBeNull();
   });
 });
 

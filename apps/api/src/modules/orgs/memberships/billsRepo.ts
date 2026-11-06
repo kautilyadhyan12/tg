@@ -11,6 +11,7 @@ import type { Sql, TransactionSql } from "postgres";
 import {
   billsToOpen,
   periodListedMinor,
+  raisedListedMinor,
   countAfterGap,
   countAfterPayment,
   countAfterUndo,
@@ -56,7 +57,7 @@ import {
   type NewBill,
   type RefundTarget,
 } from "./billsSql.js";
-import { listHeldMembership, lockedEntry, lockedHeld, settle, writeCountsAfterGap, writePaidPeriods, type CountMove, type ListHeldColumns } from "./heldRepo.js";
+import { listHeldMembership, lockedEntry, lockedHeld, periodPriceMinor, settle, writeCountsAfterGap, writePaidPeriods, type CountMove, type ListHeldColumns } from "./heldRepo.js";
 import { appliedOf, heldTaxesSql, ratesOfJson } from "./taxesSql.js";
 
 export type BillWriteOutcome =
@@ -167,7 +168,7 @@ export async function recordPaymentIn(tx: TransactionSql, input: RecordPaymentIn
   // bill behind.
   const found = bills.find((b) => b.periodIndex === target.periodIndex);
   // A period with no bill yet is opened as the bill run would open it today, its tax in.
-  const opening = billOf(periodListedMinor(row.membership, target.periodIndex, row.priceMinor), row.taxApplied);
+  const opening = billOf(periodListedMinor(row.membership, target.periodIndex, periodPriceMinor(row, target.periodIndex)), row.taxApplied);
   const paid = payMemberBill(found ?? { status: "open", amountMinor: opening.amountMinor, paidMinor: 0 }, input.amountMinor);
   if (!paid.ok) return { kind: "not_allowed" };
   // The count of paid periods moves with the payment that settles the bill, or not at all.
@@ -710,6 +711,9 @@ type Owing = ListHeldColumns & {
   /** The rates the membership was sold with, as each is now, in order (18b-iii; 18b-v-b). */
   taxes: unknown;
   tax_included: boolean | null;
+  /** Its raise's price and the first period charged at it, once its email has gone (18w). */
+  raise_price: number | null;
+  raise_from: number | null;
 };
 
 /** The memberships that may be owed a bill: stored active, with a price, of a current
@@ -721,9 +725,10 @@ const owing = (sql: Sql | TransactionSql, gymIds: readonly string[] | null) => s
          h.frozen_on::text AS frozen_on, h.cancelled_on::text AS cancelled_on,
          h.paid_periods, h.paid_floor, h.renews, h.classes_left, h.from_list, h.full_from::text AS full_from, h.contract_periods, h.contract_then,
          h.notice_days, h.stops_after, h.gym_id, h.entry_id, g.timezone, h.price_minor, h.currency,
-         ${heldTaxesSql(sql)} AS taxes, h.tax_included
+         ${heldTaxesSql(sql)} AS taxes, h.tax_included, rz.price_minor AS raise_price, rz.from_period AS raise_from
   FROM gym_held_memberships h
   JOIN gyms g ON g.id = h.gym_id AND g.status = 'active'
+  LEFT JOIN gym_price_raises rz ON rz.gym_id = h.gym_id AND rz.held_membership_id = h.id
   JOIN gym_membership_types t ON t.gym_id = h.gym_id AND t.id = h.membership_type_id
   JOIN gym_member_list_entries e ON e.gym_id = h.gym_id AND e.id = h.entry_id AND e.former_at IS NULL
   WHERE h.status = 'active' AND h.price_minor > 0
@@ -788,7 +793,8 @@ function owed(rows: readonly Owing[], billed: ReadonlyMap<string, ReadonlySet<nu
     const tax = appliedOf(ratesOfJson(row.taxes), row.tax_included ?? false);
     for (const due of opens) {
       // The part month's share where it is the first period of one billed from the gym's day (18y).
-      const bill = billOf(periodListedMinor(membership, due.periodIndex, row.price_minor), tax);
+      const raise = row.raise_price === null ? null : { priceMinor: row.raise_price, fromPeriod: row.raise_from };
+      const bill = billOf(periodListedMinor(membership, due.periodIndex, raisedListedMinor(row.price_minor, raise, due.periodIndex)), tax);
       work.bills.push({ membershipId: row.id, periodIndex: due.periodIndex, amountMinor: bill.amountMinor, taxes: bill.taxes, currency: row.currency, dueOn: due.dueOn, covers: due.covers });
     }
   }

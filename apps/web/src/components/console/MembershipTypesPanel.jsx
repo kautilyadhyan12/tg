@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { MEMBERSHIP_DESCRIPTION_MAX, MEMBERSHIP_NAME_MAX, aCoach, pcmToTaxRateText, orgWords } from '@app/shared';
+import { MEMBERSHIP_DESCRIPTION_MAX, MEMBERSHIP_NAME_MAX, aCoach, formatMinor, pcmToTaxRateText, orgWords } from '@app/shared';
 import { Loader2, Plus } from 'lucide-react';
 import { orgService, errorCode, errorText } from '../../api/orgsApi';
 import { readOnlyNote } from '../../pages/console/billingView';
@@ -55,6 +55,7 @@ import PlaceLink from './PlaceLink';
 import { GiveBox, NotSetUp, TypeTies } from './MembershipFromList';
 import { otherAgreementTo, priceAgreementLine } from '../../pages/console/agreementView';
 import { useListMemberships } from './useListMemberships';
+import { RAISE_FEW, RAISE_NOTICE_OPTIONS, raiseAsk, raiseAsked, raiseBox, raisedNote } from '../../pages/console/priceRaiseView';
 import {
   REMINDER_FEW,
   REMINDER_WORDS,
@@ -196,6 +197,155 @@ function ReminderField({ gymId, draft, set, problem, id, when }) {
   );
 }
 
+/** One group of the raise's box: a few names, then See all; those who pay the new price each with a tick. */
+function RaiseGroup({ group, busy, onTick }) {
+  const [all, setAll] = useState(false);
+  const shown = all ? group.people : group.people.slice(0, RAISE_FEW);
+  const more = group.people.length - shown.length;
+  return (
+    <div className="flex flex-col gap-1" data-testid={`raise-${group.key}`}>
+      <span className="c-s14 c-w6 c-t1">{group.title}</span>
+      {group.key === 'goes_up' ? (
+        <ul className="m-0 p-0 list-none flex flex-col">
+          {shown.map((p) => (
+            <li key={p.membershipId}>
+              <label className="flex items-start gap-3 min-h-11 py-1.5 c-s14 c-t2">
+                <input
+                  type="checkbox"
+                  className="w-[18px] h-[18px] mt-0.5 flex-shrink-0"
+                  style={TICK}
+                  checked={p.ticked === true}
+                  disabled={busy}
+                  onChange={(event) => onTick(p.membershipId, event.target.checked)}
+                />
+                <span>{p.line}</span>
+              </label>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <ul className="m-0 pl-5 c-s14 c-t2 flex flex-col gap-0.5">
+          {shown.map((p) => (
+            <li key={p.membershipId}>{p.line}</li>
+          ))}
+        </ul>
+      )}
+      {more > 0 ? (
+        <button type="button" className="c-btn c-btn-link c-s14 self-start" onClick={() => setAll(true)}>
+          {`and ${String(more)} more · See all`}
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+/** Members already on a line whose price goes up (18w): they keep their price, or pay the new one from their first
+ *  payment after the notice. The box names who pays it, each ticked, and who won't with the reason. Asked only where
+ *  somebody holds the line; nothing is saved before Save. */
+function RaiseField({ gymId, draft, setDraft, currency, problem, id, busy }) {
+  const ask = raiseAsk(draft, currency);
+  const key = ask === null ? null : ask.key;
+  useEffect(() => {
+    if (ask === null) return undefined;
+    let live = true;
+    // Asked once the price has stopped changing, not at every key pressed.
+    const timer = setTimeout(() => {
+      orgService
+        .previewPriceRaise(gymId, draft.id, { priceMinor: ask.priceMinor, noticeDays: ask.noticeDays })
+        .then((res) => {
+          if (live) setDraft((d) => ({ ...d, raiseOffer: { key, people: res.data.people, currency: res.data.currency, failed: false } }));
+        })
+        .catch(() => {
+          if (live) setDraft((d) => ({ ...d, raiseOffer: { key, people: [], currency, failed: true } }));
+        });
+    }, 400);
+    return () => {
+      live = false;
+      clearTimeout(timer);
+    };
+    // The answer belongs to the price and notice asked about (`key`).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gymId, draft.id, key]);
+  const box = raiseBox(draft, currency);
+  if (ask === null || box === null) return null;
+  if (box.failed) {
+    return <p className="c-s14 c-t2 m-0">{"We couldn't load who is on it, so the members already on it keep their price. You can still save."}</p>;
+  }
+  // Once answered, the question stays while a new notice's list loads.
+  if (!raiseAsked(draft, currency) && !(box.loading && draft.raiseChoice !== '')) return null;
+  const was = formatMinor(draft.savedPriceMinor, currency);
+  const pick = (value) => setDraft((d) => ({ ...d, raiseChoice: value }));
+  const tick = (membershipId, on) =>
+    setDraft((d) => ({ ...d, raiseUnticked: on ? d.raiseUnticked.filter((x) => x !== membershipId) : [...d.raiseUnticked, membershipId] }));
+  const choices = [
+    { value: 'keep', label: `Keep their price`, hint: `They go on paying ${was}. Only members who join from now on pay the new price.` },
+    { value: 'raise', label: 'Move them to the new price', hint: 'From each one\'s first payment after the notice, never inside a minimum term. Whoever pays is emailed first.' },
+  ];
+  return (
+    <fieldset className="c-field m-0 p-0" style={{ border: 0 }} data-testid="raise-field">
+      <legend className="c-label">Members already on it</legend>
+      <div role="radiogroup" aria-label="Members already on it" className="flex flex-col gap-2">
+        {choices.map((c, i) => {
+          const picked = draft.raiseChoice === c.value;
+          return (
+            <label
+              key={c.value}
+              className="flex items-start gap-3 rounded-[10px] px-3 py-2.5 min-h-11"
+              style={{ background: picked ? 'var(--soft)' : 'transparent', border: `1px solid ${picked ? 'var(--accent)' : 'var(--ctl-line)'}` }}
+            >
+              <input
+                type="radio"
+                name={id('raise')}
+                className="w-[18px] h-[18px] mt-0.5 flex-shrink-0"
+                style={TICK}
+                value={c.value}
+                checked={picked}
+                aria-invalid={problem && i === 0 ? 'true' : undefined}
+                onChange={() => pick(c.value)}
+              />
+              <span className="flex flex-col">
+                <span className="c-s15 c-w6 c-t1">{c.label}</span>
+                <span className="c-s14 c-t2">{c.hint}</span>
+              </span>
+            </label>
+          );
+        })}
+      </div>
+      {draft.raiseChoice === 'raise' ? (
+        <>
+          <Field id={id('raise-notice')} label="Email them">
+            <select
+              id={id('raise-notice')}
+              value={draft.raiseNotice}
+              onChange={(event) => setDraft((d) => ({ ...d, raiseNotice: event.target.value }))}
+              className="c-input"
+              style={{ maxWidth: 280 }}
+            >
+              {RAISE_NOTICE_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+            <p className="c-s13 c-t3 m-0">Before each one&apos;s first payment at the new price, with both prices, the day and how to cancel.</p>
+          </Field>
+          {box.loading ? (
+            <p className="c-s14 c-t2 m-0">Loading who is on it…</p>
+          ) : (
+            <div className="rounded-[14px] p-3 flex flex-col gap-2" style={{ background: 'var(--raise)', border: '1px solid var(--raise-line)' }} data-testid="raise-box">
+              <span className="c-s14 c-w6 c-t1">Who pays the new price</span>
+              {box.groups.map((group) => (
+                <RaiseGroup key={group.key} group={group} busy={busy} onTick={tick} />
+              ))}
+            </div>
+          )}
+        </>
+      ) : null}
+      <Problem text={problem} />
+    </fieldset>
+  );
+}
+
 function TypeForm({ gymId, orgType, country, currency, options, taxRates, onRateAdded, draft, setDraft, problems, refused, busy, forWord, error, inRow, onSave, onCancel }) {
   const [addingRate, setAddingRate] = useState(false);
   const editing = draft.id !== null;
@@ -323,6 +473,8 @@ function TypeForm({ gymId, orgType, country, currency, options, taxRates, onRate
             style={{ maxWidth: 240 }}
           />
         </Field>
+
+        {editing ? <RaiseField gymId={gymId} draft={draft} setDraft={setDraft} currency={currency} problem={problems?.raise} id={id} busy={busy} /> : null}
 
         {usesJoiningFee(choice) ? (
           <Field id={id('joining-fee')} label={`Joining fee (${currency})`} problem={problems?.joiningFee}>
@@ -645,7 +797,8 @@ function TypeForm({ gymId, orgType, country, currency, options, taxRates, onRate
         </Part>
       ) : null}
 
-      <div className="flex flex-col gap-3">
+      {/* Save stays at the bottom of the screen while the long form scrolls (Kd's click-through, 18w). */}
+      <div className="flex flex-col gap-3 c-save-stuck" style={inRow ? { background: 'var(--raise)' } : undefined} data-testid="type-form-save">
         {first !== null ? (
           <p className="c-s14 c-w6 m-0" style={BAD} role="alert">
             {NOT_SAVED}
@@ -810,6 +963,8 @@ export default function MembershipTypesPanel({ org, readOnly, openBox = null, on
   const [busy, setBusy] = useState(false);
   // What putting a type back took off it (18b-v-b); null for nothing to say.
   const [restored, setRestored] = useState(null);
+  // What a Save that raised members already on a line did, said in that line's row (18w).
+  const [savedNote, setSavedNote] = useState(null);
   const [actionError, setActionError] = useState(null);
   const [showArchived, setShowArchived] = useState(false);
   // The name from the member list the form was opened for, and the name whose
@@ -844,6 +999,7 @@ export default function MembershipTypesPanel({ org, readOnly, openBox = null, on
     setBusy(true);
     setActionError(null);
     setRestored(null);
+    setSavedNote(null);
     try {
       const res = await request();
       setList(res.data);
@@ -931,6 +1087,7 @@ export default function MembershipTypesPanel({ org, readOnly, openBox = null, on
         : await run(() => orgService.updateMembershipType(gymId, draft.id, body), "We couldn't save that change. Please try again.");
     if (saved === null) return;
     closeForm();
+    if (draft.id !== null && body.raise !== undefined) setSavedNote({ typeId: draft.id, text: raisedNote(saved.raised ?? 0, body.raise.noticeDays) });
     // Added for a name from the member list: next, who gets it.
     const made = forWord === null ? undefined : saved.types.find((t) => !had.has(t.id));
     if (forWord !== null && made !== undefined) void fromList.open(forWord.word, made.id);
@@ -949,6 +1106,7 @@ export default function MembershipTypesPanel({ org, readOnly, openBox = null, on
   const startDraft = (next) => {
     setActionError(null);
     setRestored(null);
+    setSavedNote(null);
     setShowProblems(false);
     setDraft(next);
   };
@@ -1050,7 +1208,7 @@ export default function MembershipTypesPanel({ org, readOnly, openBox = null, on
 
           {formAt === 'top' ? <section className="c-card c-narrow p-5 md:p-6">{form}</section> : null}
 
-          <section className="c-card overflow-hidden" aria-label="What you sell">
+          <section className="c-card overflow-clip" aria-label="What you sell">
             <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 px-5 pt-5 pb-4 md:px-6">
               <h2 className="c-h2">What you sell</h2>
               {summary ? <span className="c-s14 c-t3">{summary}</span> : null}
@@ -1071,7 +1229,7 @@ export default function MembershipTypesPanel({ org, readOnly, openBox = null, on
                     ties={typeTies(type, fromList.words, !readOnly)}
                     form={formAt === 'row' && draft.id === type.id ? inRow(form) : null}
                     box={boxRow === type.id ? giveBox(true) : null}
-                    note={noteRow === type.id ? { error: fromList.error, done: fromList.done } : null}
+                    note={noteRow === type.id ? { error: fromList.error, done: fromList.done } : savedNote?.typeId === type.id ? { error: null, done: savedNote.text } : null}
                     onGive={(word, t) => void fromList.open(word.word, t.id)}
                     onUndo={(word) => void fromList.undo(word)}
                     onEdit={(t) => startDraft(draftFromType(t))}

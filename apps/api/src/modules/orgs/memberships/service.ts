@@ -21,10 +21,14 @@ import {
   renewalReminderPreviewResponseSchema,
   type RenewalReminderPreviewRequest,
   type RenewalReminderPreviewResponse,
+  type PriceRaisePreviewRequest,
+  type PriceRaisePreviewResponse,
 } from "@app/shared";
 import { dayInTz } from "../../gamification/streak.js";
 import { OrgsError, holdsPrivilege, requirePrivilege, requireWritablePrivilege } from "../service.js";
 import { previewLine } from "./renewalReminders.js";
+import { applyRaise, previewRaise } from "./priceRaises.js";
+import { typeCurrency } from "./priceRaisesRepo.js";
 import { typeOfGym } from "./renewalRemindersRepo.js";
 import * as repo from "./repo.js";
 
@@ -68,6 +72,8 @@ function throwOnFailure(outcome: repo.MembershipWriteOutcome): void {
   switch (outcome.kind) {
     case "ok":
       return;
+    case "raise_not_allowed":
+      throw new OrgsError(409, "price_raise_not_allowed", "Members can only be moved to a higher price of a repeating membership.");
     case "not_found":
       throw new OrgsError(404, "membership_type_not_found", NOT_FOUND_MESSAGE);
     case "too_many":
@@ -169,24 +175,31 @@ export async function createMembershipType(
 }
 
 export async function updateMembershipType(
-  deps: MembershipsDeps,
+  deps: MembershipsDeps & { emailKey: Buffer | null },
   userId: string,
   gymId: string,
   typeId: string,
   req: UpdateGymMembershipTypeRequest,
 ): Promise<GymMembershipTypesResponse> {
   await requireWritablePrivilege(deps, gymId, userId, "memberships.manage");
-  throwOnFailure(
-    await repo.updateMembershipType(deps.sql, {
-      ...typeInput(req),
-      gymId,
-      typeId,
-      readAt: new Date(req.updatedAt),
-      actorUserId: userId,
-      now: deps.now(),
-    }),
-  );
-  return await readOr404(deps, gymId);
+  const now = deps.now();
+  const asked = req.raise;
+  const outcome = await repo.updateMembershipType(deps.sql, {
+    ...typeInput(req),
+    gymId,
+    typeId,
+    readAt: new Date(req.updatedAt),
+    actorUserId: userId,
+    now,
+    // Members already on it, ticked in the box before Save, pay the new price too (18w).
+    raise:
+      asked === undefined
+        ? null
+        : (tx) => applyRaise(tx, { gymId, typeId, lineMinor: req.priceMinor, noticeDays: asked.noticeDays, membershipIds: asked.membershipIds, emailKey: deps.emailKey, userId, now }),
+  });
+  throwOnFailure(outcome);
+  const list = await readOr404(deps, gymId);
+  return outcome.kind === "ok" && outcome.raised !== undefined ? { ...list, raised: outcome.raised } : list;
 }
 
 export async function archiveMembershipType(
@@ -213,6 +226,21 @@ export async function restoreMembershipType(
     await repo.restoreMembershipType(deps.sql, { gymId, typeId, actorUserId: userId, now: deps.now() }),
   );
   return await readOr404(deps, gymId);
+}
+
+/** The box before Save of a higher price (18w): everybody on the line now, and what the new price would do to
+ *  each. Whoever may change the line may read it; another gym's line is not found. */
+export async function previewPriceRaise(
+  deps: MembershipsDeps & { emailKey: Buffer | null },
+  userId: string,
+  gymId: string,
+  typeId: string,
+  req: PriceRaisePreviewRequest,
+): Promise<PriceRaisePreviewResponse> {
+  const { org } = await requirePrivilege(deps, gymId, userId, "memberships.manage");
+  const currency = await typeCurrency(deps.sql, gymId, typeId);
+  if (currency === null) throw new OrgsError(404, "membership_type_not_found", NOT_FOUND_MESSAGE);
+  return await previewRaise(deps.sql, deps.emailKey, gymId, typeId, req.priceMinor, req.noticeDays, dayInTz(deps.now(), org.timezone), currency);
 }
 
 /** The line's box for a renewal reminder (18v-iv): everybody on the line now, and what this reminder would do

@@ -14,6 +14,7 @@
 //   GET  /v1/orgs/:gymId/member-list/entries/:entryId/memberships            (`members.confirm`)
 //   POST /v1/orgs/:gymId/member-list/entries/:entryId/memberships            give one
 //   POST …/memberships/:membershipId/freeze | unfreeze | cancel | paid       change one
+//   POST …/memberships/:membershipId/price-raise/keep                        keep the old price (18w)
 //   POST …/memberships/:membershipId/fees/:billId/payments | waive           a fee (18h-i)
 //   POST …/memberships/:membershipId/fees/:billId/payments/:paymentId/void
 //
@@ -51,6 +52,7 @@ import {
   saveGymMembershipTypeRequestSchema,
   updateGymMembershipTypeRequestSchema,
   renewalReminderPreviewRequestSchema,
+  priceRaisePreviewRequestSchema,
 } from "@app/shared";
 import type { RedisLike } from "../../../redis.js";
 import { tellMembershipsAfter, type LiveNewsSender } from "../../live/news.js";
@@ -164,7 +166,7 @@ export function registerMembershipRoutes(app: FastifyInstance, deps: MembershipR
     const body = parseOr400(updateGymMembershipTypeRequestSchema, req.body, req, reply);
     if (body === null) return;
     const list = await service.updateMembershipType(
-      membershipDeps,
+      { ...membershipDeps, emailKey: deps.emailKey ?? null },
       requireUserId(req),
       params.gymId,
       params.typeId,
@@ -192,6 +194,16 @@ export function registerMembershipRoutes(app: FastifyInstance, deps: MembershipR
     const body = parseOr400(renewalReminderPreviewRequestSchema, req.body, req, reply);
     if (body === null) return;
     const answer = await service.previewRenewalReminder({ ...membershipDeps, emailKey: deps.emailKey ?? null }, requireUserId(req), params.gymId, params.typeId, body);
+    return reply.status(200).send(answer);
+  });
+
+  // Who a higher price would raise among those already on the line, and from when (18w): the box before Save.
+  app.post("/v1/orgs/:gymId/membership-types/:typeId/price-raise/preview", guarded, async (req, reply) => {
+    const params = parseOr400(membershipTypeParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(priceRaisePreviewRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    const answer = await service.previewPriceRaise({ ...membershipDeps, emailKey: deps.emailKey ?? null }, requireUserId(req), params.gymId, params.typeId, body);
     return reply.status(200).send(answer);
   });
 
@@ -295,6 +307,14 @@ export function registerMembershipRoutes(app: FastifyInstance, deps: MembershipR
       body.leaveFeeMinor,
     );
     return sendHeld(reply, req, answer);
+  });
+
+  // Keep the old price (18w): a raise not yet charged is taken off.
+  app.post(`${heldUrl}/:membershipId/price-raise/keep`, heldGuarded, async (req, reply) => {
+    const params = parseOr400(heldMembershipParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const answer = await held.keepOldPrice(heldDeps, requireUserId(req), params.gymId, params.entryId, params.membershipId);
+    return reply.status(200).send(answer);
   });
 
   app.post(`${heldUrl}/:membershipId/change`, heldGuarded, async (req, reply) => {

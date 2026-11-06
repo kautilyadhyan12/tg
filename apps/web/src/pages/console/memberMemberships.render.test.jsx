@@ -2329,6 +2329,53 @@ describe('cancelling with a full refund in the cooling-off period', () => {
   });
 });
 
+describe('a higher price to come (18w)', () => {
+  const raise = (state, over = {}) => ({ state, fromMinor: 4999, toMinor: 5499, startsOn: '2026-12-01', on: '2026-11-01', ...over });
+
+  it('says under each membership from when its price goes up and when the notice goes, or why it stays', async () => {
+    const gold = held(1, GOLD, '2026-10-01', true);
+    const silver = held(2, GOLD, '2026-10-05', true);
+    orgService.getHeldMemberships.mockResolvedValue(
+      answer([gold, silver], false, {
+        priceRaises: [
+          { membershipId: gold.id, status: raise('sent', { on: '2026-10-18' }), canKeep: true },
+          { membershipId: silver.id, status: raise('no_email', { startsOn: null, on: null }), canKeep: true },
+        ],
+      }),
+    );
+    render(draw(ADA, 'Ada Lovelace'));
+    const b = await boxSoon();
+    const lines = b.getAllByTestId('held-price-raise').map((el) => el.textContent);
+    expect(lines.sort()).toEqual(
+      ['Price goes up to £54.99 from the payment on 1 Dec. Notice emailed on 18 Oct.', 'Price stays £49.99 until whoever pays has an email address, so the notice can be sent.'].sort(),
+    );
+    // Staff who don't change the price list read it with no button.
+    expect(b.queryByRole('button', { name: 'Keep £49.99' })).toBeNull();
+  });
+
+  it('Keep £49.99, for whoever changes the price list, takes the raise off and says so', async () => {
+    const gold = held(1, GOLD, '2026-10-01', true);
+    orgService.getHeldMemberships.mockResolvedValue(answer([gold], false, { priceRaises: [{ membershipId: gold.id, status: raise('will_send'), canKeep: true }] }));
+    orgService.changeHeldMembership.mockResolvedValue(answer([gold]));
+    render(draw(ADA, 'Ada Lovelace', { gym: { slug: 'demo', privileges: ['members.read', 'members.confirm', 'memberships.manage'] } }));
+    const b = await boxSoon();
+    expect(b.getByTestId('held-price-raise').textContent).toContain('Price goes up to £54.99 from the payment on 1 Dec. The notice is emailed on 1 Nov.');
+    fireEvent.click(b.getByRole('button', { name: 'Keep £49.99' }));
+    await waitFor(() => expect(orgService.changeHeldMembership).toHaveBeenCalledWith(GYM, ADA, gold.id, 'price-raise/keep', {}));
+    expect(await screen.findByText('Kept at £49.99. Nothing more is charged.')).toBeTruthy();
+    expect(screen.queryByTestId('held-price-raise')).toBeNull();
+  });
+
+  it('an email on its way offers no Keep', async () => {
+    const gold = held(1, GOLD, '2026-10-01', true);
+    orgService.getHeldMemberships.mockResolvedValue(answer([gold], false, { priceRaises: [{ membershipId: gold.id, status: raise('sending'), canKeep: false }] }));
+    render(draw(ADA, 'Ada Lovelace', { gym: { slug: 'demo', privileges: ['members.read', 'members.confirm', 'memberships.manage'] } }));
+    const b = await boxSoon();
+    expect(b.getByTestId('held-price-raise').textContent).toBe('Price goes up to £54.99 from the payment on 1 Dec. The notice is being emailed.');
+    expect(b.queryByRole('button', { name: 'Keep £49.99' })).toBeNull();
+  });
+});
+
 describe('a renewal reminder (18v-iv)', () => {
   it('says under each membership when its reminder was or will be emailed, or why it cannot be', async () => {
     const gold = held(1, GOLD, '2026-10-01', true);

@@ -49,7 +49,7 @@ export async function saveToken(
 
 /** The kinds of phone notification, each with the person's own switch in Settings (Stage 5 19d). A
  *  training reminder's switch is its own row (`training_reminders`, 19e-i), read by its sender. */
-export type PushKind = "gym_messages" | "places" | "comments" | "training";
+export type PushKind = "gym_messages" | "places" | "comments" | "training" | "streak" | "badges" | "summary";
 
 /** Fixed kind→column map: the column name is never built from input. */
 const SWITCH_COLUMN: Record<PushKind, string | null> = {
@@ -57,6 +57,9 @@ const SWITCH_COLUMN: Record<PushKind, string | null> = {
   places: "push_places",
   comments: "push_comments",
   training: null,
+  streak: "push_streak",
+  badges: "push_badges",
+  summary: "push_summary",
 };
 
 /** The addresses a notification of this kind for this person may go to now: none while the person has
@@ -73,6 +76,12 @@ export async function liveTokens(sql: SqlOrTx, userId: string, now: Date, kind: 
           AND rt.revoked_at IS NULL AND rt.expires_at > ${now}
       )`;
   return rows.map((row) => row.token);
+}
+
+/** A notification of any kind reached one of the person's phones: kept with the two before it, so the
+ *  streak reminder, badges and the summary give way to the others (19e-ii, `roomForNudge`). */
+export async function noteReached(sql: SqlOrTx, userId: string, at: Date): Promise<void> {
+  await sql`UPDATE users SET recent_pushes = (array_prepend(${at}::timestamptz, recent_pushes))[1:3] WHERE id = ${userId}`;
 }
 
 /** An address Firebase says no longer exists. Only for that person, so a late answer never removes

@@ -162,6 +162,8 @@ export const gyms = pgTable(
     cardExpiryReminders: boolean("card_expiry_reminders").notNull().default(false),
     /** When its renewal reminders (0204; 18v-iv) were last looked for; null: look again. */
     renewalRemindersCheckedAt: timestamp("renewal_reminders_checked_at", { withTimezone: true }),
+    /** When its price raises still to email (0215; 18w) were last looked at. */
+    priceRaisesCheckedAt: timestamp("price_raises_checked_at", { withTimezone: true }),
     /** The At risk list's two numbers (0098; spec Part 3 §16.4), under `gyms_at_risk_check`;
      *  `AT_RISK_QUIET_DAYS` and `AT_RISK_WEEKS_CAME` in `@app/shared`. */
     atRiskQuietDays: integer("at_risk_quiet_days").notNull().default(14),
@@ -428,6 +430,8 @@ export const gymAttendance = pgTable(
       sql`CASE WHEN ${t.hoursStatus} = 'in_session' THEN ${t.slotKey} = ${t.sessionOpensMinute}::text || '-' || ${t.sessionClosesMinute}::text ELSE ${t.slotKey} = ${t.hoursStatus} END`,
     ),
     uniqueIndex("gym_attendance_gym_user_day_slot_uq").on(t.gymId, t.userId, t.day, t.slotKey),
+    // One person's visits by day, at any place: the streak, the reminders and the summary read them (0214).
+    index("gym_attendance_user_day_idx").on(t.userId, t.day),
     uniqueIndex("gym_attendance_gym_entry_day_slot_uq")
       .on(t.gymId, t.entryId, t.day, t.slotKey)
       .where(sql`${t.entryId} IS NOT NULL`),

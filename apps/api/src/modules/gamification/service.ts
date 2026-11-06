@@ -28,6 +28,9 @@ import {
 // Part of this module's service interface (R7.1) — other modules import the
 // tz helper from here, never from the internal streak.ts (T3 P2.3 nit).
 export { dayInTz, safeTimeZone } from "./streak.js";
+// The streak as it stands today, and the run that counts, for the streak reminder and the summary (19e-ii).
+export { reconcile } from "./streak.js";
+export { RUN_COUNTS_FROM_M } from "./xp.js";
 
 export interface GamificationDeps {
   sql: Sql;
