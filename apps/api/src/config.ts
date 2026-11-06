@@ -82,6 +82,9 @@ const envSchema = z.object({
     .max(400)
     .regex(/^https?:\/\/[^\s"'<>\\?#]*[^/\s"'<>\\?#]$/, "HEIGHTS_MAPZEN must be an address with no / at its end")
     .default("https://elevation-tiles-prod.s3.amazonaws.com"),
+  // The most degree squares each map keeps in HEIGHTS_DIR (RUNBOOK/height-map.md): 200 is about 5.2 GB of
+  // Mapzen and at most 9.7 GB of Copernicus. Past it, nothing new is fetched and an error is logged.
+  HEIGHTS_MOST_SQUARES_KEPT: z.coerce.number().int().min(1).max(30_000).default(200),
   // Phone notifications (ROADMAP Stage 5 item 18b-i): the path of the service account's key file that
   // Firebase's console downloads, kept outside the repository. Unset = the worker sends none.
   FIREBASE_SERVICE_ACCOUNT_FILE: z.string().trim().min(1).optional(),

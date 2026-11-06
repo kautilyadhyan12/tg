@@ -15,20 +15,23 @@
 // The only thing ever asked of either source is a whole degree square by its name, once: never a run,
 // a point, a person or a sign-in. Only squares on Copernicus's own list of land are asked
 // (`copernicusSquares.ts`): the sea is never fetched, and a place there has no height. A run in more than
-// HEIGHT_MOST_SQUARES squares (no runner's) has none at all. Each map fetches one square at a time, and
-// at most HEIGHT_NEW_SQUARES_AN_HOUR new ones an hour, so no request can fill the server's memory or
-// disk (round one of 37b-ii, C1). A file is checked before it is kept, and unpacked no bigger than it
+// HEIGHT_MOST_SQUARES squares (no runner's) has none at all. Each map fetches one square at a time, at
+// most HEIGHT_NEW_SQUARES_AN_HOUR new ones an hour, never past HEIGHTS_MOST_SQUARES_KEPT squares on the
+// disk, and a person brings at most HEIGHT_NEW_SQUARES_A_PERSON_A_DAY new squares a day (counted in Redis,
+// the api and the worker together), so no request, and no person, can fill the server's memory or disk
+// (round one of 37b-ii, C1, and its re-check). A file is checked before it is kept, and unpacked no bigger than it
 // says it is.
 import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
-import { mkdir, open, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, open, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { gunzip, inflate } from "node:zlib";
 import { HEIGHT_HIGHEST_M, HEIGHT_LOWEST_M, heightTileHeaderSchema, heightTileName, type HeightTileHeader } from "@app/shared";
 import type { FastifyBaseLogger } from "fastify";
 import type { AppConfig } from "../../config.js";
-import { copernicusHasSquare } from "./copernicusSquares.js";
+import type { RedisLike } from "../../redis.js";
+import { copernicusHasSquare, copernicusWithholds } from "./copernicusSquares.js";
 
 const inflateAsync = promisify(inflate);
 const gunzipAsync = promisify(gunzip);
@@ -36,7 +39,8 @@ const gunzipAsync = promisify(gunzip);
 /** The heights at each place (null where neither map has one), or "waiting" when a piece of a map could
  *  not be had within `waitMs`: it keeps coming, and the run is worked out again later. */
 export interface HeightMap {
-  heightsAt(places: readonly (readonly [number, number])[], waitMs: number): Promise<(number | null)[] | "waiting">;
+  /** `asker`: the person whose run it is, for the new squares a person may bring in a day. */
+  heightsAt(places: readonly (readonly [number, number])[], waitMs: number, asker?: string): Promise<(number | null)[] | "waiting">;
 }
 
 export interface HeightMapDeps {
@@ -48,9 +52,14 @@ export interface HeightMapDeps {
   fetch: typeof fetch;
   log: Pick<FastifyBaseLogger, "info" | "warn" | "error">;
   now?: () => number;
-  /** For the tests: the most bytes a fetched file may have, and the new squares an hour. */
+  /** Where a person's new squares of the day are counted; with none, they are not. */
+  redis?: RedisLike;
+  /** The most squares each map keeps on the disk (HEIGHTS_MOST_SQUARES_KEPT). */
+  mostKept?: number;
+  /** For the tests: the most bytes a fetched file may have, the new squares an hour and a person's a day. */
   mostBytes?: number;
   newSquaresAnHour?: number;
+  newSquaresAPersonADay?: number;
 }
 
 /** The biggest of the seven Copernicus files measured on 2026-11-06 was 48.6 MB, of the Mapzen ones
@@ -63,6 +72,12 @@ export const HEIGHT_RETRY_AFTER_MS = 10 * 60 * 1000;
 export const HEIGHT_MOST_SQUARES = 6;
 /** New squares each map fetches in an hour, for every request together; past it, "waiting". */
 export const HEIGHT_NEW_SQUARES_AN_HOUR = 30;
+/** Squares each map keeps on the disk unless HEIGHTS_MOST_SQUARES_KEPT says: about 5.2 GB of Mapzen and
+ *  at most 9.7 GB of Copernicus; the launch's 20 gyms need 15 to 30. Past it, nothing new is fetched. */
+export const HEIGHT_MOST_SQUARES_KEPT = 200;
+/** New squares one person's runs may bring to the server in a day: a run is in six at most. */
+export const HEIGHT_NEW_SQUARES_A_PERSON_A_DAY = 6;
+const DAY_S = 86_400;
 /** How long one fetch may take before it is given up. */
 const FETCH_MOST_MS = 120_000;
 /** Copernicus blocks kept unpacked, 4 MB each (1024 x 1024 32-bit floats). */
@@ -90,12 +105,15 @@ interface SquareKind<T> {
   keep(name: string, bytes: Buffer): Promise<T | null>;
   /** The square as kept before, whole, or null. */
   kept(name: string): Promise<T | null>;
+  /** How many squares of this map the disk holds. */
+  countKept(): Promise<number>;
 }
 
 function squareStore<T>(deps: Omit<HeightMapDeps, "copernicus" | "mapzen">, kind: SquareKind<T>, made: () => Promise<void>) {
   const now = deps.now ?? Date.now;
   const mostBytes = deps.mostBytes ?? HEIGHT_FILE_MOST_BYTES;
   const anHour = deps.newSquaresAnHour ?? HEIGHT_NEW_SQUARES_AN_HOUR;
+  const mostKept = deps.mostKept ?? HEIGHT_MOST_SQUARES_KEPT;
   const known = new Map<string, T>();
   const going = new Map<string, Promise<T | null>>();
   const failedAt = new Map<string, number>();
@@ -148,9 +166,14 @@ function squareStore<T>(deps: Omit<HeightMapDeps, "copernicus" | "mapzen">, kind
     return value;
   }
 
-  /** The fetch, in this map's line; "full" when this hour's new squares are used up (not a failure). */
+  /** The fetch, in this map's line; "full" when this hour's new squares, or the disk's, are used up (not
+   *  a failure). */
   function inLine(name: string): Promise<T | null | "full"> {
     const turn = line.then(async (): Promise<T | null | "full"> => {
+      if ((await kind.countKept()) >= mostKept) {
+        deps.log.error({ event: "geo.heights_disk_full", map: kind.map, tile: name, mostKept }, "height map squares kept are at their most");
+        return "full";
+      }
       while (began.length > 0 && now() - (began[0] ?? 0) >= HOUR_MS) began.shift();
       if (began.length >= anHour) {
         deps.log.warn({ event: "geo.heights_hour_full", map: kind.map, tile: name }, "new height map pieces this hour used up");
@@ -164,7 +187,7 @@ function squareStore<T>(deps: Omit<HeightMapDeps, "copernicus" | "mapzen">, kind
   }
 
   /** The square kept, or null when it could not be had now (tried again HEIGHT_RETRY_AFTER_MS after a failure). */
-  return function square(name: string): Promise<T | null> {
+  function square(name: string): Promise<T | null> {
     const had = known.get(name);
     if (had !== undefined) return Promise.resolve(had);
     const already = going.get(name);
@@ -196,7 +219,14 @@ function squareStore<T>(deps: Omit<HeightMapDeps, "copernicus" | "mapzen">, kind
       });
     going.set(name, job);
     return job;
-  };
+  }
+
+  /** True when the square is here already, in memory or on the disk: nothing would be fetched for it. */
+  async function isKept(name: string): Promise<boolean> {
+    return known.has(name) || (await kind.kept(name)) !== null;
+  }
+
+  return { square, isKept };
 }
 
 /** Writes `bytes` to `file` whole before it has that name, so a half-written file is never read. */
@@ -352,10 +382,11 @@ interface CopernicusSquare {
 function copernicusReader(deps: HeightMapDeps, made: () => Promise<void>) {
   const tif = (name: string): string => join(deps.dir, `${name}.tif`);
   const json = (name: string): string => join(deps.dir, `${name}.json`);
-  const square = squareStore<CopernicusSquare>(
+  const store = squareStore<CopernicusSquare>(
     deps,
     {
       map: "copernicus",
+      countKept: async () => (await readdir(deps.dir).catch(() => [])).filter((f) => f.startsWith("Copernicus_") && f.endsWith(".json")).length,
       url: (name) => `${deps.copernicus}/${name}/${name}.tif`,
       async keep(name, bytes) {
         const header = heightTileHeader(bytes, name);
@@ -423,7 +454,8 @@ function copernicusReader(deps: HeightMapDeps, made: () => Promise<void>) {
   }
 
   return {
-    square: (lat: number, lng: number) => square(heightTileName(lat, lng)),
+    square: (lat: number, lng: number) => store.square(heightTileName(lat, lng)),
+    isKept: (lat: number, lng: number) => store.isKept(heightTileName(lat, lng)),
     nameOf: heightTileName,
     /** The heights at places all in one kept square: every block they cross loaded first and held here,
      *  so a block the cache lets go of during a long run is still read. */
@@ -460,10 +492,11 @@ export function mapzenTileName(lat: number, lng: number): string {
 
 function mapzenReader(deps: HeightMapDeps, made: () => Promise<void>) {
   const hgt = (name: string): string => join(deps.dir, `${name}.hgt`);
-  const square = squareStore<string>(
+  const store = squareStore<string>(
     deps,
     {
       map: "mapzen",
+      countKept: async () => (await readdir(deps.dir).catch(() => [])).filter((f) => f.endsWith(".hgt")).length,
       url: (name) => `${deps.mapzen}/skadi/${name.slice(0, 3)}/${name}.hgt.gz`,
       async keep(name, bytes) {
         let unpacked: Buffer;
@@ -489,7 +522,8 @@ function mapzenReader(deps: HeightMapDeps, made: () => Promise<void>) {
     made,
   );
   return {
-    square: (lat: number, lng: number) => square(mapzenTileName(lat, lng)),
+    square: (lat: number, lng: number) => store.square(mapzenTileName(lat, lng)),
+    isKept: (lat: number, lng: number) => store.isKept(mapzenTileName(lat, lng)),
     nameOf: mapzenTileName,
     /** The heights at places all in one kept square, reading only the rows they cross. */
     async read(name: string, file: string, places: readonly (readonly [number, number])[]): Promise<(number | null)[]> {
@@ -570,19 +604,52 @@ export function createHeightMap(deps: HeightMapDeps): HeightMap {
     return out;
   }
 
+  const perDay = deps.newSquaresAPersonADay ?? HEIGHT_NEW_SQUARES_A_PERSON_A_DAY;
+
+  /** True when this person may bring this new square today. Each square is counted once a day for a
+   *  person, so the summary asking again for the same run counts nothing more. With Redis down the
+   *  disk's own limit still holds, so the run is not held up. */
+  async function mayBring(asker: string, square: string): Promise<boolean> {
+    const redis = deps.redis;
+    if (redis === undefined) return true;
+    const mark = `geo:new_square:${asker}:${square}`;
+    const first = await redis.setNx(mark, DAY_S, "counting");
+    if (first === null) return true;
+    if (!first) return (await redis.get(mark)) === "yes";
+    const count = await redis.incrWithTtl(`geo:new_squares:${asker}`, DAY_S);
+    const yes = count === null || count <= perDay;
+    await redis.setex(mark, DAY_S, yes ? "yes" : "no");
+    return yes;
+  }
+
   return {
-    async heightsAt(places, waitMs) {
+    async heightsAt(places, waitMs, asker) {
       // A run in more squares than any runner's: nothing is read and nothing fetched (round one, C1).
       const squares = new Set(places.map(([lat, lng]) => `${String(Math.floor(lat))},${String(Math.floor(lng))}`));
       if (squares.size > HEIGHT_MOST_SQUARES) {
         deps.log.warn({ event: "geo.heights_too_many_squares", squares: squares.size }, "a run in too many squares");
         return places.map(() => null);
       }
-      // Only places on Copernicus's list of land are read: the sea, and the squares it withholds, have none.
+      // Only places on Copernicus's list of land are read from both maps; in a square it withholds
+      // (Armenia, Azerbaijan), from Mapzen alone; the sea has none.
       const onLand = places.flatMap(([lat, lng], i) => (copernicusHasSquare(lat, lng) ? [i] : []));
+      const withheld = places.flatMap(([lat, lng], i) => (copernicusWithholds(lat, lng) ? [i] : []));
       const landPlaces = onLand.map((i): readonly [number, number] => places[i] ?? [0, 0]);
+      const withheldPlaces = withheld.map((i): readonly [number, number] => places[i] ?? [0, 0]);
       const out: (number | null)[] = places.map(() => null);
-      if (landPlaces.length === 0) return out;
+      if (landPlaces.length === 0 && withheldPlaces.length === 0) return out;
+      // A square new to the server costs its disk: a person brings a few a day at most.
+      if (asker !== undefined) {
+        const seen = new Map<string, readonly [number, number]>();
+        for (const place of [...landPlaces, ...withheldPlaces]) seen.set(`${String(Math.floor(place[0]))},${String(Math.floor(place[1]))}`, place);
+        for (const [key, [lat, lng]] of seen) {
+          const here = (await mapzen.isKept(lat, lng)) && (copernicusWithholds(lat, lng) || (await copernicus.isKept(lat, lng)));
+          if (!here && !(await mayBring(asker, key))) {
+            deps.log.warn({ event: "geo.heights_person_day_full" }, "new height map squares for this person today used up");
+            return "waiting";
+          }
+        }
+      }
       let timer: NodeJS.Timeout | undefined;
       const late = new Promise<"late">((resolve) => {
         timer = setTimeout(() => {
@@ -590,8 +657,15 @@ export function createHeightMap(deps: HeightMapDeps): HeightMap {
         }, waitMs);
       });
       try {
-        const [surface, ground] = await Promise.all([fromMap(copernicus, landPlaces, late), fromMap(mapzen, landPlaces, late)]);
-        if (surface === "waiting" || ground === "waiting") return "waiting";
+        const [surface, ground, alone] = await Promise.all([
+          fromMap(copernicus, landPlaces, late),
+          fromMap(mapzen, landPlaces, late),
+          fromMap(mapzen, withheldPlaces, late),
+        ]);
+        if (surface === "waiting" || ground === "waiting" || alone === "waiting") return "waiting";
+        withheld.forEach((at, j) => {
+          out[at] = alone[j] ?? null;
+        });
         onLand.forEach((at, j) => {
           const s = surface[j] ?? null;
           const g = ground[j] ?? null;
@@ -612,10 +686,13 @@ const fetchNothing: typeof fetch = () => Promise.reject(new Error("the tests fet
 /** The height map in HEIGHTS_DIR (a folder under the system's temporary one when unset, outside
  *  production), filled from the two sources the config names: the api and the worker make the same. */
 export function heightMapFor(
-  config: Pick<AppConfig, "NODE_ENV" | "HEIGHTS_DIR" | "HEIGHTS_COPERNICUS" | "HEIGHTS_MAPZEN">,
+  config: Pick<AppConfig, "NODE_ENV" | "HEIGHTS_DIR" | "HEIGHTS_COPERNICUS" | "HEIGHTS_MAPZEN" | "HEIGHTS_MOST_SQUARES_KEPT">,
   log: HeightMapDeps["log"],
+  redis: RedisLike,
 ): HeightMap {
   return createHeightMap({
+    redis,
+    mostKept: config.HEIGHTS_MOST_SQUARES_KEPT,
     dir: config.HEIGHTS_DIR ?? join(tmpdir(), config.NODE_ENV === "test" ? "aihg-heights-test" : "aihg-heights"),
     copernicus: config.HEIGHTS_COPERNICUS,
     mapzen: config.HEIGHTS_MAPZEN,

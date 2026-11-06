@@ -9,6 +9,7 @@ import { deflateSync, gzipSync } from "node:zlib";
 import { afterEach, describe, expect, it } from "vitest";
 import { copernicusHasSquare, COPERNICUS_SQUARE_COUNT } from "../src/modules/geo/copernicusSquares.js";
 import { HEIGHT_MOST_SQUARES, createHeightMap, heightTileHeader, mapzenTileName, type HeightMapDeps } from "../src/modules/geo/heights.adapter.js";
+import { createMemoryRedis } from "../src/redis.js";
 
 const COP = "https://copernicus.test";
 const MZ = "https://mapzen.test";
@@ -277,6 +278,51 @@ describe("no request can fill the server's memory or disk (round one of 37b-ii, 
     expect(most).toEqual({ copernicus: 1, mapzen: 1 });
   });
 
+  it("past the squares the disk may keep, nothing new is fetched, and it is logged as an error", async () => {
+    const calls: Call[] = [];
+    const { served, places } = squaresAlong(3);
+    const { log, said } = keptLog();
+    const dir = newDir();
+    const map = mapOn(dir, fakeFetch(served, calls), { mostKept: 2, log });
+    expect(await map.heightsAt(places, 5000)).toBe("waiting");
+    expect(calls).toHaveLength(4);
+    expect(said).toContainEqual(expect.objectContaining({ event: "geo.heights_disk_full", map: "copernicus" }));
+    expect(said).toContainEqual(expect.objectContaining({ event: "geo.heights_disk_full", map: "mapzen" }));
+    const files = readdirSync(dir);
+    expect([files.filter((f) => f.endsWith(".json")).length, files.filter((f) => f.endsWith(".hgt")).length]).toEqual([2, 2]);
+    // Asked again, and by a new server on the same disk: still nothing more is fetched.
+    expect(await map.heightsAt(places, 5000)).toBe("waiting");
+    expect(await mapOn(dir, fakeFetch(served, calls), { mostKept: 2 }).heightsAt(places, 5000)).toBe("waiting");
+    expect(calls).toHaveLength(4);
+  });
+
+  it("a person brings a few new squares a day: asking again costs nothing, another person still may, and the next day again", async () => {
+    let now = 9_000_000;
+    const calls: Call[] = [];
+    const { served, places } = squaresAlong(4);
+    const redis = createMemoryRedis(() => now);
+    const { log, said } = keptLog();
+    const map = mapOn(newDir(), fakeFetch(served, calls, 50), { redis, newSquaresAPersonADay: 2, log, now: () => now });
+    const [a, b, c, d] = places.map((pl): [number, number][] => [pl]);
+    // Two new squares, asked three times while they come: counted once each.
+    expect(await map.heightsAt([...(a ?? []), ...(b ?? [])], 1, "ravi")).toBe("waiting");
+    expect(await map.heightsAt([...(a ?? []), ...(b ?? [])], 1, "ravi")).toBe("waiting");
+    expect(await map.heightsAt([...(a ?? []), ...(b ?? [])], 30_000, "ravi")).toEqual([30, 30]);
+    // A third new square the same day: waiting, nothing fetched, and asked again still nothing.
+    const before = calls.length;
+    expect(await map.heightsAt(c ?? [], 5000, "ravi")).toBe("waiting");
+    expect(await map.heightsAt(c ?? [], 5000, "ravi")).toBe("waiting");
+    expect(calls.length).toBe(before);
+    expect(said).toContainEqual(expect.objectContaining({ event: "geo.heights_person_day_full" }));
+    // Squares already here cost nothing: Ravi reads them as often as he likes.
+    expect(await map.heightsAt(a ?? [], 5000, "ravi")).toEqual([30]);
+    // Somebody else may bring the square Ravi could not.
+    expect(await map.heightsAt(c ?? [], 30_000, "asha")).toEqual([30]);
+    // The next day, Ravi again.
+    now += 25 * 3_600_000;
+    expect(await map.heightsAt(d ?? [], 30_000, "ravi")).toEqual([30]);
+  });
+
   it("past the new squares an hour allows, 'waiting' with nothing more asked; an hour on, the rest", async () => {
     const calls: Call[] = [];
     let now = 5_000_000;
@@ -293,15 +339,22 @@ describe("no request can fill the server's memory or disk (round one of 37b-ii, 
 });
 
 describe("what is kept, and what is refused", () => {
-  it("a place off Copernicus's own list of land (the open Atlantic, Armenia) has no height, and nothing is asked", async () => {
+  it("a place off Copernicus's own list of land (the open Atlantic) has no height, and nothing is asked", async () => {
     const calls: Call[] = [];
     // Copernicus's own list (tileList.txt, read 2026-11-06): the Atlantic's N30 W041 and Armenia's N40 E044 are
     // not on it; Guwahati's N26 E091 and New York's N40 W074 are.
     expect(COPERNICUS_SQUARE_COUNT).toBe(26_450);
     expect([copernicusHasSquare(30.5, -40.5), copernicusHasSquare(40.5, 44.5), copernicusHasSquare(26.1, 91.7), copernicusHasSquare(40.7, -73.9)]).toEqual([false, false, true, true]);
     const map = mapOn(newDir(), fakeFetch(new Map(), calls));
-    expect(await map.heightsAt([[30.5, -40.5], [40.18, 44.51]], 5000)).toEqual([null, null]);
+    expect(await map.heightsAt([[30.5, -40.5], [-60.5, -150.5]], 5000)).toEqual([null, null]);
     expect(calls).toHaveLength(0);
+  });
+
+  it("in a square Copernicus withholds (Yerevan, Armenia), the Mapzen map alone is read, and Copernicus is never asked", async () => {
+    const calls: Call[] = [];
+    const served = new Map<string, Buffer | number>([[mzUrl(40, 44), mapzenFile(() => 990)]]);
+    expect(await mapOn(newDir(), fakeFetch(served, calls)).heightsAt([[40.18, 44.51]], 5000)).toEqual([990]);
+    expect(calls.map((c) => c.url)).toEqual([mzUrl(40, 44)]);
   });
 
   it("a 404 from either source on land is a failure, never 'no heights here': waiting, and asked again ten minutes on", async () => {

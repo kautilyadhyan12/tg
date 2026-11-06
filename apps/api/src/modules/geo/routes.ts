@@ -95,7 +95,7 @@ export function registerGeoRoutes(
     log: app.log,
   };
   const readDeps = { sql: deps.sql };
-  const heights = overrides.heights ?? heightMapFor(deps.config, app.log);
+  const heights = overrides.heights ?? heightMapFor(deps.config, app.log, deps.redis);
   app.decorateRequest("geoRouteInput", undefined);
 
   // Validation BEFORE the meter (P2.5b finding-1 precedent): a 400 must not burn
@@ -222,7 +222,7 @@ export function registerGeoRoutes(
     async (req, reply) => {
       const input = parse(runClimbRequestSchema, req.body, req, reply);
       if (input === null) return;
-      return await reply.send({ climb: await service.askClimb({ heights }, input) });
+      return await reply.send({ climb: await service.askClimb({ heights }, input, authedUserId(req)) });
     },
   );
 

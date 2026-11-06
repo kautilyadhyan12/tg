@@ -128,3 +128,13 @@ export function copernicusHasSquare(lat: number, lng: number): boolean {
   const i = (la + 90) * 360 + (lo + 180);
   return ((bits[i >> 3] ?? 0) & (1 << (i & 7))) !== 0;
 }
+
+/** The squares around Armenia and Azerbaijan that Copernicus leaves off its list (every square from
+ *  38 to 41 N and 43 to 50 E not on it, worked out from the list above on 2026-11-07): land there is read
+ *  from the Mapzen map alone, as the only one with heights (round one of 37b-ii). */
+const WITHHELD = new Set(["38,45", "38,46", "38,48", "38,49", "39,44", "39,45", "39,46", "39,47", "39,48", "39,49", "40,43", "40,44", "40,45", "40,46", "40,47", "40,48", "40,49", "40,50", "41,43", "41,44", "41,45", "41,46", "41,47", "41,48", "41,49"]);
+
+/** True for a square Copernicus withholds, where the Mapzen map alone is read. */
+export function copernicusWithholds(lat: number, lng: number): boolean {
+  return WITHHELD.has(`${String(Math.floor(lat))},${String(Math.floor(lng))}`);
+}

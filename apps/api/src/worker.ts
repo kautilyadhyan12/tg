@@ -72,7 +72,7 @@ import { sendDueCardExpiryNotices } from "./modules/orgs/payments/cardExpiry.js"
 import { sendDueRenewalReminders } from "./modules/orgs/memberships/renewalReminders.js";
 import { sendDueCardNotices } from "./modules/orgs/payments/cardNotices.js";
 // The worker busts no entitlement cache: a gym's members pick a change up within the cache's 60 s.
-import { createMemoryRedis } from "./redis.js";
+import { createIoRedis, createMemoryRedis } from "./redis.js";
 import { sentryOptions } from "./sentry.js";
 
 const config = loadConfig(process.env);
@@ -343,7 +343,8 @@ try {
   log.fatal({ err }, "failed to register the elevation gain schedule");
   process.exit(1);
 }
-const heights = heightMapFor(config, log);
+// Its own Redis seam, beside BullMQ's connection: a person's new squares are counted with the api's.
+const heights = heightMapFor(config, log, createIoRedis(redisUrl));
 
 // THE GYM'S DAY GETS WRITTEN DOWN (Part 3 §3.2; Kd rulings :26469 and :29961).
 // **THE ONLY SCHEDULE ON THIS QUEUE THAT IS NOT NIGHTLY, AND THE REASON IS THE
