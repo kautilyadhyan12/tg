@@ -1118,6 +1118,10 @@ d("member list: keeping it by hand (real Postgres)", () => {
       WHERE tc.constraint_type = 'FOREIGN KEY' AND ccu.table_name = 'gym_member_list_entries'
       ORDER BY 1`;
     expect(refs.map((r) => r.ref).sort()).toEqual([
+      // A member's payment page in the app (0217; 18k-ii-a): moved by the join with its membership, and Delete permanently
+      // waits for an open one (`appPayments.routes.test.ts`); a record deleted for good lets go of it.
+      "gym_app_payments.entry_id",
+      "gym_app_payments.gym_id",
       "gym_attendance.entry_id",
       "gym_attendance.gym_id",
       // A visit staff removed (0068): moved by the join and kept or deleted as a visit is;

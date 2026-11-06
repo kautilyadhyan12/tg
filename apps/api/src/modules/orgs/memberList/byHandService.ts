@@ -12,6 +12,7 @@ import { ChosenPeopleMovedError, onceMoreIfMoved } from "./onceMore.js";
 import {
   isLargeMemberListChange,
   MEMBER_LIST_BY_HAND_WORDS,
+  APP_PAYMENT_STAFF_WORDS,
   MEMBER_LIST_ENTRIES_PAGE,
   MEMBER_LIST_EXTRA_FIELD_PREFIX,
   MEMBER_LIST_FIELD_LABELS,
@@ -47,6 +48,7 @@ import { dayInTz } from "../../gamification/streak.js";
 import { acceptAgainForAccounts, markWrongPersonFor, withdrawForAccounts, withdrawForAddress } from "../invites/join.js";
 import { invitationsOf, inviteEntryInTx, readyToSend } from "../invites/service.js";
 import { settle as settleHeldMemberships, typeHeldByBoth } from "../memberships/heldRepo.js";
+import { anyOpenOfEntries } from "../payments/appPaymentsRepo.js";
 import type { InviteSettings } from "../invites/settings.js";
 import { insertAudit, placesFree } from "../repo.js";
 import { joinLeadOnAdd } from "../leads/joinOnAdd.js";
@@ -865,6 +867,8 @@ export async function deleteFormer(
     const stored = await repo.entryFor(tx, gymId, entryId);
     if (stored === null) throw notFound();
     if (stored.formerAt === null) throw new OrgsError(409, "not_former", MEMBER_LIST_BY_HAND_WORDS.not_former);
+    // What Square took on a page still open would have no bill to go on (18k-ii-a).
+    if (await anyOpenOfEntries(tx, gymId, [entryId])) throw new OrgsError(409, "app_payment_open", APP_PAYMENT_STAFF_WORDS.delete_open);
     // Their number is never given to somebody new (5e-i).
     await repo.keepGoingMemberNumber(tx, gymId, stored.values.memberNumber);
     // The customer the app added in Square is owed its deletion while the link to it exists (18d-iii-b-ii-b-ii-b-ii).

@@ -25,6 +25,11 @@
 //
 // What a gym sells in the app (ROADMAP 18k-i), for the phone:
 //   GET    /v1/orgs/:gymId/for-sale                            the lines a member can buy, as the agreement words them
+//   GET    /v1/orgs/:gymId/my-membership/payments              whether they can pay in the app, and their pages open (18k-ii-a)
+//   POST   /v1/orgs/:gymId/my-membership/payments              Pay: Square's own page for the bill they owe
+//   GET    /v1/orgs/:gymId/my-membership/payments/:paymentId   how it went, back from Square's page
+//   POST   /v1/orgs/:gymId/my-membership/payments/:paymentId/close   they left the page
+//   POST   …/member-list/entries/:entryId/memberships/:membershipId/app-payment/close   staff: Close payment page
 //
 // Save card on Terminal (ROADMAP 18d-ii-b-ii), `billing.members`:
 //   POST   …/member-list/entries/:entryId/card/terminal                 the agreement goes to the Terminal
@@ -88,6 +93,7 @@ import {
   saveCardRequestSchema,
   squareCardIdSchema,
   terminalFeePaymentRequestSchema,
+  appPaymentRequestSchema,
   terminalPaymentRequestSchema,
   terminalSaleRequestSchema,
   terminalSaveRequestSchema,
@@ -121,6 +127,7 @@ import * as cardRefunds from "./cardRefunds.js";
 import * as cards from "./cards.js";
 import * as failedPayments from "./failedPayments.js";
 import { readForSale } from "./forSale.js";
+import * as appPayments from "./appPayments.js";
 import * as refundsToReview from "./refundsToReview.js";
 import * as service from "./service.js";
 import { verifySquareSignature } from "./squareSignature.js";
@@ -357,6 +364,14 @@ export function registerPaymentRoutes(app: FastifyInstance, deps: Omit<service.P
     return reply.status(200).header("cache-control", "no-store").send(answer);
   });
 
+  // Close payment page (18k-ii-a): a member's page open on this membership, closed at Square.
+  app.post(`${entryUrl}/memberships/:membershipId/app-payment/close`, { preHandler: [app.authenticate, staffOnly(deps.sql, payStartLimit)], onSend: tellMemberships }, async (req, reply) => {
+    const params = parseOr400(heldMembershipParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const answer = await appPayments.closeAppPaymentByStaff(paymentsDeps, callerId(req), params.gymId, params.entryId, params.membershipId);
+    return reply.status(200).header("cache-control", "no-store").send(answer);
+  });
+
   app.get(`${entryUrl}/terminal-payments/:paymentId`, { preHandler: [app.authenticate, staffOnly(deps.sql, payCheckLimit)] }, async (req, reply) => {
     const params = parseOr400(terminalPaymentParamsSchema, req.params, req, reply);
     if (params === null) return;
@@ -585,6 +600,52 @@ export function registerPaymentRoutes(app: FastifyInstance, deps: Omit<service.P
     const mine = await cards.saveMyCard(paymentsDeps, callerId(req), params.gymId, body, gate(myCardWriteLimit, req, reply));
     if (mine === null) return;
     return reply.status(200).send(mine);
+  });
+
+  // Pay in the app (18k-ii-a). A member pays a handful of bills a month; back from Square's page the phone asks how it
+  // went every few seconds for a minute or two. The whole gym is on one wi-fi address.
+  const appPayLimit = createDualRateLimit({ name: "app_payment", max: 30, ipMax: 3000, windowMs: HOUR_MS, identifier: byPerson, redis: deps.redis });
+  const appPayCheckLimit = createDualRateLimit({ name: "app_payment_check", max: 1200, ipMax: 60_000, windowMs: HOUR_MS, identifier: byPerson, redis: deps.redis });
+  const appPaymentUrl = "/v1/orgs/:gymId/my-membership/payments";
+  const told = (gymId: string, entryId: string | null): void => {
+    if (entryId !== null) deps.news.tell(gymId, { what: "memberships", entryId });
+  };
+
+  app.get(appPaymentUrl, { preHandler: app.authenticate }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const mine = await appPayments.readMyAppPayments(paymentsDeps, callerId(req), params.gymId, gate(appPayCheckLimit, req, reply));
+    if (mine === null) return;
+    return reply.status(200).header("cache-control", "no-store").send(mine);
+  });
+
+  app.post(appPaymentUrl, { preHandler: app.authenticate }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(appPaymentRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    const done = await appPayments.startAppPayment(paymentsDeps, callerId(req), params.gymId, body, gate(appPayLimit, req, reply));
+    if (done === null) return;
+    told(params.gymId, done.tell);
+    return reply.status(200).header("cache-control", "no-store").send(done.answer);
+  });
+
+  app.get(`${appPaymentUrl}/:paymentId`, { preHandler: app.authenticate }, async (req, reply) => {
+    const params = parseOr400(terminalSaleParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const done = await appPayments.checkAppPayment(paymentsDeps, callerId(req), params.gymId, params.paymentId, gate(appPayCheckLimit, req, reply));
+    if (done === null) return;
+    told(params.gymId, done.tell);
+    return reply.status(200).header("cache-control", "no-store").send(done.answer);
+  });
+
+  app.post(`${appPaymentUrl}/:paymentId/close`, { preHandler: app.authenticate }, async (req, reply) => {
+    const params = parseOr400(terminalSaleParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const done = await appPayments.closeAppPayment(paymentsDeps, callerId(req), params.gymId, params.paymentId, gate(appPayLimit, req, reply));
+    if (done === null) return;
+    told(params.gymId, done.tell);
+    return reply.status(200).header("cache-control", "no-store").send(done.answer);
   });
 
   app.get("/v1/orgs/:gymId/for-sale", { preHandler: app.authenticate }, async (req, reply) => {

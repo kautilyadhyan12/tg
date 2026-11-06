@@ -23,6 +23,7 @@
 import { randomUUID } from "node:crypto";
 import {
   CARD_CHARGE_WORDS,
+  APP_PAYMENT_STAFF_WORDS,
   GYM_PAYMENTS_WORDS,
   MEMBER_FEE_WORDS,
   TERMINAL_AGREEMENT,
@@ -826,6 +827,8 @@ async function start(
       throw new OrgsError(409, "keep_card_save_waiting", TERMINAL_PAYMENT_WORDS.keep_card_save_waiting);
     case "card_charging":
       throw new OrgsError(409, "card_charge_waiting", CARD_CHARGE_WORDS.charging);
+    case "app_paying":
+      throw new OrgsError(409, "app_payment_open", APP_PAYMENT_STAFF_WORDS.paying);
     case "fee_not_found":
       throw new OrgsError(404, "member_fee_not_found", "That fee was not found.");
     case "fee_changed":

@@ -226,7 +226,7 @@ export async function settleLostChargeback(sql: Sql, d: { gymId: string; environ
     if (target === null) throw new Error("a payment stopped standing under the gym's lock");
     const [through] = await tx<{ minor: number }[]>`
       SELECT COALESCE(sum(amount_minor), 0)::int AS minor FROM gym_member_refunds
-      WHERE gym_id = ${d.gymId} AND payment_id = ${where.id} AND undone_at IS NULL AND method IN ('company','terminal')`;
+      WHERE gym_id = ${d.gymId} AND payment_id = ${where.id} AND undone_at IS NULL AND method IN ('company','terminal','app')`;
     const amountMinor = Math.min(row.amount_minor, target.payment.amountMinor - (through?.minor ?? 0));
     if (amountMinor > 0) {
       await writeRefund(tx, {

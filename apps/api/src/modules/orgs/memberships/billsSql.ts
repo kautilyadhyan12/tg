@@ -722,11 +722,24 @@ export async function refundAskingOnBill(sql: Sql | TransactionSql, gymId: strin
   return row !== undefined;
 }
 
-/** Money on its way through Square for this membership, on the Terminal or from the card on file:
- *  nothing else is paid, voided or cancelled on it until Square has answered. */
-export async function squareMoneyOut(tx: TransactionSql, gymId: string, membershipId: string): Promise<{ kind: "terminal_waiting" } | { kind: "card_charging" } | null> {
+/** Whether a member has Square's own payment page open for this membership (18k-ii-a), read under the record's lock,
+ *  which the page's own write takes too. */
+export async function appPaying(tx: TransactionSql, gymId: string, membershipId: string): Promise<boolean> {
+  const [row] = await tx<{ id: string }[]>`
+    SELECT id FROM gym_app_payments WHERE gym_id = ${gymId} AND held_membership_id = ${membershipId} AND state = 'open'`;
+  return row !== undefined;
+}
+
+/** Money on its way through Square for this membership, on the Terminal, from the card on file or on a member's payment
+ *  page in the app (18k-ii-a): nothing else is paid, voided or cancelled on it until Square has answered. */
+export async function squareMoneyOut(
+  tx: TransactionSql,
+  gymId: string,
+  membershipId: string,
+): Promise<{ kind: "terminal_waiting" } | { kind: "card_charging" } | { kind: "app_paying" } | null> {
   if (await terminalWaiting(tx, gymId, membershipId)) return { kind: "terminal_waiting" };
   if (await cardCharging(tx, gymId, membershipId)) return { kind: "card_charging" };
+  if (await appPaying(tx, gymId, membershipId)) return { kind: "app_paying" };
   return null;
 }
 

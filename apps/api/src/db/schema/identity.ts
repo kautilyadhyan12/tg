@@ -128,7 +128,7 @@ export const signInCodes = pgTable(
 );
 
 /** Each Change email (19c), kept for the 14 days its Undo link works (item 19's two extra passes,
- *  migration 0217): the note to the old address and its tries, and the link's SHA-256 (the token is
+ *  migration 0218): the note to the old address and its tries, and the link's SHA-256 (the token is
  *  worked out again from the id and the server's secret, never stored). */
 export const emailChanges = pgTable(
   "email_changes",

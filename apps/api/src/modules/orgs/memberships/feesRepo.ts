@@ -531,6 +531,10 @@ export type FeeWriteOutcome =
   | { kind: "terminal_waiting" }
   /** The card on file is being charged for the membership (18d-iii-i). */
   | { kind: "card_charging" }
+  /** A member has Square's own payment page open for this membership (18k-ii-a). */
+  | { kind: "app_paying" }
+  /** Paid in the app (18k-ii-a): refunded in Square, never voided here. */
+  | { kind: "app_payment" }
   /** Paid on the Terminal: refunded in Square, never voided here. */
   | { kind: "terminal_payment" }
   /** Charged to the card on file (18d-iii-i): refunded in Square, never voided here. */
@@ -691,6 +695,7 @@ export async function voidFeePayment(
     if (payment.undone) return { kind: "ok" };
     if (payment.method === "terminal") return { kind: "terminal_payment" };
     if (payment.method === "company") return { kind: "card_payment" };
+    if (payment.method === "app") return { kind: "app_payment" };
     if (entry.past) return { kind: "past_member" };
     const out = await squareMoneyOut(tx, input.gymId, input.membershipId);
     if (out !== null) return out;

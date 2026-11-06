@@ -35,7 +35,7 @@ export const DIRECT_DELETE_TABLES = [
   // The ids of meals the person removed (migration 0169, ROADMAP Stage 5 32b-i): kept so a late
   // save from the phone cannot bring a removed meal back. Their own record, deleted and exported.
   "meal_removed_ids",
-  // Each Change email, kept for the 14 days its Undo link works (migration 0217): the person's own
+  // Each Change email, kept for the 14 days its Undo link works (migration 0218): the person's own
   // addresses, deleted and exported (the link's hash and the note's tries are left out of the export).
   "email_changes",
   "user_dishware", // §5.2 "dishware"
@@ -588,6 +588,11 @@ export const USER_LINKED_NOT_PURGED_TABLES = [
   // It holds Square's ids and the amount, no card number, and is forgotten a day after it ends
   // unless Square took money it could not record.
   "gym_terminal_payments",
+  // gym_app_payments.opened_by and closed_by_staff — the member's account that pressed Pay in the app, and the member of
+  // staff who pressed Close payment page (`0217`; 18k-ii-a), on gym_member_payments' footing: the gym's record of money
+  // asked for; `ON DELETE set null`. It holds Square's ids, the amount and the card's brand and last four, no card number;
+  // a closed one is forgotten a day after it ends, and a record deleted for good lets go of `entry_id`.
+  "gym_app_payments",
   // gym_card_charges.started_by — which member of staff pressed Charge card on file (`0158`;
   // 18d-iii-i); null for the app's own charge on a bill's date. On gym_member_payments' footing: the
   // gym's record of money asked for; `ON DELETE set null`. It holds Square's ids, the card's brand

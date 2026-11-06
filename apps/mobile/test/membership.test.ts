@@ -138,8 +138,8 @@ describe("a membership", () => {
   });
 
   it("what is owed: due in orange, overdue in red, nothing where nothing is", () => {
-    expect(owedText(held({ owed: { amountMinor: 150_000, dueOn: "2026-11-04", state: "due" } }))).toEqual({ text: "₹1,500.00 due on 4 Nov 2026.", tone: "orange" });
-    expect(owedText(held({ owed: { amountMinor: 150_000, dueOn: "2026-10-04", state: "overdue" } }))).toEqual({ text: "₹1,500.00 overdue since 4 Oct 2026.", tone: "bad" });
+    expect(owedText(held({ owed: { amountMinor: 150_000, dueOn: "2026-11-04", state: "due", periodIndex: 0 } }))).toEqual({ text: "₹1,500.00 due on 4 Nov 2026.", tone: "orange" });
+    expect(owedText(held({ owed: { amountMinor: 150_000, dueOn: "2026-10-04", state: "overdue", periodIndex: 0 } }))).toEqual({ text: "₹1,500.00 overdue since 4 Oct 2026.", tone: "bad" });
     expect(owedText(held())).toBeNull();
   });
 

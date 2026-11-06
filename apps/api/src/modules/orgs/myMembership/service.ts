@@ -66,7 +66,7 @@ function membershipOf(m: HeldMembershipItem): MyMembership {
     frozenOn: m.frozenOn,
     classesLeft: m.classesLeft,
     packClasses: m.packClasses,
-    owed: billing.pay === null ? null : { amountMinor: billing.pay.leftMinor, dueOn: billing.pay.dueOn, state: billing.pay.state },
+    owed: billing.pay === null ? null : { amountMinor: billing.pay.leftMinor, dueOn: billing.pay.dueOn, state: billing.pay.state, periodIndex: billing.pay.periodIndex },
     // The bills come newest first; a bill's own payments in the order they were taken.
     payments: billing.bills.flatMap((b) =>
       [...b.payments].reverse().map((p) => ({

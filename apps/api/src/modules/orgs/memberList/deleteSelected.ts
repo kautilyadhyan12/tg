@@ -6,10 +6,11 @@
 // list is never; their payments stay in the gym's takings as "A deleted member"; their
 // member numbers are never given again (5e-i). The box names who is deleted and carries a
 // digest of exactly them; the press is refused, deleting nobody, if it no longer matches.
-import { MEMBER_LIST_DELETE_MAX, MEMBER_LIST_DELETE_NAMES_SHOWN, type MemberListDeleted, type MemberListDeletePreview, type MemberListDeletePreviewRequest, type MemberListDeleteSelectedRequest } from "@app/shared";
+import { APP_PAYMENT_STAFF_WORDS, MEMBER_LIST_DELETE_MAX, MEMBER_LIST_DELETE_NAMES_SHOWN, type MemberListDeleted, type MemberListDeletePreview, type MemberListDeletePreviewRequest, type MemberListDeleteSelectedRequest } from "@app/shared";
 import { createHash } from "node:crypto";
 import { OrgsError, requirePrivilege, requireWritablePrivilege } from "../service.js";
 import * as squareDeletes from "../payments/squareDeletesRepo.js";
+import { anyOpenOfEntries } from "../payments/appPaymentsRepo.js";
 import { keptWith } from "./memberNumbers.js";
 import * as repo from "./repo.js";
 import { SelectionChanged, selectedIds, selectionDigest } from "./selection.js";
@@ -115,6 +116,8 @@ export async function deleteSelected(
     const preview = previewOf(gymId, records, standing);
     if (preview.digest !== input.digest) return { kind: "changed", preview };
     if (preview.tooMany) throw new OrgsError(400, "too_many_to_delete", `Delete up to ${MEMBER_LIST_DELETE_MAX.toLocaleString("en")} past members at a time.`);
+    // What Square took on a page still open would have no bill to go on (18k-ii-a).
+    if (await anyOpenOfEntries(tx, gymId, past.map((record) => record.id))) throw new OrgsError(409, "app_payment_open", APP_PAYMENT_STAFF_WORDS.delete_open);
 
     // Their numbers are never given to somebody new (5e-i), kept in one write.
     const before = await repo.memberNumbersKept(tx, gymId);

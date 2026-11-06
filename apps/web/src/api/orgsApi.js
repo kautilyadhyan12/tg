@@ -124,6 +124,7 @@ import {
   autopayPreviewSchema,
   terminalSaveResponseSchema,
   terminalPaymentResponseSchema,
+  appPaymentCloseResponseSchema,
   cardChargeResponseSchema,
   cardRefundCheckSchema,
   cardRefundResponseSchema,
@@ -1949,6 +1950,13 @@ export const orgService = {
         `/v1/orgs/${encodeURIComponent(gymId)}/member-list/entries/${encodeURIComponent(entryId)}/memberships/${encodeURIComponent(membershipId)}/payments/${encodeURIComponent(paymentId)}/card-refund`,
         body,
       ),
+    ),
+  /** Close payment page (ROADMAP 18k-ii-a): a member's page open on this membership, closed at Square. */
+  closeAppPayment: (gymId, entryId, membershipId) =>
+    readThrough(
+      appPaymentCloseResponseSchema,
+      "this person's payments",
+      authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/entries/${encodeURIComponent(entryId)}/memberships/${encodeURIComponent(membershipId)}/app-payment/close`, {}),
     ),
   /** Charge card on file (ROADMAP 18d-iii-i): Square answers in the same press. */
   chargeCardOnFile: (gymId, entryId, membershipId, body) =>

@@ -301,7 +301,7 @@ describe("the My membership page", () => {
         answer("Iron House", {
           memberships: [
             membership(M1, "Gold Monthly", {
-              owed: { amountMinor: 150_000, dueOn: "2026-11-04", state: "due" },
+              owed: { amountMinor: 150_000, dueOn: "2026-11-04", state: "due", periodIndex: 0 },
               payments: [payment(12, { method: "card_at_desk", refunds: [{ amountMinor: 50_000, method: "cash", refundedOn: "2026-10-10", receiptNumber: 14 }] })],
             }),
           ],

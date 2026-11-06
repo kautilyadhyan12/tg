@@ -24,7 +24,7 @@
 // grows.
 import type { SquareDispute } from "@app/shared";
 import { randomBytes } from "node:crypto";
-import type { SquareCustomer, SquareCustomerFound, SquareLocation, SquarePayment, SquareRefund, SquareTerminalCheckout, SquareTerminalRefund } from "@app/shared";
+import type { SquareCustomer, SquareCustomerFound, SquareLocation, SquareOrder, SquarePayment, SquareRefund, SquareTerminalCheckout, SquareTerminalRefund } from "@app/shared";
 import type { CardPaymentResult, NewCardPayment, NewSquareCustomer, NewTerminalCheckout, SquareApi, SquareResult } from "../src/modules/orgs/payments/square.js";
 
 export interface Account {
@@ -55,6 +55,25 @@ export interface FakeCheckout {
 /** How a card on file answers a charge. */
 /** How a card on file answers a charge; `{ declines }` with any code Square sends (18d-iii-ii-a). */
 export type CardBehaviour = "pays" | "declines" | "insufficient" | "expired" | { declines: string };
+
+/** A payment page at the fake Square (18k-ii-a). */
+export interface FakeLink {
+  id: string;
+  accountId: string;
+  key: string;
+  body: string;
+  orderId: string;
+  url: string;
+  locationId: string;
+  referenceId: string;
+  name: string;
+  amount: number;
+  currency: string;
+  note: string;
+  deleted: boolean;
+  orderState: "DRAFT" | "OPEN" | "CANCELED";
+  paymentIds: string[];
+}
 
 export function fakeSquare() {
   const cards = new Map<string, { accountId: string; customerId: string; behaviour: CardBehaviour; fromKey?: string }>();
@@ -340,7 +359,125 @@ export function fakeSquare() {
     made.updated_at = state.now().toISOString();
   };
   const shownDispute = (d: SquareDispute): SquareDispute => ({ id: d.id, state: d.state, reason: d.reason ?? null, amount_money: d.amount_money, due_at: d.due_at ?? null, card_brand: d.card_brand ?? null, disputed_payment: d.disputed_payment, updated_at: d.updated_at ?? null });
+  // Square's own payment pages (18k-ii-a), as its test area answered on 2026-11-06 (`.cost/18k-ii-a/probe-links.mts`): a
+  // page and its DRAFT order made at once; the same key with the same request gives back the same page, with another is
+  // refused (IDEMPOTENCY_KEY_REUSED); paid, the order is OPEN with one tender naming a COMPLETED payment; deleting an unpaid
+  // page cancels its order (`cancelled_order_id`) and it can no longer be paid; deleting a paid one leaves it paid.
+  const links = new Map<string, FakeLink>();
+  const linkKeys = new Map<string, string>();
+  /** How the payment pages answer: `linkDown` gives no answer to CreatePaymentLink, `linkTotal` makes the order for another
+   *  amount, `deleteLinkDown` gives no answer to DeletePaymentLink, `orderDown` none to RetrieveOrder. `beforeDelete`: runs
+   *  once as a delete arrives, before Square answers (the member pays at that very moment). */
+  const linkState: { linkDown: boolean; linkLost: boolean; linkTotal: number | null; deleteLinkDown: boolean; orderDown: boolean; beforeLinkDelete: (() => void) | null } = {
+    linkDown: false,
+    linkLost: false,
+    linkTotal: null,
+    deleteLinkDown: false,
+    orderDown: false,
+    beforeLinkDelete: null,
+  };
+  const orderOf = (l: FakeLink): SquareOrder => ({
+    id: l.orderId,
+    location_id: l.locationId,
+    reference_id: l.referenceId,
+    state: l.orderState,
+    total_money: { amount: linkState.linkTotal ?? l.amount, currency: l.currency },
+    ...(l.paymentIds.length === 0 ? {} : { tenders: l.paymentIds.map((id) => ({ id, payment_id: id, amount_money: { amount: l.amount, currency: l.currency }, type: "CARD" })) }),
+  });
+  /** The member pays the page on Square's site: refused (false) once it is deleted or paid. `over` changes what Square took;
+   *  `times`: how many payments the order names. */
+  const payLink = (linkId: string, over: Partial<SquarePayment> = {}, times = 1): boolean => {
+    const l = links.get(linkId);
+    if (l === undefined) throw new Error("no such payment page at the fake Square");
+    if (l.deleted || l.orderState !== "DRAFT") return false;
+    for (let i = 0; i < times; i++) payOnce(l, over);
+    l.orderState = "OPEN";
+    return true;
+  };
+  const payOnce = (l: FakeLink, over: Partial<SquarePayment>): void => {
+    n += 1;
+    const id = `apppay${String(n)}${randomBytes(4).toString("hex")}`;
+    payments.set(id, {
+      id,
+      status: "COMPLETED",
+      amount_money: { amount: l.amount, currency: l.currency },
+      total_money: { amount: l.amount, currency: l.currency },
+      location_id: l.locationId,
+      order_id: l.orderId,
+      source_type: "CARD",
+      card_details: { card: { card_brand: "VISA", last_4: "1111" } },
+      ...over,
+      accountId: l.accountId,
+    });
+    l.paymentIds.push(id);
+  };
+  const linkApi: Pick<SquareApi, "createPaymentLink" | "deletePaymentLink" | "getOrder"> = {
+    createPaymentLink(token, l) {
+      if (state.down || linkState.linkDown) return Promise.resolve(unavailable);
+      const a = tokenAccount(token);
+      if (a === undefined) return Promise.resolve(unauthorized);
+      const body = JSON.stringify(l);
+      const known = linkKeys.get(`${a.merchantId}:${l.idempotencyKey}`);
+      if (known !== undefined) {
+        const was = links.get(known);
+        if (was?.body !== body) return Promise.resolve({ kind: "refused", status: 400, code: "IDEMPOTENCY_KEY_REUSED" });
+        return Promise.resolve({ kind: "ok", value: { linkId: was.id, orderId: was.orderId, url: was.url, order: orderOf(was) } });
+      }
+      if (!a.locations.some((loc) => loc.id === l.locationId)) return Promise.resolve({ kind: "refused", status: 400, code: "NOT_FOUND" });
+      n += 1;
+      const id = `LINK${String(n)}${randomBytes(3).toString("hex").toUpperCase()}`;
+      const made: FakeLink = {
+        id,
+        accountId: a.merchantId,
+        key: l.idempotencyKey,
+        body,
+        orderId: `order${String(n)}${randomBytes(4).toString("hex")}`,
+        url: `https://square.link/u/${id}`,
+        locationId: l.locationId,
+        referenceId: l.referenceId,
+        name: l.name,
+        amount: l.amountMinor,
+        currency: l.currency,
+        note: l.note,
+        deleted: false,
+        orderState: "DRAFT",
+        paymentIds: [],
+      };
+      links.set(id, made);
+      linkKeys.set(`${a.merchantId}:${l.idempotencyKey}`, id);
+      if (linkState.linkLost) return Promise.resolve(unavailable);
+      return Promise.resolve({ kind: "ok", value: { linkId: id, orderId: made.orderId, url: made.url, order: orderOf(made) } });
+    },
+    deletePaymentLink(token, linkId) {
+      if (linkState.beforeLinkDelete !== null) {
+        const run = linkState.beforeLinkDelete;
+        linkState.beforeLinkDelete = null;
+        run();
+      }
+      if (state.down || linkState.deleteLinkDown) return Promise.resolve(unavailable);
+      const a = tokenAccount(token);
+      if (a === undefined) return Promise.resolve(unauthorized);
+      const l = links.get(linkId);
+      if (l?.accountId !== a.merchantId) return Promise.resolve({ kind: "ok", value: { id: linkId } });
+      const wasDeleted = l.deleted;
+      l.deleted = true;
+      if (!wasDeleted && l.orderState === "DRAFT") {
+        l.orderState = "CANCELED";
+        return Promise.resolve({ kind: "ok", value: { id: linkId, cancelled_order_id: l.orderId } });
+      }
+      return Promise.resolve({ kind: "ok", value: { id: linkId } });
+    },
+    getOrder(token, orderId) {
+      if (state.down || linkState.orderDown) return Promise.resolve(unavailable);
+      const a = tokenAccount(token);
+      if (a === undefined) return Promise.resolve(unauthorized);
+      const l = [...links.values()].find((x) => x.orderId === orderId);
+      if (l?.accountId !== a.merchantId) return Promise.resolve(notFound);
+      return Promise.resolve({ kind: "ok", value: orderOf(l) });
+    },
+  };
   const api: SquareApi = {
+    ...linkApi,
     authorizeUrl: (s) => `https://connect.squareup.com/oauth2/authorize?state=${s}`,
     exchangeCode(code) {
       const account = codes.get(code);
@@ -887,6 +1024,9 @@ export function fakeSquare() {
   const listed = () => [...listings];
   return {
     api,
+    links,
+    linkState,
+    payLink,
     refundInSquare,
     disputeInSquare,
     disputeMoves,

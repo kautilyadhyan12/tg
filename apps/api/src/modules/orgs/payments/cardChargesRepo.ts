@@ -29,6 +29,7 @@ import { chargebackEnded, chargebackHolder, chargebackStoodThrough, chargebackSt
 import { recordPaymentIn } from "../memberships/billsRepo.js";
 import { recordFeePaymentIn } from "../memberships/feesRepo.js";
 import { billsFor, squareMoneyOut } from "../memberships/billsSql.js";
+import { cardsOfPayments } from "./appPaymentsRepo.js";
 import { lockedEntry, lockedHeld, settle } from "../memberships/heldRepo.js";
 import { lockGym } from "../memberList/repo.js";
 import type { SquareEnvironment } from "./square.js";
@@ -173,7 +174,7 @@ export interface NewCharge {
 export type StartChargeOutcome =
   | { kind: "new" | "same_press"; charge: ChargeRow }
   | { kind: "key_reused" | "entry_not_found" | "membership_not_found" | "not_allowed" | "no_card" | "card_changed" | "currency" }
-  | { kind: "terminal_waiting" | "card_charging" }
+  | { kind: "terminal_waiting" | "card_charging" | "app_paying" }
   | { kind: "fee_not_found" | "fee_changed" }
   | { kind: "too_much"; leftMinor: number; currency: string }
   /** Staff: the card was declined for this bill less than a day ago; for good; or 3 times. */
@@ -555,11 +556,15 @@ const appChargesKind = (sql: SqlOrTx) => sql`
           WHERE o.gym_id = b.gym_id AND o.held_membership_id = b.held_membership_id AND o.fee IS NULL AND o.status = 'open' AND o.period_index < b.period_index)))`;
 
 /** From 6 in the morning on the gym's clock, with nothing else on its way through Square for that
- *  membership: when the worker charges, now. */
+ *  membership (a member's payment page in the app among them, 18k-ii-a): when the worker charges, now. */
 const chargesNow = (sql: SqlOrTx) => sql`
       d.hour >= 6
       AND NOT EXISTS (SELECT 1 FROM gym_card_charges x WHERE x.gym_id = b.gym_id AND x.held_membership_id = b.held_membership_id AND x.state = 'charging')
-      AND NOT EXISTS (SELECT 1 FROM gym_terminal_payments t WHERE t.gym_id = b.gym_id AND t.held_membership_id = b.held_membership_id AND t.state = 'waiting')`;
+      AND NOT EXISTS (SELECT 1 FROM gym_terminal_payments t WHERE t.gym_id = b.gym_id AND t.held_membership_id = b.held_membership_id AND t.state = 'waiting')
+      AND NOT EXISTS (SELECT 1 FROM gym_app_payments a WHERE a.gym_id = b.gym_id AND a.held_membership_id = b.held_membership_id AND a.state = 'open')
+      -- Nor a bill a member's page in the app may have paid already: its bill says to check Square first.
+      AND NOT EXISTS (SELECT 1 FROM gym_app_payments a WHERE a.gym_id = b.gym_id AND a.held_membership_id = b.held_membership_id
+                      AND a.period_index = b.period_index AND a.outcome IN ('not_recorded','gone','no_answer'))`;
 
 /** The card the app would charge for the bill's membership: its payer's, in the connected account. */
 const payerCard = (sql: SqlOrTx) => sql`
@@ -794,6 +799,8 @@ export async function chargesOfBills(
   const pending = await pendingRetries(sql, gymId, declinedBills, now);
   const stoppedCards = await stoppedCardsOf(sql, gymId, [...new Set(facts.map((f) => f.card_id).filter((c): c is string => c !== null))]);
   const byBill = new Map<string, (typeof rows)[number][]>();
+  // The card a member paid with on Square's own page in the app (18k-ii-a), where Square named one.
+  for (const [paymentId, card] of await cardsOfPayments(sql, gymId, paymentIds)) cardOfPayment.set(paymentId, card);
   for (const r of rows) {
     if (r.member_payment_id !== null) cardOfPayment.set(r.member_payment_id, { brand: r.brand, last4: r.last4 });
     if (r.bill_id === null) continue;

@@ -16,6 +16,9 @@ import {
   MEMBER_FEE_WORDS,
   MEMBER_PAYMENT_BY_HAND,
   MEMBER_PAYMENT_METHOD_WORDS,
+  APP_PAYMENT_STAFF_WORDS,
+  appCheckLine,
+  appPayingLine,
   paymentMethodsByHand,
   PAYMENT_VOID_REASONS,
   PAYMENT_VOID_REASON_WORDS,
@@ -684,3 +687,35 @@ export function graceExample(days) {
   const day = `${String(from.getUTCDate())} ${from.toLocaleString('en-GB', { month: 'long', timeZone: 'UTC' })}`;
   return `A bill due on 1 March reads Overdue from ${day} if it isn't paid.`;
 }
+
+// ── A member paying in the app (18k-ii-a) ──
+
+/** The time a member's payment page closes, on the gym's clock ("10:42 AM"). */
+const closesAtWords = (iso, timezone) => {
+  try {
+    return new Intl.DateTimeFormat('en-US', { timeZone: timezone ?? 'UTC', hour: 'numeric', minute: '2-digit' }).format(new Date(iso));
+  } catch {
+    return new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit' }).format(new Date(iso));
+  }
+};
+
+/** A member's payment page open on this membership: who is paying, and when it closes if not paid; null for none. */
+export function appPayingNotice(m, timezone) {
+  const open = m?.billing?.appPayment ?? null;
+  return open === null ? null : { id: open.id, line: appPayingLine(open.payerName, closesAtWords(open.closesAt, timezone)) };
+}
+
+/** A member's page that ended with money Square may have taken and that is not on the bill owed: what to check; null for none. */
+export function appCheckNotice(m) {
+  const check = m?.billing?.appCheck ?? null;
+  return check === null ? null : appCheckLine(check, check.amountMinor === null ? null : formatMinor(check.amountMinor, m.currency), dayWords(check.on));
+}
+
+/** What Close payment page says when done, in the place it was pressed. */
+export const APP_CLOSE_WORDS = {
+  closed: APP_PAYMENT_STAFF_WORDS.closed,
+  paid: APP_PAYMENT_STAFF_WORDS.paid,
+  check: APP_PAYMENT_STAFF_WORDS.check,
+  waiting: APP_PAYMENT_STAFF_WORDS.waiting,
+};
+export const APP_CLOSE_BUTTON = 'Close payment page';
