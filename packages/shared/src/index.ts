@@ -114,3 +114,4 @@ export * from "./trainingReminders.js";
 export * from "./trainingNudges.js";
 export * from "./deletedForms.js";
 export * from "./gymMealPlans.js";
+export * from "./gymMealPlanGiving.js";

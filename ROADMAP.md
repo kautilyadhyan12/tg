@@ -485,7 +485,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
 24. **Plans a gym gives its members** (Kd, 2026-11-03, `rulings/2026-11-03-31c.md`; spec Part 6 §16.6): staff write a plan once and tick who gets it, everybody, a group or members they pick; it is the gym's choice in the member's Recommended For You. The web folder, at the end of its list.
    - 24a. **A meal plan**, in two parts since 2026-11-05 (`handoff/2026-11-05-24a-i.md` keeps its line as first written):
      - 24a-i. [x] **Write a meal plan** — merged 2026-11-06 (PR #477).
-     - 24a-ii. [ ] **Give it to members**: everybody, a tag or members ticked, the newest for each; the route Stage 5's 31g reads.
+     - 24a-ii. [x] **Give it to members** — merged 2026-11-06 (PR #480).
    - 24b. [ ] **A workout plan**, once Stage 5's items 36 and 60 are built.
    - 24c. [ ] **A run plan**, once Stage 5's item 37 is built.
 
@@ -691,7 +691,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
 36. [ ] **The weekly plan**: the plan builder on the server (6a), the week screen (6b). Doing a planned workout (6c) is exercise folder 2's item 64. Once the plan names a week's sessions, calories burned joins the starter goals with the plan's own number (RULINGS 2026-10-13). Its Workout tab in Recommended For You takes the three choices and rules of spec Part 6 §16.6.
 37. **Running** (item 4; Stage 1's 7b; split 2026-11-05 in seven, Kd's "go", `rulings/2026-11-05-37a.md`: recording first). Its Running tab in Recommended For You takes the three choices and rules of spec Part 6 §16.6.
     - 37a. [x] **Record a run** · merged 2026-11-06 · PR #478
-    - 37a-ii. [ ] **A voice each kilometre or mile** (one more free Expo package).
+    - 37a-ii. [x] **A voice each kilometre or mile** · merged 2026-11-06 · PR #481
     - 37b. [ ] **The map under the run, and hills climbed** (MapLibre; elevation from a free public height map, as Strava's basemap does).
     - 37c. [ ] **Your runs**: the list, a run's page, records (fastest 1 km or mile, 5 km, 10 km, longest run), the pace chart.
     - 37d. [ ] **The run plan**, run-walk intervals with voice, and Recommended For You's Running tab.

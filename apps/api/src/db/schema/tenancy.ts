@@ -428,7 +428,7 @@ export const gymAttendance = pgTable(
       sql`CASE WHEN ${t.hoursStatus} = 'in_session' THEN ${t.slotKey} = ${t.sessionOpensMinute}::text || '-' || ${t.sessionClosesMinute}::text ELSE ${t.slotKey} = ${t.hoursStatus} END`,
     ),
     uniqueIndex("gym_attendance_gym_user_day_slot_uq").on(t.gymId, t.userId, t.day, t.slotKey),
-    // One person's visits by day, at any place: the streak, the reminders and the summary read them (0213).
+    // One person's visits by day, at any place: the streak, the reminders and the summary read them (0214).
     index("gym_attendance_user_day_idx").on(t.userId, t.day),
     uniqueIndex("gym_attendance_gym_entry_day_slot_uq")
       .on(t.gymId, t.entryId, t.day, t.slotKey)

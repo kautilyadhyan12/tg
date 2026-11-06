@@ -65,7 +65,7 @@ export const userAchievements = pgTable(
       .notNull()
       .references(() => achievements.code),
     earnedAt: timestamp("earned_at", { withTimezone: true }).notNull().defaultNow(),
-    // When its notification went (0213, 19e-ii); null is not told yet.
+    // When its notification went (0214, 19e-ii); null is not told yet.
     toldAt: timestamp("told_at", { withTimezone: true }),
     createdAt: createdAt(),
   },

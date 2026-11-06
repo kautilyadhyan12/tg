@@ -8,7 +8,11 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { FOOD_ALLERGY_CAUTION } from '@app/shared';
 
-const svc = { list: vi.fn(), get: vi.fn(), create: vi.fn(), rename: vi.fn(), remove: vi.fn(), putDay: vi.fn(), measures: vi.fn(), searchFoods: vi.fn() };
+const svc = {
+  list: vi.fn(), get: vi.fn(), create: vi.fn(), rename: vi.fn(), remove: vi.fn(), putDay: vi.fn(), measures: vi.fn(), searchFoods: vi.fn(),
+  given: vi.fn(), groups: vi.fn(), givePreview: vi.fn(), give: vi.fn(), stop: vi.fn(),
+};
+const NOBODY = { gets: 0, groups: [], chosen: 0, members: [] };
 const orgApi = { getMine: vi.fn() };
 vi.mock('../../api/mealPlansApi', () => ({ mealPlansService: svc }));
 vi.mock('../../api/orgsApi', async (importOriginal) => {
@@ -78,6 +82,7 @@ const box = () => within(screen.getByTestId('meal-box'));
 beforeEach(() => {
   resetConsoleOrgs();
   for (const fn of Object.values(svc)) fn.mockReset();
+  svc.given.mockResolvedValue(NOBODY);
   vi.stubGlobal('crypto', { randomUUID: () => '00000000-0000-4000-8000-000000000001' });
 });
 afterEach(() => {
@@ -187,7 +192,7 @@ describe('a meal is saved to the day and the meal it was opened on, the rest of 
 
 describe('the page', () => {
   it('lists the gym’s plans, and New meal plan makes one and opens it', async () => {
-    svc.list.mockResolvedValue({ plans: [{ id: 'p0', name: 'Bulk week', writtenBy: 'Sam Lee', changedBy: 'Priya Shah', createdAt: '2026-11-01T10:00:00.000Z', updatedAt: '2026-11-04T10:00:00.000Z', meals: 21 }, { id: 'p2', name: 'Cut week', writtenBy: 'Sam Lee', changedBy: 'Sam Lee', createdAt: '2026-11-03T10:00:00.000Z', updatedAt: '2026-11-03T10:00:00.000Z', meals: 0 }] });
+    svc.list.mockResolvedValue({ plans: [{ id: 'p0', name: 'Bulk week', writtenBy: 'Sam Lee', changedBy: 'Priya Shah', createdAt: '2026-11-01T10:00:00.000Z', updatedAt: '2026-11-04T10:00:00.000Z', meals: 21, givenTo: { everyone: true, groups: ['Gold Monthly'], members: 2 }, gets: 140 }, { id: 'p2', name: 'Cut week', writtenBy: 'Sam Lee', changedBy: 'Sam Lee', createdAt: '2026-11-03T10:00:00.000Z', updatedAt: '2026-11-03T10:00:00.000Z', meals: 0, givenTo: { everyone: false, groups: [], members: 0 }, gets: 0 }] });
     svc.create.mockResolvedValue(planOf({}, { id: 'p1', name: 'Lean week', meals: 0 }));
     svc.get.mockResolvedValue(planOf({}, { meals: 0 }));
     open('/console/iron-house/plans');
@@ -195,6 +200,8 @@ describe('the page', () => {
     expect(screen.getByText('21 meals a week · By Sam Lee · Changed 4 Nov by Priya Shah')).toBeTruthy();
     // A plan nobody has changed since it was made says so.
     expect(screen.getByText('No meals yet · By Sam Lee · Made 3 Nov')).toBeTruthy();
+    // Who each is given to, and how many get it, on the list.
+    expect(screen.getAllByTestId('plan-given').map((p) => p.textContent)).toEqual(['Given to everybody, Gold Monthly and 2 members · 140 get it', 'Not given to anyone yet']);
     fireEvent.click(screen.getByRole('button', { name: 'New meal plan' }));
     const made = within(screen.getByTestId('new-plan'));
     fireEvent.click(made.getByRole('button', { name: 'Make plan' }));
@@ -262,7 +269,7 @@ describe('the page', () => {
   it('somebody without the tick reads who can open Plans', async () => {
     svc.list.mockRejectedValue(refusal(403, 'forbidden', "Your role doesn't allow that."));
     open('/console/iron-house/plans', { ...ORG, staffRole: 'manager', privileges: ['members.read'] });
-    expect(await screen.findByText('Only the owner, and staff the owner has given Write meal plans on the Staff page, can open Plans.')).toBeTruthy();
+    expect(await screen.findByText('Only the owner, and staff the owner has given Write meal plans on the Staff page, can open Fitness plans.')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'New meal plan' })).toBeNull();
   });
 
@@ -368,5 +375,124 @@ describe('a meal box is never saved over a day changed since, and its unsaved fo
     fireEvent.click(box().getByRole('button', { name: 'Try again' }));
     expect(await box().findByRole('spinbutton', { name: 'How much Rice (white, cooked)' })).toBeTruthy();
     expect(box().queryByText('We couldn’t load the amounts.')).toBeNull();
+  });
+});
+
+const GIVEN = {
+  gets: 41,
+  groups: [
+    { audienceId: 'a1', kind: 'everyone', name: null, size: 40, gets: 38, givenBy: 'Sam Lee', givenAt: '2026-11-05T10:00:00.000Z' },
+    { audienceId: 'a2', kind: 'tag', name: 'Beginners', size: 3, gets: 3, givenBy: 'Sam Lee', givenAt: '2026-11-05T11:00:00.000Z' },
+  ],
+  chosen: 2,
+  members: [
+    { audienceId: 'a3', entryId: 'e1', name: 'Ann Lee', instead: null, givenBy: 'Sam Lee', givenAt: '2026-11-05T12:00:00.000Z' },
+    { audienceId: 'a4', entryId: 'e2', name: 'Bob Ray', instead: 'Muscle week', givenBy: 'Sam Lee', givenAt: '2026-11-05T12:00:00.000Z' },
+  ],
+};
+const given = () => within(screen.getByTestId('given'));
+
+describe('who gets a plan', () => {
+  it('shows each group and each member chosen, with who gets a newer plan', async () => {
+    svc.get.mockResolvedValue(planOf({ 1: [meal('lunch', [RICE])] }));
+    svc.given.mockResolvedValue(GIVEN);
+    open();
+    await screen.findByTestId('given');
+    expect(await given().findByText('41 members get it now')).toBeTruthy();
+    expect(given().getByText('Everybody')).toBeTruthy();
+    expect(given().getByText('40 members')).toBeTruthy();
+    expect(given().getByText('38 of them get it. 2 were given a newer meal plan.')).toBeTruthy();
+    expect(given().getByText('Beginners tag')).toBeTruthy();
+    expect(given().getByText('Chosen members (2)')).toBeTruthy();
+    expect(given().getByText('Gets Muscle week instead')).toBeTruthy();
+    // Delete says who stops getting it.
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+    expect(screen.getByText('Its meals are deleted with it, and the 41 members who get it stop getting it. This can’t be undone.')).toBeTruthy();
+  });
+
+  it('Give to members: a tag, who it reaches and what it replaces, then Give sends that tag and nothing else', async () => {
+    svc.get.mockResolvedValue(planOf({ 1: [meal('lunch', [RICE])] }));
+    svc.groups.mockResolvedValue({ membershipTypes: [{ id: 't1', name: 'Gold Monthly' }], tags: [{ id: 'g1', name: 'Beginners' }, { id: 'g2', name: 'Seniors' }] });
+    svc.givePreview.mockImplementation((gymId, planId, to) =>
+      Promise.resolve({
+        plan: { id: 'p1', name: 'Lean week' },
+        groupName: to.kind === 'tag' ? (to.tagId === 'g2' ? 'Seniors' : 'Beginners') : to.kind === 'everyone' ? null : 'Gold Monthly',
+        count: 7,
+        people: [{ entryId: 'e1', name: 'Ann Lee' }, { entryId: 'e2', name: 'Bob Ray' }],
+        switching: 2,
+        replaces: to.kind === 'tag' ? 'Muscle week' : null,
+        gone: 0,
+        already: 0,
+      }),
+    );
+    svc.give.mockResolvedValue({ ...NOBODY, gets: 7, groups: [{ audienceId: 'a9', kind: 'tag', name: 'Seniors', size: 7, gets: 7, givenBy: 'Sam Lee', givenAt: '2026-11-06T10:00:00.000Z' }] });
+    open();
+    await screen.findByTestId('given');
+    await given().findByText('Not given to anyone yet.');
+    fireEvent.click(given().getByRole('button', { name: 'Give to members' }));
+    const box = within(await screen.findByTestId('give-box'));
+    // Everybody is the first choice, asked about at once.
+    expect(await box.findByText('7 members will get Lean week:')).toBeTruthy();
+    fireEvent.click(box.getByRole('radio', { name: 'A tag' }));
+    fireEvent.change(box.getByRole('combobox', { name: 'Tag' }), { target: { value: 'g2' } });
+    expect(await box.findByText('The Seniors tag had Muscle week. Lean week takes its place there.')).toBeTruthy();
+    expect(box.getByText('2 of them get another meal plan now. Lean week takes its place.')).toBeTruthy();
+    expect(box.getByText('Anyone given this tag later gets it too.')).toBeTruthy();
+    expect(svc.give).not.toHaveBeenCalled();
+    fireEvent.click(box.getByRole('button', { name: 'Give to 7 members' }));
+    expect(await screen.findByText('Lean week given to the Seniors tag.')).toBeTruthy();
+    expect(svc.give).toHaveBeenCalledTimes(1);
+    expect(svc.give).toHaveBeenCalledWith('g1', 'p1', { kind: 'tag', tagId: 'g2' });
+    expect(screen.queryByTestId('give-box')).toBeNull();
+    expect(given().getByText('Seniors tag')).toBeTruthy();
+  });
+
+  it('Members you choose opens Members; no memberships yet says where to add one', async () => {
+    svc.get.mockResolvedValue(planOf({ 1: [meal('lunch', [RICE])] }));
+    svc.groups.mockResolvedValue({ membershipTypes: [], tags: [] });
+    svc.givePreview.mockResolvedValue({ plan: { id: 'p1', name: 'Lean week' }, groupName: null, count: 0, people: [], switching: 0, replaces: null, gone: 0, already: 0 });
+    open();
+    await screen.findByTestId('given');
+    await given().findByText('Not given to anyone yet.');
+    fireEvent.click(given().getByRole('button', { name: 'Give to members' }));
+    const box = within(await screen.findByTestId('give-box'));
+    fireEvent.click(await box.findByRole('radio', { name: 'A membership' }));
+    expect(box.getByText('You have no memberships yet.')).toBeTruthy();
+    // Staff who cannot open Memberships are told who can.
+    expect(box.getByText('The owner can add memberships on the Memberships page.')).toBeTruthy();
+    expect(box.queryByRole('link', { name: 'Open Memberships' })).toBeNull();
+    fireEvent.click(box.getByRole('radio', { name: 'Members you choose' }));
+    expect(box.getByText('Tick the members on Members, then press Meal plan.')).toBeTruthy();
+    expect(box.getByRole('link', { name: 'Choose on Members' }).getAttribute('href')).toBe('/console/iron-house/members');
+    expect(box.queryByRole('button', { name: /^Give/ })).toBeNull();
+  });
+
+  it('without the Members tick, the members chosen are a count and who can see their names', async () => {
+    svc.get.mockResolvedValue(planOf({ 1: [meal('lunch', [RICE])] }));
+    svc.given.mockResolvedValue({ ...GIVEN, members: [] });
+    open();
+    await screen.findByTestId('given');
+    expect(await given().findByText('Chosen members (2)')).toBeTruthy();
+    expect(given().getByText('Only staff who can open Members see their names.')).toBeTruthy();
+    expect(given().queryByText('Ann Lee')).toBeNull();
+  });
+
+  it('Stop asks first, then stops that one group only', async () => {
+    svc.get.mockResolvedValue(planOf({ 1: [meal('lunch', [RICE])] }));
+    svc.given.mockResolvedValue(GIVEN);
+    svc.stop.mockResolvedValue({ ...GIVEN, groups: [GIVEN.groups[0]] });
+    open();
+    await screen.findByTestId('given');
+    await given().findByText('Beginners tag');
+    const row = given().getByText('Beginners tag').closest('li');
+    fireEvent.click(within(row).getByRole('button', { name: 'Stop' }));
+    const ask = within(row).getByRole('group', { name: 'Stop giving Lean week to the Beginners tag?' });
+    fireEvent.click(within(ask).getByRole('button', { name: 'Keep it' }));
+    expect(svc.stop).not.toHaveBeenCalled();
+    fireEvent.click(within(row).getByRole('button', { name: 'Stop' }));
+    fireEvent.click(within(row).getByRole('button', { name: 'Stop giving' }));
+    expect(await screen.findByText('Lean week is no longer given to the Beginners tag.')).toBeTruthy();
+    expect(svc.stop).toHaveBeenCalledWith('g1', 'p1', ['a2']);
+    expect(given().queryByText('Beginners tag')).toBeNull();
   });
 });
