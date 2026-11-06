@@ -797,7 +797,8 @@ function TypeForm({ gymId, orgType, country, currency, options, taxRates, onRate
         </Part>
       ) : null}
 
-      <div className="flex flex-col gap-3">
+      {/* Save stays at the bottom of the screen while the long form scrolls (Kd's click-through, 18w). */}
+      <div className="flex flex-col gap-3 c-save-stuck" style={inRow ? { background: 'var(--raise)' } : undefined} data-testid="type-form-save">
         {first !== null ? (
           <p className="c-s14 c-w6 m-0" style={BAD} role="alert">
             {NOT_SAVED}
@@ -1207,7 +1208,7 @@ export default function MembershipTypesPanel({ org, readOnly, openBox = null, on
 
           {formAt === 'top' ? <section className="c-card c-narrow p-5 md:p-6">{form}</section> : null}
 
-          <section className="c-card overflow-hidden" aria-label="What you sell">
+          <section className="c-card overflow-clip" aria-label="What you sell">
             <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 px-5 pt-5 pb-4 md:px-6">
               <h2 className="c-h2">What you sell</h2>
               {summary ? <span className="c-s14 c-t3">{summary}</span> : null}
