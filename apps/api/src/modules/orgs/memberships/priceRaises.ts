@@ -28,7 +28,8 @@ import * as reminders from "./renewalRemindersRepo.js";
 
 type SqlOrTx = Sql | TransactionSql;
 
-/** What one payment of period `index` comes to at its own price `ownMinor`, tax in. */
+/** What one payment of period `index` comes to at its own price `ownMinor`, tax in: what the email names. Screens name
+ *  the price before tax, as the price list and a person's page do. */
 function amountAt(row: HeldRow, index: number, ownMinor: number): number {
   return billOf(periodListedMinor(row.membership, index, ownMinor), row.taxApplied).amountMinor;
 }
@@ -98,9 +99,8 @@ export function proposedStatus(held: reminders.PayerHeld, lineMinor: number, not
   const standing = standingOf(row, billedTo, facts.today, facts.written);
   const raise = row.raise;
   const plan = priceRaiseNext(m, noticeDays, facts.today, billedTo);
-  const index = plan.kind === "next" ? plan.next.fromPeriod : Math.max(m.paidPeriods, billedTo + 1);
   const said = (state: PriceRaiseState, fromOwn: number, toOwn: number, startsOn: string | null = null, on: string | null = null) => ({
-    status: { state, fromMinor: amountAt(row, index, fromOwn), toMinor: amountAt(row, index, toOwn), startsOn, on },
+    status: { state, fromMinor: fromOwn, toMinor: toOwn, startsOn, on },
     writable: state === "will_send" || state === "after_freeze",
   });
 
@@ -126,21 +126,20 @@ export function standingStatus(held: reminders.PayerHeld, facts: Facts): { statu
   const billedTo = facts.billed.get(row.id) ?? -1;
   const standing = standingOf(row, billedTo, facts.today, facts.written);
   if (standing === "none" || standing === "charged") return null;
-  const said = (state: PriceRaiseState, index: number, startsOn: string | null, on: string | null) => ({
-    status: { state, fromMinor: amountAt(row, index, row.priceMinor), toMinor: amountAt(row, index, raise.priceMinor), startsOn, on },
+  const said = (state: PriceRaiseState, startsOn: string | null, on: string | null) => ({
+    status: { state, fromMinor: row.priceMinor, toMinor: raise.priceMinor, startsOn, on },
     canKeep: standing !== "emailing",
   });
-  if (standing === "sent" && raise.fromPeriod !== null) return said("sent", raise.fromPeriod, raise.fromOn, raise.sentOn);
+  if (standing === "sent" && raise.fromPeriod !== null) return said("sent", raise.fromOn, raise.sentOn);
   const email = emailOf(facts.written, row);
   const plan = priceRaiseNext(row.membership, raise.noticeDays, facts.today, billedTo);
-  const index = plan.kind === "next" ? plan.next.fromPeriod : Math.max(row.membership.paidPeriods, billedTo + 1);
-  if (standing === "emailing") return said("sending", index, email?.aboutOn ?? null, null);
-  if (email !== undefined && (email.state === "failed" || email.state === "skipped")) return said(email.reason === "address_blocked" ? "address_blocked" : "not_sent", index, null, null);
-  if (plan.kind === "none") return said(plan.reason === "frozen" ? "after_freeze" : "not_renewing", index, null, null);
+  if (standing === "emailing") return said("sending", email?.aboutOn ?? null, null);
+  if (email !== undefined && (email.state === "failed" || email.state === "skipped")) return said(email.reason === "address_blocked" ? "address_blocked" : "not_sent", null, null);
+  if (plan.kind === "none") return said(plan.reason === "frozen" ? "after_freeze" : "not_renewing", null, null);
   const why = cannotEmail(held, facts);
-  if (why !== null) return said(why, index, null, null);
-  if (email !== undefined) return said("sending", index, plan.next.fromOn, null);
-  return said("will_send", index, plan.next.fromOn, plan.next.sendOn > facts.today ? plan.next.sendOn : facts.today);
+  if (why !== null) return said(why, null, null);
+  if (email !== undefined) return said("sending", plan.next.fromOn, null);
+  return said("will_send", plan.next.fromOn, plan.next.sendOn > facts.today ? plan.next.sendOn : facts.today);
 }
 
 // ── WHAT A SCREEN READS ──

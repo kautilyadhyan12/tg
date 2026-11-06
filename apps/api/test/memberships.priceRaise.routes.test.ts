@@ -8,7 +8,7 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
-import { heldMembershipsResponseSchema, priceRaisePreviewResponseSchema, dayWords, addDays, type GymMembershipTypesResponse } from "@app/shared";
+import { heldMembershipsResponseSchema, priceRaisePreviewResponseSchema, sellPageResponseSchema, dayWords, addDays, type GymMembershipTypesResponse } from "@app/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import type { InviteEmail } from "../src/email/resend.js";
@@ -373,5 +373,30 @@ d("Raise the price for members already on a line (real Postgres)", { timeout: T 
     expect(heldMembershipsResponseSchema.parse(JSON.parse(kept.body)).priceRaises).toEqual([]);
     expect(await sql`SELECT 1 FROM gym_price_raises WHERE held_membership_id = ${evaM}`).toHaveLength(0);
     expect((await send("POST", keep, gym.cookies, {})).statusCode).toBe(404);
+  });
+
+  it("with tax: the box and the page say the price before tax, as the price list does; the email the amount paid", async () => {
+    clock = noon(chicagoToday);
+    const today = chicagoToday;
+    const gym = await makeGym("Tax Gym");
+    const rateRes = await send("POST", `/v1/orgs/${gym.id}/register/tax-rates`, gym.cookies, { name: "Sales tax", pcm: 10000 });
+    expect(rateRes.statusCode, rateRes.body).toBe(201);
+    const rate = sellPageResponseSchema.parse(JSON.parse(rateRes.body)).tax.rates.find((r) => r.name === "Sales tax");
+    if (rate === undefined) throw new Error("no rate");
+    const terms = { taxRateIds: [rate.id] };
+    const line = await lineOf(gym, terms);
+    const tia = await person(gym, "Tia Taxed");
+    const tiaM = await give(gym, line, tia, addDays(today, -5));
+    const box = priceRaisePreviewResponseSchema.parse(JSON.parse((await send("POST", `/v1/orgs/${gym.id}/membership-types/${line}/price-raise/preview`, gym.cookies, { priceMinor: 3000, noticeDays: 7 })).body));
+    expect(box.people.map((p) => [p.status.fromMinor, p.status.toMinor])).toEqual([[2500, 3000]]);
+    expect((await saveAt(gym, line, 3000, { noticeDays: 7, membershipIds: [tiaM] }, terms)).statusCode).toBe(200);
+    expect((await pageOf(gym, tia)).priceRaises.map((r) => [r.status.fromMinor, r.status.toMinor])).toEqual([[2500, 3000]]);
+    clock = noon(addDays(today, 2));
+    expect((await remind()).sent).toBe(1);
+    // 10% on top: $27.50 a week now, $33.00 at the new price.
+    expect(mailTo(await emailOf(tia))[0]?.text).toContain(`The price of your Gold Weekly membership at ${gym.name} is going up from $27.50 to $33.00 every week.`);
+    clock = noon(addDays(today, 9));
+    await openBills();
+    expect((await billsOf(tiaM)).at(-1)).toEqual([2, 3300]);
   });
 });

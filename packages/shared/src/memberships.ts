@@ -169,7 +169,7 @@ export type PriceRaiseState = z.infer<typeof priceRaiseStateSchema>;
 export const priceRaiseStatusSchema = z
   .object({
     state: priceRaiseStateSchema,
-    /** What one payment comes to now, and at the new price, tax in, in the membership's money. */
+    /** Its price now and the new price, before tax, as the price list and a person's page show prices. */
     fromMinor: z.number().int().min(0),
     toMinor: z.number().int().min(0),
     startsOn: z.string().nullable(),
