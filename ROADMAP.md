@@ -337,7 +337,12 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
    - 18h-ii. [x] **The same fees for personal training** — merged 2026-10-17 (PR #311).
    - 18i. [x] **Family plans: one person pays for several** — merged 2026-10-18 (PR #313).
    - 18j. [x] **My membership** — merged 2026-10-18 (PR #317).
-   - 18k. [ ] **A member buys and pays in the app** (RULINGS 2026-10-08; after 18d): a membership type, pack, day pass or session the gym marks as sold in the app, paid on the payment company's own page and given at once. First they read the gym's legal name, the price, whether it repeats and how to stop it, its minimum term, early cancellation fee, notice to cancel and cooling-off period (Kd, 2026-11-04), and tick a box of its own for a repeating charge, kept with its time and words. A physical service, so never the stores' billing (spec Part 3 §14.7). And pay what they owe (Kd, 2026-10-22). Web folder 1, once 18u and 18v have merged.
+   - 18k. **A member buys and pays in the app**, in five parts since 2026-11-06, each server and console here, the screens in Stage 5 item 20 (`handoff/2026-11-06-18k-i.md` keeps its line as first written):
+     - 18k-i. [x] **Sell in the app** — merged 2026-11-06 (PR #485).
+     - 18k-ii. [ ] **Pay what they owe** on Square's own checkout page (card, Apple Pay, Google Pay).
+     - 18k-iii. [ ] **Buy something paid once** on that page, given when Square says it is paid; the gym's membership agreement signed in the same step.
+     - 18k-iv. [ ] **Buy a repeating membership**: its own tick, kept with its time and words, a card typed on Square's form and kept; on sale only once 18l is built.
+     - 18k-v. [ ] **A promo code typed in the app** (spec Part 3 §14.3).
    - 18l. [ ] **A member stops their own repeating membership** (RULINGS 2026-10-08; with 18d): Cancel in the app ends it on the last day paid for, stops the payment company's schedule in the same step (the screen never says stopped while the company still charges), and tells the gym; refunds and exceptions stay the gym's. Every member, including those who joined at the desk, and charging stops at once (Kd, 2026-10-22: New York, Virginia, Connecticut and Maryland require it, so the gym's switch to turn the button off is gone). Web folder 1, once 18v has merged.
    - 18t. [x] **Joining fee** · merged 2026-10-22 · PR #336
    - 18u. **Membership agreement**, in two jobs since 2026-10-23 (no lawyer: `rulings/2026-10-23-18u-i.md`; the line as first written is in `handoff/2026-10-23-18u-i.md`). Web folder 2.

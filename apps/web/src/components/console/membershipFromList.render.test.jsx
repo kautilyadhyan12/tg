@@ -22,6 +22,8 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
       previewMembershipLink: vi.fn(),
       linkMembershipWord: vi.fn(),
       unlinkMembershipWord: vi.fn(),
+      // Sell in the app reads the Payments box (18k-i); not answered here, so nothing is said of Square.
+      getGymPayments: vi.fn(() => new Promise(() => undefined)),
     },
   };
 });

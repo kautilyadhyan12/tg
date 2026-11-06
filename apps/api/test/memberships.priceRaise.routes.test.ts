@@ -172,7 +172,7 @@ d("Raise the price for members already on a line (real Postgres)", { timeout: T 
       leaveFeeMinor: null,
       coolingOffDays: null,
       renewalReminderDays: null,
-      termReminderDays: null,
+      termReminderDays: null, soldInApp: false,
       ...terms,
       updatedAt: saved?.updatedAt,
       ...(raise === undefined ? {} : { raise }),

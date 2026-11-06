@@ -261,7 +261,7 @@ describe("what a gym may save as a membership type", () => {
 
   it("a change carries the stamp the list gave, and is refused without it", () => {
     const change = (value: unknown) => updateGymMembershipTypeRequestSchema.safeParse(value).success;
-    const stamped = { ...monthly, includesPt: false, ptLimit: null, ptPeriod: null, taxRateIds: [], joiningFeeMinor: 0, contractPeriods: null, contractThen: null, noticeDays: null, leaveFeeMinor: null, coolingOffDays: null, renewalReminderDays: null, termReminderDays: null, updatedAt: "2026-10-04T10:00:00.000Z" };
+    const stamped = { ...monthly, includesPt: false, ptLimit: null, ptPeriod: null, taxRateIds: [], joiningFeeMinor: 0, contractPeriods: null, contractThen: null, noticeDays: null, leaveFeeMinor: null, coolingOffDays: null, renewalReminderDays: null, termReminderDays: null, soldInApp: false, updatedAt: "2026-10-04T10:00:00.000Z" };
     expect(change(stamped)).toBe(true);
     // And its early cancellation fee (18v-ii-b): left out, it would take the fee off the type.
     expect(change({ ...stamped, leaveFeeMinor: undefined })).toBe(false);
@@ -286,6 +286,19 @@ describe("what a gym may save as a membership type", () => {
     expect(ok(monthly)).toBe(true);
     // And a new type does not take a stamp.
     expect(ok({ ...monthly, updatedAt: "2026-10-04T10:00:00.000Z" })).toBe(false);
+  });
+
+  it("Sell in the app only on a paid-once membership or a pack with a price; a repeating one waits for 18k-iv (18k-i)", () => {
+    expect(saveGymMembershipTypeRequestSchema.parse(monthly).soldInApp).toBe(false);
+    expect(ok({ ...monthly, soldInApp: true })).toBe(false);
+    expect(ok({ ...monthly, kind: "one_time", termCount: 3, termUnit: "month", soldInApp: true })).toBe(true);
+    expect(ok({ ...pack, soldInApp: true })).toBe(true);
+    expect(ok({ ...pack, packClasses: 1, packDays: 1, soldInApp: true })).toBe(true);
+    expect(ok({ ...monthly, kind: "trial", priceMinor: 0, termCount: 7, termUnit: "day", soldInApp: true })).toBe(false);
+    expect(ok({ ...monthly, kind: "trial", priceMinor: 1000, termCount: 7, termUnit: "day", soldInApp: true })).toBe(false);
+    expect(ok({ ...monthly, priceMinor: 0, soldInApp: true })).toBe(false);
+    expect(ok({ ...pack, priceMinor: 0, soldInApp: true })).toBe(false);
+    expect(ok({ ...monthly, soldInApp: "yes" })).toBe(false);
   });
 
   it("a joining fee only where a first bill can carry it, and never past one bill's cap (18t)", () => {

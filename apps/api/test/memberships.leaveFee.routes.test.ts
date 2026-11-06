@@ -371,7 +371,7 @@ d("an early cancellation fee on a minimum term (real Postgres)", () => {
       if (t === undefined) throw new Error("no type");
       const change = await put(
         `${typesUrl(gymId)}/${gold}`,
-        { ...monthly({ leaveFeeMinor: 15000 }), includesPt: false, ptLimit: null, ptPeriod: null, taxRateIds: [], joiningFeeMinor: 0, noticeDays: null, coolingOffDays: null, renewalReminderDays: null, termReminderDays: null, updatedAt: t.updatedAt },
+        { ...monthly({ leaveFeeMinor: 15000 }), includesPt: false, ptLimit: null, ptPeriod: null, taxRateIds: [], joiningFeeMinor: 0, noticeDays: null, coolingOffDays: null, renewalReminderDays: null, termReminderDays: null, soldInApp: false, updatedAt: t.updatedAt },
         owner,
       );
       expect(change.statusCode, change.body).toBe(200);
