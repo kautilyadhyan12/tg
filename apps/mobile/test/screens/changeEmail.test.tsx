@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
 import { App } from "../../src/App";
 import { changedEmailLine } from "../../src/screens/Settings";
 import { NO_ANSWER } from "../../src/screens/SignIn";
@@ -161,5 +161,58 @@ describe("Change email (the worst thing: the phone shows or keeps an address the
     });
     expect(screen.queryByText(RAVI.email)).toBeNull();
     expect(keptUser(store)?.email).toBe(NEW);
+  });
+});
+
+// ── Item 19's security pass, L2: past the third code of a day the server asks for the robot check ──
+
+const KEY = "1x00000000000000000000AA";
+const ASKS = "One quick check that you're not a robot, then we'll send your code.";
+const { boxes } = jest.requireMock<{ boxes: { props: { onMessage: (event: { nativeEvent: { data: string; url: string } }) => void }; gone: boolean }[] }>("react-native-webview");
+const answerBox = async (token: string) => {
+  const open = boxes.filter((one) => !one.gone).at(-1);
+  if (open === undefined) throw new Error("no robot check box is open");
+  await act(() => {
+    open.props.onMessage({ nativeEvent: { data: JSON.stringify({ kind: "token", token }), url: "http://localhost:3000/" } });
+  });
+};
+/** The server's gate: no answer gets the check, a good one sends the code. */
+const gate: Route = (body) => ((body as { robotToken?: string }).robotToken === "answer-1" ? sentCode() : refusal(403, "robot_check", ASKS, { robotCheckKey: KEY }));
+
+describe("Change email's robot check", () => {
+  beforeEach(() => {
+    boxes.length = 0;
+  });
+
+  it("the check opens over the box, and its answer sends the code with no second press", async () => {
+    const server = fakeServer(routes({ [CODE]: gate }));
+    await openSettings(server.ask);
+    await fireEvent.press(await screen.findByLabelText("Change email"));
+    await fireEvent.changeText(await screen.findByLabelText("New email address"), NEW);
+    await fireEvent.press(screen.getByLabelText("Email me a code"));
+    expect(await screen.findByText("Security check")).toBeTruthy();
+    expect(screen.getByText(ASKS)).toBeTruthy();
+    await answerBox("answer-1");
+    expect(await screen.findByText("We emailed a 6-digit code to")).toBeTruthy();
+    expect(screen.queryByText("Security check")).toBeNull();
+    expect(server.asked.filter((a) => a.path === CODE).map((a) => a.body)).toEqual([{ email: NEW }, { email: NEW, robotToken: "answer-1" }]);
+  });
+
+  it("closed before it passed: the box says why, keeps the address, and Email me a code opens the check again", async () => {
+    const server = fakeServer(routes({ [CODE]: gate }));
+    await openSettings(server.ask);
+    await fireEvent.press(await screen.findByLabelText("Change email"));
+    await fireEvent.changeText(await screen.findByLabelText("New email address"), NEW);
+    const pageCloses = screen.queryAllByRole("button", { name: "Close" });
+    await fireEvent.press(screen.getByLabelText("Email me a code"));
+    await screen.findByText("Security check");
+    // The check's own Close: the one the page did not have before it opened.
+    const close = screen.getAllByRole("button", { name: "Close" }).find((one) => !pageCloses.includes(one));
+    if (close === undefined) throw new Error("the check has no Close");
+    await fireEvent.press(close);
+    expect(await screen.findByText(ASKS)).toBeTruthy();
+    expect(screen.getByLabelText("New email address").props.value).toBe(NEW);
+    await fireEvent.press(screen.getByLabelText("Email me a code"));
+    expect(await screen.findByText("Security check")).toBeTruthy();
   });
 });

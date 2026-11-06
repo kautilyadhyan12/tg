@@ -1525,7 +1525,14 @@
       "idx": 217,
       "version": "7",
       "when": 1790726400218,
-      "tag": "0218_app_fee_payments",
+      "tag": "0218_email_changes",
+      "breakpoints": true
+    },
+    {
+      "idx": 218,
+      "version": "7",
+      "when": 1790726400219,
+      "tag": "0219_app_fee_payments",
       "breakpoints": true
     }
   ]

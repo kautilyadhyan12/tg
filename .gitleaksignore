@@ -50,3 +50,6 @@ a3138614a8b05beb36f6d9b1cfcadad8bbdd16b1:OWED.md:generic-api-key:6758
 
 # The fake test JWT secret of the label tests, before its marker.
 bca880529367457339cd708059cd7943763d8953:apps/api/test/nutrition.labels.routes.test.ts:generic-api-key:27
+
+# The dummy password of the change-email re-check test, before its marker.
+065dadba87379392726dabe5270b5d46f9d7fcc0:apps/api/test/users.changeEmail.routes.test.ts:generic-api-key:773

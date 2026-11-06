@@ -4,6 +4,7 @@
 // tenant data leaves this file unscoped (R3.2).
 import type { Sql, TransactionSql } from "postgres";
 import type { SessionClient } from "@app/shared";
+import { DPDP_RETENTION_DAYS } from "../../retention.js";
 
 /** The password-hash algorithms users.hash_algo may hold (identity.ts §3.1
  *  CHECK). Owned here because it types the DB row; the service imports it. */
@@ -76,7 +77,8 @@ export async function findUserById(sql: Sql, userId: string): Promise<UserAuthRo
   return rows[0] === undefined ? null : userAuthColumns(rows[0]);
 }
 
-/** null = email already taken (23505 on users_email_unique). */
+/** null = email already taken (23505 on users_email_unique), or held for the 14 days its account may
+ *  undo a Change email back to it (item 19's security re-check, H1-a). */
 export async function createUser(
   sql: Sql,
   input: { email: string; passwordHash: string; algo: HashAlgo; displayName: string },
@@ -84,13 +86,30 @@ export async function createUser(
   try {
     const rows = await sql<{ id: string }[]>`
       INSERT INTO users (email, password_hash, hash_algo, display_name)
-      VALUES (${input.email}, ${input.passwordHash}, ${input.algo}, ${input.displayName})
+      SELECT ${input.email}, ${input.passwordHash}, ${input.algo}, ${input.displayName}
+      WHERE NOT EXISTS (
+        SELECT 1 FROM email_changes
+        WHERE old_email = ${input.email} AND undone_at IS NULL AND ended_at IS NULL AND expires_at > now())
       RETURNING id`;
     return rows[0]?.id ?? null;
   } catch (err) {
     if (isUniqueViolation(err)) return null;
     throw err;
   }
+}
+
+/** Whether a code of this purpose, bound to this account, was proved for this address in the last
+ *  `minutes`. */
+export async function usedCodeSince(
+  sql: Sql,
+  input: { email: string; purpose: CodePurpose; userId: string; minutes: number },
+): Promise<boolean> {
+  const rows = await sql<{ one: number }[]>`
+    SELECT 1 AS one FROM sign_in_codes
+    WHERE email = ${input.email} AND purpose = ${input.purpose} AND user_id = ${input.userId}
+      AND used_at > now() - make_interval(mins => ${input.minutes})
+    LIMIT 1`;
+  return rows.length > 0;
 }
 
 /** Whether any account, a deleted one in its undo days too, holds this address. */
@@ -100,7 +119,9 @@ export async function emailTaken(sql: Sql, email: string): Promise<boolean> {
 }
 
 export type MovedEmail =
-  | { kind: "moved"; email: string; displayName: string }
+  /** `changeId`: the change kept in the move's own step, with its note and Undo link; null with no
+   *  old address. */
+  | { kind: "moved"; email: string; displayName: string; changeId: string | null }
   | { kind: "taken" }
   | { kind: "stale" };
 
@@ -110,7 +131,15 @@ export type MovedEmail =
  *  meanwhile by another request); an address another account took meanwhile is "taken". */
 export async function moveEmail(
   sql: Sql,
-  input: { userId: string; from: string | null; to: string; nameFrom: string | null; nameTo: string },
+  input: {
+    userId: string;
+    from: string | null;
+    to: string;
+    nameFrom: string | null;
+    nameTo: string;
+    /** The change's id, and its Undo link's SHA-256 (the token is worked out from the id). */
+    change: { id: string; tokenHash: string };
+  },
 ): Promise<MovedEmail> {
   try {
     return await sql.begin(async (tx): Promise<MovedEmail> => {
@@ -120,15 +149,177 @@ export async function moveEmail(
         FOR UPDATE`;
       const was = before[0];
       if (was === undefined) return { kind: "stale" };
+      // An address another account left in the last 14 days is still that account's to undo back to.
+      const held = await tx<{ one: number }[]>`
+        SELECT 1 AS one FROM email_changes
+        WHERE old_email = ${input.to} AND user_id <> ${input.userId}
+          AND undone_at IS NULL AND ended_at IS NULL AND expires_at > now()
+        LIMIT 1`;
+      if (held.length > 0) return { kind: "taken" };
       const name = input.nameFrom !== null && was.display_name === input.nameFrom ? input.nameTo : was.display_name;
       await tx`UPDATE users SET email = ${input.to}, display_name = ${name} WHERE id = ${input.userId}`;
       await tx`DELETE FROM auth_identities WHERE user_id = ${input.userId} AND provider = 'google'`;
-      return { kind: "moved", email: input.to, displayName: name };
+      // Kept even if this request ends now: the worker sends the note the request did not, from five
+      // minutes on (the request has first go), and its Undo link works for the retention's days.
+      if (input.from === null) return { kind: "moved", email: input.to, displayName: name, changeId: null };
+      await tx`
+        INSERT INTO email_changes (id, user_id, old_email, new_email, token_hash, expires_at, note_tries, note_next_try_at)
+        VALUES (${input.change.id}, ${input.userId}, ${input.from}, ${input.to}, ${input.change.tokenHash},
+                now() + make_interval(days => ${DPDP_RETENTION_DAYS}), 1, now() + interval '5 minutes')`;
+      return { kind: "moved", email: input.to, displayName: name, changeId: input.change.id };
     });
   } catch (err) {
     if (isUniqueViolation(err)) return { kind: "taken" };
     throw err;
   }
+}
+
+/** The newest change that moved an account off this address and can still be undone, with the address
+ *  it went to; null when there is none. While there is one, nobody starts a new account with it. */
+export async function liveMoveOff(sql: Sql, email: string): Promise<{ newEmail: string } | null> {
+  // FOR SHARE waits out an Undo this change in flight on the row, then reads it again: once undone it is
+  // not live, and the sign-in looks the address up again (item 19's data-integrity re-check, N2).
+  const rows = await sql<{ new_email: string }[]>`
+    SELECT new_email::text AS new_email FROM email_changes
+    WHERE old_email = ${email} AND undone_at IS NULL AND ended_at IS NULL AND expires_at > now()
+    ORDER BY created_at DESC
+    LIMIT 1
+    FOR SHARE`;
+  const row = rows[0];
+  return row === undefined ? null : { newEmail: row.new_email };
+}
+
+/** What an Undo link's page shows. */
+export type EmailChangeLink =
+  | { kind: "unknown" }
+  | { kind: "open"; oldEmail: string; newEmail: string }
+  | { kind: "done"; oldEmail: string }
+  | { kind: "closed" };
+
+/** An account an undo can put back: active, or deleted within its undo days (never one purged). */
+const restorable = (status: string, deletedAt: Date | null, now: Date): boolean =>
+  status === "active" ||
+  (status === "deleted" && deletedAt !== null && deletedAt.getTime() > now.getTime() - DPDP_RETENTION_DAYS * 86_400_000);
+
+export async function readEmailChange(sql: Sql, tokenHash: string): Promise<EmailChangeLink> {
+  const rows = await sql<
+    { old_email: string; new_email: string; live: boolean; undone: boolean; holds: boolean; status: string; deleted_at: Date | null; now: Date }[]
+  >`
+    SELECT c.old_email::text AS old_email, c.new_email::text AS new_email,
+           (c.undone_at IS NULL AND c.ended_at IS NULL AND c.expires_at > now()) AS live,
+           c.undone_at IS NOT NULL AS undone, u.email IS NOT DISTINCT FROM c.old_email AS holds,
+           u.status, u.deleted_at, now() AS now
+    FROM email_changes c JOIN users u ON u.id = c.user_id
+    WHERE c.token_hash = ${tokenHash}`;
+  const row = rows[0];
+  if (row === undefined) return { kind: "unknown" };
+  // "Your account uses it again" only while it does: an earlier change's link may have moved it since.
+  if (row.undone) return row.holds && row.status === "active" ? { kind: "done", oldEmail: row.old_email } : { kind: "closed" };
+  if (!row.live || !restorable(row.status, row.deleted_at, row.now)) return { kind: "closed" };
+  return { kind: "open", oldEmail: row.old_email, newEmail: row.new_email };
+}
+
+export type UndoneEmailChange =
+  | { kind: "unknown" }
+  | { kind: "closed" }
+  | { kind: "taken" }
+  | { kind: "done"; oldEmail: string; userId: string; already: boolean };
+
+/** Undo this change, in ONE transaction: the account goes back to the address the link was sent to (an
+ *  account deleted meanwhile comes back too); every sign-in, Google link, password and waiting link or code
+ *  on it ends; and the links of every later change stop working, so none of them can move it away again. */
+export async function undoEmailChange(sql: Sql, tokenHash: string): Promise<UndoneEmailChange> {
+  try {
+    return await sql.begin(async (tx): Promise<UndoneEmailChange> => {
+      const changes = await tx<{ id: string; user_id: string; old_email: string; live: boolean; undone: boolean; created_at: string }[]>`
+        SELECT id, user_id, old_email::text AS old_email, created_at::text AS created_at,
+               (undone_at IS NULL AND ended_at IS NULL AND expires_at > now()) AS live,
+               undone_at IS NOT NULL AS undone
+        FROM email_changes WHERE token_hash = ${tokenHash}
+        FOR UPDATE`;
+      const change = changes[0];
+      if (change === undefined) return { kind: "unknown" };
+      if (change.undone) {
+        // Pressed again: the same answer while the account still holds the address, closed once an
+        // earlier change's link has moved it on.
+        const still = await tx<{ one: number }[]>`
+          SELECT 1 AS one FROM users WHERE id = ${change.user_id} AND email = ${change.old_email} AND status = 'active'`;
+        return still.length > 0 ? { kind: "done", oldEmail: change.old_email, userId: change.user_id, already: true } : { kind: "closed" };
+      }
+      if (!change.live) return { kind: "closed" };
+      const people = await tx<{ status: string; deleted_at: Date | null; now: Date }[]>`
+        SELECT status, deleted_at, now() AS now FROM users WHERE id = ${change.user_id} FOR UPDATE`;
+      const person = people[0];
+      if (person === undefined || !restorable(person.status, person.deleted_at, person.now)) return { kind: "closed" };
+      // Another account at the address: one that proved it keeps it; one nobody proved it for (a password
+      // set at sign-up, never verified) gives it back, with its password and sign-ins, as the first proof
+      // of an address takes it from such an account (item 19's security re-check, H1-a).
+      const holders = await tx<{ id: string; proved: boolean }[]>`
+        SELECT u.id, EXISTS (
+          SELECT 1 FROM one_time_tokens t WHERE t.user_id = u.id AND t.purpose = 'verify_email' AND t.used_at IS NOT NULL
+        ) AS proved
+        FROM users u WHERE u.email = ${change.old_email} AND u.id <> ${change.user_id}
+        FOR UPDATE`;
+      const holder = holders[0];
+      if (holder !== undefined && holder.proved) return { kind: "taken" };
+      if (holder !== undefined) {
+        await tx`UPDATE users SET email = NULL, password_hash = NULL, hash_algo = NULL WHERE id = ${holder.id}`;
+        await tx`UPDATE refresh_tokens SET revoked_at = now() WHERE user_id = ${holder.id} AND revoked_at IS NULL`;
+      }
+      // Back on the old address, restored if deleted, with no password: sign-in is by code, and a password
+      // set through Forgot password while the stranger held the account would let them in again (item
+      // 19's second security re-check, H1-c). A name that is the stranger's address's first part goes back
+      // to the old address's, as moveEmail's rule the other way round (its Low).
+      await tx`
+        UPDATE users SET
+          email = ${change.old_email}, status = 'active', deleted_at = NULL, password_hash = NULL, hash_algo = NULL,
+          display_name = CASE
+            WHEN display_name = left(split_part(email::text, '@', 1), 100) THEN left(split_part(${change.old_email}, '@', 1), 100)
+            ELSE display_name
+          END
+        WHERE id = ${change.user_id}`;
+      // Every link and code waiting for the account: a reset link kept back, an unused verification, a
+      // change-email code. A used verification stays: it is the address's proof.
+      await tx`DELETE FROM one_time_tokens WHERE user_id = ${change.user_id} AND used_at IS NULL`;
+      await tx`DELETE FROM sign_in_codes WHERE user_id = ${change.user_id} AND used_at IS NULL`;
+      await tx`DELETE FROM auth_identities WHERE user_id = ${change.user_id} AND provider = 'google'`;
+      await tx`UPDATE refresh_tokens SET revoked_at = now() WHERE user_id = ${change.user_id} AND revoked_at IS NULL`;
+      await tx`UPDATE email_changes SET undone_at = now(), note_next_try_at = NULL WHERE id = ${change.id}`;
+      // Only the changes made after this one end: an earlier change's link (the owner's, when the stranger
+      // moved the address twice and undid their own) still works (item 19's security re-check, H1-b).
+      await tx`
+        UPDATE email_changes SET ended_at = now(), note_next_try_at = NULL
+        WHERE user_id = ${change.user_id} AND id <> ${change.id} AND created_at > ${change.created_at}::text::timestamptz
+          AND undone_at IS NULL AND ended_at IS NULL`;
+      return { kind: "done", oldEmail: change.old_email, userId: change.user_id, already: false };
+    });
+  } catch (err) {
+    if (isUniqueViolation(err)) return { kind: "taken" };
+    throw err;
+  }
+}
+
+/** The account an access token names, while it is active and the sign-in session the token was issued
+ *  under is still live; null otherwise. One statement on every signed-in request (the users key and
+ *  `refresh_tokens_user_family_idx`). */
+export async function activeUserInSession(sql: Sql, userId: string, familyId: string): Promise<string | null> {
+  const rows = await sql<{ id: string }[]>`
+    SELECT u.id FROM users u
+    WHERE u.id = ${userId} AND u.status = 'active'
+      AND EXISTS (
+        SELECT 1 FROM refresh_tokens r
+        WHERE r.user_id = u.id AND r.family_id = ${familyId} AND r.revoked_at IS NULL AND r.expires_at > now())`;
+  return rows[0]?.id ?? null;
+}
+
+/** Whether this sign-in session is still live: an undo ends every one of the account's, and an access
+ *  token already out would otherwise go on for its 15 minutes. */
+export async function sessionLive(sql: Sql, userId: string, familyId: string): Promise<boolean> {
+  const rows = await sql<{ one: number }[]>`
+    SELECT 1 AS one FROM refresh_tokens
+    WHERE user_id = ${userId} AND family_id = ${familyId} AND revoked_at IS NULL AND expires_at > now()
+    LIMIT 1`;
+  return rows.length > 0;
 }
 
 function isUniqueViolation(err: unknown): boolean {
@@ -163,8 +354,9 @@ export async function findUserIdByAuthIdentity(
 
 /** Create a user with NO password: password_hash / hash_algo stay NULL
  *  (identity.ts: both nullable). Google sign-in and the email-code door both
- *  create accounts this way. null = email already taken (23505), so the
- *  service re-resolves instead. */
+ *  create accounts this way. null = email already taken (23505), or held for the
+ *  14 days its account may undo a Change email back to it, so the service
+ *  re-resolves instead. */
 export async function createPasswordlessUser(
   sql: Sql,
   input: { email: string; displayName: string },
@@ -172,7 +364,10 @@ export async function createPasswordlessUser(
   try {
     const rows = await sql<{ id: string }[]>`
       INSERT INTO users (email, display_name)
-      VALUES (${input.email}, ${input.displayName})
+      SELECT ${input.email}, ${input.displayName}
+      WHERE NOT EXISTS (
+        SELECT 1 FROM email_changes
+        WHERE old_email = ${input.email} AND undone_at IS NULL AND ended_at IS NULL AND expires_at > now())
       RETURNING id`;
     return rows[0]?.id ?? null;
   } catch (err) {
@@ -190,14 +385,20 @@ export async function createPasswordlessUser(
 export async function recordVerifiedEmail(
   sql: Sql,
   userId: string,
+  /** The address just proved. False, with nothing written, when the account no longer holds it
+   *  (a Change email committed after the sign-in found the account by it: item 19's
+   *  data-integrity pass, H1 and L2) or is no longer active; the caller looks the address up again. */
+  email: string,
   markerHash: string,
   /** A sign-in's link (Google), written in the proof's own transaction: a request cut
    *  between the two would leave a link whose address was never proved, and every later
    *  sign-in by that link would skip the proof (data-integrity pass on item 12, H2). */
   link?: { provider: string; subject: string },
-): Promise<void> {
-  await sql.begin(async (tx) => {
-    await tx`SELECT 1 FROM users WHERE id = ${userId} FOR UPDATE`;
+): Promise<boolean> {
+  return await sql.begin(async (tx) => {
+    const holds = await tx<{ one: number }[]>`
+      SELECT 1 AS one FROM users WHERE id = ${userId} AND email = ${email} AND status = 'active' FOR UPDATE`;
+    if (holds.length === 0) return false;
     if (link !== undefined) {
       await tx`
         INSERT INTO auth_identities (user_id, provider, subject)
@@ -208,11 +409,12 @@ export async function recordVerifiedEmail(
       SELECT 1 AS one FROM one_time_tokens
       WHERE user_id = ${userId} AND purpose = 'verify_email' AND used_at IS NOT NULL
       LIMIT 1`;
-    if (proved.length > 0) return;
+    if (proved.length > 0) return true;
     await tx`
       INSERT INTO one_time_tokens (user_id, purpose, token_hash, expires_at, used_at)
       VALUES (${userId}, 'verify_email', ${markerHash}, now(), now())`;
     await forgetWhatCameBeforeProof(tx, userId);
+    return true;
   });
 }
 
@@ -364,29 +566,41 @@ export async function changePasswordIfUnchanged(
 
 // ── refresh tokens (rotation + reuse detection, v1 §6.1 / Part 4 §3.1) ──────
 
+/** Whether the account is active and still holds the address the sign-in found it by (null for an
+ *  account with none), under its row lock: an Undo this change takes the same lock, so a sign-in that
+ *  found the account at the address the undo moves it off begins no session on it (item 19's
+ *  data-integrity re-check, N1). */
+async function holdsAddress(tx: TransactionSql, userId: string, address: string | null): Promise<boolean> {
+  const rows = await tx<{ one: number }[]>`
+    SELECT 1 AS one FROM users
+    WHERE id = ${userId} AND status = 'active' AND email IS NOT DISTINCT FROM ${address}::citext
+    FOR UPDATE`;
+  return rows.length > 0;
+}
+
+/** A browser sign-in, begun only while the account holds `address` (`holdsAddress`); false, with
+ *  nothing written, otherwise. */
 export async function insertRefreshToken(
   sql: Sql,
   input: {
     userId: string;
+    address: string | null;
     familyId: string;
     tokenHash: string;
     expiresAt: Date;
     ip: string | null;
     userAgent: string | null;
   },
-): Promise<string> {
-  const rows = await sql.begin(async (tx) => {
-    const inserted = await tx<{ id: string }[]>`
+): Promise<boolean> {
+  return await sql.begin(async (tx) => {
+    if (!(await holdsAddress(tx, input.userId, input.address))) return false;
+    await tx`
       INSERT INTO refresh_tokens (user_id, family_id, token_hash, expires_at, ip, user_agent)
       VALUES (${input.userId}, ${input.familyId}, ${input.tokenHash}, ${input.expiresAt},
-              ${input.ip}, ${input.userAgent})
-      RETURNING id`;
+              ${input.ip}, ${input.userAgent})`;
     await markUsed(tx, input.userId);
-    return inserted;
+    return true;
   });
-  const id = rows[0]?.id;
-  if (id === undefined) throw new Error("refresh token insert returned no row");
-  return id;
 }
 
 /** ONE PHONE AT A TIME (spec Part 3 §10.5): the new phone's sign-in and the end of that
@@ -397,15 +611,18 @@ export async function startPhoneSession(
   sql: Sql,
   input: {
     userId: string;
+    /** The address the sign-in found the account by: nothing is begun once it no longer holds it. */
+    address: string | null;
     familyId: string;
     tokenHash: string;
     expiresAt: Date;
     ip: string | null;
     userAgent: string | null;
   },
-): Promise<void> {
-  await sql.begin(async (tx) => {
-    await waitOutRotations(tx, input.userId);
+): Promise<boolean> {
+  return await sql.begin(async (tx) => {
+    // The row lock waits out a rotation in flight on the old phone (waitOutRotations' lock).
+    if (!(await holdsAddress(tx, input.userId, input.address))) return false;
     await tx`
       UPDATE refresh_tokens SET revoked_at = now(), revoked_reason = 'signed_in_elsewhere'
       WHERE user_id = ${input.userId} AND client = 'phone' AND revoked_at IS NULL`;
@@ -416,6 +633,7 @@ export async function startPhoneSession(
       VALUES (${input.userId}, ${input.familyId}, ${input.tokenHash}, ${input.expiresAt},
               ${input.ip}, ${input.userAgent}, 'phone')`;
     await markUsed(tx, input.userId);
+    return true;
   });
 }
 

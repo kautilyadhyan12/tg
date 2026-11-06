@@ -873,7 +873,7 @@ export const gymAutopayPauses = pgTable(
 );
 
 /** Pay what they owe in the app (0217; ROADMAP 18k-ii-a): one row a member's press, while Square's own payment page for
- *  a membership's bill, or one of its fees (0218; 18k-ii-b), is open (`open`), then `done` with why. `link_key` is the key Square made the page with, so asking
+ *  a membership's bill, or one of its fees (0219; 18k-ii-b), is open (`open`), then `done` with why. `link_key` is the key Square made the page with, so asking
  *  again gives back the same page. While open, nothing else is paid, voided or changed on that membership; the page is
  *  closed at Square (its order CANCELED, so it can no longer be paid) when the member leaves it, staff close it, or
  *  `closes_at` passes, and the row stays open until Square says so. A paid row is kept, for the card it names; a closed one
@@ -890,7 +890,7 @@ export const gymAppPayments = pgTable(
     entryId: uuid("entry_id"),
     heldMembershipId: uuid("held_membership_id").notNull(),
     periodIndex: integer("period_index"),
-    /** A fee of the membership (0218; 18k-ii-b), in place of a period. */
+    /** A fee of the membership (0219; 18k-ii-b), in place of a period. */
     feeBillId: uuid("fee_bill_id"),
     amountMinor: integer("amount_minor").notNull(),
     currency: text("currency").notNull(),

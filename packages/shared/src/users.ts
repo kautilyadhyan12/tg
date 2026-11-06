@@ -3,6 +3,7 @@
 // auth.ts. All request bodies are .strict() (Part IV #5).
 import { z } from "zod";
 import { authEmailSchema, oneTimeTokenSchema, signInCodeSchema } from "./auth.js";
+import { ROBOT_CHECK_TOKEN_MAX_CHARS } from "./robotCheck.js";
 
 /** Part 4 §3.1 users columns exposed to the owner. emailVerified is DERIVED
  *  from a consumed verify_email one-time token (DECISIONS 2026-07-11). */
@@ -85,7 +86,11 @@ export const deleteAccountRequestSchema = z.object({ code: signInCodeSchema }).s
 export type DeleteAccountRequest = z.infer<typeof deleteAccountRequestSchema>;
 /** Change email (ROADMAP Stage 5 19c; RULINGS 2026-09-23, E): a code goes to the NEW address, and the
  *  change is made only when that code comes back from the same account. */
-export const changeEmailCodeRequestSchema = z.object({ email: authEmailSchema }).strict();
+/** `robotToken`: Cloudflare Turnstile's answer, sent only once the server asked for it (past an
+ *  account's third change-email code of the day). */
+export const changeEmailCodeRequestSchema = z
+  .object({ email: authEmailSchema, robotToken: z.string().min(1).max(ROBOT_CHECK_TOKEN_MAX_CHARS).optional() })
+  .strict();
 export type ChangeEmailCodeRequest = z.infer<typeof changeEmailCodeRequestSchema>;
 export const changeEmailRequestSchema = z.object({ email: authEmailSchema, code: signInCodeSchema }).strict();
 export type ChangeEmailRequest = z.infer<typeof changeEmailRequestSchema>;
@@ -93,6 +98,47 @@ export type ChangeEmailRequest = z.infer<typeof changeEmailRequestSchema>;
  *  becomes the new one's. Not strict, as the delete answer. */
 export const changeEmailResponseSchema = z.object({ message: z.string(), email: z.string(), displayName: z.string() });
 export type ChangeEmailResponse = z.infer<typeof changeEmailResponseSchema>;
+
+// ── Undo this change (item 19's security pass, H1; Kd 2026-11-06) ──
+// The note to the old address carries a link to `/undo-email-change#<token>`. Pressing the page's
+// button puts the account back on the old address and signs everybody out of it, for 14 days.
+
+/** The link's token: 64 hex characters, worked out on the server from the change and its secret. */
+export const emailChangeUndoTokenSchema = z.string().regex(/^[0-9a-f]{64}$/);
+export const emailChangeLinkRequestSchema = z.object({ token: emailChangeUndoTokenSchema }).strict();
+export type EmailChangeLinkRequest = z.infer<typeof emailChangeLinkRequestSchema>;
+/** What the page shows: the change to undo (the new address partly hidden), one already undone, or a
+ *  link that works no more. `supportEmail`: the address to write to, where one is set. */
+export const emailChangeLinkResponseSchema = z.discriminatedUnion("state", [
+  z.object({ state: z.literal("open"), oldEmail: z.string(), newEmail: z.string(), supportEmail: z.string().nullable() }).strict(),
+  z.object({ state: z.literal("done"), oldEmail: z.string() }).strict(),
+  z.object({ state: z.literal("closed"), supportEmail: z.string().nullable() }).strict(),
+]);
+export type EmailChangeLinkResponse = z.infer<typeof emailChangeLinkResponseSchema>;
+export const emailChangeUndoResponseSchema = z.object({ state: z.literal("done"), oldEmail: z.string() }).strict();
+export type EmailChangeUndoResponse = z.infer<typeof emailChangeUndoResponseSchema>;
+
+/** The words of the undo, the same in the email, on the page and at sign-in. */
+export const EMAIL_CHANGE_WORDS = {
+  /** Days the Undo link works, and an old address starts no new account (the retention's 14). */
+  days: 14,
+  /** At sign-in with an address an account moved off in those days. `masked`: "k***@gmail.com". */
+  movedOff: (masked: string) =>
+    `This email address was recently changed to ${masked}. If you changed it, sign in with your new email. If you didn't, open the email we sent to this address and press Undo this change.`,
+  openTitle: "Undo the email change?",
+  open: (oldEmail: string, newMasked: string) =>
+    `The email for your account was changed from ${oldEmail} to ${newMasked}. If you didn't do this, put it back. Everyone signed in to your account will be signed out.`,
+  button: "Put my account back",
+  nothingYet: "Nothing changes until you press the button. If you made this change yourself, close this page.",
+  doneTitle: "Your account is back",
+  done: (oldEmail: string) => `Your account uses ${oldEmail} again, and everyone signed in to it has been signed out. Sign in with ${oldEmail}.`,
+  phone: "Using the app on your phone? Open it and sign in there.",
+  closedTitle: "This link no longer works",
+  closed: "It may have run out after 14 days, or the change was already put back.",
+  notValid: "This link isn't valid. Open it again from the email we sent you.",
+  taken: "We couldn't put your account back, because that email address now has another account.",
+  writeToUs: (supportEmail: string) => `If you need help, write to us at ${supportEmail}.`,
+} as const;
 
 /** `emailSent`: the undo link went to the account's address, so a screen may say so. */
 // Not strict: a field the server adds later must not turn a deleted account into "no answer" on the phone.

@@ -48,6 +48,8 @@ export const INTERNAL_COLUMNS_BY_TABLE: Partial<Record<ExportedTable, readonly s
   // user's anti-cheat verdict TO that user, which is precisely what the spec
   // says must not happen. Cheap to rule now, awkward afterwards.
   workouts: ["quality_flags"],
+  // The Undo link's hash and the note's tries: the server's workings, not the person's record.
+  email_changes: ["token_hash", "note_tries", "note_next_try_at"],
 };
 
 function stripInternal(
