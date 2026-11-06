@@ -389,13 +389,13 @@ d("a pass the phone makes with no signal (real Postgres)", () => {
       expect((await request("GET", KEY_PATH)).statusCode).toBe(401);
 
       // The same person on a phone gets them; a second phone sign-in gets others, and the first
-      // phone's access token, still inside its fifteen minutes, gets nothing more.
+      // phone's access token, still inside its fifteen minutes, is let in nowhere (its sign-in ended).
       const phone = await phoneSignIn(address);
       const first = await phoneKeysOf(phone);
       const second = await phoneSignIn(address);
       expect((await phoneKeysOf(second))[0]?.key).not.toBe(first[0]?.key);
       const stale = await request("GET", KEY_PATH, { bearer: phone.accessToken });
-      expect(stale.statusCode).toBe(403);
+      expect(stale.statusCode).toBe(401);
     },
     TIMEOUT_MS,
   );
