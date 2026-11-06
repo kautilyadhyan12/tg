@@ -89,7 +89,10 @@ export function RunMap({ track, starts, units, mode, scheme, source, under = 0, 
     };
   }, [credit]);
   // The map's own word on its streets, looked at again for each new look: what the person sees, not
-  // whether our server answered (the squares come from the map's company).
+  // whether our server answered (the squares come from the map's company). A new look is new words in
+  // the style, never a new copy of the same: the map draws nothing again for that, and says nothing
+  // again (found on Kd's phone, 2026-11-06: the line came under a map that had drawn).
+  const look = useMemo(() => JSON.stringify(style), [style]);
   const drew = useRef(false);
   useEffect(() => {
     if (onDrawn === undefined) return undefined;
@@ -100,7 +103,7 @@ export function RunMap({ track, starts, units, mode, scheme, source, under = 0, 
     return () => {
       clearTimeout(wait);
     };
-  }, [style, onDrawn]);
+  }, [look, onDrawn]);
   const t = trailColours[scheme];
   const still = mode === "box";
 

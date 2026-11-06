@@ -74,7 +74,7 @@ beforeEach(async () => {
 function runServer(user = RAVI, map: MapSource = OPENFREEMAP) {
   const saved: SaveRunRequest[] = [];
   const posts: { body: unknown; key: string | undefined }[] = [];
-  const state = { online: true };
+  const state: { online: boolean; mapHeld: Promise<void> | null } = { online: true, mapHeld: null };
   const server = fakeServer({
     "/v1/auth/refresh": () => ({ status: 200, body: { tokens: tokens(2) } }),
     "/v1/geo/map": () => ({ status: 200, body: { map } }),
@@ -104,6 +104,7 @@ function runServer(user = RAVI, map: MapSource = OPENFREEMAP) {
     const path = new URL(url).pathname;
     requests.push({ path, method: init.method ?? "GET", search: new URL(url).search, body: init.body });
     if (path === "/v1/geo/map" && !state.online) throw new Error("no signal");
+    if (path === "/v1/geo/map" && state.mapHeld !== null) await state.mapHeld;
     if (path === PATH && init.method === "POST") {
       if (!state.online) throw new Error("no signal");
       posts.push({ body: init.body === undefined ? undefined : JSON.parse(init.body), key: init.headers?.["idempotency-key"] });
@@ -829,6 +830,36 @@ describe("the map under the run (37b-i)", () => {
     });
     expect(screen.queryByText(CANT_LOAD)).toBeNull();
     expect(screen.queryByText(/online/)).toBeNull();
+  });
+
+  it("a map that drew says nothing more when our server's answer, the same map, comes after it", async () => {
+    const timeouts = jest.spyOn(global, "setTimeout");
+    const s = runServer();
+    let answer: () => void = () => undefined;
+    s.state.mapHeld = new Promise<void>((resolve) => {
+      answer = resolve;
+    });
+    await openRunning(s);
+    await startRunning();
+    await runThenFinish(61);
+    expect(await screen.findByTestId("summary-map")).toBeTruthy();
+    await act(() => {
+      drawnMap("summary-map-view").props.onDidFinishLoadingMap?.();
+    });
+    const before = timeouts.mock.calls.length;
+    await act(async () => {
+      answer();
+      await new Promise<void>((resolve) => setTimeout(resolve, 50));
+    });
+    // The person then says how it felt: the summary draws again, the map is the same.
+    await fireEvent.press(screen.getByRole("button", { name: "5 of 10" }));
+    // Every wait begun since the map drew, run out: none may say the map can't load.
+    const waits = timeouts.mock.calls.slice(before).filter((call) => call[1] === MAP_WAIT_MS).map((call) => call[0]);
+    await act(() => {
+      for (const wait of waits) wait();
+    });
+    expect(screen.queryByText(CANT_LOAD)).toBeNull();
+    timeouts.mockRestore();
   });
 
   it("when the map says nothing for MAP_WAIT_MS (its squares can't be fetched), the Route box says it can't load", async () => {

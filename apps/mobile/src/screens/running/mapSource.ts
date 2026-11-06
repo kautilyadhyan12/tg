@@ -39,9 +39,9 @@ export async function askMapSource(session: Pick<Session, "signedIn">): Promise<
   await readKept();
   const answer = await session.signedIn({ method: "GET", path: "/v1/geo/map" }, mapSourceResponseSchema);
   if (answer.kind !== "ok") return;
-  const changed = JSON.stringify(answer.data.map) !== JSON.stringify(source);
-  source = answer.data.map;
-  if (changed) {
+  // The same map is kept as the same thing: a new copy of it would have every map draw again.
+  if (JSON.stringify(answer.data.map) !== JSON.stringify(source)) {
+    source = answer.data.map;
     tell();
     await files.write(FILE, JSON.stringify(source)).catch(() => undefined);
   }
