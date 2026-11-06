@@ -11,6 +11,8 @@
 import {
   authEmailSchema,
   periodListedMinor,
+  periodStart,
+  raiseStarted,
   priceRaiseDue,
   priceRaiseNext,
   priceRaisePreviewResponseSchema,
@@ -52,8 +54,23 @@ function standingOf(row: HeldRow, billedTo: number, today: string, written: Writ
     const email = emailOf(written, row);
     return email?.state === "sending" ? "emailing" : "waiting";
   }
-  const charged = billedTo >= raise.fromPeriod || row.membership.paidPeriods > raise.fromPeriod || today >= raise.fromOn;
+  // By period, as the bills are: a freeze after the email moves the payment it named, and this with it (round one, H1).
+  const charged = billedTo >= raise.fromPeriod || row.membership.paidPeriods > raise.fromPeriod || raiseStarted(row.membership, raise, today);
   return charged ? "charged" : "sent";
+}
+
+/** The payment a raise starts with, as its dates stand now: the one its email named, moved by any freeze since. */
+function startsOnOf(row: HeldRow, written: Written): string | null {
+  const raise = row.raise;
+  if (raise === null) return null;
+  return raise.fromPeriod !== null ? periodStart(row.membership, raise.fromPeriod) : (emailOf(written, row)?.aboutOn ?? null);
+}
+
+/** A raise's email that failed for a reason that may pass (the email service refused or was down), a day after: it is
+ *  written again, naming the payment the rule names then. One that may have gone is never sent again. */
+const RETRY_FAILED_AFTER_MS = 24 * 60 * 60_000;
+function retriable(email: reminders.ReminderWritten, now: Date): boolean {
+  return email.state === "failed" && email.reason !== "send_unknown" && email.finishedAt !== null && now.getTime() - email.finishedAt.getTime() >= RETRY_FAILED_AFTER_MS;
 }
 
 /** The facts each membership's status is read from, all read at once for many. */
@@ -109,7 +126,7 @@ export function proposedStatus(held: reminders.PayerHeld, lineMinor: number, not
   const to = raisedOwnPriceMinor(lineMinor, row.discount);
   if (plan.kind === "none" && plan.reason === "not_renewing") return said("not_renewing", own, own);
   // A raise emailed and not yet charged stands as the member was told it.
-  if ((standing === "sent" || standing === "emailing") && raise !== null) return said("raise_waiting", own, raise.priceMinor, raise.fromOn);
+  if ((standing === "sent" || standing === "emailing") && raise !== null) return said("raise_waiting", own, raise.priceMinor, startsOnOf(row, facts.written));
   if (to <= own) return said("not_higher", own, own);
   const why = cannotEmail(held, facts);
   if (why !== null) return said(why, own, own);
@@ -130,11 +147,16 @@ export function standingStatus(held: reminders.PayerHeld, facts: Facts): { statu
     status: { state, fromMinor: row.priceMinor, toMinor: raise.priceMinor, startsOn, on },
     canKeep: standing !== "emailing",
   });
-  if (standing === "sent" && raise.fromPeriod !== null) return said("sent", raise.fromOn, raise.sentOn);
+  if (standing === "sent" && raise.fromPeriod !== null) return said("sent", startsOnOf(row, facts.written), raise.sentOn);
   const email = emailOf(facts.written, row);
   const plan = priceRaiseNext(row.membership, raise.noticeDays, facts.today, billedTo);
   if (standing === "emailing") return said("sending", email?.aboutOn ?? null, null);
-  if (email !== undefined && (email.state === "failed" || email.state === "skipped")) return said(email.reason === "address_blocked" ? "address_blocked" : "not_sent", null, null);
+  if (email !== undefined && (email.state === "failed" || email.state === "skipped")) {
+    // Handed to the email service, which never confirmed it: it may have gone (round one, L2).
+    // A failed one is written again a day after; a skipped one was the address, which a new one may fix.
+    const state = email.reason === "address_blocked" ? "address_blocked" : email.reason === "send_unknown" ? "maybe_sent" : email.state === "failed" ? "not_sent" : "no_email";
+    return said(state, null, null);
+  }
   if (plan.kind === "none") return said(plan.reason === "frozen" ? "after_freeze" : "not_renewing", null, null);
   const why = cannotEmail(held, facts);
   if (why !== null) return said(why, null, null);
@@ -226,14 +248,18 @@ export async function queueDuePriceRaises(deps: { sql: Sql; now: () => Date; gym
     const held = await reminders.payersHeld(deps.sql, { gymId: gym.gymId, heldIds: waiting });
     const facts = await factsOf(deps.sql, null, gym.gymId, held, gym.today);
     const due: reminders.QueuedReminder[] = [];
+    const retried: string[] = [];
     for (const h of held) {
       const raise = h.row.raise;
       if (raise === null || raise.fromPeriod !== null || h.skipped !== null || h.payerEmail === null || !authEmailSchema.safeParse(h.payerEmail).success) continue;
-      if (emailOf(facts.written, h.row) !== undefined) continue;
+      const written = emailOf(facts.written, h.row);
+      if (written !== undefined && !retriable(written, now)) continue;
       const plan = priceRaiseNext(h.row.membership, raise.noticeDays, gym.today, facts.billed.get(h.row.id) ?? -1);
       if (!priceRaiseDue(plan, gym.today)) continue;
+      if (written !== undefined) retried.push(written.id);
       due.push({ gymId: gym.gymId, heldId: h.row.id, entryId: h.payerEntryId, occasion: raisesRepo.priceOccasion(raise.id), what: "price", aboutOn: plan.next.fromOn, email: h.payerEmail });
     }
+    await reminders.dropFailedReminders(deps.sql, gym.gymId, retried);
     queued += await reminders.queueReminders(deps.sql, due, now);
     await raisesRepo.markRaisesChecked(deps.sql, gym.gymId, now);
   }

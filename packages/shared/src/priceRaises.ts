@@ -72,6 +72,15 @@ export function raisedListedMinor(ownMinor: number, raise: PriceRaiseCharged | n
   return raise !== null && raise.fromPeriod !== null && index >= raise.fromPeriod ? raise.priceMinor : ownMinor;
 }
 
+/** Has the raise started: is the period running `today` (the day a frozen one stands still at) at or past the one its
+ *  email named? Read by period, as the bills are: a freeze or free days after the email move that payment later, and
+ *  the price it is paying moves with it (round one, H1). */
+export function raiseStarted(m: HeldMembership, raise: PriceRaiseCharged | null, today: string): boolean {
+  if (raise === null || raise.fromPeriod === null || m.kind !== "recurring") return false;
+  const asOf = m.status === "frozen" && m.frozenOn !== null ? m.frozenOn : today;
+  return periodIndex(m, asOf) >= raise.fromPeriod;
+}
+
 /** What a membership's own price becomes at the line's new price: a discount taken off every payment still comes
  *  off it (its own price is already the price after it); one off the first payment alone has been used. */
 export function raisedOwnPriceMinor(lineMinor: number, discount: { offMinor: number; payments: MembershipPayments } | null): number {

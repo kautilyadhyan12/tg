@@ -409,7 +409,7 @@ async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: 
   const changeOf = (row: repo.HeldRow): MemberBilling["change"] => {
     if (list.past || !list.inUse.some((r) => r.id === row.id)) return null;
     if (replaced.has(row.id)) return { ok: false, reason: "changed_already" };
-    const from = changeFrom(row.membership, repo.priceNowMinor(row, today), list.bills.filter((b) => b.membershipId === row.id).map(changeRepo.changeBillFacts), today);
+    const from = changeFrom(row.membership, (index) => repo.periodPriceMinor(row, index), list.bills.filter((b) => b.membershipId === row.id).map(changeRepo.changeBillFacts), today);
     return from.ok ? { ok: true, creditMinor: from.creditMinor, daysLeft: from.daysLeft, nextOn: from.nextOn } : { ok: false, reason: from.reason };
   };
   const changedTo = (id: string) => list.changes.find((c) => c.oldId === id && c.newStatus !== "cancelled");
@@ -1051,8 +1051,6 @@ export async function voidMemberFeePayment(
   return await readOr404(deps, gymId, entryId, today, true);
 }
 
-/** Takes back a mark that has no payment behind it. A count that would go up is
- *  refused: a period is paid by recording its payment. */
 /** Keep the old price (18w): the raise of one of their memberships is taken off, while nothing has been charged at it
  *  and its email is not on its way. Whoever may change the price list, on a person's page. */
 export async function keepOldPrice(deps: HeldDeps, userId: string, gymId: string, entryId: string, membershipId: string): Promise<HeldMembershipsResponse> {
@@ -1065,6 +1063,8 @@ export async function keepOldPrice(deps: HeldDeps, userId: string, gymId: string
   return await readOr404(deps, gymId, entryId, dayInTz(now, org.timezone), privileges.includes(BILLING));
 }
 
+/** Takes back a mark that has no payment behind it. A count that would go up is
+ *  refused: a period is paid by recording its payment. */
 export async function undoPaidMark(
   deps: HeldDeps,
   userId: string,

@@ -129,7 +129,7 @@ export async function getMoneyReport(deps: ReportsDeps, gymId: string, org: { ti
     const none = { paidMinor: 0, soldMinor: 0, refundedMinor: 0 };
     if ((!money.any_membership && !money.any_sale) || (money.first_paid_on === null && money.first_sold_on === null)) return { gym, currency, money, held: [], members: null, listPeople: 0, collected: none };
     const collected = await repo.readCollected(tx, gymId, currency, earlier);
-    const held = await inUseForMoney(tx, gymId, currency);
+    const held = await inUseForMoney(tx, gymId, currency, today);
     const onList = await heldAndOverIn(tx, gymId, today, null);
     const gone = [...onList.over].map(([id, left]) => ({ id, on: left.on }));
     const members = await repo.readMemberCounts(tx, gymId, org.timezone, today, gone, periodFrom, earlier);

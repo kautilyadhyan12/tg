@@ -161,6 +161,7 @@ export const PRICE_RAISE_STATES = [
   "no_email",
   "address_blocked",
   "not_sent",
+  "maybe_sent",
   "former_payer",
   "billed_elsewhere",
 ] as const;

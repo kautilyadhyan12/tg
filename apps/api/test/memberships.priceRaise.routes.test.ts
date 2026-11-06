@@ -14,6 +14,7 @@ import { loadConfig } from "../src/config.js";
 import type { InviteEmail } from "../src/email/resend.js";
 import { openDueBills } from "../src/modules/orgs/memberships/billsRepo.js";
 import { sendDueRenewalReminders } from "../src/modules/orgs/memberships/renewalReminders.js";
+import { emailHmac } from "../src/modules/orgs/invites/address.js";
 import { proveAddress } from "./proveAddress.js";
 
 const url = process.env["DATABASE_URL"];
@@ -98,6 +99,8 @@ d("Raise the price for members already on a line (real Postgres)", { timeout: T 
   const cleanup = async () => {
     const myUsers = sql`SELECT id FROM users WHERE email LIKE 'praise-t-%@example.com'`;
     await sql`DELETE FROM gym_renewal_reminders WHERE gym_id IN (${mineSql})`;
+    const bounced = await sql<{ email: string }[]>`SELECT email::text AS email FROM gym_member_list_entries WHERE gym_id IN (${mineSql}) AND full_name = 'Gil Bounced'`;
+    for (const b of bounced) await sql`DELETE FROM email_suppressions WHERE gym_id IS NULL AND email_hmac = ${emailHmac(HMAC_KEY, b.email)}`;
     await sql`DELETE FROM gym_price_raises WHERE gym_id IN (${mineSql})`;
     await sql`DELETE FROM gym_member_payers WHERE gym_id IN (${mineSql})`;
     await sql`DELETE FROM gym_held_memberships WHERE gym_id IN (${mineSql})`;
@@ -146,7 +149,8 @@ d("Raise the price for members already on a line (real Postgres)", { timeout: T 
   const lineOf = async (gym: Gym, terms: Record<string, unknown> = {}): Promise<string> => {
     const res = await send("POST", `/v1/orgs/${gym.id}/membership-types`, gym.cookies, { ...weekly, ...terms });
     expect(res.statusCode, res.body).toBe(201);
-    const found = (JSON.parse(res.body) as GymMembershipTypesResponse).types.find((t) => t.name === weekly.name);
+    const name = typeof terms["name"] === "string" ? terms["name"] : weekly.name;
+    const found = (JSON.parse(res.body) as GymMembershipTypesResponse).types.find((t) => t.name === name);
     if (found === undefined) throw new Error("no type");
     return found.id;
   };
@@ -297,6 +301,8 @@ d("Raise the price for members already on a line (real Postgres)", { timeout: T 
     // At the desk: the payment in 2 days is still $25.00; the one in 9 days, paid ahead, is $30.00.
     expect((await pay(gym, ann, annM, 1, 2501)).statusCode).toBe(409);
     expect((await pay(gym, ann, annM, 1, 2500)).statusCode).toBe(200);
+    // What the desk and the card on file take next reads the new price too.
+    expect((await pageOf(gym, ann)).memberships.find((m) => m.id === annM)?.billing?.pay?.leftMinor).toBe(3000);
     expect((await pay(gym, ann, annM, 2, 3000)).statusCode).toBe(200);
     expect(await billsOf(annM)).toEqual([[0, 2500], [1, 2500], [2, 3000]]);
 
@@ -398,5 +404,107 @@ d("Raise the price for members already on a line (real Postgres)", { timeout: T 
     clock = noon(addDays(today, 9));
     await openBills();
     expect((await billsOf(tiaM)).at(-1)).toEqual([2, 3300]);
+  });
+
+  it("a freeze after the email moves the payment it named: the old price is shown and charged until then, Keep still works, and a later raise waits", async () => {
+    clock = noon(chicagoToday);
+    const today = chicagoToday;
+    const gym = await makeGym("Freeze Gym");
+    const line = await lineOf(gym);
+    const eve = await person(gym, "Eve Freezes");
+    const eveM = await give(gym, line, eve, addDays(today, -5));
+    // Weekly from five days ago: with 30 days' notice the new price starts in 30 days, and the email goes today.
+    expect((await saveAt(gym, line, 3000, { noticeDays: 30, membershipIds: [eveM] })).statusCode).toBe(200);
+    expect((await remind()).sent).toBe(1);
+    expect(mailTo(await emailOf(eve))[0]?.subject).toContain(dayWords(addDays(today, 30)));
+    // Frozen tomorrow, back 30 days later: every payment moves 30 days, the one the email named to day 60.
+    clock = noon(addDays(today, 1));
+    expect((await send("POST", `${entryUrl(gym, eve)}/memberships/${eveM}/freeze`, gym.cookies, { feeMinor: 0 })).statusCode).toBe(200);
+    clock = noon(addDays(today, 31));
+    expect((await send("POST", `${entryUrl(gym, eve)}/memberships/${eveM}/unfreeze`, gym.cookies, {})).statusCode).toBe(200);
+    const page = await pageOf(gym, eve);
+    expect(page.memberships.find((m) => m.id === eveM)?.priceMinor).toBe(2500);
+    expect(page.priceRaises.map((r) => [r.status.state, r.status.startsOn, r.canKeep])).toEqual([["sent", addDays(today, 60), true]]);
+    // A second raise now: she was told of one still to come, so it leaves her as she is.
+    const box = priceRaisePreviewResponseSchema.parse(JSON.parse((await send("POST", `/v1/orgs/${gym.id}/membership-types/${line}/price-raise/preview`, gym.cookies, { priceMinor: 3500, noticeDays: 7 })).body));
+    expect(box.people.map((p) => [p.status.state, p.status.fromMinor, p.status.toMinor, p.status.startsOn])).toEqual([["raise_waiting", 2500, 3000, addDays(today, 60)]]);
+    const second = await saveAt(gym, line, 3500, { noticeDays: 7, membershipIds: [eveM] });
+    expect((JSON.parse(second.body) as GymMembershipTypesResponse).raised).toBe(0);
+    // The payments before day 60 stay at $25.00.
+    clock = noon(addDays(today, 40));
+    await openBills();
+    expect((await billsOf(eveM)).every(([, amount]) => amount === 2500)).toBe(true);
+    clock = noon(addDays(today, 60));
+    await openBills();
+    expect((await billsOf(eveM)).at(-1)).toEqual([5, 3000]);
+  });
+
+  it("a raise charged becomes the own price when raised again; billed ahead, a bounced address, a past payer, and Keep while it is being emailed", async () => {
+    clock = noon(chicagoToday);
+    const today = chicagoToday;
+    const gym = await makeGym("Twice Gym");
+    const line = await lineOf(gym);
+    const fay = await person(gym, "Fay Twice");
+    const fayM = await give(gym, line, fay, addDays(today, -5));
+    expect((await saveAt(gym, line, 3000, { noticeDays: 7, membershipIds: [fayM] })).statusCode).toBe(200);
+    clock = noon(addDays(today, 2));
+    expect((await remind()).sent).toBe(1);
+    clock = noon(addDays(today, 9));
+    await openBills();
+    expect((await billsOf(fayM)).at(-1)).toEqual([2, 3000]);
+    // Reports counts her at the price she pays now: $30.00 a week is $130.00 a month.
+    const money = await send("GET", `/v1/orgs/${gym.id}/reports/money`, gym.cookies);
+    expect(money.statusCode, money.body).toBe(200);
+    expect((JSON.parse(money.body) as { report: { recurring?: { monthlyMinor: number } } }).report.recurring?.monthlyMinor).toBe(13000);
+    // Raised again to $35.00: from her $30.00, and until its own email has gone she still pays $30.00.
+    const box = priceRaisePreviewResponseSchema.parse(JSON.parse((await send("POST", `/v1/orgs/${gym.id}/membership-types/${line}/price-raise/preview`, gym.cookies, { priceMinor: 3500, noticeDays: 7 })).body));
+    expect(box.people.map((p) => [p.name, p.status.state, p.status.fromMinor, p.status.toMinor])).toEqual([["Fay Twice", "will_send", 3000, 3500]]);
+    expect((JSON.parse((await saveAt(gym, line, 3500, { noticeDays: 7, membershipIds: [fayM] })).body) as GymMembershipTypesResponse).raised).toBe(1);
+    clock = noon(addDays(today, 16));
+    await openBills();
+    expect((await billsOf(fayM)).at(-1)).toEqual([3, 3000]);
+
+    clock = noon(today);
+    const line2 = await lineOf(gym, { name: "Silver Weekly" });
+    // Pat paid the week after next ahead, then that payment was taken back: its bill stands open at $25.00, so the new
+    // price starts the week after it.
+    const pat = await person(gym, "Pat Ahead");
+    const patM = await give(gym, line2, pat, addDays(today, -5));
+    // In 2 days, the day next week's payment falls due.
+    clock = noon(addDays(today, 2));
+    await openBills();
+    expect((await pay(gym, pat, patM, 1, 2500)).statusCode).toBe(200);
+    const ahead = await pay(gym, pat, patM, 2, 2500);
+    expect(ahead.statusCode, ahead.body).toBe(200);
+    const paidAhead = (await pageOf(gym, pat)).memberships.find((m) => m.id === patM)?.billing?.bills.find((b) => b.periodIndex === 2)?.payments[0]?.id ?? "";
+    const voided = await send("POST", `${entryUrl(gym, pat)}/memberships/${patM}/payments/${paidAhead}/void`, gym.cookies, { reason: "mistake" });
+    expect(voided.statusCode, voided.body).toBe(200);
+    expect(await billsOf(patM)).toEqual([[0, 2500], [1, 2500], [2, 2500]]);
+    // Gil's address bounced; Hal is paid for by a past member.
+    const gil = await person(gym, "Gil Bounced");
+    await give(gym, line2, gil, addDays(today, -5));
+    await sql`INSERT INTO email_suppressions (email_hmac, gym_id, reason) VALUES (${emailHmac(HMAC_KEY, await emailOf(gil))}, NULL, 'bounced') ON CONFLICT DO NOTHING`;
+    const hal = await person(gym, "Hal Child");
+    const ivy = await person(gym, "Ivy Gone");
+    await give(gym, line2, hal, addDays(today, -5));
+    await sql`INSERT INTO gym_member_payers (gym_id, entry_id, payer_entry_id) VALUES (${gym.id}, ${hal}, ${ivy})`;
+    await sql`UPDATE gym_member_list_entries SET former_at = now() WHERE id = ${ivy}`;
+    const box2 = priceRaisePreviewResponseSchema.parse(JSON.parse((await send("POST", `/v1/orgs/${gym.id}/membership-types/${line2}/price-raise/preview`, gym.cookies, { priceMinor: 3000, noticeDays: 7 })).body));
+    expect(box2.people.map((p) => [p.name, p.status.state, p.status.startsOn])).toEqual([
+      ["Gil Bounced", "address_blocked", null],
+      ["Hal Child", "former_payer", null],
+      ["Pat Ahead", "will_send", addDays(today, 16)],
+    ]);
+
+    // While Pat's email is being sent, Keep is refused and the page offers none.
+    expect((await saveAt(gym, line2, 3000, { noticeDays: 7, membershipIds: [patM] }, { name: "Silver Weekly" })).statusCode).toBe(200);
+    const [raise] = await sql<{ id: string }[]>`SELECT id FROM gym_price_raises WHERE held_membership_id = ${patM}`;
+    await sql`
+      INSERT INTO gym_renewal_reminders (gym_id, held_membership_id, entry_id, occasion, what, about_on, email, state, attempts, not_before, lease_until, maybe_sent_at, created_at)
+      VALUES (${gym.id}, ${patM}, ${pat}, ${"price:" + (raise?.id ?? "")}, 'price', ${addDays(today, 16)}::date, ${await emailOf(pat)}, 'sending', 1, ${clock}, ${new Date(clock.getTime() + 60_000)}, ${clock}, ${clock})`;
+    expect((await pageOf(gym, pat)).priceRaises.map((r) => [r.status.state, r.canKeep])).toEqual([["sending", false]]);
+    const keep = await send("POST", `${entryUrl(gym, pat)}/memberships/${patM}/price-raise/keep`, gym.cookies, {});
+    expect(keep.statusCode).toBe(409);
+    expect(await sql`SELECT 1 FROM gym_price_raises WHERE held_membership_id = ${patM}`).toHaveLength(1);
   });
 });

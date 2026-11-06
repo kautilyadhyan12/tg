@@ -61,8 +61,10 @@ export function billDaysMinor(b: ChangeBillFacts): number {
 
 /** THE MEMBERSHIP BEING CHANGED, as it is on `today`: whether it can be changed, and what a
  *  change today would take off. `heldPriceMinor` is what each period costs before tax, for a
- *  period counted as paid that has no bill (one before it was given here). */
-export function changeFrom(m: HeldMembership, heldPriceMinor: number, bills: readonly ChangeBillFacts[], today: string): ChangeFrom {
+ *  period counted as paid that has no bill (one before it was given here): one price, or each period's own where a
+ *  raise starts at one of them (18w). */
+export function changeFrom(m: HeldMembership, heldPriceMinor: number | ((index: number) => number), bills: readonly ChangeBillFacts[], today: string): ChangeFrom {
+  const priceOf = (index: number): number => (typeof heldPriceMinor === "number" ? heldPriceMinor : heldPriceMinor(index));
   if (m.kind === "pack" || m.kind === "trial") return { ok: false, reason: "not_changeable" };
   const view = heldMembershipView(m, today);
   if (view.status === "ended" || view.status === "cancelled") return { ok: false, reason: "not_changeable" };
@@ -88,7 +90,7 @@ export function changeFrom(m: HeldMembership, heldPriceMinor: number, bills: rea
       const bill = bills.find((b) => b.periodIndex === index);
       // A period with no bill was paid at its price: the part month's share for a part month (18y),
       // as one an earlier change paid for whole (round one, High-1).
-      const paid = bill === undefined ? periodListedMinor(m, index, heldPriceMinor) : billDaysMinor(bill);
+      const paid = bill === undefined ? periodListedMinor(m, index, priceOf(index)) : billDaysMinor(bill);
       const credit = index === current ? (periodDays <= 0 ? 0 : Math.floor((paid * daysLeft) / periodDays)) : paid;
       creditMinor += credit;
       if (bill !== undefined) byPeriod.push({ periodIndex: index, creditMinor: credit });

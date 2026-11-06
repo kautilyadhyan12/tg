@@ -178,6 +178,7 @@ export type ReminderState = "queued" | "sending" | "sent" | "skipped" | "failed"
 
 /** A reminder written: its occasion, state, the gym's day it was sent, and why it was not. */
 export interface ReminderWritten {
+  id: string;
   heldId: string;
   occasion: string;
   state: ReminderState;
@@ -185,17 +186,25 @@ export interface ReminderWritten {
   reason: string | null;
   /** The day the email named. */
   aboutOn: string;
+  /** When it was finished: sent, skipped or failed. */
+  finishedAt: Date | null;
 }
 
 /** The reminders written for these memberships, each with the gym's day it was sent. */
 export async function remindersOf(sql: SqlOrTx, gymId: string, heldIds: readonly string[]): Promise<ReminderWritten[]> {
   if (heldIds.length === 0) return [];
-  const rows = await sql<{ held_membership_id: string; occasion: string; state: ReminderState; reason: string | null; on: string | null; about_on: string }[]>`
-    SELECT n.held_membership_id, n.occasion, n.state, n.reason, n.about_on::text AS about_on,
+  const rows = await sql<{ id: string; held_membership_id: string; occasion: string; state: ReminderState; reason: string | null; on: string | null; about_on: string; finished_at: Date | null }[]>`
+    SELECT n.id, n.finished_at, n.held_membership_id, n.occasion, n.state, n.reason, n.about_on::text AS about_on,
            CASE WHEN n.state = 'sent' THEN ((n.finished_at AT TIME ZONE g.timezone)::date)::text END AS on
     FROM gym_renewal_reminders n JOIN gyms g ON g.id = n.gym_id
     WHERE n.gym_id = ${gymId} AND n.held_membership_id = ANY(${[...heldIds]}::uuid[])`;
-  return rows.map((r) => ({ heldId: r.held_membership_id, occasion: r.occasion, state: r.state, on: r.on, reason: r.reason, aboutOn: r.about_on }));
+  return rows.map((r) => ({ id: r.id, heldId: r.held_membership_id, occasion: r.occasion, state: r.state, on: r.on, reason: r.reason, aboutOn: r.about_on, finishedAt: r.finished_at }));
+}
+
+/** These failed emails are taken off, to be written again (a price raise's, 18w). Never one that may have gone. */
+export async function dropFailedReminders(sql: SqlOrTx, gymId: string, ids: readonly string[]): Promise<void> {
+  if (ids.length === 0) return;
+  await sql`DELETE FROM gym_renewal_reminders WHERE gym_id = ${gymId} AND id = ANY(${[...ids]}::uuid[]) AND state = 'failed' AND reason <> 'send_unknown'`;
 }
 
 /** The gym's day now. */

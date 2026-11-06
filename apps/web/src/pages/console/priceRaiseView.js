@@ -139,7 +139,9 @@ export function priceRaiseLine(status, currency) {
     case 'address_blocked':
       return `Price stays ${from}: the notice could not be delivered to their email address.`;
     case 'not_sent':
-      return `Price stays ${from}: the notice could not be delivered.`;
+      return `Price stays ${from} for now: the notice could not be delivered. It is tried again tomorrow.`;
+    case 'maybe_sent':
+      return `Price stays ${from}: we couldn't tell whether the notice was emailed.`;
     case 'former_payer':
       return `Price stays ${from}: whoever pays for it is a past member.`;
     case 'billed_elsewhere':

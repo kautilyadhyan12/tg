@@ -42,6 +42,7 @@ import {
   billsToOpen,
   periodListedMinor,
   raisedListedMinor,
+  raiseStarted,
   partMinor,
   partPeriod,
   countAfterGap,
@@ -146,10 +147,9 @@ export function periodPriceMinor(row: Pick<HeldRow, "priceMinor" | "raise">, ind
   return raisedListedMinor(row.priceMinor, row.raise, index);
 }
 
-/** The price it is paying now (18w): its raise's once today has reached the payment its email named. */
-export function priceNowMinor(row: Pick<HeldRow, "priceMinor" | "raise">, today: string): number {
-  const raise = row.raise;
-  return raise !== null && raise.fromOn !== null && today >= raise.fromOn ? raise.priceMinor : row.priceMinor;
+/** The price it is paying now (18w): its raise's once the period running today is the one its email named, or later. */
+export function priceNowMinor(row: Pick<HeldRow, "priceMinor" | "raise" | "membership">, today: string): number {
+  return row.raise !== null && raiseStarted(row.membership, row.raise, today) ? row.raise.priceMinor : row.priceMinor;
 }
 
 // Text columns under a CHECK: parsed, so a value the rule does not know fails here.
@@ -1531,19 +1531,26 @@ export async function inUseForMoney(
   sql: Sql | TransactionSql,
   gymId: string,
   currency: string,
+  today: string,
 ): Promise<{ typeId: string; typeName: string; priceMinor: number; membership: HeldMembership }[]> {
-  const rows = await sql<(ListHeldColumns & { membership_type_id: string; price_minor: number })[]>`
-    SELECT ${LIST_COLUMNS(sql)}, h.membership_type_id, h.price_minor
+  const rows = await sql<(ListHeldColumns & { membership_type_id: string; price_minor: number; raise_price: number | null; raise_from: number | null })[]>`
+    SELECT ${LIST_COLUMNS(sql)}, h.membership_type_id, h.price_minor, rz.price_minor AS raise_price, rz.from_period AS raise_from
     FROM gym_held_memberships h
     JOIN gym_membership_types t ON t.gym_id = h.gym_id AND t.id = h.membership_type_id
     JOIN gym_member_list_entries e ON e.gym_id = h.gym_id AND e.id = h.entry_id AND e.former_at IS NULL
+    LEFT JOIN gym_price_raises rz ON rz.gym_id = h.gym_id AND rz.held_membership_id = h.id
     WHERE h.gym_id = ${gymId} AND h.status = ANY(${[...IN_USE]}::text[]) AND h.currency = ${currency}`;
-  return rows.map((row) => ({
-    typeId: row.membership_type_id,
-    typeName: row.type_name,
-    priceMinor: row.price_minor,
-    membership: listHeld(row).membership,
-  }));
+  return rows.map((row) => {
+    const membership = listHeld(row).membership;
+    // A raise that has started is the price it brings in now (18w; round one, H2).
+    const raise = row.raise_price === null ? null : { priceMinor: row.raise_price, fromPeriod: row.raise_from };
+    return {
+      typeId: row.membership_type_id,
+      typeName: row.type_name,
+      priceMinor: raise !== null && raiseStarted(membership, raise, today) ? raise.priceMinor : row.price_minor,
+      membership,
+    };
+  });
 }
 
 /** Every membership stored in use of the gym's current records whose line of the price list
