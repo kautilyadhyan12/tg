@@ -463,6 +463,20 @@ export function isDayPass(type: Pick<GymMembershipType, "kind" | "packClasses" |
 }
 
 let knownCurrencies: ReadonlySet<string> | null = null;
+/** One formatter a currency: making one costs about a tenth of a millisecond, and a list prints many prices (18k-i). */
+const priceFormats = new Map<string, Intl.NumberFormat | null>();
+function priceFormat(currency: string): Intl.NumberFormat | null {
+  if (!priceFormats.has(currency)) {
+    let format: Intl.NumberFormat | null;
+    try {
+      format = new Intl.NumberFormat("en", { style: "currency", currency });
+    } catch {
+      format = null;
+    }
+    priceFormats.set(currency, format);
+  }
+  return priceFormats.get(currency) ?? null;
+}
 
 /** How many decimal places a currency has (2 for dollars, 0 for yen, 3 for
  *  Kuwaiti dinar), from the platform's own ISO 4217 table and never a list here.
@@ -476,8 +490,7 @@ export function currencyDecimals(currency: string): number | null {
       knownCurrencies ??= new Set(Intl.supportedValuesOf("currency"));
       if (!knownCurrencies.has(currency)) return null;
     }
-    return new Intl.NumberFormat("en", { style: "currency", currency }).resolvedOptions()
-      .maximumFractionDigits ?? null;
+    return priceFormat(currency)?.resolvedOptions().maximumFractionDigits ?? null;
   } catch {
     return null;
   }
@@ -513,11 +526,8 @@ export function minorToPriceText(minor: number, currency: string): string {
 /** Minor units as a printed price: 4999 USD → "$49.99", 5000 JPY → "¥5,000". */
 export function formatMinor(minor: number, currency: string): string {
   const text = minorToPriceText(minor, currency);
-  try {
-    // The decimal text, not `minor / 100`: the cap keeps it far inside the range
-    // a double prints exactly at this many places.
-    return new Intl.NumberFormat("en", { style: "currency", currency }).format(Number(text));
-  } catch {
-    return `${text} ${currency}`;
-  }
+  // The decimal text, not `minor / 100`: the cap keeps it far inside the range
+  // a double prints exactly at this many places.
+  const format = priceFormat(currency);
+  return format === null ? `${text} ${currency}` : format.format(Number(text));
 }
