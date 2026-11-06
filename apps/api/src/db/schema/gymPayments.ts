@@ -871,3 +871,79 @@ export const gymAutopayPauses = pgTable(
     foreignKey({ name: "gym_autopay_pauses_entry_fk", columns: [t.gymId, t.entryId], foreignColumns: [gymMemberListEntries.gymId, gymMemberListEntries.id] }).onDelete("cascade"),
   ],
 );
+
+/** Pay what they owe in the app (0217; ROADMAP 18k-ii-a): one row a member's press, while Square's own payment page for
+ *  a membership's bill is open (`open`), then `done` with why. `link_key` is the key Square made the page with, so asking
+ *  again gives back the same page. While open, nothing else is paid, voided or changed on that membership; the page is
+ *  closed at Square (its order CANCELED, so it can no longer be paid) when the member leaves it, staff close it, or
+ *  `closes_at` passes, and the row stays open until Square says so. A paid row is kept, for the card it names; a closed one
+ *  is forgotten a day after. `held_membership_id` has no link: the payment is recorded on whichever record holds the
+ *  membership when Square answers. A record deleted for good lets go of `entry_id` alone (`ON DELETE SET NULL
+ *  ("entry_id")`, in the migration only). */
+export const gymAppPayments = pgTable(
+  "gym_app_payments",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    gymId: uuid("gym_id")
+      .notNull()
+      .references(() => gyms.id, { onDelete: "cascade" }),
+    entryId: uuid("entry_id"),
+    heldMembershipId: uuid("held_membership_id").notNull(),
+    periodIndex: integer("period_index").notNull(),
+    amountMinor: integer("amount_minor").notNull(),
+    currency: text("currency").notNull(),
+    environment: text("environment").notNull(),
+    accountId: text("account_id").notNull(),
+    locationId: text("location_id").notNull(),
+    requestKey: uuid("request_key").notNull(),
+    /** The member's account that pressed Pay. */
+    openedBy: uuid("opened_by").references(() => users.id, { onDelete: "set null" }),
+    openedAt: timestamp("opened_at", { withTimezone: true }).notNull(),
+    closesAt: timestamp("closes_at", { withTimezone: true }).notNull(),
+    linkKey: uuid("link_key").notNull(),
+    linkId: text("link_id").notNull(),
+    orderId: text("order_id").notNull(),
+    url: text("url").notNull(),
+    state: text("state").notNull(),
+    outcome: text("outcome"),
+    /** Somebody asked for it closed: the next look at Square deletes the page first. */
+    closeWantedAt: timestamp("close_wanted_at", { withTimezone: true }),
+    closeWantedBy: text("close_wanted_by"),
+    /** The member of staff who pressed Close payment page. */
+    closedByStaff: uuid("closed_by_staff").references(() => users.id, { onDelete: "set null" }),
+    checkingUntil: timestamp("checking_until", { withTimezone: true }),
+    checkedAt: timestamp("checked_at", { withTimezone: true }).notNull(),
+    squarePaymentId: text("square_payment_id"),
+    memberPaymentId: uuid("member_payment_id"),
+    cardBrand: text("card_brand"),
+    cardLast4: text("card_last4"),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+  },
+  (t) => [
+    check("gym_app_payments_environment_check", sql`${t.environment} IN ('sandbox','production')`),
+    check(
+      "gym_app_payments_ids_check",
+      sql`${t.accountId} ~ '^[A-Za-z0-9_-]{1,64}$' AND ${t.locationId} ~ '^[A-Za-z0-9_-]{1,64}$' AND ${t.linkId} ~ '^[A-Za-z0-9_-]{1,64}$' AND ${t.orderId} ~ '^[A-Za-z0-9_-]{1,192}$' AND char_length(${t.url}) <= 300 AND (${t.squarePaymentId} IS NULL OR ${t.squarePaymentId} ~ '^[A-Za-z0-9_-]{1,192}$')`,
+    ),
+    check("gym_app_payments_amount_check", sql`${t.amountMinor} BETWEEN 1 AND 99999999 AND ${t.currency} ~ '^[A-Z]{3}$' AND ${t.periodIndex} >= 0 AND ${t.closesAt} > ${t.openedAt}`),
+    check("gym_app_payments_state_check", sql`${t.state} IN ('open','done')`),
+    check(
+      "gym_app_payments_outcome_check",
+      sql`(${t.state} = 'open') = (${t.outcome} IS NULL AND ${t.finishedAt} IS NULL) AND (${t.outcome} IS NULL OR ${t.outcome} IN ('paid','closed','not_recorded','gone','no_answer'))`,
+    ),
+    check(
+      "gym_app_payments_paid_check",
+      sql`((${t.outcome} IS NOT DISTINCT FROM 'paid') = (${t.memberPaymentId} IS NOT NULL)) AND (${t.outcome} NOT IN ('paid','not_recorded') OR ${t.squarePaymentId} IS NOT NULL)`,
+    ),
+    check("gym_app_payments_close_check", sql`(${t.closeWantedAt} IS NULL) = (${t.closeWantedBy} IS NULL) AND (${t.closeWantedBy} IS NULL OR ${t.closeWantedBy} IN ('member','staff','expired'))`),
+    check("gym_app_payments_card_check", sql`(${t.cardBrand} IS NULL) = (${t.cardLast4} IS NULL) AND (${t.cardLast4} IS NULL OR ${t.cardLast4} ~ '^[0-9]{4}$') AND (${t.cardBrand} IS NULL OR char_length(${t.cardBrand}) <= 40)`),
+    uniqueIndex("gym_app_payments_request_uq").on(t.gymId, t.requestKey),
+    uniqueIndex("gym_app_payments_membership_uq").on(t.gymId, t.heldMembershipId).where(sql`${t.state} = 'open'`),
+    uniqueIndex("gym_app_payments_link_uq").on(t.environment, t.accountId, t.linkId),
+    uniqueIndex("gym_app_payments_square_payment_uq").on(t.environment, t.accountId, t.squarePaymentId).where(sql`${t.squarePaymentId} IS NOT NULL`),
+    index("gym_app_payments_entry_idx").on(t.gymId, t.entryId).where(sql`${t.state} = 'open'`),
+    index("gym_app_payments_open_idx").on(t.checkedAt).where(sql`${t.state} = 'open'`),
+    index("gym_app_payments_member_payment_idx").on(t.gymId, t.memberPaymentId).where(sql`${t.memberPaymentId} IS NOT NULL`),
+    index("gym_app_payments_done_idx").on(t.finishedAt).where(sql`${t.finishedAt} IS NOT NULL AND ${t.outcome} = 'closed'`),
+  ],
+);

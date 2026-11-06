@@ -15,17 +15,19 @@ import { z } from "zod";
 import { SALES_TAX_PCM_MAX, TAX_RATES_MAX } from "./memberships.js";
 import { cardDeclinedSchema, cardSeenSchema, cardUncheckedSchema } from "./cardCharges.js";
 import { chargeStopSchema, chargebackSeenSchema } from "./chargebacks.js";
+import { appPaymentOpenSchema } from "./appPayments.js";
 
 export const MEMBER_BILL_STATUSES = ["open", "paid", "void", "refunded"] as const;
 export const memberBillStatusSchema = z.enum(MEMBER_BILL_STATUSES);
 export type MemberBillStatus = z.infer<typeof memberBillStatusSchema>;
 
 /** How a payment was made. `link` is the gym's own payment link (18c), `company` a
- *  connected payment company (18d) and `terminal` a card on the gym's Square Terminal
- *  (18d-vi-a); staff record the others by hand. A payment taken in Square's own app is recorded
+ *  connected payment company (18d), `terminal` a card on the gym's Square Terminal
+ *  (18d-vi-a) and `app` the member paying on Square's own page from the app (18k-ii-a); staff record the
+ *  others by hand. A payment taken in Square's own app is recorded
  *  by hand too, since Square Point of Sale was taken out (18d-iii-b-v). `upi` is paid to the gym's own UPI
  *  ID or QR code (18r), in India only. */
-export const MEMBER_PAYMENT_METHODS = ["cash", "upi", "card_at_desk", "bank_transfer", "link", "company", "terminal"] as const;
+export const MEMBER_PAYMENT_METHODS = ["cash", "upi", "card_at_desk", "bank_transfer", "link", "company", "terminal", "app"] as const;
 export const memberPaymentMethodSchema = z.enum(MEMBER_PAYMENT_METHODS);
 export type MemberPaymentMethod = z.infer<typeof memberPaymentMethodSchema>;
 
@@ -59,12 +61,13 @@ export const MEMBER_PAYMENT_METHOD_WORDS: Readonly<Record<MemberPaymentMethod, s
   link: "Payment link",
   company: "Card on file",
   terminal: "Card on Terminal",
+  app: "In the app",
 };
 
-/** Taken through Square, on the Terminal or from the card on file (18d-iii-i): Square holds the
- *  money, so it is refunded there and never voided here. */
+/** Taken through Square, on the Terminal, from the card on file (18d-iii-i) or on Square's own page from the app
+ *  (18k-ii-a): Square holds the money, so it is refunded there and never voided here. */
 export function paidThroughSquare(method: MemberPaymentMethod): boolean {
-  return method === "terminal" || method === "company";
+  return method === "terminal" || method === "company" || method === "app";
 }
 
 /** Why staff cancelled a bill: picked, never typed, so no sentence about a person is kept. */
@@ -132,8 +135,8 @@ export const REFUND_VOID_REASON_WORDS: Readonly<Record<RefundVoidKept, string>> 
 };
 
 /** How money went back: by hand, or to the card that paid, through Square (18d-iv-a), which reads as that payment's own
- *  way ("Card on Terminal", "Card on file"). */
-export const MEMBER_REFUND_METHODS = [...MEMBER_PAYMENT_BY_HAND, "company", "terminal"] as const;
+ *  way ("Card on Terminal", "Card on file", "In the app"). */
+export const MEMBER_REFUND_METHODS = [...MEMBER_PAYMENT_BY_HAND, "company", "terminal", "app"] as const;
 export const memberRefundMethodSchema = z.enum(MEMBER_REFUND_METHODS);
 export type MemberRefundMethod = z.infer<typeof memberRefundMethodSchema>;
 
@@ -409,6 +412,9 @@ export const memberBillingSchema = z
      *  bills and is not given back yet, and the newest payment with some of it left, whose bill is always among
      *  `bills`. Null otherwise, and once nothing is left. */
     coolingOffRefund: z.object({ leftMinor: z.number().int().min(1), paymentId: z.string().uuid() }).strict().nullable().default(null),
+    /** A member's payment page open on Square for `pay`'s bill (18k-ii-a): nothing else is paid, voided or changed on the
+     *  membership until it closes. */
+    appPayment: appPaymentOpenSchema.nullable().default(null),
   })
   .strict();
 export type MemberBilling = z.infer<typeof memberBillingSchema>;

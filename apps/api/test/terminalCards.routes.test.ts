@@ -281,6 +281,9 @@ function fakeSquare() {
     createTerminalRefund: () => Promise.resolve({ kind: "unavailable", status: null }),
     getTerminalRefund: () => Promise.resolve({ kind: "unavailable", status: null }),
     cancelTerminalRefund: () => Promise.resolve({ kind: "unavailable", status: null }),
+    createPaymentLink: () => Promise.resolve({ kind: "unavailable", status: null }),
+    deletePaymentLink: () => Promise.resolve({ kind: "unavailable", status: null }),
+    getOrder: () => Promise.resolve({ kind: "unavailable", status: null }),
   };
   const allow = (account: Account): string => {
     const code = `sq0cgp-${randomBytes(8).toString("hex")}`;

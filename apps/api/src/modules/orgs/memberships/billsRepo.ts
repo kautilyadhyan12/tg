@@ -85,6 +85,10 @@ export type BillWriteOutcome =
   | { kind: "terminal_waiting" }
   /** The card on file is being charged for this membership (18d-iii-i). */
   | { kind: "card_charging" }
+  /** A member has Square's own payment page open for this membership (18k-ii-a). */
+  | { kind: "app_paying" }
+  /** Paid in the app (18k-ii-a): refunded in Square, never voided here. */
+  | { kind: "app_payment" }
   /** A payment taken on the Terminal: Square holds the money, so it is refunded there. */
   | { kind: "terminal_payment" }
   /** The same, charged to the card on file (18d-iii-i). */
@@ -259,6 +263,7 @@ export async function voidPayment(
     // Square holds that money: voided here, the bill would be owed again with the card charged.
     if (payment.method === "terminal") return { kind: "terminal_payment" };
     if (payment.method === "company") return { kind: "card_payment" };
+    if (payment.method === "app") return { kind: "app_payment" };
     const out = await squareMoneyOut(tx, input.gymId, row.id);
     if (out !== null) return out;
     // No refund row yet, so the rule below cannot see it: voided now, the refund would land on a bill owed again.
@@ -592,7 +597,7 @@ export async function voidRefund(
     if (payment === null) return { kind: "payment_not_found" };
 
     const [refund] = await tx<{ undone: boolean; amount_minor: number; currency: string; to_card: boolean }[]>`
-      SELECT undone_at IS NOT NULL AS undone, amount_minor, currency, method IN ('company','terminal') AS to_card
+      SELECT undone_at IS NOT NULL AS undone, amount_minor, currency, method IN ('company','terminal','app') AS to_card
       FROM gym_member_refunds
       WHERE gym_id = ${input.gymId} AND id = ${input.refundId} AND payment_id = ${input.paymentId}`;
     if (refund === undefined) return { kind: "refund_not_found" };

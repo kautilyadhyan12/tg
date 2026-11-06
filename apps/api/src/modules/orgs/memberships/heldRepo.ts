@@ -566,7 +566,9 @@ export type HeldWriteOutcome =
   /** A payment for this membership waits on the gym's Square Terminal (18d-vi-a). */
   | { kind: "terminal_waiting" }
   /** The card on file is being charged for this membership (18d-iii-i). */
-  | { kind: "card_charging" };
+  | { kind: "card_charging" }
+  /** A member has Square's own payment page open for this membership (18k-ii-a). */
+  | { kind: "app_paying" };
 
 /** The record under the gym's lock and its own: null where it is not this gym's. */
 export async function lockedEntry(tx: TransactionSql, gymId: string, entryId: string): Promise<{ past: boolean } | null> {

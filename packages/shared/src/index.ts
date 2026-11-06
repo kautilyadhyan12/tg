@@ -65,6 +65,7 @@ export * from "./checkinRules.js";
 export * from "./waiver.js";
 export * from "./membershipAgreement.js";
 export * from "./forSale.js";
+export * from "./appPayments.js";
 export * from "./leaderboard.js";
 export * from "./posts.js";
 export * from "./postComments.js";

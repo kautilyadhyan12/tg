@@ -32,6 +32,7 @@
 import { randomUUID } from "node:crypto";
 import {
   CARD_CHARGE_WORDS,
+  APP_PAYMENT_STAFF_WORDS,
   cardChargeResponseSchema,
   cardDeclineReasonOf,
   cardExpired,
@@ -357,6 +358,8 @@ async function chargeByStaff(
       throw new OrgsError(409, "terminal_payment_waiting", "A payment for this membership is waiting on the Terminal. Wait for it to finish, or cancel it first.");
     case "card_charging":
       throw new OrgsError(409, "card_charge_waiting", CARD_CHARGE_WORDS.charging);
+    case "app_paying":
+      throw new OrgsError(409, "app_payment_open", APP_PAYMENT_STAFF_WORDS.paying);
     case "fee_not_found":
       throw new OrgsError(404, "member_fee_not_found", "That fee was not found.");
     case "fee_changed":

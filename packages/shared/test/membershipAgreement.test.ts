@@ -150,7 +150,7 @@ const sampleBill = {
   cardUnchecked: null,
   charging: false,
 };
-const emptyBilling = { bills: [], billsNotShown: 0, pay: null, cancel: null, undo: null, fees: [], change: null, coolingOffRefund: null };
+const emptyBilling = { bills: [], billsNotShown: 0, pay: null, cancel: null, undo: null, fees: [], change: null, coolingOffRefund: null, appPayment: null };
 
 describe("agreementSignable", () => {
   it.each([

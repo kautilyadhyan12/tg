@@ -14,6 +14,7 @@ import {
   CARD_CHARGE_WORDS,
   paidThroughSquare,
   TERMINAL_PAYMENT_WORDS,
+  APP_PAYMENT_STAFF_WORDS,
   DISCOUNT_WORDS,
   FRIEND_GIFT_WORDS,
   MEMBER_GIFT_WORDS,
@@ -84,6 +85,7 @@ import * as agreementRepo from "../agreement/repo.js";
 import { recordStopped, unsignedStopsRecord } from "../classes/bookingStops.js";
 import { freezeFeeOf } from "./freezeFees.js";
 import { chargesOfBills } from "../payments/cardChargesRepo.js";
+import { openOnMemberships } from "../payments/appPaymentsRepo.js";
 import { openPressesOf } from "../payments/cardRefundsRepo.js";
 import { chargeStopsOfBills } from "../payments/cardChargesRepo.js";
 import { chargebacksOfPayments } from "../payments/chargebacksRepo.js";
@@ -126,6 +128,8 @@ function billingOf(
     presses: Awaited<ReturnType<typeof openPressesOf>>;
     chargebacks: Map<string, ChargebackSeen[]>;
     chargeStops: Map<string, ChargeStop>;
+    /** A member's payment page open on each membership (18k-ii-a). */
+    appOpen: Map<string, { id: string; payerName: string | null; closesAt: Date }>;
   },
 ): Omit<MemberBilling, "change"> {
   const view = heldMembershipView(row.membership, ctx.today);
@@ -231,8 +235,12 @@ function billingOf(
     undo: back !== null ? { kind: "payment", paymentId: back.paymentId } : mark !== null ? { kind: "mark", paidPeriods: mark.paidPeriods } : null,
     fees: fees.fees.map((f) => feeOf(f, fees.payments, ctx, { refunds: refundsOf, voided: voidedRefundsOf })),
     coolingOffRefund,
+    appPayment: appPaymentOn(ctx.appOpen.get(row.id)),
   };
 }
+
+const appPaymentOn = (open: { id: string; payerName: string | null; closesAt: Date } | undefined): MemberBilling["appPayment"] =>
+  open === undefined ? null : { id: open.id, payerName: open.payerName, closesAt: open.closesAt.toISOString() };
 
 /** WHAT A FULL REFUND GIVES BACK (18v-iii): while its cooling-off period is open, or once it was cancelled in it,
  *  what was paid on its bills and is not given back yet, each bill capped as a refund on it is
@@ -395,7 +403,8 @@ async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: 
   const presses = canBill ? await openPressesOf(deps.sql, gymId, [...list.payments, ...list.feePayments.filter((p) => p.voided === null)].map((p) => p.id)) : new Map<string, CardRefundOpen>();
   const chargebacks = canBill ? await chargebacksOfPayments(deps.sql, gymId, [...list.payments, ...list.feePayments.filter((p) => p.voided === null)].map((p) => p.id), deps.now()) : new Map<string, ChargebackSeen[]>();
   const chargeStops = canBill ? await chargeStopsOfBills(deps.sql, gymId, [...list.bills.map((b) => b.id), ...list.fees.map((f) => f.id)], deps.now()) : new Map<string, ChargeStop>();
-  const ctx = { today, past: list.past, overdueAfterDays: list.overdueAfterDays, gifts, charges, presses, chargebacks, chargeStops };
+  const appOpen = canBill ? await openOnMemberships(deps.sql, gymId, [...list.inUse, ...list.over].map((row) => row.id)) : new Map<string, { id: string; payerName: string | null; closesAt: Date }>();
+  const ctx = { today, past: list.past, overdueAfterDays: list.overdueAfterDays, gifts, charges, presses, chargebacks, chargeStops, appOpen };
   // The page reads a membership as the next write will find it: with its count moved
   // over the periods nobody was asked for (`countAfterGap`), which `settle` then writes.
   const asOfToday = (row: repo.HeldRow): repo.HeldRow => {
@@ -615,6 +624,8 @@ function throwOnFailure(outcome: repo.HeldWriteOutcome): void {
       throw new OrgsError(409, "terminal_payment_waiting", TERMINAL_PAYMENT_WORDS.waiting);
     case "card_charging":
       throw new OrgsError(409, "card_charge_waiting", CARD_CHARGE_WORDS.charging);
+    case "app_paying":
+      throw new OrgsError(409, "app_payment_open", APP_PAYMENT_STAFF_WORDS.paying);
     case "early_payment":
       throw new OrgsError(
         409,
@@ -864,10 +875,14 @@ function throwOnBillFailure(outcome: billsRepo.BillWriteOutcome): void {
       throw new OrgsError(409, "terminal_payment_waiting", TERMINAL_PAYMENT_WORDS.waiting);
     case "card_charging":
       throw new OrgsError(409, "card_charge_waiting", CARD_CHARGE_WORDS.charging);
+    case "app_paying":
+      throw new OrgsError(409, "app_payment_open", APP_PAYMENT_STAFF_WORDS.paying);
     case "terminal_payment":
       throw new OrgsError(409, "terminal_payment_void", TERMINAL_PAYMENT_WORDS.void_terminal);
     case "card_payment":
       throw new OrgsError(409, "card_payment_void", CARD_CHARGE_WORDS.void_card);
+    case "app_payment":
+      throw new OrgsError(409, "app_payment_void", APP_PAYMENT_STAFF_WORDS.void_app);
     case "refund_waiting":
       throw new OrgsError(409, "card_refund_waiting", CARD_REFUND_WORDS.waiting);
     case "card_refund":
@@ -1000,10 +1015,14 @@ function throwOnFeeFailure(outcome: feesRepo.FeeWriteOutcome): void {
       throw new OrgsError(409, "terminal_payment_waiting", TERMINAL_PAYMENT_WORDS.waiting);
     case "card_charging":
       throw new OrgsError(409, "card_charge_waiting", CARD_CHARGE_WORDS.charging);
+    case "app_paying":
+      throw new OrgsError(409, "app_payment_open", APP_PAYMENT_STAFF_WORDS.paying);
     case "terminal_payment":
       throw new OrgsError(409, "terminal_payment_void", TERMINAL_PAYMENT_WORDS.void_terminal);
     case "card_payment":
       throw new OrgsError(409, "card_payment_void", CARD_CHARGE_WORDS.void_card);
+    case "app_payment":
+      throw new OrgsError(409, "app_payment_void", APP_PAYMENT_STAFF_WORDS.void_app);
     default: {
       const never: never = outcome;
       throw new Error(`unhandled fee outcome: ${JSON.stringify(never)}`);

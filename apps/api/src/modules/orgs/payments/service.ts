@@ -37,6 +37,7 @@ import {
   type SquareTerminals,
   TERMINAL_PAYMENT_WORDS,
   CARD_CHARGE_WORDS,
+  APP_PAYMENT_STAFF_WORDS,
 } from "@app/shared";
 import type { Sql, TransactionSql } from "postgres";
 import { insertAudit, lockOrgRow } from "../repo.js";
@@ -45,6 +46,7 @@ import * as repo from "./repo.js";
 import type { SquareSettings } from "./settings.js";
 import { SQUARE_SCOPES } from "./square.js";
 import { anyWaitingIn } from "./terminalPaymentsRepo.js";
+import { anyOpenIn } from "./appPaymentsRepo.js";
 import { anyChargingIn } from "./cardChargesRepo.js";
 import * as terminalsRepo from "./terminalsRepo.js";
 import type { TokenContext } from "./tokenBox.js";
@@ -91,10 +93,20 @@ export async function requireGymOwner(deps: PaymentsDeps, gymId: string, userId:
   return { org, gym };
 }
 
+/** What paying in the app needs (18k-ii-a): Square's own payment page and its order ("CreatePaymentLink": ORDERS_WRITE,
+ *  ORDERS_READ, PAYMENTS_WRITE). */
+export const APP_PAYMENT_SCOPES: readonly string[] = ["ORDERS_READ", "ORDERS_WRITE", "PAYMENTS_WRITE"];
+
+/** The connection lets members pay in the app. */
+export const appPaymentsAllowed = (row: repo.ConnectionRow): boolean => APP_PAYMENT_SCOPES.every((scope) => row.scopes.includes(scope));
+
 /** What Square Terminals and the card on file need: every permission but Square's own subscriptions read
- *  (SUBSCRIPTIONS_READ, 18d-iii-b-ii-b-i), which Delete permanently checks before it takes a customer out of Square;
- *  a gym connected before it asked for that one is never made to reconnect for the Terminal. */
-const TERMINAL_SCOPES: readonly string[] = SQUARE_SCOPES.filter((scope) => scope !== "SUBSCRIPTIONS_READ" && scope !== "DISPUTES_READ");
+ *  (SUBSCRIPTIONS_READ, 18d-iii-b-ii-b-i), which Delete permanently checks before it takes a customer out of Square,
+ *  the chargebacks read, and the orders paying in the app needs (18k-ii-a); a gym connected before it asked for those is
+ *  never made to reconnect for the Terminal. */
+const TERMINAL_SCOPES: readonly string[] = SQUARE_SCOPES.filter(
+  (scope) => scope !== "SUBSCRIPTIONS_READ" && scope !== "DISPUTES_READ" && scope !== "ORDERS_READ" && scope !== "ORDERS_WRITE",
+);
 
 /** The connection allows less than Square Terminals need: the owner connects Square again. */
 export const missingScopes = (row: repo.ConnectionRow): boolean => TERMINAL_SCOPES.some((scope) => !row.scopes.includes(scope));
@@ -154,7 +166,11 @@ export async function readPayments(deps: PaymentsDeps, userId: string, gymId: st
       needsAllow: row?.state === "connected" && allowsLess(row),
       allowFor:
         row?.state === "connected"
-          ? [...(row.scopes.includes("SUBSCRIPTIONS_READ") ? [] : (["subscriptions"] as const)), ...(row.scopes.includes("DISPUTES_READ") ? [] : (["chargebacks"] as const))]
+          ? [
+              ...(appPaymentsAllowed(row) ? [] : (["app_payments"] as const)),
+              ...(row.scopes.includes("SUBSCRIPTIONS_READ") ? [] : (["subscriptions"] as const)),
+              ...(row.scopes.includes("DISPUTES_READ") ? [] : (["chargebacks"] as const)),
+            ]
           : [],
     },
   });
@@ -436,6 +452,8 @@ export async function disconnectSquare(deps: PaymentsDeps, userId: string, gymId
     // The amount would stay on the Terminal with nothing here to record it (review round one, Low 2).
     if (await anyWaitingIn(tx, gymId, square.environment)) throw new OrgsError(409, "terminal_payment_waiting", TERMINAL_PAYMENT_WORDS.disconnect_waiting);
     if (await anyChargingIn(tx, gymId, square.environment)) throw new OrgsError(409, "card_charge_waiting", CARD_CHARGE_WORDS.disconnect_charging);
+    // A member's payment page could still be paid at Square, with nothing here to record it (18k-ii-a).
+    if (await anyOpenIn(tx, gymId, square.environment)) throw new OrgsError(409, "app_payment_open", APP_PAYMENT_STAFF_WORDS.disconnect_open);
     await repo.deleteConnection(tx, gymId, square.environment);
     if (row.state !== "connected" || row.accessToken === null) return null;
     await insertAudit(tx, {
