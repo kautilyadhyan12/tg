@@ -41,6 +41,10 @@ import {
   noticeLine,
   coolingOffHint,
   coolingOffLine,
+  sellInAppHint,
+  soldInAppWords,
+  squareSellState,
+  usesSellInApp,
   termUnitOptions,
   typesSummary,
   withChoice,
@@ -346,7 +350,39 @@ function RaiseField({ gymId, draft, setDraft, currency, problem, id, busy }) {
   );
 }
 
-function TypeForm({ gymId, orgType, country, currency, options, taxRates, onRateAdded, draft, setDraft, problems, refused, busy, forWord, error, inRow, onSave, onCancel }) {
+/** Sell in the app (18k-i): the tick, what it does, and while Square still has to be set up, the button to that place
+ *  for whoever may and a sentence for whoever may not. A line already sold stays unticked-able whatever Square's state. */
+function SellInAppField({ draft, set, problem, busy, sell }) {
+  const hint = sellInAppHint(sell.state, sell.canConnect);
+  const blocked = draft.soldInApp !== true && sell.state !== null && sell.state !== 'ready';
+  return (
+    <div className="flex flex-col gap-2">
+      <label className="flex items-start gap-3 min-h-11 c-s15 c-t1">
+        <input
+          type="checkbox"
+          className="w-[18px] h-[18px] mt-0.5 flex-shrink-0"
+          style={TICK}
+          checked={draft.soldInApp === true}
+          disabled={busy || blocked}
+          aria-invalid={problem ? 'true' : undefined}
+          onChange={(event) => set({ soldInApp: event.target.checked })}
+        />
+        <span className="flex flex-col gap-0.5">
+          <span>Sell in the app</span>
+          <span className="c-s14 c-t2">{hint.text}</span>
+        </span>
+      </label>
+      {hint.button !== null ? (
+        <PlaceLink to={sell.paymentsTo} guard>
+          {hint.button}
+        </PlaceLink>
+      ) : null}
+      <Problem text={problem} />
+    </div>
+  );
+}
+
+function TypeForm({ gymId, orgType, country, currency, options, taxRates, onRateAdded, draft, setDraft, problems, refused, busy, forWord, error, inRow, sell, onSave, onCancel }) {
   const [addingRate, setAddingRate] = useState(false);
   const editing = draft.id !== null;
   const title = editing ? 'Change membership type' : (forWord?.heading ?? 'Add a membership type');
@@ -797,6 +833,12 @@ function TypeForm({ gymId, orgType, country, currency, options, taxRates, onRate
         </Part>
       ) : null}
 
+      {usesSellInApp(choice) ? (
+        <Part title="In the app">
+          <SellInAppField draft={draft} set={set} problem={problems?.soldInApp} busy={busy} sell={sell} />
+        </Part>
+      ) : null}
+
       {/* Save stays at the bottom of the screen while the long form scrolls (Kd's click-through, 18w). */}
       <div className="flex flex-col gap-3 c-save-stuck" style={inRow ? { background: 'var(--raise)' } : undefined} data-testid="type-form-save">
         {first !== null ? (
@@ -843,8 +885,12 @@ function RowNote({ error, done }) {
  *  who gets this type, while it is open. `note`: what the last press about this type did. */
 // `agreementLine`: which of the business's agreements it is signed with, once it has more than
 // one (18u-ii-a); `agreementTo`: Settings, for whoever may open it there.
-function TypeRow({ type, orgType, taxLine = null, agreementLine = null, agreementTo = null, readOnly, busy, formOpen, ties, form, box = null, note = null, onEdit, onArchive, onGive, onUndo }) {
+function TypeRow({ type, orgType, taxLine = null, agreementLine = null, agreementTo = null, sell = null, readOnly, busy, formOpen, ties, form, box = null, note = null, onEdit, onArchive, onGive, onUndo }) {
   const [asking, setAsking] = useState(false);
+  // Sold in the app (18k-i): the tag while members can buy it; while Square still has to be set up, why not, and the
+  // button to that place for whoever may.
+  const sold = sell === null ? null : soldInAppWords(type, sell.state);
+  const fix = sold?.line ? sellInAppHint(sell.state, sell.canConnect).button : null;
   return (
     <li className="px-5 py-4 md:px-6 flex flex-col gap-3" style={LINE}>
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between md:gap-6">
@@ -852,6 +898,7 @@ function TypeRow({ type, orgType, taxLine = null, agreementLine = null, agreemen
           <div className="flex flex-wrap items-center gap-2">
             <span className="c-s15 c-w6 c-t1 break-words min-w-0">{type.name}</span>
             <span className="c-tag c-tag-plain">{kindTag(type)}</span>
+            {sold?.tag ? <span className="c-tag c-tag-plain">{sold.tag}</span> : null}
           </div>
           {type.description ? <p className="c-s14 c-t2 m-0 break-words">{type.description}</p> : null}
           <p className="c-s14 c-t1 m-0">{termLine(type)}</p>
@@ -867,6 +914,12 @@ function TypeRow({ type, orgType, taxLine = null, agreementLine = null, agreemen
           ))}
           {taxLine !== null ? <p className="c-s14 c-t2 m-0">{taxLine}</p> : null}
           <p className="c-s14 c-t2 m-0">{includesLine(type, orgType)}</p>
+          {sold?.line ? (
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <span className="c-s14 c-t2">{sold.line}</span>
+              {fix !== null ? <PlaceLink to={sell.paymentsTo}>{fix}</PlaceLink> : null}
+            </div>
+          ) : null}
           {agreementLine !== null ? (
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
               <span className="c-s14 c-t2">{agreementLine}</span>
@@ -971,6 +1024,8 @@ export default function MembershipTypesPanel({ org, readOnly, openBox = null, on
   // "Set up" question is open.
   const [draftWord, setDraftWord] = useState(null);
   const [choosing, setChoosing] = useState(null);
+  // Whether Square can take a member's payment (18k-i), for Sell in the app; null while it is not known.
+  const [payments, setPayments] = useState(null);
 
   const load = useCallback(
     (isLive = () => true) =>
@@ -994,6 +1049,20 @@ export default function MembershipTypesPanel({ org, readOnly, openBox = null, on
       cancelled = true;
     };
   }, [load]);
+
+  // Read once as the page opens; not known, the page says only whether a line is on.
+  useEffect(() => {
+    let live = true;
+    orgService
+      .getGymPayments(gymId)
+      .then((res) => {
+        if (live) setPayments(res.data.payments);
+      })
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [gymId]);
 
   const run = async (request, fallback) => {
     setBusy(true);
@@ -1035,6 +1104,7 @@ export default function MembershipTypesPanel({ org, readOnly, openBox = null, on
 
   const fromList = useListMemberships(gymId, list?.types);
   const anyBusy = busy || fromList.busy;
+  const sell = { state: squareSellState(payments), canConnect: payments?.canConnect === true, paymentsTo: placeFor(org.slug, viewerPrivileges(org), 'payments') };
 
   // A button on another page led here for one membership: open its box, once.
   const led = useRef(false);
@@ -1136,6 +1206,7 @@ export default function MembershipTypesPanel({ org, readOnly, openBox = null, on
       forWord={draftWord === null ? null : formWordsFor(draftWord)}
       error={actionError}
       inRow={formAt !== 'top'}
+      sell={sell}
       onSave={() => void save()}
       onCancel={closeForm}
     />
@@ -1223,6 +1294,7 @@ export default function MembershipTypesPanel({ org, readOnly, openBox = null, on
                     taxLine={typeTaxLine(type, list)}
                     agreementLine={priceAgreementLine(list, type)}
                     agreementTo={agreementTo}
+                    sell={sell}
                     readOnly={readOnly}
                     busy={anyBusy}
                     formOpen={locked}

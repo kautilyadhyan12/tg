@@ -23,6 +23,9 @@
 //   GET    /v1/orgs/:gymId/my-card                             the member's own, for the phone
 //   POST   /v1/orgs/:gymId/my-card                             the member adds or updates their own
 //
+// What a gym sells in the app (ROADMAP 18k-i), for the phone:
+//   GET    /v1/orgs/:gymId/for-sale                            the lines a member can buy, as the agreement words them
+//
 // Save card on Terminal (ROADMAP 18d-ii-b-ii), `billing.members`:
 //   POST   …/member-list/entries/:entryId/card/terminal                 the agreement goes to the Terminal
 //   GET    …/member-list/entries/:entryId/card/terminal/:saveId         where it stands (asked every few seconds)
@@ -117,6 +120,7 @@ import * as cardCharges from "./cardCharges.js";
 import * as cardRefunds from "./cardRefunds.js";
 import * as cards from "./cards.js";
 import * as failedPayments from "./failedPayments.js";
+import { readForSale } from "./forSale.js";
 import * as refundsToReview from "./refundsToReview.js";
 import * as service from "./service.js";
 import { verifySquareSignature } from "./squareSignature.js";
@@ -557,6 +561,8 @@ export function registerPaymentRoutes(app: FastifyInstance, deps: Omit<service.P
   // A whole gym opens the app on one wi-fi address; a member saves a card a handful of times.
   const myCardReadLimit = createDualRateLimit({ name: "my_card_read", max: 600, ipMax: 30_000, windowMs: HOUR_MS, identifier: byPerson, redis: deps.redis });
   const myCardWriteLimit = createDualRateLimit({ name: "my_card_write", max: 10, ipMax: 300, windowMs: HOUR_MS, identifier: byPerson, redis: deps.redis });
+  // The phone asks each time the page opens, the whole gym on one address.
+  const forSaleLimit = createDualRateLimit({ name: "for_sale_read", max: 600, ipMax: 30_000, windowMs: HOUR_MS, identifier: byPerson, redis: deps.redis });
   // Membership first and the limit after it: a stranger's 404 is never a 429.
   const gate = (limit: typeof myCardReadLimit, req: FastifyRequest, reply: FastifyReply) => async (): Promise<boolean> => {
     await limit(req, reply);
@@ -579,6 +585,14 @@ export function registerPaymentRoutes(app: FastifyInstance, deps: Omit<service.P
     const mine = await cards.saveMyCard(paymentsDeps, callerId(req), params.gymId, body, gate(myCardWriteLimit, req, reply));
     if (mine === null) return;
     return reply.status(200).send(mine);
+  });
+
+  app.get("/v1/orgs/:gymId/for-sale", { preHandler: app.authenticate }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const list = await readForSale(paymentsDeps, callerId(req), params.gymId, gate(forSaleLimit, req, reply));
+    if (list === null) return;
+    return reply.status(200).header("cache-control", "no-store").send(list);
   });
 
   void app.register((scope, _options, done) => {

@@ -147,6 +147,7 @@ function typeInput(req: SaveGymMembershipTypeRequest): repo.MembershipTypeInput 
     coolingOffDays: req.coolingOffDays,
     renewalReminderDays: req.renewalReminderDays,
     termReminderDays: req.termReminderDays,
+    soldInApp: req.soldInApp,
   };
 }
 

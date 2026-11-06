@@ -481,7 +481,7 @@ d("a cooling-off period on a line of the price list (real Postgres)", () => {
       if (t === undefined) throw new Error("no type");
       const change = await put(
         `${typesUrl(gymId)}/${gold}`,
-        { ...monthly({ coolingOffDays: 10 }), includesPt: false, ptLimit: null, ptPeriod: null, taxRateIds: [], joiningFeeMinor: 0, contractPeriods: null, contractThen: null, noticeDays: null, leaveFeeMinor: null, renewalReminderDays: null, termReminderDays: null, updatedAt: t.updatedAt },
+        { ...monthly({ coolingOffDays: 10 }), includesPt: false, ptLimit: null, ptPeriod: null, taxRateIds: [], joiningFeeMinor: 0, contractPeriods: null, contractThen: null, noticeDays: null, leaveFeeMinor: null, renewalReminderDays: null, termReminderDays: null, soldInApp: false, updatedAt: t.updatedAt },
         owner,
       );
       expect(change.statusCode, change.body).toBe(200);

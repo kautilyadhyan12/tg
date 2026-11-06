@@ -20,6 +20,8 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
       previewPriceRaise: vi.fn(() => Promise.resolve({ data: { currency: 'GBP', people: [] } })),
       // The list's own words (17a-iii) have their own test: none here.
       getMembershipWords: vi.fn(() => Promise.resolve({ data: { words: [], types: [] } })),
+      // The Payments box, for Sell in the app (18k-i): not answered unless a test says, so nothing is said of Square.
+      getGymPayments: vi.fn(() => new Promise(() => undefined)),
     },
   };
 });
@@ -256,6 +258,7 @@ describe('adding a type', () => {
       noticeDays: null,
       coolingOffDays: null,
       renewalReminderDays: null, termReminderDays: null,
+      soldInApp: false,
     });
     expect(await screen.findByText('£49.99 every month')).toBeTruthy();
     // The form closes on a save.
@@ -747,6 +750,108 @@ describe('while a form is open, nothing can take its row away', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Add a membership type' }));
     expect(screen.getByRole('button', { name: 'Put back Old' }).disabled).toBe(true);
     expect(orgService.restoreMembershipType).not.toHaveBeenCalled();
+  });
+});
+
+// SELL IN THE APP (18k-i; Kd, 2026-11-06): a tick on a membership or a pack with a price, never a trial; while Square
+// can't take a payment, the place to set it up for whoever may, and a sentence for whoever may not.
+describe('sell in the app (18k-i)', () => {
+  const SQUARE = { state: 'connected', businessName: 'Iron House', locationName: 'Main', locations: [], connectedAt: '2026-10-20T09:00:00.000Z', removedAt: null };
+  const box = (over = {}) => ({ availability: 'square', country: 'GB', canConnect: true, squareReady: true, square: SQUARE, terminals: null, needsAllow: false, allowFor: [], ...over });
+  const OWNER = { ...ORG, slug: 'iron-house', staffRole: 'owner' };
+  const MANAGER = { ...ORG, slug: 'iron-house', privileges: ['memberships.manage'] };
+  function openWith(list, payments, org = OWNER) {
+    orgService.getMembershipTypes.mockResolvedValue({ data: list });
+    orgService.getGymPayments.mockResolvedValueOnce({ data: { payments } });
+    render(
+      <MemoryRouter>
+        <MembershipTypesPanel org={org} readOnly={false} />
+      </MemoryRouter>,
+    );
+  }
+
+  it('with Square connected: ticked, said, sent with the type, and its row reads Sold in the app', async () => {
+    orgService.createMembershipType.mockResolvedValue({ data: listOf({ types: [type({ name: 'Gold Monthly', soldInApp: true })] }) });
+    openWith(listOf(), box());
+    fireEvent.click(await screen.findByRole('button', { name: 'Add a membership type' }));
+    type_('Name', 'Gold Monthly');
+    type_('Price (GBP)', '49.99');
+    const tick = await screen.findByRole('checkbox', { name: /Sell in the app/ });
+    await waitFor(() => expect(screen.getByText('Members can buy it in the app and pay by card through Square.')).toBeTruthy());
+    expect(tick.disabled).toBe(false);
+    fireEvent.click(tick);
+    fireEvent.click(screen.getByRole('button', { name: 'Add membership type' }));
+    await waitFor(() => expect(orgService.createMembershipType).toHaveBeenCalledTimes(1));
+    expect(orgService.createMembershipType.mock.calls[0][1]).toMatchObject({ kind: 'recurring', priceMinor: 4999, soldInApp: true });
+    const row = (await screen.findAllByRole('listitem'))[0];
+    expect(within(row).getByText('Sold in the app')).toBeTruthy();
+  });
+
+  it('a line not ticked says nothing of the app, and a change keeps the tick it has', async () => {
+    orgService.updateMembershipType.mockResolvedValue({ data: listOf({ types: [type({ name: 'Silver', soldInApp: true })] }) });
+    openWith(listOf({ types: [type({ name: 'Gold Monthly' }), type({ name: 'Silver', soldInApp: true })] }), box());
+    const rows = await screen.findAllByRole('listitem');
+    await waitFor(() => expect(within(rows[1]).getByText('Sold in the app')).toBeTruthy());
+    expect(within(rows[0]).queryByText('Sold in the app')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Change Silver' }));
+    expect(screen.getByRole('checkbox', { name: /Sell in the app/ }).checked).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    await waitFor(() => expect(orgService.updateMembershipType).toHaveBeenCalledTimes(1));
+    expect(orgService.updateMembershipType.mock.calls[0][2]).toMatchObject({ soldInApp: true });
+  });
+
+  it('Square not connected, the owner: the tick is off, with Connect Square; a line already ticked says why members cannot buy it', async () => {
+    openWith(listOf({ types: [type({ name: 'Gold Monthly', soldInApp: true })] }), box({ square: null }));
+    const row = (await screen.findAllByRole('listitem'))[0];
+    expect(await within(row).findByText("Members can't buy it in the app until Square is connected.")).toBeTruthy();
+    expect(within(row).queryByText('Sold in the app')).toBeNull();
+    expect(within(row).getByRole('link', { name: 'Connect Square' }).getAttribute('href')).toBe('/console/iron-house/settings#payments');
+    fireEvent.click(screen.getByRole('button', { name: 'Add a membership type' }));
+    type_('Price (GBP)', '49.99');
+    expect(screen.getByRole('checkbox', { name: /Sell in the app/ }).disabled).toBe(true);
+    expect(screen.getByText('Connect Square to sell in the app.')).toBeTruthy();
+    // Inside the form the button asks first: what was typed would be lost.
+    fireEvent.click(screen.getByRole('button', { name: 'Connect Square' }));
+    expect(screen.getByRole('link', { name: 'Leave this page' }).getAttribute('href')).toBe('/console/iron-house/settings#payments');
+  });
+
+  it('Square not connected, staff who cannot connect it: a sentence, no button', async () => {
+    openWith(listOf({ types: [type({ name: 'Gold Monthly', soldInApp: true })] }), box({ square: null, canConnect: false }), MANAGER);
+    const row = (await screen.findAllByRole('listitem'))[0];
+    expect(await within(row).findByText("Members can't buy it in the app until Square is connected.")).toBeTruthy();
+    expect(screen.queryByRole('link', { name: 'Connect Square' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Add a membership type' }));
+    expect(screen.getByText('Only the owner can connect Square.')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Connect Square' })).toBeNull();
+  });
+
+  it('a line already ticked can be unticked while Square is not connected', async () => {
+    orgService.updateMembershipType.mockResolvedValue({ data: listOf({ types: [type({ name: 'Gold Monthly' })] }) });
+    openWith(listOf({ types: [type({ name: 'Gold Monthly', soldInApp: true })] }), box({ square: null }));
+    const row = (await screen.findAllByRole('listitem'))[0];
+    await within(row).findByText("Members can't buy it in the app until Square is connected.");
+    fireEvent.click(screen.getByRole('button', { name: 'Change Gold Monthly' }));
+    const tick = screen.getByRole('checkbox', { name: /Sell in the app/ });
+    expect(tick.disabled).toBe(false);
+    fireEvent.click(tick);
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    await waitFor(() => expect(orgService.updateMembershipType).toHaveBeenCalledTimes(1));
+    expect(orgService.updateMembershipType.mock.calls[0][2]).toMatchObject({ soldInApp: false });
+  });
+
+  it('a trial has no tick; a free line ticked is refused before Save', async () => {
+    openWith(listOf(), box());
+    fireEvent.click(await screen.findByRole('button', { name: 'Add a membership type' }));
+    fireEvent.click(screen.getByRole('radio', { name: /Trial/ }));
+    expect(screen.queryByRole('checkbox', { name: /Sell in the app/ })).toBeNull();
+    fireEvent.click(screen.getByRole('radio', { name: /Day pass/ }));
+    type_('Name', 'Drop-in');
+    type_('Price (GBP)', '0');
+    await waitFor(() => expect(screen.getByText('Members can buy it in the app and pay by card through Square.')).toBeTruthy());
+    fireEvent.click(screen.getByRole('checkbox', { name: /Sell in the app/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add membership type' }));
+    expect(await screen.findByText("A free membership can't be sold in the app. Untick Sell in the app.")).toBeTruthy();
+    expect(orgService.createMembershipType).not.toHaveBeenCalled();
   });
 });
 

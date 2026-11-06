@@ -26,6 +26,8 @@ import {
   wholeNumber,
   withChoice,
   restoredTypeWords,
+  soldInAppWords,
+  squareSellState,
 } from './membershipTypesView';
 
 const YOGA = { id: '33333333-3333-4333-8333-000000000001', name: 'Yoga' };
@@ -212,6 +214,7 @@ describe('the form', () => {
       coolingOffDays: null,
 
       renewalReminderDays: null, termReminderDays: null,
+      soldInApp: false,
     });
     expect(draftBody(named({ description: '  All classes and open gym  ' }), 'USD').description).toBe('All classes and open gym');
     expect(draftBody(named({ choice: 'pack' }), 'USD')).toMatchObject({ kind: 'pack', packClasses: 10, packDays: 60, termCount: null, termUnit: null, access: 'all_classes' });
@@ -238,6 +241,41 @@ describe('the form', () => {
       expect(draftProblems(draft, 'USD'), JSON.stringify(draft)).toBeNull();
       expect(valid(draftBody(draft, 'USD')), JSON.stringify(draft)).toBe(true);
     }
+  });
+
+  // 18k-i: the tick goes with a membership or a pack, whatever the form still holds for another kind.
+  it('Sell in the app is sent for a membership or a pack, never for a trial, and a change states it', () => {
+    for (const choice of ['recurring', 'one_time', 'pack', 'day_pass']) {
+      const draft = named({ choice, soldInApp: true, termUnit: 'month' });
+      expect(draftProblems(draft, 'USD'), choice).toBeNull();
+      expect(draftBody(draft, 'USD').soldInApp, choice).toBe(true);
+      expect(valid(draftBody(draft, 'USD')), choice).toBe(true);
+    }
+    expect(draftBody(named({ choice: 'trial', soldInApp: true, price: '0', termCount: '7', termUnit: 'day' }), 'USD').soldInApp).toBe(false);
+    expect(draftProblems(named({ soldInApp: true, price: '0' }), 'USD')).toEqual({ soldInApp: "A free membership can't be sold in the app. Untick Sell in the app." });
+    expect(draftFromType(type({ soldInApp: true })).soldInApp).toBe(true);
+    expect(draftFromType(type()).soldInApp).toBe(false);
+    const change = draftBody({ ...draftFromType(type({ soldInApp: true })), updatedAt: '2026-10-04T09:00:00.000Z' }, 'USD');
+    expect(updateGymMembershipTypeRequestSchema.safeParse(change).success).toBe(true);
+    expect(change.soldInApp).toBe(true);
+  });
+
+  it("Square's state for Sell in the app, and what a ticked row says in each", () => {
+    const square = (state) => ({ state, businessName: 'Iron', locationName: null, locations: [], connectedAt: '2026-10-20T09:00:00.000Z', removedAt: null });
+    const box = (over) => ({ availability: 'square', squareReady: true, canConnect: true, square: square('connected'), ...over });
+    expect(squareSellState(null)).toBeNull();
+    expect(squareSellState(box())).toBe('ready');
+    expect(squareSellState(box({ square: null }))).toBe('connect');
+    expect(squareSellState(box({ square: square('removed') }))).toBe('connect');
+    expect(squareSellState(box({ square: square('choose_location') }))).toBe('location');
+    expect(squareSellState(box({ availability: 'india_soon', square: null }))).toBe('country');
+    expect(squareSellState(box({ squareReady: false }))).toBe('country');
+    const sold = type({ soldInApp: true });
+    expect(soldInAppWords(type(), 'ready')).toBeNull();
+    expect(soldInAppWords(sold, 'ready')).toEqual({ tag: 'Sold in the app', line: null });
+    expect(soldInAppWords(sold, 'connect')).toEqual({ tag: null, line: "Members can't buy it in the app until Square is connected." });
+    expect(soldInAppWords(sold, 'location')).toEqual({ tag: null, line: "Members can't buy it in the app until your Square location is chosen." });
+    expect(soldInAppWords(sold, null)).toEqual({ tag: 'Sell in the app: on', line: null });
   });
 
   it('says what is wrong, one sentence a box', () => {
@@ -309,6 +347,7 @@ describe('the form', () => {
       coolingOffDays: null,
 
       renewalReminderDays: null, termReminderDays: null,
+      soldInApp: false,
       // A change carries the stamp the list gave; a new type has none.
       updatedAt: '2026-10-04T09:00:00.000Z',
     });

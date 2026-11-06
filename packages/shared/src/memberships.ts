@@ -270,6 +270,8 @@ export const gymMembershipTypeSchema = z
     /** Its reminders (18v-iv): so many days before every renewal, and before its minimum term ends; null for none. */
     renewalReminderDays: renewalReminderDaysSchema.nullable().default(null),
     termReminderDays: renewalReminderDaysSchema.nullable().default(null),
+    /** Members may buy it in the app (18k-i): a membership or a pack with a price, never a trial. */
+    soldInApp: z.boolean().default(false),
     archivedAt: z.string().datetime({ offset: true }).nullable(),
     /** When it was last changed. A change sends it back, so a form opened before
      *  somebody else's change is refused, never saved over theirs. */
@@ -340,8 +342,15 @@ const membershipTypeFields = {
   /** Left out of a NEW type is "no reminder"; a change must say each (below). */
   renewalReminderDays: renewalReminderDaysSchema.nullable().default(null),
   termReminderDays: renewalReminderDaysSchema.nullable().default(null),
+  /** Left out of a NEW type is "not sold in the app"; a change must say it (below). */
+  soldInApp: z.boolean().default(false),
 };
 const membershipTypeObject = z.object(membershipTypeFields);
+
+/** The kinds members may buy in the app (18k-i): a repeating or paid-once membership, or a pack. A trial
+ *  has its own rules for who may have one, and a product is bought at the desk (Kd, 2026-11-06). */
+export const SOLD_IN_APP_KINDS: readonly MembershipKind[] = ["recurring", "one_time", "pack"];
+export const canSellInApp = (type: { kind: MembershipKind; priceMinor: number }): boolean => SOLD_IN_APP_KINDS.includes(type.kind) && type.priceMinor > 0;
 
 /** The rules between the fields: each kind in its own shape. */
 function refineMembershipType(value: z.infer<typeof membershipTypeObject>, ctx: z.RefinementCtx): void {
@@ -402,6 +411,8 @@ function refineMembershipType(value: z.infer<typeof membershipTypeObject>, ctx: 
     else if (!renewalReminderDaysOffered("every_renewal", value.termCount, value.termUnit).includes(value.renewalReminderDays)) wrong("renewalReminderDays");
   }
   if (value.termReminderDays !== null && value.contractPeriods === null) wrong("termReminderDays");
+  // Sold in the app: a membership or a pack with a price (18k-i).
+  if (value.soldInApp && !canSellInApp(value)) wrong("soldInApp");
 }
 
 /** How long a contract of `periods` payments, each every `termCount` `termUnit`, runs:
@@ -438,6 +449,7 @@ export const updateGymMembershipTypeRequestSchema = membershipTypeObject
     coolingOffDays: coolingOffDaysSchema.nullable(),
     renewalReminderDays: renewalReminderDaysSchema.nullable(),
     termReminderDays: renewalReminderDaysSchema.nullable(),
+    soldInApp: z.boolean(),
     /** Members already on the line pay its new, higher price too (18w): only those ticked. */
     raise: priceRaiseRequestSchema.optional(),
   })
