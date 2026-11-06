@@ -35,6 +35,9 @@ export const DIRECT_DELETE_TABLES = [
   // The ids of meals the person removed (migration 0169, ROADMAP Stage 5 32b-i): kept so a late
   // save from the phone cannot bring a removed meal back. Their own record, deleted and exported.
   "meal_removed_ids",
+  // Each Change email, kept for the 14 days its Undo link works (migration 0218): the person's own
+  // addresses, deleted and exported (the link's hash and the note's tries are left out of the export).
+  "email_changes",
   "user_dishware", // §5.2 "dishware"
   // Foods the person kept from a pack's label (ROADMAP Stage 5 33b-iii-c): their own record, deleted and exported.
   "member_label_foods",

@@ -5,12 +5,14 @@
 //   · "Invalid email or password" NEVER distinguishes no-user / wrong-password
 //   · one-time tokens stored as SHA-256 only
 //   · refresh reuse kills the whole family
+import { createHmac, randomUUID } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { hash as argon2Hash, hashSync as argon2HashSync, verify as argon2Verify } from "@node-rs/argon2";
 import type { FastifyBaseLogger } from "fastify";
 import type { Sql } from "postgres";
-import { SIGNED_IN_ELSEWHERE, type SessionClient } from "@app/shared";
+import { EMAIL_CHANGE_WORDS, SIGNED_IN_ELSEWHERE, type SessionClient } from "@app/shared";
 import type { AppConfig } from "../../config.js";
+import { maskedAddress } from "../../email/templates.js";
 import { DPDP_RETENTION_MS } from "../../retention.js";
 import * as codes from "./codes.js";
 import type { CodePurpose, CodeSender } from "./codes.js";
@@ -102,25 +104,30 @@ export interface SessionTokens {
 
 const refreshExpiry = (deps: AuthDeps): Date => new Date(Date.now() + deps.config.REFRESH_TTL_DAYS * 24 * 60 * 60 * 1000);
 
+/** A new sign-in session on the account, begun only while it still holds `address`, the address the
+ *  sign-in found it by (null for an account with none): null, with nothing written, once an Undo this
+ *  change or a Change email has moved it, and the caller looks the address up again (item 19's
+ *  data-integrity re-check, N1). */
 async function issueSession(
   deps: AuthDeps,
   userId: string,
+  address: string | null,
   meta: RequestMeta,
   client: SessionClient = "web",
-): Promise<SessionTokens> {
+): Promise<SessionTokens | null> {
   const familyId = newFamilyId();
   const refreshToken = mintOpaqueToken();
   const row = {
     userId,
+    address,
     familyId,
     tokenHash: sha256Hex(refreshToken),
     expiresAt: refreshExpiry(deps),
     ip: meta.ip,
     userAgent: meta.userAgent,
   };
-  if (client === "phone") await repo.startPhoneSession(deps.sql, row);
-  else await repo.insertRefreshToken(deps.sql, row);
-  return { accessToken: signAccessToken(userId, deps.config, familyId), refreshToken };
+  const begun = client === "phone" ? await repo.startPhoneSession(deps.sql, row) : await repo.insertRefreshToken(deps.sql, row);
+  return begun ? { accessToken: signAccessToken(userId, deps.config, familyId), refreshToken } : null;
 }
 
 async function toAuthUser(sql: Sql, row: repo.UserAuthRow): Promise<AuthUser> {
@@ -246,14 +253,26 @@ function oauthDisplayName(name: string | null): string {
  *  (DECISIONS: no verified column). Google asserts the address; a proved
  *  sign-in code proves it. The first proof also ends any password and session
  *  set up before it (repo). Runs before the new session is issued. */
-async function ensureEmailVerified(deps: AuthDeps, userId: string, googleSubject?: string): Promise<void> {
-  await repo.recordVerifiedEmail(
+async function ensureEmailVerified(deps: AuthDeps, userId: string, email: string, googleSubject?: string): Promise<boolean> {
+  return await repo.recordVerifiedEmail(
     deps.sql,
     userId,
+    email,
     sha256Hex(mintOpaqueToken()),
     googleSubject === undefined ? undefined : { provider: "google", subject: googleSubject },
   );
 }
+
+/** An address an account moved off in the last 14 days starts no new account: whoever holds it is told
+ *  where it went, partly hidden, and how to undo it (item 19's security pass, H1). They have just proved
+ *  the address, so this tells a stranger nothing. */
+async function refuseIfMovedOff(deps: AuthDeps, email: string): Promise<void> {
+  const moved = await repo.liveMoveOff(deps.sql, email);
+  if (moved !== null) throw new AuthError(409, "email_moved", EMAIL_CHANGE_WORDS.movedOff(maskedAddress(moved.newEmail)));
+}
+
+/** How many times a sign-in looks an address up while other requests move or take it. */
+const ADDRESS_LOOKS = 3;
 
 /** Google sign-in: log in the linked identity, else link Google to an existing
  *  same-email account (password untouched — passport.js:41-43), else create an
@@ -265,44 +284,53 @@ export async function googleSignIn(
   meta: RequestMeta,
   client: SessionClient = "web",
 ): Promise<{ user: AuthUser; tokens: SessionTokens; isNewAccount: boolean }> {
-  // 1. Known Google identity → straight login.
-  const linkedUserId = await repo.findUserIdByAuthIdentity(deps.sql, "google", identity.subject);
-  if (linkedUserId !== null) {
-    const user = await repo.findUserById(deps.sql, linkedUserId);
-    if (user === null || user.status !== "active") throw googleUnavailable();
-    // A link saved before 12d's fix could lack its proof: Google still vouches for this
-    // address, so it is proved now (once; a no-op when it already is).
-    if (user.email?.toLowerCase() === identity.email.toLowerCase()) await ensureEmailVerified(deps, user.id);
-    return { user: await toAuthUser(deps.sql, user), tokens: await issueSession(deps, user.id, meta, client), isNewAccount: false };
-  }
+  // The account found is linked and signed in only if it still holds the address it was found by, under
+  // its row's lock: a Change email or an Undo this change that commits between the read and the write
+  // moves it away, and the sign-in looks again (item 19's data-integrity pass, H1, and re-check, N1). So
+  // does a create that lost a race on the address.
+  for (let look = 0; look < ADDRESS_LOOKS; look += 1) {
+    // 1. Known Google identity → straight login.
+    const linkedUserId = await repo.findUserIdByAuthIdentity(deps.sql, "google", identity.subject);
+    if (linkedUserId !== null) {
+      const user = await repo.findUserById(deps.sql, linkedUserId);
+      if (user === null || user.status !== "active") throw googleUnavailable();
+      // A link saved before 12d's fix could lack its proof: Google still vouches for this
+      // address, so it is proved now (once; a no-op when it already is).
+      if (user.email?.toLowerCase() === identity.email.toLowerCase() && !(await ensureEmailVerified(deps, user.id, identity.email))) continue;
+      const tokens = await issueSession(deps, user.id, user.email, meta, client);
+      if (tokens === null) continue;
+      return { user: await toAuthUser(deps.sql, user), tokens, isNewAccount: false };
+    }
 
-  // 2. Existing account with this email → link Google to it, then log in. A
-  //    password stays only if the address was proved before it; one set on an
-  //    address nobody had proved ends here (ensureEmailVerified).
-  const byEmail = await repo.findUserByEmail(deps.sql, identity.email);
-  if (byEmail !== null) {
-    if (byEmail.status !== "active") throw googleUnavailable();
-    await ensureEmailVerified(deps, byEmail.id, identity.subject);
-    return { user: await toAuthUser(deps.sql, byEmail), tokens: await issueSession(deps, byEmail.id, meta, client), isNewAccount: false };
-  }
+    // 2. Existing account with this email → link Google to it, then log in. A
+    //    password stays only if the address was proved before it; one set on an
+    //    address nobody had proved ends here (ensureEmailVerified).
+    const byEmail = await repo.findUserByEmail(deps.sql, identity.email);
+    if (byEmail !== null) {
+      if (byEmail.status !== "active") throw googleUnavailable();
+      if (!(await ensureEmailVerified(deps, byEmail.id, identity.email, identity.subject))) continue;
+      const tokens = await issueSession(deps, byEmail.id, identity.email, meta, client);
+      if (tokens === null) continue;
+      return { user: await toAuthUser(deps.sql, byEmail), tokens, isNewAccount: false };
+    }
 
-  // 3. Brand-new OAuth-only user from the Google profile.
-  const newUserId = await repo.createPasswordlessUser(deps.sql, {
-    email: identity.email,
-    displayName: oauthDisplayName(identity.name),
-  });
-  if (newUserId === null) {
-    // Lost a concurrent create race on the email → re-resolve and link.
-    const raced = await repo.findUserByEmail(deps.sql, identity.email);
-    if (raced === null || raced.status !== "active") throw googleUnavailable();
-    await ensureEmailVerified(deps, raced.id, identity.subject);
-    return { user: await toAuthUser(deps.sql, raced), tokens: await issueSession(deps, raced.id, meta, client), isNewAccount: false };
+    // 3. Brand-new OAuth-only user from the Google profile.
+    await refuseIfMovedOff(deps, identity.email);
+    const newUserId = await repo.createPasswordlessUser(deps.sql, {
+      email: identity.email,
+      displayName: oauthDisplayName(identity.name),
+    });
+    if (newUserId === null) continue;
+    if (!(await ensureEmailVerified(deps, newUserId, identity.email, identity.subject))) continue;
+    const created = await repo.findUserById(deps.sql, newUserId);
+    if (created === null) throw new Error("created Google user could not be re-read");
+    const tokens = await issueSession(deps, newUserId, identity.email, meta, client);
+    if (tokens === null) continue;
+    return { user: await toAuthUser(deps.sql, created), tokens, isNewAccount: true };
   }
-  await ensureEmailVerified(deps, newUserId, identity.subject);
-  const created = await repo.findUserById(deps.sql, newUserId);
-  if (created === null) throw new Error("created Google user could not be re-read");
-  return { user: await toAuthUser(deps.sql, created), tokens: await issueSession(deps, newUserId, meta, client), isNewAccount: true };
+  throw googleUnavailable();
 }
+
 
 // ── sign-in by email code (Kd 2026-09-07) ───────────────────────────────────
 
@@ -339,37 +367,39 @@ export async function signInWithCode(
 ): Promise<{ user: AuthUser; tokens: SessionTokens; isNewAccount: boolean }> {
   await codes.redeemCode(codeDeps(deps), { email: input.email, purpose: "sign_in", code: input.code });
 
-  let user = await repo.findUserByEmail(deps.sql, input.email);
-  let isNewAccount = false;
-  if (user === null) {
-    const newUserId = await repo.createPasswordlessUser(deps.sql, {
-      email: input.email,
-      displayName: displayNameFromEmail(input.email),
-    });
-    if (newUserId === null) {
+  // The account found by the address is signed in only if it still holds it under its row's lock:
+  // one moved off it by Change email meanwhile is not, and the address is looked up again (item
+  // 19's data-integrity pass, L2).
+  for (let look = 0; look < ADDRESS_LOOKS; look += 1) {
+    let user = await repo.findUserByEmail(deps.sql, input.email);
+    let isNewAccount = false;
+    if (user === null) {
+      await refuseIfMovedOff(deps, input.email);
+      const newUserId = await repo.createPasswordlessUser(deps.sql, {
+        email: input.email,
+        displayName: displayNameFromEmail(input.email),
+      });
       // Lost a concurrent create race on the email → the other one is ours.
-      user = await repo.findUserByEmail(deps.sql, input.email);
-    } else {
+      if (newUserId === null) continue;
       user = await repo.findUserById(deps.sql, newUserId);
       isNewAccount = true;
     }
+    if (user === null) continue;
+    if (user.status !== "active") {
+      // The person has just PROVED they hold the address, so telling them their
+      // own account is mid-deletion reveals nothing to a stranger.
+      throw new AuthError(
+        403,
+        "account_unavailable",
+        "This account is being deleted. Use the link in the email we sent you to restore it, then try again.",
+      );
+    }
+    if (!(await ensureEmailVerified(deps, user.id, input.email))) continue;
+    const tokens = await issueSession(deps, user.id, input.email, meta, input.client ?? "web");
+    if (tokens === null) continue;
+    return { user: await toAuthUser(deps.sql, user), tokens, isNewAccount };
   }
-  if (user === null) throw new Error("code sign-in user could not be re-read");
-  if (user.status !== "active") {
-    // The person has just PROVED they hold the address, so telling them their
-    // own account is mid-deletion reveals nothing to a stranger.
-    throw new AuthError(
-      403,
-      "account_unavailable",
-      "This account is being deleted. Use the link in the email we sent you to restore it, then try again.",
-    );
-  }
-  await ensureEmailVerified(deps, user.id);
-  return {
-    user: await toAuthUser(deps.sql, user),
-    tokens: await issueSession(deps, user.id, meta, input.client ?? "web"),
-    isNewAccount,
-  };
+  throw new Error("code sign-in found no account that kept the address");
 }
 
 // ── narrow code exports for the users module (R7.1) ─────────────────────────
@@ -394,6 +424,12 @@ export async function redeemEmailCode(
 // ── change email (19c; RULINGS 2026-09-23, E) ─────────────────────────────────
 // The users module asks for the code and moves the account through these, never through the repo.
 
+/** Whether this account proved a change code for this address in the last `minutes`: a Confirm sent
+ *  again after its answer was lost is told the move worked (item 19's data-integrity pass, H2). */
+export async function movedHereLately(sql: Sql, input: { userId: string; email: string; minutes: number }): Promise<boolean> {
+  return await repo.usedCodeSince(sql, { email: input.email, purpose: "change_email", userId: input.userId, minutes: input.minutes });
+}
+
 /** Whether an account, a deleted one in its undo days too, holds this address. */
 export async function emailTaken(sql: Sql, email: string): Promise<boolean> {
   return await repo.emailTaken(sql, email);
@@ -404,15 +440,39 @@ export async function emailTaken(sql: Sql, email: string): Promise<boolean> {
  *  the old address ends. */
 export async function moveAccountEmail(
   sql: Sql,
+  config: Pick<AppConfig, "JWT_SECRET">,
   input: { userId: string; from: string | null; to: string },
 ): Promise<repo.MovedEmail> {
+  const id = randomUUID();
   return await repo.moveEmail(sql, {
     userId: input.userId,
     from: input.from,
     to: input.to,
     nameFrom: input.from === null ? null : displayNameFromEmail(input.from),
     nameTo: displayNameFromEmail(input.to),
+    change: { id, tokenHash: sha256Hex(emailChangeUndoToken(config, id)) },
   });
+}
+
+/** A change's Undo link token: worked out from its id and the server's secret, so the note can be sent
+ *  again with the same link while only the token's SHA-256 is stored. 64 hex characters. */
+export function emailChangeUndoToken(config: Pick<AppConfig, "JWT_SECRET">, changeId: string): string {
+  return createHmac("sha256", config.JWT_SECRET).update(`email-change-undo:${changeId}`).digest("hex");
+}
+
+/** What an Undo link's page shows. */
+export async function readEmailChangeLink(sql: Sql, token: string): Promise<repo.EmailChangeLink> {
+  return await repo.readEmailChange(sql, sha256Hex(token));
+}
+
+/** Undo the change an Undo link names (repo: one transaction). */
+export async function undoEmailChangeLink(sql: Sql, token: string): Promise<repo.UndoneEmailChange> {
+  return await repo.undoEmailChange(sql, sha256Hex(token));
+}
+
+/** Whether the sign-in session an access token was issued under is still live (an undo ends them all). */
+export async function sessionStillLive(sql: Sql, userId: string, familyId: string | null): Promise<boolean> {
+  return familyId !== null && (await repo.sessionLive(sql, userId, familyId));
 }
 
 // ── refresh (rotation + reuse detection) ────────────────────────────────────
@@ -535,10 +595,11 @@ export async function verifyEmail(
     throw new AuthError(400, "invalid_token", "Invalid or expired verification token");
   }
   const user = await repo.findUserById(deps.sql, userId);
-  if (user === null || user.status !== "active") {
+  const tokens = user === null || user.status !== "active" ? null : await issueSession(deps, userId, user.email, meta);
+  if (user === null || tokens === null) {
     throw new AuthError(400, "invalid_token", "Invalid or expired verification token");
   }
-  return { user: await toAuthUser(deps.sql, user), tokens: await issueSession(deps, userId, meta) };
+  return { user: await toAuthUser(deps.sql, user), tokens };
 }
 
 // ── forgot / reset password ─────────────────────────────────────────────────

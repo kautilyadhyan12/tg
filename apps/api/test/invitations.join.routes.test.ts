@@ -416,15 +416,14 @@ d("join by invitation (real Postgres)", () => {
       const hana = await signIn(addr("hana"));
       expect(hana.userId).toBe(planted.userId);
 
-      // Mallory's password and session ended with Hana's proof, and her access token,
-      // still inside its 15 minutes, opens nothing.
+      // Mallory's password and session ended with Hana's proof, and her access token, still
+      // inside its 15 minutes, is let in nowhere: a session ends at once (item 19's passes).
       expect((await post("/v1/auth/login", { email: addr("hana"), password: PASSWORD }, {})).statusCode).toBe(401);
       expect((await post("/v1/auth/refresh", {}, planted.cookies)).statusCode).toBe(401);
-      expect((await get("/v1/auth/me", planted.cookies)).statusCode).toBe(200);
-      expect((await invitationsOf(planted)).invitations).toEqual([]);
-      const malloryTries = await accept(planted, hanaInvite);
-      expect(malloryTries.statusCode).toBe(403);
-      expect((await decline(planted, hanaInvite)).statusCode).toBe(403);
+      expect((await get("/v1/auth/me", planted.cookies)).statusCode).toBe(401);
+      expect((await get("/v1/orgs/invitations", planted.cookies)).statusCode).toBe(401);
+      expect((await accept(planted, hanaInvite)).statusCode).toBe(401);
+      expect((await decline(planted, hanaInvite)).statusCode).toBe(401);
       expect((await membershipsOf(iron, hana)).length).toBe(0);
       expect((await inviteStateOf(iron, addr("hana")))?.state).toBe("pending");
 

@@ -58,6 +58,8 @@ import { sweepGoneForGood } from "./modules/orgs/goneForGood/sweep.js";
 import { clearOldRemovedLabels } from "./modules/nutrition/labelRepo.js";
 import { updatePackagedFoods } from "./modules/nutrition/packagedSync.js";
 import { purgeDueUsers, purgeShortfall } from "./modules/privacy/purge.js";
+import { changeEmailSenderFor } from "./modules/users/changeEmailSender.js";
+import { sendDueEmailChangedNotes } from "./modules/users/emailChangedNotes.js";
 import { createDiskPhotoStore } from "./modules/orgs/gymPage/photoStore.js";
 import { processPaddleEvents, processRazorpayEvents } from "./modules/billing/events.js";
 import { paddleSettings, razorpaySettings } from "./modules/billing/settings.js";
@@ -103,6 +105,7 @@ export const ORGS_CLASS_NO_SHOWS_JOB = "orgs.class_no_shows";
 export const ORGS_MEMBER_LIST_ANALYSE_JOB = "orgs.member_list_analyse";
 export const ORGS_GONE_FOR_GOOD_JOB = "orgs.gone_for_good";
 export const NUTRITION_PACKAGED_UPDATE_JOB = "nutrition.packaged_update";
+export const ACCOUNT_EMAIL_CHANGED_NOTES_JOB = "account.email_changed_notes";
 
 const connection = new Redis(redisUrl, { maxRetriesPerRequest: null });
 const sql = postgres(config.DATABASE_URL, { prepare: false, max: 2 });
@@ -394,6 +397,25 @@ try {
   );
 } catch (err) {
   log.fatal({ err }, "failed to register the class calendar fill schedule");
+  process.exit(1);
+}
+
+// THE NOTE TO AN OLD ADDRESS AFTER CHANGE EMAIL, WITH ITS UNDO LINK (19c; item 19's two extra passes): every
+// five minutes, on minutes 1, 6, 11 …, off the other schedules' minutes. The request sends it at
+// once; this sends what it could not, until the provider takes it.
+try {
+  await queue.upsertJobScheduler(
+    ACCOUNT_EMAIL_CHANGED_NOTES_JOB,
+    { pattern: "1-59/5 * * * *" },
+    {
+      name: ACCOUNT_EMAIL_CHANGED_NOTES_JOB,
+      // Each note is taken, with its next try set further off, before it is sent: a retry or a
+      // second run at once sends none of them twice.
+      opts: { attempts: 1, removeOnComplete: { count: 50 }, removeOnFail: { count: 200 } },
+    },
+  );
+} catch (err) {
+  log.fatal({ err }, "failed to register the email-changed notes schedule");
   process.exit(1);
 }
 
@@ -944,7 +966,8 @@ const worker = new Worker(
       job.name !== ORGS_MEMBER_BILLS_JOB &&
       job.name !== ORGS_MEMBER_LIST_ANALYSE_JOB &&
       job.name !== ORGS_GONE_FOR_GOOD_JOB &&
-      job.name !== NUTRITION_PACKAGED_UPDATE_JOB
+      job.name !== NUTRITION_PACKAGED_UPDATE_JOB &&
+      job.name !== ACCOUNT_EMAIL_CHANGED_NOTES_JOB
     ) {
       throw new Error(`unknown job on ${ROLLUPS_QUEUE}: ${job.name}`);
     }
@@ -1049,6 +1072,17 @@ const worker = new Worker(
         { ...analysed, durationMs: Date.now() - startedAt, event: "job.finished", job: job.name },
         "job finished",
       );
+      return;
+    }
+
+    // Each note is sent on its own; one the provider refuses waits for its next try.
+    if (job.name === ACCOUNT_EMAIL_CHANGED_NOTES_JOB) {
+      const transport =
+        config.RESEND_API_KEY !== undefined && config.EMAIL_FROM !== undefined
+          ? createResendTransport({ apiKey: config.RESEND_API_KEY, from: config.EMAIL_FROM })
+          : null;
+      const notes = await sendDueEmailChangedNotes({ sql, sender: changeEmailSenderFor(config, transport, log), log, config });
+      log.info({ ...notes, durationMs: Date.now() - startedAt, event: "job.finished", job: job.name }, "job finished");
       return;
     }
 

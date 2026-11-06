@@ -18,6 +18,7 @@ import {
   CONSENT_PROOF_RETENTION_YEARS,
 } from "../src/retention.js";
 import { getTableColumns } from "drizzle-orm";
+import { emailChanges } from "../src/db/schema/identity.js";
 import { bodyMeasurements } from "../src/db/schema/trust.js";
 import { workouts } from "../src/db/schema/training.js";
 import {
@@ -195,6 +196,7 @@ d("DPDP data export (real Postgres)", () => {
     await sql`INSERT INTO meal_log_corrections (meal_log_id, field, original, corrected)
               VALUES (${meal[0]?.id ?? ""}, ${`grams-${label}`}, ${sql.json({ g: 100 })}, ${sql.json({ g: 120 })})`;
     await sql`INSERT INTO meal_removed_ids (id, user_id) VALUES (gen_random_uuid(), ${userId})`;
+    await sql`INSERT INTO email_changes (id, user_id, old_email, new_email, token_hash, expires_at) VALUES (gen_random_uuid(), ${userId}, ${`old-export-${userId}@example.com`}, ${`new-export-${userId}@example.com`}, md5(random()::text), now() + interval '14 days')`;
     await sql`INSERT INTO body_measurement_removed_ids (id, user_id) VALUES (gen_random_uuid(), ${userId})`;
     await sql`INSERT INTO member_label_foods (id, user_id, name, unit, kcal, protein_g, carbs_g, fat_g) VALUES (${randomUUID()}, ${userId}, ${`Label ${label}`}, 'g', 100, 1, 1, 1)`;
     await sql`INSERT INTO user_dishware (user_id, label, container_class, volume_ml)
@@ -521,6 +523,7 @@ describe("DPDP export list (no database)", () => {
       // carries legacy_mongo_id, so the everywhere-list has a real table to
       // be checked against (the guard caught its absence immediately).
       body_measurements: columnsOf(bodyMeasurements),
+      email_changes: columnsOf(emailChanges),
     };
     for (const [table, cols] of Object.entries(INTERNAL_COLUMNS_BY_TABLE)) {
       const real = byTable[table] ?? [];

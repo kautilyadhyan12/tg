@@ -74,6 +74,7 @@ export async function selectDueUsers(
 export async function deleteUserOwnedRows(tx: TransactionSql, userId: string): Promise<void> {
   await tx`DELETE FROM meal_logs WHERE user_id = ${userId}`; // +corrections, CASCADE
   await tx`DELETE FROM meal_removed_ids WHERE user_id = ${userId}`;
+  await tx`DELETE FROM email_changes WHERE user_id = ${userId}`;
   await tx`DELETE FROM user_dishware WHERE user_id = ${userId}`;
   await tx`DELETE FROM member_label_foods WHERE user_id = ${userId}`;
   await tx`DELETE FROM runs WHERE user_id = ${userId}`;

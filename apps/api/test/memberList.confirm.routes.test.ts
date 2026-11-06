@@ -155,9 +155,15 @@ d("member list: pressing confirm, and the list you keep (real Postgres)", () => 
   const verify = async (email: string) => {
     const token = tokens.get(email.toLowerCase());
     if (token === undefined) throw new Error(`no verification token was sent to ${email}`);
-    expect((await post("/v1/auth/verify-email", { token })).statusCode).toBe(200);
+    const verified = await post("/v1/auth/verify-email", { token });
+    expect(verified.statusCode).toBe(200);
+    const jar = signedIn.get(email.toLowerCase());
+    if (jar !== undefined) Object.assign(jar, cookieMap(verified));
   };
 
+  /** Each person's cookies by address: verifying an address signs them in again (the first proof ends
+   *  the sign-in begun before it, at once), and `verify` puts the new cookies in the same object. */
+  const signedIn = new Map<string, Record<string, string>>();
   const makeUser = async (local: string) => {
     const email = `mconf-t-${local}@example.com`;
     const reg = await api().inject({
@@ -177,7 +183,9 @@ d("member list: pressing confirm, and the list you keep (real Postgres)", () => 
       payload: JSON.stringify({ email, password: PASSWORD }),
     });
     expect(login.statusCode).toBe(200);
-    return { userId, email, cookies: cookieMap(login) };
+    const cookies = cookieMap(login);
+    signedIn.set(email.toLowerCase(), cookies);
+    return { userId, email, cookies };
   };
 
   const subscribeGym = async (gymId: string) => {

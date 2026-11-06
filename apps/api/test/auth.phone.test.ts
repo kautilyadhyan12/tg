@@ -101,13 +101,14 @@ d("the phone app's sign-in: one phone at a time (real Postgres)", () => {
     return phoneRefreshResponseSchema.parse(JSON.parse(res.body)).tokens;
   };
   const pause = (ms: number) => new Promise((done) => setTimeout(done, ms));
-  const newPhoneRow = (userId: string) => {
+  /** `address`: the account's own, as a sign-in found it by. */
+  const newPhoneRow = (userId: string, address: string) => {
     const refreshToken = mintOpaqueToken();
     const familyId = newFamilyId();
     return {
       refreshToken,
       familyId,
-      row: { userId, familyId, tokenHash: sha256Hex(refreshToken), expiresAt: new Date(Date.now() + 60_000), ip: null, userAgent: null },
+      row: { userId, address, familyId, tokenHash: sha256Hex(refreshToken), expiresAt: new Date(Date.now() + 60_000), ip: null, userAgent: null },
     };
   };
   const livePhoneFamilies = async (userId: string): Promise<string[]> => {
@@ -198,6 +199,7 @@ d("the phone app's sign-in: one phone at a time (real Postgres)", () => {
     const together = Array.from({ length: 8 }, () =>
       startPhoneSession(sql, {
         userId,
+        address: email,
         familyId: newFamilyId(),
         tokenHash: sha256Hex(mintOpaqueToken()),
         expiresAt: new Date(Date.now() + 60_000),
@@ -220,6 +222,7 @@ d("the phone app's sign-in: one phone at a time (real Postgres)", () => {
         phoneRefresh(oldPhone.refreshToken),
         startPhoneSession(sql, {
           userId,
+          address: email,
           familyId: newFamily,
           tokenHash: sha256Hex(newToken),
           expiresAt: new Date(Date.now() + 60_000),
@@ -266,7 +269,7 @@ d("the phone app's sign-in: one phone at a time (real Postgres)", () => {
     const oldPhone = await phoneSignIn(email);
     const userId = await userIdOf(email);
     const successor = mintOpaqueToken();
-    const newPhone = newPhoneRow(userId);
+    const newPhone = newPhoneRow(userId, email);
     let signedIn = false;
     let signingIn: Promise<void> | undefined;
     // The old phone's rotation, held open after its successor is written.

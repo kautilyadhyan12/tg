@@ -28,16 +28,21 @@ const baseEnv = {
 
 type App = Awaited<ReturnType<typeof buildApp>>;
 
-function capturingAuthSender(): EmailSender & { verification: string[] } {
+function capturingAuthSender(): EmailSender & { verification: string[]; codes: Map<string, string> } {
   const verification: string[] = [];
+  const codes = new Map<string, string>();
   return {
     verification,
+    codes,
     sendVerificationEmail: (_e, _n, raw) => {
       verification.push(raw);
       return Promise.resolve();
     },
     sendPasswordResetEmail: () => Promise.resolve(),
-    sendSignInCodeEmail: () => Promise.resolve(),
+    sendSignInCodeEmail: (to, code) => {
+      codes.set(to, code);
+      return Promise.resolve();
+    },
   };
 }
 
@@ -124,6 +129,7 @@ d("users routes (real Postgres)", () => {
     await sql`DELETE FROM gym_members WHERE user_id IN
       (SELECT id FROM users WHERE email LIKE 'p22u-%@example.com')`;
     await sql`DELETE FROM gyms WHERE slug = 'p22u-test-gym'`;
+    await sql`DELETE FROM sign_in_codes WHERE email LIKE 'p22u-%@example.com'`;
     await sql`DELETE FROM users WHERE email LIKE 'p22u-%@example.com'`;
     app = await buildApp(loadConfig(baseEnv), {
       emailSender: authSender,
@@ -167,7 +173,13 @@ d("users routes (real Postgres)", () => {
     });
     expect(verify.statusCode).toBe(200);
 
-    const after = await inject({ method: "GET", url: "/v1/users/me", cookies });
+    // The address's first proof ends the sign-in made with the password set before it, at once
+    // (pre-account hijacking; item 19's passes made the end immediate): the owner signs in again.
+    expect((await inject({ method: "GET", url: "/v1/users/me", cookies })).statusCode).toBe(401);
+    expect((await inject({ method: "POST", url: "/v1/auth/code/send", body: { email: "p22u-profile@example.com" } })).statusCode).toBe(200);
+    const signedIn = await inject({ method: "POST", url: "/v1/auth/code/verify", body: { email: "p22u-profile@example.com", code: authSender.codes.get("p22u-profile@example.com") ?? "" } });
+    expect(signedIn.statusCode, signedIn.body).toBe(200);
+    const after = await inject({ method: "GET", url: "/v1/users/me", cookies: cookieMap(signedIn) });
     expect((JSON.parse(after.body) as { user: { emailVerified: boolean } }).user.emailVerified).toBe(true);
   });
 
