@@ -701,7 +701,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
     - 37a-ii. [x] **A voice each kilometre or mile** · merged 2026-11-06 · PR #481
     - 37b. **The map under the run, and hills climbed** (split 2026-11-06: the map first; Kd's "go", `rulings/2026-11-06-37b-i.md`).
       - 37b-i. [x] **The map under the run** · merged 2026-11-06 · PR #484
-      - 37b-ii. [ ] **Hills climbed**, from a free public height map on our server (Strava's rule: a climb counts past 10 m).
+      - 37b-ii. [x] **Elevation gain** · merged 2026-11-07 · PR #489
     - 37c. [ ] **Your runs**: the list, a run's page, records (fastest 1 km or mile, 5 km, 10 km, longest run), the pace chart.
     - 37d. [ ] **The run plan**, run-walk intervals with voice, and Recommended For You's Running tab.
     - 37e. [ ] **Routes.**

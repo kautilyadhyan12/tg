@@ -62,6 +62,29 @@ const envSchema = z.object({
     .regex(/^https?:\/\/[^\s"'<>\\]+$/, "MAP_PROTOMAPS_GLYPHS must be an address")
     .refine((at) => at.includes("{fontstack}") && at.includes("{range}"), "MAP_PROTOMAPS_GLYPHS must hold {fontstack} and {range}")
     .optional(),
+  // A run's elevation gain (ROADMAP 37b-ii): the folder where the height map's pieces are kept once
+  // fetched, one file per degree square a run has been in (RUNBOOK/height-map.md). REQUIRED in
+  // production, so the pieces are kept on a disk that lasts; elsewhere unset means one under the
+  // system's temporary folder.
+  HEIGHTS_DIR: z.string().trim().min(1).max(500).optional(),
+  // Where a missing piece is fetched from: the two free maps on AWS's open-data copies unless set (the
+  // Copernicus surface and the Mapzen terrain tiles), or our own copy of the same files the day one of
+  // them stops. Only a whole degree square's name is ever asked of either.
+  HEIGHTS_COPERNICUS: z
+    .string()
+    .trim()
+    .max(400)
+    .regex(/^https?:\/\/[^\s"'<>\\?#]*[^/\s"'<>\\?#]$/, "HEIGHTS_COPERNICUS must be an address with no / at its end")
+    .default("https://copernicus-dem-30m.s3.amazonaws.com"),
+  HEIGHTS_MAPZEN: z
+    .string()
+    .trim()
+    .max(400)
+    .regex(/^https?:\/\/[^\s"'<>\\?#]*[^/\s"'<>\\?#]$/, "HEIGHTS_MAPZEN must be an address with no / at its end")
+    .default("https://elevation-tiles-prod.s3.amazonaws.com"),
+  // The most degree squares each map keeps in HEIGHTS_DIR (RUNBOOK/height-map.md): 200 is about 5.2 GB of
+  // Mapzen and at most 9.7 GB of Copernicus. Past it, nothing new is fetched and an error is logged.
+  HEIGHTS_MOST_SQUARES_KEPT: z.coerce.number().int().min(1).max(30_000).default(200),
   // Phone notifications (ROADMAP Stage 5 item 18b-i): the path of the service account's key file that
   // Firebase's console downloads, kept outside the repository. Unset = the worker sends none.
   FIREBASE_SERVICE_ACCOUNT_FILE: z.string().trim().min(1).optional(),
@@ -240,6 +263,14 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     .refine((c) => c.NODE_ENV !== "production" || c.PHOTO_DIR !== undefined, {
       path: ["PHOTO_DIR"],
       message: "PHOTO_DIR is required in production (a gym page's photos)",
+    })
+    .refine((c) => c.NODE_ENV !== "production" || c.HEIGHTS_DIR !== undefined, {
+      path: ["HEIGHTS_DIR"],
+      message: "HEIGHTS_DIR is required in production (the height map's pieces, for a run's elevation gain)",
+    })
+    .refine((c) => c.NODE_ENV !== "production" || (c.HEIGHTS_COPERNICUS.startsWith("https://") && c.HEIGHTS_MAPZEN.startsWith("https://")), {
+      path: ["HEIGHTS_COPERNICUS"],
+      message: "HEIGHTS_COPERNICUS and HEIGHTS_MAPZEN must be https:// in production",
     })
     .refine((c) => c.NODE_ENV !== "production" || c.SUPPORT_EMAIL !== undefined, {
       path: ["SUPPORT_EMAIL"],

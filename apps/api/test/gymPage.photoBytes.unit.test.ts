@@ -311,6 +311,7 @@ describe("where the photos are kept", () => {
     TURNSTILE_SITE_KEY: "site",
     TURNSTILE_SECRET_KEY: "secret",
     SUPPORT_EMAIL: "help@example.com",
+    HEIGHTS_DIR: "/srv/aihg/heights",
   };
 
   it("production does not start without a folder for them, so they never land in a temporary one", () => {

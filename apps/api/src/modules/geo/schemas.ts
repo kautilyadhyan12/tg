@@ -1,6 +1,7 @@
 export {
   generateRoutesRequestSchema,
   geoListQuerySchema,
+  runClimbRequestSchema,
   saveRunRequestSchema,
   savedRouteCreateSchema,
 } from "@app/shared";
