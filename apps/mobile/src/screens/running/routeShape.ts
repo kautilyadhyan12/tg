@@ -1,6 +1,6 @@
 // A run's route laid flat for drawing (ROADMAP Stage 5 37a): true to its shape and its size, each
 // stretch apart, a stone at each whole kilometre or mile. Pure, so its rules are tested alone.
-import { geodesicMetres, type Units } from "@app/shared";
+import { unitMarkPoints, type Units } from "@app/shared";
 import { METRES_PER_MILE } from "./runWords";
 
 /** The least ground a route's box stands for, in metres: a walk round a room is drawn as the few
@@ -10,10 +10,17 @@ export const ROUTE_LEAST_SPAN_M = 200;
 /** The path laid flat in a box `w` by `h`, `pad` from its edges: north up, true to its shape and to
  *  its size (metres east and north of its first point), never smaller than ROUTE_LEAST_SPAN_M across. */
 export function fitPath(track: readonly (readonly [number, number])[], w: number, h: number, pad: number): [number, number][] {
+  const place = fitFrame(track, w, h, pad);
+  return place === null ? [] : track.map(([lat, lng]) => place(lat, lng));
+}
+
+/** The box `fitPath` lays the path in, for any point: the stones go where the path's own points do. */
+export function fitFrame(track: readonly (readonly [number, number])[], w: number, h: number, pad: number): ((lat: number, lng: number) => [number, number]) | null {
   const first = track[0];
-  if (first === undefined || w <= 0 || h <= 0) return [];
+  if (first === undefined || w <= 0 || h <= 0) return null;
   const cos = Math.cos((first[0] * Math.PI) / 180);
-  const xy = track.map(([lat, lng]): [number, number] => [(lng - first[1]) * 111_320 * cos, -(lat - first[0]) * 111_132]);
+  const flat = (lat: number, lng: number): [number, number] => [(lng - first[1]) * 111_320 * cos, -(lat - first[0]) * 111_132];
+  const xy = track.map(([lat, lng]) => flat(lat, lng));
   const xs = xy.map((q) => q[0]);
   const ys = xy.map((q) => q[1]);
   const minX = Math.min(...xs);
@@ -24,25 +31,16 @@ export function fitPath(track: readonly (readonly [number, number])[], w: number
   const scale = Math.min((w - 2 * pad) / Math.max(spanX, 1e-9), (h - 2 * pad) / Math.max(spanY, 1e-9), inner / ROUTE_LEAST_SPAN_M);
   const offX = (w - spanX * scale) / 2;
   const offY = (h - spanY * scale) / 2;
-  return xy.map(([x, y]) => [offX + (x - minX) * scale, offY + (y - minY) * scale]);
+  return (lat, lng) => {
+    const [x, y] = flat(lat, lng);
+    return [offX + (x - minX) * scale, offY + (y - minY) * scale];
+  };
 }
 
-/** Where along the path each whole kilometre or mile falls, as indexes into it: only ground covered,
- *  never the gap between two stretches (a pause, a stretch left out). */
-export function unitMarks(track: readonly (readonly [number, number])[], starts: readonly number[], units: Units): number[] {
-  const every = units === "imperial" ? METRES_PER_MILE : 1000;
-  const begins = new Set(starts);
-  const marks: number[] = [];
-  let walked = 0;
-  for (let i = 1; i < track.length; i++) {
-    if (begins.has(i)) continue;
-    const a = track[i - 1];
-    const b = track[i];
-    if (a === undefined || b === undefined) continue;
-    walked += geodesicMetres(a[0], a[1], b[0], b[1]);
-    if (walked >= every * (marks.length + 1)) marks.push(i);
-  }
-  return marks;
+/** Where each whole kilometre or mile falls, as [lat, lng] at its exact metre (37b-i): the run's own
+ *  distance over the same steps as its splits, never the gap between two stretches. */
+export function unitMarks(track: readonly (readonly [number, number])[], starts: readonly number[], units: Units): [number, number][] {
+  return unitMarkPoints(track, starts, units === "imperial" ? METRES_PER_MILE : 1000);
 }
 
 /** Each stretch its own line: a pause is a gap, never a straight line across it. */

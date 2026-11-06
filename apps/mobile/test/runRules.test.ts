@@ -102,9 +102,13 @@ describe("a route laid flat", () => {
   it("puts a stone at each whole kilometre, never counting the gap across a pause", () => {
     // A degree of latitude at the equator is 110,574 m on the WGS84 ellipsoid.
     const north = (m: number): [number, number] => [m / 110_574, 0];
-    // 1.5 km, a pause during which the person moved 3 km, then 0.6 km more.
+    // 1.5 km, a pause during which the person moved 3 km, then 0.6 km more: the second kilometre
+    // ends 500 m into the stretch after the pause, where no point was kept.
     const track = [north(0), north(500), north(1000), north(1500), north(4500), north(5100)];
-    expect(unitMarks(track, [0, 4], "metric")).toEqual([2, 5]);
+    const marks = unitMarks(track, [0, 4], "metric");
+    expect(marks).toHaveLength(2);
+    expect((marks[0]?.[0] ?? 0) * 110_574).toBeCloseTo(1000, 1);
+    expect((marks[1]?.[0] ?? 0) * 110_574).toBeCloseTo(5000, 1);
   });
 });
 

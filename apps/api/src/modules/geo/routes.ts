@@ -11,6 +11,7 @@ import type { RedisLike } from "../../redis.js";
 import { createDualRateLimit } from "../auth/rateLimit.js";
 import { requireQuota } from "../quotas/service.js";
 import type { GeocodeResolver } from "./geocode.js";
+import { mapSourceFor } from "./mapSource.js";
 import { createOrsRouteProvider, type RouteProvider } from "./ors.adapter.js";
 import { ForeignRunError } from "./repo.js";
 import { generateRoutesRequestSchema, geoListQuerySchema, saveRunRequestSchema, savedRouteCreateSchema } from "./schemas.js";
@@ -199,6 +200,11 @@ export function registerGeoRoutes(
       }
     },
   );
+
+  // ── the map under a run (ROADMAP 37b-i) ────────────────────────────────────
+  // The same answer for everyone, worked out at start: no database, nothing about the person.
+  const map = { map: mapSourceFor(deps.config) };
+  app.get("/v1/geo/map", { preHandler: [app.authenticate] }, async (_req, reply) => reply.send(map));
 
   // ── runs (read) ────────────────────────────────────────────────────────────
 

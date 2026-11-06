@@ -50,6 +50,18 @@ const envSchema = z.object({
   // 503s cleanly (fail-closed, OPENAI_API_KEY precedent); the browse/read side
   // (saved_routes, runs) works without it.
   ORS_API_KEY: z.string().min(1).optional(),
+  // The map the phones draw runs on (ROADMAP 37b-i): OpenFreeMap's unless set. "protomaps" moves every
+  // phone to our own copy of Protomaps' world file and the letters kept beside it, the day OpenFreeMap
+  // stops (RUNBOOK/switch-the-map.md); no new app version is needed.
+  MAP_SOURCE: z.enum(["openfreemap", "protomaps"]).default("openfreemap"),
+  MAP_PROTOMAPS_FILE: z.string().trim().max(400).regex(/^https?:\/\/[^\s"'<>\\]+\.pmtiles$/, "MAP_PROTOMAPS_FILE must be the address of a .pmtiles file").optional(),
+  MAP_PROTOMAPS_GLYPHS: z
+    .string()
+    .trim()
+    .max(400)
+    .regex(/^https?:\/\/[^\s"'<>\\]+$/, "MAP_PROTOMAPS_GLYPHS must be an address")
+    .refine((at) => at.includes("{fontstack}") && at.includes("{range}"), "MAP_PROTOMAPS_GLYPHS must hold {fontstack} and {range}")
+    .optional(),
   // Phone notifications (ROADMAP Stage 5 item 18b-i): the path of the service account's key file that
   // Firebase's console downloads, kept outside the repository. Unset = the worker sends none.
   FIREBASE_SERVICE_ACCOUNT_FILE: z.string().trim().min(1).optional(),
@@ -233,6 +245,16 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
       path: ["SUPPORT_EMAIL"],
       message: "SUPPORT_EMAIL is required in production (the help address shown where members post)",
     })
+    .refine((c) => c.MAP_SOURCE !== "protomaps" || (c.MAP_PROTOMAPS_FILE !== undefined && c.MAP_PROTOMAPS_GLYPHS !== undefined), {
+      path: ["MAP_PROTOMAPS_FILE"],
+      message: "MAP_PROTOMAPS_FILE and MAP_PROTOMAPS_GLYPHS are required when MAP_SOURCE is protomaps",
+    })
+    .refine(
+      (c) =>
+        c.NODE_ENV !== "production" ||
+        [c.MAP_PROTOMAPS_FILE, c.MAP_PROTOMAPS_GLYPHS].every((at) => at === undefined || at.startsWith("https://")),
+      { path: ["MAP_PROTOMAPS_FILE"], message: "MAP_PROTOMAPS_FILE and MAP_PROTOMAPS_GLYPHS must be https:// in production" },
+    )
     .refine((c) => (c.PADDLE_API_KEY === undefined) === (c.PADDLE_CLIENT_TOKEN === undefined), {
       path: ["PADDLE_CLIENT_TOKEN"],
       message: "PADDLE_API_KEY and PADDLE_CLIENT_TOKEN are set together",

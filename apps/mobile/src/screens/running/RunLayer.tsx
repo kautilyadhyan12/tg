@@ -6,6 +6,7 @@ import { AppState, Linking, Pressable, ScrollView, StyleSheet, TextInput, Vibrat
 import * as Location from "expo-location";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { RUN_MAX_POINTS, geodesicMetres, runSums, userProfileResponseSchema, type RunSums, type SaveRunRequest, type Units } from "@app/shared";
+import { BottomRoom } from "../../look/BottomRoom";
 import { Button } from "../../look/Button";
 import { colours, orangeGradient, shadows, sizes } from "../../look/colours";
 import { Icon } from "../../look/Icon";
@@ -33,7 +34,9 @@ import {
   subscribeRun,
   type LiveRun,
 } from "./recorder";
+import { useMapSource } from "./mapSource";
 import { PaceWave, RouteLine } from "./RunDrawings";
+import { RunMap, useMapScheme } from "./RunMap";
 import { useRunOutbox } from "./RunOutbox";
 import { EFFORT_ENDS, clock, distance, leftOutLine, pace, paceWord, runName, runWhen, unitWord, METRES_PER_MILE } from "./runWords";
 
@@ -170,9 +173,21 @@ export function RunLayerProvider({ children }: { children: ReactNode }) {
     [start, run, units, done],
   );
 
+  const barUp = run !== null && counting === null && !shown;
   return (
     <RunLayerContext.Provider value={value}>
-      {children}
+      {/* Every tab's page keeps room at its foot for the bar while it is up. */}
+      <BottomRoom.Provider value={barUp ? RUN_BAR_ROOM : 0}>{children}</BottomRoom.Provider>
+      {barUp ? (
+        <RunBar
+          run={run}
+          units={units}
+          kg={kg}
+          onOpen={() => {
+            setShown(true);
+          }}
+        />
+      ) : null}
       <Modal visible={counting !== null || (run !== null && shown)} animationType="slide" statusBarTranslucent navigationBarTranslucent onRequestClose={() => { setShown(false); }}>
         {counting !== null ? (
           <Countdown onGo={() => void go()} />
@@ -305,17 +320,63 @@ function GpsPill({ gps }: { gps: Gps }) {
   );
 }
 
-function Live({ run, units, kg, onHide }: { run: LiveRun; units: Units; kg: number; onHide: () => void }) {
+/** The run's moving time in seconds, as the summary gives it: pauses, stretches left out and standing
+ *  with no pause pressed are all left out. */
+function movingSeconds(run: LiveRun, now: number, sums: RunSums | null): number {
+  const elapsed = elapsedMs(run, now);
+  const paused = closedPauses(run, elapsed).reduce((t, [a, b]) => t + (b - a), 0);
+  return Math.max(0, elapsed - paused - ((sums?.leftOutS ?? 0) + (sums?.stillS ?? 0)) * 1000) / 1000;
+}
+
+/** Room the run's own bar keeps over a page's foot, above the tab bar (37b-i). */
+export const RUN_BAR_ROOM = 92;
+
+/** The run that is on, seen from every tab once its own screen is put away (Kd, 37b-i: "when I am out
+ *  of running page mid a run there is no pop up or button of run that is still on"): what it is doing,
+ *  its time and distance, and a tap opens it again. */
+function RunBar({ run, units, kg, onOpen }: { run: LiveRun; units: Units; kg: number; onOpen: () => void }) {
   const insets = useSafeAreaInsets();
   const { now, sums } = useLiveNumbers(run, kg);
-  const elapsed = elapsedMs(run, now);
-  const paused = closedPauses(run, elapsedMs(run, now)).reduce((t, [a, b]) => t + (b - a), 0);
+  const word = run.phase === "finished" ? "Run finished" : run.phase === "paused" ? "Run paused" : "Run in progress";
+  const line = run.phase === "finished" ? "Not saved yet · Open to save" : `${clock(movingSeconds(run, now, sums))} · ${distance(sums?.distanceM ?? 0, units)} ${unitWord(units)}`;
+  return (
+    <View pointerEvents="box-none" style={[styles.barWrap, { bottom: sizes.tabBar + insets.bottom + 10 }]}>
+      <Pressable accessibilityRole="button" accessibilityLabel="Open run" onPress={onOpen} style={({ pressed }) => [styles.bar, pressed ? styles.pressed : null]}>
+        <View style={[styles.barDot, run.phase === "running" ? styles.barDotOn : styles.barDotOff]} />
+        <View style={styles.grow}>
+          <Txt kind="strong" numberOfLines={1}>
+            {word}
+          </Txt>
+          <Txt kind="small" colour="textSoft" numberOfLines={1}>
+            {line}
+          </Txt>
+        </View>
+        <Txt kind="small" colour="orange" style={styles.barOpen}>
+          Open
+        </Txt>
+      </Pressable>
+    </View>
+  );
+}
+
+function Live({ run, units, kg, onHide }: { run: LiveRun; units: Units; kg: number; onHide: () => void }) {
+  const insets = useSafeAreaInsets();
+  const { session } = useSession();
+  const { now, sums } = useLiveNumbers(run, kg);
   // The same moving time the summary gives: standing with no pause pressed is left out too.
-  const moving = Math.max(0, elapsed - paused - ((sums?.leftOutS ?? 0) + (sums?.stillS ?? 0)) * 1000) / 1000;
+  const moving = movingSeconds(run, now, sums);
   const metres = sums?.distanceM ?? 0;
   const per = units === "imperial" ? METRES_PER_MILE : 1000;
   const isPaused = run.phase === "paused";
   const [busy, setBusy] = useState(false);
+  // The map first (Kd, 37b-i: "when run start it should be by default map"), Numbers beside Pause.
+  const [view, setView] = useState<"map" | "numbers">("map");
+  const [panel, setPanel] = useState(0);
+  const source = useMapSource(session);
+  const lastPoint = run.points[run.points.length - 1];
+  const here: [number, number] | null = lastPoint === undefined ? null : [lastPoint[1], lastPoint[2]];
+  const scheme = useMapScheme(here);
+  const track = sums !== null && sums.track.length > 0 ? sums.track : here === null ? [] : [here];
   const press = (work: () => Promise<unknown>) => () => {
     if (busy) return;
     setBusy(true);
@@ -323,28 +384,83 @@ function Live({ run, units, kg, onHide }: { run: LiveRun; units: Units; kg: numb
       setBusy(false);
     });
   };
+  const onMap = view === "map";
+  const top = (
+    <View style={styles.liveTop}>
+      {isPaused ? (
+        <View style={styles.pausedRow}>
+          <View style={styles.pausedTag}>
+            <Txt kind="small" colour="orange">
+              {run.pausedByPerson ? "Paused" : "Auto-paused"}
+            </Txt>
+          </View>
+          {run.pausedByPerson ? null : <Button kind="link" label="Turn off Auto-pause" onPress={press(() => chooseAutoPause(false))} />}
+        </View>
+      ) : (
+        <GpsPill gps={gpsLight(run.lastFix, now)} />
+      )}
+      <Pressable accessibilityRole="button" accessibilityLabel="Back to the app" onPress={onHide} hitSlop={10} style={[styles.hide, onMap ? styles.hideOnMap : null]}>
+        <Icon name="down" size={22} colour={onMap ? "text" : "textSoft"} />
+      </Pressable>
+    </View>
+  );
+  const controls = (
+    <View style={styles.controls}>
+      <SideButton
+        icon={onMap ? "timer" : "map"}
+        label={onMap ? "Numbers" : "Map"}
+        onPress={() => {
+          setView(onMap ? "numbers" : "map");
+        }}
+      />
+      {isPaused ? (
+        <>
+          <RoundButton key="finish" label="Finish" kind="ghost" busy={busy} onPress={press(() => finishRun())} />
+          <RoundButton key="resume" label="Resume" kind="main" busy={busy} onPress={press(() => resumeRun())} />
+        </>
+      ) : (
+        <>
+          <RoundButton key="pause" label="Pause" kind="main" busy={busy} onPress={press(() => pauseRun())} />
+          {/* Keeps Pause in the middle, the side button's width on the other side. */}
+          <View style={styles.sideSpace} />
+        </>
+      )}
+    </View>
+  );
+
+  if (onMap) {
+    return (
+      <View style={styles.mapPage}>
+        {track.length === 0 ? null : (
+          <View style={StyleSheet.absoluteFill}>
+            <RunMap track={track} starts={sums?.trackStarts ?? [0]} units={units} mode="live" scheme={scheme} source={source} under={panel} over={insets.top + 64} testID="live-map" />
+          </View>
+        )}
+        {isPaused ? <View style={styles.pausedBar} /> : null}
+        <View pointerEvents="box-none" style={[styles.mapTop, { paddingTop: insets.top + 12 }]}>
+          {top}
+        </View>
+        <View
+          style={[styles.panel, { paddingBottom: insets.bottom + 20 }]}
+          onLayout={(e) => {
+            setPanel(Math.round(e.nativeEvent.layout.height));
+          }}
+        >
+          <View style={styles.panelFigures}>
+            <Figure label="Time" value={clock(moving)} dim={isPaused} />
+            <Figure label="Distance" value={distance(metres, units)} unit={unitWord(units)} dim={isPaused} />
+            <Figure label="Current pace" value={paceNow(run, units)} unit={paceWord(units)} dim={isPaused} />
+          </View>
+          {controls}
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={[styles.livePage, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 24 }]}>
       {isPaused ? <View style={styles.pausedBar} /> : null}
-      <View style={styles.liveTop}>
-        {isPaused ? (
-          <View style={styles.pausedRow}>
-            <View style={styles.pausedTag}>
-              <Txt kind="small" colour="orange">
-                {run.pausedByPerson ? "Paused" : "Auto-paused"}
-              </Txt>
-            </View>
-            {run.pausedByPerson ? null : (
-              <Button kind="link" label="Turn off Auto-pause" onPress={press(() => chooseAutoPause(false))} />
-            )}
-          </View>
-        ) : (
-          <GpsPill gps={gpsLight(run.lastFix, now)} />
-        )}
-        <Pressable accessibilityRole="button" accessibilityLabel="Back to the app" onPress={onHide} hitSlop={10} style={styles.hide}>
-          <Icon name="down" size={22} colour="textSoft" />
-        </Pressable>
-      </View>
+      {top}
       <ScrollView style={styles.grow} contentContainerStyle={styles.liveNumbers}>
         <Txt kind="eyebrow" colour="textFaint">
           Time
@@ -378,16 +494,21 @@ function Live({ run, units, kg, onHide }: { run: LiveRun; units: Units; kg: numb
           <Figure label={units === "imperial" ? "This mile" : "This km"} value={distance(metres % per, units)} unit={unitWord(units)} dim={isPaused} />
         </View>
       </ScrollView>
-      <View style={styles.controls}>
-        {isPaused ? (
-          <>
-            <RoundButton key="finish" label="Finish" kind="ghost" busy={busy} onPress={press(() => finishRun())} />
-            <RoundButton key="resume" label="Resume" kind="main" busy={busy} onPress={press(() => resumeRun())} />
-          </>
-        ) : (
-          <RoundButton key="pause" label="Pause" kind="main" busy={busy} onPress={press(() => pauseRun())} />
-        )}
-      </View>
+      {controls}
+    </View>
+  );
+}
+
+/** The run's second thing to do, beside its main button: the map or the big numbers. */
+function SideButton({ icon, label, onPress }: { icon: "map" | "timer"; label: string; onPress: () => void }) {
+  return (
+    <View style={styles.sideWrap}>
+      <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} style={({ pressed }) => [styles.side, pressed ? styles.pressed : null]}>
+        <Icon name={icon} size={22} />
+      </Pressable>
+      <Txt kind="small" colour="textSoft" numberOfLines={1} fit style={styles.roundLabel}>
+        {label}
+      </Txt>
     </View>
   );
 }
@@ -395,7 +516,8 @@ function Live({ run, units, kg, onHide }: { run: LiveRun; units: Units; kg: numb
 function Figure({ label, value, unit, dim }: { label: string; value: string; unit?: string; dim: boolean }) {
   return (
     <View style={styles.figure}>
-      <Txt kind="eyebrow" colour="textFaint">
+      {/* One line, so the three numbers under the map stand level on a small phone (37b-i). */}
+      <Txt kind="eyebrow" colour="textFaint" numberOfLines={1} fit>
         {label}
       </Txt>
       <Txt style={[styles.figureValue, dim ? styles.dim : null]} fit numberOfLines={1}>
@@ -441,6 +563,12 @@ function Summary({ run, units, kg, onSaved }: { run: LiveRun; units: Units; kg: 
   const insets = useSafeAreaInsets();
   const finished = run.finishedMs ?? 0;
   const sums = useMemo(() => runSums(run.points, closedPauses(run, finished), finished, kg), [run, finished, kg]);
+  const { session } = useSession();
+  const source = useMapSource(session);
+  const scheme = useMapScheme(sums.track[sums.track.length - 1] ?? null);
+  const [bigMap, setBigMap] = useState(false);
+  // The map's own word on its streets (null until it says), so the line below is true whichever failed.
+  const [mapDrawn, setMapDrawn] = useState<boolean | null>(null);
   const startedAt = new Date(run.startedAt);
   const [name, setName] = useState(runName(startedAt));
   const [naming, setNaming] = useState(false);
@@ -544,9 +672,26 @@ function Summary({ run, units, kg, onSaved }: { run: LiveRun; units: Units; kg: 
         {sums.track.length > 1 ? (
           <View style={styles.card}>
             <Txt kind="h3">Route</Txt>
-            <View style={styles.routeBox}>
-              <RouteLine track={sums.track} starts={sums.trackStarts} units={units} height={200} testID="summary-route" />
+            <View style={styles.mapBox}>
+              <RunMap
+                track={sums.track}
+                starts={sums.trackStarts}
+                units={units}
+                mode="box"
+                scheme={scheme}
+                source={source}
+                onOpen={() => {
+                  setBigMap(true);
+                }}
+                onDrawn={setMapDrawn}
+                testID="summary-map"
+              />
             </View>
+            {mapDrawn === false ? (
+              <Txt kind="small" colour="textFaint" style={styles.centredWords}>
+                The map can't load right now.
+              </Txt>
+            ) : null}
           </View>
         ) : null}
         {/* A wave needs two to compare: a run under two kilometres or miles has its pace above. */}
@@ -622,6 +767,39 @@ function Summary({ run, units, kg, onSaved }: { run: LiveRun; units: Units; kg: 
           }}
         />
       </ScrollView>
+      <Modal
+        visible={bigMap}
+        animationType="fade"
+        statusBarTranslucent
+        navigationBarTranslucent
+        onRequestClose={() => {
+          setBigMap(false);
+        }}
+      >
+        <View style={styles.mapPage}>
+          <RunMap track={sums.track} starts={sums.trackStarts} units={units} mode="full" scheme={scheme} source={source} over={insets.top + 56} under={insets.bottom} testID="full-map" />
+          <View style={[styles.bigTop, { top: insets.top + 10 }]}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Close the map"
+              onPress={() => {
+                setBigMap(false);
+              }}
+              style={[styles.hide, styles.hideOnMap]}
+            >
+              <Icon name="x" size={20} />
+            </Pressable>
+            <View style={styles.bigTitle}>
+              <Txt kind="body" numberOfLines={1} style={styles.bigName}>
+                {name}
+              </Txt>
+              <Txt kind="small" colour="textSoft">
+                {`${distance(sums.distanceM, units)} ${unitWord(units)} · ${clock(sums.movingS)}`}
+              </Txt>
+            </View>
+          </View>
+        </View>
+      </Modal>
       <Sheet
         open={asking}
         title="Discard this run?"
@@ -697,6 +875,51 @@ const styles = StyleSheet.create({
   pausedBar: { position: "absolute", top: 0, left: 0, right: 0, height: 5, backgroundColor: colours.orange, boxShadow: shadows.dotGlow },
   liveTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", minHeight: sizes.press },
   hide: { width: sizes.press, height: sizes.press, alignItems: "center", justifyContent: "center" },
+  // The run's own bar, over every tab while its screen is put away (37b-i).
+  barWrap: { position: "absolute", left: 12, right: 12 },
+  bar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    minHeight: 60,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: sizes.boxRadius,
+    backgroundColor: colours.raised,
+    borderWidth: 1,
+    borderColor: colours.orangeLine,
+    boxShadow: shadows.sheet,
+  },
+  barDot: { width: 10, height: 10, borderRadius: sizes.round },
+  barDotOn: { backgroundColor: colours.orange, boxShadow: shadows.dotGlow },
+  barDotOff: { backgroundColor: colours.textFaint },
+  barOpen: { fontFamily: fonts.bold },
+  // Over the map: a round of the page's own dark, so the arrow reads on a light map too.
+  hideOnMap: { borderRadius: sizes.round, backgroundColor: colours.veil, borderWidth: 1, borderColor: colours.lineStrong },
+  // The run on the map (37b-i): the map under everything, the top over it, the numbers at the foot.
+  mapPage: { flex: 1, backgroundColor: colours.page },
+  mapTop: { position: "absolute", top: 0, left: 0, right: 0, paddingHorizontal: 18 },
+  panel: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: colours.page,
+    borderTopLeftRadius: sizes.boxRadius,
+    borderTopRightRadius: sizes.boxRadius,
+    paddingTop: 22,
+    paddingHorizontal: 22,
+    boxShadow: shadows.sheet,
+  },
+  panelFigures: { flexDirection: "row", gap: 12 },
+  sideWrap: { alignItems: "center", width: 84, paddingTop: 20 },
+  side: { width: 56, height: 56, borderRadius: sizes.round, alignItems: "center", justifyContent: "center", borderWidth: 1.5, borderColor: colours.grab, backgroundColor: colours.fill },
+  sideSpace: { width: 84 },
+  // After Finish, the map of the run and its full size.
+  mapBox: { height: 250, borderRadius: 14, overflow: "hidden", borderWidth: 1, borderColor: colours.line, backgroundColor: colours.tabBar },
+  bigTop: { position: "absolute", left: 16, right: 16, flexDirection: "row", alignItems: "center", gap: 10 },
+  bigTitle: { flexShrink: 1, borderRadius: 14, backgroundColor: colours.veil, borderWidth: 1, borderColor: colours.lineStrong, paddingHorizontal: 12, paddingVertical: 6 },
+  bigName: { fontFamily: fonts.bold },
   pill: { flexDirection: "row", alignItems: "center", gap: 7, paddingHorizontal: 12, paddingVertical: 7, borderRadius: sizes.round, backgroundColor: colours.veil, borderWidth: 1, borderColor: colours.lineStrong },
   dot: { width: 8, height: 8, borderRadius: sizes.round },
   dotGood: { backgroundColor: colours.good, boxShadow: `0 0 10px ${colours.good}` },
@@ -714,7 +937,7 @@ const styles = StyleSheet.create({
   figure: { flex: 1, gap: 6 },
   figureValue: { fontFamily: fonts.bold, fontSize: 34, lineHeight: 40, letterSpacing: -1, color: colours.text },
   figureUnit: { fontFamily: fonts.semibold, fontSize: 15, color: colours.textSoft, letterSpacing: 0 },
-  controls: { flexDirection: "row", justifyContent: "center", gap: 38, paddingTop: 12 },
+  controls: { flexDirection: "row", justifyContent: "center", gap: 16, paddingTop: 12 },
   roundWrap: { alignItems: "center" },
   round: { width: 96, height: 96, borderRadius: sizes.round, alignItems: "center", justifyContent: "center" },
   // Both keep a border of one width: Android stops the app when a view gains a gradient as its
@@ -741,7 +964,6 @@ const styles = StyleSheet.create({
   tileValue: { fontFamily: fonts.bold, fontSize: 22, lineHeight: 28, color: colours.text },
   leftOut: { flexDirection: "row", gap: 10, alignItems: "flex-start", borderRadius: 16, padding: 13, backgroundColor: colours.goldFill, borderWidth: 1, borderColor: colours.goldLine },
   card: { borderRadius: sizes.boxRadius, backgroundColor: colours.box, borderWidth: 1, borderColor: colours.line, padding: 16, gap: 12 },
-  routeBox: { borderRadius: 14, backgroundColor: colours.tabBar, borderWidth: 1, borderColor: colours.line, overflow: "hidden" },
   feel: { flexDirection: "row", gap: 5 },
   feelDot: { flex: 1, minHeight: sizes.press, borderRadius: sizes.round, alignItems: "center", justifyContent: "center", backgroundColor: colours.fill, borderWidth: 1, borderColor: colours.line },
   feelPicked: { experimental_backgroundImage: orangeGradient, borderColor: "transparent", boxShadow: shadows.chip },
