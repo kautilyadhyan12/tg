@@ -855,11 +855,13 @@ function Summary({ run, units, kg, onSaved }: { run: LiveRun; units: Units; kg: 
           setCredits(false);
         }}
       >
-        {HEIGHT_MAP_CREDITS.map((line) => (
-          <Txt key={line} kind="small" colour="textSoft">
-            {line}
-          </Txt>
-        ))}
+        <ScrollView style={styles.shrink} contentContainerStyle={[styles.creditList, { paddingBottom: insets.bottom + 16 }]}>
+          {HEIGHT_MAP_CREDITS.map((line) => (
+            <Txt key={line} kind="small" colour="textSoft">
+              {line}
+            </Txt>
+          ))}
+        </ScrollView>
       </Sheet>
       <Sheet
         open={asking}
@@ -914,6 +916,8 @@ export const openAppSettings = (): void => {
 const styles = StyleSheet.create({
   grow: { flex: 1 },
   creditRow: { flexDirection: "row", alignItems: "flex-start", gap: 8, paddingTop: 4 },
+  creditList: { gap: 12 },
+  shrink: { flexShrink: 1 },
   link: { textDecorationLine: "underline" },
   between: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   dim: { color: colours.textDim },
