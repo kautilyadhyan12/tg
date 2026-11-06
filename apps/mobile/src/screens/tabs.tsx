@@ -31,9 +31,6 @@ const WORKOUT_PARTS = [
   { value: "running", label: "Running" },
 ] as const;
 
-/** Exercises, My Workout and Running across the picture's top, as drawn (docs/design/phone/pages/Workout):
- *  it opens on Exercises, where the Dashboard's Browse Exercises points. Running is 37a's; the other two come
- *  with exercise folder 2's jobs. */
 // The streak reminder's tap opens Workout on Running (19e-ii): a run is what keeps a streak from the phone today.
 let runningAsked = false;
 const runningWatchers = new Set<() => void>();
@@ -42,6 +39,9 @@ export function openRunning(): void {
   for (const watcher of runningWatchers) watcher();
 }
 
+/** Exercises, My Workout and Running across the picture's top, as drawn (docs/design/phone/pages/Workout):
+ *  it opens on Exercises, where the Dashboard's Browse Exercises points. Running is 37a's; the other two come
+ *  with exercise folder 2's jobs. */
 export function WorkoutScreen() {
   const { state } = useSession();
   const units = (state.kind === "in" ? accountUnits(state.user.units) : null) ?? "metric";
