@@ -36,6 +36,10 @@ day (counted in Redis). A run in more than 6 squares (no runner's) has no number
 - `HEIGHTS_MOST_SQUARES_KEPT`: the most squares each map keeps (200 unless set). Reaching it logs
   `geo.heights_disk_full` at error: new places then wait, and after three days have no number. Raise it
   when real members reach that many places and the disk has room (ls `HEIGHTS_DIR`: `*.json` and `*.hgt`).
+  If made-up runs filled it (about 34 accounts can, at 6 new squares each a day), the files are only a copy:
+  stop the api and the worker, delete every `.tif`, `.json` and `.hgt` in `HEIGHTS_DIR`, and start them
+  again. The places members run in come back as they run, each person bringing 6 a day. The api and the
+  worker each count the folder before a download, so the ceiling can be passed by a square or two.
 
 ## How a run gets its number
 

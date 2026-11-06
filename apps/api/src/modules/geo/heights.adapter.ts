@@ -174,12 +174,16 @@ function squareStore<T>(deps: Omit<HeightMapDeps, "copernicus" | "mapzen">, kind
         deps.log.error({ event: "geo.heights_disk_full", map: kind.map, tile: name, mostKept }, "height map squares kept are at their most");
         return "full";
       }
-      while (began.length > 0 && now() - (began[0] ?? 0) >= HOUR_MS) began.shift();
-      if (began.length >= anHour) {
-        deps.log.warn({ event: "geo.heights_hour_full", map: kind.map, tile: name }, "new height map pieces this hour used up");
-        return "full";
+      // Only a square's first try counts against the hour: a square that failed is tried again every ten
+      // minutes, and while a source is down those tries would use up every new place's turn (L6).
+      if (!failedAt.has(name)) {
+        while (began.length > 0 && now() - (began[0] ?? 0) >= HOUR_MS) began.shift();
+        if (began.length >= anHour) {
+          deps.log.warn({ event: "geo.heights_hour_full", map: kind.map, tile: name }, "new height map pieces this hour used up");
+          return "full";
+        }
+        began.push(now());
       }
-      began.push(now());
       return await fetchIt(name);
     });
     line = turn.catch(() => undefined);

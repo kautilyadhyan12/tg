@@ -323,6 +323,23 @@ describe("no request can fill the server's memory or disk (round one of 37b-ii, 
     expect(await map.heightsAt(d ?? [], 30_000, "ravi")).toEqual([30]);
   });
 
+  it("a square tried again after a failure does not use up a new square's turn in the hour", async () => {
+    let now = 7_000_000;
+    const calls: Call[] = [];
+    const { served, places } = squaresAlong(2);
+    const [first, second] = places;
+    // The first square's source answers 404 for now.
+    served.set(copUrl(26, 86), 404);
+    const map = mapOn(newDir(), fakeFetch(served, calls), { now: () => now, newSquaresAnHour: 2 });
+    expect(await map.heightsAt(first === undefined ? [] : [first], 5000)).toBe("waiting");
+    // Ten minutes on it is tried again, and fails again: that try is not a new square's.
+    now += 11 * 60 * 1000;
+    expect(await map.heightsAt(first === undefined ? [] : [first], 5000)).toBe("waiting");
+    expect(calls.filter((c) => c.url === copUrl(26, 86))).toHaveLength(2);
+    // So the second square still has its turn this hour.
+    expect(await map.heightsAt(second === undefined ? [] : [second], 5000)).toEqual([30]);
+  });
+
   it("past the new squares an hour allows, 'waiting' with nothing more asked; an hour on, the rest", async () => {
     const calls: Call[] = [];
     let now = 5_000_000;
