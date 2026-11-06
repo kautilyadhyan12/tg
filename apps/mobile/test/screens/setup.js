@@ -352,3 +352,47 @@ jest.mock("../../src/screens/running/runVoiceNative", () => {
     },
   };
 });
+// The map is MapLibre's, drawn by the phone (37b-i). A test's map is a plain view, and each map drawn
+// is kept (`maps`, newest last, `gone` once closed) with what it was given: its style, the shapes of
+// each of its sources, its layers, its camera and its markers. A test reads them, and says back what
+// the map would (`props.onPress`, `props.onRegionWillChange`).
+jest.mock("@maplibre/maplibre-react-native", () => {
+  const { createContext, createElement, useContext, useEffect, useRef } = require("react");
+  const { View } = require("react-native");
+  const maps = [];
+  const Drawn = createContext(null);
+  function Map(props) {
+    const self = useRef(null);
+    if (self.current === null) {
+      self.current = { props, sources: {}, layers: {}, camera: null, markers: [], gone: false };
+      maps.push(self.current);
+    }
+    self.current.props = props;
+    self.current.markers = [];
+    useEffect(() => () => {
+      self.current.gone = true;
+    }, []);
+    return createElement(Drawn.Provider, { value: self.current }, createElement(View, { testID: "maplibre-map" }, props.children));
+  }
+  function GeoJSONSource(props) {
+    const map = useContext(Drawn);
+    if (map !== null) map.sources[props.id] = props.data;
+    return createElement(View, null, props.children);
+  }
+  function Layer(props) {
+    const map = useContext(Drawn);
+    if (map !== null) map.layers[props.id] = props;
+    return null;
+  }
+  function Camera(props) {
+    const map = useContext(Drawn);
+    if (map !== null) map.camera = props;
+    return null;
+  }
+  function Marker(props) {
+    const map = useContext(Drawn);
+    if (map !== null) map.markers.push(props.lngLat);
+    return createElement(View, { testID: "map-marker" }, props.children);
+  }
+  return { Map, GeoJSONSource, Layer, Camera, Marker, maps };
+});

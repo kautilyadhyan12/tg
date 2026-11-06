@@ -14,6 +14,8 @@ Current entries:
 - `set-up-razorpay.md` — Razorpay's keys, plans and webhook for Indian gyms (ROADMAP 1d-i)
 - `stop-square.md` — taking back our app's access to one gym's or every gym's Square account
   (ROADMAP 18d-ii)
+- `switch-the-map.md` — moving every phone's run map from OpenFreeMap to our own copy of the
+  world map, with no new app version (ROADMAP Stage 5 37b-i)
 - (P0.4b adds deploy/rollback; Part 8 tasks add alerts, backup/restore drill,
   break-glass, secret rotation)
 

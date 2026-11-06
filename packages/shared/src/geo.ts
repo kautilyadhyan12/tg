@@ -129,6 +129,38 @@ export type SavedRun = z.infer<typeof savedRunSchema>;
 export const saveRunResponseSchema = z.object({ status: z.enum(["created", "duplicate"]), run: savedRunSchema });
 export type SaveRunResponse = z.infer<typeof saveRunResponseSchema>;
 
+// ── The map under a run (GET /v1/geo/map; ROADMAP 37b-i) ───────────────────────────────────────
+// Which map the phones draw a run on, as the server says: OpenFreeMap's, or our own copy of
+// Protomaps' world file the day OpenFreeMap stops (RUNBOOK/switch-the-map.md), with no new app
+// version. The two name their layers differently, so the phone keeps a look for each `maker`. Only
+// map squares and letters are asked of these addresses: the run itself is drawn on the phone.
+const mapAddress = z.string().max(500).regex(/^(pmtiles:\/\/)?https?:\/\/[^\s"'<>\\]+$/);
+
+export const mapSourceSchema = z.object({
+  maker: z.enum(["openmaptiles", "protomaps"]),
+  /** The map squares: a TileJSON address, or `pmtiles://` and the address of one world file. */
+  tiles: mapAddress,
+  /** The letters of the street names: an address holding {fontstack} and {range}. */
+  glyphs: mapAddress.refine((at) => at.includes("{fontstack}") && at.includes("{range}"), "glyphs needs {fontstack} and {range}"),
+  /** The landmarks' small pictures; null where the map has none this app draws. */
+  sprite: mapAddress.nullable(),
+  /** Shown in the map's corner, as OpenStreetMap's licence asks. */
+  credit: z.string().trim().min(1).max(120),
+});
+export type MapSource = z.infer<typeof mapSourceSchema>;
+
+export const mapSourceResponseSchema = z.object({ map: mapSourceSchema });
+
+/** OpenFreeMap's public map (openfreemap.org: free, no limit on views, commercial use allowed): what
+ *  the server sends unless it is switched, and what a phone draws before it has heard from the server. */
+export const OPENFREEMAP: MapSource = {
+  maker: "openmaptiles",
+  tiles: "https://tiles.openfreemap.org/planet",
+  glyphs: "https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf",
+  sprite: "https://tiles.openfreemap.org/sprites/ofm_f384/ofm",
+  credit: "OpenFreeMap © OpenMapTiles © OpenStreetMap",
+};
+
 // ── shared list query (cursor pagination, R7.3) ─────────────────────────────
 export const geoListQuerySchema = z
   .object({ limit: z.coerce.number().int().min(1).max(100).default(20), cursor: z.string().optional() })
@@ -152,13 +184,17 @@ export const keptRunStateSchema = z.object({
 });
 export const keptRunPointsSchema = z.array(z.tuple([z.number(), z.number(), z.number(), z.number().nullable()]));
 
-/** The run's choices (37a, 37a-ii): Auto-pause, the voice, and the account's units, kept for a run the
- *  phone carries on with the app closed. One missing or unreadable keeps its default. */
+/** The run's choices (37a, 37a-ii, 37b-i): Auto-pause, the voice, the account's units, kept for a run
+ *  the phone carries on with the app closed, and the map's colours. One missing or unreadable keeps its
+ *  default. */
 export const keptRunChoicesSchema = z.object({
   autoPause: z.boolean().catch(true),
   voice: z.boolean().catch(true),
   units: z.enum(["metric", "imperial"]).catch("metric"),
+  /** "auto": light from sunrise to sunset where the person is, dark after (Kd, 37b-i). */
+  mapColours: z.enum(["auto", "light", "dark"]).catch("auto"),
 });
+export type MapColours = KeptRunChoices["mapColours"];
 export type KeptRunChoices = z.infer<typeof keptRunChoicesSchema>;
 
 /** What Android hands the app with each batch of a run's points (expo-location's task data). */

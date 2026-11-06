@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { useEffect, useState } from "react";
+import { Pressable, StyleSheet, View } from "react-native";
 import { Button } from "../look/Button";
 import { Avatar, Badge, Card, PictureCard } from "../look/Card";
 import { sizes } from "../look/colours";
@@ -59,32 +59,9 @@ export function WorkoutScreen() {
     };
   }, []);
   const parts = <Segments options={WORKOUT_PARTS} selected={part} onPick={setPart} />;
-  const scroller = useRef<ScrollView>(null);
-  const showEnd = useCallback(() => {
-    requestAnimationFrame(() => {
-      scroller.current?.scrollToEnd({ animated: true });
-    });
-  }, []);
   // The three lie just under the picture, never over it (Kd, 37a's click-through: over it they cut it).
   return part === "running" ? (
-    <Page
-      scroller={scroller}
-      top={
-        <PictureTop
-          picture="track"
-          tall={0.8}
-          foot={
-            <View style={styles.runTitle}>
-              <Icon name="footprints" size={26} colour="orange" />
-              <Txt kind="h1">Run</Txt>
-            </View>
-          }
-        />
-      }
-    >
-      {parts}
-      <RunningTab units={units} showEnd={showEnd} />
-    </Page>
+    <RunningTab units={units} parts={parts} />
   ) : (
     <Page top={<PictureTop picture="exhero" tall={0.62} eyebrow="Exercise Library" title="Exercises" />}>
       {parts}
@@ -289,7 +266,6 @@ function SignOut() {
 }
 
 const styles = StyleSheet.create({
-  runTitle: { flexDirection: "row", alignItems: "center", gap: 10 },
   two: { flexDirection: "row", gap: 10 },
   half: { flex: 1 },
   row: { flexDirection: "row", alignItems: "center", gap: 12 },
