@@ -507,4 +507,35 @@ d("Raise the price for members already on a line (real Postgres)", { timeout: T 
     expect(keep.statusCode).toBe(409);
     expect(await sql`SELECT 1 FROM gym_price_raises WHERE held_membership_id = ${patM}`).toHaveLength(1);
   });
+
+  it("an email the email service refused is written again a day after; one that may have gone is never sent again", async () => {
+    clock = noon(chicagoToday);
+    const today = chicagoToday;
+    const gym = await makeGym("Retry Gym");
+    const line = await lineOf(gym);
+    const jo = await person(gym, "Jo Refused");
+    const joM = await give(gym, line, jo, addDays(today, -5));
+    const kit = await person(gym, "Kit Unknown");
+    const kitM = await give(gym, line, kit, addDays(today, -5));
+    expect((await saveAt(gym, line, 3000, { noticeDays: 7, membershipIds: [joM, kitM] })).statusCode).toBe(200);
+    const raises = await sql<{ id: string; held_membership_id: string }[]>`SELECT id, held_membership_id FROM gym_price_raises WHERE gym_id = ${gym.id}`;
+    const failed = async (heldId: string, entryId: string, reason: string) => {
+      const raiseId = raises.find((r) => r.held_membership_id === heldId)?.id ?? "";
+      await sql`
+        INSERT INTO gym_renewal_reminders (gym_id, held_membership_id, entry_id, occasion, what, about_on, state, reason, attempts, not_before, created_at, finished_at)
+        VALUES (${gym.id}, ${heldId}, ${entryId}, ${"price:" + raiseId}, 'price', ${addDays(today, 9)}::date, 'failed', ${reason}, 1, ${clock}, ${clock}, ${clock})`;
+    };
+    await failed(joM, jo, "provider_refused");
+    await failed(kitM, kit, "send_unknown");
+    expect((await pageOf(gym, jo)).priceRaises.map((r) => r.status.state)).toEqual(["not_sent"]);
+    expect((await pageOf(gym, kit)).priceRaises.map((r) => r.status.state)).toEqual(["maybe_sent"]);
+    // A day on, before the email's own day: nothing. On its day, two days on: Jo's is written again and goes; Kit's never.
+    clock = noon(addDays(today, 1));
+    expect((await remind()).sent).toBe(0);
+    clock = noon(addDays(today, 2));
+    expect((await remind()).sent).toBe(1);
+    expect(mailTo(await emailOf(jo))).toHaveLength(1);
+    expect(mailTo(await emailOf(kit))).toHaveLength(0);
+    expect((await pageOf(gym, jo)).priceRaises.map((r) => r.status.state)).toEqual(["sent"]);
+  });
 });
