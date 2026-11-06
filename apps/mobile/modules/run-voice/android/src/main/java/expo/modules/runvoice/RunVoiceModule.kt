@@ -152,11 +152,17 @@ class RunVoiceModule : Module() {
   /** A Western English voice whatever English the phone itself speaks (Kd, 2026-11-06: a phone in
    *  Indian English said the run in a thick Indian accent; "it should be western"): American English,
    *  then British, and the phone's own English only where neither is on it. Of that English, a voice
-   *  kept on the phone over one that needs the internet. */
+   *  kept on the phone over one that needs the internet. American and British count only when that
+   *  country's English is there (LANG_AVAILABLE alone means some English, perhaps the Indian one);
+   *  any English at all is the last try. */
   private fun useEnglish(tts: TextToSpeech): String {
     val own = Locale.getDefault()
-    val tries = listOf(Locale.US, Locale.UK) + (if (own.language == Locale.ENGLISH.language) listOf(own) else emptyList())
-    val picked = tries.firstOrNull { tts.setLanguage(it) >= TextToSpeech.LANG_AVAILABLE } ?: return "noEnglish"
+    val country = TextToSpeech.LANG_COUNTRY_AVAILABLE
+    val some = TextToSpeech.LANG_AVAILABLE
+    val tries = listOf(Locale.US to country, Locale.UK to country) +
+      (if (own.language == Locale.ENGLISH.language) listOf(own to some) else emptyList()) +
+      listOf(Locale.US to some)
+    val picked = tries.firstOrNull { (locale, least) -> tts.setLanguage(locale) >= least }?.first ?: return "noEnglish"
     val current: Voice? = tts.voice
     val sameEnglish = { v: Voice -> v.locale.language == picked.language && v.locale.country == picked.country }
     if (current == null || current.isNetworkConnectionRequired || !sameEnglish(current)) {

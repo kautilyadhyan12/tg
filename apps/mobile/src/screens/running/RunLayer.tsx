@@ -6,6 +6,7 @@ import { AppState, Linking, Pressable, ScrollView, StyleSheet, TextInput, Vibrat
 import * as Location from "expo-location";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { RUN_MAX_POINTS, geodesicMetres, runSums, userProfileResponseSchema, type RunSums, type SaveRunRequest, type Units } from "@app/shared";
+import { BottomRoom } from "../../look/BottomRoom";
 import { Button } from "../../look/Button";
 import { colours, orangeGradient, shadows, sizes } from "../../look/colours";
 import { Icon } from "../../look/Icon";
@@ -172,10 +173,12 @@ export function RunLayerProvider({ children }: { children: ReactNode }) {
     [start, run, units, done],
   );
 
+  const barUp = run !== null && counting === null && !shown;
   return (
     <RunLayerContext.Provider value={value}>
-      {children}
-      {run !== null && counting === null && !shown ? (
+      {/* Every tab's page keeps room at its foot for the bar while it is up. */}
+      <BottomRoom.Provider value={barUp ? RUN_BAR_ROOM : 0}>{children}</BottomRoom.Provider>
+      {barUp ? (
         <RunBar
           run={run}
           units={units}
@@ -335,7 +338,7 @@ function RunBar({ run, units, kg, onOpen }: { run: LiveRun; units: Units; kg: nu
   const insets = useSafeAreaInsets();
   const { now, sums } = useLiveNumbers(run, kg);
   const word = run.phase === "finished" ? "Run finished" : run.phase === "paused" ? "Run paused" : "Run in progress";
-  const line = run.phase === "finished" ? "Waiting to be saved" : `${clock(movingSeconds(run, now, sums))} · ${distance(sums?.distanceM ?? 0, units)} ${unitWord(units)}`;
+  const line = run.phase === "finished" ? "Not saved yet · Open to save" : `${clock(movingSeconds(run, now, sums))} · ${distance(sums?.distanceM ?? 0, units)} ${unitWord(units)}`;
   return (
     <View pointerEvents="box-none" style={[styles.barWrap, { bottom: sizes.tabBar + insets.bottom + 10 }]}>
       <Pressable accessibilityRole="button" accessibilityLabel="Open run" onPress={onOpen} style={({ pressed }) => [styles.bar, pressed ? styles.pressed : null]}>
@@ -369,7 +372,7 @@ function Live({ run, units, kg, onHide }: { run: LiveRun; units: Units; kg: numb
   // The map first (Kd, 37b-i: "when run start it should be by default map"), Numbers beside Pause.
   const [view, setView] = useState<"map" | "numbers">("map");
   const [panel, setPanel] = useState(0);
-  const { source } = useMapSource(session);
+  const source = useMapSource(session);
   const lastPoint = run.points[run.points.length - 1];
   const here: [number, number] | null = lastPoint === undefined ? null : [lastPoint[1], lastPoint[2]];
   const scheme = useMapScheme(here);
@@ -561,9 +564,11 @@ function Summary({ run, units, kg, onSaved }: { run: LiveRun; units: Units; kg: 
   const finished = run.finishedMs ?? 0;
   const sums = useMemo(() => runSums(run.points, closedPauses(run, finished), finished, kg), [run, finished, kg]);
   const { session } = useSession();
-  const { source, online } = useMapSource(session);
+  const source = useMapSource(session);
   const scheme = useMapScheme(sums.track[sums.track.length - 1] ?? null);
   const [bigMap, setBigMap] = useState(false);
+  // The map's own word on its streets (null until it says), so the line below is true whichever failed.
+  const [mapDrawn, setMapDrawn] = useState<boolean | null>(null);
   const startedAt = new Date(run.startedAt);
   const [name, setName] = useState(runName(startedAt));
   const [naming, setNaming] = useState(false);
@@ -678,12 +683,13 @@ function Summary({ run, units, kg, onSaved }: { run: LiveRun; units: Units; kg: 
                 onOpen={() => {
                   setBigMap(true);
                 }}
+                onDrawn={setMapDrawn}
                 testID="summary-map"
               />
             </View>
-            {online === false ? (
+            {mapDrawn === false ? (
               <Txt kind="small" colour="textFaint" style={styles.centredWords}>
-                The map shows when you're online.
+                The map can't load right now.
               </Txt>
             ) : null}
           </View>

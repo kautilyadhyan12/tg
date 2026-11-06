@@ -4,16 +4,16 @@
 // The map asks the map's own address for squares of map and letters and nothing else: the trail is
 // drawn here, on the phone, from the run it holds.
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { Animated, Pressable, StyleSheet, View } from "react-native";
+import { Animated, Linking, Pressable, StyleSheet, View } from "react-native";
 import { Camera, GeoJSONSource, Layer, Map as MapView, Marker, type CameraStop, type LngLat } from "@maplibre/maplibre-react-native";
 import Svg, { Circle, Defs, Path, RadialGradient, Stop } from "react-native-svg";
 import type { MapSource, Units } from "@app/shared";
 import { colours, sizes, trailColours } from "../../look/colours";
 import { Icon } from "../../look/Icon";
 import { useLoop, useMotion } from "../../look/Motion";
-import { Txt } from "../../look/Txt";
+import { fonts, Txt } from "../../look/Txt";
 import { mapScheme } from "./daylight";
-import { baseMapStyle, mapFonts, type MapScheme } from "./mapStyle";
+import { baseMapStyle, type MapScheme } from "./mapStyle";
 import { mapColoursChoice, subscribeRun } from "./recorder";
 import { endShapes, frontBearing, runBounds, stoneShapes, trailShapes } from "./runMapShapes";
 
@@ -28,6 +28,11 @@ const NEAREST_ZOOM = 17.5;
 export const CREDIT_SHOWN_MS = 5000;
 /** How close the map follows a run going on. */
 const FOLLOW_ZOOM = 16.2;
+/** How long a map has to draw its streets before its box says they can't load: a map whose squares
+ *  cannot be fetched (no signal, or the map's company down) says neither that it drew nor that it failed. */
+export const MAP_WAIT_MS = 10_000;
+/** Where the map's credit leads, as OpenStreetMap's attribution guidelines ask. */
+export const MAP_CREDIT_PAGE = "https://www.openstreetmap.org/copyright";
 
 /** Light or dark, by the person's choice and the sun where the run is; looked at again each minute. */
 export function useMapScheme(where: readonly [number, number] | null): MapScheme {
@@ -57,10 +62,12 @@ interface RunMapProps {
   over?: number;
   /** The box's tap: opens the map full size. */
   onOpen?: () => void;
+  /** Told whether the map drew its streets: true when it did, false when it failed or has not within MAP_WAIT_MS. */
+  onDrawn?: (drawn: boolean) => void;
   testID?: string;
 }
 
-export function RunMap({ track, starts, units, mode, scheme, source, under = 0, over = 0, onOpen, testID }: RunMapProps) {
+export function RunMap({ track, starts, units, mode, scheme, source, under = 0, over = 0, onOpen, onDrawn, testID }: RunMapProps) {
   const style = useMemo(() => baseMapStyle(source, scheme), [source, scheme]);
   const trail = useMemo(() => trailShapes(track, starts), [track, starts]);
   const stones = useMemo(() => (mode === "live" ? null : stoneShapes(track, starts, units)), [mode, track, starts, units]);
@@ -81,8 +88,20 @@ export function RunMap({ track, starts, units, mode, scheme, source, under = 0, 
       clearTimeout(fold);
     };
   }, [credit]);
+  // The map's own word on its streets, looked at again for each new look: what the person sees, not
+  // whether our server answered (the squares come from the map's company).
+  const drew = useRef(false);
+  useEffect(() => {
+    if (onDrawn === undefined) return undefined;
+    drew.current = false;
+    const wait = setTimeout(() => {
+      if (!drew.current) onDrawn(false);
+    }, MAP_WAIT_MS);
+    return () => {
+      clearTimeout(wait);
+    };
+  }, [style, onDrawn]);
   const t = trailColours[scheme];
-  const bold = mapFonts(source.maker).bold;
   const still = mode === "box";
 
   const frontLat = front?.[0];
@@ -119,6 +138,13 @@ export function RunMap({ track, starts, units, mode, scheme, source, under = 0, 
           setCredit(false);
           if (mode === "live") setFollowing(false);
         }}
+        onDidFinishLoadingMap={() => {
+          drew.current = true;
+          onDrawn?.(true);
+        }}
+        onDidFailLoadingMap={() => {
+          onDrawn?.(false);
+        }}
       >
         <Camera maxZoom={NEAREST_ZOOM} {...(camera ?? {})} />
         <GeoJSONSource id="run-trail" data={trail}>
@@ -132,17 +158,6 @@ export function RunMap({ track, starts, units, mode, scheme, source, under = 0, 
           />
           {scheme === "light" ? <Layer id="trail-shine" type="line" layout={{ "line-cap": "round", "line-join": "round" }} paint={{ "line-color": t.shine, "line-width": 1.6, "line-opacity": 0.95 }} /> : null}
         </GeoJSONSource>
-        {stones === null ? null : (
-          <GeoJSONSource id="run-stones" data={stones}>
-            <Layer id="stone" type="circle" paint={{ "circle-radius": 10.5, "circle-color": t.stone, "circle-stroke-color": t.stoneRing, "circle-stroke-width": 1.8 }} />
-            <Layer
-              id="stone-number"
-              type="symbol"
-              layout={{ "text-field": ["get", "n"], "text-font": [bold], "text-size": 10.5, "text-allow-overlap": true, "text-ignore-placement": true }}
-              paint={{ "text-color": t.stoneWord }}
-            />
-          </GeoJSONSource>
-        )}
         <GeoJSONSource id="run-ends" data={ends}>
           <Layer
             id="end"
@@ -150,6 +165,17 @@ export function RunMap({ track, starts, units, mode, scheme, source, under = 0, 
             paint={{ "circle-radius": 7, "circle-color": ["match", ["get", "n"], "start", t.start, t.finish], "circle-stroke-color": t.endRing, "circle-stroke-width": 2.5 }}
           />
         </GeoJSONSource>
+        {/* Drawn by the phone, not as the map's own words: those need letters from the map's company,
+            and a phone with no signal would show blank stones. */}
+        {stones?.features.map((stone) => (
+          <Marker key={stone.properties.n} lngLat={stone.geometry.coordinates} anchor="center">
+            <View testID="map-stone" style={[styles.stone, { backgroundColor: t.stone, borderColor: t.stoneRing }]}>
+              <Txt kind="tiny" style={[styles.stoneWord, { color: t.stoneWord }]}>
+                {stone.properties.n}
+              </Txt>
+            </View>
+          </Marker>
+        ))}
         {mode === "live" && centre !== null ? (
           <Marker lngLat={centre} anchor="center">
             <FrontLight bearing={bearing} scheme={scheme} />
@@ -178,12 +204,18 @@ export function RunMap({ track, starts, units, mode, scheme, source, under = 0, 
         </Pressable>
       ) : null}
       {credit ? (
-        <View pointerEvents="none" style={[styles.credit, { bottom: under + 6 }]}>
-          <View style={[styles.creditBack, { backgroundColor: t.credit }]}>
+        <View pointerEvents="box-none" style={[styles.credit, { bottom: under + 6 }]}>
+          <Pressable
+            accessibilityRole="link"
+            onPress={() => {
+              void Linking.openURL(MAP_CREDIT_PAGE).catch(() => undefined);
+            }}
+            style={[styles.creditBack, { backgroundColor: t.credit }]}
+          >
             <Txt kind="small" style={[styles.creditWords, { color: t.creditWord }]}>
               {source.credit}
             </Txt>
-          </View>
+          </Pressable>
         </View>
       ) : (
         <Pressable
@@ -274,6 +306,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colours.grab,
   },
+  // Grows with its number at the phone's largest text, never cut.
+  stone: { minWidth: 21, minHeight: 21, paddingHorizontal: 3, borderRadius: sizes.round, borderWidth: 1.8, alignItems: "center", justifyContent: "center" },
+  stoneWord: { fontFamily: fonts.bold, textAlign: "center" },
   front: { width: BEAM * 2, height: BEAM * 2, alignItems: "center", justifyContent: "center" },
   beam: { position: "absolute" },
   pulse: { position: "absolute", width: 36, height: 36, borderRadius: sizes.round },

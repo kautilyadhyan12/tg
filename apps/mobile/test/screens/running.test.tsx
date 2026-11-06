@@ -1,9 +1,11 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
-import { AppState, Linking } from "react-native";
+import { AppState, Linking, StyleSheet } from "react-native";
 import type { StyleSpecification } from "@maplibre/maplibre-react-native";
 import { OPENFREEMAP, RUN_MAX_POINTS, runSums, saveRunRequestSchema, type MapSource, type RunPoint, type SaveRunRequest } from "@app/shared";
 import { App } from "../../src/App";
 import { resetMapSource } from "../../src/screens/running/mapSource";
+import { RUN_BAR_ROOM } from "../../src/screens/running/RunLayer";
+import { MAP_CREDIT_PAGE, MAP_WAIT_MS } from "../../src/screens/running/RunMap";
 import { unitMarks } from "../../src/screens/running/routeShape";
 import { closedPauses, keepRunUnits, phoneRunFiles, resetRecorder, runNow, takeLocations } from "../../src/screens/running/recorder";
 import { spokenTime } from "../../src/screens/running/runVoice";
@@ -27,8 +29,16 @@ const location = jest.requireMock<{ state: { services: boolean; granted: boolean
 
 // Each map drawn, as the setup's stand-in keeps it (37b-i).
 type DrawnMap = {
-  props: { testID: string; mapStyle: StyleSpecification; onPress?: () => void; onRegionWillChange?: (event: { nativeEvent: { userInteraction: boolean } }) => void } & Record<string, unknown>;
+  props: {
+    testID: string;
+    mapStyle: StyleSpecification;
+    onPress?: () => void;
+    onRegionWillChange?: (event: { nativeEvent: { userInteraction: boolean } }) => void;
+    onDidFinishLoadingMap?: () => void;
+    onDidFailLoadingMap?: () => void;
+  } & Record<string, unknown>;
   sources: Record<string, unknown>;
+  layers: Record<string, unknown>;
   camera: Record<string, unknown> | null;
   markers: [number, number][];
   gone: boolean;
@@ -674,7 +684,7 @@ describe("the map under the run (37b-i)", () => {
   };
   // The only things a map may be given: what it draws and how it moves. A header, a request changed on
   // its way out, or an address of the run's own is none of them.
-  const MAP_PROPS = new Set(["testID", "style", "mapStyle", "attribution", "logo", "compass", "scaleBar", "dragPan", "touchZoom", "doubleTapZoom", "doubleTapHoldZoom", "touchRotate", "touchPitch", "onPress", "onRegionWillChange", "children"]);
+  const MAP_PROPS = new Set(["testID", "style", "mapStyle", "attribution", "logo", "compass", "scaleBar", "dragPan", "touchZoom", "doubleTapZoom", "doubleTapHoldZoom", "touchRotate", "touchPitch", "onPress", "onRegionWillChange", "onDidFinishLoadingMap", "onDidFailLoadingMap", "children"]);
   /** Every address written anywhere in what a map was given. */
   const addressesIn = (map: DrawnMap): string[] => JSON.stringify({ style: map.props.mapStyle, sources: map.sources }).match(/[a-z]+:\/\/[^"\s]+/gi) ?? [];
   /** Runs `seconds` north at 3 m/s, then stands still until Auto-pause pauses the run where it
@@ -762,10 +772,12 @@ describe("the map under the run (37b-i)", () => {
     const sums = finishedSums();
     const marks = unitMarks(sums.track, sums.trackStarts, "metric");
     expect(marks).toHaveLength(2);
-    expect(box.sources["run-stones"]).toEqual({
-      type: "FeatureCollection",
-      features: marks.map(([lat, lng], i) => ({ type: "Feature", properties: { n: String(i + 1) }, geometry: { type: "Point", coordinates: [lng, lat] } })),
-    });
+    // Each stone at its mark, numbered by the phone itself: the map's own words need letters from the
+    // map's company, which a phone with no signal has not got.
+    expect(box.markers).toEqual(marks.map(([lat, lng]) => [lng, lat]));
+    const stones = within(screen.getByTestId("summary-map")).getAllByTestId("map-stone");
+    expect(stones.map((stone, i) => within(stone).getByText(String(i + 1)))).toHaveLength(2);
+    expect(Object.keys(box.layers).filter((id) => id.startsWith("stone"))).toEqual([]);
     // Still in the summary, so the page scrolls; it fits the whole run. The map takes no tap of its
     // own: on Kd's phone its tap took the Finish press under it and opened the full size at once.
     expect(box.props).toMatchObject({ dragPan: false, touchZoom: false });
@@ -776,7 +788,7 @@ describe("the map under the run (37b-i)", () => {
     await fireEvent.press(screen.getByRole("button", { name: "Open the map full size" }));
     const full = drawnMap("full-map-view");
     expect(full.props).toMatchObject({ dragPan: true, touchZoom: true, touchRotate: false });
-    expect(full.sources["run-stones"]).toEqual(box.sources["run-stones"]);
+    expect(full.markers).toEqual(box.markers);
     await fireEvent.press(screen.getByRole("button", { name: "Close the map" }));
     await waitFor(() => {
       expect(maplibre.maps.filter((m) => m.props.testID === "full-map-view" && !m.gone)).toHaveLength(0);
@@ -784,14 +796,56 @@ describe("the map under the run (37b-i)", () => {
     expect(screen.getByRole("button", { name: "Save run" })).toBeTruthy();
   });
 
-  it("with no signal after Finish, the trail is still drawn and the box says the map shows when online", async () => {
+  const CANT_LOAD = "The map can't load right now.";
+
+  it("when the map's streets fail to load, with our server up, the Route box says so and the trail is still drawn", async () => {
+    const s = runServer();
+    await openRunning(s);
+    await startRunning();
+    await runThenFinish(61);
+    expect(await screen.findByTestId("summary-map")).toBeTruthy();
+    expect(screen.queryByText(CANT_LOAD)).toBeNull();
+    await act(() => {
+      drawnMap("summary-map-view").props.onDidFailLoadingMap?.();
+    });
+    expect(screen.getByText(CANT_LOAD)).toBeTruthy();
+    expect(JSON.stringify(drawnMap("summary-map-view").sources["run-trail"])).toContain("LineString");
+    // Drawn after all (the signal came back): the line goes.
+    await act(() => {
+      drawnMap("summary-map-view").props.onDidFinishLoadingMap?.();
+    });
+    expect(screen.queryByText(CANT_LOAD)).toBeNull();
+  });
+
+  it("when the map draws with our server out of reach, nothing says it can't", async () => {
     const s = runServer();
     await openRunning(s);
     await startRunning();
     s.state.online = false;
     await runThenFinish(61);
-    expect(await screen.findByText("The map shows when you're online.")).toBeTruthy();
-    expect(JSON.stringify(drawnMap("summary-map-view").sources["run-trail"])).toContain("LineString");
+    expect(await screen.findByTestId("summary-map")).toBeTruthy();
+    await act(() => {
+      drawnMap("summary-map-view").props.onDidFinishLoadingMap?.();
+    });
+    expect(screen.queryByText(CANT_LOAD)).toBeNull();
+    expect(screen.queryByText(/online/)).toBeNull();
+  });
+
+  it("when the map says nothing for MAP_WAIT_MS (its squares can't be fetched), the Route box says it can't load", async () => {
+    const timeouts = jest.spyOn(global, "setTimeout");
+    const s = runServer();
+    await openRunning(s);
+    await startRunning();
+    await runThenFinish(61);
+    expect(await screen.findByTestId("summary-map")).toBeTruthy();
+    expect(screen.queryByText(CANT_LOAD)).toBeNull();
+    const waits = timeouts.mock.calls.filter((call) => call[1] === MAP_WAIT_MS).map((call) => call[0]);
+    expect(waits.length).toBeGreaterThan(0);
+    await act(() => {
+      for (const wait of waits) wait();
+    });
+    expect(screen.getByText(CANT_LOAD)).toBeTruthy();
+    timeouts.mockRestore();
   });
 
   it("the server switched to our own copy: every map reads it, and the phone keeps it for when it is offline", async () => {
@@ -804,6 +858,24 @@ describe("the map under the run (37b-i)", () => {
     });
     expect(screen.getByText(OWN_COPY.credit)).toBeTruthy();
     expect(JSON.parse((await phoneRunFiles.read("run-map.json")) ?? "{}")).toEqual(OWN_COPY);
+  });
+
+  it.each<[string, string, MapSource]>([
+    ["the map the phone kept is the one drawn", JSON.stringify(OWN_COPY), OWN_COPY],
+    ["a kept map with an address that is not a map's leaves OpenFreeMap's", JSON.stringify({ ...OWN_COPY, tiles: "javascript:alert(1)" }), OPENFREEMAP],
+    ["a kept file that does not read leaves OpenFreeMap's", "{not a map", OPENFREEMAP],
+  ])("our server out of reach: %s", async (_case, keptFile, drawn) => {
+    await phoneRunFiles.write("run-map.json", keptFile);
+    const s = runServer();
+    s.state.online = false;
+    await openRunning(s);
+    await startRunning();
+    await feed(0, 31, 3);
+    await waitFor(() => {
+      expect(drawnMap("live-map-view").props.mapStyle.sources).toEqual({ basemap: { type: "vector", url: drawn.tiles } });
+    });
+    expect(screen.getByText(drawn.credit)).toBeTruthy();
+    expect(s.requests.some((r) => r.path === "/v1/geo/map")).toBe(true);
   });
 
   it("Map colours on the Running page: Dark keeps the map dark whatever the hour, and stays chosen", async () => {
@@ -836,13 +908,40 @@ describe("from Kd's click-through of 37b-i", () => {
     // Another tab: the bar is still there.
     await fireEvent.press(screen.getByRole("tab", { name: "Food" }));
     expect(screen.getByRole("button", { name: "Open run" })).toBeTruthy();
+    // Every page keeps room for the bar at its foot, so the last of it can be seen and pressed.
+    const foot = () => screen.getAllByTestId("page-boxes", { includeHiddenElements: true }).map((page) => Number(StyleSheet.flatten(page.props.style).paddingBottom));
+    expect(foot().length).toBeGreaterThan(1);
+    expect(foot().every((room) => room >= 24 + RUN_BAR_ROOM)).toBe(true);
     await fireEvent.press(screen.getByRole("button", { name: "Open run" }));
     expect(await screen.findByTestId("live-map")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Open run" })).toBeNull();
+    // The bar gone, the pages keep only their own room.
+    expect(foot()).toContain(24);
     // Paused and put away: the bar says so.
     await fireEvent.press(screen.getByRole("button", { name: "Pause" }));
     await fireEvent.press(await screen.findByRole("button", { name: "Back to the app" }));
     expect(within(await screen.findByRole("button", { name: "Open run" })).getByText("Run paused")).toBeTruthy();
+  });
+
+  it("a finished run put away (the phone's back) says it is not saved yet, and opens to save", async () => {
+    const s = runServer();
+    await openRunning(s);
+    await startRunning();
+    await feed(0, 31, 3);
+    await fireEvent.press(screen.getByRole("button", { name: "Pause" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Finish" }));
+    expect(await screen.findByRole("button", { name: "Save run" })).toBeTruthy();
+    // The phone's own back, as Android hands it to the run's screen.
+    const back = screen.container.queryAll((node) => node.props["visible"] === true && typeof node.props["onRequestClose"] === "function").at(-1)?.props["onRequestClose"];
+    if (typeof back !== "function") throw new Error("no run screen");
+    await act(() => {
+      back();
+    });
+    const bar = await screen.findByRole("button", { name: "Open run" });
+    expect(within(bar).getByText("Run finished")).toBeTruthy();
+    expect(within(bar).getByText("Not saved yet · Open to save")).toBeTruthy();
+    await fireEvent.press(bar);
+    expect(await screen.findByRole("button", { name: "Save run" })).toBeTruthy();
   });
 
   it("the map's credit folds into (i) at the first touch of the map, and (i) shows it again", async () => {
@@ -860,5 +959,10 @@ describe("from Kd's click-through of 37b-i", () => {
     expect(screen.queryByText(OPENFREEMAP.credit)).toBeNull();
     await fireEvent.press(screen.getByRole("button", { name: "Map credits" }));
     expect(screen.getByText(OPENFREEMAP.credit)).toBeTruthy();
+    // Pressed, the credit opens OpenStreetMap's copyright page, as its guidelines ask.
+    const opened = jest.spyOn(Linking, "openURL").mockResolvedValue(true);
+    await fireEvent.press(screen.getByRole("link", { name: OPENFREEMAP.credit }));
+    expect(opened).toHaveBeenCalledWith(MAP_CREDIT_PAGE);
+    opened.mockRestore();
   });
 });
