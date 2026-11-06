@@ -18,10 +18,12 @@ false bumps that Copernicus does not. Measured on 2026-11-06 against the US surv
 lower of the two was within 2 m on every case where either alone was off by up to 146 m
 (`packages/shared/test/fixtures/real-climbs.json`).
 
-In `HEIGHTS_DIR`, per square: `<copernicus name>.tif` and `.json` (its checked header), `<N28W081>.hgt`,
-and `<name>.copernicus.none` or `<name>.mapzen.none` where that map has no file (the sea; Armenia and
-Azerbaijan, which Copernicus withholds). At 20 gyms in about 15 cities that is 15 to 30 squares, about
-2 GB; it grows only where members run.
+In `HEIGHTS_DIR`, per square: `<copernicus name>.tif` and `.json` (its checked header) and `<N28W081>.hgt`.
+Only squares on Copernicus's own list of land are ever asked (`apps/api/src/modules/geo/copernicusSquares.ts`,
+made from its `tileList.txt`, 26,450 squares): the sea, and Armenia and Azerbaijan, which Copernicus withholds,
+have no heights and are never fetched. At 20 gyms in about 15 cities that is 15 to 30 squares, about 2 GB;
+it grows only where members run, and at most 30 new squares an hour for each map (one download at a time),
+so nobody can fill the disk with made-up runs. A run in more than 6 squares (no runner's) has no number.
 
 ## Settings
 
@@ -39,8 +41,11 @@ Azerbaijan, which Copernicus withholds). At 20 gyms in about 15 cities that is 1
    It waits up to 10 s for a missing square, then saves the run `waiting`.
 3. The worker (`geo.climb_sweep`, minutes 14, 29, 44 and 59) works out up to 50 `waiting` runs each time.
 
-A square that failed to arrive is not fetched again for 10 minutes. A file that is not one this server
-reads is logged as `geo.heights_bad_file` and not kept.
+A square that failed to arrive (a 404 included: every square asked is land, so a 404 means the source has
+gone or moved) is not fetched again for 10 minutes. A file that is not one this server reads, or unpacks
+bigger than it should, is logged as `geo.heights_bad_file` and not kept. A run still `waiting` three days
+after it was saved gives up: `none`. Past 30 new squares in an hour, `geo.heights_hour_full` is logged and
+the runs wait for the next hour.
 
 ## Symptoms
 
@@ -54,7 +59,7 @@ reads is logged as `geo.heights_bad_file` and not kept.
 Copy the same files to our own storage (a Cloudflare R2 bucket with a public domain, as the run map's
 own copy, `RUNBOOK/switch-the-map.md`), keeping their paths, set `HEIGHTS_COPERNICUS` or
 `HEIGHTS_MAPZEN` to it and restart the api and the worker. Squares already kept are read from the disk
-as before. Delete a square's `.none` files to have it asked again.
+as before.
 
 ## Limits, measured 2026-11-06
 
