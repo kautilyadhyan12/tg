@@ -149,19 +149,26 @@ class RunVoiceModule : Module() {
     dropFocus()
   }
 
-  /** The phone's own English, or American English; a voice kept on the phone where there is one. */
+  /** A Western English voice whatever English the phone itself speaks (Kd, 2026-11-06: a phone in
+   *  Indian English said the run in a thick Indian accent; "it should be western"): American English,
+   *  then British, and the phone's own English only where neither is on it. Of that English, a voice
+   *  kept on the phone over one that needs the internet. American and British count only when that
+   *  country's English is there (LANG_AVAILABLE alone means some English, perhaps the Indian one);
+   *  any English at all is the last try. */
   private fun useEnglish(tts: TextToSpeech): String {
     val own = Locale.getDefault()
-    val wanted = if (own.language == Locale.ENGLISH.language) own else Locale.US
-    if (tts.setLanguage(wanted) < TextToSpeech.LANG_AVAILABLE && (wanted == Locale.US || tts.setLanguage(Locale.US) < TextToSpeech.LANG_AVAILABLE)) {
-      return "noEnglish"
-    }
+    val country = TextToSpeech.LANG_COUNTRY_AVAILABLE
+    val some = TextToSpeech.LANG_AVAILABLE
+    val tries = listOf(Locale.US to country, Locale.UK to country) +
+      (if (own.language == Locale.ENGLISH.language) listOf(own to some) else emptyList()) +
+      listOf(Locale.US to some)
+    val picked = tries.firstOrNull { (locale, least) -> tts.setLanguage(locale) >= least }?.first ?: return "noEnglish"
     val current: Voice? = tts.voice
-    if (current != null && current.isNetworkConnectionRequired) {
+    val sameEnglish = { v: Voice -> v.locale.language == picked.language && v.locale.country == picked.country }
+    if (current == null || current.isNetworkConnectionRequired || !sameEnglish(current)) {
       val onPhone = tts.voices.orEmpty()
-        .filter { it.locale.language == Locale.ENGLISH.language && !it.isNetworkConnectionRequired && !it.features.contains(TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED) }
-        .sortedWith(compareByDescending<Voice> { it.locale == current.locale }.thenByDescending { it.quality })
-        .firstOrNull()
+        .filter { sameEnglish(it) && !it.isNetworkConnectionRequired && !it.features.contains(TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED) }
+        .maxByOrNull { it.quality }
       if (onPhone != null) tts.voice = onPhone
     }
     return "ok"
