@@ -336,8 +336,8 @@ export function feeRow(fee, currency, today) {
         : fee.state === 'removed'
           ? noLongerOwed(fee)
           : (fee.state === 'due' || fee.state === 'overdue') && fee.stillOwed === false
-            ? // Taken off while a member was paying it in the app (18k-ii-b): it waits for the page.
-              `${noLongerOwed(fee)}${(fee.appPayment ?? null) !== null ? ' It comes off once the payment page in the app closes, if nothing was paid.' : (fee.appCheck ?? null) !== null ? ' Waive it once you have checked Square.' : ''}`
+            ? // Taken off while a member was paying it in the app (18k-ii-b): it stands until their page has closed.
+              `${capital(whyNotOwed(fee))}.${(fee.appPayment ?? null) !== null ? ' It comes off once their payment page in the app closes, if nothing was paid.' : (fee.appCheck ?? null) !== null ? ' Waive this fee once you have checked Square.' : ''}`
           : fee.state === 'paid' && fee.stillOwed === false
             ? // Paid on the Terminal or from the card on file: it goes back through Square, and Void payment
               // is not offered (18d-vi-b-i, 18d-iii-i, 18d-iv-b-i).

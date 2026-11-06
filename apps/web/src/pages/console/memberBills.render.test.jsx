@@ -956,7 +956,8 @@ describe('a member paying a fee in the app (18k-ii-b)', () => {
     orgService.getHeldMemberships.mockResolvedValue(answer([withFee({ stillOwed: false, appPayment: OPEN })]));
     render(draw({ readOnly: true }));
     const item = await screen.findByTestId('held-fee');
-    expect(item.textContent).toContain('No longer owed: they were marked Came, or the class was cancelled. It comes off once the payment page in the app closes, if nothing was paid.');
+    expect(item.textContent).toContain('They were marked Came, or the class was cancelled. It comes off once their payment page in the app closes, if nothing was paid.');
+    expect(item.textContent).not.toContain('No longer owed');
     expect(within(item).getByTestId('held-fee-app-payment').textContent).toContain('is paying this fee in the app');
     expect(within(within(item).getByTestId('held-fee-app-payment')).queryByRole('button')).toBeNull();
   });
