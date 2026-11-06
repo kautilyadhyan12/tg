@@ -6,6 +6,7 @@
 // module; written here like the nutrition/coach tasks' disclosed crossings
 // (getLiveGymId duplicated from nutrition/repo.ts — a cross-module repo import
 // would violate R7.1).
+import type { RunClimb } from "@app/shared";
 import type { Sql } from "postgres";
 import { ORS_ROUTE_COST_MICRO } from "./cost.js";
 
@@ -247,6 +248,7 @@ export interface NewRun {
   splits: { km: { m: number; s: number }[]; mi: { m: number; s: number }[]; starts: number[] };
   polyline: string;
   calcVersion: number;
+  climb: RunClimb;
 }
 
 export interface SavedRunRow {
@@ -263,6 +265,7 @@ export interface SavedRunRow {
   kcal: number | null;
   splits: unknown;
   polyline: string | null;
+  climbM: number | null;
 }
 
 interface SavedRunDbRow {
@@ -279,6 +282,7 @@ interface SavedRunDbRow {
   kcal_point: number | null;
   splits: unknown;
   polyline: string | null;
+  climb_m: number | null;
 }
 
 const toSavedRun = (r: SavedRunDbRow): SavedRunRow => ({
@@ -295,6 +299,7 @@ const toSavedRun = (r: SavedRunDbRow): SavedRunRow => ({
   kcal: r.kcal_point,
   splits: r.splits,
   polyline: r.polyline,
+  climbM: r.climb_m,
 });
 
 /** Saves a run once: a second send of the same id changes nothing and reads back what the first
@@ -305,14 +310,15 @@ export async function insertRun(sql: Sql, userId: string, run: NewRun): Promise<
     const inserted = await tx`
       INSERT INTO runs (id, user_id, started_at, duration_s, distance_m, polyline, splits, kcal_point,
                         kcal_calc_version, source, name, effort, note, elapsed_s, left_out_m, left_out_s,
-                        run_calc_version)
+                        run_calc_version, climb_m, climb_state)
       VALUES (${run.id}, ${userId}, ${run.startedAt}, ${run.movingS}, ${run.distanceM}, ${run.polyline},
               ${tx.json(run.splits)}, ${run.kcal}, ${run.calcVersion}, 'mobile', ${run.name}, ${run.effort},
-              ${run.note}, ${run.elapsedS}, ${run.leftOutM}, ${run.leftOutS}, ${run.calcVersion})
+              ${run.note}, ${run.elapsedS}, ${run.leftOutM}, ${run.leftOutS}, ${run.calcVersion},
+              ${run.climb.state === "done" ? run.climb.m : null}, ${run.climb.state})
       ON CONFLICT (id) DO NOTHING`;
     const rows = await tx<(SavedRunDbRow & { user_id: string })[]>`
       SELECT id, user_id, started_at, name, effort, note, distance_m, duration_s, elapsed_s, left_out_m,
-             left_out_s, kcal_point, splits, polyline
+             left_out_s, kcal_point, splits, polyline, climb_m
       FROM runs WHERE id = ${run.id}`;
     const row = rows[0];
     if (row === undefined || row.user_id !== userId) throw new ForeignRunError();
@@ -324,7 +330,35 @@ export async function insertRun(sql: Sql, userId: string, run: NewRun): Promise<
 export async function getSavedRun(sql: Sql, userId: string, id: string): Promise<SavedRunRow | null> {
   const rows = await sql<SavedRunDbRow[]>`
     SELECT id, started_at, name, effort, note, distance_m, duration_s, elapsed_s, left_out_m, left_out_s,
-           kcal_point, splits, polyline
+           kcal_point, splits, polyline, climb_m
     FROM runs WHERE id = ${id} AND user_id = ${userId}`;
   return rows[0] === undefined ? null : toSavedRun(rows[0]);
+}
+
+// ── A run's elevation gain, worked out again later (ROADMAP 37b-ii) ──────────────────────────────
+
+export interface WaitingClimb {
+  id: string;
+  userId: string;
+  polyline: string | null;
+  splits: unknown;
+}
+
+/** Runs whose elevation gain waits for a piece of the height map, the longest waiting first. */
+export async function listWaitingClimbs(sql: Sql, limit: number): Promise<WaitingClimb[]> {
+  const rows = await sql<{ id: string; user_id: string; polyline: string | null; splits: unknown }[]>`
+    SELECT id, user_id, polyline, splits FROM runs
+    WHERE climb_state = 'waiting'
+    ORDER BY created_at, id
+    LIMIT ${limit}`;
+  return rows.map((r) => ({ id: r.id, userId: r.user_id, polyline: r.polyline, splits: r.splits }));
+}
+
+/** Keeps a run's elevation gain once it is known, only while it still waits: a second worker, or the
+ *  same one twice, changes nothing. True when this call kept it. */
+export async function keepWaitingClimb(sql: Sql, run: { id: string; userId: string }, climb: Exclude<RunClimb, { state: "waiting" }>): Promise<boolean> {
+  const done = await sql`
+    UPDATE runs SET climb_m = ${climb.state === "done" ? climb.m : null}, climb_state = ${climb.state}
+    WHERE id = ${run.id} AND user_id = ${run.userId} AND climb_state = 'waiting'`;
+  return done.count === 1;
 }

@@ -6,12 +6,24 @@
 // candidates only.
 import type { FastifyBaseLogger } from "fastify";
 import type { Sql } from "postgres";
-import { RUN_CALC_VERSION, encodePolyline, runSplitSchema, runSums } from "@app/shared";
-import type { GenerateRoutesRequest, RouteCandidate, SavedRoute, SavedRouteCreate, RunDetail, RunSummary, SaveRunRequest, SavedRun } from "@app/shared";
+import { RUN_CALC_VERSION, climbFromHeights, climbSamples, decodePolyline, encodePolyline, runSplitSchema, runSums } from "@app/shared";
+import type {
+  GenerateRoutesRequest,
+  RouteCandidate,
+  RunClimb,
+  RunClimbRequest,
+  SavedRoute,
+  SavedRouteCreate,
+  RunDetail,
+  RunSummary,
+  SaveRunRequest,
+  SavedRun,
+} from "@app/shared";
 import { z } from "zod";
 import { onWorkoutSynced } from "../gamification/service.js";
 import { getUserSyncContext } from "../users/service.js";
 import { GeoError } from "./errors.js";
+import type { HeightMap } from "./heights.adapter.js";
 import type { RouteProvider } from "./ors.adapter.js";
 import * as repo from "./repo.js";
 
@@ -169,8 +181,62 @@ const asSavedRun = (r: repo.SavedRunRow): SavedRun => {
     splitsMi: splits.success ? splits.data.mi : [],
     polyline: r.polyline ?? "",
     trackStarts: splits.success ? (splits.data.starts ?? [0]) : [0],
+    climbM: r.climbM,
   };
 };
+
+// ── A run's elevation gain (ROADMAP 37b-ii) ─────────────────────────────────────────────────────
+
+/** How long saving a run waits for a piece of the height map it does not have yet; past it, the run is
+ *  saved waiting and the worker works the climb out once the piece is here. */
+export const SAVE_CLIMB_WAIT_MS = 10_000;
+/** How long the summary's ask waits: the phone shows "--" meanwhile, and asks again past it. */
+export const ASK_CLIMB_WAIT_MS = 25_000;
+
+/** The metres climbed along a run's saved line (as `encodePolyline` keeps it, so the summary's ask,
+ *  the save and the worker read the very same places), from the server's height map. */
+export async function climbOfLine(heights: HeightMap, polyline: string, starts: readonly number[], waitMs: number): Promise<RunClimb> {
+  const line = decodePolyline(polyline);
+  if (line.length < 2) return { state: "done", m: 0 };
+  const samples = climbSamples(line, starts);
+  const got = await heights.heightsAt(samples.at, waitMs);
+  if (got === "waiting") return { state: "waiting" };
+  const m = climbFromHeights(got, samples.apart);
+  return m === null ? { state: "none" } : { state: "done", m };
+}
+
+/** The summary's ask: the run's line worked out as saving it would, its climb read, nothing kept. */
+export async function askClimb(deps: { heights: HeightMap }, input: RunClimbRequest): Promise<RunClimb> {
+  const sums = runSums(input.points, input.pauses, input.elapsedMs, 0);
+  return await climbOfLine(deps.heights, encodePolyline(sums.track), sums.trackStarts, ASK_CLIMB_WAIT_MS);
+}
+
+/** The runs whose climb waited for the height map, worked out again now: up to `limit` of them, each
+ *  kept only while it still waits, so two workers at once change nothing twice. */
+export async function workOutWaitingClimbs(
+  deps: { sql: Sql; heights: HeightMap; log: Pick<FastifyBaseLogger, "error"> },
+  opts: { limit: number; waitMs: number },
+): Promise<{ looked: number; kept: number; stillWaiting: number }> {
+  const runs = await repo.listWaitingClimbs(deps.sql, opts.limit);
+  let kept = 0;
+  let stillWaiting = 0;
+  for (const run of runs) {
+    const splits = splitsStoredSchema.safeParse(run.splits);
+    let climb: RunClimb;
+    try {
+      climb = run.polyline === null ? { state: "done", m: 0 } : await climbOfLine(deps.heights, run.polyline, splits.success ? (splits.data.starts ?? [0]) : [0], opts.waitMs);
+    } catch (err) {
+      deps.log.error({ event: "geo.climb_failed", runId: run.id, errName: err instanceof Error ? err.name : typeof err }, "elevation gain not worked out");
+      climb = { state: "waiting" };
+    }
+    if (climb.state === "waiting") {
+      stillWaiting++;
+      continue;
+    }
+    if (await repo.keepWaitingClimb(deps.sql, run, climb)) kept++;
+  }
+  return { looked: runs.length, kept, stillWaiting };
+}
 
 /** A run this person has already saved under this id, read before any of its points are: a send
  *  repeated is answered from the row at no cost (round one of 37a, H2). null when there is none. */
@@ -188,7 +254,7 @@ export function startedAtKept(sent: Date, elapsedMs: number, now: Date): Date {
 /** Works every number out from the points with the shared rules and saves the run once. The
  *  person's weight is the one they keep (70 kg when there is none), as workouts' calories are. */
 export async function saveRun(
-  deps: ReadDeps & { now: () => Date },
+  deps: ReadDeps & { now: () => Date; heights: HeightMap; log: Pick<FastifyBaseLogger, "error"> },
   userId: string,
   input: SaveRunRequest,
 ): Promise<{ status: "created" | "duplicate"; run: SavedRun }> {
@@ -196,6 +262,15 @@ export async function saveRun(
   const ctx = await getUserSyncContext(deps.sql, userId);
   const sums = runSums(input.points, input.pauses, input.elapsedMs, ctx.weightKg ?? 0);
   const note = input.note === null || input.note === "" ? null : input.note;
+  const polyline = encodePolyline(sums.track);
+  // The run is saved whatever the height map does: anything wrong there leaves its climb waiting.
+  let climb: RunClimb;
+  try {
+    climb = await climbOfLine(deps.heights, polyline, sums.trackStarts, SAVE_CLIMB_WAIT_MS);
+  } catch (err) {
+    deps.log.error({ event: "geo.climb_failed", errName: err instanceof Error ? err.name : typeof err }, "elevation gain not worked out");
+    climb = { state: "waiting" };
+  }
   const saved = await repo.insertRun(deps.sql, userId, {
     id: input.runId,
     startedAt,
@@ -209,8 +284,9 @@ export async function saveRun(
     leftOutS: sums.leftOutS,
     kcal: sums.kcal,
     splits: { km: sums.splitsKm, mi: sums.splitsMi, starts: sums.trackStarts },
-    polyline: encodePolyline(sums.track),
+    polyline,
     calcVersion: RUN_CALC_VERSION,
+    climb,
   });
   // On every send, a repeat included, as a workout's sync does: the streak, badges and XP are
   // worked out again from history, so a send whose first try failed here heals on the next.

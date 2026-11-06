@@ -57,6 +57,8 @@ import { expireLapsedGymTrials } from "./modules/orgs/trialSweep.js";
 import { sweepGoneForGood } from "./modules/orgs/goneForGood/sweep.js";
 import { clearOldRemovedLabels } from "./modules/nutrition/labelRepo.js";
 import { updatePackagedFoods } from "./modules/nutrition/packagedSync.js";
+import { heightMapFor } from "./modules/geo/heights.adapter.js";
+import { workOutWaitingClimbs } from "./modules/geo/service.js";
 import { purgeDueUsers, purgeShortfall } from "./modules/privacy/purge.js";
 import { createDiskPhotoStore } from "./modules/orgs/gymPage/photoStore.js";
 import { processPaddleEvents, processRazorpayEvents } from "./modules/billing/events.js";
@@ -103,6 +105,7 @@ export const ORGS_CLASS_NO_SHOWS_JOB = "orgs.class_no_shows";
 export const ORGS_MEMBER_LIST_ANALYSE_JOB = "orgs.member_list_analyse";
 export const ORGS_GONE_FOR_GOOD_JOB = "orgs.gone_for_good";
 export const NUTRITION_PACKAGED_UPDATE_JOB = "nutrition.packaged_update";
+export const GEO_CLIMB_SWEEP_JOB = "geo.climb_sweep";
 
 const connection = new Redis(redisUrl, { maxRetriesPerRequest: null });
 const sql = postgres(config.DATABASE_URL, { prepare: false, max: 2 });
@@ -319,6 +322,25 @@ if (config.PACKAGED_FOOD_UPDATES) {
   // Switched off after being on: the schedule stays in Redis until it is taken out.
   await queue.removeJobScheduler(NUTRITION_PACKAGED_UPDATE_JOB).catch(() => false);
 }
+
+// A RUN'S ELEVATION GAIN THAT WAITED FOR THE HEIGHT MAP (ROADMAP Stage 5 37b-ii): every ten minutes,
+// on minutes 6, 16, 26 …, off the other schedules' minutes. A run is saved at once whatever the map
+// does; one whose map piece was still coming is worked out here once it is kept. Each run is kept only
+// while it still waits, so a second run at once changes nothing.
+try {
+  await queue.upsertJobScheduler(
+    GEO_CLIMB_SWEEP_JOB,
+    { pattern: "6-59/10 * * * *" },
+    {
+      name: GEO_CLIMB_SWEEP_JOB,
+      opts: { attempts: 1, removeOnComplete: { count: 50 }, removeOnFail: { count: 200 } },
+    },
+  );
+} catch (err) {
+  log.fatal({ err }, "failed to register the elevation gain schedule");
+  process.exit(1);
+}
+const heights = heightMapFor(config, log);
 
 // THE GYM'S DAY GETS WRITTEN DOWN (Part 3 §3.2; Kd rulings :26469 and :29961).
 // **THE ONLY SCHEDULE ON THIS QUEUE THAT IS NOT NIGHTLY, AND THE REASON IS THE
@@ -944,7 +966,8 @@ const worker = new Worker(
       job.name !== ORGS_MEMBER_BILLS_JOB &&
       job.name !== ORGS_MEMBER_LIST_ANALYSE_JOB &&
       job.name !== ORGS_GONE_FOR_GOOD_JOB &&
-      job.name !== NUTRITION_PACKAGED_UPDATE_JOB
+      job.name !== NUTRITION_PACKAGED_UPDATE_JOB &&
+      job.name !== GEO_CLIMB_SWEEP_JOB
     ) {
       throw new Error(`unknown job on ${ROLLUPS_QUEUE}: ${job.name}`);
     }
@@ -1041,6 +1064,11 @@ const worker = new Worker(
         log,
       });
       log.info({ ...report, durationMs: Date.now() - startedAt, event: "job.finished", job: job.name }, "job finished");
+      return;
+    }
+    if (job.name === GEO_CLIMB_SWEEP_JOB) {
+      const climbs = await workOutWaitingClimbs({ sql, heights, log }, { limit: 50, waitMs: 60_000 });
+      log.info({ ...climbs, durationMs: Date.now() - startedAt, event: "job.finished", job: job.name }, "job finished");
       return;
     }
     if (job.name === ORGS_MEMBER_LIST_ANALYSE_JOB) {

@@ -123,8 +123,28 @@ export const savedRunSchema = z.object({
   polyline: z.string(),
   /** Where in the polyline's points each stretch begins: the line starts again there. */
   trackStarts: z.array(z.number().int().nonnegative()),
+  /** Metres climbed (37b-ii), from the server's height map; null while it waits for the map, where the
+   *  map has no heights, or for a run saved before. */
+  climbM: z.number().int().nonnegative().nullable(),
 });
 export type SavedRun = z.infer<typeof savedRunSchema>;
+
+// ── A run's elevation gain before it is saved (POST /v1/geo/runs/climb; ROADMAP 37b-ii) ───────────
+// The run's summary asks with the same points it will save: the server works the line out with the
+// same rules, reads the heights under it, and keeps nothing. Saved, the run is worked out again the
+// same way, so the two numbers are one.
+export const runClimbRequestSchema = saveRunRequestSchema.pick({ elapsedMs: true, points: true, pauses: true }).strict();
+export type RunClimbRequest = z.infer<typeof runClimbRequestSchema>;
+
+export const runClimbSchema = z.discriminatedUnion("state", [
+  z.object({ state: z.literal("done"), m: z.number().int().nonnegative() }),
+  /** The map has no heights under this run. */
+  z.object({ state: z.literal("none") }),
+  /** A piece of the map is still coming: ask again. */
+  z.object({ state: z.literal("waiting") }),
+]);
+export type RunClimb = z.infer<typeof runClimbSchema>;
+export const runClimbResponseSchema = z.object({ climb: runClimbSchema });
 
 export const saveRunResponseSchema = z.object({ status: z.enum(["created", "duplicate"]), run: savedRunSchema });
 export type SaveRunResponse = z.infer<typeof saveRunResponseSchema>;

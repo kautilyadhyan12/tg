@@ -1520,6 +1520,13 @@
       "when": 1790726400217,
       "tag": "0217_app_payments",
       "breakpoints": true
+    },
+    {
+      "idx": 217,
+      "version": "7",
+      "when": 1790726400218,
+      "tag": "0218_run_climb",
+      "breakpoints": true
     }
   ]
 }

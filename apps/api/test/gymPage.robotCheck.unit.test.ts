@@ -14,6 +14,7 @@ describe("the robot check's keys", () => {
     RESEND_API_KEY: "re_x",
     EMAIL_FROM: "AI Home Gym <hi@example.com>",
     PHOTO_DIR: "/srv/aihg/photos",
+    HEIGHTS_DIR: "/srv/aihg/heights",
     SUPPORT_EMAIL: "help@example.com",
   };
 

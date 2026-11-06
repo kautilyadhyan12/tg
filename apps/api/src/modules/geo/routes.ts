@@ -11,10 +11,11 @@ import type { RedisLike } from "../../redis.js";
 import { createDualRateLimit } from "../auth/rateLimit.js";
 import { requireQuota } from "../quotas/service.js";
 import type { GeocodeResolver } from "./geocode.js";
+import { heightMapFor, type HeightMap } from "./heights.adapter.js";
 import { mapSourceFor } from "./mapSource.js";
 import { createOrsRouteProvider, type RouteProvider } from "./ors.adapter.js";
 import { ForeignRunError } from "./repo.js";
-import { generateRoutesRequestSchema, geoListQuerySchema, saveRunRequestSchema, savedRouteCreateSchema } from "./schemas.js";
+import { generateRoutesRequestSchema, geoListQuerySchema, runClimbRequestSchema, saveRunRequestSchema, savedRouteCreateSchema } from "./schemas.js";
 import * as service from "./service.js";
 import type { GeoDeps } from "./service.js";
 
@@ -31,6 +32,8 @@ export interface GeoRouteOverrides {
    *  wires a live resolver; the two-layer cache seam ships resolver-less by
    *  design (G1 ruling). Kept here so the P5 wiring is a one-line change. */
   geocodeResolver?: GeocodeResolver;
+  /** The height map a run's elevation gain is read from (37b-ii); unset is the one in HEIGHTS_DIR. */
+  heights?: HeightMap;
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -92,6 +95,7 @@ export function registerGeoRoutes(
     log: app.log,
   };
   const readDeps = { sql: deps.sql };
+  const heights = overrides.heights ?? heightMapFor(deps.config, app.log);
   app.decorateRequest("geoRouteInput", undefined);
 
   // Validation BEFORE the meter (P2.5b finding-1 precedent): a 400 must not burn
@@ -192,12 +196,33 @@ export function registerGeoRoutes(
         });
       }
       try {
-        const saved = await service.saveRun({ sql: deps.sql, now: () => new Date() }, authedUserId(req), input);
+        const saved = await service.saveRun({ sql: deps.sql, now: () => new Date(), heights, log: app.log }, authedUserId(req), input);
         return await reply.status(saved.status === "created" ? 201 : 200).send(saved);
       } catch (err) {
         if (err instanceof ForeignRunError) return notFound(req, reply);
         throw err;
       }
+    },
+  );
+
+  // ── a run's elevation gain before it is saved (ROADMAP 37b-ii) ────────────────
+  // The summary asks with the points it will save. Nothing is kept or logged: the answer is a number.
+  // Ten a minute for a person, as saving is, never by address.
+  const climbLimit = createDualRateLimit({
+    name: "geo_run_climb",
+    max: 10,
+    ipMax: null,
+    windowMs: 60 * 1000,
+    identifier: (req) => req.authUser?.id ?? null,
+    redis: deps.redis,
+  });
+  app.post(
+    "/v1/geo/runs/climb",
+    { preHandler: [app.authenticate, climbLimit], bodyLimit: 3 * 1024 * 1024 },
+    async (req, reply) => {
+      const input = parse(runClimbRequestSchema, req.body, req, reply);
+      if (input === null) return;
+      return await reply.send({ climb: await service.askClimb({ heights }, input) });
     },
   );
 

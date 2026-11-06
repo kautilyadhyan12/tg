@@ -46,6 +46,9 @@ export const runs = pgTable(
     leftOutM: integer("left_out_m"),
     leftOutS: integer("left_out_s"),
     runCalcVersion: smallint("run_calc_version"),
+    // 0218 (ROADMAP 37b-ii): the elevation gain from the server's height map, and where it stands.
+    climbM: integer("climb_m"),
+    climbState: text("climb_state"),
   },
   (t) => [
     index("runs_user_started_idx").on(t.userId, t.startedAt.desc()),
@@ -56,6 +59,11 @@ export const runs = pgTable(
       "runs_numbers_check",
       sql`${t.durationS} >= 0 AND ${t.distanceM} >= 0 AND ${t.elapsedS} >= ${t.durationS} AND ${t.leftOutM} >= 0 AND ${t.leftOutS} >= 0`,
     ),
+    check(
+      "runs_climb_check",
+      sql`(${t.climbState} IS NULL AND ${t.climbM} IS NULL) OR (${t.climbState} = 'done' AND ${t.climbM} >= 0) OR (${t.climbState} IN ('none', 'waiting') AND ${t.climbM} IS NULL)`,
+    ),
+    index("runs_climb_waiting_idx").on(t.createdAt).where(sql`${t.climbState} = 'waiting'`),
   ],
 );
 
