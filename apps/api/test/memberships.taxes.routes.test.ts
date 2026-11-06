@@ -170,7 +170,7 @@ d("several taxes on one membership (real Postgres)", () => {
       packClasses: t.packClasses, packDays: t.packDays, access: t.access, bookingsLimit: t.bookingsLimit, bookingsPeriod: t.bookingsPeriod,
       classTypeIds: null, includesPt: t.includesPt, ptLimit: t.ptLimit, ptPeriod: t.ptPeriod, taxRateIds, joiningFeeMinor: t.joiningFeeMinor,
       contractPeriods: t.contractPeriods, contractThen: t.contractThen, noticeDays: t.noticeDays, leaveFeeMinor: t.leaveFeeMinor,
-      coolingOffDays: t.coolingOffDays, renewalReminderDays: t.renewalReminderDays, termReminderDays: t.termReminderDays, updatedAt: t.updatedAt,
+      coolingOffDays: t.coolingOffDays, renewalReminderDays: t.renewalReminderDays, termReminderDays: t.termReminderDays, soldInApp: t.soldInApp, updatedAt: t.updatedAt,
     };
     return await put(`${typesUrl(gymId)}/${typeId}`, body, cookies);
   };

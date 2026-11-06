@@ -1506,6 +1506,13 @@
       "when": 1790726400215,
       "tag": "0215_price_raises",
       "breakpoints": true
+    },
+    {
+      "idx": 215,
+      "version": "7",
+      "when": 1790726400216,
+      "tag": "0216_sold_in_app",
+      "breakpoints": true
     }
   ]
 }

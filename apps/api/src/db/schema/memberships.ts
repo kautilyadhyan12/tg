@@ -71,6 +71,8 @@ export const gymMembershipTypes = pgTable(
      *  none. Read as they are now: never copied to a membership. */
     renewalReminderDays: integer("renewal_reminder_days"),
     termReminderDays: integer("term_reminder_days"),
+    /** Members may buy it in the app (0216; 18k-i): a membership or a pack with a price, never a trial. */
+    soldInApp: boolean("sold_in_app").notNull().default(false),
     archivedAt: timestamp("archived_at", { withTimezone: true }),
     createdAt: createdAt(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -105,6 +107,7 @@ export const gymMembershipTypes = pgTable(
       "gym_membership_types_renewal_reminder_check",
       sql`(${t.renewalReminderDays} IS NULL OR (${t.renewalReminderDays} IN (3,7,14,30,45,60) AND ${t.kind} = 'recurring' AND ${t.priceMinor} > 0)) AND (${t.termReminderDays} IS NULL OR (${t.termReminderDays} IN (3,7,14,30,45,60) AND ${t.contractPeriods} IS NOT NULL))`,
     ),
+    check("gym_membership_types_sold_in_app_check", sql`NOT ${t.soldInApp} OR (${t.kind} IN ('recurring','one_time','pack') AND ${t.priceMinor} > 0)`),
     check("gym_membership_types_access_check", sql`${t.access} IN ('all_classes','limited','gym_only')`),
     check(
       "gym_membership_types_limit_check",

@@ -24,6 +24,7 @@ import {
   TAXED_PRICE_MINOR_MAX,
   pcmToTaxRateText,
   SALES_TAX_PCM_MAX,
+  canSellInApp,
 } from '@app/shared';
 import { reminderDayOptions } from './renewalReminderView';
 import { RAISE_DRAFT, raiseBody, raiseProblem } from './priceRaiseView';
@@ -264,6 +265,47 @@ export function coolingOffLine(type) {
   return `Cooling-off period: ${String(type.coolingOffDays)} day${type.coolingOffDays === 1 ? '' : 's'}`;
 }
 
+/** The ways of paying a member can buy in the app (18k-i): a paid-once membership or a pack (a day pass is one). A
+ *  repeating membership waits for 18k-iv, once members can cancel it in the app (18l); never a trial. */
+export const usesSellInApp = (choice) => choice === 'one_time' || choice === 'pack' || choice === 'day_pass';
+
+/** WHETHER SQUARE CAN TAKE A MEMBER'S PAYMENT NOW (18k-i), from the Payments box: `ready`; `connect` or `location` for
+ *  what the owner still has to do; `country` where Square is not offered; `off` where it can't be connected here yet;
+ *  null while it is not known. */
+export function squareSellState(payments) {
+  if (payments === null || payments === undefined) return null;
+  if (payments.availability !== 'square') return 'country';
+  if (payments.squareReady !== true) return 'off';
+  const square = payments.square;
+  if (square === null || square === undefined || square.state === 'removed') return 'connect';
+  return square.state === 'choose_location' ? 'location' : 'ready';
+}
+
+/** What the form says under Sell in the app, and the button to the place to fix it, by the state of Square. */
+export function sellInAppHint(state, canConnect) {
+  if (state === 'connect') return canConnect ? { text: 'Connect Square to sell in the app.', button: 'Connect Square' } : { text: 'Only the owner can connect Square.', button: null };
+  if (state === 'location') return canConnect ? { text: 'Choose your Square location to sell in the app.', button: 'Choose location' } : { text: 'Only the owner can choose the Square location.', button: null };
+  if (state === 'country') return { text: "Selling in the app isn't available in your country yet.", button: null };
+  if (state === 'off') return { text: "Selling in the app isn't available yet.", button: null };
+  if (state === 'ready') return { text: 'Members can buy it in the app and pay by card through Square.', button: null };
+  // Square's state not known yet (still loading, or its read failed): what the tick does, and no more.
+  return { text: 'Lets members buy it in the app.', button: null };
+}
+
+/** The row's word for a line sold in the app: the tag while members can buy it, a sentence while Square still has to
+ *  be set up or the business has no plan with us (`no_plan`; `it` is "gym", "studio"), and null for a line not ticked
+ *  or one that cannot be sold in the app. Not known yet, it says only that it is on. */
+export function soldInAppWords(type, state, it = 'gym') {
+  if (type?.soldInApp !== true || !canSellInApp(type)) return null;
+  if (state === 'no_plan') return { tag: null, line: `Members can't buy it in the app until this ${it} has a plan.` };
+  if (state === 'ready') return { tag: 'Sold in the app', line: null };
+  if (state === 'connect') return { tag: null, line: "Members can't buy it in the app until Square is connected." };
+  if (state === 'location') return { tag: null, line: "Members can't buy it in the app until your Square location is chosen." };
+  if (state === 'country') return { tag: null, line: "Members can't buy it in the app: selling in the app isn't available in your country yet." };
+  if (state === 'off') return { tag: null, line: "Members can't buy it in the app yet." };
+  return { tag: 'Sell in the app: on', line: null };
+}
+
 /** Under the cooling-off box: what the days typed mean, where they read. */
 export function coolingOffHint(draft) {
   if (String(draft.coolingOffDays ?? '').trim() === '') return 'Days after they sign in which members can cancel with a full refund. Weekends count. Leave empty for none.';
@@ -323,6 +365,7 @@ export function emptyDraft() {
     coolingOffDays: '',
     renewalReminderDays: '',
     termReminderDays: '',
+    soldInApp: false,
     // Members already on it, where a change raises its price (18w).
     ...RAISE_DRAFT,
   };
@@ -363,6 +406,7 @@ export function draftFromType(type) {
     coolingOffDays: type.coolingOffDays === null || type.coolingOffDays === undefined ? '' : String(type.coolingOffDays),
     renewalReminderDays: type.renewalReminderDays > 0 ? String(type.renewalReminderDays) : '',
     termReminderDays: type.termReminderDays > 0 ? String(type.termReminderDays) : '',
+    soldInApp: type.soldInApp === true,
     savedPriceMinor: type.priceMinor,
   };
 }
@@ -417,7 +461,7 @@ const usesTerm = (choice) => choice === 'recurring' || choice === 'one_time' || 
 const usesAccess = usesTerm;
 
 /** The boxes in the order the form draws them, so the first wrong one can be shown. */
-export const PROBLEM_ORDER = ['name', 'description', 'price', 'raise', 'joiningFee', 'tax', 'termCount', 'contractPeriods', 'leaveFee', 'noticeDays', 'coolingOffDays', 'renewalReminderDays', 'termReminderDays', 'packClasses', 'packDays', 'bookingsLimit', 'classes', 'ptLimit'];
+export const PROBLEM_ORDER = ['name', 'description', 'price', 'raise', 'joiningFee', 'tax', 'termCount', 'contractPeriods', 'leaveFee', 'noticeDays', 'coolingOffDays', 'renewalReminderDays', 'termReminderDays', 'packClasses', 'packDays', 'bookingsLimit', 'classes', 'ptLimit', 'soldInApp'];
 
 /** The first box that is wrong, top to bottom, or null. */
 export function firstProblem(problems) {
@@ -531,9 +575,15 @@ export function draftProblems(draft, currency, rates = []) {
   if (draftLimitsPt(draft) && wholeNumber(draft.ptLimit, 1, MEMBERSHIP_PT_LIMIT_MAX) === null) {
     problems.ptLimit = `Type how many sessions, from 1 to ${String(MEMBERSHIP_PT_LIMIT_MAX)}.`;
   }
+  if (draftSellsInApp(draft) && priceMinor === 0) problems.soldInApp = "A free membership can't be sold in the app. Untick Sell in the app.";
   const raise = raiseProblem(draft, currency);
   if (raise !== null) problems.raise = raise;
   return Object.keys(problems).length === 0 ? null : problems;
+}
+
+/** Whether the form sells it in the app: ticked, on a way of paying that can be (18k-i). */
+export function draftSellsInApp(draft) {
+  return draft.soldInApp === true && usesSellInApp(draft.choice);
 }
 
 /** Whether the form sets a contract: a repeating type only (18v-i). */
@@ -619,6 +669,7 @@ export function draftBody(draft, currency) {
     coolingOffDays: draftHasCoolingOff(draft) ? wholeNumber(draft.coolingOffDays, 1, MEMBERSHIP_COOLING_OFF_DAYS_MAX) : null,
     renewalReminderDays: draftHasReminder(draft) ? Number(draft.renewalReminderDays) : null,
     termReminderDays: draftHasTermReminder(draft) ? Number(draft.termReminderDays) : null,
+    soldInApp: draftSellsInApp(draft),
     // A change says which version of the type the form read.
     ...(draft.id === null ? {} : { updatedAt: draft.updatedAt }),
     // Members already on it, ticked, pay its new, higher price too (18w).
