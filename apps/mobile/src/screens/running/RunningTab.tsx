@@ -417,7 +417,8 @@ const styles = StyleSheet.create({
     experimental_backgroundImage: orangeGradient,
     boxShadow: shadows.roundButton,
   },
-  goWord: { fontFamily: fonts.bold, fontSize: 21, letterSpacing: 0.5, color: colours.onOrange },
+  // The width of the round, not the word's own: Android cut the T of START on a small phone (37b-i).
+  goWord: { alignSelf: "stretch", textAlign: "center", fontFamily: fonts.bold, fontSize: 21, letterSpacing: 0.5, color: colours.onOrange },
   problem: { gap: 4, alignItems: "flex-start" },
   choices: { flexDirection: "row", gap: 16, flexWrap: "wrap" },
   said: { textAlign: "center" },
