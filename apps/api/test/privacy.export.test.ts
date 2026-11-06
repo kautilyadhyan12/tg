@@ -18,6 +18,7 @@ import {
   CONSENT_PROOF_RETENTION_YEARS,
 } from "../src/retention.js";
 import { getTableColumns } from "drizzle-orm";
+import { emailChanges } from "../src/db/schema/identity.js";
 import { bodyMeasurements } from "../src/db/schema/trust.js";
 import { workouts } from "../src/db/schema/training.js";
 import {
@@ -522,6 +523,7 @@ describe("DPDP export list (no database)", () => {
       // carries legacy_mongo_id, so the everywhere-list has a real table to
       // be checked against (the guard caught its absence immediately).
       body_measurements: columnsOf(bodyMeasurements),
+      email_changes: columnsOf(emailChanges),
     };
     for (const [table, cols] of Object.entries(INTERNAL_COLUMNS_BY_TABLE)) {
       const real = byTable[table] ?? [];
