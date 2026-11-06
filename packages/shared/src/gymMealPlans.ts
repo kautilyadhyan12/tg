@@ -1,7 +1,8 @@
 // A meal plan a gym gives its members (spec Part 6 §16.6; ROADMAP Stage 2 24a-i). Staff with
 // the Plans tick write it once: a week, Monday first, of meals from the food list or foods of
 // their own, priced by the server as a person's own meal plan is (34e-ii-b), and stored in the
-// same shape, so the phone shows it and logs a meal of it at the same numbers. Who gets it is 24a-ii.
+// same shape, so the phone shows it and logs a meal of it at the same numbers. Who gets it:
+// `gymMealPlanGiving.ts` (24a-ii).
 import { z } from "zod";
 import {
   FOOD_ALLERGY_CAUTION, MEAL_MOST_FOODS, MOST_PLAN_MEALS, dayVersionSchema, dietPlanDaySchema, mealChoiceSchema,
@@ -85,7 +86,20 @@ export const gymMealPlanSummarySchema = z.object({
 }).strict();
 export type GymMealPlanSummary = z.infer<typeof gymMealPlanSummarySchema>;
 
-export const gymMealPlansResponseSchema = z.object({ plans: z.array(gymMealPlanSummarySchema).max(GYM_MEAL_PLANS_MOST) }).strict();
+/** The Plans list: each plan with who it is given to. */
+export const gymMealPlanListItemSchema = gymMealPlanSummarySchema.extend({
+  givenTo: z.object({
+    everyone: z.boolean(),
+    /** The membership types' and tags' names, in the order given. */
+    groups: z.array(z.string()),
+    members: z.number().int().nonnegative(),
+  }).strict(),
+  /** How many people on the list get it now. */
+  gets: z.number().int().nonnegative(),
+}).strict();
+export type GymMealPlanListItem = z.infer<typeof gymMealPlanListItemSchema>;
+
+export const gymMealPlansResponseSchema = z.object({ plans: z.array(gymMealPlanListItemSchema).max(GYM_MEAL_PLANS_MOST) }).strict();
 export type GymMealPlansResponse = z.infer<typeof gymMealPlansResponseSchema>;
 
 export const gymMealPlanResponseSchema = gymMealPlanSummarySchema.extend({

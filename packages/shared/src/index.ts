@@ -113,3 +113,4 @@ export * from "./phoneNotifications.js";
 export * from "./trainingReminders.js";
 export * from "./deletedForms.js";
 export * from "./gymMealPlans.js";
+export * from "./gymMealPlanGiving.js";

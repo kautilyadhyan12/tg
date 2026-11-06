@@ -1157,6 +1157,10 @@ d("member list: keeping it by hand (real Postgres)", () => {
       "gym_held_memberships.gym_id",
       "gym_leads.entry_id",
       "gym_leads.gym_id",
+      // A meal plan given to a person (0213; 24a-ii): moved by the join, the one given last standing if
+      // both had one; a record deleted for good takes it (`gymMealPlanGiving.routes.test.ts`).
+      "gym_meal_plan_audiences.entry_id",
+      "gym_meal_plan_audiences.gym_id",
       // A card on file (0144; 18d-ii): the join keeps the newer card on the kept record and owes
       // Square the other's stop; a record deleted for good owes its card's stop and takes the
       // card with it (`memberCards.routes.test.ts`).
