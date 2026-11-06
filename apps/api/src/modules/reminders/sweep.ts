@@ -115,6 +115,7 @@ export async function sendTrainingReminders(deps: {
           failed = true;
         }
       }
+      if (reached) await push.noteReached(sql, userId, now).catch(onError);
       if (failed && !reached) await repo.unclaim(sql, userId, [...taken, ...later], clock.day);
     } catch (err) {
       // A failure after the claim: owed again unless a phone already has it; the rest of the run goes on.

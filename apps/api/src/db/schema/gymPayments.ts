@@ -817,7 +817,7 @@ export const gymRenewalReminders = pgTable(
   ],
 );
 
-/** A membership's price raised by staff for members already on its line (0214; 18w): the price it goes to and the days
+/** A membership's price raised by staff for members already on its line (0215; 18w): the price it goes to and the days
  *  of notice. `from_period`, `from_on` and `sent_on` are written once its email has gone, and only then is anything
  *  charged at it. One a membership. Its link to the membership is in the migration only. */
 export const gymPriceRaises = pgTable(

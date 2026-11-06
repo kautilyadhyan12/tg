@@ -1,3 +1,4 @@
+import { BADGE_NAMES } from "@app/shared";
 import type { Meal, MealType, RunSummary, WeeklyChallenge, WorkoutListItem } from "@app/shared";
 
 // What the Dashboard says about the numbers the server sends (ROADMAP Stage 5 item 31a). The server
@@ -200,28 +201,9 @@ export function challengeProgress(c: Pick<WeeklyChallenge, "current" | "target">
   return `${count(Math.min(c.current, c.target))} of ${count(c.target)}`;
 }
 
-/** The badges' names, by the server's codes (`apps/api/src/modules/gamification/badges.ts`). */
-export const BADGE_NAMES: Readonly<Record<string, string>> = {
-  first_workout: "First Workout",
-  ten_workouts: "10 Workouts",
-  fifty_workouts: "50 Workouts",
-  hundred_workouts: "100 Workouts",
-  streak_3: "3-Day Streak",
-  streak_7: "7-Day Streak",
-  streak_30: "30-Day Streak",
-  streak_100: "100-Day Streak",
-  form_perfect: "Perfect Form",
-  form_master: "Form Master",
-  calorie_1k: "1,000 kcal Burned",
-  calorie_10k: "10,000 kcal Burned",
-  early_bird: "Early Bird",
-  night_owl: "Night Owl",
-  variety_5: "5 Kinds of Exercise",
-  variety_all: "Every Kind of Exercise",
-  first_meal: "First Meal Logged",
-  macro_master: "Protein Target, 7 Days",
-  photo_meal: "First Meal Photo",
-};
+// The badges' names, by the server's codes, live in @app/shared, where the notification of a new badge
+// reads them too (19e-ii).
+export { BADGE_NAMES };
 
 /** The newest badges first, by name; a code this phone does not know yet is left out, never shown raw. */
 export function latestBadges(earned: readonly { code: string; earnedAt: string }[], most = 2): string[] {

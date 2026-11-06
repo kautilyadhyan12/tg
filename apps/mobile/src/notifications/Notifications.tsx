@@ -92,7 +92,7 @@ export function NotificationsProvider({ children, onTapped }: { children: ReactN
     const offAddress = onNewAddress((address) => void give(address));
     const offTap = onNotificationTapped((tapped) => {
       if (!live()) return;
-      if (tapped.kind !== "training") setTapAsked(tapped);
+      if (tapped.kind !== "training" && tapped.kind !== "progress") setTapAsked(tapped);
       onTapped?.(tapped);
     });
     return () => {

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { AppState, Linking, PixelRatio, Pressable, ScrollView, StyleSheet, Switch, View, type NativeScrollEvent, type NativeSyntheticEvent } from "react-native";
 import {
   REMINDER_KINDS,
@@ -24,8 +24,20 @@ const DAY_LETTER = ["M", "T", "W", "T", "F", "S", "S"] as const;
 const DAY_NAME = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"] as const;
 type Loaded = { kind: "loading" } | { kind: "failed" } | { kind: "ok"; reminders: Reminder[]; safeMode: boolean };
 
-/** `onTurnedOn`: a reminder was just switched on, so Android is asked, if it has not been, to let it show. */
-export function TrainingReminders({ offOnPhone, phoneAllowed, onTurnedOn }: { offOnPhone: boolean; phoneAllowed: boolean; onTurnedOn: () => void }) {
+/** `onTurnedOn`: a reminder was just switched on, so Android is asked, if it has not been, to let it show.
+ *  `after`: what follows the reminders under Your training (19e-ii), told whether Safe mode is on (null while
+ *  that could not be read). */
+export function TrainingReminders({
+  offOnPhone,
+  phoneAllowed,
+  onTurnedOn,
+  after,
+}: {
+  offOnPhone: boolean;
+  phoneAllowed: boolean;
+  onTurnedOn: () => void;
+  after?: (safeMode: boolean | null) => ReactNode;
+}) {
   const { session } = useSession();
   const [loaded, setLoaded] = useState<Loaded>({ kind: "loading" });
   const [tries, setTries] = useState(0);
@@ -175,6 +187,7 @@ export function TrainingReminders({ offOnPhone, phoneAllowed, onTurnedOn }: { of
           </Txt>
         </>
       )}
+      {after?.(loaded.kind === "ok" ? loaded.safeMode : null)}
       <TimeBox
         reminder={timeFor}
         onClose={() => { setTimeFor(null); }}

@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { Button } from "../look/Button";
 import { Avatar, Badge, Card, PictureCard } from "../look/Card";
@@ -31,6 +31,14 @@ const WORKOUT_PARTS = [
   { value: "running", label: "Running" },
 ] as const;
 
+// The streak reminder's tap opens Workout on Running (19e-ii): a run is what keeps a streak from the phone today.
+let runningAsked = false;
+const runningWatchers = new Set<() => void>();
+export function openRunning(): void {
+  runningAsked = true;
+  for (const watcher of runningWatchers) watcher();
+}
+
 /** Exercises, My Workout and Running across the picture's top, as drawn (docs/design/phone/pages/Workout):
  *  it opens on Exercises, where the Dashboard's Browse Exercises points. Running is 37a's; the other two come
  *  with exercise folder 2's jobs. */
@@ -38,6 +46,18 @@ export function WorkoutScreen() {
   const { state } = useSession();
   const units = (state.kind === "in" ? accountUnits(state.user.units) : null) ?? "metric";
   const [part, setPart] = useState<WorkoutPart>("exercises");
+  useEffect(() => {
+    const take = () => {
+      if (!runningAsked) return;
+      runningAsked = false;
+      setPart("running");
+    };
+    take();
+    runningWatchers.add(take);
+    return () => {
+      runningWatchers.delete(take);
+    };
+  }, []);
   const parts = <Segments options={WORKOUT_PARTS} selected={part} onPick={setPart} />;
   const scroller = useRef<ScrollView>(null);
   const showEnd = useCallback(() => {
@@ -168,9 +188,30 @@ function ProgressCard() {
   );
 }
 
+// A tapped badge notification opens Achievements over the Me tab (19e-ii): asked before the tab is drawn,
+// it opens once the tab is.
+let achievementsAsked = false;
+const achievementsWatchers = new Set<() => void>();
+export function openAchievements(): void {
+  achievementsAsked = true;
+  for (const watcher of achievementsWatchers) watcher();
+}
+
 /** Achievements' picture, opening the page over the tab (35c-iii). */
 function AchievementsCard() {
   const [open, setOpen] = useState(false);
+  useEffect(() => {
+    const take = () => {
+      if (!achievementsAsked) return;
+      achievementsAsked = false;
+      setOpen(true);
+    };
+    take();
+    achievementsWatchers.add(take);
+    return () => {
+      achievementsWatchers.delete(take);
+    };
+  }, []);
   return (
     <>
       <Pressable

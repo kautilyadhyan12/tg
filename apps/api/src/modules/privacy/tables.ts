@@ -478,7 +478,7 @@ export const USER_LINKED_NOT_PURGED_TABLES = [
   // gym_meal_plan_audiences.given_by_user_id: which member of staff gave one of the gym’s meal plans
   // to a group (`0213`), on gym_meal_plans’ footing: the gym’s own; `ON DELETE set null`.
   "gym_meal_plan_audiences",
-  // gym_price_raises.raised_by: which member of staff raised a member's price (`0214`), on gym_events' footing: the
+  // gym_price_raises.raised_by: which member of staff raised a member's price (`0215`), on gym_events' footing: the
   // gym's own record of its prices; `ON DELETE set null`.
   "gym_price_raises",
   // gym_event_places.user_id — which events a member said they were coming to, waited for or
