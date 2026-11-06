@@ -1,5 +1,5 @@
 import { useCallback, useContext, useEffect, useRef, useState } from "react";
-import { AppState, Pressable, ScrollView, Share, StyleSheet, View } from "react-native";
+import { AppState, Pressable, ScrollView, Share, StyleSheet, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { memberReferralResponseSchema, referralLineWords, referralShareMessage, type ReferralTickets } from "@app/shared";
 import { Button } from "../../look/Button";
@@ -9,6 +9,7 @@ import { Icon } from "../../look/Icon";
 import { Modal } from "../../look/Modal";
 import { Rise } from "../../look/Motion";
 import { PictureTop } from "../../look/PictureTop";
+import { MOST_TEXT_GROWTH, pictureTopHeight } from "../../look/sizing";
 import { Txt } from "../../look/Txt";
 import { useSession } from "../../session/SessionProvider";
 import { CopyContext } from "../ThisCopy";
@@ -113,6 +114,9 @@ function Body({ place, top, bottom, onClose }: { place: InvitePlace; top: number
   const readInvite = useInviteRead();
   const [held, setHeld] = useState<InviteHeld>(place.first);
   const [shareFailed, setShareFailed] = useState(false);
+  // The page's own picture has gone under the Back button: it gets a bar, so it never sits on the words.
+  const [scrolled, setScrolled] = useState(false);
+  const { width, height } = useWindowDimensions();
   const started = useRef(0);
   const live = useRef(true);
 
@@ -151,7 +155,15 @@ function Body({ place, top, bottom, onClose }: { place: InvitePlace; top: number
 
   return (
     <>
-      <ScrollView style={styles.grow} contentContainerStyle={{ paddingBottom: bottom + 24 }}>
+      <ScrollView
+        testID="invite-scroll"
+        style={styles.grow}
+        contentContainerStyle={{ paddingBottom: bottom + 24 }}
+        scrollEventThrottle={32}
+        onScroll={(event) => {
+          setScrolled(event.nativeEvent.contentOffset.y > pictureTopHeight(width, height, PICTURE_TALL) - top - BACK_BAR - TOP_WORDS);
+        }}
+      >
         <PictureTop picture="highfive" tall={PICTURE_TALL} eyebrow={place.name} title="Invite a friend" />
         <View style={styles.body}>
           {held.kind === "loading" ? (
@@ -194,6 +206,13 @@ function Body({ place, top, bottom, onClose }: { place: InvitePlace; top: number
           )}
         </View>
       </ScrollView>
+      {scrolled ? (
+        <View testID="invite-bar" style={[styles.bar, { minHeight: top + BACK_BAR }]}>
+          <Txt kind="h3" numberOfLines={1}>
+            Invite a friend
+          </Txt>
+        </View>
+      ) : null}
       <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={onClose} style={[styles.back, { top: top + BACK_TOP }]}>
         <Icon name="back" size={18} />
       </Pressable>
@@ -228,7 +247,7 @@ function Ticket({ label, gift, notes }: { label: string; gift: string; notes: st
   return (
     <View style={styles.ticket} accessible accessibilityLabel={`${label}: ${gift}. ${notes.join(" ")}`}>
       <Txt kind="eyebrow">{label}</Txt>
-      <Txt kind="h2">{gift}</Txt>
+      <Txt kind="ticket">{gift}</Txt>
       {notes.map((note) => (
         <View key={note} style={styles.note}>
           <View style={styles.tick}>
@@ -248,7 +267,12 @@ function Ticket({ label, gift, notes }: { label: string; gift: string; notes: st
 
 /** The picture's height for the phone's width, as Challenges' own page. */
 const PICTURE_TALL = 0.5;
+/** The Back button's place under the phone's clock, and the bar that holds it once the page has scrolled. */
 const BACK_TOP = 12;
+const BACK_BAR = BACK_TOP + sizes.press + 8;
+/** The page's first words at the picture's foot (its name and the title, at the largest text Txt allows):
+ *  the bar comes as they reach the Back button, not once the whole picture has gone. */
+const TOP_WORDS = (14 + 26) * MOST_TEXT_GROWTH + 8 + 6;
 const NOTCH = 22;
 
 const styles = StyleSheet.create({
@@ -297,6 +321,19 @@ const styles = StyleSheet.create({
     backgroundColor: colours.field,
   },
   small: { gap: 4, paddingHorizontal: 2 },
+  bar: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    justifyContent: "flex-end",
+    paddingLeft: sizes.edge + sizes.press + 12,
+    paddingRight: sizes.edge,
+    paddingBottom: 8 + (sizes.press - 20) / 2,
+    backgroundColor: colours.page,
+    borderBottomWidth: 1,
+    borderBottomColor: colours.lineStrong,
+  },
   back: {
     position: "absolute",
     left: sizes.edge,

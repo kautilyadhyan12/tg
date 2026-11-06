@@ -291,6 +291,25 @@ describe("the page", () => {
     expect(await page().findByText(`${WEB}/invite/${IRON_CODE}`)).toBeTruthy();
   });
 
+  it("scrolled until its first words reach the Back button, the page gets a bar with its name behind Back", async () => {
+    const server = fakeServer({
+      "/v1/auth/refresh": ok({ tokens: tokens(2) }),
+      "/v1/orgs/mine": mine(IRON),
+      [pathOf(IRON)]: ok(on(IRON, IRON_CODE, TEN_POUNDS, null)),
+    });
+    await openGym(server.ask);
+    await fireEvent.press(await screen.findByTestId(`invite-line-${IRON.id}`));
+    expect(await page().findByText(`${WEB}/invite/${IRON_CODE}`)).toBeTruthy();
+    const scroll = page().getByTestId("invite-scroll");
+    const at = (y: number) => ({ nativeEvent: { contentOffset: { x: 0, y }, contentSize: { width: 400, height: 1600 }, layoutMeasurement: { width: 400, height: 800 } } });
+    await fireEvent.scroll(scroll, at(2));
+    expect(page().queryByTestId("invite-bar")).toBeNull();
+    await fireEvent.scroll(scroll, at(400));
+    expect(within(page().getByTestId("invite-bar")).getByText("Invite a friend")).toBeTruthy();
+    await fireEvent.scroll(scroll, at(0));
+    expect(page().queryByTestId("invite-bar")).toBeNull();
+  });
+
   it("sharing that cannot open says so under the button", async () => {
     shared.mockRejectedValueOnce(new Error("no share sheet"));
     const server = fakeServer({
