@@ -485,7 +485,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
 24. **Plans a gym gives its members** (Kd, 2026-11-03, `rulings/2026-11-03-31c.md`; spec Part 6 §16.6): staff write a plan once and tick who gets it, everybody, a group or members they pick; it is the gym's choice in the member's Recommended For You. The web folder, at the end of its list.
    - 24a. **A meal plan**, in two parts since 2026-11-05 (`handoff/2026-11-05-24a-i.md` keeps its line as first written):
      - 24a-i. [x] **Write a meal plan** — merged 2026-11-06 (PR #477).
-     - 24a-ii. [ ] **Give it to members**: everybody, a tag or members ticked, the newest for each; the route Stage 5's 31g reads.
+     - 24a-ii. [x] **Give it to members** — merged 2026-11-06 (PR #480).
    - 24b. [ ] **A workout plan**, once Stage 5's items 36 and 60 are built.
    - 24c. [ ] **A run plan**, once Stage 5's item 37 is built.
 
