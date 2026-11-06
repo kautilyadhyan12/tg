@@ -127,6 +127,25 @@ export const signInCodes = pgTable(
   ],
 );
 
+/** The note to an account's old address once Change email has moved it (19c), kept until it is sent:
+ *  the request tries it at once, and the worker again until the provider takes it (item 19's
+ *  data-integrity pass, L3). Deleted once sent, or after its last try. */
+export const emailChangedNotes = pgTable(
+  "email_changed_notes",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    oldEmail: citext("old_email").notNull(),
+    newEmail: citext("new_email").notNull(),
+    tries: smallint("tries").notNull().default(0),
+    nextTryAt: timestamp("next_try_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: createdAt(),
+  },
+  (t) => [check("email_changed_notes_tries_check", sql`${t.tries} >= 0`), index("email_changed_notes_next_try_idx").on(t.nextTryAt)],
+);
+
 export const refreshTokens = pgTable(
   "refresh_tokens", // rotation + reuse detection (v1 §6.1)
   {

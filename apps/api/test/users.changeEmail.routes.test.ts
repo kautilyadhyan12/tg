@@ -12,6 +12,7 @@ import { createIoRedis, createMemoryRedis, type RedisLike } from "../src/redis.j
 import { emailChangedEmail, maskedAddress } from "../src/email/templates.js";
 import { liveChannel } from "../src/modules/live/news.js";
 import { changeEmailSenderFor, type ChangeEmailSender } from "../src/modules/users/changeEmailSender.js";
+import { sendDueEmailChangedNotes } from "../src/modules/users/emailChangedNotes.js";
 
 const url = process.env["DATABASE_URL"];
 const d = describe.skipIf(url === undefined || url === "");
@@ -56,6 +57,8 @@ d("change email (real Postgres)", { timeout: T }, () => {
     sendInUse: () => Promise.resolve(),
     sendChanged: () => Promise.resolve(),
   };
+  /** Old addresses whose "changed" note the provider refuses, until taken out. */
+  const failChanged = new Set<string>();
   const receive = (to: string, what: string) => {
     inbox.set(to.toLowerCase(), [...(inbox.get(to.toLowerCase()) ?? []), what]);
   };
@@ -137,6 +140,24 @@ d("change email (real Postgres)", { timeout: T }, () => {
     return { userId: body.user.id, isNewAccount: body.isNewAccount };
   };
 
+  const changeSender: ChangeEmailSender = {
+    sendCode: (to, code) => {
+      changeCodes.set(to.toLowerCase(), code);
+      receive(to, "change code");
+      return Promise.resolve();
+    },
+    sendInUse: (to) => {
+      receive(to, "in use");
+      return Promise.resolve();
+    },
+    sendChanged: (oldEmail, newEmail) => {
+      if (failChanged.has(oldEmail)) return Promise.reject(new Error("provider refused"));
+      told.push({ oldEmail, newEmail });
+      receive(oldEmail, "changed");
+      return Promise.resolve();
+    },
+  };
+
   beforeAll(async () => {
     await cleanup();
     redis = redisUrl === undefined || redisUrl === "" ? createMemoryRedis() : createIoRedis(redisUrl);
@@ -155,22 +176,7 @@ d("change email (real Postgres)", { timeout: T }, () => {
           return Promise.resolve();
         },
       },
-      changeEmailSender: {
-        sendCode: (to, code) => {
-          changeCodes.set(to.toLowerCase(), code);
-          receive(to, "change code");
-          return Promise.resolve();
-        },
-        sendInUse: (to) => {
-          receive(to, "in use");
-          return Promise.resolve();
-        },
-        sendChanged: (oldEmail, newEmail) => {
-          told.push({ oldEmail, newEmail });
-          receive(oldEmail, "changed");
-          return Promise.resolve();
-        },
-      },
+      changeEmailSender: changeSender,
       robotCheck: { siteKey: "change-site-key", verify: (token) => Promise.resolve(token === "pass" ? ("passed" as const) : ("failed" as const)) },
       googlePhoneVerifier: {
         clientId: "change-email-test-client",
@@ -474,6 +480,35 @@ d("change email (real Postgres)", { timeout: T }, () => {
       ),
     );
     expect(answers.map((r) => r.statusCode)).toEqual(Array.from({ length: 12 }, () => 200));
+  });
+
+  it("the old address is told even when the first send fails: the note waits, and the worker sends it once (L3)", async () => {
+    const notesOf = (userId: string) => sql`SELECT tries FROM email_changed_notes WHERE user_id = ${userId}`;
+    const run = () => sendDueEmailChangedNotes({ sql, sender: changeSender, log: api().log });
+    // Sent at once: no note is left.
+    const wes = await person("wes");
+    expect((await change(wes, address("wes-new"))).statusCode).toBe(200);
+    expect(await notesOf(wes.userId)).toHaveLength(0);
+
+    const vic = await person("vic");
+    failChanged.add(vic.email);
+    expect((await change(vic, address("vic-new"))).statusCode).toBe(200);
+    expect(told.filter((t) => t.oldEmail === vic.email)).toHaveLength(0);
+    expect(await notesOf(vic.userId)).toHaveLength(1);
+    // Not before its time, and a failed try waits again.
+    await run();
+    expect(told.filter((t) => t.oldEmail === vic.email)).toHaveLength(0);
+    await sql`UPDATE email_changed_notes SET next_try_at = now() - interval '1 second' WHERE user_id = ${vic.userId}`;
+    await run();
+    expect(told.filter((t) => t.oldEmail === vic.email)).toHaveLength(0);
+    expect(await notesOf(vic.userId)).toEqual([{ tries: 2 }]);
+    // The provider takes it: told once, the note gone, and a run after sends nothing more.
+    failChanged.delete(vic.email);
+    await sql`UPDATE email_changed_notes SET next_try_at = now() - interval '1 second' WHERE user_id = ${vic.userId}`;
+    await Promise.all([run(), run()]);
+    await run();
+    expect(told.filter((t) => t.oldEmail === vic.email)).toHaveLength(1);
+    expect(await notesOf(vic.userId)).toHaveLength(0);
   });
 
   // ── Item 19's data-integrity pass (reviews/19-integrity-findings.md) ──

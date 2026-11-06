@@ -114,7 +114,8 @@ export async function emailTaken(sql: Sql, email: string): Promise<boolean> {
 }
 
 export type MovedEmail =
-  | { kind: "moved"; email: string; displayName: string }
+  /** `noteId`: the note to the old address, kept in the move's own step; null with no old address. */
+  | { kind: "moved"; email: string; displayName: string; noteId: string | null }
   | { kind: "taken" }
   | { kind: "stale" };
 
@@ -137,7 +138,16 @@ export async function moveEmail(
       const name = input.nameFrom !== null && was.display_name === input.nameFrom ? input.nameTo : was.display_name;
       await tx`UPDATE users SET email = ${input.to}, display_name = ${name} WHERE id = ${input.userId}`;
       await tx`DELETE FROM auth_identities WHERE user_id = ${input.userId} AND provider = 'google'`;
-      return { kind: "moved", email: input.to, displayName: name };
+      // The old address is told even if this request ends now: the worker sends what the request did
+      // not, from five minutes on (the request has first go).
+      const note =
+        input.from === null
+          ? []
+          : await tx<{ id: string }[]>`
+              INSERT INTO email_changed_notes (user_id, old_email, new_email, tries, next_try_at)
+              VALUES (${input.userId}, ${input.from}, ${input.to}, 1, now() + interval '5 minutes')
+              RETURNING id`;
+      return { kind: "moved", email: input.to, displayName: name, noteId: note[0]?.id ?? null };
     });
   } catch (err) {
     if (isUniqueViolation(err)) return { kind: "taken" };

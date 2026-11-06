@@ -10,6 +10,7 @@ import type { Sql } from "postgres";
 import type { AppConfig } from "../../config.js";
 import { emailTaken, moveAccountEmail, movedHereLately, redeemEmailCode, requestEmailCode } from "../auth/service.js";
 import type { ChangeEmailSender } from "./changeEmailSender.js";
+import { sendEmailChangedNoteNow } from "./emailChangedNotes.js";
 import * as repo from "./repo.js";
 import { UsersError } from "./service.js";
 
@@ -80,16 +81,9 @@ export async function changeEmail(
   if (moved.kind === "stale") {
     throw new UsersError(409, "email_changed", "Your email address was changed on another device. Close this and check it.");
   }
-  if (row.email !== null) {
-    try {
-      await deps.sender.sendChanged(row.email, moved.email);
-    } catch (err) {
-      // The move stands: the note is a courtesy. Error class only; a provider's errors echo addresses.
-      deps.log.warn(
-        { errName: err instanceof Error ? err.name : typeof err, event: "email.email_changed.send_failed" },
-        "email-changed note send failed",
-      );
-    }
+  // The move stands whatever happens to the note: a note not sent now is the worker's.
+  if (row.email !== null && moved.noteId !== null) {
+    await sendEmailChangedNoteNow(deps, { id: moved.noteId, oldEmail: row.email, newEmail: moved.email });
   }
   return { email: moved.email, displayName: moved.displayName };
 }

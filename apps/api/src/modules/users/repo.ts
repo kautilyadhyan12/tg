@@ -842,3 +842,37 @@ export async function restoreUser(sql: Sql, userId: string): Promise<boolean> {
     RETURNING id`;
   return rows.length > 0;
 }
+
+// ── The note to an old address after Change email (item 19's data-integrity pass, L3) ──
+
+export interface DueEmailChangedNote {
+  id: string;
+  oldEmail: string;
+  newEmail: string;
+  /** Tries so far, this one counted. */
+  tries: number;
+}
+
+/** Takes up to `limit` notes whose next try has come, and sets each one's next try further off
+ *  (5, 10, 20 … minutes, at most 6 hours), so a second run at once, or a run after a crash, takes none
+ *  of them again until then. */
+export async function takeDueEmailChangedNotes(sql: Sql, limit: number): Promise<DueEmailChangedNote[]> {
+  const rows = await sql<{ id: string; old_email: string; new_email: string; tries: number }[]>`
+    WITH due AS (
+      SELECT id FROM email_changed_notes
+      WHERE next_try_at <= now()
+      ORDER BY next_try_at
+      LIMIT ${limit}
+      FOR UPDATE SKIP LOCKED
+    )
+    UPDATE email_changed_notes AS n
+    SET tries = n.tries + 1, next_try_at = now() + make_interval(mins => LEAST(5 * power(2, n.tries)::int, 360))
+    FROM due WHERE n.id = due.id
+    RETURNING n.id, n.old_email::text AS old_email, n.new_email::text AS new_email, n.tries`;
+  return rows.map((row) => ({ id: row.id, oldEmail: row.old_email, newEmail: row.new_email, tries: row.tries }));
+}
+
+/** Sent, or given up on: the old address is kept no longer. */
+export async function dropEmailChangedNote(sql: Sql, id: string): Promise<void> {
+  await sql`DELETE FROM email_changed_notes WHERE id = ${id}`;
+}
