@@ -456,7 +456,7 @@ function SideButton({ icon, label, onPress }: { icon: "map" | "timer"; label: st
       <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} style={({ pressed }) => [styles.side, pressed ? styles.pressed : null]}>
         <Icon name={icon} size={22} />
       </Pressable>
-      <Txt kind="small" colour="textSoft" style={styles.roundLabel}>
+      <Txt kind="small" colour="textSoft" numberOfLines={1} fit style={styles.roundLabel}>
         {label}
       </Txt>
     </View>
@@ -466,7 +466,8 @@ function SideButton({ icon, label, onPress }: { icon: "map" | "timer"; label: st
 function Figure({ label, value, unit, dim }: { label: string; value: string; unit?: string; dim: boolean }) {
   return (
     <View style={styles.figure}>
-      <Txt kind="eyebrow" colour="textFaint">
+      {/* One line, so the three numbers under the map stand level on a small phone (37b-i). */}
+      <Txt kind="eyebrow" colour="textFaint" numberOfLines={1} fit>
         {label}
       </Txt>
       <Txt style={[styles.figureValue, dim ? styles.dim : null]} fit numberOfLines={1}>
@@ -839,9 +840,9 @@ const styles = StyleSheet.create({
     boxShadow: shadows.sheet,
   },
   panelFigures: { flexDirection: "row", gap: 12 },
-  sideWrap: { alignItems: "center", width: 64, paddingTop: 20 },
+  sideWrap: { alignItems: "center", width: 84, paddingTop: 20 },
   side: { width: 56, height: 56, borderRadius: sizes.round, alignItems: "center", justifyContent: "center", borderWidth: 1.5, borderColor: colours.grab, backgroundColor: colours.fill },
-  sideSpace: { width: 64 },
+  sideSpace: { width: 84 },
   // After Finish, the map of the run and its full size.
   mapBox: { height: 250, borderRadius: 14, overflow: "hidden", borderWidth: 1, borderColor: colours.line, backgroundColor: colours.tabBar },
   bigTop: { position: "absolute", left: 16, right: 16, flexDirection: "row", alignItems: "center", gap: 10 },
@@ -864,7 +865,7 @@ const styles = StyleSheet.create({
   figure: { flex: 1, gap: 6 },
   figureValue: { fontFamily: fonts.bold, fontSize: 34, lineHeight: 40, letterSpacing: -1, color: colours.text },
   figureUnit: { fontFamily: fonts.semibold, fontSize: 15, color: colours.textSoft, letterSpacing: 0 },
-  controls: { flexDirection: "row", justifyContent: "center", gap: 22, paddingTop: 12 },
+  controls: { flexDirection: "row", justifyContent: "center", gap: 16, paddingTop: 12 },
   roundWrap: { alignItems: "center" },
   round: { width: 96, height: 96, borderRadius: sizes.round, alignItems: "center", justifyContent: "center" },
   // Both keep a border of one width: Android stops the app when a view gains a gradient as its

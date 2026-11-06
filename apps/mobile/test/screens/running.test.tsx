@@ -766,8 +766,10 @@ describe("the map under the run (37b-i)", () => {
       type: "FeatureCollection",
       features: marks.map(([lat, lng], i) => ({ type: "Feature", properties: { n: String(i + 1) }, geometry: { type: "Point", coordinates: [lng, lat] } })),
     });
-    // Still in the summary, so the page scrolls; it fits the whole run.
+    // Still in the summary, so the page scrolls; it fits the whole run. The map takes no tap of its
+    // own: on Kd's phone its tap took the Finish press under it and opened the full size at once.
     expect(box.props).toMatchObject({ dragPan: false, touchZoom: false });
+    expect(box.props.onPress).toBeUndefined();
     expect(Array.isArray(box.camera?.["bounds"])).toBe(true);
     expect(screen.getByText(OPENFREEMAP.credit)).toBeTruthy();
 

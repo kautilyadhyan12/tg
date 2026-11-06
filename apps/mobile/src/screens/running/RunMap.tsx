@@ -99,9 +99,6 @@ export function RunMap({ track, starts, units, mode, scheme, source, under = 0, 
         doubleTapHoldZoom={!still}
         touchRotate={false}
         touchPitch={false}
-        onPress={() => {
-          if (still) onOpen?.();
-        }}
         onRegionWillChange={(event) => {
           if (mode === "live" && event.nativeEvent.userInteraction) setFollowing(false);
         }}
@@ -143,8 +140,12 @@ export function RunMap({ track, starts, units, mode, scheme, source, under = 0, 
         ) : null}
       </MapView>
       {mode === "box" ? (
-        <Pressable accessibilityRole="button" accessibilityLabel="Open the map full size" onPress={onOpen} hitSlop={8} style={styles.open}>
-          <Icon name="expand" size={17} />
+        // The whole box is the button, over the map, so only a press begun on it opens it: the map's
+        // own tap took the Finish press under it for one (found on Kd's phone, 2026-11-06).
+        <Pressable accessibilityRole="button" accessibilityLabel="Open the map full size" onPress={onOpen} style={StyleSheet.absoluteFill}>
+          <View style={styles.open}>
+            <Icon name="expand" size={17} />
+          </View>
         </Pressable>
       ) : null}
       {mode === "live" && !following ? (
@@ -154,15 +155,17 @@ export function RunMap({ track, starts, units, mode, scheme, source, under = 0, 
           onPress={() => {
             setFollowing(true);
           }}
-          style={[styles.follow, { bottom: under + 16 }]}
+          style={[styles.follow, { bottom: under + 44 }]}
         >
           <Icon name="locate" size={22} />
         </Pressable>
       ) : null}
-      <View pointerEvents="none" style={[styles.credit, { bottom: under + 6, backgroundColor: t.credit }]}>
-        <Txt kind="small" style={[styles.creditWords, { color: t.creditWord }]}>
-          {source.credit}
-        </Txt>
+      <View pointerEvents="none" style={[styles.credit, { bottom: under + 6 }]}>
+        <View style={[styles.creditBack, { backgroundColor: t.credit }]}>
+          <Txt kind="small" style={[styles.creditWords, { color: t.creditWord }]}>
+            {source.credit}
+          </Txt>
+        </View>
       </View>
     </View>
   );
@@ -224,7 +227,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colours.grab,
   },
-  credit: { position: "absolute", right: 8, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 },
+  // Kept inside the map, wrapping to a second line on a narrow phone rather than running off its edge.
+  credit: { position: "absolute", right: 8, left: 8, alignItems: "flex-end" },
+  creditBack: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 },
   creditWords: { fontSize: 11, lineHeight: 14 },
   front: { width: BEAM * 2, height: BEAM * 2, alignItems: "center", justifyContent: "center" },
   beam: { position: "absolute" },
