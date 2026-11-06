@@ -7,11 +7,19 @@ const cableOf = (key: keyof typeof copies) =>
   cableFor({ scheme: copyFor(key).scheme, ...copies[key] });
 
 describe("what the phone command runs for a copy", () => {
-  it("links the copy's own api and bundler through the cable, and nothing else", () => {
+  it("links the copy's own api, bundler and website through the cable, and nothing else", () => {
     expect(cableOf("feature2").reverse).toEqual([
       ["reverse", "tcp:3001", "tcp:3001"],
       ["reverse", "tcp:8092", "tcp:8092"],
+      ["reverse", "tcp:5174", "tcp:5174"],
     ]);
+  });
+
+  it("the website's link is the address the copy's shared links start with", () => {
+    for (const key of COPY_KEYS as (keyof typeof copies)[]) {
+      const web = cableOf(key).reverse[2];
+      expect(`http://localhost:${web?.[1]?.replace("tcp:", "") ?? ""}`).toBe(copyFor(key).webUrl);
+    }
   });
 
   it("the api's link is the address the app itself asks", () => {
@@ -41,11 +49,13 @@ describe("what the phone command runs for a copy", () => {
   });
 
   it.each([
-    ["a port that is words", { scheme: "a", apiPort: "3000; calc", metroPort: 8091 }],
-    ["a port with a fraction", { scheme: "a", apiPort: 3000.5, metroPort: 8091 }],
-    ["a missing port", { scheme: "a", apiPort: 3000, metroPort: undefined }],
-    ["a port below 1024", { scheme: "a", apiPort: 80, metroPort: 8091 }],
-    ["a scheme with a space", { scheme: "a & calc", apiPort: 3000, metroPort: 8091 }],
+    ["a port that is words", { scheme: "a", apiPort: "3000; calc", metroPort: 8091, webPort: 5173 }],
+    ["a port with a fraction", { scheme: "a", apiPort: 3000.5, metroPort: 8091, webPort: 5173 }],
+    ["a missing port", { scheme: "a", apiPort: 3000, metroPort: undefined, webPort: 5173 }],
+    ["a port below 1024", { scheme: "a", apiPort: 80, metroPort: 8091, webPort: 5173 }],
+    ["a missing website port", { scheme: "a", apiPort: 3000, metroPort: 8091, webPort: undefined }],
+    ["a website port that is words", { scheme: "a", apiPort: 3000, metroPort: 8091, webPort: "5173 & calc" }],
+    ["a scheme with a space", { scheme: "a & calc", apiPort: 3000, metroPort: 8091, webPort: 5173 }],
   ])("refuses %s", (_name, copy) => {
     expect(() => cableFor(copy)).toThrow(/must be/);
   });
