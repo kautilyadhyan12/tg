@@ -160,10 +160,13 @@ export async function chooseVoice(on: boolean): Promise<void> {
   primeVoice(current);
 }
 
-/** The account's units, as the app knows them. */
+/** The account's units, as the app knows them. Changed mid-run, the marks already passed in the new
+ *  units are counted at once, so none is said late. */
 export async function keepRunUnits(units: Units): Promise<void> {
   await readRunChoices();
-  if (choices.units !== units) await keepChoices({ units });
+  if (choices.units === units) return;
+  await keepChoices({ units });
+  primeVoice(current);
 }
 
 // ── The voice (37a-ii) ────────────────────────────────────────────────────────────────────────
@@ -356,7 +359,7 @@ export async function takeLocations(data: unknown): Promise<void> {
   }
   // Only Auto-pause pauses a run here: a pause ends the stretch the maths smooths, so a mark passed
   // before it is said at once.
-  if (current.phase === "running") say([...markNow(current, false), ...(was === "paused" ? [PAUSE_WORDS.resumed] : [])]);
+  if (current.phase === "running") say([...(was === "paused" ? [PAUSE_WORDS.resumed] : []), ...markNow(current, false)]);
   else if (was === "running") say([...markNow(current, true), PAUSE_WORDS.auto]);
   if (Date.now() - writtenAt >= WRITE_EVERY_MS) {
     writtenAt = Date.now();

@@ -6,6 +6,9 @@ import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.speech.tts.Voice
@@ -24,14 +27,20 @@ import java.util.Locale
 // one that needs the internet, so a run with no signal is still spoken.
 class RunVoiceModule : Module() {
   private var engine: TextToSpeech? = null
+  /** Which engine is the current one: an answer from one let go, or replaced, is not listened to. */
+  private var engineNo = 0
   private var ready = false
   /** An engine can answer inside its own constructor, before it is kept: its answer waits here. */
   private var earlyStatus: Int? = null
   private val waiting = ArrayList<String>()
-  private var queued = 0
+  /** Lines given to the engine and not yet ended. The focus is held while there are any. */
+  private val pending = HashSet<String>()
   private var lineNo = 0
   private var focus: AudioFocusRequest? = null
   private val focusChanged = AudioManager.OnAudioFocusChangeListener { }
+  private val main = Handler(Looper.getMainLooper())
+  /** When the lines given so far should all have been said, on the uptime clock. */
+  private var queueEnds = 0L
 
   private val speech: AudioAttributes = AudioAttributes.Builder()
     .setUsage(AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE)
@@ -50,7 +59,7 @@ class RunVoiceModule : Module() {
     /** Stop at once, and let the phone's voice go: the run has ended. */
     AsyncFunction("quiet") { quiet() }
 
-    /** Whether this phone can speak English at all, for the Running page's line. */
+    /** "ok", "off" (no text-to-speech that starts) or "noEnglish", for the Running page's line. */
     AsyncFunction("check") { promise: Promise -> check(promise) }
 
     OnDestroy { quiet() }
@@ -60,24 +69,29 @@ class RunVoiceModule : Module() {
   private fun say(text: String) {
     val ctx = context ?: return
     if (engine == null) {
+      engineNo += 1
+      val mine = engineNo
       ready = false
       earlyStatus = null
-      val made = TextToSpeech(ctx) { status -> started(status) }
+      val made = TextToSpeech(ctx) { status -> started(mine, status) }
       engine = made
-      earlyStatus?.let { started(it) }
+      earlyStatus?.let { started(mine, it) }
+      // It failed inside its constructor: nothing is kept to be said later.
+      if (engine == null) return
     }
     if (ready) speakNow(text) else waiting.add(text)
   }
 
   @Synchronized
-  private fun started(status: Int) {
+  private fun started(id: Int, status: Int) {
+    if (id != engineNo) return
     val tts = engine
     if (tts == null) {
       earlyStatus = status
       return
     }
     if (ready) return
-    if (status != TextToSpeech.SUCCESS || !useEnglish(tts)) {
+    if (status != TextToSpeech.SUCCESS || useEnglish(tts) != "ok") {
       // No voice on this phone: the lines are let go, and the next one tries again.
       waiting.clear()
       tts.shutdown()
@@ -87,12 +101,12 @@ class RunVoiceModule : Module() {
     tts.setAudioAttributes(speech)
     tts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
       override fun onStart(utteranceId: String?) = Unit
-      override fun onDone(utteranceId: String?) = lineEnded()
-      override fun onStop(utteranceId: String?, interrupted: Boolean) = lineEnded()
+      override fun onDone(utteranceId: String?) = lineEnded(utteranceId)
+      override fun onStop(utteranceId: String?, interrupted: Boolean) = lineEnded(utteranceId)
 
       @Deprecated("Deprecated in Java")
-      override fun onError(utteranceId: String?) = lineEnded()
-      override fun onError(utteranceId: String?, errorCode: Int) = lineEnded()
+      override fun onError(utteranceId: String?) = lineEnded(utteranceId)
+      override fun onError(utteranceId: String?, errorCode: Int) = lineEnded(utteranceId)
     })
     ready = true
     for (line in waiting) speakNow(line)
@@ -101,38 +115,46 @@ class RunVoiceModule : Module() {
 
   private fun speakNow(text: String) {
     val tts = engine ?: return
-    if (queued == 0) takeFocus()
+    // Refused focus is a phone call or another app that may not be talked over: the line is let go.
+    if (pending.isEmpty() && !takeFocus()) return
     lineNo += 1
-    if (tts.speak(text, TextToSpeech.QUEUE_ADD, Bundle(), "run-$lineNo") == TextToSpeech.SUCCESS) {
-      queued += 1
-    } else if (queued == 0) {
+    val id = "run-$lineNo"
+    if (tts.speak(text, TextToSpeech.QUEUE_ADD, Bundle(), id) == TextToSpeech.SUCCESS) {
+      pending.add(id)
+      // An engine that dies mid-line calls nothing back: the music is given back all the same, well
+      // after the line, and those before it, would have ended (a voice says about 15 letters a second).
+      queueEnds = maxOf(SystemClock.uptimeMillis(), queueEnds) + text.length * MS_PER_LETTER * 2
+      main.postAtTime({ lineEnded(id) }, queueEnds + LINE_GRACE_MS)
+    } else if (pending.isEmpty()) {
       dropFocus()
     }
   }
 
   @Synchronized
-  private fun lineEnded() {
-    queued = maxOf(0, queued - 1)
-    if (queued == 0) dropFocus()
+  private fun lineEnded(id: String?) {
+    if (id == null || !pending.remove(id)) return
+    if (pending.isEmpty()) dropFocus()
   }
 
   @Synchronized
   private fun quiet() {
+    engineNo += 1
     waiting.clear()
     engine?.stop()
     engine?.shutdown()
     engine = null
     ready = false
-    queued = 0
+    pending.clear()
+    main.removeCallbacksAndMessages(null)
     dropFocus()
   }
 
   /** The phone's own English, or American English; a voice kept on the phone where there is one. */
-  private fun useEnglish(tts: TextToSpeech): Boolean {
+  private fun useEnglish(tts: TextToSpeech): String {
     val own = Locale.getDefault()
     val wanted = if (own.language == Locale.ENGLISH.language) own else Locale.US
     if (tts.setLanguage(wanted) < TextToSpeech.LANG_AVAILABLE && (wanted == Locale.US || tts.setLanguage(Locale.US) < TextToSpeech.LANG_AVAILABLE)) {
-      return false
+      return "noEnglish"
     }
     val current: Voice? = tts.voice
     if (current != null && current.isNetworkConnectionRequired) {
@@ -142,18 +164,18 @@ class RunVoiceModule : Module() {
         .firstOrNull()
       if (onPhone != null) tts.voice = onPhone
     }
-    return true
+    return "ok"
   }
 
   private fun check(promise: Promise) {
     val ctx = context
     if (ctx == null) {
-      promise.resolve(false)
+      promise.resolve("off")
       return
     }
     synchronized(this) {
       if (ready && engine != null) {
-        promise.resolve(true)
+        promise.resolve("ok")
         return
       }
     }
@@ -162,11 +184,11 @@ class RunVoiceModule : Module() {
     var answered = false
     val answer = { status: Int ->
       val tts = asked[0]
-      if (!answered && tts != null) {
+      if (!answered) {
         answered = true
-        val can = status == TextToSpeech.SUCCESS && useEnglish(tts)
-        tts.shutdown()
-        promise.resolve(can)
+        val said = if (status == TextToSpeech.SUCCESS && tts != null) useEnglish(tts) else "off"
+        tts?.shutdown()
+        promise.resolve(said)
       }
     }
     var early: Int? = null
@@ -174,19 +196,19 @@ class RunVoiceModule : Module() {
     early?.let { answer(it) }
   }
 
-  private fun takeFocus() {
-    val audio = context?.getSystemService(AudioManager::class.java) ?: return
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+  private fun takeFocus(): Boolean {
+    val audio = context?.getSystemService(AudioManager::class.java) ?: return false
+    val got = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
       val request = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
         .setAudioAttributes(speech)
         .setOnAudioFocusChangeListener(focusChanged)
         .build()
-      audio.requestAudioFocus(request)
-      focus = request
+      audio.requestAudioFocus(request).also { if (it == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) focus = request }
     } else {
       @Suppress("DEPRECATION")
       audio.requestAudioFocus(focusChanged, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
     }
+    return got == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
   }
 
   private fun dropFocus() {
@@ -198,5 +220,10 @@ class RunVoiceModule : Module() {
       @Suppress("DEPRECATION")
       audio.abandonAudioFocus(focusChanged)
     }
+  }
+
+  private companion object {
+    const val LINE_GRACE_MS = 5_000L
+    const val MS_PER_LETTER = 70L
   }
 }

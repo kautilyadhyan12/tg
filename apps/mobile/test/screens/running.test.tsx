@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import { AppState, Linking } from "react-native";
 import { RUN_MAX_POINTS, runSums, saveRunRequestSchema, type RunPoint, type SaveRunRequest } from "@app/shared";
 import { App } from "../../src/App";
-import { closedPauses, phoneRunFiles, resetRecorder, runNow, takeLocations } from "../../src/screens/running/recorder";
+import { closedPauses, keepRunUnits, phoneRunFiles, resetRecorder, runNow, takeLocations } from "../../src/screens/running/recorder";
 import { spokenTime } from "../../src/screens/running/runVoice";
 import { readRunFile } from "../../src/screens/running/runQueue";
 import { clock, distance, runName } from "../../src/screens/running/runWords";
@@ -378,7 +378,7 @@ describe("a run stays inside what the server takes (round one of 37a, H1)", () =
 // real runs in test/runVoice.test.ts; here a real run goes through the whole app, as Android hands
 // its points over with the screen locked, in each of the person's units.
 
-const voice = jest.requireMock<{ voice: { said: string[]; quieted: number; canSpeak: boolean } }>("../../src/screens/running/runVoiceNative").voice;
+const voice = jest.requireMock<{ voice: { said: string[]; quieted: number; canSpeak: string; missing: boolean } }>("../../src/screens/running/runVoiceNative").voice;
 
 /** A real run's points, thirty at a time, as Android hands them over with the screen off. */
 async function feedReal(points: readonly RealPoint[]) {
@@ -391,11 +391,18 @@ async function feedReal(points: readonly RealPoint[]) {
 }
 
 const MARK = { kilometre: /^\d+ kilometres?\./, mile: /^\d+ miles?\./ } as const;
+
+/** The seconds a line says after a label: "Time 11 minutes 20 seconds." is 680. */
+function secondsIn(line: string, label: string): number {
+  const part = line.split(`${label} `)[1]?.split(".")[0] ?? "";
+  const unit = (name: string) => Number(new RegExp(`(\\d+) ${name}s?\\b`).exec(part)?.[1] ?? 0);
+  return unit("hour") * 3600 + unit("minute") * 60 + unit("second");
+}
 const marksSaid = (unit: "kilometre" | "mile") => voice.said.filter((line) => MARK[unit].test(line));
 
 describe("the voice, through the whole app", () => {
   beforeEach(() => {
-    Object.assign(voice, { said: [], quieted: 0, canSpeak: true });
+    Object.assign(voice, { said: [], quieted: 0, canSpeak: "ok", missing: false });
   });
 
   it.each([
@@ -497,7 +504,7 @@ describe("the voice, through the whole app", () => {
   });
 
   it("a phone that cannot speak says so under the switch, with the button to its settings", async () => {
-    voice.canSpeak = false;
+    voice.canSpeak = "off";
     const opened = jest.spyOn(Linking, "sendIntent").mockResolvedValue(undefined);
     const s = runServer();
     await openRunning(s);
@@ -505,13 +512,115 @@ describe("the voice, through the whole app", () => {
     await fireEvent.press(screen.getByRole("button", { name: "Open text-to-speech settings" }));
     expect(opened).toHaveBeenCalledWith("com.android.settings.TTS_SETTINGS");
     // Turned on in the phone's settings: the line goes when the person comes back.
-    voice.canSpeak = true;
+    voice.canSpeak = "ok";
     await act(() => {
       comeBack();
     });
     await waitFor(() => {
       expect(screen.queryByText("Text-to-speech is off on this phone.")).toBeNull();
     });
+  });
+
+  it("a phone with text-to-speech but no English voice is told to add one, not that it is off", async () => {
+    voice.canSpeak = "noEnglish";
+    const s = runServer();
+    await openRunning(s);
+    expect(await screen.findByText("Your phone has no English voice for text-to-speech.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Open text-to-speech settings" })).toBeTruthy();
+    expect(screen.queryByText("Text-to-speech is off on this phone.")).toBeNull();
+  });
+
+  it("a phone with no voice code of this app's (an iPhone, until item 21) keeps the row, says Coming soon, and its switch does nothing", async () => {
+    voice.missing = true;
+    const s = runServer();
+    await openRunning(s);
+    expect(await screen.findByText("Coming soon")).toBeTruthy();
+    const toggle = screen.getByRole("switch", { name: "Voice" });
+    expect(toggle.props.value).toBe(false);
+    expect(toggle.props.disabled).toBe(true);
+  });
+
+  it("a run reopened past 3 km says the next kilometre, never the 3 km already passed", async () => {
+    // A run of 3,300 m left on this phone by this person, still recording (Android's service on).
+    const startedAt = Date.now() - 1_200_000;
+    const points = Array.from({ length: 1100 }, (_, i): RunPoint => [i * 1000, 26.1445 + (i * 3) / 111_132, 91.7362, 5]);
+    await phoneRunFiles.write("run-now.json", JSON.stringify({ runId: "2c9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed", userId: RAVI.id, startedAt, phase: "running", pausedByPerson: false, autoPause: true, pauses: [], finishedMs: null, files: 2 }));
+    await phoneRunFiles.write("run-now-0.json", JSON.stringify(points.slice(0, 600)));
+    await phoneRunFiles.write("run-now-1.json", JSON.stringify(points.slice(600)));
+    location.running = true;
+    const s = runServer();
+    // The run opens over the app as it was left, so the Running page is not looked for.
+    await render(<App extra={extra} store={memoryStore(kept(1, RAVI))} ask={s.ask} runStore={s.runStore} />);
+    await waitFor(() => {
+      expect(runNow()?.points).toHaveLength(1100);
+    });
+    await feed(1100, 10, 3);
+    expect(marksSaid("kilometre")).toEqual([]);
+    await feed(1110, 300, 3);
+    expect(marksSaid("kilometre").map((line) => line.split(".")[0])).toEqual(["4 kilometres"]);
+  });
+
+  it("a pause before a kilometre is left out of the time said at it, as the summary leaves it out", async () => {
+    const s = runServer();
+    await openRunning(s);
+    await startRunning();
+    await feed(0, 400, 3);
+    const run = runNow();
+    if (run === null) throw new Error("no run");
+    // Standing ninety seconds: Auto-pause pauses the run, then running on starts it again.
+    const stillAt = 26.1445 + (399 * 3) / 111_132;
+    await act(() =>
+      takeLocations({ locations: Array.from({ length: 90 }, (_, i) => ({ timestamp: run.startedAt + (400 + i) * 1000, coords: { latitude: stillAt, longitude: 91.7362, accuracy: 5, speed: 0 } })) }),
+    );
+    await feed(490, 330, 3, stillAt - (490 * 3) / 111_132);
+    const done = runNow();
+    if (done === null) throw new Error("no run");
+    expect(done.pauses.length).toBe(1);
+    const end = done.points[done.points.length - 1]?.[0] ?? 0;
+    const final = runSums(done.points, closedPauses(done, end), end, 0);
+    const second = voice.said.find((line) => line.startsWith("2 kilometres."));
+    if (second === undefined) throw new Error("the second kilometre was not said");
+    const saidS = secondsIn(second, "Time");
+    // The clock at the mark, from the summary: its moving time less what came after the mark.
+    const atMark = final.movingS - final.splitsKm.slice(2).reduce((t, split) => t + split.s, 0);
+    expect(Math.abs(saidS - atMark)).toBeLessThanOrEqual(1);
+    expect(secondsIn(second, "Average pace")).toBe(Math.round(saidS / 2));
+    // Ninety seconds standing would have made it some 85 s more.
+    expect(saidS).toBeLessThan(700);
+  });
+
+  it("units changed mid-run say no mile already passed, and the next mile in miles", async () => {
+    const s = runServer();
+    await openRunning(s);
+    await startRunning();
+    await feed(0, 400, 3);
+    await feed(400, 350, 3);
+    await feed(750, 350, 3);
+    expect(marksSaid("kilometre").map((line) => line.split(".")[0])).toEqual(["1 kilometre", "2 kilometres", "3 kilometres"]);
+    // 3.3 km run: 2 miles (3.22 km) are passed. The account turns to miles.
+    await act(() => keepRunUnits("imperial"));
+    await feed(1100, 10, 3);
+    expect(marksSaid("mile")).toEqual([]);
+    await feed(1110, 540, 3);
+    expect(marksSaid("mile").map((line) => line.split(".")[0])).toEqual(["3 miles"]);
+  });
+
+  it("a batch that starts the run again and passes a kilometre says Run resumed first", async () => {
+    const s = runServer();
+    await openRunning(s);
+    await startRunning();
+    await feed(0, 330, 3);
+    const run = runNow();
+    if (run === null) throw new Error("no run");
+    const stillAt = 26.1445 + (329 * 3) / 111_132;
+    await act(() =>
+      takeLocations({ locations: Array.from({ length: 20 }, (_, i) => ({ timestamp: run.startedAt + (330 + i) * 1000, coords: { latitude: stillAt, longitude: 91.7362, accuracy: 5, speed: 0 } })) }),
+    );
+    expect(voice.said).toEqual(["Auto-paused."]);
+    // One batch, as Android hands them after the screen was off: moving again, and 1 km passed.
+    await feed(350, 45, 3, stillAt - (350 * 3) / 111_132);
+    expect(voice.said[1]).toBe("Run resumed.");
+    expect(voice.said[2]).toMatch(/^1 kilometre./);
   });
 
   it("keeps the account's units for a run the phone carries on with the app closed", async () => {

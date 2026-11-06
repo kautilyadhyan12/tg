@@ -43,13 +43,23 @@ function speakThrough(points: readonly RunPoint[], units: Units, from: VoiceStat
   return { lines, checks };
 }
 
-/** The summary's numbers at mark n: the kilometre or mile's own time, as it shows it, and the time
- *  at the mark worked out back from its moving time, with how far the rounding of each kilometre
- *  it adds can move that (half a second each, and the moving time's own). */
-function summaryMark(final: RunSums, units: Units, count: number): { lastS: number; timeS: number; roundingS: number } {
-  const splits = units === "imperial" ? final.splitsMi : final.splitsKm;
-  const after = splits.slice(count);
-  return { lastS: splits[count - 1]?.s ?? -1, timeS: final.movingS - after.reduce((t, split) => t + split.s, 0), roundingS: (after.length + 2) / 2 };
+/** The kilometre or mile's own time, as the summary shows it. */
+function summaryLast(final: RunSums, units: Units, count: number): number {
+  return (units === "imperial" ? final.splitsMi : final.splitsKm)[count - 1]?.s ?? -1;
+}
+
+/** The moving time at the last point before mark n and at the first point past it, each worked out
+ *  from the points up to it alone: the time at the mark lies between them. */
+function clockAroundMark(points: readonly RunPoint[], per: number, count: number): [number, number] {
+  const sumsTo = (length: number) => runSums(points.slice(0, length), [], points[length - 1]?.[0] ?? 0, 0);
+  let lo = 1;
+  let hi = points.length;
+  while (lo < hi) {
+    const mid = Math.floor((lo + hi) / 2);
+    if (sumsTo(mid).distanceM >= count * per) hi = mid;
+    else lo = mid + 1;
+  }
+  return [sumsTo(lo - 1).movingS, sumsTo(lo).movingS];
 }
 
 describe("the worst thing: a wrong number said out loud", () => {
@@ -71,13 +81,19 @@ describe("the worst thing: a wrong number said out loud", () => {
       else if (sinceLast >= SETTLE_S + CHECK_MS / 1000) expect(said).toEqual(all);
       else expect([all, all.slice(0, -1)]).toContainEqual(said);
       expect(said.length).toBeGreaterThan(3);
+      const unit = units === "imperial" ? "mile" : "kilometre";
       for (const { line, mark } of lines) {
-        const summary = summaryMark(final, units, mark.count);
+        const n = mark.count;
         expect(mark.units).toBe(units);
-        // The kilometre or mile's own time is the summary's, to the second.
-        expect(mark.lastS).toBe(summary.lastS);
-        expect(Math.abs(mark.timeS - summary.timeS)).toBeLessThanOrEqual(summary.roundingS);
-        expect(line).toBe(markLine(mark));
+        // The kilometre or mile's own time is the summary's, to the second, and is what is said.
+        if (n > 1) expect(line).toContain(`Last ${unit} ${spokenTime(summaryLast(final, units, n))}.`);
+        // The time said lies between the clock at the points either side of the mark (a second for
+        // rounding each way), and the average pace said is that time over the marks.
+        const [before, after] = clockAroundMark(points, per, n);
+        expect(mark.timeS).toBeGreaterThanOrEqual(before - 1);
+        expect(mark.timeS).toBeLessThanOrEqual(after + 1);
+        expect(line.startsWith(`${String(n)} ${unit}${n === 1 ? "" : "s"}. Time ${spokenTime(mark.timeS)}.`)).toBe(true);
+        expect(line).toContain(`Average pace ${spokenTime(Math.round(mark.timeS / n))} per ${unit}.`);
       }
       // Never the other unit's word.
       for (const { line } of lines) expect(line).not.toMatch(units === "imperial" ? /kilometre/ : /mile/);

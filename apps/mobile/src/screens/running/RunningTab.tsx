@@ -14,7 +14,7 @@ import { SettingsPage } from "../Settings";
 import { autoPauseChoice, chooseAutoPause, chooseVoice, readRunChoices, subscribeRun, voiceChoice } from "./recorder";
 import { gpsLight, openAppSettings, START_PROBLEM_WORDS, useRunLayer, type StartProblem } from "./RunLayer";
 import { useRunOutbox } from "./RunOutbox";
-import { runVoiceNative } from "./runVoiceNative";
+import { runVoiceNative, speakState, type SpeakState } from "./runVoiceNative";
 import { clock, distance, unitWord } from "./runWords";
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
@@ -68,6 +68,8 @@ export function RunningTab({ units, showEnd }: { units: Units; showEnd?: () => v
     void readRunChoices();
   }, []);
   const canSpeak = useCanSpeak(focused && voiceOn);
+  // No voice code of this app's on this phone (an iPhone, until Stage 5 item 21): the row stays.
+  const noVoiceYet = runVoiceNative === null;
   const [problem, setProblem] = useState<StartProblem | null>(null);
   const [settings, setSettings] = useState(false);
   const [removing, setRemoving] = useState<{ runId: string; name: string } | null>(null);
@@ -126,20 +128,26 @@ export function RunningTab({ units, showEnd }: { units: Units; showEnd?: () => v
           <View style={styles.grow}>
             <Txt kind="body">Voice</Txt>
             <Txt kind="small" colour="textFaint">
-              {units === "imperial" ? "Your time and pace each mile" : "Your time and pace each kilometre"}
+              {noVoiceYet ? "Coming soon" : units === "imperial" ? "Your time and pace each mile" : "Your time and pace each kilometre"}
             </Txt>
-            {voiceOn && !canSpeak ? (
+            {voiceOn && canSpeak !== "ok" ? (
               <View style={styles.problem}>
                 <Txt kind="small" colour="badText">
-                  Text-to-speech is off on this phone.
+                  {canSpeak === "off" ? "Text-to-speech is off on this phone." : "Your phone has no English voice for text-to-speech."}
                 </Txt>
-                <Button kind="link" label="Turn it on" say="Open text-to-speech settings" onPress={openSpeechSettings} />
+                <Button
+                  kind="link"
+                  label={canSpeak === "off" ? "Turn it on" : "Add a voice"}
+                  say="Open text-to-speech settings"
+                  onPress={openSpeechSettings}
+                />
               </View>
             ) : null}
           </View>
           <Switch
             accessibilityLabel="Voice"
-            value={voiceOn}
+            disabled={noVoiceYet}
+            value={voiceOn && !noVoiceYet}
             onValueChange={(on) => {
               void chooseVoice(on);
             }}
@@ -266,8 +274,8 @@ export function RunningTab({ units, showEnd }: { units: Units; showEnd?: () => v
 /** Whether the phone can speak, asked while the Voice switch is on and the page shown, and again
  *  when the person comes back from the phone's settings. A phone with no voice code of this app's
  *  (none on an iPhone yet) is not told its text-to-speech is off. */
-function useCanSpeak(asking: boolean): boolean {
-  const [can, setCan] = useState(true);
+function useCanSpeak(asking: boolean): SpeakState {
+  const [can, setCan] = useState<SpeakState>("ok");
   const [back, setBack] = useState(0);
   useEffect(() => {
     const heard = AppState.addEventListener("change", (next) => {
@@ -281,8 +289,8 @@ function useCanSpeak(asking: boolean): boolean {
     if (!asking || runVoiceNative === null) return;
     let live = true;
     void runVoiceNative.check().then(
-      (yes) => {
-        if (live) setCan(yes);
+      (answer) => {
+        if (live) setCan(speakState(answer));
       },
       () => undefined,
     );

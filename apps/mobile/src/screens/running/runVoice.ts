@@ -5,9 +5,10 @@
 // Each whole kilometre or mile: the distance, the time at the mark, the last one's time and the
 // average pace, as they stood at the mark. A mark is said SETTLE_S after it is passed: the line
 // drawn through the points is smoothed with the points that follow, which moves where the mark
-// falls. Measured on four real runs recorded on phones, in kilometres and miles (74 marks), a mark
-// said SETTLE_S after gives the summary's own seconds every time; said at the mark, up to 9 in 12
-// were a second off. A pause ends the stretch the maths smooths, so a mark is said at once there.
+// falls. Measured on four real runs recorded on phones, in kilometres and miles (58 marks; three of
+// the runs are test/fixtures/real-runs.json), a mark said SETTLE_S after gives the summary's own
+// seconds every time; said at the mark, up to 9 in 12 were a second off. A pause ends the stretch the
+// maths smooths, so a mark is said at once there.
 import type { RunSums, Units } from "@app/shared";
 import { METRES_PER_MILE } from "./runWords";
 
