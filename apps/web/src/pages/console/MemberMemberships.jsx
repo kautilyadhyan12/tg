@@ -104,6 +104,9 @@ import {
   voidFeePaymentWords,
   voidRefundWords,
   waiveFeeWords,
+  APP_CLOSE_BUTTON,
+  APP_CLOSE_WORDS,
+  appPayingNotice,
 } from './memberBillsView';
 
 // A PERSON'S MEMBERSHIPS, on their page (spec Part 3 §13.2; ROADMAP 17a-ii): what they
@@ -209,6 +212,8 @@ export default function MemberMemberships({
   const [form, setForm] = useState(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState(null);
+  /** Close payment page (18k-ii-a), on one membership: { membershipId, busy, said }, said in the place it was pressed. */
+  const [appClose, setAppClose] = useState(null);
   /** The notice that says a card was not kept from a Terminal payment: Open Card on file is offered under that notice alone. */
   const [cardNotKept, setCardNotKept] = useState(null);
   const [chargesStarted, setChargesStarted] = useState(null);
@@ -1549,6 +1554,46 @@ export default function MemberMemberships({
     );
   };
 
+  /** Close payment page (18k-ii-a): Square deletes the member's page, unless it was paid just before; said here. */
+  const closeAppPage = async (m) => {
+    setAppClose({ membershipId: m.id, busy: true, said: null });
+    try {
+      const res = await orgService.closeAppPayment(gymId, entryId, m.id);
+      setAppClose({ membershipId: m.id, busy: false, said: APP_CLOSE_WORDS[res.data.outcome] });
+    } catch (err) {
+      setAppClose({ membershipId: m.id, busy: false, said: errorText(err, "We couldn't close the payment page. Try again.") });
+    }
+    readQuietly.current();
+    onChanged?.();
+  };
+
+  /** A member paying this membership in the app (18k-ii-a): who, until when, and Close payment page for staff who take
+   *  payments; nothing else on the membership can be paid or changed meanwhile. */
+  const renderAppPaying = (m) => {
+    const open = appPayingNotice(m, gym?.timezone ?? null);
+    const said = appClose !== null && appClose.membershipId === m.id ? appClose.said : null;
+    if (open === null && said === null) return null;
+    return (
+      <div className="flex flex-col items-start gap-1.5 pt-1" data-testid="held-app-payment">
+        {open !== null ? (
+          <span className="c-s13 c-w5" style={{ color: 'var(--warn)' }}>
+            {open.line}
+          </span>
+        ) : null}
+        {open !== null && canAct && !readOnly ? (
+          <button type="button" className={SMALL} disabled={appClose?.busy === true} onClick={() => void closeAppPage(m)}>
+            {APP_CLOSE_BUTTON}
+          </button>
+        ) : null}
+        {said !== null ? (
+          <span className="c-s13 c-t2" role="status">
+            {said}
+          </span>
+        ) : null}
+      </div>
+    );
+  };
+
   /** A membership's bills, each a box of its own, the newest first; the older ones
    *  behind "Show all". `payHere`: Record payment is drawn inside the bill it is for. */
   const renderBills = (m, payHere) => {
@@ -2291,6 +2336,7 @@ export default function MemberMemberships({
             setHeld((h) => (h === null || h.entryId !== entryId ? h : { ...h, memberships: h.memberships.map((x) => (x.id === m.id ? { ...x, agreementLink: link } : x)) }))
           }
         />
+        {renderAppPaying(m)}
         {renderBills(m, payInBill)}
         {renderFees(m)}
         {inUse && !shown.canBill && can.markPaid !== null ? (

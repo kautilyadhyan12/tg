@@ -144,5 +144,15 @@ describe('the lines', () => {
     expect(reconnectWords(['chargebacks']).line).toContain('chargebacks show here');
     expect(reconnectWords(['chargebacks', 'subscriptions']).hint).toContain('two more things');
     expect(reconnectWords(['subscriptions']).line).toContain('Delete permanently');
+    // Paying in the app (18k-ii-a), asked of every gym connected before it, with whatever else it lacks.
+    expect(reconnectWords(['app_payments'])).toEqual({
+      line: 'Reconnect Square so members can pay what they owe in the app.',
+      hint: "Square will ask you to approve one more thing: making Square's payment pages for your members.",
+      others: 'The owner needs to reconnect Square before members can pay what they owe in the app.',
+    });
+    expect(reconnectWords(['app_payments', 'subscriptions', 'chargebacks']).line).toBe(
+      'Reconnect Square so members can pay what they owe in the app, chargebacks show here and Delete permanently can take people out of your Square customer list.',
+    );
+    expect(reconnectWords(['app_payments', 'chargebacks']).hint).toBe("Square will ask you to approve two more things: making Square's payment pages for your members and reading your chargebacks.");
   });
 });
