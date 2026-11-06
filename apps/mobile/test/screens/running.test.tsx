@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
 import { AppState, Linking } from "react-native";
 import type { StyleSpecification } from "@maplibre/maplibre-react-native";
-import { OPENFREEMAP, RUN_MAX_POINTS, runSums, saveRunRequestSchema, type MapSource, type RunPoint, type SaveRunRequest } from "@app/shared";
+import { HEIGHT_MAP_CREDITS, HEIGHT_MAP_SHORT_CREDIT, OPENFREEMAP, RUN_MAX_POINTS, runSums, saveRunRequestSchema, type MapSource, type RunClimb, type RunPoint, type SaveRunRequest } from "@app/shared";
 import { App } from "../../src/App";
 import { resetMapSource } from "../../src/screens/running/mapSource";
 import { RUN_BAR_ROOM } from "../../src/screens/running/RunLayer";
@@ -74,8 +74,14 @@ beforeEach(async () => {
 function runServer(user = RAVI, map: MapSource = OPENFREEMAP) {
   const saved: SaveRunRequest[] = [];
   const posts: { body: unknown; key: string | undefined }[] = [];
-  const state: { online: boolean; mapHeld: Promise<void> | null } = { online: true, mapHeld: null };
+  const state: { online: boolean; mapHeld: Promise<void> | null; climb: RunClimb } = { online: true, mapHeld: null, climb: { state: "done", m: 28 } };
+  const climbAsks: unknown[] = [];
   const server = fakeServer({
+    // The run's elevation gain, as the server's height map works it out (37b-ii).
+    "/v1/geo/runs/climb": (body) => {
+      climbAsks.push(body);
+      return { status: 200, body: { climb: state.climb } };
+    },
     "/v1/auth/refresh": () => ({ status: 200, body: { tokens: tokens(2) } }),
     "/v1/geo/map": () => ({ status: 200, body: { map } }),
     "/v1/users/me": () => ({ status: 200, body: profile(true, user) }),
@@ -93,7 +99,7 @@ function runServer(user = RAVI, map: MapSource = OPENFREEMAP) {
           status: "created",
           run: {
             id: run.runId, startedAt: run.startedAt, name: run.name, effort: run.effort, note: run.note, distanceM: sums.distanceM, movingS: sums.movingS,
-            elapsedS: sums.elapsedS, leftOutM: sums.leftOutM, leftOutS: sums.leftOutS, kcal: sums.kcal, splitsKm: sums.splitsKm, splitsMi: sums.splitsMi, polyline: "", trackStarts: sums.trackStarts,
+            elapsedS: sums.elapsedS, leftOutM: sums.leftOutM, leftOutS: sums.leftOutS, kcal: sums.kcal, splitsKm: sums.splitsKm, splitsMi: sums.splitsMi, polyline: "", trackStarts: sums.trackStarts, climbM: null,
           },
         },
       };
@@ -105,6 +111,7 @@ function runServer(user = RAVI, map: MapSource = OPENFREEMAP) {
     requests.push({ path, method: init.method ?? "GET", search: new URL(url).search, body: init.body });
     if (path === "/v1/geo/map" && !state.online) throw new Error("no signal");
     if (path === "/v1/geo/map" && state.mapHeld !== null) await state.mapHeld;
+    if (path === "/v1/geo/runs/climb" && !state.online) throw new Error("no signal");
     if (path === PATH && init.method === "POST") {
       if (!state.online) throw new Error("no signal");
       posts.push({ body: init.body === undefined ? undefined : JSON.parse(init.body), key: init.headers?.["idempotency-key"] });
@@ -119,7 +126,7 @@ function runServer(user = RAVI, map: MapSource = OPENFREEMAP) {
       return Promise.resolve();
     },
   });
-  return { ask, saved, posts, state, runStore, requests, file: () => file };
+  return { ask, saved, posts, state, runStore, requests, climbAsks, file: () => file };
 }
 
 async function openRunning(s: ReturnType<typeof runServer>, user = RAVI) {
@@ -1003,5 +1010,83 @@ describe("from Kd's click-through of 37b-i", () => {
     await fireEvent.press(screen.getByRole("link", { name: OPENFREEMAP.credit }));
     expect(opened).toHaveBeenCalledWith(MAP_CREDIT_PAGE);
     opened.mockRestore();
+  });
+});
+
+describe("Elevation gain on the summary (37b-ii)", () => {
+  /** Two minutes north, then Pause and Finish: the run's summary. */
+  async function toSummary(s: ReturnType<typeof runServer>, user = RAVI) {
+    await openRunning(s, user);
+    await startRunning();
+    await feed(0, 121, 3);
+    await fireEvent.press(await screen.findByRole("button", { name: "Pause" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Finish" }));
+    expect(await screen.findByText("Elevation gain")).toBeTruthy();
+  }
+
+  it("the worst thing on the phone: the summary asks with exactly the points Save sends, and nothing else of the run", async () => {
+    const s = runServer();
+    await toSummary(s);
+    expect(await screen.findByText("28 m")).toBeTruthy();
+    expect(s.climbAsks).toHaveLength(1);
+    const asked = s.climbAsks[0];
+    // No name, no note, no effort, no id: the points, the pauses and how long, as Save will send them.
+    expect(Object.keys(asked ?? {}).sort()).toEqual(["elapsedMs", "pauses", "points"]);
+    await fireEvent.press(screen.getByRole("button", { name: "Save run" }));
+    await waitFor(() => {
+      expect(s.posts).toHaveLength(1);
+    });
+    const sent = saveRunRequestSchema.parse(s.posts[0]?.body);
+    expect(asked).toEqual({ elapsedMs: sent.elapsedMs, points: sent.points, pauses: sent.pauses });
+  });
+
+  it("in feet for a person who runs in miles", async () => {
+    const s = runServer({ ...RAVI, units: "imperial" });
+    s.state.climb = { state: "done", m: 28 };
+    await toSummary(s, { ...RAVI, units: "imperial" });
+    // 28 m is 91.86 ft.
+    expect(await screen.findByText("92 ft")).toBeTruthy();
+  });
+
+  it("with the map's credit under the number, and Credits opens every line its licences ask for", async () => {
+    const s = runServer();
+    await toSummary(s);
+    expect(await screen.findByText(HEIGHT_MAP_SHORT_CREDIT)).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "Elevation credits" }));
+    expect(await screen.findByText("Elevation data")).toBeTruthy();
+    for (const line of HEIGHT_MAP_CREDITS) expect(screen.getByText(line)).toBeTruthy();
+  });
+
+  it.each([
+    ["no heights here", { state: "none" } as const],
+    ["a piece of the map still coming", { state: "waiting" } as const],
+  ])("%s: \"--\", and no credit for a number not shown", async (_why, climb) => {
+    const s = runServer();
+    s.state.climb = climb;
+    await toSummary(s);
+    await waitFor(() => {
+      expect(s.climbAsks).toHaveLength(1);
+    });
+    expect(screen.getByText("--")).toBeTruthy();
+    expect(screen.queryByText(HEIGHT_MAP_SHORT_CREDIT)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Elevation credits" })).toBeNull();
+  });
+
+  it("with no signal at Finish: \"--\", and the run is saved all the same when the signal is back", async () => {
+    const s = runServer();
+    s.state.online = false;
+    await toSummary(s);
+    expect(await screen.findByText("--")).toBeTruthy();
+    const name = runName(new Date(runNow()?.startedAt ?? 0));
+    await fireEvent.press(screen.getByRole("button", { name: "Save run" }));
+    expect(await screen.findByText(`${name} is saved on this phone. It will be sent when you're online.`)).toBeTruthy();
+    s.state.online = true;
+    await act(async () => {
+      comeBack();
+      await Promise.resolve();
+    });
+    await waitFor(() => {
+      expect(s.saved).toHaveLength(1);
+    });
   });
 });

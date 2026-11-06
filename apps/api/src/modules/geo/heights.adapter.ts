@@ -525,7 +525,9 @@ export function createHeightMap(deps: HeightMapDeps): HeightMap {
     const groups = new Map<string, number[]>();
     places.forEach(([lat, lng], i) => {
       const name = reader.nameOf(lat, lng);
-      groups.set(name, [...(groups.get(name) ?? []), i]);
+      const group = groups.get(name);
+      if (group === undefined) groups.set(name, [i]);
+      else group.push(i);
     });
     const names = [...groups.keys()];
     const firsts = names.map((name) => groups.get(name)?.[0] ?? 0);

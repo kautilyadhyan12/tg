@@ -19,7 +19,7 @@ const run = (n: number): SaveRunRequest => ({
 
 const saved = (r: SaveRunRequest): SavedRun => ({
   id: r.runId, startedAt: r.startedAt, name: r.name, effort: r.effort, note: r.note, distanceM: 3, movingS: 60, elapsedS: 60,
-  leftOutM: 0, leftOutS: 0, kcal: 1, splitsKm: [], splitsMi: [], polyline: "", trackStarts: [0],
+  leftOutM: 0, leftOutS: 0, kcal: 1, splitsKm: [], splitsMi: [], polyline: "", trackStarts: [0], climbM: null,
 });
 
 function memory(text: string | null = null) {

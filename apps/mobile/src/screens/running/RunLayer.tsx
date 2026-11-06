@@ -5,7 +5,18 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { AppState, Linking, Pressable, ScrollView, StyleSheet, TextInput, Vibration, View } from "react-native";
 import * as Location from "expo-location";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { RUN_MAX_POINTS, geodesicMetres, runSums, userProfileResponseSchema, type RunSums, type SaveRunRequest, type Units } from "@app/shared";
+import {
+  HEIGHT_MAP_CREDITS,
+  HEIGHT_MAP_SHORT_CREDIT,
+  RUN_MAX_POINTS,
+  geodesicMetres,
+  runSums,
+  userProfileResponseSchema,
+  type RunClimbRequest,
+  type RunSums,
+  type SaveRunRequest,
+  type Units,
+} from "@app/shared";
 import { BottomRoom } from "../../look/BottomRoom";
 import { Button } from "../../look/Button";
 import { colours, orangeGradient, shadows, sizes } from "../../look/colours";
@@ -35,6 +46,7 @@ import {
   type LiveRun,
 } from "./recorder";
 import { useMapSource } from "./mapSource";
+import { climbWords, useRunClimb } from "./runClimb";
 import { PaceWave, RouteLine } from "./RunDrawings";
 import { RunMap, useMapScheme } from "./RunMap";
 import { useRunOutbox } from "./RunOutbox";
@@ -577,7 +589,18 @@ function Summary({ run, units, kg, onSaved }: { run: LiveRun; units: Units; kg: 
   const [asking, setAsking] = useState(false);
   const [busy, setBusy] = useState(false);
   const [notKept, setNotKept] = useState(false);
+  const [credits, setCredits] = useState(false);
   const pausedS = Math.max(0, sums.elapsedS - sums.movingS - sums.leftOutS);
+  // What the server is sent: asked for the climb now (37b-ii), and saved with the same points at Save.
+  const sent = useMemo(
+    (): RunClimbRequest => ({
+      elapsedMs: Math.round(finished),
+      points: run.points.slice(0, RUN_MAX_POINTS).map(([at, lat, lng, acc]) => [Math.round(at), lat, lng, acc]),
+      pauses: closedPauses(run, finished).map(([a, b]) => [Math.round(a), Math.round(b)]),
+    }),
+    [run, finished],
+  );
+  const climb = useRunClimb(session, sent);
 
   const save = async () => {
     if (outbox === null || busy) return;
@@ -586,12 +609,10 @@ function Summary({ run, units, kg, onSaved }: { run: LiveRun; units: Units; kg: 
     const body: SaveRunRequest = {
       runId: run.runId,
       startedAt: startedAt.toISOString(),
-      elapsedMs: Math.round(finished),
+      ...sent,
       name: kept,
       effort,
       note: note.trim() === "" ? null : note.trim().slice(0, 1000),
-      points: run.points.slice(0, RUN_MAX_POINTS).map(([at, lat, lng, acc]) => [Math.round(at), lat, lng, acc]),
-      pauses: closedPauses(run, finished).map(([a, b]) => [Math.round(a), Math.round(b)]),
     };
     // The recorder's own files go only once the outbox holds the run on the phone (round one, L1).
     if (!(await outbox.add(body))) {
@@ -655,6 +676,33 @@ function Summary({ run, units, kg, onSaved }: { run: LiveRun; units: Units; kg: 
         <View style={styles.three}>
           <Tile value={pace(sums.movingS, sums.distanceM < 50 ? 0 : sums.distanceM, units)} label={`Avg pace ${paceWord(units)}`} />
           <Tile value={String(sums.kcal)} label="Calories" />
+        </View>
+        <View style={styles.tile}>
+          <Txt style={styles.tileValue} fit numberOfLines={1}>
+            {climbWords(climb, units)}
+          </Txt>
+          <Txt kind="small" colour="textFaint">
+            Elevation gain
+          </Txt>
+          {climb.kind === "done" ? (
+            <View style={styles.creditRow}>
+              <Txt kind="tiny" style={styles.grow}>
+                {HEIGHT_MAP_SHORT_CREDIT}
+              </Txt>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Elevation credits"
+                hitSlop={10}
+                onPress={() => {
+                  setCredits(true);
+                }}
+              >
+                <Txt kind="tiny" colour="textSoft" style={styles.link}>
+                  Credits
+                </Txt>
+              </Pressable>
+            </View>
+          ) : null}
         </View>
         {pausedS > 0 ? (
           <Txt kind="small" colour="textFaint">
@@ -801,6 +849,19 @@ function Summary({ run, units, kg, onSaved }: { run: LiveRun; units: Units; kg: 
         </View>
       </Modal>
       <Sheet
+        open={credits}
+        title="Elevation data"
+        onClose={() => {
+          setCredits(false);
+        }}
+      >
+        {HEIGHT_MAP_CREDITS.map((line) => (
+          <Txt key={line} kind="small" colour="textSoft">
+            {line}
+          </Txt>
+        ))}
+      </Sheet>
+      <Sheet
         open={asking}
         title="Discard this run?"
         onClose={() => {
@@ -852,6 +913,8 @@ export const openAppSettings = (): void => {
 
 const styles = StyleSheet.create({
   grow: { flex: 1 },
+  creditRow: { flexDirection: "row", alignItems: "flex-start", gap: 8, paddingTop: 4 },
+  link: { textDecorationLine: "underline" },
   between: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   dim: { color: colours.textDim },
   pressed: { opacity: 0.85 },

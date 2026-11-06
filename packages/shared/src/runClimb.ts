@@ -213,7 +213,24 @@ export function heightTileName(lat: number, lng: number): string {
 }
 export const HEIGHT_TILE_NAME = /^Copernicus_DSM_COG_10_[NS]\d{2}_00_[EW]\d{3}_00_DEM$/;
 
-/** The notice the Copernicus WorldDEM-30 licence asks for where heights made from it are shown
- *  (its Article 6(b)). */
-export const HEIGHT_MAP_CREDIT =
-  "Elevation gain produced using Copernicus WorldDEM-30 © DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA; all rights reserved.";
+/** Under a run's elevation gain, the short line; Credits beside it opens HEIGHT_MAP_CREDITS. */
+export const HEIGHT_MAP_SHORT_CREDIT = "Elevation: Copernicus, U.S. Geological Survey and others";
+
+/** What each map's licence asks to be shown where heights made from it are: the Copernicus
+ *  WorldDEM-30 licence's Article 6(b) and 6(c), word for word, and the Mapzen terrain tiles' own list
+ *  of required attribution (github.com/tilezen/joerd, docs/attribution.md, read 2026-11-06). */
+export const HEIGHT_MAP_CREDITS: readonly string[] = [
+  "Elevation gain produced using Copernicus WorldDEM-30 © DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA; all rights reserved.",
+  "The organisations in charge of the Copernicus programme by law or by delegation do not incur any liability for any use of the Copernicus WorldDEM-30.",
+  "ArcticDEM terrain data DEM(s) were created from DigitalGlobe, Inc., imagery and funded under National Science Foundation awards 1043681, 1559691, and 1542736.",
+  "Australia terrain data © Commonwealth of Australia (Geoscience Australia) 2017.",
+  "Austria terrain data © offene Daten Österreichs – Digitales Geländemodell (DGM) Österreich.",
+  "Canada terrain data contains information licensed under the Open Government Licence – Canada.",
+  "Europe terrain data produced using Copernicus data and information funded by the European Union - EU-DEM layers.",
+  "Global ETOPO1 terrain data U.S. National Oceanic and Atmospheric Administration.",
+  "Mexico terrain data source: INEGI, Continental relief, 2016.",
+  "New Zealand terrain data Copyright 2011 Crown copyright (c) Land Information New Zealand and the New Zealand Government (All rights reserved).",
+  "Norway terrain data © Kartverket.",
+  "United Kingdom terrain data © Environment Agency copyright and/or database right 2015. All rights reserved.",
+  "United States 3DEP (formerly NED) and global GMTED2010 and SRTM terrain data courtesy of the U.S. Geological Survey.",
+];
