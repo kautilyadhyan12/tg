@@ -855,12 +855,19 @@ describe('sell in the app (18k-i)', () => {
     expect(screen.getByRole('checkbox', { name: /Sell in the app/ }).disabled).toBe(false);
   });
 
-  it('a business with no plan with us: a ticked row says members cannot buy it, never Sold in the app', async () => {
+  it('a business with no plan with us: a ticked row says members cannot buy it, never Sold in the app, and offers no Square button', async () => {
     openWith(listOf({ types: [quarter({ soldInApp: true })] }), box(), { readOnly: true });
     const row = (await screen.findAllByRole('listitem'))[0];
     await waitFor(() => expect(orgService.getGymPayments).toHaveBeenCalled());
     expect(await within(row).findByText("Members can't buy it in the app until this gym has a plan.")).toBeTruthy();
     expect(within(row).queryByText('Sold in the app')).toBeNull();
+    cleanup();
+    // No plan and no Square: the sentence is the plan's, so no Connect Square beside it (re-check, N1).
+    openWith(listOf({ types: [quarter({ soldInApp: true })] }), box({ square: null }), { readOnly: true });
+    const again = (await screen.findAllByRole('listitem'))[0];
+    await waitFor(() => expect(orgService.getGymPayments).toHaveBeenCalledTimes(2));
+    expect(await within(again).findByText("Members can't buy it in the app until this gym has a plan.")).toBeTruthy();
+    expect(within(again).queryByRole('link', { name: 'Connect Square' })).toBeNull();
   });
 
   it('a line already ticked can be unticked while Square is not connected', async () => {

@@ -890,7 +890,8 @@ function TypeRow({ type, orgType, taxLine = null, agreementLine = null, agreemen
   // Sold in the app (18k-i): the tag while members can buy it; while Square still has to be set up, why not, and the
   // button to that place for whoever may.
   const sold = sell === null ? null : soldInAppWords(type, readOnly ? 'no_plan' : sell.state, orgWords(orgType).it);
-  const fix = sold?.line ? sellInAppHint(sell.state, sell.canConnect).button : null;
+  // No plan with us is not Square's to fix: its sentence stands alone (the page says why at the top).
+  const fix = sold?.line && !readOnly ? sellInAppHint(sell.state, sell.canConnect).button : null;
   return (
     <li className="px-5 py-4 md:px-6 flex flex-col gap-3" style={LINE}>
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between md:gap-6">
