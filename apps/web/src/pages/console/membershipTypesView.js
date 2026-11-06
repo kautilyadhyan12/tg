@@ -26,6 +26,7 @@ import {
   SALES_TAX_PCM_MAX,
 } from '@app/shared';
 import { reminderDayOptions } from './renewalReminderView';
+import { RAISE_DRAFT, raiseBody, raiseProblem } from './priceRaiseView';
 
 /** Whether this person may change the price list. The tick, never the job title: an
  *  owner can give it to anyone on staff. */
@@ -322,6 +323,8 @@ export function emptyDraft() {
     coolingOffDays: '',
     renewalReminderDays: '',
     termReminderDays: '',
+    // Members already on it, where a change raises its price (18w).
+    ...RAISE_DRAFT,
   };
 }
 
@@ -360,6 +363,7 @@ export function draftFromType(type) {
     coolingOffDays: type.coolingOffDays === null || type.coolingOffDays === undefined ? '' : String(type.coolingOffDays),
     renewalReminderDays: type.renewalReminderDays > 0 ? String(type.renewalReminderDays) : '',
     termReminderDays: type.termReminderDays > 0 ? String(type.termReminderDays) : '',
+    savedPriceMinor: type.priceMinor,
   };
 }
 
@@ -413,7 +417,7 @@ const usesTerm = (choice) => choice === 'recurring' || choice === 'one_time' || 
 const usesAccess = usesTerm;
 
 /** The boxes in the order the form draws them, so the first wrong one can be shown. */
-export const PROBLEM_ORDER = ['name', 'description', 'price', 'joiningFee', 'tax', 'termCount', 'contractPeriods', 'leaveFee', 'noticeDays', 'coolingOffDays', 'renewalReminderDays', 'termReminderDays', 'packClasses', 'packDays', 'bookingsLimit', 'classes', 'ptLimit'];
+export const PROBLEM_ORDER = ['name', 'description', 'price', 'raise', 'joiningFee', 'tax', 'termCount', 'contractPeriods', 'leaveFee', 'noticeDays', 'coolingOffDays', 'renewalReminderDays', 'termReminderDays', 'packClasses', 'packDays', 'bookingsLimit', 'classes', 'ptLimit'];
 
 /** The first box that is wrong, top to bottom, or null. */
 export function firstProblem(problems) {
@@ -527,6 +531,8 @@ export function draftProblems(draft, currency, rates = []) {
   if (draftLimitsPt(draft) && wholeNumber(draft.ptLimit, 1, MEMBERSHIP_PT_LIMIT_MAX) === null) {
     problems.ptLimit = `Type how many sessions, from 1 to ${String(MEMBERSHIP_PT_LIMIT_MAX)}.`;
   }
+  const raise = raiseProblem(draft, currency);
+  if (raise !== null) problems.raise = raise;
   return Object.keys(problems).length === 0 ? null : problems;
 }
 
@@ -615,6 +621,8 @@ export function draftBody(draft, currency) {
     termReminderDays: draftHasTermReminder(draft) ? Number(draft.termReminderDays) : null,
     // A change says which version of the type the form read.
     ...(draft.id === null ? {} : { updatedAt: draft.updatedAt }),
+    // Members already on it, ticked, pay its new, higher price too (18w).
+    ...(draft.id === null ? {} : raiseBody(draft, currency)),
   };
 }
 

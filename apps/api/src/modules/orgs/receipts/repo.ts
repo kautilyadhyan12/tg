@@ -233,7 +233,7 @@ async function paymentReceipt(sql: Sql, gymId: string, number: number): Promise<
       discount_payments: string | null;
     }[]
   >`
-    SELECT h.price_minor AS held_price, CASE WHEN b.fee IS NULL THEN h.discount_name END AS discount_name, h.discount_minor, h.discount_payments, p.id, p.amount_minor, p.currency, p.method, p.paid_on::text AS paid_on, p.undone_at IS NOT NULL AS cancelled,
+    SELECT CASE WHEN rz.from_period IS NOT NULL AND b.fee IS NULL AND b.period_index >= rz.from_period THEN rz.price_minor ELSE h.price_minor END AS held_price, CASE WHEN b.fee IS NULL THEN h.discount_name END AS discount_name, h.discount_minor, h.discount_payments, p.id, p.amount_minor, p.currency, p.method, p.paid_on::text AS paid_on, p.undone_at IS NOT NULL AS cancelled,
            u.display_name AS by, e.full_name, (h.entry_id IS NULL) AS person_deleted, p.paid_by_name, p.paid_by_deleted, ${billItemSql(sql)} AS type_name,
            b.amount_minor AS bill_minor, b.joining_fee_minor AS joining_fee, b.change_credit_minor AS change_credit,
            (SELECT ot.name FROM gym_held_memberships o JOIN gym_membership_types ot ON ot.gym_id = o.gym_id AND ot.id = o.membership_type_id
@@ -247,6 +247,8 @@ async function paymentReceipt(sql: Sql, gymId: string, number: number): Promise<
     JOIN gym_member_bills b ON b.gym_id = p.gym_id AND b.id = p.bill_id
     JOIN gym_held_memberships h ON h.gym_id = b.gym_id AND h.id = b.held_membership_id
     JOIN gym_membership_types t ON t.gym_id = h.gym_id AND t.id = h.membership_type_id
+    -- A bill at a raised price (18w) prints its discount from that price.
+    LEFT JOIN gym_price_raises rz ON rz.gym_id = h.gym_id AND rz.held_membership_id = h.id
     LEFT JOIN gym_member_list_entries e ON e.gym_id = h.gym_id AND e.id = h.entry_id
     LEFT JOIN users u ON u.id = p.recorded_by
     WHERE p.gym_id = ${gymId} AND p.receipt_number = ${number}`;

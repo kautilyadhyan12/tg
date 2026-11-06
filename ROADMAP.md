@@ -355,7 +355,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
        - 18v-ii-b. [x] **An early cancellation fee** — merged 2026-11-04 (PR #464).
      - 18v-iii. [x] **Days to change their mind** — merged 2026-11-04 (PR #466).
      - 18v-iv. [x] **A reminder before a renewal or a minimum term's end** — merged 2026-11-05 (PR #469).
-   - 18w. [ ] **Raise the price for existing members** from their next payment, with each place's notice (Kd, 2026-10-22). Web folder 2.
+   - 18w. [x] **Raise the price for existing members** — merged 2026-11-06 (PR #483).
    - 18x. [x] **Move to another membership** · merged 2026-10-22 · PR #338
    - 18y. [x] **Bill everyone on one day of the month** · merged 2026-10-22 · PR #340
    - 18z. [x] **A fee while frozen** · merged 2026-10-23 · PR #342

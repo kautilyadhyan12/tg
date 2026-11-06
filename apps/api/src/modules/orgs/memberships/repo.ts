@@ -233,7 +233,10 @@ export interface MembershipTypeInput {
 }
 
 export type MembershipWriteOutcome =
-  | { kind: "ok" }
+  /** `raised`: the members already on it whose price was raised with it (18w). */
+  | { kind: "ok"; raised?: number }
+  /** A raise for members already on it, where the price does not go up or the line does not repeat (18w). */
+  | { kind: "raise_not_allowed" }
   | { kind: "not_found" }
   | { kind: "too_many"; cap: number }
   | { kind: "name_taken" }
@@ -416,6 +419,8 @@ export async function updateMembershipType(
     readAt: Date;
     actorUserId: string;
     now: Date;
+    /** Raise members already on it to the new price (18w), written in this same change: answers how many. */
+    raise?: ((tx: TransactionSql) => Promise<number>) | null;
   },
 ): Promise<MembershipWriteOutcome> {
   return await sql.begin(async (tx) => {
@@ -429,6 +434,8 @@ export async function updateMembershipType(
     // To the millisecond, which is what the list sends and a form can send back.
     if (before.updated_at.getTime() !== input.readAt.getTime()) return { kind: "changed" };
     if (before.kind !== input.kind) return { kind: "kind_fixed" };
+    const raise = input.raise ?? null;
+    if (raise !== null && (before.kind !== "recurring" || input.priceMinor <= before.price_minor)) return { kind: "raise_not_allowed" };
     if (await nameTaken(tx, input.gymId, input.name, input.typeId)) return { kind: "name_taken" };
     if (!(await classesAreThisGyms(tx, input.gymId, input.classTypeIds))) {
       return { kind: "class_not_in_gym" };
@@ -452,6 +459,7 @@ export async function updateMembershipType(
       WHERE id = ${input.typeId} AND gym_id = ${input.gymId}`;
     await writeCoveredClasses(tx, input.gymId, input.typeId, input.classTypeIds);
     await writeTypeRates(tx, input.gymId, input.typeId, input.taxRateIds);
+    const raised = raise === null ? null : await raise(tx);
     const reminderBefore = reminderWords(before.renewal_reminder_days, before.term_reminder_days);
     const reminderAfter = reminderWords(input.renewalReminderDays, input.termReminderDays);
 
@@ -466,6 +474,7 @@ export async function updateMembershipType(
         after: input.name,
         priceBefore: String(before.price_minor),
         priceAfter: String(input.priceMinor),
+        ...(raised === null ? {} : { membersRaised: String(raised) }),
         ...(before.joining_fee_minor === input.joiningFeeMinor
           ? {}
           : { joiningFeeBefore: String(before.joining_fee_minor), joiningFeeAfter: String(input.joiningFeeMinor) }),
@@ -489,7 +498,7 @@ export async function updateMembershipType(
     });
     // A changed reminder is looked for again today, so the line's box tells the truth (18v-iv).
     if (reminderBefore !== reminderAfter) await tx`UPDATE gyms SET renewal_reminders_checked_at = NULL WHERE id = ${input.gymId}`;
-    return { kind: "ok" };
+    return raised === null ? { kind: "ok" } : { kind: "ok", raised };
   });
 }
 

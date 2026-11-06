@@ -30,6 +30,7 @@ import { cardRefundSaidNow, refundReasonsFor, waitsOnSquare } from './cardRefund
 import MembershipAgreement from './MembershipAgreement';
 import { noteDay } from './memberListPeople';
 import { reminderStatusLine } from './renewalReminderView';
+import { keepPriceWords, priceRaiseLine } from './priceRaiseView';
 import {
   ENDING_CLASSES_SHOWN,
   ENDING_MOVED,
@@ -2248,6 +2249,24 @@ export default function MemberMemberships({
           .map((r) => (
             <span key={r.when} className="c-s14 c-t2" data-testid="held-renewal-reminder">
               {r.line}
+            </span>
+          ))}
+        {/* A higher price to come (18w): from when, its notice, or why it stays; Keep for whoever changes prices. */}
+        {(shown.priceRaises ?? [])
+          .filter((r) => r.membershipId === m.id && priceRaiseLine(r.status, m.currency) !== null)
+          .map((r) => (
+            <span key="price-raise" className="flex flex-wrap items-center gap-x-3 gap-y-1" data-testid="held-price-raise">
+              <span className="c-s14 c-t2">{priceRaiseLine(r.status, m.currency)}</span>
+              {r.canKeep && !readOnly && !asking && viewerPrivileges(gym).includes('memberships.manage') ? (
+                <button
+                  type="button"
+                  className={SMALL}
+                  disabled={busy}
+                  onClick={() => void run('keepPrice', m, () => orgService.changeHeldMembership(gymId, entryId, m.id, 'price-raise/keep', {}), keepPriceWords(r.status, m.currency).done)}
+                >
+                  {keepPriceWords(r.status, m.currency).button}
+                </button>
+              ) : null}
             </span>
           ))}
         <MembershipAgreement

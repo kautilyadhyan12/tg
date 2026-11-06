@@ -5,7 +5,7 @@
 import { lineReminders, periodListedMinor, RENEWAL_REMINDER_FROM_HOUR, type RenewalReminderSetting, type RenewalReminderWhat } from "@app/shared";
 import type { Sql, TransactionSql } from "postgres";
 import { billOf } from "./billsSql.js";
-import { heldRowsOf, type HeldRow } from "./heldRepo.js";
+import { heldRowsOf, periodPriceMinor, type HeldRow } from "./heldRepo.js";
 import { autopayPaused } from "../payments/autopayRepo.js";
 import { chargebackStops } from "../payments/chargebacksRepo.js";
 
@@ -32,10 +32,9 @@ export async function markChecked(sql: SqlOrTx, gymId: string, at: Date): Promis
   await sql`UPDATE gyms SET renewal_reminders_checked_at = ${at} WHERE id = ${gymId}`;
 }
 
-/** One membership whose line asks for a reminder, with whoever pays for it. */
-export interface RemindedHeld {
+/** One repeating membership in use, with whoever pays for it. */
+export interface PayerHeld {
   row: HeldRow;
-  setting: RenewalReminderSetting;
   /** The record holding it. */
   entryId: string;
   holderName: string;
@@ -47,6 +46,11 @@ export interface RemindedHeld {
   skipped: "former_payer" | "billed_elsewhere" | null;
 }
 
+/** One membership whose line asks for a reminder, with whoever pays for it. */
+export interface RemindedHeld extends PayerHeld {
+  setting: RenewalReminderSetting;
+}
+
 /** The memberships in use, of the gym's current records, whose line asks for a reminder; or of one line, or
  *  one membership. One entry for each reminder its line asks for (before every renewal, then before its minimum
  *  term ends), or for `setting` alone where it is given. Each with whoever pays for it (18i) and the address on
@@ -55,7 +59,25 @@ export async function remindedHeld(
   sql: SqlOrTx,
   q: { gymId: string; typeId?: string; heldId?: string; entryId?: string; setting?: RenewalReminderSetting },
 ): Promise<RemindedHeld[]> {
-  const asked = q.setting !== undefined;
+  const rows = await heldWithPayers(sql, { ...q, anyLine: q.setting !== undefined });
+  return rows.flatMap(({ held, renewalReminderDays, termReminderDays }) => {
+    const settings = q.setting === undefined ? lineReminders({ renewalReminderDays, termReminderDays }) : [q.setting];
+    return settings.map((setting) => ({ ...held, setting }));
+  });
+}
+
+/** The repeating memberships in use, of the gym's current records, of one line, one or these memberships, or one
+ *  record, each with whoever pays for it (18i) and the address on that record now (18w reads every line). */
+export async function payersHeld(sql: SqlOrTx, q: { gymId: string; typeId?: string; heldIds?: readonly string[]; entryId?: string }): Promise<PayerHeld[]> {
+  return (await heldWithPayers(sql, { ...q, anyLine: true })).map((r) => r.held);
+}
+
+async function heldWithPayers(
+  sql: SqlOrTx,
+  q: { gymId: string; typeId?: string; heldId?: string; heldIds?: readonly string[]; entryId?: string; anyLine: boolean },
+): Promise<{ held: PayerHeld; renewalReminderDays: number | null; termReminderDays: number | null }[]> {
+  const asked = q.anyLine;
+  const ids = q.heldIds === undefined ? null : [...q.heldIds];
   const rows = await sql<
     {
       id: string;
@@ -80,6 +102,7 @@ export async function remindedHeld(
       WHERE h.gym_id = ${q.gymId} AND h.status IN ('active','frozen') AND h.kind = 'recurring' AND (${asked}::boolean OR t.renewal_reminder_days IS NOT NULL OR t.term_reminder_days IS NOT NULL)
         AND (${q.typeId ?? null}::uuid IS NULL OR t.id = ${q.typeId ?? null}::uuid)
         AND (${q.heldId ?? null}::uuid IS NULL OR h.id = ${q.heldId ?? null}::uuid)
+        AND (${ids}::uuid[] IS NULL OR h.id = ANY(${ids}::uuid[]))
         AND (${q.entryId ?? null}::uuid IS NULL OR h.entry_id = ${q.entryId ?? null}::uuid)
     )
     SELECT h.id, h.entry_id, e.full_name AS holder_name, h.renewal_reminder_days, h.term_reminder_days,
@@ -100,31 +123,38 @@ export async function remindedHeld(
   return rows.flatMap((r) => {
     const row = held.get(r.id);
     if (row === undefined) return [];
-    const settings = q.setting === undefined ? lineReminders({ renewalReminderDays: r.renewal_reminder_days, termReminderDays: r.term_reminder_days }) : [q.setting];
-    return settings.map((setting) => ({
-        row,
-        setting,
-        entryId: r.entry_id,
-        holderName: r.holder_name ?? "",
-        payerEntryId: r.payer_entry_id,
-        payerName: r.payer_name ?? "",
-        payerEmail: r.payer_email,
-        skipped: r.payer_former ? ("former_payer" as const) : r.billed_elsewhere ? ("billed_elsewhere" as const) : null,
-      }));
+    return [
+      {
+        held: {
+          row,
+          entryId: r.entry_id,
+          holderName: r.holder_name ?? "",
+          payerEntryId: r.payer_entry_id,
+          payerName: r.payer_name ?? "",
+          payerEmail: r.payer_email,
+          skipped: r.payer_former ? ("former_payer" as const) : r.billed_elsewhere ? ("billed_elsewhere" as const) : null,
+        },
+        renewalReminderDays: r.renewal_reminder_days,
+        termReminderDays: r.term_reminder_days,
+      },
+    ];
   });
 }
 
 /** What the renewal (or the first payment after a minimum term) comes to: its period's price, its tax in. */
 export function renewalAmountMinor(row: HeldRow, periodIndex: number): number {
-  return billOf(periodListedMinor(row.membership, periodIndex, row.priceMinor), row.taxApplied).amountMinor;
+  return billOf(periodListedMinor(row.membership, periodIndex, periodPriceMinor(row, periodIndex)), row.taxApplied).amountMinor;
 }
+
+/** What a queued email is about: a renewal reminder's, or a price raise's (18w, occasion `price:<raise id>`). */
+export type QueuedWhat = RenewalReminderWhat | "price";
 
 export interface QueuedReminder {
   gymId: string;
   heldId: string;
   entryId: string;
   occasion: string;
-  what: RenewalReminderWhat;
+  what: QueuedWhat;
   aboutOn: string;
   email: string;
 }
@@ -148,6 +178,7 @@ export type ReminderState = "queued" | "sending" | "sent" | "skipped" | "failed"
 
 /** A reminder written: its occasion, state, the gym's day it was sent, and why it was not. */
 export interface ReminderWritten {
+  id: string;
   heldId: string;
   occasion: string;
   state: ReminderState;
@@ -155,17 +186,26 @@ export interface ReminderWritten {
   reason: string | null;
   /** The day the email named. */
   aboutOn: string;
+  /** When it was finished: sent, skipped or failed. */
+  finishedAt: Date | null;
 }
 
 /** The reminders written for these memberships, each with the gym's day it was sent. */
 export async function remindersOf(sql: SqlOrTx, gymId: string, heldIds: readonly string[]): Promise<ReminderWritten[]> {
   if (heldIds.length === 0) return [];
-  const rows = await sql<{ held_membership_id: string; occasion: string; state: ReminderState; reason: string | null; on: string | null; about_on: string }[]>`
-    SELECT n.held_membership_id, n.occasion, n.state, n.reason, n.about_on::text AS about_on,
+  const rows = await sql<{ id: string; held_membership_id: string; occasion: string; state: ReminderState; reason: string | null; on: string | null; about_on: string; finished_at: Date | null }[]>`
+    SELECT n.id, n.finished_at, n.held_membership_id, n.occasion, n.state, n.reason, n.about_on::text AS about_on,
            CASE WHEN n.state = 'sent' THEN ((n.finished_at AT TIME ZONE g.timezone)::date)::text END AS on
     FROM gym_renewal_reminders n JOIN gyms g ON g.id = n.gym_id
     WHERE n.gym_id = ${gymId} AND n.held_membership_id = ANY(${[...heldIds]}::uuid[])`;
-  return rows.map((r) => ({ heldId: r.held_membership_id, occasion: r.occasion, state: r.state, on: r.on, reason: r.reason, aboutOn: r.about_on }));
+  return rows.map((r) => ({ id: r.id, heldId: r.held_membership_id, occasion: r.occasion, state: r.state, on: r.on, reason: r.reason, aboutOn: r.about_on, finishedAt: r.finished_at }));
+}
+
+/** These failed or skipped emails are taken off, to be written again (a price raise's, 18w). Never one that may have
+ *  gone, nor an address that bounced. */
+export async function dropFailedReminders(sql: SqlOrTx, gymId: string, ids: readonly string[]): Promise<void> {
+  if (ids.length === 0) return;
+  await sql`DELETE FROM gym_renewal_reminders WHERE gym_id = ${gymId} AND id = ANY(${[...ids]}::uuid[]) AND ((state = 'failed' AND reason <> 'send_unknown') OR (state = 'skipped' AND reason <> 'address_blocked'))`;
 }
 
 /** The gym's day now. */
@@ -201,7 +241,7 @@ export interface ClaimedReminder {
   heldId: string;
   entryId: string | null;
   occasion: string;
-  what: RenewalReminderWhat;
+  what: QueuedWhat;
   aboutOn: string;
   email: string | null;
   attempts: number;
@@ -213,7 +253,7 @@ export interface ClaimedReminder {
  *  same email again. */
 export async function claimNext(sql: SqlOrTx, q: { now: Date; leaseMs: number; gymIds: readonly string[] | null }): Promise<ClaimedReminder | null> {
   const rows = await sql<
-    { id: string; gym_id: string; held_membership_id: string; entry_id: string | null; occasion: string; what: RenewalReminderWhat; about_on: string; email: string | null; attempts: number; maybe_sent_at: Date | null; created_at: Date }[]
+    { id: string; gym_id: string; held_membership_id: string; entry_id: string | null; occasion: string; what: QueuedWhat; about_on: string; email: string | null; attempts: number; maybe_sent_at: Date | null; created_at: Date }[]
   >`
     WITH next AS (
       SELECT n.id FROM gym_renewal_reminders n

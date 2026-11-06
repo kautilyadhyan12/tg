@@ -134,6 +134,51 @@ export const renewalReminderStatusSchema = z
   .strict();
 export type RenewalReminderStatus = z.infer<typeof renewalReminderStatusSchema>;
 
+// ── RAISE THE PRICE FOR MEMBERS ALREADY ON A LINE (18w; `priceRaises.ts` holds the rule) ──
+
+/** How many days before the first payment at the new price each member is emailed. */
+export const PRICE_RAISE_NOTICE_DAYS = [7, 14, 30] as const;
+export const priceRaiseNoticeDaysSchema = z.union([z.literal(7), z.literal(14), z.literal(30)]);
+export type PriceRaiseNoticeDays = z.infer<typeof priceRaiseNoticeDaysSchema>;
+/** The most memberships one Save may raise: a gym of 10,000 on one line, twice over. */
+export const PRICE_RAISE_TICKED_MAX = 20_000;
+/** Raise the price for these memberships of the line, ticked in the box before Save: the line's new price, from
+ *  each one's first payment at least `noticeDays` away, emailed that many days before it. */
+export const priceRaiseRequestSchema = z
+  .object({ noticeDays: priceRaiseNoticeDaysSchema, membershipIds: z.array(z.string().uuid()).min(1).max(PRICE_RAISE_TICKED_MAX) })
+  .strict();
+export type PriceRaiseRequest = z.infer<typeof priceRaiseRequestSchema>;
+/** What happens to one membership's price: to be emailed (`on` the day it goes); after a freeze; on its way; emailed
+ *  (`on` the gym's day); or why it stays. `startsOn` is the first payment at the new price, where there is one. */
+export const PRICE_RAISE_STATES = [
+  "will_send",
+  "after_freeze",
+  "sending",
+  "sent",
+  "not_renewing",
+  "not_higher",
+  "raise_waiting",
+  "no_email",
+  "address_blocked",
+  "not_sent",
+  "maybe_sent",
+  "former_payer",
+  "billed_elsewhere",
+] as const;
+export const priceRaiseStateSchema = z.enum(PRICE_RAISE_STATES);
+export type PriceRaiseState = z.infer<typeof priceRaiseStateSchema>;
+export const priceRaiseStatusSchema = z
+  .object({
+    state: priceRaiseStateSchema,
+    /** Its price now and the new price, before tax, as the price list and a person's page show prices. */
+    fromMinor: z.number().int().min(0),
+    toMinor: z.number().int().min(0),
+    startsOn: z.string().nullable(),
+    on: z.string().nullable(),
+  })
+  .strict();
+export type PriceRaiseStatus = z.infer<typeof priceRaiseStatusSchema>;
+
 
 /** What a class limit is counted over. */
 export const MEMBERSHIP_LIMIT_PERIODS = ["week", "month"] as const;
@@ -253,6 +298,8 @@ export const gymMembershipTypesResponseSchema = z
     agreements: z.array(z.object({ id: z.string().uuid(), name: z.string(), inUse: z.boolean().default(true) }).strict()).default([]),
     /** The business's default agreement: never written, turned off, or in use (18u-ii-a). */
     defaultAgreement: z.enum(["none", "off", "in_use"]).default("none"),
+    /** After a change that raised members already on the line (18w): how many. */
+    raised: z.number().int().min(0).optional(),
   })
   .strict();
 export type GymMembershipTypesResponse = z.infer<typeof gymMembershipTypesResponseSchema>;
@@ -391,6 +438,8 @@ export const updateGymMembershipTypeRequestSchema = membershipTypeObject
     coolingOffDays: coolingOffDaysSchema.nullable(),
     renewalReminderDays: renewalReminderDaysSchema.nullable(),
     termReminderDays: renewalReminderDaysSchema.nullable(),
+    /** Members already on the line pay its new, higher price too (18w): only those ticked. */
+    raise: priceRaiseRequestSchema.optional(),
   })
   .strict()
   .superRefine(refineMembershipType);

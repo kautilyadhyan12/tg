@@ -162,6 +162,8 @@ export const gyms = pgTable(
     cardExpiryReminders: boolean("card_expiry_reminders").notNull().default(false),
     /** When its renewal reminders (0204; 18v-iv) were last looked for; null: look again. */
     renewalRemindersCheckedAt: timestamp("renewal_reminders_checked_at", { withTimezone: true }),
+    /** When its price raises still to email (0215; 18w) were last looked at. */
+    priceRaisesCheckedAt: timestamp("price_raises_checked_at", { withTimezone: true }),
     /** The At risk list's two numbers (0098; spec Part 3 §16.4), under `gyms_at_risk_check`;
      *  `AT_RISK_QUIET_DAYS` and `AT_RISK_WEEKS_CAME` in `@app/shared`. */
     atRiskQuietDays: integer("at_risk_quiet_days").notNull().default(14),
