@@ -36,6 +36,8 @@ import { localClock, reminderZone, type LocalClock } from "./clock.js";
 import * as repo from "./nudgesRepo.js";
 
 const AT_ONCE = 10;
+/** People whose week is read in one query. */
+const WEEKS_AT_ONCE = 1000;
 const DAY_MS = 86_400_000;
 
 const mondayOf = (clock: LocalClock): string => {
@@ -82,11 +84,26 @@ export async function sendTrainingNudges(deps: {
     close: NUDGE_LAST_MINUTE,
     streakLeast: STREAK_REMINDER_LEAST,
     badgesSince,
+    openedSince: new Date(now.getTime() - REMINDER_PAUSE_DAYS * DAY_MS),
     userIds: deps.userIds,
   });
 
-  const weekOf = async (person: repo.NudgePerson, clock: repo.NudgeClock, zone: string) => {
-    const { thisWeek, lastWeek } = await repo.twoWeeks(sql, person.userId, zone, clock.monday, RUN_COUNTS_FROM_M);
+  // The week's numbers for everybody whose summary is due now, read once a zone.
+  const weeks = new Map<string, { thisWeek: repo.WeekCounts; lastWeek: repo.WeekCounts }>();
+  for (const clock of clocks) {
+    if (clock.weekday !== 7 || !nudgeDue(SUMMARY_MINUTE, clock.minute)) continue;
+    const due = owed.filter((p) => p.zone === clock.zone && p.pushSummary && (p.summaryWeek === null || p.summaryWeek < clock.monday)).map((p) => p.userId);
+    const zone = reminderZone(clock.zone === "" ? null : clock.zone);
+    for (let i = 0; i < due.length; i += WEEKS_AT_ONCE) {
+      const got = await repo.twoWeeksOf(sql, { userIds: due.slice(i, i + WEEKS_AT_ONCE), zone, monday: clock.monday, runFromM: RUN_COUNTS_FROM_M });
+      for (const [id, counts] of got) weeks.set(id, counts);
+    }
+  }
+
+  const weekOf = (person: repo.NudgePerson, clock: repo.NudgeClock) => {
+    const counts = weeks.get(person.userId);
+    if (counts === undefined) return null;
+    const { thisWeek, lastWeek } = counts;
     return {
       workouts: thisWeek.workouts,
       runs: thisWeek.runs,
@@ -102,9 +119,12 @@ export async function sendTrainingNudges(deps: {
   const pick = async (person: repo.NudgePerson, clock: repo.NudgeClock, zone: string): Promise<Shown | null> => {
     const summaryOwed = person.pushSummary && clock.weekday === 7 && (person.summaryWeek === null || person.summaryWeek < clock.monday);
     if (summaryOwed && nudgeDue(SUMMARY_MINUTE, clock.minute)) {
-      const week = { ...(await weekOf(person, clock, zone)), badges: person.untold };
-      const shown = summaryNotification(week);
-      if (!summaryWorthSending(week) || shown === null) {
+      const counts = weekOf(person, clock);
+      const week = counts === null ? null : { ...counts, badges: person.untold };
+      const shown = week === null ? null : summaryNotification(week);
+      if (week === null) {
+        // Not read this run: nothing is decided about the week.
+      } else if (!summaryWorthSending(week) || shown === null) {
         // Two weeks with nothing done: no summary this week, and the day stays free for a badge.
         await repo.skipSummary(sql, person.userId, clock.monday);
       } else {
@@ -141,11 +161,6 @@ export async function sendTrainingNudges(deps: {
     const clock = clockOf.get(person.zone);
     if (clock === undefined) return;
     const zone = reminderZone(person.zone === "" ? null : person.zone);
-    // Not opened for a week: none of the three.
-    if (person.lastActiveAt.getTime() < now.getTime() - REMINDER_PAUSE_DAYS * DAY_MS) {
-      result.skipped += 1;
-      return;
-    }
     // The other notifications come first: none within 2 hours of one, none once 3 reached the phone today.
     const recent = person.recentPushes.map((at) => ({ at, day: localClock(zone, at).day }));
     if (!roomForNudge(recent, clock.day, now)) {
@@ -157,22 +172,19 @@ export async function sendTrainingNudges(deps: {
       result.skipped += 1;
       return;
     }
-    const taken = await repo.claimDay(sql, person.userId, clock.day, shown.monday);
+    const taken = await repo.claim(sql, { userId: person.userId, day: clock.day, monday: shown.monday, badgesSince: shown.kind === "streak" ? null : badgesSince, at: now });
     if (taken === null) return;
-    let badges: string[] = [];
     let reached = false;
     try {
       // The badges the claim took are the ones told; a summary or badges notice is built again from them.
       let words = { title: shown.title, body: shown.body };
-      if (shown.kind !== "streak") {
-        badges = await repo.claimBadges(sql, person.userId, badgesSince, now);
-        if (shown.kind === "badges") {
-          const again = badgeNotification(badges);
-          if (again === null) throw new Skip();
-          words = again;
-        } else if (badges.join() !== shown.badges.join()) {
-          words = summaryNotification({ ...(await weekOf(person, clock, zone)), badges }) ?? words;
-        }
+      if (shown.kind === "badges") {
+        const again = badgeNotification(taken.badges);
+        if (again === null) throw new Skip();
+        words = again;
+      } else if (shown.kind === "summary" && taken.badges.join() !== shown.badges.join()) {
+        const counts = weekOf(person, clock);
+        words = (counts === null ? null : summaryNotification({ ...counts, badges: taken.badges })) ?? words;
       }
       const tokens = await push.liveTokens(sql, person.userId, now, shown.kind);
       if (tokens.length === 0) throw new Skip();
@@ -200,7 +212,7 @@ export async function sendTrainingNudges(deps: {
       if (reached) await push.noteReached(sql, person.userId, now).catch(onError);
       else {
         if (!failed) result.skipped += 1;
-        await giveBack(person.userId, clock, shown.monday, taken, badges);
+        await giveBack(person.userId, clock, shown.monday, taken);
       }
     } catch (err) {
       if (err instanceof Skip) {
@@ -210,20 +222,12 @@ export async function sendTrainingNudges(deps: {
         onError(err);
         result.failed += 1;
       }
-      if (!reached) await giveBack(person.userId, clock, shown.monday, taken, badges).catch(onError);
+      if (!reached) await giveBack(person.userId, clock, shown.monday, taken).catch(onError);
     }
   };
 
-  const giveBack = async (
-    userId: string,
-    clock: repo.NudgeClock,
-    monday: string | null,
-    taken: { prevDay: string | null; prevWeek: string | null },
-    badges: readonly string[],
-  ): Promise<void> => {
-    await repo.unclaimDay(sql, userId, clock.day, monday, taken);
-    await repo.unclaimBadges(sql, userId, badges, now);
-  };
+  const giveBack = (userId: string, clock: repo.NudgeClock, monday: string | null, taken: repo.Claimed): Promise<void> =>
+    repo.unclaim(sql, { userId, day: clock.day, monday, taken, at: now });
 
   for (let i = 0; i < owed.length; i += AT_ONCE) {
     await Promise.all(owed.slice(i, i + AT_ONCE).map((person) => handle(person).catch(onError)));
