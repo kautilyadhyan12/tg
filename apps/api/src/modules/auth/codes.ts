@@ -82,8 +82,11 @@ function tooSoon(retryAfterMs: number): AuthError {
 const hashPurpose = (purpose: CodePurpose, boundTo: string | undefined): string =>
   boundTo === undefined ? purpose : `${purpose}:${boundTo}`;
 
-/** Change-email codes an address may be sent in a day, whichever accounts ask: each account's
- *  own three are counted apart, so without this a crowd of accounts could fill one inbox. */
+/** Change-email codes an address may be sent in a day before it takes no NEW account asking for it:
+ *  each account's own three are counted apart, so without this a crowd of accounts could fill one
+ *  inbox. An account that asked for the address before the cap filled keeps its own three, so a
+ *  crowd that comes after cannot stop the address's owner (item 19's security pass, L1); an inbox
+ *  gets at most this many plus two more for each account that was in before it filled. */
 export const CHANGE_EMAIL_CODES_PER_ADDRESS_PER_DAY = 10;
 
 /** The address's own ceiling, over every account's unproved codes for it (newest first). It names
@@ -146,7 +149,7 @@ export async function requestCode(
     userId: input.boundTo ?? null,
     check: (recent, everyone) => {
       refuseIfOverRules(recent, now, input.robot);
-      if (input.boundTo !== undefined) refuseIfAddressFull(everyone, now);
+      if (input.boundTo !== undefined && recent.length === 0) refuseIfAddressFull(everyone, now);
     },
   });
 

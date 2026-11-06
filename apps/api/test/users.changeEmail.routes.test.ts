@@ -381,29 +381,29 @@ d("change email (real Postgres)", { timeout: T }, () => {
     expect([await emailOf(nia.userId), await emailOf(mal.userId)]).toEqual([target, mal.email]);
   });
 
-  it("however many accounts ask, one address is sent ten change-email emails a day, taken or free, and the refusal names the address", async () => {
-    const crowd = await Promise.all(["ra", "rb", "rc", "rd"].map((who) => person(who)));
+  it("past ten change-email emails a day an address takes no new account asking, taken or free; a crowd never stops the one who asked first, and the refusal names the address (security L1)", async () => {
+    const owner = await person("rowner");
+    const crowd = await Promise.all(["ra", "rb", "rc", "rd", "re", "rf", "rg", "rh", "ri"].map((who) => person(who)));
     const free = address("crowd-free");
     const taken = (await person("crowd-taken")).email;
+    const ask = async (who: Person, target: string) => {
+      await pastTheGap(target);
+      const res = await askCode(who, target);
+      return { status: res.statusCode, error: res.statusCode === 200 ? null : errorOf(res) };
+    };
     for (const target of [free, taken]) {
       const before = inbox.get(target)?.length ?? 0;
-      const answers: { status: number; error: string | null }[] = [];
-      for (let round = 0; round < 3; round++) {
-        for (const who of crowd) {
-          await pastTheGap(target);
-          const res = await askCode(who, target);
-          answers.push({ status: res.statusCode, error: res.statusCode === 200 ? null : errorOf(res) });
-        }
-      }
-      expect(answers.filter((a) => a.status === 200)).toHaveLength(10);
-      expect(answers.slice(10)).toEqual([
-        { status: 429, error: "address_limit" },
-        { status: 429, error: "address_limit" },
-      ]);
-      expect((inbox.get(target)?.length ?? 0) - before).toBe(10);
+      expect(await ask(owner, target)).toEqual({ status: 200, error: null });
+      // Nine more accounts each ask once: ten in all, and the address takes no new one after.
+      for (const who of crowd) expect(await ask(who, target)).toEqual({ status: 200, error: null });
+      expect(await ask(await person("rlate"), target)).toEqual({ status: 429, error: "address_limit" });
+      // The one who asked first is never stopped by them: her own second and third.
+      expect(await ask(owner, target)).toEqual({ status: 200, error: null });
+      expect(await ask(owner, target)).toEqual({ status: 200, error: null });
+      expect(await ask(owner, target)).toEqual({ status: 429, error: "code_limit" });
+      expect((inbox.get(target)?.length ?? 0) - before).toBe(12);
     }
-    await pastTheGap(free);
-    const refused = await askCode(await person("re"), free);
+    const refused = await askCode(await person("rlast"), free);
     expect(JSON.parse(refused.body)).toMatchObject({ message: "This address has had too many codes today. Try again tomorrow." });
   });
 
