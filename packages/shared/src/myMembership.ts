@@ -56,6 +56,10 @@ export const myFeeSchema = z
     refundPending: z.boolean().default(false),
     /** The receipt of the payment that paid it; null while it is owed or waived. */
     receiptNumber: receiptNumberSchema.nullable(),
+    /** False once its class or session no longer counts it (marked Came, or the class not run). One still due then was being
+     *  paid in the app as they were marked (18k-ii-b): it comes off once that payment page closes with nothing paid, or once
+     *  the front desk has checked it with Square, and it is not paid in the app. */
+    stillOwed: z.boolean().default(true),
   })
   .strict();
 export type MyFee = z.infer<typeof myFeeSchema>;

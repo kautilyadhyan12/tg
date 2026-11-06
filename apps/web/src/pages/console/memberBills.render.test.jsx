@@ -952,6 +952,21 @@ describe('a member paying a fee in the app (18k-ii-b)', () => {
     );
   });
 
+  it('while a page is open on the membership, Record payment is offered nowhere on it: only Close payment page', async () => {
+    const m = held(1, GOLD, TODAY, false);
+    const owing = (over) => answer([{ ...m, billing: { ...m.billing, fees: [fee(over)] } }]);
+    orgService.getHeldMemberships.mockResolvedValue(owing({}));
+    const { unmount } = render(draw());
+    expect(within((await rowsSoon())[0]).getAllByRole('button', { name: /^Record payment/ }).length).toBeGreaterThan(0);
+    unmount();
+    orgService.getHeldMemberships.mockResolvedValue(owing({ appPayment: OPEN, can: { pay: false, waive: false, voidPaymentId: null } }));
+    render(draw());
+    const row = (await rowsSoon())[0];
+    expect(within(row).queryByRole('button', { name: /^Record payment/ })).toBeNull();
+    expect(within(row).queryByRole('button', { name: 'Waive fee' })).toBeNull();
+    expect(within(row).getByRole('button', { name: 'Close payment page' })).toBeTruthy();
+  });
+
   it('a fee taken off while it is being paid says it comes off once the page closes', async () => {
     orgService.getHeldMemberships.mockResolvedValue(answer([withFee({ stillOwed: false, appPayment: OPEN })]));
     render(draw({ readOnly: true }));

@@ -162,6 +162,7 @@ describe("fees", () => {
     refundedMinor: 0,
     refundPending: false,
     receiptNumber: state === "paid" || state === "refunded" ? 31 : null,
+    stillOwed: true,
     ...over,
   });
   const item = (f: ReturnType<typeof fee>) => ({ fee: f, currency: "INR", membership: "Gold Monthly" });

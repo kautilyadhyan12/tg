@@ -723,6 +723,10 @@ export const APP_CLOSE_WORDS = {
   waiting: APP_PAYMENT_STAFF_WORDS.waiting,
 };
 
+/** Whether a member's payment page in the app is open on this membership, for its bill or one of its fees (18k-ii-b):
+ *  nothing else is paid on it meanwhile, so Record payment is not offered. */
+export const appPageOpenOn = (m) => (m?.billing?.appPayment ?? null) !== null || (m?.billing?.fees ?? []).some((f) => (f.appPayment ?? null) !== null);
+
 /** The same, pressed under a fee (18k-ii-b). */
 export const APP_CLOSE_FEE_WORDS = { ...APP_CLOSE_WORDS, check: APP_PAYMENT_FEE_STAFF_WORDS.check };
 

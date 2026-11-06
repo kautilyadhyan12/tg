@@ -107,6 +107,7 @@ import {
   APP_CLOSE_BUTTON,
   APP_CLOSE_WORDS,
   APP_CLOSE_FEE_WORDS,
+  appPageOpenOn,
   appCheckNotice,
   appPayingNotice,
   feeAppCheckNotice,
@@ -2234,7 +2235,8 @@ export default function MemberMemberships({
     const can = m.view.can;
     const inUse = canAct && isLive(m);
     // A bill left owing is paid whatever became of the membership or the person.
-    const canPay = !readOnly && owes(m);
+    // Not while a member is paying on this membership in the app (18k-ii-b): Close payment page is what is offered then.
+    const canPay = !readOnly && owes(m) && !appPageOpenOn(m);
     // A payment recorded by mistake is voided from its own ⋯, on a membership that is over
     // too; an older mark with no payment behind it is taken back from here.
     const canUndo = canAct && m.billing !== null && m.billing.undo?.kind === 'mark';

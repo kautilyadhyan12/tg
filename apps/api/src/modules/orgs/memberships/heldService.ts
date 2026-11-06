@@ -362,9 +362,11 @@ function feeOf(
     appCheck: owed ? feeCheckOn(ctx.app.checks.get(f.id)) : null,
     // A payment taken on the Terminal or charged to the card on file is refunded in Square, never
     // voided here (18d-vi-b-i, 18d-iii-i).
+    // Not while a member's payment page in the app is open on the membership (18k-ii-b): only Close payment page is
+    // offered then. A fee its booking or session no longer owes takes no payment; it is waived once Square is checked.
     can: {
-      pay: owed,
-      waive: owed,
+      pay: owed && f.stillOwed && ctx.app.open === undefined,
+      waive: owed && ctx.app.open === undefined,
       voidPaymentId:
         f.status === "paid" && standing[0] !== undefined && !paidThroughSquare(standing[0].method) ? standing[0].id : null,
     },

@@ -82,12 +82,27 @@ export const feeRefundSql = (sql: Sql | TransactionSql) => sql`
                                           WHERE p.gym_id = f.gym_id AND p.bill_id = f.id AND p.undone_at IS NULL AND r.undone_at IS NULL) THEN 'part'
   END`;
 
-export type FeeListState = "owed" | "paid" | "part_refunded" | "refund_pending" | "refunded" | "waived";
+/** In a statement that names a fee's bill `f`, with its `id` and `gym_id` (18k-ii-b): whether it is still owed, read on the
+ *  bill itself by `stillOwedSql`, and whether a member's payment page in the app is open on it. */
+export const feeHeldSql = (sql: Sql | TransactionSql) => sql`
+  (SELECT ${stillOwedSql(sql)} FROM gym_member_bills b WHERE b.gym_id = f.gym_id AND b.id = f.id) AS fee_still_owed,
+  EXISTS (SELECT 1 FROM gym_app_payments ap WHERE ap.gym_id = f.gym_id AND ap.fee_bill_id = f.id AND ap.state = 'open') AS fee_paying`;
 
-/** One answer about a fee on a class's list and a personal training session, as its bills read on the person's page. */
-export function feeListState(r: { fee_waived: boolean | null; fee_status: string | null; fee_refund: string | null }): FeeListState {
+/** `held`: no longer owed, and it comes off once the member's payment page in the app closes with nothing paid; `check`: no
+ *  longer owed, and that page ended with money Square may have taken, so staff check Square, then waive it (18k-ii-b). */
+export type FeeListState = "owed" | "paid" | "part_refunded" | "refund_pending" | "refunded" | "waived" | "held" | "check";
+
+/** One answer about a fee on a class's list and a personal training session, as its bills read on the person's page. A fee
+ *  still open that its booking or session no longer owes is one a payment page in the app holds (`feesBeingPaid`). */
+export function feeListState(r: {
+  fee_waived: boolean | null;
+  fee_status: string | null;
+  fee_refund: string | null;
+  fee_still_owed?: boolean | null;
+  fee_paying?: boolean | null;
+}): FeeListState {
   if (r.fee_waived === true) return "waived";
-  if (r.fee_status === "open") return "owed";
+  if (r.fee_status === "open") return r.fee_still_owed === false ? (r.fee_paying === true ? "held" : "check") : "owed";
   if (r.fee_refund === "pending") return "refund_pending";
   if (r.fee_status === "refunded") return "refunded";
   return r.fee_refund === "part" ? "part_refunded" : "paid";

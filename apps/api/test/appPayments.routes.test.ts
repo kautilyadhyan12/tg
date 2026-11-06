@@ -29,6 +29,7 @@ import { buildApp } from "../src/app.js";
 import { createMemoryRedis } from "../src/redis.js";
 import { openDueBills } from "../src/modules/orgs/memberships/billsRepo.js";
 import { openDueFreezeFees } from "../src/modules/orgs/memberships/freezeFees.js";
+import { appointmentById } from "../src/modules/orgs/pt/repo.js";
 import { loadConfig } from "../src/config.js";
 import { APP_PAYMENT } from "../src/modules/orgs/payments/appPayments.js";
 import { squareSettings } from "../src/modules/orgs/payments/settings.js";
@@ -855,10 +856,23 @@ d("Pay what they owe in the app: charged once, on this bill alone (real Postgres
       INSERT INTO gym_class_bookings (gym_id, session_id, user_id, entry_id, held_membership_id, status, request_key, booked_at)
       VALUES (${gym.id}, ${session?.id ?? ""}, ${person.userId}, ${who.entryId}, ${who.membershipId}, 'booked', ${randomUUID()}, ${new Date(startsAt.getTime() - 60 * 60_000)})
       RETURNING id`;
-    return async (status: "no_show" | "attended") => {
+    const mark = async (status: "no_show" | "attended") => {
       const res = await send("POST", `/v1/orgs/${gym.id}/class-sessions/${session?.id ?? ""}/bookings/${booking?.id ?? ""}/mark`, gym.owner.cookies, { status });
       expect(res.statusCode, res.body).toBe(200);
     };
+    /** The fee as the class's list says it, under their mark. */
+    const onList = async (): Promise<unknown> => {
+      const res = await send("GET", `/v1/orgs/${gym.id}/class-sessions/${session?.id ?? ""}/bookings`, gym.owner.cookies);
+      expect(res.statusCode, res.body).toBe(200);
+      const find = (o: unknown): unknown => {
+        if (Array.isArray(o)) return o.map(find).find((x) => x !== undefined);
+        if (o === null || typeof o !== "object") return undefined;
+        const rec = o as Record<string, unknown>;
+        return rec["bookingId"] === booking?.id ? rec["fee"] : Object.values(rec).map(find).find((x) => x !== undefined);
+      };
+      return find(JSON.parse(res.body));
+    };
+    return Object.assign(mark, { onList });
   };
   /** A personal training session yesterday with the owner, on their membership, and its mark (18h-ii). */
   const sessionYesterday = async (gym: Gym, who: Holder) => {
@@ -869,10 +883,13 @@ d("Pay what they owe in the app: charged once, on this bill alone (real Postgres
              ${new Date(startsAt.getTime() + 60 * 60_000)}, 60, 'booked', ${randomUUID()}, ${gym.owner.userId}
       FROM (SELECT ${startsAt}::timestamptz AT TIME ZONE 'America/Chicago' AS l) x
       RETURNING id`;
-    return async (status: "no_show" | "attended") => {
+    const mark = async (status: "no_show" | "attended") => {
       const res = await send("POST", `/v1/orgs/${gym.id}/pt/appointments/${session?.id ?? ""}/mark`, gym.owner.cookies, { status });
       expect(res.statusCode, res.body).toBe(200);
     };
+    /** The fee as the trainer's week reads it (`appointmentsOf` and this share one read). */
+    const onWeek = async () => (await appointmentById(sql, gym.id, session?.id ?? "", false))?.fee ?? null;
+    return Object.assign(mark, { onWeek });
   };
   const feesOf = async (gym: Gym, who: Holder) => (await held(gym, gym.owner, who.entryId)).memberships.find((m) => m.id === who.membershipId)?.billing?.fees ?? [];
   const feePress = (gym: Gym, by: Person, who: Holder, feeId: string, over: Record<string, unknown> = {}) =>
@@ -942,6 +959,8 @@ d("Pay what they owe in the app: charged once, on this bill alone (real Postgres
     const open = (await held(gymA, gymA.owner, tara.entryId)).memberships[0]?.billing;
     expect(open?.fees[0]?.appPayment).toMatchObject({ id: started.payment.id, payerName: "Tara Singh" });
     expect(open?.appPayment).toBeNull();
+    // Only Close payment page is offered meanwhile: neither Record payment nor Waive fee.
+    expect(open?.fees[0]?.can).toMatchObject({ pay: false, waive: false });
     // Pressed again: the same page, never a second; her month waits for it.
     expect((await payFee(gymA, taraApp, tara, taraFee)).payment.id).toBe(started.payment.id);
     expect(errorOf(await payPress(gymA, taraApp, tara))).toBe("app_payment_other_open");
@@ -1142,19 +1161,77 @@ d("Pay what they owe in the app: charged once, on this bill alone (real Postgres
     expect((await send("POST", `${feeUrl(gym, kai, second)}/waive`, gym.owner.cookies, {})).statusCode).toBe(200);
     expect(errorOf(await feePress(gym, kaiApp, kai, second))).toBe("app_payment_changed");
 
-    // An early cancellation fee, owed for good: paid in the app, named as such, then not again.
-    const [leave] = await sql<{ id: string }[]>`
-      INSERT INTO gym_member_bills (gym_id, held_membership_id, fee, fee_for, covers_from, covers_to, amount_minor, currency, due_on, status)
-      SELECT ${gym.id}, ${kai.membershipId}, 'leave_early', 'Gold Monthly', d, d, 2500, 'USD', d, 'open'
-      FROM (SELECT (${clock}::timestamptz AT TIME ZONE 'America/Chicago')::date AS d) x
-      RETURNING id`;
-    const leavePage = await payFee(gym, kaiApp, kai, leave?.id ?? "", { amountMinor: 2500 });
+    // An early cancellation fee, owed for good: a twelve-month membership cancelled inside its term with its fee. Her own
+    // page lists it, she pays it in the app, named as such, and then not again.
+    const twelve = await send("POST", `/v1/orgs/${gym.id}/membership-types`, gym.owner.cookies, { ...gold, name: "Gold 12", contractPeriods: 12, contractThen: "renews", leaveFeeMinor: 2500 });
+    expect(twelve.statusCode, twelve.body).toBe(201);
+    const twelveId = (JSON.parse(twelve.body) as GymMembershipTypesResponse).types.find((t) => t.name === "Gold 12")?.id ?? "";
+    const { holder: lea, app: leaApp } = await member(gym, twelveId, "Lea Leave");
+    expect((await byHand(gym, lea)).statusCode).toBe(200);
+    const cancelled = await send("POST", `${entryUrl(gym, lea.entryId)}/memberships/${lea.membershipId}/cancel`, gym.owner.cookies, { when: "leave_early", leaveFeeMinor: 2500 });
+    expect(cancelled.statusCode, cancelled.body).toBe(200);
+    const theirs = myMembershipResponseSchema.parse(JSON.parse((await send("GET", `/v1/orgs/${gym.id}/my-membership`, leaApp.cookies)).body));
+    const leave = theirs.memberships.flatMap((m) => m.fees).find((f) => f.fee === "leave_early");
+    expect(leave).toMatchObject({ amountMinor: 2500, state: "due", stillOwed: true });
+    const leavePage = await payFee(gym, leaApp, lea, leave?.id ?? "", { amountMinor: 2500 });
     expect(linkOf(acct, leavePage)).toMatchObject({ amount: 2500, note: "Early cancellation fee" });
-    expect(linkOf(acct, leavePage)?.name).toMatch(new RegExp(`^Early cancellation fee, Gold Monthly, ${DAY}$`));
+    expect(linkOf(acct, leavePage)?.name).toMatch(new RegExp(`^Early cancellation fee, Gold 12, ${DAY}$`));
     square.payLink(linkOf(acct, leavePage)?.id ?? "");
-    expect((await check(gym, kaiApp, leavePage.payment.id)).payment.state).toBe("paid");
+    expect((await check(gym, leaApp, leavePage.payment.id)).payment.state).toBe("paid");
     expect(await billStatus(leave?.id ?? "")).toBe("paid");
-    expect(errorOf(await feePress(gym, kaiApp, kai, leave?.id ?? "", { amountMinor: 2500 }))).toBe("app_payment_changed");
-    expect((await paymentsOf(gym.id)).map((p) => [p.bill_id, p.amount_minor, p.method])).toEqual([[leave?.id, 2500, "app"]]);
+    expect(errorOf(await feePress(gym, leaApp, lea, leave?.id ?? "", { amountMinor: 2500 }))).toBe("app_payment_changed");
+    expect((await paymentsOf(gym.id)).filter((p) => p.method === "app").map((p) => [p.bill_id, p.amount_minor])).toEqual([[leave?.id, 2500]]);
+  });
+
+  it("marked Came while paying, and the page ends with money Square may have taken: the fee stays for the desk to check, and every page says so", async () => {
+    clock = new Date();
+    const gym = await makeGym("App Fee Held");
+    const acct = account(`AFH${uniq().slice(-6)}`);
+    await connect(gym, acct);
+    await sql`UPDATE gyms SET class_no_show_fee_minor = 1000, pt_no_show_fee_minor = 1500 WHERE id = ${gym.id}`;
+    const typeId = await typeOf(gym);
+
+    // Ida pays her class's no-show fee; staff mark her Came; Square never finishes her payment.
+    const { holder: ida, app: idaApp } = await member(gym, typeId, "Ida Held");
+    const idaClass = await classYesterday(gym, ida, idaApp, "Spin");
+    await idaClass("no_show");
+    expect(await idaClass.onList()).toMatchObject({ state: "owed" });
+    const idaFee = (await feesOf(gym, ida))[0]?.id ?? "";
+    const idaPage = await payFee(gym, idaApp, ida, idaFee);
+    await idaClass("attended");
+    // The class's list says what her page says: it comes off once her page closes.
+    expect(await idaClass.onList()).toMatchObject({ amountMinor: 1000, state: "held" });
+    square.payLink(linkOf(acct, idaPage)?.id ?? "", { status: "APPROVED" });
+    clock = new Date(clock.getTime() + APP_PAYMENT.giveUpMs + 60_000);
+    await work([gym.id]);
+    expect((await check(gym, idaApp, idaPage.payment.id)).payment.state).toBe("check");
+    // Square may have her money: the fee is not taken off, it says to check Square, and only Waive fee is offered.
+    expect(await billStatus(idaFee)).toBe("open");
+    // A day on, it reads Overdue.
+    expect((await feesOf(gym, ida))[0]).toMatchObject({ state: "overdue", stillOwed: false, appPayment: null, appCheck: { why: "unknown", payerName: "Ida Held" }, can: { pay: false, waive: true } });
+    expect(await idaClass.onList()).toMatchObject({ state: "check" });
+    const idaOwn = myMembershipResponseSchema.parse(JSON.parse((await send("GET", `/v1/orgs/${gym.id}/my-membership`, idaApp.cookies)).body));
+    expect(idaOwn.memberships[0]?.fees[0]).toMatchObject({ id: idaFee, stillOwed: false });
+    expect(errorOf(await feePress(gym, idaApp, ida, idaFee))).toBe("app_payment_changed");
+
+    // Jo pays a session's no-show fee; staff mark him Came; the gym leaves that Square account while the page is open.
+    clock = new Date();
+    const { holder: jo, app: joApp } = await member(gym, typeId, "Jo Held");
+    const joSession = await sessionYesterday(gym, jo);
+    await joSession("no_show");
+    const joFee = (await feesOf(gym, jo))[0]?.id ?? "";
+    const joPage = await payFee(gym, joApp, jo, joFee, { amountMinor: 1500 });
+    await joSession("attended");
+    expect(await joSession.onWeek()).toMatchObject({ amountMinor: 1500, state: "held" });
+    await sql`UPDATE gym_payment_connections SET access_token = NULL, refresh_token = NULL, state = 'removed', removed_at = now() WHERE gym_id = ${gym.id}`;
+    clock = new Date(clock.getTime() + APP_PAYMENT.idleMs + 1000);
+    await work([gym.id]);
+    expect((await check(gym, joApp, joPage.payment.id)).payment.state).toBe("check");
+    expect(await billStatus(joFee)).toBe("open");
+    expect((await feesOf(gym, jo))[0]).toMatchObject({ stillOwed: false, appCheck: { why: "unknown" }, can: { pay: false, waive: true } });
+    expect(await joSession.onWeek()).toMatchObject({ state: "check" });
+    // Staff check Square, then waive it: nobody who came owes it.
+    expect((await send("POST", `${feeUrl(gym, jo, joFee)}/waive`, gym.owner.cookies, {})).statusCode).toBe(200);
+    expect(await joSession.onWeek()).toMatchObject({ state: "waived" });
   });
 });
