@@ -106,8 +106,11 @@ import {
   waiveFeeWords,
   APP_CLOSE_BUTTON,
   APP_CLOSE_WORDS,
+  APP_CLOSE_FEE_WORDS,
   appCheckNotice,
   appPayingNotice,
+  feeAppCheckNotice,
+  feeAppPayingNotice,
 } from './memberBillsView';
 
 // A PERSON'S MEMBERSHIPS, on their page (spec Part 3 §13.2; ROADMAP 17a-ii): what they
@@ -993,6 +996,7 @@ export default function MemberMemberships({
                   <ChargeStopHolder holder={row.stopHolder} gym={gym} />
                   {row.charging !== null ? <span className="c-s13 c-t2">{row.charging}</span> : null}
                 </div>
+                {renderFeeAppPaying(m, fee)}
                 {row.payments.map((p) => (
                   <div key={p.id} className="flex flex-col gap-2 px-3 py-2" style={SPLIT} data-testid={p.voided === null ? 'held-fee-payment' : 'held-fee-voided-payment'}>
                     <div className="flex flex-col gap-1.5 md:flex-row md:items-center md:gap-x-3">
@@ -1555,23 +1559,59 @@ export default function MemberMemberships({
     );
   };
 
-  /** Close payment page (18k-ii-a): Square deletes the member's page, unless it was paid just before; said here. */
-  const closeAppPage = async (m) => {
-    setAppClose({ membershipId: m.id, busy: true, said: null });
+  /** Close payment page (18k-ii-a): Square deletes the member's page, unless it was paid just before; said here, under the
+   *  bill, or under the fee it was pressed under (`fee`, 18k-ii-b). */
+  const closeAppPage = async (m, fee = null) => {
+    const feeId = fee === null ? null : fee.id;
+    const words = fee === null ? APP_CLOSE_WORDS : APP_CLOSE_FEE_WORDS;
+    setAppClose({ membershipId: m.id, feeId, busy: true, said: null });
     try {
       const res = await orgService.closeAppPayment(gymId, entryId, m.id);
-      setAppClose({ membershipId: m.id, busy: false, said: APP_CLOSE_WORDS[res.data.outcome], ended: res.data.outcome !== 'waiting' });
+      setAppClose({ membershipId: m.id, feeId, busy: false, said: words[res.data.outcome], ended: res.data.outcome !== 'waiting' });
     } catch (err) {
-      setAppClose({ membershipId: m.id, busy: false, said: errorText(err, "We couldn't close the payment page. Try again.") });
+      setAppClose({ membershipId: m.id, feeId, busy: false, said: errorText(err, "We couldn't close the payment page. Try again.") });
     }
     readQuietly.current();
     onChanged?.();
   };
 
+  /** A member paying this fee in the app (18k-ii-b), under the fee: who, until when, and Close payment page; and a page for
+   *  it that ended with money Square may have taken that is not on it. */
+  const renderFeeAppPaying = (m, fee) => {
+    const said = appClose !== null && appClose.membershipId === m.id && appClose.feeId === fee.id ? appClose.said : null;
+    const open = said !== null && appClose.ended === true ? null : feeAppPayingNotice(fee, gym?.timezone ?? null);
+    const check = feeAppCheckNotice(fee, m.currency);
+    if (open === null && said === null && check === null) return null;
+    return (
+      <div className="flex flex-col items-start gap-1.5 px-3 pb-2.5" data-testid="held-fee-app-payment">
+        {check !== null ? (
+          <span className="c-s13 c-w5" style={{ color: 'var(--bad)' }} data-testid="held-fee-app-check">
+            {check}
+          </span>
+        ) : null}
+        {open !== null ? (
+          <span className="c-s13 c-w5" style={{ color: 'var(--warn)' }}>
+            {open.line}
+          </span>
+        ) : null}
+        {open !== null && canAct && !readOnly ? (
+          <button type="button" className={SMALL} disabled={appClose?.busy === true} onClick={() => void closeAppPage(m, fee)}>
+            {APP_CLOSE_BUTTON}
+          </button>
+        ) : null}
+        {said !== null ? (
+          <span className="c-s13 c-t2" role="status">
+            {said}
+          </span>
+        ) : null}
+      </div>
+    );
+  };
+
   /** A member paying this membership in the app (18k-ii-a): who, until when, and Close payment page for staff who take
    *  payments; nothing else on the membership can be paid or changed meanwhile. */
   const renderAppPaying = (m) => {
-    const said = appClose !== null && appClose.membershipId === m.id ? appClose.said : null;
+    const said = appClose !== null && appClose.membershipId === m.id && (appClose.feeId ?? null) === null ? appClose.said : null;
     // Once Square has said how it ended, the line goes at once, before the page reads again.
     const open = said !== null && appClose.ended === true ? null : appPayingNotice(m, gym?.timezone ?? null);
     const check = appCheckNotice(m);

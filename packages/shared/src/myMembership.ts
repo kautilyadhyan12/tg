@@ -42,6 +42,8 @@ export type MyPayment = z.infer<typeof myPaymentSchema>;
  *  refunded or waived. A fee taken off is not sent. */
 export const myFeeSchema = z
   .object({
+    /** The fee, for paying it in the app while it is due or overdue (18k-ii-b): all of `amountMinor`. */
+    id: z.string().uuid(),
     fee: memberFeeKindSchema,
     forName: z.string().min(1),
     on: daySchema,

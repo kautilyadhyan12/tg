@@ -6,6 +6,7 @@
 //   cd apps/api
 //   $env:DATABASE_URL='postgres://aihg:aihg@localhost:5433/aihg'
 //   corepack pnpm exec node --env-file=C:\Projects\ai-home-gym\apps\api\.env.square.local --import tsx tools/square-app-payment.ts pay <gymId> <member's email>
+//   … tools/square-app-payment.ts pay-fee <gymId> <member's email>   (their oldest fee owed, 18k-ii-b)
 //   … tools/square-app-payment.ts check <gymId> <member's email> <paymentId>
 //   … tools/square-app-payment.ts close <gymId> <member's email> <paymentId>
 import { randomUUID } from "node:crypto";
@@ -32,11 +33,12 @@ if (!env.success) {
 const args = z
   .union([
     z.tuple([z.literal("pay"), z.string().uuid(), z.string().email()]),
+    z.tuple([z.literal("pay-fee"), z.string().uuid(), z.string().email()]),
     z.tuple([z.enum(["check", "close"]), z.string().uuid(), z.string().email(), z.string().uuid()]),
   ])
   .safeParse(process.argv.slice(2));
 if (!args.success) {
-  console.error("Usage: square-app-payment.ts pay <gymId> <email> | check <gymId> <email> <paymentId> | close <gymId> <email> <paymentId>");
+  console.error("Usage: square-app-payment.ts pay|pay-fee <gymId> <email> | check <gymId> <email> <paymentId> | close <gymId> <email> <paymentId>");
   process.exit(2);
 }
 
@@ -65,6 +67,18 @@ try {
     const page = done?.answer.payment;
     if (page === undefined) throw new Error("No answer.");
     console.log(`${owed.name}: ${formatMinor(page.amountMinor, page.currency)}. Payment ${page.id}`);
+    console.log(`Square's page: ${page.url ?? "(not open)"}`);
+  } else if (args.data[0] === "pay-fee") {
+    const mine = await getMyMembership({ sql, now: () => new Date() }, user.id, gymId, always);
+    const owing = [...(mine?.memberships ?? []), ...(mine?.paysFor ?? []).flatMap((p) => p.memberships)].flatMap((m) =>
+      m.fees.filter((f) => f.state === "due" || f.state === "overdue").map((f) => ({ membership: m, fee: f })),
+    );
+    const oldest = owing.sort((a, b) => a.fee.dueOn.localeCompare(b.fee.dueOn))[0];
+    if (oldest === undefined) throw new Error("No fee is owed now for this member, or they don't read it as theirs.");
+    const done = await startAppPayment(deps, user.id, gymId, { requestKey: randomUUID(), membershipId: oldest.membership.id, feeId: oldest.fee.id, amountMinor: oldest.fee.amountMinor }, always);
+    const page = done?.answer.payment;
+    if (page === undefined) throw new Error("No answer.");
+    console.log(`${oldest.fee.fee} fee, ${oldest.fee.forName}: ${formatMinor(page.amountMinor, page.currency)}. Payment ${page.id}`);
     console.log(`Square's page: ${page.url ?? "(not open)"}`);
   } else {
     const id = args.data[3];

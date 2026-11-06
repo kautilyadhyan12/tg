@@ -15,11 +15,17 @@
 // meanwhile is recorded instead; money is recorded only once Square says the order's one payment is COMPLETED, at the
 // gym's location, for exactly the amount asked with no tip, and it is recorded once (the page is the payment's key, and
 // Square's payment id is kept once). Money Square took that the bill can no longer take is kept, never dropped.
+//
+// A FEE (18k-ii-b) is paid the same way: a late cancel, no-show, freeze or early cancellation fee of a membership the member
+// pays for, all of it, while it is owed. The worst thing there is the same, and a fee charged that they no longer owe with
+// nobody told: so while its page is open the fee is not taken off (staff marking them came asks the page closed instead), it
+// comes off once Square says nothing was paid, and paid meanwhile it reads Paid and goes on Refunds to review.
 import { randomUUID } from "node:crypto";
 import {
   APP_PAYMENT_LIMITS,
   APP_PAYMENT_STAFF_WORDS,
   APP_PAYMENT_WORDS,
+  MEMBER_FEE_WORDS,
   appPaymentCloseResponseSchema,
   appPaymentResponseSchema,
   myAppPaymentsResponseSchema,
@@ -67,6 +73,8 @@ const notDue = (): OrgsError => new OrgsError(409, "app_payment_not_due", APP_PA
 const atDesk = (): OrgsError => new OrgsError(409, "app_payment_at_desk", APP_PAYMENT_WORDS.at_desk);
 const squareDown = (): OrgsError => new OrgsError(503, "square_unavailable", APP_PAYMENT_WORDS.square_down);
 const squareRefused = (): OrgsError => new OrgsError(409, "app_payment_refused", APP_PAYMENT_WORDS.refused);
+const checkFirst = (): OrgsError => new OrgsError(409, "app_payment_check", APP_PAYMENT_WORDS.check_first);
+const otherOpen = (): OrgsError => new OrgsError(409, "app_payment_other_open", APP_PAYMENT_WORDS.other_open);
 
 type Limit = () => Promise<boolean>;
 
@@ -108,7 +116,8 @@ function viewOf(row: pays.AppPayRow): AppPayment {
   return {
     id: row.id,
     membershipId: row.membershipId,
-    periodIndex: row.periodIndex,
+    periodIndex: row.feeBillId === null ? row.periodIndex : null,
+    feeId: row.feeBillId,
     amountMinor: row.amountMinor,
     currency: row.currency,
     state,
@@ -129,6 +138,19 @@ const dayOf = (day: string): string => {
 /** The line Square's page shows: the membership, and the days the bill covers ("Gold Monthly, 1 Nov 2026 to 30 Nov 2026"). */
 export const lineName = (name: string, covers: { from: string; to: string } | null): string =>
   (covers === null ? name : `${name}, ${dayOf(covers.from)} to ${dayOf(covers.to)}`).slice(0, 500);
+
+/** A fee's line (18k-ii-b): the fee, what it was for and its day ("No-show fee, Spin, 4 Nov 2026"), a freeze fee's month
+ *  ("Freeze fee, Gold Monthly, 1 Nov 2026 to 30 Nov 2026"). A session's fee names no trainer: no person's name goes to Square. */
+export const feeLineName = (line: Extract<pays.PageLine, { kind: "fee" }>): string => {
+  const what = line.of === "pt" ? "Personal training" : line.forName;
+  const days = line.to === null ? dayOf(line.on) : `${dayOf(line.on)} to ${dayOf(line.to)}`;
+  return `${MEMBER_FEE_WORDS[line.fee]}, ${what}, ${days}`.slice(0, 500);
+};
+
+const pageLineName = (line: pays.PageLine): string => (line.kind === "period" ? lineName(line.name, line.covers) : feeLineName(line));
+
+/** What the press asks to pay: the bill's period, or the fee. */
+const targetOf = (body: AppPaymentRequest): pays.PayTarget => ("feeId" in body ? { kind: "fee", billId: body.feeId } : { kind: "period", periodIndex: body.periodIndex });
 
 // ── Asking Square about a page ──
 
@@ -286,9 +308,10 @@ export async function readMyAppPayments(deps: PaymentsDeps, userId: string, gymI
 export async function startAppPayment(deps: PaymentsDeps, userId: string, gymId: string, body: AppPaymentRequest, limit: Limit): Promise<Told<AppPaymentResponse> | null> {
   const entries = await payingFor(deps, gymId, userId);
   if (!(await limit())) return null;
+  const target = targetOf(body);
   const same = await pays.readByKey(deps.sql, gymId, body.requestKey);
   if (same !== null) {
-    const repeat = same.openedBy === userId && same.membershipId === body.membershipId && same.periodIndex === body.periodIndex && same.amountMinor === body.amountMinor;
+    const repeat = same.openedBy === userId && same.membershipId === body.membershipId && pays.paysTarget(same, target) && same.amountMinor === body.amountMinor;
     if (!repeat) throw changed();
     return { answer: answerOf(same), tell: null };
   }
@@ -302,14 +325,14 @@ export async function startAppPayment(deps: PaymentsDeps, userId: string, gymId:
     gymId,
     entryId,
     membershipId: body.membershipId,
-    periodIndex: body.periodIndex,
+    target,
     amountMinor: body.amountMinor,
     accountCurrency: ready.row.currency,
     today: dayInTz(now, ready.timezone),
     now,
   };
   const before = await pays.payable(deps.sql, pressing);
-  if (before.kind !== "ok") return { answer: openOr(before, userId, body), tell: null };
+  if (before.kind !== "ok") return { answer: openOr(before, userId, body, target), tell: null };
 
   const token = ready.square.tokens.open(ready.row.accessToken ?? "", accessContext(gymId));
   if (token === null) throw notOffered();
@@ -319,10 +342,11 @@ export async function startAppPayment(deps: PaymentsDeps, userId: string, gymId:
     idempotencyKey: linkKey,
     locationId: ready.row.locationId,
     referenceId: id,
-    name: lineName(before.name, before.covers),
+    name: pageLineName(before.line),
     amountMinor: body.amountMinor,
     currency: before.currency,
-    note: APP_PAYMENT.note,
+    // A fee is listed as the fee it is, as the Terminal lists it ("No-show fee").
+    note: before.line.kind === "fee" ? MEMBER_FEE_WORDS[before.line.fee] : APP_PAYMENT.note,
   });
   if (made.kind === "unavailable") throw squareDown();
   if (made.kind === "refused") {
@@ -359,32 +383,37 @@ export async function startAppPayment(deps: PaymentsDeps, userId: string, gymId:
   const gone = await ready.square.api.deletePaymentLink(token, link.linkId);
   if (gone.kind !== "ok") deps.log.warn({ event: "square.app_payment_link_left", gymId }, "a payment page nobody was given could not be deleted");
   if (written.kind === "key_reused") {
-    const repeat = written.row.openedBy === userId && written.row.membershipId === body.membershipId && written.row.periodIndex === body.periodIndex;
+    const repeat = written.row.openedBy === userId && written.row.membershipId === body.membershipId && pays.paysTarget(written.row, target);
     if (!repeat) throw changed();
     return { answer: answerOf(written.row), tell: null };
   }
-  return { answer: openOr(written, userId, body), tell: null };
+  return { answer: openOr(written, userId, body, target), tell: null };
 }
 
-/** Why a page cannot be made, or the page already open for this very bill. */
-function openOr(outcome: Exclude<pays.PayableOutcome, { kind: "ok" }>, userId: string, body: AppPaymentRequest): AppPaymentResponse {
+/** Why a page cannot be made, or the page already open for this very bill or fee. */
+function openOr(outcome: Exclude<pays.PayableOutcome, { kind: "ok" }>, userId: string, body: AppPaymentRequest, target: pays.PayTarget): AppPaymentResponse {
   switch (outcome.kind) {
     case "open": {
       const row = outcome.row;
-      if (row.openedBy === userId && row.periodIndex === body.periodIndex && row.amountMinor === body.amountMinor) return answerOf(row);
+      if (!pays.paysTarget(row, target)) throw otherOpen();
+      if (row.openedBy === userId && row.amountMinor === body.amountMinor) return answerOf(row);
       throw changed();
     }
     case "at_desk":
       throw atDesk();
     case "currency":
       throw notOffered();
+    // Somebody else's fee reads as one the gym does not have.
     case "entry_not_found":
     case "membership_not_found":
+    case "fee_not_found":
       throw notFound();
     case "changed":
       throw changed();
     case "not_due":
       throw notDue();
+    case "check":
+      throw checkFirst();
     default: {
       const never: never = outcome;
       throw new Error(`unhandled payment page check: ${JSON.stringify(never)}`);

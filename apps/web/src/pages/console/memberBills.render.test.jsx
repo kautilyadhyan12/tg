@@ -888,3 +888,76 @@ describe('a member paying in the app (18k-ii-a)', () => {
     expect(within(box).queryByRole('button')).toBeNull();
   });
 });
+
+describe('a member paying a fee in the app (18k-ii-b)', () => {
+  const PAGE = '55555555-5555-4555-8555-000000000002';
+  const FEE_ID = '55555555-5555-4555-8555-000000000003';
+  const OPEN = { id: PAGE, payerName: 'Ada Lovelace', closesAt: '2026-10-20T15:42:00.000Z' };
+  const fee = (over = {}) => ({
+    id: FEE_ID,
+    fee: 'no_show',
+    forName: 'Spin',
+    on: '2026-10-19',
+    amountMinor: 1000,
+    taxes: [],
+    dueOn: '2026-10-19',
+    state: 'due',
+    waived: null,
+    payments: [],
+    voidedPayments: [],
+    can: { pay: true, waive: true, voidPaymentId: null },
+    ...over,
+  });
+  const withFee = (over = {}) => {
+    const m = held(1, GOLD, '2026-10-04', true);
+    return { ...m, billing: { ...m.billing, fees: [fee(over)] } };
+  };
+
+  it('says under the fee who is paying it, and Close payment page closes it and says so there', async () => {
+    orgService.getHeldMemberships.mockResolvedValueOnce(answer([withFee({ appPayment: OPEN })])).mockResolvedValue(answer([withFee()]));
+    orgService.closeAppPayment.mockResolvedValue({ data: { outcome: 'closed' } });
+    render(draw({ gym: { timezone: 'America/Chicago' } }));
+    const box = within(await screen.findByTestId('held-fee')).getByTestId('held-fee-app-payment');
+    expect(box.textContent).toContain('Ada Lovelace is paying this fee in the app. The payment page closes at 10:42 AM if it isn\x27t paid.');
+    // It is the fee's, so nothing is said above the bills.
+    expect(screen.queryByTestId('held-app-payment')).toBeNull();
+    fireEvent.click(within(box).getByRole('button', { name: 'Close payment page' }));
+    await waitFor(() => expect(orgService.closeAppPayment).toHaveBeenCalledWith(GYM, ADA, withFee().id));
+    expect((await screen.findByRole('status')).textContent).toBe('Payment page closed. Nothing was paid in the app.');
+    expect(screen.getByTestId('held-fee').textContent).not.toContain('is paying this fee in the app');
+  });
+
+  it('Close payment page under a fee Square may have been paid for says to check Square, naming the fee', async () => {
+    orgService.getHeldMemberships.mockResolvedValue(answer([withFee({ appPayment: OPEN })]));
+    orgService.closeAppPayment.mockResolvedValue({ data: { outcome: 'check' } });
+    render(draw());
+    fireEvent.click(within(await screen.findByTestId('held-fee-app-payment')).getByRole('button', { name: 'Close payment page' }));
+    expect((await screen.findByRole('status')).textContent).toBe("Square may have taken a payment on this page that isn't on the fee. Check it in Square before taking this payment again.");
+  });
+
+  it('a no-show fee Square took money for says to check Square; a freeze fee also says the card on file will not be charged', async () => {
+    orgService.getHeldMemberships.mockResolvedValue(answer([withFee({ appCheck: { why: 'taken', amountMinor: 1000, on: TODAY, payerName: 'Ada Lovelace' } })]));
+    const { unmount } = render(draw());
+    expect((await screen.findByTestId('held-fee-app-check')).textContent).toBe(
+      'Square took £10.00 from Ada Lovelace in the app on 20 October 2026, but it couldn\x27t go on this fee. Check it in Square before taking this payment again.',
+    );
+    expect(within(screen.getByTestId('held-fee-app-payment')).queryByRole('button')).toBeNull();
+    unmount();
+    orgService.getHeldMemberships.mockResolvedValue(
+      answer([withFee({ fee: 'freeze', of: 'membership', forName: 'Gold Monthly', on: '2026-10-01', to: '2026-10-31', appCheck: { why: 'unknown', amountMinor: null, on: TODAY, payerName: 'Ada Lovelace' } })]),
+    );
+    render(draw());
+    expect((await screen.findByTestId('held-fee-app-check')).textContent).toBe(
+      'Ada Lovelace\x27s payment page in the app ended on 20 October 2026 without an answer from Square, so it may have been paid. Check it in Square before taking this payment again. It won\x27t be charged to the card on file automatically.',
+    );
+  });
+
+  it('a fee taken off while it is being paid says it comes off once the page closes', async () => {
+    orgService.getHeldMemberships.mockResolvedValue(answer([withFee({ stillOwed: false, appPayment: OPEN })]));
+    render(draw({ readOnly: true }));
+    const item = await screen.findByTestId('held-fee');
+    expect(item.textContent).toContain('No longer owed: they were marked Came, or the class was cancelled. It comes off once the payment page in the app closes, if nothing was paid.');
+    expect(within(item).getByTestId('held-fee-app-payment').textContent).toContain('is paying this fee in the app');
+    expect(within(within(item).getByTestId('held-fee-app-payment')).queryByRole('button')).toBeNull();
+  });
+});
