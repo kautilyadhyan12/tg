@@ -229,9 +229,28 @@ export const billingElsewhereLine = (people) => `If your old software or Square 
 export const RECONNECT_LINE = 'Reconnect Square so Delete permanently can take people out of your Square customer list.';
 export const RECONNECT_HINT = "Square will ask you to approve one more thing: reading its subscriptions, so nobody Square still charges is taken out.";
 export const RECONNECT_OTHERS = 'The owner needs to reconnect Square before Delete permanently can take people out of your Square customer list.';
+/** What each thing connecting again adds does, and what Square asks to approve for it. */
+const RECONNECT_FOR = {
+  app_payments: { so: 'members can pay what they owe in the app', approve: "making Square's payment pages for your members" },
+  chargebacks: { so: 'chargebacks show here', approve: 'reading your chargebacks' },
+  subscriptions: { so: 'Delete permanently can take people out of your Square customer list', approve: 'reading its subscriptions' },
+};
+const andList = (parts) => (parts.length <= 1 ? (parts[0] ?? '') : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`);
+const MORE_THINGS = ['one more thing', 'two more things', 'three more things'];
+
 /** The same, saying what connecting again adds (18d-iv-e-i), for each thing it would add. */
 export function reconnectWords(allowFor) {
   const list = allowFor ?? [];
+  // Paying in the app (18k-ii-a) is asked of every gym connected before it, with whatever else it lacks.
+  if (list.includes('app_payments')) {
+    const parts = ['app_payments', 'chargebacks', 'subscriptions'].filter((key) => list.includes(key)).map((key) => RECONNECT_FOR[key]);
+    const so = andList(parts.map((p) => p.so));
+    return {
+      line: `Reconnect Square so ${so}.`,
+      hint: `Square will ask you to approve ${MORE_THINGS[parts.length - 1] ?? 'more things'}: ${andList(parts.map((p) => p.approve))}.`,
+      others: `The owner needs to reconnect Square before ${so}.`,
+    };
+  }
   const chargebacks = list.includes('chargebacks');
   if (chargebacks && list.includes('subscriptions')) {
     return {

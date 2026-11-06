@@ -11,7 +11,7 @@ import { insertAudit, lockOrgRow } from "../repo.js";
 import { priceBasket, pricedSaleSchema, recordTakenSale, type SaleRefusal, type SellLineInput } from "../register/repo.js";
 import { recordPaymentIn } from "../memberships/billsRepo.js";
 import { recordFeePaymentIn } from "../memberships/feesRepo.js";
-import { billsFor, cardCharging } from "../memberships/billsSql.js";
+import { appPaying, billsFor, cardCharging } from "../memberships/billsSql.js";
 import { lockedEntry, lockedHeld, settle } from "../memberships/heldRepo.js";
 import { lockGym } from "../memberList/repo.js";
 import { payerOf } from "../payers/repo.js";
@@ -236,6 +236,8 @@ export type StartOutcome =
   | { kind: "keep_save_waiting" }
   /** The card on file is being charged for the membership (18d-iii-i). */
   | { kind: "card_charging" }
+  /** A member has Square's own payment page open for the membership (18k-ii-a). */
+  | { kind: "app_paying" }
   | { kind: "too_much"; leftMinor: number; currency: string };
 
 /** A new press, or why not. Asked under the record's lock with the same rules as a payment by
@@ -266,6 +268,7 @@ export async function startPayment(sql: Sql, s: NewPay): Promise<StartOutcome> {
       return waiting.period_index === periodIndex && waiting.fee_bill_id === feeBillId ? { kind: "membership_waiting", payment: toRow(waiting) } : { kind: "other_waiting" };
     }
     if (await cardCharging(tx, s.gymId, row.id)) return { kind: "card_charging" };
+    if (await appPaying(tx, s.gymId, row.id)) return { kind: "app_paying" };
     if (s.keepCard !== null) {
       const m = row.membership;
       if (s.target.kind !== "period" || m.kind !== "recurring" || !m.renews || m.status !== "active" || (await payerOf(tx, s.gymId, s.entryId)) !== null) return { kind: "keep_not_offered" };

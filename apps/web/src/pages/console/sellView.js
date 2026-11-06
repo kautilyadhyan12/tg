@@ -238,6 +238,7 @@ const howWords = (t, money) => {
   if (t.link > 0) how.push(`${methodWords('link')} ${money(t.link)}`);
   if (t.company > 0) how.push(`${methodWords('company')} ${money(t.company)}`);
   if (t.terminal > 0) how.push(`${methodWords('terminal')} ${money(t.terminal)}`);
+  if ((t.app ?? 0) > 0) how.push(`${methodWords('app')} ${money(t.app)}`);
   return how.join(' · ');
 };
 

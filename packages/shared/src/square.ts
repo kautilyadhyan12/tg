@@ -267,6 +267,9 @@ export const squarePaymentSchema = z.object({
       /** True for an Interac debit card in Canada: "any refunds occur in-person and on a Square Terminal" ("Refund
        *  Interac Payments", read 2026-10-30). */
       refund_requires_card_presence: z.boolean().nullish(),
+      /** A fee for paying by card that the business adds on top ("CardSurchargeDetails", Square's API definition, read
+       *  2026-11-06): what was asked plus this is what Square took (18k-ii-a). */
+      applied_card_surcharge_details: z.object({ card_surcharge_money: squareMoneySchema.nullish() }).nullish(),
     })
     .nullish(),
   /** When Square made it. */
@@ -290,6 +293,51 @@ export type SquarePayment = z.infer<typeof squarePaymentSchema>;
 
 /** GetPayment's answer. */
 export const squarePaymentAnswerSchema = z.object({ payment: squarePaymentSchema });
+
+// Square's own payment page (ROADMAP 18k-ii-a; "Checkout API", read 2026-11-06). Measured in Square's test area that day
+// (`apps/api/.cost/18k-ii-a/probe-links.mts`): CreatePaymentLink makes the page and its order (DRAFT); once paid the
+// order is OPEN and its one tender names the payment; DeletePaymentLink of an unpaid page answers `cancelled_order_id`
+// and the order is CANCELED, and the page, even one open on the buyer's screen, can no longer be paid; of a paid page it
+// answers without one and the order stays paid; the same key with the same request gives back the same page.
+
+/** A payment page's id at Square. */
+export const squarePaymentLinkIdSchema = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/);
+
+/** The page's address: Square's own short address ("formatted as https://square.link/u/{short_url_id}"), the only one a
+ *  member is sent to. */
+export const squarePaymentLinkUrlSchema = z
+  .string()
+  .max(300)
+  .regex(/^https:\/\/(sandbox\.)?square\.link\/u\/[A-Za-z0-9_-]{1,64}$/);
+
+/** An order, as far as the app reads one: its state (DRAFT until paid, then OPEN; CANCELED once its page is deleted),
+ *  where, how much, and the payments (`tenders`) that paid it. */
+export const squareOrderSchema = z.object({
+  id: squareOrderIdSchema,
+  location_id: squareObjectIdSchema.nullish(),
+  reference_id: z.string().max(40).nullish(),
+  state: z.string().max(40),
+  total_money: squareMoneySchema.nullish(),
+  tenders: z
+    .array(z.object({ id: z.string().max(192), payment_id: squarePaymentIdSchema.nullish(), amount_money: squareMoneySchema.nullish(), type: z.string().max(40).nullish() }))
+    .max(50)
+    .nullish(),
+});
+export type SquareOrder = z.infer<typeof squareOrderSchema>;
+
+/** RetrieveOrder's answer. */
+export const squareOrderAnswerSchema = z.object({ order: squareOrderSchema });
+
+/** CreatePaymentLink's answer: the page, and the order Square made for it. */
+export const squarePaymentLinkAnswerSchema = z.object({
+  payment_link: z.object({ id: squarePaymentLinkIdSchema, order_id: squareOrderIdSchema, url: squarePaymentLinkUrlSchema }),
+  related_resources: z.object({ orders: z.array(squareOrderSchema).max(5).nullish() }).nullish(),
+});
+export type SquarePaymentLinkAnswer = z.infer<typeof squarePaymentLinkAnswerSchema>;
+
+/** DeletePaymentLink's answer: `cancelled_order_id` where the page was not paid and its order is now CANCELED. */
+export const squareDeletedLinkSchema = z.object({ id: squarePaymentLinkIdSchema, cancelled_order_id: squareOrderIdSchema.nullish() });
+export type SquareDeletedLink = z.infer<typeof squareDeletedLinkSchema>;
 
 /** A refund (18d-iv-a). `status`: PENDING, COMPLETED, FAILED or REJECTED ("Refund Payments", read 2026-10-30). Its id
  *  is the payment's and its own joined by an underscore, 73 characters in Square's test area (measured 2026-10-30). */

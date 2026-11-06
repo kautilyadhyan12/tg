@@ -22,6 +22,7 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
       changeHeldMembership: vi.fn(),
       getBillSettings: vi.fn(),
       saveBillSettings: vi.fn(),
+      closeAppPayment: vi.fn(),
     },
   };
 });
@@ -823,5 +824,67 @@ describe('no new bookings while a payment is overdue (17i)', () => {
     render(draw());
     await rowsSoon();
     expect(screen.queryByTestId('bookings-stopped')).toBeNull();
+  });
+});
+
+describe('a member paying in the app (18k-ii-a)', () => {
+  const PAGE = '55555555-5555-4555-8555-000000000001';
+  const paying = () => {
+    const m = held(1, GOLD, TODAY, false);
+    return { ...m, billing: { ...m.billing, appPayment: { id: PAGE, payerName: 'Ada Lovelace', closesAt: '2026-10-20T15:42:00.000Z' } } };
+  };
+
+  it('says who is paying and when the page closes, and Close payment page closes it and says so in the same place', async () => {
+    orgService.getHeldMemberships.mockResolvedValueOnce(answer([paying()])).mockResolvedValue(answer([held(1, GOLD, TODAY, false)]));
+    orgService.closeAppPayment.mockResolvedValue({ data: { outcome: 'closed' } });
+    render(draw({ gym: { timezone: 'America/Chicago' } }));
+    const box = await screen.findByTestId('held-app-payment');
+    expect(box.textContent).toContain('Ada Lovelace is paying this in the app. The payment page closes at 10:42 AM if it isn\x27t paid.');
+    fireEvent.click(within(box).getByRole('button', { name: 'Close payment page' }));
+    await waitFor(() => expect(orgService.closeAppPayment).toHaveBeenCalledWith(GYM, ADA, paying().id));
+    expect((await screen.findByRole('status')).textContent).toBe('Payment page closed. Nothing was paid in the app.');
+    expect(screen.getByTestId('held-app-payment').textContent).not.toContain('is paying this in the app');
+    await waitFor(() => expect(orgService.getHeldMemberships).toHaveBeenCalledTimes(2));
+  });
+
+  it('says when it was paid just before it closed', async () => {
+    orgService.getHeldMemberships.mockResolvedValue(answer([paying()]));
+    orgService.closeAppPayment.mockResolvedValue({ data: { outcome: 'paid' } });
+    render(draw());
+    fireEvent.click(within(await screen.findByTestId('held-app-payment')).getByRole('button', { name: 'Close payment page' }));
+    expect((await screen.findByRole('status')).textContent).toBe('It was paid in the app before the page closed.');
+  });
+
+  it('a page that ended with money Square may have taken says to check Square, under the bill owed', async () => {
+    const m = held(1, GOLD, TODAY, false);
+    orgService.getHeldMemberships.mockResolvedValue(answer([{ ...m, billing: { ...m.billing, appCheck: { why: 'taken', amountMinor: 4999, on: TODAY, payerName: 'Ada Lovelace' } } }]));
+    render(draw());
+    expect((await screen.findByTestId('held-app-check')).textContent).toBe(
+      'Square took £49.99 from Ada Lovelace in the app on 20 October 2026, but it couldn\x27t go on this bill. Check it in Square before taking this payment again. It won\x27t be charged to the card on file automatically.',
+    );
+    expect(within(screen.getByTestId('held-app-payment')).queryByRole('button')).toBeNull();
+  });
+
+  it("where Square named no amount in the gym's money, the line names none", async () => {
+    const m = held(1, GOLD, TODAY, false);
+    orgService.getHeldMemberships.mockResolvedValue(answer([{ ...m, billing: { ...m.billing, appCheck: { why: 'taken', amountMinor: null, on: TODAY, payerName: null } } }]));
+    render(draw());
+    expect((await screen.findByTestId('held-app-check')).textContent).toMatch(/^Square took a payment from the member in the app on 20 October 2026, but it couldn't go on this bill./);
+  });
+
+  it('Close payment page says to check Square where it may have been paid', async () => {
+    orgService.getHeldMemberships.mockResolvedValue(answer([paying()]));
+    orgService.closeAppPayment.mockResolvedValue({ data: { outcome: 'check' } });
+    render(draw());
+    fireEvent.click(within(await screen.findByTestId('held-app-payment')).getByRole('button', { name: 'Close payment page' }));
+    expect((await screen.findByRole('status')).textContent).toBe("Square may have taken a payment on this page that isn't on the bill. Check it in Square before taking this payment again.");
+  });
+
+  it('a read-only page says it with no button', async () => {
+    orgService.getHeldMemberships.mockResolvedValue(answer([paying()]));
+    render(draw({ readOnly: true }));
+    const box = await screen.findByTestId('held-app-payment');
+    expect(box.textContent).toContain('is paying this in the app');
+    expect(within(box).queryByRole('button')).toBeNull();
   });
 });

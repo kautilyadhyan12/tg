@@ -1513,6 +1513,13 @@
       "when": 1790726400216,
       "tag": "0216_sold_in_app",
       "breakpoints": true
+    },
+    {
+      "idx": 216,
+      "version": "7",
+      "when": 1790726400217,
+      "tag": "0217_app_payments",
+      "breakpoints": true
     }
   ]
 }

@@ -20,11 +20,17 @@
 // changed: Delete permanently keeps such a customer. Payments taken in Square's own app (18d-iii-b-i to
 // 18d-iii-b-ii-c) were taken out with Square Point of Sale (18d-iii-b-v, Kd, 2026-10-30), and with them
 // ORDERS_READ and ITEMS_READ. Refund to card (18d-iv-a) uses PAYMENTS_WRITE and reads with PAYMENTS_READ
-// ("Refund Payments", Square's API definition, read 2026-10-30): no new permission.
+// ("Refund Payments", Square's API definition, read 2026-10-30): no new permission. Paying in the app (18k-ii-a) makes
+// Square's own payment page with CreatePaymentLink, which needs ORDERS_WRITE, ORDERS_READ and PAYMENTS_WRITE, deletes it
+// with DeletePaymentLink (ORDERS_READ, ORDERS_WRITE) and reads its order with RetrieveOrder (ORDERS_READ) ("OAuth
+// Permissions Reference" and Square's API definition, read 2026-11-06): a gym connected before then connects again.
 import {
   squareCardAnswerSchema,
   squareCustomerAnswerSchema,
   squareCustomerSchema,
+  squareDeletedLinkSchema,
+  squareOrderAnswerSchema,
+  squarePaymentLinkAnswerSchema,
   squareCustomersPageSchema,
   squareDeviceCodeAnswerSchema,
   squareErrorSchema,
@@ -57,6 +63,8 @@ import {
   type SquareMerchant,
   type SquarePayment,
   type SquareDispute,
+  type SquareDeletedLink,
+  type SquareOrder,
   type SquareRefund,
   type SquareTerminalAction,
   type SquareTerminalCheckout,
@@ -157,6 +165,27 @@ export interface SquareApi {
   getTerminalRefund(accessToken: string, terminalRefundId: string): Promise<SquareResult<SquareTerminalRefund>>;
   /** Square cancels only while the Terminal has not started it ("as long as the status of the request is `PENDING`"). */
   cancelTerminalRefund(accessToken: string, terminalRefundId: string): Promise<SquareResult<SquareTerminalRefund>>;
+  /** Square's own payment page for one amount (18k-ii-a), and the order Square made for it. `idempotencyKey`: the same
+   *  key with the same request gives back the same page; with another request Square refuses it (IDEMPOTENCY_KEY_REUSED)
+   *  (measured 2026-11-06). */
+  createPaymentLink(accessToken: string, link: NewPaymentLink): Promise<SquareResult<{ linkId: string; orderId: string; url: string; order: SquareOrder | null }>>;
+  /** The page is gone; where it was not paid its order is CANCELED and `cancelled_order_id` names it. Asked again, the
+   *  same answer without it. */
+  deletePaymentLink(accessToken: string, linkId: string): Promise<SquareResult<SquareDeletedLink>>;
+  getOrder(accessToken: string, orderId: string): Promise<SquareResult<SquareOrder>>;
+}
+
+/** A payment page: one line, `name`, for `amountMinor`, at the gym's location, with no tip, coupon, rewards, delivery
+ *  address, Cash App Pay or Afterpay; card, Apple Pay and Google Pay. `referenceId`: our row, never the person. `note`:
+ *  what the gym's Square Dashboard lists the payment as. */
+export interface NewPaymentLink {
+  idempotencyKey: string;
+  locationId: string;
+  referenceId: string;
+  name: string;
+  amountMinor: number;
+  currency: string;
+  note: string;
 }
 
 /** `deadline`: at most five minutes, Square's own limit. `reason` as a card refund's. */
@@ -276,6 +305,16 @@ const paymentPath = (paymentId: string): string => {
   return `/v2/payments/${paymentId}`;
 };
 
+/** The same for a payment page's id and an order's (`squarePaymentLinkIdSchema`, `squareOrderIdSchema`). */
+const linkPath = (linkId: string): string => {
+  if (!/^[A-Za-z0-9_-]{1,64}$/.test(linkId)) throw new Error("not a Square payment link id");
+  return `/v2/online-checkout/payment-links/${linkId}`;
+};
+const orderPath = (orderId: string): string => {
+  if (!/^[A-Za-z0-9_-]{1,192}$/.test(orderId)) throw new Error("not a Square order id");
+  return `/v2/orders/${orderId}`;
+};
+
 /** The same for a refund's id (`squareRefundIdSchema`). */
 const refundPath = (refundId: string): string => {
   if (!/^[A-Za-z0-9_-]{1,255}$/.test(refundId)) throw new Error("not a Square refund id");
@@ -292,6 +331,8 @@ export const SQUARE_SCOPES = [
   "DEVICE_CREDENTIAL_MANAGEMENT",
   "SUBSCRIPTIONS_READ",
   "DISPUTES_READ",
+  "ORDERS_READ",
+  "ORDERS_WRITE",
 ] as const;
 export const SQUARE_VERSION = "2026-09-16";
 export const SQUARE_TIMEOUT_MS = 10_000;
@@ -648,6 +689,37 @@ export function createSquareApi(opts: {
     async cancelTerminalRefund(accessToken, terminalRefundId) {
       const result = await call("POST", `${terminalRefundPath(terminalRefundId)}/cancel`, squareTerminalRefundAnswerSchema, bearer(accessToken), {});
       return result.kind === "ok" ? { kind: "ok", value: result.value.refund } : result;
+    },
+    async createPaymentLink(accessToken, l) {
+      const result = await call("POST", "/v2/online-checkout/payment-links", squarePaymentLinkAnswerSchema, bearer(accessToken), {
+        idempotency_key: l.idempotencyKey,
+        order: {
+          location_id: l.locationId,
+          reference_id: l.referenceId,
+          line_items: [{ name: l.name, quantity: "1", base_price_money: { amount: l.amountMinor, currency: l.currency } }],
+        },
+        // Every choice said, never Square's own default: tipping defaults to the country's ("a 15% auto-tip in the United
+        // States and Canada"), and a coupon or a reward would change what is paid ("Guidelines and Limitations").
+        checkout_options: {
+          allow_tipping: false,
+          enable_coupon: false,
+          enable_loyalty: false,
+          ask_for_shipping_address: false,
+          accepted_payment_methods: { apple_pay: true, google_pay: true, cash_app_pay: false, afterpay_clearpay: false },
+        },
+        payment_note: l.note,
+      });
+      if (result.kind !== "ok") return result;
+      const link = result.value.payment_link;
+      const order = result.value.related_resources?.orders?.find((o) => o.id === link.order_id) ?? null;
+      return { kind: "ok", value: { linkId: link.id, orderId: link.order_id, url: link.url, order } };
+    },
+    async deletePaymentLink(accessToken, linkId) {
+      return await call("DELETE", linkPath(linkId), squareDeletedLinkSchema, bearer(accessToken));
+    },
+    async getOrder(accessToken, orderId) {
+      const result = await call("GET", orderPath(orderId), squareOrderAnswerSchema, bearer(accessToken));
+      return result.kind === "ok" ? { kind: "ok", value: result.value.order } : result;
     },
     async revokeAccount(accountId) {
       const result = await call("POST", "/oauth2/revoke", squareRevokeSchema, `Client ${opts.applicationSecret}`, {

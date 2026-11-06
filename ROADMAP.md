@@ -339,7 +339,9 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
    - 18j. [x] **My membership** — merged 2026-10-18 (PR #317).
    - 18k. **A member buys and pays in the app**, in five parts since 2026-11-06, each server and console here, the screens in Stage 5 item 20 (`handoff/2026-11-06-18k-i.md` keeps its line as first written):
      - 18k-i. [x] **Sell in the app** — merged 2026-11-06 (PR #485).
-     - 18k-ii. [ ] **Pay what they owe** on Square's own checkout page (card, Apple Pay, Google Pay).
+     - 18k-ii. **Pay what they owe**, in two parts since 2026-11-06 (`handoff/2026-11-06-18k-ii-a.md` keeps its line as first written):
+       - 18k-ii-a. [x] **A membership's bill** — merged 2026-11-06 (PR #487).
+       - 18k-ii-b. [ ] **A fee** (late cancel, no-show, freeze, early cancellation) the same way.
      - 18k-iii. [ ] **Buy something paid once** on that page, given when Square says it is paid; the gym's membership agreement signed in the same step.
      - 18k-iv. [ ] **Buy a repeating membership**: its own tick, kept with its time and words, a card typed on Square's form and kept; on sale only once 18l is built.
      - 18k-v. [ ] **A promo code typed in the app** (spec Part 3 §14.3).
