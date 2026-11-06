@@ -225,6 +225,9 @@ d("change email (real Postgres)", { timeout: T }, () => {
       expect((await google(thiefGoogle, thief)).userId).toBe(maya.userId);
       const thief2 = address("thief-two");
       expect((await change(maya, thief2)).statusCode).toBe(200);
+      // Google at their second address too: the move just now ended the first link, not this one.
+      const thiefGoogle2 = `google-thief-two-${randomUUID()}`;
+      expect((await google(thiefGoogle2, thief2)).userId).toBe(maya.userId);
       await sql`UPDATE users SET status = 'deleted', deleted_at = now() WHERE id = ${maya.userId}`;
 
       // Her inbox has the link; opening the page changes nothing.
@@ -252,6 +255,7 @@ d("change email (real Postgres)", { timeout: T }, () => {
       expect((await inject("POST", "/v1/users/me/delete-code", maya.cookies, {})).statusCode).toBe(401);
       // Google at the stranger's address opens their own new account, never hers.
       expect((await google(thiefGoogle, thief)).userId).not.toBe(maya.userId);
+      expect((await google(thiefGoogle2, thief2)).userId).not.toBe(maya.userId);
       // The stranger's own link, from their second change, works no more.
       const theirs = tokenOf(undoLinks.get(thief));
       expect(JSON.parse((await readLink(theirs)).body)).toEqual({ state: "closed", supportEmail: null });
