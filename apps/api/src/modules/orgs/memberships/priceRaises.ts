@@ -37,11 +37,18 @@ function amountAt(row: HeldRow, index: number, ownMinor: number): number {
  *  first payment still to come; or charged (its first payment billed, paid, or its day come), and so its price. */
 type Standing = "none" | "waiting" | "emailing" | "sent" | "charged";
 
-function standingOf(row: HeldRow, billedTo: number, today: string, written: readonly reminders.ReminderWritten[]): Standing {
+/** The emails written for raises, by membership and occasion. */
+type Written = ReadonlyMap<string, reminders.ReminderWritten>;
+const writtenKey = (heldId: string, occasion: string): string => `${heldId}|${occasion}`;
+/** The email written for this membership's raise, if one is. */
+const emailOf = (written: Written, row: HeldRow): reminders.ReminderWritten | undefined =>
+  row.raise === null ? undefined : written.get(writtenKey(row.id, raisesRepo.priceOccasion(row.raise.id)));
+
+function standingOf(row: HeldRow, billedTo: number, today: string, written: Written): Standing {
   const raise = row.raise;
   if (raise === null) return "none";
   if (raise.fromPeriod === null || raise.fromOn === null) {
-    const email = written.find((w) => w.heldId === row.id && w.occasion === raisesRepo.priceOccasion(raise.id));
+    const email = emailOf(written, row);
     return email?.state === "sending" ? "emailing" : "waiting";
   }
   const charged = billedTo >= raise.fromPeriod || row.membership.paidPeriods > raise.fromPeriod || today >= raise.fromOn;
@@ -52,7 +59,7 @@ function standingOf(row: HeldRow, billedTo: number, today: string, written: read
 interface Facts {
   today: string;
   billed: ReadonlyMap<string, number>;
-  written: readonly reminders.ReminderWritten[];
+  written: Written;
   /** The payers' address keys that bounced or were refused. */
   blocked: ReadonlySet<string>;
   emailKey: Buffer | null;
@@ -64,7 +71,7 @@ const keyOf = (emailKey: Buffer | null, held: reminders.PayerHeld): string | nul
 async function factsOf(sql: SqlOrTx, emailKey: Buffer | null, gymId: string, held: readonly reminders.PayerHeld[], today: string): Promise<Facts> {
   const ids = held.map((h) => h.row.id);
   const billed = await raisesRepo.billedTo(sql, gymId, ids);
-  const written = await reminders.remindersOf(sql, gymId, ids);
+  const written = new Map((await reminders.remindersOf(sql, gymId, ids)).map((w) => [writtenKey(w.heldId, w.occasion), w]));
   const blocked = await reminders.blockedOf(
     sql,
     held.flatMap((h) => {
@@ -124,7 +131,7 @@ export function standingStatus(held: reminders.PayerHeld, facts: Facts): { statu
     canKeep: standing !== "emailing",
   });
   if (standing === "sent" && raise.fromPeriod !== null) return said("sent", raise.fromPeriod, raise.fromOn, raise.sentOn);
-  const email = facts.written.find((w) => w.heldId === row.id && w.occasion === raisesRepo.priceOccasion(raise.id));
+  const email = emailOf(facts.written, row);
   const plan = priceRaiseNext(row.membership, raise.noticeDays, facts.today, billedTo);
   const index = plan.kind === "next" ? plan.next.fromPeriod : Math.max(row.membership.paidPeriods, billedTo + 1);
   if (standing === "emailing") return said("sending", index, email?.aboutOn ?? null, null);
@@ -223,7 +230,7 @@ export async function queueDuePriceRaises(deps: { sql: Sql; now: () => Date; gym
     for (const h of held) {
       const raise = h.row.raise;
       if (raise === null || raise.fromPeriod !== null || h.skipped !== null || h.payerEmail === null || !authEmailSchema.safeParse(h.payerEmail).success) continue;
-      if (facts.written.some((w) => w.heldId === h.row.id && w.occasion === raisesRepo.priceOccasion(raise.id))) continue;
+      if (emailOf(facts.written, h.row) !== undefined) continue;
       const plan = priceRaiseNext(h.row.membership, raise.noticeDays, gym.today, facts.billed.get(h.row.id) ?? -1);
       if (!priceRaiseDue(plan, gym.today)) continue;
       due.push({ gymId: gym.gymId, heldId: h.row.id, entryId: h.payerEntryId, occasion: raisesRepo.priceOccasion(raise.id), what: "price", aboutOn: plan.next.fromOn, email: h.payerEmail });

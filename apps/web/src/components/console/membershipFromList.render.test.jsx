@@ -15,6 +15,7 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
       getBillSettings: vi.fn(() => new Promise(() => undefined)),
       createMembershipType: vi.fn(),
       updateMembershipType: vi.fn(),
+      previewPriceRaise: vi.fn(() => Promise.resolve({ data: { currency: 'GBP', people: [] } })),
       archiveMembershipType: vi.fn(),
       restoreMembershipType: vi.fn(),
       getMembershipWords: vi.fn(),
