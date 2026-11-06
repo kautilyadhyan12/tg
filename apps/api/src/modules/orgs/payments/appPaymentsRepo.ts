@@ -182,6 +182,8 @@ export type PayableOutcome =
   /** Another page of this membership is open: the same bill's is answered instead of a second. */
   | { kind: "open"; row: AppPayRow }
   | { kind: "entry_not_found" | "membership_not_found" | "changed" | "currency" }
+  /** What they owe: due today or before. Paying ahead is taken at the desk. */
+  | { kind: "not_due" }
   /** Staff are taking a payment for the membership on the Terminal, or the card on file is being charged. */
   | { kind: "at_desk" };
 
@@ -200,6 +202,7 @@ async function payableIn(tx: TransactionSql, s: Pressing): Promise<PayableOutcom
   const target = memberPayTarget(row.membership, row.nextBillMinor, s.today, bills, entry.past);
   // All that is left of the bill the screen showed, never part of it, never another.
   if (target === null || target.periodIndex !== s.periodIndex || target.leftMinor !== s.amountMinor) return { kind: "changed" };
+  if (target.dueOn > s.today) return { kind: "not_due" };
   if (row.currency !== s.accountCurrency) return { kind: "currency" };
   return { kind: "ok", currency: row.currency, covers: target.covers, name: row.typeName };
 }

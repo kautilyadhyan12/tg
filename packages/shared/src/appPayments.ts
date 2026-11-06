@@ -1,7 +1,7 @@
 // PAY WHAT THEY OWE, IN THE APP — ROADMAP Stage 2 item 18k-ii-a (Kd, 2026-11-06; spec Part 3 §14.8). A member pays a
 // membership's bill, their own or of somebody they pay for (18i), on Square's own payment page: card, Apple Pay or
 // Google Pay, no tip and no coupon. The server makes the page for all that is left on the one bill a payment can be
-// taken for now (`memberBillingSchema.pay`), and records the payment on that bill only once Square says it is paid,
+// taken for now (`memberBillingSchema.pay`), once it is due (paying ahead stays at the desk), and records the payment on that bill only once Square says it is paid,
 // for exactly that amount. While a page is open, nothing else is paid, voided or changed on the membership; it closes
 // by itself after `APP_PAYMENT_LIMITS.openMinutes`, or sooner when the member leaves it or staff close it, and Square
 // is told, so the page can no longer be paid. The phone draws it (Stage 5 item 20).
@@ -74,6 +74,7 @@ export type AppPaymentCloseResponse = z.infer<typeof appPaymentCloseResponseSche
 export const APP_PAYMENT_WORDS = {
   not_offered: "You can't pay in the app here yet. Pay at the front desk.",
   changed: "What you owe has changed. Go back and look again.",
+  not_due: "This bill isn't due yet.",
   at_desk: "The front desk is taking this payment right now. Try again in a few minutes.",
   square_down: "Square isn't answering. Try again in a minute.",
   refused: "Square couldn't open the payment page. Pay at the front desk.",

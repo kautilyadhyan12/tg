@@ -62,6 +62,7 @@ export const APP_PAYMENT = {
 const notFound = (): OrgsError => new OrgsError(404, "app_payment_not_found", APP_PAYMENT_WORDS.not_found);
 const notOffered = (): OrgsError => new OrgsError(409, "app_payment_not_offered", APP_PAYMENT_WORDS.not_offered);
 const changed = (): OrgsError => new OrgsError(409, "app_payment_changed", APP_PAYMENT_WORDS.changed);
+const notDue = (): OrgsError => new OrgsError(409, "app_payment_not_due", APP_PAYMENT_WORDS.not_due);
 const atDesk = (): OrgsError => new OrgsError(409, "app_payment_at_desk", APP_PAYMENT_WORDS.at_desk);
 const squareDown = (): OrgsError => new OrgsError(503, "square_unavailable", APP_PAYMENT_WORDS.square_down);
 const squareRefused = (): OrgsError => new OrgsError(409, "app_payment_refused", APP_PAYMENT_WORDS.refused);
@@ -374,6 +375,8 @@ function openOr(outcome: Exclude<pays.PayableOutcome, { kind: "ok" }>, userId: s
       throw notFound();
     case "changed":
       throw changed();
+    case "not_due":
+      throw notDue();
     default: {
       const never: never = outcome;
       throw new Error(`unhandled payment page check: ${JSON.stringify(never)}`);

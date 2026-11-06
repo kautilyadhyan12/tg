@@ -522,6 +522,10 @@ d("Pay what they owe in the app: charged once, on this bill alone (real Postgres
     expect(linksOf(acct).filter((l) => !l.deleted)).toHaveLength(0);
     expect((await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM gym_app_payments WHERE gym_id = ${gym.id} AND state = 'open'`)[0]?.n).toBe(0);
     expect((await byHand(gym, ava)).statusCode).toBe(200);
+    // Her next month is owed only once it is due: paying ahead is taken at the desk.
+    const ahead = await payPress(gym, avaApp, ava, { periodIndex: 1 });
+    expect(ahead.statusCode, ahead.body).toBe(409);
+    expect(errorOf(ahead)).toBe("app_payment_not_due");
 
     // A gym connected before the app asked for orders: members read that they pay at the desk; the owner reads why to
     // reconnect; Terminals keep working.

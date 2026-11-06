@@ -843,6 +843,7 @@ describe('a member paying in the app (18k-ii-a)', () => {
     fireEvent.click(within(box).getByRole('button', { name: 'Close payment page' }));
     await waitFor(() => expect(orgService.closeAppPayment).toHaveBeenCalledWith(GYM, ADA, paying().id));
     expect((await screen.findByRole('status')).textContent).toBe('Payment page closed. Nothing was paid in the app.');
+    expect(screen.getByTestId('held-app-payment').textContent).not.toContain('is paying this in the app');
     await waitFor(() => expect(orgService.getHeldMemberships).toHaveBeenCalledTimes(2));
   });
 

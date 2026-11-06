@@ -76,7 +76,8 @@ export const myMembershipSchema = z
     classesLeft: z.number().int().min(0).nullable(),
     packClasses: z.number().int().nullable(),
     /** What is owed now and since when; null where nothing is. `periodIndex` names that bill, for paying it in the app
-     *  (18k-ii-a): all of `amountMinor` is what a payment there takes. */
+     *  (18k-ii-a) once `dueOn` has come (a bill not due yet is paid ahead at the desk): all of `amountMinor` is what a payment
+     *  there takes. */
     owed: z.object({ amountMinor: minorSchema, dueOn: daySchema, state: z.enum(["due", "overdue"]), periodIndex: z.number().int().min(0) }).strict().nullable(),
     payments: z.array(myPaymentSchema),
     /** Older periods' payments kept off this answer; the gym holds them. */

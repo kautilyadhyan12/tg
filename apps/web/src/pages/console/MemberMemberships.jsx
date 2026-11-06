@@ -1559,7 +1559,7 @@ export default function MemberMemberships({
     setAppClose({ membershipId: m.id, busy: true, said: null });
     try {
       const res = await orgService.closeAppPayment(gymId, entryId, m.id);
-      setAppClose({ membershipId: m.id, busy: false, said: APP_CLOSE_WORDS[res.data.outcome] });
+      setAppClose({ membershipId: m.id, busy: false, said: APP_CLOSE_WORDS[res.data.outcome], ended: res.data.outcome !== 'waiting' });
     } catch (err) {
       setAppClose({ membershipId: m.id, busy: false, said: errorText(err, "We couldn't close the payment page. Try again.") });
     }
@@ -1570,8 +1570,9 @@ export default function MemberMemberships({
   /** A member paying this membership in the app (18k-ii-a): who, until when, and Close payment page for staff who take
    *  payments; nothing else on the membership can be paid or changed meanwhile. */
   const renderAppPaying = (m) => {
-    const open = appPayingNotice(m, gym?.timezone ?? null);
     const said = appClose !== null && appClose.membershipId === m.id ? appClose.said : null;
+    // Once Square has said how it ended, the line goes at once, before the page reads again.
+    const open = said !== null && appClose.ended === true ? null : appPayingNotice(m, gym?.timezone ?? null);
     if (open === null && said === null) return null;
     return (
       <div className="flex flex-col items-start gap-1.5 pt-1" data-testid="held-app-payment">
