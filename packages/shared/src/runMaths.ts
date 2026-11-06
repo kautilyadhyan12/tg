@@ -459,6 +459,31 @@ function splitsOf(steps: readonly Step[], every: number): RunSplit[] {
   return out;
 }
 
+/** Where each whole `every` metres falls along a run's track (RunSums' `track` and `trackStarts`), as
+ *  [lat, lng] (ROADMAP 37b-i, Kd: "need to be accurate"): over the same steps as the run's distance and
+ *  its splits, never across the gap between two stretches, at the exact metre between the two points
+ *  either side of it rather than at the next point the phone kept. */
+export function unitMarkPoints(track: readonly (readonly [number, number])[], trackStarts: readonly number[], every: number): [number, number][] {
+  const out: [number, number][] = [];
+  if (!(every > 0)) return out;
+  const begins = new Set(trackStarts);
+  let walked = 0;
+  for (let i = 1; i < track.length; i++) {
+    if (begins.has(i)) continue;
+    const a = track[i - 1];
+    const b = track[i];
+    if (a === undefined || b === undefined) continue;
+    const m = geodesicMetres(a[0], a[1], b[0], b[1]);
+    while (m > 0 && walked + m >= every * (out.length + 1)) {
+      // A step is metres long: along it, a straight share of the degrees is the share of the metres.
+      const share = (every * (out.length + 1) - walked) / m;
+      out.push([a[0] + (b[0] - a[0]) * share, a[1] + (b[1] - a[1]) * share]);
+    }
+    walked += m;
+  }
+  return out;
+}
+
 /** The spans of a piece spent standing: each longest stretch whose points all lie within STILL_M of
  *  its first, when it lasts STILL_MS or more. */
 function standingSpans(piece: Fix[]): [number, number][] {

@@ -8,7 +8,7 @@ import type { RunSplit, Units } from "@app/shared";
 import { colours } from "../../look/colours";
 import { useLoop } from "../../look/Motion";
 import { fonts, Txt } from "../../look/Txt";
-import { fitPath, heading, pathOf, unitMarks } from "./routeShape";
+import { fitFrame, fitPath, heading, pathOf, unitMarks } from "./routeShape";
 import { pace, splitLabel } from "./runWords";
 
 const GOLD = colours.gold;
@@ -27,7 +27,8 @@ export function RouteLine({ track, starts, units, height, marks = true, live = f
   const first = points[0];
   const last = points[points.length - 1];
   const d = pathOf(points, starts);
-  const stones = marks ? unitMarks(track, starts, units) : [];
+  const frame = marks ? fitFrame(track, width, height, pad) : null;
+  const stones = frame === null ? [] : unitMarks(track, starts, units).map(([lat, lng]) => frame(lat, lng));
   const facing = live ? heading(points, starts) : null;
   return (
     <View onLayout={onLayout} style={{ height }} testID={testID} accessible accessibilityLabel="Your route">
@@ -44,10 +45,9 @@ export function RouteLine({ track, starts, units, height, marks = true, live = f
           <Path d={d} stroke={GOLD} strokeOpacity={0.12} strokeWidth={marks ? 16 : 11} fill="none" strokeLinecap="round" strokeLinejoin="round" />
           <Path d={d} stroke={PALE} strokeOpacity={0.22} strokeWidth={marks ? 8 : 6} fill="none" strokeLinecap="round" strokeLinejoin="round" />
           <Path d={d} stroke="url(#trail)" strokeWidth={marks ? 3.5 : 3} fill="none" strokeLinecap="round" strokeLinejoin="round" />
-          {stones.map((index, n) => {
-            const p = points[index];
-            return p === undefined ? null : <Circle key={String(n)} cx={p[0]} cy={p[1]} r={10} fill={colours.page} stroke={PALE} strokeWidth={1.6} />;
-          })}
+          {stones.map((p, n) => (
+            <Circle key={String(n)} cx={p[0]} cy={p[1]} r={10} fill={colours.page} stroke={PALE} strokeWidth={1.6} />
+          ))}
           <Circle cx={first[0]} cy={first[1]} r={marks ? 5.5 : 4} fill={GOLD} />
           {facing === null ? null : (
             <>
@@ -66,10 +66,7 @@ export function RouteLine({ track, starts, units, height, marks = true, live = f
       ) : null}
       {live && width > 0 && last !== undefined ? <Pulse x={last[0]} y={last[1]} /> : null}
       {width > 0
-        ? stones.map((index, n) => {
-            const p = points[index];
-            return p === undefined ? null : <Label key={String(n)} x={p[0]} y={p[1]} text={String(n + 1)} bold />;
-          })
+        ? stones.map((p, n) => <Label key={String(n)} x={p[0]} y={p[1]} text={String(n + 1)} bold />)
         : null}
     </View>
   );

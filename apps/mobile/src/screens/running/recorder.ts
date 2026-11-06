@@ -17,6 +17,7 @@ import {
   phoneLocationsSchema,
   runSums,
   type KeptRunChoices,
+  type MapColours,
   type RunPause,
   type RunPoint,
   type Units,
@@ -116,12 +117,13 @@ export const runNow = (): LiveRun | null => current;
 // on with the app closed.
 
 const SETTINGS_FILE = "run-settings.json";
-const DEFAULT_CHOICES: KeptRunChoices = { autoPause: true, voice: true, units: "metric" };
+const DEFAULT_CHOICES: KeptRunChoices = { autoPause: true, voice: true, units: "metric", mapColours: "auto" };
 let choices: KeptRunChoices = DEFAULT_CHOICES;
 let choicesRead: Promise<void> | null = null;
 
 export const autoPauseChoice = (): boolean => choices.autoPause;
 export const voiceChoice = (): boolean => choices.voice;
+export const mapColoursChoice = (): MapColours => choices.mapColours;
 
 /** Read once; every change waits for it, so a change is never written over by the file. */
 export function readRunChoices(): Promise<void> {
@@ -158,6 +160,11 @@ export async function chooseVoice(on: boolean): Promise<void> {
   if (!on) quietVoice();
   await keepChoices({ voice: on });
   primeVoice(current);
+}
+
+/** The map's colours (37b-i): by the sun, or always light, or always dark. */
+export async function chooseMapColours(choice: MapColours): Promise<void> {
+  await keepChoices({ mapColours: choice });
 }
 
 /** The account's units, as the app knows them. Changed mid-run, the marks already passed in the new

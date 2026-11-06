@@ -1,7 +1,10 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
 import { AppState, Linking } from "react-native";
-import { RUN_MAX_POINTS, runSums, saveRunRequestSchema, type RunPoint, type SaveRunRequest } from "@app/shared";
+import type { StyleSpecification } from "@maplibre/maplibre-react-native";
+import { OPENFREEMAP, RUN_MAX_POINTS, runSums, saveRunRequestSchema, type MapSource, type RunPoint, type SaveRunRequest } from "@app/shared";
 import { App } from "../../src/App";
+import { resetMapSource } from "../../src/screens/running/mapSource";
+import { unitMarks } from "../../src/screens/running/routeShape";
 import { closedPauses, keepRunUnits, phoneRunFiles, resetRecorder, runNow, takeLocations } from "../../src/screens/running/recorder";
 import { spokenTime } from "../../src/screens/running/runVoice";
 import { readRunFile } from "../../src/screens/running/runQueue";
@@ -22,6 +25,22 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{1
 // The phone's location, as the setup's stand-in holds it.
 const location = jest.requireMock<{ state: { services: boolean; granted: boolean; canAskAgain: boolean; accuracy: string; asked: number; started: { task: string; options: { foregroundService?: { notificationTitle: string } } }[]; running: boolean; acceptsTurnOn: boolean } }>("expo-location").state;
 
+// Each map drawn, as the setup's stand-in keeps it (37b-i).
+type DrawnMap = {
+  props: { testID: string; mapStyle: StyleSpecification; onPress?: () => void; onRegionWillChange?: (event: { nativeEvent: { userInteraction: boolean } }) => void } & Record<string, unknown>;
+  sources: Record<string, unknown>;
+  camera: Record<string, unknown> | null;
+  markers: [number, number][];
+  gone: boolean;
+};
+const maplibre = jest.requireMock<{ maps: DrawnMap[] }>("@maplibre/maplibre-react-native");
+/** The map on screen with this test id, the newest drawn. */
+const drawnMap = (testID: string): DrawnMap => {
+  const map = maplibre.maps.filter((m) => !m.gone && m.props.testID === testID).at(-1);
+  if (map === undefined) throw new Error(`no ${testID} on screen`);
+  return map;
+};
+
 let handlers: ((state: "active") => void)[] = [];
 const comeBack = () => {
   for (const handler of handlers) handler("active");
@@ -34,18 +53,21 @@ beforeEach(async () => {
     return { remove: () => undefined };
   });
   Object.assign(location, { services: true, granted: true, canAskAgain: true, accuracy: "fine", asked: 0, started: [], running: false, acceptsTurnOn: true });
-  for (const name of ["run-now.json", "run-now-0.json", "run-now-1.json", "run-settings.json"]) phoneRunFiles.remove(name);
+  for (const name of ["run-now.json", "run-now-0.json", "run-now-1.json", "run-settings.json", "run-map.json"]) phoneRunFiles.remove(name);
   resetRecorder();
+  resetMapSource();
+  maplibre.maps.length = 0;
   await Promise.resolve();
 });
 
 /** The server: the person's runs, a POST kept once for its id. `online` false is no signal. */
-function runServer(user = RAVI) {
+function runServer(user = RAVI, map: MapSource = OPENFREEMAP) {
   const saved: SaveRunRequest[] = [];
   const posts: { body: unknown; key: string | undefined }[] = [];
   const state = { online: true };
   const server = fakeServer({
     "/v1/auth/refresh": () => ({ status: 200, body: { tokens: tokens(2) } }),
+    "/v1/geo/map": () => ({ status: 200, body: { map } }),
     "/v1/users/me": () => ({ status: 200, body: profile(true, user) }),
     [PATH]: (body): Reply => {
       if (body === undefined) {
@@ -67,8 +89,11 @@ function runServer(user = RAVI) {
       };
     },
   });
+  const requests: { path: string; method: string; search: string; body: string | undefined }[] = [];
   const ask: Ask = async (url: string, init: AskInit) => {
     const path = new URL(url).pathname;
+    requests.push({ path, method: init.method ?? "GET", search: new URL(url).search, body: init.body });
+    if (path === "/v1/geo/map" && !state.online) throw new Error("no signal");
     if (path === PATH && init.method === "POST") {
       if (!state.online) throw new Error("no signal");
       posts.push({ body: init.body === undefined ? undefined : JSON.parse(init.body), key: init.headers?.["idempotency-key"] });
@@ -83,7 +108,7 @@ function runServer(user = RAVI) {
       return Promise.resolve();
     },
   });
-  return { ask, saved, posts, state, runStore, file: () => file };
+  return { ask, saved, posts, state, runStore, requests, file: () => file };
 }
 
 async function openRunning(s: ReturnType<typeof runServer>, user = RAVI) {
@@ -139,8 +164,13 @@ describe("a run, Start to Save", () => {
     const points = await feed(0, 301, 3);
     const expected = runSums(points, [], 300_000, 60);
     const shown = distance(expected.distanceM, "metric");
-    // Under the first kilometre, Distance and This km read the same.
-    expect(await screen.findAllByText(`${shown} km`, {}, { timeout: 5000 })).toHaveLength(2);
+    // The run opens on its map, with Time, Distance and Current pace under it (Kd, 37b-i).
+    expect(await screen.findAllByText(`${shown} km`, {}, { timeout: 5000 })).toHaveLength(1);
+    expect(screen.getByTestId("live-map")).toBeTruthy();
+    // Numbers beside Pause: the big numbers, where under the first kilometre Distance and This km read the same.
+    await fireEvent.press(screen.getByRole("button", { name: "Numbers" }));
+    expect(await screen.findAllByText(`${shown} km`)).toHaveLength(2);
+    expect(screen.queryByTestId("live-map")).toBeNull();
 
     await fireEvent.press(screen.getByRole("button", { name: "Pause" }));
     expect(await screen.findByText("Paused")).toBeTruthy();
@@ -630,6 +660,164 @@ describe("the voice, through the whole app", () => {
     expect(screen.getByText("Your time and pace each mile")).toBeTruthy();
     await waitFor(async () => {
       expect(JSON.parse((await phoneRunFiles.read("run-settings.json")) ?? "{}")).toMatchObject({ units: "imperial", voice: true, autoPause: true });
+    });
+  });
+});
+
+describe("the map under the run (37b-i)", () => {
+  const OWN_COPY: MapSource = {
+    maker: "protomaps",
+    tiles: "pmtiles://https://maps.example.org/world.pmtiles",
+    glyphs: "https://maps.example.org/fonts/{fontstack}/{range}.pbf",
+    sprite: null,
+    credit: "Protomaps © OpenStreetMap",
+  };
+  // The only things a map may be given: what it draws and how it moves. A header, a request changed on
+  // its way out, or an address of the run's own is none of them.
+  const MAP_PROPS = new Set(["testID", "style", "mapStyle", "attribution", "logo", "compass", "scaleBar", "dragPan", "touchZoom", "doubleTapZoom", "doubleTapHoldZoom", "touchRotate", "touchPitch", "onPress", "onRegionWillChange", "children"]);
+  /** Every address written anywhere in what a map was given. */
+  const addressesIn = (map: DrawnMap): string[] => JSON.stringify({ style: map.props.mapStyle, sources: map.sources }).match(/[a-z]+:\/\/[^"\s]+/gi) ?? [];
+  /** Runs `seconds` north at 3 m/s, then stands still until Auto-pause pauses the run where it
+   *  stopped, and presses Finish: the run's points all count, as on a real run. */
+  async function runThenFinish(seconds: number, meanwhile?: () => Promise<void>): Promise<void> {
+    await feed(0, seconds, 3);
+    await meanwhile?.();
+    await feed(seconds, 15, 0, 26.1445 + ((seconds - 1) * 3) / 111_132);
+    expect(await screen.findByText("Auto-paused", {}, { timeout: 5000 })).toBeTruthy();
+    await fireEvent.press(await screen.findByRole("button", { name: "Finish" }));
+  }
+  /** The run's own sums, as its summary works them out. */
+  const finishedSums = () => {
+    const run = runNow();
+    if (run === null) throw new Error("no run");
+    const at = run.finishedMs ?? 0;
+    return runSums(run.points, closedPauses(run, at), at, 60);
+  };
+
+  it("the worst thing: the map asks only the map's own addresses, and nothing of the run is sent to draw it", async () => {
+    const s = runServer();
+    await openRunning(s);
+    await startRunning();
+    // The live map's trail, once the run's numbers are worked out, before Auto-pause and Finish.
+    await runThenFinish(241, () =>
+      waitFor(
+        () => {
+          expect(JSON.stringify(drawnMap("live-map-view").sources["run-trail"])).toContain("LineString");
+        },
+        { timeout: 5000 },
+      ),
+    );
+    const points = runNow()?.points ?? [];
+    await fireEvent.press(await screen.findByRole("button", { name: "Open the map full size" }));
+    for (const testID of ["live-map-view", "summary-map-view", "full-map-view"]) {
+      const map = maplibre.maps.filter((m) => m.props.testID === testID).at(-1);
+      if (map === undefined) throw new Error(`${testID} was never drawn`);
+      expect(Object.keys(map.props).filter((key) => !MAP_PROPS.has(key))).toEqual([]);
+      expect(map.props.mapStyle.sources).toEqual({ basemap: { type: "vector", url: OPENFREEMAP.tiles } });
+      expect(addressesIn(map).every((at) => [OPENFREEMAP.tiles, OPENFREEMAP.glyphs, OPENFREEMAP.sprite].includes(at))).toBe(true);
+      // The run is drawn from shapes the phone holds, never from an address.
+      expect(JSON.stringify(map.sources["run-trail"])).toContain('"type":"LineString"');
+    }
+    // What the app asked our server for the map: which map, and nothing of the run.
+    const asked = s.requests.filter((r) => r.path === "/v1/geo/map");
+    expect(asked.length).toBeGreaterThan(0);
+    expect(asked.every((r) => r.method === "GET" && r.search === "" && r.body === undefined)).toBe(true);
+    const lat = (points[100]?.[1] ?? 0).toFixed(5);
+    expect(s.requests.filter((r) => r.path !== PATH && (r.body ?? "").includes(lat))).toEqual([]);
+  });
+
+  it("follows the front of the run, stops when the person moves the map, and Follow me brings it back", async () => {
+    const s = runServer();
+    await openRunning(s);
+    await startRunning();
+    await feed(0, 121, 3);
+    const front = () => drawnMap("live-map-view").markers.at(-1);
+    await waitFor(
+      () => {
+        expect(drawnMap("live-map-view").camera).toMatchObject({ center: front(), zoom: 16.2 });
+      },
+      { timeout: 5000 },
+    );
+    await act(() => {
+      drawnMap("live-map-view").props.onRegionWillChange?.({ nativeEvent: { userInteraction: true } });
+    });
+    expect(drawnMap("live-map-view").camera?.["center"]).toBeUndefined();
+    await fireEvent.press(await screen.findByRole("button", { name: "Follow me" }));
+    expect(drawnMap("live-map-view").camera).toMatchObject({ center: front() });
+    expect(screen.queryByRole("button", { name: "Follow me" })).toBeNull();
+    // The map's own moves, following the run, never stop it following.
+    await act(() => {
+      drawnMap("live-map-view").props.onRegionWillChange?.({ nativeEvent: { userInteraction: false } });
+    });
+    expect(drawnMap("live-map-view").camera).toMatchObject({ center: front() });
+  });
+
+  it("after Finish, the Route box holds the run's map with a stone at each exact kilometre; tapped, it opens full size, and the cross closes it", async () => {
+    const s = runServer();
+    await openRunning(s);
+    await startRunning();
+    await runThenFinish(801);
+    expect(await screen.findByTestId("summary-map")).toBeTruthy();
+    const box = drawnMap("summary-map-view");
+    const sums = finishedSums();
+    const marks = unitMarks(sums.track, sums.trackStarts, "metric");
+    expect(marks).toHaveLength(2);
+    expect(box.sources["run-stones"]).toEqual({
+      type: "FeatureCollection",
+      features: marks.map(([lat, lng], i) => ({ type: "Feature", properties: { n: String(i + 1) }, geometry: { type: "Point", coordinates: [lng, lat] } })),
+    });
+    // Still in the summary, so the page scrolls; it fits the whole run.
+    expect(box.props).toMatchObject({ dragPan: false, touchZoom: false });
+    expect(Array.isArray(box.camera?.["bounds"])).toBe(true);
+    expect(screen.getByText(OPENFREEMAP.credit)).toBeTruthy();
+
+    await fireEvent.press(screen.getByRole("button", { name: "Open the map full size" }));
+    const full = drawnMap("full-map-view");
+    expect(full.props).toMatchObject({ dragPan: true, touchZoom: true, touchRotate: false });
+    expect(full.sources["run-stones"]).toEqual(box.sources["run-stones"]);
+    await fireEvent.press(screen.getByRole("button", { name: "Close the map" }));
+    await waitFor(() => {
+      expect(maplibre.maps.filter((m) => m.props.testID === "full-map-view" && !m.gone)).toHaveLength(0);
+    });
+    expect(screen.getByRole("button", { name: "Save run" })).toBeTruthy();
+  });
+
+  it("with no signal after Finish, the trail is still drawn and the box says the map shows when online", async () => {
+    const s = runServer();
+    await openRunning(s);
+    await startRunning();
+    s.state.online = false;
+    await runThenFinish(61);
+    expect(await screen.findByText("The map shows when you're online.")).toBeTruthy();
+    expect(JSON.stringify(drawnMap("summary-map-view").sources["run-trail"])).toContain("LineString");
+  });
+
+  it("the server switched to our own copy: every map reads it, and the phone keeps it for when it is offline", async () => {
+    const s = runServer(RAVI, OWN_COPY);
+    await openRunning(s);
+    await startRunning();
+    await feed(0, 61, 3);
+    await waitFor(() => {
+      expect(drawnMap("live-map-view").props.mapStyle.sources).toEqual({ basemap: { type: "vector", url: OWN_COPY.tiles } });
+    });
+    expect(screen.getByText(OWN_COPY.credit)).toBeTruthy();
+    expect(JSON.parse((await phoneRunFiles.read("run-map.json")) ?? "{}")).toEqual(OWN_COPY);
+  });
+
+  it("Map colours on the Running page: Dark keeps the map dark whatever the hour, and stays chosen", async () => {
+    const s = runServer();
+    await openRunning(s);
+    expect(screen.getByText("Automatic: light by day, dark at night")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "Change map colours" }));
+    const sheet = await screen.findByTestId("sheet");
+    expect(within(sheet).getByText("Map colours")).toBeTruthy();
+    await fireEvent.press(within(sheet).getByRole("button", { name: "Dark" }));
+    expect(await screen.findByText("Dark")).toBeTruthy();
+    expect(JSON.parse((await phoneRunFiles.read("run-settings.json")) ?? "{}")).toMatchObject({ mapColours: "dark" });
+    await startRunning();
+    await feed(0, 31, 3);
+    await waitFor(() => {
+      expect(drawnMap("live-map-view").props.mapStyle.name).toBe("run-map-openmaptiles-dark");
     });
   });
 });

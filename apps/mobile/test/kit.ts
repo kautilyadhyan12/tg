@@ -1,4 +1,4 @@
-import { CURRENT_DISCLAIMER_VERSION, FOOD_ALLERGY_CAUTION } from "@app/shared";
+import { CURRENT_DISCLAIMER_VERSION, FOOD_ALLERGY_CAUTION, OPENFREEMAP } from "@app/shared";
 import type { Ask, AskInit } from "../src/session/calls";
 import type { KeyStore } from "../src/session/session";
 
@@ -141,6 +141,8 @@ export function fakeServer(routes: Record<string, Route>): { ask: Ask; asked: As
     "/v1/nutrition/food-week": () => ({ status: 200, body: foodWeekReply() }),
     // Every training reminder off, as they start, unless a test says otherwise.
     "/v1/users/me/reminders": () => ({ status: 200, body: { reminders: OFF_REMINDERS, safeMode: false } }),
+    // OpenFreeMap's map under a run, as the server says unless it is switched (37b-i).
+    "/v1/geo/map": () => ({ status: 200, body: { map: OPENFREEMAP } }),
     ...routes,
   };
   const ask: Ask = async (url: string, init: AskInit) => {

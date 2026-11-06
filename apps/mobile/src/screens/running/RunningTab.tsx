@@ -4,18 +4,26 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import { AppState, Linking, Pressable, StyleSheet, Switch, View } from "react-native";
 import * as Location from "expo-location";
 import { useIsFocused } from "@react-navigation/native";
-import { runPageSchema, type Units } from "@app/shared";
+import { runPageSchema, type MapColours, type Units } from "@app/shared";
 import { Button } from "../../look/Button";
+import { Options } from "../../look/Choice";
 import { Sheet } from "../../look/Sheet";
 import { colours, orangeGradient, shadows, sizes } from "../../look/colours";
 import { fonts, Txt } from "../../look/Txt";
 import { useRead } from "../dashboard/useRead";
 import { SettingsPage } from "../Settings";
-import { autoPauseChoice, chooseAutoPause, chooseVoice, readRunChoices, subscribeRun, voiceChoice } from "./recorder";
+import { autoPauseChoice, chooseAutoPause, chooseMapColours, chooseVoice, mapColoursChoice, readRunChoices, subscribeRun, voiceChoice } from "./recorder";
 import { gpsLight, openAppSettings, START_PROBLEM_WORDS, useRunLayer, type StartProblem } from "./RunLayer";
 import { useRunOutbox } from "./RunOutbox";
 import { runVoiceNative, speakState, type SpeakState } from "./runVoiceNative";
 import { clock, distance, unitWord } from "./runWords";
+
+/** The map's colours (37b-i): by the sun where the person is, as Google Maps and Waze switch, or fixed. */
+export const MAP_COLOUR_CHOICES: readonly { value: MapColours; label: string; desc?: string }[] = [
+  { value: "auto", label: "Automatic", desc: "Light by day, dark at night" },
+  { value: "light", label: "Light" },
+  { value: "dark", label: "Dark" },
+];
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
 
@@ -64,6 +72,8 @@ export function RunningTab({ units, showEnd }: { units: Units; showEnd?: () => v
   const { view, outbox } = useRunOutbox();
   const autoPause = useSyncExternalStore(subscribeRun, autoPauseChoice);
   const voiceOn = useSyncExternalStore(subscribeRun, voiceChoice);
+  const mapColours = useSyncExternalStore(subscribeRun, mapColoursChoice);
+  const [pickingColours, setPickingColours] = useState(false);
   useEffect(() => {
     void readRunChoices();
   }, []);
@@ -171,6 +181,22 @@ export function RunningTab({ units, showEnd }: { units: Units; showEnd?: () => v
             }}
           />
         </View>
+        <View style={[styles.row, styles.rowLine]}>
+          <View style={styles.grow}>
+            <Txt kind="body">Map colours</Txt>
+            <Txt kind="small" colour="textFaint">
+              {mapColours === "auto" ? "Automatic: light by day, dark at night" : mapColours === "light" ? "Light" : "Dark"}
+            </Txt>
+          </View>
+          <Button
+            kind="link"
+            label="Change"
+            say="Change map colours"
+            onPress={() => {
+              setPickingColours(true);
+            }}
+          />
+        </View>
       </View>
       {going ? (
         <View style={styles.centre}>
@@ -258,6 +284,23 @@ export function RunningTab({ units, showEnd }: { units: Units; showEnd?: () => v
           style={styles.middle}
           onPress={() => {
             setRemoving(null);
+          }}
+        />
+      </Sheet>
+      <Sheet
+        open={pickingColours}
+        title="Map colours"
+        onClose={() => {
+          setPickingColours(false);
+        }}
+      >
+        <Options
+          options={MAP_COLOUR_CHOICES}
+          selected={mapColours}
+          solid
+          onPick={(choice) => {
+            setPickingColours(false);
+            void chooseMapColours(choice);
           }}
         />
       </Sheet>

@@ -1,0 +1,15 @@
+{
+  "source": "U.S. Naval Observatory, Astronomical Applications Department, one-day rise/set data (https://aa.usno.navy.mil/api/rstt/oneday), read 2026-11-06. Times are local, to the minute, at the given offset from UTC in hours.",
+  "days": [
+    { "place": "Jorhat", "date": "2026-11-06", "lat": 26.7509, "lng": 94.2037, "tz": 5.5, "rise": "05:26", "set": "16:27" },
+    { "place": "Jorhat", "date": "2026-06-21", "lat": 26.7509, "lng": 94.2037, "tz": 5.5, "rise": "04:20", "set": "18:10" },
+    { "place": "New York", "date": "2026-11-06", "lat": 40.7128, "lng": -74.006, "tz": -5, "rise": "06:32", "set": "16:47" },
+    { "place": "New York", "date": "2026-07-04", "lat": 40.7128, "lng": -74.006, "tz": -4, "rise": "05:30", "set": "20:30" },
+    { "place": "Toronto", "date": "2026-12-21", "lat": 43.6532, "lng": -79.3832, "tz": -5, "rise": "07:48", "set": "16:44" },
+    { "place": "Sydney", "date": "2026-11-06", "lat": -33.8688, "lng": 151.2093, "tz": 11, "rise": "05:51", "set": "19:27" },
+    { "place": "Bengaluru", "date": "2026-03-20", "lat": 12.9716, "lng": 77.5946, "tz": 5.5, "rise": "06:24", "set": "18:30" },
+    { "place": "Vancouver", "date": "2026-09-15", "lat": 49.2827, "lng": -123.1207, "tz": -7, "rise": "06:49", "set": "19:25" },
+    { "place": "Tromsø", "date": "2026-06-21", "lat": 69.6492, "lng": 18.9553, "tz": 2, "always": "up", "lowest": "00:46" },
+    { "place": "Tromsø", "date": "2026-12-21", "lat": 69.6492, "lng": 18.9553, "tz": 1, "always": "down", "highest": "11:42" }
+  ]
+}
