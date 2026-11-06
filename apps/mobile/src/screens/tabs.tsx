@@ -34,10 +34,30 @@ const WORKOUT_PARTS = [
 /** Exercises, My Workout and Running across the picture's top, as drawn (docs/design/phone/pages/Workout):
  *  it opens on Exercises, where the Dashboard's Browse Exercises points. Running is 37a's; the other two come
  *  with exercise folder 2's jobs. */
+// The streak reminder's tap opens Workout on Running (19e-ii): a run is what keeps a streak from the phone today.
+let runningAsked = false;
+const runningWatchers = new Set<() => void>();
+export function openRunning(): void {
+  runningAsked = true;
+  for (const watcher of runningWatchers) watcher();
+}
+
 export function WorkoutScreen() {
   const { state } = useSession();
   const units = (state.kind === "in" ? accountUnits(state.user.units) : null) ?? "metric";
   const [part, setPart] = useState<WorkoutPart>("exercises");
+  useEffect(() => {
+    const take = () => {
+      if (!runningAsked) return;
+      runningAsked = false;
+      setPart("running");
+    };
+    take();
+    runningWatchers.add(take);
+    return () => {
+      runningWatchers.delete(take);
+    };
+  }, []);
   const parts = <Segments options={WORKOUT_PARTS} selected={part} onPick={setPart} />;
   const scroller = useRef<ScrollView>(null);
   const showEnd = useCallback(() => {

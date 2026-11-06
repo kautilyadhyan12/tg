@@ -67,8 +67,8 @@ describe("giving way to the other notifications", () => {
 
 describe("what the phone shows", () => {
   it("the streak reminder: with and without a freeze, never under 3 days", () => {
-    expect(streakNotification({ days: 3, freeze: false })).toEqual({ title: "Keep your streak going", body: "Your 3-day streak ends at midnight. Even a short workout counts." });
-    expect(streakNotification({ days: 1200, freeze: true })?.body).toBe("No workout yet today. A freeze will keep your 1,200-day streak safe, but a short workout keeps it going.");
+    expect(streakNotification({ days: 3, freeze: false })).toEqual({ title: "Keep your streak going", body: "Your 3-day streak ends at midnight. Even a short run counts." });
+    expect(streakNotification({ days: 1200, freeze: true })?.body).toBe("Nothing done yet today. A freeze will keep your 1,200-day streak safe, but a short run keeps it going.");
     expect(streakNotification({ days: 2, freeze: false })).toBeNull();
     expect(streakNotification({ days: 3.5, freeze: false })).toBeNull();
   });
@@ -103,18 +103,17 @@ describe("what the phone shows", () => {
     ["after a week with none: no sum against nothing", week({ workouts: 3, streak: 3 }), "This week: 3 workouts. Your streak: 3 days."],
     ["one of each", week({ workouts: 1, runs: 1, visits: 1 }), "This week: 1 workout, 1 run and 1 visit."],
     ["visits only", week({ visits: 3, streak: 4 }), "This week: 3 visits. Your streak: 4 days."],
-    ["a quiet week after a busy one", week({ lastWeekWorkouts: 2, lastWeekVisits: 1 }), "A quiet week. Last week: 2 workouts and 1 visit."],
-    ["a quiet week with a new badge", week({ badges: ["streak_3"] }), "A quiet week. New badge: 3-Day Streak."],
+    ["nothing done this week, a new badge: the badge alone", week({ lastWeekWorkouts: 2, badges: ["streak_3"] }), "New badge: 3-Day Streak."],
     ["new badges", week({ workouts: 1, badges: ["first_workout", "first_meal"] }), "This week: 1 workout. New badges: First Workout and First Meal Logged."],
   ])("%s", (_name, given, body) => {
     expect(summaryNotification(given)).toEqual({ title: "Your week", body });
   });
 
-  it("two weeks with nothing done: no summary", () => {
+  it("a week with nothing done and no new badge: no summary, whatever last week was", () => {
     expect(summaryWorthSending(week({}))).toBe(false);
     expect(summaryNotification(week({ streak: 0 }))).toBeNull();
     expect(summaryNotification(week({ badges: ["not_a_badge"] }))).toBeNull();
-    expect(summaryWorthSending(week({ lastWeekRuns: 1 }))).toBe(true);
+    expect(summaryNotification(week({ lastWeekWorkouts: 4, lastWeekRuns: 1, lastWeekVisits: 2, streak: 3 }))).toBeNull();
   });
 
   it("no summary or reminder line ever tells somebody to train harder, or names a fall", () => {
@@ -127,6 +126,7 @@ describe("what the phone shows", () => {
 
   it("a tap opens only one of three places", () => {
     expect(trainingNudgePushDataSchema.safeParse({ kind: "training_nudge", open: "achievements" }).success).toBe(true);
+    expect(trainingNudgePushDataSchema.safeParse({ kind: "training_nudge", open: "running" }).success).toBe(true);
     expect(trainingNudgePushDataSchema.safeParse({ kind: "training_nudge", open: "settings" }).success).toBe(false);
     expect(trainingNudgePushDataSchema.safeParse({ kind: "training_reminder", open: "workout" }).success).toBe(false);
   });

@@ -90,14 +90,15 @@ const count = (n: number, one: string, many: string): string => `${n.toLocaleStr
 /** The names of these badges that the app knows, in the order given; a code it does not know is left out. */
 const badgeNames = (codes: readonly string[]): string[] => codes.flatMap((code) => (BADGE_NAMES[code] === undefined ? [] : [BADGE_NAMES[code]]));
 
-/** The streak reminder. `freeze`: a freeze is saved, and covers today if nothing is done. */
+/** The streak reminder. `freeze`: a freeze is saved, and covers today if nothing is done. It names a run, the
+ *  one thing the phone can record today besides a visit; read again when workouts can be started on it. */
 export function streakNotification(input: { days: number; freeze: boolean }): { title: string; body: string } | null {
   const { days, freeze } = input;
   if (!Number.isInteger(days) || days < STREAK_REMINDER_LEAST) return null;
   const streak = `${days.toLocaleString("en-US")}-day streak`;
   return freeze
-    ? { title: "Keep your streak going", body: `No workout yet today. A freeze will keep your ${streak} safe, but a short workout keeps it going.` }
-    : { title: "Keep your streak going", body: `Your ${streak} ends at midnight. Even a short workout counts.` };
+    ? { title: "Keep your streak going", body: `Nothing done yet today. A freeze will keep your ${streak} safe, but a short run keeps it going.` }
+    : { title: "Keep your streak going", body: `Your ${streak} ends at midnight. Even a short run counts.` };
 }
 
 /** New badges, told together. None the app knows is no notification. */
@@ -120,9 +121,10 @@ export interface WeekSummary {
   badges: readonly string[];
 }
 
-/** Whether the summary goes at all: not after two weeks in a row with nothing done. */
+/** Whether the summary goes at all: only for a week with something done or a new badge, so it never tells
+ *  somebody a week was emptier than the one before. */
 export function summaryWorthSending(week: WeekSummary): boolean {
-  return week.workouts + week.runs + week.visits + week.lastWeekWorkouts + week.lastWeekRuns + week.lastWeekVisits > 0 || badgeNames(week.badges).length > 0;
+  return week.workouts + week.runs + week.visits > 0 || badgeNames(week.badges).length > 0;
 }
 
 /** The Sunday summary: the week's workouts and visits, beside last week's only when it is more, the
@@ -135,14 +137,7 @@ export function summaryNotification(week: WeekSummary): { title: string; body: s
     ...(week.runs > 0 ? [count(week.runs, "run", "runs")] : []),
     ...(week.visits > 0 ? [count(week.visits, "visit", "visits")] : []),
   ];
-  if (done.length === 0) {
-    const before = [
-      ...(week.lastWeekWorkouts > 0 ? [count(week.lastWeekWorkouts, "workout", "workouts")] : []),
-      ...(week.lastWeekRuns > 0 ? [count(week.lastWeekRuns, "run", "runs")] : []),
-      ...(week.lastWeekVisits > 0 ? [count(week.lastWeekVisits, "visit", "visits")] : []),
-    ];
-    parts.push(before.length === 0 ? "A quiet week." : `A quiet week. Last week: ${andList(before)}.`);
-  } else {
+  if (done.length > 0) {
     parts.push(`This week: ${andList(done)}.`);
     const more = week.workouts - week.lastWeekWorkouts;
     if (week.workouts > 0 && more > 0 && week.lastWeekWorkouts > 0) parts.push(`That’s ${count(more, "workout", "workouts")} more than last week.`);
@@ -158,6 +153,6 @@ export const TRAINING_PROGRESS_CHANNEL = { id: "training-progress", name: "Strea
 
 /** What each carries for the app: the place a tap opens. */
 export const trainingNudgePushDataSchema = z
-  .object({ kind: z.literal("training_nudge"), open: z.enum(["workout", "achievements", "dashboard"]) })
+  .object({ kind: z.literal("training_nudge"), open: z.enum(["running", "achievements", "dashboard"]) })
   .strip();
 export type TrainingNudgePushData = z.infer<typeof trainingNudgePushDataSchema>;

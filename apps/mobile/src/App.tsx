@@ -47,7 +47,7 @@ import { BodyOutboxProvider } from "./screens/progress/BodyOutbox";
 import { MealOutboxProvider } from "./screens/food/MealOutbox";
 import { PhotoSheetStoreProvider } from "./screens/food/PhotoSheetStore";
 import type { TextStore } from "./screens/food/outbox";
-import { MeScreen, WorkoutScreen, openAchievements } from "./screens/tabs";
+import { MeScreen, WorkoutScreen, openAchievements, openRunning } from "./screens/tabs";
 
 /** The five tabs, in their order (spec Part 6 §16.3a). A tab's name is the word under its icon. */
 export const TABS = [
@@ -132,15 +132,16 @@ function SignedInOrOut({ mealStore, bodyStore, runStore }: Stores) {
 // Workout or Food (19e-i).
 const tabsRef = createNavigationContainerRef<Record<string, undefined>>();
 type TappedTab = "Gym" | "Workout" | "Food" | "Dashboard" | "Me";
-// The streak reminder opens Workout, the summary the Dashboard, a badge Achievements on Me (19e-ii).
+// The streak reminder opens Workout on Running, the summary the Dashboard, a badge Achievements on Me (19e-ii).
 export const tabOfTap = (tapped: Tapped): TappedTab => {
-  if (tapped.kind === "progress") return tapped.open === "workout" ? "Workout" : tapped.open === "dashboard" ? "Dashboard" : "Me";
+  if (tapped.kind === "progress") return tapped.open === "running" ? "Workout" : tapped.open === "dashboard" ? "Dashboard" : "Me";
   return tapped.kind !== "training" ? "Gym" : tapped.open === "workout" ? "Workout" : "Food";
 };
 // A tap that opened the app arrives before the tabs are drawn: held until they are.
 let heldTab: TappedTab | null = null;
 const openTappedTab = (tapped: Tapped) => {
   if (tapped.kind === "progress" && tapped.open === "achievements") openAchievements();
+  if (tapped.kind === "progress" && tapped.open === "running") openRunning();
   if (tabsRef.isReady()) tabsRef.navigate(tabOfTap(tapped));
   else heldTab = tabOfTap(tapped);
 };

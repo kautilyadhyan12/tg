@@ -125,8 +125,8 @@ export async function updateProfile(
   onBefore?: (before: ShownBefore) => void,
 ): Promise<ProfileRow | null> {
   return await sql.begin(async (tx) => {
-    const prevRows = await tx<{ id: string; display_name: string; leaderboard_opt_out: boolean }[]>`
-      SELECT id, display_name, leaderboard_opt_out FROM users
+    const prevRows = await tx<{ id: string; display_name: string; leaderboard_opt_out: boolean; push_badges: boolean }[]>`
+      SELECT id, display_name, leaderboard_opt_out, push_badges FROM users
       WHERE id = ${userId} AND status = 'active' FOR NO KEY UPDATE`;
     const prev = prevRows[0];
     if (prev === undefined) return null;
@@ -151,8 +151,9 @@ export async function updateProfile(
         UPDATE users SET ${tx(cols)}
         WHERE id = ${userId} AND status = 'active'`;
     }
-    // Badges switched off: those not yet told are had, so switching on again sends nothing old (19e-ii).
-    if (patch.pushBadges === false) {
+    // Badges switched off or on again: those not yet told are had, so switching on sends nothing earned while
+    // it was off (19e-ii; 19d's rule for every kind).
+    if (patch.pushBadges !== undefined && patch.pushBadges !== prev.push_badges) {
       await tx`UPDATE user_achievements SET told_at = now() WHERE user_id = ${userId} AND told_at IS NULL`;
     }
     // A typed weight is a row of the history, the only place weight lives

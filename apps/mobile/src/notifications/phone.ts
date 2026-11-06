@@ -45,7 +45,7 @@ export type Tapped =
   | ({ kind: "place" } & Omit<GymPlacePushData, "kind">)
   | { kind: "comment"; gymId: string; postId: string }
   | { kind: "training"; open: "workout" | "food" }
-  | { kind: "progress"; open: "workout" | "achievements" | "dashboard" };
+  | { kind: "progress"; open: "running" | "achievements" | "dashboard" };
 
 /** A tap that opens a place's page on the Gym tab. */
 export type GymTapped = Exclude<Tapped, { kind: "training" } | { kind: "progress" }>;

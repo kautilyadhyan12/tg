@@ -166,8 +166,8 @@ d("the streak reminder, badges and the Sunday summary (real Postgres)", () => {
     sent.length = 0;
     await sweep(india(19, 0, TUE));
     expect(sentTo(safe.token)).toEqual([]);
-    expect(sentTo(asha.token).map((m) => [m.userId, m.body])).toEqual([[asha.userId, "Your 4-day streak ends at midnight. Even a short workout counts."]]);
-    expect(sentTo(ravi.token).map((m) => [m.userId, m.body])).toEqual([[ravi.userId, "Your 9-day streak ends at midnight. Even a short workout counts."]]);
+    expect(sentTo(asha.token).map((m) => [m.userId, m.body])).toEqual([[asha.userId, "Your 4-day streak ends at midnight. Even a short run counts."]]);
+    expect(sentTo(ravi.token).map((m) => [m.userId, m.body])).toEqual([[ravi.userId, "Your 9-day streak ends at midnight. Even a short run counts."]]);
     expect(sent).toHaveLength(2);
     // Safe mode's summary still goes, and says only what was done: never a push to train.
     await workout(safe, india(10, 0, TUE));
@@ -222,9 +222,9 @@ d("the streak reminder, badges and the Sunday summary (real Postgres)", () => {
     expect(sent).toEqual([]);
     await sweep(india(19, 0, TUE));
     expect(sentTo(due.token).map((m) => [m.title, m.body, m.data])).toEqual([
-      ["Keep your streak going", "Your 3-day streak ends at midnight. Even a short workout counts.", { kind: "training_nudge", open: "workout" }],
+      ["Keep your streak going", "Your 3-day streak ends at midnight. Even a short run counts.", { kind: "training_nudge", open: "running" }],
     ]);
-    expect(sentTo(freeze.token).map((m) => m.body)).toEqual(["No workout yet today. A freeze will keep your 12-day streak safe, but a short workout keeps it going."]);
+    expect(sentTo(freeze.token).map((m) => m.body)).toEqual(["Nothing done yet today. A freeze will keep your 12-day streak safe, but a short run keeps it going."]);
     for (const who of [short, trained, looked]) expect(sentTo(who.token)).toEqual([]);
     // Once a day: the next minutes send nothing again.
     await sweep(india(19, 1, TUE));
@@ -373,7 +373,7 @@ d("the streak reminder, badges and the Sunday summary (real Postgres)", () => {
     expect(told?.n).toBe(0);
   }, TIMEOUT_MS);
 
-  it("no summary after two weeks with nothing done, and a quiet week after a busy one is said kindly", async () => {
+  it("no summary for a week with nothing done, even after a busy one: it never tells somebody of a fall", async () => {
     const idle = await phone("idle", india(9, 0, SUN));
     const quiet = await phone("quiet", india(9, 0, SUN));
     await workout(quiet, india(7, 0, -4));
@@ -381,9 +381,78 @@ d("the streak reminder, badges and the Sunday summary (real Postgres)", () => {
     sent.length = 0;
     await sweep(india(18, 0, SUN));
     expect(sentTo(idle.token)).toEqual([]);
-    expect(sentTo(quiet.token).map((m) => m.body)).toEqual(["A quiet week. Last week: 2 workouts."]);
-    const [row] = await sql<{ summary_week: string | null }[]>`SELECT summary_week::text FROM users WHERE id = ${idle.userId}`;
-    expect(row?.summary_week).toBe(dayText(0));
+    expect(sentTo(quiet.token)).toEqual([]);
+    const rows = await sql<{ summary_week: string | null }[]>`SELECT summary_week::text FROM users WHERE id IN ${sql([idle.userId, quiet.userId])}`;
+    expect(rows.map((r) => r.summary_week)).toEqual([dayText(0), dayText(0)]);
+  }, TIMEOUT_MS);
+
+  // ── Round one's findings ──
+
+  it("a badge earned while Badges was off is never told once it is on again (H1)", async () => {
+    const back = await phone("badgeback", india(9, 0, TUE));
+    expect((await request("PATCH", "/v1/users/me", { bearer: back.accessToken, payload: { pushBadges: false } })).statusCode).toBe(200);
+    await badge(back, "ten_workouts", india(9, 30, TUE));
+    expect((await request("PATCH", "/v1/users/me", { bearer: back.accessToken, payload: { pushBadges: true } })).statusCode).toBe(200);
+    await sql`UPDATE users SET last_active_at = ${india(9, 0, TUE)} WHERE id = ${back.userId}`;
+    sent.length = 0;
+    await sweep(india(11, 0, TUE));
+    await sweep(india(12, 0, TUE + 1));
+    expect(sentTo(back.token)).toEqual([]);
+    // Saving Badges on while it is already on takes nothing from a badge still owed.
+    await badge(back, "early_bird", india(13, 0, TUE + 1));
+    expect((await request("PATCH", "/v1/users/me", { bearer: back.accessToken, payload: { pushBadges: true } })).statusCode).toBe(200);
+    await sql`UPDATE users SET last_active_at = ${india(9, 0, TUE + 1)} WHERE id = ${back.userId}`;
+    await sweep(india(14, 0, TUE + 2));
+    expect(sentTo(back.token).map((m) => m.body)).toEqual(["You earned Early Bird."]);
+  }, TIMEOUT_MS);
+
+  it("with Badges off, the Sunday summary names no badge (H2)", async () => {
+    const quietBadges = await phone("summarynobadge", india(9, 0, SUN));
+    await workout(quietBadges, india(7, 0, 2));
+    expect((await request("PATCH", "/v1/users/me", { bearer: quietBadges.accessToken, payload: { pushBadges: false } })).statusCode).toBe(200);
+    await badge(quietBadges, "first_workout", india(9, 0, SUN));
+    await sql`UPDATE users SET last_active_at = ${india(9, 0, SUN)} WHERE id = ${quietBadges.userId}`;
+    sent.length = 0;
+    await sweep(india(18, 0, SUN));
+    expect(sentTo(quietBadges.token).map((m) => m.body)).toEqual(["This week: 1 workout."]);
+  }, TIMEOUT_MS);
+
+  it("two runs at the same instant send one notification", async () => {
+    const twice = await phone("twice", india(9, 0, TUE));
+    await badge(twice, "photo_meal", india(9, 30, TUE));
+    sent.length = 0;
+    await Promise.all([sweep(india(10, 0, TUE)), sweep(india(10, 0, TUE))]);
+    expect(sentTo(twice.token)).toHaveLength(1);
+  }, TIMEOUT_MS);
+
+  it("Firebase reaching no phone gives the day and the badge back, so the next run tells it", async () => {
+    const unreached = await phone("unreached", india(9, 0, TUE));
+    await badge(unreached, "variety_5", india(9, 30, TUE));
+    answers.set(unreached.token, "failed");
+    sent.length = 0;
+    await sweep(india(10, 0, TUE));
+    answers.delete(unreached.token);
+    const [row] = await sql<{ nudge_day: string | null }[]>`SELECT nudge_day::text FROM users WHERE id = ${unreached.userId}`;
+    expect(row?.nudge_day).toBeNull();
+    await sweep(india(10, 1, TUE));
+    expect(sentTo(unreached.token).map((m) => m.body)).toEqual(["You earned 5 Kinds of Exercise.", "You earned 5 Kinds of Exercise."]);
+  }, TIMEOUT_MS);
+
+  it("a zone the app cannot read gets none of the three, never one at night; nor does a phone signed in no more (L3, L5)", async () => {
+    const offset = await phone("offsetzone", india(9, 0, TUE));
+    await sql`UPDATE users SET timezone = '+05:30' WHERE id = ${offset.userId}`;
+    await badge(offset, "night_owl", india(9, 30, TUE));
+    const ranOut = await phone("ranoutbadge", india(9, 0, TUE));
+    await badge(ranOut, "early_bird", india(9, 30, TUE));
+    await sql`UPDATE refresh_tokens SET expires_at = ${india(9, 0, TUE - 1)} WHERE user_id = ${ranOut.userId}`;
+    sent.length = 0;
+    // 00:30 in India is 19:00 on UTC's clock: a day hour there, the middle of the night here.
+    await sweep(new Date(Date.UTC(2026, 10, 3, 19, 0)));
+    await sweep(india(11, 0, TUE));
+    expect(sentTo(offset.token)).toEqual([]);
+    expect(sentTo(ranOut.token)).toEqual([]);
+    const rows = await sql<{ nudge_day: string | null }[]>`SELECT nudge_day::text FROM users WHERE id IN ${sql([offset.userId, ranOut.userId])}`;
+    expect(rows.map((r) => r.nudge_day)).toEqual([null, null]);
   }, TIMEOUT_MS);
 
   // ── The switches on the account ──

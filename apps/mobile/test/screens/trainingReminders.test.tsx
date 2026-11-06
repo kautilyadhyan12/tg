@@ -211,8 +211,9 @@ describe("a reminder's notification on the phone", () => {
     expect(tabOfTap(food)).toBe("Food");
     expect(tabOfTap({ kind: "inbox", gymId: "1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f" })).toBe("Gym");
   });
-  it("the streak reminder opens Workout, a badge Me (where Achievements is), the summary the Dashboard (19e-ii)", () => {
-    const streak = tappedOf({ kind: "training_nudge", open: "workout" });
+  it("the streak reminder opens Workout (on Running), a badge Me (where Achievements is), the summary the Dashboard (19e-ii)", () => {
+    const streak = tappedOf({ kind: "training_nudge", open: "running" });
+    expect(tappedOf({ kind: "training_nudge", open: "workout" })).toBeNull();
     const badge = tappedOf({ kind: "training_nudge", open: "achievements" });
     const week = tappedOf({ kind: "training_nudge", open: "dashboard" });
     expect(tappedOf({ kind: "training_nudge", open: "settings" })).toBeNull();

@@ -90,7 +90,7 @@ export const PUSH_SWITCHES: readonly { key: PushSwitch; channel: string; label: 
 
 /** The three the app decides by itself (19e-ii), under Your training for everyone. */
 export const PROGRESS_SWITCHES: readonly { key: PushSwitch; channel: string; label: string; on: string; off: string }[] = [
-  { key: "pushStreak", channel: TRAINING_PROGRESS_CHANNEL.id, label: "Streak reminder", on: "At 7 PM, when your streak would end at midnight.", off: "Off." },
+  { key: "pushStreak", channel: TRAINING_PROGRESS_CHANNEL.id, label: "Streak reminder", on: "At 7 PM, on a day you haven’t trained yet.", off: "Off." },
   { key: "pushBadges", channel: TRAINING_PROGRESS_CHANNEL.id, label: "Badges", on: "When you earn a new badge.", off: "Off. New badges still show in Achievements." },
   { key: "pushSummary", channel: TRAINING_PROGRESS_CHANNEL.id, label: "Sunday summary", on: "Your week, on Sunday at 6 PM.", off: "Off." },
 ];

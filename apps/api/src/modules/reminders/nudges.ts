@@ -69,8 +69,10 @@ export async function sendTrainingNudges(deps: {
   const badgesSince = new Date(now.getTime() - BADGE_TELL_DAYS * DAY_MS);
 
   await repo.dropStaleBadges(sql, badgesSince, deps.userIds);
-  const zones = await repo.nudgeZones(sql, deps.userIds);
-  const clocks = zones.map((zone) => {
+  const zones = await repo.nudgeZones(sql, now, deps.userIds);
+  // A zone the app cannot read would put the three on UTC's clock, at night where the person lives: none goes.
+  const readable = zones.filter((zone) => zone === "UTC" || (zone !== "" && reminderZone(zone) !== "UTC"));
+  const clocks = readable.map((zone) => {
     const clock = localClock(zone === "" ? null : zone, now);
     return { zone, ...clock, monday: mondayOf(clock) };
   });
@@ -84,6 +86,7 @@ export async function sendTrainingNudges(deps: {
     close: NUDGE_LAST_MINUTE,
     streakLeast: STREAK_REMINDER_LEAST,
     badgesSince,
+    now,
     openedSince: new Date(now.getTime() - REMINDER_PAUSE_DAYS * DAY_MS),
     userIds: deps.userIds,
   });
@@ -154,7 +157,7 @@ export async function sendTrainingNudges(deps: {
     if ((await getPlanHealth(sql, person.userId))?.safeMode === true) return null;
     if (await repo.activeOn(sql, person.userId, zone, clock.day, new Date(now.getTime() - 2 * DAY_MS), RUN_COUNTS_FROM_M)) return null;
     const shown = streakNotification({ days: streak.current, freeze: streak.freezesAvailable > 0 });
-    return shown === null ? null : { kind: "streak", ...shown, open: "workout", monday: null, badges: [] };
+    return shown === null ? null : { kind: "streak", ...shown, open: "running", monday: null, badges: [] };
   };
 
   const handle = async (person: repo.NudgePerson): Promise<void> => {
@@ -172,7 +175,7 @@ export async function sendTrainingNudges(deps: {
       result.skipped += 1;
       return;
     }
-    const taken = await repo.claim(sql, { userId: person.userId, day: clock.day, monday: shown.monday, badgesSince: shown.kind === "streak" ? null : badgesSince, at: now });
+    const taken = await repo.claim(sql, { userId: person.userId, day: clock.day, monday: shown.monday, badgesSince: shown.kind === "streak" || !person.pushBadges ? null : badgesSince, at: now });
     if (taken === null) return;
     let reached = false;
     try {

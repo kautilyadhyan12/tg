@@ -4,13 +4,16 @@ import type { Sql, TransactionSql } from "postgres";
 
 type SqlOrTx = Sql | TransactionSql;
 
-/** The zones of everybody active with a phone that may be told: the sender works out each one's clock once. */
-export async function nudgeZones(sql: SqlOrTx, userIds?: readonly string[]): Promise<string[]> {
+/** The zones of everybody active with a phone still signed in: the sender works out each one's clock once. */
+export async function nudgeZones(sql: SqlOrTx, now: Date, userIds?: readonly string[]): Promise<string[]> {
   const rows = await sql<{ zone: string }[]>`
     SELECT DISTINCT COALESCE(u.timezone, '') AS zone
     FROM users u
     WHERE u.status = 'active' AND (u.push_streak OR u.push_badges OR u.push_summary)
-      AND EXISTS (SELECT 1 FROM push_tokens p WHERE p.user_id = u.id)
+      AND EXISTS (
+        SELECT 1 FROM push_tokens p JOIN refresh_tokens rt ON rt.user_id = p.user_id AND rt.family_id = p.family_id
+        WHERE p.user_id = u.id AND rt.client = 'phone' AND rt.revoked_at IS NULL AND rt.expires_at > ${now}
+      )
       ${userIds === undefined ? sql`` : sql`AND u.id IN ${sql(userIds)}`}`;
   return rows.map((row) => row.zone);
 }
@@ -53,12 +56,14 @@ export async function owedNudges(
     close: number;
     streakLeast: number;
     badgesSince: Date;
+    /** Only people with a phone signed in at this instant: no claim made and given back for nobody's phone. */
+    now: Date;
     /** Nobody who has not opened the app since then: none of the three goes to them. */
     openedSince: Date;
     userIds?: readonly string[] | undefined;
   },
 ): Promise<NudgePerson[]> {
-  const { clocks, streakFrom, summaryFrom, due, open, close, streakLeast, badgesSince, openedSince, userIds } = input;
+  const { clocks, streakFrom, summaryFrom, due, open, close, streakLeast, badgesSince, openedSince, now, userIds } = input;
   if (clocks.length === 0) return [];
   const rows = await sql<
     {
@@ -99,7 +104,10 @@ export async function owedNudges(
     WHERE u.status = 'active'
       AND (u.nudge_day IS NULL OR u.nudge_day < c.day)
       AND COALESCE(u.last_active_at, u.created_at) >= ${openedSince}
-      AND EXISTS (SELECT 1 FROM push_tokens p WHERE p.user_id = u.id)
+      AND EXISTS (
+        SELECT 1 FROM push_tokens p JOIN refresh_tokens rt ON rt.user_id = p.user_id AND rt.family_id = p.family_id
+        WHERE p.user_id = u.id AND rt.client = 'phone' AND rt.revoked_at IS NULL AND rt.expires_at > ${now}
+      )
       AND (
         (u.push_streak AND s.current >= ${streakLeast} AND c.minute BETWEEN ${streakFrom} AND ${streakFrom + due - 1})
         OR (u.push_summary AND c.weekday = 7 AND (u.summary_week IS NULL OR u.summary_week < c.monday)
