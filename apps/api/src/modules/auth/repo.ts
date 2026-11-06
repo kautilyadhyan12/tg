@@ -226,8 +226,8 @@ export type UndoneEmailChange =
   | { kind: "done"; oldEmail: string; userId: string; already: boolean };
 
 /** Undo this change, in ONE transaction: the account goes back to the address the link was sent to (an
- *  account deleted meanwhile comes back too), every sign-in and Google link on it ends, and the links of
- *  every later change stop working, so none of them can move it away again. */
+ *  account deleted meanwhile comes back too); every sign-in, Google link, password and waiting link or code
+ *  on it ends; and the links of every later change stop working, so none of them can move it away again. */
 export async function undoEmailChange(sql: Sql, tokenHash: string): Promise<UndoneEmailChange> {
   try {
     return await sql.begin(async (tx): Promise<UndoneEmailChange> => {
@@ -266,7 +266,22 @@ export async function undoEmailChange(sql: Sql, tokenHash: string): Promise<Undo
         await tx`UPDATE users SET email = NULL, password_hash = NULL, hash_algo = NULL WHERE id = ${holder.id}`;
         await tx`UPDATE refresh_tokens SET revoked_at = now() WHERE user_id = ${holder.id} AND revoked_at IS NULL`;
       }
-      await tx`UPDATE users SET email = ${change.old_email}, status = 'active', deleted_at = NULL WHERE id = ${change.user_id}`;
+      // Back on the old address, restored if deleted, with no password: sign-in is by code, and a password
+      // set through Forgot password while the stranger held the account would let them in again (item
+      // 19's second security re-check, H1-c). A name that is the stranger's address's first part goes back
+      // to the old address's, as moveEmail's rule the other way round (its Low).
+      await tx`
+        UPDATE users SET
+          email = ${change.old_email}, status = 'active', deleted_at = NULL, password_hash = NULL, hash_algo = NULL,
+          display_name = CASE
+            WHEN display_name = left(split_part(email::text, '@', 1), 100) THEN left(split_part(${change.old_email}, '@', 1), 100)
+            ELSE display_name
+          END
+        WHERE id = ${change.user_id}`;
+      // Every link and code waiting for the account: a reset link kept back, an unused verification, a
+      // change-email code. A used verification stays: it is the address's proof.
+      await tx`DELETE FROM one_time_tokens WHERE user_id = ${change.user_id} AND used_at IS NULL`;
+      await tx`DELETE FROM sign_in_codes WHERE user_id = ${change.user_id} AND used_at IS NULL`;
       await tx`DELETE FROM auth_identities WHERE user_id = ${change.user_id} AND provider = 'google'`;
       await tx`UPDATE refresh_tokens SET revoked_at = now() WHERE user_id = ${change.user_id} AND revoked_at IS NULL`;
       await tx`UPDATE email_changes SET undone_at = now(), note_next_try_at = NULL WHERE id = ${change.id}`;

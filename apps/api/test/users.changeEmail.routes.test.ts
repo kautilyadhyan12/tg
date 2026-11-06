@@ -57,6 +57,8 @@ d("change email (real Postgres)", { timeout: T }, () => {
     sendInUse: () => Promise.resolve(),
     sendChanged: () => Promise.resolve(),
   };
+  /** The newest Forgot password link each address was sent. */
+  const resetLinks = new Map<string, string>();
   /** The newest Undo this change link each old address was sent. */
   const undoLinks = new Map<string, string>();
   /** Old addresses whose "changed" note the provider refuses, until taken out. */
@@ -175,7 +177,10 @@ d("change email (real Postgres)", { timeout: T }, () => {
       redis,
       emailSender: {
         sendVerificationEmail: () => Promise.resolve(),
-        sendPasswordResetEmail: () => Promise.resolve(),
+        sendPasswordResetEmail: (to, _name, rawToken) => {
+          resetLinks.set(to.toLowerCase(), rawToken);
+          return Promise.resolve();
+        },
         sendSignInCodeEmail: (to, code) => {
           signInCodes.set(to.toLowerCase(), code);
           receive(to, "sign-in code");
@@ -866,6 +871,30 @@ d("change email (real Postgres)", { timeout: T }, () => {
     expect(undone.statusCode, undone.body).toBe(200);
     expect(signedIn.statusCode, signedIn.body).toBe(200);
     expect(JSON.parse(signedIn.body)).toMatchObject({ user: { id: val.userId }, isNewAccount: false });
+  });
+
+  it("a password set through Forgot password while the account sat at the stranger's address, and a reset link kept back, end with the Undo; the name goes back (second security re-check, H1-c)", async () => {
+    const wyn = await person("wyn");
+    const t6 = address("wyn-t6");
+    const PASSWORD = "a-Perfectly-fine-pw-1"; // dummy fixture, gitleaks:allow
+    expect((await change(wyn, t6)).statusCode).toBe(200);
+    expect(await nameOf(wyn.userId)).toBe(t6.split("@")[0]);
+    // The stranger sets a password from t6's inbox, then asks for a second link and keeps it.
+    expect((await inject("POST", "/v1/auth/forgot-password", {}, { email: t6 })).statusCode).toBe(200);
+    const reset = await inject("POST", "/v1/auth/reset-password", {}, { token: resetLinks.get(t6) ?? "", password: PASSWORD });
+    expect(reset.statusCode, reset.body).toBe(200);
+    expect((await inject("POST", "/v1/auth/login", {}, { email: t6, password: PASSWORD })).statusCode).toBe(200);
+    expect((await inject("POST", "/v1/auth/forgot-password", {}, { email: t6 })).statusCode).toBe(200);
+    const kept = resetLinks.get(t6) ?? "";
+
+    expect((await undo(tokenOf(undoLinks.get(wyn.email)))).statusCode).toBe(200);
+    expect((await inject("POST", "/v1/auth/login", {}, { email: wyn.email, password: PASSWORD })).statusCode).toBe(401);
+    const late = await inject("POST", "/v1/auth/reset-password", {}, { token: kept, password: PASSWORD });
+    expect([late.statusCode, errorOf(late)]).toEqual([400, "invalid_token"]);
+    expect((await inject("POST", "/v1/auth/login", {}, { email: wyn.email, password: PASSWORD })).statusCode).toBe(401);
+    expect(await nameOf(wyn.userId)).toBe(wyn.email.split("@")[0]);
+    // Her own sign-in by code opens her account.
+    expect((await codeSignIn(wyn.email)).userId).toBe(wyn.userId);
   });
 
   // The person's gyms read again: their page shows the address, and the name where it changed with it.
