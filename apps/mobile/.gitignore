@@ -1,8 +1,11 @@
 # Which folder's copy this is (one word from copies.json). Each folder has its own.
 .copy
 # Made by `expo prebuild` from app.config.ts; never edited by hand.
-android/
-ios/
+/android/
+/ios/
+# This app's own Android code (modules/, 37a-ii) is kept; what Gradle builds beside it is not.
+modules/*/android/build/
+modules/*/android/.cxx/
 .expo/
 # Firebase's file for the Android app (18b-i), from the kwazo project's console. Each folder copies it in.
 google-services.json

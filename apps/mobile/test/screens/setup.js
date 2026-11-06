@@ -293,13 +293,19 @@ jest.mock("expo-secure-store", () => {
 // reads what was asked of it; the points themselves are handed in by the test, as Android hands them
 // to the run's task.
 jest.mock("expo-location", () => {
-  const state = { services: true, granted: true, canAskAgain: true, accuracy: "fine", asked: 0, started: [], running: false, watching: 0 };
+  const state = { services: true, granted: true, canAskAgain: true, accuracy: "fine", asked: 0, started: [], running: false, watching: 0, acceptsTurnOn: true };
   const answer = () => ({ granted: state.granted, canAskAgain: state.canAskAgain, status: state.granted ? "granted" : "denied", android: { accuracy: state.granted ? state.accuracy : "none" } });
   return {
     state,
     Accuracy: { BestForNavigation: 6 },
     ActivityType: { Fitness: 3 },
     hasServicesEnabledAsync: () => Promise.resolve(state.services),
+    // Google's Turn on box: a test sets whether the person accepts it.
+    enableNetworkProviderAsync: () => {
+      if (!state.acceptsTurnOn) return Promise.reject(new Error("declined"));
+      state.services = true;
+      return Promise.resolve();
+    },
     getForegroundPermissionsAsync: () => Promise.resolve(answer()),
     requestForegroundPermissionsAsync: () => {
       state.asked += 1;
@@ -318,6 +324,31 @@ jest.mock("expo-location", () => {
     watchPositionAsync: () => {
       state.watching += 1;
       return Promise.resolve({ remove: () => { state.watching -= 1; } });
+    },
+  };
+});
+// The run's voice (ROADMAP Stage 5 37a-ii), this app's own Android code: a test reads what was said,
+// whether it was told to stop, sets what the phone answers ("ok", "off", "noEnglish"), and
+// `missing` stands for a phone with no such code (an iPhone, until item 21).
+jest.mock("../../src/screens/running/runVoiceNative", () => {
+  const actual = jest.requireActual("../../src/screens/running/runVoiceNative");
+  const voice = { said: [], quieted: 0, canSpeak: "ok", missing: false };
+  const native = {
+    say: (text) => {
+      voice.said.push(text);
+      return Promise.resolve();
+    },
+    quiet: () => {
+      voice.quieted += 1;
+      return Promise.resolve();
+    },
+    check: () => Promise.resolve(voice.canSpeak),
+  };
+  return {
+    voice,
+    speakState: actual.speakState,
+    get runVoiceNative() {
+      return voice.missing ? null : native;
     },
   };
 });
