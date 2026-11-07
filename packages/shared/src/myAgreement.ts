@@ -46,5 +46,4 @@ export type SignMyAgreementResponse = z.infer<typeof signMyAgreementResponseSche
 export const MY_AGREEMENT_WORDS = {
   paid_by_other: "Someone else pays for this membership, so its agreement is signed at the front desk.",
   minor: "As you're under 18, a parent or guardian signs this agreement at the front desk.",
-  shared: "Your membership agreement is signed at the front desk.",
 } as const;

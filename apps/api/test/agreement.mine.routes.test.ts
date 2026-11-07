@@ -81,6 +81,8 @@ d("a member signs their own membership agreement in the app (real Postgres)", { 
   // Noon in Chicago, 7 November 2026.
   const clock = new Date("2026-11-07T18:00:00Z");
   const copies: AgreementCopyLetter[] = [];
+  /** How long the email service takes to answer a copy, for presses at once. */
+  let copyDelayMs = 0;
   let app: App | undefined;
   const api = (): App => {
     if (app === undefined) throw new Error("beforeAll did not build the app");
@@ -233,9 +235,9 @@ d("a member signs their own membership agreement in the app (real Postgres)", { 
       redis,
       orgs: { now: () => clock },
       agreementEmailSender: {
-        sendAgreementCopy: (letter) => {
+        sendAgreementCopy: async (letter) => {
+          if (copyDelayMs > 0) await new Promise((resolve) => setTimeout(resolve, copyDelayMs));
           copies.push(letter);
-          return Promise.resolve();
         },
         sendAgreementLink: () => Promise.resolve(),
       },
@@ -330,9 +332,9 @@ d("a member signs their own membership agreement in the app (real Postgres)", { 
 
     // My membership says the same, for her own membership only.
     const ashaView = await myMembership(lotus.id, asha);
-    expect(ashaView.memberships.find((m) => m.id === ashaGold)?.agreement).toEqual({ state: "signed", signedOn: "2026-11-07", signedName: "Asha Walk", view: true });
+    expect(ashaView.memberships.find((m) => m.id === ashaGold)?.agreement).toEqual({ state: "signed", signedOn: "2026-11-07", signedName: "Asha Walk", view: true, why: null });
     const benView = await myMembership(lotus.id, ben);
-    expect(benView.memberships.find((m) => m.id === benGold)?.agreement).toEqual({ state: "to_sign", signedOn: null, signedName: null, view: false });
+    expect(benView.memberships.find((m) => m.id === benGold)?.agreement).toEqual({ state: "to_sign", signedOn: null, signedName: null, view: false, why: null });
   });
 
   it("a membership somebody else pays for, or a record whose date of birth says under 18, is signed at the front desk; a shared record is nobody's", async () => {
@@ -360,7 +362,7 @@ d("a member signs their own membership agreement in the app (real Postgres)", { 
     const box = membershipAgreementResponseSchema.parse(JSON.parse((await inject("GET", boxUrl, gym.owner.cookies)).body));
     if (box.agreement === null || box.factsKey === null) throw new Error("the desk has nothing to sign");
     expect((await inject("POST", `${boxUrl}/sign`, gym.owner.cookies, { agreementId: box.agreement.id, factsKey: box.factsKey, signer: "person", name: "Dev Rao" })).statusCode).toBe(200);
-    expect((await myMembership(gym.id, dev)).memberships.find((m) => m.id === devGold)?.agreement).toEqual({ state: "signed", signedOn: "2026-11-07", signedName: "Dev Rao", view: false });
+    expect((await myMembership(gym.id, dev)).memberships.find((m) => m.id === devGold)?.agreement).toEqual({ state: "signed", signedOn: "2026-11-07", signedName: "Dev Rao", view: false, why: null });
     const afterDesk = await page(gym.id, devGold, dev);
     expect([afterDesk.state, afterDesk.signed]).toEqual(["at_desk", null]);
 
@@ -425,5 +427,77 @@ d("a member signs their own membership agreement in the app (real Postgres)", { 
     expect([bad.statusCode, errorOf(bad).error]).toEqual([400, "validation_error"]);
     const stranger = await inject("GET", mineUrl(gym.id, kimGold), {});
     expect(stranger.statusCode).toBe(401);
+  });
+
+  it("two presses at the same instant write one signature and one copy, and both say the copy went", async () => {
+    const gym = await makeGym("Twice Mine Gym", true);
+    const zoe = await member(gym, "Zoe Park");
+    const gold = await give(gym, zoe.entryId);
+    const p = await page(gym.id, gold, zoe);
+    copyDelayMs = 300;
+    const before = copies.length;
+    const both = await Promise.all([sign(gym.id, gold, zoe, bodyOf(p, "Zoe Park")), sign(gym.id, gold, zoe, bodyOf(p, "Zoe Park"))]);
+    copyDelayMs = 0;
+    expect(both.map((r) => r.statusCode)).toEqual([200, 200]);
+    expect(both.map((r) => signMyAgreementResponseSchema.parse(JSON.parse(r.body)).emailed)).toEqual(["sent", "sent"]);
+    expect((await signatures(gym.id)).length).toBe(1);
+    expect(copies.length).toBe(before + 1);
+  });
+
+  it("only a membership running or still to start is asked for: an upcoming one is, a cancelled one is not", async () => {
+    const gym = await makeGym("Dates Mine Gym", true);
+    const ivy = await member(gym, "Ivy Chen");
+    const jon = await member(gym, "Jon Chen");
+    const later = await give(gym, ivy.entryId);
+    const gone = await give(gym, jon.entryId);
+    await sql`UPDATE gym_held_memberships SET starts_on = '2026-12-01' WHERE gym_id = ${gym.id} AND id = ${later}`;
+    await sql`UPDATE gym_held_memberships SET status = 'cancelled', cancelled_on = '2026-11-07' WHERE gym_id = ${gym.id} AND id = ${gone}`;
+    expect((await card(gym.id, ivy)).agreementsToSign.map((a) => a.membershipId)).toEqual([later]);
+    expect((await myMembership(gym.id, ivy)).memberships.find((m) => m.id === later)?.agreement?.state).toBe("to_sign");
+    expect((await card(gym.id, jon)).agreementsToSign).toEqual([]);
+    expect((await myMembership(gym.id, jon)).memberships.find((m) => m.id === gone)?.agreement ?? null).toBeNull();
+    expect((await page(gym.id, gone, jon)).state).toBe("none");
+  });
+
+  it("a teenager's My membership says why it is signed at the desk, and the statement refuses a date of birth changed since it was read", async () => {
+    const gym = await makeGym("Teen Mine Gym", true);
+    const tom = await member(gym, "Tom Lee", "2011-05-01");
+    const gold = await give(gym, tom.entryId);
+    expect((await myMembership(gym.id, tom)).memberships.find((m) => m.id === gold)?.agreement).toEqual({ state: "at_desk", signedOn: null, signedName: null, view: false, why: "minor" });
+
+    // An adult's record whose date of birth staff change between the under-18 check and the write: nothing is written.
+    const ada = await member(gym, "Ada Moss", "1990-01-01");
+    const adaGold = await give(gym, ada.entryId);
+    const p = await page(gym.id, adaGold, ada);
+    if (p.agreement === null || p.facts === null) throw new Error("nothing to sign");
+    await sql`UPDATE gym_member_list_entries SET date_of_birth = '2012-01-01' WHERE gym_id = ${gym.id} AND id = ${ada.entryId}`;
+    const input = { gymId: gym.id, agreementId: p.agreement.id, entryId: ada.entryId, membershipId: adaGold, dateOfBirth: "1990-01-01", signer: "person" as const, name: "Ada Moss", facts: p.facts, witnessedBy: null, at: clock, appUserId: ada.userId };
+    expect(await agreementRepo.signAtDesk(sql, input)).toBeNull();
+    expect(await signatures(gym.id)).toEqual([]);
+  });
+
+  it("a deleted second account on the record does not stop its member signing", async () => {
+    const gym = await makeGym("Gone Mine Gym", true);
+    const kai = await member(gym, "Kai Ward");
+    const gold = await give(gym, kai.entryId);
+    const old = await signedIn("Kai Old");
+    await holds(gym, kai.entryId, old);
+    await sql`UPDATE users SET status = 'deleted' WHERE id = ${old.userId}`;
+    expect((await card(gym.id, kai)).agreementsToSign.map((a) => a.membershipId)).toEqual([gold]);
+    const p = await page(gym.id, gold, kai);
+    expect((await sign(gym.id, gold, kai, bodyOf(p, "Kai Ward"))).statusCode).toBe(200);
+    expect((await signatures(gym.id)).map((r) => r.signed_via)).toEqual(["app"]);
+  });
+
+  it("presses on a membership that is not theirs spend the member's own limit too", async () => {
+    const gym = await makeGym("Limit Mine Gym", true);
+    const lea = await member(gym, "Lea Fox");
+    const other = await member(gym, "Max Fox");
+    const theirs = await give(gym, other.entryId);
+    const body = { agreementId: randomUUID(), factsKey: "a".repeat(64), name: "Lea Fox" };
+    const answers: number[] = [];
+    for (let i = 0; i < 21; i += 1) answers.push((await sign(gym.id, theirs, lea, body)).statusCode);
+    expect(answers.slice(0, 20).every((s) => s === 404)).toBe(true);
+    expect(answers[20]).toBe(429);
   });
 });

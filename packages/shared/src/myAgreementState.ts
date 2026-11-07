@@ -17,6 +17,8 @@ export const myMembershipAgreementSchema = z
     signedOn: daySchema.nullable(),
     signedName: z.string().nullable(),
     view: z.boolean(),
+    /** With `at_desk`: why, so the member knows who signs it there. */
+    why: atDeskWhySchema.nullable().default(null),
   })
   .strict();
 export type MyMembershipAgreement = z.infer<typeof myMembershipAgreementSchema>;

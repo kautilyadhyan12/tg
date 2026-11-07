@@ -24,6 +24,8 @@ export interface Own {
   today: string;
   /** Why it is signed at the front desk; null where the member signs in the app. */
   atDesk: AtDeskWhy | null;
+  /** The date of birth that decision read: the signature is written only while the record still has it. */
+  dateOfBirth: string | null;
 }
 
 /** The reader's own record at a business: the one their account alone holds. Null where they hold none, or share it. */
@@ -34,7 +36,7 @@ export async function ownRecord(sql: Sql, gymId: string, userId: string, now: Da
   if (org === null || org.status !== "active" || dateOfBirth === undefined) return null;
   const today = dayInTz(now, org.timezone);
   const atDesk: AtDeskWhy | null = payer !== null ? "paid_by_other" : isUnder18(dateOfBirth, today) === true ? "minor" : null;
-  return { org, entryId: reader.entryId, today, atDesk };
+  return { org, entryId: reader.entryId, today, atDesk, dateOfBirth };
 }
 
 /** For each of these businesses the caller is a member of, their memberships whose agreement they may sign in the app
@@ -70,9 +72,9 @@ export async function myMembershipAgreements(
   for (const m of memberships) {
     const s = signed.get(m.id);
     if (s !== undefined) {
-      states.set(m.id, { state: "signed", signedOn: dayInTz(s.at, timezone), signedName: s.name, view: atDesk !== "paid_by_other" });
+      states.set(m.id, { state: "signed", signedOn: dayInTz(s.at, timezone), signedName: s.name, view: atDesk !== "paid_by_other", why: null });
     } else if (asked.has(m.id) && m.signable) {
-      states.set(m.id, { state: atDesk === null ? "to_sign" : "at_desk", signedOn: null, signedName: null, view: false });
+      states.set(m.id, { state: atDesk === null ? "to_sign" : "at_desk", signedOn: null, signedName: null, view: false, why: atDesk });
     }
   }
   return states;

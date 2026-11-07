@@ -41,13 +41,21 @@ async function ownMembership(deps: AgreementDeps, userId: string, gymId: string,
   return { ...own, email: record.email };
 }
 
-/** A second press: what became of the first one's copy, and nothing sent. */
-const again = (signed: repo.SignatureRow, email: string | null): SignMyAgreementResponse =>
-  signMyAgreementResponseSchema.parse({ signed: signedOf(signed), emailed: signed.emailedAt !== null ? "sent" : email === null ? "no_email" : "failed" });
+/** How long after a signature its copy may still be on its way (`claimCopy` claims one a minute). */
+const COPY_SENDING_MS = 60_000;
+
+/** A second press: what became of the first one's copy, and nothing sent. A copy not marked sent within a minute of
+ *  the signature is the first press's, still sending. */
+function again(signed: repo.SignatureRow, email: string | null, at: Date): SignMyAgreementResponse {
+  const sending = signed.emailedAt === null && at.getTime() - signed.at.getTime() < COPY_SENDING_MS;
+  const emailed = email === null ? "no_email" : signed.emailedAt !== null || sending ? "sent" : "failed";
+  return signMyAgreementResponseSchema.parse({ signed: signedOf(signed), emailed });
+}
 
 export async function getMyAgreement(deps: AgreementDeps, userId: string, gymId: string, membershipId: string, limit: Limit): Promise<MyAgreementResponse | null> {
-  const own = await ownMembership(deps, userId, gymId, membershipId);
+  // The limit first: a membership that is not theirs costs a read too.
   if (!(await limit())) return null;
+  const own = await ownMembership(deps, userId, gymId, membershipId);
   const base = { gymId, membershipId, gymName: own.org.name, timezone: own.org.timezone, why: null, agreement: null, facts: null, factsKey: null, signed: null };
   const [now, signed] = await Promise.all([current(deps, own.org, own.entryId, membershipId, own.today), repo.signatureOf(deps.sql, gymId, membershipId)]);
   const membershipName = now.typeName ?? (await membershipNameOf(deps.sql, gymId, membershipId));
@@ -86,13 +94,13 @@ export async function signMyAgreement(
   body: SignMyAgreementBody,
   limit: Limit,
 ): Promise<SignMyAgreementResponse | null> {
-  const own = await ownMembership(deps, userId, gymId, membershipId);
   if (!(await limit())) return null;
+  const own = await ownMembership(deps, userId, gymId, membershipId);
   const { org } = own;
   const existing = await repo.signatureOf(deps.sql, gymId, membershipId);
   if (existing !== null) {
     if (own.atDesk === "paid_by_other") throw new OrgsError(409, "agreement_at_desk", MY_AGREEMENT_WORDS.paid_by_other);
-    return again(existing, own.email);
+    return again(existing, own.email, deps.now());
   }
   if (own.atDesk !== null) throw new OrgsError(409, "agreement_at_desk", MY_AGREEMENT_WORDS[own.atDesk]);
   const at = deps.now();
@@ -107,7 +115,8 @@ export async function signMyAgreement(
       agreementId: body.agreementId,
       entryId: own.entryId,
       membershipId,
-      dateOfBirth: now.record.dateOfBirth,
+      // The date of birth the under-18 decision read: changed since, nothing is written.
+      dateOfBirth: own.dateOfBirth,
       signer: "person",
       name: body.name,
       facts,
@@ -123,7 +132,7 @@ export async function signMyAgreement(
   if (written === null) {
     const signed = await repo.signatureOf(deps.sql, gymId, membershipId);
     // Another press of theirs signed first.
-    if (signed !== null) return again(signed, own.email);
+    if (signed !== null) return again(signed, own.email, deps.now());
     const agreement = await askedOf(deps.sql, gymId, membershipId);
     if (agreement === null) throw new OrgsError(409, "agreement_not_in_use", AGREEMENT_WORDS.agreement_not_in_use(org.name));
     if (agreement.row.id !== body.agreementId) throw new OrgsError(409, "agreement_changed", AGREEMENT_WORDS.agreement_changed(org.name));
