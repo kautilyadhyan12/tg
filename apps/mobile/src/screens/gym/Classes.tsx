@@ -19,6 +19,7 @@ import { Sheet } from "../../look/Sheet";
 import { Txt } from "../../look/Txt";
 import { useSession } from "../../session/SessionProvider";
 import { NO_ANSWER } from "../SignIn";
+import { SignToBook } from "./Agreement";
 import {
   EARLIER_CANCELLED,
   MORE_CLASSES,
@@ -74,21 +75,21 @@ const phoneZone = () => {
 };
 
 /** The page over the Gym tab; closed while `place` is null. */
-export function ClassesPage({ place, onClose }: { place: ClassesPlace | null; onClose: () => void }) {
+export function ClassesPage({ place, onClose, onSignAgreement = null, readAgain = 0 }: { place: ClassesPlace | null; onClose: () => void; onSignAgreement?: (() => void) | null; readAgain?: number }) {
   const insets = useSafeAreaInsets();
   return (
     <Modal visible={place !== null} animationType="slide" statusBarTranslucent navigationBarTranslucent onRequestClose={onClose}>
       <View testID="classes-page" accessibilityViewIsModal style={[styles.page, { paddingTop: insets.top }]}>
-        {place === null ? null : <ClassesBody key={`${place.id}:${place.sessionId ?? ""}`} place={place} onClose={onClose} bottom={insets.bottom} />}
+        {place === null ? null : <ClassesBody key={`${place.id}:${place.sessionId ?? ""}`} place={place} onClose={onClose} bottom={insets.bottom} onSignAgreement={onSignAgreement} readAgain={readAgain} />}
       </View>
     </Modal>
   );
 }
 
 type Held = { kind: "loading" } | { kind: "failed"; status: number | null } | { kind: "ok"; list: MemberClassesResponse };
-type Said = { text: string; bad: boolean };
+type Said = { text: string; bad: boolean; sign?: boolean };
 
-function ClassesBody({ place, onClose, bottom }: { place: ClassesPlace; onClose: () => void; bottom: number }) {
+function ClassesBody({ place, onClose, bottom, onSignAgreement, readAgain }: { place: ClassesPlace; onClose: () => void; bottom: number; onSignAgreement: (() => void) | null; readAgain: number }) {
   const { session } = useSession();
   const [week, setWeek] = useState(place.week ?? 0);
   const [held, setHeld] = useState<Held>({ kind: "loading" });
@@ -149,6 +150,16 @@ function ClassesBody({ place, onClose, bottom }: { place: ClassesPlace; onClose:
     loadNow.current = load;
   }, [load]);
 
+  // The membership agreement opened from here was closed (20c): what a class says now is read again, and what the
+  // last press was told is stale.
+  // Only a closing while this page is open: the count it opened with is already in the first read.
+  const openedWith = useRef(readAgain);
+  useEffect(() => {
+    if (readAgain === openedWith.current) return;
+    setSaid({});
+    void loadNow.current(true);
+  }, [readAgain]);
+
   useEffect(() => {
     live.current = true;
     void load(false);
@@ -202,7 +213,7 @@ function ClassesBody({ place, onClose, bottom }: { place: ClassesPlace; onClose:
       // A key kept from a press whose booking was cancelled since is answered with that cancelled booking.
       const status = answer.data.booking.mine?.status;
       if (status === undefined || status === "cancelled" || status === "late_cancelled") say(c.sessionId, { text: EARLIER_CANCELLED, bad: true });
-    } else say(c.sessionId, { text: answer.message, bad: true });
+    } else say(c.sessionId, { text: answer.message, bad: true, sign: answer.error === "agreement_not_signed" });
     // One booking changes what the others say (a week's bookings, a pack's last class).
     void loadNow.current(true);
   };
@@ -343,6 +354,7 @@ function ClassesBody({ place, onClose, bottom }: { place: ClassesPlace; onClose:
                     busy={busyId === c.sessionId}
                     blocked={busyId !== null && busyId !== c.sessionId}
                     said={said[c.sessionId]}
+                    onSignAgreement={onSignAgreement}
                     onTake={(action) => {
                       if (bookAsk(c, action, place.clockFormat, Date.now(), place.name) === null) void take(c, action);
                       else setConfirming({ c, action });
@@ -438,11 +450,13 @@ interface ClassBoxProps {
   /** Another class's press is on its way: this one's buttons wait for it. */
   blocked: boolean;
   said: Said | undefined;
+  /** Opens the membership agreement, where the business stops bookings until it is signed and it can be signed here. */
+  onSignAgreement: (() => void) | null;
   onTake: (action: Take) => void;
   onGive: () => void;
 }
 
-function ClassBox({ c, clock, gym, busy, blocked, said, onTake, onGive }: ClassBoxProps) {
+function ClassBox({ c, clock, gym, busy, blocked, said, onSignAgreement, onTake, onGive }: ClassBoxProps) {
   const { take, give } = actionsOf(c);
   const mine = mineText(c, Date.now());
   const places = placesText(c);
@@ -450,6 +464,8 @@ function ClassBox({ c, clock, gym, busy, blocked, said, onTake, onGive }: ClassB
   const fees = feeLines(c, clock, Date.now(), gym);
   const online = onlineText(c, Date.now());
   const when = whenText(c, clock);
+  // The business stops bookings until the agreement is signed, and it can be signed here: one line and its button.
+  const signHere = onSignAgreement !== null && (c.can.why === "agreement_not_signed" || said?.sign === true) ? onSignAgreement : null;
   return (
     <Card testID={`class-${c.sessionId}`} style={styles.box}>
       <View style={styles.row}>
@@ -480,8 +496,9 @@ function ClassBox({ c, clock, gym, busy, blocked, said, onTake, onGive }: ClassB
           }}
         />
       )}
-      {why === null ? null : <Txt kind="small">{why}</Txt>}
-      {said === undefined ? null : (
+      {why === null || (signHere !== null && c.can.why === "agreement_not_signed") ? null : <Txt kind="small">{why}</Txt>}
+      {signHere === null ? null : <SignToBook onSign={signHere} />}
+      {said === undefined || (signHere !== null && said.sign === true) ? null : (
         <Txt kind="small" colour={said.bad ? "badText" : "goodText"}>
           {said.text}
         </Txt>

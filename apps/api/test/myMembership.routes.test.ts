@@ -348,6 +348,8 @@ d("my membership: a member's own memberships, payments and receipts (real Postgr
         olderPeriodsNotShown: 0,
         fees: [],
         terms: [],
+        // The gym asks for no agreement (20c).
+        agreement: null,
       },
     ]);
     expect(numbersIn(his)).toEqual([aaravBought.receipt]);

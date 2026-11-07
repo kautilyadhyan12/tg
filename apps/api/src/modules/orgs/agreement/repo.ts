@@ -240,6 +240,22 @@ export async function signedAtOf(sql: SqlOrTx, gymId: string, membershipIds: rea
   return new Map(rows.map((row) => [row.held_membership_id, row.signed_at]));
 }
 
+/** These memberships' signatures: when each was signed, and the name typed (My membership, 20c). */
+export async function signedNamesOf(sql: SqlOrTx, gymId: string, membershipIds: readonly string[]): Promise<Map<string, { at: Date; name: string }>> {
+  if (membershipIds.length === 0) return new Map();
+  const rows = await sql<{ held_membership_id: string; signed_at: Date; signed_name: string }[]>`
+    SELECT held_membership_id, signed_at, signed_name FROM gym_agreement_signatures
+    WHERE gym_id = ${gymId} AND held_membership_id = ANY(${[...membershipIds]}::uuid[])`;
+  return new Map(rows.map((row) => [row.held_membership_id, { at: row.signed_at, name: row.signed_name }]));
+}
+
+/** A record's date of birth, for the under-18 check; undefined where it is not on the list today. */
+export async function dateOfBirthOf(sql: SqlOrTx, gymId: string, entryId: string): Promise<string | null | undefined> {
+  const rows = await sql<{ date_of_birth: string | null }[]>`
+    SELECT date_of_birth::text AS date_of_birth FROM gym_member_list_entries WHERE gym_id = ${gymId} AND id = ${entryId} AND former_at IS NULL`;
+  return rows[0] === undefined ? undefined : rows[0].date_of_birth;
+}
+
 export interface SignatureRow {
   id: string;
   name: string;
@@ -362,13 +378,17 @@ export async function signAtDesk(
     at: Date;
     /** Signed from the emailed link: the SHA-256 of its token. */
     linkTokenHash?: string;
+    /** Signed by the member in the app (20c): their account, which must still hold the record alone, with nobody
+     *  paying for it, when it is written. */
+    appUserId?: string;
   },
 ): Promise<string | null> {
   const hash = input.linkTokenHash ?? null;
+  const appUser = input.appUserId ?? null;
   const rows = await sql<{ id: string }[]>`
     INSERT INTO gym_agreement_signatures (gym_id, agreement_id, held_membership_id, signer, signed_name, facts, witnessed_by, signed_at, signed_via)
     SELECT a.gym_id, a.id, h.id, ${input.signer}, ${input.name}, ${sql.json(input.facts.map((fact) => ({ label: fact.label, value: fact.value })))}, ${input.witnessedBy}, ${input.at},
-      ${hash === null ? "desk" : "link"}
+      ${hash !== null ? "link" : appUser !== null ? "app" : "desk"}
     FROM gym_agreements a
     JOIN gym_member_list_entries e ON e.gym_id = a.gym_id AND e.id = ${input.entryId} AND e.former_at IS NULL
     JOIN gym_held_memberships h ON h.gym_id = a.gym_id AND h.id = ${input.membershipId} AND h.entry_id = e.id AND h.status = 'active'
@@ -380,6 +400,11 @@ export async function signAtDesk(
       AND (${hash}::text IS NULL OR EXISTS (
         SELECT 1 FROM gym_agreement_sign_links l
         WHERE l.gym_id = h.gym_id AND l.held_membership_id = h.id AND l.token_hash = ${hash}::text AND ${linkWorks(sql, input.at)}))
+      AND (${appUser}::uuid IS NULL OR (
+        EXISTS (SELECT 1 FROM gym_members m WHERE m.gym_id = e.gym_id AND m.entry_id = e.id AND m.user_id = ${appUser}::uuid AND m.removed_at IS NULL)
+        AND (SELECT count(*) FROM gym_members o JOIN users u ON u.id = o.user_id AND u.status = 'active'
+             WHERE o.gym_id = e.gym_id AND o.entry_id = e.id AND o.removed_at IS NULL) = 1
+        AND NOT EXISTS (SELECT 1 FROM gym_member_payers p WHERE p.gym_id = e.gym_id AND p.entry_id = e.id)))
     ON CONFLICT (held_membership_id) DO NOTHING
     RETURNING id`;
   return rows[0]?.id ?? null;
