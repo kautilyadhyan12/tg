@@ -256,7 +256,8 @@ export function fastestStretch(segments: readonly (readonly RunMark[])[], metres
   let best = Infinity;
   const keep = (ms: number) => {
     const seconds = ms / 1000;
-    if (seconds > 0 && metres / seconds <= recordSpeed(seconds) && seconds < best) best = seconds;
+    // The record check only for a stretch that would be the best so far: it is the costly part.
+    if (seconds > 0 && seconds < best && metres / seconds <= recordSpeed(seconds)) best = seconds;
   };
   for (const seg of segments) {
     const n = seg.length;
