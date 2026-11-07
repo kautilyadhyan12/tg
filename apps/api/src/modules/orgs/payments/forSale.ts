@@ -14,6 +14,9 @@ import { dayInTz } from "../../gamification/streak.js";
 import { factsKeyOf } from "../agreement/factsKey.js";
 import { gymContact, typeDocumentSql } from "../agreement/repo.js";
 import { billDayOf } from "../memberships/billsSql.js";
+import { appMemberValues } from "../memberList/placeOnList.js";
+import { detailsRecordOf } from "./appPurchaseHome.js";
+import { memberContact } from "../memberList/repo.js";
 import { readerOf } from "../myMembership/repo.js";
 import { friendGiftOffer } from "../referrals/friendGift.js";
 import { waitingGiftFor } from "../referrals/memberGiftRepo.js";
@@ -45,10 +48,10 @@ async function wordingsOf(sql: Sql, gymId: string): Promise<Map<string, ForSaleL
   return found;
 }
 
-/** The record's name and date of birth. */
+/** The record's name and date of birth; a past member's too, whose record comes back on the list by what they buy. */
 async function personOf(sql: Sql, gymId: string, entryId: string): Promise<{ fullName: string; dateOfBirth: string | null } | null> {
   const [row] = await sql<{ full_name: string; date_of_birth: string | null }[]>`
-    SELECT full_name, date_of_birth::text AS date_of_birth FROM gym_member_list_entries WHERE gym_id = ${gymId} AND id = ${entryId} AND former_at IS NULL`;
+    SELECT full_name, date_of_birth::text AS date_of_birth FROM gym_member_list_entries WHERE gym_id = ${gymId} AND id = ${entryId}`;
   return row === undefined ? null : { fullName: row.full_name.trim(), dateOfBirth: row.date_of_birth };
 }
 
@@ -63,13 +66,20 @@ export async function readForSale(deps: PaymentsDeps, userId: string, gymId: str
   const connection = deps.square === null ? null : await repo.readConnection(deps.sql, gymId, deps.square.environment);
   if (stateOf(deps.square, gym, connection) !== "ready" || !(await gymHasLivePlan(deps.sql, gymId))) return empty;
   const today = dayInTz(deps.now(), gym.timezone);
-  const own = record === "own" && reader.entryId !== null ? reader.entryId : null;
+  // A member not on the list yet: the record already holding their very details, which nobody holds in the app, is read as
+  // theirs, as Buy checks it (round one H1); with none, they are named as the record made for them will name them.
+  const buyer = record === "none" ? await memberContact(deps.sql, gymId, userId) : null;
+  const details =
+    buyer === null || buyer.email === null
+      ? null
+      : await deps.sql.begin(async (tx) => await detailsRecordOf(tx, gymId, { name: appMemberValues(buyer).fullName, email: buyer.email ?? "", phone: buyer.phone }));
+  const own = record === "own" && reader.entryId !== null ? reader.entryId : details !== null && details.holders.length === 0 ? details.id : null;
   const [lines, contact, billDay, taxIncluded, person, wordings, friendOffer, memberGift] = await Promise.all([
     soldInApp(deps.sql, gymId),
     gymContact(deps.sql, gymId),
     billDayOf(deps.sql, gymId),
     taxIncludedOf(deps.sql, gymId),
-    own === null ? Promise.resolve(null) : personOf(deps.sql, gymId, own),
+    own !== null ? personOf(deps.sql, gymId, own) : Promise.resolve(buyer === null ? null : { fullName: appMemberValues(buyer).fullName, dateOfBirth: null }),
     wordingsOf(deps.sql, gymId),
     // The gifts Add membership fills in for this record (18k-iii-a).
     own === null ? Promise.resolve(null) : friendGiftOffer(deps.sql, gymId, own, today),
