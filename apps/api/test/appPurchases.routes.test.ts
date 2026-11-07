@@ -481,8 +481,8 @@ d("Buy in the app: given once, on their own record, only for what Square took (r
   });
 
   it("round one: a day pass is never paid once it is over; who may buy is asked under the lock; deleting waits; a second signature is never swapped", async () => {
-    // 23:40 in Chicago (05:40 UTC): a day pass's page closes at 23:55, before its day ends, never at 23:55 + 15 minutes.
-    clock = new Date("2026-11-11T05:40:00Z");
+    // 23:42 in Chicago (05:42 UTC): a day pass's page closes at 23:55, before its day ends, never 15 minutes on at 23:57.
+    clock = new Date("2026-11-11T05:42:00Z");
     const acct = account(`ABR1${uniq().slice(-6)}`);
     const gym = await makeGym("App Buy Round One", acct);
     await agreementOn(gym);
