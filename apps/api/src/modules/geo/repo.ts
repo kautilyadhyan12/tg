@@ -7,7 +7,7 @@
 // (getLiveGymId duplicated from nutrition/repo.ts — a cross-module repo import
 // would violate R7.1).
 import type { RunClimb } from "@app/shared";
-import type { Sql } from "postgres";
+import type { Sql, TransactionSql } from "postgres";
 import { ORS_ROUTE_COST_MICRO } from "./cost.js";
 
 export interface RunRow {
@@ -19,6 +19,24 @@ export interface RunRow {
   kcalPoint: number | null;
   source: string;
   polyline: string | null;
+  // ROADMAP 37c-i.
+  name: string | null;
+  elapsedS: number | null;
+  climbM: number | null;
+  shape: string | null;
+  /** The day it began in the person's own time zone, YYYY-MM-DD. */
+  day: string;
+  /** What the shape is made from while it has none yet: the saved line and its splits' starts. */
+  shapeFrom: { polyline: string; splits: unknown } | null;
+}
+
+/** A run's own page: the summary's row and what its page shows besides. */
+export interface RunDetailRow extends RunRow {
+  splits: unknown;
+  effort: number | null;
+  note: string | null;
+  leftOutM: number | null;
+  leftOutS: number | null;
 }
 
 export interface SavedRouteRow {
@@ -38,6 +56,21 @@ interface RunDbRow {
   kcal_point: number | null;
   source: string;
   polyline: string | null;
+  name: string | null;
+  elapsed_s: number | null;
+  climb_m: number | null;
+  shape: string | null;
+  day: string;
+  shape_polyline: string | null;
+  shape_splits: unknown;
+}
+
+interface RunDetailDbRow extends RunDbRow {
+  splits: unknown;
+  effort: number | null;
+  note: string | null;
+  left_out_m: number | null;
+  left_out_s: number | null;
 }
 
 interface SavedRouteDbRow {
@@ -57,6 +90,21 @@ const toRun = (r: RunDbRow): RunRow => ({
   kcalPoint: r.kcal_point,
   source: r.source,
   polyline: r.polyline,
+  name: r.name,
+  elapsedS: r.elapsed_s,
+  climbM: r.climb_m,
+  shape: r.shape,
+  day: r.day,
+  shapeFrom: r.shape === null && r.shape_polyline !== null ? { polyline: r.shape_polyline, splits: r.shape_splits } : null,
+});
+
+const toRunDetail = (r: RunDetailDbRow): RunDetailRow => ({
+  ...toRun(r),
+  splits: r.splits,
+  effort: r.effort,
+  note: r.note,
+  leftOutM: r.left_out_m,
+  leftOutS: r.left_out_s,
 });
 
 const toSavedRoute = (r: SavedRouteDbRow): SavedRouteRow => ({
@@ -69,21 +117,79 @@ const toSavedRoute = (r: SavedRouteDbRow): SavedRouteRow => ({
 
 // ── runs (read-only; record/sync = P5) ──────────────────────────────────────
 
+/** A page of the person's runs, newest first, from the cursor, or from the end of the day `upTo` of
+ *  their own time zone (`timeZone`, a safeTimeZone-validated IANA name, always a parameterized value). */
 export async function listRuns(
   sql: Sql,
   userId: string,
   limit: number,
   cursor: { at: Date; id: string } | null,
+  timeZone: string,
+  upTo: string | null = null,
 ): Promise<RunRow[]> {
-  // Summary read — polyline deliberately excluded (sensitive; detail-only).
+  // Summary read: the saved line is never sent, only read here to make a shape for a run that has none
+  // yet (saved before 37c-i), once.
   const rows = await sql<RunDbRow[]>`
-    SELECT id, started_at, duration_s, distance_m, route_name, kcal_point, source, NULL AS polyline
+    SELECT id, started_at, duration_s, distance_m, route_name, kcal_point, source, NULL AS polyline,
+           name, elapsed_s, climb_m, shape, to_char(started_at AT TIME ZONE ${timeZone}, 'YYYY-MM-DD') AS day,
+           CASE WHEN shape IS NULL THEN polyline END AS shape_polyline,
+           CASE WHEN shape IS NULL THEN splits END AS shape_splits
     FROM runs
     WHERE user_id = ${userId}
       AND (${cursor === null} OR (started_at, id) < (${cursor?.at ?? null}, ${cursor?.id ?? null}))
+      AND (${upTo === null} OR started_at < ((${upTo}::date + 1)::timestamp AT TIME ZONE ${timeZone}))
     ORDER BY started_at DESC, id DESC
     LIMIT ${limit + 1}`;
   return rows.map(toRun);
+}
+
+/** Every run the person has, counted, and its metres. */
+export async function getRunCount(sql: Sql, userId: string): Promise<{ runs: number; distanceM: number }> {
+  const [r] = await sql<{ n: string; m: string }[]>`
+    SELECT count(*) AS n, coalesce(sum(distance_m), 0) AS m FROM runs WHERE user_id = ${userId}`;
+  return { runs: Number(r?.n ?? 0), distanceM: Number(r?.m ?? 0) };
+}
+
+/** Each named month's runs and metres, whole, in the person's own time zone (YYYY-MM). */
+export async function getRunMonths(sql: Sql, userId: string, timeZone: string, months: readonly string[]): Promise<{ month: string; runs: number; distanceM: number }[]> {
+  if (months.length === 0) return [];
+  const sorted = [...months].sort();
+  const from = `${sorted[0] ?? ""}-01`;
+  const to = `${sorted[sorted.length - 1] ?? ""}-01`;
+  const rows = await sql<{ month: string; n: string; m: string }[]>`
+    SELECT to_char(started_at AT TIME ZONE ${timeZone}, 'YYYY-MM') AS month, count(*) AS n, coalesce(sum(distance_m), 0) AS m
+    FROM runs
+    WHERE user_id = ${userId}
+      AND started_at >= (${from}::date::timestamp AT TIME ZONE ${timeZone})
+      AND started_at < ((${to}::date + interval '1 month')::timestamp AT TIME ZONE ${timeZone})
+    GROUP BY month`;
+  const wanted = new Set(months);
+  return rows.filter((r) => wanted.has(r.month)).map((r) => ({ month: r.month, runs: Number(r.n), distanceM: Number(r.m) }));
+}
+
+/** The days of one month the person ran, in their own time zone, with each day's runs and metres. */
+export async function getRunCalendar(sql: Sql, userId: string, timeZone: string, month: string): Promise<{ day: string; runs: number; distanceM: number }[]> {
+  const first = `${month}-01`;
+  const rows = await sql<{ day: string; n: string; m: string }[]>`
+    SELECT to_char(started_at AT TIME ZONE ${timeZone}, 'YYYY-MM-DD') AS day, count(*) AS n, coalesce(sum(distance_m), 0) AS m
+    FROM runs
+    WHERE user_id = ${userId}
+      AND started_at >= (${first}::date::timestamp AT TIME ZONE ${timeZone})
+      AND started_at < ((${first}::date + interval '1 month')::timestamp AT TIME ZONE ${timeZone})
+    GROUP BY day ORDER BY day`;
+  return rows.map((r) => ({ day: r.day, runs: Number(r.n), distanceM: Number(r.m) }));
+}
+
+/** The day of the person's first run, in their own time zone; null with none. */
+export async function getFirstRunDay(sql: Sql, userId: string, timeZone: string): Promise<string | null> {
+  const [r] = await sql<{ day: string | null }[]>`
+    SELECT to_char(min(started_at) AT TIME ZONE ${timeZone}, 'YYYY-MM-DD') AS day FROM runs WHERE user_id = ${userId}`;
+  return r?.day ?? null;
+}
+
+/** A run's shape, kept the first time the list makes it; never over one already kept. */
+export async function keepRunShape(sql: Sql, userId: string, id: string, shape: string): Promise<void> {
+  await sql`UPDATE runs SET shape = ${shape} WHERE id = ${id} AND user_id = ${userId} AND shape IS NULL`;
 }
 
 /** Progress's numbers (ROADMAP 31a): the person's runs since `since`, counted and summed. */
@@ -115,12 +221,59 @@ export async function getRunDays(
   return rows.map((r) => ({ date: r.day, runs: Number(r.n) }));
 }
 
-export async function getRun(sql: Sql, userId: string, id: string): Promise<RunRow | null> {
-  const rows = await sql<RunDbRow[]>`
-    SELECT id, started_at, duration_s, distance_m, route_name, kcal_point, source, polyline
+const runDetailColumns = (sql: Sql, timeZone: string) => sql`
+  id, started_at, duration_s, distance_m, route_name, kcal_point, source, polyline, name, elapsed_s, climb_m, shape,
+  to_char(started_at AT TIME ZONE ${timeZone}, 'YYYY-MM-DD') AS day,
+  CASE WHEN shape IS NULL THEN polyline END AS shape_polyline, CASE WHEN shape IS NULL THEN splits END AS shape_splits,
+  splits, effort, note, left_out_m, left_out_s`;
+
+export async function getRun(sql: Sql, userId: string, id: string, timeZone: string): Promise<RunDetailRow | null> {
+  const rows = await sql<RunDetailDbRow[]>`
+    SELECT ${runDetailColumns(sql, timeZone)}
     FROM runs
     WHERE id = ${id} AND user_id = ${userId}`;
-  return rows[0] === undefined ? null : toRun(rows[0]);
+  return rows[0] === undefined ? null : toRunDetail(rows[0]);
+}
+
+/** What the person changes of their own run: each field given, the others as they are. Null when they
+ *  have no run by this id. */
+export async function changeRun(
+  sql: Sql,
+  userId: string,
+  id: string,
+  change: { name?: string | undefined; effort?: number | null | undefined; note?: string | null | undefined },
+  timeZone: string,
+): Promise<RunDetailRow | null> {
+  const rows = await sql<RunDetailDbRow[]>`
+    UPDATE runs SET
+      name = CASE WHEN ${change.name !== undefined} THEN ${change.name ?? null}::text ELSE name END,
+      effort = CASE WHEN ${change.effort !== undefined} THEN ${change.effort ?? null}::smallint ELSE effort END,
+      note = CASE WHEN ${change.note !== undefined} THEN ${change.note ?? null}::text ELSE note END
+    WHERE id = ${id} AND user_id = ${userId}
+    RETURNING ${runDetailColumns(sql, timeZone)}`;
+  return rows[0] === undefined ? null : toRunDetail(rows[0]);
+}
+
+const lockRunId = async (tx: TransactionSql, id: string): Promise<void> => {
+  await tx`SELECT pg_advisory_xact_lock(hashtext(${`run:${id}`}))`;
+};
+
+/** Deletes the person's run, its route with it, and keeps its id for them under the lock a save of that
+ *  id takes, so a save of it still on its way keeps nothing (`insertRun`). False: none of theirs by it. */
+export async function removeRun(sql: Sql, userId: string, id: string): Promise<boolean> {
+  return await sql.begin(async (tx) => {
+    await lockRunId(tx, id);
+    const rows = await tx<{ id: string }[]>`DELETE FROM runs WHERE id = ${id} AND user_id = ${userId} RETURNING id`;
+    if (rows.length === 0) return false;
+    await tx`INSERT INTO run_removed_ids (id, user_id) VALUES (${id}, ${userId}) ON CONFLICT (id) DO NOTHING`;
+    return true;
+  });
+}
+
+/** Whether this person deleted a run by this id. */
+export async function wasRunRemoved(sql: Sql, userId: string, id: string): Promise<boolean> {
+  const rows = await sql`SELECT 1 FROM run_removed_ids WHERE id = ${id} AND user_id = ${userId}`;
+  return rows.length > 0;
 }
 
 // ── saved_routes CRUD ────────────────────────────────────────────────────────
@@ -249,6 +402,8 @@ export interface NewRun {
   polyline: string;
   calcVersion: number;
   climb: RunClimb;
+  /** The route made small for Your runs (37c-i); null with no route. */
+  shape: string | null;
 }
 
 export interface SavedRunRow {
@@ -305,16 +460,20 @@ const toSavedRun = (r: SavedRunDbRow): SavedRunRow => ({
 /** Saves a run once: a second send of the same id changes nothing and reads back what the first
  *  saved. Whose it is is checked on the row as it stands after the insert, so two people's first
  *  sends of one id can never both pass. */
-export async function insertRun(sql: Sql, userId: string, run: NewRun): Promise<{ created: boolean; row: SavedRunRow }> {
+export async function insertRun(sql: Sql, userId: string, run: NewRun): Promise<{ created: boolean; row: SavedRunRow } | "removed"> {
   return await sql.begin(async (tx) => {
+    await lockRunId(tx, run.id);
+    // Deleted while its send was on its way: kept nothing (37c-i).
+    const removed = await tx`SELECT 1 FROM run_removed_ids WHERE id = ${run.id}`;
+    if (removed.length > 0) return "removed" as const;
     const inserted = await tx`
       INSERT INTO runs (id, user_id, started_at, duration_s, distance_m, polyline, splits, kcal_point,
                         kcal_calc_version, source, name, effort, note, elapsed_s, left_out_m, left_out_s,
-                        run_calc_version, climb_m, climb_state)
+                        run_calc_version, climb_m, climb_state, shape)
       VALUES (${run.id}, ${userId}, ${run.startedAt}, ${run.movingS}, ${run.distanceM}, ${run.polyline},
               ${tx.json(run.splits)}, ${run.kcal}, ${run.calcVersion}, 'mobile', ${run.name}, ${run.effort},
               ${run.note}, ${run.elapsedS}, ${run.leftOutM}, ${run.leftOutS}, ${run.calcVersion},
-              ${run.climb.state === "done" ? run.climb.m : null}, ${run.climb.state})
+              ${run.climb.state === "done" ? run.climb.m : null}, ${run.climb.state}, ${run.shape})
       ON CONFLICT (id) DO NOTHING`;
     const rows = await tx<(SavedRunDbRow & { user_id: string })[]>`
       SELECT id, user_id, started_at, name, effort, note, distance_m, duration_s, elapsed_s, left_out_m,

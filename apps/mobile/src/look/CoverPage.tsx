@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { KeyboardAvoidingView, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { KeyboardAvoidingView, Pressable, ScrollView, StyleSheet, View, type NativeScrollEvent, type NativeSyntheticEvent } from "react-native";
 import { Modal } from "./Modal";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colours, sizes } from "./colours";
@@ -22,10 +22,15 @@ interface CoverPageProps {
   tall?: number;
   /** A page's own top drawn by the page, edge to edge, in place of the bar; the ✕ lies on it. */
   hero?: ReactNode;
+  /** Scrolled near its foot: a long list reads its next part (Your runs, 37c-i). */
+  onNearEnd?: () => void;
 }
 
+/** How near the foot, in points, a scroll asks for the next part. */
+const NEAR_END = 600;
+
 /** A page that opens over the tab for one task, closed by its ✕, its action held at the bottom. */
-export function CoverPage({ open, title, onClose, children, foot, picture, tall = 0.62, hero }: CoverPageProps) {
+export function CoverPage({ open, title, onClose, children, foot, picture, tall = 0.62, hero, onNearEnd }: CoverPageProps) {
   const insets = useSafeAreaInsets();
   const top = hero !== undefined || picture !== undefined;
   return (
@@ -42,7 +47,19 @@ export function CoverPage({ open, title, onClose, children, foot, picture, tall 
             <View style={styles.close} />
           </View>
         ) : null}
-        <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={[styles.body, top ? styles.underPicture : null]}>
+        <ScrollView
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={[styles.body, top ? styles.underPicture : null]}
+          {...(onNearEnd === undefined
+            ? {}
+            : {
+                scrollEventThrottle: 250,
+                onScroll: (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+                  const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
+                  if (layoutMeasurement.height + contentOffset.y >= contentSize.height - NEAR_END) onNearEnd();
+                },
+              })}
+        >
           {hero !== undefined ? (
             <View style={styles.bleed}>{hero}</View>
           ) : picture === undefined ? null : (

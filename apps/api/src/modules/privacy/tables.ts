@@ -43,6 +43,9 @@ export const DIRECT_DELETE_TABLES = [
   "member_label_foods",
   // §5.2's "coach threads/messages": those tables were dropped with the coach (ROADMAP 9b).
   "runs", // §5.2 "runs/saved_routes/schedules"
+  // The ids of runs the person deleted (migration 0221, ROADMAP Stage 5 37c-i), on meal_removed_ids'
+  // footing: their own record, deleted and exported.
+  "run_removed_ids",
   "saved_routes",
   "run_schedules",
   "body_measurements",

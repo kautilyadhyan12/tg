@@ -44,7 +44,7 @@ const quiet: Record<string, Route> = {
   "/v1/progress/overview": ok({ totalWorkouts: 0, totalKcal: 0, totalDurationMs: 0, avgFormScore: null, currentStreak: 0, longestStreak: 0, consistencyPct: 0, totalRuns: 0, runDurationMs: 0, runKcal: 0, limitedToDays: null }),
   "/v1/progress/trend": ok({ points: [], runDays: [], limitedToDays: 90 }),
   "/v1/workouts": ok({ items: [], nextCursor: null, limitedToDays: 90, hasAnyWorkouts: false }),
-  "/v1/geo/runs": ok({ items: [], nextCursor: null }),
+  "/v1/geo/runs": ok({ items: [], nextCursor: null, months: [], total: { runs: 0, distanceM: 0 } }),
   "/v1/nutrition/meals": ok({ items: [], nextCursor: null }),
   "/v1/exercises": ok({ items: LIBRARY, nextCursor: null }),
 };

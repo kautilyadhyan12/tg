@@ -3,6 +3,7 @@
 // Run RECORDING (write/sync) and route-name geocoding-on-save are mobile (P5).
 import { z } from "zod";
 import { RUN_MAX_ELAPSED_MS, RUN_MAX_PAUSES, RUN_MAX_POINTS } from "./runMaths.js";
+import { RUN_SHAPE_MOST_CHARS } from "./runShape.js";
 
 // ── route generation (POST /v1/geo/routes/generate) ─────────────────────────
 // Bounds ported verbatim from running.py:123,126 (Part 0 rule 4): targetKm
@@ -60,23 +61,97 @@ export type SavedRoute = z.infer<typeof savedRouteSchema>;
 // ── runs (read-only; record/sync = P5) ──────────────────────────────────────
 // GPS polylines are the most sensitive data the app holds (Part 4 §3.9):
 // own-user-only, org-invisible, never logged — polyline appears in DETAIL only.
+/** A whole kilometre or mile of a run, or what is left at its end: metres and seconds. */
+export const runSplitSchema = z.object({ m: z.number().int().nonnegative(), s: z.number().int().nonnegative() });
+
+/** A day of the person's own time zone, YYYY-MM-DD. */
+const runDaySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+/** A month of the person's own time zone, YYYY-MM. */
+export const runMonthSchema = z.string().regex(/^(19|20)\d{2}-(0[1-9]|1[0-2])$/);
+
 export const runSummarySchema = z.object({
   id: z.string().uuid(),
   startedAt: z.string().datetime(),
+  /** The moving time. */
   durationS: z.number().int().nonnegative(),
   distanceM: z.number().int().nonnegative(),
   routeName: z.string().nullable(),
   kcalPoint: z.number().int().nullable(),
   source: z.string(),
+  // ROADMAP 37c-i: what Your runs shows of each.
+  /** What the person called it; "Run" for one that came from the old app with no name. */
+  name: z.string().min(1),
+  /** The day it began, in the person's own time zone: the list's month and the calendar's day. */
+  day: runDaySchema,
+  /** From Start to Finish, pauses and all; the moving time for a run that kept none. */
+  elapsedS: z.number().int().nonnegative(),
+  /** Metres climbed (37b-ii); null where it is not known. */
+  climbM: z.number().int().nonnegative().nullable(),
+  /** The route made small for its picture (`runShape.ts`); null with no route. */
+  shape: z.string().max(RUN_SHAPE_MOST_CHARS).nullable(),
 });
 export type RunSummary = z.infer<typeof runSummarySchema>;
 
-/** GET /v1/geo/runs: a page of the person's runs, newest first. */
-export const runPageSchema = z.object({ items: z.array(runSummarySchema), nextCursor: z.string().nullable() });
+/** A month's runs and distance, in the person's own time zone. */
+export const runMonthTotalSchema = z.object({ month: runMonthSchema, runs: z.number().int().nonnegative(), distanceM: z.number().int().nonnegative() });
+export type RunMonthTotal = z.infer<typeof runMonthTotalSchema>;
+
+/** GET /v1/geo/runs: a page of the person's runs, newest first. `months`: the whole of each month
+ *  the page's runs fall in, though the page holds only some of it; `total`: every run they have. */
+export const runPageSchema = z.object({
+  items: z.array(runSummarySchema),
+  nextCursor: z.string().nullable(),
+  months: z.array(runMonthTotalSchema),
+  total: z.object({ runs: z.number().int().nonnegative(), distanceM: z.number().int().nonnegative() }),
+});
 export type RunPage = z.infer<typeof runPageSchema>;
 
-export const runDetailSchema = runSummarySchema.extend({ polyline: z.string().nullable() });
+/** The list's own query: `upTo` starts it at a day picked on the calendar, the runs of that day and
+ *  before (the person's own time zone). */
+export const runListQuerySchema = z
+  .object({ limit: z.coerce.number().int().min(1).max(100).default(20), cursor: z.string().optional(), upTo: runDaySchema.optional() })
+  .strict();
+export type RunListQuery = z.infer<typeof runListQuerySchema>;
+
+/** A run's own page: everything its summary showed after Finish. */
+export const runDetailSchema = runSummarySchema.extend({
+  polyline: z.string().nullable(),
+  trackStarts: z.array(z.number().int().nonnegative()),
+  splitsKm: z.array(runSplitSchema),
+  splitsMi: z.array(runSplitSchema),
+  effort: z.number().int().min(1).max(10).nullable(),
+  note: z.string().nullable(),
+  leftOutM: z.number().int().nonnegative(),
+  leftOutS: z.number().int().nonnegative(),
+});
 export type RunDetail = z.infer<typeof runDetailSchema>;
+export const runDetailResponseSchema = z.object({ run: runDetailSchema });
+
+/** GET /v1/geo/runs/days?month=YYYY-MM: the calendar's month, each day the person ran, in their own
+ *  time zone; `first` is the day of their first run, so the calendar goes back no further. */
+export const runDaysQuerySchema = z.object({ month: runMonthSchema }).strict();
+export const runCalendarDaySchema = z.object({ day: runDaySchema, runs: z.number().int().positive(), distanceM: z.number().int().nonnegative() });
+export type RunCalendarDay = z.infer<typeof runCalendarDaySchema>;
+export const runDaysResponseSchema = z.object({ month: runMonthSchema, days: z.array(runCalendarDaySchema), first: runDaySchema.nullable() });
+export type RunDaysResponse = z.infer<typeof runDaysResponseSchema>;
+
+/** PATCH /v1/geo/runs/:id: what the person may change of a saved run; its numbers never. Each field
+ *  left out stays as it is. */
+export const changeRunRequestSchema = z
+  .object({
+    name: z.string().max(200).transform((t) => t.replace(/\u0000/g, "")).pipe(z.string().trim().min(1).max(60)).optional(),
+    effort: z.number().int().min(1).max(10).nullable().optional(),
+    note: z.string().max(3000).transform((t) => t.replace(/\u0000/g, "")).pipe(z.string().trim().max(1000)).nullable().optional(),
+  })
+  .strict()
+  .refine((c) => c.name !== undefined || c.effort !== undefined || c.note !== undefined, { message: "nothing to change" });
+export type ChangeRunRequest = z.infer<typeof changeRunRequestSchema>;
+
+/** The server's sentences about a saved run, said where the press was made. */
+export const RUN_WORDS = {
+  not_found: "This run was deleted.",
+  run_deleted: "This run was deleted.",
+} as const;
 
 // ── Record a run (POST /v1/geo/runs; ROADMAP 37a) ──────────────────────────────────────────────
 // The phone sends the points and pauses it recorded; the server works every number out again
@@ -103,7 +178,6 @@ export const saveRunRequestSchema = z
   .strict();
 export type SaveRunRequest = z.infer<typeof saveRunRequestSchema>;
 
-export const runSplitSchema = z.object({ m: z.number().int().nonnegative(), s: z.number().int().nonnegative() });
 
 /** A saved run, everything its summary shows. */
 export const savedRunSchema = z.object({

@@ -76,7 +76,7 @@ function server(world: World, more: Record<string, Route> = {}) {
     "/v1/nutrition/targets": () => ({ status: 200, body: TARGETS }),
     "/v1/nutrition/suggestions": () => world.ideas(),
     "/v1/workouts": () => ({ status: 200, body: { items: [], nextCursor: null, limitedToDays: 90, hasAnyWorkouts: false } }),
-    "/v1/geo/runs": () => ({ status: 200, body: { items: [], nextCursor: null } }),
+    "/v1/geo/runs": () => ({ status: 200, body: { items: [], nextCursor: null, months: [], total: { runs: 0, distanceM: 0 } } }),
     "/v1/nutrition/meals": (body) => {
       if (body === undefined) return { status: 200, body: { items: world.meals, nextCursor: null } };
       const refused = world.save?.();

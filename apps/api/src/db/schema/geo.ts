@@ -49,6 +49,8 @@ export const runs = pgTable(
     // 0218 (ROADMAP 37b-ii): the elevation gain from the server's height map, and where it stands.
     climbM: integer("climb_m"),
     climbState: text("climb_state"),
+    // 0221 (ROADMAP 37c-i): the route made small for its picture in Your runs (`runShape.ts`).
+    shape: text("shape"),
   },
   (t) => [
     index("runs_user_started_idx").on(t.userId, t.startedAt.desc()),
@@ -64,7 +66,21 @@ export const runs = pgTable(
       sql`(${t.climbState} IS NULL AND ${t.climbM} IS NULL) OR (${t.climbState} = 'done' AND ${t.climbM} >= 0) OR (${t.climbState} IN ('none', 'waiting') AND ${t.climbM} IS NULL)`,
     ),
     index("runs_climb_waiting_idx").on(t.createdAt).where(sql`${t.climbState} = 'waiting'`),
+    check("runs_shape_check", sql`char_length(${t.shape}) BETWEEN 1 AND 4000`),
   ],
+);
+
+/** A deleted run's id, kept for its owner (0221; ROADMAP 37c-i): a late save of it keeps nothing. */
+export const runRemovedIds = pgTable(
+  "run_removed_ids",
+  {
+    id: uuid("id").primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    removedAt: timestamp("removed_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("run_removed_ids_user_idx").on(t.userId)],
 );
 
 export const savedRoutes = pgTable("saved_routes", {

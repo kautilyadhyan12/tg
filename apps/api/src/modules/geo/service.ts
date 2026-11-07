@@ -6,7 +6,7 @@
 // candidates only.
 import type { FastifyBaseLogger } from "fastify";
 import type { Sql } from "postgres";
-import { RUN_CALC_VERSION, climbFromHeights, climbSamples, decodePolyline, encodePolyline, runSplitSchema, runSums } from "@app/shared";
+import { RUN_CALC_VERSION, climbFromHeights, climbSamples, decodePolyline, encodePolyline, routeShape, runSplitSchema, runSums } from "@app/shared";
 import type {
   GenerateRoutesRequest,
   RouteCandidate,
@@ -14,13 +14,17 @@ import type {
   RunClimbRequest,
   SavedRoute,
   SavedRouteCreate,
+  ChangeRunRequest,
+  RunDaysResponse,
   RunDetail,
+  RunMonthTotal,
   RunSummary,
   SaveRunRequest,
   SavedRun,
 } from "@app/shared";
 import { z } from "zod";
 import { onWorkoutSynced } from "../gamification/service.js";
+import { safeTimeZone } from "../gamification/streak.js";
 import { getUserSyncContext } from "../users/service.js";
 import { GeoError } from "./errors.js";
 import type { HeightMap } from "./heights.adapter.js";
@@ -125,17 +129,60 @@ const asRunSummary = (r: repo.RunRow): RunSummary => ({
   routeName: r.routeName,
   kcalPoint: r.kcalPoint,
   source: r.source,
+  name: r.name ?? r.routeName ?? "Run",
+  day: r.day,
+  elapsedS: Math.max(r.elapsedS ?? r.durationS, r.durationS),
+  climbM: r.climbM,
+  shape: r.shape,
 });
 
+/** The person's own time zone, for days and months (an unknown one reads as UTC). */
+const zoneOf = async (deps: ReadDeps, userId: string): Promise<string> => safeTimeZone((await getUserSyncContext(deps.sql, userId)).timezone);
+
+/** Where each stretch of a saved line begins, as its splits keep them. */
+const startsOf = (splits: unknown): number[] => {
+  const kept = splitsStoredSchema.safeParse(splits);
+  return kept.success ? (kept.data.starts ?? [0]) : [0];
+};
+
+/** A run saved before 37c-i has no shape: made from its saved line once, and kept. */
+async function withShape<T extends repo.RunRow>(deps: ReadDeps, userId: string, row: T): Promise<T> {
+  if (row.shape !== null || row.shapeFrom === null) return row;
+  const shape = routeShape(decodePolyline(row.shapeFrom.polyline), startsOf(row.shapeFrom.splits));
+  if (shape === null) return row;
+  await repo.keepRunShape(deps.sql, userId, row.id, shape);
+  return { ...row, shape };
+}
+
+/** A page of the person's runs, newest first, from the cursor or from the end of the day `upTo`; with
+ *  each month the page touches, whole, and every run they have counted. */
 export async function listRuns(
   deps: ReadDeps,
   userId: string,
   limit: number,
   cursor: { at: Date; id: string } | null,
-): Promise<{ items: RunSummary[]; next: repo.RunRow | null }> {
-  const rows = await repo.listRuns(deps.sql, userId, limit, cursor);
+  upTo: string | null = null,
+): Promise<{ items: RunSummary[]; next: repo.RunRow | null; months: RunMonthTotal[]; total: { runs: number; distanceM: number } }> {
+  const timeZone = await zoneOf(deps, userId);
+  const rows = await repo.listRuns(deps.sql, userId, limit, cursor, timeZone, upTo);
   const page = rows.slice(0, limit);
-  return { items: page.map(asRunSummary), next: rows.length > limit ? (page.at(-1) ?? null) : null };
+  const shaped: repo.RunRow[] = [];
+  for (const row of page) shaped.push(await withShape(deps, userId, row));
+  const months = [...new Set(page.map((r) => r.day.slice(0, 7)))];
+  const [totals, total] = await Promise.all([repo.getRunMonths(deps.sql, userId, timeZone, months), repo.getRunCount(deps.sql, userId)]);
+  return {
+    items: shaped.map(asRunSummary),
+    next: rows.length > limit ? (page.at(-1) ?? null) : null,
+    months: months.flatMap((m) => totals.filter((t) => t.month === m)),
+    total,
+  };
+}
+
+/** The calendar's month: each day the person ran, and the day of their first run. */
+export async function runCalendar(deps: ReadDeps, userId: string, month: string): Promise<RunDaysResponse> {
+  const timeZone = await zoneOf(deps, userId);
+  const [days, first] = await Promise.all([repo.getRunCalendar(deps.sql, userId, timeZone, month), repo.getFirstRunDay(deps.sql, userId, timeZone)]);
+  return { month, days, first };
 }
 
 export async function runTotals(deps: ReadDeps, userId: string, since: Date | null) {
@@ -146,11 +193,42 @@ export async function runDays(deps: ReadDeps, userId: string, since: Date | null
   return repo.getRunDays(deps.sql, userId, since, timeZone);
 }
 
+const asRunDetail = (row: repo.RunDetailRow): RunDetail => {
+  const splits = splitsStoredSchema.safeParse(row.splits);
+  return {
+    ...asRunSummary(row),
+    polyline: row.polyline,
+    trackStarts: splits.success ? (splits.data.starts ?? [0]) : [0],
+    splitsKm: splits.success ? splits.data.km : [],
+    splitsMi: splits.success ? splits.data.mi : [],
+    effort: row.effort,
+    note: row.note,
+    leftOutM: row.leftOutM ?? 0,
+    leftOutS: row.leftOutS ?? 0,
+  };
+};
+
 export async function getRun(deps: ReadDeps, userId: string, id: string): Promise<RunDetail | null> {
-  const row = await repo.getRun(deps.sql, userId, id);
+  const row = await repo.getRun(deps.sql, userId, id, await zoneOf(deps, userId));
   // Detail includes the polyline (owner-only — the route WHERE already bound it
   // to userId; it is never logged or returned to any other user).
-  return row === null ? null : { ...asRunSummary(row), polyline: row.polyline };
+  return row === null ? null : asRunDetail(await withShape(deps, userId, row));
+}
+
+/** The person changes their own run's name, how it felt or its note (37c-i); its numbers never. Null
+ *  when they have no run by this id. */
+export async function changeRun(deps: ReadDeps, userId: string, id: string, input: ChangeRunRequest): Promise<RunDetail | null> {
+  const note = input.note === undefined ? undefined : input.note === null || input.note === "" ? null : input.note;
+  const row = await repo.changeRun(deps.sql, userId, id, { name: input.name, effort: input.effort, note }, await zoneOf(deps, userId));
+  return row === null ? null : asRunDetail(row);
+}
+
+/** The person deletes their own run (37c-i): it and its route go for good, and the streak, badges and
+ *  XP are worked out again from what is left, as after any sync. False: no run of theirs by this id. */
+export async function deleteRun(deps: ReadDeps, userId: string, id: string): Promise<boolean> {
+  if (!(await repo.removeRun(deps.sql, userId, id))) return false;
+  await onWorkoutSynced({ sql: deps.sql }, userId, (await getUserSyncContext(deps.sql, userId)).timezone);
+  return true;
 }
 
 // ── Record a run (ROADMAP 37a) ─────────────────────────────────────────────────────────────────
@@ -251,9 +329,19 @@ export async function workOutWaitingClimbs(
 
 /** A run this person has already saved under this id, read before any of its points are: a send
  *  repeated is answered from the row at no cost (round one of 37a, H2). null when there is none. */
-export async function savedRunIfAny(deps: ReadDeps, userId: string, runId: string): Promise<SavedRun | null> {
+/** A run sent again: as saved, "removed" when the person deleted it, null when it is new. */
+export async function savedRunIfAny(deps: ReadDeps, userId: string, runId: string): Promise<SavedRun | "removed" | null> {
   const row = await repo.getSavedRun(deps.sql, userId, runId);
-  return row === null ? null : asSavedRun(row);
+  if (row !== null) return asSavedRun(row);
+  return (await repo.wasRunRemoved(deps.sql, userId, runId)) ? "removed" : null;
+}
+
+/** A run sent after the person deleted it: nothing is kept (37c-i). */
+export class RemovedRunError extends Error {
+  constructor() {
+    super("the run was deleted");
+    this.name = "RemovedRunError";
+  }
 }
 
 /** A phone's clock can be fast. A run that seems to end after the server's own now is moved back
@@ -298,7 +386,9 @@ export async function saveRun(
     polyline,
     calcVersion: RUN_CALC_VERSION,
     climb,
+    shape: routeShape(sums.track, sums.trackStarts),
   });
+  if (saved === "removed") throw new RemovedRunError();
   // On every send, a repeat included, as a workout's sync does: the streak, badges and XP are
   // worked out again from history, so a send whose first try failed here heals on the next.
   await onWorkoutSynced({ sql: deps.sql }, userId, ctx.timezone);
