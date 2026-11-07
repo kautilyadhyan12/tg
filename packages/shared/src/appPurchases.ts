@@ -73,6 +73,8 @@ export const APP_PURCHASE_WORDS = {
   too_many: "You have as many memberships here as the app allows. Ask the front desk.",
   other_open: "A payment page is already open. Finish that payment or close it first.",
   check_first: "We couldn't confirm your last payment for this. Ask the front desk to check it with Square before you buy it again.",
+  /** A line whose last day ends within minutes on the gym's clock: a page now could be paid once it is over. */
+  too_late: "It's too late today to buy this. Try again tomorrow.",
   /** `check`, said on the phone where a purchase ended that way. */
   check: "We couldn't confirm your payment, so nothing was added yet. The front desk will check it with Square.",
 } as const;
@@ -80,7 +82,11 @@ export const APP_PURCHASE_WORDS = {
 /** What staff read about purchases. */
 export const APP_PURCHASE_STAFF_WORDS = {
   /** Saving or archiving a line of the price list while a member is buying it. */
-  type_buying: "A member is buying this in the app right now. Save again in a few minutes, once their payment page closes.",
+  type_buying: "A member is buying this in the app right now. Save again once their payment page closes.",
+  /** Delete permanently while a purchase that may have taken money waits for a check. */
+  delete_check: "A payment this person made in the app needs checking. Check it in Square and mark it as checked on their page first.",
+  /** Joining two records while both have a purchase page open. */
+  merge_buying: "Both records are buying in the app right now. Merge them once their payment pages close.",
   none: "No payment page is open for this person now.",
   /** Mark as checked on a purchase already marked, or not one that needs it. */
   not_checking: "There's nothing to check for this payment now.",

@@ -78,7 +78,13 @@ const answerOf = (row: pays.AppPayRow): AppPurchaseResponse => appPurchaseRespon
 /** The same press, or the page already open for this record: given back where it is this reader's, for this line at this
  *  amount; otherwise the reader is told what stands in the way. */
 function sameOr(row: pays.AppPayRow, userId: string, body: AppPurchaseRequest): AppPurchaseResponse {
-  if (row.openedBy === userId && row.typeId === body.typeId && row.amountMinor === body.amountMinor) return answerOf(row);
+  const sameLine = row.openedBy === userId && row.typeId === body.typeId && row.amountMinor === body.amountMinor;
+  if (sameLine && row.requestKey === body.requestKey) return answerOf(row);
+  // Another press on the page open: given back only where it is signed the same, never a signature it did not send.
+  const sign = buys.boughtOf(row)?.sign ?? null;
+  const signedSame =
+    body.agreement === null ? sign === null : sign !== null && sign.agreementId === body.agreement.agreementId && sign.signer === body.agreement.signer && sign.name === body.agreement.name;
+  if (sameLine && row.state === "open" && signedSame) return answerOf(row);
   if (row.state === "open" && row.requestKey !== body.requestKey) throw new OrgsError(409, "app_payment_other_open", APP_PURCHASE_WORDS.other_open);
   throw changed();
 }
@@ -90,6 +96,10 @@ function refusalOf(outcome: Exclude<buys.PurchasableOutcome, { kind: "ok" }>, gy
       return sameOr(outcome.row, userId, body);
     case "entry_not_found":
       throw new OrgsError(409, "app_purchase_not_own", APP_PURCHASE_WORDS.not_own);
+    case "paid_by_other":
+      throw new OrgsError(409, "app_purchase_paid_by_other", APP_PURCHASE_WORDS.paid_by_other);
+    case "too_late":
+      throw new OrgsError(409, "app_purchase_too_late", APP_PURCHASE_WORDS.too_late);
     case "changed":
       throw changed();
     case "agreement_changed":

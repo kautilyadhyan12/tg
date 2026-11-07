@@ -13,6 +13,7 @@ import {
   discountFits,
   forSaleWorked,
   giveHeldMembership,
+  heldMembershipView,
   isUnder18,
   type AppPurchaseBought,
   type AppPurchaseCheck,
@@ -53,11 +54,18 @@ export interface Buying {
   now: Date;
 }
 
+/** A page for a line whose last day is near closes this long before that day ends on the gym's clock, so it is never paid
+ *  once the membership would already be over (a day pass bought late in the evening); and one that would be open for
+ *  less than `MIN_OPEN_MS` is not made. */
+export const LINE_END_MARGIN_MINUTES = 5;
+export const MIN_OPEN_MS = 5 * 60_000;
+
 export type PurchasableOutcome =
-  | { kind: "ok"; bought: AppPurchaseBought; currency: string }
+  /** `deadline`: when the page must close, the line's last day being near; null where it is far. */
+  | { kind: "ok"; bought: AppPurchaseBought; currency: string; deadline: Date | null }
   /** A page for this record is open: the same press's is answered instead of a second. */
   | { kind: "open"; row: AppPayRow }
-  | { kind: "entry_not_found" | "changed" | "agreement_changed" | "guardian_needed" | "person_signs" | "too_many" | "currency" | "check" }
+  | { kind: "entry_not_found" | "paid_by_other" | "changed" | "agreement_changed" | "guardian_needed" | "person_signs" | "too_many" | "currency" | "check" | "too_late" }
   | { kind: "already_held"; name: string };
 
 /** The newest wording of the agreement a line asks for today, or null for none: the main agreement unless the line is
@@ -124,6 +132,13 @@ async function purchasableIn(tx: TransactionSql, s: Buying): Promise<Purchasable
     SELECT ${COLUMNS(tx)} FROM gym_app_payments a
     WHERE a.gym_id = ${s.gymId} AND a.entry_id = ${s.entryId} AND a.state = 'open' AND a.membership_type_id IS NOT NULL`;
   if (open !== undefined) return { kind: "open", row: toRow(open) };
+  // Their own record still, under its lock: one account holds it, and nobody else pays for it (18i).
+  const [who] = await tx<{ holders: number; paid_by_other: boolean }[]>`
+    SELECT (SELECT count(*) FROM gym_members o JOIN users u ON u.id = o.user_id AND u.status = 'active'
+            WHERE o.gym_id = ${s.gymId} AND o.entry_id = ${s.entryId} AND o.removed_at IS NULL)::int AS holders,
+           EXISTS (SELECT 1 FROM gym_member_payers p WHERE p.gym_id = ${s.gymId} AND p.entry_id = ${s.entryId}) AS paid_by_other`;
+  if (who === undefined || who.holders !== 1) return { kind: "entry_not_found" };
+  if (who.paid_by_other) return { kind: "paid_by_other" };
   const person = await personOf(tx, s.gymId, s.entryId);
   if (person === null) return { kind: "entry_not_found" };
   const found = await workedFor(tx, { gymId: s.gymId, entryId: s.entryId, typeId: s.typeId, gymName: s.gymName, today: s.today, personName: person.fullName });
@@ -150,9 +165,19 @@ async function purchasableIn(tx: TransactionSql, s: Buying): Promise<Purchasable
     LIMIT 1`;
   if (check !== undefined) return { kind: "check" };
   if (item.currency !== s.accountCurrency) return { kind: "currency" };
+  // The page closes before the line's last day ends on the gym's clock: what is paid is never already over.
+  const endsOn = heldMembershipView(found.m.membership, s.today).endsOn;
+  const [end] =
+    endsOn === null
+      ? []
+      : await tx<{ deadline: Date }[]>`
+          SELECT ((${endsOn}::date + 1)::timestamp AT TIME ZONE g.timezone) - make_interval(mins => ${LINE_END_MARGIN_MINUTES}) AS deadline
+          FROM gyms g WHERE g.id = ${s.gymId}`;
+  const deadline = end?.deadline ?? null;
+  if (deadline !== null && deadline.getTime() - s.now.getTime() < MIN_OPEN_MS) return { kind: "too_late" };
   const sign: AppPurchaseSign | null =
     asked === null || s.agreement === null ? null : { agreementId: asked.id, signer: s.agreement.signer, name: s.agreement.name, facts: item.facts, at: s.now.toISOString() };
-  return { kind: "ok", bought: { ...given, sign }, currency: item.currency };
+  return { kind: "ok", bought: { ...given, sign }, currency: item.currency, deadline };
 }
 
 /** The check before Square is asked to make the page: nothing is written but what the clock had already done. */
@@ -184,11 +209,12 @@ export async function writeOpenPurchase(sql: Sql, s: NewPurchase): Promise<OpenP
     if (check.kind !== "ok") return check;
     const [same] = await tx<RawPay[]>`SELECT ${COLUMNS(tx)} FROM gym_app_payments a WHERE a.gym_id = ${s.gymId} AND a.request_key = ${s.requestKey}`;
     if (same !== undefined) return { kind: "key_reused", row: toRow(same) };
+    const closesAt = check.deadline !== null && check.deadline < s.closesAt ? check.deadline : s.closesAt;
     await tx`
       INSERT INTO gym_app_payments (id, gym_id, entry_id, membership_type_id, bought, amount_minor, currency, environment, account_id,
                                     location_id, request_key, opened_by, opened_at, closes_at, link_key, link_id, order_id, url, state, checked_at)
       VALUES (${s.id}, ${s.gymId}, ${s.entryId}, ${s.typeId}, ${tx.json(check.bought)}, ${s.amountMinor}, ${check.currency}, ${s.environment},
-              ${s.accountId}, ${s.locationId}, ${s.requestKey}, ${s.openedBy}, ${s.now}, ${s.closesAt}, ${s.linkKey}, ${s.linkId}, ${s.orderId},
+              ${s.accountId}, ${s.locationId}, ${s.requestKey}, ${s.openedBy}, ${s.now}, ${closesAt}, ${s.linkKey}, ${s.linkId}, ${s.orderId},
               ${s.url}, 'open', ${s.now})`;
     const [written] = await tx<RawPay[]>`SELECT ${COLUMNS(tx)} FROM gym_app_payments a WHERE a.gym_id = ${s.gymId} AND a.id = ${s.id}`;
     if (written === undefined) throw new Error("a purchase page just written was not read back");
@@ -209,6 +235,26 @@ export async function readOwnPurchase(sql: SqlOrTx, gymId: string, userId: strin
     SELECT ${COLUMNS(sql)} FROM gym_app_payments a
     WHERE a.gym_id = ${gymId} AND a.id = ${id} AND a.opened_by = ${userId} AND a.membership_type_id IS NOT NULL`;
   return row === undefined ? null : toRow(row);
+}
+
+/** Purchases of these records that may have taken money and gave nothing, not yet marked checked: Delete permanently waits
+ *  for them, as the line about them would be on no page once the record is gone. */
+export async function uncheckedOfEntries(tx: TransactionSql, gymId: string, entryIds: readonly string[]): Promise<boolean> {
+  if (entryIds.length === 0) return false;
+  const [row] = await tx<{ id: string }[]>`
+    SELECT id FROM gym_app_payments
+    WHERE gym_id = ${gymId} AND entry_id = ANY(${[...entryIds]}::uuid[]) AND membership_type_id IS NOT NULL
+      AND outcome IN ('not_recorded','gone','no_answer') AND cleared_at IS NULL
+    LIMIT 1`;
+  return row !== undefined;
+}
+
+/** Whether both of these records have a purchase page open: joining them waits, as a record has one at a time. */
+export async function bothBuying(tx: TransactionSql, gymId: string, entryIds: readonly [string, string]): Promise<boolean> {
+  const [row] = await tx<{ n: number }[]>`
+    SELECT count(DISTINCT entry_id)::int AS n FROM gym_app_payments
+    WHERE gym_id = ${gymId} AND entry_id = ANY(${[...entryIds]}::uuid[]) AND state = 'open' AND membership_type_id IS NOT NULL`;
+  return (row?.n ?? 0) >= 2;
 }
 
 /** Whether a member is buying this line in the app now: the price list holds it. Under the gym's lock, which Buy's write
@@ -268,7 +314,7 @@ export async function staffClosePurchase(sql: Sql, s: { gymId: string; entryId: 
       WHERE gym_id = ${s.gymId} AND id = ${s.id} AND entry_id = ${s.entryId} AND state = 'open' AND membership_type_id IS NOT NULL
       RETURNING id`;
     if (row === undefined) return null;
-    await insertAudit(tx, { actorUserId: s.staffUserId, gymId: s.gymId, action: "org.app_payment_closed", targetType: "gym_app_payment", targetId: row.id, meta: { entryId: s.entryId } });
+    await insertAudit(tx, { actorUserId: s.staffUserId, gymId: s.gymId, action: "org.app_payment_closed", targetType: "gym_app_payment", targetId: row.id, meta: { entryId: s.entryId, purchase: "true" } });
     return row.id;
   });
 }
@@ -377,13 +423,17 @@ export async function recordBought(sql: Sql, p: Bought): Promise<{ outcome: "pai
         });
         return { outcome: "paid" as const, membershipId: done.id, signed: signed !== null };
       }
-      why = done.kind === "given" ? "no_payment" : done.kind;
+      // Given with no payment recorded cannot happen with `paid: true`; were it to, nothing is kept and the page is asked again.
+      if (done.kind === "given") throw new Error("a membership bought in the app was given with no payment");
+      why = done.kind;
     } else if (why === "") {
       why = "amount_differs";
     }
     await tx`
       UPDATE gym_app_payments SET state = 'done', outcome = 'not_recorded', square_payment_id = ${p.squarePaymentId},
-             card_brand = ${p.card?.brand ?? null}, card_last4 = ${p.card?.last4 ?? null}, taken_minor = ${p.taken}, finished_at = ${p.now}, checking_until = NULL
+             card_brand = ${p.card?.brand ?? null}, card_last4 = ${p.card?.last4 ?? null}, taken_minor = ${p.taken}, finished_at = ${p.now}, checking_until = NULL,
+             -- Nothing was signed for: the page keeps no name or details typed.
+             bought = bought || '{"sign":null}'::jsonb
       WHERE gym_id = ${row.gymId} AND id = ${row.id}`;
     await insertAudit(tx, {
       actorUserId: row.openedBy,

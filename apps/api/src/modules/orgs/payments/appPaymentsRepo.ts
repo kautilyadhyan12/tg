@@ -419,7 +419,9 @@ export async function finish(sql: Sql, gymId: string, id: string, outcome: "clos
     const fee = outcome === "closed" ? (page?.fee_bill_id ?? null) : null;
     if (fee !== null) await lockGym(tx, gymId);
     const rows = await tx<{ id: string }[]>`
-      UPDATE gym_app_payments SET state = 'done', outcome = ${outcome}, finished_at = ${at}, checking_until = NULL
+      UPDATE gym_app_payments SET state = 'done', outcome = ${outcome}, finished_at = ${at}, checking_until = NULL,
+             -- A purchase that gave nothing keeps no name or details typed (18k-iii-a).
+             bought = CASE WHEN membership_type_id IS NULL THEN bought ELSE bought || '{"sign":null}'::jsonb END
       WHERE gym_id = ${gymId} AND id = ${id} AND state = 'open'
       RETURNING id`;
     if (rows.length !== 1) return false;

@@ -480,6 +480,64 @@ d("Buy in the app: given once, on their own record, only for what Square took (r
     expect(kept?.sign).toBeNull();
   });
 
+  it("round one: a day pass is never paid once it is over; who may buy is asked under the lock; deleting waits; a second signature is never swapped", async () => {
+    // 23:40 in Chicago (05:40 UTC): a day pass's page closes at 23:55, before its day ends, never at 23:55 + 15 minutes.
+    clock = new Date("2026-11-11T05:40:00Z");
+    const acct = account(`ABR1${uniq().slice(-6)}`);
+    const gym = await makeGym("App Buy Round One", acct);
+    await agreementOn(gym);
+    const pass = await addType(gym, { name: "Day pass", priceMinor: 1500, packClasses: 1, packDays: 1 });
+    const pack = await addType(gym, { name: "10-class pack" });
+    const di = await member(gym, "Di Day");
+    const late = parsed(await buyPress(gym, di.app, await lineOf(gym, di.app, pass), {}, "Di Day"));
+    expect(late.purchase.closesAt).toBe("2026-11-11T05:55:00.000Z");
+    // At 23:56 the worker has closed it: Square's page can no longer be paid, and nothing is given.
+    clock = new Date("2026-11-11T05:56:00Z");
+    await work();
+    expect((await check(gym, di.app, late.purchase.id)).purchase.state).toBe("closed");
+    expect(square.payLink(linkOf(late.purchase.id)?.id ?? "")).toBe(false);
+    // From 23:50 a day pass is not bought at all; a 60-day pack still is.
+    clock = new Date("2026-11-11T05:52:00Z");
+    const tooLate = await buyPress(gym, di.app, await lineOf(gym, di.app, pass), {}, "Di Day");
+    expect(errorOf(tooLate)).toBe("app_purchase_too_late");
+    const packPage = parsed(await buyPress(gym, di.app, await lineOf(gym, di.app, pack), {}, "Di Day"));
+    expect(packPage.purchase.closesAt).toBe("2026-11-11T06:07:00.000Z");
+    // A second press on the open page signed with another name is not given the first signature.
+    const otherName = await buyPress(gym, di.app, await lineOf(gym, di.app, pack), {}, "Someone Else");
+    expect(errorOf(otherName)).toBe("app_payment_other_open");
+    // Staff of this gym on another record's page neither close nor check it.
+    const eve = await member(gym, "Eve Other");
+    expect((await send("POST", `${entryUrl(gym, eve.entryId)}/app-purchases/${packPage.purchase.id}/close`, gym.owner.cookies)).statusCode).toBe(404);
+    expect((await send("POST", `${entryUrl(gym, eve.entryId)}/app-purchases/${packPage.purchase.id}/checked`, gym.owner.cookies)).statusCode).toBe(404);
+    // Delete permanently waits while her page is open.
+    await sql`UPDATE gym_member_list_entries SET former_at = ${clock} WHERE gym_id = ${gym.id} AND id = ${di.entryId}`;
+    const whileOpen = await send("DELETE", `/v1/orgs/${gym.id}/member-list/former/${di.entryId}`, gym.owner.cookies);
+    expect(errorOf(whileOpen)).toBe("app_payment_open");
+    // Paid now, taken off the list meanwhile: nothing given, the money kept, and the page keeps no name she typed.
+    square.payLink(linkOf(packPage.purchase.id)?.id ?? "");
+    expect((await check(gym, di.app, packPage.purchase.id)).purchase.state).toBe("check");
+    const [kept] = await sql<{ sign: unknown }[]>`SELECT bought->'sign' AS sign FROM gym_app_payments WHERE id = ${packPage.purchase.id}`;
+    expect(kept?.sign).toBeNull();
+    // Delete permanently waits for that check too, then goes once it is marked checked.
+    const unchecked = await send("DELETE", `/v1/orgs/${gym.id}/member-list/former/${di.entryId}`, gym.owner.cookies);
+    expect(errorOf(unchecked)).toBe("app_purchase_check");
+    expect((await send("POST", `${entryUrl(gym, di.entryId)}/app-purchases/${packPage.purchase.id}/checked`, gym.owner.cookies)).statusCode).toBe(200);
+    const gone = await send("DELETE", `/v1/orgs/${gym.id}/member-list/former/${di.entryId}`, gym.owner.cookies);
+    expect(gone.statusCode, gone.body).toBe(200);
+
+    // A record two accounts hold is nobody's own to buy on; neither is one somebody else starts paying for once the line is read.
+    const fay = await member(gym, "Fay Two");
+    const fayLine = await lineOf(gym, fay.app, pack);
+    const second = await signedIn("Fay Two Phone");
+    await sql`INSERT INTO gym_members (gym_id, user_id, entry_id) VALUES (${gym.id}, ${second.userId}, ${fay.entryId})`;
+    expect(errorOf(await buyPress(gym, fay.app, fayLine, {}, "Fay Two"))).toBe("app_purchase_not_own");
+    // An adult by her record signs herself, never a parent or guardian for her.
+    const gus = await member(gym, "Gus Grown", "1990-02-02");
+    const gusLine = await lineOf(gym, gus.app, pack);
+    const asGuardian = await buyPress(gym, gus.app, gusLine, { agreement: { agreementId: gusLine.agreement?.id, signer: "guardian", name: "Pat Grown" } });
+    expect(errorOf(asGuardian)).toBe("person_signs");
+  });
+
   it("a body that is not a purchase is refused before anything is read", async () => {
     const acct = account(`ABVL${uniq().slice(-6)}`);
     const gym = await makeGym("App Buy Valid", acct);
