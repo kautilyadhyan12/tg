@@ -171,6 +171,8 @@ describe("the worst thing: a run deleted the person did not choose, or without b
     await fireEvent.press(screen.getByRole("button", { name: "Delete run" }));
     const sheet = await screen.findByText("Delete this run?");
     expect(sheet).toBeTruthy();
+    const listReads = () => s.requests.filter((r) => r.path === RUNS && r.method === "GET").length;
+    const readsBefore = listReads();
     await fireEvent.press(newest(screen.getAllByRole("button", { name: "Delete run" })));
     await waitFor(() => {
       expect(s.requests.filter((r) => r.method === "DELETE").map((r) => r.path)).toEqual([`${RUNS}/00000000-0000-4000-8000-000000000002`]);
@@ -182,6 +184,10 @@ describe("the worst thing: a run deleted the person did not choose, or without b
     expect(await rowOf("Morning Run")).toBeTruthy();
     expect(await rowOf("Long run")).toBeTruthy();
     expect(s.held.runs.map((r) => r.name)).toEqual(["Morning Run", "Long run"]);
+    // Taken out where it stood, never by reading the list again from its top (round one, L5); its total less it.
+    expect(listReads()).toBe(readsBefore);
+    // The header's total (and the month's too, where all three fell in one month).
+    expect(screen.getAllByText("2 runs · 21.99 km").length).toBeGreaterThanOrEqual(1);
   });
 
   it("Save changes sends only what the person changed, and nothing at all until pressed", async () => {
@@ -259,6 +265,19 @@ describe("Your runs", () => {
     await fireEvent.press(screen.getByRole("button", { name: "Show newest" }));
     await waitFor(() => {
       expect(screen.queryByText(/^Runs on .* and before$/)).toBeNull();
+    });
+  });
+
+  it("a run deleted from the Running page's box is said there", async () => {
+    const s = runsServer([makeRun(1, "Morning Run", 9.59, 63, 0), makeRun(2, "Old run", 6.96, 33, 3)]);
+    await openRunning(s);
+    await fireEvent.press(await rowOf("Morning Run"));
+    await fireEvent.press(await screen.findByRole("button", { name: "Delete run" }, { timeout: 4000 }));
+    await fireEvent.press(newest(screen.getAllByRole("button", { name: "Delete run" })));
+    expect(await screen.findByText("Morning Run was deleted.")).toBeTruthy();
+    const box = await screen.findByTestId("your-runs");
+    await waitFor(() => {
+      expect(within(box).getByText("Old run")).toBeTruthy();
     });
   });
 
