@@ -13,6 +13,7 @@ import { memberFeeKindSchema, memberPaymentMethodSchema, receiptNumberSchema } f
 import { heldMembershipShownSchema } from "./heldMemberships.js";
 import { membershipKindSchema } from "./memberships.js";
 import { membershipTermSchema } from "./membershipAgreement.js";
+import { myMembershipAgreementSchema } from "./myAgreementState.js";
 
 const daySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const minorSchema = z.number().int().min(0).max(99_999_999);
@@ -92,6 +93,9 @@ export const myMembershipSchema = z
     /** Its terms as its agreement says them (16d): the minimum term, early cancellation fee, notice to cancel and
      *  cooling-off period it has. Where somebody else pays for it, the fee and the cooling-off period are theirs to read. */
     terms: z.array(membershipTermSchema).max(4).default([]),
+    /** Its agreement (20c): to sign in the app, signed, or to sign at the front desk; null where the business asks
+     *  for none, on somebody the reader pays for, and from an api too old to send it. */
+    agreement: myMembershipAgreementSchema.nullable().default(null),
   })
   .strict();
 export type MyMembership = z.infer<typeof myMembershipSchema>;

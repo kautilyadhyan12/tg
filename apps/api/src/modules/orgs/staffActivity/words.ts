@@ -597,6 +597,8 @@ export const NOT_STAFF: ReadonlySet<string> = new Set([
   "org.lead_enquiry",
   // The person signs from the emailed link, with nobody at the desk (18u-ii-b).
   "org.agreement_signed_by_link",
+  // The member signs in the app (20c).
+  "member.agreement_signed",
   "org.lead_unsubscribed",
   "org.lead_complained",
   "org.restored",

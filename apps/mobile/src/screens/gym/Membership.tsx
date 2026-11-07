@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AppState, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from "react-native";
 import { Modal } from "../../look/Modal";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { formatMinor, myMembershipResponseSchema, receiptSchema, type MyMembership, type MyMembershipResponse, type Receipt } from "@app/shared";
+import { formatMinor, myMembershipResponseSchema, receiptSchema, type MyMembership, type MyMembershipAgreement, type MyMembershipResponse, type Receipt } from "@app/shared";
 import { Button } from "../../look/Button";
 import { Card, Pill } from "../../look/Card";
 import { colours, sizes } from "../../look/colours";
@@ -11,6 +11,8 @@ import { Sheet } from "../../look/Sheet";
 import { RECEIPT_MOST } from "../../look/sizing";
 import { Txt } from "../../look/Txt";
 import { useSession } from "../../session/SessionProvider";
+import { AgreementPage, type AgreementPlace } from "./Agreement";
+import { membershipAgreementRow } from "./agreementView";
 import {
   NO_PAYMENTS,
   cancelledLine,
@@ -81,6 +83,8 @@ function MembershipBody({ place, onClose, bottom }: { place: MembershipPlace; on
   const { session } = useSession();
   const [held, setHeld] = useState<Held>({ kind: "loading" });
   const [opened, setOpened] = useState<Opened | null>(null);
+  // The membership whose agreement page is open over this one (20c), or null.
+  const [agreementAt, setAgreementAt] = useState<AgreementPlace | null>(null);
   // Reads are numbered as they start: an answer stands only if no later read has started.
   const started = useRef(0);
   const receiptAsked = useRef(0);
@@ -158,7 +162,13 @@ function MembershipBody({ place, onClose, bottom }: { place: MembershipPlace; on
             />
           </Card>
         ) : (
-          <Sections view={held.view} receiptButton={receiptButton} />
+          <Sections
+            view={held.view}
+            receiptButton={receiptButton}
+            onAgreement={(m) => {
+              setAgreementAt({ id: place.id, name: place.name, membershipId: m.id, membershipName: m.name });
+            }}
+          />
         )}
       </ScrollView>
       <ReceiptBox
@@ -169,13 +179,23 @@ function MembershipBody({ place, onClose, bottom }: { place: MembershipPlace; on
           setOpened(null);
         }}
       />
+      <AgreementPage
+        place={agreementAt}
+        onSigned={() => {
+          void load(true);
+        }}
+        onClose={() => {
+          setAgreementAt(null);
+          void load(true);
+        }}
+      />
     </>
   );
 }
 
 type ReceiptButton = (number: number, what: string, refund?: boolean) => React.JSX.Element;
 
-function Sections({ view, receiptButton }: { view: MyMembershipResponse; receiptButton: ReceiptButton }) {
+function Sections({ view, receiptButton, onAgreement }: { view: MyMembershipResponse; receiptButton: ReceiptButton; onAgreement: (m: MyMembership) => void }) {
   const gym = view.gym.name;
   const none = noRecordText(view);
   if (none !== null) {
@@ -199,7 +219,7 @@ function Sections({ view, receiptButton }: { view: MyMembershipResponse; receipt
         )}
         {view.memberships.length === 0 ? <Txt>{noMembershipText(gym)}</Txt> : null}
         {view.memberships.map((m) => (
-          <MembershipCard key={m.id} m={m} gym={gym} paidBy={view.paidBy !== null} receiptButton={receiptButton} />
+          <MembershipCard key={m.id} m={m} gym={gym} paidBy={view.paidBy !== null} receiptButton={receiptButton} onAgreement={onAgreement} />
         ))}
         {view.earlierNotShown > 0 ? <Txt kind="small">{olderMemberships(gym)}</Txt> : null}
       </View>
@@ -270,7 +290,7 @@ function Sections({ view, receiptButton }: { view: MyMembershipResponse; receipt
             <Txt>{paysForText(person.name)}</Txt>
             {person.memberships.length === 0 ? <Txt>{theirNoMembershipText(person.name, gym)}</Txt> : null}
             {person.memberships.map((m) => (
-              <MembershipCard key={m.id} m={m} gym={gym} paidBy={false} receiptButton={receiptButton} />
+              <MembershipCard key={m.id} m={m} gym={gym} paidBy={false} receiptButton={receiptButton} onAgreement={null} />
             ))}
             {theirFees.map((item, j) => (
               <FeeCard key={`${item.fee.on}-${String(j)}`} item={item} gym={gym} receiptButton={receiptButton} />
@@ -283,7 +303,7 @@ function Sections({ view, receiptButton }: { view: MyMembershipResponse; receipt
   );
 }
 
-function MembershipCard({ m, gym, paidBy, receiptButton }: { m: MyMembership; gym: string; paidBy: boolean; receiptButton: ReceiptButton }) {
+function MembershipCard({ m, gym, paidBy, receiptButton, onAgreement }: { m: MyMembership; gym: string; paidBy: boolean; receiptButton: ReceiptButton; onAgreement: ((m: MyMembership) => void) | null }) {
   const tag = statusTag(m);
   const dates = datesText(m);
   const classes = classesText(m);
@@ -338,7 +358,32 @@ function MembershipCard({ m, gym, paidBy, receiptButton }: { m: MyMembership; gy
           ))}
         </View>
       )}
+      {m.agreement === null || onAgreement === null ? null : <AgreementRow m={m} agreement={m.agreement} gym={gym} onOpen={onAgreement} />}
     </Card>
+  );
+}
+
+/** Its agreement (20c): signed, with View; to sign, with Sign; or to sign at the front desk. */
+function AgreementRow({ m, agreement, gym, onOpen }: { m: MyMembership; agreement: MyMembershipAgreement; gym: string; onOpen: (m: MyMembership) => void }) {
+  const row = membershipAgreementRow(agreement, gym);
+  return (
+    <View testID={`agreement-row-${m.id}`} style={[styles.row, styles.agreement]}>
+      <View style={styles.grow}>
+        <Txt colour={row.tone === "warn" ? "orange" : "text"}>{row.title}</Txt>
+        {row.line === "" ? null : <Txt kind="small">{row.line}</Txt>}
+      </View>
+      {row.button === null ? null : (
+        <Button
+          label={row.button}
+          kind="soft"
+          small
+          say={`${row.button === "Sign" ? "Sign" : "View"} the agreement for ${m.name}`}
+          onPress={() => {
+            onOpen(m);
+          }}
+        />
+      )}
+    </View>
   );
 }
 
@@ -454,6 +499,7 @@ const styles = StyleSheet.create({
   ask: { gap: 12 },
   receipt: { gap: 12 },
   terms: { gap: 8, paddingTop: 10, borderTopWidth: 1, borderTopColor: colours.line },
+  agreement: { paddingTop: 10, borderTopWidth: 1, borderTopColor: colours.line, gap: 10 },
   rule: { gap: 6, paddingTop: 10, borderTopWidth: 1, borderTopColor: colours.line },
   middle: { alignSelf: "center" },
 });
