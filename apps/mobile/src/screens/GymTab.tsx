@@ -37,11 +37,12 @@ import { MembershipPage, type MembershipPlace } from "./gym/Membership";
 import { PersonalTrainingPage, type PtPlace } from "./gym/PersonalTraining";
 import { OWN_PASS_AFTER_MS, PASS_PATH, PassSheet } from "./gym/Pass";
 import { UpdatesPage, type UpdatesPlace } from "./gym/Updates";
+import { WaiverAsk, WaiverPage, type WaiverPlace } from "./gym/Waiver";
 import { makePhonePass, phoneDay } from "./gym/phonePass";
 import { NO_ANSWER } from "./SignIn";
 
 // The Gym tab (docs/design/phone/pages/Gym and GymNone): the places the person joined, each with
-// Show my pass, its Inbox, its Updates, its Classes, its Events, its Personal training, My membership, Invite a friend where it
+// Show my pass, its waiver to sign where it asks for one, its Inbox, its Updates, its Classes, its Events, its Personal training, My membership, Invite a friend where it
 // has switched Refer a friend on, and the days they came there, a place that removed them, and every invitation still open for their address. It reads again when the
 // tab is opened or the app comes back, at most every 30 seconds. With the internet it also asks for
 // this sign-in's keys for passes with no signal, today's and tomorrow's, whenever the phone lacks
@@ -100,6 +101,8 @@ export function GymScreen() {
   const [inboxAt, setInboxAt] = useState<InboxPlace | null>(null);
   // The place whose Invite a friend is open over the tab, or null.
   const [inviteAt, setInviteAt] = useState<InvitePlace | null>(null);
+  // The place whose Waiver page is open over the tab, or null.
+  const [waiverAt, setWaiverAt] = useState<WaiverPlace | null>(null);
 
   const fetchPass = useCallback(() => session.signedIn({ method: "GET", path: PASS_PATH }, checkinPassResponseSchema), [session]);
   const makeOwnPass = useMemo(
@@ -251,6 +254,15 @@ export function GymScreen() {
             <PlaceHead name={org.name} orgType={org.orgType} city={org.city}>
               <Pill label="Member" tone="good" icon="check" />
             </PlaceHead>
+            {org.waiver === "to_sign" ? (
+              <WaiverAsk
+                gymId={org.id}
+                gymName={org.name}
+                onOpen={() => {
+                  setWaiverAt({ id: org.id, name: org.name, orgType: org.orgType, city: org.city });
+                }}
+              />
+            ) : null}
             <Txt kind="small">
               {org.orgType === "personal_trainer" ? "Show your pass to your trainer when you arrive." : "Show your pass at the front desk when you arrive."}
             </Txt>
@@ -328,6 +340,17 @@ export function GymScreen() {
                   setMembershipAt({ id: org.id, name: org.name });
                 }}
               />
+              {org.waiver === "signed" ? (
+                <Button
+                  label="Waiver"
+                  kind="link"
+                  icon="book"
+                  say={`Waiver at ${org.name}`}
+                  onPress={() => {
+                    setWaiverAt({ id: org.id, name: org.name, orgType: org.orgType, city: org.city });
+                  }}
+                />
+              ) : null}
             </View>
             <InviteLine
               key={org.id}
@@ -399,6 +422,14 @@ export function GymScreen() {
         place={updatesAt}
         onClose={() => {
           setUpdatesAt(null);
+        }}
+      />
+      <WaiverPage
+        place={waiverAt}
+        onClose={() => {
+          setWaiverAt(null);
+          // A signature made, or a waiver changed meanwhile, is what the card says when it closes.
+          void readMine();
         }}
       />
       <InviteFriendPage
