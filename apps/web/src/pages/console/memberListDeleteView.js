@@ -35,7 +35,7 @@ export function deleteButton(preview) {
 /** "3 past members deleted permanently. 2 of them are being deleted from your Square customer list too." */
 export function deleteDoneLine(done, words) {
   if (done.nothingLeft) return `None of these are past ${words.people} any more, so nothing was deleted.`;
-  const deleted = `${pastPeople(done.deleted, words)} deleted permanently.`;
+  const deleted = `${pastPeople(done.deleted, words)} deleted permanently.${deletedAppLine(done, words)}`;
   const n = done.squareDeleting ?? 0;
   if (n === 0) return deleted;
   const who = n === done.deleted ? (n === 1 ? 'They are' : 'All of them are') : n === 1 ? 'One of them is' : `${count(n)} of them are`;
@@ -96,4 +96,64 @@ export function deleteSquareLineOne(kind, name) {
 /** " They are also being deleted from your Square customer list." after one person is deleted, or '' where they are not in it. */
 export function deletedOneSquareLine(squareDeleting) {
   return squareDeleting > 0 ? ' They are also being deleted from your Square customer list.' : '';
+}
+
+// What Delete permanently does about past members still in the app (5e-iii): their access to the gym there ends with their
+// record, as Remove from app ends it; staff keep theirs. The box names each, with its reason.
+/** The groups under the names; none where nobody deleted is in the app. */
+export function deleteAppGroups(preview, words) {
+  const app = preview?.app ?? { ends: [], keeps: [], mayEndApp: true };
+  const it = words.it ?? 'gym';
+  const people = (key, names) => names.map((name, i) => ({ id: `${key}-${String(i)}`, name }));
+  const groups = [];
+  if (app.ends.length > 0) {
+    groups.push({
+      key: 'ends',
+      title: `Also lose access to your ${it} in the app (${count(app.ends.length)})`,
+      why: app.mayEndApp
+        ? `They still use the app, so their access to your ${it} there ends too. Their own accounts and workout history aren’t affected.`
+        : `They still use the app. Deleting them also removes their access to your ${it} there, which your role can’t do. Ask the owner.`,
+      total: app.ends.length,
+      people: people('ends', app.ends),
+    });
+  }
+  if (app.keeps.length > 0) {
+    groups.push({
+      key: 'keeps',
+      title: `Keep access in the app (${count(app.keeps.length)})`,
+      why: `They are on your staff, so they keep access to your ${it} in the app.`,
+      total: app.keeps.length,
+      people: people('keeps', app.keeps),
+    });
+  }
+  return groups;
+}
+
+/** Nobody can be deleted by this reader: somebody's app would end, and their role can't end it. */
+export const deleteBlockedByApp = (preview) => (preview?.app?.ends?.length ?? 0) > 0 && preview?.app?.mayEndApp === false;
+
+/** " 2 of them no longer have access to your gym in the app." after a delete, or '' where nobody deleted was in the app. */
+function deletedAppLine(done, words) {
+  const n = done.appEnded ?? 0;
+  if (n === 0) return '';
+  const it = words.it ?? 'gym';
+  if (n === done.deleted) return n === 1 ? ` They no longer have access to your ${it} in the app.` : ` None of them have access to your ${it} in the app any more.`;
+  return n === 1 ? ` One of them no longer has access to your ${it} in the app.` : ` ${count(n)} of them no longer have access to your ${it} in the app.`;
+}
+
+/** On one past member's page, before Delete permanently: whose access ends and who keeps it (5e-iii); null for each nobody. */
+export function deleteAppLinesOne({ ending, keeping, mayEndApp, it = 'gym', listNames }) {
+  const ends =
+    ending.length === 0
+      ? null
+      : mayEndApp
+        ? `${listNames(ending)} will also lose access to your ${it} in the app. ${ending.length === 1 ? 'Their own account and workout history aren’t' : 'Their own accounts and workout history aren’t'} affected.`
+        : `${listNames(ending)} still ${ending.length === 1 ? 'uses' : 'use'} the app. Deleting them also removes their access to your ${it} there, which your role can’t do. Ask the owner.`;
+  const keeps = keeping.length === 0 ? null : `${listNames(keeping)} ${keeping.length === 1 ? 'is' : 'are'} on your staff, so ${keeping.length === 1 ? 'keeps' : 'keep'} access to your ${it} in the app.`;
+  return { ends, keeps };
+}
+
+/** " They no longer have access to your gym in the app." after one person is deleted, or ''. */
+export function deletedOneAppLine(appEnded, it = 'gym') {
+  return appEnded ? ` They no longer have access to your ${it} in the app.` : '';
 }

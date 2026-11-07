@@ -35,11 +35,11 @@ import { typeWithTax } from './heldMembershipsView';
 import { leadMatchLine } from '@app/shared';
 import { canRecordPayments } from './memberBillsView';
 import { canManageMemberships } from './membershipTypesView';
-import { viewerPrivileges } from './consoleView';
+import { canRemoveMembers, viewerPrivileges } from './consoleView';
 import { PersonMealPlan } from './MealPlanGiving';
 import { canManagePlans } from './mealPlansView';
 import { canOpenPlace, placeFor } from './consolePlaces';
-import { DELETE_WHAT_HAPPENS, SQUARE_OWNER_ONLY, deleteSquareLineOne, deletedOneSquareLine } from './memberListDeleteView';
+import { DELETE_WHAT_HAPPENS, SQUARE_OWNER_ONLY, deleteAppLinesOne, deleteSquareLineOne, deletedOneAppLine, deletedOneSquareLine } from './memberListDeleteView';
 import { useCameBack } from './useCameBack';
 import PlaceLink from '../../components/console/PlaceLink';
 import MoreMenu from '../../components/console/MoreMenu';
@@ -462,6 +462,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
   const [deleted, setDeleted] = useState(null);
   /** Customers in the gym's Square now being deleted with the person just deleted (18d-iii-b-ii-b-ii-b-ii). */
   const [deletedSquare, setDeletedSquare] = useState(0);
+  const [deletedApp, setDeletedApp] = useState(false);
   // Join: the search, the record picked, and which of the two is kept.
   const [joinQuery, setJoinQuery] = useState('');
   const [joinResults, setJoinResults] = useState(null);
@@ -918,6 +919,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
       const res = await orgService.deleteFormerMemberListEntry(gymId, asked);
       if (wanted.current !== asked) return;
       setDeletedSquare(res?.data?.squareDeleting ?? 0);
+      setDeletedApp(res?.data?.appEnded === true);
       setDeleted(name || 'This person');
       setEntry(null);
       onChanged();
@@ -1637,9 +1639,30 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
     // What Delete permanently does about their customer in the gym's Square (18d-iii-b-ii-b-ii-b-ii).
     const squareLine = deleteSquareLineOne(p.squareOnDelete, name);
     const squareTo = placeFor(gym?.slug, viewerPrivileges(gym), 'payments');
+    // Still in the app, they lose it with the record; staff keep theirs (5e-iii). Named, by the rule Remove from app uses.
+    const endsFor = p.removeEndsAppFor ?? [];
+    const mayEndApp = canRemoveMembers(viewerPrivileges(gym));
+    const app = deleteAppLinesOne({
+      ending: p.members.filter((m) => endsFor.includes(m.userId)).map((m) => m.displayName),
+      keeping: p.members.filter((m) => !endsFor.includes(m.userId)).map((m) => m.displayName),
+      mayEndApp,
+      it: words.it ?? 'gym',
+      listNames,
+    });
+    const blocked = endsFor.length > 0 && !mayEndApp;
     return (
       <Ask testId="confirm-delete" question={`Delete ${name} permanently?`}>
         <p className="c-s14 c-t2 m-0">{DELETE_WHAT_HAPPENS}</p>
+        {app.ends !== null ? (
+          <p className="c-s14 c-t2 m-0" data-testid="delete-app">
+            {app.ends}
+          </p>
+        ) : null}
+        {app.keeps !== null ? (
+          <p className="c-s14 c-t2 m-0" data-testid="delete-app-keeps">
+            {app.keeps}
+          </p>
+        ) : null}
         {squareLine !== null ? (
           <p className="c-s14 c-t2 m-0" data-testid="delete-square">
             {squareLine}
@@ -1657,10 +1680,12 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
           )
         ) : null}
         <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={() => void deleteForGood()} disabled={busy || readOnly} className={DANGER}>
-            Delete permanently
-          </button>
-          {cancel("Don't delete")}
+          {blocked ? null : (
+            <button type="button" onClick={() => void deleteForGood()} disabled={busy || readOnly} className={DANGER}>
+              Delete permanently
+            </button>
+          )}
+          {cancel(blocked ? 'Back' : "Don't delete")}
         </div>
       </Ask>
     );
@@ -1787,7 +1812,8 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
   if (deleted !== null) {
     body = (
       <p className="c-s14 c-t2 m-0" data-testid="deleted-note">
-        {deleted} was deleted permanently.{deletedOneSquareLine(deletedSquare)}
+        {deleted} was deleted permanently.{deletedOneAppLine(deletedApp, words.it ?? 'gym')}
+        {deletedOneSquareLine(deletedSquare)}
       </p>
     );
   } else if (id === null || (mode === 'edit' && shown !== null)) {
