@@ -592,6 +592,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
         - 12b-ii. [x] **The robot check on the phone** — merged 2026-10-14 (PR #263).
     - 12c. [x] **"Before you start" on the phone** — merged 2026-10-14 (PR #271).
     - 12d. [x] **Sign in with Google on the phone** — merged 2026-10-27 (PR #369).
+    - 12e. [ ] **Sign-in's new look** (Kd, 2026-11-07, before Google's closed test, 21d): a new picture and better buttons; the drawing first. A screen job.
 13. **Invitations and Join** (spec Part 3 §10.2; split 2026-10-27: the email's button needs the app's own web address).
     - 13a. [x] **Join on the phone** — merged 2026-10-27 (PR #372).
     - 13b. [ ] **The invitation email's button opens the app**, and on a phone without it the store buttons. Waits for the website's own address (Stage 4 item 1) and the app on the store (item 21): Android opens an app from a web link only when that https address names the app.
@@ -599,6 +600,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
     - 14a. [x] **The first seven questions** — merged 2026-10-27 (PR #373).
     - 14b. [x] **The health question, Safe mode and its tap, and Food** — merged 2026-10-28 (PR #375).
     - 14c. [x] **Your plan and Finish, and the place that invited you; setup in front of the tabs** — merged 2026-10-28 (PR #377).
+    - 14d. [ ] **A look at the Dashboard, then setup** (Kd, 2026-11-07, before 21d): after sign-in, Before you start and any invitation, the Dashboard for about 8 seconds, then setup in a box from the bottom that cannot be closed (Sign out stays). Until setup is done a tap on a workout, run, meal or plan opens it, so the health question and the age come first as today; reopened unfinished, setup at once.
 15. **The pass** (spec Part 3 §12.2) and the days you came (split 2026-10-28 in three: the pass first).
     - 15a. [x] **Show my pass** — merged 2026-10-28 (PR #378).
     - 15b. [x] **Attendance (Days you came)** — merged 2026-10-28 (PR #381).
@@ -645,7 +647,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
     - 21a. [ ] **The server online, free for the test** (Stage 4 item 1, moved here; Kd: pay only at publishing, same tools): the api, worker, Postgres, Redis and Caddy on Oracle Cloud's Always Free machine (ARM; home region chosen once, at sign-up), the domain (Kd's yes needed: Resend sends only from a domain you own) with HTTPS and the support address, Resend's and Sentry's free plans, nightly backups off the machine, Stage 4 item 22's scan ceiling.
     - 21b. [ ] **The privacy policy, the terms of use and the account-deletion page** (Stage 4 item 3's words for people who use the app; Google requires a web page to ask for deletion), on the domain; Get started's line opens them.
     - 21c. [ ] **The store version and Play Console**: the app's permanent id and name; a signed build targeting Android 16 (Google's rule since 2026-08-31), Google sign-in and notifications on it; the app setup (listing, a way in for Google's reviewers, 18+, data safety, the health declaration as fitness and nutrition only, never medical, running's service declaration and its video, "not a medical device"); Google's 16 KB check; 15 to 20 testers.
-    - 21d. [ ] **Google's closed test**, 14 days, at least 12 testers: starts once 21a to 21c and Stage 2's 14a are done (testers given the tester plan by hand if 14a is late), never waiting for workouts or exercises, which arrive by update. Production access is applied for the day after, while at least 12 testers are still in; publishing waits for the finished app.
+    - 21d. [ ] **Google's closed test**, 14 days, at least 12 testers: starts once 21a to 21c, 12e, 14d, 31h and Stage 2's 14a are done (testers given the tester plan by hand if 14a is late), never waiting for workouts or exercises, which arrive by update. Production access is applied for the day after, while at least 12 testers are still in; publishing waits for the finished app.
     - 21e. [ ] **Paying in the app and production**: the $10 plan through the stores (item 6), one device one trial (Stage 3's 2c), production access; the paid server and the domain chosen then; then the iPhone version with Apple sign-in.
 
 **Feature folder 2 — `D:\Projects\ai-home-gym-b`: the member's own day.**
@@ -663,6 +665,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
     - 31e. ~~**Food allergies**~~ — dropped 2026-11-03 (Kd: warn only, `rulings/2026-11-03-31f.md`).
     - 31f. [x] **Suggested or My plan in Recommended For You** — merged 2026-11-03 (PR #458).
     - 31g. [ ] **The gym's meal plan on the phone** (§16.6). Waits for Stage 2's 24a.
+    - 31h. [ ] **Zero, never a dash, where nothing is recorded yet** (Kd, 2026-11-07, before 21d): a count with nothing done reads 0; a number still loading shows a soft bar, never 0; a weight or a place that has none yet says so in words ("Add your weight", "Not ranked yet"), never 0 kg. Dashboard, Progress, Achievements and the gym's boards. A screen job.
 32. **Food** (split 2026-10-13: the server part needs no phone).
     - 32a. [x] **A meal sent twice from the phone is saved once** — merged 2026-10-13 (PR #238).
     - 32b. **The Food screen** (split 2026-10-28: logging first).
