@@ -633,7 +633,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
       - 19e-i. [x] **Workout and meal reminders** · merged 2026-11-06 · PR #479
       - 19e-ii. [x] **The streak reminder, badges and the Sunday summary** · merged 2026-11-06 · PR #482
 20. **What the gym side adds for members**, each after its web job: the waiver (3e), the membership agreement signed in the app (18u), the referral link (20e), the member photo (5b-vi), saving their card (18d-ii), buying from the gym (18k), stopping a membership (18l), a gym's plan for a member (19e). Split 2026-11-06, one part a terminal, each when its web job is built: the referral link first.
-    - 20a. [ ] **Invite a friend**: the gym's Refer a friend offer and the member's own link, on the Gym tab, shared from the phone.
+    - 20a. [x] **Invite a friend** · merged 2026-11-07 · PR #490
 21. [ ] **Paying, the stores and release**: the $10 plan through the stores (item 6), one device one trial (Stage 3's 2c), the store pages rated 18+, the Terms and Privacy pages that Get started's line opens (it opens nothing today, as the browser's), Google's closed test, then the iPhone version with Apple sign-in.
 
 **Feature folder 2 — `D:\Projects\ai-home-gym-b`: the member's own day.**
