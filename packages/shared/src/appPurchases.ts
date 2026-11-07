@@ -55,8 +55,18 @@ export const appPurchaseSignSchema = z
   .strict();
 export type AppPurchaseSign = z.infer<typeof appPurchaseSignSchema>;
 
-/** What a purchase page keeps of the line bought: what buying it gives (`appPurchaseGivenSchema`), and the signature. */
-export const appPurchaseBoughtSchema = appPurchaseGivenSchema.extend({ sign: appPurchaseSignSchema.nullable() }).strict();
+/** Who bought it, for a member not on the gym's list yet (18k-iii-b): their name, proved email and the phone they gave,
+ *  kept with the page until it ends, so they are put on the list as they were when they pressed Buy. */
+export const appPurchaseBuyerSchema = z
+  .object({ name: z.string().min(1).max(200), email: z.string().email().max(320), phone: z.string().max(40).nullable() })
+  .strict();
+export type AppPurchaseBuyer = z.infer<typeof appPurchaseBuyerSchema>;
+
+/** What a purchase page keeps of the line bought: what buying it gives (`appPurchaseGivenSchema`), the signature, and who
+ *  bought it where they were not on the list. */
+export const appPurchaseBoughtSchema = appPurchaseGivenSchema
+  .extend({ sign: appPurchaseSignSchema.nullable(), buyer: appPurchaseBuyerSchema.nullable().default(null) })
+  .strict();
 export type AppPurchaseBought = z.infer<typeof appPurchaseBoughtSchema>;
 
 export const appPurchaseCheckedResponseSchema = z.object({ ok: z.literal(true) }).strict();
@@ -64,6 +74,8 @@ export const appPurchaseCheckedResponseSchema = z.object({ ok: z.literal(true) }
 /** The server's answers to Buy, as the member reads them on the phone. */
 export const APP_PURCHASE_WORDS = {
   not_own: "To buy in the app, ask the front desk to add you to their member list first.",
+  /** A record two app accounts hold is nobody's in the app (17e-ii): neither buys on it. */
+  shared: "Two app accounts share your record here, so buy this at the front desk.",
   paid_by_other: "Someone else pays for your memberships here, so buy this at the front desk.",
   changed: "What you're buying has changed. Go back and look again.",
   agreement_changed: (gym: string): string => `${gym} has changed its agreement. Go back and read it again.`,
