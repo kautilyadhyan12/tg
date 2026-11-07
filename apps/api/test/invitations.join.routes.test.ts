@@ -816,7 +816,7 @@ d("join by invitation (real Postgres)", () => {
   );
 
   it(
-    "joining two records moves the membership's link onto the kept one, and deleting a record clears the link and keeps the member",
+    "joining two records moves the membership's link onto the kept one, and deleting a record clears the link and, a past member still in the app, ends her access too (5e-iii)",
     async () => {
       const gym = await makeGym("Merge Gym");
       const old = await addInvited(gym, { fullName: "Xena Kay", email: addr("xena") });
@@ -838,7 +838,9 @@ d("join by invitation (real Postgres)", () => {
       expect((await send("DELETE", `/v1/orgs/${gym.id}/member-list/former/${keptId}`, gym.owner.cookies)).statusCode).toBe(200);
       const rows = await membershipsOf(gym, xena);
       expect(rows).toHaveLength(1);
-      expect(rows[0]).toMatchObject({ entry_id: null, removed_at: null });
+      expect(rows[0]?.entry_id).toBeNull();
+      // Delete permanently takes a past member out of the app too (ROADMAP 5e-iii, Kd 2026-11-07).
+      expect(rows[0]?.removed_at).not.toBeNull();
     },
     TEST_TIMEOUT_MS,
   );

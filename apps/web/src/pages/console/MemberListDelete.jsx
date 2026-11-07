@@ -4,7 +4,7 @@ import { MEMBER_LIST_SELECTION_CHANGED_WORDS } from '@app/shared';
 import { deleteRefused, errorText, selectionChanged } from '../../api/orgsApi';
 import PlaceLink from '../../components/console/PlaceLink';
 import { Names } from './MemberListRemove';
-import { DELETE_WHAT_HAPPENS, SQUARE_OWNER_ONLY, deleteButton, deleteDoneLine, deleteKeptLine, deleteNobodyLine, deleteQuestion, deleteSquareGroups } from './memberListDeleteView';
+import { DELETE_WHAT_HAPPENS, SQUARE_OWNER_ONLY, deleteAppGroups, deleteButton, deleteDoneLine, deleteKeptLine, deleteNobodyLine, deleteQuestion, deleteSquareGroups } from './memberListDeleteView';
 
 // The Delete permanently box for the past members selected (5e-ii; Kd's click-through,
 // 2026-10-16). Before anyone is deleted it names who, and who ticked is not and why; the
@@ -114,6 +114,9 @@ export default function MemberListDelete({ words, load, press, onSelectionChange
     const nobody = deleteNobodyLine(preview, words);
     const kept = deleteKeptLine(preview, words);
     const squareGroups = question !== null ? deleteSquareGroups(preview) : [];
+    // Past members still in the app lose it with their record, staff keep it (5e-iii).
+    // "Not deleted" is said even when nobody else is; the rest only beside a delete.
+    const appGroups = deleteAppGroups(preview, words).filter((group) => question !== null || group.key === 'notDeleted');
     body = (
       <>
         {question !== null ? (
@@ -139,6 +142,13 @@ export default function MemberListDelete({ words, load, press, onSelectionChange
                 </p>
               )
             ) : null}
+          </section>
+        ))}
+        {appGroups.map((group) => (
+          <section key={group.key} className="flex flex-col gap-2" data-testid={`delete-app-${group.key}`}>
+            <h3 className="c-s16 c-w6 c-t1">{group.title}</h3>
+            <Names people={group.people} total={group.total} testId={`delete-app-${group.key}-names`} />
+            <p className="c-s14 c-t2">{group.why}</p>
           </section>
         ))}
         {nobody !== null ? <p className="c-s15 c-t1" data-testid="delete-nobody">{nobody}</p> : null}

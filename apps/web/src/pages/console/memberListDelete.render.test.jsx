@@ -6,7 +6,7 @@ import { render, screen, cleanup, fireEvent, waitFor, within } from '@testing-li
 import { MemoryRouter } from 'react-router-dom';
 import { MEMBER_LIST_DELETE_CHANGED_WORDS } from '@app/shared';
 import MemberListDelete from './MemberListDelete';
-import { deleteDoneLine, deleteKeptLine, deleteNobodyLine, deleteQuestion, deleteSquareGroups, deleteSquareLineOne, deletedOneSquareLine } from './memberListDeleteView';
+import { deleteAppGroups, deleteDoneLine, deleteKeptLine, deleteNobodyLine, deleteQuestion, deleteSquareGroups, deleteSquareLineOne, deletedOneSquareLine } from './memberListDeleteView';
 
 const words = { person: 'member', people: 'members' };
 const DIGEST = 'a'.repeat(64);
@@ -173,5 +173,58 @@ describe('the box words', () => {
     expect(deleteSquareLineOne('none', 'Ada Lovelace')).toBeNull();
     expect(deletedOneSquareLine(1)).toBe(' They are also being deleted from your Square customer list.');
     expect(deletedOneSquareLine(0)).toBe('');
+  });
+
+  // 5e-iii: past members still in the app lose it with their record; staff keep it. The box names each, with its reason.
+  const appPreview = (over = {}) =>
+    preview({ count: 3, names: ['Asha Rao', 'Bea Lin', 'Cal Noapp'], onList: 0, app: { ends: ['Asha Rao'], keeps: ['Bea Lin'], mayEndApp: true, ...over } });
+
+  it('names who loses access to the gym in the app and who keeps it, and the done line says how many no longer have it', async () => {
+    const press = vi.fn().mockResolvedValue({ deleted: 3, version: 4, appEnded: 1 });
+    open(() => Promise.resolve(appPreview()), press, { words: { ...words, it: 'studio' } });
+    const ends = within(await screen.findByTestId('delete-app-ends'));
+    expect(ends.getByText('Also lose access to your studio in the app (1)')).toBeTruthy();
+    expect(within(ends.getByTestId('delete-app-ends-names')).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['Asha Rao']);
+    expect(ends.getByText('They still use the app, so their access to your studio there ends too. Their own accounts and workout history aren’t affected.')).toBeTruthy();
+    const keeps = within(screen.getByTestId('delete-app-keeps'));
+    expect(keeps.getByText('Keep access in the app (1)')).toBeTruthy();
+    expect(keeps.getByText('They are on your staff, so they keep access to your studio in the app.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Delete 3 permanently' }));
+    expect((await screen.findByTestId('delete-done')).textContent).toBe('3 past members deleted permanently. 1 member no longer has access to your studio in the app.');
+  });
+
+  it('a role that can’t remove app access: those still in the app are named as not deleted, and the others can be deleted', async () => {
+    const press = vi.fn().mockResolvedValue({ deleted: 2, version: 4, appEnded: 0 });
+    const notDeleted = { count: 2, names: ['Bea Lin', 'Cal Noapp'], app: { ends: ['Asha Rao'], keeps: [], mayEndApp: false } };
+    open(() => Promise.resolve(preview({ onList: 0, ...notDeleted })), press);
+    const group = within(await screen.findByTestId('delete-app-notDeleted'));
+    expect(group.getByText('Not deleted (1)')).toBeTruthy();
+    expect(within(group.getByTestId('delete-app-notDeleted-names')).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['Asha Rao']);
+    expect(group.getByText('They still use the app, and your role can’t remove their access to your gym there, so they aren’t deleted. Ask the owner.')).toBeTruthy();
+    expect(screen.queryByTestId('delete-app-ends')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Delete 2 permanently' }));
+    expect((await screen.findByTestId('delete-done')).textContent).toBe('2 past members deleted permanently.');
+  });
+
+  it('everybody ticked still uses the app and the role can’t remove access: only the Not deleted group and Close', async () => {
+    open(() => Promise.resolve(preview({ count: 0, names: [], onList: 0, app: { ends: ['Asha Rao'], keeps: [], mayEndApp: false } })), vi.fn());
+    expect(await screen.findByTestId('delete-app-notDeleted')).toBeTruthy();
+    expect(screen.queryByTestId('delete-nobody')).toBeNull();
+    expect(screen.queryByTestId('delete-confirm')).toBeNull();
+    expect(screen.queryByRole('button', { name: "Don't delete" })).toBeNull();
+  });
+
+  it('nobody in the app: no app groups, and the done lines count those who were', () => {
+    expect(deleteAppGroups(preview(), words)).toEqual([]);
+    // Counted in people, beyond the names shown: one record two accounts share is two.
+    expect(deleteAppGroups(preview({ app: { ends: ['A', 'B'], keeps: [], mayEndApp: true, endsCount: 250, keepsCount: 0 } }), words)[0]).toMatchObject({
+      title: 'Also lose access to your gym in the app (250)',
+      total: 250,
+    });
+    expect(deleteDoneLine({ deleted: 1, appEnded: 1 }, words)).toBe('1 past member deleted permanently. 1 member no longer has access to your gym in the app.');
+    expect(deleteDoneLine({ deleted: 2, appEnded: 2 }, words)).toBe('2 past members deleted permanently. 2 members no longer have access to your gym in the app.');
+    expect(deleteDoneLine({ deleted: 5, appEnded: 3, squareDeleting: 1 }, words)).toBe(
+      '5 past members deleted permanently. One of them is being deleted from your Square customer list too. 3 members no longer have access to your gym in the app.',
+    );
   });
 });
