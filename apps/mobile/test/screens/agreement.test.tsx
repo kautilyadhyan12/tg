@@ -427,10 +427,18 @@ describe("the round-one cases", () => {
       online: null,
       fees: null,
     };
+    // Both signed in My membership: the business no longer stops the booking.
+    let signedBoth = false;
     const server = fakeServer({
       "/v1/auth/refresh": ok({ tokens: tokens(2) }),
-      "/v1/orgs/mine": ok({ orgs: [org(IRON, [{ membershipId: M_IRON, name: "Gold Monthly" }, { membershipId: M_PACK, name: "10-class pack" }])], formerOrgs: [] }),
-      [`/v1/orgs/${IRON.id}/member-classes`]: ok({ week: 0, from: "2026-11-08", to: "2026-11-14", timezone: "Europe/London", classes: [klass], more: false }),
+      "/v1/orgs/mine": () => ({
+        status: 200,
+        body: { orgs: [org(IRON, signedBoth ? [] : [{ membershipId: M_IRON, name: "Gold Monthly" }, { membershipId: M_PACK, name: "10-class pack" }])], formerOrgs: [] },
+      }),
+      [`/v1/orgs/${IRON.id}/member-classes`]: () => ({
+        status: 200,
+        body: { week: 0, from: "2026-11-08", to: "2026-11-14", timezone: "Europe/London", classes: [signedBoth ? { ...klass, can: { ...klass.can, book: true, why: null } } : klass], more: false },
+      }),
       "/v1/orgs/1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f/my-membership": ok(
         myMembership([
           membership(M_IRON, "Gold Monthly", { state: "to_sign", signedOn: null, signedName: null, view: false }),
@@ -444,6 +452,17 @@ describe("the round-one cases", () => {
     expect(await screen.findByLabelText("Sign the agreement for Gold Monthly")).toBeTruthy();
     expect(screen.getByLabelText("Sign the agreement for 10-class pack")).toBeTruthy();
     expect(server.asked.some((one) => one.path.endsWith("/agreement/mine"))).toBe(false);
+
+    // Signed there and closed: Classes under it reads again, and never says to sign at the front desk.
+    signedBoth = true;
+    const reads = server.asked.filter((one) => one.path.endsWith("/member-classes")).length;
+    await fireEvent.press(screen.getAllByLabelText("Back").at(-1) ?? screen.getByLabelText("Back"));
+    await waitFor(() => {
+      expect(server.asked.filter((one) => one.path.endsWith("/member-classes")).length).toBeGreaterThan(reads);
+    });
+    const box = within(await screen.findByTestId(`class-${klass.sessionId}`));
+    expect(await box.findByText("Book")).toBeTruthy();
+    expect(box.queryByText(UNSIGNED_BOOKING_WORDS)).toBeNull();
   });
 
   it("refused because it is signed at the front desk: the page says why once", async () => {

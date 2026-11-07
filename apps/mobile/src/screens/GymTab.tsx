@@ -458,7 +458,9 @@ export function GymScreen() {
         place={membershipAt}
         onClose={() => {
           setMembershipAt(null);
-          // An agreement signed there is what the card says when it closes (20c).
+          // An agreement signed there is what the card says when it closes, and what Classes or Personal training
+          // under it say, where its Sign agreement opened it (20c).
+          setAgreementClosed((n) => n + 1);
           void readMine();
         }}
       />

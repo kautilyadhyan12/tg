@@ -20,7 +20,7 @@ import {
   type SignMyAgreementResponse,
 } from "@app/shared";
 import type { Sql } from "postgres";
-import { insertAudit } from "../repo.js";
+import { insertAudit, type OrgRow } from "../repo.js";
 import { OrgsError } from "../service.js";
 import { factsKeyOf } from "./factsKey.js";
 import * as repo from "./repo.js";
@@ -41,14 +41,10 @@ async function ownMembership(deps: AgreementDeps, userId: string, gymId: string,
   return { ...own, email: record.email };
 }
 
-/** How long after a signature its copy may still be on its way (`claimCopy` claims one a minute). */
-const COPY_SENDING_MS = 60_000;
-
-/** A second press: what became of the first one's copy, and nothing sent. A copy not marked sent within a minute of
- *  the signature is the first press's, still sending. */
-function again(signed: repo.SignatureRow, email: string | null, at: Date): SignMyAgreementResponse {
-  const sending = signed.emailedAt === null && at.getTime() - signed.at.getTime() < COPY_SENDING_MS;
-  const emailed = email === null ? "no_email" : signed.emailedAt !== null || sending ? "sent" : "failed";
+/** A second press: a copy marked sent is said so; otherwise it goes through `sendCopy`, whose one-a-minute claim
+ *  answers "sent" for a copy another press is sending, and sends one that failed or never went. One copy either way. */
+async function again(deps: AgreementDeps, org: OrgRow, signed: repo.SignatureRow, email: string | null): Promise<SignMyAgreementResponse> {
+  const emailed = signed.emailedAt !== null ? "sent" : await sendCopy(deps, org, email, signed);
   return signMyAgreementResponseSchema.parse({ signed: signedOf(signed), emailed });
 }
 
@@ -100,7 +96,7 @@ export async function signMyAgreement(
   const existing = await repo.signatureOf(deps.sql, gymId, membershipId);
   if (existing !== null) {
     if (own.atDesk === "paid_by_other") throw new OrgsError(409, "agreement_at_desk", MY_AGREEMENT_WORDS.paid_by_other);
-    return again(existing, own.email, deps.now());
+    return await again(deps, own.org, existing, own.email);
   }
   if (own.atDesk !== null) throw new OrgsError(409, "agreement_at_desk", MY_AGREEMENT_WORDS[own.atDesk]);
   const at = deps.now();
@@ -132,7 +128,7 @@ export async function signMyAgreement(
   if (written === null) {
     const signed = await repo.signatureOf(deps.sql, gymId, membershipId);
     // Another press of theirs signed first.
-    if (signed !== null) return again(signed, own.email, deps.now());
+    if (signed !== null) return await again(deps, org, signed, own.email);
     const agreement = await askedOf(deps.sql, gymId, membershipId);
     if (agreement === null) throw new OrgsError(409, "agreement_not_in_use", AGREEMENT_WORDS.agreement_not_in_use(org.name));
     if (agreement.row.id !== body.agreementId) throw new OrgsError(409, "agreement_changed", AGREEMENT_WORDS.agreement_changed(org.name));

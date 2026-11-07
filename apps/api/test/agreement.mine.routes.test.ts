@@ -81,6 +81,7 @@ d("a member signs their own membership agreement in the app (real Postgres)", { 
   // Noon in Chicago, 7 November 2026.
   const clock = new Date("2026-11-07T18:00:00Z");
   const copies: AgreementCopyLetter[] = [];
+  let copyFails = false;
   /** How long the email service takes to answer a copy, for presses at once. */
   let copyDelayMs = 0;
   let app: App | undefined;
@@ -237,6 +238,7 @@ d("a member signs their own membership agreement in the app (real Postgres)", { 
       agreementEmailSender: {
         sendAgreementCopy: async (letter) => {
           if (copyDelayMs > 0) await new Promise((resolve) => setTimeout(resolve, copyDelayMs));
+          if (copyFails) throw new Error("the email service is down");
           copies.push(letter);
         },
         sendAgreementLink: () => Promise.resolve(),
@@ -442,6 +444,22 @@ d("a member signs their own membership agreement in the app (real Postgres)", { 
     expect(both.map((r) => signMyAgreementResponseSchema.parse(JSON.parse(r.body)).emailed)).toEqual(["sent", "sent"]);
     expect((await signatures(gym.id)).length).toBe(1);
     expect(copies.length).toBe(before + 1);
+  });
+
+  it("a copy that did not go is said so, and a second press sends it", async () => {
+    const gym = await makeGym("Copy Mine Gym", true);
+    const una = await member(gym, "Una Bell");
+    const gold = await give(gym, una.entryId);
+    const p = await page(gym.id, gold, una);
+    copyFails = true;
+    const first = await sign(gym.id, gold, una, bodyOf(p, "Una Bell"));
+    copyFails = false;
+    expect(signMyAgreementResponseSchema.parse(JSON.parse(first.body)).emailed).toBe("failed");
+    const before = copies.length;
+    const second = await sign(gym.id, gold, una, bodyOf(p, "Una Bell"));
+    expect(signMyAgreementResponseSchema.parse(JSON.parse(second.body)).emailed).toBe("sent");
+    expect(copies.length).toBe(before + 1);
+    expect((await signatures(gym.id)).length).toBe(1);
   });
 
   it("only a membership running or still to start is asked for: an upcoming one is, a cancelled one is not", async () => {
