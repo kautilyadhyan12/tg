@@ -823,6 +823,42 @@ describe('a person on the list', () => {
     });
   });
 
+  // 5e-iii: a past member still in the app loses it with their record, by the rule Remove from app uses; staff keep it.
+  describe('Delete permanently and the app', () => {
+    const U1 = '11111111-1111-4111-8111-111111111111';
+    const U2 = '22222222-2222-4222-8222-222222222222';
+    const member = (userId, displayName) => ({ userId, displayName, joinedAt: '2026-07-01T10:00:00.000Z', visits: 3, lastVisitOn: null, sharedEmail: false, waiverSigned: null });
+    const ask = async (gym) => {
+      orgService.getMemberListEntry.mockResolvedValue(
+        entryAnswer({ ...adaOld, inApp: true, removeEndsApp: true, removeEndsAppFor: [U1], members: [member(U1, 'Ada Lovelace'), member(U2, 'Tom Coach')] }),
+      );
+      orgService.deleteFormerMemberListEntry.mockResolvedValue({ data: { deleted: true, version: 5, squareDeleting: 0, appEnded: true } });
+      render(
+        <MemoryRouter>
+          <MemberListPerson gymId={GYM} gym={gym} entryId={ADA_OLD} list={LIST} words={WORDS} readOnly={false} canRemove onClose={onClose} onChanged={onChanged} />
+        </MemoryRouter>,
+      );
+      fireEvent.click(await dialog().findByRole('button', { name: 'Delete permanently' }));
+      return within(screen.getByTestId('confirm-delete'));
+    };
+
+    it('names who loses access and who keeps it, and the done line says their access has ended', async () => {
+      const box = await ask({ slug: 'iron-house', orgType: 'gym', staffRole: 'owner' });
+      expect(box.getByTestId('delete-app').textContent).toBe('Ada Lovelace will also lose access to your gym in the app. Their own account and workout history aren’t affected.');
+      expect(box.getByTestId('delete-app-keeps').textContent).toBe('Tom Coach is on your staff, so keeps access to your gym in the app.');
+      fireEvent.click(box.getByRole('button', { name: 'Delete permanently' }));
+      expect((await screen.findByTestId('deleted-note')).textContent).toBe('Ada Lovelace was deleted permanently. They no longer have access to your gym in the app.');
+    });
+
+    it('a role that can’t remove app access reads why, and has no Delete button', async () => {
+      const box = await ask({ slug: 'iron-house', orgType: 'gym', staffRole: 'manager', privileges: ['members.read', 'members.confirm'] });
+      expect(box.getByTestId('delete-app').textContent).toBe('Ada Lovelace still uses the app. Deleting them also removes their access to your gym there, which your role can’t do. Ask the owner.');
+      expect(box.queryByRole('button', { name: 'Delete permanently' })).toBeNull();
+      expect(box.getByRole('button', { name: 'Back' })).toBeTruthy();
+      expect(orgService.deleteFormerMemberListEntry).not.toHaveBeenCalled();
+    });
+  });
+
   it("goes ahead with a change that leaves app members off the list only when staff say so", async () => {
     orgService.changeMemberListEntry
       .mockRejectedValueOnce(refusal(409, { error: 'leaves_list', message: 'This would leave people who use the app off your list.', members: 1 }))

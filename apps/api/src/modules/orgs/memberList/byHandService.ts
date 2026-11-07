@@ -56,7 +56,7 @@ import { joinLeadOnAdd } from "../leads/joinOnAdd.js";
 import { OrgsError, requirePrivilege, requireWritablePrivilege } from "../service.js";
 import { appViewsOf } from "./appViews.js";
 import { deskSignaturesOf, moveDeskSignatures, signaturesOf, waiverInUse, type SignatureRow } from "../waiver/repo.js";
-import { appPeopleIn, removeRecordIn } from "./oneRemove.js";
+import { appOnDelete, appPeopleIn, endAppOnDelete, removeRecordIn } from "./oneRemove.js";
 import { currentRecordOf, pastRecordOf } from "./whose.js";
 import { applyTyped, EMPTY_VALUES, mergeValues, type EntryValues, type TypedContext } from "./byHand.js";
 import { identityKey } from "./fields.js";
@@ -789,7 +789,8 @@ async function giveAppBack(
   return { kind: "back", reopened: back.map((row) => row.userId) };
 }
 
-/** Delete a FORMER record for good (§11.1). A current one has to be taken off first. */
+/** Delete a FORMER record for good (§11.1). A current one has to be taken off first. A past member still in the app loses the
+ *  gym there with it (5e-iii), which needs `members.remove`, as Remove from app does. */
 export async function deleteFormer(
   deps: MemberListDeps,
   userId: string,
@@ -798,8 +799,11 @@ export async function deleteFormer(
   limit: () => Promise<boolean>,
 ): Promise<MemberListEntryDeleted | null> {
   await requireWritablePrivilege(deps, gymId, userId, "members.confirm");
+  const { privileges } = await requirePrivilege(deps, gymId, userId, "members.confirm");
   if (!(await limit())) return null;
-  return await deps.sql.begin(async (tx) => {
+  const at = deps.now();
+  const closed: string[] = [];
+  const done = await deps.sql.begin(async (tx) => {
     await repo.lockGym(tx, gymId);
     const stored = await repo.entryFor(tx, gymId, entryId);
     if (stored === null) throw notFound();
@@ -811,9 +815,14 @@ export async function deleteFormer(
     // Their number is never given to somebody new (5e-i).
     await repo.keepGoingMemberNumber(tx, gymId, stored.values.memberNumber);
     // The customer the app added in Square is owed its deletion while the link to it exists (18d-iii-b-ii-b-ii-b-ii).
-    const squareDeleting = await oweDeletes(tx, gymId, [entryId], deps.now());
+    const squareDeleting = await oweDeletes(tx, gymId, [entryId], at);
+    // Their app ends with the record, read while the record still says whose it is (5e-iii).
+    const ends = (await appOnDelete(tx, gymId, [entryId])).get(entryId)?.ends ?? [];
+    if (ends.length > 0 && !privileges.includes("members.remove")) throw new OrgsError(403, "forbidden", MEMBER_LIST_BY_HAND_WORDS.delete_needs_app);
+    const facts = { gymId, actorUserId: userId, at, settings: deps.invites ?? null };
+    closed.push(...(await endAppOnDelete(tx, facts, ends.map((member) => member.userId))));
     // Past members only, whatever was checked above (5e-ii).
-    if (!(await repo.deleteEntry(tx, gymId, entryId, deps.now(), { onlyPast: true }))) throw notFound();
+    if (!(await repo.deleteEntry(tx, gymId, entryId, at, { onlyPast: true }))) throw notFound();
     const version = await repo.bumpListVersion(tx, gymId);
     await insertAudit(tx, {
       actorUserId: userId,
@@ -823,8 +832,10 @@ export async function deleteFormer(
       targetId: entryId,
       meta: {},
     });
-    return { deleted: true as const, version, squareDeleting };
+    return { deleted: true as const, version, squareDeleting, appEnded: closed.length > 0 };
   });
+  await bustAfterRemoval(deps, gymId, closed);
+  return done;
 }
 
 /** Join two records of one person (PushPress's way): `goneId` is the record NOT

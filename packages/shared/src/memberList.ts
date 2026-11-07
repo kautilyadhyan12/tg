@@ -2168,6 +2168,17 @@ export const memberListDeletePreviewSchema = z
       })
       .strict()
       .default({ deletes: [], stays: [], shared: [], notReached: [] }),
+    /** Of the past members it deletes, those still in the app whose access to the gym ends with their record (5e-iii), and those
+     *  whose record it is who keep it because they work at the gym; each named, in the order of `names`. `mayEndApp` is false where
+     *  the reader's role cannot remove app access: then nobody in `ends` can be deleted by them. */
+    app: z
+      .object({
+        ends: z.array(z.string().max(MEMBER_LIST_MAX_NAME_CHARS)).max(MEMBER_LIST_DELETE_NAMES_SHOWN),
+        keeps: z.array(z.string().max(MEMBER_LIST_MAX_NAME_CHARS)).max(MEMBER_LIST_DELETE_NAMES_SHOWN),
+        mayEndApp: z.boolean(),
+      })
+      .strict()
+      .default({ ends: [], keeps: [], mayEndApp: true }),
   })
   .strict();
 export type MemberListDeletePreview = z.infer<typeof memberListDeletePreviewSchema>;
@@ -2185,6 +2196,8 @@ export const memberListDeletedSchema = z
     version: z.number().int().min(0),
     /** Customers now owed their deletion at Square, which the worker sends within minutes (18d-iii-b-ii-b-ii-b-ii). */
     squareDeleting: z.number().int().min(0).default(0),
+    /** Of them, how many were still in the app and no longer have access to the gym there (5e-iii). */
+    appEnded: z.number().int().min(0).default(0),
   })
   .strict();
 export type MemberListDeleted = z.infer<typeof memberListDeletedSchema>;
@@ -2584,7 +2597,13 @@ export const memberListEntryWrittenSchema = z
 export type MemberListEntryWritten = z.infer<typeof memberListEntryWrittenSchema>;
 
 export const memberListEntryDeletedSchema = z
-  .object({ deleted: z.literal(true), version: z.number().int().min(0), squareDeleting: z.number().int().min(0).default(0) })
+  .object({
+    deleted: z.literal(true),
+    version: z.number().int().min(0),
+    squareDeleting: z.number().int().min(0).default(0),
+    /** They were still in the app, and no longer have access to the gym there (5e-iii). */
+    appEnded: z.boolean().default(false),
+  })
   .strict();
 export type MemberListEntryDeleted = z.infer<typeof memberListEntryDeletedSchema>;
 
@@ -2724,6 +2743,7 @@ export const MEMBER_LIST_BY_HAND_WORDS = {
   large_change:
     "This would remove more of your members than we do without asking. Check the number, then confirm again to go ahead.",
   remove_needs_app: "This person uses the app, and your role can't remove app access. Ask the owner.",
+  delete_needs_app: "Deleting them also removes their access in the app, which your role can't do. Ask the owner.",
   remove_needs_list: "Removing this person also takes them off your list, which your role can't do. Ask the owner.",
   not_them_gone: "This person no longer uses the app with these details. Close and reopen the page.",
   not_them_needs_remove: "Your role can't remove app access. Ask the owner.",

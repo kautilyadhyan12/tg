@@ -77,7 +77,7 @@ export async function removeRecordIn(
   if (entry.formerAt !== null) {
     const version = (await repo.listState(tx, gymId))?.version ?? 0;
     if (people.length === 0) return { kind: "already_removed", version };
-    return { kind: "removed_from_app", version, closed: await endApp(tx, facts, people, entry.id) };
+    return { kind: "removed_from_app", version, closed: await endApp(tx, facts, people, entry.id, "list") };
   }
   // Their coming personal training sessions end with the record: named first (it throws).
   const sessions = await requireSessionsConfirmed(tx, gymId, { entryIds: [entry.id] }, at, facts.confirmPtSessions ?? null);
@@ -89,7 +89,7 @@ export async function removeRecordIn(
   await repo.stampListedByContact(tx, gymId, [{ email: entry.values.email, phone: entry.values.phone }], [entry.id], at);
   // Signing in with the address must not let anybody back in until staff invite again.
   await withdrawForAddress(tx, facts.settings, { gymId, email: entry.values.email, at });
-  const closed = await endApp(tx, facts, people, entry.id);
+  const closed = await endApp(tx, facts, people, entry.id, "list");
   const version = await repo.bumpListVersion(tx, gymId);
   await insertAudit(tx, {
     actorUserId: facts.actorUserId,
@@ -102,9 +102,9 @@ export async function removeRecordIn(
   return { kind: "removed", version, closed };
 }
 
-/** End these people's app with the gym, removed with this record, each audited, and stop
+/** End these people's app with the gym, removed with this record (none for a record being deleted), each audited, and stop
  *  their invitations. */
-async function endApp(tx: TransactionSql, facts: RemoveFacts, people: readonly string[], entryId: string): Promise<string[]> {
+async function endApp(tx: TransactionSql, facts: RemoveFacts, people: readonly string[], entryId: string | null, via: "list" | "deleted"): Promise<string[]> {
   const { gymId, at } = facts;
   const closed = await repo.closeMemberships(
     tx,
@@ -119,9 +119,35 @@ async function endApp(tx: TransactionSql, facts: RemoveFacts, people: readonly s
       action: "org.member_removed",
       targetType: "gym_member",
       targetId: row.membershipId,
-      meta: { removedUserId: row.userId, via: "list" },
+      meta: { removedUserId: row.userId, via },
     });
   }
   await withdrawForAccounts(tx, facts.settings, { gymId, userIds: closed.map((row) => row.userId), at });
   return closed.map((row) => row.userId);
+}
+
+/** DELETE PERMANENTLY TAKES THEM OUT OF THE APP TOO (ROADMAP 5e-iii; Kd, 2026-11-07). Of each past record, the people whose
+ *  access to the gym in the app ends with it: exactly those Remove from app ends (`appPeopleIn`), who joined with it and are
+ *  on the list by no other record. And of the same people, those who keep it because they work at the gym. Never a relative on
+ *  an email the record holds, never somebody on the list by another record. Read before the delete. */
+export interface AppOnDelete {
+  ends: readonly repo.MemberAgainstList[];
+  keeps: readonly repo.MemberAgainstList[];
+}
+
+export async function appOnDelete(sql: repo.SqlOrTx, gymId: string, entryIds: readonly string[]): Promise<Map<string, AppOnDelete>> {
+  const found = new Map<string, AppOnDelete>();
+  if (entryIds.length === 0) return found;
+  const reached = await repo.membersAgainstList(sql, gymId, { email: null, phone: null, entryIds });
+  for (const entryId of entryIds) {
+    const mine = reached.filter((member) => pastRecordOf(member) === entryId);
+    if (mine.length > 0) found.set(entryId, { ends: mine.filter((member) => member.inMarks), keeps: mine.filter((member) => !member.inMarks) });
+  }
+  return found;
+}
+
+/** Their app ends with the records being deleted: closed with no record (it is going), each audited, their invitations stopped
+ *  and their class bookings ended, as Remove from app does. The user ids closed. */
+export async function endAppOnDelete(tx: TransactionSql, facts: RemoveFacts, people: readonly string[]): Promise<string[]> {
+  return people.length === 0 ? [] : await endApp(tx, facts, people, null, "deleted");
 }
