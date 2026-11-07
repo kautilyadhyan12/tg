@@ -23,6 +23,8 @@ export function deleteKeptLine(preview, words) {
 /** Why nothing can be deleted, or null where something can. */
 export function deleteNobodyLine(preview, words) {
   if (preview.tooMany) return `You can delete up to ${count(MEMBER_LIST_DELETE_MAX)} past ${words.people} at a time. Tick fewer, then delete.`;
+  // Everybody ticked still uses the app and this role can't end it: the "Not deleted" group says why.
+  if (preview.count === 0 && preview.app?.mayEndApp === false && (preview.app?.ends?.length ?? 0) > 0) return null;
   if (preview.count === 0) return `Nobody you selected can be deleted. Only past ${words.people} can be.`;
   return null;
 }
@@ -106,15 +108,23 @@ export function deleteAppGroups(preview, words) {
   const it = words.it ?? 'gym';
   const people = (key, names) => names.map((name, i) => ({ id: `${key}-${String(i)}`, name }));
   const groups = [];
-  if (app.ends.length > 0) {
+  if (app.ends.length > 0 && app.mayEndApp) {
     groups.push({
       key: 'ends',
       title: `Also lose access to your ${it} in the app (${count(app.ends.length)})`,
-      why: app.mayEndApp
-        ? `They still use the app, so their access to your ${it} there ends too. Their own accounts and workout history aren’t affected.`
-        : `They still use the app. Deleting them also removes their access to your ${it} there, which your role can’t do. Ask the owner.`,
+      why: `They still use the app, so their access to your ${it} there ends too. Their own accounts and workout history aren’t affected.`,
       total: app.ends.length,
       people: people('ends', app.ends),
+    });
+  }
+  // A role that can't remove app access: these are left out of the delete, and the others are deleted.
+  if (app.ends.length > 0 && !app.mayEndApp) {
+    groups.push({
+      key: 'notDeleted',
+      title: `Not deleted (${count(app.ends.length)})`,
+      why: `They still use the app, and your role can’t remove their access to your ${it} there, so they aren’t deleted. Ask the owner.`,
+      total: app.ends.length,
+      people: people('notDeleted', app.ends),
     });
   }
   if (app.keeps.length > 0) {
@@ -128,9 +138,6 @@ export function deleteAppGroups(preview, words) {
   }
   return groups;
 }
-
-/** Nobody can be deleted by this reader: somebody's app would end, and their role can't end it. */
-export const deleteBlockedByApp = (preview) => (preview?.app?.ends?.length ?? 0) > 0 && preview?.app?.mayEndApp === false;
 
 /** " 2 of them no longer have access to your gym in the app." after a delete, or '' where nobody deleted was in the app. */
 function deletedAppLine(done, words) {
@@ -149,7 +156,7 @@ export function deleteAppLinesOne({ ending, keeping, mayEndApp, it = 'gym', list
       : mayEndApp
         ? `${listNames(ending)} will also lose access to your ${it} in the app. ${ending.length === 1 ? 'Their own account and workout history aren’t' : 'Their own accounts and workout history aren’t'} affected.`
         : `${listNames(ending)} still ${ending.length === 1 ? 'uses' : 'use'} the app. Deleting them also removes their access to your ${it} there, which your role can’t do. Ask the owner.`;
-  const keeps = keeping.length === 0 ? null : `${listNames(keeping)} ${keeping.length === 1 ? 'is' : 'are'} on your staff, so ${keeping.length === 1 ? 'keeps' : 'keep'} access to your ${it} in the app.`;
+  const keeps = keeping.length === 0 ? null : `${listNames(keeping)} ${keeping.length === 1 ? 'is' : 'are'} on your staff, so they keep access to your ${it} in the app.`;
   return { ends, keeps };
 }
 

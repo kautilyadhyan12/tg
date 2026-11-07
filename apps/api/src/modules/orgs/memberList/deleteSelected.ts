@@ -37,20 +37,6 @@ function digestOf(gymId: string, ids: readonly string[], standing: readonly squa
     .digest("hex");
 }
 
-/** The past members still in the app whose access ends, and those who keep it because they work at the gym, by their record's
- *  name in the order the box lists the people. */
-function appGroups(records: Records, app: AppOf, mayEndApp: boolean): MemberListDeletePreview["app"] {
-  const ends: string[] = [];
-  const keeps: string[] = [];
-  for (const record of records) {
-    const people = app.get(record.id);
-    if (people === undefined) continue;
-    if (people.ends.length > 0) ends.push(record.fullName);
-    if (people.keeps.length > 0) keeps.push(record.fullName);
-  }
-  return { ends: ends.slice(0, MEMBER_LIST_DELETE_NAMES_SHOWN), keeps: keeps.slice(0, MEMBER_LIST_DELETE_NAMES_SHOWN), mayEndApp };
-}
-
 /** Each person counted once, by what Delete permanently does about their place in the gym's Square customer list, and named: in the
  *  order the box lists the people. */
 function squareGroups(records: Records, standing: readonly squareDeletes.StandingRow[]): Pick<MemberListDeletePreview, "square" | "squareNames"> {
@@ -70,17 +56,39 @@ function squareGroups(records: Records, standing: readonly squareDeletes.Standin
   };
 }
 
-function previewOf(gymId: string, records: Records, standing: readonly squareDeletes.StandingRow[], app: AppOf, mayEndApp: boolean): MemberListDeletePreview {
+/** What one press does, and the box that says it. A role that can't remove app access (no `members.remove`) deletes the past
+ *  members ticked who are not in the app, and leaves out, named, those whose access would end (5e-iii): `app.ends` then holds
+ *  the people NOT deleted. People are named by their app account's name, in the order the box lists the records. */
+function planOf(
+  gymId: string,
+  records: Records,
+  standing: readonly squareDeletes.StandingRow[],
+  app: AppOf,
+  mayEndApp: boolean,
+): { preview: MemberListDeletePreview; deleted: Records } {
   const past = records.filter((record) => record.past);
-  return {
-    count: past.length,
-    names: past.slice(0, MEMBER_LIST_DELETE_NAMES_SHOWN).map((record) => record.fullName),
+  const ends = (record: Records[number]) => app.get(record.id)?.ends ?? [];
+  const deleted = mayEndApp ? past : past.filter((record) => ends(record).length === 0);
+  const left = mayEndApp ? [] : past.filter((record) => ends(record).length > 0);
+  const kept = new Set(deleted.map((record) => record.id));
+  const theirs = standing.filter((row) => kept.has(row.entryId));
+  const theirApp = new Map([...app].filter(([entryId]) => kept.has(entryId)));
+  const names = (from: Records, pick: (people: AppOnDelete) => readonly { fullName: string }[]) =>
+    from.flatMap((record) => pick(app.get(record.id) ?? { ends: [], keeps: [] }).map((member) => member.fullName)).slice(0, MEMBER_LIST_DELETE_NAMES_SHOWN);
+  const preview: MemberListDeletePreview = {
+    count: deleted.length,
+    names: deleted.slice(0, MEMBER_LIST_DELETE_NAMES_SHOWN).map((record) => record.fullName),
     onList: records.length - past.length,
-    tooMany: past.length > MEMBER_LIST_DELETE_MAX,
-    digest: digestOf(gymId, past.map((record) => record.id), standing, app),
-    ...squareGroups(past, standing),
-    app: appGroups(past, app, mayEndApp),
+    tooMany: deleted.length > MEMBER_LIST_DELETE_MAX,
+    digest: digestOf(gymId, deleted.map((record) => record.id), theirs, theirApp),
+    ...squareGroups(deleted, theirs),
+    app: {
+      ends: mayEndApp ? names(deleted, (people) => people.ends) : names(left, (people) => people.ends),
+      keeps: names(deleted, (people) => people.keeps),
+      mayEndApp,
+    },
   };
+  return { preview, deleted };
 }
 
 const pastIds = (records: Records): string[] => records.filter((record) => record.past).map((record) => record.id);
@@ -102,7 +110,7 @@ export async function previewDeleteSelected(
   const within = past.length <= MEMBER_LIST_DELETE_MAX;
   const standing = within ? await squareDeletes.standingOf(deps.sql, gymId, past) : [];
   const app = within ? await appOnDelete(deps.sql, gymId, past) : new Map<string, AppOnDelete>();
-  return previewOf(gymId, records, standing, app, privileges.includes("members.remove"));
+  return planOf(gymId, records, standing, app, privileges.includes("members.remove")).preview;
 }
 
 export type DeleteSelectedAnswer = { kind: "rate_limited" } | { kind: "changed"; preview: MemberListDeletePreview } | { kind: "deleted"; done: MemberListDeleted };
@@ -115,8 +123,7 @@ export async function deleteSelected(
   input: MemberListDeleteSelectedRequest,
   limit: () => Promise<boolean>,
 ): Promise<DeleteSelectedAnswer> {
-  await requireWritablePrivilege(deps, gymId, userId, "members.confirm");
-  const { privileges } = await requirePrivilege(deps, gymId, userId, "members.confirm");
+  const { privileges } = await requireWritablePrivilege(deps, gymId, userId, "members.confirm");
   const mayEndApp = privileges.includes("members.remove");
   if (!(await limit())) return { kind: "rate_limited" };
   // NOBODY CHOSEN IS A PAST MEMBER ANY MORE: the same press sent again after it was done (a
@@ -139,16 +146,20 @@ export async function deleteSelected(
   const answer = await deps.sql.begin(async (tx): Promise<DeleteSelectedAnswer> => {
     await repo.lockGym(tx, gymId);
     const records = await repo.recordsAmong(tx, gymId, ids);
-    const past = records.filter((record) => record.past);
-    if (past.length === 0) return await nothingLeft(tx);
-    const within = past.length <= MEMBER_LIST_DELETE_MAX;
-    const standing = within ? await squareDeletes.standingOf(tx, gymId, pastIds(records)) : [];
-    const app = within ? await appOnDelete(tx, gymId, pastIds(records)) : new Map<string, AppOnDelete>();
-    const preview = previewOf(gymId, records, standing, app, mayEndApp);
+    const tickedPast = pastIds(records);
+    if (tickedPast.length === 0) return await nothingLeft(tx);
+    const within = tickedPast.length <= MEMBER_LIST_DELETE_MAX;
+    const standing = within ? await squareDeletes.standingOf(tx, gymId, tickedPast) : [];
+    const app = within ? await appOnDelete(tx, gymId, tickedPast) : new Map<string, AppOnDelete>();
+    const { preview, deleted: past } = planOf(gymId, records, standing, app, mayEndApp);
     if (preview.digest !== input.digest) return { kind: "changed", preview };
+    // Everybody ticked still uses the app, and this role can't end it: the box said so, and nobody is deleted.
+    if (past.length === 0) {
+      return { kind: "deleted", done: { deleted: 0, nothingLeft: false, version: (await repo.listState(tx, gymId))?.version ?? 0, squareDeleting: 0, appEnded: 0 } };
+    }
     if (preview.tooMany) throw new OrgsError(400, "too_many_to_delete", `Delete up to ${MEMBER_LIST_DELETE_MAX.toLocaleString("en")} past members at a time.`);
     // Their app ends with their record (5e-iii), which only a role that removes app access may do.
-    const ending = [...app.values()].flatMap((people) => people.ends.map((member) => member.userId));
+    const ending = past.flatMap((record) => (app.get(record.id)?.ends ?? []).map((member) => member.userId));
     if (ending.length > 0 && !mayEndApp) throw new OrgsError(403, "forbidden", MEMBER_LIST_BY_HAND_WORDS.delete_needs_app);
     // What Square took on a page still open would have no bill to go on (18k-ii-a).
     if (await anyOpenOfEntries(tx, gymId, past.map((record) => record.id))) throw new OrgsError(409, "app_payment_open", APP_PAYMENT_STAFF_WORDS.delete_open);
@@ -164,7 +175,9 @@ export async function deleteSelected(
     // The customers the app added in Square are owed their deletion while their links still exist (the records take them with them).
     const squareDeleting = await squareDeletes.oweDeletes(tx, gymId, past.map((record) => record.id), at);
     closed.push(...(await endAppOnDelete(tx, { gymId, actorUserId: userId, at, settings: deps.invites ?? null }, ending)));
-    const appEnded = past.filter((record) => (app.get(record.id)?.ends.length ?? 0) > 0).length;
+    // Counted by what was closed, not by what was read: a person made staff meanwhile keeps their access and is not counted.
+    const closedNow = new Set(closed);
+    const appEnded = past.filter((record) => (app.get(record.id)?.ends ?? []).some((member) => closedNow.has(member.userId))).length;
     for (const record of past) {
       if (!(await repo.deleteEntry(tx, gymId, record.id, at, { onlyPast: true }))) {
         throw new Error(`a past member the box named was not deleted (${record.id})`);

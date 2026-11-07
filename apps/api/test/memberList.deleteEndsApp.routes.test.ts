@@ -8,6 +8,7 @@ import { addAnyway } from "./memberListAddAnyway.js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
 import { buildApp } from "../src/app.js";
+import { createMemoryRedis } from "../src/redis.js";
 import { loadConfig } from "../src/config.js";
 import { emailHmac } from "../src/modules/orgs/invites/address.js";
 import { inviteSettings } from "../src/modules/orgs/invites/settings.js";
@@ -60,6 +61,7 @@ const cookieMap = (res: { cookies: { name: string; value: string }[] }) => Objec
 d("Delete permanently takes a past member out of the app too (real Postgres)", () => {
   const sql = postgres(url ?? "", { prepare: false, max: 5 });
   const signInCodes = new Map<string, string>();
+  const redis = createMemoryRedis();
   let app: App | undefined;
   const api = (): App => {
     if (app === undefined) throw new Error("beforeAll did not build the app");
@@ -200,6 +202,7 @@ d("Delete permanently takes a past member out of the app too (real Postgres)", (
       VALUES (${LIVE_PLAN}, 'org', ${"plan." + LIVE_PLAN}, 0, 'INR', 'month', 100000, 0, 10, '{}'::jsonb, '{}'::jsonb)
       ON CONFLICT (code) DO UPDATE SET active = true, seat_cap = 100000`;
     app = await buildApp(loadConfig(baseEnv), {
+      redis,
       emailSender: {
         sendVerificationEmail: () => Promise.resolve(),
         sendPasswordResetEmail: () => Promise.resolve(),
@@ -284,12 +287,20 @@ d("Delete permanently takes a past member out of the app too (real Postgres)", (
     async () => {
       const gym = await makeGym();
       const { entryId, user } = await pastInApp(gym, "Ravi Shah", "rshah");
+      // What the app remembers of his gym perks, and his invitation, before.
+      await redis.setex(`ent:${user.userId}`, 60, "{}");
+      const invite = async () =>
+        (await sql<{ state: string }[]>`SELECT state FROM gym_invites WHERE gym_id = ${gym.id} AND email_hmac = ${emailHmac(settings.hmacKey, addr("rshah"))}`)[0]?.state;
+      expect(await invite()).not.toBe("withdrawn");
       const res = await deleteOne(gym, entryId);
       expect(res.statusCode, res.body).toBe(200);
       expect(memberListEntryDeletedSchema.parse(JSON.parse(res.body))).toMatchObject({ deleted: true, appEnded: true });
       expect(await exists(gym, entryId)).toBe(false);
       expect(await inApp(gym, user)).toBe(false);
       expect(await removedAudits(gym, user)).toBe(1);
+      // His gym perks are read again at once, and signing in with the address lets nobody back in.
+      expect(await redis.get(`ent:${user.userId}`)).toBeNull();
+      expect(await invite()).toBe("withdrawn");
       // Their app's closed membership names no record to give it back with: the record is gone.
       const [closed] = await sql<{ removed_entry_id: string | null }[]>`
         SELECT removed_entry_id FROM gym_members WHERE gym_id = ${gym.id} AND user_id = ${user.userId}`;
@@ -336,7 +347,7 @@ d("Delete permanently takes a past member out of the app too (real Postgres)", (
   );
 
   it(
-    "a role that can't remove app access deletes nobody still in the app, and says why; a past member not in the app it can delete",
+    "a role that can't remove app access deletes nobody still in the app, and names them as not deleted; the others ticked it deletes",
     async () => {
       const gym = await makeGym();
       const { entryId, user } = await pastInApp(gym, "Ola Kept", "okept");
@@ -347,17 +358,21 @@ d("Delete permanently takes a past member out of the app too (real Postgres)", (
       const one = await deleteOne(gym, entryId, clerk);
       expect(one.statusCode, one.body).toBe(403);
       expect(one.body).toContain(MEMBER_LIST_BY_HAND_WORDS.delete_needs_app);
+      // Ola alone: nobody is deleted, and the box names her.
+      const onlyOla = await box(gym, ticked(entryId), clerk);
+      expect(onlyOla).toMatchObject({ count: 0, app: { ends: ["Ola Kept"], keeps: [], mayEndApp: false } });
+      const none = await press(gym, ticked(entryId), onlyOla.digest, clerk);
+      expect(none.statusCode, none.body).toBe(200);
+      expect(memberListDeletedResponseSchema.parse(JSON.parse(none.body)).done).toMatchObject({ deleted: 0, appEnded: 0 });
+      // With Pat: Pat is deleted, Ola is left out.
       const preview = await box(gym, ticked(entryId, noApp), clerk);
-      expect(preview.app).toEqual({ ends: ["Ola Kept"], keeps: [], mayEndApp: false });
+      expect(preview).toMatchObject({ count: 1, names: ["Pat Gone"], app: { ends: ["Ola Kept"], keeps: [], mayEndApp: false } });
       const many = await press(gym, ticked(entryId, noApp), preview.digest, clerk);
-      expect(many.statusCode, many.body).toBe(403);
-      expect(await exists(gym, entryId)).toBe(true);
-      expect(await exists(gym, noApp)).toBe(true);
-      expect(await inApp(gym, user)).toBe(true);
-
-      const alone = await deleteOne(gym, noApp, clerk);
-      expect(alone.statusCode, alone.body).toBe(200);
+      expect(many.statusCode, many.body).toBe(200);
+      expect(memberListDeletedResponseSchema.parse(JSON.parse(many.body)).done).toMatchObject({ deleted: 1, appEnded: 0 });
       expect(await exists(gym, noApp)).toBe(false);
+      expect(await exists(gym, entryId)).toBe(true);
+      expect(await inApp(gym, user)).toBe(true);
       // A stranger and another gym's owner reach nobody here.
       const stranger = await register(addr("stranger"));
       expect([403, 404]).toContain((await deleteOne(gym, entryId, stranger)).statusCode);

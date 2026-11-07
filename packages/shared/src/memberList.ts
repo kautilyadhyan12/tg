@@ -2168,9 +2168,9 @@ export const memberListDeletePreviewSchema = z
       })
       .strict()
       .default({ deletes: [], stays: [], shared: [], notReached: [] }),
-    /** Of the past members it deletes, those still in the app whose access to the gym ends with their record (5e-iii), and those
-     *  whose record it is who keep it because they work at the gym; each named, in the order of `names`. `mayEndApp` is false where
-     *  the reader's role cannot remove app access: then nobody in `ends` can be deleted by them. */
+    /** The people in the app whose access to the gym ends with the past members it deletes (5e-iii), and those who keep it because
+     *  they are staff, by their app names, in the order of the records. `mayEndApp` is false where the reader's role cannot remove app
+     *  access: then the past members still in the app are left out of the delete, and `ends` names them as not deleted. */
     app: z
       .object({
         ends: z.array(z.string().max(MEMBER_LIST_MAX_NAME_CHARS)).max(MEMBER_LIST_DELETE_NAMES_SHOWN),

@@ -798,8 +798,7 @@ export async function deleteFormer(
   entryId: string,
   limit: () => Promise<boolean>,
 ): Promise<MemberListEntryDeleted | null> {
-  await requireWritablePrivilege(deps, gymId, userId, "members.confirm");
-  const { privileges } = await requirePrivilege(deps, gymId, userId, "members.confirm");
+  const { privileges } = await requireWritablePrivilege(deps, gymId, userId, "members.confirm");
   if (!(await limit())) return null;
   const at = deps.now();
   const closed: string[] = [];

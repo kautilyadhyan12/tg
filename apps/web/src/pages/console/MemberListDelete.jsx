@@ -4,7 +4,7 @@ import { MEMBER_LIST_SELECTION_CHANGED_WORDS } from '@app/shared';
 import { deleteRefused, errorText, selectionChanged } from '../../api/orgsApi';
 import PlaceLink from '../../components/console/PlaceLink';
 import { Names } from './MemberListRemove';
-import { DELETE_WHAT_HAPPENS, SQUARE_OWNER_ONLY, deleteAppGroups, deleteBlockedByApp, deleteButton, deleteDoneLine, deleteKeptLine, deleteNobodyLine, deleteQuestion, deleteSquareGroups } from './memberListDeleteView';
+import { DELETE_WHAT_HAPPENS, SQUARE_OWNER_ONLY, deleteAppGroups, deleteButton, deleteDoneLine, deleteKeptLine, deleteNobodyLine, deleteQuestion, deleteSquareGroups } from './memberListDeleteView';
 
 // The Delete permanently box for the past members selected (5e-ii; Kd's click-through,
 // 2026-10-16). Before anyone is deleted it names who, and who ticked is not and why; the
@@ -115,8 +115,8 @@ export default function MemberListDelete({ words, load, press, onSelectionChange
     const kept = deleteKeptLine(preview, words);
     const squareGroups = question !== null ? deleteSquareGroups(preview) : [];
     // Past members still in the app lose it with their record, staff keep it (5e-iii).
-    const appGroups = question !== null ? deleteAppGroups(preview, words) : [];
-    const blocked = deleteBlockedByApp(preview);
+    // "Not deleted" is said even when nobody else is; the rest only beside a delete.
+    const appGroups = deleteAppGroups(preview, words).filter((group) => question !== null || group.key === 'notDeleted');
     body = (
       <>
         {question !== null ? (
@@ -173,14 +173,14 @@ export default function MemberListDelete({ words, load, press, onSelectionChange
           </p>
         ) : null}
         <div className="grid grid-cols-[1fr_auto] md:flex md:justify-end gap-2 md:gap-3">
-          {question !== null && !blocked ? (
+          {question !== null ? (
             <button type="button" onClick={() => void remove()} disabled={deleting} data-testid="delete-confirm" className="c-btn c-btn-danger c-btn-lg md:order-2">
               {deleting ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
               {deleteButton(preview)}
             </button>
           ) : null}
           <button type="button" onClick={onClose} className="c-btn c-btn-s c-btn-lg md:order-1">
-            {question !== null && !blocked ? "Don't delete" : 'Close'}
+            {question !== null ? "Don't delete" : 'Close'}
           </button>
         </div>
       </div>

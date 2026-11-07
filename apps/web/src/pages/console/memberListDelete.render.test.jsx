@@ -193,13 +193,25 @@ describe('the box words', () => {
     expect((await screen.findByTestId('delete-done')).textContent).toBe('3 past members deleted permanently. One of them no longer has access to your studio in the app.');
   });
 
-  it('a role that can’t remove app access reads why and who can, and gets no Delete button', async () => {
-    const press = vi.fn();
-    open(() => Promise.resolve(appPreview({ keeps: [], mayEndApp: false })), press);
-    expect(await screen.findByText('They still use the app. Deleting them also removes their access to your gym there, which your role can’t do. Ask the owner.')).toBeTruthy();
+  it('a role that can’t remove app access: those still in the app are named as not deleted, and the others can be deleted', async () => {
+    const press = vi.fn().mockResolvedValue({ deleted: 2, version: 4, appEnded: 0 });
+    const notDeleted = { count: 2, names: ['Bea Lin', 'Cal Noapp'], app: { ends: ['Asha Rao'], keeps: [], mayEndApp: false } };
+    open(() => Promise.resolve(preview({ onList: 0, ...notDeleted })), press);
+    const group = within(await screen.findByTestId('delete-app-notDeleted'));
+    expect(group.getByText('Not deleted (1)')).toBeTruthy();
+    expect(within(group.getByTestId('delete-app-notDeleted-names')).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['Asha Rao']);
+    expect(group.getByText('They still use the app, and your role can’t remove their access to your gym there, so they aren’t deleted. Ask the owner.')).toBeTruthy();
+    expect(screen.queryByTestId('delete-app-ends')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Delete 2 permanently' }));
+    expect((await screen.findByTestId('delete-done')).textContent).toBe('2 past members deleted permanently.');
+  });
+
+  it('everybody ticked still uses the app and the role can’t remove access: only the Not deleted group and Close', async () => {
+    open(() => Promise.resolve(preview({ count: 0, names: [], onList: 0, app: { ends: ['Asha Rao'], keeps: [], mayEndApp: false } })), vi.fn());
+    expect(await screen.findByTestId('delete-app-notDeleted')).toBeTruthy();
+    expect(screen.queryByTestId('delete-nobody')).toBeNull();
     expect(screen.queryByTestId('delete-confirm')).toBeNull();
     expect(screen.queryByRole('button', { name: "Don't delete" })).toBeNull();
-    expect(press).not.toHaveBeenCalled();
   });
 
   it('nobody in the app: no app groups, and the done lines count those who were', () => {

@@ -845,7 +845,7 @@ describe('a person on the list', () => {
     it('names who loses access and who keeps it, and the done line says their access has ended', async () => {
       const box = await ask({ slug: 'iron-house', orgType: 'gym', staffRole: 'owner' });
       expect(box.getByTestId('delete-app').textContent).toBe('Ada Lovelace will also lose access to your gym in the app. Their own account and workout history aren’t affected.');
-      expect(box.getByTestId('delete-app-keeps').textContent).toBe('Tom Coach is on your staff, so keeps access to your gym in the app.');
+      expect(box.getByTestId('delete-app-keeps').textContent).toBe('Tom Coach is on your staff, so they keep access to your gym in the app.');
       fireEvent.click(box.getByRole('button', { name: 'Delete permanently' }));
       expect((await screen.findByTestId('deleted-note')).textContent).toBe('Ada Lovelace was deleted permanently. They no longer have access to your gym in the app.');
     });
