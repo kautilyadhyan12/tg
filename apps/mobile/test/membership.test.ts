@@ -152,6 +152,7 @@ describe("a membership", () => {
 
 describe("fees", () => {
   const fee = (state: "due" | "overdue" | "paid" | "refunded" | "waived", over: object = {}) => ({
+    id: "5d0f2f8e-6b0a-4c1e-9a43-2f6c1d9e7a02",
     fee: "late_cancel" as const,
     forName: "Spin at 6",
     on: "2026-10-20",
@@ -161,6 +162,7 @@ describe("fees", () => {
     refundedMinor: 0,
     refundPending: false,
     receiptNumber: state === "paid" || state === "refunded" ? 31 : null,
+    stillOwed: true,
     ...over,
   });
   const item = (f: ReturnType<typeof fee>) => ({ fee: f, currency: "INR", membership: "Gold Monthly" });

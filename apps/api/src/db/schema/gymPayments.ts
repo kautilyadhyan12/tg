@@ -873,7 +873,7 @@ export const gymAutopayPauses = pgTable(
 );
 
 /** Pay what they owe in the app (0217; ROADMAP 18k-ii-a): one row a member's press, while Square's own payment page for
- *  a membership's bill is open (`open`), then `done` with why. `link_key` is the key Square made the page with, so asking
+ *  a membership's bill, or one of its fees (0219; 18k-ii-b), is open (`open`), then `done` with why. `link_key` is the key Square made the page with, so asking
  *  again gives back the same page. While open, nothing else is paid, voided or changed on that membership; the page is
  *  closed at Square (its order CANCELED, so it can no longer be paid) when the member leaves it, staff close it, or
  *  `closes_at` passes, and the row stays open until Square says so. A paid row is kept, for the card it names; a closed one
@@ -889,7 +889,9 @@ export const gymAppPayments = pgTable(
       .references(() => gyms.id, { onDelete: "cascade" }),
     entryId: uuid("entry_id"),
     heldMembershipId: uuid("held_membership_id").notNull(),
-    periodIndex: integer("period_index").notNull(),
+    periodIndex: integer("period_index"),
+    /** A fee of the membership (0219; 18k-ii-b), in place of a period. */
+    feeBillId: uuid("fee_bill_id"),
     amountMinor: integer("amount_minor").notNull(),
     currency: text("currency").notNull(),
     environment: text("environment").notNull(),
@@ -928,7 +930,11 @@ export const gymAppPayments = pgTable(
       "gym_app_payments_ids_check",
       sql`${t.accountId} ~ '^[A-Za-z0-9_-]{1,64}$' AND ${t.locationId} ~ '^[A-Za-z0-9_-]{1,64}$' AND ${t.linkId} ~ '^[A-Za-z0-9_-]{1,64}$' AND ${t.orderId} ~ '^[A-Za-z0-9_-]{1,192}$' AND char_length(${t.url}) <= 300 AND (${t.squarePaymentId} IS NULL OR ${t.squarePaymentId} ~ '^[A-Za-z0-9_-]{1,192}$')`,
     ),
-    check("gym_app_payments_amount_check", sql`${t.amountMinor} BETWEEN 1 AND 99999999 AND ${t.currency} ~ '^[A-Z]{3}$' AND ${t.periodIndex} >= 0 AND ${t.closesAt} > ${t.openedAt}`),
+    check(
+      "gym_app_payments_amount_check",
+      sql`${t.amountMinor} BETWEEN 1 AND 99999999 AND ${t.currency} ~ '^[A-Z]{3}$' AND (${t.periodIndex} IS NULL OR ${t.periodIndex} >= 0) AND ${t.closesAt} > ${t.openedAt}`,
+    ),
+    check("gym_app_payments_bill_check", sql`num_nonnulls(${t.periodIndex}, ${t.feeBillId}) = 1`),
     check("gym_app_payments_state_check", sql`${t.state} IN ('open','done')`),
     check(
       "gym_app_payments_outcome_check",
@@ -938,7 +944,7 @@ export const gymAppPayments = pgTable(
       "gym_app_payments_paid_check",
       sql`((${t.outcome} IS NOT DISTINCT FROM 'paid') = (${t.memberPaymentId} IS NOT NULL)) AND (${t.outcome} NOT IN ('paid','not_recorded') OR ${t.squarePaymentId} IS NOT NULL)`,
     ),
-    check("gym_app_payments_close_check", sql`(${t.closeWantedAt} IS NULL) = (${t.closeWantedBy} IS NULL) AND (${t.closeWantedBy} IS NULL OR ${t.closeWantedBy} IN ('member','staff','expired'))`),
+    check("gym_app_payments_close_check", sql`(${t.closeWantedAt} IS NULL) = (${t.closeWantedBy} IS NULL) AND (${t.closeWantedBy} IS NULL OR ${t.closeWantedBy} IN ('member','staff','expired','removed'))`),
     check("gym_app_payments_card_check", sql`(${t.cardBrand} IS NULL) = (${t.cardLast4} IS NULL) AND (${t.cardLast4} IS NULL OR ${t.cardLast4} ~ '^[0-9]{4}$') AND (${t.cardBrand} IS NULL OR char_length(${t.cardBrand}) <= 40)`),
     uniqueIndex("gym_app_payments_request_uq").on(t.gymId, t.requestKey),
     uniqueIndex("gym_app_payments_membership_uq").on(t.gymId, t.heldMembershipId).where(sql`${t.state} = 'open'`),
@@ -948,5 +954,6 @@ export const gymAppPayments = pgTable(
     index("gym_app_payments_open_idx").on(t.checkedAt).where(sql`${t.state} = 'open'`),
     index("gym_app_payments_member_payment_idx").on(t.gymId, t.memberPaymentId).where(sql`${t.memberPaymentId} IS NOT NULL`),
     index("gym_app_payments_done_idx").on(t.finishedAt).where(sql`${t.finishedAt} IS NOT NULL AND ${t.outcome} = 'closed'`),
+    index("gym_app_payments_check_idx").on(t.gymId, t.heldMembershipId).where(sql`${t.outcome} IN ('not_recorded','gone','no_answer')`),
   ],
 );

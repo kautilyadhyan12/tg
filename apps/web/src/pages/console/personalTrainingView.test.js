@@ -797,6 +797,13 @@ describe('came or no-show (17e-iv-b)', () => {
     expect(markRow(started({ fees }), null).note).toBe('Not marked yet');
     expect(markRow(started({ fees: null }), 'GBP').note).toBe('Not marked yet');
     expect(markRow(started({ status: 'attended', fees }), 'GBP').note).toBe('Changing to no-show adds a one-time £8.00 fee.');
+    // Marked Came while they were paying its fee in the app (18k-ii-b): that fee waits for the page, so nothing is added.
+    expect(markRow(started({ status: 'attended', fees, fee: { kind: 'no_show', amountMinor: 800, state: 'held' } }), 'GBP').note).toBe(
+      'Their £8.00 no-show fee comes off once their payment page in the app closes, if nothing was paid.',
+    );
+    expect(markRow(started({ status: 'attended', fees, fee: { kind: 'no_show', amountMinor: 800, state: 'check' } }), 'GBP').note).toBe(
+      'Their £8.00 no-show fee may have been paid in the app. Check Square, then waive it on their page.',
+    );
     const missed = (fee) => markRow(started({ status: 'no_show', fees, fee }), 'GBP').note;
     expect(missed({ kind: 'no_show', amountMinor: 800, state: 'owed' })).toBe('One-time no-show fee £8.00 · Payment due. Changing to came takes it off.');
     expect(missed({ kind: 'no_show', amountMinor: 800, state: 'paid' })).toBe('One-time no-show fee £8.00 · Paid.');

@@ -57,6 +57,8 @@ import { expireLapsedGymTrials } from "./modules/orgs/trialSweep.js";
 import { sweepGoneForGood } from "./modules/orgs/goneForGood/sweep.js";
 import { clearOldRemovedLabels } from "./modules/nutrition/labelRepo.js";
 import { updatePackagedFoods } from "./modules/nutrition/packagedSync.js";
+import { heightMapFor } from "./modules/geo/heights.adapter.js";
+import { workOutWaitingClimbs } from "./modules/geo/service.js";
 import { purgeDueUsers, purgeShortfall } from "./modules/privacy/purge.js";
 import { changeEmailSenderFor } from "./modules/users/changeEmailSender.js";
 import { sendDueEmailChangedNotes } from "./modules/users/emailChangedNotes.js";
@@ -70,7 +72,7 @@ import { sendDueCardExpiryNotices } from "./modules/orgs/payments/cardExpiry.js"
 import { sendDueRenewalReminders } from "./modules/orgs/memberships/renewalReminders.js";
 import { sendDueCardNotices } from "./modules/orgs/payments/cardNotices.js";
 // The worker busts no entitlement cache: a gym's members pick a change up within the cache's 60 s.
-import { createMemoryRedis } from "./redis.js";
+import { createIoRedis, createMemoryRedis } from "./redis.js";
 import { sentryOptions } from "./sentry.js";
 
 const config = loadConfig(process.env);
@@ -106,6 +108,7 @@ export const ORGS_MEMBER_LIST_ANALYSE_JOB = "orgs.member_list_analyse";
 export const ORGS_GONE_FOR_GOOD_JOB = "orgs.gone_for_good";
 export const NUTRITION_PACKAGED_UPDATE_JOB = "nutrition.packaged_update";
 export const ACCOUNT_EMAIL_CHANGED_NOTES_JOB = "account.email_changed_notes";
+export const GEO_CLIMB_SWEEP_JOB = "geo.climb_sweep";
 
 const connection = new Redis(redisUrl, { maxRetriesPerRequest: null });
 const sql = postgres(config.DATABASE_URL, { prepare: false, max: 2 });
@@ -322,6 +325,26 @@ if (config.PACKAGED_FOOD_UPDATES) {
   // Switched off after being on: the schedule stays in Redis until it is taken out.
   await queue.removeJobScheduler(NUTRITION_PACKAGED_UPDATE_JOB).catch(() => false);
 }
+
+// A RUN'S ELEVATION GAIN THAT WAITED FOR THE HEIGHT MAP (ROADMAP Stage 5 37b-ii): every fifteen
+// minutes, on minutes 14, 29, 44 and 59, off the other schedules' minutes. A run is saved at once whatever the map
+// does; one whose map piece was still coming is worked out here once it is kept. Each run is kept only
+// while it still waits, so a second run at once changes nothing.
+try {
+  await queue.upsertJobScheduler(
+    GEO_CLIMB_SWEEP_JOB,
+    { pattern: "14-59/15 * * * *" },
+    {
+      name: GEO_CLIMB_SWEEP_JOB,
+      opts: { attempts: 1, removeOnComplete: { count: 50 }, removeOnFail: { count: 200 } },
+    },
+  );
+} catch (err) {
+  log.fatal({ err }, "failed to register the elevation gain schedule");
+  process.exit(1);
+}
+// Its own Redis seam, beside BullMQ's connection: a person's new squares are counted with the api's.
+const heights = heightMapFor(config, log, createIoRedis(redisUrl));
 
 // THE GYM'S DAY GETS WRITTEN DOWN (Part 3 §3.2; Kd rulings :26469 and :29961).
 // **THE ONLY SCHEDULE ON THIS QUEUE THAT IS NOT NIGHTLY, AND THE REASON IS THE
@@ -967,7 +990,8 @@ const worker = new Worker(
       job.name !== ORGS_MEMBER_LIST_ANALYSE_JOB &&
       job.name !== ORGS_GONE_FOR_GOOD_JOB &&
       job.name !== NUTRITION_PACKAGED_UPDATE_JOB &&
-      job.name !== ACCOUNT_EMAIL_CHANGED_NOTES_JOB
+      job.name !== ACCOUNT_EMAIL_CHANGED_NOTES_JOB &&
+      job.name !== GEO_CLIMB_SWEEP_JOB
     ) {
       throw new Error(`unknown job on ${ROLLUPS_QUEUE}: ${job.name}`);
     }
@@ -1064,6 +1088,12 @@ const worker = new Worker(
         log,
       });
       log.info({ ...report, durationMs: Date.now() - startedAt, event: "job.finished", job: job.name }, "job finished");
+      return;
+    }
+    if (job.name === GEO_CLIMB_SWEEP_JOB) {
+      // A minute at most: the queue is every rollup job's.
+      const climbs = await workOutWaitingClimbs({ sql, heights, log }, { limit: 50, waitMs: 15_000, mostMs: 60_000 });
+      log.info({ ...climbs, durationMs: Date.now() - startedAt, event: "job.finished", job: job.name }, "job finished");
       return;
     }
     if (job.name === ORGS_MEMBER_LIST_ANALYSE_JOB) {

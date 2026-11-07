@@ -475,6 +475,7 @@ describe("invitation settings", () => {
     TURNSTILE_SITE_KEY: "site",
     TURNSTILE_SECRET_KEY: "secret",
     PHOTO_DIR: "/srv/aihg/photos",
+    HEIGHTS_DIR: "/srv/aihg/heights",
     SUPPORT_EMAIL: "help@example.com",
   };
 

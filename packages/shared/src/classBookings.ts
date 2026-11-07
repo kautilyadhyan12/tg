@@ -444,8 +444,10 @@ const staffBookingSchema = z
     entryId: z.string().uuid().nullable(),
     at: z.string().datetime(),
     /** Its late cancel or no-show fee (18h-i), owed, paid, part refunded, with Square, refunded or waived, in the list's
-     *  `currency`; null for none, and for a coach reading their own class's list. */
-    fee: z.object({ amountMinor: z.number().int().min(1), state: z.enum(["owed", "paid", "part_refunded", "refund_pending", "refunded", "waived"]) }).strict().nullable().default(null),
+     *  `currency`; null for none, and for a coach reading their own class's list. `held`: no longer owed, and it comes off
+     *  once the member's payment page in the app for it closes with nothing paid; `check`: no longer owed, and that page
+     *  ended with money Square may have taken, so staff check Square, then waive it (18k-ii-b). */
+    fee: z.object({ amountMinor: z.number().int().min(1), state: z.enum(["owed", "paid", "part_refunded", "refund_pending", "refunded", "waived", "held", "check"]) }).strict().nullable().default(null),
     /** What marking them No-show would add (`classFeeFor`); null for nothing, and for a coach,
      *  who is sent the list's `noShowFeeMayMinor` instead. */
     noShowFeeMinor: z.number().int().min(1).nullable().default(null),

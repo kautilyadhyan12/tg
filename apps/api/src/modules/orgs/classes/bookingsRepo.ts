@@ -26,7 +26,7 @@ import {
   type HeldCover,
 } from "@app/shared";
 import { heldForBooking, heldForClasses } from "../memberships/heldRepo.js";
-import { feeListState, feeRefundSql, type FeeListState } from "../memberships/feesRepo.js";
+import { feeHeldSql, feeListState, feeRefundSql, type FeeListState } from "../memberships/feesRepo.js";
 
 type SqlOrTx = Sql | TransactionSql;
 
@@ -538,11 +538,14 @@ export async function staffList(
       fee_status: string | null;
       fee_refund: string | null;
       fee_waived: boolean | null;
+      fee_still_owed: boolean | null;
+      fee_paying: boolean | null;
       at: Date;
     }[]
   >`
     SELECT b.id, b.status, b.pack_charged, b.held_membership_id, COALESCE(b.cancelled_at, b.booked_at, b.created_at) AS at, e.id AS entry_id,
            f.amount_minor AS fee_minor, f.status AS fee_status, (f.void_reason = 'waived') AS fee_waived, ${feeRefundSql(sql)} AS fee_refund,
+           ${feeHeldSql(sql)},
            CASE WHEN u.status = 'active' THEN u.display_name END AS display_name,
            CASE WHEN u.status = 'active' THEN u.email::text END AS email,
            nullif(btrim(e.full_name), '') AS record_name,
