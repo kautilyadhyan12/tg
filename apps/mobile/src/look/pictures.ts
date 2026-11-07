@@ -11,6 +11,8 @@
 // `greekyoga`, `vikingbell` and `egyptpush` are his painted posters, cut without their carved words.
 // Running (37a, 2026-11-05): `track` is Kd's "Silhouette Sprint and Long Shadow"; `greekrun` his "Ivory Greek
 // chiton running poster", cut above its carved words and its numbers.
+// Invite a friend (20a, 2026-11-06): `highfive` is Kd's poster "High five across the bridge", cut above its words and
+// logo, its sky made the page's black and its people warm black-and-white (Kd: "too much red … match my theme").
 // Your runs (37c-i, 2026-11-07): `runners` is his "Runners in timeless monochrome", cut to its two runners.
 import anatomy from "../../assets/pictures/anatomy.webp";
 import balance from "../../assets/pictures/balance.webp";
@@ -36,6 +38,7 @@ import goddess from "../../assets/pictures/goddess.webp";
 import greekrun from "../../assets/pictures/greekrun.webp";
 import greekyoga from "../../assets/pictures/greekyoga.webp";
 import hero from "../../assets/pictures/hero.webp";
+import highfive from "../../assets/pictures/highfive.webp";
 import hourstrained from "../../assets/pictures/hourstrained.webp";
 import jumpsquat from "../../assets/pictures/jumpsquat.webp";
 import latestbadges from "../../assets/pictures/latestbadges.webp";
@@ -91,6 +94,7 @@ export const pictures = {
   greekrun,
   greekyoga,
   hero,
+  highfive,
   hourstrained,
   jumpsquat,
   latestbadges,

@@ -13,7 +13,11 @@ import {
   referralGiftInputWords,
   referralGiftWords,
   referralMemberGiftWords,
+  referralLineWords,
   referralOfferLines,
+  referralShareMessage,
+  referralTickets,
+  memberReferralResponseSchema,
   setReferralSettingsRequestSchema,
   type ReferralGiftTerms,
 } from "../src/index.js";
@@ -125,6 +129,104 @@ describe("what the member reads", () => {
       "Your link shows your first name, Maya, to whoever opens it.",
       "This offer is set by Northside Gym and may change.",
     ]);
+  });
+});
+
+// The phone's Invite a friend (Stage 5 item 20a): the same offer as the lines above, each gift
+// on a ticket of its own. Written by hand from what each gift does, as the lines were.
+describe("what the member reads on the phone", () => {
+  const gbp = { kind: "amount" as const, percentBp: null, amountMinor: 1000, currency: "GBP" };
+  const money = referralMemberGiftWords({ ...gbp, on: "membership" });
+  const days = referralMemberGiftWords({ ...gbp, on: "membership", days: 14 });
+  const desk = referralMemberGiftWords({ ...gbp, on: "products" });
+  const small = ["Your link shows your first name, Maya, to whoever opens it.", "This offer is set by Iron House Gym and may change."];
+  it.each([
+    [
+      "both gifts, money off for the member",
+      money,
+      "10% off the first payment of a membership",
+      {
+        you: { gift: "£10.00 off your next membership payment", notes: ["When a friend you invite joins Iron House Gym and makes their first payment, it comes off by itself, and we'll tell you in your inbox."] },
+        friend: { gift: "10% off the first payment of a membership", note: "Iron House Gym adds it for them when they join." },
+        plain: null,
+      },
+    ],
+    [
+      "free days for the member, and the money a member with no membership gets instead",
+      days,
+      null,
+      {
+        you: {
+          gift: "14 free days on your membership",
+          notes: [
+            "When a friend you invite joins Iron House Gym and makes their first payment, they are added by themselves, and we'll tell you in your inbox.",
+            "If you have no membership then, you get £10.00 off your next membership payment instead.",
+          ],
+        },
+        friend: null,
+        plain: null,
+      },
+    ],
+    [
+      "money off at the desk for the member",
+      desk,
+      null,
+      {
+        you: { gift: "£10.00 off your next purchase at the desk", notes: ["When a friend you invite joins Iron House Gym and makes their first payment, it comes off by itself, and we'll tell you in your inbox."] },
+        friend: null,
+        plain: null,
+      },
+    ],
+    ["the friend's gift alone", null, "₹500.00 off products", { you: null, friend: { gift: "₹500.00 off products", note: "Iron House Gym adds it for them when they join." }, plain: null }],
+    ["no gift that can be used today promises nothing", null, null, { you: null, friend: null, plain: "Send your link to a friend who'd like to join Iron House Gym." }],
+  ])("%s", (_name, member, friend, tickets) => {
+    expect(referralTickets("Iron House Gym ", member, friend, "Maya")).toEqual({ ...tickets, small });
+  });
+  it("each ticket says what the lines say: the same gift and the same sentences, the gift lifted out", () => {
+    for (const member of [money, days, desk, null]) {
+      for (const friend of ["10% off the first payment of a membership", null]) {
+        const lines = referralOfferLines("Iron House Gym", member, friend, "Maya").join(" ");
+        const t = referralTickets("Iron House Gym", member, friend, "Maya");
+        if (member !== null) expect(lines).toContain(`you get ${member.gift}.`);
+        for (const note of t.you?.notes.slice(1) ?? []) expect(lines).toContain(note);
+        // The note's second half is the lines' own sentence, its first letter made small.
+        if (t.you !== null && member !== null) {
+          const second = lines.split("you get ")[1]?.split(". ")[1] ?? "none";
+          expect(t.you.notes[0]?.toLowerCase()).toContain(second.toLowerCase());
+        }
+        for (const words of [...t.small, t.plain ?? ""]) expect(lines).toContain(words);
+        if (friend !== null) expect(lines).toContain(`Your friend gets ${friend} when they join.`);
+      }
+    }
+  });
+  it("a first letter is made a capital, and nothing else changes", () => {
+    expect(referralTickets("Gym", { gift: "free month", instead: null }, "a free class", null)).toMatchObject({ you: { gift: "Free month" }, friend: { gift: "A free class" } });
+    expect(referralTickets("Gym", null, null, null).small[0]).toBe("Your link shows your first name to whoever opens it.");
+  });
+  it("the Gym tab's line names the member's own gift, and nothing where there is none", () => {
+    expect(referralLineWords("£10.00 off your next membership payment")).toBe("You get £10.00 off your next membership payment when a friend you invite joins and pays");
+    expect(referralLineWords(null)).toBeNull();
+  });
+  it("what goes with a shared link: the business and the link, and no gift that may change", () => {
+    expect(referralShareMessage(" Iron House Gym ", "https://kwazo.app/invite/abcdefghijklmnop")).toBe("Join me at Iron House Gym: https://kwazo.app/invite/abcdefghijklmnop");
+  });
+  it("the phone takes only a link of an invite code, under the business it asked", () => {
+    const on = {
+      status: "on",
+      gymId: "1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f",
+      gymName: "Iron House Gym",
+      path: "/invite/abcdefghijklmnop",
+      memberGift: null,
+      friendGift: null,
+      lines: ["x"],
+      tickets: referralTickets("Iron House Gym", null, null, null),
+    };
+    expect(memberReferralResponseSchema.safeParse(on).success).toBe(true);
+    for (const path of ["/invite/abc", "https://evil.example/invite/abcdefghijklmnop", "/invite/abcdefghijklmnop/x", "/gyms/abcdefghijklmnop", "/invite/ABCDEFGHIJKLMNOP"]) {
+      expect(memberReferralResponseSchema.safeParse({ ...on, path }).success).toBe(false);
+    }
+    expect(memberReferralResponseSchema.safeParse({ ...on, gymId: undefined }).success).toBe(false);
+    expect(memberReferralResponseSchema.safeParse({ status: "off", gymName: "Iron House Gym" }).success).toBe(false);
   });
 });
 

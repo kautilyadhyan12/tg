@@ -38,6 +38,8 @@ export const colours = {
   track: "rgba(255,255,255,0.08)",
   line: "rgba(255,255,255,0.06)",
   lineStrong: "rgba(255,255,255,0.10)",
+  /** A ticket's dashed edge (Invite a friend, 20a, as Kd's drawing of 2026-11-06). */
+  ticketEdge: "rgba(255,255,255,0.16)",
   text: "rgba(255,255,255,0.95)",
   textSoft: "rgba(255,255,255,0.62)",
   textFaint: "rgba(255,255,255,0.42)",
