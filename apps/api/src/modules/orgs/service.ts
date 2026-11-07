@@ -47,7 +47,7 @@ import * as repo from "./repo.js";
 import { roleById } from "./staffInvites/repo.js";
 import { isThrowawayEmail } from "./throwaway.js";
 import { myWaiverStates } from "./waiver/repo.js";
-import { agreementsToSign } from "./agreement/mine.js";
+import { agreementsToSign } from "./agreement/toSign.js";
 import {
   ORG_PRIVILEGES,
   OWNER_ONLY_PRIVILEGES,

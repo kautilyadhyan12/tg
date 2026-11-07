@@ -29,7 +29,7 @@ import type { Sql } from "postgres";
 import { dayInTz } from "../../gamification/streak.js";
 import { OrgsError } from "../service.js";
 import { readOwnHeld } from "../memberships/heldService.js";
-import { atDeskOf, myMembershipAgreements } from "../agreement/mine.js";
+import { atDeskOf, myMembershipAgreements } from "../agreement/toSign.js";
 import { paidForBy, payerOf } from "../payers/repo.js";
 import { purchasesOf, type SaleRow } from "../register/repo.js";
 import * as receipts from "../receipts/repo.js";
