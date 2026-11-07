@@ -42,6 +42,13 @@ function made(seconds: number, seed: number): ReturnType<typeof runSums> {
   return runSums(points, [], seconds * 1000, 70);
 }
 
+/** The splits as the runs table keeps them, in plain JSON. */
+const splitsJson = (sums: ReturnType<typeof runSums>) => ({
+  km: sums.splitsKm.map((x) => ({ m: x.m, s: x.s })),
+  mi: sums.splitsMi.map((x) => ({ m: x.m, s: x.s })),
+  starts: [...sums.trackStarts],
+});
+
 async function cleanup(): Promise<void> {
   const me = sql`SELECT id FROM users WHERE email = ${EMAIL}`;
   await sql`DELETE FROM runs WHERE user_id IN (${me})`;
@@ -77,7 +84,7 @@ async function main(): Promise<void> {
   const hour = made(3600, 1);
   const line = encodePolyline(hour.track);
   const shape = routeShape(hour.track, hour.trackStarts);
-  const splits = sql.json({ km: hour.splitsKm, mi: hour.splitsMi, starts: hour.trackStarts });
+  const splits = sql.json(splitsJson(hour));
   const now = Date.now();
   const ids: string[] = [];
   for (let start = 0; start < RUNS; start += 250) {
@@ -98,7 +105,7 @@ async function main(): Promise<void> {
   await sql`
     INSERT INTO runs (id, user_id, started_at, duration_s, distance_m, polyline, splits, kcal_point, source, name, elapsed_s, left_out_m, left_out_s, run_calc_version, shape)
     VALUES (${longId}, ${user.id}, ${new Date(now - 3_600_000)}, ${long.movingS}, ${long.distanceM}, ${encodePolyline(long.track)},
-            ${sql.json({ km: long.splitsKm, mi: long.splitsMi, starts: long.trackStarts })}, ${long.kcal}, 'mobile', 'Long day', ${long.elapsedS}, 0, 0, 1,
+            ${sql.json(splitsJson(long))}, ${long.kcal}, 'mobile', 'Long day', ${long.elapsedS}, 0, 0, 1,
             ${routeShape(long.track, long.trackStarts)})`;
   await sql`ANALYZE runs`;
   console.log(`measure-your-runs-cost: ${String(RUNS + 1)} runs for one person · ${cpus()[0]?.model ?? "?"} · ${new Date().toISOString()}`);
