@@ -66,12 +66,12 @@ const phoneZone = () => {
 };
 
 /** The page over the Gym tab; closed while `place` is null. */
-export function PersonalTrainingPage({ place, onClose, onSignAgreement = null }: { place: PtPlace | null; onClose: () => void; onSignAgreement?: (() => void) | null }) {
+export function PersonalTrainingPage({ place, onClose, onSignAgreement = null, readAgain = 0 }: { place: PtPlace | null; onClose: () => void; onSignAgreement?: (() => void) | null; readAgain?: number }) {
   const insets = useSafeAreaInsets();
   return (
     <Modal visible={place !== null} animationType="slide" statusBarTranslucent navigationBarTranslucent onRequestClose={onClose}>
       <View testID="pt-page" accessibilityViewIsModal style={[styles.page, { paddingTop: insets.top }]}>
-        {place === null ? null : <PtBody key={place.id} place={place} onClose={onClose} bottom={insets.bottom} onSignAgreement={onSignAgreement} />}
+        {place === null ? null : <PtBody key={place.id} place={place} onClose={onClose} bottom={insets.bottom} onSignAgreement={onSignAgreement} readAgain={readAgain} />}
       </View>
     </Modal>
   );
@@ -81,7 +81,7 @@ type Held = { kind: "loading" } | { kind: "failed"; status: number | null } | { 
 type Said = { text: string; bad: boolean; sign?: boolean };
 type Choosing = BookTime & { trainerId: string; sessionMinutes: number; pay: Pay | null };
 
-function PtBody({ place, onClose, bottom, onSignAgreement }: { place: PtPlace; onClose: () => void; bottom: number; onSignAgreement: (() => void) | null }) {
+function PtBody({ place, onClose, bottom, onSignAgreement, readAgain }: { place: PtPlace; onClose: () => void; bottom: number; onSignAgreement: (() => void) | null; readAgain: number }) {
   const { session } = useSession();
   const [week, setWeek] = useState(0);
   const [held, setHeld] = useState<Held>({ kind: "loading" });
@@ -129,6 +129,14 @@ function PtBody({ place, onClose, bottom, onSignAgreement }: { place: PtPlace; o
   useEffect(() => {
     loadNow.current = load;
   }, [load]);
+
+  // The membership agreement opened from here was closed (20c): the times are read again, and what the last press
+  // was told is stale.
+  useEffect(() => {
+    if (readAgain === 0) return;
+    setSaid(null);
+    void loadNow.current(true);
+  }, [readAgain]);
 
   useEffect(() => {
     live.current = true;

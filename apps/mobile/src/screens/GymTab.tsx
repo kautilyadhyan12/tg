@@ -107,6 +107,8 @@ export function GymScreen() {
   const [waiverAt, setWaiverAt] = useState<WaiverPlace | null>(null);
   // The membership whose agreement page is open over the tab, or null (20c).
   const [agreementAt, setAgreementAt] = useState<AgreementPlace | null>(null);
+  // Counts the agreement page's closings: Classes and Personal training read again each time (20c).
+  const [agreementClosed, setAgreementClosed] = useState(0);
 
   const fetchPass = useCallback(() => session.signedIn({ method: "GET", path: PASS_PATH }, checkinPassResponseSchema), [session]);
   const makeOwnPass = useMemo(
@@ -433,6 +435,7 @@ export function GymScreen() {
       <ClassesPage
         place={classesAt}
         onSignAgreement={signAgreementAt(classesAt?.id ?? null)}
+        readAgain={agreementClosed}
         onClose={() => {
           setClassesAt(null);
         }}
@@ -440,6 +443,7 @@ export function GymScreen() {
       <PersonalTrainingPage
         place={ptAt}
         onSignAgreement={signAgreementAt(ptAt?.id ?? null)}
+        readAgain={agreementClosed}
         onClose={() => {
           setPtAt(null);
         }}
@@ -498,6 +502,7 @@ export function GymScreen() {
         }}
         onClose={() => {
           setAgreementAt(null);
+          setAgreementClosed((n) => n + 1);
           // A signature made, or details or words changed meanwhile, is what the card says when it closes.
           void readMine();
         }}

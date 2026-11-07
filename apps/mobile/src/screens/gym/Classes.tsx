@@ -75,12 +75,12 @@ const phoneZone = () => {
 };
 
 /** The page over the Gym tab; closed while `place` is null. */
-export function ClassesPage({ place, onClose, onSignAgreement = null }: { place: ClassesPlace | null; onClose: () => void; onSignAgreement?: (() => void) | null }) {
+export function ClassesPage({ place, onClose, onSignAgreement = null, readAgain = 0 }: { place: ClassesPlace | null; onClose: () => void; onSignAgreement?: (() => void) | null; readAgain?: number }) {
   const insets = useSafeAreaInsets();
   return (
     <Modal visible={place !== null} animationType="slide" statusBarTranslucent navigationBarTranslucent onRequestClose={onClose}>
       <View testID="classes-page" accessibilityViewIsModal style={[styles.page, { paddingTop: insets.top }]}>
-        {place === null ? null : <ClassesBody key={`${place.id}:${place.sessionId ?? ""}`} place={place} onClose={onClose} bottom={insets.bottom} onSignAgreement={onSignAgreement} />}
+        {place === null ? null : <ClassesBody key={`${place.id}:${place.sessionId ?? ""}`} place={place} onClose={onClose} bottom={insets.bottom} onSignAgreement={onSignAgreement} readAgain={readAgain} />}
       </View>
     </Modal>
   );
@@ -89,7 +89,7 @@ export function ClassesPage({ place, onClose, onSignAgreement = null }: { place:
 type Held = { kind: "loading" } | { kind: "failed"; status: number | null } | { kind: "ok"; list: MemberClassesResponse };
 type Said = { text: string; bad: boolean; sign?: boolean };
 
-function ClassesBody({ place, onClose, bottom, onSignAgreement }: { place: ClassesPlace; onClose: () => void; bottom: number; onSignAgreement: (() => void) | null }) {
+function ClassesBody({ place, onClose, bottom, onSignAgreement, readAgain }: { place: ClassesPlace; onClose: () => void; bottom: number; onSignAgreement: (() => void) | null; readAgain: number }) {
   const { session } = useSession();
   const [week, setWeek] = useState(place.week ?? 0);
   const [held, setHeld] = useState<Held>({ kind: "loading" });
@@ -149,6 +149,14 @@ function ClassesBody({ place, onClose, bottom, onSignAgreement }: { place: Class
   useEffect(() => {
     loadNow.current = load;
   }, [load]);
+
+  // The membership agreement opened from here was closed (20c): what a class says now is read again, and what the
+  // last press was told is stale.
+  useEffect(() => {
+    if (readAgain === 0) return;
+    setSaid({});
+    void loadNow.current(true);
+  }, [readAgain]);
 
   useEffect(() => {
     live.current = true;

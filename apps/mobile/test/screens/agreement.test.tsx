@@ -321,12 +321,18 @@ describe("My membership, Classes and the desk", () => {
       fees: null,
     };
     const weekOf = { week: 0, from: "2026-11-08", to: "2026-11-14", timezone: "Europe/London", classes: [klass], more: false };
+    let signed = false;
+    const ironWeek = () => ({ status: 200, body: signed ? { ...weekOf, classes: [{ ...klass, can: { ...klass.can, book: true, why: null } }] } : weekOf });
     const server = fakeServer({
       "/v1/auth/refresh": ok({ tokens: tokens(2) }),
-      "/v1/orgs/mine": ok({ orgs: [org(IRON, [{ membershipId: M_IRON, name: "Gold Monthly" }]), org(LOTUS, [])], formerOrgs: [] }),
-      [`/v1/orgs/${IRON.id}/member-classes`]: ok(weekOf),
+      "/v1/orgs/mine": () => ({ status: 200, body: { orgs: [org(IRON, signed ? [] : [{ membershipId: M_IRON, name: "Gold Monthly" }]), org(LOTUS, [])], formerOrgs: [] } }),
+      [`/v1/orgs/${IRON.id}/member-classes`]: ironWeek,
       [`/v1/orgs/${LOTUS.id}/member-classes`]: ok(weekOf),
       [readPath(IRON, M_IRON)]: ok(toSign(IRON, M_IRON, IRON_TERMS, "£50.00 every month", KEY_A)),
+      [signPath(IRON, M_IRON)]: () => {
+        signed = true;
+        return { status: 200, body: signedReply("Iron House", IRON_TERMS.text) };
+      },
     });
     await openGym(server.ask);
     // Lotus Yoga: nothing to sign in the app, so its own words, and no button.
@@ -343,6 +349,15 @@ describe("My membership, Classes and the desk", () => {
     expect(box.queryByText(UNSIGNED_BOOKING_WORDS)).toBeNull();
     await fireEvent.press(box.getByText("Sign agreement"));
     expect(await screen.findByText(IRON_TERMS.text)).toBeTruthy();
-    expect(screen.getByLabelText("Sign Iron House's membership agreement")).toBeTruthy();
+    await signIt("Maya Patel");
+    await fireEvent.press(screen.getByLabelText("Sign Iron House's membership agreement"));
+    await fireEvent.press(await screen.findByText("Done"));
+    // Back on Classes, the class is read again: Book, and no word of the agreement.
+    await waitFor(() => {
+      expect(within(screen.getByTestId(`class-${klass.sessionId}`)).queryByText(UNSIGNED_BOOKING_WORDS)).toBeNull();
+    });
+    const after = within(screen.getByTestId(`class-${klass.sessionId}`));
+    expect(after.queryByText("Your membership agreement isn't signed yet. Sign it to book.")).toBeNull();
+    expect(await after.findByText("Book")).toBeTruthy();
   });
 });
