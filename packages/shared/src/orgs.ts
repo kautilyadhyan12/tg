@@ -8,7 +8,7 @@ import { GYM_CONTACT_EMAIL_MAX_CHARS, GYM_CONTACT_PHONE_MAX_CHARS } from "./gymC
 import { GYM_POSTAL_ADDRESS_MAX_CHARS } from "./memberInvites.js";
 import { confirmPtSessionsField } from "./ptSessionsEnding.js";
 import { instantSchema } from "./time.js";
-import { MY_AGREEMENTS_TO_SIGN_MAX, myAgreementToSignSchema } from "./myAgreement.js";
+import { MY_AGREEMENTS_TO_SIGN_MAX, myAgreementToSignSchema } from "./myAgreementState.js";
 
 /** The DB vocabulary (Part 4 §3.2's CHECK, widened by migrations `0024` and `0132`),
  *  used to PARSE rows on the way out. It still contains `clinic` and

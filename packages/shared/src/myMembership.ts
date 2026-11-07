@@ -13,7 +13,7 @@ import { memberFeeKindSchema, memberPaymentMethodSchema, receiptNumberSchema } f
 import { heldMembershipShownSchema } from "./heldMemberships.js";
 import { membershipKindSchema } from "./memberships.js";
 import { membershipTermSchema } from "./membershipAgreement.js";
-import { myMembershipAgreementSchema } from "./myAgreement.js";
+import { myMembershipAgreementSchema } from "./myAgreementState.js";
 
 const daySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const minorSchema = z.number().int().min(0).max(99_999_999);

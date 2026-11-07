@@ -38,6 +38,7 @@ import { PersonalTrainingPage, type PtPlace } from "./gym/PersonalTraining";
 import { OWN_PASS_AFTER_MS, PASS_PATH, PassSheet } from "./gym/Pass";
 import { UpdatesPage, type UpdatesPlace } from "./gym/Updates";
 import { WaiverAsk, WaiverPage, type WaiverPlace } from "./gym/Waiver";
+import { AgreementAsk, AgreementPage, type AgreementPlace } from "./gym/Agreement";
 import { makePhonePass, phoneDay } from "./gym/phonePass";
 import { NO_ANSWER } from "./SignIn";
 
@@ -103,6 +104,8 @@ export function GymScreen() {
   const [inviteAt, setInviteAt] = useState<InvitePlace | null>(null);
   // The place whose Waiver page is open over the tab, or null.
   const [waiverAt, setWaiverAt] = useState<WaiverPlace | null>(null);
+  // The membership whose agreement page is open over the tab, or null (20c).
+  const [agreementAt, setAgreementAt] = useState<AgreementPlace | null>(null);
 
   const fetchPass = useCallback(() => session.signedIn({ method: "GET", path: PASS_PATH }, checkinPassResponseSchema), [session]);
   const makeOwnPass = useMemo(
@@ -198,6 +201,16 @@ export function GymScreen() {
   };
 
   const joined = mine?.kind === "ok" ? mine.data.orgs.filter((org) => org.isMember) : [];
+  // Sign agreement on Classes and Personal training, where the business stops bookings until it is signed: opens its
+  // first membership to sign in the app; null where there is none, and they read the server's own words.
+  const signAgreementAt = (gymId: string | null): (() => void) | null => {
+    const org = gymId === null ? undefined : joined.find((one) => one.id === gymId);
+    const first = org?.agreementsToSign[0];
+    if (org === undefined || first === undefined) return null;
+    return () => {
+      setAgreementAt({ id: org.id, name: org.name, membershipId: first.membershipId, membershipName: first.name });
+    };
+  };
   const unreadOf = (org: { id: string; newMessages: number }) => placeUnread(org.id) ?? org.newMessages;
   const removed = mine?.kind === "ok" ? mine.data.formerOrgs : [];
   // A place the person has joined is listed once, as theirs, never again as an invitation.
@@ -263,6 +276,17 @@ export function GymScreen() {
                 }}
               />
             ) : null}
+            {org.agreementsToSign.map((a) => (
+              <AgreementAsk
+                key={a.membershipId}
+                gymName={org.name}
+                membershipId={a.membershipId}
+                membershipName={a.name}
+                onOpen={() => {
+                  setAgreementAt({ id: org.id, name: org.name, membershipId: a.membershipId, membershipName: a.name });
+                }}
+              />
+            ))}
             <Txt kind="small">
               {org.orgType === "personal_trainer" ? "Show your pass to your trainer when you arrive." : "Show your pass at the front desk when you arrive."}
             </Txt>
@@ -395,12 +419,14 @@ export function GymScreen() {
       />
       <ClassesPage
         place={classesAt}
+        onSignAgreement={signAgreementAt(classesAt?.id ?? null)}
         onClose={() => {
           setClassesAt(null);
         }}
       />
       <PersonalTrainingPage
         place={ptAt}
+        onSignAgreement={signAgreementAt(ptAt?.id ?? null)}
         onClose={() => {
           setPtAt(null);
         }}
@@ -436,6 +462,28 @@ export function GymScreen() {
         onClose={() => {
           setWaiverAt(null);
           // A signature made, or a waiver changed meanwhile, is what the card says when it closes.
+          void readMine();
+        }}
+      />
+      {/* Last, so that it opens over Classes or Personal training when their Sign agreement is pressed. */}
+      <AgreementPage
+        place={agreementAt}
+        onSigned={(gymId, membershipId) => {
+          setMine((now) =>
+            now?.kind === "ok"
+              ? {
+                  kind: "ok",
+                  data: {
+                    ...now.data,
+                    orgs: now.data.orgs.map((one) => (one.id === gymId ? { ...one, agreementsToSign: one.agreementsToSign.filter((a) => a.membershipId !== membershipId) } : one)),
+                  },
+                }
+              : now,
+          );
+        }}
+        onClose={() => {
+          setAgreementAt(null);
+          // A signature made, or details or words changed meanwhile, is what the card says when it closes.
           void readMine();
         }}
       />

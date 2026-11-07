@@ -7,29 +7,7 @@
 import { z } from "zod";
 import { agreementEmailedSchema, agreementFactsSchema, factsKeySchema } from "./membershipAgreement.js";
 import { signedNameSchema, waiverToReadSchema } from "./waiver.js";
-
-const daySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
-
-/** Why a membership's agreement is signed at the front desk and not in the app. */
-export const atDeskWhySchema = z.enum(["paid_by_other", "minor"]);
-export type AtDeskWhy = z.infer<typeof atDeskWhySchema>;
-
-/** A membership's agreement on My membership: to sign in the app, signed, or to sign at the front desk. `view`: what
- *  was signed may be opened in the app (not where somebody else pays: it holds the price). */
-export const myMembershipAgreementSchema = z
-  .object({
-    state: z.enum(["to_sign", "signed", "at_desk"]),
-    signedOn: daySchema.nullable(),
-    signedName: z.string().nullable(),
-    view: z.boolean(),
-  })
-  .strict();
-export type MyMembershipAgreement = z.infer<typeof myMembershipAgreementSchema>;
-
-/** A membership of the caller's whose agreement they may sign in the app now, on the Gym tab's card. */
-export const myAgreementToSignSchema = z.object({ membershipId: z.string().uuid(), name: z.string() }).strict();
-export type MyAgreementToSign = z.infer<typeof myAgreementToSignSchema>;
-export const MY_AGREEMENTS_TO_SIGN_MAX = 10;
+import { atDeskWhySchema } from "./myAgreementState.js";
 
 /** What was signed, as kept: the details and the words of that day. */
 export const mySignedAgreementSchema = z

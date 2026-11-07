@@ -20,6 +20,7 @@ import { Sheet } from "../../look/Sheet";
 import { Txt } from "../../look/Txt";
 import { useSession } from "../../session/SessionProvider";
 import { NO_ANSWER } from "../SignIn";
+import { SignToBook } from "./Agreement";
 import { newRequestKey, weekText } from "./classesView";
 import {
   askedLate,
@@ -65,22 +66,22 @@ const phoneZone = () => {
 };
 
 /** The page over the Gym tab; closed while `place` is null. */
-export function PersonalTrainingPage({ place, onClose }: { place: PtPlace | null; onClose: () => void }) {
+export function PersonalTrainingPage({ place, onClose, onSignAgreement = null }: { place: PtPlace | null; onClose: () => void; onSignAgreement?: (() => void) | null }) {
   const insets = useSafeAreaInsets();
   return (
     <Modal visible={place !== null} animationType="slide" statusBarTranslucent navigationBarTranslucent onRequestClose={onClose}>
       <View testID="pt-page" accessibilityViewIsModal style={[styles.page, { paddingTop: insets.top }]}>
-        {place === null ? null : <PtBody key={place.id} place={place} onClose={onClose} bottom={insets.bottom} />}
+        {place === null ? null : <PtBody key={place.id} place={place} onClose={onClose} bottom={insets.bottom} onSignAgreement={onSignAgreement} />}
       </View>
     </Modal>
   );
 }
 
 type Held = { kind: "loading" } | { kind: "failed"; status: number | null } | { kind: "ok"; view: MemberPtResponse };
-type Said = { text: string; bad: boolean };
+type Said = { text: string; bad: boolean; sign?: boolean };
 type Choosing = BookTime & { trainerId: string; sessionMinutes: number; pay: Pay | null };
 
-function PtBody({ place, onClose, bottom }: { place: PtPlace; onClose: () => void; bottom: number }) {
+function PtBody({ place, onClose, bottom, onSignAgreement }: { place: PtPlace; onClose: () => void; bottom: number; onSignAgreement: (() => void) | null }) {
   const { session } = useSession();
   const [week, setWeek] = useState(0);
   const [held, setHeld] = useState<Held>({ kind: "loading" });
@@ -174,7 +175,7 @@ function PtBody({ place, onClose, bottom }: { place: PtPlace; onClose: () => voi
       return;
     }
     keys.current.delete(id);
-    tell(answer.kind === "ok" ? bookedText(answer.data.session, place.clockFormat) : { text: answer.message, bad: true });
+    tell(answer.kind === "ok" ? bookedText(answer.data.session, place.clockFormat) : { text: answer.message, bad: true, sign: answer.error === "agreement_not_signed" });
     // The times are not as this page showed them: read them again.
     void loadNow.current(true);
   };
@@ -255,7 +256,9 @@ function PtBody({ place, onClose, bottom }: { place: PtPlace; onClose: () => voi
           </Card>
         ) : (
           <>
-            {said === null ? null : (
+            {said === null ? null : said.sign === true && onSignAgreement !== null ? (
+              <SignToBook onSign={onSignAgreement} />
+            ) : (
               <Txt colour={said.bad ? "badText" : "goodText"}>
                 {said.text}
               </Txt>
@@ -355,7 +358,13 @@ function PtBody({ place, onClose, bottom }: { place: PtPlace; onClose: () => voi
                     />
                   ))}
                 </ScrollView>
-                {day.notOpen === null && day.pay !== null ? <Txt colour={day.pay.can ? "text" : "orange"}>{day.pay.text}</Txt> : null}
+                {day.notOpen === null && day.pay !== null ? (
+                  day.pay.unsigned === true && onSignAgreement !== null ? (
+                    <SignToBook onSign={onSignAgreement} />
+                  ) : (
+                    <Txt colour={day.pay.can ? "text" : "orange"}>{day.pay.text}</Txt>
+                  )
+                ) : null}
                 {day.notOpen !== null ? (
                   <Txt kind="small">{day.notOpen}</Txt>
                 ) : (

@@ -47,6 +47,8 @@ function limitUsedText(limit: Limit, day: string, today: string): string {
 export interface Pay {
   text: string;
   can: boolean;
+  /** The business stops new bookings until a membership agreement of theirs is signed (18u-iv; 20c). */
+  unsigned?: boolean;
 }
 
 /** What a booking on a day would use, or why it cannot be made; null where the gym sells no memberships and there
@@ -59,7 +61,7 @@ export function payText(view: MemberPtResponse, day: Day, orgType: unknown): Pay
   if ((day.why === "limit_week" || day.why === "limit_month") && limit !== null) {
     return { text: limitUsedText(limit, day.localDate, view.today), can: false };
   }
-  if (day.why !== null) return { text: words[day.why], can: false };
+  if (day.why !== null) return { text: words[day.why], can: false, unsigned: day.why === "agreement_not_signed" };
   const pays = day.pays;
   if (pays === null) return { text: words.no_membership, can: false };
   if (pays.membership === null) return null;
