@@ -190,7 +190,10 @@ describe("what the member reads on the phone", () => {
         if (member !== null) expect(lines).toContain(`you get ${member.gift}.`);
         for (const note of t.you?.notes.slice(1) ?? []) expect(lines).toContain(note);
         // The note's second half is the lines' own sentence, its first letter made small.
-        if (t.you !== null && member !== null) expect(t.you.notes[0]?.toLowerCase()).toContain(`${lines.split("you get ")[1]?.split(". ")[1]?.toLowerCase() ?? "none"}`);
+        if (t.you !== null && member !== null) {
+          const second = lines.split("you get ")[1]?.split(". ")[1] ?? "none";
+          expect(t.you.notes[0]?.toLowerCase()).toContain(second.toLowerCase());
+        }
         for (const words of [...t.small, t.plain ?? ""]) expect(lines).toContain(words);
         if (friend !== null) expect(lines).toContain(`Your friend gets ${friend} when they join.`);
       }
