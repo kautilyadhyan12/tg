@@ -108,6 +108,7 @@ export async function getMyWaiver(deps: WaiverDeps, userId: string, gymId: strin
   const waiver = await repo.waiverInUse(deps.sql, gymId);
   const signed = waiver === null ? undefined : (await repo.signaturesOf(deps.sql, gymId, waiver.id, [userId])).get(userId);
   return myWaiverResponseSchema.parse({
+    gymId,
     gymName: org.name,
     timezone: org.timezone,
     waiver: waiver === null ? null : toRead(waiver),

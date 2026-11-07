@@ -47,6 +47,23 @@ export async function waiversInUse(sql: SqlOrTx, gymIds: readonly string[]): Pro
   return new Map(rows.filter((raw) => raw.stopped_at === null).map((raw) => [raw.gym_id, toRow(raw)]));
 }
 
+/** For each of these gyms that asks for a waiver today, whether this one account has signed its
+ *  words as they are now (the Gym tab's card, 20b). A gym that asks for none is absent. The words
+ *  themselves are not read. */
+export async function myWaiverStates(sql: SqlOrTx, userId: string, gymIds: readonly string[]): Promise<Map<string, "to_sign" | "signed">> {
+  if (gymIds.length === 0) return new Map();
+  const rows = await sql<{ gym_id: string; signed: boolean }[]>`
+    SELECT w.gym_id, EXISTS (
+      SELECT 1 FROM gym_waiver_signatures s WHERE s.waiver_id = w.id AND s.user_id = ${userId}
+    ) AS signed
+    FROM (
+      SELECT DISTINCT ON (gym_id) gym_id, id, stopped_at FROM gym_waivers
+      WHERE gym_id = ANY(${[...gymIds]}::uuid[]) ORDER BY gym_id, version DESC
+    ) w
+    WHERE w.stopped_at IS NULL`;
+  return new Map(rows.map((row) => [row.gym_id, row.signed ? "signed" : "to_sign"]));
+}
+
 /** A new wording, numbered after the newest. The caller holds the gym's row lock. */
 export async function insertVersion(tx: TransactionSql, input: { gymId: string; version: number; body: string; savedBy: string; at: Date }): Promise<WaiverRow> {
   const rows = await tx<RawWaiver[]>`

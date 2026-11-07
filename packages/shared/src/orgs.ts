@@ -1340,6 +1340,10 @@ export const myOrgSchema = orgSummarySchema.extend({
    *  My Gyms in the menu (ROADMAP 20a-ii). The same count as the inbox's `unread`; 0 for
    *  somebody who is not a member, and from an api too old to send it. */
   newMessages: z.number().int().min(0).default(0),
+  /** The caller's own waiver here (3e; the phone's Gym tab, 20b): `to_sign` where the gym asks for one
+   *  and they have not signed its words as they are today in the app, `signed` where they have; null
+   *  where it asks for none, for somebody who is not a member, and from an api too old to send it. */
+  waiver: z.enum(["to_sign", "signed"]).nullable().default(null),
 });
 export type MyOrg = z.infer<typeof myOrgSchema>;
 
