@@ -831,7 +831,7 @@ d("Buy in the app: given once, on their own record, only for what Square took (r
 
     // H4 and H2: Quinn presses Buy with no record anywhere; meanwhile a record with Quinn's details turns up, held by
     // another account, and moved to past members. Paid: that record stays past and holds nothing; the money waits for a
-    // check; and Quinn can't pay for the same line again until it is checked.
+    // check; and Quinn is refused, as the record is the other account's.
     const quinn = await appOnly(gym, "Quinn Late");
     const quinnPage = parsed(await buyPress(gym, quinn, await lineOf(gym, quinn, pack), {}, "Quinn Late"));
     const quinnRecord = await addRecord(gym, { fullName: "Quinn Late", email: quinn.email });
@@ -847,5 +847,9 @@ d("Buy in the app: given once, on their own record, only for what Square took (r
     expect(errorOf(await buyPress(gym, quinn, await lineOf(gym, quinn, pack), {}, "Quinn Late"))).toBe("app_purchase_not_own");
     // H2b: the other account, whose record it is, is not told about a payment they never made: their own Buy goes ahead.
     expect(parsed(await buyPress(gym, other.app, await lineOf(gym, other.app, pack), {}, "Quinn L")).purchase.state).toBe("open");
+    // H2: once the other account has left the app, Quinn's own page that may have taken money still holds up the same line.
+    await sql`UPDATE gym_app_payments SET state = 'done', outcome = 'closed', finished_at = ${clock} WHERE gym_id = ${gym.id} AND opened_by = ${other.app.userId} AND state = 'open'`;
+    await sql`UPDATE gym_members SET removed_at = ${clock} WHERE gym_id = ${gym.id} AND user_id = ${other.app.userId}`;
+    expect(errorOf(await buyPress(gym, quinn, await lineOf(gym, quinn, pack), {}, "Quinn Late"))).toBe("app_payment_check");
   });
 });
