@@ -6,26 +6,34 @@
 // list is never; their payments stay in the gym's takings as "A deleted member"; their
 // member numbers are never given again (5e-i). The box names who is deleted and carries a
 // digest of exactly them; the press is refused, deleting nobody, if it no longer matches.
-import { APP_PAYMENT_STAFF_WORDS, APP_PURCHASE_STAFF_WORDS, MEMBER_LIST_DELETE_MAX, MEMBER_LIST_DELETE_NAMES_SHOWN, type MemberListDeleted, type MemberListDeletePreview, type MemberListDeletePreviewRequest, type MemberListDeleteSelectedRequest } from "@app/shared";
+import { APP_PAYMENT_STAFF_WORDS, APP_PURCHASE_STAFF_WORDS, MEMBER_LIST_BY_HAND_WORDS, MEMBER_LIST_DELETE_MAX, MEMBER_LIST_DELETE_NAMES_SHOWN, type MemberListDeleted, type MemberListDeletePreview, type MemberListDeletePreviewRequest, type MemberListDeleteSelectedRequest } from "@app/shared";
 import { createHash } from "node:crypto";
 import { OrgsError, requirePrivilege, requireWritablePrivilege } from "../service.js";
 import * as squareDeletes from "../payments/squareDeletesRepo.js";
 import { anyOpenOfEntries } from "../payments/appPaymentsRepo.js";
 import { uncheckedOfEntries } from "../payments/appPurchasesRepo.js";
+import { bustAfterRemoval } from "./byHandService.js";
 import { keptWith } from "./memberNumbers.js";
+import { appOnDelete, endAppOnDelete, type AppOnDelete } from "./oneRemove.js";
 import * as repo from "./repo.js";
 import { SelectionChanged, selectedIds, selectionDigest } from "./selection.js";
 import type { MemberListDeps } from "./service.js";
 
 type Records = Awaited<ReturnType<typeof repo.recordsAmong>>;
+type AppOf = ReadonlyMap<string, AppOnDelete>;
 
-/** What the press sends back: the people, and the customers in Square the box says are deleted with them, so it deletes exactly
- *  what the box showed. A gym with none in Square keeps the people-only digest. */
-function digestOf(gymId: string, ids: readonly string[], standing: readonly squareDeletes.StandingRow[]): string {
+/** Whose app ends with which record, one line each, sorted: what the box says about the app (5e-iii). */
+const appLines = (app: AppOf): string[] =>
+  [...app].flatMap(([entryId, people]) => people.ends.map((member) => `${entryId}:${member.userId}`)).sort();
+
+/** What the press sends back: the people, the customers in Square the box says are deleted with them, and whose app ends, so it
+ *  does exactly what the box showed. A gym with none in Square and nobody in the app keeps the people-only digest. */
+function digestOf(gymId: string, ids: readonly string[], standing: readonly squareDeletes.StandingRow[], app: AppOf): string {
   const lines = squareDeletes.deletedLines(standing);
-  if (lines.length === 0) return selectionDigest(gymId, ids);
+  const apps = appLines(app);
+  if (lines.length === 0 && apps.length === 0) return selectionDigest(gymId, ids);
   return createHash("sha256")
-    .update([selectionDigest(gymId, ids), "square", ...lines].join("\n"), "utf8")
+    .update([selectionDigest(gymId, ids), "square", ...lines, ...(apps.length === 0 ? [] : ["app", ...apps])].join("\n"), "utf8")
     .digest("hex");
 }
 
@@ -48,16 +56,43 @@ function squareGroups(records: Records, standing: readonly squareDeletes.Standin
   };
 }
 
-function previewOf(gymId: string, records: Records, standing: readonly squareDeletes.StandingRow[]): MemberListDeletePreview {
+/** What one press does, and the box that says it. A role that can't remove app access (no `members.remove`) deletes the past
+ *  members ticked who are not in the app, and leaves out, named, those whose access would end (5e-iii): `app.ends` then holds
+ *  the people NOT deleted. People are named by their app account's name, in the order the box lists the records. */
+function planOf(
+  gymId: string,
+  records: Records,
+  standing: readonly squareDeletes.StandingRow[],
+  app: AppOf,
+  mayEndApp: boolean,
+): { preview: MemberListDeletePreview; deleted: Records } {
   const past = records.filter((record) => record.past);
-  return {
-    count: past.length,
-    names: past.slice(0, MEMBER_LIST_DELETE_NAMES_SHOWN).map((record) => record.fullName),
+  const endsOf = (record: Records[number]) => app.get(record.id)?.ends ?? [];
+  const deleted = mayEndApp ? past : past.filter((record) => endsOf(record).length === 0);
+  const left = mayEndApp ? [] : past.filter((record) => endsOf(record).length > 0);
+  const kept = new Set(deleted.map((record) => record.id));
+  const theirs = standing.filter((row) => kept.has(row.entryId));
+  const theirApp = new Map([...app].filter(([entryId]) => kept.has(entryId)));
+  const all = (from: Records, pick: (people: AppOnDelete) => readonly { fullName: string }[]) =>
+    from.flatMap((record) => pick(app.get(record.id) ?? { ends: [], keeps: [] }).map((member) => member.fullName));
+  const ends = mayEndApp ? all(deleted, (people) => people.ends) : all(left, (people) => people.ends);
+  const keeps = all(deleted, (people) => people.keeps);
+  const preview: MemberListDeletePreview = {
+    count: deleted.length,
+    names: deleted.slice(0, MEMBER_LIST_DELETE_NAMES_SHOWN).map((record) => record.fullName),
     onList: records.length - past.length,
-    tooMany: past.length > MEMBER_LIST_DELETE_MAX,
-    digest: digestOf(gymId, past.map((record) => record.id), standing),
-    ...squareGroups(past, standing),
+    tooMany: deleted.length > MEMBER_LIST_DELETE_MAX,
+    digest: digestOf(gymId, deleted.map((record) => record.id), theirs, theirApp),
+    ...squareGroups(deleted, theirs),
+    app: {
+      ends: ends.slice(0, MEMBER_LIST_DELETE_NAMES_SHOWN),
+      keeps: keeps.slice(0, MEMBER_LIST_DELETE_NAMES_SHOWN),
+      mayEndApp,
+      endsCount: ends.length,
+      keepsCount: keeps.length,
+    },
   };
+  return { preview, deleted };
 }
 
 const pastIds = (records: Records): string[] => records.filter((record) => record.past).map((record) => record.id);
@@ -70,14 +105,16 @@ export async function previewDeleteSelected(
   request: MemberListDeletePreviewRequest,
   limit: () => Promise<boolean>,
 ): Promise<MemberListDeletePreview | null> {
-  await requirePrivilege(deps, gymId, userId, "members.confirm");
+  const { privileges } = await requirePrivilege(deps, gymId, userId, "members.confirm");
   if (!(await limit())) return null;
   const ids = await selectedIds(deps, gymId, request.selection);
   const records = await repo.recordsAmong(deps.sql, gymId, ids);
-  // Only a box that deletes somebody asks about Square; more than the most one press deletes is refused whole.
+  // Only a box that deletes somebody asks about Square and the app; more than the most one press deletes is refused whole.
   const past = pastIds(records);
-  const standing = past.length > MEMBER_LIST_DELETE_MAX ? [] : await squareDeletes.standingOf(deps.sql, gymId, past);
-  return previewOf(gymId, records, standing);
+  const within = past.length <= MEMBER_LIST_DELETE_MAX;
+  const standing = within ? await squareDeletes.standingOf(deps.sql, gymId, past) : [];
+  const app = within ? await appOnDelete(deps.sql, gymId, past) : new Map<string, AppOnDelete>();
+  return planOf(gymId, records, standing, app, privileges.includes("members.remove")).preview;
 }
 
 export type DeleteSelectedAnswer = { kind: "rate_limited" } | { kind: "changed"; preview: MemberListDeletePreview } | { kind: "deleted"; done: MemberListDeleted };
@@ -90,14 +127,15 @@ export async function deleteSelected(
   input: MemberListDeleteSelectedRequest,
   limit: () => Promise<boolean>,
 ): Promise<DeleteSelectedAnswer> {
-  await requireWritablePrivilege(deps, gymId, userId, "members.confirm");
+  const { privileges } = await requireWritablePrivilege(deps, gymId, userId, "members.confirm");
+  const mayEndApp = privileges.includes("members.remove");
   if (!(await limit())) return { kind: "rate_limited" };
   // NOBODY CHOSEN IS A PAST MEMBER ANY MORE: the same press sent again after it was done (a
   // reply lost on the way), or a colleague deleted or put them back. Nothing is deleted, and
   // the answer says only that, which is true in every one of those cases.
   const nothingLeft = async (sql: Parameters<typeof repo.listState>[0]): Promise<DeleteSelectedAnswer> => ({
     kind: "deleted",
-    done: { deleted: 0, nothingLeft: true, version: (await repo.listState(sql, gymId))?.version ?? 0, squareDeleting: 0 },
+    done: { deleted: 0, nothingLeft: true, version: (await repo.listState(sql, gymId))?.version ?? 0, squareDeleting: 0, appEnded: 0 },
   });
   let ids: string[];
   try {
@@ -108,15 +146,25 @@ export async function deleteSelected(
     throw err;
   }
   const at = deps.now();
-  return await deps.sql.begin(async (tx): Promise<DeleteSelectedAnswer> => {
+  const closed: string[] = [];
+  const answer = await deps.sql.begin(async (tx): Promise<DeleteSelectedAnswer> => {
     await repo.lockGym(tx, gymId);
     const records = await repo.recordsAmong(tx, gymId, ids);
-    const past = records.filter((record) => record.past);
-    if (past.length === 0) return await nothingLeft(tx);
-    const standing = past.length > MEMBER_LIST_DELETE_MAX ? [] : await squareDeletes.standingOf(tx, gymId, pastIds(records));
-    const preview = previewOf(gymId, records, standing);
+    const tickedPast = pastIds(records);
+    if (tickedPast.length === 0) return await nothingLeft(tx);
+    const within = tickedPast.length <= MEMBER_LIST_DELETE_MAX;
+    const standing = within ? await squareDeletes.standingOf(tx, gymId, tickedPast) : [];
+    const app = within ? await appOnDelete(tx, gymId, tickedPast) : new Map<string, AppOnDelete>();
+    const { preview, deleted: past } = planOf(gymId, records, standing, app, mayEndApp);
     if (preview.digest !== input.digest) return { kind: "changed", preview };
+    // Everybody ticked still uses the app, and this role can't end it: the box said so, and nobody is deleted.
+    if (past.length === 0) {
+      return { kind: "deleted", done: { deleted: 0, nothingLeft: false, version: (await repo.listState(tx, gymId))?.version ?? 0, squareDeleting: 0, appEnded: 0 } };
+    }
     if (preview.tooMany) throw new OrgsError(400, "too_many_to_delete", `Delete up to ${MEMBER_LIST_DELETE_MAX.toLocaleString("en")} past members at a time.`);
+    // Their app ends with their record (5e-iii), which only a role that removes app access may do.
+    const ending = past.flatMap((record) => (app.get(record.id)?.ends ?? []).map((member) => member.userId));
+    if (ending.length > 0 && !mayEndApp) throw new OrgsError(403, "forbidden", MEMBER_LIST_BY_HAND_WORDS.delete_needs_app);
     // What Square took on a page still open would have no bill to go on (18k-ii-a).
     if (await anyOpenOfEntries(tx, gymId, past.map((record) => record.id))) throw new OrgsError(409, "app_payment_open", APP_PAYMENT_STAFF_WORDS.delete_open);
     // A purchase that may have taken money and gave nothing would be on no page once they are gone (18k-iii-a).
@@ -130,6 +178,9 @@ export async function deleteSelected(
 
     // The customers the app added in Square are owed their deletion while their links still exist (the records take them with them).
     const squareDeleting = await squareDeletes.oweDeletes(tx, gymId, past.map((record) => record.id), at);
+    closed.push(...(await endAppOnDelete(tx, { gymId, actorUserId: userId, at, settings: deps.invites ?? null }, ending)));
+    // The people whose access was closed, not those read: a person made staff meanwhile keeps their access and is not counted.
+    const appEnded = closed.length;
     for (const record of past) {
       if (!(await repo.deleteEntry(tx, gymId, record.id, at, { onlyPast: true }))) {
         throw new Error(`a past member the box named was not deleted (${record.id})`);
@@ -142,6 +193,8 @@ export async function deleteSelected(
       gymId,
       rows: past.map((record) => ({ action: "org.member_list_entry_deleted", targetType: "member_list_entry", targetId: record.id, meta: { via: "selected" } })),
     });
-    return { kind: "deleted", done: { deleted: past.length, nothingLeft: false, version, squareDeleting } };
+    return { kind: "deleted", done: { deleted: past.length, nothingLeft: false, version, squareDeleting, appEnded } };
   });
+  await bustAfterRemoval(deps, gymId, closed);
+  return answer;
 }

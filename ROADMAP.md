@@ -191,7 +191,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
    - 5e. **The app numbers members itself** (Kd, 2026-10-15; built in web folder 1, Kd 2026-10-16), split 2026-10-16 in two (the line as first written is in `handoff/2026-10-16-5e-i.md`):
      - 5e-i. [x] **Add member numbers people** — merged 2026-10-16 (PR #288).
      - 5e-ii. [x] **An import's numbers** — merged 2026-10-16 (PR #292).
-     - 5e-iii. [ ] **Delete permanently takes them out of the gym's app too** (Kd, 2026-11-07, `rulings/2026-11-07-18k-iii-b.md`): a past member still in the app loses it with their record, and the box says so. Web folder, straight after 18k-iii-b.
+     - 5e-iii. [x] **Delete permanently takes them out of the gym's app too** — merged 2026-11-07 (PR #497).
    - 5f. [x] **Five kinds of business at sign-up** — merged 2026-10-16 (PR #300).
    - 5f-ii. [x] **Personal training and Gym days in each kind's words** — merged 2026-10-17 (PR #303).
    - 5f-iii. [x] **Every other gym sentence in each kind's words** — merged 2026-10-17 (PR #304).
