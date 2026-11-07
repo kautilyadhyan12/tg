@@ -233,7 +233,9 @@ async function settle(a: Asking, order: SquareOrder): Promise<"none" | "wait" | 
     // A line bought is given as of the day Square took the money on the gym's clock, not the day it is recorded: a day pass
     // paid at 23:50 and first looked at after midnight is still that day's (round one's re-check, H1b).
     const takenAt = payment.created_at == null ? null : new Date(payment.created_at);
-    const takenOn = takenAt !== null && !Number.isNaN(takenAt.getTime()) && takenAt.getTime() <= now.getTime() ? dayInTz(takenAt, gym?.timezone ?? "UTC") : today;
+    // Only a time while the page could be paid is believed: from its opening to now.
+    const believed = takenAt !== null && !Number.isNaN(takenAt.getTime()) && takenAt.getTime() >= row.openedAt.getTime() && takenAt.getTime() <= now.getTime();
+    const takenOn = believed ? dayInTz(takenAt, gym?.timezone ?? "UTC") : today;
     const bought = await recordBought(deps.sql, { ...paid, today: takenOn });
     if (bought?.outcome === "not_recorded") deps.log.error({ event: "square.app_purchase_not_recorded", gymId: row.gymId }, "money taken for a line bought in the app gave nothing");
     // The signed copy goes to the record's address once the membership is theirs, after the transaction.
