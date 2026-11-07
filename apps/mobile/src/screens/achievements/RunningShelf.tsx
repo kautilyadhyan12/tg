@@ -140,7 +140,7 @@ function RecordBox({ r, units, now, onOpenRun }: { r: ShownRecord; units: Units;
             <Stat big={dayWords(record.startedAt, now)} small={record.name} />
           </View>
           {beat === null ? null : <Txt kind="small">{beat}</Txt>}
-          <Button label="Open run" say={`Open ${record.name}`} onPress={() => { onOpenRun(record.runId); }} />
+          <Button label="Open run" say={`Open ${record.name}`} style={styles.open} onPress={() => { onOpenRun(record.runId); }} />
         </>
       )}
     </View>
@@ -182,5 +182,6 @@ const styles = StyleSheet.create({
   chipSet: { backgroundColor: recordLook.tag },
   chipSetWords: { color: recordLook.onTag, fontFamily: fonts.bold },
   stats: { flexDirection: "row", gap: 10 },
+  open: { alignSelf: "center", minWidth: 200 },
   stat: { flex: 1, minHeight: 64, padding: 12, borderRadius: 16, backgroundColor: colours.glass, borderWidth: 1, borderColor: colours.line },
 });
