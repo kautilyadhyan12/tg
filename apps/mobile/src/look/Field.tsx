@@ -25,11 +25,13 @@ interface FieldProps {
   name?: boolean;
   /** Several lines of words: the box starts this many lines tall and grows with them. */
   lines?: number;
+  /** Shown, and not changed while something is being saved. */
+  disabled?: boolean;
 }
 
 /** One line to type in, as tall as a main button; its edge turns orange while it is typed in.
  *  The box is a View round the input: Android drops an input's own padding when its edge is restyled. */
-export function Field({ label, bare = false, value, onChange, placeholder, keyboard, fills, maxLength, spaced = false, ready = false, onDone, name = false, lines }: FieldProps) {
+export function Field({ label, bare = false, value, onChange, placeholder, keyboard, fills, maxLength, spaced = false, ready = false, onDone, name = false, lines, disabled = false }: FieldProps) {
   const many = lines !== undefined && lines > 1;
   const [on, setOn] = useState(false);
   return (
@@ -42,6 +44,8 @@ export function Field({ label, bare = false, value, onChange, placeholder, keybo
       <View style={[styles.box, many ? [styles.manyBox, { minHeight: LINE * lines + 24 }] : null, on ? styles.on : null]}>
         <TextInput
           accessibilityLabel={label}
+          accessibilityState={{ disabled }}
+          editable={!disabled}
           maxFontSizeMultiplier={MOST_TEXT_GROWTH}
           value={value}
           onChangeText={onChange}

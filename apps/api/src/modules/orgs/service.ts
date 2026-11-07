@@ -46,6 +46,7 @@ import * as messagesRepo from "./messages/repo.js";
 import * as repo from "./repo.js";
 import { roleById } from "./staffInvites/repo.js";
 import { isThrowawayEmail } from "./throwaway.js";
+import { myWaiverStates } from "./waiver/repo.js";
 import {
   ORG_PRIVILEGES,
   OWNER_ONLY_PRIVILEGES,
@@ -577,6 +578,8 @@ export async function listMyOrgs(
   // list's details: a plain member's gym card asks nothing.
   const listReaders = rows.filter((r) => r.staffRole !== null && privilegesFor(r.staffRole, r.privileges).includes("members.confirm"));
   const needReview = await listRepo.reviewCounts(deps.sql, listReaders.map((r) => r.id));
+  // The caller's own waiver at each place they are a member of (20b): the phone's card asks with it.
+  const waivers = await myWaiverStates(deps.sql, userId, rows.filter((r) => r.isMember).map((r) => r.id));
   return myOrgsResponseSchema.parse({
     orgs: rows.map((r) => {
       // COMPUTED ONCE PER ROW because two fields below now need it, and calling
@@ -702,6 +705,7 @@ export async function listMyOrgs(
       isMember: r.isMember,
       joinedAt: r.joinedAt === null ? null : r.joinedAt.toISOString(),
       newMessages: r.isMember ? (newMessages.get(r.id) ?? 0) : 0,
+      waiver: r.isMember ? (waivers.get(r.id) ?? null) : null,
       };
     }),
     formerOrgs: former.map((f) => ({

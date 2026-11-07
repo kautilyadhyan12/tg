@@ -22,6 +22,7 @@ import {
   memberListEntryDetailSchema,
   memberListEntryWrittenSchema,
   myInvitationsResponseSchema,
+  myOrgsResponseSchema,
   myWaiverResponseSchema,
   signWaiverResponseSchema,
   type GymWaiverResponse,
@@ -269,6 +270,71 @@ d("a gym's waiver (real Postgres)", () => {
   // THE WORST THING: SIGNED FOR WORDS NEVER SEEN, OR FOR SOMEBODY ELSE
   // =========================================================================
 
+  /** What the Gym tab's own read says of each place's waiver for this person (20b). */
+  const waiverStates = async (who: User): Promise<Record<string, string | null>> => {
+    const res = await get("/v1/orgs/mine", who.cookies);
+    expect(res.statusCode, res.body).toBe(200);
+    return Object.fromEntries(myOrgsResponseSchema.parse(JSON.parse(res.body)).orgs.map((org) => [org.name, org.waiver]));
+  };
+
+  it(
+    "the Gym tab says a place's waiver is signed only by the person's own signature of its words as they are today (20b)",
+    async () => {
+      const iron = await makeGym("Iron Tab");
+      const studio = await makeGym("Studio Tab");
+      const plain = await makeGym("Plain Tab");
+      // Bea joins all three before any waiver; Cal joins Iron alone.
+      const { who: bea, entryId: beaAtIron } = await member(iron, "tab-bea", "Bea Lund");
+      // One sign-in: the address is invited to the other two and joins each.
+      for (const gym of [studio, plain]) {
+        await addInvited(gym, { fullName: "Bea Lund", email: addr("tab-bea") });
+        expect((await join(bea, (await invitationAt(bea, gym)).id, {})).statusCode).toBe(200);
+      }
+      const { who: cal } = await member(iron, "tab-cal", "Cal Moss");
+      expect(await waiverStates(bea)).toEqual({ "Iron Tab": null, "Studio Tab": null, "Plain Tab": null });
+
+      const v1 = savedId(await save(iron, PASTED));
+      const studioV1 = savedId(await save(studio, "Studio Tab's own waiver."));
+      expect(await waiverStates(bea)).toEqual({ "Iron Tab": "to_sign", "Studio Tab": "to_sign", "Plain Tab": null });
+
+      // Signed at the desk only, Bea is still asked in the app (spec §10.10: on purpose).
+      const desk = await post(`/v1/orgs/${iron.id}/member-list/entries/${beaAtIron}/waiver/sign`, { waiverId: v1, signer: "person", name: "Bea Lund" }, iron.owner.cookies);
+      expect(desk.statusCode, desk.body).toBe(200);
+      expect(await waiverStates(bea)).toEqual({ "Iron Tab": "to_sign", "Studio Tab": "to_sign", "Plain Tab": null });
+
+      // Cal signs Iron's words: his card, never Bea's, reads signed.
+      expect((await sign(iron, cal, { waiverId: v1, name: "Cal Moss" })).statusCode).toBe(200);
+      expect(await waiverStates(cal)).toEqual({ "Iron Tab": "signed" });
+      expect(await waiverStates(bea)).toEqual({ "Iron Tab": "to_sign", "Studio Tab": "to_sign", "Plain Tab": null });
+
+      // Bea signs the studio's: Iron still asks her.
+      expect((await sign(studio, bea, { waiverId: studioV1, name: "Bea Lund" })).statusCode).toBe(200);
+      expect(await waiverStates(bea)).toEqual({ "Iron Tab": "to_sign", "Studio Tab": "signed", "Plain Tab": null });
+
+      // New words at Iron: Cal's signature of the old ones no longer counts.
+      const v2 = savedId(await save(iron, CHANGED));
+      expect(await waiverStates(cal)).toEqual({ "Iron Tab": "to_sign" });
+      expect((await sign(iron, cal, { waiverId: v2, name: "Cal Moss" })).statusCode).toBe(200);
+      expect(await waiverStates(cal)).toEqual({ "Iron Tab": "signed" });
+
+      // Stopped, nobody is asked; the waiver's own read names the business it answers for.
+      await stop(iron);
+      expect(await waiverStates(cal)).toEqual({ "Iron Tab": null });
+      expect(await myWaiver(studio, bea)).toMatchObject({ gymId: studio.id, gymName: "Studio Tab", signed: { name: "Bea Lund" } });
+
+      // The owner, who is not a member, is told nothing about anybody's waiver; a trainer who is
+      // also a member is asked as a member.
+      expect(await waiverStates(studio.owner)).toEqual({ "Studio Tab": null });
+      await sql`INSERT INTO gym_staff (gym_id, user_id, role) VALUES (${studio.id}, ${bea.userId}, 'trainer')`;
+      expect((await waiverStates(bea))["Studio Tab"]).toBe("signed");
+      await sql`DELETE FROM gym_staff WHERE gym_id = ${studio.id} AND user_id = ${bea.userId}`;
+      // Removed from the studio, it leaves her places altogether (the list's own rule, before 20b).
+      await sql`UPDATE gym_members SET removed_at = now() WHERE gym_id = ${studio.id} AND user_id = ${bea.userId}`;
+      expect(Object.keys(await waiverStates(bea))).not.toContain("Studio Tab");
+    },
+    TEST_TIMEOUT_MS,
+  );
+
   it(
     "a signature is written only for the words the person was shown, and only for the account that typed it",
     async () => {
@@ -312,7 +378,7 @@ d("a gym's waiver (real Postgres)", () => {
       const second = await save(iron, CHANGED);
       const v2 = savedId(second);
       expect(second).toMatchObject({ inUse: true, people: 2, signed: 0, waiver: { version: 2, text: CHANGED } });
-      expect(await myWaiver(iron, alice)).toEqual({ gymName: "Iron House", timezone: "Europe/London", waiver: { id: v2, version: 2, text: CHANGED }, signed: null });
+      expect(await myWaiver(iron, alice)).toEqual({ gymId: iron.id, gymName: "Iron House", timezone: "Europe/London", waiver: { id: v2, version: 2, text: CHANGED }, signed: null });
       const page = await personPage(iron, aliceEntry);
       expect(page.waiverInUse).toBe(true);
       expect(page.members).toMatchObject([{ userId: alice.userId, waiverSigned: null }]);
@@ -496,7 +562,7 @@ d("a gym's waiver (real Postgres)", () => {
       expect(umaInvitation.waiver).toBeNull();
       expect((await join(uma, umaInvitation.id, { waiver: { id: "00000000-0000-4000-8000-000000000000", name: "Uma Vance" } })).statusCode).toBe(200);
       expect(await signaturesAt(gym)).toEqual([]);
-      expect(await myWaiver(gym, ola)).toEqual({ gymName: "Plain Gym", timezone: "Europe/London", waiver: null, signed: null });
+      expect(await myWaiver(gym, ola)).toEqual({ gymId: gym.id, gymName: "Plain Gym", timezone: "Europe/London", waiver: null, signed: null });
       expect(await personPage(gym, entryId)).toMatchObject({ waiverInUse: false, members: [{ waiverSigned: null }] });
 
       // The gym writes one: the two people already in the app are asked.

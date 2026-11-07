@@ -82,6 +82,8 @@ export type GymWaiverResponse = z.infer<typeof gymWaiverResponseSchema>;
 
 export const myWaiverResponseSchema = z
   .object({
+    /** The business this answers for, so a phone never shows one business's waiver under another's (20b). */
+    gymId: z.string().uuid(),
     gymName: z.string(),
     /** The gym's time zone, so the day a signature was made is written as the gym's own. */
     timezone: z.string().optional(),
