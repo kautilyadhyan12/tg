@@ -14,6 +14,8 @@ import { dayInTz } from "../../gamification/streak.js";
 import { factsKeyOf } from "../agreement/factsKey.js";
 import { gymContact, typeDocumentSql } from "../agreement/repo.js";
 import { billDayOf } from "../memberships/billsSql.js";
+import { appMemberValues } from "../memberList/placeOnList.js";
+import { memberContact } from "../memberList/repo.js";
 import { readerOf } from "../myMembership/repo.js";
 import { friendGiftOffer } from "../referrals/friendGift.js";
 import { waitingGiftFor } from "../referrals/memberGiftRepo.js";
@@ -45,10 +47,10 @@ async function wordingsOf(sql: Sql, gymId: string): Promise<Map<string, ForSaleL
   return found;
 }
 
-/** The record's name and date of birth. */
+/** The record's name and date of birth; a past member's too, whose record comes back on the list by what they buy. */
 async function personOf(sql: Sql, gymId: string, entryId: string): Promise<{ fullName: string; dateOfBirth: string | null } | null> {
   const [row] = await sql<{ full_name: string; date_of_birth: string | null }[]>`
-    SELECT full_name, date_of_birth::text AS date_of_birth FROM gym_member_list_entries WHERE gym_id = ${gymId} AND id = ${entryId} AND former_at IS NULL`;
+    SELECT full_name, date_of_birth::text AS date_of_birth FROM gym_member_list_entries WHERE gym_id = ${gymId} AND id = ${entryId}`;
   return row === undefined ? null : { fullName: row.full_name.trim(), dateOfBirth: row.date_of_birth };
 }
 
@@ -69,7 +71,12 @@ export async function readForSale(deps: PaymentsDeps, userId: string, gymId: str
     gymContact(deps.sql, gymId),
     billDayOf(deps.sql, gymId),
     taxIncludedOf(deps.sql, gymId),
-    own === null ? Promise.resolve(null) : personOf(deps.sql, gymId, own),
+    // A member not on the list yet is named as the record made for them once they pay will name them (18k-iii-b).
+    own !== null
+      ? personOf(deps.sql, gymId, own)
+      : record === "none"
+        ? memberContact(deps.sql, gymId, userId).then((c) => (c === null ? null : { fullName: appMemberValues(c).fullName, dateOfBirth: null }))
+        : Promise.resolve(null),
     wordingsOf(deps.sql, gymId),
     // The gifts Add membership fills in for this record (18k-iii-a).
     own === null ? Promise.resolve(null) : friendGiftOffer(deps.sql, gymId, own, today),

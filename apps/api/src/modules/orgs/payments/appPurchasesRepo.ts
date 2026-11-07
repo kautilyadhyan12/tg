@@ -16,6 +16,7 @@ import {
   heldMembershipView,
   isUnder18,
   type AppPurchaseBought,
+  type AppPurchaseBuyer,
   type AppPurchaseCheck,
   type AppPurchaseGiven,
   type AppPurchaseOpen,
@@ -33,6 +34,7 @@ import { friendGiftOffer } from "../referrals/friendGift.js";
 import { waitingGiftFor } from "../referrals/memberGiftRepo.js";
 import { taxIncludedOf } from "../register/taxRepo.js";
 import { insertAudit } from "../repo.js";
+import { homeOf } from "./appPurchaseHome.js";
 import { COLUMNS, toRow, type AppPayRow, type RawPay } from "./appPaymentsRepo.js";
 import { soldInAppLine } from "./forSaleRepo.js";
 import type { SquareEnvironment } from "./square.js";
@@ -42,7 +44,12 @@ type SqlOrTx = Sql | TransactionSql;
 /** What Buy read off the screen, and who pressed it. */
 export interface Buying {
   gymId: string;
-  entryId: string;
+  /** The account that pressed Buy. */
+  userId: string;
+  /** Their own record; null for a member not on the list yet, who is put on it by what they buy (18k-iii-b). */
+  entryId: string | null;
+  /** Who they are, where they have no record: what the record made for them holds. */
+  buyer: AppPurchaseBuyer | null;
   typeId: string;
   amountMinor: number;
   factsKey: string;
@@ -65,7 +72,7 @@ export type PurchasableOutcome =
   | { kind: "ok"; bought: AppPurchaseBought; currency: string; deadline: Date | null }
   /** A page for this record is open: the same press's is answered instead of a second. */
   | { kind: "open"; row: AppPayRow }
-  | { kind: "entry_not_found" | "paid_by_other" | "changed" | "agreement_changed" | "guardian_needed" | "person_signs" | "too_many" | "currency" | "check" | "too_late" }
+  | { kind: "entry_not_found" | "shared" | "paid_by_other" | "changed" | "agreement_changed" | "guardian_needed" | "person_signs" | "too_many" | "currency" | "check" | "too_late" }
   | { kind: "already_held"; name: string };
 
 /** The newest wording of the agreement a line asks for today, or null for none: the main agreement unless the line is
@@ -116,31 +123,52 @@ export async function workedFor(
   return { worked, m: giveHeldMembership(line.type, s.today, false, s.today, billDay) };
 }
 
-/** The record's name and date of birth, as the agreement reads them. */
+/** The record's name and date of birth, as the agreement reads them; a past member's too, whose record comes back on the
+ *  list by what they buy (18k-iii-b). */
 async function personOf(tx: SqlOrTx, gymId: string, entryId: string): Promise<{ fullName: string; dateOfBirth: string | null } | null> {
   const [row] = await tx<{ full_name: string; date_of_birth: string | null }[]>`
-    SELECT full_name, date_of_birth::text AS date_of_birth FROM gym_member_list_entries WHERE gym_id = ${gymId} AND id = ${entryId} AND former_at IS NULL`;
+    SELECT full_name, date_of_birth::text AS date_of_birth FROM gym_member_list_entries WHERE gym_id = ${gymId} AND id = ${entryId}`;
   return row === undefined ? null : { fullName: row.full_name.trim(), dateOfBirth: row.date_of_birth };
 }
 
 /** Whether a purchase can be made now, asked under the gym's lock and the record's: the same rules giving it will meet. */
 async function purchasableIn(tx: TransactionSql, s: Buying): Promise<PurchasableOutcome> {
-  const entry = await lockedEntry(tx, s.gymId, s.entryId);
-  if (entry === null || entry.past) return { kind: "entry_not_found" };
-  await settle(tx, s.gymId, s.entryId, s.today, s.now);
+  if (s.entryId === null) {
+    await lockGym(tx, s.gymId);
+  } else {
+    if ((await lockedEntry(tx, s.gymId, s.entryId)) === null) return { kind: "entry_not_found" };
+    await settle(tx, s.gymId, s.entryId, s.today, s.now);
+  }
+  // One purchase page open at a time: the record's, or the account's while it holds none.
   const [open] = await tx<RawPay[]>`
     SELECT ${COLUMNS(tx)} FROM gym_app_payments a
-    WHERE a.gym_id = ${s.gymId} AND a.entry_id = ${s.entryId} AND a.state = 'open' AND a.membership_type_id IS NOT NULL`;
+    WHERE a.gym_id = ${s.gymId} AND a.state = 'open' AND a.membership_type_id IS NOT NULL
+      AND (a.entry_id = ${s.entryId} OR (a.entry_id IS NULL AND a.opened_by = ${s.userId}))
+    LIMIT 1`;
   if (open !== undefined) return { kind: "open", row: toRow(open) };
-  // Their own record still, under its lock: one account holds it, and nobody else pays for it (18i).
-  const [who] = await tx<{ holders: number; paid_by_other: boolean }[]>`
-    SELECT (SELECT count(*) FROM gym_members o JOIN users u ON u.id = o.user_id AND u.status = 'active'
-            WHERE o.gym_id = ${s.gymId} AND o.entry_id = ${s.entryId} AND o.removed_at IS NULL)::int AS holders,
-           EXISTS (SELECT 1 FROM gym_member_payers p WHERE p.gym_id = ${s.gymId} AND p.entry_id = ${s.entryId}) AS paid_by_other`;
-  if (who === undefined || who.holders !== 1) return { kind: "entry_not_found" };
-  if (who.paid_by_other) return { kind: "paid_by_other" };
-  const person = await personOf(tx, s.gymId, s.entryId);
-  if (person === null) return { kind: "entry_not_found" };
+  // Under the lock, their app still holds what it held when Buy was read: that record, or none.
+  const [me] = await tx<{ entry_id: string | null }[]>`
+    SELECT entry_id FROM gym_members WHERE gym_id = ${s.gymId} AND user_id = ${s.userId} AND removed_at IS NULL`;
+  if (me === undefined) return { kind: "entry_not_found" };
+  if (me.entry_id !== s.entryId) return { kind: "changed" };
+  let person: { fullName: string; dateOfBirth: string | null };
+  if (s.entryId === null) {
+    // Not on the list yet: the record made for them, once they pay, holds their app's name; it has no date of birth.
+    if (s.buyer === null) return { kind: "entry_not_found" };
+    person = { fullName: s.buyer.name, dateOfBirth: null };
+  } else {
+    // Their own record still: one account holds it, and nobody else pays for it (18i).
+    const [who] = await tx<{ holders: number; paid_by_other: boolean }[]>`
+      SELECT (SELECT count(*) FROM gym_members o JOIN users u ON u.id = o.user_id AND u.status = 'active'
+              WHERE o.gym_id = ${s.gymId} AND o.entry_id = ${s.entryId} AND o.removed_at IS NULL)::int AS holders,
+             EXISTS (SELECT 1 FROM gym_member_payers p WHERE p.gym_id = ${s.gymId} AND p.entry_id = ${s.entryId}) AS paid_by_other`;
+    if (who === undefined || who.holders === 0) return { kind: "entry_not_found" };
+    if (who.holders > 1) return { kind: "shared" };
+    if (who.paid_by_other) return { kind: "paid_by_other" };
+    const own = await personOf(tx, s.gymId, s.entryId);
+    if (own === null) return { kind: "entry_not_found" };
+    person = own;
+  }
   const found = await workedFor(tx, { gymId: s.gymId, entryId: s.entryId, typeId: s.typeId, gymName: s.gymName, today: s.today, personName: person.fullName });
   if (found === null || !found.m.ok) return { kind: "changed" };
   const { item, given } = found.worked;
@@ -154,13 +182,14 @@ async function purchasableIn(tx: TransactionSql, s: Buying): Promise<Purchasable
     if (s.agreement.signer === "person" && minor === true) return { kind: "guardian_needed" };
     if (s.agreement.signer === "guardian" && minor === false) return { kind: "person_signs" };
   }
-  const refused = await wouldRefuseGiving(tx, s.gymId, s.entryId, s.typeId, found.m.membership, s.today);
+  // Somebody with no record holds nothing to stand in the way.
+  const refused = s.entryId === null ? null : await wouldRefuseGiving(tx, s.gymId, s.entryId, s.typeId, found.m.membership, s.today);
   if (refused === "already_held") return { kind: "already_held", name: item.name };
   if (refused === "too_many") return { kind: "too_many" };
   // An earlier page for this line that may have been paid and gave nothing is checked by the front desk first.
   const [check] = await tx<{ id: string }[]>`
     SELECT id FROM gym_app_payments
-    WHERE gym_id = ${s.gymId} AND entry_id = ${s.entryId} AND membership_type_id = ${s.typeId}
+    WHERE gym_id = ${s.gymId} AND (entry_id = ${s.entryId} OR (entry_id IS NULL AND opened_by = ${s.userId})) AND membership_type_id = ${s.typeId}
       AND outcome IN ('not_recorded','gone','no_answer') AND cleared_at IS NULL
     LIMIT 1`;
   if (check !== undefined) return { kind: "check" };
@@ -177,7 +206,7 @@ async function purchasableIn(tx: TransactionSql, s: Buying): Promise<Purchasable
   if (deadline !== null && deadline.getTime() - s.now.getTime() < MIN_OPEN_MS) return { kind: "too_late" };
   const sign: AppPurchaseSign | null =
     asked === null || s.agreement === null ? null : { agreementId: asked.id, signer: s.agreement.signer, name: s.agreement.name, facts: item.facts, at: s.now.toISOString() };
-  return { kind: "ok", bought: { ...given, sign }, currency: item.currency, deadline };
+  return { kind: "ok", bought: { ...given, sign, buyer: s.entryId === null ? s.buyer : null }, currency: item.currency, deadline };
 }
 
 /** The check before Square is asked to make the page: nothing is written but what the clock had already done. */
@@ -371,18 +400,21 @@ export async function recordBought(sql: Sql, p: Bought): Promise<{ outcome: "pai
   const typeId = row.typeId;
   if (typeId === null) throw new Error("a bill's page reached the purchase's recording");
   return await sql.begin(async (tx) => {
-    // The gym's lock, then the record's, then the page: the order Add membership takes.
+    // The gym's lock, then the page, then the record: Add membership takes the gym's first too.
     await lockGym(tx, row.gymId);
-    const entry = row.entryId === null ? null : await lockedEntry(tx, row.gymId, row.entryId);
     const [still] = await tx<{ id: string }[]>`SELECT id FROM gym_app_payments WHERE gym_id = ${row.gymId} AND id = ${row.id} AND state = 'open' FOR UPDATE`;
     if (still === undefined) return null;
+    // Square took the money: the record it lands on, a member not on the list put on it now (18k-iii-b), so whatever
+    // happens next is on a page staff read.
+    const home = await homeOf(tx, row, p.now);
+    const entryId = home?.entryId ?? row.entryId;
     const bought = boughtOf(row);
-    let why: string = p.refuse ?? (row.entryId === null || entry === null ? "entry_not_found" : bought === null ? "bought_unreadable" : "");
-    if (why === "" && row.entryId !== null && bought !== null && bought.totalMinor === row.amountMinor) {
+    let why: string = p.refuse ?? (home === null ? "entry_not_found" : !home.theirs ? "record_not_theirs" : bought === null ? "bought_unreadable" : "");
+    if (why === "" && home !== null && bought !== null && bought.totalMinor === row.amountMinor) {
       const what = given(bought);
       const done = await giveHeldIn(tx, {
         gymId: row.gymId,
-        entryId: row.entryId,
+        entryId: home.entryId,
         typeId,
         // The page itself is the membership's and the payment's key: the same page given twice is one.
         requestKey: row.id,
@@ -408,10 +440,10 @@ export async function recordBought(sql: Sql, p: Bought): Promise<{ outcome: "pai
       if (done.kind === "given" && done.paymentId !== null) {
         const signed = bought.sign === null ? null : await signBought(tx, row.gymId, done.id, bought.sign);
         await tx`
-          UPDATE gym_app_payments SET state = 'done', outcome = 'paid', held_membership_id = ${done.id}, square_payment_id = ${p.squarePaymentId},
+          UPDATE gym_app_payments SET state = 'done', outcome = 'paid', entry_id = ${home.entryId}, held_membership_id = ${done.id}, square_payment_id = ${p.squarePaymentId},
                  member_payment_id = ${done.paymentId}, card_brand = ${p.card?.brand ?? null}, card_last4 = ${p.card?.last4 ?? null}, taken_minor = ${p.taken},
-                 -- The signature now lives with the membership; the page keeps no name or details of it.
-                 bought = bought || '{"sign":null}'::jsonb, finished_at = ${p.now}, checking_until = NULL
+                 -- The signature now lives with the membership, and the buyer on their record; the page keeps no name or details.
+                 bought = bought || '{"sign":null,"buyer":null}'::jsonb, finished_at = ${p.now}, checking_until = NULL
           WHERE gym_id = ${row.gymId} AND id = ${row.id}`;
         await insertAudit(tx, {
           actorUserId: row.openedBy,
@@ -419,7 +451,7 @@ export async function recordBought(sql: Sql, p: Bought): Promise<{ outcome: "pai
           action: "member.app_purchase_paid",
           targetType: "gym_member_payment",
           targetId: done.paymentId,
-          meta: { entryId: row.entryId, membershipId: done.id, typeId, amountMinor: String(row.amountMinor), currency: row.currency, signed: String(signed !== null) },
+          meta: { entryId: home.entryId, membershipId: done.id, typeId, amountMinor: String(row.amountMinor), currency: row.currency, signed: String(signed !== null) },
         });
         return { outcome: "paid" as const, membershipId: done.id, signed: signed !== null };
       }
@@ -430,10 +462,10 @@ export async function recordBought(sql: Sql, p: Bought): Promise<{ outcome: "pai
       why = "amount_differs";
     }
     await tx`
-      UPDATE gym_app_payments SET state = 'done', outcome = 'not_recorded', square_payment_id = ${p.squarePaymentId},
+      UPDATE gym_app_payments SET state = 'done', outcome = 'not_recorded', entry_id = ${entryId}, square_payment_id = ${p.squarePaymentId},
              card_brand = ${p.card?.brand ?? null}, card_last4 = ${p.card?.last4 ?? null}, taken_minor = ${p.taken}, finished_at = ${p.now}, checking_until = NULL,
              -- Nothing was signed for: the page keeps no name or details typed.
-             bought = bought || '{"sign":null}'::jsonb
+             bought = bought || '{"sign":null,"buyer":null}'::jsonb
       WHERE gym_id = ${row.gymId} AND id = ${row.id}`;
     await insertAudit(tx, {
       actorUserId: row.openedBy,
@@ -441,7 +473,7 @@ export async function recordBought(sql: Sql, p: Bought): Promise<{ outcome: "pai
       action: "member.app_purchase_not_recorded",
       targetType: "gym_app_payment",
       targetId: row.id,
-      meta: { ...(row.entryId === null ? {} : { entryId: row.entryId }), typeId, amountMinor: String(row.amountMinor), currency: row.currency, why },
+      meta: { ...(entryId === null ? {} : { entryId }), typeId, amountMinor: String(row.amountMinor), currency: row.currency, why },
     });
     return { outcome: "not_recorded" as const };
   });

@@ -20,6 +20,7 @@ import { billsFor, cardCharging, terminalWaiting } from "../memberships/billsSql
 import { membershipFee, recordFeePaymentIn, stillOwedSql } from "../memberships/feesRepo.js";
 import { lockedEntry, lockedHeld, settle } from "../memberships/heldRepo.js";
 import { lockGym } from "../memberList/repo.js";
+import { homeOf } from "./appPurchaseHome.js";
 import type { SquareEnvironment } from "./square.js";
 
 type SqlOrTx = Sql | TransactionSql;
@@ -415,13 +416,19 @@ export async function staffClose(sql: Sql, s: { gymId: string; id: string; entry
  *  owed, with the line under it that says to check Square. */
 export async function finish(sql: Sql, gymId: string, id: string, outcome: "closed" | "gone" | "no_answer", at: Date): Promise<boolean> {
   return await sql.begin(async (tx) => {
-    const [page] = await tx<{ fee_bill_id: string | null }[]>`SELECT fee_bill_id FROM gym_app_payments WHERE gym_id = ${gymId} AND id = ${id}`;
-    const fee = outcome === "closed" ? (page?.fee_bill_id ?? null) : null;
-    if (fee !== null) await lockGym(tx, gymId);
+    const [page] = await tx<RawPay[]>`SELECT ${COLUMNS(tx)} FROM gym_app_payments a WHERE a.gym_id = ${gymId} AND a.id = ${id}`;
+    const pageRow = page === undefined ? null : toRow(page);
+    const fee = outcome === "closed" ? (pageRow?.feeBillId ?? null) : null;
+    // A purchase by somebody not on the list that may have been paid puts them on it, so the line telling staff to check
+    // Square is on their page (18k-iii-b).
+    const homeless = outcome !== "closed" && pageRow !== null && pageRow.state === "open" && pageRow.typeId !== null && pageRow.entryId === null;
+    if (fee !== null || homeless) await lockGym(tx, gymId);
+    const home = homeless && pageRow !== null ? await homeOf(tx, pageRow, at) : null;
     const rows = await tx<{ id: string }[]>`
       UPDATE gym_app_payments SET state = 'done', outcome = ${outcome}, finished_at = ${at}, checking_until = NULL,
-             -- A purchase that gave nothing keeps no name or details typed (18k-iii-a).
-             bought = CASE WHEN membership_type_id IS NULL THEN bought ELSE bought || '{"sign":null}'::jsonb END
+             entry_id = COALESCE(entry_id, ${home?.entryId ?? null}::uuid),
+             -- A purchase that gave nothing keeps no name or details typed (18k-iii-a), nor who bought it (18k-iii-b).
+             bought = CASE WHEN membership_type_id IS NULL THEN bought ELSE bought || '{"sign":null,"buyer":null}'::jsonb END
       WHERE gym_id = ${gymId} AND id = ${id} AND state = 'open'
       RETURNING id`;
     if (rows.length !== 1) return false;

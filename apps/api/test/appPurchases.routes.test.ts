@@ -514,12 +514,17 @@ d("Buy in the app: given once, on their own record, only for what Square took (r
     await sql`UPDATE gym_member_list_entries SET former_at = ${clock} WHERE gym_id = ${gym.id} AND id = ${di.entryId}`;
     const whileOpen = await send("DELETE", `/v1/orgs/${gym.id}/member-list/former/${di.entryId}`, gym.owner.cookies);
     expect(errorOf(whileOpen)).toBe("app_payment_open");
-    // Paid now, taken off the list meanwhile: nothing given, the money kept, and the page keeps no name she typed.
-    square.payLink(linkOf(packPage.purchase.id)?.id ?? "");
+    // Square takes another amount, her record moved to past members meanwhile: her own record comes back on the list (she
+    // paid, 18k-iii-b), nothing is given, the money is kept, and the page keeps no name she typed.
+    square.payLink(linkOf(packPage.purchase.id)?.id ?? "", { amount_money: { amount: 100, currency: "USD" }, total_money: { amount: 100, currency: "USD" } });
     expect((await check(gym, di.app, packPage.purchase.id)).purchase.state).toBe("check");
     const [kept] = await sql<{ sign: unknown }[]>`SELECT bought->'sign' AS sign FROM gym_app_payments WHERE id = ${packPage.purchase.id}`;
     expect(kept?.sign).toBeNull();
+    const [back] = await sql<{ past: boolean }[]>`SELECT former_at IS NOT NULL AS past FROM gym_member_list_entries WHERE id = ${di.entryId}`;
+    expect(back?.past).toBe(false);
+    expect((await held(gym, di.entryId)).memberships).toEqual([]);
     // Delete permanently waits for that check too, then goes once it is marked checked.
+    await sql`UPDATE gym_member_list_entries SET former_at = ${clock} WHERE gym_id = ${gym.id} AND id = ${di.entryId}`;
     const unchecked = await send("DELETE", `/v1/orgs/${gym.id}/member-list/former/${di.entryId}`, gym.owner.cookies);
     expect(errorOf(unchecked)).toBe("app_purchase_check");
     expect((await send("POST", `${entryUrl(gym, di.entryId)}/app-purchases/${packPage.purchase.id}/checked`, gym.owner.cookies)).statusCode).toBe(200);
@@ -531,7 +536,7 @@ d("Buy in the app: given once, on their own record, only for what Square took (r
     const fayLine = await lineOf(gym, fay.app, pack);
     const second = await signedIn("Fay Two Phone");
     await sql`INSERT INTO gym_members (gym_id, user_id, entry_id) VALUES (${gym.id}, ${second.userId}, ${fay.entryId})`;
-    expect(errorOf(await buyPress(gym, fay.app, fayLine, {}, "Fay Two"))).toBe("app_purchase_not_own");
+    expect(errorOf(await buyPress(gym, fay.app, fayLine, {}, "Fay Two"))).toBe("app_purchase_shared");
     // An adult by her record signs herself, never a parent or guardian for her.
     const gus = await member(gym, "Gus Grown", "1990-02-02");
     const gusLine = await lineOf(gym, gus.app, pack);
@@ -566,12 +571,12 @@ d("Buy in the app: given once, on their own record, only for what Square took (r
     const pack = await addType(gym, { name: "10-class pack" });
     const ivy = await member(gym, "Ivy Lock");
     const shown = await lineOf(gym, ivy.app, pack);
-    const buying = { gymId: gym.id, entryId: ivy.entryId, typeId: pack, amountMinor: shown.firstPayment.amountMinor, factsKey: shown.factsKey, agreement: null, accountCurrency: "USD", gymName: gym.name, today: (await held(gym, ivy.entryId)).today, now: clock };
+    const buying = { gymId: gym.id, userId: ivy.app.userId, entryId: ivy.entryId, buyer: null, typeId: pack, amountMinor: shown.firstPayment.amountMinor, factsKey: shown.factsKey, agreement: null, accountCurrency: "USD", gymName: gym.name, today: (await held(gym, ivy.entryId)).today, now: clock };
     expect((await purchasable(sql, buying)).kind).toBe("ok");
     // A second account joins her record after the route read it: the check under the lock refuses.
     const other = await signedIn("Ivy Phone Two");
     await sql`INSERT INTO gym_members (gym_id, user_id, entry_id) VALUES (${gym.id}, ${other.userId}, ${ivy.entryId})`;
-    expect((await purchasable(sql, buying)).kind).toBe("entry_not_found");
+    expect((await purchasable(sql, buying)).kind).toBe("shared");
     await sql`DELETE FROM gym_members WHERE gym_id = ${gym.id} AND user_id = ${other.userId}`;
     // Somebody starts paying for her after the route read it: refused the same way.
     const payer = await member(gym, "Ivy Parent");
@@ -587,5 +592,200 @@ d("Buy in the app: given once, on their own record, only for what Square took (r
       const res = await send("POST", buyUrl(gym), zoe.app.cookies, body);
       expect(res.statusCode, res.body).toBe(400);
     }
+  });
+
+  // ── 18k-iii-b: a member not on the gym's list yet, or sharing a record (Kd, 2026-11-07: "yes go") ──
+
+  /** Somebody in the gym's app with no record of their own; `phone`: the one they typed when they joined. */
+  const appOnly = async (gym: Gym, name: string, phone: string | null = null): Promise<Person & { email: string }> => {
+    const who = await signedIn(name);
+    await sql`INSERT INTO gym_members (gym_id, user_id, stated_phone_e164) VALUES (${gym.id}, ${who.userId}, ${phone})`;
+    const [u] = await sql<{ email: string }[]>`SELECT email::text AS email FROM users WHERE id = ${who.userId}`;
+    return { ...who, email: u?.email ?? "" };
+  };
+  /** A record typed in by staff, added anyway where it looks like one already there. */
+  const addRecord = async (gym: Gym, person: Record<string, string>): Promise<string> => {
+    const url = `/v1/orgs/${gym.id}/member-list/entries`;
+    let res = await send("POST", url, gym.owner.cookies, person);
+    if (res.statusCode === 409) {
+      const people = (JSON.parse(res.body) as { people: { entryId: string }[] }).people.map((p) => p.entryId);
+      res = await send("POST", url, gym.owner.cookies, { ...person, acknowledgedDuplicates: people });
+    }
+    expect(res.statusCode, res.body).toBe(201);
+    return (JSON.parse(res.body) as { entry: { entryId: string } }).entry.entryId;
+  };
+  const linkOfAccount = async (gym: Gym, userId: string): Promise<string | null> =>
+    (await sql<{ entry_id: string | null }[]>`SELECT entry_id FROM gym_members WHERE gym_id = ${gym.id} AND user_id = ${userId} AND removed_at IS NULL`)[0]?.entry_id ?? null;
+  const recordsOf = async (gym: Gym) =>
+    await sql<{ id: string; full_name: string; email: string | null; past: boolean; source: string }[]>`
+      SELECT id, full_name, email::text AS email, former_at IS NOT NULL AS past, source
+      FROM gym_member_list_entries WHERE gym_id = ${gym.id} ORDER BY full_name, id`;
+  const typesHeld = async (gym: Gym, entryId: string) => (await held(gym, entryId)).memberships.map((m) => m.typeName);
+  const payPage = async (gym: Gym, who: Person, id: string) => {
+    expect(square.payLink(linkOf(id)?.id ?? "")).toBe(true);
+    return (await check(gym, who, id)).purchase;
+  };
+
+  it("the worst thing (18k-iii-b): somebody not on the list is put on it by what they paid for, on a record certainly theirs, and nobody else's", async () => {
+    clock = new Date();
+    const gym = await makeGym("App Buy Not Listed", account(`ABNL${uniq().slice(-6)}`));
+    const other = await makeGym("App Buy Not Listed Other", account(`ABNO${uniq().slice(-6)}`));
+    await agreementOn(gym);
+    const pack = await addType(gym, { name: "10-class pack" });
+
+    // Nia uses the app here with no record (hers deleted for good, say).
+    const nia = await appOnly(gym, "Nia Cole");
+    // A family's one email on two records (spec Part 3 §17.10, row 1e): Mum joined with it, and the list can't tell whose it is.
+    const mum = await appOnly(gym, "Mum Park");
+    const leo = await addRecord(gym, { fullName: "Leo Park", email: mum.email });
+    const maria = await addRecord(gym, { fullName: "Maria Park", email: mum.email });
+    // Tom Reed is on the list with his phone; somebody else joined under his name and typed that phone.
+    const tom = await addRecord(gym, { fullName: "Tom Reed", email: `abuy-r-${uniq()}@gmail.com`, phone: "+15125550101" });
+    const fakeTom = await appOnly(gym, "Tom Reed", "+15125550101");
+    // Grace is a past member still in the app.
+    const grace = await member(gym, "Grace Hall");
+    await sql`UPDATE gym_member_list_entries SET former_at = ${clock} WHERE gym_id = ${gym.id} AND id = ${grace.entryId}`;
+    // Two records joined on the console, each with its own account: the kept one is held by both.
+    const fay = await member(gym, "Fay Moss");
+    const fay2 = await member(gym, "Fay M");
+    const merged = await send("POST", `${entryUrl(gym, fay2.entryId)}/merge`, gym.owner.cookies, { keepEntryId: fay.entryId });
+    expect(merged.statusCode, merged.body).toBe(200);
+    expect(await linkOfAccount(gym, fay2.app.userId)).toBe(fay.entryId);
+    // Pat's own email is on a record another account holds since staff joined two records: that record is not Pat's to buy on.
+    const pat = await appOnly(gym, "Pat Lane");
+    const patRecord = await addRecord(gym, { fullName: "Pat Lane", email: pat.email });
+    const patOther = await member(gym, "Pat L");
+    expect((await send("POST", `${entryUrl(gym, patOther.entryId)}/merge`, gym.owner.cookies, { keepEntryId: patRecord })).statusCode).toBe(200);
+    expect(await linkOfAccount(gym, patOther.app.userId)).toBe(patRecord);
+    const otherOnly = await appOnly(other, "Olu Other");
+    const before = await recordsOf(gym);
+
+    // The list reads them as they are: none, own (Grace's past record is hers), shared.
+    expect((await forSale(gym, nia)).record).toBe("none");
+    expect((await forSale(gym, grace.app)).record).toBe("own");
+    expect((await forSale(gym, fay.app)).record).toBe("shared");
+    // A shared record is nobody's: refused in words that are true. Another gym's app member and a stranger are not this gym's.
+    const shown = await lineOf(gym, nia, pack);
+    const fayRes = await buyPress(gym, fay.app, await lineOf(gym, fay.app, pack), {}, "Fay Moss");
+    expect([fayRes.statusCode, errorOf(fayRes)]).toEqual([409, "app_purchase_shared"]);
+    expect((JSON.parse(fayRes.body) as { message: string }).message).toBe("Two app accounts share your record here, so buy this at the front desk.");
+    expect((await buyPress(gym, otherOnly, shown)).statusCode).toBe(404);
+    expect((await buyPress(gym, await signedIn("A Stranger"), shown)).statusCode).toBe(404);
+
+    // Each presses Buy, signing as the line asks: nothing on the list changes while the pages are open.
+    const niaPage = parsed(await buyPress(gym, nia, shown, {}, "Nia Cole"));
+    const mumPage = parsed(await buyPress(gym, mum, await lineOf(gym, mum, pack), {}, "Mum Park"));
+    const tomPage = parsed(await buyPress(gym, fakeTom, await lineOf(gym, fakeTom, pack), {}, "Tom Reed"));
+    const gracePage = parsed(await buyPress(gym, grace.app, await lineOf(gym, grace.app, pack), {}, "Grace Hall"));
+    expect(await recordsOf(gym)).toEqual(before);
+    // The same person's second press is the same page.
+    expect(parsed(await buyPress(gym, nia, shown, {}, "Nia Cole")).purchase.id).toBe(niaPage.purchase.id);
+
+    // Paid: each on a record of their own, holding exactly what they bought, their app linked to it.
+    for (const [who, page] of [[nia, niaPage], [mum, mumPage], [fakeTom, tomPage], [grace.app, gracePage]] as const) {
+      expect((await payPage(gym, who, page.purchase.id)).state).toBe("paid");
+    }
+    const after = await recordsOf(gym);
+    const niaRecord = after.find((r) => r.email === nia.email);
+    expect(niaRecord).toMatchObject({ full_name: "Nia Cole", past: false, source: "member" });
+    expect(await linkOfAccount(gym, nia.userId)).toBe(niaRecord?.id);
+    expect(await typesHeld(gym, niaRecord?.id ?? "")).toEqual(["10-class pack"]);
+    // Mum gets a record of her own at the family's email; Leo's and Maria's hold nothing.
+    const mumRecord = after.find((r) => r.full_name === "Mum Park");
+    expect(mumRecord?.email).toBe(mum.email);
+    expect(await linkOfAccount(gym, mum.userId)).toBe(mumRecord?.id);
+    expect([await typesHeld(gym, leo), await typesHeld(gym, maria)]).toEqual([[], []]);
+    // The phone typed never made Tom's record theirs: a record of their own, Tom's untouched.
+    const fakeTomRecord = await linkOfAccount(gym, fakeTom.userId);
+    expect(fakeTomRecord).not.toBeNull();
+    expect(fakeTomRecord).not.toBe(tom);
+    expect(await typesHeld(gym, tom)).toEqual([]);
+    expect(await typesHeld(gym, fakeTomRecord ?? "")).toEqual(["10-class pack"]);
+    // Grace's own record is back on the list with the pack; no second Grace.
+    expect(after.filter((r) => r.full_name === "Grace Hall")).toEqual([expect.objectContaining({ id: grace.entryId, past: false })]);
+    expect(await typesHeld(gym, grace.entryId)).toEqual(["10-class pack"]);
+    // Three records made and one brought back, nothing else; the agreement signed for each of the four.
+    expect(after.length - before.length).toBe(3);
+    const [signed] = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM gym_agreement_signatures WHERE gym_id = ${gym.id} AND signed_via = 'app'`;
+    expect(signed?.n).toBe(4);
+    // No ended page keeps who bought it.
+    const [kept] = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM gym_app_payments WHERE gym_id = ${gym.id} AND jsonb_typeof(bought->'buyer') = 'object'`;
+    expect(kept?.n).toBe(0);
+    // Pat paid, and the record holding Pat's details is somebody else's app: nothing given on it, Pat not linked to it, and
+    // staff read the line to check it there.
+    const patPage = parsed(await buyPress(gym, pat, await lineOf(gym, pat, pack), {}, "Pat Lane"));
+    expect((await payPage(gym, pat, patPage.purchase.id)).state).toBe("check");
+    expect(await typesHeld(gym, patRecord)).toEqual([]);
+    expect(await linkOfAccount(gym, pat.userId)).not.toBe(patRecord);
+    const [patEnded] = await sql<{ outcome: string; entry_id: string | null }[]>`SELECT outcome, entry_id FROM gym_app_payments WHERE id = ${patPage.purchase.id}`;
+    expect(patEnded).toEqual({ outcome: "not_recorded", entry_id: patRecord });
+    // On the list now, Nia reads her own record in the app.
+    expect((await forSale(gym, nia)).record).toBe("own");
+  });
+
+  it("18k-iii-b: a page not paid puts nobody on the list; staff adding them meanwhile is where it lands; one that may have been paid puts them on it to check", async () => {
+    clock = new Date();
+    const gym = await makeGym("App Buy Not Listed Races", account(`ABNR${uniq().slice(-6)}`));
+    const pack = await addType(gym, { name: "10-class pack" });
+    const before = (await recordsOf(gym)).length;
+
+    // Closed without paying: no record, no link.
+    const ola = await appOnly(gym, "Ola Quit");
+    const olaPage = parsed(await buyPress(gym, ola, await lineOf(gym, ola, pack)));
+    expect((await send("POST", `${buyUrl(gym)}/${olaPage.purchase.id}/close`, ola.cookies)).statusCode).toBe(200);
+    expect((await recordsOf(gym)).length).toBe(before);
+    expect(await linkOfAccount(gym, ola.userId)).toBeNull();
+
+    // Two presses at the same instant, each its own key: one page.
+    const two = await appOnly(gym, "Two Press");
+    const line2 = await lineOf(gym, two, pack);
+    const both = await Promise.all([buyPress(gym, two, line2), buyPress(gym, two, line2)]);
+    const [open] = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM gym_app_payments WHERE gym_id = ${gym.id} AND opened_by = ${two.userId} AND state = 'open'`;
+    expect(open?.n, both.map((r) => r.body).join(" | ")).toBe(1);
+
+    // Staff press Add to your list while Kai pays: it lands on that record, and no second one is made.
+    const kai = await appOnly(gym, "Kai Desk");
+    const kaiPage = parsed(await buyPress(gym, kai, await lineOf(gym, kai, pack)));
+    const added = await send("POST", `/v1/orgs/${gym.id}/member-list/entries/from-member/${kai.userId}`, gym.owner.cookies);
+    expect(added.statusCode, added.body).toBe(201);
+    const kaiRecord = (JSON.parse(added.body) as { entry: { entryId: string } }).entry.entryId;
+    expect(await linkOfAccount(gym, kai.userId)).toBe(kaiRecord);
+    expect((await payPage(gym, kai, kaiPage.purchase.id)).state).toBe("paid");
+    expect(await typesHeld(gym, kaiRecord)).toEqual(["10-class pack"]);
+    expect((await recordsOf(gym)).filter((r) => r.full_name === "Kai Desk")).toHaveLength(1);
+    // Asked again, it is given once.
+    expect((await check(gym, kai, kaiPage.purchase.id)).purchase.state).toBe("paid");
+    expect(await typesHeld(gym, kaiRecord)).toEqual(["10-class pack"]);
+
+    // A payment Square never finishes, on a page nobody closes: after a day it may have been paid, so they go on the list,
+    // where staff read the line to check it.
+    const una = await appOnly(gym, "Una Silent");
+    const unaPage = parsed(await buyPress(gym, una, await lineOf(gym, una, pack)));
+    square.payLink(linkOf(unaPage.purchase.id)?.id ?? "", { status: "APPROVED" });
+    clock = new Date(clock.getTime() + 25 * 3_600_000);
+    await work();
+    expect((await check(gym, una, unaPage.purchase.id)).purchase.state).toBe("check");
+    const unaRecord = await linkOfAccount(gym, una.userId);
+    expect(unaRecord).not.toBeNull();
+    const [ended] = await sql<{ outcome: string; entry_id: string | null }[]>`SELECT outcome, entry_id FROM gym_app_payments WHERE id = ${unaPage.purchase.id}`;
+    expect(ended).toEqual({ outcome: "no_answer", entry_id: unaRecord });
+    expect(await typesHeld(gym, unaRecord ?? "")).toEqual([]);
+  });
+
+  it("18k-iii-b: Add to your list links the person's app to the record made for them, never by a phone alone", async () => {
+    clock = new Date();
+    const gym = await makeGym("App Buy Desk Adds", account(`ABDA${uniq().slice(-6)}`));
+    const lee = await appOnly(gym, "Lee Walk");
+    expect((await forSale(gym, lee)).record).toBe("none");
+    const added = await send("POST", `/v1/orgs/${gym.id}/member-list/entries/from-member/${lee.userId}`, gym.owner.cookies);
+    expect(added.statusCode, added.body).toBe(201);
+    expect((await forSale(gym, lee)).record).toBe("own");
+    // Somebody with no proved email who typed a member's name and phone is never linked to that member's record.
+    const ann = await addRecord(gym, { fullName: "Ann Phone", phone: "+15125550199" });
+    const unproved = await appOnly(gym, "Ann Phone", "+15125550199");
+    await sql`DELETE FROM one_time_tokens WHERE user_id = ${unproved.userId}`;
+    const put = await send("POST", `/v1/orgs/${gym.id}/member-list/entries/from-member/${unproved.userId}`, gym.owner.cookies);
+    expect(put.statusCode, put.body).toBeLessThan(300);
+    expect(await linkOfAccount(gym, unproved.userId)).not.toBe(ann);
   });
 });

@@ -973,6 +973,10 @@ export const gymAppPayments = pgTable(
     index("gym_app_payments_done_idx").on(t.finishedAt).where(sql`${t.finishedAt} IS NOT NULL AND ${t.outcome} = 'closed'`),
     index("gym_app_payments_check_idx").on(t.gymId, t.heldMembershipId).where(sql`${t.outcome} IN ('not_recorded','gone','no_answer')`),
     uniqueIndex("gym_app_payments_purchase_uq").on(t.gymId, t.entryId).where(sql`${t.state} = 'open' AND ${t.membershipTypeId} IS NOT NULL`),
+    // A member not on the list yet: one page open for their account (0223; 18k-iii-b).
+    uniqueIndex("gym_app_payments_purchase_account_uq")
+      .on(t.gymId, t.openedBy)
+      .where(sql`${t.state} = 'open' AND ${t.membershipTypeId} IS NOT NULL AND ${t.entryId} IS NULL`),
     index("gym_app_payments_type_open_idx").on(t.gymId, t.membershipTypeId).where(sql`${t.state} = 'open' AND ${t.membershipTypeId} IS NOT NULL`),
     index("gym_app_payments_purchase_check_idx")
       .on(t.gymId, t.entryId)
