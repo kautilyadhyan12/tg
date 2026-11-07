@@ -13,6 +13,8 @@
 //   POST   /v1/orgs/:gymId/member-list/entries/:entryId/memberships/:membershipId/agreement/link    email a link to sign (18u-ii-b)
 //   POST   /v1/agreement-link/read   the link's page: what to sign (public: the token is the whole request)
 //   POST   /v1/agreement-link/sign   the person signs from the link
+//   GET    /v1/orgs/:gymId/memberships/:membershipId/agreement/mine        a member reads their own (20c, `mine.ts`)
+//   POST   /v1/orgs/:gymId/memberships/:membershipId/agreement/mine/sign   the member signs it in the app
 // Authenticate, then who the caller is at this gym, then the limit, then the handler: the
 // service asks the tick first and the limit after it. The link's two routes have no sign-in:
 // the token rides in the body, which no log writes, never in an address.
@@ -24,15 +26,17 @@ import {
   saveGymAgreementBodySchema,
   saveOtherAgreementBodySchema,
   signMembershipAgreementBodySchema,
+  signMyAgreementBodySchema,
   agreementBookingsBodySchema,
 } from "@app/shared";
 import type { Sql } from "postgres";
 import type { z } from "zod";
 import type { RedisLike } from "../../../redis.js";
 import { createDualRateLimit } from "../../auth/rateLimit.js";
-import { heldMembershipParamsSchema, orgParamsSchema, otherAgreementParamsSchema } from "../schemas.js";
+import { heldMembershipParamsSchema, myHeldMembershipParamsSchema, orgParamsSchema, otherAgreementParamsSchema } from "../schemas.js";
 import type { LiveNewsSender } from "../../live/news.js";
 import type { AgreementEmailSender } from "./email.js";
+import * as mine from "./mine.js";
 import * as service from "./service.js";
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -96,6 +100,9 @@ export function registerAgreementRoutes(
   };
   const linkReadLimit = createDualRateLimit({ name: "agreement_link_read", max: 60, ipMax: 600, windowMs: HOUR_MS, identifier: byLink, redis: deps.redis });
   const linkSignLimit = createDualRateLimit({ name: "agreement_link_sign", max: 20, ipMax: 200, windowMs: HOUR_MS, identifier: byLink, redis: deps.redis });
+  // A member reads their own agreement when they open it; many members of one gym share its wifi.
+  const memberReadLimit = createDualRateLimit({ name: "agreement_member_read", max: 120, ipMax: 3000, windowMs: HOUR_MS, identifier: byPerson, redis: deps.redis });
+  const memberSignLimit = createDualRateLimit({ name: "agreement_member_sign", max: 20, ipMax: 600, windowMs: HOUR_MS, identifier: byPerson, redis: deps.redis });
 
   const url = "/v1/orgs/:gymId/agreement";
 
@@ -217,6 +224,26 @@ export function registerAgreementRoutes(
     if (sent === null) return;
     tellMemberships(params.gymId, params.entryId);
     return reply.status(200).header("cache-control", "no-store").send(sent);
+  });
+
+  const mineUrl = "/v1/orgs/:gymId/memberships/:membershipId/agreement/mine";
+
+  app.get(mineUrl, { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(myHeldMembershipParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const page = await mine.getMyAgreement(agreementDeps, requireUserId(req), params.gymId, params.membershipId, gate(memberReadLimit)(req, reply));
+    if (page === null) return;
+    return reply.status(200).header("cache-control", "no-store").send(page);
+  });
+
+  app.post(`${mineUrl}/sign`, { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(myHeldMembershipParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(signMyAgreementBodySchema, req.body, req, reply);
+    if (body === null) return;
+    const signed = await mine.signMyAgreement(agreementDeps, requireUserId(req), params.gymId, params.membershipId, body, gate(memberSignLimit)(req, reply));
+    if (signed === null) return;
+    return reply.status(200).header("cache-control", "no-store").send(signed);
   });
 
   // The page the emailed link opens. No sign-in: the token names one membership and nothing else.

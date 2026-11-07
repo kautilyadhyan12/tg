@@ -47,6 +47,7 @@ import * as repo from "./repo.js";
 import { roleById } from "./staffInvites/repo.js";
 import { isThrowawayEmail } from "./throwaway.js";
 import { myWaiverStates } from "./waiver/repo.js";
+import { agreementsToSign } from "./agreement/mine.js";
 import {
   ORG_PRIVILEGES,
   OWNER_ONLY_PRIVILEGES,
@@ -579,7 +580,10 @@ export async function listMyOrgs(
   const listReaders = rows.filter((r) => r.staffRole !== null && privilegesFor(r.staffRole, r.privileges).includes("members.confirm"));
   const needReview = await listRepo.reviewCounts(deps.sql, listReaders.map((r) => r.id));
   // The caller's own waiver at each place they are a member of (20b): the phone's card asks with it.
-  const waivers = await myWaiverStates(deps.sql, userId, rows.filter((r) => r.isMember).map((r) => r.id));
+  const memberOf = rows.filter((r) => r.isMember).map((r) => r.id);
+  const waivers = await myWaiverStates(deps.sql, userId, memberOf);
+  // Their own memberships' agreements to sign in the app (20c): the card asks with them too.
+  const toSign = await agreementsToSign({ sql: deps.sql, now: () => deps.now?.() ?? new Date() }, userId, memberOf);
   return myOrgsResponseSchema.parse({
     orgs: rows.map((r) => {
       // COMPUTED ONCE PER ROW because two fields below now need it, and calling
@@ -706,6 +710,7 @@ export async function listMyOrgs(
       joinedAt: r.joinedAt === null ? null : r.joinedAt.toISOString(),
       newMessages: r.isMember ? (newMessages.get(r.id) ?? 0) : 0,
       waiver: r.isMember ? (waivers.get(r.id) ?? null) : null,
+      agreementsToSign: r.isMember ? (toSign.get(r.id) ?? []) : [],
       };
     }),
     formerOrgs: former.map((f) => ({

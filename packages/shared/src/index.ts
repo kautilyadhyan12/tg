@@ -66,6 +66,7 @@ export * from "./checkinPhoneKey.js";
 export * from "./checkinRules.js";
 export * from "./waiver.js";
 export * from "./membershipAgreement.js";
+export * from "./myAgreement.js";
 export * from "./forSale.js";
 export * from "./appPayments.js";
 export * from "./appPurchases.js";

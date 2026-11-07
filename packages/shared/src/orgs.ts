@@ -8,6 +8,7 @@ import { GYM_CONTACT_EMAIL_MAX_CHARS, GYM_CONTACT_PHONE_MAX_CHARS } from "./gymC
 import { GYM_POSTAL_ADDRESS_MAX_CHARS } from "./memberInvites.js";
 import { confirmPtSessionsField } from "./ptSessionsEnding.js";
 import { instantSchema } from "./time.js";
+import { MY_AGREEMENTS_TO_SIGN_MAX, myAgreementToSignSchema } from "./myAgreement.js";
 
 /** The DB vocabulary (Part 4 §3.2's CHECK, widened by migrations `0024` and `0132`),
  *  used to PARSE rows on the way out. It still contains `clinic` and
@@ -1344,6 +1345,9 @@ export const myOrgSchema = orgSummarySchema.extend({
    *  and they have not signed its words as they are today in the app, `signed` where they have; null
    *  where it asks for none, for somebody who is not a member, and from an api too old to send it. */
   waiver: z.enum(["to_sign", "signed"]).nullable().default(null),
+  /** The caller's own memberships here whose agreement they may sign in the app now (20c); empty for
+   *  somebody who is not a member, and from an api too old to send it. */
+  agreementsToSign: z.array(myAgreementToSignSchema).max(MY_AGREEMENTS_TO_SIGN_MAX).default([]),
 });
 export type MyOrg = z.infer<typeof myOrgSchema>;
 

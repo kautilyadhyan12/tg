@@ -14,6 +14,7 @@
 import {
   PURCHASES_SHOWN,
   RECEIPT_WORDS,
+  agreementSignable,
   membershipTerms,
   myMembershipResponseSchema,
   receiptSchema,
@@ -28,6 +29,7 @@ import type { Sql } from "postgres";
 import { dayInTz } from "../../gamification/streak.js";
 import { OrgsError } from "../service.js";
 import { readOwnHeld } from "../memberships/heldService.js";
+import { atDeskOf, myMembershipAgreements } from "../agreement/mine.js";
 import { paidForBy, payerOf } from "../payers/repo.js";
 import { purchasesOf, type SaleRow } from "../register/repo.js";
 import * as receipts from "../receipts/repo.js";
@@ -86,6 +88,7 @@ function membershipOf(m: HeldMembershipItem): MyMembership {
     ),
     // The words its agreement and the Terminal say (16d).
     terms: membershipTerms(m),
+    agreement: null,
   };
 }
 
@@ -138,7 +141,16 @@ export async function getMyMembership(deps: MyMembershipDeps, userId: string, gy
     }),
   );
   const purchases = purchasesFrom(bought?.sales ?? []);
-  const own = held.memberships.map(membershipOf);
+  // Each own membership's agreement (20c): to sign in the app, signed, or at the front desk.
+  const atDesk = await atDeskOf(deps.sql, gymId, reader.own, today, payer !== null);
+  const agreements = await myMembershipAgreements(
+    deps.sql,
+    gymId,
+    reader.timezone,
+    held.memberships.map((m) => ({ id: m.id, signable: agreementSignable(m.view.status) })),
+    atDesk,
+  );
+  const own = held.memberships.map((m) => ({ ...membershipOf(m), agreement: agreements.get(m.id) ?? null }));
   return myMembershipResponseSchema.parse({
     ...empty,
     record: "own",
