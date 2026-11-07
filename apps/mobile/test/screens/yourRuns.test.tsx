@@ -279,6 +279,9 @@ describe("Your runs", () => {
     await waitFor(() => {
       expect(within(box).getByText("Old run")).toBeTruthy();
     });
+    // Said once: opening the next run takes it away (round one's re-check, L7).
+    await fireEvent.press(within(box).getByRole("button", { name: /^Old run, / }));
+    expect(screen.queryByText("Morning Run was deleted.")).toBeNull();
   });
 
   it("with no runs yet, the Running page holds no empty box", async () => {

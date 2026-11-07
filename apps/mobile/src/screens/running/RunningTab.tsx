@@ -111,6 +111,10 @@ export function RunningTab({ units, parts }: { units: Units; parts: ReactNode })
   const last = useRead("/v1/geo/runs?limit=1", runPageSchema, view.sent + changed);
   const lastRun = last.read.kind === "ok" ? (last.read.data.items[0] ?? null) : null;
 
+  // A run just finished takes the place of what was said of the one deleted before it.
+  useEffect(() => {
+    if (layer.done !== null) setDeleted(null);
+  }, [layer.done]);
   const saidUnderStart = problem !== null || layer.done !== null || view.refused.length > 0;
   useEffect(() => {
     if (saidUnderStart) showEnd();
@@ -163,11 +167,20 @@ export function RunningTab({ units, parts }: { units: Units; parts: ReactNode })
                   label="See all"
                   say="See all your runs"
                   onPress={() => {
+                    setDeleted(null);
                     setRunsOpen(true);
                   }}
                 />
               </View>
-              <RunRow run={lastRun} units={units} line={false} onOpen={setOpenRun} />
+              <RunRow
+                run={lastRun}
+                units={units}
+                line={false}
+                onOpen={(id) => {
+                  setDeleted(null);
+                  setOpenRun(id);
+                }}
+              />
             </View>
           )}
           <View style={styles.rows}>

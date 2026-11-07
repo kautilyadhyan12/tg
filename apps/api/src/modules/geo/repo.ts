@@ -468,10 +468,13 @@ const toSavedRun = (r: SavedRunDbRow): SavedRunRow => ({
 export async function insertRun(sql: Sql, userId: string, run: NewRun): Promise<{ created: boolean; row: SavedRunRow } | "removed"> {
   return await sql.begin(async (tx) => {
     await lockRunId(tx, run.id);
-    // Deleted while its send was on its way: kept nothing (37c-i).
-    // The person's own removed id only: another's falls through to the row check below, as any id not theirs.
-    const removed = await tx`SELECT 1 FROM run_removed_ids WHERE id = ${run.id} AND user_id = ${userId}`;
-    if (removed.length > 0) return "removed" as const;
+    // Deleted while its send was on its way: kept nothing (37c-i). Another person's deleted id is refused as it
+    // was while their run stood (404), so a stranger learns nothing and no run ever shares a deleted id.
+    const removed = await tx<{ user_id: string }[]>`SELECT user_id FROM run_removed_ids WHERE id = ${run.id}`;
+    if (removed[0] !== undefined) {
+      if (removed[0].user_id !== userId) throw new ForeignRunError();
+      return "removed" as const;
+    }
     const inserted = await tx`
       INSERT INTO runs (id, user_id, started_at, duration_s, distance_m, polyline, splits, kcal_point,
                         kcal_calc_version, source, name, effort, note, elapsed_s, left_out_m, left_out_s,

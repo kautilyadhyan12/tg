@@ -198,19 +198,21 @@ d("your runs (real Postgres)", () => {
       expect(await sql`SELECT 1 FROM runs WHERE id = ${run.runId}`).toHaveLength(0);
     });
 
-    it("another person sending a deleted run's id learns nothing: answered as for any id that is free", async () => {
+    it("another person sending a deleted run's id learns nothing: answered as while the run stood", async () => {
       const runner = await makeUser("probed");
       const stranger = await makeUser("prober");
       const run = body();
       expect((await save(runner.cookies, run)).statusCode).toBe(201);
+      const before = await save(stranger.cookies, body({ runId: run.runId, name: "Mine" }));
       expect((await remove(runner.cookies, run.runId)).statusCode).toBe(204);
-      // Not "This run was deleted.": a stranger's send under the id is kept as theirs, as under a new id.
-      const theirs = await save(stranger.cookies, body({ runId: run.runId, name: "Mine" }));
-      expect(theirs.statusCode).toBe(201);
-      expect(theirs.body).not.toContain("deleted");
-      // The runner's own phone sending it again still keeps nothing of theirs.
+      const after = await save(stranger.cookies, body({ runId: run.runId, name: "Mine" }));
+      // The same answer before and after the delete: nothing to tell the two apart, and nothing kept.
+      expect([before.statusCode, after.statusCode]).toEqual([404, 404]);
+      const said = (res: { body: string }) => { const b = JSON.parse(res.body) as { error: string; message: string }; return [b.error, b.message]; };
+      expect(said(after)).toEqual(said(before));
+      expect(await sql`SELECT 1 FROM runs WHERE id = ${run.runId}`).toHaveLength(0);
+      // The runner's own phone sending it again still keeps nothing.
       expect((await save(runner.cookies, run)).statusCode).toBe(410);
-      expect(await sql`SELECT user_id FROM runs WHERE id = ${run.runId}`).toEqual([{ user_id: stranger.id }]);
     });
 
     it("nobody signed in gets nothing", async () => {
