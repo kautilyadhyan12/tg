@@ -54,6 +54,8 @@ const kinds = StyleSheet.create({
   h2: { fontFamily: fonts.bold, fontSize: 22, lineHeight: 26, letterSpacing: -0.44, color: colours.text },
   h3: { fontFamily: fonts.semibold, fontSize: 15, lineHeight: 20, color: colours.text },
   big: { fontFamily: fonts.bold, fontSize: 22, lineHeight: 26, color: colours.text },
+  /** A gift's words on a ticket (Invite a friend, 20a, as Kd's drawing of 2026-11-06). */
+  ticket: { fontFamily: fonts.bold, fontSize: 19, lineHeight: 24, letterSpacing: -0.3, color: colours.text },
   eyebrow: {
     fontFamily: fonts.bold,
     fontSize: 11,

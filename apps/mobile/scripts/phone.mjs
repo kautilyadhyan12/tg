@@ -40,7 +40,7 @@ const copies = JSON.parse(readFileSync(join(root, "copies.json"), "utf8"));
 const key = readFileSync(join(root, ".copy"), "utf8").trim();
 const ports = copies[key];
 const applicationId = config.android.package;
-const cable = cableFor({ scheme: config.scheme, apiPort: ports.apiPort, metroPort: ports.metroPort });
+const cable = cableFor({ scheme: config.scheme, apiPort: ports.apiPort, metroPort: ports.metroPort, webPort: ports.webPort });
 
 const phone = read("adb", ["get-state"]);
 if (!phone.ok || phone.text.trim() !== "device") {
