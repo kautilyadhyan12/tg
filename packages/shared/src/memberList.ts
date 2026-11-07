@@ -2743,7 +2743,7 @@ export const MEMBER_LIST_BY_HAND_WORDS = {
   large_change:
     "This would remove more of your members than we do without asking. Check the number, then confirm again to go ahead.",
   remove_needs_app: "This person uses the app, and your role can't remove app access. Ask the owner.",
-  delete_needs_app: "Deleting them also removes their access to your gym in the app, which your role can't do. Ask the owner.",
+  delete_needs_app: "Deleting them also removes their access in the app, which your role can't do. Ask the owner.",
   remove_needs_list: "Removing this person also takes them off your list, which your role can't do. Ask the owner.",
   not_them_gone: "This person no longer uses the app with these details. Close and reopen the page.",
   not_them_needs_remove: "Your role can't remove app access. Ask the owner.",
