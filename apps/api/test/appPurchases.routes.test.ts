@@ -25,6 +25,7 @@ import { createMemoryRedis } from "../src/redis.js";
 import { loadConfig } from "../src/config.js";
 import { squareSettings } from "../src/modules/orgs/payments/settings.js";
 import { processSquareWork } from "../src/modules/orgs/payments/work.js";
+import { purchasable } from "../src/modules/orgs/payments/appPurchasesRepo.js";
 import { account, fakeSquare, type Account } from "./fakeSquareTerminal.js";
 import { recordingHub } from "./liveNewsRecorder.js";
 import { proveAddress } from "./proveAddress.js";
@@ -536,6 +537,46 @@ d("Buy in the app: given once, on their own record, only for what Square took (r
     const gusLine = await lineOf(gym, gus.app, pack);
     const asGuardian = await buyPress(gym, gus.app, gusLine, { agreement: { agreementId: gusLine.agreement?.id, signer: "guardian", name: "Pat Grown" } });
     expect(errorOf(asGuardian)).toBe("person_signs");
+  });
+
+  it("re-check: a day pass paid at 23:50 and first looked at after midnight is given, as of the day Square took it", async () => {
+    clock = new Date("2026-11-11T05:40:00Z");
+    const acct = account(`ABR2${uniq().slice(-6)}`);
+    const gym = await makeGym("App Buy Midnight", acct);
+    const pass = await addType(gym, { name: "Day pass", priceMinor: 1500, packClasses: 1, packDays: 1 });
+    const hal = await member(gym, "Hal Late");
+    const page = parsed(await buyPress(gym, hal.app, await lineOf(gym, hal.app, pass)));
+    // Paid at 23:50 Chicago, on Square's page while it was open.
+    clock = new Date("2026-11-11T05:50:00Z");
+    expect(square.payLink(linkOf(page.purchase.id)?.id ?? "", { created_at: "2026-11-11T05:50:00.000Z" })).toBe(true);
+    // Nobody asks until 00:01, the next day on the gym's clock.
+    clock = new Date("2026-11-11T06:01:00Z");
+    const paid = await check(gym, hal.app, page.purchase.id);
+    expect(paid.purchase.state).toBe("paid");
+    const his = await held(gym, hal.entryId);
+    expect(his.memberships.map((m) => [m.typeName, m.startsOn])).toEqual([["Day pass", "2026-11-10"]]);
+    const [pay] = await sql<{ paid_on: string }[]>`SELECT paid_on::text AS paid_on FROM gym_member_payments WHERE gym_id = ${gym.id}`;
+    expect(pay?.paid_on).toBe("2026-11-10");
+  });
+
+  it("re-check: whose record it is, and whether somebody else pays for it, is asked again under the record's lock", async () => {
+    clock = new Date();
+    const acct = account(`ABR3${uniq().slice(-6)}`);
+    const gym = await makeGym("App Buy Lock", acct);
+    const pack = await addType(gym, { name: "10-class pack" });
+    const ivy = await member(gym, "Ivy Lock");
+    const shown = await lineOf(gym, ivy.app, pack);
+    const buying = { gymId: gym.id, entryId: ivy.entryId, typeId: pack, amountMinor: shown.firstPayment.amountMinor, factsKey: shown.factsKey, agreement: null, accountCurrency: "USD", gymName: gym.name, today: (await held(gym, ivy.entryId)).today, now: clock };
+    expect((await purchasable(sql, buying)).kind).toBe("ok");
+    // A second account joins her record after the route read it: the check under the lock refuses.
+    const other = await signedIn("Ivy Phone Two");
+    await sql`INSERT INTO gym_members (gym_id, user_id, entry_id) VALUES (${gym.id}, ${other.userId}, ${ivy.entryId})`;
+    expect((await purchasable(sql, buying)).kind).toBe("entry_not_found");
+    await sql`DELETE FROM gym_members WHERE gym_id = ${gym.id} AND user_id = ${other.userId}`;
+    // Somebody starts paying for her after the route read it: refused the same way.
+    const payer = await member(gym, "Ivy Parent");
+    await sql`INSERT INTO gym_member_payers (gym_id, entry_id, payer_entry_id, set_by) VALUES (${gym.id}, ${ivy.entryId}, ${payer.entryId}, ${gym.owner.userId})`;
+    expect((await purchasable(sql, buying)).kind).toBe("paid_by_other");
   });
 
   it("a body that is not a purchase is refused before anything is read", async () => {
