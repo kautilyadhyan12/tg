@@ -187,9 +187,10 @@ d("running records (real Postgres)", () => {
 
     it("the fastest wins, a tie keeps the run that set it first, and the best before it is said", async () => {
       const me = await makeUser("rule");
+      // The later run that ties the 1K is kept in the table FIRST, so the table's own order cannot pass the tie.
+      await keep(me.id, "2026-10-09T01:00:00.000Z", 5050, { k1: 280, k5: 1660 }); // ties the 1K later: no record
       await keep(me.id, "2026-10-01T01:00:00.000Z", 5200, { k1: 300, mile: 490, k5: 1700 });
       const better = await keep(me.id, "2026-10-05T01:00:00.000Z", 5100, { k1: 280, mile: 470, k5: 1620 });
-      await keep(me.id, "2026-10-09T01:00:00.000Z", 5050, { k1: 280, k5: 1660 }); // ties the 1K later: no record
       const long = await keep(me.id, "2026-10-12T01:00:00.000Z", 10_400, { k1: 310, mile: 500, k5: 1750, k10: 3600 });
       const r = await records(me.cookies);
       expect(r.k1).toMatchObject({ runId: better, value: 280, before: 300, name: "Run 10-05", day: "2026-10-05" });
@@ -216,6 +217,13 @@ d("running records (real Postgres)", () => {
       const r = await records(me.cookies);
       expect(r.longest).toMatchObject({ runId: before, value: 7000, before: null });
       expect([r.k1, r.mile, r.k5, r.k10]).toEqual([null, null, null, null]);
+    });
+
+    it("a longest run tied is held by the run that set it first", async () => {
+      const me = await makeUser("longtie");
+      await keep(me.id, "2026-10-08T01:00:00.000Z", 8000, {});
+      const first = await keep(me.id, "2026-10-02T01:00:00.000Z", 8000, {});
+      expect((await records(me.cookies)).longest).toMatchObject({ runId: first, value: 8000, before: null });
     });
 
     it("the longest run counts from 200 m, the streak's own line", async () => {

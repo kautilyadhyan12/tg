@@ -46,6 +46,14 @@ describe("the words", () => {
     expect(beatWords("k1", 300, null, "metric")).toBeNull();
   });
 
+  it("a longest run beaten by under a hundredth of the unit says metres or feet, never 0.00", () => {
+    expect(beatWords("longest", 5008, 5000, "metric")).toBe("8 metres longer than your last best.");
+    expect(beatWords("longest", 5001, 5000, "metric")).toBe("1 metre longer than your last best.");
+    expect(beatWords("longest", 5010, 5000, "metric")).toBe("0.01 km longer than your last best.");
+    expect(beatWords("longest", 5010, 5000, "imperial")).toBe("33 feet longer than your last best.");
+    expect(beatWords("longest", 5017, 5000, "imperial")).toBe("0.01 mi longer than your last best.");
+  });
+
   it("a record not set says what it takes", () => {
     expect(shownRecords(NONE, "metric").map((r) => [r.name, r.value, r.takes])).toEqual([
       ["Fastest 1K", null, "Run 1 km to set it."],

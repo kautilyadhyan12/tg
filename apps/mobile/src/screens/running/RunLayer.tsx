@@ -574,7 +574,7 @@ function RoundButton({ label, kind, onPress, busy }: { label: "Pause" | "Resume"
 // ── After Finish ──────────────────────────────────────────────────────────────────────────────
 
 function Summary({ run, units, kg, onSaved }: { run: LiveRun; units: Units; kg: number; onSaved: (name: string, waiting: boolean) => void }) {
-  const { outbox } = useRunOutbox();
+  const { outbox, view } = useRunOutbox();
   const insets = useSafeAreaInsets();
   const finished = run.finishedMs ?? 0;
   const sums = useMemo(() => runSums(run.points, closedPauses(run, finished), finished, kg), [run, finished, kg]);
@@ -598,8 +598,11 @@ function Summary({ run, units, kg, onSaved }: { run: LiveRun; units: Units; kg: 
   );
   const climb = useRunClimb(session, sent);
   // The person's records as the server last gave them (37c-ii): the boxes wait for them, and a read that
-  // fails (no signal) shows none, never a record the run may not have set.
+  // fails (no signal) shows none, never a record the run may not have set. Read again each time the server
+  // takes a run; while another run still waits on the phone, the server's records may not hold it, so no
+  // box is shown (round one, H3).
   const [records, setRecords] = useState<RunRecords | null>(null);
+  const otherWaiting = view.waiting.some((r) => r.runId !== run.runId);
   useEffect(() => {
     let live = true;
     void session.signedIn({ method: "GET", path: RECORDS_PATH }, runRecordsSchema).then((answer) => {
@@ -608,8 +611,8 @@ function Summary({ run, units, kg, onSaved }: { run: LiveRun; units: Units; kg: 
     return () => {
       live = false;
     };
-  }, [session]);
-  const beaten = records === null ? [] : newRecords(sums.bests, sums.distanceM, records, units);
+  }, [session, view.sent]);
+  const beaten = records === null || otherWaiting ? [] : newRecords(sums.bests, sums.distanceM, records, units);
 
   const save = async () => {
     if (outbox === null || busy) return;

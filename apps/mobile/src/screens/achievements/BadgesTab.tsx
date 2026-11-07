@@ -29,7 +29,18 @@ export const BadgesTab = memo(function BadgesTab({ read, again, records, records
   const now = new Date();
   return (
     <>
-      {records.kind === "ok" ? <RunningShelf records={records.data} again={recordsAgain} /> : null}
+      <ReadOr read={records} again={recordsAgain} what="Your running records">
+        {(data) => (
+          <RunningShelf
+            records={data}
+            again={() => {
+              // A run changed or deleted from the shelf moves the records and the badges under them (round one, L2).
+              recordsAgain();
+              again();
+            }}
+          />
+        )}
+      </ReadOr>
       <ReadOr read={read} again={again} what="Your badges">
         {(data) => (
           <View style={styles.groups}>

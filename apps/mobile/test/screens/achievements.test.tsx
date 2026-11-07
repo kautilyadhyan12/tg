@@ -239,10 +239,19 @@ describe("Achievements → Badges: the Running shelf (37c-ii)", () => {
     expect(screen.getByRole("button", { name: "Open Tempo Run" })).toBeTruthy();
   });
 
-  it("with no records read, no Running shelf, and the badges as before", async () => {
-    await openAchievements(server().ask);
+  it("records that could not be read say so, with Try again, and the badges as before", async () => {
+    let fails = true;
+    const s = server({
+      [ACHIEVEMENTS_READS.records]: () =>
+        fails ? { status: 503, body: { error: "unavailable" } } : { status: 200, body: { k1: record(292, null), mile: null, k5: null, k10: null, longest: null } },
+    });
+    await openAchievements(s.ask);
     expect(await screen.findByLabelText("First Workout, Bronze. Earned 14 Oct.")).toBeTruthy();
+    expect(await screen.findByText("Your running records couldn’t load.")).toBeTruthy();
     expect(screen.queryByTestId("running-shelf")).toBeNull();
+    fails = false;
+    await fireEvent.press(screen.getByRole("button", { name: "Load your running records again" }));
+    expect(await screen.findByTestId("running-shelf")).toBeTruthy();
   });
 });
 

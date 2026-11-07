@@ -4,7 +4,7 @@
 // (GET /v1/geo/runs/records), worked out from the person's own runs; a run's best efforts are the shared
 // maths' own (`runSums`), so the summary and the server never differ.
 import type { RunBests, RunRecord, RunRecordKind, RunRecords, Units } from "@app/shared";
-import { clock, distance, unitWord } from "./runWords";
+import { clock, distance, METRES_PER_MILE, unitWord } from "./runWords";
 
 export const RECORDS_PATH = "/v1/geo/runs/records";
 
@@ -69,7 +69,15 @@ export function shownRecords(records: RunRecords, units: Units): ShownRecord[] {
  *  longest run "1.20 km longer than your last best."; null for a first record. */
 export function beatWords(kind: RunRecordKind, value: number, before: number | null, units: Units): string | null {
   if (before === null) return null;
-  if (kind === "longest") return `${distance(value - before, units)} ${unitWord(units)} longer than your last best.`;
+  if (kind === "longest") {
+    const more = value - before;
+    if (more <= 0) return null;
+    // Under a hundredth of the unit, "0.00 km" would read as no further: said in metres or feet (round one, H2).
+    const small = units === "imperial" ? more < METRES_PER_MILE / 100 : more < 10;
+    if (!small) return `${distance(more, units)} ${unitWord(units)} longer than your last best.`;
+    const n = units === "imperial" ? Math.max(1, Math.round(more * 3.28084)) : Math.max(1, Math.round(more));
+    return `${String(n)} ${units === "imperial" ? (n === 1 ? "foot" : "feet") : n === 1 ? "metre" : "metres"} longer than your last best.`;
+  }
   const s = before - value;
   if (s <= 0) return null;
   return s < 60 ? `${String(s)} ${s === 1 ? "second" : "seconds"} faster than your last best.` : `${clock(s)} faster than your last best.`;

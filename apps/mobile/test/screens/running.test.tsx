@@ -801,7 +801,47 @@ describe("the map under the run (37b-i)", () => {
     await startRunning();
     await runThenFinish(801);
     expect(await screen.findByTestId("summary-map")).toBeTruthy();
+    // Only once the records' read has been answered (with a refusal) is "no box" a finding.
+    await waitFor(() => {
+      expect(s.requests.some((r) => r.path === "/v1/geo/runs/records")).toBe(true);
+    });
+    await act(() => new Promise((resolve) => setTimeout(resolve, 50)));
     expect(screen.queryByText("NEW RECORD")).toBeNull();
+  });
+
+  it("while an earlier run still waits on the phone, the summary claims no record; once it is sent, the records are read again", async () => {
+    const s = runServer();
+    s.state.records = { k1: null, mile: null, k5: null, k10: null, longest: null };
+    await openRunning(s);
+    await startRunning();
+    await feed(0, 121, 3);
+    await fireEvent.press(await screen.findByRole("button", { name: "Pause" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Finish" }));
+    s.state.online = false;
+    await fireEvent.press(await screen.findByRole("button", { name: "Save run" }));
+    expect(await screen.findByText(/is saved on this phone/)).toBeTruthy();
+    await startRunning();
+    await runThenFinish(801);
+    expect(await screen.findByTestId("summary-map")).toBeTruthy();
+    await waitFor(() => {
+      expect(s.requests.filter((r) => r.path === "/v1/geo/runs/records").length).toBeGreaterThan(0);
+    });
+    await act(() => new Promise((resolve) => setTimeout(resolve, 50)));
+    // The server's records (none) do not hold the run waiting: a box here could claim what it already beat.
+    expect(screen.queryByText("NEW RECORD")).toBeNull();
+    const readsBefore = s.requests.filter((r) => r.path === "/v1/geo/runs/records").length;
+    s.state.online = true;
+    await act(async () => {
+      comeBack();
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+    await waitFor(() => {
+      expect(s.saved).toHaveLength(1);
+    });
+    await waitFor(() => {
+      expect(s.requests.filter((r) => r.path === "/v1/geo/runs/records").length).toBeGreaterThan(readsBefore);
+    });
+    expect(await screen.findByTestId("new-record-longest")).toBeTruthy();
   });
 
   it("after Finish, the Route box holds the run's map with a stone at each exact kilometre; tapped, it opens full size, and the cross closes it", async () => {
