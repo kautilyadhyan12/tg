@@ -605,6 +605,8 @@ function Summary({ run, units, kg, onSaved }: { run: LiveRun; units: Units; kg: 
   const otherWaiting = view.waiting.some((r) => r.runId !== run.runId);
   useEffect(() => {
     let live = true;
+    // No box from the read before: it may not hold the run the server has just taken (the re-check's Low).
+    setRecords(null);
     void session.signedIn({ method: "GET", path: RECORDS_PATH }, runRecordsSchema).then((answer) => {
       if (live && answer.kind === "ok") setRecords(answer.data);
     });
