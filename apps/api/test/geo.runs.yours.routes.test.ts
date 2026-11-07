@@ -18,6 +18,7 @@ import {
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import type { EmailSender } from "../src/modules/auth/email.js";
+import { insertRun } from "../src/modules/geo/repo.js";
 
 const url = process.env["DATABASE_URL"];
 const d = describe.skipIf(url === undefined || url === "");
@@ -179,6 +180,20 @@ d("your runs (real Postgres)", () => {
       expect([200, 410]).toContain(late.statusCode);
       expect((await save(me.cookies, raced)).statusCode).toBe(410);
       expect((await sql`SELECT 1 FROM runs WHERE id = ${raced.runId}`).length).toBe(0);
+    });
+
+    it("a second send already past its first look when the run is deleted keeps nothing: the save's own look, under the lock", async () => {
+      const me = await makeUser("late");
+      const run = body();
+      expect((await save(me.cookies, run)).statusCode).toBe(201);
+      expect((await remove(me.cookies, run.runId)).statusCode).toBe(204);
+      // A retry whose first look found no row (the first send not yet kept) reaches the save after the delete.
+      const kept = await insertRun(sql, me.id, {
+        id: run.runId, startedAt: new Date(run.startedAt), name: "Morning Run", effort: null, note: null, distanceM: 1, movingS: 1, elapsedS: 1,
+        leftOutM: 0, leftOutS: 0, kcal: 0, splits: { km: [], mi: [], starts: [0] }, polyline: "", calcVersion: 1, climb: { state: "none" }, shape: null,
+      });
+      expect(kept).toBe("removed");
+      expect(await sql`SELECT 1 FROM runs WHERE id = ${run.runId}`).toHaveLength(0);
     });
 
     it("nobody signed in gets nothing", async () => {
