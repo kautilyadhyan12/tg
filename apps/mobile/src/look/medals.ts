@@ -49,6 +49,14 @@ import medalCalorie1k from "../../assets/medals/medal_calorie_1k.webp";
 import medalCalorie1kLocked from "../../assets/medals/medal_calorie_1k_locked.webp";
 import medalEarlyBird from "../../assets/medals/medal_early_bird.webp";
 import medalEarlyBirdLocked from "../../assets/medals/medal_early_bird_locked.webp";
+import medalFastest10k from "../../assets/medals/medal_fastest_10k.webp";
+import medalFastest10kLocked from "../../assets/medals/medal_fastest_10k_locked.webp";
+import medalFastest1k from "../../assets/medals/medal_fastest_1k.webp";
+import medalFastest1kLocked from "../../assets/medals/medal_fastest_1k_locked.webp";
+import medalFastest5k from "../../assets/medals/medal_fastest_5k.webp";
+import medalFastest5kLocked from "../../assets/medals/medal_fastest_5k_locked.webp";
+import medalLongestRun from "../../assets/medals/medal_longest_run.webp";
+import medalLongestRunLocked from "../../assets/medals/medal_longest_run_locked.webp";
 import medalFiftyWorkouts from "../../assets/medals/medal_fifty_workouts.webp";
 import medalFiftyWorkoutsLocked from "../../assets/medals/medal_fifty_workouts_locked.webp";
 import medalFirstMeal from "../../assets/medals/medal_first_meal.webp";
@@ -134,6 +142,14 @@ export const medalPictures = {
   medal_calorie_1k_locked: medalCalorie1kLocked,
   medal_early_bird: medalEarlyBird,
   medal_early_bird_locked: medalEarlyBirdLocked,
+  medal_fastest_10k: medalFastest10k,
+  medal_fastest_10k_locked: medalFastest10kLocked,
+  medal_fastest_1k: medalFastest1k,
+  medal_fastest_1k_locked: medalFastest1kLocked,
+  medal_fastest_5k: medalFastest5k,
+  medal_fastest_5k_locked: medalFastest5kLocked,
+  medal_longest_run: medalLongestRun,
+  medal_longest_run_locked: medalLongestRunLocked,
   medal_fifty_workouts: medalFiftyWorkouts,
   medal_fifty_workouts_locked: medalFiftyWorkoutsLocked,
   medal_first_meal: medalFirstMeal,

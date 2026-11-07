@@ -122,6 +122,43 @@ export const runListQuerySchema = z
   .strict();
 export type RunListQuery = z.infer<typeof runListQuerySchema>;
 
+// ── Running records (ROADMAP 37c-ii) ─────────────────────────────────────────────────────────────
+/** A record the person keeps: the fastest 1 km, mile, 5 km, 10 km, and the longest run. */
+export const RUN_RECORD_KINDS = ["k1", "mile", "k5", "k10", "longest"] as const;
+export const runRecordKindSchema = z.enum(RUN_RECORD_KINDS);
+export type RunRecordKind = z.infer<typeof runRecordKindSchema>;
+
+/** A run's fastest 1 km, mile, 5 km and 10 km, whole seconds; null where it did not cover one, or was
+ *  saved before records were kept. */
+export const runBestsSchema = z.object({
+  k1: z.number().int().positive().nullable(),
+  mile: z.number().int().positive().nullable(),
+  k5: z.number().int().positive().nullable(),
+  k10: z.number().int().positive().nullable(),
+});
+
+/** One record: the run that holds it, its value (seconds, or metres for the longest run), and the
+ *  person's best before that run, null when it was their first. */
+export const runRecordSchema = z.object({
+  runId: z.string().uuid(),
+  name: z.string().min(1),
+  startedAt: z.string().datetime(),
+  day: runDaySchema,
+  value: z.number().int().positive(),
+  before: z.number().int().positive().nullable(),
+});
+export type RunRecord = z.infer<typeof runRecordSchema>;
+
+/** GET /v1/geo/runs/records: each record, null while not set. */
+export const runRecordsSchema = z.object({
+  k1: runRecordSchema.nullable(),
+  mile: runRecordSchema.nullable(),
+  k5: runRecordSchema.nullable(),
+  k10: runRecordSchema.nullable(),
+  longest: runRecordSchema.nullable(),
+});
+export type RunRecords = z.infer<typeof runRecordsSchema>;
+
 /** A run's own page: everything its summary showed after Finish. */
 export const runDetailSchema = runSummarySchema.extend({
   polyline: z.string().nullable(),
@@ -132,6 +169,9 @@ export const runDetailSchema = runSummarySchema.extend({
   note: z.string().nullable(),
   leftOutM: z.number().int().nonnegative(),
   leftOutS: z.number().int().nonnegative(),
+  /** Its best efforts, and the records it holds now (37c-ii). */
+  bests: runBestsSchema,
+  records: z.array(runRecordKindSchema),
 });
 export type RunDetail = z.infer<typeof runDetailSchema>;
 export const runDetailResponseSchema = z.object({ run: runDetailSchema });
