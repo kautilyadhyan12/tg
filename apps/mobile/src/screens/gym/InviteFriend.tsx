@@ -68,8 +68,9 @@ export function InviteLine({ gymId, gymName, read, onOpen }: InviteLineProps) {
     const number = started.current;
     void readInvite(gymId).then((now) => {
       if (!live || number !== started.current) return;
-      // A read that fails keeps what the last one showed; the next read of the places tries again.
-      setHeld((was) => (now.kind === "failed" && was.kind !== "loading" ? was : now));
+      // A read that fails keeps what the last one showed (a lost connection, too many reads, the server
+      // down); the next read of the places tries again. A 404, no longer theirs, takes the line away.
+      setHeld((was) => (now.kind === "failed" && now.status !== 404 && was.kind !== "loading" ? was : now));
     });
     return () => {
       live = false;
@@ -126,8 +127,9 @@ function Body({ place, top, bottom, onClose }: { place: InvitePlace; top: number
       const number = started.current;
       const now = await readInvite(place.id);
       if (!live.current || number !== started.current) return;
-      // A read made by itself never takes the page away over a lost connection.
-      setHeld((was) => (quiet && now.kind === "failed" && now.status === null && was.kind === "on" ? was : now));
+      // A read made by itself never takes the link away over a lost connection, too many reads or the
+      // server down; a 404 (no longer theirs) does.
+      setHeld((was) => (quiet && now.kind === "failed" && now.status !== 404 && was.kind === "on" ? was : now));
     },
     [readInvite, place.id],
   );

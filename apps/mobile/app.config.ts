@@ -16,7 +16,9 @@ export interface Copy {
   scheme: string;
   /** Reached through the USB cable (`adb reverse`), so the phone's own localhost. */
   apiUrl: string;
-  /** The folder's website, the start of the links a member shares; opened on the phone through the cable too. */
+  /** The folder's website as its own FOLDER.md runs it (its api's WEB_ORIGIN), the start of the links a member
+   *  shares. The cable reaches it from the phone only on 127.0.0.1 (localhost): exercise folders' 127.0.0.2 and
+   *  127.0.0.3 open on the laptop alone. */
   webUrl: string;
   metroPort: number;
 }
@@ -35,14 +37,14 @@ export function copyFor(written: string): Copy {
       `apps/mobile/.copy must hold one of: ${COPY_KEYS.join(", ")}. It holds "${key}".`,
     );
   }
-  const { name, apiPort, metroPort, webPort } = copies[key];
+  const { name, apiPort, metroPort, webHost, webPort } = copies[key];
   return {
     key,
     name,
     applicationId: `com.aihomegym.dev.${key}`,
     scheme: `aihomegym-${key}`,
     apiUrl: `http://localhost:${String(apiPort)}`,
-    webUrl: `http://localhost:${String(webPort)}`,
+    webUrl: `http://${webHost}:${String(webPort)}`,
     metroPort,
   };
 }

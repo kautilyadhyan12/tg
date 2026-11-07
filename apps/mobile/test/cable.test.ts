@@ -15,11 +15,20 @@ describe("what the phone command runs for a copy", () => {
     ]);
   });
 
-  it("the website's link is the address the copy's shared links start with", () => {
+  it("the website's link is on the port the copy's shared links use", () => {
     for (const key of COPY_KEYS as (keyof typeof copies)[]) {
       const web = cableOf(key).reverse[2];
-      expect(`http://localhost:${web?.[1]?.replace("tcp:", "") ?? ""}`).toBe(copyFor(key).webUrl);
+      expect(copyFor(key).webUrl.endsWith(`:${web?.[1]?.replace("tcp:", "") ?? "none"}`)).toBe(true);
     }
+  });
+
+  it("each copy shares its own folder's website, as that folder's api allows it", () => {
+    expect((COPY_KEYS as (keyof typeof copies)[]).map((key) => copyFor(key).webUrl)).toEqual([
+      "http://localhost:5173",
+      "http://127.0.0.1:5174",
+      "http://127.0.0.2:5175",
+      "http://127.0.0.3:5176",
+    ]);
   });
 
   it("the api's link is the address the app itself asks", () => {

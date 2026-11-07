@@ -146,7 +146,7 @@ describe("what the member reads on the phone", () => {
       money,
       "10% off the first payment of a membership",
       {
-        you: { gift: "£10.00 off your next membership payment", notes: ["When a friend you invite joins Iron House Gym and makes their first payment. It comes off by itself, and we'll tell you in your inbox."] },
+        you: { gift: "£10.00 off your next membership payment", notes: ["When a friend you invite joins Iron House Gym and makes their first payment, it comes off by itself, and we'll tell you in your inbox."] },
         friend: { gift: "10% off the first payment of a membership", note: "Iron House Gym adds it for them when they join." },
         plain: null,
       },
@@ -159,7 +159,7 @@ describe("what the member reads on the phone", () => {
         you: {
           gift: "14 free days on your membership",
           notes: [
-            "When a friend you invite joins Iron House Gym and makes their first payment. They are added by themselves, and we'll tell you in your inbox.",
+            "When a friend you invite joins Iron House Gym and makes their first payment, they are added by themselves, and we'll tell you in your inbox.",
             "If you have no membership then, you get £10.00 off your next membership payment instead.",
           ],
         },
@@ -172,7 +172,7 @@ describe("what the member reads on the phone", () => {
       desk,
       null,
       {
-        you: { gift: "£10.00 off your next purchase at the desk", notes: ["When a friend you invite joins Iron House Gym and makes their first payment. It comes off by itself, and we'll tell you in your inbox."] },
+        you: { gift: "£10.00 off your next purchase at the desk", notes: ["When a friend you invite joins Iron House Gym and makes their first payment, it comes off by itself, and we'll tell you in your inbox."] },
         friend: null,
         plain: null,
       },
@@ -189,7 +189,8 @@ describe("what the member reads on the phone", () => {
         const t = referralTickets("Iron House Gym", member, friend, "Maya");
         if (member !== null) expect(lines).toContain(`you get ${member.gift}.`);
         for (const note of t.you?.notes.slice(1) ?? []) expect(lines).toContain(note);
-        if (t.you !== null) expect(lines).toContain(t.you.notes[0]?.split(". ")[1] ?? "none");
+        // The note's second half is the lines' own sentence, its first letter made small.
+        if (t.you !== null && member !== null) expect(t.you.notes[0]?.toLowerCase()).toContain(`${lines.split("you get ")[1]?.split(". ")[1]?.toLowerCase() ?? "none"}`);
         for (const words of [...t.small, t.plain ?? ""]) expect(lines).toContain(words);
         if (friend !== null) expect(lines).toContain(`Your friend gets ${friend} when they join.`);
       }
@@ -200,7 +201,7 @@ describe("what the member reads on the phone", () => {
     expect(referralTickets("Gym", null, null, null).small[0]).toBe("Your link shows your first name to whoever opens it.");
   });
   it("the Gym tab's line names the member's own gift, and nothing where there is none", () => {
-    expect(referralLineWords("£10.00 off your next membership payment")).toBe("You get £10.00 off your next membership payment");
+    expect(referralLineWords("£10.00 off your next membership payment")).toBe("You get £10.00 off your next membership payment when a friend you invite joins and pays");
     expect(referralLineWords(null)).toBeNull();
   });
   it("what goes with a shared link: the business and the link, and no gift that may change", () => {

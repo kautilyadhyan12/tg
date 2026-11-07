@@ -24,4 +24,5 @@ export function inviteNotRead(status: number | null, gymName: string): string {
   return status === 404 ? `${gymName} isn’t showing your invite link right now.` : INVITE_NOT_READ;
 }
 
-export const inviteOff = (gymName: string) => `${gymName} has switched off Invite a friend.`;
+/** Off for any reason: switched off, the business closed, or its plan ended. The phone is not told which. */
+export const inviteOff = (gymName: string) => `${gymName} isn’t offering Invite a friend right now.`;

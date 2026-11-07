@@ -166,6 +166,7 @@ export const referralTicketsSchema = z
 export type ReferralTickets = z.infer<typeof referralTicketsSchema>;
 
 const firstUpper = (words: string) => words.charAt(0).toUpperCase() + words.slice(1);
+const firstLower = (words: string) => words.charAt(0).toLowerCase() + words.slice(1);
 
 export function referralTickets(gymName: string, memberGift: MemberGiftWords | null, friendGift: string | null, firstName: string | null): ReferralTickets {
   const gym = gymName.trim();
@@ -173,15 +174,20 @@ export function referralTickets(gymName: string, memberGift: MemberGiftWords | n
     you:
       memberGift === null
         ? null
-        : { gift: firstUpper(memberGift.gift), notes: [`${whenTheyPay(gym)}. ${byItself(memberGift)}`, ...(memberGift.instead === null ? [] : [insteadLine(memberGift.instead)])] },
+        : {
+            gift: firstUpper(memberGift.gift),
+            // One whole sentence: the offer line's two, with its gift on the ticket above.
+            notes: [`${whenTheyPay(gym)}, ${firstLower(byItself(memberGift))}`, ...(memberGift.instead === null ? [] : [insteadLine(memberGift.instead)])],
+          },
     friend: friendGift === null ? null : { gift: firstUpper(friendGift), note: `${gym} adds it for them when they join.` },
     plain: memberGift === null && friendGift === null ? noGiftLine(gym) : null,
     small: [nameLine(firstName), setByLine(gym)],
   };
 }
 
-/** The Gym tab's line under Invite a friend: the member's own gift, where there is one. */
-export const referralLineWords = (memberGift: string | null): string | null => (memberGift === null ? null : `You get ${memberGift}`);
+/** The Gym tab's line under Invite a friend: the member's own gift and when it comes, where there is one. */
+export const referralLineWords = (memberGift: string | null): string | null =>
+  memberGift === null ? null : `You get ${memberGift} when a friend you invite joins and pays`;
 
 /** What goes with the link when the member shares it. No gift: the page the link opens says the offer as it is that day. */
 export const referralShareMessage = (gymName: string, link: string): string => `Join me at ${gymName.trim()}: ${link}`;

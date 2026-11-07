@@ -28,7 +28,7 @@ describe("a folder's copy of the app", () => {
     expect(phoneAppExtraSchema.parse(config.extra)).toEqual({
       copyName: "Exercise 2",
       apiUrl: "http://localhost:3003",
-      webUrl: "http://localhost:5176",
+      webUrl: "http://127.0.0.3:5176",
     });
   });
 

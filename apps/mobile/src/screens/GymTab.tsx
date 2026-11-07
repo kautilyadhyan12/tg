@@ -405,6 +405,8 @@ export function GymScreen() {
         place={inviteAt}
         onClose={() => {
           setInviteAt(null);
+          // What the page last read (switched off, a new gift) is what the card says when it closes.
+          setVisitsRead((n) => n + 1);
         }}
       />
 

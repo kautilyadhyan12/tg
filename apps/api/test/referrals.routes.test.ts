@@ -812,7 +812,7 @@ d("Refer a friend (real Postgres)", () => {
           tickets: {
             you: {
               gift: "10% off your next membership payment",
-              notes: ["When a friend you invite joins Northside Refer A and makes their first payment. It comes off by itself, and we'll tell you in your inbox."],
+              notes: ["When a friend you invite joins Northside Refer A and makes their first payment, it comes off by itself, and we'll tell you in your inbox."],
             },
             friend: { gift: "20% off the first payment of a membership", note: "Northside Refer A adds it for them when they join." },
             plain: null,

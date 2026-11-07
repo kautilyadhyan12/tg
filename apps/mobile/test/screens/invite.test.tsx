@@ -2,7 +2,7 @@
 // job could do to a real person: share somebody else's link, so a friend reads another member's
 // first name and that member gets the gift. Every answer is read through the server's own shape.
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
-import { Share } from "react-native";
+import { AppState, Share } from "react-native";
 import { memberReferralResponseSchema, referralMemberGiftWords, referralTickets } from "@app/shared";
 import { App } from "../../src/App";
 import type { Ask } from "../../src/session/calls";
@@ -59,12 +59,21 @@ async function openGym(ask: Ask, copy: typeof extra | Omit<typeof extra, "webUrl
 }
 const page = () => within(screen.getByTestId("invite-page"));
 let shared: jest.SpyInstance;
+let handlers: ((state: "active") => void)[] = [];
+const comeBack = () => {
+  for (const handler of handlers) handler("active");
+};
 
 beforeEach(() => {
   shared = jest.spyOn(Share, "share").mockResolvedValue({ action: Share.sharedAction });
+  handlers = [];
+  jest.spyOn(AppState, "addEventListener").mockImplementation((_type, handler) => {
+    handlers.push(handler);
+    return { remove: () => undefined };
+  });
 });
 afterEach(() => {
-  shared.mockRestore();
+  jest.restoreAllMocks();
 });
 
 describe("the worst thing: somebody else's link shared, under their name", () => {
@@ -85,7 +94,7 @@ describe("the worst thing: somebody else's link shared, under their name", () =>
     expect(shared).toHaveBeenLastCalledWith({ message: `Join me at Lotus Yoga: ${WEB}/invite/${LOTUS_CODE}` });
 
     await fireEvent.press(page().getByLabelText("Back"));
-    await fireEvent.press(await screen.findByLabelText("Invite a friend to Iron House. You get £10.00 off your next membership payment"));
+    await fireEvent.press(await screen.findByLabelText("Invite a friend to Iron House. You get £10.00 off your next membership payment when a friend you invite joins and pays"));
     expect(await page().findByText(`${WEB}/invite/${IRON_CODE}`)).toBeTruthy();
     expect(page().queryByText(new RegExp(LOTUS_CODE))).toBeNull();
     await fireEvent.press(page().getByLabelText("Share my invite link for Iron House"));
@@ -209,7 +218,7 @@ describe("the page", () => {
     expect(await page().findByText("Invite a friend")).toBeTruthy();
     expect(page().getByText("You get")).toBeTruthy();
     expect(page().getByText("£10.00 off your next membership payment")).toBeTruthy();
-    expect(page().getByText("When a friend you invite joins Iron House and makes their first payment. It comes off by itself, and we'll tell you in your inbox.")).toBeTruthy();
+    expect(page().getByText("When a friend you invite joins Iron House and makes their first payment, it comes off by itself, and we'll tell you in your inbox.")).toBeTruthy();
     expect(page().getByText("Your friend gets")).toBeTruthy();
     expect(page().getByText("10% off the first payment of a membership")).toBeTruthy();
     expect(page().getByText("Iron House adds it for them when they join.")).toBeTruthy();
@@ -242,7 +251,28 @@ describe("the page", () => {
     expect(page().getByLabelText("Share my invite link for Iron House")).toBeTruthy();
   });
 
-  it("switched off, or no longer showing, while open: says so in place, with Try again where it may help", async () => {
+  it("switched off while open: says so in place, and the card it closes onto says the same", async () => {
+    let answer: Reply = { status: 200, body: on(IRON, IRON_CODE, TEN_POUNDS, null) };
+    const server = fakeServer({
+      "/v1/auth/refresh": ok({ tokens: tokens(2) }),
+      "/v1/orgs/mine": mine(IRON),
+      [pathOf(IRON)]: () => answer,
+    });
+    await openGym(server.ask);
+    const line = await screen.findByTestId(`invite-line-${IRON.id}`);
+    answer = { status: 200, body: off(IRON) };
+    await fireEvent.press(line);
+    // Off for any reason (switched off, closed, its plan ended): the page does not say who did it.
+    expect(await page().findByText("Iron House isn’t offering Invite a friend right now.")).toBeTruthy();
+    expect(page().queryByLabelText("Share my invite link for Iron House")).toBeNull();
+    await fireEvent.press(page().getByLabelText("Back"));
+    // The card reads again as the page closes, so it no longer offers what the page just said is off.
+    await waitFor(() => {
+      expect(screen.queryByTestId(`invite-line-${IRON.id}`)).toBeNull();
+    });
+  });
+
+  it("a refusal while the link is shown keeps it; one no longer theirs says so; Try again reads again", async () => {
     let answer: Reply = { status: 200, body: on(IRON, IRON_CODE, TEN_POUNDS, null) };
     let reads = 0;
     const server = fakeServer({
@@ -255,40 +285,74 @@ describe("the page", () => {
     });
     await openGym(server.ask);
     const line = await screen.findByTestId(`invite-line-${IRON.id}`);
-    answer = { status: 200, body: off(IRON) };
+    // Too many reads, or the server down: the page opens on the link the card read, and keeps it.
+    answer = refusal(429, "rate_limited", "Too many requests");
+    let before = reads;
     await fireEvent.press(line);
-    expect(await page().findByText("Iron House has switched off Invite a friend.")).toBeTruthy();
-    expect(page().queryByLabelText("Share my invite link for Iron House")).toBeNull();
+    await waitFor(() => {
+      expect(reads).toBeGreaterThan(before);
+    });
+    expect(await page().findByText(`${WEB}/invite/${IRON_CODE}`)).toBeTruthy();
+    expect(page().queryByText("Couldn’t load your invite link.")).toBeNull();
     await fireEvent.press(page().getByLabelText("Back"));
 
+    // No longer theirs (a 404): said in place, the link gone, with Try again.
     answer = refusal(404, "not_found", "Not found");
-    const before = reads;
-    // The tab still shows the line it last read; the page reads again and says what it found.
-    await fireEvent.press(screen.getByTestId(`invite-line-${IRON.id}`));
+    before = reads;
+    const again = screen.queryByTestId(`invite-line-${IRON.id}`);
+    if (again === null) throw new Error("the line went before the page could say why");
+    await fireEvent.press(again);
     await waitFor(() => {
       expect(reads).toBeGreaterThan(before);
     });
     expect(await page().findByText("Iron House isn’t showing your invite link right now.")).toBeTruthy();
     expect(page().queryByText(new RegExp(IRON_CODE))).toBeNull();
-    expect(page().queryByLabelText("Try again")).toBeTruthy();
-  });
 
-  it("a page that cannot read says so with Try again, and Try again reads it", async () => {
-    let answer: Reply = { status: 200, body: on(IRON, IRON_CODE, TEN_POUNDS, null) };
-    const server = fakeServer({
-      "/v1/auth/refresh": ok({ tokens: tokens(2) }),
-      "/v1/orgs/mine": mine(IRON),
-      [pathOf(IRON)]: () => answer,
-    });
-    await openGym(server.ask);
-    const line = await screen.findByTestId(`invite-line-${IRON.id}`);
+    // Try again, refused: said; Try again, answered: the link.
     answer = refusal(500, "internal", "Something went wrong");
-    await fireEvent.press(line);
-    // A refusal says so; only a lost connection keeps what the page opened with.
+    await fireEvent.press(page().getByLabelText("Try again"));
     expect(await page().findByText("Couldn’t load your invite link.")).toBeTruthy();
     answer = { status: 200, body: on(IRON, IRON_CODE, TEN_POUNDS, null) };
     await fireEvent.press(page().getByLabelText("Try again"));
     expect(await page().findByText(`${WEB}/invite/${IRON_CODE}`)).toBeTruthy();
+  });
+
+  it("of two reads of the page, an older answer coming last never replaces the newer one", async () => {
+    let reads = 0;
+    let release: (reply: Reply) => void = () => undefined;
+    let answer: Reply = { status: 200, body: on(IRON, IRON_CODE, TEN_POUNDS, null) };
+    const server = fakeServer({
+      "/v1/auth/refresh": ok({ tokens: tokens(2) }),
+      "/v1/orgs/mine": mine(IRON),
+      [pathOf(IRON)]: () => {
+        reads += 1;
+        // The page's first read waits; every other read answers with what the business says now.
+        if (reads === 2) {
+          return new Promise<Reply>((resolve) => {
+            release = resolve;
+          });
+        }
+        return answer;
+      },
+    });
+    await openGym(server.ask);
+    await fireEvent.press(await screen.findByTestId(`invite-line-${IRON.id}`));
+    await waitFor(() => {
+      expect(reads).toBe(2);
+    });
+    // The business changes its gift; the app comes back to the front and the page reads again.
+    answer = { status: 200, body: on(IRON, IRON_CODE, FREE_DAYS, null) };
+    await act(async () => {
+      comeBack();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+    expect(await page().findByText("14 free days on your membership")).toBeTruthy();
+    await act(async () => {
+      release({ status: 200, body: on(IRON, IRON_CODE, TEN_POUNDS, null) });
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+    expect(page().getByText("14 free days on your membership")).toBeTruthy();
+    expect(page().queryByText("£10.00 off your next membership payment")).toBeNull();
   });
 
   it("scrolled until its first words reach the Back button, the page gets a bar with its name behind Back", async () => {
