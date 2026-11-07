@@ -312,3 +312,15 @@ export const trailColours = {
     creditWord: "rgba(255,255,255,0.75)",
   },
 } as const;
+
+/** A running record (37c-ii, Kd's "yes" to the drawing): the gold New record box on a run's summary,
+ *  glowing from its medal; the gold "Your record" tag. */
+export const recordLook = {
+  box: "#14110C",
+  line: "rgba(255,214,107,0.35)",
+  shade: "linear-gradient(90deg, rgba(255,214,107,0.22) 0%, rgba(255,138,31,0.06) 55%, rgba(20,17,12,0) 100%)",
+  glow: "0 0 28px rgba(255,180,60,0.16)",
+  word: "#FFD66B",
+  tag: "#FFD66B",
+  onTag: "#1A1206",
+} as const;

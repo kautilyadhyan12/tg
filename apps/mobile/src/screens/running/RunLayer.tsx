@@ -8,9 +8,11 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   RUN_MAX_POINTS,
   geodesicMetres,
+  runRecordsSchema,
   runSums,
   userProfileResponseSchema,
   type RunClimbRequest,
+  type RunRecords,
   type RunSums,
   type SaveRunRequest,
   type Units,
@@ -46,7 +48,9 @@ import {
 import { useMapSource } from "./mapSource";
 import { useRunClimb } from "./runClimb";
 import { RouteLine } from "./RunDrawings";
+import { NewRecordBox } from "./RecordParts";
 import { FeelCard, NoteCard, RouteCard, RunFigures, SplitsCard } from "./RunParts";
+import { newRecords, RECORDS_PATH } from "./runRecords";
 import { RunMap, useMapScheme } from "./RunMap";
 import { useRunOutbox } from "./RunOutbox";
 import { clock, distance, pace, paceWord, runName, runWhen, unitWord, METRES_PER_MILE } from "./runWords";
@@ -570,7 +574,7 @@ function RoundButton({ label, kind, onPress, busy }: { label: "Pause" | "Resume"
 // ── After Finish ──────────────────────────────────────────────────────────────────────────────
 
 function Summary({ run, units, kg, onSaved }: { run: LiveRun; units: Units; kg: number; onSaved: (name: string, waiting: boolean) => void }) {
-  const { outbox } = useRunOutbox();
+  const { outbox, view } = useRunOutbox();
   const insets = useSafeAreaInsets();
   const finished = run.finishedMs ?? 0;
   const sums = useMemo(() => runSums(run.points, closedPauses(run, finished), finished, kg), [run, finished, kg]);
@@ -593,6 +597,24 @@ function Summary({ run, units, kg, onSaved }: { run: LiveRun; units: Units; kg: 
     [run, finished],
   );
   const climb = useRunClimb(session, sent);
+  // The person's records as the server last gave them (37c-ii): the boxes wait for them, and a read that
+  // fails (no signal) shows none, never a record the run may not have set. Read again each time the server
+  // takes a run; while another run still waits on the phone, the server's records may not hold it, so no
+  // box is shown (round one, H3).
+  const [records, setRecords] = useState<RunRecords | null>(null);
+  const otherWaiting = view.waiting.some((r) => r.runId !== run.runId);
+  useEffect(() => {
+    let live = true;
+    // No box from the read before: it may not hold the run the server has just taken (the re-check's Low).
+    setRecords(null);
+    void session.signedIn({ method: "GET", path: RECORDS_PATH }, runRecordsSchema).then((answer) => {
+      if (live && answer.kind === "ok") setRecords(answer.data);
+    });
+    return () => {
+      live = false;
+    };
+  }, [session, view.sent]);
+  const beaten = records === null || otherWaiting ? [] : newRecords(sums.bests, sums.distanceM, records, units);
 
   const save = async () => {
     if (outbox === null || busy) return;
@@ -657,6 +679,9 @@ function Summary({ run, units, kg, onSaved }: { run: LiveRun; units: Units; kg: 
             }
           />
         </View>
+        {beaten.map((rec) => (
+          <NewRecordBox key={rec.kind} rec={rec} units={units} />
+        ))}
         <RunFigures
           distanceM={sums.distanceM}
           movingS={sums.movingS}

@@ -267,6 +267,9 @@ export function registerGeoRoutes(
     return reply.send(await service.runCalendar(readDeps, authedUserId(req), q.month));
   });
 
+  // ── Running records (ROADMAP 37c-ii): the person's own, from their own runs ──────────────────
+  app.get("/v1/geo/runs/records", { preHandler: [app.authenticate] }, async (req, reply) => reply.send(await service.runRecords(readDeps, authedUserId(req))));
+
   app.get<{ Params: { id: string } }>("/v1/geo/runs/:id", { preHandler: [app.authenticate] }, async (req, reply) => {
     if (!UUID.test(req.params.id)) return runNotFound(req, reply);
     const run = await service.getRun(readDeps, authedUserId(req), req.params.id);

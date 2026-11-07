@@ -18,6 +18,9 @@ import type {
   RunDaysResponse,
   RunDetail,
   RunMonthTotal,
+  RunRecord,
+  RunRecordKind,
+  RunRecords,
   RunSummary,
   SaveRunRequest,
   SavedRun,
@@ -232,22 +235,42 @@ const asRunDetail = (row: repo.RunDetailRow): RunDetail => {
     note: row.note,
     leftOutM: row.leftOutM ?? 0,
     leftOutS: row.leftOutS ?? 0,
+    bests: row.bests,
+    records: [],
   };
 };
 
+/** The records this run holds now, from the person's records (37c-ii). */
+const heldBy = (records: readonly repo.RunRecordRow[], runId: string): RunRecordKind[] =>
+  records.filter((r) => r.runId === runId).map((r) => r.kind);
+
 export async function getRun(deps: ReadDeps, userId: string, id: string): Promise<RunDetail | null> {
-  const row = await repo.getRun(deps.sql, userId, id, await zoneOf(deps, userId));
+  const timeZone = await zoneOf(deps, userId);
+  const row = await repo.getRun(deps.sql, userId, id, timeZone);
   // Detail includes the polyline (owner-only — the route WHERE already bound it
   // to userId; it is never logged or returned to any other user).
-  return row === null ? null : asRunDetail(await withShape(deps, userId, row));
+  if (row === null) return null;
+  const detail = asRunDetail(await withShape(deps, userId, row));
+  return { ...detail, records: heldBy(await repo.getRunRecords(deps.sql, userId, timeZone), id) };
+}
+
+/** The person's running records (37c-ii): each null while not set. */
+export async function runRecords(deps: ReadDeps, userId: string): Promise<RunRecords> {
+  const rows = await repo.getRunRecords(deps.sql, userId, await zoneOf(deps, userId));
+  const of = (kind: RunRecordKind): RunRecord | null => {
+    const r = rows.find((x) => x.kind === kind);
+    return r === undefined ? null : { runId: r.runId, name: r.name ?? "Run", startedAt: r.startedAt.toISOString(), day: r.day, value: r.value, before: r.before };
+  };
+  return { k1: of("k1"), mile: of("mile"), k5: of("k5"), k10: of("k10"), longest: of("longest") };
 }
 
 /** The person changes their own run's name, how it felt or its note (37c-i); its numbers never. Null
  *  when they have no run by this id. */
 export async function changeRun(deps: ReadDeps, userId: string, id: string, input: ChangeRunRequest): Promise<RunDetail | null> {
   const note = input.note === undefined ? undefined : input.note === null || input.note === "" ? null : input.note;
-  const row = await repo.changeRun(deps.sql, userId, id, { name: input.name, effort: input.effort, note }, await zoneOf(deps, userId));
-  return row === null ? null : asRunDetail(row);
+  const timeZone = await zoneOf(deps, userId);
+  const row = await repo.changeRun(deps.sql, userId, id, { name: input.name, effort: input.effort, note }, timeZone);
+  return row === null ? null : { ...asRunDetail(row), records: heldBy(await repo.getRunRecords(deps.sql, userId, timeZone), id) };
 }
 
 /** The person deletes their own run (37c-i): it and its route go for good, and the streak, badges and
@@ -414,6 +437,7 @@ export async function saveRun(
     calcVersion: RUN_CALC_VERSION,
     climb,
     shape: routeShape(sums.track, sums.trackStarts),
+    bests: sums.bests,
   });
   if (saved === "removed") throw new RemovedRunError();
   // On every send, a repeat included, as a workout's sync does: the streak, badges and XP are

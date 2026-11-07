@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Animated, StyleSheet, View } from "react-native";
-import { badgeListSchema, gamificationMeSchema, myOrgsResponseSchema, weeklyChallengesSchema } from "@app/shared";
+import { badgeListSchema, gamificationMeSchema, myOrgsResponseSchema, runRecordsSchema, weeklyChallengesSchema } from "@app/shared";
 import { CoverPage } from "../../look/CoverPage";
 import { useMotion } from "../../look/Motion";
 import { useRead } from "../dashboard/useRead";
@@ -10,6 +10,7 @@ import { BadgesTab } from "./BadgesTab";
 import { BoardTab } from "./BoardTab";
 import { ChallengesTab } from "./ChallengesTab";
 import { Hero } from "./parts";
+import { RECORDS_PATH } from "../running/runRecords";
 
 // Me → Achievements (ROADMAP Stage 5 35c-iii; Kd's drawing of 2026-11-05, reviews/35c-iii-achievements-mock-4.png): the
 // browser's Achievements page in three tabs under the goddess: Badges, Challenges and the Leaderboard. Every tab is
@@ -20,6 +21,7 @@ export const ACHIEVEMENTS_READS = {
   badges: "/v1/gamification/badges",
   challenges: "/v1/gamification/challenges",
   places: "/v1/orgs/mine",
+  records: RECORDS_PATH,
 } as const;
 
 /** About how long the page takes to slide in. */
@@ -59,6 +61,7 @@ function Tabs({ tab, onCount }: { tab: TabKey; onCount: (words: string | null) =
   }, [countWords, onCount]);
   const challenges = useRead(ACHIEVEMENTS_READS.challenges, weeklyChallengesSchema);
   const places = useRead(ACHIEVEMENTS_READS.places, myOrgsResponseSchema);
+  const records = useRead(ACHIEVEMENTS_READS.records, runRecordsSchema);
   const motion = useMotion();
   const shown = useRef(new Animated.Value(1)).current;
   // A tab picked fades in over a fifth of a second; its medals and lanes were already drawn.
@@ -88,7 +91,7 @@ function Tabs({ tab, onCount }: { tab: TabKey; onCount: (words: string | null) =
   const built = (key: TabKey) => key === tab || rest;
   return (
     <View>
-      <Animated.View style={page("badges")}>{built("badges") ? <BadgesTab read={badges.read} again={badges.again} /> : null}</Animated.View>
+      <Animated.View style={page("badges")}>{built("badges") ? <BadgesTab read={badges.read} again={badges.again} records={records.read} recordsAgain={records.again} /> : null}</Animated.View>
       <Animated.View style={page("challenges")}>{built("challenges") ? <ChallengesTab read={challenges.read} again={challenges.again} /> : null}</Animated.View>
       <Animated.View style={page("leaderboard")}>{built("leaderboard") ? <BoardTab places={places.read} /> : null}</Animated.View>
     </View>
