@@ -84,8 +84,8 @@ describe("the icons and the pictures are the design's", () => {
     // The sign-in and setup pictures are the browser's own pages', cut for a phone, and the two goals pictures are
     // Kd's own drawing (31b), as are the clock's and the Dashboard top's; none is on the design canvas; nor is the food bowl, cut out of the food picture (34d-iii),
     // nor Progress's chalk drawings from Kd's posters (35c-i), nor Achievements' goddess and painted posters (35c-iii),
-    // nor Running's track photo and Greek runner, from his posters (37a).
-    const drawn = [...Object.keys(JSON.parse(read(join(design, "images.json"))) as Record<string, string>), "anatomy", "balance", "cave", "egyptpush", "etch", "foodbowl", "getstarted", "goals", "goalsbox", "goddess", "greekrun", "greekyoga", "motivation", "plank", "pushup", "rope", "runner", "setup", "steps", "track", "vikingbell"].sort();
+    // nor Running's track photo and Greek runner, from his posters (37a), nor Invite a friend's high five, from his poster (20a).
+    const drawn = [...Object.keys(JSON.parse(read(join(design, "images.json"))) as Record<string, string>), "anatomy", "balance", "cave", "egyptpush", "etch", "foodbowl", "getstarted", "goals", "goalsbox", "goddess", "greekrun", "greekyoga", "highfive", "motivation", "plank", "pushup", "rope", "runner", "setup", "steps", "track", "vikingbell"].sort();
     const folder = join(here, "assets", "pictures");
     const shipped = readdirSync(folder).sort();
     expect(shipped).toEqual(drawn.map((name) => `${name}.webp`));

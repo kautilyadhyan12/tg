@@ -24,6 +24,7 @@ export const referralCodeSchema = z.string().regex(REFERRAL_CODE_PATTERN);
 
 /** The address an invite opens, on the app's own site. */
 export const referralPath = (code: string): string => `/invite/${code}`;
+const REFERRAL_PATH_PATTERN = new RegExp(`^/invite/${REFERRAL_CODE_PATTERN.source.slice(1, -1)}$`);
 
 /** What the words below read of a discount. */
 export interface ReferralGiftTerms {
@@ -120,44 +121,94 @@ export function referralMemberGiftWords(g: {
   return { gift: `${giftDaysWords(g.days)} on your membership`, instead: money };
 }
 
+type MemberGiftWords = { gift: string; instead: string | null };
+
+// The offer's sentences, in pieces: the lines below and the phone's tickets say the same thing.
+const whenTheyPay = (gym: string) => `When a friend you invite joins ${gym} and makes their first payment`;
+const byItself = (gift: MemberGiftWords) =>
+  gift.instead === null ? "It comes off by itself, and we'll tell you in your inbox." : "They are added by themselves, and we'll tell you in your inbox.";
+const insteadLine = (instead: string) => `If you have no membership then, you get ${instead} instead.`;
+const noGiftLine = (gym: string) => `Send your link to a friend who'd like to join ${gym}.`;
+const nameLine = (firstName: string | null) =>
+  firstName === null ? "Your link shows your first name to whoever opens it." : `Your link shows your first name, ${firstName}, to whoever opens it.`;
+const setByLine = (gym: string) => `This offer is set by ${gym} and may change.`;
+
 /** The offer in the member's words. No code: the member's gift comes off, or its days are
  *  added, by itself. `firstName`: the name their link shows; null in the owner's preview. */
-export function referralOfferLines(
-  gymName: string,
-  memberGift: { gift: string; instead: string | null } | null,
-  friendGift: string | null,
-  firstName: string | null = null,
-): string[] {
+export function referralOfferLines(gymName: string, memberGift: MemberGiftWords | null, friendGift: string | null, firstName: string | null = null): string[] {
   const gym = gymName.trim();
   const lines: string[] = [];
-  const instead = memberGift?.instead ?? null;
-  if (memberGift !== null && instead === null) {
-    lines.push(`When a friend you invite joins ${gym} and makes their first payment, you get ${memberGift.gift}. It comes off by itself, and we'll tell you in your inbox.`);
-  } else if (memberGift !== null && instead !== null) {
-    lines.push(`When a friend you invite joins ${gym} and makes their first payment, you get ${memberGift.gift}. They are added by themselves, and we'll tell you in your inbox.`);
-    lines.push(`If you have no membership then, you get ${instead} instead.`);
+  if (memberGift !== null) {
+    lines.push(`${whenTheyPay(gym)}, you get ${memberGift.gift}. ${byItself(memberGift)}`);
+    if (memberGift.instead !== null) lines.push(insteadLine(memberGift.instead));
   }
   if (friendGift !== null) lines.push(`Your friend gets ${friendGift} when they join.`);
-  if (memberGift === null && friendGift === null) lines.push(`Send your link to a friend who'd like to join ${gym}.`);
-  lines.push(firstName === null ? "Your link shows your first name to whoever opens it." : `Your link shows your first name, ${firstName}, to whoever opens it.`);
-  lines.push(`This offer is set by ${gym} and may change.`);
+  if (memberGift === null && friendGift === null) lines.push(noGiftLine(gym));
+  lines.push(nameLine(firstName));
+  lines.push(setByLine(gym));
   return lines;
 }
 
+/** The same offer as the phone's Invite a friend shows it: each gift on a ticket of its own,
+ *  its words first and what it needs under them; the rest small, under the link. */
+export const referralTicketsSchema = z
+  .object({
+    /** "£10.00 off your next membership payment", and when it comes. Null where the member gets none. */
+    you: z.object({ gift: z.string().min(1), notes: z.array(z.string().min(1)).min(1) }).strict().nullable(),
+    /** "10% off the first payment of a membership", and who adds it. Null where the friend gets none. */
+    friend: z.object({ gift: z.string().min(1), note: z.string().min(1) }).strict().nullable(),
+    /** Where neither gets a gift: why send it anyway. */
+    plain: z.string().min(1).nullable(),
+    /** The first name the link shows, and who set the offer. */
+    small: z.array(z.string().min(1)).min(1),
+  })
+  .strict();
+export type ReferralTickets = z.infer<typeof referralTicketsSchema>;
+
+const firstUpper = (words: string) => words.charAt(0).toUpperCase() + words.slice(1);
+const firstLower = (words: string) => words.charAt(0).toLowerCase() + words.slice(1);
+
+export function referralTickets(gymName: string, memberGift: MemberGiftWords | null, friendGift: string | null, firstName: string | null): ReferralTickets {
+  const gym = gymName.trim();
+  return {
+    you:
+      memberGift === null
+        ? null
+        : {
+            gift: firstUpper(memberGift.gift),
+            // One whole sentence: the offer line's two, with its gift on the ticket above.
+            notes: [`${whenTheyPay(gym)}, ${firstLower(byItself(memberGift))}`, ...(memberGift.instead === null ? [] : [insteadLine(memberGift.instead)])],
+          },
+    friend: friendGift === null ? null : { gift: firstUpper(friendGift), note: `${gym} adds it for them when they join.` },
+    plain: memberGift === null && friendGift === null ? noGiftLine(gym) : null,
+    small: [nameLine(firstName), setByLine(gym)],
+  };
+}
+
+/** The Gym tab's line under Invite a friend: the member's own gift and when it comes, where there is one. */
+export const referralLineWords = (memberGift: string | null): string | null =>
+  memberGift === null ? null : `You get ${memberGift} when a friend you invite joins and pays`;
+
+/** What goes with the link when the member shares it. No gift: the page the link opens says the offer as it is that day. */
+export const referralShareMessage = (gymName: string, link: string): string => `Join me at ${gymName.trim()}: ${link}`;
+
 export const memberReferralResponseSchema = z.discriminatedUnion("status", [
   /** The business has not switched it on. */
-  z.object({ status: z.literal("off"), gymName: z.string() }).strict(),
+  z.object({ status: z.literal("off"), gymId: z.string().uuid(), gymName: z.string() }).strict(),
   z
     .object({
       status: z.literal("on"),
+      /** The business asked about: the phone shows an answer only under the business it asked. */
+      gymId: z.string().uuid(),
       gymName: z.string(),
-      /** The member's own link, on the app's site: `/invite/<code>`. */
-      path: z.string(),
+      /** The member's own link, on the app's site: `/invite/<code>`. Nothing else is ever shared. */
+      path: z.string().regex(REFERRAL_PATH_PATTERN),
       /** Null where the business gives none, or its code cannot be used today. */
       memberGift: z.string().nullable(),
       friendGift: z.string().nullable(),
       /** The offer as the member reads it, last line saying who set it. */
       lines: z.array(z.string()).min(1),
+      tickets: referralTicketsSchema,
     })
     .strict(),
 ]);

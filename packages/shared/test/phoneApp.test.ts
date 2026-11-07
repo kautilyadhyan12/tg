@@ -29,4 +29,14 @@ describe("the phone app's first reads", () => {
     }
     expect(phoneAppExtraSchema.safeParse({ copyName: "Feature 1", apiUrl: "http://localhost:3000" }).success).toBe(true);
   });
+
+  it("the website's address is an address alone, and the store's app shares https links only", () => {
+    const copy = { copyName: "Feature 1", apiUrl: "http://localhost:3000" };
+    expect(phoneAppExtraSchema.parse({ ...copy, webUrl: "http://localhost:5173" }).webUrl).toBe("http://localhost:5173");
+    for (const webUrl of ["http://localhost:5173/", "http://localhost:5173/invite", "localhost:5173", "http://user@evil.example", "javascript:alert(1)", ""]) {
+      expect([webUrl, phoneAppExtraSchema.safeParse({ ...copy, webUrl }).success]).toEqual([webUrl, false]);
+    }
+    expect(phoneAppExtraSchema.safeParse({ apiUrl: "https://api.example.com", webUrl: "https://kwazo.app" }).success).toBe(true);
+    expect(phoneAppExtraSchema.safeParse({ apiUrl: "https://api.example.com", webUrl: "http://kwazo.app" }).success).toBe(false);
+  });
 });
