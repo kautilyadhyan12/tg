@@ -132,8 +132,10 @@ function PtBody({ place, onClose, bottom, onSignAgreement, readAgain }: { place:
 
   // The membership agreement opened from here was closed (20c): the times are read again, and what the last press
   // was told is stale.
+  // Only a closing while this page is open: the count it opened with is already in the first read.
+  const openedWith = useRef(readAgain);
   useEffect(() => {
-    if (readAgain === 0) return;
+    if (readAgain === openedWith.current) return;
     setSaid(null);
     void loadNow.current(true);
   }, [readAgain]);

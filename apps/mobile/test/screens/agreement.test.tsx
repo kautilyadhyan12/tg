@@ -483,4 +483,24 @@ describe("the round-one cases", () => {
     const none = within(await screen.findByTestId("agreement-none"));
     expect(none.getAllByText(MY_AGREEMENT_WORDS.paid_by_other)).toHaveLength(1);
   });
+
+  it("My membership closed from the card: Classes opened after it reads once", async () => {
+    const server = fakeServer({
+      "/v1/auth/refresh": ok({ tokens: tokens(2) }),
+      "/v1/orgs/mine": ok({ orgs: [org(IRON, [{ membershipId: M_IRON, name: "Gold Monthly" }, { membershipId: M_PACK, name: "10-class pack" }])], formerOrgs: [] }),
+      [`/v1/orgs/${IRON.id}/member-classes`]: ok({ week: 0, from: "2026-11-08", to: "2026-11-14", timezone: "Europe/London", classes: [], more: false }),
+      "/v1/orgs/1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f/my-membership": ok(myMembership([membership(M_IRON, "Gold Monthly", { state: "to_sign", signedOn: null, signedName: null, view: false })])),
+    });
+    await openGym(server.ask);
+    await fireEvent.press(await screen.findByTestId(`agreements-ask-${IRON.id}`));
+    await screen.findByLabelText("Sign the agreement for Gold Monthly");
+    await fireEvent.press(screen.getByLabelText("Back"));
+    await fireEvent.press(await screen.findByLabelText("Classes at Iron House"));
+    await screen.findByTestId("classes-page");
+    await waitFor(() => {
+      expect(server.asked.filter((one) => one.path.endsWith("/member-classes")).length).toBe(1);
+    });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(server.asked.filter((one) => one.path.endsWith("/member-classes")).length).toBe(1);
+  });
 });
