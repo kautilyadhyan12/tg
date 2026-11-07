@@ -34,7 +34,7 @@ import { friendGiftOffer } from "../referrals/friendGift.js";
 import { waitingGiftFor } from "../referrals/memberGiftRepo.js";
 import { taxIncludedOf } from "../register/taxRepo.js";
 import { insertAudit } from "../repo.js";
-import { homeOf } from "./appPurchaseHome.js";
+import { detailsRecordOf, homeOf } from "./appPurchaseHome.js";
 import { COLUMNS, toRow, type AppPayRow, type RawPay } from "./appPaymentsRepo.js";
 import { soldInAppLine } from "./forSaleRepo.js";
 import type { SquareEnvironment } from "./square.js";
@@ -69,7 +69,7 @@ export const MIN_OPEN_MS = 5 * 60_000;
 
 export type PurchasableOutcome =
   /** `deadline`: when the page must close, the line's last day being near; null where it is far. */
-  | { kind: "ok"; bought: AppPurchaseBought; currency: string; deadline: Date | null }
+  | { kind: "ok"; bought: AppPurchaseBought; currency: string; deadline: Date | null; landsOn: string | null }
   /** A page for this record is open: the same press's is answered instead of a second. */
   | { kind: "open"; row: AppPayRow }
   | { kind: "entry_not_found" | "shared" | "paid_by_other" | "changed" | "agreement_changed" | "guardian_needed" | "person_signs" | "too_many" | "currency" | "check" | "too_late" }
@@ -133,17 +133,26 @@ async function personOf(tx: SqlOrTx, gymId: string, entryId: string): Promise<{ 
 
 /** Whether a purchase can be made now, asked under the gym's lock and the record's: the same rules giving it will meet. */
 async function purchasableIn(tx: TransactionSql, s: Buying): Promise<PurchasableOutcome> {
+  // The record the purchase lands on: their own, or, for a member not on the list yet, the one already holding the very
+  // details they buy with (checked now as their own is, round one H1 to H3), or none, and a new one is made once they pay.
+  let landsOn = s.entryId;
   if (s.entryId === null) {
     await lockGym(tx, s.gymId);
-  } else {
-    if ((await lockedEntry(tx, s.gymId, s.entryId)) === null) return { kind: "entry_not_found" };
-    await settle(tx, s.gymId, s.entryId, s.today, s.now);
+    if (s.buyer === null) return { kind: "entry_not_found" };
+    const found = await detailsRecordOf(tx, s.gymId, s.buyer);
+    // Another account holds it: not theirs to buy on (round one H2, H4).
+    if (found !== null && found.holders.length > 0) return { kind: "entry_not_found" };
+    landsOn = found?.id ?? null;
   }
-  // One purchase page open at a time: the record's, or the account's while it holds none.
+  if (landsOn !== null) {
+    if ((await lockedEntry(tx, s.gymId, landsOn)) === null) return { kind: "entry_not_found" };
+    await settle(tx, s.gymId, landsOn, s.today, s.now);
+  }
+  // One purchase page open at a time: the record's, or the account's.
   const [open] = await tx<RawPay[]>`
     SELECT ${COLUMNS(tx)} FROM gym_app_payments a
     WHERE a.gym_id = ${s.gymId} AND a.state = 'open' AND a.membership_type_id IS NOT NULL
-      AND (a.entry_id = ${s.entryId} OR (a.entry_id IS NULL AND a.opened_by = ${s.userId}))
+      AND (a.entry_id = ${landsOn} OR a.opened_by = ${s.userId})
     LIMIT 1`;
   if (open !== undefined) return { kind: "open", row: toRow(open) };
   // Under the lock, their app still holds what it held when Buy was read: that record, or none.
@@ -152,24 +161,26 @@ async function purchasableIn(tx: TransactionSql, s: Buying): Promise<Purchasable
   if (me === undefined) return { kind: "entry_not_found" };
   if (me.entry_id !== s.entryId) return { kind: "changed" };
   let person: { fullName: string; dateOfBirth: string | null };
-  if (s.entryId === null) {
+  if (landsOn === null) {
     // Not on the list yet: the record made for them, once they pay, holds their app's name; it has no date of birth.
     if (s.buyer === null) return { kind: "entry_not_found" };
     person = { fullName: s.buyer.name, dateOfBirth: null };
   } else {
-    // Their own record still: one account holds it, and nobody else pays for it (18i).
+    // Their own record still (one account holds it; none yet for the one holding their details), and nobody else pays for
+    // it (18i).
     const [who] = await tx<{ holders: number; paid_by_other: boolean }[]>`
       SELECT (SELECT count(*) FROM gym_members o JOIN users u ON u.id = o.user_id AND u.status = 'active'
-              WHERE o.gym_id = ${s.gymId} AND o.entry_id = ${s.entryId} AND o.removed_at IS NULL)::int AS holders,
-             EXISTS (SELECT 1 FROM gym_member_payers p WHERE p.gym_id = ${s.gymId} AND p.entry_id = ${s.entryId}) AS paid_by_other`;
-    if (who === undefined || who.holders === 0) return { kind: "entry_not_found" };
-    if (who.holders > 1) return { kind: "shared" };
+              WHERE o.gym_id = ${s.gymId} AND o.entry_id = ${landsOn} AND o.removed_at IS NULL)::int AS holders,
+             EXISTS (SELECT 1 FROM gym_member_payers p WHERE p.gym_id = ${s.gymId} AND p.entry_id = ${landsOn}) AS paid_by_other`;
+    const holders = s.entryId === null ? 0 : 1;
+    if (who === undefined || who.holders < holders) return { kind: "entry_not_found" };
+    if (who.holders > holders) return s.entryId === null ? { kind: "entry_not_found" } : { kind: "shared" };
     if (who.paid_by_other) return { kind: "paid_by_other" };
-    const own = await personOf(tx, s.gymId, s.entryId);
+    const own = await personOf(tx, s.gymId, landsOn);
     if (own === null) return { kind: "entry_not_found" };
     person = own;
   }
-  const found = await workedFor(tx, { gymId: s.gymId, entryId: s.entryId, typeId: s.typeId, gymName: s.gymName, today: s.today, personName: person.fullName });
+  const found = await workedFor(tx, { gymId: s.gymId, entryId: landsOn, typeId: s.typeId, gymName: s.gymName, today: s.today, personName: person.fullName });
   if (found === null || !found.m.ok) return { kind: "changed" };
   const { item, given } = found.worked;
   // Only what the screen showed: its first payment and its details, to the character.
@@ -183,13 +194,14 @@ async function purchasableIn(tx: TransactionSql, s: Buying): Promise<Purchasable
     if (s.agreement.signer === "guardian" && minor === false) return { kind: "person_signs" };
   }
   // Somebody with no record holds nothing to stand in the way.
-  const refused = s.entryId === null ? null : await wouldRefuseGiving(tx, s.gymId, s.entryId, s.typeId, found.m.membership, s.today);
+  const refused = landsOn === null ? null : await wouldRefuseGiving(tx, s.gymId, landsOn, s.typeId, found.m.membership, s.today);
   if (refused === "already_held") return { kind: "already_held", name: item.name };
   if (refused === "too_many") return { kind: "too_many" };
-  // An earlier page for this line that may have been paid and gave nothing is checked by the front desk first.
+  // An earlier page of theirs for this line that may have been paid and gave nothing is checked by the front desk first;
+  // another account's page on their record is not theirs to be told about (round one H2b).
   const [check] = await tx<{ id: string }[]>`
     SELECT id FROM gym_app_payments
-    WHERE gym_id = ${s.gymId} AND (entry_id = ${s.entryId} OR (entry_id IS NULL AND opened_by = ${s.userId})) AND membership_type_id = ${s.typeId}
+    WHERE gym_id = ${s.gymId} AND (opened_by = ${s.userId} OR (entry_id = ${landsOn} AND opened_by IS NULL)) AND membership_type_id = ${s.typeId}
       AND outcome IN ('not_recorded','gone','no_answer') AND cleared_at IS NULL
     LIMIT 1`;
   if (check !== undefined) return { kind: "check" };
@@ -206,7 +218,7 @@ async function purchasableIn(tx: TransactionSql, s: Buying): Promise<Purchasable
   if (deadline !== null && deadline.getTime() - s.now.getTime() < MIN_OPEN_MS) return { kind: "too_late" };
   const sign: AppPurchaseSign | null =
     asked === null || s.agreement === null ? null : { agreementId: asked.id, signer: s.agreement.signer, name: s.agreement.name, facts: item.facts, at: s.now.toISOString() };
-  return { kind: "ok", bought: { ...given, sign, buyer: s.entryId === null ? s.buyer : null }, currency: item.currency, deadline };
+  return { kind: "ok", bought: { ...given, sign, buyer: s.entryId === null ? s.buyer : null }, currency: item.currency, deadline, landsOn };
 }
 
 /** The check before Square is asked to make the page: nothing is written but what the clock had already done. */
@@ -242,7 +254,7 @@ export async function writeOpenPurchase(sql: Sql, s: NewPurchase): Promise<OpenP
     await tx`
       INSERT INTO gym_app_payments (id, gym_id, entry_id, membership_type_id, bought, amount_minor, currency, environment, account_id,
                                     location_id, request_key, opened_by, opened_at, closes_at, link_key, link_id, order_id, url, state, checked_at)
-      VALUES (${s.id}, ${s.gymId}, ${s.entryId}, ${s.typeId}, ${tx.json(check.bought)}, ${s.amountMinor}, ${check.currency}, ${s.environment},
+      VALUES (${s.id}, ${s.gymId}, ${check.landsOn}, ${s.typeId}, ${tx.json(check.bought)}, ${s.amountMinor}, ${check.currency}, ${s.environment},
               ${s.accountId}, ${s.locationId}, ${s.requestKey}, ${s.openedBy}, ${s.now}, ${closesAt}, ${s.linkKey}, ${s.linkId}, ${s.orderId},
               ${s.url}, 'open', ${s.now})`;
     const [written] = await tx<RawPay[]>`SELECT ${COLUMNS(tx)} FROM gym_app_payments a WHERE a.gym_id = ${s.gymId} AND a.id = ${s.id}`;
@@ -410,6 +422,11 @@ export async function recordBought(sql: Sql, p: Bought): Promise<{ outcome: "pai
     const entryId = home?.entryId ?? row.entryId;
     const bought = boughtOf(row);
     let why: string = p.refuse ?? (home === null ? "entry_not_found" : !home.theirs ? "record_not_theirs" : bought === null ? "bought_unreadable" : "");
+    // Who signed must still fit the record it lands on: a parent or guardian for somebody under 18 (round one H1).
+    if (why === "" && home !== null && bought !== null && bought.sign !== null) {
+      const minor = isUnder18((await personOf(tx, row.gymId, home.entryId))?.dateOfBirth ?? null, p.today);
+      if ((bought.sign.signer === "person" && minor === true) || (bought.sign.signer === "guardian" && minor === false)) why = "signer_changed";
+    }
     if (why === "" && home !== null && bought !== null && bought.totalMinor === row.amountMinor) {
       const what = given(bought);
       const done = await giveHeldIn(tx, {

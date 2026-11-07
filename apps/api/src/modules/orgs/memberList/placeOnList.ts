@@ -43,7 +43,7 @@ export async function holderOf(tx: TransactionSql, gymId: string, values: EntryV
 }
 
 /** Put a person on the list whose key nobody holds, or bring back the FORMER record
- *  that holds it. Shared by "Add member" and "put an app member on the list". */
+ *  that holds it. Shared by "Add member", "put an app member on the list" and a purchase in the app (18k-iii-b). */
 export async function placeOnList(
   tx: TransactionSql,
   input: { gymId: string; userId: string | null; at: Date; values: EntryValues; source: "typed" | "member"; revive: (stored: repo.StoredEntry) => EntryValues; via?: string },

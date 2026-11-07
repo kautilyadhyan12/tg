@@ -640,7 +640,8 @@ d("Buy in the app: given once, on their own record, only for what Square took (r
     const leo = await addRecord(gym, { fullName: "Leo Park", email: mum.email });
     const maria = await addRecord(gym, { fullName: "Maria Park", email: mum.email });
     // Tom Reed is on the list with his phone; somebody else joined under his name and typed that phone.
-    const tom = await addRecord(gym, { fullName: "Tom Reed", email: `abuy-r-${uniq()}@gmail.com`, phone: "+15125550101" });
+    // Tom's record has his name and phone and no email, so only the phone could match (round one T2).
+    const tom = await addRecord(gym, { fullName: "Tom Reed", phone: "+15125550101" });
     const fakeTom = await appOnly(gym, "Tom Reed", "+15125550101");
     // Grace is a past member still in the app.
     const grace = await member(gym, "Grace Hall");
@@ -711,14 +712,14 @@ d("Buy in the app: given once, on their own record, only for what Square took (r
     // No ended page keeps who bought it.
     const [kept] = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM gym_app_payments WHERE gym_id = ${gym.id} AND jsonb_typeof(bought->'buyer') = 'object'`;
     expect(kept?.n).toBe(0);
-    // Pat paid, and the record holding Pat's details is somebody else's app: nothing given on it, Pat not linked to it, and
-    // staff read the line to check it there.
-    const patPage = parsed(await buyPress(gym, pat, await lineOf(gym, pat, pack), {}, "Pat Lane"));
-    expect((await payPage(gym, pat, patPage.purchase.id)).state).toBe("check");
+    // The record holding Pat's details is somebody else's app: Pat is refused before any page opens (round one H2), and
+    // nothing of that record changes.
+    const patRes = await buyPress(gym, pat, await lineOf(gym, pat, pack), {}, "Pat Lane");
+    expect([patRes.statusCode, errorOf(patRes)]).toEqual([409, "app_purchase_not_own"]);
+    const [patPages] = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM gym_app_payments WHERE gym_id = ${gym.id} AND opened_by = ${pat.userId}`;
+    expect(patPages?.n).toBe(0);
     expect(await typesHeld(gym, patRecord)).toEqual([]);
-    expect(await linkOfAccount(gym, pat.userId)).not.toBe(patRecord);
-    const [patEnded] = await sql<{ outcome: string; entry_id: string | null }[]>`SELECT outcome, entry_id FROM gym_app_payments WHERE id = ${patPage.purchase.id}`;
-    expect(patEnded).toEqual({ outcome: "not_recorded", entry_id: patRecord });
+    expect(await linkOfAccount(gym, pat.userId)).toBeNull();
     // On the list now, Nia reads her own record in the app.
     expect((await forSale(gym, nia)).record).toBe("own");
   });
@@ -789,5 +790,62 @@ d("Buy in the app: given once, on their own record, only for what Square took (r
     // The desk's press finds Ann's own record by those details, and still does not link this app to it.
     expect((JSON.parse(put.body) as { outcome: string; entry: { entryId: string } }).entry.entryId, put.body).toBe(ann);
     expect(await linkOfAccount(gym, unproved.userId)).toBeNull();
+  });
+
+  it("18k-iii-b round one: the record holding the buyer's details is checked at Buy as their own, and a record another account holds is never changed", async () => {
+    clock = new Date();
+    const gym = await makeGym("App Buy Round One", account(`ABR1${uniq().slice(-6)}`));
+    await agreementOn(gym);
+    const pack = await addType(gym, { name: "10-class pack" });
+    const once = await addType(gym, { name: "Summer month", kind: "one_time", priceMinor: 6000, termCount: 1, termUnit: "month", packClasses: null, packDays: null });
+
+    // T1: staff typed Zed in with his very name and email before his app was linked: his purchase lands there, and links him.
+    const zed = await appOnly(gym, "Zed Rook");
+    const zedRecord = await addRecord(gym, { fullName: "Zed Rook", email: zed.email });
+    const count = (await recordsOf(gym)).length;
+    const zedPage = parsed(await buyPress(gym, zed, await lineOf(gym, zed, pack), {}, "Zed Rook"));
+    expect((await payPage(gym, zed, zedPage.purchase.id)).state).toBe("paid");
+    expect(await linkOfAccount(gym, zed.userId)).toBe(zedRecord);
+    expect(await typesHeld(gym, zedRecord)).toEqual(["10-class pack"]);
+    expect((await recordsOf(gym)).length).toBe(count);
+
+    // H1: Ana's record (born 2012) holds her details: a parent or guardian signs, never Ana herself.
+    const ana = await appOnly(gym, "Ana Teen");
+    await addRecord(gym, { fullName: "Ana Teen", email: ana.email, dateOfBirth: "2012-05-05" });
+    const anaLine = await lineOf(gym, ana, pack);
+    expect((await forSale(gym, ana)).signer).toBe("guardian");
+    expect(errorOf(await buyPress(gym, ana, anaLine, {}, "Ana Teen"))).toBe("guardian_needed");
+
+    // H3: Ray's own record already holds Summer month while his app is unlinked from it: refused before he pays.
+    const ray = await appOnly(gym, "Ray Held");
+    const rayRecord = await addRecord(gym, { fullName: "Ray Held", email: ray.email });
+    const raySummer = parsed(await buyPress(gym, ray, await lineOf(gym, ray, once), {}, "Ray Held"));
+    expect((await payPage(gym, ray, raySummer.purchase.id)).state).toBe("paid");
+    await sql`UPDATE gym_members SET entry_id = NULL WHERE gym_id = ${gym.id} AND user_id = ${ray.userId}`;
+    expect(errorOf(await buyPress(gym, ray, await lineOf(gym, ray, once), {}, "Ray Held"))).toBe("already_held");
+    expect(await typesHeld(gym, rayRecord)).toEqual(["Summer month"]);
+    // Somebody else paying for that record (18i) is refused the same way.
+    const payer = await member(gym, "Ray Parent");
+    await sql`INSERT INTO gym_member_payers (gym_id, entry_id, payer_entry_id, set_by) VALUES (${gym.id}, ${rayRecord}, ${payer.entryId}, ${gym.owner.userId})`;
+    expect(errorOf(await buyPress(gym, ray, await lineOf(gym, ray, pack), {}, "Ray Held"))).toBe("app_purchase_paid_by_other");
+
+    // H4 and H2: Quinn presses Buy with no record anywhere; meanwhile a record with Quinn's details turns up, held by
+    // another account, and moved to past members. Paid: that record stays past and holds nothing; the money waits for a
+    // check; and Quinn can't pay for the same line again until it is checked.
+    const quinn = await appOnly(gym, "Quinn Late");
+    const quinnPage = parsed(await buyPress(gym, quinn, await lineOf(gym, quinn, pack), {}, "Quinn Late"));
+    const quinnRecord = await addRecord(gym, { fullName: "Quinn Late", email: quinn.email });
+    const other = await member(gym, "Quinn L");
+    expect((await send("POST", `${entryUrl(gym, other.entryId)}/merge`, gym.owner.cookies, { keepEntryId: quinnRecord })).statusCode).toBe(200);
+    await sql`UPDATE gym_member_list_entries SET former_at = ${clock} WHERE gym_id = ${gym.id} AND id = ${quinnRecord}`;
+    expect((await payPage(gym, quinn, quinnPage.purchase.id)).state).toBe("check");
+    const [still] = await sql<{ past: boolean }[]>`SELECT former_at IS NOT NULL AS past FROM gym_member_list_entries WHERE id = ${quinnRecord}`;
+    expect(still?.past).toBe(true);
+    expect(await typesHeld(gym, quinnRecord)).toEqual([]);
+    const [revived] = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM audit_log WHERE gym_id = ${gym.id} AND target_id = ${quinnRecord} AND meta->>'via' = 'app_purchase'`;
+    expect(revived?.n).toBe(0);
+    expect(errorOf(await buyPress(gym, quinn, await lineOf(gym, quinn, pack), {}, "Quinn Late"))).toBe("app_purchase_not_own");
+    // H2b: the other account, whose record it is, is not told about a payment they never made: their own Buy goes ahead.
+    expect(parsed(await buyPress(gym, other.app, await lineOf(gym, other.app, pack), {}, "Quinn L")).purchase.state).toBe("open");
   });
 });

@@ -595,7 +595,10 @@ export const USER_LINKED_NOT_PURGED_TABLES = [
   // member of staff who pressed Close payment page (`0217`; 18k-ii-a), and who pressed Mark as checked on a purchase that
   // gave nothing (`0221`; 18k-iii-a), on gym_member_payments' footing: the gym's record of money
   // asked for; `ON DELETE set null`. It holds Square's ids, the amount and the card's brand and last four, no card number;
-  // a closed one is forgotten a day after it ends, and a record deleted for good lets go of `entry_id`.
+  // a purchase by a member not on the list also holds their name, proved email and the phone they gave (`bought.buyer`,
+  // 18k-iii-b) until it ends, and one that may have taken money then puts them on the list with those details even where
+  // the account was deleted meanwhile, as the gym's record of who paid; a closed one is forgotten a day after it ends, and
+  // a record deleted for good lets go of `entry_id`.
   "gym_app_payments",
   // gym_card_charges.started_by — which member of staff pressed Charge card on file (`0158`;
   // 18d-iii-i); null for the app's own charge on a bill's date. On gym_member_payments' footing: the
