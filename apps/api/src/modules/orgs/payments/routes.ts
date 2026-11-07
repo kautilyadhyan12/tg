@@ -30,6 +30,11 @@
 //   GET    /v1/orgs/:gymId/my-membership/payments/:paymentId   how it went, back from Square's page
 //   POST   /v1/orgs/:gymId/my-membership/payments/:paymentId/close   they left the page
 //   POST   …/member-list/entries/:entryId/memberships/:membershipId/app-payment/close   staff: Close payment page
+//   POST   /v1/orgs/:gymId/for-sale/purchases                  Buy: Square's own page for a line sold in the app (18k-iii-a)
+//   GET    /v1/orgs/:gymId/for-sale/purchases/:paymentId       how it went, back from Square's page
+//   POST   /v1/orgs/:gymId/for-sale/purchases/:paymentId/close they left the page
+//   POST   …/member-list/entries/:entryId/app-purchases/:paymentId/close     staff: Close payment page on a purchase
+//   POST   …/member-list/entries/:entryId/app-purchases/:paymentId/checked   staff: Mark as checked
 //
 // Save card on Terminal (ROADMAP 18d-ii-b-ii), `billing.members`:
 //   POST   …/member-list/entries/:entryId/card/terminal                 the agreement goes to the Terminal
@@ -94,6 +99,7 @@ import {
   squareCardIdSchema,
   terminalFeePaymentRequestSchema,
   appPaymentRequestSchema,
+  appPurchaseRequestSchema,
   terminalPaymentRequestSchema,
   terminalSaleRequestSchema,
   terminalSaveRequestSchema,
@@ -128,6 +134,7 @@ import * as cards from "./cards.js";
 import * as failedPayments from "./failedPayments.js";
 import { readForSale } from "./forSale.js";
 import * as appPayments from "./appPayments.js";
+import * as appPurchases from "./appPurchases.js";
 import * as refundsToReview from "./refundsToReview.js";
 import * as service from "./service.js";
 import { verifySquareSignature } from "./squareSignature.js";
@@ -164,7 +171,7 @@ function callerId(req: FastifyRequest): string {
 }
 
 export function registerPaymentRoutes(app: FastifyInstance, deps: Omit<service.PaymentsDeps, "log"> & { redis: RedisLike; news: LiveNewsSender }): void {
-  const paymentsDeps: service.PaymentsDeps = { sql: deps.sql, square: deps.square, now: deps.now, log: app.log };
+  const paymentsDeps: service.PaymentsDeps = { sql: deps.sql, square: deps.square, now: deps.now, log: app.log, ...(deps.agreementCopy === undefined ? {} : { agreementCopy: deps.agreementCopy }) };
   const byPerson = (req: FastifyRequest): string | null => req.authUser?.id ?? null;
   // Settings asks once each time it opens; a gym's staff can share one address.
   const readLimit = createDualRateLimit({ name: "payments_read", max: 300, ipMax: 3000, windowMs: HOUR_MS, identifier: byPerson, redis: deps.redis });
@@ -369,6 +376,21 @@ export function registerPaymentRoutes(app: FastifyInstance, deps: Omit<service.P
     const params = parseOr400(heldMembershipParamsSchema, req.params, req, reply);
     if (params === null) return;
     const answer = await appPayments.closeAppPaymentByStaff(paymentsDeps, callerId(req), params.gymId, params.entryId, params.membershipId);
+    return reply.status(200).header("cache-control", "no-store").send(answer);
+  });
+
+  // A purchase in the app (18k-iii-a): Close payment page, and Mark as checked under one that gave nothing.
+  app.post(`${entryUrl}/app-purchases/:paymentId/close`, { preHandler: [app.authenticate, staffOnly(deps.sql, payStartLimit)], onSend: tellMemberships }, async (req, reply) => {
+    const params = parseOr400(terminalPaymentParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const answer = await appPurchases.closePurchaseByStaff(paymentsDeps, callerId(req), params.gymId, params.entryId, params.paymentId);
+    return reply.status(200).header("cache-control", "no-store").send(answer);
+  });
+
+  app.post(`${entryUrl}/app-purchases/:paymentId/checked`, { preHandler: [app.authenticate, staffOnly(deps.sql, payStartLimit)], onSend: tellMemberships }, async (req, reply) => {
+    const params = parseOr400(terminalPaymentParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const answer = await appPurchases.markPurchaseChecked(paymentsDeps, callerId(req), params.gymId, params.entryId, params.paymentId);
     return reply.status(200).header("cache-control", "no-store").send(answer);
   });
 
@@ -643,6 +665,37 @@ export function registerPaymentRoutes(app: FastifyInstance, deps: Omit<service.P
     const params = parseOr400(terminalSaleParamsSchema, req.params, req, reply);
     if (params === null) return;
     const done = await appPayments.closeAppPayment(paymentsDeps, callerId(req), params.gymId, params.paymentId, gate(appPayLimit, req, reply));
+    if (done === null) return;
+    told(params.gymId, done.tell);
+    return reply.status(200).header("cache-control", "no-store").send(done.answer);
+  });
+
+  // Buy in the app (18k-iii-a): a member buys a few things a month, and asks how it went as Pay does.
+  const purchaseUrl = "/v1/orgs/:gymId/for-sale/purchases";
+  app.post(purchaseUrl, { preHandler: app.authenticate }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(appPurchaseRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    const done = await appPurchases.startPurchase(paymentsDeps, callerId(req), params.gymId, body, gate(appPayLimit, req, reply));
+    if (done === null) return;
+    told(params.gymId, done.tell);
+    return reply.status(200).header("cache-control", "no-store").send(done.answer);
+  });
+
+  app.get(`${purchaseUrl}/:paymentId`, { preHandler: app.authenticate }, async (req, reply) => {
+    const params = parseOr400(terminalSaleParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const done = await appPurchases.checkPurchase(paymentsDeps, callerId(req), params.gymId, params.paymentId, gate(appPayCheckLimit, req, reply));
+    if (done === null) return;
+    told(params.gymId, done.tell);
+    return reply.status(200).header("cache-control", "no-store").send(done.answer);
+  });
+
+  app.post(`${purchaseUrl}/:paymentId/close`, { preHandler: app.authenticate }, async (req, reply) => {
+    const params = parseOr400(terminalSaleParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const done = await appPurchases.closePurchase(paymentsDeps, callerId(req), params.gymId, params.paymentId, gate(appPayLimit, req, reply));
     if (done === null) return;
     told(params.gymId, done.tell);
     return reply.status(200).header("cache-control", "no-store").send(done.answer);

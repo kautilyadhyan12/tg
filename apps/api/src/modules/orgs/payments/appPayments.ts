@@ -20,6 +20,9 @@
 // pays for, all of it, while it is owed. The worst thing there is the same, and a fee charged that they no longer owe with
 // nobody told: so while its page is open the fee is not taken off (staff marking them came asks the page closed instead), it
 // comes off once Square says nothing was paid, and paid meanwhile it reads Paid and goes on Refunds to review.
+//
+// A LINE BOUGHT (18k-iii-a, `appPurchases.ts`) is asked about the same way: once Square says its one payment is exactly what
+// was asked, the membership is given and its agreement signed (`recordBought`) instead of a bill being paid.
 import { randomUUID } from "node:crypto";
 import {
   APP_PAYMENT_LIMITS,
@@ -44,6 +47,7 @@ import { gymHasLivePlan } from "../repo.js";
 import { OrgsError, requirePrivilege } from "../service.js";
 import { BILLING, orgNotFound, stateOf } from "./cards.js";
 import * as pays from "./appPaymentsRepo.js";
+import { recordBought } from "./appPurchasesRepo.js";
 import * as repo from "./repo.js";
 import { accessContext, appPaymentsAllowed, type PaymentsDeps } from "./service.js";
 import type { SquareSettings } from "./settings.js";
@@ -89,7 +93,7 @@ const leaseFrom = (at: Date): Date => new Date(at.getTime() + APP_PAYMENT.leaseM
 
 /** The gym's Square, able to make payment pages now: connected with a location, allowing what the page needs, in a
  *  country Square serves, and the gym on a live plan with us. Null otherwise. */
-async function readyForApp(deps: PaymentsDeps, gymId: string): Promise<{ square: SquareSettings; row: repo.ConnectionRow & { locationId: string }; timezone: string } | null> {
+export async function readyForApp(deps: PaymentsDeps, gymId: string): Promise<{ square: SquareSettings; row: repo.ConnectionRow & { locationId: string }; timezone: string } | null> {
   const square = deps.square;
   if (square === null) return null;
   const gym = await repo.readGym(deps.sql, gymId);
@@ -113,6 +117,8 @@ async function payingFor(deps: PaymentsDeps, gymId: string, userId: string): Pro
 
 function viewOf(row: pays.AppPayRow): AppPayment {
   const state = pays.stateOf(row);
+  // A purchase's page is read by `appPurchases.ts`; the reads for a bill's or fee's leave it out.
+  if (row.membershipId === null || row.typeId !== null) throw new Error("a purchase page was read as a bill's");
   return {
     id: row.id,
     membershipId: row.membershipId,
@@ -222,7 +228,15 @@ async function settle(a: Asking, order: SquareOrder): Promise<"none" | "wait" | 
   // bill's amount, or another; null where Square named another money.
   const totals = taken.map((p) => p.total_money ?? p.amount_money);
   const tookMinor = totals.every((t) => t.currency === row.currency) ? totals.reduce((sum, t) => sum + t.amount, 0) : null;
-  const kept = await pays.recordPaid(deps.sql, { row, squarePaymentId: payment.id, card: cardSeen, taken: tookMinor, today, now, ...(refuse === undefined ? {} : { refuse }) });
+  const paid = { row, squarePaymentId: payment.id, card: cardSeen, taken: tookMinor, today, now, ...(refuse === undefined ? {} : { refuse }) };
+  if (row.typeId !== null) {
+    const bought = await recordBought(deps.sql, paid);
+    if (bought?.outcome === "not_recorded") deps.log.error({ event: "square.app_purchase_not_recorded", gymId: row.gymId }, "money taken for a line bought in the app gave nothing");
+    // The signed copy goes to the record's address once the membership is theirs, after the transaction.
+    if (bought?.outcome === "paid" && bought.signed && deps.agreementCopy !== undefined) await deps.agreementCopy(row.gymId, bought.membershipId);
+    return "done";
+  }
+  const kept = await pays.recordPaid(deps.sql, paid);
   if (kept?.outcome === "not_recorded") deps.log.error({ event: "square.app_payment_not_recorded", gymId: row.gymId }, "money taken in the app could not be recorded on its bill");
   return "done";
 }
@@ -278,7 +292,7 @@ async function advance(deps: PaymentsDeps, square: SquareSettings, row: pays.App
 }
 
 /** Asked by this request now, or left to the one already asking for at most `waitMs`. */
-async function lookNow(deps: PaymentsDeps, square: SquareSettings, gymId: string, id: string, waitMs: number): Promise<void> {
+export async function lookNow(deps: PaymentsDeps, square: SquareSettings, gymId: string, id: string, waitMs: number): Promise<void> {
   const waitUntil = Date.now() + waitMs;
   for (;;) {
     const now = deps.now();

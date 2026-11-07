@@ -167,7 +167,7 @@ export interface AgreementFormRow {
   facts: AgreementFact[];
   emailedAt: Date | null;
   agreementName: string | null;
-  via: "desk" | "link";
+  via: "desk" | "link" | "app";
   deletedAt: Date;
 }
 
@@ -208,7 +208,7 @@ export async function agreementForm(sql: Sql, gymId: string, formId: string, cut
     facts: agreementFactsSchema.parse(row.facts),
     emailedAt: row.emailed_at,
     agreementName: row.agreement_name,
-    via: row.signed_via === "link" ? "link" : "desk",
+    via: row.signed_via === "link" || row.signed_via === "app" ? row.signed_via : "desk",
     deletedAt: row.deleted_at,
   };
 }

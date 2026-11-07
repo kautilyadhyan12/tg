@@ -63,6 +63,8 @@ export interface PaymentsDeps {
   square: SquareSettings | null;
   log: PaymentsLog;
   now: () => Date;
+  /** Emails the signed copy of a membership's agreement signed in the app as it was bought (18k-iii-a); never throws. */
+  agreementCopy?: (gymId: string, membershipId: string) => Promise<void>;
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
