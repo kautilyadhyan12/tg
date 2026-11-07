@@ -252,7 +252,7 @@ export interface SignatureRow {
   emailedAt: Date | null;
   /** The other agreement's name; null for the main one. */
   agreementName: string | null;
-  via: "desk" | "link";
+  via: "desk" | "link" | "app";
 }
 
 /** One membership's signature, with the words and details it was signed for. */
@@ -292,7 +292,7 @@ export async function signatureOf(sql: SqlOrTx, gymId: string, membershipId: str
     facts: agreementFactsSchema.parse(row.facts),
     emailedAt: row.emailed_at,
     agreementName: row.agreement_name,
-    via: row.signed_via === "link" ? "link" : "desk",
+    via: row.signed_via === "link" || row.signed_via === "app" ? row.signed_via : "desk",
   };
 }
 
@@ -314,6 +314,16 @@ export async function membershipRecord(
     WHERE e.gym_id = ${gymId} AND e.id = ${entryId} AND (${opts.former} OR e.former_at IS NULL)`;
   const row = rows[0];
   return row === undefined ? null : { fullName: row.full_name.trim(), dateOfBirth: row.date_of_birth, email: row.email, former: row.former };
+}
+
+/** The record holding a membership, with its address, for the copy of what was signed in the app (18k-iii-a). */
+export async function recordOfMembership(sql: SqlOrTx, gymId: string, membershipId: string): Promise<{ email: string | null } | null> {
+  const rows = await sql<{ email: string | null }[]>`
+    SELECT e.email::text AS email FROM gym_held_memberships h
+    JOIN gym_member_list_entries e ON e.gym_id = h.gym_id AND e.id = h.entry_id AND e.former_at IS NULL
+    WHERE h.gym_id = ${gymId} AND h.id = ${membershipId}`;
+  const row = rows[0];
+  return row === undefined ? null : { email: row.email };
 }
 
 /** The business's details the agreement names. */
@@ -415,6 +425,11 @@ export async function letGoOfAgreementSignatures(tx: TransactionSql, gymId: stri
     UPDATE gym_agreement_signatures SET record_deleted_at = ${at}, merged_into_entry_id = NULL
     WHERE gym_id = ${gymId} AND merged_into_entry_id IS NOT NULL
       AND (${entryId}::uuid IS NULL OR merged_into_entry_id = ${entryId}::uuid)`;
+  // A purchase page keeps the name signed and the details read until its membership is given (18k-iii-a): let go of them.
+  await tx`
+    UPDATE gym_app_payments SET bought = bought || '{"sign":null}'::jsonb
+    WHERE gym_id = ${gymId} AND membership_type_id IS NOT NULL AND entry_id IS NOT NULL
+      AND (${entryId}::uuid IS NULL OR entry_id = ${entryId}::uuid) AND bought->'sign' <> 'null'::jsonb`;
 }
 
 // ── The emailed link to sign (18u-ii-b; migration 0162) ──

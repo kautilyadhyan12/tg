@@ -15,6 +15,7 @@ import { heightMapFor, type HeightMap } from "./heights.adapter.js";
 import { mapSourceFor } from "./mapSource.js";
 import { createOrsRouteProvider, type RouteProvider } from "./ors.adapter.js";
 import { ForeignRunError } from "./repo.js";
+import { RUN_WORDS, changeRunRequestSchema, runDaysQuerySchema, runListQuerySchema } from "@app/shared";
 import { generateRoutesRequestSchema, geoListQuerySchema, runClimbRequestSchema, saveRunRequestSchema, savedRouteCreateSchema } from "./schemas.js";
 import * as service from "./service.js";
 import type { GeoDeps } from "./service.js";
@@ -67,6 +68,14 @@ function parse<S extends z.ZodTypeAny>(
 
 const notFound = (req: FastifyRequest, reply: FastifyReply): FastifyReply =>
   reply.status(404).send({ error: "not_found", message: "Resource not found", requestId: req.id });
+
+/** A run of the person's own that is not there: deleted, on this phone or another (37c-i). */
+const runNotFound = (req: FastifyRequest, reply: FastifyReply): FastifyReply =>
+  reply.status(404).send({ error: "not_found", message: RUN_WORDS.not_found, requestId: req.id });
+
+/** A run sent after the person deleted it: kept nothing; the phone lets it go (37c-i). */
+const runDeleted = (req: FastifyRequest, reply: FastifyReply): FastifyReply =>
+  reply.status(410).send({ error: "run_deleted", message: RUN_WORDS.run_deleted, requestId: req.id });
 
 // Opaque cursor: base64url({at, id}), Zod-checked on the way back in.
 const cursorSchema = z.object({ at: z.string().datetime(), id: z.string().uuid() }).strict();
@@ -183,6 +192,7 @@ export function registerGeoRoutes(
       const key = req.headers["idempotency-key"];
       if (typeof key === "string" && UUID.test(key)) {
         const already = await service.savedRunIfAny(readDeps, authedUserId(req), key);
+        if (already === "removed") return runDeleted(req, reply);
         if (already !== null) return await reply.status(200).send({ status: "duplicate", run: already });
       }
       const input = parse(saveRunRequestSchema, req.body, req, reply);
@@ -200,6 +210,7 @@ export function registerGeoRoutes(
         return await reply.status(saved.status === "created" ? 201 : 200).send(saved);
       } catch (err) {
         if (err instanceof ForeignRunError) return notFound(req, reply);
+        if (err instanceof service.RemovedRunError) return runDeleted(req, reply);
         throw err;
       }
     },
@@ -234,22 +245,56 @@ export function registerGeoRoutes(
   // ── runs (read) ────────────────────────────────────────────────────────────
 
   app.get("/v1/geo/runs", { preHandler: [app.authenticate] }, async (req, reply) => {
-    const q = parse(geoListQuerySchema, req.query, req, reply);
+    const q = parse(runListQuerySchema, req.query, req, reply);
     if (q === null) return;
     const cursor = cursorDecode(q.cursor);
     if (q.cursor !== undefined && cursor === null) {
       return reply.status(400).send({ error: "validation_error", message: "cursor: invalid", requestId: req.id });
     }
-    const page = await service.listRuns(readDeps, authedUserId(req), q.limit, cursor);
+    const page = await service.listRuns(readDeps, authedUserId(req), q.limit, cursor, q.upTo ?? null);
     return reply.send({
       items: page.items,
       nextCursor: page.next === null ? null : cursorEncode({ at: page.next.startedAt, id: page.next.id }),
+      months: page.months,
+      total: page.total,
     });
   });
 
+  // ── Your runs (ROADMAP 37c-i): the calendar's month, a run changed or deleted ─────────────────
+  app.get("/v1/geo/runs/days", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const q = parse(runDaysQuerySchema, req.query, req, reply);
+    if (q === null) return;
+    return reply.send(await service.runCalendar(readDeps, authedUserId(req), q.month));
+  });
+
   app.get<{ Params: { id: string } }>("/v1/geo/runs/:id", { preHandler: [app.authenticate] }, async (req, reply) => {
-    if (!UUID.test(req.params.id)) return notFound(req, reply);
+    if (!UUID.test(req.params.id)) return runNotFound(req, reply);
     const run = await service.getRun(readDeps, authedUserId(req), req.params.id);
-    return run === null ? notFound(req, reply) : reply.send({ run });
+    return run === null ? runNotFound(req, reply) : reply.send({ run });
+  });
+
+  // Thirty changes or deletes a minute for a person, wherever they are (never by address: a gym's
+  // members share one).
+  const changeLimit = createDualRateLimit({
+    name: "geo_run_change",
+    max: 30,
+    ipMax: null,
+    windowMs: 60 * 1000,
+    identifier: (req) => req.authUser?.id ?? null,
+    redis: deps.redis,
+  });
+
+  app.patch<{ Params: { id: string } }>("/v1/geo/runs/:id", { preHandler: [app.authenticate, changeLimit] }, async (req, reply) => {
+    if (!UUID.test(req.params.id)) return runNotFound(req, reply);
+    const input = parse(changeRunRequestSchema, req.body, req, reply);
+    if (input === null) return;
+    const run = await service.changeRun(readDeps, authedUserId(req), req.params.id, input);
+    return run === null ? runNotFound(req, reply) : reply.send({ run });
+  });
+
+  app.delete<{ Params: { id: string } }>("/v1/geo/runs/:id", { preHandler: [app.authenticate, changeLimit] }, async (req, reply) => {
+    if (!UUID.test(req.params.id)) return runNotFound(req, reply);
+    const deleted = await service.deleteRun(readDeps, authedUserId(req), req.params.id);
+    return deleted ? reply.status(204).send() : runNotFound(req, reply);
   });
 }

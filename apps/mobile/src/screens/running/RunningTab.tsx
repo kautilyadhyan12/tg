@@ -1,5 +1,6 @@
-// The Workout tab's Running page (ROADMAP Stage 5 item 37a): the GPS light, the last run, Start,
-// Auto-pause, the voice (37a-ii) and the units. The run itself opens over the app (RunLayer).
+// The Workout tab's Running page (ROADMAP Stage 5 item 37a): the GPS light, Your runs (37c-i: the last
+// run, and See all), Start, Auto-pause, the voice (37a-ii) and the units. The run itself opens over the
+// app (RunLayer).
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { AppState, Linking, Pressable, ScrollView, StyleSheet, Switch, View } from "react-native";
 import * as Location from "expo-location";
@@ -16,10 +17,13 @@ import { fonts, Txt } from "../../look/Txt";
 import { useRead } from "../dashboard/useRead";
 import { SettingsPage } from "../Settings";
 import { autoPauseChoice, chooseAutoPause, chooseMapColours, chooseVoice, mapColoursChoice, readRunChoices, subscribeRun, voiceChoice } from "./recorder";
+import { RefusedRuns } from "./RefusedRuns";
 import { RUN_BAR_ROOM, gpsLight, openAppSettings, START_PROBLEM_WORDS, useRunLayer, type StartProblem } from "./RunLayer";
 import { useRunOutbox } from "./RunOutbox";
+import { RunPage } from "./RunPage";
+import { RunRow } from "./RunRow";
+import { RunsPage } from "./RunsPage";
 import { runVoiceNative, speakState, type SpeakState } from "./runVoiceNative";
-import { clock, distance, unitWord } from "./runWords";
 
 /** The map's colours (37b-i): by the sun where the person is, as Google Maps and Waze switch, or fixed. */
 export const MAP_COLOUR_CHOICES: readonly { value: MapColours; label: string; desc?: string }[] = [
@@ -27,8 +31,6 @@ export const MAP_COLOUR_CHOICES: readonly { value: MapColours; label: string; de
   { value: "light", label: "Light" },
   { value: "dark", label: "Dark" },
 ];
-
-const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
 
 /** The GPS light before a run: only while the page is on screen and the person already allowed it. */
 function useGpsBefore(watching: boolean, asked: number): ReturnType<typeof gpsLight> | null {
@@ -83,7 +85,7 @@ export function RunningTab({ units, parts }: { units: Units; parts: ReactNode })
   }, []);
   const focused = useIsFocused();
   const layer = useRunLayer();
-  const { view, outbox } = useRunOutbox();
+  const { view } = useRunOutbox();
   const autoPause = useSyncExternalStore(subscribeRun, autoPauseChoice);
   const voiceOn = useSyncExternalStore(subscribeRun, voiceChoice);
   const mapColours = useSyncExternalStore(subscribeRun, mapColoursChoice);
@@ -96,15 +98,23 @@ export function RunningTab({ units, parts }: { units: Units; parts: ReactNode })
   const noVoiceYet = runVoiceNative === null;
   const [problem, setProblem] = useState<StartProblem | null>(null);
   const [settings, setSettings] = useState(false);
-  const [removing, setRemoving] = useState<{ runId: string; name: string } | null>(null);
+  const [runsOpen, setRunsOpen] = useState(false);
+  const [openRun, setOpenRun] = useState<string | null>(null);
+  const [changed, setChanged] = useState(0);
+  // A run deleted from its page opened here, said where its box was (37c-i, round one).
+  const [deleted, setDeleted] = useState<string | null>(null);
   const going = layer.run !== null;
   // A run going on shows its own Auto-pause, and the switch changes it at once (Kd, 37a's click-through).
   const shownAuto = layer.run !== null && layer.run.phase !== "finished" ? layer.run.autoPause : autoPause;
   const [asked, setAsked] = useState(0);
   const gps = useGpsBefore(focused && !going, asked);
-  const last = useRead("/v1/geo/runs?limit=1", runPageSchema, view.sent);
+  const last = useRead("/v1/geo/runs?limit=1", runPageSchema, view.sent + changed);
   const lastRun = last.read.kind === "ok" ? (last.read.data.items[0] ?? null) : null;
 
+  // A run just finished takes the place of what was said of the one deleted before it.
+  useEffect(() => {
+    if (layer.done !== null) setDeleted(null);
+  }, [layer.done]);
   const saidUnderStart = problem !== null || layer.done !== null || view.refused.length > 0;
   useEffect(() => {
     if (saidUnderStart) showEnd();
@@ -143,10 +153,35 @@ export function RunningTab({ units, parts }: { units: Units; parts: ReactNode })
               <Txt kind="small">{gps.word === "GPS" ? "GPS ready" : gps.word}</Txt>
             </View>
           )}
-          {lastRun === null ? null : (
-            <Txt kind="small" colour="textSoft">
-              {`Last run · ${DAYS[new Date(lastRun.startedAt).getDay()] ?? ""} · ${distance(lastRun.distanceM, units)} ${unitWord(units)} in ${clock(lastRun.durationS)}`}
+          {deleted === null ? null : (
+            <Txt kind="small" colour="goodText">
+              {deleted}
             </Txt>
+          )}
+          {lastRun === null ? null : (
+            <View style={styles.yours} testID="your-runs">
+              <View style={styles.yoursHead}>
+                <Txt kind="h3">Your runs</Txt>
+                <Button
+                  kind="link"
+                  label="See all"
+                  say="See all your runs"
+                  onPress={() => {
+                    setDeleted(null);
+                    setRunsOpen(true);
+                  }}
+                />
+              </View>
+              <RunRow
+                run={lastRun}
+                units={units}
+                line={false}
+                onOpen={(id) => {
+                  setDeleted(null);
+                  setOpenRun(id);
+                }}
+              />
+            </View>
           )}
           <View style={styles.rows}>
             <View style={styles.row}>
@@ -254,61 +289,7 @@ export function RunningTab({ units, parts }: { units: Units; parts: ReactNode })
               {layer.done.waiting ? `${layer.done.name} is saved on this phone. It will be sent when you're online.` : `${layer.done.name} is saved.`}
             </Txt>
           )}
-          {view.refused.map((r) => (
-            <View key={r.runId} style={styles.problem}>
-              <Txt kind="small" colour="badText">
-                {`${r.name}: ${r.message}`}
-              </Txt>
-              <View style={styles.choices}>
-                {r.run === undefined ? null : (
-                  <Button
-                    kind="link"
-                    label="Try again"
-                    say={`Send ${r.name} again`}
-                    onPress={() => {
-                      void outbox?.retryRefused(r.runId).then(() => outbox.send());
-                    }}
-                  />
-                )}
-                <Button
-                  kind="dangerLink"
-                  label="Remove"
-                  say={`Remove ${r.name}`}
-                  onPress={() => {
-                    setRemoving({ runId: r.runId, name: r.name });
-                  }}
-                />
-              </View>
-            </View>
-          ))}
-          <Sheet
-            open={removing !== null}
-            title="Remove this run?"
-            onClose={() => {
-              setRemoving(null);
-            }}
-          >
-            <Txt kind="body" colour="textSoft">
-              {`${removing?.name ?? "This run"} will be deleted from this phone. It was never saved.`}
-            </Txt>
-            <Button
-              kind="danger"
-              label="Remove run"
-              wide
-              onPress={() => {
-                if (removing !== null) outbox?.removeRefused(removing.runId);
-                setRemoving(null);
-              }}
-            />
-            <Button
-              kind="link"
-              label="Keep it"
-              style={styles.middle}
-              onPress={() => {
-                setRemoving(null);
-              }}
-            />
-          </Sheet>
+          <RefusedRuns />
           <Sheet
             open={pickingColours}
             title="Map colours"
@@ -330,6 +311,31 @@ export function RunningTab({ units, parts }: { units: Units; parts: ReactNode })
             open={settings}
             onClose={() => {
               setSettings(false);
+            }}
+          />
+          <RunsPage
+            open={runsOpen}
+            units={units}
+            onClose={() => {
+              setRunsOpen(false);
+              setChanged((n) => n + 1);
+            }}
+            onStart={() => {
+              setRunsOpen(false);
+            }}
+          />
+          <RunPage
+            runId={openRun}
+            units={units}
+            onClose={() => {
+              setOpenRun(null);
+            }}
+            onChanged={() => {
+              setChanged((n) => n + 1);
+            }}
+            onDeleted={(gone) => {
+              setDeleted(`${gone.name} was deleted.`);
+              setChanged((n) => n + 1);
             }}
           />
         </View>
@@ -425,4 +431,6 @@ const styles = StyleSheet.create({
   rows: { borderRadius: sizes.boxRadius, backgroundColor: colours.box, borderWidth: 1, borderColor: colours.line },
   row: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingVertical: 12, minHeight: 64 },
   rowLine: { borderTopWidth: 1, borderTopColor: colours.line },
+  yours: { borderRadius: sizes.boxRadius, backgroundColor: colours.box, borderWidth: 1, borderColor: colours.line, paddingHorizontal: 16, paddingTop: 14, paddingBottom: 4 },
+  yoursHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
 });

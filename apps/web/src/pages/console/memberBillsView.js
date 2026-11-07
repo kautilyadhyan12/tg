@@ -18,8 +18,11 @@ import {
   MEMBER_PAYMENT_METHOD_WORDS,
   APP_PAYMENT_STAFF_WORDS,
   APP_PAYMENT_FEE_STAFF_WORDS,
+  appBuyCheckLine,
+  appBuyingLine,
   appCheckLine,
   appPayingLine,
+  APP_PURCHASE_STAFF_WORDS,
   paymentMethodsByHand,
   PAYMENT_VOID_REASONS,
   PAYMENT_VOID_REASON_WORDS,
@@ -714,6 +717,26 @@ export function appCheckNotice(m) {
   const check = m?.billing?.appCheck ?? null;
   return check === null ? null : appCheckLine(check, check.amountMinor === null ? null : formatMinor(check.amountMinor, m.currency), dayWords(check.on));
 }
+
+// ── A member buying in the app (18k-iii-a) ──
+
+/** A member buying a line in the app for this record now: who, what, and when the page closes; null for none. */
+export function appBuyingNotice(shown, timezone) {
+  const open = shown?.appBuying ?? null;
+  return open === null ? null : { id: open.id, line: appBuyingLine(open.payerName, open.typeName, closesAtWords(open.closesAt, timezone)) };
+}
+
+/** Purchases in the app that gave nothing though Square may have taken money: what to check, each with its id. */
+export function appBuyCheckNotices(shown) {
+  return (shown?.appBuyChecks ?? []).map((c) => ({
+    id: c.id,
+    line: appBuyCheckLine(c, c.amountMinor === null ? null : formatMinor(c.amountMinor, c.currency), dayWords(c.on)),
+  }));
+}
+
+/** Mark as checked, and what it says once done. */
+export const APP_BUY_CHECKED_BUTTON = 'Mark as checked';
+export const APP_BUY_CHECKED_WORDS = APP_PURCHASE_STAFF_WORDS.checked;
 
 /** What Close payment page says when done, in the place it was pressed. */
 export const APP_CLOSE_WORDS = {

@@ -12,6 +12,7 @@
 // caller's: it is the gym's country's own, read here when a type is made.
 import type { Sql } from "postgres";
 import {
+  APP_PURCHASE_STAFF_WORDS,
   REGISTER_WORDS,
   gymMembershipTypesResponseSchema,
   memberCurrencyForCountry,
@@ -74,6 +75,8 @@ function throwOnFailure(outcome: repo.MembershipWriteOutcome): void {
       return;
     case "raise_not_allowed":
       throw new OrgsError(409, "price_raise_not_allowed", "Members can only be moved to a higher price of a repeating membership.");
+    case "being_bought":
+      throw new OrgsError(409, "type_being_bought", APP_PURCHASE_STAFF_WORDS.type_buying);
     case "not_found":
       throw new OrgsError(404, "membership_type_not_found", NOT_FOUND_MESSAGE);
     case "too_many":

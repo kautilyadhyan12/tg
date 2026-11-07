@@ -13,6 +13,7 @@
 // chiton running poster", cut above its carved words and its numbers.
 // Invite a friend (20a, 2026-11-06): `highfive` is Kd's poster "High five across the bridge", cut above its words and
 // logo, its sky made the page's black and its people warm black-and-white (Kd: "too much red … match my theme").
+// Your runs (37c-i, 2026-11-07): `runners` is his "Runners in timeless monochrome", cut to its two runners.
 import anatomy from "../../assets/pictures/anatomy.webp";
 import balance from "../../assets/pictures/balance.webp";
 import benchpress from "../../assets/pictures/benchpress.webp";
@@ -53,6 +54,7 @@ import recommended from "../../assets/pictures/recommended.webp";
 import rope from "../../assets/pictures/rope.webp";
 import ropping from "../../assets/pictures/ropping.webp";
 import runner from "../../assets/pictures/runner.webp";
+import runners from "../../assets/pictures/runners.webp";
 import running from "../../assets/pictures/running.webp";
 import setting from "../../assets/pictures/setting.webp";
 import setup from "../../assets/pictures/setup.webp";
@@ -108,6 +110,7 @@ export const pictures = {
   rope,
   ropping,
   runner,
+  runners,
   running,
   setting,
   setup,

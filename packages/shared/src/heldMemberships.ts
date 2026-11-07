@@ -61,6 +61,7 @@ import {
 } from "./memberships.js";
 import { confirmPtSessionsField } from "./ptSessionsEnding.js";
 import { MEMBERSHIP_PAYMENTS, gymDiscountSchema } from "./discounts.js";
+import { appPurchaseCheckSchema, appPurchaseOpenSchema } from "./appPurchaseStaff.js";
 import { friendGiftSchema } from "./friendGift.js";
 import { GIFT_DAYS_MAX, memberGiftSchema } from "./memberGift.js";
 import { memberBillingSchema, memberPaymentByHandSchema } from "./memberBills.js";
@@ -1284,6 +1285,10 @@ export const heldMembershipsResponseSchema = z
     /** Their gift off products waiting at Sell, said beside the one above (20e-ii-b-ii-b,
      *  round one L3): Add membership never fills it in. Null otherwise. */
     memberGiftAtSell: memberGiftSchema.nullable().default(null),
+    /** A member buying a line in the app for this record right now (18k-iii-a), for a reader who takes payments. */
+    appBuying: appPurchaseOpenSchema.nullable().default(null),
+    /** Purchases in the app that gave nothing though Square may have taken money, until staff mark them checked. */
+    appBuyChecks: z.array(appPurchaseCheckSchema).default([]),
     /** Whether the gym's prices already hold the tax, or it is added on top (18b-iii). */
     taxIncluded: z.boolean(),
     /** The day of the month the gym bills everyone on (18y); null where each is billed from its start. */

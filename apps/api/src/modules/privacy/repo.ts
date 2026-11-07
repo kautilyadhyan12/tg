@@ -78,6 +78,7 @@ export async function deleteUserOwnedRows(tx: TransactionSql, userId: string): P
   await tx`DELETE FROM user_dishware WHERE user_id = ${userId}`;
   await tx`DELETE FROM member_label_foods WHERE user_id = ${userId}`;
   await tx`DELETE FROM runs WHERE user_id = ${userId}`;
+  await tx`DELETE FROM run_removed_ids WHERE user_id = ${userId}`;
   await tx`DELETE FROM saved_routes WHERE user_id = ${userId}`;
   await tx`DELETE FROM run_schedules WHERE user_id = ${userId}`;
   await tx`DELETE FROM body_measurements WHERE user_id = ${userId}`;

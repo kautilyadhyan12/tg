@@ -97,6 +97,19 @@ describe("the run outbox", () => {
     expect(readRunFile(m.file.text ?? "").refused).toEqual([]);
   });
 
+  it("lets go of a run the person deleted while it waited (37c-i): never kept, never told as refused, lists read again", async () => {
+    const m = memory();
+    const answers: RunSendResult[] = [{ kind: "deleted" }, { kind: "done", run: saved(run(2)) }];
+    const outbox = createRunOutbox(m.store, () => Promise.resolve(answers.shift() ?? { kind: "later" }));
+    await outbox.start();
+    await outbox.add(run(1));
+    await outbox.add(run(2));
+    await outbox.send();
+    expect(outbox.view()).toMatchObject({ waiting: [], refused: [], sent: 2 });
+    expect(outbox.view().saved.map((r) => r.id)).toEqual([run(2).runId]);
+    expect(readRunFile(m.file.text ?? "")).toEqual({ waiting: [], refused: [] });
+  });
+
   it("reads a file it cannot read as holding nothing to send, and a bad run in it is left out", () => {
     expect(readRunFile("not json")).toEqual({ waiting: [], refused: [] });
     const text = JSON.stringify({ version: 1, waiting: [run(1), { runId: "nope" }], refused: [] });

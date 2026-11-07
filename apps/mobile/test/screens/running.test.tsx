@@ -87,8 +87,11 @@ function runServer(user = RAVI, map: MapSource = OPENFREEMAP) {
     "/v1/users/me": () => ({ status: 200, body: profile(true, user) }),
     [PATH]: (body): Reply => {
       if (body === undefined) {
-        const items = saved.map((r) => ({ id: r.runId, startedAt: r.startedAt, durationS: 600, distanceM: 1800, routeName: null, kcalPoint: 120, source: "mobile" }));
-        return { status: 200, body: { items: items.slice(-1), nextCursor: null } };
+        const items = saved.map((r) => ({
+          id: r.runId, startedAt: r.startedAt, durationS: 600, distanceM: 1800, routeName: null, kcalPoint: 120, source: "mobile",
+          name: r.name, day: r.startedAt.slice(0, 10), elapsedS: 600, climbM: null, shape: null,
+        }));
+        return { status: 200, body: { items: items.slice(-1), nextCursor: null, months: [], total: { runs: items.length, distanceM: 1800 * items.length } } };
       }
       const run = saveRunRequestSchema.parse(body);
       if (!saved.some((r) => r.runId === run.runId)) saved.push(run);

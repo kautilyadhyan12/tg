@@ -29,6 +29,7 @@ import { changeEmailSenderFor, type ChangeEmailSender } from "./modules/users/ch
 import { OnboardingIncompleteError, UsersError } from "./modules/users/service.js";
 import { createDevCoOwnerEmailSender, createResendCoOwnerEmailSender, type CoOwnerEmailSender } from "./modules/orgs/coOwners/email.js";
 import { createDevAgreementEmailSender, createResendAgreementEmailSender, type AgreementEmailSender } from "./modules/orgs/agreement/email.js";
+import { emailBoughtCopy } from "./modules/orgs/agreement/service.js";
 import { registerUserRoutes } from "./modules/users/routes.js";
 import { registerPrivacyRoutes } from "./modules/privacy/routes.js";
 import { registerPushRoutes } from "./modules/push/routes.js";
@@ -401,6 +402,8 @@ export async function buildApp(
   const paddle = paddleSettings(config, overrides.paddleApi);
   const razorpay = razorpaySettings(config, overrides.razorpayApi);
   const billing = { sql, redis, paddle, razorpay, log: app.log, now: () => new Date() };
+  const agreementEmail =
+    overrides.agreementEmailSender ?? (transport !== null ? createResendAgreementEmailSender(transport, app.log) : createDevAgreementEmailSender(app.log, config));
   registerOrgRoutes(
     app,
     {
@@ -416,9 +419,7 @@ export async function buildApp(
       coOwnerEmail:
         overrides.coOwnerEmailSender ??
         (transport !== null ? createResendCoOwnerEmailSender(transport, app.log) : createDevCoOwnerEmailSender(app.log, config)),
-      agreementEmail:
-        overrides.agreementEmailSender ??
-        (transport !== null ? createResendAgreementEmailSender(transport, app.log) : createDevAgreementEmailSender(app.log, config)),
+      agreementEmail,
       webOrigin: config.WEB_ORIGIN,
       news,
       joinCodes: config.JOIN_CODES,
@@ -438,6 +439,9 @@ export async function buildApp(
     news,
     square: squareSettings(config, overrides.squareApi),
     now: overrides.orgs?.now ?? (() => new Date()),
+    // The copy of an agreement signed as a line is bought in the app (18k-iii-a).
+    agreementCopy: (gymId, membershipId) =>
+      emailBoughtCopy({ sql, now: overrides.orgs?.now ?? (() => new Date()), email: agreementEmail, addressKey: invites?.hmacKey ?? null, log: app.log }, gymId, membershipId),
   });
   // The unsubscribe link in every invitation: public, and not under /v1/orgs.
   registerUnsubscribeRoutes(app, { sql, redis, settings: invites });

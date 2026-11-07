@@ -86,6 +86,7 @@ import { recordStopped, unsignedStopsRecord } from "../classes/bookingStops.js";
 import { freezeFeeOf } from "./freezeFees.js";
 import { chargesOfBills } from "../payments/cardChargesRepo.js";
 import { checksOnMemberships, openOnMemberships, type AppCheckRow, type OpenPage } from "../payments/appPaymentsRepo.js";
+import { openPurchaseOf, purchaseChecksOf } from "../payments/appPurchasesRepo.js";
 import { openPressesOf } from "../payments/cardRefundsRepo.js";
 import { chargeStopsOfBills } from "../payments/cardChargesRepo.js";
 import { chargebacksOfPayments } from "../payments/chargebacksRepo.js";
@@ -434,6 +435,8 @@ async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: 
   const heldIds = [...list.inUse, ...list.over].map((row) => row.id);
   const appOpen = canBill ? await openOnMemberships(deps.sql, gymId, heldIds) : new Map<string, OpenPage>();
   const appChecks = canBill ? await checksOnMemberships(deps.sql, gymId, heldIds) : { bills: new Map<string, AppCheckRow>(), fees: new Map<string, AppCheckRow>() };
+  // A member buying a line in the app for this record (18k-iii-a), and purchases that gave nothing, for who takes payments.
+  const [appBuying, appBuyChecks] = canBill ? await Promise.all([openPurchaseOf(deps.sql, gymId, entryId), purchaseChecksOf(deps.sql, gymId, entryId)]) : [null, []];
   const ctx = { today, past: list.past, overdueAfterDays: list.overdueAfterDays, gifts, charges, presses, chargebacks, chargeStops, appOpen, appChecks };
   // The page reads a membership as the next write will find it: with its count moved
   // over the periods nobody was asked for (`countAfterGap`), which `settle` then writes.
@@ -567,6 +570,8 @@ async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: 
     friendGift: list.past ? null : friendGift,
     memberGift,
     memberGiftAtSell,
+    appBuying,
+    appBuyChecks,
   });
 }
 

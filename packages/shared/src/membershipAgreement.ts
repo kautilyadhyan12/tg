@@ -29,7 +29,7 @@ export const agreementFactSchema = z
 export type AgreementFact = z.infer<typeof agreementFactSchema>;
 export const agreementFactsSchema = z.array(agreementFactSchema).min(1).max(AGREEMENT_FACTS_MAX);
 
-const factsKeySchema = z.string().regex(/^[0-9a-f]{64}$/);
+export const factsKeySchema = z.string().regex(/^[0-9a-f]{64}$/);
 
 // ── The business's side (Settings, `org.manage`) ──
 
@@ -110,8 +110,8 @@ export const agreementSignedSchema = z
     emailedAt: z.string().nullable(),
     /** The name of the other agreement it was signed with (18u-ii-a); null for the main one. */
     agreementName: z.string().nullable().default(null),
-    /** Signed at the desk, or by the person from the emailed link (18u-ii-b). */
-    via: z.enum(["desk", "link"]).default("desk"),
+    /** Signed at the desk, by the person from the emailed link (18u-ii-b), or as they bought it in the app (18k-iii-a). */
+    via: z.enum(["desk", "link", "app"]).default("desk"),
   })
   .strict();
 export type AgreementSigned = z.infer<typeof agreementSignedSchema>;
