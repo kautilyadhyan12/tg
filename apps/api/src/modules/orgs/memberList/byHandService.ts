@@ -18,7 +18,6 @@ import {
   MEMBER_LIST_EXTRA_FIELD_PREFIX,
   MEMBER_LIST_FIELD_LABELS,
   MEMBER_LIST_MAX_EDITED_FIELDS,
-  MEMBER_LIST_MAX_NAME_CHARS,
   MEMBER_PAYER_WORDS,
   type MemberListEntryDeleted,
   type MemberListEntryDetail,
@@ -59,14 +58,13 @@ import { appViewsOf } from "./appViews.js";
 import { deskSignaturesOf, moveDeskSignatures, signaturesOf, waiverInUse, type SignatureRow } from "../waiver/repo.js";
 import { appPeopleIn, removeRecordIn } from "./oneRemove.js";
 import { currentRecordOf, pastRecordOf } from "./whose.js";
-import { applyTyped, changedFields, EMPTY_VALUES, mergeValues, type EntryValues, type TypedContext } from "./byHand.js";
-import { tidyCell } from "./cells.js";
-import { cut, identityKey } from "./fields.js";
-import { withoutCardNumbers } from "./neverKeep.js";
+import { applyTyped, EMPTY_VALUES, mergeValues, type EntryValues, type TypedContext } from "./byHand.js";
+import { identityKey } from "./fields.js";
 import { nameKey } from "./samePerson.js";
 import { readCountry } from "./phone.js";
 import { moveNotesAndTags } from "./notesRepo.js";
 import * as repo from "./repo.js";
+import { appMemberValues, currentContacts, holderOf, linkAppMember, listVersion, placeOnList } from "./placeOnList.js";
 import { reviewAfterChecked, reviewAfterEdit, reviewAfterMerge, sameReview } from "./review.js";
 import { decodeEntryCursor, encodeEntryCursor } from "./cursor.js";
 import { appOrThrow, type MemberListDeps } from "./service.js";
@@ -249,12 +247,6 @@ async function leftOff(
   return userIds.filter((userId) => !listed.has(userId)).length;
 }
 
-/** The contacts of every record that is current, before or after a change. */
-const currentContacts = (...records: { values: EntryValues; current: boolean }[]) =>
-  records.filter((record) => record.current).map((record) => ({ email: record.values.email, phone: record.values.phone }));
-
-const listVersion = async (tx: TransactionSql, gymId: string): Promise<number> => (await repo.listState(tx, gymId))?.version ?? 0;
-
 export async function readEntry(
   deps: MemberListDeps,
   userId: string,
@@ -327,14 +319,6 @@ async function finish(deps: MemberListDeps, gymId: string, done: Done): Promise<
   return { kind: "written", status: done.outcome === "added" ? 201 : 200, written };
 }
 
-/** These values with the gym's next member number where they have none (5e-i), under the
- *  gym's lock. A next number too long to store leaves them without one. */
-async function numbered(tx: TransactionSql, gymId: string, values: EntryValues): Promise<EntryValues> {
-  if (values.memberNumber !== null) return values;
-  const given = await repo.giveMemberNumber(tx, gymId);
-  return given === null ? values : { ...values, memberNumber: given };
-}
-
 /** Add member or Change with a member number another record holds: refused (5e-i). */
 interface NumberTaken {
   taken: { entryId: string; fullName: string; former: boolean; memberNumber: string };
@@ -344,55 +328,6 @@ async function numberTaken(tx: TransactionSql, gymId: string, memberNumber: stri
   if (memberNumber === null) return null;
   const holder = await repo.memberNumberHolder(tx, gymId, memberNumber, exceptId);
   return holder === null ? null : { taken: { entryId: holder.id, fullName: holder.fullName, former: holder.former, memberNumber } };
-}
-
-/** The record that is this person: the one holding these very details, or, with no number
- *  typed, the one holding them with the number the app gave it (5e-i), so somebody typed
- *  again is found as they were before records had numbers. */
-async function holderOf(tx: TransactionSql, gymId: string, values: EntryValues): Promise<{ id: string; former: boolean } | null> {
-  const exact = await repo.entryHolding(tx, gymId, identityKey(values));
-  if (exact !== null || values.memberNumber !== null) return exact;
-  return await repo.entryWithDetails(tx, gymId, values, null);
-}
-
-/** Put a person on the list whose key nobody holds, or bring back the FORMER record
- *  that holds it. Shared by "Add member" and "put an app member on the list". */
-async function placeOnList(
-  tx: TransactionSql,
-  input: { gymId: string; userId: string; at: Date; values: EntryValues; source: "typed" | "member"; revive: (stored: repo.StoredEntry) => EntryValues },
-): Promise<Done> {
-  const { gymId, values, at } = input;
-  const holder = await holderOf(tx, gymId, values);
-  if (holder !== null && !holder.former) return { outcome: "already_on_list", entryId: holder.id, version: await listVersion(tx, gymId) };
-
-  let entryId: string;
-  let written: EntryValues;
-  if (holder === null) {
-    // Somebody new with no number typed is given the gym's next one (5e-i). The record is
-    // found by the details staff typed, above; its key holds the number it is given.
-    written = await numbered(tx, gymId, values);
-    entryId = await repo.insertEntry(tx, gymId, written, identityKey(written), input.source);
-  } else {
-    const stored = await repo.entryFor(tx, gymId, holder.id);
-    if (stored === null) throw new Error(`member-list entry ${holder.id} vanished under the gym's lock`);
-    // A past member coming back keeps their number, and is given one if they had none.
-    written = await numbered(tx, gymId, input.revive(stored));
-    entryId = holder.id;
-    // Whatever the new values change, what an import found wrong there goes with it.
-    const review = reviewAfterEdit(stored.review, changedFields(stored.values, written));
-    await repo.writeEntry(tx, gymId, entryId, { values: written, identityKey: identityKey(written), handEdited: stored.handEdited, review, formerAt: null });
-  }
-  await repo.stampListedByContact(tx, gymId, currentContacts({ values: written, current: true }), [entryId], at);
-  const version = await repo.bumpListVersion(tx, gymId);
-  await insertAudit(tx, {
-    actorUserId: input.userId,
-    gymId,
-    action: "org.member_list_entry_added",
-    targetType: "member_list_entry",
-    targetId: entryId,
-    meta: { source: input.source, ...(holder === null ? {} : { revived: "true" }) },
-  });
-  return { outcome: holder === null ? "added" : "revived", entryId, version };
 }
 
 /** "Add member" (§11.6), and "Add and invite" (§9.12) when `input.invite` is set: both
@@ -1037,15 +972,12 @@ export async function putMemberOnList(
     if (self !== undefined && self.joinedEntryId !== null) {
       return await setOnListIn(tx, deps, { userId, gymId, entryId: self.joinedEntryId, on: true, at });
     }
-    const values: EntryValues = {
-      ...EMPTY_VALUES,
-      fullName: cut(withoutCardNumbers(tidyCell(contact.displayName)).text, MEMBER_LIST_MAX_NAME_CHARS),
-      email: contact.email,
-      phone: contact.phone,
-    };
     // A former record with these very details is the same person coming back; it
-    // keeps what it holds.
-    return await placeOnList(tx, { gymId, userId, at, values, source: "member", revive: (stored) => stored.values });
+    // keeps what it holds. Made or found from their own details, it is theirs in the app too (18k-iii-b).
+    const placed = await placeOnList(tx, { gymId, userId, at, values: appMemberValues(contact), source: "member", revive: (stored) => stored.values });
+    // Never by a phone alone: a record found with no proved email of theirs on it may be somebody else's.
+    if (placed.outcome === "added" || contact.email !== null) await linkAppMember(tx, gymId, memberUserId, placed.entryId);
+    return placed;
   });
   return await finish(deps, gymId, done);
 }

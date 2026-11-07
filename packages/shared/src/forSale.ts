@@ -87,7 +87,7 @@ export const forSaleSignerSchema = z.enum(["person", "guardian", "either"]);
 export type ForSaleSigner = z.infer<typeof forSaleSignerSchema>;
 
 /** The member's own list. `record`: whether the reader's account alone holds a record of the gym (`own`), holds none
- *  yet, or shares one. `items` is empty where the gym sells nothing in the app, or cannot take a payment through
+ *  yet (they can buy, and are put on the list once they pay: 18k-iii-b), or shares one (they buy at the front desk). `items` is empty where the gym sells nothing in the app, or cannot take a payment through
  *  Square now. */
 export const forSaleResponseSchema = z
   .object({

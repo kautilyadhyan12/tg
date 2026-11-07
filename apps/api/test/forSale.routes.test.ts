@@ -427,7 +427,7 @@ d("what a gym sells in the app (real Postgres)", () => {
   );
 
   it(
-    "an account with no record of its own reads the list with no member named; a shared record the same",
+    "an account with no record of its own reads the list named as the record buying makes for them will name them (18k-iii-b); a shared record names nobody",
     async () => {
       const owner = await makeUser("r-owner");
       const gymId = await makeGym(owner.cookies, "Record Gym");
@@ -437,7 +437,8 @@ d("what a gym sells in the app (real Postgres)", () => {
       await inApp(gymId, newcomer.id, null);
       const fresh = await forSale(gymId, newcomer.cookies);
       expect(fresh.record).toBe("none");
-      expect(itemNamed(fresh, "Gold").facts.some((f) => f.label === "Member")).toBe(false);
+      const [named] = await sql<{ display_name: string }[]>`SELECT display_name FROM users WHERE id = ${newcomer.id}`;
+      expect(itemNamed(fresh, "Gold").facts.find((f) => f.label === "Member")?.value).toBe(named?.display_name);
       const shared = await addPerson(gymId, owner.cookies, "Sam Shared");
       const one = await makeUser("r-one");
       const two = await makeUser("r-two");

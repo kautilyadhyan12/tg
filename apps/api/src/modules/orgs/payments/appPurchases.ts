@@ -22,9 +22,12 @@ import {
   type AppPaymentCloseResponse,
   type AppPurchase,
   type AppPurchaseRequest,
+  type AppPurchaseBuyer,
   type AppPurchaseResponse,
 } from "@app/shared";
 import { dayInTz } from "../../gamification/streak.js";
+import { appMemberValues } from "../memberList/placeOnList.js";
+import { memberContact } from "../memberList/repo.js";
 import { readerOf } from "../myMembership/repo.js";
 import { payerOf } from "../payers/repo.js";
 import { OrgsError, requirePrivilege } from "../service.js";
@@ -45,14 +48,31 @@ const squareRefused = (): OrgsError => new OrgsError(409, "app_payment_refused",
 
 type Limit = () => Promise<boolean>;
 
-/** The reader's own record: one their account alone holds, that nobody else pays for. 404 for anybody who is not a live
- *  member of the gym. */
-async function ownRecord(deps: PaymentsDeps, gymId: string, userId: string): Promise<{ entryId: string; gymName: string; timezone: string }> {
+const notOwn = (): OrgsError => new OrgsError(409, "app_purchase_not_own", APP_PURCHASE_WORDS.not_own);
+
+/** Who is buying: their own record, one their account alone holds (a past one too, which comes back on the list), that
+ *  nobody else pays for; or, for a member not on the list yet, who they are, to put them on it once they pay (18k-iii-b:
+ *  their app's name and proved email, and the phone they gave). A record two accounts hold is nobody's (17e-ii). 404 for
+ *  anybody who is not a live member of the gym. */
+async function buyerOf(
+  deps: PaymentsDeps,
+  gymId: string,
+  userId: string,
+): Promise<{ entryId: string | null; buyer: AppPurchaseBuyer | null; gymName: string; timezone: string }> {
   const reader = await readerOf(deps.sql, gymId, userId);
   if (reader === null) throw orgNotFound();
-  if (reader.entryId === null || reader.holders !== 1) throw new OrgsError(409, "app_purchase_not_own", APP_PURCHASE_WORDS.not_own);
-  if ((await payerOf(deps.sql, gymId, reader.entryId)) !== null) throw new OrgsError(409, "app_purchase_paid_by_other", APP_PURCHASE_WORDS.paid_by_other);
-  return { entryId: reader.entryId, gymName: reader.gymName, timezone: reader.timezone };
+  const gym = { gymName: reader.gymName, timezone: reader.timezone };
+  if (reader.entryId !== null) {
+    if (reader.holders !== 1) throw new OrgsError(409, "app_purchase_shared", APP_PURCHASE_WORDS.shared);
+    if ((await payerOf(deps.sql, gymId, reader.entryId)) !== null) throw new OrgsError(409, "app_purchase_paid_by_other", APP_PURCHASE_WORDS.paid_by_other);
+    return { entryId: reader.entryId, buyer: null, ...gym };
+  }
+  const contact = await memberContact(deps.sql, gymId, userId);
+  // Only a proved email makes a record certainly theirs.
+  if (contact === null || contact.email === null) throw notOwn();
+  const values = appMemberValues(contact);
+  if (values.fullName === "") throw notOwn();
+  return { entryId: null, buyer: { name: values.fullName, email: contact.email, phone: values.phone }, ...gym };
 }
 
 function viewOf(row: pays.AppPayRow): AppPurchase {
@@ -95,7 +115,9 @@ function refusalOf(outcome: Exclude<buys.PurchasableOutcome, { kind: "ok" }>, gy
     case "open":
       return sameOr(outcome.row, userId, body);
     case "entry_not_found":
-      throw new OrgsError(409, "app_purchase_not_own", APP_PURCHASE_WORDS.not_own);
+      throw notOwn();
+    case "shared":
+      throw new OrgsError(409, "app_purchase_shared", APP_PURCHASE_WORDS.shared);
     case "paid_by_other":
       throw new OrgsError(409, "app_purchase_paid_by_other", APP_PURCHASE_WORDS.paid_by_other);
     case "too_late":
@@ -126,7 +148,7 @@ function refusalOf(outcome: Exclude<buys.PurchasableOutcome, { kind: "ok" }>, gy
 /** Buy: Square's page for the line's first payment, as the list showed it to this reader. The same press sent twice is
  *  one page; a page already open for the same line is given back instead of a second. */
 export async function startPurchase(deps: PaymentsDeps, userId: string, gymId: string, body: AppPurchaseRequest, limit: Limit): Promise<Told<AppPurchaseResponse> | null> {
-  const own = await ownRecord(deps, gymId, userId);
+  const own = await buyerOf(deps, gymId, userId);
   if (!(await limit())) return null;
   const same = await pays.readByKey(deps.sql, gymId, body.requestKey);
   if (same !== null) return { answer: sameOr(same, userId, body), tell: null };
@@ -135,7 +157,9 @@ export async function startPurchase(deps: PaymentsDeps, userId: string, gymId: s
   const now = deps.now();
   const buying: buys.Buying = {
     gymId,
+    userId,
     entryId: own.entryId,
+    buyer: own.buyer,
     typeId: body.typeId,
     amountMinor: body.amountMinor,
     factsKey: body.factsKey,
