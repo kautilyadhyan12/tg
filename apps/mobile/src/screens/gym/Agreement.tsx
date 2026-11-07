@@ -22,11 +22,9 @@ import { Txt } from "../../look/Txt";
 import { useSession } from "../../session/SessionProvider";
 import { NO_ANSWER } from "../SignIn";
 import {
-  AGREEMENT_ASK_TITLE,
   AGREEMENT_PAGE_TITLE,
   SIGN_AGREEMENT_BUTTON,
   UNSIGNED_SIGN_HERE,
-  agreementAskLine,
   agreementDoneTitle,
   agreementNotRead,
   agreementPath,
@@ -55,20 +53,20 @@ export interface AgreementPlace {
   membershipName: string;
 }
 
-/** The ask on the card, above Show my pass. */
-export function AgreementAsk({ gymName, membershipId, membershipName, onOpen }: { gymName: string; membershipId: string; membershipName: string; onOpen: () => void }) {
+/** The ask on the card, above Show my pass: one membership's, or one for several (`testId` names which). */
+export function AgreementAsk({ testId, title, line, onOpen }: { testId: string; title: string; line: string; onOpen: () => void }) {
   return (
     <Pressable
-      testID={`agreement-ask-${membershipId}`}
+      testID={testId}
       accessibilityRole="button"
-      accessibilityLabel={`${AGREEMENT_ASK_TITLE}. ${agreementAskLine(gymName, membershipName)}`}
+      accessibilityLabel={`${title}. ${line}`}
       onPress={onOpen}
       style={({ pressed }) => [styles.ask, pressed ? styles.askPressed : null]}
     >
       <Badge icon="pen" />
       <View style={styles.grow}>
-        <Txt kind="h3">{AGREEMENT_ASK_TITLE}</Txt>
-        <Txt kind="small">{agreementAskLine(gymName, membershipName)}</Txt>
+        <Txt kind="h3">{title}</Txt>
+        <Txt kind="small">{line}</Txt>
       </View>
       <Icon name="go" size={18} colour="orange" />
     </Pressable>

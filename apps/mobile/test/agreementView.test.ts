@@ -1,7 +1,7 @@
 // The Membership agreement page's words (ROADMAP Stage 5 item 20c): what My membership, the copy and the desk say.
 import { describe, expect, it } from "vitest";
 import { MY_AGREEMENT_WORDS, myAgreementResponseSchema } from "@app/shared";
-import { agreementNotRead, copyLine, dayLong, membershipAgreementRow, notInAppLine, termsHeading } from "../src/screens/gym/agreementView";
+import { agreementNotRead, agreementsAskLine, copyLine, dayLong, membershipAgreementRow, notInAppLine, termsHeading } from "../src/screens/gym/agreementView";
 
 const page = (over: Record<string, unknown>) =>
   myAgreementResponseSchema.parse({
@@ -61,6 +61,11 @@ describe("the page's other words", () => {
     expect(notInAppLine(page({ state: "at_desk", why: "paid_by_other" }))).toBe(MY_AGREEMENT_WORDS.paid_by_other);
     expect(notInAppLine(page({ state: "at_desk", why: "minor" }))).toBe(MY_AGREEMENT_WORDS.minor);
     expect(notInAppLine(page({ state: "none" }))).toBe("There is nothing to sign for this membership.");
+  });
+
+  it("the card's one ask for several names the first and the rest", () => {
+    expect(agreementsAskLine("Iron House", ["Gold Monthly", "Day pass"])).toBe("Iron House asks you to sign the agreements for Gold Monthly and Day pass.");
+    expect(agreementsAskLine("Iron House", ["Gold Monthly", "Day pass", "10-class pack"])).toBe("Iron House asks you to sign the agreements for Gold Monthly and 2 more.");
   });
 
   it("names the terms by the agreement's own name where it has one", () => {

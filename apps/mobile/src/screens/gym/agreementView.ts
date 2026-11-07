@@ -10,6 +10,14 @@ export const agreementSignPath = (gymId: string, membershipId: string): string =
 export const AGREEMENT_PAGE_TITLE = "Membership agreement";
 export const AGREEMENT_ASK_TITLE = "Sign your membership agreement";
 export const agreementAskLine = (business: string, membership: string): string => `${business} asks you to sign the agreement for ${membership}.`;
+/** More than one to sign: one ask, which opens My membership, where each has its own Sign. */
+export const AGREEMENTS_ASK_TITLE = "Sign your membership agreements";
+export const agreementsAskLine = (business: string, names: readonly string[]): string => {
+  const [first, ...rest] = names;
+  if (first === undefined) return "";
+  const others = rest.length === 1 ? (rest[0] ?? "") : `${String(rest.length)} more`;
+  return `${business} asks you to sign the agreements for ${first} and ${others}.`;
+};
 
 /** The heading over the business's own words: the agreement's name where it has one. */
 export const termsHeading = (business: string, name: string | null): string => name ?? `${business}’s terms`;

@@ -39,6 +39,7 @@ import { OWN_PASS_AFTER_MS, PASS_PATH, PassSheet } from "./gym/Pass";
 import { UpdatesPage, type UpdatesPlace } from "./gym/Updates";
 import { WaiverAsk, WaiverPage, type WaiverPlace } from "./gym/Waiver";
 import { AgreementAsk, AgreementPage, type AgreementPlace } from "./gym/Agreement";
+import { AGREEMENTS_ASK_TITLE, AGREEMENT_ASK_TITLE, agreementAskLine, agreementsAskLine } from "./gym/agreementView";
 import { makePhonePass, phoneDay } from "./gym/phonePass";
 import { NO_ANSWER } from "./SignIn";
 
@@ -276,17 +277,29 @@ export function GymScreen() {
                 }}
               />
             ) : null}
-            {org.agreementsToSign.map((a) => (
+            {org.agreementsToSign.length === 1 && org.agreementsToSign[0] !== undefined ? (
               <AgreementAsk
-                key={a.membershipId}
-                gymName={org.name}
-                membershipId={a.membershipId}
-                membershipName={a.name}
+                testId={`agreement-ask-${org.agreementsToSign[0].membershipId}`}
+                title={AGREEMENT_ASK_TITLE}
+                line={agreementAskLine(org.name, org.agreementsToSign[0].name)}
                 onOpen={() => {
-                  setAgreementAt({ id: org.id, name: org.name, membershipId: a.membershipId, membershipName: a.name });
+                  const one = org.agreementsToSign[0];
+                  if (one !== undefined) setAgreementAt({ id: org.id, name: org.name, membershipId: one.membershipId, membershipName: one.name });
                 }}
               />
-            ))}
+            ) : org.agreementsToSign.length > 1 ? (
+              <AgreementAsk
+                testId={`agreements-ask-${org.id}`}
+                title={AGREEMENTS_ASK_TITLE}
+                line={agreementsAskLine(
+                  org.name,
+                  org.agreementsToSign.map((a) => a.name),
+                )}
+                onOpen={() => {
+                  setMembershipAt({ id: org.id, name: org.name });
+                }}
+              />
+            ) : null}
             <Txt kind="small">
               {org.orgType === "personal_trainer" ? "Show your pass to your trainer when you arrive." : "Show your pass at the front desk when you arrive."}
             </Txt>
@@ -435,6 +448,8 @@ export function GymScreen() {
         place={membershipAt}
         onClose={() => {
           setMembershipAt(null);
+          // An agreement signed there is what the card says when it closes (20c).
+          void readMine();
         }}
       />
       <InboxPage

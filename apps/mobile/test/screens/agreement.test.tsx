@@ -133,18 +133,19 @@ describe("the worst thing: terms or a price signed that were never shown, or sai
   it("an answer naming another membership or another business is never shown, or signed, under this one", async () => {
     const server = fakeServer({
       "/v1/auth/refresh": ok({ tokens: tokens(2) }),
-      "/v1/orgs/mine": ok({ orgs: [org(IRON, [{ membershipId: M_IRON, name: "Gold Monthly" }, { membershipId: M_PACK, name: "10-class pack" }]), org(LOTUS, [])], formerOrgs: [] }),
-      // Iron House's Gold Monthly answered with its pack's page, and its pack with Lotus Yoga's.
+      "/v1/orgs/mine": ok({ orgs: [org(IRON, [{ membershipId: M_IRON, name: "Gold Monthly" }]), org(LOTUS, [{ membershipId: M_PACK, name: "10-class pack" }])], formerOrgs: [] }),
+      // Iron House's Gold Monthly answered with another membership's page; Lotus Yoga's pack with Iron House's.
       [readPath(IRON, M_IRON)]: ok(toSign(IRON, M_PACK, IRON_TERMS, "£90.00", KEY_C)),
-      [readPath(IRON, M_PACK)]: ok(toSign(LOTUS, M_PACK, LOTUS_TERMS, "£80.00", KEY_B)),
+      [readPath(LOTUS, M_PACK)]: ok(toSign(IRON, M_PACK, IRON_TERMS, "£90.00", KEY_B)),
     });
     await openGym(server.ask);
     for (const id of [M_IRON, M_PACK]) {
       await fireEvent.press(await screen.findByTestId(`agreement-ask-${id}`));
       expect(await screen.findByText("We couldn't load the agreement. Please try again.")).toBeTruthy();
       expect(screen.queryByText("£90.00")).toBeNull();
-      expect(screen.queryByText(LOTUS_TERMS.text)).toBeNull();
+      expect(screen.queryByText(IRON_TERMS.text)).toBeNull();
       expect(screen.queryByLabelText("Sign Iron House's membership agreement")).toBeNull();
+      expect(screen.queryByLabelText("Sign Lotus Yoga's membership agreement")).toBeNull();
       await fireEvent.press(screen.getByLabelText("Close"));
     }
     expect(posts(server.asked)).toEqual([]);
@@ -260,6 +261,26 @@ describe("My membership, Classes and the desk", () => {
     await fireEvent.press(screen.getByLabelText("Sign the agreement for 10-class pack"));
     expect(await screen.findByText("£90.00")).toBeTruthy();
     expect(screen.getByLabelText("Sign Iron House's membership agreement")).toBeTruthy();
+  });
+
+  it("several to sign at one business: one ask, which opens My membership, where each has its own Sign", async () => {
+    const server = fakeServer({
+      "/v1/auth/refresh": ok({ tokens: tokens(2) }),
+      "/v1/orgs/mine": ok({ orgs: [org(IRON, [{ membershipId: M_IRON, name: "Gold Monthly" }, { membershipId: M_PACK, name: "10-class pack" }, { membershipId: M_LOTUS, name: "Day pass" }])], formerOrgs: [] }),
+      "/v1/orgs/1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f/my-membership": ok(
+        myMembership([
+          membership(M_IRON, "Gold Monthly", { state: "to_sign", signedOn: null, signedName: null, view: false }),
+          membership(M_PACK, "10-class pack", { state: "to_sign", signedOn: null, signedName: null, view: false }),
+        ]),
+      ),
+    });
+    await openGym(server.ask);
+    expect(await screen.findByTestId(`agreements-ask-${IRON.id}`)).toBeTruthy();
+    expect(screen.getByText("Iron House asks you to sign the agreements for Gold Monthly and 2 more.")).toBeTruthy();
+    expect(screen.queryByTestId(`agreement-ask-${M_IRON}`)).toBeNull();
+    await fireEvent.press(screen.getByTestId(`agreements-ask-${IRON.id}`));
+    expect(await screen.findByLabelText("Sign the agreement for Gold Monthly")).toBeTruthy();
+    expect(screen.getByLabelText("Sign the agreement for 10-class pack")).toBeTruthy();
   });
 
   it("a membership signed at the front desk says why, and offers no Sign", async () => {
