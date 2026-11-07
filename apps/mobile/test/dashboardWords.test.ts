@@ -123,6 +123,11 @@ const run = (more: Partial<RunSummary>): RunSummary => ({
   routeName: "Evening run",
   kcalPoint: 310,
   source: "mobile",
+  name: "Evening run",
+  day: "2026-10-27",
+  elapsedS: 31 * 60,
+  climbM: null,
+  shape: null,
   ...more,
 });
 
@@ -150,7 +155,9 @@ describe("Recent Activity: everything done lately, whatever kind", () => {
     expect(mealRow(meal({}))).toMatchObject({ name: "Lunch", facts: "Tue 27 Oct · Meal scan", value: "540 kcal" });
     expect(mealRow(meal({ mealName: "Dal and rice", origin: "manual" }))).toMatchObject({ name: "Dal and rice", facts: "Tue 27 Oct · Logged" });
     expect(mealRow(meal({ mealType: null })).name).toBe("Meal");
-    expect(runRow(run({ routeName: null })).name).toBe("Run");
+    // The name the person gave it (37c-i), whatever the old app called its route; miles for somebody on miles.
+    expect(runRow(run({ name: "Canal loop", routeName: "Old name" })).name).toBe("Canal loop");
+    expect(runRow(run({}), "imperial")).toMatchObject({ value: "3.24 mi", runId: run({}).id });
   });
 
   it("what the server does not have is left out, never shown as 0", () => {

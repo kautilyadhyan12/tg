@@ -6,7 +6,6 @@ import { AppState, Linking, Pressable, ScrollView, StyleSheet, TextInput, Vibrat
 import * as Location from "expo-location";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
-  HEIGHT_MAP_CREDITS,
   RUN_MAX_POINTS,
   geodesicMetres,
   runSums,
@@ -45,11 +44,12 @@ import {
   type LiveRun,
 } from "./recorder";
 import { useMapSource } from "./mapSource";
-import { climbWords, useRunClimb } from "./runClimb";
-import { PaceWave, RouteLine } from "./RunDrawings";
+import { useRunClimb } from "./runClimb";
+import { RouteLine } from "./RunDrawings";
+import { FeelCard, NoteCard, RouteCard, RunFigures, SplitsCard } from "./RunParts";
 import { RunMap, useMapScheme } from "./RunMap";
 import { useRunOutbox } from "./RunOutbox";
-import { EFFORT_ENDS, clock, distance, leftOutLine, pace, paceWord, runName, runWhen, unitWord, METRES_PER_MILE } from "./runWords";
+import { clock, distance, pace, paceWord, runName, runWhen, unitWord, METRES_PER_MILE } from "./runWords";
 
 /** What stood in the way of Start, said under it with its button. */
 export type StartProblem = "denied" | "settings" | "approximate" | "off" | "failed";
@@ -575,11 +575,6 @@ function Summary({ run, units, kg, onSaved }: { run: LiveRun; units: Units; kg: 
   const finished = run.finishedMs ?? 0;
   const sums = useMemo(() => runSums(run.points, closedPauses(run, finished), finished, kg), [run, finished, kg]);
   const { session } = useSession();
-  const source = useMapSource(session);
-  const scheme = useMapScheme(sums.track[sums.track.length - 1] ?? null);
-  const [bigMap, setBigMap] = useState(false);
-  // The map's own word on its streets (null until it says), so the line below is true whichever failed.
-  const [mapDrawn, setMapDrawn] = useState<boolean | null>(null);
   const startedAt = new Date(run.startedAt);
   const [name, setName] = useState(runName(startedAt));
   const [naming, setNaming] = useState(false);
@@ -588,8 +583,6 @@ function Summary({ run, units, kg, onSaved }: { run: LiveRun; units: Units; kg: 
   const [asking, setAsking] = useState(false);
   const [busy, setBusy] = useState(false);
   const [notKept, setNotKept] = useState(false);
-  const [credits, setCredits] = useState(false);
-  const pausedS = Math.max(0, sums.elapsedS - sums.movingS - sums.leftOutS);
   // What the server is sent: asked for the climb now (37b-ii), and saved with the same points at Save.
   const sent = useMemo(
     (): RunClimbRequest => ({
@@ -664,136 +657,20 @@ function Summary({ run, units, kg, onSaved }: { run: LiveRun; units: Units; kg: 
             }
           />
         </View>
-        <Txt style={styles.km} fit numberOfLines={1}>
-          {distance(sums.distanceM, units)}
-          <Txt style={styles.kmUnit}> {unitWord(units)}</Txt>
-        </Txt>
-        <View style={styles.three}>
-          <Tile value={clock(sums.movingS)} label="Moving time" />
-          <Tile value={clock(sums.elapsedS)} label="Total time" />
-        </View>
-        <View style={styles.three}>
-          <Tile value={pace(sums.movingS, sums.distanceM < 50 ? 0 : sums.distanceM, units)} label={`Avg pace ${paceWord(units)}`} />
-          <Tile value={String(sums.kcal)} label="Calories" />
-        </View>
-        <View style={[styles.tile, styles.climbTile]}>
-          <Txt style={styles.tileValue} fit numberOfLines={1}>
-            {climbWords(climb, units)}
-          </Txt>
-          <Txt kind="small" colour="textFaint">
-            Elevation gain
-          </Txt>
-          {/* The maps' credits behind a small (i), as the run map's own (Kd, 37b-ii's click-through). */}
-          {climb.kind === "done" ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Elevation data"
-              hitSlop={10}
-              onPress={() => {
-                setCredits(true);
-              }}
-              style={styles.creditButton}
-            >
-              <Icon name="info" size={18} />
-            </Pressable>
-          ) : null}
-        </View>
-        {pausedS > 0 ? (
-          <Txt kind="small" colour="textFaint">
-            {`Paused for ${clock(pausedS)}`}
-          </Txt>
-        ) : null}
-        {sums.leftOutM > 0 ? (
-          <View style={styles.leftOut}>
-            <Icon name="warn" size={18} colour="gold" />
-            <Txt kind="small" colour="text" style={styles.grow}>
-              {leftOutLine(sums.leftOutM, units)}
-            </Txt>
-          </View>
-        ) : null}
-        {sums.track.length > 1 ? (
-          <View style={styles.card}>
-            <Txt kind="h3">Route</Txt>
-            <View style={styles.mapBox}>
-              <RunMap
-                track={sums.track}
-                starts={sums.trackStarts}
-                units={units}
-                mode="box"
-                scheme={scheme}
-                source={source}
-                onOpen={() => {
-                  setBigMap(true);
-                }}
-                onDrawn={setMapDrawn}
-                testID="summary-map"
-              />
-            </View>
-            {mapDrawn === false ? (
-              <Txt kind="small" colour="textFaint" style={styles.centredWords}>
-                The map can't load right now.
-              </Txt>
-            ) : null}
-          </View>
-        ) : null}
-        {/* A wave needs two to compare: a run under two kilometres or miles has its pace above. */}
-        {(units === "imperial" ? sums.splitsMi : sums.splitsKm).length > 1 ? (
-          <View style={styles.card}>
-            <Txt kind="h3">{units === "imperial" ? "Miles" : "Kilometres"}</Txt>
-            <PaceWave splits={units === "imperial" ? sums.splitsMi : sums.splitsKm} units={units} />
-            <Txt kind="small" colour="textFaint">
-              Higher is faster
-            </Txt>
-          </View>
-        ) : null}
-        <View style={styles.card}>
-          <Txt kind="h3">How did it feel?</Txt>
-          <View style={styles.feel}>
-            {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
-              <Pressable
-                key={String(n)}
-                accessibilityRole="button"
-                accessibilityLabel={`${String(n)} of 10`}
-                accessibilityState={{ selected: effort === n }}
-                onPress={() => {
-                  setEffort(effort === n ? null : n);
-                }}
-                style={[styles.feelDot, effort === n ? styles.feelPicked : null]}
-              >
-                <Txt kind="small" colour={effort === n ? "onOrange" : "textSoft"} style={styles.feelNumber}>
-                  {String(n)}
-                </Txt>
-              </Pressable>
-            ))}
-          </View>
-          <View style={styles.ends}>
-            <Txt kind="small" colour="textFaint">
-              {EFFORT_ENDS[0]}
-            </Txt>
-            <Txt kind="small" colour="textFaint">
-              {EFFORT_ENDS[1]}
-            </Txt>
-          </View>
-        </View>
-        <View style={styles.card}>
-          <View style={styles.between}>
-            <Txt kind="h3">Private note</Txt>
-            <Txt kind="small" colour="textFaint">
-              Only you see it
-            </Txt>
-          </View>
-          <TextInput
-            accessibilityLabel="Private note"
-            value={note}
-            onChangeText={setNote}
-            placeholder="Add a note"
-            placeholderTextColor={colours.textFaint}
-            maxLength={1000}
-            multiline
-            style={styles.note}
-            selectionColor={colours.orange}
-          />
-        </View>
+        <RunFigures
+          distanceM={sums.distanceM}
+          movingS={sums.movingS}
+          elapsedS={sums.elapsedS}
+          leftOutM={sums.leftOutM}
+          leftOutS={sums.leftOutS}
+          kcal={sums.kcal}
+          climb={climb}
+          units={units}
+        />
+        <RouteCard track={sums.track} starts={sums.trackStarts} units={units} name={name} distanceM={sums.distanceM} movingS={sums.movingS} />
+        <SplitsCard splits={units === "imperial" ? sums.splitsMi : sums.splitsKm} units={units} />
+        <FeelCard effort={effort} onPick={setEffort} />
+        <NoteCard note={note} onChange={setNote} />
         <Button label="Save run" onPress={() => void save()} busy={busy} wide style={styles.save} />
         {notKept ? (
           <Txt kind="small" colour="badText" style={styles.centredWords}>
@@ -809,54 +686,6 @@ function Summary({ run, units, kg, onSaved }: { run: LiveRun; units: Units; kg: 
           }}
         />
       </ScrollView>
-      <Modal
-        visible={bigMap}
-        animationType="fade"
-        statusBarTranslucent
-        navigationBarTranslucent
-        onRequestClose={() => {
-          setBigMap(false);
-        }}
-      >
-        <View style={styles.mapPage}>
-          <RunMap track={sums.track} starts={sums.trackStarts} units={units} mode="full" scheme={scheme} source={source} over={insets.top + 56} under={insets.bottom} testID="full-map" />
-          <View style={[styles.bigTop, { top: insets.top + 10 }]}>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Close the map"
-              onPress={() => {
-                setBigMap(false);
-              }}
-              style={[styles.hide, styles.hideOnMap]}
-            >
-              <Icon name="x" size={20} />
-            </Pressable>
-            <View style={styles.bigTitle}>
-              <Txt kind="body" numberOfLines={1} style={styles.bigName}>
-                {name}
-              </Txt>
-              <Txt kind="small" colour="textSoft">
-                {`${distance(sums.distanceM, units)} ${unitWord(units)} · ${clock(sums.movingS)}`}
-              </Txt>
-            </View>
-          </View>
-        </View>
-      </Modal>
-      <Sheet
-        open={credits}
-        title="Elevation data"
-        onClose={() => {
-          setCredits(false);
-        }}
-      >
-        <ScrollView style={styles.shrink} contentContainerStyle={[styles.creditList, { paddingBottom: insets.bottom + 16 }]}>
-          {HEIGHT_MAP_CREDITS.map((line) => (
-            <Txt key={line} kind="small" colour="textSoft">
-              {line}
-            </Txt>
-          ))}
-        </ScrollView>
-      </Sheet>
       <Sheet
         open={asking}
         title="Discard this run?"
@@ -885,19 +714,6 @@ function Summary({ run, units, kg, onSaved }: { run: LiveRun; units: Units; kg: 
           }}
         />
       </Sheet>
-    </View>
-  );
-}
-
-function Tile({ value, label }: { value: string; label: string }) {
-  return (
-    <View style={styles.tile}>
-      <Txt style={styles.tileValue} fit numberOfLines={1}>
-        {value}
-      </Txt>
-      <Txt kind="small" colour="textFaint" numberOfLines={2}>
-        {label}
-      </Txt>
     </View>
   );
 }

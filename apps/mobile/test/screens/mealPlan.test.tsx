@@ -80,7 +80,7 @@ function serverOf(plan: () => Reply | Promise<Reply>, more: Record<string, Route
     "/v1/nutrition/suggestions": () => ({ status: 200, body: IDEAS }),
     "/v1/nutrition/diet-plan": () => plan(),
     "/v1/workouts": () => ({ status: 200, body: { items: [], nextCursor: null, limitedToDays: 90, hasAnyWorkouts: false } }),
-    "/v1/geo/runs": () => ({ status: 200, body: { items: [], nextCursor: null } }),
+    "/v1/geo/runs": () => ({ status: 200, body: { items: [], nextCursor: null, months: [], total: { runs: 0, distanceM: 0 } } }),
     "/v1/nutrition/meals": async (body) => {
       if (body === undefined) return { status: 200, body: { items: meals, nextCursor: null } };
       if (saving !== null) return saving(body);

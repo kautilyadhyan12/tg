@@ -124,6 +124,8 @@ export const shadows = {
   /** A chart's best bar, and a lit day's dot (Progress, 35c-i). */
   barGlow: "0 0 0 6px rgba(255,138,31,0.16), 0 8px 22px rgba(255,138,31,0.35)",
   dotGlow: "0 0 8px rgba(255,138,31,0.75)",
+  /** A day run on Your runs' calendar (37c-i): the footprint lit from under. */
+  dayGlow: "0 0 16px 4px rgba(255,138,31,0.55)",
   sheet: "0 -12px 48px rgba(0,0,0,0.6)",
   /** A run's round Start, Pause and Resume (37a): a halo, then the glow under it. */
   roundButton: "0 0 0 10px rgba(255,138,31,0.12), 0 0 0 22px rgba(255,138,31,0.05), 0 10px 38px rgba(255,138,31,0.55)",

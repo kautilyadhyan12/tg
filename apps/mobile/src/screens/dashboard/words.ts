@@ -1,5 +1,6 @@
 import { BADGE_NAMES } from "@app/shared";
-import type { Meal, MealType, RunSummary, WeeklyChallenge, WorkoutListItem } from "@app/shared";
+import type { Meal, MealType, RunSummary, Units, WeeklyChallenge, WorkoutListItem } from "@app/shared";
+import { distance as runDistance, unitWord } from "../running/runWords";
 
 // What the Dashboard says about the numbers the server sends (ROADMAP Stage 5 item 31a). The server
 // computes every number; these only put it into words. Nothing here guesses a number it was not sent.
@@ -103,6 +104,8 @@ export interface ActivityRow {
   /** Its day, and the rest of what is known of it. */
   facts: string;
   value: string | null;
+  /** A run's id: its row opens the run's own page (37c-i). */
+  runId?: string;
 }
 
 const MEAL_TYPES: Record<MealType, string> = { breakfast: "Breakfast", lunch: "Lunch", dinner: "Dinner", snack: "Snack" };
@@ -126,14 +129,16 @@ export function workoutRow(w: WorkoutListItem): ActivityRow {
   };
 }
 
-export function runRow(r: RunSummary): ActivityRow {
+/** A run as the person named it, in their own units (37c-i: the name their run's page shows). */
+export function runRow(r: RunSummary, units: Units = "metric"): ActivityRow {
   return {
     key: `run-${r.id}`,
     kind: "run",
     at: r.startedAt,
-    name: r.routeName ?? "Run",
+    name: r.name,
     facts: joined([dayWords(r.startedAt), minutesWords(r.durationS / 60)]),
-    value: distanceWords(r.distanceM),
+    value: units === "imperial" ? `${runDistance(r.distanceM, units)} ${unitWord(units)}` : distanceWords(r.distanceM),
+    runId: r.id,
   };
 }
 
@@ -152,8 +157,9 @@ export function mealRow(m: Meal): ActivityRow {
 export function recentActivity(
   lists: { workouts: readonly WorkoutListItem[]; runs: readonly RunSummary[]; meals: readonly Meal[] },
   most = 3,
+  units: Units = "metric",
 ): ActivityRow[] {
-  const rows = [...lists.workouts.map(workoutRow), ...lists.runs.map(runRow), ...lists.meals.map(mealRow)];
+  const rows = [...lists.workouts.map(workoutRow), ...lists.runs.map((r) => runRow(r, units)), ...lists.meals.map(mealRow)];
   const when = (row: ActivityRow) => {
     const t = Date.parse(row.at);
     return Number.isNaN(t) ? -Infinity : t;

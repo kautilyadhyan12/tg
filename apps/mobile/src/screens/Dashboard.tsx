@@ -16,7 +16,8 @@ import {
   type MealPage,
   type ProgressOverview,
   type ProgressTrend,
-  type RunPage,
+  type RunPage as RunPageRead,
+  type Units,
   type WeeklyChallenges,
   type WorkoutPage,
 } from "@app/shared";
@@ -55,6 +56,8 @@ import { IDEAS_READ } from "./food/MealIdeas";
 import { Recommended } from "./food/MealPlan";
 import { useMealOutbox } from "./food/MealOutbox";
 import { useRunOutbox } from "./running/RunOutbox";
+import { RunPage } from "./running/RunPage";
+import { accountUnits } from "./setup/Setup";
 import { GOALS_READ, GoalsBox, GoalsPage, type GoalsOpen } from "./Goals";
 import { LeaderboardPage, type LeaderboardPlace } from "./gym/Leaderboard";
 import { rankWords } from "./gym/leaderboardView";
@@ -103,6 +106,10 @@ export function DashboardScreen() {
   // A goal's days are the person's own: read again once the zone is saved.
   const goals = useRead(DASHBOARD_READS.goals, goalsResponseSchema, zoneSaved);
   const [goalsOpen, setGoalsOpen] = useState<GoalsOpen | null>(null);
+  // A run of Recent Activity opened on its own page (37c-i).
+  const [openRun, setOpenRun] = useState<string | null>(null);
+  const [runDeleted, setRunDeleted] = useState<string | null>(null);
+  const units = (state.kind === "in" ? accountUnits(state.user.units) : null) ?? "metric";
   // Your Rank is the person's first gym's board; somebody using the app alone has a board of their own to come (item 38).
   const places = useRead(PLACES_READ, myOrgsResponseSchema);
   const firstGym = places.read.kind === "ok" ? (places.read.data.orgs.find((org) => org.isMember) ?? null) : null;
@@ -217,7 +224,7 @@ export function DashboardScreen() {
           go.navigate("Food", { today: Date.now(), next: Date.now() });
         }}
       />
-      <Recent workouts={recent.read} runs={runs.read} meals={meals.read} />
+      <Recent workouts={recent.read} runs={runs.read} meals={meals.read} units={units} onRun={(id) => { setRunDeleted(null); setOpenRun(id); }} said={runDeleted} />
       <Ready onPress={toWorkout} />
       <GoalsPage
         open={goalsOpen}
@@ -226,6 +233,25 @@ export function DashboardScreen() {
         }}
         read={goals.read}
         again={goals.again}
+      />
+      <RunPage
+        runId={openRun}
+        units={units}
+        onClose={() => {
+          setOpenRun(null);
+        }}
+        onChanged={() => {
+          // A run changed: its name in Recent Activity.
+          runs.again();
+        }}
+        onDeleted={(gone) => {
+          // A run deleted: Recent Activity says so, and the sessions, the streak and the XP read again.
+          setRunDeleted(`${gone.name} was deleted.`);
+          runs.again();
+          overview.again();
+          me.again();
+          week.again();
+        }}
       />
       <AchievementsPage
         open={achievements !== null}
@@ -566,10 +592,10 @@ const ACTIVITY_LOOK = {
 
 /** Everything done lately, of any kind. Shown only when all three lists are read: a list missing
  *  would leave out what may be the newest thing. */
-function Recent({ workouts, runs, meals }: { workouts: Read<WorkoutPage>; runs: Read<RunPage>; meals: Read<MealPage> }) {
+function Recent({ workouts, runs, meals, units, onRun, said }: { workouts: Read<WorkoutPage>; runs: Read<RunPageRead>; meals: Read<MealPage>; units: Units; onRun: (id: string) => void; said: string | null }) {
   const rows =
     workouts.kind === "ok" && runs.kind === "ok" && meals.kind === "ok"
-      ? recentActivity({ workouts: workouts.data.items, runs: runs.data.items, meals: meals.data.items })
+      ? recentActivity({ workouts: workouts.data.items, runs: runs.data.items, meals: meals.data.items }, 3, units)
       : null;
   return (
     <Card style={styles.recent} testID="recent-activity">
@@ -582,6 +608,11 @@ function Recent({ workouts, runs, meals }: { workouts: Read<WorkoutPage>; runs: 
           Recent Activity
         </Txt>
       </View>
+      {said === null ? null : (
+        <Txt kind="tiny" colour="goodText">
+          {said}
+        </Txt>
+      )}
       {rows === null || workouts.kind !== "ok" ? (
         <Txt kind="small">{NOT_KNOWN}</Txt>
       ) : rows.length === 0 ? (
@@ -590,7 +621,15 @@ function Recent({ workouts, runs, meals }: { workouts: Read<WorkoutPage>; runs: 
         <View style={styles.timeline}>
           {rows.length > 1 ? <View style={styles.rail} /> : null}
           {rows.map((row) => (
-            <View key={row.key} style={styles.moment}>
+            <Pressable
+              key={row.key}
+              accessibilityRole={row.runId === undefined ? undefined : "button"}
+              disabled={row.runId === undefined}
+              onPress={() => {
+                if (row.runId !== undefined) onRun(row.runId);
+              }}
+              style={styles.moment}
+            >
               <View style={[styles.dotIcon, { backgroundColor: colours[ACTIVITY_LOOK[row.kind].fill], borderColor: colours[ACTIVITY_LOOK[row.kind].line] }]}>
                 <Icon name={ACTIVITY_ICONS[row.kind]} size={13} colour={ACTIVITY_LOOK[row.kind].ink} />
               </View>
@@ -611,7 +650,7 @@ function Recent({ workouts, runs, meals }: { workouts: Read<WorkoutPage>; runs: 
                   )}
                 </View>
               </View>
-            </View>
+            </Pressable>
           ))}
         </View>
       )}

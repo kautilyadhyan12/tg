@@ -6,7 +6,8 @@ import type { Answer } from "../../session/calls";
 import type { Session } from "../../session/session";
 import type { TextStore } from "../food/outbox";
 
-export type RunSendResult = { kind: "done"; run: SavedRun } | { kind: "later" } | { kind: "refused"; message: string };
+/** `deleted`: the person deleted it, on this phone or another, while it waited to be sent (37c-i). */
+export type RunSendResult = { kind: "done"; run: SavedRun } | { kind: "later" } | { kind: "refused"; message: string } | { kind: "deleted" };
 export type RunSender = (run: SaveRunRequest) => Promise<RunSendResult>;
 
 export type { RefusedRun };
@@ -49,6 +50,7 @@ export function runSender(session: Session): RunSender {
     const answer = await session.signedIn({ method: "POST", path: "/v1/geo/runs", body: run, key: run.runId, waitMs: 60_000 }, saveRunResponseSchema);
     if (answer.kind === "ok") return { kind: "done", run: answer.data.run };
     if (notNow(answer) || answer.kind !== "refused") return { kind: "later" };
+    if (answer.status === 410) return { kind: "deleted" };
     // A shape the server would not read is the app's fault, never words for the person.
     return { kind: "refused", message: REFUSED_WORDS };
   };
@@ -111,6 +113,9 @@ export function createRunOutbox(store: TextStore, send: RunSender): RunOutbox {
       const waiting = view.waiting.filter((r) => r.runId !== next.runId);
       if (result.kind === "done") {
         set({ ...view, waiting, saved: [result.run, ...view.saved.filter((r) => r.id !== result.run.id)], sent: view.sent + 1 });
+      } else if (result.kind === "deleted") {
+        // Deleted while it waited: let go, never said to be refused; lists of runs read again.
+        set({ ...view, waiting, saved: view.saved.filter((r) => r.id !== next.runId), sent: view.sent + 1 });
       } else {
         set({ ...view, waiting, refused: [...view.refused, { runId: next.runId, name: next.name, message: result.message, run: next }] });
       }

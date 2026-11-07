@@ -70,15 +70,21 @@ const workoutRow = (id: string, startedAt: string) => ({
 });
 const page = (items: unknown[], hasAnyWorkouts: boolean) => ({ items, nextCursor: null, limitedToDays: 90, hasAnyWorkouts });
 const list = (items: unknown[]) => ({ items, nextCursor: null });
-const runRow = (id: string, startedAt: string, routeName: string) => ({
+const runRow = (id: string, startedAt: string, name: string) => ({
   id,
   startedAt,
   durationS: 31 * 60,
   distanceM: 5230,
-  routeName,
+  routeName: null,
   kcalPoint: 310,
   source: "mobile",
+  name,
+  day: startedAt.slice(0, 10),
+  elapsedS: 31 * 60,
+  climbM: null,
+  shape: null,
 });
+const runs = (items: unknown[]) => ({ items, nextCursor: null, months: [], total: { runs: items.length, distanceM: 5230 * items.length } });
 const mealRow = (id: string, takenAt: string, mealName: string | null) => ({
   id,
   takenAt,
@@ -103,11 +109,11 @@ const trained: Record<string, Route> = {
   "/v1/gamification/challenges": ok(challenges),
   "/v1/nutrition/suggestions": ok({ status: "needs_plan" }),
   "/v1/workouts": ok(page([workoutRow("1b6f0a3e-2c4d-4e5f-8a9b-0c1d2e3f4a5b", hoursAgo(1))], true)),
-  "/v1/geo/runs": ok(list([runRow("5d4c3b2a-1f0e-4d9c-8b7a-6f5e4d3c2b1a", hoursAgo(30), "Evening run")])),
+  "/v1/geo/runs": ok(runs([runRow("5d4c3b2a-1f0e-4d9c-8b7a-6f5e4d3c2b1a", hoursAgo(30), "Evening run")])),
   "/v1/nutrition/meals": ok(list([mealRow("6e5d4c3b-2a1f-4e0d-9c8b-7a6f5e4d3c2b", hoursAgo(3), null)])),
   "/v1/goals": ok({ goals: [goal({ kind: "training_days", period: "week", target: 4, current: 2 })], max: 30 }),
 };
-const nothingElse = { "/v1/geo/runs": ok(list([])), "/v1/nutrition/meals": ok(list([])) };
+const nothingElse = { "/v1/geo/runs": ok(runs([])), "/v1/nutrition/meals": ok(list([])) };
 
 async function openApp(routes: Record<string, Route>, ask?: Ask) {
   const server = fakeServer({ "/v1/auth/refresh": ok({ tokens: tokens(2) }), ...routes });
@@ -157,7 +163,7 @@ describe("the worst thing: nobody else's numbers on this person's Dashboard", ()
       "/v1/progress/overview": overview(999, { totalKcal: 98765 }),
       "/v1/gamification/me": gamification({ xp: { total: 55555, level: 42, xpInLevel: 1, xpForNext: 2, progressPct: 50, nextLevelAt: 3 } }),
       "/v1/workouts": page([workoutRow("9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d", "2026-01-05T10:00:00.000Z")], true),
-      "/v1/geo/runs": list([runRow("8b7a6f5e-4d3c-4b2a-9f0e-1d2c3b4a5f6e", "2026-01-06T07:00:00.000Z", "Ravi's canal loop")]),
+      "/v1/geo/runs": runs([runRow("8b7a6f5e-4d3c-4b2a-9f0e-1d2c3b4a5f6e", "2026-01-06T07:00:00.000Z", "Ravi's canal loop")]),
       "/v1/nutrition/meals": list([mealRow("9c8b7a6f-5e4d-4c3b-8a2f-1e0d9c8b7a6f", "2026-01-06T13:00:00.000Z", "Ravi's thali")]),
     };
     const ashas: Record<string, unknown> = {
@@ -166,7 +172,7 @@ describe("the worst thing: nobody else's numbers on this person's Dashboard", ()
       "/v1/progress/trend": { points: [], runDays: [], limitedToDays: 90 },
       "/v1/gamification/challenges": challenges,
       "/v1/workouts": page([], false),
-      "/v1/geo/runs": list([]),
+      "/v1/geo/runs": runs([]),
       "/v1/nutrition/meals": list([]),
     };
     const ask: Ask = async (url, init) => {
