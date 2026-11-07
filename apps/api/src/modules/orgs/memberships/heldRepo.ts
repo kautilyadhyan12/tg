@@ -746,8 +746,10 @@ export interface GiveHeldInput {
   requestKey: string;
   startsOn: string;
   paid: boolean;
-  /** How they paid, where `paid`. */
-  method: MemberPaymentByHand | null;
+  /** How they paid, where `paid`: by hand, or in the app as they bought it (18k-iii-a), with Square's payment. */
+  method: MemberPaymentByHand | "app" | null;
+  /** The payment company's payment, for a payment made in the app. */
+  provider?: { name: string; paymentId: string } | null;
   /** The price the screen showed; null where it showed none. */
   shownPriceMinor: number | null;
   /** The gym's discount it is given with, and what the screen showed coming off. */
@@ -777,7 +779,8 @@ export interface GiveHeldInput {
   change?: { fromId: string; creditMinor: number; paidByChange: boolean; stoppedOld?: boolean } | null;
   /** The gym's own day. */
   today: string;
-  actorUserId: string;
+  /** The member of staff; null where the member bought it in the app, which is no staff's doing. */
+  actorUserId: string | null;
   now: Date;
 }
 
@@ -788,9 +791,9 @@ export async function giveHeld(sql: Sql, input: GiveHeldInput): Promise<HeldWrit
   });
 }
 
-/** `giveHeld` in the caller's transaction: answers the membership it made, or `ok` where the
- *  same request had already made it. */
-export async function giveHeldIn(tx: TransactionSql, input: GiveHeldInput): Promise<HeldWriteOutcome | { kind: "given"; id: string }> {
+/** `giveHeld` in the caller's transaction: answers the membership it made and the payment it recorded, or `ok`
+ *  where the same request had already made it. */
+export async function giveHeldIn(tx: TransactionSql, input: GiveHeldInput): Promise<HeldWriteOutcome | { kind: "given"; id: string; paymentId: string | null }> {
   const change = input.change ?? null;
   const entry = await lockedEntry(tx, input.gymId, input.entryId);
   if (entry === null) return { kind: "entry_not_found" };
@@ -952,6 +955,7 @@ export async function giveHeldIn(tx: TransactionSql, input: GiveHeldInput): Prom
   });
 
   const [due] = billsToOpen(owed, input.today, new Set());
+  let paymentId: string | null = null;
   if (due !== undefined) {
     const [opened] = await insertBills(
       tx,
@@ -961,6 +965,8 @@ export async function giveHeldIn(tx: TransactionSql, input: GiveHeldInput): Prom
     );
     if (opened === undefined) throw new Error("a new membership's bill was not opened");
     if (gift !== null) await markUsed(tx, { gymId: input.gymId, giftId: gift.id, billId: opened.id, saleId: null, offMinor: gift.offMinor, currency: type.currency, now: input.now });
+    // A payment in the app names Square's payment, as the column's rule asks of it.
+    if (input.method === "app" && (input.provider ?? null) === null) throw new Error("a payment in the app came without its payment company's payment");
     if (pays && input.method !== null) {
       const recorded = await insertPayment(
         tx,
@@ -973,21 +979,21 @@ export async function giveHeldIn(tx: TransactionSql, input: GiveHeldInput): Prom
           requestKey: input.requestKey,
           paidOn: input.today,
           recordedBy: input.actorUserId,
-          provider: null,
+          provider: input.method === "app" ? (input.provider ?? null) : null,
         },
         input.now,
       );
       if (recorded === null) throw new Error("a new membership's payment was not recorded");
-      const paymentId = recorded.id;
+      paymentId = recorded.id;
       await setBillStatus(tx, input.gymId, opened.id, "paid", input.now);
       // A friend a member invited has paid: the member's Refer a friend gift (20e-ii-b-ii-a).
-      await giveMemberGift(tx, { gymId: input.gymId, friendEntryId: input.entryId, by: { paymentId }, today: input.today, now: input.now });
+      await giveMemberGift(tx, { gymId: input.gymId, friendEntryId: input.entryId, by: { paymentId: recorded.id }, today: input.today, now: input.now });
       await insertAudit(tx, {
         actorUserId: input.actorUserId,
         gymId: input.gymId,
         action: "org.member_payment_recorded",
         targetType: "gym_member_payment",
-        targetId: paymentId,
+        targetId: recorded.id,
         meta: {
           entryId: input.entryId,
           membershipId: created.id,
@@ -1012,7 +1018,23 @@ export async function giveHeldIn(tx: TransactionSql, input: GiveHeldInput): Prom
   } else if (creditMinor > 0 && !paidByChange) {
     throw new Error("a membership given in place of another had no bill to carry its credit");
   }
-  return { kind: "given", id: created.id };
+  return { kind: "given", id: created.id, paymentId };
+}
+
+/** Whether giving this record a membership of this type would be refused as `giveHeldIn` refuses it: as many in use as
+ *  a record may hold, or the same type running over the same days (a pack never clashes). Asked before a member pays for
+ *  one in the app (18k-iii-a), under the record's lock, after `settle`. */
+export async function wouldRefuseGiving(
+  tx: TransactionSql,
+  gymId: string,
+  entryId: string,
+  typeId: string,
+  m: HeldMembership,
+  today: string,
+): Promise<"too_many" | "already_held" | null> {
+  const running = (await held(tx, gymId, entryId, IN_USE, IN_USE_READ)).map(shape);
+  if (running.length >= HELD_LIVE_MAX) return "too_many";
+  return running.some((row) => row.typeId === typeId && sameTypeTwice(row.membership, m, today)) ? "already_held" : null;
 }
 
 /** One membership of a record, held for a write, or null where it is not that record's.

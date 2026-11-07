@@ -49,7 +49,7 @@ export const runs = pgTable(
     // 0218 (ROADMAP 37b-ii): the elevation gain from the server's height map, and where it stands.
     climbM: integer("climb_m"),
     climbState: text("climb_state"),
-    // 0221 (ROADMAP 37c-i): the route made small for its picture in Your runs (`runShape.ts`).
+    // 0222 (ROADMAP 37c-i): the route made small for its picture in Your runs (`runShape.ts`).
     shape: text("shape"),
   },
   (t) => [
@@ -70,7 +70,7 @@ export const runs = pgTable(
   ],
 );
 
-/** A deleted run's id, kept for its owner (0221; ROADMAP 37c-i): a late save of it keeps nothing. */
+/** A deleted run's id, kept for its owner (0222; ROADMAP 37c-i): a late save of it keeps nothing. */
 export const runRemovedIds = pgTable(
   "run_removed_ids",
   {

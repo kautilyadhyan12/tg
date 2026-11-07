@@ -43,7 +43,7 @@ export const DIRECT_DELETE_TABLES = [
   "member_label_foods",
   // §5.2's "coach threads/messages": those tables were dropped with the coach (ROADMAP 9b).
   "runs", // §5.2 "runs/saved_routes/schedules"
-  // The ids of runs the person deleted (migration 0221, ROADMAP Stage 5 37c-i), on meal_removed_ids'
+  // The ids of runs the person deleted (migration 0222, ROADMAP Stage 5 37c-i), on meal_removed_ids'
   // footing: their own record, deleted and exported.
   "run_removed_ids",
   "saved_routes",
@@ -591,8 +591,9 @@ export const USER_LINKED_NOT_PURGED_TABLES = [
   // It holds Square's ids and the amount, no card number, and is forgotten a day after it ends
   // unless Square took money it could not record.
   "gym_terminal_payments",
-  // gym_app_payments.opened_by and closed_by_staff — the member's account that pressed Pay in the app, and the member of
-  // staff who pressed Close payment page (`0217`; 18k-ii-a), on gym_member_payments' footing: the gym's record of money
+  // gym_app_payments.opened_by, closed_by_staff and cleared_by — the member's account that pressed Pay or Buy in the app, the
+  // member of staff who pressed Close payment page (`0217`; 18k-ii-a), and who pressed Mark as checked on a purchase that
+  // gave nothing (`0221`; 18k-iii-a), on gym_member_payments' footing: the gym's record of money
   // asked for; `ON DELETE set null`. It holds Square's ids, the amount and the card's brand and last four, no card number;
   // a closed one is forgotten a day after it ends, and a record deleted for good lets go of `entry_id`.
   "gym_app_payments",

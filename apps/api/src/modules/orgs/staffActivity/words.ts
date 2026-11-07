@@ -259,7 +259,9 @@ export const STAFF_LINES: Readonly<Record<string, (s: Said) => string>> = {
   // Square's answer could not be read past its time, so the money may have been taken (18d-vi-a).
   // A sale at Sell (18d-vi-b-ii) is named as one: it may be a walk-in's.
   // A member's payment page in the app, closed by staff from the person's page (18k-ii-a).
-  "org.app_payment_closed": (s) => `Closed the payment page in the app for ${whose(s, "bill")}`,
+  "org.app_payment_closed": (s) => `Closed the payment page in the app for ${whose(s, text(s, "purchase") === "true" ? "purchase" : "bill")}`,
+  // A purchase in the app that gave nothing, checked in Square by staff (18k-iii-a).
+  "org.app_purchase_checked": (s) => `Marked ${whose(s, "purchase in the app")} as checked`,
   "org.terminal_payment_unchecked": (s) =>
     text(s, "sale") === "true"
       ? `Started a sale${amountOf(s)} on a Square Terminal that couldn't be checked. Check it in Square`
@@ -620,6 +622,9 @@ export const NOT_STAFF: ReadonlySet<string> = new Set([
   // A member paying a bill on Square's own page in the app (18k-ii-a): the payment shows on their page.
   "member.app_payment_paid",
   "member.app_payment_not_recorded",
+  // A member buying a line in the app (18k-iii-a): the membership shows on their page.
+  "member.app_purchase_paid",
+  "member.app_purchase_not_recorded",
   "org.member_card_removed_in_square",
   "billing.trial_replaced",
   "billing.size_replaced",

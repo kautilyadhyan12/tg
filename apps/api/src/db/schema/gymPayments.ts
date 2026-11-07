@@ -888,10 +888,15 @@ export const gymAppPayments = pgTable(
       .notNull()
       .references(() => gyms.id, { onDelete: "cascade" }),
     entryId: uuid("entry_id"),
-    heldMembershipId: uuid("held_membership_id").notNull(),
+    /** The membership paid; for a line bought (0221; 18k-iii-a), the one given, once Square says it is paid. */
+    heldMembershipId: uuid("held_membership_id"),
     periodIndex: integer("period_index"),
     /** A fee of the membership (0219; 18k-ii-b), in place of a period. */
     feeBillId: uuid("fee_bill_id"),
+    /** A line of the price list bought in the app (0221; 18k-iii-a), in place of a membership's bill or fee. */
+    membershipTypeId: uuid("membership_type_id"),
+    /** What the screen showed of the line bought, as the server worked it out, and the signature until it is written. */
+    bought: jsonb("bought"),
     amountMinor: integer("amount_minor").notNull(),
     currency: text("currency").notNull(),
     environment: text("environment").notNull(),
@@ -922,6 +927,9 @@ export const gymAppPayments = pgTable(
     /** What Square took, in the page's money, where it named it in that money. */
     takenMinor: integer("taken_minor"),
     finishedAt: timestamp("finished_at", { withTimezone: true }),
+    /** A purchase Square took money for that could not be given, marked checked by staff (0221). */
+    clearedAt: timestamp("cleared_at", { withTimezone: true }),
+    clearedBy: uuid("cleared_by").references(() => users.id, { onDelete: "set null" }),
   },
   (t) => [
     check("gym_app_payments_taken_check", sql`${t.takenMinor} IS NULL OR ${t.takenMinor} BETWEEN 0 AND 99999999`),
@@ -934,7 +942,16 @@ export const gymAppPayments = pgTable(
       "gym_app_payments_amount_check",
       sql`${t.amountMinor} BETWEEN 1 AND 99999999 AND ${t.currency} ~ '^[A-Z]{3}$' AND (${t.periodIndex} IS NULL OR ${t.periodIndex} >= 0) AND ${t.closesAt} > ${t.openedAt}`,
     ),
-    check("gym_app_payments_bill_check", sql`num_nonnulls(${t.periodIndex}, ${t.feeBillId}) = 1`),
+    check(
+      "gym_app_payments_bill_check",
+      sql`CASE WHEN ${t.membershipTypeId} IS NULL
+        THEN num_nonnulls(${t.periodIndex}, ${t.feeBillId}) = 1 AND ${t.heldMembershipId} IS NOT NULL AND ${t.bought} IS NULL AND ${t.clearedAt} IS NULL
+        ELSE ${t.periodIndex} IS NULL AND ${t.feeBillId} IS NULL AND ${t.bought} IS NOT NULL
+          AND ((${t.outcome} IS NOT DISTINCT FROM 'paid') = (${t.heldMembershipId} IS NOT NULL))
+          AND (${t.clearedAt} IS NULL OR ${t.outcome} IN ('not_recorded','gone','no_answer'))
+      END`,
+    ),
+    check("gym_app_payments_cleared_check", sql`${t.clearedBy} IS NULL OR ${t.clearedAt} IS NOT NULL`),
     check("gym_app_payments_state_check", sql`${t.state} IN ('open','done')`),
     check(
       "gym_app_payments_outcome_check",
@@ -955,5 +972,10 @@ export const gymAppPayments = pgTable(
     index("gym_app_payments_member_payment_idx").on(t.gymId, t.memberPaymentId).where(sql`${t.memberPaymentId} IS NOT NULL`),
     index("gym_app_payments_done_idx").on(t.finishedAt).where(sql`${t.finishedAt} IS NOT NULL AND ${t.outcome} = 'closed'`),
     index("gym_app_payments_check_idx").on(t.gymId, t.heldMembershipId).where(sql`${t.outcome} IN ('not_recorded','gone','no_answer')`),
+    uniqueIndex("gym_app_payments_purchase_uq").on(t.gymId, t.entryId).where(sql`${t.state} = 'open' AND ${t.membershipTypeId} IS NOT NULL`),
+    index("gym_app_payments_type_open_idx").on(t.gymId, t.membershipTypeId).where(sql`${t.state} = 'open' AND ${t.membershipTypeId} IS NOT NULL`),
+    index("gym_app_payments_purchase_check_idx")
+      .on(t.gymId, t.entryId)
+      .where(sql`${t.membershipTypeId} IS NOT NULL AND ${t.outcome} IN ('not_recorded','gone','no_answer') AND ${t.clearedAt} IS NULL`),
   ],
 );

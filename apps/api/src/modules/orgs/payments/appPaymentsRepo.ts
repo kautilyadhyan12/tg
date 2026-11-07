@@ -9,6 +9,9 @@
 // recorded with the rules a fee paid by hand takes (`recordFeePaymentIn`). While it is open the fee is not taken off
 // (`removeClassFees`, `removePtFees` ask the page closed instead), and once Square says nothing was paid, a fee no longer owed
 // comes off (`finish`).
+//
+// Or a page buys a line of the price list (18k-iii-a, `appPurchasesRepo.ts`): it has no membership until Square says it is
+// paid (`membershipId` null, `typeId` the line). The reads here for a bill's or a fee's page leave those out.
 import { memberFeeKindSchema, memberPayTarget, type AppPaymentState, type MemberFeeKind } from "@app/shared";
 import type { Sql, TransactionSql } from "postgres";
 import { insertAudit } from "../repo.js";
@@ -31,7 +34,12 @@ export interface AppPayRow {
   gymId: string;
   /** Null once the record was deleted for good. */
   entryId: string | null;
-  membershipId: string;
+  /** The membership paid; for a line bought, the one given once it is paid, null until then. */
+  membershipId: string | null;
+  /** The line of the price list bought (18k-iii-a); null for a bill's or a fee's page. */
+  typeId: string | null;
+  /** What the screen showed of the line bought, as kept: parsed by `appPurchasesRepo.ts`. */
+  bought: unknown;
   /** One of the two: the bill's period, or the fee. */
   periodIndex: number | null;
   feeBillId: string | null;
@@ -58,11 +66,13 @@ export interface AppPayRow {
   finishedAt: Date | null;
 }
 
-interface RawPay {
+export interface RawPay {
   id: string;
   gym_id: string;
   entry_id: string | null;
-  held_membership_id: string;
+  held_membership_id: string | null;
+  membership_type_id: string | null;
+  bought: unknown;
   period_index: number | null;
   fee_bill_id: string | null;
   amount_minor: number;
@@ -89,11 +99,13 @@ interface RawPay {
 const OUTCOMES: readonly AppPayOutcome[] = ["paid", "closed", "not_recorded", "gone", "no_answer"];
 const CLOSERS = ["member", "staff", "expired", "removed"] as const;
 
-const toRow = (r: RawPay): AppPayRow => ({
+export const toRow = (r: RawPay): AppPayRow => ({
   id: r.id,
   gymId: r.gym_id,
   entryId: r.entry_id,
   membershipId: r.held_membership_id,
+  typeId: r.membership_type_id,
+  bought: r.bought,
   periodIndex: r.period_index,
   feeBillId: r.fee_bill_id,
   amountMinor: r.amount_minor,
@@ -118,8 +130,8 @@ const toRow = (r: RawPay): AppPayRow => ({
   finishedAt: r.finished_at,
 });
 
-const COLUMNS = (sql: SqlOrTx) =>
-  sql`a.id, a.gym_id, a.entry_id, a.held_membership_id, a.period_index, a.fee_bill_id, a.amount_minor, a.currency, a.environment, a.account_id,
+export const COLUMNS = (sql: SqlOrTx) =>
+  sql`a.id, a.gym_id, a.entry_id, a.held_membership_id, a.membership_type_id, a.bought, a.period_index, a.fee_bill_id, a.amount_minor, a.currency, a.environment, a.account_id,
       a.location_id, a.request_key, a.opened_by, a.opened_at, a.closes_at, a.link_id, a.order_id, a.url, a.state, a.outcome,
       a.close_wanted_at, a.close_wanted_by, a.square_payment_id, a.finished_at,
       (SELECT p.receipt_number FROM gym_member_payments p WHERE p.gym_id = a.gym_id AND p.id = a.member_payment_id) AS receipt_number`;
@@ -142,16 +154,18 @@ export async function readByKey(sql: SqlOrTx, gymId: string, requestKey: string)
   return row === undefined ? null : toRow(row);
 }
 
-/** One press, read for the account that made it. */
+/** One press on a bill or a fee, read for the account that made it. */
 export async function readOwn(sql: SqlOrTx, gymId: string, userId: string, id: string): Promise<AppPayRow | null> {
-  const [row] = await sql<RawPay[]>`SELECT ${COLUMNS(sql)} FROM gym_app_payments a WHERE a.gym_id = ${gymId} AND a.id = ${id} AND a.opened_by = ${userId}`;
+  const [row] = await sql<RawPay[]>`
+    SELECT ${COLUMNS(sql)} FROM gym_app_payments a WHERE a.gym_id = ${gymId} AND a.id = ${id} AND a.opened_by = ${userId} AND a.membership_type_id IS NULL`;
   return row === undefined ? null : toRow(row);
 }
 
-/** The pages this account has open at the gym. */
+/** The pages on a bill or a fee this account has open at the gym. */
 export async function readOpenOf(sql: SqlOrTx, gymId: string, userId: string): Promise<AppPayRow[]> {
   const rows = await sql<RawPay[]>`
-    SELECT ${COLUMNS(sql)} FROM gym_app_payments a WHERE a.gym_id = ${gymId} AND a.opened_by = ${userId} AND a.state = 'open' ORDER BY a.opened_at`;
+    SELECT ${COLUMNS(sql)} FROM gym_app_payments a
+    WHERE a.gym_id = ${gymId} AND a.opened_by = ${userId} AND a.state = 'open' AND a.membership_type_id IS NULL ORDER BY a.opened_at`;
   return rows.map(toRow);
 }
 
@@ -405,7 +419,9 @@ export async function finish(sql: Sql, gymId: string, id: string, outcome: "clos
     const fee = outcome === "closed" ? (page?.fee_bill_id ?? null) : null;
     if (fee !== null) await lockGym(tx, gymId);
     const rows = await tx<{ id: string }[]>`
-      UPDATE gym_app_payments SET state = 'done', outcome = ${outcome}, finished_at = ${at}, checking_until = NULL
+      UPDATE gym_app_payments SET state = 'done', outcome = ${outcome}, finished_at = ${at}, checking_until = NULL,
+             -- A purchase that gave nothing keeps no name or details typed (18k-iii-a).
+             bought = CASE WHEN membership_type_id IS NULL THEN bought ELSE bought || '{"sign":null}'::jsonb END
       WHERE gym_id = ${gymId} AND id = ${id} AND state = 'open'
       RETURNING id`;
     if (rows.length !== 1) return false;
@@ -430,16 +446,19 @@ export async function recordPaid(
   p: { row: AppPayRow; squarePaymentId: string; card: { brand: string; last4: string } | null; taken: number | null; today: string; now: Date; refuse?: string },
 ): Promise<{ outcome: "paid" | "not_recorded" } | null> {
   const { row } = p;
+  const membershipId = row.membershipId;
+  // A line bought is given, not paid on a bill: `appPurchasesRepo.recordBought`.
+  if (membershipId === null || row.typeId !== null) throw new Error("a purchase page reached the bill's recording");
   return await sql.begin(async (tx) => {
     // The gym's lock first, then the record's, then the page: the order a payment by hand takes.
     await lockGym(tx, row.gymId);
-    const holder = await holderOf(tx, row.gymId, row.membershipId);
+    const holder = await holderOf(tx, row.gymId, membershipId);
     if (holder !== null) await lockedEntry(tx, row.gymId, holder);
     const [still] = await tx<{ id: string }[]>`SELECT id FROM gym_app_payments WHERE gym_id = ${row.gymId} AND id = ${row.id} AND state = 'open' FOR UPDATE`;
     if (still === undefined) return null;
     const paying = {
       gymId: row.gymId,
-      membershipId: row.membershipId,
+      membershipId,
       // The page itself is the payment's key: the same page recorded twice is one payment.
       requestKey: row.id,
       amountMinor: row.amountMinor,
@@ -576,14 +595,18 @@ export async function checksOnMemberships(
   return { bills, fees };
 }
 
-/** Whether a page is open on any membership these records hold: Delete permanently waits for it, as what Square took would
- *  have no bill to go on. */
+/** Whether a page is open on any membership these records hold, or for a line one of them is buying (18k-iii-a): Delete
+ *  permanently waits for it, as what Square took would have no bill to go on, or no record to be given to. */
 export async function anyOpenOfEntries(tx: TransactionSql, gymId: string, entryIds: readonly string[]): Promise<boolean> {
   if (entryIds.length === 0) return false;
   const [row] = await tx<{ id: string }[]>`
     SELECT a.id FROM gym_app_payments a
     JOIN gym_held_memberships h ON h.gym_id = a.gym_id AND h.id = a.held_membership_id
-    WHERE a.gym_id = ${gymId} AND a.state = 'open' AND h.entry_id = ANY(${[...entryIds]}::uuid[]) LIMIT 1`;
+    WHERE a.gym_id = ${gymId} AND a.state = 'open' AND h.entry_id = ANY(${[...entryIds]}::uuid[])
+    UNION ALL
+    SELECT a.id FROM gym_app_payments a
+    WHERE a.gym_id = ${gymId} AND a.state = 'open' AND a.membership_type_id IS NOT NULL AND a.entry_id = ANY(${[...entryIds]}::uuid[])
+    LIMIT 1`;
   return row !== undefined;
 }
 

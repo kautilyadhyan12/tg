@@ -217,7 +217,8 @@ d("what a gym sells in the app (real Postgres)", () => {
         if (held === undefined || held.billing === null) throw new Error(`${name} was not given with its bills`);
         const bill = held.billing.bills.find((b) => b.periodIndex === 0);
         expect(bill, name).toBeDefined();
-        expect({ amountMinor: bill?.amountMinor, joiningFeeMinor: bill?.joiningFeeMinor, part: bill?.part, covers: bill?.covers ?? null, dueOn: bill?.dueOn }, name).toEqual(item.firstPayment);
+        // No Refer a friend gift here: the bill is the line's own (18k-iii-a takes gifts off for the reader who has one).
+        expect({ amountMinor: bill?.amountMinor, joiningFeeMinor: bill?.joiningFeeMinor, part: bill?.part, covers: bill?.covers ?? null, dueOn: bill?.dueOn, friendGift: null, memberGiftOffMinor: 0 }, name).toEqual(item.firstPayment);
         expect(item.firstPayment.dueOn, name).toBe(today);
         const words = await send("GET", `/v1/orgs/${gymId}/member-list/entries/${entryId}/memberships/${held.id}/agreement`, owner);
         expect(words.statusCode, words.body).toBe(200);

@@ -13,7 +13,7 @@
 // Signing from afar (18u-ii-b): staff email the record's address a link; the page it opens reads
 // the same details and words and signs by the same one statement, which also asks that the link
 // still works. A link names one membership and nothing else: the token is the whole request.
-import { createHash, randomBytes } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import type { FastifyBaseLogger } from "fastify";
 import {
   AGREEMENT_LINK_DAYS,
@@ -65,6 +65,7 @@ import { OrgsError, holdsPrivilege, requirePrivilege, requireWritablePrivilege }
 import { unsignedPeople } from "../classes/bookingStops.js";
 import type { LiveNewsSender } from "../../live/news.js";
 import type { AgreementEmailSender } from "./email.js";
+import { factsKeyOf } from "./factsKey.js";
 import * as repo from "./repo.js";
 
 export interface AgreementDeps {
@@ -89,8 +90,7 @@ const membershipNotFound = (): OrgsError => new OrgsError(404, "membership_not_f
 
 const toRead = (row: repo.AgreementRow): WaiverToRead => ({ id: row.id, version: row.version, text: row.body });
 
-/** The key of a membership's details: what the screen sends back to sign them. */
-export const factsKeyOf = (facts: readonly AgreementFact[]): string => createHash("sha256").update(JSON.stringify(facts), "utf8").digest("hex");
+export { factsKeyOf };
 
 const saved = (row: repo.AgreementRow) => ({ ...toRead(row), savedAt: row.savedAt.toISOString() });
 
@@ -391,7 +391,9 @@ export async function getMembershipAgreement(
 
 /** Emails the copy of a signature, where the record has an address that takes our email. One
  *  copy a minute: a press while another sends it answers "sent" and sends nothing. */
-async function sendCopy(deps: AgreementDeps, org: OrgRow, email: string | null, signed: repo.SignatureRow): Promise<AgreementEmailed> {
+type CopyDeps = Pick<AgreementDeps, "sql" | "now" | "email" | "addressKey" | "log">;
+
+async function sendCopy(deps: CopyDeps, org: OrgRow, email: string | null, signed: repo.SignatureRow): Promise<AgreementEmailed> {
   if (email === null) return "no_email";
   const suppressed = deps.addressKey !== null && (await suppressionsFor(deps.sql, org.id, [emailHmac(deps.addressKey, email)])).size > 0;
   if (suppressed) return "blocked";
@@ -415,6 +417,18 @@ async function sendCopy(deps: AgreementDeps, org: OrgRow, email: string | null, 
     return "failed";
   }
   return "sent";
+}
+
+/** The copy of an agreement signed in the app as its membership was bought (18k-iii-a), to the record's address, once the
+ *  membership is theirs. Never throws: a copy that did not go reads so on the person's page, with Email a copy. */
+export async function emailBoughtCopy(deps: CopyDeps, gymId: string, membershipId: string): Promise<void> {
+  try {
+    const [org, signed, record] = await Promise.all([getOrgById(deps.sql, gymId), repo.signatureOf(deps.sql, gymId, membershipId), repo.recordOfMembership(deps.sql, gymId, membershipId)]);
+    if (org === null || signed === null || record === null || signed.emailedAt !== null) return;
+    await sendCopy(deps, org, record.email, signed);
+  } catch (err) {
+    deps.log.warn({ event: "agreement.bought_copy_failed", gymId, errName: err instanceof Error ? err.name : typeof err }, "a copy of an agreement signed in the app was not emailed");
+  }
 }
 
 /** The person, or their parent or guardian, signs on staff's screen. A second press answers

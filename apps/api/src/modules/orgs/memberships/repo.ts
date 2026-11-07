@@ -7,6 +7,7 @@
 // decided against a list nobody else is changing.
 import type { Sql, TransactionSql } from "postgres";
 import { MEMBERSHIP_ARCHIVED_PAGE, MEMBERSHIP_TYPES_MAX, SALES_TAX_PCM_MAX, memberCurrencyForCountry } from "@app/shared";
+import { holdsLine } from "../payments/appPurchasesRepo.js";
 import { insertAudit, lockOrgRow } from "../repo.js";
 import { ratesOf, readRates, taxIncludedOf } from "../register/taxRepo.js";
 import { typeTaxRateIdsSql } from "./taxesSql.js";
@@ -257,7 +258,9 @@ export type MembershipWriteOutcome =
   /** A tax rate named is not one of this gym's. */
   | { kind: "rate_not_found" }
   /** Its rates would come to more than 30% together (18b-v-b). */
-  | { kind: "taxes_over_cap" };
+  | { kind: "taxes_over_cap" }
+  /** A member is buying it in the app right now (18k-iii-a): it is not changed under them. */
+  | { kind: "being_bought" };
 
 /** The rates a type is saved with are this gym's, and come to 30% at most together (18b-v-b),
  *  read under the gym's lock that a rate's change takes. */
@@ -440,6 +443,8 @@ export async function updateMembershipType(
     if (before === undefined) return { kind: "not_found" };
     // To the millisecond, which is what the list sends and a form can send back.
     if (before.updated_at.getTime() !== input.readAt.getTime()) return { kind: "changed" };
+    // What a member is paying for in the app is given as they saw it: the line waits for their page (18k-iii-a).
+    if (await holdsLine(tx, input.gymId, input.typeId)) return { kind: "being_bought" };
     if (before.kind !== input.kind) return { kind: "kind_fixed" };
     const raise = input.raise ?? null;
     if (raise !== null && (before.kind !== "recurring" || input.priceMinor <= before.price_minor)) return { kind: "raise_not_allowed" };
@@ -527,6 +532,7 @@ export async function archiveMembershipType(
       SELECT name FROM gym_membership_types
       WHERE id = ${input.typeId} AND gym_id = ${input.gymId} AND archived_at IS NULL`;
     if (before === undefined) return { kind: "not_found" };
+    if (await holdsLine(tx, input.gymId, input.typeId)) return { kind: "being_bought" };
     await tx`
       UPDATE gym_membership_types SET archived_at = ${input.now}, updated_at = ${input.now}
       WHERE id = ${input.typeId} AND gym_id = ${input.gymId}`;

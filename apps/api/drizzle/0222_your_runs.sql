@@ -1,5 +1,5 @@
 -- Your runs (ROADMAP Stage 5 item 37c-i). Forward-only. Hand-written, as `0016` onwards are; its
--- journal entry is part of this commit.
+-- journal entry is part of this commit. Written as 0221 and renumbered 0222, as another folder's 0221 merged first.
 --
 -- `shape` is the run's route made small for the picture beside it in the list (`runShape.ts`), worked
 -- out when the run is saved; a run saved before gets its own the first time the list reads it.

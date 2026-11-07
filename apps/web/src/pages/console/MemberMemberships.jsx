@@ -28,6 +28,7 @@ import CardRefundBox from './CardRefundBox';
 import ChargebackLines, { ChargeStopHolder } from './ChargebackLines';
 import { cardRefundSaidNow, refundReasonsFor, waitsOnSquare } from './cardRefundView';
 import MembershipAgreement from './MembershipAgreement';
+import AppBuying from './AppBuying';
 import { noteDay } from './memberListPeople';
 import { reminderStatusLine } from './renewalReminderView';
 import { keepPriceWords, priceRaiseLine } from './priceRaiseView';
@@ -2587,6 +2588,19 @@ export default function MemberMemberships({
         <p role="status" className="c-s14 c-t2 m-0" data-testid="held-live-refused">
           {liveRefused}
         </p>
+      ) : null}
+      {shown.canBill && open === null ? (
+        <AppBuying
+          gymId={gymId}
+          entryId={entryId}
+          shown={shown}
+          timezone={gym?.timezone ?? null}
+          canAct={!readOnly}
+          onChanged={() => {
+            readQuietly.current();
+            onChanged?.();
+          }}
+        />
       ) : null}
       {shown.canBill && shown.memberGift !== null && shown.memberGift !== undefined && open === null ? <MemberGiftWaiting gift={shown.memberGift} /> : null}
       {shown.canBill && shown.memberGiftAtSell !== null && shown.memberGiftAtSell !== undefined && open === null ? <MemberGiftWaiting gift={shown.memberGiftAtSell} /> : null}
