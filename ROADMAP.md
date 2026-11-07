@@ -638,6 +638,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
 20. **What the gym side adds for members**, each after its web job: the waiver (3e), the membership agreement signed in the app (18u), the referral link (20e), the member photo (5b-vi), saving their card (18d-ii), buying from the gym (18k), stopping a membership (18l), a gym's plan for a member (19e). Split 2026-11-06, one part a terminal, each when its web job is built: the referral link first.
     - 20a. [x] **Invite a friend** · merged 2026-11-07 · PR #490
     - 20b. [x] **Sign the waiver** · merged 2026-11-07 · PR #493
+    - 20c. [x] **Sign the membership agreement** · merged 2026-11-07 · PR #496
 21. [ ] **Paying, the stores and release**: the $10 plan through the stores (item 6), one device one trial (Stage 3's 2c), the store pages rated 18+, the Terms and Privacy pages that Get started's line opens (it opens nothing today, as the browser's), Google's closed test, then the iPhone version with Apple sign-in.
 
 **Feature folder 2 — `D:\Projects\ai-home-gym-b`: the member's own day.**
@@ -709,7 +710,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
       - 37b-ii. [x] **Elevation gain** · merged 2026-11-07 · PR #489
     - 37c. **Your runs** (split 2026-11-07 in three: the list and a run's page first; Kd's "go", `rulings/2026-11-07-37c-i.md`).
       - 37c-i. [x] **Your runs and a run's page** · merged 2026-11-07 · PR #491
-      - 37c-ii. [ ] **Records**: fastest 1 km or mile, 5 km, 10 km, longest run, also as badges.
+      - 37c-ii. [x] **Running records** · merged 2026-11-07 · PR #495
       - 37c-iii. [ ] **The pace chart**: how your speed changed across the run.
     - 37d. [ ] **The run plan**, run-walk intervals with voice, and Recommended For You's Running tab.
     - 37e. [ ] **Routes.**

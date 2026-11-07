@@ -81,7 +81,7 @@ export interface AgreementDeps {
   news: LiveNewsSender;
 }
 
-type Limit = () => Promise<boolean>;
+export type Limit = () => Promise<boolean>;
 
 const TICK = "org.manage";
 /** Whoever gives memberships opens the box under one and hands the screen over. */
@@ -318,7 +318,7 @@ export async function stopGymAgreement(deps: AgreementDeps, userId: string, gymI
 
 // ── One membership, at the desk ──
 
-interface Current {
+export interface Current {
   record: { fullName: string; dateOfBirth: string | null; email: string | null; former: boolean };
   /** Its details now, or null where it is over, cancelled or frozen. */
   facts: AgreementFact[] | null;
@@ -327,7 +327,7 @@ interface Current {
 }
 
 /** A membership of this record, with its details worked out now from what is stored. */
-async function current(deps: AgreementDeps, org: OrgRow, entryId: string, membershipId: string, today: string, opts: { former: boolean } = { former: false }): Promise<Current> {
+export async function current(deps: AgreementDeps, org: OrgRow, entryId: string, membershipId: string, today: string, opts: { former: boolean } = { former: false }): Promise<Current> {
   const record = await repo.membershipRecord(deps.sql, org.id, entryId, membershipId, opts);
   if (record === null) throw membershipNotFound();
   // A past member: their signed copy is read, and nothing is signed for them.
@@ -354,7 +354,7 @@ const toSigned = (row: repo.SignatureRow): AgreementSigned => ({
 });
 
 /** The agreement a membership's line of the price list asks for today, or null for none. */
-async function askedOf(sql: repo.SqlOrTx, gymId: string, membershipId: string): Promise<{ row: repo.AgreementRow; name: string | null } | null> {
+export async function askedOf(sql: repo.SqlOrTx, gymId: string, membershipId: string): Promise<{ row: repo.AgreementRow; name: string | null } | null> {
   const found = await repo.agreementForMembership(sql, gymId, membershipId);
   if (found === null || found.latest === null || found.latest.stoppedAt !== null) return null;
   return { row: found.latest, name: found.name };
@@ -391,9 +391,9 @@ export async function getMembershipAgreement(
 
 /** Emails the copy of a signature, where the record has an address that takes our email. One
  *  copy a minute: a press while another sends it answers "sent" and sends nothing. */
-type CopyDeps = Pick<AgreementDeps, "sql" | "now" | "email" | "addressKey" | "log">;
+export type CopyDeps = Pick<AgreementDeps, "sql" | "now" | "email" | "addressKey" | "log">;
 
-async function sendCopy(deps: CopyDeps, org: OrgRow, email: string | null, signed: repo.SignatureRow): Promise<AgreementEmailed> {
+export async function sendCopy(deps: CopyDeps, org: OrgRow, email: string | null, signed: repo.SignatureRow): Promise<AgreementEmailed> {
   if (email === null) return "no_email";
   const suppressed = deps.addressKey !== null && (await suppressionsFor(deps.sql, org.id, [emailHmac(deps.addressKey, email)])).size > 0;
   if (suppressed) return "blocked";

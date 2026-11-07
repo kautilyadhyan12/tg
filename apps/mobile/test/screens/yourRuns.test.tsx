@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
 import { AppState } from "react-native";
-import { encodePolyline, routeShape, type RunDetail } from "@app/shared";
+import { encodePolyline, routeShape, type RunDetail, type RunRecords } from "@app/shared";
 import { App } from "../../src/App";
 import { dayKey, monthWords } from "../../src/screens/running/RunCalendar";
 import { resetMapSource } from "../../src/screens/running/mapSource";
@@ -57,6 +57,8 @@ function makeRun(n: number, name: string, km: number, minutes: number, daysAgo: 
     note: "Easy one",
     leftOutM: 0,
     leftOutS: 0,
+    bests: { k1: null, mile: null, k5: null, k10: null },
+    records: [],
   };
 }
 
@@ -66,7 +68,7 @@ const summaryOf = (r: RunDetail) => ({
 });
 
 /** The person's runs on the server, newest first, as its routes answer them. */
-function runsServer(runs: RunDetail[]) {
+function runsServer(runs: RunDetail[], records: RunRecords | null = null) {
   const held = { runs: [...runs].sort((a, b) => b.startedAt.localeCompare(a.startedAt)) };
   const requests: { method: string; path: string; search: string; body: unknown }[] = [];
   // What the Dashboard's Recent Activity reads beside the runs: no workouts, no meals.
@@ -99,6 +101,9 @@ function runsServer(runs: RunDetail[]) {
         months,
         total: { runs: held.runs.length, distanceM: held.runs.reduce((s, r) => s + r.distanceM, 0) },
       });
+    }
+    if (u.pathname === `${RUNS}/records`) {
+      return records === null ? reply(503, { error: "unavailable" }) : reply(200, records);
     }
     if (u.pathname === `${RUNS}/days`) {
       const month = u.searchParams.get("month") ?? "";
@@ -316,3 +321,41 @@ describe("Your runs", () => {
     expect(await screen.findByText("Moving time", {}, { timeout: 4000 })).toBeTruthy();
   });
 });
+
+describe("Running records (37c-ii)", () => {
+  const recordOf = (run: RunDetail, value: number, before: number | null = null) => ({ runId: run.id, name: run.name, startedAt: run.startedAt, day: run.day, value, before });
+
+  it("Your records under Your runs: each record opens the run that set it, one not set says what it takes", async () => {
+    const fast = { ...makeRun(1, "Tempo Run", 6.21, 30, 2), bests: { k1: 292, mile: 470, k5: 1660, k10: null }, records: ["k1", "mile", "k5"] as RunDetail["records"] };
+    const long = { ...makeRun(2, "Long Run", 9.59, 63, 5), bests: { k1: 340, mile: 560, k5: 1800, k10: null }, records: ["longest"] as RunDetail["records"] };
+    const s = runsServer([fast, long], { k1: recordOf(fast, 292, 300), mile: recordOf(fast, 470), k5: recordOf(fast, 1660, 1702), k10: null, longest: recordOf(long, 9590) });
+    await openRunning(s);
+    const card = await screen.findByTestId("your-records");
+    expect(within(card).getByText("Fastest 1K")).toBeTruthy();
+    expect(within(card).getByText("4:52")).toBeTruthy();
+    expect(within(card).getByText("27:40")).toBeTruthy();
+    expect(within(card).getByText("9.59 km")).toBeTruthy();
+    expect(within(card).getByText("Run 10 km to set it.")).toBeTruthy();
+    expect(within(card).queryByText("Fastest mile")).toBeNull();
+    // A record not set opens nothing.
+    expect(within(card).queryByRole("button", { name: /^Fastest 10K/ })).toBeNull();
+    await fireEvent.press(within(card).getByRole("button", { name: /^Fastest 5K, 27:40/ }));
+    const efforts = await screen.findByTestId("best-efforts", {}, { timeout: 4000 });
+    expect(within(efforts).getByLabelText("5K, 27:40, your record")).toBeTruthy();
+    expect(within(efforts).getByLabelText("1K, 4:52, your record")).toBeTruthy();
+    expect(within(efforts).queryByText("10K")).toBeNull();
+  });
+
+  it("a run that holds no record shows its best efforts with no Your record; no records yet, no box", async () => {
+    const run = { ...makeRun(1, "Easy Run", 5.2, 32, 1), bests: { k1: 340, mile: 560, k5: 1830, k10: null }, records: [] };
+    const s = runsServer([run], { k1: null, mile: null, k5: null, k10: null, longest: null });
+    await openRunning(s);
+    await fireEvent.press(within(await screen.findByTestId("your-runs")).getByRole("button", { name: /^Easy Run, / }));
+    const efforts = await screen.findByTestId("best-efforts", {}, { timeout: 4000 });
+    expect(within(efforts).getByLabelText("5K, 30:30")).toBeTruthy();
+    expect(within(efforts).queryByText("Your record")).toBeNull();
+    await fireEvent.press(newest(screen.getAllByRole("button", { name: "Close" })));
+    expect(screen.queryByTestId("your-records")).toBeNull();
+  });
+});
+

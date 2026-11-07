@@ -13,6 +13,7 @@ import { PictureTop } from "../../look/PictureTop";
 import { Sheet } from "../../look/Sheet";
 import { fonts, Txt } from "../../look/Txt";
 import { useSession } from "../../session/SessionProvider";
+import { BestEffortsCard } from "./RecordParts";
 import { FeelCard, NoteCard, RouteCard, RunFigures, SplitsCard } from "./RunParts";
 import { distance, runWhen, unitWord } from "./runWords";
 
@@ -227,6 +228,7 @@ export function RunPage({ runId, units, onClose, onChanged, onDeleted }: {
           />
           <RouteCard track={track} starts={read.run.trackStarts} units={units} name={read.run.name} distanceM={read.run.distanceM} movingS={read.run.durationS} testID="run-map" />
           <SplitsCard splits={units === "imperial" ? read.run.splitsMi : read.run.splitsKm} units={units} />
+          <BestEffortsCard bests={read.run.bests} held={read.run.records} units={units} />
           <FeelCard effort={draft.effort} onPick={(effort) => { change({ effort }); }} />
           <NoteCard note={draft.note} onChange={(note) => { change({ note }); }} />
           <Button kind="dangerLink" label="Delete run" style={styles.centredButton} onPress={() => { setTrouble(null); setDeleting(true); }} />

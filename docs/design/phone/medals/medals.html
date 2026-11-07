@@ -87,6 +87,11 @@ const scales=(metal)=>`<g stroke="url(#${metal})" stroke-width="2.4" fill="none"
 const lens=(metal)=>`<circle cx="60" cy="88" r="22" fill="none" stroke="rgba(0,0,0,.6)" stroke-width="3"/><circle cx="60" cy="88" r="13" fill="#04081a"/><circle cx="60" cy="88" r="13" fill="none" stroke="url(#${metal})" stroke-width="1.4"/><ellipse cx="53" cy="80" rx="6" ry="4" fill="rgba(255,255,255,.75)" transform="rotate(-30 53 80)"/><circle cx="66" cy="95" r="2" fill="rgba(255,255,255,.4)"/>`;
 const diamond=`<g filter="url(#glow)"><polygon points="60,78 76,90 60,118 44,90" fill="url(#gem)"/><polygon points="44,90 60,78 76,90 60,94" fill="rgba(255,255,255,.55)"/><path d="M44 90 L60 118 L76 90 M52 90 L60 118 L68 90" stroke="rgba(255,255,255,.5)" stroke-width=".8" fill="none"/></g>`;
 
+// The running records' emblems (ROADMAP 37c-ii, Kd's "yes" to reviews/37c-ii-records-mock.png).
+const sandal=(metal)=>`<g filter="url(#emb)"><path d="M40 104 C44 100 56 100 66 98 C74 96 80 98 82 104 C83 108 80 110 74 110 H44 C40 110 38 108 40 104Z" fill="url(#${metal})"/><path d="M52 100 L56 84 M60 99 L62 86 M68 97 L66 86" stroke="url(#${metal})" stroke-width="2.2" stroke-linecap="round"/><path d="M50 86 C44 76 34 74 28 76 C36 78 40 82 42 88 C36 84 30 84 26 86 C34 88 40 92 46 94Z" fill="url(#leafgold)"/></g>`;
+const romanK=(t,metal,size)=>roman(t,metal,size).replace(/y="([\d.]+)"/,(m,y)=>`y="${(+y-4).toFixed(1)}"`)+`<text x="60" y="114" text-anchor="middle" font-family="Georgia,serif" font-size="9" font-weight="700" letter-spacing="2" fill="url(#${metal})" filter="url(#emb)">KM</text>`;
+const road=(metal)=>`<g filter="url(#emb)"><path d="M54 116 L58 72 H62 L66 116Z" fill="url(#${metal})"/><path d="M60 112 V106 M60 100 V95 M60 90 V86 M60 82 V79" stroke="#1d1a14" stroke-width="1.6"/><path d="M32 116 C44 100 50 86 56 74 M88 116 C76 100 70 86 64 74" stroke="url(#${metal})" stroke-width="1.4" fill="none"/><circle cx="60" cy="66" r="6" fill="#fff1c2" filter="url(#glow)"/></g>`;
+
 const R={orange:['#ff8a1f','#2a1608'],red:['#c4261b','#f3d8a8'],blue:['#1d3a93','#f2e2b8'],green:['#23733a','#f2e2b8'],purple:['#4d2190','#f2c14e'],night:['#141c48','#9fb4ff'],teal:['#11716a','#f2e2b8']};
 const B={
  first_workout:()=>coin({metal:'bronze',enamel:'e-crimson',emblem:roman('I','bronze',40)+laurel(60,88,26,'bronze'),rib:R.orange,text:'FIRST WORKOUT'}),
@@ -108,6 +113,10 @@ const B={
  first_meal:()=>coin({metal:'bronze',enamel:'e-green',emblem:apple('gold'),rib:R.green,text:'FIRST MEAL'}),
  macro_master:()=>coin({metal:'gold',enamel:'e-green',emblem:scales('gold'),shape:'shield',rib:R.green}),
  photo_meal:()=>coin({metal:'bronze',enamel:'e-lens',emblem:lens('bronze'),shape:'lens',rib:R.teal,text:'MEAL PHOTO'}),
+ fastest_1k:()=>coin({metal:'bronze',enamel:'e-teal',emblem:sandal('bronze'),rib:R.teal,text:'FASTEST'}),
+ fastest_5k:()=>coin({metal:'silver',enamel:'e-teal',emblem:romanK('V','silver',30)+laurel(60,88,26,'silver'),rib:R.teal}),
+ fastest_10k:()=>coin({metal:'gold',enamel:'e-teal',emblem:romanK('X','gold',30)+laurel(60,88,26,'gold'),rib:R.teal}),
+ longest_run:()=>coin({metal:'plat',enamel:'e-dawn',emblem:road('plat'),shape:'sun',rib:R.teal}),
 };
 
 const EMB={

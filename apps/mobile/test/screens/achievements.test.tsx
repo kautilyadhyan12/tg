@@ -218,3 +218,40 @@ describe("the Dashboard opens Achievements where its box points", () => {
     expect(within(screen.getByRole("tab", { name: tab })).getByText(tab)).toBeTruthy();
   });
 });
+
+describe("Achievements → Badges: the Running shelf (37c-ii)", () => {
+  const RUN_ID = "7d9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed";
+  const record = (value: number, before: number | null) => ({ runId: RUN_ID, name: "Tempo Run", startedAt: "2026-10-20T01:30:00.000Z", day: "2026-10-20", value, before });
+
+  it("lights only the records the server holds, writes each under its medal, and a medal's box opens its run", async () => {
+    const s = server({ [ACHIEVEMENTS_READS.records]: ok({ k1: record(292, null), mile: null, k5: record(1660, 1702), k10: null, longest: record(6210, 5200) }) });
+    await openAchievements(s.ask);
+    const shelf = await screen.findByTestId("running-shelf");
+    expect(within(shelf).getByText("3 of 4")).toBeTruthy();
+    expect(within(shelf).getByLabelText("Fastest 1K, 4:52")).toBeTruthy();
+    expect(within(shelf).getByLabelText("Fastest 5K, 27:40")).toBeTruthy();
+    expect(within(shelf).getByLabelText("Longest run, 6.21 km")).toBeTruthy();
+    expect(within(shelf).getByLabelText("Fastest 10K, not set yet. Run 10 km to set it.")).toBeTruthy();
+    await fireEvent.press(within(shelf).getByLabelText("Fastest 5K, 27:40"));
+    expect(await screen.findByText("Your record")).toBeTruthy();
+    expect(screen.getByText("42 seconds faster than your last best.")).toBeTruthy();
+    expect(screen.getByText("Tempo Run")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Open Tempo Run" })).toBeTruthy();
+  });
+
+  it("records that could not be read say so, with Try again, and the badges as before", async () => {
+    let fails = true;
+    const s = server({
+      [ACHIEVEMENTS_READS.records]: () =>
+        fails ? { status: 503, body: { error: "unavailable" } } : { status: 200, body: { k1: record(292, null), mile: null, k5: null, k10: null, longest: null } },
+    });
+    await openAchievements(s.ask);
+    expect(await screen.findByLabelText("First Workout, Bronze. Earned 14 Oct.")).toBeTruthy();
+    expect(await screen.findByText("Your running records couldn’t load.")).toBeTruthy();
+    expect(screen.queryByTestId("running-shelf")).toBeNull();
+    fails = false;
+    await fireEvent.press(screen.getByRole("button", { name: "Load your running records again" }));
+    expect(await screen.findByTestId("running-shelf")).toBeTruthy();
+  });
+});
+
