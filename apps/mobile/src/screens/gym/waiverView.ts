@@ -25,7 +25,9 @@ export function signedDay(at: string, timeZone: string | undefined): string {
 export const signedLine = (signed: { name: string; at: string }, timeZone: string | undefined): string =>
   `Signed on ${signedDay(signed.at, timeZone)} as ${signed.name}.`;
 
-export function waiverNotRead(status: number | null, business: string, person: string): string {
+/** `other`: an answer came back, but for another business. */
+export function waiverNotRead(status: number | "other" | null, business: string, person: string): string {
+  if (status === "other") return `We couldn't load ${business}'s waiver. Please try again.`;
   if (status === 404) return `You're no longer a ${person} of ${business}.`;
   if (status === 429) return "Too many tries. Please wait a few minutes and try again.";
   return `We couldn't load ${business}'s waiver. Check your connection and try again.`;

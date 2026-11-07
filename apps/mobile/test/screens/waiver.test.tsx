@@ -107,7 +107,7 @@ describe("the worst thing: a waiver said to be signed that was not, or words sig
     });
     await openGym(server.ask);
     await fireEvent.press(await screen.findByTestId(`waiver-ask-${IRON.id}`));
-    expect(await screen.findByText("We couldn't load Iron House's waiver. Check your connection and try again.")).toBeTruthy();
+    expect(await screen.findByText("We couldn't load Iron House's waiver. Please try again.")).toBeTruthy();
     expect(screen.queryByText(LOTUS_V1.text)).toBeNull();
     expect(screen.queryByLabelText("Sign Iron House's waiver")).toBeNull();
     expect(server.asked.some((one) => one.method === "POST" && one.path.includes("/waiver/"))).toBe(false);
@@ -147,6 +147,70 @@ describe("the worst thing: a waiver said to be signed that was not, or words sig
 });
 
 describe("the rest", () => {
+  it("signed while the places are slow to read: the card says signed at once, and the name box is not changed while Sign is saved", async () => {
+    let signal = true;
+    let readsAfter = 0;
+    let finish: (reply: Reply) => void = () => undefined;
+    const server = fakeServer({
+      "/v1/auth/refresh": ok({ tokens: tokens(2) }),
+      "/v1/orgs/mine": () => {
+        if (!signal) {
+          readsAfter += 1;
+          // A slow connection: this read never comes back during the test.
+          return new Promise<Reply>(() => undefined);
+        }
+        return { status: 200, body: { orgs: [org(IRON, "to_sign")], formerOrgs: [] } };
+      },
+      [readPath(IRON)]: ok(mineOf(IRON, IRON_V1)),
+      [signPath(IRON)]: () =>
+        new Promise<Reply>((resolve) => {
+          finish = resolve;
+        }),
+    });
+    await openGym(server.ask);
+    await fireEvent.press(await screen.findByTestId(`waiver-ask-${IRON.id}`));
+    await screen.findByText(IRON_V1.text);
+    await signIt("Maya Patel");
+    await fireEvent.press(screen.getByLabelText("Sign Iron House's waiver"));
+    await waitFor(() => {
+      expect(screen.getByLabelText("Full name").props.editable).toBe(false);
+    });
+    signal = false;
+    finish({ status: 200, body: { signed: { name: "Maya Patel", at: AT } } });
+    await screen.findByText("You signed Iron House’s waiver.");
+    await fireEvent.press(screen.getByText("Done"));
+    await waitFor(() => {
+      expect(readsAfter).toBeGreaterThan(0);
+    });
+    expect(askOf(IRON)).toBeNull();
+    expect(screen.getByLabelText("Waiver at Iron House")).toBeTruthy();
+  });
+
+  it("no longer a member: said, with no Try again; any other failure offers Try again, which reads again", async () => {
+    let reads = 0;
+    const server = fakeServer({
+      "/v1/auth/refresh": ok({ tokens: tokens(2) }),
+      "/v1/orgs/mine": ok({ orgs: [org(IRON, "to_sign"), org(LOTUS, "to_sign")], formerOrgs: [] }),
+      [readPath(IRON)]: () => refusal(404, "not_found", WAIVER_WORDS.not_found),
+      [readPath(LOTUS)]: () => {
+        reads += 1;
+        return reads === 1 ? refusal(500, "internal", "Something went wrong") : { status: 200, body: mineOf(LOTUS, LOTUS_V1) };
+      },
+    });
+    await openGym(server.ask);
+    await fireEvent.press(await screen.findByTestId(`waiver-ask-${IRON.id}`));
+    expect(await screen.findByText("You're no longer a member of Iron House.")).toBeTruthy();
+    expect(within(screen.getByTestId("waiver-paper-failed")).queryByText("Try again")).toBeNull();
+    await fireEvent.press(screen.getByLabelText("Close"));
+    await fireEvent.press(await screen.findByTestId(`waiver-ask-${LOTUS.id}`));
+    expect(await screen.findByText("We couldn't load Lotus Yoga's waiver. Check your connection and try again.")).toBeTruthy();
+    // The page's own, over the tab.
+    const again = screen.getAllByText("Try again").at(-1);
+    if (again === undefined) throw new Error("no Try again on the page");
+    await fireEvent.press(again);
+    expect(await screen.findByText(LOTUS_V1.text)).toBeTruthy();
+  });
+
   it("a waiver stopped while the page was open: nothing to sign, and it says so", async () => {
     let stopped = false;
     const server = fakeServer({

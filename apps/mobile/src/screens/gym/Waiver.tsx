@@ -61,14 +61,14 @@ export function WaiverAsk({ gymId, gymName, onOpen }: { gymId: string; gymName: 
   );
 }
 
-type Held = { kind: "loading" } | { kind: "failed"; status: number | null } | { kind: "ok"; view: MyWaiverResponse };
+type Held = { kind: "loading" } | { kind: "failed"; status: number | "other" | null } | { kind: "ok"; view: MyWaiverResponse };
 
 /** The page over the Gym tab; closed while `place` is null. */
-export function WaiverPage({ place, onClose }: { place: WaiverPlace | null; onClose: () => void }) {
-  return place === null ? null : <Body key={place.id} place={place} onClose={onClose} />;
+export function WaiverPage({ place, onClose, onSigned }: { place: WaiverPlace | null; onClose: () => void; onSigned: (gymId: string) => void }) {
+  return place === null ? null : <Body key={place.id} place={place} onClose={onClose} onSigned={onSigned} />;
 }
 
-function Body({ place, onClose }: { place: WaiverPlace; onClose: () => void }) {
+function Body({ place, onClose, onSigned }: { place: WaiverPlace; onClose: () => void; onSigned: (gymId: string) => void }) {
   const { session } = useSession();
   const [held, setHeld] = useState<Held>({ kind: "loading" });
   const [name, setName] = useState("");
@@ -85,7 +85,7 @@ function Body({ place, onClose }: { place: WaiverPlace; onClose: () => void }) {
     const number = started.current;
     const answer = await session.signedIn({ method: "GET", path: waiverPath(place.id) }, myWaiverResponseSchema);
     if (!live.current || number !== started.current) return;
-    if (answer.kind === "ok" && answer.data.gymId === place.id) setHeld({ kind: "ok", view: answer.data });
+    if (answer.kind === "ok") setHeld(answer.data.gymId === place.id ? { kind: "ok", view: answer.data } : { kind: "failed", status: "other" });
     else setHeld({ kind: "failed", status: answer.kind === "refused" ? answer.status : null });
   }, [session, place.id]);
 
@@ -113,6 +113,8 @@ function Body({ place, onClose }: { place: WaiverPlace; onClose: () => void }) {
     setBusy(false);
     if (answer.kind === "ok") {
       setDone(answer.data.signed);
+      // The card says signed at once, with no signal too; the places read again on closing.
+      onSigned(place.id);
       return;
     }
     setProblem(answer.kind === "refused" ? answer.message : NO_ANSWER);
@@ -173,7 +175,7 @@ function Body({ place, onClose }: { place: WaiverPlace; onClose: () => void }) {
       {held.kind === "loading" ? (
         <Txt kind="small">Loading…</Txt>
       ) : held.kind === "failed" ? (
-        <Card style={styles.paper}>
+        <Card testID="waiver-paper-failed" style={styles.paper}>
           <Txt colour="badText">{waiverNotRead(held.status, place.name, person)}</Txt>
           {held.status === 404 ? null : (
             <Button
@@ -211,7 +213,7 @@ function Body({ place, onClose }: { place: WaiverPlace; onClose: () => void }) {
           {toSign === null ? null : (
             <>
               <View style={styles.line} />
-              <Field label="Full name" value={name} onChange={setName} fills="name" name maxLength={WAIVER_NAME_MAX_CHARS} />
+              <Field label="Full name" value={name} onChange={setName} fills="name" name maxLength={WAIVER_NAME_MAX_CHARS} disabled={busy} />
               <Tick
                 label={WAIVER_AGREE_LABEL}
                 ticked={agreed}

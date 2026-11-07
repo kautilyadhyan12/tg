@@ -284,7 +284,7 @@ d("a gym's waiver (real Postgres)", () => {
       const studio = await makeGym("Studio Tab");
       const plain = await makeGym("Plain Tab");
       // Bea joins all three before any waiver; Cal joins Iron alone.
-      const { who: bea } = await member(iron, "tab-bea", "Bea Lund");
+      const { who: bea, entryId: beaAtIron } = await member(iron, "tab-bea", "Bea Lund");
       // One sign-in: the address is invited to the other two and joins each.
       for (const gym of [studio, plain]) {
         await addInvited(gym, { fullName: "Bea Lund", email: addr("tab-bea") });
@@ -295,6 +295,11 @@ d("a gym's waiver (real Postgres)", () => {
 
       const v1 = savedId(await save(iron, PASTED));
       const studioV1 = savedId(await save(studio, "Studio Tab's own waiver."));
+      expect(await waiverStates(bea)).toEqual({ "Iron Tab": "to_sign", "Studio Tab": "to_sign", "Plain Tab": null });
+
+      // Signed at the desk only, Bea is still asked in the app (spec §10.10: on purpose).
+      const desk = await post(`/v1/orgs/${iron.id}/member-list/entries/${beaAtIron}/waiver/sign`, { waiverId: v1, signer: "person", name: "Bea Lund" }, iron.owner.cookies);
+      expect(desk.statusCode, desk.body).toBe(200);
       expect(await waiverStates(bea)).toEqual({ "Iron Tab": "to_sign", "Studio Tab": "to_sign", "Plain Tab": null });
 
       // Cal signs Iron's words: his card, never Bea's, reads signed.
@@ -317,9 +322,13 @@ d("a gym's waiver (real Postgres)", () => {
       expect(await waiverStates(cal)).toEqual({ "Iron Tab": null });
       expect(await myWaiver(studio, bea)).toMatchObject({ gymId: studio.id, gymName: "Studio Tab", signed: { name: "Bea Lund" } });
 
-      // The owner, who is not a member, is told nothing about anybody's waiver.
+      // The owner, who is not a member, is told nothing about anybody's waiver; a trainer who is
+      // also a member is asked as a member.
       expect(await waiverStates(studio.owner)).toEqual({ "Studio Tab": null });
-      // Removed from the studio, Bea is no longer asked there.
+      await sql`INSERT INTO gym_staff (gym_id, user_id, role) VALUES (${studio.id}, ${bea.userId}, 'trainer')`;
+      expect((await waiverStates(bea))["Studio Tab"]).toBe("signed");
+      await sql`DELETE FROM gym_staff WHERE gym_id = ${studio.id} AND user_id = ${bea.userId}`;
+      // Removed from the studio, it leaves her places altogether (the list's own rule, before 20b).
       await sql`UPDATE gym_members SET removed_at = now() WHERE gym_id = ${studio.id} AND user_id = ${bea.userId}`;
       expect(Object.keys(await waiverStates(bea))).not.toContain("Studio Tab");
     },

@@ -426,6 +426,13 @@ export function GymScreen() {
       />
       <WaiverPage
         place={waiverAt}
+        onSigned={(gymId) => {
+          setMine((now) =>
+            now?.kind === "ok"
+              ? { kind: "ok", data: { ...now.data, orgs: now.data.orgs.map((one) => (one.id === gymId ? { ...one, waiver: "signed" as const } : one)) } }
+              : now,
+          );
+        }}
         onClose={() => {
           setWaiverAt(null);
           // A signature made, or a waiver changed meanwhile, is what the card says when it closes.
