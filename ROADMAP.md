@@ -343,7 +343,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
        - 18k-ii-a. [x] **A membership's bill** — merged 2026-11-06 (PR #487).
        - 18k-ii-b. [x] **A fee** — merged 2026-11-07 (PR #488).
      - 18k-iii. **Buy something paid once**, in two parts since 2026-11-07 (`handoff/2026-11-07-18k-iii-a.md` keeps its line as first written):
-       - 18k-iii-a. [ ] **A member on the gym's list buys it**, given when Square says it is paid, its agreement signed as they press Buy.
+       - 18k-iii-a. [x] **A member on the gym's list buys it** — merged 2026-11-07 (PR #492).
        - 18k-iii-b. [ ] **A member not on the gym's list yet, or sharing a record, buys it** (Kd decides at its plan whether buying puts them on the list).
      - 18k-iv. [ ] **Buy a repeating membership**: its own tick, kept with its time and words, a card typed on Square's form and kept; on sale only once 18l is built.
      - 18k-v. [ ] **A promo code typed in the app** (spec Part 3 §14.3).
