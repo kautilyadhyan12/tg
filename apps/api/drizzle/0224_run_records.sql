@@ -1,5 +1,5 @@
 -- Running records (ROADMAP Stage 5 item 37c-ii). Forward-only. Hand-written, as `0016` onwards are; its
--- journal entry is part of this commit.
+-- journal entry is part of this commit. Written as 0223 and renumbered 0224, as another folder's 0223 merged first.
 --
 -- Each run's fastest 1 km, mile, 5 km and 10 km in whole seconds, worked out from its points when it is
 -- saved (`runMaths.ts`, `fastestStretch`); null where it did not cover the distance, and for a run saved
