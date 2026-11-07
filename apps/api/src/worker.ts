@@ -68,6 +68,8 @@ import { paddleSettings, razorpaySettings } from "./modules/billing/settings.js"
 import { sendPlanEndReminders } from "./modules/billing/service.js";
 import { squareSettings } from "./modules/orgs/payments/settings.js";
 import { processSquareWork } from "./modules/orgs/payments/work.js";
+import { createLogOnlyAgreementEmailSender, createResendAgreementEmailSender } from "./modules/orgs/agreement/email.js";
+import { emailBoughtCopy } from "./modules/orgs/agreement/service.js";
 import { sendDueCardExpiryNotices } from "./modules/orgs/payments/cardExpiry.js";
 import { sendDueRenewalReminders } from "./modules/orgs/memberships/renewalReminders.js";
 import { sendDueCardNotices } from "./modules/orgs/payments/cardNotices.js";
@@ -801,12 +803,19 @@ if (square === null) {
     log.fatal({ err }, "failed to register the Square schedule");
     process.exit(1);
   }
+  // The copy of an agreement signed as a line is bought in the app, where the worker finds the page paid (18k-iii-a).
+  const boughtCopySender =
+    config.RESEND_API_KEY !== undefined && config.EMAIL_FROM !== undefined
+      ? createResendAgreementEmailSender(createResendTransport({ apiKey: config.RESEND_API_KEY, from: config.EMAIL_FROM }), log)
+      : createLogOnlyAgreementEmailSender(log);
+  const agreementCopy = (gymId: string, membershipId: string): Promise<void> =>
+    emailBoughtCopy({ sql, now: () => new Date(), email: boughtCopySender, addressKey: invites?.hmacKey ?? null, log }, gymId, membershipId);
   paymentsWorker = new Worker(
     PAYMENTS_QUEUE,
     async (job) => {
       if (job.name !== PAYMENTS_SQUARE_JOB) throw new Error(`unknown job on ${PAYMENTS_QUEUE}: ${job.name}`);
       const startedAt = Date.now();
-      const run = await processSquareWork({ sql, square, log, now: () => new Date() });
+      const run = await processSquareWork({ sql, square, log, now: () => new Date(), agreementCopy });
       const revokes = run.revokes.sent + run.revokes.deferred + run.revokes.givenUp;
       const cardStops = run.cardStops.sent + run.cardStops.deferred + run.cardStops.givenUp;
       const customerDeletes = run.customerDeletes.deleted + run.customerDeletes.kept + run.customerDeletes.deferred + run.customerDeletes.givenUp;

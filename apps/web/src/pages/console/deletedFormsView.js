@@ -44,6 +44,6 @@ export const deletedFormsShownLine = (shown, total) => (shown < total ? `Showing
 
 /** Who was at the front desk when it was signed there; null from the emailed link or when they have left. */
 export function deletedFormDeskLine(signed) {
-  if (signed.by === null || signed.via === 'link') return null;
+  if (signed.by === null || signed.via !== 'desk') return null;
   return `Signed at the front desk with ${signed.by}.`;
 }

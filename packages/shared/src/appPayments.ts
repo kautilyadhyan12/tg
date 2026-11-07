@@ -112,9 +112,9 @@ export const APP_PAYMENT_STAFF_WORDS = {
   check: "Square may have taken a payment on this page that isn't on the bill. Check it in Square before taking this payment again.",
   none: "No payment page is open on this membership now.",
   /** Disconnect Square while a member's page is open: it could still be paid, with nothing here to record it. */
-  disconnect_open: "A member is paying in the app right now. Disconnect Square once their payment page closes.",
+  disconnect_open: "A member is paying or buying in the app right now. Disconnect Square once their payment page closes.",
   /** Delete permanently while one of the person's pages is open: what Square took would have no bill to go on. */
-  delete_open: "This person is paying in the app right now. Delete them once their payment page closes.",
+  delete_open: "This person is paying or buying in the app right now. Delete them once their payment page closes.",
   /** Void payment on a payment made in the app: Square holds the money. */
   void_app: "This was paid in the app. To give the money back, press Refund on the payment.",
 } as const;

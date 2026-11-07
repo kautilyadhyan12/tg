@@ -85,7 +85,7 @@ export const gymAgreementSignatures = pgTable(
   (t) => [
     check("gym_agreement_signatures_signer_check", sql`${t.signer} IN ('person', 'guardian')`),
     check("gym_agreement_signatures_name_check", sql`char_length(${t.signedName}) BETWEEN 2 AND 100`),
-    check("gym_agreement_signatures_via_check", sql`${t.signedVia} IN ('desk', 'link')`),
+    check("gym_agreement_signatures_via_check", sql`${t.signedVia} IN ('desk', 'link', 'app')`),
     check("gym_agreement_signatures_facts_check", sql`jsonb_typeof(${t.facts}) = 'array' AND jsonb_array_length(${t.facts}) BETWEEN 1 AND 30`),
     foreignKey({ name: "gym_agreement_signatures_agreement_fk", columns: [t.gymId, t.agreementId], foreignColumns: [gymAgreements.gymId, gymAgreements.id] }).onDelete(
       "cascade",
