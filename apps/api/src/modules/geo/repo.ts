@@ -28,6 +28,8 @@ export interface RunRow {
   day: string;
   /** What the shape is made from while it has none yet: the saved line and its splits' starts. */
   shapeFrom: { polyline: string; splits: unknown } | null;
+  /** Brought over from the old app (`tools/migrate-mongo`): its line is that app's JSON path, not a coded line. */
+  legacy: boolean;
 }
 
 /** A run's own page: the summary's row and what its page shows besides. */
@@ -63,6 +65,7 @@ interface RunDbRow {
   day: string;
   shape_polyline: string | null;
   shape_splits: unknown;
+  legacy: boolean;
 }
 
 interface RunDetailDbRow extends RunDbRow {
@@ -96,6 +99,7 @@ const toRun = (r: RunDbRow): RunRow => ({
   shape: r.shape,
   day: r.day,
   shapeFrom: r.shape === null && r.shape_polyline !== null ? { polyline: r.shape_polyline, splits: r.shape_splits } : null,
+  legacy: r.legacy,
 });
 
 const toRunDetail = (r: RunDetailDbRow): RunDetailRow => ({
@@ -133,7 +137,8 @@ export async function listRuns(
     SELECT id, started_at, duration_s, distance_m, route_name, kcal_point, source, NULL AS polyline,
            name, elapsed_s, climb_m, shape, to_char(started_at AT TIME ZONE ${timeZone}, 'YYYY-MM-DD') AS day,
            CASE WHEN shape IS NULL THEN polyline END AS shape_polyline,
-           CASE WHEN shape IS NULL THEN splits END AS shape_splits
+           CASE WHEN shape IS NULL THEN splits END AS shape_splits,
+           legacy_mongo_id IS NOT NULL AS legacy
     FROM runs
     WHERE user_id = ${userId}
       AND (${cursor === null} OR (started_at, id) < (${cursor?.at ?? null}, ${cursor?.id ?? null}))
@@ -225,7 +230,7 @@ const runDetailColumns = (sql: Sql, timeZone: string) => sql`
   id, started_at, duration_s, distance_m, route_name, kcal_point, source, polyline, name, elapsed_s, climb_m, shape,
   to_char(started_at AT TIME ZONE ${timeZone}, 'YYYY-MM-DD') AS day,
   CASE WHEN shape IS NULL THEN polyline END AS shape_polyline, CASE WHEN shape IS NULL THEN splits END AS shape_splits,
-  splits, effort, note, left_out_m, left_out_s`;
+  splits, effort, note, left_out_m, left_out_s, legacy_mongo_id IS NOT NULL AS legacy`;
 
 export async function getRun(sql: Sql, userId: string, id: string, timeZone: string): Promise<RunDetailRow | null> {
   const rows = await sql<RunDetailDbRow[]>`
@@ -464,7 +469,8 @@ export async function insertRun(sql: Sql, userId: string, run: NewRun): Promise<
   return await sql.begin(async (tx) => {
     await lockRunId(tx, run.id);
     // Deleted while its send was on its way: kept nothing (37c-i).
-    const removed = await tx`SELECT 1 FROM run_removed_ids WHERE id = ${run.id}`;
+    // The person's own removed id only: another's falls through to the row check below, as any id not theirs.
+    const removed = await tx`SELECT 1 FROM run_removed_ids WHERE id = ${run.id} AND user_id = ${userId}`;
     if (removed.length > 0) return "removed" as const;
     const inserted = await tx`
       INSERT INTO runs (id, user_id, started_at, duration_s, distance_m, polyline, splits, kcal_point,

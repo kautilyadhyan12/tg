@@ -9,6 +9,7 @@ import postgres from "postgres";
 import {
   RUN_SHAPE_MOST_POINTS,
   RUN_WORDS,
+  decodePolyline,
   decodeShape,
   runDaysResponseSchema,
   runDetailResponseSchema,
@@ -19,6 +20,7 @@ import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import type { EmailSender } from "../src/modules/auth/email.js";
 import { insertRun } from "../src/modules/geo/repo.js";
+import { insertRun as importRun, transformRun } from "../tools/migrate-mongo/collections/running.js";
 
 const url = process.env["DATABASE_URL"];
 const d = describe.skipIf(url === undefined || url === "");
@@ -74,11 +76,11 @@ d("your runs (real Postgres)", () => {
     if (app === undefined) throw new Error("beforeAll did not build the app");
     return app;
   };
-  const inject = (opts: { method: Method; url: string; body?: unknown; cookies?: Cookies; key?: string }) =>
+  const inject = (opts: { method: Method; url: string; body?: unknown; cookies?: Cookies; key?: string; ip?: string }) =>
     api().inject({
       method: opts.method,
       url: opts.url,
-      remoteAddress: nextIp(),
+      remoteAddress: opts.ip ?? nextIp(),
       headers: {
         ...(opts.body !== undefined ? { "content-type": "application/json" } : {}),
         ...(opts.key !== undefined ? { "idempotency-key": opts.key } : {}),
@@ -93,8 +95,8 @@ d("your runs (real Postgres)", () => {
     return runPageSchema.parse(JSON.parse(res.body));
   };
   const open = (cookies: Cookies, id: string) => inject({ method: "GET", url: `/v1/geo/runs/${id}`, cookies });
-  const change = (cookies: Cookies, id: string, to: unknown) => inject({ method: "PATCH", url: `/v1/geo/runs/${id}`, body: to, cookies });
-  const remove = (cookies: Cookies, id: string) => inject({ method: "DELETE", url: `/v1/geo/runs/${id}`, cookies });
+  const change = (cookies: Cookies, id: string, to: unknown, ip?: string) => inject({ method: "PATCH", url: `/v1/geo/runs/${id}`, body: to, cookies, ...(ip === undefined ? {} : { ip }) });
+  const remove = (cookies: Cookies, id: string, ip?: string) => inject({ method: "DELETE", url: `/v1/geo/runs/${id}`, cookies, ...(ip === undefined ? {} : { ip }) });
 
   const makeUser = async (name: string, timeZone = "Asia/Kolkata"): Promise<{ cookies: Cookies; id: string }> => {
     const email = `runyou-${name}@example.com`;
@@ -121,12 +123,12 @@ d("your runs (real Postgres)", () => {
   beforeAll(async () => {
     await clear();
     app = await buildApp(loadConfig(baseEnv), { emailSender: silentAuthSender() });
-  });
+  }, 30_000);
   afterAll(async () => {
     await clear();
     await app?.close();
     await sql.end();
-  });
+  }, 30_000);
 
   describe("the worst thing: somebody else's run shown, changed or deleted, or a deleted run brought back", () => {
     it("another member cannot list, open, change or delete my run, nor see its day on their calendar", async () => {
@@ -196,6 +198,21 @@ d("your runs (real Postgres)", () => {
       expect(await sql`SELECT 1 FROM runs WHERE id = ${run.runId}`).toHaveLength(0);
     });
 
+    it("another person sending a deleted run's id learns nothing: answered as for any id that is free", async () => {
+      const runner = await makeUser("probed");
+      const stranger = await makeUser("prober");
+      const run = body();
+      expect((await save(runner.cookies, run)).statusCode).toBe(201);
+      expect((await remove(runner.cookies, run.runId)).statusCode).toBe(204);
+      // Not "This run was deleted.": a stranger's send under the id is kept as theirs, as under a new id.
+      const theirs = await save(stranger.cookies, body({ runId: run.runId, name: "Mine" }));
+      expect(theirs.statusCode).toBe(201);
+      expect(theirs.body).not.toContain("deleted");
+      // The runner's own phone sending it again still keeps nothing of theirs.
+      expect((await save(runner.cookies, run)).statusCode).toBe(410);
+      expect(await sql`SELECT user_id FROM runs WHERE id = ${run.runId}`).toEqual([{ user_id: stranger.id }]);
+    });
+
     it("nobody signed in gets nothing", async () => {
       const id = randomUUID();
       for (const [method, path] of [["GET", "/v1/geo/runs"], ["GET", "/v1/geo/runs/days?month=2026-10"], ["GET", `/v1/geo/runs/${id}`], ["PATCH", `/v1/geo/runs/${id}`], ["DELETE", `/v1/geo/runs/${id}`]] as const) {
@@ -243,7 +260,45 @@ d("your runs (real Postgres)", () => {
     expect(picked.items.map((r) => r.name)).toEqual(["Late run", "October run"]);
     expect((await list(me.cookies, "?upTo=2026-10-31")).items.map((r) => r.name)).toEqual(["October run"]);
     expect((await list(me.cookies, "?upTo=2026-10-24")).items).toEqual([]);
-    expect((await inject({ method: "GET", url: "/v1/geo/runs?upTo=1-11-2026", cookies: me.cookies })).statusCode).toBe(400);
+    for (const bad of ["1-11-2026", "2026-13-45", "2026-02-30", "0000-01-01", "1899-12-31"]) {
+      expect((await inject({ method: "GET", url: `/v1/geo/runs?upTo=${bad}`, cookies: me.cookies })).statusCode, bad).toBe(400);
+    }
+  });
+
+  it("a run brought over from the old app shows its own route, or none: never one made up from its JSON path", async () => {
+    const me = await makeUser("legacy");
+    // The old app's path, as tools/migrate-mongo keeps it: walking north-east from Guwahati.
+    const path = Array.from({ length: 30 }, (_, i) => [26.1445 + i * 0.0003, 91.7362 + i * 0.0002]);
+    const doc = { _id: "6a36f8d2e5a6aa387a50df81", user_id: "6a0d468a98494b5b25602e81", started_at: "2026-10-20T01:00:00Z", duration_min: 30, distance_km: 1.2, path };
+    const row = transformRun(doc);
+    if (row === null) throw new Error("no legacy run");
+    expect(await importRun(sql, { ...row, userId: me.id })).toBe(1);
+    const [listed] = (await list(me.cookies)).items;
+    const small = decodeShape(listed?.shape ?? "").track;
+    expect(small.length).toBeGreaterThan(1);
+    for (const [lat, lng] of small) {
+      expect(lat).toBeGreaterThan(26.14);
+      expect(lat).toBeLessThan(26.16);
+      expect(lng).toBeGreaterThan(91.73);
+      expect(lng).toBeLessThan(91.75);
+    }
+    const page = runDetailResponseSchema.parse(JSON.parse((await open(me.cookies, row.id)).body)).run;
+    const line = decodePolyline(page.polyline ?? "");
+    expect(line).toHaveLength(30);
+    expect(line[29]?.[0]).toBeCloseTo(26.1445 + 29 * 0.0003, 5);
+    expect(line[29]?.[1]).toBeCloseTo(91.7362 + 29 * 0.0002, 5);
+    // {lat, lng} points read the same way; a path that is not a path is no route at all.
+    const points = transformRun({ ...doc, _id: "6a36f8d2e5a6aa387a50df82", path: path.map(([lat, lng]) => ({ lat, lng, t: 0 })) });
+    const broken = transformRun({ ...doc, _id: "6a36f8d2e5a6aa387a50df83", path: [{ x: 1 }, "here"] });
+    if (points === null || broken === null) throw new Error("no legacy run");
+    await importRun(sql, { ...points, userId: me.id });
+    await importRun(sql, { ...broken, userId: me.id });
+    const pointsPage = runDetailResponseSchema.parse(JSON.parse((await open(me.cookies, points.id)).body)).run;
+    expect(decodePolyline(pointsPage.polyline ?? "")).toHaveLength(30);
+    const brokenPage = runDetailResponseSchema.parse(JSON.parse((await open(me.cookies, broken.id)).body)).run;
+    expect(brokenPage.polyline).toBeNull();
+    expect(brokenPage.shape).toBeNull();
+    expect(await sql`SELECT shape FROM runs WHERE id = ${broken.id}`).toEqual([{ shape: null }]);
   });
 
   it("a run saved before Your runs gets its route small the first time the list reads it, and keeps it", async () => {
@@ -348,13 +403,16 @@ d("your runs (real Postgres)", () => {
   it("thirty changes or deletes a minute for a person; somebody else at the same address goes on", async () => {
     const me = await makeUser("limit");
     const other = await makeUser("limit-other");
+    // One gym's wi-fi: both people at one address, a fresh one for each run of the test.
+    const gym = `198.51.${String(Math.floor(Math.random() * 250))}.${String(Math.floor(Math.random() * 250) + 1)}`;
     const run = body();
     expect((await save(me.cookies, run)).statusCode).toBe(201);
-    for (let i = 0; i < 30; i++) expect((await change(me.cookies, run.runId, { effort: (i % 10) + 1 })).statusCode).toBe(200);
-    expect((await change(me.cookies, run.runId, { effort: 5 })).statusCode).toBe(429);
-    expect((await remove(me.cookies, run.runId)).statusCode).toBe(429);
+    for (let i = 0; i < 30; i++) expect((await change(me.cookies, run.runId, { effort: (i % 10) + 1 }, gym)).statusCode).toBe(200);
+    expect((await change(me.cookies, run.runId, { effort: 5 }, gym)).statusCode).toBe(429);
+    expect((await remove(me.cookies, run.runId, gym)).statusCode).toBe(429);
     const theirs = body();
     expect((await save(other.cookies, theirs)).statusCode).toBe(201);
-    expect((await change(other.cookies, theirs.runId, { effort: 5 })).statusCode).toBe(200);
+    expect((await change(other.cookies, theirs.runId, { effort: 5 }, gym)).statusCode).toBe(200);
+    expect((await remove(other.cookies, theirs.runId, gym)).statusCode).toBe(204);
   });
 });

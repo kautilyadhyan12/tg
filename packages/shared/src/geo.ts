@@ -65,7 +65,16 @@ export type SavedRoute = z.infer<typeof savedRouteSchema>;
 export const runSplitSchema = z.object({ m: z.number().int().nonnegative(), s: z.number().int().nonnegative() });
 
 /** A day of the person's own time zone, YYYY-MM-DD. */
-const runDaySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+const runDaySchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/)
+  .refine((day) => {
+    // A real day of the calendar, from 1900: 2026-02-30 and 2026-13-45 are refused, never read as another day.
+    const [y, m, d] = day.split("-").map(Number);
+    if (y === undefined || m === undefined || d === undefined || y < 1900) return false;
+    const at = new Date(Date.UTC(y, m - 1, d));
+    return at.getUTCFullYear() === y && at.getUTCMonth() === m - 1 && at.getUTCDate() === d;
+  }, "not a day of the calendar");
 /** A month of the person's own time zone, YYYY-MM. */
 export const runMonthSchema = z.string().regex(/^(19|20)\d{2}-(0[1-9]|1[0-2])$/);
 

@@ -108,6 +108,7 @@ export function DashboardScreen() {
   const [goalsOpen, setGoalsOpen] = useState<GoalsOpen | null>(null);
   // A run of Recent Activity opened on its own page (37c-i).
   const [openRun, setOpenRun] = useState<string | null>(null);
+  const [runDeleted, setRunDeleted] = useState<string | null>(null);
   const units = (state.kind === "in" ? accountUnits(state.user.units) : null) ?? "metric";
   // Your Rank is the person's first gym's board; somebody using the app alone has a board of their own to come (item 38).
   const places = useRead(PLACES_READ, myOrgsResponseSchema);
@@ -223,7 +224,7 @@ export function DashboardScreen() {
           go.navigate("Food", { today: Date.now(), next: Date.now() });
         }}
       />
-      <Recent workouts={recent.read} runs={runs.read} meals={meals.read} units={units} onRun={setOpenRun} />
+      <Recent workouts={recent.read} runs={runs.read} meals={meals.read} units={units} onRun={(id) => { setRunDeleted(null); setOpenRun(id); }} said={runDeleted} />
       <Ready onPress={toWorkout} />
       <GoalsPage
         open={goalsOpen}
@@ -240,7 +241,12 @@ export function DashboardScreen() {
           setOpenRun(null);
         }}
         onChanged={() => {
-          // A run changed or deleted: its name, the sessions, the streak and the XP.
+          // A run changed: its name in Recent Activity.
+          runs.again();
+        }}
+        onDeleted={(gone) => {
+          // A run deleted: Recent Activity says so, and the sessions, the streak and the XP read again.
+          setRunDeleted(`${gone.name} was deleted.`);
           runs.again();
           overview.again();
           me.again();
@@ -586,7 +592,7 @@ const ACTIVITY_LOOK = {
 
 /** Everything done lately, of any kind. Shown only when all three lists are read: a list missing
  *  would leave out what may be the newest thing. */
-function Recent({ workouts, runs, meals, units, onRun }: { workouts: Read<WorkoutPage>; runs: Read<RunPageRead>; meals: Read<MealPage>; units: Units; onRun: (id: string) => void }) {
+function Recent({ workouts, runs, meals, units, onRun, said }: { workouts: Read<WorkoutPage>; runs: Read<RunPageRead>; meals: Read<MealPage>; units: Units; onRun: (id: string) => void; said: string | null }) {
   const rows =
     workouts.kind === "ok" && runs.kind === "ok" && meals.kind === "ok"
       ? recentActivity({ workouts: workouts.data.items, runs: runs.data.items, meals: meals.data.items }, 3, units)
@@ -602,6 +608,11 @@ function Recent({ workouts, runs, meals, units, onRun }: { workouts: Read<Workou
           Recent Activity
         </Txt>
       </View>
+      {said === null ? null : (
+        <Txt kind="tiny" colour="goodText">
+          {said}
+        </Txt>
+      )}
       {rows === null || workouts.kind !== "ok" ? (
         <Txt kind="small">{NOT_KNOWN}</Txt>
       ) : rows.length === 0 ? (

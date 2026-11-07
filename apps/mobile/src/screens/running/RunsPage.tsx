@@ -246,8 +246,18 @@ export function RunsPage({ open, units, onClose, onStart }: { open: boolean; uni
         onChanged={() => {
           setChanged((n) => n + 1);
         }}
-        onDeleted={(name) => {
-          setSaid(`${name} was deleted.`);
+        onDeleted={(gone) => {
+          // Taken out where it stood, its month and the total less it: the list stays where the person was.
+          setListed((was) => {
+            const run = was.items.find((r) => r.id === gone.id);
+            if (run === undefined) return was;
+            const months = new Map(was.months);
+            const month = months.get(run.day.slice(0, 7));
+            if (month !== undefined) months.set(month.month, { ...month, runs: Math.max(0, month.runs - 1), distanceM: Math.max(0, month.distanceM - run.distanceM) });
+            const total = was.total === null ? null : { runs: Math.max(0, was.total.runs - 1), distanceM: Math.max(0, was.total.distanceM - run.distanceM) };
+            return { ...was, items: was.items.filter((r) => r.id !== gone.id), months, total };
+          });
+          setSaid(`${gone.name} was deleted.`);
         }}
       />
     </CoverPage>

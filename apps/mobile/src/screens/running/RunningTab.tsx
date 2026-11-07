@@ -101,6 +101,8 @@ export function RunningTab({ units, parts }: { units: Units; parts: ReactNode })
   const [runsOpen, setRunsOpen] = useState(false);
   const [openRun, setOpenRun] = useState<string | null>(null);
   const [changed, setChanged] = useState(0);
+  // A run deleted from its page opened here, said where its box was (37c-i, round one).
+  const [deleted, setDeleted] = useState<string | null>(null);
   const going = layer.run !== null;
   // A run going on shows its own Auto-pause, and the switch changes it at once (Kd, 37a's click-through).
   const shownAuto = layer.run !== null && layer.run.phase !== "finished" ? layer.run.autoPause : autoPause;
@@ -146,6 +148,11 @@ export function RunningTab({ units, parts }: { units: Units; parts: ReactNode })
               <View style={[styles.dot, gps.tone === "good" ? styles.dotGood : gps.tone === "weak" ? styles.dotWeak : styles.dotNone]} />
               <Txt kind="small">{gps.word === "GPS" ? "GPS ready" : gps.word}</Txt>
             </View>
+          )}
+          {deleted === null ? null : (
+            <Txt kind="small" colour="goodText">
+              {deleted}
+            </Txt>
           )}
           {lastRun === null ? null : (
             <View style={styles.yours} testID="your-runs">
@@ -311,6 +318,10 @@ export function RunningTab({ units, parts }: { units: Units; parts: ReactNode })
               setOpenRun(null);
             }}
             onChanged={() => {
+              setChanged((n) => n + 1);
+            }}
+            onDeleted={(gone) => {
+              setDeleted(`${gone.name} was deleted.`);
               setChanged((n) => n + 1);
             }}
           />

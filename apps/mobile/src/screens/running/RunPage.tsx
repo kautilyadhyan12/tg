@@ -41,13 +41,14 @@ export function changesOf(run: RunDetail, draft: Draft): { name?: string; effort
   };
 }
 
-/** `runId` null: closed. `onChanged`: the run was changed or deleted, so lists of runs read again. */
+/** `runId` null: closed. `onChanged`: the run was changed, so lists of runs read again. `onDeleted`: it
+ *  was deleted, and the page it was opened from says so; without it, `onChanged`. */
 export function RunPage({ runId, units, onClose, onChanged, onDeleted }: {
   runId: string | null;
   units: Units;
   onClose: () => void;
   onChanged: () => void;
-  onDeleted?: (name: string) => void;
+  onDeleted?: (run: { id: string; name: string }) => void;
 }) {
   const { session } = useSession();
   const [read, setRead] = useState<Read>({ kind: "loading" });
@@ -124,8 +125,8 @@ export function RunPage({ runId, units, onClose, onChanged, onDeleted }: {
     // Deleted now, or already, on this phone or another: gone either way.
     if (answer.kind === "ok" || (answer.kind === "refused" && answer.status === 404)) {
       setDeleting(false);
-      onChanged();
-      onDeleted?.(run.name);
+      if (onDeleted === undefined) onChanged();
+      else onDeleted({ id: run.id, name: run.name });
       onClose();
       return;
     }

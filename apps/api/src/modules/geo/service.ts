@@ -145,10 +145,35 @@ const startsOf = (splits: unknown): number[] => {
   return kept.success ? (kept.data.starts ?? [0]) : [0];
 };
 
+/** The old app's path (`tools/migrate-mongo` keeps it as its JSON): [lat, lng] pairs or {lat, lng}
+ *  points. Read through its shape: anything else is no route at all, never a made-up one. */
+const legacyPointSchema = z.union([
+  z.tuple([z.number().min(-90).max(90), z.number().min(-180).max(180)]).rest(z.unknown()),
+  z.object({ lat: z.number().min(-90).max(90), lng: z.number().min(-180).max(180) }).transform((p): [number, number] => [p.lat, p.lng]),
+  z.object({ lat: z.number().min(-90).max(90), lon: z.number().min(-180).max(180) }).transform((p): [number, number] => [p.lat, p.lon]),
+]);
+const legacyPathSchema = z.array(legacyPointSchema).min(2);
+
+/** A saved line's points: the coded line this app saves, or an old app's path read through its shape;
+ *  null where an old app's path cannot be read. */
+export function lineOf(polyline: string, legacy: boolean): [number, number][] | null {
+  if (!legacy) return decodePolyline(polyline);
+  let raw: unknown;
+  try {
+    raw = JSON.parse(polyline);
+  } catch {
+    return null;
+  }
+  const read = legacyPathSchema.safeParse(raw);
+  return read.success ? read.data.map((p): [number, number] => [p[0], p[1]]) : null;
+}
+
 /** A run saved before 37c-i has no shape: made from its saved line once, and kept. */
 async function withShape<T extends repo.RunRow>(deps: ReadDeps, userId: string, row: T): Promise<T> {
   if (row.shape !== null || row.shapeFrom === null) return row;
-  const shape = routeShape(decodePolyline(row.shapeFrom.polyline), startsOf(row.shapeFrom.splits));
+  const line = lineOf(row.shapeFrom.polyline, row.legacy);
+  if (line === null) return row;
+  const shape = routeShape(line, row.legacy ? [0] : startsOf(row.shapeFrom.splits));
   if (shape === null) return row;
   await repo.keepRunShape(deps.sql, userId, row.id, shape);
   return { ...row, shape };
@@ -195,10 +220,12 @@ export async function runDays(deps: ReadDeps, userId: string, since: Date | null
 
 const asRunDetail = (row: repo.RunDetailRow): RunDetail => {
   const splits = splitsStoredSchema.safeParse(row.splits);
+  // The phone draws a coded line: an old app's path is sent as one, or not at all where it cannot be read.
+  const line = row.polyline === null ? null : lineOf(row.polyline, row.legacy);
   return {
     ...asRunSummary(row),
-    polyline: row.polyline,
-    trackStarts: splits.success ? (splits.data.starts ?? [0]) : [0],
+    polyline: line === null || row.polyline === null ? null : row.legacy ? encodePolyline(line) : row.polyline,
+    trackStarts: row.legacy ? [0] : splits.success ? (splits.data.starts ?? [0]) : [0],
     splitsKm: splits.success ? splits.data.km : [],
     splitsMi: splits.success ? splits.data.mi : [],
     effort: row.effort,
