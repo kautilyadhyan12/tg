@@ -710,7 +710,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
       - 37b-ii. [x] **Elevation gain** · merged 2026-11-07 · PR #489
     - 37c. **Your runs** (split 2026-11-07 in three: the list and a run's page first; Kd's "go", `rulings/2026-11-07-37c-i.md`).
       - 37c-i. [x] **Your runs and a run's page** · merged 2026-11-07 · PR #491
-      - 37c-ii. [ ] **Records**: fastest 1 km or mile, 5 km, 10 km, longest run, also as badges.
+      - 37c-ii. [x] **Running records** · merged 2026-11-07 · PR #495
       - 37c-iii. [ ] **The pace chart**: how your speed changed across the run.
     - 37d. [ ] **The run plan**, run-walk intervals with voice, and Recommended For You's Running tab.
     - 37e. [ ] **Routes.**

@@ -32,7 +32,7 @@ medals = re.findall(r"^ (\w+):\(\)=>coin\(", page[page.index("const B={"):], re.
 measures = re.findall(r"^ (\w+):\(m\)=>", page[page.index("const EMB={"):], re.M)
 names = [f"medal_{m}" for m in medals] + [f"coin_{m}_{metal}" for m in measures for metal in ("bronze", "silver", "gold")] + ["place_1", "place_2", "place_3"]
 cells = [{"name": n, "x": (i % 8) * 380, "y": (i // 8) * 440, "w": 360, "h": 420 if n.startswith("medal_") else 360} for i, n in enumerate(names)]
-if len(medals) != 19 or len(measures) != 7:
+if len(medals) != 23 or len(measures) != 7:
     raise SystemExit(f"read {len(medals)} medals and {len(measures)} coins from the page")
 width = max(c["x"] + c["w"] for c in cells) + 20
 height = max(c["y"] + c["h"] for c in cells) + 20

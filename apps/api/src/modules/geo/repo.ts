@@ -6,7 +6,7 @@
 // module; written here like the nutrition/coach tasks' disclosed crossings
 // (getLiveGymId duplicated from nutrition/repo.ts — a cross-module repo import
 // would violate R7.1).
-import type { RunClimb } from "@app/shared";
+import type { RunBests, RunClimb, RunRecordKind } from "@app/shared";
 import type { Sql, TransactionSql } from "postgres";
 import { ORS_ROUTE_COST_MICRO } from "./cost.js";
 
@@ -39,6 +39,7 @@ export interface RunDetailRow extends RunRow {
   note: string | null;
   leftOutM: number | null;
   leftOutS: number | null;
+  bests: RunBests;
 }
 
 export interface SavedRouteRow {
@@ -74,6 +75,10 @@ interface RunDetailDbRow extends RunDbRow {
   note: string | null;
   left_out_m: number | null;
   left_out_s: number | null;
+  best_1k_s: number | null;
+  best_mile_s: number | null;
+  best_5k_s: number | null;
+  best_10k_s: number | null;
 }
 
 interface SavedRouteDbRow {
@@ -109,6 +114,7 @@ const toRunDetail = (r: RunDetailDbRow): RunDetailRow => ({
   note: r.note,
   leftOutM: r.left_out_m,
   leftOutS: r.left_out_s,
+  bests: { k1: r.best_1k_s, mile: r.best_mile_s, k5: r.best_5k_s, k10: r.best_10k_s },
 });
 
 const toSavedRoute = (r: SavedRouteDbRow): SavedRouteRow => ({
@@ -230,7 +236,8 @@ const runDetailColumns = (sql: Sql, timeZone: string) => sql`
   id, started_at, duration_s, distance_m, route_name, kcal_point, source, polyline, name, elapsed_s, climb_m, shape,
   to_char(started_at AT TIME ZONE ${timeZone}, 'YYYY-MM-DD') AS day,
   CASE WHEN shape IS NULL THEN polyline END AS shape_polyline, CASE WHEN shape IS NULL THEN splits END AS shape_splits,
-  splits, effort, note, left_out_m, left_out_s, legacy_mongo_id IS NOT NULL AS legacy`;
+  splits, effort, note, left_out_m, left_out_s, legacy_mongo_id IS NOT NULL AS legacy,
+  best_1k_s, best_mile_s, best_5k_s, best_10k_s`;
 
 export async function getRun(sql: Sql, userId: string, id: string, timeZone: string): Promise<RunDetailRow | null> {
   const rows = await sql<RunDetailDbRow[]>`
@@ -279,6 +286,53 @@ export async function removeRun(sql: Sql, userId: string, id: string): Promise<b
 export async function wasRunRemoved(sql: Sql, userId: string, id: string): Promise<boolean> {
   const rows = await sql`SELECT 1 FROM run_removed_ids WHERE id = ${id} AND user_id = ${userId}`;
   return rows.length > 0;
+}
+
+// ── Running records (ROADMAP 37c-ii) ─────────────────────────────────────────────────────────────
+
+/** Runs from this long count for the longest run: the streak's and XP's own line. */
+export const LONGEST_RUN_FROM_M = 200;
+
+export interface RunRecordRow {
+  kind: RunRecordKind;
+  runId: string;
+  name: string | null;
+  startedAt: Date;
+  day: string;
+  value: number;
+  before: number | null;
+}
+
+/** The person's records, from their own runs that this app recorded (`run_calc_version`, as XP
+ *  counts them): each distance's fastest time, the longest run from LONGEST_RUN_FROM_M, a tie held by
+ *  the run that set it first; and the best before that run, from the runs begun earlier. */
+export async function getRunRecords(sql: Sql, userId: string, timeZone: string): Promise<RunRecordRow[]> {
+  const rows = await sql<{ kind: RunRecordKind; id: string; name: string | null; started_at: Date; day: string; value: number; before: number | null }[]>`
+    WITH mine AS (
+      SELECT id, name, started_at, distance_m, best_1k_s, best_mile_s, best_5k_s, best_10k_s,
+             to_char(started_at AT TIME ZONE ${timeZone}, 'YYYY-MM-DD') AS day
+      FROM runs WHERE user_id = ${userId} AND run_calc_version IS NOT NULL
+    ), fastest AS (
+      SELECT m.id, m.name, m.started_at, m.day, k.kind,
+             CASE k.kind WHEN 'k1' THEN m.best_1k_s WHEN 'mile' THEN m.best_mile_s
+                         WHEN 'k5' THEN m.best_5k_s ELSE m.best_10k_s END AS value
+      FROM mine m CROSS JOIN (VALUES ('k1'), ('mile'), ('k5'), ('k10')) AS k(kind)
+    ), held AS (
+      SELECT DISTINCT ON (kind) * FROM fastest WHERE value IS NOT NULL ORDER BY kind, value, started_at, id
+    ), longest AS (
+      SELECT id, name, started_at, day, distance_m AS value FROM mine
+      WHERE distance_m >= ${LONGEST_RUN_FROM_M} ORDER BY distance_m DESC, started_at, id LIMIT 1
+    )
+    SELECT h.kind, h.id, h.name, h.started_at, h.day, h.value,
+           (SELECT min(f.value) FROM fastest f
+            WHERE f.kind = h.kind AND f.value IS NOT NULL AND (f.started_at, f.id) < (h.started_at, h.id)) AS before
+    FROM held h
+    UNION ALL
+    SELECT 'longest', l.id, l.name, l.started_at, l.day, l.value,
+           (SELECT max(m.distance_m) FROM mine m
+            WHERE m.distance_m >= ${LONGEST_RUN_FROM_M} AND (m.started_at, m.id) < (l.started_at, l.id)) AS before
+    FROM longest l`;
+  return rows.map((r) => ({ kind: r.kind, runId: r.id, name: r.name, startedAt: r.started_at, day: r.day, value: r.value, before: r.before }));
 }
 
 // ── saved_routes CRUD ────────────────────────────────────────────────────────
@@ -409,6 +463,8 @@ export interface NewRun {
   climb: RunClimb;
   /** The route made small for Your runs (37c-i); null with no route. */
   shape: string | null;
+  /** Its fastest 1 km, mile, 5 km and 10 km (37c-ii). */
+  bests: RunBests;
 }
 
 export interface SavedRunRow {
@@ -478,11 +534,12 @@ export async function insertRun(sql: Sql, userId: string, run: NewRun): Promise<
     const inserted = await tx`
       INSERT INTO runs (id, user_id, started_at, duration_s, distance_m, polyline, splits, kcal_point,
                         kcal_calc_version, source, name, effort, note, elapsed_s, left_out_m, left_out_s,
-                        run_calc_version, climb_m, climb_state, shape)
+                        run_calc_version, climb_m, climb_state, shape, best_1k_s, best_mile_s, best_5k_s, best_10k_s)
       VALUES (${run.id}, ${userId}, ${run.startedAt}, ${run.movingS}, ${run.distanceM}, ${run.polyline},
               ${tx.json(run.splits)}, ${run.kcal}, ${run.calcVersion}, 'mobile', ${run.name}, ${run.effort},
               ${run.note}, ${run.elapsedS}, ${run.leftOutM}, ${run.leftOutS}, ${run.calcVersion},
-              ${run.climb.state === "done" ? run.climb.m : null}, ${run.climb.state}, ${run.shape})
+              ${run.climb.state === "done" ? run.climb.m : null}, ${run.climb.state}, ${run.shape},
+              ${run.bests.k1}, ${run.bests.mile}, ${run.bests.k5}, ${run.bests.k10})
       ON CONFLICT (id) DO NOTHING`;
     const rows = await tx<(SavedRunDbRow & { user_id: string })[]>`
       SELECT id, user_id, started_at, name, effort, note, distance_m, duration_s, elapsed_s, left_out_m,
