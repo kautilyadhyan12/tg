@@ -170,6 +170,7 @@ async function detailOf(
     review: entry.formerAt === null ? reviewLines(entry.review.needsReview, fields) : [],
     removeEndsApp: ends.length > 0,
     removeEndsAppFor: ends,
+    keepsAppFor: entry.formerAt === null ? [] : mine.filter((member) => member.isStaff === true).map((member) => member.userId),
     members: visits.map((row) => ({
       userId: row.userId,
       displayName: row.displayName,

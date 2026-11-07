@@ -312,6 +312,9 @@ d("Delete permanently takes a past member out of the app too (real Postgres)", (
       await sql`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${gym.id}, ${bUser.userId}, 'trainer', ${["members.read"]})`;
       const c = await add(gym, "Cal Noapp", addr("cnoapp"));
       await madePast(gym, c);
+      // Her page names her as keeping it, by the same rule; Asha's names nobody.
+      expect((await detailOf(gym, b)).keepsAppFor).toEqual([bUser.userId]);
+      expect((await detailOf(gym, a)).keepsAppFor).toEqual([]);
       const preview = await box(gym, ticked(a, b, c));
       expect(preview).toMatchObject({ count: 3, app: { ends: ["Asha Rao"], keeps: ["Bea Lin"], mayEndApp: true } });
       const done = await press(gym, ticked(a, b, c), preview.digest);

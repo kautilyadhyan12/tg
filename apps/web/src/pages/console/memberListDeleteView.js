@@ -37,11 +37,12 @@ export function deleteButton(preview) {
 /** "3 past members deleted permanently. 2 of them are being deleted from your Square customer list too." */
 export function deleteDoneLine(done, words) {
   if (done.nothingLeft) return `None of these are past ${words.people} any more, so nothing was deleted.`;
-  const deleted = `${pastPeople(done.deleted, words)} deleted permanently.${deletedAppLine(done, words)}`;
+  const deleted = `${pastPeople(done.deleted, words)} deleted permanently.`;
+  const app = deletedAppLine(done, words);
   const n = done.squareDeleting ?? 0;
-  if (n === 0) return deleted;
+  if (n === 0) return deleted + app;
   const who = n === done.deleted ? (n === 1 ? 'They are' : 'All of them are') : n === 1 ? 'One of them is' : `${count(n)} of them are`;
-  return `${deleted} ${who} being deleted from your Square customer list too.`;
+  return `${deleted} ${who} being deleted from your Square customer list too.${app}`;
 }
 
 // What Delete permanently does about the people in the gym's Square customer list (18d-iii-b-ii-b-ii-b-ii). Square calls everybody it
@@ -111,9 +112,9 @@ export function deleteAppGroups(preview, words) {
   if (app.ends.length > 0 && app.mayEndApp) {
     groups.push({
       key: 'ends',
-      title: `Also lose access to your ${it} in the app (${count(app.ends.length)})`,
+      title: `Also lose access to your ${it} in the app (${count(app.endsCount || app.ends.length)})`,
       why: `They still use the app, so their access to your ${it} there ends too. Their own accounts and workout history aren’t affected.`,
-      total: app.ends.length,
+      total: app.endsCount || app.ends.length,
       people: people('ends', app.ends),
     });
   }
@@ -121,18 +122,18 @@ export function deleteAppGroups(preview, words) {
   if (app.ends.length > 0 && !app.mayEndApp) {
     groups.push({
       key: 'notDeleted',
-      title: `Not deleted (${count(app.ends.length)})`,
+      title: `Not deleted (${count(app.endsCount || app.ends.length)})`,
       why: `They still use the app, and your role can’t remove their access to your ${it} there, so they aren’t deleted. Ask the owner.`,
-      total: app.ends.length,
+      total: app.endsCount || app.ends.length,
       people: people('notDeleted', app.ends),
     });
   }
   if (app.keeps.length > 0) {
     groups.push({
       key: 'keeps',
-      title: `Keep access in the app (${count(app.keeps.length)})`,
+      title: `Keep access in the app (${count(app.keepsCount || app.keeps.length)})`,
       why: `They are on your staff, so they keep access to your ${it} in the app.`,
-      total: app.keeps.length,
+      total: app.keepsCount || app.keeps.length,
       people: people('keeps', app.keeps),
     });
   }
@@ -140,12 +141,12 @@ export function deleteAppGroups(preview, words) {
 }
 
 /** " 2 of them no longer have access to your gym in the app." after a delete, or '' where nobody deleted was in the app. */
+// It counts people in the app, as the box does, not records: two accounts can share one record.
 function deletedAppLine(done, words) {
   const n = done.appEnded ?? 0;
   if (n === 0) return '';
   const it = words.it ?? 'gym';
-  if (n === done.deleted) return n === 1 ? ` They no longer have access to your ${it} in the app.` : ` None of them have access to your ${it} in the app any more.`;
-  return n === 1 ? ` One of them no longer has access to your ${it} in the app.` : ` ${count(n)} of them no longer have access to your ${it} in the app.`;
+  return ` ${count(n)} ${n === 1 ? `${words.person} no longer has` : `${words.people} no longer have`} access to your ${it} in the app.`;
 }
 
 /** On one past member's page, before Delete permanently: whose access ends and who keeps it (5e-iii); null for each nobody. */

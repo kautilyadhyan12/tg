@@ -190,7 +190,7 @@ describe('the box words', () => {
     expect(keeps.getByText('Keep access in the app (1)')).toBeTruthy();
     expect(keeps.getByText('They are on your staff, so they keep access to your studio in the app.')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Delete 3 permanently' }));
-    expect((await screen.findByTestId('delete-done')).textContent).toBe('3 past members deleted permanently. One of them no longer has access to your studio in the app.');
+    expect((await screen.findByTestId('delete-done')).textContent).toBe('3 past members deleted permanently. 1 member no longer has access to your studio in the app.');
   });
 
   it('a role that can’t remove app access: those still in the app are named as not deleted, and the others can be deleted', async () => {
@@ -216,10 +216,15 @@ describe('the box words', () => {
 
   it('nobody in the app: no app groups, and the done lines count those who were', () => {
     expect(deleteAppGroups(preview(), words)).toEqual([]);
-    expect(deleteDoneLine({ deleted: 1, appEnded: 1 }, words)).toBe('1 past member deleted permanently. They no longer have access to your gym in the app.');
-    expect(deleteDoneLine({ deleted: 2, appEnded: 2 }, words)).toBe('2 past members deleted permanently. None of them have access to your gym in the app any more.');
+    // Counted in people, beyond the names shown: one record two accounts share is two.
+    expect(deleteAppGroups(preview({ app: { ends: ['A', 'B'], keeps: [], mayEndApp: true, endsCount: 250, keepsCount: 0 } }), words)[0]).toMatchObject({
+      title: 'Also lose access to your gym in the app (250)',
+      total: 250,
+    });
+    expect(deleteDoneLine({ deleted: 1, appEnded: 1 }, words)).toBe('1 past member deleted permanently. 1 member no longer has access to your gym in the app.');
+    expect(deleteDoneLine({ deleted: 2, appEnded: 2 }, words)).toBe('2 past members deleted permanently. 2 members no longer have access to your gym in the app.');
     expect(deleteDoneLine({ deleted: 5, appEnded: 3, squareDeleting: 1 }, words)).toBe(
-      '5 past members deleted permanently. 3 of them no longer have access to your gym in the app. One of them is being deleted from your Square customer list too.',
+      '5 past members deleted permanently. One of them is being deleted from your Square customer list too. 3 members no longer have access to your gym in the app.',
     );
   });
 });

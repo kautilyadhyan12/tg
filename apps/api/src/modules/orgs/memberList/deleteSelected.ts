@@ -67,14 +67,16 @@ function planOf(
   mayEndApp: boolean,
 ): { preview: MemberListDeletePreview; deleted: Records } {
   const past = records.filter((record) => record.past);
-  const ends = (record: Records[number]) => app.get(record.id)?.ends ?? [];
-  const deleted = mayEndApp ? past : past.filter((record) => ends(record).length === 0);
-  const left = mayEndApp ? [] : past.filter((record) => ends(record).length > 0);
+  const endsOf = (record: Records[number]) => app.get(record.id)?.ends ?? [];
+  const deleted = mayEndApp ? past : past.filter((record) => endsOf(record).length === 0);
+  const left = mayEndApp ? [] : past.filter((record) => endsOf(record).length > 0);
   const kept = new Set(deleted.map((record) => record.id));
   const theirs = standing.filter((row) => kept.has(row.entryId));
   const theirApp = new Map([...app].filter(([entryId]) => kept.has(entryId)));
-  const names = (from: Records, pick: (people: AppOnDelete) => readonly { fullName: string }[]) =>
-    from.flatMap((record) => pick(app.get(record.id) ?? { ends: [], keeps: [] }).map((member) => member.fullName)).slice(0, MEMBER_LIST_DELETE_NAMES_SHOWN);
+  const all = (from: Records, pick: (people: AppOnDelete) => readonly { fullName: string }[]) =>
+    from.flatMap((record) => pick(app.get(record.id) ?? { ends: [], keeps: [] }).map((member) => member.fullName));
+  const ends = mayEndApp ? all(deleted, (people) => people.ends) : all(left, (people) => people.ends);
+  const keeps = all(deleted, (people) => people.keeps);
   const preview: MemberListDeletePreview = {
     count: deleted.length,
     names: deleted.slice(0, MEMBER_LIST_DELETE_NAMES_SHOWN).map((record) => record.fullName),
@@ -83,9 +85,11 @@ function planOf(
     digest: digestOf(gymId, deleted.map((record) => record.id), theirs, theirApp),
     ...squareGroups(deleted, theirs),
     app: {
-      ends: mayEndApp ? names(deleted, (people) => people.ends) : names(left, (people) => people.ends),
-      keeps: names(deleted, (people) => people.keeps),
+      ends: ends.slice(0, MEMBER_LIST_DELETE_NAMES_SHOWN),
+      keeps: keeps.slice(0, MEMBER_LIST_DELETE_NAMES_SHOWN),
       mayEndApp,
+      endsCount: ends.length,
+      keepsCount: keeps.length,
     },
   };
   return { preview, deleted };
@@ -175,9 +179,8 @@ export async function deleteSelected(
     // The customers the app added in Square are owed their deletion while their links still exist (the records take them with them).
     const squareDeleting = await squareDeletes.oweDeletes(tx, gymId, past.map((record) => record.id), at);
     closed.push(...(await endAppOnDelete(tx, { gymId, actorUserId: userId, at, settings: deps.invites ?? null }, ending)));
-    // Counted by what was closed, not by what was read: a person made staff meanwhile keeps their access and is not counted.
-    const closedNow = new Set(closed);
-    const appEnded = past.filter((record) => (app.get(record.id)?.ends ?? []).some((member) => closedNow.has(member.userId))).length;
+    // The people whose access was closed, not those read: a person made staff meanwhile keeps their access and is not counted.
+    const appEnded = closed.length;
     for (const record of past) {
       if (!(await repo.deleteEntry(tx, gymId, record.id, at, { onlyPast: true }))) {
         throw new Error(`a past member the box named was not deleted (${record.id})`);

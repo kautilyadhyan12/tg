@@ -830,7 +830,7 @@ describe('a person on the list', () => {
     const member = (userId, displayName) => ({ userId, displayName, joinedAt: '2026-07-01T10:00:00.000Z', visits: 3, lastVisitOn: null, sharedEmail: false, waiverSigned: null });
     const ask = async (gym) => {
       orgService.getMemberListEntry.mockResolvedValue(
-        entryAnswer({ ...adaOld, inApp: true, removeEndsApp: true, removeEndsAppFor: [U1], members: [member(U1, 'Ada Lovelace'), member(U2, 'Tom Coach')] }),
+        entryAnswer({ ...adaOld, inApp: true, removeEndsApp: true, removeEndsAppFor: [U1], keepsAppFor: [U2], members: [member(U1, 'Ada Lovelace'), member(U2, 'Tom Coach')] }),
       );
       orgService.deleteFormerMemberListEntry.mockResolvedValue({ data: { deleted: true, version: 5, squareDeleting: 0, appEnded: true } });
       render(

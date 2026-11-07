@@ -2176,9 +2176,12 @@ export const memberListDeletePreviewSchema = z
         ends: z.array(z.string().max(MEMBER_LIST_MAX_NAME_CHARS)).max(MEMBER_LIST_DELETE_NAMES_SHOWN),
         keeps: z.array(z.string().max(MEMBER_LIST_MAX_NAME_CHARS)).max(MEMBER_LIST_DELETE_NAMES_SHOWN),
         mayEndApp: z.boolean(),
+        /** How many people each group holds, beyond the names shown. */
+        endsCount: z.number().int().min(0).default(0),
+        keepsCount: z.number().int().min(0).default(0),
       })
       .strict()
-      .default({ ends: [], keeps: [], mayEndApp: true }),
+      .default({ ends: [], keeps: [], mayEndApp: true, endsCount: 0, keepsCount: 0 }),
   })
   .strict();
 export type MemberListDeletePreview = z.infer<typeof memberListDeletePreviewSchema>;
@@ -2196,7 +2199,8 @@ export const memberListDeletedSchema = z
     version: z.number().int().min(0),
     /** Customers now owed their deletion at Square, which the worker sends within minutes (18d-iii-b-ii-b-ii-b-ii). */
     squareDeleting: z.number().int().min(0).default(0),
-    /** Of them, how many were still in the app and no longer have access to the gym there (5e-iii). */
+    /** How many people in the app no longer have access to the gym there, their records deleted (5e-iii). People, not records:
+     *  two accounts can share one record. */
     appEnded: z.number().int().min(0).default(0),
   })
   .strict();
@@ -2543,6 +2547,8 @@ export const memberListEntryDetailSchema = memberListEntrySchema.extend({
   removeEndsApp: z.boolean().default(false),
   /** Whose app it would end, of `members`, so the box can name them. */
   removeEndsAppFor: z.array(z.string().uuid()).max(MEMBER_LIST_MAX_ENTRY_MEMBERS).default([]),
+  /** On a past member's page, of `members`, the staff who keep their access when it is deleted (5e-iii). */
+  keepsAppFor: z.array(z.string().uuid()).max(MEMBER_LIST_MAX_ENTRY_MEMBERS).default([]),
   /** What an import found wrong on this record, each until staff fix that field or press
    *  It's correct (5b-v-d-iv). */
   review: z.array(memberListReviewLineSchema).max(MEMBER_LIST_MAX_REVIEW_ITEMS).default([]),

@@ -1644,7 +1644,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
     const mayEndApp = canRemoveMembers(viewerPrivileges(gym));
     const app = deleteAppLinesOne({
       ending: p.members.filter((m) => endsFor.includes(m.userId)).map((m) => m.displayName),
-      keeping: p.members.filter((m) => !endsFor.includes(m.userId)).map((m) => m.displayName),
+      keeping: p.members.filter((m) => (p.keepsAppFor ?? []).includes(m.userId)).map((m) => m.displayName),
       mayEndApp,
       it: words.it ?? 'gym',
       listNames,
