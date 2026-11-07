@@ -192,7 +192,7 @@ d("your runs (real Postgres)", () => {
       // A retry whose first look found no row (the first send not yet kept) reaches the save after the delete.
       const kept = await insertRun(sql, me.id, {
         id: run.runId, startedAt: new Date(run.startedAt), name: "Morning Run", effort: null, note: null, distanceM: 1, movingS: 1, elapsedS: 1,
-        leftOutM: 0, leftOutS: 0, kcal: 0, splits: { km: [], mi: [], starts: [0] }, polyline: "", calcVersion: 1, climb: { state: "none" }, shape: null,
+        leftOutM: 0, leftOutS: 0, kcal: 0, splits: { km: [], mi: [], starts: [0] }, polyline: "", calcVersion: 1, climb: { state: "none" }, shape: null, bests: { k1: null, mile: null, k5: null, k10: null },
       });
       expect(kept).toBe("removed");
       expect(await sql`SELECT 1 FROM runs WHERE id = ${run.runId}`).toHaveLength(0);

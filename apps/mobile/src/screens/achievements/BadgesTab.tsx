@@ -1,7 +1,7 @@
 import { memo, useState } from "react";
 import { Image, Pressable, StyleSheet, View } from "react-native";
 import Svg, { Circle, Defs, RadialGradient, Stop } from "react-native-svg";
-import type { Badge, BadgeList } from "@app/shared";
+import type { Badge, BadgeList, RunRecords } from "@app/shared";
 import { colours, medal, medalShades } from "../../look/colours";
 import { medalPicture } from "../../look/medals";
 import { bandFor } from "../../look/bands";
@@ -11,6 +11,7 @@ import type { Read } from "../dashboard/useRead";
 import { ReadOr } from "../progress/parts";
 import { badgeGroups, earnedDay, medalOf, ofWords, progressWords, share, TIER_LABEL, toGoWords, type ShownBadge } from "./achievementsRules";
 import { Laurel } from "./parts";
+import { RunningShelf } from "./RunningShelf";
 
 // Badges: every badge as its own medal, standing on dark shelves three to a row, in its group (Kd's drawing): an earned
 // one in its metal with the day it was earned, the rest grey with how far along the person is. A medal pressed opens its
@@ -18,11 +19,17 @@ import { Laurel } from "./parts";
 
 const count = (n: number) => n.toLocaleString("en-US");
 
-export const BadgesTab = memo(function BadgesTab({ read, again }: { read: Read<BadgeList>; again: () => void }) {
+export const BadgesTab = memo(function BadgesTab({ read, again, records, recordsAgain }: {
+  read: Read<BadgeList>;
+  again: () => void;
+  records: Read<RunRecords>;
+  recordsAgain: () => void;
+}) {
   const [open, setOpen] = useState<ShownBadge | null>(null);
   const now = new Date();
   return (
     <>
+      {records.kind === "ok" ? <RunningShelf records={records.data} again={recordsAgain} /> : null}
       <ReadOr read={read} again={again} what="Your badges">
         {(data) => (
           <View style={styles.groups}>

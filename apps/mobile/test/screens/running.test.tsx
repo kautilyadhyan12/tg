@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
 import { AppState, Linking } from "react-native";
 import type { StyleSpecification } from "@maplibre/maplibre-react-native";
-import { HEIGHT_MAP_CREDITS, OPENFREEMAP, RUN_MAX_POINTS, runSums, saveRunRequestSchema, type MapSource, type RunClimb, type RunPoint, type SaveRunRequest } from "@app/shared";
+import { HEIGHT_MAP_CREDITS, OPENFREEMAP, RUN_MAX_POINTS, runSums, saveRunRequestSchema, type MapSource, type RunClimb, type RunPoint, type RunRecords, type SaveRunRequest } from "@app/shared";
 import { App } from "../../src/App";
 import { resetMapSource } from "../../src/screens/running/mapSource";
 import { RUN_BAR_ROOM } from "../../src/screens/running/RunLayer";
@@ -74,7 +74,7 @@ beforeEach(async () => {
 function runServer(user = RAVI, map: MapSource = OPENFREEMAP) {
   const saved: SaveRunRequest[] = [];
   const posts: { body: unknown; key: string | undefined }[] = [];
-  const state: { online: boolean; mapHeld: Promise<void> | null; climb: RunClimb } = { online: true, mapHeld: null, climb: { state: "done", m: 28 } };
+  const state: { online: boolean; mapHeld: Promise<void> | null; climb: RunClimb; records: RunRecords | null } = { online: true, mapHeld: null, climb: { state: "done", m: 28 }, records: null };
   const climbAsks: unknown[] = [];
   const server = fakeServer({
     // The run's elevation gain, as the server's height map works it out (37b-ii).
@@ -84,6 +84,8 @@ function runServer(user = RAVI, map: MapSource = OPENFREEMAP) {
     },
     "/v1/auth/refresh": () => ({ status: 200, body: { tokens: tokens(2) } }),
     "/v1/geo/map": () => ({ status: 200, body: { map } }),
+    // The person's records (37c-ii); none read (no signal) until a test gives some.
+    "/v1/geo/runs/records": () => (state.records === null ? { status: 503, body: { error: "unavailable" } } : { status: 200, body: state.records }),
     "/v1/users/me": () => ({ status: 200, body: profile(true, user) }),
     [PATH]: (body): Reply => {
       if (body === undefined) {
@@ -771,6 +773,35 @@ describe("the map under the run (37b-i)", () => {
       drawnMap("live-map-view").props.onRegionWillChange?.({ nativeEvent: { userInteraction: false } });
     });
     expect(drawnMap("live-map-view").camera).toMatchObject({ center: front() });
+  });
+
+  it("the worst thing: the summary says New record only for a record the run beats, never one it does not", async () => {
+    const s = runServer();
+    const held = (value: number, before: number | null = null) => ({
+      runId: "7d9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed", name: "Old Run", startedAt: "2026-10-01T01:00:00.000Z", day: "2026-10-01", value, before,
+    });
+    // A fastest kilometre of 3:20 this run cannot beat; a longest run of 500 m it can.
+    s.state.records = { k1: held(200), mile: null, k5: null, k10: null, longest: held(500) };
+    await openRunning(s);
+    await startRunning();
+    await runThenFinish(801);
+    const box = await screen.findByTestId("new-record-longest");
+    const sums = finishedSums();
+    expect(within(box).getByText(/Longest run/)).toBeTruthy();
+    expect(within(box).getByText(`${distance(sums.distanceM, "metric")} km`)).toBeTruthy();
+    expect(within(box).getByText(`${distance(sums.distanceM - 500, "metric")} km longer than your last best.`)).toBeTruthy();
+    expect(sums.bests.k1).toBeGreaterThan(200);
+    expect(screen.queryByTestId("new-record-k1")).toBeNull();
+    expect(screen.queryByTestId("new-record-k5")).toBeNull();
+  });
+
+  it("with no records read (no signal), the summary claims no record at all", async () => {
+    const s = runServer();
+    await openRunning(s);
+    await startRunning();
+    await runThenFinish(801);
+    expect(await screen.findByTestId("summary-map")).toBeTruthy();
+    expect(screen.queryByText("NEW RECORD")).toBeNull();
   });
 
   it("after Finish, the Route box holds the run's map with a stone at each exact kilometre; tapped, it opens full size, and the cross closes it", async () => {

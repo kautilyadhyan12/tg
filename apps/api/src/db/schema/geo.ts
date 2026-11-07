@@ -51,6 +51,11 @@ export const runs = pgTable(
     climbState: text("climb_state"),
     // 0222 (ROADMAP 37c-i): the route made small for its picture in Your runs (`runShape.ts`).
     shape: text("shape"),
+    // 0223 (ROADMAP 37c-ii): the run's fastest 1 km, mile, 5 km and 10 km, whole seconds (`fastestStretch`).
+    best1kS: integer("best_1k_s"),
+    bestMileS: integer("best_mile_s"),
+    best5kS: integer("best_5k_s"),
+    best10kS: integer("best_10k_s"),
   },
   (t) => [
     index("runs_user_started_idx").on(t.userId, t.startedAt.desc()),
@@ -67,6 +72,7 @@ export const runs = pgTable(
     ),
     index("runs_climb_waiting_idx").on(t.createdAt).where(sql`${t.climbState} = 'waiting'`),
     check("runs_shape_check", sql`char_length(${t.shape}) BETWEEN 1 AND 4000`),
+    check("runs_bests_check", sql`${t.best1kS} > 0 AND ${t.bestMileS} > 0 AND ${t.best5kS} > 0 AND ${t.best10kS} > 0`),
   ],
 );
 

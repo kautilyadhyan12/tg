@@ -225,6 +225,75 @@ export interface RunSums {
   /** Where in `track` each stretch begins: after a pause, or a stretch left out, the line starts
    *  again there and is never drawn across the gap. The first is 0. */
   trackStarts: number[];
+  /** The run's best efforts (37c-ii): the fastest stretch of each distance, whole seconds. */
+  bests: RunBests;
+}
+
+/** A run's fastest 1 km, mile, 5 km and 10 km in whole seconds; null where it did not cover it. */
+export interface RunBests {
+  k1: number | null;
+  mile: number | null;
+  k5: number | null;
+  k10: number | null;
+}
+
+/** The distances a record is kept for, in metres (ROADMAP 37c-ii). */
+export const RECORD_DISTANCES_M: Readonly<Record<keyof RunBests, number>> = { k1: 1000, mile: 1609.344, k5: 5000, k10: 10_000 };
+
+/** A place along the counted track: metres from the start, and the clock in milliseconds. */
+export interface RunMark {
+  d: number;
+  t: number;
+}
+
+/** The fastest stretch of `metres` inside the stretches given, in seconds, as Strava's Best Efforts:
+ *  anywhere in the run, timed on the clock like a race (pauses and stops count, so a record is never
+ *  made by pausing between sprints), never across a stretch left out as too fast (each list in
+ *  `segments` ends there). Between two marks the runner is taken at an even speed, so the fastest
+ *  stretch starts or ends on a mark: both are tried. A stretch faster than the world record for its
+ *  time is never one. null when no stretch is that long. */
+export function fastestStretch(segments: readonly (readonly RunMark[])[], metres: number): number | null {
+  let best = Infinity;
+  const keep = (ms: number) => {
+    const seconds = ms / 1000;
+    if (seconds > 0 && metres / seconds <= recordSpeed(seconds) && seconds < best) best = seconds;
+  };
+  for (const seg of segments) {
+    const n = seg.length;
+    const first = seg[0];
+    const last = seg[n - 1];
+    if (first === undefined || last === undefined || last.d - first.d < metres) continue;
+    // Ending on each mark: the latest moment the stretch could start.
+    let k = 0;
+    for (let j = 1; j < n; j++) {
+      const end = seg[j];
+      if (end === undefined) continue;
+      const target = end.d - metres;
+      if (target < first.d) continue;
+      while (k + 1 < j && (seg[k + 1]?.d ?? Infinity) <= target) k++;
+      const a = seg[k];
+      const b = seg[k + 1];
+      if (a === undefined || b === undefined) continue;
+      const startT = b.d > a.d ? a.t + ((b.t - a.t) * (target - a.d)) / (b.d - a.d) : b.t;
+      keep(end.t - startT);
+    }
+    // Starting on each mark: the earliest moment it could end.
+    let e = 1;
+    for (let i = 0; i < n - 1; i++) {
+      const start = seg[i];
+      if (start === undefined) continue;
+      const target = start.d + metres;
+      if (target > last.d) break;
+      if (e <= i) e = i + 1;
+      while (e < n && (seg[e]?.d ?? Infinity) < target) e++;
+      const a = seg[e - 1];
+      const b = seg[e];
+      if (a === undefined || b === undefined) continue;
+      const endT = b.d > a.d ? a.t + ((b.t - a.t) * (target - a.d)) / (b.d - a.d) : a.t;
+      keep(endT - start.t);
+    }
+  }
+  return best === Infinity ? null : Math.round(best);
 }
 
 interface Fix {
@@ -531,6 +600,11 @@ export function runSums(points: readonly RunPoint[], pauses: readonly RunPause[]
   let leftOutMs = 0;
   let stillMs = 0;
   const still: [number, number][] = [];
+  // The marks for the best efforts: a pause does not cut a stretch (the clock runs on), a stretch
+  // left out does.
+  const segments: RunMark[][] = [];
+  let segment: RunMark[] = [];
+  let walked = 0;
   for (const raw of piecesBetweenPauses(points, cleaned, elapsed)) {
     const piece = withoutSpikes(raw);
     const spans = standingSpans(piece);
@@ -555,13 +629,18 @@ export function runSums(points: readonly RunPoint[], pauses: readonly RunPause[]
       }
     }
     parts.push(part);
-    for (const p of parts) {
+    for (const [index, p] of parts.entries()) {
+      if (index > 0 && segment.length > 0) {
+        segments.push(segment);
+        segment = [];
+      }
       if (p.length < 2) continue; // a lone point between two left-out steps covers no ground
       const path = smoothed(p);
       let last = path[0];
       if (last === undefined) continue;
       trackStarts.push(track.length);
       track.push([last.lat, last.lng]);
+      segment.push({ d: walked, t: last.at });
       for (let i = 1; i < path.length; i++) {
         const fix = path[i];
         if (fix === undefined) continue;
@@ -569,10 +648,13 @@ export function runSums(points: readonly RunPoint[], pauses: readonly RunPause[]
         if (m < MIN_STEP_M && i < path.length - 1) continue;
         steps.push({ m, s: (fix.at - last.at - standingWithin(still, last.at, fix.at)) / 1000 });
         track.push([fix.lat, fix.lng]);
+        walked += m;
+        segment.push({ d: walked, t: fix.at });
         last = fix;
       }
     }
   }
+  if (segment.length > 0) segments.push(segment);
   const distanceM = steps.reduce((sum, step) => sum + step.m, 0);
   const movingS = Math.max(0, (elapsed - pausedMs - leftOutMs - stillMs) / 1000);
   const splitsKm = splitsOf(steps, 1000);
@@ -596,6 +678,12 @@ export function runSums(points: readonly RunPoint[], pauses: readonly RunPause[]
     splitsMi: splitsOf(steps, 1609.344).map((x) => ({ m: Math.round(x.m), s: Math.round(x.s) })),
     track,
     trackStarts,
+    bests: {
+      k1: fastestStretch(segments, RECORD_DISTANCES_M.k1),
+      mile: fastestStretch(segments, RECORD_DISTANCES_M.mile),
+      k5: fastestStretch(segments, RECORD_DISTANCES_M.k5),
+      k10: fastestStretch(segments, RECORD_DISTANCES_M.k10),
+    },
   };
 }
 

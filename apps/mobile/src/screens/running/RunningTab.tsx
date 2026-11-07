@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type Re
 import { AppState, Linking, Pressable, ScrollView, StyleSheet, Switch, View } from "react-native";
 import * as Location from "expo-location";
 import { useIsFocused } from "@react-navigation/native";
-import { runPageSchema, type MapColours, type Units } from "@app/shared";
+import { runPageSchema, runRecordsSchema, type MapColours, type Units } from "@app/shared";
 import { Button } from "../../look/Button";
 import { Options } from "../../look/Choice";
 import { Sheet } from "../../look/Sheet";
@@ -21,6 +21,8 @@ import { RefusedRuns } from "./RefusedRuns";
 import { RUN_BAR_ROOM, gpsLight, openAppSettings, START_PROBLEM_WORDS, useRunLayer, type StartProblem } from "./RunLayer";
 import { useRunOutbox } from "./RunOutbox";
 import { RunPage } from "./RunPage";
+import { RecordsCard } from "./RecordParts";
+import { RECORDS_PATH } from "./runRecords";
 import { RunRow } from "./RunRow";
 import { RunsPage } from "./RunsPage";
 import { runVoiceNative, speakState, type SpeakState } from "./runVoiceNative";
@@ -110,6 +112,9 @@ export function RunningTab({ units, parts }: { units: Units; parts: ReactNode })
   const gps = useGpsBefore(focused && !going, asked);
   const last = useRead("/v1/geo/runs?limit=1", runPageSchema, view.sent + changed);
   const lastRun = last.read.kind === "ok" ? (last.read.data.items[0] ?? null) : null;
+  const recordsRead = useRead(RECORDS_PATH, runRecordsSchema, view.sent + changed);
+  const records = recordsRead.read.kind === "ok" ? recordsRead.read.data : null;
+  const anyRecord = records !== null && Object.values(records).some((r) => r !== null);
 
   // A run just finished takes the place of what was said of the one deleted before it.
   useEffect(() => {
@@ -182,6 +187,16 @@ export function RunningTab({ units, parts }: { units: Units; parts: ReactNode })
                 }}
               />
             </View>
+          )}
+          {records === null || !anyRecord ? null : (
+            <RecordsCard
+              records={records}
+              units={units}
+              onOpen={(id) => {
+                setDeleted(null);
+                setOpenRun(id);
+              }}
+            />
           )}
           <View style={styles.rows}>
             <View style={styles.row}>
