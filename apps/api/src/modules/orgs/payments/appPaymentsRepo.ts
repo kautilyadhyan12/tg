@@ -421,9 +421,9 @@ export async function finish(sql: Sql, gymId: string, id: string, outcome: "clos
     const fee = outcome === "closed" ? (pageRow?.feeBillId ?? null) : null;
     // A purchase by somebody not on the list that may have been paid puts them on it, so the line telling staff to check
     // Square is on their page (18k-iii-b).
-    const homeless = outcome !== "closed" && pageRow !== null && pageRow.state === "open" && pageRow.typeId !== null && pageRow.entryId === null;
-    if (fee !== null || homeless) await lockGym(tx, gymId);
-    const home = homeless && pageRow !== null ? await homeOf(tx, pageRow, at) : null;
+    const homeless = outcome !== "closed" && pageRow?.state === "open" && pageRow.typeId !== null && pageRow.entryId === null ? pageRow : null;
+    if (fee !== null || homeless !== null) await lockGym(tx, gymId);
+    const home = homeless === null ? null : await homeOf(tx, homeless, at);
     const rows = await tx<{ id: string }[]>`
       UPDATE gym_app_payments SET state = 'done', outcome = ${outcome}, finished_at = ${at}, checking_until = NULL,
              entry_id = COALESCE(entry_id, ${home?.entryId ?? null}::uuid),

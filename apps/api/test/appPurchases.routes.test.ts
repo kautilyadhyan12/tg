@@ -786,6 +786,8 @@ d("Buy in the app: given once, on their own record, only for what Square took (r
     await sql`DELETE FROM one_time_tokens WHERE user_id = ${unproved.userId}`;
     const put = await send("POST", `/v1/orgs/${gym.id}/member-list/entries/from-member/${unproved.userId}`, gym.owner.cookies);
     expect(put.statusCode, put.body).toBeLessThan(300);
-    expect(await linkOfAccount(gym, unproved.userId)).not.toBe(ann);
+    // The desk's press finds Ann's own record by those details, and still does not link this app to it.
+    expect((JSON.parse(put.body) as { outcome: string; entry: { entryId: string } }).entry.entryId, put.body).toBe(ann);
+    expect(await linkOfAccount(gym, unproved.userId)).toBeNull();
   });
 });
