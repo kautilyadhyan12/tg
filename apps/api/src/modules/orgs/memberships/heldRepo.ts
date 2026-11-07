@@ -1583,7 +1583,7 @@ export async function unsignedAgreementHeld(
   sql: Sql | TransactionSql,
   gymId: string,
   entryIds: readonly string[] | null = null,
-): Promise<{ entryId: string; membership: HeldMembership }[]> {
+): Promise<{ entryId: string; id: string; typeName: string; membership: HeldMembership }[]> {
   if (entryIds !== null && entryIds.length === 0) return [];
   const rows = await sql<(ListHeldColumns & { entry_id: string })[]>`
     SELECT ${LIST_COLUMNS(sql)}, h.entry_id
@@ -1593,7 +1593,10 @@ export async function unsignedAgreementHeld(
     WHERE h.gym_id = ${gymId} AND h.status = ANY(${[...IN_USE]}::text[]) AND ${typeAskedSql(sql)}
       ${entryIds === null ? sql`` : sql`AND h.entry_id = ANY(${[...entryIds]}::uuid[])`}
       AND NOT EXISTS (SELECT 1 FROM gym_agreement_signatures s WHERE s.gym_id = h.gym_id AND s.held_membership_id = h.id)`;
-  return rows.map((row) => ({ entryId: row.entry_id, membership: listHeld(row).membership }));
+  return rows.map((row) => {
+    const held = listHeld(row);
+    return { entryId: row.entry_id, id: held.id, typeName: held.typeName, membership: held.membership };
+  });
 }
 
 /** A stored membership's last day, for a row aliased `h`, as the rule works it out
