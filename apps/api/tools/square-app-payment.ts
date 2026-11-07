@@ -9,12 +9,17 @@
 //   … tools/square-app-payment.ts pay-fee <gymId> <member's email>   (their oldest fee owed, 18k-ii-b)
 //   … tools/square-app-payment.ts check <gymId> <member's email> <paymentId>
 //   … tools/square-app-payment.ts close <gymId> <member's email> <paymentId>
+//   … tools/square-app-payment.ts buy <gymId> <member's email> "<line's name>" ["<name signed>"]   (18k-iii-a; signs as the
+//         member, or as a parent or guardian where the record is under 18, with the name given or the account's own)
+//   … tools/square-app-payment.ts check-buy|close-buy <gymId> <member's email> <paymentId>
 import { randomUUID } from "node:crypto";
 import postgres from "postgres";
 import { z } from "zod";
 import { formatMinor } from "@app/shared";
 import { getMyMembership } from "../src/modules/orgs/myMembership/service.js";
 import { checkAppPayment, closeAppPayment, startAppPayment } from "../src/modules/orgs/payments/appPayments.js";
+import { checkPurchase, closePurchase, startPurchase } from "../src/modules/orgs/payments/appPurchases.js";
+import { readForSale } from "../src/modules/orgs/payments/forSale.js";
 import { squareSettings } from "../src/modules/orgs/payments/settings.js";
 
 const env = z
@@ -34,11 +39,13 @@ const args = z
   .union([
     z.tuple([z.literal("pay"), z.string().uuid(), z.string().email()]),
     z.tuple([z.literal("pay-fee"), z.string().uuid(), z.string().email()]),
-    z.tuple([z.enum(["check", "close"]), z.string().uuid(), z.string().email(), z.string().uuid()]),
+    z.tuple([z.enum(["check", "close", "check-buy", "close-buy"]), z.string().uuid(), z.string().email(), z.string().uuid()]),
+    z.tuple([z.literal("buy"), z.string().uuid(), z.string().email(), z.string().min(1)]),
+    z.tuple([z.literal("buy"), z.string().uuid(), z.string().email(), z.string().min(1), z.string().min(1).max(200)]),
   ])
   .safeParse(process.argv.slice(2));
 if (!args.success) {
-  console.error("Usage: square-app-payment.ts pay|pay-fee <gymId> <email> | check <gymId> <email> <paymentId> | close <gymId> <email> <paymentId>");
+  console.error('Usage: square-app-payment.ts pay|pay-fee <gymId> <email> | check|close|check-buy|close-buy <gymId> <email> <paymentId> | buy <gymId> <email> "<line>" ["<name signed>"]');
   process.exit(2);
 }
 
@@ -57,9 +64,26 @@ const deps = { sql, square, log, now: () => new Date() };
 const always = (): Promise<boolean> => Promise.resolve(true);
 try {
   const [step, gymId, email] = args.data;
-  const [user] = await sql<{ id: string }[]>`SELECT id FROM users WHERE email = ${email}`;
+  const [user] = await sql<{ id: string; display_name: string | null }[]>`SELECT id, display_name FROM users WHERE email = ${email}`;
   if (user === undefined) throw new Error("No account has that email.");
-  if (args.data[0] === "pay") {
+  if (args.data[0] === "buy") {
+    const lineName = args.data[3];
+    const list = await readForSale(deps, user.id, gymId, always);
+    const shown = list?.items.find((i) => i.name === lineName);
+    if (shown === undefined) throw new Error(`"${lineName}" is not sold in the app to this member now.`);
+    const name = args.data[4] ?? user.display_name ?? email;
+    const signer = list?.signer === "guardian" ? "guardian" : "person";
+    const agreement = shown.agreement === null ? null : { agreementId: shown.agreement.id, signer, name } as const;
+    const done = await startPurchase(deps, user.id, gymId, { requestKey: randomUUID(), typeId: shown.typeId, amountMinor: shown.firstPayment.amountMinor, factsKey: shown.factsKey, agreement }, always);
+    const page = done?.answer.purchase;
+    if (page === undefined) throw new Error("No answer.");
+    console.log(`${shown.name}: ${formatMinor(page.amountMinor, page.currency)}${agreement === null ? "" : `, signed by ${name}`}. Purchase ${page.id}`);
+    console.log(`Square's page: ${page.url ?? "(not open)"}`);
+  } else if (args.data[0] === "check-buy" || args.data[0] === "close-buy") {
+    const id = args.data[3];
+    const done = args.data[0] === "check-buy" ? await checkPurchase(deps, user.id, gymId, id, always) : await closePurchase(deps, user.id, gymId, id, always);
+    console.log(`Purchase ${id}: ${done?.answer.purchase.state ?? "no answer"}${done?.answer.purchase.receiptNumber == null ? "" : `, receipt ${String(done.answer.purchase.receiptNumber)}`}`);
+  } else if (args.data[0] === "pay") {
     const mine = await getMyMembership({ sql, now: () => new Date() }, user.id, gymId, always);
     const owed = [...(mine?.memberships ?? []), ...(mine?.paysFor ?? []).flatMap((p) => p.memberships)].find((m) => m.owed !== null);
     if (owed?.owed == null) throw new Error("Nothing is owed now for this member, or they don't read it as theirs.");

@@ -125,6 +125,7 @@ import {
   terminalSaveResponseSchema,
   terminalPaymentResponseSchema,
   appPaymentCloseResponseSchema,
+  appPurchaseCheckedResponseSchema,
   cardChargeResponseSchema,
   cardRefundCheckSchema,
   cardRefundResponseSchema,
@@ -1957,6 +1958,20 @@ export const orgService = {
       appPaymentCloseResponseSchema,
       "this person's payments",
       authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/entries/${encodeURIComponent(entryId)}/memberships/${encodeURIComponent(membershipId)}/app-payment/close`, {}),
+    ),
+  /** Close payment page on a member's purchase in the app (ROADMAP 18k-iii-a). */
+  closeAppPurchase: (gymId, entryId, paymentId) =>
+    readThrough(
+      appPaymentCloseResponseSchema,
+      "this person's payments",
+      authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/entries/${encodeURIComponent(entryId)}/app-purchases/${encodeURIComponent(paymentId)}/close`, {}),
+    ),
+  /** Mark as checked, under a purchase in the app that gave nothing (ROADMAP 18k-iii-a). */
+  markAppPurchaseChecked: (gymId, entryId, paymentId) =>
+    readThrough(
+      appPurchaseCheckedResponseSchema,
+      "this person's payments",
+      authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/entries/${encodeURIComponent(entryId)}/app-purchases/${encodeURIComponent(paymentId)}/checked`, {}),
     ),
   /** Charge card on file (ROADMAP 18d-iii-i): Square answers in the same press. */
   chargeCardOnFile: (gymId, entryId, membershipId, body) =>
