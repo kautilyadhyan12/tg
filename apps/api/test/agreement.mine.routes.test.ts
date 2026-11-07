@@ -457,6 +457,12 @@ d("a member signs their own membership agreement in the app (real Postgres)", { 
     expect((await card(gym.id, jon)).agreementsToSign).toEqual([]);
     expect((await myMembership(gym.id, jon)).memberships.find((m) => m.id === gone)?.agreement ?? null).toBeNull();
     expect((await page(gym.id, gone, jon)).state).toBe("none");
+    // Frozen: the list counts it as held, and still nothing is asked until it runs again.
+    const kit = await member(gym, "Kit Chen");
+    const frozen = await give(gym, kit.entryId);
+    await sql`UPDATE gym_held_memberships SET status = 'frozen', frozen_on = '2026-11-07' WHERE gym_id = ${gym.id} AND id = ${frozen}`;
+    expect((await card(gym.id, kit)).agreementsToSign).toEqual([]);
+    expect((await myMembership(gym.id, kit)).memberships.find((m) => m.id === frozen)?.agreement ?? null).toBeNull();
   });
 
   it("a teenager's My membership says why it is signed at the desk, and the statement refuses a date of birth changed since it was read", async () => {

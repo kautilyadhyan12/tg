@@ -361,3 +361,107 @@ describe("My membership, Classes and the desk", () => {
     expect(await after.findByText("Book")).toBeTruthy();
   });
 });
+
+describe("the round-one cases", () => {
+  const PT_DAY = new Date(Date.now() + 20 * 86_400_000).toISOString().slice(0, 10);
+  const ptWeek = (why: string | null) => ({
+    timezone: "UTC",
+    today: PT_DAY,
+    from: PT_DAY,
+    to: PT_DAY,
+    lastDay: PT_DAY,
+    opensDays: 30,
+    freeCancelMinutes: 120,
+    record: "own",
+    days: [{ localDate: PT_DAY, pays: { membership: "10 sessions", sessionsLeft: 3 }, why, limit: null, fees: null }],
+    trainers: [{ trainerId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", name: "Sam Trainer", sessionMinutes: 60, days: [{ localDate: PT_DAY, free: [600], opensLater: false }] }],
+    sessions: [],
+    history: [],
+  });
+
+  it("Personal training, where bookings stop until it is signed: Sign agreement opens it, and the times are read again after", async () => {
+    let signed = false;
+    const server = fakeServer({
+      "/v1/auth/refresh": ok({ tokens: tokens(2) }),
+      "/v1/orgs/mine": () => ({ status: 200, body: { orgs: [org(IRON, signed ? [] : [{ membershipId: M_IRON, name: "Gold Monthly" }])], formerOrgs: [] } }),
+      [`/v1/orgs/${IRON.id}/member-pt`]: () => ({ status: 200, body: ptWeek(signed ? null : "agreement_not_signed") }),
+      [readPath(IRON, M_IRON)]: ok(toSign(IRON, M_IRON, IRON_TERMS, "£50.00 every month", KEY_A)),
+      [signPath(IRON, M_IRON)]: () => {
+        signed = true;
+        return { status: 200, body: signedReply("Iron House", IRON_TERMS.text) };
+      },
+    });
+    await openGym(server.ask);
+    await fireEvent.press(await screen.findByLabelText("Personal training at Iron House"));
+    const pt = within(await screen.findByTestId("pt-page"));
+    expect(await pt.findByText("Your membership agreement isn't signed yet. Sign it to book.")).toBeTruthy();
+    expect(pt.queryByText(UNSIGNED_BOOKING_WORDS)).toBeNull();
+    await fireEvent.press(pt.getByText("Sign agreement"));
+    await signIt("Maya Patel");
+    await fireEvent.press(screen.getByLabelText("Sign Iron House's membership agreement"));
+    await fireEvent.press(await screen.findByText("Done"));
+    await waitFor(() => {
+      expect(within(screen.getByTestId("pt-page")).queryByText("Your membership agreement isn't signed yet. Sign it to book.")).toBeNull();
+    });
+    expect(within(screen.getByTestId("pt-page")).queryByText(UNSIGNED_BOOKING_WORDS)).toBeNull();
+    expect(server.asked.filter((one) => one.path === `/v1/orgs/${IRON.id}/member-pt`).length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("Classes with two memberships to sign: Sign agreement opens My membership, where each has its Sign", async () => {
+    const klass = {
+      sessionId: "44444444-4444-4444-8444-444444444444",
+      className: "Morning Flow",
+      localDate: "2026-11-09",
+      localStartMinute: 7 * 60,
+      timezone: "Europe/London",
+      startsAt: "2026-11-09T07:00:00.000Z",
+      minutes: 60,
+      cancelled: false,
+      places: 12,
+      booked: 3,
+      waitlisted: 0,
+      opensAt: "2026-11-02T07:00:00.000Z",
+      freeCancelUntil: "2026-11-09T05:00:00.000Z",
+      mine: null,
+      can: { book: false, joinWaitlist: false, claim: false, cancel: null, why: "agreement_not_signed" },
+      online: null,
+      fees: null,
+    };
+    const server = fakeServer({
+      "/v1/auth/refresh": ok({ tokens: tokens(2) }),
+      "/v1/orgs/mine": ok({ orgs: [org(IRON, [{ membershipId: M_IRON, name: "Gold Monthly" }, { membershipId: M_PACK, name: "10-class pack" }])], formerOrgs: [] }),
+      [`/v1/orgs/${IRON.id}/member-classes`]: ok({ week: 0, from: "2026-11-08", to: "2026-11-14", timezone: "Europe/London", classes: [klass], more: false }),
+      "/v1/orgs/1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f/my-membership": ok(
+        myMembership([
+          membership(M_IRON, "Gold Monthly", { state: "to_sign", signedOn: null, signedName: null, view: false }),
+          membership(M_PACK, "10-class pack", { state: "to_sign", signedOn: null, signedName: null, view: false }),
+        ]),
+      ),
+    });
+    await openGym(server.ask);
+    await fireEvent.press(await screen.findByLabelText("Classes at Iron House"));
+    await fireEvent.press(within(await screen.findByTestId(`class-${klass.sessionId}`)).getByText("Sign agreement"));
+    expect(await screen.findByLabelText("Sign the agreement for Gold Monthly")).toBeTruthy();
+    expect(screen.getByLabelText("Sign the agreement for 10-class pack")).toBeTruthy();
+    expect(server.asked.some((one) => one.path.endsWith("/agreement/mine"))).toBe(false);
+  });
+
+  it("refused because it is signed at the front desk: the page says why once", async () => {
+    let reads = 0;
+    const server = fakeServer({
+      "/v1/auth/refresh": ok({ tokens: tokens(2) }),
+      "/v1/orgs/mine": ok({ orgs: [org(IRON, [{ membershipId: M_IRON, name: "Gold Monthly" }])], formerOrgs: [] }),
+      [readPath(IRON, M_IRON)]: () => {
+        reads += 1;
+        return { status: 200, body: reads === 1 ? toSign(IRON, M_IRON, IRON_TERMS, "£50.00 every month", KEY_A) : pageOf(IRON, M_IRON, { state: "at_desk", why: "paid_by_other" }) };
+      },
+      [signPath(IRON, M_IRON)]: () => refusal(409, "agreement_at_desk", MY_AGREEMENT_WORDS.paid_by_other),
+    });
+    await openGym(server.ask);
+    await fireEvent.press(await screen.findByTestId(`agreement-ask-${M_IRON}`));
+    await signIt("Maya Patel");
+    await fireEvent.press(screen.getByLabelText("Sign Iron House's membership agreement"));
+    const none = within(await screen.findByTestId("agreement-none"));
+    expect(none.getAllByText(MY_AGREEMENT_WORDS.paid_by_other)).toHaveLength(1);
+  });
+});

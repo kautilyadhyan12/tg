@@ -1,6 +1,6 @@
 // A member's own membership agreement on the phone (ROADMAP Stage 5 item 20c; spec Part 3 §14.8): the words the
 // Membership agreement page, the Gym tab's ask and My membership use, apart from the screens so the tests can read them.
-import { MY_AGREEMENT_WORDS, type AgreementEmailed, type MyAgreementResponse, type MyMembershipAgreement } from "@app/shared";
+import { MY_AGREEMENTS_TO_SIGN_MAX, MY_AGREEMENT_WORDS, type AgreementEmailed, type MyAgreementResponse, type MyMembershipAgreement } from "@app/shared";
 import { signedDay } from "./waiverView";
 
 export const agreementPath = (gymId: string, membershipId: string): string =>
@@ -15,7 +15,8 @@ export const AGREEMENTS_ASK_TITLE = "Sign your membership agreements";
 export const agreementsAskLine = (business: string, names: readonly string[]): string => {
   const [first, ...rest] = names;
   if (first === undefined) return "";
-  const others = rest.length === 1 ? (rest[0] ?? "") : `${String(rest.length)} more`;
+  // The server sends at most MY_AGREEMENTS_TO_SIGN_MAX: at the cap, the true number is not known.
+  const others = names.length >= MY_AGREEMENTS_TO_SIGN_MAX ? "more" : rest.length === 1 ? (rest[0] ?? "") : `${String(rest.length)} more`;
   return `${business} asks you to sign the agreements for ${first} and ${others}.`;
 };
 
@@ -36,7 +37,7 @@ export const agreementSignedLine = (signed: { name: string; at: string }, timeZo
 
 /** What the page says where there is nothing to sign in the app. */
 export function notInAppLine(view: MyAgreementResponse): string {
-  if (view.state === "at_desk") return view.why === null ? MY_AGREEMENT_WORDS.shared : MY_AGREEMENT_WORDS[view.why];
+  if (view.state === "at_desk" && view.why !== null) return MY_AGREEMENT_WORDS[view.why];
   return "There is nothing to sign for this membership.";
 }
 
@@ -61,7 +62,7 @@ export function membershipAgreementRow(a: MyMembershipAgreement, business: strin
     return { title: "Agreement signed", line: a.signedOn === null ? "" : `${dayLong(a.signedOn)}${a.signedName === null ? "" : `, as ${a.signedName}`}`, tone: "plain", button: a.view ? "View" : null };
   }
   if (a.state === "to_sign") return { title: "Agreement not signed", line: `${business} asks you to sign it.`, tone: "warn", button: "Sign" };
-  return { title: "Agreement not signed", line: "Sign it at the front desk.", tone: "warn", button: null };
+  return { title: "Agreement not signed", line: a.why === null ? "Sign it at the front desk." : MY_AGREEMENT_WORDS[a.why], tone: "warn", button: null };
 }
 
 /** The booking stop's words, where the member can sign in the app: the button beside them opens it. */

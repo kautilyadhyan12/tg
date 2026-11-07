@@ -226,7 +226,7 @@ function Body({ place, onClose, onSigned }: { place: AgreementPlace; onClose: ()
         <Card testID="agreement-none" style={styles.paper}>
           {head}
           <View style={styles.line} />
-          {problem === "" ? null : <Txt colour="badText">{problem}</Txt>}
+          {problem === "" || problem === notInAppLine(held.view) ? null : <Txt colour="badText">{problem}</Txt>}
           <Txt colour="text">{notInAppLine(held.view)}</Txt>
         </Card>
       ) : (

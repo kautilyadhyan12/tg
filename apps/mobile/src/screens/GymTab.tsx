@@ -204,12 +204,18 @@ export function GymScreen() {
   };
 
   const joined = mine?.kind === "ok" ? mine.data.orgs.filter((org) => org.isMember) : [];
-  // Sign agreement on Classes and Personal training, where the business stops bookings until it is signed: opens its
-  // first membership to sign in the app; null where there is none, and they read the server's own words.
+  // Sign agreement on Classes and Personal training, where the business stops bookings until it is signed: opens the
+  // one membership to sign, or My membership where there are several (the stop holds until all are signed); null where
+  // there is none, and they read the server's own words.
   const signAgreementAt = (gymId: string | null): (() => void) | null => {
     const org = gymId === null ? undefined : joined.find((one) => one.id === gymId);
     const first = org?.agreementsToSign[0];
     if (org === undefined || first === undefined) return null;
+    if (org.agreementsToSign.length > 1) {
+      return () => {
+        setMembershipAt({ id: org.id, name: org.name });
+      };
+    }
     return () => {
       setAgreementAt({ id: org.id, name: org.name, membershipId: first.membershipId, membershipName: first.name });
     };
