@@ -173,7 +173,7 @@ const styles = StyleSheet.create({
   today: { borderWidth: 1.5, borderColor: colours.orange },
   pressed: { opacity: 0.7 },
   foot: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, alignItems: "center", justifyContent: "center" },
-  glow: { position: "absolute", width: 28, height: 28, borderRadius: sizes.round, backgroundColor: colours.orangeFill, boxShadow: shadows.dotGlow },
+  glow: { position: "absolute", width: 26, height: 26, borderRadius: sizes.round, backgroundColor: colours.orangeLine, boxShadow: shadows.dayGlow },
   date: { fontFamily: fonts.semibold, fontSize: 14, lineHeight: 18, color: colours.textSoft },
   dateRan: { fontFamily: fonts.bold, color: colours.text, textShadowColor: colours.page, textShadowRadius: 4, textShadowOffset: { width: 0, height: 0 } },
   dateAfter: { color: colours.textFaint, opacity: 0.5 },

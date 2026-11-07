@@ -45,9 +45,11 @@ export function RouteThumb({ shape, size = THUMB }: { shape: string | null; size
   );
 }
 
-/** "9.59 km · 1:02:44 · 6:32 /km", read aloud in whole words. */
+/** "9.59 kilometres, 1:02:44, pace 6:32 a kilometre": the line read aloud, in whole words. */
 export function runNumbersSaid(run: Pick<RunSummary, "distanceM" | "durationS">, units: Units): string {
-  return `${distance(run.distanceM, units)} ${units === "imperial" ? "miles" : "kilometres"}, ${clock(run.durationS)}, pace ${pace(run.durationS, run.distanceM, units)} ${units === "imperial" ? "a mile" : "a kilometre"}`;
+  const each = pace(run.durationS, run.distanceM < 50 ? 0 : run.distanceM, units);
+  // The pace the line shows: none under 50 m, as the summary's.
+  return `${distance(run.distanceM, units)} ${units === "imperial" ? "miles" : "kilometres"}, ${clock(run.durationS)}, ${each === "--:--" ? "no pace" : `pace ${each} ${units === "imperial" ? "a mile" : "a kilometre"}`}`;
 }
 
 /** One run of the list. */
