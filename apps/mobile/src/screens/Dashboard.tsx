@@ -700,7 +700,8 @@ const styles = StyleSheet.create({
   name: { alignSelf: "stretch" },
   // A little lower than the picture's own foot, on the ground under the figures (Kd).
   footDrop: { transform: [{ translateY: 12 }] },
-  boxTitle: { fontSize: 14, lineHeight: 18, color: colours.textSoft },
+  // A title too long for its box goes onto a second line, never past the box's edge (an opened folding phone).
+  boxTitle: { flexShrink: 1, fontSize: 14, lineHeight: 18, color: colours.textSoft },
   centre: { textAlign: "center" },
   fill: { position: "absolute", width: "100%", height: "100%" },
   shade: { experimental_backgroundImage: pictureShade },
