@@ -7,7 +7,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
 vi.mock('../../api/adminApi', () => ({
-  adminService: { door: vi.fn(), makePassword: vi.fn(), openDoor: vi.fn(), lock: vi.fn(), people: vi.fn(), setLimits: vi.fn() },
+  adminService: { door: vi.fn(), makePassword: vi.fn(), openDoor: vi.fn(), lock: vi.fn(), people: vi.fn(), setLimits: vi.fn(), personDays: vi.fn(), day: vi.fn() },
   isDoorShut: (err) => err?.response?.status === 403 && err?.response?.data?.error === 'admin_locked',
 }));
 const auth = { user: { id: 'kd', displayName: 'Kd', email: 'kd@gmail.com' }, logout: vi.fn(), sendCode: vi.fn(), verifyCode: vi.fn() };
@@ -55,6 +55,115 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+});
+
+const { todayIn, myZone } = await import('./adminView');
+const today = todayIn(myZone());
+const dayBefore = (n) => {
+  const [y, m, d] = today.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d - n)).toISOString().slice(0, 10);
+};
+const benDays = {
+  person: { id: 'b1', name: 'Ben', email: 'ben@gmail.com' },
+  zone: 'Asia/Kolkata',
+  zoneFromPhone: true,
+  today,
+  days: [
+    { day: today, minutes: 34, mealScans: 3, routePlans: 0, costMicro: 528 },
+    { day: dayBefore(1), minutes: 0, mealScans: 0, routePlans: 1, costMicro: 0 },
+    { day: dayBefore(2), minutes: null, mealScans: 1, routePlans: 0, costMicro: 176 },
+  ],
+  next: dayBefore(2),
+};
+const rowTexts = (table) => within(table).getAllByRole('row').slice(1).map((r) => within(r).getAllByRole('cell').map((c) => c.textContent));
+
+describe("each person's days (14a-ii)", () => {
+  it("Days opens under that person's row: each day's time in the app, scans, route plans and cost; Earlier days; Close", async () => {
+    vi.mocked(adminService.personDays)
+      .mockResolvedValueOnce(benDays)
+      .mockResolvedValueOnce({ ...benDays, days: [{ day: dayBefore(3), minutes: null, mealScans: 0, routePlans: 0, costMicro: 0 }], next: null });
+    draw();
+    fireEvent.click(await screen.findByRole('button', { name: "Ben's days" }));
+    const section = await screen.findByRole('region', { name: "Ben's days" });
+    expect(adminService.personDays).toHaveBeenCalledWith('b1', { zone: myZone() });
+    expect(within(section).getByText("Each day is their own, in their phone's time zone (Asia/Kolkata).")).toBeTruthy();
+    const table = await within(section).findByRole('table');
+    const rows = rowTexts(table);
+    expect(rows.map((r) => r.slice(1))).toEqual([
+      ['34 min', '3', '0', '$0.0005'],
+      ['0 min', '0', '1', '$0'],
+      ['Not recorded', '1', '0', '$0.0002'],
+    ]);
+    expect(rows.map((r) => r[0]).slice(0, 2)).toEqual(['Today', 'Yesterday']);
+    expect(screen.queryByRole('region', { name: "Asha's days" })).toBeNull();
+    fireEvent.click(within(section).getByRole('button', { name: 'Earlier days' }));
+    await waitFor(() => expect(rowTexts(table)).toHaveLength(4));
+    expect(adminService.personDays).toHaveBeenLastCalledWith('b1', { zone: myZone(), before: dayBefore(2) });
+    expect(within(section).getByText('They signed up on the last day shown.')).toBeTruthy();
+    expect(within(section).queryByRole('button', { name: 'Earlier days' })).toBeNull();
+    fireEvent.click(within(section).getByRole('button', { name: 'Close' }));
+    expect(screen.queryByRole('region', { name: "Ben's days" })).toBeNull();
+  });
+
+  it("somebody whose phone has sent nothing yet: their days are in Kd's time zone, and it says so", async () => {
+    vi.mocked(adminService.personDays).mockResolvedValue({ ...benDays, zone: 'Europe/London', zoneFromPhone: false, next: null });
+    draw();
+    fireEvent.click(await screen.findByRole('button', { name: "Ben's days" }));
+    expect(await screen.findByText("Their phone hasn't sent its time zone yet, so these days are in yours (Europe/London).")).toBeTruthy();
+  });
+
+  it('By day: the day picked, its totals in one line, everyone who used the app, most time first; Show more', async () => {
+    const row = (id, name, minutes) => ({ id, name, email: `${name.toLowerCase()}@gmail.com`, minutes, mealScans: 1, routePlans: 0, costMicro: 176 });
+    const totals = { people: 3, minutes: 95, mealScans: 3, routePlans: 0, costMicro: 528 };
+    vi.mocked(adminService.day)
+      .mockResolvedValueOnce({ day: today, totals, people: [row('a1', 'Asha', 60), row('b1', 'Ben', 35)], next: 2 })
+      .mockResolvedValueOnce({ day: today, totals, people: [row('c1', 'Chen', null)], next: null });
+    draw();
+    fireEvent.click(await screen.findByRole('button', { name: 'By day' }));
+    expect((await screen.findByTestId('day-totals')).textContent).toBe('Today: 3 people used the app · 1 h 35 min in the app · 3 meal scans · 0 route plans · cost $0.0005');
+    expect(adminService.day).toHaveBeenCalledWith(today, { zone: myZone() });
+    expect(screen.getByRole('button', { name: 'Day' }).textContent).not.toBe('Pick a date');
+    const table = screen.getByRole('table');
+    expect(rowTexts(table).map((r) => r[0])).toEqual(['Asha', 'Ben']);
+    fireEvent.click(screen.getByRole('button', { name: 'Show more' }));
+    await waitFor(() => expect(rowTexts(table)).toHaveLength(3));
+    expect(rowTexts(table)[2]).toEqual(['Chen', 'chen@gmail.com', 'Not recorded', '1', '0', '$0.0002']);
+    expect(adminService.day).toHaveBeenLastCalledWith(today, { zone: myZone(), from: 2 });
+    expect(screen.queryByRole('button', { name: 'Show more' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'People' }));
+    expect(await screen.findByText('People using the app')).toBeTruthy();
+  });
+
+  it('a day nobody used the app says so', async () => {
+    vi.mocked(adminService.day).mockResolvedValue({ day: today, totals: { people: 0, minutes: 0, mealScans: 0, routePlans: 0, costMicro: 0 }, people: [], next: null });
+    draw();
+    fireEvent.click(await screen.findByRole('button', { name: 'By day' }));
+    expect((await screen.findByTestId('day-totals')).textContent).toBe('Today: Nobody used the app on this day.');
+    expect(screen.queryByRole('table')).toBeNull();
+  });
+
+  it('the door shut while reading days: back to the door, no days shown', async () => {
+    vi.mocked(adminService.personDays).mockRejectedValue({ response: { status: 403, data: { error: 'admin_locked' } } });
+    draw();
+    const days = await screen.findByRole('button', { name: "Ben's days" });
+    vi.mocked(adminService.door).mockResolvedValue({ passwordSet: true, open: false, openUntil: null, fresh: true });
+    fireEvent.click(days);
+    expect(await screen.findByText('Admin password')).toBeTruthy();
+    expect(screen.queryByRole('region', { name: "Ben's days" })).toBeNull();
+  });
+
+  it('coming back to the window reads the open days again', async () => {
+    vi.mocked(adminService.personDays).mockResolvedValue(benDays);
+    draw();
+    fireEvent.click(await screen.findByRole('button', { name: "Ben's days" }));
+    await screen.findByRole('region', { name: "Ben's days" });
+    await waitFor(() => expect(adminService.personDays).toHaveBeenCalledTimes(1));
+    const later = Date.now() + 5000;
+    const spy = vi.spyOn(Date, 'now').mockReturnValue(later);
+    fireEvent.focus(window);
+    await waitFor(() => expect(adminService.personDays).toHaveBeenCalledTimes(2));
+    spy.mockRestore();
+  });
 });
 
 describe('the admin page', () => {
@@ -142,10 +251,10 @@ describe('the admin page', () => {
     await within(table).findByText('Asha');
     const rows = within(table).getAllByRole('row');
     expect(rows.map((r) => r.textContent)).toEqual([
-      'NameEmailSigned upLast seenPlanMeal scansRoute plans',
-      'Ashaasha@gmail.com8 Nov 2026Not recordedFree3 a month2 a month',
-      'Benben@gmail.com8 Nov 2026Not recordedMember of Iron Gym15 a day · set by you2 a month',
-      'Chenchen@gmail.com8 Nov 2026Not recorded$10 a month15 a day2 a month',
+      'NameEmailSigned upLast seenPlanMeal scansRoute plansDays',
+      'Ashaasha@gmail.com8 Nov 2026Not recordedFree3 a month2 a monthDays',
+      'Benben@gmail.com8 Nov 2026Not recordedMember of Iron Gym15 a day · set by you2 a monthDays',
+      'Chenchen@gmail.com8 Nov 2026Not recorded$10 a month15 a day2 a monthDays',
     ]);
   });
 

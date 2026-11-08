@@ -1,5 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { allowanceWords, confirmWords, doneWords, namesWords, openUntilWords, planWords } from './adminView';
+import {
+  allowanceWords,
+  confirmWords,
+  costWords,
+  dayTotalsWords,
+  dayWords,
+  doneWords,
+  minutesWords,
+  namesWords,
+  openUntilWords,
+  planWords,
+  todayIn,
+} from './adminView';
 
 const person = (name, over = {}) => ({
   id: `id-${name}`,
@@ -64,5 +76,32 @@ describe('the admin page words', () => {
     expect(doneWords({ changed: 1, unchanged: 0, notFound: 0 }, 'route_gen', 0)).toBe('1 person now has 0 route plans a day.');
     expect(doneWords({ changed: 1, unchanged: 0, notFound: 0 }, 'meal_scan', null)).toBe("1 person is back on their plan's meal scans.");
     expect(doneWords({ changed: 0, unchanged: 0, notFound: 1 }, 'meal_scan', 5)).toBe('Nothing changed. 1 person could not be changed: the account was deleted.');
+  });
+});
+
+describe("each person's days, in words (14a-ii)", () => {
+  it('time in the app: not recorded, minutes, hours', () => {
+    expect([null, 0, 1, 59, 60, 61, 125, 1440].map(minutesWords)).toEqual(['Not recorded', '0 min', '1 min', '59 min', '1 h', '1 h 1 min', '2 h 5 min', '24 h']);
+  });
+  it('cost in dollars to the ten-thousandth, from whole micro-dollars', () => {
+    expect([0, 1, 49, 50, 176, 528, 9999, 10000, 1000000, 9000000000].map(costWords)).toEqual([
+      '$0', 'Under $0.0001', 'Under $0.0001', '$0.0001', '$0.0002', '$0.0005', '$0.0100', '$0.0100', '$1.0000', '$9000.0000',
+    ]);
+  });
+  it('a day: Today, Yesterday, a weekday, and the year when it is not this one', () => {
+    expect(dayWords('2026-11-08', '2026-11-08')).toBe('Today');
+    expect(dayWords('2026-11-07', '2026-11-08')).toBe('Yesterday');
+    expect(dayWords('2026-11-01', '2026-11-08')).toBe('Sun 1 Nov');
+    expect(dayWords('2025-12-31', '2026-01-01')).toBe('Yesterday');
+    expect(dayWords('2025-12-30', '2026-01-01')).toBe('Tue 30 Dec 2025');
+  });
+  it("a day's totals in one line, one person or many", () => {
+    expect(dayTotalsWords({ people: 1, minutes: 5, mealScans: 1, routePlans: 1, costMicro: 176 })).toBe('1 person used the app · 5 min in the app · 1 meal scan · 1 route plan · cost $0.0002');
+    expect(dayTotalsWords({ people: 0, minutes: 0, mealScans: 0, routePlans: 0, costMicro: 0 })).toBe('Nobody used the app on this day.');
+  });
+  it("today in a time zone is that zone's own date", () => {
+    const at = new Date('2026-11-07T20:00:00Z');
+    expect(todayIn('Asia/Kolkata', at)).toBe('2026-11-08');
+    expect(todayIn('America/Los_Angeles', at)).toBe('2026-11-07');
   });
 });
