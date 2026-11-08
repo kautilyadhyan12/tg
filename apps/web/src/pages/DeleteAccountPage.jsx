@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Loader2, Trash2 } from 'lucide-react';
-import { DELETE_PAGE_KEPT, DELETE_PAGE_WORDS as W, LEGAL_PATHS, SIGN_IN_ROBOT_WORDS } from '@app/shared';
+import { DELETE_PAGE_KEPT, DELETE_PAGE_TEXT as T, DELETE_PAGE_WORDS as W, LEGAL_PATHS, SIGN_IN_ROBOT_WORDS } from '@app/shared';
 import { deleteAccountService } from '../api/deleteAccountApi';
 import { errorCode, errorText } from '../api/orgsApi';
 import { ACCENT, INK, LINE, MUTED } from './GymPublicPage';
@@ -276,7 +276,7 @@ function DeleteForm() {
 
 export default function DeleteAccountPage() {
   useEffect(() => {
-    document.title = `${W.title} · KWAZO`;
+    document.title = `${T.title} · KWAZO`;
     window.scrollTo(0, 0);
   }, []);
 
@@ -287,29 +287,29 @@ export default function DeleteAccountPage() {
           <p className="text-sm font-bold tracking-wide" style={{ color: ACCENT }}>
             KWAZO
           </p>
-          <h1 className="text-[28px] sm:text-[34px] font-bold leading-tight" style={{ color: INK }}>{W.title}</h1>
-          {W.lead.map((para) => (
+          <h1 className="text-[28px] sm:text-[34px] font-bold leading-tight" style={{ color: INK }}>{T.title}</h1>
+          {T.lead.map((para) => (
             <p key={para} className="text-[16px] leading-7 mt-2">
               {para}
             </p>
           ))}
         </header>
 
-        <Section heading={W.inAppHeading}>
-          <Para text={W.inAppLead} />
-          <Steps items={W.inAppSteps} />
+        <Section heading={T.inAppHeading}>
+          <Para text={T.inAppLead} />
+          <Steps items={T.inAppSteps} />
         </Section>
 
-        <Section heading={W.webHeading}>
-          {W.webLead.map((para) => (
+        <Section heading={T.webHeading}>
+          {T.webLead.map((para) => (
             <Para key={para} text={para} />
           ))}
           <DeleteForm />
         </Section>
 
-        <Section heading={W.whatHappensHeading}>
-          <Para text={W.whatHappensLead} />
-          {W.whatHappens.map((part) => (
+        <Section heading={T.whatHappensHeading}>
+          <Para text={T.whatHappensLead} />
+          {T.whatHappens.map((part) => (
             <div key={part.heading} className="flex flex-col gap-3">
               <LegalBlock block={{ kind: 'h3', text: part.heading }} />
               {part.paras.map((para) => (
@@ -317,29 +317,29 @@ export default function DeleteAccountPage() {
               ))}
             </div>
           ))}
-          <LegalBlock block={{ kind: 'list', items: W.deletedItems }} />
-          <Para text={W.deletedAfter} />
+          <LegalBlock block={{ kind: 'list', items: T.deletedItems }} />
+          <Para text={T.deletedAfter} />
         </Section>
 
-        <Section heading={W.keptHeading}>
-          {W.keptLead.map((para) => (
+        <Section heading={T.keptHeading}>
+          {T.keptLead.map((para) => (
             <Para key={para} text={para} />
           ))}
-          <LegalBlock block={{ kind: 'table', head: W.keptHead, rows: Object.values(DELETE_PAGE_KEPT) }} />
+          <LegalBlock block={{ kind: 'table', head: T.keptHead, rows: Object.values(DELETE_PAGE_KEPT) }} />
           <p className="text-[15px] leading-7">
-            {W.keptMoreBefore}
+            {T.keptMoreBefore}
             <Link to={`${LEGAL_PATHS.privacy}#how-long`} className="underline" style={{ color: ACCENT }}>
-              {W.keptMore}
+              {T.keptMore}
             </Link>
-            {W.keptMoreAfter}
+            {T.keptMoreAfter}
           </p>
         </Section>
 
-        <Section heading={W.ownerHeading}>
-          <Para text={W.ownerLine} />
-          <Para text={W.ownerStepsLead} />
-          <Steps items={W.ownerSteps} />
-          <Para text={W.ownerAfter} />
+        <Section heading={T.ownerHeading}>
+          <Para text={T.ownerLine} />
+          <Para text={T.ownerStepsLead} />
+          <Steps items={T.ownerSteps} />
+          <Para text={T.ownerAfter} />
         </Section>
 
         <footer className="flex flex-col gap-2 pt-6 text-sm" style={{ borderTop: `1px solid ${LINE}`, color: MUTED }}>

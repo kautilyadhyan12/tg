@@ -50,7 +50,8 @@ export const DELETE_PAGE_KEPT: Record<KeptAfterDeletionId, readonly [what: strin
   ],
 };
 
-export const DELETE_PAGE_WORDS = {
+/** The page's text, Kd's own (2026-11-08): a document like the Privacy Policy, about every kind of business at once. */
+export const DELETE_PAGE_TEXT = {
   title: "Account Deletion",
   lead: [
     "KWAZO provides users with the ability to request the deletion of their accounts either through the KWAZO mobile application or through the official KWAZO website.",
@@ -70,23 +71,6 @@ export const DELETE_PAGE_WORDS = {
     "To proceed, enter the email address associated with your KWAZO account and select Email me a code.",
     "A 6-digit verification code will be sent to your registered email address for the account deletion process.",
   ],
-  emailLabel: "Email Address",
-  emailPlaceholder: "Enter your registered email address",
-  sendButton: "Email me a code",
-  sent: (email: string) => `If ${email} has a KWAZO account, we've emailed it a 6-digit code.`,
-  codeLabel: "6-digit code",
-  deleteButton: "Delete my account",
-  resend: "Email me a new code",
-  resendIn: (seconds: number) => `New code in ${String(seconds)} s`,
-  resent: "We emailed you a new code.",
-  otherEmail: "Use a different email",
-  doneTitle: "Your account is being deleted",
-  doneUndo: `You're signed out everywhere. To keep your account, open the email we sent you and press Undo within ${days} days.`,
-  doneNoEmail: `You're signed out everywhere. Your account will be deleted for good in ${days} days.`,
-  noAccount: "There's no KWAZO account with this email address, so there's nothing to delete.",
-  alreadyDeleting: `This account is already being deleted. To keep it, open the email we sent when it was deleted and press Undo within ${days} days.`,
-  ownerNext: "Sign in to manage your gym",
-  failed: "Something went wrong. Please try again.",
   whatHappensHeading: "3. Consequences of Account Deletion",
   whatHappensLead: "Upon submitting and confirming an account deletion request, the following actions and conditions apply:",
   whatHappens: [
@@ -135,4 +119,25 @@ export const DELETE_PAGE_WORDS = {
     "Select Make owner next to the relevant staff member to transfer ownership.",
   ],
   ownerAfter: "Business owners should complete this ownership transfer before proceeding with account deletion.",
+} as const;
+
+/** The short lines the page's form shows, the same for every kind of business. */
+export const DELETE_PAGE_WORDS = {
+  emailLabel: "Email Address",
+  emailPlaceholder: "Enter your registered email address",
+  sendButton: "Email me a code",
+  sent: (email: string) => `If ${email} has a KWAZO account, we've emailed it a 6-digit code.`,
+  codeLabel: "6-digit code",
+  deleteButton: "Delete my account",
+  resend: "Email me a new code",
+  resendIn: (seconds: number) => `New code in ${String(seconds)} s`,
+  resent: "We emailed you a new code.",
+  otherEmail: "Use a different email",
+  doneTitle: "Your account is being deleted",
+  doneUndo: `You're signed out everywhere. To keep your account, open the email we sent you and press Undo within ${days} days.`,
+  doneNoEmail: `You're signed out everywhere. Your account will be deleted for good in ${days} days.`,
+  noAccount: "There's no KWAZO account with this email address, so there's nothing to delete.",
+  alreadyDeleting: `This account is already being deleted. To keep it, open the email we sent when it was deleted and press Undo within ${days} days.`,
+  ownerNext: "Sign in to manage your business",
+  failed: "Something went wrong. Please try again.",
 } as const;
