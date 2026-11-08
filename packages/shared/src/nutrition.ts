@@ -870,6 +870,12 @@ export type DietPlanMeal = z.infer<typeof dietPlanMealSchema>;
 const planNumbersSchema = z.object({
   kcal: z.number().int(), proteinG: z.number().int(), carbsG: z.number().int(), fatG: z.number().int(),
 }).strict();
+/** The least a person may eat in a day, and why (spec Part 6 §16.6; RULINGS 2026-09-07): the app's
+ *  floor, or what keeps their weight where their plan holds no calorie cut (under 18, a yes on the
+ *  health question). The server's rule; a plan's day under it says so and is never changed. */
+export const lowestKcalSchema = z.object({ kcal: z.number().int().positive(), why: z.enum(["floor", "keeps_weight"]) }).strict();
+export type LowestKcal = z.infer<typeof lowestKcalSchema>;
+
 export const dietPlanDayReplySchema = z.object({
   day: dietPlanDaySchema,
   meals: z.array(dietPlanMealSchema).max(MOST_PLAN_MEALS),
@@ -879,6 +885,8 @@ export const dietPlanDayReplySchema = z.object({
   target: planNumbersSchema.nullable(),
   /** planned less target, each figure; null with the target. Below 0 is under it. */
   off: planNumbersSchema.nullable(),
+  /** The least this person may eat, where the day has meals and holds less; else null. */
+  under: lowestKcalSchema.nullable(),
   /** The day as it is now, every food, amount and own number of it: a change sent with an older one
    *  is refused (`plan_changed`), never laid over a change made since (34e-ii-b). */
   version: dayVersionSchema,
@@ -896,19 +904,26 @@ export const dietPlanMakeSchema = z.discriminatedUnion("status", [
 ]);
 export type DietPlanMake = z.infer<typeof dietPlanMakeSchema>;
 
-/** Which food Recommended For You shows (spec Part 6 §16.6; ROADMAP 31f): the app's own ideas or
- *  the person's own meal plan. The gym's plan joins with 31g. */
-export const foodChoiceSchema = z.enum(["suggested", "mine"]);
+/** Which food Recommended For You shows (spec Part 6 §16.6; ROADMAP 31f, 31g): the app's own ideas,
+ *  the plan a gym gave the person, or the person's own meal plan. */
+export const foodChoiceSchema = z.enum(["suggested", "mine", "gym"]);
 export type FoodChoice = z.infer<typeof foodChoiceSchema>;
-/** The person picks one; kept on the server, so every screen and phone shows the same. */
-export const putFoodChoiceRequestSchema = z.object({ choice: foodChoiceSchema }).strict();
+/** The person picks one; kept on the server, so every screen and phone shows the same. The gym's
+ *  plan names the gym, one the person is a member of. */
+export const putFoodChoiceRequestSchema = z.union([
+  z.object({ choice: z.enum(["suggested", "mine"]) }).strict(),
+  z.object({ choice: z.literal("gym"), gymId: z.string().uuid() }).strict(),
+]);
 export type PutFoodChoiceRequest = z.infer<typeof putFoodChoiceRequestSchema>;
 
 export const dietPlanResponseSchema = z.object({
   days: z.array(dietPlanDayReplySchema).length(7),
   make: dietPlanMakeSchema,
-  /** The person's pick; before they pick, My plan where their week has a meal, else Suggested. */
+  /** The person's pick; before they pick, the plan a gym gave them, else My plan where their week
+   *  has a meal, else Suggested. */
   choice: foodChoiceSchema,
+  /** The gym, where `choice` is the gym's plan; null otherwise. */
+  choiceGymId: z.string().uuid().nullable(),
   caution: z.literal(FOOD_ALLERGY_CAUTION),
   /** For a vegetarian or vegan, or somebody with no diet answer; null for somebody who eats meat. */
   labelCaution: z.literal(DIET_LABEL_CAUTION).nullable(),

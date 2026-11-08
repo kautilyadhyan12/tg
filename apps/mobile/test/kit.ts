@@ -83,9 +83,10 @@ export function versionOf(day: number, meals: unknown): string {
 }
 
 const NO_PLAN = {
-  days: [1, 2, 3, 4, 5, 6, 7].map((day) => ({ day, meals: [], planned: { kcal: 0, proteinG: 0, carbsG: 0, fatG: 0 }, target: null, off: null, version: versionOf(day, []) })),
+  days: [1, 2, 3, 4, 5, 6, 7].map((day) => ({ day, meals: [], planned: { kcal: 0, proteinG: 0, carbsG: 0, fatG: 0 }, target: null, off: null, under: null, version: versionOf(day, []) })),
   make: { status: "ok" },
   choice: "suggested",
+  choiceGymId: null,
   caution: FOOD_ALLERGY_CAUTION,
   labelCaution: null,
 };
@@ -140,6 +141,8 @@ export function fakeServer(routes: Record<string, Route>): { ask: Ask; asked: As
     "/v1/users/me/consents": () => ({ status: 200, body: { consents: [], total: 0 } }),
     // No meal plan made yet, unless a test says otherwise.
     "/v1/nutrition/diet-plan": () => ({ status: 200, body: NO_PLAN }),
+    // In no gym, so no gym's meal plan, unless a test says otherwise (31g).
+    "/v1/nutrition/gym-meal-plans": () => ({ status: 200, body: { gyms: [] } }),
     // No meals in the week, unless a test says otherwise.
     "/v1/nutrition/food-week": () => ({ status: 200, body: foodWeekReply() }),
     // Every training reminder off, as they start, unless a test says otherwise.

@@ -6,26 +6,42 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
-import { dietPlanResponseSchema, type DietPlanResponse, type FoodChoice } from "@app/shared";
+import { dietPlanResponseSchema, type DietPlanResponse } from "@app/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import type { EmailSender } from "../src/modules/auth/email.js";
 import type { FoodSearchProvider } from "../src/modules/nutrition/openfoodfacts.adapter.js";
-import { foodChoiceOf } from "../src/modules/nutrition/dietPlanService.js";
-import { EMPTY_WEEK, type StoredDays } from "../src/modules/nutrition/dietPlanRepo.js";
+import { foodChoiceOf, type GymsForChoice } from "../src/modules/nutrition/dietPlanService.js";
+import { EMPTY_WEEK, type Picked, type StoredDays } from "../src/modules/nutrition/dietPlanRepo.js";
 
 describe("where the choice starts, every case", () => {
   const oneMeal: StoredDays = [[], [], [{ mealType: "lunch", items: [] }], [], [], [], []];
-  const cases: readonly [picked: FoodChoice | null, days: StoredDays, shown: FoodChoice, why: string][] = [
-    [null, EMPTY_WEEK, "suggested", "no pick, no plan: the app's ideas"],
-    [null, oneMeal, "mine", "no pick, a meal on any day of the week: their plan"],
-    ["suggested", oneMeal, "suggested", "picked Suggested with a plan: the app's ideas"],
-    ["suggested", EMPTY_WEEK, "suggested", "picked Suggested, no plan"],
-    ["mine", EMPTY_WEEK, "mine", "picked My plan with none yet: My plan, which offers Build my own"],
-    ["mine", oneMeal, "mine", "picked My plan with a plan"],
+  const IRON = "00000000-0000-4000-8000-000000000001";
+  const OAK = "00000000-0000-4000-8000-000000000002";
+  const none: GymsForChoice = { live: [], newestGiven: null };
+  const ironNoPlan: GymsForChoice = { live: [IRON], newestGiven: null };
+  const ironGave: GymsForChoice = { live: [IRON], newestGiven: IRON };
+  const bothOakNewest: GymsForChoice = { live: [IRON, OAK], newestGiven: OAK };
+  const gym = (gymId: string): Picked => ({ choice: "gym", gymId });
+  const of = (choice: "suggested" | "mine"): Picked => ({ choice, gymId: null });
+  const cases: readonly [picked: Picked | null, days: StoredDays, gyms: GymsForChoice, shown: Picked, why: string][] = [
+    [null, EMPTY_WEEK, none, of("suggested"), "no pick, no plan, no gym: the app's ideas"],
+    [null, oneMeal, none, of("mine"), "no pick, a meal on any day of the week: their plan"],
+    [null, oneMeal, ironNoPlan, of("mine"), "a gym that gave nothing does not take the start"],
+    [null, oneMeal, ironGave, gym(IRON), "no pick, a gym gave a plan: the gym's, before their own"],
+    [null, EMPTY_WEEK, bothOakNewest, gym(OAK), "two gyms gave one: the newest given"],
+    [of("suggested"), oneMeal, ironGave, of("suggested"), "picked Suggested: kept, whatever a gym gave"],
+    [of("suggested"), EMPTY_WEEK, none, of("suggested"), "picked Suggested, no plan"],
+    [of("mine"), EMPTY_WEEK, ironGave, of("mine"), "picked My plan with none yet: My plan, which offers Build my own"],
+    [of("mine"), oneMeal, none, of("mine"), "picked My plan with a plan"],
+    [gym(IRON), EMPTY_WEEK, ironNoPlan, gym(IRON), "picked a gym that gave nothing: kept, the phone says so"],
+    [gym(IRON), oneMeal, bothOakNewest, gym(IRON), "picked one of two gyms: kept, not the newest"],
+    [gym(OAK), oneMeal, ironNoPlan, of("mine"), "picked a gym they left: back to the start, their plan"],
+    [gym(OAK), EMPTY_WEEK, ironGave, gym(IRON), "picked a gym they left, another gave one: that one"],
+    [gym(OAK), EMPTY_WEEK, none, of("suggested"), "picked a gym they left, nothing else: the app's ideas"],
   ];
-  it.each(cases)("%s · %#: %s", (picked, days, shown) => {
-    expect(foodChoiceOf(picked, days)).toBe(shown);
+  it.each(cases)("%# · %s", (picked, days, gyms, shown) => {
+    expect(foodChoiceOf(picked, days, gyms)).toEqual(shown);
   });
 });
 
@@ -178,9 +194,10 @@ d("Recommended For You's choice for food (real Postgres)", () => {
         expect((await pick(cookies, body)).statusCode, JSON.stringify(body)).toBe(400);
       }
       expect(await stored("refused")).toEqual([]);
-      // Round one, L1: the table holds only the choices the server can read; the gym's joins with 31g.
+      // Round one, L1: the table holds only the choices the server can read, and the gym's names a gym (31g).
       const id = (await sql<{ id: string }[]>`SELECT id FROM users WHERE email = 'foodchoice-refused@example.com'`)[0]?.id ?? "";
-      await expect(sql`INSERT INTO recommended_choices (user_id, kind, choice) VALUES (${id}, 'food', 'gym')`).rejects.toThrow(/recommended_choices_choice_check/);
+      await expect(sql`INSERT INTO recommended_choices (user_id, kind, choice) VALUES (${id}, 'food', 'coach')`).rejects.toThrow(/recommended_choices_choice_check/);
+      await expect(sql`INSERT INTO recommended_choices (user_id, kind, choice) VALUES (${id}, 'food', 'gym')`).rejects.toThrow(/recommended_choices_gym_check/);
     });
 
     it("sent twice is one pick, one row", { timeout: 60_000 }, async () => {

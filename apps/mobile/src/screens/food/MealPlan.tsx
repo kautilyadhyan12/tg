@@ -18,7 +18,9 @@ import { newGoalId } from "../goals/words";
 import { mealTypeName, startOfDay } from "./day";
 import { dayRows, useDayMeals } from "./dayRows";
 import { ideaName } from "./ideaRules";
-import { FoodChoiceRow, useFoodChoice } from "./FoodChoice";
+import { FoodChoiceRow, shownOf, useFoodChoice } from "./FoodChoice";
+import { GymPlanBox, NoGymPlan, UnderLine, useGymPlans } from "./GymMealPlan";
+import { gymMeal, writtenByLine, type GymOfMine } from "./gymPlanRules";
 import { MealIdeas, NO_PLAN_YET, type PlannedNow } from "./MealIdeas";
 import { useMealOutbox } from "./MealOutbox";
 import { loggedAmount } from "./measures";
@@ -63,7 +65,10 @@ export function WhatToEatNext({ foodsToday, fresh, onAnswered, todayFailed, retr
   const { session } = useSession();
   const { height } = useWindowDimensions();
   const { read, again, begun, shownFrom } = useRead(PLAN_READ, dietPlanResponseSchema, fresh);
+  const gyms = useGymPlans(fresh);
   const { outbox } = useMealOutbox();
+  // The gym's plan picked: the gym's box opens its own week for the Dashboard's See meal plan.
+  const gymShown = useRef(false);
   // The plan as the server answered a change, until a read begun after that answer comes back.
   const [answered, setAnswered] = useState<{ data: DietPlanResponse; after: number } | null>(null);
   useEffect(() => {
@@ -106,7 +111,9 @@ export function WhatToEatNext({ foodsToday, fresh, onAnswered, todayFailed, retr
   const onChoice = useCallback((data: DietPlanResponse) => {
     setAnswered({ data, after: begun() });
   }, [begun]);
-  const choice = useFoodChoice(plan?.choice ?? null, { begun, shownFrom, again }, onChoice);
+  const choice = useFoodChoice(plan === null ? null : shownOf(plan), { begun, shownFrom, again }, onChoice);
+  gymShown.current = choice.shown?.choice === "gym";
+  const gymList = gyms.read.kind === "ok" ? gyms.read.data.gyms : [];
   // The plan changed under "Remove this meal?": the question goes, and the week says why.
   const removingFrom = removing?.version ?? null;
   const shownVersion = plan?.days[shownDay - 1]?.version ?? null;
@@ -116,7 +123,7 @@ export function WhatToEatNext({ foodsToday, fresh, onAnswered, todayFailed, retr
     setTrouble("Your plan has changed, so nothing was removed.");
   }, [removingFrom, shownVersion]);
   useEffect(() => {
-    if (openWeekAt === null) return;
+    if (openWeekAt === null || gymShown.current) return;
     setShownDay(planDayOf(new Date()));
     setAsking(false);
     setChoosing(false);
@@ -304,7 +311,7 @@ export function WhatToEatNext({ foodsToday, fresh, onAnswered, todayFailed, retr
     return true;
   };
   const planned = hasMeals(plan);
-  const choices = choice.shown === null ? null : <FoodChoiceRow shown={choice.shown} pick={choice.pick} trouble={choice.trouble} />;
+  const choices = choice.shown === null ? null : <FoodChoiceRow shown={choice.shown} pick={choice.pick} trouble={choice.trouble} gyms={gymList} />;
   const sheets = (
     <>
       <Sheet
@@ -433,7 +440,26 @@ export function WhatToEatNext({ foodsToday, fresh, onAnswered, todayFailed, retr
     </>
   );
 
-  if (choice.shown === "mine" && !planned) {
+  if (choice.shown?.choice === "gym") {
+    const gymId = choice.shown.gymId;
+    return (
+      <>
+        <GymPlanBox
+          gym={gyms.read.kind === "failed" ? "failed" : gymList.find((g) => g.gymId === gymId) ?? null}
+          retry={gyms.again}
+          choices={choices}
+          foodsToday={foodsToday}
+          todayFailed={todayFailed}
+          retryToday={retryToday}
+          openWeekAt={openWeekAt}
+          onWeekOpened={onWeekOpened}
+        />
+        {sheets}
+      </>
+    );
+  }
+
+  if (choice.shown?.choice === "mine" && !planned) {
     // My plan picked, and none yet: the app's plan, or one's own.
     return (
       <>
@@ -453,7 +479,7 @@ export function WhatToEatNext({ foodsToday, fresh, onAnswered, todayFailed, retr
     );
   }
 
-  if (choice.shown === "suggested") {
+  if (choice.shown?.choice === "suggested") {
     // Suggested: the meal ideas, which also ask for any answer still missing; with no plan, the app's plan or one's own.
     return (
       <>
@@ -529,6 +555,7 @@ export function WhatToEatNext({ foodsToday, fresh, onAnswered, todayFailed, retr
           <>
             <MealWords meal={next} />
             <OutsideDiet meal={next} />
+            <UnderLine under={plan.days[today - 1]?.under} />
             <View style={styles.actions}>
               <Button label="Log meal" compact disabled={held} say={`Log ${ideaName(next)}`} onPress={() => { void log(next, nextAt); }} />
               <Button label="Swap" kind="link" compact disabled={held} say={`Swap ${ideaName(next)}`} onPress={() => { void swap(today, nextAt); }} />
@@ -546,23 +573,42 @@ export function WhatToEatNext({ foodsToday, fresh, onAnswered, todayFailed, retr
 }
 
 /** The Dashboard's Recommended box: the same answer as the Food page's. Today's meals are read only
- *  for somebody with a plan. */
-/** The Dashboard's Recommended box. Its Log meal opens the Food page's What to eat next, where the meal
- *  is logged: the Dashboard never logs one by itself (Kd, 2026-11-02). */
+ *  for somebody with a plan. Its Log meal opens the Food page's What to eat next, where the meal is
+ *  logged: the Dashboard never logs one by itself (Kd, 2026-11-02). */
 export function Recommended({ onMore, onPlan, onLog }: { onMore: () => void; onPlan: () => void; onLog: () => void }) {
   const { read, again, begun, shownFrom } = useRead(PLAN_READ, dietPlanResponseSchema);
-  const choice = useFoodChoice(read.kind === "ok" ? read.data.choice : null, { begun, shownFrom, again });
+  const gyms = useGymPlans();
+  const choice = useFoodChoice(read.kind === "ok" ? shownOf(read.data) : null, { begun, shownFrom, again });
   if (read.kind === "loading") return <MealIdeas onMore={onMore} onLog={onLog} planned="loading" />;
   // Never the ideas as if there were no plan: Food says the same.
   if (read.kind === "failed") return <MealIdeas onMore={onMore} onLog={onLog} planned={{ failed: "Your meal plan couldn’t load.", retry: again }} />;
-  const shown = choice.shown ?? read.data.choice;
-  const choices = <FoodChoiceRow shown={shown} pick={choice.pick} trouble={choice.trouble} />;
-  if (shown === "suggested") return <MealIdeas onMore={onMore} onLog={onLog} choices={choices} />;
+  const shown = choice.shown ?? shownOf(read.data);
+  const gymList = gyms.read.kind === "ok" ? gyms.read.data.gyms : [];
+  const choices = <FoodChoiceRow shown={shown} pick={choice.pick} trouble={choice.trouble} gyms={gymList} />;
+  if (shown.choice === "gym") {
+    if (gyms.read.kind === "loading") return <MealIdeas onMore={onMore} onLog={onLog} choices={choices} planned="loading" />;
+    if (gyms.read.kind === "failed") return <MealIdeas onMore={onMore} onLog={onLog} choices={choices} planned={{ failed: "Your gym’s meal plan couldn’t load.", retry: gyms.again }} />;
+    const gym = gymList.find((g) => g.gymId === shown.gymId);
+    if (gym === undefined) return <MealIdeas onMore={onMore} onLog={onLog} choices={choices} planned="loading" />;
+    return <RecommendedFromGym gym={gym} onMore={onPlan} onIdeas={onMore} onLog={onLog} choices={choices} />;
+  }
+  if (shown.choice === "suggested") return <MealIdeas onMore={onMore} onLog={onLog} choices={choices} />;
   if (hasMeals(read.data)) return <RecommendedFromPlan plan={read.data} onMore={onPlan} onIdeas={onMore} onLog={onLog} choices={choices} />;
   return <MealIdeas onMore={onMore} onLog={onLog} choices={choices} planned={{ build: onPlan }} />;
 }
 
-function RecommendedFromPlan({ plan, onMore, onIdeas, onLog, choices }: { plan: DietPlanResponse; onMore: () => void; onIdeas: () => void; onLog: () => void; choices: ReactNode }) {
+/** The gym's plan on the Dashboard: today's next meal from it, as the person's own plan's is shown. */
+function RecommendedFromGym({ gym, onMore, onIdeas, onLog, choices }: { gym: GymOfMine; onMore: () => void; onIdeas: () => void; onLog: () => void; choices: ReactNode }) {
+  const plan = gym.plan;
+  if (plan === null) return <MealIdeas onMore={onIdeas} onLog={onLog} choices={choices} planned={{ words: <NoGymPlan gym={gym} /> }} />;
+  const days = plan.days.map((d) => ({ meals: d.meals.map(gymMeal), under: d.under }));
+  const note = <Txt kind="tiny" colour="textSoft">{writtenByLine(plan)}</Txt>;
+  return <RecommendedFromPlan plan={{ days, caution: plan.caution, labelCaution: null }} note={note} onMore={onMore} onIdeas={onIdeas} onLog={onLog} choices={choices} />;
+}
+
+type PlanToday = { days: readonly { meals: readonly DietPlanMeal[]; under: DietPlanDayReply["under"] }[]; caution: string; labelCaution: string | null };
+
+function RecommendedFromPlan({ plan, note = null, onMore, onIdeas, onLog, choices }: { plan: PlanToday; note?: ReactNode; onMore: () => void; onIdeas: () => void; onLog: () => void; choices: ReactNode }) {
   const { view } = useMealOutbox();
   const dayStart = startOfDay(new Date()).getTime();
   const day = useMemo(() => new Date(dayStart), [dayStart]);
@@ -573,7 +619,8 @@ function RecommendedFromPlan({ plan, onMore, onIdeas, onLog, choices }: { plan: 
   if (rows === null) {
     return <MealIdeas onMore={onMore} choices={choices} planned={mealsRead.kind === "failed" ? { failed: "Your meals couldn’t load.", retry: again } : "loading"} />;
   }
-  const meals = plan.days[planDayOf(day) - 1]?.meals ?? [];
+  const today = plan.days[planDayOf(day) - 1];
+  const meals = today?.meals ?? [];
   // Today has no meals in the plan: the app's ideas, as on the Food page.
   if (meals.length === 0) return <MealIdeas onMore={onIdeas} onLog={onLog} choices={choices} lead={{ words: NOTHING_TODAY, action: { label: "See meal plan", onPress: onMore } }} />;
   const foods = rows.map((r) => foodsOfRow(r, view.waiting));
@@ -582,6 +629,12 @@ function RecommendedFromPlan({ plan, onMore, onIdeas, onLog, choices }: { plan: 
     canLog: true,
     caution: plan.caution,
     labelCaution: plan.labelCaution,
+    note: (
+      <>
+        {note}
+        <UnderLine under={today?.under} />
+      </>
+    ),
   };
   return <MealIdeas onMore={onMore} onLog={onLog} planned={planned} choices={choices} />;
 }
@@ -606,10 +659,13 @@ function DayArrow({ name, say, onPress }: { name: "back" | "go"; say: string; on
 function DayNumbers({ day }: { day: DietPlanDayReply }) {
   if (day.meals.length === 0) return null;
   return (
-    <Txt kind="small">
-      {count(day.planned.kcal)} kcal planned
-      {day.target === null ? "" : ` · target ${count(day.target.kcal)} kcal`}
-    </Txt>
+    <>
+      <Txt kind="small">
+        {count(day.planned.kcal)} kcal planned
+        {day.target === null ? "" : ` · target ${count(day.target.kcal)} kcal`}
+      </Txt>
+      <UnderLine under={day.under} />
+    </>
   );
 }
 

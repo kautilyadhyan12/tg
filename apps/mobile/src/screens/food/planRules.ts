@@ -51,8 +51,9 @@ export function foodsOfRow(
 }
 
 /** What the outbox keeps for a planned meal logged: its foods as the plan holds them, and which meal of
- *  the plan it is, so the server saves the numbers the plan showed (round one of 34e-ii-b, H4). */
-export function planMealAsMeal(meal: Pick<DietPlanMeal, "mealType" | "items" | "totals">, id: string, now: Date, planned: { day: number; meal: number }): WaitingMeal {
+ *  the person's own plan it is, so the server saves the numbers the plan showed (round one of 34e-ii-b,
+ *  H4). A gym's meal (31g) names none: the server prices its foods as any meal logged by hand. */
+export function planMealAsMeal(meal: Pick<DietPlanMeal, "mealType" | "items" | "totals">, id: string, now: Date, planned: { day: number; meal: number } | null): WaitingMeal {
   return {
     id,
     body: {
@@ -61,7 +62,7 @@ export function planMealAsMeal(meal: Pick<DietPlanMeal, "mealType" | "items" | "
       takenAt: now.toISOString(),
       mealType: meal.mealType,
       items: meal.items.map(planItemChoice),
-      planned,
+      ...(planned === null ? {} : { planned }),
     },
     items: meal.items,
     totals: meal.totals,

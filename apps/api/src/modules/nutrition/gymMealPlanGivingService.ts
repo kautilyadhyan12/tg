@@ -7,7 +7,9 @@ import {
   gymMealPlanForEntryResponseSchema, gymMealPlanGivePreviewSchema, gymMealPlansResponseSchema, gymMealPlanGivenSchema, gymMealPlanGroupsResponseSchema, memberGymMealPlanResponseSchema,
   type GymMealPlanForEntryResponse, type GymMealPlanGivePreview, type GymMealPlanGiven, type GymMealPlanGivenToSelected,
   type GymMealPlanGroup, type GymMealPlanGroupsResponse, type GymMealPlansResponse, type HeldMembership, type MemberGymMealPlanResponse,
+  myGymMealPlansResponseSchema, type LowestKcal, type MemberGymMealPlan, type MyGymMealPlansResponse,
 } from "@app/shared";
+import { dayUnder } from "./targets.js";
 import type { Sql } from "postgres";
 import { dayInTz } from "../gamification/streak.js";
 import { membersAgainstList } from "../orgs/memberList/repo.js";
@@ -299,6 +301,12 @@ export async function myGymMealPlan(deps: GivingDeps, userId: string, gymId: str
     throw new NutritionError(404, "not_member", GYM_MEAL_PLAN_GIVING_WORDS.not_member);
   }
   if (!(await limit())) return null;
+  return memberGymMealPlanResponseSchema.parse({ plan: await planGivenTo(deps, userId, gymId) });
+}
+
+/** The plan this gym gives this member, as written, or null; the caller has checked they are a live
+ *  member. The rule of `myGymMealPlan`, read once for each gym on the phone (31g). */
+async function planGivenTo(deps: GivingDeps, userId: string, gymId: string): Promise<MemberGymMealPlan | null> {
   const member = (await membersAgainstList(deps.sql, gymId, { email: null, phone: null, userIds: [userId] })).find((m) => m.userId === userId);
   const entryId = member === undefined ? null : currentRecordOf(member);
   const got =
@@ -307,19 +315,41 @@ export async function myGymMealPlan(deps: GivingDeps, userId: string, gymId: str
       : member?.unsure !== null && member?.unsure !== undefined
         ? (await audiences.givenOfGym(deps.sql, gymId, [])).find((g) => g.kind === "everyone")
         : undefined;
-  if (got === undefined) return memberGymMealPlanResponseSchema.parse({ plan: null });
+  if (got === undefined) return null;
   const plan = await plans.getPlan(deps.sql, gymId, got.planId);
   // Deleted between the two reads: nothing is given now.
-  if (plan === null) return memberGymMealPlanResponseSchema.parse({ plan: null });
-  return memberGymMealPlanResponseSchema.parse({
-    plan: {
-      id: plan.id,
-      name: plan.name,
-      writtenBy: plan.writtenBy,
-      updatedAt: plan.updatedAt.toISOString(),
-      givenAt: got.givenAt.toISOString(),
-      days: plan.days.map((meals, at) => dayOf(at + 1, meals)),
-      caution: FOOD_ALLERGY_CAUTION,
-    },
+  if (plan === null) return null;
+  return {
+    id: plan.id,
+    name: plan.name,
+    writtenBy: plan.writtenBy,
+    updatedAt: plan.updatedAt.toISOString(),
+    givenAt: got.givenAt.toISOString(),
+    days: plan.days.map((meals, at) => dayOf(at + 1, meals)),
+    caution: FOOD_ALLERGY_CAUTION,
+  };
+}
+
+/** Each gym this person is a live member of, and the plan it gives them (Stage 5's 31g): the phone's
+ *  Recommended For You, and the choice the diet plan starts at. Keyed on the caller's own id alone. */
+export async function gymPlansOf(deps: GivingDeps, userId: string): Promise<{ gym: audiences.LiveGymRow; plan: MemberGymMealPlan | null }[]> {
+  const gyms = await audiences.liveGymsOf(deps.sql, userId);
+  return await Promise.all(gyms.map(async (gym) => ({ gym, plan: await planGivenTo(deps, userId, gym.gymId) })));
+}
+
+/** The phone's read: every gym and its plan, each day with the least this person may eat where it holds less. */
+export async function myGymMealPlans(deps: GivingDeps, userId: string, lowest: LowestKcal): Promise<MyGymMealPlansResponse> {
+  const got = await gymPlansOf(deps, userId);
+  return myGymMealPlansResponseSchema.parse({
+    gyms: got.map(({ gym, plan }) => ({
+      gymId: gym.gymId,
+      name: gym.name,
+      orgType: gym.orgType,
+      contact: { phone: gym.contactPhone, email: gym.contactEmail },
+      plan: plan === null ? null : {
+        ...plan,
+        days: plan.days.map((d) => ({ ...d, under: dayUnder(d.planned.kcal, d.meals.length, lowest) })),
+      },
+    })),
   });
 }

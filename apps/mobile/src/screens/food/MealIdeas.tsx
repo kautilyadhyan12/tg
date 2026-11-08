@@ -67,7 +67,9 @@ export type PlannedNow =
   | "loading"
   | { failed: string; retry: () => void }
   | { build: () => void }
-  | { meal: DietPlanMeal | null; canLog: boolean; caution: string; labelCaution: string | null }
+  | { meal: DietPlanMeal | null; canLog: boolean; caution: string; labelCaution: string | null; note?: ReactNode }
+  /** Another choice's own words in the box: the gym's plan that hasn't been given (31g). */
+  | { words: ReactNode }
 
 export function MealIdeas({ onMore, onAnswered, fresh = 0, below = null, bare = false, planned, onLog, lead, choices = null }: MealIdeasProps) {
   const { read, again, outbox, view, waiting, old } = useIdeas(fresh);
@@ -148,8 +150,10 @@ export function MealIdeas({ onMore, onAnswered, fresh = 0, below = null, bare = 
         <Button label="Build my own" compact style={styles.start} onPress={plannedNow.build} />
       </>
     );
+  } else if (plannedNow !== null && "words" in plannedNow) {
+    body = plannedNow.words;
   } else if (plannedNow !== null && onMore !== undefined) {
-    const { meal, caution, labelCaution } = plannedNow;
+    const { meal, caution, labelCaution, note = null } = plannedNow;
     body =
       meal === null ? (
         <>
@@ -159,6 +163,7 @@ export function MealIdeas({ onMore, onAnswered, fresh = 0, below = null, bare = 
       ) : (
         <>
           {choices === null ? <Source word="My plan" /> : null}
+          {note}
           <BestPlanned meal={meal} onLog={onLog ?? onMore} onMore={onMore} />
         </>
       );

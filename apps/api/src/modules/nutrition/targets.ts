@@ -11,6 +11,7 @@
 // profile's days a week as an activity factor and cut a fixed 400 kcal (or
 // added 300) — is retired with that move. Its resting burn, calorie floor and
 // macro split were already the plan calculator's.
+import type { LowestKcal } from "@app/shared";
 import { CALORIE_FLOOR_KCAL } from "../plan/maths.js";
 import { nutritionTargetsResponseSchema } from "./schemas.js";
 import type {
@@ -82,14 +83,25 @@ export function ownTargetsHeld(
   // No plan, no rule to check against — and no resting burn for the rings
   // either, so the person's numbers wait for the questions to be answered.
   if (plan === null) return { code: "plan_incomplete" };
-  const noCut = noCutReasons.length > 0;
-  const maintenanceKcal = plan.dailyBurnKcal;
-  const minKcal = Math.max(CALORIE_FLOOR_KCAL, noCut ? maintenanceKcal : 0);
-  if (own.kcal >= minKcal) return null;
-  return noCut && maintenanceKcal > CALORIE_FLOOR_KCAL
-    ? { code: "no_cut_below_maintenance", maintenanceKcal, reasons: [...noCutReasons] }
+  const lowest = lowestKcalOf(plan, noCutReasons);
+  if (own.kcal >= lowest.kcal) return null;
+  return lowest.why === "keeps_weight"
+    ? { code: "no_cut_below_maintenance", maintenanceKcal: lowest.kcal, reasons: [...noCutReasons] }
     : { code: "below_floor", floorKcal: CALORIE_FLOOR_KCAL };
 }
+
+/** The least a person may eat in a day: the bound `ownTargetsHeld` holds typed numbers to, and the
+ *  line a meal plan's day under it carries (spec Part 6 §16.6). The higher of the app's floor and,
+ *  for a plan holding no calorie cut, what keeps the weight. With no plan yet, only the floor is known. */
+export function lowestKcalOf(plan: PlanNumbers | null, noCutReasons: readonly NoDeficitReason[]): LowestKcal {
+  return noCutReasons.length > 0 && plan !== null && plan.dailyBurnKcal > CALORIE_FLOOR_KCAL
+    ? { kcal: plan.dailyBurnKcal, why: "keeps_weight" }
+    : { kcal: CALORIE_FLOOR_KCAL, why: "floor" };
+}
+
+/** A plan's day against that least: null for a day with no meals, or one that holds enough. */
+export const dayUnder = (plannedKcal: number, mealCount: number, lowest: LowestKcal): LowestKcal | null =>
+  mealCount > 0 && plannedKcal < lowest.kcal ? lowest : null;
 
 /** The rings' answer: both sets, which one is showing, and why the person's own
  *  cannot feed the rings today where that is so. Parsed through the shared contract, so

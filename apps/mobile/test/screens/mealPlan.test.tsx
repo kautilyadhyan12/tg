@@ -48,11 +48,13 @@ function week(todayMeals: Meal[], over: Partial<DietPlanResponse> = {}, otherMea
         planned: { kcal: meals.reduce((n, m) => n + m.totals.kcalPoint, 0), proteinG: 0, carbsG: 0, fatG: 0 },
         target: { kcal: 2300, proteinG: 120, carbsG: 280, fatG: 75 },
         off: { kcal: 0, proteinG: 0, carbsG: 0, fatG: 0 },
+        under: null,
         version: versionOf(day, meals),
       };
     }),
     make: { status: "ok" },
     choice: todayMeals.length + otherMeals.length > 0 ? "mine" : "suggested",
+    choiceGymId: null,
     caution: FOOD_ALLERGY_CAUTION,
     labelCaution: null,
     ...over,
@@ -813,5 +815,130 @@ describe("Suggested or My plan: an older read landing after the pick (31f round 
     holdReads = false;
     await act(async () => { for (const done of heldReads.splice(0)) done(); await new Promise((done) => setTimeout(done, 20)); });
     lit();
+  });
+});
+
+describe("the gym's meal plan (31g)", () => {
+  const CHOICE = "/v1/nutrition/diet-plan/choice";
+  const GYMS = "/v1/nutrition/gym-meal-plans";
+  const IRON = "6f1c2d3e-4a5b-4c6d-8e7f-001122334455";
+  const OAK = "6f1c2d3e-4a5b-4c6d-8e7f-001122334466";
+  const gymMeal = ({ outsideDiet: _, ...meal }: Meal) => meal;
+  const under = { kcal: 1200, why: "floor" as const };
+  function gymPlan(todayMeals: Meal[], todayUnder: typeof under | null = null) {
+    return {
+      id: "6f1c2d3e-4a5b-4c6d-8e7f-0011223344aa",
+      name: "Lean week",
+      writtenBy: "Sam",
+      updatedAt: "2026-11-01T10:00:00.000Z",
+      givenAt: "2026-11-01T10:00:00.000Z",
+      days: [1, 2, 3, 4, 5, 6, 7].map((day) => {
+        const meals = day === TODAY ? todayMeals.map(gymMeal) : [];
+        return {
+          day,
+          meals,
+          planned: { kcal: meals.reduce((n, m) => n + m.totals.kcalPoint, 0), proteinG: 0, carbsG: 0, fatG: 0 },
+          version: versionOf(day, meals),
+          under: day === TODAY ? todayUnder : null,
+        };
+      }),
+      caution: FOOD_ALLERGY_CAUTION,
+    };
+  }
+  const gym = (gymId: string, name: string, plan: ReturnType<typeof gymPlan> | null) => ({
+    gymId, name, orgType: "gym", contact: { phone: null, email: "desk@ironhouse.com" }, plan,
+  });
+  /** A member of the gyms given, with their own week `mine`, starting where the server says it starts. */
+  function member(gyms: ReturnType<typeof gym>[], mine: Meal[] = [], start: { choice: DietPlanResponse["choice"]; gymId: string | null } = { choice: "gym", gymId: IRON }) {
+    let picked = start;
+    const plan = () => ok(week(mine, { choice: picked.choice, choiceGymId: picked.gymId }));
+    return serverOf(plan, {
+      "/v1/nutrition/suggestions": () => ok(WITH_IDEA),
+      [GYMS]: () => ok({ gyms }),
+      [CHOICE]: (body) => {
+        const b = body as { choice: DietPlanResponse["choice"]; gymId?: string };
+        picked = { choice: b.choice, gymId: b.gymId ?? null };
+        return plan();
+      },
+    });
+  }
+  const picks = (world: ReturnType<typeof serverOf>) => world.s.asked.filter((a) => a.method === "PUT" && a.path === CHOICE).map((a) => a.body);
+
+  it("the worst thing: the gym's plan shows as the gym wrote it, by who wrote it, only from the gym the server names; Log meal logs it once, as a meal of no plan of the person's", async () => {
+    const world = member([gym(IRON, "Iron House", gymPlan([OATS, RICE]))], [SALMON]);
+    const box = await open(world);
+    expect(await box.findByRole("radio", { name: "Iron House", selected: true })).toBeTruthy();
+    expect(box.getByRole("radio", { name: "Suggested" })).toBeTruthy();
+    expect(box.getByRole("radio", { name: "My plan" })).toBeTruthy();
+    expect(box.queryByRole("radio", { name: "Oak Gym" })).toBeNull();
+    expect(box.getByText("Lean week · By Sam")).toBeTruthy();
+    // The gym's next meal, never the person's own Salmon.
+    expect(box.queryByRole("button", { name: "Log Salmon" })).toBeNull();
+    expect(box.getByText(FOOD_ALLERGY_CAUTION)).toBeTruthy();
+    // Nothing on it can be changed from the phone.
+    expect(box.queryByRole("button", { name: /^Swap/ })).toBeNull();
+    const logOats = await box.findByRole("button", { name: "Log Oatmeal" });
+    await act(async () => {
+      fireEvent.press(logOats);
+      fireEvent.press(logOats);
+    });
+    await waitFor(() => { expect(posts(world, "/v1/nutrition/meals")).toHaveLength(1); });
+    const sent = posts(world, "/v1/nutrition/meals")[0]?.body as SentMeal & { planned?: unknown };
+    expect(sent.items).toEqual([{ canonical: "oats", grams: 250 }]);
+    expect(sent.mealType).toBe("breakfast");
+    // Not a meal of the person's own plan: the server prices it as any meal logged by hand.
+    expect(sent.planned).toBeUndefined();
+    expect(await box.findByText("Logged to Breakfast.")).toBeTruthy();
+    // The Dashboard shows the same choice and the gym's next meal.
+    await fireEvent.press(screen.getByRole("tab", { name: "Dashboard" }));
+    const card = within(await screen.findByTestId("recommended-box"));
+    expect(await card.findByRole("radio", { name: "Iron House", selected: true })).toBeTruthy();
+    expect(await card.findByText("Lean week · By Sam")).toBeTruthy();
+  });
+
+  it("a member of two gyms sees both; picking one sends that gym, and My plan shows their own again", async () => {
+    const world = member([gym(IRON, "Iron House", gymPlan([OATS])), gym(OAK, "Oak Gym", null)], [SALMON]);
+    const box = await open(world);
+    await fireEvent.press(await box.findByRole("radio", { name: "Oak Gym" }));
+    expect(await box.findByText("Oak Gym hasn’t given you a meal plan.")).toBeTruthy();
+    expect(box.getByRole("radio", { name: "Oak Gym", selected: true })).toBeTruthy();
+    await fireEvent.press(box.getByRole("radio", { name: "My plan" }));
+    expect(await box.findByRole("button", { name: "Log Salmon" })).toBeTruthy();
+    expect(picks(world)).toEqual([{ choice: "gym", gymId: OAK }, { choice: "mine" }]);
+  });
+
+  it("a gym that gave none says so, with Contact the gym opening an email already about the meal plan", async () => {
+    const world = member([gym(IRON, "Iron House", null)]);
+    const box = await open(world);
+    expect(await box.findByText("Iron House hasn’t given you a meal plan.")).toBeTruthy();
+    await fireEvent.press(box.getByRole("button", { name: "Contact the gym" }));
+    expect(within(await screen.findByTestId("sheet")).getByRole("button", { name: "Email desk@ironhouse.com" })).toBeTruthy();
+    // On the Dashboard too.
+    await fireEvent.press(screen.getByRole("tab", { name: "Dashboard" }));
+    expect(await within(await screen.findByTestId("recommended-box")).findByText("Iron House hasn’t given you a meal plan.")).toBeTruthy();
+  });
+
+  it("a day under what the person may eat says so beside it, in the box, in the week and on the Dashboard", async () => {
+    const LINE = "This day is under 1,200 kcal, the least we plan for anyone.";
+    const world = member([gym(IRON, "Iron House", gymPlan([OATS], under))]);
+    const box = await open(world);
+    expect(await box.findByText(LINE)).toBeTruthy();
+    await fireEvent.press(box.getByRole("button", { name: "See the week" }));
+    const sheet = within(await screen.findByTestId("sheet"));
+    expect(sheet.getByText(LINE)).toBeTruthy();
+    expect(sheet.getByText("Lean week · By Sam")).toBeTruthy();
+    expect(sheet.queryByRole("button", { name: /^Change|^Remove|^Swap/ })).toBeNull();
+    await fireEvent.press(screen.getByRole("tab", { name: "Dashboard" }));
+    expect(await within(await screen.findByTestId("recommended-box")).findByText(LINE)).toBeTruthy();
+  });
+
+  it("the person's own plan's day under what they may eat says so too, never changed", async () => {
+    const LINE = "This day is under 2,150 kcal, what keeps your weight. With your health answers, eat at least that.";
+    const own = week([OATS], { choice: "mine" });
+    const days = own.days.map((d) => (d.day === TODAY ? { ...d, under: { kcal: 2150, why: "keeps_weight" as const } } : d));
+    const world = serverOf(() => ok({ ...own, days }), { "/v1/nutrition/suggestions": () => ok(WITH_IDEA) });
+    const box = await open(world);
+    expect(await box.findByText(LINE)).toBeTruthy();
+    expect(box.getByRole("button", { name: "Log Oatmeal" })).toBeTruthy();
   });
 });
