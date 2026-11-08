@@ -68,14 +68,15 @@ export function PersonDays({ person, onShut, onClose }) {
   const zone = myZone();
   const load = useCallback(() => adminService.personDays(person.id, { zone }), [person.id, zone]);
   const first = useRead(load, onShut);
-  // Earlier pages, added below the first. Read again, the first page may start a day later (their
-  // midnight passed): the earlier pages start again from it, so no day falls between them.
-  const [earlierState, setEarlier] = useState({ after: null, days: [], next: undefined, loading: false, error: null });
-  const earlier = earlierState.after === first.data ? earlierState : { days: [], next: undefined, loading: false, error: null };
+  // Earlier pages, added below the first, belong to where the first page ends. Read again, it ends a
+  // day later once their midnight has passed: the earlier pages start again from it, so no day falls
+  // between them; otherwise they stay open.
+  const [earlierState, setEarlier] = useState({ after: undefined, days: [], next: undefined, loading: false, error: null });
+  const earlier = earlierState.after === first.data?.next ? earlierState : { days: [], next: undefined, loading: false, error: null };
   const next = earlier.next === undefined ? (first.data?.next ?? null) : earlier.next;
   const showEarlier = async () => {
     if (next === null) return;
-    const after = first.data;
+    const after = first.data?.next;
     setEarlier({ ...earlier, after, loading: true, error: null });
     try {
       const page = await adminService.personDays(person.id, { zone, before: next });
@@ -94,7 +95,7 @@ export function PersonDays({ person, onShut, onClose }) {
         <h3 className="c-s15 c-w6" style={{ margin: 0 }}>
           {name}&apos;s days
         </h3>
-        {first.data !== null ? <span className="c-hint">{zoneWords(first.data)}</span> : null}
+        {first.data !== null ? <span className="c-hint">{zoneWords(first.data, zone)}</span> : null}
         <span style={{ flexGrow: 1 }} />
         <button type="button" className="c-btn c-btn-quiet c-btn-sm" onClick={onClose}>
           <X size={16} aria-hidden="true" />
@@ -224,6 +225,14 @@ export function ByDay({ onShut }) {
         <button type="button" className="c-btn c-btn-s" style={{ alignSelf: 'flex-start' }} disabled={more.loading} onClick={showMore}>
           {more.loading ? 'Loading…' : 'Show more'}
         </button>
+      ) : null}
+      {first.data !== null && next === null && people.length < first.data.totals.people ? (
+        <div role="status" style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+          <span className="c-s14">The list changed while you were reading it.</span>
+          <button type="button" className="c-btn c-btn-s c-btn-sm" onClick={first.reload}>
+            Read again
+          </button>
+        </div>
       ) : null}
     </>
   );

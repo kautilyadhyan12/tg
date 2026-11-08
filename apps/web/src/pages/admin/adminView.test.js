@@ -12,6 +12,7 @@ import {
   planWords,
   todayIn,
   zoneName,
+  zoneWords,
 } from './adminView';
 
 const person = (name, over = {}) => ({
@@ -111,5 +112,11 @@ describe("each person's days, in words (14a-ii)", () => {
     expect(zoneName('Asia/Calcutta', winter)).toBe('India Standard Time');
     expect(zoneName('Europe/London', winter)).toBe('Greenwich Mean Time');
     expect(zoneName('Mars/Base', winter)).toBe('Mars/Base');
+  });
+  it("which clock: the phone's, the admin's own, or UTC when the admin's could not be read", () => {
+    const winter = new Date('2026-11-08T12:00:00Z');
+    expect(zoneWords({ zone: 'Asia/Kolkata', zoneFromPhone: true }, 'Europe/London', winter)).toBe("Each day is their own, in their phone's time zone (India Standard Time).");
+    expect(zoneWords({ zone: 'Asia/Kolkata', zoneFromPhone: false }, 'Asia/Kolkata', winter)).toBe("Their phone hasn't sent its time zone yet, so these days are in yours (India Standard Time).");
+    expect(zoneWords({ zone: 'UTC', zoneFromPhone: false }, '+05:30', winter)).toBe("Their phone hasn't sent its time zone yet, and yours could not be read, so these days are in UTC.");
   });
 });

@@ -140,11 +140,12 @@ export function zoneName(zone, now = new Date()) {
   }
 }
 
-/** Which clock a person's days are on. */
-export function zoneWords(days, now = new Date()) {
-  return days.zoneFromPhone
-    ? `Each day is their own, in their phone's time zone (${zoneName(days.zone, now)}).`
-    : `Their phone hasn't sent its time zone yet, so these days are in yours (${zoneName(days.zone, now)}).`;
+/** Which clock a person's days are on: their phone's, the admin's own (`mine`), or UTC when the
+ *  server could not read the admin's. */
+export function zoneWords(days, mine, now = new Date()) {
+  if (days.zoneFromPhone) return `Each day is their own, in their phone's time zone (${zoneName(days.zone, now)}).`;
+  if (days.zone !== mine) return "Their phone hasn't sent its time zone yet, and yours could not be read, so these days are in UTC.";
+  return `Their phone hasn't sent its time zone yet, so these days are in yours (${zoneName(days.zone, now)}).`;
 }
 
 const many = (n, one, more) => `${String(n)} ${n === 1 ? one : more}`;
