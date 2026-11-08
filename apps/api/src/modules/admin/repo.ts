@@ -233,34 +233,48 @@ export interface DayList {
  *  route plan, or a cost. The totals are over all of them; the page is `limit` of them from `from`,
  *  most time in the app first. */
 export async function dayList(sql: Sql, opts: { day: string; zone: string; from: number; limit: number }): Promise<DayList> {
-  // Every zone's day lies within the UTC day before and the day after it (UTC-12 to UTC+14).
-  const rows = await sql<{ totals: DayList["totals"]; page: DayRow[] | null }[]>`
-    WITH cand AS (
+  // Every zone's day lies within the UTC day before and the day after it (UTC-12 to UTC+14): the
+  // rows of those three UTC days are read once, and each person's are kept to their own day. The
+  // people are worked out once (MATERIALIZED), never once for every account. Postgres guesses far
+  // more rows than these joins make and would compile the query first (JIT): measured at 10,000
+  // people on a day, 1.26 s of a 1.74 s read (tools/measure-admin-days-cost.ts), so not for this one.
+  const rows = await sql.begin(async (tx) => {
+    await tx`SET LOCAL jit = off`;
+    return await tx<{ totals: DayList["totals"]; page: DayRow[] | null }[]>`
+    WITH span AS (
+      SELECT ((${opts.day}::date - 1)::timestamp AT TIME ZONE 'UTC') AS lo, ((${opts.day}::date + 2)::timestamp AT TIME ZONE 'UTC') AS hi
+    ), uses_near AS MATERIALIZED (
+      SELECT x.user_id, x.feature, x.at FROM metered_uses x, span WHERE x.at >= span.lo AND x.at < span.hi
+    ), costs_near AS MATERIALIZED (
+      SELECT e.user_id, e.cost_micro, e.at FROM api_cost_events e, span WHERE e.user_id IS NOT NULL AND e.at >= span.lo AND e.at < span.hi
+    ), cand AS (
       SELECT user_id FROM app_minutes WHERE day = ${opts.day}::date
-      UNION SELECT user_id FROM metered_uses
-        WHERE at >= ((${opts.day}::date - 1)::timestamp AT TIME ZONE 'UTC') AND at < ((${opts.day}::date + 2)::timestamp AT TIME ZONE 'UTC')
-      UNION SELECT user_id FROM api_cost_events
-        WHERE user_id IS NOT NULL
-          AND at >= ((${opts.day}::date - 1)::timestamp AT TIME ZONE 'UTC') AND at < ((${opts.day}::date + 2)::timestamp AT TIME ZONE 'UTC')
-    ), z AS (
+      UNION SELECT user_id FROM uses_near
+      UNION SELECT user_id FROM costs_near
+    ), z AS MATERIALIZED (
       SELECT u.id, u.display_name, u.email::text AS email,
-             COALESCE((SELECT m.zone FROM app_minutes m WHERE m.user_id = u.id ORDER BY m.day DESC LIMIT 1), ${opts.zone}) AS zone,
+             (${opts.day}::date::timestamp AT TIME ZONE zn.zone) AS lo, ((${opts.day}::date + 1)::timestamp AT TIME ZONE zn.zone) AS hi,
              EXISTS (SELECT 1 FROM app_minutes m WHERE m.user_id = u.id AND m.day <= ${opts.day}::date) AS recorded
       FROM cand JOIN users u ON u.id = cand.user_id AND u.status = 'active'
+      CROSS JOIN LATERAL (
+        SELECT COALESCE((SELECT m.zone FROM app_minutes m WHERE m.user_id = u.id ORDER BY m.day DESC LIMIT 1), ${opts.zone}) AS zone
+      ) zn
+    ), uses AS (
+      SELECT x.user_id, count(*) FILTER (WHERE x.feature = 'meal_scan') AS meal, count(*) FILTER (WHERE x.feature = 'route_gen') AS route
+      FROM uses_near x JOIN z ON z.id = x.user_id AND x.at >= z.lo AND x.at < z.hi
+      GROUP BY x.user_id
+    ), costs AS (
+      SELECT e.user_id, sum(e.cost_micro) AS micro
+      FROM costs_near e JOIN z ON z.id = e.user_id AND e.at >= z.lo AND e.at < z.hi
+      GROUP BY e.user_id
     ), n AS (
       SELECT z.id, z.display_name, z.email,
-             CASE WHEN z.recorded THEN COALESCE((SELECT m.minutes FROM app_minutes m WHERE m.user_id = z.id AND m.day = ${opts.day}::date), 0)::int END AS minutes,
-             uses.meal::int AS meal, uses.route::int AS route, COALESCE(cost.micro, 0)::bigint AS cost
+             CASE WHEN z.recorded THEN COALESCE(mm.minutes, 0)::int END AS minutes,
+             COALESCE(uses.meal, 0)::int AS meal, COALESCE(uses.route, 0)::int AS route, COALESCE(costs.micro, 0)::bigint AS cost
       FROM z
-      CROSS JOIN LATERAL (
-        SELECT count(*) FILTER (WHERE x.feature = 'meal_scan') AS meal, count(*) FILTER (WHERE x.feature = 'route_gen') AS route
-        FROM metered_uses x
-        WHERE x.user_id = z.id AND x.at >= (${opts.day}::date::timestamp AT TIME ZONE z.zone) AND x.at < ((${opts.day}::date + 1)::timestamp AT TIME ZONE z.zone)
-      ) uses
-      CROSS JOIN LATERAL (
-        SELECT sum(e.cost_micro) AS micro FROM api_cost_events e
-        WHERE e.user_id = z.id AND e.at >= (${opts.day}::date::timestamp AT TIME ZONE z.zone) AND e.at < ((${opts.day}::date + 1)::timestamp AT TIME ZONE z.zone)
-      ) cost
+      LEFT JOIN app_minutes mm ON mm.user_id = z.id AND mm.day = ${opts.day}::date
+      LEFT JOIN uses ON uses.user_id = z.id
+      LEFT JOIN costs ON costs.user_id = z.id
     ), used AS (
       SELECT * FROM n WHERE COALESCE(n.minutes, 0) > 0 OR n.meal > 0 OR n.route > 0 OR n.cost > 0
     )
@@ -272,6 +286,7 @@ export async function dayList(sql: Sql, opts: { day: string; zone: string; from:
                                          'meal', p.meal, 'route', p.route, 'cost', p.cost::text) ORDER BY p.at)
        FROM (SELECT used.*, row_number() OVER (ORDER BY used.minutes DESC NULLS LAST, used.meal DESC, used.route DESC, used.cost DESC, used.id) AS at
              FROM used ORDER BY at OFFSET ${opts.from} LIMIT ${opts.limit}) p) AS page`;
+  });
   const row = rows[0];
   if (row === undefined) throw new Error("the day's totals query returned no row");
   return { totals: row.totals, page: row.page ?? [] };
