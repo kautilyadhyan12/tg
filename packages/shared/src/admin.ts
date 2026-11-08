@@ -3,6 +3,8 @@
 // plans a day. Only what running the app needs: never a health answer, a weight, a photo or a run.
 import { z } from "zod";
 import { meteredWindowSchema } from "./entitlements.js";
+import { timeZoneNameSchema } from "./appMinutes.js";
+import { calendarDaySchema } from "./plan.js";
 
 /** The most Kd can set a day, either feature: a guard against a typing slip, not a plan. */
 export const ADMIN_LIMIT_MAX = 100;
@@ -85,3 +87,88 @@ export const adminDoorStateSchema = z
   .object({ passwordSet: z.boolean(), open: z.boolean(), openUntil: z.string().datetime().nullable(), fresh: z.boolean() })
   .strict();
 export type AdminDoorState = z.infer<typeof adminDoorStateSchema>;
+
+// ── Each person's days (ROADMAP Stage 2 item 14a-ii) ─────────────────────────
+// Each day is the person's own, in their phone's time zone; somebody whose phone has sent none yet is
+// read in the admin's own time zone, which the page sends. Cost is in micro-dollars, whole numbers.
+
+/** How many days a person's page shows at a time, and how many people a day's page. */
+export const ADMIN_DAYS_PAGE = 30;
+export const ADMIN_DAY_PEOPLE_PAGE = 50;
+
+export const adminPersonDaysQuerySchema = z
+  .object({
+    /** The admin's own time zone, for a person whose phone has sent none. */
+    zone: timeZoneNameSchema,
+    /** The days before this one; absent, the days up to the person's today. */
+    before: calendarDaySchema.optional(),
+    /** The zone the first page was read in (its `zone`), so every page of one list is cut in the
+     *  same zone even after the person's phone sends from another. */
+    dayZone: timeZoneNameSchema.optional(),
+  })
+  .strict();
+export type AdminPersonDaysQuery = z.infer<typeof adminPersonDaysQuerySchema>;
+
+export const adminDayNumbersSchema = z
+  .object({
+    /** Null: their phone had not counted time in the app yet on that day. */
+    minutes: z.number().int().nonnegative().nullable(),
+    mealScans: z.number().int().nonnegative(),
+    routePlans: z.number().int().nonnegative(),
+    costMicro: z.number().int().nonnegative(),
+  })
+  .strict();
+export type AdminDayNumbers = z.infer<typeof adminDayNumbersSchema>;
+
+export const adminPersonDaySchema = adminDayNumbersSchema.extend({ day: calendarDaySchema }).strict();
+export type AdminPersonDay = z.infer<typeof adminPersonDaySchema>;
+
+export const adminPersonDaysResponseSchema = z
+  .object({
+    person: z.object({ id: z.string().uuid(), name: z.string(), email: z.string().nullable() }).strict(),
+    /** The time zone the days are read in, and whether it is their phone's (else the admin's). */
+    zone: z.string(),
+    zoneFromPhone: z.boolean(),
+    /** Their today, in that zone. */
+    today: calendarDaySchema,
+    /** Newest first, from their today (or the day before `before`) back to their sign-up day. */
+    days: z.array(adminPersonDaySchema),
+    /** The `before` of the next, earlier page; null at their sign-up day. */
+    next: calendarDaySchema.nullable(),
+  })
+  .strict();
+export type AdminPersonDaysResponse = z.infer<typeof adminPersonDaysResponseSchema>;
+
+export const adminDayQuerySchema = z
+  .object({
+    zone: timeZoneNameSchema,
+    /** How many people of the day's list to skip: the last page's `next`. */
+    from: z.string().regex(/^\d{1,6}$/).optional(),
+  })
+  .strict();
+export type AdminDayQuery = z.infer<typeof adminDayQuerySchema>;
+
+export const adminDayPersonSchema = adminDayNumbersSchema
+  .extend({ id: z.string().uuid(), name: z.string(), email: z.string().nullable() })
+  .strict();
+export type AdminDayPerson = z.infer<typeof adminDayPersonSchema>;
+
+export const adminDayResponseSchema = z
+  .object({
+    day: calendarDaySchema,
+    /** Everyone who used the app that day: time in the app, a scan, a route plan or a cost. */
+    totals: z
+      .object({
+        people: z.number().int().nonnegative(),
+        minutes: z.number().int().nonnegative(),
+        mealScans: z.number().int().nonnegative(),
+        routePlans: z.number().int().nonnegative(),
+        costMicro: z.number().int().nonnegative(),
+      })
+      .strict(),
+    /** Most time in the app first, then most meal scans, route plans and cost. */
+    people: z.array(adminDayPersonSchema),
+    next: z.number().int().nonnegative().nullable(),
+  })
+  .strict();
+export type AdminDayResponse = z.infer<typeof adminDayResponseSchema>;

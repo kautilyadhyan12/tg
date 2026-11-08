@@ -17,6 +17,7 @@ import type { Sql } from "postgres";
 import type { MeteredFeatureName, MeteredWindow } from "./schemas.js";
 import type { RedisLike } from "../../redis.js";
 import { getEntitlements } from "../entitlements/service.js";
+import { recordUse, unrecordUse } from "./repo.js";
 
 // quotas.py:8-11 policy, verbatim.
 const FAIL_OPEN: Record<MeteredFeatureName, boolean> = {
@@ -53,13 +54,20 @@ export interface QuotaDeps {
   now?: () => Date;
 }
 
+/** A use counted for a request: its Redis key, and its row in metered_uses (ROADMAP 14a-ii). */
+export interface CountedUse {
+  key: string;
+  useId: string;
+}
+
 /** preHandler factory — MUST be listed after app.authenticate (R3.3 order:
- *  authn → … → entitlement → quota). Wired to the meal and route routes. `onCounted` hears the key a request's use
- *  was counted under, for refundQuota. */
+ *  authn → … → entitlement → quota). Wired to the meal and route routes. `onCounted` hears the use a
+ *  request counted, for refundUse. Each counted use is also written down with when (metered_uses), so
+ *  the admin page reads it day by day; a use that cannot be written down is not counted either. */
 export function requireQuota(
   feature: MeteredFeatureName,
   deps: QuotaDeps,
-  onCounted?: (req: FastifyRequest, key: string) => void,
+  onCounted?: (req: FastifyRequest, use: CountedUse) => void,
 ) {
   return async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
     const userId = req.authUser?.id;
@@ -101,7 +109,14 @@ export function requireQuota(
       });
       return;
     }
-    onCounted?.(req, key);
+    let useId: string;
+    try {
+      useId = await recordUse(deps.sql, feature, userId, now);
+    } catch (err) {
+      await deps.redis.decrIfPositive(key);
+      throw err;
+    }
+    onCounted?.(req, { key, useId });
   };
 }
 
@@ -112,6 +127,29 @@ export function requireQuota(
  *  false = nothing given back (Redis down, or nothing left counted). */
 export async function refundQuota(redis: RedisLike, key: string): Promise<boolean> {
   return (await redis.decrIfPositive(key)) === true;
+}
+
+/** Takes a counted use's row out of metered_uses and gives the use back (refundQuota), together:
+ *  the admin page counts what the person's limit counts, and the same use given back twice gives
+ *  back one. When the database does not answer, the use is still given back (a failed scan costs
+ *  the person nothing, Part 8 §5.3) and its row is logged as left, never a failed scan's own answer
+ *  turned into a fault. */
+export async function refundUse(
+  deps: { sql: Sql; redis: RedisLike; log: { warn: (obj: object, msg: string) => void } },
+  userId: string,
+  use: CountedUse,
+): Promise<boolean> {
+  const asked = { givenBack: false };
+  const giveBack = async (): Promise<boolean> => {
+    asked.givenBack = await refundQuota(deps.redis, use.key);
+    return asked.givenBack;
+  };
+  try {
+    return await unrecordUse(deps.sql, userId, use.useId, giveBack);
+  } catch (err) {
+    deps.log.warn({ event: "quota.unrecord_failed", userId, err }, "a use given back is still written down");
+    return asked.givenBack || (await refundQuota(deps.redis, use.key));
+  }
 }
 
 /** How many uses a person has left of what their plan allows, read without counting one. Null where

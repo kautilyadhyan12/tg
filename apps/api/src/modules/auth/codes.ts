@@ -12,8 +12,9 @@
 //   · asking for a code never says whether the address has an account, and
 //     never creates one — the account is created when the code is PROVED
 //
-// The same mechanism serves three purposes: the sign-in door, the code
-// Settings asks for before deleting an account, and the code sent to a NEW
+// The same mechanism serves four purposes: the sign-in door, the code
+// Settings asks for before deleting an account (bound to the account), the one the website's Delete
+// your account page sends to the address typed, and the code sent to a NEW
 // address before the account moves to it. They are counted separately
 // (purpose is in every key), so asking to delete never spends a sign-in.
 // A code may be bound to an account (`boundTo`, change email's): it is kept,
@@ -172,6 +173,21 @@ export async function requestCode(
     resendAfterSeconds: SIGN_IN_CODE_RULES.resendAfterSeconds,
     expiresInSeconds: SIGN_IN_CODE_RULES.ttlSeconds,
   };
+}
+
+/** Whether this exact code proved this address within a code's life: the same press sent again
+ *  after its answer was lost. Only the holder of the code can learn anything from it. */
+export async function provedLately(deps: CodeDeps, input: { email: string; purpose: CodePurpose; code: string }): Promise<boolean> {
+  const presented = Buffer.from(
+    signInCodeHash(deps.config.JWT_SECRET, { purpose: hashPurpose(input.purpose, undefined), email: input.email, code: input.code }),
+    "hex",
+  );
+  const since = new Date(Date.now() - SIGN_IN_CODE_RULES.ttlSeconds * 1000);
+  const hashes = await repo.findProvedCodeHashes(deps.sql, input.email, input.purpose, since);
+  return hashes.some((hash) => {
+    const stored = Buffer.from(hash, "hex");
+    return stored.length === presented.length && timingSafeEqual(stored, presented);
+  });
 }
 
 /** One sentence for a wrong, expired, used or burned code and for an address with none: a

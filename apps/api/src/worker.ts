@@ -76,6 +76,7 @@ import { sendDueCardNotices } from "./modules/orgs/payments/cardNotices.js";
 // The worker busts no entitlement cache: a gym's members pick a change up within the cache's 60 s.
 import { createIoRedis, createMemoryRedis } from "./redis.js";
 import { sentryOptions } from "./sentry.js";
+import { scrubbedForSentry } from "./logSafety.js";
 
 const config = loadConfig(process.env);
 const log = pino({ level: config.LOG_LEVEL });
@@ -679,7 +680,7 @@ if (invites === null || inviteSender === null) {
     { connection },
   );
   invitesWorker.on("failed", (job, err) => {
-    Sentry.captureException(err, { tags: { job: job?.name ?? "unknown", queue: INVITES_QUEUE } });
+    Sentry.captureException(scrubbedForSentry(err), { tags: { job: job?.name ?? "unknown", queue: INVITES_QUEUE } });
     log.error({ errName: err.name, errMessage: err.message, event: "job.failed", job: job?.name, jobId: job?.id }, "job failed");
   });
 }
@@ -761,7 +762,7 @@ if (paddle !== null || razorpay !== null) {
           if (reminded > 0) log.info({ reminded, durationMs: Date.now() - startedAt, event: "job.finished", job: BILLING_PLAN_END_REMINDERS_JOB }, "job finished");
         } catch (err) {
           if (!providerFailed) throw err;
-          Sentry.captureException(err, { tags: { job: BILLING_PLAN_END_REMINDERS_JOB, queue: BILLING_QUEUE } });
+          Sentry.captureException(scrubbedForSentry(err), { tags: { job: BILLING_PLAN_END_REMINDERS_JOB, queue: BILLING_QUEUE } });
           log.error({ errName: err instanceof Error ? err.name : typeof err, event: "job.failed", job: BILLING_PLAN_END_REMINDERS_JOB }, "job failed");
         }
       }
@@ -769,7 +770,7 @@ if (paddle !== null || razorpay !== null) {
     { connection },
   );
   billingWorker.on("failed", (job, err) => {
-    Sentry.captureException(err, { tags: { job: job?.name ?? "unknown", queue: BILLING_QUEUE } });
+    Sentry.captureException(scrubbedForSentry(err), { tags: { job: job?.name ?? "unknown", queue: BILLING_QUEUE } });
     log.error({ errName: err.name, errMessage: err.message, event: "job.failed", job: job?.name, jobId: job?.id }, "job failed");
   });
 }
@@ -830,7 +831,7 @@ if (square === null) {
     { connection },
   );
   paymentsWorker.on("failed", (job, err) => {
-    Sentry.captureException(err, { tags: { job: job?.name ?? "unknown", queue: PAYMENTS_QUEUE } });
+    Sentry.captureException(scrubbedForSentry(err), { tags: { job: job?.name ?? "unknown", queue: PAYMENTS_QUEUE } });
     log.error({ errName: err.name, errMessage: err.message, event: "job.failed", job: job?.name, jobId: job?.id }, "job failed");
   });
 }
@@ -964,7 +965,7 @@ if (pushAccount === null) {
     { connection },
   );
   pushWorker.on("failed", (job, err) => {
-    Sentry.captureException(err, { tags: { job: job?.name ?? "unknown", queue: PUSH_QUEUE } });
+    Sentry.captureException(scrubbedForSentry(err), { tags: { job: job?.name ?? "unknown", queue: PUSH_QUEUE } });
     log.error({ errName: err.name, errMessage: err.message, event: "job.failed", job: job?.name, jobId: job?.id }, "job failed");
   });
 }
@@ -1207,7 +1208,7 @@ const worker = new Worker(
 // R8.3: silent job death is forbidden — a failure that exhausts its attempts
 // stays on the failed set (the DLQ tail above) and says so here.
 worker.on("failed", (job, err) => {
-  Sentry.captureException(err, { tags: { job: job?.name ?? "unknown", queue: ROLLUPS_QUEUE } });
+  Sentry.captureException(scrubbedForSentry(err), { tags: { job: job?.name ?? "unknown", queue: ROLLUPS_QUEUE } });
   log.error(
     {
       attemptsMade: job?.attemptsMade,

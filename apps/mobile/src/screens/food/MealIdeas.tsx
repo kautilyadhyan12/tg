@@ -9,9 +9,10 @@ import { Icon } from "../../look/Icon";
 import { pictures } from "../../look/pictures";
 import { Sheet } from "../../look/Sheet";
 import { fonts, Txt } from "../../look/Txt";
+import { SoftBar } from "../../look/Waiting";
 import { useZoneSaved } from "../../session/TimeZoneSync";
 import { useRead } from "../dashboard/useRead";
-import { NOT_KNOWN, count } from "../dashboard/words";
+import { count } from "../dashboard/words";
 import { newGoalId } from "../goals/words";
 import { Setup } from "../setup/Setup";
 import { mealTypeName } from "./day";
@@ -141,7 +142,7 @@ export function MealIdeas({ onMore, onAnswered, fresh = 0, below = null, bare = 
   let foot = null;
   const plannedNow = onDashboard && planned !== undefined ? planned : null;
   if (plannedNow === "loading") {
-    body = <Txt kind="small">{NOT_KNOWN}</Txt>;
+    body = <SoftBar width="70%" />;
   } else if (plannedNow !== null && "failed" in plannedNow) {
     body = (
       <View style={styles.row}>
@@ -217,7 +218,7 @@ export function MealIdeas({ onMore, onAnswered, fresh = 0, below = null, bare = 
       </View>
     );
   } else if (read.kind === "loading") {
-    body = <Txt kind="small">{NOT_KNOWN}</Txt>;
+    body = <SoftBar width="70%" />;
   } else if (old) {
     body = (
       <View style={styles.row}>
@@ -358,7 +359,7 @@ export function MealIdeas({ onMore, onAnswered, fresh = 0, below = null, bare = 
   return (
     <>
       {onDashboard ? (
-        <Card style={styles.card} testID="recommended-box">
+        <Card raised style={styles.card} testID="recommended-box">
           <View style={styles.titleRow}>
             <Icon name="target" size={16} colour="orange" />
             <Txt kind="h3" style={styles.boxTitle}>

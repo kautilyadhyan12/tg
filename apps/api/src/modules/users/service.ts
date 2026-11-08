@@ -8,6 +8,7 @@ import {
   consumeRestoreToken,
   isUserEmailVerified,
   issueRestoreToken,
+  provedEmailCodeLately,
   redeemEmailCode,
   requestEmailCode,
   revokeAllSessions,
@@ -42,7 +43,9 @@ import {
   onboardingResponseSchema,
   UNANSWERED_HEALTH_SCREENING,
 } from "./schemas.js";
-import { genderSchema, ownedGymLine, type Gender } from "@app/shared";
+import { DELETE_PAGE_WORDS, genderSchema, ownedGymLine, type Gender } from "@app/shared";
+import type { RobotAnswer } from "../auth/codes.js";
+import { AuthError } from "../auth/errors.js";
 import type {
   ConsentListResponse,
   ConsentRecord,
@@ -630,7 +633,10 @@ async function refuseOwner(deps: UsersDeps, userId: string): Promise<void> {
 /** Deleting an account is confirmed with a code emailed to the account's own
  *  address (there is no password to ask for — Kd 2026-09-07). The address
  *  comes from the signed-in user's own row, never from the request, so a code
- *  can only ever be sent to, and proved for, the account that is deleting. */
+ *  can only ever be sent to, and proved for, the account that is deleting.
+ *  The code is bound to the account, so it is counted apart from the codes the
+ *  website's page sends to the same address: a stranger asking there can never
+ *  use up the app's three a day. */
 export async function requestDeleteCode(
   deps: UsersDeps,
   userId: string,
@@ -643,7 +649,7 @@ export async function requestDeleteCode(
   }
   return await requestEmailCode(
     { sql: deps.sql, config: deps.config, log: deps.log },
-    { email: row.email, purpose: "delete_account" },
+    { email: row.email, purpose: "delete_account", boundTo: userId },
     (to, code) => deps.emailSender.sendAccountDeleteCodeEmail(to, code),
   );
 }
@@ -657,7 +663,7 @@ export async function deleteAccount(
   deps: UsersDeps,
   userId: string,
   code: string,
-): Promise<{ emailSent: boolean; leftGymIds: string[] }> {
+): Promise<DeletedAccount> {
   const row = await repo.getProfile(deps.sql, userId);
   if (row === null) throw new UsersError(401, "unauthorized", "authentication required");
   await refuseOwner(deps, userId);
@@ -666,8 +672,62 @@ export async function deleteAccount(
   }
   await redeemEmailCode(
     { sql: deps.sql, config: deps.config, log: deps.log },
-    { email: row.email, purpose: "delete_account", code },
+    { email: row.email, purpose: "delete_account", code, boundTo: userId },
   );
+  return await deleteProvedAccount(deps, userId, row.email);
+}
+
+/** The website's Delete your account page (21b-ii), for somebody without the app: a code to the
+ *  address typed. Sent the same way whether or not the address has an account, under the sign-in
+ *  code's own day cap and resend gap, so asking never says which addresses have one. */
+export async function requestDeleteCodeByEmail(
+  deps: UsersDeps,
+  email: string,
+  robot: RobotAnswer,
+): Promise<{ resendAfterSeconds: number; expiresInSeconds: number }> {
+  return await requestEmailCode(
+    { sql: deps.sql, config: deps.config, log: deps.log },
+    { email, purpose: "delete_account_web", robot },
+    (to, code) => deps.emailSender.sendAccountDeleteCodeEmail(to, code),
+  );
+}
+
+/** The page's Delete: the code is proved FIRST, so only somebody who holds the address learns
+ *  anything about it (that it has no account, is already being deleted, or owns a gym). */
+export async function deleteAccountByEmail(
+  deps: UsersDeps,
+  email: string,
+  code: string,
+): Promise<DeletedAccount> {
+  const codeDeps = { sql: deps.sql, config: deps.config, log: deps.log };
+  const input = { email, purpose: "delete_account_web" as const, code };
+  try {
+    await redeemEmailCode(codeDeps, input);
+  } catch (err) {
+    // The same press sent again after its answer was lost: the person is told where the account
+    // stands, never that the code they just used is wrong. A code proved for an account still
+    // active proves nothing a second time.
+    if (err instanceof AuthError && err.code === "invalid_code" && (await provedEmailCodeLately(codeDeps, input))) {
+      const account = await repo.findAccountByEmail(deps.sql, email);
+      if (account === null) throw new UsersError(404, "no_account", DELETE_PAGE_WORDS.noAccount);
+      if (account.status === "deleted") throw new UsersError(409, "already_deleting", DELETE_PAGE_WORDS.alreadyDeleting);
+    }
+    throw err;
+  }
+  const account = await repo.findAccountByEmail(deps.sql, email);
+  if (account === null) throw new UsersError(404, "no_account", DELETE_PAGE_WORDS.noAccount);
+  if (account.status === "deleted") throw new UsersError(409, "already_deleting", DELETE_PAGE_WORDS.alreadyDeleting);
+  if (account.status !== "active") throw new Error(`users.status outside the enum: ${account.status}`);
+  await refuseOwner(deps, account.id);
+  return await deleteProvedAccount(deps, account.id, email);
+}
+
+/** `deletedByAnother`: another request deleted it at the same instant, and sends the undo email. */
+type DeletedAccount = { emailSent: boolean; deletedByAnother: boolean; leftGymIds: string[] };
+
+/** Day 0, once the code is proved: the account is deleted, its sessions ended, the undo emailed. */
+async function deleteProvedAccount(deps: UsersDeps, userId: string, email: string): Promise<DeletedAccount> {
+  const row = { email };
   const invites = inviteSettings(deps.config);
   // Nobody is there to ask, so the sessions booked with a trainer who deletes their
   // account end without a box, by the clock every other removal reads.
@@ -689,10 +749,11 @@ export async function deleteAccount(
     throw err;
   }
   // null = the row stopped being active between the profile read above and
-  // this write (a racing second tap): quiet success, no second undo email.
+  // this write (a second tap, or the website's Delete at the same instant): no
+  // second undo email, and the screen says the other request's may be on its way.
   // A repeat DELETE from a deleted session never gets here — authenticate
   // and the active-only profile read both 401 first.
-  if (deleted === null) return { emailSent: false, leftGymIds: [] };
+  if (deleted === null) return { emailSent: false, deletedByAnother: true, leftGymIds: [] };
   await revokeAllSessions(deps.sql, userId);
   // Memberships just closed = an entitlement change → bust (§4.1/§10 seam).
   await bustEntitlements(deps.redis, userId);
@@ -700,7 +761,7 @@ export async function deleteAccount(
   if (deleted.email !== null) {
     try {
       await deps.emailSender.sendAccountDeletionEmail(deleted.email, deleted.displayName, rawToken);
-      return { emailSent: true, leftGymIds: deleted.leftGymIds };
+      return { emailSent: true, deletedByAnother: false, leftGymIds: deleted.leftGymIds };
     } catch (err) {
       // R3.10 (T3 2026-07-11 finding 5): provider errors routinely echo the
       // recipient address / message content — log the error CLASS only,
@@ -713,12 +774,12 @@ export async function deleteAccount(
         },
         "email send failed",
       );
-      return { emailSent: false, leftGymIds: deleted.leftGymIds };
+      return { emailSent: false, deletedByAnother: false, leftGymIds: deleted.leftGymIds };
     }
   }
   // OAuth-only account without an email: no undo channel — log the event.
   deps.log.warn({ event: "account_deletion.no_email", userId }, "deletion without undo email");
-  return { emailSent: false, leftGymIds: deleted.leftGymIds };
+  return { emailSent: false, deletedByAnother: false, leftGymIds: deleted.leftGymIds };
 }
 
 /** Undo (Part 4 §5.2): token consume and window check are BOTH enforced;

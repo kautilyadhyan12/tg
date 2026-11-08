@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster }     from 'react-hot-toast';
 import { AuthProvider } from './context/AuthContext';
@@ -26,6 +27,9 @@ import Settings        from './pages/Settings';
 import InvitationLink  from './pages/InvitationLink';
 import StaffInvitationLink from './pages/StaffInvitationLink';
 import GymPublicPage   from './pages/GymPublicPage';
+import LegalPage       from './pages/LegalPage';
+import DeleteAccountPage from './pages/DeleteAccountPage';
+import { LEGAL_PATHS } from '@app/shared';
 import InvitePage       from './pages/InvitePage';
 import AgreementSignPage from './pages/AgreementSignPage';
 import Invitations     from './pages/Invitations';
@@ -68,7 +72,8 @@ import ConsoleMore     from './pages/console/More';
 import ConsoleAccount  from './pages/console/Account';
 import FrameGuard from './components/common/FrameGuard';
 // Kd's own admin page (ROADMAP Stage 2 item 14a-i): only his account; the server says "not found" to anybody else.
-import Admin from './pages/admin/Admin';
+// Loaded only when /admin is opened: its addresses are not in the bundle every visitor gets.
+const Admin = lazy(() => import('./pages/admin/Admin'));
 
 export default function App() {
   return (
@@ -195,6 +200,12 @@ export default function App() {
             <Route path="/join/:slug" element={<InvitationLink />} />
             {/* A staff invitation email's link (Part 3 §10.3): sign in through the Manage door. */}
             <Route path="/staff-invitation" element={<StaffInvitationLink />} />
+            {/* KWAZO's Privacy Policy, Terms of Use and Washington's page (21b-i): public, no sign-in. */}
+            <Route path={LEGAL_PATHS.privacy} element={<LegalPage which="privacy" />} />
+            <Route path={LEGAL_PATHS.terms} element={<LegalPage which="terms" />} />
+            <Route path={LEGAL_PATHS.washington} element={<LegalPage which="washington" />} />
+            {/* Google Play's web page to ask for an account's deletion (21b-ii): no sign-in. */}
+            <Route path={LEGAL_PATHS.deleteAccount} element={<DeleteAccountPage />} />
             {/* A gym's own page and its enquiry form (20c-iv-a): public, no sign-in. */}
             <Route path="/gyms/:slug" element={<GymPublicPage />} />
             {/* A member's invite link (20e-ii-a): public, for every business. */}
@@ -417,7 +428,7 @@ export default function App() {
 
             {/* KD'S ADMIN PAGE (14a-i): its own door, never a gym's. It signs in by itself (a fresh
                 code, then his password), so no gym or member gate stands in front of it. */}
-            <Route path="/admin" element={<Admin />} />
+            <Route path="/admin" element={<Suspense fallback={null}><Admin /></Suspense>} />
 
             {/* ── Fallback ──────────────────────────────────────────────── */}
             <Route path="/"  element={<Navigate to="/login" replace />} />

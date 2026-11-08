@@ -2,18 +2,29 @@
 //
 // Order (CLAUDE.md §4): who is asking and whether they are the admin, in one step, then the rate
 // limit, then the handler. To everybody but the one account `ADMIN_USER_ID` names, signed in or
-// not, every address here answers exactly as an address that does not exist: the not-found reply
-// itself, so nothing tells a stranger the page is here.
+// not, every address here answers exactly as an address that does not exist: the router itself
+// does not find these addresses for them (`adminCaller` below), so the reply, its headers and how
+// the body is read are the not-found's own, and nothing tells a stranger the page is here.
+import type { IncomingMessage } from "node:http";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { Sql } from "postgres";
-import { adminPasswordRequestSchema, adminPeopleQuerySchema, adminSetLimitsRequestSchema } from "@app/shared";
+import {
+  adminDayQuerySchema,
+  adminPasswordRequestSchema,
+  adminPeopleQuerySchema,
+  adminPersonDaysQuerySchema,
+  adminSetLimitsRequestSchema,
+  calendarDaySchema,
+} from "@app/shared";
+import { knownZones } from "../appMinutes/repo.js";
 import type { AppConfig } from "../../config.js";
 import type { RedisLike } from "../../redis.js";
 import { accessClaimsOf } from "../auth/plugin.js";
 import { activeUserInSession } from "../auth/repo.js";
 import { createDualRateLimit, giveBackRateLimit } from "../auth/rateLimit.js";
 import { argon2idHasher, type PasswordHasher } from "../auth/service.js";
-import { DoorError, doorState, lock, makePassword, requireOpenDoor, unlock } from "./door.js";
+import { ACCESS_COOKIE, verifyAccessTokenClaims } from "../auth/tokens.js";
+import { DoorError, doorState, lock, makePassword, requireOpenDoor, UNAVAILABLE, unlock } from "./door.js";
 import { parseOr400 } from "../orgs/posts/routes.js";
 import * as service from "./service.js";
 
@@ -24,6 +35,55 @@ export interface AdminRouteDeps {
   /** Tests pass a quick one; argon2id otherwise. */
   hasher?: PasswordHasher;
   now?: () => Date;
+}
+
+/** The access token a raw request carries, as `accessClaimsOf` reads it: the Bearer header, else the cookie. */
+function rawAccessToken(req: IncomingMessage): string | null {
+  const header = req.headers.authorization;
+  if (header !== undefined && header.startsWith("Bearer ")) return header.slice("Bearer ".length);
+  for (const part of (req.headers.cookie ?? "").split(";")) {
+    const at = part.indexOf("=");
+    if (at !== -1 && part.slice(0, at).trim() === ACCESS_COOKIE) {
+      try {
+        return decodeURIComponent(part.slice(at + 1).trim());
+      } catch {
+        return null;
+      }
+    }
+  }
+  return null;
+}
+
+/** "yes" for a request signed in as the admin, before routing: the admin addresses are found only
+ *  for it. Its session is still checked by `adminOnly`. */
+type Strategy = Parameters<FastifyInstance["addConstraintStrategy"]>[0];
+type Stored = Parameters<ReturnType<Strategy["storage"]>["set"]>[1];
+export function adminCallerStrategy(config: AppConfig): Strategy {
+  return {
+    name: "adminCaller",
+    storage() {
+      const held = new Map<unknown, Stored>();
+      return {
+        get: (value) => held.get(value) ?? null,
+        set: (value, store) => {
+          held.set(value, store);
+        },
+      };
+    },
+    deriveConstraint(req: IncomingMessage): string {
+      const adminId = config.ADMIN_USER_ID;
+      if (adminId === undefined || req.url === undefined || !req.url.startsWith("/v1/admin/")) return "no";
+      const token = rawAccessToken(req);
+      if (token === null || token === "") return "no";
+      try {
+        const claims = verifyAccessTokenClaims(token, config);
+        return claims.userId === adminId && claims.familyId !== null ? "yes" : "no";
+      } catch {
+        return "no";
+      }
+    },
+    mustMatchWhenDerived: false,
+  };
 }
 
 /** The one account that may, from its live sign-in session; anybody else meets the not-found reply. */
@@ -58,7 +118,10 @@ function adminWho(req: FastifyRequest): { userId: string; familyId: string } {
   return { userId: adminUserId(req), familyId };
 }
 
+const ONLY_ADMIN = { adminCaller: "yes" };
+
 export function registerAdminRoutes(app: FastifyInstance, deps: AdminRouteDeps): void {
+  app.addConstraintStrategy(adminCallerStrategy(deps.config));
   const admin = adminOnly(deps);
   // One person uses this page. Far past what he does by hand, and a stolen session can still not
   // read the whole list in a burst.
@@ -89,6 +152,8 @@ export function registerAdminRoutes(app: FastifyInstance, deps: AdminRouteDeps):
     windowMs: 15 * 60 * 1000,
     identifier: (req: FastifyRequest) => req.authUser?.id ?? null,
     redis: deps.redis,
+    // A guess is never let through uncounted: with Redis down no password is checked at all.
+    refuseWhenDown: { error: "admin_unavailable", message: UNAVAILABLE },
   };
   const doorLimit = createDualRateLimit(doorLimitOptions);
   const door = { sql: deps.sql, redis: deps.redis, config: deps.config, hasher: deps.hasher ?? argon2idHasher, now: deps.now ?? (() => new Date()) };
@@ -125,31 +190,62 @@ export function registerAdminRoutes(app: FastifyInstance, deps: AdminRouteDeps):
 
   /** The door: whether a password is made, whether it is open and until when, and whether this
    *  sign-in is fresh enough to open it. */
-  app.get("/v1/admin/door", { preHandler: [admin, readLimit] }, async (req, reply) => doorReply(reply, () => doorState(door, req, adminWho(req))));
+  app.get("/v1/admin/door", { constraints: ONLY_ADMIN, preHandler: [admin, readLimit] }, async (req, reply) => doorReply(reply, () => doorState(door, req, adminWho(req))));
 
   /** The first password, from a fresh sign-in; it opens the door. */
-  app.post("/v1/admin/door/password", { preHandler: [admin, doorLimit] }, async (req, reply) =>
+  app.post("/v1/admin/door/password", { constraints: ONLY_ADMIN, preHandler: [admin, doorLimit] }, async (req, reply) =>
     tryPassword(req, reply, (password) => makePassword(door, reply, adminWho(req), password)),
   );
 
   /** A fresh sign-in and the password open the door for 12 hours. */
-  app.post("/v1/admin/door/open", { preHandler: [admin, doorLimit] }, async (req, reply) =>
+  app.post("/v1/admin/door/open", { constraints: ONLY_ADMIN, preHandler: [admin, doorLimit] }, async (req, reply) =>
     tryPassword(req, reply, (password) => unlock(door, reply, adminWho(req), password)),
   );
 
   /** Lock the page now. */
-  app.post("/v1/admin/door/lock", { preHandler: [admin, writeLimit] }, async (req, reply) => {
-    await lock(door, req, reply);
+  app.post("/v1/admin/door/lock", { constraints: ONLY_ADMIN, preHandler: [admin, writeLimit] }, async (req, reply) => {
+    await lock(door, reply, adminWho(req));
     return noStore(reply).status(200).send({ locked: true });
   });
 
-  app.get("/v1/admin/people", { preHandler: [admin, open, readLimit] }, async (req, reply) => {
+  app.get("/v1/admin/people", { constraints: ONLY_ADMIN, preHandler: [admin, open, readLimit] }, async (req, reply) => {
     const query = parseOr400(adminPeopleQuerySchema, req.query, req, reply);
     if (query === null) return;
     return noStore(reply).status(200).send(await service.listPeople(deps, query));
   });
 
-  app.put("/v1/admin/limits", { preHandler: [admin, open, writeLimit] }, async (req, reply) => {
+  /** The admin's own zone, from the browser; one the database cannot read days in is read as UTC,
+   *  and the answer's `zone` says so. */
+  const readableZone = async (zone: string): Promise<string> => ((await knownZones(deps.sql)).has(zone) ? zone : "UTC");
+  const notFound = async (req: FastifyRequest, reply: FastifyReply) =>
+    await reply.status(404).send({ error: "not_found", message: "Person not found", requestId: req.id });
+  const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+  /** One person's days (14a-ii): time in the app, meal scans, route plans and their cost. */
+  app.get<{ Params: { id: string } }>("/v1/admin/people/:id/days", { constraints: ONLY_ADMIN, preHandler: [admin, open, readLimit] }, async (req, reply) => {
+    if (!UUID.test(req.params.id)) return notFound(req, reply);
+    const query = parseOr400(adminPersonDaysQuerySchema, req.query, req, reply);
+    if (query === null) return;
+    const days = await service.personDays(deps, {
+      userId: req.params.id,
+      zone: await readableZone(query.zone),
+      dayZone: query.dayZone !== undefined && (await knownZones(deps.sql)).has(query.dayZone) ? query.dayZone : null,
+      before: query.before ?? null,
+      now: (deps.now ?? (() => new Date()))(),
+    });
+    return days === null ? notFound(req, reply) : noStore(reply).status(200).send(days);
+  });
+
+  /** Everyone who used the app on one day, each on their own day (14a-ii). */
+  app.get<{ Params: { day: string } }>("/v1/admin/days/:day", { constraints: ONLY_ADMIN, preHandler: [admin, open, readLimit] }, async (req, reply) => {
+    const day = parseOr400(calendarDaySchema, req.params.day, req, reply);
+    if (day === null) return;
+    const query = parseOr400(adminDayQuerySchema, req.query, req, reply);
+    if (query === null) return;
+    return noStore(reply).status(200).send(await service.dayPeople(deps, { day, zone: await readableZone(query.zone), from: Number(query.from ?? "0") }));
+  });
+
+  app.put("/v1/admin/limits", { constraints: ONLY_ADMIN, preHandler: [admin, open, writeLimit] }, async (req, reply) => {
     const body = parseOr400(adminSetLimitsRequestSchema, req.body, req, reply);
     if (body === null) return;
     return noStore(reply).status(200).send(await service.setLimits(deps, adminUserId(req), body));

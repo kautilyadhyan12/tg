@@ -119,8 +119,8 @@ export const signInCodes = pgTable(
     userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }),
   },
   (t) => [
-    check("sign_in_codes_purpose_check", sql`${t.purpose} IN ('sign_in','delete_account','change_email')`),
-    check("sign_in_codes_user_check", sql`(${t.purpose} = 'change_email') = (${t.userId} IS NOT NULL)`),
+    check("sign_in_codes_purpose_check", sql`${t.purpose} IN ('sign_in','delete_account','delete_account_web','change_email')`),
+    check("sign_in_codes_user_check", sql`(${t.purpose} IN ('change_email','delete_account')) = (${t.userId} IS NOT NULL)`),
     check("sign_in_codes_attempts_check", sql`${t.attempts} >= 0`),
     index("sign_in_codes_email_purpose_created_idx").on(t.email, t.purpose, t.createdAt.desc()),
     index("sign_in_codes_created_idx").on(t.createdAt),

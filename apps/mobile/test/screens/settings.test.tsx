@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
-import { AppState } from "react-native";
+import { AppState, Linking } from "react-native";
 import { missingPlanInputSchema } from "@app/shared";
 import { App } from "../../src/App";
 import { NO_ANSWER } from "../../src/screens/SignIn";
@@ -349,5 +349,26 @@ describe("memberSinceText", () => {
     ["not a date", null],
   ])("%s → %s", (at, words) => {
     expect(memberSinceText(at)).toBe(words);
+  });
+});
+
+describe("Privacy and terms (21b-i)", () => {
+  it("Privacy Policy and Terms of Use open the website's pages in the phone's browser", async () => {
+    const opened: string[] = [];
+    jest.spyOn(Linking, "openURL").mockImplementation((url: string) => {
+      opened.push(url);
+      return Promise.resolve(true);
+    });
+    const acct = account();
+    const server = fakeServer(routes({ [ME]: acct.me }));
+    await render(<App extra={{ ...extra, webUrl: "http://127.0.0.1:5174" }} ask={server.ask} store={memoryStore(kept(1))} wait={noWait} />);
+    const tab = (await screen.findAllByRole("tab"))[4];
+    if (tab === undefined) throw new Error("no fifth tab");
+    await fireEvent.press(tab);
+    await fireEvent.press(await screen.findByLabelText("Settings"));
+    await fireEvent.press(await screen.findByRole("button", { name: "Privacy Policy" }));
+    await fireEvent.press(screen.getByRole("button", { name: "Terms of Use" }));
+    expect(opened).toEqual(["http://127.0.0.1:5174/privacy", "http://127.0.0.1:5174/terms"]);
+    jest.restoreAllMocks();
   });
 });

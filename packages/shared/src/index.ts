@@ -124,4 +124,7 @@ export * from "./trainingNudges.js";
 export * from "./deletedForms.js";
 export * from "./gymMealPlans.js";
 export * from "./gymMealPlanGiving.js";
+export * from "./appMinutes.js";
 export * from "./admin.js";
+export * from "./legal.js";
+export * from "./deleteAccountPage.js";

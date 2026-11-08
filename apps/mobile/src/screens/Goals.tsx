@@ -25,9 +25,10 @@ import { pictures } from "../look/pictures";
 import { Trail } from "../look/Progress";
 import { Sheet } from "../look/Sheet";
 import { fonts, Txt } from "../look/Txt";
+import { SoftBar } from "../look/Waiting";
 import type { Answer, Shape } from "../session/calls";
 import { useSession } from "../session/SessionProvider";
-import { NOT_KNOWN, count } from "./dashboard/words";
+import { count } from "./dashboard/words";
 import { usePlaces } from "./places";
 import { Setup } from "./setup/Setup";
 import type { Read } from "./dashboard/useRead";
@@ -101,7 +102,7 @@ export function GoalsBox({ read, onOpen }: { read: Read<GoalsResponse>; onOpen: 
           </Txt>
         </View>
         {goals === null ? (
-          <Txt kind="small">{NOT_KNOWN}</Txt>
+          <SoftBar width="70%" failed={read.kind === "failed"} />
         ) : goals.length === 0 ? (
           <>
             <Txt kind="small">No goals yet.</Txt>
@@ -220,7 +221,7 @@ export function GoalsPage({ open, onClose, read, again }: GoalsPageProps) {
             <Button label="Try again" kind="link" onPress={again} />
           </Card>
         ) : (
-          <Txt kind="small">{NOT_KNOWN}</Txt>
+          <SoftBar width="70%" />
         )
       ) : goals.length === 0 ? (
         <Txt kind="small">No goals yet.</Txt>
@@ -582,7 +583,7 @@ function AddSheet(props: { open: boolean; goals: readonly Goal[]; onClose: () =>
             ) : (
               <>
                 <Field label="Exercise" bare placeholder="Search exercises" value={search} onChange={setSearch} />
-                {exercises === "loading" ? <Txt kind="small">{NOT_KNOWN}</Txt> : null}
+                {exercises === "loading" ? <SoftBar width="70%" /> : null}
                 {exercises === "failed" ? (
                   <View style={styles.between}>
                     <Txt kind="small" style={styles.grow}>

@@ -408,7 +408,7 @@ export async function signInWithCode(
 
 export async function requestEmailCode(
   deps: { sql: Sql; config: AppConfig; log: FastifyBaseLogger },
-  input: { email: string; purpose: CodePurpose; boundTo?: string },
+  input: { email: string; purpose: CodePurpose; boundTo?: string; robot?: codes.RobotAnswer },
   send: CodeSender,
 ): Promise<{ resendAfterSeconds: number; expiresInSeconds: number }> {
   return await codes.requestCode(deps, input, send);
@@ -419,6 +419,13 @@ export async function redeemEmailCode(
   input: { email: string; purpose: CodePurpose; code: string; boundTo?: string },
 ): Promise<void> {
   await codes.redeemCode(deps, input);
+}
+
+export async function provedEmailCodeLately(
+  deps: { sql: Sql; config: AppConfig; log: FastifyBaseLogger },
+  input: { email: string; purpose: CodePurpose; code: string },
+): Promise<boolean> {
+  return await codes.provedLately(deps, input);
 }
 
 // ── change email (19c; RULINGS 2026-09-23, E) ─────────────────────────────────

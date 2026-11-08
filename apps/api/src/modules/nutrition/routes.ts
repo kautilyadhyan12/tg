@@ -47,7 +47,7 @@ declare module "fastify" {
     nutritionScanInput?: { imageBase64: string; mimeType: "image/jpeg" | "image/png" | "image/webp" };
     nutritionUsedRetake?: boolean;
     /** Set by the meter: the quota key the scan was counted under. */
-    nutritionScanQuotaKey?: string;
+    nutritionScanUse?: import("../quotas/service.js").CountedUse;
   }
 }
 
@@ -148,7 +148,7 @@ export function registerNutritionRoutes(
   registerGymMealPlanRoutes(app, nutritionDeps);
   app.decorateRequest("nutritionScanInput", undefined);
   app.decorateRequest("nutritionUsedRetake", undefined);
-  app.decorateRequest("nutritionScanQuotaKey", undefined);
+  app.decorateRequest("nutritionScanUse", undefined);
 
   /** Validation BEFORE the meter (P2.5b finding-1 precedent): base64 shape,
    *  1 KB–10 MB decoded, magic bytes; a valid retakeToken is consumed here
@@ -196,8 +196,8 @@ export function registerNutritionRoutes(
     }
   };
 
-  const quota = requireQuota("meal_scan", { sql: deps.sql, redis: deps.redis }, (req, key) => {
-    req.nutritionScanQuotaKey = key;
+  const quota = requireQuota("meal_scan", { sql: deps.sql, redis: deps.redis }, (req, use) => {
+    req.nutritionScanUse = use;
   });
   const meter = async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
     if (req.nutritionUsedRetake !== true) await quota(req, reply);
@@ -264,9 +264,9 @@ export function registerNutritionRoutes(
     async (req, reply) => {
       const input = req.nutritionScanInput;
       if (input === undefined) throw new Error("scan validation did not run");
-      const quotaKey = req.nutritionScanQuotaKey;
+      const counted = req.nutritionScanUse;
       const paidWith: service.ScanPaidWith | null =
-        req.nutritionUsedRetake === true ? { retake: true } : quotaKey === undefined ? null : { quotaKey };
+        req.nutritionUsedRetake === true ? { retake: true } : counted === undefined ? null : { counted };
       if (paidWith === null) throw new Error("the scan meter did not run");
       try {
         const draft = await service.analyzePhoto(
@@ -299,9 +299,9 @@ export function registerNutritionRoutes(
     async (req, reply) => {
       const input = req.nutritionScanInput;
       if (input === undefined) throw new Error("scan validation did not run");
-      const quotaKey = req.nutritionScanQuotaKey;
+      const counted = req.nutritionScanUse;
       const paidWith: service.ScanPaidWith | null =
-        req.nutritionUsedRetake === true ? { retake: true } : quotaKey === undefined ? null : { quotaKey };
+        req.nutritionUsedRetake === true ? { retake: true } : counted === undefined ? null : { counted };
       if (paidWith === null) throw new Error("the scan meter did not run");
       try {
         return await reply.status(200).send(await service.readLabel(nutritionDeps, authedUserId(req), input.imageBase64, input.mimeType, paidWith, req.id));

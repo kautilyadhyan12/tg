@@ -140,9 +140,10 @@ export const EMAIL_CHANGE_WORDS = {
   writeToUs: (supportEmail: string) => `If you need help, write to us at ${supportEmail}.`,
 } as const;
 
-/** `emailSent`: the undo link went to the account's address, so a screen may say so. */
+/** `emailSent`: the undo link went to the account's address, so a screen may say so.
+ *  `deletedByAnother`: another request deleted it at the same instant and sends the undo email. */
 // Not strict: a field the server adds later must not turn a deleted account into "no answer" on the phone.
-export const deleteAccountResponseSchema = z.object({ message: z.string(), emailSent: z.boolean() });
+export const deleteAccountResponseSchema = z.object({ message: z.string(), emailSent: z.boolean(), deletedByAnother: z.boolean().optional() });
 export type DeleteAccountResponse = z.infer<typeof deleteAccountResponseSchema>;
 
 /** What a gym's own owner reads in Delete account, on the phone and in the browser, and the server's

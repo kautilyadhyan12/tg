@@ -182,7 +182,7 @@ export function entryWords(m: BodyMeasurement, units: string, waiting: boolean):
   return {
     date: dateWords(entryDay(m)),
     how: waiting ? "Waiting to send" : m.source === "self_reported" ? "Typed by you" : "Logged",
-    weight: m.weightKg === null ? "–" : shownWithUnit(m.weightKg, "weight", units),
+    weight: m.weightKg === null ? "No weight" : shownWithUnit(m.weightKg, "weight", units),
     more: others === 0 ? null : `${String(others)} ${others === 1 ? "measurement" : "measurements"}`,
   };
 }

@@ -1583,6 +1583,20 @@
       "when": 1790726400226,
       "tag": "0226_usage_limits",
       "breakpoints": true
+    },
+    {
+      "idx": 226,
+      "version": "7",
+      "when": 1790726400227,
+      "tag": "0227_app_minutes",
+      "breakpoints": true
+    },
+    {
+      "idx": 227,
+      "version": "7",
+      "when": 1790726400228,
+      "tag": "0228_delete_account_web_code",
+      "breakpoints": true
     }
   ]
 }

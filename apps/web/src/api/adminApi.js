@@ -1,4 +1,10 @@
-import { adminDoorStateSchema, adminPeopleResponseSchema, adminSetLimitsResponseSchema } from '@app/shared';
+import {
+  adminDayResponseSchema,
+  adminDoorStateSchema,
+  adminPeopleResponseSchema,
+  adminPersonDaysResponseSchema,
+  adminSetLimitsResponseSchema,
+} from '@app/shared';
 import authApi from './authApi';
 
 // THE ADMIN PAGE (ROADMAP Stage 2 item 14a-i): Kd's own. The server answers "not found" to
@@ -41,6 +47,24 @@ export const adminService = {
     if (after !== null) params.after = after;
     const res = await authApi.get('/v1/admin/people', { params });
     return read(adminPeopleResponseSchema, res.data, 'the people list');
+  },
+
+  /** One person's days, 30 at a time (14a-ii); `before` is the last page's `next`. `zone` is the
+   *  admin's own, for a person whose phone has sent none. */
+  personDays: async (personId, { zone, before = null, dayZone = null }) => {
+    const params = { zone };
+    if (before !== null) params.before = before;
+    if (dayZone) params.dayZone = dayZone;
+    const res = await authApi.get(`/v1/admin/people/${encodeURIComponent(personId)}/days`, { params });
+    return read(adminPersonDaysResponseSchema, res.data, "a person's days");
+  },
+
+  /** Everyone who used the app on one day (14a-ii); `from` is the last page's `next`. */
+  day: async (day, { zone, from = 0 }) => {
+    const params = { zone };
+    if (from > 0) params.from = String(from);
+    const res = await authApi.get(`/v1/admin/days/${encodeURIComponent(day)}`, { params });
+    return read(adminDayResponseSchema, res.data, 'the day');
   },
 
   /** Sets one feature's number a day for these people, or with `perDay` null takes it back. */

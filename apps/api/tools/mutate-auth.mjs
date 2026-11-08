@@ -201,7 +201,7 @@ const MUTANTS = [
     target: 'users',
     why: 'deleting an account no longer checks the code — any six digits, or a stale one, deletes',
     expect: 'delete-account',
-    from: '  await redeemEmailCode(\n    { sql: deps.sql, config: deps.config, log: deps.log },\n    { email: row.email, purpose: "delete_account", code },\n  );',
+    from: '  await redeemEmailCode(\n    { sql: deps.sql, config: deps.config, log: deps.log },\n    { email: row.email, purpose: "delete_account", code, boundTo: userId },\n  );',
     to: '  await Promise.resolve();',
   },
   {
