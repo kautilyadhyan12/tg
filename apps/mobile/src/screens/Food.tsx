@@ -40,6 +40,7 @@ import { NOT_KNOWN, count } from "./dashboard/words";
 import { useRead } from "./dashboard/useRead";
 import { dayRows, useDayMeals } from "./food/dayRows";
 import { WhatToEatNext } from "./food/MealPlan";
+import { useSetupFirst } from "./setupFirst";
 import { foodsOfRow } from "./food/planRules";
 import {
   MEAL_TYPES,
@@ -117,6 +118,8 @@ const MEAL_CHANGED_WORDS = "This meal was changed on another device. Close it an
 
 
 export function FoodScreen() {
+  // While the person looks at the app before setup (14d), a meal logged or numbers set wait for setup.
+  const first = useSetupFirst();
   const [day, setDay] = useState(() => startOfDay(new Date()));
   const { outbox, view } = useMealOutbox();
   const settle = useCallback((upTo: number) => outbox?.settle(upTo), [outbox]);
@@ -231,7 +234,7 @@ export function FoodScreen() {
           tall={0.62}
           eyebrow="Nutrition"
           title="Fuel Your Training"
-          foot={<Button label={photoKept ? "Finish photo meal" : "Scan food"} icon="camera" onPress={() => { setSaid(null); setBarcodeFirst(false); setPhotoOpen(true); }} />}
+          foot={<Button label={photoKept ? "Finish photo meal" : "Scan food"} icon="camera" onPress={first(() => { setSaid(null); setBarcodeFirst(false); setPhotoOpen(true); })} />}
         />
         </View>
       }
@@ -243,7 +246,7 @@ export function FoodScreen() {
           <Txt kind="small" colour="text" style={styles.grow}>
             Your photo meal isn’t saved yet.
           </Txt>
-          <Button label="Scan a barcode" kind="link" onPress={() => { setSaid(null); setBarcodeFirst(true); setPhotoOpen(true); }} />
+          <Button label="Scan a barcode" kind="link" onPress={first(() => { setSaid(null); setBarcodeFirst(true); setPhotoOpen(true); })} />
           <Button label="Discard" kind="quiet" onPress={() => { setDiscarding(true); }} />
         </Card>
       ) : null}
@@ -262,10 +265,10 @@ export function FoodScreen() {
         targets={shownTargets}
         retry={targets.again}
         said={numbersSaid !== null && shownTargets.kind === "ok" && shownTargets.data.source === numbersSaid.source ? numbersSaid.words : null}
-        onChange={() => {
+        onChange={first(() => {
           setNumbersSaid(null);
           setNumbers(true);
-        }}
+        })}
         eaten={rows === null || rows.some((r) => r.totals === null) ? null : daySums(rows)}
         uncounted={rows === null ? 0 : rows.filter((r) => r.totals === null).length}
         about={rows !== null && rows.some((r) => hasEstimate(r.items))}
@@ -373,10 +376,10 @@ export function FoodScreen() {
               rows={rows.filter((r) => r.section === type)}
               canAdd={today}
               said={said?.section === type ? said.words : null}
-              onAdd={() => {
+              onAdd={first(() => {
                 setSaid(null);
                 setAdding(type);
-              }}
+              })}
               onOpen={(row) => {
                 setSaid(null);
                 setOpen(row);

@@ -3,7 +3,7 @@ import { StyleSheet, View } from "react-native";
 import { pushTokenResponseSchema } from "@app/shared";
 import { Button } from "../look/Button";
 import { Sheet } from "../look/Sheet";
-import { useSetupComing } from "../screens/SetupGate";
+import { useSetupComing } from "../screens/setupFirst";
 import { Txt } from "../look/Txt";
 import { useSession } from "../session/SessionProvider";
 import {

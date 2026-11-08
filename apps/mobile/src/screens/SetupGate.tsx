@@ -1,10 +1,11 @@
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
-import { AccessibilityInfo, AppState, StyleSheet, View } from "react-native";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { AppState, StyleSheet, View } from "react-native";
 import { userProfileResponseSchema } from "@app/shared";
 import { colours } from "../look/colours";
 import { useSession } from "../session/SessionProvider";
 import { NOTE_CHECK_WAIT_MS } from "./BeforeYouStart";
 import { Setup } from "./setup/Setup";
+import { LookContext, SetupComingContext } from "./setupFirst";
 
 // Setup in front of the tabs until it is finished (ROADMAP Stage 5 item 14c; the browser's own rule):
 // after "Before you start" and any invitation, a person who has not finished setup meets it, with
@@ -16,42 +17,14 @@ import { Setup } from "./setup/Setup";
 // without setup. An answer that says "finished" (in the browser, say) lets them through.
 //
 // A look first (14d, Kd 2026-11-07): a sign-in made in this run of the app shows the tabs for
-// LOOK_MS, counted while the app is in front, then setup comes up over them. Meanwhile a press on
-// any tab's page opens setup at once; the tab bar and scrolling stay free. Reopened unfinished,
-// setup comes at once. A screen reader skips the look: the pages are hidden from it while it lasts.
+// LOOK_MS, counted while the app is in front, then setup comes up over them. The person looks around
+// freely; only what starts a run, logs a meal or makes a plan opens setup at once (`useSetupFirst`).
+// Reopened unfinished, setup comes at once.
 
 export const LOOK_MS = 8_000;
 
 /** "look": the tabs, look only; "over": setup over the tabs after the look; "setup": setup alone. */
 type Phase = "checking" | "look" | "over" | "setup" | "through";
-
-/** While the person is looking, what a press on a page does: open setup. Null otherwise. */
-const LookContext = createContext<(() => void) | null>(null);
-
-/** The tabs are drawn while setup is still to come (the look, or setup over them): what asks the person
- *  something of its own, the notifications box, waits for setup to be finished, as before 14d. */
-const SetupComingContext = createContext(false);
-export const useSetupComing = (): boolean => useContext(SetupComingContext);
-
-/** Round each tab's page. While the person is looking it takes every touch that starts on the page
- *  before any button can, and a touch let go there opens setup; a drag is the page's own scroll. */
-export function LookOnly({ children }: { children: ReactNode }) {
-  const openSetup = useContext(LookContext);
-  if (openSetup === null) return <>{children}</>;
-  return (
-    <View
-      testID="look only"
-      style={styles.fill}
-      importantForAccessibility="no-hide-descendants"
-      accessibilityElementsHidden
-      onStartShouldSetResponderCapture={() => true}
-      onResponderTerminationRequest={() => true}
-      onResponderRelease={openSetup}
-    >
-      {children}
-    </View>
-  );
-}
 
 export function SetupGate({ children, lookMs = LOOK_MS }: { children: ReactNode; lookMs?: number }) {
   const { session } = useSession();
@@ -123,12 +96,6 @@ export function SetupGate({ children, lookMs = LOOK_MS }: { children: ReactNode;
       timer = null;
       left = Math.max(0, left - (Date.now() - since));
     });
-    void AccessibilityInfo.isScreenReaderEnabled().then(
-      (on) => {
-        if (on) openSetup();
-      },
-      () => undefined,
-    );
     return () => {
       if (timer !== null) clearTimeout(timer);
       heard.remove();
@@ -154,5 +121,4 @@ export function SetupGate({ children, lookMs = LOOK_MS }: { children: ReactNode;
 
 const styles = StyleSheet.create({
   page: { flex: 1, backgroundColor: colours.page },
-  fill: { flex: 1 },
 });

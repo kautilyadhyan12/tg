@@ -54,6 +54,7 @@ import { Clock } from "./dashboard/Clock";
 import { useRead, type Read } from "./dashboard/useRead";
 import { IDEAS_READ } from "./food/MealIdeas";
 import { Recommended } from "./food/MealPlan";
+import { useSetupFirst } from "./setupFirst";
 import { useMealOutbox } from "./food/MealOutbox";
 import { useRunOutbox } from "./running/RunOutbox";
 import { RunPage } from "./running/RunPage";
@@ -89,6 +90,8 @@ const PLACES_READ = "/v1/orgs/mine";
 export function DashboardScreen() {
   const { state } = useSession();
   const go = useNavigation<NavigationProp<ParamListBase>>();
+  // While the person looks at the app before setup (14d), a plan or a meal waits for setup.
+  const first = useSetupFirst();
   // The week, the streak and the totals are keyed by day in the person's zone: read again once it is saved.
   const zoneSaved = useZoneSaved();
   // A run the server has just taken changes the sessions, the XP, the week and Recent Activity (37a).
@@ -217,12 +220,12 @@ export function DashboardScreen() {
         onMore={() => {
           go.navigate("Food", { today: Date.now() });
         }}
-        onPlan={() => {
+        onPlan={first(() => {
           go.navigate("Food", { today: Date.now(), week: Date.now() });
-        }}
-        onLog={() => {
+        })}
+        onLog={first(() => {
           go.navigate("Food", { today: Date.now(), next: Date.now() });
-        }}
+        })}
       />
       <Recent workouts={recent.read} runs={runs.read} meals={meals.read} units={units} onRun={(id) => { setRunDeleted(null); setOpenRun(id); }} said={runDeleted} />
       <Ready onPress={toWorkout} />

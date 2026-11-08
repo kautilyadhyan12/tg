@@ -21,6 +21,7 @@ import { ideaName } from "./ideaRules";
 import { FoodChoiceRow, useFoodChoice } from "./FoodChoice";
 import { MealIdeas, NO_PLAN_YET, type PlannedNow } from "./MealIdeas";
 import { useMealOutbox } from "./MealOutbox";
+import { useLookOpen } from "../setupFirst";
 import { loggedAmount } from "./measures";
 import type { BasketFood, PlanMealTarget } from "./basket";
 import { dayWithMeal, foodsOfRow, hasMeals, loggedOfDay, planBasketFood, planDayName, planDayOf, planMealAsMeal, stepDay } from "./planRules";
@@ -60,6 +61,8 @@ interface WhatToEatNextProps {
 /** The Food page's one answer to "what do I eat now?": the plan's next meal for somebody with a plan,
  *  the meal ideas for somebody without. Every number and every refusal is the server's. */
 export function WhatToEatNext({ foodsToday, fresh, onAnswered, todayFailed, retryToday, openWeekAt, onWeekOpened, pickFoods }: WhatToEatNextProps) {
+  // While the person looks at the app before setup (14d), a plan made, changed or logged waits for setup.
+  const look = useLookOpen();
   const { session } = useSession();
   const { height } = useWindowDimensions();
   const { read, again, begun, shownFrom } = useRead(PLAN_READ, dietPlanResponseSchema, fresh);
@@ -156,6 +159,10 @@ export function WhatToEatNext({ foodsToday, fresh, onAnswered, todayFailed, retr
   };
 
   const make = async () => {
+    if (look !== null) {
+      look();
+      return;
+    }
     if ((await send("make", "POST", `${PLAN_READ}/make`, {})).kind === "ok") {
       setUndo(null);
       setAsking(false);
@@ -164,6 +171,10 @@ export function WhatToEatNext({ foodsToday, fresh, onAnswered, todayFailed, retr
     }
   };
   const swap = async (day: number, at: number) => {
+    if (look !== null) {
+      look();
+      return;
+    }
     const shown = plan?.days[day - 1];
     if (shown === undefined) return;
     const sent = await send(`swap|${String(day)}|${String(at)}|${shown.version}`, "POST", `${PLAN_READ}/days/${String(day)}/swap`, { meal: at, version: shown.version });
@@ -181,6 +192,10 @@ export function WhatToEatNext({ foodsToday, fresh, onAnswered, todayFailed, retr
     }
   };
   const log = async (meal: DietPlanMeal, at: number) => {
+    if (look !== null) {
+      look();
+      return;
+    }
     if (outbox === null || foodsToday === null || loggingNow.current) return;
     loggingNow.current = true;
     setLogging(true);
@@ -239,6 +254,10 @@ export function WhatToEatNext({ foodsToday, fresh, onAnswered, todayFailed, retr
     }
   };
   const openWeek = () => {
+    if (look !== null) {
+      look();
+      return;
+    }
     quiet();
     setShownDay(today);
     setChoosing(false);

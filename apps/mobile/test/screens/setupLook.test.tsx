@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
-import { AccessibilityInfo, AppState } from "react-native";
+import { AppState } from "react-native";
 import { missingPlanInputSchema, type OnboardingAnswers } from "@app/shared";
 import { App } from "../../src/App";
 import { LOOK_MS } from "../../src/screens/SetupGate";
@@ -12,7 +12,6 @@ const noWait = () => Promise.resolve();
 const SHORT = 150;
 const notSetUp = (): Reply => ({ status: 200, body: profile(true, RAVI, false) });
 const setUp = (): Reply => ({ status: 200, body: profile(true, RAVI, true) });
-const hidden = { includeHiddenElements: true };
 
 const EMPTY: OnboardingAnswers = {
   displayName: "Ravi",
@@ -72,28 +71,16 @@ async function signIn(me: () => Reply, lookMs = SHORT) {
   return { server, route };
 }
 
-type Node = { props: Record<string, unknown>; parent: Node | null };
-/** The look's cover round a page's button, or null: what takes a touch before the button can. */
-function coverOf(element: Node): Node | null {
-  for (let at = element.parent; at !== null; at = at.parent) if (at.props.testID === "look only") return at;
-  return null;
-}
-const covered = (element: Node) => {
-  const cover = coverOf(element);
-  if (cover === null) throw new Error("no cover");
-  return cover;
-};
-const touchAndLetGo = async (cover: Node) => {
+const press = (name: string) => fireEvent.press(screen.getByRole("button", { name }));
+const looking = async (ms: number) => {
   await act(async () => {
-    expect((cover.props.onStartShouldSetResponderCapture as () => boolean)()).toBe(true);
-    (cover.props.onResponderRelease as () => void)();
-    await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve, ms));
   });
 };
 const setupIsUp = async () => {
   expect(await screen.findByRole("header", { name: "Your goal" })).toBeTruthy();
   expect(screen.queryByRole("button", { name: "Close" })).toBeNull();
-  expect(screen.getByRole("button", { name: "Sign out" })).toBeTruthy();
+  expect(screen.getAllByRole("button", { name: "Sign out" }).length).toBeGreaterThan(0);
 };
 /** What a person who has not finished setup must not start: a run, a meal, a plan. */
 const started = (server: { asked: { method: string; path: string }[] }) =>
@@ -108,42 +95,47 @@ afterEach(() => {
 });
 
 describe("the worst thing: nobody starts a workout, run, meal or plan before the health question and their age", () => {
-  // Each tab's page, and a button on it that would start something, or open what does.
+  // Each place, and the button on it that starts a run, logs a meal or makes a plan.
   it.each([
-    ["Dashboard", "Start Training"],
-    ["Workout", "Running"],
-    ["Food", "Scan food"],
-  ])("on %s, %s is under the look's cover, and a touch there opens setup, never the button", async (tab, button) => {
+    ["Food", null, "Scan food"],
+    ["Food", null, "Build my own"],
+    ["Workout", "Running", "Start run"],
+  ])("on %s, %s %s opens setup at once, and nothing is started", async (tab, part, button) => {
     const { server } = await signIn(notSetUp, 60_000);
     await fireEvent.press(await screen.findByRole("tab", { name: tab }));
-    const [pressable, ...more] = await screen.findAllByRole("button", { name: button, ...hidden });
-    if (pressable === undefined) throw new Error("no button");
-    for (const one of more) expect(coverOf(one as unknown as Node)).not.toBeNull();
-    // Hidden from a screen reader too, whose double tap would press the button itself.
-    expect(screen.queryAllByRole("button", { name: button })).toEqual([]);
-    await touchAndLetGo(covered(pressable));
+    if (part !== null) await press(part);
+    await fireEvent.press((await screen.findAllByRole("button", { name: button }))[0] ?? screen.getByRole("button", { name: button }));
     await setupIsUp();
     expect(started(server)).toEqual([]);
   });
 
-  it("the tab bar is not covered: the person moves between tabs while looking", async () => {
+  it("Me's Your plan opens the setup that cannot be closed, not one with a close button", async () => {
     await signIn(notSetUp, 60_000);
-    for (const tab of ["Workout", "Food", "Me", "Dashboard"]) {
-      const bar = await screen.findByRole("tab", { name: tab });
-      expect(coverOf(bar as unknown as Node)).toBeNull();
-      await fireEvent.press(bar);
-    }
+    await fireEvent.press(await screen.findByRole("tab", { name: "Me" }));
+    await press("Your plan");
+    await setupIsUp();
+  });
+
+  it("looking around is free: tabs, Workout's parts and the pages open, and setup waits", async () => {
+    await signIn(notSetUp, 60_000);
+    for (const tab of ["Workout", "Food", "Me", "Dashboard"]) await fireEvent.press(await screen.findByRole("tab", { name: tab }));
+    await fireEvent.press(await screen.findByRole("tab", { name: "Workout" }));
+    await press("Running");
+    expect(await screen.findByRole("button", { name: "Start run" })).toBeTruthy();
+    await fireEvent.press(await screen.findByRole("tab", { name: "Dashboard" }));
+    const [startTraining] = screen.getAllByRole("button", { name: "Start Training" });
+    if (startTraining === undefined) throw new Error("no Start Training");
+    await fireEvent.press(startTraining);
+    expect(await screen.findByRole("button", { name: "Running" })).toBeTruthy();
     expect(screen.queryByRole("header", { name: "Your goal" })).toBeNull();
   });
 });
 
 describe("the look", () => {
-  it("is the Dashboard first, covered, with no setup yet", async () => {
+  it("is the Dashboard first, with no setup yet", async () => {
     await signIn(notSetUp, 60_000);
     expect(await screen.findByRole("tab", { name: "Dashboard" })).toBeTruthy();
-    const [button] = await screen.findAllByRole("button", { name: "Start Training", ...hidden });
-    if (button === undefined) throw new Error("no button");
-    expect(coverOf(button)).not.toBeNull();
+    await looking(SHORT * 2);
     expect(screen.queryByRole("header", { name: "Your goal" })).toBeNull();
   });
 
@@ -176,19 +168,13 @@ describe("the look", () => {
     }
   });
 
-  it("is skipped with a screen reader on: setup at once", async () => {
-    jest.spyOn(AccessibilityInfo, "isScreenReaderEnabled").mockResolvedValue(true);
-    await signIn(notSetUp, 60_000);
-    await setupIsUp();
-  });
-
-  it("is never given to somebody set up: no cover, and no setup", async () => {
+  it("is never given to somebody set up: no setup, and Build my own goes ahead", async () => {
     await signIn(setUp);
-    const buttons = await screen.findAllByRole("button", { name: "Start Training" });
-    for (const one of buttons) expect(coverOf(one as unknown as Node)).toBeNull();
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, SHORT * 3));
-    });
+    await looking(SHORT * 3);
+    expect(screen.queryByRole("header", { name: "Your goal" })).toBeNull();
+    await fireEvent.press(await screen.findByRole("tab", { name: "Food" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Build my own" }));
+    await looking(SHORT);
     expect(screen.queryByRole("header", { name: "Your goal" })).toBeNull();
   });
 
@@ -212,7 +198,7 @@ describe("the look", () => {
     expect(await screen.findByText("Turn on notifications?")).toBeTruthy();
   });
 
-  it("finished elsewhere while setup is up over the tabs: they are let through, uncovered", async () => {
+  it("finished elsewhere while setup is up over the tabs: they are let through, and Build my own goes ahead", async () => {
     const turn = heldAppState();
     const { route } = await signIn(notSetUp);
     await setupIsUp();
@@ -221,7 +207,9 @@ describe("the look", () => {
     await waitFor(() => {
       expect(screen.queryByRole("header", { name: "Your goal" })).toBeNull();
     });
-    const buttons = await screen.findAllByRole("button", { name: "Start Training" });
-    for (const one of buttons) expect(coverOf(one as unknown as Node)).toBeNull();
+    await fireEvent.press(await screen.findByRole("tab", { name: "Food" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Build my own" }));
+    await looking(SHORT);
+    expect(screen.queryByRole("header", { name: "Your goal" })).toBeNull();
   });
 });

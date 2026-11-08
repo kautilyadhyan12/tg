@@ -22,7 +22,7 @@ import { Page } from "./look/Page";
 import { TabBar } from "./look/TabBar";
 import { SignUpNoteGate } from "./screens/BeforeYouStart";
 import { InvitationsGate } from "./screens/InvitationsGate";
-import { LookOnly, SetupGate } from "./screens/SetupGate";
+import { SetupGate } from "./screens/SetupGate";
 import { SignInScreen } from "./screens/SignIn";
 import { CopyContext, ThisCopy } from "./screens/ThisCopy";
 import type { Ask } from "./session/calls";
@@ -178,7 +178,7 @@ function TabsOfPlaces() {
   const dots: Record<string, string> = newMessages > 0 ? { Gym: newMessages === 1 ? "1 new message" : `${String(newMessages)} new messages` } : {};
   return (
     <NavigationContainer ref={tabsRef} theme={theme} onReady={openHeldTab}>
-      <Tabs.Navigator screenOptions={{ headerShown: false }} screenLayout={({ children }) => <LookOnly>{children}</LookOnly>} tabBar={(props) => <TabBar {...props} icons={tabIcons} labels={labels} dots={dots} />}>
+      <Tabs.Navigator screenOptions={{ headerShown: false }} tabBar={(props) => <TabBar {...props} icons={tabIcons} labels={labels} dots={dots} />}>
         {TABS.map((tab) => (
           <Tabs.Screen key={tab.name} name={tab.name} component={tab.screen} />
         ))}
