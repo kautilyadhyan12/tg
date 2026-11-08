@@ -148,16 +148,26 @@ describe("the worst thing: nobody starts a workout, run, meal or plan before the
     ["Food", "", "Log Oatmeal", true],
     ["Food", "", "Swap Oatmeal", true],
     ["Food", "", "See the week", true],
-    ["Workout", "Running", "Start run", false],
-  ])("on %s %s, %s opens setup at once, and nothing is started (a meal plan: %s)", async (tab, part, button, plan) => {
+    ["Workout", " → Running", "Start run", false],
+  ])("on %s%s, %s opens setup at once, and nothing is started (a meal plan: %s)", async (tab, part, button, plan) => {
     const { server } = await signIn(notSetUp, 60_000, fed(plan));
     await fireEvent.press(await screen.findByRole("tab", { name: tab }));
-    if (part !== "") await press(part);
+    if (part !== "") await press(part.replace(" → ", ""));
     const [shown] = await screen.findAllByRole("button", { name: button });
     if (shown === undefined) throw new Error(`no ${button}`);
     await fireEvent.press(shown);
     await setupIsUp();
     expect(started(server)).toEqual([]);
+  });
+
+  it("Food's Answer now, for daily numbers still missing, opens the setup that cannot be closed", async () => {
+    const missing = { targets: null, missing: ["age"], targetWrongSide: false, source: "app", appTargets: null, own: null, ownHeld: null };
+    await signIn(notSetUp, 60_000, { ...fed(false), "/v1/nutrition/targets": () => ({ status: 200, body: missing }) });
+    await fireEvent.press(await screen.findByRole("tab", { name: "Food" }));
+    const [answerNow] = await screen.findAllByRole("button", { name: "Answer now" });
+    if (answerNow === undefined) throw new Error("no Answer now");
+    await fireEvent.press(answerNow);
+    await setupIsUp();
   });
 
   it("Me's Your plan opens the setup that cannot be closed, not one with a close button", async () => {
