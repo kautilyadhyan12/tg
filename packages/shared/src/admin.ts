@@ -69,3 +69,19 @@ export const adminSetLimitsResponseSchema = z
   .object({ changed: z.number().int().nonnegative(), unchanged: z.number().int().nonnegative(), notFound: z.number().int().nonnegative() })
   .strict();
 export type AdminSetLimitsResponse = z.infer<typeof adminSetLimitsResponseSchema>;
+
+/** The admin door (Kd, 2026-11-08): a fresh sign-in code, then his own password; open 12 hours. */
+export const ADMIN_PASSWORD_MIN = 12;
+export const ADMIN_DOOR_HOURS = 12;
+/** How long after a sign-in its code still counts as fresh at the door. */
+export const ADMIN_FRESH_MINUTES = 10;
+
+export const adminPasswordRequestSchema = z.object({ password: z.string().min(ADMIN_PASSWORD_MIN).max(200) }).strict();
+export type AdminPasswordRequest = z.infer<typeof adminPasswordRequestSchema>;
+
+/** Where the admin account stands at the door: whether a password is made yet, whether the door
+ *  is open (and until when), and whether its sign-in is fresh enough to open it. */
+export const adminDoorStateSchema = z
+  .object({ passwordSet: z.boolean(), open: z.boolean(), openUntil: z.string().datetime().nullable(), fresh: z.boolean() })
+  .strict();
+export type AdminDoorState = z.infer<typeof adminDoorStateSchema>;

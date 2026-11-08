@@ -398,7 +398,7 @@ export async function buildApp(
   registerGoalRoutes(app, { sql, ...(overrides.goals?.now === undefined ? {} : { now: overrides.goals.now }) });
   registerEntitlementRoutes(app, { sql, redis });
   // Kd's own admin page: only the account ADMIN_USER_ID names (ROADMAP Stage 2 item 14a-i).
-  registerAdminRoutes(app, { sql, redis, config });
+  registerAdminRoutes(app, { sql, redis, config, ...(overrides.passwordHasher === undefined ? {} : { hasher: overrides.passwordHasher }) });
   registerNutritionRoutes(app, { sql, redis, config, reportError }, overrides.nutrition ?? {});
   registerGeoRoutes(app, { sql, redis, config }, overrides.geo ?? {});
   const invites = inviteSettings(config);

@@ -200,6 +200,7 @@ d("DPDP data export (real Postgres)", () => {
     await sql`INSERT INTO body_measurement_removed_ids (id, user_id) VALUES (gen_random_uuid(), ${userId})`;
     await sql`INSERT INTO run_removed_ids (id, user_id) VALUES (gen_random_uuid(), ${userId})`;
     await sql`INSERT INTO usage_limits (user_id, meal_scans_a_day) VALUES (${userId}, 15)`;
+    await sql`INSERT INTO admin_passwords (user_id, password_hash, hash_algo) VALUES (${userId}, 'not-a-real-hash', 'argon2id')`;
     await sql`INSERT INTO member_label_foods (id, user_id, name, unit, kcal, protein_g, carbs_g, fat_g) VALUES (${randomUUID()}, ${userId}, ${`Label ${label}`}, 'g', 100, 1, 1, 1)`;
     await sql`INSERT INTO user_dishware (user_id, label, container_class, volume_ml)
               VALUES (${userId}, ${`Katori ${label}`}, 'katori', 175)`;

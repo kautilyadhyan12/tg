@@ -64,3 +64,18 @@ export const usageLimits = pgTable(
     check("usage_limits_some_check", sql`${t.mealScansADay} IS NOT NULL OR ${t.routePlansADay} IS NOT NULL`),
   ],
 );
+
+/** The admin door's own password, for the one admin account (migration 0225, ROADMAP Stage 2 item
+ *  14a-i): only its hash. */
+export const adminPasswords = pgTable(
+  "admin_passwords",
+  {
+    userId: uuid("user_id")
+      .primaryKey()
+      .references(() => users.id, { onDelete: "cascade" }),
+    passwordHash: text("password_hash").notNull(),
+    hashAlgo: text("hash_algo").notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [check("admin_passwords_hash_algo_check", sql`${t.hashAlgo} IN ('bcrypt','argon2id')`)],
+);

@@ -41,20 +41,25 @@ d("the admin page (real Postgres)", () => {
   let member: Person = { userId: "", access: "" };
   let payer: Person = { userId: "", access: "" };
   let gone = "";
+  let adminDoor = "";
+  const ADMIN_PASSWORD = "a-long-admin-door-pw-1"; // dummy fixture, gitleaks:allow
 
   const must = (a: App | undefined): App => {
     if (a === undefined) throw new Error("beforeAll did not build the app");
     return a;
   };
-  const call = (a: App, opts: { method?: "GET" | "PUT" | "POST"; url: string; body?: unknown; access?: string }) =>
+  const call = (a: App, opts: { method?: "GET" | "PUT" | "POST"; url: string; body?: unknown; access?: string; door?: string }) =>
     a.inject({
       method: opts.method ?? "GET",
       url: opts.url,
       headers: opts.body !== undefined ? { "content-type": "application/json" } : {},
-      cookies: opts.access !== undefined && opts.access !== "" ? { accessToken: opts.access } : {},
+      cookies: {
+        ...(opts.access !== undefined && opts.access !== "" ? { accessToken: opts.access } : {}),
+        ...(opts.door !== undefined && opts.door !== "" ? { adminDoor: opts.door } : {}),
+      },
       ...(opts.body !== undefined ? { payload: JSON.stringify(opts.body) } : {}),
     });
-  const asAdmin = (opts: { method?: "GET" | "PUT"; url: string; body?: unknown }) => call(must(app), { ...opts, access: admin.access });
+  const asAdmin = (opts: { method?: "GET" | "PUT" | "POST"; url: string; body?: unknown }) => call(must(app), { ...opts, access: admin.access, door: adminDoor });
 
   const session = async (email: string, name: string): Promise<Person> => {
     const a = must(setup);
@@ -80,7 +85,7 @@ d("the admin page (real Postgres)", () => {
 
   const clean = async () => {
     const mine = sql`SELECT id FROM users WHERE email LIKE ${`${PREFIX}%`} OR email LIKE ${`${BULK}%`}`;
-    await sql`DELETE FROM audit_log WHERE action = 'admin.usage_limit_set' AND target_id IN (SELECT id::text FROM users WHERE email LIKE ${`${PREFIX}%`})`;
+    await sql`DELETE FROM audit_log WHERE action LIKE 'admin.%' AND target_id IN (SELECT id::text FROM users WHERE email LIKE ${`${PREFIX}%`})`;
     await sql`DELETE FROM subscriptions WHERE owner_id IN (${mine})`;
     await sql`DELETE FROM subscriptions WHERE owner_id IN (SELECT id FROM gyms WHERE slug = 'a14i-gym')`;
     await sql`DELETE FROM subscriptions WHERE owner_id IN (SELECT id FROM gyms WHERE slug = 'a14i-gym-old')`;
@@ -115,6 +120,10 @@ d("the admin page (real Postgres)", () => {
     const a = must(app);
     a.get("/test/a14i/meal", { preHandler: [a.authenticate, requireQuota("meal_scan", { sql, redis })] }, async (_q, r) => r.send({ ok: true }));
     a.get("/test/a14i/route", { preHandler: [a.authenticate, requireQuota("route_gen", { sql, redis })] }, async (_q, r) => r.send({ ok: true }));
+    // The admin's first password, from a sign-in a moment old: the door opens.
+    const made = await call(a, { method: "POST", url: "/v1/admin/door/password", body: { password: ADMIN_PASSWORD }, access: admin.access });
+    if (made.statusCode !== 200) throw new Error("door password: " + made.body);
+    adminDoor = made.cookies.find((c) => c.name === "adminDoor")?.value ?? "";
   }, 180_000);
 
   afterAll(async () => {
@@ -125,7 +134,10 @@ d("the admin page (real Postgres)", () => {
   });
 
   const ADDRESSES = (target: string) => [
-    { method: "GET" as const, url: "/v1/admin/me" },
+    { method: "GET" as const, url: "/v1/admin/door" },
+    { method: "POST" as const, url: "/v1/admin/door/password", body: { password: "a-stranger-s-password" } },
+    { method: "POST" as const, url: "/v1/admin/door/open", body: { password: "a-stranger-s-password" } },
+    { method: "POST" as const, url: "/v1/admin/door/lock" },
     { method: "GET" as const, url: "/v1/admin/people" },
     { method: "GET" as const, url: `/v1/admin/people?search=${PREFIX}` },
     { method: "PUT" as const, url: "/v1/admin/limits", body: { userIds: [target], feature: "meal_scan", perDay: 100 } },
@@ -142,7 +154,8 @@ d("the admin page (real Postgres)", () => {
     ];
     for (const { who, p } of callers) {
       for (const address of ADDRESSES(p.userId)) {
-        const res = await call(must(app), { ...address, access: p.access });
+        // Even holding the admin's own open door, nobody else gets in.
+        const res = await call(must(app), { ...address, access: p.access, door: adminDoor });
         const unknown = await call(must(app), { method: address.method, url: address.url.replace("/v1/admin/", "/v1/admin-none/"), access: p.access, ...(address.body === undefined ? {} : { body: address.body }) });
         expect({ who, url: address.url, status: res.statusCode }).toEqual({ who, url: address.url, status: 404 });
         expect(res.json<{ error: string }>().error).toBe("not_found");
@@ -152,15 +165,18 @@ d("the admin page (real Postgres)", () => {
       }
     }
     expect((await limitsRows())[0]?.n).toBe(0);
+    // Nothing behind the check ran for them: their Lock presses, holding the admin's door, did not close it.
+    expect((await asAdmin({ url: "/v1/admin/door" })).json<{ open: boolean }>().open).toBe(true);
+    expect(await sql`SELECT 1 FROM admin_passwords WHERE user_id <> ${admin.userId} AND user_id IN (SELECT id FROM users WHERE email LIKE ${`${PREFIX}%`})`).toHaveLength(0);
     expect((await mealScan(stranger)).meal_scan).toEqual({ window: "month", limit: 3 });
     expect((await mealScan(staff)).meal_scan).toEqual({ window: "month", limit: 3 });
   });
 
   it("WORST THING: with no admin named, even the would-be admin meets not-found; a signed-out session of the admin does too", { timeout: 60_000 }, async () => {
-    const unnamed = await buildApp(loadConfig(baseEnv), { redis });
+    const unnamed = await buildApp(loadConfig(baseEnv), { redis: createMemoryRedis() }); // its own: closing it empties its memory
     try {
       for (const address of ADDRESSES(admin.userId)) {
-        expect((await call(unnamed, { ...address, access: admin.access })).statusCode).toBe(404);
+        expect((await call(unnamed, { ...address, access: admin.access, door: adminDoor })).statusCode).toBe(404);
       }
     } finally {
       await unnamed.close();
@@ -169,17 +185,73 @@ d("the admin page (real Postgres)", () => {
     const login = await call(must(app), { method: "POST", url: "/v1/auth/login", body: { email: `${PREFIX}admin@example.com`, password: PASSWORD } });
     const access = login.cookies.find((c) => c.name === "accessToken")?.value ?? "";
     const refresh = login.cookies.find((c) => c.name === "refreshToken")?.value ?? "";
-    expect((await call(must(app), { url: "/v1/admin/me", access })).statusCode).toBe(200);
+    expect((await call(must(app), { url: "/v1/admin/door", access })).statusCode).toBe(200);
     await must(app).inject({ method: "POST", url: "/v1/auth/logout", cookies: { accessToken: access, refreshToken: refresh } });
-    expect((await call(must(app), { url: "/v1/admin/me", access })).statusCode).toBe(404);
+    expect((await call(must(app), { url: "/v1/admin/door", access })).statusCode).toBe(404);
     expect((await limitsRows())[0]?.n).toBe(0);
   });
 
-  it("the admin is told so, and nothing it reads is kept by a browser", async () => {
-    const res = await asAdmin({ url: "/v1/admin/me" });
-    expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual({ admin: true });
-    expect(res.headers["cache-control"]).toBe("no-store");
+  it("THE DOOR: the page is locked without the admin's own open door; only the hash is kept; 12 hours", { timeout: 60_000 }, async () => {
+    const locked = await call(must(app), { url: "/v1/admin/people", access: admin.access });
+    expect(locked.statusCode).toBe(403);
+    expect(locked.json<{ error: string }>().error).toBe("admin_locked");
+    expect(locked.body).not.toContain("@example.com");
+    expect((await call(must(app), { method: "PUT", url: "/v1/admin/limits", access: admin.access, body: { userIds: [admin.userId], feature: "meal_scan", perDay: 100 } })).statusCode).toBe(403);
+    expect((await call(must(app), { url: "/v1/admin/people", access: admin.access, door: "made-up-door" })).statusCode).toBe(403);
+    expect((await limitsRows())[0]?.n).toBe(0);
+    const state = await asAdmin({ url: "/v1/admin/door" });
+    expect(state.headers["cache-control"]).toBe("no-store");
+    const body = state.json<{ passwordSet: boolean; open: boolean; openUntil: string; fresh: boolean }>();
+    expect(body).toMatchObject({ passwordSet: true, open: true, fresh: true });
+    const hours = (new Date(body.openUntil).getTime() - Date.now()) / 3_600_000;
+    expect(hours).toBeGreaterThan(11.9);
+    expect(hours).toBeLessThanOrEqual(12);
+    const kept = await sql<{ password_hash: string }[]>`SELECT password_hash FROM admin_passwords WHERE user_id = ${admin.userId}`;
+    expect(kept[0]?.password_hash).not.toContain(ADMIN_PASSWORD);
+    expect((await asAdmin({ method: "POST", url: "/v1/admin/door/password", body: { password: "another-long-password" } })).statusCode).toBe(409);
+  });
+
+  it("THE DOOR: a short password is refused; a wrong one is refused and written down; the right one from a fresh sign-in opens it", { timeout: 60_000 }, async () => {
+    await redis.del(`rl:admin_door:id:${admin.userId}`);
+    expect((await call(must(app), { method: "POST", url: "/v1/admin/door/open", access: admin.access, body: { password: "short" } })).statusCode).toBe(400);
+    const wrong = await call(must(app), { method: "POST", url: "/v1/admin/door/open", access: admin.access, body: { password: "not-the-admin-password" } });
+    expect(wrong.statusCode).toBe(403);
+    expect(wrong.json<{ error: string }>().error).toBe("wrong_password");
+    expect(wrong.cookies.find((c) => c.name === "adminDoor")).toBeUndefined();
+    expect(await sql`SELECT 1 FROM audit_log WHERE action = 'admin.door_wrong_password' AND actor_user_id = ${admin.userId}`).toHaveLength(1);
+    const right = await call(must(app), { method: "POST", url: "/v1/admin/door/open", access: admin.access, body: { password: ADMIN_PASSWORD } });
+    expect(right.statusCode).toBe(200);
+    const cookie = right.cookies.find((c) => c.name === "adminDoor");
+    expect(cookie).toMatchObject({ httpOnly: true, path: "/v1/admin", maxAge: 43_200 });
+    expect((await call(must(app), { url: "/v1/admin/people", access: admin.access, door: cookie?.value ?? "" })).statusCode).toBe(200);
+  });
+
+  it("THE DOOR: another sign-in of the admin cannot use this one's door; a sign-in older than a few minutes needs a new code; Lock closes it", { timeout: 60_000 }, async () => {
+    await redis.del(`rl:admin_door:id:${admin.userId}`);
+    const login = await call(must(app), { method: "POST", url: "/v1/auth/login", body: { email: `${PREFIX}admin@example.com`, password: PASSWORD } });
+    const access = login.cookies.find((c) => c.name === "accessToken")?.value ?? "";
+    expect((await call(must(app), { url: "/v1/admin/people", access, door: adminDoor })).statusCode).toBe(403);
+    const opened = await call(must(app), { method: "POST", url: "/v1/admin/door/open", access, body: { password: ADMIN_PASSWORD } });
+    const door = opened.cookies.find((c) => c.name === "adminDoor")?.value ?? "";
+    expect((await call(must(app), { url: "/v1/admin/people", access, door })).statusCode).toBe(200);
+    // Made eleven minutes old, this sign-in is not fresh: the password alone opens nothing.
+    await sql`UPDATE refresh_tokens SET created_at = now() - interval '11 minutes' WHERE user_id = ${admin.userId}
+      AND family_id = (SELECT family_id FROM refresh_tokens WHERE user_id = ${admin.userId} ORDER BY created_at DESC LIMIT 1)`;
+    const stale = await call(must(app), { method: "POST", url: "/v1/admin/door/open", access, body: { password: ADMIN_PASSWORD } });
+    expect(stale.statusCode).toBe(403);
+    expect(stale.json<{ error: string }>().error).toBe("fresh_code_needed");
+    expect((await call(must(app), { url: "/v1/admin/door", access })).json<{ fresh: boolean }>().fresh).toBe(false);
+    expect((await call(must(app), { method: "POST", url: "/v1/admin/door/lock", access, door })).statusCode).toBe(200);
+    expect((await call(must(app), { url: "/v1/admin/people", access, door })).statusCode).toBe(403);
+  });
+
+  it("THE DOOR: five tries in 15 minutes, then even the right password waits", { timeout: 60_000 }, async () => {
+    await redis.del(`rl:admin_door:id:${admin.userId}`);
+    for (let n = 1; n <= 5; n++) {
+      expect((await call(must(app), { method: "POST", url: "/v1/admin/door/open", access: admin.access, body: { password: "guess-number-" + String(n) + "-xx" } })).statusCode).toBe(403);
+    }
+    expect((await call(must(app), { method: "POST", url: "/v1/admin/door/open", access: admin.access, body: { password: ADMIN_PASSWORD } })).statusCode).toBe(429);
+    await redis.del(`rl:admin_door:id:${admin.userId}`);
   });
 
   it("lists the people using the app with their plan and what they get; a deleted account is not one", { timeout: 30_000 }, async () => {

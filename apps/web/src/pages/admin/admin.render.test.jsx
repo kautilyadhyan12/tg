@@ -1,19 +1,19 @@
-// The admin page (ROADMAP Stage 2 item 14a-i), drawn: only Kd's account sees it or its menu
-// line; ticked people get the number he picks after a box names them; what happened is said in
-// one line. The server's own refusal of everybody else is `apps/api/test/admin.routes.test.ts`.
+// The admin page (ROADMAP Stage 2 item 14a-i), drawn: its own door (a fresh code, then Kd's
+// password), never a line in a gym's menu; ticked people get the number he picks after a box names
+// them; what happened is said in one line. The server's own refusal of everybody else, and the
+// door's rules, are `apps/api/test/admin.routes.test.ts`.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
 vi.mock('../../api/adminApi', () => ({
-  adminService: { isAdmin: vi.fn(), people: vi.fn(), setLimits: vi.fn() },
+  adminService: { door: vi.fn(), makePassword: vi.fn(), openDoor: vi.fn(), lock: vi.fn(), people: vi.fn(), setLimits: vi.fn() },
+  isDoorShut: (err) => err?.response?.status === 403 && err?.response?.data?.error === 'admin_locked',
 }));
-vi.mock('../../context/AuthContext', () => ({
-  useAuth: () => ({ user: { id: 'kd', displayName: 'Kd', email: 'kd@gmail.com' }, logout: vi.fn() }),
-}));
+const auth = { user: { id: 'kd', displayName: 'Kd', email: 'kd@gmail.com' }, logout: vi.fn(), sendCode: vi.fn(), verifyCode: vi.fn() };
+vi.mock('../../context/AuthContext', () => ({ useAuth: () => auth }));
 
 const { adminService } = await import('../../api/adminApi');
-const { forgetAdminAnswers } = await import('./useIsAdmin');
 const Admin = (await import('./Admin')).default;
 const ConsoleLayout = (await import('../../components/console/ConsoleLayout')).default;
 
@@ -44,9 +44,11 @@ function draw(path = '/admin') {
   );
 }
 
+const OPEN = { passwordSet: true, open: true, openUntil: '2026-11-08T21:40:00.000Z', fresh: true };
+
 beforeEach(() => {
-  forgetAdminAnswers();
-  vi.mocked(adminService.isAdmin).mockResolvedValue(true);
+  auth.user = { id: 'kd', displayName: 'Kd', email: 'kd@gmail.com' };
+  vi.mocked(adminService.door).mockResolvedValue(OPEN);
   vi.mocked(adminService.people).mockResolvedValue({ people: [asha, ben, chen], next: null });
   vi.mocked(adminService.setLimits).mockResolvedValue({ changed: 2, unchanged: 0, notFound: 0 });
 });
@@ -56,11 +58,82 @@ afterEach(() => {
 });
 
 describe('the admin page', () => {
-  it('is not there for anybody else: they are sent to the console, and nobody is read', async () => {
-    vi.mocked(adminService.isAdmin).mockResolvedValue(false);
+  it('is not there for anybody else: it says so, offers Sign out, and nobody is read', async () => {
+    vi.mocked(adminService.door).mockResolvedValue(null);
     draw();
-    expect(await screen.findByText('Console home')).toBeTruthy();
+    expect(await screen.findByText("This page isn't available")).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: 'Sign out' }).length).toBeGreaterThan(0);
     expect(adminService.people).not.toHaveBeenCalled();
+  });
+
+  it('signed out: its own sign-in, the email then the code', async () => {
+    auth.user = null;
+    draw();
+    expect(await screen.findByText('Admin sign-in')).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'kd@gmail.com' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send code' }));
+    await waitFor(() => expect(auth.sendCode).toHaveBeenCalledWith('kd@gmail.com', undefined));
+    fireEvent.change(await screen.findByLabelText('The code we emailed to kd@gmail.com'), { target: { value: '123456' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+    await waitFor(() => expect(auth.verifyCode).toHaveBeenCalledWith('kd@gmail.com', '123456'));
+    expect(adminService.people).not.toHaveBeenCalled();
+  });
+
+  it('signed in a while ago: a new code first, to the same email; then the door is read again', async () => {
+    vi.mocked(adminService.door).mockResolvedValueOnce({ passwordSet: true, open: false, openUntil: null, fresh: false }).mockResolvedValue({ passwordSet: true, open: false, openUntil: null, fresh: true });
+    draw();
+    expect(await screen.findByText('Sign in again')).toBeTruthy();
+    expect(screen.getByLabelText('Email')).toHaveProperty('value', 'kd@gmail.com');
+    expect(screen.getByLabelText('Email')).toHaveProperty('readOnly', true);
+    fireEvent.click(screen.getByRole('button', { name: 'Send code' }));
+    fireEvent.change(await screen.findByLabelText('The code we emailed to kd@gmail.com'), { target: { value: '654321' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+    expect(await screen.findByText('Admin password')).toBeTruthy();
+    expect(adminService.people).not.toHaveBeenCalled();
+  });
+
+  it('the first time: make the password (long enough, typed twice the same), and the page opens', async () => {
+    vi.mocked(adminService.door).mockResolvedValue({ passwordSet: false, open: false, openUntil: null, fresh: true });
+    vi.mocked(adminService.makePassword).mockResolvedValue(OPEN);
+    draw();
+    expect(await screen.findByText('Make your admin password')).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('New password'), { target: { value: 'short' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Make password and open' }));
+    expect(screen.getByRole('alert').textContent).toBe('Your admin password needs at least 12 characters.');
+    fireEvent.change(screen.getByLabelText('New password'), { target: { value: 'a-long-admin-pw-1' } });
+    fireEvent.change(screen.getByLabelText('Type it again'), { target: { value: 'a-long-admin-pw-2' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Make password and open' }));
+    expect(screen.getByRole('alert').textContent).toBe('The two passwords are not the same.');
+    expect(adminService.makePassword).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText('Type it again'), { target: { value: 'a-long-admin-pw-1' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Make password and open' }));
+    expect(await screen.findByRole('table')).toBeTruthy();
+    expect(adminService.makePassword).toHaveBeenCalledWith('a-long-admin-pw-1');
+    expect(screen.getByTestId('open-until').textContent).toMatch(/^Open until /);
+  });
+
+  it('a wrong password says so and opens nothing; the right one opens the page; Lock shuts it', async () => {
+    vi.mocked(adminService.door).mockResolvedValue({ passwordSet: true, open: false, openUntil: null, fresh: true });
+    vi.mocked(adminService.openDoor).mockRejectedValueOnce({ response: { status: 403, data: { error: 'wrong_password', message: 'That password is not right.' } } }).mockResolvedValue(OPEN);
+    draw();
+    fireEvent.change(await screen.findByLabelText('Password'), { target: { value: 'not-the-right-one' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Open' }));
+    expect((await screen.findByRole('alert')).textContent).toBe('That password is not right.');
+    expect(screen.queryByRole('table')).toBeNull();
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'the-right-password' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Open' }));
+    expect(await screen.findByRole('table')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Lock' }));
+    await waitFor(() => expect(adminService.lock).toHaveBeenCalled());
+    expect(await screen.findByText('Admin password')).toBeTruthy();
+    expect(screen.queryByRole('table')).toBeNull();
+  });
+
+  it('when the 12 hours end mid-use, the page goes back to the door', async () => {
+    vi.mocked(adminService.people).mockRejectedValue({ response: { status: 403, data: { error: 'admin_locked', message: 'Open the admin page with your password first.' } } });
+    vi.mocked(adminService.door).mockResolvedValueOnce(OPEN).mockResolvedValue({ passwordSet: true, open: false, openUntil: null, fresh: false });
+    draw();
+    expect(await screen.findByText('Sign in again')).toBeTruthy();
   });
 
   it('lists the people with their plan and what they get', async () => {
@@ -144,8 +217,8 @@ describe('the admin page', () => {
   });
 });
 
-describe("the console's Admin line", () => {
-  const console_ = () =>
+describe("the gym console", () => {
+  it('has no Admin line, and never asks about the admin page', async () => {
     render(
       <MemoryRouter initialEntries={['/console']}>
         <Routes>
@@ -153,19 +226,9 @@ describe("the console's Admin line", () => {
         </Routes>
       </MemoryRouter>,
     );
-
-  it('is there for the admin, opening the admin page', async () => {
-    console_();
-    const links = await screen.findAllByRole('link', { name: 'Admin' });
-    expect(links.length).toBeGreaterThan(0);
-    for (const link of links) expect(link.getAttribute('href')).toBe('/admin');
-  });
-
-  it('is not there for anybody else', async () => {
-    vi.mocked(adminService.isAdmin).mockResolvedValue(false);
-    console_();
-    await waitFor(() => expect(adminService.isAdmin).toHaveBeenCalled());
-    await Promise.resolve();
+    expect(await screen.findByText('Your organisations')).toBeTruthy();
     expect(screen.queryByRole('link', { name: 'Admin' })).toBeNull();
+    expect(screen.queryByText('Admin')).toBeNull();
+    expect(adminService.door).not.toHaveBeenCalled();
   });
 });

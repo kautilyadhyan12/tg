@@ -1,10 +1,9 @@
 import { Link, useParams } from 'react-router-dom';
-import { Building2, ChevronRight, LogOut, ShieldCheck, UserRound } from 'lucide-react';
+import { Building2, ChevronRight, LogOut, UserRound } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { PAGE_ICONS } from '../../components/console/consoleIcons';
 import { useConsoleOrg } from './useConsoleOrg';
 import { useConsoleSignOut } from './consoleSignOut';
-import { useIsAdmin } from '../admin/useIsAdmin';
 import { consoleMenu } from './consoleMenu';
 import { roleLabel, viewerPrivileges } from './consoleView';
 
@@ -28,7 +27,6 @@ export default function More() {
   const { user } = useAuth();
   const { org } = useConsoleOrg(orgSlug);
   const { signingOut, signOut } = useConsoleSignOut();
-  const isAdmin = useIsAdmin() === true;
 
   const menu = consoleMenu(orgSlug, viewerPrivileges(org), org?.orgType);
   const name = user?.displayName || user?.email || '';
@@ -44,7 +42,6 @@ export default function More() {
         ))}
         <Row to="/console" icon={Building2} label="Your organisations" />
         <Row to={`/console/${orgSlug}/account`} icon={UserRound} label="Your account" />
-        {isAdmin ? <Row to="/admin" icon={ShieldCheck} label="Admin" /> : null}
       </nav>
 
       <div

@@ -14,3 +14,15 @@ CREATE TABLE "usage_limits" (
 );
 --> statement-breakpoint
 ALTER TABLE "usage_limits" ADD CONSTRAINT "usage_limits_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+--> statement-breakpoint
+-- The admin door's own password (Kd, 2026-11-08: a fresh sign-in code, then a password he makes,
+-- and in for at most 12 hours). Only its hash is kept, for the one admin account.
+CREATE TABLE "admin_passwords" (
+	"user_id" uuid PRIMARY KEY NOT NULL,
+	"password_hash" text NOT NULL,
+	"hash_algo" text NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "admin_passwords_hash_algo_check" CHECK ("hash_algo" IN ('bcrypt','argon2id'))
+);
+--> statement-breakpoint
+ALTER TABLE "admin_passwords" ADD CONSTRAINT "admin_passwords_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;

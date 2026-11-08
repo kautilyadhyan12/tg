@@ -99,3 +99,35 @@ export async function setLimits(
     return { changed, unchanged: people.length - changed.length, notFound: ids.length - people.length };
   });
 }
+
+/** The admin door's password hash, or null before one is made. */
+export async function getDoorPassword(sql: Sql, userId: string): Promise<{ hash: string; algo: "bcrypt" | "argon2id" } | null> {
+  const rows = await sql<{ password_hash: string; hash_algo: "bcrypt" | "argon2id" }[]>`
+    SELECT password_hash, hash_algo FROM admin_passwords WHERE user_id = ${userId}`;
+  const row = rows[0];
+  return row === undefined ? null : { hash: row.password_hash, algo: row.hash_algo };
+}
+
+/** Makes the first password; false when one is made already (two first presses at once: one wins). */
+export async function createDoorPassword(sql: Sql, userId: string, hash: string, algo: "bcrypt" | "argon2id"): Promise<boolean> {
+  return await sql.begin(async (tx) => {
+    const rows = await tx`
+      INSERT INTO admin_passwords (user_id, password_hash, hash_algo) VALUES (${userId}, ${hash}, ${algo})
+      ON CONFLICT (user_id) DO NOTHING RETURNING user_id`;
+    if (rows.length === 0) return false;
+    await tx`INSERT INTO audit_log (actor_user_id, action, target_type, target_id) VALUES (${userId}, 'admin.door_password_made', 'user', ${userId})`;
+    return true;
+  });
+}
+
+/** When this sign-in session began: its first refresh token. null for a session that is not live. */
+export async function sessionBegan(sql: Sql, userId: string, familyId: string): Promise<Date | null> {
+  const rows = await sql<{ began: Date | null }[]>`
+    SELECT min(created_at) AS began FROM refresh_tokens WHERE user_id = ${userId} AND family_id = ${familyId}`;
+  return rows[0]?.began ?? null;
+}
+
+/** The door opened, or a wrong password at it: written down with when. */
+export async function auditDoor(sql: Sql, userId: string, action: "admin.door_opened" | "admin.door_wrong_password"): Promise<void> {
+  await sql`INSERT INTO audit_log (actor_user_id, action, target_type, target_id) VALUES (${userId}, ${action}, 'user', ${userId})`;
+}

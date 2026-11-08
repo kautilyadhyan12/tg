@@ -244,7 +244,7 @@ describe('the console routes and sign-out honour the amendment', () => {
     // 2026-08-19 amendment one route at a time as routes are added or edited.
     const src = read('../App.jsx');
     const consoleRoutes = src.match(
-      /path="\/(?:console[^"]*|connect\/square|admin)"[\s\S]{0,120}?<ProtectedRoute([^>]*)>/g,
+      /path="\/(?:console[^"]*|connect\/square)"[\s\S]{0,120}?<ProtectedRoute([^>]*)>/g,
     ) ?? [];
     // The COUNT is what keeps this honest: without it a regex that silently
     // stopped matching would pass over an empty list. It moved 4 → 5 when the
@@ -257,11 +257,10 @@ describe('the console routes and sign-out honour the amendment', () => {
     // from Square (18d-i), outside /console because Square's return address is one address
     // for every gym, and a console page all the same; 22 → 23 with Failed payments (18d-iii-ii-b);
     // 23 → 24 with Payments to match (18d-iii-b-ii-a), 24 → 23 when it went with Square Point of Sale (18d-iii-b-v);
-    // 23 → 24 with Your account (19b-ii); 24 → 26 with Plans and one plan of it (24a-i); 26 → 27 with
-    // Kd's admin page (14a-i), a business page outside /console, never the member app's;
+    // 23 → 24 with Your account (19b-ii); 24 → 26 with Plans and one plan of it (24a-i);
     // the loop below is the guarantee, this number is only the proof that the
     // loop saw everything.
-    expect(consoleRoutes.length).toBe(27);
+    expect(consoleRoutes.length).toBe(26);
     for (const route of consoleRoutes) {
       expect(route).toContain('requireOnboarding={false}');
     }
@@ -274,9 +273,9 @@ describe('the console routes and sign-out honour the amendment', () => {
     // opt-out on any other route lets a person train without it.
     const src = read('../App.jsx').replace(/\{\/\*[\s\S]*?\*\/\}/g, '');
     const consoleRoutes = src.match(
-      /path="\/(?:console[^"]*|connect\/square|admin)"[\s\S]{0,120}?<ProtectedRoute([^>]*)>/g,
+      /path="\/(?:console[^"]*|connect\/square)"[\s\S]{0,120}?<ProtectedRoute([^>]*)>/g,
     ) ?? [];
-    expect(consoleRoutes.length).toBe(27);
+    expect(consoleRoutes.length).toBe(26);
     for (const route of consoleRoutes) {
       expect(route).toContain('requireSignUpNote={false}');
     }
@@ -289,9 +288,9 @@ describe('the console routes and sign-out honour the amendment', () => {
     // without being asked. The invitations page shows them itself.
     const src = read('../App.jsx').replace(/\{\/\*[\s\S]*?\*\/\}/g, '');
     const consoleRoutes = src.match(
-      /path="\/(?:console[^"]*|connect\/square|admin)"[\s\S]{0,120}?<ProtectedRoute([^>]*)>/g,
+      /path="\/(?:console[^"]*|connect\/square)"[\s\S]{0,120}?<ProtectedRoute([^>]*)>/g,
     ) ?? [];
-    expect(consoleRoutes.length).toBe(27);
+    expect(consoleRoutes.length).toBe(26);
     for (const route of consoleRoutes) {
       expect(route).toContain('requireInvitations={false}');
     }

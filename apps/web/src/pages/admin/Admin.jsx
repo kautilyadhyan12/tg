@@ -1,18 +1,20 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, Navigate, useLocation } from 'react-router-dom';
-import { ArrowLeft, Check, Search } from 'lucide-react';
-import { adminService } from '../../api/adminApi';
+import { useLocation } from 'react-router-dom';
+import { Check, Lock, LogOut, Search } from 'lucide-react';
+import { adminService, isDoorShut } from '../../api/adminApi';
 import { errorText } from '../../api/orgsApi';
+import { useAuth } from '../../context/AuthContext';
 import { consoleLook } from '../console/consoleMenu';
-import { useIsAdmin } from './useIsAdmin';
+import { CodeStep, PasswordStep } from './AdminDoor';
 import { FEATURES, allowanceWords, confirmWords, dateTimeWords, dateWords, doneWords, planWords } from './adminView';
 import '../../components/console/console.css';
 
 // THE ADMIN PAGE (ROADMAP Stage 2 item 14a-i; Kd, 2026-11-07 and 2026-11-08): Kd's own, on
 // the website only. The people using the app, newest first, and their meal scans and route
 // plans a day, which he sets for the people he ticks. A plain page in the console's look (Kd:
-// "simple style is enough"). Anybody else is sent to the console: the server answers them
-// "not found" whatever this page does.
+// "simple style is enough"). Its own door, never a gym's menu: a fresh sign-in code and his own
+// password open it for 12 hours (AdminDoor.jsx). Anybody else reads that the page is not there:
+// the server answers them "not found" whatever this page does.
 
 const NUMBERS = Array.from({ length: 101 }, (_x, n) => n);
 
@@ -24,12 +26,11 @@ function Tick({ on, label, onToggle }) {
   );
 }
 
-/** The list, asked only once the server has said this account is the admin. */
-function usePeople(search, ready) {
+/** The list, asked once the door is open; a refusal because the door shut sends it back to the door. */
+function usePeople(search, onShut) {
   const [state, setState] = useState({ loading: true, error: null, people: [], next: null, more: false });
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
-    if (!ready) return undefined;
     let cancelled = false;
     setState((s) => ({ ...s, loading: true, error: null }));
     adminService
@@ -38,12 +39,14 @@ function usePeople(search, ready) {
         if (!cancelled) setState({ loading: false, error: null, people: page.people, next: page.next, more: false });
       })
       .catch((err) => {
-        if (!cancelled) setState({ loading: false, error: errorText(err, "We couldn't load the people."), people: [], next: null, more: false });
+        if (cancelled) return;
+        if (isDoorShut(err)) onShut();
+        else setState({ loading: false, error: errorText(err, "We couldn't load the people."), people: [], next: null, more: false });
       });
     return () => {
       cancelled = true;
     };
-  }, [search, attempt, ready]);
+  }, [search, attempt, onShut]);
   const showMore = async () => {
     if (state.next === null) return;
     setState((s) => ({ ...s, more: true }));
@@ -51,18 +54,17 @@ function usePeople(search, ready) {
       const page = await adminService.people({ search, after: state.next });
       setState((s) => ({ ...s, people: [...s.people, ...page.people], next: page.next, more: false }));
     } catch (err) {
-      setState((s) => ({ ...s, more: false, error: errorText(err, "We couldn't load more people.") }));
+      if (isDoorShut(err)) onShut();
+      else setState((s) => ({ ...s, more: false, error: errorText(err, "We couldn't load more people.") }));
     }
   };
   return { ...state, reload: () => setAttempt((n) => n + 1), showMore };
 }
 
-export default function Admin() {
-  const isAdmin = useIsAdmin();
-  const { search: address } = useLocation();
+function People({ onShut }) {
   const [typed, setTyped] = useState('');
   const [search, setSearch] = useState('');
-  const list = usePeople(search, isAdmin === true);
+  const list = usePeople(search, onShut);
   const [ticked, setTicked] = useState(() => new Set());
   const [feature, setFeature] = useState('meal_scan');
   const [perDay, setPerDay] = useState(15);
@@ -102,29 +104,14 @@ export default function Admin() {
       setTicked(new Set());
       list.reload();
     } catch (err) {
+      if (isDoorShut(err)) onShut();
       setBox({ kind: 'error', text: errorText(err, "That didn't save. Nothing was changed; please try again.") });
     } finally {
       setSaving(false);
     }
   };
 
-  if (isAdmin === false) return <Navigate to="/console" replace />;
-
   return (
-    <div className={`c-console t-${consoleLook(address, import.meta.env.DEV)}`}>
-      <main className="c-page" style={{ maxWidth: 1240, margin: '0 auto' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-          <Link to="/console" className="c-btn c-btn-s c-btn-sm">
-            <ArrowLeft size={16} aria-hidden="true" />
-            Console
-          </Link>
-          <h1 className="c-h1" style={{ margin: 0 }}>
-            Admin
-          </h1>
-        </div>
-        {isAdmin === null ? (
-          <p className="c-hint">Loading…</p>
-        ) : (
           <>
             <div>
               <h2 className="c-s16 c-w6" style={{ margin: 0 }}>
@@ -264,7 +251,98 @@ export default function Admin() {
               </button>
             ) : null}
           </>
-        )}
+  );
+}
+
+const timeWords = new Intl.DateTimeFormat('en-GB', { hour: 'numeric', minute: '2-digit', hour12: true });
+
+export default function Admin() {
+  const { user, logout } = useAuth();
+  const { search: address } = useLocation();
+  const [attempt, setAttempt] = useState(0);
+  const userId = user?.id ?? null;
+  // The door's answer for this account and this asking: null while asking, 'none' when this
+  // account is not the admin, else the door's state. An answer to an older asking is not shown.
+  const key = `${String(userId)}:${String(attempt)}`;
+  const [answer, setAnswer] = useState({ key: null, door: null, problem: '' });
+  useEffect(() => {
+    if (userId === null) return undefined;
+    let cancelled = false;
+    adminService
+      .door()
+      .then((state) => {
+        if (!cancelled) setAnswer({ key, door: state ?? 'none', problem: '' });
+      })
+      .catch((err) => {
+        if (!cancelled) setAnswer({ key, door: null, problem: errorText(err, "We couldn't reach the server. Please try again.") });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [userId, key]);
+  const door = answer.key === key ? answer.door : null;
+  const problem = answer.key === key ? answer.problem : '';
+  const setDoor = (state) => setAnswer({ key, door: state, problem: '' });
+  const readAgain = useCallback(() => setAttempt((n) => n + 1), []);
+  const lock = async () => {
+    try {
+      await adminService.lock();
+    } finally {
+      readAgain();
+    }
+  };
+
+  let inside;
+  if (userId === null) {
+    inside = <CodeStep heading="Admin sign-in" line="We'll email you a sign-in code." />;
+  } else if (problem) {
+    inside = (
+      <div className="c-card" style={{ padding: 16, display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', maxWidth: 420 }}>
+        <span className="c-s15">{problem}</span>
+        <button type="button" className="c-btn c-btn-s" onClick={readAgain}>Try again</button>
+      </div>
+    );
+  } else if (door === null) {
+    inside = <p className="c-hint">Loading…</p>;
+  } else if (door === 'none') {
+    inside = (
+      <section className="c-card" style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 12, maxWidth: 420 }}>
+        <h2 className="c-s16 c-w6" style={{ margin: 0 }}>This page isn't available</h2>
+        <p className="c-s14 c-t2" style={{ margin: 0 }}>You're signed in as {user.email ?? user.displayName}.</p>
+        <button type="button" className="c-btn c-btn-s" onClick={() => void logout()}>Sign out</button>
+      </section>
+    );
+  } else if (!door.open && !door.fresh) {
+    inside = <CodeStep key={`code-${String(attempt)}`} heading="Sign in again" line="For your safety the admin page asks for a new sign-in code each time." email={user.email ?? ''} onSignedIn={readAgain} />;
+  } else if (!door.open) {
+    inside = <PasswordStep make={!door.passwordSet} onOpened={(state) => setDoor(state)} onStale={readAgain} />;
+  } else {
+    inside = <People onShut={readAgain} />;
+  }
+
+  return (
+    <div className={`c-console t-${consoleLook(address, import.meta.env.DEV)}`}>
+      <main className="c-page" style={{ maxWidth: 1240, margin: '0 auto' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <h1 className="c-h1" style={{ margin: 0 }}>Admin</h1>
+          {door !== null && door !== 'none' && door.open && door.openUntil ? (
+            <span className="c-s14 c-t2" data-testid="open-until">Open until {timeWords.format(new Date(door.openUntil))}</span>
+          ) : null}
+          <span style={{ flexGrow: 1 }} />
+          {door !== null && door !== 'none' && door.open ? (
+            <button type="button" className="c-btn c-btn-s c-btn-sm" onClick={() => void lock()}>
+              <Lock size={16} aria-hidden="true" />
+              Lock
+            </button>
+          ) : null}
+          {userId !== null ? (
+            <button type="button" className="c-btn c-btn-s c-btn-sm" onClick={() => void logout()}>
+              <LogOut size={16} aria-hidden="true" />
+              Sign out
+            </button>
+          ) : null}
+        </div>
+        {inside}
       </main>
     </div>
   );

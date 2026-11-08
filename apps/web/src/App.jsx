@@ -415,13 +415,9 @@ export default function App() {
               </ProtectedRoute>
             } />
 
-            {/* KD'S ADMIN PAGE (14a-i): his account only. It is not a gym's page, so it has no
-                console menu of its own; the gates are the console's. */}
-            <Route path="/admin" element={
-              <ProtectedRoute requireOnboarding={false} requireSignUpNote={false} requireInvitations={false}>
-                <Admin />
-              </ProtectedRoute>
-            } />
+            {/* KD'S ADMIN PAGE (14a-i): its own door, never a gym's. It signs in by itself (a fresh
+                code, then his password), so no gym or member gate stands in front of it. */}
+            <Route path="/admin" element={<Admin />} />
 
             {/* ── Fallback ──────────────────────────────────────────────── */}
             <Route path="/"  element={<Navigate to="/login" replace />} />
