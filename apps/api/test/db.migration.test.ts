@@ -650,6 +650,7 @@ d("0001_init on a real database", () => {
     expect([...byName.keys()].sort()).toEqual(["sign_in_codes_attempts_check", "sign_in_codes_purpose_check", "sign_in_codes_user_check"]);
     expect(byName.get("sign_in_codes_purpose_check")).toContain("'sign_in'");
     expect(byName.get("sign_in_codes_purpose_check")).toContain("'delete_account'");
+    expect(byName.get("sign_in_codes_purpose_check")).toContain("'delete_account_web'");
     expect(byName.get("sign_in_codes_attempts_check")).toContain("attempts >= 0");
 
     const refused = (p: Promise<unknown>) => expect(p).rejects.toMatchObject({ code: "23514" });
@@ -659,7 +660,13 @@ d("0001_init on a real database", () => {
     await refused(sql`
       INSERT INTO sign_in_codes (email, purpose, code_hash, expires_at, attempts)
       VALUES ('zz-0023@example.com', 'sign_in', repeat('0', 64), now(), -1)`);
-    // 0206: a change-email code is an account's, and no other code is.
+    // 0206: a change-email code is an account's; 0228: so is the app's delete code, and the website's is not.
+    await refused(sql`
+      INSERT INTO sign_in_codes (email, purpose, code_hash, expires_at)
+      VALUES ('zz-0023@example.com', 'delete_account', repeat('0', 64), now())`);
+    await refused(sql`
+      INSERT INTO sign_in_codes (email, purpose, code_hash, expires_at, user_id)
+      VALUES ('zz-0023@example.com', 'delete_account_web', repeat('0', 64), now(), (SELECT id FROM users LIMIT 1))`);
     await refused(sql`
       INSERT INTO sign_in_codes (email, purpose, code_hash, expires_at)
       VALUES ('zz-0023@example.com', 'change_email', repeat('0', 64), now())`);
@@ -672,7 +679,7 @@ d("0001_init on a real database", () => {
       await sql.begin(async (tx) => {
         await tx`
           INSERT INTO sign_in_codes (email, purpose, code_hash, expires_at)
-          VALUES ('zz-0023@example.com', 'delete_account', repeat('0', 64), now())`;
+          VALUES ('zz-0023@example.com', 'delete_account_web', repeat('0', 64), now())`;
         accepted = true;
         throw new Error("ROLLBACK");
       });
@@ -681,7 +688,7 @@ d("0001_init on a real database", () => {
     }
     expect(accepted).toBe(true);
     // The address has no FK to users — by design (an address may have no account yet). The one FK is
-    // 0206's `user_id`, which only a change-email code holds.
+    // 0206's `user_id`, which only a change-email code and the app's delete code hold.
     const fks = await sql<{ def: string }[]>`
       SELECT pg_get_constraintdef(oid) AS def FROM pg_constraint WHERE conrelid = 'sign_in_codes'::regclass AND contype = 'f'`;
     expect(fks.map((fk) => fk.def)).toEqual(["FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE"]);
