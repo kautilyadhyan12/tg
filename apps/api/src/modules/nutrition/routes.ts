@@ -6,7 +6,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { Sql } from "postgres";
 import type { z } from "zod";
-import { MEAL_PHOTO_MAX_BYTES, barcodeParamSchema, cleanPhoto, dailyAmountsFor, labelFoodParamSchema, labelFoodSaveSchema } from "@app/shared";
+import { MEAL_PHOTO_MAX_BYTES, MY_GYM_MEAL_PLANS_PATH, barcodeParamSchema, cleanPhoto, dailyAmountsFor, labelFoodParamSchema, labelFoodSaveSchema } from "@app/shared";
 import type { AppConfig } from "../../config.js";
 import { REQUEST_TIMEOUT_MS } from "../../requestTimeout.js";
 import type { RedisLike } from "../../redis.js";
@@ -373,6 +373,20 @@ export function registerNutritionRoutes(
    *  model call and no quota; the app-wide limit bounds it, as for the meal ideas. */
   app.get("/v1/nutrition/diet-plan", { preHandler: [app.authenticate] }, async (req, reply) => {
     return reply.send(await dietPlan.getDietPlan(readDeps, authedUserId(req)));
+  });
+
+  // The gyms' plans for the person (31g), read when Food or the Dashboard opens. Per person only: a
+  // gym's members share its wi-fi.
+  const gymPlansLimit = createDualRateLimit({
+    name: "nutrition_gym_meal_plans",
+    max: 600,
+    ipMax: null,
+    windowMs: 60 * 60 * 1000,
+    identifier: (req) => req.authUser?.id ?? null,
+    redis: deps.redis,
+  });
+  app.get(MY_GYM_MEAL_PLANS_PATH, { preHandler: [app.authenticate, gymPlansLimit] }, async (req, reply) => {
+    return reply.send(await dietPlan.getMyGymMealPlans(readDeps, authedUserId(req)));
   });
 
   // Making a week draws ideas for every meal of seven days: a person may ask a few times a minute, never in a loop.

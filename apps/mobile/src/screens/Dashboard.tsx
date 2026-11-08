@@ -7,6 +7,7 @@ import {
   mealPageSchema,
   myOrgsResponseSchema,
   progressOverviewSchema,
+  MY_GYM_MEAL_PLANS_PATH,
   progressTrendSchema,
   runPageSchema,
   weeklyChallengesSchema,
@@ -83,6 +84,8 @@ export const DASHBOARD_READS = {
   goals: GOALS_READ,
   ideas: IDEAS_READ,
   plan: "/v1/nutrition/diet-plan",
+  /** The Recommended box's gyms and the plans they gave (31g). */
+  gymPlans: MY_GYM_MEAL_PLANS_PATH,
 } as const;
 /** Your Rank's: which gym. The Gym tab reads the same. */
 const PLACES_READ = "/v1/orgs/mine";
@@ -220,8 +223,8 @@ export function DashboardScreen() {
         onMore={() => {
           go.navigate("Food", { today: Date.now() });
         }}
-        onPlan={first(() => {
-          go.navigate("Food", { today: Date.now(), week: Date.now() });
+        onPlan={first((gymId: string | null) => {
+          go.navigate("Food", gymId === null ? { today: Date.now(), week: Date.now() } : { today: Date.now(), week: Date.now(), weekGym: gymId });
         })}
         onLog={first(() => {
           go.navigate("Food", { today: Date.now(), next: Date.now() });

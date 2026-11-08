@@ -196,3 +196,15 @@ export async function isLiveMember(sql: SqlOrTx, gymId: string, userId: string):
     SELECT 1 AS one FROM gym_members WHERE gym_id = ${gymId} AND user_id = ${userId} AND removed_at IS NULL LIMIT 1`;
   return rows.length > 0;
 }
+
+export interface LiveGymRow { gymId: string; name: string; orgType: string; contactPhone: string | null; contactEmail: string | null }
+
+/** Every gym this person is a live member of, by name, with how members reach it (Stage 5's 31g):
+ *  the same predicate as `isLiveMember`, keyed on the caller's own id. */
+export async function liveGymsOf(sql: SqlOrTx, userId: string): Promise<LiveGymRow[]> {
+  return await sql<LiveGymRow[]>`
+    SELECT g.id AS "gymId", g.name, g.org_type AS "orgType", g.contact_phone AS "contactPhone", g.contact_email AS "contactEmail"
+    FROM gym_members m JOIN gyms g ON g.id = m.gym_id
+    WHERE m.user_id = ${userId} AND m.removed_at IS NULL
+    ORDER BY g.name, g.id`;
+}

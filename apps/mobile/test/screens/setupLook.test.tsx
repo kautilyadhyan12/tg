@@ -62,10 +62,11 @@ const ZERO = { kcal: 0, proteinG: 0, carbsG: 0, fatG: 0 };
 const WEEK = {
   days: [1, 2, 3, 4, 5, 6, 7].map((day) => {
     const meals = day === planDayOf(new Date()) ? [OATMEAL] : [];
-    return { day, meals, planned: ZERO, target: { kcal: 2300, proteinG: 120, carbsG: 280, fatG: 75 }, off: ZERO, version: versionOf(day, meals) };
+    return { day, meals, planned: ZERO, target: { kcal: 2300, proteinG: 120, carbsG: 280, fatG: 75 }, off: ZERO, version: versionOf(day, meals), under: null };
   }),
   make: { status: "ok" },
   choice: "mine",
+  choiceGymId: null,
   caution: FOOD_ALLERGY_CAUTION,
   labelCaution: null,
 };
