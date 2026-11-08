@@ -9,8 +9,11 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { Sql } from "postgres";
 import { z } from "zod";
 import {
+  DELETE_PAGE_WORDS,
   EMAIL_CHANGE_WORDS,
   SIGN_IN_ROBOT_WORDS,
+  deleteByEmailRequestSchema,
+  sendCodeRequestSchema,
   emailChangeLinkRequestSchema,
   type EmailChangeLinkResponse,
   type EmailChangeUndoResponse,
@@ -21,6 +24,9 @@ import {
   type DeleteAccountResponse,
 } from "@app/shared";
 import { createDualRateLimit, giveBackRateLimit, type DualRateLimitOptions } from "../auth/rateLimit.js";
+import { createCodeDoor } from "../auth/codeDoor.js";
+import { RobotCheckNeeded } from "../auth/codes.js";
+import { WrongGuessError } from "../auth/errors.js";
 import { readEmailChangeLink, sessionStillLive, undoEmailChangeLink } from "../auth/service.js";
 import { maskedAddress } from "../../email/templates.js";
 import type { AppConfig } from "../../config.js";
@@ -352,6 +358,46 @@ export function registerUserRoutes(
         : `Account scheduled for deletion. It will be permanently removed after ${String(DPDP_RETENTION_DAYS)} days.`,
       emailSent,
     } satisfies DeleteAccountResponse);
+  });
+
+  // THE WEBSITE'S DELETE YOUR ACCOUNT PAGE (21b-ii), for somebody without the app: no sign-in, the code
+  // emailed to the address typed is the proof. Behind the sign-in page's own walls (codeDoor.ts): the
+  // robot check, the address's hour, the day's ceiling and the wrong guesses, and the database's own day
+  // cap and resend gap for the address. Asking answers the same for every address; only somebody who
+  // proved the code learns whether it has an account.
+  const door = createCodeDoor({ config: deps.config, redis: deps.redis, robotCheck: deps.robotCheck });
+  app.post("/v1/account-deletion/code", { preHandler: door.beforeSend }, async (req, reply) => {
+    const input = parseBody(sendCodeRequestSchema, req, reply);
+    if (input === null) return;
+    let rules: Awaited<ReturnType<typeof service.requestDeleteCodeByEmail>>;
+    try {
+      rules = await service.requestDeleteCodeByEmail(usersDeps, input.email, door.passedRobot(req) ? "passed" : "not_passed");
+    } catch (err) {
+      if (err instanceof RobotCheckNeeded) return door.askForRobot(req, reply);
+      throw err;
+    }
+    await door.countSent();
+    return reply.status(200).header("cache-control", "no-store").send({ message: DELETE_PAGE_WORDS.sent(input.email), ...rules });
+  });
+
+  app.post("/v1/account-deletion", { preHandler: [door.guessRoom] }, async (req, reply) => {
+    const input = parseBody(deleteByEmailRequestSchema, req, reply);
+    if (input === null) return;
+    let deleted: Awaited<ReturnType<typeof service.deleteAccountByEmail>>;
+    try {
+      deleted = await service.deleteAccountByEmail(usersDeps, input.email, input.code);
+    } catch (err) {
+      if (err instanceof WrongGuessError) await door.countWrongGuess(req);
+      throw err;
+    }
+    tellGyms(deps.news, deleted.leftGymIds, { what: "people" });
+    return reply
+      .status(200)
+      .header("cache-control", "no-store")
+      .send({
+        message: deleted.emailSent ? DELETE_PAGE_WORDS.doneUndo : DELETE_PAGE_WORDS.doneNoEmail,
+        emailSent: deleted.emailSent,
+      } satisfies DeleteAccountResponse);
   });
 
   // Change email (Stage 5 19c). Each new address keeps the code's own day cap and resend gap; a

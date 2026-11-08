@@ -874,7 +874,7 @@ export async function consumeOneTimeToken(
 // WHERE, so a code asked for by one address can never be found through another
 // (R3.2 in the shape this table has — the address is the tenant).
 
-export type CodePurpose = "sign_in" | "delete_account" | "change_email";
+export type CodePurpose = "sign_in" | "delete_account" | "delete_account_web" | "change_email";
 
 export interface SignInCodeRow {
   id: string;

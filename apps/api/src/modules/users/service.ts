@@ -42,7 +42,8 @@ import {
   onboardingResponseSchema,
   UNANSWERED_HEALTH_SCREENING,
 } from "./schemas.js";
-import { genderSchema, ownedGymLine, type Gender } from "@app/shared";
+import { DELETE_PAGE_WORDS, genderSchema, ownedGymLine, type Gender } from "@app/shared";
+import type { RobotAnswer } from "../auth/codes.js";
 import type {
   ConsentListResponse,
   ConsentRecord,
@@ -630,7 +631,10 @@ async function refuseOwner(deps: UsersDeps, userId: string): Promise<void> {
 /** Deleting an account is confirmed with a code emailed to the account's own
  *  address (there is no password to ask for — Kd 2026-09-07). The address
  *  comes from the signed-in user's own row, never from the request, so a code
- *  can only ever be sent to, and proved for, the account that is deleting. */
+ *  can only ever be sent to, and proved for, the account that is deleting.
+ *  The code is bound to the account, so it is counted apart from the codes the
+ *  website's page sends to the same address: a stranger asking there can never
+ *  use up the app's three a day. */
 export async function requestDeleteCode(
   deps: UsersDeps,
   userId: string,
@@ -643,7 +647,7 @@ export async function requestDeleteCode(
   }
   return await requestEmailCode(
     { sql: deps.sql, config: deps.config, log: deps.log },
-    { email: row.email, purpose: "delete_account" },
+    { email: row.email, purpose: "delete_account", boundTo: userId },
     (to, code) => deps.emailSender.sendAccountDeleteCodeEmail(to, code),
   );
 }
@@ -666,8 +670,48 @@ export async function deleteAccount(
   }
   await redeemEmailCode(
     { sql: deps.sql, config: deps.config, log: deps.log },
-    { email: row.email, purpose: "delete_account", code },
+    { email: row.email, purpose: "delete_account", code, boundTo: userId },
   );
+  return await deleteProvedAccount(deps, userId, row.email);
+}
+
+/** The website's Delete your account page (21b-ii), for somebody without the app: a code to the
+ *  address typed. Sent the same way whether or not the address has an account, under the sign-in
+ *  code's own day cap and resend gap, so asking never says which addresses have one. */
+export async function requestDeleteCodeByEmail(
+  deps: UsersDeps,
+  email: string,
+  robot: RobotAnswer,
+): Promise<{ resendAfterSeconds: number; expiresInSeconds: number }> {
+  return await requestEmailCode(
+    { sql: deps.sql, config: deps.config, log: deps.log },
+    { email, purpose: "delete_account_web", robot },
+    (to, code) => deps.emailSender.sendAccountDeleteCodeEmail(to, code),
+  );
+}
+
+/** The page's Delete: the code is proved FIRST, so only somebody who holds the address learns
+ *  anything about it (that it has no account, is already being deleted, or owns a gym). */
+export async function deleteAccountByEmail(
+  deps: UsersDeps,
+  email: string,
+  code: string,
+): Promise<{ emailSent: boolean; leftGymIds: string[] }> {
+  await redeemEmailCode({ sql: deps.sql, config: deps.config, log: deps.log }, { email, purpose: "delete_account_web", code });
+  const account = await repo.findAccountByEmail(deps.sql, email);
+  if (account === null) throw new UsersError(404, "no_account", DELETE_PAGE_WORDS.noAccount);
+  if (account.status !== "active") throw new UsersError(409, "already_deleting", DELETE_PAGE_WORDS.alreadyDeleting);
+  await refuseOwner(deps, account.id);
+  return await deleteProvedAccount(deps, account.id, email);
+}
+
+/** Day 0, once the code is proved: the account is deleted, its sessions ended, the undo emailed. */
+async function deleteProvedAccount(
+  deps: UsersDeps,
+  userId: string,
+  email: string,
+): Promise<{ emailSent: boolean; leftGymIds: string[] }> {
+  const row = { email };
   const invites = inviteSettings(deps.config);
   // Nobody is there to ask, so the sessions booked with a trainer who deletes their
   // account end without a box, by the clock every other removal reads.

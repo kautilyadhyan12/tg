@@ -15,6 +15,7 @@ export const LEGAL_PATHS = {
   privacy: "/privacy",
   terms: "/terms",
   washington: "/washington-health-data",
+  deleteAccount: "/delete-account",
 } as const;
 
 /** The day the words below last changed, `YYYY-MM-DD`. */
@@ -529,6 +530,8 @@ export function privacyPolicy(facts: LegalFacts = LEGAL_FACTS): LegalDocument {
           h3("10.1. Retention During Account Activity"),
           p("KWAZO retains personal information for as long as the relevant user account remains active, subject to the specific retention arrangements described in this Policy."),
           h3("10.2. Account Deletion Procedure"),
+          p("A user may request account deletion in the Application, under Settings, or on the KWAZO website without the Application, by confirming a code sent to the account's email address."),
+          { kind: "links", items: [{ label: "Account Deletion", to: LEGAL_PATHS.deleteAccount }] },
           p("When a user requests account deletion:"),
           list(
             "The user is signed out of the Application immediately.",

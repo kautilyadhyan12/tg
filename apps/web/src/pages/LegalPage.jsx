@@ -25,6 +25,7 @@ const OTHERS = [
   { key: 'privacy', label: 'Privacy Policy' },
   { key: 'terms', label: 'Terms of Use' },
   { key: 'washington', label: 'Washington Consumer Health Data Privacy Policy' },
+  { key: 'deleteAccount', label: 'Account Deletion' },
 ];
 
 /** A line of words, with the support address as a link where it appears. */
@@ -44,7 +45,7 @@ function Words({ text }) {
   ));
 }
 
-function Block({ block }) {
+export function LegalBlock({ block }) {
   if (block.kind === 'h3') {
     return (
       <h3 className="text-[17px] font-semibold leading-snug mt-2" style={{ color: INK }}>
@@ -161,7 +162,7 @@ export default function LegalPage({ which }) {
           <section key={section.id} id={section.id} className="min-w-0 flex flex-col gap-3 scroll-mt-6">
             <h2 className="text-[20px] font-bold leading-snug" style={{ color: INK }}>{section.heading}</h2>
             {section.blocks.map((block, i) => (
-              <Block key={i} block={block} />
+              <LegalBlock key={i} block={block} />
             ))}
           </section>
         ))}

@@ -106,6 +106,12 @@ export async function getProfile(sql: Sql, userId: string): Promise<ProfileRow |
   return await selectProfile(sql, userId);
 }
 
+/** The account that uses this address (citext: any case), active or being deleted. */
+export async function findAccountByEmail(sql: Sql, email: string): Promise<{ id: string; status: string } | null> {
+  const rows = await sql<{ id: string; status: string }[]>`SELECT id, status FROM users WHERE email = ${email}`;
+  return rows[0] ?? null;
+}
+
 /** Applies a profile PATCH. The users row is locked first — active-only, and
  *  a concurrent deletion waits — then the columns, then the weight as a row
  *  of the history (`recordTypedWeight`). NO KEY UPDATE for the reason

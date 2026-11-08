@@ -12,8 +12,9 @@
 //   · asking for a code never says whether the address has an account, and
 //     never creates one — the account is created when the code is PROVED
 //
-// The same mechanism serves three purposes: the sign-in door, the code
-// Settings asks for before deleting an account, and the code sent to a NEW
+// The same mechanism serves four purposes: the sign-in door, the code
+// Settings asks for before deleting an account (bound to the account), the one the website's Delete
+// your account page sends to the address typed, and the code sent to a NEW
 // address before the account moves to it. They are counted separately
 // (purpose is in every key), so asking to delete never spends a sign-in.
 // A code may be bound to an account (`boundTo`, change email's): it is kept,
