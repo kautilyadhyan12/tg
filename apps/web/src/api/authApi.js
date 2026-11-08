@@ -28,7 +28,8 @@ function isAuthEndpoint(url) {
 // a member's invite link (`/invite/…`, 20e-ii-a), opened by a friend who has no account,
 // the front desk (`/check-in`), which is a device, not a person, and the page an emailed link to
 // sign a membership agreement opens (`/sign-agreement`, 18u-ii-b), for a member with no account, and the
-// page the note to an old email address opens to undo the change (`/undo-email-change`, item 19's passes).
+// page the note to an old email address opens to undo the change (`/undo-email-change`, item 19's passes),
+// and the admin page (`/admin`, 14a-i), which has its own sign-in.
 function redirectToLogin() {
   if (typeof window === 'undefined') return; // SSR / node tests: no-op
   const p = window.location.pathname;
@@ -37,7 +38,8 @@ function redirectToLogin() {
     !p.startsWith('/verify-email') && !p.startsWith('/reset-password') &&
     !p.startsWith('/forgot-password') && !p.startsWith('/restore-account') &&
     !p.startsWith('/join/') && !p.startsWith('/gyms/') && !p.startsWith('/invite/') &&
-    !p.startsWith('/check-in') && !p.startsWith('/sign-agreement') && !p.startsWith('/undo-email-change')
+    !p.startsWith('/check-in') && !p.startsWith('/sign-agreement') && !p.startsWith('/undo-email-change') &&
+    !p.startsWith('/admin')
   ) {
     window.location.href = '/login';
   }
