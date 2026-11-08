@@ -28,6 +28,11 @@ type Phase = "checking" | "look" | "over" | "setup" | "through";
 /** While the person is looking, what a press on a page does: open setup. Null otherwise. */
 const LookContext = createContext<(() => void) | null>(null);
 
+/** The tabs are drawn while setup is still to come (the look, or setup over them): what asks the person
+ *  something of its own, the notifications box, waits for setup to be finished, as before 14d. */
+const SetupComingContext = createContext(false);
+export const useSetupComing = (): boolean => useContext(SetupComingContext);
+
 /** Round each tab's page. While the person is looking it takes every touch that starts on the page
  *  before any button can, and a touch let go there opens setup; a drag is the page's own scroll. */
 export function LookOnly({ children }: { children: ReactNode }) {
@@ -139,7 +144,9 @@ export function SetupGate({ children, lookMs = LOOK_MS }: { children: ReactNode;
   // One shape for the look, setup over it and the way through, so the tabs are never drawn again.
   return (
     <>
-      <LookContext.Provider value={phase === "look" ? openSetup : null}>{children}</LookContext.Provider>
+      <SetupComingContext.Provider value={phase === "look" || phase === "over"}>
+        <LookContext.Provider value={phase === "look" ? openSetup : null}>{children}</LookContext.Provider>
+      </SetupComingContext.Provider>
       {phase === "over" ? <Setup open mode="front" onClose={through} /> : null}
     </>
   );

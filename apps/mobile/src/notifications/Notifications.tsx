@@ -3,6 +3,7 @@ import { StyleSheet, View } from "react-native";
 import { pushTokenResponseSchema } from "@app/shared";
 import { Button } from "../look/Button";
 import { Sheet } from "../look/Sheet";
+import { useSetupComing } from "../screens/SetupGate";
 import { Txt } from "../look/Txt";
 import { useSession } from "../session/SessionProvider";
 import {
@@ -59,6 +60,8 @@ export function NotificationsProvider({ children, onTapped }: { children: ReactN
   const [asking, setAsking] = useState(false);
   const [tapAsked, setTapAsked] = useState<GymTapped | null>(null);
   const [allowed, setAllowed] = useState<NotificationsAllowed | null>(null);
+  // Not over the look or setup (14d): asked once setup is finished.
+  const setupComing = useSetupComing();
   // The last answer read, so the address is given only when notifications have just been allowed.
   const lastAllowed = useRef<NotificationsAllowed | null>(null);
 
@@ -129,7 +132,7 @@ export function NotificationsProvider({ children, onTapped }: { children: ReactN
   return (
     <AskedContext.Provider value={{ tapAsked, tapOpened }}>
       <AllowsContext.Provider value={{ allowed, readAgain, turnOn }}>{children}</AllowsContext.Provider>
-      <Sheet open={asking} title={NOTIFICATIONS_ASK.title} onClose={notNow}>
+      <Sheet open={asking && !setupComing} title={NOTIFICATIONS_ASK.title} onClose={notNow}>
         <Txt kind="body">{NOTIFICATIONS_ASK.line}</Txt>
         <View style={styles.two}>
           <Button label="Not now" kind="plain" style={styles.half} onPress={notNow} />

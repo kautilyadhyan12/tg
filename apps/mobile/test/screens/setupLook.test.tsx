@@ -99,8 +99,12 @@ const setupIsUp = async () => {
 const started = (server: { asked: { method: string; path: string }[] }) =>
   server.asked.filter((one) => one.method !== "GET" && /\/(runs|meals|diet-plan|workouts)/.test(one.path));
 
+const { notifications, reset } = jest.requireMock<{ notifications: { permission: unknown }; reset: () => void }>("expo-notifications");
+const ASK_NOTIFICATIONS = { granted: false, canAskAgain: true, status: "undetermined" };
+
 afterEach(() => {
   jest.restoreAllMocks();
+  reset();
 });
 
 describe("the worst thing: nobody starts a workout, run, meal or plan before the health question and their age", () => {
@@ -193,6 +197,19 @@ describe("the look", () => {
     await render(<App extra={extra} ask={server.ask} store={memoryStore(kept(1, RAVI, undefined, false))} wait={noWait} lookMs={60_000} />);
     await setupIsUp();
     expect(screen.queryByRole("tab", { name: "Dashboard" })).toBeNull();
+  });
+
+  it("the notifications box waits for setup: not over the look, nor over setup, and asked once it is finished", async () => {
+    notifications.permission = ASK_NOTIFICATIONS;
+    const turn = heldAppState();
+    const { route } = await signIn(notSetUp, 400);
+    await screen.findByRole("tab", { name: "Dashboard" });
+    expect(screen.queryByText("Turn on notifications?")).toBeNull();
+    await setupIsUp();
+    expect(screen.queryByText("Turn on notifications?")).toBeNull();
+    route.me = setUp;
+    await turn("active");
+    expect(await screen.findByText("Turn on notifications?")).toBeTruthy();
   });
 
   it("finished elsewhere while setup is up over the tabs: they are let through, uncovered", async () => {
