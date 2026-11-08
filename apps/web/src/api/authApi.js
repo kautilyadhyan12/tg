@@ -40,7 +40,7 @@ export function isSignedOutPage(p) {
     !p.startsWith('/join/') && !p.startsWith('/gyms/') && !p.startsWith('/invite/') &&
     !p.startsWith('/check-in') && !p.startsWith('/sign-agreement') && !p.startsWith('/undo-email-change') &&
     !p.startsWith('/admin') &&
-    !Object.values(LEGAL_PATHS).includes(p)
+    !Object.values(LEGAL_PATHS).some((l) => p === l || p.startsWith(`${l}/`))
   );
 }
 

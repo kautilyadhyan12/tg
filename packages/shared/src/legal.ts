@@ -81,64 +81,75 @@ const contactLines = (facts: LegalFacts, nameLabel: string): LegalBlock[] => [
 ];
 
 /** The companies that handle people's data for us, each with what it receives. The api's test ties each
- *  one to the settings that switch it on. */
+ *  one to the settings that switch it on. `healthData`: it may receive what Washington's law calls consumer
+ *  health data (a meal photo, notification words, a run's map), so Washington's page names it too. */
 export const OUTSIDE_SERVICES = [
   {
     id: "openai",
+    healthData: true,
     name: "OpenAI",
     forWhat: "Identifies food items from meal photographs and product packaging labels, and verifies food names.",
     gets: "Submitted photographs with location and capture-time metadata removed, together with food names and quantities. Names and email addresses are not provided.",
   },
   {
     id: "resend",
+    healthData: false,
     name: "Resend",
     forWhat: "Delivers emails, including authentication codes, invitations, receipts, and reminders.",
     gets: "The recipient's email address and the contents of the relevant email.",
   },
   {
     id: "firebase",
+    healthData: true,
     name: "Google Firebase",
     forWhat: "Delivers push notifications to users' devices.",
     gets: "Device notification tokens or addresses and the contents of notifications.",
   },
   {
     id: "google_sign_in",
+    healthData: false,
     name: "Google Sign-In",
     forWhat: "Enables users to authenticate through their Google accounts, where selected.",
     gets: "Google receives information indicating that the user is signing in to KWAZO. Google provides KWAZO with the user's Google identifier, email address, and name.",
   },
   {
     id: "cloudflare",
+    healthData: false,
     name: "Cloudflare",
     forWhat: "Provides automated bot-verification checks when an unusually high number of authentication codes is requested and on business enquiry forms.",
     gets: "The user's IP address and browser-related information while the verification check is displayed.",
   },
   {
     id: "openfreemap",
+    healthData: true,
     name: "OpenFreeMap",
     forWhat: "Provides map rendering within the mobile Application.",
     gets: "The user's IP address and information identifying the map area displayed on the device.",
   },
   {
     id: "openstreetmap",
+    healthData: true,
     name: "OpenStreetMap and LocationIQ",
     forWhat: "Provide map rendering and location search functionality on the running-related pages of the KWAZO website.",
     gets: "The user's IP address, the map area displayed, and location or place-search information entered by the user.",
   },
   {
     id: "sentry",
+    healthData: false,
     name: "Sentry",
     forWhat: "Identifies and reports errors occurring in KWAZO's server infrastructure.",
     gets: "Technical information relating to application code failures. User-submitted content, names, and email addresses are not provided.",
   },
   {
     id: "square",
+    healthData: false,
     name: "Square",
     forWhat: "Processes card payments for participating businesses that use Square and maintains payment cards on file for those businesses.",
     gets: "The user's name, email address, phone number, and payment card information. KWAZO retains only the card brand, last four digits, and expiration date.",
   },
   {
     id: "paddle_razorpay",
+    healthData: false,
     name: "Paddle and Razorpay",
     forWhat: "Process subscription payments made by participating businesses for KWAZO plans.",
     gets: "The payer's email address and country. Razorpay additionally receives the business's payment-related phone number.",
@@ -245,6 +256,7 @@ export function privacyPolicy(facts: LegalFacts = LEGAL_FACTS): LegalDocument {
             "The Internet Protocol (IP) address associated with the sign-in.",
             "Information identifying the browser or mobile device used to access the account.",
           ),
+          p("Our server's logs also record the IP address of each request, to keep the Services secure. How long these logs are kept will be stated in this Policy before the official publication of KWAZO."),
           h3("3.3. Fitness Profile and Onboarding Information"),
           p("During account setup and onboarding, we collect information used to personalize fitness and nutrition functionality, including:"),
           list(
@@ -256,6 +268,7 @@ export function privacyPolicy(facts: LegalFacts = LEGAL_FACTS): LegalDocument {
             "Training locations and available exercise equipment.",
             "Dietary preferences and dietary information.",
             "Preferred number of meals per day.",
+            "Training pace, daily activity level, session length, preferred workout time, and push-up and plank results.",
           ),
           h3("3.4. Health-Related Screening Information"),
           p("KWAZO collects a limited health-related screening response through a yes-or-no question concerning whether you have a medical condition, physical injury, or pregnancy requiring special care, and whether a qualified professional has provided clearance."),
@@ -298,7 +311,7 @@ export function privacyPolicy(facts: LegalFacts = LEGAL_FACTS): LegalDocument {
           h3("3.10. Running and Location Information"),
           p("When you activate the running-tracking functionality, KWAZO accesses your device's location information to record:"),
           list("Running routes.", "Distances traveled.", "Running times."),
-          p("Location information is accessed only while a running session is being recorded and the Application is open or the active running notification is displayed."),
+          p("Location information is accessed while a running session is being recorded and the Application is open or the active running notification is displayed, and while the Running page is open, to show the strength of the GPS signal. That reading stays on your device and is not kept."),
           p("KWAZO does not otherwise collect your location in the background outside these circumstances."),
           h3("3.11. Business Page and Community Information"),
           p("When you interact with pages operated by participating businesses, we may collect and process:"),
@@ -439,6 +452,10 @@ export function privacyPolicy(facts: LegalFacts = LEGAL_FACTS): LegalDocument {
           h3("7.7. Retention Following Departure or Account Deletion"),
           p("If you leave a participating business or delete your KWAZO account, the business retains its own records relating to the period during which you were associated with it."),
           p("Such records are subject to the applicable retention provisions described in Section 10 of this Policy."),
+          h3("7.8. Information Visible to Other Members"),
+          p("Other members of the business can see your name, your place, and your gym-day, workout-day, and streak counts on its leaderboards, and the posts and comments you publish on its page."),
+          p("You can hide yourself from the business's leaderboards at any time through:"),
+          strong("Me → Settings → Hide me"),
         ],
       },
       {
@@ -471,6 +488,8 @@ export function privacyPolicy(facts: LegalFacts = LEGAL_FACTS): LegalDocument {
             "Subscription or plan information.",
             "Time spent using the Application.",
             "Meal-scanning usage.",
+            "The businesses they belong to.",
+            "Their device's time zone.",
           ),
           p("This administrative access does not include:"),
           list("Responses to health-related screening questions.", "Body weight.", "Meal information.", "Photographs.", "Running information."),
@@ -526,7 +545,7 @@ export function privacyPolicy(facts: LegalFacts = LEGAL_FACTS): LegalDocument {
             rows: KEPT_AFTER_DELETION.map((k) => [k.what, k.howLong]),
           },
           h3("10.4. Authentication Code Retention"),
-          p("Sign-in and authentication codes are deleted two days after they are sent."),
+          p("Sign-in and authentication codes stop working shortly after they are sent, and are deleted once they are more than two days old, when the next code is requested."),
         ],
       },
       {
@@ -609,7 +628,7 @@ export function privacyPolicy(facts: LegalFacts = LEGAL_FACTS): LegalDocument {
         blocks: [
           p("15.1. KWAZO may revise or update this Privacy Policy as the Application and its associated Services evolve."),
           p("15.2. Whenever this Policy is amended, the \"Last Updated\" date displayed at the beginning of the document will be revised to reflect the update."),
-          p("15.3. Where a change materially affects users, KWAZO will provide notice through the Application before the relevant modification takes effect."),
+          p("15.3. Where a change materially affects users, KWAZO will notify users by email or through the Application before the relevant modification takes effect."),
         ],
       },
       {
@@ -743,7 +762,7 @@ export function termsOfUse(facts: LegalFacts = LEGAL_FACTS): LegalDocument {
           p("10.1. KWAZO is an evolving software platform, and its features, functionalities, and services may be introduced, modified, updated, or discontinued as part of its ongoing development."),
           p("10.2. KWAZO reserves the right to modify or update these Terms from time to time."),
           p("10.3. Whenever these Terms are revised, the \"Last Updated\" date displayed at the beginning of this document will be amended accordingly."),
-          p("10.4. Where a modification materially affects users, KWAZO will provide notice through the application before the relevant change takes effect."),
+          p("10.4. Where a modification materially affects users, KWAZO will notify users by email or through the Application before the relevant change takes effect."),
         ],
       },
       {
@@ -844,6 +863,8 @@ export function washingtonHealthDataPolicy(facts: LegalFacts = LEGAL_FACTS): Leg
             "Hosting Infrastructure Provider: The company responsible for hosting KWAZO's server infrastructure and supporting the operation of the Application.",
             "OpenAI: Processes submitted meal photographs to identify and analyze food information.",
             "Google Firebase: Facilitates the delivery of application notifications, which may contain information relating to your workouts, training activities, or meals.",
+            "OpenFreeMap: Provides the maps in the mobile Application, including while a run is recorded, and receives your IP address and the map area around you.",
+            "OpenStreetMap and LocationIQ: Provide maps and place search on the running-related pages of the KWAZO website, and receive your IP address, the map area displayed, and the places you search for.",
           ),
           h3("3.3. Participating Fitness Businesses"),
           p("Where you are a member of a gym, fitness studio, or another fitness-related business using KWAZO, certain fitness-related information may be disclosed to that business."),
@@ -851,6 +872,7 @@ export function washingtonHealthDataPolicy(facts: LegalFacts = LEGAL_FACTS): Leg
           list("Workout information.", "Exercise form scores."),
           p("The following categories of information are disclosed to the participating business only with your permission:"),
           list("Meals and nutritional information.", "Body weight.", "Body measurements."),
+          p("Other members of the business can see your name, your place, and your gym-day, workout-day, and streak counts on its leaderboards, unless you hide yourself through Me → Settings → Hide me."),
         ],
       },
       {

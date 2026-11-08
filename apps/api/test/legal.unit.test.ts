@@ -17,6 +17,9 @@ import {
   type KeptAfterDeletionId,
   type LegalDocument,
   type OutsideServiceId,
+  GYM_CAN_SEE,
+  GYM_NEVER_SEES,
+  GYM_SEES_IF_YOU_ALLOW,
 } from "@app/shared";
 import { USER_LINKED_NOT_PURGED_TABLES } from "../src/modules/privacy/tables.js";
 
@@ -85,7 +88,7 @@ const SENDS_NOTHING_ABOUT_A_PERSON: Record<string, string> = {
   SUPPORT_EMAIL: "our own address",
   POSTHOG_API_KEY: "nothing calls it: no event is sent (checked below)",
   POSTHOG_HOST: "nothing calls it: no event is sent (checked below)",
-  ORS_API_KEY: "route planning: no screen asks for a route today (the policy adds OpenRouteService when one does)",
+  ORS_API_KEY: "route planning: no screen asks the server for a route today (checked below; the policy adds OpenRouteService when one does)",
   PACKAGED_FOOD_UPDATES: "downloads Open Food Facts' public files; sends only our own contact address",
   OPEN_FOOD_FACTS_CONTACT: "our own contact address, in that download's request",
   MAP_PROTOMAPS_FILE: "our own copy of the map",
@@ -96,8 +99,8 @@ const SENDS_NOTHING_ABOUT_A_PERSON: Record<string, string> = {
   HEIGHTS_MOST_SQUARES_KEPT: "the server's own",
 };
 
-/** Where each table the purge keeps is said in "How long we keep it". Tables of a business not named here
- *  are its own records about a person (`business_records`). */
+/** Where each table the purge keeps is said in "How long we keep it", every one named: a new kept table
+ *  fails until somebody says which line covers it. */
 const KEPT_TABLES: Record<string, KeptAfterDeletionId> = {
   users: "tombstone",
   consent_log: "consent",
@@ -126,6 +129,45 @@ const KEPT_TABLES: Record<string, KeptAfterDeletionId> = {
   gym_referral_settings: "business_content",
   gym_group_messages: "business_content",
   gyms: "business_records",
+  gym_members: "business_records",
+  gym_staff: "business_records",
+  gym_join_applications: "business_records",
+  gym_attendance: "business_records",
+  gym_attendance_removed: "business_records",
+  gym_cheers: "business_records",
+  gym_nudges: "business_records",
+  gym_member_list_uploads: "business_records",
+  gym_checkin_devices: "business_records",
+  gym_class_bookings: "business_records",
+  gym_leads: "business_records",
+  gym_event_places: "business_records",
+  gym_pt_appointments: "business_records",
+  gym_staff_invites: "business_records",
+  gym_staff_roles: "business_records",
+  gym_co_owner_requests: "business_records",
+  gym_owner_requests: "business_records",
+  gym_member_notes: "business_records",
+  gym_member_tags: "business_records",
+  gym_member_entry_tags: "business_records",
+  gym_member_payers: "business_records",
+  gym_member_payments: "business_records",
+  gym_member_bills: "business_records",
+  gym_member_refunds: "business_records",
+  gym_sales: "business_records",
+  gym_sale_refunds: "business_records",
+  gym_payment_connections: "business_records",
+  gym_payment_connect_starts: "business_records",
+  gym_square_terminals: "business_records",
+  gym_member_cards: "business_records",
+  gym_terminal_card_saves: "business_records",
+  gym_terminal_payments: "business_records",
+  gym_app_payments: "business_records",
+  gym_card_charges: "business_records",
+  gym_square_refunds: "business_records",
+  gym_square_disputes: "business_records",
+  gym_autopay_pauses: "business_records",
+  gym_referral_member_gifts: "business_records",
+  gym_referral_kept_invites: "business_records",
   invoices: "money_records",
   subscriptions: "money_records",
   billing_checkouts: "money_records",
@@ -169,22 +211,60 @@ describe("the privacy policy against the code", () => {
         return statSync(path).isDirectory() ? files(path) : path.endsWith(".ts") ? [path] : [];
       });
     const paths = files(src.pathname.replace(/^\/([A-Za-z]:)/, "$1"));
-    // analytics.ts makes the PostHog client and its `capture`; no other file may call it.
+    // analytics.ts makes the PostHog client; only app.ts builds it, and nothing calls its `capture`.
     const callers = paths.filter((f) => !f.endsWith("analytics.ts") && /\.capture\(/.test(readFileSync(f, "utf8")));
     expect(callers).toEqual([]);
+    const importers = paths
+      .filter((f) => /from "(?:\.\.?\/)+analytics\.js"/.test(readFileSync(f, "utf8")))
+      .map((f) => f.split(/[\\/]src[\\/]/)[1]);
+    expect(importers).toEqual(["app.ts"]);
     const all = paths.map((f) => readFileSync(f, "utf8"));
     expect(all.filter((t) => /INSERT INTO trace_samples|insert\(traceSamples\)/.test(t))).toEqual([]);
   });
 
+  it("no screen of the phone or the website asks the server to plan a route, so OpenRouteService is sent nothing", () => {
+    const callers = (dir: string): string[] =>
+      readdirSync(dir).flatMap((f) => {
+        const path = join(dir, f);
+        if (statSync(path).isDirectory()) return f === "node_modules" ? [] : callers(path);
+        return /\.(tsx?|jsx?)$/.test(f) && !f.includes(".test.") && readFileSync(path, "utf8").includes("geo/routes/generate") ? [path] : [];
+      });
+    const root = (rel: string) => new URL(rel, import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1");
+    expect([...callers(root("../../mobile/src/")), ...callers(root("../../web/src/"))]).toEqual([]);
+  });
+
+  it("Washington's page names every company that may receive consumer health data", () => {
+    const washington = JSON.stringify(washingtonHealthDataPolicy());
+    expect(OUTSIDE_SERVICES.filter((s) => s.healthData && !washington.includes(`${s.name}:`)).map((s) => s.name)).toEqual([]);
+  });
+
+  it("what a business sees, in the policy, matches the Join screen's lists one for one", () => {
+    const members = JSON.stringify(privacyPolicy().sections.find((s) => s.id === "members"));
+    // Each line of the Join screen, and the policy's own words for it (Kd's text).
+    const SAID_AS: Record<string, string> = {
+      "Your name and email address": "Your name and email address.",
+      "Your workouts: dates, exercises, sets, reps, hold times and duration":
+        "Workout information, including workout dates, exercises, sets, repetitions, hold times, and exercise duration.",
+      "Your form scores and form faults": "Exercise form scores and identified form faults.",
+      "Your streaks and challenges": "Training streaks and participation in challenges.",
+      "Your meals and nutrition": "Meals and nutritional information.",
+      "Your weight and body measurements": "Body weight and body measurements.",
+      "Your running routes": "Your recorded running routes.",
+    };
+    const screen: string[] = [...GYM_CAN_SEE, ...GYM_SEES_IF_YOU_ALLOW, ...GYM_NEVER_SEES];
+    expect(screen.filter((line) => !Object.hasOwn(SAID_AS, line))).toEqual([]);
+    expect(Object.values(SAID_AS).filter((line) => !members.includes(line))).toEqual([]);
+  });
+
   it("every table the purge keeps is covered by a line of How long we keep it", () => {
     const uncovered = USER_LINKED_NOT_PURGED_TABLES.filter(
-      (t) => !Object.hasOwn(KEPT_TABLES, t) && !Object.hasOwn(NOT_ABOUT_THE_PERSON, t) && !t.startsWith("gym_"),
+      (t) => !Object.hasOwn(KEPT_TABLES, t) && !Object.hasOwn(NOT_ABOUT_THE_PERSON, t),
     );
     expect(uncovered).toEqual([]);
     const kept = new Set<string>(USER_LINKED_NOT_PURGED_TABLES);
     expect([...Object.keys(KEPT_TABLES), ...Object.keys(NOT_ABOUT_THE_PERSON)].filter((t) => !kept.has(t))).toEqual([]);
     // Every line of the policy's list is about a table that is really kept.
-    const used = new Set<string>([...Object.values(KEPT_TABLES), "business_records"]);
+    const used = new Set<string>(Object.values(KEPT_TABLES));
     expect(KEPT_AFTER_DELETION.map((k) => k.id).filter((id) => !used.has(id))).toEqual([]);
   });
 

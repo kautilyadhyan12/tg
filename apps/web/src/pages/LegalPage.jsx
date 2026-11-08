@@ -31,16 +31,17 @@ const OTHERS = [
 function Words({ text }) {
   const email = LEGAL_FACTS.supportEmail;
   if (email === null || !text.includes(email)) return text;
-  const [before, after] = text.split(email);
-  return (
-    <>
-      {before}
-      <a href={`mailto:${email}`} style={{ color: ACCENT }} className="underline">
-        {email}
-      </a>
-      {after}
-    </>
-  );
+  const parts = text.split(email);
+  return parts.map((part, i) => (
+    <span key={i}>
+      {part}
+      {i < parts.length - 1 ? (
+        <a href={`mailto:${email}`} style={{ color: ACCENT }} className="underline">
+          {email}
+        </a>
+      ) : null}
+    </span>
+  ));
 }
 
 function Block({ block }) {

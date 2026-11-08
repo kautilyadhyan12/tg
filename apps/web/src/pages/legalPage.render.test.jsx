@@ -83,6 +83,7 @@ describe('somebody whose old sign-in has run out', () => {
   it('still reads the three pages: a failed sign-in never sends them to /login from here', async () => {
     const { isSignedOutPage } = await import('../api/authApi');
     expect(Object.values(LEGAL_PATHS).filter((p) => !isSignedOutPage(p))).toEqual([]);
+    expect(['/privacy/', '/terms/'].filter((p) => !isSignedOutPage(p))).toEqual([]);
     expect(isSignedOutPage('/dashboard')).toBe(false);
   });
 });
