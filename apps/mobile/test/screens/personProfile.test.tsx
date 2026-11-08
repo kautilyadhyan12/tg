@@ -361,7 +361,7 @@ describe("the numbers, in words", () => {
     );
     expect(stats).toEqual([
       { key: "gym_days", number: "1st", label: "Visits", under: "9 visits last month" },
-      { key: "workout_days", number: "Not ranked yet", label: "Workout days", under: "0 workout days last month" },
+      { key: "workout_days", number: "Not ranked", label: "Workout days", under: "0 workout days last month" },
       { key: "streak", number: "2nd", label: "Streak", under: "1 week" },
     ]);
   });
@@ -408,7 +408,7 @@ describe("the page", () => {
     await openTom(ask);
     expect(await profilePage().findByText("Couldn't load their posts.")).toBeTruthy();
     expect(await profilePage().findByText("Couldn't load their places on the leaderboard.")).toBeTruthy();
-    expect(within(profilePage().getByTestId("stat-posts")).getByTestId("soft-bar")).toBeTruthy();
+    expect(within(profilePage().getByTestId("stat-posts")).getByTestId("failed-bar")).toBeTruthy();
     up = true;
     await fireEvent.press(profilePage().getByLabelText("Try their places again"));
     expect(await profilePage().findByTestId("stat-gym_days")).toBeTruthy();

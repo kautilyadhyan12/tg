@@ -8,14 +8,14 @@ import { Shown } from "./Waiting";
 
 /** A number in its box, two to a row, its picture standing on the right behind a shade, as on the
  *  Dashboard: its icon, the number, what it counts, and a note under that where there is one. */
-export function StatTile(props: { picture: PictureName; icon: IconName; tone?: "orange" | "gold"; value: string | null; label: string; note?: string; say?: string }) {
+export function StatTile(props: { picture: PictureName; icon: IconName; tone?: "orange" | "gold"; value: string | null; failed?: boolean; label: string; note?: string; say?: string }) {
   return (
     <Card style={styles.stat}>
       <Image source={pictures[props.picture]} resizeMode="contain" style={styles.art} accessible={false} />
       <View style={[StyleSheet.absoluteFill, styles.shade]} />
       <Badge icon={props.icon} tone={props.tone ?? "orange"} />
-      <View accessible={props.say !== undefined} accessibilityLabel={props.say}>
-        <Shown kind="big" width={48} value={props.value} />
+      <View accessible accessibilityLabel={props.say ?? (props.value !== null ? `${props.value} ${props.label}` : props.failed === true ? `${props.label}, couldn’t load` : `${props.label}, loading`)}>
+        <Shown kind="big" width={48} value={props.value} failed={props.failed ?? false} />
         <Txt kind="small" style={styles.label}>
           {props.label}
         </Txt>

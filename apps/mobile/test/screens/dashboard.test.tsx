@@ -165,8 +165,9 @@ describe("the worst thing: a 30-day streak never reads 0 while it loads (31h)", 
     expect(screen.getByLabelText("0 day streak")).toBeTruthy();
     expect(screen.getByLabelText("0 freezes left")).toBeTruthy();
     expect(screen.getByText("0 of 7 days active")).toBeTruthy();
-    // Total Sessions and Calories Burned both read 0.
-    expect(screen.getAllByText("0").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByLabelText("0 Total Sessions")).toBeTruthy();
+    expect(screen.getByLabelText("0 Calories Burned")).toBeTruthy();
+    expect(screen.getByLabelText("0 min Hours Trained")).toBeTruthy();
     expect(screen.queryByText("–")).toBeNull();
     await waitFor(() => {
       expect(screen.queryAllByTestId("soft-bar")).toHaveLength(0);
@@ -434,6 +435,11 @@ describe("a read that fails or is slow never shows a number it does not know", (
     await openApp(Object.fromEntries(Object.entries(trained).map(([path, route]) => [path, failing(route)])));
     expect(await screen.findByText("Some of your numbers couldn’t load.")).toBeTruthy();
     expect(screen.getByText("Total Sessions")).toBeTruthy();
+    // A read that failed is not on its way: still bars read as Couldn’t load, none breathing as Loading.
+    expect(screen.getByLabelText("Total Sessions, couldn’t load")).toBeTruthy();
+    expect(screen.getByLabelText("day streak, couldn’t load")).toBeTruthy();
+    expect(screen.getAllByTestId("failed-bar").length).toBeGreaterThanOrEqual(8);
+    expect(screen.queryAllByTestId("soft-bar")).toHaveLength(0);
     // No figure anywhere but the calendar's own dates and the clock's time.
     const figures = screen.queryAllByText(/\d/).map((one) => String(one.props.children));
     const dates = weekOf(new Date()).map((day) => String(day.date));

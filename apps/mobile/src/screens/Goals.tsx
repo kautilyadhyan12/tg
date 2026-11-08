@@ -102,7 +102,7 @@ export function GoalsBox({ read, onOpen }: { read: Read<GoalsResponse>; onOpen: 
           </Txt>
         </View>
         {goals === null ? (
-          <SoftBar width="70%" />
+          <SoftBar width="70%" failed={read.kind === "failed"} />
         ) : goals.length === 0 ? (
           <>
             <Txt kind="small">No goals yet.</Txt>

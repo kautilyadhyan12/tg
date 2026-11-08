@@ -788,6 +788,8 @@ function Podium({ challenge, onPerson }: { challenge: MemberGymChallenge; onPers
 function Teams({ challenge, pressing, onPick }: { challenge: MemberGymChallenge; pressing: boolean; onPick: (team: TeamLine) => void }) {
   const rows = teamRows(challenge);
   const mine = myTeam(challenge);
+  // Said only while the board is shown: "yet" while the challenge runs, never once it has ended.
+  const unranked = challenge.teamBoard?.status !== "shown" ? null : challenge.state === "ended" ? "Not ranked" : NOT_RANKED;
   if (rows.length === 0) return null;
   return (
     <View style={styles.lines}>
@@ -801,7 +803,7 @@ function Teams({ challenge, pressing, onPick }: { challenge: MemberGymChallenge;
             )}
             <View style={styles.grow}>
               <Txt kind="h3">{team.name}</Txt>
-              <Txt kind="small">{team.place === null ? `${team.people} · ${NOT_RANKED}` : team.people}</Txt>
+              <Txt kind="small">{team.place === null && unranked !== null ? `${team.people} · ${unranked}` : team.people}</Txt>
             </View>
             {team.isMine ? <Pill label="Your team" tone="orange" /> : null}
             {team.number === null ? null : (
@@ -969,7 +971,7 @@ function WholeBoard({ open, place, challenge, timezone, top, bottom, onClose, on
               )}
               <Txt kind="h3" style={styles.grow}>
                 You
-                {me.place === null && me.hidden === null ? <Txt kind="small">{` · ${NOT_RANKED}`}</Txt> : null}
+                {me.place === null && me.hidden === null && challenge.board.status === "shown" ? <Txt kind="small">{` · ${challenge.state === "ended" ? "Not ranked" : NOT_RANKED}`}</Txt> : null}
               </Txt>
               <Txt kind="h3">{printed(me.value, challenge.words)}</Txt>
             </View>

@@ -210,7 +210,7 @@ export function DashboardScreen() {
         ) : places.read.kind === "ok" ? (
           <RankBox big={null} />
         ) : (
-          <RankBox big={null} waiting />
+          <RankBox big={null} waiting failed={places.read.kind === "failed"} />
         )}
         <Badges
           me={me.read}
@@ -285,6 +285,7 @@ function Totals({ overview, me }: { overview: Read<ProgressOverview>; me: Read<G
     window: windowWords(o.limitedToDays),
   }));
   const xp = known(me, (m) => m.xp);
+  const overviewFailed = overview.kind === "failed";
   return (
     <View style={styles.tight}>
       {totals === null ? null : (
@@ -296,18 +297,21 @@ function Totals({ overview, me }: { overview: Read<ProgressOverview>; me: Read<G
       <StatTile
         picture="totalworkout"
         icon="dumbbell"
+        failed={overviewFailed}
         value={totals === null ? null : count(totals.sessions)}
         label="Total Sessions"
       />
       <StatTile
         picture="hourstrained"
         icon="clock"
+        failed={overviewFailed}
         value={totals === null ? null : totals.hours}
         label="Hours Trained"
       />
       <StatTile
         picture="caloriesburned"
         icon="flame"
+        failed={overviewFailed}
         value={totals === null ? null : count(totals.kcal)}
         label="Calories Burned"
       />
@@ -315,6 +319,7 @@ function Totals({ overview, me }: { overview: Read<ProgressOverview>; me: Read<G
         picture="currentlevel"
         icon="trophy"
         tone="gold"
+        failed={me.kind === "failed"}
         value={xp === null ? null : `Level ${count(xp.level)}`}
         label={xp === null ? "Current Level" : `${count(xp.total)} XP earned`}
       />
@@ -335,13 +340,13 @@ function Experience({ me, week, now }: { me: Read<GamificationMe>; week: Read<Pr
           <Txt kind="h3" style={styles.boxTitle}>Experience Points</Txt>
         </View>
         <View style={styles.tight}>
-          <Shown kind="tiny" width={140} value={data === null ? null : xpToNext(data.xp)} />
+          <Shown kind="tiny" width={140} failed={me.kind === "failed"} value={data === null ? null : xpToNext(data.xp)} />
           <Bar share={data === null ? 0 : barShare(data.xp.progressPct)} />
         </View>
         <View style={styles.three}>
-          <Figure value={thisWeek === null ? null : count(thisWeek)} label="this week" />
-          <Figure value={data === null ? null : count(data.streak.current)} label="day streak" />
-          <Figure value={freezes === null ? null : count(freezes)} label={freezes === 1 ? "freeze left" : "freezes left"} />
+          <Figure value={thisWeek === null ? null : count(thisWeek)} failed={week.kind === "failed"} label="this week" />
+          <Figure value={data === null ? null : count(data.streak.current)} failed={me.kind === "failed"} label="day streak" />
+          <Figure value={freezes === null ? null : count(freezes)} failed={me.kind === "failed"} label={freezes === 1 ? "freeze left" : "freezes left"} />
         </View>
       </View>
       <View style={styles.sideArt}>
@@ -351,10 +356,10 @@ function Experience({ me, week, now }: { me: Read<GamificationMe>; week: Read<Pr
   );
 }
 
-function Figure({ value, label }: { value: string | null; label: string }) {
+function Figure({ value, failed = false, label }: { value: string | null; failed?: boolean; label: string }) {
   return (
-    <View style={styles.figure} accessible accessibilityLabel={value === null ? `${label}, loading` : `${value} ${label}`}>
-      <Shown kind="big" colour="orange" width={36} value={value} />
+    <View style={styles.figure} accessible accessibilityLabel={value !== null ? `${value} ${label}` : failed ? `${label}, couldn’t load` : `${label}, loading`}>
+      <Shown kind="big" colour="orange" width={36} failed={failed} value={value} />
       <Txt kind="tiny" style={styles.centre}>
         {label}
       </Txt>
@@ -383,7 +388,7 @@ function ThisWeek({ week, now }: { week: Read<ProgressTrend>; now: Date }) {
             <Icon name="calendar" size={16} colour="orange" />
             <Txt kind="h3" style={styles.boxTitle}>This Week</Txt>
           </View>
-          <Shown kind="tiny" width={72} value={trained === null ? null : activeDaysWords(trained.days)} />
+          <Shown kind="tiny" width={72} failed={week.kind === "failed"} value={trained === null ? null : activeDaysWords(trained.days)} />
         </View>
         <View style={styles.days}>
           {days.map((day, i) => {
@@ -464,8 +469,8 @@ function Challenges({ read, onPress }: { read: Read<WeeklyChallenges>; onPress: 
         </View>
         {read.kind !== "ok" ? (
           <View style={[styles.tight, styles.challengeRow]}>
-            <SoftBar kind="tiny" width="90%" />
-            <SoftBar kind="tiny" width="70%" />
+            <SoftBar kind="tiny" width="90%" failed={read.kind === "failed"} />
+            <SoftBar kind="tiny" width="70%" failed={read.kind === "failed"} />
           </View>
         ) : (
           // In the box's left half: the picture's own figures stand in the right half, never under a row.
@@ -505,6 +510,7 @@ function GymRank({ place, read, onClosed }: { place: LeaderboardPlace; read: Rea
       <RankBox
         big={words?.big ?? null}
         waiting={words === null}
+        failed={read.kind === "failed"}
         of={words?.of ?? null}
         line={words?.line ?? null}
         say={`Your Rank at ${place.name}`}
@@ -529,13 +535,15 @@ interface RankBoxProps {
   big: string | null;
   /** The board is still coming: a soft bar. */
   waiting?: boolean;
+  /** The read failed: the bar stands still. */
+  failed?: boolean;
   of?: string | null;
   line?: string | null;
   say?: string;
   onPress?: () => void;
 }
 
-function RankBox({ big, waiting = false, of = null, line = null, say, onPress }: RankBoxProps) {
+function RankBox({ big, waiting = false, failed = false, of = null, line = null, say, onPress }: RankBoxProps) {
   const inside = (
     <>
       <Image source={pictures.rank} resizeMode="cover" style={styles.fill} accessible={false} />
@@ -546,7 +554,7 @@ function RankBox({ big, waiting = false, of = null, line = null, say, onPress }:
           <Txt kind="h3" style={styles.boxTitle}>Your Rank</Txt>
         </View>
         {waiting ? (
-          <SoftBar kind="h1" width={64} />
+          <SoftBar kind="h1" width={64} failed={failed} />
         ) : big === null && line === null ? (
           <Pill label={COMING_SOON} />
         ) : big === null ? (
@@ -589,7 +597,7 @@ function Badges({ me, onPress }: { me: Read<GamificationMe>; onPress: () => void
           </Txt>
         </View>
         {names === null ? (
-          <SoftBar width={96} />
+          <SoftBar width={96} failed={me.kind === "failed"} />
         ) : names.length === 0 ? (
           <Txt kind="small">No badges yet.</Txt>
         ) : (
@@ -631,7 +639,7 @@ function Recent({ workouts, runs, meals, units, onRun, said }: { workouts: Read<
         </Txt>
       )}
       {rows === null || workouts.kind !== "ok" ? (
-        <SoftBar width="80%" />
+        <SoftBar width="80%" failed={workouts.kind === "failed" || runs.kind === "failed" || meals.kind === "failed"} />
       ) : rows.length === 0 ? (
         <Txt kind="small">{noActivityWords(workouts.data.hasAnyWorkouts, workouts.data.limitedToDays)}</Txt>
       ) : (

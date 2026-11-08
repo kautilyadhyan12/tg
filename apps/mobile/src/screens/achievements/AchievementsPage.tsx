@@ -49,7 +49,7 @@ function Top({ tab, onTab, badges }: { tab: TabKey; onTab: (t: TabKey) => void; 
   useEffect(() => {
     if (badges !== null) again();
   }, [badges, again]);
-  return <Hero xp={me.read.kind === "ok" ? me.read.data.xp : null} badges={badges} tab={tab} onTab={onTab} />;
+  return <Hero xp={me.read.kind === "ok" ? me.read.data.xp : null} failed={me.read.kind === "failed"} again={again} badges={badges} tab={tab} onTab={onTab} />;
 }
 
 function Tabs({ tab, onCount }: { tab: TabKey; onCount: (words: string | null) => void }) {

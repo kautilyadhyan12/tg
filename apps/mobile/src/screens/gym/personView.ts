@@ -1,6 +1,6 @@
 // A person's profile, in words: the browser's rules (apps/web/src/components/gym/PersonProfile.jsx). Pure, so tested alone.
 import type { GymPost, GymPostsResponse, LeaderboardPeriod, LeaderboardProfileResponse, PersonGymPostsResponse } from "@app/shared";
-import { BOARD_TABS, NOT_RANKED, PERIODS, ordinal, valueText } from "./leaderboardView";
+import { BOARD_TABS, PERIODS, ordinal, valueText } from "./leaderboardView";
 
 export const personPlacesPath = (gymId: string, userId: string, period: LeaderboardPeriod) =>
   `/v1/orgs/${encodeURIComponent(gymId)}/leaderboard/people/${encodeURIComponent(userId)}?period=${period}`;
@@ -21,24 +21,26 @@ export function personOf(post: Pick<GymPost, "author" | "authorId">): ProfilePer
 
 export interface ProfileStat {
   key: string;
-  /** Null while it is still coming: a soft bar. */
+  /** Null while it is still coming: a soft bar; still and dim where it failed (`failed`). */
   number: string | null;
+  failed?: boolean;
   label: string;
   under: string | null;
 }
 
 /** "1 post" reads as "1" over "Post". */
-export function postsStat(total: number | null): ProfileStat {
-  return { key: "posts", number: total === null ? null : total.toLocaleString("en"), label: total === 1 ? "Post" : "Posts", under: null };
+export function postsStat(total: number | null, failed = false): ProfileStat {
+  return { key: "posts", number: total === null ? null : total.toLocaleString("en"), failed, label: total === 1 ? "Post" : "Posts", under: null };
 }
 
-/** One number for each board the person has a place on: a board that is not sent shows nothing. */
+/** One number for each board sent: the person's place, or "Not ranked" without one (a past month's
+ *  board is never "yet"); a board that is not sent shows nothing. */
 export function placeStats(boards: LeaderboardProfileResponse["boards"], period: LeaderboardPeriod): ProfileStat[] {
   return boards.map((b) => {
     const label = BOARD_TABS.find((t) => t.id === b.board)?.label ?? "";
     const words = PERIODS.find((p) => p.value === (b.period ?? period))?.label.toLowerCase() ?? "";
     const under = b.board === "streak" ? valueText(b.value, b.board) : `${valueText(b.value, b.board)} ${words}`;
-    return { key: b.board, number: b.place === null ? NOT_RANKED : ordinal(b.place), label, under };
+    return { key: b.board, number: b.place === null ? "Not ranked" : ordinal(b.place), label, under };
   });
 }
 
