@@ -22,7 +22,7 @@ import { Page } from "./look/Page";
 import { TabBar } from "./look/TabBar";
 import { SignUpNoteGate } from "./screens/BeforeYouStart";
 import { InvitationsGate } from "./screens/InvitationsGate";
-import { SetupGate } from "./screens/SetupGate";
+import { LookOnly, SetupGate } from "./screens/SetupGate";
 import { SignInScreen } from "./screens/SignIn";
 import { CopyContext, ThisCopy } from "./screens/ThisCopy";
 import type { Ask } from "./session/calls";
@@ -90,14 +90,16 @@ interface AppProps {
   photoStore?: (userId: string) => TextStore;
   /** Where a person's saved runs not yet on the server are kept (37a). */
   runStore?: (userId: string) => TextStore;
+  /** How long a new sign-in looks at the tabs before setup comes up (14d); tests make it short. */
+  lookMs?: number;
 }
 
 /** Signed out, the sign-in screen and nothing of anybody's; signed in, "Before you start" until
- *  the person has ticked it, then any invitation waiting, then setup until it is finished, then
+ *  the person has ticked it, then any invitation waiting, then setup until it is finished (after a look at the tabs for a new sign-in, 14d), then
  *  the five tabs. */
 type Stores = { mealStore: (userId: string) => TextStore; bodyStore: (userId: string) => TextStore; runStore: (userId: string) => TextStore };
 
-function SignedInOrOut({ mealStore, bodyStore, runStore }: Stores) {
+function SignedInOrOut({ mealStore, bodyStore, runStore, lookMs }: Stores & { lookMs: number | undefined }) {
   const { state } = useSession();
   // With nobody signed in, nothing of the last person's stays: an app killed with Updates open left its photos.
   useEffect(() => {
@@ -119,7 +121,7 @@ function SignedInOrOut({ mealStore, bodyStore, runStore }: Stores) {
     <SignUpNoteGate key={state.user.id}>
       <TimeZoneSync>
         <InvitationsGate>
-          <SetupGate>
+          <SetupGate {...(lookMs === undefined ? {} : { lookMs })}>
             <FiveTabs mealStore={mealStore} bodyStore={bodyStore} runStore={runStore} />
           </SetupGate>
         </InvitationsGate>
@@ -176,7 +178,7 @@ function TabsOfPlaces() {
   const dots: Record<string, string> = newMessages > 0 ? { Gym: newMessages === 1 ? "1 new message" : `${String(newMessages)} new messages` } : {};
   return (
     <NavigationContainer ref={tabsRef} theme={theme} onReady={openHeldTab}>
-      <Tabs.Navigator screenOptions={{ headerShown: false }} tabBar={(props) => <TabBar {...props} icons={tabIcons} labels={labels} dots={dots} />}>
+      <Tabs.Navigator screenOptions={{ headerShown: false }} screenLayout={({ children }) => <LookOnly>{children}</LookOnly>} tabBar={(props) => <TabBar {...props} icons={tabIcons} labels={labels} dots={dots} />}>
         {TABS.map((tab) => (
           <Tabs.Screen key={tab.name} name={tab.name} component={tab.screen} />
         ))}
@@ -185,7 +187,7 @@ function TabsOfPlaces() {
   );
 }
 
-export function App({ extra, ask = fetch, store = phoneKeyStore, google = askGoogle, wait, mealStore = mealFile, bodyStore = bodyFile, photoStore = photoSheetFile, runStore = runFile }: AppProps) {
+export function App({ extra, ask = fetch, store = phoneKeyStore, google = askGoogle, wait, mealStore = mealFile, bodyStore = bodyFile, photoStore = photoSheetFile, runStore = runFile, lookMs }: AppProps) {
   // A font that cannot be read must not leave a blank page: the phone's own font shows instead.
   const [fontsReady, fontsFailed] = useFonts({
     Inter_400Regular,
@@ -213,7 +215,7 @@ export function App({ extra, ask = fetch, store = phoneKeyStore, google = askGoo
           ) : (
             <SessionProvider server={server} store={store} google={google} wait={wait}>
               <PhotoSheetStoreProvider store={photoStore}>
-                <SignedInOrOut mealStore={mealStore} bodyStore={bodyStore} runStore={runStore} />
+                <SignedInOrOut mealStore={mealStore} bodyStore={bodyStore} runStore={runStore} lookMs={lookMs} />
               </PhotoSheetStoreProvider>
             </SessionProvider>
           )}
