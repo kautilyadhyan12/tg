@@ -73,6 +73,16 @@ describe('authApi refresh-retry interceptor (v1 §6.1)', () => {
     expect(window.location.href).toBe('');
   });
 
+  it('does NOT send a signed-out visitor away from the admin page, which has its own sign-in (14a-i)', async () => {
+    vi.stubGlobal('window', { location: { pathname: '/admin', href: '' } });
+    installAdapter({
+      '/v1/auth/me': () => ({ status: 401 }),
+      '/v1/auth/refresh': () => ({ status: 401 }),
+    });
+    await expect(authService.getMe()).rejects.toMatchObject({ response: { status: 401 } });
+    expect(window.location.href).toBe('');
+  });
+
   it("does NOT send a signed-out visitor away from a gym's own page, where they send the gym a message", async () => {
     vi.stubGlobal('window', { location: { pathname: '/gyms/iron-house', href: '' } });
     installAdapter({

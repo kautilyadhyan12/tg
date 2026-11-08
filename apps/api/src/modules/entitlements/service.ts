@@ -67,6 +67,18 @@ export function mergeEntitlements(
   return { entitlements: merged ?? free, source };
 }
 
+/** Kd's own number a day for a person (the admin page, ROADMAP Stage 2 item 14a-i) replaces what
+ *  their plans give of that feature, higher or lower: what he sets is what they get, until he takes
+ *  it back (Kd, 2026-11-08). Every other feature stays as the plans merged it. Pure; exported for
+ *  its table test. */
+export function applyOwnLimits(entitlements: Entitlements, own: repo.OwnLimits): Entitlements {
+  return {
+    ...entitlements,
+    meal_scan: own.mealScan === null ? entitlements.meal_scan : { window: "day", limit: own.mealScan },
+    route_gen: own.routeGen === null ? entitlements.route_gen : { window: "day", limit: own.routeGen },
+  };
+}
+
 const cachedSchema = z.object({
   entitlements: entitlementsSchema,
   source: z.enum(["free", "own_subscription", "gym_membership"]),
@@ -91,11 +103,13 @@ export async function getEntitlements(
     const parsed = cachedSchema.safeParse(raw);
     if (parsed.success) return parsed.data;
   }
-  const [freeDoc, candidates] = await Promise.all([
+  const [freeDoc, candidates, own] = await Promise.all([
     repo.getFreePlanDoc(deps.sql),
     repo.getCandidates(deps.sql, userId),
+    repo.getOwnLimits(deps.sql, userId),
   ]);
-  const resolved = mergeEntitlements(freeDoc, candidates);
+  const merged = mergeEntitlements(freeDoc, candidates);
+  const resolved = { entitlements: applyOwnLimits(merged.entitlements, own), source: merged.source };
   await deps.redis.setex(cacheKey(userId), CACHE_TTL_S, JSON.stringify(resolved));
   return resolved;
 }
@@ -144,4 +158,21 @@ export async function yourPlansAt(sql: Sql, userId: string, gymIds: readonly str
  *  callers: account deletion (memberships close); P3/gyms add the rest. */
 export async function bustEntitlements(redis: RedisLike, userId: string): Promise<void> {
   await redis.del(cacheKey(userId));
+}
+
+/** What each of these people gets, as `getEntitlements` resolves it, read in three statements
+ *  however many there are: the admin page's list. It neither reads nor fills the 60-second memory. */
+export async function entitlementsOfMany(sql: Sql, userIds: readonly string[]): Promise<Map<string, Entitlements>> {
+  if (userIds.length === 0) return new Map();
+  const [freeDoc, candidates, own] = await Promise.all([
+    repo.getFreePlanDoc(sql),
+    repo.getCandidatesMany(sql, userIds),
+    repo.getOwnLimitsMany(sql, userIds),
+  ]);
+  return new Map(
+    userIds.map((id) => [
+      id,
+      applyOwnLimits(mergeEntitlements(freeDoc, candidates.get(id) ?? []).entitlements, own.get(id) ?? { mealScan: null, routeGen: null }),
+    ]),
+  );
 }
