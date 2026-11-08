@@ -254,6 +254,20 @@ d("the admin page (real Postgres)", () => {
     await redis.del(`rl:admin_door:id:${admin.userId}`);
   });
 
+  it("THE DOOR: only a wrong password uses a try: the right one, a short one, and Lock then open again never run out", { timeout: 60_000 }, async () => {
+    await redis.del(`rl:admin_door:id:${admin.userId}`);
+    for (let n = 1; n <= 7; n++) {
+      expect((await call(must(app), { method: "POST", url: "/v1/admin/door/open", access: admin.access, body: { password: ADMIN_PASSWORD } })).statusCode).toBe(200);
+      expect((await call(must(app), { method: "POST", url: "/v1/admin/door/open", access: admin.access, body: { password: "short" } })).statusCode).toBe(400);
+    }
+    // Four wrong ones, then the right one still opens.
+    for (let n = 1; n <= 4; n++) {
+      expect((await call(must(app), { method: "POST", url: "/v1/admin/door/open", access: admin.access, body: { password: "guess-number-" + String(n) + "-xx" } })).statusCode).toBe(403);
+    }
+    expect((await call(must(app), { method: "POST", url: "/v1/admin/door/open", access: admin.access, body: { password: ADMIN_PASSWORD } })).statusCode).toBe(200);
+    await redis.del(`rl:admin_door:id:${admin.userId}`);
+  });
+
   it("lists the people using the app with their plan and what they get; a deleted account is not one", { timeout: 30_000 }, async () => {
     const res = await asAdmin({ url: `/v1/admin/people?search=${PREFIX}` });
     expect(res.statusCode).toBe(200);

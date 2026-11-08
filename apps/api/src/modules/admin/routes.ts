@@ -11,7 +11,7 @@ import type { AppConfig } from "../../config.js";
 import type { RedisLike } from "../../redis.js";
 import { accessClaimsOf } from "../auth/plugin.js";
 import { activeUserInSession } from "../auth/repo.js";
-import { createDualRateLimit } from "../auth/rateLimit.js";
+import { createDualRateLimit, giveBackRateLimit } from "../auth/rateLimit.js";
 import { argon2idHasher, type PasswordHasher } from "../auth/service.js";
 import { DoorError, doorState, lock, makePassword, requireOpenDoor, unlock } from "./door.js";
 import { parseOr400 } from "../orgs/posts/routes.js";
@@ -78,15 +78,19 @@ export function registerAdminRoutes(app: FastifyInstance, deps: AdminRouteDeps):
     identifier: (req) => req.authUser?.id ?? null,
     redis: deps.redis,
   });
-  // A password is tried by hand: 5 tries in 15 minutes is plenty for Kd and nothing for a guesser.
-  const doorLimit = createDualRateLimit({
+  // A password is tried by hand: 5 wrong ones in 15 minutes is plenty for Kd and nothing for a
+  // guesser. Only a wrong password uses a try: one that opens the door, a form refused before it was
+  // checked, or a sign-in too old to try it, is given back (Kd's click-through: the right password
+  // after a Lock was refused as "too many").
+  const doorLimitOptions = {
     name: "admin_door",
     max: 5,
     ipMax: 20,
     windowMs: 15 * 60 * 1000,
-    identifier: (req) => req.authUser?.id ?? null,
+    identifier: (req: FastifyRequest) => req.authUser?.id ?? null,
     redis: deps.redis,
-  });
+  };
+  const doorLimit = createDualRateLimit(doorLimitOptions);
   const door = { sql: deps.sql, redis: deps.redis, config: deps.config, hasher: deps.hasher ?? argon2idHasher, now: deps.now ?? (() => new Date()) };
   const open = requireOpenDoor(door);
   const doorReply = async (reply: FastifyReply, run: () => Promise<unknown>) => {
@@ -97,6 +101,25 @@ export function registerAdminRoutes(app: FastifyInstance, deps: AdminRouteDeps):
       throw err;
     }
   };
+  /** A password try: the try is kept only when the password was wrong. */
+  const tryPassword = async (req: FastifyRequest, reply: FastifyReply, run: (password: string) => Promise<unknown>) => {
+    const body = parseOr400(adminPasswordRequestSchema, req.body, req, reply);
+    if (body === null) {
+      await giveBackRateLimit(doorLimitOptions, req);
+      return reply;
+    }
+    const tried = { wrong: false };
+    const sent = await doorReply(reply, async () => {
+      try {
+        return await run(body.password);
+      } catch (err) {
+        tried.wrong = err instanceof DoorError && err.code === "wrong_password";
+        throw err;
+      }
+    });
+    if (!tried.wrong) await giveBackRateLimit(doorLimitOptions, req);
+    return sent;
+  };
   // Nothing here is kept by a browser or anything between it and us.
   const noStore = (reply: FastifyReply): FastifyReply => reply.header("cache-control", "no-store");
 
@@ -105,18 +128,14 @@ export function registerAdminRoutes(app: FastifyInstance, deps: AdminRouteDeps):
   app.get("/v1/admin/door", { preHandler: [admin, readLimit] }, async (req, reply) => doorReply(reply, () => doorState(door, req, adminWho(req))));
 
   /** The first password, from a fresh sign-in; it opens the door. */
-  app.post("/v1/admin/door/password", { preHandler: [admin, doorLimit] }, async (req, reply) => {
-    const body = parseOr400(adminPasswordRequestSchema, req.body, req, reply);
-    if (body === null) return;
-    return doorReply(reply, () => makePassword(door, reply, adminWho(req), body.password));
-  });
+  app.post("/v1/admin/door/password", { preHandler: [admin, doorLimit] }, async (req, reply) =>
+    tryPassword(req, reply, (password) => makePassword(door, reply, adminWho(req), password)),
+  );
 
   /** A fresh sign-in and the password open the door for 12 hours. */
-  app.post("/v1/admin/door/open", { preHandler: [admin, doorLimit] }, async (req, reply) => {
-    const body = parseOr400(adminPasswordRequestSchema, req.body, req, reply);
-    if (body === null) return;
-    return doorReply(reply, () => unlock(door, reply, adminWho(req), body.password));
-  });
+  app.post("/v1/admin/door/open", { preHandler: [admin, doorLimit] }, async (req, reply) =>
+    tryPassword(req, reply, (password) => unlock(door, reply, adminWho(req), password)),
+  );
 
   /** Lock the page now. */
   app.post("/v1/admin/door/lock", { preHandler: [admin, writeLimit] }, async (req, reply) => {
