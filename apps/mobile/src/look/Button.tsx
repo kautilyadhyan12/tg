@@ -1,12 +1,13 @@
 import type { ReactNode } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, type StyleProp, type ViewStyle } from "react-native";
-import { colours, orangeGradient, shadows, sizes, type ColourName } from "./colours";
+import { colours, lightGradient, orangeGradient, raisedOrangeGradient, shadows, sizes, type ColourName } from "./colours";
 import { Icon, type IconName } from "./Icon";
 import { fonts, Txt } from "./Txt";
 
 /** `link`, `dangerLink` and `quiet` are words alone, with no box: a second thing to do beside a main button
- *  (`dangerLink` for one that removes something, such as Delete account). */
-export type ButtonKind = "main" | "plain" | "soft" | "danger" | "link" | "dangerLink" | "quiet";
+ *  (`dangerLink` for one that removes something, such as Delete account; `lightLink` white, on an orange box).
+ *  `light` is Google's white button; `dark` the black main button on sign-in's orange box. */
+export type ButtonKind = "main" | "plain" | "soft" | "danger" | "light" | "dark" | "link" | "lightLink" | "dangerLink" | "quiet";
 
 interface ButtonProps {
   label: string;
@@ -19,6 +20,8 @@ interface ButtonProps {
   /** Drawn 34 tall over a picture where a full button would hide it; its touch area stays 44. */
   compact?: boolean;
   wide?: boolean;
+  /** Drawn 52 tall with depth: a main button lit along its top, a white one lifted (sign-in, 12e). */
+  raised?: boolean;
   /** Drawn faint, and a press does nothing. */
   disabled?: boolean;
   /** Its own work is away: it turns, and a press does nothing. */
@@ -33,7 +36,10 @@ const ink: Record<ButtonKind, ColourName> = {
   plain: "text",
   soft: "orange",
   danger: "badText",
+  light: "onLight",
+  dark: "onOrange",
   link: "orange",
+  lightLink: "onOrange",
   dangerLink: "badText",
   quiet: "textSoft",
 };
@@ -48,12 +54,13 @@ export function Button({
   small = false,
   compact = false,
   wide = false,
+  raised = false,
   disabled = false,
   busy = false,
   style,
   say,
 }: ButtonProps) {
-  const words = kind === "link" || kind === "dangerLink" || kind === "quiet";
+  const words = kind === "link" || kind === "lightLink" || kind === "dangerLink" || kind === "quiet";
   return (
     <Pressable
       accessibilityRole="button"
@@ -69,6 +76,7 @@ export function Button({
         compact ? styles.compact : null,
         words ? styles.words : null,
         wide ? styles.wide : null,
+        raised ? (kind === "main" ? styles.raisedMain : kind === "dark" ? styles.raisedDark : styles.raised) : null,
         pressed ? styles.pressed : null,
         disabled ? styles.disabled : null,
         style,
@@ -107,7 +115,13 @@ const styles = StyleSheet.create({
   plain: { backgroundColor: colours.fill, borderColor: colours.lineStrong },
   soft: { backgroundColor: colours.orangeFill, borderColor: colours.orangeLine },
   danger: { backgroundColor: colours.badFill, borderColor: colours.badLine },
+  light: { backgroundColor: colours.light, experimental_backgroundImage: lightGradient, borderColor: colours.lightLine },
+  dark: { backgroundColor: colours.darkButton },
+  raised: { height: 52, boxShadow: shadows.lightButton },
+  raisedDark: { height: 52, boxShadow: shadows.darkButton },
+  raisedMain: { height: 52, experimental_backgroundImage: raisedOrangeGradient, boxShadow: shadows.buttonRaised },
   link: {},
+  lightLink: {},
   dangerLink: {},
   quiet: {},
   small: { height: sizes.press, paddingHorizontal: 16 },

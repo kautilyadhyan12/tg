@@ -119,7 +119,7 @@ function BeforeYouStart({ problemAtStart, onThrough }: { problemAtStart: string;
       <View style={styles.brand}>
         <Logo />
         <Txt kind="strong" style={styles.brandName}>
-          AI Home Gym
+          KWAZO
         </Txt>
       </View>
 
