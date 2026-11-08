@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 import { dietPlanResponseSchema, type DietPlanResponse, type FoodChoice } from "@app/shared";
-import { Chip } from "../../look/Chip";
-import { Txt } from "../../look/Txt";
+import { colours, orangeGradient, shadows, sizes } from "../../look/colours";
+import { fonts, Txt } from "../../look/Txt";
 import { useSession } from "../../session/SessionProvider";
 
 // Recommended For You's choice for food (ROADMAP Stage 5 31f, 31g; spec Part 6 §16.6): the app's own
@@ -60,8 +60,8 @@ export function useFoodChoice(fromRead: Shown | null, read: PlanRead, onAnswer?:
   return { shown, pick, trouble, quiet: () => { setTrouble(null); } };
 }
 
-/** The row of choices, under the box's title: Suggested, each gym the person is a member of, My plan.
- *  The picked one glows. */
+/** The choices as one switch, under the box's title: Suggested, each gym the person is a member of,
+ *  My plan. The picked one is orange and glows (Kd's drawing, 2026-11-08). */
 export function FoodChoiceRow({ shown, pick, trouble, gyms }: {
   shown: Shown;
   pick: (c: Shown) => Promise<void>;
@@ -75,10 +75,25 @@ export function FoodChoiceRow({ shown, pick, trouble, gyms }: {
   ];
   return (
     <View style={styles.box}>
-      <View style={styles.row} accessibilityRole="radiogroup" accessibilityLabel="Whose meals">
-        {choices.map((c) => (
-          <Chip key={c.key} label={c.label} on={same(shown, c.to)} small onPress={() => { void pick(c.to); }} />
-        ))}
+      <View style={styles.track} accessibilityRole="radiogroup" accessibilityLabel="Whose meals">
+        {choices.map((c) => {
+          const on = same(shown, c.to);
+          return (
+            <Pressable
+              key={c.key}
+              accessibilityRole="radio"
+              accessibilityLabel={c.label}
+              accessibilityState={{ selected: on }}
+              hitSlop={SLOP}
+              onPress={() => { void pick(c.to); }}
+              style={({ pressed }) => [styles.part, on ? styles.on : null, pressed ? styles.pressed : null]}
+            >
+              <Txt colour={on ? "onOrange" : "textSoft"} style={styles.label}>
+                {c.label}
+              </Txt>
+            </Pressable>
+          );
+        })}
       </View>
       {trouble === null ? null : (
         <Txt kind="small" colour="badText">
@@ -89,7 +104,21 @@ export function FoodChoiceRow({ shown, pick, trouble, gyms }: {
   );
 }
 
+const SLOP = { top: 6, bottom: 6, left: 0, right: 0 };
+
 const styles = StyleSheet.create({
   box: { gap: 6 },
-  row: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  track: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    padding: 3,
+    borderRadius: sizes.round,
+    borderWidth: 1,
+    borderColor: colours.line,
+    backgroundColor: colours.fill,
+  },
+  part: { flexGrow: 1, flexBasis: "auto", minHeight: 34, paddingHorizontal: 10, alignItems: "center", justifyContent: "center", borderRadius: sizes.round },
+  on: { backgroundColor: colours.orange, experimental_backgroundImage: orangeGradient, boxShadow: shadows.chip },
+  pressed: { opacity: 0.85 },
+  label: { fontFamily: fonts.semibold, fontSize: 13, lineHeight: 17 },
 });

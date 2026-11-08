@@ -224,9 +224,12 @@ describe("the Food screen's box", () => {
   it("shows the next meal's ideas with amounts and numbers, and the later meals behind a button", async () => {
     await open({ ideas: () => ({ status: 200, body: answer() }), meals: [] }, "Food");
     const box = within(await screen.findByTestId("meal-ideas-box"));
-    expect(await box.findByText("Rice 1 cup · 200 g")).toBeTruthy();
-    expect(box.getByText("Chicken breast 150 g")).toBeTruthy();
-    expect(box.getByText(/^508 kcal · 40 g protein/)).toBeTruthy();
+    expect(await box.findByText("Rice")).toBeTruthy();
+    expect(box.getByText("1 cup · 200 g")).toBeTruthy();
+    expect(box.getByText("Chicken breast")).toBeTruthy();
+    expect(box.getByText("150 g")).toBeTruthy();
+    expect(box.getByText("508 kcal")).toBeTruthy();
+    expect(box.getByText("40 g protein")).toBeTruthy();
     // Each idea's own reason, the server's, under it (31d-ii).
     for (const why of ["share", "under", "after_workout"] as const) expect(box.getByText(IDEA_WHY_WORDS[why])).toBeTruthy();
     expect(box.queryByText(IDEA_WHY_WORDS.most)).toBeNull();
@@ -302,8 +305,11 @@ describe("the Dashboard's Recommended box", () => {
     expect(box.getByRole("radio", { name: "Food" })).toBeTruthy();
     expect(await box.findByText(/^Rice/)).toBeTruthy();
     expect(box.getByText("1 cup · 200 g")).toBeTruthy();
-    expect(box.getByText("508 kcal")).toBeTruthy();
-    expect(box.getByText("40 g protein · 60 g carbs")).toBeTruthy();
+    // Its numbers as tiles: kcal, then each macro.
+    expect(box.getByText("508")).toBeTruthy();
+    expect(box.getByText("Protein")).toBeTruthy();
+    expect(box.getByText("Carbs")).toBeTruthy();
+    expect(box.getByText("Picked for you")).toBeTruthy();
     expect(box.getByText(IDEA_WHY_WORDS.share)).toBeTruthy();
     expect(box.queryByText(/^Dal/)).toBeNull();
     expect(box.getByText(FOOD_ALLERGY_CAUTION)).toBeTruthy();

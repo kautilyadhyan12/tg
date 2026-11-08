@@ -305,7 +305,7 @@ describe("one box, one answer", () => {
     // Whose meal it is: the lit choice says it, once.
     expect(await card.findByRole("radio", { name: "My plan", selected: true })).toBeTruthy();
     expect(card.queryByText("MY PLAN")).toBeNull();
-    expect(card.queryByText("SUGGESTED")).toBeNull();
+    expect(card.queryByText("Picked for you")).toBeNull();
     await fireEvent.press(await card.findByRole("button", { name: "Log Rice + Dal" }));
     const food = within(await screen.findByTestId("meal-plan-box"));
     expect(screen.getByRole("tab", { name: "Food", selected: true })).toBeTruthy();
@@ -325,7 +325,7 @@ describe("one box, one answer", () => {
     const box = within(await (await open(world)).findByTestId("meal-plan-box"));
     expect(await box.findByText("No meals in your plan today.")).toBeTruthy();
     // Whose meal it is: the app's, never read as the plan's.
-    expect(box.getByText("SUGGESTED")).toBeTruthy();
+    expect(box.getByText("Picked for you")).toBeTruthy();
     expect(box.queryByText("MY PLAN")).toBeNull();
     expect(box.getByText(IDEA_WHY_WORDS.share)).toBeTruthy();
     expect(box.getByText(FOOD_ALLERGY_CAUTION)).toBeTruthy();
@@ -343,7 +343,7 @@ describe("one box, one answer", () => {
     const world = serverOf(() => ok(week([], {}, [OATS])), { "/v1/nutrition/suggestions": () => ok(WITH_IDEA) });
     const card = within(await (await open(world, files(), "Dashboard")).findByTestId("recommended-box"));
     expect(await card.findByText("No meals in your plan today.")).toBeTruthy();
-    expect(card.getByText("SUGGESTED")).toBeTruthy();
+    expect(card.getByText("Picked for you")).toBeTruthy();
     expect(card.getByRole("button", { name: "See meal plan" })).toBeTruthy();
     expect(card.getByText(IDEA_WHY_WORDS.share)).toBeTruthy();
     expect(card.getByText(FOOD_ALLERGY_CAUTION)).toBeTruthy();
@@ -871,7 +871,8 @@ describe("the gym's meal plan (31g)", () => {
     expect(box.getByRole("radio", { name: "Suggested" })).toBeTruthy();
     expect(box.getByRole("radio", { name: "My plan" })).toBeTruthy();
     expect(box.queryByRole("radio", { name: "Oak Gym" })).toBeNull();
-    expect(box.getByText("Lean week · By Sam")).toBeTruthy();
+    expect(box.getByText("Lean week")).toBeTruthy();
+    expect(box.getByText("By Sam · Iron House")).toBeTruthy();
     // The gym's next meal, never the person's own Salmon.
     expect(box.queryByRole("button", { name: "Log Salmon" })).toBeNull();
     expect(box.getByText(FOOD_ALLERGY_CAUTION)).toBeTruthy();
@@ -895,7 +896,7 @@ describe("the gym's meal plan (31g)", () => {
     await fireEvent.press(screen.getByRole("tab", { name: "Dashboard" }));
     const card = within(await screen.findByTestId("recommended-box"));
     expect(await card.findByRole("radio", { name: "Iron House", selected: true })).toBeTruthy();
-    expect(await card.findByText("Lean week · By Sam")).toBeTruthy();
+    expect(await card.findByText("By Sam · Iron House")).toBeTruthy();
   });
 
   it("a member of two gyms sees both; picking one sends that gym, and My plan shows their own again", async () => {
@@ -942,7 +943,7 @@ describe("the gym's meal plan (31g)", () => {
     const card = within(await screen.findByTestId("recommended-box"));
     await fireEvent.press(await card.findByRole("radio", { name: "Iron House" }));
     const picked = within(await screen.findByTestId("recommended-box"));
-    expect(await picked.findByText("Lean week · By Sam")).toBeTruthy();
+    expect(await picked.findByText("By Sam · Iron House")).toBeTruthy();
     await fireEvent.press(picked.getByRole("button", { name: "See meal plan" }));
     expect(await screen.findByText("Iron House’s meal plan")).toBeTruthy();
     expect(screen.queryByText("Your meal plan")).toBeNull();

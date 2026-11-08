@@ -14,6 +14,7 @@ import { newGoalId } from "../goals/words";
 import { mealTypeName } from "./day";
 import { gymMeal, mealPlanEmail, noGymPlanLine, underLine, writtenByLine, type GymOfMine } from "./gymPlanRules";
 import { ideaName } from "./ideaRules";
+import { AllergyFoot, FromRow, initialsOf, nextMealWords, Notice, PlanMealCard } from "./MealCard";
 import { useMealOutbox } from "./MealOutbox";
 import { loggedAmount } from "./measures";
 import { loggedOfDay, planDayName, planDayOf, planMealAsMeal, stepDay } from "./planRules";
@@ -146,7 +147,7 @@ export function GymPlanBox({ gym, retry, choices, foodsToday, todayFailed, retry
     const seeWeek = <Button label="See the week" kind="link" compact onPress={() => { setSaid(null); setWeek(true); }} />;
     body = (
       <>
-        <Txt kind="tiny" colour="textSoft">{writtenByLine(plan)}</Txt>
+        <GymFrom gym={gym} plan={plan} />
         {saidLine}
         {troubleLine}
         {foodsToday === null ? (
@@ -172,7 +173,7 @@ export function GymPlanBox({ gym, retry, choices, foodsToday, todayFailed, retry
           </>
         ) : (
           <>
-            <GymMealWords meal={next} />
+            <PlanMealCard meal={next} eyebrow={nextMealWords(next)} />
             <UnderLine under={day?.under} />
             <View style={styles.actions}>
               <Button label="Log meal" compact disabled={held} say={`Log ${ideaName(next)}`} onPress={() => { void log(next); }} />
@@ -180,7 +181,7 @@ export function GymPlanBox({ gym, retry, choices, foodsToday, todayFailed, retry
             </View>
           </>
         )}
-        <Txt kind="tiny">{plan.caution}</Txt>
+        <AllergyFoot lines={[plan.caution]} />
       </>
     );
   }
@@ -277,13 +278,17 @@ function GymWeek({ open, gymName, plan, today, foodsToday, held, said, trouble, 
 export function UnderLine({ under }: { under: LowestKcal | null | undefined }) {
   const words = underLine(under ?? null);
   if (words === null) return null;
+  return <Notice>{words}</Notice>;
+}
+
+/** Whose plan: the writer's initials, the plan's name, and who wrote it at which gym. */
+export function GymFrom({ gym, plan }: { gym: GymOfMine; plan: Pick<MyGymMealPlan, "name" | "writtenBy"> }) {
   return (
-    <View style={styles.row}>
-      <Icon name="warn" size={14} colour="gold" />
-      <Txt kind="small" colour="gold" style={styles.grow}>
-        {words}
-      </Txt>
-    </View>
+    <FromRow
+      badge={{ initials: initialsOf(plan.writtenBy ?? gym.name) }}
+      title={plan.name}
+      sub={plan.writtenBy === null ? gym.name : `By ${plan.writtenBy} · ${gym.name}`}
+    />
   );
 }
 

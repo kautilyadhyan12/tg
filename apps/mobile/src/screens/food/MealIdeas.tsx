@@ -15,10 +15,10 @@ import { NOT_KNOWN, count } from "../dashboard/words";
 import { newGoalId } from "../goals/words";
 import { Setup } from "../setup/Setup";
 import { mealTypeName } from "./day";
-import { ideaAmountWords, ideaAsMeal, ideaFoodWords, ideaMealType, ideaName } from "./ideaRules";
+import { ideaAmountWords, ideaAsMeal, ideaMealType, ideaName } from "./ideaRules";
 import { useMealOutbox } from "./MealOutbox";
-import { loggedAmount } from "./measures";
-import { foodTitle } from "./rows";
+import { AllergyFoot, ART_SIZE, EmptyBox, Eyebrow, FoodLines, FromRow, NumberTiles, nextMealWords, planFoods } from "./MealCard";
+import { planDayName, planDayOf } from "./planRules";
 
 export const IDEAS_READ = "/v1/nutrition/suggestions";
 
@@ -67,7 +67,7 @@ export type PlannedNow =
   | "loading"
   | { failed: string; retry: () => void }
   | { build: () => void }
-  | { meal: DietPlanMeal | null; canLog: boolean; caution: string; labelCaution: string | null; note?: ReactNode }
+  | { meal: DietPlanMeal | null; canLog: boolean; caution: string; labelCaution: string | null; from?: ReactNode; note?: ReactNode }
   /** Another choice's own words in the box: the gym's plan that hasn't been given (31g). */
   | { words: ReactNode }
 
@@ -130,6 +130,7 @@ export function MealIdeas({ onMore, onAnswered, fresh = 0, below = null, bare = 
   const tryAgain = <Button label="Try again" kind="link" say="Try meal ideas again" onPress={again} />;
 
   let body;
+  let rest: ReactNode = null;
   let foot = null;
   const plannedNow = onDashboard && planned !== undefined ? planned : null;
   if (plannedNow === "loading") {
@@ -146,34 +147,50 @@ export function MealIdeas({ onMore, onAnswered, fresh = 0, below = null, bare = 
   } else if (plannedNow !== null && "build" in plannedNow) {
     body = (
       <>
-        <Txt kind="small">{NO_PLAN_YET}</Txt>
-        <Button label="Build my own" compact style={styles.start} onPress={plannedNow.build} />
+        <MyPlanFrom />
+        <EmptyBox title={NO_PLAN_YET} line={null} />
       </>
     );
+    rest = <Button label="Build my own" compact style={styles.start} onPress={plannedNow.build} />;
   } else if (plannedNow !== null && "words" in plannedNow) {
     body = plannedNow.words;
   } else if (plannedNow !== null && onMore !== undefined) {
-    const { meal, caution, labelCaution, note = null } = plannedNow;
-    body =
-      meal === null ? (
+    const { meal, caution, labelCaution, from = <MyPlanFrom />, note = null } = plannedNow;
+    if (meal === null) {
+      body = (
         <>
-          <Txt kind="small">All of today’s meals are logged.</Txt>
-          <Button label="See meal plan" kind="link" compact style={styles.start} onPress={onMore} />
+          {from}
+          <EmptyBox title="All of today’s meals are logged." line={null} />
         </>
-      ) : (
+      );
+      rest = <Button label="See meal plan" kind="link" compact style={styles.start} onPress={onMore} />;
+    } else {
+      body = (
         <>
-          {choices === null ? <Source word="My plan" /> : null}
+          {from}
+          <View style={styles.mealWords}>
+            <Eyebrow words={nextMealWords(meal)} />
+            <FoodLines foods={planFoods(meal)} />
+          </View>
+        </>
+      );
+      rest = (
+        <>
+          <NumberTiles kcal={meal.totals.kcalPoint} proteinG={meal.totals.proteinG} carbsG={meal.totals.carbsG} fatG={meal.totals.fatG} />
+          {meal.outsideDiet.length === 0 ? null : (
+            <Txt kind="tiny" colour="gold">
+              Not in your diet: {meal.outsideDiet.join(", ")}.
+            </Txt>
+          )}
           {note}
-          <BestPlanned meal={meal} onLog={onLog ?? onMore} onMore={onMore} />
+          <View style={styles.actions}>
+            <Button label="Log meal" compact say={`Log ${ideaName(meal)}`} onPress={onLog ?? onMore} />
+            <Button label="See meal plan" kind="link" compact onPress={onMore} />
+          </View>
         </>
       );
-    foot =
-      meal === null ? null : (
-        <>
-          <Txt kind="tiny">{caution}</Txt>
-          {labelCaution === null ? null : <Txt kind="tiny">{labelCaution}</Txt>}
-        </>
-      );
+      foot = <AllergyFoot lines={[caution, labelCaution]} />;
+    }
   } else if (waiting) {
     body = (
       <View style={styles.row}>
@@ -223,21 +240,39 @@ export function MealIdeas({ onMore, onAnswered, fresh = 0, below = null, bare = 
     body = <Txt kind="small">No more meals to suggest today.</Txt>;
   } else {
     const { caution, labelCaution } = read.data;
-    const [next, ...rest] = read.data.meals;
+    const [next, ...laterMeals] = read.data.meals;
+    const best = onDashboard ? next.ideas[0] : undefined;
+    if (best !== undefined && onMore !== undefined) {
+      rest = (
+        <>
+          <NumberTiles kcal={best.totals.kcal} proteinG={best.totals.proteinG} carbsG={best.totals.carbsG} fatG={best.totals.fatG} />
+          <View style={styles.actions}>
+            <Button label="Log meal" compact say={`Log ${ideaName(best)}`} onPress={onLog ?? onMore} />
+            <Button label="More ideas" kind="link" compact onPress={onMore} />
+          </View>
+        </>
+      );
+    }
     body = (
       <>
-        {/* The lit choice already says whose ideas these are; under My plan's empty day, it doesn't. */}
-        {choices === null || lead !== undefined ? <Source word="Suggested" /> : null}
-        {onDashboard ? (
-          next.ideas[0] === undefined ? null : (
-            <BestIdea idea={next.ideas[0]} onLog={onLog ?? onMore} onMore={onMore} />
-          )
+        {/* Whose ideas these are; under My plan's empty day, the ideas are said to be the app's. */}
+        {best === undefined ? (
+          <>
+            {lead !== undefined ? <FromRow badge={{ icon: "sparkles" }} title="Picked for you" sub={null} /> : null}
+            {onDashboard ? null : next.ideas.map(row)}
+          </>
         ) : (
-          next.ideas.map(row)
+          <>
+            <FromRow badge={{ icon: "sparkles" }} title="Picked for you" sub={IDEA_WHY_WORDS[best.why]} />
+            <View style={styles.mealWords}>
+              <Eyebrow words="Today’s idea" />
+              <FoodLines foods={best.items.map((f) => ({ name: f.name, amount: ideaAmountWords(f) }))} />
+            </View>
+          </>
         )}
-        {onDashboard || rest.length === 0 ? null : (
+        {onDashboard || laterMeals.length === 0 ? null : (
           <Button
-            label={rest.length === 1 ? "1 more meal today" : `${String(rest.length)} more meals today`}
+            label={laterMeals.length === 1 ? "1 more meal today" : `${String(laterMeals.length)} more meals today`}
             kind="link"
             style={styles.start}
             onPress={() => {
@@ -249,8 +284,7 @@ export function MealIdeas({ onMore, onAnswered, fresh = 0, below = null, bare = 
     );
     foot = (
       <>
-        <Txt kind="tiny">{caution}</Txt>
-        {labelCaution === null ? null : <Txt kind="tiny">{labelCaution}</Txt>}
+        <AllergyFoot lines={[caution, labelCaution]} />
         <Sheet
           open={later && !onDashboard}
           title="Later today"
@@ -258,7 +292,7 @@ export function MealIdeas({ onMore, onAnswered, fresh = 0, below = null, bare = 
             setLater(false);
           }}
         >
-          {rest.map((meal, at) => (
+          {laterMeals.map((meal, at) => (
             <View key={String(at)} style={styles.later}>
               <Txt kind="strong">{at === 0 ? "1 meal later" : `${String(at + 1)} meals later`} · about {count(meal.kcalTarget)} kcal</Txt>
               {meal.ideas.map(row)}
@@ -295,8 +329,9 @@ export function MealIdeas({ onMore, onAnswered, fresh = 0, below = null, bare = 
     );
   const leadLine =
     lead === undefined ? null : (
-      <View>
-        <Txt kind="small">{lead.words}</Txt>
+      <View style={styles.lead}>
+        <MyPlanFrom />
+        <EmptyBox title={lead.words} line={null} />
         <Button label={lead.action.label} kind="link" compact style={styles.start} onPress={lead.action.onPress} />
       </View>
     );
@@ -307,6 +342,7 @@ export function MealIdeas({ onMore, onAnswered, fresh = 0, below = null, bare = 
         {saidLine}
         {leadLine}
         {body}
+        {rest}
         {foot}
         {setup}
       </>
@@ -331,7 +367,7 @@ export function MealIdeas({ onMore, onAnswered, fresh = 0, below = null, bare = 
             </Pressable>
           </View>
           {choices}
-          {/* The picture beside the words and never under them, as on Weekly Challenges; the choices above both, across the box. */}
+          {/* Whose meal and the meal beside the picture, never under it; its numbers and the button across the box. */}
           <View style={styles.beside}>
             <View style={styles.leftWords}>
               {view.refused.map((r) => (
@@ -350,13 +386,15 @@ export function MealIdeas({ onMore, onAnswered, fresh = 0, below = null, bare = 
                 </View>
               ))}
               {saidLine}
-              {leadLine}
-              {body}
+              {/* My plan with nothing today: the empty day beside the picture, the app's idea across the box under it. */}
+              {lead === undefined ? body : leadLine}
             </View>
             <View style={styles.art}>
               <Image source={pictures.foodbowl} resizeMode="contain" style={styles.artFill} accessible={false} />
             </View>
           </View>
+          {lead === undefined ? null : body}
+          {rest}
           {foot}
         </Card>
       ) : (
@@ -368,6 +406,7 @@ export function MealIdeas({ onMore, onAnswered, fresh = 0, below = null, bare = 
           {choices}
           {saidLine}
           {body}
+          {rest}
           {foot}
           {below}
         </Card>
@@ -377,79 +416,9 @@ export function MealIdeas({ onMore, onAnswered, fresh = 0, below = null, bare = 
   );
 }
 
-/** The Dashboard's one idea: its numbers large, its foods as a short table, and the one thing to do. */
-function BestIdea({ idea, onLog, onMore }: { idea: SuggestedIdea; onLog: () => void; onMore: () => void }) {
-  return (
-    <>
-      <View>
-        <Txt colour="orange" style={styles.kcal}>
-          {count(idea.totals.kcal)} kcal
-        </Txt>
-        <Txt kind="tiny">
-          {count(Math.round(idea.totals.proteinG))} g protein · {count(Math.round(idea.totals.carbsG))} g carbs
-        </Txt>
-        <Why idea={idea} />
-      </View>
-      <View style={styles.foods}>
-        {idea.items.map((food) => (
-          <Txt key={food.canonical} kind="tiny" colour="text">
-            {food.name}{" "}
-            <Txt kind="tiny" colour="textFaint">
-              {ideaAmountWords(food).replace(/ /g, KEEP_TOGETHER)}
-            </Txt>
-          </Txt>
-        ))}
-      </View>
-      <View style={styles.actions}>
-        <Button label="Log meal" compact say={`Log ${ideaName(idea)}`} onPress={onLog} />
-        <Button label="More ideas" kind="link" compact onPress={onMore} />
-      </View>
-    </>
-  );
-}
-
-/** The same box for somebody with a meal plan: the plan's next meal. */
-function BestPlanned({ meal, onLog, onMore }: { meal: DietPlanMeal; onLog: () => void; onMore: () => void }) {
-  return (
-    <>
-      <View>
-        <Txt colour="orange" style={styles.kcal}>
-          {mealTypeName(meal.mealType)} · {count(meal.totals.kcalPoint)} kcal
-        </Txt>
-        <Txt kind="tiny">
-          {count(Math.round(meal.totals.proteinG))} g protein · {count(Math.round(meal.totals.carbsG))} g carbs · {count(Math.round(meal.totals.fatG))} g fat
-        </Txt>
-      </View>
-      <View style={styles.foods}>
-        {meal.items.map((food, at) => (
-          <Txt key={String(at)} kind="tiny" colour="text">
-            {foodTitle(food)}{" "}
-            <Txt kind="tiny" colour="textFaint">
-              {loggedAmount(food).replace(/ /g, KEEP_TOGETHER)}
-            </Txt>
-          </Txt>
-        ))}
-      </View>
-      {meal.outsideDiet.length === 0 ? null : (
-        <Txt kind="tiny" colour="gold">
-          Not in your diet: {meal.outsideDiet.join(", ")}.
-        </Txt>
-      )}
-      <View style={styles.actions}>
-        <Button label="Log meal" compact say={`Log ${ideaName(meal)}`} onPress={onLog} />
-        <Button label="See meal plan" kind="link" compact onPress={onMore} />
-      </View>
-    </>
-  );
-}
-
-/** Whose meal is shown: the app's ("Suggested") or the person's own ("My plan"). */
-export function Source({ word }: { word: "Suggested" | "My plan" }) {
-  return (
-    <Txt kind="tiny" colour="textSoft" style={styles.source}>
-      {word.toUpperCase()}
-    </Txt>
-  );
+/** Whose meal, when it is the person's own plan: today's. */
+function MyPlanFrom() {
+  return <FromRow badge={{ icon: "calendar" }} title="Your plan" sub={planDayName(planDayOf(new Date()))} />;
 }
 
 /** Why the idea holds what it does, in the server's one reason (spec Part 6 §16.6, 8). */
@@ -462,15 +431,16 @@ function Why({ idea }: { idea: SuggestedIdea }) {
 function IdeaRow({ idea, held, onLog }: { idea: SuggestedIdea; held: boolean; onLog: () => void }) {
   return (
     <View style={styles.idea}>
-      <View style={styles.grow}>
-        {idea.items.map((food) => (
-          <Txt key={food.canonical} kind="small" colour="text">
-            {ideaFoodWords(food)}
+      <View style={[styles.grow, styles.ideaWords]}>
+        <FoodLines list foods={idea.items.map((f) => ({ name: f.name, amount: ideaAmountWords(f) }))} />
+        <View style={styles.tags}>
+          <Txt kind="tiny" colour="orangeLight" style={styles.tag}>
+            {count(idea.totals.kcal)} kcal
           </Txt>
-        ))}
-        <Txt kind="tiny" style={styles.numbers}>
-          {count(idea.totals.kcal)} kcal · {count(Math.round(idea.totals.proteinG))} g protein
-        </Txt>
+          <Txt kind="tiny" colour="text" style={styles.tag}>
+            {count(Math.round(idea.totals.proteinG))} g protein
+          </Txt>
+        </View>
         <Why idea={idea} />
       </View>
       <Button label="Log" kind="soft" small disabled={held} say={`Log ${ideaName(idea)}`} onPress={onLog} />
@@ -481,8 +451,6 @@ function IdeaRow({ idea, held, onLog }: { idea: SuggestedIdea; held: boolean; on
 /** My plan is picked and the person has none yet. */
 export const NO_PLAN_YET = "You don’t have a meal plan yet.";
 
-/** A space a line never breaks at: an amount is never split from its unit. */
-const KEEP_TOGETHER = "\u00A0";
 const OPTION_SLOP = { top: 12, bottom: 12, left: 8, right: 8 };
 
 const styles = StyleSheet.create({
@@ -492,14 +460,17 @@ const styles = StyleSheet.create({
   titleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   boxTitle: { fontSize: 14, lineHeight: 18, color: colours.textSoft },
   beside: { flexDirection: "row", gap: 8 },
-  art: { width: "36%", minHeight: 120 },
+  art: { width: ART_SIZE, height: ART_SIZE },
   artFill: { position: "absolute", top: 0, right: 0, bottom: 0, left: 0, width: "100%", height: "100%" },
   leftWords: { flex: 1, gap: 10 },
   options: { flexDirection: "row", gap: 14 },
   option: { alignSelf: "flex-start", paddingBottom: 3, borderBottomWidth: 2, borderBottomColor: colours.orange },
   optionWord: { fontFamily: fonts.semibold },
-  kcal: { fontFamily: fonts.bold, fontSize: 15, lineHeight: 20 },
-  foods: { gap: 3 },
+  mealWords: { gap: 4 },
+  lead: { gap: 10 },
+  ideaWords: { gap: 6 },
+  tags: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  tag: { fontFamily: fonts.semibold, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999, backgroundColor: colours.raised, overflow: "hidden" },
   actions: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 4 },
   start: { alignSelf: "flex-start" },
   idea: { flexDirection: "row", alignItems: "center", gap: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: colours.line },

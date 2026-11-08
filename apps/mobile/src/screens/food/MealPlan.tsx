@@ -19,8 +19,9 @@ import { mealTypeName, startOfDay } from "./day";
 import { dayRows, useDayMeals } from "./dayRows";
 import { ideaName } from "./ideaRules";
 import { FoodChoiceRow, shownOf, useFoodChoice } from "./FoodChoice";
-import { GymPlanBox, NoGymPlan, UnderLine, useGymPlans, type WeekAsk } from "./GymMealPlan";
-import { gymMeal, writtenByLine, type GymOfMine } from "./gymPlanRules";
+import { GymFrom, GymPlanBox, NoGymPlan, UnderLine, useGymPlans, type WeekAsk } from "./GymMealPlan";
+import { AllergyFoot, FromRow, nextMealWords, PlanMealCard } from "./MealCard";
+import { gymMeal, type GymOfMine } from "./gymPlanRules";
 import { MealIdeas, NO_PLAN_YET, type PlannedNow } from "./MealIdeas";
 import { useMealOutbox } from "./MealOutbox";
 import { loggedAmount } from "./measures";
@@ -551,7 +552,8 @@ export function WhatToEatNext({ foodsToday, fresh, onAnswered, todayFailed, retr
           </>
         ) : (
           <>
-            <MealWords meal={next} />
+            <FromRow badge={{ icon: "calendar" }} title="Your plan" sub={planDayName(today)} />
+            <PlanMealCard meal={next} eyebrow={nextMealWords(next)} />
             <OutsideDiet meal={next} />
             <UnderLine under={plan.days[today - 1]?.under} />
             <View style={styles.actions}>
@@ -560,8 +562,7 @@ export function WhatToEatNext({ foodsToday, fresh, onAnswered, todayFailed, retr
               {seeWeek}
               {otherIdeas}
             </View>
-            <Txt kind="tiny">{plan.caution}</Txt>
-            {plan.labelCaution === null ? null : <Txt kind="tiny">{plan.labelCaution}</Txt>}
+            <AllergyFoot lines={[plan.caution, plan.labelCaution]} />
           </>
         )}
       </Card>
@@ -601,13 +602,12 @@ function RecommendedFromGym({ gym, onMore, onIdeas, onLog, choices }: { gym: Gym
   const plan = gym.plan;
   if (plan === null) return <MealIdeas onMore={onIdeas} onLog={onLog} choices={choices} planned={{ words: <NoGymPlan gym={gym} /> }} />;
   const days = plan.days.map((d) => ({ meals: d.meals.map(gymMeal), under: d.under }));
-  const note = <Txt kind="tiny" colour="textSoft">{writtenByLine(plan)}</Txt>;
-  return <RecommendedFromPlan plan={{ days, caution: plan.caution, labelCaution: null }} note={note} onMore={onMore} onIdeas={onIdeas} onLog={onLog} choices={choices} />;
+  return <RecommendedFromPlan plan={{ days, caution: plan.caution, labelCaution: null }} from={<GymFrom gym={gym} plan={plan} />} onMore={onMore} onIdeas={onIdeas} onLog={onLog} choices={choices} />;
 }
 
 type PlanToday = { days: readonly { meals: readonly DietPlanMeal[]; under: DietPlanDayReply["under"] }[]; caution: string; labelCaution: string | null };
 
-function RecommendedFromPlan({ plan, note = null, onMore, onIdeas, onLog, choices }: { plan: PlanToday; note?: ReactNode; onMore: () => void; onIdeas: () => void; onLog: () => void; choices: ReactNode }) {
+function RecommendedFromPlan({ plan, from, onMore, onIdeas, onLog, choices }: { plan: PlanToday; from?: ReactNode; onMore: () => void; onIdeas: () => void; onLog: () => void; choices: ReactNode }) {
   const { view } = useMealOutbox();
   const dayStart = startOfDay(new Date()).getTime();
   const day = useMemo(() => new Date(dayStart), [dayStart]);
@@ -628,12 +628,8 @@ function RecommendedFromPlan({ plan, note = null, onMore, onIdeas, onLog, choice
     canLog: true,
     caution: plan.caution,
     labelCaution: plan.labelCaution,
-    note: (
-      <>
-        {note}
-        <UnderLine under={today?.under} />
-      </>
-    ),
+    ...(from === undefined ? {} : { from }),
+    note: <UnderLine under={today?.under} />,
   };
   return <MealIdeas onMore={onMore} onLog={onLog} planned={planned} choices={choices} />;
 }
