@@ -55,6 +55,10 @@ export const DIRECT_DELETE_TABLES = [
   // (migration 0227, ROADMAP Stage 2 item 14a-ii): about them, so deleted and exported.
   "app_minutes",
   "metered_uses",
+  // Each sign-in kept with its internet address and device, and the one-time links (password, undo):
+  // revoked at Day 0, deleted here (ROADMAP Stage 5 21b-i: the privacy policy says they go with the account).
+  "refresh_tokens",
+  "one_time_tokens",
   "saved_routes",
   "run_schedules",
   "body_measurements",
@@ -216,6 +220,9 @@ export const EXPORT_EXCLUDED_TABLES = {
   push_tokens: "device push credentials — exporting them is a spoofing vector, not user content",
   // The admin door's password hash (14a-i): a credential, never handed out in a file.
   admin_passwords: "a password hash — a credential, never content to hand out",
+  // Sign-ins and one-time links (21b-i): credentials, never handed out in a file.
+  refresh_tokens: "sign-in credentials — a file holding them could be used to sign in",
+  one_time_tokens: "one-time link credentials — never content to hand out",
   // Only which of OTHER people's comments the phone was told of, and when: their ids, none of
   // the person's own words or choices (the comments themselves are in the export).
   gym_post_comment_notices: "a send queue of other people's comment ids, not the person's content",
@@ -390,8 +397,6 @@ export const USER_LINKED_NOT_PURGED_TABLES = [
   "audit_log",
   "invoices",
   // The SPEC GAP: recorded, not ruled (R0.2).
-  "one_time_tokens",
-  "refresh_tokens",
   "gym_members",
   "gym_staff",
   "gym_join_applications",

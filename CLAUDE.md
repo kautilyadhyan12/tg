@@ -368,6 +368,13 @@ twelve seconds of answering nobody — and no rule asked, so nothing found it un
 did. The launch shape to measure against is 20 gyms of 200 (RULINGS 2026-09-20), and a
 number that is comfortable there is still stated, not assumed.
 
+**The privacy policy keeps up (Kd, 2026-11-08, `rulings/2026-11-08-21b-i.md`).** A job that makes the
+app collect, keep or send something new about a person (a new outside service, a new kind of data, a
+longer keep) changes the words in `packages/shared/src/legal.ts` in the same pull request, and
+`apps/api/test/legal.unit.test.ts` fails until it does for a new server setting or kept table. The whole
+policy is read again against the app before publishing. KWAZO is a fitness and nutrition app, never
+called a health app.
+
 **Numbers.** Any count, size, threshold or "the file contains X" claim comes from a
 command run in this session, with its output shown. Otherwise write "unverified".
 

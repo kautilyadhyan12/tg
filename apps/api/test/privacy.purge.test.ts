@@ -251,6 +251,11 @@ d("DPDP Day-14 purge (real Postgres)", () => {
     await sql`INSERT INTO admin_passwords (user_id, password_hash, hash_algo) VALUES (${userId}, 'not-a-real-hash', 'argon2id')`;
     await sql`INSERT INTO app_minutes (user_id, day, minutes, zone) VALUES (${userId}, current_date, 12, 'Asia/Kolkata')`;
     await sql`INSERT INTO metered_uses (user_id, feature) VALUES (${userId}, 'meal_scan')`;
+    // A sign-in with its address and device, and an undo link (21b-i): gone with the account.
+    await sql`INSERT INTO refresh_tokens (user_id, family_id, token_hash, expires_at, revoked_at, ip, user_agent, client)
+              VALUES (${userId}, gen_random_uuid(), md5(random()::text), now() + interval '30 days', now(), '203.0.113.7', 'Fixture phone', 'phone')`;
+    await sql`INSERT INTO one_time_tokens (user_id, purpose, token_hash, expires_at)
+              VALUES (${userId}, 'restore_account', md5(random()::text), now() + interval '14 days')`;
     await sql`INSERT INTO member_label_foods (id, user_id, name, unit, kcal, protein_g, carbs_g, fat_g) VALUES (gen_random_uuid(), ${userId}, 'Fixture label', 'g', 100, 1, 1, 1)`;
     await sql`INSERT INTO user_dishware (user_id, label, container_class, volume_ml)
               VALUES (${userId}, 'Fixture katori', 'katori', 175)`;
@@ -321,6 +326,10 @@ d("DPDP Day-14 purge (real Postgres)", () => {
     expect((await directCounts(early.userId))["streaks"]).toBe(1);
     expect((await directCounts(due.userId))["streaks"]).toBe(0);
     expect((await directCounts(old.userId))["streaks"]).toBe(0);
+    // The sign-ins (address and device) go with the account, and only with the purged one's (21b-i).
+    for (const t of ["refresh_tokens", "one_time_tokens"]) {
+      expect({ t, early: (await directCounts(early.userId))[t], due: (await directCounts(due.userId))[t] }).toEqual({ t, early: 1, due: 0 });
+    }
   });
 
   it("KEEPS the consent log through a purge (proof of the tap, RULINGS 2026-09-09) while the screening goes", { timeout: 60_000 }, async () => {
