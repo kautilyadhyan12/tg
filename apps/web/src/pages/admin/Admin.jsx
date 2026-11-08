@@ -6,7 +6,7 @@ import { errorText } from '../../api/orgsApi';
 import { useAuth } from '../../context/AuthContext';
 import { consoleLook } from '../console/consoleMenu';
 import { CodeStep, PasswordStep } from './AdminDoor';
-import { FEATURES, allowanceWords, confirmWords, dateTimeWords, dateWords, doneWords, planWords } from './adminView';
+import { FEATURES, allowanceWords, confirmWords, dateTimeWords, dateWords, doneWords, openUntilWords, planWords } from './adminView';
 import '../../components/console/console.css';
 
 // THE ADMIN PAGE (ROADMAP Stage 2 item 14a-i; Kd, 2026-11-07 and 2026-11-08): Kd's own, on
@@ -254,8 +254,6 @@ function People({ onShut }) {
   );
 }
 
-const timeWords = new Intl.DateTimeFormat('en-GB', { hour: 'numeric', minute: '2-digit', hour12: true });
-
 export default function Admin() {
   const { user, logout } = useAuth();
   const { search: address } = useLocation();
@@ -326,7 +324,7 @@ export default function Admin() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           <h1 className="c-h1" style={{ margin: 0 }}>Admin</h1>
           {door !== null && door !== 'none' && door.open && door.openUntil ? (
-            <span className="c-s14 c-t2" data-testid="open-until">Open until {timeWords.format(new Date(door.openUntil))}</span>
+            <span className="c-s14 c-t2" data-testid="open-until">Open until {openUntilWords(door.openUntil)}</span>
           ) : null}
           <span style={{ flexGrow: 1 }} />
           {door !== null && door !== 'none' && door.open ? (

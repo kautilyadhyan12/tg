@@ -12,6 +12,12 @@ const day = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', y
 const time = new Intl.DateTimeFormat('en-GB', { hour: 'numeric', minute: '2-digit', hour12: true });
 
 export const dateWords = (iso) => day.format(new Date(iso));
+
+/** "10:50 pm", or "5:56 am tomorrow" when the admin page's 12 hours end on the next day. */
+export function openUntilWords(iso, now = new Date()) {
+  const until = new Date(iso);
+  return `${time.format(until)}${until.toDateString() === now.toDateString() ? '' : ' tomorrow'}`;
+}
 export const dateTimeWords = (iso) => (iso === null ? 'Not recorded' : `${day.format(new Date(iso))}, ${time.format(new Date(iso))}`);
 
 const people = (n) => (n === 1 ? '1 person' : `${String(n)} people`);

@@ -11,6 +11,7 @@ import { loadConfig } from "../src/config.js";
 import { seed } from "../src/db/seed.js";
 import { createMemoryRedis } from "../src/redis.js";
 import { requireQuota } from "../src/modules/quotas/service.js";
+import type { EmailSender } from "../src/modules/auth/email.js";
 
 const url = process.env["DATABASE_URL"];
 const d = describe.skipIf(url === undefined || url === "");
@@ -27,11 +28,26 @@ const PREFIX = "a14i-";
 const BULK = "a14ibulk";
 
 type App = Awaited<ReturnType<typeof buildApp>>;
+
+/** Keeps every sign-in code sent, with its address. */
+function capturingSender(): EmailSender & { sent: { email: string; code: string }[] } {
+  const sent: { email: string; code: string }[] = [];
+  return {
+    sent,
+    sendVerificationEmail: () => Promise.resolve(),
+    sendPasswordResetEmail: () => Promise.resolve(),
+    sendSignInCodeEmail: (email, code) => {
+      sent.push({ email, code });
+      return Promise.resolve();
+    },
+  };
+}
 type Person = { userId: string; access: string };
 
 d("the admin page (real Postgres)", () => {
   const sql = postgres(url ?? "", { prepare: false, max: 5 });
   const redis = createMemoryRedis();
+  const sender = capturingSender();
   let setup: App | undefined; // no admin named: signs the fixtures in
   let app: App | undefined; // ADMIN_USER_ID = the admin fixture
   let admin: Person = { userId: "", access: "" };
@@ -69,6 +85,13 @@ d("the admin page (real Postgres)", () => {
     const login = await call(a, { method: "POST", url: "/v1/auth/login", body: { email, password: PASSWORD } });
     return { userId, access: login.cookies.find((c) => c.name === "accessToken")?.value ?? "" };
   };
+  /** A second sign-in of the admin with an account password, as an old account might still have:
+   *  the code sign-in ended the first one, so the stranger's hash of the same fixture password is
+   *  put back first. */
+  const passwordLogin = async () => {
+    await sql`UPDATE users SET (password_hash, hash_algo) = (SELECT password_hash, hash_algo FROM users WHERE id = ${stranger.userId}) WHERE id = ${admin.userId}`;
+    return await call(must(app), { method: "POST", url: "/v1/auth/login", body: { email: `${PREFIX}admin@example.com`, password: PASSWORD } });
+  };
   const planId = async (code: string): Promise<string> => {
     const rows = await sql<{ id: string }[]>`SELECT id FROM plans WHERE code = ${code}`;
     const id = rows[0]?.id;
@@ -94,13 +117,14 @@ d("the admin page (real Postgres)", () => {
     await sql`DELETE FROM gym_staff WHERE gym_id IN (SELECT id FROM gyms WHERE slug = 'a14i-gym')`;
     await sql`DELETE FROM gyms WHERE slug = 'a14i-gym'`;
     await sql`DELETE FROM refresh_tokens WHERE user_id IN (${mine})`;
+    await sql`DELETE FROM sign_in_codes WHERE email LIKE ${`${PREFIX}%`}`;
     await sql`DELETE FROM users WHERE email LIKE ${`${PREFIX}%`} OR email LIKE ${`${BULK}%`}`;
   };
 
   beforeAll(async () => {
     await seed(url ?? "");
     await clean();
-    setup = await buildApp(loadConfig(baseEnv), { redis });
+    setup = await buildApp(loadConfig(baseEnv), { redis, emailSender: sender });
     admin = await session(`${PREFIX}admin@example.com`, "A14i Admin");
     stranger = await session(`${PREFIX}stranger@example.com`, "A14i Stranger");
     owner = await session(`${PREFIX}owner@example.com`, "A14i Owner");
@@ -116,10 +140,17 @@ d("the admin page (real Postgres)", () => {
     await sql`INSERT INTO subscriptions (owner_type, owner_id, plan_id, status, provider) VALUES ('gym', ${gymId}, ${await planId("org_b1_us_m")}, 'trialing', 'pilot')`;
     await sql`INSERT INTO gym_members (gym_id, user_id) VALUES (${gymId}, ${member.userId})`;
     await sql`INSERT INTO subscriptions (owner_type, owner_id, plan_id, status, provider) VALUES ('user', ${payer.userId}, ${await planId("pro_us_m")}, 'active', 'pilot')`;
-    app = await buildApp(loadConfig({ ...baseEnv, ADMIN_USER_ID: admin.userId }), { redis });
+    app = await buildApp(loadConfig({ ...baseEnv, ADMIN_USER_ID: admin.userId }), { redis, emailSender: sender });
     const a = must(app);
     a.get("/test/a14i/meal", { preHandler: [a.authenticate, requireQuota("meal_scan", { sql, redis })] }, async (_q, r) => r.send({ ok: true }));
     a.get("/test/a14i/route", { preHandler: [a.authenticate, requireQuota("route_gen", { sql, redis })] }, async (_q, r) => r.send({ ok: true }));
+    // The admin signs in as the door asks: an emailed code (the password sign-in above opens nothing).
+    const adminEmail = `${PREFIX}admin@example.com`;
+    const sent = await call(a, { method: "POST", url: "/v1/auth/code/send", body: { email: adminEmail } });
+    if (sent.statusCode !== 200) throw new Error("code send: " + sent.body);
+    const code = [...sender.sent].reverse().find((c) => c.email === adminEmail)?.code ?? "";
+    const verified = await call(a, { method: "POST", url: "/v1/auth/code/verify", body: { email: adminEmail, code } });
+    admin = { userId: admin.userId, access: verified.cookies.find((c) => c.name === "accessToken")?.value ?? "" };
     // The admin's first password, from a sign-in a moment old: the door opens.
     const made = await call(a, { method: "POST", url: "/v1/admin/door/password", body: { password: ADMIN_PASSWORD }, access: admin.access });
     if (made.statusCode !== 200) throw new Error("door password: " + made.body);
@@ -182,7 +213,7 @@ d("the admin page (real Postgres)", () => {
       await unnamed.close();
     }
     // A second sign-in of the admin, then signed out: its token still verifies, its session is over.
-    const login = await call(must(app), { method: "POST", url: "/v1/auth/login", body: { email: `${PREFIX}admin@example.com`, password: PASSWORD } });
+    const login = await passwordLogin();
     const access = login.cookies.find((c) => c.name === "accessToken")?.value ?? "";
     const refresh = login.cookies.find((c) => c.name === "refreshToken")?.value ?? "";
     expect((await call(must(app), { url: "/v1/admin/door", access })).statusCode).toBe(200);
@@ -226,22 +257,54 @@ d("the admin page (real Postgres)", () => {
     expect((await call(must(app), { url: "/v1/admin/people", access: admin.access, door: cookie?.value ?? "" })).statusCode).toBe(200);
   });
 
-  it("THE DOOR: another sign-in of the admin cannot use this one's door; a sign-in older than a few minutes needs a new code; Lock closes it", { timeout: 60_000 }, async () => {
+  it("THE DOOR: only a sign-in made with an emailed code is fresh: the account's password, however new, opens nothing", { timeout: 60_000 }, async () => {
     await redis.del(`rl:admin_door:id:${admin.userId}`);
-    const login = await call(must(app), { method: "POST", url: "/v1/auth/login", body: { email: `${PREFIX}admin@example.com`, password: PASSWORD } });
+    const login = await passwordLogin();
     const access = login.cookies.find((c) => c.name === "accessToken")?.value ?? "";
+    expect((await call(must(app), { url: "/v1/admin/door", access })).json<{ fresh: boolean }>().fresh).toBe(false);
+    const refused = await call(must(app), { method: "POST", url: "/v1/admin/door/open", access, body: { password: ADMIN_PASSWORD } });
+    expect(refused.statusCode).toBe(403);
+    expect(refused.json<{ error: string }>().error).toBe("fresh_code_needed");
+    expect(refused.cookies.find((c) => c.name === "adminDoor")).toBeUndefined();
+  });
+
+  it("THE DOOR: another sign-in of the admin cannot use this one's door; 9 minutes old still opens, 11 does not; Lock clears its cookie", { timeout: 60_000 }, async () => {
+    await redis.del(`rl:admin_door:id:${admin.userId}`);
+    // A second sign-in, made fresh as a code sign-in is: a used code at the moment it began.
+    const login = await passwordLogin();
+    const access = login.cookies.find((c) => c.name === "accessToken")?.value ?? "";
+    const family = (await sql<{ family_id: string; began: Date }[]>`
+      SELECT family_id, min(created_at) AS began FROM refresh_tokens WHERE user_id = ${admin.userId} GROUP BY family_id ORDER BY began DESC LIMIT 1`)[0];
+    if (family === undefined) throw new Error("no session");
+    await sql`INSERT INTO sign_in_codes (email, purpose, code_hash, expires_at, used_at)
+      VALUES (${`${PREFIX}admin@example.com`}, 'sign_in', 'not-a-real-hash', now() + interval '10 minutes', ${family.began})`;
     expect((await call(must(app), { url: "/v1/admin/people", access, door: adminDoor })).statusCode).toBe(403);
+    const age = async (minutes: number) => {
+      await sql`UPDATE refresh_tokens SET created_at = created_at - make_interval(mins => ${minutes}) WHERE user_id = ${admin.userId} AND family_id = ${family.family_id}`;
+      await sql`UPDATE sign_in_codes SET used_at = used_at - make_interval(mins => ${minutes}) WHERE email = ${`${PREFIX}admin@example.com`} AND code_hash = 'not-a-real-hash'`;
+    };
+    await age(9);
     const opened = await call(must(app), { method: "POST", url: "/v1/admin/door/open", access, body: { password: ADMIN_PASSWORD } });
+    expect(opened.statusCode).toBe(200);
     const door = opened.cookies.find((c) => c.name === "adminDoor")?.value ?? "";
     expect((await call(must(app), { url: "/v1/admin/people", access, door })).statusCode).toBe(200);
-    // Made eleven minutes old, this sign-in is not fresh: the password alone opens nothing.
-    await sql`UPDATE refresh_tokens SET created_at = now() - interval '11 minutes' WHERE user_id = ${admin.userId}
-      AND family_id = (SELECT family_id FROM refresh_tokens WHERE user_id = ${admin.userId} ORDER BY created_at DESC LIMIT 1)`;
+    await age(2);
     const stale = await call(must(app), { method: "POST", url: "/v1/admin/door/open", access, body: { password: ADMIN_PASSWORD } });
     expect(stale.statusCode).toBe(403);
     expect(stale.json<{ error: string }>().error).toBe("fresh_code_needed");
-    expect((await call(must(app), { url: "/v1/admin/door", access })).json<{ fresh: boolean }>().fresh).toBe(false);
-    expect((await call(must(app), { method: "POST", url: "/v1/admin/door/lock", access, door })).statusCode).toBe(200);
+    // A cross-site page cannot press Lock (the site check every change meets).
+    const crossSite = await must(app).inject({
+      method: "POST",
+      url: "/v1/admin/door/lock",
+      headers: { origin: "https://elsewhere.example", "sec-fetch-site": "cross-site", "content-type": "text/plain" },
+      cookies: { accessToken: access, adminDoor: door },
+      payload: "x",
+    });
+    expect(crossSite.statusCode).toBe(403);
+    expect((await call(must(app), { url: "/v1/admin/people", access, door })).statusCode).toBe(200);
+    const locked = await call(must(app), { method: "POST", url: "/v1/admin/door/lock", access, door });
+    expect(locked.statusCode).toBe(200);
+    expect(locked.cookies.find((c) => c.name === "adminDoor")).toMatchObject({ value: "", path: "/v1/admin", maxAge: 0 });
     expect((await call(must(app), { url: "/v1/admin/people", access, door })).statusCode).toBe(403);
   });
 

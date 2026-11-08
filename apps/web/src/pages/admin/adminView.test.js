@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { allowanceWords, confirmWords, doneWords, namesWords, planWords } from './adminView';
+import { allowanceWords, confirmWords, doneWords, namesWords, openUntilWords, planWords } from './adminView';
 
 const person = (name, over = {}) => ({
   id: `id-${name}`,
@@ -13,6 +13,11 @@ const person = (name, over = {}) => ({
 });
 
 describe('the admin page words', () => {
+  it('says until when the page is open, and tomorrow when the 12 hours end on the next day', () => {
+    expect(openUntilWords(new Date(2026, 10, 8, 22, 50).toISOString(), new Date(2026, 10, 8, 10, 50))).toBe('10:50 pm');
+    expect(openUntilWords(new Date(2026, 10, 9, 5, 56).toISOString(), new Date(2026, 10, 8, 17, 56))).toBe('5:56 am tomorrow');
+  });
+
   it('names the plan: free, their own, through a gym, or both', () => {
     expect(planWords(person('Asha'))).toBe('Free');
     expect(planWords(person('Asha', { ownPlan: 'month' }))).toBe('$10 a month');

@@ -65,7 +65,9 @@ export async function setLimits(
 ): Promise<SetLimitsResult> {
   return await sql.begin(async (tx) => {
     const ids = [...input.userIds];
-    const found = await tx<{ id: string }[]>`SELECT id FROM users WHERE id = ANY(${ids}::uuid[]) AND status = 'active'`;
+    // Their rows locked, in one order: two presses at once for the same people run one after the other,
+    // so each change is read and written down once.
+    const found = await tx<{ id: string }[]>`SELECT id FROM users WHERE id = ANY(${ids}::uuid[]) AND status = 'active' ORDER BY id FOR UPDATE`;
     const people = found.map((r) => r.id);
     const held = await tx<{ user_id: string; meal_scans_a_day: number | null; route_plans_a_day: number | null }[]>`
       SELECT user_id, meal_scans_a_day, route_plans_a_day FROM usage_limits
@@ -120,11 +122,26 @@ export async function createDoorPassword(sql: Sql, userId: string, hash: string,
   });
 }
 
-/** When this sign-in session began: its first refresh token. null for a session that is not live. */
-export async function sessionBegan(sql: Sql, userId: string, familyId: string): Promise<Date | null> {
-  const rows = await sql<{ began: Date | null }[]>`
-    SELECT min(created_at) AS began FROM refresh_tokens WHERE user_id = ${userId} AND family_id = ${familyId}`;
-  return rows[0]?.began ?? null;
+/** When this sign-in session began (its first refresh token), and whether it is the sign-in an
+ *  emailed code made: a code for the account's address used at most two seconds before the session
+ *  began, with no other session of the account begun in between. A session made with a password,
+ *  Google or any other way, even a moment after somebody's code sign-in, is not it (round one of
+ *  14a-i, H1). null for a session that is not there. */
+export async function sessionBegan(sql: Sql, userId: string, familyId: string): Promise<{ began: Date; byCode: boolean } | null> {
+  const rows = await sql<{ began: Date | null; by_code: boolean | null }[]>`
+    WITH fams AS (
+      SELECT family_id, min(created_at) AS began FROM refresh_tokens WHERE user_id = ${userId} GROUP BY family_id
+    ), mine AS (SELECT began FROM fams WHERE family_id = ${familyId})
+    SELECT mine.began,
+           EXISTS (
+             SELECT 1 FROM sign_in_codes c JOIN users u ON u.email = c.email
+             WHERE u.id = ${userId} AND c.purpose = 'sign_in' AND c.used_at IS NOT NULL
+               AND c.used_at BETWEEN mine.began - interval '2 seconds' AND mine.began
+               AND NOT EXISTS (SELECT 1 FROM fams WHERE fams.family_id <> ${familyId} AND fams.began BETWEEN c.used_at AND mine.began)
+           ) AS by_code
+    FROM mine`;
+  const row = rows[0];
+  return row?.began === null || row?.began === undefined ? null : { began: row.began, byCode: row.by_code === true };
 }
 
 /** The door opened, or a wrong password at it: written down with when. */

@@ -56,9 +56,10 @@ async function openUntil(deps: DoorDeps, req: FastifyRequest, who: Who): Promise
   return until > deps.now() ? until : null;
 }
 
+/** A sign-in made with an emailed code in the last few minutes (Kd: "the fresh code"). */
 async function fresh(deps: DoorDeps, who: Who): Promise<boolean> {
-  const began = await repo.sessionBegan(deps.sql, who.userId, who.familyId);
-  return began !== null && deps.now().getTime() - began.getTime() <= ADMIN_FRESH_MINUTES * 60 * 1000;
+  const session = await repo.sessionBegan(deps.sql, who.userId, who.familyId);
+  return session !== null && session.byCode && deps.now().getTime() - session.began.getTime() <= ADMIN_FRESH_MINUTES * 60 * 1000;
 }
 
 export async function doorState(deps: DoorDeps, req: FastifyRequest, who: Who): Promise<AdminDoorState> {
