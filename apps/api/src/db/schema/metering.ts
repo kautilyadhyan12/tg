@@ -46,7 +46,7 @@ export const apiCostEvents = pgTable(
 );
 
 /** Kd's own number of meal scans or route plans a day for one person, set on the admin page
- *  (ROADMAP Stage 2 item 14a-i, migration 0225). It replaces the plan's number, higher or lower,
+ *  (ROADMAP Stage 2 item 14a-i, migration 0226). It replaces the plan's number, higher or lower,
  *  until he takes it back; a row with neither number is deleted. */
 export const usageLimits = pgTable(
   "usage_limits",
@@ -65,7 +65,7 @@ export const usageLimits = pgTable(
   ],
 );
 
-/** The admin door's own password, for the one admin account (migration 0225, ROADMAP Stage 2 item
+/** The admin door's own password, for the one admin account (migration 0226, ROADMAP Stage 2 item
  *  14a-i): only its hash. */
 export const adminPasswords = pgTable(
   "admin_passwords",

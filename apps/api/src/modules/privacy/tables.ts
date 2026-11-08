@@ -46,10 +46,10 @@ export const DIRECT_DELETE_TABLES = [
   // The ids of runs the person deleted (migration 0222, ROADMAP Stage 5 37c-i), on meal_removed_ids'
   // footing: their own record, deleted and exported.
   "run_removed_ids",
-  // Kd's own number of meal scans or route plans a day for the person (migration 0225, ROADMAP
+  // Kd's own number of meal scans or route plans a day for the person (migration 0226, ROADMAP
   // Stage 2 item 14a-i): about them, so deleted and exported with their own records.
   "usage_limits",
-  // The admin door's password hash (migration 0225, 14a-i): deleted, never exported.
+  // The admin door's password hash (migration 0226, 14a-i): deleted, never exported.
   "admin_passwords",
   "saved_routes",
   "run_schedules",

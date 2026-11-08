@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { check, jsonb, pgTable, primaryKey, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { createdAt } from "./common.js";
 import { users } from "./identity.js";
+import { gyms } from "./tenancy.js";
 
 export const dietPlans = pgTable(
   "diet_plans",
@@ -21,7 +22,7 @@ export const dietPlans = pgTable(
 );
 
 // Recommended For You's choice for each kind (migration 0200; ROADMAP 31f). No row: not picked yet.
-// The gym's choice (31g) widens the CHECK and `foodChoiceSchema` together.
+// The gym's choice (31g, migration 0225) names the gym: a member of two gyms picks one of them.
 export const recommendedChoices = pgTable(
   "recommended_choices",
   {
@@ -30,11 +31,13 @@ export const recommendedChoices = pgTable(
       .references(() => users.id, { onDelete: "cascade" }),
     kind: text("kind").notNull(),
     choice: text("choice").notNull(),
+    gymId: uuid("gym_id").references(() => gyms.id, { onDelete: "cascade" }),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     primaryKey({ name: "recommended_choices_pkey", columns: [t.userId, t.kind] }),
     check("recommended_choices_kind_check", sql`${t.kind} IN ('food','workout','running')`),
-    check("recommended_choices_choice_check", sql`${t.choice} IN ('suggested','mine')`),
+    check("recommended_choices_choice_check", sql`${t.choice} IN ('suggested','mine','gym')`),
+    check("recommended_choices_gym_check", sql`(${t.choice} = 'gym') = (${t.gymId} IS NOT NULL)`),
   ],
 );

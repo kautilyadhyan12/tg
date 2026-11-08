@@ -3,9 +3,9 @@
 // one plan at a time; a member reached by several gets the newest given. The member reads it as
 // written, with the writer's name, at `GET /v1/orgs/:gymId/meal-plans/mine` (Stage 5's 31g).
 import { z } from "zod";
-import { gymMealPlanDaySchema } from "./gymMealPlans.js";
+import { gymMealPlanDaySchema, gymMealPlanMealSchema } from "./gymMealPlans.js";
 import { memberListSelectionSchema } from "./memberList.js";
-import { FOOD_ALLERGY_CAUTION } from "./nutrition.js";
+import { DIET_LABEL_CAUTION, FOOD_ALLERGY_CAUTION, lowestKcalSchema } from "./nutrition.js";
 
 const idSchema = z.string().uuid().toLowerCase();
 
@@ -123,6 +123,31 @@ export const memberGymMealPlanSchema = z.object({
 export type MemberGymMealPlan = z.infer<typeof memberGymMealPlanSchema>;
 export const memberGymMealPlanResponseSchema = z.object({ plan: memberGymMealPlanSchema.nullable() }).strict();
 export type MemberGymMealPlanResponse = z.infer<typeof memberGymMealPlanResponseSchema>;
+
+/** The phone's Recommended For You (Stage 5's 31g): each gym the person is a member of, and the plan
+ *  it gave them or null, each day with the least this person may eat where the day holds less. */
+export const myGymMealPlansResponseSchema = z.object({
+  gyms: z.array(z.object({
+    gymId: z.string().uuid(),
+    name: z.string().min(1),
+    orgType: z.string(),
+    /** How the member reaches the gym, as the inbox gives it: null where it added none. */
+    contact: z.object({ phone: z.string().nullable(), email: z.string().nullable() }).strict(),
+    plan: memberGymMealPlanSchema.extend({
+      days: z.array(gymMealPlanDaySchema.extend({
+        /** Each meal as the gym wrote it, with the foods this member's diet doesn't eat, to say so only. */
+        meals: z.array(gymMealPlanMealSchema.extend({ outsideDiet: z.array(z.string()) }).strict()),
+        under: lowestKcalSchema.nullable(),
+      }).strict()).length(7),
+      /** For a vegetarian or vegan member, as on their own plan. */
+      labelCaution: z.literal(DIET_LABEL_CAUTION).nullable(),
+    }).strict().nullable(),
+  }).strict()),
+}).strict();
+export type MyGymMealPlansResponse = z.infer<typeof myGymMealPlansResponseSchema>;
+export type MyGymMealPlan = NonNullable<MyGymMealPlansResponse["gyms"][number]["plan"]>;
+
+export const MY_GYM_MEAL_PLANS_PATH = "/v1/nutrition/gym-meal-plans";
 
 /** What a plan can be given to from its page: the gym's live membership types and its tags. */
 export const gymMealPlanGroupsResponseSchema = z.object({

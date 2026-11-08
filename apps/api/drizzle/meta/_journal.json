@@ -1574,7 +1574,14 @@
       "idx": 224,
       "version": "7",
       "when": 1790726400225,
-      "tag": "0225_usage_limits",
+      "tag": "0225_recommended_choice_gym",
+      "breakpoints": true
+    },
+    {
+      "idx": 225,
+      "version": "7",
+      "when": 1790726400226,
+      "tag": "0226_usage_limits",
       "breakpoints": true
     }
   ]
