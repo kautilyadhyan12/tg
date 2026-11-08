@@ -8,8 +8,8 @@ import { useLoop } from "../../look/Motion";
 import { pictures, type PictureName } from "../../look/pictures";
 import { pictureTopHeight } from "../../look/sizing";
 import { fonts, Txt } from "../../look/Txt";
+import { SoftBar } from "../../look/Waiting";
 import type { Read } from "../dashboard/useRead";
-import { NOT_KNOWN } from "../dashboard/words";
 
 // Progress's own pieces (ROADMAP Stage 5 35c-i): its top with the four tabs, a box with a chalk
 // drawing behind its words, a box with a drawing across its top, and the flame of a day trained.
@@ -125,9 +125,9 @@ export function BandBox({ picture, title, children }: { picture: PictureName; ti
   );
 }
 
-/** A read's answer, or "–" while it comes, or a line and Try again where it never came. */
+/** A read's answer, or a soft bar while it comes, or a line and Try again where it never came. */
 export function ReadOr<T>({ read, again, what, children }: { read: Read<T>; again: () => void; what: string; children: (data: T) => ReactNode }) {
-  if (read.kind === "loading") return <Txt kind="small">{NOT_KNOWN}</Txt>;
+  if (read.kind === "loading") return <SoftBar width="70%" />;
   if (read.kind === "failed")
     return (
       <View style={styles.failed}>

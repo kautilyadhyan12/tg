@@ -7,7 +7,7 @@ import { useLoop } from "../../look/Motion";
 import { pictures, type PictureName } from "../../look/pictures";
 import { pictureTopHeight } from "../../look/sizing";
 import { fonts, Txt } from "../../look/Txt";
-import { NOT_KNOWN } from "../dashboard/words";
+import { SoftBar } from "../../look/Waiting";
 import { TABS, type TabKey } from "./achievementsRules";
 
 // Achievements' own pieces (ROADMAP Stage 5 35c-iii; Kd's drawing, reviews/35c-iii-achievements-mock-4.png): the goddess
@@ -48,10 +48,14 @@ export function Hero({ xp, badges, tab, onTab }: { xp: XpView | null; badges: st
         <View style={styles.level}>
           <LevelWreath level={xp?.level ?? null} />
           <View style={styles.grow}>
-            <Txt kind="strong" numberOfLines={1} fit>
-              {xp === null ? NOT_KNOWN : `${count(xp.total)} XP`}
-              {badges === null ? null : <Txt kind="strong" colour="orange">{` · ${badges}`}</Txt>}
-            </Txt>
+            {xp === null ? (
+              <SoftBar width={120} />
+            ) : (
+              <Txt kind="strong" numberOfLines={1} fit>
+                {`${count(xp.total)} XP`}
+                {badges === null ? null : <Txt kind="strong" colour="orange">{` · ${badges}`}</Txt>}
+              </Txt>
+            )}
             <Txt kind="small" colour="textSoft" numberOfLines={1}>
               {xp === null || toNext === null ? " " : `${count(toNext)} XP to Level ${String(xp.level + 1)}`}
             </Txt>
@@ -117,7 +121,7 @@ function LevelWreath({ level }: { level: number | null }) {
           />
         ))}
       </Svg>
-      <Txt style={styles.levelNumber}>{level === null ? NOT_KNOWN : String(level)}</Txt>
+      {level === null ? <SoftBar kind="h1" width={28} /> : <Txt style={styles.levelNumber}>{String(level)}</Txt>}
       <Txt kind="tiny" numberOfLines={1} fit style={styles.levelWord}>
         LEVEL
       </Txt>

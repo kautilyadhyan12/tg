@@ -619,12 +619,12 @@ describe("Your Rank on the Dashboard", () => {
     expect(within(box).getByText("1st")).toBeTruthy();
   });
 
-  it("the board not read is –, never a place; the line at the top says so, and Try again reads it", async () => {
+  it("the board not read is a soft bar, never a place; the line at the top says so, and Try again reads it", async () => {
     let up = false;
     await openDash({ [boardPath(IRON, "gym_days")]: () => (up ? { status: 200, body: boardOf(IRON, "gym_days") } : lost()) });
     const box = await screen.findByLabelText("Your Rank at Iron House");
     expect(await screen.findByText("Some of your numbers couldn’t load.")).toBeTruthy();
-    expect(within(box).getByText("–")).toBeTruthy();
+    expect(within(box).getByTestId("soft-bar")).toBeTruthy();
     up = true;
     await fireEvent.press(screen.getByLabelText("Try again"));
     expect(await within(await screen.findByLabelText("Your Rank at Iron House")).findByText("2nd")).toBeTruthy();
@@ -638,7 +638,7 @@ describe("Your Rank on the Dashboard", () => {
     });
     await settle();
     expect(within(box).queryByText("2nd")).toBeNull();
-    expect(within(box).getByText("–")).toBeTruthy();
+    expect(within(box).getByTestId("soft-bar")).toBeTruthy();
   });
 
   it("a gym that checks nobody in with Workout days switched off: one read, never back and forth", async () => {

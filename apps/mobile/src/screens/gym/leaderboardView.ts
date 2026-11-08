@@ -216,15 +216,18 @@ export function weekLine(week: Week, gymName: string): { label: string; text: st
   }
 }
 
-/** The Dashboard's Your Rank, from one board. A hidden person's would-be place stays on their own board. */
-export function rankWords(board: LeaderboardResponse): { big: string; of: string | null; line: string } {
+/** Where a person has no place on a board yet. */
+export const NOT_RANKED = "Not ranked yet";
+
+/** The Dashboard's Your Rank, from one board: a place, or why there is none, in words (31h: never a dash). */
+export function rankWords(board: LeaderboardResponse): { big: string | null; of: string | null; line: string } {
   const tab = BOARD_TABS.find((t) => t.id === board.board)?.label ?? "";
   const what = board.board === "streak" ? tab : `${tab} this week`;
-  if (board.status === "paused" || board.status === "switched_off" || board.status === "no_checkins") return { big: "–", of: null, line: "Not showing" };
+  if (board.status === "paused" || board.status === "switched_off" || board.status === "no_checkins") return { big: null, of: null, line: "Not showing" };
   const { me } = board;
-  if (me.hidden === "staff") return { big: "–", of: null, line: "Staff" };
-  if (me.hidden === "no_name") return { big: "–", of: null, line: "Add your name" };
-  if (me.hidden !== null) return { big: "–", of: null, line: "Hidden" };
-  if (me.place === null) return { big: "–", of: null, line: what };
+  if (me.hidden === "staff") return { big: null, of: null, line: "Staff" };
+  if (me.hidden === "no_name") return { big: null, of: null, line: "Add your name" };
+  if (me.hidden !== null) return { big: null, of: null, line: "Hidden" };
+  if (me.place === null) return { big: null, of: null, line: NOT_RANKED };
   return { big: ordinal(me.place), of: `of ${String(board.ranked)}`, line: what };
 }

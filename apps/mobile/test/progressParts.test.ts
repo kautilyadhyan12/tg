@@ -328,7 +328,7 @@ describe("Body", () => {
     expect(latestWeight([logged, typed])?.id).toBe(typed.id);
     expect(latestWeight([logged])).toBeNull();
     expect(entryRows([logged, typed], "metric").map((r) => [r.how, r.weight, r.more])).toEqual([
-      ["Logged", "–", "2 measurements"],
+      ["Logged", "No weight", "2 measurements"],
       ["Typed by you", "69.9 kg", null],
     ]);
     expect(entryRows([typed], "imperial")[0]?.weight).toBe("154 lb");

@@ -4,17 +4,18 @@ import { boxShade } from "./colours";
 import type { IconName } from "./Icon";
 import { pictures, type PictureName } from "./pictures";
 import { Txt } from "./Txt";
+import { Shown } from "./Waiting";
 
 /** A number in its box, two to a row, its picture standing on the right behind a shade, as on the
  *  Dashboard: its icon, the number, what it counts, and a note under that where there is one. */
-export function StatTile(props: { picture: PictureName; icon: IconName; tone?: "orange" | "gold"; value: string; label: string; note?: string; say?: string }) {
+export function StatTile(props: { picture: PictureName; icon: IconName; tone?: "orange" | "gold"; value: string | null; label: string; note?: string; say?: string }) {
   return (
     <Card style={styles.stat}>
       <Image source={pictures[props.picture]} resizeMode="contain" style={styles.art} accessible={false} />
       <View style={[StyleSheet.absoluteFill, styles.shade]} />
       <Badge icon={props.icon} tone={props.tone ?? "orange"} />
       <View accessible={props.say !== undefined} accessibilityLabel={props.say}>
-        <Txt kind="big">{props.value}</Txt>
+        <Shown kind="big" width={48} value={props.value} />
         <Txt kind="small" style={styles.label}>
           {props.label}
         </Txt>

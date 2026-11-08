@@ -8,9 +8,10 @@ import { colours, type ColourName } from "../../look/colours";
 import { Icon } from "../../look/Icon";
 import { Sheet } from "../../look/Sheet";
 import { Txt } from "../../look/Txt";
+import { SoftBar } from "../../look/Waiting";
 import { useZoneSaved } from "../../session/TimeZoneSync";
 import { useRead, type Read } from "../dashboard/useRead";
-import { NOT_KNOWN, count } from "../dashboard/words";
+import { count } from "../dashboard/words";
 import {
   WEEK_FIGURES,
   averageLine,
@@ -77,7 +78,7 @@ export function FoodWeek({ fresh, ...ctx }: FoodWeekProps) {
           <Button label="Try again" kind="link" say="Load your week again" onPress={again} />
         </View>
       ) : read.kind === "loading" ? (
-        <Txt kind="small">{NOT_KNOWN}</Txt>
+        <SoftBar width="70%" />
       ) : (
         <WeekBody week={read.data} here={ctx.here} onSetup={ctx.onSetup} />
       )}
@@ -149,7 +150,7 @@ function MonthRead({ figure, ctx }: { figure: FoodWeekFigure; ctx: Ctx }) {
 }
 
 function ReadOr({ read, again, children }: { read: Read<FoodWeekResponse>; again: () => void; children: (week: FoodWeekResponse) => ReactNode }) {
-  if (read.kind === "loading") return <Txt kind="small">{NOT_KNOWN}</Txt>;
+  if (read.kind === "loading") return <SoftBar width="70%" />;
   if (read.kind === "failed")
     return (
       <View style={styles.row}>

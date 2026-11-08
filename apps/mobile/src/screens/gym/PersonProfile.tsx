@@ -22,6 +22,7 @@ import { Modal } from "../../look/Modal";
 import { PictureTop } from "../../look/PictureTop";
 import { pictureTopHeight } from "../../look/sizing";
 import { Txt } from "../../look/Txt";
+import { Shown } from "../../look/Waiting";
 import { useSession } from "../../session/SessionProvider";
 import { CopyContext } from "../ThisCopy";
 import { useBusyIds } from "./Reactions";
@@ -313,9 +314,7 @@ function Body({ place, person, period, shared, onClose, onChanged, top, bottom }
               <View testID="person-stats" accessibilityLabel={`${person.name} in numbers`} style={styles.stats}>
                 {stats.map((stat) => (
                   <View key={stat.key} testID={`stat-${stat.key}`} style={styles.stat}>
-                    <Txt kind="h3" style={styles.centre}>
-                      {stat.number}
-                    </Txt>
+                    <Shown kind="h3" width={32} style={styles.centre} value={stat.number} />
                     <Txt kind="small" colour="text" style={styles.centre}>
                       {stat.label}
                     </Txt>

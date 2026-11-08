@@ -71,7 +71,7 @@ export function entryRows(items: readonly BodyMeasurement[], units: string, most
       id: m.id,
       date: dateWords(entryDay(m)),
       how: m.source === "self_reported" ? "Typed by you" : "Logged",
-      weight: m.weightKg === null ? "–" : weightWords(m.weightKg, units),
+      weight: m.weightKg === null ? "No weight" : weightWords(m.weightKg, units),
       more: others === 0 ? null : `${count(others)} ${others === 1 ? "measurement" : "measurements"}`,
     };
   });

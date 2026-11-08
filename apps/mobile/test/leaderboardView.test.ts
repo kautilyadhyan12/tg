@@ -128,17 +128,17 @@ describe("Your Rank's words", () => {
   const me = (over: object) => ({ me: { value: 2, place: 7, hidden: null, toNextPlace: null, nextPlace: null, circles: null, ...over } });
   it.each([
     ["placed", {}, { big: "7th", of: "of 30", line: "Visits this week" }],
-    ["no place yet", me({ place: null, value: 0 }), { big: "–", of: null, line: "Visits this week" }],
-    ["too few on it", { status: "too_few", ...me({ place: null }) }, { big: "–", of: null, line: "Visits this week" }],
+    ["no place yet", me({ place: null, value: 0 }), { big: null, of: null, line: "Not ranked yet" }],
+    ["too few on it", { status: "too_few", ...me({ place: null }) }, { big: null, of: null, line: "Not ranked yet" }],
     ["Streak", { board: "streak", period: null }, { big: "7th", of: "of 30", line: "Streak" }],
-    ["Hide me never says the would-be place", me({ hidden: "hide_me" }), { big: "–", of: null, line: "Hidden" }],
-    ["under 18", me({ hidden: "under_18" }), { big: "–", of: null, line: "Hidden" }],
-    ["taken off", me({ hidden: "taken_off" }), { big: "–", of: null, line: "Hidden" }],
-    ["staff", me({ hidden: "staff" }), { big: "–", of: null, line: "Staff" }],
-    ["no name", me({ hidden: "no_name" }), { big: "–", of: null, line: "Add your name" }],
-    ["a lapsed plan", { status: "paused" }, { big: "–", of: null, line: "Not showing" }],
-    ["switched off", { status: "switched_off" }, { big: "–", of: null, line: "Not showing" }],
-    ["nobody checked in", { status: "no_checkins" }, { big: "–", of: null, line: "Not showing" }],
+    ["Hide me never says the would-be place", me({ hidden: "hide_me" }), { big: null, of: null, line: "Hidden" }],
+    ["under 18", me({ hidden: "under_18" }), { big: null, of: null, line: "Hidden" }],
+    ["taken off", me({ hidden: "taken_off" }), { big: null, of: null, line: "Hidden" }],
+    ["staff", me({ hidden: "staff" }), { big: null, of: null, line: "Staff" }],
+    ["no name", me({ hidden: "no_name" }), { big: null, of: null, line: "Add your name" }],
+    ["a lapsed plan", { status: "paused" }, { big: null, of: null, line: "Not showing" }],
+    ["switched off", { status: "switched_off" }, { big: null, of: null, line: "Not showing" }],
+    ["nobody checked in", { status: "no_checkins" }, { big: null, of: null, line: "Not showing" }],
   ])("%s", (_name, over, words) => {
     expect(rankWords(leaderboardResponseSchema.parse(board(over)))).toEqual(words);
   });

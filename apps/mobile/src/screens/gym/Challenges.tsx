@@ -61,7 +61,7 @@ import {
   type TeamLine,
 } from "./challengesView";
 import { LeaderboardPage, NameBox } from "./Leaderboard";
-import { hiddenText, updatedText } from "./leaderboardView";
+import { NOT_RANKED, hiddenText, updatedText } from "./leaderboardView";
 import { PersonProfile, type ProfilePerson } from "./PersonProfile";
 
 // A place's challenges for its member (spec Part 3 §15.6; ROADMAP Stage 5 item 17d): a short list, and each challenge on
@@ -794,12 +794,14 @@ function Teams({ challenge, pressing, onPick }: { challenge: MemberGymChallenge;
       {rows.map((team) => (
         <Card key={team.id} testID={`team-${team.id}`} style={[styles.team, team.isMine ? styles.mineDone : null]}>
           <View style={styles.between} accessible accessibilityLabel={team.label}>
-            <Txt kind="small" colour={team.place === null ? "textSoft" : (MEDAL[team.place] ?? "textSoft")} style={styles.teamPlace}>
-              {team.place === null ? "–" : ordinal(team.place)}
-            </Txt>
+            {team.place === null ? null : (
+              <Txt kind="small" colour={MEDAL[team.place] ?? "textSoft"} style={styles.teamPlace}>
+                {ordinal(team.place)}
+              </Txt>
+            )}
             <View style={styles.grow}>
               <Txt kind="h3">{team.name}</Txt>
-              <Txt kind="small">{team.people}</Txt>
+              <Txt kind="small">{team.place === null ? `${team.people} · ${NOT_RANKED}` : team.people}</Txt>
             </View>
             {team.isMine ? <Pill label="Your team" tone="orange" /> : null}
             {team.number === null ? null : (
@@ -960,11 +962,14 @@ function WholeBoard({ open, place, challenge, timezone, top, bottom, onClose, on
         {me === null || meInRows ? null : (
           <View testID="board-me" style={[styles.meBar, { paddingBottom: bottom + 10 }]}>
             <View style={[styles.meRow, me.hidden === null ? null : styles.faded]}>
-              <Txt kind="h3" colour="textSoft" style={styles.place}>
-                {me.place === null ? "–" : ordinal(me.place)}
-              </Txt>
+              {me.place === null ? null : (
+                <Txt kind="h3" colour="textSoft" style={styles.place}>
+                  {ordinal(me.place)}
+                </Txt>
+              )}
               <Txt kind="h3" style={styles.grow}>
                 You
+                {me.place === null && me.hidden === null ? <Txt kind="small">{` · ${NOT_RANKED}`}</Txt> : null}
               </Txt>
               <Txt kind="h3">{printed(me.value, challenge.words)}</Txt>
             </View>

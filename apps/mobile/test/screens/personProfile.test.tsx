@@ -350,7 +350,7 @@ describe("the numbers, in words", () => {
   it("each board's place and how much, one post and many, and a place not yet earned", () => {
     expect(postsStat(1)).toMatchObject({ number: "1", label: "Post" });
     expect(postsStat(0)).toMatchObject({ number: "0", label: "Posts" });
-    expect(postsStat(null)).toMatchObject({ number: "–", label: "Posts" });
+    expect(postsStat(null)).toMatchObject({ number: null, label: "Posts" });
     const stats = placeStats(
       [
         { board: "gym_days", period: "last_month", place: 1, value: 9 },
@@ -361,7 +361,7 @@ describe("the numbers, in words", () => {
     );
     expect(stats).toEqual([
       { key: "gym_days", number: "1st", label: "Visits", under: "9 visits last month" },
-      { key: "workout_days", number: "–", label: "Workout days", under: "0 workout days last month" },
+      { key: "workout_days", number: "Not ranked yet", label: "Workout days", under: "0 workout days last month" },
       { key: "streak", number: "2nd", label: "Streak", under: "1 week" },
     ]);
   });
@@ -408,7 +408,7 @@ describe("the page", () => {
     await openTom(ask);
     expect(await profilePage().findByText("Couldn't load their posts.")).toBeTruthy();
     expect(await profilePage().findByText("Couldn't load their places on the leaderboard.")).toBeTruthy();
-    expect(within(profilePage().getByTestId("stat-posts")).getByText("–")).toBeTruthy();
+    expect(within(profilePage().getByTestId("stat-posts")).getByTestId("soft-bar")).toBeTruthy();
     up = true;
     await fireEvent.press(profilePage().getByLabelText("Try their places again"));
     expect(await profilePage().findByTestId("stat-gym_days")).toBeTruthy();
