@@ -359,7 +359,7 @@ export function MealIdeas({ onMore, onAnswered, fresh = 0, below = null, bare = 
   return (
     <>
       {onDashboard ? (
-        <Card style={styles.card} testID="recommended-box">
+        <Card raised style={styles.card} testID="recommended-box">
           <View style={styles.titleRow}>
             <Icon name="target" size={16} colour="orange" />
             <Txt kind="h3" style={styles.boxTitle}>

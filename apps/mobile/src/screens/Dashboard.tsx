@@ -615,7 +615,7 @@ function Recent({ workouts, runs, meals, units, onRun, said }: { workouts: Read<
       ? recentActivity({ workouts: workouts.data.items, runs: runs.data.items, meals: meals.data.items }, 3, units)
       : null;
   return (
-    <Card style={styles.recent} testID="recent-activity">
+    <Card raised style={styles.recent} testID="recent-activity">
       <View style={styles.recentArt}>
         <Image source={pictures.recentworkout} resizeMode="contain" style={styles.recentArtFill} accessible={false} />
       </View>

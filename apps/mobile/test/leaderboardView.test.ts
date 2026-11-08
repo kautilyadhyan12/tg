@@ -134,7 +134,7 @@ describe("Your Rank's words", () => {
     ["Hide me never says the would-be place", me({ hidden: "hide_me" }), { big: null, of: null, line: "Hidden" }],
     ["under 18", me({ hidden: "under_18" }), { big: null, of: null, line: "Hidden" }],
     ["taken off", me({ hidden: "taken_off" }), { big: null, of: null, line: "Hidden" }],
-    ["staff", me({ hidden: "staff" }), { big: null, of: null, line: "Staff" }],
+    ["staff", me({ hidden: "staff" }), { big: null, of: null, line: "Staff aren’t ranked" }],
     ["no name", me({ hidden: "no_name" }), { big: null, of: null, line: "Add your name" }],
     ["a lapsed plan", { status: "paused" }, { big: null, of: null, line: "Not showing" }],
     ["switched off", { status: "switched_off" }, { big: null, of: null, line: "Not showing" }],

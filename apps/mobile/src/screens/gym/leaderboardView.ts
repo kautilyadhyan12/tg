@@ -225,7 +225,7 @@ export function rankWords(board: LeaderboardResponse): { big: string | null; of:
   const what = board.board === "streak" ? tab : `${tab} this week`;
   if (board.status === "paused" || board.status === "switched_off" || board.status === "no_checkins") return { big: null, of: null, line: "Not showing" };
   const { me } = board;
-  if (me.hidden === "staff") return { big: null, of: null, line: "Staff" };
+  if (me.hidden === "staff") return { big: null, of: null, line: "Staff aren’t ranked" };
   if (me.hidden === "no_name") return { big: null, of: null, line: "Add your name" };
   if (me.hidden !== null) return { big: null, of: null, line: "Hidden" };
   if (me.place === null) return { big: null, of: null, line: NOT_RANKED };
