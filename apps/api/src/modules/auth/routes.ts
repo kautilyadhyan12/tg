@@ -15,10 +15,9 @@ import { refusalReason, type GooglePhoneVerifier, type GoogleVerifier } from "./
 import { googleWordSecondsLeft, mintGoogleWord } from "./googleWord.js";
 import { WrongGuessError } from "./errors.js";
 import { createDualRateLimit } from "./rateLimit.js";
+import { createCodeDoor } from "./codeDoor.js";
 import type { RobotCheck } from "../orgs/gymPage/robotCheck.js";
 import {
-  SIGN_IN_FREE_SENDS_PER_ADDRESS,
-  SIGN_IN_ROBOT_WORDS,
   googlePhoneSignInRequestSchema,
   phoneRefreshRequestSchema,
 } from "@app/shared";
@@ -202,110 +201,27 @@ export function registerAuthRoutes(
   const googleRefusedKey = (req: FastifyRequest) => `rl:google_refused:ip:${req.ip}`;
 
   // ── sign-in by email code (Kd 2026-09-07) ─────────────────────────────────
-  // The per-PERSON limits are in the database (three unused codes a day, then one more
-  // past the robot check; five guesses a code), so nothing here counts by the email
-  // typed: a stranger who typed somebody's address could otherwise use up that person's
-  // allowance and lock them out (the security pass on item 12, H2). These buckets are the
-  // wall against a client that VARIES the address: every send is an email Kd pays for. A
-  // gym's wi-fi or a phone company's gateway puts a whole gym on one internet address
-  // (ROADMAP Stage 4 item 10: 200 people in an hour), so the address's first 20 sends an
-  // hour go straight through and every send after needs the robot check
-  // (`codeRobotGate`), not a refusal. 500 an hour is the ceiling even with the check: 200
-  // people at a code and a resend each, with room. On top sits ONE ceiling on sends a day
-  // across everyone, the outage-and-bill stop.
-  const codeSendLimit = createDualRateLimit({
-    name: "code_send",
-    max: 500,
-    ipMax: 500,
-    windowMs: HOUR_MS,
-    identifier: () => null,
-    redis: deps.redis,
-  });
-  const DAY_S = 24 * 60 * 60;
-  // The ceiling counts EMAILS, not requests: read here, stepped only after a
-  // send has resolved (below), so a refusal never spends one of the day's sends.
-  // Read-then-count can overshoot by the requests in flight together, nothing
-  // against a stop in the thousands. A missing key and a Redis outage both
-  // read as "none yet" and open; with Redis down every send has passed the robot
-  // check first (`codeRobotGate`), so no robot reaches it.
-  const DAY_CEILING_KEY = "rl:code_send:all:day";
-  const dailySendCeiling = async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
-    const sentToday = Number((await deps.redis.get(DAY_CEILING_KEY)) ?? "0");
-    if (sentToday >= deps.config.CODE_EMAILS_PER_DAY) {
-      await reply.status(429).send({
-        error: "code_ceiling",
-        message: "Sign-in codes are paused for today. Please try again tomorrow, or sign in with Google.",
-        requestId: req.id,
-      });
-    }
-  };
+  // The walls around the door (robot check, the address’s hour, the day’s ceiling, wrong guesses)
+  // are shared with the website’s Delete your account page: codeDoor.ts.
+  const door = createCodeDoor({ config: deps.config, redis: deps.redis, robotCheck: deps.robotCheck });
 
-  // THE ROBOT CHECK, past the address's first 20 sends an hour, and past a person's three
-  // free codes a day (the database's rule, `RobotCheckNeeded`). It runs before the
-  // limits, so a request without a passed check counts against nobody's allowance —
-  // not the address's, and not the person whose address a robot typed. A request that
-  // would send nothing (the handler answers it 400) spends none of the 20. Every answer
-  // is put to Cloudflare, and failures are never counted against the address: one person
-  // there could otherwise lock out everybody sharing it; the floor of 600 a minute an
-  // address bounds the asks. Each answer is used once (Cloudflare refuses it a second
-  // time). REDIS DOWN: the 20 cannot be counted, nor the day's ceiling, so every send asks
-  // for the check, which needs no Redis (the security pass on item 12, H3).
-  const HOUR_S = HOUR_MS / 1000;
-  /** The requests that passed the robot check, for the handler's day rule. */
-  const passedRobot = new WeakSet<FastifyRequest>();
-  const askForRobot = (req: FastifyRequest, reply: FastifyReply) =>
-    reply.status(403).send({ error: "robot_check", message: SIGN_IN_ROBOT_WORDS.robot_check, robotCheckKey: deps.robotCheck.siteKey, requestId: req.id });
-  const codeRobotGate = async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
-    // Answered here, so a request that would send nothing reaches no count after this one.
-    const body = parseBody(sendCodeRequestSchema, req, reply);
-    if (body === null) return;
-    const token = body.robotToken;
-    if (token !== undefined) {
-      const answer = await deps.robotCheck.verify(token, "sign_in");
-      if (answer === "unavailable") {
-        await reply.status(503).send({ error: "robot_unavailable", message: SIGN_IN_ROBOT_WORDS.robot_unavailable, requestId: req.id });
-        return;
-      }
-      if (answer !== "passed") {
-        await reply.status(403).send({ error: "robot_failed", message: SIGN_IN_ROBOT_WORDS.robot_failed, robotCheckKey: deps.robotCheck.siteKey, requestId: req.id });
-        return;
-      }
-      passedRobot.add(req);
-    }
-    const sends = await deps.redis.incrWithTtl(`rl:code_send_free:ip:${req.ip}`, HOUR_S);
-    if (sends === null) req.log.warn({ event: "ratelimit.robot_check_redis_down", limiter: "code_send_free" }, "every code send asks for the robot check (Redis unavailable)");
-    const free = sends !== null && sends <= SIGN_IN_FREE_SENDS_PER_ADDRESS;
-    if (!free && !passedRobot.has(req)) await askForRobot(req, reply);
-  };
-
-  app.post("/v1/auth/code/send", { preHandler: [codeRobotGate, codeSendLimit, dailySendCeiling] }, async (req, reply) => {
+  app.post("/v1/auth/code/send", { preHandler: door.beforeSend }, async (req, reply) => {
     const input = parseBody(sendCodeRequestSchema, req, reply);
     if (input === null) return;
     let rules: Awaited<ReturnType<typeof service.requestSignInCode>>;
     try {
-      rules = await service.requestSignInCode(authDeps, input.email, passedRobot.has(req) ? "passed" : "not_passed");
+      rules = await service.requestSignInCode(authDeps, input.email, door.passedRobot(req) ? "passed" : "not_passed");
     } catch (err) {
-      if (err instanceof RobotCheckNeeded) return askForRobot(req, reply);
+      if (err instanceof RobotCheckNeeded) return door.askForRobot(req, reply);
       throw err;
     }
-    // Only a send that resolved is counted against the day's ceiling.
-    await deps.redis.incrWithTtl(DAY_CEILING_KEY, DAY_S);
+    await door.countSent();
     // One fixed body for known AND unknown addresses — asking never reveals
     // whether an account exists.
     return reply.status(200).send({ message: "We emailed you a 6-digit code.", ...rules });
   });
 
-  // 1,000 wrong guesses at live codes an hour from one address. Counted after the guess
-  // (a live code must exist, so each one costs a send, past 20 a robot check); read before.
-  const WRONG_GUESSES_PER_ADDRESS = 1000;
-  const wrongGuessKey = (req: FastifyRequest) => `rl:code_verify_wrong:ip:${req.ip}`;
-  const guessRoom = async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
-    if (Number((await deps.redis.get(wrongGuessKey(req))) ?? "0") >= WRONG_GUESSES_PER_ADDRESS) {
-      await reply.status(429).send({ error: "rate_limited", message: "Too many attempts. Please try again later.", requestId: req.id });
-    }
-  };
-
-  app.post("/v1/auth/code/verify", { preHandler: [guessRoom] }, async (req, reply) => {
+  app.post("/v1/auth/code/verify", { preHandler: [door.guessRoom] }, async (req, reply) => {
     const input = parseBody(verifyCodeRequestSchema, req, reply);
     if (input === null) return;
     if (input.client === "phone" && refusedFromABrowser(req, reply)) return;
@@ -313,7 +229,7 @@ export function registerAuthRoutes(
     try {
       signedIn = await service.signInWithCode(authDeps, input, requestMeta(req));
     } catch (err) {
-      if (err instanceof WrongGuessError) await deps.redis.incrWithTtl(wrongGuessKey(req), HOUR_S);
+      if (err instanceof WrongGuessError) await door.countWrongGuess(req);
       throw err;
     }
     const { user, tokens, isNewAccount } = signedIn;

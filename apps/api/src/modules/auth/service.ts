@@ -408,7 +408,7 @@ export async function signInWithCode(
 
 export async function requestEmailCode(
   deps: { sql: Sql; config: AppConfig; log: FastifyBaseLogger },
-  input: { email: string; purpose: CodePurpose; boundTo?: string },
+  input: { email: string; purpose: CodePurpose; boundTo?: string; robot?: codes.RobotAnswer },
   send: CodeSender,
 ): Promise<{ resendAfterSeconds: number; expiresInSeconds: number }> {
   return await codes.requestCode(deps, input, send);
