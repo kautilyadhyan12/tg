@@ -39,6 +39,7 @@ import { registerGamificationRoutes } from "./modules/gamification/routes.js";
 import { registerGoalRoutes } from "./modules/goals/routes.js";
 import { GoalsError } from "./modules/goals/service.js";
 import { registerEntitlementRoutes } from "./modules/entitlements/routes.js";
+import { registerAdminRoutes } from "./modules/admin/routes.js";
 import { createIoRedis, createMemoryRedis, type RedisLike } from "./redis.js";
 import type { AppConfig } from "./config.js";
 import { registerNutritionRoutes, type NutritionRouteOverrides } from "./modules/nutrition/routes.js";
@@ -396,6 +397,8 @@ export async function buildApp(
   registerGamificationRoutes(app, { sql });
   registerGoalRoutes(app, { sql, ...(overrides.goals?.now === undefined ? {} : { now: overrides.goals.now }) });
   registerEntitlementRoutes(app, { sql, redis });
+  // Kd's own admin page: only the account ADMIN_USER_ID names (ROADMAP Stage 2 item 14a-i).
+  registerAdminRoutes(app, { sql, redis, config, ...(overrides.passwordHasher === undefined ? {} : { hasher: overrides.passwordHasher }) });
   registerNutritionRoutes(app, { sql, redis, config, reportError }, overrides.nutrition ?? {});
   registerGeoRoutes(app, { sql, redis, config }, overrides.geo ?? {});
   const invites = inviteSettings(config);

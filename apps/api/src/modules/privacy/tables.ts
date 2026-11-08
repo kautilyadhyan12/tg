@@ -46,6 +46,11 @@ export const DIRECT_DELETE_TABLES = [
   // The ids of runs the person deleted (migration 0222, ROADMAP Stage 5 37c-i), on meal_removed_ids'
   // footing: their own record, deleted and exported.
   "run_removed_ids",
+  // Kd's own number of meal scans or route plans a day for the person (migration 0226, ROADMAP
+  // Stage 2 item 14a-i): about them, so deleted and exported with their own records.
+  "usage_limits",
+  // The admin door's password hash (migration 0226, 14a-i): deleted, never exported.
+  "admin_passwords",
   "saved_routes",
   "run_schedules",
   "body_measurements",
@@ -205,6 +210,8 @@ export const EXPORT_EXCLUDED_TABLES = {
   // ("every user-owned table above") does cover them, which is exactly why
   // this exclusion is written down rather than silently applied.
   push_tokens: "device push credentials — exporting them is a spoofing vector, not user content",
+  // The admin door's password hash (14a-i): a credential, never handed out in a file.
+  admin_passwords: "a password hash — a credential, never content to hand out",
   // Only which of OTHER people's comments the phone was told of, and when: their ids, none of
   // the person's own words or choices (the comments themselves are in the export).
   gym_post_comment_notices: "a send queue of other people's comment ids, not the person's content",
