@@ -4,8 +4,8 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   test: {
     include: ["test/*.test.ts"],
-    // On the laptop, four test files at a time: two folders share its 16 GB (Kd, 2026-11-08).
+    // On the laptop, five test files at a time: two folders share its 16 GB (Kd, 2026-11-08).
     // GitHub (CI set) keeps the default.
-    ...(process.env.CI ? {} : { poolOptions: { forks: { maxForks: 4, minForks: 1 }, threads: { maxThreads: 4, minThreads: 1 } } }),
+    ...(process.env.CI ? {} : { poolOptions: { forks: { maxForks: 5, minForks: 1 }, threads: { maxThreads: 5, minThreads: 1 } } }),
   },
 });
