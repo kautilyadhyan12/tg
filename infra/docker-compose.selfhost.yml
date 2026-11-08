@@ -1,0 +1,74 @@
+# The test server (ROADMAP Stage 5 item 21a-i; Kd 2026-11-07: free until publishing, the same
+# tools): ONE machine holds Postgres and Redis as well, where `docker-compose.yml` expects them as
+# managed services. Used on top of that file:
+#
+#   docker compose -f infra/docker-compose.yml -f infra/docker-compose.selfhost.yml up -d
+#
+# On the host, beside these files and never in git: `api.env` (the api's settings; its
+# DATABASE_URL names `postgres` and REDIS_URL `redis`), `db.env` (POSTGRES_USER, POSTGRES_PASSWORD,
+# POSTGRES_DB), `.env` (API_DOMAIN, WEB_DOMAIN, ACME_EMAIL) and `web/` (the built console).
+#
+# Only Caddy has a door to the internet. Postgres listens on the machine's own loopback alone, for
+# migrations through an SSH tunnel; Redis on none.
+
+x-data: &data
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+  volumes:
+    - /srv/kwazo/photos:/data/photos
+    - /srv/kwazo/heights:/data/heights
+
+services:
+  caddy:
+    volumes:
+      - ./Caddyfile.selfhost:/etc/caddy/Caddyfile:ro
+      - ./Caddyfile:/etc/caddy/Caddyfile.api:ro
+      - ./web:/srv/web:ro
+    environment:
+      WEB_DOMAIN: ${WEB_DOMAIN:?set WEB_DOMAIN in infra/.env}
+
+  api:
+    <<: *data
+
+  live:
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  worker:
+    <<: *data
+
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    env_file:
+      - ./db.env
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # Kept on disk so rate limits and queued jobs outlive a restart.
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  pgdata:
+  redisdata:

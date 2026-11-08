@@ -1,0 +1,45 @@
+# The test server (ROADMAP Stage 5 item 21a-i): one machine serves the api, as `Caddyfile` does,
+# and the console itself from `infra/web` (built on a laptop with VITE_API_URL set to the api's
+# https address, then copied across). `docker-compose.selfhost.yml` mounts this file in place of
+# `Caddyfile` and that one beside it.
+import Caddyfile.api
+
+{$WEB_DOMAIN} {
+	root * /srv/web
+
+	# No other site shows the console in a frame (18d-ii, round one, H2): the page's own guard
+	# draws nothing there, and this header stops the browser from framing it at all. A gym's
+	# public page as its embed is the one page that may be framed (`framing.js`, `mayBeFramed`).
+	@notEmbed not {
+		path_regexp ^/gyms/[^/]+/?$
+		query embed=1
+	}
+	header @notEmbed Content-Security-Policy "frame-ancestors 'none'"
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+	}
+
+	# The built files carry their content's hash in their names, so they never change in place;
+	# the page itself is read again on every visit so a new build is seen at once
+	# (matched on the address asked for: every page is index.html).
+	@hashed path /assets/*
+	header @hashed Cache-Control "public, max-age=31536000, immutable"
+	@page not path /assets/*
+	header @page Cache-Control "no-cache"
+
+	encode zstd gzip
+	try_files {path} /index.html
+	file_server
+
+	log {
+		output stdout
+		format filter {
+			wrap json
+			fields {
+				request>uri regexp "\?.*$" ""
+			}
+		}
+	}
+}
