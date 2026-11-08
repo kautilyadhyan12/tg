@@ -44,6 +44,28 @@ interface Drawn {
 const drawn = (node: Drawn) => StyleSheet.flatten(node.props.style);
 
 describe("the worst thing, on the screen", () => {
+  it("the new look leaves every way in: the email box and both buttons, then the code's boxes, Continue, Resend and Use a different email", async () => {
+    const { server } = await openApp({ "/v1/auth/code/send": sent, "/v1/auth/code/verify": signsIn() });
+    await screen.findByText("Get started.");
+    const free = { disabled: false, busy: false };
+    expect(screen.getByLabelText("Email").props.editable).toBe(true);
+    expect(screen.getByRole("button", { name: "Continue" }).props.accessibilityState).toEqual(free);
+    expect(screen.getByRole("button", { name: "Continue with Google" }).props.accessibilityState).toEqual(free);
+    await askForCode();
+    expect(await screen.findByText("ravi@example.com")).toBeTruthy();
+    // Each digit typed shows in its own box, so the person sees what they typed.
+    await type("6-digit code", "4815");
+    expect(["4", "8", "1", "5"].map((digit) => screen.getAllByText(digit).length)).toEqual([1, 1, 1, 1]);
+    expect(screen.getByLabelText("6-digit code").props.editable).not.toBe(false);
+    expect(screen.getByRole("button", { name: "Continue" }).props.accessibilityState).toEqual(free);
+    expect(screen.getByRole("button", { name: /^Resend code/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Use a different email" }).props.accessibilityState).toEqual(free);
+    await type("6-digit code", "481516");
+    await press("Continue");
+    expect(await screen.findByRole("header", { name: "Ravi" })).toBeTruthy();
+    expect(server.paths().filter((path) => path.startsWith("/v1/auth/code/"))).toEqual(["/v1/auth/code/send", "/v1/auth/code/verify"]);
+  });
+
   it("opened with no internet, a signed-in person is on their tabs, never the sign-in screen", async () => {
     const { server, store } = await openApp({ "/health": lost, "/v1/auth/refresh": lost }, kept(1));
     expect(await screen.findByRole("tab", { name: "Dashboard" })).toBeTruthy();
@@ -170,11 +192,14 @@ describe("signing in by email code", () => {
     const { server } = await openApp({});
     expect(await screen.findByText("Get started.")).toBeTruthy();
     expect(screen.getByText("Sign in or create your account")).toBeTruthy();
-    // The browser's own picture, across the top.
-    expect(screen.getByTestId("get-started-picture").props.source).toBe(pictures.getstarted);
-    // Few words: the mark, the heading, one line, the box's own words, the two ways in and the terms.
+    // Kd's poster over the whole page, and the app's name on it, said once.
+    expect(screen.getByTestId("sign-in-picture").props.source).toBe(pictures.signin);
+    expect(screen.getByRole("image", { name: "KWAZO" })).toBeTruthy();
+    // Few words: the heading, one line, the box's own words, the two ways in and the terms.
     expect(screen.getAllByText(/./).map((line) => String(line.props.children))).toEqual([
-      "AI Home Gym",
+      "KWA",
+      "Z",
+      "O",
       "Get started.",
       "Sign in or create your account",
       "Continue",

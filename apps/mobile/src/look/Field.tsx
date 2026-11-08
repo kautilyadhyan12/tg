@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { StyleSheet, TextInput, View, type TextInputProps } from "react-native";
 import { colours, shadows, sizes } from "./colours";
+import { Icon, type IconName } from "./Icon";
 import { MOST_TEXT_GROWTH } from "./sizing";
 import { fonts, Txt } from "./Txt";
 
@@ -27,11 +28,13 @@ interface FieldProps {
   lines?: number;
   /** Shown, and not changed while something is being saved. */
   disabled?: boolean;
+  /** A small orange sign inside the box's start, saying what goes in it (sign-in's envelope, 12e). */
+  icon?: IconName;
 }
 
 /** One line to type in, as tall as a main button; its edge turns orange while it is typed in.
  *  The box is a View round the input: Android drops an input's own padding when its edge is restyled. */
-export function Field({ label, bare = false, value, onChange, placeholder, keyboard, fills, maxLength, spaced = false, ready = false, onDone, name = false, lines, disabled = false }: FieldProps) {
+export function Field({ label, bare = false, value, onChange, placeholder, keyboard, fills, maxLength, spaced = false, ready = false, onDone, name = false, lines, disabled = false, icon }: FieldProps) {
   const many = lines !== undefined && lines > 1;
   const [on, setOn] = useState(false);
   return (
@@ -41,7 +44,12 @@ export function Field({ label, bare = false, value, onChange, placeholder, keybo
           {label}
         </Txt>
       )}
-      <View style={[styles.box, many ? [styles.manyBox, { minHeight: LINE * lines + 24 }] : null, on ? styles.on : null]}>
+      <View style={[styles.box, many ? [styles.manyBox, { minHeight: LINE * lines + 24 }] : null, icon === undefined ? null : styles.withIcon, on ? styles.on : null]}>
+        {icon === undefined ? null : (
+          <View style={styles.icon}>
+            <Icon name={icon} size={18} colour="orange" />
+          </View>
+        )}
         <TextInput
           accessibilityLabel={label}
           accessibilityState={{ disabled }}
@@ -66,7 +74,7 @@ export function Field({ label, bare = false, value, onChange, placeholder, keybo
             setOn(false);
           }}
           selectionColor={colours.orange}
-          style={[styles.input, many ? [styles.manyInput, { minHeight: LINE * lines }] : null, spaced && value !== "" ? styles.spaced : null]}
+          style={[styles.input, icon === undefined ? null : styles.inputBeside, many ? [styles.manyInput, { minHeight: LINE * lines }] : null, spaced && value !== "" ? styles.spaced : null]}
         />
       </View>
     </View>
@@ -87,6 +95,18 @@ const styles = StyleSheet.create({
     backgroundColor: colours.field,
     paddingHorizontal: 16,
   },
+  withIcon: { height: 52, flexDirection: "row", alignItems: "center", gap: 10, paddingLeft: 6, paddingRight: 14 },
+  icon: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colours.orangeFill,
+    borderWidth: 1,
+    borderColor: colours.orangeLine,
+  },
+  inputBeside: { flex: 1, height: 50 },
   input: { height: sizes.button - 2, padding: 0, color: colours.text, fontFamily: fonts.regular, fontSize: 15 },
   // Several lines: the box grows with the words (minHeight, never height), the words start at its top.
   manyBox: { height: undefined, paddingVertical: 12 },
