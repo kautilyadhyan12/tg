@@ -208,7 +208,8 @@ describe("signing in by email code", () => {
       "Continue",
       "or",
       "Continue with Google",
-      "By continuing you agree to our Terms & Privacy Policy",
+      "Terms",
+      "Privacy Policy",
     ]);
     expect(screen.getByLabelText("Email").props.placeholder).toBe("Email address");
     expect(screen.queryAllByRole("tab")).toEqual([]);

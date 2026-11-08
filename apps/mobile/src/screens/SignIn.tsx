@@ -1,5 +1,5 @@
 import { useContext, useEffect, useRef, useState } from "react";
-import { Image, Keyboard, LayoutAnimation, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
+import { Image, Keyboard, LayoutAnimation, Linking, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SIGN_IN_CODE_RULES, authEmailSchema } from "@app/shared";
 import { Button } from "../look/Button";
@@ -16,6 +16,7 @@ import type { Answer } from "../session/calls";
 import { forgetWaiting, keepWaiting, readWaiting } from "../session/codeWaiting";
 import type { KeyStore } from "../session/session";
 import { useSession } from "../session/SessionProvider";
+import { legalUrl, type LegalPage } from "./legalLinks";
 import { RobotCheck } from "./RobotCheck";
 import { CopyContext } from "./ThisCopy";
 
@@ -56,6 +57,12 @@ function wordsFor(answer: Exclude<Answer<unknown>, { kind: "ok" }>, fallback: st
 export function SignInScreen({ note, waiting }: { note: string | null; waiting: KeyStore }) {
   const { session } = useSession();
   const apiUrl = useContext(CopyContext).extra?.apiUrl ?? "";
+  const webUrl = useContext(CopyContext).extra?.webUrl;
+  /** Terms or Privacy Policy, in the phone's browser (21b-i). */
+  const openLegal = (page: LegalPage) => {
+    const url = legalUrl(webUrl, page);
+    if (url !== null) Linking.openURL(url).catch(() => undefined);
+  };
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const [step, setStep] = useState<"email" | "code">("email");
@@ -399,7 +406,14 @@ export function SignInScreen({ note, waiting }: { note: string | null; waiting: 
             )}
 
             <Txt kind="tiny" colour="onSignIn" style={styles.centre}>
-              By continuing you agree to our Terms & Privacy Policy
+              By continuing you agree to our{" "}
+              <Txt kind="tiny" colour="onSignIn" style={styles.legal} onPress={() => { openLegal("terms"); }}>
+                Terms
+              </Txt>
+              {" & "}
+              <Txt kind="tiny" colour="onSignIn" style={styles.legal} onPress={() => { openLegal("privacy"); }}>
+                Privacy Policy
+              </Txt>
             </Txt>
           </View>
         )}
@@ -482,5 +496,6 @@ const styles = StyleSheet.create({
   orLine: { flex: 1, height: 1, backgroundColor: colours.onSignInFaint },
   links: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between" },
   centre: { textAlign: "center" },
+  legal: { textDecorationLine: "underline" },
   said: { alignSelf: "stretch", paddingVertical: 8, paddingHorizontal: 12, borderRadius: 12, backgroundColor: colours.light },
 });

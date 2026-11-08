@@ -46,6 +46,7 @@ import { UNIT_OPTIONS } from "./setup/SetupScreens";
 import { setupPath } from "./setup/useSetupAnswers";
 import { RobotCheck } from "./RobotCheck";
 import { NO_ANSWER } from "./SignIn";
+import { legalUrl, type LegalPage } from "./legalLinks";
 import { CopyContext } from "./ThisCopy";
 
 // Settings on the phone (ROADMAP Stage 5 item 19a): the browser's Profile name, Units, Hide me, what
@@ -176,6 +177,7 @@ function SettingsBody({ onClose }: { onClose: () => void }) {
       <PlacesPart places={memberOf} onAgain={() => { setTries((n) => n + 1); }} />
       <AccountPart onClose={onClose} saves={saves} />
       <DataPart places={places} onStale={() => { setTries((n) => n + 1); }} />
+      <LegalPart />
     </View>
   );
 }
@@ -805,6 +807,25 @@ function DataPart({ places, onStale }: { places: Places; onStale: () => void }) 
       <View style={styles.rule} />
       <Button label="Delete account" kind="dangerLink" icon="trash" style={styles.start} onPress={() => { setAsking(true); }} />
       <DeleteAsk open={asking} places={places} onStale={onStale} onClose={() => { setAsking(false); }} />
+    </Part>
+  );
+}
+
+/** Our Privacy Policy and Terms of Use (21b-i), on the website, in the phone's browser. */
+function LegalPart() {
+  const webUrl = useContext(CopyContext).extra?.webUrl;
+  const [failed, setFailed] = useState(false);
+  const open = (page: LegalPage) => {
+    setFailed(false);
+    const url = legalUrl(webUrl, page);
+    if (url === null) { setFailed(true); return; }
+    Linking.openURL(url).catch(() => { setFailed(true); });
+  };
+  return (
+    <Part title="Privacy and terms" icon="shield">
+      <Button label="Privacy Policy" kind="link" style={styles.start} onPress={() => { open("privacy"); }} />
+      <Button label="Terms of Use" kind="link" style={styles.start} onPress={() => { open("terms"); }} />
+      <Said words={failed ? "Couldn’t open the page. Try again." : null} bad />
     </Part>
   );
 }

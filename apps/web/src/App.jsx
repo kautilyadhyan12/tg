@@ -26,6 +26,8 @@ import Settings        from './pages/Settings';
 import InvitationLink  from './pages/InvitationLink';
 import StaffInvitationLink from './pages/StaffInvitationLink';
 import GymPublicPage   from './pages/GymPublicPage';
+import LegalPage       from './pages/LegalPage';
+import { LEGAL_PATHS } from '@app/shared';
 import InvitePage       from './pages/InvitePage';
 import AgreementSignPage from './pages/AgreementSignPage';
 import Invitations     from './pages/Invitations';
@@ -195,6 +197,10 @@ export default function App() {
             <Route path="/join/:slug" element={<InvitationLink />} />
             {/* A staff invitation email's link (Part 3 §10.3): sign in through the Manage door. */}
             <Route path="/staff-invitation" element={<StaffInvitationLink />} />
+            {/* KWAZO's Privacy Policy, Terms of Use and Washington's page (21b-i): public, no sign-in. */}
+            <Route path={LEGAL_PATHS.privacy} element={<LegalPage which="privacy" />} />
+            <Route path={LEGAL_PATHS.terms} element={<LegalPage which="terms" />} />
+            <Route path={LEGAL_PATHS.washington} element={<LegalPage which="washington" />} />
             {/* A gym's own page and its enquiry form (20c-iv-a): public, no sign-in. */}
             <Route path="/gyms/:slug" element={<GymPublicPage />} />
             {/* A member's invite link (20e-ii-a): public, for every business. */}

@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
 import { useTransition } from '../context/TransitionContext';
 import { Dumbbell, ArrowRight, Zap, Mail } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { SIGN_IN_CODE_RULES, SIGN_IN_ROBOT_WORDS } from '@app/shared';
+import { LEGAL_PATHS, SIGN_IN_CODE_RULES, SIGN_IN_ROBOT_WORDS } from '@app/shared';
 import { GYM_DOOR, MEMBER_DOOR, landingRoute, readDoor, rememberDoor, returnForDoor } from './landingRoute';
 import { useRobotCheck } from './useRobotCheck';
 
@@ -552,9 +552,17 @@ export default function Login() {
           {/* Footer */}
           <p
             className="text-center text-xs mt-8"
-            style={{ color: 'rgba(255,255,255,0.20)' }}
+            style={{ color: 'rgba(255,255,255,0.45)' }}
           >
-            By continuing you agree to our Terms & Privacy Policy
+            By continuing you agree to our{' '}
+            <Link to={LEGAL_PATHS.terms} className="underline" style={{ color: 'rgba(255,255,255,0.75)' }}>Terms</Link>
+            {' & '}
+            <Link to={LEGAL_PATHS.privacy} className="underline" style={{ color: 'rgba(255,255,255,0.75)' }}>Privacy Policy</Link>
+          </p>
+          <p className="text-center text-xs mt-2">
+            <Link to={LEGAL_PATHS.washington} className="underline" style={{ color: 'rgba(255,255,255,0.45)' }}>
+              Washington Consumer Health Data Privacy Policy
+            </Link>
           </p>
         </motion.div>
       </div>
