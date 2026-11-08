@@ -5,7 +5,7 @@ import { distance as runDistance, unitWord } from "../running/runWords";
 // What the Dashboard says about the numbers the server sends (ROADMAP Stage 5 item 31a). The server
 // computes every number; these only put it into words. Nothing here guesses a number it was not sent.
 
-/** Shown in a number's place while it is loading, or when its read failed. */
+/** A figure nobody measured (a food's, a meal's): never 0. A number still loading is a soft bar (31h). */
 export const NOT_KNOWN = "–";
 
 /** 1240 → "1,240". Written here: the phone's own number formatting differs between Android versions. */

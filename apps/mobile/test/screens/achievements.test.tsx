@@ -205,6 +205,21 @@ describe("Me → Achievements", () => {
   });
 });
 
+describe("Achievements when the level cannot be read (31h round one)", () => {
+  it("says so with Try again, its bars stand still and are never read as Loading; Try again shows the level", async () => {
+    let up = false;
+    await openAchievements(server({ [ACHIEVEMENTS_READS.me]: () => (up ? { status: 200, body: ME } : refusal(503, "unavailable", "Down")) }).ask);
+    expect(await screen.findByText("Your level couldn’t load.")).toBeTruthy();
+    expect(screen.getByLabelText("Level couldn’t load")).toBeTruthy();
+    expect(screen.getAllByTestId("failed-bar").length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByLabelText("Level loading")).toBeNull();
+    up = true;
+    await fireEvent.press(screen.getByLabelText("Load your level again"));
+    expect(await screen.findByLabelText("Level 4")).toBeTruthy();
+    expect(screen.queryByText("Your level couldn’t load.")).toBeNull();
+  });
+});
+
 describe("the Dashboard opens Achievements where its box points", () => {
   it.each([
     ["Latest Badges, View all", "Badges"],

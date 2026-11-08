@@ -7,7 +7,7 @@ import {
   type NoDeficitReason,
 } from "@app/shared";
 import type { IconName } from "../../look/Icon";
-import { NOT_KNOWN, count } from "../dashboard/words";
+import { count } from "../dashboard/words";
 
 // What Your Goals says about each goal (ROADMAP Stage 5 item 31b). The server measures every goal and
 // holds the ones the health rules hold; these only put its numbers into words.
@@ -148,7 +148,7 @@ export function goalProgress(goal: Goal, units: string): Progress {
     if (goal.reached === true) return { kind: "done", words: "Reached" };
     return { kind: "going", words: cur === null ? "No weigh-in yet" : `${weightWords(cur, units)} now`, share: null };
   }
-  if (cur === null || t === null) return { kind: "going", words: NOT_KNOWN, share: null };
+  if (cur === null || t === null) return { kind: "going", words: "Not started yet", share: null };
   if (goal.direction === "at_most") {
     // Over its number: the words alone, never a trail climbed to the top as if it were reached.
     if (cur > t) return { kind: "going", words: `${count(cur - t)} ${UNIT_WORDS[goal.unit](cur - t)} over${now}`, share: null };

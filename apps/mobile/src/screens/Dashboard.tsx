@@ -35,7 +35,6 @@ import { fonts, Txt } from "../look/Txt";
 import { useSession } from "../session/SessionProvider";
 import { useZoneSaved } from "../session/TimeZoneSync";
 import {
-  NOT_KNOWN,
   activeDaysWords,
   barShare,
   challengeProgress,
@@ -68,10 +67,11 @@ import { AchievementsPage } from "./achievements/AchievementsPage";
 import type { TabKey as AchievementsTab } from "./achievements/achievementsRules";
 import { greetingAt } from "./greeting";
 import { COMING_SOON } from "./Soon";
+import { Shown, SoftBar } from "../look/Waiting";
 
 // The Dashboard as drawn (docs/design/phone/pages/Today.src.html), from the member web's own page,
 // filled with the person's own numbers (ROADMAP Stage 5 item 31a). Each box has its own read, so one
-// that is slow or fails never empties another; a number not known is "–", never a 0.
+// that is slow or fails never empties another; a number still coming is a soft bar, never a 0 (31h).
 
 export const DASHBOARD_READS = {
   overview: "/v1/progress/overview?period=all",
@@ -210,7 +210,7 @@ export function DashboardScreen() {
         ) : places.read.kind === "ok" ? (
           <RankBox big={null} />
         ) : (
-          <RankBox big={NOT_KNOWN} />
+          <RankBox big={null} waiting failed={places.read.kind === "failed"} />
         )}
         <Badges
           me={me.read}
@@ -285,6 +285,7 @@ function Totals({ overview, me }: { overview: Read<ProgressOverview>; me: Read<G
     window: windowWords(o.limitedToDays),
   }));
   const xp = known(me, (m) => m.xp);
+  const overviewFailed = overview.kind === "failed";
   return (
     <View style={styles.tight}>
       {totals === null ? null : (
@@ -296,26 +297,30 @@ function Totals({ overview, me }: { overview: Read<ProgressOverview>; me: Read<G
       <StatTile
         picture="totalworkout"
         icon="dumbbell"
-        value={totals === null ? NOT_KNOWN : count(totals.sessions)}
+        failed={overviewFailed}
+        value={totals === null ? null : count(totals.sessions)}
         label="Total Sessions"
       />
       <StatTile
         picture="hourstrained"
         icon="clock"
-        value={totals === null ? NOT_KNOWN : totals.hours}
+        failed={overviewFailed}
+        value={totals === null ? null : totals.hours}
         label="Hours Trained"
       />
       <StatTile
         picture="caloriesburned"
         icon="flame"
-        value={totals === null ? NOT_KNOWN : count(totals.kcal)}
+        failed={overviewFailed}
+        value={totals === null ? null : count(totals.kcal)}
         label="Calories Burned"
       />
       <StatTile
         picture="currentlevel"
         icon="trophy"
         tone="gold"
-        value={xp === null ? NOT_KNOWN : `Level ${count(xp.level)}`}
+        failed={me.kind === "failed"}
+        value={xp === null ? null : `Level ${count(xp.level)}`}
         label={xp === null ? "Current Level" : `${count(xp.total)} XP earned`}
       />
       </View>
@@ -335,13 +340,13 @@ function Experience({ me, week, now }: { me: Read<GamificationMe>; week: Read<Pr
           <Txt kind="h3" style={styles.boxTitle}>Experience Points</Txt>
         </View>
         <View style={styles.tight}>
-          <Txt kind="tiny">{data === null ? NOT_KNOWN : xpToNext(data.xp)}</Txt>
+          <Shown kind="tiny" width={140} failed={me.kind === "failed"} value={data === null ? null : xpToNext(data.xp)} />
           <Bar share={data === null ? 0 : barShare(data.xp.progressPct)} />
         </View>
         <View style={styles.three}>
-          <Figure value={thisWeek === null ? NOT_KNOWN : count(thisWeek)} label="this week" />
-          <Figure value={data === null ? NOT_KNOWN : count(data.streak.current)} label="day streak" />
-          <Figure value={freezes === null ? NOT_KNOWN : count(freezes)} label={freezes === 1 ? "freeze left" : "freezes left"} />
+          <Figure value={thisWeek === null ? null : count(thisWeek)} failed={week.kind === "failed"} label="this week" />
+          <Figure value={data === null ? null : count(data.streak.current)} failed={me.kind === "failed"} label="day streak" />
+          <Figure value={freezes === null ? null : count(freezes)} failed={me.kind === "failed"} label={freezes === 1 ? "freeze left" : "freezes left"} />
         </View>
       </View>
       <View style={styles.sideArt}>
@@ -351,12 +356,10 @@ function Experience({ me, week, now }: { me: Read<GamificationMe>; week: Read<Pr
   );
 }
 
-function Figure({ value, label }: { value: string; label: string }) {
+function Figure({ value, failed = false, label }: { value: string | null; failed?: boolean; label: string }) {
   return (
-    <View style={styles.figure} accessible accessibilityLabel={`${value} ${label}`}>
-      <Txt kind="big" colour="orange">
-        {value}
-      </Txt>
+    <View style={styles.figure} accessible accessibilityLabel={value !== null ? `${value} ${label}` : failed ? `${label}, couldn’t load` : `${label}, loading`}>
+      <Shown kind="big" colour="orange" width={36} failed={failed} value={value} />
       <Txt kind="tiny" style={styles.centre}>
         {label}
       </Txt>
@@ -385,7 +388,7 @@ function ThisWeek({ week, now }: { week: Read<ProgressTrend>; now: Date }) {
             <Icon name="calendar" size={16} colour="orange" />
             <Txt kind="h3" style={styles.boxTitle}>This Week</Txt>
           </View>
-          <Txt kind="tiny">{trained === null ? NOT_KNOWN : activeDaysWords(trained.days)}</Txt>
+          <Shown kind="tiny" width={72} failed={week.kind === "failed"} value={trained === null ? null : activeDaysWords(trained.days)} />
         </View>
         <View style={styles.days}>
           {days.map((day, i) => {
@@ -465,7 +468,10 @@ function Challenges({ read, onPress }: { read: Read<WeeklyChallenges>; onPress: 
           <Txt kind="h3" style={styles.boxTitle}>Weekly Challenges</Txt>
         </View>
         {read.kind !== "ok" ? (
-          <Txt kind="small">{NOT_KNOWN}</Txt>
+          <View style={[styles.tight, styles.challengeRow]}>
+            <SoftBar kind="tiny" width="90%" failed={read.kind === "failed"} />
+            <SoftBar kind="tiny" width="70%" failed={read.kind === "failed"} />
+          </View>
         ) : (
           // In the box's left half: the picture's own figures stand in the right half, never under a row.
           read.data.challenges.map((c) => (
@@ -502,7 +508,9 @@ function GymRank({ place, read, onClosed }: { place: LeaderboardPlace; read: Rea
   return (
     <>
       <RankBox
-        big={words?.big ?? NOT_KNOWN}
+        big={words?.big ?? null}
+        waiting={words === null}
+        failed={read.kind === "failed"}
         of={words?.of ?? null}
         line={words?.line ?? null}
         say={`Your Rank at ${place.name}`}
@@ -522,15 +530,20 @@ function GymRank({ place, read, onClosed }: { place: LeaderboardPlace; read: Rea
 }
 
 interface RankBoxProps {
-  /** Null: somebody who has no gym, whose own board is still to come. */
+  /** Null with no line: somebody who has no gym, whose own board is still to come. Null with a
+   *  line: no place, said in the line alone ("Not ranked yet"). */
   big: string | null;
+  /** The board is still coming: a soft bar. */
+  waiting?: boolean;
+  /** The read failed: the bar stands still. */
+  failed?: boolean;
   of?: string | null;
   line?: string | null;
   say?: string;
   onPress?: () => void;
 }
 
-function RankBox({ big, of = null, line = null, say, onPress }: RankBoxProps) {
+function RankBox({ big, waiting = false, failed = false, of = null, line = null, say, onPress }: RankBoxProps) {
   const inside = (
     <>
       <Image source={pictures.rank} resizeMode="cover" style={styles.fill} accessible={false} />
@@ -540,8 +553,14 @@ function RankBox({ big, of = null, line = null, say, onPress }: RankBoxProps) {
           <Icon name="crown" size={16} colour="orange" />
           <Txt kind="h3" style={styles.boxTitle}>Your Rank</Txt>
         </View>
-        {big === null ? (
+        {waiting ? (
+          <SoftBar kind="h1" width={64} failed={failed} />
+        ) : big === null && line === null ? (
           <Pill label={COMING_SOON} />
+        ) : big === null ? (
+          <Txt kind="h3" colour="gold">
+            {line}
+          </Txt>
         ) : (
           <View>
             <View style={styles.rankNumber}>
@@ -578,7 +597,7 @@ function Badges({ me, onPress }: { me: Read<GamificationMe>; onPress: () => void
           </Txt>
         </View>
         {names === null ? (
-          <Txt kind="small">{NOT_KNOWN}</Txt>
+          <SoftBar width={96} failed={me.kind === "failed"} />
         ) : names.length === 0 ? (
           <Txt kind="small">No badges yet.</Txt>
         ) : (
@@ -604,7 +623,7 @@ function Recent({ workouts, runs, meals, units, onRun, said }: { workouts: Read<
       ? recentActivity({ workouts: workouts.data.items, runs: runs.data.items, meals: meals.data.items }, 3, units)
       : null;
   return (
-    <Card style={styles.recent} testID="recent-activity">
+    <Card raised style={styles.recent} testID="recent-activity">
       <View style={styles.recentArt}>
         <Image source={pictures.recentworkout} resizeMode="contain" style={styles.recentArtFill} accessible={false} />
       </View>
@@ -620,7 +639,7 @@ function Recent({ workouts, runs, meals, units, onRun, said }: { workouts: Read<
         </Txt>
       )}
       {rows === null || workouts.kind !== "ok" ? (
-        <Txt kind="small">{NOT_KNOWN}</Txt>
+        <SoftBar width="80%" failed={workouts.kind === "failed" || runs.kind === "failed" || meals.kind === "failed"} />
       ) : rows.length === 0 ? (
         <Txt kind="small">{noActivityWords(workouts.data.hasAnyWorkouts, workouts.data.limitedToDays)}</Txt>
       ) : (
@@ -689,7 +708,8 @@ const styles = StyleSheet.create({
   name: { alignSelf: "stretch" },
   // A little lower than the picture's own foot, on the ground under the figures (Kd).
   footDrop: { transform: [{ translateY: 12 }] },
-  boxTitle: { fontSize: 14, lineHeight: 18, color: colours.textSoft },
+  // A title too long for its box goes onto a second line, never past the box's edge (an opened folding phone).
+  boxTitle: { flexShrink: 1, fontSize: 14, lineHeight: 18, color: colours.textSoft },
   centre: { textAlign: "center" },
   fill: { position: "absolute", width: "100%", height: "100%" },
   shade: { experimental_backgroundImage: pictureShade },

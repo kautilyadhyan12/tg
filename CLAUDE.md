@@ -421,6 +421,28 @@ run takes about 11, and it was GitHub that caught that job's failing database te
 the remembering ones keep is under each package's `node_modules/.cache`, which git
 ignores; delete that folder if a remembered result ever looks wrong.
 
+**The laptop's memory is shared: test lightly** (Kd, 2026-11-08, `rulings/2026-11-08-31h.md`).
+Two folders run at once on one laptop with 16 GB (Kd, 2026-11-08: *"i run two folder at same
+time not three"*). A whole package's tests start a copy of Node for nearly every one of its 12
+cores, and on 2026-11-08 one terminal's whole phone run (vitest, then jest) took the laptop to the
+edge while the other folder was working. Kd wants it light, never slow. So, on the laptop:
+- Run only the test files the job changed or that test what it changed, by path, one command at
+  a time, never two test runs at once in a folder and never in the background. The whole
+  package's run is GitHub's, on the push: read it there.
+- The settings hold every laptop run to five copies at a time (`maxWorkers`/`maxForks` 5 when
+  `CI` is not set, in the phone app's jest and vitest, the web's and the engine's; jest starts a
+  copy again past 1 GB). Kd's line: about 3 GB left free at the lowest is enough (*"lowest memeory
+  3 gb left is enough actully , 5 gb lowest left actually too much"*). Measured 2026-11-08 on eleven
+  phone screen files: five copies went from 9.4 GB free to 2.9 GB at the lowest in 65 s; six went
+  to 2.5 GB in 66 s, no faster; four kept 5.7 GB. Never raise them, and never pass `--maxWorkers`
+  or `--pool` higher to get past them.
+- Before a test run that takes more than a minute, check free memory (PowerShell:
+  `(Get-CimInstance Win32_OperatingSystem).FreePhysicalMemory/1MB`, in GB). A run of five copies
+  takes about 6.5 GB, so under 9.5 GB free pass `--maxWorkers=2` (jest) or `--poolOptions.forks.maxForks=2`
+  (vitest); under 5 GB free, tell Kd what is using it and wait, never start it anyway.
+- A server or bundler the terminal started (api, web, Metro) is stopped when the walk it was
+  for is done, and the terminal says so. Nothing of a terminal's keeps running after its job.
+
 Dev servers: api from `apps/api` with `DATABASE_URL` pointing at the LOCAL database
 (Folder A's `apps/api/.env` points at Kd's real Neon data; never run sweeps or seeds
 against it, and never `--env-file=.env` for anything that touches a gym); web with
@@ -539,8 +561,8 @@ Redis number and ports; the two lists are in ROADMAP Stage 2's header.
 web part was built on a borrowed laptop in three web folders (A, B, C) until 2026-10-16,
 then in web folders 1 and 2 on Kd's own laptop, and since 2026-10-26 in ONE web folder on
 a second laptop (ROADMAP Stage 2's header; its own `FOLDER.md`). Kd's
-own laptop builds the phone app and the exercises in FOUR folders, three running at a time
-since 2026-10-26 (two before), each in its own PowerShell window, not VS Code, all
+own laptop builds the phone app and the exercises in FOUR folders, two running at a time
+(Kd, 2026-11-08), each in its own PowerShell window, not VS Code, all
 checkouts of the one repository:
 
 | Folder | Path | Builds (ROADMAP Stage 5) |

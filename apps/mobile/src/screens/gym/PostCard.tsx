@@ -233,7 +233,7 @@ function ChallengeResult({ post, gymName, onChallenge }: { post: GymPost; gymNam
       {result.rows.map((row) => (
         <View key={row.key} accessible accessibilityLabel={row.label} style={styles.resultRow}>
           <Txt kind="small" colour={row.place === 1 ? "gold" : "textSoft"} style={[styles.bold, styles.resultPlace]}>
-            {row.placeText ?? "–"}
+            {row.placeText ?? ""}
           </Txt>
           <View style={styles.grow}>
             <Txt kind="small" colour="text" numberOfLines={1}>

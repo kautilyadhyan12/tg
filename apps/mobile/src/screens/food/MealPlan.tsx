@@ -11,9 +11,10 @@ import { colours } from "../../look/colours";
 import { Icon } from "../../look/Icon";
 import { Sheet } from "../../look/Sheet";
 import { fonts, Txt } from "../../look/Txt";
+import { SoftBar } from "../../look/Waiting";
 import { useSession } from "../../session/SessionProvider";
 import { useRead } from "../dashboard/useRead";
-import { NOT_KNOWN, count } from "../dashboard/words";
+import { count } from "../dashboard/words";
 import { newGoalId } from "../goals/words";
 import { mealTypeName, startOfDay } from "./day";
 import { dayRows, useDayMeals } from "./dayRows";
@@ -308,7 +309,7 @@ export function WhatToEatNext({ foodsToday, fresh, onAnswered, todayFailed, retr
     ) : (
       <Card style={styles.card}>
         <Title />
-        <Txt kind="small">{NOT_KNOWN}</Txt>
+        <SoftBar width="70%" />
       </Card>
     );
   }
@@ -555,7 +556,7 @@ export function WhatToEatNext({ foodsToday, fresh, onAnswered, todayFailed, retr
               <Button label="Try again" kind="link" say="Try your meals again" onPress={retryToday} />
             </View>
           ) : (
-            <Txt kind="small">{NOT_KNOWN}</Txt>
+            <SoftBar width="70%" />
           )
         ) : meals.length === 0 ? (
           // A day of the plan with no meals: the app's ideas in its place (Kd, 31d-i's click-through).

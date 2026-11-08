@@ -8,8 +8,9 @@ import { colours } from "../../look/colours";
 import { Icon } from "../../look/Icon";
 import { Sheet } from "../../look/Sheet";
 import { fonts, Txt } from "../../look/Txt";
+import { SoftBar } from "../../look/Waiting";
 import { useRead } from "../dashboard/useRead";
-import { NOT_KNOWN, count } from "../dashboard/words";
+import { count } from "../dashboard/words";
 import { newGoalId } from "../goals/words";
 import { mealTypeName } from "./day";
 import { gymMeal, mealPlanEmail, noGymPlanLine, underLine, writtenByLine, type GymOfMine } from "./gymPlanRules";
@@ -148,7 +149,7 @@ export function GymPlanBox({ gym, retry, choices, foodsToday, todayFailed, retry
   const troubleLine = trouble === null ? null : <Txt kind="small" colour="badText">{trouble}</Txt>;
 
   let body: ReactNode;
-  if (gym === null) body = <Txt kind="small">{NOT_KNOWN}</Txt>;
+  if (gym === null) body = <SoftBar width="70%" />;
   else if (gym === "failed") {
     body = (
       <View style={styles.row}>
@@ -179,7 +180,7 @@ export function GymPlanBox({ gym, retry, choices, foodsToday, todayFailed, retry
               <Button label="Try again" kind="link" say="Try your meals again" onPress={retryToday} />
             </View>
           ) : (
-            <Txt kind="small">{NOT_KNOWN}</Txt>
+            <SoftBar width="70%" />
           )
         ) : meals.length === 0 ? (
           <>

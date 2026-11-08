@@ -148,7 +148,7 @@ describe("Progress → Body → Log measurements", () => {
     await fireEvent.press(await screen.findByRole("tab", { name: "Body" }));
     expect(await screen.findByText("Your measurements couldn’t load.")).toBeTruthy();
     await log({ "Waist · cm": "82" });
-    expect(await screen.findByLabelText(/, Waiting to send, –, 1 measurement$/)).toBeTruthy();
+    expect(await screen.findByLabelText(/, Waiting to send, No weight, 1 measurement$/)).toBeTruthy();
     expect(screen.queryByText("No weight yet")).toBeNull();
   });
 

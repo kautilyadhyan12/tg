@@ -118,6 +118,11 @@ export const bandShade =
 /** Over a box's top drawing that fades into the rest of the box (Progress's calendar). */
 export const topShade =
   "linear-gradient(to bottom, rgba(18,17,16,0.5) 0%, rgba(18,17,16,0.45) 45%, rgba(18,17,16,1) 100%)";
+/** A raised box with no picture of its own: dark at its words, turning the neutral silver-grey of the
+ *  Weekly Challenges picture toward its right, so it stands off the page (Kd, 2026-11-08: Recommended
+ *  For You and Recent Activity). */
+export const raisedShade = "linear-gradient(90deg, rgba(26,25,25,1) 0%, rgba(33,32,32,1) 45%, rgba(43,42,42,1) 100%)";
+
 /** Over a picture, so the words on it can be read. */
 export const pictureShade =
   "linear-gradient(to top, rgba(10,9,8,0.94) 0%, rgba(10,9,8,0.45) 50%, rgba(10,9,8,0.05) 100%)";
