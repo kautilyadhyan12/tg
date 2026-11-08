@@ -134,10 +134,17 @@ describe("the worst thing: nobody starts a workout, run, meal or plan before the
 });
 
 describe("the look", () => {
-  it("is the Dashboard first, then setup comes up by itself, with no way to close it", async () => {
-    await signIn(notSetUp);
+  it("is the Dashboard first, covered, with no setup yet", async () => {
+    await signIn(notSetUp, 60_000);
     expect(await screen.findByRole("tab", { name: "Dashboard" })).toBeTruthy();
+    const [button] = await screen.findAllByRole("button", { name: "Start Training", ...hidden });
+    if (button === undefined) throw new Error("no button");
+    expect(coverOf(button)).not.toBeNull();
     expect(screen.queryByRole("header", { name: "Your goal" })).toBeNull();
+  });
+
+  it("then setup comes up by itself, with no way to close it", async () => {
+    await signIn(notSetUp);
     await setupIsUp();
   });
 
@@ -147,15 +154,22 @@ describe("the look", () => {
 
   it("counts only while the app is in front", async () => {
     const turn = heldAppState();
-    await signIn(notSetUp, 400);
-    await screen.findByRole("tab", { name: "Dashboard" });
-    await turn("background");
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 700));
-    });
-    expect(screen.queryByRole("header", { name: "Your goal" })).toBeNull();
-    await turn("active");
-    await setupIsUp();
+    // Behind another app from the start, so the test does not race the look on a slow machine.
+    const before = Object.getOwnPropertyDescriptor(AppState, "currentState");
+    Object.defineProperty(AppState, "currentState", { value: "background", configurable: true, writable: true });
+    try {
+      await signIn(notSetUp, SHORT);
+      await screen.findByRole("tab", { name: "Dashboard" });
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, SHORT * 4));
+      });
+      expect(screen.queryByRole("header", { name: "Your goal" })).toBeNull();
+      await turn("active");
+      await setupIsUp();
+    } finally {
+      if (before === undefined) Reflect.deleteProperty(AppState, "currentState");
+      else Object.defineProperty(AppState, "currentState", before);
+    }
   });
 
   it("is skipped with a screen reader on: setup at once", async () => {

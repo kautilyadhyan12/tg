@@ -106,7 +106,8 @@ export function SetupGate({ children, lookMs = LOOK_MS }: { children: ReactNode;
       since = Date.now();
       timer = setTimeout(openSetup, left);
     };
-    go();
+    // Opened behind another app (a sign-in finished in the browser's tab, say), the time waits.
+    if (AppState.currentState !== "background") go();
     const heard = AppState.addEventListener("change", (state) => {
       if (state === "active") {
         if (timer === null) go();
