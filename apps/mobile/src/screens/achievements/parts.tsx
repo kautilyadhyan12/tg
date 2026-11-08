@@ -7,7 +7,8 @@ import { useLoop } from "../../look/Motion";
 import { pictures, type PictureName } from "../../look/pictures";
 import { pictureTopHeight } from "../../look/sizing";
 import { fonts, Txt } from "../../look/Txt";
-import { NOT_KNOWN } from "../dashboard/words";
+import { Button } from "../../look/Button";
+import { SoftBar } from "../../look/Waiting";
 import { TABS, type TabKey } from "./achievementsRules";
 
 // Achievements' own pieces (ROADMAP Stage 5 35c-iii; Kd's drawing, reviews/35c-iii-achievements-mock-4.png): the goddess
@@ -17,7 +18,8 @@ import { TABS, type TabKey } from "./achievementsRules";
 const count = (n: number) => n.toLocaleString("en-US");
 
 /** The goddess, big and glowing; the title, the level and its XP, and the three tabs over her. */
-export function Hero({ xp, badges, tab, onTab }: { xp: XpView | null; badges: string | null; tab: TabKey; onTab: (t: TabKey) => void }) {
+/** `failed`: the level could not be read; its line says so, with Try again (`again`). */
+export function Hero({ xp, failed = false, again, badges, tab, onTab }: { xp: XpView | null; failed?: boolean; again?: () => void; badges: string | null; tab: TabKey; onTab: (t: TabKey) => void }) {
   const { width, height } = useWindowDimensions();
   const tall = pictureTopHeight(width, height, 0.95);
   const breathe = useLoop(3200);
@@ -46,12 +48,21 @@ export function Hero({ xp, badges, tab, onTab }: { xp: XpView | null; badges: st
           ACHIEVEMENTS
         </Txt>
         <View style={styles.level}>
-          <LevelWreath level={xp?.level ?? null} />
+          <LevelWreath level={xp?.level ?? null} failed={failed} />
           <View style={styles.grow}>
-            <Txt kind="strong" numberOfLines={1} fit>
-              {xp === null ? NOT_KNOWN : `${count(xp.total)} XP`}
-              {badges === null ? null : <Txt kind="strong" colour="orange">{` · ${badges}`}</Txt>}
-            </Txt>
+            {xp === null && failed ? (
+              <View style={styles.failedRow}>
+                <Txt kind="small" colour="text">Your level couldn’t load.</Txt>
+                {again === undefined ? null : <Button label="Try again" kind="link" say="Load your level again" onPress={again} />}
+              </View>
+            ) : xp === null ? (
+              <SoftBar width={120} />
+            ) : (
+              <Txt kind="strong" numberOfLines={1} fit>
+                {`${count(xp.total)} XP`}
+                {badges === null ? null : <Txt kind="strong" colour="orange">{` · ${badges}`}</Txt>}
+              </Txt>
+            )}
             <Txt kind="small" colour="textSoft" numberOfLines={1}>
               {xp === null || toNext === null ? " " : `${count(toNext)} XP to Level ${String(xp.level + 1)}`}
             </Txt>
@@ -84,7 +95,7 @@ export function Hero({ xp, badges, tab, onTab }: { xp: XpView | null; badges: st
 const WREATH = 84;
 
 /** The level as a gold laurel wreath round its number, in carved capitals (Kd, 2026-11-05). */
-function LevelWreath({ level }: { level: number | null }) {
+function LevelWreath({ level, failed }: { level: number | null; failed: boolean }) {
   const leaves: { x: number; y: number; turn: number }[] = [];
   for (const side of [-1, 1]) {
     for (let i = 0; i < 8; i += 1) {
@@ -93,7 +104,7 @@ function LevelWreath({ level }: { level: number | null }) {
     }
   }
   return (
-    <View style={styles.wreath} accessible accessibilityLabel={level === null ? "Level not known yet" : `Level ${String(level)}`}>
+    <View style={styles.wreath} accessible accessibilityLabel={level !== null ? `Level ${String(level)}` : failed ? "Level couldn’t load" : "Level loading"}>
       <Svg width={WREATH} height={WREATH} viewBox="0 0 78 78" style={StyleSheet.absoluteFill}>
         <Defs>
           <LinearGradient id="wreathGold" x1="0" y1="0" x2="1" y2="1">
@@ -117,7 +128,7 @@ function LevelWreath({ level }: { level: number | null }) {
           />
         ))}
       </Svg>
-      <Txt style={styles.levelNumber}>{level === null ? NOT_KNOWN : String(level)}</Txt>
+      {level === null ? <SoftBar kind="h1" width={28} failed={failed} /> : <Txt style={styles.levelNumber}>{String(level)}</Txt>}
       <Txt kind="tiny" numberOfLines={1} fit style={styles.levelWord}>
         LEVEL
       </Txt>
@@ -240,6 +251,7 @@ export function Torch({ colour }: { colour: string }) {
 }
 
 const styles = StyleSheet.create({
+  failedRow: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", columnGap: 10 },
   clip: { overflow: "hidden" },
   goddess: { position: "absolute", right: -10, top: "6%" },
   fade: { experimental_backgroundImage: pictureFadeUnderWords },

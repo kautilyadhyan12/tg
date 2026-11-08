@@ -40,6 +40,7 @@ import {
   flameLabel,
   flamesLine,
   hiddenText,
+  NOT_RANKED,
   nextPlaceText,
   notCountedText,
   ordinal,
@@ -290,9 +291,11 @@ function Body({ place, onClose, top, bottom }: { place: LeaderboardPlace; onClos
             }}
             style={[styles.mineRow, board.me.hidden === null ? null : styles.faded]}
           >
-            <Txt kind="h3" colour="textSoft" style={styles.place}>
-              {board.me.place === null ? "–" : ordinal(board.me.place)}
-            </Txt>
+            {board.me.place === null ? null : (
+              <Txt kind="h3" colour="textSoft" style={styles.place}>
+                {ordinal(board.me.place)}
+              </Txt>
+            )}
             <View style={styles.grow}>
               <Txt kind="h3">
                 You{" "}
@@ -300,6 +303,7 @@ function Body({ place, onClose, top, bottom }: { place: LeaderboardPlace; onClos
                   What counted
                 </Txt>
               </Txt>
+              {board.me.place === null && board.me.hidden === null ? <Txt kind="small">{NOT_RANKED}</Txt> : null}
               {board.circleDays === null ? null : <Flames circles={board.me.circles} days={board.circleDays} boardId={board.board} />}
             </View>
             <Txt kind="h3" style={styles.value}>

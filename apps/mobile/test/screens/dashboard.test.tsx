@@ -123,6 +123,58 @@ async function openApp(routes: Record<string, Route>, ask?: Ask) {
 
 const label = (name: string) => screen.queryAllByLabelText(new RegExp(`^${name}`));
 
+describe("the worst thing: a 30-day streak never reads 0 while it loads (31h)", () => {
+  it("while the streak is coming no 0 and no dash is shown, a soft bar is; once it comes, 30", async () => {
+    let answer: (() => void) | null = null;
+    const slow: Route = () =>
+      new Promise<Reply>((done) => {
+        answer = () => {
+          done({ status: 200, body: gamification({ streak: { current: 30, longest: 30, lastActivityDate: today, freezesAvailable: 2 } }) });
+        };
+      });
+    await openApp({ ...trained, "/v1/gamification/me": slow });
+    expect(await screen.findByText("24")).toBeTruthy();
+    const streak = screen.getByLabelText("day streak, loading");
+    expect(within(streak).getByTestId("soft-bar")).toBeTruthy();
+    expect(within(streak).queryByText("0")).toBeNull();
+    expect(screen.queryByText("–")).toBeNull();
+    expect(screen.queryByText("Level 0")).toBeNull();
+    await act(async () => {
+      answer?.();
+      await Promise.resolve();
+    });
+    expect(await screen.findByLabelText("30 day streak")).toBeTruthy();
+    expect(screen.getByLabelText("2 freezes left")).toBeTruthy();
+  });
+
+  it("somebody who has done nothing yet reads 0, never a dash or a soft bar", async () => {
+    const none = {
+      "/v1/progress/overview": ok({ totalWorkouts: 0, totalKcal: 0, totalDurationMs: 0, avgFormScore: null, currentStreak: 0, longestStreak: 0, consistencyPct: 0, totalRuns: 0, runDurationMs: 0, runKcal: 0, limitedToDays: 90 }),
+      "/v1/gamification/me": ok({ streak: { current: 0, longest: 0, lastActivityDate: null, freezesAvailable: 0 }, xp: { total: 0, level: 1, xpInLevel: 0, xpForNext: 100, progressPct: 0, nextLevelAt: 100 }, achievements: [] }),
+      "/v1/progress/trend": ok({ points: [], runDays: [], limitedToDays: 90 }),
+      "/v1/gamification/challenges": ok({ ...challenges, challenges: [challenge("train_days_3", "training_days", 3, 0)], xpThisWeek: 0 }),
+      "/v1/workouts": ok(page([], false)),
+      "/v1/goals": ok({ goals: [], max: 30 }),
+      "/v1/orgs/mine": ok({ orgs: [], formerOrgs: [] }),
+      ...nothingElse,
+    };
+    await openApp(none);
+    expect(await screen.findByText("Level 1")).toBeTruthy();
+    expect(screen.getByText("0 XP earned")).toBeTruthy();
+    expect(screen.getByLabelText("0 this week")).toBeTruthy();
+    expect(screen.getByLabelText("0 day streak")).toBeTruthy();
+    expect(screen.getByLabelText("0 freezes left")).toBeTruthy();
+    expect(screen.getByText("0 of 7 days active")).toBeTruthy();
+    expect(screen.getByLabelText("0 Total Sessions")).toBeTruthy();
+    expect(screen.getByLabelText("0 Calories Burned")).toBeTruthy();
+    expect(screen.getByLabelText("0 min Hours Trained")).toBeTruthy();
+    expect(screen.queryByText("–")).toBeNull();
+    await waitFor(() => {
+      expect(screen.queryAllByTestId("soft-bar")).toHaveLength(0);
+    });
+  });
+});
+
 describe("Your Rank's read", () => {
   it("a board that could not be read stops being said once the person has no gym", async () => {
     const gym = { id: "1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f", name: "Iron House", city: null, orgType: "gym", clockFormat: "12h", slug: "iron-house", timezone: "Asia/Kolkata", locale: "en", currencyDisplay: "INR", status: "active", staffRole: null, isMember: true, joinedAt: "2026-10-01T00:00:00.000Z" };
@@ -383,6 +435,11 @@ describe("a read that fails or is slow never shows a number it does not know", (
     await openApp(Object.fromEntries(Object.entries(trained).map(([path, route]) => [path, failing(route)])));
     expect(await screen.findByText("Some of your numbers couldn’t load.")).toBeTruthy();
     expect(screen.getByText("Total Sessions")).toBeTruthy();
+    // A read that failed is not on its way: still bars read as Couldn’t load, none breathing as Loading.
+    expect(screen.getByLabelText("Total Sessions, couldn’t load")).toBeTruthy();
+    expect(screen.getByLabelText("day streak, couldn’t load")).toBeTruthy();
+    expect(screen.getAllByTestId("failed-bar").length).toBeGreaterThanOrEqual(8);
+    expect(screen.queryAllByTestId("soft-bar")).toHaveLength(0);
     // No figure anywhere but the calendar's own dates and the clock's time.
     const figures = screen.queryAllByText(/\d/).map((one) => String(one.props.children));
     const dates = weekOf(new Date()).map((day) => String(day.date));
@@ -402,7 +459,8 @@ describe("a read that fails or is slow never shows a number it does not know", (
     expect(screen.getByText("1 of 7 days active")).toBeTruthy();
     expect(screen.queryByText(/^Level \d/)).toBeNull();
     expect(screen.queryByText("12")).toBeNull();
-    expect(screen.getAllByText("–").length).toBeGreaterThanOrEqual(4);
+    expect(screen.getAllByTestId("soft-bar").length).toBeGreaterThanOrEqual(4);
+    expect(screen.queryByText("–")).toBeNull();
     expect(screen.queryByText("No badges yet.")).toBeNull();
     expect(screen.queryByText("Some of your numbers couldn’t load.")).toBeNull();
   });

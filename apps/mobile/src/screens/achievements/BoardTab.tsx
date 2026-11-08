@@ -7,9 +7,9 @@ import { colours, medal, medalShades, shadows } from "../../look/colours";
 import { medalPicture } from "../../look/medals";
 import { Txt } from "../../look/Txt";
 import type { Read } from "../dashboard/useRead";
-import { NOT_KNOWN } from "../dashboard/words";
+import { SoftBar } from "../../look/Waiting";
 import { LeaderboardPage, type LeaderboardPlace } from "../gym/Leaderboard";
-import { BOARD_TABS, hiddenText, nextPlaceText, ordinal, rankWords, statusText, valueText } from "../gym/leaderboardView";
+import { BOARD_TABS, NOT_RANKED, hiddenText, nextPlaceText, ordinal, rankWords, statusText, valueText } from "../gym/leaderboardView";
 import { PersonProfile, type ProfilePerson } from "../gym/PersonProfile";
 import { useGymRank } from "../gym/useGymRank";
 import { COMING_SOON } from "../Soon";
@@ -39,7 +39,7 @@ export const BoardTab = memo(function BoardTab({ places }: { places: Read<MyOrgs
           <Txt kind="tiny">{COMING_SOON}</Txt>
         </View>
       </View>
-      {places.kind === "loading" ? <Txt kind="small">{NOT_KNOWN}</Txt> : null}
+      {places.kind === "loading" ? <SoftBar width="60%" /> : null}
       {place === null ? null : <GymBoard key={place.id} place={place} />}
     </View>
   );
@@ -60,7 +60,7 @@ function GymBoard({ place }: { place: LeaderboardPlace }) {
               <Button label="Try again" kind="link" onPress={rank.again} />
             </>
           ) : (
-            <Txt kind="small">{NOT_KNOWN}</Txt>
+            <SoftBar kind="hero" width={72} />
           )
         ) : (
           <Top board={board} />
@@ -118,7 +118,7 @@ function Top({ board }: { board: LeaderboardResponse }) {
             </Txt>
           )}
           <View style={styles.grow}>
-            <Txt kind="small" colour="text">{board.me.hidden !== null ? hiddenText(board.me.hidden, board.gymName) : `Your place · ${valueText(board.me.value, board.board)}`}</Txt>
+            <Txt kind="small" colour="text">{board.me.hidden !== null ? hiddenText(board.me.hidden, board.gymName) : board.me.place === null ? `${NOT_RANKED} · ${valueText(board.me.value, board.board)}` : `Your place · ${valueText(board.me.value, board.board)}`}</Txt>
             {next === null ? null : <Txt kind="small" colour="orangeLight">{next}</Txt>}
           </View>
         </View>

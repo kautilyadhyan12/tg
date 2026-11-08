@@ -190,7 +190,7 @@ describe("until today's meals are read (round one, H1)", () => {
     const world = serverOf(() => ok(week([RICE, SALMON])), { "/v1/nutrition/meals": (body) => (body === undefined ? never() : ok({})) });
     const box = await open(world, files(), tab);
     await act(async () => { await new Promise((done) => setTimeout(done, 300)); });
-    expect(box.getAllByText("–").length).toBeGreaterThan(0);
+    expect(box.getAllByTestId("soft-bar").length).toBeGreaterThan(0);
     expect(box.queryByText(/Lunch · 640 kcal/)).toBeNull();
     expect(box.queryByRole("button", { name: /^Log Rice/ })).toBeNull();
     expect(box.queryByRole("button", { name: /^Swap Rice/ })).toBeNull();

@@ -21,23 +21,26 @@ export function personOf(post: Pick<GymPost, "author" | "authorId">): ProfilePer
 
 export interface ProfileStat {
   key: string;
-  number: string;
+  /** Null while it is still coming: a soft bar; still and dim where it failed (`failed`). */
+  number: string | null;
+  failed?: boolean;
   label: string;
   under: string | null;
 }
 
 /** "1 post" reads as "1" over "Post". */
-export function postsStat(total: number | null): ProfileStat {
-  return { key: "posts", number: total === null ? "–" : total.toLocaleString("en"), label: total === 1 ? "Post" : "Posts", under: null };
+export function postsStat(total: number | null, failed = false): ProfileStat {
+  return { key: "posts", number: total === null ? null : total.toLocaleString("en"), failed, label: total === 1 ? "Post" : "Posts", under: null };
 }
 
-/** One number for each board the person has a place on: a board that is not sent shows nothing. */
+/** One number for each board sent: the person's place, or "Not ranked" without one (a past month's
+ *  board is never "yet"); a board that is not sent shows nothing. */
 export function placeStats(boards: LeaderboardProfileResponse["boards"], period: LeaderboardPeriod): ProfileStat[] {
   return boards.map((b) => {
     const label = BOARD_TABS.find((t) => t.id === b.board)?.label ?? "";
     const words = PERIODS.find((p) => p.value === (b.period ?? period))?.label.toLowerCase() ?? "";
     const under = b.board === "streak" ? valueText(b.value, b.board) : `${valueText(b.value, b.board)} ${words}`;
-    return { key: b.board, number: b.place === null ? "–" : ordinal(b.place), label, under };
+    return { key: b.board, number: b.place === null ? "Not ranked" : ordinal(b.place), label, under };
   });
 }
 

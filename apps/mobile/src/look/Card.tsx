@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { Image, StyleSheet, View, type StyleProp, type ViewStyle } from "react-native";
-import { colours, orangeGradient, pictureShade, shadows, sizes, type ColourName } from "./colours";
+import { colours, orangeGradient, pictureShade, raisedShade, shadows, sizes, type ColourName } from "./colours";
 import { Icon, type IconName } from "./Icon";
 import { pictures, type PictureName } from "./pictures";
 import { fonts, Txt } from "./Txt";
@@ -8,15 +8,17 @@ import { fonts, Txt } from "./Txt";
 interface CardProps {
   /** The web's see-through box, where a page's own picture shows behind it. */
   glass?: boolean;
+  /** Lifted off the page: lighter, a brighter edge and a warm corner, for a box with no picture behind it. */
+  raised?: boolean;
   style?: StyleProp<ViewStyle>;
   testID?: string;
   children: ReactNode;
 }
 
 /** A page's box: dark, with a thin line round it. */
-export function Card({ glass = false, style, testID, children }: CardProps) {
+export function Card({ glass = false, raised = false, style, testID, children }: CardProps) {
   return (
-    <View testID={testID} style={[styles.card, glass ? styles.glass : null, styles.pad, style]}>
+    <View testID={testID} style={[styles.card, glass ? styles.glass : null, raised ? styles.raised : null, styles.pad, style]}>
       {children}
     </View>
   );
@@ -132,6 +134,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   glass: { backgroundColor: colours.glass },
+  raised: { backgroundColor: colours.raised, borderColor: colours.lineStrong, experimental_backgroundImage: raisedShade },
   pad: { padding: 14, gap: 10 },
   picture: { borderRadius: 22 },
   // A picture has a size of its own, so it is told the box's; "cover" then cuts it to fit.

@@ -35,6 +35,7 @@ import { PictureTop } from "../look/PictureTop";
 import { Ring } from "../look/Ring";
 import { Sheet } from "../look/Sheet";
 import { Txt } from "../look/Txt";
+import { SoftBar } from "../look/Waiting";
 import { useSession } from "../session/SessionProvider";
 import { NOT_KNOWN, count } from "./dashboard/words";
 import { useRead } from "./dashboard/useRead";
@@ -367,7 +368,7 @@ export function FoodScreen() {
             <Button label="Try again" kind="link" onPress={again} />
           </Card>
         ) : (
-          <Txt kind="small">{NOT_KNOWN}</Txt>
+          <SoftBar width="70%" />
         )
       ) : (
         <>
@@ -529,7 +530,7 @@ function Macros({ title, today, targets, retry, eaten, uncounted, about, onSetup
             <Button label="Try again" kind="link" onPress={retry} />
           </View>
         ) : (
-          <Txt kind="small">{NOT_KNOWN}</Txt>
+          <SoftBar width="70%" />
         )}
       </Card>
     );
