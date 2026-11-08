@@ -237,7 +237,7 @@ export function privacyPolicy(facts: LegalFacts = LEGAL_FACTS): LegalDocument {
             "Your setup answers: age, sex, height, the weight you aim for, your fitness level and goals, your training days, places and equipment, your diet and meals a day.",
             "The health question: one yes or no answer, whether you have a condition, an injury or a pregnancy that needs care, and whether a professional has cleared you. We never ask which condition. A yes makes the app more careful.",
             "Your training: workouts, sets, repetitions, times, form scores, streaks, badges and challenges.",
-            "The camera, when you train with it: the picture is read on your phone and never leaves it. We receive only the results: the repetitions, the time, the form score and the mistakes found.",
+            "The camera, when you train with it: it watches you only while you exercise, on your own phone. Nothing is recorded. No video or photo is saved, sent to us or seen by anyone, not even us, and when you finish, it is gone. Only your results are kept, as words and numbers: your repetitions, sets, time, form score and the mistakes found.",
             "Your food: the meals you log (foods, amounts, calories and nutrients), your own foods and dishes, and your meal plan.",
             "Meal and label photos: sent to our server to read the food, then thrown away. We never keep the photo. The food list read from it waits up to 24 hours for you to save it.",
             "Your body: the weight and body measurements you log.",
@@ -511,7 +511,7 @@ export function washingtonHealthDataPolicy(facts: LegalFacts = LEGAL_FACTS): Leg
       {
         id: "sources",
         heading: "Where it comes from",
-        blocks: [p("From you, and from your phone while you use the app: the counts and form scores the camera works out on your phone (the picture itself never leaves it), and your location while you record a run.")],
+        blocks: [p("From you, and from your phone while you use the app: your results from the camera, such as repetitions and form scores (the camera records nothing, and no video ever leaves your phone), and your location while you record a run.")],
       },
       {
         id: "shared",
