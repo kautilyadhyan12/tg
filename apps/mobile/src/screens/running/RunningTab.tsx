@@ -20,6 +20,7 @@ import { autoPauseChoice, chooseAutoPause, chooseMapColours, chooseVoice, mapCol
 import { RefusedRuns } from "./RefusedRuns";
 import { RUN_BAR_ROOM, gpsLight, openAppSettings, START_PROBLEM_WORDS, useRunLayer, type StartProblem } from "./RunLayer";
 import { useRunOutbox } from "./RunOutbox";
+import { useLookOpen } from "../setupFirst";
 import { RunPage } from "./RunPage";
 import { RecordsCard } from "./RecordParts";
 import { RECORDS_PATH } from "./runRecords";
@@ -87,6 +88,8 @@ export function RunningTab({ units, parts }: { units: Units; parts: ReactNode })
   }, []);
   const focused = useIsFocused();
   const layer = useRunLayer();
+  // While the person looks at the app before setup (14d), a run waits for setup.
+  const look = useLookOpen();
   const { view } = useRunOutbox();
   const autoPause = useSyncExternalStore(subscribeRun, autoPauseChoice);
   const voiceOn = useSyncExternalStore(subscribeRun, voiceChoice);
@@ -126,6 +129,10 @@ export function RunningTab({ units, parts }: { units: Units; parts: ReactNode })
   }, [saidUnderStart, problem, layer.done, showEnd]);
 
   const start = async () => {
+    if (look !== null) {
+      look();
+      return;
+    }
     setProblem(null);
     const said = await layer.start(autoPause);
     setProblem(said);

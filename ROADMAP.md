@@ -602,7 +602,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
     - 14a. [x] **The first seven questions** — merged 2026-10-27 (PR #373).
     - 14b. [x] **The health question, Safe mode and its tap, and Food** — merged 2026-10-28 (PR #375).
     - 14c. [x] **Your plan and Finish, and the place that invited you; setup in front of the tabs** — merged 2026-10-28 (PR #377).
-    - 14d. [ ] **A look at the Dashboard, then setup** (Kd, 2026-11-07, before 21d): after sign-in, Before you start and any invitation, the Dashboard for about 8 seconds, then setup in a box from the bottom that cannot be closed (Sign out stays). Until setup is done a tap on a workout, run, meal or plan opens it, so the health question and the age come first as today; reopened unfinished, setup at once.
+    - 14d. [x] **A look at the Dashboard, then setup** · merged 2026-11-08 · PR #499
 15. **The pass** (spec Part 3 §12.2) and the days you came (split 2026-10-28 in three: the pass first).
     - 15a. [x] **Show my pass** — merged 2026-10-28 (PR #378).
     - 15b. [x] **Attendance (Days you came)** — merged 2026-10-28 (PR #381).
