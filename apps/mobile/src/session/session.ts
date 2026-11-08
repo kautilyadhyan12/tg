@@ -102,6 +102,8 @@ export interface Session {
   keepSetupDone: (done: boolean) => Promise<void>;
   /** This sign-in's keys for passes with no signal, none until the server has given them. */
   passKeys: () => readonly CheckinPhoneDayKey[];
+  /** The sign-in was made in this run of the app, not read from the key store at opening (14d's look). */
+  signedInHere: () => boolean;
   /** Which sign-in this is: a new number at each sign-in and sign-out, never at a refresh. */
   signInNumber: () => number;
   /** Kept with the sign-in they were asked for (`signIn`), so keys that come back after a sign-out
@@ -127,6 +129,7 @@ export function createSession({
   /** The refresh that is away, and whose sign-in it is for: one at a time for each. */
   let refreshing: { run: Promise<void>; of: PhoneKeptSession } | null = null;
   let signIns = 0;
+  let here = false;
 
   const show = (next: SessionState) => {
     state = next;
@@ -181,6 +184,7 @@ export function createSession({
   /** Memory first, so nothing of the last person is shown; then the key store, which must not keep them. */
   const forget = async () => {
     signIns += 1;
+    here = false;
     kept = null;
     access = null;
     try {
@@ -304,6 +308,7 @@ export function createSession({
       if (answer.kind === "ok") {
         const { user, tokens } = answer.data;
         signIns += 1;
+        here = true;
         await keep({ refreshToken: tokens.refreshToken, user }, tokens.accessToken);
         show({ kind: "in", user });
       }
@@ -320,6 +325,7 @@ export function createSession({
       if (answer.kind === "ok") {
         const { user, tokens } = answer.data;
         signIns += 1;
+        here = true;
         await keep({ refreshToken: tokens.refreshToken, user }, tokens.accessToken);
         show({ kind: "in", user });
       }
@@ -366,6 +372,7 @@ export function createSession({
 
     passKeys: () => kept?.passKeys ?? [],
 
+    signedInHere: () => here,
     signInNumber: () => signIns,
 
     keepPassKeys: async (keys, signIn) => {

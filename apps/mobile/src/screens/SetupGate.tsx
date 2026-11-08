@@ -1,46 +1,65 @@
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { AppState, StyleSheet, View } from "react-native";
 import { userProfileResponseSchema } from "@app/shared";
 import { colours } from "../look/colours";
 import { useSession } from "../session/SessionProvider";
 import { NOTE_CHECK_WAIT_MS } from "./BeforeYouStart";
 import { Setup } from "./setup/Setup";
+import { LookContext, SetupComingContext } from "./setupFirst";
 
 // Setup in front of the tabs until it is finished (ROADMAP Stage 5 item 14c; the browser's own rule):
 // after "Before you start" and any invitation, a person who has not finished setup meets it, with
 // Sign out its only way out. A finish the server confirmed is kept with the sign-in, and the
 // server is not asked again. Until then it is asked on every opening; with no internet, or no
-// answer in a few seconds, the tabs open, as the other gates do, and it is asked again each time
-// the app comes back to the front. Unlike the invitations, an answer that says "not finished"
+// answer in a few seconds, the tabs open guarded (14d): what starts a run, a meal or a plan opens
+// setup, which lets through somebody who finished elsewhere. It is asked again each time the app
+// comes back to the front. Unlike the invitations, an answer that says "not finished"
 // puts setup in front of tabs already open, a late first answer as well: nobody uses the app
 // without setup. An answer that says "finished" (in the browser, say) lets them through.
+//
+// A look first (14d, Kd 2026-11-07): a sign-in made in this run of the app shows the tabs for
+// LOOK_MS, counted while the app is in front, then setup comes up over them. The person looks around
+// freely; only what starts a run, logs a meal or makes a plan opens setup at once (`useSetupFirst`).
+// Reopened unfinished, setup comes at once.
 
-type Phase = "checking" | "setup" | "through";
+export const LOOK_MS = 8_000;
 
-export function SetupGate({ children }: { children: ReactNode }) {
+/** "look": the tabs for a look, then setup; "guarded": the tabs while the server has not answered,
+ *  with no time running; "over": setup over the tabs; "setup": setup alone. In "look" and "guarded"
+ *  a run, a meal or a plan opens setup. */
+type Phase = "checking" | "look" | "guarded" | "over" | "setup" | "through";
+
+export function SetupGate({ children, lookMs = LOOK_MS }: { children: ReactNode; lookMs?: number }) {
   const { session } = useSession();
   const [phase, setPhase] = useState<Phase>(() => (session.setupDone() ? "through" : "checking"));
 
   const [known] = useState(phase === "through");
+  // Read once: a sign-in made in this run is given the look; one read from the key store is not.
+  const [lookable] = useState(() => session.signedInHere());
+  const looked = useRef(false);
 
   useEffect(() => {
     if (known) return;
     const run = { live: true };
     // Read as a call, as the gate can be left while an answer is away.
     const live = () => run.live;
+    const notDone = (now: Phase): Phase => {
+      if (now === "look" || now === "over" || now === "setup") return now;
+      return lookable && !looked.current ? "look" : "setup";
+    };
     const ask = async () => {
       const answer = await session.signedIn({ method: "GET", path: "/v1/users/me" }, userProfileResponseSchema);
       if (!live()) return;
       if (answer.kind !== "ok") {
-        setPhase((now) => (now === "checking" ? "through" : now));
+        setPhase((now) => (now === "checking" ? "guarded" : now));
         return;
       }
       const done = answer.data.user.onboardingCompleted;
       await session.keepSetupDone(done);
-      if (live()) setPhase(done ? "through" : "setup");
+      if (live()) setPhase((now) => (done ? "through" : notDone(now)));
     };
     const shown = setTimeout(() => {
-      if (run.live) setPhase((now) => (now === "checking" ? "through" : now));
+      if (run.live) setPhase((now) => (now === "checking" ? "guarded" : now));
     }, NOTE_CHECK_WAIT_MS);
     void ask();
     const front = AppState.addEventListener("change", (state) => {
@@ -51,15 +70,56 @@ export function SetupGate({ children }: { children: ReactNode }) {
       clearTimeout(shown);
       front.remove();
     };
-  }, [known, session]);
+  }, [known, lookable, session]);
+
+  const openSetup = useCallback(() => {
+    setPhase((now) => (now === "look" || now === "guarded" ? "over" : now));
+  }, []);
+
+  // The look's time runs only while the app is in front.
+  useEffect(() => {
+    if (phase !== "look") return;
+    looked.current = true;
+    let left = lookMs;
+    let since = Date.now();
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const go = () => {
+      since = Date.now();
+      timer = setTimeout(openSetup, left);
+    };
+    // Opened behind another app (a sign-in finished in the browser's tab, say), the time waits.
+    if (AppState.currentState !== "background") go();
+    const heard = AppState.addEventListener("change", (state) => {
+      if (state === "active") {
+        if (timer === null) go();
+        return;
+      }
+      if (timer === null) return;
+      clearTimeout(timer);
+      timer = null;
+      left = Math.max(0, left - (Date.now() - since));
+    });
+    return () => {
+      if (timer !== null) clearTimeout(timer);
+      heard.remove();
+    };
+  }, [phase, lookMs, openSetup]);
 
   const through = useCallback(() => {
     setPhase("through");
   }, []);
 
-  if (phase === "through") return <>{children}</>;
   if (phase === "checking") return <View style={styles.page} />;
-  return <Setup open mode="front" onClose={through} />;
+  if (phase === "setup") return <Setup open mode="front" onClose={through} />;
+  // One shape for the look, setup over it and the way through, so the tabs are never drawn again.
+  return (
+    <>
+      <SetupComingContext.Provider value={phase === "look" || phase === "guarded" || phase === "over"}>
+        <LookContext.Provider value={phase === "look" || phase === "guarded" ? openSetup : null}>{children}</LookContext.Provider>
+      </SetupComingContext.Provider>
+      {phase === "over" ? <Setup open mode="front" onClose={through} /> : null}
+    </>
+  );
 }
 
 const styles = StyleSheet.create({

@@ -17,6 +17,7 @@ import { Setup } from "../setup/Setup";
 import { mealTypeName } from "./day";
 import { ideaAmountWords, ideaAsMeal, ideaMealType, ideaName } from "./ideaRules";
 import { useMealOutbox } from "./MealOutbox";
+import { useLookOpen } from "../setupFirst";
 import { AllergyFoot, ART_SIZE, EmptyBox, Eyebrow, FoodLines, FromRow, NumberTiles, nextMealWords, planFoods } from "./MealCard";
 import { planDayName, planDayOf } from "./planRules";
 
@@ -72,6 +73,8 @@ export type PlannedNow =
   | { words: ReactNode }
 
 export function MealIdeas({ onMore, onAnswered, fresh = 0, below = null, bare = false, planned, onLog, lead, choices = null }: MealIdeasProps) {
+  // While the person looks at the app before setup (14d), a meal logged waits for setup.
+  const look = useLookOpen();
   const { read, again, outbox, view, waiting, old } = useIdeas(fresh);
   const onDashboard = onMore !== undefined;
   const [said, setSaid] = useState<{ words: string; meal: string | null } | null>(null);
@@ -91,6 +94,10 @@ export function MealIdeas({ onMore, onAnswered, fresh = 0, below = null, bare = 
   }, [refusedNow]);
 
   const keep = async (meal: WaitingMeal, type: DietPlanMeal["mealType"]) => {
+    if (look !== null) {
+      look();
+      return;
+    }
     if (outbox === null || loggingNow.current) return;
     loggingNow.current = true;
     setLogging(true);

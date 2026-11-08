@@ -28,6 +28,7 @@ import { fonts, Txt } from "../../look/Txt";
 import { useSession } from "../../session/SessionProvider";
 import { invitationsPath } from "../Invitation";
 import { SignOutAsk } from "../SignOutAsk";
+import { useLookOpen } from "../setupFirst";
 import { PlanBar } from "./PlanPanel";
 import {
   AboutScreen,
@@ -101,10 +102,19 @@ export function Setup({ open, onClose, onSettled, at = null, mode = "over", agai
   // Android's back leaves as the ✕ does: the name typed is saved first, and a blank one stays to be
   // fixed. In front of the tabs it goes back a step, and nowhere from the first.
   const leave = useRef<() => void>(mode === "over" ? onClose : () => undefined);
+  // Opened from a page while the person looks at the app before setup (14d): the setup in front of the
+  // tabs comes instead, which cannot be closed.
+  const look = useLookOpen();
+  const instead = open && mode === "over" && look !== null;
+  useEffect(() => {
+    if (!instead) return;
+    look();
+    onClose();
+  }, [instead, look, onClose]);
   return (
     <Modal
       testID="setup"
-      visible={open}
+      visible={open && !instead}
       animationType="slide"
       statusBarTranslucent
       navigationBarTranslucent
