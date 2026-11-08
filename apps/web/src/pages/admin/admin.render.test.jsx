@@ -105,7 +105,8 @@ describe("each person's days (14a-ii)", () => {
     expect(screen.queryByRole('region', { name: "Asha's days" })).toBeNull();
     fireEvent.click(within(section).getByRole('button', { name: 'Earlier days' }));
     await waitFor(() => expect(rowTexts(table)).toHaveLength(4));
-    expect(adminService.personDays).toHaveBeenLastCalledWith('b1', { zone: myZone(), before: dayBefore(2) });
+    // The second page is cut in the first page's zone, the person's phone's.
+    expect(adminService.personDays).toHaveBeenLastCalledWith('b1', { zone: myZone(), before: dayBefore(2), dayZone: 'Asia/Kolkata' });
     expect(within(section).getByText('They signed up on the last day shown.')).toBeTruthy();
     expect(within(section).queryByRole('button', { name: 'Earlier days' })).toBeNull();
     fireEvent.click(within(section).getByRole('button', { name: 'Close' }));
@@ -178,6 +179,15 @@ describe("each person's days (14a-ii)", () => {
     // Their midnight passed: the first page ends a day later, and the earlier days start again from it.
     vi.mocked(adminService.personDays).mockImplementation(async (_id, { before = null }) => (before === null ? { ...benDays, next: dayBefore(1) } : earlierPage));
     spy.mockReturnValue(Date.now() + 10000);
+    fireEvent.focus(window);
+    await waitFor(() => expect(rowTexts(table)).toHaveLength(3));
+    expect(within(section).getByRole('button', { name: 'Earlier days' })).toBeTruthy();
+    // Earlier days again, then their phone sends from another zone: the first page ends on the same
+    // day, but the earlier days were cut in the old zone, so they start again too.
+    fireEvent.click(within(section).getByRole('button', { name: 'Earlier days' }));
+    await waitFor(() => expect(rowTexts(table)).toHaveLength(4));
+    vi.mocked(adminService.personDays).mockImplementation(async (_id, { before = null }) => (before === null ? { ...benDays, zone: 'UTC', next: dayBefore(1) } : earlierPage));
+    spy.mockReturnValue(Date.now() + 15000);
     fireEvent.focus(window);
     await waitFor(() => expect(rowTexts(table)).toHaveLength(3));
     expect(within(section).getByRole('button', { name: 'Earlier days' })).toBeTruthy();

@@ -12,7 +12,19 @@ export async function recordUse(sql: Sql, feature: MeteredFeatureName, userId: s
   return row.id;
 }
 
-/** Takes out a use that was given back; the person's own id keeps it to their row. */
-export async function unrecordUse(sql: Sql, userId: string, useId: string): Promise<void> {
-  await sql`DELETE FROM metered_uses WHERE id = ${useId} AND user_id = ${userId}`;
+class NotGivenBack extends Error {}
+
+/** Takes out a use, and only then runs `giveBack`, in one transaction: the row stays unless the
+ *  count was given back too, and a use already taken out gives nothing back. The person's own id
+ *  keeps it to their row. true = taken out and given back. */
+export async function unrecordUse(sql: Sql, userId: string, useId: string, giveBack: () => Promise<boolean>): Promise<boolean> {
+  return await sql.begin(async (tx) => {
+    const gone = await tx`DELETE FROM metered_uses WHERE id = ${useId} AND user_id = ${userId} RETURNING 1`;
+    if (gone.length === 0) return false;
+    if (!(await giveBack())) throw new NotGivenBack();
+    return true;
+  }).catch((err: unknown) => {
+    if (err instanceof NotGivenBack) return false;
+    throw err;
+  });
 }
