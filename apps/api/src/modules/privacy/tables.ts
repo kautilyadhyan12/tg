@@ -51,6 +51,10 @@ export const DIRECT_DELETE_TABLES = [
   "usage_limits",
   // The admin door's password hash (migration 0226, 14a-i): deleted, never exported.
   "admin_passwords",
+  // The minutes the app was open each day, and each meal scan and route plan used, with when
+  // (migration 0227, ROADMAP Stage 2 item 14a-ii): about them, so deleted and exported.
+  "app_minutes",
+  "metered_uses",
   "saved_routes",
   "run_schedules",
   "body_measurements",

@@ -42,7 +42,7 @@ export const apiCostEvents = pgTable(
     costMicro: bigint("cost_micro", { mode: "bigint" }).notNull(),
     currency: text("currency").notNull().default("USD"),
   },
-  (t) => [index("api_cost_events_gym_at_idx").on(t.gymId, t.at)],
+  (t) => [index("api_cost_events_gym_at_idx").on(t.gymId, t.at), index("api_cost_events_user_at_idx").on(t.userId, t.at)],
 );
 
 /** Kd's own number of meal scans or route plans a day for one person, set on the admin page
@@ -78,4 +78,44 @@ export const adminPasswords = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [check("admin_passwords_hash_algo_check", sql`${t.hashAlgo} IN ('bcrypt','argon2id')`)],
+);
+
+/** The minutes the app was open on screen on one of the person's own days, as their phone counted
+ *  them, with its time zone (ROADMAP Stage 2 item 14a-ii, migration 0227; sent by Stage 5 item 21f).
+ *  A day sent again keeps the higher total. */
+export const appMinutes = pgTable(
+  "app_minutes",
+  {
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    day: date("day").notNull(),
+    minutes: smallint("minutes").notNull(),
+    zone: text("zone").notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.userId, t.day] }),
+    check("app_minutes_minutes_check", sql`${t.minutes} BETWEEN 0 AND 1440`),
+    index("app_minutes_day_idx").on(t.day),
+  ],
+);
+
+/** Each meal scan and route plan a person used, with when (migration 0227): the quota's own count,
+ *  kept past the day its Redis counter forgets; a use given back is deleted. */
+export const meteredUses = pgTable(
+  "metered_uses",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    feature: text("feature").notNull(),
+    at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    check("metered_uses_feature_check", sql`${t.feature} IN ('meal_scan','route_gen')`),
+    index("metered_uses_user_at_idx").on(t.userId, t.at),
+    index("metered_uses_at_idx").on(t.at),
+  ],
 );
