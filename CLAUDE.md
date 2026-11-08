@@ -422,13 +422,14 @@ the remembering ones keep is under each package's `node_modules/.cache`, which g
 ignores; delete that folder if a remembered result ever looks wrong.
 
 **The laptop's memory is shared: test lightly** (Kd, 2026-11-08, `rulings/2026-11-08-31h.md`).
-Three folders run at once on one laptop with 16 GB. A whole package's tests start a copy of
-Node for nearly every one of its 12 cores, and on 2026-11-08 one terminal's whole phone run
-(vitest, then jest) took the laptop to the edge while the others were working. So, on the laptop:
+Two folders run at once on one laptop with 16 GB (Kd, 2026-11-08: *"i run two folder at same
+time not three"*). A whole package's tests start a copy of Node for nearly every one of its 12
+cores, and on 2026-11-08 one terminal's whole phone run (vitest, then jest) took the laptop to the
+edge while the other folder was working. Kd wants it light, never slow. So, on the laptop:
 - Run only the test files the job changed or that test what it changed, by path, one command at
   a time, never two test runs at once in a folder and never in the background. The whole
   package's run is GitHub's, on the push: read it there.
-- The settings hold every laptop run to two copies at a time (`maxWorkers`/`maxForks` 2 when
+- The settings hold every laptop run to four copies at a time (`maxWorkers`/`maxForks` 4 when
   `CI` is not set, in the phone app's jest and vitest, the web's and the engine's; jest starts a
   copy again past 1 GB). Never raise them, and never pass `--maxWorkers` or `--pool` to get past them.
 - A server or bundler the terminal started (api, web, Metro) is stopped when the walk it was
@@ -555,8 +556,8 @@ Redis number and ports; the two lists are in ROADMAP Stage 2's header.
 web part was built on a borrowed laptop in three web folders (A, B, C) until 2026-10-16,
 then in web folders 1 and 2 on Kd's own laptop, and since 2026-10-26 in ONE web folder on
 a second laptop (ROADMAP Stage 2's header; its own `FOLDER.md`). Kd's
-own laptop builds the phone app and the exercises in FOUR folders, three running at a time
-since 2026-10-26 (two before), each in its own PowerShell window, not VS Code, all
+own laptop builds the phone app and the exercises in FOUR folders, two running at a time
+(Kd, 2026-11-08), each in its own PowerShell window, not VS Code, all
 checkouts of the one repository:
 
 | Folder | Path | Builds (ROADMAP Stage 5) |

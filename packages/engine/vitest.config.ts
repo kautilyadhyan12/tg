@@ -8,7 +8,7 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   test: {
     pool: "forks",
-    // On the laptop, two test files at a time: three folders share its 16 GB (Kd, 2026-11-08).
-    poolOptions: { forks: { execArgv: ["--expose-gc"], ...(process.env.CI ? {} : { maxForks: 2, minForks: 1 }) } },
+    // On the laptop, four test files at a time: two folders share its 16 GB (Kd, 2026-11-08).
+    poolOptions: { forks: { execArgv: ["--expose-gc"], ...(process.env.CI ? {} : { maxForks: 4, minForks: 1 }) } },
   },
 });
