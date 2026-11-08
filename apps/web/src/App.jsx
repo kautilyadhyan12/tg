@@ -67,6 +67,8 @@ import SquareReturn from './pages/console/SquareReturn';
 import ConsoleMore     from './pages/console/More';
 import ConsoleAccount  from './pages/console/Account';
 import FrameGuard from './components/common/FrameGuard';
+// Kd's own admin page (ROADMAP Stage 2 item 14a-i): only his account; the server says "not found" to anybody else.
+import Admin from './pages/admin/Admin';
 
 export default function App() {
   return (
@@ -410,6 +412,14 @@ export default function App() {
             <Route path="/console/:orgSlug/account" element={
               <ProtectedRoute requireOnboarding={false} requireSignUpNote={false} requireInvitations={false}>
                 <ConsoleLayout><ConsoleAccount /></ConsoleLayout>
+              </ProtectedRoute>
+            } />
+
+            {/* KD'S ADMIN PAGE (14a-i): his account only. It is not a gym's page, so it has no
+                console menu of its own; the gates are the console's. */}
+            <Route path="/admin" element={
+              <ProtectedRoute requireOnboarding={false} requireSignUpNote={false} requireInvitations={false}>
+                <Admin />
               </ProtectedRoute>
             } />
 

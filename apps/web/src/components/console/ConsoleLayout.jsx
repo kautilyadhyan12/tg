@@ -1,7 +1,7 @@
 import { Fragment } from 'react';
 import { orgWords } from '@app/shared';
 import { NavLink, Link, useLocation, useParams } from 'react-router-dom';
-import { Building2, ChevronsUpDown, Ellipsis, LogOut, UserRound } from 'lucide-react';
+import { Building2, ChevronsUpDown, Ellipsis, LogOut, ShieldCheck, UserRound } from 'lucide-react';
 import ConsoleBanner from './ConsoleBanner';
 import PlanModal from './PlanModal';
 import SizeDecisionPrompt from './SizeDecisionPrompt';
@@ -9,6 +9,7 @@ import { PAGE_ICONS } from './consoleIcons';
 import { useAuth } from '../../context/AuthContext';
 import { useConsoleOrg } from '../../pages/console/useConsoleOrg';
 import { useConsoleSignOut } from '../../pages/console/consoleSignOut';
+import { useIsAdmin } from '../../pages/admin/useIsAdmin';
 import { consoleLook, consoleMenu, moreIsCurrent } from '../../pages/console/consoleMenu';
 import { orgTypeLabel, roleLabel, viewerPrivileges } from '../../pages/console/consoleView';
 import './console.css';
@@ -67,6 +68,8 @@ export default function ConsoleLayout({ children }) {
   // the screen's to show; here it only means no role yet.
   const { org } = useConsoleOrg(orgSlug);
   const { signingOut, signOut } = useConsoleSignOut();
+  // Kd's own account alone is told yes (ROADMAP Stage 2 item 14a-i).
+  const isAdmin = useIsAdmin() === true;
 
   const words = orgWords(org?.orgType);
   const consoleName = `${words.itCap} console`;
@@ -125,6 +128,12 @@ export default function ConsoleLayout({ children }) {
               ) : null}
             </div>
           ) : null}
+          {isAdmin ? (
+            <Link to="/admin" className="c-nav">
+              <ShieldCheck size={20} />
+              <span>Admin</span>
+            </Link>
+          ) : null}
           {/* Their own account, and Delete account in it (19b-ii). */}
           {menu ? (
             <NavLink to={`/console/${orgSlug}/account`} className={({ isActive }) => `c-nav${isActive ? ' c-nav-on' : ''}`}>
@@ -150,6 +159,12 @@ export default function ConsoleLayout({ children }) {
               <span className="c-s15 c-w6" style={{ color: 'var(--rail-t2)' }}>
                 {consoleName}
               </span>
+              {isAdmin ? (
+                <Link to="/admin" className="c-btn" style={{ height: 44, color: 'var(--rail-t2)' }}>
+                  <ShieldCheck size={18} />
+                  Admin
+                </Link>
+              ) : null}
               <button
                 type="button"
                 onClick={signOut}
