@@ -83,7 +83,9 @@ d("the admin page (real Postgres)", () => {
     await sql`DELETE FROM audit_log WHERE action = 'admin.usage_limit_set' AND target_id IN (SELECT id::text FROM users WHERE email LIKE ${`${PREFIX}%`})`;
     await sql`DELETE FROM subscriptions WHERE owner_id IN (${mine})`;
     await sql`DELETE FROM subscriptions WHERE owner_id IN (SELECT id FROM gyms WHERE slug = 'a14i-gym')`;
-    await sql`DELETE FROM gym_members WHERE gym_id IN (SELECT id FROM gyms WHERE slug = 'a14i-gym')`;
+    await sql`DELETE FROM subscriptions WHERE owner_id IN (SELECT id FROM gyms WHERE slug = 'a14i-gym-old')`;
+    await sql`DELETE FROM gym_members WHERE gym_id IN (SELECT id FROM gyms WHERE slug IN ('a14i-gym', 'a14i-gym-old'))`;
+    await sql`DELETE FROM gyms WHERE slug = 'a14i-gym-old'`;
     await sql`DELETE FROM gym_staff WHERE gym_id IN (SELECT id FROM gyms WHERE slug = 'a14i-gym')`;
     await sql`DELETE FROM gyms WHERE slug = 'a14i-gym'`;
     await sql`DELETE FROM refresh_tokens WHERE user_id IN (${mine})`;
@@ -194,6 +196,32 @@ d("the admin page (real Postgres)", () => {
     const times = body.people.map((p) => p.signedUpAt);
     expect([...times].sort().reverse()).toEqual(times);
     expect(body.next).toBeNull();
+  });
+
+  it("TWIN CHECK: the list's numbers are the plan check's own, person by person, in every kind of plan", { timeout: 60_000 }, async () => {
+    // Two more kinds: a member of a gym whose plan has ended, and a person whose own plan was cancelled.
+    const lapsed = await sql<{ id: string }[]>`INSERT INTO users (email, display_name) VALUES (${`${PREFIX}lapsed@example.com`}, 'A14i Lapsed') RETURNING id`;
+    const lapsedId = lapsed[0]?.id ?? "";
+    const oldGym = await sql<{ id: string }[]>`INSERT INTO gyms (slug, name, owner_user_id) VALUES ('a14i-gym-old', 'A14i Old Gym', ${owner.userId}) RETURNING id`;
+    const oldGymId = oldGym[0]?.id ?? "";
+    await sql`INSERT INTO subscriptions (owner_type, owner_id, plan_id, status, provider) VALUES ('gym', ${oldGymId}, ${await planId("org_b1_us_m")}, 'expired', 'pilot')`;
+    await sql`INSERT INTO gym_members (gym_id, user_id) VALUES (${oldGymId}, ${lapsedId})`;
+    await sql`INSERT INTO subscriptions (owner_type, owner_id, plan_id, status, provider) VALUES ('user', ${staff.userId}, ${await planId("pro_us_y")}, 'canceled', 'pilot')`;
+    try {
+      const listed = (await asAdmin({ url: `/v1/admin/people?search=${PREFIX}` })).json<{ people: { id: string; gyms: string[]; ownPlan: string | null; mealScans: { window: string; limit: number }; routePlans: { window: string; limit: number } }[] }>().people;
+      const byId = new Map(listed.map((p) => [p.id, p]));
+      expect(byId.get(lapsedId)).toMatchObject({ gyms: [], mealScans: { window: "month", limit: 3 } });
+      expect(byId.get(staff.userId)).toMatchObject({ ownPlan: null, mealScans: { window: "month", limit: 3 } });
+      for (const p of [stranger, owner, staff, member, payer]) {
+        const one = await mealScan(p);
+        const row = byId.get(p.userId);
+        expect({ meal: { window: row?.mealScans.window, limit: row?.mealScans.limit }, route: { window: row?.routePlans.window, limit: row?.routePlans.limit } }).toEqual({ meal: one.meal_scan, route: one.route_gen });
+      }
+    } finally {
+      await sql`DELETE FROM subscriptions WHERE owner_id IN (${oldGymId}, ${staff.userId})`;
+      await sql`DELETE FROM gym_members WHERE gym_id = ${oldGymId}`;
+      await sql`DELETE FROM gyms WHERE id = ${oldGymId}`;
+    }
   });
 
   it("search takes % and _ as themselves, and matches a name or an email in any case", { timeout: 30_000 }, async () => {

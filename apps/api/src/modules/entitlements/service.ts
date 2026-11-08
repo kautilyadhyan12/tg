@@ -159,3 +159,20 @@ export async function yourPlansAt(sql: Sql, userId: string, gymIds: readonly str
 export async function bustEntitlements(redis: RedisLike, userId: string): Promise<void> {
   await redis.del(cacheKey(userId));
 }
+
+/** What each of these people gets, as `getEntitlements` resolves it, read in three statements
+ *  however many there are: the admin page's list. It neither reads nor fills the 60-second memory. */
+export async function entitlementsOfMany(sql: Sql, userIds: readonly string[]): Promise<Map<string, Entitlements>> {
+  if (userIds.length === 0) return new Map();
+  const [freeDoc, candidates, own] = await Promise.all([
+    repo.getFreePlanDoc(sql),
+    repo.getCandidatesMany(sql, userIds),
+    repo.getOwnLimitsMany(sql, userIds),
+  ]);
+  return new Map(
+    userIds.map((id) => [
+      id,
+      applyOwnLimits(mergeEntitlements(freeDoc, candidates.get(id) ?? []).entitlements, own.get(id) ?? { mealScan: null, routeGen: null }),
+    ]),
+  );
+}

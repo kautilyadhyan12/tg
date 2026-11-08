@@ -76,3 +76,30 @@ export interface OwnLimits {
   mealScan: number | null;
   routeGen: number | null;
 }
+
+/** `getCandidates` for many people at once, for the admin page's list: the same two arms, keyed by
+ *  the person. `admin.routes.test.ts`'s twin check holds the two to one answer. */
+export async function getCandidatesMany(sql: Sql, userIds: readonly string[]): Promise<Map<string, CandidateRow[]>> {
+  const rows = await sql<{ user_id: string; rank: number; entitlements: unknown; member_entitlements: unknown }[]>`
+    SELECT s.owner_id AS user_id, p.rank, p.entitlements, NULL::jsonb AS member_entitlements
+    FROM subscriptions s JOIN plans p ON p.id = s.plan_id
+    WHERE s.owner_type='user' AND s.owner_id = ANY(${[...userIds]}::uuid[]) AND s.status IN
+    ('trialing','active','past_due')
+    UNION ALL
+    SELECT m.user_id, p.rank, NULL, p.member_entitlements
+    FROM gym_members m
+    JOIN subscriptions s ON s.owner_type='gym' AND s.owner_id=m.gym_id
+                         AND s.status IN ('trialing','active','past_due')
+    JOIN plans p ON p.id = s.plan_id
+    WHERE m.user_id = ANY(${[...userIds]}::uuid[]) AND m.removed_at IS NULL`;
+  const byPerson = new Map<string, CandidateRow[]>(userIds.map((id) => [id, []]));
+  for (const r of rows) byPerson.get(r.user_id)?.push({ rank: r.rank, entitlements: r.entitlements, memberEntitlements: r.member_entitlements });
+  return byPerson;
+}
+
+/** `getOwnLimits` for many people at once. */
+export async function getOwnLimitsMany(sql: Sql, userIds: readonly string[]): Promise<Map<string, OwnLimits>> {
+  const rows = await sql<{ user_id: string; meal_scans_a_day: number | null; route_plans_a_day: number | null }[]>`
+    SELECT user_id, meal_scans_a_day, route_plans_a_day FROM usage_limits WHERE user_id = ANY(${[...userIds]}::uuid[])`;
+  return new Map(rows.map((r) => [r.user_id, { mealScan: r.meal_scans_a_day, routeGen: r.route_plans_a_day }]));
+}
