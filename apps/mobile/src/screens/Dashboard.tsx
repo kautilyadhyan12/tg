@@ -7,6 +7,7 @@ import {
   mealPageSchema,
   myOrgsResponseSchema,
   progressOverviewSchema,
+  MY_GYM_MEAL_PLANS_PATH,
   progressTrendSchema,
   runPageSchema,
   weeklyChallengesSchema,
@@ -82,6 +83,8 @@ export const DASHBOARD_READS = {
   goals: GOALS_READ,
   ideas: IDEAS_READ,
   plan: "/v1/nutrition/diet-plan",
+  /** The Recommended box's gyms and the plans they gave (31g). */
+  gymPlans: MY_GYM_MEAL_PLANS_PATH,
 } as const;
 /** Your Rank's: which gym. The Gym tab reads the same. */
 const PLACES_READ = "/v1/orgs/mine";

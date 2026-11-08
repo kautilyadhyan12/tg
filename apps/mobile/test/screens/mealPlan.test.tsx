@@ -823,7 +823,7 @@ describe("the gym's meal plan (31g)", () => {
   const GYMS = "/v1/nutrition/gym-meal-plans";
   const IRON = "6f1c2d3e-4a5b-4c6d-8e7f-001122334455";
   const OAK = "6f1c2d3e-4a5b-4c6d-8e7f-001122334466";
-  const gymMeal = ({ outsideDiet: _, ...meal }: Meal) => meal;
+  const gymMeal = (meal: Meal) => ({ mealType: meal.mealType, items: meal.items, totals: meal.totals });
   const under = { kcal: 1200, why: "floor" as const };
   function gymPlan(todayMeals: Meal[], todayUnder: typeof under | null = null) {
     return {
@@ -878,9 +878,11 @@ describe("the gym's meal plan (31g)", () => {
     // Nothing on it can be changed from the phone.
     expect(box.queryByRole("button", { name: /^Swap/ })).toBeNull();
     const logOats = await box.findByRole("button", { name: "Log Oatmeal" });
+    const press = logOats.props.onClick as (event: object) => void;
     await act(async () => {
-      fireEvent.press(logOats);
-      fireEvent.press(logOats);
+      press({});
+      press({});
+      await Promise.resolve();
     });
     await waitFor(() => { expect(posts(world, "/v1/nutrition/meals")).toHaveLength(1); });
     const sent = posts(world, "/v1/nutrition/meals")[0]?.body as SentMeal & { planned?: unknown };
