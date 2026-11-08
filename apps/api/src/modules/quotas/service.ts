@@ -130,10 +130,20 @@ export async function refundQuota(redis: RedisLike, key: string): Promise<boolea
 }
 
 /** Gives back a counted use (refundQuota) and, once it is given back, takes its row out of
- *  metered_uses: the admin page counts what the person's limit counts. */
-export async function refundUse(deps: { sql: Sql; redis: RedisLike }, userId: string, use: CountedUse): Promise<boolean> {
+ *  metered_uses: the admin page counts what the person's limit counts. The use is given back
+ *  whether or not its row goes: a row that could not be taken out is logged, never a failed scan's
+ *  own answer turned into a fault. */
+export async function refundUse(
+  deps: { sql: Sql; redis: RedisLike; log: { warn: (obj: object, msg: string) => void } },
+  userId: string,
+  use: CountedUse,
+): Promise<boolean> {
   if (!(await refundQuota(deps.redis, use.key))) return false;
-  await unrecordUse(deps.sql, userId, use.useId);
+  try {
+    await unrecordUse(deps.sql, userId, use.useId);
+  } catch (err) {
+    deps.log.warn({ event: "quota.unrecord_failed", userId, err }, "a use given back is still written down");
+  }
   return true;
 }
 

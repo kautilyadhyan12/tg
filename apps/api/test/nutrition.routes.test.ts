@@ -892,6 +892,8 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
       // The third failure pauses this person's scans, so it no longer says "in a minute".
       expect(bodyOf(third)).toEqual(UNAVAILABLE);
       expect(await s.scansUsed()).toBe("0");
+      // Each scan given back is taken off the admin page's count too (14a-ii).
+      expect((await sql<{n:number}[]>`SELECT count(*)::int AS n FROM metered_uses WHERE user_id=${s.userId} AND feature='meal_scan'`)[0]?.n).toBe(0);
       expect(scanner.calls).toBe(3);
       // Paused: refused before it takes anything, and the scanner is not called.
       expect(bodyOf(await s.scan())).toEqual(UNAVAILABLE);
@@ -909,6 +911,7 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
       const good=await s.scan();
       expect(good.statusCode,good.body).toBe(200);
       expect([scanner.calls,await s.scansUsed()]).toEqual([5,"1"]);
+      expect((await sql<{n:number}[]>`SELECT count(*)::int AS n FROM metered_uses WHERE user_id=${s.userId} AND feature='meal_scan'`)[0]?.n).toBe(1);
       const line=(res:Scanned,reason:string,userId=s.userId)=>({event:"nutrition.scan_failed",userId,model:"gpt-6-luna",kind:"unavailable",reason,requestId:res.json<Failed>().requestId});
       expect(loggedFailures(logged.mock.calls)).toEqual([line(first,"vision HTTP 429"),line(second,"vision network failure"),line(third,"vision malformed completion"),line(theirs,"vision HTTP 503",other.userId)]);
       // An outage brings back no usage, so the one row is the good scan's.
@@ -945,6 +948,8 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
       const good=await s.scan(held);
       expect(good.statusCode,good.body).toBe(200);
       expect(await s.scansUsed()).toBe("1");
+      // The poor photo's scan stays counted, on the admin page as in the limit; the free retries add none.
+      expect((await sql<{n:number}[]>`SELECT count(*)::int AS n FROM metered_uses WHERE user_id=${s.userId} AND feature='meal_scan'`)[0]?.n).toBe(1);
       // A free retry outlives the pause, so one given back as the pause begins is never lost to it.
       expect(SCANNER_PAUSE_SECONDS).toBeLessThan(RETAKE_TTL_SECONDS);
     }finally{await s.app.close();}

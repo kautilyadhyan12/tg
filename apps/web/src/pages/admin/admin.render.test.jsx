@@ -75,6 +75,10 @@ const benDays = {
   ],
   next: dayBefore(2),
 };
+// The page reads the door, then the people: on a busy machine (GitHub's, running every file) that
+// can take longer than a find's own second.
+const SLOW = { timeout: 5000 };
+const daysButton = (name) => screen.findByRole('button', { name: `${name}'s days` }, SLOW);
 const rowTexts = (table) => within(table).getAllByRole('row').slice(1).map((r) => within(r).getAllByRole('cell').map((c) => c.textContent));
 
 describe("each person's days (14a-ii)", () => {
@@ -83,11 +87,14 @@ describe("each person's days (14a-ii)", () => {
       .mockResolvedValueOnce(benDays)
       .mockResolvedValueOnce({ ...benDays, days: [{ day: dayBefore(3), minutes: null, mealScans: 0, routePlans: 0, costMicro: 0 }], next: null });
     draw();
-    fireEvent.click(await screen.findByRole('button', { name: "Ben's days" }));
-    const section = await screen.findByRole('region', { name: "Ben's days" });
+    const button = await daysButton('Ben');
+    fireEvent.click(button);
+    const section = await screen.findByRole('region', { name: "Ben's days" }, SLOW);
+    // Under that person's own row: the row right after Ben's holds his days.
+    expect(button.closest('tr').nextElementSibling.contains(section)).toBe(true);
     expect(adminService.personDays).toHaveBeenCalledWith('b1', { zone: myZone() });
     expect(within(section).getByText("Each day is their own, in their phone's time zone (India Standard Time).")).toBeTruthy();
-    const table = await within(section).findByRole('table');
+    const table = await within(section).findByRole('table', {}, SLOW);
     const rows = rowTexts(table);
     expect(rows.map((r) => r.slice(1))).toEqual([
       ['34 min', '3', '0', '$0.0005'],
@@ -108,8 +115,8 @@ describe("each person's days (14a-ii)", () => {
   it("somebody whose phone has sent nothing yet: their days are in Kd's time zone, and it says so", async () => {
     vi.mocked(adminService.personDays).mockResolvedValue({ ...benDays, zone: 'Europe/London', zoneFromPhone: false, next: null });
     draw();
-    fireEvent.click(await screen.findByRole('button', { name: "Ben's days" }));
-    expect(await screen.findByText(/^Their phone hasn't sent its time zone yet, so these days are in yours \((Greenwich Mean Time|British Summer Time)\)\.$/)).toBeTruthy();
+    fireEvent.click(await daysButton('Ben'));
+    expect(await screen.findByText(/^Their phone hasn't sent its time zone yet, so these days are in yours \((Greenwich Mean Time|British Summer Time)\)\.$/, {}, SLOW)).toBeTruthy();
   });
 
   it('By day: the day picked, its totals in one line, everyone who used the app, most time first; Show more', async () => {
@@ -119,8 +126,8 @@ describe("each person's days (14a-ii)", () => {
       .mockResolvedValueOnce({ day: today, totals, people: [row('a1', 'Asha', 60), row('b1', 'Ben', 35)], next: 2 })
       .mockResolvedValueOnce({ day: today, totals, people: [row('c1', 'Chen', null)], next: null });
     draw();
-    fireEvent.click(await screen.findByRole('button', { name: 'By day' }));
-    expect((await screen.findByTestId('day-totals')).textContent).toBe('Today: 3 people used the app · 1 h 35 min in the app · 3 meal scans · 0 route plans · cost $0.0005');
+    fireEvent.click(await screen.findByRole('button', { name: 'By day' }, SLOW));
+    expect((await screen.findByTestId('day-totals', {}, SLOW)).textContent).toBe('Today: 3 people used the app · 1 h 35 min in the app · 3 meal scans · 0 route plans · cost $0.0005');
     expect(adminService.day).toHaveBeenCalledWith(today, { zone: myZone() });
     expect(screen.getByRole('button', { name: 'Day' }).textContent).not.toBe('Pick a date');
     const table = screen.getByRole('table');
@@ -137,26 +144,26 @@ describe("each person's days (14a-ii)", () => {
   it('a day nobody used the app says so', async () => {
     vi.mocked(adminService.day).mockResolvedValue({ day: today, totals: { people: 0, minutes: 0, mealScans: 0, routePlans: 0, costMicro: 0 }, people: [], next: null });
     draw();
-    fireEvent.click(await screen.findByRole('button', { name: 'By day' }));
-    expect((await screen.findByTestId('day-totals')).textContent).toBe('Today: Nobody used the app on this day.');
+    fireEvent.click(await screen.findByRole('button', { name: 'By day' }, SLOW));
+    expect((await screen.findByTestId('day-totals', {}, SLOW)).textContent).toBe('Today: Nobody used the app on this day.');
     expect(screen.queryByRole('table')).toBeNull();
   });
 
   it('the door shut while reading days: back to the door, no days shown', async () => {
     vi.mocked(adminService.personDays).mockRejectedValue({ response: { status: 403, data: { error: 'admin_locked' } } });
     draw();
-    const days = await screen.findByRole('button', { name: "Ben's days" });
+    const days = await daysButton('Ben');
     vi.mocked(adminService.door).mockResolvedValue({ passwordSet: true, open: false, openUntil: null, fresh: true });
     fireEvent.click(days);
-    expect(await screen.findByText('Admin password')).toBeTruthy();
+    expect(await screen.findByText('Admin password', {}, SLOW)).toBeTruthy();
     expect(screen.queryByRole('region', { name: "Ben's days" })).toBeNull();
   });
 
   it('coming back to the window reads the open days again', async () => {
     vi.mocked(adminService.personDays).mockResolvedValue(benDays);
     draw();
-    fireEvent.click(await screen.findByRole('button', { name: "Ben's days" }));
-    await screen.findByRole('region', { name: "Ben's days" });
+    fireEvent.click(await daysButton('Ben'));
+    await screen.findByRole('region', { name: "Ben's days" }, SLOW);
     await waitFor(() => expect(adminService.personDays).toHaveBeenCalledTimes(1));
     const later = Date.now() + 5000;
     const spy = vi.spyOn(Date, 'now').mockReturnValue(later);

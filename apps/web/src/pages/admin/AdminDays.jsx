@@ -68,18 +68,21 @@ export function PersonDays({ person, onShut, onClose }) {
   const zone = myZone();
   const load = useCallback(() => adminService.personDays(person.id, { zone }), [person.id, zone]);
   const first = useRead(load, onShut);
-  // Earlier pages, added below the first; a day's row is the same day however often the first is read again.
-  const [earlier, setEarlier] = useState({ days: [], next: undefined, loading: false, error: null });
+  // Earlier pages, added below the first. Read again, the first page may start a day later (their
+  // midnight passed): the earlier pages start again from it, so no day falls between them.
+  const [earlierState, setEarlier] = useState({ after: null, days: [], next: undefined, loading: false, error: null });
+  const earlier = earlierState.after === first.data ? earlierState : { days: [], next: undefined, loading: false, error: null };
   const next = earlier.next === undefined ? (first.data?.next ?? null) : earlier.next;
   const showEarlier = async () => {
     if (next === null) return;
-    setEarlier((e) => ({ ...e, loading: true, error: null }));
+    const after = first.data;
+    setEarlier({ ...earlier, after, loading: true, error: null });
     try {
       const page = await adminService.personDays(person.id, { zone, before: next });
-      setEarlier((e) => ({ days: [...e.days, ...page.days], next: page.next, loading: false, error: null }));
+      setEarlier((e) => (e.after === after ? { after, days: [...e.days, ...page.days], next: page.next, loading: false, error: null } : e));
     } catch (err) {
       if (isDoorShut(err)) onShut();
-      else setEarlier((e) => ({ ...e, loading: false, error: errorText(err, "We couldn't load the earlier days.") }));
+      else setEarlier((e) => (e.after === after ? { ...e, loading: false, error: errorText(err, "We couldn't load the earlier days.") } : e));
     }
   };
   const name = person.name || person.email || 'This person';
@@ -154,7 +157,12 @@ export function ByDay({ onShut }) {
     setMore({ ...more, after, loading: true, error: null });
     try {
       const page = await adminService.day(day, { zone, from: next });
-      setMore((m) => (m.after === after ? { after, people: [...m.people, ...page.people], next: page.next, loading: false, error: null } : m));
+      // Somebody whose minutes arrived meanwhile can move up into a page already shown: shown once.
+      setMore((m) => {
+        if (m.after !== after) return m;
+        const shown = new Set([...(after?.people ?? []), ...m.people].map((p) => p.id));
+        return { after, people: [...m.people, ...page.people.filter((p) => !shown.has(p.id))], next: page.next, loading: false, error: null };
+      });
     } catch (err) {
       if (isDoorShut(err)) onShut();
       else setMore((m) => (m.after === after ? { ...m, loading: false, error: errorText(err, "We couldn't load more people.") } : m));

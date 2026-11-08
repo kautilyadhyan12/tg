@@ -157,12 +157,9 @@ export function registerAdminRoutes(app: FastifyInstance, deps: AdminRouteDeps):
     return noStore(reply).status(200).send(await service.listPeople(deps, query));
   });
 
-  /** A zone the page sent that the database cannot read days in is a bad request. */
-  const zoneOr400 = async (zone: string, req: FastifyRequest, reply: FastifyReply): Promise<boolean> => {
-    if ((await knownZones(deps.sql)).has(zone)) return true;
-    await reply.status(400).send({ error: "validation_error", message: "zone: unknown time zone", requestId: req.id });
-    return false;
-  };
+  /** The admin's own zone, from the browser; one the database cannot read days in is read as UTC,
+   *  and the answer's `zone` says so. */
+  const readableZone = async (zone: string): Promise<string> => ((await knownZones(deps.sql)).has(zone) ? zone : "UTC");
   const notFound = async (req: FastifyRequest, reply: FastifyReply) =>
     await reply.status(404).send({ error: "not_found", message: "Person not found", requestId: req.id });
   const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -171,10 +168,10 @@ export function registerAdminRoutes(app: FastifyInstance, deps: AdminRouteDeps):
   app.get<{ Params: { id: string } }>("/v1/admin/people/:id/days", { preHandler: [admin, open, readLimit] }, async (req, reply) => {
     if (!UUID.test(req.params.id)) return notFound(req, reply);
     const query = parseOr400(adminPersonDaysQuerySchema, req.query, req, reply);
-    if (query === null || !(await zoneOr400(query.zone, req, reply))) return;
+    if (query === null) return;
     const days = await service.personDays(deps, {
       userId: req.params.id,
-      zone: query.zone,
+      zone: await readableZone(query.zone),
       before: query.before ?? null,
       now: (deps.now ?? (() => new Date()))(),
     });
@@ -186,8 +183,8 @@ export function registerAdminRoutes(app: FastifyInstance, deps: AdminRouteDeps):
     const day = parseOr400(calendarDaySchema, req.params.day, req, reply);
     if (day === null) return;
     const query = parseOr400(adminDayQuerySchema, req.query, req, reply);
-    if (query === null || !(await zoneOr400(query.zone, req, reply))) return;
-    return noStore(reply).status(200).send(await service.dayPeople(deps, { day, zone: query.zone, from: Number(query.from ?? "0") }));
+    if (query === null) return;
+    return noStore(reply).status(200).send(await service.dayPeople(deps, { day, zone: await readableZone(query.zone), from: Number(query.from ?? "0") }));
   });
 
   app.put("/v1/admin/limits", { preHandler: [admin, open, writeLimit] }, async (req, reply) => {

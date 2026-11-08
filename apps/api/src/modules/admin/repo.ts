@@ -150,7 +150,7 @@ export async function auditDoor(sql: Sql, userId: string, action: "admin.door_op
 }
 
 // ── Each person's days (ROADMAP Stage 2 item 14a-ii) ─────────────────────────
-// A person's day is their own, in the time zone their phone last sent with its minutes; somebody whose
+// A person's day is their own, in the time zone their phone sent with its latest minutes; somebody whose
 // phone has sent none is read in the admin's zone. A day's meal scans and route plans are the uses
 // their limit counted (metered_uses), its cost what the ledger paid for them (api_cost_events).
 
@@ -178,7 +178,7 @@ export async function personDays(
   return await sql<PersonDaysRow[]>`
     WITH p AS (
       SELECT u.id, u.display_name, u.email::text AS email, u.created_at,
-             (SELECT m.zone FROM app_minutes m WHERE m.user_id = u.id ORDER BY m.day DESC LIMIT 1) AS phone_zone,
+             (SELECT m.zone FROM app_minutes m WHERE m.user_id = u.id ORDER BY m.updated_at DESC, m.day DESC LIMIT 1) AS phone_zone,
              (SELECT min(m.day) FROM app_minutes m WHERE m.user_id = u.id) AS first_day
       FROM users u WHERE u.id = ${opts.userId} AND u.status = 'active'
     ), z AS (
@@ -257,7 +257,7 @@ export async function dayList(sql: Sql, opts: { day: string; zone: string; from:
              EXISTS (SELECT 1 FROM app_minutes m WHERE m.user_id = u.id AND m.day <= ${opts.day}::date) AS recorded
       FROM cand JOIN users u ON u.id = cand.user_id AND u.status = 'active'
       CROSS JOIN LATERAL (
-        SELECT COALESCE((SELECT m.zone FROM app_minutes m WHERE m.user_id = u.id ORDER BY m.day DESC LIMIT 1), ${opts.zone}) AS zone
+        SELECT COALESCE((SELECT m.zone FROM app_minutes m WHERE m.user_id = u.id ORDER BY m.updated_at DESC, m.day DESC LIMIT 1), ${opts.zone}) AS zone
       ) zn
     ), uses AS (
       SELECT x.user_id, count(*) FILTER (WHERE x.feature = 'meal_scan') AS meal, count(*) FILTER (WHERE x.feature = 'route_gen') AS route

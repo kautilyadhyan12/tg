@@ -10,7 +10,7 @@ import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { seed } from "../src/db/seed.js";
 import { createMemoryRedis } from "../src/redis.js";
-import { refundUse, requireQuota, type CountedUse } from "../src/modules/quotas/service.js";
+import { quotaKey, refundUse, requireQuota, type CountedUse } from "../src/modules/quotas/service.js";
 import type { EmailSender } from "../src/modules/auth/email.js";
 
 const url = process.env["DATABASE_URL"];
@@ -156,8 +156,14 @@ d("the admin page (real Postgres)", () => {
       const use = failed.get(q.id);
       const userId = q.authUser?.id;
       if (use === undefined || userId === undefined) throw new Error("the meter did not run");
-      return r.status(503).send({ given: await refundUse({ sql, redis }, userId, use) });
+      return r.status(503).send({ given: await refundUse({ sql, redis, log: q.log }, userId, use) });
     });
+    // A use counted for somebody whose use cannot be written down (no account row).
+    const nobodyIn = async (q: { authUser?: { id: string; familyId: string | null } }) => {
+      q.authUser = { id: "00000000-0000-4000-8000-0000000014a2", familyId: null };
+      await Promise.resolve();
+    };
+    a.get("/test/a14ii/meal-nobody", { preHandler: [nobodyIn, requireQuota("meal_scan", { sql, redis })] }, async (_q, r) => r.send({ ok: true }));
     // The admin signs in as the door asks: an emailed code (the password sign-in above opens nothing).
     const adminEmail = `${PREFIX}admin@example.com`;
     const sent = await call(a, { method: "POST", url: "/v1/auth/code/send", body: { email: adminEmail } });
@@ -685,5 +691,47 @@ d("the admin page (real Postgres)", () => {
     expect((await call(must(app), { url: "/test/a14i/meal", access: lee.access })).statusCode).toBe(429);
     expect(await uses()).toBe(3);
     expect((await daysOf(lee)).days[0]?.mealScans).toBe(3);
+  });
+  it("the zone of a person's days is the one their phone sent last, not the one of their latest day", { timeout: 60_000 }, async () => {
+    const tia = await session(`${PREFIX}days-tia@example.com`, "A14i Tia");
+    const ahead = todayIn("Etc/GMT-14");
+    expect((await sendMinutes(tia, { days: [{ day: ahead, minutes: 3, zone: "Etc/GMT-14" }] })).json()).toEqual({ kept: 1, ignored: 0 });
+    expect((await daysOf(tia)).zone).toBe("Etc/GMT-14");
+    // Her phone's next send, back home: her days are read in India again, though the day sent is earlier.
+    await sql`UPDATE app_minutes SET updated_at = now() - interval '1 minute' WHERE user_id = ${tia.userId}`;
+    expect((await sendMinutes(tia, { days: [{ day: todayIn("Asia/Kolkata"), minutes: 9, zone: "Asia/Kolkata" }] })).json()).toEqual({ kept: 1, ignored: 0 });
+    expect((await daysOf(tia)).zone).toBe("Asia/Kolkata");
+  });
+
+  it("the admin's own zone, when the database cannot read days in it, is read as UTC and the answer says so", { timeout: 30_000 }, async () => {
+    const ben = await idOf(`${PREFIX}days-ben@example.com`);
+    await sql`DELETE FROM app_minutes WHERE user_id = ${ben.userId}`;
+    const res = await asAdmin({ url: `/v1/admin/people/${ben.userId}/days?zone=${encodeURIComponent("+05:30")}` });
+    expect(res.statusCode, res.body).toBe(200);
+    expect(res.json<Days>()).toMatchObject({ zone: "UTC", zoneFromPhone: false });
+    const day = await asAdmin({ url: `/v1/admin/days/${todayIn("UTC")}?zone=${encodeURIComponent("+05:30")}` });
+    expect(day.statusCode, day.body).toBe(200);
+  });
+
+  it("a use that cannot be written down is not counted either", { timeout: 30_000 }, async () => {
+    // Somebody with no account row: writing their use fails (its person must exist), and the count is put back.
+    const nobody = "00000000-0000-4000-8000-0000000014a2";
+    const key = quotaKey("meal_scan", nobody, "month", new Date());
+    const res = await must(app).inject({ method: "GET", url: "/test/a14ii/meal-nobody" });
+    expect(res.statusCode).toBe(500);
+    expect(await redis.get(key)).toBe("0");
+    expect(await sql`SELECT 1 FROM metered_uses WHERE user_id = ${nobody}`).toHaveLength(0);
+  });
+
+  it("the minutes limit is by person: a whole gym at one address sends its members' minutes", { timeout: 30_000 }, async () => {
+    const one = await session(`${PREFIX}days-one@example.com`, "A14i One");
+    const ip = "10.14.9.9";
+    // The address already far past any limit: a person sending from it is still let through.
+    for (const dimension of ["ip", "ip:app_minutes"]) await redis.setex(`rl:app_minutes:${dimension}:${ip}`, 60, "1000");
+    const res = await call(must(app), { method: "POST", url: "/v1/me/app-minutes", access: one.access, ip, body: { days: [{ day: todayIn("Asia/Kolkata"), minutes: 2, zone: "Asia/Kolkata" }] } });
+    expect(res.statusCode, res.body).toBe(200);
+    // The person's own: the 31st in a minute waits.
+    await redis.setex(`rl:app_minutes:id:${one.userId}`, 60, "30");
+    expect((await call(must(app), { method: "POST", url: "/v1/me/app-minutes", access: one.access, ip, body: { days: [{ day: todayIn("Asia/Kolkata"), minutes: 3, zone: "Asia/Kolkata" }] } })).statusCode).toBe(429);
   });
 });
