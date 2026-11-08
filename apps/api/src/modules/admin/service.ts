@@ -60,17 +60,11 @@ export async function listPeople(deps: AdminDeps, query: AdminPeopleQuery): Prom
   return { people, next: rows.length > PAGE_SIZE && last !== undefined ? cursorOf(last) : null };
 }
 
-/** Sets the number, then has every changed person's plan check read afresh at once, and again a
- *  second later: a plan check that read the old number just before the save could otherwise put it
- *  back in the 60-second memory after the first clearing. */
-export const SECOND_CLEARING_MS = 1000;
+/** Sets the number, then has every changed person's plan check read afresh: a check that read the
+ *  old number just before the save cannot put it back (bustEntitlements gives them a new mark). */
 export async function setLimits(deps: AdminDeps, actorUserId: string, input: AdminSetLimitsRequest): Promise<AdminSetLimitsResponse> {
   const result = await repo.setLimits(deps.sql, actorUserId, input);
-  const clear = async (): Promise<void> => {
-    await Promise.all(result.changed.map((id) => bustEntitlements(deps.redis, id)));
-  };
-  await clear();
-  if (result.changed.length > 0) setTimeout(() => void clear(), SECOND_CLEARING_MS).unref();
+  await Promise.all(result.changed.map((id) => bustEntitlements(deps.redis, id)));
   return { changed: result.changed.length, unchanged: result.unchanged, notFound: result.notFound };
 }
 
@@ -85,7 +79,7 @@ function micro(text: string): number {
  *  not a person using the app. */
 export async function personDays(
   deps: AdminDeps,
-  input: { userId: string; zone: string; before: string | null; now: Date },
+  input: { userId: string; zone: string; dayZone: string | null; before: string | null; now: Date },
 ): Promise<AdminPersonDaysResponse | null> {
   const rows = await repo.personDays(deps.sql, { ...input, count: ADMIN_DAYS_PAGE });
   const first = rows[0];

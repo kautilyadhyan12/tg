@@ -92,9 +92,11 @@ export async function setLimits(
         await tx`DELETE FROM usage_limits WHERE user_id = ANY(${changed}::uuid[]) AND meal_scans_a_day IS NULL`;
         await tx`UPDATE usage_limits SET route_plans_a_day = NULL, updated_at = now() WHERE user_id = ANY(${changed}::uuid[])`;
       }
+      // Stamped when the change is made, after the locks (now() would be when this press began): two
+      // presses that waited for each other are written down in the order they changed the number.
       await tx`
-        INSERT INTO audit_log (actor_user_id, action, target_type, target_id, meta)
-        SELECT ${actorUserId}, 'admin.usage_limit_set', 'user', x.id::text,
+        INSERT INTO audit_log (at, actor_user_id, action, target_type, target_id, meta)
+        SELECT clock_timestamp(), ${actorUserId}, 'admin.usage_limit_set', 'user', x.id::text,
                jsonb_build_object('feature', ${input.feature}::text, 'from', x.from_n, 'to', ${input.perDay}::int)
         FROM jsonb_to_recordset(${tx.json(changes.map((c) => ({ id: c.id, from_n: c.from })))}::jsonb) AS x(id uuid, from_n int)`;
     }
@@ -173,7 +175,7 @@ export interface PersonDaysRow {
  *  back to their sign-up day. No rows: no such person using the app. */
 export async function personDays(
   sql: Sql,
-  opts: { userId: string; zone: string; before: string | null; count: number; now: Date },
+  opts: { userId: string; zone: string; dayZone: string | null; before: string | null; count: number; now: Date },
 ): Promise<PersonDaysRow[]> {
   return await sql<PersonDaysRow[]>`
     WITH p AS (
@@ -182,7 +184,7 @@ export async function personDays(
              (SELECT min(m.day) FROM app_minutes m WHERE m.user_id = u.id) AS first_day
       FROM users u WHERE u.id = ${opts.userId} AND u.status = 'active'
     ), z AS (
-      SELECT p.*, COALESCE(p.phone_zone, ${opts.zone}) AS zone FROM p
+      SELECT p.*, COALESCE(${opts.dayZone}::text, p.phone_zone, ${opts.zone}) AS zone FROM p
     ), span AS (
       SELECT z.*, (${opts.now}::timestamptz AT TIME ZONE z.zone)::date AS today,
              (z.created_at AT TIME ZONE z.zone)::date AS first_shown

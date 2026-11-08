@@ -1,7 +1,9 @@
 // The admin door (Kd, 2026-11-08): the admin account's sign-in must be fresh (a code typed in the
 // last few minutes), then his own password opens the page for at most 12 hours, in this browser's
-// sign-in session only. The door's key is a random token in an httpOnly cookie; Redis keeps only
-// its hash, with whose session it is, and forgets it after 12 hours.
+// sign-in session only. The door's key is a random token in an httpOnly cookie. Redis keeps one key
+// for each session, holding only the token's hash: opening again replaces it and Lock takes it out,
+// so no earlier key of the session still opens the page. Forgotten after 12 hours.
+import { timingSafeEqual } from "node:crypto";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import type { Sql } from "postgres";
 import { z } from "zod";
@@ -15,8 +17,10 @@ import * as repo from "./repo.js";
 export const DOOR_COOKIE = "adminDoor";
 export const DOOR_PATH = "/v1/admin";
 const DOOR_SECONDS = ADMIN_DOOR_HOURS * 60 * 60;
-const doorKey = (token: string): string => `admin-door:${sha256Hex(token)}`;
-const heldSchema = z.object({ userId: z.string(), familyId: z.string(), until: z.string() }).strict();
+const doorKey = (familyId: string): string => `admin-door-session:${familyId}`;
+const heldSchema = z.object({ userId: z.string(), tokenHash: z.string(), until: z.string() }).strict();
+const sameHash = (a: string, b: string): boolean => a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
+export const UNAVAILABLE = "The admin page cannot open right now. Please try again in a few minutes.";
 
 export interface DoorDeps {
   sql: Sql;
@@ -42,7 +46,7 @@ type Who = { userId: string; familyId: string };
 async function openUntil(deps: DoorDeps, req: FastifyRequest, who: Who): Promise<Date | null> {
   const token = req.cookies[DOOR_COOKIE];
   if (token === undefined || token === "") return null;
-  const raw = await deps.redis.get(doorKey(token));
+  const raw = await deps.redis.get(doorKey(who.familyId));
   if (raw === null) return null;
   let held: unknown = null;
   try {
@@ -51,7 +55,7 @@ async function openUntil(deps: DoorDeps, req: FastifyRequest, who: Who): Promise
     return null;
   }
   const parsed = heldSchema.safeParse(held);
-  if (!parsed.success || parsed.data.userId !== who.userId || parsed.data.familyId !== who.familyId) return null;
+  if (!parsed.success || parsed.data.userId !== who.userId || !sameHash(parsed.data.tokenHash, sha256Hex(token))) return null;
   const until = new Date(parsed.data.until);
   return until > deps.now() ? until : null;
 }
@@ -70,10 +74,13 @@ export async function doorState(deps: DoorDeps, req: FastifyRequest, who: Who): 
 async function open(deps: DoorDeps, reply: FastifyReply, who: Who): Promise<AdminDoorState> {
   const token = mintOpaqueToken();
   const until = new Date(deps.now().getTime() + DOOR_SECONDS * 1000);
-  const kept = await deps.redis.setex(doorKey(token), DOOR_SECONDS, JSON.stringify({ userId: who.userId, familyId: who.familyId, until: until.toISOString() }));
-  if (!kept) throw new DoorError(503, "admin_unavailable", "The admin page cannot open right now. Please try again in a few minutes.");
-  reply.setCookie(DOOR_COOKIE, token, cookieOptions(deps.config, DOOR_SECONDS, DOOR_PATH));
+  // Written down first: the door never opens without its row.
   await repo.auditDoor(deps.sql, who.userId, "admin.door_opened");
+  const kept = await deps.redis.setex(doorKey(who.familyId), DOOR_SECONDS, JSON.stringify({ userId: who.userId, tokenHash: sha256Hex(token), until: until.toISOString() }));
+  if (!kept) throw new DoorError(503, "admin_unavailable", UNAVAILABLE);
+  // SameSite stays the app's own (None in production): the console and the api are on different
+  // sites there (tokens.ts), so a Strict cookie would never reach the api.
+  reply.setCookie(DOOR_COOKIE, token, cookieOptions(deps.config, DOOR_SECONDS, DOOR_PATH));
   return { passwordSet: true, open: true, openUntil: until.toISOString(), fresh: true };
 }
 
@@ -101,10 +108,9 @@ export async function unlock(deps: DoorDeps, reply: FastifyReply, who: Who, pass
   return await open(deps, reply, who);
 }
 
-/** Lock: the door's key is forgotten and its cookie cleared. */
-export async function lock(deps: DoorDeps, req: FastifyRequest, reply: FastifyReply): Promise<void> {
-  const token = req.cookies[DOOR_COOKIE];
-  if (token !== undefined && token !== "") await deps.redis.del(doorKey(token));
+/** Lock: the session's key is forgotten, whichever cookie this press carries, and its cookie cleared. */
+export async function lock(deps: DoorDeps, reply: FastifyReply, who: Who): Promise<void> {
+  await deps.redis.del(doorKey(who.familyId));
   reply.setCookie(DOOR_COOKIE, "", cookieOptions(deps.config, 0, DOOR_PATH));
 }
 

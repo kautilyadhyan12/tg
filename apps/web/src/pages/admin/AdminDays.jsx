@@ -79,7 +79,8 @@ export function PersonDays({ person, onShut, onClose }) {
     const after = first.data?.next;
     setEarlier({ ...earlier, after, loading: true, error: null });
     try {
-      const page = await adminService.personDays(person.id, { zone, before: next });
+      // Cut in the first page's zone, so a day is never shown twice when their phone moves zone.
+      const page = await adminService.personDays(person.id, { zone, before: next, dayZone: first.data?.zone });
       setEarlier((e) => (e.after === after ? { after, days: [...e.days, ...page.days], next: page.next, loading: false, error: null } : e));
     } catch (err) {
       if (isDoorShut(err)) onShut();

@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster }     from 'react-hot-toast';
 import { AuthProvider } from './context/AuthContext';
@@ -68,7 +69,8 @@ import ConsoleMore     from './pages/console/More';
 import ConsoleAccount  from './pages/console/Account';
 import FrameGuard from './components/common/FrameGuard';
 // Kd's own admin page (ROADMAP Stage 2 item 14a-i): only his account; the server says "not found" to anybody else.
-import Admin from './pages/admin/Admin';
+// Loaded only when /admin is opened: its addresses are not in the bundle every visitor gets.
+const Admin = lazy(() => import('./pages/admin/Admin'));
 
 export default function App() {
   return (
@@ -417,7 +419,7 @@ export default function App() {
 
             {/* KD'S ADMIN PAGE (14a-i): its own door, never a gym's. It signs in by itself (a fresh
                 code, then his password), so no gym or member gate stands in front of it. */}
-            <Route path="/admin" element={<Admin />} />
+            <Route path="/admin" element={<Suspense fallback={null}><Admin /></Suspense>} />
 
             {/* ── Fallback ──────────────────────────────────────────────── */}
             <Route path="/"  element={<Navigate to="/login" replace />} />

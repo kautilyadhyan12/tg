@@ -51,9 +51,10 @@ export const adminService = {
 
   /** One person's days, 30 at a time (14a-ii); `before` is the last page's `next`. `zone` is the
    *  admin's own, for a person whose phone has sent none. */
-  personDays: async (personId, { zone, before = null }) => {
+  personDays: async (personId, { zone, before = null, dayZone = null }) => {
     const params = { zone };
     if (before !== null) params.before = before;
+    if (dayZone) params.dayZone = dayZone;
     const res = await authApi.get(`/v1/admin/people/${encodeURIComponent(personId)}/days`, { params });
     return read(adminPersonDaysResponseSchema, res.data, "a person's days");
   },

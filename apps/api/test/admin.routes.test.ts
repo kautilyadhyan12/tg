@@ -11,6 +11,9 @@ import { loadConfig } from "../src/config.js";
 import { seed } from "../src/db/seed.js";
 import { createMemoryRedis } from "../src/redis.js";
 import { quotaKey, refundUse, requireQuota, type CountedUse } from "../src/modules/quotas/service.js";
+import { createDoorPassword } from "../src/modules/admin/repo.js";
+import { saveMinutes } from "../src/modules/appMinutes/repo.js";
+import { getEntitlements } from "../src/modules/entitlements/service.js";
 import type { EmailSender } from "../src/modules/auth/email.js";
 
 const url = process.env["DATABASE_URL"];
@@ -77,6 +80,7 @@ d("the admin page (real Postgres)", () => {
       ...(opts.body !== undefined ? { payload: JSON.stringify(opts.body) } : {}),
     });
   const asAdmin = (opts: { method?: "GET" | "PUT" | "POST"; url: string; body?: unknown }) => call(must(app), { ...opts, access: admin.access, door: adminDoor });
+  const doorOf = (res: { cookies: { name: string; value: string }[] }): string => res.cookies.find((c) => c.name === "adminDoor")?.value ?? "";
 
   /** Each fixture person signs up from an address of their own: sign-up's per-address limit is not what is tested. */
   let signUps = 0;
@@ -199,6 +203,13 @@ d("the admin page (real Postgres)", () => {
     { method: "GET" as const, url: "/v1/admin/days/2026-11-08?zone=UTC&from=50" },
   ];
 
+  /** What a caller can tell apart: the status, the body with its address taken out, and which headers came. */
+  const seen = (res: { statusCode: number; body: string; headers: Record<string, unknown> }, url: string) => {
+    const unknownUrl = url.replace("/v1/admin/", "/v1/admin/none/");
+    const read = (body: string) => body.replaceAll(unknownUrl, "<url>").replaceAll(url, "<url>").replace(/"requestId":"[^"]*"/, "");
+    return { status: res.statusCode, body: read(res.body), headers: Object.keys(res.headers).sort() };
+  };
+
   it("WORST THING: nobody but the admin reads or changes anything; each meets the not-found reply", { timeout: 60_000 }, async () => {
     const callers = [
       { who: "signed out", p: { userId: stranger.userId, access: "" } },
@@ -211,12 +222,24 @@ d("the admin page (real Postgres)", () => {
       for (const address of ADDRESSES(p.userId)) {
         // Even holding the admin's own open door, nobody else gets in.
         const res = await call(must(app), { ...address, access: p.access, door: adminDoor });
-        const unknown = await call(must(app), { method: address.method, url: address.url.replace("/v1/admin/", "/v1/admin-none/"), access: p.access, ...(address.body === undefined ? {} : { body: address.body }) });
+        const unknown = await call(must(app), { method: address.method, url: address.url.replace("/v1/admin/", "/v1/admin/none/"), access: p.access, ...(address.body === undefined ? {} : { body: address.body }) });
         expect({ who, url: address.url, status: res.statusCode }).toEqual({ who, url: address.url, status: 404 });
         expect(res.json<{ error: string }>().error).toBe("not_found");
         expect(res.json<{ message: string }>().message).toBe(`Route ${address.method}:${address.url} not found`);
-        expect(Object.keys(res.json<object>()).sort()).toEqual(Object.keys(unknown.json<object>()).sort());
+        expect(seen(res, address.url)).toEqual(seen(unknown, address.url));
         expect(res.body).not.toContain("@example.com");
+      }
+      // Sent as a form, or with a body that does not read: still exactly an address that does not exist.
+      for (const raw of [
+        { headers: { "content-type": "application/x-www-form-urlencoded" }, payload: "password=a-stranger-s-password" },
+        { headers: { "content-type": "application/json" }, payload: "{not json" },
+      ]) {
+        for (const path of ["/v1/admin/door/open", "/v1/admin/door/password"]) {
+          const send = (url: string) => must(app).inject({ method: "POST", url, ...raw, cookies: p.access === "" ? {} : { accessToken: p.access } });
+          const res = await send(path);
+          const unknown = await send(path.replace("/v1/admin/", "/v1/admin/none/"));
+          expect({ who, path, type: raw.headers["content-type"], got: seen(res, path) }).toEqual({ who, path, type: raw.headers["content-type"], got: seen(unknown, path) });
+        }
       }
     }
     expect((await limitsRows())[0]?.n).toBe(0);
@@ -279,6 +302,9 @@ d("the admin page (real Postgres)", () => {
     const cookie = right.cookies.find((c) => c.name === "adminDoor");
     expect(cookie).toMatchObject({ httpOnly: true, path: "/v1/admin", maxAge: 43_200 });
     expect((await call(must(app), { url: "/v1/admin/people", access: admin.access, door: cookie?.value ?? "" })).statusCode).toBe(200);
+    // Opened again in the same session: the earlier key no longer opens it.
+    expect((await asAdmin({ url: "/v1/admin/people" })).statusCode).toBe(403);
+    adminDoor = cookie?.value ?? "";
   });
 
   it("THE DOOR: only a sign-in made with an emailed code is fresh: the account's password, however new, opens nothing", { timeout: 60_000 }, async () => {
@@ -344,14 +370,18 @@ d("the admin page (real Postgres)", () => {
   it("THE DOOR: only a wrong password uses a try: the right one, a short one, and Lock then open again never run out", { timeout: 60_000 }, async () => {
     await redis.del(`rl:admin_door:id:${admin.userId}`);
     for (let n = 1; n <= 7; n++) {
-      expect((await call(must(app), { method: "POST", url: "/v1/admin/door/open", access: admin.access, body: { password: ADMIN_PASSWORD } })).statusCode).toBe(200);
+      const opened = await call(must(app), { method: "POST", url: "/v1/admin/door/open", access: admin.access, body: { password: ADMIN_PASSWORD } });
+      expect(opened.statusCode).toBe(200);
+      adminDoor = doorOf(opened);
       expect((await call(must(app), { method: "POST", url: "/v1/admin/door/open", access: admin.access, body: { password: "short" } })).statusCode).toBe(400);
     }
     // Four wrong ones, then the right one still opens.
     for (let n = 1; n <= 4; n++) {
       expect((await call(must(app), { method: "POST", url: "/v1/admin/door/open", access: admin.access, body: { password: "guess-number-" + String(n) + "-xx" } })).statusCode).toBe(403);
     }
-    expect((await call(must(app), { method: "POST", url: "/v1/admin/door/open", access: admin.access, body: { password: ADMIN_PASSWORD } })).statusCode).toBe(200);
+    const last = await call(must(app), { method: "POST", url: "/v1/admin/door/open", access: admin.access, body: { password: ADMIN_PASSWORD } });
+    expect(last.statusCode).toBe(200);
+    adminDoor = doorOf(last);
     await redis.del(`rl:admin_door:id:${admin.userId}`);
   });
 
@@ -733,5 +763,173 @@ d("the admin page (real Postgres)", () => {
     // The person's own: the 31st in a minute waits.
     await redis.setex(`rl:app_minutes:id:${one.userId}`, 60, "30");
     expect((await call(must(app), { method: "POST", url: "/v1/me/app-minutes", access: one.access, ip, body: { days: [{ day: todayIn("Asia/Kolkata"), minutes: 3, zone: "Asia/Kolkata" }] } })).statusCode).toBe(429);
+  });
+
+  // ── The two extra passes over 14a ──────────────────────────────────────────
+
+  it("THE DOOR (security H1): opening again ends the earlier key; Lock ends the session's key whichever cookie it carries; two opens at once leave one", { timeout: 60_000 }, async () => {
+    await redis.del(`rl:admin_door:id:${admin.userId}`);
+    await redis.del(`rl:admin_write:id:${admin.userId}`);
+    await redis.del(`rl:admin_read:id:${admin.userId}`);
+    const openNow = () => call(must(app), { method: "POST", url: "/v1/admin/door/open", access: admin.access, body: { password: ADMIN_PASSWORD } });
+    const people = async (door: string) => (await call(must(app), { url: "/v1/admin/people", access: admin.access, door })).statusCode;
+    const lockWith = async (door: string) => (await call(must(app), { method: "POST", url: "/v1/admin/door/lock", access: admin.access, door })).statusCode;
+    const first = doorOf(await openNow());
+    const second = doorOf(await openNow());
+    expect([await people(first), await people(second)]).toEqual([403, 200]);
+    // Lock pressed from a page still holding the earlier key closes the open one too.
+    expect(await lockWith(first)).toBe(200);
+    expect([await people(first), await people(second)]).toEqual([403, 403]);
+    // Two tabs pressing Open together: one key opens; Lock from the other closes it.
+    const both = await Promise.all([openNow(), openNow()]);
+    expect(both.map((r) => r.statusCode)).toEqual([200, 200]);
+    const opens = [await people(doorOf(both[0])), await people(doorOf(both[1]))];
+    expect([...opens].sort()).toEqual([200, 403]);
+    const closedBy = opens[0] === 200 ? both[1] : both[0];
+    expect(await lockWith(doorOf(closedBy))).toBe(200);
+    for (const r of both) expect(await people(doorOf(r))).toBe(403);
+    // Each open is written down before the door opens.
+    expect((await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM audit_log WHERE action = 'admin.door_opened' AND actor_user_id = ${admin.userId} AND at > now() - interval '1 minute'`)[0]?.n).toBeGreaterThanOrEqual(4);
+    adminDoor = doorOf(await openNow());
+    expect(await people(adminDoor)).toBe(200);
+  });
+
+  it("THE DOOR (security L3): with Redis down no password is checked: right or wrong, the page cannot open now", { timeout: 60_000 }, async () => {
+    const down = createMemoryRedis();
+    down.down = true;
+    const cut = await buildApp(loadConfig({ ...baseEnv, ADMIN_USER_ID: admin.userId }), { redis: down });
+    try {
+      const wrongs = async () => (await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM audit_log WHERE action = 'admin.door_wrong_password' AND actor_user_id = ${admin.userId}`)[0]?.n;
+      const before = await wrongs();
+      for (const password of ["not-the-admin-password", ADMIN_PASSWORD]) {
+        const res = await call(cut, { method: "POST", url: "/v1/admin/door/open", access: admin.access, body: { password } });
+        expect({ password, status: res.statusCode, error: res.json<{ error: string }>().error }).toEqual({ password, status: 503, error: "admin_unavailable" });
+        expect(res.cookies.find((c) => c.name === "adminDoor")).toBeUndefined();
+      }
+      expect(await wrongs()).toBe(before);
+    } finally {
+      await cut.close();
+    }
+  });
+
+  it("year 0000 is not a day (security L1): refused, never a fault", { timeout: 30_000 }, async () => {
+    const zed = await session(`${PREFIX}days-zed@example.com`, "A14i Zed");
+    expect((await sendMinutes(zed, { days: [{ day: "0000-01-01", minutes: 5, zone: "UTC" }] })).statusCode).toBe(400);
+    expect((await asAdmin({ url: "/v1/admin/days/0000-01-01?zone=UTC" })).statusCode).toBe(400);
+    expect((await sendMinutes(zed, { days: [{ day: "0001-01-01", minutes: 5, zone: "UTC" }] })).json()).toEqual({ kept: 0, ignored: 1 });
+  });
+
+  it("a day holds no more minutes than have passed of it, and an hour more (security L4); two phones sending at once keep the highest", { timeout: 60_000 }, async () => {
+    const cap = await session(`${PREFIX}days-cap@example.com`, "A14i Cap");
+    // 12:09 UTC is 17:39 in India: 1,059 minutes of the day have passed.
+    const now = new Date("2026-11-08T12:09:00Z");
+    const kept = await saveMinutes(sql, cap.userId, [
+      { day: "2026-11-07", minutes: 1440, zone: "Asia/Kolkata" },
+      { day: "2026-11-08", minutes: 1440, zone: "Asia/Kolkata" },
+      { day: "2026-11-09", minutes: 500, zone: "Asia/Kolkata" },
+    ], now);
+    expect(kept).toBe(3);
+    expect(await sql`SELECT day::text, minutes FROM app_minutes WHERE user_id = ${cap.userId} ORDER BY day`).toEqual([
+      { day: "2026-11-07", minutes: 1440 },
+      { day: "2026-11-08", minutes: 1059 + 60 },
+      { day: "2026-11-09", minutes: 0 },
+    ]);
+    // Five minutes before midnight in India, tomorrow already holds what a clock five minutes fast would count.
+    await saveMinutes(sql, cap.userId, [{ day: "2026-11-09", minutes: 30, zone: "Asia/Kolkata" }], new Date("2026-11-08T18:25:00Z"));
+    expect(await sql`SELECT minutes FROM app_minutes WHERE user_id = ${cap.userId} AND day = '2026-11-09'`).toEqual([{ minutes: 30 }]);
+    // Twenty sends of one day at once, from two phones in two zones: one row, the highest.
+    await sql`DELETE FROM app_minutes WHERE user_id = ${cap.userId}`;
+    const today = todayIn("UTC");
+    const sends = Array.from({ length: 20 }, (_x, n) => saveMinutes(sql, cap.userId, [{ day: today, minutes: n + 1, zone: n % 2 === 0 ? "UTC" : "Europe/London" }], new Date()));
+    await Promise.all(sends);
+    expect(await sql`SELECT minutes FROM app_minutes WHERE user_id = ${cap.userId} AND day = ${today}::date`).toEqual([{ minutes: 20 }]);
+  });
+
+  it("limits pressed at once (integrity L1): each person's record reads in the order the number changed", { timeout: 60_000 }, async () => {
+    await redis.del(`rl:admin_write:id:${admin.userId}`);
+    const one = await session(`${PREFIX}race-one@example.com`, "A14i Race One");
+    const two = await session(`${PREFIX}race-two@example.com`, "A14i Race Two");
+    const numbers = [3, 5, null, 7, 9];
+    const presses = Array.from({ length: 20 }, (_x, n) =>
+      asAdmin({ method: "PUT", url: "/v1/admin/limits", body: { userIds: n % 3 === 0 ? [one.userId] : n % 3 === 1 ? [two.userId, one.userId] : [two.userId], feature: "meal_scan", perDay: numbers[n % numbers.length] ?? null } }),
+    );
+    expect((await Promise.all(presses)).map((r) => r.statusCode)).toEqual(Array.from({ length: 20 }, () => 200));
+    for (const p of [one, two]) {
+      const rows = await sql<{ meta: { from: number | null; to: number | null } }[]>`
+        SELECT meta FROM audit_log WHERE action = 'admin.usage_limit_set' AND target_id = ${p.userId} ORDER BY at, id`;
+      expect(rows.length).toBeGreaterThan(1);
+      const held = await sql<{ n: number | null }[]>`SELECT meal_scans_a_day AS n FROM usage_limits WHERE user_id = ${p.userId}`;
+      let was: number | null = null;
+      for (const r of rows) {
+        expect(r.meta.from).toBe(was);
+        was = r.meta.to;
+      }
+      expect(was).toBe(held[0]?.n ?? null);
+    }
+    for (const p of [one, two]) await asAdmin({ method: "PUT", url: "/v1/admin/limits", body: { userIds: [p.userId], feature: "meal_scan", perDay: null } });
+  });
+
+  it("a plan check that read the old number just before a save cannot keep it (integrity L2)", { timeout: 60_000 }, async () => {
+    await redis.del(`rl:admin_write:id:${admin.userId}`);
+    const pat = await session(`${PREFIX}race-pat@example.com`, "A14i Race Pat");
+    await redis.del(`ent:${pat.userId}`);
+    let atWrite: () => void = () => undefined;
+    let release: () => void = () => undefined;
+    const reached = new Promise<void>((r) => (atWrite = r));
+    const gate = new Promise<void>((r) => (release = r));
+    // A plan check that has read the database, and stalls before it keeps its answer.
+    const stalling = {
+      ...redis,
+      setex: async (key: string, ttl: number, value: string) => {
+        if (key.startsWith(`ent:${pat.userId}`)) {
+          atWrite();
+          await gate;
+        }
+        return await redis.setex(key, ttl, value);
+      },
+    };
+    const stalled = getEntitlements({ sql, redis: stalling }, pat.userId);
+    await reached;
+    expect((await asAdmin({ method: "PUT", url: "/v1/admin/limits", body: { userIds: [pat.userId], feature: "meal_scan", perDay: 10 } })).statusCode).toBe(200);
+    release();
+    expect((await stalled).entitlements.meal_scan).toEqual({ window: "month", limit: 3 });
+    expect((await getEntitlements({ sql, redis }, pat.userId)).entitlements.meal_scan).toEqual({ window: "day", limit: 10 });
+    expect((await mealScan(pat)).meal_scan).toEqual({ window: "day", limit: 10 });
+    await asAdmin({ method: "PUT", url: "/v1/admin/limits", body: { userIds: [pat.userId], feature: "meal_scan", perDay: null } });
+  });
+
+  it("one use given back twice at once gives back one, and the page's count stays the limit's (integrity L3)", { timeout: 60_000 }, async () => {
+    const kim = await session(`${PREFIX}race-kim@example.com`, "A14i Race Kim");
+    for (let n = 0; n < 2; n++) expect((await call(must(app), { url: "/test/a14i/meal", access: kim.access })).statusCode).toBe(200);
+    const key = quotaKey("meal_scan", kim.userId, "month", new Date());
+    const useId = (await sql<{ id: string }[]>`SELECT id FROM metered_uses WHERE user_id = ${kim.userId} ORDER BY at DESC LIMIT 1`)[0]?.id ?? "";
+    const log = { warn: () => undefined };
+    const given = await Promise.all([refundUse({ sql, redis, log }, kim.userId, { key, useId }), refundUse({ sql, redis, log }, kim.userId, { key, useId })]);
+    expect([...given].sort()).toEqual([false, true]);
+    expect(await redis.get(key)).toBe("1");
+    expect(await sql`SELECT 1 FROM metered_uses WHERE user_id = ${kim.userId}`).toHaveLength(1);
+    expect((await daysOf(kim)).days[0]?.mealScans).toBe(1);
+  });
+
+  it("earlier days are cut in the first page's zone though the phone has since sent from another (integrity L4)", { timeout: 60_000 }, async () => {
+    await redis.del(`rl:admin_read:id:${admin.userId}`);
+    const uma = await session(`${PREFIX}race-uma@example.com`, "A14i Race Uma");
+    expect((await sendMinutes(uma, { days: [{ day: todayIn("Asia/Kolkata"), minutes: 4, zone: "Asia/Kolkata" }] })).statusCode).toBe(200);
+    const first = await daysOf(uma);
+    expect(first.zone).toBe("Asia/Kolkata");
+    await sql`UPDATE app_minutes SET updated_at = now() - interval '1 minute' WHERE user_id = ${uma.userId}`;
+    expect((await sendMinutes(uma, { days: [{ day: todayIn("UTC"), minutes: 9, zone: "UTC" }] })).statusCode).toBe(200);
+    expect((await daysOf(uma)).zone).toBe("UTC");
+    expect((await daysOf(uma, `zone=Europe/London&before=${first.today}&dayZone=Asia/Kolkata`)).zone).toBe("Asia/Kolkata");
+    // A zone the database cannot read days in is not used.
+    expect((await daysOf(uma, `zone=Europe/London&dayZone=${encodeURIComponent("+05:30")}`)).zone).toBe("UTC");
+  });
+
+  it("the first password pressed four times at once is made once, written down once", { timeout: 30_000 }, async () => {
+    const made = await Promise.all(Array.from({ length: 4 }, () => createDoorPassword(sql, owner.userId, "not-a-real-hash", "argon2id")));
+    expect([...made].sort()).toEqual([false, false, false, true]);
+    expect(await sql`SELECT 1 FROM admin_passwords WHERE user_id = ${owner.userId}`).toHaveLength(1);
+    expect(await sql`SELECT 1 FROM audit_log WHERE action = 'admin.door_password_made' AND actor_user_id = ${owner.userId}`).toHaveLength(1);
+    await sql`DELETE FROM admin_passwords WHERE user_id = ${owner.userId}`;
   });
 });

@@ -41,6 +41,9 @@ export interface DualRateLimitOptions {
   /** The refusal's sentence, for a door whose reader needs to know what to do next. Left
    *  out, the global limiter's own words. */
   message?: string;
+  /** For a door where a guess must never go uncounted (the admin password): with Redis down the
+   *  request is refused with 503 and this reply, never let through. */
+  refuseWhenDown?: { error: string; message: string };
 }
 
 export function createDualRateLimit(
@@ -53,9 +56,13 @@ export function createDualRateLimit(
     req: FastifyRequest,
     dimension: "ip" | "id",
     value: string,
-  ): Promise<boolean> => {
+  ): Promise<boolean | "down"> => {
     const max = dimension === "ip" ? (ipMax ?? Number.POSITIVE_INFINITY) : opts.max;
     const count = await opts.redis.incrWithTtl(`rl:${opts.name}:${dimension}:${value}`, windowSeconds);
+    if (count === null && opts.refuseWhenDown !== undefined) {
+      req.log.warn({ event: "ratelimit.closed_redis_down", limiter: opts.name, dimension }, "rate limiter refusing (Redis unavailable)");
+      return "down";
+    }
     if (count === null) {
       // Redis down → fail open, but NEVER silently (T3 P2.4): a silent
       // fail-open disables auth throttling with zero signal. The global
@@ -77,9 +84,15 @@ export function createDualRateLimit(
   // Each bucket still counts every request it lets through.
   return async (req, reply) => {
     const id = opts.identifier(req);
-    const idOk = id === null ? true : await hit(req, "id", id);
+    const idHit = id === null ? true : await hit(req, "id", id);
     const scope = opts.ipScope?.(req) ?? null;
-    const ipOk = idOk && ipMax !== null ? await hit(req, "ip", scope === null ? req.ip : `${scope}:${req.ip}`) : true;
+    const ipHit = idHit === true && ipMax !== null ? await hit(req, "ip", scope === null ? req.ip : `${scope}:${req.ip}`) : true;
+    if ((idHit === "down" || ipHit === "down") && opts.refuseWhenDown !== undefined) {
+      await reply.status(503).send({ ...opts.refuseWhenDown, requestId: req.id });
+      return;
+    }
+    const idOk = idHit === true;
+    const ipOk = ipHit === true;
     if (idOk && !ipOk && id !== null) await opts.redis.decrIfPositive(`rl:${opts.name}:id:${id}`);
     if (!ipOk || !idOk) {
       // Same client-facing shape as the global limiter's 429 (R8.1).

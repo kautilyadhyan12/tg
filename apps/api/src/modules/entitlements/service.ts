@@ -3,6 +3,7 @@
 // library filter, and history window calls THIS. Cached in Redis 60s, busted
 // on billing/membership events (§4.1); the cache adapter fails soft, so a
 // Redis outage degrades to per-request DB resolution, never an error.
+import { randomUUID } from "node:crypto";
 import type { Sql } from "postgres";
 import { z } from "zod";
 import { entitlementsSchema, type Entitlements, type EntitlementsMe, type OwnPlanExtra, type YourPlan } from "@app/shared";
@@ -15,7 +16,12 @@ export interface EntitlementsDeps {
 }
 
 const CACHE_TTL_S = 60; // §4.1: "cache Redis 60 s"
-const cacheKey = (userId: string) => `ent:${userId}`;
+// Each clearing gives the person a new mark, and the memory is kept under the mark it was read
+// with: a check that read the database just before a change, and writes its answer after the
+// clearing, writes it where no later check looks.
+const MARK_TTL_S = 24 * 60 * 60;
+const markKey = (userId: string) => `ent-mark:${userId}`;
+const cacheKey = (userId: string, mark: string | null) => (mark === null ? `ent:${userId}` : `ent:${userId}:${mark}`);
 
 type Source = EntitlementsMe["source"];
 
@@ -88,7 +94,8 @@ export async function getEntitlements(
   deps: EntitlementsDeps,
   userId: string,
 ): Promise<EntitlementsMe> {
-  const hit = await deps.redis.get(cacheKey(userId));
+  const key = cacheKey(userId, await deps.redis.get(markKey(userId)));
+  const hit = await deps.redis.get(key);
   if (hit !== null) {
     // Cache is external input (R2.3): a corrupt/old-format/manually-poked
     // value must NOT throw out of the resolver (T3 P2.4 — that would 500
@@ -110,7 +117,7 @@ export async function getEntitlements(
   ]);
   const merged = mergeEntitlements(freeDoc, candidates);
   const resolved = { entitlements: applyOwnLimits(merged.entitlements, own), source: merged.source };
-  await deps.redis.setex(cacheKey(userId), CACHE_TTL_S, JSON.stringify(resolved));
+  await deps.redis.setex(key, CACHE_TTL_S, JSON.stringify(resolved));
   return resolved;
 }
 
@@ -157,7 +164,7 @@ export async function yourPlansAt(sql: Sql, userId: string, gymIds: readonly str
 /** §4.1/§10 bust seam — call on ANY billing or membership change. Today's
  *  callers: account deletion (memberships close); P3/gyms add the rest. */
 export async function bustEntitlements(redis: RedisLike, userId: string): Promise<void> {
-  await redis.del(cacheKey(userId));
+  await Promise.all([redis.setex(markKey(userId), MARK_TTL_S, randomUUID()), redis.del(cacheKey(userId, null))]);
 }
 
 /** What each of these people gets, as `getEntitlements` resolves it, read in three statements

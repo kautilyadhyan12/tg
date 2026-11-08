@@ -75,10 +75,10 @@ try {
   const heavy = people[0] ?? "";
   const zone = "Asia/Kolkata";
   const today = (await sql<{ d: string }[]>`SELECT (now() AT TIME ZONE ${zone}::text)::date::text AS d`)[0]?.d ?? "";
-  const firstDays = await personDays(deps, { userId: heavy, zone, before: null, now: new Date() });
+  const firstDays = await personDays(deps, { userId: heavy, zone, dayZone: null, before: null, now: new Date() });
   const cases: { said: string; read: () => Promise<number> }[] = [
-    { said: "one person's 30 days", read: async () => (await personDays(deps, { userId: heavy, zone, before: null, now: new Date() }))?.days.length ?? 0 },
-    { said: "their earlier days", read: async () => (await personDays(deps, { userId: heavy, zone, before: firstDays?.next ?? null, now: new Date() }))?.days.length ?? 0 },
+    { said: "one person's 30 days", read: async () => (await personDays(deps, { userId: heavy, zone, dayZone: null, before: null, now: new Date() }))?.days.length ?? 0 },
+    { said: "their earlier days", read: async () => (await personDays(deps, { userId: heavy, zone, dayZone: null, before: firstDays?.next ?? null, now: new Date() }))?.days.length ?? 0 },
     { said: "today for everyone, first page", read: async () => (await dayPeople(deps, { day: today, zone, from: 0 })).people.length },
     { said: "today for everyone, a later page (from 5,000)", read: async () => (await dayPeople(deps, { day: today, zone, from: 5000 })).people.length },
   ];

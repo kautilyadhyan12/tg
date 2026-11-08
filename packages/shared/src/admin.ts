@@ -102,6 +102,9 @@ export const adminPersonDaysQuerySchema = z
     zone: timeZoneNameSchema,
     /** The days before this one; absent, the days up to the person's today. */
     before: calendarDaySchema.optional(),
+    /** The zone the first page was read in (its `zone`), so every page of one list is cut in the
+     *  same zone even after the person's phone sends from another. */
+    dayZone: timeZoneNameSchema.optional(),
   })
   .strict();
 export type AdminPersonDaysQuery = z.infer<typeof adminPersonDaysQuerySchema>;

@@ -86,7 +86,8 @@ export const calendarDaySchema = z
   .regex(/^\d{4}-\d{2}-\d{2}$/, "expected YYYY-MM-DD")
   .refine((s) => {
     const t = Date.parse(`${s}T00:00:00Z`);
-    return !Number.isNaN(t) && new Date(t).toISOString().slice(0, 10) === s;
+    // Year 0000 is a date to JavaScript, not to Postgres.
+    return !Number.isNaN(t) && new Date(t).toISOString().slice(0, 10) === s && s >= "0001-01-01";
   }, "not a real calendar day");
 
 /** The day a plan starts on: a real day with room for the ten-year horizon to

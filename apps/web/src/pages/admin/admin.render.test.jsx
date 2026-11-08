@@ -105,7 +105,8 @@ describe("each person's days (14a-ii)", () => {
     expect(screen.queryByRole('region', { name: "Asha's days" })).toBeNull();
     fireEvent.click(within(section).getByRole('button', { name: 'Earlier days' }));
     await waitFor(() => expect(rowTexts(table)).toHaveLength(4));
-    expect(adminService.personDays).toHaveBeenLastCalledWith('b1', { zone: myZone(), before: dayBefore(2) });
+    // The second page is cut in the first page's zone, the person's phone's.
+    expect(adminService.personDays).toHaveBeenLastCalledWith('b1', { zone: myZone(), before: dayBefore(2), dayZone: 'Asia/Kolkata' });
     expect(within(section).getByText('They signed up on the last day shown.')).toBeTruthy();
     expect(within(section).queryByRole('button', { name: 'Earlier days' })).toBeNull();
     fireEvent.click(within(section).getByRole('button', { name: 'Close' }));
