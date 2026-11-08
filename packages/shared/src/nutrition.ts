@@ -912,7 +912,7 @@ export type FoodChoice = z.infer<typeof foodChoiceSchema>;
  *  plan names the gym, one the person is a member of. */
 export const putFoodChoiceRequestSchema = z.union([
   z.object({ choice: z.enum(["suggested", "mine"]) }).strict(),
-  z.object({ choice: z.literal("gym"), gymId: z.string().uuid() }).strict(),
+  z.object({ choice: z.literal("gym"), gymId: z.string().uuid().toLowerCase() }).strict(),
 ]);
 export type PutFoodChoiceRequest = z.infer<typeof putFoodChoiceRequestSchema>;
 

@@ -3,9 +3,9 @@
 // one plan at a time; a member reached by several gets the newest given. The member reads it as
 // written, with the writer's name, at `GET /v1/orgs/:gymId/meal-plans/mine` (Stage 5's 31g).
 import { z } from "zod";
-import { gymMealPlanDaySchema } from "./gymMealPlans.js";
+import { gymMealPlanDaySchema, gymMealPlanMealSchema } from "./gymMealPlans.js";
 import { memberListSelectionSchema } from "./memberList.js";
-import { FOOD_ALLERGY_CAUTION, lowestKcalSchema } from "./nutrition.js";
+import { DIET_LABEL_CAUTION, FOOD_ALLERGY_CAUTION, lowestKcalSchema } from "./nutrition.js";
 
 const idSchema = z.string().uuid().toLowerCase();
 
@@ -134,7 +134,13 @@ export const myGymMealPlansResponseSchema = z.object({
     /** How the member reaches the gym, as the inbox gives it: null where it added none. */
     contact: z.object({ phone: z.string().nullable(), email: z.string().nullable() }).strict(),
     plan: memberGymMealPlanSchema.extend({
-      days: z.array(gymMealPlanDaySchema.extend({ under: lowestKcalSchema.nullable() }).strict()).length(7),
+      days: z.array(gymMealPlanDaySchema.extend({
+        /** Each meal as the gym wrote it, with the foods this member's diet doesn't eat, to say so only. */
+        meals: z.array(gymMealPlanMealSchema.extend({ outsideDiet: z.array(z.string()) }).strict()),
+        under: lowestKcalSchema.nullable(),
+      }).strict()).length(7),
+      /** For a vegetarian or vegan member, as on their own plan. */
+      labelCaution: z.literal(DIET_LABEL_CAUTION).nullable(),
     }).strict().nullable(),
   }).strict()),
 }).strict();

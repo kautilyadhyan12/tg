@@ -31,6 +31,26 @@ export function useGymPlans(fresh = 0) {
   return useRead(MY_GYM_MEAL_PLANS_PATH, myGymMealPlansResponseSchema, fresh);
 }
 
+/** The gym the choice names, from the gyms read. That read and the plan's are two requests, so one can
+ *  be newer than the other and miss the gym: it is read again once, and still missing, the choice is drawn
+ *  as the server starts one without that gym ("missing"). */
+export function useNamedGym(gyms: ReturnType<typeof useGymPlans>, gymId: string | null): GymOfMine | "loading" | "failed" | "missing" | null {
+  const { read, again, begun, shownFrom } = gyms;
+  const [tried, setTried] = useState<{ gymId: string; after: number } | null>(null);
+  const found = gymId === null || read.kind !== "ok" ? undefined : read.data.gyms.find((g) => g.gymId === gymId);
+  const absent = gymId !== null && read.kind === "ok" && found === undefined;
+  useEffect(() => {
+    if (!absent || tried?.gymId === gymId) return;
+    setTried({ gymId, after: begun() });
+    again();
+  }, [absent, gymId, tried, begun, again]);
+  if (gymId === null) return null;
+  if (read.kind === "loading") return "loading";
+  if (read.kind === "failed") return "failed";
+  if (found !== undefined) return found;
+  return tried?.gymId === gymId && shownFrom > tried.after ? "missing" : "loading";
+}
+
 /** The gym's name and its "hasn't given you a meal plan" line, with Contact the gym under it. */
 export function NoGymPlan({ gym }: { gym: GymOfMine }) {
   const [open, setOpen] = useState(false);
@@ -174,6 +194,7 @@ export function GymPlanBox({ gym, retry, choices, foodsToday, todayFailed, retry
         ) : (
           <>
             <PlanMealCard meal={next} eyebrow={nextMealWords(next)} />
+            <NotInDiet foods={next.outsideDiet} />
             <UnderLine under={day?.under} />
             <View style={styles.actions}>
               <Button label="Log meal" compact disabled={held} say={`Log ${ideaName(next)}`} onPress={() => { void log(next); }} />
@@ -181,7 +202,7 @@ export function GymPlanBox({ gym, retry, choices, foodsToday, todayFailed, retry
             </View>
           </>
         )}
-        <AllergyFoot lines={[plan.caution]} />
+        <AllergyFoot lines={[plan.caution, plan.labelCaution]} />
       </>
     );
   }
@@ -275,6 +296,12 @@ function GymWeek({ open, gymName, plan, today, foodsToday, held, said, trouble, 
 }
 
 /** The day's one line where it holds less than the person may eat. */
+/** The foods of a meal the person's diet doesn't eat: said, never taken out of the gym's plan. */
+export function NotInDiet({ foods }: { foods: readonly string[] }) {
+  if (foods.length === 0) return null;
+  return <Notice>Not in your diet: {foods.join(", ")}.</Notice>;
+}
+
 export function UnderLine({ under }: { under: LowestKcal | null | undefined }) {
   const words = underLine(under ?? null);
   if (words === null) return null;

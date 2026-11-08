@@ -7,7 +7,7 @@ import {
   gymMealPlanForEntryResponseSchema, gymMealPlanGivePreviewSchema, gymMealPlansResponseSchema, gymMealPlanGivenSchema, gymMealPlanGroupsResponseSchema, memberGymMealPlanResponseSchema,
   type GymMealPlanForEntryResponse, type GymMealPlanGivePreview, type GymMealPlanGiven, type GymMealPlanGivenToSelected,
   type GymMealPlanGroup, type GymMealPlanGroupsResponse, type GymMealPlansResponse, type HeldMembership, type MemberGymMealPlanResponse,
-  myGymMealPlansResponseSchema, type LowestKcal, type MemberGymMealPlan, type MyGymMealPlansResponse,
+  myGymMealPlansResponseSchema, type LowestKcal, type MealItem, type MemberGymMealPlan, type MyGymMealPlan, type MyGymMealPlansResponse,
 } from "@app/shared";
 import { dayUnder } from "./targets.js";
 import type { Sql } from "postgres";
@@ -338,7 +338,15 @@ export async function gymPlansOf(deps: GivingDeps, userId: string): Promise<{ gy
 }
 
 /** The phone's read: every gym and its plan, each day with the least this person may eat where it holds less. */
-export async function myGymMealPlans(deps: GivingDeps, userId: string, lowest: LowestKcal): Promise<MyGymMealPlansResponse> {
+/** What the phone's reply needs of the member: the least they may eat, the foods their diet doesn't
+ *  eat, and the label line their diet gets. */
+export interface GymPlanReader {
+  lowest: LowestKcal;
+  outsideDiet: (items: readonly MealItem[]) => string[];
+  labelCaution: MyGymMealPlan["labelCaution"];
+}
+
+export async function myGymMealPlans(deps: GivingDeps, userId: string, reader: GymPlanReader): Promise<MyGymMealPlansResponse> {
   const got = await gymPlansOf(deps, userId);
   return myGymMealPlansResponseSchema.parse({
     gyms: got.map(({ gym, plan }) => ({
@@ -348,7 +356,12 @@ export async function myGymMealPlans(deps: GivingDeps, userId: string, lowest: L
       contact: { phone: gym.contactPhone, email: gym.contactEmail },
       plan: plan === null ? null : {
         ...plan,
-        days: plan.days.map((d) => ({ ...d, under: dayUnder(d.planned.kcal, d.meals.length, lowest) })),
+        days: plan.days.map((d) => ({
+          ...d,
+          meals: d.meals.map((m) => ({ ...m, outsideDiet: reader.outsideDiet(m.items) })),
+          under: dayUnder(d.planned.kcal, d.meals.length, reader.lowest),
+        })),
+        labelCaution: reader.labelCaution,
       },
     })),
   });

@@ -17,11 +17,12 @@ export function underLine(under: LowestKcal | null): string | null {
   if (under === null) return null;
   return under.why === "floor"
     ? `This day is under ${count(under.kcal)} kcal, the least we plan for anyone.`
-    : `This day is under ${count(under.kcal)} kcal, what keeps your weight. With your health answers, eat at least that.`;
+    : `This day is under ${count(under.kcal)} kcal, what keeps your weight. Eat at least that.`;
 }
 
-/** A gym's meal as the plan's screens draw a meal: it is never checked against the person's diet. */
-export const gymMeal = (meal: MyGymMealPlan["days"][number]["meals"][number]): DietPlanMeal => ({ ...meal, outsideDiet: [] });
+/** A gym's meal as the plan's screens draw a meal: as the gym wrote it, with the foods the person's diet
+ *  doesn't eat named, to say so only. */
+export const gymMeal = (meal: MyGymMealPlan["days"][number]["meals"][number]): DietPlanMeal => ({ ...meal });
 
 /** The email to the gym, already about the meal plan. */
 export const mealPlanEmail = (href: string): string => (href.startsWith("mailto:") ? `${href}?subject=${encodeURIComponent("Meal plan")}` : href);

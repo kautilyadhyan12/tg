@@ -11,7 +11,7 @@ import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
 import {
-  MY_GYM_MEAL_PLANS_PATH, dietPlanResponseSchema, gymMealPlanGivenToSelectedResponseSchema, gymMealPlanResponseSchema, myGymMealPlansResponseSchema,
+  DIET_LABEL_CAUTION, MY_GYM_MEAL_PLANS_PATH, dietPlanResponseSchema, nutritionTargetsResponseSchema, gymMealPlanGivenToSelectedResponseSchema, gymMealPlanResponseSchema, myGymMealPlansResponseSchema,
   type DietPlanResponse, type MyGymMealPlansResponse,
 } from "@app/shared";
 import { buildApp } from "../src/app.js";
@@ -231,6 +231,11 @@ d("the gym's meal plan on the phone (real Postgres)", () => {
       expect((await pick(ann, body)).statusCode, JSON.stringify(body)).toBe(400);
     }
 
+    // His own gym's id in capital letters is the same gym.
+    const upper = dietPlanResponseSchema.parse(ok(await pick(bob, { choice: "gym", gymId: iron.toUpperCase() })));
+    expect([upper.choice, upper.choiceGymId]).toEqual(["gym", iron]);
+    await pick(bob, { choice: "suggested" });
+
     // Bob picks his gym, which gave him nothing: kept; the phone says it hasn't given one.
     const bobPicked = dietPlanResponseSchema.parse(ok(await pick(bob, { choice: "gym", gymId: iron })));
     expect([bobPicked.choice, bobPicked.choiceGymId]).toEqual(["gym", iron]);
@@ -275,6 +280,9 @@ d("the gym's meal plan on the phone (real Postgres)", () => {
     const keeps = teenDays[0]?.under;
     expect(keeps?.why).toBe("keeps_weight");
     expect(keeps?.kcal ?? 0).toBeGreaterThan(monday);
+    // It is the person's own daily burn, as their targets give it.
+    const teenTargets = nutritionTargetsResponseSchema.parse(ok(await get("/v1/nutrition/targets", teen.cookies)));
+    expect(keeps?.kcal).toBe(teenTargets.targets?.tdee);
     // The adult may eat that much: no line on Monday.
     expect(adultDays[0]?.under).toBeNull();
     // Tuesday is under the app's floor for both; a day with no meals has no line.
@@ -282,13 +290,50 @@ d("the gym's meal plan on the phone (real Postgres)", () => {
     expect(adultDays[1]?.under).toEqual({ kcal: 1200, why: "floor" });
     expect(teenDays[1]?.under?.why).toBe("keeps_weight");
     expect(adultDays[2]?.under).toBeNull();
-    // Never changed: the plan reads the same to both, meal for meal.
-    expect(teenDays.map((d) => d.meals)).toEqual(adultDays.map((d) => d.meals));
+    // Never changed: each member reads the plan as the gym wrote it, meal for meal.
+    const written = gymMealPlanResponseSchema.parse(ok(await get(`/v1/orgs/${gymId}/meal-plans/${plan}`, owner.cookies)));
+    const asWritten = written.days.map((d) => d.meals);
+    const bare = (days: typeof teenDays) => days.map((d) => d.meals.map((m) => ({ mealType: m.mealType, items: m.items, totals: m.totals })));
+    expect(bare(teenDays)).toEqual(asWritten);
+    expect(bare(adultDays)).toEqual(asWritten);
+
+    // A vegetarian member: the chicken is named as not in her diet, with the label line; the meal is as written.
+    const veg = await makeUser("veg", { ...ADULT, diet: "vegetarian" });
+    await memberOf(gymId, veg, "Vera Green");
+    ok(await put(`/v1/orgs/${gymId}/meal-plans/${plan}/days/3`, { changeId: randomUUID(), meals: [{ mealType: "dinner", items: [{ canonical: "chicken_breast_cooked", grams: 150 }] }] }, owner.cookies));
+    const vegPlan = (await gymPlans(veg)).gyms[0]?.plan;
+    expect(vegPlan?.labelCaution).toBe(DIET_LABEL_CAUTION);
+    expect(vegPlan?.days[2]?.meals[0]?.outsideDiet).toHaveLength(1);
+    expect(vegPlan?.days[2]?.meals[0]?.items[0]?.canonical).toBe("chicken_breast_cooked");
+    expect(vegPlan?.days[0]?.meals.every((m) => m.outsideDiet.length === 0)).toBe(true);
+    const adultPlan = (await gymPlans(adult)).gyms[0]?.plan;
+    expect(adultPlan?.labelCaution).toBeNull();
+    expect(adultPlan?.days[2]?.meals[0]?.outsideDiet).toEqual([]);
 
     // Their own plan carries the same line.
     ok(await put("/v1/nutrition/diet-plan/days/4", { changeId: randomUUID(), meals: SMALL_DAY }, adult.cookies));
     const own = await dietPlan(adult);
     expect(own.days[3]?.under).toEqual({ kcal: 1200, why: "floor" });
     expect(own.days[0]?.under).toBeNull();
+  });
+
+  it("a member of two gyms that both gave a plan starts on the one given last, and sees both", { timeout: T }, async () => {
+    const ownerA = await makeUser("two-a");
+    const first = await makeGym(ownerA, "Choice First Gym");
+    const ownerB = await makeUser("two-b");
+    const second = await makeGym(ownerB, "Choice Second Gym");
+    const pat = await makeUser("pat");
+    await memberOf(first, pat, "Pat Both");
+    await memberOf(second, pat, "Pat Both");
+    await giveEverybody(first, await writePlan(first, ownerA, "First week"), ownerA);
+    await giveEverybody(second, await writePlan(second, ownerB, "Second week"), ownerB);
+    const both = (await gymPlans(pat)).gyms;
+    expect(both.map((g) => [g.gymId, g.plan?.name ?? null]).sort()).toEqual([[first, "First week"], [second, "Second week"]].sort());
+    const start = await dietPlan(pat);
+    expect([start.choice, start.choiceGymId]).toEqual(["gym", second]);
+    // The first gym gives again, later: it starts there now.
+    await giveEverybody(first, await writePlan(first, ownerA, "First again"), ownerA);
+    const after = await dietPlan(pat);
+    expect([after.choice, after.choiceGymId]).toEqual(["gym", first]);
   });
 });

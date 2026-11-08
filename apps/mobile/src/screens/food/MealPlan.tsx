@@ -19,7 +19,7 @@ import { mealTypeName, startOfDay } from "./day";
 import { dayRows, useDayMeals } from "./dayRows";
 import { ideaName } from "./ideaRules";
 import { FoodChoiceRow, shownOf, useFoodChoice } from "./FoodChoice";
-import { GymFrom, GymPlanBox, NoGymPlan, UnderLine, useGymPlans, type WeekAsk } from "./GymMealPlan";
+import { GymFrom, GymPlanBox, NoGymPlan, UnderLine, useGymPlans, useNamedGym, type WeekAsk } from "./GymMealPlan";
 import { AllergyFoot, FromRow, nextMealWords, PlanMealCard } from "./MealCard";
 import { gymMeal, type GymOfMine } from "./gymPlanRules";
 import { MealIdeas, NO_PLAN_YET, type PlannedNow } from "./MealIdeas";
@@ -111,6 +111,7 @@ export function WhatToEatNext({ foodsToday, fresh, onAnswered, todayFailed, retr
     setAnswered({ data, after: begun() });
   }, [begun]);
   const choice = useFoodChoice(plan === null ? null : shownOf(plan), { begun, shownFrom, again }, onChoice);
+  const named = useNamedGym(gyms, choice.shown?.choice === "gym" ? choice.shown.gymId : null);
   const gymList = gyms.read.kind === "ok" ? gyms.read.data.gyms : [];
   // The plan changed under "Remove this meal?": the question goes, and the week says why.
   const removingFrom = removing?.version ?? null;
@@ -310,6 +311,8 @@ export function WhatToEatNext({ foodsToday, fresh, onAnswered, todayFailed, retr
     return true;
   };
   const planned = hasMeals(plan);
+  // The gym named is in neither read: drawn as the server starts a choice without it.
+  const gymGone = named === "missing";
   const choices = choice.shown === null ? null : <FoodChoiceRow shown={choice.shown} pick={choice.pick} trouble={choice.trouble} gyms={gymList} />;
   const sheets = (
     <>
@@ -439,12 +442,11 @@ export function WhatToEatNext({ foodsToday, fresh, onAnswered, todayFailed, retr
     </>
   );
 
-  if (choice.shown?.choice === "gym") {
-    const gymId = choice.shown.gymId;
+  if (choice.shown?.choice === "gym" && !gymGone) {
     return (
       <>
         <GymPlanBox
-          gym={gyms.read.kind === "failed" ? "failed" : gymList.find((g) => g.gymId === gymId) ?? null}
+          gym={named === "failed" ? "failed" : named === "loading" || named === null ? null : named}
           retry={gyms.again}
           choices={choices}
           foodsToday={foodsToday}
@@ -478,7 +480,7 @@ export function WhatToEatNext({ foodsToday, fresh, onAnswered, todayFailed, retr
     );
   }
 
-  if (choice.shown?.choice === "suggested") {
+  if (choice.shown?.choice === "suggested" || (gymGone && !planned)) {
     // Suggested: the meal ideas, which also ask for any answer still missing; with no plan, the app's plan or one's own.
     return (
       <>
@@ -579,20 +581,20 @@ export function Recommended({ onMore, onPlan, onLog }: { onMore: () => void; onP
   const { read, again, begun, shownFrom } = useRead(PLAN_READ, dietPlanResponseSchema);
   const gyms = useGymPlans();
   const choice = useFoodChoice(read.kind === "ok" ? shownOf(read.data) : null, { begun, shownFrom, again });
+  const named = useNamedGym(gyms, choice.shown?.choice === "gym" ? choice.shown.gymId : null);
   if (read.kind === "loading") return <MealIdeas onMore={onMore} onLog={onLog} planned="loading" />;
   // Never the ideas as if there were no plan: Food says the same.
   if (read.kind === "failed") return <MealIdeas onMore={onMore} onLog={onLog} planned={{ failed: "Your meal plan couldn’t load.", retry: again }} />;
   const shown = choice.shown ?? shownOf(read.data);
   const gymList = gyms.read.kind === "ok" ? gyms.read.data.gyms : [];
   const choices = <FoodChoiceRow shown={shown} pick={choice.pick} trouble={choice.trouble} gyms={gymList} />;
-  if (shown.choice === "gym") {
-    if (gyms.read.kind === "loading") return <MealIdeas onMore={onMore} onLog={onLog} choices={choices} planned="loading" />;
-    if (gyms.read.kind === "failed") return <MealIdeas onMore={onMore} onLog={onLog} choices={choices} planned={{ failed: "Your gym’s meal plan couldn’t load.", retry: gyms.again }} />;
-    const gym = gymList.find((g) => g.gymId === shown.gymId);
-    if (gym === undefined) return <MealIdeas onMore={onMore} onLog={onLog} choices={choices} planned="loading" />;
-    return <RecommendedFromGym gym={gym} onMore={() => { onPlan(gym.gymId); }} onIdeas={onMore} onLog={onLog} choices={choices} />;
+  if (shown.choice === "gym" && named !== "missing") {
+    if (named === "loading" || named === null) return <MealIdeas onMore={onMore} onLog={onLog} choices={choices} planned="loading" />;
+    if (named === "failed") return <MealIdeas onMore={onMore} onLog={onLog} choices={choices} planned={{ failed: "Your gym’s meal plan couldn’t load.", retry: gyms.again }} />;
+    return <RecommendedFromGym gym={named} onMore={() => { onPlan(named.gymId); }} onIdeas={onMore} onLog={onLog} choices={choices} />;
   }
-  if (shown.choice === "suggested") return <MealIdeas onMore={onMore} onLog={onLog} choices={choices} />;
+  // The gym named is in neither read: drawn as the server starts a choice without it.
+  if (shown.choice === "suggested" || (shown.choice === "gym" && !hasMeals(read.data))) return <MealIdeas onMore={onMore} onLog={onLog} choices={choices} />;
   if (hasMeals(read.data)) return <RecommendedFromPlan plan={read.data} onMore={ownPlan} onIdeas={onMore} onLog={onLog} choices={choices} />;
   return <MealIdeas onMore={onMore} onLog={onLog} choices={choices} planned={{ build: ownPlan }} />;
 }
@@ -602,7 +604,7 @@ function RecommendedFromGym({ gym, onMore, onIdeas, onLog, choices }: { gym: Gym
   const plan = gym.plan;
   if (plan === null) return <MealIdeas onMore={onIdeas} onLog={onLog} choices={choices} planned={{ words: <NoGymPlan gym={gym} /> }} />;
   const days = plan.days.map((d) => ({ meals: d.meals.map(gymMeal), under: d.under }));
-  return <RecommendedFromPlan plan={{ days, caution: plan.caution, labelCaution: null }} from={<GymFrom gym={gym} plan={plan} />} onMore={onMore} onIdeas={onIdeas} onLog={onLog} choices={choices} />;
+  return <RecommendedFromPlan plan={{ days, caution: plan.caution, labelCaution: plan.labelCaution }} from={<GymFrom gym={gym} plan={plan} />} onMore={onMore} onIdeas={onIdeas} onLog={onLog} choices={choices} />;
 }
 
 type PlanToday = { days: readonly { meals: readonly DietPlanMeal[]; under: DietPlanDayReply["under"] }[]; caution: string; labelCaution: string | null };

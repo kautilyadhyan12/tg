@@ -132,8 +132,13 @@ export async function putFoodChoice(deps: Pick<NutritionDeps, "sql">, userId: st
 
 /** The phone's gyms and their plans, each day against the least this person may eat (31g). */
 export async function getMyGymMealPlans(deps: Pick<NutritionDeps, "sql">, userId: string): Promise<MyGymMealPlansResponse> {
-  const read = await getUserPlanAndCutRules(deps.sql, userId, null);
-  return await myGymMealPlans(deps, userId, lowestKcalOf(read.plan.plan, read.noCutReasons));
+  const [read, answers] = await Promise.all([getUserPlanAndCutRules(deps.sql, userId, null), getUserFoodAnswers(deps.sql, userId)]);
+  const { diet } = answers;
+  return await myGymMealPlans(deps, userId, {
+    lowest: lowestKcalOf(read.plan.plan, read.noCutReasons),
+    outsideDiet: (items) => outsideDiet(items, diet),
+    labelCaution: diet === null || diet === "non_vegetarian" ? null : DIET_LABEL_CAUTION,
+  });
 }
 
 /** Each list of chosen foods priced, in one pass, as a logged meal's are. */

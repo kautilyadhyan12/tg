@@ -823,9 +823,9 @@ describe("the gym's meal plan (31g)", () => {
   const GYMS = "/v1/nutrition/gym-meal-plans";
   const IRON = "6f1c2d3e-4a5b-4c6d-8e7f-001122334455";
   const OAK = "6f1c2d3e-4a5b-4c6d-8e7f-001122334466";
-  const gymMeal = (meal: Meal) => ({ mealType: meal.mealType, items: meal.items, totals: meal.totals });
+  const gymMeal = (meal: Meal, outsideDiet: string[] = []) => ({ mealType: meal.mealType, items: meal.items, totals: meal.totals, outsideDiet });
   const under = { kcal: 1200, why: "floor" as const };
-  function gymPlan(todayMeals: Meal[], todayUnder: typeof under | null = null) {
+  function gymPlan(todayMeals: Meal[], todayUnder: typeof under | null = null, notInDiet: string[] = [], labelCaution: string | null = null) {
     return {
       id: "6f1c2d3e-4a5b-4c6d-8e7f-0011223344aa",
       name: "Lean week",
@@ -833,7 +833,7 @@ describe("the gym's meal plan (31g)", () => {
       updatedAt: "2026-11-01T10:00:00.000Z",
       givenAt: "2026-11-01T10:00:00.000Z",
       days: [1, 2, 3, 4, 5, 6, 7].map((day) => {
-        const meals = day === TODAY ? todayMeals.map(gymMeal) : [];
+        const meals = day === TODAY ? todayMeals.map((m) => gymMeal(m, notInDiet)) : [];
         return {
           day,
           meals,
@@ -843,6 +843,7 @@ describe("the gym's meal plan (31g)", () => {
         };
       }),
       caution: FOOD_ALLERGY_CAUTION,
+      labelCaution,
     };
   }
   const gym = (gymId: string, name: string, plan: ReturnType<typeof gymPlan> | null) => ({
@@ -949,8 +950,37 @@ describe("the gym's meal plan (31g)", () => {
     expect(screen.queryByText("Your meal plan")).toBeNull();
   });
 
+  it("for a vegetarian, a gym meal with meat says so, with the label line, and the meal is shown as the gym wrote it", async () => {
+    const world = member([gym(IRON, "Iron House", gymPlan([OATS], null, ["Oatmeal"], DIET_LABEL_CAUTION))]);
+    const box = await open(world);
+    expect(await box.findByText("Not in your diet: Oatmeal.")).toBeTruthy();
+    expect(box.getByText(DIET_LABEL_CAUTION)).toBeTruthy();
+    expect(box.getByRole("button", { name: "Log Oatmeal" })).toBeTruthy();
+    await fireEvent.press(screen.getByRole("tab", { name: "Dashboard" }));
+    const card = within(await screen.findByTestId("recommended-box"));
+    expect(await card.findByText("Not in your diet: Oatmeal.")).toBeTruthy();
+    expect(card.getByText(DIET_LABEL_CAUTION)).toBeTruthy();
+  });
+
+  it("a gym named by the choice that the gyms read doesn't hold is read again once, then the box shows what the server would start", async () => {
+    let gymReads = 0;
+    const world = serverOf(() => ok(week([], { choice: "gym", choiceGymId: OAK })), {
+      "/v1/nutrition/suggestions": () => ok(WITH_IDEA),
+      [GYMS]: () => {
+        gymReads += 1;
+        return ok({ gyms: [gym(IRON, "Iron House", gymPlan([OATS]))] });
+      },
+    });
+    const box = await open(world);
+    // Not stuck on loading: the app's ideas, as the server starts a choice with no meals of one's own.
+    expect(await box.findByRole("button", { name: "Log Paneer + Rice" })).toBeTruthy();
+    expect(gymReads).toBeGreaterThanOrEqual(2);
+    expect(box.queryByText("Lean week")).toBeNull();
+  });
+
   it("the person's own plan's day under what they may eat says so too, never changed", async () => {
-    const LINE = "This day is under 2,150 kcal, what keeps your weight. With your health answers, eat at least that.";
+    // One line true for each reason a person holds no cut: under 18, pregnancy, a health yes.
+    const LINE = "This day is under 2,150 kcal, what keeps your weight. Eat at least that.";
     const own = week([OATS], { choice: "mine" });
     const days = own.days.map((d) => (d.day === TODAY ? { ...d, under: { kcal: 2150, why: "keeps_weight" as const } } : d));
     const world = serverOf(() => ok({ ...own, days }), { "/v1/nutrition/suggestions": () => ok(WITH_IDEA) });
