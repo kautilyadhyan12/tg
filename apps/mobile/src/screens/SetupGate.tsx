@@ -11,8 +11,9 @@ import { LookContext, SetupComingContext } from "./setupFirst";
 // after "Before you start" and any invitation, a person who has not finished setup meets it, with
 // Sign out its only way out. A finish the server confirmed is kept with the sign-in, and the
 // server is not asked again. Until then it is asked on every opening; with no internet, or no
-// answer in a few seconds, the tabs open, as the other gates do, and it is asked again each time
-// the app comes back to the front. Unlike the invitations, an answer that says "not finished"
+// answer in a few seconds, the tabs open guarded (14d): what starts a run, a meal or a plan opens
+// setup, which lets through somebody who finished elsewhere. It is asked again each time the app
+// comes back to the front. Unlike the invitations, an answer that says "not finished"
 // puts setup in front of tabs already open, a late first answer as well: nobody uses the app
 // without setup. An answer that says "finished" (in the browser, say) lets them through.
 //
@@ -23,8 +24,10 @@ import { LookContext, SetupComingContext } from "./setupFirst";
 
 export const LOOK_MS = 8_000;
 
-/** "look": the tabs, look only; "over": setup over the tabs after the look; "setup": setup alone. */
-type Phase = "checking" | "look" | "over" | "setup" | "through";
+/** "look": the tabs for a look, then setup; "guarded": the tabs while the server has not answered,
+ *  with no time running; "over": setup over the tabs; "setup": setup alone. In "look" and "guarded"
+ *  a run, a meal or a plan opens setup. */
+type Phase = "checking" | "look" | "guarded" | "over" | "setup" | "through";
 
 export function SetupGate({ children, lookMs = LOOK_MS }: { children: ReactNode; lookMs?: number }) {
   const { session } = useSession();
@@ -48,7 +51,7 @@ export function SetupGate({ children, lookMs = LOOK_MS }: { children: ReactNode;
       const answer = await session.signedIn({ method: "GET", path: "/v1/users/me" }, userProfileResponseSchema);
       if (!live()) return;
       if (answer.kind !== "ok") {
-        setPhase((now) => (now === "checking" ? "through" : now));
+        setPhase((now) => (now === "checking" ? "guarded" : now));
         return;
       }
       const done = answer.data.user.onboardingCompleted;
@@ -56,7 +59,7 @@ export function SetupGate({ children, lookMs = LOOK_MS }: { children: ReactNode;
       if (live()) setPhase((now) => (done ? "through" : notDone(now)));
     };
     const shown = setTimeout(() => {
-      if (run.live) setPhase((now) => (now === "checking" ? "through" : now));
+      if (run.live) setPhase((now) => (now === "checking" ? "guarded" : now));
     }, NOTE_CHECK_WAIT_MS);
     void ask();
     const front = AppState.addEventListener("change", (state) => {
@@ -70,7 +73,7 @@ export function SetupGate({ children, lookMs = LOOK_MS }: { children: ReactNode;
   }, [known, lookable, session]);
 
   const openSetup = useCallback(() => {
-    setPhase((now) => (now === "look" ? "over" : now));
+    setPhase((now) => (now === "look" || now === "guarded" ? "over" : now));
   }, []);
 
   // The look's time runs only while the app is in front.
@@ -111,8 +114,8 @@ export function SetupGate({ children, lookMs = LOOK_MS }: { children: ReactNode;
   // One shape for the look, setup over it and the way through, so the tabs are never drawn again.
   return (
     <>
-      <SetupComingContext.Provider value={phase === "look" || phase === "over"}>
-        <LookContext.Provider value={phase === "look" ? openSetup : null}>{children}</LookContext.Provider>
+      <SetupComingContext.Provider value={phase === "look" || phase === "guarded" || phase === "over"}>
+        <LookContext.Provider value={phase === "look" || phase === "guarded" ? openSetup : null}>{children}</LookContext.Provider>
       </SetupComingContext.Provider>
       {phase === "over" ? <Setup open mode="front" onClose={through} /> : null}
     </>
