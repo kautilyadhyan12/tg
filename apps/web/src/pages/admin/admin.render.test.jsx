@@ -182,6 +182,15 @@ describe("each person's days (14a-ii)", () => {
     fireEvent.focus(window);
     await waitFor(() => expect(rowTexts(table)).toHaveLength(3));
     expect(within(section).getByRole('button', { name: 'Earlier days' })).toBeTruthy();
+    // Earlier days again, then their phone sends from another zone: the first page ends on the same
+    // day, but the earlier days were cut in the old zone, so they start again too.
+    fireEvent.click(within(section).getByRole('button', { name: 'Earlier days' }));
+    await waitFor(() => expect(rowTexts(table)).toHaveLength(4));
+    vi.mocked(adminService.personDays).mockImplementation(async (_id, { before = null }) => (before === null ? { ...benDays, zone: 'UTC', next: dayBefore(1) } : earlierPage));
+    spy.mockReturnValue(Date.now() + 15000);
+    fireEvent.focus(window);
+    await waitFor(() => expect(rowTexts(table)).toHaveLength(3));
+    expect(within(section).getByRole('button', { name: 'Earlier days' })).toBeTruthy();
     spy.mockRestore();
   });
 

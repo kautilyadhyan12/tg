@@ -147,7 +147,7 @@ export async function sessionBegan(sql: Sql, userId: string, familyId: string): 
 }
 
 /** The door opened, or a wrong password at it: written down with when. */
-export async function auditDoor(sql: Sql, userId: string, action: "admin.door_opened" | "admin.door_wrong_password"): Promise<void> {
+export async function auditDoor(sql: Sql, userId: string, action: "admin.door_opened" | "admin.door_open_failed" | "admin.door_wrong_password"): Promise<void> {
   await sql`INSERT INTO audit_log (actor_user_id, action, target_type, target_id) VALUES (${userId}, ${action}, 'user', ${userId})`;
 }
 

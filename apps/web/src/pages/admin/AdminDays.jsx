@@ -69,22 +69,26 @@ export function PersonDays({ person, onShut, onClose }) {
   const load = useCallback(() => adminService.personDays(person.id, { zone }), [person.id, zone]);
   const first = useRead(load, onShut);
   // Earlier pages, added below the first, belong to where the first page ends. Read again, it ends a
-  // day later once their midnight has passed: the earlier pages start again from it, so no day falls
-  // between them; otherwise they stay open.
-  const [earlierState, setEarlier] = useState({ after: undefined, days: [], next: undefined, loading: false, error: null });
-  const earlier = earlierState.after === first.data?.next ? earlierState : { days: [], next: undefined, loading: false, error: null };
+  // day later once their midnight has passed, or in another zone once their phone sends from one: the
+  // earlier pages start again from it, so no day falls between them or is cut twice; otherwise they
+  // stay open.
+  const [earlierState, setEarlier] = useState({ after: undefined, zone: undefined, days: [], next: undefined, loading: false, error: null });
+  const same = earlierState.after === first.data?.next && earlierState.zone === first.data?.zone;
+  const earlier = same ? earlierState : { days: [], next: undefined, loading: false, error: null };
   const next = earlier.next === undefined ? (first.data?.next ?? null) : earlier.next;
   const showEarlier = async () => {
     if (next === null) return;
     const after = first.data?.next;
-    setEarlier({ ...earlier, after, loading: true, error: null });
+    const cut = first.data?.zone;
+    const mine = (e) => e.after === after && e.zone === cut;
+    setEarlier({ ...earlier, after, zone: cut, loading: true, error: null });
     try {
       // Cut in the first page's zone, so a day is never shown twice when their phone moves zone.
-      const page = await adminService.personDays(person.id, { zone, before: next, dayZone: first.data?.zone });
-      setEarlier((e) => (e.after === after ? { after, days: [...e.days, ...page.days], next: page.next, loading: false, error: null } : e));
+      const page = await adminService.personDays(person.id, { zone, before: next, dayZone: cut });
+      setEarlier((e) => (mine(e) ? { after, zone: cut, days: [...e.days, ...page.days], next: page.next, loading: false, error: null } : e));
     } catch (err) {
       if (isDoorShut(err)) onShut();
-      else setEarlier((e) => (e.after === after ? { ...e, loading: false, error: errorText(err, "We couldn't load the earlier days.") } : e));
+      else setEarlier((e) => (mine(e) ? { ...e, loading: false, error: errorText(err, "We couldn't load the earlier days.") } : e));
     }
   };
   const name = person.name || person.email || 'This person';

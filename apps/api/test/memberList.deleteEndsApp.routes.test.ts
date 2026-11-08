@@ -289,6 +289,7 @@ d("Delete permanently takes a past member out of the app too (real Postgres)", (
       const { entryId, user } = await pastInApp(gym, "Ravi Shah", "rshah");
       // What the app remembers of his gym perks, and his invitation, before.
       await redis.setex(`ent:${user.userId}`, 60, "{}");
+      const markBefore = await redis.get(`ent-mark:${user.userId}`);
       const invite = async () =>
         (await sql<{ state: string }[]>`SELECT state FROM gym_invites WHERE gym_id = ${gym.id} AND email_hmac = ${emailHmac(settings.hmacKey, addr("rshah"))}`)[0]?.state;
       expect(await invite()).not.toBe("withdrawn");
@@ -300,6 +301,10 @@ d("Delete permanently takes a past member out of the app too (real Postgres)", (
       expect(await removedAudits(gym, user)).toBe(1);
       // His gym perks are read again at once, and signing in with the address lets nobody back in.
       expect(await redis.get(`ent:${user.userId}`)).toBeNull();
+      // A new mark: a plan check read before the deletion keeps its answer where no later check looks.
+      const markAfter = await redis.get(`ent-mark:${user.userId}`);
+      expect(markAfter).not.toBeNull();
+      expect(markAfter).not.toBe(markBefore);
       expect(await invite()).toBe("withdrawn");
       // Their app's closed membership names no record to give it back with: the record is gone.
       const [closed] = await sql<{ removed_entry_id: string | null }[]>`

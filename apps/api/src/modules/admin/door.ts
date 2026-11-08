@@ -77,7 +77,11 @@ async function open(deps: DoorDeps, reply: FastifyReply, who: Who): Promise<Admi
   // Written down first: the door never opens without its row.
   await repo.auditDoor(deps.sql, who.userId, "admin.door_opened");
   const kept = await deps.redis.setex(doorKey(who.familyId), DOOR_SECONDS, JSON.stringify({ userId: who.userId, tokenHash: sha256Hex(token), until: until.toISOString() }));
-  if (!kept) throw new DoorError(503, "admin_unavailable", UNAVAILABLE);
+  if (!kept) {
+    // The row above says it opened: this one says it did not after all.
+    await repo.auditDoor(deps.sql, who.userId, "admin.door_open_failed");
+    throw new DoorError(503, "admin_unavailable", UNAVAILABLE);
+  }
   // SameSite stays the app's own (None in production): the console and the api are on different
   // sites there (tokens.ts), so a Strict cookie would never reach the api.
   reply.setCookie(DOOR_COOKIE, token, cookieOptions(deps.config, DOOR_SECONDS, DOOR_PATH));

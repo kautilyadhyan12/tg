@@ -810,6 +810,19 @@ d("the admin page (real Postgres)", () => {
     } finally {
       await cut.close();
     }
+    // Redis counts the try but will not keep the key: the door stays shut and is written down as not opened.
+    const refusing = { ...createMemoryRedis(), setex: () => Promise.resolve(false) };
+    const stuck = await buildApp(loadConfig({ ...baseEnv, ADMIN_USER_ID: admin.userId }), { redis: refusing });
+    try {
+      const rows = async (action: string) => (await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM audit_log WHERE action = ${action} AND actor_user_id = ${admin.userId}`)[0]?.n ?? 0;
+      const [opened, failed] = [await rows("admin.door_opened"), await rows("admin.door_open_failed")];
+      const res = await call(stuck, { method: "POST", url: "/v1/admin/door/open", access: admin.access, body: { password: ADMIN_PASSWORD } });
+      expect(res.statusCode, res.body).toBe(503);
+      expect(res.cookies.find((c) => c.name === "adminDoor")).toBeUndefined();
+      expect([await rows("admin.door_opened"), await rows("admin.door_open_failed")]).toEqual([opened + 1, failed + 1]);
+    } finally {
+      await stuck.close();
+    }
   });
 
   it("year 0000 is not a day (security L1): refused, never a fault", { timeout: 30_000 }, async () => {
