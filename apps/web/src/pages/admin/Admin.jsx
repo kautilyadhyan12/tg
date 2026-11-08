@@ -208,7 +208,7 @@ function People({ onShut }) {
               </div>
             ) : null}
 
-            <div className="c-card" style={{ overflowX: 'auto' }}>
+            <div className="c-card" style={{ overflowX: 'auto', position: 'relative' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr className="c-th" style={{ textAlign: 'left' }}>

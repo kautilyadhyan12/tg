@@ -169,7 +169,7 @@ export function ByDay({ onShut }) {
           By day
         </h2>
         <p className="c-hint" style={{ margin: '4px 0 0' }}>
-          Everyone who used the app on one day, most time in the app first. Each day is the person&apos;s own, in their phone&apos;s time zone.
+          Everyone who used the app on one day, most time in the app first. Each day is the person&apos;s own, in their phone&apos;s time zone, or in yours until their phone has sent one.
         </p>
       </div>
       <div className="c-field" style={{ maxWidth: 260 }}>

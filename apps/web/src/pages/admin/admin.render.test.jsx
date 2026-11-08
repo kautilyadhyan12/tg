@@ -86,7 +86,7 @@ describe("each person's days (14a-ii)", () => {
     fireEvent.click(await screen.findByRole('button', { name: "Ben's days" }));
     const section = await screen.findByRole('region', { name: "Ben's days" });
     expect(adminService.personDays).toHaveBeenCalledWith('b1', { zone: myZone() });
-    expect(within(section).getByText("Each day is their own, in their phone's time zone (Asia/Kolkata).")).toBeTruthy();
+    expect(within(section).getByText("Each day is their own, in their phone's time zone (India Standard Time).")).toBeTruthy();
     const table = await within(section).findByRole('table');
     const rows = rowTexts(table);
     expect(rows.map((r) => r.slice(1))).toEqual([
@@ -109,7 +109,7 @@ describe("each person's days (14a-ii)", () => {
     vi.mocked(adminService.personDays).mockResolvedValue({ ...benDays, zone: 'Europe/London', zoneFromPhone: false, next: null });
     draw();
     fireEvent.click(await screen.findByRole('button', { name: "Ben's days" }));
-    expect(await screen.findByText("Their phone hasn't sent its time zone yet, so these days are in yours (Europe/London).")).toBeTruthy();
+    expect(await screen.findByText(/^Their phone hasn't sent its time zone yet, so these days are in yours \((Greenwich Mean Time|British Summer Time)\)\.$/)).toBeTruthy();
   });
 
   it('By day: the day picked, its totals in one line, everyone who used the app, most time first; Show more', async () => {

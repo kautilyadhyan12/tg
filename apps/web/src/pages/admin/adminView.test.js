@@ -11,6 +11,7 @@ import {
   openUntilWords,
   planWords,
   todayIn,
+  zoneName,
 } from './adminView';
 
 const person = (name, over = {}) => ({
@@ -103,5 +104,12 @@ describe("each person's days, in words (14a-ii)", () => {
     const at = new Date('2026-11-07T20:00:00Z');
     expect(todayIn('Asia/Kolkata', at)).toBe('2026-11-08');
     expect(todayIn('America/Los_Angeles', at)).toBe('2026-11-07');
+  });
+  it("a time zone in plain words, and its own name for one the browser cannot name", () => {
+    const winter = new Date('2026-11-08T12:00:00Z');
+    expect(zoneName('Asia/Kolkata', winter)).toBe('India Standard Time');
+    expect(zoneName('Asia/Calcutta', winter)).toBe('India Standard Time');
+    expect(zoneName('Europe/London', winter)).toBe('Greenwich Mean Time');
+    expect(zoneName('Mars/Base', winter)).toBe('Mars/Base');
   });
 });

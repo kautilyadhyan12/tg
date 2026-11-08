@@ -130,11 +130,21 @@ export function dayWords(day, today) {
   return day.slice(0, 4) === today.slice(0, 4) ? words : `${words} ${day.slice(0, 4)}`;
 }
 
+/** A time zone in words: "India Standard Time", or its own name where the browser has none. */
+export function zoneName(zone, now = new Date()) {
+  try {
+    const part = new Intl.DateTimeFormat('en-GB', { timeZone: zone, timeZoneName: 'long' }).formatToParts(now).find((p) => p.type === 'timeZoneName');
+    return part?.value ?? zone;
+  } catch {
+    return zone;
+  }
+}
+
 /** Which clock a person's days are on. */
-export function zoneWords(days) {
+export function zoneWords(days, now = new Date()) {
   return days.zoneFromPhone
-    ? `Each day is their own, in their phone's time zone (${days.zone}).`
-    : `Their phone hasn't sent its time zone yet, so these days are in yours (${days.zone}).`;
+    ? `Each day is their own, in their phone's time zone (${zoneName(days.zone, now)}).`
+    : `Their phone hasn't sent its time zone yet, so these days are in yours (${zoneName(days.zone, now)}).`;
 }
 
 const many = (n, one, more) => `${String(n)} ${n === 1 ? one : more}`;
