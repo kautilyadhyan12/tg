@@ -28,7 +28,7 @@ function linesOf(doc) {
   return doc.sections.flatMap((s) => [
     s.heading,
     ...s.blocks.flatMap((b) =>
-      b.kind === 'p' ? [b.text] : b.kind === 'list' ? b.items : b.kind === 'links' ? b.items.map((i) => i.label) : b.rows.flat(),
+      b.kind === 'p' || b.kind === 'h3' || b.kind === 'strong' ? [b.text] : b.kind === 'list' ? b.items : b.kind === 'links' ? b.items.map((i) => i.label) : b.rows.flat(),
     ),
   ]);
 }
@@ -59,8 +59,8 @@ describe('who runs KWAZO, and the parts for each kind of person', () => {
   it('the Privacy Policy names its owner and says the address is still to come', () => {
     open(LEGAL_PATHS.privacy);
     const who = document.getElementById('who-we-are');
-    expect(who?.textContent).toContain(`KWAZO is run by ${LEGAL_OWNER}, a sole proprietor in India`);
-    expect(who?.textContent).toContain('Our email address is added here before KWAZO is published.');
+    expect(who?.textContent).toContain(`KWAZO is owned and operated by ${LEGAL_OWNER}, a sole proprietor based in India`);
+    expect(who?.textContent).toContain('Our contact email address will be included in this Policy before the official publication of KWAZO.');
   });
 
   it('each kind of person has a part, and the list at the top opens it', () => {
@@ -74,8 +74,8 @@ describe('who runs KWAZO, and the parts for each kind of person', () => {
   it('a member reads what their business can never see, the health answer among it', () => {
     open(LEGAL_PATHS.privacy);
     const members = document.getElementById('members');
-    expect(members?.textContent).toContain('Your answer to the health question');
-    expect(members?.textContent).toContain('Your running routes');
+    expect(members?.textContent).toContain('Your response to the health-related screening question.');
+    expect(members?.textContent).toContain('Your recorded running routes.');
   });
 });
 

@@ -9,6 +9,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   KEPT_AFTER_DELETION,
+  KWAZO_IS,
   OUTSIDE_SERVICES,
   privacyPolicy,
   termsOfUse,
@@ -196,7 +197,7 @@ describe("the privacy policy against the code", () => {
     const text = (d: LegalDocument) => JSON.stringify(d);
     const docs = [privacyPolicy(), termsOfUse(), washingtonHealthDataPolicy()];
     expect(docs.filter((d) => /health app|medical app|health application/i.test(text(d)))).toEqual([]);
-    expect(text(privacyPolicy())).toContain("KWAZO is a fitness and nutrition app");
-    expect(text(termsOfUse())).toContain("a fitness and nutrition app");
+    // KWAZO first, then who owns it (Kd, 2026-11-08), in all three.
+    for (const d of docs) expect(d.lead.join(" ")).toContain(KWAZO_IS);
   });
 });

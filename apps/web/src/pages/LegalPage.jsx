@@ -44,6 +44,16 @@ function Words({ text }) {
 }
 
 function Block({ block }) {
+  if (block.kind === 'h3') {
+    return (
+      <h3 className="text-[17px] font-semibold leading-snug mt-2" style={{ color: INK }}>
+        {block.text}
+      </h3>
+    );
+  }
+  if (block.kind === 'strong') {
+    return <p className="text-[15px] leading-7 font-semibold">{block.text}</p>;
+  }
   if (block.kind === 'p') {
     return (
       <p className="text-[15px] leading-7 break-words">
