@@ -11,9 +11,10 @@ import * as Sentry from "@sentry/node";
  *  the event's breadcrumbs. Measured with the real SDK on a real port
  *  (test/sentry.test.ts). So no body is kept, and the request and the breadcrumbs
  *  come off every event before it is sent. `transport` is for tests only. */
-/** An error message with whatever it quotes taken off: `a "b" c` → `a "…" c`. */
+/** An error message with the values it quotes taken off: `a "b" c` → `a "…" c`. */
 export function withoutQuotedText(message: string): string {
-  return message.replace(/"[^"]*"/g, '"…"');
+  // A rule, table or column name stays (it names our code, not a person): `violates check constraint "x"`.
+  return message.replace(/(constraint|relation|table|column|index) "[^"]*"|"[^"]*"/g, (quoted, name: string | undefined) => (name === undefined ? '"…"' : quoted));
 }
 
 export function sentryOptions(dsn: string, environment: string, transport?: Sentry.NodeOptions["transport"]): Sentry.NodeOptions {

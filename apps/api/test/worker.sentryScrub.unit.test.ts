@@ -32,6 +32,7 @@ describe("the worker's error reports", () => {
   it("an error's message reaches Sentry with what it quotes taken off", () => {
     expect(withoutQuotedText('invalid input syntax for type uuid: "amara@realgym.example"')).toBe('invalid input syntax for type uuid: "…"');
     expect(withoutQuotedText("no quotes here")).toBe("no quotes here");
+    expect(withoutQuotedText('new row for relation "gym_members" violates check constraint "x"')).toBe('new row for relation "gym_members" violates check constraint "x"');
   });
 
   it("the scrubber takes off a refused row's values and keeps the message", () => {
