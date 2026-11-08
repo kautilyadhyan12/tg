@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { LEGAL_PATHS } from '@app/shared';
 
 // P2.8 web repoint (Card 1) — auth on the NEW /v1 API with httpOnly-cookie
 // sessions (v1 §6.1: "rotating refresh tokens (httpOnly cookie on web)").
@@ -29,20 +30,23 @@ function isAuthEndpoint(url) {
 // the front desk (`/check-in`), which is a device, not a person, and the page an emailed link to
 // sign a membership agreement opens (`/sign-agreement`, 18u-ii-b), for a member with no account, and the
 // page the note to an old email address opens to undo the change (`/undo-email-change`, item 19's passes),
-// and the admin page (`/admin`, 14a-i), which has its own sign-in.
-function redirectToLogin() {
-  if (typeof window === 'undefined') return; // SSR / node tests: no-op
-  const p = window.location.pathname;
-  if (
+// and the admin page (`/admin`, 14a-i), which has its own sign-in, and our Privacy Policy, Terms of Use and
+// Washington's page (21b-i), which anyone reads, signed in or not.
+export function isSignedOutPage(p) {
+  return !(
     !p.startsWith('/login') && !p.startsWith('/register') &&
     !p.startsWith('/verify-email') && !p.startsWith('/reset-password') &&
     !p.startsWith('/forgot-password') && !p.startsWith('/restore-account') &&
     !p.startsWith('/join/') && !p.startsWith('/gyms/') && !p.startsWith('/invite/') &&
     !p.startsWith('/check-in') && !p.startsWith('/sign-agreement') && !p.startsWith('/undo-email-change') &&
-    !p.startsWith('/admin')
-  ) {
-    window.location.href = '/login';
-  }
+    !p.startsWith('/admin') &&
+    !Object.values(LEGAL_PATHS).includes(p)
+  );
+}
+
+function redirectToLogin() {
+  if (typeof window === 'undefined') return; // SSR / node tests: no-op
+  if (!isSignedOutPage(window.location.pathname)) window.location.href = '/login';
 }
 
 // Reactive refresh: the access cookie lives ~15 min (v1 §6.1) and is httpOnly,

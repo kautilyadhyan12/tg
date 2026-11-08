@@ -10,7 +10,6 @@
 // (Kd, 2026-11-08, rulings/2026-11-08-21b-i.md), and they are read again whole before publishing.
 // KWAZO is a fitness and nutrition app, never called a health app (Kd, 2026-11-08).
 import { ACCOUNT_UNDO_DAYS } from "./privacy.js";
-import { CURRENT_DISCLAIMER_VERSION, DISCLAIMER_WORDINGS } from "./health.js";
 import { GYM_CAN_SEE, GYM_NEVER_SEES, GYM_SEES_IF_YOU_ALLOW } from "./invitations.js";
 
 export const LEGAL_PATHS = {
@@ -48,7 +47,8 @@ export interface LegalSection {
 
 export interface LegalDocument {
   title: string;
-  lead: string;
+  /** The opening paragraphs, before the first section. */
+  lead: readonly string[];
   sections: readonly LegalSection[];
 }
 
@@ -192,17 +192,12 @@ const servicesTable = (): LegalBlock => ({
   rows: OUTSIDE_SERVICES.map((s) => [s.name, s.forWhat, s.gets]),
 });
 
-const signUpNote = (): string => {
-  const words = DISCLAIMER_WORDINGS.sign_up[CURRENT_DISCLAIMER_VERSION.sign_up];
-  if (words === undefined) throw new Error("no words for the sign-up note");
-  return words;
-};
-
 export function privacyPolicy(facts: LegalFacts = LEGAL_FACTS): LegalDocument {
   return {
     title: "Privacy Policy",
-    lead:
+    lead: [
       "KWAZO is a fitness and nutrition app, for people who train on their own and for the members and staff of gyms, studios and other fitness businesses. This policy says what we collect, why, who else receives it, how long we keep it, and what you can do about it.",
+    ],
     sections: [
       {
         id: "who-we-are",
@@ -382,107 +377,160 @@ export function privacyPolicy(facts: LegalFacts = LEGAL_FACTS): LegalDocument {
 export function termsOfUse(facts: LegalFacts = LEGAL_FACTS): LegalDocument {
   return {
     title: "Terms of Use",
-    lead: `These terms are the agreement between you and ${LEGAL_OWNER}, who runs KWAZO, a fitness and nutrition app. By creating an account or using KWAZO, you agree to them and to our Privacy Policy.`,
+    lead: [
+      `These Terms of Use ("Terms") constitute a legally binding agreement between you ("User" or "you") and ${LEGAL_OWNER}, the owner and operator of KWAZO ("KWAZO," "we," "us," or "our"), a fitness and nutrition application.`,
+      "By creating an account, accessing, or using KWAZO, you acknowledge that you have read, understood, and agreed to be bound by these Terms and our Privacy Policy.",
+    ],
     sections: [
       {
-        id: "who-can-use",
-        heading: "Who can use KWAZO",
+        id: "eligibility",
+        heading: "1. Eligibility and Account Responsibilities",
         blocks: [
-          list(
-            "You must be 18 or older.",
-            "One account is for one person. Keep your sign-in to yourself; what is done with it is your responsibility.",
-            "The details you give must be true, so that the app's numbers fit you.",
-          ),
+          p("1.1. You must be at least 18 years of age to create an account or use KWAZO."),
+          p("1.2. Each account is intended for individual use by a single person. You are responsible for maintaining the confidentiality of your account credentials and for all activities conducted through your account."),
+          p("1.3. You agree to provide accurate, truthful, and complete information when registering for and using KWAZO. Accurate personal information is necessary for the application to generate recommendations, calculations, and other results appropriate to your individual circumstances."),
         ],
       },
       {
-        id: "not-medical-advice",
-        heading: "Not medical advice",
+        id: "health-disclaimer",
+        heading: "2. Health and Medical Disclaimer",
         blocks: [
-          p(signUpNote()),
-          p("KWAZO is not a medical device. It does not diagnose, treat or prevent any condition."),
+          p("2.1. KWAZO is intended exclusively for individuals aged 18 years or older and provides fitness, workout, exercise, and nutrition-related guidance designed to support users in achieving their health and fitness objectives."),
+          p("2.2. All information, recommendations, and guidance provided through KWAZO are intended for general fitness and informational purposes only and must not be considered a substitute for professional medical advice, diagnosis, or treatment."),
+          p("2.3. If you have an existing medical condition, physical injury, are pregnant, take any medication, or have any specific health-related concerns, you should consult a qualified healthcare professional before making significant modifications to your exercise routine, physical activity, or dietary habits. You should follow the advice and recommendations provided by such professionals."),
+          p("2.4. KWAZO is not a medical device and is not intended to diagnose, treat, or prevent any medical condition or disease."),
         ],
       },
       {
         id: "estimates",
-        heading: "Our numbers are estimates",
+        heading: "3. Fitness Figures and Training Safely",
         blocks: [
-          p("Calories, nutrients, meal scans, repetition counts, form scores, distances and predictions are estimates and can be wrong. Check a food's label and its allergens yourself. You train at your own risk: stop if you feel pain, dizziness or shortness of breath. When you run, watch the road and the people around you, not the screen."),
+          p("3.1. KWAZO calculates calories, nutritional values, meal scans, exercise repetition counts, exercise form scores, distances, and other fitness figures to help you understand and track your progress."),
+          p("3.2. These figures are carefully calculated estimates. As with any fitness application, they may occasionally differ from exact values, so they are best used as a guide alongside your own judgment."),
+          p("3.3. If you have a food allergy or a specific dietary requirement, please check food labels and ingredients before eating."),
+          p("3.4. Train at a pace that suits your fitness level, and pause or stop if you feel pain, dizziness, or shortness of breath."),
+          p("3.5. When running or training outdoors, stay aware of traffic, other people, and your surroundings. KWAZO's spoken updates let you keep your attention on your route rather than your screen."),
         ],
       },
       {
-        id: "on-your-own",
-        heading: "If you use KWAZO on your own",
+        id: "payments",
+        heading: "4. Individual Users, Subscriptions, and Payments",
         blocks: [
-          p("Some features may need a paid plan. The app shows the price before you pay. A plan bought through Google Play or the App Store follows their terms for billing, cancelling and refunds."),
+          p("4.1. KWAZO may offer certain features and functionalities that require a paid subscription or plan."),
+          p("4.2. Where payment is required, the applicable subscription price will be displayed to the user before the purchase is completed."),
+          p("4.3. Subscriptions or plans purchased through Google Play or the Apple App Store are subject to the respective platform's applicable terms and conditions, including provisions governing billing, subscription cancellation, and refunds."),
         ],
       },
       {
         id: "members",
-        heading: "If you are a member of a business",
+        heading: "5. Memberships and Services Provided by Fitness Businesses",
         blocks: [
-          p("A gym, studio or other fitness business uses KWAZO to run its memberships, classes, payments and page. What it sells you, its prices, its rules, its waiver and its agreements are between you and the business, and the business is responsible for them and for its classes, its trainers and its premises. We provide the software."),
+          p("5.1. KWAZO may be used by gyms, fitness studios, and other fitness-related businesses to manage memberships, classes, payments, and business pages through the application."),
+          p("5.2. Any products, memberships, classes, training sessions, or other services offered or sold by a participating business are provided by that business and not by KWAZO."),
+          p("5.3. The prices, policies, membership conditions, waivers, contractual agreements, and other terms applicable to such products or services are established between the user and the relevant business."),
+          p("5.4. Each participating business remains responsible for its products, services, classes, trainers, facilities, premises, and the performance of its contractual obligations to its members or customers."),
+          p("5.5. KWAZO acts as a software platform that facilitates the management and administration of these business activities and does not assume responsibility for the products or services independently provided by participating businesses."),
         ],
       },
       {
         id: "businesses",
-        heading: "If you run a business on KWAZO, or work for one",
+        heading: "6. Responsibilities of Business Owners and Staff",
         blocks: [
+          p("6.1. Businesses using KWAZO must ensure that they have the necessary authorization or lawful basis to collect, add, store, and maintain the personal information of individuals within the application."),
+          p("6.2. Businesses may send emails or other permitted communications only to individuals they are legally authorized to contact."),
+          p("6.3. Each business is independently responsible for establishing and administering its pricing, terms and conditions, waivers, refund policies, and compliance with all applicable laws and regulations in the jurisdictions in which it operates."),
+          p("6.4. Staff members granted access to a business account act on behalf of the respective business. The business is responsible for assigning and managing staff permissions and ensuring that each staff member receives only the level of access necessary to perform their assigned responsibilities."),
+        ],
+      },
+      {
+        id: "content",
+        heading: "7. User-Generated Content and Community Standards",
+        blocks: [
+          p("7.1. You retain ownership of the content you create, submit, upload, or publish through KWAZO."),
+          p("7.2. By submitting or publishing content through the application, you grant KWAZO permission to display and make such content available to the individuals or groups for whom it is intended to be visible within the application, including members of a business where applicable."),
+          p("7.3. You must not submit, upload, publish, or distribute content that:"),
           list(
-            "You may add only people whose details you are allowed to keep, and email only people you are allowed to email.",
-            "Your business is responsible for its prices, its terms, its waivers, its refunds and the laws where it works.",
-            "Staff you add act for your business. Give each person only the access they need.",
+            "Violates any applicable law or regulation.",
+            "Contains hateful, threatening, sexually explicit, or violent material.",
+            "Discloses another individual's private or personal information without appropriate authorization.",
+            "Constitutes spam or unsolicited promotional material.",
+            "Impersonates another person or misrepresents an individual's identity.",
           ),
+          p("7.4. KWAZO and participating businesses reserve the right to remove content that violates these Terms or applicable community standards."),
+          p("7.5. Users may report inappropriate content or block other users through the reporting and blocking functionalities made available within the application."),
         ],
       },
       {
-        id: "what-you-post",
-        heading: "What you post",
+        id: "acceptable-use",
+        heading: "8. Acceptable Use and Intellectual Property",
         blocks: [
-          p("What you post stays yours. You let us show it to the people the app shows it to, such as the members of your business. Do not post anything unlawful, hateful, threatening, sexual or violent, anyone's private details, spam, or anything pretending to be somebody else. A business and we may remove a post, and anyone can report or block."),
-        ],
-      },
-      {
-        id: "fair-use",
-        heading: "Using KWAZO fairly",
-        blocks: [
-          p("Do not break or overload KWAZO, copy its contents in bulk, get around its limits or its checks, take it apart, or use somebody else's account. KWAZO's code, look, words and exercises are ours; you may use them in the app."),
+          p("8.1. You agree to use KWAZO only for lawful purposes and in accordance with these Terms."),
+          p("8.2. You must not:"),
+          list(
+            "Disrupt, damage, interfere with, or place an excessive load on the application, its systems, or its services.",
+            "Copy, extract, or reproduce the application's content in bulk.",
+            "Circumvent, bypass, or interfere with any technical restrictions, usage limits, security measures, or verification mechanisms implemented by KWAZO.",
+            "Reverse engineer, decompile, disassemble, or otherwise attempt to examine or reconstruct the application's underlying software or technical components.",
+            "Access or use another individual's account without authorization.",
+          ),
+          p("8.3. All intellectual property rights relating to KWAZO, including its software code, visual design, appearance, written content, and exercise materials, belong to KWAZO."),
+          p("8.4. Users are permitted to access and use these materials only within the application and in accordance with these Terms."),
         ],
       },
       {
         id: "ending",
-        heading: "Ending",
+        heading: "9. Account Deletion, Suspension, and Termination",
         blocks: [
-          p("You can delete your account at any time: in the app, Me, then Settings, then Delete account. We may suspend or close an account that breaks these terms, and we tell you why, unless the law stops us."),
+          p("9.1. Users may request the deletion of their accounts at any time through the following navigation path within the application: Me → Settings → Delete account."),
+          p("9.2. KWAZO reserves the right to suspend or terminate accounts that violate these Terms."),
+          p("9.3. Where an account is suspended or terminated for a violation, KWAZO will provide the affected user with an explanation of the reason for such action, except where disclosure is prohibited by applicable law."),
         ],
       },
       {
         id: "changes",
-        heading: "Changes",
+        heading: "10. Changes to the Application and These Terms",
         blocks: [
-          p("KWAZO changes as we build it: features are added, changed or removed. When these terms change, the date at the top changes. If a change matters to you, the app tells you before it applies."),
+          p("10.1. KWAZO is an evolving software platform, and its features, functionalities, and services may be introduced, modified, updated, or discontinued as part of its ongoing development."),
+          p("10.2. KWAZO reserves the right to modify or update these Terms from time to time."),
+          p("10.3. Whenever these Terms are revised, the \"Last Updated\" date displayed at the beginning of this document will be amended accordingly."),
+          p("10.4. Where a modification materially affects users, KWAZO will provide notice through the application before the relevant change takes effect."),
         ],
       },
       {
         id: "liability",
-        heading: "Our responsibility",
+        heading: "11. Disclaimer of Warranties and Limitation of Liability",
         blocks: [
-          p("KWAZO is provided as it is. We work to keep it running and correct, but we cannot promise it is always available or free of mistakes."),
-          p("As far as the law allows, we are not responsible for indirect losses, or for what a business does or sells, and our total responsibility to you is the larger of what you paid us in the last 12 months and 100 US dollars. Nothing here limits responsibility the law does not let us limit, such as for death or injury caused by our negligence, or for fraud."),
-          p("Nothing in these terms takes away a right the consumer law of your country gives you."),
+          p("11.1. We work continuously to keep KWAZO reliable, accurate, and available. As with any online service, there may occasionally be interruptions, updates, or errors, and KWAZO is therefore provided on an \"as is\" basis."),
+          p("11.2. To the maximum extent permitted by applicable law, KWAZO shall not be liable for indirect losses or damages arising from or relating to the use of the application."),
+          p("11.3. KWAZO shall not be responsible for the conduct, products, services, or transactions of independently operated businesses that use the platform."),
+          p("11.4. To the maximum extent permitted by applicable law, KWAZO's total aggregate liability to any user arising from or relating to the application or these Terms shall not exceed the greater of:"),
+          list(
+            "The total amount paid by that user directly to KWAZO during the 12 months immediately preceding the event giving rise to the claim; or",
+            "USD 100 (one hundred United States dollars).",
+          ),
+          p("11.5. Nothing in these Terms excludes or limits any liability that cannot lawfully be excluded or limited, including liability for death or personal injury resulting from negligence, or liability arising from fraud."),
+          p("11.6. Nothing in these Terms shall exclude, restrict, or diminish any mandatory rights or protections available to users under the applicable consumer protection laws of their respective countries."),
         ],
       },
       {
         id: "law",
-        heading: "The law",
+        heading: "12. Governing Law and Jurisdiction",
         blocks: [
-          p("These terms are governed by the laws of India, and disputes go to the courts of India. If the law of your country gives you the right to go to your own courts, you keep it."),
+          p("12.1. These Terms shall be governed by and interpreted in accordance with the laws of India."),
+          p("12.2. Any dispute arising from or relating to these Terms or the use of KWAZO shall be subject to the jurisdiction of the courts of India."),
+          p("12.3. Notwithstanding the foregoing, where the applicable laws of a user's country grant that user the right to initiate legal proceedings before the courts of their own jurisdiction, nothing in these Terms shall restrict or remove that right."),
         ],
       },
       {
         id: "contact",
-        heading: "Contact",
-        blocks: [p(`${LEGAL_OWNER}, India. ${writeToUs(facts)}`)],
+        heading: "13. Contact Information",
+        blocks: [
+          p("For inquiries, concerns, or communications relating to these Terms of Use or the KWAZO application, users may contact:"),
+          p(`Owner and Operator: ${LEGAL_OWNER}`),
+          p("Application: KWAZO"),
+          p("Country: India"),
+          p(`Email Address: ${facts.supportEmail ?? "To be added before the official publication of KWAZO."}`),
+        ],
       },
     ],
   };
@@ -493,7 +541,7 @@ export function termsOfUse(facts: LegalFacts = LEGAL_FACTS): LegalDocument {
 export function washingtonHealthDataPolicy(facts: LegalFacts = LEGAL_FACTS): LegalDocument {
   return {
     title: "Washington Consumer Health Data Privacy Policy",
-    lead: "Washington State's My Health My Data Act asks for this page. It adds to our Privacy Policy, and covers only the people of Washington State using KWAZO for themselves, and only what that law calls \"consumer health data\".",
+    lead: ["Washington State's My Health My Data Act asks for this page. It adds to our Privacy Policy, and covers only the people of Washington State using KWAZO for themselves, and only what that law calls \"consumer health data\"."],
     sections: [
       {
         id: "collected",

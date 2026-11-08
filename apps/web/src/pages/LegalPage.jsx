@@ -139,7 +139,11 @@ export default function LegalPage({ which }) {
           <p className="text-sm" style={{ color: MUTED }}>
             Last updated {legalDayText(LEGAL_UPDATED_ON)}
           </p>
-          <p className="text-[16px] leading-7 mt-2">{doc.lead}</p>
+          {doc.lead.map((para) => (
+            <p key={para} className="text-[16px] leading-7 mt-2">
+              {para}
+            </p>
+          ))}
         </header>
 
         {doc.sections.map((section) => (

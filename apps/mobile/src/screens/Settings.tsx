@@ -822,9 +822,10 @@ function LegalPart() {
     Linking.openURL(url).catch(() => { setFailed(true); });
   };
   return (
-    <Part title="Privacy and terms" icon="shield">
-      <Button label="Privacy Policy" kind="link" style={styles.start} onPress={() => { open("privacy"); }} />
-      <Button label="Terms of Use" kind="link" style={styles.start} onPress={() => { open("terms"); }} />
+    <Part title="Privacy and terms" icon="info">
+      <Button label="Privacy Policy" kind="link" icon="shield" style={styles.start} onPress={() => { open("privacy"); }} />
+      <View style={styles.rule} />
+      <Button label="Terms of Use" kind="link" icon="book" style={styles.start} onPress={() => { open("terms"); }} />
       <Said words={failed ? "Couldn’t open the page. Try again." : null} bad />
     </Part>
   );
