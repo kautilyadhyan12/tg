@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
 import { AppState, StyleSheet, type AppStateStatus, type StyleProp, type TextStyle, type ViewStyle } from "react-native";
 import { App } from "../../src/App";
 import type { AskGoogle, GoogleAnswer } from "../../src/session/google";
@@ -22,11 +22,13 @@ const signsIn =
 const noWait = () => Promise.resolve();
 
 /** The app as a phone opens it: `held` is what its key store kept from last time. */
-async function openApp(routes: Record<string, Route>, held: string | null = null, google?: AskGoogle) {
+async function openApp(routes: Record<string, Route>, held: string | null = null, google?: AskGoogle, waiting = memoryStore()) {
   const server = fakeServer(routes);
   const store = memoryStore(held);
-  await render(<App extra={extra} ask={server.ask} store={store} wait={noWait} {...(google === undefined ? {} : { google })} />);
-  return { server, store };
+  const drawn = await render(
+    <App extra={extra} ask={server.ask} store={store} wait={noWait} waitingStore={waiting} {...(google === undefined ? {} : { google })} />,
+  );
+  return { server, store, waiting, drawn };
 }
 
 const type = (field: string, words: string) => fireEvent.changeText(screen.getByLabelText(field), words);
@@ -44,6 +46,29 @@ interface Drawn {
 const drawn = (node: Drawn) => StyleSheet.flatten(node.props.style);
 
 describe("the worst thing, on the screen", () => {
+  it("the new look leaves every way in: the email box and both buttons, then the code's boxes, Continue, Resend and Use a different email", async () => {
+    const { server } = await openApp({ "/v1/auth/code/send": sent, "/v1/auth/code/verify": signsIn() });
+    await screen.findByText("Get started.");
+    const free = { disabled: false, busy: false };
+    expect(screen.getByLabelText("Email").props.editable).toBe(true);
+    expect(screen.getByRole("button", { name: "Continue" }).props.accessibilityState).toEqual(free);
+    expect(screen.getByRole("button", { name: "Continue with Google" }).props.accessibilityState).toEqual(free);
+    await askForCode();
+    expect(await screen.findByText("ravi@example.com")).toBeTruthy();
+    // Each digit typed shows in its own box, so the person sees what they typed.
+    await type("6-digit code", "4815");
+    const boxText = (at: number) => within(screen.getByTestId(`code-box-${String(at)}`)).queryAllByText(/./).map((line) => String(line.props.children)).join("");
+    expect([0, 1, 2, 3, 4, 5].map(boxText)).toEqual(["4", "8", "1", "5", "", ""]);
+    expect(screen.getByLabelText("6-digit code").props.editable).not.toBe(false);
+    expect(screen.getByRole("button", { name: "Continue" }).props.accessibilityState).toEqual(free);
+    expect(screen.getByRole("button", { name: /^Resend code/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Use a different email" }).props.accessibilityState).toEqual(free);
+    await type("6-digit code", "481516");
+    await press("Continue");
+    expect(await screen.findByRole("header", { name: "Ravi" })).toBeTruthy();
+    expect(server.paths().filter((path) => path.startsWith("/v1/auth/code/"))).toEqual(["/v1/auth/code/send", "/v1/auth/code/verify"]);
+  });
+
   it("opened with no internet, a signed-in person is on their tabs, never the sign-in screen", async () => {
     const { server, store } = await openApp({ "/health": lost, "/v1/auth/refresh": lost }, kept(1));
     expect(await screen.findByRole("tab", { name: "Dashboard" })).toBeTruthy();
@@ -170,11 +195,14 @@ describe("signing in by email code", () => {
     const { server } = await openApp({});
     expect(await screen.findByText("Get started.")).toBeTruthy();
     expect(screen.getByText("Sign in or create your account")).toBeTruthy();
-    // The browser's own picture, across the top.
-    expect(screen.getByTestId("get-started-picture").props.source).toBe(pictures.getstarted);
-    // Few words: the mark, the heading, one line, the box's own words, the two ways in and the terms.
+    // Kd's poster over the whole page, and the app's name on it, said once.
+    expect(screen.getByTestId("sign-in-picture").props.source).toBe(pictures.signin);
+    expect(screen.getByRole("image", { name: "KWAZO" })).toBeTruthy();
+    // Few words: the heading, one line, the box's own words, the two ways in and the terms.
     expect(screen.getAllByText(/./).map((line) => String(line.props.children))).toEqual([
-      "AI Home Gym",
+      "KWA",
+      "Z",
+      "O",
       "Get started.",
       "Sign in or create your account",
       "Continue",
@@ -337,10 +365,11 @@ describe("signing in by email code", () => {
 
   it("Resend code waits out the server's minute, then sends and says so; Use a different email goes back", async () => {
     // The server's own wait is what the button counts: one second here, sixty in the app.
-    const { server } = await openApp({
+    const { server, waiting } = await openApp({
       "/v1/auth/code/send": () => ({ status: 200, body: { message: "Sent.", resendAfterSeconds: 1, expiresInSeconds: 600 } }),
     });
     await askForCode();
+    const kept = () => JSON.parse(waiting.value ?? "{}") as { sentAt: number; resendAt: number };
     const resend = () => screen.getByRole("button", { name: /^Resend code/ });
     expect((await screen.findByRole("button", { name: "Resend code in 1s" })).props.accessibilityState).toEqual({ disabled: true, busy: false });
     await fireEvent.press(resend());
@@ -351,14 +380,89 @@ describe("signing in by email code", () => {
       },
       { timeout: 4000 },
     );
+    const first = kept();
     await press("Resend code");
     expect(await screen.findByText("New code sent.")).toBeTruthy();
     expect(server.paths()).toEqual(["/v1/auth/code/send", "/v1/auth/code/send"]);
+    // The kept step follows the new code: its time and its Resend countdown.
+    await waitFor(() => {
+      expect(kept().sentAt).toBeGreaterThan(first.sentAt);
+    });
+    expect(kept().resendAt).toBeGreaterThan(first.resendAt);
     expect(screen.getByRole("button", { name: "Resend code in 1s" })).toBeTruthy();
 
     await press("Use a different email");
     expect(screen.getByLabelText("Email").props.value).toBe("ravi@example.com");
     expect(screen.queryByLabelText("6-digit code")).toBeNull();
+  });
+
+  it("closed by Android while the person fetches the code: reopened, it is on the code step for that address, and the code signs in", async () => {
+    const routes = { "/v1/auth/code/send": sent, "/v1/auth/code/verify": signsIn() };
+    const { waiting, drawn } = await openApp(routes);
+    await askForCode();
+    await screen.findByLabelText("6-digit code");
+    // The address and when it went are kept; the code never is.
+    expect(JSON.parse(waiting.value ?? "{}")).toMatchObject({ email: "ravi@example.com", arrival: "sent" });
+    await drawn.unmount();
+    const again = await openApp(routes, null, undefined, waiting);
+    expect(await screen.findByText("Check your email.")).toBeTruthy();
+    expect(screen.getByText("ravi@example.com")).toBeTruthy();
+    expect(screen.queryByText("Get started.")).toBeNull();
+    // No second code was asked for.
+    expect(again.server.paths().filter((path) => path === "/v1/auth/code/send")).toEqual([]);
+    await type("6-digit code", "123456");
+    await press("Continue");
+    expect(await screen.findByRole("header", { name: "Ravi" })).toBeTruthy();
+    expect(waiting.value).toBeNull();
+  });
+
+  it("a code step kept past the code's ten minutes opens on Get started and is removed; one inside them comes back", async () => {
+    const note = (minutesAgo: number) =>
+      JSON.stringify({ email: "ravi@example.com", sentAt: Date.now() - minutesAgo * 60_000, resendAt: 0, arrival: "sent" });
+    const old = memoryStore(note(10.1));
+    const first = await openApp({}, null, undefined, old);
+    expect(await screen.findByText("Get started.")).toBeTruthy();
+    expect(old.value).toBeNull();
+    await first.drawn.unmount();
+    const fresh = memoryStore(note(9));
+    await openApp({}, null, undefined, fresh);
+    expect(await screen.findByText("Check your email.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Resend code" }).props.accessibilityState).toEqual({ disabled: false, busy: false });
+  });
+
+  it("a kept step refused as too soon comes back as Enter your code; one dated after now is removed; Use a different email after a reopen keeps the address", async () => {
+    const tooSoon = memoryStore(JSON.stringify({ email: "ravi@example.com", sentAt: Date.now() - 30_000, resendAt: Date.now() + 30_000, arrival: "too-soon" }));
+    const first = await openApp({}, null, undefined, tooSoon);
+    expect(await screen.findByText("Enter your code.")).toBeTruthy();
+    expect(screen.queryByText("Check your email.")).toBeNull();
+    await press("Use a different email");
+    expect(screen.getByLabelText("Email").props.value).toBe("ravi@example.com");
+    await first.drawn.unmount();
+    const ahead = memoryStore(JSON.stringify({ email: "ravi@example.com", sentAt: Date.now() + 60_000, resendAt: 0, arrival: "sent" }));
+    await openApp({}, null, undefined, ahead);
+    expect(await screen.findByText("Get started.")).toBeTruthy();
+    expect(ahead.value).toBeNull();
+  });
+
+  it("a kept note that cannot be read opens on Get started and is removed", async () => {
+    const broken = memoryStore("{not json");
+    await openApp({}, null, undefined, broken);
+    expect(await screen.findByText("Get started.")).toBeTruthy();
+    await waitFor(() => {
+      expect(broken.value).toBeNull();
+    });
+  });
+
+  it("Use a different email removes the kept code step", async () => {
+    const { waiting } = await openApp({ "/v1/auth/code/send": sent });
+    await askForCode();
+    await screen.findByLabelText("6-digit code");
+    expect(waiting.value).not.toBeNull();
+    await press("Use a different email");
+    expect(await screen.findByLabelText("Email")).toBeTruthy();
+    await waitFor(() => {
+      expect(waiting.value).toBeNull();
+    });
   });
 
   it("no drawn words are under 11, and nothing pressed or typed in is under 44 tall", async () => {
@@ -389,8 +493,10 @@ describe("Continue with Google", () => {
 
   it("the person's account from Google's box, then the tabs; the sign-in is kept on the phone", async () => {
     const { google, asked } = googleSays({ kind: "token", idToken: "google-answer" });
-    const { server, store } = await openApp({ "/v1/auth/google/phone/start": started, "/v1/auth/google/phone": signsIn() }, null, google);
+    const { server, store, waiting } = await openApp({ "/v1/auth/google/phone/start": started, "/v1/auth/google/phone": signsIn() }, null, google);
     await screen.findByText("Get started.");
+    // A code step kept from an earlier try by email: signed in by Google instead, it goes.
+    waiting.value = JSON.stringify({ email: "ravi@example.com", sentAt: Date.now(), resendAt: 0, arrival: "sent" });
     await press("Continue with Google");
     expect(await screen.findByRole("header", { name: "Ravi" })).toBeTruthy();
     // Google was asked with the server's own word and client id, and its answer went only to the server.
@@ -400,6 +506,9 @@ describe("Continue with Google", () => {
       ["/v1/auth/google/phone", { idToken: "google-answer" }],
     ]);
     expect(store.value).toBe(kept(1));
+    await waitFor(() => {
+      expect(waiting.value).toBeNull();
+    });
   });
 
   it("Google's box closed by the person: nothing is said and nobody is signed in", async () => {

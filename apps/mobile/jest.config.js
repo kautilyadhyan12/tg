@@ -4,6 +4,7 @@ module.exports = {
   preset: "jest-expo",
   testMatch: ["<rootDir>/test/screens/**/*.test.tsx"],
   setupFiles: ["react-native-gesture-handler/jestSetup.js", "<rootDir>/test/screens/setup.js"],
+  setupFilesAfterEnv: ["<rootDir>/test/screens/clearWaiting.js"],
   // A screen is slow to draw on a busy machine; a test that hangs still fails.
   testTimeout: 20000,
   // On the laptop, five copies of Node at a time, each started again past 1 GB: two folders share

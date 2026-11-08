@@ -594,7 +594,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
         - 12b-ii. [x] **The robot check on the phone** — merged 2026-10-14 (PR #263).
     - 12c. [x] **"Before you start" on the phone** — merged 2026-10-14 (PR #271).
     - 12d. [x] **Sign in with Google on the phone** — merged 2026-10-27 (PR #369).
-    - 12e. [ ] **Sign-in's new look** (Kd, 2026-11-07, before Google's closed test, 21d): Kd's own new picture (he gives it) and better buttons; the drawing first. A screen job.
+    - 12e. [x] **Sign-in's new look** · merged 2026-11-08 · PR #502
 13. **Invitations and Join** (spec Part 3 §10.2; split 2026-10-27: the email's button needs the app's own web address).
     - 13a. [x] **Join on the phone** — merged 2026-10-27 (PR #372).
     - 13b. [ ] **The invitation email's button opens the app**, and on a phone without it the store buttons. Waits for the website's own address (Stage 4 item 1) and the app on the store (item 21): Android opens an app from a web link only when that https address names the app.

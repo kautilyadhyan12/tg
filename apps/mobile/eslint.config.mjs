@@ -24,7 +24,7 @@ export default [
   },
   {
     // Plain Node files outside the TypeScript project: read without the typed rules.
-    files: ["scripts/*.mjs", "plugins/*.js", "metro.config.js", "jest.config.js", "test/screens/setup.js"],
+    files: ["scripts/*.mjs", "plugins/*.js", "metro.config.js", "jest.config.js", "test/screens/setup.js", "test/screens/clearWaiting.js"],
     ...tseslint.configs.disableTypeChecked,
     languageOptions: {
       ...tseslint.configs.disableTypeChecked.languageOptions,
