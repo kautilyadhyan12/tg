@@ -975,6 +975,8 @@ describe("the gym's meal plan (31g)", () => {
     // Not stuck on loading: the app's ideas, as the server starts a choice with no meals of one's own.
     expect(await box.findByRole("button", { name: "Log Paneer + Rice" })).toBeTruthy();
     expect(gymReads).toBeGreaterThanOrEqual(2);
+    // The choice drawn is the one lit.
+    expect(box.getByRole("radio", { name: "Suggested", selected: true })).toBeTruthy();
     expect(box.queryByText("Lean week")).toBeNull();
   });
 

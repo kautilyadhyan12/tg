@@ -18,7 +18,7 @@ import { newGoalId } from "../goals/words";
 import { mealTypeName, startOfDay } from "./day";
 import { dayRows, useDayMeals } from "./dayRows";
 import { ideaName } from "./ideaRules";
-import { FoodChoiceRow, shownOf, useFoodChoice } from "./FoodChoice";
+import { FoodChoiceRow, shownOf, useFoodChoice, type Shown } from "./FoodChoice";
 import { GymFrom, GymPlanBox, NoGymPlan, UnderLine, useGymPlans, useNamedGym, type WeekAsk } from "./GymMealPlan";
 import { AllergyFoot, FromRow, nextMealWords, PlanMealCard } from "./MealCard";
 import { gymMeal, type GymOfMine } from "./gymPlanRules";
@@ -313,7 +313,9 @@ export function WhatToEatNext({ foodsToday, fresh, onAnswered, todayFailed, retr
   const planned = hasMeals(plan);
   // The gym named is in neither read: drawn as the server starts a choice without it.
   const gymGone = named === "missing";
-  const choices = choice.shown === null ? null : <FoodChoiceRow shown={choice.shown} pick={choice.pick} trouble={choice.trouble} gyms={gymList} />;
+  // A gym in neither read has no chip: the choice being drawn is the one lit.
+  const lit: Shown | null = gymGone ? { choice: planned ? "mine" : "suggested", gymId: null } : choice.shown;
+  const choices = lit === null ? null : <FoodChoiceRow shown={lit} pick={choice.pick} trouble={choice.trouble} gyms={gymList} />;
   const sheets = (
     <>
       <Sheet
@@ -587,7 +589,8 @@ export function Recommended({ onMore, onPlan, onLog }: { onMore: () => void; onP
   if (read.kind === "failed") return <MealIdeas onMore={onMore} onLog={onLog} planned={{ failed: "Your meal plan couldn’t load.", retry: again }} />;
   const shown = choice.shown ?? shownOf(read.data);
   const gymList = gyms.read.kind === "ok" ? gyms.read.data.gyms : [];
-  const choices = <FoodChoiceRow shown={shown} pick={choice.pick} trouble={choice.trouble} gyms={gymList} />;
+  const lit: Shown = named === "missing" ? { choice: hasMeals(read.data) ? "mine" : "suggested", gymId: null } : shown;
+  const choices = <FoodChoiceRow shown={lit} pick={choice.pick} trouble={choice.trouble} gyms={gymList} />;
   if (shown.choice === "gym" && named !== "missing") {
     if (named === "loading" || named === null) return <MealIdeas onMore={onMore} onLog={onLog} choices={choices} planned="loading" />;
     if (named === "failed") return <MealIdeas onMore={onMore} onLog={onLog} choices={choices} planned={{ failed: "Your gym’s meal plan couldn’t load.", retry: gyms.again }} />;

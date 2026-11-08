@@ -137,7 +137,7 @@ export async function getMyGymMealPlans(deps: Pick<NutritionDeps, "sql">, userId
   return await myGymMealPlans(deps, userId, {
     lowest: lowestKcalOf(read.plan.plan, read.noCutReasons),
     outsideDiet: (items) => outsideDiet(items, diet),
-    labelCaution: diet === null || diet === "non_vegetarian" ? null : DIET_LABEL_CAUTION,
+    labelCaution: diet === "non_vegetarian" ? null : DIET_LABEL_CAUTION,
   });
 }
 
