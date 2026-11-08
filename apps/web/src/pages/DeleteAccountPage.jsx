@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Loader2, Trash2 } from 'lucide-react';
-import { DELETE_PAGE_WORDS as W, KEPT_AFTER_DELETION, LEGAL_PATHS, SIGN_IN_ROBOT_WORDS } from '@app/shared';
+import { DELETE_PAGE_KEPT, DELETE_PAGE_WORDS as W, LEGAL_PATHS, SIGN_IN_ROBOT_WORDS } from '@app/shared';
 import { deleteAccountService } from '../api/deleteAccountApi';
 import { errorCode, errorText } from '../api/orgsApi';
 import { ACCENT, INK, LINE, MUTED } from './GymPublicPage';
@@ -24,6 +24,20 @@ function Section({ heading, children }) {
       <h2 className="text-[20px] font-bold leading-snug" style={{ color: INK }}>{heading}</h2>
       {children}
     </section>
+  );
+}
+
+function Para({ text }) {
+  return <p className="text-[15px] leading-7">{text}</p>;
+}
+
+function Steps({ items }) {
+  return (
+    <ol className="list-decimal pl-5 flex flex-col gap-2 text-[15px] leading-7">
+      {items.map((stepText) => (
+        <li key={stepText}>{stepText}</li>
+      ))}
+    </ol>
   );
 }
 
@@ -157,7 +171,6 @@ function DeleteForm() {
           void send('email');
         }}
       >
-        <p className="text-[15px] leading-7">{W.webLead}</p>
         <label htmlFor="delete-email" className="text-sm font-semibold">
           {W.emailLabel}
         </label>
@@ -167,6 +180,7 @@ function DeleteForm() {
           inputMode="email"
           autoComplete="email"
           maxLength={254}
+          placeholder={W.emailPlaceholder}
           value={email}
           onChange={(e) => {
             setEmail(e.target.value);
@@ -274,37 +288,58 @@ export default function DeleteAccountPage() {
             KWAZO
           </p>
           <h1 className="text-[28px] sm:text-[34px] font-bold leading-tight" style={{ color: INK }}>{W.title}</h1>
-          <p className="text-[16px] leading-7 mt-2">{W.lead}</p>
+          {W.lead.map((para) => (
+            <p key={para} className="text-[16px] leading-7 mt-2">
+              {para}
+            </p>
+          ))}
         </header>
 
         <Section heading={W.inAppHeading}>
-          <ol className="list-decimal pl-5 flex flex-col gap-2 text-[15px] leading-7">
-            {W.inAppSteps.map((stepText) => (
-              <li key={stepText}>{stepText}</li>
-            ))}
-          </ol>
+          <Para text={W.inAppLead} />
+          <Steps items={W.inAppSteps} />
         </Section>
 
         <Section heading={W.webHeading}>
+          {W.webLead.map((para) => (
+            <Para key={para} text={para} />
+          ))}
           <DeleteForm />
         </Section>
 
         <Section heading={W.whatHappensHeading}>
-          <LegalBlock block={{ kind: 'list', items: W.whatHappens }} />
+          <Para text={W.whatHappensLead} />
+          {W.whatHappens.map((part) => (
+            <div key={part.heading} className="flex flex-col gap-3">
+              <LegalBlock block={{ kind: 'h3', text: part.heading }} />
+              {part.paras.map((para) => (
+                <Para key={para} text={para} />
+              ))}
+            </div>
+          ))}
+          <LegalBlock block={{ kind: 'list', items: W.deletedItems }} />
+          <Para text={W.deletedAfter} />
         </Section>
 
         <Section heading={W.keptHeading}>
-          <p className="text-[15px] leading-7">{W.keptLead}</p>
-          <LegalBlock
-            block={{ kind: 'table', head: ['What we keep', 'For how long'], rows: KEPT_AFTER_DELETION.map((k) => [k.what, k.howLong]) }}
-          />
-          <Link to={`${LEGAL_PATHS.privacy}#how-long`} className="text-[15px] underline" style={{ color: ACCENT }}>
-            {W.keptMore}
-          </Link>
+          {W.keptLead.map((para) => (
+            <Para key={para} text={para} />
+          ))}
+          <LegalBlock block={{ kind: 'table', head: W.keptHead, rows: Object.values(DELETE_PAGE_KEPT) }} />
+          <p className="text-[15px] leading-7">
+            {W.keptMoreBefore}
+            <Link to={`${LEGAL_PATHS.privacy}#how-long`} className="underline" style={{ color: ACCENT }}>
+              {W.keptMore}
+            </Link>
+            {W.keptMoreAfter}
+          </p>
         </Section>
 
         <Section heading={W.ownerHeading}>
-          <p className="text-[15px] leading-7">{W.ownerLine}</p>
+          <Para text={W.ownerLine} />
+          <Para text={W.ownerStepsLead} />
+          <Steps items={W.ownerSteps} />
+          <Para text={W.ownerAfter} />
         </Section>
 
         <footer className="flex flex-col gap-2 pt-6 text-sm" style={{ borderTop: `1px solid ${LINE}`, color: MUTED }}>

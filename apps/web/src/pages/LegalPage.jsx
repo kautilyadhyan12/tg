@@ -25,7 +25,7 @@ const OTHERS = [
   { key: 'privacy', label: 'Privacy Policy' },
   { key: 'terms', label: 'Terms of Use' },
   { key: 'washington', label: 'Washington Consumer Health Data Privacy Policy' },
-  { key: 'deleteAccount', label: 'Delete your account' },
+  { key: 'deleteAccount', label: 'Account Deletion' },
 ];
 
 /** A line of words, with the support address as a link where it appears. */

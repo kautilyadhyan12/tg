@@ -6,7 +6,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { DELETE_PAGE_WORDS as W, KEPT_AFTER_DELETION, LEGAL_PATHS } from '@app/shared';
+import { DELETE_PAGE_KEPT, DELETE_PAGE_WORDS as W, KEPT_AFTER_DELETION, LEGAL_PATHS } from '@app/shared';
 import { isSignedOutPage } from '../api/authApi';
 
 vi.mock('../api/deleteAccountApi', () => ({ deleteAccountService: { sendCode: vi.fn(), deleteAccount: vi.fn() } }));
@@ -50,7 +50,14 @@ describe('the Delete your account page', () => {
     draw();
     expect(screen.getByRole('heading', { level: 1, name: W.title })).toBeTruthy();
     const page = document.body.textContent ?? '';
-    const lines = [...W.inAppSteps, ...W.whatHappens, ...KEPT_AFTER_DELETION.flatMap((k) => [k.what, k.howLong]), W.ownerLine];
+    const lines = [
+      ...W.lead, W.inAppLead, ...W.inAppSteps, ...W.webLead, W.whatHappensLead,
+      ...W.whatHappens.flatMap((part) => [part.heading, ...part.paras]), ...W.deletedItems, W.deletedAfter,
+      ...W.keptLead, ...W.keptHead, ...Object.values(DELETE_PAGE_KEPT).flat(), W.keptMoreBefore.trim(),
+      W.ownerLine, W.ownerStepsLead, ...W.ownerSteps, W.ownerAfter,
+    ];
+    // One row for every kind of record the deletion keeps.
+    expect(Object.keys(DELETE_PAGE_KEPT).sort()).toEqual(KEPT_AFTER_DELETION.map((k) => k.id).sort());
     expect(lines.filter((line) => !page.includes(line))).toEqual([]);
     expect(screen.getByRole('link', { name: W.keptMore }).getAttribute('href')).toBe(`${LEGAL_PATHS.privacy}#how-long`);
   });
