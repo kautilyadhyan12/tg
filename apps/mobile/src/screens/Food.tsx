@@ -40,6 +40,7 @@ import { NOT_KNOWN, count } from "./dashboard/words";
 import { useRead } from "./dashboard/useRead";
 import { dayRows, useDayMeals } from "./food/dayRows";
 import { WhatToEatNext } from "./food/MealPlan";
+import type { WeekAsk } from "./food/GymMealPlan";
 import { foodsOfRow } from "./food/planRules";
 import {
   MEAL_TYPES,
@@ -165,13 +166,14 @@ export function FoodScreen() {
   // The Dashboard's See meal plan opens the week itself.
   const askedWeek = typeof asked === "object" && "week" in asked && typeof asked.week === "number" ? asked.week : null;
   // Opened once: coming back to today later never opens it again.
-  const [toWeek, setToWeek] = useState<number | null>(null);
+  const askedWeekGym = typeof asked === "object" && "weekGym" in asked && typeof asked.weekGym === "string" ? asked.weekGym : null;
+  const [toWeek, setToWeek] = useState<WeekAsk | null>(null);
   const weekSeen = useRef<number | null>(null);
   useEffect(() => {
     if (askedWeek === null || askedWeek === weekSeen.current) return;
     weekSeen.current = askedWeek;
-    setToWeek(askedWeek);
-  }, [askedWeek]);
+    setToWeek({ at: askedWeek, gymId: askedWeekGym });
+  }, [askedWeek, askedWeekGym]);
   useEffect(() => {
     if (toToday !== null) setDay(startOfDay(new Date()));
   }, [toToday]);

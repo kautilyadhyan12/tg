@@ -19,7 +19,7 @@ import { mealTypeName, startOfDay } from "./day";
 import { dayRows, useDayMeals } from "./dayRows";
 import { ideaName } from "./ideaRules";
 import { FoodChoiceRow, shownOf, useFoodChoice } from "./FoodChoice";
-import { GymPlanBox, NoGymPlan, UnderLine, useGymPlans } from "./GymMealPlan";
+import { GymPlanBox, NoGymPlan, UnderLine, useGymPlans, type WeekAsk } from "./GymMealPlan";
 import { gymMeal, writtenByLine, type GymOfMine } from "./gymPlanRules";
 import { MealIdeas, NO_PLAN_YET, type PlannedNow } from "./MealIdeas";
 import { useMealOutbox } from "./MealOutbox";
@@ -52,8 +52,8 @@ interface WhatToEatNextProps {
   /** Today's meals could not be read, and how to read them again. */
   todayFailed: boolean;
   retryToday: () => void;
-  /** Moves when another page asks for the week to open (the Dashboard's See meal plan). */
-  openWeekAt: number | null;
+  /** Another page asks for a week to open (the Dashboard's See meal plan). */
+  openWeekAt: WeekAsk | null;
   onWeekOpened: () => void;
   /** The Food page's own food box, to change a meal of the plan or put a new one in (34e-ii-b). */
   pickFoods: (plan: PlanMealTarget, onClose: () => void) => ReactNode;
@@ -67,8 +67,6 @@ export function WhatToEatNext({ foodsToday, fresh, onAnswered, todayFailed, retr
   const { read, again, begun, shownFrom } = useRead(PLAN_READ, dietPlanResponseSchema, fresh);
   const gyms = useGymPlans(fresh);
   const { outbox } = useMealOutbox();
-  // The gym's plan picked: the gym's box opens its own week for the Dashboard's See meal plan.
-  const gymShown = useRef(false);
   // The plan as the server answered a change, until a read begun after that answer comes back.
   const [answered, setAnswered] = useState<{ data: DietPlanResponse; after: number } | null>(null);
   useEffect(() => {
@@ -112,7 +110,6 @@ export function WhatToEatNext({ foodsToday, fresh, onAnswered, todayFailed, retr
     setAnswered({ data, after: begun() });
   }, [begun]);
   const choice = useFoodChoice(plan === null ? null : shownOf(plan), { begun, shownFrom, again }, onChoice);
-  gymShown.current = choice.shown?.choice === "gym";
   const gymList = gyms.read.kind === "ok" ? gyms.read.data.gyms : [];
   // The plan changed under "Remove this meal?": the question goes, and the week says why.
   const removingFrom = removing?.version ?? null;
@@ -123,7 +120,8 @@ export function WhatToEatNext({ foodsToday, fresh, onAnswered, todayFailed, retr
     setTrouble("Your plan has changed, so nothing was removed.");
   }, [removingFrom, shownVersion]);
   useEffect(() => {
-    if (openWeekAt === null || gymShown.current) return;
+    // A request for a gym's week is the gym's box's to open.
+    if (openWeekAt === null || openWeekAt.gymId !== null) return;
     setShownDay(planDayOf(new Date()));
     setAsking(false);
     setChoosing(false);
@@ -575,7 +573,8 @@ export function WhatToEatNext({ foodsToday, fresh, onAnswered, todayFailed, retr
 /** The Dashboard's Recommended box: the same answer as the Food page's. Today's meals are read only
  *  for somebody with a plan. Its Log meal opens the Food page's What to eat next, where the meal is
  *  logged: the Dashboard never logs one by itself (Kd, 2026-11-02). */
-export function Recommended({ onMore, onPlan, onLog }: { onMore: () => void; onPlan: () => void; onLog: () => void }) {
+export function Recommended({ onMore, onPlan, onLog }: { onMore: () => void; onPlan: (gymId: string | null) => void; onLog: () => void }) {
+  const ownPlan = () => { onPlan(null); };
   const { read, again, begun, shownFrom } = useRead(PLAN_READ, dietPlanResponseSchema);
   const gyms = useGymPlans();
   const choice = useFoodChoice(read.kind === "ok" ? shownOf(read.data) : null, { begun, shownFrom, again });
@@ -590,11 +589,11 @@ export function Recommended({ onMore, onPlan, onLog }: { onMore: () => void; onP
     if (gyms.read.kind === "failed") return <MealIdeas onMore={onMore} onLog={onLog} choices={choices} planned={{ failed: "Your gym’s meal plan couldn’t load.", retry: gyms.again }} />;
     const gym = gymList.find((g) => g.gymId === shown.gymId);
     if (gym === undefined) return <MealIdeas onMore={onMore} onLog={onLog} choices={choices} planned="loading" />;
-    return <RecommendedFromGym gym={gym} onMore={onPlan} onIdeas={onMore} onLog={onLog} choices={choices} />;
+    return <RecommendedFromGym gym={gym} onMore={() => { onPlan(gym.gymId); }} onIdeas={onMore} onLog={onLog} choices={choices} />;
   }
   if (shown.choice === "suggested") return <MealIdeas onMore={onMore} onLog={onLog} choices={choices} />;
-  if (hasMeals(read.data)) return <RecommendedFromPlan plan={read.data} onMore={onPlan} onIdeas={onMore} onLog={onLog} choices={choices} />;
-  return <MealIdeas onMore={onMore} onLog={onLog} choices={choices} planned={{ build: onPlan }} />;
+  if (hasMeals(read.data)) return <RecommendedFromPlan plan={read.data} onMore={ownPlan} onIdeas={onMore} onLog={onLog} choices={choices} />;
+  return <MealIdeas onMore={onMore} onLog={onLog} choices={choices} planned={{ build: ownPlan }} />;
 }
 
 /** The gym's plan on the Dashboard: today's next meal from it, as the person's own plan's is shown. */

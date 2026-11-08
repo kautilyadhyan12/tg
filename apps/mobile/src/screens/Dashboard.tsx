@@ -220,8 +220,8 @@ export function DashboardScreen() {
         onMore={() => {
           go.navigate("Food", { today: Date.now() });
         }}
-        onPlan={() => {
-          go.navigate("Food", { today: Date.now(), week: Date.now() });
+        onPlan={(gymId) => {
+          go.navigate("Food", gymId === null ? { today: Date.now(), week: Date.now() } : { today: Date.now(), week: Date.now(), weekGym: gymId });
         }}
         onLog={() => {
           go.navigate("Food", { today: Date.now(), next: Date.now() });

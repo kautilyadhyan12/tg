@@ -934,6 +934,20 @@ describe("the gym's meal plan (31g)", () => {
     expect(await within(await screen.findByTestId("recommended-box")).findByText(LINE)).toBeTruthy();
   });
 
+  it("the Dashboard's See meal plan opens the gym's week when the gym was just picked there, never the person's own", async () => {
+    const world = member([gym(IRON, "Iron House", gymPlan([OATS]))], [SALMON], { choice: "mine", gymId: null });
+    const box = await open(world);
+    expect(await box.findByRole("button", { name: "Log Salmon" })).toBeTruthy();
+    await fireEvent.press(screen.getByRole("tab", { name: "Dashboard" }));
+    const card = within(await screen.findByTestId("recommended-box"));
+    await fireEvent.press(await card.findByRole("radio", { name: "Iron House" }));
+    const picked = within(await screen.findByTestId("recommended-box"));
+    expect(await picked.findByText("Lean week · By Sam")).toBeTruthy();
+    await fireEvent.press(picked.getByRole("button", { name: "See meal plan" }));
+    expect(await screen.findByText("Iron House’s meal plan")).toBeTruthy();
+    expect(screen.queryByText("Your meal plan")).toBeNull();
+  });
+
   it("the person's own plan's day under what they may eat says so too, never changed", async () => {
     const LINE = "This day is under 2,150 kcal, what keeps your weight. With your health answers, eat at least that.";
     const own = week([OATS], { choice: "mine" });

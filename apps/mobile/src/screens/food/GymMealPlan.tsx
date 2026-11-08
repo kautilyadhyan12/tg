@@ -75,10 +75,13 @@ interface GymPlanBoxProps {
   foodsToday: readonly (readonly string[])[] | null;
   todayFailed: boolean;
   retryToday: () => void;
-  /** Moves when another page asks for the week to open (the Dashboard's See meal plan). */
-  openWeekAt: number | null;
+  /** Another page asks for a week to open (the Dashboard's See meal plan). */
+  openWeekAt: WeekAsk | null;
   onWeekOpened: () => void;
 }
+
+/** A request from another page to open a week: the gym's, or the person's own when gymId is null. */
+export interface WeekAsk { at: number; gymId: string | null }
 
 /** The Food page's What to eat next with the gym's plan picked. */
 export function GymPlanBox({ gym, retry, choices, foodsToday, todayFailed, retryToday, openWeekAt, onWeekOpened }: GymPlanBoxProps) {
@@ -97,11 +100,13 @@ export function GymPlanBox({ gym, retry, choices, foodsToday, todayFailed, retry
     }
   }, [focused]);
   const plan = gym !== null && gym !== "failed" ? gym.plan : null;
+  // Only a request for this gym's week: Food's choice may still be the one before the Dashboard's pick.
+  const gymId = gym !== null && gym !== "failed" ? gym.gymId : null;
   useEffect(() => {
-    if (openWeekAt === null) return;
+    if (openWeekAt === null || gymId === null || openWeekAt.gymId !== gymId) return;
     if (plan !== null) setWeek(true);
     onWeekOpened();
-  }, [openWeekAt, onWeekOpened, plan]);
+  }, [openWeekAt, onWeekOpened, plan, gymId]);
 
   const log = async (meal: DietPlanMeal) => {
     if (outbox === null || foodsToday === null || loggingNow.current) return;
