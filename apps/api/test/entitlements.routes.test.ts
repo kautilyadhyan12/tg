@@ -243,7 +243,8 @@ d("entitlements + quotas + history gate (real Postgres)", () => {
   });
 
   it("a CORRUPT cache value self-heals to DB resolution, never 500s (T3 P2.4)", { timeout: 30_000 }, async () => {
-    // Poison the cache with non-JSON, then with valid-JSON-wrong-shape.
+    // Poison the cache with non-JSON, then with valid-JSON-wrong-shape. With no mark, the plan check reads `ent:<id>`.
+    await redis.del("ent-mark:" + userB);
     await redis.setex("ent:" + userB, 60, "}{ not json");
     const r1 = await inject({ url: "/v1/entitlements/me", access: cookieB });
     expect(r1.statusCode).toBe(200);
