@@ -1,4 +1,4 @@
-import { useContext, useEffect, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import { Image, Keyboard, LayoutAnimation, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SIGN_IN_CODE_RULES, authEmailSchema } from "@app/shared";
@@ -13,6 +13,8 @@ import { pictures } from "../look/pictures";
 import { Txt } from "../look/Txt";
 import { Wordmark } from "../look/Wordmark";
 import type { Answer } from "../session/calls";
+import { forgetWaiting, keepWaiting, readWaiting } from "../session/codeWaiting";
+import type { KeyStore } from "../session/session";
 import { useSession } from "../session/SessionProvider";
 import { RobotCheck } from "./RobotCheck";
 import { CopyContext } from "./ThisCopy";
@@ -49,7 +51,9 @@ function wordsFor(answer: Exclude<Answer<unknown>, { kind: "ok" }>, fallback: st
   return answer.message === "" ? fallback : answer.message;
 }
 
-export function SignInScreen({ note }: { note: string | null }) {
+/** `waiting`: where the code step is kept while the person fetches their code, so a reopen after Android closed the
+ *  app comes back to it. */
+export function SignInScreen({ note, waiting }: { note: string | null; waiting: KeyStore }) {
   const { session } = useSession();
   const apiUrl = useContext(CopyContext).extra?.apiUrl ?? "";
   const insets = useSafeAreaInsets();
@@ -102,10 +106,33 @@ export function SignInScreen({ note }: { note: string | null }) {
 
   const secondsToResend = Math.max(0, Math.ceil((resendAt - now) / 1000));
 
+  /** When Resend may next be pressed, as the last answer set it: kept with the code step. */
+  const resendAtNow = useRef(0);
   const waitFor = (seconds: number) => {
-    setResendAt(Date.now() + seconds * 1000);
+    resendAtNow.current = Date.now() + seconds * 1000;
+    setResendAt(resendAtNow.current);
     setNow(Date.now());
   };
+
+  /** Reading whether a code step was left open: until then the box waits, so the email step never flashes first. */
+  const [restoring, setRestoring] = useState(true);
+  useEffect(() => {
+    let live = true;
+    void readWaiting(waiting, Date.now()).then((left) => {
+      if (!live) return;
+      if (left !== null) {
+        setAddress(left.email);
+        setArrival(left.arrival);
+        setResendAt(left.resendAt);
+        setNow(Date.now());
+        setStep("code");
+      }
+      setRestoring(false);
+    });
+    return () => {
+      live = false;
+    };
+  }, [waiting]);
 
   /** `too-soon`: a code was asked for inside the server's gap, so none went out; the code box opens either way. */
   async function askForCode(to: string, press: "email" | "resend", robotToken?: string): Promise<"sent" | "too-soon" | null> {
@@ -152,6 +179,7 @@ export function SignInScreen({ note }: { note: string | null }) {
       setCode("");
       setArrival(arrived);
       setStep("code");
+      void keepWaiting(waiting, { email: parsed.data, sentAt: Date.now(), resendAt: resendAtNow.current, arrival: arrived });
     }
   }
 
@@ -161,6 +189,7 @@ export function SignInScreen({ note }: { note: string | null }) {
       setCode("");
       setArrival("sent");
       setSaid("New code sent.");
+      void keepWaiting(waiting, { email: address, sentAt: Date.now(), resendAt: resendAtNow.current, arrival: "sent" });
     }
   }
 
@@ -174,8 +203,11 @@ export function SignInScreen({ note }: { note: string | null }) {
     setProblem("");
     setSaid("");
     const answer = await session.verifyCode(address, code);
-    // Signed in: the tabs take this screen's place.
-    if (answer.kind === "ok") return;
+    // Signed in: the tabs take this screen's place, and the kept code step goes.
+    if (answer.kind === "ok") {
+      void forgetWaiting(waiting);
+      return;
+    }
     if (answer.kind === "no_answer") setUnanswered(code);
     // The same digits refused after a check with no answer: that check may have spent them at the
     // server, or they were wrong all along. Either way a new code is the way on, and the line says so.
@@ -205,8 +237,11 @@ export function SignInScreen({ note }: { note: string | null }) {
     setGoogleProblem("");
     setProblem("");
     const answer = await session.signInWithGoogle();
-    // Signed in: the tabs take this screen's place.
-    if (answer.kind === "ok") return;
+    // Signed in: the tabs take this screen's place, and any kept code step goes.
+    if (answer.kind === "ok") {
+      void forgetWaiting(waiting);
+      return;
+    }
     // Closed by the person: nothing to say, and the page is as it was.
     if (answer.kind === "failed") setGoogleProblem(GOOGLE_FAILED);
     else if (answer.kind !== "closed") setGoogleProblem(wordsFor(answer, GOOGLE_FAILED));
@@ -214,6 +249,7 @@ export function SignInScreen({ note }: { note: string | null }) {
   }
 
   const changeEmail = () => {
+    void forgetWaiting(waiting);
     setStep("email");
     setGoogleProblem("");
     setCode("");
@@ -248,110 +284,112 @@ export function SignInScreen({ note }: { note: string | null }) {
         {/* The people stay in view above the box; while typing the box rises over them, to the keyboard. */}
         <View style={typing ? styles.typing : { flexGrow: 1, minHeight: Math.max(0, Math.round(posterHeight * POSTER.peopleFoot) - insets.top - TOP_ROOM) }} />
 
-        <View style={styles.box}>
-          {step === "email" ? (
-            <View style={styles.head}>
-              <Txt kind="h1">Get started.</Txt>
-              <Txt colour="onSignIn">Sign in or create your account</Txt>
-            </View>
-          ) : arrival === "sent" ? (
-            <View style={styles.head}>
-              <Txt kind="h1">Check your email.</Txt>
-              <Txt colour="onSignIn">Enter the 6-digit code sent to</Txt>
-              <Address address={address} />
-            </View>
-          ) : (
-            <View style={styles.head}>
-              <Txt kind="h1">Enter your code.</Txt>
-              <Txt colour="onSignIn">{secondsToResend > 0 ? TOO_SOON.asked : TOO_SOON.have}</Txt>
-              <Address address={address} />
-              <Txt colour="onSignIn">{secondsToResend > 0 ? TOO_SOON.wait : TOO_SOON.resend}</Txt>
-            </View>
-          )}
+        {restoring ? null : (
+          <View style={styles.box}>
+            {step === "email" ? (
+              <View style={styles.head}>
+                <Txt kind="h1">Get started.</Txt>
+                <Txt colour="onSignIn">Sign in or create your account</Txt>
+              </View>
+            ) : arrival === "sent" ? (
+              <View style={styles.head}>
+                <Txt kind="h1">Check your email.</Txt>
+                <Txt colour="onSignIn">Enter the 6-digit code sent to</Txt>
+                <Address address={address} />
+              </View>
+            ) : (
+              <View style={styles.head}>
+                <Txt kind="h1">Enter your code.</Txt>
+                <Txt colour="onSignIn">{secondsToResend > 0 ? TOO_SOON.asked : TOO_SOON.have}</Txt>
+                <Address address={address} />
+                <Txt colour="onSignIn">{secondsToResend > 0 ? TOO_SOON.wait : TOO_SOON.resend}</Txt>
+              </View>
+            )}
 
-          {/* Why the person is here again; once they have asked for a code it has been read. */}
-          {note === null || step === "code" ? null : (
-            <Card style={styles.note}>
-              <Icon name="logout" size={16} colour="textSoft" />
-              <Txt colour="text" style={styles.noteWords}>
-                {note}
-              </Txt>
-            </Card>
-          )}
-
-          {step === "email" ? (
-            <View style={styles.form}>
-              <Field
-                key="email"
-                label="Email"
-                bare
-                icon="mail"
-                light
-                value={typed}
-                onChange={(value) => {
-                  setTyped(value);
-                  setProblem("");
-                }}
-                placeholder="Email address"
-                keyboard="email-address"
-                fills="email"
-                maxLength={254}
-                onDone={() => void continueWithEmail()}
-              />
-              {problem === "" ? null : <Said tone="bad" words={problem} />}
-              <Button label="Continue" kind="dark" wide raised busy={busy} disabled={googleBusy} onPress={() => void continueWithEmail()} />
-              <View style={styles.or}>
-                <View style={styles.orLine} />
-                <Txt kind="tiny" colour="onSignIn">
-                  or
+            {/* Why the person is here again; once they have asked for a code it has been read. */}
+            {note === null || step === "code" ? null : (
+              <Card style={styles.note}>
+                <Icon name="logout" size={16} colour="textSoft" />
+                <Txt colour="text" style={styles.noteWords}>
+                  {note}
                 </Txt>
-                <View style={styles.orLine} />
-              </View>
-              <Button
-                label="Continue with Google"
-                kind="light"
-                wide
-                raised
-                lead={<GoogleMark />}
-                busy={googleBusy}
-                disabled={busy}
-                onPress={() => void continueWithGoogle()}
-              />
-              {googleProblem === "" ? null : <Said tone="bad" words={googleProblem} />}
-            </View>
-          ) : (
-            <View style={styles.form}>
-              <CodeBoxes
-                label="6-digit code"
-                length={6}
-                value={code}
-                onChange={(value) => {
-                  setCode(value.replace(/\D/g, "").slice(0, 6));
-                  setProblem("");
-                }}
-                onDone={() => void continueWithCode()}
-              />
-              {problem === "" ? null : <Said tone="bad" words={problem} />}
-              <Button label="Continue" kind="dark" wide raised busy={busy} onPress={() => void continueWithCode()} />
-              <View style={styles.links}>
-                <Button
-                  label={secondsToResend > 0 ? `Resend code in ${String(secondsToResend)}s` : "Resend code"}
-                  kind="lightLink"
-                  disabled={busy || secondsToResend > 0}
-                  onPress={() => void resend()}
-                />
-                <Button label="Use a different email" kind="lightLink" disabled={busy} onPress={changeEmail} />
-              </View>
-              {said === "" ? null : (
-                <Said tone="good" words={said} />
-              )}
-            </View>
-          )}
+              </Card>
+            )}
 
-          <Txt kind="tiny" colour="onSignIn" style={styles.centre}>
-            By continuing you agree to our Terms & Privacy Policy
-          </Txt>
-        </View>
+            {step === "email" ? (
+              <View style={styles.form}>
+                <Field
+                  key="email"
+                  label="Email"
+                  bare
+                  icon="mail"
+                  light
+                  value={typed}
+                  onChange={(value) => {
+                    setTyped(value);
+                    setProblem("");
+                  }}
+                  placeholder="Email address"
+                  keyboard="email-address"
+                  fills="email"
+                  maxLength={254}
+                  onDone={() => void continueWithEmail()}
+                />
+                {problem === "" ? null : <Said tone="bad" words={problem} />}
+                <Button label="Continue" kind="dark" wide raised busy={busy} disabled={googleBusy} onPress={() => void continueWithEmail()} />
+                <View style={styles.or}>
+                  <View style={styles.orLine} />
+                  <Txt kind="tiny" colour="onSignIn">
+                    or
+                  </Txt>
+                  <View style={styles.orLine} />
+                </View>
+                <Button
+                  label="Continue with Google"
+                  kind="light"
+                  wide
+                  raised
+                  lead={<GoogleMark />}
+                  busy={googleBusy}
+                  disabled={busy}
+                  onPress={() => void continueWithGoogle()}
+                />
+                {googleProblem === "" ? null : <Said tone="bad" words={googleProblem} />}
+              </View>
+            ) : (
+              <View style={styles.form}>
+                <CodeBoxes
+                  label="6-digit code"
+                  length={6}
+                  value={code}
+                  onChange={(value) => {
+                    setCode(value.replace(/\D/g, "").slice(0, 6));
+                    setProblem("");
+                  }}
+                  onDone={() => void continueWithCode()}
+                />
+                {problem === "" ? null : <Said tone="bad" words={problem} />}
+                <Button label="Continue" kind="dark" wide raised busy={busy} onPress={() => void continueWithCode()} />
+                <View style={styles.links}>
+                  <Button
+                    label={secondsToResend > 0 ? `Resend code in ${String(secondsToResend)}s` : "Resend code"}
+                    kind="lightLink"
+                    disabled={busy || secondsToResend > 0}
+                    onPress={() => void resend()}
+                  />
+                  <Button label="Use a different email" kind="lightLink" disabled={busy} onPress={changeEmail} />
+                </View>
+                {said === "" ? null : (
+                  <Said tone="good" words={said} />
+                )}
+              </View>
+            )}
+
+            <Txt kind="tiny" colour="onSignIn" style={styles.centre}>
+              By continuing you agree to our Terms & Privacy Policy
+            </Txt>
+          </View>
+        )}
       </ScrollView>
 
       <RobotCheck

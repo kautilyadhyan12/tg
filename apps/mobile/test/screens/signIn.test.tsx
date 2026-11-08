@@ -22,11 +22,13 @@ const signsIn =
 const noWait = () => Promise.resolve();
 
 /** The app as a phone opens it: `held` is what its key store kept from last time. */
-async function openApp(routes: Record<string, Route>, held: string | null = null, google?: AskGoogle) {
+async function openApp(routes: Record<string, Route>, held: string | null = null, google?: AskGoogle, waiting = memoryStore()) {
   const server = fakeServer(routes);
   const store = memoryStore(held);
-  await render(<App extra={extra} ask={server.ask} store={store} wait={noWait} {...(google === undefined ? {} : { google })} />);
-  return { server, store };
+  const drawn = await render(
+    <App extra={extra} ask={server.ask} store={store} wait={noWait} waitingStore={waiting} {...(google === undefined ? {} : { google })} />,
+  );
+  return { server, store, waiting, drawn };
 }
 
 const type = (field: string, words: string) => fireEvent.changeText(screen.getByLabelText(field), words);
@@ -384,6 +386,52 @@ describe("signing in by email code", () => {
     await press("Use a different email");
     expect(screen.getByLabelText("Email").props.value).toBe("ravi@example.com");
     expect(screen.queryByLabelText("6-digit code")).toBeNull();
+  });
+
+  it("closed by Android while the person fetches the code: reopened, it is on the code step for that address, and the code signs in", async () => {
+    const routes = { "/v1/auth/code/send": sent, "/v1/auth/code/verify": signsIn() };
+    const { waiting, drawn } = await openApp(routes);
+    await askForCode();
+    await screen.findByLabelText("6-digit code");
+    // The address and when it went are kept; the code never is.
+    expect(JSON.parse(waiting.value ?? "{}")).toMatchObject({ email: "ravi@example.com", arrival: "sent" });
+    await drawn.unmount();
+    const again = await openApp(routes, null, undefined, waiting);
+    expect(await screen.findByText("Check your email.")).toBeTruthy();
+    expect(screen.getByText("ravi@example.com")).toBeTruthy();
+    expect(screen.queryByText("Get started.")).toBeNull();
+    // No second code was asked for.
+    expect(again.server.paths().filter((path) => path === "/v1/auth/code/send")).toEqual([]);
+    await type("6-digit code", "123456");
+    await press("Continue");
+    expect(await screen.findByRole("header", { name: "Ravi" })).toBeTruthy();
+    expect(waiting.value).toBeNull();
+  });
+
+  it("a code step kept past the code's ten minutes opens on Get started and is removed; one inside them comes back", async () => {
+    const note = (minutesAgo: number) =>
+      JSON.stringify({ email: "ravi@example.com", sentAt: Date.now() - minutesAgo * 60_000, resendAt: 0, arrival: "sent" });
+    const old = memoryStore(note(10.1));
+    const first = await openApp({}, null, undefined, old);
+    expect(await screen.findByText("Get started.")).toBeTruthy();
+    expect(old.value).toBeNull();
+    await first.drawn.unmount();
+    const fresh = memoryStore(note(9));
+    await openApp({}, null, undefined, fresh);
+    expect(await screen.findByText("Check your email.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Resend code" }).props.accessibilityState).toEqual({ disabled: false, busy: false });
+  });
+
+  it("Use a different email removes the kept code step", async () => {
+    const { waiting } = await openApp({ "/v1/auth/code/send": sent });
+    await askForCode();
+    await screen.findByLabelText("6-digit code");
+    expect(waiting.value).not.toBeNull();
+    await press("Use a different email");
+    expect(await screen.findByLabelText("Email")).toBeTruthy();
+    await waitFor(() => {
+      expect(waiting.value).toBeNull();
+    });
   });
 
   it("no drawn words are under 11, and nothing pressed or typed in is under 44 tall", async () => {

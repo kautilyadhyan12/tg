@@ -18,3 +18,11 @@ export const phoneOwedStore: KeyStore = {
     SecureStore.setItemAsync("sign-out-owed", value, { keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY }),
   clear: () => SecureStore.deleteItemAsync("sign-out-owed"),
 };
+
+/** The code step a person left to fetch their code (12e): their address and when it went, never the code. */
+export const phoneWaitingStore: KeyStore = {
+  read: () => SecureStore.getItemAsync("sign-in-waiting"),
+  write: (value) =>
+    SecureStore.setItemAsync("sign-in-waiting", value, { keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY }),
+  clear: () => SecureStore.deleteItemAsync("sign-in-waiting"),
+};
