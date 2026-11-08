@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
 import { AppState, StyleSheet, type AppStateStatus, type StyleProp, type TextStyle, type ViewStyle } from "react-native";
 import { App } from "../../src/App";
 import type { AskGoogle, GoogleAnswer } from "../../src/session/google";
@@ -57,7 +57,8 @@ describe("the worst thing, on the screen", () => {
     expect(await screen.findByText("ravi@example.com")).toBeTruthy();
     // Each digit typed shows in its own box, so the person sees what they typed.
     await type("6-digit code", "4815");
-    expect(["4", "8", "1", "5"].map((digit) => screen.getAllByText(digit).length)).toEqual([1, 1, 1, 1]);
+    const boxText = (at: number) => within(screen.getByTestId(`code-box-${String(at)}`)).queryAllByText(/./).map((line) => String(line.props.children)).join("");
+    expect([0, 1, 2, 3, 4, 5].map(boxText)).toEqual(["4", "8", "1", "5", "", ""]);
     expect(screen.getByLabelText("6-digit code").props.editable).not.toBe(false);
     expect(screen.getByRole("button", { name: "Continue" }).props.accessibilityState).toEqual(free);
     expect(screen.getByRole("button", { name: /^Resend code/ })).toBeTruthy();
@@ -364,10 +365,11 @@ describe("signing in by email code", () => {
 
   it("Resend code waits out the server's minute, then sends and says so; Use a different email goes back", async () => {
     // The server's own wait is what the button counts: one second here, sixty in the app.
-    const { server } = await openApp({
+    const { server, waiting } = await openApp({
       "/v1/auth/code/send": () => ({ status: 200, body: { message: "Sent.", resendAfterSeconds: 1, expiresInSeconds: 600 } }),
     });
     await askForCode();
+    const kept = () => JSON.parse(waiting.value ?? "{}") as { sentAt: number; resendAt: number };
     const resend = () => screen.getByRole("button", { name: /^Resend code/ });
     expect((await screen.findByRole("button", { name: "Resend code in 1s" })).props.accessibilityState).toEqual({ disabled: true, busy: false });
     await fireEvent.press(resend());
@@ -378,9 +380,15 @@ describe("signing in by email code", () => {
       },
       { timeout: 4000 },
     );
+    const first = kept();
     await press("Resend code");
     expect(await screen.findByText("New code sent.")).toBeTruthy();
     expect(server.paths()).toEqual(["/v1/auth/code/send", "/v1/auth/code/send"]);
+    // The kept step follows the new code: its time and its Resend countdown.
+    await waitFor(() => {
+      expect(kept().sentAt).toBeGreaterThan(first.sentAt);
+    });
+    expect(kept().resendAt).toBeGreaterThan(first.resendAt);
     expect(screen.getByRole("button", { name: "Resend code in 1s" })).toBeTruthy();
 
     await press("Use a different email");
@@ -420,6 +428,29 @@ describe("signing in by email code", () => {
     await openApp({}, null, undefined, fresh);
     expect(await screen.findByText("Check your email.")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Resend code" }).props.accessibilityState).toEqual({ disabled: false, busy: false });
+  });
+
+  it("a kept step refused as too soon comes back as Enter your code; one dated after now is removed; Use a different email after a reopen keeps the address", async () => {
+    const tooSoon = memoryStore(JSON.stringify({ email: "ravi@example.com", sentAt: Date.now() - 30_000, resendAt: Date.now() + 30_000, arrival: "too-soon" }));
+    const first = await openApp({}, null, undefined, tooSoon);
+    expect(await screen.findByText("Enter your code.")).toBeTruthy();
+    expect(screen.queryByText("Check your email.")).toBeNull();
+    await press("Use a different email");
+    expect(screen.getByLabelText("Email").props.value).toBe("ravi@example.com");
+    await first.drawn.unmount();
+    const ahead = memoryStore(JSON.stringify({ email: "ravi@example.com", sentAt: Date.now() + 60_000, resendAt: 0, arrival: "sent" }));
+    await openApp({}, null, undefined, ahead);
+    expect(await screen.findByText("Get started.")).toBeTruthy();
+    expect(ahead.value).toBeNull();
+  });
+
+  it("a kept note that cannot be read opens on Get started and is removed", async () => {
+    const broken = memoryStore("{not json");
+    await openApp({}, null, undefined, broken);
+    expect(await screen.findByText("Get started.")).toBeTruthy();
+    await waitFor(() => {
+      expect(broken.value).toBeNull();
+    });
   });
 
   it("Use a different email removes the kept code step", async () => {
@@ -462,8 +493,10 @@ describe("Continue with Google", () => {
 
   it("the person's account from Google's box, then the tabs; the sign-in is kept on the phone", async () => {
     const { google, asked } = googleSays({ kind: "token", idToken: "google-answer" });
-    const { server, store } = await openApp({ "/v1/auth/google/phone/start": started, "/v1/auth/google/phone": signsIn() }, null, google);
+    const { server, store, waiting } = await openApp({ "/v1/auth/google/phone/start": started, "/v1/auth/google/phone": signsIn() }, null, google);
     await screen.findByText("Get started.");
+    // A code step kept from an earlier try by email: signed in by Google instead, it goes.
+    waiting.value = JSON.stringify({ email: "ravi@example.com", sentAt: Date.now(), resendAt: 0, arrival: "sent" });
     await press("Continue with Google");
     expect(await screen.findByRole("header", { name: "Ravi" })).toBeTruthy();
     // Google was asked with the server's own word and client id, and its answer went only to the server.
@@ -473,6 +506,9 @@ describe("Continue with Google", () => {
       ["/v1/auth/google/phone", { idToken: "google-answer" }],
     ]);
     expect(store.value).toBe(kept(1));
+    await waitFor(() => {
+      expect(waiting.value).toBeNull();
+    });
   });
 
   it("Google's box closed by the person: nothing is said and nobody is signed in", async () => {

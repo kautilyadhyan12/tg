@@ -25,7 +25,7 @@ export function CodeBoxes({ label, value, onChange, length, onDone }: CodeBoxesP
   return (
     <View style={styles.row}>
       {digits.map((digit, at) => (
-        <View key={at} style={[styles.box, on && at === next ? styles.lit : null]}>
+        <View key={at} testID={`code-box-${String(at)}`} style={[styles.box, on && at === next ? styles.lit : null]}>
           {on && at === next && digit === "" ? <View style={styles.caret} /> : <Txt style={styles.digit}>{digit}</Txt>}
         </View>
       ))}

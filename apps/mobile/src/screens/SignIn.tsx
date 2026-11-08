@@ -20,7 +20,7 @@ import { RobotCheck } from "./RobotCheck";
 import { CopyContext } from "./ThisCopy";
 
 // "Get started" (12e, Kd's drawing of 2026-11-08): his poster over the whole page, the app's name on it,
-// and the form in one dark box by the thumb (the browser asks the same, apps/web/src/pages/Login.jsx). Sign-up and sign-in are
+// and the form in one orange box by the thumb (the browser asks the same, apps/web/src/pages/Login.jsx). Sign-up and sign-in are
 // the same act: an email, the 6-digit code, and a new address gets its account on the spot.
 // Or Google: its own box from the bottom, and the server checks what Google answered.
 
@@ -122,6 +122,7 @@ export function SignInScreen({ note, waiting }: { note: string | null; waiting: 
       if (!live) return;
       if (left !== null) {
         setAddress(left.email);
+        setTyped(left.email);
         setArrival(left.arrival);
         setResendAt(left.resendAt);
         setNow(Date.now());
@@ -179,8 +180,20 @@ export function SignInScreen({ note, waiting }: { note: string | null; waiting: 
       setCode("");
       setArrival(arrived);
       setStep("code");
-      void keepWaiting(waiting, { email: parsed.data, sentAt: Date.now(), resendAt: resendAtNow.current, arrival: arrived });
+      void keepStep(parsed.data, arrived);
     }
+  }
+
+  /** Keeps the code step for a reopen. Refused as too soon, no code went: the step lasts only as long as the earlier
+   *  code, so it keeps that code's time where it was kept, or the earliest that code can have gone. */
+  async function keepStep(email: string, arrived: "sent" | "too-soon") {
+    const now = Date.now();
+    let sentAt = now;
+    if (arrived === "too-soon") {
+      const kept = await readWaiting(waiting, now);
+      sentAt = kept !== null && kept.email === email ? kept.sentAt : now - SIGN_IN_CODE_RULES.resendAfterSeconds * 1000;
+    }
+    await keepWaiting(waiting, { email, sentAt, resendAt: resendAtNow.current, arrival: arrived });
   }
 
   async function resend(robotToken?: string) {

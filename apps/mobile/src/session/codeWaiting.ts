@@ -8,16 +8,22 @@ export function stillWaiting(note: PhoneCodeWaiting, now: number): boolean {
 
 /** The code step to reopen on, or null; a note past its time, or one that cannot be read, is removed. */
 export async function readWaiting(store: KeyStore, now: number): Promise<PhoneCodeWaiting | null> {
+  let written: string | null;
   try {
-    const written = await store.read();
-    if (written === null || written === "") return null;
-    const parsed = phoneCodeWaitingSchema.safeParse(JSON.parse(written));
-    if (parsed.success && stillWaiting(parsed.data, now)) return parsed.data;
-    await store.clear();
-    return null;
+    written = await store.read();
   } catch {
     return null;
   }
+  if (written === null || written === "") return null;
+  let parsed: ReturnType<typeof phoneCodeWaitingSchema.safeParse> | null = null;
+  try {
+    parsed = phoneCodeWaitingSchema.safeParse(JSON.parse(written));
+  } catch {
+    parsed = null;
+  }
+  if (parsed !== null && parsed.success && stillWaiting(parsed.data, now)) return parsed.data;
+  await forgetWaiting(store);
+  return null;
 }
 
 export async function keepWaiting(store: KeyStore, note: PhoneCodeWaiting): Promise<void> {
