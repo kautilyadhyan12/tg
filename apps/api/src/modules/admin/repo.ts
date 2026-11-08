@@ -148,3 +148,146 @@ export async function sessionBegan(sql: Sql, userId: string, familyId: string): 
 export async function auditDoor(sql: Sql, userId: string, action: "admin.door_opened" | "admin.door_wrong_password"): Promise<void> {
   await sql`INSERT INTO audit_log (actor_user_id, action, target_type, target_id) VALUES (${userId}, ${action}, 'user', ${userId})`;
 }
+
+// ── Each person's days (ROADMAP Stage 2 item 14a-ii) ─────────────────────────
+// A person's day is their own, in the time zone their phone sent with its latest minutes; somebody whose
+// phone has sent none is read in the admin's zone. A day's meal scans and route plans are the uses
+// their limit counted (metered_uses), its cost what the ledger paid for them (api_cost_events).
+
+export interface PersonDaysRow {
+  id: string;
+  display_name: string;
+  email: string | null;
+  zone: string;
+  from_phone: boolean;
+  today: string;
+  first_shown: string;
+  day: string | null;
+  minutes: number | null;
+  meal: number;
+  route: number;
+  cost: string;
+}
+
+/** Up to `count` of one person's days, newest first, from their today (or the day before `before`)
+ *  back to their sign-up day. No rows: no such person using the app. */
+export async function personDays(
+  sql: Sql,
+  opts: { userId: string; zone: string; before: string | null; count: number; now: Date },
+): Promise<PersonDaysRow[]> {
+  return await sql<PersonDaysRow[]>`
+    WITH p AS (
+      SELECT u.id, u.display_name, u.email::text AS email, u.created_at,
+             (SELECT m.zone FROM app_minutes m WHERE m.user_id = u.id ORDER BY m.updated_at DESC, m.day DESC LIMIT 1) AS phone_zone,
+             (SELECT min(m.day) FROM app_minutes m WHERE m.user_id = u.id) AS first_day
+      FROM users u WHERE u.id = ${opts.userId} AND u.status = 'active'
+    ), z AS (
+      SELECT p.*, COALESCE(p.phone_zone, ${opts.zone}) AS zone FROM p
+    ), span AS (
+      SELECT z.*, (${opts.now}::timestamptz AT TIME ZONE z.zone)::date AS today,
+             (z.created_at AT TIME ZONE z.zone)::date AS first_shown
+      FROM z
+    ), last AS (
+      SELECT span.*, LEAST(span.today, COALESCE(${opts.before}::date - 1, span.today)) AS last_day FROM span
+    )
+    SELECT last.id, last.display_name, last.email, last.zone, last.phone_zone IS NOT NULL AS from_phone,
+           last.today::text AS today, last.first_shown::text AS first_shown, d.day::text AS day,
+           CASE WHEN d.day IS NULL OR last.first_day IS NULL OR d.day < last.first_day THEN NULL
+                ELSE COALESCE(m.minutes, 0)::int END AS minutes,
+           COALESCE(uses.meal, 0)::int AS meal, COALESCE(uses.route, 0)::int AS route,
+           COALESCE(cost.micro, 0)::bigint::text AS cost
+    FROM last
+    LEFT JOIN LATERAL (
+      SELECT last.last_day - g AS day FROM generate_series(0, ${opts.count - 1}::int) AS g
+      WHERE last.last_day - g >= last.first_shown
+    ) d ON true
+    LEFT JOIN app_minutes m ON m.user_id = last.id AND m.day = d.day
+    LEFT JOIN LATERAL (
+      SELECT count(*) FILTER (WHERE x.feature = 'meal_scan') AS meal, count(*) FILTER (WHERE x.feature = 'route_gen') AS route
+      FROM metered_uses x
+      WHERE x.user_id = last.id AND x.at >= (d.day::timestamp AT TIME ZONE last.zone) AND x.at < ((d.day + 1)::timestamp AT TIME ZONE last.zone)
+    ) uses ON true
+    LEFT JOIN LATERAL (
+      SELECT sum(e.cost_micro) AS micro FROM api_cost_events e
+      WHERE e.user_id = last.id AND e.at >= (d.day::timestamp AT TIME ZONE last.zone) AND e.at < ((d.day + 1)::timestamp AT TIME ZONE last.zone)
+    ) cost ON true
+    ORDER BY d.day DESC NULLS LAST`;
+}
+
+export interface DayRow {
+  id: string;
+  display_name: string;
+  email: string | null;
+  minutes: number | null;
+  meal: number;
+  route: number;
+  cost: string;
+}
+
+export interface DayList {
+  totals: { people: number; minutes: number; meal: number; route: number; cost: string };
+  page: DayRow[];
+}
+
+/** Everyone who used the app on `day`, each on their own day: time in the app, a counted scan or
+ *  route plan, or a cost. The totals are over all of them; the page is `limit` of them from `from`,
+ *  most time in the app first. */
+export async function dayList(sql: Sql, opts: { day: string; zone: string; from: number; limit: number }): Promise<DayList> {
+  // Every zone's day lies within the UTC day before and the day after it (UTC-12 to UTC+14): the
+  // rows of those three UTC days are read once, and each person's are kept to their own day. The
+  // people are worked out once (MATERIALIZED), never once for every account. Postgres guesses far
+  // more rows than these joins make and would compile the query first (JIT): measured at 10,000
+  // people on a day, 1.26 s of a 1.74 s read (tools/measure-admin-days-cost.ts), so not for this one.
+  const rows = await sql.begin(async (tx) => {
+    await tx`SET LOCAL jit = off`;
+    return await tx<{ totals: DayList["totals"]; page: DayRow[] | null }[]>`
+    WITH span AS (
+      SELECT ((${opts.day}::date - 1)::timestamp AT TIME ZONE 'UTC') AS lo, ((${opts.day}::date + 2)::timestamp AT TIME ZONE 'UTC') AS hi
+    ), uses_near AS MATERIALIZED (
+      SELECT x.user_id, x.feature, x.at FROM metered_uses x, span WHERE x.at >= span.lo AND x.at < span.hi
+    ), costs_near AS MATERIALIZED (
+      SELECT e.user_id, e.cost_micro, e.at FROM api_cost_events e, span WHERE e.user_id IS NOT NULL AND e.at >= span.lo AND e.at < span.hi
+    ), cand AS (
+      SELECT user_id FROM app_minutes WHERE day = ${opts.day}::date
+      UNION SELECT user_id FROM uses_near
+      UNION SELECT user_id FROM costs_near
+    ), z AS MATERIALIZED (
+      SELECT u.id, u.display_name, u.email::text AS email,
+             (${opts.day}::date::timestamp AT TIME ZONE zn.zone) AS lo, ((${opts.day}::date + 1)::timestamp AT TIME ZONE zn.zone) AS hi,
+             EXISTS (SELECT 1 FROM app_minutes m WHERE m.user_id = u.id AND m.day <= ${opts.day}::date) AS recorded
+      FROM cand JOIN users u ON u.id = cand.user_id AND u.status = 'active'
+      CROSS JOIN LATERAL (
+        SELECT COALESCE((SELECT m.zone FROM app_minutes m WHERE m.user_id = u.id ORDER BY m.updated_at DESC, m.day DESC LIMIT 1), ${opts.zone}) AS zone
+      ) zn
+    ), uses AS (
+      SELECT x.user_id, count(*) FILTER (WHERE x.feature = 'meal_scan') AS meal, count(*) FILTER (WHERE x.feature = 'route_gen') AS route
+      FROM uses_near x JOIN z ON z.id = x.user_id AND x.at >= z.lo AND x.at < z.hi
+      GROUP BY x.user_id
+    ), costs AS (
+      SELECT e.user_id, sum(e.cost_micro) AS micro
+      FROM costs_near e JOIN z ON z.id = e.user_id AND e.at >= z.lo AND e.at < z.hi
+      GROUP BY e.user_id
+    ), n AS (
+      SELECT z.id, z.display_name, z.email,
+             CASE WHEN z.recorded THEN COALESCE(mm.minutes, 0)::int END AS minutes,
+             COALESCE(uses.meal, 0)::int AS meal, COALESCE(uses.route, 0)::int AS route, COALESCE(costs.micro, 0)::bigint AS cost
+      FROM z
+      LEFT JOIN app_minutes mm ON mm.user_id = z.id AND mm.day = ${opts.day}::date
+      LEFT JOIN uses ON uses.user_id = z.id
+      LEFT JOIN costs ON costs.user_id = z.id
+    ), used AS (
+      SELECT * FROM n WHERE COALESCE(n.minutes, 0) > 0 OR n.meal > 0 OR n.route > 0 OR n.cost > 0
+    )
+    SELECT
+      (SELECT json_build_object('people', count(*)::int, 'minutes', COALESCE(sum(COALESCE(minutes, 0)), 0)::int,
+                                'meal', COALESCE(sum(meal), 0)::int, 'route', COALESCE(sum(route), 0)::int,
+                                'cost', COALESCE(sum(cost), 0)::bigint::text) FROM used) AS totals,
+      (SELECT json_agg(json_build_object('id', p.id, 'display_name', p.display_name, 'email', p.email, 'minutes', p.minutes,
+                                         'meal', p.meal, 'route', p.route, 'cost', p.cost::text) ORDER BY p.at)
+       FROM (SELECT used.*, row_number() OVER (ORDER BY used.minutes DESC NULLS LAST, used.meal DESC, used.route DESC, used.cost DESC, used.id) AS at
+             FROM used ORDER BY at OFFSET ${opts.from} LIMIT ${opts.limit}) p) AS page`;
+  });
+  const row = rows[0];
+  if (row === undefined) throw new Error("the day's totals query returned no row");
+  return { totals: row.totals, page: row.page ?? [] };
+}

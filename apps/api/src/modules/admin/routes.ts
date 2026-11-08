@@ -6,7 +6,15 @@
 // itself, so nothing tells a stranger the page is here.
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { Sql } from "postgres";
-import { adminPasswordRequestSchema, adminPeopleQuerySchema, adminSetLimitsRequestSchema } from "@app/shared";
+import {
+  adminDayQuerySchema,
+  adminPasswordRequestSchema,
+  adminPeopleQuerySchema,
+  adminPersonDaysQuerySchema,
+  adminSetLimitsRequestSchema,
+  calendarDaySchema,
+} from "@app/shared";
+import { knownZones } from "../appMinutes/repo.js";
 import type { AppConfig } from "../../config.js";
 import type { RedisLike } from "../../redis.js";
 import { accessClaimsOf } from "../auth/plugin.js";
@@ -147,6 +155,36 @@ export function registerAdminRoutes(app: FastifyInstance, deps: AdminRouteDeps):
     const query = parseOr400(adminPeopleQuerySchema, req.query, req, reply);
     if (query === null) return;
     return noStore(reply).status(200).send(await service.listPeople(deps, query));
+  });
+
+  /** The admin's own zone, from the browser; one the database cannot read days in is read as UTC,
+   *  and the answer's `zone` says so. */
+  const readableZone = async (zone: string): Promise<string> => ((await knownZones(deps.sql)).has(zone) ? zone : "UTC");
+  const notFound = async (req: FastifyRequest, reply: FastifyReply) =>
+    await reply.status(404).send({ error: "not_found", message: "Person not found", requestId: req.id });
+  const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+  /** One person's days (14a-ii): time in the app, meal scans, route plans and their cost. */
+  app.get<{ Params: { id: string } }>("/v1/admin/people/:id/days", { preHandler: [admin, open, readLimit] }, async (req, reply) => {
+    if (!UUID.test(req.params.id)) return notFound(req, reply);
+    const query = parseOr400(adminPersonDaysQuerySchema, req.query, req, reply);
+    if (query === null) return;
+    const days = await service.personDays(deps, {
+      userId: req.params.id,
+      zone: await readableZone(query.zone),
+      before: query.before ?? null,
+      now: (deps.now ?? (() => new Date()))(),
+    });
+    return days === null ? notFound(req, reply) : noStore(reply).status(200).send(days);
+  });
+
+  /** Everyone who used the app on one day, each on their own day (14a-ii). */
+  app.get<{ Params: { day: string } }>("/v1/admin/days/:day", { preHandler: [admin, open, readLimit] }, async (req, reply) => {
+    const day = parseOr400(calendarDaySchema, req.params.day, req, reply);
+    if (day === null) return;
+    const query = parseOr400(adminDayQuerySchema, req.query, req, reply);
+    if (query === null) return;
+    return noStore(reply).status(200).send(await service.dayPeople(deps, { day, zone: await readableZone(query.zone), from: Number(query.from ?? "0") }));
   });
 
   app.put("/v1/admin/limits", { preHandler: [admin, open, writeLimit] }, async (req, reply) => {

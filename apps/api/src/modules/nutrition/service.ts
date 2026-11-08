@@ -47,7 +47,7 @@ import {
 } from "@app/shared";
 import type { RedisLike } from "../../redis.js";
 import { onMealLogged } from "../gamification/service.js";
-import { refundQuota } from "../quotas/service.js";
+import { refundUse, type CountedUse } from "../quotas/service.js";
 import { dayInTz, hourInTz, safeTimeZone } from "../gamification/streak.js";
 import { getUserFoodAnswers, getUserPlanAndCutRules, getUserSyncContext } from "../users/service.js";
 import { AFTER_WORKOUT_MS, LEAST_MEAL_KCAL, regionOf, suggestAfterWorkout, suggestMeals, type AfterWorkoutIdea, type DayNumbers } from "./suggest.js";
@@ -220,14 +220,14 @@ export async function scannerPaused(deps: Pick<NutritionDeps, "redis">, userId: 
 }
 
 /** What a scan took from the person before it ran: the free retry it rode, or
- *  one of their scans, counted under its quota key. */
-export type ScanPaidWith = { retake: true } | { quotaKey: string };
+ *  one of their scans, counted under its quota key with its row in metered_uses. */
+export type ScanPaidWith = { retake: true } | { counted: CountedUse };
 
 /** Gives the person back what a failed scan took: the scan it counted, or, for
  *  a scan that rode a free retry, a new free retry, returned for the response. */
 async function giveBack(deps: NutritionDeps, userId: string, paidWith: ScanPaidWith): Promise<string | null> {
   if ("retake" in paidWith) return await issueRetake(deps, userId);
-  if (!(await refundQuota(deps.redis, paidWith.quotaKey))) {
+  if (!(await refundUse(deps, userId, paidWith.counted))) {
     deps.log.warn({ event: "nutrition.scan_refund_failed", userId }, "a failed scan could not be given back");
   }
   return null;

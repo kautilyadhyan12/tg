@@ -10,7 +10,7 @@ import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { seed } from "../src/db/seed.js";
 import { createMemoryRedis } from "../src/redis.js";
-import { requireQuota } from "../src/modules/quotas/service.js";
+import { quotaKey, refundUse, requireQuota, type CountedUse } from "../src/modules/quotas/service.js";
 import type { EmailSender } from "../src/modules/auth/email.js";
 
 const url = process.env["DATABASE_URL"];
@@ -64,10 +64,11 @@ d("the admin page (real Postgres)", () => {
     if (a === undefined) throw new Error("beforeAll did not build the app");
     return a;
   };
-  const call = (a: App, opts: { method?: "GET" | "PUT" | "POST"; url: string; body?: unknown; access?: string; door?: string }) =>
+  const call = (a: App, opts: { method?: "GET" | "PUT" | "POST"; url: string; body?: unknown; access?: string; door?: string; ip?: string }) =>
     a.inject({
       method: opts.method ?? "GET",
       url: opts.url,
+      ...(opts.ip === undefined ? {} : { remoteAddress: opts.ip }),
       headers: opts.body !== undefined ? { "content-type": "application/json" } : {},
       cookies: {
         ...(opts.access !== undefined && opts.access !== "" ? { accessToken: opts.access } : {}),
@@ -77,12 +78,16 @@ d("the admin page (real Postgres)", () => {
     });
   const asAdmin = (opts: { method?: "GET" | "PUT" | "POST"; url: string; body?: unknown }) => call(must(app), { ...opts, access: admin.access, door: adminDoor });
 
+  /** Each fixture person signs up from an address of their own: sign-up's per-address limit is not what is tested. */
+  let signUps = 0;
   const session = async (email: string, name: string): Promise<Person> => {
     const a = must(setup);
-    const reg = await call(a, { method: "POST", url: "/v1/auth/register", body: { email, password: PASSWORD, displayName: name } });
+    signUps += 1;
+    const ip = `10.14.2.${String(signUps)}`;
+    const reg = await call(a, { method: "POST", url: "/v1/auth/register", body: { email, password: PASSWORD, displayName: name }, ip });
     if (reg.statusCode !== 201) throw new Error(`register failed: ${reg.body}`);
     const { userId } = reg.json<{ userId: string }>();
-    const login = await call(a, { method: "POST", url: "/v1/auth/login", body: { email, password: PASSWORD } });
+    const login = await call(a, { method: "POST", url: "/v1/auth/login", body: { email, password: PASSWORD }, ip });
     return { userId, access: login.cookies.find((c) => c.name === "accessToken")?.value ?? "" };
   };
   /** A second sign-in of the admin with an account password, as an old account might still have:
@@ -117,6 +122,7 @@ d("the admin page (real Postgres)", () => {
     await sql`DELETE FROM gym_staff WHERE gym_id IN (SELECT id FROM gyms WHERE slug = 'a14i-gym')`;
     await sql`DELETE FROM gyms WHERE slug = 'a14i-gym'`;
     await sql`DELETE FROM refresh_tokens WHERE user_id IN (${mine})`;
+    await sql`DELETE FROM api_cost_events WHERE user_id IN (${mine})`;
     await sql`DELETE FROM sign_in_codes WHERE email LIKE ${`${PREFIX}%`}`;
     await sql`DELETE FROM users WHERE email LIKE ${`${PREFIX}%`} OR email LIKE ${`${BULK}%`}`;
   };
@@ -144,6 +150,20 @@ d("the admin page (real Postgres)", () => {
     const a = must(app);
     a.get("/test/a14i/meal", { preHandler: [a.authenticate, requireQuota("meal_scan", { sql, redis })] }, async (_q, r) => r.send({ ok: true }));
     a.get("/test/a14i/route", { preHandler: [a.authenticate, requireQuota("route_gen", { sql, redis })] }, async (_q, r) => r.send({ ok: true }));
+    // A scan that fails through no fault of the person's, as the scanner's own refusals do: its use is given back.
+    const failed = new Map<string, CountedUse>();
+    a.get("/test/a14ii/meal-fails", { preHandler: [a.authenticate, requireQuota("meal_scan", { sql, redis }, (q, use) => failed.set(q.id, use))] }, async (q, r) => {
+      const use = failed.get(q.id);
+      const userId = q.authUser?.id;
+      if (use === undefined || userId === undefined) throw new Error("the meter did not run");
+      return r.status(503).send({ given: await refundUse({ sql, redis, log: q.log }, userId, use) });
+    });
+    // A use counted for somebody whose use cannot be written down (no account row).
+    const nobodyIn = async (q: { authUser?: { id: string; familyId: string | null } }) => {
+      q.authUser = { id: "00000000-0000-4000-8000-0000000014a2", familyId: null };
+      await Promise.resolve();
+    };
+    a.get("/test/a14ii/meal-nobody", { preHandler: [nobodyIn, requireQuota("meal_scan", { sql, redis })] }, async (_q, r) => r.send({ ok: true }));
     // The admin signs in as the door asks: an emailed code (the password sign-in above opens nothing).
     const adminEmail = `${PREFIX}admin@example.com`;
     const sent = await call(a, { method: "POST", url: "/v1/auth/code/send", body: { email: adminEmail } });
@@ -173,6 +193,10 @@ d("the admin page (real Postgres)", () => {
     { method: "GET" as const, url: `/v1/admin/people?search=${PREFIX}` },
     { method: "PUT" as const, url: "/v1/admin/limits", body: { userIds: [target], feature: "meal_scan", perDay: 100 } },
     { method: "PUT" as const, url: "/v1/admin/limits", body: { userIds: [target], feature: "route_gen", perDay: 100 } },
+    { method: "GET" as const, url: `/v1/admin/people/${target}/days?zone=UTC` },
+    { method: "GET" as const, url: `/v1/admin/people/${target}/days?zone=UTC&before=2026-11-01` },
+    { method: "GET" as const, url: "/v1/admin/days/2026-11-08?zone=UTC" },
+    { method: "GET" as const, url: "/v1/admin/days/2026-11-08?zone=UTC&from=50" },
   ];
 
   it("WORST THING: nobody but the admin reads or changes anything; each meets the not-found reply", { timeout: 60_000 }, async () => {
@@ -468,5 +492,246 @@ d("the admin page (real Postgres)", () => {
     ];
     for (const body of bodies) expect((await asAdmin({ method: "PUT", url: "/v1/admin/limits", body })).statusCode).toBe(400);
     expect((await mealScan(stranger)).meal_scan).toEqual({ window: "day", limit: 15 });
+  });
+  // ── 14a-ii: each person's days ─────────────────────────────────────────────
+  // THE WORST THING (14a-ii's plan, Kd's go 2026-11-08): somebody other than Kd sees a person's days
+  // (the addresses above), or one person's minutes or scans are shown under another person's name.
+
+  const todayIn = (zone: string, at = new Date()): string =>
+    new Intl.DateTimeFormat("en-CA", { timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit" }).format(at);
+  const addDays = (day: string, n: number): string => {
+    const [y, m, dd] = day.split("-").map(Number);
+    return new Date(Date.UTC(y ?? 0, (m ?? 1) - 1, (dd ?? 1) + n)).toISOString().slice(0, 10);
+  };
+  /** The instant a clock in `zone` reads `hhmm` on `day`, from Postgres's own zone rules. Sent as
+   *  text: a value the driver sees as a timestamp it reads in this computer's own zone first. */
+  const instant = async (day: string, hhmm: string, zone: string): Promise<Date> => {
+    const rows = await sql<{ at: Date }[]>`SELECT (${`${day} ${hhmm}`}::text::timestamp AT TIME ZONE ${zone}::text) AS at`;
+    const at = rows[0]?.at;
+    if (at === undefined) throw new Error("no instant");
+    return at;
+  };
+  const idOf = async (email: string): Promise<Person> => ({
+    userId: (await sql<{ id: string }[]>`SELECT id FROM users WHERE email = ${email}`)[0]?.id ?? "",
+    access: "",
+  });
+  const sendMinutes = (p: Person, body: unknown) => call(must(app), { method: "POST", url: "/v1/me/app-minutes", access: p.access, body });
+  type Numbers = { minutes: number | null; mealScans: number; routePlans: number; costMicro: number };
+  type Days = { person: { id: string; name: string }; zone: string; zoneFromPhone: boolean; today: string; days: (Numbers & { day: string })[]; next: string | null };
+  type DayPage = { day: string; totals: { people: number; minutes: number; mealScans: number; routePlans: number; costMicro: number }; people: (Numbers & { id: string; name: string })[]; next: number | null };
+  const daysOf = async (p: Person, query = "zone=Europe/London") => (await asAdmin({ url: `/v1/admin/people/${p.userId}/days?${query}` })).json<Days>();
+  const dayPage = async (day: string, query = "zone=Europe/London") => (await asAdmin({ url: `/v1/admin/days/${day}?${query}` })).json<DayPage>();
+  const use = async (p: Person, feature: "meal_scan" | "route_gen", at: Date) => sql`INSERT INTO metered_uses (user_id, feature, at) VALUES (${p.userId}, ${feature}, ${at})`;
+  const cost = async (p: Person, micro: number, at: Date) =>
+    sql`INSERT INTO api_cost_events (at, user_id, feature, provider, units, unit_type, cost_micro) VALUES (${at}, ${p.userId}, 'meal_scan', 'test', 1, 'tokens', ${micro})`;
+
+  it("WORST THING (14a-ii): each person's minutes, scans and cost are their own, on their own row, under their own name", { timeout: 90_000 }, async () => {
+    const ria = await session(`${PREFIX}days-ria@example.com`, "A14i Ria");
+    const ben = await session(`${PREFIX}days-ben@example.com`, "A14i Ben");
+    const riaToday = todayIn("Asia/Kolkata");
+    const benToday = todayIn("America/Los_Angeles");
+    expect((await sendMinutes(ria, { days: [{ day: riaToday, minutes: 34, zone: "Asia/Kolkata" }] })).json()).toEqual({ kept: 1, ignored: 0 });
+    expect((await sendMinutes(ben, { days: [{ day: benToday, minutes: 7, zone: "America/Los_Angeles" }] })).json()).toEqual({ kept: 1, ignored: 0 });
+    // A body naming somebody else is refused: a person writes only their own days.
+    expect((await sendMinutes(ria, { userId: ben.userId, days: [{ day: benToday, minutes: 900, zone: "America/Los_Angeles" }] })).statusCode).toBe(400);
+    expect((await sendMinutes(ria, { days: [{ day: benToday, minutes: 900, zone: "America/Los_Angeles", userId: ben.userId }] })).statusCode).toBe(400);
+    const now = new Date();
+    await use(ria, "meal_scan", now);
+    await use(ria, "meal_scan", now);
+    await use(ria, "meal_scan", now);
+    await use(ben, "route_gen", now);
+    await cost(ria, 176, now);
+    await cost(ria, 50, now);
+
+    const riaDays = await daysOf(ria);
+    expect(riaDays).toMatchObject({ person: { id: ria.userId, name: "A14i Ria" }, zone: "Asia/Kolkata", zoneFromPhone: true, today: riaToday });
+    expect(riaDays.days[0]).toEqual({ day: riaToday, minutes: 34, mealScans: 3, routePlans: 0, costMicro: 226 });
+    const benDays = await daysOf(ben);
+    expect(benDays).toMatchObject({ person: { id: ben.userId, name: "A14i Ben" }, zone: "America/Los_Angeles", today: benToday });
+    expect(benDays.days[0]).toEqual({ day: benToday, minutes: 7, mealScans: 0, routePlans: 1, costMicro: 0 });
+
+    const riaRow = (await dayPage(riaToday)).people.find((p) => p.id === ria.userId);
+    expect(riaRow).toEqual({ id: ria.userId, name: "A14i Ria", email: `${PREFIX}days-ria@example.com`, minutes: 34, mealScans: 3, routePlans: 0, costMicro: 226 });
+    const benRow = (await dayPage(benToday)).people.find((p) => p.id === ben.userId);
+    expect(benRow).toEqual({ id: ben.userId, name: "A14i Ben", email: `${PREFIX}days-ben@example.com`, minutes: 7, mealScans: 0, routePlans: 1, costMicro: 0 });
+    // Nobody else's row took any of it.
+    expect(await sql`SELECT user_id, minutes FROM app_minutes WHERE user_id IN (${ria.userId}, ${ben.userId}) ORDER BY minutes`).toEqual([
+      { user_id: ben.userId, minutes: 7 },
+      { user_id: ria.userId, minutes: 34 },
+    ]);
+  });
+
+  it("minutes: signed out is refused; a day sent twice, or a lower total, changes nothing; too old or too far ahead is ignored", { timeout: 60_000 }, async () => {
+    const sam = await session(`${PREFIX}days-sam@example.com`, "A14i Sam");
+    const today = todayIn("Asia/Kolkata");
+    const day = (d: string, minutes: number, zone = "Asia/Kolkata") => ({ day: d, minutes, zone });
+    expect((await call(must(app), { method: "POST", url: "/v1/me/app-minutes", body: { days: [day(today, 5)] } })).statusCode).toBe(401);
+    expect((await sendMinutes(sam, { days: [day(today, 20), day(addDays(today, -1), 45)] })).json()).toEqual({ kept: 2, ignored: 0 });
+    const before = await sql<{ updated_at: Date }[]>`SELECT updated_at FROM app_minutes WHERE user_id = ${sam.userId} ORDER BY day`;
+    // The same again, and a phone that lost count: kept as they are, nothing rewritten.
+    expect((await sendMinutes(sam, { days: [day(today, 20), day(addDays(today, -1), 10)] })).json()).toEqual({ kept: 2, ignored: 0 });
+    expect(await sql`SELECT updated_at FROM app_minutes WHERE user_id = ${sam.userId} ORDER BY day`).toEqual(before);
+    expect((await sendMinutes(sam, { days: [day(today, 31)] })).json()).toEqual({ kept: 1, ignored: 0 });
+    expect(await sql`SELECT minutes FROM app_minutes WHERE user_id = ${sam.userId} ORDER BY day DESC`).toEqual([{ minutes: 31 }, { minutes: 45 }]);
+    // Older than 40 days or two days ahead: settled as ignored. Tomorrow (a phone's clock a little ahead) is kept.
+    expect((await sendMinutes(sam, { days: [day(addDays(today, -40), 9), day(addDays(today, 2), 9)] })).json()).toEqual({ kept: 0, ignored: 2 });
+    expect((await sendMinutes(sam, { days: [day(addDays(today, 1), 3)] })).json()).toEqual({ kept: 1, ignored: 0 });
+    // Not a zone, not a day, too many minutes, the same day twice, nothing, too many days: refused.
+    for (const bad of [
+      { days: [day(today, 5, "Mars/Base")] },
+      { days: [day("2026-02-30", 5)] },
+      { days: [day(today, 1441)] },
+      { days: [day(today, 1.5)] },
+      { days: [day(today, 5), day(today, 6)] },
+      { days: [] },
+      { days: Array.from({ length: 61 }, (_x, n) => day(addDays(today, -n), 1)) },
+    ]) {
+      expect((await sendMinutes(sam, bad)).statusCode).toBe(400);
+    }
+    expect(await sql`SELECT 1 FROM app_minutes WHERE user_id = ${sam.userId}`).toHaveLength(3);
+    await sql`DELETE FROM app_minutes WHERE user_id = ${sam.userId} AND day > ${today}::date`;
+  });
+
+  it("days are the person's own: their phone's zone, else the admin's; a scan just after their midnight is on that day", { timeout: 60_000 }, async () => {
+    const ria = await idOf(`${PREFIX}days-ria@example.com`);
+    const cat = await session(`${PREFIX}days-cat@example.com`, "A14i Cat");
+    const riaToday = todayIn("Asia/Kolkata");
+    const riaYesterday = addDays(riaToday, -1);
+    await sql`UPDATE users SET created_at = now() - interval '3 days' WHERE id IN (${ria.userId}, ${cat.userId})`;
+    // Ten minutes into Ria's yesterday in India is still the day before in UTC.
+    await use(ria, "meal_scan", await instant(riaYesterday, "00:10", "Asia/Kolkata"));
+    await use(ria, "meal_scan", await instant(riaYesterday, "23:50", "Asia/Kolkata"));
+    const days = await daysOf(ria);
+    expect(days.days.find((d) => d.day === riaYesterday)?.mealScans).toBe(2);
+    expect(days.days.find((d) => d.day === addDays(riaYesterday, -1))?.mealScans).toBe(0);
+    // Before the first day her phone counted, time in the app is not recorded.
+    expect(days.days.find((d) => d.day === riaYesterday)?.minutes).toBeNull();
+    expect((await dayPage(riaYesterday)).people.find((p) => p.id === ria.userId)).toMatchObject({ minutes: null, mealScans: 2 });
+    // Cat's phone has sent nothing: read in the admin's zone, which the page sends.
+    const catDay = todayIn("Europe/London");
+    await use(cat, "route_gen", await instant(catDay, "00:30", "Europe/London"));
+    const inLondon = await daysOf(cat);
+    expect(inLondon).toMatchObject({ zone: "Europe/London", zoneFromPhone: false, today: catDay });
+    expect(inLondon.days.find((d) => d.day === catDay)).toMatchObject({ routePlans: 1, minutes: null });
+    const inLa = await daysOf(cat, "zone=America/Los_Angeles");
+    expect(inLa.days.find((d) => d.day === addDays(catDay, -1))?.routePlans).toBe(1);
+    expect((await dayPage(catDay)).people.find((p) => p.id === cat.userId)).toMatchObject({ routePlans: 1, minutes: null });
+    // Sam's phone sent today and two days ago: the day between, not sent, is 0; the day before them is not recorded.
+    const sam = await idOf(`${PREFIX}days-sam@example.com`);
+    await sql`UPDATE users SET created_at = now() - interval '5 days' WHERE id = ${sam.userId}`;
+    await sql`DELETE FROM app_minutes WHERE user_id = ${sam.userId} AND day = ${riaYesterday}::date`;
+    await sql`INSERT INTO app_minutes (user_id, day, minutes, zone) VALUES (${sam.userId}, ${addDays(riaToday, -2)}::date, 4, 'Asia/Kolkata')`;
+    const samDays = await daysOf(sam);
+    expect(samDays.days.slice(0, 4).map((d) => [d.day, d.minutes])).toEqual([
+      [riaToday, 31],
+      [riaYesterday, 0],
+      [addDays(riaToday, -2), 4],
+      [addDays(riaToday, -3), null],
+    ]);
+    expect((await dayPage(riaYesterday)).people.find((p) => p.id === sam.userId)).toBeUndefined();
+  });
+
+  it("a person's days: 30 a page back to the day they signed up; an unknown person is not found; bad asks refused", { timeout: 60_000 }, async () => {
+    const ria = await idOf(`${PREFIX}days-ria@example.com`);
+    const today = todayIn("Asia/Kolkata");
+    await sql`UPDATE users SET created_at = ${await instant(addDays(today, -40), "12:00", "Asia/Kolkata")} WHERE id = ${ria.userId}`;
+    const first = await daysOf(ria);
+    expect(first.days.map((d) => d.day)).toEqual(Array.from({ length: 30 }, (_x, n) => addDays(today, -n)));
+    expect(first.next).toBe(addDays(today, -29));
+    const second = await daysOf(ria, `zone=Europe/London&before=${first.next ?? ""}`);
+    expect(second.days.map((d) => d.day)).toEqual(Array.from({ length: 11 }, (_x, n) => addDays(today, -30 - n)));
+    expect(second.next).toBeNull();
+    expect((await asAdmin({ url: "/v1/admin/people/00000000-0000-4000-8000-000000000000/days?zone=UTC" })).statusCode).toBe(404);
+    expect((await asAdmin({ url: `/v1/admin/people/${gone}/days?zone=UTC` })).statusCode).toBe(404);
+    expect((await asAdmin({ url: "/v1/admin/people/not-an-id/days?zone=UTC" })).statusCode).toBe(404);
+    for (const q of ["", "zone=Mars/Base", "zone=UTC&before=2026-13-01", "zone=UTC&other=1"]) {
+      expect((await asAdmin({ url: `/v1/admin/people/${ria.userId}/days?${q}` })).statusCode).toBe(400);
+    }
+    for (const u of ["/v1/admin/days/2026-02-30?zone=UTC", "/v1/admin/days/2026-11-08", "/v1/admin/days/2026-11-08?zone=UTC&from=-1", "/v1/admin/days/2026-11-08?zone=Mars/Base"]) {
+      expect((await asAdmin({ url: u })).statusCode).toBe(400);
+    }
+    // Without the open door, the days are locked too.
+    expect((await call(must(app), { url: `/v1/admin/people/${ria.userId}/days?zone=UTC`, access: admin.access })).statusCode).toBe(403);
+    expect((await call(must(app), { url: "/v1/admin/days/2026-11-08?zone=UTC", access: admin.access })).statusCode).toBe(403);
+  });
+
+  it("a day for everyone: totals over all of them, 50 a page, most time first, nobody twice or missed", { timeout: 90_000 }, async () => {
+    // A day nobody else's rows can be on.
+    const day = "2001-02-03";
+    const bulk = await sql<{ id: string }[]>`SELECT id FROM users WHERE email LIKE ${`${BULK}%`} ORDER BY email`;
+    expect(bulk.length).toBe(53);
+    await sql`INSERT INTO app_minutes (user_id, day, minutes, zone)
+      SELECT x.id, ${day}::date, x.n::int, 'UTC' FROM unnest(${bulk.map((b) => b.id)}::uuid[]) WITH ORDINALITY AS x(id, n)`;
+    const scanner = bulk[0]?.id ?? "";
+    await sql`INSERT INTO metered_uses (user_id, feature, at) VALUES (${scanner}, 'meal_scan', '2001-02-03 10:00Z'), (${scanner}, 'meal_scan', '2001-02-03 23:59Z'), (${scanner}, 'meal_scan', '2001-02-04 00:00Z')`;
+    await sql`INSERT INTO api_cost_events (at, user_id, feature, provider, units, unit_type, cost_micro) VALUES ('2001-02-03 10:00Z', ${scanner}, 'meal_scan', 'test', 1, 'tokens', 9000000000)`;
+    const first = await dayPage(day, "zone=UTC");
+    expect(first.totals).toEqual({ people: 53, minutes: (53 * 54) / 2, mealScans: 2, routePlans: 0, costMicro: 9000000000 });
+    expect(first.people).toHaveLength(50);
+    expect(first.people.slice(0, 2).map((p) => p.minutes)).toEqual([53, 52]);
+    expect(first.next).toBe(50);
+    const second = await dayPage(day, "zone=UTC&from=50");
+    expect(second.people.map((p) => p.minutes)).toEqual([3, 2, 1]);
+    expect(second.people[2]).toMatchObject({ id: scanner, mealScans: 2, costMicro: 9000000000 });
+    expect(second.next).toBeNull();
+    expect(new Set([...first.people, ...second.people].map((p) => p.id)).size).toBe(53);
+    expect(second.totals).toEqual(first.totals);
+    expect(await dayPage("2001-02-01", "zone=UTC")).toEqual({ day: "2001-02-01", totals: { people: 0, minutes: 0, mealScans: 0, routePlans: 0, costMicro: 0 }, people: [], next: null });
+  });
+
+  it("a scan counted is kept with when; one refused over the limit or given back is not", { timeout: 60_000 }, async () => {
+    const lee = await session(`${PREFIX}days-lee@example.com`, "A14i Lee");
+    const uses = async () => (await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM metered_uses WHERE user_id = ${lee.userId} AND feature = 'meal_scan'`)[0]?.n;
+    // Free: 3 a month. Two counted, one given back, one more, and the next refused.
+    expect((await call(must(app), { url: "/test/a14i/meal", access: lee.access })).statusCode).toBe(200);
+    expect((await call(must(app), { url: "/test/a14i/meal", access: lee.access })).statusCode).toBe(200);
+    expect((await call(must(app), { url: "/test/a14ii/meal-fails", access: lee.access })).json()).toEqual({ given: true });
+    expect(await uses()).toBe(2);
+    expect((await call(must(app), { url: "/test/a14i/meal", access: lee.access })).statusCode).toBe(200);
+    expect((await call(must(app), { url: "/test/a14i/meal", access: lee.access })).statusCode).toBe(429);
+    expect(await uses()).toBe(3);
+    expect((await daysOf(lee)).days[0]?.mealScans).toBe(3);
+  });
+  it("the zone of a person's days is the one their phone sent last, not the one of their latest day", { timeout: 60_000 }, async () => {
+    const tia = await session(`${PREFIX}days-tia@example.com`, "A14i Tia");
+    const ahead = todayIn("Etc/GMT-14");
+    expect((await sendMinutes(tia, { days: [{ day: ahead, minutes: 3, zone: "Etc/GMT-14" }] })).json()).toEqual({ kept: 1, ignored: 0 });
+    expect((await daysOf(tia)).zone).toBe("Etc/GMT-14");
+    // Her phone's next send, back home: her days are read in India again, though the day sent is earlier.
+    await sql`UPDATE app_minutes SET updated_at = now() - interval '1 minute' WHERE user_id = ${tia.userId}`;
+    expect((await sendMinutes(tia, { days: [{ day: todayIn("Asia/Kolkata"), minutes: 9, zone: "Asia/Kolkata" }] })).json()).toEqual({ kept: 1, ignored: 0 });
+    expect((await daysOf(tia)).zone).toBe("Asia/Kolkata");
+  });
+
+  it("the admin's own zone, when the database cannot read days in it, is read as UTC and the answer says so", { timeout: 30_000 }, async () => {
+    const ben = await idOf(`${PREFIX}days-ben@example.com`);
+    await sql`DELETE FROM app_minutes WHERE user_id = ${ben.userId}`;
+    const res = await asAdmin({ url: `/v1/admin/people/${ben.userId}/days?zone=${encodeURIComponent("+05:30")}` });
+    expect(res.statusCode, res.body).toBe(200);
+    expect(res.json<Days>()).toMatchObject({ zone: "UTC", zoneFromPhone: false });
+    const day = await asAdmin({ url: `/v1/admin/days/${todayIn("UTC")}?zone=${encodeURIComponent("+05:30")}` });
+    expect(day.statusCode, day.body).toBe(200);
+  });
+
+  it("a use that cannot be written down is not counted either", { timeout: 30_000 }, async () => {
+    // Somebody with no account row: writing their use fails (its person must exist), and the count is put back.
+    const nobody = "00000000-0000-4000-8000-0000000014a2";
+    const key = quotaKey("meal_scan", nobody, "month", new Date());
+    const res = await must(app).inject({ method: "GET", url: "/test/a14ii/meal-nobody" });
+    expect(res.statusCode).toBe(500);
+    expect(await redis.get(key)).toBe("0");
+    expect(await sql`SELECT 1 FROM metered_uses WHERE user_id = ${nobody}`).toHaveLength(0);
+  });
+
+  it("the minutes limit is by person: a whole gym at one address sends its members' minutes", { timeout: 30_000 }, async () => {
+    const one = await session(`${PREFIX}days-one@example.com`, "A14i One");
+    const ip = "10.14.9.9";
+    // The address already far past any limit: a person sending from it is still let through.
+    for (const dimension of ["ip", "ip:app_minutes"]) await redis.setex(`rl:app_minutes:${dimension}:${ip}`, 60, "1000");
+    const res = await call(must(app), { method: "POST", url: "/v1/me/app-minutes", access: one.access, ip, body: { days: [{ day: todayIn("Asia/Kolkata"), minutes: 2, zone: "Asia/Kolkata" }] } });
+    expect(res.statusCode, res.body).toBe(200);
+    // The person's own: the 31st in a minute waits.
+    await redis.setex(`rl:app_minutes:id:${one.userId}`, 60, "30");
+    expect((await call(must(app), { method: "POST", url: "/v1/me/app-minutes", access: one.access, ip, body: { days: [{ day: todayIn("Asia/Kolkata"), minutes: 3, zone: "Asia/Kolkata" }] } })).statusCode).toBe(429);
   });
 });

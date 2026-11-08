@@ -1,11 +1,12 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Check, Lock, LogOut, Search } from 'lucide-react';
+import { CalendarDays, Check, Lock, LogOut, Search, Users } from 'lucide-react';
 import { adminService, isDoorShut } from '../../api/adminApi';
 import { errorText } from '../../api/orgsApi';
 import { useAuth } from '../../context/AuthContext';
 import { consoleLook } from '../console/consoleMenu';
 import { CodeStep, PasswordStep } from './AdminDoor';
+import { ByDay, PersonDays } from './AdminDays';
 import { FEATURES, allowanceWords, confirmWords, dateTimeWords, dateWords, doneWords, openUntilWords, planWords } from './adminView';
 import '../../components/console/console.css';
 
@@ -71,6 +72,8 @@ function People({ onShut }) {
   // The box under the bar: what is about to happen (`ask`), or what did (`done`).
   const [box, setBox] = useState(null);
   const [saving, setSaving] = useState(false);
+  // The person whose days are open under their row.
+  const [opened, setOpened] = useState(null);
 
   // A new search starts again from the top.
   useEffect(() => {
@@ -205,7 +208,7 @@ function People({ onShut }) {
               </div>
             ) : null}
 
-            <div className="c-card" style={{ overflowX: 'auto' }}>
+            <div className="c-card" style={{ overflowX: 'auto', position: 'relative' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr className="c-th" style={{ textAlign: 'left' }}>
@@ -218,12 +221,16 @@ function People({ onShut }) {
                     <th style={{ padding: '12px 8px' }}>Last seen</th>
                     <th style={{ padding: '12px 8px' }}>Plan</th>
                     <th style={{ padding: '12px 8px' }}>Meal scans</th>
-                    <th style={{ padding: '12px 16px 12px 8px' }}>Route plans</th>
+                    <th style={{ padding: '12px 8px' }}>Route plans</th>
+                    <th style={{ padding: '12px 16px 12px 8px' }}>
+                      <span className="sr-only">Days</span>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   {list.people.map((p) => (
-                    <tr key={p.id} className="c-s14" style={{ borderTop: '1px solid var(--line)' }}>
+                    <Fragment key={p.id}>
+                    <tr className="c-s14" style={{ borderTop: '1px solid var(--line)' }}>
                       <td style={{ padding: '10px 16px' }}>
                         <Tick on={ticked.has(p.id)} label={`Tick ${p.name || p.email || 'this person'}`} onToggle={() => toggle(p.id)} />
                       </td>
@@ -233,8 +240,27 @@ function People({ onShut }) {
                       <td style={{ padding: '10px 8px', whiteSpace: 'nowrap' }}>{dateTimeWords(p.lastSeenAt)}</td>
                       <td style={{ padding: '10px 8px' }}>{planWords(p)}</td>
                       <td style={{ padding: '10px 8px', whiteSpace: 'nowrap' }}>{allowanceWords(p.mealScans)}</td>
-                      <td style={{ padding: '10px 16px 10px 8px', whiteSpace: 'nowrap' }}>{allowanceWords(p.routePlans)}</td>
+                      <td style={{ padding: '10px 8px', whiteSpace: 'nowrap' }}>{allowanceWords(p.routePlans)}</td>
+                      <td style={{ padding: '6px 16px 6px 8px' }}>
+                        <button
+                          type="button"
+                          className="c-btn c-btn-s c-btn-sm"
+                          aria-expanded={opened === p.id}
+                          aria-label={`${p.name || p.email || 'This person'}'s days`}
+                          onClick={() => setOpened(opened === p.id ? null : p.id)}
+                        >
+                          Days
+                        </button>
+                      </td>
                     </tr>
+                    {opened === p.id ? (
+                      <tr>
+                        <td colSpan={9} style={{ background: 'var(--raise)' }}>
+                          <PersonDays person={p} onShut={onShut} onClose={() => setOpened(null)} />
+                        </td>
+                      </tr>
+                    ) : null}
+                    </Fragment>
                   ))}
                 </tbody>
               </table>
@@ -258,6 +284,7 @@ export default function Admin() {
   const { user, logout } = useAuth();
   const { search: address } = useLocation();
   const [attempt, setAttempt] = useState(0);
+  const [view, setView] = useState('people');
   const userId = user?.id ?? null;
   // The door's answer for this account and this asking: null while asking, 'none' when this
   // account is not the admin, else the door's state. An answer to an older asking is not shown.
@@ -315,7 +342,21 @@ export default function Admin() {
   } else if (!door.open) {
     inside = <PasswordStep make={!door.passwordSet} onOpened={(state) => setDoor(state)} onStale={readAgain} />;
   } else {
-    inside = <People onShut={readAgain} />;
+    inside = (
+      <>
+        <div role="group" aria-label="Show" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button type="button" aria-pressed={view === 'people'} className={`c-btn c-btn-sm ${view === 'people' ? 'c-btn-p' : 'c-btn-s'}`} onClick={() => setView('people')}>
+            <Users size={16} aria-hidden="true" />
+            People
+          </button>
+          <button type="button" aria-pressed={view === 'day'} className={`c-btn c-btn-sm ${view === 'day' ? 'c-btn-p' : 'c-btn-s'}`} onClick={() => setView('day')}>
+            <CalendarDays size={16} aria-hidden="true" />
+            By day
+          </button>
+        </div>
+        {view === 'people' ? <People onShut={readAgain} /> : <ByDay onShut={readAgain} />}
+      </>
+    );
   }
 
   return (

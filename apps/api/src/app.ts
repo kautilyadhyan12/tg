@@ -40,6 +40,7 @@ import { registerGoalRoutes } from "./modules/goals/routes.js";
 import { GoalsError } from "./modules/goals/service.js";
 import { registerEntitlementRoutes } from "./modules/entitlements/routes.js";
 import { registerAdminRoutes } from "./modules/admin/routes.js";
+import { registerAppMinutesRoutes } from "./modules/appMinutes/routes.js";
 import { createIoRedis, createMemoryRedis, type RedisLike } from "./redis.js";
 import type { AppConfig } from "./config.js";
 import { registerNutritionRoutes, type NutritionRouteOverrides } from "./modules/nutrition/routes.js";
@@ -399,6 +400,8 @@ export async function buildApp(
   registerEntitlementRoutes(app, { sql, redis });
   // Kd's own admin page: only the account ADMIN_USER_ID names (ROADMAP Stage 2 item 14a-i).
   registerAdminRoutes(app, { sql, redis, config, ...(overrides.passwordHasher === undefined ? {} : { hasher: overrides.passwordHasher }) });
+  // The minutes the app is open each day, from the person's phone (14a-ii; the phone's part is 21f).
+  registerAppMinutesRoutes(app, { sql, redis });
   registerNutritionRoutes(app, { sql, redis, config, reportError }, overrides.nutrition ?? {});
   registerGeoRoutes(app, { sql, redis, config }, overrides.geo ?? {});
   const invites = inviteSettings(config);

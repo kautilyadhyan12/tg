@@ -80,3 +80,84 @@ export function doneWords(result, feature, perDay) {
   if (result.notFound > 0) parts.push(`${people(result.notFound)} could not be changed: the account was deleted.`);
   return parts.join(' ');
 }
+
+// ── Each person's days (14a-ii) ──────────────────────────────────────────────
+
+/** This browser's time zone: the days of somebody whose phone has sent none are read in it. */
+export function myZone() {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  } catch {
+    return 'UTC';
+  }
+}
+
+/** Today in `zone`, `YYYY-MM-DD`. */
+export function todayIn(zone, now = new Date()) {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
+}
+
+/** "Not recorded" before their phone counted any; "0 min", "45 min", "1 h", "2 h 5 min". */
+export function minutesWords(minutes) {
+  if (minutes === null) return 'Not recorded';
+  if (minutes < 60) return `${String(minutes)} min`;
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return m === 0 ? `${String(h)} h` : `${String(h)} h ${String(m)} min`;
+}
+
+/** Micro-dollars as dollars to the ten-thousandth of a dollar: "$0", "Under $0.0001", "$0.0005". */
+export function costWords(micro) {
+  if (micro === 0) return '$0';
+  if (micro < 50) return 'Under $0.0001';
+  const units = Math.round(micro / 100);
+  return `$${String(Math.floor(units / 10000))}.${String(units % 10000).padStart(4, '0')}`;
+}
+
+const addDays = (day, n) => {
+  const [y, m, d] = day.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10);
+};
+const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/** "Today", "Yesterday", "Fri 6 Nov", or with its year when it is not this year's. */
+export function dayWords(day, today) {
+  if (day === today) return 'Today';
+  if (day === addDays(today, -1)) return 'Yesterday';
+  const at = new Date(`${day}T00:00:00Z`);
+  const words = `${WEEKDAYS[at.getUTCDay()]} ${String(at.getUTCDate())} ${MONTHS[at.getUTCMonth()]}`;
+  return day.slice(0, 4) === today.slice(0, 4) ? words : `${words} ${day.slice(0, 4)}`;
+}
+
+/** A time zone in words: "India Standard Time", or its own name where the browser has none. */
+export function zoneName(zone, now = new Date()) {
+  try {
+    const part = new Intl.DateTimeFormat('en-GB', { timeZone: zone, timeZoneName: 'long' }).formatToParts(now).find((p) => p.type === 'timeZoneName');
+    return part?.value ?? zone;
+  } catch {
+    return zone;
+  }
+}
+
+/** Which clock a person's days are on: their phone's, the admin's own (`mine`), or UTC when the
+ *  server could not read the admin's. */
+export function zoneWords(days, mine, now = new Date()) {
+  if (days.zoneFromPhone) return `Each day is their own, in their phone's time zone (${zoneName(days.zone, now)}).`;
+  if (days.zone !== mine) return "Their phone hasn't sent its time zone yet, and yours could not be read, so these days are in UTC.";
+  return `Their phone hasn't sent its time zone yet, so these days are in yours (${zoneName(days.zone, now)}).`;
+}
+
+const many = (n, one, more) => `${String(n)} ${n === 1 ? one : more}`;
+
+/** The day's totals, in one line. */
+export function dayTotalsWords(totals) {
+  if (totals.people === 0) return 'Nobody used the app on this day.';
+  return [
+    `${many(totals.people, 'person', 'people')} used the app`,
+    `${minutesWords(totals.minutes)} in the app`,
+    many(totals.mealScans, 'meal scan', 'meal scans'),
+    many(totals.routePlans, 'route plan', 'route plans'),
+    `cost ${costWords(totals.costMicro)}`,
+  ].join(' · ');
+}
