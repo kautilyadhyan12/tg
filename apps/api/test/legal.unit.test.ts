@@ -238,6 +238,14 @@ describe("the privacy policy against the code", () => {
     expect(OUTSIDE_SERVICES.filter((s) => s.healthData && !washington.includes(`${s.name}:`)).map((s) => s.name)).toEqual([]);
   });
 
+  it("both pages name the company that hosts the server, and the policy names where it is (21a-i)", () => {
+    expect(JSON.stringify(privacyPolicy())).toContain(
+      "This service provider is Amazon Web Services (AWS), and KWAZO's servers and database are located in Sydney, Australia.",
+    );
+    expect(JSON.stringify(privacyPolicy())).toContain("including the United States and Australia");
+    expect(JSON.stringify(washingtonHealthDataPolicy())).toContain("Hosting Infrastructure Provider: Amazon Web Services (AWS), responsible");
+  });
+
   it("what a business sees, in the policy, matches the Join screen's lists one for one", () => {
     const members = JSON.stringify(privacyPolicy().sections.find((s) => s.id === "members"));
     // Each line of the Join screen, and the policy's own words for it (Kd's text).
