@@ -664,7 +664,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
       - 31d-ii. [x] **Why, in one line, under each idea on the phone** — merged 2026-11-03 (PR #454).
     - 31e. ~~**Food allergies**~~ — dropped 2026-11-03 (Kd: warn only, `rulings/2026-11-03-31f.md`).
     - 31f. [x] **Suggested or My plan in Recommended For You** — merged 2026-11-03 (PR #458).
-    - 31g. [ ] **The gym's meal plan on the phone** (§16.6). Waits for Stage 2's 24a.
+    - 31g. [x] **The gym’s meal plan on the phone** — merged 2026-11-08 (PR #500).
     - 31h. [ ] **Zero, never a dash, where nothing is recorded yet** (Kd, 2026-11-07, before 21d): a count with nothing done reads 0; a number still loading shows a soft bar, never 0; a weight or a place that has none yet says so in words ("Add your weight", "Not ranked yet"), never 0 kg. Dashboard, Progress, Achievements and the gym's boards. A screen job.
 32. **Food** (split 2026-10-13: the server part needs no phone).
     - 32a. [x] **A meal sent twice from the phone is saved once** — merged 2026-10-13 (PR #238).
