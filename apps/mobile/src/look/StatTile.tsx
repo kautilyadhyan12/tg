@@ -14,7 +14,7 @@ export function StatTile(props: { picture: PictureName; icon: IconName; tone?: "
       <Image source={pictures[props.picture]} resizeMode="contain" style={styles.art} accessible={false} />
       <View style={[StyleSheet.absoluteFill, styles.shade]} />
       <Badge icon={props.icon} tone={props.tone ?? "orange"} />
-      <View accessible accessibilityLabel={props.say ?? (props.value !== null ? `${props.value} ${props.label}` : props.failed === true ? `${props.label}, couldn’t load` : `${props.label}, loading`)}>
+      <View accessible accessibilityLabel={props.say ?? `${props.value !== null ? `${props.value} ${props.label}` : props.failed === true ? `${props.label}, couldn’t load` : `${props.label}, loading`}${props.note === undefined ? "" : `, ${props.note}`}`}>
         <Shown kind="big" width={48} value={props.value} failed={props.failed ?? false} />
         <Txt kind="small" style={styles.label}>
           {props.label}
