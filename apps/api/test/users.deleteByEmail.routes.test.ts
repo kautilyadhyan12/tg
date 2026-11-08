@@ -164,7 +164,9 @@ d("the website's Delete your account page (real Postgres)", { timeout: T }, () =
       expect(late.statusCode, late.body).toBe(400);
       expect(errorOf(late).error).toBe("invalid_code");
 
-      // A code proved for the stranger's OWN address deletes nothing of the victim's.
+      // A code proved for the stranger's OWN address deletes nothing of the victim's. The victim has
+      // a live code again here, so only the code's hash (address and purpose) can refuse it.
+      await codeFor(victim.email);
       const stranger = newAddress();
       const theirs = await codeFor(stranger);
       const crossed = await deleteWith(victim.email, theirs);
@@ -237,6 +239,55 @@ d("the website's Delete your account page (real Postgres)", { timeout: T }, () =
     expect(refused.statusCode, refused.body).toBe(409);
     expect(errorOf(refused)).toMatchObject({ error: "owns_gym", message: `You own ${name}. Before you delete your account, make someone else its owner.` });
     expect(await statusOf(owner)).toBe("active");
+  }, T);
+
+  it("a stranger who asks the page for somebody's codes all day never stops them deleting in the app", async () => {
+    const vic = await signedIn("Vic Victim");
+    // Three asks, then the fourth asks for the robot check, which the stranger passes.
+    for (let i = 0; i < 3; i += 1) await codeFor(vic.email);
+    await sql`UPDATE sign_in_codes SET created_at = created_at - interval '2 minutes' WHERE email = ${vic.email}`;
+    const fourth = await askCode(vic.email);
+    expect(fourth.statusCode, fourth.body).toBe(403);
+    expect(errorOf(fourth)).toMatchObject({ error: "robot_check" });
+    const passed = await post("/v1/account-deletion/code", { email: vic.email, robotToken: "pass" });
+    expect(passed.statusCode, passed.body).toBe(200);
+    await sql`UPDATE sign_in_codes SET created_at = created_at - interval '2 minutes' WHERE email = ${vic.email}`;
+    const fifth = await post("/v1/account-deletion/code", { email: vic.email, robotToken: "pass" });
+    expect(fifth.statusCode, fifth.body).toBe(429);
+
+    // The person, signed in to the app, still gets their own code and deletes.
+    deleteCodes.delete(vic.email);
+    const asked = await post("/v1/users/me/delete-code", {}, { cookies: vic.cookies });
+    expect(asked.statusCode, asked.body).toBe(200);
+    const code = deleteCodes.get(vic.email);
+    if (code === undefined) throw new Error("no code was emailed");
+    // The app's code is the account's own: it does not work on the website's page.
+    const onPage = await deleteWith(vic.email, code);
+    expect(onPage.statusCode, onPage.body).toBe(400);
+    const done = await api().inject({
+      method: "DELETE",
+      url: "/v1/users/me",
+      remoteAddress: nextIp(),
+      cookies: vic.cookies,
+      headers: { "content-type": "application/json" },
+      payload: JSON.stringify({ code }),
+    });
+    expect(done.statusCode, done.body).toBe(200);
+    expect(await statusOf(vic)).toBe("deleted");
+  }, T);
+
+  it("an internet address with a thousand wrong guesses this hour is turned away before its next one", async () => {
+    const ip = "10.94.0.1";
+    await redis?.setex(`rl:code_verify_wrong:ip:${ip}`, 3600, "1000");
+    const email = newAddress();
+    const code = await codeFor(email);
+    const refused = await deleteWith(email, code, ip);
+    expect(refused.statusCode, refused.body).toBe(429);
+    // A wrong guess from a fresh address is counted against it.
+    const other = "10.94.0.2";
+    const wrong = await deleteWith(email, otherThan(code), other);
+    expect(wrong.statusCode, wrong.body).toBe(400);
+    expect(await redis?.get(`rl:code_verify_wrong:ip:${other}`)).toBe("1");
   }, T);
 
   it("a body that is not an address and a code is refused, and nothing is sent", async () => {

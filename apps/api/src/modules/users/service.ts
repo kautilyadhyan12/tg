@@ -631,7 +631,10 @@ async function refuseOwner(deps: UsersDeps, userId: string): Promise<void> {
 /** Deleting an account is confirmed with a code emailed to the account's own
  *  address (there is no password to ask for — Kd 2026-09-07). The address
  *  comes from the signed-in user's own row, never from the request, so a code
- *  can only ever be sent to, and proved for, the account that is deleting. */
+ *  can only ever be sent to, and proved for, the account that is deleting.
+ *  The code is bound to the account, so it is counted apart from the codes the
+ *  website's page sends to the same address: a stranger asking there can never
+ *  use up the app's three a day. */
 export async function requestDeleteCode(
   deps: UsersDeps,
   userId: string,
@@ -644,7 +647,7 @@ export async function requestDeleteCode(
   }
   return await requestEmailCode(
     { sql: deps.sql, config: deps.config, log: deps.log },
-    { email: row.email, purpose: "delete_account" },
+    { email: row.email, purpose: "delete_account", boundTo: userId },
     (to, code) => deps.emailSender.sendAccountDeleteCodeEmail(to, code),
   );
 }
@@ -667,7 +670,7 @@ export async function deleteAccount(
   }
   await redeemEmailCode(
     { sql: deps.sql, config: deps.config, log: deps.log },
-    { email: row.email, purpose: "delete_account", code },
+    { email: row.email, purpose: "delete_account", code, boundTo: userId },
   );
   return await deleteProvedAccount(deps, userId, row.email);
 }
@@ -682,7 +685,7 @@ export async function requestDeleteCodeByEmail(
 ): Promise<{ resendAfterSeconds: number; expiresInSeconds: number }> {
   return await requestEmailCode(
     { sql: deps.sql, config: deps.config, log: deps.log },
-    { email, purpose: "delete_account", robot },
+    { email, purpose: "delete_account_web", robot },
     (to, code) => deps.emailSender.sendAccountDeleteCodeEmail(to, code),
   );
 }
@@ -694,7 +697,7 @@ export async function deleteAccountByEmail(
   email: string,
   code: string,
 ): Promise<{ emailSent: boolean; leftGymIds: string[] }> {
-  await redeemEmailCode({ sql: deps.sql, config: deps.config, log: deps.log }, { email, purpose: "delete_account", code });
+  await redeemEmailCode({ sql: deps.sql, config: deps.config, log: deps.log }, { email, purpose: "delete_account_web", code });
   const account = await repo.findAccountByEmail(deps.sql, email);
   if (account === null) throw new UsersError(404, "no_account", DELETE_PAGE_WORDS.noAccount);
   if (account.status !== "active") throw new UsersError(409, "already_deleting", DELETE_PAGE_WORDS.alreadyDeleting);

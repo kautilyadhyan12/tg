@@ -32,7 +32,7 @@ export function deleteAccountCodeEmail(to: string, code: string, minutes: number
   return codeMessage(
     to,
     `${code} is your ${APP_NAME} account-deletion code`,
-    "Someone asked to delete your account. Type this code to confirm it was you:",
+    `Someone asked to delete the ${APP_NAME} account that uses this email address. If there is one, type this code to confirm it was you:`,
     code,
     minutes,
   );

@@ -164,7 +164,7 @@ describe("the code emails", () => {
   it("the deletion email says what the code is for", () => {
     const m = deleteAccountCodeEmail("kd@example.com", "042917", 10);
     expect(m.subject).toMatch(/deletion/i);
-    expect(m.text).toMatch(/delete your account/i);
+    expect(m.text).toContain("account that uses this email address. If there is one, type this code");
   });
   it("the undo email carries exactly one link, to our restore page, and the real window", () => {
     const m = accountDeletionEmail("kd@example.com", "Kd", "https://app.example/restore-account?token=abc", 14);

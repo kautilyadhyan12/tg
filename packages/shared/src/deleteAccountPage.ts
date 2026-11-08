@@ -126,7 +126,7 @@ export const DELETE_PAGE_WORDS = {
   emailLabel: "Email Address",
   emailPlaceholder: "Enter your registered email address",
   sendButton: "Email me a code",
-  sent: (email: string) => `If ${email} has a KWAZO account, we've emailed it a 6-digit code.`,
+  sent: (email: string) => `We've emailed a 6-digit code to ${email}.`,
   codeLabel: "6-digit code",
   deleteButton: "Delete my account",
   resend: "Email me a new code",
