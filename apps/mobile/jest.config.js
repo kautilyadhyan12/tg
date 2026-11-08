@@ -4,6 +4,7 @@ module.exports = {
   preset: "jest-expo",
   testMatch: ["<rootDir>/test/screens/**/*.test.tsx"],
   setupFiles: ["react-native-gesture-handler/jestSetup.js", "<rootDir>/test/screens/setup.js"],
+  setupFilesAfterEnv: ["<rootDir>/test/screens/clearWaiting.js"],
   // A screen is slow to draw on a busy machine; a test that hangs still fails.
   testTimeout: 20000,
   // @app/shared is TypeScript whose imports end in ".js" (the api's module rules).

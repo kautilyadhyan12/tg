@@ -212,6 +212,21 @@ export const phoneSignOutOwedSchema = z
   .strict();
 export type PhoneSignOutOwed = z.infer<typeof phoneSignOutOwedSchema>;
 
+/** A code asked for on the phone, kept while the person fetches it from their email (12e): if Android closes the app
+ *  meanwhile, it reopens on the code step, for as long as the code is good (Kd). Never the code itself. */
+export const PHONE_CODE_WAITING_SECONDS = SIGN_IN_CODE_RULES.ttlSeconds;
+export const phoneCodeWaitingSchema = z
+  .object({
+    email: authEmailSchema,
+    /** When the code was asked for, and when Resend may be pressed, in the phone's milliseconds. */
+    sentAt: z.number().int().nonnegative(),
+    resendAt: z.number().int().nonnegative(),
+    /** `too-soon`: the server refused inside its gap, so the person has an earlier code. */
+    arrival: z.enum(["sent", "too-soon"]),
+  })
+  .strict();
+export type PhoneCodeWaiting = z.infer<typeof phoneCodeWaitingSchema>;
+
 /** A refusal as this api words it: `message` is written for people, and `retryAfterSeconds`
  *  is the server's own wait. The phone app reads every refusal through this. */
 export const apiRefusalSchema = z.object({

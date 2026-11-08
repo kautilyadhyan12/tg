@@ -46,6 +46,8 @@ export const colours = {
   onOrange: "#ffffff",
   orange: "#FF8A1F",
   orangeLight: "#FFB347",
+  /** The foot of a raised main button (sign-in, 12e). */
+  orangeDeep: "#F2710C",
   orangeFill: "rgba(255,138,31,0.10)",
   orangeLine: "rgba(255,138,31,0.28)",
   good: "#22c55e",
@@ -62,6 +64,24 @@ export const colours = {
   googleGreen: "#34A853",
   googleYellow: "#FBBC05",
   googleRed: "#EA4335",
+  /** The app's name as Kd's posters write it (12e): black on a white pill, its Z orange. */
+  brandPill: "#FFFFFF",
+  brandInk: "#0A0908",
+  /** Continue with Google, as Google's light button: white, a grey edge, near-black words. */
+  light: "#FFFFFF",
+  lightLow: "#ECEBE9",
+  lightLine: "#D9D7D3",
+  onLight: "#1F1F1F",
+  /** The sign-in box over Kd's bright poster (his pick, "C2"): the poster's orange made rust, so it stands apart,
+   *  with a white sticker edge and a thin dark outline like the poster's people; words on it white. */
+  signInTop: "#C9500A",
+  signInFoot: "#A63E06",
+  signInOutline: "rgba(20,12,40,0.9)",
+  onSignIn: "rgba(255,255,255,0.85)",
+  onSignInFaint: "rgba(255,255,255,0.45)",
+  /** Words waiting in a white box, and the black main button on the orange box. */
+  lightPlaceholder: "#8A7D70",
+  darkButton: "#1A1410",
   goldFill: "rgba(255,214,107,0.12)",
   goldLine: "rgba(255,214,107,0.25)",
   blue: "#60a5fa",
@@ -80,6 +100,12 @@ export type ColourName = keyof typeof colours;
 
 /** What is pressed: orange running to light orange. */
 export const orangeGradient = `linear-gradient(135deg, ${colours.orange}, ${colours.orangeLight})`;
+/** A main button drawn raised (sign-in, 12e): light at its top, deeper at its foot. */
+export const raisedOrangeGradient = `linear-gradient(to bottom, ${colours.orangeLight} 0%, ${colours.orange} 55%, ${colours.orangeDeep} 100%)`;
+/** Google's white button, faintly rounded by its light. */
+export const lightGradient = `linear-gradient(to bottom, ${colours.light}, ${colours.lightLow})`;
+/** The sign-in box, rust from its top to its foot (12e). */
+export const signInGradient = `linear-gradient(to bottom, ${colours.signInTop}, ${colours.signInFoot})`;
 /** A chart's bar: light orange at its top running to orange at its foot (Progress, 35c-i). */
 export const barGradient = `linear-gradient(to bottom, ${colours.orangeLight}, ${colours.orange})`;
 /** Across a box with a chalk drawing on its right: the box's own colour under the words, the drawing
@@ -118,6 +144,14 @@ export const pictureFadeLight =
 /** The glow of what is pressed, the ring round a box being typed in, and the lift of a box from the bottom. */
 export const shadows = {
   button: "0 6px 22px rgba(255,138,31,0.38), inset 0 1px 0 rgba(255,255,255,0.22)",
+  /** The raised main button (sign-in, 12e): its glow, a warm rim, the light along its top and a shade at its foot. */
+  buttonRaised: "0 10px 28px rgba(255,138,31,0.45), 0 0 0 1px rgba(255,190,120,0.35), inset 0 1px 0 rgba(255,255,255,0.45), inset 0 -2px 0 rgba(150,60,0,0.25)",
+  /** Google's white button and the app's name lifted off the picture. */
+  lightButton: "0 6px 18px rgba(0,0,0,0.35)",
+  /** The sign-in box over the picture: its thin dark outline round the white edge, and its lift. */
+  signInBox: `0 0 0 2px ${colours.signInOutline}, 0 14px 40px rgba(0,0,0,0.35)`,
+  /** The black main button lifted off the orange box. */
+  darkButton: "0 8px 20px rgba(0,0,0,0.35)",
   logo: "0 0 20px rgba(255,138,31,0.35)",
   fieldOn: "0 0 0 3px rgba(255,138,31,0.08)",
   chip: "0 4px 14px rgba(255,138,31,0.3)",

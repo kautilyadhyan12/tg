@@ -3,7 +3,8 @@
 // `cave` is Kd's "prehistoric-cave-brightened" (2026-10-28), its fire made to glow, for the Dashboard's top.
 // `motivation` is Kd's "Glowing spear ring and lone warrior" (2026-10-28), darkened for the clock.
 // `goals` and `goalsbox` are Kd's own drawing (2026-10-27), made dark by reviews/pics31b.py.
-// `getstarted` is the browser's sign-in picture, cut by the same tool to sit at the top of a phone.
+// `signin` is Kd's "Neon Fitness Crew Sticker Poster" (12e, 2026-11-08), made tall for a phone by ChatGPT; its plain
+// orange under the people lengthened, so the sign-in box covers none of them.
 // Progress's chalk drawings are Kd's posters (35c-i, 2026-11-04), cut without their words or made-up
 // numbers, the ink ones made negative: `runner`, `pushup`, `etch`, `rope`, `steps`, `balance`, `anatomy`, `plank`.
 // `setup` is the browser's setup picture (its Vitruvian figure), its lines drawn light and glowing for the dark page.
@@ -31,7 +32,6 @@ import experiencepoints from "../../assets/pictures/experiencepoints.webp";
 import food from "../../assets/pictures/food.webp";
 import foodbg from "../../assets/pictures/foodbg.webp";
 import foodbowl from "../../assets/pictures/foodbowl.webp";
-import getstarted from "../../assets/pictures/getstarted.webp";
 import goals from "../../assets/pictures/goals.webp";
 import goalsbox from "../../assets/pictures/goalsbox.webp";
 import goddess from "../../assets/pictures/goddess.webp";
@@ -58,6 +58,7 @@ import runners from "../../assets/pictures/runners.webp";
 import running from "../../assets/pictures/running.webp";
 import setting from "../../assets/pictures/setting.webp";
 import setup from "../../assets/pictures/setup.webp";
+import signin from "../../assets/pictures/signin.webp";
 import squat from "../../assets/pictures/squat.webp";
 import steps from "../../assets/pictures/steps.webp";
 import thisweek from "../../assets/pictures/thisweek.webp";
@@ -87,7 +88,6 @@ export const pictures = {
   food,
   foodbg,
   foodbowl,
-  getstarted,
   goals,
   goalsbox,
   goddess,
@@ -114,6 +114,7 @@ export const pictures = {
   running,
   setting,
   setup,
+  signin,
   squat,
   steps,
   thisweek,

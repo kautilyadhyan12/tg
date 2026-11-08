@@ -67,7 +67,7 @@ function YoureInvited({ invitations, onDone }: { invitations: MyInvitation[]; on
       <View style={styles.brand}>
         <Logo />
         <Txt kind="strong" style={styles.brandName}>
-          AI Home Gym
+          KWAZO
         </Txt>
       </View>
       <View style={styles.head}>
