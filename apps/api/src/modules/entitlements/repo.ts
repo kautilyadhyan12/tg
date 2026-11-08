@@ -62,3 +62,17 @@ export async function getFreePlanDoc(sql: Sql): Promise<unknown> {
   if (rows[0] === undefined) throw new Error("plans seed missing the 'free' row (Part 4 §8)");
   return rows[0].entitlements;
 }
+
+/** Kd's own numbers a day for this person, set on the admin page (ROADMAP Stage 2 item 14a-i);
+ *  null for a feature he set none for. */
+export async function getOwnLimits(sql: Sql, userId: string): Promise<OwnLimits> {
+  const rows = await sql<{ meal_scans_a_day: number | null; route_plans_a_day: number | null }[]>`
+    SELECT meal_scans_a_day, route_plans_a_day FROM usage_limits WHERE user_id = ${userId}`;
+  const row = rows[0];
+  return { mealScan: row?.meal_scans_a_day ?? null, routeGen: row?.route_plans_a_day ?? null };
+}
+
+export interface OwnLimits {
+  mealScan: number | null;
+  routeGen: number | null;
+}

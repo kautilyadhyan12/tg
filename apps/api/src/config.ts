@@ -159,6 +159,10 @@ const envSchema = z.object({
   // Where the app tells its operator that a gym's invitations were stopped (the "have
   // a look" list, until the admin panel). Unset: the log alone says so.
   OPERATOR_EMAIL: z.string().trim().email().max(254).optional(),
+  // The one account that opens the admin page (ROADMAP Stage 2 item 14a-i; Kd, 2026-11-07: only his
+  // own). Its id, not its email: no change of address can make another account the admin. Unset:
+  // every admin address answers as one that does not exist, to everybody.
+  ADMIN_USER_ID: z.string().uuid().optional(),
   // Join codes (ROADMAP 3c; RULINGS 2026-09-21): an invitation to an address is the only
   // way into a gym, so the code routes and the waiting room answer 410 and a new gym gets
   // no code. "on" exists for the old suites, which keep that code from rotting unseen.

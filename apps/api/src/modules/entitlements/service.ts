@@ -67,6 +67,18 @@ export function mergeEntitlements(
   return { entitlements: merged ?? free, source };
 }
 
+/** Kd's own number a day for a person (the admin page, ROADMAP Stage 2 item 14a-i) replaces what
+ *  their plans give of that feature, higher or lower: what he sets is what they get, until he takes
+ *  it back (Kd, 2026-11-08). Every other feature stays as the plans merged it. Pure; exported for
+ *  its table test. */
+export function applyOwnLimits(entitlements: Entitlements, own: repo.OwnLimits): Entitlements {
+  return {
+    ...entitlements,
+    meal_scan: own.mealScan === null ? entitlements.meal_scan : { window: "day", limit: own.mealScan },
+    route_gen: own.routeGen === null ? entitlements.route_gen : { window: "day", limit: own.routeGen },
+  };
+}
+
 const cachedSchema = z.object({
   entitlements: entitlementsSchema,
   source: z.enum(["free", "own_subscription", "gym_membership"]),
@@ -91,11 +103,13 @@ export async function getEntitlements(
     const parsed = cachedSchema.safeParse(raw);
     if (parsed.success) return parsed.data;
   }
-  const [freeDoc, candidates] = await Promise.all([
+  const [freeDoc, candidates, own] = await Promise.all([
     repo.getFreePlanDoc(deps.sql),
     repo.getCandidates(deps.sql, userId),
+    repo.getOwnLimits(deps.sql, userId),
   ]);
-  const resolved = mergeEntitlements(freeDoc, candidates);
+  const merged = mergeEntitlements(freeDoc, candidates);
+  const resolved = { entitlements: applyOwnLimits(merged.entitlements, own), source: merged.source };
   await deps.redis.setex(cacheKey(userId), CACHE_TTL_S, JSON.stringify(resolved));
   return resolved;
 }
