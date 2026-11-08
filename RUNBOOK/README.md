@@ -16,6 +16,8 @@ Current entries:
   (ROADMAP 18d-ii)
 - `switch-the-map.md` — moving every phone's run map from OpenFreeMap to our own copy of the
   world map, with no new app version (ROADMAP Stage 5 37b-i)
+- `migrate-a-tighter-rule.md` — a migration that tightens a rule the running api still writes
+  against: stop, migrate, start (ROADMAP Stage 5 21b-ii, migration 0228)
 - (P0.4b adds deploy/rollback; Part 8 tasks add alerts, backup/restore drill,
   break-glass, secret rotation)
 

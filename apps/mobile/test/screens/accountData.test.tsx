@@ -166,7 +166,7 @@ describe("Delete account (the worst thing: after deleting, the phone still shows
     const store = await openSettings(server.ask);
     await upToTheCode();
     await fireEvent.press(screen.getByLabelText("Delete"));
-    expect(await screen.findByText(deletedNote(false, new Date()))).toBeTruthy();
+    expect(await screen.findByText(deletedNote("maybe", new Date()))).toBeTruthy();
     expect(store.value).toBeNull();
     expect(new File(Paths.document, `meals-${RAVI.id}.json`).exists).toBe(false);
   });
@@ -245,6 +245,15 @@ describe("Delete account (the worst thing: after deleting, the phone still shows
     await fireEvent.press(screen.getByLabelText("Email me a new code"));
     expect(await screen.findByText("We emailed you a new code.")).toBeTruthy();
     expect(server.asked.filter((a) => a.method === "DELETE")).toEqual([]);
+  });
+
+  it("deleted at the same instant by the website: says to look for the undo email", async () => {
+    const server = fakeServer(routes({ [ME]: me(ok({ message: "Account scheduled for deletion.", emailSent: false, deletedByAnother: true })) }));
+    await openSettings(server.ask);
+    await upToTheCode();
+    await fireEvent.press(screen.getByLabelText("Delete"));
+    expect(await screen.findByText(deletedNote("maybe", new Date()))).toBeTruthy();
+    expect(screen.queryByText(/link we emailed/)).toBeNull();
   });
 
   it("never says an email was sent when the server says none went", async () => {

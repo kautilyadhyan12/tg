@@ -1034,6 +1034,16 @@ export async function expireCode(sql: Sql, id: string): Promise<void> {
   await sql`UPDATE sign_in_codes SET expires_at = now() WHERE id = ${id} AND used_at IS NULL`;
 }
 
+/** The hashes of this address's unbound codes for one purpose proved since `since`, newest first. */
+export async function findProvedCodeHashes(sql: Sql, email: string, purpose: CodePurpose, since: Date): Promise<string[]> {
+  const rows = await sql<{ code_hash: string }[]>`
+    SELECT code_hash FROM sign_in_codes
+    WHERE email = ${email} AND purpose = ${purpose} AND user_id IS NULL AND used_at > ${since}
+    ORDER BY used_at DESC
+    LIMIT 5`;
+  return rows.map((r) => r.code_hash);
+}
+
 /** Single use, one UPDATE — a code presented twice at once is consumed once. */
 export async function consumeCode(sql: Sql, id: string): Promise<boolean> {
   const rows = await sql<{ id: string }[]>`

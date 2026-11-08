@@ -41,7 +41,8 @@ export interface CodeDoor {
   countWrongGuess(req: FastifyRequest): Promise<void>;
 }
 
-export function createCodeDoor(deps: { config: AppConfig; redis: RedisLike; robotCheck: RobotCheck }): CodeDoor {
+/** `pausedWords`: what the door says once the day's ceiling is reached; the sign-in page's by default. */
+export function createCodeDoor(deps: { config: AppConfig; redis: RedisLike; robotCheck: RobotCheck; pausedWords?: string }): CodeDoor {
   const sendLimit = createDualRateLimit({
     name: "code_send",
     max: 500,
@@ -60,7 +61,7 @@ export function createCodeDoor(deps: { config: AppConfig; redis: RedisLike; robo
     if (sentToday >= deps.config.CODE_EMAILS_PER_DAY) {
       await reply.status(429).send({
         error: "code_ceiling",
-        message: "Sign-in codes are paused for today. Please try again tomorrow, or sign in with Google.",
+        message: deps.pausedWords ?? "Sign-in codes are paused for today. Please try again tomorrow, or sign in with Google.",
         requestId: req.id,
       });
     }

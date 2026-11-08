@@ -89,6 +89,17 @@ describe('the Delete your account page', () => {
     expect(screen.queryByLabelText(W.codeLabel)).toBeNull();
   });
 
+  it('deleted at the same instant in the app: says to look for the undo email, never that one was sent', async () => {
+    deleteAccountService.deleteAccount.mockResolvedValue({ message: W.doneMaybe, emailSent: false, deletedByAnother: true });
+    draw();
+    await typeEmailAndSend();
+    typeCode('123456');
+    fireEvent.click(screen.getByRole('button', { name: W.deleteButton }));
+    const done = (await screen.findByText(W.doneTitle)).closest('[role="status"]');
+    expect(within(done).getByText(W.doneMaybe)).toBeTruthy();
+    expect(within(done).queryByText(W.doneNoEmail)).toBeNull();
+  });
+
   it('a wrong code says so and clears the box; the address can be changed', async () => {
     deleteAccountService.deleteAccount.mockRejectedValue(apiError(400, 'invalid_code', 'That code didn’t work. Check it and try again, or ask for a new one.'));
     draw();
