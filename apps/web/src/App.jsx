@@ -28,6 +28,7 @@ import InvitationLink  from './pages/InvitationLink';
 import StaffInvitationLink from './pages/StaffInvitationLink';
 import GymPublicPage   from './pages/GymPublicPage';
 import LegalPage       from './pages/LegalPage';
+import DeleteAccountPage from './pages/DeleteAccountPage';
 import { LEGAL_PATHS } from '@app/shared';
 import InvitePage       from './pages/InvitePage';
 import AgreementSignPage from './pages/AgreementSignPage';
@@ -203,6 +204,8 @@ export default function App() {
             <Route path={LEGAL_PATHS.privacy} element={<LegalPage which="privacy" />} />
             <Route path={LEGAL_PATHS.terms} element={<LegalPage which="terms" />} />
             <Route path={LEGAL_PATHS.washington} element={<LegalPage which="washington" />} />
+            {/* Google Play's web page to ask for an account's deletion (21b-ii): no sign-in. */}
+            <Route path={LEGAL_PATHS.deleteAccount} element={<DeleteAccountPage />} />
             {/* A gym's own page and its enquiry form (20c-iv-a): public, no sign-in. */}
             <Route path="/gyms/:slug" element={<GymPublicPage />} />
             {/* A member's invite link (20e-ii-a): public, for every business. */}
