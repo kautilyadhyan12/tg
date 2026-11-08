@@ -5,7 +5,7 @@ import { SIGN_IN_CODE_RULES, authEmailSchema } from "@app/shared";
 import { Button } from "../look/Button";
 import { Card } from "../look/Card";
 import { CodeBoxes } from "../look/CodeBoxes";
-import { colours, shadows, sizes } from "../look/colours";
+import { colours, shadows, signInGradient, sizes } from "../look/colours";
 import { Field } from "../look/Field";
 import { GoogleMark } from "../look/GoogleMark";
 import { Icon } from "../look/Icon";
@@ -252,20 +252,20 @@ export function SignInScreen({ note }: { note: string | null }) {
           {step === "email" ? (
             <View style={styles.head}>
               <Txt kind="h1">Get started.</Txt>
-              <Txt colour="textSoft">Sign in or create your account</Txt>
+              <Txt colour="onSignIn">Sign in or create your account</Txt>
             </View>
           ) : arrival === "sent" ? (
             <View style={styles.head}>
               <Txt kind="h1">Check your email.</Txt>
-              <Txt colour="textSoft">Enter the 6-digit code sent to</Txt>
+              <Txt colour="onSignIn">Enter the 6-digit code sent to</Txt>
               <Address address={address} />
             </View>
           ) : (
             <View style={styles.head}>
               <Txt kind="h1">Enter your code.</Txt>
-              <Txt colour="textSoft">{secondsToResend > 0 ? TOO_SOON.asked : TOO_SOON.have}</Txt>
+              <Txt colour="onSignIn">{secondsToResend > 0 ? TOO_SOON.asked : TOO_SOON.have}</Txt>
               <Address address={address} />
-              <Txt colour="textSoft">{secondsToResend > 0 ? TOO_SOON.wait : TOO_SOON.resend}</Txt>
+              <Txt colour="onSignIn">{secondsToResend > 0 ? TOO_SOON.wait : TOO_SOON.resend}</Txt>
             </View>
           )}
 
@@ -286,6 +286,7 @@ export function SignInScreen({ note }: { note: string | null }) {
                 label="Email"
                 bare
                 icon="mail"
+                light
                 value={typed}
                 onChange={(value) => {
                   setTyped(value);
@@ -297,11 +298,11 @@ export function SignInScreen({ note }: { note: string | null }) {
                 maxLength={254}
                 onDone={() => void continueWithEmail()}
               />
-              {problem === "" ? null : <Txt colour="badText">{problem}</Txt>}
-              <Button label="Continue" wide raised busy={busy} disabled={googleBusy} onPress={() => void continueWithEmail()} />
+              {problem === "" ? null : <Said tone="bad" words={problem} />}
+              <Button label="Continue" kind="dark" wide raised busy={busy} disabled={googleBusy} onPress={() => void continueWithEmail()} />
               <View style={styles.or}>
                 <View style={styles.orLine} />
-                <Txt kind="tiny" colour="textFaint">
+                <Txt kind="tiny" colour="onSignIn">
                   or
                 </Txt>
                 <View style={styles.orLine} />
@@ -316,7 +317,7 @@ export function SignInScreen({ note }: { note: string | null }) {
                 disabled={busy}
                 onPress={() => void continueWithGoogle()}
               />
-              {googleProblem === "" ? null : <Txt colour="badText">{googleProblem}</Txt>}
+              {googleProblem === "" ? null : <Said tone="bad" words={googleProblem} />}
             </View>
           ) : (
             <View style={styles.form}>
@@ -330,26 +331,24 @@ export function SignInScreen({ note }: { note: string | null }) {
                 }}
                 onDone={() => void continueWithCode()}
               />
-              {problem === "" ? null : <Txt colour="badText">{problem}</Txt>}
-              <Button label="Continue" wide raised busy={busy} onPress={() => void continueWithCode()} />
+              {problem === "" ? null : <Said tone="bad" words={problem} />}
+              <Button label="Continue" kind="dark" wide raised busy={busy} onPress={() => void continueWithCode()} />
               <View style={styles.links}>
                 <Button
                   label={secondsToResend > 0 ? `Resend code in ${String(secondsToResend)}s` : "Resend code"}
-                  kind="link"
+                  kind="lightLink"
                   disabled={busy || secondsToResend > 0}
                   onPress={() => void resend()}
                 />
-                <Button label="Use a different email" kind="quiet" disabled={busy} onPress={changeEmail} />
+                <Button label="Use a different email" kind="lightLink" disabled={busy} onPress={changeEmail} />
               </View>
               {said === "" ? null : (
-                <Txt colour="goodText" style={styles.centre}>
-                  {said}
-                </Txt>
+                <Said tone="good" words={said} />
               )}
             </View>
           )}
 
-          <Txt kind="tiny" style={styles.centre}>
+          <Txt kind="tiny" colour="onSignIn" style={styles.centre}>
             By continuing you agree to our Terms & Privacy Policy
           </Txt>
         </View>
@@ -366,11 +365,22 @@ export function SignInScreen({ note }: { note: string | null }) {
   );
 }
 
+/** What went wrong, or that a new code went: dark words on a white strip, so they read on the orange box. */
+function Said({ tone, words }: { tone: "bad" | "good"; words: string }) {
+  return (
+    <View style={styles.said}>
+      <Txt kind="strong" colour={tone} style={styles.centre}>
+        {words}
+      </Txt>
+    </View>
+  );
+}
+
 /** The address a code went to, in a pill under the line that names it. */
 function Address({ address }: { address: string }) {
   return (
     <View style={styles.address}>
-      <Icon name="mail" size={16} colour="orange" />
+      <Icon name="mail" size={16} colour="onOrange" />
       <Txt kind="strong" numberOfLines={1} style={styles.addressWords}>
         {address}
       </Txt>
@@ -391,9 +401,10 @@ const styles = StyleSheet.create({
     paddingTop: 20,
     gap: 14,
     borderRadius: 28,
-    borderWidth: 1,
-    borderColor: colours.lineStrong,
-    backgroundColor: colours.signInBox,
+    borderWidth: 3,
+    borderColor: colours.light,
+    backgroundColor: colours.signInFoot,
+    experimental_backgroundImage: signInGradient,
     boxShadow: shadows.signInBox,
   },
   head: { gap: 6 },
@@ -409,15 +420,16 @@ const styles = StyleSheet.create({
     paddingRight: 14,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: colours.lineStrong,
-    backgroundColor: colours.fill,
+    borderColor: colours.onSignInFaint,
+    backgroundColor: colours.veil,
   },
   addressWords: { flexShrink: 1 },
   note: { flexDirection: "row", alignItems: "center", gap: 10 },
   noteWords: { flex: 1 },
   form: { gap: 14 },
   or: { flexDirection: "row", alignItems: "center", gap: 12 },
-  orLine: { flex: 1, height: 1, backgroundColor: colours.lineStrong },
+  orLine: { flex: 1, height: 1, backgroundColor: colours.onSignInFaint },
   links: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between" },
   centre: { textAlign: "center" },
+  said: { alignSelf: "stretch", paddingVertical: 8, paddingHorizontal: 12, borderRadius: 12, backgroundColor: colours.light },
 });

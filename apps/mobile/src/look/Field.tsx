@@ -30,11 +30,13 @@ interface FieldProps {
   disabled?: boolean;
   /** A small orange sign inside the box's start, saying what goes in it (sign-in's envelope, 12e). */
   icon?: IconName;
+  /** A white box with dark words, on a coloured box (sign-in's, 12e). */
+  light?: boolean;
 }
 
 /** One line to type in, as tall as a main button; its edge turns orange while it is typed in.
  *  The box is a View round the input: Android drops an input's own padding when its edge is restyled. */
-export function Field({ label, bare = false, value, onChange, placeholder, keyboard, fills, maxLength, spaced = false, ready = false, onDone, name = false, lines, disabled = false, icon }: FieldProps) {
+export function Field({ label, bare = false, value, onChange, placeholder, keyboard, fills, maxLength, spaced = false, ready = false, onDone, name = false, lines, disabled = false, icon, light = false }: FieldProps) {
   const many = lines !== undefined && lines > 1;
   const [on, setOn] = useState(false);
   return (
@@ -44,7 +46,7 @@ export function Field({ label, bare = false, value, onChange, placeholder, keybo
           {label}
         </Txt>
       )}
-      <View style={[styles.box, many ? [styles.manyBox, { minHeight: LINE * lines + 24 }] : null, icon === undefined ? null : styles.withIcon, on ? styles.on : null]}>
+      <View style={[styles.box, many ? [styles.manyBox, { minHeight: LINE * lines + 24 }] : null, icon === undefined ? null : styles.withIcon, on ? styles.on : null, light ? styles.light : null]}>
         {icon === undefined ? null : (
           <View style={styles.icon}>
             <Icon name={icon} size={18} colour="orange" />
@@ -58,7 +60,7 @@ export function Field({ label, bare = false, value, onChange, placeholder, keybo
           value={value}
           onChangeText={onChange}
           placeholder={placeholder}
-          placeholderTextColor={colours.textFaint}
+          placeholderTextColor={light ? colours.lightPlaceholder : colours.textFaint}
           keyboardType={keyboard}
           autoComplete={fills}
           autoCapitalize={name ? "words" : many ? "sentences" : "none"}
@@ -74,7 +76,7 @@ export function Field({ label, bare = false, value, onChange, placeholder, keybo
             setOn(false);
           }}
           selectionColor={colours.orange}
-          style={[styles.input, icon === undefined ? null : styles.inputBeside, many ? [styles.manyInput, { minHeight: LINE * lines }] : null, spaced && value !== "" ? styles.spaced : null]}
+          style={[styles.input, icon === undefined ? null : styles.inputBeside, light ? styles.lightInput : null, many ? [styles.manyInput, { minHeight: LINE * lines }] : null, spaced && value !== "" ? styles.spaced : null]}
         />
       </View>
     </View>
@@ -107,6 +109,8 @@ const styles = StyleSheet.create({
     borderColor: colours.orangeLine,
   },
   inputBeside: { flex: 1, height: 50 },
+  light: { backgroundColor: colours.light, borderColor: colours.light },
+  lightInput: { color: colours.onLight },
   input: { height: sizes.button - 2, padding: 0, color: colours.text, fontFamily: fonts.regular, fontSize: 15 },
   // Several lines: the box grows with the words (minHeight, never height), the words start at its top.
   manyBox: { height: undefined, paddingVertical: 12 },

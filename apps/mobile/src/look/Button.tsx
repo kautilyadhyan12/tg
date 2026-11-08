@@ -5,8 +5,9 @@ import { Icon, type IconName } from "./Icon";
 import { fonts, Txt } from "./Txt";
 
 /** `link`, `dangerLink` and `quiet` are words alone, with no box: a second thing to do beside a main button
- *  (`dangerLink` for one that removes something, such as Delete account). `light` is Google's white button. */
-export type ButtonKind = "main" | "plain" | "soft" | "danger" | "light" | "link" | "dangerLink" | "quiet";
+ *  (`dangerLink` for one that removes something, such as Delete account; `lightLink` white, on an orange box).
+ *  `light` is Google's white button; `dark` the black main button on sign-in's orange box. */
+export type ButtonKind = "main" | "plain" | "soft" | "danger" | "light" | "dark" | "link" | "lightLink" | "dangerLink" | "quiet";
 
 interface ButtonProps {
   label: string;
@@ -36,7 +37,9 @@ const ink: Record<ButtonKind, ColourName> = {
   soft: "orange",
   danger: "badText",
   light: "onLight",
+  dark: "onOrange",
   link: "orange",
+  lightLink: "onOrange",
   dangerLink: "badText",
   quiet: "textSoft",
 };
@@ -57,7 +60,7 @@ export function Button({
   style,
   say,
 }: ButtonProps) {
-  const words = kind === "link" || kind === "dangerLink" || kind === "quiet";
+  const words = kind === "link" || kind === "lightLink" || kind === "dangerLink" || kind === "quiet";
   return (
     <Pressable
       accessibilityRole="button"
@@ -73,7 +76,7 @@ export function Button({
         compact ? styles.compact : null,
         words ? styles.words : null,
         wide ? styles.wide : null,
-        raised ? (kind === "main" ? styles.raisedMain : styles.raised) : null,
+        raised ? (kind === "main" ? styles.raisedMain : kind === "dark" ? styles.raisedDark : styles.raised) : null,
         pressed ? styles.pressed : null,
         disabled ? styles.disabled : null,
         style,
@@ -113,9 +116,12 @@ const styles = StyleSheet.create({
   soft: { backgroundColor: colours.orangeFill, borderColor: colours.orangeLine },
   danger: { backgroundColor: colours.badFill, borderColor: colours.badLine },
   light: { backgroundColor: colours.light, experimental_backgroundImage: lightGradient, borderColor: colours.lightLine },
+  dark: { backgroundColor: colours.darkButton },
   raised: { height: 52, boxShadow: shadows.lightButton },
+  raisedDark: { height: 52, boxShadow: shadows.darkButton },
   raisedMain: { height: 52, experimental_backgroundImage: raisedOrangeGradient, boxShadow: shadows.buttonRaised },
   link: {},
+  lightLink: {},
   dangerLink: {},
   quiet: {},
   small: { height: sizes.press, paddingHorizontal: 16 },

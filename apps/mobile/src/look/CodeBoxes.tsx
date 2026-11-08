@@ -16,7 +16,7 @@ interface CodeBoxesProps {
   onDone?: () => void;
 }
 
-/** A code as one box for each digit, the next one lit. Under them lies one ordinary input, unseen, so typing,
+/** A code as one white box for each digit (on sign-in's orange box), the next one ringed dark. Under them lies one ordinary input, unseen, so typing,
  *  pasting and the phone's offer of a code from a message work as in any box. */
 export function CodeBoxes({ label, value, onChange, length, onDone }: CodeBoxesProps) {
   const [on, setOn] = useState(false);
@@ -61,14 +61,14 @@ const styles = StyleSheet.create({
     minHeight: BOX,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: colours.lineStrong,
-    backgroundColor: colours.fill,
+    borderColor: colours.light,
+    backgroundColor: colours.light,
     alignItems: "center",
     justifyContent: "center",
   },
-  lit: { borderColor: colours.fieldOnLine, backgroundColor: colours.fieldOn, boxShadow: shadows.fieldOn },
+  lit: { borderColor: colours.darkButton, borderWidth: 2, boxShadow: shadows.darkButton },
   caret: { width: 2, height: 24, borderRadius: 1, backgroundColor: colours.orange },
-  digit: { fontFamily: fonts.bold, fontSize: 24, lineHeight: 30, color: colours.text },
+  digit: { fontFamily: fonts.bold, fontSize: 24, lineHeight: 30, color: colours.onLight },
   // Over the boxes and unseen: a press anywhere on them opens the keyboard.
   input: { position: "absolute", top: 0, left: 0, right: 0, height: BOX, opacity: 0.02, color: colours.text },
 });
