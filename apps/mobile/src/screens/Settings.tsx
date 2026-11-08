@@ -728,9 +728,11 @@ export function deletesOnText(now: Date): string {
   return `${String(at.getDate())} ${MONTHS[at.getMonth()] ?? ""}`;
 }
 
-/** What the sign-in screen says once the account is deleted: the undo link only where one was sent. */
-export function deletedNote(emailSent: boolean, now: Date): string {
+/** What the sign-in screen says once the account is deleted: the undo link only where one was sent;
+ *  "maybe" where another request deleted it at the same instant and sends its own. */
+export function deletedNote(emailSent: boolean | "maybe", now: Date): string {
   const day = deletesOnText(now);
+  if (emailSent === "maybe") return `Your account will be deleted on ${day}. To keep it, look for our email and open its link before then.`;
   return emailSent
     ? `Your account will be deleted on ${day}. To keep it, open the link we emailed you before then.`
     : `Your account will be deleted on ${day}.`;
@@ -874,7 +876,7 @@ function DeleteAsk({ open, places, onStale, onClose }: { open: boolean; places: 
     setProblem(null);
     const answer = await session.signedIn({ method: "DELETE", path: "/v1/users/me", body: { code } }, deleteAccountResponseSchema);
     if (answer.kind === "ok") {
-      await forgetMe(answer.data.emailSent);
+      await forgetMe(answer.data.deletedByAnother === true ? "maybe" : answer.data.emailSent);
       return;
     }
     // The server replies only once the undo email is sent, so its reply can be lost after the account is
@@ -885,7 +887,8 @@ function DeleteAsk({ open, places, onStale, onClose }: { open: boolean; places: 
       await session.signedIn({ method: "GET", path: "/v1/users/me" }, userProfileResponseSchema);
       const now = session.state();
       if (now.kind === "out" && now.note === SIGNED_OUT_NOTES.ended) {
-        await forgetMe(false);
+        // Its undo email was most likely sent before the reply was lost.
+        await forgetMe("maybe");
         return;
       }
     }
@@ -899,7 +902,7 @@ function DeleteAsk({ open, places, onStale, onClose }: { open: boolean; places: 
   };
   // Nothing of the person stays: their waiting meals and drafts, then the sign-in and its pass keys;
   // the files again once nothing of theirs is open, for a write that was already on its way.
-  const forgetMe = async (emailSent: boolean) => {
+  const forgetMe = async (emailSent: boolean | "maybe") => {
     forgetPersonFiles(me.id);
     await session.accountDeleted(deletedNote(emailSent, new Date()));
     forgetPersonFiles(me.id);

@@ -136,6 +136,8 @@ export const DELETE_PAGE_WORDS = {
   doneTitle: "Your account is being deleted",
   doneUndo: `You're signed out everywhere. To keep your account, open the email we sent you and press Undo within ${days} days.`,
   doneNoEmail: `You're signed out everywhere. Your account will be deleted for good in ${days} days.`,
+  doneMaybe: `You're signed out everywhere. To keep your account, look for our email and press Undo within ${days} days.`,
+  paused: "We can't send more codes to this email address today. Please try again tomorrow, or delete your account in the KWAZO app, under Settings.",
   noAccount: "There's no KWAZO account with this email address, so there's nothing to delete.",
   alreadyDeleting: `This account is already being deleted. To keep it, open the email we sent when it was deleted and press Undo within ${days} days.`,
   ownerNext: "Sign in to manage your business",

@@ -8,6 +8,7 @@ import {
   consumeRestoreToken,
   isUserEmailVerified,
   issueRestoreToken,
+  provedEmailCodeLately,
   redeemEmailCode,
   requestEmailCode,
   revokeAllSessions,
@@ -44,6 +45,7 @@ import {
 } from "./schemas.js";
 import { DELETE_PAGE_WORDS, genderSchema, ownedGymLine, type Gender } from "@app/shared";
 import type { RobotAnswer } from "../auth/codes.js";
+import { AuthError } from "../auth/errors.js";
 import type {
   ConsentListResponse,
   ConsentRecord,
@@ -661,7 +663,7 @@ export async function deleteAccount(
   deps: UsersDeps,
   userId: string,
   code: string,
-): Promise<{ emailSent: boolean; leftGymIds: string[] }> {
+): Promise<DeletedAccount> {
   const row = await repo.getProfile(deps.sql, userId);
   if (row === null) throw new UsersError(401, "unauthorized", "authentication required");
   await refuseOwner(deps, userId);
@@ -696,21 +698,35 @@ export async function deleteAccountByEmail(
   deps: UsersDeps,
   email: string,
   code: string,
-): Promise<{ emailSent: boolean; leftGymIds: string[] }> {
-  await redeemEmailCode({ sql: deps.sql, config: deps.config, log: deps.log }, { email, purpose: "delete_account_web", code });
+): Promise<DeletedAccount> {
+  const codeDeps = { sql: deps.sql, config: deps.config, log: deps.log };
+  const input = { email, purpose: "delete_account_web" as const, code };
+  try {
+    await redeemEmailCode(codeDeps, input);
+  } catch (err) {
+    // The same press sent again after its answer was lost: the person is told where the account
+    // stands, never that the code they just used is wrong. A code proved for an account still
+    // active proves nothing a second time.
+    if (err instanceof AuthError && err.code === "invalid_code" && (await provedEmailCodeLately(codeDeps, input))) {
+      const account = await repo.findAccountByEmail(deps.sql, email);
+      if (account === null) throw new UsersError(404, "no_account", DELETE_PAGE_WORDS.noAccount);
+      if (account.status === "deleted") throw new UsersError(409, "already_deleting", DELETE_PAGE_WORDS.alreadyDeleting);
+    }
+    throw err;
+  }
   const account = await repo.findAccountByEmail(deps.sql, email);
   if (account === null) throw new UsersError(404, "no_account", DELETE_PAGE_WORDS.noAccount);
-  if (account.status !== "active") throw new UsersError(409, "already_deleting", DELETE_PAGE_WORDS.alreadyDeleting);
+  if (account.status === "deleted") throw new UsersError(409, "already_deleting", DELETE_PAGE_WORDS.alreadyDeleting);
+  if (account.status !== "active") throw new Error(`users.status outside the enum: ${account.status}`);
   await refuseOwner(deps, account.id);
   return await deleteProvedAccount(deps, account.id, email);
 }
 
+/** `deletedByAnother`: another request deleted it at the same instant, and sends the undo email. */
+type DeletedAccount = { emailSent: boolean; deletedByAnother: boolean; leftGymIds: string[] };
+
 /** Day 0, once the code is proved: the account is deleted, its sessions ended, the undo emailed. */
-async function deleteProvedAccount(
-  deps: UsersDeps,
-  userId: string,
-  email: string,
-): Promise<{ emailSent: boolean; leftGymIds: string[] }> {
+async function deleteProvedAccount(deps: UsersDeps, userId: string, email: string): Promise<DeletedAccount> {
   const row = { email };
   const invites = inviteSettings(deps.config);
   // Nobody is there to ask, so the sessions booked with a trainer who deletes their
@@ -733,10 +749,11 @@ async function deleteProvedAccount(
     throw err;
   }
   // null = the row stopped being active between the profile read above and
-  // this write (a racing second tap): quiet success, no second undo email.
+  // this write (a second tap, or the website's Delete at the same instant): no
+  // second undo email, and the screen says the other request's may be on its way.
   // A repeat DELETE from a deleted session never gets here — authenticate
   // and the active-only profile read both 401 first.
-  if (deleted === null) return { emailSent: false, leftGymIds: [] };
+  if (deleted === null) return { emailSent: false, deletedByAnother: true, leftGymIds: [] };
   await revokeAllSessions(deps.sql, userId);
   // Memberships just closed = an entitlement change → bust (§4.1/§10 seam).
   await bustEntitlements(deps.redis, userId);
@@ -744,7 +761,7 @@ async function deleteProvedAccount(
   if (deleted.email !== null) {
     try {
       await deps.emailSender.sendAccountDeletionEmail(deleted.email, deleted.displayName, rawToken);
-      return { emailSent: true, leftGymIds: deleted.leftGymIds };
+      return { emailSent: true, deletedByAnother: false, leftGymIds: deleted.leftGymIds };
     } catch (err) {
       // R3.10 (T3 2026-07-11 finding 5): provider errors routinely echo the
       // recipient address / message content — log the error CLASS only,
@@ -757,12 +774,12 @@ async function deleteProvedAccount(
         },
         "email send failed",
       );
-      return { emailSent: false, leftGymIds: deleted.leftGymIds };
+      return { emailSent: false, deletedByAnother: false, leftGymIds: deleted.leftGymIds };
     }
   }
   // OAuth-only account without an email: no undo channel — log the event.
   deps.log.warn({ event: "account_deletion.no_email", userId }, "deletion without undo email");
-  return { emailSent: false, leftGymIds: deleted.leftGymIds };
+  return { emailSent: false, deletedByAnother: false, leftGymIds: deleted.leftGymIds };
 }
 
 /** Undo (Part 4 §5.2): token consume and window check are BOTH enforced;

@@ -1,13 +1,22 @@
 // 21b-ii: the website's Delete your account page, for somebody without the app. No sign-in: a code
 // emailed to the address typed is the proof. Real Postgres.
 import { randomUUID } from "node:crypto";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import postgres from "postgres";
+import type * as Tokens from "../src/modules/auth/tokens.js";
 import { DELETE_PAGE_WORDS } from "@app/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { createMemoryRedis, type RedisLike } from "../src/redis.js";
 import { proveAddress } from "./proveAddress.js";
+
+// Every code minted while `fixed.code` is set has those six digits, so only the address or the
+// purpose can refuse it, never the digits by chance.
+const fixed = vi.hoisted(() => ({ code: null as string | null }));
+vi.mock("../src/modules/auth/tokens.js", async (importOriginal) => {
+  const real = await importOriginal<typeof Tokens>();
+  return { ...real, mintSixDigitCode: () => fixed.code ?? real.mintSixDigitCode() };
+});
 
 const url = process.env["DATABASE_URL"];
 const d = describe.skipIf(url === undefined || url === "");
@@ -69,6 +78,24 @@ d("the website's Delete your account page (real Postgres)", { timeout: T }, () =
     });
   const askCode = (email: string, ip?: string) => post("/v1/account-deletion/code", { email }, ip === undefined ? {} : { ip });
   const deleteWith = (email: string, code: string, ip?: string) => post("/v1/account-deletion", { email, code }, ip === undefined ? {} : { ip });
+  const deleteInApp = (cookies: Cookies, code: string) =>
+    api().inject({
+      method: "DELETE",
+      url: "/v1/users/me",
+      remoteAddress: nextIp(),
+      cookies,
+      headers: { "content-type": "application/json" },
+      payload: JSON.stringify({ code }),
+    });
+  /** The app's own delete code for the signed-in person. */
+  const appCodeFor = async (cookies: Cookies, email: string): Promise<string> => {
+    deleteCodes.delete(email);
+    const asked = await post("/v1/users/me/delete-code", {}, { cookies });
+    expect(asked.statusCode, asked.body).toBe(200);
+    const code = deleteCodes.get(email);
+    if (code === undefined) throw new Error("no code was emailed");
+    return code;
+  };
 
   interface Person {
     userId: string;
@@ -202,7 +229,7 @@ d("the website's Delete your account page (real Postgres)", { timeout: T }, () =
     const code = await codeFor(mia.email);
     const done = await deleteWith(mia.email.toUpperCase(), code);
     expect(done.statusCode, done.body).toBe(200);
-    expect(JSON.parse(done.body)).toEqual({ message: DELETE_PAGE_WORDS.doneUndo, emailSent: true });
+    expect(JSON.parse(done.body)).toEqual({ message: DELETE_PAGE_WORDS.doneUndo, emailSent: true, deletedByAnother: false });
     expect(await statusOf(mia)).toBe("deleted");
     expect(undoEmails.filter((to) => to === mia.email)).toHaveLength(1);
     const me = await api().inject({ method: "GET", url: "/v1/users/me", cookies: mia.cookies, remoteAddress: nextIp() });
@@ -210,10 +237,15 @@ d("the website's Delete your account page (real Postgres)", { timeout: T }, () =
     const left = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM gym_members WHERE gym_id = ${org.id} AND user_id = ${mia.userId} AND removed_at IS NULL`;
     expect(left[0]?.n).toBe(0);
 
-    // The same press again (an answer lost on the way): the code is spent, and nothing more happens.
+    // The same press again (an answer lost on the way): nothing more happens, and the person is told
+    // the account is being deleted, never that the code they just used is wrong.
     const again = await deleteWith(mia.email, code);
-    expect(again.statusCode, again.body).toBe(400);
+    expect(again.statusCode, again.body).toBe(409);
+    expect(errorOf(again)).toMatchObject({ error: "already_deleting", message: DELETE_PAGE_WORDS.alreadyDeleting });
     expect(undoEmails.filter((to) => to === mia.email)).toHaveLength(1);
+    // Any other code is still just wrong.
+    const guess = await deleteWith(mia.email, otherThan(code));
+    expect(errorOf(guess).error).toBe("invalid_code");
 
     // Proved again, the address is told the account is already being deleted.
     const twice = await deleteWith(mia.email, await codeFor(mia.email));
@@ -254,6 +286,8 @@ d("the website's Delete your account page (real Postgres)", { timeout: T }, () =
     await sql`UPDATE sign_in_codes SET created_at = created_at - interval '2 minutes' WHERE email = ${vic.email}`;
     const fifth = await post("/v1/account-deletion/code", { email: vic.email, robotToken: "pass" });
     expect(fifth.statusCode, fifth.body).toBe(429);
+    // The person is pointed to the app, and not told they asked too often.
+    expect(errorOf(fifth)).toMatchObject({ error: "code_limit", message: DELETE_PAGE_WORDS.paused });
 
     // The person, signed in to the app, still gets their own code and deletes.
     deleteCodes.delete(vic.email);
@@ -274,6 +308,77 @@ d("the website's Delete your account page (real Postgres)", { timeout: T }, () =
     });
     expect(done.statusCode, done.body).toBe(200);
     expect(await statusOf(vic)).toBe("deleted");
+  }, T);
+
+  it("with every code the same six digits, only the address and the purpose decide: a stranger's code, a sign-in code and the app's code delete nothing", async () => {
+    fixed.code = "424242";
+    try {
+      const vera = await signedIn("Vera Same Digits");
+      // The stranger's own page code, the same digits, for the stranger's address only.
+      const stranger = newAddress();
+      expect(await codeFor(stranger)).toBe("424242");
+      const crossed = await deleteWith(vera.email, "424242");
+      expect(crossed.statusCode, crossed.body).toBe(400);
+      expect(errorOf(crossed).error).toBe("invalid_code");
+
+      // Vera's sign-in code and the app's own code, the same digits, are not the page's code.
+      signInCodes.delete(vera.email);
+      const signIn = await post("/v1/auth/code/send", { email: vera.email });
+      expect(signIn.statusCode, signIn.body).toBe(200);
+      expect(signInCodes.get(vera.email)).toBe("424242");
+      expect(await appCodeFor(vera.cookies, vera.email)).toBe("424242");
+      const wrongKind = await deleteWith(vera.email, "424242");
+      expect(wrongKind.statusCode, wrongKind.body).toBe(400);
+      expect(await statusOf(vera)).toBe("active");
+
+      // The page's code does not delete in the app: the app's code is spent first, so only the page's is live.
+      await sql`UPDATE sign_in_codes SET used_at = now() WHERE email = ${vera.email} AND purpose = 'delete_account'`;
+      expect(await codeFor(vera.email)).toBe("424242");
+      const inApp = await deleteInApp(vera.cookies, "424242");
+      expect(inApp.statusCode, inApp.body).toBe(400);
+      expect(await statusOf(vera)).toBe("active");
+
+      // Vera's own page code, the same digits, does.
+      const done = await deleteWith(vera.email, "424242");
+      expect(done.statusCode, done.body).toBe(200);
+      expect(await statusOf(vera)).toBe("deleted");
+    } finally {
+      fixed.code = null;
+    }
+  }, T);
+
+  it("the page and the app deleting at the same instant: one deletion, one undo email, and the second is told to look for it", async () => {
+    for (let round = 0; round < 3; round += 1) {
+      const ana = await signedIn(`Ana Both Doors ${String(round)}`);
+      const appCode = await appCodeFor(ana.cookies, ana.email);
+      const pageCode = await codeFor(ana.email);
+      const [web, inApp] = await Promise.all([deleteWith(ana.email, pageCode), deleteInApp(ana.cookies, appCode)]);
+      expect(web.statusCode, web.body).toBe(200);
+      expect(inApp.statusCode, inApp.body).toBe(200);
+      const answers = [JSON.parse(web.body), JSON.parse(inApp.body)] as { message: string; emailSent: boolean; deletedByAnother: boolean }[];
+      expect(answers.map((a) => a.deletedByAnother).sort()).toEqual([false, true]);
+      for (const a of answers) if (a.deletedByAnother) expect(a.emailSent).toBe(false);
+      const webAnswer = answers[0];
+      if (webAnswer?.deletedByAnother === true) expect(webAnswer.message).toBe(DELETE_PAGE_WORDS.doneMaybe);
+      expect(undoEmails.filter((to) => to === ana.email)).toHaveLength(1);
+      const tokens = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM one_time_tokens WHERE user_id = ${ana.userId} AND purpose = 'restore_account'`;
+      expect(tokens[0]?.n).toBe(1);
+      expect(await statusOf(ana)).toBe("deleted");
+    }
+  }, T);
+
+  it("once the day's codes for everyone run out, the page points to the app, and the sign-in page keeps its own words", async () => {
+    await redis?.setex("rl:code_send:all:day", 3600, "100000000");
+    try {
+      const page = await askCode(newAddress());
+      expect(page.statusCode, page.body).toBe(429);
+      expect(errorOf(page)).toMatchObject({ error: "code_ceiling", message: DELETE_PAGE_WORDS.paused });
+      const signIn = await post("/v1/auth/code/send", { email: newAddress() });
+      expect(signIn.statusCode, signIn.body).toBe(429);
+      expect(errorOf(signIn).message).toContain("Sign-in codes are paused");
+    } finally {
+      await redis?.del("rl:code_send:all:day");
+    }
   }, T);
 
   it("an internet address with a thousand wrong guesses this hour is turned away before its next one", async () => {

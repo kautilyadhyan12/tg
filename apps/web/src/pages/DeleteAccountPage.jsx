@@ -125,7 +125,7 @@ function DeleteForm() {
     setResent(false);
     try {
       const done = await deleteAccountService.deleteAccount(email.trim(), code);
-      setDoneText(done.emailSent ? W.doneUndo : W.doneNoEmail);
+      setDoneText(done.deletedByAnother ? W.doneMaybe : done.emailSent ? W.doneUndo : W.doneNoEmail);
       setStep('done');
     } catch (err) {
       const why = errorCode(err);

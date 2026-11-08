@@ -26,7 +26,7 @@ import {
 import { createDualRateLimit, giveBackRateLimit, type DualRateLimitOptions } from "../auth/rateLimit.js";
 import { createCodeDoor } from "../auth/codeDoor.js";
 import { RobotCheckNeeded } from "../auth/codes.js";
-import { WrongGuessError } from "../auth/errors.js";
+import { AuthError, WrongGuessError } from "../auth/errors.js";
 import { readEmailChangeLink, sessionStillLive, undoEmailChangeLink } from "../auth/service.js";
 import { maskedAddress } from "../../email/templates.js";
 import type { AppConfig } from "../../config.js";
@@ -345,7 +345,7 @@ export function registerUserRoutes(
     const input = parseBody(deleteAccountRequestSchema, req, reply);
     if (input === null) return;
     // The gyms the deletion itself took the person out of, a gym joined in that same instant too.
-    const { emailSent, leftGymIds } = await service.deleteAccount(usersDeps, authedUserId(req), input.code);
+    const { emailSent, deletedByAnother, leftGymIds } = await service.deleteAccount(usersDeps, authedUserId(req), input.code);
     tellGyms(deps.news, leftGymIds, { what: "people" });
     // T3 2026-07-11 finding 6: don't promise an email that wasn't sent
     // (OAuth-only accounts have no address; sender may also have failed).
@@ -357,6 +357,7 @@ export function registerUserRoutes(
         ? `Account scheduled for deletion. You have ${String(DPDP_RETENTION_DAYS)} days to undo via the link we emailed you.`
         : `Account scheduled for deletion. It will be permanently removed after ${String(DPDP_RETENTION_DAYS)} days.`,
       emailSent,
+      deletedByAnother,
     } satisfies DeleteAccountResponse);
   });
 
@@ -365,7 +366,7 @@ export function registerUserRoutes(
   // robot check, the address's hour, the day's ceiling and the wrong guesses, and the database's own day
   // cap and resend gap for the address. Asking answers the same for every address; only somebody who
   // proved the code learns whether it has an account.
-  const door = createCodeDoor({ config: deps.config, redis: deps.redis, robotCheck: deps.robotCheck });
+  const door = createCodeDoor({ config: deps.config, redis: deps.redis, robotCheck: deps.robotCheck, pausedWords: DELETE_PAGE_WORDS.paused });
   app.post("/v1/account-deletion/code", { preHandler: door.beforeSend }, async (req, reply) => {
     const input = parseBody(sendCodeRequestSchema, req, reply);
     if (input === null) return;
@@ -374,6 +375,8 @@ export function registerUserRoutes(
       rules = await service.requestDeleteCodeByEmail(usersDeps, input.email, door.passedRobot(req) ? "passed" : "not_passed");
     } catch (err) {
       if (err instanceof RobotCheckNeeded) return door.askForRobot(req, reply);
+      // The address's codes for today are used up, perhaps by somebody else: the app still works.
+      if (err instanceof AuthError && err.code === "code_limit") throw new AuthError(429, "code_limit", DELETE_PAGE_WORDS.paused, err.retryAfterSeconds);
       throw err;
     }
     await door.countSent();
@@ -395,8 +398,9 @@ export function registerUserRoutes(
       .status(200)
       .header("cache-control", "no-store")
       .send({
-        message: deleted.emailSent ? DELETE_PAGE_WORDS.doneUndo : DELETE_PAGE_WORDS.doneNoEmail,
+        message: deleted.deletedByAnother ? DELETE_PAGE_WORDS.doneMaybe : deleted.emailSent ? DELETE_PAGE_WORDS.doneUndo : DELETE_PAGE_WORDS.doneNoEmail,
         emailSent: deleted.emailSent,
+        deletedByAnother: deleted.deletedByAnother,
       } satisfies DeleteAccountResponse);
   });
 

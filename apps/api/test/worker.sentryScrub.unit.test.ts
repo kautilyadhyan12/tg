@@ -33,6 +33,10 @@ describe("the worker's error reports", () => {
     expect(withoutQuotedText('invalid input syntax for type uuid: "amara@realgym.example"')).toBe('invalid input syntax for type uuid: "…"');
     expect(withoutQuotedText("no quotes here")).toBe("no quotes here");
     expect(withoutQuotedText('new row for relation "gym_members" violates check constraint "x"')).toBe('new row for relation "gym_members" violates check constraint "x"');
+    // A value with quotes inside it: nothing of it is left, however it is crafted.
+    expect(withoutQuotedText('invalid input syntax for type uuid: "Jane "JJ" Doe"')).toBe('invalid input syntax for type uuid: "…"');
+    expect(withoutQuotedText('invalid input syntax for type uuid: "a column "jane@x.com" b"')).toBe('invalid input syntax for type uuid: "…"');
+    expect(withoutQuotedText('value "jane@x.com" violates check constraint "x"')).toBe('value "…"');
   });
 
   it("the scrubber takes off a refused row's values and keeps the message", () => {

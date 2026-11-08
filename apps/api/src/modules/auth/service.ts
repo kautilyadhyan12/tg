@@ -421,6 +421,13 @@ export async function redeemEmailCode(
   await codes.redeemCode(deps, input);
 }
 
+export async function provedEmailCodeLately(
+  deps: { sql: Sql; config: AppConfig; log: FastifyBaseLogger },
+  input: { email: string; purpose: CodePurpose; code: string },
+): Promise<boolean> {
+  return await codes.provedLately(deps, input);
+}
+
 // ── change email (19c; RULINGS 2026-09-23, E) ─────────────────────────────────
 // The users module asks for the code and moves the account through these, never through the repo.
 
