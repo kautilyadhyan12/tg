@@ -316,13 +316,19 @@ describe("kept until the server has it", () => {
     const store = file(JSON.stringify({ version: 1, days: [{ day: "2026-11-08", zone: "Asia/Kolkata", seconds: 600 }, { day: "2026-11-09", zone: "Asia/Kolkata", seconds: 120 }] }));
     const sends: AppMinutesDay[][] = [];
     let answer: MinutesSendResult = "refused";
-    const counter = createMinuteCounter({ store, now: () => MORNING_IST, zone: () => "Asia/Kolkata", send: (d) => (sends.push(d), Promise.resolve(answer)) });
+    let at = MORNING_IST;
+    const counter = createMinuteCounter({ store, now: () => at, zone: () => "Asia/Kolkata", send: (d) => (sends.push(d), Promise.resolve(answer)) });
     await counter.start();
     await counter.send();
     expect(counter.days()).toEqual([{ day: "2026-11-09", zone: "UTC", seconds: 120 }]);
+    // A minute counted after the refusal keeps UTC, never the refused zone.
+    counter.opened();
+    at += MIN;
+    await counter.closed();
+    expect(sends.at(-1)).toEqual([{ day: "2026-11-09", minutes: 3, zone: "UTC" }]);
     answer = "taken";
     await counter.send();
-    expect(sends.at(-1)).toEqual([{ day: "2026-11-09", minutes: 2, zone: "UTC" }]);
+    expect(sends.at(-1)).toEqual([{ day: "2026-11-09", minutes: 3, zone: "UTC" }]);
   });
 
   it("only a 400 counts as refused; no answer, a limit or the server down is tried again later", async () => {

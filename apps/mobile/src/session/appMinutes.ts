@@ -91,9 +91,11 @@ export function createMinuteCounter({ store, send, now, zone }: MinuteCounterOpt
   let saving: Promise<void> = Promise.resolve();
   let sending: Promise<void> | null = null;
 
+  // Zones a send was refused with (a 400): counted in UTC from then on, so they are never sent again.
+  const refusedZones = new Set<string>();
   const zoneNow = (): string => {
     const z = zone();
-    return z !== null && timeZoneNameSchema.safeParse(z).success && dayIn(z, new Date(0)) !== null ? z : "UTC";
+    return z !== null && !refusedZones.has(z) && timeZoneNameSchema.safeParse(z).success && dayIn(z, new Date(0)) !== null ? z : "UTC";
   };
   const dayAt = (ms: number, z: string): string => dayIn(z, new Date(ms)) ?? new Date(ms).toISOString().slice(0, 10);
 
@@ -166,6 +168,7 @@ export function createMinuteCounter({ store, send, now, zone }: MinuteCounterOpt
       if (result === "later") return;
       const today = dayAt(now(), zoneNow());
       if (result === "refused") {
+        for (const d of days) if (d.zone !== "UTC") refusedZones.add(d.zone);
         // Never sent again as it was: the past days go, and today counts on in UTC, which every server reads.
         days = days.filter((d) => d.day === today).map((d) => ({ ...d, zone: "UTC" }));
         await keep();
