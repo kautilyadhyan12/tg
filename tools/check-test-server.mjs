@@ -80,6 +80,18 @@ check("the console may not be framed", (page.headers.get("content-security-polic
 check("the console keeps to https", (page.headers.get("strict-transport-security") ?? "").includes("max-age="), page.headers.get("strict-transport-security") ?? "none");
 check("the console's policy names this api", body.includes(`https://${apiName}`), "");
 
+// A console built with the laptop's apps/web/.env calls the laptop (localhost:8000), and Chrome then asks
+// every visitor to let the site "access other apps and services on this device" (21a-ii, seen by Kd).
+// `http://localhost` alone is the router's own placeholder for a URL with no origin, never fetched.
+const scripts = [...body.matchAll(/<script[^>]+src="([^"]+\.js)"/g)].map((m) => m[1] ?? "");
+const laptopAddresses = [];
+for (const src of scripts) {
+  const text = await (await get(new URL(src, `https://${webName}/`).href)).text();
+  for (const m of text.matchAll(/(?:https?|wss?):\/\/(?:localhost|127\.0\.0\.1):\d+[^"'`\s]*/g)) laptopAddresses.push(m[0]);
+}
+const policyLaptop = body.match(/(?:https?|wss?):\/\/(?:localhost|127\.0\.0\.1):\d+/g) ?? [];
+check("the console never calls this laptop", scripts.length > 0 && laptopAddresses.length === 0 && policyLaptop.length === 0, [...new Set([...laptopAddresses, ...policyLaptop])].join(" ") || `${scripts.length} scripts read`);
+
 const deep = await get(`https://${webName}/console`);
 check("an address inside the console opens the page", deep.status === 200, String(deep.status));
 

@@ -81,6 +81,8 @@ infra/api.env
 # The test server's database password and its built console (RUNBOOK/test-server.md).
 infra/db.env
 infra/web/
+# Key files copied to the test server's /srv/kwazo/secrets (21a-ii), e.g. Firebase's service account.
+infra/secrets/
 
 # Local browser profile used for driving the app (holds cookies/session state)
 .codex-chrome-profile/

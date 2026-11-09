@@ -29,6 +29,9 @@ x-data: &data
   volumes:
     - /srv/kwazo/photos:/data/photos
     - /srv/kwazo/heights:/data/heights
+    # Files of keys too long for api.env (21a-ii): Firebase's service account, read by the worker as
+    # FIREBASE_SERVICE_ACCOUNT_FILE=/run/kwazo-secrets/firebase.json. Mode 600, never in git.
+    - /srv/kwazo/secrets:/run/kwazo-secrets:ro
 
 services:
   caddy:

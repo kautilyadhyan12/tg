@@ -6,3 +6,6 @@ apps/api/test/fixtures/member-list/** -text
 apps/api/test/fixtures/photos/*.jpg binary
 apps/api/test/fixtures/photos/*.png binary
 apps/api/test/fixtures/photos/*.webp binary
+# Run on the Linux test server as they are (21a-ii): a CR at a line end breaks bash and cron.
+infra/*.sh text eol=lf
+infra/*.cron text eol=lf

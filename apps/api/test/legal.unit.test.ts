@@ -10,6 +10,7 @@ import { describe, expect, it } from "vitest";
 import {
   KEPT_AFTER_DELETION,
   KWAZO_IS,
+  LEGAL_FACTS,
   OUTSIDE_SERVICES,
   privacyPolicy,
   termsOfUse,
@@ -244,6 +245,15 @@ describe("the privacy policy against the code", () => {
     );
     expect(JSON.stringify(privacyPolicy())).toContain("including the United States, Australia and Japan.");
     expect(JSON.stringify(washingtonHealthDataPolicy())).toContain("Hosting Infrastructure Provider: Amazon Web Services (AWS), responsible");
+  });
+
+  it("the nightly backup goes where the policy says the server is, and the policy says how long a copy stays (21a-ii)", () => {
+    const script = readFileSync(new URL("../../../infra/backup-selfhost.sh", import.meta.url), "utf8");
+    const region = script.match(/^REGION="([a-z0-9-]+)"$/m)?.[1];
+    const AWS_REGION_PLACES: Record<string, string> = { "ap-southeast-2": "Sydney, Australia" };
+    expect(AWS_REGION_PLACES[region ?? ""]).toBe(LEGAL_FACTS.hosting?.place);
+    expect(script).toContain("pg_dump");
+    expect(JSON.stringify(privacyPolicy())).toContain("Information deleted from KWAZO may therefore remain in these copies for up to 28 days.");
   });
 
   it("what a business sees, in the policy, matches the Join screen's lists one for one", () => {
