@@ -652,7 +652,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
       - 21a-ii. [x] **Errors, backups, notifications and the food lists on the server** · merged 2026-11-09 · PR #513
       - 21a-iii. **Security updates** (Kd, 2026-11-09, `rulings/2026-11-09-21a-iii.md`; split that day: zod 4.6.7 guards only lists with a limit, measured).
         - 21a-iii-a. [ ] **A size limit on every list sent to the server**, and undici, follow-redirects and node-forge (node-forge from 2026-11-10, the 14-day rule).
-        - 21a-iii-b. [ ] **zod 3 to zod 4** (api and shared, 247 files): what each schema accepts stays the same, stricter emails and ids checked against real ones.
+        - 21a-iii-b. [ ] **zod 3 to zod 4** (api and shared, 247 files): what each schema accepts stays the same, stricter emails and ids checked against real ones. Sign-in before a large body is read (round one of 21a-iii-a).
     - 21b. **The privacy policy, the terms of use and the account-deletion page** (moved to feature folder 2, Kd 2026-11-08; split that day: the deletion page needs a sign-in of its own).
       - 21b-i. [x] **The Privacy Policy, the Terms of Use and Washington's page** · merged 2026-11-08 · PR #505
       - 21b-ii. [x] **The "Delete your account" page** — merged 2026-11-09 (PR #507).
