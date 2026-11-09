@@ -20,6 +20,8 @@ describe("a provider's documented reply is read", () => {
     const read = reader(name).safeParse(reply);
     expect(read.error?.issues ?? []).toEqual([]);
     expect(read.success).toBe(true);
+    // What it reads as, kept: a change to zod that read a reply differently shows here.
+    expect(read.data).toMatchSnapshot();
   });
 });
 
