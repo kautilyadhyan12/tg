@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { phoneAppExtraSchema } from "@app/shared";
-import { COPY_KEYS, configFor, copyFor } from "../app.config";
+import { COPY_KEYS, configFor, copyFor, withServer } from "../app.config";
 
 describe("a folder's copy of the app", () => {
   it("each folder has its own name, application id, api and bundler port", () => {
@@ -36,5 +36,37 @@ describe("a folder's copy of the app", () => {
     expect(() => copyFor(written)).toThrow(
       /must hold one of: feature1, feature2, exercise1, exercise2/,
     );
+  });
+});
+
+describe("a copy pointed at the online test server (21a-i)", () => {
+  const copy = copyFor("feature1");
+
+  it("talks to the cable when neither address is set", () => {
+    expect(withServer(copy, {})).toBe(copy);
+    expect(withServer(copy, { PHONE_SERVER: " ", PHONE_WEBSITE: "" })).toBe(copy);
+  });
+
+  it("reads an address with spaces around it, as a line typed in a terminal has", () => {
+    expect(withServer(copy, { PHONE_SERVER: " https://api.getkwazo.com ", PHONE_WEBSITE: "https://getkwazo.com " })).toMatchObject({
+      apiUrl: "https://api.getkwazo.com",
+      webUrl: "https://getkwazo.com",
+    });
+  });
+
+  it("talks to the online server, and hands the app exactly those two addresses", () => {
+    const online = withServer(copy, { PHONE_SERVER: "https://api.getkwazo.com", PHONE_WEBSITE: "https://getkwazo.com/" });
+    expect(online).toMatchObject({ name: "Feature 1", applicationId: "com.aihomegym.dev.feature1", apiUrl: "https://api.getkwazo.com", webUrl: "https://getkwazo.com" });
+    expect(phoneAppExtraSchema.parse(configFor(online).extra)).toEqual({ copyName: "Feature 1", apiUrl: "https://api.getkwazo.com", webUrl: "https://getkwazo.com" });
+  });
+
+  it.each([
+    [{ PHONE_SERVER: "https://api.getkwazo.com" }, /PHONE_WEBSITE/],
+    [{ PHONE_WEBSITE: "https://getkwazo.com" }, /PHONE_SERVER/],
+    [{ PHONE_SERVER: "http://api.getkwazo.com", PHONE_WEBSITE: "https://getkwazo.com" }, /PHONE_SERVER/],
+    [{ PHONE_SERVER: "https://api.getkwazo.com/v1", PHONE_WEBSITE: "https://getkwazo.com" }, /PHONE_SERVER/],
+    [{ PHONE_SERVER: "api.getkwazo.com", PHONE_WEBSITE: "https://getkwazo.com" }, /PHONE_SERVER/],
+  ])("refuses %j", (env, named) => {
+    expect(() => withServer(copy, env)).toThrow(named);
   });
 });

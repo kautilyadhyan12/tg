@@ -19,7 +19,7 @@ export const LEGAL_PATHS = {
 } as const;
 
 /** The day the words below last changed, `YYYY-MM-DD`. */
-export const LEGAL_UPDATED_ON = "2026-11-08";
+export const LEGAL_UPDATED_ON = "2026-11-09";
 
 /** Who runs KWAZO (Kd, 2026-11-08: his full name; a sole proprietorship, RULINGS 2026-09-15). */
 export const LEGAL_OWNER = "Kautilya Darshan Baruah";
@@ -29,9 +29,13 @@ export const LEGAL_OWNER = "Kautilya Darshan Baruah";
  *  they are added before KWAZO is published. */
 export interface LegalFacts {
   supportEmail: string | null;
-  hosting: string | null;
+  hosting: { company: string; place: string } | null;
 }
-export const LEGAL_FACTS: LegalFacts = { supportEmail: null, hosting: null };
+export const LEGAL_FACTS: LegalFacts = {
+  supportEmail: null,
+  // The test server (21a-i, RUNBOOK/test-server.md): AWS's free plan opens Sydney alone.
+  hosting: { company: "Amazon Web Services (AWS)", place: "Sydney, Australia" },
+};
 
 export type LegalBlock =
   | { kind: "p"; text: string }
@@ -400,10 +404,10 @@ export function privacyPolicy(facts: LegalFacts = LEGAL_FACTS): LegalDocument {
           p(
             facts.hosting === null
               ? "The identity of this service provider will be disclosed in this Policy before the official publication of KWAZO."
-              : `This service provider is ${facts.hosting}.`,
+              : `This service provider is ${facts.hosting.company}, and KWAZO's servers and database are located in ${facts.hosting.place}.`,
           ),
           h3("5.5. International Processing and Data Transfers"),
-          p("Certain third-party service providers operate in countries outside the user's country of residence, including the United States."),
+          p("Certain third-party service providers operate in countries outside the user's country of residence, including the United States, Australia and Japan."),
           p("Accordingly, personal information may be processed or handled in such jurisdictions, subject to the respective service providers' applicable terms governing the handling of customer data."),
           h3("5.6. Disclosures Required by Law"),
           p("KWAZO may disclose personal information to law enforcement authorities, including the police, or to courts only where such disclosure is required by applicable law."),
@@ -863,7 +867,9 @@ export function washingtonHealthDataPolicy(facts: LegalFacts = LEGAL_FACTS): Leg
           h3("3.2. Third-Party Service Providers"),
           p("KWAZO shares consumer health data only with service providers involved in the operation and delivery of its Services, as described below:"),
           list(
-            "Hosting Infrastructure Provider: The company responsible for hosting KWAZO's server infrastructure and supporting the operation of the Application.",
+            facts.hosting === null
+              ? "Hosting Infrastructure Provider: The company responsible for hosting KWAZO's server infrastructure and supporting the operation of the Application."
+              : `Hosting Infrastructure Provider: ${facts.hosting.company}, responsible for hosting KWAZO's server infrastructure and supporting the operation of the Application.`,
             "OpenAI: Processes submitted meal photographs to identify and analyze food information.",
             "Google Firebase: Facilitates the delivery of application notifications, which may contain information relating to your workouts, training activities, or meals.",
             "OpenFreeMap: Provides the maps in the mobile Application, including while a run is recorded, and receives your IP address and the map area around you.",

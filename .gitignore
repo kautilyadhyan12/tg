@@ -78,6 +78,9 @@ apps/web/public/models/*.task
 # infra: the production env file lives on the deploy host, never in the repo
 # (R3.6, Part 8 §1 escrow). .gitignore's `.env` rule does not cover this name.
 infra/api.env
+# The test server's database password and its built console (RUNBOOK/test-server.md).
+infra/db.env
+infra/web/
 
 # Local browser profile used for driving the app (holds cookies/session state)
 .codex-chrome-profile/

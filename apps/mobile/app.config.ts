@@ -49,6 +49,29 @@ export function copyFor(written: string): Copy {
   };
 }
 
+/** The online test server in place of the folder's own (ROADMAP Stage 5 item 21a-i): `PHONE_SERVER` is the
+ *  api's https address and `PHONE_WEBSITE` the website's, set together when the bundler starts. The app reads
+ *  them as it reads the folder's own, so the copy already installed needs no new build. Neither set: the cable. */
+export function withServer(copy: Copy, env: Readonly<Record<string, string | undefined>>): Copy {
+  const api = env.PHONE_SERVER?.trim() ?? "";
+  const web = env.PHONE_WEBSITE?.trim() ?? "";
+  if (api === "" && web === "") return copy;
+  return { ...copy, apiUrl: httpsOrigin("PHONE_SERVER", api), webUrl: httpsOrigin("PHONE_WEBSITE", web) };
+}
+
+function httpsOrigin(name: string, written: string): string {
+  const refused = new Error(`${name} must be an https address such as https://api.getkwazo.com. It holds "${written}".`);
+  let url: URL;
+  try {
+    url = new URL(written);
+  } catch {
+    throw refused;
+  }
+  const bare = written.endsWith("/") ? written.slice(0, -1) : written;
+  if (url.protocol !== "https:" || url.origin !== bare) throw refused;
+  return url.origin;
+}
+
 /** Firebase's file for the Android app (ROADMAP Stage 5 item 18b-i), downloaded from the kwazo
  *  project's console and kept out of git: `apps/mobile/google-services.json`. A copy built without
  *  it runs, and gets no notifications. */
@@ -105,5 +128,5 @@ export default function config(): ExpoConfig {
       `apps/mobile/.copy is missing. Write one word in it: ${COPY_KEYS.join(", ")}.`,
     );
   }
-  return configFor(copyFor(written), existsSync(join(__dirname, GOOGLE_SERVICES_FILE)));
+  return configFor(withServer(copyFor(written), process.env), existsSync(join(__dirname, GOOGLE_SERVICES_FILE)));
 }
