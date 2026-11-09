@@ -2,8 +2,9 @@
 // shows it live and the server works the saved numbers out again with it, so the two never differ.
 // Pure: no clock, no randomness; the same points always give the same numbers.
 
-/** Raised whenever a rule below changes, and kept with each saved run. */
-export const RUN_CALC_VERSION = 1;
+/** Raised whenever a rule below changes, and kept with each saved run. 2 (37c-iii): standing is found on
+ *  the smoothed path, so a phone's wander of a few metres while standing no longer hides the stop. */
+export const RUN_CALC_VERSION = 2;
 
 /** A point: milliseconds since the run started, latitude, longitude, and how sure the phone was of
  *  it in metres (Android's horizontal accuracy; null when the phone did not say). */
@@ -26,9 +27,9 @@ const MIN_STEP_M = 3;
 /** How fast a runner may change speed, in metres a second: how far the smoothing lets a position
  *  move between points before it trusts the new one. */
 const SMOOTHING_M_PER_S = 4;
-/** Standing: every point of at least STILL_MS within STILL_M of the first of them. Moving time leaves
- *  such a stretch out, as Strava's server does for a run with no pauses; the phone's Auto-pause
- *  pauses on the same test (`apps/mobile/src/screens/running/autoPause.ts`). */
+/** Standing: every point of at least STILL_MS within STILL_M of the first of them, on the smoothed path.
+ *  Moving time leaves such a stretch out, as Strava's server does for a run with no pauses. The phone's
+ *  Auto-pause makes the same test on the points as they come (`apps/mobile/src/screens/running/autoPause.ts`). */
 export const STILL_MS = 8000;
 export const STILL_M = 3;
 
@@ -671,7 +672,9 @@ export function runSums(points: readonly RunPoint[], pauses: readonly RunPause[]
   let walked = 0;
   for (const raw of piecesBetweenPauses(points, cleaned, elapsed)) {
     const piece = withoutSpikes(raw);
-    const spans = standingSpans(piece);
+    // On the smoothed path: the raw points of a phone standing still wander past STILL_M, and the stop
+    // was counted as moving and drawn as a crawl on the pace chart (round one of 37c-iii, H3).
+    const spans = standingSpans(smoothed(piece));
     for (const span of spans) {
       stillMs += span[1] - span[0];
       still.push(span);

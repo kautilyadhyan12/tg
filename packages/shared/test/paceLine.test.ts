@@ -20,6 +20,18 @@ function track(speeds: readonly number[]): RunPoint[] {
   return points;
 }
 const steady = (seconds: number, mps: number): number[] => Array.from({ length: seconds }, () => mps);
+
+/** The same track as a real phone gives it: each point off by a random few metres (`jitter`, the spread
+ *  in metres north and east), with the accuracy the phone says, seeded so every run is the same. */
+function wandering(speeds: readonly number[], jitter: number, accuracy: number): RunPoint[] {
+  let seed = 7;
+  const next = () => {
+    seed = (seed * 16807) % 2147483647;
+    return seed / 2147483647;
+  };
+  const gauss = () => Math.sqrt(-2 * Math.log(next() + 1e-12)) * Math.cos(2 * Math.PI * next());
+  return track(speeds).map(([at, lat, lng]): RunPoint => [at, lat + (gauss() * jitter) / NORTH_M_PER_DEG, lng + (gauss() * jitter) / 100_000, accuracy]);
+}
 const line = (speeds: readonly number[], pauses: [number, number][] = []) => runSums(track(speeds), pauses, speeds.length * 1000, 70);
 const mps = (cms: number): number => cms / 100;
 
@@ -36,6 +48,18 @@ describe("the worst thing: a pace never run, shown as the person's", () => {
   it("a stop of two minutes standing still is never drawn as a crawl", () => {
     const sums = line([...steady(300, 3), ...steady(120, 0), ...steady(300, 3)]);
     for (const v of sums.paceLine) expect(mps(v)).toBeGreaterThan(2.6);
+  });
+
+  // A phone standing still says it is a few metres from where it was a second ago (round one, H3).
+  it.each([
+    [2, 5],
+    [4, 10],
+  ])("a stop of three minutes on a real phone (%d m of wander, %d m sure) is never drawn as a crawl, nor counted as moving", (jitter, accuracy) => {
+    const speeds = [...steady(400, 3), ...steady(180, 0), ...steady(400, 3)];
+    const sums = runSums(wandering(speeds, jitter, accuracy), [], speeds.length * 1000, 70);
+    for (const v of sums.paceLine) expect(mps(v)).toBeGreaterThan(2.2);
+    expect(sums.stillS).toBeGreaterThan(150);
+    expect(sums.movingS).toBeLessThan(840);
   });
 
   it("a pause is never drawn as a crawl", () => {
