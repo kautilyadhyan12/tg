@@ -1,18 +1,32 @@
-// The test server seen from outside (ROADMAP Stage 5 item 21a-i; RUNBOOK/test-server.md). Its worst
-// thing would be the database, Redis or a secret open to the internet, so this knocks on every door
-// a stranger could and fails unless only SSH, the web and https answer, and the api and the console
-// answer only over https with their headers.
+// The test server seen from outside, and from inside (ROADMAP Stage 5 item 21a-i; RUNBOOK/test-server.md).
+// Its worst thing would be the database, Redis or a secret open to the internet, so this knocks on every
+// door a stranger could, and fails unless only SSH, the web and https answer, the api and the console
+// answer only over https with their headers, and no secret file is served. AWS's security group stands in
+// front of the machine, so a door the machine itself opens by mistake reads shut from outside: the
+// inside part signs in over SSH and reads what the machine listens on.
 //
 //   node tools/check-test-server.mjs [address] [api name] [web name]
+//   node tools/check-test-server.mjs --inside      (also signs in with ~/.ssh/kwazo_oracle, read only)
 //
-// Exit 0 when every check passes. It sends nothing but connections and GETs.
+// Exit 0 when every check passes. It sends nothing but connections and GETs, and `ss` inside.
+import { execFileSync } from "node:child_process";
 import net from "node:net";
+import os from "node:os";
+import path from "node:path";
+import tls from "node:tls";
 
-const [address = "13.237.195.91", apiName = "api.getkwazo.com", webName = "getkwazo.com"] = process.argv.slice(2);
+const args = process.argv.slice(2);
+const inside = args.includes("--inside");
+const [address = "13.237.195.91", apiName = "api.getkwazo.com", webName = "getkwazo.com"] = args.filter((a) => !a.startsWith("--"));
 
 const OPEN = [22, 80, 443];
 // Postgres, Redis, the api's and live's own ports, and the usual spares a stray container might take.
 const SHUT = [5432, 6379, 3000, 3100, 8080, 8443, 9000, 2375, 2376, 5433, 6380, 27017];
+// What the machine itself may listen on: SSH and Caddy on every address, and anything on its own
+// loopback, which nothing outside the machine reaches (Postgres for the tunnel, the name service, Docker's).
+const MAY_LISTEN = /^(0\.0\.0\.0|\[::\]|\*):(22|80|443)$|^127\.\d+\.\d+\.\d+(%lo)?:\d+$|^\[::1\]:\d+$/;
+// What a secret file of this server holds, by name: api.env, db.env and .env.
+const SECRET_WORDS = /SECRET|PASSWORD|API_KEY|DATABASE_URL|REDIS_URL|POSTGRES_|API_DOMAIN|ACME_EMAIL|\[core\]/;
 
 function knock(port) {
   return new Promise((resolve) => {
@@ -24,6 +38,20 @@ function knock(port) {
     socket.once("connect", () => end(true));
     socket.once("timeout", () => end(false));
     socket.once("error", () => end(false));
+  });
+}
+
+/** A request sent exactly as written: `fetch` tidies `/../` away before it leaves. */
+function rawGet(host, target) {
+  return new Promise((resolve) => {
+    let text = "";
+    const socket = tls.connect({ host, port: 443, servername: host, timeout: 10_000 }, () => {
+      socket.write(`GET ${target} HTTP/1.1\r\nHost: ${host}\r\nConnection: close\r\n\r\n`);
+    });
+    socket.on("data", (chunk) => (text += chunk.toString("utf8")));
+    socket.on("end", () => resolve(text));
+    socket.on("timeout", () => (socket.destroy(), resolve(text)));
+    socket.on("error", () => resolve(text));
   });
 }
 
@@ -40,6 +68,7 @@ for (const port of SHUT) {
 
 const health = await get(`https://${apiName}/health`);
 check("the api answers over https", health.status === 200, String(health.status));
+check("the api keeps to https", (health.headers.get("strict-transport-security") ?? "").includes("max-age="), health.headers.get("strict-transport-security") ?? "none");
 
 const plain = await get(`http://${apiName}/health`, { redirect: "manual" });
 check("plain http is sent to https", plain.status >= 300 && plain.status < 400 && (plain.headers.get("location") ?? "").startsWith("https://"), `${plain.status} ${plain.headers.get("location") ?? ""}`);
@@ -55,13 +84,33 @@ const deep = await get(`https://${webName}/console`);
 check("an address inside the console opens the page", deep.status === 200, String(deep.status));
 
 const embed = await get(`https://${webName}/gyms/some-gym?embed=1`);
-check("a gym's page as its embed may be framed", !(embed.headers.get("content-security-policy") ?? "").includes("frame-ancestors"), embed.headers.get("content-security-policy") ?? "none");
+check("a gym's page as its embed may be framed", embed.status === 200 && !(embed.headers.get("content-security-policy") ?? "").includes("frame-ancestors"), `${embed.status} ${embed.headers.get("content-security-policy") ?? "none"}`);
 
-// Files a careless deploy leaves readable.
-for (const path of ["/api.env", "/.env", "/db.env", "/../infra/api.env", "/.git/config"]) {
-  const res = await get(`https://${webName}${path}`);
-  const text = await res.text();
-  check(`${path} gives away nothing`, !/(SECRET|PASSWORD|API_KEY|DATABASE_URL|\[core\])/.test(text), String(res.status));
+// Files a careless deploy leaves readable. The console answers every unknown address with its own page,
+// so anything else coming back, or a secret's name, is a leak.
+const console_ = body;
+for (const target of ["/api.env", "/.env", "/db.env", "/infra/api.env", "/.git/config", "/../infra/api.env", "/%2e%2e/infra/api.env", "/..%2finfra/api.env"]) {
+  const answer = await rawGet(webName, target);
+  const [head = "", ...rest] = answer.split("\r\n\r\n");
+  const status = Number(head.split(" ")[1] ?? 0);
+  const content = rest.join("\r\n\r\n");
+  const leak = SECRET_WORDS.test(content) || (status === 200 && !content.includes("<div id=\"root\">"));
+  check(`${target} gives away nothing`, status !== 0 && !leak, status === 200 && content.includes("<div id=\"root\">") && console_.length > 0 ? "200, the console's page" : String(status));
+}
+
+if (inside) {
+  const key = path.join(os.homedir(), ".ssh", "kwazo_oracle");
+  let listening = "";
+  try {
+    listening = execFileSync("ssh", ["-i", key, "-o", "BatchMode=yes", `ubuntu@${address}`, "sudo ss -ltnH"], { encoding: "utf8", timeout: 30_000 });
+  } catch (error) {
+    check("the machine can be read over SSH", false, error instanceof Error ? error.message.split("\n")[0] : "failed");
+  }
+  if (listening !== "") {
+    const locals = listening.trim().split("\n").map((line) => line.trim().split(/\s+/)[3] ?? "");
+    const stray = locals.filter((local) => !MAY_LISTEN.test(local));
+    check("the machine listens only on SSH, the web, https and its own loopback", stray.length === 0, stray.length === 0 ? `${locals.length} listeners` : stray.join(" "));
+  }
 }
 
 let failed = 0;

@@ -47,6 +47,13 @@ describe("a copy pointed at the online test server (21a-i)", () => {
     expect(withServer(copy, { PHONE_SERVER: " ", PHONE_WEBSITE: "" })).toBe(copy);
   });
 
+  it("reads an address with spaces around it, as a line typed in a terminal has", () => {
+    expect(withServer(copy, { PHONE_SERVER: " https://api.getkwazo.com ", PHONE_WEBSITE: "https://getkwazo.com " })).toMatchObject({
+      apiUrl: "https://api.getkwazo.com",
+      webUrl: "https://getkwazo.com",
+    });
+  });
+
   it("talks to the online server, and hands the app exactly those two addresses", () => {
     const online = withServer(copy, { PHONE_SERVER: "https://api.getkwazo.com", PHONE_WEBSITE: "https://getkwazo.com/" });
     expect(online).toMatchObject({ name: "Feature 1", applicationId: "com.aihomegym.dev.feature1", apiUrl: "https://api.getkwazo.com", webUrl: "https://getkwazo.com" });

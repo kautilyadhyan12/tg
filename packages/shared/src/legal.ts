@@ -407,7 +407,7 @@ export function privacyPolicy(facts: LegalFacts = LEGAL_FACTS): LegalDocument {
               : `This service provider is ${facts.hosting.company}, and KWAZO's servers and database are located in ${facts.hosting.place}.`,
           ),
           h3("5.5. International Processing and Data Transfers"),
-          p("Certain third-party service providers operate in countries outside the user's country of residence, including the United States and Australia."),
+          p("Certain third-party service providers operate in countries outside the user's country of residence, including the United States, Australia and Japan."),
           p("Accordingly, personal information may be processed or handled in such jurisdictions, subject to the respective service providers' applicable terms governing the handling of customer data."),
           h3("5.6. Disclosures Required by Law"),
           p("KWAZO may disclose personal information to law enforcement authorities, including the police, or to courts only where such disclosure is required by applicable law."),

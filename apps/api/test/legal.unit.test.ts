@@ -242,7 +242,7 @@ describe("the privacy policy against the code", () => {
     expect(JSON.stringify(privacyPolicy())).toContain(
       "This service provider is Amazon Web Services (AWS), and KWAZO's servers and database are located in Sydney, Australia.",
     );
-    expect(JSON.stringify(privacyPolicy())).toContain("including the United States and Australia");
+    expect(JSON.stringify(privacyPolicy())).toContain("including the United States, Australia and Japan.");
     expect(JSON.stringify(washingtonHealthDataPolicy())).toContain("Hosting Infrastructure Provider: Amazon Web Services (AWS), responsible");
   });
 

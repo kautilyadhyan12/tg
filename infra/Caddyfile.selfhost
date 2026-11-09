@@ -16,7 +16,7 @@ import Caddyfile.api
 	}
 	header @notEmbed Content-Security-Policy "frame-ancestors 'none'"
 	header {
-		Strict-Transport-Security "max-age=31536000"
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
 		X-Content-Type-Options "nosniff"
 		Referrer-Policy "strict-origin-when-cross-origin"
 	}
@@ -39,6 +39,9 @@ import Caddyfile.api
 			wrap json
 			fields {
 				request>uri regexp "\?.*$" ""
+				# A page's address in the Referer header can carry a token too (the account restore link,
+				# Square's return): it is not kept.
+				request>headers>Referer delete
 			}
 		}
 	}

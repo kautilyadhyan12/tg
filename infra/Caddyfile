@@ -28,12 +28,21 @@
 			wrap json
 			fields {
 				request>uri regexp "^(/v1/nutrition/barcode/)[^?]*|\?.*$" "$1"
+				# A page's address in the Referer header can carry a token too (the account restore link,
+				# Square's return): it is not kept.
+				request>headers>Referer delete
 			}
 		}
 	}
 }
 
 {$API_DOMAIN} {
+	# Only ever over https, and a reply is never read as another kind of file.
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+	}
+
 	# A photo is held to its limit here too, before it reaches the api.
 	@photos path /v1/nutrition/analyze-photo /v1/nutrition/labels/read
 	request_body @photos {
@@ -70,6 +79,9 @@
 			wrap json
 			fields {
 				request>uri regexp "^(/v1/nutrition/barcode/)[^?]*|\?.*$" "$1"
+				# A page's address in the Referer header can carry a token too (the account restore link,
+				# Square's return): it is not kept.
+				request>headers>Referer delete
 			}
 		}
 	}

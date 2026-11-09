@@ -16,11 +16,13 @@ AWS's credit until publishing (21e), when the paid server is chosen.
 
 **Never publish another port** in a compose file: Docker's published ports go around `ufw`, and only
 AWS's security group would still stop them (measured 2026-11-09: Redis published on `0.0.0.0:6379`
-read shut from outside only because of it). Check from outside after any change:
-`node tools/check-test-server.mjs` (every door, the https answers and their headers).
+read shut from outside only because of it). Check after any change:
+`node tools/check-test-server.mjs --inside` (every door from outside, the https answers and their
+headers, secret files, and what the machine itself listens on, read over SSH).
 
 **Never** put the database's password, `api.env` or any key in a terminal's output, a commit or a
-message. Read them on the machine when a command needs them.
+message. Read them on the machine when a command needs them. **Never run `$C config`** on the
+machine: it prints every value of `api.env` and `db.env`.
 
 ## Signing in to the machine
 
@@ -41,13 +43,23 @@ $C logs --tail 100 api
 From the repository on the laptop, at the commit to send:
 
 ```
-git archive --format=tar HEAD | ssh -i ~/.ssh/kwazo_oracle ubuntu@13.237.195.91 'tar -x -C /srv/kwazo/app'
+git archive --format=tar HEAD | ssh -i ~/.ssh/kwazo_oracle ubuntu@13.237.195.91 'rm -rf /srv/kwazo/app.new && mkdir /srv/kwazo/app.new && tar -x -C /srv/kwazo/app.new'
+ssh -i ~/.ssh/kwazo_oracle ubuntu@13.237.195.91 "echo $(git rev-parse HEAD) > /srv/kwazo/app.new/DEPLOYED"
 ```
 
-That leaves the settings files and `infra/web` alone (neither is in git). Then on the machine:
-`$C build api && $C up -d --force-recreate caddy api live worker`. The api, worker and live share one
-image. Caddy is recreated as well: it reads its two files through single-file mounts, and an update
-that writes a new file (`tar`, `sed -i`) leaves the running Caddy on the old one, even after a reload.
+A fresh folder, so a file taken out of the repository is gone from the machine too; `DEPLOYED` says
+which commit runs. Then on the machine, carrying over what is not in git (the settings and the
+console) and swapping the folders:
+
+```
+cd /srv/kwazo && for f in api.env db.env .env; do cp -p app/infra/$f app.new/infra/; done && mv app/infra/web app.new/infra/web
+rm -rf app.old && mv app app.old && mv app.new app && cd app
+$C build api && $C up -d --force-recreate caddy api live worker
+```
+
+The api, worker and live share one image. Caddy is recreated as well: it reads its two files through
+single-file mounts, and an update that writes a new file leaves the running Caddy on the old one,
+even after a reload. `app.old` is the way back until the next update.
 
 **The console** is built on the laptop (the machine has 2 GB) and copied across:
 
@@ -58,7 +70,9 @@ cd <scratch>/web-dist && tar -cf - . | ssh -i ~/.ssh/kwazo_oracle ubuntu@13.237.
 
 ## Migrations, seeds and the food table
 
-Postgres listens on the machine's own loopback only. From `apps/api` on the laptop, through a tunnel:
+Postgres listens on the machine's own loopback only. From `apps/api` on the laptop, through a tunnel.
+The password goes into the address as it is, so it is made of letters, digits, `-` and `_` only
+(base64url, as the first one was); a new one is made the same way, never with `/`, `+`, `@` or `#`.
 
 ```
 ssh -i ~/.ssh/kwazo_oracle -f -N -L 15432:127.0.0.1:5432 ubuntu@13.237.195.91
