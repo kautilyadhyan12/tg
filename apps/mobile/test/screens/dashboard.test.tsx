@@ -458,7 +458,9 @@ describe("a read that fails or is slow never shows a number it does not know", (
     expect(await screen.findByText("24")).toBeTruthy();
     expect(screen.getByText("1 of 7 days active")).toBeTruthy();
     expect(screen.queryByText(/^Level \d/)).toBeNull();
-    expect(screen.queryByText("12")).toBeNull();
+    // The streak box shows no 12; a calendar date of the 12th, in a week that has one, is not the streak.
+    const twelfths = weekOf(new Date()).filter((day) => String(day.date) === "12").length;
+    expect(screen.queryAllByText("12")).toHaveLength(twelfths);
     expect(screen.getAllByTestId("soft-bar").length).toBeGreaterThanOrEqual(4);
     expect(screen.queryByText("–")).toBeNull();
     expect(screen.queryByText("No badges yet.")).toBeNull();
