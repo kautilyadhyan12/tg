@@ -15,7 +15,7 @@ import { heightMapFor, type HeightMap } from "./heights.adapter.js";
 import { mapSourceFor } from "./mapSource.js";
 import { createOrsRouteProvider, type RouteProvider } from "./ors.adapter.js";
 import { ForeignRunError } from "./repo.js";
-import { RUN_WORDS, changeRunRequestSchema, runDaysQuerySchema, runListQuerySchema } from "@app/shared";
+import { RUN_MAX_PAUSES, RUN_MAX_POINTS, RUN_WORDS, changeRunRequestSchema, runDaysQuerySchema, runListQuerySchema } from "@app/shared";
 import { generateRoutesRequestSchema, geoListQuerySchema, runClimbRequestSchema, saveRunRequestSchema, savedRouteCreateSchema } from "./schemas.js";
 import * as service from "./service.js";
 import type { GeoDeps } from "./service.js";
@@ -173,6 +173,9 @@ export function registerGeoRoutes(
   // ── record a run (ROADMAP 37a) ────────────────────────────────────────────
   // Ten a minute for a person, wherever they are (never by address: a gym's members share one). A
   // phone sends its waiting runs one after another; nobody records ten runs in a minute.
+  // The longest run a phone may send, counted as `listLimit.ts` counts: each point is a list
+  // item holding four, each pause one holding two.
+  const RUN_LIST_ITEMS_MOST = RUN_MAX_POINTS * 5 + RUN_MAX_PAUSES * 3;
   const runLimit = createDualRateLimit({
     name: "geo_run_save",
     max: 10,
@@ -185,7 +188,7 @@ export function registerGeoRoutes(
   // before it is read.
   app.post(
     "/v1/geo/runs",
-    { preHandler: [app.authenticate, runLimit], bodyLimit: 3 * 1024 * 1024 },
+    { preHandler: [app.authenticate, runLimit], bodyLimit: 3 * 1024 * 1024, config: { listItemsMost: RUN_LIST_ITEMS_MOST } },
     async (req, reply) => {
       // A run sent again is answered from the row before its points are read or worked out: a
       // repeat costs the server a lookup, never the maths (round one of 37a, H2).
@@ -229,7 +232,7 @@ export function registerGeoRoutes(
   });
   app.post(
     "/v1/geo/runs/climb",
-    { preHandler: [app.authenticate, climbLimit], bodyLimit: 3 * 1024 * 1024 },
+    { preHandler: [app.authenticate, climbLimit], bodyLimit: 3 * 1024 * 1024, config: { listItemsMost: RUN_LIST_ITEMS_MOST } },
     async (req, reply) => {
       const input = parse(runClimbRequestSchema, req.body, req, reply);
       if (input === null) return;

@@ -219,10 +219,13 @@ export const saveRunRequestSchema = z
     /** How it felt, 1 (easy) to 10 (max effort); null when not given. */
     effort: z.number().int().min(1).max(10).nullable(),
     note: z.string().max(3000).transform(noNul).pipe(z.string().trim().max(1000)).nullable(),
+    // Too many is refused before one point is read: zod would keep a fault for each bad one.
     points: z
-      .array(z.tuple([msIntoRun, z.number().min(-90).max(90), z.number().min(-180).max(180), z.number().min(0).max(100_000).nullable()]))
-      .max(RUN_MAX_POINTS),
-    pauses: z.array(z.tuple([msIntoRun, msIntoRun])).max(RUN_MAX_PAUSES),
+      .custom<unknown[]>((value) => !Array.isArray(value) || value.length <= RUN_MAX_POINTS, { message: "too many points" })
+      .pipe(z.array(z.tuple([msIntoRun, z.number().min(-90).max(90), z.number().min(-180).max(180), z.number().min(0).max(100_000).nullable()]))),
+    pauses: z
+      .custom<unknown[]>((value) => !Array.isArray(value) || value.length <= RUN_MAX_PAUSES, { message: "too many pauses" })
+      .pipe(z.array(z.tuple([msIntoRun, msIntoRun]))),
   })
   .strict();
 export type SaveRunRequest = z.infer<typeof saveRunRequestSchema>;
