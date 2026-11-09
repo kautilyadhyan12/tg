@@ -2,6 +2,7 @@
 // from P2.1 on; here only platform concerns: logging, CORS, rate limit,
 // error mapping, /health.
 import { REQUEST_TIMEOUT_MS } from "./requestTimeout.js";
+import { registerListLimit } from "./listLimit.js";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import Fastify, { LogController, type FastifyError, type FastifyInstance } from "fastify";
@@ -238,6 +239,9 @@ export async function buildApp(
       return new AuthError(429, "rate_limited", `Too many requests. Please try again in ${String(seconds)} seconds.`, seconds);
     },
   });
+  // A request with more list items than its route takes is refused before any route reads it
+  // (`listLimit.ts`): after the floor above, so a flood of them is counted too.
+  registerListLimit(app);
 
   // Unmatched routes: same typed shape as errors, and rate-limited too —
   // otherwise 404 scanning traffic bypasses the limiter entirely.

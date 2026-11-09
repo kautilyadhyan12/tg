@@ -9,6 +9,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
 import { z } from "zod";
 import {
+  RUN_MAX_PAUSES,
+  RUN_MAX_POINTS,
   runDetailSchema,
   runPageSchema,
   runSums,
@@ -203,6 +205,17 @@ d("record a run (real Postgres)", () => {
     // The Dashboard's list and the run's own page read the same row.
     const list = runPageSchema.parse(JSON.parse((await inject({ method: "GET", url: "/v1/geo/runs", cookies: me.cookies })).body));
     expect(list.items[0]).toMatchObject({ id: run.runId, distanceM: saved.run.distanceM, durationS: 1720, kcalPoint: saved.run.kcal });
+  });
+
+  it("the longest run a phone keeps, twelve hours of points and 2,000 pauses, is saved", async () => {
+    const me = await makeUser("longest");
+    const pauses: SaveRunRequest["pauses"] = [];
+    for (let i = 0; i < RUN_MAX_PAUSES; i++) pauses.push([i * 20_000 + 1000, i * 20_000 + 2000]);
+    const run = body({ points: northRun(RUN_MAX_POINTS - 1, 3), elapsedMs: RUN_MAX_POINTS * 1000, pauses });
+    expect(run.points.length).toBe(RUN_MAX_POINTS);
+    const res = await save(me.cookies, run);
+    expect(res.statusCode, res.body).toBe(201);
+    expect((await sql`SELECT 1 FROM runs WHERE user_id = ${me.id}`).length).toBe(1);
   });
 
   it("is saved once when sent twice, and the second send reads back the first", async () => {
