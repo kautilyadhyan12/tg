@@ -1,10 +1,13 @@
+import { useState } from "react";
 import { Image, Pressable, StyleSheet, View } from "react-native";
 import type { RunBests, RunRecordKind, RunRecords, Units } from "@app/shared";
+import { Button } from "../../look/Button";
 import { colours, recordLook, sizes } from "../../look/colours";
 import { medalPicture } from "../../look/medals";
+import { Sheet } from "../../look/Sheet";
 import { fonts, Txt } from "../../look/Txt";
 import { earnedDay } from "../achievements/achievementsRules";
-import { MEDALS, beatWords, recordName, recordValue, shownKinds, shownRecords, type NewRecord } from "./runRecords";
+import { MEDALS, beatWords, recordName, recordValue, shownKinds, shownRecords, type NewRecord, type ShownRecord } from "./runRecords";
 
 // Running records' pieces (ROADMAP 37c-ii, Kd's "yes" to reviews/37c-ii-records-mock.png): the gold New
 // record box on a run's summary, Your records on the Running page, and a run's own Best efforts.
@@ -40,54 +43,82 @@ export function NewRecordBox({ rec, units }: { rec: NewRecord; units: Units }) {
   );
 }
 
+/** Your records holds this many at most; with more, See all opens every one (Kd, 37c-iii: more records will
+ *  be added, and the box must not keep getting longer). */
+export const RECORDS_SHOWN_MOST = 4;
+
 /** Your records: each in the person's units, opening the run that set it; one not set says what it takes. */
-export function RecordsCard({ records, units, onOpen }: { records: RunRecords; units: Units; onOpen: (runId: string) => void }) {
+export function RecordsCard({ records, units, onOpen, most = RECORDS_SHOWN_MOST }: { records: RunRecords; units: Units; onOpen: (runId: string) => void; most?: number }) {
+  const [all, setAll] = useState(false);
   const now = new Date();
+  const rows = shownRecords(records, units);
+  const more = rows.length > most;
   return (
     <View style={styles.card} testID="your-records">
-      <Txt kind="h3">Your records</Txt>
-      {shownRecords(records, units).map((r, i) => {
-        const line = (
-          <>
-            <SmallMedal medal={r.medal} lit={r.record !== null} />
-            <View style={styles.grow}>
-              <Txt kind="strong" colour={r.record === null ? "textSoft" : "text"}>
-                {r.name}
-              </Txt>
-              {r.record === null ? null : <Txt kind="tiny">{dayWords(r.record.startedAt, now)}</Txt>}
-            </View>
-            {r.record === null ? (
-              <Txt kind="small" colour="textFaint" style={styles.takes}>
-                {r.takes}
-              </Txt>
-            ) : (
-              <Txt kind="big" style={styles.value}>
-                {r.value}
-              </Txt>
-            )}
-          </>
-        );
-        const record = r.record;
-        return record === null ? (
-          <View key={r.kind} style={[styles.line, i === 0 ? null : styles.lineTop]}>
-            {line}
-          </View>
-        ) : (
-          <Pressable
-            key={r.kind}
-            accessibilityRole="button"
-            accessibilityLabel={`${r.name}, ${r.value ?? ""}, ${dayWords(record.startedAt, now)}. Open ${record.name}`}
-            onPress={() => { onOpen(record.runId); }}
-            style={({ pressed }) => [styles.line, i === 0 ? null : styles.lineTop, pressed ? styles.pressed : null]}
-          >
-            {line}
-            <Txt kind="body" colour="textFaint">
-              ›
-            </Txt>
-          </Pressable>
-        );
-      })}
+      <View style={styles.head}>
+        <Txt kind="h3">Your records</Txt>
+        {more ? <Button kind="link" label="See all" say="See all your records" onPress={() => { setAll(true); }} /> : null}
+      </View>
+      {rows.slice(0, most).map((r, i) => (
+        <RecordLine key={r.kind} r={r} first={i === 0} now={now} onOpen={onOpen} />
+      ))}
+      {more ? (
+        <Sheet open={all} title="Your records" onClose={() => { setAll(false); }}>
+          {rows.map((r, i) => (
+            <RecordLine
+              key={r.kind}
+              r={r}
+              first={i === 0}
+              now={now}
+              onOpen={(runId) => {
+                setAll(false);
+                onOpen(runId);
+              }}
+            />
+          ))}
+        </Sheet>
+      ) : null}
     </View>
+  );
+}
+
+/** One record's line: its medal, name and day, and its value; pressed, the run that set it. */
+function RecordLine({ r, first, now, onOpen }: { r: ShownRecord; first: boolean; now: Date; onOpen: (runId: string) => void }) {
+  const line = (
+    <>
+      <SmallMedal medal={r.medal} lit={r.record !== null} />
+      <View style={styles.grow}>
+        <Txt kind="strong" colour={r.record === null ? "textSoft" : "text"}>
+          {r.name}
+        </Txt>
+        {r.record === null ? null : <Txt kind="tiny">{dayWords(r.record.startedAt, now)}</Txt>}
+      </View>
+      {r.record === null ? (
+        <Txt kind="small" colour="textFaint" style={styles.takes}>
+          {r.takes}
+        </Txt>
+      ) : (
+        <Txt kind="big" style={styles.value}>
+          {r.value}
+        </Txt>
+      )}
+    </>
+  );
+  const record = r.record;
+  return record === null ? (
+    <View style={[styles.line, first ? null : styles.lineTop]}>{line}</View>
+  ) : (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${r.name}, ${r.value ?? ""}, ${dayWords(record.startedAt, now)}. Open ${record.name}`}
+      onPress={() => { onOpen(record.runId); }}
+      style={({ pressed }) => [styles.line, first ? null : styles.lineTop, pressed ? styles.pressed : null]}
+    >
+      {line}
+      <Txt kind="body" colour="textFaint">
+        ›
+      </Txt>
+    </Pressable>
   );
 }
 
@@ -150,6 +181,7 @@ const styles = StyleSheet.create({
   newWord: { fontFamily: fonts.carved, fontSize: 12, lineHeight: 16, letterSpacing: 2, color: recordLook.word },
   gold: { color: recordLook.word },
   card: { borderRadius: sizes.boxRadius, backgroundColor: colours.box, borderWidth: 1, borderColor: colours.line, padding: 16, gap: 4 },
+  head: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   line: { flexDirection: "row", alignItems: "center", gap: 12, minHeight: 56, paddingVertical: 6 },
   lineTop: { borderTopWidth: 1, borderTopColor: colours.line },
   pressed: { opacity: 0.7 },

@@ -3,6 +3,7 @@ import { AppState, Dimensions } from "react-native";
 import { encodePolyline, routeShape, type RunDetail, type RunRecords } from "@app/shared";
 import { App } from "../../src/App";
 import { dayKey, monthWords } from "../../src/screens/running/RunCalendar";
+import { RecordsCard } from "../../src/screens/running/RecordParts";
 import { PaceCard } from "../../src/screens/running/RunParts";
 import { resetMapSource } from "../../src/screens/running/mapSource";
 import { phoneRunFiles, resetRecorder } from "../../src/screens/running/recorder";
@@ -419,5 +420,29 @@ describe("The pace chart (37c-iii)", () => {
     await fireEvent(chart, "responderGrant", fingerAt(34));
     expect(screen.getByText("0.00 mi")).toBeTruthy();
     expect(screen.getByText("131 ft")).toBeTruthy();
+  });
+});
+
+describe("Your records holds four at most (37c-iii, Kd: more records will be added)", () => {
+  const run = makeRun(1, "Record Run", 10.2, 52, 1);
+  const held = (value: number) => ({ runId: run.id, name: run.name, startedAt: run.startedAt, day: run.day, value, before: null });
+  const records: RunRecords = { k1: held(260), mile: held(430), k5: held(1420), k10: held(3000), longest: held(10_200) };
+
+  it("with four records, all four show and there is no See all", async () => {
+    await render(<RecordsCard records={records} units="metric" onOpen={() => undefined} />);
+    expect(screen.getByText("Fastest 1K")).toBeTruthy();
+    expect(screen.getByText("Longest run")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "See all your records" })).toBeNull();
+  });
+
+  it("with more than the box holds, See all opens every record, and a record there opens its run", async () => {
+    const opened: string[] = [];
+    await render(<RecordsCard records={records} units="metric" most={2} onOpen={(id) => { opened.push(id); }} />);
+    expect(screen.queryByText("Fastest 10K")).toBeNull();
+    await fireEvent.press(screen.getByRole("button", { name: "See all your records" }));
+    expect(await screen.findByText("Fastest 10K")).toBeTruthy();
+    expect(screen.getByText("Longest run")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: /^Fastest 10K, 50:00/ }));
+    expect(opened).toEqual([run.id]);
   });
 });
