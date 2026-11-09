@@ -122,7 +122,7 @@ describe("the worst thing: a wrong number said out loud", () => {
 function sums(distanceM: number, splitsKm: [number, number][], movingS: number, splitsMi: [number, number][] = []): RunSums {
   return {
     distanceM, elapsedS: movingS, movingS, stillS: 0, leftOutM: 0, leftOutS: 0, kcal: 0,
-    splitsKm: splitsKm.map(([m, s]) => ({ m, s })), splitsMi: splitsMi.map(([m, s]) => ({ m, s })), track: [], trackStarts: [], bests: { k1: null, mile: null, k5: null, k10: null },
+    splitsKm: splitsKm.map(([m, s]) => ({ m, s })), splitsMi: splitsMi.map(([m, s]) => ({ m, s })), track: [], trackStarts: [], bests: { k1: null, mile: null, k5: null, k10: null }, paceLine: [],
   };
 }
 

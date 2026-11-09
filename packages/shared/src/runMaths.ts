@@ -227,6 +227,9 @@ export interface RunSums {
   trackStarts: number[];
   /** The run's best efforts (37c-ii): the fastest stretch of each distance, whole seconds. */
   bests: RunBests;
+  /** The pace chart (37c-iii): the speed in centimetres a second at evenly spaced places from the
+   *  start to the finish (`paceLine`); empty under PACE_LINE_FROM_M. */
+  paceLine: number[];
 }
 
 /** A run's fastest 1 km, mile, 5 km and 10 km in whole seconds; null where it did not cover it. */
@@ -507,6 +510,66 @@ interface Step {
   s: number;
 }
 
+// ── The pace chart (ROADMAP 37c-iii) ─────────────────────────────────────────────────────────────
+/** A run shorter than this has no pace chart: there is too little of it to show a change. */
+export const PACE_LINE_FROM_M = 400;
+/** The chart has at most this many places, one every PACE_LINE_EVERY_M at least. */
+export const PACE_LINE_MOST = 150;
+const PACE_LINE_EVERY_M = 10;
+/** The speed at each place is the distance over the moving time of the stretch around it, this long
+ *  (a twentieth of the run, between the two): long enough that a phone's wander of a few metres is
+ *  not a sprint or a crawl, short enough that a walk break of a minute shows. */
+const PACE_WINDOW_LEAST_M = 100;
+const PACE_WINDOW_MOST_M = 400;
+
+/** The speed along the run, in whole centimetres a second, at `n` evenly spaced places from 0 to the
+ *  run's distance (n = the distance over PACE_LINE_EVERY_M, PACE_LINE_MOST at most), over the same
+ *  steps as the distance, the moving time and the splits: a pause, a stretch left out as too fast and
+ *  time standing are in none of them, so none drags the line to a crawl or makes a sprint. */
+export function paceLineOf(steps: readonly Step[]): number[] {
+  const at: number[] = [0];
+  const clock: number[] = [0];
+  for (const step of steps) {
+    at.push((at[at.length - 1] ?? 0) + step.m);
+    clock.push((clock[clock.length - 1] ?? 0) + Math.max(0, step.s));
+  }
+  const total = at[at.length - 1] ?? 0;
+  if (total < PACE_LINE_FROM_M) return [];
+  // The moving clock at a distance, between the two steps either side of it.
+  let k = 0;
+  const clockAt = (d: number): number => {
+    while (k > 0 && (at[k] ?? 0) > d) k--;
+    while (k < at.length - 2 && (at[k + 1] ?? 0) < d) k++;
+    const d0 = at[k] ?? 0;
+    const d1 = at[k + 1] ?? d0;
+    const t0 = clock[k] ?? 0;
+    const t1 = clock[k + 1] ?? t0;
+    return d1 > d0 ? t0 + ((t1 - t0) * (d - d0)) / (d1 - d0) : t1;
+  };
+  const n = Math.min(PACE_LINE_MOST, Math.floor(total / PACE_LINE_EVERY_M) + 1);
+  const half = Math.min(PACE_WINDOW_MOST_M, Math.max(PACE_WINDOW_LEAST_M, total / 20)) / 2;
+  const out: number[] = [];
+  for (let i = 0; i < n; i++) {
+    const d = (total * i) / (n - 1);
+    // Near the start and the finish the stretch keeps its length, moved inside the run.
+    const from = Math.max(0, Math.min(d - half, total - 2 * half));
+    const to = Math.min(total, from + 2 * half);
+    const seconds = clockAt(to) - clockAt(from);
+    const metres = to - from;
+    // Never faster than anybody has run that far in that time (the stretches left out already are).
+    const mps = seconds > 0 ? Math.min(metres / seconds, recordSpeed(seconds)) : 0;
+    out.push(Math.round(mps * 100));
+  }
+  // A stretch with no moving time at all (every second of it standing) takes the speed beside it.
+  for (let i = 0; i < out.length; i++) {
+    if (out[i] !== 0) continue;
+    const before = out.slice(0, i).reverse().find((v) => v > 0);
+    const after = out.slice(i + 1).find((v) => v > 0);
+    out[i] = before ?? after ?? 0;
+  }
+  return out;
+}
+
 function splitsOf(steps: readonly Step[], every: number): RunSplit[] {
   const out: RunSplit[] = [];
   let m = 0;
@@ -685,6 +748,7 @@ export function runSums(points: readonly RunPoint[], pauses: readonly RunPause[]
       k5: fastestStretch(segments, RECORD_DISTANCES_M.k5),
       k10: fastestStretch(segments, RECORD_DISTANCES_M.k10),
     },
+    paceLine: paceLineOf(steps),
   };
 }
 

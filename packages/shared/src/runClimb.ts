@@ -134,6 +134,30 @@ function meanOf(values: readonly number[], size: number): number[] {
  *  line between the heights either side of it; a stretch that starts `apart` carries on from the
  *  height the last one stopped at. */
 export function climbFromHeights(heights: readonly (number | null)[], apart: readonly boolean[]): number | null {
+  const line = smoothHeights(heights, apart);
+  return line === null ? null : Math.round(climbOver(line));
+}
+
+/** The hills behind the pace chart (37c-iii): the same smoothed heights the climb is counted over, at
+ *  `n` evenly spaced places from the start to the finish, in whole metres; empty where the climb has
+ *  no number, or n is under 2. */
+export function hillLineOf(heights: readonly (number | null)[], apart: readonly boolean[], n: number): number[] {
+  const line = smoothHeights(heights, apart);
+  if (line === null || n < 2) return [];
+  const last = line.length - 1;
+  return Array.from({ length: n }, (_, i) => {
+    const x = (last * i) / (n - 1);
+    const lo = Math.floor(x);
+    const a = line[lo] ?? 0;
+    const b = line[Math.min(last, lo + 1)] ?? a;
+    // Held inside what the schema takes, whatever a broken piece of the map said.
+    return Math.max(-1000, Math.min(9000, Math.round(a + (b - a) * (x - lo))));
+  });
+}
+
+/** The heights with their gaps filled, stretches joined and outliers smoothed out; null when too few
+ *  are known to say. */
+function smoothHeights(heights: readonly (number | null)[], apart: readonly boolean[]): number[] | null {
   const known = heights.filter((h) => h !== null).length;
   if (known === 0 || known < heights.length * KNOWN_SHARE) return null;
   const filled: number[] = [];
@@ -158,7 +182,7 @@ export function climbFromHeights(heights: readonly (number | null)[], apart: rea
     if (i > 0 && apart[i] === true) shift += (filled[i - 1] ?? h) - h;
     return h + shift;
   });
-  return Math.round(climbOver(meanOf(middleOf(line, MEDIAN_SAMPLES), MEAN_SAMPLES)));
+  return meanOf(middleOf(line, MEDIAN_SAMPLES), MEAN_SAMPLES);
 }
 
 // ── One piece of the height map, as our server keeps it ──────────────────────────────────────────

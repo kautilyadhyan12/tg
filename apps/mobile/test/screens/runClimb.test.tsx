@@ -38,10 +38,10 @@ const settle = async () => {
 
 describe("the words", () => {
   it.each([
-    [{ kind: "done", m: 28 } as const, "metric", "28 m"],
-    [{ kind: "done", m: 28 } as const, "imperial", "92 ft"],
-    [{ kind: "done", m: 0 } as const, "imperial", "0 ft"],
-    [{ kind: "done", m: 1000 } as const, "imperial", "3281 ft"],
+    [{ kind: "done", m: 28, hills: [] } as const, "metric", "28 m"],
+    [{ kind: "done", m: 28, hills: [] } as const, "imperial", "92 ft"],
+    [{ kind: "done", m: 0, hills: [] } as const, "imperial", "0 ft"],
+    [{ kind: "done", m: 1000, hills: [] } as const, "imperial", "3281 ft"],
     [{ kind: "asking" } as const, "metric", "--"],
     [{ kind: "none" } as const, "imperial", "--"],
   ])("%j in %s is %s", (climb, units, words) => {
@@ -51,7 +51,7 @@ describe("the words", () => {
 
 describe("asking the server", () => {
   it("a piece of the map still coming: asked again in 30 s, and the number shown when it comes", async () => {
-    const { session, asks } = sessionAnswering([ok({ state: "waiting" }), ok({ state: "done", m: 41 })]);
+    const { session, asks } = sessionAnswering([ok({ state: "waiting" }), ok({ state: "done", m: 41, hills: [] })]);
     const { result } = await renderHook(() => useRunClimb(session, ASK));
     await settle();
     expect(result.current).toEqual({ kind: "asking" });
@@ -67,7 +67,7 @@ describe("asking the server", () => {
     });
     await settle();
     expect(asks()).toBe(2);
-    expect(result.current).toEqual({ kind: "done", m: 41 });
+    expect(result.current).toEqual({ kind: "done", m: 41, hills: [] });
   });
 
   it.each([

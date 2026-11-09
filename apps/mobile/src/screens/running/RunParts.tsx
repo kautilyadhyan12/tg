@@ -13,6 +13,7 @@ import { fonts, Txt } from "../../look/Txt";
 import { useSession } from "../../session/SessionProvider";
 import { useMapSource } from "./mapSource";
 import { climbWords, type ClimbShown } from "./runClimb";
+import { PaceChart } from "./PaceChart";
 import { PaceWave } from "./RunDrawings";
 import { RunMap, useMapScheme } from "./RunMap";
 import { EFFORT_ENDS, clock, distance, leftOutLine, pace, paceWord, unitWord } from "./runWords";
@@ -192,6 +193,22 @@ export function SplitsCard({ splits, units }: { splits: readonly RunSplit[]; uni
   );
 }
 
+/** The pace chart (37c-iii); nothing for a run too short for one, or saved before it was kept. */
+export function PaceCard({ paceLine, hillLine, distanceM, movingS, units }: { paceLine: readonly number[]; hillLine: readonly number[]; distanceM: number; movingS: number; units: Units }) {
+  if (paceLine.length < 2) return null;
+  return (
+    <View style={styles.card} testID="pace-card">
+      <View style={styles.paceHead}>
+        <Txt kind="h3">Pace</Txt>
+        <Txt kind="small" colour="textFaint">
+          {units === "imperial" ? "min/mi" : "min/km"}
+        </Txt>
+      </View>
+      <PaceChart paceLine={paceLine} hillLine={hillLine} distanceM={distanceM} movingS={movingS} units={units} />
+    </View>
+  );
+}
+
 /** How the run felt, 1 to 10; pressed again, a number is taken off. */
 export function FeelCard({ effort, onPick }: { effort: number | null; onPick: (effort: number | null) => void }) {
   return (
@@ -292,6 +309,7 @@ const styles = StyleSheet.create({
   tileValue: { fontFamily: fonts.bold, fontSize: 22, lineHeight: 28, color: colours.text },
   leftOut: { flexDirection: "row", gap: 10, alignItems: "flex-start", borderRadius: 16, padding: 13, backgroundColor: colours.goldFill, borderWidth: 1, borderColor: colours.goldLine },
   card: { borderRadius: sizes.boxRadius, backgroundColor: colours.box, borderWidth: 1, borderColor: colours.line, padding: 16, gap: 12 },
+  paceHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "baseline" },
   mapBox: { height: 250, borderRadius: 14, overflow: "hidden", borderWidth: 1, borderColor: colours.line, backgroundColor: colours.tabBar },
   centredWords: { textAlign: "center" },
   mapPage: { flex: 1, backgroundColor: colours.page },

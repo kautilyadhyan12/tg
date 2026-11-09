@@ -6,7 +6,7 @@
 // candidates only.
 import type { FastifyBaseLogger } from "fastify";
 import type { Sql } from "postgres";
-import { RUN_CALC_VERSION, climbFromHeights, climbSamples, decodePolyline, encodePolyline, routeShape, runSplitSchema, runSums } from "@app/shared";
+import { RUN_CALC_VERSION, climbFromHeights, climbSamples, decodePolyline, encodePolyline, hillLineOf, hillLineSchema, paceLineSchema, routeShape, runSplitSchema, runSums } from "@app/shared";
 import type {
   GenerateRoutesRequest,
   RouteCandidate,
@@ -231,6 +231,8 @@ const asRunDetail = (row: repo.RunDetailRow): RunDetail => {
     trackStarts: row.legacy ? [0] : splits.success ? (splits.data.starts ?? [0]) : [0],
     splitsKm: splits.success ? splits.data.km : [],
     splitsMi: splits.success ? splits.data.mi : [],
+    paceLine: splits.success && !row.legacy ? (splits.data.pace ?? []) : [],
+    hillLine: splits.success && !row.legacy ? (splits.data.hills ?? []) : [],
     effort: row.effort,
     note: row.note,
     leftOutM: row.leftOutM ?? 0,
@@ -289,6 +291,9 @@ const splitsStoredSchema = z.object({
   km: z.array(runSplitSchema),
   mi: z.array(runSplitSchema),
   starts: z.array(z.number().int().nonnegative()).optional(),
+  /** The pace chart's two lines (37c-iii); a run saved before it has neither. */
+  pace: paceLineSchema.optional(),
+  hills: hillLineSchema.optional(),
 });
 
 const asSavedRun = (r: repo.SavedRunRow): SavedRun => {
@@ -322,21 +327,22 @@ export const SAVE_CLIMB_WAIT_MS = 10_000;
 export const ASK_CLIMB_WAIT_MS = 25_000;
 
 /** The metres climbed along a run's saved line (as `encodePolyline` keeps it, so the summary's ask,
- *  the save and the worker read the very same places), from the server's height map. */
-export async function climbOfLine(heights: HeightMap, polyline: string, starts: readonly number[], waitMs: number, asker: string): Promise<RunClimb> {
+ *  the save and the worker read the very same places), from the server's height map; with the hills
+ *  behind its pace chart at `places` places (the pace line's length). */
+export async function climbOfLine(heights: HeightMap, polyline: string, starts: readonly number[], waitMs: number, asker: string, places: number): Promise<RunClimb> {
   const line = decodePolyline(polyline);
-  if (line.length < 2) return { state: "done", m: 0 };
+  if (line.length < 2) return { state: "done", m: 0, hills: [] };
   const samples = climbSamples(line, starts);
   const got = await heights.heightsAt(samples.at, waitMs, asker);
   if (got === "waiting") return { state: "waiting" };
   const m = climbFromHeights(got, samples.apart);
-  return m === null ? { state: "none" } : { state: "done", m };
+  return m === null ? { state: "none" } : { state: "done", m, hills: hillLineOf(got, samples.apart, places) };
 }
 
 /** The summary's ask: the run's line worked out as saving it would, its climb read, nothing kept. */
 export async function askClimb(deps: { heights: HeightMap }, input: RunClimbRequest, userId: string): Promise<RunClimb> {
   const sums = runSums(input.points, input.pauses, input.elapsedMs, 0);
-  return await climbOfLine(deps.heights, encodePolyline(sums.track), sums.trackStarts, ASK_CLIMB_WAIT_MS, userId);
+  return await climbOfLine(deps.heights, encodePolyline(sums.track), sums.trackStarts, ASK_CLIMB_WAIT_MS, userId, sums.paceLine.length);
 }
 
 /** A run still waiting this long after it was saved gives up: its map never came. */
@@ -363,7 +369,8 @@ export async function workOutWaitingClimbs(
     const splits = splitsStoredSchema.safeParse(run.splits);
     let climb: RunClimb;
     try {
-      climb = run.polyline === null ? { state: "done", m: 0 } : await climbOfLine(deps.heights, run.polyline, splits.success ? (splits.data.starts ?? [0]) : [0], opts.waitMs, run.userId);
+      const places = splits.success ? (splits.data.pace?.length ?? 0) : 0;
+      climb = run.polyline === null ? { state: "done", m: 0, hills: [] } : await climbOfLine(deps.heights, run.polyline, splits.success ? (splits.data.starts ?? [0]) : [0], opts.waitMs, run.userId, places);
     } catch (err) {
       deps.log.error({ event: "geo.climb_failed", runId: run.id, errName: err instanceof Error ? err.name : typeof err }, "elevation gain not worked out");
       climb = { state: "waiting" };
@@ -415,7 +422,7 @@ export async function saveRun(
   // The run is saved whatever the height map does: anything wrong there leaves its climb waiting.
   let climb: RunClimb;
   try {
-    climb = await climbOfLine(deps.heights, polyline, sums.trackStarts, SAVE_CLIMB_WAIT_MS, userId);
+    climb = await climbOfLine(deps.heights, polyline, sums.trackStarts, SAVE_CLIMB_WAIT_MS, userId, sums.paceLine.length);
   } catch (err) {
     deps.log.error({ event: "geo.climb_failed", errName: err instanceof Error ? err.name : typeof err }, "elevation gain not worked out");
     climb = { state: "waiting" };
@@ -432,7 +439,7 @@ export async function saveRun(
     leftOutM: sums.leftOutM,
     leftOutS: sums.leftOutS,
     kcal: sums.kcal,
-    splits: { km: sums.splitsKm, mi: sums.splitsMi, starts: sums.trackStarts },
+    splits: { km: sums.splitsKm, mi: sums.splitsMi, starts: sums.trackStarts, pace: sums.paceLine, hills: climb.state === "done" ? climb.hills : [] },
     polyline,
     calcVersion: RUN_CALC_VERSION,
     climb,

@@ -3,6 +3,7 @@ import { AppState } from "react-native";
 import { encodePolyline, routeShape, type RunDetail, type RunRecords } from "@app/shared";
 import { App } from "../../src/App";
 import { dayKey, monthWords } from "../../src/screens/running/RunCalendar";
+import { PaceCard } from "../../src/screens/running/RunParts";
 import { resetMapSource } from "../../src/screens/running/mapSource";
 import { phoneRunFiles, resetRecorder } from "../../src/screens/running/recorder";
 import type { Ask, AskInit } from "../../src/session/calls";
@@ -59,6 +60,8 @@ function makeRun(n: number, name: string, km: number, minutes: number, daysAgo: 
     leftOutS: 0,
     bests: { k1: null, mile: null, k5: null, k10: null },
     records: [],
+    paceLine: [],
+    hillLine: [],
   };
 }
 
@@ -359,3 +362,60 @@ describe("Running records (37c-ii)", () => {
   });
 });
 
+
+/** A finger put down at `x` on the chart, as React Native's touch system hands it to the chart. */
+function fingerAt(x: number) {
+  const touch = { touchActive: true, startPageX: x, startPageY: 90, startTimeStamp: 0, currentPageX: x, currentPageY: 90, currentTimeStamp: 0, previousPageX: x, previousPageY: 90, previousTimeStamp: 0 };
+  return { nativeEvent: { locationX: x, locationY: 90, pageX: x, pageY: 90, touches: [], changedTouches: [] }, touchHistory: { touchBank: [touch], numberActiveTouches: 1, indexOfSingleActiveTouch: 0, mostRecentTimeStamp: 0 } };
+}
+
+describe("The pace chart (37c-iii)", () => {
+  // 5.2 km: 2 km at 5:00 a kilometre, a walk of 400 m at 10:00, the rest at 4:30; the hills rise 20 m.
+  const paceLine = Array.from({ length: 150 }, (_, i) => {
+    const m = (5200 * i) / 149;
+    return m < 2000 ? 333 : m < 2400 ? 167 : 370;
+  });
+  const hillLine = Array.from({ length: 150 }, (_, i) => 40 + Math.round((20 * i) / 149));
+
+  it("a run's page shows the Pace box with the average and the fastest; a finger on it reads that place", async () => {
+    const run = { ...makeRun(1, "Pace Run", 5.2, 26, 1), paceLine, hillLine };
+    const s = runsServer([run]);
+    await openRunning(s);
+    await fireEvent.press(within(await screen.findByTestId("your-runs")).getByRole("button", { name: /^Pace Run, / }));
+    const card = await screen.findByTestId("pace-card", {}, { timeout: 4000 });
+    // 26 minutes for 5.2 km is 5:00 a kilometre; the fastest, 3.70 m/s, is 4:30.
+    expect(within(card).getByText("5:00")).toBeTruthy();
+    expect(within(card).getByText("4:30")).toBeTruthy();
+    expect(within(card).getByText("Hills")).toBeTruthy();
+    const chart = within(card).getByTestId("pace-chart");
+    await fireEvent(chart, "layout", { nativeEvent: { layout: { width: 342, height: 190 } } });
+    // The finger on the walk, 2.2 km in: its distance, its pace and its height.
+    const x = 34 + (300 * 2200) / 5200;
+    await fireEvent(chart, "responderGrant", fingerAt(x));
+    expect(within(card).getByText("Distance")).toBeTruthy();
+    expect(within(card).getByText("2.19 km")).toBeTruthy();
+    expect(within(card).getByText("9:59")).toBeTruthy();
+    expect(within(card).getByText("48 m")).toBeTruthy();
+    expect(within(card).getByTestId("pace-picked")).toBeTruthy();
+  });
+
+  it("a run saved before the chart was kept has no Pace box, never an empty one", async () => {
+    const s = runsServer([makeRun(1, "Old Run", 5.2, 26, 1)]);
+    await openRunning(s);
+    await fireEvent.press(within(await screen.findByTestId("your-runs")).getByRole("button", { name: /^Old Run, / }));
+    await screen.findByRole("button", { name: "Delete run" }, { timeout: 4000 });
+    expect(screen.queryByTestId("pace-card")).toBeNull();
+  });
+
+  it("in miles: the pace a mile, the distance in miles, the height in feet", async () => {
+    // The chart's own words, without the whole app.
+    await render(<PaceCard paceLine={paceLine} hillLine={hillLine} distanceM={5200} movingS={1560} units="imperial" />);
+    expect(screen.getByText("min/mi")).toBeTruthy();
+    expect(screen.getByText("8:03")).toBeTruthy();
+    const chart = screen.getByTestId("pace-chart");
+    await fireEvent(chart, "layout", { nativeEvent: { layout: { width: 342, height: 190 } } });
+    await fireEvent(chart, "responderGrant", fingerAt(34));
+    expect(screen.getByText("0.00 mi")).toBeTruthy();
+    expect(screen.getByText("131 ft")).toBeTruthy();
+  });
+});

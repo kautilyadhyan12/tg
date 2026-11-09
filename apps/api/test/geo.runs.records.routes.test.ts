@@ -124,7 +124,7 @@ d("running records (real Postgres)", () => {
     const id = randomUUID();
     await insertRun(sql, userId, {
       id, startedAt: new Date(at), name: `Run ${at.slice(5, 10)}`, effort: null, note: null, distanceM, movingS: Math.round(distanceM / 3),
-      elapsedS: Math.round(distanceM / 3), leftOutM: 0, leftOutS: 0, kcal: 0, splits: { km: [], mi: [], starts: [0] }, polyline: "",
+      elapsedS: Math.round(distanceM / 3), leftOutM: 0, leftOutS: 0, kcal: 0, splits: { km: [], mi: [], starts: [0], pace: [], hills: [] }, polyline: "",
       calcVersion: 1, climb: { state: "none" }, shape: null, bests: { ...none, ...bests },
     });
     if (opts.old === true) await sql`UPDATE runs SET run_calc_version = NULL, source = 'mongo' WHERE id = ${id}`;
