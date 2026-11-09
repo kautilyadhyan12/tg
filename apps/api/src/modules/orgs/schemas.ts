@@ -156,10 +156,10 @@ export type {
 /** A non-uuid :gymId must fail as a 400 at the boundary, never as a 500 from
  *  Postgres refusing to cast it (the shape :4483 recorded — a schema that
  *  proves less than the code assumes). */
-export const orgParamsSchema = z.object({ gymId: z.string().uuid() }).strict();
+export const orgParamsSchema = z.object({ gymId: z.uuid() }).strict();
 export type OrgParams = z.infer<typeof orgParamsSchema>;
 
-const gymInPathSchema = z.object({ gymId: z.string().uuid() });
+const gymInPathSchema = z.object({ gymId: z.uuid() });
 /** The gym named in a route's address, whatever else the address names: for a limit counted a gym at a time. */
 export const gymInPath = (req: { params: unknown }): string | null => gymInPathSchema.safeParse(req.params).data?.gymId.toLowerCase() ?? null;
 
@@ -168,40 +168,40 @@ export const gymInPath = (req: { params: unknown }): string | null => gymInPathS
  *  `WHERE`"), which is why there is no shape here that carries an upload id
  *  alone: an upload id on its own is not a question this module answers. */
 export const memberListParamsSchema = z
-  .object({ gymId: z.string().uuid(), uploadId: z.string().uuid() })
+  .object({ gymId: z.uuid(), uploadId: z.uuid() })
   .strict();
 export type MemberListParams = z.infer<typeof memberListParamsSchema>;
 
 /** A gym and one record of its list, together, for the same reason. */
 /** A gym and one of its Square Terminals, or a code waiting for one (18d-ii-b-i). */
-export const squareTerminalParamsSchema = z.object({ gymId: z.string().uuid(), terminalId: z.string().uuid() }).strict();
+export const squareTerminalParamsSchema = z.object({ gymId: z.uuid(), terminalId: z.uuid() }).strict();
 
 export const memberListEntryParamsSchema = z
-  .object({ gymId: z.string().uuid(), entryId: z.string().uuid() })
+  .object({ gymId: z.uuid(), entryId: z.uuid() })
   .strict();
 export type MemberListEntryParams = z.infer<typeof memberListEntryParamsSchema>;
 
 /** Save card on Terminal (18d-ii-b-ii): one press, on one record. */
 export const terminalSaveParamsSchema = z
-  .object({ gymId: z.string().uuid(), entryId: z.string().uuid(), saveId: z.string().uuid() })
+  .object({ gymId: z.uuid(), entryId: z.uuid(), saveId: z.uuid() })
   .strict();
 
 /** Take payment on Terminal (18d-vi-a): one press, on one record. */
 export const terminalPaymentParamsSchema = z
-  .object({ gymId: z.string().uuid(), entryId: z.string().uuid(), paymentId: z.string().uuid() })
+  .object({ gymId: z.uuid(), entryId: z.uuid(), paymentId: z.uuid() })
   .strict();
 
 /** A sale on the Terminal at Sell (18d-vi-b-ii). */
-export const terminalSaleParamsSchema = z.object({ gymId: z.string().uuid(), paymentId: z.string().uuid() }).strict();
+export const terminalSaleParamsSchema = z.object({ gymId: z.uuid(), paymentId: z.uuid() }).strict();
 
 export const memberNoteParamsSchema = z
-  .object({ gymId: z.string().uuid(), entryId: z.string().uuid(), noteId: z.string().uuid() })
+  .object({ gymId: z.uuid(), entryId: z.uuid(), noteId: z.uuid() })
   .strict();
 export const memberTagParamsSchema = z
-  .object({ gymId: z.string().uuid(), entryId: z.string().uuid(), tagId: z.string().uuid() })
+  .object({ gymId: z.uuid(), entryId: z.uuid(), tagId: z.uuid() })
   .strict();
 /** A gym and one of its own tags (5d-ii). */
-export const gymTagParamsSchema = z.object({ gymId: z.string().uuid(), tagId: z.string().uuid() }).strict();
+export const gymTagParamsSchema = z.object({ gymId: z.uuid(), tagId: z.uuid() }).strict();
 
 /** WHO CAME, ON WHICH DAY, FILTERED HOW.
  *
@@ -321,9 +321,9 @@ export type AttendanceDayQuery = z.infer<typeof attendanceDayQuerySchema>;
  *  subject; the authorisation fork in the service is untouched. */
 export const attendanceHistoryQuerySchema = z
   .object({
-    userId: z.string().uuid().optional(),
+    userId: z.uuid().optional(),
     /** Staff reading somebody without the app: their record's visits (16b-ii). */
-    entryId: z.string().uuid().optional(),
+    entryId: z.uuid().optional(),
     from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
     to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
     cursor: z.string().min(1).max(200).optional(),
@@ -361,7 +361,7 @@ export type AttendanceHistoryQuery = z.infer<typeof attendanceHistoryQuerySchema
  *  uuid for the same reason `gymId` is: a non-uuid must fail as a 400 at the
  *  boundary and never as a 500 from Postgres refusing the cast. */
 export const applicationParamsSchema = z
-  .object({ gymId: z.string().uuid(), applicationId: z.string().uuid() })
+  .object({ gymId: z.uuid(), applicationId: z.uuid() })
   .strict();
 export type ApplicationParams = z.infer<typeof applicationParamsSchema>;
 
@@ -370,7 +370,7 @@ export type ApplicationParams = z.infer<typeof applicationParamsSchema>;
  *  shape) and nothing else identifying, so keying on anything the screen does
  *  not hold would force a second lookup the screen cannot make. */
 export const memberParamsSchema = z
-  .object({ gymId: z.string().uuid(), userId: z.string().uuid() })
+  .object({ gymId: z.uuid(), userId: z.uuid() })
   .strict();
 export type MemberParams = z.infer<typeof memberParamsSchema>;
 
@@ -381,7 +381,7 @@ export type MemberParams = z.infer<typeof memberParamsSchema>;
  *  shape today, and a schema whose NAME says "member" quietly becomes the
  *  justification for the next person who widens one of them. */
 export const staffParamsSchema = z
-  .object({ gymId: z.string().uuid(), userId: z.string().uuid() })
+  .object({ gymId: z.uuid(), userId: z.uuid() })
   .strict();
 export type StaffParams = z.infer<typeof staffParamsSchema>;
 
@@ -399,7 +399,7 @@ export type StaffParams = z.infer<typeof staffParamsSchema>;
  *  spelling of that rule is what stops a pasted "k7qm-2x" missing a row stored
  *  as "K7QM2X". */
 export const codeParamsSchema = z
-  .object({ gymId: z.string().uuid(), code: z.string().trim().min(1).max(32) })
+  .object({ gymId: z.uuid(), code: z.string().trim().min(1).max(32) })
   .strict();
 export type CodeParams = z.infer<typeof codeParamsSchema>;
 
@@ -413,73 +413,73 @@ export type CodeParams = z.infer<typeof codeParamsSchema>;
  *  happen to have the same shape today, and a schema whose NAME says "type"
  *  quietly becomes the justification for the next person who widens one. */
 export const classTypeParamsSchema = z
-  .object({ gymId: z.string().uuid(), classTypeId: z.string().uuid() })
+  .object({ gymId: z.uuid(), classTypeId: z.uuid() })
   .strict();
 export type ClassTypeParams = z.infer<typeof classTypeParamsSchema>;
 
 /** A gym and one of its membership types (§13.1). The pair, as for a class type. */
 export const membershipTypeParamsSchema = z
-  .object({ gymId: z.string().uuid(), typeId: z.string().uuid() })
+  .object({ gymId: z.uuid(), typeId: z.uuid() })
   .strict();
 export type MembershipTypeParams = z.infer<typeof membershipTypeParamsSchema>;
 
 /** A gym, one record of its list and one membership that record holds (§13.2). */
 export const heldMembershipParamsSchema = z
-  .object({ gymId: z.string().uuid(), entryId: z.string().uuid(), membershipId: z.string().uuid() })
+  .object({ gymId: z.uuid(), entryId: z.uuid(), membershipId: z.uuid() })
   .strict();
 export type HeldMembershipParams = z.infer<typeof heldMembershipParamsSchema>;
 
 /** A gym and one of its other agreements (18u-ii-a), read together. */
-export const otherAgreementParamsSchema = z.object({ gymId: z.string().uuid(), agreementId: z.string().uuid() }).strict();
+export const otherAgreementParamsSchema = z.object({ gymId: z.uuid(), agreementId: z.uuid() }).strict();
 
 /** A gym and one membership of the reader's own record there (20c). */
-export const myHeldMembershipParamsSchema = z.object({ gymId: z.string().uuid(), membershipId: z.string().uuid() }).strict();
+export const myHeldMembershipParamsSchema = z.object({ gymId: z.uuid(), membershipId: z.uuid() }).strict();
 
 /** A gym, a record, one membership it holds and one payment recorded on it (§14.2). */
 export const memberPaymentParamsSchema = z
-  .object({ gymId: z.string().uuid(), entryId: z.string().uuid(), membershipId: z.string().uuid(), paymentId: z.string().uuid() })
+  .object({ gymId: z.uuid(), entryId: z.uuid(), membershipId: z.uuid(), paymentId: z.uuid() })
   .strict();
 
 /** A gym, a record, one membership it holds and one bill of it (§14.2). */
 export const memberBillParamsSchema = z
-  .object({ gymId: z.string().uuid(), entryId: z.string().uuid(), membershipId: z.string().uuid(), billId: z.string().uuid() })
+  .object({ gymId: z.uuid(), entryId: z.uuid(), membershipId: z.uuid(), billId: z.uuid() })
   .strict();
 
 /** The same down to one fee and one payment of it (18h-i). */
 export const memberFeePaymentParamsSchema = z
-  .object({ gymId: z.string().uuid(), entryId: z.string().uuid(), membershipId: z.string().uuid(), billId: z.string().uuid(), paymentId: z.string().uuid() })
+  .object({ gymId: z.uuid(), entryId: z.uuid(), membershipId: z.uuid(), billId: z.uuid(), paymentId: z.uuid() })
   .strict();
 
 /** The same down to one refund noted against a payment (§14.2). */
 export const memberRefundParamsSchema = z
   .object({
-    gymId: z.string().uuid(),
-    entryId: z.string().uuid(),
-    membershipId: z.string().uuid(),
-    paymentId: z.string().uuid(),
-    refundId: z.string().uuid(),
+    gymId: z.uuid(),
+    entryId: z.uuid(),
+    membershipId: z.uuid(),
+    paymentId: z.uuid(),
+    refundId: z.uuid(),
   })
   .strict();
 
 /** A gym and one of its repeats. See the note above on why it is its own shape. */
 export const classScheduleParamsSchema = z
-  .object({ gymId: z.string().uuid(), scheduleId: z.string().uuid() })
+  .object({ gymId: z.uuid(), scheduleId: z.uuid() })
   .strict();
 export type ClassScheduleParams = z.infer<typeof classScheduleParamsSchema>;
 
 /** A gym and one date on its calendar. The pair, as for the two above. */
 export const classSessionParamsSchema = z
-  .object({ gymId: z.string().uuid(), sessionId: z.string().uuid() })
+  .object({ gymId: z.uuid(), sessionId: z.uuid() })
   .strict();
 export type ClassSessionParams = z.infer<typeof classSessionParamsSchema>;
 
 /** A gym, one date on its calendar and one booking of it, always together (17f). */
 export const classBookingParamsSchema = z
-  .object({ gymId: z.string().uuid(), sessionId: z.string().uuid(), bookingId: z.string().uuid() })
+  .object({ gymId: z.uuid(), sessionId: z.uuid(), bookingId: z.uuid() })
   .strict();
 
 /** A gym and one of its leads (20c-i), always together. */
-export const leadParamsSchema = z.object({ gymId: z.string().uuid(), leadId: z.string().uuid() }).strict();
+export const leadParamsSchema = z.object({ gymId: z.uuid(), leadId: z.uuid() }).strict();
 export type LeadParams = z.infer<typeof leadParamsSchema>;
 
 /** The gym id AND the date being un-closed.
@@ -495,7 +495,7 @@ export type LeadParams = z.infer<typeof leadParamsSchema>;
  *  for un-closing a day and a body on a DELETE is a shape half the HTTP stack
  *  drops. */
 export const closureParamsSchema = z
-  .object({ gymId: z.string().uuid(), day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) })
+  .object({ gymId: z.uuid(), day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) })
   .strict();
 export type ClosureParams = z.infer<typeof closureParamsSchema>;
 
@@ -507,6 +507,6 @@ export type ClosureParams = z.infer<typeof closureParamsSchema>;
  *  not need, and a route that accepts a redundant identifier is a route where
  *  somebody eventually trusts the wrong one. */
 export const myApplicationParamsSchema = z
-  .object({ applicationId: z.string().uuid() })
+  .object({ applicationId: z.uuid() })
   .strict();
 export type MyApplicationParams = z.infer<typeof myApplicationParamsSchema>;

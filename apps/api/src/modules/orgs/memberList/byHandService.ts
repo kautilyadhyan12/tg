@@ -995,7 +995,7 @@ export async function putMemberOnList(
 
 // ── "Remove all" (§9.8, §9.9) ───────────────────────────────────────────────
 
-const cursorSchema = z.string().uuid();
+const cursorSchema = z.uuid();
 
 /** The members "Remove all" would remove, a page at a time, with the numbers the
  *  removal must send back. */

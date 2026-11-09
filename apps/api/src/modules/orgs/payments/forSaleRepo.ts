@@ -7,7 +7,7 @@ import { ratesOfJson, typeTaxesSql } from "../memberships/taxesSql.js";
 
 // Parsed, not cast: `kind`, the units and `contract_then` are text columns under a CHECK.
 const rowSchema = z.object({
-  id: z.string().uuid(),
+  id: z.uuid(),
   name: z.string(),
   description: z.string().nullable(),
   kind: membershipKindSchema,

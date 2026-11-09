@@ -40,7 +40,7 @@ export async function getCatalogPage(
   });
 }
 
-const betaRulesSchema = z.object({ userIds: z.array(z.string().uuid()) });
+const betaRulesSchema = z.object({ userIds: z.array(z.uuid()) });
 const manifestSchema = z.record(z.string(), z.number().int().positive());
 
 /** §9.3: beta channel only for allowlisted users; anything else — flag

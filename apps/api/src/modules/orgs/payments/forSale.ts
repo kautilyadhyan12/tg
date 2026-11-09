@@ -29,7 +29,7 @@ import type { PaymentsDeps } from "./service.js";
 
 type Limit = () => Promise<boolean>;
 
-const wordingSchema = z.object({ type_id: z.string().uuid(), id: z.string().uuid(), version: z.number().int(), body: z.string(), name: z.string().nullable() });
+const wordingSchema = z.object({ type_id: z.uuid(), id: z.uuid(), version: z.number().int(), body: z.string(), name: z.string().nullable() });
 
 /** The newest wording, not stopped, of the agreement each line sold in the app asks for, by line. */
 async function wordingsOf(sql: Sql, gymId: string): Promise<Map<string, ForSaleLine["agreement"]>> {

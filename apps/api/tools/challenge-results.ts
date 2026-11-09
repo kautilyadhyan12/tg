@@ -7,7 +7,7 @@ import postgres from "postgres";
 import { z } from "zod";
 import { postChallengeResults } from "../src/modules/orgs/challenges/resultPosts.js";
 
-const env = z.object({ DATABASE_URL: z.string().url(), LOG_LEVEL: z.string().optional() }).safeParse(process.env);
+const env = z.object({ DATABASE_URL: z.url(), LOG_LEVEL: z.string().optional() }).safeParse(process.env);
 if (!env.success) {
   console.error("Missing env: DATABASE_URL. (secrets never printed)");
   process.exit(1);

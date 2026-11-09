@@ -12,12 +12,12 @@ import { normaliseSecondTrialCode } from "@app/shared";
 import { sha256Hex } from "../src/modules/auth/tokens.js";
 import { makeSecondTrialCode, saveSecondTrialCode, showSecondTrialCode } from "../src/modules/orgs/secondTrialCode.js";
 
-const env = z.object({ DATABASE_URL: z.string().url() }).safeParse(process.env);
+const env = z.object({ DATABASE_URL: z.url() }).safeParse(process.env);
 if (!env.success) {
   console.error("Missing env: DATABASE_URL. (secrets never printed)");
   process.exit(1);
 }
-const args = z.tuple([z.string().trim().email().max(254)]).safeParse(process.argv.slice(2));
+const args = z.tuple([z.string().trim().max(254).pipe(z.email())]).safeParse(process.argv.slice(2));
 if (!args.success) {
   console.error("Usage: second-trial-code.ts <the owner's email address>");
   process.exit(2);

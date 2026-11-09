@@ -25,7 +25,7 @@ const legacyMealSchema = z
     fat_g: z.number().nullish(),
     consumed_at: z.union([z.date(), z.string()]).nullish(),
   })
-  .passthrough();
+  .loose();
 
 function toDate(v: Date | string | null | undefined): Date | null {
   if (v === null || v === undefined) return null;

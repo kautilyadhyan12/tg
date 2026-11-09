@@ -13,7 +13,7 @@ import type { EmailMessage } from "../src/email/resend.js";
 import { dueGyms } from "../src/modules/orgs/goneForGood/repo.js";
 import { sweepGoneForGood } from "../src/modules/orgs/goneForGood/sweep.js";
 
-const env = z.object({ DATABASE_URL: z.string().url(), WEB_ORIGIN: z.string().url().optional() }).safeParse(process.env);
+const env = z.object({ DATABASE_URL: z.url(), WEB_ORIGIN: z.url().optional() }).safeParse(process.env);
 if (!env.success) {
   console.error("DATABASE_URL is missing.");
   process.exit(1);

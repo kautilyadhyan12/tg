@@ -132,7 +132,7 @@ export function createPaddleApi(opts: {
   const doFetch = opts.fetchImpl ?? fetch;
   const base = paddleBaseUrl(opts.environment);
 
-  async function call<T extends z.ZodTypeAny>(
+  async function call<T extends z.ZodType>(
     method: "GET" | "POST" | "PATCH",
     path: string,
     schema: T,
@@ -168,7 +168,7 @@ export function createPaddleApi(opts: {
     const parsed = schema.safeParse(json);
     // A 2xx we cannot read is treated as no answer, never as a success.
     if (!parsed.success) return { kind: "unavailable", status: response.status };
-    return { kind: "ok", value: parsed.data as z.infer<T> };
+    return { kind: "ok", value: parsed.data };
   }
 
   const unwrap = <T>(result: PaddleResult<{ data: T }>): PaddleResult<T> =>

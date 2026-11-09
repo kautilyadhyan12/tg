@@ -32,7 +32,7 @@ import { lockFreeTerminal } from "./terminalPaymentsRepo.js";
 type SqlOrTx = Sql | TransactionSql;
 
 /** What each product takes of a press on all of a sale (18d-iv-b-ii): our own column, parsed. */
-export const salePartsSchema = z.array(z.object({ saleId: z.string().uuid(), amountMinor: z.number().int().min(1), restock: z.number().int().min(0).max(99) }).strict()).min(1);
+export const salePartsSchema = z.array(z.object({ saleId: z.uuid(), amountMinor: z.number().int().min(1), restock: z.number().int().min(0).max(99) }).strict()).min(1);
 export type SalePart = z.infer<typeof salePartsSchema>[number];
 
 export interface RefundPress {

@@ -86,7 +86,7 @@ export function createRazorpayApi(opts: {
   const doFetch = opts.fetchImpl ?? fetch;
   const authorization = `Basic ${Buffer.from(`${opts.keyId}:${opts.keySecret}`).toString("base64")}`;
 
-  async function call<T extends z.ZodTypeAny>(
+  async function call<T extends z.ZodType>(
     method: "GET" | "POST",
     path: string,
     schema: T,
@@ -121,7 +121,7 @@ export function createRazorpayApi(opts: {
     const parsed = schema.safeParse(json);
     // A 2xx we cannot read is treated as no answer, never as a success.
     if (!parsed.success) return { kind: "unavailable", status: response.status };
-    return { kind: "ok", value: parsed.data as z.infer<T> };
+    return { kind: "ok", value: parsed.data };
   }
 
   // Ids go into a path only in Razorpay's own shape.

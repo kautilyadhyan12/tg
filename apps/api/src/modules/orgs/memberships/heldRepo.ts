@@ -1876,7 +1876,7 @@ export async function inUseByRule(
     WHERE h.gym_id = ${gymId} AND h.entry_id = ANY(${[...entryIds]}::uuid[])
       AND h.status = ANY(${[...IN_USE]}::text[])`;
   for (const row of rows) {
-    const entryId = z.object({ entry_id: z.string() }).passthrough().parse(row).entry_id;
+    const entryId = z.object({ entry_id: z.string() }).loose().parse(row).entry_id;
     if (heldMembershipView(shape(row).membership, today).status === "ended") continue;
     counts.set(entryId, (counts.get(entryId) ?? 0) + 1);
   }

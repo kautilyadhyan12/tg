@@ -4,7 +4,7 @@ import { z } from "zod";
 import * as repo from "./repo.js";
 
 /** The gym in the address; a route's other ids are its own to parse. */
-const gymInAddress = z.object({ gymId: z.string().uuid() });
+const gymInAddress = z.object({ gymId: z.uuid() });
 
 type Limit = (req: FastifyRequest, reply: FastifyReply) => Promise<void>;
 

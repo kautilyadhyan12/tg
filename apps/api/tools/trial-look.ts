@@ -9,7 +9,7 @@ import { z } from "zod";
 import type { ClueKind } from "../src/modules/orgs/trialLook/clues.js";
 import { trialLookWarnings, type OtherGymPlan } from "../src/modules/orgs/trialLook/repo.js";
 
-const env = z.object({ DATABASE_URL: z.string().url() }).safeParse(process.env);
+const env = z.object({ DATABASE_URL: z.url() }).safeParse(process.env);
 if (!env.success) {
   console.error("Missing env: DATABASE_URL. (secrets never printed)");
   process.exit(1);

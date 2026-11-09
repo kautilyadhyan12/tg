@@ -22,7 +22,7 @@ const legacyUserSchema = z
     weight: z.unknown().optional(),
     lastLogin: z.union([z.date(), z.string()]).nullish(),
   })
-  .passthrough();
+  .loose();
 
 /** Legacy timestamp → Date, or null when unparseable (an Invalid Date would
  *  abort the whole run at insert — T3 finding 3). */

@@ -22,7 +22,7 @@ import { DPDP_RETENTION_DAYS } from "../src/retention.js";
 // WEB_ORIGIN and JWT_SECRET, and an operator running a deletion sweep should
 // not have to hold the app's HTTP secrets to do it.
 const envSchema = z.object({
-  DATABASE_URL: z.string().url(),
+  DATABASE_URL: z.url(),
   LOG_LEVEL: z.string().optional(),
   // Where the api keeps photos (its own PHOTO_DIR): a purged person's post photos are
   // removed from it. The api's default when unset.

@@ -19,7 +19,7 @@ import { z } from "zod";
 import { MEMBER_LIST_MAX_NAME_CHARS } from "@app/shared";
 
 export const entryCursorSchema = z
-  .object({ name: z.string().max(MEMBER_LIST_MAX_NAME_CHARS), id: z.string().uuid() })
+  .object({ name: z.string().max(MEMBER_LIST_MAX_NAME_CHARS), id: z.uuid() })
   .strict();
 export type EntryCursor = z.infer<typeof entryCursorSchema>;
 
@@ -48,7 +48,7 @@ export function decodeEntryCursor(raw: string): EntryCursor | null {
 /** Where a page of possible duplicates ended (5b-iv-a): the last pair's first name and
  *  both its records, since one record can be the first of several pairs. */
 export const pairCursorSchema = z
-  .object({ name: z.string().max(MEMBER_LIST_MAX_NAME_CHARS), id: z.string().uuid(), second: z.string().uuid() })
+  .object({ name: z.string().max(MEMBER_LIST_MAX_NAME_CHARS), id: z.uuid(), second: z.uuid() })
   .strict();
 export type PairCursor = z.infer<typeof pairCursorSchema>;
 

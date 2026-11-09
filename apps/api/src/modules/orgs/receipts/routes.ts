@@ -11,7 +11,7 @@ import { createDualRateLimit } from "../../auth/rateLimit.js";
 import * as service from "./service.js";
 
 export function registerReceiptRoutes(app: FastifyInstance, deps: { sql: Sql; redis: RedisLike }): void {
-  const gymOf = (params: unknown): string | null => z.object({ gymId: z.string().uuid() }).safeParse(params).data?.gymId ?? null;
+  const gymOf = (params: unknown): string | null => z.object({ gymId: z.uuid() }).safeParse(params).data?.gymId ?? null;
   const hour = 60 * 60 * 1000;
   /** Every ask, refused ones too, against the asker alone and never the address. */
   const askerLimit = createDualRateLimit({ name: "orgs_receipts_asks", max: 3000, ipMax: null, windowMs: hour, identifier: (req) => req.authUser?.id ?? null, redis: deps.redis });

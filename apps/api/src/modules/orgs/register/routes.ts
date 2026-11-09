@@ -52,15 +52,15 @@ import { createDualRateLimit } from "../../auth/rateLimit.js";
 import { memberListEntryParamsSchema, orgParamsSchema } from "../schemas.js";
 import * as service from "./service.js";
 
-const productParamsSchema = z.object({ gymId: z.string().uuid(), productId: z.string().uuid() }).strict();
-const discountParamsSchema = z.object({ gymId: z.string().uuid(), discountId: z.string().uuid() }).strict();
-const saleParamsSchema = z.object({ gymId: z.string().uuid(), saleId: z.string().uuid() }).strict();
-const rateParamsSchema = z.object({ gymId: z.string().uuid(), rateId: z.string().uuid() }).strict();
-const saleRefundParamsSchema = z.object({ gymId: z.string().uuid(), saleId: z.string().uuid(), refundId: z.string().uuid() }).strict();
+const productParamsSchema = z.object({ gymId: z.uuid(), productId: z.uuid() }).strict();
+const discountParamsSchema = z.object({ gymId: z.uuid(), discountId: z.uuid() }).strict();
+const saleParamsSchema = z.object({ gymId: z.uuid(), saleId: z.uuid() }).strict();
+const rateParamsSchema = z.object({ gymId: z.uuid(), rateId: z.uuid() }).strict();
+const saleRefundParamsSchema = z.object({ gymId: z.uuid(), saleId: z.uuid(), refundId: z.uuid() }).strict();
 
 export function registerRegisterRoutes(app: FastifyInstance, deps: { sql: Sql; redis: RedisLike; now: () => Date }): void {
   const registerDeps: service.RegisterDeps = { sql: deps.sql, now: deps.now };
-  const gymOf = (params: unknown): string | null => z.object({ gymId: z.string().uuid() }).safeParse(params).data?.gymId ?? null;
+  const gymOf = (params: unknown): string | null => z.object({ gymId: z.uuid() }).safeParse(params).data?.gymId ?? null;
   const hour = 60 * 60 * 1000;
   const limitOf = (name: string, max: number, ipMax: number | null) =>
     createDualRateLimit({

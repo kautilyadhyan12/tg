@@ -20,7 +20,7 @@ const legacyItemSchema = z
     sets: z.number().nullish(),
     reps: z.number().nullish(),
   })
-  .passthrough();
+  .loose();
 
 const legacySessionSchema = z
   .object({
@@ -33,7 +33,7 @@ const legacySessionSchema = z
     started_at: z.union([z.date(), z.string()]).nullish(),
     completed_at: z.union([z.date(), z.string()]).nullish(),
   })
-  .passthrough();
+  .loose();
 
 /** Legacy timestamp → Date, or null when unparseable (an Invalid Date would
  *  abort the insert — same guard as the users stage, T3 finding 3). */

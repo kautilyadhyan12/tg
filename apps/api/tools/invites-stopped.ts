@@ -10,13 +10,13 @@ import postgres from "postgres";
 import { z } from "zod";
 import { resumeGym, stoppedGyms } from "../src/modules/orgs/invites/repo.js";
 
-const env = z.object({ DATABASE_URL: z.string().url() }).safeParse(process.env);
+const env = z.object({ DATABASE_URL: z.url() }).safeParse(process.env);
 if (!env.success) {
   console.error("Missing env: DATABASE_URL. (secrets never printed)");
   process.exit(1);
 }
 const args = z
-  .union([z.tuple([]), z.tuple([z.literal("resume"), z.string().uuid()])])
+  .union([z.tuple([]), z.tuple([z.literal("resume"), z.uuid()])])
   .safeParse(process.argv.slice(2));
 if (!args.success) {
   console.error("Usage: invites-stopped.ts [resume <gymId>]");

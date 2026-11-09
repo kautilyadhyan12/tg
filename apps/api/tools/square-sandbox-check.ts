@@ -35,7 +35,7 @@ import { processSquareWork } from "../src/modules/orgs/payments/work.js";
 
 const env = z
   .object({
-    DATABASE_URL: z.string().url(),
+    DATABASE_URL: z.url(),
     SQUARE_ENV: z.enum(["sandbox", "production"]).default("sandbox"),
     SQUARE_APPLICATION_ID: z.string().regex(/^sandbox-sq0idb-[A-Za-z0-9_-]{10,60}$/),
     SQUARE_APPLICATION_SECRET: z.string().regex(/^sandbox-sq0csb-[A-Za-z0-9_-]{10,100}$/),

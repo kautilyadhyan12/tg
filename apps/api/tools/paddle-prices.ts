@@ -14,7 +14,7 @@ import { paddlePlans, setPaddlePriceId } from "../src/modules/billing/repo.js";
 
 const env = z
   .object({
-    DATABASE_URL: z.string().url(),
+    DATABASE_URL: z.url(),
     PADDLE_ENV: z.enum(["sandbox", "production"]).default("sandbox"),
     PADDLE_API_KEY: z.string().regex(/^pdl_(live|sdbx)_apikey_[a-z\d]{26}_[a-zA-Z\d]{22}_[a-zA-Z\d]{3}$/),
   })

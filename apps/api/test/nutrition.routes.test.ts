@@ -1161,7 +1161,7 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
   it("the real match check is wired in (33a-ii): a food words found is asked about in a second call, text only, with no photo and no person, and ledgered",async()=>{
     // "roasted potatoes" hinted "potatoes": words find our baked potato, so it is checked.
     const evidence:VisionEvidence={meal_name:"Potatoes",items:[seen({name:"roasted potatoes",canonical_hint:"potatoes",grams:200,kcal:300,protein_g:5,carbs_g:40,fat_g:13})],unknown_items:[],photo_quality:"good"};
-    const sentSchema=z.object({messages:z.array(z.object({content:z.array(z.object({type:z.string()}).passthrough())}))}).passthrough();
+    const sentSchema=z.object({messages:z.array(z.object({content:z.array(z.object({type:z.string()}).loose())}))}).loose();
     const calls:{body:z.infer<typeof sentSchema>}[]=[];
     const openai:typeof fetch=(_input,init)=>{
       const body=sentSchema.parse(JSON.parse(typeof init?.body==="string"?init.body:"{}"));

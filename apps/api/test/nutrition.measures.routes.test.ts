@@ -211,7 +211,7 @@ d("adding a food by measure (real Postgres)", () => {
   it("weighs a saved dish by the food's own cup, keeps the dish on the item, and never uses another person's dish", async () => {
     const dish = await inject("POST", "/v1/nutrition/dishware", alice, { label: "My blue bowl", containerClass: "custom", volumeMl: 360 });
     expect(dish.statusCode, dish.body).toBe(201);
-    const dishwareId = z.object({ dishware: z.object({ id: z.string().uuid() }) }).parse(dish.json()).dishware.id;
+    const dishwareId = z.object({ dishware: z.object({ id: z.uuid() }) }).parse(dish.json()).dishware.id;
 
     // Half of 360 ml of nuts whose half cup is 70 g: 360 × 0.5 × 70 / 120 = 105 g.
     // Half of it of apple, which has no plain cup: Appendix B's 1 g a millilitre, 180 g.

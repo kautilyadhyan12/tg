@@ -14,7 +14,7 @@ import { razorpayPlans, setRazorpayPlanId } from "../src/modules/billing/repo.js
 
 const env = z
   .object({
-    DATABASE_URL: z.string().url(),
+    DATABASE_URL: z.url(),
     RAZORPAY_KEY_ID: z.string().regex(/^rzp_(test|live)_[A-Za-z0-9]{14}$/),
     RAZORPAY_KEY_SECRET: z.string().regex(/^[A-Za-z0-9]{20,40}$/),
   })
