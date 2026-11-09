@@ -134,7 +134,7 @@ and the newest name in the bucket is a whole copy (tried 2026-11-09 with a dump 
   cannot read the rule, so no check can catch them apart.
 - **A missed or failed night.** The script checks in with Sentry's cron monitor `kwazo-backup`
   (started, ok or error), so a failure or a night with no run emails Kd. A `SENTRY_DSN` it cannot read
-  is written to the log as "no Sentry check-in". Seen by Kd: see the handoff of 21a-ii.
+  is written to the log as "no Sentry check-in". Seen by Kd on 2026-11-09: the failing test run's check-in emailed him.
 - **Restore** (tried 2026-11-09: 185 tables, 2 people, 13,225 USDA foods, 228 migrations, the same as
   live). On the machine, into a throwaway database first:
 

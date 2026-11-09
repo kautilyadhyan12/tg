@@ -97,6 +97,8 @@ while (queue.length > 0) {
   const text = await (await get(href)).text();
   for (const m of text.matchAll(LOCAL_ADDRESS)) laptopAddresses.push(m[0]);
   for (const m of text.matchAll(/(?:\.{0,2}\/)?assets\/[\w.-]+\.js/g)) queue.push(new URL(m[0].replace(/^(?:\.{1,2}\/)+/, ""), `https://${webName}/assets/`).href.replace("/assets/assets/", "/assets/"));
+  // A chunk can also name another by its bare file, `./x.js`, from inside /assets/.
+  for (const m of text.matchAll(/["'`]\.\/([\w.-]+\.js)["'`]/g)) queue.push(new URL(m[1] ?? "", `https://${webName}/assets/`).href);
 }
 const policyLaptop = body.match(LOCAL_ADDRESS) ?? [];
 check("the console never calls this laptop", scripts.size > 1 && laptopAddresses.length === 0 && policyLaptop.length === 0, [...new Set([...laptopAddresses, ...policyLaptop])].join(" ") || `${String(scripts.size)} scripts read`);
