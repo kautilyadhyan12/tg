@@ -123,16 +123,19 @@ function SignedInOrOut({ mealStore, bodyStore, runStore, minutesStore, lookMs, w
   if (state.kind === "starting") return <View style={styles.page} />;
   if (state.kind === "out") return <SignInScreen note={state.note} waiting={waitingStore} />;
   return (
-    <SignUpNoteGate key={state.user.id}>
-      <AppMinutes userId={state.user.id} store={minutesStore} />
-      <TimeZoneSync>
-        <InvitationsGate>
-          <SetupGate {...(lookMs === undefined ? {} : { lookMs })}>
-            <FiveTabs mealStore={mealStore} bodyStore={bodyStore} runStore={runStore} />
-          </SetupGate>
-        </InvitationsGate>
-      </TimeZoneSync>
-    </SignUpNoteGate>
+    <>
+      {/* Counted from the sign-in on, "Before you start" and setup included (21f). */}
+      <AppMinutes key={state.user.id} userId={state.user.id} store={minutesStore} />
+      <SignUpNoteGate key={state.user.id}>
+        <TimeZoneSync>
+          <InvitationsGate>
+            <SetupGate {...(lookMs === undefined ? {} : { lookMs })}>
+              <FiveTabs mealStore={mealStore} bodyStore={bodyStore} runStore={runStore} />
+            </SetupGate>
+          </InvitationsGate>
+        </TimeZoneSync>
+      </SignUpNoteGate>
+    </>
   );
 }
 

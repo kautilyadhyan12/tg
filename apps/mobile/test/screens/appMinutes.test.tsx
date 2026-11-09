@@ -2,7 +2,7 @@ import { act, render, screen } from "@testing-library/react-native";
 import { AppState, type AppStateStatus } from "react-native";
 import { App } from "../../src/App";
 import type { TextStore } from "../../src/screens/food/outbox";
-import { fakeServer, kept, memoryStore, RAVI, tokens, type Reply } from "../kit";
+import { fakeServer, kept, memoryStore, profile, RAVI, tokens, type Reply } from "../kit";
 
 // Minutes in the app (ROADMAP Stage 5 21f), wired into the app: the counter reads and sends only the
 // file of the person signed in, and leaving the app sends what it counted.
@@ -91,4 +91,26 @@ it("leaving the app sends what it counted; nothing is sent before there is anyth
   const body = sent[0]?.body as { days: { minutes: number }[] };
   expect(body.days).toHaveLength(1);
   expect(body.days[0]?.minutes).toBe(0);
+});
+
+it("counts from the sign-in on: time on Before you start is the person's too", async () => {
+  const server = fakeServer({
+    "/v1/auth/refresh": ok({ tokens: tokens(2) }),
+    "/v1/me/app-minutes": ok({ kept: 1, ignored: 0 }),
+    "/v1/users/me": ok(profile(false)),
+  });
+  const phone = files({});
+  await render(<App extra={extra} ask={server.ask} store={memoryStore(kept(1, RAVI, null))} wait={noWait} minutesStore={phone.store} />);
+  expect(await screen.findByText("Before you start")).toBeTruthy();
+  await settle();
+  expect(phone.askedFor).toContain(RAVI.id);
+  await act(() => {
+    for (const handler of handlers) handler("active");
+  });
+  await settle();
+  await act(() => {
+    for (const handler of handlers) handler("background");
+  });
+  await settle();
+  expect(sends(server)).toHaveLength(1);
 });
