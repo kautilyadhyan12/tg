@@ -64,9 +64,11 @@ export async function sendTrainingReminders(deps: {
     let reached = false;
     try {
       const zone = reminderZone(first.zone === "" ? null : first.zone);
-      // Not opened for a week: nothing goes, and what came due pauses itself until they turn it on.
+      // Not opened for a week: nothing goes, and what came due pauses itself until they turn it on. The
+      // pause holds it, not today's mark: turned on for later today, it goes then.
       if (!(await repo.openedSince(sql, userId, new Date(now.getTime() - REMINDER_PAUSE_DAYS * DAY_MS)))) {
         await repo.pause(sql, userId, taken.map((t) => t.kind), now);
+        await repo.unclaim(sql, userId, taken, clock.day);
         result.skipped += 1;
         return;
       }

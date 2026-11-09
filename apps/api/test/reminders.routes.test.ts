@@ -13,6 +13,7 @@ import { createMemoryRedis } from "../src/redis.js";
 import type { EmailSender } from "../src/modules/auth/email.js";
 import type { PushMessage, PushResult, PushSender } from "../src/modules/push/fcm.adapter.js";
 import { sendTrainingReminders } from "../src/modules/reminders/sweep.js";
+import { claim } from "../src/modules/reminders/repo.js";
 
 const url = process.env["DATABASE_URL"];
 const d = describe.skipIf(url === undefined || url === "");
@@ -502,7 +503,7 @@ d("the workout and meal reminders (real Postgres)", () => {
   }, TIMEOUT_MS);
 
   /** Each step a save ("save", time, at hh:mm) or a run (`run`, at hh:mm), on Monday unless a day is
-   *  given; `goes` is how many notifications reach the phone over all the steps. */
+   *  given; `goes` is how many sends are tried over all the steps, failed ones included. */
   type Step = { save: string; hh: number; mm: number; day?: number } | { run: true; hh: number; mm: number; day?: number };
   const cases: { name: string; steps: Step[]; goes: number; failFirst?: boolean }[] = [
     { name: "saved at a time already past: nothing goes at once, nor later today", steps: [{ save: "15:45", hh: 16, mm: 0 }, { run: true, hh: 16, mm: 0 }, { run: true, hh: 16, mm: 1 }], goes: 0 },
@@ -525,6 +526,27 @@ d("the workout and meal reminders (real Postgres)", () => {
       }
     }
     expect(sentTo(who.token)).toHaveLength(goes);
+  }, TIMEOUT_MS);
+
+  it("paused for a week, then turned on for later the same day, it comes at that time (round one H1)", async () => {
+    const back = await phone("backlater");
+    await set(back, "breakfast", "08:00");
+    await sql`UPDATE users SET last_active_at = ${india(9, 0, -8)}, created_at = ${india(9, 0, -30)} WHERE id = ${back.userId}`;
+    sent.length = 0;
+    await sweep(india(8, 0));
+    expect((await read(back))[1]).toMatchObject({ kind: "breakfast", paused: true });
+    await sql`UPDATE users SET last_active_at = ${india(8, 10)} WHERE id = ${back.userId}`;
+    await saveAt(back, "breakfast", "09:00", 8, 10);
+    await sweep(india(9, 0));
+    await sweep(india(9, 1));
+    expect(sentTo(back.token).map((m) => m.title)).toEqual(["Breakfast"]);
+  }, TIMEOUT_MS);
+
+  it("a save at a time already past, landing between a run's read and its claim, is not taken (round one)", async () => {
+    const between = await phone("between");
+    await set(between, "lunch", "13:00");
+    await saveAt(between, "lunch", "12:50", 13, 0);
+    expect(await claim(sql, between.userId, ["lunch"], "2026-11-02")).toEqual([]);
   }, TIMEOUT_MS);
 
   it("moved later while its send is failing, it goes at the new time, once", async () => {
