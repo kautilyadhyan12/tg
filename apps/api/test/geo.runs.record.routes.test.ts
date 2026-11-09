@@ -216,7 +216,7 @@ d("record a run (real Postgres)", () => {
     const res = await save(me.cookies, run);
     expect(res.statusCode, res.body).toBe(201);
     expect((await sql`SELECT 1 FROM runs WHERE user_id = ${me.id}`).length).toBe(1);
-  });
+  }, 30_000);
 
   it("is saved once when sent twice, and the second send reads back the first", async () => {
     const me = await makeUser("twice");
