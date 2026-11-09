@@ -17,8 +17,11 @@ export const trainingReminders = pgTable(
     minute: smallint("minute").notNull(),
     /** Monday 1 … Sunday 64; a meal's are all seven (127). */
     days: smallint("days").notNull().default(127),
-    /** The person's own day it last went or was skipped: at most once a day. */
+    /** The person's own day it last went or was skipped by the worker: at most once a day. */
     sentDay: date("sent_day"),
+    /** The person's own day a save at a time already past held: that day's does not go, so a save never
+     *  sends at once. A later save at a time still to come clears it (19e-iii). */
+    heldDay: date("held_day"),
     /** Paused by itself: the person had not opened the app for a week when it came due. */
     pausedAt: timestamp("paused_at", { withTimezone: true }),
     createdAt: createdAt(),

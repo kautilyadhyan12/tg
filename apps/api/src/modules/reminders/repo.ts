@@ -29,8 +29,8 @@ export async function readPerson(sql: SqlOrTx, userId: string): Promise<{ zone: 
 }
 
 /** Saves one reminder whole. Turning it on ends a pause. A time already past today on the person's clock
- *  counts as today's, so a save never sends at once; a time still to come today may go today, unless
- *  today's has already gone. */
+ *  holds today, so a save never sends at once; a time still to come today ends that hold and goes today,
+ *  unless today's has really gone (`sent_day`, written only by the worker). */
 export async function saveReminder(
   sql: SqlOrTx,
   input: { userId: string; kind: ReminderKind; on: boolean; minute: number; days: number; today: string; nowMinute: number },
@@ -38,15 +38,12 @@ export async function saveReminder(
   const { userId, kind, on, minute, days, today, nowMinute } = input;
   const passed = minute <= nowMinute;
   await sql`
-    INSERT INTO training_reminders AS t (user_id, kind, is_on, minute, days, sent_day, paused_at, updated_at)
+    INSERT INTO training_reminders AS t (user_id, kind, is_on, minute, days, held_day, paused_at, updated_at)
     VALUES (${userId}, ${kind}, ${on}, ${minute}, ${days}, ${passed ? today : null}::date, NULL, now())
     ON CONFLICT (user_id, kind) DO UPDATE SET
       is_on = EXCLUDED.is_on, minute = EXCLUDED.minute, days = EXCLUDED.days, updated_at = now(),
       paused_at = CASE WHEN EXCLUDED.is_on THEN NULL ELSE t.paused_at END,
-      sent_day = CASE
-        WHEN ${passed} THEN GREATEST(COALESCE(t.sent_day, ${today}::date), ${today}::date)
-        ELSE t.sent_day
-      END`;
+      held_day = EXCLUDED.held_day`;
 }
 
 /** The zones of everybody with a reminder on and not paused: the sweep works out each one's clock once. */
@@ -67,7 +64,7 @@ export interface OwedRow {
 }
 
 /** Reminders still owed today and near now on each person's own clock: on, not paused, today one of
- *  their days, not yet sent or skipped today, their time between `REMINDER_DUE_MINUTES` ago and
+ *  their days, not yet sent, skipped or held today, their time between `REMINDER_DUE_MINUTES` ago and
  *  `REMINDER_BUNDLE_MINUTES` ahead. `clocks`: each raw zone string (as `liveZones` gave it) with its
  *  day, minute and weekday. */
 export async function owedNear(
@@ -89,6 +86,7 @@ export async function owedNear(
     JOIN c ON c.zone = COALESCE(u.timezone, '')
     WHERE t.is_on AND t.paused_at IS NULL
       AND (t.sent_day IS NULL OR t.sent_day < c.day)
+      AND (t.held_day IS NULL OR t.held_day < c.day)
       AND (t.days & (1 << (c.weekday - 1))) <> 0
       AND t.minute BETWEEN c.minute - ${before} AND c.minute + ${ahead}
       ${userIds === undefined ? sql`` : sql`AND t.user_id IN ${sql(userIds)}`}
@@ -96,12 +94,10 @@ export async function owedNear(
   return rows.map((row) => ({ userId: row.user_id, kind: row.kind, minute: row.minute, zone: row.zone }));
 }
 
-/** A reminder taken for today: the day it held before, and the save it was taken from (`updated_at` as
- *  text, to the millionth; a Date keeps only the thousandth). */
+/** A reminder taken for today, with the day it held before. */
 export interface Taken {
   kind: ReminderKind;
   prev: string | null;
-  saved: string;
 }
 
 /** Takes the person's reminders for today, once: a second run at the same instant gets none back. Each
@@ -113,11 +109,12 @@ export async function claim(sql: SqlOrTx, userId: string, kinds: readonly Remind
       SELECT kind, sent_day AS prev FROM training_reminders
       WHERE user_id = ${userId} AND kind IN ${sql(kinds)} AND is_on AND paused_at IS NULL
         AND (sent_day IS NULL OR sent_day < ${day}::date)
+        AND (held_day IS NULL OR held_day < ${day}::date)
       FOR UPDATE
     )
     UPDATE training_reminders t SET sent_day = ${day}::date
     FROM o WHERE t.user_id = ${userId} AND t.kind = o.kind
-    RETURNING t.kind, o.prev::text AS prev, t.updated_at::text AS saved`;
+    RETURNING t.kind, o.prev::text AS prev`;
 }
 
 /** Of these, the reminders still on and not paused: read again just before a send, so a switch-off made
@@ -130,14 +127,13 @@ export async function stillOn(sql: SqlOrTx, userId: string, kinds: readonly Remi
   return rows.map((row) => row.kind);
 }
 
-/** Firebase reached no phone: today's is owed again, unless the person saved it since (a save at a time
- *  already past holds today as well, and waits for tomorrow). */
+/** Firebase reached no phone: today's is owed again. A save made since at a time already past holds today
+ *  by itself (`held_day`); one at a time still to come goes at that time. */
 export async function unclaim(sql: SqlOrTx, userId: string, taken: readonly Taken[], day: string): Promise<void> {
   for (const one of taken) {
     await sql`
       UPDATE training_reminders SET sent_day = ${one.prev}::date
-      WHERE user_id = ${userId} AND kind = ${one.kind} AND sent_day = ${day}::date
-        AND updated_at = ${one.saved}::text::timestamptz`;
+      WHERE user_id = ${userId} AND kind = ${one.kind} AND sent_day = ${day}::date`;
   }
 }
 
