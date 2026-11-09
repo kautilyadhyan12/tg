@@ -526,4 +526,19 @@ d("the workout and meal reminders (real Postgres)", () => {
     }
     expect(sentTo(who.token)).toHaveLength(goes);
   }, TIMEOUT_MS);
+
+  it("moved later while its send is failing, it goes at the new time, once", async () => {
+    const mid = await phone("midmove");
+    await set(mid, "breakfast", "08:00");
+    answers.set(mid.token, "failed");
+    duringSend.set(mid.token, () => saveAt(mid, "breakfast", "08:30", 8, 0));
+    sent.length = 0;
+    await sweep(india(8, 0));
+    answers.delete(mid.token);
+    await sweep(india(8, 1));
+    expect(sentTo(mid.token)).toHaveLength(1);
+    await sweep(india(8, 30));
+    await sweep(india(8, 31));
+    expect(sentTo(mid.token)).toHaveLength(2);
+  }, TIMEOUT_MS);
 });
