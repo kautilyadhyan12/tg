@@ -5,7 +5,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { PACE_LINE_FROM_M, PACE_LINE_MOST, hillLineOf, runSums, type RunPoint } from "../src/index.js";
+import { PACE_LINE_FROM_M, PACE_LINE_MOST, hillLineOf, paceLineOf, recordSpeed, runSums, type RunPoint } from "../src/index.js";
 
 const NORTH_M_PER_DEG = 110_766;
 
@@ -48,6 +48,16 @@ describe("the worst thing: a pace never run, shown as the person's", () => {
     const speeds = Array.from({ length: 900 }, (_, i) => (i % 10 === 0 ? 11 : i % 10 === 1 ? -5 : 3));
     const sums = line(speeds);
     for (const v of sums.paceLine) expect(mps(v)).toBeLessThan(10.5);
+  });
+});
+
+describe("the line never faster than anybody has run", () => {
+  it("steps faster than the world record are held at it, never drawn as the speed they claim", () => {
+    // 6 km at 12 m/s: the line's stretch is 300 m in 25 s, and nobody has kept up 12 m/s for 25 s.
+    const line = paceLineOf(Array.from({ length: 500 }, () => ({ m: 12, s: 1 })));
+    expect(line.length).toBe(PACE_LINE_MOST);
+    for (const v of line) expect(v).toBeLessThanOrEqual(Math.round(recordSpeed(25) * 100));
+    expect(Math.max(...line)).toBeLessThan(1200);
   });
 });
 
@@ -99,6 +109,17 @@ describe("the hills behind it", () => {
     expect(hills).toHaveLength(11);
     expect(hills[0]).toBe(10);
     expect(hills[10]).toBe(60);
+  });
+
+  it("a stretch that starts somewhere else keeps the ground's own height there", () => {
+    // 20 heights at 0 m, a car ride left out, 20 heights at 500 m.
+    const heights = [...Array.from({ length: 20 }, () => 0), ...Array.from({ length: 20 }, () => 500)];
+    const apart = heights.map((_, i) => i === 20);
+    const hills = hillLineOf(heights, apart, 40);
+    expect(hills[0]).toBe(0);
+    expect(hills[5]).toBe(0);
+    expect(hills[30]).toBe(500);
+    expect(hills[39]).toBe(500);
   });
 
   it("too few heights known: no hills, never a made-up line", () => {

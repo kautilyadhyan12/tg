@@ -134,7 +134,7 @@ function meanOf(values: readonly number[], size: number): number[] {
  *  line between the heights either side of it; a stretch that starts `apart` carries on from the
  *  height the last one stopped at. */
 export function climbFromHeights(heights: readonly (number | null)[], apart: readonly boolean[]): number | null {
-  const line = smoothHeights(heights, apart);
+  const line = smoothHeights(heights, apart, true);
   return line === null ? null : Math.round(climbOver(line));
 }
 
@@ -142,7 +142,8 @@ export function climbFromHeights(heights: readonly (number | null)[], apart: rea
  *  `n` evenly spaced places from the start to the finish, in whole metres; empty where the climb has
  *  no number, or n is under 2. */
 export function hillLineOf(heights: readonly (number | null)[], apart: readonly boolean[], n: number): number[] {
-  const line = smoothHeights(heights, apart);
+  // The ground's own height: a stretch that starts somewhere else keeps its own heights (round one, H1).
+  const line = smoothHeights(heights, apart, false);
   if (line === null || n < 2) return [];
   const last = line.length - 1;
   return Array.from({ length: n }, (_, i) => {
@@ -155,9 +156,10 @@ export function hillLineOf(heights: readonly (number | null)[], apart: readonly 
   });
 }
 
-/** The heights with their gaps filled, stretches joined and outliers smoothed out; null when too few
- *  are known to say. */
-function smoothHeights(heights: readonly (number | null)[], apart: readonly boolean[]): number[] | null {
+/** The heights with their gaps filled and outliers smoothed out; null when too few are known to say.
+ *  `join`: a stretch apart from the last is moved to start where the last stopped, so the gap itself climbs
+ *  nothing (the climb); without it each stretch is smoothed on its own and keeps the ground's height. */
+function smoothHeights(heights: readonly (number | null)[], apart: readonly boolean[], join: boolean): number[] | null {
   const known = heights.filter((h) => h !== null).length;
   if (known === 0 || known < heights.length * KNOWN_SHARE) return null;
   const filled: number[] = [];
@@ -175,6 +177,16 @@ function smoothHeights(heights: readonly (number | null)[], apart: readonly bool
     const ha = after < heights.length ? heights[after] : null;
     if (hb !== null && hb !== undefined && ha !== null && ha !== undefined) filled.push(hb + ((ha - hb) * (i - before)) / (after - before));
     else filled.push(hb ?? ha ?? 0);
+  }
+  if (!join) {
+    const out: number[] = [];
+    let from = 0;
+    for (let i = 1; i <= filled.length; i++) {
+      if (i < filled.length && apart[i] !== true) continue;
+      out.push(...meanOf(middleOf(filled.slice(from, i), MEDIAN_SAMPLES), MEAN_SAMPLES));
+      from = i;
+    }
+    return out;
   }
   // A stretch apart from the last keeps its own ups and downs, moved to start where the last stopped.
   let shift = 0;

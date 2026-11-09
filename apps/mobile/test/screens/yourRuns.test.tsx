@@ -410,6 +410,18 @@ describe("The pace chart (37c-iii)", () => {
     expect(screen.queryByTestId("pace-card")).toBeNull();
   });
 
+  it("a steady run reads steady: the scale spans a minute round the average, with numbers on the side", async () => {
+    // 296 to 304 cm/s throughout; the average 278 cm/s (6:00), slower than every place, as when the
+    // phone's first fix came 40 s after Start.
+    const steady = Array.from({ length: 150 }, (_, i) => 300 + ((i % 5) - 2) * 2);
+    await render(<PaceCard paceLine={steady} hillLine={[]} distanceM={5000} movingS={1799} units="metric" />);
+    await fireEvent(screen.getByTestId("pace-chart"), "layout", { nativeEvent: { layout: { width: 342, height: 190 } } });
+    // Half-minute marks, as no two whole minutes fall inside: 5:30 and 6:00 at the side.
+    expect(screen.getByText("5:30")).toBeTruthy();
+    expect(screen.getAllByText("6:00").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText("Best pace")).toBeTruthy();
+  });
+
   it("in miles: the pace a mile, the distance in miles, the height in feet", async () => {
     // The chart's own words, without the whole app.
     await render(<PaceCard paceLine={paceLine} hillLine={hillLine} distanceM={5200} movingS={1560} units="imperial" />);

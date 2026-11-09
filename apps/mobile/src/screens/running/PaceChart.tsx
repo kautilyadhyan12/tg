@@ -23,6 +23,8 @@ const FEET_PER_METRE = 1 / 0.3048;
  *  not squash the rest of the run flat (its pace is still read under a finger). */
 const FLOOR_SHARE = 0.6;
 const HILLS_LEAST_M = 50;
+/** The pace scale spans at least this many seconds a kilometre or mile either side of the average. */
+const SPAN_S = 30;
 /** Two pace labels closer than this on the chart (at the usual text size): the lower one is left out. */
 const MARKS_APART = 18;
 /** Room each distance label takes along the bottom, at the usual text size. */
@@ -44,14 +46,18 @@ const paceOf = (cms: number, units: Units): string => (cms <= 0 ? "--:--" : pace
 const heightWords = (m: number, units: Units): string =>
   units === "imperial" ? `${String(Math.round(m * FEET_PER_METRE))} ft` : `${String(m)} m`;
 
-/** The whole-minute paces between the fastest and the floor, fastest first, for the lines across the chart. */
+/** The paces between the top and the floor, fastest first, for the lines across the chart: whole minutes,
+ *  or where fewer than two fall inside (a steady run), every half minute, then every 15 seconds. */
 function paceMarks(lo: number, hi: number, units: Units): { cms: number; label: string }[] {
-  const out: { cms: number; label: string }[] = [];
-  for (let minutes = 2; minutes <= 30; minutes++) {
-    const cms = (each(units) * 100) / (minutes * 60);
-    if (cms >= lo && cms <= hi) out.push({ cms, label: `${String(minutes)}:00` });
+  for (const step of [60, 30, 15]) {
+    const out: { cms: number; label: string }[] = [];
+    for (let s = 120; s <= 1800; s += step) {
+      const cms = (each(units) * 100) / s;
+      if (cms >= lo && cms <= hi) out.push({ cms, label: `${String(Math.floor(s / 60))}:${String(s % 60).padStart(2, "0")}` });
+    }
+    if (out.length >= 2) return out;
   }
-  return out;
+  return [];
 }
 
 /** The distance marks along the bottom: whole kilometres or miles, `most` gaps at most. */
@@ -68,9 +74,15 @@ export function PaceChart({ paceLine, hillLine, distanceM, movingS, units }: Pac
   const [at, setAt] = useState<number | null>(null);
   const n = paceLine.length;
   const average = movingS > 0 ? (distanceM / movingS) * 100 : 0;
-  const hi = n === 0 ? 0 : Math.max(...paceLine);
-  const lo = n === 0 ? 0 : Math.min(Math.max(Math.min(...paceLine), average * FLOOR_SHARE), hi - 1);
-  const fastest = paceLine.indexOf(hi);
+  const top = n === 0 ? 0 : Math.max(...paceLine);
+  const fastest = paceLine.indexOf(top);
+  // The scale spans at least SPAN_S a unit either side of the average pace, with the average inside it, so
+  // a steady run reads steady and the dashed line lies where the average is.
+  const averageS = average > 0 ? (each(units) * 100) / average : 0;
+  const slowEdge = average > 0 ? (each(units) * 100) / (averageS + SPAN_S) : 0;
+  const fastEdge = averageS > SPAN_S ? (each(units) * 100) / (averageS - SPAN_S) : top;
+  const hi = Math.max(top, fastEdge, average);
+  const lo = n === 0 ? 0 : Math.min(Math.max(Math.min(...paceLine), average * FLOOR_SHARE), slowEdge, average, hi - 1);
   const hills = hillLine.length === n ? hillLine : [];
   const { fontScale } = useWindowDimensions();
   const LEFT = Math.ceil(LABEL_W * fontScale) + 6;
@@ -132,7 +144,7 @@ export function PaceChart({ paceLine, hillLine, distanceM, movingS, units }: Pac
   const onLayout = (e: LayoutChangeEvent) => {
     setWidth(Math.round(e.nativeEvent.layout.width));
   };
-  const said = `Pace chart. Average ${paceOf(average, units)}, fastest ${paceOf(hi, units)} ${paceWord(units)}.`;
+  const said = `Pace chart. Average ${paceOf(average, units)}, best ${paceOf(top, units)} ${paceWord(units)}.`;
 
   return (
     <View>
@@ -140,7 +152,7 @@ export function PaceChart({ paceLine, hillLine, distanceM, movingS, units }: Pac
         {at === null || picked === null ? (
           <>
             <Figure value={paceOf(average, units)} label="Avg pace" />
-            <Figure value={paceOf(hi, units)} label="Fastest" gold />
+            <Figure value={paceOf(top, units)} label="Best pace" gold />
           </>
         ) : (
           <>
@@ -179,8 +191,8 @@ export function PaceChart({ paceLine, hillLine, distanceM, movingS, units }: Pac
             <Line x1={LEFT} x2={width - RIGHT} y1={y(average)} y2={y(average)} stroke={GOLD} strokeWidth={1.4} strokeDasharray="5 5" strokeOpacity={0.8} />
             {at === null || picked === null ? (
               <>
-                <Circle cx={x(fastest)} cy={y(hi)} r={11} fill={colours.trail} fillOpacity={0.18} />
-                <Circle cx={x(fastest)} cy={y(hi)} r={5.5} fill={colours.trail} stroke={PALE} strokeWidth={2} />
+                <Circle cx={x(fastest)} cy={y(top)} r={11} fill={colours.trail} fillOpacity={0.18} />
+                <Circle cx={x(fastest)} cy={y(top)} r={5.5} fill={colours.trail} stroke={PALE} strokeWidth={2} />
               </>
             ) : (
               <>

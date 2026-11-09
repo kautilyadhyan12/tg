@@ -1134,7 +1134,7 @@ describe("Elevation gain on the summary (37b-ii)", () => {
     const card = await screen.findByTestId("pace-card");
     // About 3 m/s, 5:33 a kilometre, the average and the fastest alike.
     expect(within(card).getByText("Avg pace")).toBeTruthy();
-    expect(within(card).getByText("Fastest")).toBeTruthy();
+    expect(within(card).getByText("Best pace")).toBeTruthy();
     expect(within(card).getAllByText(/^5:3\d$/)).toHaveLength(2);
     expect(await within(card).findByText("Hills")).toBeTruthy();
   });

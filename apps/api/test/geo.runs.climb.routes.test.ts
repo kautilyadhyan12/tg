@@ -233,6 +233,10 @@ d("a run's elevation gain (real Postgres)", () => {
       expect(page.paceLine).toHaveLength(PACE_LINE_MOST);
       expect(page.hillLine).toHaveLength(PACE_LINE_MOST);
       expect(page.splitsKm.length).toBeGreaterThan(0);
+      // This run's own hills: the very ones the summary's ask gives for its points.
+      const asked = runClimbResponseSchema.parse(JSON.parse((await ask(me.cookies, askOf(run))).body)).climb;
+      expect(page.hillLine).toEqual(asked.state === "done" ? asked.hills : null);
+      expect((page.hillLine[page.hillLine.length - 1] ?? 0) - (page.hillLine[0] ?? 0)).toBeGreaterThan(15);
       const mineKept = await sql`SELECT 1 FROM runs WHERE user_id = ${me.id} AND climb_state = 'done'`;
       expect(mineKept).toHaveLength(1);
       // The phone, sending it again, now reads the climb.
