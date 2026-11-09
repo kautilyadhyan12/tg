@@ -162,6 +162,13 @@ export function hillLineOf(heights: readonly (number | null)[], apart: readonly 
 function smoothHeights(heights: readonly (number | null)[], apart: readonly boolean[], join: boolean): number[] | null {
   const known = heights.filter((h) => h !== null).length;
   if (known === 0 || known < heights.length * KNOWN_SHARE) return null;
+  // Which stretch each height lies on: a gap is filled from its own stretch, never by a line drawn across a
+  // stretch left out (a car ride), which would climb what nobody ran (37c-iii's re-check).
+  const stretchOf: number[] = [];
+  for (let i = 0, k = 0; i < heights.length; i++) {
+    if (i > 0 && apart[i] === true) k++;
+    stretchOf.push(k);
+  }
   const filled: number[] = [];
   for (let i = 0; i < heights.length; i++) {
     const h = heights[i];
@@ -169,12 +176,20 @@ function smoothHeights(heights: readonly (number | null)[], apart: readonly bool
       filled.push(h);
       continue;
     }
-    let before = i - 1;
-    while (before >= 0 && heights[before] === null) before--;
-    let after = i + 1;
-    while (after < heights.length && heights[after] === null) after++;
+    const near = (from: number, step: number, sameStretch: boolean): number => {
+      let j = from;
+      while (j >= 0 && j < heights.length && heights[j] === null && (!sameStretch || stretchOf[j] === stretchOf[i])) j += step;
+      return j >= 0 && j < heights.length && heights[j] !== null && (!sameStretch || stretchOf[j] === stretchOf[i]) ? j : -1;
+    };
+    let before = near(i - 1, -1, true);
+    let after = near(i + 1, 1, true);
+    // A stretch with no height of its own takes the nearest anywhere.
+    if (before < 0 && after < 0) {
+      before = near(i - 1, -1, false);
+      after = near(i + 1, 1, false);
+    }
     const hb = before >= 0 ? heights[before] : null;
-    const ha = after < heights.length ? heights[after] : null;
+    const ha = after >= 0 ? heights[after] : null;
     if (hb !== null && hb !== undefined && ha !== null && ha !== undefined) filled.push(hb + ((ha - hb) * (i - before)) / (after - before));
     else filled.push(hb ?? ha ?? 0);
   }

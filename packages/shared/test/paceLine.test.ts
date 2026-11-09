@@ -21,16 +21,26 @@ function track(speeds: readonly number[]): RunPoint[] {
 }
 const steady = (seconds: number, mps: number): number[] => Array.from({ length: seconds }, () => mps);
 
-/** The same track as a real phone gives it: each point off by a random few metres (`jitter`, the spread
- *  in metres north and east), with the accuracy the phone says, seeded so every run is the same. */
-function wandering(speeds: readonly number[], jitter: number, accuracy: number): RunPoint[] {
-  let seed = 7;
+/** The same track as a real phone gives it, seeded so every run is the same: each point off by a random few
+ *  metres from one second to the next (`jitter`, the spread north and east), and by an error that drifts
+ *  slowly, over about 20 s (`drift`, its spread), as a phone standing still mostly does; with the accuracy
+ *  the phone says. */
+function wandering(speeds: readonly number[], jitter: number, accuracy: number, drift = 0, seed = 7): RunPoint[] {
+  let s = seed;
   const next = () => {
-    seed = (seed * 16807) % 2147483647;
-    return seed / 2147483647;
+    s = (s * 16807) % 2147483647;
+    return s / 2147483647;
   };
   const gauss = () => Math.sqrt(-2 * Math.log(next() + 1e-12)) * Math.cos(2 * Math.PI * next());
-  return track(speeds).map(([at, lat, lng]): RunPoint => [at, lat + (gauss() * jitter) / NORTH_M_PER_DEG, lng + (gauss() * jitter) / 100_000, accuracy]);
+  const keep = Math.exp(-1 / 20);
+  const fresh = drift * Math.sqrt(1 - keep * keep);
+  let north = 0;
+  let east = 0;
+  return track(speeds).map(([at, lat, lng]): RunPoint => {
+    north = keep * north + fresh * gauss();
+    east = keep * east + fresh * gauss();
+    return [at, lat + (north + gauss() * jitter) / NORTH_M_PER_DEG, lng + (east + gauss() * jitter) / 100_000, accuracy];
+  });
 }
 const line = (speeds: readonly number[], pauses: [number, number][] = []) => runSums(track(speeds), pauses, speeds.length * 1000, 70);
 const mps = (cms: number): number => cms / 100;
@@ -60,6 +70,27 @@ describe("the worst thing: a pace never run, shown as the person's", () => {
     for (const v of sums.paceLine) expect(mps(v)).toBeGreaterThan(2.2);
     expect(sums.stillS).toBeGreaterThan(150);
     expect(sums.movingS).toBeLessThan(840);
+  });
+
+  // A phone standing still mostly drifts: its error moves slowly over tens of seconds (the re-check of H3). In a
+  // run at 3 m/s (5:33 a kilometre), what is left of such a stop is a dip, never a crawl.
+  it.each([
+    [1, 3, 5, 11],
+    [1, 3, 5, 99],
+    [1, 5, 8, 11],
+    [2, 8, 15, 4242],
+  ])("a stop of three minutes on a drifting phone (%d m of wander, %d m of drift, %d m sure, seed %d) is found and never drawn as a crawl", (jitter, drift, accuracy, seed) => {
+    const speeds = [...steady(400, 3), ...steady(180, 0), ...steady(400, 3)];
+    const sums = runSums(wandering(speeds, jitter, accuracy, drift, seed), [], speeds.length * 1000, 70);
+    expect(sums.stillS).toBeGreaterThan(110);
+    expect(Math.min(...sums.paceLine.map(mps))).toBeGreaterThan(1.7);
+  });
+
+  it("a slow walk on a wandering phone is walking, never standing", () => {
+    // 0.6 m/s, 2.2 km an hour: a steep climb on foot.
+    const sums = runSums(wandering(steady(900, 0.6), 2, 8, 3, 5), [], 900_000, 70);
+    expect(sums.stillS).toBeLessThan(30);
+    expect(sums.movingS).toBeGreaterThan(870);
   });
 
   it("a pause is never drawn as a crawl", () => {

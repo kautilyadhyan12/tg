@@ -2,8 +2,8 @@
 // shows it live and the server works the saved numbers out again with it, so the two never differ.
 // Pure: no clock, no randomness; the same points always give the same numbers.
 
-/** Raised whenever a rule below changes, and kept with each saved run. 2 (37c-iii): standing is found on
- *  the smoothed path, so a phone's wander of a few metres while standing no longer hides the stop. */
+/** Raised whenever a rule below changes, and kept with each saved run. 2 (37c-iii): standing is judged on the
+ *  smoothed path over 40 s, so a phone's wander and drift while standing no longer hide the stop. */
 export const RUN_CALC_VERSION = 2;
 
 /** A point: milliseconds since the run started, latitude, longitude, and how sure the phone was of
@@ -27,9 +27,9 @@ const MIN_STEP_M = 3;
 /** How fast a runner may change speed, in metres a second: how far the smoothing lets a position
  *  move between points before it trusts the new one. */
 const SMOOTHING_M_PER_S = 4;
-/** Standing: every point of at least STILL_MS within STILL_M of the first of them, on the smoothed path.
- *  Moving time leaves such a stretch out, as Strava's server does for a run with no pauses. The phone's
- *  Auto-pause makes the same test on the points as they come (`apps/mobile/src/screens/running/autoPause.ts`). */
+/** Standing: STILL_MS or more with the smoothed path all but still (`standingSpans`). Moving time leaves such
+ *  a stretch out, as Strava's server does for a run with no pauses. The phone's Auto-pause tests the points
+ *  as they come against STILL_M (`apps/mobile/src/screens/running/autoPause.ts`). */
 export const STILL_MS = 8000;
 export const STILL_M = 3;
 
@@ -618,27 +618,46 @@ export function unitMarkPoints(track: readonly (readonly [number, number])[], tr
   return out;
 }
 
-/** The spans of a piece spent standing: each longest stretch whose points all lie within STILL_M of
- *  its first, when it lasts STILL_MS or more. */
-function standingSpans(piece: Fix[]): [number, number][] {
+/** Standing is judged over a window of twice STAND_HALF_MS on the smoothed path: the person stands while the
+ *  path moves less than STAND_MOST_M across it, or less than the phone's own accuracy where that is worse. A
+ *  phone standing still drifts a few metres over tens of seconds; a slow walk keeps moving across the window
+ *  (round one of 37c-iii, H3 and its re-check). */
+const STAND_HALF_MS = 20_000;
+const STAND_MOST_M = 10;
+/** The spans of a smoothed piece spent standing, each STILL_MS or longer: the points whose window is still,
+ *  grown at each end while the path stays within STILL_M of the span's first or last point. */
+function standingSpans(path: Fix[]): [number, number][] {
+  const n = path.length;
+  const still = new Array<boolean>(n).fill(false);
+  let a = 0;
+  let b = 0;
+  for (let k = 0; k < n; k++) {
+    const at = path[k]?.at ?? 0;
+    while (a < k && (path[a]?.at ?? 0) < at - STAND_HALF_MS) a++;
+    while (b + 1 < n && (path[b + 1]?.at ?? 0) <= at + STAND_HALF_MS) b++;
+    const pa = path[a];
+    const pb = path[b];
+    if (pa !== undefined && pb !== undefined && pb.at - pa.at >= STAND_HALF_MS) still[k] = quickMetres(pa, pb) < Math.max(STAND_MOST_M, (pa.acc + pb.acc) / 2);
+  }
   const spans: [number, number][] = [];
   let i = 0;
-  while (i < piece.length) {
-    const first = piece[i];
-    if (first === undefined) break;
-    let j = i;
-    while (j + 1 < piece.length) {
-      const next = piece[j + 1];
-      if (next === undefined || quickMetres(first, next) > STILL_M) break;
-      j++;
-    }
-    const last = piece[j];
-    if (last !== undefined && j > i && last.at - first.at >= STILL_MS) {
-      spans.push([first.at, last.at]);
-      i = j;
-    } else {
+  while (i < n) {
+    if (!still[i]) {
       i++;
+      continue;
     }
+    let j = i;
+    while (j + 1 < n && still[j + 1]) j++;
+    let from = i;
+    let to = j;
+    const first = path[i];
+    const last = path[j];
+    while (first !== undefined && from > 0 && quickMetres(path[from - 1] ?? first, first) < STILL_M) from--;
+    while (last !== undefined && to < n - 1 && quickMetres(path[to + 1] ?? last, last) < STILL_M) to++;
+    const pf = path[from];
+    const pt = path[to];
+    if (pf !== undefined && pt !== undefined && pt.at - pf.at >= STILL_MS) spans.push([pf.at, pt.at]);
+    i = j + 1;
   }
   return spans;
 }
