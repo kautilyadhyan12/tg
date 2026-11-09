@@ -89,7 +89,7 @@ const namesRows = (root) => root.getAllByTestId('names-row');
 const DIGEST = 'a'.repeat(64);
 const DIGEST_BOX = 'c'.repeat(64);
 const USER = '44444444-4444-4444-8444-444444444444';
-const entryId = (n) => `55555555-5555-5555-5555-${String(n).padStart(12, '0')}`;
+const entryId = (n) => `55555555-5555-4555-8555-${String(n).padStart(12, '0')}`;
 /** Somebody the file leaves out, as the missing-people read gives them (§18.8). */
 const missingOne = (n, fullName, over = {}, onList = {}) => ({
   entryId: entryId(n),
