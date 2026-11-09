@@ -2,8 +2,9 @@
 // shows it live and the server works the saved numbers out again with it, so the two never differ.
 // Pure: no clock, no randomness; the same points always give the same numbers.
 
-/** Raised whenever a rule below changes, and kept with each saved run. */
-export const RUN_CALC_VERSION = 1;
+/** Raised whenever a rule below changes, and kept with each saved run. 2 (37c-iii): standing is judged on the
+ *  smoothed path over 40 s, so a phone's wander and drift while standing no longer hide the stop. */
+export const RUN_CALC_VERSION = 2;
 
 /** A point: milliseconds since the run started, latitude, longitude, and how sure the phone was of
  *  it in metres (Android's horizontal accuracy; null when the phone did not say). */
@@ -26,9 +27,9 @@ const MIN_STEP_M = 3;
 /** How fast a runner may change speed, in metres a second: how far the smoothing lets a position
  *  move between points before it trusts the new one. */
 const SMOOTHING_M_PER_S = 4;
-/** Standing: every point of at least STILL_MS within STILL_M of the first of them. Moving time leaves
- *  such a stretch out, as Strava's server does for a run with no pauses; the phone's Auto-pause
- *  pauses on the same test (`apps/mobile/src/screens/running/autoPause.ts`). */
+/** Standing: STILL_MS or more with the smoothed path all but still (`standingSpans`). Moving time leaves such
+ *  a stretch out, as Strava's server does for a run with no pauses. The phone's Auto-pause tests the points
+ *  as they come against STILL_M (`apps/mobile/src/screens/running/autoPause.ts`). */
 export const STILL_MS = 8000;
 export const STILL_M = 3;
 
@@ -227,6 +228,9 @@ export interface RunSums {
   trackStarts: number[];
   /** The run's best efforts (37c-ii): the fastest stretch of each distance, whole seconds. */
   bests: RunBests;
+  /** The pace chart (37c-iii): the speed in centimetres a second at evenly spaced places from the
+   *  start to the finish (`paceLine`); empty under PACE_LINE_FROM_M. */
+  paceLine: number[];
 }
 
 /** A run's fastest 1 km, mile, 5 km and 10 km in whole seconds; null where it did not cover it. */
@@ -507,6 +511,66 @@ interface Step {
   s: number;
 }
 
+// ── The pace chart (ROADMAP 37c-iii) ─────────────────────────────────────────────────────────────
+/** A run shorter than this has no pace chart: there is too little of it to show a change. */
+export const PACE_LINE_FROM_M = 400;
+/** The chart has at most this many places, one every PACE_LINE_EVERY_M at least. */
+export const PACE_LINE_MOST = 150;
+const PACE_LINE_EVERY_M = 10;
+/** The speed at each place is the distance over the moving time of the stretch around it, this long
+ *  (a twentieth of the run, between the two): long enough that a phone's wander of a few metres is
+ *  not a sprint or a crawl, short enough that a walk break of a minute shows. */
+const PACE_WINDOW_LEAST_M = 100;
+const PACE_WINDOW_MOST_M = 400;
+
+/** The speed along the run, in whole centimetres a second, at `n` evenly spaced places from 0 to the
+ *  run's distance (n = the distance over PACE_LINE_EVERY_M, PACE_LINE_MOST at most), over the same
+ *  steps as the distance, the moving time and the splits: a pause, a stretch left out as too fast and
+ *  time standing are in none of them, so none drags the line to a crawl or makes a sprint. */
+export function paceLineOf(steps: readonly Step[]): number[] {
+  const at: number[] = [0];
+  const clock: number[] = [0];
+  for (const step of steps) {
+    at.push((at[at.length - 1] ?? 0) + step.m);
+    clock.push((clock[clock.length - 1] ?? 0) + Math.max(0, step.s));
+  }
+  const total = at[at.length - 1] ?? 0;
+  if (total < PACE_LINE_FROM_M) return [];
+  // The moving clock at a distance, between the two steps either side of it.
+  let k = 0;
+  const clockAt = (d: number): number => {
+    while (k > 0 && (at[k] ?? 0) > d) k--;
+    while (k < at.length - 2 && (at[k + 1] ?? 0) < d) k++;
+    const d0 = at[k] ?? 0;
+    const d1 = at[k + 1] ?? d0;
+    const t0 = clock[k] ?? 0;
+    const t1 = clock[k + 1] ?? t0;
+    return d1 > d0 ? t0 + ((t1 - t0) * (d - d0)) / (d1 - d0) : t1;
+  };
+  const n = Math.min(PACE_LINE_MOST, Math.floor(total / PACE_LINE_EVERY_M) + 1);
+  const half = Math.min(PACE_WINDOW_MOST_M, Math.max(PACE_WINDOW_LEAST_M, total / 20)) / 2;
+  const out: number[] = [];
+  for (let i = 0; i < n; i++) {
+    const d = (total * i) / (n - 1);
+    // Near the start and the finish the stretch keeps its length, moved inside the run.
+    const from = Math.max(0, Math.min(d - half, total - 2 * half));
+    const to = Math.min(total, from + 2 * half);
+    const seconds = clockAt(to) - clockAt(from);
+    const metres = to - from;
+    // Never faster than anybody has run that far in that time (the stretches left out already are).
+    const mps = seconds > 0 ? Math.min(metres / seconds, recordSpeed(seconds)) : 0;
+    out.push(Math.round(mps * 100));
+  }
+  // A stretch with no moving time at all (every second of it standing) takes the speed beside it.
+  for (let i = 0; i < out.length; i++) {
+    if (out[i] !== 0) continue;
+    const before = out.slice(0, i).reverse().find((v) => v > 0);
+    const after = out.slice(i + 1).find((v) => v > 0);
+    out[i] = before ?? after ?? 0;
+  }
+  return out;
+}
+
 function splitsOf(steps: readonly Step[], every: number): RunSplit[] {
   const out: RunSplit[] = [];
   let m = 0;
@@ -554,27 +618,67 @@ export function unitMarkPoints(track: readonly (readonly [number, number])[], tr
   return out;
 }
 
-/** The spans of a piece spent standing: each longest stretch whose points all lie within STILL_M of
- *  its first, when it lasts STILL_MS or more. */
-function standingSpans(piece: Fix[]): [number, number][] {
+/** Standing is judged over a window of twice STAND_HALF_MS on the smoothed path: the person stands while the
+ *  path's two ends lie less than STAND_MOST_M apart and the path goes less than STAND_TRAVEL_M between them,
+ *  every point of the window STAND_SURE_M sure or better. A phone standing still drifts a few metres over tens
+ *  of seconds; a slow walk keeps moving across the window; laps of a small loop go a long way round (round
+ *  one of 37c-iii, H3, and its three re-checks). Measured on 40 s windows: standing still at 5 to 10 m sure,
+ *  the smoothed path went 15 to 38 m; laps of 40 to 200 m at 2 to 3 m/s, 46 m or more. Less sure than that,
+ *  the two overlap (standing 9 to 50 m, laps from 13 m), so a stop is not looked for and its time counts as
+ *  moving: a stop may show as a dip on the pace chart, and a run is never counted as standing. A loop smaller
+ *  than the phone can tell apart, walked slowly (40 m round at 1 m/s or slower), reads as standing in part. */
+const STAND_HALF_MS = 20_000;
+const STAND_MOST_M = 10;
+const STAND_TRAVEL_M = 42;
+const STAND_SURE_M = 10;
+/** The spans of a smoothed piece spent standing, each STILL_MS or longer: the points whose window is still,
+ *  grown at each end while the path stays within STILL_M of the span's first or last point. */
+function standingSpans(path: Fix[]): [number, number][] {
+  const n = path.length;
+  const still = new Array<boolean>(n).fill(false);
+  // How far the smoothed path has gone by each point: a runner going round a small loop comes back to the
+  // same place every lap, but goes a long way between (the second re-check).
+  const walked: number[] = [0];
+  // How many points up to each are less sure than STAND_SURE_M: a window holding any is not judged.
+  const unsure: number[] = [(path[0]?.acc ?? 0) > STAND_SURE_M ? 1 : 0];
+  for (let k = 1; k < n; k++) {
+    const p = path[k - 1];
+    const q = path[k];
+    walked.push((walked[k - 1] ?? 0) + (p !== undefined && q !== undefined ? quickMetres(p, q) : 0));
+    unsure.push((unsure[k - 1] ?? 0) + ((q?.acc ?? 0) > STAND_SURE_M ? 1 : 0));
+  }
+  let a = 0;
+  let b = 0;
+  for (let k = 0; k < n; k++) {
+    const at = path[k]?.at ?? 0;
+    while (a < k && (path[a]?.at ?? 0) < at - STAND_HALF_MS) a++;
+    while (b + 1 < n && (path[b + 1]?.at ?? 0) <= at + STAND_HALF_MS) b++;
+    const pa = path[a];
+    const pb = path[b];
+    const sure = (unsure[b] ?? 0) - (a > 0 ? (unsure[a - 1] ?? 0) : 0) === 0;
+    if (pa !== undefined && pb !== undefined && sure && pb.at - pa.at >= STAND_HALF_MS) {
+      still[k] = quickMetres(pa, pb) < STAND_MOST_M && (walked[b] ?? 0) - (walked[a] ?? 0) < STAND_TRAVEL_M;
+    }
+  }
   const spans: [number, number][] = [];
   let i = 0;
-  while (i < piece.length) {
-    const first = piece[i];
-    if (first === undefined) break;
-    let j = i;
-    while (j + 1 < piece.length) {
-      const next = piece[j + 1];
-      if (next === undefined || quickMetres(first, next) > STILL_M) break;
-      j++;
-    }
-    const last = piece[j];
-    if (last !== undefined && j > i && last.at - first.at >= STILL_MS) {
-      spans.push([first.at, last.at]);
-      i = j;
-    } else {
+  while (i < n) {
+    if (!still[i]) {
       i++;
+      continue;
     }
+    let j = i;
+    while (j + 1 < n && still[j + 1]) j++;
+    let from = i;
+    let to = j;
+    const first = path[i];
+    const last = path[j];
+    while (first !== undefined && from > 0 && quickMetres(path[from - 1] ?? first, first) < STILL_M) from--;
+    while (last !== undefined && to < n - 1 && quickMetres(path[to + 1] ?? last, last) < STILL_M) to++;
+    const pf = path[from];
+    const pt = path[to];
+    if (pf !== undefined && pt !== undefined && pt.at - pf.at >= STILL_MS) spans.push([pf.at, pt.at]);
+    i = j + 1;
   }
   return spans;
 }
@@ -608,7 +712,9 @@ export function runSums(points: readonly RunPoint[], pauses: readonly RunPause[]
   let walked = 0;
   for (const raw of piecesBetweenPauses(points, cleaned, elapsed)) {
     const piece = withoutSpikes(raw);
-    const spans = standingSpans(piece);
+    // On the smoothed path: the raw points of a phone standing still wander past STILL_M, and the stop
+    // was counted as moving and drawn as a crawl on the pace chart (round one of 37c-iii, H3).
+    const spans = standingSpans(smoothed(piece));
     for (const span of spans) {
       stillMs += span[1] - span[0];
       still.push(span);
@@ -685,6 +791,7 @@ export function runSums(points: readonly RunPoint[], pauses: readonly RunPause[]
       k5: fastestStretch(segments, RECORD_DISTANCES_M.k5),
       k10: fastestStretch(segments, RECORD_DISTANCES_M.k10),
     },
+    paceLine: paceLineOf(steps),
   };
 }
 

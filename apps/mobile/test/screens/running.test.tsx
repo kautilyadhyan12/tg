@@ -74,7 +74,7 @@ beforeEach(async () => {
 function runServer(user = RAVI, map: MapSource = OPENFREEMAP) {
   const saved: SaveRunRequest[] = [];
   const posts: { body: unknown; key: string | undefined }[] = [];
-  const state: { online: boolean; mapHeld: Promise<void> | null; climb: RunClimb; records: RunRecords | null } = { online: true, mapHeld: null, climb: { state: "done", m: 28 }, records: null };
+  const state: { online: boolean; mapHeld: Promise<void> | null; climb: RunClimb; records: RunRecords | null } = { online: true, mapHeld: null, climb: { state: "done", m: 28, hills: [] }, records: null };
   const climbAsks: unknown[] = [];
   const server = fakeServer({
     // The run's elevation gain, as the server's height map works it out (37b-ii).
@@ -1114,9 +1114,39 @@ describe("Elevation gain on the summary (37b-ii)", () => {
     expect(asked).toEqual({ elapsedMs: sent.elapsedMs, points: sent.points, pauses: sent.pauses });
   });
 
+  it("the summary shows the Pace box from the phone's own points, the hills the server gives behind it (37c-iii)", async () => {
+    const s = runServer();
+    // 600 m at 3 m/s.
+    await openRunning(s);
+    await startRunning();
+    await feed(0, 201, 3);
+    // Standing still until Auto-pause, then Finish: the run's clock has moved on as the points have.
+    await feed(201, 15, 0, 26.1445 + (200 * 3) / 111_132);
+    expect(await screen.findByText("Auto-paused", {}, { timeout: 5000 })).toBeTruthy();
+    // The server's hills at each of the chart's places, as it answers the summary's ask.
+    const run = runNow();
+    if (run === null) throw new Error("no run");
+    const at = (run.points[run.points.length - 1]?.[0] ?? 0) + 1000;
+    const places = runSums(run.points, closedPauses(run, at), at, 60).paceLine.length;
+    expect(places).toBeGreaterThan(50);
+    s.state.climb = { state: "done", m: 28, hills: Array.from({ length: places }, (_, i) => 40 + Math.round(i / 6)) };
+    await fireEvent.press(await screen.findByRole("button", { name: "Finish" }));
+    const card = await screen.findByTestId("pace-card");
+    // About 3 m/s, 5:33 a kilometre, the average and the fastest alike.
+    expect(within(card).getByText("Avg pace")).toBeTruthy();
+    expect(within(card).getByText("Best pace")).toBeTruthy();
+    expect(within(card).getAllByText(/^5:3\d$/)).toHaveLength(2);
+    expect(await within(card).findByText("Hills")).toBeTruthy();
+  });
+
+  it("a summary of a run under 400 m has no Pace box", async () => {
+    await toSummary(runServer());
+    expect(screen.queryByTestId("pace-card")).toBeNull();
+  });
+
   it("in feet for a person who runs in miles", async () => {
     const s = runServer({ ...RAVI, units: "imperial" });
-    s.state.climb = { state: "done", m: 28 };
+    s.state.climb = { state: "done", m: 28, hills: [] };
     await toSummary(s, { ...RAVI, units: "imperial" });
     // 28 m is 91.86 ft.
     expect(await screen.findByText("92 ft")).toBeTruthy();

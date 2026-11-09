@@ -14,7 +14,7 @@ import { Sheet } from "../../look/Sheet";
 import { fonts, Txt } from "../../look/Txt";
 import { useSession } from "../../session/SessionProvider";
 import { BestEffortsCard } from "./RecordParts";
-import { FeelCard, NoteCard, RouteCard, RunFigures, SplitsCard } from "./RunParts";
+import { FeelCard, NoteCard, PaceCard, RouteCard, RunFigures, SplitsCard } from "./RunParts";
 import { distance, runWhen, unitWord } from "./runWords";
 
 export const RUNS_PATH = "/v1/geo/runs";
@@ -223,10 +223,11 @@ export function RunPage({ runId, units, onClose, onChanged, onDeleted }: {
             leftOutM={read.run.leftOutM}
             leftOutS={read.run.leftOutS}
             kcal={read.run.kcalPoint ?? 0}
-            climb={read.run.climbM === null ? { kind: "none" } : { kind: "done", m: read.run.climbM }}
+            climb={read.run.climbM === null ? { kind: "none" } : { kind: "done", m: read.run.climbM, hills: read.run.hillLine }}
             units={units}
           />
           <RouteCard track={track} starts={read.run.trackStarts} units={units} name={read.run.name} distanceM={read.run.distanceM} movingS={read.run.durationS} testID="run-map" />
+          <PaceCard paceLine={read.run.paceLine} hillLine={read.run.hillLine} distanceM={read.run.distanceM} movingS={read.run.durationS} units={units} />
           <SplitsCard splits={units === "imperial" ? read.run.splitsMi : read.run.splitsKm} units={units} />
           <BestEffortsCard bests={read.run.bests} held={read.run.records} units={units} />
           <FeelCard effort={draft.effort} onPick={(effort) => { change({ effort }); }} />

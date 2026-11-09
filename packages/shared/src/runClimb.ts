@@ -134,8 +134,41 @@ function meanOf(values: readonly number[], size: number): number[] {
  *  line between the heights either side of it; a stretch that starts `apart` carries on from the
  *  height the last one stopped at. */
 export function climbFromHeights(heights: readonly (number | null)[], apart: readonly boolean[]): number | null {
+  const line = smoothHeights(heights, apart, true);
+  return line === null ? null : Math.round(climbOver(line));
+}
+
+/** The hills behind the pace chart (37c-iii): the same smoothed heights the climb is counted over, at
+ *  `n` evenly spaced places from the start to the finish, in whole metres; empty where the climb has
+ *  no number, or n is under 2. */
+export function hillLineOf(heights: readonly (number | null)[], apart: readonly boolean[], n: number): number[] {
+  // The ground's own height: a stretch that starts somewhere else keeps its own heights (round one, H1).
+  const line = smoothHeights(heights, apart, false);
+  if (line === null || n < 2) return [];
+  const last = line.length - 1;
+  return Array.from({ length: n }, (_, i) => {
+    const x = (last * i) / (n - 1);
+    const lo = Math.floor(x);
+    const a = line[lo] ?? 0;
+    const b = line[Math.min(last, lo + 1)] ?? a;
+    // Held inside what the schema takes, whatever a broken piece of the map said.
+    return Math.max(-1000, Math.min(9000, Math.round(a + (b - a) * (x - lo))));
+  });
+}
+
+/** The heights with their gaps filled and outliers smoothed out; null when too few are known to say.
+ *  `join`: a stretch apart from the last is moved to start where the last stopped, so the gap itself climbs
+ *  nothing (the climb); without it each stretch is smoothed on its own and keeps the ground's height. */
+function smoothHeights(heights: readonly (number | null)[], apart: readonly boolean[], join: boolean): number[] | null {
   const known = heights.filter((h) => h !== null).length;
   if (known === 0 || known < heights.length * KNOWN_SHARE) return null;
+  // Which stretch each height lies on: a gap is filled from its own stretch, never by a line drawn across a
+  // stretch left out (a car ride), which would climb what nobody ran (37c-iii's re-check).
+  const stretchOf: number[] = [];
+  for (let i = 0, k = 0; i < heights.length; i++) {
+    if (i > 0 && apart[i] === true) k++;
+    stretchOf.push(k);
+  }
   const filled: number[] = [];
   for (let i = 0; i < heights.length; i++) {
     const h = heights[i];
@@ -143,14 +176,32 @@ export function climbFromHeights(heights: readonly (number | null)[], apart: rea
       filled.push(h);
       continue;
     }
-    let before = i - 1;
-    while (before >= 0 && heights[before] === null) before--;
-    let after = i + 1;
-    while (after < heights.length && heights[after] === null) after++;
+    const near = (from: number, step: number, sameStretch: boolean): number => {
+      let j = from;
+      while (j >= 0 && j < heights.length && heights[j] === null && (!sameStretch || stretchOf[j] === stretchOf[i])) j += step;
+      return j >= 0 && j < heights.length && heights[j] !== null && (!sameStretch || stretchOf[j] === stretchOf[i]) ? j : -1;
+    };
+    let before = near(i - 1, -1, true);
+    let after = near(i + 1, 1, true);
+    // A stretch with no height of its own takes the nearest anywhere.
+    if (before < 0 && after < 0) {
+      before = near(i - 1, -1, false);
+      after = near(i + 1, 1, false);
+    }
     const hb = before >= 0 ? heights[before] : null;
-    const ha = after < heights.length ? heights[after] : null;
+    const ha = after >= 0 ? heights[after] : null;
     if (hb !== null && hb !== undefined && ha !== null && ha !== undefined) filled.push(hb + ((ha - hb) * (i - before)) / (after - before));
     else filled.push(hb ?? ha ?? 0);
+  }
+  if (!join) {
+    const out: number[] = [];
+    let from = 0;
+    for (let i = 1; i <= filled.length; i++) {
+      if (i < filled.length && apart[i] !== true) continue;
+      out.push(...meanOf(middleOf(filled.slice(from, i), MEDIAN_SAMPLES), MEAN_SAMPLES));
+      from = i;
+    }
+    return out;
   }
   // A stretch apart from the last keeps its own ups and downs, moved to start where the last stopped.
   let shift = 0;
@@ -158,7 +209,7 @@ export function climbFromHeights(heights: readonly (number | null)[], apart: rea
     if (i > 0 && apart[i] === true) shift += (filled[i - 1] ?? h) - h;
     return h + shift;
   });
-  return Math.round(climbOver(meanOf(middleOf(line, MEDIAN_SAMPLES), MEAN_SAMPLES)));
+  return meanOf(middleOf(line, MEDIAN_SAMPLES), MEAN_SAMPLES);
 }
 
 // ── One piece of the height map, as our server keeps it ──────────────────────────────────────────

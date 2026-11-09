@@ -10,7 +10,8 @@ import type { Session } from "../../session/session";
 export const CLIMB_ASK_AGAIN_MS = 30_000;
 export const CLIMB_ASK_FOR_MS = 15 * 60_000;
 
-export type ClimbShown = { kind: "asking" } | { kind: "done"; m: number } | { kind: "none" };
+/** `hills`: the line behind the pace chart (37c-iii), at the pace line's places. */
+export type ClimbShown = { kind: "asking" } | { kind: "done"; m: number; hills: readonly number[] } | { kind: "none" };
 
 const FEET_PER_METRE = 1 / 0.3048;
 
@@ -38,7 +39,7 @@ export function useRunClimb(session: Session | null, ask: RunClimbRequest): Clim
       const answer = await session.signedIn({ method: "POST", path: "/v1/geo/runs/climb", body: asked.current, waitMs: 60_000 }, runClimbResponseSchema);
       if (stopped) return;
       if (answer.kind === "ok") {
-        if (answer.data.climb.state === "done") setClimb({ kind: "done", m: answer.data.climb.m });
+        if (answer.data.climb.state === "done") setClimb({ kind: "done", m: answer.data.climb.m, hills: answer.data.climb.hills });
         else if (answer.data.climb.state === "none") setClimb({ kind: "none" });
         else again();
         return;

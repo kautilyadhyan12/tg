@@ -73,6 +73,18 @@ describe("garbage in gives no number, never a wrong one", () => {
     expect(h.filter((x) => x === null).length / h.length).toBeGreaterThan(0.25);
     expect(climbFromHeights(h, none(h.length))).toBeNull();
   });
+  it("a gap at the end of a stretch is never filled by a line to the next stretch, across a car ride", () => {
+    // Two stretches each rising 19.8 m, from 100 m and from 500 m, a car ride left out between them, the first
+    // stretch's last height missing (37c-iii's re-check: the line across the gap climbed 230 m).
+    const first: (number | null)[] = Array.from({ length: 100 }, (_, i) => 100 + i * 0.2);
+    first[99] = null;
+    const second = Array.from({ length: 100 }, (_, i) => 500 + i * 0.2);
+    const h = [...first, ...second];
+    const apart = h.map((_, i) => i === 100);
+    const m = climbFromHeights(h, apart) ?? 0;
+    expect(m).toBeGreaterThan(30);
+    expect(m).toBeLessThan(45);
+  });
   it("a short gap is filled by a straight line between its two sides", () => {
     const h: (number | null)[] = slope(0, 30, 600);
     for (let i = 10; i < 18; i++) h[i] = null;

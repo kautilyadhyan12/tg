@@ -2,7 +2,7 @@
 // Web is browse/plan only: route generation, saved_routes CRUD, runs read.
 // Run RECORDING (write/sync) and route-name geocoding-on-save are mobile (P5).
 import { z } from "zod";
-import { RUN_MAX_ELAPSED_MS, RUN_MAX_PAUSES, RUN_MAX_POINTS } from "./runMaths.js";
+import { PACE_LINE_MOST, RUN_MAX_ELAPSED_MS, RUN_MAX_PAUSES, RUN_MAX_POINTS } from "./runMaths.js";
 import { RUN_SHAPE_MOST_CHARS } from "./runShape.js";
 
 // ── route generation (POST /v1/geo/routes/generate) ─────────────────────────
@@ -63,6 +63,12 @@ export type SavedRoute = z.infer<typeof savedRouteSchema>;
 // own-user-only, org-invisible, never logged — polyline appears in DETAIL only.
 /** A whole kilometre or mile of a run, or what is left at its end: metres and seconds. */
 export const runSplitSchema = z.object({ m: z.number().int().nonnegative(), s: z.number().int().nonnegative() });
+
+/** The pace chart (37c-iii): the speed in centimetres a second at evenly spaced places along the run
+ *  (`paceLineOf`), and the hills behind it in metres at the same places (`hillLineOf`); empty where
+ *  there is none. */
+export const paceLineSchema = z.array(z.number().int().nonnegative().max(2000)).max(PACE_LINE_MOST);
+export const hillLineSchema = z.array(z.number().int().min(-1000).max(9000)).max(PACE_LINE_MOST);
 
 /** A day of the person's own time zone, YYYY-MM-DD. */
 const runDaySchema = z
@@ -172,6 +178,9 @@ export const runDetailSchema = runSummarySchema.extend({
   /** Its best efforts, and the records it holds now (37c-ii). */
   bests: runBestsSchema,
   records: z.array(runRecordKindSchema),
+  /** The pace chart (37c-iii); empty for a run saved before it, or too short for one. */
+  paceLine: paceLineSchema,
+  hillLine: hillLineSchema,
 });
 export type RunDetail = z.infer<typeof runDetailSchema>;
 export const runDetailResponseSchema = z.object({ run: runDetailSchema });
@@ -263,7 +272,8 @@ export const runClimbRequestSchema = saveRunRequestSchema.pick({ elapsedMs: true
 export type RunClimbRequest = z.infer<typeof runClimbRequestSchema>;
 
 export const runClimbSchema = z.discriminatedUnion("state", [
-  z.object({ state: z.literal("done"), m: z.number().int().nonnegative() }),
+  /** `hills`: the line behind the pace chart (37c-iii), at the pace line's places. */
+  z.object({ state: z.literal("done"), m: z.number().int().nonnegative(), hills: hillLineSchema }),
   /** The map has no heights under this run. */
   z.object({ state: z.literal("none") }),
   /** A piece of the map is still coming: ask again. */
