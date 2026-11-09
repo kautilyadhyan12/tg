@@ -460,17 +460,21 @@ d("a gym's Updates (real Postgres, real disk)", () => {
       }
       const bad = await inject("POST", posts(gym.id), gym.owner.cookies, { postKey: randomUUID(), body: "x", photos: [PNG, notAPhoto] });
       expect((JSON.parse(bad.body) as { message: string }).message).toBe("Photo 2: Choose a photo saved as JPEG, PNG or WebP.");
-      // A list of a hundred thousand things where four photos go: refused for its length,
+      // A list of twenty thousand things where four photos go: refused for its length,
       // in one line, and no item of it is looked at (each would be a line of the reply).
+      // A hundred thousand is past what any request may hold, refused before the route
+      // (`listLimit.ts`).
       const viewer0 = await member(gym, "Mel Member");
       expect((await inject("PUT", `${posts(gym.id)}/settings`, gym.owner.cookies, { membersCanPost: true })).statusCode).toBe(200);
       for (const [path, cookies] of [[posts(gym.id), gym.owner.cookies], [`${posts(gym.id)}/mine`, viewer0.cookies]] as const) {
-        const flood = await inject("POST", path, cookies, { postKey: randomUUID(), body: "x", photos: Array.from({ length: 100_000 }, () => 7) });
+        const flood = await inject("POST", path, cookies, { postKey: randomUUID(), body: "x", photos: Array.from({ length: 20_000 }, () => 7) });
         expect({ path, status: flood.statusCode, body: JSON.parse(flood.body) as unknown }).toEqual({
           path,
           status: 400,
           body: { error: "validation_error", message: "photos: custom", requestId: expect.any(String) as unknown },
         });
+        const past = await inject("POST", path, cookies, { postKey: randomUUID(), body: "x", photos: Array.from({ length: 100_000 }, () => 7) });
+        expect({ path, status: past.statusCode, error: (JSON.parse(past.body) as { error: string }).error }).toEqual({ path, status: 413, error: "too_many_items" });
       }
       // Everything wrong at once is still a short answer: the first ten faults, no more.
       const everything = await inject("POST", posts(gym.id), gym.owner.cookies, { postKey: "nope", body: 7, photos: ["", "!", "", "!"], pinned: true });
