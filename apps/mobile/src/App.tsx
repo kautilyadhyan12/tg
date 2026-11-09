@@ -31,6 +31,7 @@ import type { KeyStore } from "./session/session";
 import { askGoogle, type AskGoogle } from "./session/google";
 import { SessionProvider, useSession } from "./session/SessionProvider";
 import { TimeZoneSync } from "./session/TimeZoneSync";
+import { AppMinutes } from "./session/MinutesInApp";
 import { DashboardScreen } from "./screens/Dashboard";
 import { GymScreen } from "./screens/GymTab";
 import { NotificationsProvider } from "./notifications/Notifications";
@@ -40,7 +41,7 @@ import { forgetExports } from "./session/personFiles";
 import { PlacesProvider, usePlaces } from "./screens/places";
 import { tabWord } from "./screens/placesHeading";
 import { FoodScreen } from "./screens/Food";
-import { bodyFile, mealFile, photoSheetFile, runFile } from "./screens/food/fileStore";
+import { bodyFile, mealFile, minutesFile, photoSheetFile, runFile } from "./screens/food/fileStore";
 import { RunLayerProvider } from "./screens/running/RunLayer";
 import { RunOutboxProvider } from "./screens/running/RunOutbox";
 import { BodyOutboxProvider } from "./screens/progress/BodyOutbox";
@@ -90,6 +91,8 @@ interface AppProps {
   photoStore?: (userId: string) => TextStore;
   /** Where a person's saved runs not yet on the server are kept (37a). */
   runStore?: (userId: string) => TextStore;
+  /** Where a person's minutes in the app not yet on the server are kept (21f). */
+  minutesStore?: (userId: string) => TextStore;
   /** How long a new sign-in looks at the tabs before setup comes up (14d); tests make it short. */
   lookMs?: number;
   /** Where the code step a person left to fetch their code is kept (12e): the phone's key store, or a test's. */
@@ -101,7 +104,7 @@ interface AppProps {
  *  the five tabs. */
 type Stores = { mealStore: (userId: string) => TextStore; bodyStore: (userId: string) => TextStore; runStore: (userId: string) => TextStore };
 
-function SignedInOrOut({ mealStore, bodyStore, runStore, lookMs, waitingStore }: Stores & { lookMs: number | undefined; waitingStore: KeyStore }) {
+function SignedInOrOut({ mealStore, bodyStore, runStore, minutesStore, lookMs, waitingStore }: Stores & { minutesStore: (userId: string) => TextStore; lookMs: number | undefined; waitingStore: KeyStore }) {
   const { state } = useSession();
   // With nobody signed in, nothing of the last person's stays: an app killed with Updates open left its photos.
   useEffect(() => {
@@ -121,6 +124,7 @@ function SignedInOrOut({ mealStore, bodyStore, runStore, lookMs, waitingStore }:
   if (state.kind === "out") return <SignInScreen note={state.note} waiting={waitingStore} />;
   return (
     <SignUpNoteGate key={state.user.id}>
+      <AppMinutes userId={state.user.id} store={minutesStore} />
       <TimeZoneSync>
         <InvitationsGate>
           <SetupGate {...(lookMs === undefined ? {} : { lookMs })}>
@@ -189,7 +193,7 @@ function TabsOfPlaces() {
   );
 }
 
-export function App({ extra, ask = fetch, store = phoneKeyStore, google = askGoogle, wait, mealStore = mealFile, bodyStore = bodyFile, photoStore = photoSheetFile, runStore = runFile, lookMs, waitingStore = phoneWaitingStore }: AppProps) {
+export function App({ extra, ask = fetch, store = phoneKeyStore, google = askGoogle, wait, mealStore = mealFile, bodyStore = bodyFile, photoStore = photoSheetFile, runStore = runFile, minutesStore = minutesFile, lookMs, waitingStore = phoneWaitingStore }: AppProps) {
   // A font that cannot be read must not leave a blank page: the phone's own font shows instead.
   const [fontsReady, fontsFailed] = useFonts({
     Inter_400Regular,
@@ -217,7 +221,7 @@ export function App({ extra, ask = fetch, store = phoneKeyStore, google = askGoo
           ) : (
             <SessionProvider server={server} store={store} google={google} wait={wait}>
               <PhotoSheetStoreProvider store={photoStore}>
-                <SignedInOrOut mealStore={mealStore} bodyStore={bodyStore} runStore={runStore} lookMs={lookMs} waitingStore={waitingStore} />
+                <SignedInOrOut mealStore={mealStore} bodyStore={bodyStore} runStore={runStore} minutesStore={minutesStore} lookMs={lookMs} waitingStore={waitingStore} />
               </PhotoSheetStoreProvider>
             </SessionProvider>
           )}

@@ -19,6 +19,11 @@ export function runFile(userId: string): TextStore {
   return keptFile(`runs-${userId}.json`, `runs-${userId}.unread.json`);
 }
 
+/** A person's minutes in the app not yet on the server (ROADMAP Stage 5 21f), kept as their meals are. */
+export function minutesFile(userId: string): TextStore {
+  return keptFile(`minutes-${userId}.json`, `minutes-${userId}.unread.json`);
+}
+
 function keptFile(name: string, unread: string): TextStore {
   return {
     read: async () => {
