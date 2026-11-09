@@ -55,7 +55,7 @@ const Members = (await import('./Members')).default;
 
 // ── Fixtures ────────────────────────────────────────────────────────────────
 
-const GYM_ID = '11111111-1111-1111-1111-111111111111';
+const GYM_ID = '11111111-1111-4111-8111-111111111111';
 
 /** An owner's row as `/v1/orgs/mine` now serves it. `privileges` is spelled out
  *  rather than left absent: this screen's gate reads the effective set, and a

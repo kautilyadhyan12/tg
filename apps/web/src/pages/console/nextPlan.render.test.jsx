@@ -47,7 +47,7 @@ const { setCurrentUserId } = await import('../../utils/storage');
 const ConsoleLayout = (await import('../../components/console/ConsoleLayout')).default;
 const Overview = (await import('./Overview')).default;
 
-const GYM_ID = '11111111-1111-1111-1111-111111111111';
+const GYM_ID = '11111111-1111-4111-8111-111111111111';
 
 const OWNER = {
   id: GYM_ID,
@@ -166,7 +166,7 @@ describe('a new owner chooses their plan before the handed-over plan ends (4b-vi
       },
     });
     orgService.startCheckout.mockResolvedValue({
-      data: { checkoutId: '22222222-2222-2222-2222-222222222222', provider: 'paddle', environment: 'sandbox', clientToken: 'test_x', transactionId: 'txn_01', email: 'cora@example.com', country: 'US' },
+      data: { checkoutId: '22222222-2222-4222-8222-222222222222', provider: 'paddle', environment: 'sandbox', clientToken: 'test_x', transactionId: 'txn_01', email: 'cora@example.com', country: 'US' },
     });
     orgService.syncCheckout.mockResolvedValue({ data: { state: 'paid', subscription: following() } });
     let onEvent = null;
@@ -272,7 +272,7 @@ describe('a new owner chooses their plan before the handed-over plan ends (4b-vi
       data: { plans: [{ code: 'org_b1_us_m', seatCap: 200, priceMinor: 2900, currency: 'USD', priceLabel: '$29', fits: true }], payOnline: 'available' },
     });
     orgService.startCheckout.mockResolvedValue({
-      data: { checkoutId: '22222222-2222-2222-2222-222222222222', provider: 'paddle', environment: 'sandbox', clientToken: 'test_x', transactionId: 'txn_01', email: 'cora@example.com', country: 'US' },
+      data: { checkoutId: '22222222-2222-4222-8222-222222222222', provider: 'paddle', environment: 'sandbox', clientToken: 'test_x', transactionId: 'txn_01', email: 'cora@example.com', country: 'US' },
     });
     orgService.syncCheckout.mockResolvedValue({ data: { state: 'not_started' } });
     let onEvent = null;
@@ -305,7 +305,7 @@ describe('a new owner chooses their plan before a Razorpay plan handed over ends
       data: { plans: [{ code: 'org_b2_in_m', seatCap: 500, priceMinor: 1350000, currency: 'INR', priceLabel: '₹13,500', fits: true }], payOnline: 'available' },
     });
     orgService.startCheckout.mockResolvedValue({
-      data: { checkoutId: '22222222-2222-2222-2222-222222222222', provider: 'razorpay', keyId: 'rzp_test_x', subscriptionId: 'sub_01', description: 'Up to 500', email: 'cora@example.com', contact: null },
+      data: { checkoutId: '22222222-2222-4222-8222-222222222222', provider: 'razorpay', keyId: 'rzp_test_x', subscriptionId: 'sub_01', description: 'Up to 500', email: 'cora@example.com', contact: null },
     });
     orgService.syncCheckout.mockResolvedValue({ data: { state: 'paid', subscription: rupeesFollowing() } });
     let onEvent = null;

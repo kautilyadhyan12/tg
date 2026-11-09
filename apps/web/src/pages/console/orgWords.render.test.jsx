@@ -106,7 +106,7 @@ const ConsoleSettings = (await import('./Settings')).default;
  *  thing under test is the word, so a difference on screen can have only one
  *  cause. */
 const orgOfType = (orgType) => ({
-  id: '11111111-1111-1111-1111-111111111111',
+  id: '11111111-1111-4111-8111-111111111111',
   slug: 'flow-studio',
   name: 'Flow Studio',
   city: 'Austin',

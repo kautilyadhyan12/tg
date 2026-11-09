@@ -100,7 +100,7 @@ const ConsoleLayout = (await import('../../components/console/ConsoleLayout')).d
 // ── Fixtures ────────────────────────────────────────────────────────────────
 
 const ORG = {
-  id: '11111111-1111-1111-1111-111111111111',
+  id: '11111111-1111-4111-8111-111111111111',
   slug: 'iron-house',
   name: 'Iron House',
   city: 'Austin',
@@ -809,7 +809,7 @@ describe('when the gym changes underneath the form', () => {
   it('carries NOTHING from one gym onto another, even mid-edit', async () => {
     const gymB = {
       ...ORG,
-      id: 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
+      id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
       slug: 'iron-palace',
       name: 'Iron Palace',
       city: 'Dallas',

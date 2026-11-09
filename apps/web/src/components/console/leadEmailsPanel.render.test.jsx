@@ -23,7 +23,7 @@ vi.mock('../../context/AuthContext', () => ({
 const { orgService } = await import('../../api/orgsApi');
 const LeadEmailsPanel = (await import('./LeadEmailsPanel')).default;
 
-const ORG = { id: '11111111-1111-1111-1111-111111111111', name: 'Iron House', orgType: 'gym' };
+const ORG = { id: '11111111-1111-4111-8111-111111111111', name: 'Iron House', orgType: 'gym' };
 const OFF = { sendForMe: false, replyTo: null, perMonth: 100, usedThisMonth: 0, hasPostalAddress: true, stopped: false, appSending: 'on' };
 const answer = (settings) => Promise.resolve({ data: { settings } });
 

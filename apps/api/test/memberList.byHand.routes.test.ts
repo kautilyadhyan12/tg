@@ -65,7 +65,7 @@ const cookieMap = (res: { cookies: { name: string; value: string }[] }) =>
 const csv = (rows: string[][]): Buffer =>
   Buffer.from(rows.map((r) => r.map((cell) => (cell.includes(",") ? `"${cell}"` : cell)).join(",")).join("\r\n"), "utf8");
 
-const NOBODY = "11111111-2222-3333-4444-555555555555";
+const NOBODY = "11111111-2222-4333-8444-555555555555";
 
 d("member list: keeping it by hand (real Postgres)", () => {
   const sql = postgres(url ?? "", { prepare: false, max: 5 });

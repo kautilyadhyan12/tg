@@ -12,13 +12,13 @@ import { orgService, errorText, errorCode, errorStatus, isRetryable } from './or
 /** Bodies that SATISFY each contract, so the endpoint assertions below are not
  *  quietly measuring the parser instead of the URL. */
 const MEMBERSHIP_BODY = {
-  id: '55555555-5555-5555-5555-555555555555',
+  id: '55555555-5555-4555-8555-555555555555',
   joinedAt: '2026-08-19T10:00:00.000Z',
   groupLabel: 'Front Desk',
 };
 
 const ORG_BODY = {
-  id: '11111111-1111-1111-1111-111111111111',
+  id: '11111111-1111-4111-8111-111111111111',
   slug: 'iron-house',
   name: 'Iron House',
   city: null,
@@ -30,7 +30,7 @@ const ORG_BODY = {
 };
 
 const APPLICATION_BODY = {
-  id: '44444444-4444-4444-4444-444444444444',
+  id: '44444444-4444-4444-8444-444444444444',
   status: 'pending',
   appliedAt: '2026-08-19T09:00:00.000Z',
   expiresAt: '2026-09-02T09:00:00.000Z',
@@ -49,7 +49,7 @@ const HOURS_BODY = {
 };
 
 const STAFF_BODY = {
-  userId: '66666666-6666-6666-6666-666666666666',
+  userId: '66666666-6666-4666-8666-666666666666',
   displayName: 'Rita Sen',
   email: 'rita@example.com',
   role: 'manager',
@@ -100,7 +100,7 @@ const okBody = (url, method = 'get') => {
   if (url.endsWith('/codes')) return { codes: [] };
   return {
     org: {
-      id: '11111111-1111-1111-1111-111111111111', slug: 's', name: 'n', city: null,
+      id: '11111111-1111-4111-8111-111111111111', slug: 's', name: 'n', city: null,
       orgType: 'gym', timezone: 'UTC', locale: 'en', currencyDisplay: 'USD', status: 'active',
     },
     joinCode: { code: 'K7QM2X', label: 'Front Desk' },
@@ -118,7 +118,7 @@ const CLASSES_BODY = {
   entries: [
     {
       type: {
-        id: '22222222-2222-2222-2222-222222222222',
+        id: '22222222-2222-4222-8222-222222222222',
         name: 'Sunrise Yoga',
         description: null,
         minutes: 45,
@@ -131,8 +131,8 @@ const CLASSES_BODY = {
       },
       schedules: [
         {
-          id: '33333333-3333-3333-3333-333333333333',
-          classTypeId: '22222222-2222-2222-2222-222222222222',
+          id: '33333333-3333-4333-8333-333333333333',
+          classTypeId: '22222222-2222-4222-8222-222222222222',
           weekdays: [1, 3],
           startMinute: 1110,
           startsOn: '2026-09-21',
@@ -167,9 +167,9 @@ const WEEK_BODY = {
   lastWeekStart: '2026-11-09',
   sessions: [
     {
-      id: '77777777-7777-7777-7777-777777777777',
-      classTypeId: '22222222-2222-2222-2222-222222222222',
-      scheduleId: '33333333-3333-3333-3333-333333333333',
+      id: '77777777-7777-4777-8777-777777777777',
+      classTypeId: '22222222-2222-4222-8222-222222222222',
+      scheduleId: '33333333-3333-4333-8333-333333333333',
       name: 'Sunrise Yoga',
       colour: 'blue',
       openGym: false,
@@ -244,7 +244,7 @@ describe('orgService endpoints', () => {
       seen.push({ url: config.url, method: config.method, data: config.data, key: config.headers?.['Idempotency-Key'] });
       const data = config.url.endsWith('/sync')
         ? { state: 'waiting' }
-        : { checkoutId: '44444444-4444-4444-4444-444444444444', provider: 'paddle', environment: 'sandbox', clientToken: 'test_x', transactionId: `txn_${'a'.repeat(26)}`, email: 'owner@example.com', country: 'AT' };
+        : { checkoutId: '44444444-4444-4444-8444-444444444444', provider: 'paddle', environment: 'sandbox', clientToken: 'test_x', transactionId: `txn_${'a'.repeat(26)}`, email: 'owner@example.com', country: 'AT' };
       return { data, status: 200, statusText: '', headers: {}, config, request: {} };
     };
     await orgService.startCheckout('gym-1', 'org_b1_us_m', 'press-1');
@@ -648,7 +648,7 @@ describe('a 200 that does not match its contract is a FAILURE, not empty data (T
         summary: [],
         people: [
           {
-            userId: '11111111-1111-1111-1111-111111111111',
+            userId: '11111111-1111-4111-8111-111111111111',
             displayName: 'Priya Sharma',
             visits: [
               {
@@ -834,8 +834,8 @@ describe('a 200 that does not match its contract is a FAILURE, not empty data (T
     answerWith(authApi, {
       items: [
         {
-          id: '44444444-4444-4444-4444-444444444444',
-          userId: '77777777-7777-7777-7777-777777777777',
+          id: '44444444-4444-4444-8444-444444444444',
+          userId: '77777777-7777-4777-8777-777777777777',
           displayName: 'Anil Bora',
           appliedAt: '2026-08-19T09:00:00.000Z',
           expiresAt: '2026-09-02T09:00:00.000Z',

@@ -94,8 +94,8 @@ const ConsoleLayout = (await import('../../components/console/ConsoleLayout')).d
 const Overview = (await import('./Overview')).default;
 const Members = (await import('./Members')).default;
 
-const A_ID = '11111111-1111-1111-1111-111111111111';
-const B_ID = '22222222-2222-2222-2222-222222222222';
+const A_ID = '11111111-1111-4111-8111-111111111111';
+const B_ID = '22222222-2222-4222-8222-222222222222';
 
 /** An owner of BOTH gyms, holding every tick — so nothing here passes merely
  *  because a control was hidden from the viewer. */
