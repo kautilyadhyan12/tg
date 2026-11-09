@@ -13,6 +13,7 @@ import { createMemoryRedis } from "../src/redis.js";
 import type { EmailSender } from "../src/modules/auth/email.js";
 import type { PushMessage, PushResult, PushSender } from "../src/modules/push/fcm.adapter.js";
 import { sendTrainingReminders } from "../src/modules/reminders/sweep.js";
+import { claim } from "../src/modules/reminders/repo.js";
 
 const url = process.env["DATABASE_URL"];
 const d = describe.skipIf(url === undefined || url === "");
@@ -134,7 +135,7 @@ d("the workout and meal reminders (real Postgres)", () => {
     await sql`
       INSERT INTO training_reminders (user_id, kind, is_on, minute, days)
       VALUES (${who.userId}, ${kind}, true, ${minute}, ${days})
-      ON CONFLICT (user_id, kind) DO UPDATE SET is_on = true, minute = ${minute}, days = ${days}, sent_day = NULL, paused_at = NULL`;
+      ON CONFLICT (user_id, kind) DO UPDATE SET is_on = true, minute = ${minute}, days = ${days}, sent_day = NULL, held_day = NULL, paused_at = NULL`;
   };
   const read = async (who: { accessToken: string }) => {
     const res = await request("GET", "/v1/users/me/reminders", { bearer: who.accessToken });
@@ -472,5 +473,94 @@ d("the workout and meal reminders (real Postgres)", () => {
     expect(sentTo(midsave.token)).toHaveLength(1);
     await sweep(india(7, 55, 1));
     expect(sentTo(midsave.token)).toHaveLength(2);
+  }, TIMEOUT_MS);
+  // ── 19e-iii: a reminder moved later today still comes ──
+  // The worst thing this fix could do: a reminder moved to later today that never comes (Kd's 4:15 PM,
+  // found 2026-11-09), or, put right too far, one that comes twice in a day or the moment it is saved.
+
+  /** A save through the route, the routes' clock at India hh:mm on Monday (or `dayOffset` days on). */
+  const saveAt = async (who: Phone, kind: ReminderKind, time: string, hh: number, mm: number, dayOffset = 0) => {
+    routesNow = india(hh, mm, dayOffset);
+    try {
+      expect((await save(who, kind, { on: true, time, days: [1, 2, 3, 4, 5, 6, 7] })).statusCode).toBe(200);
+    } finally {
+      routesNow = null;
+    }
+  };
+
+  it("Kd's 4:15 PM: saved for 2:00 PM at 3:00 PM, then moved to 4:15 PM at 4:00 PM, it comes at 4:15, once", async () => {
+    const kd = await phone("moved415");
+    await saveAt(kd, "workout", "14:00", 15, 0);
+    sent.length = 0;
+    await sweep(india(15, 1));
+    expect(sentTo(kd.token)).toEqual([]);
+    await saveAt(kd, "workout", "16:15", 16, 0);
+    await sweep(india(16, 0));
+    expect(sentTo(kd.token)).toEqual([]);
+    await Promise.all([sweep(india(16, 15)), sweep(india(16, 15))]);
+    await sweep(india(16, 16));
+    expect(sentTo(kd.token).map((m) => m.title)).toEqual(["Time to train"]);
+  }, TIMEOUT_MS);
+
+  /** Each step a save ("save", time, at hh:mm) or a run (`run`, at hh:mm), on Monday unless a day is
+   *  given; `goes` is how many sends are tried over all the steps, failed ones included. */
+  type Step = { save: string; hh: number; mm: number; day?: number } | { run: true; hh: number; mm: number; day?: number };
+  const cases: { name: string; steps: Step[]; goes: number; failFirst?: boolean }[] = [
+    { name: "saved at a time already past: nothing goes at once, nor later today", steps: [{ save: "15:45", hh: 16, mm: 0 }, { run: true, hh: 16, mm: 0 }, { run: true, hh: 16, mm: 1 }], goes: 0 },
+    { name: "held today, it goes tomorrow at its time", steps: [{ save: "15:45", hh: 16, mm: 0 }, { run: true, hh: 15, mm: 45, day: 1 }], goes: 1 },
+    { name: "went at 2:00 PM, then moved to 4:15 PM: not again today, and it goes tomorrow", steps: [{ save: "14:00", hh: 13, mm: 0 }, { run: true, hh: 14, mm: 0 }, { save: "16:15", hh: 15, mm: 0 }, { run: true, hh: 16, mm: 15 }, { run: true, hh: 16, mm: 15, day: 1 }], goes: 2 },
+    { name: "past, then later, then past again: held today", steps: [{ save: "14:00", hh: 15, mm: 0 }, { save: "16:15", hh: 15, mm: 30 }, { save: "15:00", hh: 15, mm: 40 }, { run: true, hh: 15, mm: 41 }, { run: true, hh: 16, mm: 15 }], goes: 0 },
+    { name: "past, then later, then later again: goes at the last time only", steps: [{ save: "14:00", hh: 15, mm: 0 }, { save: "16:15", hh: 15, mm: 30 }, { save: "17:00", hh: 16, mm: 0 }, { run: true, hh: 16, mm: 15 }, { run: true, hh: 17, mm: 0 }, { run: true, hh: 17, mm: 1 }], goes: 1 },
+    { name: "held yesterday, moved later today: goes today", steps: [{ save: "08:00", hh: 9, mm: 0, day: -1 }, { save: "10:00", hh: 9, mm: 30 }, { run: true, hh: 10, mm: 0 }], goes: 1 },
+    { name: "its send failed, then it was moved later: it goes at the new time, once", failFirst: true, steps: [{ save: "08:00", hh: 7, mm: 0 }, { run: true, hh: 8, mm: 0 }, { save: "08:30", hh: 8, mm: 5 }, { run: true, hh: 8, mm: 30 }, { run: true, hh: 8, mm: 31 }], goes: 2 },
+  ];
+  it.each(cases)("$name", async ({ steps, goes, failFirst }) => {
+    const who = await phone("case");
+    sent.length = 0;
+    if (failFirst === true) answers.set(who.token, "failed");
+    for (const step of steps) {
+      if ("save" in step) await saveAt(who, "breakfast", step.save, step.hh, step.mm, step.day ?? 0);
+      else {
+        await sweep(india(step.hh, step.mm, step.day ?? 0));
+        answers.delete(who.token);
+      }
+    }
+    expect(sentTo(who.token)).toHaveLength(goes);
+  }, TIMEOUT_MS);
+
+  it("paused for a week, then turned on for later the same day, it comes at that time (round one H1)", async () => {
+    const back = await phone("backlater");
+    await set(back, "breakfast", "08:00");
+    await sql`UPDATE users SET last_active_at = ${india(9, 0, -8)}, created_at = ${india(9, 0, -30)} WHERE id = ${back.userId}`;
+    sent.length = 0;
+    await sweep(india(8, 0));
+    expect((await read(back))[1]).toMatchObject({ kind: "breakfast", paused: true });
+    await sql`UPDATE users SET last_active_at = ${india(8, 10)} WHERE id = ${back.userId}`;
+    await saveAt(back, "breakfast", "09:00", 8, 10);
+    await sweep(india(9, 0));
+    await sweep(india(9, 1));
+    expect(sentTo(back.token).map((m) => m.title)).toEqual(["Breakfast"]);
+  }, TIMEOUT_MS);
+
+  it("a save at a time already past, landing between a run's read and its claim, is not taken (round one)", async () => {
+    const between = await phone("between");
+    await set(between, "lunch", "13:00");
+    await saveAt(between, "lunch", "12:50", 13, 0);
+    expect(await claim(sql, between.userId, ["lunch"], "2026-11-02")).toEqual([]);
+  }, TIMEOUT_MS);
+
+  it("moved later while its send is failing, it goes at the new time, once", async () => {
+    const mid = await phone("midmove");
+    await set(mid, "breakfast", "08:00");
+    answers.set(mid.token, "failed");
+    duringSend.set(mid.token, () => saveAt(mid, "breakfast", "08:30", 8, 0));
+    sent.length = 0;
+    await sweep(india(8, 0));
+    answers.delete(mid.token);
+    await sweep(india(8, 1));
+    expect(sentTo(mid.token)).toHaveLength(1);
+    await sweep(india(8, 30));
+    await sweep(india(8, 31));
+    expect(sentTo(mid.token)).toHaveLength(2);
   }, TIMEOUT_MS);
 });
