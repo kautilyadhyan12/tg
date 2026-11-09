@@ -1,0 +1,5 @@
+# The test server's nightly backup (infra/backup-selfhost.sh), installed as /etc/cron.d/kwazo-backup.
+# 21:30 UTC is 03:00 in India, where most testers are.
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+30 21 * * * root /srv/kwazo/app/infra/backup-selfhost.sh >> /var/log/kwazo-backup.log 2>&1

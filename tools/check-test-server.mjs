@@ -80,6 +80,29 @@ check("the console may not be framed", (page.headers.get("content-security-polic
 check("the console keeps to https", (page.headers.get("strict-transport-security") ?? "").includes("max-age="), page.headers.get("strict-transport-security") ?? "none");
 check("the console's policy names this api", body.includes(`https://${apiName}`), "");
 
+// A console built with the laptop's apps/web/.env calls the laptop (localhost:8000), and Chrome then asks
+// every visitor to let the site "access other apps and services on this device" (21a-ii, seen by Kd).
+// `http://localhost` alone is the router's own placeholder for a URL with no origin, never fetched.
+// Every script the console can load: the page's own, then each `assets/*.js` named inside one already read
+// (the pages loaded later, such as /admin). Any address on the visitor's own device or network with a port
+// fires Chrome's question: localhost, 127.x, [::1], 10.x, 172.16-31.x, 192.168.x.
+const LOCAL_ADDRESS = /(?:https?|wss?):\/\/(?:localhost|127(?:\.\d{1,3}){3}|\[::1\]|10(?:\.\d{1,3}){3}|172\.(?:1[6-9]|2\d|3[01])(?:\.\d{1,3}){2}|192\.168(?:\.\d{1,3}){2}):\d+[^"'`\s]*/g;
+const queue = [...body.matchAll(/<script[^>]+src="([^"]+\.js)"/g)].map((m) => new URL(m[1] ?? "", `https://${webName}/`).href);
+const scripts = new Set();
+const laptopAddresses = [];
+while (queue.length > 0) {
+  const href = queue.shift() ?? "";
+  if (scripts.has(href)) continue;
+  scripts.add(href);
+  const text = await (await get(href)).text();
+  for (const m of text.matchAll(LOCAL_ADDRESS)) laptopAddresses.push(m[0]);
+  for (const m of text.matchAll(/(?:\.{0,2}\/)?assets\/[\w.-]+\.js/g)) queue.push(new URL(m[0].replace(/^(?:\.{1,2}\/)+/, ""), `https://${webName}/assets/`).href.replace("/assets/assets/", "/assets/"));
+  // A chunk can also name another by its bare file, `./x.js`, from inside /assets/.
+  for (const m of text.matchAll(/["'`]\.\/([\w.-]+\.js)["'`]/g)) queue.push(new URL(m[1] ?? "", `https://${webName}/assets/`).href);
+}
+const policyLaptop = body.match(LOCAL_ADDRESS) ?? [];
+check("the console never calls this laptop", scripts.size > 1 && laptopAddresses.length === 0 && policyLaptop.length === 0, [...new Set([...laptopAddresses, ...policyLaptop])].join(" ") || `${String(scripts.size)} scripts read`);
+
 const deep = await get(`https://${webName}/console`);
 check("an address inside the console opens the page", deep.status === 200, String(deep.status));
 

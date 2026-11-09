@@ -61,10 +61,14 @@ The api, worker and live share one image. Caddy is recreated as well: it reads i
 single-file mounts, and an update that writes a new file leaves the running Caddy on the old one,
 even after a reload. `app.old` is the way back until the next update.
 
-**The console** is built on the laptop (the machine has 2 GB) and copied across:
+**The console** is built on the laptop (the machine has 2 GB) and copied across. The empty settings
+matter: Vite otherwise takes them from the laptop's own `apps/web/.env`, the console then calls
+`localhost:8000` and `localhost:3001`, and Chrome asks every visitor to let getkwazo.com "access other
+apps and services on this device" (21a-ii; the outside check now fails on it):
 
 ```
-VITE_API_URL=https://api.getkwazo.com corepack pnpm --filter web exec vite build --outDir <scratch>/web-dist --emptyOutDir
+VITE_API_URL=https://api.getkwazo.com VITE_AUTH_API_URL= VITE_ML_API_URL= VITE_WS_URL= VITE_TRACE_RECORD= corepack pnpm --filter web exec vite build --outDir <scratch>/web-dist --emptyOutDir
+grep -rhoE "(https?|wss?)://(localhost|127\.0\.0\.1):[0-9]+" <scratch>/web-dist   # must print nothing
 cd <scratch>/web-dist && tar -cf - . | ssh -i ~/.ssh/kwazo_oracle ubuntu@13.237.195.91 'rm -rf /srv/kwazo/app/infra/web && mkdir -p /srv/kwazo/app/infra/web && tar -x -C /srv/kwazo/app/infra/web'
 ```
 
@@ -100,3 +104,66 @@ Both or neither; each must be a bare https address.
 
 `ADMIN_USER_ID` in `api.env` is Kd's own account on THIS server (its users are not the laptop's):
 after he signs in once, read his id with `psql` on the machine, add the line and `$C up -d api`.
+
+## Errors: Sentry
+
+`SENTRY_DSN` in `api.env` (21a-ii): Kd's free Sentry account, organization `kwazo`, project
+`kwazo-server` (United States), errors only. The api and the worker send a fault nobody expected
+with its request id and nothing of the request (`apps/api/src/sentry.ts`). Measured 2026-11-09 from
+the machine, the real SDK and the real address: a planted sign-in code, cookie, email and name were
+in none of what was sent. Kd gets an email for each new issue.
+
+## Backups
+
+Every night at 21:30 UTC (03:00 in India) `/etc/cron.d/kwazo-backup` (from `infra/kwazo-backup.cron`)
+runs `infra/backup-selfhost.sh` as root: the database (`pg_dump -Fc`, the two packaged-food lists'
+rows left out: they are public files, loaded again with `load-packaged-food-lists.md`) and the photo
+folders go to the S3 bucket `kwazo-backups-8abb72` in Sydney, as `db/<day>.dump` and
+`files/<day>.tar.gz`. Its log: `/var/log/kwazo-backup.log`. Each copy is made in `/srv/kwazo/backup-tmp`
+(removed after every run), read back in full (`pg_restore -f /dev/null`, which refuses a copy cut short
+anywhere; `-l` passed one cut in half) and only then sent, so **a night Sentry marks failed sent nothing**
+and the newest name in the bucket is a whole copy (tried 2026-11-09 with a dump that fails half-way).
+
+- **Who may do what.** The machine's role `kwazo-backup-writer` may add and read, never delete
+  (measured: `s3 rm` refused, "not authorized to perform: s3:DeleteObject"). The bucket blocks public
+  access, has versioning on, and its rule `keep-14-days` deletes a copy after 14 days and an earlier
+  version 14 days after that, so an overwrite cannot destroy a copy. Also refused, measured 2026-11-09:
+  changing versioning or the public-access block, reading the rule, deleting an earlier version. The
+  privacy policy says up to 30 days (`BACKUP_MOST_DAYS`, section 10.5: S3 rounds each period up to a
+  midnight and removes a little later). **The rule and `BACKUP_KEEP_DAYS` change together**: the role
+  cannot read the rule, so no check can catch them apart.
+- **A missed or failed night.** The script checks in with Sentry's cron monitor `kwazo-backup`
+  (started, ok or error), so a failure or a night with no run emails Kd. A `SENTRY_DSN` it cannot read
+  is written to the log as "no Sentry check-in". Seen by Kd on 2026-11-09: the failing test run's check-in emailed him.
+- **Restore** (tried 2026-11-09: 185 tables, 2 people, 13,225 USDA foods, 228 migrations, the same as
+  live). On the machine, into a throwaway database first:
+
+```
+A="sudo docker run --rm -i --network host amazon/aws-cli:2.17.0@sha256:643507c10ada7964ca6157b3d799f030b90577643da9955d319a77399ed80d73 --region ap-southeast-2"
+$A s3 ls s3://kwazo-backups-8abb72/db/
+sudo docker run -d --name restore-test --network none -e POSTGRES_PASSWORD=x -e POSTGRES_USER=kwazo -e POSTGRES_DB=kwazo pgvector/pgvector:pg16
+$A s3 cp s3://kwazo-backups-8abb72/db/<day>.dump - > /tmp/r.dump
+sudo docker exec -i restore-test pg_restore -U kwazo -d kwazo --no-owner < /tmp/r.dump
+# ... compare counts with live, then leave no copy of everyone's data behind:
+sudo docker rm -f restore-test && rm -f /tmp/r.dump
+```
+
+  The photos: `$A s3 cp s3://kwazo-backups-8abb72/files/<day>.tar.gz - | sudo tar -xz -C /srv/kwazo`
+  (it holds `photos/` and `heights/`).
+
+  To put it back for real, stop the api, worker and live, then `pg_restore --clean --if-exists` into the
+  `postgres` service the same way, start them, and load the packaged-food lists again.
+- `docker run -i` reads its input: in a script fed through `bash -s`, it swallows the rest of the
+  script. Copy a script to the machine and run the file.
+
+## Phone notifications: Firebase
+
+`FIREBASE_SERVICE_ACCOUNT_FILE=/run/kwazo-secrets/firebase.json` in `api.env`: the file is
+`/srv/kwazo/secrets/firebase.json` on the machine (folder 700, file 600, owned by `ubuntu`, which is the
+image's `node` user), mounted read-only into the worker alone (the api never reads it). Kd's laptop copy is
+`infra/secrets/firebase.json`, ignored by git. The worker's log says `worker.push_off` when it is missing.
+
+## Support mail
+
+support@getkwazo.com is forwarded to Kd's Gmail by Cloudflare Email Routing (getkwazo.com, Email).
+`SUPPORT_EMAIL` in `api.env` and `LEGAL_FACTS.supportEmail` name it.
