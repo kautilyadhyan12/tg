@@ -78,7 +78,7 @@ describe("the worst thing: a pace never run, shown as the person's", () => {
     [1, 3, 5, 11],
     [1, 3, 5, 99],
     [1, 5, 8, 11],
-    [2, 8, 15, 4242],
+    [2, 3, 10, 99],
   ])("a stop of three minutes on a drifting phone (%d m of wander, %d m of drift, %d m sure, seed %d) is found and never drawn as a crawl", (jitter, drift, accuracy, seed) => {
     const speeds = [...steady(400, 3), ...steady(180, 0), ...steady(400, 3)];
     const sums = runSums(wandering(speeds, jitter, accuracy, drift, seed), [], speeds.length * 1000, 70);
@@ -86,23 +86,43 @@ describe("the worst thing: a pace never run, shown as the person's", () => {
     expect(Math.min(...sums.paceLine.map(mps))).toBeGreaterThan(1.7);
   });
 
-  // Laps of a small loop come back to the same place every lap (the second re-check of H3).
+  // Less sure than 10 m, standing and small laps cannot be told apart (measured: the third re-check of H3), so
+  // the time counts as moving: a stop shows as a dip, and a run is never counted as standing.
+  it("with a weak signal a stop is not looked for: its time counts as moving", () => {
+    const speeds = [...steady(400, 3), ...steady(180, 0), ...steady(400, 3)];
+    const sums = runSums(wandering(speeds, 2, 15, 8, 4242), [], speeds.length * 1000, 70);
+    expect(sums.stillS).toBe(0);
+    expect(sums.movingS).toBe(980);
+  });
+
+  // Laps of a small loop come back to the same place every lap (the second and third re-checks of H3).
   it.each([
-    [40, 2.5],
-    [80, 2.2],
-    [120, 3],
-  ])("laps of a %d m loop at %d m/s for half an hour are running, never standing", (lapM, speed) => {
+    [40, 2.5, 1, 0, 5],
+    [80, 2.2, 1, 0, 5],
+    [120, 3, 1, 0, 5],
+    [40, 2, 2, 3, 10],
+    [80, 2.2, 3, 5, 20],
+    [100, 2.5, 3, 5, 25],
+    [120, 3, 4, 8, 30],
+  ])("laps of a %d m loop at %d m/s for half an hour (%d m of wander, %d m of drift, %d m sure) are running, never standing", (lapM, speed, jitter, drift, accuracy) => {
     let s = 3;
     const next = () => {
       s = (s * 16807) % 2147483647;
       return s / 2147483647;
     };
+    const gauss = () => Math.sqrt(-2 * Math.log(next() + 1e-12)) * Math.cos(2 * Math.PI * next());
+    const keep = Math.exp(-1 / 20);
+    const fresh = drift * Math.sqrt(1 - keep * keep);
     const radius = lapM / (2 * Math.PI);
     let angle = 0;
+    let north = 0;
+    let east = 0;
     const points: RunPoint[] = [];
     for (let t = 0; t <= 1800; t++) {
       if (t > 0) angle += (speed * (1 + (next() - 0.5) * 0.1)) / radius;
-      points.push([t * 1000, 26.1445 + (radius * Math.sin(angle) + (next() - 0.5) * 2) / NORTH_M_PER_DEG, 91.7362 + (radius * Math.cos(angle) + (next() - 0.5) * 2) / 100_000, 5]);
+      north = keep * north + fresh * gauss();
+      east = keep * east + fresh * gauss();
+      points.push([t * 1000, 26.1445 + (radius * Math.sin(angle) + north + gauss() * jitter) / NORTH_M_PER_DEG, 91.7362 + (radius * Math.cos(angle) + east + gauss() * jitter) / 100_000, accuracy]);
     }
     const sums = runSums(points, [], 1_800_000, 70);
     expect(sums.stillS).toBeLessThan(30);

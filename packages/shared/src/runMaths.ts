@@ -619,14 +619,18 @@ export function unitMarkPoints(track: readonly (readonly [number, number])[], tr
 }
 
 /** Standing is judged over a window of twice STAND_HALF_MS on the smoothed path: the person stands while the
- *  path's two ends lie less than STAND_MOST_M apart (or the phone's own accuracy where that is worse) and the
- *  path goes less than STAND_TRAVEL times that between them. A phone standing still drifts a few metres over
- *  tens of seconds; a slow walk keeps moving across the window; laps of a small loop go a long way round
- *  (round one of 37c-iii, H3, and its two re-checks). A loop smaller than the phone can tell apart, walked
- *  slowly (40 m round at 0.8 m/s), reads as standing. */
+ *  path's two ends lie less than STAND_MOST_M apart and the path goes less than STAND_TRAVEL_M between them,
+ *  every point of the window STAND_SURE_M sure or better. A phone standing still drifts a few metres over tens
+ *  of seconds; a slow walk keeps moving across the window; laps of a small loop go a long way round (round
+ *  one of 37c-iii, H3, and its three re-checks). Measured on 40 s windows: standing still at 5 to 10 m sure,
+ *  the smoothed path went 15 to 38 m; laps of 40 to 200 m at 2 to 3 m/s, 46 m or more. Less sure than that,
+ *  the two overlap (standing 9 to 50 m, laps from 13 m), so a stop is not looked for and its time counts as
+ *  moving: a stop may show as a dip on the pace chart, and a run is never counted as standing. A loop smaller
+ *  than the phone can tell apart, walked slowly (40 m round at 0.8 m/s), reads as standing. */
 const STAND_HALF_MS = 20_000;
 const STAND_MOST_M = 10;
-const STAND_TRAVEL = 4;
+const STAND_TRAVEL_M = 42;
+const STAND_SURE_M = 10;
 /** The spans of a smoothed piece spent standing, each STILL_MS or longer: the points whose window is still,
  *  grown at each end while the path stays within STILL_M of the span's first or last point. */
 function standingSpans(path: Fix[]): [number, number][] {
@@ -635,10 +639,13 @@ function standingSpans(path: Fix[]): [number, number][] {
   // How far the smoothed path has gone by each point: a runner going round a small loop comes back to the
   // same place every lap, but goes a long way between (the second re-check).
   const walked: number[] = [0];
+  // How many points up to each are less sure than STAND_SURE_M: a window holding any is not judged.
+  const unsure: number[] = [(path[0]?.acc ?? 0) > STAND_SURE_M ? 1 : 0];
   for (let k = 1; k < n; k++) {
     const p = path[k - 1];
     const q = path[k];
     walked.push((walked[k - 1] ?? 0) + (p !== undefined && q !== undefined ? quickMetres(p, q) : 0));
+    unsure.push((unsure[k - 1] ?? 0) + ((q?.acc ?? 0) > STAND_SURE_M ? 1 : 0));
   }
   let a = 0;
   let b = 0;
@@ -648,9 +655,9 @@ function standingSpans(path: Fix[]): [number, number][] {
     while (b + 1 < n && (path[b + 1]?.at ?? 0) <= at + STAND_HALF_MS) b++;
     const pa = path[a];
     const pb = path[b];
-    if (pa !== undefined && pb !== undefined && pb.at - pa.at >= STAND_HALF_MS) {
-      const most = Math.max(STAND_MOST_M, (pa.acc + pb.acc) / 2);
-      still[k] = quickMetres(pa, pb) < most && (walked[b] ?? 0) - (walked[a] ?? 0) < STAND_TRAVEL * most;
+    const sure = (unsure[b] ?? 0) - (a > 0 ? (unsure[a - 1] ?? 0) : 0) === 0;
+    if (pa !== undefined && pb !== undefined && sure && pb.at - pa.at >= STAND_HALF_MS) {
+      still[k] = quickMetres(pa, pb) < STAND_MOST_M && (walked[b] ?? 0) - (walked[a] ?? 0) < STAND_TRAVEL_M;
     }
   }
   const spans: [number, number][] = [];
