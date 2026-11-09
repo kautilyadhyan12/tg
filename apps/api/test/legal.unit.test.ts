@@ -252,8 +252,12 @@ describe("the privacy policy against the code", () => {
     const region = script.match(/^REGION="([a-z0-9-]+)"$/m)?.[1];
     const AWS_REGION_PLACES: Record<string, string> = { "ap-southeast-2": "Sydney, Australia" };
     expect(AWS_REGION_PLACES[region ?? ""]).toBe(LEGAL_FACTS.hosting?.place);
-    expect(script).toContain("pg_dump");
-    expect(JSON.stringify(privacyPolicy())).toContain("Information deleted from KWAZO may therefore remain in these copies for up to 28 days.");
+    // Lines that run, not words in a comment: the dump, the full read-back that refuses a cut copy, the upload.
+    expect(script).toMatch(/^"\$\{C\[@\]\}" exec -T postgres sh -c 'pg_dump [^\n]*> "\$WORK\/db\.dump"\r?$/m);
+    expect(script).toMatch(/^"\$\{C\[@\]\}" exec -T postgres pg_restore -f \/dev\/null < "\$WORK\/db\.dump"\r?$/m);
+    expect(script).toMatch(/^"\$\{AWS\[@\]\}" s3 cp \/work\/db\.dump /m);
+    // 14 days a copy and 14 an earlier version (the bucket's rule), each rounded up to a midnight by S3.
+    expect(JSON.stringify(privacyPolicy())).toContain("Information deleted from KWAZO may therefore remain in these copies for up to 30 days.");
   });
 
   it("what a business sees, in the policy, matches the Join screen's lists one for one", () => {

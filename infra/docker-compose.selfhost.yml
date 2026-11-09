@@ -29,9 +29,6 @@ x-data: &data
   volumes:
     - /srv/kwazo/photos:/data/photos
     - /srv/kwazo/heights:/data/heights
-    # Files of keys too long for api.env (21a-ii): Firebase's service account, read by the worker as
-    # FIREBASE_SERVICE_ACCOUNT_FILE=/run/kwazo-secrets/firebase.json. Mode 600, never in git.
-    - /srv/kwazo/secrets:/run/kwazo-secrets:ro
 
 services:
   caddy:
@@ -54,6 +51,13 @@ services:
 
   worker:
     <<: *data
+    # A merge replaces the list, so the worker names all three. The third is Firebase's service account
+    # (21a-ii), read only by the worker as FIREBASE_SERVICE_ACCOUNT_FILE=/run/kwazo-secrets/firebase.json;
+    # the api, which faces the internet, never gets it. Mode 600, never in git.
+    volumes:
+      - /srv/kwazo/photos:/data/photos
+      - /srv/kwazo/heights:/data/heights
+      - /srv/kwazo/secrets:/run/kwazo-secrets:ro
 
   postgres:
     <<: *logs

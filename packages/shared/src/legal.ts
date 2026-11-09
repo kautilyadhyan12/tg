@@ -41,6 +41,10 @@ export const LEGAL_FACTS: LegalFacts = {
 /** How long the test server's nightly copy is kept (21a-ii): the backup bucket's lifecycle rule, 14 days
  *  for a copy and 14 more for an earlier version of it (RUNBOOK/test-server.md, "Backups"). */
 export const BACKUP_KEEP_DAYS = 14;
+/** The most a deleted thing can stay in a copy: S3 rounds each rule's day up to the next midnight UTC and
+ *  removes the object some time after that, so a day is added to each of the two periods. The bucket's
+ *  rule and BACKUP_KEEP_DAYS change together: the machine's role cannot read the rule to check it. */
+export const BACKUP_MOST_DAYS = 2 * (BACKUP_KEEP_DAYS + 1);
 
 export type LegalBlock =
   | { kind: "p"; text: string }
@@ -560,7 +564,7 @@ export function privacyPolicy(facts: LegalFacts = LEGAL_FACTS): LegalDocument {
           p("Sign-in and authentication codes stop working shortly after they are sent, and are deleted once they are more than two days old, when the next code is requested."),
           h3("10.5. Backup Copies"),
           p(
-            `To protect against data loss, KWAZO makes a copy of its database and stored files each night and keeps it with the same hosting provider, in a separate storage location. Each copy is deleted automatically after ${String(BACKUP_KEEP_DAYS)} days, and any earlier version of a copy is permanently deleted no more than ${String(BACKUP_KEEP_DAYS)} days after that. Information deleted from KWAZO may therefore remain in these copies for up to ${String(2 * BACKUP_KEEP_DAYS)} days. The copies are used only to restore the Services after a failure.`,
+            `To protect against data loss, KWAZO makes a copy of its database and stored files each night and keeps it with the same hosting provider, in a separate storage location. Each copy is deleted automatically about ${String(BACKUP_KEEP_DAYS)} days after it is made, and any earlier version of a copy about ${String(BACKUP_KEEP_DAYS)} days after that. Information deleted from KWAZO may therefore remain in these copies for up to ${String(BACKUP_MOST_DAYS)} days. The copies are used only to restore the Services after a failure.`,
           ),
         ],
       },

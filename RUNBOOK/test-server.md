@@ -119,25 +119,37 @@ Every night at 21:30 UTC (03:00 in India) `/etc/cron.d/kwazo-backup` (from `infr
 runs `infra/backup-selfhost.sh` as root: the database (`pg_dump -Fc`, the two packaged-food lists'
 rows left out: they are public files, loaded again with `load-packaged-food-lists.md`) and the photo
 folders go to the S3 bucket `kwazo-backups-8abb72` in Sydney, as `db/<day>.dump` and
-`files/<day>.tar.gz`. Its log: `/var/log/kwazo-backup.log`.
+`files/<day>.tar.gz`. Its log: `/var/log/kwazo-backup.log`. Each copy is made in `/srv/kwazo/backup-tmp`
+(removed after every run), read back in full (`pg_restore -f /dev/null`, which refuses a copy cut short
+anywhere; `-l` passed one cut in half) and only then sent, so **a night Sentry marks failed sent nothing**
+and the newest name in the bucket is a whole copy (tried 2026-11-09 with a dump that fails half-way).
 
 - **Who may do what.** The machine's role `kwazo-backup-writer` may add and read, never delete
   (measured: `s3 rm` refused, "not authorized to perform: s3:DeleteObject"). The bucket blocks public
   access, has versioning on, and its rule `keep-14-days` deletes a copy after 14 days and an earlier
-  version 14 days after that, so an overwrite cannot destroy a copy. The privacy policy says up to
-  28 days (`BACKUP_KEEP_DAYS`, section 10.5).
+  version 14 days after that, so an overwrite cannot destroy a copy. Also refused, measured 2026-11-09:
+  changing versioning or the public-access block, reading the rule, deleting an earlier version. The
+  privacy policy says up to 30 days (`BACKUP_MOST_DAYS`, section 10.5: S3 rounds each period up to a
+  midnight and removes a little later). **The rule and `BACKUP_KEEP_DAYS` change together**: the role
+  cannot read the rule, so no check can catch them apart.
 - **A missed or failed night.** The script checks in with Sentry's cron monitor `kwazo-backup`
-  (started, ok or error), so a failure or a night with no run emails Kd.
+  (started, ok or error), so a failure or a night with no run emails Kd. A `SENTRY_DSN` it cannot read
+  is written to the log as "no Sentry check-in". Seen by Kd: see the handoff of 21a-ii.
 - **Restore** (tried 2026-11-09: 185 tables, 2 people, 13,225 USDA foods, 228 migrations, the same as
   live). On the machine, into a throwaway database first:
 
 ```
-A="sudo docker run --rm -i --network host amazon/aws-cli:2.17.0 --region ap-southeast-2"
+A="sudo docker run --rm -i --network host amazon/aws-cli:2.17.0@sha256:643507c10ada7964ca6157b3d799f030b90577643da9955d319a77399ed80d73 --region ap-southeast-2"
 $A s3 ls s3://kwazo-backups-8abb72/db/
 sudo docker run -d --name restore-test --network none -e POSTGRES_PASSWORD=x -e POSTGRES_USER=kwazo -e POSTGRES_DB=kwazo pgvector/pgvector:pg16
 $A s3 cp s3://kwazo-backups-8abb72/db/<day>.dump - > /tmp/r.dump
 sudo docker exec -i restore-test pg_restore -U kwazo -d kwazo --no-owner < /tmp/r.dump
+# ... compare counts with live, then leave no copy of everyone's data behind:
+sudo docker rm -f restore-test && rm -f /tmp/r.dump
 ```
+
+  The photos: `$A s3 cp s3://kwazo-backups-8abb72/files/<day>.tar.gz - | sudo tar -xz -C /srv/kwazo`
+  (it holds `photos/` and `heights/`).
 
   To put it back for real, stop the api, worker and live, then `pg_restore --clean --if-exists` into the
   `postgres` service the same way, start them, and load the packaged-food lists again.
@@ -148,7 +160,7 @@ sudo docker exec -i restore-test pg_restore -U kwazo -d kwazo --no-owner < /tmp/
 
 `FIREBASE_SERVICE_ACCOUNT_FILE=/run/kwazo-secrets/firebase.json` in `api.env`: the file is
 `/srv/kwazo/secrets/firebase.json` on the machine (folder 700, file 600, owned by `ubuntu`, which is the
-image's `node` user), mounted read-only into the api and the worker. Kd's laptop copy is
+image's `node` user), mounted read-only into the worker alone (the api never reads it). Kd's laptop copy is
 `infra/secrets/firebase.json`, ignored by git. The worker's log says `worker.push_off` when it is missing.
 
 ## Support mail
