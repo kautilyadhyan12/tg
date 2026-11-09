@@ -353,13 +353,18 @@ d("the website's Delete your account page (real Postgres)", { timeout: T }, () =
       const appCode = await appCodeFor(ana.cookies, ana.email);
       const pageCode = await codeFor(ana.email);
       const [web, inApp] = await Promise.all([deleteWith(ana.email, pageCode), deleteInApp(ana.cookies, appCode)]);
-      expect(web.statusCode, web.body).toBe(200);
-      expect(inApp.statusCode, inApp.body).toBe(200);
-      const answers = [JSON.parse(web.body), JSON.parse(inApp.body)] as { message: string; emailSent: boolean; deletedByAnother: boolean }[];
-      expect(answers.map((a) => a.deletedByAnother).sort()).toEqual([false, true]);
+      // Which door is first is the server's timing. Whichever comes second is told the truth: the page
+      // "already being deleted" (409), the app signed out (401), or, inside the same instant, a 200 that
+      // says the other request is sending the undo email.
+      expect([200, 409], web.body).toContain(web.statusCode);
+      expect([200, 401], inApp.body).toContain(inApp.statusCode);
+      const answers = [web, inApp]
+        .filter((res) => res.statusCode === 200)
+        .map((res) => JSON.parse(res.body) as { message: string; emailSent: boolean; deletedByAnother: boolean });
+      expect(answers.filter((a) => !a.deletedByAnother)).toHaveLength(1);
       for (const a of answers) if (a.deletedByAnother) expect(a.emailSent).toBe(false);
-      const webAnswer = answers[0];
-      if (webAnswer?.deletedByAnother === true) expect(webAnswer.message).toBe(DELETE_PAGE_WORDS.doneMaybe);
+      if (web.statusCode === 200 && answers[0]?.deletedByAnother === true) expect(answers[0].message).toBe(DELETE_PAGE_WORDS.doneMaybe);
+      if (web.statusCode === 409) expect(errorOf(web).error).toBe("already_deleting");
       expect(undoEmails.filter((to) => to === ana.email)).toHaveLength(1);
       const tokens = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM one_time_tokens WHERE user_id = ${ana.userId} AND purpose = 'restore_account'`;
       expect(tokens[0]?.n).toBe(1);
