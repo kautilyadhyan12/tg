@@ -163,6 +163,8 @@ describe("the most list items one request may carry", () => {
       const tooManyPauses = schema.safeParse({ ...run, pauses: new Array(RUN_MAX_PAUSES + 1).fill("x") });
       expect(tooManyPauses.error?.issues.length).toBe(1);
       expect(schema.safeParse(run).success).toBe(true);
+      const notAList = schema.safeParse({ ...run, points: "not a list" });
+      expect(notAList.error?.issues.map((issue) => issue.message)).toEqual(["Expected array, received string"]);
     }
   });
 

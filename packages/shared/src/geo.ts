@@ -221,10 +221,10 @@ export const saveRunRequestSchema = z
     note: z.string().max(3000).transform(noNul).pipe(z.string().trim().max(1000)).nullable(),
     // Too many is refused before one point is read: zod would keep a fault for each bad one.
     points: z
-      .custom<unknown[]>((value) => Array.isArray(value) && value.length <= RUN_MAX_POINTS, { message: "too many points" })
+      .custom<unknown[]>((value) => !Array.isArray(value) || value.length <= RUN_MAX_POINTS, { message: "too many points" })
       .pipe(z.array(z.tuple([msIntoRun, z.number().min(-90).max(90), z.number().min(-180).max(180), z.number().min(0).max(100_000).nullable()]))),
     pauses: z
-      .custom<unknown[]>((value) => Array.isArray(value) && value.length <= RUN_MAX_PAUSES, { message: "too many pauses" })
+      .custom<unknown[]>((value) => !Array.isArray(value) || value.length <= RUN_MAX_PAUSES, { message: "too many pauses" })
       .pipe(z.array(z.tuple([msIntoRun, msIntoRun]))),
   })
   .strict();
