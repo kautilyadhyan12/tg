@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
-import { AppState } from "react-native";
+import { AppState, Dimensions } from "react-native";
 import { encodePolyline, routeShape, type RunDetail, type RunRecords } from "@app/shared";
 import { App } from "../../src/App";
 import { dayKey, monthWords } from "../../src/screens/running/RunCalendar";
@@ -390,7 +390,9 @@ describe("The pace chart (37c-iii)", () => {
     const chart = within(card).getByTestId("pace-chart");
     await fireEvent(chart, "layout", { nativeEvent: { layout: { width: 342, height: 190 } } });
     // The finger on the walk, 2.2 km in: its distance, its pace and its height.
-    const x = 34 + (300 * 2200) / 5200;
+    // The chart 342 wide: room for the pace labels as the phone's text size makes it, 8 on the right, the rest for the line.
+    const left = Math.ceil(30 * Dimensions.get("window").fontScale) + 6;
+    const x = left + ((342 - left - 8) * 2200) / 5200;
     await fireEvent(chart, "responderGrant", fingerAt(x));
     expect(within(card).getByText("Distance")).toBeTruthy();
     expect(within(card).getByText("2.19 km")).toBeTruthy();

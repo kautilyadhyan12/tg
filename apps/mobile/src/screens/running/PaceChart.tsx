@@ -3,7 +3,7 @@
 // lit, the hills faint behind it. A finger on it reads that place: how far, the pace there, the height.
 // The line is the server's (`paceLineOf`), worked out from the same steps as the distance and the splits.
 import { useMemo, useRef, useState } from "react";
-import { PanResponder, StyleSheet, View, type LayoutChangeEvent } from "react-native";
+import { PanResponder, StyleSheet, View, useWindowDimensions, type LayoutChangeEvent } from "react-native";
 import Svg, { Circle, Defs, Line, LinearGradient, Path, Stop } from "react-native-svg";
 import type { Units } from "@app/shared";
 import { colours } from "../../look/colours";
@@ -13,7 +13,8 @@ import { distance, pace, paceWord, unitWord, METRES_PER_MILE } from "./runWords"
 const GOLD = colours.gold;
 const PALE = colours.flamePale;
 const HEIGHT = 190;
-const LEFT = 34;
+/** Room for the pace labels on the left at the phone's usual text size; it grows with a larger one. */
+const LABEL_W = 30;
 const RIGHT = 8;
 const TOP = 14;
 const BOTTOM = 24;
@@ -21,6 +22,11 @@ const FEET_PER_METRE = 1 / 0.3048;
 /** Slower than this share of the average speed is drawn at the floor, so one stop for a drink does
  *  not squash the rest of the run flat (its pace is still read under a finger). */
 const FLOOR_SHARE = 0.6;
+const HILLS_LEAST_M = 50;
+/** Two pace labels closer than this on the chart (at the usual text size): the lower one is left out. */
+const MARKS_APART = 18;
+/** Room each distance label takes along the bottom, at the usual text size. */
+const DISTANCE_W = 52;
 
 export interface PaceChartProps {
   /** Centimetres a second at evenly spaced places from the start to the finish. */
@@ -38,21 +44,20 @@ const paceOf = (cms: number, units: Units): string => (cms <= 0 ? "--:--" : pace
 const heightWords = (m: number, units: Units): string =>
   units === "imperial" ? `${String(Math.round(m * FEET_PER_METRE))} ft` : `${String(m)} m`;
 
-/** The whole-minute paces between the fastest and the floor, for the lines across the chart. */
+/** The whole-minute paces between the fastest and the floor, fastest first, for the lines across the chart. */
 function paceMarks(lo: number, hi: number, units: Units): { cms: number; label: string }[] {
   const out: { cms: number; label: string }[] = [];
   for (let minutes = 2; minutes <= 30; minutes++) {
     const cms = (each(units) * 100) / (minutes * 60);
     if (cms >= lo && cms <= hi) out.push({ cms, label: `${String(minutes)}:00` });
   }
-  // On a run of very even pace, few or none fall inside: every other one kept where many do.
-  return out.length > 5 ? out.filter((_, i) => i % 2 === 0) : out;
+  return out;
 }
 
-/** The distance marks along the bottom: whole kilometres or miles, as many as fit. */
-function distanceMarks(distanceM: number, units: Units): number[] {
+/** The distance marks along the bottom: whole kilometres or miles, `most` gaps at most. */
+function distanceMarks(distanceM: number, units: Units, most: number): number[] {
   const units1 = distanceM / each(units);
-  const step = [0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50].find((s) => units1 / s <= 5) ?? 100;
+  const step = [0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50].find((s) => units1 / s <= most) ?? 100;
   const out: number[] = [];
   for (let k = 0; k <= units1 + 1e-9; k += step) out.push(Math.round(k * 10) / 10);
   return out;
@@ -67,21 +72,30 @@ export function PaceChart({ paceLine, hillLine, distanceM, movingS, units }: Pac
   const lo = n === 0 ? 0 : Math.min(Math.max(Math.min(...paceLine), average * FLOOR_SHARE), hi - 1);
   const fastest = paceLine.indexOf(hi);
   const hills = hillLine.length === n ? hillLine : [];
+  const { fontScale } = useWindowDimensions();
+  const LEFT = Math.ceil(LABEL_W * fontScale) + 6;
   const plotW = Math.max(0, width - LEFT - RIGHT);
   const plotH = HEIGHT - TOP - BOTTOM;
   const x = (i: number): number => LEFT + (n > 1 ? (plotW * i) / (n - 1) : 0);
   const y = (cms: number): number => TOP + plotH * (1 - (Math.max(lo, cms) - lo) / (hi - lo || 1));
-  const hMin = hills.length === 0 ? 0 : Math.min(...hills) - 8;
-  const hMax = hills.length === 0 ? 1 : Math.max(...hills) + 8;
+  // The lines across, top first, each at least MARKS_APART below the last kept.
+  const marks: { cms: number; label: string }[] = [];
+  for (const m of paceMarks(lo, hi, units)) {
+    const last = marks[marks.length - 1];
+    if (last === undefined || y(m.cms) - y(last.cms) >= MARKS_APART * fontScale) marks.push(m);
+  }
+  // At least HILLS_LEAST_M from the bottom to the top, so a flat run reads flat, never a metre's wobble drawn as a hill.
+  const hMin = hills.length === 0 ? 0 : Math.min(...hills);
+  const hMax = hills.length === 0 ? 1 : hMin + Math.max(HILLS_LEAST_M, (Math.max(...hills) - hMin) * 1.1);
   // The hills take the lower half of the chart at most, so they never hide the pace.
   const hy = (h: number): number => HEIGHT - BOTTOM - plotH * 0.55 * ((h - hMin) / (hMax - hMin || 1));
 
-  const geometry = useRef({ plotW, n });
-  geometry.current = { plotW, n };
+  const geometry = useRef({ plotW, n, LEFT });
+  geometry.current = { plotW, n, LEFT };
   const pick = (locationX: number) => {
     const g = geometry.current;
     if (g.n < 2 || g.plotW <= 0) return;
-    setAt(Math.max(0, Math.min(g.n - 1, Math.round(((locationX - LEFT) / g.plotW) * (g.n - 1)))));
+    setAt(Math.max(0, Math.min(g.n - 1, Math.round(((locationX - g.LEFT) / g.plotW) * (g.n - 1)))));
   };
   const touch = useMemo(
     () =>
@@ -155,7 +169,7 @@ export function PaceChart({ paceLine, hillLine, distanceM, movingS, units }: Pac
                 <Stop offset="1" stopColor={colours.trail} stopOpacity={0} />
               </LinearGradient>
             </Defs>
-            {paceMarks(lo, hi, units).map((m) => (
+            {marks.map((m) => (
               <Line key={m.label} x1={LEFT} x2={width - RIGHT} y1={y(m.cms)} y2={y(m.cms)} stroke={colours.trailGlow} strokeOpacity={0.35} />
             ))}
             {hillPath === "" ? null : <Path d={hillPath} fill={colours.trail} fillOpacity={0.07} stroke={colours.trail} strokeOpacity={0.14} strokeWidth={1} />}
@@ -179,14 +193,14 @@ export function PaceChart({ paceLine, hillLine, distanceM, movingS, units }: Pac
           </Svg>
         ) : null}
         {width > 0
-          ? paceMarks(lo, hi, units).map((m) => (
-              <Txt key={m.label} style={[styles.mark, styles.paceMark, { top: y(m.cms) - 8 }]} numberOfLines={1}>
+          ? marks.map((m) => (
+              <Txt key={m.label} style={[styles.mark, styles.paceMark, { top: y(m.cms) - 8, width: LEFT - 6 }]} numberOfLines={1}>
                 {m.label}
               </Txt>
             ))
           : null}
         {width > 0
-          ? distanceMarks(distanceM, units).map((k, i, all) => {
+          ? spaced(distanceMarks(distanceM, units, Math.max(2, Math.min(6, Math.floor(plotW / (DISTANCE_W * fontScale))))), (k) => LEFT + (plotW * k * each(units)) / Math.max(1, distanceM), DISTANCE_W * fontScale).map((k, i, all) => {
               const px = LEFT + (plotW * k * each(units)) / Math.max(1, distanceM);
               const end = i === all.length - 1 && px > width - RIGHT - 24;
               const left = i === 0 ? px : end ? width - RIGHT - 64 : px - 32;
@@ -205,6 +219,17 @@ export function PaceChart({ paceLine, hillLine, distanceM, movingS, units }: Pac
       </View>
     </View>
   );
+}
+
+/** The marks in order, each at least `apart` along from the last kept; the last mark kept over the one before it. */
+function spaced(marks: number[], at: (k: number) => number, apart: number): number[] {
+  const out: number[] = [];
+  for (const k of marks) {
+    const last = out[out.length - 1];
+    if (last === undefined || at(k) - at(last) >= apart) out.push(k);
+    else if (k === marks[marks.length - 1] && out.length > 1) out[out.length - 1] = k;
+  }
+  return out;
 }
 
 function Figure({ value, label, gold = false }: { value: string; label: string; gold?: boolean }) {
@@ -234,7 +259,7 @@ function Key({ colour, label, thick = false, dashed = false }: { colour: string;
 const styles = StyleSheet.create({
   read: { flexDirection: "row", gap: 18, minHeight: 44, marginTop: 4 },
   mark: { position: "absolute", fontFamily: fonts.regular, fontSize: 11, lineHeight: 16, color: colours.textFaint },
-  paceMark: { left: 0, width: LEFT - 6, textAlign: "right" },
+  paceMark: { left: 0, textAlign: "right" },
   distanceMark: { top: HEIGHT - 18, width: 64 },
   figure: { fontFamily: fonts.bold, fontSize: 20, color: colours.text },
   key: { flexDirection: "row", gap: 14, flexWrap: "wrap" },
