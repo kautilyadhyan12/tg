@@ -732,7 +732,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
     - 37c. **Your runs** (split 2026-11-07 in three: the list and a run's page first; Kd's "go", `rulings/2026-11-07-37c-i.md`).
       - 37c-i. [x] **Your runs and a run's page** · merged 2026-11-07 · PR #491
       - 37c-ii. [x] **Running records** · merged 2026-11-07 · PR #495
-      - 37c-iii. [ ] **The pace chart**: how your speed changed across the run.
+      - 37c-iii. [x] **The pace chart** · merged 2026-11-10 · PR #517
     - 37d. [ ] **The run plan**, run-walk intervals with voice, and Recommended For You's Running tab.
     - 37e. [ ] **Routes.**
     - 37f. [ ] **Heart rate from a chest strap or watch.**
