@@ -619,16 +619,27 @@ export function unitMarkPoints(track: readonly (readonly [number, number])[], tr
 }
 
 /** Standing is judged over a window of twice STAND_HALF_MS on the smoothed path: the person stands while the
- *  path moves less than STAND_MOST_M across it, or less than the phone's own accuracy where that is worse. A
- *  phone standing still drifts a few metres over tens of seconds; a slow walk keeps moving across the window
- *  (round one of 37c-iii, H3 and its re-check). */
+ *  path's two ends lie less than STAND_MOST_M apart (or the phone's own accuracy where that is worse) and the
+ *  path goes less than STAND_TRAVEL times that between them. A phone standing still drifts a few metres over
+ *  tens of seconds; a slow walk keeps moving across the window; laps of a small loop go a long way round
+ *  (round one of 37c-iii, H3, and its two re-checks). A loop smaller than the phone can tell apart, walked
+ *  slowly (40 m round at 0.8 m/s), reads as standing. */
 const STAND_HALF_MS = 20_000;
 const STAND_MOST_M = 10;
+const STAND_TRAVEL = 4;
 /** The spans of a smoothed piece spent standing, each STILL_MS or longer: the points whose window is still,
  *  grown at each end while the path stays within STILL_M of the span's first or last point. */
 function standingSpans(path: Fix[]): [number, number][] {
   const n = path.length;
   const still = new Array<boolean>(n).fill(false);
+  // How far the smoothed path has gone by each point: a runner going round a small loop comes back to the
+  // same place every lap, but goes a long way between (the second re-check).
+  const walked: number[] = [0];
+  for (let k = 1; k < n; k++) {
+    const p = path[k - 1];
+    const q = path[k];
+    walked.push((walked[k - 1] ?? 0) + (p !== undefined && q !== undefined ? quickMetres(p, q) : 0));
+  }
   let a = 0;
   let b = 0;
   for (let k = 0; k < n; k++) {
@@ -637,7 +648,10 @@ function standingSpans(path: Fix[]): [number, number][] {
     while (b + 1 < n && (path[b + 1]?.at ?? 0) <= at + STAND_HALF_MS) b++;
     const pa = path[a];
     const pb = path[b];
-    if (pa !== undefined && pb !== undefined && pb.at - pa.at >= STAND_HALF_MS) still[k] = quickMetres(pa, pb) < Math.max(STAND_MOST_M, (pa.acc + pb.acc) / 2);
+    if (pa !== undefined && pb !== undefined && pb.at - pa.at >= STAND_HALF_MS) {
+      const most = Math.max(STAND_MOST_M, (pa.acc + pb.acc) / 2);
+      still[k] = quickMetres(pa, pb) < most && (walked[b] ?? 0) - (walked[a] ?? 0) < STAND_TRAVEL * most;
+    }
   }
   const spans: [number, number][] = [];
   let i = 0;

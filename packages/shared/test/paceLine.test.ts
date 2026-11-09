@@ -86,6 +86,30 @@ describe("the worst thing: a pace never run, shown as the person's", () => {
     expect(Math.min(...sums.paceLine.map(mps))).toBeGreaterThan(1.7);
   });
 
+  // Laps of a small loop come back to the same place every lap (the second re-check of H3).
+  it.each([
+    [40, 2.5],
+    [80, 2.2],
+    [120, 3],
+  ])("laps of a %d m loop at %d m/s for half an hour are running, never standing", (lapM, speed) => {
+    let s = 3;
+    const next = () => {
+      s = (s * 16807) % 2147483647;
+      return s / 2147483647;
+    };
+    const radius = lapM / (2 * Math.PI);
+    let angle = 0;
+    const points: RunPoint[] = [];
+    for (let t = 0; t <= 1800; t++) {
+      if (t > 0) angle += (speed * (1 + (next() - 0.5) * 0.1)) / radius;
+      points.push([t * 1000, 26.1445 + (radius * Math.sin(angle) + (next() - 0.5) * 2) / NORTH_M_PER_DEG, 91.7362 + (radius * Math.cos(angle) + (next() - 0.5) * 2) / 100_000, 5]);
+    }
+    const sums = runSums(points, [], 1_800_000, 70);
+    expect(sums.stillS).toBeLessThan(30);
+    expect(sums.movingS).toBeGreaterThan(1770);
+    for (const v of sums.paceLine) expect(mps(v)).toBeLessThan(speed * 1.5);
+  });
+
   it("a slow walk on a wandering phone is walking, never standing", () => {
     // 0.6 m/s, 2.2 km an hour: a steep climb on foot.
     const sums = runSums(wandering(steady(900, 0.6), 2, 8, 3, 5), [], 900_000, 70);
