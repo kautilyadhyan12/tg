@@ -574,7 +574,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
 19. [ ] **The real site under heavy load, before launch** (Kd, 2026-10-24): the live server tested with thousands of pretend staff and members at once, at launch size, then 10 and 100 times it; more than one api server; alarms when answers slow down. After item 1. Meal photos too (Kd, 2026-10-30): a waiting line so a rush waits seconds instead of being refused, and OpenAI's top level ($500 of credit, 30,000 requests a minute).
 20. [ ] **Cheaper scan models tried on Kd's eight plates** (2026-10-30): today's price list has vision models below Luna, none tested. Foods found, calories and cost side by side, for cents; the choice is Kd's.
 21. [ ] **A lost database connection must not end the api** (item 33's data pass, 2026-11-01): `postgres` 3.4.9 threw uncaught when a connection ended during a transaction, and every gym stops with it. Read upstream's fix, then a test that ends one.
-22. [ ] **A daily ceiling on what the scanner spends** (with Stage 5 item 21a, Kd 2026-11-07) (item 33's security pass, 2026-11-01): past Kd's amount scanning turns off and Sentry is told; refuse a photo over about 2,000 px.
+22. [ ] **A daily ceiling on what the scanner spends** (before publishing, not the closed test: Kd 2026-11-09, each tester's own scan limit on the admin page caps the test) (item 33's security pass, 2026-11-01): past Kd's amount scanning turns off and Sentry is told; refuse a photo over about 2,000 px.
 23. [ ] **Every other route's body, read before sign-in** (item 33's security pass, 2026-11-01): the photo routes settle who is asking first; the others read up to Fastify's limit first. Measure at full size. And a lost reply to a photo scan costs a use (its data pass, L11): plan it.
 
 ## Stage 5 — The phone app
@@ -648,7 +648,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
 21. **Release** (split 2026-11-07, Kd: the release is prepared alongside the building, and Google's closed test starts as soon as the app can be installed from Google Play, without waiting for workouts or exercises; `rulings/2026-11-07-21-closed-test-early.md` keeps the line as first written and Google's rules as read that day).
     - 21a. **The server online, free for the test** (split 2026-11-08: the server first; on AWS's free plan in Sydney, Oracle having refused Kd's card; `handoff/2026-11-09-21a-i.md` keeps its line as first written).
       - 21a-i. [x] **The server at its own https address** · merged 2026-11-09 · PR #509
-      - 21a-ii. [ ] **Errors, backups and the scan ceiling**: Sentry's free plan, nightly backups off the machine, Stage 4 item 22's ceiling, support@getkwazo.com forwarded, the packaged-food lists, phone notifications.
+      - 21a-ii. [ ] **Errors, backups, notifications and the food lists on the server** (the scan ceiling moved to publishing, Kd 2026-11-09).
     - 21b. **The privacy policy, the terms of use and the account-deletion page** (moved to feature folder 2, Kd 2026-11-08; split that day: the deletion page needs a sign-in of its own).
       - 21b-i. [x] **The Privacy Policy, the Terms of Use and Washington's page** · merged 2026-11-08 · PR #505
       - 21b-ii. [x] **The "Delete your account" page** — merged 2026-11-09 (PR #507).

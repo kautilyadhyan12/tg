@@ -56,11 +56,11 @@ describe.each([
 });
 
 describe('who runs KWAZO, and the parts for each kind of person', () => {
-  it('the Privacy Policy names its owner and says the address is still to come', () => {
+  it('the Privacy Policy names its owner and gives the support address (21a-ii)', () => {
     open(LEGAL_PATHS.privacy);
     const who = document.getElementById('who-we-are');
     expect(who?.textContent).toContain(`KWAZO is owned and operated by ${LEGAL_OWNER}, a sole proprietor based in India`);
-    expect(who?.textContent).toContain('Our contact email address will be included in this Policy before the official publication of KWAZO.');
+    expect(who?.textContent).toContain('Our contact email address is support@getkwazo.com.');
   });
 
   it('each kind of person has a part, and the list at the top opens it', () => {

@@ -32,7 +32,8 @@ export interface LegalFacts {
   hosting: { company: string; place: string } | null;
 }
 export const LEGAL_FACTS: LegalFacts = {
-  supportEmail: null,
+  // Forwarded to Kd's Gmail by Cloudflare Email Routing (21a-ii), and the api's SUPPORT_EMAIL on the server.
+  supportEmail: "support@getkwazo.com",
   // The test server (21a-i, RUNBOOK/test-server.md): AWS's free plan opens Sydney alone.
   hosting: { company: "Amazon Web Services (AWS)", place: "Sydney, Australia" },
 };
