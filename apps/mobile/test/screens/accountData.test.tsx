@@ -116,6 +116,9 @@ describe("Delete account (the worst thing: after deleting, the phone still shows
     expect(new File(Paths.document, `meals-${RAVI.id}.json`).exists).toBe(false);
     expect(new File(Paths.document, `photo-meal-${RAVI.id}.json`).exists).toBe(false);
     expect(draft.exists).toBe(false);
+    // The minutes counter, closed as the person left, writes nothing back once they are gone (21f).
+    await act(() => new Promise<void>((resolve) => setTimeout(resolve, 50)));
+    expect(new File(Paths.document, `minutes-${RAVI.id}.json`).exists).toBe(false);
     expect(new File(Paths.document, `meals-${ANOTHER}.json`).exists).toBe(true);
     expect(exported.exists).toBe(false);
     expect(new File(exported, "aihomegym-export-2026-11-01.json").exists).toBe(false);
