@@ -52,7 +52,7 @@ which commit runs. Then on the machine, carrying over what is not in git (the se
 console) and swapping the folders:
 
 ```
-cd /srv/kwazo && for f in api.env db.env .env; do cp -p app/infra/$f app.new/infra/; done && mv app/infra/web app.new/infra/web
+cd /srv/kwazo && for f in api.env db.env .env; do cp -p app/infra/$f app.new/infra/; done && cp -a app/infra/web app.new/infra/web
 rm -rf app.old && mv app app.old && mv app.new app && cd app
 $C build api && $C up -d --force-recreate caddy api live worker
 ```
