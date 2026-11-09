@@ -779,7 +779,7 @@ function DataPart({ places, onStale }: { places: Places; onStale: () => void }) 
     if (busy || me === null) return;
     setSaid(null);
     setBusy(true);
-    const answer = await session.signedIn({ method: "GET", path: "/v1/users/me/export", waitMs: 60_000 }, dpdpExportSchema.passthrough());
+    const answer = await session.signedIn({ method: "GET", path: "/v1/users/me/export", waitMs: 60_000 }, dpdpExportSchema.loose());
     // The file is only ever that of the person who asked for it, still signed in.
     if (answer.kind !== "ok" || answer.data.user["id"] !== me || session.state().kind !== "in") {
       setBusy(false);
