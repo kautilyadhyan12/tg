@@ -2,7 +2,7 @@
 // from P2.1 on; here only platform concerns: logging, CORS, rate limit,
 // error mapping, /health.
 import { REQUEST_TIMEOUT_MS } from "./requestTimeout.js";
-import { registerListLimit } from "./listLimit.js";
+import { registerListLimit, TooManyItemsError } from "./listLimit.js";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import Fastify, { LogController, type FastifyError, type FastifyInstance } from "fastify";
@@ -270,6 +270,7 @@ export async function buildApp(
       err instanceof GeoError ||
       err instanceof OrgsError ||
       err instanceof ExportError ||
+      err instanceof TooManyItemsError ||
       (typeof err.code === "string" && err.code.startsWith("FST_"));
     if (clientSafe) {
       if (status >= 500) {
