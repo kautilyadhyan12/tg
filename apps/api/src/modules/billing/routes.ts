@@ -66,7 +66,7 @@ export function registerBillingRoutes(
   const billingStaff = async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
     const params = gymInParams.safeParse(req.params);
     if (!params.success) {
-      await reply.status(400).send({ error: "validation_error", message: "gymId: invalid_string", requestId: req.id });
+      await reply.status(400).send({ error: "validation_error", message: "gymId: invalid_format", requestId: req.id });
       return;
     }
     await requirePrivilege(deps, params.data.gymId, requireUserId(req), "billing.manage");

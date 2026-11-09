@@ -4,7 +4,7 @@ import { defineConfig } from "drizzle-kit";
 import { z } from "zod";
 
 const env = z
-  .object({ DATABASE_URL: z.string().url() })
+  .object({ DATABASE_URL: z.url() })
   // generate/check don't need a DB; migrate does and fails loudly without it.
   .partial()
   .parse(process.env);
