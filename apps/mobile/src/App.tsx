@@ -37,7 +37,7 @@ import { GymScreen } from "./screens/GymTab";
 import { NotificationsProvider } from "./notifications/Notifications";
 import { forgetNotifications, type Tapped } from "./notifications/phone";
 import { emptyPhotoFolder } from "./screens/gym/photoFiles";
-import { forgetExports } from "./session/personFiles";
+import { forgetExports, rememberPerson } from "./session/personFiles";
 import { PlacesProvider, usePlaces } from "./screens/places";
 import { tabWord } from "./screens/placesHeading";
 import { FoodScreen } from "./screens/Food";
@@ -122,10 +122,12 @@ function SignedInOrOut({ mealStore, bodyStore, runStore, minutesStore, lookMs, w
   }, [state.kind]);
   if (state.kind === "starting") return <View style={styles.page} />;
   if (state.kind === "out") return <SignInScreen note={state.note} waiting={waitingStore} />;
+  // Signed in again after a deletion was undone: their files are kept once more.
+  rememberPerson(state.user.id);
   return (
     <>
       {/* Counted from the sign-in on, "Before you start" and setup included (21f). */}
-      <AppMinutes key={state.user.id} userId={state.user.id} store={minutesStore} />
+      <AppMinutes key={`minutes-${state.user.id}`} userId={state.user.id} store={minutesStore} />
       <SignUpNoteGate key={state.user.id}>
         <TimeZoneSync>
           <InvitationsGate>

@@ -45,6 +45,17 @@ export const appMinutesRequestSchema = z
   .strict();
 export type AppMinutesRequest = z.infer<typeof appMinutesRequestSchema>;
 
+/** One day as the phone keeps it in the person's own file until the server has it (Stage 5 21f):
+ *  seconds, so a part minute is not lost between two stretches. */
+export const keptMinutesDaySchema = z
+  .object({
+    day: calendarDaySchema,
+    zone: timeZoneNameSchema,
+    seconds: z.number().finite().min(0).max(86_400),
+  })
+  .strict();
+export type KeptMinutesDay = z.infer<typeof keptMinutesDaySchema>;
+
 /** Every day sent is settled: kept (or already as high), or ignored (too old, in the future, or a
  *  time zone the server does not know). The phone drops all of them, and keeps counting today. */
 export const appMinutesResponseSchema = z

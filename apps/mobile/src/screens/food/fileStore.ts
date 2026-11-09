@@ -1,4 +1,5 @@
 import { File, Paths } from "expo-file-system";
+import { isForgotten } from "../../session/personFiles";
 import type { TextStore } from "./outbox";
 
 /** A person's waiting meals, in the app's own documents folder, which Android keeps until the app is
@@ -6,25 +7,25 @@ import type { TextStore } from "./outbox";
  *  second file and moved over the first; the move deletes the first before it renames, so a phone
  *  that dies between the two leaves only the second, and a read finds it there. */
 export function mealFile(userId: string): TextStore {
-  return keptFile(`meals-${userId}.json`, `meals-${userId}.unread.json`);
+  return keptFile(userId, `meals-${userId}.json`, `meals-${userId}.unread.json`);
 }
 
 /** A person's waiting body measurements (ROADMAP Stage 5 35c-ii), kept as their meals are. */
 export function bodyFile(userId: string): TextStore {
-  return keptFile(`body-${userId}.json`, `body-${userId}.unread.json`);
+  return keptFile(userId, `body-${userId}.json`, `body-${userId}.unread.json`);
 }
 
 /** A person's saved runs not yet on the server (ROADMAP Stage 5 37a), kept as their meals are. */
 export function runFile(userId: string): TextStore {
-  return keptFile(`runs-${userId}.json`, `runs-${userId}.unread.json`);
+  return keptFile(userId, `runs-${userId}.json`, `runs-${userId}.unread.json`);
 }
 
 /** A person's minutes in the app not yet on the server (ROADMAP Stage 5 21f), kept as their meals are. */
 export function minutesFile(userId: string): TextStore {
-  return keptFile(`minutes-${userId}.json`, `minutes-${userId}.unread.json`);
+  return keptFile(userId, `minutes-${userId}.json`, `minutes-${userId}.unread.json`);
 }
 
-function keptFile(name: string, unread: string): TextStore {
+function keptFile(userId: string, name: string, unread: string): TextStore {
   return {
     read: async () => {
       const file = new File(Paths.document, name);
@@ -33,6 +34,8 @@ function keptFile(name: string, unread: string): TextStore {
       return next.exists ? await next.text() : null;
     },
     write: async (text) => {
+      // Their account was deleted: nothing of theirs is written back.
+      if (isForgotten(userId)) return;
       const next = new File(Paths.document, `${name}.next`);
       if (next.exists) next.delete();
       next.create();
@@ -41,6 +44,7 @@ function keptFile(name: string, unread: string): TextStore {
     },
     // The last file that could not all be read, kept as it was.
     aside: (text) => {
+      if (isForgotten(userId)) return Promise.resolve();
       const kept = new File(Paths.document, unread);
       if (kept.exists) kept.delete();
       kept.create();

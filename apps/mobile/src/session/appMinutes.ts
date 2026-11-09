@@ -1,4 +1,12 @@
-import { APP_MINUTES_DAYS_MAX, APP_MINUTES_KEEP_DAYS, appMinutesResponseSchema, type AppMinutesDay } from "@app/shared";
+import {
+  APP_MINUTES_DAYS_MAX,
+  APP_MINUTES_KEEP_DAYS,
+  appMinutesResponseSchema,
+  keptMinutesDaySchema,
+  timeZoneNameSchema,
+  type AppMinutesDay,
+  type KeptMinutesDay,
+} from "@app/shared";
 import type { TextStore } from "../screens/food/outbox";
 import { dayIn } from "../screens/gym/visitsView";
 import type { Session } from "./session";
@@ -17,15 +25,11 @@ export const TICK_MS = 60_000;
 /** How often the open app sends; it also sends on opening and on leaving. */
 export const SEND_EVERY_MS = 10 * 60_000;
 
-interface KeptDay {
-  day: string;
-  zone: string;
-  /** Seconds, so a part minute is never lost between two stretches. */
-  seconds: number;
-}
+type KeptDay = { -readonly [K in keyof KeptMinutesDay]: KeptMinutesDay[K] };
 
-/** What the server said: taken (every day sent is settled), or not now (no answer, a refusal). */
-export type MinutesSendResult = "taken" | "later";
+/** What the server said: taken (every day sent is settled), refused as it is sent (a 400: never sent
+ *  again as it was), or not now (no answer, a limit, a sign-in it no longer takes). */
+export type MinutesSendResult = "taken" | "refused" | "later";
 
 export interface MinuteCounterOptions {
   store: TextStore;
@@ -50,7 +54,7 @@ export interface MinuteCounter {
   days: () => readonly KeptDay[];
 }
 
-/** The days a file holds, each read on its own; anything it cannot read is left out. */
+/** The days a file holds, each read through its shape; anything it cannot read is left out. */
 export function readMinutesFile(text: string | null): KeptDay[] {
   if (text === null || text === "") return [];
   let raw: unknown = null;
@@ -63,16 +67,10 @@ export function readMinutesFile(text: string | null): KeptDay[] {
   const list: unknown = Reflect.get(raw, "days");
   if (!Array.isArray(list)) return [];
   const out: KeptDay[] = [];
-  for (const item of list as unknown[]) {
-    if (typeof item !== "object" || item === null) continue;
-    const day: unknown = Reflect.get(item, "day");
-    const zone: unknown = Reflect.get(item, "zone");
-    const seconds: unknown = Reflect.get(item, "seconds");
-    if (typeof day !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(day)) continue;
-    if (typeof zone !== "string" || zone === "" || zone.length > 64) continue;
-    if (typeof seconds !== "number" || !Number.isFinite(seconds) || seconds < 0) continue;
-    if (out.some((d) => d.day === day)) continue;
-    out.push({ day, zone, seconds: Math.min(seconds, 86_400) });
+  for (const item of list) {
+    const parsed = keptMinutesDaySchema.safeParse(item);
+    if (!parsed.success || out.some((d) => d.day === parsed.data.day)) continue;
+    out.push({ ...parsed.data });
   }
   return out;
 }
@@ -95,7 +93,7 @@ export function createMinuteCounter({ store, send, now, zone }: MinuteCounterOpt
 
   const zoneNow = (): string => {
     const z = zone();
-    return z !== null && dayIn(z, new Date(0)) !== null ? z : "UTC";
+    return z !== null && timeZoneNameSchema.safeParse(z).success && dayIn(z, new Date(0)) !== null ? z : "UTC";
   };
   const dayAt = (ms: number, z: string): string => dayIn(z, new Date(ms)) ?? new Date(ms).toISOString().slice(0, 10);
 
@@ -165,9 +163,15 @@ export function createMinuteCounter({ store, send, now, zone }: MinuteCounterOpt
     lastSent = now();
     const away = (async () => {
       const result = await send(days.map((d) => ({ day: d.day, minutes: minutesOf(d.seconds), zone: d.zone })));
-      if (result !== "taken") return;
-      // Today goes on counting; any day counted further while the send was away stays to be sent again.
+      if (result === "later") return;
       const today = dayAt(now(), zoneNow());
+      if (result === "refused") {
+        // Never sent again as it was: the past days go, and today counts on in UTC, which every server reads.
+        days = days.filter((d) => d.day === today).map((d) => ({ ...d, zone: "UTC" }));
+        await keep();
+        return;
+      }
+      // Today goes on counting; any day counted further while the send was away stays to be sent again.
       days = days.filter((d) => {
         if (d.day === today) return true;
         const was = counted.get(d.day);
@@ -226,6 +230,7 @@ export function sendAsOwner(session: Pick<Session, "state" | "signedIn">, owner:
     const state = session.state();
     if (state.kind !== "in" || state.user.id !== owner) return "later";
     const answer = await session.signedIn({ method: "POST", path: "/v1/me/app-minutes", body: { days } }, appMinutesResponseSchema);
-    return answer.kind === "ok" ? "taken" : "later";
+    if (answer.kind === "ok") return "taken";
+    return answer.kind === "refused" && answer.status === 400 ? "refused" : "later";
   };
 }

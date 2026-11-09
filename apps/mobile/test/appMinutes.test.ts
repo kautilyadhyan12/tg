@@ -312,6 +312,38 @@ describe("kept until the server has it", () => {
     expect(r.sends).toEqual([[{ day: "2026-11-09", minutes: 1, zone: "Asia/Kolkata" }]]);
   });
 
+  it("a send the server refuses as it is (400) is never sent again as it was: past days go, today counts on in UTC", async () => {
+    const store = file(JSON.stringify({ version: 1, days: [{ day: "2026-11-08", zone: "Asia/Kolkata", seconds: 600 }, { day: "2026-11-09", zone: "Asia/Kolkata", seconds: 120 }] }));
+    const sends: AppMinutesDay[][] = [];
+    let answer: MinutesSendResult = "refused";
+    const counter = createMinuteCounter({ store, now: () => MORNING_IST, zone: () => "Asia/Kolkata", send: (d) => (sends.push(d), Promise.resolve(answer)) });
+    await counter.start();
+    await counter.send();
+    expect(counter.days()).toEqual([{ day: "2026-11-09", zone: "UTC", seconds: 120 }]);
+    answer = "taken";
+    await counter.send();
+    expect(sends.at(-1)).toEqual([{ day: "2026-11-09", minutes: 2, zone: "UTC" }]);
+  });
+
+  it("only a 400 counts as refused; no answer, a limit or the server down is tried again later", async () => {
+    const answers = [
+      { status: 400, want: "refused" },
+      { status: 429, want: "later" },
+      { status: 503, want: "later" },
+      { status: 401, want: "later" },
+    ];
+    for (const { status, want } of answers) {
+      const signedIn: Session["signedIn"] = () => Promise.resolve({ kind: "refused", status, error: "x", message: "x", retryAfterSeconds: null, robotCheckKey: null, body: null });
+      expect(await sendAsOwner({ state: () => ({ kind: "in", user: RAVI }), signedIn }, RAVI.id)([])).toBe(want);
+    }
+    const lost: Session["signedIn"] = () => Promise.resolve({ kind: "no_answer" });
+    expect(await sendAsOwner({ state: () => ({ kind: "in", user: RAVI }), signedIn: lost }, RAVI.id)([])).toBe("later");
+  });
+
+  it("a zone in the file that the server's own list would refuse is left out, never sent", () => {
+    expect(readMinutesFile(JSON.stringify({ version: 1, days: [{ day: "2026-11-09", zone: "Mars/Olympus", seconds: 60 }, { day: "2026-11-08", zone: "UTC", seconds: 60, extra: 1 }] }))).toEqual([]);
+  });
+
   it("a file it cannot read starts empty; a part it cannot read is left out", () => {
     expect(readMinutesFile("not json")).toEqual([]);
     expect(readMinutesFile(JSON.stringify({ version: 1, days: [{ day: "2026-11-09", zone: "Asia/Kolkata", seconds: 60 }, { day: "9 Nov", zone: "x", seconds: 1 }, { day: "2026-11-08", zone: "Asia/Kolkata", seconds: -5 }] }))).toEqual([

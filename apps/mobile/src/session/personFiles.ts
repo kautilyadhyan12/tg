@@ -1,10 +1,22 @@
 import { Directory, File, Paths } from "expo-file-system";
 
+// The people whose account was deleted in this run of the app: a write of their files that comes after
+// (a counter closed as they left) is dropped, until the same person signs in again (a restored account).
+const forgotten = new Set<string>();
+
+export const isForgotten = (userId: string): boolean => forgotten.has(userId);
+
+/** Signed in: this person's files are kept again. */
+export function rememberPerson(userId: string): void {
+  forgotten.delete(userId);
+}
+
 /** Every file the app keeps for one person names them (`meals-<id>.json`, `photo-meal-<id>.json`,
  *  `post-draft-<id>-<place>`, `export-<id>/`): once their account is deleted each one goes, and nobody
  *  else's. One that cannot be removed now is left; it can never be sent, as the account is gone. */
 export function forgetPersonFiles(userId: string): void {
   if (userId === "") return;
+  forgotten.add(userId);
   for (const place of [Paths.document, Paths.cache]) {
     try {
       for (const one of place.list()) {
