@@ -25,12 +25,12 @@ import { createLine } from "../classes/bookingsService.js";
 import * as memberService from "./memberService.js";
 import * as service from "./service.js";
 
-const trainerParamsSchema = z.object({ gymId: z.string().uuid(), userId: z.string().uuid() }).strict();
-const timeOffParamsSchema = z.object({ gymId: z.string().uuid(), userId: z.string().uuid(), timeOffId: z.string().uuid() }).strict();
-const appointmentParamsSchema = z.object({ gymId: z.string().uuid(), appointmentId: z.string().uuid() }).strict();
+const trainerParamsSchema = z.object({ gymId: z.uuid(), userId: z.uuid() }).strict();
+const timeOffParamsSchema = z.object({ gymId: z.uuid(), userId: z.uuid(), timeOffId: z.uuid() }).strict();
+const appointmentParamsSchema = z.object({ gymId: z.uuid(), appointmentId: z.uuid() }).strict();
 
-function parseOr400<S extends z.ZodTypeAny>(schema: S, value: unknown, req: FastifyRequest, reply: FastifyReply): z.output<S> | null {
-  const parsed: z.SafeParseReturnType<unknown, z.output<S>> = schema.safeParse(value);
+function parseOr400<S extends z.ZodType>(schema: S, value: unknown, req: FastifyRequest, reply: FastifyReply): z.output<S> | null {
+  const parsed: z.ZodSafeParseResult<z.output<S>> = schema.safeParse(value);
   if (!parsed.success) {
     // Issue paths and codes only, never the offending value; the first ten.
     void reply.status(400).send({

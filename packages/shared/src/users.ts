@@ -8,7 +8,7 @@ import { ROBOT_CHECK_TOKEN_MAX_CHARS } from "./robotCheck.js";
 /** Part 4 §3.1 users columns exposed to the owner. emailVerified is DERIVED
  *  from a consumed verify_email one-time token (DECISIONS 2026-07-11). */
 export const userProfileSchema = z.object({
-  id: z.string().uuid(),
+  id: z.uuid(),
   email: z.string().nullable(),
   displayName: z.string(),
   emailVerified: z.boolean(),
@@ -255,7 +255,7 @@ export function dietAllows(diet: Diet, foodDiet: Diet): boolean {
 /** A set, not a list: duplicates are rejected rather than silently deduped, so
  *  the parsed value is a true multiset-free set (R2.3 parse-don't-validate) —
  *  a repeated goal would otherwise double-weight Part 2B §4's scorer. */
-const uniqueArray = <T extends z.ZodTypeAny>(item: T, max: number) =>
+const uniqueArray = <T extends z.ZodType>(item: T, max: number) =>
   z
     .array(item)
     .max(max)

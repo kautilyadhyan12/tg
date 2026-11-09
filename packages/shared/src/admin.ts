@@ -32,11 +32,11 @@ export type AdminAllowance = z.infer<typeof adminAllowanceSchema>;
 
 export const adminPersonSchema = z
   .object({
-    id: z.string().uuid(),
+    id: z.uuid(),
     name: z.string(),
     email: z.string().nullable(),
-    signedUpAt: z.string().datetime(),
-    lastSeenAt: z.string().datetime().nullable(),
+    signedUpAt: z.iso.datetime(),
+    lastSeenAt: z.iso.datetime().nullable(),
     /** The $10 plan, monthly or yearly, when they bought it themselves. */
     ownPlan: z.enum(["month", "year"]).nullable(),
     /** The gyms whose live plan they get, by name. */
@@ -56,7 +56,7 @@ export type AdminPeopleResponse = z.infer<typeof adminPeopleResponseSchema>;
 export const adminSetLimitsRequestSchema = z
   .object({
     userIds: z
-      .array(z.string().uuid())
+      .array(z.uuid())
       .min(1)
       .max(100)
       .refine((ids) => new Set(ids).size === ids.length, { message: "each person once" }),
@@ -84,7 +84,7 @@ export type AdminPasswordRequest = z.infer<typeof adminPasswordRequestSchema>;
 /** Where the admin account stands at the door: whether a password is made yet, whether the door
  *  is open (and until when), and whether its sign-in is fresh enough to open it. */
 export const adminDoorStateSchema = z
-  .object({ passwordSet: z.boolean(), open: z.boolean(), openUntil: z.string().datetime().nullable(), fresh: z.boolean() })
+  .object({ passwordSet: z.boolean(), open: z.boolean(), openUntil: z.iso.datetime().nullable(), fresh: z.boolean() })
   .strict();
 export type AdminDoorState = z.infer<typeof adminDoorStateSchema>;
 
@@ -125,7 +125,7 @@ export type AdminPersonDay = z.infer<typeof adminPersonDaySchema>;
 
 export const adminPersonDaysResponseSchema = z
   .object({
-    person: z.object({ id: z.string().uuid(), name: z.string(), email: z.string().nullable() }).strict(),
+    person: z.object({ id: z.uuid(), name: z.string(), email: z.string().nullable() }).strict(),
     /** The time zone the days are read in, and whether it is their phone's (else the admin's). */
     zone: z.string(),
     zoneFromPhone: z.boolean(),
@@ -149,7 +149,7 @@ export const adminDayQuerySchema = z
 export type AdminDayQuery = z.infer<typeof adminDayQuerySchema>;
 
 export const adminDayPersonSchema = adminDayNumbersSchema
-  .extend({ id: z.string().uuid(), name: z.string(), email: z.string().nullable() })
+  .extend({ id: z.uuid(), name: z.string(), email: z.string().nullable() })
   .strict();
 export type AdminDayPerson = z.infer<typeof adminDayPersonSchema>;
 

@@ -30,7 +30,7 @@ const tagWord = z.string().max(256);
  *  email. Both read as one list. */
 export const resendTagsSchema = z
   .union([
-    z.record(tagWord),
+    z.record(z.string(), tagWord),
     z.array(z.object({ name: tagWord, value: tagWord })).max(50),
   ])
   .transform((tags) => (Array.isArray(tags) ? tags : Object.entries(tags).map(([name, value]) => ({ name, value }))));

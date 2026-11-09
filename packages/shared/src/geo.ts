@@ -50,11 +50,11 @@ export const savedRouteCreateSchema = z
 export type SavedRouteCreate = z.infer<typeof savedRouteCreateSchema>;
 
 export const savedRouteSchema = z.object({
-  id: z.string().uuid(),
+  id: z.uuid(),
   name: z.string(),
   polyline: z.string(),
   distanceM: z.number().int().nonnegative(),
-  createdAt: z.string().datetime(),
+  createdAt: z.iso.datetime(),
 });
 export type SavedRoute = z.infer<typeof savedRouteSchema>;
 
@@ -79,8 +79,8 @@ const runDaySchema = z
 export const runMonthSchema = z.string().regex(/^(19|20)\d{2}-(0[1-9]|1[0-2])$/);
 
 export const runSummarySchema = z.object({
-  id: z.string().uuid(),
-  startedAt: z.string().datetime(),
+  id: z.uuid(),
+  startedAt: z.iso.datetime(),
   /** The moving time. */
   durationS: z.number().int().nonnegative(),
   distanceM: z.number().int().nonnegative(),
@@ -140,9 +140,9 @@ export const runBestsSchema = z.object({
 /** One record: the run that holds it, its value (seconds, or metres for the longest run), and the
  *  person's best before that run, null when it was their first. */
 export const runRecordSchema = z.object({
-  runId: z.string().uuid(),
+  runId: z.uuid(),
   name: z.string().min(1),
-  startedAt: z.string().datetime(),
+  startedAt: z.iso.datetime(),
   day: runDaySchema,
   value: z.number().int().positive(),
   before: z.number().int().positive().nullable(),
@@ -211,8 +211,8 @@ const noNul = (text: string): string => text.replace(/\u0000/g, "");
 
 export const saveRunRequestSchema = z
   .object({
-    runId: z.string().uuid(),
-    startedAt: z.string().datetime(),
+    runId: z.uuid(),
+    startedAt: z.iso.datetime(),
     elapsedMs: msIntoRun,
     // A NUL is stripped, never refused: Postgres cannot keep one, and a refusal would lose the run.
     name: z.string().max(200).transform(noNul).pipe(z.string().trim().min(1).max(60)),
@@ -233,8 +233,8 @@ export type SaveRunRequest = z.infer<typeof saveRunRequestSchema>;
 
 /** A saved run, everything its summary shows. */
 export const savedRunSchema = z.object({
-  id: z.string().uuid(),
-  startedAt: z.string().datetime(),
+  id: z.uuid(),
+  startedAt: z.iso.datetime(),
   name: z.string(),
   effort: z.number().int().nullable(),
   note: z.string().nullable(),
@@ -318,8 +318,8 @@ export type GeoListQuery = z.infer<typeof geoListQuerySchema>;
 
 /** The run going on, kept beside its points (`apps/mobile/src/screens/running/recorder.ts`). */
 export const keptRunStateSchema = z.object({
-  runId: z.string().uuid(),
-  userId: z.string().uuid(),
+  runId: z.uuid(),
+  userId: z.uuid(),
   startedAt: z.number(),
   phase: z.enum(["running", "paused", "finished"]),
   pausedByPerson: z.boolean(),

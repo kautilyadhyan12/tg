@@ -20,13 +20,13 @@ import { orgParamsSchema, gymInPath } from "../schemas.js";
 import * as service from "./service.js";
 import { tellMembersLeaderboards, type LiveNewsSender } from "../../live/news.js";
 
-function parseOr400<S extends z.ZodTypeAny>(
+function parseOr400<S extends z.ZodType>(
   schema: S,
   value: unknown,
   req: FastifyRequest,
   reply: FastifyReply,
 ): z.output<S> | null {
-  const parsed: z.SafeParseReturnType<unknown, z.output<S>> = schema.safeParse(value);
+  const parsed: z.ZodSafeParseResult<z.output<S>> = schema.safeParse(value);
   if (!parsed.success) {
     // Issue paths and codes only, never the offending value (R3.10).
     void reply.status(400).send({

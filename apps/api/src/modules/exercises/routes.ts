@@ -12,12 +12,12 @@ import * as service from "./service.js";
 /** Zod-parse the querystring; 400 with issue paths/codes only (R3.10).
  *  Generic over the schema (not its output) so .default() fields keep their
  *  non-optional OUTPUT type. */
-function parseQuery<S extends z.ZodTypeAny>(
+function parseQuery<S extends z.ZodType>(
   schema: S,
   req: FastifyRequest,
   reply: FastifyReply,
 ): z.output<S> | null {
-  const parsed: z.SafeParseReturnType<unknown, z.output<S>> = schema.safeParse(req.query);
+  const parsed: z.ZodSafeParseResult<z.output<S>> = schema.safeParse(req.query);
   if (!parsed.success) {
     void reply.status(400).send({
       error: "validation_error",

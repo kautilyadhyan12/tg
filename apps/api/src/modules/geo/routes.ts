@@ -48,7 +48,7 @@ const authedUserId = (req: FastifyRequest): string => {
 type SafeParseResult<T> = { success: true; data: T } | { success: false; error: z.ZodError };
 
 /** Zod-parse; 400 with issue paths/codes only — never echo values (R3.10). */
-function parse<S extends z.ZodTypeAny>(
+function parse<S extends z.ZodType>(
   schema: S,
   value: unknown,
   req: FastifyRequest,
@@ -78,7 +78,7 @@ const runDeleted = (req: FastifyRequest, reply: FastifyReply): FastifyReply =>
   reply.status(410).send({ error: "run_deleted", message: RUN_WORDS.run_deleted, requestId: req.id });
 
 // Opaque cursor: base64url({at, id}), Zod-checked on the way back in.
-const cursorSchema = z.object({ at: z.string().datetime(), id: z.string().uuid() }).strict();
+const cursorSchema = z.object({ at: z.iso.datetime(), id: z.uuid() }).strict();
 const cursorEncode = (v: { at: Date; id: string }): string =>
   Buffer.from(JSON.stringify({ at: v.at.toISOString(), id: v.id })).toString("base64url");
 const cursorDecode = (v: string | undefined): { at: Date; id: string } | null => {

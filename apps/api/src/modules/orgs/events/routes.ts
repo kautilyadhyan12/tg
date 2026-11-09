@@ -21,8 +21,8 @@ import * as service from "./service.js";
 
 const ISSUES_SAID = 10;
 
-function parseOr400<S extends z.ZodTypeAny>(schema: S, value: unknown, req: FastifyRequest, reply: FastifyReply): z.output<S> | null {
-  const parsed: z.SafeParseReturnType<unknown, z.output<S>> = schema.safeParse(value);
+function parseOr400<S extends z.ZodType>(schema: S, value: unknown, req: FastifyRequest, reply: FastifyReply): z.output<S> | null {
+  const parsed: z.ZodSafeParseResult<z.output<S>> = schema.safeParse(value);
   if (!parsed.success) {
     // Issue paths and codes only, never the offending value, and the first few.
     void reply.status(400).send({
@@ -159,7 +159,7 @@ export function registerEventRoutes(app: FastifyInstance, deps: Omit<service.Eve
   // thread. So who is asking, the tick and the limit are settled BEFORE the body is read.
   const maySave = async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
     // An address that names no gym is answered here too, or its body would be read.
-    const params = parseOr400(orgParamsSchema.passthrough(), req.params, req, reply);
+    const params = parseOr400(orgParamsSchema.loose(), req.params, req, reply);
     if (params === null) return;
     await service.requireEventStaff(eventsDeps, requireUserId(req), params.gymId);
     await staffSaveLimit(req, reply);

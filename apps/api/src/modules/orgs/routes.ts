@@ -86,13 +86,13 @@ import { PtSessionsEndAsk } from "./pt/changes.js";
 /** Zod-parse a request part; 400 with issue paths/codes only (R3.10 — never
  *  the offending value, which can be user data). Generic over the schema so
  *  `.default()` fields keep their non-optional OUTPUT type. */
-function parseOr400<S extends z.ZodTypeAny>(
+function parseOr400<S extends z.ZodType>(
   schema: S,
   value: unknown,
   req: FastifyRequest,
   reply: FastifyReply,
 ): z.output<S> | null {
-  const parsed: z.SafeParseReturnType<unknown, z.output<S>> = schema.safeParse(value);
+  const parsed: z.ZodSafeParseResult<z.output<S>> = schema.safeParse(value);
   if (!parsed.success) {
     void reply.status(400).send({
       error: "validation_error",

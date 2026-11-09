@@ -28,14 +28,14 @@ export const RAZORPAY_WEBHOOK_PATH = "/v1/webhooks/razorpay";
 /** Paddle's and Razorpay's subscription bodies are a few kilobytes; this leaves room and no more. */
 const WEBHOOK_BODY_LIMIT = 64 * 1024;
 
-const gymParams = z.object({ gymId: z.string().uuid() }).strict();
+const gymParams = z.object({ gymId: z.uuid() }).strict();
 /** The gym in any billing route's path, before the route's own parse. */
-const gymInParams = z.object({ gymId: z.string().uuid() }).passthrough();
-const checkoutParams = z.object({ gymId: z.string().uuid(), checkoutId: z.string().uuid() }).strict();
+const gymInParams = z.object({ gymId: z.uuid() }).loose();
+const checkoutParams = z.object({ gymId: z.uuid(), checkoutId: z.uuid() }).strict();
 const idempotencyKey = z.string().min(1).max(100).regex(/^[\x21-\x7e]+$/);
 
-function parseOr400<S extends z.ZodTypeAny>(schema: S, value: unknown, req: FastifyRequest, reply: FastifyReply): z.output<S> | null {
-  const parsed: z.SafeParseReturnType<unknown, z.output<S>> = schema.safeParse(value);
+function parseOr400<S extends z.ZodType>(schema: S, value: unknown, req: FastifyRequest, reply: FastifyReply): z.output<S> | null {
+  const parsed: z.ZodSafeParseResult<z.output<S>> = schema.safeParse(value);
   if (!parsed.success) {
     void reply.status(400).send({
       error: "validation_error",

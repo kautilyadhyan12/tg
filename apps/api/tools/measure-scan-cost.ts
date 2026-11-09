@@ -51,7 +51,7 @@ const modelText = (envelope: string): { text: string; thoughts: number } | null 
   try {
     const completion = openAiCompletionSchema.safeParse(JSON.parse(envelope));
     if (!completion.success) return null;
-    return { text: completion.data.choices[0].message.content ?? "", thoughts: completion.data.usage.completion_tokens_details.reasoning_tokens };
+    return { text: (completion.data.choices[0]?.message.content ?? null) ?? "", thoughts: completion.data.usage.completion_tokens_details.reasoning_tokens };
   } catch {
     return null;
   }
