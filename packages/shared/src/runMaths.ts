@@ -626,7 +626,7 @@ export function unitMarkPoints(track: readonly (readonly [number, number])[], tr
  *  the smoothed path went 15 to 38 m; laps of 40 to 200 m at 2 to 3 m/s, 46 m or more. Less sure than that,
  *  the two overlap (standing 9 to 50 m, laps from 13 m), so a stop is not looked for and its time counts as
  *  moving: a stop may show as a dip on the pace chart, and a run is never counted as standing. A loop smaller
- *  than the phone can tell apart, walked slowly (40 m round at 0.8 m/s), reads as standing. */
+ *  than the phone can tell apart, walked slowly (40 m round at 1 m/s or slower), reads as standing in part. */
 const STAND_HALF_MS = 20_000;
 const STAND_MOST_M = 10;
 const STAND_TRAVEL_M = 42;
