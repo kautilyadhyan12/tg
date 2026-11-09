@@ -641,7 +641,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
     - 19e. **Your training's notifications** (split 2026-11-05: what the person sets first): a workout reminder (days and a time), a meal reminder, a streak reminder, badges and the weekly summary, each with its switch, for everyone (Kd, 2026-11-05, `rulings/2026-11-05-19d.md`); taken from item 38.
       - 19e-i. [x] **Workout and meal reminders** · merged 2026-11-06 · PR #479
       - 19e-ii. [x] **The streak reminder, badges and the Sunday summary** · merged 2026-11-06 · PR #482
-      - 19e-iii. [ ] **A reminder moved later today still comes** (found in 21a-ii, 2026-11-09): a save at a time already past marks today done, and a later save at a time still to come keeps that mark, so Kd's 4:15 PM reminder never came. Only a real send marks today.
+      - 19e-iii. [ ] **A reminder moved later today still comes** (found in 21a-ii, 2026-11-09; feature folder 2, Kd that day): a save at a time already past marks today done, and a later save at a time still to come keeps that mark, so Kd's 4:15 PM reminder never came. Only a real send marks today.
 20. **What the gym side adds for members**, each after its web job: the waiver (3e), the membership agreement signed in the app (18u), the referral link (20e), the member photo (5b-vi), saving their card (18d-ii), buying from the gym (18k), stopping a membership (18l), a gym's plan for a member (19e). Split 2026-11-06, one part a terminal, each when its web job is built: the referral link first.
     - 20a. [x] **Invite a friend** · merged 2026-11-07 · PR #490
     - 20b. [x] **Sign the waiver** · merged 2026-11-07 · PR #493
@@ -650,6 +650,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
     - 21a. **The server online, free for the test** (split 2026-11-08: the server first; on AWS's free plan in Sydney, Oracle having refused Kd's card; `handoff/2026-11-09-21a-i.md` keeps its line as first written).
       - 21a-i. [x] **The server at its own https address** · merged 2026-11-09 · PR #509
       - 21a-ii. [x] **Errors, backups, notifications and the food lists on the server** · merged 2026-11-09 · PR #513
+      - 21a-iii. [ ] **Security updates** (Kd, 2026-11-09, `rulings/2026-11-09-21a-iii.md`): zod, undici and node-forge to the versions that fix GitHub's high alerts that ship on the server, nothing published in the last 14 days; the critical alerts are test tools and `archive/` only. Feature folder 1, next, before 21c.
     - 21b. **The privacy policy, the terms of use and the account-deletion page** (moved to feature folder 2, Kd 2026-11-08; split that day: the deletion page needs a sign-in of its own).
       - 21b-i. [x] **The Privacy Policy, the Terms of Use and Washington's page** · merged 2026-11-08 · PR #505
       - 21b-ii. [x] **The "Delete your account" page** — merged 2026-11-09 (PR #507).
