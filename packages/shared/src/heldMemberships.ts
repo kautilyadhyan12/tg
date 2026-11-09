@@ -1128,8 +1128,8 @@ export const heldTaxesSchema = z.array(heldTaxSchema).max(TAX_RATES_MAX);
  *  the price and the term are the type's as they were when it was given. */
 export const heldMembershipSchema = z
   .object({
-    id: z.string().uuid(),
-    typeId: z.string().uuid(),
+    id: z.uuid(),
+    typeId: z.uuid(),
     typeName: z.string(),
     kind: membershipKindSchema,
     priceMinor: z.number().int().min(0),
@@ -1213,7 +1213,7 @@ export type HeldMembershipItem = z.infer<typeof heldMembershipSchema>;
  *  out from. */
 export const heldMembershipTypeChoiceSchema = z
   .object({
-    id: z.string().uuid(),
+    id: z.uuid(),
     name: z.string(),
     kind: membershipKindSchema,
     priceMinor: z.number().int().min(0),
@@ -1250,7 +1250,7 @@ export const listedMembershipSchema = z
     word: z.string().min(1),
     endsOn: daySchema.nullable(),
     endsOnKind: z.enum(["ends", "renews"]).nullable(),
-    type: z.object({ id: z.string().uuid(), name: z.string() }).strict().nullable(),
+    type: z.object({ id: z.uuid(), name: z.string() }).strict().nullable(),
     /** The list's name is that type's own name, as the server folds both. */
     ownName: z.boolean(),
     held: z.boolean(),
@@ -1304,10 +1304,10 @@ export const heldMembershipsResponseSchema = z
      *  whether its own is asked (`agreementAsked`). */
     agreementInUse: z.boolean().default(false),
     /** Each membership in use whose line asks for a renewal reminder (18v-iv), and what happens to it. */
-    renewalReminders: z.array(z.object({ membershipId: z.string().uuid(), when: renewalReminderWhenSchema, status: renewalReminderStatusSchema }).strict()).default([]),
+    renewalReminders: z.array(z.object({ membershipId: z.uuid(), when: renewalReminderWhenSchema, status: renewalReminderStatusSchema }).strict()).default([]),
     /** Each membership in use whose price staff raised and that is not yet charged at it (18w): what happens to it,
      *  and whether staff who change the price list may keep its old price. */
-    priceRaises: z.array(z.object({ membershipId: z.string().uuid(), status: priceRaiseStatusSchema, canKeep: z.boolean() }).strict()).default([]),
+    priceRaises: z.array(z.object({ membershipId: z.uuid(), status: priceRaiseStatusSchema, canKeep: z.boolean() }).strict()).default([]),
   })
   .strict();
 export type HeldMembershipsResponse = z.infer<typeof heldMembershipsResponseSchema>;
@@ -1316,8 +1316,8 @@ export type HeldMembershipsResponse = z.infer<typeof heldMembershipsResponseSche
  *  arriving twice gives one membership, and one payment where it was paid. */
 export const giveHeldMembershipRequestSchema = z
   .object({
-    requestKey: z.string().uuid(),
-    typeId: z.string().uuid(),
+    requestKey: z.uuid(),
+    typeId: z.uuid(),
     startsOn: daySchema,
     paid: z.boolean(),
     /** How they paid, where `paid` is true and the type has a price (18a-i). */
@@ -1328,7 +1328,7 @@ export const giveHeldMembershipRequestSchema = z
     /** The gym's discount it is given with (18b-ii-b), and what the screen showed coming
      *  off: worked out again on the server, and nothing is given where it comes to
      *  anything else. Sent with `priceMinor`. */
-    discountId: z.string().uuid().optional(),
+    discountId: z.uuid().optional(),
     discountMinor: z.number().int().min(1).max(99_999_999).optional(),
     /** What the screen showed the first bill comes to, tax and discount in (18b-iii): a
      *  membership whose first bill now comes to anything else is not given. Sent with
@@ -1337,7 +1337,7 @@ export const giveHeldMembershipRequestSchema = z
     /** The person's own Refer a friend gift filled in (20e-ii-b-ii-a), and what the screen
      *  showed it takes off the first bill: worked out again on the server. Sent with
      *  `priceMinor`. */
-    memberGiftId: z.string().uuid().optional(),
+    memberGiftId: z.uuid().optional(),
     memberGiftMinor: z.number().int().min(1).max(99_999_999).optional(),
     /** The type's joining fee the screen showed and charges on the first bill (18t): a type
      *  whose fee is now anything else is not given. 0 is the fee left off, which only
@@ -1414,8 +1414,8 @@ export type PaidHeldMembershipRequest = z.infer<typeof paidHeldMembershipRequest
  *  `requestKey` is the new membership's, and its payment's where `paid`. */
 export const changeHeldMembershipRequestSchema = z
   .object({
-    requestKey: z.string().uuid(),
-    typeId: z.string().uuid(),
+    requestKey: z.uuid(),
+    typeId: z.uuid(),
     when: z.enum(["today", "next_payment"]),
     /** The day the screen said the new one starts: a change on any other day is refused. */
     startsOn: daySchema,

@@ -143,7 +143,7 @@ export const leadEmailSettingsResponseSchema = z.object({ settings: leadEmailSet
 export const updateLeadEmailSettingsRequestSchema = z
   .object({
     sendForMe: z.boolean(),
-    replyTo: z.string().trim().toLowerCase().max(254).email().nullable(),
+    replyTo: z.string().trim().toLowerCase().max(254).pipe(z.email()).nullable(),
   })
   .strict()
   .refine((body) => !body.sendForMe || body.replyTo !== null, { message: "replyTo is needed to switch it on", path: ["replyTo"] });
@@ -169,7 +169,7 @@ export const leadFollowUpSchema = z
     dueNow: z.boolean(),
     /** Its day has passed without it being marked sent. */
     overdue: z.boolean(),
-    lastSentAt: z.string().datetime({ offset: true }).nullable(),
+    lastSentAt: z.iso.datetime({ offset: true }).nullable(),
     /** Who sends the next one (20c-v): the app, with "Send them for me" on, emails able
      *  to go and room in the month, or staff. Null when none is due. */
     by: z.enum(["app", "you"]).nullable().default(null),
@@ -181,7 +181,7 @@ export const leadFollowUpSchema = z
     notSent: z.enum(LEAD_EMAIL_NOT_SENT).nullable().default(null),
     /** When the person asked this gym to stop emailing them through the app: Stop
      *  pressed in an email, or an email marked as spam. */
-    optedOutAt: z.string().datetime({ offset: true }).nullable().default(null),
+    optedOutAt: z.iso.datetime({ offset: true }).nullable().default(null),
     /** How: Stop pressed, or an email marked as spam (20c-v-b). */
     optedOutHow: z.enum(["unsubscribed", "complained"]).nullable().default(null),
   })
@@ -227,7 +227,7 @@ export function invitedByWords(by: LeadInvitedBy): string {
  *  friend's gift a NEW member they invited is given, filled in on their membership. */
 export const leadMatchSchema = z
   .object({
-    id: z.string().uuid(),
+    id: z.uuid(),
     fullName: z.string(),
     sameName: z.boolean(),
     invitedBy: leadInvitedBySchema.nullable(),
@@ -256,7 +256,7 @@ export function leadMatchLine(lead: LeadMatch): string {
 
 export const leadSchema = z
   .object({
-    id: z.string().uuid(),
+    id: z.uuid(),
     fullName: z.string().min(1).max(MEMBER_LIST_MAX_NAME_CHARS),
     email: z.string().nullable(),
     phone: z.string().nullable(),
@@ -269,15 +269,15 @@ export const leadSchema = z
     mayEmail: z.boolean(),
     /** The member record a joined lead is on the list as; null otherwise, and null
      *  when that record has since been deleted. */
-    entryId: z.string().uuid().nullable(),
+    entryId: z.uuid().nullable(),
     /** That record is on the list now: false when it was taken off or deleted. */
     onList: z.boolean(),
-    createdAt: z.string().datetime({ offset: true }),
-    statusChangedAt: z.string().datetime({ offset: true }),
+    createdAt: z.iso.datetime({ offset: true }),
+    statusChangedAt: z.iso.datetime({ offset: true }),
     followUp: leadFollowUpSchema,
     /** When the person last sent the gym page's form (20c-iv-a), or null. Absent from
      *  an answer written before the form existed, so it defaults to null. */
-    enquiredAt: z.string().datetime({ offset: true }).nullable().default(null),
+    enquiredAt: z.iso.datetime({ offset: true }).nullable().default(null),
     /** A New lead's address that emails cannot reach — it bounces, or the email service
      *  refuses it (its own list, which a spam report anywhere can put an address on, so
      *  never called a bounce) — or who marked one of this gym's emails as spam and has not
@@ -391,7 +391,7 @@ export type UpdateLeadRequest = z.infer<typeof updateLeadRequestSchema>;
  *  person. `asNew`: staff said none of the records shown is them. */
 export const joinLeadRequestSchema = z
   .object({
-    entryId: z.string().uuid().optional(),
+    entryId: z.uuid().optional(),
     asNew: z.literal(true).optional(),
   })
   .strict()
@@ -412,7 +412,7 @@ export type LeadFollowUpSentRequest = z.infer<typeof leadFollowUpSentRequestSche
 /** A record on the list that shares the lead's email or phone. */
 export const leadJoinCandidateSchema = z
   .object({
-    entryId: z.string().uuid(),
+    entryId: z.uuid(),
     fullName: z.string(),
     email: z.string().nullable(),
     phone: z.string().nullable(),
@@ -498,7 +498,7 @@ export const leadSelectionSchema = z.discriminatedUnion("kind", [
   z
     .object({
       kind: z.literal("ticked"),
-      leadIds: z.array(z.string().uuid()).min(1).max(LEADS_TICKED_MAX),
+      leadIds: z.array(z.uuid()).min(1).max(LEADS_TICKED_MAX),
     })
     .strict(),
   z
@@ -534,7 +534,7 @@ export const leadsSelectionChangedSchema = z.object({
 export const leadsDeletePreviewSchema = z
   .object({
     selected: z.number().int().min(0),
-    leads: z.array(z.object({ id: z.string().uuid(), name: z.string() }).strict()),
+    leads: z.array(z.object({ id: z.uuid(), name: z.string() }).strict()),
     gone: z.number().int().min(0),
     digest: leadDigestSchema,
   })

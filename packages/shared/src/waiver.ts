@@ -46,7 +46,7 @@ export const signedNameSchema = z
 /** A waiver as a person reads it. */
 export const waiverToReadSchema = z
   .object({
-    id: z.string().uuid(),
+    id: z.uuid(),
     version: z.number().int().min(1),
     text: z.string().min(1).max(WAIVER_MAX_CHARS),
   })
@@ -83,7 +83,7 @@ export type GymWaiverResponse = z.infer<typeof gymWaiverResponseSchema>;
 export const myWaiverResponseSchema = z
   .object({
     /** The business this answers for, so a phone never shows one business's waiver under another's (20b). */
-    gymId: z.string().uuid(),
+    gymId: z.uuid(),
     gymName: z.string(),
     /** The gym's time zone, so the day a signature was made is written as the gym's own. */
     timezone: z.string().optional(),
@@ -96,7 +96,7 @@ export const myWaiverResponseSchema = z
 export type MyWaiverResponse = z.infer<typeof myWaiverResponseSchema>;
 
 /** What a person sends to sign: the wording they were shown, and their name as typed. */
-export const signWaiverBodySchema = z.object({ waiverId: z.string().uuid(), name: signedNameSchema }).strict();
+export const signWaiverBodySchema = z.object({ waiverId: z.uuid(), name: signedNameSchema }).strict();
 export type SignWaiverBody = z.infer<typeof signWaiverBodySchema>;
 
 export const signWaiverResponseSchema = z.object({ signed: waiverSignedSchema }).strict();
@@ -104,7 +104,7 @@ export type SignWaiverResponse = z.infer<typeof signWaiverResponseSchema>;
 
 /** Join carries the same two things, where the gym has a waiver. */
 export const acceptInvitationBodySchema = z
-  .object({ waiver: z.object({ id: z.string().uuid(), name: signedNameSchema }).strict().optional() })
+  .object({ waiver: z.object({ id: z.uuid(), name: signedNameSchema }).strict().optional() })
   .strict();
 export type AcceptInvitationBody = z.infer<typeof acceptInvitationBodySchema>;
 
@@ -171,7 +171,7 @@ export const deskWaiverResponseSchema = z
   .strict();
 export type DeskWaiverResponse = z.infer<typeof deskWaiverResponseSchema>;
 
-export const signAtDeskBodySchema = z.object({ waiverId: z.string().uuid(), signer: deskSignerSchema, name: signedNameSchema }).strict();
+export const signAtDeskBodySchema = z.object({ waiverId: z.uuid(), signer: deskSignerSchema, name: signedNameSchema }).strict();
 export type SignAtDeskBody = z.infer<typeof signAtDeskBodySchema>;
 
 export const signAtDeskResponseSchema = z.object({ signed: deskSignedSchema }).strict();

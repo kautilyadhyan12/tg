@@ -14,8 +14,8 @@ export const GYM_MEAL_PLAN_NAME_MAX = 60;
 /** The most meal plans one gym keeps. */
 export const GYM_MEAL_PLANS_MOST = 100;
 
-const planIdSchema = z.string().uuid().toLowerCase();
-const changeIdSchema = z.string().uuid().toLowerCase();
+const planIdSchema = z.uuid().toLowerCase();
+const changeIdSchema = z.uuid().toLowerCase();
 export const gymMealPlanNameSchema = z.string().trim().min(1).max(GYM_MEAL_PLAN_NAME_MAX);
 
 /** One food of a plan's meal: a food of the lists by grams or by one of its measures, or the
@@ -25,12 +25,12 @@ export const gymPlanFoodSchema = mealChoiceSchema.refine((c: MealChoice) => !("d
   message: "a gym's plan weighs a food in grams or by its own measures",
 });
 
-export const gymMealPlanParamsSchema = z.object({ gymId: z.string().uuid(), planId: planIdSchema }).strict();
+export const gymMealPlanParamsSchema = z.object({ gymId: z.uuid(), planId: planIdSchema }).strict();
 export const gymMealPlanDayParamsSchema = z.object({
-  gymId: z.string().uuid(), planId: planIdSchema, day: z.coerce.number().pipe(dietPlanDaySchema),
+  gymId: z.uuid(), planId: planIdSchema, day: z.coerce.number().pipe(dietPlanDaySchema),
 }).strict();
 export const gymMealPlanMealParamsSchema = z.object({
-  gymId: z.string().uuid(), planId: planIdSchema, day: z.coerce.number().pipe(dietPlanDaySchema),
+  gymId: z.uuid(), planId: planIdSchema, day: z.coerce.number().pipe(dietPlanDaySchema),
   meal: z.coerce.number().int().min(0).max(MOST_PLAN_MEALS - 1),
 }).strict();
 
@@ -74,13 +74,13 @@ export type GymMealPlanDay = z.infer<typeof gymMealPlanDaySchema>;
 const byNameSchema = z.string().min(1).nullable();
 
 export const gymMealPlanSummarySchema = z.object({
-  id: z.string().uuid(),
+  id: z.uuid(),
   name: z.string().min(1),
   writtenBy: byNameSchema,
   changedBy: byNameSchema,
-  createdAt: z.string().datetime({ offset: true }),
+  createdAt: z.iso.datetime({ offset: true }),
   /** The same as `createdAt` until the plan is first changed. */
-  updatedAt: z.string().datetime({ offset: true }),
+  updatedAt: z.iso.datetime({ offset: true }),
   /** How many meals the week holds. */
   meals: z.number().int().nonnegative(),
 }).strict();

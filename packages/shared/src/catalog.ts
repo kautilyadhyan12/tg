@@ -9,7 +9,7 @@ import { definitionBundleSchema } from "./definition.js";
  *  'live' rows (Part 4 §3.4), so it would always be the same value. */
 export const exerciseCatalogItemSchema = z.object({
   /** What a goal names (`putGoalRequestSchema.exerciseId`). */
-  id: z.string().uuid(),
+  id: z.uuid(),
   slug: z.string(),
   nameKey: z.string(),
   family: z.string(),

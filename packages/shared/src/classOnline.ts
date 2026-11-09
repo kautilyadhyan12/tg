@@ -67,7 +67,7 @@ export const classOnlineViewSchema = z
   .object({
     state: z.enum(CLASS_ONLINE_STATES),
     /** When the link shows to somebody booked. */
-    opensAt: z.string().datetime(),
+    opensAt: z.iso.datetime(),
     link: z.string().nullable(),
   })
   .strict()

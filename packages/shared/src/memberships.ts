@@ -47,7 +47,7 @@ export const SALES_TAX_PCM_MAX = 30_000;
 export const TAX_RATES_MAX = 10;
 /** The rates a membership type charges (18b-v-b): each of the gym's rates once, in order. */
 const taxRateIdsSchema = z
-  .array(z.string().uuid())
+  .array(z.uuid())
   .max(TAX_RATES_MAX)
   .refine((ids) => new Set(ids).size === ids.length, "rate_twice");
 export const MEMBERSHIP_TERM_COUNT_MAX = 365;
@@ -145,7 +145,7 @@ export const PRICE_RAISE_TICKED_MAX = 20_000;
 /** Raise the price for these memberships of the line, ticked in the box before Save: the line's new price, from
  *  each one's first payment at least `noticeDays` away, emailed that many days before it. */
 export const priceRaiseRequestSchema = z
-  .object({ noticeDays: priceRaiseNoticeDaysSchema, membershipIds: z.array(z.string().uuid()).min(1).max(PRICE_RAISE_TICKED_MAX) })
+  .object({ noticeDays: priceRaiseNoticeDaysSchema, membershipIds: z.array(z.uuid()).min(1).max(PRICE_RAISE_TICKED_MAX) })
   .strict();
 export type PriceRaiseRequest = z.infer<typeof priceRaiseRequestSchema>;
 /** What happens to one membership's price: to be emailed (`on` the day it goes); after a freeze; on its way; emailed
@@ -231,7 +231,7 @@ const ptLimitSchema = z.number().int().min(1).max(MEMBERSHIP_PT_LIMIT_MAX);
  *  `ptPeriod` is how many personal training sessions it allows; both null is no limit. */
 export const gymMembershipTypeSchema = z
   .object({
-    id: z.string().uuid(),
+    id: z.uuid(),
     name: z.string().min(1).max(MEMBERSHIP_NAME_MAX),
     description: z.string().min(1).max(MEMBERSHIP_DESCRIPTION_MAX).nullable(),
     kind: membershipKindSchema,
@@ -245,7 +245,7 @@ export const gymMembershipTypeSchema = z
     bookingsLimit: bookingsLimitSchema.nullable(),
     bookingsPeriod: membershipLimitPeriodSchema.nullable(),
     classTypes: z
-      .array(z.object({ id: z.string().uuid(), name: z.string().min(1).max(80) }).strict())
+      .array(z.object({ id: z.uuid(), name: z.string().min(1).max(80) }).strict())
       .nullable(),
     /** It includes personal training (17e-i). "Every class" does not by itself. */
     includesPt: z.boolean(),
@@ -253,11 +253,11 @@ export const gymMembershipTypeSchema = z
     ptPeriod: membershipLimitPeriodSchema.nullable(),
     /** The gym's tax rates its bills charge, in the order they were picked (18b-iii; 18b-v-b);
      *  empty for no tax. */
-    taxRateIds: z.array(z.string().uuid()).max(TAX_RATES_MAX),
+    taxRateIds: z.array(z.uuid()).max(TAX_RATES_MAX),
     /** Charged on the first bill of a membership given from it (18t); 0 for none. */
     joiningFeeMinor: priceMinorSchema,
     /** The business's other agreement it is signed with (18u-ii-a); null for the main one. */
-    agreementId: z.string().uuid().nullable().default(null),
+    agreementId: z.uuid().nullable().default(null),
     /** Its contract (18v-i): so many payments, then it renews or ends; both null for none. */
     contractPeriods: contractPeriodsSchema.nullable().default(null),
     contractThen: contractThenSchema.nullable().default(null),
@@ -272,10 +272,10 @@ export const gymMembershipTypeSchema = z
     termReminderDays: renewalReminderDaysSchema.nullable().default(null),
     /** Members may buy it in the app (18k-i): a membership or a pack with a price, never a trial. */
     soldInApp: z.boolean().default(false),
-    archivedAt: z.string().datetime({ offset: true }).nullable(),
+    archivedAt: z.iso.datetime({ offset: true }).nullable(),
     /** When it was last changed. A change sends it back, so a form opened before
      *  somebody else's change is refused, never saved over theirs. */
-    updatedAt: z.string().datetime({ offset: true }),
+    updatedAt: z.iso.datetime({ offset: true }),
   })
   .strict();
 export type GymMembershipType = z.infer<typeof gymMembershipTypeSchema>;
@@ -289,15 +289,15 @@ export const gymMembershipTypesResponseSchema = z
     types: z.array(gymMembershipTypeSchema),
     archived: z.array(gymMembershipTypeSchema),
     archivedTotal: z.number().int().min(0),
-    classChoices: z.array(z.object({ id: z.string().uuid(), name: z.string().min(1).max(80) }).strict()),
+    classChoices: z.array(z.object({ id: z.uuid(), name: z.string().min(1).max(80) }).strict()),
     /** The gym's tax rates, for "Tax" (18b-iii), and whether its prices hold the tax. */
-    taxRates: z.array(z.object({ id: z.string().uuid(), name: z.string(), pcm: z.number().int().min(1).max(SALES_TAX_PCM_MAX) }).strict()),
+    taxRates: z.array(z.object({ id: z.uuid(), name: z.string(), pcm: z.number().int().min(1).max(SALES_TAX_PCM_MAX) }).strict()),
     taxIncluded: z.boolean(),
     /** The day of the month the gym bills everyone on (18y); null where each is billed from its start. */
     billDay: z.number().int().min(1).max(28).nullable().default(null),
     /** The business's other agreements, by name (18u-ii-a): each line says which it uses. Empty
      *  where it has only its main one. */
-    agreements: z.array(z.object({ id: z.string().uuid(), name: z.string(), inUse: z.boolean().default(true) }).strict()).default([]),
+    agreements: z.array(z.object({ id: z.uuid(), name: z.string(), inUse: z.boolean().default(true) }).strict()).default([]),
     /** The business's default agreement: never written, turned off, or in use (18u-ii-a). */
     defaultAgreement: z.enum(["none", "off", "in_use"]).default("none"),
     /** After a change that raised members already on the line (18w): how many. */
@@ -319,7 +319,7 @@ const membershipTypeFields = {
   access: membershipAccessSchema,
   bookingsLimit: bookingsLimitSchema.nullable(),
   bookingsPeriod: membershipLimitPeriodSchema.nullable(),
-  classTypeIds: z.array(z.string().uuid()).max(MEMBERSHIP_CLASS_TYPES_MAX).nullable(),
+  classTypeIds: z.array(z.uuid()).max(MEMBERSHIP_CLASS_TYPES_MAX).nullable(),
   /** Left out of a NEW type is "no"; a change must say it (below). */
   includesPt: z.boolean().default(false),
   /** Left out of a NEW type is "no limit"; a change must say both (below). */
@@ -356,7 +356,7 @@ export const canSellInApp = (type: { kind: MembershipKind; priceMinor: number })
 /** The rules between the fields: each kind in its own shape. */
 function refineMembershipType(value: z.infer<typeof membershipTypeObject>, ctx: z.RefinementCtx): void {
   const wrong = (path: string) => {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, path: [path] });
+    ctx.addIssue({ code: "custom", path: [path] });
   };
   if (value.kind === "pack") {
     if (value.packClasses === null) wrong("packClasses");
@@ -437,7 +437,7 @@ export const updateGymMembershipTypeRequestSchema = membershipTypeObject
   // A change states the tick outright, as it states every other field: a default here
   // would take personal training off everybody who holds the type, or its limit.
   .extend({
-    updatedAt: z.string().datetime({ offset: true }),
+    updatedAt: z.iso.datetime({ offset: true }),
     includesPt: z.boolean(),
     ptLimit: ptLimitSchema.nullable(),
     ptPeriod: membershipLimitPeriodSchema.nullable(),

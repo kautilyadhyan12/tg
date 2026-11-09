@@ -68,7 +68,7 @@ const minorSchema = z.number().int().min(0).max(99_999_999);
 
 /** `requestKey` is made by the screen once a box: the same key twice is one refund. `terminalId`: where Square needs the card present. */
 export const cardRefundRequestSchema = z
-  .object({ requestKey: z.string().uuid(), amountMinor: z.number().int().min(1).max(99_999_999), reason: refundReasonSchema, terminalId: z.string().uuid().optional() })
+  .object({ requestKey: z.uuid(), amountMinor: z.number().int().min(1).max(99_999_999), reason: refundReasonSchema, terminalId: z.uuid().optional() })
   .strict();
 export type CardRefundRequest = z.infer<typeof cardRefundRequestSchema>;
 
@@ -92,7 +92,7 @@ export const cardRefundResponseSchema = z
     amountMinor: minorSchema,
     currency: z.string().regex(/^[A-Z]{3}$/),
     card: cardSeenSchema.nullable(),
-    pressId: z.string().uuid(),
+    pressId: z.uuid(),
     onTerminal: cardRefundTerminalViewSchema.nullable(),
   })
   .strict();
@@ -115,7 +115,7 @@ export const cardRefundCheckSchema = z
   .strict();
 export type CardRefundCheck = z.infer<typeof cardRefundCheckSchema>;
 
-export const cardRefundPressParamsSchema = z.object({ gymId: z.string().uuid(), pressId: z.string().uuid() }).strict();
+export const cardRefundPressParamsSchema = z.object({ gymId: z.uuid(), pressId: z.uuid() }).strict();
 
 /** The box of a refund that needs the card on the Terminal. */
 export const CARD_REFUND_TERMINAL_WORDS = {

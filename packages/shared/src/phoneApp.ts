@@ -11,7 +11,7 @@ export const phoneAppExtraSchema = z
   .object({
     /** The folder's name under the icon, on a laptop's copy; absent in the store's app. */
     copyName: z.string().min(1).optional(),
-    apiUrl: z.string().url(),
+    apiUrl: z.url(),
     /** The app's website, an address alone (`http://localhost:5173`): the start of every link a
      *  member shares, which opens there (Invite a friend, Stage 5 item 20a). */
     webUrl: z

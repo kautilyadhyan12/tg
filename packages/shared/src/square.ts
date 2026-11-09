@@ -11,7 +11,7 @@ export const squareObjectIdSchema = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/);
 /** An access or refresh token. Never logged, never sent to a browser. */
 const squareTokenTextSchema = z.string().regex(/^[\x21-\x7e]{16,1024}$/);
 
-const squareTimeSchema = z.string().datetime({ offset: true });
+const squareTimeSchema = z.iso.datetime({ offset: true });
 
 /** ObtainToken's answer, for a code and for a refresh alike. */
 export const squareTokenSchema = z.object({

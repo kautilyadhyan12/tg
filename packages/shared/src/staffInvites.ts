@@ -38,12 +38,12 @@ export const createStaffInviteRequestSchema = z
      *  when left out. "Manage staff" stays the owner's and is refused. */
     privileges: z.array(orgPrivilegeSchema).max(ORG_PRIVILEGES.length).optional(),
     /** One of the gym's own roles ("Front desk"): its name is shown in place of `role`. */
-    roleId: z.string().uuid().optional(),
+    roleId: z.uuid().optional(),
   })
   .strict();
 export type CreateStaffInviteRequest = z.infer<typeof createStaffInviteRequestSchema>;
 
-export const staffInviteParamsSchema = z.object({ gymId: z.string().uuid(), inviteId: z.string().uuid() }).strict();
+export const staffInviteParamsSchema = z.object({ gymId: z.uuid(), inviteId: z.uuid() }).strict();
 
 /** Why a staff invitation's email did not go. */
 export const staffInviteEmailReasonSchema = z.enum([
@@ -86,7 +86,7 @@ export const STAFF_INVITE_EMAIL_REASON_WORDS: Readonly<Record<StaffInviteEmailRe
  *  answered; `ended`: 7 days passed with no answer; `declined`: they said No thanks. */
 export const staffInviteSchema = z
   .object({
-    id: z.string().uuid(),
+    id: z.uuid(),
     email: z.string(),
     role: staffInviteRoleSchema,
     /** What Accept gives them. */
@@ -136,7 +136,7 @@ export type ResendStaffInviteResponse = z.infer<typeof resendStaffInviteResponse
 
 export const staffRoleSchema = z
   .object({
-    id: z.string().uuid(),
+    id: z.uuid(),
     name: z.string(),
     privileges: z.array(z.string()),
   })
@@ -159,7 +159,7 @@ export type CreateStaffRoleRequest = z.infer<typeof createStaffRoleRequestSchema
 
 export const createStaffRoleResponseSchema = z.object({ role: staffRoleSchema }).strict();
 export const deleteStaffRoleResponseSchema = z.object({ status: z.literal("deleted") }).strict();
-export const staffRoleParamsSchema = z.object({ gymId: z.string().uuid(), roleId: z.string().uuid() }).strict();
+export const staffRoleParamsSchema = z.object({ gymId: z.uuid(), roleId: z.uuid() }).strict();
 
 /** Names a gym's own role may not take: the app's own roles, in any of its words. */
 export const RESERVED_STAFF_ROLE_NAMES = ["owner", "manager", "trainer", "coach", "clinician"] as const;
@@ -168,7 +168,7 @@ export const RESERVED_STAFF_ROLE_NAMES = ["owner", "manager", "trainer", "coach"
 
 export const myStaffInvitationSchema = z
   .object({
-    id: z.string().uuid(),
+    id: z.uuid(),
     role: staffInviteRoleSchema,
     /** What they will be able to do. */
     privileges: z.array(z.string()),
@@ -176,7 +176,7 @@ export const myStaffInvitationSchema = z
     roleName: z.string().nullable(),
     gym: z
       .object({
-        id: z.string().uuid(),
+        id: z.uuid(),
         name: z.string(),
         city: z.string().nullable(),
         orgType: orgTypeSchema,
@@ -201,7 +201,7 @@ export const myStaffInvitationsResponseSchema = z
   .strict();
 export type MyStaffInvitationsResponse = z.infer<typeof myStaffInvitationsResponseSchema>;
 
-export const staffInvitationParamsSchema = z.object({ invitationId: z.string().uuid() }).strict();
+export const staffInvitationParamsSchema = z.object({ invitationId: z.uuid() }).strict();
 
 export const acceptStaffInvitationResponseSchema = z
   .object({
@@ -209,7 +209,7 @@ export const acceptStaffInvitationResponseSchema = z
     role: orgRoleSchema,
     gym: z
       .object({
-        id: z.string().uuid(),
+        id: z.uuid(),
         slug: z.string(),
         name: z.string(),
         orgType: orgTypeSchema,

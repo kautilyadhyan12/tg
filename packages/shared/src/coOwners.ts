@@ -8,14 +8,14 @@ import { z } from "zod";
 export const CO_OWNER_REQUEST_DAYS = 7;
 
 /** The two routes the owner uses address a person on the Staff tab by their user id. */
-export const coOwnerStaffParamsSchema = z.object({ gymId: z.string().uuid(), userId: z.string().uuid() }).strict();
+export const coOwnerStaffParamsSchema = z.object({ gymId: z.uuid(), userId: z.uuid() }).strict();
 
 /** The person asked answers the one request they were shown. */
-export const coOwnerRequestParamsSchema = z.object({ gymId: z.string().uuid(), requestId: z.string().uuid() }).strict();
+export const coOwnerRequestParamsSchema = z.object({ gymId: z.uuid(), requestId: z.uuid() }).strict();
 
 /** Send request: the request, and whether its email went. */
 export const sendCoOwnerRequestResponseSchema = z.object({
-  request: z.object({ userId: z.string().uuid(), expiresAt: z.string().datetime() }),
+  request: z.object({ userId: z.uuid(), expiresAt: z.iso.datetime() }),
   /** False when the email could not be sent: the request still waits on their Overview. */
   emailed: z.boolean(),
 });
@@ -28,10 +28,10 @@ export type CancelCoOwnerRequestResponse = z.infer<typeof cancelCoOwnerRequestRe
 export const myCoOwnerRequestResponseSchema = z.object({
   request: z
     .object({
-      id: z.string().uuid(),
+      id: z.uuid(),
       /** The owner who asked, by the name they go by; empty when they have none. */
       ownerName: z.string(),
-      expiresAt: z.string().datetime(),
+      expiresAt: z.iso.datetime(),
     })
     .nullable(),
 });
@@ -67,7 +67,7 @@ export const OWNER_REQUEST_DAYS = 7;
 
 /** Send request: the request, and whether its email went. */
 export const sendOwnerRequestResponseSchema = z.object({
-  request: z.object({ userId: z.string().uuid(), expiresAt: z.string().datetime() }),
+  request: z.object({ userId: z.uuid(), expiresAt: z.iso.datetime() }),
   /** False when the email could not be sent: the request still waits on their Overview. */
   emailed: z.boolean(),
 });
@@ -80,17 +80,17 @@ export type CancelOwnerRequestResponse = z.infer<typeof cancelOwnerRequestRespon
 export const myOwnerRequestResponseSchema = z.object({
   request: z
     .object({
-      id: z.string().uuid(),
+      id: z.uuid(),
       /** The owner who asked, by the name they go by; empty when they have none. */
       ownerName: z.string(),
-      expiresAt: z.string().datetime(),
+      expiresAt: z.iso.datetime(),
       /** The gym's plan, paid by the owner, stops renewing on Accept: until when it is paid, and
        *  whether it is a paid trial; then the new owner chooses their own (4b-iii-a). Null with
        *  no such plan, or one already handed over to the owner by somebody else. */
       planStops: z
         .object({
           /** When the paid month ends; null when the payment company gives no date. */
-          until: z.string().datetime().nullable(),
+          until: z.iso.datetime().nullable(),
           /** A paid trial made before 2026-09-30: it ends with its trial, nothing charged. */
           trial: z.boolean(),
           /** A new owner's plan not yet started (4b-vi-a): it stops before it starts, nothing charged. */

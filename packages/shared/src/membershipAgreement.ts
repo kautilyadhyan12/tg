@@ -51,12 +51,12 @@ const savedWordingSchema = waiverToReadSchema.extend({ savedAt: z.string() }).st
 /** One of the business's other agreements: its name, its newest wording, and how many
  *  memberships were signed with any of its wordings. */
 export const otherAgreementSchema = z
-  .object({ id: z.string().uuid(), name: z.string(), agreement: savedWordingSchema, inUse: z.boolean(), signed: z.number().int().min(0) })
+  .object({ id: z.uuid(), name: z.string(), agreement: savedWordingSchema, inUse: z.boolean(), signed: z.number().int().min(0) })
   .strict();
 export type OtherAgreement = z.infer<typeof otherAgreementSchema>;
 
 /** A line of the price list in use, with the other agreement it uses; null is the main one. */
-export const agreementPriceSchema = z.object({ id: z.string().uuid(), name: z.string(), agreementId: z.string().uuid().nullable() }).strict();
+export const agreementPriceSchema = z.object({ id: z.uuid(), name: z.string(), agreementId: z.uuid().nullable() }).strict();
 export type AgreementPrice = z.infer<typeof agreementPriceSchema>;
 
 export const gymAgreementResponseSchema = z
@@ -83,8 +83,8 @@ export const saveOtherAgreementBodySchema = z
   .object({
     name: agreementNameSchema,
     text: waiverTextSchema,
-    usedFor: z.array(z.string().uuid()).max(AGREEMENT_USED_FOR_MAX),
-    seen: z.array(z.object({ id: z.string().uuid(), agreementId: z.string().uuid().nullable() }).strict()).max(AGREEMENT_USED_FOR_MAX),
+    usedFor: z.array(z.uuid()).max(AGREEMENT_USED_FOR_MAX),
+    seen: z.array(z.object({ id: z.uuid(), agreementId: z.uuid().nullable() }).strict()).max(AGREEMENT_USED_FOR_MAX),
   })
   .strict();
 export type SaveOtherAgreementBody = z.infer<typeof saveOtherAgreementBodySchema>;
@@ -92,7 +92,7 @@ export type SaveOtherAgreementBody = z.infer<typeof saveOtherAgreementBodySchema
 // ── One membership, at the desk (`members.confirm`) ──
 
 /** The card a member agreed on a Terminal to keep for this membership (18d-vi-c). */
-export const agreementCardSchema = z.object({ brand: z.string(), last4: z.string(), at: z.string().datetime() }).strict();
+export const agreementCardSchema = z.object({ brand: z.string(), last4: z.string(), at: z.iso.datetime() }).strict();
 export type AgreementCard = z.infer<typeof agreementCardSchema>;
 
 /** A signature as staff see it: who signed and the name typed, when, the member of staff who
@@ -145,7 +145,7 @@ export type MembershipAgreementResponse = z.infer<typeof membershipAgreementResp
 
 /** What the desk sends: the wording and the details it showed, who is signing and the name. */
 export const signMembershipAgreementBodySchema = z
-  .object({ agreementId: z.string().uuid(), factsKey: factsKeySchema, signer: deskSignerSchema, name: signedNameSchema })
+  .object({ agreementId: z.uuid(), factsKey: factsKeySchema, signer: deskSignerSchema, name: signedNameSchema })
   .strict();
 export type SignMembershipAgreementBody = z.infer<typeof signMembershipAgreementBodySchema>;
 

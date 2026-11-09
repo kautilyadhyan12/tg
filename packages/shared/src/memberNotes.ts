@@ -76,7 +76,7 @@ export const memberNoteAddRequestSchema = z
       .transform(tidyMemberNoteBody)
       .pipe(z.string().min(1).max(MEMBER_NOTE_MAX_CHARS).refine(memberNoteIsSeen, { message: "a note needs words" })),
     /** The press that made it: the same press again adds nothing. */
-    requestKey: z.string().uuid(),
+    requestKey: z.uuid(),
   })
   .strict();
 export type MemberNoteAddRequest = z.infer<typeof memberNoteAddRequestSchema>;
@@ -89,21 +89,21 @@ const tagNameSchema = z
 
 /** One of the gym's tags, picked; or a name typed, which is that tag if the gym has it and
  *  a new one if not. */
-export const memberTagAddRequestSchema = z.union([z.object({ id: z.string().uuid() }).strict(), z.object({ name: tagNameSchema }).strict()]);
+export const memberTagAddRequestSchema = z.union([z.object({ id: z.uuid() }).strict(), z.object({ name: tagNameSchema }).strict()]);
 export type MemberTagAddRequest = z.infer<typeof memberTagAddRequestSchema>;
 
 export const memberNoteSchema = z
   .object({
-    id: z.string().uuid(),
+    id: z.uuid(),
     body: z.string(),
     /** Who wrote it; null once that account is gone. */
     authorName: z.string().nullable(),
-    createdAt: z.string().datetime(),
+    createdAt: z.iso.datetime(),
   })
   .strict();
 export type MemberNote = z.infer<typeof memberNoteSchema>;
 
-export const memberTagSchema = z.object({ id: z.string().uuid(), name: z.string() }).strict();
+export const memberTagSchema = z.object({ id: z.uuid(), name: z.string() }).strict();
 export type MemberTag = z.infer<typeof memberTagSchema>;
 
 /** One person's newest notes (newest first) and tags, and every tag the gym has made. */
@@ -119,7 +119,7 @@ export const memberNotesAndTagsSchema = z
 export type MemberNotesAndTags = z.infer<typeof memberNotesAndTagsSchema>;
 
 /** The notes older than one the page already shows: `before` is the oldest note shown. */
-export const memberNotesOlderQuerySchema = z.object({ before: z.string().uuid() }).strict();
+export const memberNotesOlderQuerySchema = z.object({ before: z.uuid() }).strict();
 export const memberNotesOlderResponseSchema = z
   .object({
     notes: z.array(memberNoteSchema).max(MEMBER_NOTES_PAGE),
@@ -155,7 +155,7 @@ export const MEMBER_NOTE_NO_AUTHOR_WORDS = "Someone no longer here";
 
 /** One of the gym's tags with how many records hold it: members, and past members. */
 export const memberGymTagSchema = z
-  .object({ id: z.string().uuid(), name: z.string(), people: z.number().int().min(0), pastPeople: z.number().int().min(0) })
+  .object({ id: z.uuid(), name: z.string(), people: z.number().int().min(0), pastPeople: z.number().int().min(0) })
   .strict();
 export type MemberGymTag = z.infer<typeof memberGymTagSchema>;
 
@@ -180,14 +180,14 @@ export const memberTagsSelectedRequestSchema = z.discriminatedUnion("action", [
     .object({
       action: z.literal("add"),
       selection: memberListSelectionSchema,
-      tag: z.union([z.object({ id: z.string().uuid() }).strict(), z.object({ name: tagNameSchema }).strict()]),
+      tag: z.union([z.object({ id: z.uuid() }).strict(), z.object({ name: tagNameSchema }).strict()]),
     })
     .strict(),
-  z.object({ action: z.literal("remove"), selection: memberListSelectionSchema, tagId: z.string().uuid() }).strict(),
+  z.object({ action: z.literal("remove"), selection: memberListSelectionSchema, tagId: z.uuid() }).strict(),
 ]);
 export type MemberTagsSelectedRequest = z.infer<typeof memberTagsSelectedRequestSchema>;
 
-export const memberTagPersonSchema = z.object({ entryId: z.string().uuid(), name: z.string() }).strict();
+export const memberTagPersonSchema = z.object({ entryId: z.uuid(), name: z.string() }).strict();
 export type MemberTagPerson = z.infer<typeof memberTagPersonSchema>;
 
 /** Why someone selected does not change:
@@ -206,7 +206,7 @@ export const memberTagsPreviewSchema = z
   .object({
     action: z.enum(["add", "remove"]),
     /** `id` is null for a tag the gym does not have yet. */
-    tag: z.object({ id: z.string().uuid().nullable(), name: z.string() }).strict(),
+    tag: z.object({ id: z.uuid().nullable(), name: z.string() }).strict(),
     selected: z.number().int().min(0),
     /** How many change; `change` names the first of them. */
     changeCount: z.number().int().min(0),

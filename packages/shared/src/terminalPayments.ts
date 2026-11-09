@@ -28,13 +28,13 @@ export type TerminalKeepStep = z.infer<typeof terminalKeepStepSchema>;
 
 export const terminalPaymentSchema = z
   .object({
-    id: z.string().uuid(),
+    id: z.uuid(),
     /** Null for a basket at Sell (18d-vi-b-ii). */
-    membershipId: z.string().uuid().nullable(),
+    membershipId: z.uuid().nullable(),
     /** A basket at Sell: recorded as that sale once Square takes the money (18d-vi-b-ii). */
     forSale: z.boolean().default(false),
     /** The fee it pays (18d-vi-b-i); null for a period of the membership. */
-    feeBillId: z.string().uuid().nullable(),
+    feeBillId: z.uuid().nullable(),
     amountMinor: z.number().int().min(1).max(99_999_999),
     currency: z.string().regex(/^[A-Z]{3}$/),
     /** `waiting`: on its way to the Terminal or on its screen; `done`: see `outcome`. */
@@ -48,7 +48,7 @@ export const terminalPaymentSchema = z
     tooLate: z.boolean(),
     /** Null once the gym has removed the Terminal. */
     terminal: cardTerminalSchema.nullable(),
-    startedAt: z.string().datetime(),
+    startedAt: z.iso.datetime(),
     /** The payment's receipt once it is on the bill, or the sale's once it is recorded. */
     receiptNumber: receiptNumberSchema.nullable(),
     /** Who pressed it: sent for Sell's waiting sales, so another desk sees whose it is. */
@@ -100,8 +100,8 @@ export type TerminalSalesResponse = z.infer<typeof terminalSalesResponseSchema>;
  *  press sent twice is one payment. */
 export const terminalPaymentRequestSchema = z
   .object({
-    terminalId: z.string().uuid(),
-    requestKey: z.string().uuid(),
+    terminalId: z.uuid(),
+    requestKey: z.uuid(),
     periodIndex: z.number().int().min(0).max(100_000),
     amountMinor: z.number().int().min(1).max(99_999_999),
     /** Ask the person on the Terminal to save the card they pay with (18d-vi-c). */
@@ -113,8 +113,8 @@ export type TerminalPaymentRequest = z.infer<typeof terminalPaymentRequestSchema
 /** Take payment on Terminal for a fee (18d-vi-b-i): all of it, the amount the screen showed. */
 export const terminalFeePaymentRequestSchema = z
   .object({
-    terminalId: z.string().uuid(),
-    requestKey: z.string().uuid(),
+    terminalId: z.uuid(),
+    requestKey: z.uuid(),
     amountMinor: z.number().int().min(1).max(99_999_999),
   })
   .strict();

@@ -12,7 +12,7 @@ const markSchema = z.string().regex(/^[0-9a-f]{64}$/);
 
 export const ptSessionEndingSchema = z
   .object({
-    id: z.string().uuid(),
+    id: z.uuid(),
     /** The person on the gym's list the session is for. */
     personName: z.string(),
     /** Null where the trainer's account has gone. */

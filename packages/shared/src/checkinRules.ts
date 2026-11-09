@@ -119,7 +119,7 @@ export const checkinRulesPreviewResponseSchema = z
     notListed: z.number().int().min(0),
     /** The first of them by name, each with why. */
     people: z
-      .array(z.object({ entryId: z.string().uuid(), name: z.string(), reason: checkinStopReasonSchema }).strict())
+      .array(z.object({ entryId: z.uuid(), name: z.string(), reason: checkinStopReasonSchema }).strict())
       .max(CHECKIN_RULES_PREVIEW_NAMES),
   })
   .strict();

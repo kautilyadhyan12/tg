@@ -83,7 +83,7 @@ export const memberCardSchema = z
      *  `not_sent`. Null where none was written. */
     expiryReminder: z.enum(["sending", "emailed", "maybe_emailed", "no_email", "not_sent"]).nullable(),
     expiryReminderOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(),
-    savedAt: z.string().datetime(),
+    savedAt: z.iso.datetime(),
     /** `desk`: on staff's screen; `app`: the member's own; `terminal`: on the gym's Square
      *  Terminal (18d-ii-b-ii). */
     savedFrom: z.enum(["desk", "app", "terminal"]),
@@ -133,7 +133,7 @@ const earlierCardSchema = z.object({ brand: z.string().regex(/^[A-Z_]{1,40}$/), 
  *  simulated Terminals in its sandbox. */
 export const cardTerminalSchema = z
   .object({
-    id: z.string().uuid(),
+    id: z.uuid(),
     serial: z.string().max(100).nullable(),
     practice: squarePracticeTerminalSchema.nullable(),
   })
@@ -152,7 +152,7 @@ export type TerminalSaveOutcome = z.infer<typeof terminalSaveOutcomeSchema>;
 
 export const terminalSaveSchema = z
   .object({
-    id: z.string().uuid(),
+    id: z.uuid(),
     /** `agree`: waiting for I agree; `card`: waiting for the card; `done`: see `outcome`. */
     step: z.enum(["agree", "card", "done"]),
     outcome: terminalSaveOutcomeSchema.nullable(),
@@ -167,7 +167,7 @@ export const terminalSaveSchema = z
     entry: z.enum(["insert_or_swipe", "swipe"]),
     /** Null once the gym has removed the Terminal. */
     terminal: cardTerminalSchema.nullable(),
-    startedAt: z.string().datetime(),
+    startedAt: z.iso.datetime(),
   })
   .strict();
 export type TerminalSave = z.infer<typeof terminalSaveSchema>;
@@ -179,7 +179,7 @@ export const memberCardViewSchema = z
     card: memberCardSchema.nullable(),
     earlierCard: earlierCardSchema.nullable(),
     /** Somebody else on the list pays for this person (18i): that person's card is used. */
-    paidBy: z.object({ entryId: z.string().uuid(), name: z.string().max(120) }).strict().nullable(),
+    paidBy: z.object({ entryId: z.uuid(), name: z.string().max(120) }).strict().nullable(),
     /** One app account of their own holds the record: they can add a card in the app. */
     inApp: z.boolean(),
     /** Add, replace and remove: the gym is on a live plan and Square is ready. */
@@ -207,7 +207,7 @@ export const memberCardResponseSchema = z.object({ cardOnFile: memberCardViewSch
 export type MemberCardResponse = z.infer<typeof memberCardResponseSchema>;
 
 /** Save card on Terminal. `requestKey`: the same press sent twice is one save. */
-export const terminalSaveRequestSchema = z.object({ terminalId: z.string().uuid(), requestKey: z.string().uuid() }).strict();
+export const terminalSaveRequestSchema = z.object({ terminalId: z.uuid(), requestKey: z.uuid() }).strict();
 export type TerminalSaveRequest = z.infer<typeof terminalSaveRequestSchema>;
 
 /** Where a save on a Terminal stands, and Card on file as it is now. */
@@ -221,7 +221,7 @@ export const saveCardRequestSchema = z
     sourceId: squareCardSourceSchema,
     agreed: z.literal(true),
     agreement: z.string().min(1).max(600),
-    requestKey: z.string().uuid(),
+    requestKey: z.uuid(),
   })
   .strict();
 export type SaveCardRequest = z.infer<typeof saveCardRequestSchema>;

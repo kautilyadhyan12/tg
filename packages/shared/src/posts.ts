@@ -110,21 +110,21 @@ export type GymPostChallengeResult = z.infer<typeof gymPostChallengeResultSchema
 
 export const gymPostSchema = z
   .object({
-    id: z.string().uuid(),
+    id: z.uuid(),
     /** Who posted: first name and last initial for members, the whole name for staff;
      *  null when the account is gone, and the screen says the gym's name. */
     author: z.object({ name: z.string().nullable(), initials: z.string() }).strict(),
     body: postWords,
     photos: z.array(gymPostPhotoSchema).max(GYM_POST_MAX_PHOTOS),
     pinned: z.boolean(),
-    createdAt: z.string().datetime({ offset: true }),
+    createdAt: z.iso.datetime({ offset: true }),
     reactions: reactionCountsSchema,
     /** The reader's own reaction. */
     mine: gymPostReactionSchema.nullable(),
     /** A member's own post, as against one by the gym's staff. */
     fromMember: z.boolean(),
     /** The member who wrote it, whose posts a tap on the name opens; null for a staff post. */
-    authorId: z.string().uuid().nullable(),
+    authorId: z.uuid().nullable(),
     /** The reader wrote it as a member, and may remove it. */
     own: z.boolean(),
     /** The reader wrote it, as a member or as staff: nothing of theirs offers Report. */
@@ -157,11 +157,11 @@ export const postsCursor = z
   .max(80)
   .transform((text, ctx) => {
     const cut = text.lastIndexOf("_");
-    const at = z.string().datetime().safeParse(text.slice(0, Math.max(cut, 0)));
-    const id = z.string().uuid().safeParse(text.slice(cut + 1));
+    const at = z.iso.datetime().safeParse(text.slice(0, Math.max(cut, 0)));
+    const id = z.uuid().safeParse(text.slice(cut + 1));
     // Before 1970 no post exists, and the database cannot read year 0000 at all.
     if (cut < 0 || !at.success || !id.success || !(new Date(at.data).getTime() >= 0)) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "not a place in the list" });
+      ctx.addIssue({ code: "custom", message: "not a place in the list" });
       return z.NEVER;
     }
     return { at: at.data, id: id.data };
@@ -170,8 +170,8 @@ export const gymPostsQuerySchema = z.object({ before: postsCursor.optional() }).
 export type GymPostsQuery = z.infer<typeof gymPostsQuerySchema>;
 export type GymPostsCursor = NonNullable<GymPostsQuery["before"]>;
 
-const feedShape = <P extends z.ZodTypeAny>(post: P) => ({
-  gymId: z.string().uuid(),
+const feedShape = <P extends z.ZodType>(post: P) => ({
+  gymId: z.uuid(),
   gymName: z.string(),
   /** The pinned posts, newest pin first; on the first page only. */
   pinned: z.array(post).max(GYM_POST_MAX_PINNED),
@@ -197,7 +197,7 @@ export const gymPostsResponseSchema = z
     /** People the reader has blocked at this gym. */
     blockedCount: z.number().int().nonnegative(),
     /** Where to write for help with the app; null until one is set. */
-    supportEmail: z.string().email().nullable(),
+    supportEmail: z.email().nullable(),
   })
   .strict();
 export type GymPostsResponse = z.infer<typeof gymPostsResponseSchema>;
@@ -225,7 +225,7 @@ const photoBase64 = z
 export const addGymPostRequestSchema = z
   .object({
     /** The browser's key for this one post: the same key again is the same post. */
-    postKey: z.string().uuid(),
+    postKey: z.uuid(),
     body: postWords.refine((text) => !text.includes(NUL), { message: "a character that cannot be kept" }),
     /** Each photo as base64, already shrunk by the browser, in the order shown. A list
      *  that is too long is refused before one item of it is looked at: the body may hold
@@ -252,7 +252,7 @@ export const GYM_POST_DRAFT_MOST = GYM_POST_MAX_CHARS * 4;
 export const gymPostDraftFileSchema = z
   .object({
     version: z.literal(1),
-    postKey: z.string().uuid(),
+    postKey: z.uuid(),
     body: z.string().max(GYM_POST_DRAFT_MOST),
     photos: z.array(z.string().regex(/^[0-9a-f-]{36}\.webp$/)).max(GYM_POST_MAX_PHOTOS),
     /** It has been sent under this key, and the answer is not known. */
@@ -291,8 +291,8 @@ export const gymPostReactorsResponseSchema = z
   .strict();
 export type GymPostReactorsResponse = z.infer<typeof gymPostReactorsResponseSchema>;
 
-export const gymPostParamsSchema = z.object({ gymId: z.string().uuid(), postId: z.string().uuid() }).strict();
-export const gymPostPhotoParamsSchema = gymPostParamsSchema.extend({ photoId: z.string().uuid() }).strict();
+export const gymPostParamsSchema = z.object({ gymId: z.uuid(), postId: z.uuid() }).strict();
+export const gymPostPhotoParamsSchema = gymPostParamsSchema.extend({ photoId: z.uuid() }).strict();
 
 // ── MEMBERS POST, REPORT, AND THE STAFF LIST (19b-ii-a; spec §15.3) ──
 
@@ -324,7 +324,7 @@ export type GymPostReasonCounts = z.infer<typeof reasonCountsSchema>;
  *  never sent: only how many, and why. */
 export const reportedGymPostsResponseSchema = z
   .object({
-    gymId: z.string().uuid(),
+    gymId: z.uuid(),
     gymName: z.string(),
     items: z
       .array(
@@ -340,8 +340,8 @@ export const reportedGymPostsResponseSchema = z
              *  reports are no longer the ones counted here. */
             allReports: z.number().int().positive(),
             reportsMark: reportsMark,
-            firstReportedAt: z.string().datetime({ offset: true }),
-            lastReportedAt: z.string().datetime({ offset: true }),
+            firstReportedAt: z.iso.datetime({ offset: true }),
+            lastReportedAt: z.iso.datetime({ offset: true }),
           })
           .strict(),
       )
@@ -368,14 +368,14 @@ export const keptGymPostResponseSchema = z
 export const gymPostSettingsSchema = z.object({ membersCanPost: z.boolean() }).strict();
 export type GymPostSettings = z.infer<typeof gymPostSettingsSchema>;
 
-export const gymPosterParamsSchema = z.object({ gymId: z.string().uuid(), userId: z.string().uuid() }).strict();
+export const gymPosterParamsSchema = z.object({ gymId: z.uuid(), userId: z.uuid() }).strict();
 export const gymPosterStoppedResponseSchema = z.object({ stopped: z.boolean() }).strict();
 export const stoppedGymPostersResponseSchema = z
   .object({
     people: z
       .array(
         z
-          .object({ userId: z.string().uuid(), name: z.string().nullable(), initials: z.string(), stoppedAt: z.string().datetime({ offset: true }) })
+          .object({ userId: z.uuid(), name: z.string().nullable(), initials: z.string(), stoppedAt: z.iso.datetime({ offset: true }) })
           .strict(),
       )
       .max(GYM_POST_STOPS_SHOWN),
@@ -389,7 +389,7 @@ export type StoppedGymPostersResponse = z.infer<typeof stoppedGymPostersResponse
 export const GYM_POST_BLOCKS_SHOWN = 200;
 
 export const blockedGymPosterResponseSchema = z.object({ blocked: z.boolean() }).strict();
-export const gymPostBlockParamsSchema = z.object({ gymId: z.string().uuid(), blockId: z.string().uuid() }).strict();
+export const gymPostBlockParamsSchema = z.object({ gymId: z.uuid(), blockId: z.uuid() }).strict();
 
 /** The people the reader has blocked at this gym, named as members see each other. */
 export const blockedGymPostersResponseSchema = z
@@ -397,7 +397,7 @@ export const blockedGymPostersResponseSchema = z
     people: z
       .array(
         z
-          .object({ id: z.string().uuid(), name: z.string().nullable(), initials: z.string(), blockedAt: z.string().datetime({ offset: true }) })
+          .object({ id: z.uuid(), name: z.string().nullable(), initials: z.string(), blockedAt: z.iso.datetime({ offset: true }) })
           .strict(),
       )
       .max(GYM_POST_BLOCKS_SHOWN),

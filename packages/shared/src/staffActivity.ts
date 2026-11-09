@@ -26,7 +26,7 @@ const cursorSchema = z
 export const staffActivityQuerySchema = z
   .object({
     /** One worker, or everybody. */
-    worker: z.string().uuid().optional(),
+    worker: z.uuid().optional(),
     /** The first and last day shown, on the gym's own calendar; both or neither. */
     from: daySchema.optional(),
     to: daySchema.optional(),
@@ -42,7 +42,7 @@ export const staffActivityLineSchema = z.object({
   /** The gym's own day and minute of the day it happened. */
   day: z.string().regex(DAY),
   minute: z.number().int().min(0).max(1439),
-  workerId: z.string().uuid(),
+  workerId: z.uuid(),
   worker: z.string(),
   /** What they did, as one sentence: "Removed Priya Shah from the app." */
   line: z.string(),
@@ -50,7 +50,7 @@ export const staffActivityLineSchema = z.object({
 export type StaffActivityLine = z.infer<typeof staffActivityLineSchema>;
 
 export const staffActivityWorkerSchema = z.object({
-  userId: z.string().uuid(),
+  userId: z.uuid(),
   name: z.string(),
   /** Still on the gym's staff; a former worker's lines stay. */
   current: z.boolean(),

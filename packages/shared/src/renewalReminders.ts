@@ -170,7 +170,7 @@ export function renewalReminderWords(input: RenewalReminderWordsInput): RenewalR
 
 /** One person on a line, as its box lists them (18v-iv): their name, and whose membership where somebody else pays. */
 export const renewalReminderPersonSchema = z
-  .object({ entryId: z.string().uuid(), name: z.string(), paidBy: z.string().nullable(), status: renewalReminderStatusSchema })
+  .object({ entryId: z.uuid(), name: z.string(), paidBy: z.string().nullable(), status: renewalReminderStatusSchema })
   .strict();
 export const renewalReminderPreviewResponseSchema = z.object({ people: z.array(renewalReminderPersonSchema) }).strict();
 export type RenewalReminderPreviewResponse = z.infer<typeof renewalReminderPreviewResponseSchema>;

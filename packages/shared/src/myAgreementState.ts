@@ -24,6 +24,6 @@ export const myMembershipAgreementSchema = z
 export type MyMembershipAgreement = z.infer<typeof myMembershipAgreementSchema>;
 
 /** A membership of the caller's whose agreement they may sign in the app now, on the Gym tab's card. */
-export const myAgreementToSignSchema = z.object({ membershipId: z.string().uuid(), name: z.string() }).strict();
+export const myAgreementToSignSchema = z.object({ membershipId: z.uuid(), name: z.string() }).strict();
 export type MyAgreementToSign = z.infer<typeof myAgreementToSignSchema>;
 export const MY_AGREEMENTS_TO_SIGN_MAX = 10;

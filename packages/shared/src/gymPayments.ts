@@ -41,8 +41,8 @@ export const squareConnectionSchema = z
     locationName: z.string().max(255).nullable(),
     /** While choosing, for the owner alone; empty otherwise. */
     locations: z.array(squareLocationChoiceSchema).max(300),
-    connectedAt: z.string().datetime(),
-    removedAt: z.string().datetime().nullable(),
+    connectedAt: z.iso.datetime(),
+    removedAt: z.iso.datetime().nullable(),
   })
   .strict();
 export type SquareConnection = z.infer<typeof squareConnectionSchema>;
@@ -66,11 +66,11 @@ export type SquarePracticeTerminal = z.infer<typeof squarePracticeTerminalSchema
 
 export const squareTerminalSchema = z
   .object({
-    id: z.string().uuid(),
+    id: z.uuid(),
     /** A real Terminal's serial number, as Square names it; null for a simulated one. */
     serial: z.string().max(100).nullable(),
     practice: squarePracticeTerminalSchema.nullable(),
-    pairedAt: z.string().datetime(),
+    pairedAt: z.iso.datetime(),
   })
   .strict();
 export type SquareTerminal = z.infer<typeof squareTerminalSchema>;
@@ -82,7 +82,7 @@ export const squareTerminalsSchema = z
     needsAllow: z.boolean(),
     list: z.array(squareTerminalSchema).max(SQUARE_TERMINALS_MAX),
     /** A code waiting for a Terminal to sign in, for the owner alone. */
-    pairing: z.object({ id: z.string().uuid(), pairBy: z.string().datetime() }).strict().nullable(),
+    pairing: z.object({ id: z.uuid(), pairBy: z.iso.datetime() }).strict().nullable(),
   })
   .strict();
 export type SquareTerminals = z.infer<typeof squareTerminalsSchema>;
@@ -110,7 +110,7 @@ export const gymPaymentsResponseSchema = z.object({ payments: gymPaymentsSchema 
 export type GymPaymentsResponse = z.infer<typeof gymPaymentsResponseSchema>;
 
 /** Connect Square: the address of Square's own page, for the browser to open. */
-export const squareConnectResponseSchema = z.object({ url: z.string().url().max(2000) }).strict();
+export const squareConnectResponseSchema = z.object({ url: z.url().max(2000) }).strict();
 export type SquareConnectResponse = z.infer<typeof squareConnectResponseSchema>;
 
 /** What Square sent back to the return page: a code after Allow, or an error after Deny. */
@@ -152,7 +152,7 @@ export type SquareFinishResponse = z.infer<typeof squareFinishResponseSchema>;
 
 /** Pair a Terminal: Square's code, shown once and never kept, and until when it works. */
 export const squarePairResponseSchema = z
-  .object({ code: squareDeviceCodeTextSchema, pairBy: z.string().datetime(), payments: gymPaymentsSchema })
+  .object({ code: squareDeviceCodeTextSchema, pairBy: z.iso.datetime(), payments: gymPaymentsSchema })
   .strict();
 export type SquarePairResponse = z.infer<typeof squarePairResponseSchema>;
 

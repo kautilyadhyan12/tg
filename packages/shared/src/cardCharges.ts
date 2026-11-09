@@ -111,10 +111,10 @@ export type CardOnFile = z.infer<typeof cardOnFileSchema>;
 
 export const cardChargeSchema = z
   .object({
-    id: z.string().uuid(),
-    membershipId: z.string().uuid(),
+    id: z.uuid(),
+    membershipId: z.uuid(),
     /** The fee it charged; null for a period of the membership. */
-    feeBillId: z.string().uuid().nullable(),
+    feeBillId: z.uuid().nullable(),
     amountMinor: z.number().int().min(1).max(99_999_999),
     currency: z.string().regex(/^[A-Z]{3}$/),
     card: cardSeenSchema,
@@ -133,7 +133,7 @@ export type CardCharge = z.infer<typeof cardChargeSchema>;
  *  same press sent twice is one charge. */
 export const cardChargeRequestSchema = z
   .object({
-    requestKey: z.string().uuid(),
+    requestKey: z.uuid(),
     periodIndex: z.number().int().min(0).max(100_000),
     amountMinor: z.number().int().min(1).max(99_999_999),
     /** The card the screen showed (`cardOnFile.ref`). */
@@ -145,7 +145,7 @@ export type CardChargeRequest = z.infer<typeof cardChargeRequestSchema>;
 /** Charge card on file for a fee: all of it, the amount the screen showed. */
 export const cardFeeChargeRequestSchema = z
   .object({
-    requestKey: z.string().uuid(),
+    requestKey: z.uuid(),
     amountMinor: z.number().int().min(1).max(99_999_999),
     cardRef: z.string().min(1).max(200),
   })

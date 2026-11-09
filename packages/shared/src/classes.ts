@@ -162,7 +162,7 @@ export const classPlacesSchema = z.number().int().min(1).max(500);
  *  read these three when it writes one (`fill.ts` takes the repeat's). */
 export const gymClassTypeSchema = z
   .object({
-    id: z.string().uuid(),
+    id: z.uuid(),
     name: z.string().min(1).max(80),
     description: z.string().max(500).nullable(),
     minutes: classMinutesSchema,
@@ -170,7 +170,7 @@ export const gymClassTypeSchema = z
     /** The usual coach: a member of THIS gym's staff, by user id. `null` is "no
      *  coach named", which is the honest state for open gym and for a gym that
      *  simply does not track it. */
-    coachUserId: z.string().uuid().nullable(),
+    coachUserId: z.uuid().nullable(),
     /** Their name as the console draws it. Absent when no coach is named, and
      *  absent when the named coach is no longer staff here — the screen then
      *  says so rather than printing a stranger's name it cannot vouch for. */
@@ -179,7 +179,7 @@ export const gymClassTypeSchema = z
     /** Open gym is a class type marked so (§13.3), not a fourth table. It is
      *  what 17c reads to know the floor is not a class with places. */
     openGym: z.boolean(),
-    archivedAt: z.string().datetime({ offset: true }).nullable(),
+    archivedAt: z.iso.datetime({ offset: true }).nullable(),
   })
   .strict();
 export type GymClassType = z.infer<typeof gymClassTypeSchema>;
@@ -204,8 +204,8 @@ export type GymClassType = z.infer<typeof gymClassTypeSchema>;
  *  a state nothing serves. */
 export const gymClassScheduleSchema = z
   .object({
-    id: z.string().uuid(),
-    classTypeId: z.string().uuid(),
+    id: z.uuid(),
+    classTypeId: z.uuid(),
     weekdays: z.array(classWeekdaySchema).min(1).max(7),
     startMinute: classStartMinuteSchema,
     startsOn: classDaySchema,
@@ -215,7 +215,7 @@ export const gymClassScheduleSchema = z
     /** How many fit in THIS repeat; null is no limit. */
     places: classPlacesSchema.nullable(),
     /** Who teaches THIS repeat: a member of this gym's staff, by user id. */
-    coachUserId: z.string().uuid().nullable(),
+    coachUserId: z.uuid().nullable(),
     /** Their name as the console draws it — answered only while they are still
      *  this gym's active staff, the class type's rule verbatim and for the same
      *  reason: a timetable must never print a name the gym cannot vouch for. */
@@ -314,7 +314,7 @@ export const classOverSessionsSchema = z
     shown: z.array(
       z
         .object({
-          id: z.string().uuid(),
+          id: z.uuid(),
           trainerName: z.string().nullable(),
           /** The person booked; null where their record has gone. */
           name: z.string().nullable(),
@@ -346,7 +346,7 @@ export const createGymClassTypeRequestSchema = z
     description: z.string().trim().max(500).refine(isVisibleLines).optional(),
     minutes: classMinutesSchema,
     places: classPlacesSchema.nullable().optional(),
-    coachUserId: z.string().uuid().nullable().optional(),
+    coachUserId: z.uuid().nullable().optional(),
     colour: classColourSchema,
     openGym: z.boolean().optional(),
   })
@@ -377,7 +377,7 @@ export type UpdateGymClassTypeRequest = z.infer<typeof updateGymClassTypeRequest
 const classScheduleFieldsShape = {
   minutes: classMinutesSchema,
   places: classPlacesSchema.nullable(),
-  coachUserId: z.string().uuid().nullable(),
+  coachUserId: z.uuid().nullable(),
 };
 
 /** **`weekdays` is de-duplicated and sorted HERE**, so the column, the fill's
@@ -471,7 +471,7 @@ export type UpdateGymClassScheduleRequest = z.infer<typeof updateGymClassSchedul
 export const bulkEditGymClassSchedulesRequestSchema = z
   .object({
     scheduleIds: z
-      .array(z.string().uuid())
+      .array(z.uuid())
       .min(1)
       .max(CLASS_SCHEDULES_LISTED_PER_TYPE_MAX)
       .refine((ids) => new Set(ids).size === ids.length, { message: "a time slot twice" }),
@@ -480,7 +480,7 @@ export const bulkEditGymClassSchedulesRequestSchema = z
       .object({
         minutes: classMinutesSchema.optional(),
         places: classPlacesSchema.nullable().optional(),
-        coachUserId: z.string().uuid().nullable().optional(),
+        coachUserId: z.uuid().nullable().optional(),
       })
       .strict()
       .refine((s) => Object.keys(s).length > 0, { message: "nothing to change" }),
@@ -508,19 +508,19 @@ export type ClassSessionStatus = z.infer<typeof classSessionStatusSchema>;
  *  written, and a date changed on its own keeps what staff gave it. */
 export const gymClassSessionSchema = z
   .object({
-    id: z.string().uuid(),
-    classTypeId: z.string().uuid(),
+    id: z.uuid(),
+    classTypeId: z.uuid(),
     /** Null only for a date with no repeat behind it, which nothing writes yet. */
-    scheduleId: z.string().uuid().nullable(),
+    scheduleId: z.uuid().nullable(),
     name: z.string().min(1).max(80),
     colour: classColourSchema,
     openGym: z.boolean(),
     localDate: classDaySchema,
     startMinute: classStartMinuteSchema,
-    startsAt: z.string().datetime({ offset: true }),
+    startsAt: z.iso.datetime({ offset: true }),
     minutes: classMinutesSchema,
     places: classPlacesSchema.nullable(),
-    coachUserId: z.string().uuid().nullable(),
+    coachUserId: z.uuid().nullable(),
     /** Answered only while the coach is still this gym's active staff. */
     coachName: z.string().max(200).nullable(),
     status: classSessionStatusSchema,

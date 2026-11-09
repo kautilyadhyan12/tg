@@ -84,11 +84,11 @@ export function yourPlanWords(gymName: string, plan: YourPlan): { lead: string; 
  *  Join, while the person is still on the gym's list (RULINGS 2026-09-23). */
 export const myInvitationSchema = z
   .object({
-    id: z.string().uuid(),
+    id: z.uuid(),
     state: z.enum(["pending", "declined"]),
     gym: z
       .object({
-        id: z.string().uuid(),
+        id: z.uuid(),
         name: z.string(),
         city: z.string().nullable(),
         orgType: orgTypeSchema,
@@ -120,14 +120,14 @@ export const myInvitationsResponseSchema = z
   .strict();
 export type MyInvitationsResponse = z.infer<typeof myInvitationsResponseSchema>;
 
-export const invitationParamsSchema = z.object({ invitationId: z.string().uuid() }).strict();
+export const invitationParamsSchema = z.object({ invitationId: z.uuid() }).strict();
 
 export const acceptInvitationResponseSchema = z
   .object({
     outcome: z.enum(["joined", "already_member"]),
     gym: z
       .object({
-        id: z.string().uuid(),
+        id: z.uuid(),
         slug: z.string(),
         name: z.string(),
         orgType: orgTypeSchema,

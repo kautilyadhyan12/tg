@@ -53,7 +53,7 @@ export const phonePushSchema = z
   .object({
     heading: z.string().min(1).max(400),
     text: z.string().min(1).max(2000),
-    to: z.string().uuid(),
+    to: z.uuid(),
     body: z.string().max(1000),
     channelId: z.string().min(1).max(100),
     tag: z.string().min(1).max(200),
@@ -65,7 +65,7 @@ export type PhonePush = z.infer<typeof phonePushSchema>;
 export const phonePushTapDataSchema = z.record(z.string(), z.unknown());
 
 /** What a notification carries for the app: which gym's Inbox a tap opens. */
-export const gymMessagePushDataSchema = z.object({ kind: z.literal("gym_inbox"), gymId: z.string().uuid() }).strip();
+export const gymMessagePushDataSchema = z.object({ kind: z.literal("gym_inbox"), gymId: z.uuid() }).strip();
 export type GymMessagePushData = z.infer<typeof gymMessagePushDataSchema>;
 
 // ── A PLACE IN A CLASS OR AN EVENT (ROADMAP Stage 5 item 18b-ii-a) ──
@@ -96,9 +96,9 @@ export function placeNotification(input: { notice: PlaceNotice; gymName: string;
 export const gymPlacePushDataSchema = z
   .object({
     kind: z.literal("gym_place"),
-    gymId: z.string().uuid(),
+    gymId: z.uuid(),
     what: z.enum(["class", "event"]),
-    id: z.string().uuid(),
+    id: z.uuid(),
     day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   })
   .strip();
@@ -153,7 +153,7 @@ export function commentNotification(input: { gymName: string; comments: readonly
 }
 
 /** What a comment's notification carries for the app: the gym, and the post whose comments a tap opens. */
-export const gymCommentPushDataSchema = z.object({ kind: z.literal("gym_comment"), gymId: z.string().uuid(), postId: z.string().uuid() }).strip();
+export const gymCommentPushDataSchema = z.object({ kind: z.literal("gym_comment"), gymId: z.uuid(), postId: z.uuid() }).strip();
 export type GymCommentPushData = z.infer<typeof gymCommentPushDataSchema>;
 
 // ── Google's replies (the adapter parses them here) ──
@@ -168,9 +168,9 @@ export const googleServiceTokenSchema = z.object({
 export const firebaseServiceAccountSchema = z.object({
   type: z.literal("service_account"),
   project_id: z.string().min(1).regex(/^[a-z0-9-]+$/),
-  client_email: z.string().email(),
+  client_email: z.email(),
   private_key: z.string().includes("PRIVATE KEY"),
-  token_uri: z.string().url().default("https://oauth2.googleapis.com/token"),
+  token_uri: z.url().default("https://oauth2.googleapis.com/token"),
 });
 export type FirebaseServiceAccount = z.infer<typeof firebaseServiceAccountSchema>;
 
@@ -182,6 +182,6 @@ export const fcmErrorReplySchema = z.object({
     code: z.number().int().optional(),
     status: z.string().optional(),
     message: z.string().optional(),
-    details: z.array(z.object({ errorCode: z.string().optional() }).passthrough()).optional(),
+    details: z.array(z.object({ errorCode: z.string().optional() }).loose()).optional(),
   }),
 });

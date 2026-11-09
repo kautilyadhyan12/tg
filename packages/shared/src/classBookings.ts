@@ -366,7 +366,7 @@ export type LateCancelRefusal = z.infer<typeof lateCancelRefusalSchema>;
 
 // ── THE WIRE ──
 
-export const bookClassRequestSchema = z.object({ requestKey: z.string().uuid(), joinWaitlist: z.boolean() }).strict();
+export const bookClassRequestSchema = z.object({ requestKey: z.uuid(), joinWaitlist: z.boolean() }).strict();
 export type BookClassRequest = z.infer<typeof bookClassRequestSchema>;
 
 /** `feeMinor`: the late cancel fee the member was shown and said yes to (18h-i). A late
@@ -379,20 +379,20 @@ export type CancelClassBookingRequest = z.infer<typeof cancelClassBookingRequest
 /** One class as the person booking it sees it. */
 export const classBookingViewSchema = z
   .object({
-    sessionId: z.string().uuid(),
+    sessionId: z.uuid(),
     className: z.string(),
     /** The gym's own day and clock time, and its time zone. */
     localDate: z.string(),
     localStartMinute: z.number().int(),
     timezone: z.string(),
-    startsAt: z.string().datetime(),
+    startsAt: z.iso.datetime(),
     minutes: z.number().int(),
     cancelled: z.boolean(),
     places: z.number().int().nullable(),
     booked: z.number().int(),
     waitlisted: z.number().int(),
-    opensAt: z.string().datetime(),
-    freeCancelUntil: z.string().datetime(),
+    opensAt: z.iso.datetime(),
+    freeCancelUntil: z.iso.datetime(),
     mine: z
       .object({
         status: classBookingStatusSchema,
@@ -431,7 +431,7 @@ export const CLASS_BOOKINGS_LATE_SHOWN = 100;
 
 const staffBookingSchema = z
   .object({
-    bookingId: z.string().uuid(),
+    bookingId: z.uuid(),
     name: z.string().nullable(),
     initials: z.string(),
     status: classBookingStatusSchema,
@@ -441,8 +441,8 @@ const staffBookingSchema = z
     packCharged: z.boolean().nullable(),
     /** Their record on the gym's list, for staff who may open a person's page
      *  (`members.confirm`); null for anybody else, and where they are not on the list. */
-    entryId: z.string().uuid().nullable(),
-    at: z.string().datetime(),
+    entryId: z.uuid().nullable(),
+    at: z.iso.datetime(),
     /** Its late cancel or no-show fee (18h-i), owed, paid, part refunded, with Square, refunded or waived, in the list's
      *  `currency`; null for none, and for a coach reading their own class's list. `held`: no longer owed, and it comes off
      *  once the member's payment page in the app for it closes with nothing paid; `check`: no longer owed, and that page
@@ -459,9 +459,9 @@ export type StaffClassBooking = z.infer<typeof staffBookingSchema>;
  *  and the late cancels. */
 export const classSessionBookingsResponseSchema = z
   .object({
-    sessionId: z.string().uuid(),
+    sessionId: z.uuid(),
     className: z.string(),
-    startsAt: z.string().datetime(),
+    startsAt: z.iso.datetime(),
     cancelled: z.boolean(),
     places: z.number().int().nullable(),
     booked: z.array(staffBookingSchema),
@@ -495,7 +495,7 @@ export const CLASS_BOOKINGS_ENDING_PAGE = 100;
 const endingPersonSchema = z
   .object({
     /** The booking's id: the list's key, and the cursor for the next page. */
-    id: z.string().uuid(),
+    id: z.uuid(),
     name: z.string().nullable(),
     initials: z.string(),
     /** On the waitlist; false: holds a place. */
@@ -546,10 +546,10 @@ export const CLASS_BOOKINGS_ENDING_SCOPES = ["session", "slot", "class"] as cons
 export const classBookingsEndingQuerySchema = z
   .object({
     by: z.enum(CLASS_BOOKINGS_ENDING_SCOPES),
-    id: z.string().uuid(),
+    id: z.uuid(),
     from: classDaySchema.optional(),
     /** The `id` of the last booking already shown. */
-    after: z.string().uuid().optional(),
+    after: z.uuid().optional(),
   })
   .strict();
 export type ClassBookingsEndingQuery = z.infer<typeof classBookingsEndingQuerySchema>;
@@ -557,7 +557,7 @@ export type ClassBookingsEndingQuery = z.infer<typeof classBookingsEndingQuerySc
 export const classBookingsEndingResponseSchema = classBookingsEndingSchema
   .extend({
     /** `after` for the next page; null on the last. */
-    next: z.string().uuid().nullable(),
+    next: z.uuid().nullable(),
   })
   .strict();
 export type ClassBookingsEndingResponse = z.infer<typeof classBookingsEndingResponseSchema>;
@@ -611,7 +611,7 @@ export const agreementBookingsResponseSchema = z
       .object({
         count: z.number().int().min(0),
         staff: z.number().int().min(0),
-        people: z.array(z.object({ entryId: z.string().uuid(), name: z.string() }).strict()).max(BOOKING_UNSIGNED_NAMES),
+        people: z.array(z.object({ entryId: z.uuid(), name: z.string() }).strict()).max(BOOKING_UNSIGNED_NAMES),
       })
       .strict()
       .nullable(),
@@ -646,7 +646,7 @@ export const classBookingSettingsResponseSchema = z
         stopped: z
           .object({
             count: z.number().int().min(0),
-            people: z.array(z.object({ entryId: z.string().uuid(), name: z.string() }).strict()).max(BOOKING_OVERDUE_NAMES),
+            people: z.array(z.object({ entryId: z.uuid(), name: z.string() }).strict()).max(BOOKING_OVERDUE_NAMES),
           })
           .strict()
           .nullable(),

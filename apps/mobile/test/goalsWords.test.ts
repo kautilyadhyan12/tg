@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { GOAL_KIND_RULES, goalTargetMax, type Goal, type GoalKind } from "@app/shared";
+import { GOAL_KIND_RULES, goalIdParamsSchema, goalTargetMax, type Goal, type GoalKind } from "@app/shared";
 import { goal } from "./goalFixture";
 import {
   KIND_ORDER,
@@ -161,5 +161,9 @@ describe("adding and changing", () => {
     expect(a).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
     expect(newGoalId()).not.toBe(a);
     expect(exerciseName("worlds_greatest_stretch")).toBe("Worlds greatest stretch");
+  });
+
+  it("the server reads every goal id the phone makes (zod 4 checks the uuid version)", () => {
+    for (let i = 0; i < 2000; i++) expect(goalIdParamsSchema.safeParse({ id: newGoalId() }).success).toBe(true);
   });
 });

@@ -173,7 +173,7 @@ export type MemberListInvitation = z.infer<typeof memberListInvitationSchema>;
  *  staff to check the address they have. */
 export const memberListNotMeSchema = z
   .object({
-    entryId: z.string().uuid(),
+    entryId: z.uuid(),
     fullName: z.string(),
     email: z.string(),
     notMeAt: z.string(),

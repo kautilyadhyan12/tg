@@ -134,7 +134,7 @@ const challengeFields = {
     .array(
       z
         .object({
-          id: z.string().uuid().nullable(),
+          id: z.uuid().nullable(),
           name: words(GYM_CHALLENGE_TEAM_NAME_MAX).refine(eventNameIsSeen, { message: "a name is needed" }),
         })
         .strict(),
@@ -191,7 +191,7 @@ const teamsFit = (c: Dated): boolean => {
 export const addGymChallengeRequestSchema = z
   .object({
     /** The browser's key for this one challenge: the same key again is the same challenge. */
-    challengeKey: z.string().uuid(),
+    challengeKey: z.uuid(),
     ...challengeFields,
   })
   .strict()
@@ -218,14 +218,14 @@ export type ChangeGymChallengeRequest = z.infer<typeof changeGymChallengeRequest
 
 export const cancelGymChallengeRequestSchema = z.object({ cancelled: z.boolean() }).strict();
 
-export const gymChallengeParamsSchema = z.object({ gymId: z.string().uuid(), challengeId: z.string().uuid() }).strict();
+export const gymChallengeParamsSchema = z.object({ gymId: z.uuid(), challengeId: z.uuid() }).strict();
 
 /** Staff type people's numbers for a challenge of the gym's own count. A person's number
  *  null: it is taken off. */
 export const setChallengeScoresRequestSchema = z
   .object({
     scores: z
-      .array(z.object({ userId: z.string().uuid(), value: z.number().int().min(0).max(GYM_CHALLENGE_SCORE_MAX).nullable() }).strict())
+      .array(z.object({ userId: z.uuid(), value: z.number().int().min(0).max(GYM_CHALLENGE_SCORE_MAX).nullable() }).strict())
       .min(1)
       .max(GYM_CHALLENGE_SCORES_A_SAVE),
   })
@@ -237,7 +237,7 @@ export const challengeScoresResponseSchema = z.object({ saved: z.number().int().
 export const setChallengeTeamPeopleRequestSchema = z
   .object({
     people: z
-      .array(z.object({ userId: z.string().uuid(), teamId: z.string().uuid().nullable() }).strict())
+      .array(z.object({ userId: z.uuid(), teamId: z.uuid().nullable() }).strict())
       .min(1)
       .max(GYM_CHALLENGE_TEAM_PEOPLE_A_SAVE),
   })
@@ -246,7 +246,7 @@ export type SetChallengeTeamPeopleRequest = z.infer<typeof setChallengeTeamPeopl
 export const challengeTeamPeopleResponseSchema = z.object({ saved: z.number().int().min(0) }).strict();
 
 /** A member picks their team. */
-export const pickChallengeTeamRequestSchema = z.object({ teamId: z.string().uuid() }).strict();
+export const pickChallengeTeamRequestSchema = z.object({ teamId: z.uuid() }).strict();
 
 export const staffChallengeBoardQuerySchema = z.object({ page: z.coerce.number().int().min(1).max(10_000).default(1) }).strict();
 
@@ -369,7 +369,7 @@ export const challengeWordsSchema = z
 
 const challengeSchema = z
   .object({
-    id: z.string().uuid(),
+    id: z.uuid(),
     name: z.string(),
     details: z.string(),
     prize: z.string(),
@@ -402,7 +402,7 @@ export type GymChallengeBoardStatus = (typeof GYM_CHALLENGE_BOARD_STATUSES)[numb
 
 export const gymChallengeRowSchema = z
   .object({
-    userId: z.string().uuid(),
+    userId: z.uuid(),
     /** First name and last initial: "Priya S." */
     name: z.string(),
     initials: z.string(),
@@ -432,7 +432,7 @@ export type GymChallengeMe = z.infer<typeof challengeMeSchema>;
 
 export const gymChallengeTeamRowSchema = z
   .object({
-    id: z.string().uuid(),
+    id: z.uuid(),
     name: z.string(),
     /** People in it that this member may count: nobody hidden, and themselves. */
     people: z.number().int().min(0),
@@ -459,9 +459,9 @@ const memberTeamBoardSchema = z
     /** Their own team: themselves, and the leading teammates members may see who have a number. */
     mine: z
       .object({
-        teamId: z.string().uuid(),
+        teamId: z.uuid(),
         people: z
-          .array(z.object({ userId: z.string().uuid(), name: z.string(), initials: z.string(), value: z.number().int().min(0), isMe: z.boolean() }).strict())
+          .array(z.object({ userId: z.uuid(), name: z.string(), initials: z.string(), value: z.number().int().min(0), isMe: z.boolean() }).strict())
           .max(GYM_CHALLENGE_TEAMMATES_SHOWN + 1),
         /** Teammates with a number who are not listed. */
         more: z.number().int().min(0),
@@ -506,7 +506,7 @@ export type MemberGymChallenge = z.infer<typeof memberGymChallengeSchema>;
  *  end first), then the coming, then the ones that ended in the last fortnight. */
 export const gymChallengesResponseSchema = z
   .object({
-    gymId: z.string().uuid(),
+    gymId: z.uuid(),
     gymName: z.string(),
     timezone: z.string(),
     /** Today on the gym's calendar. */
@@ -517,7 +517,7 @@ export const gymChallengesResponseSchema = z
      *  being counted. */
     checkingIn: z.boolean(),
     challenges: z.array(memberGymChallengeSchema).max(GYM_CHALLENGES_CURRENT_MAX + GYM_CHALLENGES_ENDED_SHOWN),
-    asOf: z.string().datetime(),
+    asOf: z.iso.datetime(),
   })
   .strict();
 export type GymChallengesResponse = z.infer<typeof gymChallengesResponseSchema>;
@@ -528,12 +528,12 @@ export type MemberGymChallengeResponse = z.infer<typeof memberGymChallengeRespon
 /** A challenge's whole board for a member: the first hundred, and their own line. */
 export const gymChallengeBoardResponseSchema = z
   .object({
-    challengeId: z.string().uuid(),
+    challengeId: z.uuid(),
     status: z.enum(GYM_CHALLENGE_BOARD_STATUSES),
     ranked: z.number().int().min(0),
     rows: z.array(gymChallengeRowSchema).max(LEADERBOARD_TOP),
     me: challengeMeSchema.nullable(),
-    asOf: z.string().datetime(),
+    asOf: z.iso.datetime(),
   })
   .strict();
 export type GymChallengeBoardResponse = z.infer<typeof gymChallengeBoardResponseSchema>;
@@ -548,7 +548,7 @@ export const staffGymChallengeSchema = challengeSchema
     /** The first three as MEMBERS see them placed, by full name; empty while members see
      *  no places, and on a list that does not carry them (an ended challenge's). */
     top: z
-      .array(z.object({ userId: z.string().uuid(), name: z.string(), initials: z.string(), place: z.number().int().min(1), value: z.number().int().min(1) }).strict())
+      .array(z.object({ userId: z.uuid(), name: z.string(), initials: z.string(), place: z.number().int().min(1), value: z.number().int().min(1) }).strict())
       .max(GYM_CHALLENGE_PODIUM),
     /** People with a number in it, the hidden included; null where it was not counted. */
     withNumber: z.number().int().min(0).nullable(),
@@ -557,7 +557,7 @@ export const staffGymChallengeSchema = challengeSchema
       .array(
         z
           .object({
-            id: z.string().uuid(),
+            id: z.uuid(),
             name: z.string(),
             /** Everyone in it who is in the challenge now, the hidden included. */
             people: z.number().int().min(0),
@@ -572,14 +572,14 @@ export const staffGymChallengeSchema = challengeSchema
     /** Its result's post on Updates, made once when it ends; null while there is none. A
      *  post staff removed stays removed. `hidden`: five members reported it, so members are
      *  not sent it until staff keep or remove it. */
-    resultPost: z.object({ postedAt: z.string().datetime(), removed: z.boolean(), hidden: z.boolean() }).strict().nullable(),
+    resultPost: z.object({ postedAt: z.iso.datetime(), removed: z.boolean(), hidden: z.boolean() }).strict().nullable(),
   })
   .strict();
 export type StaffGymChallenge = z.infer<typeof staffGymChallengeSchema>;
 
 export const staffGymChallengesResponseSchema = z
   .object({
-    gymId: z.string().uuid(),
+    gymId: z.uuid(),
     gymName: z.string(),
     timezone: z.string(),
     today: classDaySchema,
@@ -601,7 +601,7 @@ export type GymChallengeResponse = z.infer<typeof gymChallengeResponseSchema>;
 
 export const staffGymChallengeRowSchema = z
   .object({
-    userId: z.string().uuid(),
+    userId: z.uuid(),
     /** The full name, or null when the person has typed none and their record has none. */
     name: z.string().nullable(),
     initials: z.string(),
@@ -614,7 +614,7 @@ export const staffGymChallengeRowSchema = z
     hidden: z.enum(LEADERBOARD_HIDDEN_REASONS).nullable(),
     reached: z.boolean(),
     /** The team they are in; null for none, and where the challenge has no teams. */
-    teamId: z.string().uuid().nullable(),
+    teamId: z.uuid().nullable(),
   })
   .strict();
 export type StaffGymChallengeRow = z.infer<typeof staffGymChallengeRowSchema>;
@@ -623,7 +623,7 @@ export type StaffGymChallengeRow = z.infer<typeof staffGymChallengeRowSchema>;
  *  join, everyone who joined; the hidden with the reason. */
 export const staffGymChallengeBoardResponseSchema = z
   .object({
-    challengeId: z.string().uuid(),
+    challengeId: z.uuid(),
     /** What the gym's members see of this board right now. */
     memberStatus: z.enum(GYM_CHALLENGE_BOARD_STATUSES),
     /** People members see on it. */
@@ -641,9 +641,9 @@ export const staffGymChallengeBoardResponseSchema = z
      *  one read that carries an ended challenge's result. Empty where people are in it alone;
      *  null number and place while members see none. */
     teams: z
-      .array(z.object({ id: z.string().uuid(), value: z.number().int().min(0).nullable(), place: z.number().int().min(1).nullable() }).strict())
+      .array(z.object({ id: z.uuid(), value: z.number().int().min(0).nullable(), place: z.number().int().min(1).nullable() }).strict())
       .max(GYM_CHALLENGE_TEAMS_MAX),
-    asOf: z.string().datetime(),
+    asOf: z.iso.datetime(),
   })
   .strict();
 export type StaffGymChallengeBoardResponse = z.infer<typeof staffGymChallengeBoardResponseSchema>;

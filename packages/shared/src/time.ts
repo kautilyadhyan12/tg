@@ -25,8 +25,7 @@
 import { z } from "zod";
 
 export const instantSchema = z
-  .string()
-  .datetime({ offset: true })
+  .iso.datetime({ offset: true })
   .refine((s) => !Number.isNaN(Date.parse(s)), {
     message: "not a real instant",
   });
