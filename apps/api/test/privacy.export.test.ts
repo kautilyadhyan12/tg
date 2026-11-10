@@ -199,6 +199,7 @@ d("DPDP data export (real Postgres)", () => {
     await sql`INSERT INTO email_changes (id, user_id, old_email, new_email, token_hash, expires_at) VALUES (gen_random_uuid(), ${userId}, ${`old-export-${userId}@example.com`}, ${`new-export-${userId}@example.com`}, md5(random()::text), now() + interval '14 days')`;
     await sql`INSERT INTO body_measurement_removed_ids (id, user_id) VALUES (gen_random_uuid(), ${userId})`;
     await sql`INSERT INTO run_removed_ids (id, user_id) VALUES (gen_random_uuid(), ${userId})`;
+    await sql`INSERT INTO run_plans (user_id, answers, answered_at) VALUES (${userId}, '{"doesRun":"no"}'::jsonb, now())`;
     await sql`INSERT INTO usage_limits (user_id, meal_scans_a_day) VALUES (${userId}, 15)`;
     await sql`INSERT INTO admin_passwords (user_id, password_hash, hash_algo) VALUES (${userId}, 'not-a-real-hash', 'argon2id')`;
     await sql`INSERT INTO app_minutes (user_id, day, minutes, zone) VALUES (${userId}, current_date, 12, 'Asia/Kolkata')`;
