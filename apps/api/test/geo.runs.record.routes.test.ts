@@ -174,6 +174,23 @@ d("record a run (real Postgres)", () => {
     it("nobody signed in gets nothing", async () => {
       expect((await save({}, body())).statusCode).toBe(401);
     });
+
+    it("who is asking and the limit come before the points are read, for the phone's sign-in and the browser's", async () => {
+      // 21a-iii-c. A body that is not even JSON: a server that read it first would answer 400 to all.
+      const broken = (headers: Record<string, string>, cookies: Cookies = {}) =>
+        api().inject({ method: "POST", url: "/v1/geo/runs", remoteAddress: nextIp(), headers: { "content-type": "application/json", "idempotency-key": randomUUID(), ...headers }, cookies, payload: '{"points": ' });
+      expect((await broken({})).statusCode).toBe(401);
+      expect((await broken({ authorization: "Bearer not-a-token" })).statusCode).toBe(401);
+      const me = await makeUser("before-the-body");
+      const token = me.cookies["accessToken"] ?? "";
+      expect(token).not.toBe("");
+      // The phone signs in with its token, the browser with its cookie: both reach the reader.
+      expect((await broken({ authorization: `Bearer ${token}` })).statusCode).toBe(400);
+      expect((await broken({}, me.cookies)).statusCode).toBe(400);
+      // Ten a minute each: two spent, eight more read, the eleventh refused unread.
+      for (let i = 3; i <= 10; i++) expect({ i, status: (await broken({ authorization: `Bearer ${token}` })).statusCode }).toEqual({ i, status: 400 });
+      expect((await broken({ authorization: `Bearer ${token}` })).statusCode).toBe(429);
+    });
   });
 
   it("works every number out itself, from the points, with the same rules the phone shows", async () => {
@@ -216,6 +233,17 @@ d("record a run (real Postgres)", () => {
     const res = await save(me.cookies, run);
     expect(res.statusCode, res.body).toBe(201);
     expect((await sql`SELECT 1 FROM runs WHERE user_id = ${me.id}`).length).toBe(1);
+  }, 30_000);
+
+  it("one point past the longest run is refused by the list count, and nothing is saved", async () => {
+    const me = await makeUser("past-longest");
+    const pauses: SaveRunRequest["pauses"] = [];
+    for (let i = 0; i < RUN_MAX_PAUSES; i++) pauses.push([i * 20_000 + 1000, i * 20_000 + 2000]);
+    const run = body({ points: northRun(RUN_MAX_POINTS, 3), elapsedMs: RUN_MAX_POINTS * 1000, pauses });
+    expect(run.points.length).toBe(RUN_MAX_POINTS + 1);
+    const res = await save(me.cookies, run);
+    expect([res.statusCode, (JSON.parse(res.body) as { error: string }).error]).toEqual([413, "too_many_items"]);
+    expect((await sql`SELECT 1 FROM runs WHERE user_id = ${me.id}`).length).toBe(0);
   }, 30_000);
 
   it("is saved once when sent twice, and the second send reads back the first", async () => {

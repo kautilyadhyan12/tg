@@ -187,10 +187,10 @@ export function registerGeoRoutes(
     redis: deps.redis,
   });
   // Twelve hours of points at one a second is about 2 MB of JSON; anything past this is refused
-  // before it is read.
+  // before it is read, and so is a stranger's or one past the limit: both run before the body.
   app.post(
     "/v1/geo/runs",
-    { preHandler: [app.authenticate, runLimit], bodyLimit: 3 * 1024 * 1024, config: { listItemsMost: RUN_LIST_ITEMS_MOST } },
+    { onRequest: [app.authenticate, runLimit], bodyLimit: 3 * 1024 * 1024, config: { listItemsMost: RUN_LIST_ITEMS_MOST } },
     async (req, reply) => {
       // A run sent again is answered from the row before its points are read or worked out: a
       // repeat costs the server a lookup, never the maths (round one of 37a, H2).
@@ -234,7 +234,7 @@ export function registerGeoRoutes(
   });
   app.post(
     "/v1/geo/runs/climb",
-    { preHandler: [app.authenticate, climbLimit], bodyLimit: 3 * 1024 * 1024, config: { listItemsMost: RUN_LIST_ITEMS_MOST } },
+    { onRequest: [app.authenticate, climbLimit], bodyLimit: 3 * 1024 * 1024, config: { listItemsMost: RUN_LIST_ITEMS_MOST } },
     async (req, reply) => {
       const input = parse(runClimbRequestSchema, req.body, req, reply);
       if (input === null) return;

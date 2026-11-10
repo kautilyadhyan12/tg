@@ -482,7 +482,8 @@ describe("the voice, through the whole app", () => {
       if (i > 0) expect(line).toContain(`Last ${unit} ${spokenTime(splits[i]?.s ?? -1)}.`);
     });
     for (const line of voice.said) expect(line).not.toContain(never);
-  });
+    // A whole real run through the app: 5.6 s on the laptop, near 20 s on GitHub's machine.
+  }, 60_000);
 
   it("says Auto-paused, Run paused and Run resumed; a kilometre passed just before a pause is said at the pause", async () => {
     const s = runServer();

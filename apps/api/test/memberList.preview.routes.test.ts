@@ -363,6 +363,20 @@ d("member list: upload and preview (real Postgres)", () => {
       expect((await get(one, trainer.cookies)).statusCode).toBe(403);
       expect((await get(`${one}/rows?group=new`, trainer.cookies)).statusCode).toBe(403);
 
+      // WHO IS ASKING, WHETHER THEY MAY, AND THE LIMIT COME BEFORE THE FILE IS READ
+      // (21a-iii-c). A body that is not even JSON gets each person's own refusal; a server
+      // that read it first would answer everybody 400.
+      const broken = (cookies: Record<string, string>) =>
+        api().inject({ method: "POST", url: uploadsUrl(org.org.id), remoteAddress: nextIp(), headers: { "content-type": "application/json" }, cookies, payload: '{"contentBase64": ' });
+      expect((await broken({})).statusCode).toBe(401);
+      for (const cookies of [stranger.cookies, member.cookies, rival.cookies]) expect((await broken(cookies)).statusCode).toBe(404);
+      expect((await broken(trainer.cookies)).statusCode).toBe(403);
+      // The owner's reaches the reader, and spends one of twelve an hour as a real file
+      // does: one upload and this one are two, ten more are read, the thirteenth is not.
+      expect((await broken(owner.cookies)).statusCode).toBe(400);
+      for (let i = 3; i <= 12; i++) expect({ i, status: (await broken(owner.cookies)).statusCode }).toEqual({ i, status: 400 });
+      expect((await broken(owner.cookies)).statusCode).toBe(429);
+
       // NOT ONE PERSON'S DETAILS LEFT THE GYM. The refusals above are read for
       // their bodies as well as their codes: a 404 that still carried a name in
       // its message would pass every assertion above.
