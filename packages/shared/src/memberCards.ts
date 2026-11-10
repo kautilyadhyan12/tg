@@ -247,6 +247,20 @@ export type MyCardView = z.infer<typeof myCardViewSchema>;
 export const myCardResponseSchema = z.object({ myCard: myCardViewSchema }).strict();
 export type MyCardResponse = z.infer<typeof myCardResponseSchema>;
 
+/** What the phone's card page (Square's boxes in a small web page the app writes, Stage 5 item 20d) may say back:
+ *  `ready` once Square's boxes are drawn; `height` of the boxes, in points; `token`, Square's one-time token for the
+ *  card typed; `not_taken`, Square did not take what was typed (its boxes say why); `blocked`, Square's script or
+ *  boxes did not load; `tall`, Square's or the bank's check is open over the page (it needs the room). */
+export const cardFormMessageSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("ready") }).strict(),
+  z.object({ kind: z.literal("height"), px: z.number().int().min(1).max(2000) }).strict(),
+  z.object({ kind: z.literal("token"), token: squareCardSourceSchema }).strict(),
+  z.object({ kind: z.literal("not_taken") }).strict(),
+  z.object({ kind: z.literal("blocked") }).strict(),
+  z.object({ kind: z.literal("tall"), on: z.boolean() }).strict(),
+]);
+export type CardFormMessage = z.infer<typeof cardFormMessageSchema>;
+
 /** The words the server answers with, and the box's own. */
 export const MEMBER_CARD_WORDS = {
   title: "Card on file",

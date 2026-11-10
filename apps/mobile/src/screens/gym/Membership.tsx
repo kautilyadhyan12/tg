@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AppState, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from "react-native";
 import { Modal } from "../../look/Modal";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { formatMinor, myMembershipResponseSchema, receiptSchema, type MyMembership, type MyMembershipAgreement, type MyMembershipResponse, type Receipt } from "@app/shared";
+import { formatMinor, myCardResponseSchema, myMembershipResponseSchema, receiptSchema, type MyCardView, type MyMembership, type MyMembershipAgreement, type MyMembershipResponse, type Receipt } from "@app/shared";
 import { Button } from "../../look/Button";
 import { Card, Pill } from "../../look/Card";
 import { colours, sizes } from "../../look/colours";
@@ -11,8 +11,11 @@ import { Sheet } from "../../look/Sheet";
 import { RECEIPT_MOST } from "../../look/sizing";
 import { Txt } from "../../look/Txt";
 import { useSession } from "../../session/SessionProvider";
+import { AddCardPage, type CardPlace } from "./AddCard";
 import { AgreementPage, type AgreementPlace } from "./Agreement";
 import { membershipAgreementRow } from "./agreementView";
+import { CardOnFile } from "./CardOnFile";
+import { cardSavedLine, myCardPath } from "./cardView";
 import {
   NO_PAYMENTS,
   cancelledLine,
@@ -85,6 +88,11 @@ function MembershipBody({ place, onClose, bottom }: { place: MembershipPlace; on
   const [opened, setOpened] = useState<Opened | null>(null);
   // The membership whose agreement page is open over this one (20c), or null.
   const [agreementAt, setAgreementAt] = useState<AgreementPlace | null>(null);
+  // Card on file (20d): the server's answer for this place, what was just saved, and the Add card page while open.
+  const [card, setCard] = useState<MyCardView | null>(null);
+  const [cardSaid, setCardSaid] = useState<string | null>(null);
+  const [addingCard, setAddingCard] = useState<CardPlace | null>(null);
+  const cardStarted = useRef(0);
   // Reads are numbered as they start: an answer stands only if no later read has started.
   const started = useRef(0);
   const receiptAsked = useRef(0);
@@ -103,17 +111,30 @@ function MembershipBody({ place, onClose, bottom }: { place: MembershipPlace; on
     [session, place.id],
   );
 
+  // The box reads by itself: a read that fails leaves it as it was, and the page stands without it.
+  const loadCard = useCallback(async () => {
+    cardStarted.current += 1;
+    const number = cardStarted.current;
+    const answer = await session.signedIn({ method: "GET", path: myCardPath(place.id) }, myCardResponseSchema);
+    if (!live.current || number !== cardStarted.current) return;
+    if (answer.kind === "ok") setCard(answer.data.myCard);
+  }, [session, place.id]);
+
   useEffect(() => {
     live.current = true;
     void load(false);
+    void loadCard();
     const back = AppState.addEventListener("change", (state) => {
-      if (state === "active") void load(true);
+      if (state === "active") {
+        void load(true);
+        void loadCard();
+      }
     });
     return () => {
       live.current = false;
       back.remove();
     };
-  }, [load]);
+  }, [load, loadCard]);
 
   const openReceipt = useCallback(
     async (number: number, refund: boolean) => {
@@ -164,6 +185,18 @@ function MembershipBody({ place, onClose, bottom }: { place: MembershipPlace; on
         ) : (
           <Sections
             view={held.view}
+            card={
+              card === null ? null : (
+                <CardOnFile
+                  view={card}
+                  said={cardSaid}
+                  onAdd={() => {
+                    setCardSaid(null);
+                    setAddingCard({ id: place.id, name: place.name });
+                  }}
+                />
+              )
+            }
             receiptButton={receiptButton}
             onAgreement={(m) => {
               setAgreementAt({ id: place.id, name: place.name, membershipId: m.id, membershipName: m.name });
@@ -177,6 +210,19 @@ function MembershipBody({ place, onClose, bottom }: { place: MembershipPlace; on
         onClose={() => {
           receiptAsked.current += 1;
           setOpened(null);
+        }}
+      />
+      <AddCardPage
+        place={addingCard}
+        onSaved={(gymId, saved) => {
+          // Only this place's page takes the answer.
+          if (gymId !== place.id) return;
+          cardStarted.current += 1;
+          setCard(saved);
+          if (saved.card !== null) setCardSaid(cardSavedLine(saved.card));
+        }}
+        onClose={() => {
+          setAddingCard(null);
         }}
       />
       <AgreementPage
@@ -195,7 +241,7 @@ function MembershipBody({ place, onClose, bottom }: { place: MembershipPlace; on
 
 type ReceiptButton = (number: number, what: string, refund?: boolean) => React.JSX.Element;
 
-function Sections({ view, receiptButton, onAgreement }: { view: MyMembershipResponse; receiptButton: ReceiptButton; onAgreement: (m: MyMembership) => void }) {
+function Sections({ view, card, receiptButton, onAgreement }: { view: MyMembershipResponse; card: React.ReactNode; receiptButton: ReceiptButton; onAgreement: (m: MyMembership) => void }) {
   const gym = view.gym.name;
   const none = noRecordText(view);
   if (none !== null) {
@@ -223,6 +269,8 @@ function Sections({ view, receiptButton, onAgreement }: { view: MyMembershipResp
         ))}
         {view.earlierNotShown > 0 ? <Txt kind="small">{olderMemberships(gym)}</Txt> : null}
       </View>
+
+      {card}
 
       {fees.length === 0 ? null : (
         <View style={styles.section}>
