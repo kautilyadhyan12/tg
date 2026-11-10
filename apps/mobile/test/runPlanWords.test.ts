@@ -5,7 +5,7 @@ import { c25kParts, pacesOf } from "@app/shared";
 import * as words from "../src/screens/running/runPlanWords";
 
 /** The words as read: the no-break spaces that keep "1 min" and "/km" whole read as spaces. */
-const plain = <A extends unknown[]>(f: (...a: A) => string) => (...a: A): string => f(...a).replace(/\u00a0/g, " ");
+const plain = <A extends unknown[]>(f: (...a: A) => string) => (...a: A): string => f(...a).replace(/\u00a0/g, " ").replace(/\u2060/g, "");
 const minutes = plain(words.minutes);
 const sessionDetail = plain(words.sessionDetail);
 const sessionTitle = plain(words.sessionTitle);

@@ -141,9 +141,9 @@ function Paces({ plan, units, onChange }: { plan: Extract<Shown, { kind: "runner
       ) : (
         <>
           <View style={styles.paces}>
-            <Pace value={`${paceOf(p.easy[0], units)}–${paceOf(p.easy[1], units)}`} label={`Easy ${per}`} />
-            <Pace value={`${paceOf(p.steady[0], units)}–${paceOf(p.steady[1], units)}`} label={`Tempo ${per}`} />
-            <Pace value={paceOf(p.fast, units)} label={`Interval ${per}`} />
+            <Pace label="Easy" value={`${paceOf(p.easy[0], units)}–${paceOf(p.easy[1], units)} ${per}`} first />
+            <Pace label="Tempo" value={`${paceOf(p.steady[0], units)}–${paceOf(p.steady[1], units)} ${per}`} />
+            <Pace label="Interval" value={`${paceOf(p.fast, units)} ${per}`} />
           </View>
           <Txt kind="tiny">From your race time, by Jack Daniels’ formula.</Txt>
         </>
@@ -152,11 +152,12 @@ function Paces({ plan, units, onChange }: { plan: Extract<Shown, { kind: "runner
   );
 }
 
-function Pace({ value, label }: { value: string; label: string }) {
+/** A pace as a row, its name beside it: a range never breaks across lines, on any phone. */
+function Pace({ value, label, first = false }: { value: string; label: string; first?: boolean }) {
   return (
-    <View style={styles.pace}>
+    <View style={[styles.pace, first ? null : styles.line]}>
+      <Txt kind="body" style={styles.grow}>{label}</Txt>
       <Txt kind="strong" style={styles.paceValue}>{value}</Txt>
-      <Txt kind="tiny">{label}</Txt>
     </View>
   );
 }
@@ -177,8 +178,8 @@ const styles = StyleSheet.create({
   ahead: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 14, paddingVertical: 12 },
   aheadWalk: { paddingHorizontal: 14, paddingVertical: 12, gap: 3 },
   box: { borderRadius: sizes.boxRadius, backgroundColor: colours.box, borderWidth: 1, borderColor: colours.line, padding: 16, gap: 8, alignItems: "flex-start" },
-  paces: { flexDirection: "row", gap: 8, alignSelf: "stretch" },
-  pace: { flex: 1, borderRadius: 14, backgroundColor: colours.raised, padding: 10, gap: 2 },
+  paces: { alignSelf: "stretch", borderRadius: 14, backgroundColor: colours.raised },
+  pace: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 12, paddingVertical: 10 },
   paceValue: { fontVariant: ["tabular-nums"] },
   note: { paddingHorizontal: 4, lineHeight: 17 },
   change: { alignSelf: "center" },

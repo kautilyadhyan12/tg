@@ -27,7 +27,8 @@ export function paceOf(perKm: number, units: Units): string {
   const s = Math.round(units === "imperial" ? (perKm * METRES_PER_MILE) / 1000 : perKm);
   return `${String(Math.floor(s / 60))}:${two(s % 60)}`;
 }
-const per = (units: Units): string => (units === "imperial" ? "/mi" : "/km");
+/** "/km" with a word joiner after the slash: Android may break a line after "/". */
+const per = (units: Units): string => (units === "imperial" ? "/\u2060mi" : "/\u2060km");
 const range = ([fast, slow]: readonly [number, number], units: Units): string => `${paceOf(fast, units)}–${paceOf(slow, units)}${NBSP}${per(units)}`;
 
 /** A walk-and-run session in one line, as Couch to 5K apps say it: "5 min warm-up walk, then alternate 1 min
