@@ -276,6 +276,22 @@ describe("a runner's week", () => {
     expect(tiny.kind === "runner" ? tiny.weekM : 99_999).toBeLessThanOrEqual(1_100);
   });
 
+  it("full weeks run after a short one bring the plan straight back, never past its highest week + 10 %", () => {
+    const answers = runnerAnswers({ weeklyM: 20_000, longestM: 8_000 });
+    // Week 2 a sick week with one 1 km run; weeks 3 and 5 four 5 km runs each (week 4 is the recovery week).
+    const runs = [run(planDayPlus(MONDAY, 7), 1000)];
+    for (const wk of [2, 3, 4]) for (const d of [0, 2, 4, 6]) runs.push(run(planDayPlus(MONDAY, wk * 7 + d), 5_000));
+    const weekM = (day: number): number => {
+      const plan = runPlanOf(input(answers, { today: planDayPlus(MONDAY, day), runs: runs.filter((x) => x.day < planDayPlus(MONDAY, day)) }));
+      return plan.kind === "runner" ? plan.weekM : -1;
+    };
+    expect(weekM(14)).toBeLessThanOrEqual(1_100);
+    // 20 km really run in week 3: week 4 (recovery) and week 5 are back near the plan, never over 22 km.
+    expect(weekM(28)).toBeGreaterThan(10_000);
+    expect(weekM(35)).toBeGreaterThan(18_000);
+    expect(weekM(35)).toBeLessThanOrEqual(22_000);
+  });
+
   it("stops growing at the distance picked", () => {
     for (const goal of RUN_GOALS) {
       const answers = runnerAnswers({ goal, weeklyM: RUN_GOAL_PEAK[goal].weekM, longestM: RUN_GOAL_PEAK[goal].longM });

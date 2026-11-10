@@ -456,12 +456,12 @@ function weekTargets(input: RunPlanInput, start: RunnerStart, peakM: number, upT
       if (wk === upTo) hard = true;
       continue;
     }
-    // An easier week is judged against its own smaller distance.
-    const plannedM = (wk - 1) % EASIER_EVERY === 0 ? before * EASIER_SHARE : before;
-    const share = plannedM > 0 ? ranM / plannedM : 1;
-    // Only from what was really run: a week half run grows from that half.
-    const from = before * Math.min(1, share);
-    nominal.push(Math.min(ceiling, from * WEEK_GROWTH));
+    // Only from what was really run, never past the highest week the plan has reached: a short week
+    // shrinks the next, and full weeks run after it bring the plan straight back. A recovery week run
+    // in full counts as the ordinary week it stands for.
+    const ranFor = (wk - 1) % EASIER_EVERY === 0 ? ranM / EASIER_SHARE : ranM;
+    const highest = Math.max(...nominal);
+    nominal.push(Math.min(ceiling, Math.min(ranFor, highest) * WEEK_GROWTH));
   }
   return { nominal, held, hard };
 }
