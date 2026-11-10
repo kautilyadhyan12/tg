@@ -6,7 +6,7 @@
 // candidates only.
 import type { FastifyBaseLogger } from "fastify";
 import type { Sql } from "postgres";
-import { RUN_CALC_VERSION, climbFromHeights, climbSamples, decodePolyline, encodePolyline, hillLineOf, hillLineSchema, paceLineSchema, routeShape, runSplitSchema, runSums } from "@app/shared";
+import { RUN_CALC_VERSION, restartsPlan, runPlanAnswersSchema, runPlanOf, runsFrom, sameRace, climbFromHeights, climbSamples, decodePolyline, encodePolyline, hillLineOf, hillLineSchema, paceLineSchema, routeShape, runSplitSchema, runSums } from "@app/shared";
 import type {
   GenerateRoutesRequest,
   RouteCandidate,
@@ -20,6 +20,8 @@ import type {
   RunMonthTotal,
   RunRecord,
   RunRecordKind,
+  RunPlanAnswers,
+  RunPlanResponse,
   RunRecords,
   RunSummary,
   SaveRunRequest,
@@ -27,8 +29,8 @@ import type {
 } from "@app/shared";
 import { z } from "zod";
 import { onWorkoutSynced } from "../gamification/service.js";
-import { safeTimeZone } from "../gamification/streak.js";
-import { getUserSyncContext } from "../users/service.js";
+import { dayInTz, safeTimeZone } from "../gamification/streak.js";
+import { getUserPlanAndCutRules, getUserSyncContext } from "../users/service.js";
 import { GeoError } from "./errors.js";
 import type { HeightMap } from "./heights.adapter.js";
 import type { RouteProvider } from "./ors.adapter.js";
@@ -451,4 +453,43 @@ export async function saveRun(
   // worked out again from history, so a send whose first try failed here heals on the next.
   await onWorkoutSynced({ sql: deps.sql }, userId, ctx.timezone);
   return { status: saved.created ? "created" : "duplicate", run: asSavedRun(saved.row) };
+}
+
+// ── The run plan (ROADMAP 37d-i) ──────────────────────────────────────────────────────────────
+
+/** Answers kept before a rule changed and no longer read are treated as none: the person answers again. */
+const answersOf = (stored: unknown): RunPlanAnswers | null => {
+  const parsed = runPlanAnswersSchema.safeParse(stored);
+  return parsed.success ? parsed.data : null;
+};
+
+/** The person's answers and the plan from them and from the runs they recorded. Safe mode makes no
+ *  plan, answered or not, and says so. */
+export async function runPlan(deps: ReadDeps & { now: () => Date }, userId: string): Promise<RunPlanResponse> {
+  const [row, ctx, rules] = await Promise.all([
+    repo.getRunPlan(deps.sql, userId),
+    getUserSyncContext(deps.sql, userId),
+    getUserPlanAndCutRules(deps.sql, userId, null),
+  ]);
+  const safeMode = rules.answers.health?.safeMode === true;
+  const answers = row === null ? null : answersOf(row.answers);
+  const timeZone = safeTimeZone(ctx.timezone);
+  const today = dayInTz(deps.now(), timeZone);
+  if (safeMode) return { answers, plan: { kind: "none", why: "safe_mode" }, today };
+  if (row === null || answers === null) return { answers: null, plan: null, today };
+  const startDay = dayInTz(row.startedAt, timeZone);
+  const raceDay = row.raceAt === null ? null : dayInTz(row.raceAt, timeZone);
+  const runs = answers.doesRun === "no" ? [] : await repo.getRunPlanDays(deps.sql, userId, timeZone, runsFrom(startDay, today));
+  return { answers, plan: runPlanOf({ answers, startDay, raceDay, today, safeMode, runs }), today };
+}
+
+export async function setRunPlan(deps: ReadDeps & { now: () => Date }, userId: string, answers: RunPlanAnswers): Promise<RunPlanResponse> {
+  const now = deps.now();
+  const before = await repo.getRunPlan(deps.sql, userId);
+  const kept = before === null ? null : answersOf(before.answers);
+  // Its weeks are kept unless what the plan starts from changed; a race time keeps the day it was given.
+  const startedAt = before !== null && kept !== null && !restartsPlan(kept, answers) ? before.startedAt : now;
+  const raceAt = answers.race === null ? null : before !== null && kept !== null && sameRace(kept.race, answers.race) ? (before.raceAt ?? now) : now;
+  await repo.putRunPlan(deps.sql, userId, answers, startedAt, raceAt, now);
+  return runPlan(deps, userId);
 }

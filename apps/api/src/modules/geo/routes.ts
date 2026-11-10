@@ -15,7 +15,7 @@ import { heightMapFor, type HeightMap } from "./heights.adapter.js";
 import { mapSourceFor } from "./mapSource.js";
 import { createOrsRouteProvider, type RouteProvider } from "./ors.adapter.js";
 import { ForeignRunError } from "./repo.js";
-import { RUN_MAX_PAUSES, RUN_MAX_POINTS, RUN_WORDS, changeRunRequestSchema, runDaysQuerySchema, runListQuerySchema } from "@app/shared";
+import { RUN_MAX_PAUSES, RUN_MAX_POINTS, RUN_WORDS, runPlanAnswersSchema, changeRunRequestSchema, runDaysQuerySchema, runListQuerySchema } from "@app/shared";
 import { generateRoutesRequestSchema, geoListQuerySchema, runClimbRequestSchema, saveRunRequestSchema, savedRouteCreateSchema } from "./schemas.js";
 import * as service from "./service.js";
 import type { GeoDeps } from "./service.js";
@@ -35,6 +35,8 @@ export interface GeoRouteOverrides {
   geocodeResolver?: GeocodeResolver;
   /** The height map a run's elevation gain is read from (37b-ii); unset is the one in HEIGHTS_DIR. */
   heights?: HeightMap;
+  /** The run plan's clock (37d-i): which day it is for the person. Unset is the real one. */
+  now?: () => Date;
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -302,5 +304,16 @@ export function registerGeoRoutes(
     if (!UUID.test(req.params.id)) return runNotFound(req, reply);
     const deleted = await service.deleteRun(readDeps, authedUserId(req), req.params.id);
     return deleted ? reply.status(204).send() : runNotFound(req, reply);
+  });
+
+  // ── The run plan (ROADMAP 37d-i): the person's own answers and the plan from them ─────────────
+  const planDeps = { sql: deps.sql, now: overrides.now ?? (() => new Date()) };
+  app.get("/v1/geo/run-plan", { preHandler: [app.authenticate] }, async (req, reply) => reply.send(await service.runPlan(planDeps, authedUserId(req))));
+
+  // The whole answers each time: a PUT sent twice leaves the same row.
+  app.put("/v1/geo/run-plan", { preHandler: [app.authenticate, changeLimit] }, async (req, reply) => {
+    const answers = parse(runPlanAnswersSchema, req.body, req, reply);
+    if (answers === null) return;
+    return reply.send(await service.setRunPlan(planDeps, authedUserId(req), answers));
   });
 }

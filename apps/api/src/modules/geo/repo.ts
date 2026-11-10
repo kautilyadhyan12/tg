@@ -6,7 +6,7 @@
 // module; written here like the nutrition/coach tasks' disclosed crossings
 // (getLiveGymId duplicated from nutrition/repo.ts — a cross-module repo import
 // would violate R7.1).
-import type { RunBests, RunClimb, RunRecordKind } from "@app/shared";
+import type { RunBests, RunClimb, RunPlanAnswers, RunRecordKind } from "@app/shared";
 import type { Sql, TransactionSql } from "postgres";
 import { ORS_ROUTE_COST_MICRO } from "./cost.js";
 
@@ -598,4 +598,43 @@ export async function keepWaitingClimb(sql: Sql, run: { id: string; userId: stri
                     ELSE splits END
     WHERE id = ${run.id} AND user_id = ${run.userId} AND climb_state = 'waiting'`;
   return done.count === 1;
+}
+
+// ── The run plan (ROADMAP 37d-i) ──────────────────────────────────────────────────────────────
+
+export interface RunPlanRow {
+  answers: unknown;
+  startedAt: Date;
+  raceAt: Date | null;
+}
+
+/** The person's own answers, by their own id only. */
+export async function getRunPlan(sql: Sql, userId: string): Promise<RunPlanRow | null> {
+  const rows = await sql<{ answers: unknown; started_at: Date; race_at: Date | null }[]>`
+    SELECT answers, started_at, race_at FROM run_plans WHERE user_id = ${userId}`;
+  const row = rows[0];
+  return row === undefined ? null : { answers: row.answers, startedAt: row.started_at, raceAt: row.race_at };
+}
+
+/** The answers with the plan's start and the race time's day the service worked out: one statement, so
+ *  two at once leave the newer. */
+export async function putRunPlan(sql: Sql, userId: string, answers: RunPlanAnswers, startedAt: Date, raceAt: Date | null, at: Date): Promise<void> {
+  await sql`
+    INSERT INTO run_plans (user_id, answers, started_at, race_at, updated_at)
+    VALUES (${userId}, ${sql.json(answers)}, ${startedAt}, ${raceAt}, ${at})
+    ON CONFLICT (user_id) DO UPDATE SET answers = EXCLUDED.answers, started_at = EXCLUDED.started_at, race_at = EXCLUDED.race_at, updated_at = EXCLUDED.updated_at`;
+}
+
+/** One row a day of the person's runs that this app recorded (as XP and the records count them), in
+ *  their own time zone, from `fromDay`: the day's distance, its longest run, its longest moving time and
+ *  how its longest run felt (a short extra jog rated hard says nothing of the planned run). */
+export async function getRunPlanDays(sql: Sql, userId: string, timeZone: string, fromDay: string): Promise<{ day: string; distanceM: number; longestM: number; movingS: number; effort: number | null }[]> {
+  const rows = await sql<{ day: string; m: string; longest: number; moving: number; effort: number | null }[]>`
+    SELECT to_char(started_at AT TIME ZONE ${timeZone}, 'YYYY-MM-DD') AS day,
+           sum(distance_m) AS m, max(distance_m) AS longest, max(duration_s) AS moving, (array_agg(effort ORDER BY distance_m DESC, started_at))[1] AS effort
+    FROM runs
+    WHERE user_id = ${userId} AND run_calc_version IS NOT NULL
+      AND started_at >= (${fromDay}::date::timestamp AT TIME ZONE ${timeZone})
+    GROUP BY 1 ORDER BY 1`;
+  return rows.map((r) => ({ day: r.day, distanceM: Number(r.m), longestM: r.longest, movingS: r.moving, effort: r.effort }));
 }

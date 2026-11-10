@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type Re
 import { AppState, Linking, Pressable, ScrollView, StyleSheet, Switch, View } from "react-native";
 import * as Location from "expo-location";
 import { useIsFocused } from "@react-navigation/native";
-import { runPageSchema, runRecordsSchema, type MapColours, type Units } from "@app/shared";
+import { runPageSchema, runPlanResponseSchema, runRecordsSchema, type MapColours, type Units } from "@app/shared";
 import { Button } from "../../look/Button";
 import { Options } from "../../look/Choice";
 import { Sheet } from "../../look/Sheet";
@@ -22,6 +22,9 @@ import { RUN_BAR_ROOM, gpsLight, openAppSettings, START_PROBLEM_WORDS, useRunLay
 import { useRunOutbox } from "./RunOutbox";
 import { useLookOpen } from "../setupFirst";
 import { RunPage } from "./RunPage";
+import { RunPlanAsk } from "./RunPlanAsk";
+import { RUN_PLAN_PATH, RunPlanBox, type PlanRead } from "./RunPlanBox";
+import { RunPlanPage } from "./RunPlanPage";
 import { RecordsCard } from "./RecordParts";
 import { RECORDS_PATH } from "./runRecords";
 import { RunRow } from "./RunRow";
@@ -118,6 +121,13 @@ export function RunningTab({ units, parts }: { units: Units; parts: ReactNode })
   const recordsRead = useRead(RECORDS_PATH, runRecordsSchema, view.sent + changed);
   const records = recordsRead.read.kind === "ok" ? recordsRead.read.data : null;
   const anyRecord = records !== null && Object.values(records).some((r) => r !== null);
+  // The run plan (37d-i): read again when a run lands, and when its answers change.
+  const [planChanged, setPlanChanged] = useState(0);
+  const [asking, setAsking] = useState(false);
+  const [planOpen, setPlanOpen] = useState(false);
+  const planRead = useRead(RUN_PLAN_PATH, runPlanResponseSchema, view.sent + changed + planChanged);
+  const plan: PlanRead = planRead.read.kind === "ok" ? { kind: "ok", data: planRead.read.data } : planRead.read.kind === "failed" ? { kind: "failed", again: planRead.again } : { kind: "loading" };
+  const shownPlan = plan.kind === "ok" && plan.data.plan !== null && plan.data.plan.kind !== "none" ? plan.data.plan : null;
 
   // A run just finished takes the place of what was said of the one deleted before it.
   useEffect(() => {
@@ -170,6 +180,20 @@ export function RunningTab({ units, parts }: { units: Units; parts: ReactNode })
               {deleted}
             </Txt>
           )}
+          <RunPlanBox
+            read={plan}
+            units={units}
+            onMake={() => {
+              if (look !== null) look();
+              else setAsking(true);
+            }}
+            onOpen={() => {
+              setPlanOpen(true);
+            }}
+            onCleared={() => {
+              setPlanChanged((n) => n + 1);
+            }}
+          />
           {lastRun === null ? null : (
             <View style={styles.yours} testID="your-runs">
               <View style={styles.yoursHead}>
@@ -344,6 +368,31 @@ export function RunningTab({ units, parts }: { units: Units; parts: ReactNode })
             }}
             onStart={() => {
               setRunsOpen(false);
+            }}
+          />
+          <RunPlanAsk
+            open={asking}
+            units={units}
+            before={plan.kind === "ok" ? plan.data.answers : null}
+            onClose={() => {
+              setAsking(false);
+            }}
+            onSaved={() => {
+              setAsking(false);
+              setPlanChanged((n) => n + 1);
+              setPlanOpen(false);
+            }}
+          />
+          <RunPlanPage
+            plan={planOpen ? shownPlan : null}
+            today={plan.kind === "ok" ? plan.data.today : ""}
+            units={units}
+            onClose={() => {
+              setPlanOpen(false);
+            }}
+            onChange={() => {
+              setPlanOpen(false);
+              setAsking(true);
             }}
           />
           <RunPage
