@@ -2,13 +2,16 @@
 import { METRES_PER_MILE } from "./runWords";
 import type { Part, PlanSession, RunGoal, Paces, Units } from "@app/shared";
 
+/** Keeps "/km" on the line of its pace, and "min" on the line of its number. */
+const NBSP = "\u00a0";
+
 export const GOAL_WORDS: Record<RunGoal, string> = { "5k": "5K", "10k": "10K", half: "Half marathon" };
 
 /** "1 min", "1½ min", "28½ min", "40 min". */
 export function minutes(seconds: number): string {
   const whole = Math.floor(seconds / 60);
   const half = seconds % 60 >= 30;
-  return `${whole === 0 && half ? "" : String(whole)}${half ? "½" : ""} min`;
+  return `${whole === 0 && half ? "" : String(whole)}${half ? "½" : ""}${NBSP}min`;
 }
 
 /** "5.5 km" or "3.4 mi": one place, never rounded up. */
@@ -25,7 +28,7 @@ export function paceOf(perKm: number, units: Units): string {
   return `${String(Math.floor(s / 60))}:${two(s % 60)}`;
 }
 const per = (units: Units): string => (units === "imperial" ? "/mi" : "/km");
-const range = ([fast, slow]: readonly [number, number], units: Units): string => `${paceOf(fast, units)}–${paceOf(slow, units)} ${per(units)}`;
+const range = ([fast, slow]: readonly [number, number], units: Units): string => `${paceOf(fast, units)}–${paceOf(slow, units)}${NBSP}${per(units)}`;
 
 /** A walk-and-run session in one line: "Walk 5 min, then 8 runs of 1 min with 1½ min walks between, then walk 5 min". */
 export function walkRunWords(parts: readonly Part[]): string {
@@ -71,7 +74,8 @@ export function sessionDetail(session: PlanSession, paces: Paces | null, units: 
   const how =
     session.kind === "steady"
       ? `steady ${paces === null ? `(${STEADY_BY_FEEL})` : `at ${range(paces.steady, units)}`}`
-      : `fast ${paces === null ? `(${FAST_BY_FEEL})` : `at ${paceOf(paces.fast, units)} ${per(units)}`}`;
+      : `fast ${paces === null ? `(${FAST_BY_FEEL})` : `at ${paceOf(paces.fast, units)}${NBSP}${per(units)}`}`;
+  if (reps.count === 1) return `Easy to warm up, then ${rep} ${how}, then easy`;
   return `Easy to warm up, then ${String(reps.count)} × ${rep} ${how} with ${rest} easy between, then easy`;
 }
 

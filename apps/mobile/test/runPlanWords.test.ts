@@ -2,7 +2,15 @@
 // it, each runner's run with its paces in the person's units, and by feel with no race time.
 import { describe, expect, it } from "vitest";
 import { c25kParts, pacesOf } from "@app/shared";
-import { minutes, paceOf, planDistance, sessionDetail, sessionTitle, walkRunWords } from "../src/screens/running/runPlanWords";
+import * as words from "../src/screens/running/runPlanWords";
+
+/** The words as read: the no-break spaces that keep "1 min" and "/km" whole read as spaces. */
+const plain = <A extends unknown[]>(f: (...a: A) => string) => (...a: A): string => f(...a).replace(/\u00a0/g, " ");
+const minutes = plain(words.minutes);
+const sessionDetail = plain(words.sessionDetail);
+const sessionTitle = plain(words.sessionTitle);
+const walkRunWords = plain(words.walkRunWords);
+const { paceOf, planDistance } = words;
 
 describe("Couch to 5K in words", () => {
   it.each([

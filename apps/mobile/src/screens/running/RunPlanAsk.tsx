@@ -2,16 +2,16 @@
 // never in setup): do you run, how long you can jog, the days and the distance you aim for, and for
 // somebody who can already jog 30 minutes their running now. One question a page; what was answered
 // before is already picked.
-import { useEffect, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { useEffect, useMemo, useState } from "react";
+import { Pressable, StyleSheet, View } from "react-native";
 import { RACE_DISTANCES_M, runPlanResponseSchema, vdotOf, type JogBand, type RaceTime, type RunDoesRun, type RunGoal, type RunPlanAnswers, type RunPlanResponse, type Units } from "@app/shared";
 import { Button } from "../../look/Button";
 import { Options } from "../../look/Choice";
 import { Chip } from "../../look/Chip";
 import { CoverPage } from "../../look/CoverPage";
-import { Steps } from "../../look/Progress";
 import { Ruler } from "../../look/Ruler";
-import { Txt } from "../../look/Txt";
+import { colours, sizes } from "../../look/colours";
+import { fonts, Txt } from "../../look/Txt";
 import { useSession } from "../../session/SessionProvider";
 import { RUN_PLAN_PATH } from "./RunPlanBox";
 import { GOAL_WORDS, weekdayShort } from "./runPlanWords";
@@ -121,7 +121,11 @@ export function RunPlanAsk({ open, units, before, onClose, onSaved }: { open: bo
   return (
     <CoverPage open={open} title="Your run plan" onClose={onClose} {...(foot === undefined ? {} : { foot })}>
       <View style={styles.steps}>
-        <Steps share={(at + 1) / order.length} />
+        <View style={styles.bar} accessible accessibilityLabel={`Question ${String(at + 1)} of ${String(order.length)}`}>
+          {order.map((s, i) => (
+            <View key={s} style={[styles.segment, i <= at ? styles.segmentOn : null]} />
+          ))}
+        </View>
         {back === null ? null : <Button kind="link" label="Back" say="Back to the last question" onPress={back} />}
       </View>
       {step === "run" ? (
@@ -155,10 +159,24 @@ export function RunPlanAsk({ open, units, before, onClose, onSaved }: { open: bo
         <View style={styles.q}>
           <Txt kind="h2">Which days can you run?</Txt>
           <Txt kind="small">{runner ? "Pick two or more." : "Pick two or more. The plan runs three days a week, with a rest day between."}</Txt>
-          <View style={styles.chips}>
-            {[1, 2, 3, 4, 5, 6, 7].map((d) => (
-              <Chip key={d} label={weekdayShort(d)} small on={days.includes(d)} onPress={() => { setDays((was) => (was.includes(d) ? was.filter((x) => x !== d) : [...was, d])); }} />
-            ))}
+          <View style={styles.days}>
+            {[1, 2, 3, 4, 5, 6, 7].map((d) => {
+              const on = days.includes(d);
+              return (
+                <Pressable
+                  key={d}
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: on }}
+                  accessibilityLabel={weekdayShort(d)}
+                  onPress={() => { setDays((was) => (was.includes(d) ? was.filter((x) => x !== d) : [...was, d])); }}
+                  style={[styles.day, on ? styles.dayOn : null]}
+                >
+                  <Txt kind="small" colour={on ? "onOrange" : "textSoft"} style={styles.dayWord} numberOfLines={1}>
+                    {weekdayShort(d)}
+                  </Txt>
+                </Pressable>
+              );
+            })}
           </View>
           <Txt kind="h3" style={styles.gap}>
             What are you aiming for?
@@ -215,7 +233,7 @@ export function RunPlanAsk({ open, units, before, onClose, onSaved }: { open: bo
 }
 
 function RaceRuler({ distanceM, race, onPick }: { distanceM: RaceTime["distanceM"]; race: RaceTime | null; onPick: (race: RaceTime) => void }) {
-  const rows = raceRows(distanceM);
+  const rows = useMemo(() => raceRows(distanceM), [distanceM]);
   const held = race !== null && race.distanceM === distanceM ? rows.indexOf(race.timeS) : -1;
   const minute = distanceM >= 21097 ? 600 : distanceM >= 5000 ? 60 : 30;
   return (
@@ -244,7 +262,14 @@ function Problem({ words }: { words: string | null }) {
 }
 
 const styles = StyleSheet.create({
-  steps: { gap: 8 },
+  steps: { flexDirection: "row", alignItems: "center", gap: 12, minHeight: sizes.press },
+  bar: { flex: 1, flexDirection: "row", gap: 6 },
+  segment: { flex: 1, height: 4, borderRadius: 2, backgroundColor: colours.lineStrong },
+  segmentOn: { backgroundColor: colours.orange },
+  days: { flexDirection: "row", gap: 6 },
+  day: { flex: 1, minHeight: sizes.press, borderRadius: sizes.round, borderWidth: 1, borderColor: colours.lineStrong, backgroundColor: colours.fill, alignItems: "center", justifyContent: "center", paddingHorizontal: 2 },
+  dayOn: { borderColor: colours.orange, backgroundColor: colours.orange },
+  dayWord: { fontFamily: fonts.semibold },
   q: { gap: 12 },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   gap: { marginTop: 10 },

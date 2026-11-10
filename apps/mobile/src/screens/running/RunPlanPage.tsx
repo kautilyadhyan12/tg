@@ -13,7 +13,7 @@ import { phoneToday } from "./RunPlanBox";
 
 type Shown = Exclude<RunPlan, { kind: "none" }>;
 
-export const RULES_LINE = "No run is more than 10 % longer than your longest of the last month (a 2025 study of 5,205 runners), and a week grows by 10 % at most, with an easier week every fourth.";
+export const RULES_LINE = "No run is more than 10\u00a0% longer than your longest of the last month (a 2025 study of 5,205 runners), and a week grows by 10\u00a0% at most, with an easier week every fourth.";
 export const NHS_LINE = "Go at a pace where you can still talk. Have a rest day between runs. If a week felt hard, do it again: the plan waits for you. From the NHS Couch to 5K plan.";
 
 export function RunPlanPage({ plan, units, onClose, onChange }: { plan: Shown | null; units: Units; onClose: () => void; onChange: () => void }) {
@@ -40,8 +40,8 @@ export function RunPlanPage({ plan, units, onClose, onChange }: { plan: Shown | 
           {plan.kind === "runner" && plan.ready ? <Txt kind="small" colour="goodText">{`You’re ready for a ${GOAL_WORDS[plan.goal]}. Your plan keeps this week steady now.`}</Txt> : null}
           {plan.kind === "runner" && plan.held ? <Txt kind="small" colour="gold">No run was recorded last week, so this week stays the same. Record your runs here so your plan can grow.</Txt> : null}
           <View style={styles.list}>
-            {plan.days.filter((d) => d.session !== null).map((d, i) => (
-              <Session key={d.day} day={d} first={i === 0} today={d.day === today} plan={plan} units={units} />
+            {plan.days.filter((d) => d.session !== null).map((d, i, shown) => (
+              <Session key={d.day} day={d} first={i === 0} today={d.day === today} plan={plan} units={units} sameAs={sameRunBefore(d, shown.slice(0, i))} />
             ))}
             {runs === 0 ? <Txt kind="small" style={styles.pad}>No runs left this week.</Txt> : null}
           </View>
@@ -52,14 +52,19 @@ export function RunPlanPage({ plan, units, onClose, onChange }: { plan: Shown | 
                 <Txt kind="tiny">{plan.kind === "runner" ? "grows from what you run" : "after each week’s runs"}</Txt>
               </View>
               <View style={styles.list}>
-                {plan.ahead.map((a, i) => (
-                  <View key={a.week} style={[styles.ahead, i === 0 ? null : styles.line]}>
-                    <Txt kind="body" style={styles.grow}>{`Week ${String(a.week)}${a.easier ? " · easier week" : ""}`}</Txt>
-                    <Txt kind="strong" style={styles.aheadValue}>
-                      {a.m !== null ? planDistance(a.m, units) : a.parts !== null ? walkRunCore(a.parts) : ""}
-                    </Txt>
-                  </View>
-                ))}
+                {plan.ahead.map((a, i) =>
+                  a.parts !== null ? (
+                    <View key={a.week} style={[styles.aheadWalk, i === 0 ? null : styles.line]}>
+                      <Txt kind="strong">{`Week ${String(a.week)}`}</Txt>
+                      <Txt kind="small">{sentence(walkRunCore(a.parts))}</Txt>
+                    </View>
+                  ) : (
+                    <View key={a.week} style={[styles.ahead, i === 0 ? null : styles.line]}>
+                      <Txt kind="body" style={styles.grow}>{`Week ${String(a.week)}${a.easier ? " · easier week" : ""}`}</Txt>
+                      <Txt kind="strong">{a.m === null ? "" : planDistance(a.m, units)}</Txt>
+                    </View>
+                  ),
+                )}
               </View>
             </>
           )}
@@ -80,19 +85,31 @@ export function RunPlanPage({ plan, units, onClose, onChange }: { plan: Shown | 
   );
 }
 
-function Session({ day, first, today, plan, units }: { day: PlanDay; first: boolean; today: boolean; plan: Shown; units: Units }) {
+/** Couch to 5K's run number of an earlier run this week with the very same walks and runs, as the NHS
+ *  plan writes "Repeat week 1 run 1". */
+function sameRunBefore(day: PlanDay, before: readonly PlanDay[]): number | null {
+  const session = day.session;
+  if (session?.kind !== "walk_run") return null;
+  const same = before.find((d) => d.session?.kind === "walk_run" && JSON.stringify(d.session.parts) === JSON.stringify(session.parts));
+  return same?.session?.kind === "walk_run" ? same.session.run : null;
+}
+
+const sentence = (words: string): string => words.charAt(0).toUpperCase() + words.slice(1);
+
+function Session({ day, first, today, plan, units, sameAs }: { day: PlanDay; first: boolean; today: boolean; plan: Shown; units: Units; sameAs: number | null }) {
   const session = day.session;
   if (session === null) return null;
   const paces = plan.kind === "runner" ? plan.paces : null;
+  const detail = sameAs === null ? sessionDetail(session, paces, units) : `The same as Run ${String(sameAs)}`;
   return (
-    <View style={[styles.session, first ? null : styles.line]} accessible accessibilityLabel={`${weekdayShort(day.weekday)}${today ? ", today" : ""}: ${sessionTitle(session, units)}. ${sessionDetail(session, paces, units)}.${day.done ? " Done." : ""}`}>
+    <View style={[styles.session, first ? null : styles.line]} accessible accessibilityLabel={`${weekdayShort(day.weekday)}${today ? ", today" : ""}: ${sessionTitle(session, units)}. ${detail}.${day.done ? " Done." : ""}`}>
       <Txt kind="tiny" colour={today ? "gold" : "textFaint"} style={styles.dayName}>
         {weekdayShort(day.weekday).toUpperCase()}
       </Txt>
       <View style={styles.grow}>
         <Txt kind="strong">{sessionTitle(session, units)}</Txt>
-        <Txt kind="small">{sessionDetail(session, paces, units)}</Txt>
-        {session.kind === "walk_run" ? <Bars parts={session.parts} /> : null}
+        <Txt kind="small">{detail}</Txt>
+        {session.kind === "walk_run" && sameAs === null ? <Bars parts={session.parts} /> : null}
       </View>
       <View style={[styles.tick, day.done ? styles.tickDone : null]}>{day.done ? <Icon name="check" size={14} colour="onOrange" /> : null}</View>
     </View>
@@ -158,7 +175,7 @@ const styles = StyleSheet.create({
   barWalk: { height: 8, borderRadius: 3, backgroundColor: colours.lineStrong },
   monthRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "baseline", marginTop: 8, paddingHorizontal: 4 },
   ahead: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 14, paddingVertical: 12 },
-  aheadValue: { flexShrink: 1, textAlign: "right" },
+  aheadWalk: { paddingHorizontal: 14, paddingVertical: 12, gap: 3 },
   box: { borderRadius: sizes.boxRadius, backgroundColor: colours.box, borderWidth: 1, borderColor: colours.line, padding: 16, gap: 8, alignItems: "flex-start" },
   paces: { flexDirection: "row", gap: 8, alignSelf: "stretch" },
   pace: { flex: 1, borderRadius: 14, backgroundColor: colours.raised, padding: 10, gap: 2 },
