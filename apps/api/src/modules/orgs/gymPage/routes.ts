@@ -24,6 +24,7 @@ import type { RedisLike } from "../../../redis.js";
 import { createDualRateLimit } from "../../auth/rateLimit.js";
 import { orgParamsSchema } from "../schemas.js";
 import { requireWritablePrivilege } from "../service.js";
+import { spentBeforeTheBody } from "../spentBeforeTheBody.js";
 import type { PhotoStore } from "./photoStore.js";
 import type { RobotCheck } from "./robotCheck.js";
 import * as referrals from "../referrals/service.js";
@@ -296,7 +297,6 @@ export function registerGymPageRoutes(app: FastifyInstance, deps: GymPageRouteDe
     await requireWritablePrivilege(pageDeps, params.gymId, requireUserId(req), "org.manage");
     await photoWriteLimit(req, reply);
   };
-  const spentBeforeTheBody = (): Promise<boolean> => Promise.resolve(true);
 
   app.post("/v1/orgs/:gymId/page/photos", { bodyLimit: PHOTO_BODY_LIMIT, onRequest: [app.authenticate, mayAddPhoto] }, async (req, reply) => {
     const params = parseOr400(orgParamsSchema, req.params, req, reply);

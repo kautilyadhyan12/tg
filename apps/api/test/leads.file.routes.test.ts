@@ -492,6 +492,10 @@ d("leads from a file (real Postgres, real worker)", () => {
         expect({ i, status: (await postFrom(desk, checkUrl(org.org.id), garbled, first.cookies)).statusCode }).toEqual({ i, status: 400 });
       }
       expect((await postFrom(desk, checkUrl(org.org.id), { contentBase64: file }, first.cookies)).statusCode).toBe(429);
+      // Refused before the file is read (21a-iii-c): a body that is not even JSON is 429, not 400.
+      const notJson = (path: string, cookies: Record<string, string>) =>
+        api().inject({ method: "POST", url: path, remoteAddress: desk, cookies, headers: { "content-type": "application/json" }, payload: '{"contentBase64": ' });
+      expect((await notJson(checkUrl(org.org.id), first.cookies)).statusCode).toBe(429);
       // Another gym's owner at the same desk still has their own allowance.
       expect((await postFrom(desk, checkUrl(other.org.id), { contentBase64: file }, second.cookies)).statusCode).toBe(200);
 
@@ -501,6 +505,7 @@ d("leads from a file (real Postgres, real worker)", () => {
         expect({ i, status: (await postFrom(desk, addUrl(other.org.id), stale, second.cookies)).statusCode }).toEqual({ i, status: 409 });
       }
       expect((await postFrom(desk, addUrl(other.org.id), stale, second.cookies)).statusCode).toBe(429);
+      expect((await notJson(addUrl(other.org.id), second.cookies)).statusCode).toBe(429);
       expect(await storedLeads(other.org.id)).toEqual([]);
     },
     TIMEOUT_MS,

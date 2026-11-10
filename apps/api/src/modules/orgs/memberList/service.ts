@@ -22,7 +22,9 @@
 // 404 and a trainer's 403 must not spend the front desk's own allowance. The
 // second is this route in particular — reading a file costs a worker, 5 MiB and up
 // to fifteen seconds, so the cheap refusals belong in front of the limiter as well
-// as in front of the work.
+// as in front of the work. The upload (`previewUpload`) is the exception: its route
+// checks the privilege and spends the limit before its file is read (21a-iii-c), and
+// hands in a limit already spent.
 import { ChosenPeopleMovedError, onceMoreIfMoved } from "./onceMore.js";
 import { createHash } from "node:crypto";
 import type { Sql, TransactionSql } from "postgres";
@@ -531,10 +533,9 @@ export interface PreviewInput {
 /** STAGE AN UPLOAD AND ANSWER WHAT IT WOULD DO. Writes one row — the staged
  *  upload — and touches nothing about anybody's membership.
  *
- *  `limit` is the rate limiter, handed in by the route and called HERE rather
- *  than hung on the route, so it sits after the privilege gate (the file header
- *  says why). It answers false when it has already sent its own 429, and the
- *  handler then has nothing left to do. */
+ *  `limit` is the rate limiter. The route spends it before the file is read, after
+ *  its own privilege check, and hands in `spentBeforeTheBody`; a tool that calls
+ *  this hands in its own. It answers false when it has already sent its own 429. */
 export async function previewUpload(
   deps: MemberListDeps,
   userId: string,

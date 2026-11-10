@@ -1,8 +1,8 @@
 // THE MEMBER LIST'S ROUTES (Part 3 §9.9), thin as every other route file in this
 // module: authenticate, Zod-parse, hand to the service, which owns the
 // authorisation and the rate limit in that order (CLAUDE.md §4; the service's own
-// header says why the limiter is called there and not hung on the route). The upload
-// settles both before its file is read (`mayUpload`).
+// header says why the limiter is called there and not hung on the route), except the
+// upload, whose route settles both before its file is read (`mayUpload`).
 //
 // Registered from `registerOrgRoutes` rather than from `app.ts`, because these
 // are the same console behind the same gates and share its deps.
@@ -93,6 +93,7 @@ import { keepListed } from "./tidy.js";
 import { SelectionChanged, selectAll } from "./selection.js";
 import * as groupMessages from "../messages/group.js";
 import { requireWritablePrivilege } from "../service.js";
+import { spentBeforeTheBody } from "../spentBeforeTheBody.js";
 import * as service from "./service.js";
 import { tellPeopleAfter, type LiveNewsSender } from "../../live/news.js";
 
@@ -225,7 +226,6 @@ export function registerMemberListRoutes(app: FastifyInstance, deps: MemberListR
     await requireWritablePrivilege(listDeps, params.gymId, requireUserId(req), "members.confirm");
     await uploadLimit(req, reply);
   };
-  const spentBeforeTheBody = (): Promise<boolean> => Promise.resolve(true);
 
   app.post(
     "/v1/orgs/:gymId/member-list/uploads",

@@ -30,6 +30,7 @@ import type { InviteSettings } from "../invites/settings.js";
 import { leadParamsSchema, orgParamsSchema } from "../schemas.js";
 import { deleteSelectedLeads, LeadSelectionChanged, previewDeleteLeads, selectAllLeads } from "./deleteSelected.js";
 import { requireWritablePrivilege } from "../service.js";
+import { spentBeforeTheBody } from "../spentBeforeTheBody.js";
 import * as emailSettings from "./emailSettings.js";
 import * as fileService from "./fileService.js";
 import * as service from "./service.js";
@@ -150,7 +151,6 @@ export function registerLeadRoutes(app: FastifyInstance, deps: LeadRouteDeps): v
       await requireWritablePrivilege(deps, params.gymId, requireUserId(req), "members.confirm");
       await limit(req, reply);
     };
-  const spentBeforeTheBody = (): Promise<boolean> => Promise.resolve(true);
   const fileDeps: fileService.LeadFileDeps = { sql: deps.sql, redis: deps.redis, log: app.log, addressKey: invites?.hmacKey ?? null };
   const signedIn = { preHandler: [app.authenticate] };
 
