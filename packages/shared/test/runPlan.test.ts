@@ -149,7 +149,7 @@ describe("Couch to 5K: the NHS printable plan", () => {
     expect(plan.kind).toBe("c25k");
     const planned = daysOf(plan).filter((d) => d.session !== null);
     expect(planned.map((d) => d.weekday)).toEqual([1, 3, 5]);
-    expect(planned.map((d) => (d.session?.kind === "walk_run" ? `${d.session.week}.${d.session.run}` : ""))).toEqual(["1.1", "1.2", "1.3"]);
+    expect(planned.map((d) => (d.session?.kind === "walk_run" ? `${String(d.session.week)}.${String(d.session.run)}` : ""))).toEqual(["1.1", "1.2", "1.3"]);
   });
 
   it.each([

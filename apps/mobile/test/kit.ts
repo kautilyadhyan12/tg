@@ -149,6 +149,8 @@ export function fakeServer(routes: Record<string, Route>): { ask: Ask; asked: As
     "/v1/users/me/reminders": () => ({ status: 200, body: { reminders: OFF_REMINDERS, safeMode: false } }),
     // OpenFreeMap's map under a run, as the server says unless it is switched (37b-i).
     "/v1/geo/map": () => ({ status: 200, body: { map: OPENFREEMAP } }),
+    // No run plan answered yet, unless a test says otherwise (37d-i).
+    "/v1/geo/run-plan": () => ({ status: 200, body: { answers: null, plan: null } }),
     ...routes,
   };
   const ask: Ask = async (url: string, init: AskInit) => {
