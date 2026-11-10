@@ -518,7 +518,7 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
   // send matches the shared contract — createdAt included, which the web
   // needs to date a typed row.
   it("PATCH body-measurement: source and stray keys are 400, a stranger's edit is 404, a real edit is 200",async()=>{
-    const created=await inject("POST","/v1/nutrition/body-measurements",cookieA,{measuredAt:new Date().toISOString(),weightKg:75});
+    const created=await inject("POST","/v1/nutrition/body-measurements",cookieA,{measuredAt:new Date().toISOString(),weightKg:75,metrics:{waist_cm:82,hip_cm:95}});
     expect(created.statusCode,created.body).toBe(201);
     const id=bodyMeasurementSchema.parse(created.json<{measurement:unknown}>().measurement).id;
     expect((await inject("PATCH",`/v1/nutrition/body-measurements/${id}`,cookieA,{source:"manual"})).statusCode).toBe(400);
@@ -528,8 +528,10 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
     expect(edited.statusCode,edited.body).toBe(200);
     expect(bodyMeasurementSchema.parse(edited.json<{measurement:unknown}>().measurement)).toMatchObject({weightKg:76,source:"manual"});
     expect((await inject("PATCH",`/v1/nutrition/body-measurements/${id}`,cookieB,{weightKg:99})).statusCode).toBe(404);
-    const [still]=await sql<{weight_kg:string|null}[]>`SELECT weight_kg FROM body_measurements WHERE id=${id}`;
+    const [still]=await sql<{weight_kg:string|null;metrics:unknown}[]>`SELECT weight_kg, metrics FROM body_measurements WHERE id=${id}`;
     expect(still?.weight_kg).toBe("76.00");
+    // A change to the weight alone keeps the other measurements (zod 4 would fill metrics with {}).
+    expect(still?.metrics).toEqual({waist_cm:82,hip_cm:95});
     const list=await inject("GET","/v1/nutrition/body-measurements?limit=100",cookieA);
     expect(list.statusCode).toBe(200);
     expect(bodyMeasurementListResponseSchema.parse(list.json()).items.find((m)=>m.id===id)).toMatchObject({weightKg:76,source:"manual"});
@@ -1161,7 +1163,7 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
   it("the real match check is wired in (33a-ii): a food words found is asked about in a second call, text only, with no photo and no person, and ledgered",async()=>{
     // "roasted potatoes" hinted "potatoes": words find our baked potato, so it is checked.
     const evidence:VisionEvidence={meal_name:"Potatoes",items:[seen({name:"roasted potatoes",canonical_hint:"potatoes",grams:200,kcal:300,protein_g:5,carbs_g:40,fat_g:13})],unknown_items:[],photo_quality:"good"};
-    const sentSchema=z.object({messages:z.array(z.object({content:z.array(z.object({type:z.string()}).passthrough())}))}).passthrough();
+    const sentSchema=z.object({messages:z.array(z.object({content:z.array(z.object({type:z.string()}).loose())}))}).loose();
     const calls:{body:z.infer<typeof sentSchema>}[]=[];
     const openai:typeof fetch=(_input,init)=>{
       const body=sentSchema.parse(JSON.parse(typeof init?.body==="string"?init.body:"{}"));

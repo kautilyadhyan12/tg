@@ -35,7 +35,7 @@ const minorSchema = z.number().int().min(0).max(99_999_999);
 /** One line members can buy. */
 export const forSaleItemSchema = z
   .object({
-    typeId: z.string().uuid(),
+    typeId: z.uuid(),
     name: z.string().min(1),
     description: z.string().nullable(),
     kind: membershipKindSchema,
@@ -71,7 +71,7 @@ export type ForSaleItem = z.infer<typeof forSaleItemSchema>;
 /** The agreement a line asks the member to sign as they buy it (18k-iii-a): its wording's id, its name (null for the
  *  business's main one) and its words. */
 export const forSaleAgreementSchema = z
-  .object({ id: z.string().uuid(), name: z.string().min(1).nullable(), version: z.number().int().min(1), text: waiverTextSchema })
+  .object({ id: z.uuid(), name: z.string().min(1).nullable(), version: z.number().int().min(1), text: waiverTextSchema })
   .strict();
 export type ForSaleAgreement = z.infer<typeof forSaleAgreementSchema>;
 
@@ -159,8 +159,8 @@ export const appPurchaseGivenSchema = z
     minimumTerm: z.object({ periods: z.number().int().min(1), then: contractThenSchema, leaveFeeMinor: minorSchema.nullable() }).strict().nullable(),
     noticeDays: z.number().int().min(0).nullable(),
     coolingOffDays: z.number().int().min(0).nullable(),
-    discount: z.object({ id: z.string().uuid(), offMinor: z.number().int().min(1) }).strict().nullable(),
-    memberGift: z.object({ id: z.string().uuid(), offMinor: z.number().int().min(1) }).strict().nullable(),
+    discount: z.object({ id: z.uuid(), offMinor: z.number().int().min(1) }).strict().nullable(),
+    memberGift: z.object({ id: z.uuid(), offMinor: z.number().int().min(1) }).strict().nullable(),
   })
   .strict();
 export type AppPurchaseGiven = z.infer<typeof appPurchaseGivenSchema>;

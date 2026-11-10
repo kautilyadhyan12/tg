@@ -56,7 +56,7 @@ export const leaderboardQuerySchema = z
 export type LeaderboardQuery = z.infer<typeof leaderboardQuerySchema>;
 
 export const leaderboardPersonParamsSchema = z
-  .object({ gymId: z.string().uuid(), userId: z.string().uuid() })
+  .object({ gymId: z.uuid(), userId: z.uuid() })
   .strict();
 
 export const leaderboardProfileQuerySchema = z
@@ -65,7 +65,7 @@ export const leaderboardProfileQuerySchema = z
 
 export const leaderboardRowSchema = z
   .object({
-    userId: z.string().uuid(),
+    userId: z.uuid(),
     /** First name and last initial: "Priya S." */
     name: z.string(),
     initials: z.string(),
@@ -95,7 +95,7 @@ export type LeaderboardMe = z.infer<typeof leaderboardMeSchema>;
 
 export const leaderboardResponseSchema = z
   .object({
-    gymId: z.string().uuid(),
+    gymId: z.uuid(),
     gymName: z.string(),
     timezone: z.string(),
     board: z.enum(LEADERBOARD_BOARDS),
@@ -112,7 +112,7 @@ export const leaderboardResponseSchema = z
     ranked: z.number().int().min(0),
     rows: z.array(leaderboardRowSchema).max(LEADERBOARD_TOP),
     me: leaderboardMeSchema,
-    asOf: z.string().datetime(),
+    asOf: z.iso.datetime(),
   })
   .strict();
 export type LeaderboardResponse = z.infer<typeof leaderboardResponseSchema>;
@@ -120,7 +120,7 @@ export type LeaderboardResponse = z.infer<typeof leaderboardResponseSchema>;
 /** What counted for the person's own number. */
 export const leaderboardVisitSchema = z
   .object({
-    at: z.string().datetime(),
+    at: z.iso.datetime(),
     /** desk: a scan at the front desk; staff: a member of staff checked them in. */
     how: z.enum(["desk", "staff"]),
     /** The desk's or the staff member's name. */
@@ -138,7 +138,7 @@ export type LeaderboardVisit = z.infer<typeof leaderboardVisitSchema>;
 export const leaderboardVisitNotCountedSchema = z
   .object({
     day,
-    at: z.string().datetime(),
+    at: z.iso.datetime(),
     why: z.enum(["own_tap", "app_code", "removed"]),
     by: z.string().nullable(),
     removedOn: day.nullable(),
@@ -149,7 +149,7 @@ export type LeaderboardVisitNotCounted = z.infer<typeof leaderboardVisitNotCount
 /** One counted workout, for the person's own list. */
 export const leaderboardWorkoutSchema = z
   .object({
-    at: z.string().datetime(),
+    at: z.iso.datetime(),
     /** Who counted its reps: the camera, the person, or some sets each; null when the
      *  sets do not say. */
     countedBy: z.enum(["camera", "you", "both"]).nullable(),
@@ -177,7 +177,7 @@ export const leaderboardCountedResponseSchema = z
       z
         .object({
           day,
-          at: z.string().datetime(),
+          at: z.iso.datetime(),
           why: z.enum(LEADERBOARD_WORKOUT_NOT_COUNTED),
           daysLate: z.number().int().min(1).nullable(),
         })
@@ -199,7 +199,7 @@ export type LeaderboardCountedResponse = z.infer<typeof leaderboardCountedRespon
 
 export const leaderboardProfileResponseSchema = z
   .object({
-    userId: z.string().uuid(),
+    userId: z.uuid(),
     name: z.string(),
     initials: z.string(),
     boards: z.array(
@@ -246,7 +246,7 @@ export type StaffLeaderboardQuery = z.infer<typeof staffLeaderboardQuerySchema>;
 
 export const staffLeaderboardRowSchema = z
   .object({
-    userId: z.string().uuid(),
+    userId: z.uuid(),
     /** The full name, or null when the person has typed none and their record has none. */
     name: z.string().nullable(),
     initials: z.string(),
@@ -263,7 +263,7 @@ export type StaffLeaderboardRow = z.infer<typeof staffLeaderboardRowSchema>;
 
 export const staffLeaderboardResponseSchema = z
   .object({
-    gymId: z.string().uuid(),
+    gymId: z.uuid(),
     gymName: z.string(),
     timezone: z.string(),
     board: z.enum(LEADERBOARD_BOARDS),
@@ -288,7 +288,7 @@ export const staffLeaderboardResponseSchema = z
     rows: z.array(staffLeaderboardRowSchema).max(LEADERBOARD_STAFF_PAGE),
     /** People on the gym's list who are not in the app, so are on no board. */
     notInApp: z.number().int().min(0),
-    asOf: z.string().datetime(),
+    asOf: z.iso.datetime(),
   })
   .strict();
 export type StaffLeaderboardResponse = z.infer<typeof staffLeaderboardResponseSchema>;
@@ -296,7 +296,7 @@ export type StaffLeaderboardResponse = z.infer<typeof staffLeaderboardResponseSc
 /** One person, for staff: their place on every board, hidden or not. */
 export const staffLeaderboardProfileResponseSchema = z
   .object({
-    userId: z.string().uuid(),
+    userId: z.uuid(),
     name: z.string().nullable(),
     initials: z.string(),
     hidden: z.enum(LEADERBOARD_HIDDEN_REASONS).nullable(),
@@ -306,7 +306,7 @@ export const staffLeaderboardProfileResponseSchema = z
     hiddenWithoutTakeOff: z.enum(LEADERBOARD_HIDDEN_REASONS).nullable(),
     isStaff: z.boolean(),
     /** Their record on the gym's list, when they have one. */
-    entryId: z.string().uuid().nullable(),
+    entryId: z.uuid().nullable(),
     boards: z.array(
       z
         .object({
@@ -328,7 +328,7 @@ export type StaffLeaderboardProfileResponse = z.infer<typeof staffLeaderboardPro
  *  see what the workout was or when in the day it was done. */
 export const staffLeaderboardCountedResponseSchema = z
   .object({
-    userId: z.string().uuid(),
+    userId: z.uuid(),
     gymName: z.string(),
     timezone: z.string(),
     board: z.enum(LEADERBOARD_BOARDS),
@@ -338,7 +338,7 @@ export const staffLeaderboardCountedResponseSchema = z
     value: z.number().int().min(0),
     /** Each visit carries its id, which staff holding `attendance.mark` remove it by. */
     days: z.array(
-      z.object({ day, visits: z.array(leaderboardVisitSchema.extend({ id: z.string().uuid() }).strict()).min(1) }).strict(),
+      z.object({ day, visits: z.array(leaderboardVisitSchema.extend({ id: z.uuid() }).strict()).min(1) }).strict(),
     ),
     notCounted: z.array(leaderboardVisitNotCountedSchema),
     workoutDays: z.array(z.object({ day, workouts: z.number().int().min(1) }).strict()),

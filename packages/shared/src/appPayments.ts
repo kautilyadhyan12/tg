@@ -21,13 +21,13 @@ const minorSchema = z.number().int().min(1).max(99_999_999);
 /** As `memberBills.ts`'s, which reads this file. */
 const receiptNumberSchema = z.number().int().min(1).max(2_147_483_647);
 
-const pressSchema = { requestKey: z.string().uuid(), membershipId: z.string().uuid(), amountMinor: minorSchema };
+const pressSchema = { requestKey: z.uuid(), membershipId: z.uuid(), amountMinor: minorSchema };
 
 /** Pay: the membership and the bill the screen showed, and all that was left on it; or one of its fees (18k-ii-b), and its
  *  amount. Never both. The same key sent again is the same press. */
 export const appPaymentRequestSchema = z.union([
   z.object({ ...pressSchema, periodIndex: z.number().int().min(0).max(100_000) }).strict(),
-  z.object({ ...pressSchema, feeId: z.string().uuid() }).strict(),
+  z.object({ ...pressSchema, feeId: z.uuid() }).strict(),
 ]);
 export type AppPaymentRequest = z.infer<typeof appPaymentRequestSchema>;
 
@@ -39,18 +39,18 @@ export type AppPaymentState = z.infer<typeof appPaymentStateSchema>;
 
 export const appPaymentSchema = z
   .object({
-    id: z.string().uuid(),
-    membershipId: z.string().uuid(),
+    id: z.uuid(),
+    membershipId: z.uuid(),
     /** The bill it pays, or the fee (18k-ii-b): one of the two. */
     periodIndex: z.number().int().min(0).nullable(),
-    feeId: z.string().uuid().nullable(),
+    feeId: z.uuid().nullable(),
     amountMinor: minorSchema,
     currency: z.string().regex(/^[A-Z]{3}$/),
     state: appPaymentStateSchema,
     /** Square's own page, while it is open. */
-    url: z.string().url().nullable(),
+    url: z.url().nullable(),
     /** When the app closes it if it is not paid; null once it is not open. */
-    closesAt: z.string().datetime().nullable(),
+    closesAt: z.iso.datetime().nullable(),
     /** The payment's receipt, once it is on the bill. */
     receiptNumber: receiptNumberSchema.nullable(),
   })
@@ -67,7 +67,7 @@ export type MyAppPaymentsResponse = z.infer<typeof myAppPaymentsResponseSchema>;
 /** A page open on a membership, for staff on the person's page: who is paying (the payer's name where somebody else
  *  pays), and when it closes. */
 export const appPaymentOpenSchema = z
-  .object({ id: z.string().uuid(), payerName: z.string().nullable(), closesAt: z.string().datetime() })
+  .object({ id: z.uuid(), payerName: z.string().nullable(), closesAt: z.iso.datetime() })
   .strict();
 export type AppPaymentOpen = z.infer<typeof appPaymentOpenSchema>;
 

@@ -194,12 +194,12 @@ export const referralShareMessage = (gymName: string, link: string): string => `
 
 export const memberReferralResponseSchema = z.discriminatedUnion("status", [
   /** The business has not switched it on. */
-  z.object({ status: z.literal("off"), gymId: z.string().uuid(), gymName: z.string() }).strict(),
+  z.object({ status: z.literal("off"), gymId: z.uuid(), gymName: z.string() }).strict(),
   z
     .object({
       status: z.literal("on"),
       /** The business asked about: the phone shows an answer only under the business it asked. */
-      gymId: z.string().uuid(),
+      gymId: z.uuid(),
       gymName: z.string(),
       /** The member's own link, on the app's site: `/invite/<code>`. Nothing else is ever shared. */
       path: z.string().regex(REFERRAL_PATH_PATTERN),

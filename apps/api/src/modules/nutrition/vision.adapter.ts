@@ -154,6 +154,7 @@ async function openAiChat(
   const completion = openAiCompletionSchema.safeParse(raw);
   if (!completion.success) throw new VisionProviderError("vision malformed completion", "unavailable");
   const [choice] = completion.data.choices;
+  if (choice === undefined) throw new VisionProviderError("vision malformed completion", "unavailable");
   const usage = { tokensIn: completion.data.usage.prompt_tokens, tokensOut: completion.data.usage.completion_tokens };
   if (choice.message.refusal !== null || choice.finish_reason === "content_filter") throw new VisionProviderError("vision blocked", "unreadable", usage);
   const text = choice.message.content ?? "";

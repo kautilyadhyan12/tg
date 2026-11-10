@@ -91,7 +91,7 @@ d("what reaches Sentry: the real SDK, a real port, a recording transport", () =>
       await sql`
         INSERT INTO gym_member_list_entries
           (gym_id, full_name, email, phone_e164, member_number, status, identity_key, source)
-        VALUES ('11111111-2222-3333-4444-555555555555', ${ROW_NAME}, ${ROW_ADDRESS}, ${ROW_PHONE},
+        VALUES ('11111111-2222-4333-8444-555555555555', ${ROW_NAME}, ${ROW_ADDRESS}, ${ROW_PHONE},
                 'MBR-1', ${"x".repeat(60)}, ${"a".repeat(64)}, 'upload')`;
       return { never: true };
     });

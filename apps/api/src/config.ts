@@ -6,16 +6,16 @@ const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   PORT: z.coerce.number().int().min(1).max(65535).default(3000),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace"]).default("info"),
-  DATABASE_URL: z.string().url(),
+  DATABASE_URL: z.url(),
   // Connections each API process keeps to Postgres (ROADMAP Stage 4 item 11). One meant
   // a slow statement held every other request. Neon's smallest compute (0.25 CU) allows
   // 104 connections and its pooler 10,000 clients; 10 per process plus the worker's 2
   // leaves room for several processes.
   DATABASE_POOL_MAX: z.coerce.number().int().min(1).max(50).default(10),
-  WEB_ORIGIN: z.string().url(), // exact origin for CORS-with-credentials (Part IV #6)
-  SENTRY_DSN: z.string().url().optional(),
+  WEB_ORIGIN: z.url(), // exact origin for CORS-with-credentials (Part IV #6)
+  SENTRY_DSN: z.url().optional(),
   POSTHOG_API_KEY: z.string().min(1).optional(),
-  POSTHOG_HOST: z.string().url().default("https://app.posthog.com"),
+  POSTHOG_HOST: z.url().default("https://app.posthog.com"),
   // P2.1 auth. An unset secret must never silently sign tokens (ported
   // jwtHelper.js fail-loud); 32+ chars so HS256 isn't brute-forceable.
   JWT_SECRET: z.string().min(32),
@@ -26,7 +26,7 @@ const envSchema = z.object({
   REFRESH_TTL_DAYS: z.coerce.number().int().positive().default(30),
   // P2.4: quota counters + entitlement cache (v1 §7.2). Optional in dev/test
   // (in-memory adapter); REQUIRED in production — refinement below.
-  REDIS_URL: z.string().url().optional(),
+  REDIS_URL: z.url().optional(),
   // Live updates (ROADMAP Stage 4 item 18). "here": this api holds the console's open lines
   // itself (this laptop, tests). "apart": the lines are held by `src/live.ts`, a server of their
   // own, and this api only tells it what changed, through Redis. LIVE_PORT is that server's port.
@@ -45,7 +45,7 @@ const envSchema = z.object({
     .transform((value) => value === "on"),
   // Open Food Facts asks every app to say who it is: "AppName/Version (ContactEmail)". Set on a real
   // server, to the app's own address.
-  OPEN_FOOD_FACTS_CONTACT: z.string().trim().email().max(254).optional(),
+  OPEN_FOOD_FACTS_CONTACT: z.string().trim().max(254).pipe(z.email()).optional(),
   // P2.6b: geo route generation via ORS (v1 §6.1). Unset = route generation
   // 503s cleanly (fail-closed, OPENAI_API_KEY precedent); the browse/read side
   // (saved_routes, runs) works without it.
@@ -95,7 +95,7 @@ const envSchema = z.object({
   // exactly match the redirect URI registered in the Google Cloud console.
   GOOGLE_CLIENT_ID: z.string().min(1).optional(),
   GOOGLE_CLIENT_SECRET: z.string().min(1).optional(),
-  GOOGLE_CALLBACK_URL: z.string().url().optional(),
+  GOOGLE_CALLBACK_URL: z.url().optional(),
   // Sign-in by email code (Kd 2026-09-07): codes go out through Resend. Both
   // unset in dev/test = the DEV sender prints the code in the server log;
   // REQUIRED in production (refinement below) — a production box with no way
@@ -122,7 +122,7 @@ const envSchema = z.object({
   // invitations are switched off (Invite answers 503); outside production the api's
   // own address, a secret derived from JWT_SECRET and the logging sender stand in.
   // The public address of THIS api, for the unsubscribe links an invitation carries.
-  API_ORIGIN: z.string().url().optional(),
+  API_ORIGIN: z.url().optional(),
   // The invitations' own sender, on a sub-domain of its own, so a stale member list
   // can never get sign-in codes blocked. Same shape rule as EMAIL_FROM.
   INVITE_EMAIL_FROM: z
@@ -158,11 +158,11 @@ const envSchema = z.object({
     .optional(),
   // Where the app tells its operator that a gym's invitations were stopped (the "have
   // a look" list, until the admin panel). Unset: the log alone says so.
-  OPERATOR_EMAIL: z.string().trim().email().max(254).optional(),
+  OPERATOR_EMAIL: z.string().trim().max(254).pipe(z.email()).optional(),
   // The one account that opens the admin page (ROADMAP Stage 2 item 14a-i; Kd, 2026-11-07: only his
   // own). Its id, not its email: no change of address can make another account the admin. Unset:
   // every admin address answers as one that does not exist, to everybody.
-  ADMIN_USER_ID: z.string().uuid().optional(),
+  ADMIN_USER_ID: z.uuid().optional(),
   // Join codes (ROADMAP 3c; RULINGS 2026-09-21): an invitation to an address is the only
   // way into a gym, so the code routes and the waiting room answer 410 and a new gym gets
   // no code. "on" exists for the old suites, which keep that code from rotting unseen.
@@ -204,7 +204,7 @@ const envSchema = z.object({
   SQUARE_APPLICATION_ID: z.string().regex(/^(sandbox-)?sq0id[bp]-[A-Za-z0-9_-]{10,60}$/, "SQUARE_APPLICATION_ID must be a Square application id").optional(),
   SQUARE_APPLICATION_SECRET: z.string().regex(/^(sandbox-)?sq0cs[bp]-[A-Za-z0-9_-]{10,100}$/, "SQUARE_APPLICATION_SECRET must be a Square application secret").optional(),
   SQUARE_WEBHOOK_SIGNATURE_KEY: z.string().regex(/^[\x21-\x7e]{10,200}$/, "SQUARE_WEBHOOK_SIGNATURE_KEY must be 10 to 200 visible characters").optional(),
-  SQUARE_WEBHOOK_URL: z.string().url().optional(),
+  SQUARE_WEBHOOK_URL: z.url().optional(),
   // The key that locks each gym's Square tokens in the database (AES-256-GCM): 32 random
   // bytes, base64. Required with Square. Changing it makes every connected gym connect again.
   PAYMENT_TOKENS_KEY: z
@@ -225,7 +225,7 @@ const envSchema = z.object({
   // 19b-ii-b; Apple and Google ask it of any app where people post). Kd has not chosen it
   // yet (RULINGS 2026-10-05), so it is REQUIRED in production: the site cannot go online
   // without one. Elsewhere unset means no such line is shown.
-  SUPPORT_EMAIL: z.string().trim().email().max(200).optional(),
+  SUPPORT_EMAIL: z.string().trim().max(200).pipe(z.email()).optional(),
 });
 
 export type AppConfig = Readonly<z.infer<typeof envSchema>>;

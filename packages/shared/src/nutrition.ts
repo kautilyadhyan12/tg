@@ -172,8 +172,7 @@ export const MEAL_PHOTO_MAX_BYTES = 10 * 1024 * 1024;
 /** GAP-3 ruling: client-supplied, bounded to ≤24 h in the future (offline
  *  backfill of past meals is legitimate; future meals are not). */
 const takenAtSchema = z
-  .string()
-  .datetime()
+  .iso.datetime()
   .refine((v) => Date.parse(v) <= Date.now() + 24 * 60 * 60 * 1000, {
     message: "must not be more than 24h in the future",
   });
@@ -194,7 +193,7 @@ const gramsItemSchema = z
 /** `share`: the meal was eaten from one dish, and this food is that part of it (Kd, 2026-10-30): the
  *  server weighs the dish as `fillLevel` full and gives the food its share. */
 const dishwareItemSchema = z
-  .object({ canonical: z.string().min(1).max(120), dishwareId: z.string().uuid(), fillLevel: z.number().positive().max(1), share: z.number().positive().max(1).optional() })
+  .object({ canonical: z.string().min(1).max(120), dishwareId: z.uuid(), fillLevel: z.number().positive().max(1), share: z.number().positive().max(1).optional() })
   .strict();
 
 // ROADMAP 7a-iv-a — a food logged by one of its own measures (RULINGS 2026-09-16,
@@ -272,7 +271,7 @@ const mealChoicesSchema = z.array(mealChoiceSchema).min(1).max(MEAL_MOST_FOODS);
 /** The meal's id, made by the phone (ROADMAP 32a): the same id sent twice is one
  *  meal, and the second reply is the meal as it is now. Kept and answered in small
  *  letters. Without it every send is a new meal, as the web's is. */
-const ownMealIdSchema = z.string().uuid().toLowerCase().optional();
+const ownMealIdSchema = z.uuid().toLowerCase().optional();
 
 export const confirmMealRequestSchema = z.object({
   id: ownMealIdSchema,
@@ -349,7 +348,7 @@ export const patchMealRequestSchema = z.object({
   itemsVersion: itemsVersionSchema.optional(),
   /** The phone's own id for this change (ROADMAP 32b-ii-a): the same change sent twice is made
    *  once, and the second answer is the meal as it is now. Kept in small letters. */
-  changeId: z.string().uuid().toLowerCase().optional(),
+  changeId: z.uuid().toLowerCase().optional(),
 }).strict()
   .refine((v) => Object.keys(v).some((k) => k !== "changeId"), { message: "at least one field required" })
   .refine((v) => (v.items === undefined) === (v.itemsVersion === undefined), {
@@ -367,7 +366,7 @@ export const mealMeasuresResponseSchema = z.object({ measures: z.array(z.array(f
 export type MealMeasuresResponse = z.infer<typeof mealMeasuresResponseSchema>;
 
 export const mealSchema = z.object({
-  id: z.string().uuid(), takenAt: z.string(), mealType: mealTypeSchema.nullable(),
+  id: z.uuid(), takenAt: z.string(), mealType: mealTypeSchema.nullable(),
   mealName: z.string().nullable(), items: z.array(mealItemSchema),
   totals: mealTotalsSchema, confirmed: z.boolean(), origin: mealOriginSchema,
   portionSource: z.enum(["user_dishware", "regional_prior", "default", "legacy"]),
@@ -404,12 +403,12 @@ export const standardDish = (id: string) => STANDARD_DISHES.find((d) => d.id ===
 /** POST /v1/nutrition/dishware. With the phone's own `id` (ROADMAP 32b-ii-b) the same dish sent
  *  twice is saved once, and the second answer is the dish as it is now. Kept in small letters. */
 export const createDishwareRequestSchema = dishwareInputSchema
-  .extend({ id: z.string().uuid().toLowerCase().refine((id) => standardDish(id) === null, { message: "a dish everybody has" }).optional() })
+  .extend({ id: z.uuid().toLowerCase().refine((id) => standardDish(id) === null, { message: "a dish everybody has" }).optional() })
   .strict();
 export type CreateDishwareRequest = z.infer<typeof createDishwareRequestSchema>;
 /** The person's saved dishes, newest first (GET /v1/nutrition/dishware). */
 export const dishwareSchema = z.object({
-  id: z.string().uuid(), label: z.string(), containerClass: z.string(), volumeMl: z.number().int().positive(),
+  id: z.uuid(), label: z.string(), containerClass: z.string(), volumeMl: z.number().int().positive(),
   foodHint: z.string().nullable(), createdAt: z.string(),
 }).strict();
 export type Dishware = z.infer<typeof dishwareSchema>;
@@ -420,21 +419,22 @@ export type PatchDishware = z.infer<typeof patchDishwareSchema>;
 export const bodyMeasurementInputSchema = z.object({
   // The entry's id, made by the phone (ROADMAP 35c-ii): sent twice it is one entry, and one
   // removed stays removed. Without it every send is a new entry, as the web's is.
-  id: z.string().uuid().toLowerCase().optional(),
+  id: z.uuid().toLowerCase().optional(),
   // Same ≤24h-future bound as takenAt (T3 P2.6a: a measurement dated 2099
   // would stay the person's weight, as the newest weigh-in, forever).
   measuredAt: z
-    .string()
-    .datetime()
+    .iso.datetime()
     .refine((v) => Date.parse(v) <= Date.now() + 24 * 60 * 60 * 1000, {
       message: "must not be more than 24h in the future",
     }),
   weightKg: z.number().positive().lt(1000).multipleOf(0.01).nullable().optional(),
-  metrics: z.record(z.number().finite().nonnegative()).default({}), source: z.literal("manual").default("manual"),
+  metrics: z.record(z.string(), z.number().nonnegative()).default({}), source: z.literal("manual").default("manual"),
 }).strict();
 // `source` and `id` are not patchable: a row the person typed ("self_reported") must
 // not be relabelled a weigh-in, and nothing else is ever sent for it.
-export const patchBodyMeasurementSchema = bodyMeasurementInputSchema.omit({ source: true, id: true }).partial().refine((v) => Object.keys(v).length > 0, { message: "at least one field required" });
+// Zod 4 fills a default even inside .partial(): metrics is re-declared without its default, or a
+// change to the weight alone would write metrics as {} and wipe them.
+export const patchBodyMeasurementSchema = bodyMeasurementInputSchema.omit({ source: true, id: true }).extend({ metrics: z.record(z.string(), z.number().nonnegative()) }).partial().refine((v) => Object.keys(v).length > 0, { message: "at least one field required" });
 export type BodyMeasurementInput = z.infer<typeof bodyMeasurementInputSchema>;
 export type PatchBodyMeasurement = z.infer<typeof patchBodyMeasurementSchema>;
 
@@ -443,12 +443,12 @@ export type PatchBodyMeasurement = z.infer<typeof patchBodyMeasurementSchema>;
 // the person has, so its measuredAt can sit ahead of the clock, and the web
 // shows it under the day it was written instead.
 export const bodyMeasurementSchema = z.object({
-  id: z.string().uuid(),
-  measuredAt: z.string().datetime(),
+  id: z.uuid(),
+  measuredAt: z.iso.datetime(),
   weightKg: z.number().nullable(),
-  metrics: z.record(z.number().finite().nonnegative()),
+  metrics: z.record(z.string(), z.number().nonnegative()),
   source: z.enum(["manual", "self_reported"]),
-  createdAt: z.string().datetime(),
+  createdAt: z.iso.datetime(),
 }).strict();
 export const bodyMeasurementListResponseSchema = z.object({
   items: z.array(bodyMeasurementSchema),
@@ -466,26 +466,26 @@ export const BODY_OUTBOX_MOST = 200;
 /** An entry waiting to be sent: what the POST carries, its time read without the server's "not more
  *  than a day ahead" rule, which is the server's to apply. `tried`: sent at least once. */
 export const waitingBodyEntrySchema = z.object({
-  id: z.string().uuid().toLowerCase(),
-  measuredAt: z.string().datetime(),
+  id: z.uuid().toLowerCase(),
+  measuredAt: z.iso.datetime(),
   weightKg: z.number().positive().lt(1000).nullable(),
-  metrics: z.record(z.number().finite().nonnegative()),
+  metrics: z.record(z.string(), z.number().nonnegative()),
   tried: z.boolean(),
 }).strict();
 export type WaitingBodyEntry = z.infer<typeof waitingBodyEntrySchema>;
 
 export const bodyOutboxEntrySchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("save"), entry: waitingBodyEntrySchema }).strict(),
-  z.object({ kind: z.literal("remove"), id: z.string().uuid().toLowerCase() }).strict(),
+  z.object({ kind: z.literal("remove"), id: z.uuid().toLowerCase() }).strict(),
 ]);
 export type BodyOutboxEntry = z.infer<typeof bodyOutboxEntrySchema>;
 
 /** An entry the server would not take, said on Body until the person presses OK. */
 export const bodyOutboxRefusedSchema = z.object({
-  id: z.string().uuid().toLowerCase(),
+  id: z.uuid().toLowerCase(),
   message: z.string().max(500),
   /** Which entry it was, so two refusals never read alike. */
-  measuredAt: z.string().datetime().optional(),
+  measuredAt: z.iso.datetime().optional(),
   weightKg: z.number().nullable().optional(),
 }).strict();
 export type BodyOutboxRefused = z.infer<typeof bodyOutboxRefusedSchema>;
@@ -854,7 +854,7 @@ export const MOST_PLAN_MEALS = 8;
 /** A day of the plan as it stands, in a word: changed in any food, amount or number, it is another. */
 export const dayVersionSchema = z.string().regex(/^[0-9a-f]{16}$/);
 /** One change's id, made by the phone: the same change sent twice is made once. */
-const planChangeIdSchema = z.string().uuid().toLowerCase();
+const planChangeIdSchema = z.uuid().toLowerCase();
 
 export const dietPlanMealSchema = z.object({
   mealType: mealTypeSchema,
@@ -912,7 +912,7 @@ export type FoodChoice = z.infer<typeof foodChoiceSchema>;
  *  plan names the gym, one the person is a member of. */
 export const putFoodChoiceRequestSchema = z.union([
   z.object({ choice: z.enum(["suggested", "mine"]) }).strict(),
-  z.object({ choice: z.literal("gym"), gymId: z.string().uuid().toLowerCase() }).strict(),
+  z.object({ choice: z.literal("gym"), gymId: z.uuid().toLowerCase() }).strict(),
 ]);
 export type PutFoodChoiceRequest = z.infer<typeof putFoodChoiceRequestSchema>;
 
@@ -923,7 +923,7 @@ export const dietPlanResponseSchema = z.object({
    *  has a meal, else Suggested. */
   choice: foodChoiceSchema,
   /** The gym, where `choice` is the gym's plan; null otherwise. */
-  choiceGymId: z.string().uuid().nullable(),
+  choiceGymId: z.uuid().nullable(),
   caution: z.literal(FOOD_ALLERGY_CAUTION),
   /** For a vegetarian or vegan, or somebody with no diet answer; null for somebody who eats meat. */
   labelCaution: z.literal(DIET_LABEL_CAUTION).nullable(),
@@ -1054,12 +1054,12 @@ export const MEAL_OUTBOX_MOST = 500;
 /** What is sent for a waiting meal: the typed meal's request, its time read without the server's
  *  "not more than a day ahead" rule, which is the server's to apply when it is sent; a phone whose
  *  clock was ahead and is put right must not lose the meal. */
-export const waitingMealBodySchema = manualMealRequestSchema.extend({ takenAt: z.string().datetime() });
+export const waitingMealBodySchema = manualMealRequestSchema.extend({ takenAt: z.iso.datetime() });
 
 /** A meal waiting to be sent: what is sent, and what the day's list shows of it. */
 export const waitingMealSchema = z.object({
   /** The meal's own id, the one `body` carries: the server keeps one meal for it (32a). */
-  id: z.string().uuid().toLowerCase(),
+  id: z.uuid().toLowerCase(),
   body: waitingMealBodySchema,
   /** The server's preview of it, where one came back before it was logged. */
   items: z.array(mealItemSchema).nullable(),
@@ -1075,17 +1075,17 @@ export type WaitingMeal = z.infer<typeof waitingMealSchema>;
 /** A change to a saved meal waiting to be sent (ROADMAP 32b-ii-a): what the PATCH carries, its time
  *  read without the server's "not more than a day ahead" rule, as a waiting meal's is. */
 export const waitingChangeBodySchema = z.object({
-  mealName: z.string().trim().min(1).max(200).optional(), takenAt: z.string().datetime().optional(),
+  mealName: z.string().trim().min(1).max(200).optional(), takenAt: z.iso.datetime().optional(),
   mealType: mealTypeSchema.nullable().optional(),
   items: mealEditItemsSchema.optional(), itemsVersion: itemsVersionSchema.optional(),
-  changeId: z.string().uuid().toLowerCase(),
+  changeId: z.uuid().toLowerCase(),
 }).strict();
 export type WaitingChangeBody = z.infer<typeof waitingChangeBodySchema>;
 
 /** A change waiting to be sent: what is sent, and what the day's list shows of it while it waits. */
 export const waitingChangeSchema = z.object({
   /** The meal's id. */
-  id: z.string().uuid().toLowerCase(),
+  id: z.uuid().toLowerCase(),
   /** The meal's name when the change was made, said if the server will not take it. */
   name: z.string().max(200),
   body: waitingChangeBodySchema,
@@ -1104,14 +1104,14 @@ export type WaitingChange = z.infer<typeof waitingChangeSchema>;
 
 export const mealOutboxEntrySchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("save"), meal: waitingMealSchema }).strict(),
-  z.object({ kind: z.literal("remove"), id: z.string().uuid().toLowerCase() }).strict(),
+  z.object({ kind: z.literal("remove"), id: z.uuid().toLowerCase() }).strict(),
   z.object({ kind: z.literal("change"), change: waitingChangeSchema }).strict(),
 ]);
 export type MealOutboxEntry = z.infer<typeof mealOutboxEntrySchema>;
 
 /** A meal the server would not take, kept until the person has read why. */
 export const mealOutboxRefusedSchema = z.object({
-  id: z.string().uuid().toLowerCase(),
+  id: z.uuid().toLowerCase(),
   name: z.string().max(200),
   message: z.string().max(500),
 }).strict();
@@ -1154,7 +1154,7 @@ export type PhotoSheetPick = z.infer<typeof photoSheetPickSchema>;
 export const photoSheetFileSchema = z.object({
   version: z.literal(1),
   /** When the scan came back: it can be saved until `MEAL_SCAN_SAVE_SECONDS` after. */
-  scannedAt: z.string().datetime(),
+  scannedAt: z.iso.datetime(),
   analysis: mealPhotoAnalysisSchema,
   /** Each scanned food's amount, in the scan's order; null where the person took it off the meal. */
   amounts: z.array(photoSheetAmountSchema.nullable()).max(30),

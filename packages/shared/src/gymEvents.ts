@@ -100,7 +100,7 @@ const timesInOrder = (event: EventTimes): boolean => {
 export const addGymEventRequestSchema = z
   .object({
     /** The browser's key for this one event: the same key again is the same event. */
-    eventKey: z.string().uuid(),
+    eventKey: z.uuid(),
     ...eventFields,
     /** The poster as base64, already shrunk by the browser; left out for none. */
     poster: posterBase64.optional(),
@@ -121,14 +121,14 @@ export type ChangeGymEventRequest = z.infer<typeof changeGymEventRequestSchema>;
 
 export const cancelGymEventRequestSchema = z.object({ cancelled: z.boolean() }).strict();
 
-export const gymEventParamsSchema = z.object({ gymId: z.string().uuid(), eventId: z.string().uuid() }).strict();
-export const gymEventPosterParamsSchema = gymEventParamsSchema.extend({ posterId: z.string().uuid() }).strict();
+export const gymEventParamsSchema = z.object({ gymId: z.uuid(), eventId: z.uuid() }).strict();
+export const gymEventPosterParamsSchema = gymEventParamsSchema.extend({ posterId: z.uuid() }).strict();
 
 /** An event as members and staff are sent it. Its poster's picture is at
  *  `/v1/orgs/{gymId}/events/{id}/poster/{poster.id}`. */
 export const gymEventSchema = z
   .object({
-    id: z.string().uuid(),
+    id: z.uuid(),
     name: z.string(),
     details: z.string(),
     place: z.string(),
@@ -136,8 +136,8 @@ export const gymEventSchema = z
     startMinute: classStartMinuteSchema,
     endsOn: classDaySchema,
     endMinute: classStartMinuteSchema,
-    startsAt: z.string().datetime({ offset: true }),
-    endsAt: z.string().datetime({ offset: true }),
+    startsAt: z.iso.datetime({ offset: true }),
+    endsAt: z.iso.datetime({ offset: true }),
     places: z.number().int().positive().nullable(),
     cancelled: z.boolean(),
     poster: gymPagePhotoSchema.nullable(),
@@ -287,7 +287,7 @@ export const staffGymEventSchema = gymEventSchema
   .strict();
 export type StaffGymEvent = z.infer<typeof staffGymEventSchema>;
 
-export const comeToEventRequestSchema = z.object({ requestKey: z.string().uuid(), joinWaitlist: z.boolean() }).strict();
+export const comeToEventRequestSchema = z.object({ requestKey: z.uuid(), joinWaitlist: z.boolean() }).strict();
 export type ComeToEventRequest = z.infer<typeof comeToEventRequestSchema>;
 
 export const memberGymEventResponseSchema = z.object({ event: memberGymEventSchema }).strict();
@@ -299,11 +299,11 @@ export const GYM_EVENT_PEOPLE_SHOWN = 1000;
 const eventPersonSchema = z
   .object({
     /** The place's own id: what staff name to take the person off. */
-    id: z.string().uuid(),
+    id: z.uuid(),
     name: z.string().nullable(),
     initials: z.string(),
     /** When they said so, or were given the place. */
-    at: z.string().datetime(),
+    at: z.iso.datetime(),
   })
   .strict();
 export type GymEventPerson = z.infer<typeof eventPersonSchema>;
@@ -311,7 +311,7 @@ export type GymEventPerson = z.infer<typeof eventPersonSchema>;
 /** Who is coming to an event and who is waiting (first in line first), for staff. */
 export const gymEventPeopleResponseSchema = z
   .object({
-    eventId: z.string().uuid(),
+    eventId: z.uuid(),
     places: z.number().int().positive().nullable(),
     /** A place freed now goes to the first in line by itself; false: it stays free for the
      *  first person to take it (inside the gym's hand-over time, started, or cancelled). */
@@ -326,7 +326,7 @@ export const gymEventPeopleResponseSchema = z
   .strict();
 export type GymEventPeopleResponse = z.infer<typeof gymEventPeopleResponseSchema>;
 
-export const gymEventPersonParamsSchema = gymEventParamsSchema.extend({ placeId: z.string().uuid() }).strict();
+export const gymEventPersonParamsSchema = gymEventParamsSchema.extend({ placeId: z.uuid() }).strict();
 
 export const GYM_EVENT_COMING_WORDS = {
   event_cancelled: "This event has been cancelled.",
@@ -345,7 +345,7 @@ export const GYM_EVENT_COMING_WORDS = {
  *  has not ended, a cancelled one too, so nobody wonders where it went. */
 export const gymEventsResponseSchema = z
   .object({
-    gymId: z.string().uuid(),
+    gymId: z.uuid(),
     gymName: z.string(),
     /** The zone the events' days and times are in. */
     timezone: z.string(),
@@ -361,7 +361,7 @@ export type GymEventsResponse = z.infer<typeof gymEventsResponseSchema>;
 /** The gym's events for its staff holding `posts.manage`. */
 export const staffGymEventsResponseSchema = z
   .object({
-    gymId: z.string().uuid(),
+    gymId: z.uuid(),
     gymName: z.string(),
     timezone: z.string(),
     /** Today on the gym's clock: the first day a new event may start on. */

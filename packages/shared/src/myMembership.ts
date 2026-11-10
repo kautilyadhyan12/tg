@@ -44,7 +44,7 @@ export type MyPayment = z.infer<typeof myPaymentSchema>;
 export const myFeeSchema = z
   .object({
     /** The fee, for paying it in the app while it is due or overdue (18k-ii-b): all of `amountMinor`. */
-    id: z.string().uuid(),
+    id: z.uuid(),
     fee: memberFeeKindSchema,
     forName: z.string().min(1),
     on: daySchema,
@@ -67,7 +67,7 @@ export type MyFee = z.infer<typeof myFeeSchema>;
 
 export const myMembershipSchema = z
   .object({
-    id: z.string().uuid(),
+    id: z.uuid(),
     name: z.string(),
     kind: membershipKindSchema,
     /** Null where somebody else pays for it (`paidBy`): the price is theirs to read. */

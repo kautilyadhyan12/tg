@@ -190,7 +190,7 @@ export const billTaxesSchema = z.array(billTaxSchema).max(TAX_RATES_MAX);
 /** A refund sent to the card through Square (18d-iv-a): where it stands there, and the card, where Square named it. `late`:
  *  still pending after Square's 14 days. `pressId`: the press it came from (`cardRefundResponseSchema`). */
 export const squareRefundSeenSchema = z
-  .object({ state: z.enum(["pending", "completed"]), card: cardSeenSchema.nullable(), late: z.boolean(), pressId: z.string().uuid().nullable().default(null), inSquare: z.boolean().default(false), shelfAsked: z.boolean().default(false) })
+  .object({ state: z.enum(["pending", "completed"]), card: cardSeenSchema.nullable(), late: z.boolean(), pressId: z.uuid().nullable().default(null), inSquare: z.boolean().default(false), shelfAsked: z.boolean().default(false) })
   .strict();
 export type SquareRefundSeen = z.infer<typeof squareRefundSeenSchema>;
 
@@ -198,7 +198,7 @@ export type SquareRefundSeen = z.infer<typeof squareRefundSeenSchema>;
  *  is its note of that. The app moves no money. */
 export const memberRefundSchema = z
   .object({
-    id: z.string().uuid(),
+    id: z.uuid(),
     amountMinor: minorSchema,
     /** How the gym gave it back. */
     method: memberRefundMethodSchema,
@@ -216,7 +216,7 @@ export type MemberRefund = z.infer<typeof memberRefundSchema>;
 
 /** Who voided a row, on the gym's own day, and why; the reason is null for one voided
  *  before reasons were kept, `by` where that member of staff has since left the app. */
-const voidedBy = <T extends z.ZodTypeAny>(reason: T) => z.object({ reason: reason.nullable(), on: daySchema, by: z.string().nullable() }).strict();
+const voidedBy = <T extends z.ZodType>(reason: T) => z.object({ reason: reason.nullable(), on: daySchema, by: z.string().nullable() }).strict();
 
 /** A refund staff voided (18o): kept on the page, struck through, and counted in nothing. */
 export const voidedMemberRefundSchema = memberRefundSchema.extend({ voided: voidedBy(refundVoidKeptSchema) }).strict();
@@ -230,7 +230,7 @@ export type CardRefundOpen = z.infer<typeof cardRefundOpenSchema>;
 
 export const memberPaymentSchema = z
   .object({
-    id: z.string().uuid(),
+    id: z.uuid(),
     amountMinor: minorSchema,
     method: memberPaymentMethodSchema,
     /** The gym's own day it was recorded on. */
@@ -265,7 +265,7 @@ export type VoidedMemberPayment = z.infer<typeof voidedMemberPaymentSchema>;
 
 export const memberBillSchema = z
   .object({
-    id: z.string().uuid(),
+    id: z.uuid(),
     periodIndex: z.number().int().min(0),
     covers: z.object({ from: daySchema, to: daySchema }).strict().nullable(),
     /** The part month before the gym's billing day (18y): the first bill of one billed from it. */
@@ -323,7 +323,7 @@ export type MemberFeeState = (typeof MEMBER_FEE_STATES)[number];
 /** One fee of a membership, and what staff can do about it now. */
 export const memberFeeSchema = z
   .object({
-    id: z.string().uuid(),
+    id: z.uuid(),
     fee: memberFeeKindSchema,
     /** A class's fee, a personal training session's (18h-ii), or the membership's own freeze fee (18z). */
     of: z.enum(["class", "pt", "membership"]).default("class"),
@@ -366,7 +366,7 @@ export const memberFeeSchema = z
         pay: z.boolean(),
         waive: z.boolean(),
         /** The payment that can be voided: the one that paid it. */
-        voidPaymentId: z.string().uuid().nullable(),
+        voidPaymentId: z.uuid().nullable(),
       })
       .strict(),
   })
@@ -394,10 +394,10 @@ export const memberBillingSchema = z
       .nullable(),
     /** The one bill staff can cancel now: the bill `pay` is for, where it is open with
      *  nothing paid on it. */
-    cancel: z.object({ billId: z.string().uuid() }).strict().nullable(),
+    cancel: z.object({ billId: z.uuid() }).strict().nullable(),
     undo: z
       .discriminatedUnion("kind", [
-        z.object({ kind: z.literal("payment"), paymentId: z.string().uuid() }).strict(),
+        z.object({ kind: z.literal("payment"), paymentId: z.uuid() }).strict(),
         z.object({ kind: z.literal("mark"), paidPeriods: z.number().int().min(0) }).strict(),
       ])
       .nullable(),
@@ -416,7 +416,7 @@ export const memberBillingSchema = z
     /** Its cooling-off period (18v-iii), while it is open or once it was cancelled in it: what was paid on its
      *  bills and is not given back yet, and the newest payment with some of it left, whose bill is always among
      *  `bills`. Null otherwise, and once nothing is left. */
-    coolingOffRefund: z.object({ leftMinor: z.number().int().min(1), paymentId: z.string().uuid() }).strict().nullable().default(null),
+    coolingOffRefund: z.object({ leftMinor: z.number().int().min(1), paymentId: z.uuid() }).strict().nullable().default(null),
     /** A member's payment page open on Square for `pay`'s bill (18k-ii-a): nothing else is paid, voided or changed on the
      *  membership until it closes. A page for one of its fees is that fee's (`memberFeeSchema.appPayment`). */
     appPayment: appPaymentOpenSchema.nullable().default(null),
@@ -430,7 +430,7 @@ export type MemberBilling = z.infer<typeof memberBillingSchema>;
  *  `periodIndex` is the period the screen was shown; a payment for any other is refused. */
 export const recordMemberPaymentRequestSchema = z
   .object({
-    requestKey: z.string().uuid(),
+    requestKey: z.uuid(),
     periodIndex: z.number().int().min(0).max(100_000),
     amountMinor: z.number().int().min(1).max(99_999_999),
     method: memberPaymentByHandSchema,
@@ -442,7 +442,7 @@ export type RecordMemberPaymentRequest = z.infer<typeof recordMemberPaymentReque
  *  fee is no longer that. */
 export const recordMemberFeePaymentRequestSchema = z
   .object({
-    requestKey: z.string().uuid(),
+    requestKey: z.uuid(),
     amountMinor: z.number().int().min(1).max(99_999_999),
     method: memberPaymentByHandSchema,
   })
@@ -463,7 +463,7 @@ export type CancelMemberBillRequest = z.infer<typeof cancelMemberBillRequestSche
 /** `requestKey` is made by the screen once a form: the same key twice is one refund. */
 export const noteMemberRefundRequestSchema = z
   .object({
-    requestKey: z.string().uuid(),
+    requestKey: z.uuid(),
     amountMinor: z.number().int().min(1).max(99_999_999),
     method: memberPaymentByHandSchema,
     reason: refundReasonSchema,
@@ -506,7 +506,7 @@ export type CardExpiryOutcome = z.infer<typeof cardExpiryOutcomeSchema>;
 
 export const cardExpiryPersonSchema = z
   .object({
-    entryId: z.string().uuid(),
+    entryId: z.uuid(),
     name: z.string().max(120),
     brand: z.string().regex(/^[A-Z_]{1,40}$/),
     last4: z.string().regex(/^[0-9]{4}$/),

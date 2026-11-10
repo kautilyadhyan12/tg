@@ -205,7 +205,7 @@ const promoCodeSchema = z.string().regex(PROMO_CODE);
 
 export const gymDiscountSchema = z
   .object({
-    id: z.string().uuid(),
+    id: z.uuid(),
     name: z.string(),
     /** The promo code a customer asks for it by; null where staff pick it by name. */
     code: z.string().nullable(),
@@ -223,17 +223,17 @@ export const gymDiscountSchema = z
     forProducts: z.boolean(),
     allProducts: z.boolean(),
     /** The products it is limited to, where not `allProducts`. */
-    productIds: z.array(z.string().uuid()),
+    productIds: z.array(z.uuid()),
     /** For memberships: every type, or the ones in `membershipTypeIds`. */
     forMemberships: z.boolean(),
     allMembershipTypes: z.boolean(),
-    membershipTypeIds: z.array(z.string().uuid()),
+    membershipTypeIds: z.array(z.uuid()),
     /** How often it comes off a repeating membership; null where it is not for memberships. */
     membershipPayments: z.enum(MEMBERSHIP_PAYMENTS).nullable(),
     /** Refer a friend's own friend's gift (20e-ii-b-i): offered only to the friend it is for. */
     referralGift: z.boolean().default(false),
-    archivedAt: z.string().datetime().nullable(),
-    updatedAt: z.string().datetime(),
+    archivedAt: z.iso.datetime().nullable(),
+    updatedAt: z.iso.datetime(),
   })
   .strict();
 export type GymDiscount = z.infer<typeof gymDiscountSchema>;
@@ -286,10 +286,10 @@ const saveGymDiscountFields = z
     maxUses: usesSchema.nullable(),
     forProducts: z.boolean(),
     allProducts: z.boolean(),
-    productIds: z.array(z.string().uuid()).max(DISCOUNT_PRODUCTS_MAX),
+    productIds: z.array(z.uuid()).max(DISCOUNT_PRODUCTS_MAX),
     forMemberships: z.boolean(),
     allMembershipTypes: z.boolean(),
-    membershipTypeIds: z.array(z.string().uuid()).max(DISCOUNT_MEMBERSHIP_TYPES_MAX),
+    membershipTypeIds: z.array(z.uuid()).max(DISCOUNT_MEMBERSHIP_TYPES_MAX),
     membershipPayments: z.enum(MEMBERSHIP_PAYMENTS).nullable(),
   })
   .strict();
@@ -299,7 +299,7 @@ export type SaveGymDiscountRequest = z.infer<typeof saveGymDiscountRequestSchema
 
 /** `updatedAt` is the discount as the form read it: a change since then refuses the save.
  *  A sale that used it in between does not. */
-export const updateGymDiscountRequestSchema = saveGymDiscountFields.extend({ updatedAt: z.string().datetime() }).strict().superRefine(checkDiscountShape);
+export const updateGymDiscountRequestSchema = saveGymDiscountFields.extend({ updatedAt: z.iso.datetime() }).strict().superRefine(checkDiscountShape);
 export type UpdateGymDiscountRequest = z.infer<typeof updateGymDiscountRequestSchema>;
 
 /** The server's sentences, one place for the routes and the screen's tests. */

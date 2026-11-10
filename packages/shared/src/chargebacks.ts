@@ -17,7 +17,7 @@ export type ChargebackReason = z.infer<typeof chargebackReasonSchema>;
 /** One chargeback as a screen reads it. `dueOn`: Square's date on the gym's own calendar. `duePassed`: that moment has gone. */
 export const chargebackSeenSchema = z
   .object({
-    id: z.string().uuid(),
+    id: z.uuid(),
     amountMinor: minorSchema,
     currency: z.string().regex(/^[A-Z]{3}$/),
     state: chargebackStateSchema,
@@ -41,7 +41,7 @@ export type ChargebackSeen = z.infer<typeof chargebackSeenSchema>;
  *  `heldBy` where that is somebody else this person's payer pays for. `missed`: one stood through the days the app could have charged it. `behind`: one has ended, and the bill's own days passed
  *  while the bill before it was unpaid, as the app charges in order. `paused`: staff paused automatic payments of whoever pays, `heldBy`
  *  where that is somebody else (18d-iv-f). `paused_missed`: a pause stood through the days the app could have charged it. */
-export const chargeStopSchema = z.object({ kind: z.enum(["stopped", "missed", "behind", "paused", "paused_missed"]), heldBy: z.object({ entryId: z.string().uuid(), name: z.string() }).strict().nullable() }).strict();
+export const chargeStopSchema = z.object({ kind: z.enum(["stopped", "missed", "behind", "paused", "paused_missed"]), heldBy: z.object({ entryId: z.uuid(), name: z.string() }).strict().nullable() }).strict();
 export type ChargeStop = z.infer<typeof chargeStopSchema>;
 
 /** Rows a page on Overview, the soonest date first. */
@@ -53,8 +53,8 @@ export const chargebackToAnswerSchema = chargebackSeenSchema
     past: z.boolean(),
     personDeleted: z.boolean(),
     /** The person's page, or the sale on Sell, that holds the payment. */
-    member: z.object({ entryId: z.string().uuid().nullable(), what: z.string() }).strict().nullable(),
-    sale: z.object({ saleId: z.string().uuid(), day: daySchema, item: z.string(), more: z.number().int().min(0) }).strict().nullable(),
+    member: z.object({ entryId: z.uuid().nullable(), what: z.string() }).strict().nullable(),
+    sale: z.object({ saleId: z.uuid(), day: daySchema, item: z.string(), more: z.number().int().min(0) }).strict().nullable(),
   })
   .strict();
 export type ChargebackToAnswer = z.infer<typeof chargebackToAnswerSchema>;
@@ -85,6 +85,6 @@ export const chargebackStartPreviewSchema = z
   .strict();
 export type ChargebackStartPreview = z.infer<typeof chargebackStartPreviewSchema>;
 
-export const chargebackParamsSchema = z.object({ gymId: z.string().uuid(), chargebackId: z.string().uuid() }).strict();
+export const chargebackParamsSchema = z.object({ gymId: z.uuid(), chargebackId: z.uuid() }).strict();
 
 export const chargebacksQuerySchema = z.object({ from: z.coerce.number().int().min(0).max(100_000).default(0) }).strict();

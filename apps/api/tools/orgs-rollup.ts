@@ -39,7 +39,7 @@ import { ROLLUP_WINDOW_DAYS, rollUpGymDays } from "../src/modules/orgs/rollup.js
 // and JWT_SECRET, and counting yesterday should not require the app's HTTP
 // secrets.
 const envSchema = z.object({
-  DATABASE_URL: z.string().url(),
+  DATABASE_URL: z.url(),
   LOG_LEVEL: z.string().optional(),
 });
 const env = envSchema.safeParse(process.env);

@@ -498,7 +498,7 @@ d("Reports, the period: every figure counts the days the answer names (real Post
           expect(res.statusCode, `${part} ${bad}`).toBe(400);
           // The refusal names the field and the fault, never what was sent.
           const said = (JSON.parse(res.body) as { message: string }).message;
-          expect(said, `${part} ${bad}`).toMatch(/^(period: invalid_enum_value|period: invalid_type|: unrecognized_keys)$/);
+          expect(said, `${part} ${bad}`).toMatch(/^(period: invalid_value|period: invalid_type|: unrecognized_keys)$/);
         }
         for (const key of REPORT_PERIODS) {
           expect((await get(`${at}?period=${key}`)).statusCode, `${part} ${key} nobody`).toBe(401);

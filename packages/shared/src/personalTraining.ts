@@ -459,7 +459,7 @@ const personNameSchema = { name: z.string().nullable(), initials: z.string() };
 /** One time off of a trainer's. Both minutes null: whole days. */
 export const ptTimeOffSchema = z
   .object({
-    id: z.string().uuid(),
+    id: z.uuid(),
     fromDate: classDaySchema,
     toDate: classDaySchema,
     fromMinute: z.number().int().nullable(),
@@ -472,7 +472,7 @@ export type PtTimeOff = z.infer<typeof ptTimeOffSchema>;
  *  until their hours are first saved. */
 export const ptTrainerSchema = z
   .object({
-    userId: z.string().uuid(),
+    userId: z.uuid(),
     ...personNameSchema,
     offers: z.boolean(),
     sessionMinutes: ptSessionMinutesSchema.nullable(),
@@ -533,7 +533,7 @@ export const savePtTrainerRequestSchema = z
   .strict()
   .superRefine((value, ctx) => {
     const problem = ptHoursProblem(value.hours);
-    if (problem !== null) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["hours"], message: problem });
+    if (problem !== null) ctx.addIssue({ code: "custom", path: ["hours"], message: problem });
   });
 export type SavePtTrainerRequest = z.infer<typeof savePtTrainerRequestSchema>;
 
@@ -551,19 +551,19 @@ const ptFeesInMoneySchema = classFeesSchema.extend({ currency: z.string().regex(
 
 export const ptAppointmentSchema = z
   .object({
-    id: z.string().uuid(),
+    id: z.uuid(),
     /** Null: the trainer's account is gone. */
-    trainerId: z.string().uuid().nullable(),
+    trainerId: z.uuid().nullable(),
     /** The gym's own day and clock time. */
     localDate: classDaySchema,
     localStartMinute: z.number().int(),
     minutes: z.number().int(),
-    startsAt: z.string().datetime(),
+    startsAt: z.iso.datetime(),
     status: ptAppointmentStatusSchema,
     ...personNameSchema,
     /** Their record on the gym's list, for staff who may open a person's page
      *  (`members.confirm`); null for anybody else. */
-    entryId: z.string().uuid().nullable(),
+    entryId: z.uuid().nullable(),
     /** The membership it was booked on; null where the gym has no membership types, and
      *  for a reader who may not open a person's page. */
     membership: z.string().nullable(),
@@ -588,7 +588,7 @@ export type PtAppointment = z.infer<typeof ptAppointmentSchema>;
 
 /** `from`: the first of the seven days, the gym's own; today when left out. It can be up
  *  to `PT_PAST_DAYS` back, for marking who came. */
-export const ptWeekQuerySchema = z.object({ trainer: z.string().uuid(), from: classDaySchema.optional() }).strict();
+export const ptWeekQuerySchema = z.object({ trainer: z.uuid(), from: classDaySchema.optional() }).strict();
 export type PtWeekQuery = z.infer<typeof ptWeekQuerySchema>;
 
 /** A taught class the trainer coaches, as their week shows it: it takes that time off
@@ -602,7 +602,7 @@ export type PtCoachedClass = z.infer<typeof ptCoachedClassSchema>;
  *  clock), the sessions booked on it and the classes they coach on it, the earliest first. */
 export const ptWeekResponseSchema = z
   .object({
-    trainerId: z.string().uuid(),
+    trainerId: z.uuid(),
     timezone: z.string(),
     today: classDaySchema,
     from: classDaySchema,
@@ -627,7 +627,7 @@ export const ptWeekResponseSchema = z
           appointments: z.array(ptAppointmentSchema),
           classes: z.array(ptCoachedClassSchema),
           /** Their time off on this day: both minutes null for the whole day. */
-          timeOff: z.array(z.object({ id: z.string().uuid(), fromMinute: z.number().int().nullable(), toMinute: z.number().int().nullable() }).strict()),
+          timeOff: z.array(z.object({ id: z.uuid(), fromMinute: z.number().int().nullable(), toMinute: z.number().int().nullable() }).strict()),
         })
         .strict(),
     ),
@@ -637,10 +637,10 @@ export type PtWeekResponse = z.infer<typeof ptWeekResponseSchema>;
 
 export const bookPtRequestSchema = z
   .object({
-    requestKey: z.string().uuid(),
-    trainerId: z.string().uuid(),
+    requestKey: z.uuid(),
+    trainerId: z.uuid(),
     /** The person's record on the gym's member list. */
-    entryId: z.string().uuid(),
+    entryId: z.uuid(),
     localDate: classDaySchema,
     startMinute: minuteOfDay(1435),
     /** The session's length as the screen showed it: a trainer whose length has changed
@@ -672,7 +672,7 @@ export const ptPeopleResponseSchema = z
       .array(
         z
           .object({
-            entryId: z.string().uuid(),
+            entryId: z.uuid(),
             name: z.string(),
             pt: z.object({ membership: z.string(), sessionsLeft: z.number().int().nullable() }).strict().nullable(),
             limit: ptAllowanceSchema.nullable(),
@@ -711,7 +711,7 @@ export const PT_TIME_OFF_OVER_SHOWN = 100;
 
 const overRow = z
   .object({
-    id: z.string().uuid(),
+    id: z.uuid(),
     /** The person booked (null where their record has gone), or the class's name. */
     name: z.string().nullable(),
     localDate: z.string(),
@@ -735,7 +735,7 @@ export type PtTimeOffOver = z.infer<typeof ptTimeOffOverSchema>;
 
 export const addPtTimeOffRequestSchema = z
   .object({
-    requestKey: z.string().uuid(),
+    requestKey: z.uuid(),
     fromDate: classDaySchema,
     toDate: classDaySchema,
     fromMinute: minuteOfDay(1435).nullable(),
@@ -749,7 +749,7 @@ export const addPtTimeOffRequestSchema = z
   .strict()
   .superRefine((value, ctx) => {
     const problem = ptTimeOffProblem(value);
-    if (problem !== null) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["toDate"], message: problem });
+    if (problem !== null) ctx.addIssue({ code: "custom", path: ["toDate"], message: problem });
   });
 export type AddPtTimeOffRequest = z.infer<typeof addPtTimeOffRequestSchema>;
 
@@ -831,15 +831,15 @@ export type MemberPtQuery = z.infer<typeof memberPtQuerySchema>;
 /** A session of the reader's own. Nobody else's is ever sent to a member. */
 export const memberPtSessionSchema = z
   .object({
-    id: z.string().uuid(),
+    id: z.uuid(),
     /** Null: the trainer has typed no name, or their account is gone. */
     trainerName: z.string().nullable(),
     localDate: classDaySchema,
     localStartMinute: z.number().int(),
     minutes: z.number().int(),
-    startsAt: z.string().datetime(),
+    startsAt: z.iso.datetime(),
     /** Cancelling is free until this instant. */
-    freeCancelUntil: z.string().datetime(),
+    freeCancelUntil: z.iso.datetime(),
     status: ptAppointmentStatusSchema,
     /** A session of a pack is used for it. */
     packCharged: z.boolean(),
@@ -894,7 +894,7 @@ export const memberPtResponseSchema = z
     trainers: z.array(
       z
         .object({
-          trainerId: z.string().uuid(),
+          trainerId: z.uuid(),
           name: z.string().nullable(),
           sessionMinutes: ptSessionMinutesSchema,
           days: z.array(
@@ -922,8 +922,8 @@ export type MemberPtResponse = z.infer<typeof memberPtResponseSchema>;
 /** A member's own booking: no person is named, the session is the reader's. */
 export const memberBookPtRequestSchema = z
   .object({
-    requestKey: z.string().uuid(),
-    trainerId: z.string().uuid(),
+    requestKey: z.uuid(),
+    trainerId: z.uuid(),
     localDate: classDaySchema,
     startMinute: minuteOfDay(1435),
     /** The session's length as the screen showed it. */

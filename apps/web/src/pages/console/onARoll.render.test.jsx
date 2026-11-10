@@ -39,7 +39,7 @@ const { orgService } = await import('../../api/orgsApi');
 const { resetConsoleOrgs } = await import('./consoleOrgs');
 const Overview = (await import('./Overview')).default;
 
-const GYM_ID = '11111111-1111-1111-1111-111111111111';
+const GYM_ID = '11111111-1111-4111-8111-111111111111';
 
 /** An owner of a gym on a live plan. `privileges` is stated rather than left to
  *  the role template, because `members.read` is exactly what this card's control

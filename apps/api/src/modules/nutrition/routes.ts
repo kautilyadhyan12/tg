@@ -71,7 +71,7 @@ type SafeParseResult<T> = { success: true; data: T } | { success: false; error: 
 
 /** Zod-parse; 400 with issue paths/codes only — never echo values (R3.10:
  *  doubly vital here, a value could be the image itself). */
-function parse<S extends z.ZodTypeAny>(
+function parse<S extends z.ZodType>(
   schema: S,
   value: unknown,
   req: FastifyRequest,
@@ -106,7 +106,7 @@ const notFound = (req: FastifyRequest, reply: FastifyReply) =>
 
 // Opaque cursor: base64url({at, id}), Zod-checked on the way back in.
 import { z as zod } from "zod";
-const cursorSchema = zod.object({ at: zod.string().datetime(), id: zod.string().uuid() }).strict();
+const cursorSchema = zod.object({ at: zod.iso.datetime(), id: zod.uuid() }).strict();
 const cursorEncode = (v: { at: Date; id: string }): string =>
   Buffer.from(JSON.stringify({ at: v.at.toISOString(), id: v.id })).toString("base64url");
 const cursorDecode = (v: string | undefined): { at: Date; id: string } | null => {

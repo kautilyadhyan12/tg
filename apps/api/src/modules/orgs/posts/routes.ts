@@ -23,13 +23,13 @@ import { createDualRateLimit } from "../../auth/rateLimit.js";
 import { orgParamsSchema, gymInPath } from "../schemas.js";
 import * as service from "./service.js";
 
-export function parseOr400<S extends z.ZodTypeAny>(
+export function parseOr400<S extends z.ZodType>(
   schema: S,
   value: unknown,
   req: FastifyRequest,
   reply: FastifyReply,
 ): z.output<S> | null {
-  const parsed: z.SafeParseReturnType<unknown, z.output<S>> = schema.safeParse(value);
+  const parsed: z.ZodSafeParseResult<z.output<S>> = schema.safeParse(value);
   if (!parsed.success) {
     // Issue paths and codes only, never the offending value, and the first few: a body
     // may be megabytes, and a reply must not be.

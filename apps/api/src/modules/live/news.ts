@@ -110,7 +110,7 @@ export function hearRedisNews(url: string, channel: string, hub: LiveHub, log: F
  *  been worked out, so the change is saved, and it is told even when the browser that asked has
  *  already gone (`onResponse` waits for the answer to be written). */
 export function tellMembershipsAfter(news: LiveNewsSender) {
-  const personInAddress = z.object({ gymId: z.string().uuid(), entryId: z.string().uuid() });
+  const personInAddress = z.object({ gymId: z.uuid(), entryId: z.uuid() });
   return async <P>(req: FastifyRequest, reply: FastifyReply, payload: P): Promise<P> => {
     if (req.method === "GET" || reply.statusCode >= 300) return payload;
     const at = personInAddress.safeParse(req.params);
@@ -146,7 +146,7 @@ export function tellMembersLeaderboards(sql: Sql, news: LiveNewsSender, log: Fas
 /** A route's `onSend` (as above): a change saved to the gym's people (2xx, not a read) tells the
  *  gym's open lines that names, records or members changed. */
 export function tellPeopleAfter(news: LiveNewsSender) {
-  const inGym = z.object({ gymId: z.string().uuid() });
+  const inGym = z.object({ gymId: z.uuid() });
   return async <P>(req: FastifyRequest, reply: FastifyReply, payload: P): Promise<P> => {
     if (req.method === "GET" || reply.statusCode >= 300) return payload;
     const at = inGym.safeParse(req.params);

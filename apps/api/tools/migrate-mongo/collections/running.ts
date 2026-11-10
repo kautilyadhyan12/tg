@@ -41,7 +41,7 @@ const legacyRunSchema = z
     path: z.array(z.unknown()).nullish(),
     splits: z.array(z.unknown()).nullish(),
   })
-  .passthrough();
+  .loose();
 
 export interface RunRow {
   id: string;
@@ -98,7 +98,7 @@ const legacyRouteSchema = z
     coords: z.array(z.unknown()).nullish(),
     distance_km: z.number().nullish(),
   })
-  .passthrough();
+  .loose();
 
 export interface RouteRow {
   id: string;

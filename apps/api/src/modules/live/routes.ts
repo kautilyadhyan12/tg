@@ -58,7 +58,7 @@ export function registerLiveRoutes(app: FastifyInstance, deps: LiveRouteDeps): v
     if (req.headers.origin !== deps.config.WEB_ORIGIN) throw new OrgsError(404, "org_not_found", ORG_NOT_FOUND_MESSAGE);
     const params = orgParamsSchema.safeParse(req.params);
     if (!params.success) {
-      await reply.status(400).send({ error: "validation_error", message: "gymId: invalid_string", requestId: req.id });
+      await reply.status(400).send({ error: "validation_error", message: "gymId: invalid_format", requestId: req.id });
       return;
     }
     const userId = req.authUser?.id;

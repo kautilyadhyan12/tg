@@ -159,7 +159,7 @@ export const definitionBundleSchema = z
     for (const [slug, version] of Object.entries(bundle.manifest)) {
       if (byKey.get(slug) !== version) {
         ctx.addIssue({
-          code: z.ZodIssueCode.custom,
+          code: "custom",
           path: ["manifest", slug],
           message: `manifest points at ${slug}@${String(version)} but the bundle carries ${String(byKey.get(slug) ?? "nothing")}`,
         });

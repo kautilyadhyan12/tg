@@ -36,13 +36,13 @@ import * as service from "./service.js";
  *  the body (the mapping, the key). */
 const FILE_BODY_LIMIT = MEMBER_FILE_MAX_BASE64_CHARS + 16 * 1024;
 
-function parseOr400<S extends z.ZodTypeAny>(
+function parseOr400<S extends z.ZodType>(
   schema: S,
   value: unknown,
   req: FastifyRequest,
   reply: FastifyReply,
 ): z.output<S> | null {
-  const parsed: z.SafeParseReturnType<unknown, z.output<S>> = schema.safeParse(value);
+  const parsed: z.ZodSafeParseResult<z.output<S>> = schema.safeParse(value);
   if (!parsed.success) {
     // Issue paths and codes only, never the value: it is somebody's name or number.
     void reply.status(400).send({

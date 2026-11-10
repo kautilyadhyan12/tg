@@ -32,13 +32,13 @@ import { pageTurnedAwayKey } from "./service.js";
 /** The slug in a page's address: what `slugifyName` makes, and nothing else. */
 const slugParamsSchema = z.object({ slug: z.string().regex(/^[a-z0-9-]{1,100}$/) }).strict();
 
-function parseOr400<S extends z.ZodTypeAny>(
+function parseOr400<S extends z.ZodType>(
   schema: S,
   value: unknown,
   req: FastifyRequest,
   reply: FastifyReply,
 ): z.output<S> | null {
-  const parsed: z.SafeParseReturnType<unknown, z.output<S>> = schema.safeParse(value);
+  const parsed: z.ZodSafeParseResult<z.output<S>> = schema.safeParse(value);
   if (!parsed.success) {
     // Issue paths and codes only, never the value: it is somebody's name or number.
     void reply.status(400).send({
@@ -91,8 +91,8 @@ const INVITE_MISSES_MAX = 600;
 const inviteNotFound = (req: FastifyRequest, reply: FastifyReply): FastifyReply =>
   reply.status(404).send({ error: "invite_not_found", message: REFERRAL_WORDS.not_found, requestId: req.id });
 
-const photoParamsSchema = z.object({ gymId: z.string().uuid(), photoId: z.string().uuid() }).strict();
-const publicPhotoParamsSchema = slugParamsSchema.extend({ photoId: z.string().uuid() }).strict();
+const photoParamsSchema = z.object({ gymId: z.uuid(), photoId: z.uuid() }).strict();
+const publicPhotoParamsSchema = slugParamsSchema.extend({ photoId: z.uuid() }).strict();
 
 /** A photo's base64 and JSON's own punctuation; the app's default body limit is small
  *  on purpose, so this door alone takes a photo. */

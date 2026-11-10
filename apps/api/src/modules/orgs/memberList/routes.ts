@@ -119,13 +119,13 @@ function sendSelectionChanged(err: SelectionChanged, req: FastifyRequest, reply:
  *  spreadsheet must not raise it for every other door. */
 const UPLOAD_BODY_LIMIT = MEMBER_FILE_MAX_BASE64_CHARS + 8 * 1024;
 
-function parseOr400<S extends z.ZodTypeAny>(
+function parseOr400<S extends z.ZodType>(
   schema: S,
   value: unknown,
   req: FastifyRequest,
   reply: FastifyReply,
 ): z.output<S> | null {
-  const parsed: z.SafeParseReturnType<unknown, z.output<S>> = schema.safeParse(value);
+  const parsed: z.ZodSafeParseResult<z.output<S>> = schema.safeParse(value);
   if (!parsed.success) {
     // Issue paths and codes only, never the offending value (R3.10): the value
     // here is a member list. A check of our own says its own sentence, which holds none.

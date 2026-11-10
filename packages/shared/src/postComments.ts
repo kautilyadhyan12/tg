@@ -27,19 +27,19 @@ const NUL = String.fromCharCode(0);
 
 export const gymPostCommentSchema = z
   .object({
-    id: z.string().uuid(),
-    postId: z.string().uuid(),
+    id: z.uuid(),
+    postId: z.uuid(),
     /** The comment this is a reply under; null on a comment. */
-    parentId: z.string().uuid().nullable(),
+    parentId: z.uuid().nullable(),
     /** A reply to a reply: the name of who it answers, while the reader may see that reply. */
     replyingTo: z.string().nullable(),
     author: z.object({ name: z.string().nullable(), initials: z.string() }).strict(),
     body: z.string(),
-    createdAt: z.string().datetime({ offset: true }),
+    createdAt: z.iso.datetime({ offset: true }),
     reactions: reactionCountsSchema,
     mine: gymPostReactionSchema.nullable(),
     fromMember: z.boolean(),
-    authorId: z.string().uuid().nullable(),
+    authorId: z.uuid().nullable(),
     /** The reader wrote it as a member, and may remove it. */
     own: z.boolean(),
     wrote: z.boolean(),
@@ -78,10 +78,10 @@ const commentWords = z
 export const addGymPostCommentRequestSchema = z
   .object({
     /** The phone's key for this one comment: the same key again is the same comment. */
-    commentKey: z.string().uuid(),
+    commentKey: z.uuid(),
     body: commentWords,
     /** The comment or reply this answers; left out for a new comment on the post. */
-    replyTo: z.string().uuid().optional(),
+    replyTo: z.uuid().optional(),
   })
   .strict();
 export type AddGymPostCommentRequest = z.infer<typeof addGymPostCommentRequestSchema>;
@@ -89,7 +89,7 @@ export type AddGymPostCommentRequest = z.infer<typeof addGymPostCommentRequestSc
 /** `firstKept` is false when the answer is a comment kept earlier under the same key. */
 export const addedGymPostCommentResponseSchema = z.object({ comment: gymPostCommentSchema, firstKept: z.boolean() }).strict();
 
-export const gymPostCommentParamsSchema = z.object({ gymId: z.string().uuid(), commentId: z.string().uuid() }).strict();
+export const gymPostCommentParamsSchema = z.object({ gymId: z.uuid(), commentId: z.uuid() }).strict();
 export const reactToGymPostCommentResponseSchema = z.object({ reactions: reactionCountsSchema, mine: gymPostReactionSchema.nullable() }).strict();
 export const reportGymPostCommentRequestSchema = z.object({ reason: gymPostCommentReportReasonSchema, note: reportNote.optional() }).strict();
 export const reportedGymPostCommentResponseSchema = z.object({ reported: z.literal(true) }).strict();
@@ -101,16 +101,16 @@ export const removedGymPostCommentResponseSchema = z.object({ removed: z.literal
 /** A comment or reply as staff read it: the whole name, and whether its member writer is stopped. */
 export const staffGymPostCommentSchema = z
   .object({
-    id: z.string().uuid(),
-    postId: z.string().uuid(),
-    parentId: z.string().uuid().nullable(),
+    id: z.uuid(),
+    postId: z.uuid(),
+    parentId: z.uuid().nullable(),
     replyingTo: z.string().nullable(),
     author: z.object({ name: z.string().nullable(), initials: z.string() }).strict(),
     body: z.string(),
-    createdAt: z.string().datetime({ offset: true }),
+    createdAt: z.iso.datetime({ offset: true }),
     reactions: reactionCountsSchema,
     fromMember: z.boolean(),
-    authorId: z.string().uuid().nullable(),
+    authorId: z.uuid().nullable(),
     authorStopped: z.boolean(),
     hidden: z.boolean(),
     replyCount: z.number().int().nonnegative(),
@@ -140,7 +140,7 @@ export const reportedGymPostCommentsResponseSchema = z
           .object({
             comment: staffGymPostCommentSchema,
             /** The post it is on, so staff can read it in its place. */
-            post: z.object({ id: z.string().uuid(), body: z.string(), fromMember: z.boolean(), hidden: z.boolean(), author: z.object({ name: z.string().nullable(), initials: z.string() }).strict() }).strict(),
+            post: z.object({ id: z.uuid(), body: z.string(), fromMember: z.boolean(), hidden: z.boolean(), author: z.object({ name: z.string().nullable(), initials: z.string() }).strict() }).strict(),
             reports: z.number().int().positive(),
             reasons: commentReasonCountsSchema,
             /** What reporters typed, oldest first; never who typed it. */
@@ -172,12 +172,12 @@ export const gymPostCommentDraftsFileSchema = z
   .object({
     version: z.literal(1),
     drafts: z.record(
-      z.string().uuid(),
+      z.uuid(),
       z
         .object({
-          commentKey: z.string().uuid(),
+          commentKey: z.uuid(),
           body: z.string().max(GYM_POST_COMMENT_DRAFT_MOST),
-          replyTo: z.object({ id: z.string().uuid(), name: z.string().max(200) }).strict().nullable(),
+          replyTo: z.object({ id: z.uuid(), name: z.string().max(200) }).strict().nullable(),
           /** It has been sent under this key, and the answer is not known. */
           sent: z.boolean().optional(),
           /** And it has been changed since. */

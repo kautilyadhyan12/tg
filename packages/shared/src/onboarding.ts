@@ -81,7 +81,7 @@ export const onboardingAnswersSchema = z
     diet: dietSchema.nullable(),
     mealsPerDay: z.number().int().nullable(),
     onboardingCompleted: z.boolean(),
-    updatedAt: z.string().datetime().nullable(),
+    updatedAt: z.iso.datetime().nullable(),
   })
   .strict();
 export type OnboardingAnswers = z.infer<typeof onboardingAnswersSchema>;

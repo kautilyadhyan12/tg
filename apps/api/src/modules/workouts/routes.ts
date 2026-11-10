@@ -19,12 +19,12 @@ import { tellMembersLeaderboards, type LiveNewsSender } from "../live/news.js";
 
 /** Zod-parse the querystring; 400 with issue paths/codes only (R3.10).
  *  Generic over the schema so .default() outputs stay non-optional. */
-function parseQuery<S extends z.ZodTypeAny>(
+function parseQuery<S extends z.ZodType>(
   schema: S,
   req: FastifyRequest,
   reply: FastifyReply,
 ): z.output<S> | null {
-  const parsed: z.SafeParseReturnType<unknown, z.output<S>> = schema.safeParse(req.query);
+  const parsed: z.ZodSafeParseResult<z.output<S>> = schema.safeParse(req.query);
   if (!parsed.success) {
     void reply.status(400).send({
       error: "validation_error",

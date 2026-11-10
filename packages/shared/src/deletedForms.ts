@@ -55,7 +55,7 @@ export type DeletedFormsQuery = z.infer<typeof deletedFormsQuerySchema>;
  *  record was deleted (null for one deleted before 18u-iii kept it). */
 export const deletedFormItemSchema = z
   .object({
-    id: z.string().uuid(),
+    id: z.uuid(),
     kind: deletedFormKindSchema,
     signedName: z.string(),
     signer: deskSignerSchema,

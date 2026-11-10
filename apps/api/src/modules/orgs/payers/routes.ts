@@ -16,8 +16,8 @@ import { memberListEntryParamsSchema } from "../schemas.js";
 import { staffOnly } from "../staffLimit.js";
 import * as service from "./service.js";
 
-function parseOr400<S extends z.ZodTypeAny>(schema: S, value: unknown, req: FastifyRequest, reply: FastifyReply): z.output<S> | null {
-  const parsed: z.SafeParseReturnType<unknown, z.output<S>> = schema.safeParse(value);
+function parseOr400<S extends z.ZodType>(schema: S, value: unknown, req: FastifyRequest, reply: FastifyReply): z.output<S> | null {
+  const parsed: z.ZodSafeParseResult<z.output<S>> = schema.safeParse(value);
   if (!parsed.success) {
     // Issue paths and codes only, never the offending value.
     void reply.status(400).send({

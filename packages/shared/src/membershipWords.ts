@@ -27,7 +27,7 @@ export const membershipWordSchema = z
     people: z.number().int().min(0),
     link: z
       .object({
-        typeId: z.string().uuid(),
+        typeId: z.uuid(),
         typeName: z.string(),
         typeArchived: z.boolean(),
         waiting: z.number().int().min(0),
@@ -42,7 +42,7 @@ export const membershipWordSchema = z
      *  have never held it. A screen offers it without asking which type the word is, and
      *  shows nothing where everybody has it. */
     sameName: z
-      .object({ typeId: z.string().uuid(), typeName: z.string(), waiting: z.number().int().min(0), again: z.number().int().min(0) })
+      .object({ typeId: z.uuid(), typeName: z.string(), waiting: z.number().int().min(0), again: z.number().int().min(0) })
       .strict()
       .nullable(),
   })
@@ -72,7 +72,7 @@ export type MembershipLinkGroup = z.infer<typeof membershipLinkGroupSchema>;
  *  `ended`, `endsOn` is the last day the list gave them. */
 export const membershipLinkPersonSchema = z
   .object({
-    entryId: z.string().uuid(),
+    entryId: z.uuid(),
     fullName: z.string(),
     group: membershipLinkGroupSchema,
     /** The list gave a day for this person. */
@@ -122,7 +122,7 @@ export const membershipLinkPreviewResponseSchema = z
   .strict();
 export type MembershipLinkPreviewResponse = z.infer<typeof membershipLinkPreviewResponseSchema>;
 
-export const membershipLinkPreviewRequestSchema = z.object({ word: wordSchema, typeId: z.string().uuid() }).strict();
+export const membershipLinkPreviewRequestSchema = z.object({ word: wordSchema, typeId: z.uuid() }).strict();
 export type MembershipLinkPreviewRequest = z.infer<typeof membershipLinkPreviewRequestSchema>;
 
 /** Link a word to a type and give it. `groups` are the ones staff left ticked;
@@ -131,7 +131,7 @@ export type MembershipLinkPreviewRequest = z.infer<typeof membershipLinkPreviewR
 export const membershipLinkRequestSchema = z
   .object({
     word: wordSchema,
-    typeId: z.string().uuid(),
+    typeId: z.uuid(),
     groups: z.object({ settled: z.boolean(), due: z.boolean(), ask: z.boolean() }).strict(),
     digest: digestSchema,
     paid: z.boolean().nullable(),

@@ -8,7 +8,7 @@ import { ROBOT_CHECK_TOKEN_MAX_CHARS } from "./robotCheck.js";
 
 /** citext in the DB handles case; trim + lowercase here so rate-limit
  *  identifier keys and lookups agree on one canonical form. */
-export const authEmailSchema = z.string().trim().toLowerCase().max(254).email();
+export const authEmailSchema = z.string().trim().toLowerCase().max(254).pipe(z.email());
 
 export const authPasswordSchema = z.string().min(8).max(128);
 
@@ -124,7 +124,7 @@ export type ChangePasswordRequest = z.infer<typeof changePasswordRequestSchema>;
 /** Minimal authenticated-user view (full profile is the users module, P2.2).
  *  No tokens anywhere in a body — cookies only (DECISIONS 2026-07-11). */
 export const authUserSchema = z.object({
-  id: z.string().uuid(),
+  id: z.uuid(),
   email: z.string().nullable(),
   displayName: z.string(),
   emailVerified: z.boolean(),
@@ -239,7 +239,7 @@ export const apiRefusalSchema = z.object({
 export type ApiRefusal = z.infer<typeof apiRefusalSchema>;
 
 export const registerResponseSchema = z.object({
-  userId: z.string().uuid(),
+  userId: z.uuid(),
   message: z.string(),
 });
 export type RegisterResponse = z.infer<typeof registerResponseSchema>;

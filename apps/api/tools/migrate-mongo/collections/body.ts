@@ -36,7 +36,7 @@ const legacyBodySchema = z
     right_thigh_cm: z.number().nullish(),
     body_fat_pct: z.number().nullish(),
   })
-  .passthrough();
+  .loose();
 
 function toDate(v: Date | string | null | undefined): Date | null {
   if (v === null || v === undefined) return null;

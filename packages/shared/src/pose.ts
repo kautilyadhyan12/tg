@@ -61,7 +61,7 @@ export const keypointSchema = z.tuple([
 
 export const poseFrameSchema = z
   .object({
-    t: z.number().nonnegative().finite(), // monotonic ms since session start
+    t: z.number().nonnegative(), // monotonic ms since session start
     kp: z.array(keypointSchema).length(KEYPOINT_COUNT),
   })
   .strict();
@@ -82,7 +82,7 @@ export const cameraFrameSchema = poseFrameSchema
 // ignores them.
 export const traceFrameSchema = z
   .object({
-    t: z.number().nonnegative().finite(),
+    t: z.number().nonnegative(),
     aspect: z.number().min(MIN_ASPECT).max(MAX_ASPECT),
     kp: z.union([z.array(keypointSchema).length(KEYPOINT_COUNT), z.array(keypointSchema).length(0)]),
     wkp: z.array(z.tuple([z.number(), z.number(), z.number()])).length(KEYPOINT_COUNT).optional(),

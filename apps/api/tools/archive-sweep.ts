@@ -53,7 +53,7 @@ import { archiveLapsedGyms } from "../src/modules/orgs/archiveSweep.js";
 // and JWT_SECRET, and closing a lapsed gym should not require the app's HTTP
 // secrets.
 const envSchema = z.object({
-  DATABASE_URL: z.string().url(),
+  DATABASE_URL: z.url(),
   LOG_LEVEL: z.string().optional(),
   NODE_ENV: z.string().optional(),
 });

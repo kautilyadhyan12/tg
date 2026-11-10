@@ -150,8 +150,8 @@ export const SQUARE_WEBHOOK_PATH = "/v1/webhooks/square";
 const WEBHOOK_BODY_LIMIT = 64 * 1024;
 const HOUR_MS = 60 * 60 * 1000;
 
-function parseOr400<S extends z.ZodTypeAny>(schema: S, value: unknown, req: FastifyRequest, reply: FastifyReply): z.output<S> | null {
-  const parsed: z.SafeParseReturnType<unknown, z.output<S>> = schema.safeParse(value);
+function parseOr400<S extends z.ZodType>(schema: S, value: unknown, req: FastifyRequest, reply: FastifyReply): z.output<S> | null {
+  const parsed: z.ZodSafeParseResult<z.output<S>> = schema.safeParse(value);
   if (!parsed.success) {
     // Issue paths and codes only, never the offending value: a code from Square is a secret.
     void reply.status(400).send({
@@ -433,7 +433,7 @@ export function registerPaymentRoutes(app: FastifyInstance, deps: Omit<service.P
   });
 
   const saleRefundUrl = "/v1/orgs/:gymId/register/sales/:saleId/card-refund";
-  const saleParamsSchema = z.object({ gymId: z.string().uuid(), saleId: z.string().uuid() }).strict();
+  const saleParamsSchema = z.object({ gymId: z.uuid(), saleId: z.uuid() }).strict();
 
   app.get(saleRefundUrl, { preHandler: [app.authenticate, staffOnly(deps.sql, refundReadLimit)] }, async (req, reply) => {
     const params = parseOr400(saleParamsSchema, req.params, req, reply);

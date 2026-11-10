@@ -129,8 +129,8 @@ const Overview = (await import('./Overview')).default;
 const Members = (await import('./Members')).default;
 const Settings = (await import('./Settings')).default;
 
-const GYM_ID = '11111111-1111-1111-1111-111111111111';
-const MEMBER_ID = '22222222-2222-2222-2222-222222222222';
+const GYM_ID = '11111111-1111-4111-8111-111111111111';
+const MEMBER_ID = '22222222-2222-4222-8222-222222222222';
 
 /** A MANAGER, and the choice of role is load-bearing rather than incidental.
  *

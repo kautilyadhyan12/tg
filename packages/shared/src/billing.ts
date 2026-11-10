@@ -30,13 +30,13 @@ export type OrgCheckoutRequest = z.infer<typeof orgCheckoutRequestSchema>;
  *  when it passes this, and none otherwise (the window then asks), since a stored email may
  *  be in a shape this refuses (a Google or migrated account) and the console reads the reply
  *  through this schema. */
-export const payerEmailSchema = z.string().email().max(254);
+export const payerEmailSchema = z.email().max(254);
 
 /** What the browser needs to open the payment window for the checkout our server made:
  *  Paddle's for the transaction, or Razorpay's for the subscription (an Indian gym, 1d-i). */
 export const orgCheckoutResponseSchema = z.discriminatedUnion("provider", [
   z.object({
-    checkoutId: z.string().uuid(),
+    checkoutId: z.uuid(),
     provider: z.literal("paddle"),
     environment: z.enum(["sandbox", "production"]),
     clientToken: z.string().min(1).max(200),
@@ -48,7 +48,7 @@ export const orgCheckoutResponseSchema = z.discriminatedUnion("provider", [
     country: z.string().regex(/^[A-Z]{2}$/).nullable(),
   }),
   z.object({
-    checkoutId: z.string().uuid(),
+    checkoutId: z.uuid(),
     provider: z.literal("razorpay"),
     keyId: razorpayKeyIdSchema,
     subscriptionId: razorpaySubscriptionIdSchema,
@@ -104,7 +104,7 @@ export const orgPlanChangePreviewSchema = z
       .strict()
       .nullable(),
     /** When the new monthly price is next charged. */
-    nextPaymentAt: z.string().datetime().nullable(),
+    nextPaymentAt: z.iso.datetime().nullable(),
   })
   .strict();
 export type OrgPlanChangePreview = z.infer<typeof orgPlanChangePreviewSchema>;
@@ -138,13 +138,12 @@ export type OrgPlanCancelResponse = z.infer<typeof orgPlanCancelResponseSchema>;
 
 // ── Paddle ───────────────────────────────────────────────────────────────────
 
-const instant = z.string().datetime({ offset: true });
+const instant = z.iso.datetime({ offset: true });
 
 /** A link to Paddle's customer portal: https, on Paddle's own domain, nowhere else. */
 export const paddlePortalUrlSchema = z
-  .string()
-  .max(2000)
   .url()
+  .max(2000)
   .refine((value) => {
     let link: URL;
     try {
@@ -192,7 +191,7 @@ export const paddleSubscriptionSchema = z.object({
   status: z.enum(["active", "canceled", "past_due", "paused", "trialing"]),
   customer_id: paddleCustomerIdSchema.nullable(),
   /** A discount on it. Our server never gives one. */
-  discount: z.object({ id: z.string().max(60) }).passthrough().nullable().optional(),
+  discount: z.object({ id: z.string().max(60) }).loose().nullable().optional(),
   currency_code: z.string().length(3),
   updated_at: instant,
   canceled_at: instant.nullable(),
@@ -213,7 +212,7 @@ export const paddleSubscriptionSchema = z.object({
           type: z.enum(["standard", "custom"]).optional(),
           unit_price: z.object({ amount: z.string().regex(/^\d{1,12}$/), currency_code: z.string().length(3) }).optional(),
           billing_cycle: z.object({ interval: z.enum(["day", "week", "month", "year"]), frequency: z.number().int() }).nullable().optional(),
-          custom_data: z.record(z.unknown()).nullable().optional(),
+          custom_data: z.record(z.string(), z.unknown()).nullable().optional(),
         }),
       }),
     )
@@ -239,7 +238,7 @@ export const paddleTransactionSchema = z.object({
           id: paddlePriceIdSchema,
           unit_price: z.object({ amount: z.string().regex(/^\d{1,12}$/), currency_code: z.string().length(3) }),
           trial_period: z.object({ interval: z.enum(["day", "week", "month", "year"]), frequency: z.number().int() }).nullable().optional(),
-          custom_data: z.record(z.unknown()).nullable().optional(),
+          custom_data: z.record(z.string(), z.unknown()).nullable().optional(),
         }),
       }),
     )
@@ -276,21 +275,21 @@ export const paddlePriceSchema = z.object({
   unit_price: z.object({ amount: z.string().regex(/^\d{1,12}$/), currency_code: z.string().length(3) }),
   billing_cycle: z.object({ interval: z.enum(["day", "week", "month", "year"]), frequency: z.number().int() }).nullable(),
   quantity: z.object({ minimum: z.number().int(), maximum: z.number().int() }),
-  custom_data: z.record(z.unknown()).nullable(),
+  custom_data: z.record(z.string(), z.unknown()).nullable(),
 });
 export type PaddlePrice = z.infer<typeof paddlePriceSchema>;
 
 export const paddleProductSchema = z.object({ id: paddleProductIdSchema });
 
 /** Every Paddle response wraps its entity in `data`. */
-export const paddleEnvelope = <T extends z.ZodTypeAny>(entity: T) => z.object({ data: entity });
+export const paddleEnvelope = <T extends z.ZodType>(entity: T) => z.object({ data: entity });
 
 /** A list response: `data` and, when there is more, `meta.pagination.next`. */
-export const paddleListEnvelope = <T extends z.ZodTypeAny>(entity: T) =>
+export const paddleListEnvelope = <T extends z.ZodType>(entity: T) =>
   z.object({
     data: z.array(entity).max(200),
     meta: z
-      .object({ pagination: z.object({ has_more: z.boolean(), next: z.string().url().nullable().optional() }).optional() })
+      .object({ pagination: z.object({ has_more: z.boolean(), next: z.url().nullable().optional() }).optional() })
       .optional(),
   });
 
@@ -321,7 +320,7 @@ export const paddleWebhookBodySchema = z.object({
   event_id: z.string().regex(/^evt_[a-z\d]{26}$/),
   event_type: z.string().min(1).max(100),
   occurred_at: instant,
-  data: z.object({ id: z.string().min(1).max(100) }).passthrough(),
+  data: z.object({ id: z.string().min(1).max(100) }).loose(),
 });
 export type PaddleWebhookBody = z.infer<typeof paddleWebhookBodySchema>;
 

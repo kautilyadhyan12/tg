@@ -55,7 +55,7 @@ const { trialEndDateLabel } = await import('./billingView');
 const ConsoleLayout = (await import('../../components/console/ConsoleLayout')).default;
 const Overview = (await import('./Overview')).default;
 
-const GYM_ID = '11111111-1111-1111-1111-111111111111';
+const GYM_ID = '11111111-1111-4111-8111-111111111111';
 const TRIAL_END = new Date(Date.now() + 6 * 86_400_000).toISOString();
 
 const OWNER = {
@@ -130,7 +130,7 @@ describe('paying during the free trial', () => {
   it('WORST THING: in the free trial every plan says it is paid today, and a press asks for that plan', async () => {
     orgService.getMine.mockResolvedValue(mineIs({ ...OWNER, subscription: freeTrial }));
     orgService.startCheckout.mockResolvedValue({
-      data: { checkoutId: '22222222-2222-2222-2222-222222222222', provider: 'paddle', environment: 'sandbox', clientToken: 'test_x', transactionId: 'txn_01j7zbyqs3vah3aafp4jf62qaw' },
+      data: { checkoutId: '22222222-2222-4222-8222-222222222222', provider: 'paddle', environment: 'sandbox', clientToken: 'test_x', transactionId: 'txn_01j7zbyqs3vah3aafp4jf62qaw' },
     });
     orgService.syncCheckout.mockResolvedValue({ data: { state: 'paid', subscription: { ...paying, seatCap: 500, planSeatCap: 500, priceLabel: '$129' } } });
     openPaddleCheckout.mockImplementation(async ({ onEvent }) => {
@@ -159,7 +159,7 @@ describe('paying during the free trial', () => {
   it('says nothing was charged when the server answers that an old trial window did not start', async () => {
     orgService.getMine.mockResolvedValue(mineIs({ ...OWNER, subscription: freeTrial }));
     orgService.startCheckout.mockResolvedValue({
-      data: { checkoutId: '22222222-2222-2222-2222-222222222222', provider: 'paddle', environment: 'sandbox', clientToken: 'test_x', transactionId: 'txn_01j7zbyqs3vah3aafp4jf62qaw' },
+      data: { checkoutId: '22222222-2222-4222-8222-222222222222', provider: 'paddle', environment: 'sandbox', clientToken: 'test_x', transactionId: 'txn_01j7zbyqs3vah3aafp4jf62qaw' },
     });
     orgService.syncCheckout.mockResolvedValue({ data: { state: 'trial_ended' } });
     openPaddleCheckout.mockImplementation(async ({ onEvent }) => {
@@ -280,7 +280,7 @@ describe('Change size', () => {
   });
 
   it('is offered to nobody who cannot pay, nor on a plan set to end', async () => {
-    orgService.getMine.mockResolvedValue(mineIs({ ...TRAINER, subscription: paying }, { ...OWNER, id: '33333333-3333-3333-3333-333333333333', slug: 'other' }));
+    orgService.getMine.mockResolvedValue(mineIs({ ...TRAINER, subscription: paying }, { ...OWNER, id: '33333333-3333-4333-8333-333333333333', slug: 'other' }));
     renderOverview();
     await screen.findByRole('heading', { name: 'Iron House' });
     expect(screen.queryByRole('button', { name: 'Change size' })).toBeNull();
@@ -524,7 +524,7 @@ describe('Change size through Razorpay (1d-iii-a)', () => {
   ];
   const NEXT = trialEndDateLabel(NEXT_PAYMENT);
   const WINDOW = {
-    checkoutId: '44444444-4444-4444-4444-444444444444',
+    checkoutId: '44444444-4444-4444-8444-444444444444',
     provider: 'razorpay',
     keyId: 'rzp_test_AAAAAAAAAAAAAA',
     subscriptionId: 'sub_AAAAAAAAAAAAAA',

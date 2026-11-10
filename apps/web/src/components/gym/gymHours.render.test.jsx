@@ -23,7 +23,7 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
 const { orgService } = await import('../../api/orgsApi');
 const GymHoursNote = (await import('./GymHoursNote')).default;
 
-const GYM = '11111111-1111-1111-1111-111111111111';
+const GYM = '11111111-1111-4111-8111-111111111111';
 
 // 2026-09-01 at 23:30 UTC. In Kiritimati (UTC+14) the gym's date is already the
 // 2nd — a WEDNESDAY — while the browser and UTC still say Tuesday the 1st. Every

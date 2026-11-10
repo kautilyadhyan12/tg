@@ -284,7 +284,7 @@ export const createOrgRequestSchema = z
     trainsHere: z.boolean(),
     /** Made by the form when it opens: a second press with it, after an answer that never
      *  arrived, answers the gym the first press made instead of making another. */
-    createKey: z.string().uuid().optional(),
+    createKey: z.uuid().optional(),
   })
   .strict();
 export type CreateOrgRequest = z.infer<typeof createOrgRequestSchema>;
@@ -306,7 +306,7 @@ export const gymClockFormatSchema = z.enum(["12h", "24h"]);
 export type GymClockFormat = z.infer<typeof gymClockFormatSchema>;
 
 export const orgSummarySchema = z.object({
-  id: z.string().uuid(),
+  id: z.uuid(),
   slug: z.string(),
   name: z.string(),
   city: z.string().nullable(),
@@ -788,7 +788,7 @@ export const orgPlansResponseSchema = z.object({
   payOnline: z.enum(["available", "coming_soon", "unavailable"]).default("unavailable"),
   /** Where a gym that needs a plan writes to us (Stage 3 item 2e-i): `SUPPORT_EMAIL`, null
    *  until one is set. */
-  supportEmail: z.string().email().nullable().default(null),
+  supportEmail: z.email().nullable().default(null),
 });
 export type OrgPlansResponse = z.infer<typeof orgPlansResponseSchema>;
 
@@ -1091,7 +1091,7 @@ export const myOrgSchema = orgSummarySchema.extend({
    *  until they make someone else its owner, and they delete it on the website where they manage
    *  the gym. `url` opens the console's Your account page; `askedName` is the co-owner asked to
    *  take the gym over who has not answered yet. Absent for everybody else. */
-  handOver: z.object({ url: z.string().url(), askedName: z.string().nullable() }).strict().optional(),
+  handOver: z.object({ url: z.url(), askedName: z.string().nullable() }).strict().optional(),
   /** WHAT THE CALLER MAY DO AT THIS GYM — their OWN effective set, not anybody
    *  else's (T3 round 1 C/H-1).
    *
@@ -1430,7 +1430,7 @@ export const linkedJoinCodeSchema = z
   );
 
 export const membershipSchema = z.object({
-  id: z.string().uuid(),
+  id: z.uuid(),
   joinedAt: z.string(),
   /** The label of the code used, e.g. "Front Desk" — Part 3 §2.1's group
    *  mechanism.
@@ -1461,7 +1461,7 @@ export type OrgApplicationStatus = z.infer<typeof orgApplicationStatusSchema>;
 
 /** The applicant's own view of their application. */
 export const orgApplicationSchema = z.object({
-  id: z.string().uuid(),
+  id: z.uuid(),
   status: orgApplicationStatusSchema,
   appliedAt: z.string(),
   /** :11385 — a pending application dies if nobody acts on it, and
@@ -1564,8 +1564,8 @@ export type JoinOrgResponse = z.infer<typeof joinOrgResponseSchema>;
  *  dossier to do it. */
 export const orgApplicantSchema = z.object({
   /** The APPLICATION id — what confirm/reject address. */
-  id: z.string().uuid(),
-  userId: z.string().uuid(),
+  id: z.uuid(),
+  userId: z.uuid(),
   displayName: z.string(),
   appliedAt: z.string(),
   expiresAt: z.string(),
@@ -1714,7 +1714,7 @@ export type OrgMemberListQuery = z.infer<typeof orgMemberListQuerySchema>;
  *  from the never-see list (meals, weight, coach chats, run routes). A field
  *  added here without re-reading §2.4 is how that promise gets broken. */
 export const orgMemberSchema = z.object({
-  userId: z.string().uuid(),
+  userId: z.uuid(),
   displayName: z.string(),
   joinedAt: z.string(),
   groupLabel: z.string().nullable(),
@@ -1780,7 +1780,7 @@ export const orgMemberSchema = z.object({
       reason: z.enum(["taken_off", "no_longer_listed", "never_listed"]),
       at: z.string().nullable(),
       sameEmailName: z.string().nullable(),
-      sameEmailEntryId: z.string().uuid().nullable(),
+      sameEmailEntryId: z.uuid().nullable(),
     })
     .strict()
     .optional(),
@@ -1788,7 +1788,7 @@ export const orgMemberSchema = z.object({
    *  as "Your list" (Kd, 2026-09-27): the current record §9.7 matches them to, else the
    *  past record they joined with. Never a past record found only by a shared email,
    *  which can be a relative's. Only for staff who see the list; absent otherwise. */
-  recordId: z.string().uuid().optional(),
+  recordId: z.uuid().optional(),
   /** They also run this gym: their role and the gym's own name for it ("Front desk"), so
    *  Remove can say they keep the console (ROADMAP 4a-ii); null for a member only. Already
    *  readable from `takesSeat` (see above). Optional while an older server leaves it out. */
@@ -2122,7 +2122,7 @@ export const OWNER_ONLY_PRIVILEGES: readonly OrgPrivilege[] = ["staff.manage"];
  *  derived from a seat being complimentary, which was true only while one
  *  caller happened to behave a certain way. */
 export const orgStaffSchema = z.object({
-  userId: z.string().uuid(),
+  userId: z.uuid(),
   displayName: z.string(),
   /** Null for an OAuth-only account: `users.email` is nullable by design. */
   email: z.string().nullable(),
@@ -2175,9 +2175,9 @@ export const orgStaffSchema = z.object({
    *  False on the owner's own row and everybody else's. */
   coOwner: z.boolean().optional(),
   /** The owner has asked them to be a co-owner and they have not answered: when it ends. */
-  coOwnerRequest: z.object({ expiresAt: z.string().datetime() }).nullable().optional(),
+  coOwnerRequest: z.object({ expiresAt: z.iso.datetime() }).nullable().optional(),
   /** The owner has asked this co-owner to be the owner and they have not answered (4b-ii). */
-  ownerRequest: z.object({ expiresAt: z.string().datetime() }).nullable().optional(),
+  ownerRequest: z.object({ expiresAt: z.iso.datetime() }).nullable().optional(),
 });
 export type OrgStaff = z.infer<typeof orgStaffSchema>;
 
@@ -2191,7 +2191,7 @@ export const orgStaffResponseSchema = z.object({
   planStops: z
     .object({
       /** When the paid month ends; null when the payment company gives no date. */
-      until: z.string().datetime().nullable(),
+      until: z.iso.datetime().nullable(),
       /** A paid trial made before 2026-09-30: it ends with its trial, nothing charged. */
       trial: z.boolean(),
       /** A new owner's plan not yet started (4b-vi-a): it stops before it starts, nothing charged. */
@@ -2238,7 +2238,7 @@ export type AddOrgStaffRequest = z.infer<typeof addOrgStaffRequestSchema>;
  *  name and carries the ticks saved with it. One or the other, never both. */
 export const updateOrgStaffRequestSchema = z.union([
   z.object({ role: staffAssignableRoleSchema }).strict(),
-  z.object({ roleId: z.string().uuid() }).strict(),
+  z.object({ roleId: z.uuid() }).strict(),
 ]);
 export type UpdateOrgStaffRequest = z.infer<typeof updateOrgStaffRequestSchema>;
 
@@ -2545,7 +2545,7 @@ export const ATTENDANCE_SUMMARY_LIMIT = 400;
 export const gymAttendanceVisitSchema = z
   .object({
     day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-    markedAt: z.string().datetime(),
+    markedAt: z.iso.datetime(),
     method: gymAttendanceMethodSchema,
     hoursStatus: gymAttendanceHoursStatusSchema,
     session: gymSessionSchema.nullable(),
@@ -2582,8 +2582,8 @@ export const gymAttendancePersonSchema = z
   .object({
     /** The person's app account, or null for somebody without the app who was checked in
      *  on their record (a key tag, or staff); `entryId` is then their record (16b-ii). */
-    userId: z.string().uuid().nullable(),
-    entryId: z.string().uuid().nullable().default(null),
+    userId: z.uuid().nullable(),
+    entryId: z.uuid().nullable().default(null),
     displayName: z.string(),
     /** **A KNOWING DEVIATION FROM Part 3 §2.4, RULED BY KD ON 2026-09-03**
      *  (*"gym can see email also"*), recorded as one per R0.3.
@@ -2942,7 +2942,7 @@ export const SLIPPING_AWAY_MIN_HISTORY_DAYS =
  *  this person stopped training", and a gym is not entitled to the second. */
 export const orgSlippingAwaySchema = z
   .object({
-    userId: z.string().uuid(),
+    userId: z.uuid(),
     displayName: z.string(),
     /** THE GYM'S OWN DATE OF THE LAST VISIT, `YYYY-MM-DD`, **never a rendered
      *  phrase**. *"Last came 3 weeks ago"* is computed at draw time from the
@@ -2986,7 +2986,7 @@ export type OrgSlippingAway = z.infer<typeof orgSlippingAwaySchema>;
 
 export const orgRegularSchema = z
   .object({
-    userId: z.string().uuid(),
+    userId: z.uuid(),
     displayName: z.string(),
     /** `min(1)` AND NOT `min(ON_A_ROLL_MIN_WEEKS)`, WHICH IS DELIBERATE AND WAS
      *  RE-EXAMINED IN T3 ROUND 1 (L-6). The server's floor is 2, so the contract

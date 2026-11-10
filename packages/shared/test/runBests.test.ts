@@ -96,7 +96,7 @@ describe("the fastest stretch, between the marks", () => {
 
 describe("three real runs recorded on phones", () => {
   const fixture = z
-    .object({ runs: z.record(z.object({ points: z.array(z.tuple([z.number(), z.number(), z.number()])) })) })
+    .object({ runs: z.record(z.string(), z.object({ points: z.array(z.tuple([z.number(), z.number(), z.number()])) })) })
     .parse(JSON.parse(readFileSync(new URL("../../../apps/mobile/test/fixtures/real-runs.json", import.meta.url), "utf8")));
 
   /** The slow way to the answer: from every point, the stretch that starts there and the one that ends

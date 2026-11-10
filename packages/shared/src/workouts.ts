@@ -57,7 +57,7 @@ export const workoutListQuerySchema = z
 export type WorkoutListQuery = z.infer<typeof workoutListQuerySchema>;
 
 export const workoutListItemSchema = z.object({
-  id: z.string().uuid(),
+  id: z.uuid(),
   startedAt: z.string(),
   platform: z.enum(["web", "android", "ios"]),
   setsCount: z.number().int(),
@@ -168,7 +168,7 @@ export const mealSuggestionSchema = z.object({ meal: z.string().min(1), timing: 
 export type MealSuggestion = z.infer<typeof mealSuggestionSchema>;
 
 export const workoutSummarySchema = z.object({
-  workoutId: z.string().uuid(),
+  workoutId: z.uuid(),
   startedAt: z.string(),
   /** Time the user was actually mid-set: Σ per-set durationMs, in WHOLE
    *  SECONDS. Seconds and not minutes because a rounded-to-minutes duration is

@@ -1061,7 +1061,7 @@ export async function membersAgainstList(
 const sameContactSchema = z.array(
   z
     .object({
-      id: z.string().uuid(),
+      id: z.uuid(),
       status: z.string().nullable(),
       memberNumber: z.string().nullable(),
       fullName: z.string(),

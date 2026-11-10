@@ -137,7 +137,7 @@ export function priceRaiseWords(input: PriceRaiseWordsInput): PriceRaiseWords {
 /** One membership on the line, as the box before Save lists it: who holds it, whose it is where somebody else pays,
  *  and what the raise would do to it. */
 export const priceRaisePersonSchema = z
-  .object({ membershipId: z.string().uuid(), entryId: z.string().uuid(), name: z.string(), paidBy: z.string().nullable(), status: priceRaiseStatusSchema })
+  .object({ membershipId: z.uuid(), entryId: z.uuid(), name: z.string(), paidBy: z.string().nullable(), status: priceRaiseStatusSchema })
   .strict();
 export type PriceRaisePerson = z.infer<typeof priceRaisePersonSchema>;
 export const priceRaisePreviewResponseSchema = z.object({ currency: z.string(), people: z.array(priceRaisePersonSchema) }).strict();

@@ -64,7 +64,7 @@ function openableToday(privileges) {
 }
 
 const gym = (staffRole, privileges) => ({
-  id: '11111111-1111-1111-1111-111111111111',
+  id: '11111111-1111-4111-8111-111111111111',
   slug: 'iron-house',
   name: 'Iron House',
   city: 'Austin',

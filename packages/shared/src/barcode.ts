@@ -75,7 +75,7 @@ export const barcodeReplySchema = z.discriminatedUnion("status", [
     allergensFrom: z.literal("openfoodfacts").nullable(),
     check: packagedCheckSchema,
     /** Set where this is the person's own saved label, not a list's product. */
-    labelId: z.string().uuid().optional(),
+    labelId: z.uuid().optional(),
     /** When that label was last saved: sent back with a change to it. */
     labelSeen: z.string().optional(),
   }).strict(),

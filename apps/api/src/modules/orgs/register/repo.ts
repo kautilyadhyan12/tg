@@ -827,13 +827,13 @@ export interface SellInput {
  *  Terminal (18d-vi-b-ii), so the sale Square takes the money for is the sale recorded. */
 export const pricedSaleLineSchema = z
   .object({
-    productId: z.string().uuid(),
+    productId: z.uuid(),
     name: z.string().min(1).max(80),
     unitPriceMinor: z.number().int().min(1),
     currency: z.string().regex(/^[A-Z]{3}$/),
     quantity: z.number().int().min(1).max(99),
-    used: z.object({ id: z.string().uuid(), name: z.string().min(1), offMinor: z.number().int().min(1) }).strict().nullable(),
-    gift: z.object({ id: z.string().uuid(), offMinor: z.number().int().min(1) }).strict().nullable(),
+    used: z.object({ id: z.uuid(), name: z.string().min(1), offMinor: z.number().int().min(1) }).strict().nullable(),
+    gift: z.object({ id: z.uuid(), offMinor: z.number().int().min(1) }).strict().nullable(),
     /** Each tax, as priced (18b-v-a); empty for none. */
     taxes: z.array(z.object({ name: z.string().min(1), pcm: z.number().int().min(1), minor: z.number().int().min(0) }).strict()).max(10),
     netMinor: z.number().int().min(0),

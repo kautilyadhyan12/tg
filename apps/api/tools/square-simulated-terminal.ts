@@ -14,7 +14,7 @@ import { addSimulatedTerminal } from "../src/modules/orgs/payments/terminals.js"
 
 const env = z
   .object({
-    DATABASE_URL: z.string().url(),
+    DATABASE_URL: z.url(),
     SQUARE_ENV: z.literal("sandbox"),
     SQUARE_APPLICATION_ID: z.string().regex(/^sandbox-sq0idb-[A-Za-z0-9_-]{10,60}$/),
     SQUARE_APPLICATION_SECRET: z.string().regex(/^sandbox-sq0csb-[A-Za-z0-9_-]{10,100}$/),
@@ -25,7 +25,7 @@ if (!env.success) {
   console.error("Needs DATABASE_URL, and Square's sandbox SQUARE_ENV, SQUARE_APPLICATION_ID, SQUARE_APPLICATION_SECRET and PAYMENT_TOKENS_KEY (.env.square.local). Secrets are never printed.");
   process.exit(1);
 }
-const args = z.tuple([z.string().uuid(), squarePracticeTerminalSchema]).safeParse(process.argv.slice(2));
+const args = z.tuple([z.uuid(), squarePracticeTerminalSchema]).safeParse(process.argv.slice(2));
 if (!args.success) {
   console.error("Usage: square-simulated-terminal.ts <gymId> <saves|declines|cancels|times_out|offline|interac>");
   process.exit(2);

@@ -131,10 +131,10 @@ export type RefundReceipt = z.infer<typeof refundReceiptSchema>;
 
 /** A receipt's number as a path segment: digits only, no leading 0. */
 export const receiptParamsSchema = z
-  .object({ gymId: z.string().uuid(), number: z.string().regex(/^[1-9][0-9]{0,9}$/) })
+  .object({ gymId: z.uuid(), number: z.string().regex(/^[1-9][0-9]{0,9}$/) })
   .strict()
   .transform((p) => ({ gymId: p.gymId, number: Number(p.number) }))
-  .pipe(z.object({ gymId: z.string().uuid(), number: receiptNumberSchema }).strict());
+  .pipe(z.object({ gymId: z.uuid(), number: receiptNumberSchema }).strict());
 
 /** A bill's or a sale's amounts as a receipt prints them. Where the tax is added on top,
  *  the price listed is the total less the taxes; where the price holds them, the total. */

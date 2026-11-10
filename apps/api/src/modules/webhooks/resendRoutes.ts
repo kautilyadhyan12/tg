@@ -65,7 +65,7 @@ export function registerResendWebhookRoutes(
           if (!event.success) req.log.warn({ event: "webhook.resend_unreadable" }, "a signed Resend webhook body did not parse");
           return reply.status(200).send();
         }
-        const tagged = (name: string) => z.string().uuid().safeParse(event.data.data?.tags?.find((tag) => tag.name === name)?.value);
+        const tagged = (name: string) => z.uuid().safeParse(event.data.data?.tags?.find((tag) => tag.name === name)?.value);
         const sendId = tagged(INVITE_SEND_TAG);
         const leadSendId = tagged(LEAD_SEND_TAG);
         const staffSendId = tagged(STAFF_INVITE_SEND_TAG);

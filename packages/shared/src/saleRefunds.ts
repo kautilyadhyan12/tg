@@ -51,7 +51,7 @@ const minorSchema = z.number().int().min(0).max(99_999_999);
 /** One refund of a sale, as a screen reads it. */
 export const saleRefundSchema = z
   .object({
-    id: z.string().uuid(),
+    id: z.uuid(),
     amountMinor: minorSchema,
     /** How the money went back. */
     method: saleRefundMethodSchema,
@@ -75,7 +75,7 @@ export type SaleRefund = z.infer<typeof saleRefundSchema>;
  *  refund. `restock` is how many go back on the shelf: 0 for none. */
 export const refundSaleRequestSchema = z
   .object({
-    requestKey: z.string().uuid(),
+    requestKey: z.uuid(),
     amountMinor: z.number().int().min(1).max(99_999_999),
     method: memberPaymentByHandSchema,
     reason: saleRefundReasonSchema,
@@ -87,24 +87,24 @@ export type RefundSaleRequest = z.infer<typeof refundSaleRequestSchema>;
 /** Refund to card on one product of a sale paid on the Terminal (18d-iv-b-ii). The same key twice is one refund. */
 export const saleCardRefundRequestSchema = z
   .object({
-    requestKey: z.string().uuid(),
+    requestKey: z.uuid(),
     amountMinor: z.number().int().min(1).max(99_999_999),
     reason: saleRefundReasonSchema,
     restock: z.number().int().min(0).max(99),
     /** The Terminal, where Square needs the card present. */
-    terminalId: z.string().uuid().optional(),
+    terminalId: z.uuid().optional(),
   })
   .strict();
 export type SaleCardRefundRequest = z.infer<typeof saleCardRefundRequestSchema>;
 
 /** How many of each product of a sale went back on the shelf, when all of it is refunded at once: a product left out, none. */
 export const saleShelfSchema = z
-  .array(z.object({ saleId: z.string().uuid(), count: z.number().int().min(0).max(99) }).strict())
+  .array(z.object({ saleId: z.uuid(), count: z.number().int().min(0).max(99) }).strict())
   .max(20);
 
 /** Note a refund on all of a sale. `totalMinor` is what staff saw left: a sale that changed meanwhile is not noted. */
 export const refundWholeSaleRequestSchema = z
-  .object({ requestKey: z.string().uuid(), totalMinor: z.number().int().min(1).max(99_999_999), method: memberPaymentByHandSchema, reason: saleRefundReasonSchema, shelf: saleShelfSchema })
+  .object({ requestKey: z.uuid(), totalMinor: z.number().int().min(1).max(99_999_999), method: memberPaymentByHandSchema, reason: saleRefundReasonSchema, shelf: saleShelfSchema })
   .strict();
 export type RefundWholeSaleRequest = z.infer<typeof refundWholeSaleRequestSchema>;
 
@@ -113,7 +113,7 @@ export type RefundWholeSaleResponse = z.infer<typeof refundWholeSaleResponseSche
 
 /** Refund to card on all of a sale: one refund at Square. `amountMinor` is what the box showed as left. */
 export const saleWholeCardRefundRequestSchema = z
-  .object({ requestKey: z.string().uuid(), amountMinor: z.number().int().min(1).max(99_999_999), reason: saleRefundReasonSchema, shelf: saleShelfSchema, terminalId: z.string().uuid().optional() })
+  .object({ requestKey: z.uuid(), amountMinor: z.number().int().min(1).max(99_999_999), reason: saleRefundReasonSchema, shelf: saleShelfSchema, terminalId: z.uuid().optional() })
   .strict();
 export type SaleWholeCardRefundRequest = z.infer<typeof saleWholeCardRefundRequestSchema>;
 
@@ -184,11 +184,11 @@ export function saleRestockTooManyWords(leftCount: number): string {
     : `Only ${String(leftCount)} can go back on the shelf for this sale. Nothing was noted.`;
 }
 
-export const placeSquareRefundParamsSchema = z.object({ gymId: z.string().uuid(), saleId: z.string().uuid(), pressId: z.string().uuid() }).strict();
+export const placeSquareRefundParamsSchema = z.object({ gymId: z.uuid(), saleId: z.uuid(), pressId: z.uuid() }).strict();
 
 /** Which product a refund made in Square was for (18d-iv-d-ii): the amounts add up to what Square gave back; `restock` is how many went back on the shelf. */
 export const placeSquareRefundRequestSchema = z
-  .object({ parts: z.array(z.object({ saleId: z.string().uuid(), amountMinor: z.number().int().min(1).max(99_999_999), restock: z.number().int().min(0).max(99) }).strict()).min(1).max(20) })
+  .object({ parts: z.array(z.object({ saleId: z.uuid(), amountMinor: z.number().int().min(1).max(99_999_999), restock: z.number().int().min(0).max(99) }).strict()).min(1).max(20) })
   .strict();
 export type PlaceSquareRefundRequest = z.infer<typeof placeSquareRefundRequestSchema>;
 

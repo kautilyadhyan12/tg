@@ -86,29 +86,29 @@ export const putGoalRequestSchema = z
     kind: goalKindSchema,
     period: goalPeriodSchema.nullable(),
     target: z.number().int().positive().nullable(),
-    exerciseId: z.string().uuid().nullable(),
+    exerciseId: z.uuid().nullable(),
   })
   .strict()
   .superRefine((g, ctx) => {
     const rule = GOAL_KIND_RULES[g.kind];
     const periodFits = g.period === null ? rule.periods.length === 0 : rule.periods.includes(g.period);
     if (!periodFits) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["period"], message: "period does not fit this kind" });
+      ctx.addIssue({ code: "custom", path: ["period"], message: "period does not fit this kind" });
       return;
     }
     const max = goalTargetMax(g.kind, g.period);
     if ((max === null) !== (g.target === null) || (max !== null && g.target !== null && g.target > max)) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["target"], message: "target does not fit this kind" });
+      ctx.addIssue({ code: "custom", path: ["target"], message: "target does not fit this kind" });
     }
     if (rule.exercise !== (g.exerciseId !== null)) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["exerciseId"], message: "exercise does not fit this kind" });
+      ctx.addIssue({ code: "custom", path: ["exerciseId"], message: "exercise does not fit this kind" });
     }
   });
 export type PutGoalRequest = z.infer<typeof putGoalRequestSchema>;
 
 /** DELETE answers 204 when the goal is removed and 404 when the caller has no goal with
  *  this id, so a removal sent again after a lost reply reads 404: already gone, done. */
-export const goalIdParamsSchema = z.object({ id: z.string().uuid() }).strict();
+export const goalIdParamsSchema = z.object({ id: z.uuid() }).strict();
 
 /** Why a goal is not measured for this person today. The goal is kept, never removed. */
 export const goalHeldSchema = z.discriminatedUnion("code", [
@@ -130,10 +130,10 @@ const daySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
 export const goalSchema = z
   .object({
-    id: z.string().uuid(),
+    id: z.uuid(),
     kind: goalKindSchema,
     period: goalPeriodSchema.nullable(),
-    exerciseId: z.string().uuid().nullable(),
+    exerciseId: z.uuid().nullable(),
     exerciseSlug: z.string().nullable(),
     setBy: z.enum(["app", "user"]),
     unit: goalUnitSchema,

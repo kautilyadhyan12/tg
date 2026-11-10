@@ -548,7 +548,7 @@ export const GYM_COME_BACK_LINES: Record<string, string> = {
 // ── THE INBOX, AS A MEMBER READS IT ──
 
 export const gymInboxMessageSchema = z.object({
-  id: z.string().uuid(),
+  id: z.uuid(),
   kind: gymInboxKindSchema,
   // Counted as the rule that let it be sent counts it: a shorter limit here and one long
   // message would make the whole inbox unreadable.
@@ -566,7 +566,7 @@ export const gymInboxMessageSchema = z.object({
 export type GymInboxMessage = z.infer<typeof gymInboxMessageSchema>;
 
 export const gymInboxResponseSchema = z.object({
-  gymId: z.string().uuid(),
+  gymId: z.uuid(),
   gymName: z.string(),
   /** `paused`: the gym is closed or on no plan, and its members are shown no messages. */
   status: z.enum(["shown", "paused"]),
@@ -588,7 +588,7 @@ export type GymInboxResponse = z.infer<typeof gymInboxResponseSchema>;
  *  only those (and, when the read was cut at `GYM_INBOX_MAX`, any older than all of them), so a
  *  message written before `asOf` and saved after the read stays new too. */
 export const markGymInboxReadRequestSchema = z
-  .object({ upTo: instantSchema, ids: z.array(z.string().uuid()).max(GYM_INBOX_MAX).optional() })
+  .object({ upTo: instantSchema, ids: z.array(z.uuid()).max(GYM_INBOX_MAX).optional() })
   .strict();
 export type MarkGymInboxReadRequest = z.infer<typeof markGymInboxReadRequestSchema>;
 

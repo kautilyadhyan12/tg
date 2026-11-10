@@ -31,8 +31,8 @@ export class OrsProviderError extends Error {
 // Defensive schema for the one feature we consume. Extras are optional (ORS
 // omits them when a route has none); missing → fraction 0 (matches the Python
 // KeyError → 0.0 guard).
-const extraSummaryEntrySchema = z.object({ value: z.number(), amount: z.number() }).passthrough();
-const extraSchema = z.object({ summary: z.array(extraSummaryEntrySchema).default([]) }).passthrough();
+const extraSummaryEntrySchema = z.object({ value: z.number(), amount: z.number() }).loose();
+const extraSchema = z.object({ summary: z.array(extraSummaryEntrySchema).default([]) }).loose();
 const featureSchema = z.object({
   geometry: z.object({ coordinates: z.array(z.array(z.number())) }),
   properties: z

@@ -160,7 +160,7 @@ const foodSchema = z.object({
 
 const draftSchema = z
   .object({
-    userId: z.string().uuid(),
+    userId: z.uuid(),
     mealName: z.string(),
     foods: z.array(foodSchema),
     items: z.array(

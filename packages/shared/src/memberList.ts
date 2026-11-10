@@ -517,7 +517,7 @@ export function memberListReviewShortWords(problem: MemberListReviewProblem): st
 export const MEMBER_LIST_REVIEW_PAGE = 100;
 export const memberListReviewPersonSchema = z
   .object({
-    entryId: z.string().uuid(),
+    entryId: z.uuid(),
     fullName: z.string(),
     email: z.string().nullable(),
     phone: z.string().nullable(),
@@ -549,7 +549,7 @@ export const MEMBER_LIST_DUPLICATES_PAGE = 50;
 export const MEMBER_LIST_DUPLICATES_KEPT = 1_000;
 export const memberListDuplicatePersonSchema = z
   .object({
-    entryId: z.string().uuid(),
+    entryId: z.uuid(),
     fullName: z.string(),
     email: z.string().nullable(),
     phone: z.string().nullable(),
@@ -585,7 +585,7 @@ export const memberListDuplicatesQuerySchema = z.object({ cursor: z.string().max
 export type MemberListDuplicatesQuery = z.infer<typeof memberListDuplicatesQuerySchema>;
 /** Different people: the two records of a pair, remembered so the pair is never shown again. */
 export const memberListNotDuplicatesRequestSchema = z
-  .object({ entryIds: z.tuple([z.string().uuid(), z.string().uuid()]) })
+  .object({ entryIds: z.tuple([z.uuid(), z.uuid()]) })
   .strict()
   .refine((body) => body.entryIds[0].toLowerCase() !== body.entryIds[1].toLowerCase(), {
     message: "Two different records are needed.",
@@ -1202,7 +1202,7 @@ export const MEMBER_LIST_NO_IMPORT_NUMBERS: MemberListImportNumbers = { given: 0
  *  can say which is which, and the list counts are all zero because no person
  *  could be read out of it. */
 export const memberListPreviewSchema = z.object({
-  uploadId: z.string().uuid(),
+  uploadId: z.uuid(),
   mode: memberListModeSchema,
   expiresAt: z.string(),
   /** The gym's last CONFIRMED upload was byte for byte this file. Confirming it
@@ -1255,7 +1255,7 @@ export const memberListOnListSchema = z
     /** How the record came onto the list: an import, typed in by staff, or made when the
      *  person joined the app. */
     source: memberListEntrySourceSchema,
-    addedAt: z.string().datetime({ offset: true }),
+    addedAt: z.iso.datetime({ offset: true }),
   })
   .strict();
 export type MemberListOnList = z.infer<typeof memberListOnListSchema>;
@@ -1346,7 +1346,7 @@ export type MemberListRowsPage = z.infer<typeof memberListRowsPageSchema>;
  *  `entryId` is the record the row matched (null for somebody new): a fact about the
  *  LIST, which is what a read compares with a member's joined record (ROADMAP 3a-vi-b).
  *  Absent on an upload staged before it existed, which a read then works out again. */
-const memberListStagedEntryIdSchema = z.string().uuid().nullable().optional();
+const memberListStagedEntryIdSchema = z.uuid().nullable().optional();
 const memberListGroupedRowSchema = z
   .object({
     at: z.number().int().min(0),
@@ -1497,8 +1497,8 @@ export type MemberListRowsResponse = z.infer<typeof memberListRowsResponseSchema
 export const memberListMarksSchema = z
   .object({
     missingDigest: sha256Schema,
-    left: z.array(z.string().uuid()).max(MEMBER_LIST_MARKS_MAX),
-    stay: z.array(z.string().uuid()).max(MEMBER_LIST_MARKS_MAX),
+    left: z.array(z.uuid()).max(MEMBER_LIST_MARKS_MAX),
+    stay: z.array(z.uuid()).max(MEMBER_LIST_MARKS_MAX),
   })
   .strict()
   .refine((marks) => marks.left.length + marks.stay.length <= MEMBER_LIST_MARKS_MAX, { message: "Too many marks." });
@@ -1540,7 +1540,7 @@ export type MemberListConfirmRequest = z.infer<typeof memberListConfirmRequestSc
  *  (3a-iv), so it is read live rather than stored. `confirmedAt` is THIS upload's
  *  own instant and never a later upload's. */
 export const memberListConfirmedSchema = z.object({
-  uploadId: z.string().uuid(),
+  uploadId: z.uuid(),
   alreadyConfirmed: z.boolean(),
   version: z.number().int().min(0),
   confirmedAt: z.string(),
@@ -1763,7 +1763,7 @@ export const memberListViewSchema = z.object({
   over: memberListOverSignSchema.default({ count: 0, owing: 0 }),
   /** When the list was last deleted because the gym had no paid plan and no sign-in for
    *  six months (ROADMAP Stage 4 item 14), for the empty list's line; null if never. */
-  goneForGoodDeletedAt: z.string().datetime({ offset: true }).nullable().default(null),
+  goneForGoodDeletedAt: z.iso.datetime({ offset: true }).nullable().default(null),
 });
 export type MemberListView = z.infer<typeof memberListViewSchema>;
 
@@ -1774,7 +1774,7 @@ export type MemberListViewResponse = z.infer<typeof memberListViewResponseSchema
  *  removes one by it; everything else is what the GYM said about them, plus the one
  *  thing only this app knows — whether they are already a member here. */
 export const memberListEntrySchema = z.object({
-  entryId: z.string().uuid(),
+  entryId: z.uuid(),
   fullName: z.string(),
   email: z.string().nullable(),
   phone: z.string().nullable(),
@@ -1887,7 +1887,7 @@ export const memberListEntriesQuerySchema = z
     /** The App words to show (§18.4), given once each; current members only. */
     app: z.union([memberAppFilterSchema, z.array(memberAppFilterSchema).max(MEMBER_APP_FILTER_ORDER.length)]).optional(),
     /** Only the people who hold this one of the gym's tags (5d-ii; §18.13). */
-    tag: z.string().uuid().optional(),
+    tag: z.uuid().optional(),
     /** Only the current members who have not signed the waiver the gym asks for today
      *  (3e-ii): no signature at the desk, and none in the app by the person the record is.
      *  A current member's word, as `app` and `membership` are: a page of past members is
@@ -1940,7 +1940,7 @@ export const memberListSelectionSchema = z.discriminatedUnion("kind", [
   z
     .object({
       kind: z.literal("ticked"),
-      entryIds: z.array(z.string().uuid()).min(1).max(MEMBER_LIST_TICKED_MAX),
+      entryIds: z.array(z.uuid()).min(1).max(MEMBER_LIST_TICKED_MAX),
     })
     .strict(),
   z
@@ -1996,7 +1996,7 @@ export const MEMBER_REMOVE_TICKED_MAX = MEMBER_LIST_TICKED_MAX;
 
 /** People in the app, ticked on "In the app". */
 export const memberRosterSelectionSchema = z
-  .object({ userIds: z.array(z.string().uuid()).min(1).max(MEMBER_REMOVE_TICKED_MAX) })
+  .object({ userIds: z.array(z.uuid()).min(1).max(MEMBER_REMOVE_TICKED_MAX) })
   .strict();
 export type MemberRosterSelection = z.infer<typeof memberRosterSelectionSchema>;
 
@@ -2005,8 +2005,8 @@ export type MemberRosterSelection = z.infer<typeof memberRosterSelectionSchema>;
 export const memberRemovePersonSchema = z
   .object({
     name: z.string(),
-    entryId: z.string().uuid().nullable(),
-    userId: z.string().uuid().nullable(),
+    entryId: z.uuid().nullable(),
+    userId: z.uuid().nullable(),
   })
   .strict();
 export type MemberRemovePerson = z.infer<typeof memberRemovePersonSchema>;
@@ -2064,7 +2064,7 @@ export const memberRemovePreviewResponseSchema = z.object({ preview: memberRemov
 /** ONE PERSON A WHOLE-LIST FILE LEAVES OUT, as the list has them today (§18.8). */
 export const memberListMissingPersonSchema = z
   .object({
-    entryId: z.string().uuid(),
+    entryId: z.uuid(),
     fullName: z.string(),
     email: z.string().nullable(),
     phone: z.string().nullable(),
@@ -2328,7 +2328,7 @@ export type MemberInviteReason = z.infer<typeof memberInviteReasonSchema>;
 
 export const memberInvitePersonSchema = z
   .object({
-    entryId: z.string().uuid(),
+    entryId: z.uuid(),
     fullName: z.string(),
     email: z.string().nullable(),
     status: z.string().nullable(),
@@ -2352,7 +2352,7 @@ export const memberInvitePeopleQuerySchema = z
     /** The last person the page showed, as the server gave it: the next page starts
      *  after them in the list's order, so people the group gains or loses in between
      *  are never skipped or shown twice. */
-    cursor: z.string().uuid().optional(),
+    cursor: z.uuid().optional(),
   })
   .strict();
 export type MemberInvitePeopleQuery = z.infer<typeof memberInvitePeopleQuerySchema>;
@@ -2367,7 +2367,7 @@ export const memberInviteSelectedPeopleRequestSchema = z
   .object({
     selection: memberListSelectionSchema,
     group: z.enum(["reach", "left_out"]),
-    cursor: z.string().uuid().optional(),
+    cursor: z.uuid().optional(),
   })
   .strict();
 export type MemberInviteSelectedPeopleRequest = z.infer<typeof memberInviteSelectedPeopleRequestSchema>;
@@ -2376,7 +2376,7 @@ export const memberInvitePeopleSchema = z
   .object({
     total: z.number().int().min(0),
     people: z.array(memberInvitePersonSchema).max(MEMBER_INVITE_PEOPLE_PAGE),
-    cursor: z.string().uuid().nullable(),
+    cursor: z.uuid().nullable(),
   })
   .strict();
 export type MemberInvitePeople = z.infer<typeof memberInvitePeopleSchema>;
@@ -2464,10 +2464,10 @@ export const memberListEntryInputSchema = z
     invite: z.boolean().optional(),
     /** "Add anyway" (5b-iv-b): the records the warning named. The add goes ahead only if
      *  every record alike now is one of them; the exact "already on your list" still stops it. */
-    acknowledgedDuplicates: z.array(z.string().uuid()).min(1).max(MEMBER_LIST_POSSIBLE_MATCHES_MAX).optional(),
+    acknowledgedDuplicates: z.array(z.uuid()).min(1).max(MEMBER_LIST_POSSIBLE_MATCHES_MAX).optional(),
     /** The lead staff were shown as this person (20e-ii-b-i), marked Joined with the new
      *  record where it still shares the email or phone typed. Left out, no lead is changed. */
-    leadId: z.string().uuid().optional(),
+    leadId: z.uuid().optional(),
   })
   .strict();
 export type MemberListEntryInput = z.infer<typeof memberListEntryInputSchema>;
@@ -2501,7 +2501,7 @@ export type MemberListEntryPatch = z.infer<typeof memberListEntryPatchSchema>;
  *  to is the one NOT kept; `keepEntryId` is the one that stays. The tick is as for a
  *  change. */
 export const memberListMergeRequestSchema = z
-  .object({ keepEntryId: z.string().uuid(), acknowledgeLeavesList: z.boolean().optional() })
+  .object({ keepEntryId: z.uuid(), acknowledgeLeavesList: z.boolean().optional() })
   .strict();
 export type MemberListMergeRequest = z.infer<typeof memberListMergeRequestSchema>;
 
@@ -2519,7 +2519,7 @@ export type MemberListEntryFieldValue = z.infer<typeof memberListEntryFieldValue
  *  when they joined and their visits here during this membership. */
 export const memberListEntryMemberSchema = z
   .object({
-    userId: z.string().uuid(),
+    userId: z.uuid(),
     displayName: z.string(),
     joinedAt: z.string(),
     visits: z.number().int().min(0),
@@ -2546,9 +2546,9 @@ export const memberListEntryDetailSchema = memberListEntrySchema.extend({
    *  by the rule Remove itself uses, so the box says only what will happen. */
   removeEndsApp: z.boolean().default(false),
   /** Whose app it would end, of `members`, so the box can name them. */
-  removeEndsAppFor: z.array(z.string().uuid()).max(MEMBER_LIST_MAX_ENTRY_MEMBERS).default([]),
+  removeEndsAppFor: z.array(z.uuid()).max(MEMBER_LIST_MAX_ENTRY_MEMBERS).default([]),
   /** On a past member's page, of `members`, the staff who keep their access when it is deleted (5e-iii). */
-  keepsAppFor: z.array(z.string().uuid()).max(MEMBER_LIST_MAX_ENTRY_MEMBERS).default([]),
+  keepsAppFor: z.array(z.uuid()).max(MEMBER_LIST_MAX_ENTRY_MEMBERS).default([]),
   /** What an import found wrong on this record, each until staff fix that field or press
    *  It's correct (5b-v-d-iv). */
   review: z.array(memberListReviewLineSchema).max(MEMBER_LIST_MAX_REVIEW_ITEMS).default([]),
@@ -2597,7 +2597,7 @@ export const memberListEntryWrittenSchema = z
      *  access given back, or no free place on the plan for it. Absent otherwise. */
     app: z.enum(["back", "no_place"]).optional(),
     /** Add member: the lead marked Joined as this person (20e-ii-b-i). Absent otherwise. */
-    lead: z.object({ id: z.string().uuid(), fullName: z.string() }).strict().optional(),
+    lead: z.object({ id: z.uuid(), fullName: z.string() }).strict().optional(),
   })
   .strict();
 export type MemberListEntryWritten = z.infer<typeof memberListEntryWrittenSchema>;
@@ -2619,7 +2619,7 @@ export type MemberListEntryDeleted = z.infer<typeof memberListEntryDeletedSchema
 export const memberListAlreadyOnListSchema = z.object({
   error: z.enum(["already_on_list", "former_record"]),
   message: z.string(),
-  entryId: z.string().uuid(),
+  entryId: z.uuid(),
   requestId: z.string().optional(),
 });
 
@@ -2659,7 +2659,7 @@ export type MemberListUnlistedQuery = z.infer<typeof memberListUnlistedQuerySche
 /** One app member in the group: the name, their proved address or null, and when
  *  they joined. */
 export const memberListUnlistedPersonSchema = z
-  .object({ userId: z.string().uuid(), displayName: z.string(), email: z.string().nullable(), joinedAt: z.string() })
+  .object({ userId: z.uuid(), displayName: z.string(), email: z.string().nullable(), joinedAt: z.string() })
   .strict();
 export type MemberListUnlistedPerson = z.infer<typeof memberListUnlistedPersonSchema>;
 
@@ -2772,7 +2772,7 @@ export const memberListNextNumberSchema = z.object({ memberNumber: z.string().ma
 export type MemberListNextNumber = z.infer<typeof memberListNextNumberSchema>;
 
 /** "Not this person": which account in the app it is about (§18.4). */
-export const memberListNotThemRequestSchema = z.object({ userId: z.string().uuid() }).strict();
+export const memberListNotThemRequestSchema = z.object({ userId: z.uuid() }).strict();
 export type MemberListNotThemRequest = z.infer<typeof memberListNotThemRequestSchema>;
 
 /** The sentence for a card number typed into a field, naming the field. */

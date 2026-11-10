@@ -126,9 +126,8 @@ export const razorpayErrorSchema = z.object({
 
 /** A link to one of Razorpay's own pages: https, on rzp.io or razorpay.com, nowhere else. */
 export const razorpayPayLinkSchema = z
-  .string()
-  .max(2000)
   .url()
+  .max(2000)
   .refine((value) => {
     let link: URL;
     try {

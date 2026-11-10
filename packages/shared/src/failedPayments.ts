@@ -30,7 +30,7 @@ export const failedPaymentRetrySchema = z.discriminatedUnion("kind", [
       amountMinor: z.number().int().min(1).max(99_999_999),
     })
     .strict(),
-  z.object({ kind: z.literal("wait"), from: z.string().datetime() }).strict(),
+  z.object({ kind: z.literal("wait"), from: z.iso.datetime() }).strict(),
   z
     .object({
       kind: z.literal("no"),
@@ -47,12 +47,12 @@ export type FailedPaymentRetry = z.infer<typeof failedPaymentRetrySchema>;
 export const failedPaymentSchema = z
   .object({
     /** The bill or the fee. */
-    billId: z.string().uuid(),
-    entryId: z.string().uuid(),
+    billId: z.uuid(),
+    entryId: z.uuid(),
     name: z.string(),
     /** A past member's: still owed, as their page says. */
     past: z.boolean(),
-    membershipId: z.string().uuid(),
+    membershipId: z.uuid(),
     typeName: z.string(),
     /** The period it is for; null for a fee. */
     periodIndex: z.number().int().min(0).nullable(),

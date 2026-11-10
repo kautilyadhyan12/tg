@@ -51,7 +51,7 @@ export const keptMinutesDaySchema = z
   .object({
     day: calendarDaySchema,
     zone: timeZoneNameSchema,
-    seconds: z.number().finite().min(0).max(86_400),
+    seconds: z.number().min(0).max(86_400),
   })
   .strict();
 export type KeptMinutesDay = z.infer<typeof keptMinutesDaySchema>;

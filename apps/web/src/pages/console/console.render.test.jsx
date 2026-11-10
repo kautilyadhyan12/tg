@@ -88,7 +88,7 @@ const Members = (await import('./Members')).default;
 // ── Fixtures ────────────────────────────────────────────────────────────────
 
 const ORG = {
-  id: '11111111-1111-1111-1111-111111111111',
+  id: '11111111-1111-4111-8111-111111111111',
   slug: 'iron-house',
   name: 'Iron House',
   city: 'Austin',
@@ -1637,7 +1637,7 @@ describe('Waiting to join', () => {
 
     fireEvent.click(await screen.findByText('Confirm'));
     await waitFor(() =>
-      expect(orgService.confirmApplication).toHaveBeenCalledWith('11111111-1111-1111-1111-111111111111', 'app-1'),
+      expect(orgService.confirmApplication).toHaveBeenCalledWith('11111111-1111-4111-8111-111111111111', 'app-1'),
     );
     // THE HALF THAT MATTERS: the person is now a member, so they appear in the
     // list below rather than the owner having to reload to believe it.
@@ -2014,7 +2014,7 @@ describe('Removing a member', () => {
     // Asked, the only Remove left is the one inside the question.
     fireEvent.click(panel.getByRole('button', { name: 'Remove' }));
     await waitFor(() =>
-      expect(orgService.removeMember).toHaveBeenCalledWith('11111111-1111-1111-1111-111111111111', 'u2', { alsoStaff: false }),
+      expect(orgService.removeMember).toHaveBeenCalledWith('11111111-1111-4111-8111-111111111111', 'u2', { alsoStaff: false }),
     );
     await waitFor(() => expect(screen.queryByText('Rita Sen')).toBeNull());
     // `find`, not `get`: the roster re-read passes through its loading state,
@@ -3001,7 +3001,7 @@ describe('In the app: Remove names the personal training sessions it cancels', (
     fireEvent.click(panel.getByRole('button', { name: 'Remove' }));
     fireEvent.click(panel.getByRole('button', { name: 'Remove' }));
     const box = within(await screen.findByTestId('pt-sessions-end-box'));
-    expect(orgService.removeMember).toHaveBeenLastCalledWith('11111111-1111-1111-1111-111111111111', 'u2', { alsoStaff: false });
+    expect(orgService.removeMember).toHaveBeenLastCalledWith('11111111-1111-4111-8111-111111111111', 'u2', { alsoStaff: false });
     expect(box.getByRole('heading', { name: '2 personal training sessions will be cancelled' })).toBeTruthy();
     expect(within(box.getByTestId('pt-sessions-ending')).getAllByRole('listitem')).toHaveLength(2);
     // No error sentence: it is a question, and she is still in the list behind.
@@ -3010,7 +3010,7 @@ describe('In the app: Remove names the personal training sessions it cancels', (
 
     fireEvent.click(box.getByRole('button', { name: 'Remove and cancel 2 sessions' }));
     await waitFor(() => expect(orgService.removeMember).toHaveBeenCalledTimes(2));
-    expect(orgService.removeMember).toHaveBeenLastCalledWith('11111111-1111-1111-1111-111111111111', 'u2', { alsoStaff: false, confirmPtSessions: MARK });
+    expect(orgService.removeMember).toHaveBeenLastCalledWith('11111111-1111-4111-8111-111111111111', 'u2', { alsoStaff: false, confirmPtSessions: MARK });
     await waitFor(() => expect(screen.queryByTestId('pt-sessions-end-box')).toBeNull());
     await waitFor(() => expect(screen.queryByText('Rita Sen')).toBeNull());
   });

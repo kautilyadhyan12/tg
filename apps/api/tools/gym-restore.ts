@@ -43,7 +43,7 @@ import { getOrgIdBySlug, restoreGym } from "../src/modules/orgs/repo.js";
 // Standalone tool: it parses ONLY the env it needs (R2.3), following
 // tools/trial-sweep.ts.
 const envSchema = z.object({
-  DATABASE_URL: z.string().url(),
+  DATABASE_URL: z.url(),
   LOG_LEVEL: z.string().optional(),
 });
 const env = envSchema.safeParse(process.env);
@@ -70,7 +70,7 @@ try {
   // actually get** — the console's routes are `/console/:orgSlug`, so the
   // address bar carries a name and the uuid appears on no screen. A uuid is
   // still accepted because a support conversation or a log line may carry one.
-  const asUuid = z.string().uuid().safeParse(gymArg);
+  const asUuid = z.uuid().safeParse(gymArg);
   const gymId = asUuid.success ? asUuid.data : await getOrgIdBySlug(sql, gymArg);
   if (gymId === null) {
     log.error({ gym: gymArg, event: "orgs.gym_not_found" }, "no gym with that name or id");

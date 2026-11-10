@@ -16,12 +16,12 @@ const PRACTICE = {
   pays: { cardId: "ccof:customer-card-id-visa-ok", brand: "VISA", last4: "1111" },
 } as const;
 
-const env = z.object({ DATABASE_URL: z.string().url(), SQUARE_ENV: z.literal("sandbox") }).safeParse(process.env);
+const env = z.object({ DATABASE_URL: z.url(), SQUARE_ENV: z.literal("sandbox") }).safeParse(process.env);
 if (!env.success) {
   console.error("Needs DATABASE_URL and Square's sandbox SQUARE_ENV (.env.square.local).");
   process.exit(1);
 }
-const args = z.tuple([z.string().uuid(), z.string().uuid(), z.enum(["declines", "pays"])]).safeParse(process.argv.slice(2));
+const args = z.tuple([z.uuid(), z.uuid(), z.enum(["declines", "pays"])]).safeParse(process.argv.slice(2));
 if (!args.success) {
   console.error("Usage: square-practice-card.ts <gymId> <entryId> <declines|pays>");
   process.exit(2);

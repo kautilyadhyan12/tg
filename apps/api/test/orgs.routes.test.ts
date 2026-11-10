@@ -461,13 +461,13 @@ d("orgs routes (real Postgres)", () => {
     expect((await get("/v1/orgs/mine")).statusCode).toBe(401);
     expect((await post("/v1/orgs/join", { code: "AAAAAA" })).statusCode).toBe(401);
     expect(
-      (await get("/v1/orgs/11111111-1111-1111-1111-111111111111/members")).statusCode,
+      (await get("/v1/orgs/11111111-1111-4111-8111-111111111111/members")).statusCode,
     ).toBe(401);
     expect(
-      (await get("/v1/orgs/11111111-1111-1111-1111-111111111111/codes")).statusCode,
+      (await get("/v1/orgs/11111111-1111-4111-8111-111111111111/codes")).statusCode,
     ).toBe(401);
     expect(
-      (await post("/v1/orgs/11111111-1111-1111-1111-111111111111/trial", {})).statusCode,
+      (await post("/v1/orgs/11111111-1111-4111-8111-111111111111/trial", {})).statusCode,
     ).toBe(401);
     // ADDED BY T3 ROUND 1's Low-5 ON THE PRICE-LIST CARD, and it is the SECOND
     // time this list has been caught trailing the module — :12227's L-1 below is
@@ -475,7 +475,7 @@ d("orgs routes (real Postgres)", () => {
     // The route was guarded from the day it shipped; what was missing is the
     // line that notices if it ever stops being.
     expect(
-      (await get("/v1/orgs/11111111-1111-1111-1111-111111111111/plans")).statusCode,
+      (await get("/v1/orgs/11111111-1111-4111-8111-111111111111/plans")).statusCode,
     ).toBe(401);
     // T3 L-1: this test named FIVE of the module's NINE routes and none of the
     // four the waiting-room card added — proven by deleting `app.authenticate`
@@ -484,8 +484,8 @@ d("orgs routes (real Postgres)", () => {
     // when the preHandler did not run, so a missing guard is a 500 and not an
     // open door. A guard whose absence nothing notices is still a guard nobody
     // is checking.
-    const someGym = "11111111-1111-1111-1111-111111111111";
-    const someApplication = "22222222-2222-2222-2222-222222222222";
+    const someGym = "11111111-1111-4111-8111-111111111111";
+    const someApplication = "22222222-2222-4222-8222-222222222222";
     expect((await get("/v1/orgs/applications/mine")).statusCode).toBe(401);
     expect((await get(`/v1/orgs/${someGym}/applications`)).statusCode).toBe(401);
     // ADDED BY THE READ-ONLY CARD'S T3 ROUND 1 (rule 4). The NUDGE route was the
@@ -509,7 +509,7 @@ d("orgs routes (real Postgres)", () => {
     expect(
       (await post(`/v1/orgs/${someGym}/applications/${someApplication}/reject`, {})).statusCode,
     ).toBe(401);
-    const someUser = "33333333-3333-3333-3333-333333333333";
+    const someUser = "33333333-3333-4333-8333-333333333333";
     expect((await del(`/v1/orgs/${someGym}/members/${someUser}`)).statusCode).toBe(401);
     // The code-management card's three, added HERE rather than in its own
     // block, because L-1's finding was precisely that a card can add routes and
@@ -2212,7 +2212,7 @@ d("orgs routes (real Postgres)", () => {
     // list under a count still reporting three people waiting. A malformed
     // cursor already restarted; a stale one must too.
     const stale = await get(
-      `/v1/orgs/${org.org.id}/applications?limit=2&cursor=33333333-3333-3333-3333-333333333333`,
+      `/v1/orgs/${org.org.id}/applications?limit=2&cursor=33333333-3333-4333-8333-333333333333`,
       { cookies: owner.cookies },
     );
     expect(stale.statusCode).toBe(200);

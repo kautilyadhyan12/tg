@@ -163,7 +163,7 @@ export function memberGiftLine(g: LeadMemberGift, member: string, friend: string
 /** A gift waiting for a person on the list, as Add membership and Sell fill it in. */
 export const memberGiftSchema = z
   .object({
-    id: z.string().uuid(),
+    id: z.uuid(),
     ...termsShape,
     /** What it comes off: Add membership fills in a membership's, Sell a products'. */
     on: memberGiftOnSchema,

@@ -674,8 +674,8 @@ d("A new owner chooses their plan before the handed-over plan ends (real Postgre
   });
 
   describe("whom the reminder offers the next plan (no database)", () => {
-    const KD = "11111111-1111-1111-1111-111111111111";
-    const CORA = "22222222-2222-2222-2222-222222222222";
+    const KD = "11111111-1111-4111-8111-111111111111";
+    const CORA = "22222222-2222-4222-8222-222222222222";
     const now = new Date("2027-11-01T00:00:00Z");
     const due = {
       endsAt: new Date("2027-11-08T00:00:00Z"),

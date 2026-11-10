@@ -31,9 +31,9 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
 const { orgService } = await import('../../api/orgsApi');
 const MemberListUpload = (await import('./MemberListUpload')).default;
 
-const GYM = '11111111-1111-1111-1111-111111111111';
-const UPLOAD = '22222222-2222-2222-2222-222222222222';
-const UPLOAD_ADD = '33333333-3333-3333-3333-333333333333';
+const GYM = '11111111-1111-4111-8111-111111111111';
+const UPLOAD = '22222222-2222-4222-8222-222222222222';
+const UPLOAD_ADD = '33333333-3333-4333-8333-333333333333';
 const WORDS = { people: 'members', person: 'member' };
 
 const counts = (over = {}) => ({
@@ -88,8 +88,8 @@ const namesRows = (root) => root.getAllByTestId('names-row');
 
 const DIGEST = 'a'.repeat(64);
 const DIGEST_BOX = 'c'.repeat(64);
-const USER = '44444444-4444-4444-4444-444444444444';
-const entryId = (n) => `55555555-5555-5555-5555-${String(n).padStart(12, '0')}`;
+const USER = '44444444-4444-4444-8444-444444444444';
+const entryId = (n) => `55555555-5555-4555-8555-${String(n).padStart(12, '0')}`;
 /** Somebody the file leaves out, as the missing-people read gives them (§18.8). */
 const missingOne = (n, fullName, over = {}, onList = {}) => ({
   entryId: entryId(n),

@@ -111,7 +111,7 @@ export const healthScreeningSchema = z
      *  trying to lose weight. NO SINGLE FLAG says "the under-18 rule applies to
      *  this person" — a screen that needs that reads the age. */
     noCalorieCut: z.boolean(),
-    updatedAt: z.string().datetime().nullable(),
+    updatedAt: z.iso.datetime().nullable(),
   })
   .strict()
   .refine((s) => (s.answered ? s.hasCondition !== null && s.updatedAt !== null : s.hasCondition === null && s.checkFirst === null && s.updatedAt === null), {
@@ -227,12 +227,12 @@ export type RecordConsentRequest = z.infer<typeof recordConsentRequestSchema>;
 
 export const consentRecordSchema = z
   .object({
-    id: z.string().uuid(),
+    id: z.uuid(),
     purpose: consentPurposeSchema,
     wordingVersion: z.string(),
     wording: z.string().min(1),
     appVersion: z.string(),
-    recordedAt: z.string().datetime(),
+    recordedAt: z.iso.datetime(),
   })
   .strict();
 export type ConsentRecord = z.infer<typeof consentRecordSchema>;

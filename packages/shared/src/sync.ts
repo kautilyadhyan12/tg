@@ -17,7 +17,7 @@ const INT4_SECONDS_MAX = Math.floor(INT4_MAX / 1000);
 
 export const workoutSyncPayloadSchema = z
   .object({
-    workoutId: z.string().uuid(), // client-generated: THE idempotency key (Part 4 §3.5)
+    workoutId: z.uuid(), // client-generated: THE idempotency key (Part 4 §3.5)
     // THE CLASS, not just the case (the lesson this repo has recorded four
     // times). The T3 on `b80bd3c` found `datetime({ offset: true })` admitting
     // an offset JS cannot parse; a grep for that option found exactly two sites
@@ -92,7 +92,7 @@ export const workoutSyncPayloadSchema = z
         for (const s of sets) {
           if (seen.has(s.setIndex)) {
             ctx.addIssue({
-              code: z.ZodIssueCode.custom,
+              code: "custom",
               message: `duplicate setIndex ${String(s.setIndex)}`,
             });
           }

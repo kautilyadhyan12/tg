@@ -473,7 +473,7 @@ describe("pressing confirm, and the list you keep (3a-iii-b's own shapes)", () =
 
   it("what a confirm answers is counts and instants, never a name", () => {
     const answer = {
-      uploadId: "11111111-2222-3333-4444-555555555555",
+      uploadId: "11111111-2222-4333-8444-555555555555",
       alreadyConfirmed: false,
       version: 3,
       confirmedAt: new Date().toISOString(),
@@ -554,7 +554,7 @@ describe("pressing confirm, and the list you keep (3a-iii-b's own shapes)", () =
 
   it("a page of the list is bounded, and its cursor is either a place to go or the end", () => {
     const entry = {
-      entryId: "11111111-2222-3333-4444-555555555555",
+      entryId: "11111111-2222-4333-8444-555555555555",
       fullName: "Ada Lovelace",
       email: "ada@example.com",
       phone: "+447911123456",
@@ -776,7 +776,7 @@ describe("the wider record, kept (3a-v-b's own shapes)", () => {
 
   it("one person on a page carries every kept field and NOT the gym's own columns", () => {
     const entry = {
-      entryId: "11111111-2222-3333-4444-555555555555",
+      entryId: "11111111-2222-4333-8444-555555555555",
       fullName: "Ada Lovelace",
       email: "ada@example.com",
       phone: "+447911123456",
@@ -845,7 +845,7 @@ describe("the wider record, kept (3a-v-b's own shapes)", () => {
 
 describe("keeping the list by hand (3a-iv's own shapes)", () => {
   const entry = {
-    entryId: "11111111-2222-3333-4444-555555555555",
+    entryId: "11111111-2222-4333-8444-555555555555",
     fullName: "Ann Bell",
     email: "ann@x.example",
     phone: null,

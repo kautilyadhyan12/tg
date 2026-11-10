@@ -51,7 +51,7 @@ const Members = (await import('./Members')).default;
 // ── Fixtures ────────────────────────────────────────────────────────────────
 
 const ORG = {
-  id: '11111111-1111-1111-1111-111111111111',
+  id: '11111111-1111-4111-8111-111111111111',
   slug: 'iron-house',
   name: 'Iron House',
   city: 'Austin',
@@ -356,7 +356,7 @@ describe('what is sent is exactly what is ticked', () => {
   /** One address for every gym's Members, so nothing remounts when the gym changes. A row
    *  from the first gym, pressed under the second, would be sent to the second gym's id. */
   it('carries no staff list, and no open person, from one gym onto another', async () => {
-    const gymB = { ...ORG, id: 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', slug: 'iron-palace', name: 'Iron Palace' };
+    const gymB = { ...ORG, id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', slug: 'iron-palace', name: 'Iron Palace' };
     orgService.getMine.mockResolvedValue({ data: { orgs: [ORG, gymB] } });
     orgService.getStaff.mockResolvedValueOnce({ data: { staff: [OWNER, MANAGER] } });
     await drawPerson();

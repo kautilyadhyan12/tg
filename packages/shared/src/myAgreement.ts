@@ -19,8 +19,8 @@ export type MySignedAgreement = z.infer<typeof mySignedAgreementSchema>;
  *  shows one under another. `none`: nothing to sign (over, cancelled or frozen, or no agreement asked for). */
 export const myAgreementResponseSchema = z
   .object({
-    gymId: z.string().uuid(),
-    membershipId: z.string().uuid(),
+    gymId: z.uuid(),
+    membershipId: z.uuid(),
     gymName: z.string(),
     timezone: z.string(),
     membershipName: z.string(),
@@ -37,7 +37,7 @@ export const myAgreementResponseSchema = z
   .strict();
 export type MyAgreementResponse = z.infer<typeof myAgreementResponseSchema>;
 
-export const signMyAgreementBodySchema = z.object({ agreementId: z.string().uuid(), factsKey: factsKeySchema, name: signedNameSchema }).strict();
+export const signMyAgreementBodySchema = z.object({ agreementId: z.uuid(), factsKey: factsKeySchema, name: signedNameSchema }).strict();
 export type SignMyAgreementBody = z.infer<typeof signMyAgreementBodySchema>;
 
 export const signMyAgreementResponseSchema = z.object({ signed: mySignedAgreementSchema, emailed: agreementEmailedSchema }).strict();

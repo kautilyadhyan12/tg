@@ -180,17 +180,17 @@ const stockSchema = z.number().int().min(0).max(PRODUCT_STOCK_MAX);
 
 export const gymProductSchema = z
   .object({
-    id: z.string().uuid(),
+    id: z.uuid(),
     name: z.string(),
     priceMinor: minorSchema,
     currency: currencySchema,
     /** The gym's tax rates charged on it, in the order they were picked (a product's form keeps the
      *  rates it had in their places, and a rate ticked later goes after them); empty for no tax (18b-v-a). */
-    taxRateIds: z.array(z.string().uuid()).max(TAX_RATES_MAX),
+    taxRateIds: z.array(z.uuid()).max(TAX_RATES_MAX),
     /** How many are left; null where the gym does not count it. */
     stock: stockSchema.nullable(),
-    archivedAt: z.string().datetime().nullable(),
-    updatedAt: z.string().datetime(),
+    archivedAt: z.iso.datetime().nullable(),
+    updatedAt: z.iso.datetime(),
   })
   .strict();
 export type GymProduct = z.infer<typeof gymProductSchema>;
@@ -201,7 +201,7 @@ export const saveGymProductRequestSchema = z
     priceMinor: z.number().int().min(1).max(MEMBERSHIP_PRICE_MINOR_MAX),
     /** The gym's rates it charges, each once; together at most 30% (checked on the server). */
     taxRateIds: z
-      .array(z.string().uuid())
+      .array(z.uuid())
       .max(TAX_RATES_MAX)
       .refine((ids) => new Set(ids).size === ids.length, "rate_twice"),
     stock: stockSchema.nullable(),
@@ -211,14 +211,14 @@ export type SaveGymProductRequest = z.infer<typeof saveGymProductRequestSchema>;
 
 /** `updatedAt` is the product as the form read it: a sale or another change since then
  *  refuses the save, so a stock count never goes back to an older number. */
-export const updateGymProductRequestSchema = saveGymProductRequestSchema.extend({ updatedAt: z.string().datetime() }).strict();
+export const updateGymProductRequestSchema = saveGymProductRequestSchema.extend({ updatedAt: z.iso.datetime() }).strict();
 export type UpdateGymProductRequest = z.infer<typeof updateGymProductRequestSchema>;
 
 /** One of the gym's named tax rates (18b-iii), with what charges it: so the screen can say
  *  what a change reaches before it is made, and why one in use cannot be removed. */
 export const gymTaxRateSchema = z
   .object({
-    id: z.string().uuid(),
+    id: z.uuid(),
     name: z.string(),
     pcm: ratePcmSchema,
     /** Products on sale that charge it. */
@@ -251,7 +251,7 @@ export type SaveTaxRateRequest = z.infer<typeof saveTaxRateRequestSchema>;
 export const chargeTaxRateRequestSchema = z
   .object({
     use: z.enum(["memberships", "products"]),
-    ids: z.array(z.string().uuid()).max(200),
+    ids: z.array(z.uuid()).max(200),
   })
   .strict();
 export type ChargeTaxRateRequest = z.infer<typeof chargeTaxRateRequestSchema>;
@@ -275,7 +275,7 @@ export type SaleTax = z.infer<typeof saleTaxSchema>;
 
 export const gymSaleSchema = z
   .object({
-    id: z.string().uuid(),
+    id: z.uuid(),
     /** The product as it was named and priced when it was sold. */
     itemName: z.string(),
     quantity: z.number().int().min(1).max(SALE_QUANTITY_MAX),
@@ -298,12 +298,12 @@ export const gymSaleSchema = z
     method: salePaymentMethodSchema,
     /** The gym's own day, and the instant. */
     soldOn: daySchema,
-    soldAt: z.string().datetime(),
+    soldAt: z.iso.datetime(),
     /** The member of staff who sold it; null where they have since left the app. */
     by: z.string().nullable(),
     /** Who bought it; null for a walk-in, or for somebody whose record was deleted for good
      *  since (`personDeleted`). */
-    person: z.object({ entryId: z.string().uuid(), name: z.string() }).strict().nullable(),
+    person: z.object({ entryId: z.uuid(), name: z.string() }).strict().nullable(),
     personDeleted: z.boolean(),
     /** Staff voided the sale: kept, and counted in nothing. */
     undone: z.boolean(),
@@ -327,9 +327,9 @@ export const gymSaleSchema = z
     /** The chargebacks on the payment (18d-iv-e-i), on the sale's first line, for staff who may sell. */
     chargebacks: z.array(chargebackSeenSchema).default([]),
     /** Refunded in Square, or a chargeback lost (18d-iv-e-ii-b), with no product said (18d-iv-d-ii), on the sale's first line: staff choose, and the money counts from then. */
-    toPlace: z.array(z.object({ pressId: z.string().uuid(), chargeback: z.boolean().default(false), amountMinor: minorSchema, on: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), room: z.array(z.object({ saleId: z.string().uuid(), minor: minorSchema }).strict()) }).strict()).default([]),
+    toPlace: z.array(z.object({ pressId: z.uuid(), chargeback: z.boolean().default(false), amountMinor: minorSchema, on: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), room: z.array(z.object({ saleId: z.uuid(), minor: minorSchema }).strict()) }).strict()).default([]),
     /** Its product, to open from the sale. */
-    productId: z.string().uuid().nullable().default(null),
+    productId: z.uuid().nullable().default(null),
     /** Its receipt's number, the gym's own (18g-i): every line of one sale has the same. */
     receiptNumber: receiptNumberSchema,
     /** Its place in its sale, from 1 (18q). Who bought it, how it was paid, its day and
@@ -387,17 +387,17 @@ export type VoidSaleRequest = z.infer<typeof voidSaleRequestSchema>;
  *  notebook's own row (`memberBills.ts`), listed so the day's takings are whole. */
 export const dayPaymentSchema = z
   .object({
-    id: z.string().uuid(),
+    id: z.uuid(),
     /** The membership it was for, by the name it was sold under. */
     typeName: z.string(),
     amountMinor: minorSchema,
     currency: currencySchema,
     method: memberPaymentMethodSchema,
-    paidAt: z.string().datetime(),
+    paidAt: z.iso.datetime(),
     by: z.string().nullable(),
     /** Who paid; null where their record was deleted for good since (18m): the payment
      *  stays in the day's takings, with no name. */
-    person: z.object({ entryId: z.string().uuid(), name: z.string() }).strict().nullable(),
+    person: z.object({ entryId: z.uuid(), name: z.string() }).strict().nullable(),
     /** Its receipt's number, the gym's own (18g-i). */
     receiptNumber: receiptNumberSchema,
     /** A late cancel, no-show or freeze fee rather than the membership itself (18q-ii). */
@@ -482,10 +482,10 @@ export const sellPageResponseSchema = z
     membershipTypes: z.array(
       z
         .object({
-          id: z.string().uuid(),
+          id: z.uuid(),
           name: z.string(),
           /** The tax rates its bills charge, in order (18b-iii; 18b-v-b); empty for none. */
-          taxRateIds: z.array(z.string().uuid()).max(TAX_RATES_MAX),
+          taxRateIds: z.array(z.uuid()).max(TAX_RATES_MAX),
           /** Free: it opens no bill, so it charges no tax. */
           free: z.boolean(),
         })
@@ -519,15 +519,15 @@ export const sellPageQuerySchema = z
 const saleTotalSchema = z.number().int().min(1).max(MEMBERSHIP_PRICE_MINOR_MAX);
 /** The buyer's own Refer a friend gift filled in (20e-ii-b-ii-a), in place of a discount, and
  *  what the screen showed it takes off: worked out again on the server. */
-const memberGiftUseSchema = z.object({ id: z.string().uuid(), offMinor: saleTotalSchema }).strict().nullable().default(null);
+const memberGiftUseSchema = z.object({ id: z.uuid(), offMinor: saleTotalSchema }).strict().nullable().default(null);
 
 /** One product of a sale (18q): how many, the gym's discount on it if any, and what the
  *  screen showed it comes to. */
 export const saleLineRequestSchema = z
   .object({
-    productId: z.string().uuid(),
+    productId: z.uuid(),
     quantity: z.number().int().min(1).max(SALE_QUANTITY_MAX),
-    discountId: z.string().uuid().nullable().default(null),
+    discountId: z.uuid().nullable().default(null),
     memberGift: memberGiftUseSchema,
     totalMinor: saleTotalSchema,
   })
@@ -535,8 +535,8 @@ export const saleLineRequestSchema = z
 
 const basketRequestSchema = z
   .object({
-    requestKey: z.string().uuid(),
-    entryId: z.string().uuid().nullable(),
+    requestKey: z.uuid(),
+    entryId: z.uuid().nullable(),
     method: memberPaymentByHandSchema,
     totalMinor: saleTotalSchema,
     lines: z.array(saleLineRequestSchema).min(1).max(SALE_LINES_MAX),
@@ -546,13 +546,13 @@ const basketRequestSchema = z
 /** A sale of one product may still be sent as that product's fields alone. */
 const oneProductRequestSchema = z
   .object({
-    requestKey: z.string().uuid(),
-    productId: z.string().uuid(),
+    requestKey: z.uuid(),
+    productId: z.uuid(),
     quantity: z.number().int().min(1).max(SALE_QUANTITY_MAX),
-    entryId: z.string().uuid().nullable(),
+    entryId: z.uuid().nullable(),
     method: memberPaymentByHandSchema,
     totalMinor: saleTotalSchema,
-    discountId: z.string().uuid().nullable().default(null),
+    discountId: z.uuid().nullable().default(null),
     memberGift: memberGiftUseSchema,
   })
   .strict()
@@ -572,11 +572,11 @@ export const sellProductRequestSchema = z.union([basketRequestSchema, oneProduct
 
 function basketChecks(v: { entryId: string | null; totalMinor: number; lines: readonly { productId: string; discountId: string | null; memberGift: unknown; totalMinor: number }[] }, ctx: z.RefinementCtx): void {
   const products = new Set(v.lines.map((l) => l.productId));
-  if (products.size !== v.lines.length) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "product_twice" });
+  if (products.size !== v.lines.length) ctx.addIssue({ code: "custom", message: "product_twice" });
   const gifts = v.lines.filter((l) => l.memberGift !== null);
-  if (gifts.length > 1) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "member_gift_once" });
-  if (gifts.some((l) => l.discountId !== null) || (gifts.length > 0 && v.entryId === null)) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "member_gift_alone" });
-  if (v.lines.reduce((n, l) => n + l.totalMinor, 0) !== v.totalMinor) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "total_not_lines" });
+  if (gifts.length > 1) ctx.addIssue({ code: "custom", message: "member_gift_once" });
+  if (gifts.some((l) => l.discountId !== null) || (gifts.length > 0 && v.entryId === null)) ctx.addIssue({ code: "custom", message: "member_gift_alone" });
+  if (v.lines.reduce((n, l) => n + l.totalMinor, 0) !== v.totalMinor) ctx.addIssue({ code: "custom", message: "total_not_lines" });
 }
 export type SellProductRequest = z.infer<typeof sellProductRequestSchema>;
 export type SaleLineRequest = SellProductRequest["lines"][number];
@@ -587,9 +587,9 @@ export type SellProductRequestBody = z.input<typeof sellProductRequestSchema>;
  *  gym's Terminal it goes to in place of a payment method. */
 export const terminalSaleRequestSchema = z
   .object({
-    terminalId: z.string().uuid(),
-    requestKey: z.string().uuid(),
-    entryId: z.string().uuid().nullable(),
+    terminalId: z.uuid(),
+    requestKey: z.uuid(),
+    entryId: z.uuid().nullable(),
     totalMinor: saleTotalSchema,
     lines: z.array(saleLineRequestSchema).min(1).max(SALE_LINES_MAX),
   })
@@ -601,14 +601,14 @@ export type TerminalSaleRequest = z.infer<typeof terminalSaleRequestSchema>;
 export type TerminalSaleRequestBody = z.input<typeof terminalSaleRequestSchema>;
 
 /** `saleId` is the sale's first line; every line of it has `receiptNumber`. */
-export const sellProductResponseSchema = z.object({ saleId: z.string().uuid(), receiptNumber: receiptNumberSchema, register: sellPageResponseSchema }).strict();
+export const sellProductResponseSchema = z.object({ saleId: z.uuid(), receiptNumber: receiptNumberSchema, register: sellPageResponseSchema }).strict();
 export type SellProductResponse = z.infer<typeof sellProductResponseSchema>;
 
 export const salePeopleQuerySchema = z.object({ query: z.string().trim().min(2).max(80) }).strict();
 
 export const salePersonSchema = z
   .object({
-    entryId: z.string().uuid(),
+    entryId: z.uuid(),
     name: z.string(),
     email: z.string().nullable(),
     memberNumber: z.string().nullable(),

@@ -15,9 +15,9 @@ export const storedResendEventSchema = z
   .object({
     type: resendEmailEventTypeSchema,
     emailId: z.string().min(1).max(100),
-    sendId: z.string().uuid().nullable(),
-    leadSendId: z.string().uuid().nullable().default(null),
-    staffSendId: z.string().uuid().nullable().default(null),
+    sendId: z.uuid().nullable(),
+    leadSendId: z.uuid().nullable().default(null),
+    staffSendId: z.uuid().nullable().default(null),
     bounceType: z.string().max(40).nullable(),
     bounceSubType: z.string().max(40).nullable(),
   })

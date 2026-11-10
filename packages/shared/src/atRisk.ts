@@ -136,7 +136,7 @@ export const atRiskLastMessageSchema = z.object({ preset: z.string().nullable(),
 /** The gym's own words to one person. `key` is made once for a box, so a second press of
  *  it sends nothing more. The words are checked as a message to a group's are. */
 export const atRiskMessageRequestSchema = z
-  .object({ userId: z.string().uuid(), body: z.string().min(1).max(GYM_MESSAGE_BODY_MAX * 4), key: z.string().uuid() })
+  .object({ userId: z.uuid(), body: z.string().min(1).max(GYM_MESSAGE_BODY_MAX * 4), key: z.uuid() })
   .strict();
 export type AtRiskMessageRequest = z.infer<typeof atRiskMessageRequestSchema>;
 export const atRiskMessageResponseSchema = z.object({ message: z.object({ body: z.string(), sentAt: z.string() }).strict() }).strict();
@@ -144,9 +144,9 @@ export type AtRiskMessageResponse = z.infer<typeof atRiskMessageResponseSchema>;
 
 export const atRiskPersonSchema = z.object({
   /** The record on the gym's list, when they have one. */
-  entryId: z.string().uuid().nullable(),
+  entryId: z.uuid().nullable(),
   /** The app account a message goes to, when exactly one holds the record. */
-  userId: z.string().uuid().nullable(),
+  userId: z.uuid().nullable(),
   app: atRiskAppSchema,
   name: z.string(),
   lastVisitOn: daySchema,

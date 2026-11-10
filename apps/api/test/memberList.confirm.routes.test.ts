@@ -1337,7 +1337,7 @@ d("member list: pressing confirm, and the list you keep (real Postgres)", () => 
       expect((await get(`${listUrl(org.org.id)}/entries?nonsense=1`, owner.cookies)).statusCode).toBe(400);
       // An upload id of the right shape that is nobody's.
       expect(
-        (await post(confirmUrl(org.org.id, "11111111-2222-3333-4444-555555555555"), { permissionConfirmed: true }, owner.cookies)).statusCode,
+        (await post(confirmUrl(org.org.id, "11111111-2222-4333-8444-555555555555"), { permissionConfirmed: true }, owner.cookies)).statusCode,
       ).toBe(404);
 
       // A GYM WITH NO LIVE PLAN IS READ-ONLY, NOT BLIND (§4.2). Its staff cannot

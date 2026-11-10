@@ -1,0 +1,593 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`a provider's documented reply is read > paddleCustomerSchema #1 1`] = `
+{
+  "email": "sam.rivera+paddle@gmail.com",
+  "id": "ctm_01hv6y1jedq4p1n0yqn5ba3ky4",
+}
+`;
+
+exports[`a provider's documented reply is read > paddlePortalSessionSchema #1 1`] = `
+{
+  "customer_id": "ctm_01hv6y1jedq4p1n0yqn5ba3ky4",
+  "urls": {
+    "general": {
+      "overview": "https://customer-portal.paddle.com/cpl_01j7zbyqs3vah3aafp4jf62qaw?action=overview&token=pga_x",
+    },
+    "subscriptions": [
+      {
+        "cancel_subscription": "https://customer-portal.paddle.com/cpl_01j7zbyqs3vah3aafp4jf62qaw?action=cancel_subscription&subscription_id=sub_01hv8x29kz0t586xy6zn1a62ny&token=pga_x",
+        "id": "sub_01hv8x29kz0t586xy6zn1a62ny",
+        "update_subscription_payment_method": "https://customer-portal.paddle.com/cpl_01j7zbyqs3vah3aafp4jf62qaw?action=update_subscription_payment_method&subscription_id=sub_01hv8x29kz0t586xy6zn1a62ny&token=pga_x",
+      },
+    ],
+  },
+}
+`;
+
+exports[`a provider's documented reply is read > paddlePriceSchema #1 1`] = `
+{
+  "billing_cycle": {
+    "frequency": 1,
+    "interval": "month",
+  },
+  "custom_data": {
+    "plan": "zz_mid",
+  },
+  "id": "pri_01gsz8x8sawmvhz1pv30nge1ke",
+  "name": "Monthly",
+  "product_id": "pro_01gsz4t5hdjse780zja8vvr7jg",
+  "quantity": {
+    "maximum": 1,
+    "minimum": 1,
+  },
+  "status": "active",
+  "tax_mode": "account_setting",
+  "unit_price": {
+    "amount": "1500",
+    "currency_code": "USD",
+  },
+}
+`;
+
+exports[`a provider's documented reply is read > paddleSubscriptionSchema #1 1`] = `
+{
+  "canceled_at": null,
+  "currency_code": "USD",
+  "current_billing_period": {
+    "ends_at": "2024-05-12T10:18:47.635628Z",
+    "starts_at": "2024-04-12T10:18:47.635628Z",
+  },
+  "customer_id": "ctm_01hv6y1jedq4p1n0yqn5ba3ky4",
+  "discount": null,
+  "id": "sub_01hv8x29kz0t586xy6zn1a62ny",
+  "items": [
+    {
+      "price": {
+        "billing_cycle": {
+          "frequency": 1,
+          "interval": "month",
+        },
+        "custom_data": {
+          "plan": "zz_mid",
+        },
+        "id": "pri_01gsz8x8sawmvhz1pv30nge1ke",
+        "type": "standard",
+        "unit_price": {
+          "amount": "1500",
+          "currency_code": "USD",
+        },
+      },
+      "quantity": 1,
+    },
+  ],
+  "next_billed_at": "2024-05-12T10:18:47.635628Z",
+  "paused_at": null,
+  "scheduled_change": null,
+  "status": "active",
+  "updated_at": "2024-04-12T10:18:47.635628Z",
+}
+`;
+
+exports[`a provider's documented reply is read > paddleSubscriptionSchema #2 1`] = `
+{
+  "canceled_at": null,
+  "currency_code": "USD",
+  "current_billing_period": {
+    "ends_at": "2024-05-12T10:18:47.635628Z",
+    "starts_at": "2024-04-12T10:18:47.635628Z",
+  },
+  "customer_id": "ctm_01hv6y1jedq4p1n0yqn5ba3ky4",
+  "discount": {
+    "ends_at": null,
+    "id": "dsc_01gtgztp8fpchantd5g1wrksa3",
+    "starts_at": "2024-04-12T10:18:47.635628Z",
+  },
+  "id": "sub_01hv8x29kz0t586xy6zn1a62ny",
+  "items": [
+    {
+      "price": {
+        "billing_cycle": {
+          "frequency": 1,
+          "interval": "month",
+        },
+        "custom_data": {
+          "plan": "zz_mid",
+        },
+        "id": "pri_01gsz8x8sawmvhz1pv30nge1ke",
+        "type": "standard",
+        "unit_price": {
+          "amount": "1500",
+          "currency_code": "USD",
+        },
+      },
+      "quantity": 1,
+    },
+  ],
+  "next_billed_at": "2024-05-12T10:18:47.635628Z",
+  "paused_at": null,
+  "scheduled_change": {
+    "action": "cancel",
+    "effective_at": "2024-05-12T10:18:47.635628Z",
+  },
+  "status": "active",
+  "updated_at": "2024-04-12T10:18:47.635628Z",
+}
+`;
+
+exports[`a provider's documented reply is read > paddleSubscriptionSchema #3 1`] = `
+{
+  "canceled_at": "2024-04-12T10:18:47.635628Z",
+  "currency_code": "USD",
+  "current_billing_period": null,
+  "customer_id": "ctm_01hv6y1jedq4p1n0yqn5ba3ky4",
+  "discount": null,
+  "id": "sub_01hv8x29kz0t586xy6zn1a62ny",
+  "items": [
+    {
+      "price": {
+        "billing_cycle": {
+          "frequency": 1,
+          "interval": "month",
+        },
+        "custom_data": {
+          "plan": "zz_mid",
+        },
+        "id": "pri_01gsz8x8sawmvhz1pv30nge1ke",
+        "type": "standard",
+        "unit_price": {
+          "amount": "1500",
+          "currency_code": "USD",
+        },
+      },
+      "quantity": 1,
+    },
+  ],
+  "next_billed_at": null,
+  "paused_at": null,
+  "scheduled_change": null,
+  "status": "canceled",
+  "updated_at": "2024-04-12T10:18:47.635628Z",
+}
+`;
+
+exports[`a provider's documented reply is read > paddleTransactionSchema #1 1`] = `
+{
+  "adjustments": [
+    {
+      "action": "refund",
+      "status": "approved",
+    },
+  ],
+  "billed_at": "2024-04-12T10:18:47.635628Z",
+  "created_at": "2024-04-12T10:18:47.635628Z",
+  "currency_code": "USD",
+  "details": {
+    "totals": {
+      "discount": "0",
+      "grand_total": "1500",
+    },
+  },
+  "id": "txn_01hv8wptq8987qeep44cyrewp9",
+  "items": [
+    {
+      "price": {
+        "custom_data": {
+          "plan": "zz_mid",
+        },
+        "id": "pri_01gsz8x8sawmvhz1pv30nge1ke",
+        "trial_period": null,
+        "unit_price": {
+          "amount": "1500",
+          "currency_code": "USD",
+        },
+      },
+      "quantity": 1,
+    },
+  ],
+  "origin": "subscription_recurring",
+  "status": "completed",
+  "subscription_id": "sub_01hv8x29kz0t586xy6zn1a62ny",
+}
+`;
+
+exports[`a provider's documented reply is read > paddleTransactionSchema #2 1`] = `
+{
+  "adjustments": undefined,
+  "billed_at": null,
+  "created_at": "2024-04-12T10:18:47.635628Z",
+  "currency_code": "USD",
+  "details": {
+    "totals": null,
+  },
+  "id": "txn_01hv8wptq8987qeep44cyrewp9",
+  "items": [
+    {
+      "price": {
+        "custom_data": {
+          "plan": "zz_mid",
+        },
+        "id": "pri_01gsz8x8sawmvhz1pv30nge1ke",
+        "trial_period": null,
+        "unit_price": {
+          "amount": "1500",
+          "currency_code": "USD",
+        },
+      },
+      "quantity": 1,
+    },
+  ],
+  "origin": "subscription_recurring",
+  "status": "ready",
+  "subscription_id": "sub_01hv8x29kz0t586xy6zn1a62ny",
+}
+`;
+
+exports[`a provider's documented reply is read > paddleWebhookBodySchema #1 1`] = `
+{
+  "data": {
+    "address_id": "add_01hv8gq3318ktkfengj2r75gfx",
+    "billing_cycle": {
+      "frequency": 1,
+      "interval": "month",
+    },
+    "billing_details": null,
+    "business_id": null,
+    "canceled_at": null,
+    "collection_mode": "automatic",
+    "created_at": "2024-04-12T10:18:47.635628Z",
+    "currency_code": "USD",
+    "current_billing_period": {
+      "ends_at": "2024-05-12T10:18:47.635628Z",
+      "starts_at": "2024-04-12T10:18:47.635628Z",
+    },
+    "custom_data": {
+      "gymId": "3f2b8c1e-9a4d-4e7b-8c2a-1d5e6f7a8b9c",
+    },
+    "customer_id": "ctm_01hv6y1jedq4p1n0yqn5ba3ky4",
+    "discount": null,
+    "first_billed_at": "2024-04-12T10:18:47.635628Z",
+    "id": "sub_01hv8x29kz0t586xy6zn1a62ny",
+    "import_meta": null,
+    "items": [
+      {
+        "created_at": "2024-04-12T10:18:47.635628Z",
+        "next_billed_at": "2024-04-12T10:18:47.635628Z",
+        "previously_billed_at": "2024-04-12T10:18:47.635628Z",
+        "price": {
+          "billing_cycle": {
+            "frequency": 1,
+            "interval": "month",
+          },
+          "created_at": "2024-04-12T10:18:47.635628Z",
+          "custom_data": {
+            "plan": "zz_mid",
+          },
+          "description": "Monthly",
+          "id": "pri_01gsz8x8sawmvhz1pv30nge1ke",
+          "import_meta": null,
+          "name": "Monthly",
+          "product_id": "pro_01gsz4t5hdjse780zja8vvr7jg",
+          "quantity": {
+            "maximum": 1,
+            "minimum": 1,
+          },
+          "status": "active",
+          "tax_mode": "account_setting",
+          "trial_period": null,
+          "type": "standard",
+          "unit_price": {
+            "amount": "1500",
+            "currency_code": "USD",
+          },
+          "unit_price_overrides": [],
+          "updated_at": "2024-04-12T10:18:47.635628Z",
+        },
+        "product": {
+          "id": "pro_01gsz4t5hdjse780zja8vvr7jg",
+          "name": "Gym",
+          "status": "active",
+        },
+        "quantity": 1,
+        "recurring": true,
+        "status": "active",
+        "trial_dates": null,
+        "updated_at": "2024-04-12T10:18:47.635628Z",
+      },
+    ],
+    "next_billed_at": "2024-05-12T10:18:47.635628Z",
+    "paused_at": null,
+    "scheduled_change": null,
+    "started_at": "2024-04-12T10:18:47.635628Z",
+    "status": "active",
+    "updated_at": "2024-04-12T10:18:47.635628Z",
+  },
+  "event_id": "evt_01hv8x2acma2gz9y6kfvrxm6dx",
+  "event_type": "subscription.created",
+  "occurred_at": "2024-04-12T10:18:49.621022Z",
+}
+`;
+
+exports[`a provider's documented reply is read > razorpayInvoiceSchema #1 1`] = `
+{
+  "amount": 129900,
+  "amount_due": 0,
+  "amount_paid": 129900,
+  "billing_end": 1597084200,
+  "created_at": 1593344888,
+  "entity": "invoice",
+  "id": "inv_00000000000001",
+  "paid_at": 1593344889,
+  "payment_id": "pay_00000000000001",
+  "short_url": "https://rzp.io/i/Ys4feGqEp",
+  "status": "paid",
+  "subscription_id": "sub_00000000000001",
+}
+`;
+
+exports[`a provider's documented reply is read > razorpayInvoiceSchema #2 1`] = `
+{
+  "amount": 129900,
+  "amount_due": 129900,
+  "amount_paid": 0,
+  "billing_end": 1597084200,
+  "created_at": 1593344888,
+  "entity": "invoice",
+  "id": "inv_00000000000001",
+  "paid_at": null,
+  "payment_id": null,
+  "short_url": "https://rzp.io/i/Ys4feGqEp",
+  "status": "issued",
+  "subscription_id": "sub_00000000000001",
+}
+`;
+
+exports[`a provider's documented reply is read > razorpayPaymentSchema #1 1`] = `
+{
+  "amount": 129900,
+  "amount_refunded": 0,
+  "currency": "INR",
+  "entity": "payment",
+  "id": "pay_00000000000001",
+  "status": "captured",
+}
+`;
+
+exports[`a provider's documented reply is read > razorpayPlanSchema #1 1`] = `
+{
+  "entity": "plan",
+  "id": "plan_00000000000001",
+  "interval": 1,
+  "item": {
+    "active": true,
+    "amount": 129900,
+    "currency": "INR",
+    "name": "Gym",
+  },
+  "notes": {},
+  "period": "monthly",
+}
+`;
+
+exports[`a provider's documented reply is read > razorpayPlanSchema #2 1`] = `
+{
+  "entity": "plan",
+  "id": "plan_00000000000001",
+  "interval": 1,
+  "item": {
+    "active": true,
+    "amount": 129900,
+    "currency": "INR",
+    "name": "Gym",
+  },
+  "notes": {
+    "code": "zz_mid",
+  },
+  "period": "monthly",
+}
+`;
+
+exports[`a provider's documented reply is read > razorpaySubscriptionSchema #1 1`] = `
+{
+  "charge_at": 1582963200,
+  "created_at": 1580283807,
+  "current_end": 1582963200,
+  "current_start": 1580284732,
+  "customer_id": "cust_D0000000000001",
+  "ended_at": null,
+  "entity": "subscription",
+  "expire_by": 1580626740,
+  "id": "sub_00000000000001",
+  "notes": {
+    "gymId": "3f2b8c1e-9a4d-4e7b-8c2a-1d5e6f7a8b9c",
+  },
+  "paid_count": 1,
+  "plan_id": "plan_00000000000001",
+  "quantity": 1,
+  "start_at": 1580284732,
+  "status": "active",
+  "total_count": 12,
+}
+`;
+
+exports[`a provider's documented reply is read > razorpaySubscriptionSchema #2 1`] = `
+{
+  "charge_at": 1582963200,
+  "created_at": 1580283807,
+  "current_end": null,
+  "current_start": null,
+  "customer_id": null,
+  "ended_at": null,
+  "entity": "subscription",
+  "expire_by": 1580626740,
+  "id": "sub_00000000000001",
+  "notes": {},
+  "paid_count": 1,
+  "plan": {
+    "entity": "plan",
+    "id": "plan_00000000000001",
+    "interval": 1,
+    "item": {
+      "active": true,
+      "amount": 129900,
+      "currency": "INR",
+      "name": "Gym",
+    },
+    "notes": {},
+    "period": "monthly",
+  },
+  "plan_id": "plan_00000000000001",
+  "quantity": 1,
+  "start_at": 1580284732,
+  "status": "created",
+  "total_count": 12,
+}
+`;
+
+exports[`a provider's documented reply is read > razorpayWebhookBodySchema #1 1`] = `
+{
+  "entity": "event",
+  "event": "subscription.charged",
+  "payload": {
+    "subscription": {
+      "entity": {
+        "id": "sub_00000000000001",
+      },
+    },
+  },
+}
+`;
+
+exports[`a provider's documented reply is read > razorpayWebhookBodySchema #2 1`] = `
+{
+  "entity": "event",
+  "event": "invoice.paid",
+  "payload": {
+    "invoice": {
+      "entity": {
+        "subscription_id": "sub_00000000000001",
+      },
+    },
+  },
+}
+`;
+
+exports[`a provider's documented reply is read > resendWebhookBodySchema #1 1`] = `
+{
+  "data": {
+    "bounce": {
+      "subType": "Suppressed",
+      "type": "Permanent",
+    },
+    "email_id": "56761188-7520-42d8-8898-ff6fc54ce618",
+    "tags": [
+      {
+        "name": "invite_send",
+        "value": "3f2b8c1e-9a4d-4e7b-8c2a-1d5e6f7a8b9c",
+      },
+    ],
+  },
+  "type": "email.bounced",
+}
+`;
+
+exports[`a provider's documented reply is read > resendWebhookBodySchema #2 1`] = `
+{
+  "data": {
+    "email_id": "56761188-7520-42d8-8898-ff6fc54ce618",
+    "tags": [
+      {
+        "name": "invite_send",
+        "value": "3f2b8c1e-9a4d-4e7b-8c2a-1d5e6f7a8b9c",
+      },
+    ],
+  },
+  "type": "email.complained",
+}
+`;
+
+exports[`a provider's documented reply is read > squareMerchantSchema #1 1`] = `
+{
+  "merchant": {
+    "business_name": "Apple A Day",
+    "country": "US",
+    "currency": "USD",
+    "id": "DM7VKY8Q63GNP",
+    "status": "ACTIVE",
+  },
+}
+`;
+
+exports[`a provider's documented reply is read > squarePaymentAnswerSchema #1 1`] = `
+{
+  "payment": {
+    "amount_money": {
+      "amount": 1000,
+      "currency": "USD",
+    },
+    "card_details": {
+      "card": {
+        "card_brand": "MASTERCARD",
+        "last_4": "9029",
+      },
+    },
+    "created_at": "2021-10-13T21:14:29.577Z",
+    "id": "R2B3Z8WMVt3EAmzYWLZvz7Y69EbZY",
+    "location_id": "L88917AVBK2S5",
+    "order_id": "pRsjRTgFWATl7so6DxdKBJa7ssbZY",
+    "source_type": "CARD",
+    "status": "COMPLETED",
+    "total_money": {
+      "amount": 1000,
+      "currency": "USD",
+    },
+  },
+}
+`;
+
+exports[`a provider's documented reply is read > squareTokenSchema #1 1`] = `
+{
+  "access_token": "EAAA-test-access-token",
+  "expires_at": "2026-12-10T19:21:06Z",
+  "merchant_id": "MLT2F9W1PPWQ7",
+  "refresh_token": "EQAA-test-refresh-token",
+  "token_type": "bearer",
+}
+`;
+
+exports[`a provider's documented reply is read > squareWebhookBodySchema #1 1`] = `
+{
+  "data": {
+    "id": "ka9c3uKkUtNfdb7N8QJ8yDYAkqOZY",
+    "object": {
+      "dispute": {
+        "id": "ka9c3uKkUtNfdb7N8QJ8yDYAkqOZY",
+      },
+    },
+    "type": "dispute",
+  },
+  "event_id": "a1b2c3d4-1234-5678-9abc-def012345678",
+  "merchant_id": "6SSW7HV8K2ST5",
+  "type": "dispute.created",
+}
+`;

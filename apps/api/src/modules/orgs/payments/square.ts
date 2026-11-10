@@ -383,7 +383,7 @@ export function createSquareApi(opts: {
     return { status: response.status, ok: response.ok, json };
   }
 
-  async function call<T extends z.ZodTypeAny>(
+  async function call<T extends z.ZodType>(
     method: "GET" | "POST" | "PUT" | "DELETE",
     path: string,
     schema: T,
@@ -402,7 +402,7 @@ export function createSquareApi(opts: {
     const parsed = schema.safeParse(sent.json);
     // A 2xx we cannot read is treated as no answer, never as a success.
     if (!parsed.success) return { kind: "unavailable", status: sent.status };
-    return { kind: "ok", value: parsed.data as z.infer<T> };
+    return { kind: "ok", value: parsed.data };
   }
 
   const bearer = (token: string) => `Bearer ${token}`;

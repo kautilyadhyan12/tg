@@ -261,7 +261,7 @@ describe("the route's line (Google's encoded polyline)", () => {
 });
 
 // ── Real trips: cars and a bus recorded on Android phones (UCI's GPS Trajectories, CC BY 4.0) ───
-const trips = z.object({ trips: z.record(z.object({ points: z.array(z.array(z.number())) })) }).parse(
+const trips = z.object({ trips: z.record(z.string(), z.object({ points: z.array(z.array(z.number())) })) }).parse(
   JSON.parse(readFileSync(new URL("./fixtures/uci-go-track-trips.json", import.meta.url), "utf8")),
 );
 

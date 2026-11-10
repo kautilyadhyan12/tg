@@ -22,7 +22,7 @@ import { onMealLogged, onWorkoutSynced } from "../../src/modules/gamification/se
 
 const envSchema = z.object({
   MONGO_URI: z.string().min(1),
-  DATABASE_URL: z.string().url(),
+  DATABASE_URL: z.url(),
 });
 
 async function main(): Promise<void> {

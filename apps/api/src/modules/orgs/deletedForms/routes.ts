@@ -13,10 +13,10 @@ import * as service from "./service.js";
 
 const HOUR_MS = 60 * 60 * 1000;
 
-const formParamsSchema = z.object({ gymId: z.string().uuid(), kind: deletedFormKindSchema, formId: z.string().uuid() }).strict();
+const formParamsSchema = z.object({ gymId: z.uuid(), kind: deletedFormKindSchema, formId: z.uuid() }).strict();
 
-function parseOr400<S extends z.ZodTypeAny>(schema: S, value: unknown, req: FastifyRequest, reply: FastifyReply): z.output<S> | null {
-  const parsed: z.SafeParseReturnType<unknown, z.output<S>> = schema.safeParse(value);
+function parseOr400<S extends z.ZodType>(schema: S, value: unknown, req: FastifyRequest, reply: FastifyReply): z.output<S> | null {
+  const parsed: z.ZodSafeParseResult<z.output<S>> = schema.safeParse(value);
   if (!parsed.success) {
     // Issue paths and codes only, never the value: a search is a person's name.
     void reply.status(400).send({

@@ -16,7 +16,7 @@ export const REFUND_REVIEW_KINDS = ["fee", "failed", "lost", "late", "place", "c
 export const refundToReviewSchema = z
   .object({
     /** The fee's bill for a fee; the payment for a cooling-off refund; the refund press for the rest. */
-    id: z.string().uuid(),
+    id: z.uuid(),
     kind: z.enum(REFUND_REVIEW_KINDS),
     /** Choose product on a lost chargeback, not a refund made in Square (18d-iv-e-ii-b). */
     chargeback: z.boolean().default(false),
@@ -35,9 +35,9 @@ export const refundToReviewSchema = z
     on: daySchema.nullable(),
     member: z
       .object({
-        entryId: z.string().uuid(),
-        membershipId: z.string().uuid(),
-        paymentId: z.string().uuid(),
+        entryId: z.uuid(),
+        membershipId: z.uuid(),
+        paymentId: z.uuid(),
         typeName: z.string(),
         /** Paid by hand: Void payment, as such a fee takes no refund. */
         byHand: z.boolean(),
@@ -50,7 +50,7 @@ export const refundToReviewSchema = z
       .nullable(),
     sale: z
       .object({
-        saleId: z.string().uuid(),
+        saleId: z.uuid(),
         /** The day Sell lists it on. */
         day: daySchema,
         item: z.string(),
@@ -75,8 +75,8 @@ export type RefundsToReviewResponse = z.infer<typeof refundsToReviewResponseSche
 
 export const refundsToReviewQuerySchema = z.object({ from: z.coerce.number().int().min(0).max(100_000).default(0) }).strict();
 
-export const refundReviewFeeParamsSchema = z.object({ gymId: z.string().uuid(), billId: z.string().uuid() }).strict();
-export const refundReviewPressParamsSchema = z.object({ gymId: z.string().uuid(), pressId: z.string().uuid() }).strict();
+export const refundReviewFeeParamsSchema = z.object({ gymId: z.uuid(), billId: z.uuid() }).strict();
+export const refundReviewPressParamsSchema = z.object({ gymId: z.uuid(), pressId: z.uuid() }).strict();
 
 export const REFUND_REVIEW_WORDS = {
   changed: "This has changed since the list was read. The list now shows what is left to do.",

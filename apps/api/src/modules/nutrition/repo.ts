@@ -692,7 +692,7 @@ export async function keepDayTargets(sql: SqlOrTx, userId: string, day: string, 
 
 // ── body measurements (Part 4 §3.6) — THE ONE SOURCE OF BODY WEIGHT ─────────
 
-const metricsSchema = z.record(z.number().finite().nonnegative());
+const metricsSchema = z.record(z.string(), z.number().nonnegative());
 
 interface MeasurementDbRow {
   id: string;

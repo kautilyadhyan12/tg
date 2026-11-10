@@ -17,7 +17,7 @@ export const checkinPassResponseSchema = z
   .object({
     pass: z.string().length(CHECKIN_PASS_LENGTH),
     /** When the app should ask for the next one: the end of this pass's window. */
-    refreshAt: z.string().datetime(),
+    refreshAt: z.iso.datetime(),
   })
   .strict();
 export type CheckinPassResponse = z.infer<typeof checkinPassResponseSchema>;
@@ -66,7 +66,7 @@ export const checkinScanResponseSchema = z.discriminatedUnion("result", [
       gymName: z.string(),
       person: checkinPersonSchema,
       notice: checkinNoticeSchema,
-      firstAt: z.string().datetime(),
+      firstAt: z.iso.datetime(),
       timezone: z.string(),
       clockFormat: gymClockFormatSchema,
     })
@@ -93,7 +93,7 @@ export const CHECKIN_KEY_TAG_MISSES = 10;
 export const CHECKIN_KEY_TAG_PAUSE_MINUTES = 10;
 
 export const checkinDeviceIdParamsSchema = z
-  .object({ gymId: z.string().uuid(), deviceId: z.string().uuid() })
+  .object({ gymId: z.uuid(), deviceId: z.uuid() })
   .strict();
 
 export const addCheckinDeviceRequestSchema = z
@@ -107,14 +107,14 @@ export const checkinDeviceStateSchema = z.enum(["waiting", "on", "off"]);
 
 export const checkinDeviceSchema = z
   .object({
-    id: z.string().uuid(),
+    id: z.uuid(),
     name: z.string(),
     state: checkinDeviceStateSchema,
-    linkExpiresAt: z.string().datetime().nullable(),
-    lastSeenAt: z.string().datetime().nullable(),
-    createdAt: z.string().datetime(),
+    linkExpiresAt: z.iso.datetime().nullable(),
+    lastSeenAt: z.iso.datetime().nullable(),
+    createdAt: z.iso.datetime(),
     /** Until when the device takes no key tags, after too many numbers nobody has. */
-    keyTagsPausedUntil: z.string().datetime().nullable(),
+    keyTagsPausedUntil: z.iso.datetime().nullable(),
   })
   .strict();
 export type CheckinDevice = z.infer<typeof checkinDeviceSchema>;
@@ -126,7 +126,7 @@ export type CheckinDevicesResponse = z.infer<typeof checkinDevicesResponseSchema
 
 /** The device and its one-time link, shown once to the member of staff who made it. */
 export const checkinDeviceLinkResponseSchema = z
-  .object({ device: checkinDeviceSchema, link: z.string().url() })
+  .object({ device: checkinDeviceSchema, link: z.url() })
   .strict();
 export type CheckinDeviceLinkResponse = z.infer<typeof checkinDeviceLinkResponseSchema>;
 
@@ -174,8 +174,8 @@ export type CheckinPeopleQuery = z.infer<typeof checkinPeopleQuerySchema>;
 
 /** Whom staff picked: a record on the gym's list, or a member in the app who has none. */
 export const checkinPickSchema = z.union([
-  z.object({ entryId: z.string().uuid() }).strict(),
-  z.object({ userId: z.string().uuid() }).strict(),
+  z.object({ entryId: z.uuid() }).strict(),
+  z.object({ userId: z.uuid() }).strict(),
 ]);
 export type CheckinPick = z.infer<typeof checkinPickSchema>;
 
@@ -208,7 +208,7 @@ export const staffCheckinResponseSchema = z.discriminatedUnion("result", [
       result: z.literal("already"),
       person: checkinPersonSchema,
       notice: checkinNoticeSchema,
-      firstAt: z.string().datetime(),
+      firstAt: z.iso.datetime(),
       timezone: z.string(),
       clockFormat: gymClockFormatSchema,
     })
@@ -220,14 +220,14 @@ export type StaffCheckinResponse = z.infer<typeof staffCheckinResponseSchema>;
 export const CHECKIN_LOG_LIMIT = 50;
 
 export const checkinLogQuerySchema = z
-  .object({ since: z.string().datetime().optional() })
+  .object({ since: z.iso.datetime().optional() })
   .strict();
 export type CheckinLogQuery = z.infer<typeof checkinLogQuerySchema>;
 
 export const checkinLogVisitSchema = z
   .object({
-    id: z.string().uuid(),
-    markedAt: z.string().datetime(),
+    id: z.uuid(),
+    markedAt: z.iso.datetime(),
     name: z.string(),
     method: gymAttendanceMethodSchema,
     /** The desk's name for a pass or key tag, the staff member's for staff; null for the
@@ -285,7 +285,7 @@ export const addVisitResponseSchema = z
   .strict();
 export type AddVisitResponse = z.infer<typeof addVisitResponseSchema>;
 
-export const visitIdParamsSchema = z.object({ gymId: z.string().uuid(), visitId: z.string().uuid() }).strict();
+export const visitIdParamsSchema = z.object({ gymId: z.uuid(), visitId: z.uuid() }).strict();
 
 export const removeVisitResponseSchema = z.object({ removed: z.literal(true), day: calendarDay }).strict();
 export type RemoveVisitResponse = z.infer<typeof removeVisitResponseSchema>;

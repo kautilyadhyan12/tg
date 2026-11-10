@@ -7,7 +7,7 @@ import { z } from "zod";
 /** Something changed that a page may be showing. */
 export const liveNewsSchema = z.discriminatedUnion("what", [
   /** A person's memberships on the gym's list: given, changed, paid, or an agreement signed. */
-  z.object({ what: z.literal("memberships"), entryId: z.string().uuid() }).strict(),
+  z.object({ what: z.literal("memberships"), entryId: z.uuid() }).strict(),
   /** A visit at the gym: added (the desk, staff, an earlier day) or removed. Removed means the
    *  check-in log reads the whole of today again; added, only what is newer than it holds. */
   z.object({ what: z.literal("visits"), change: z.enum(["added", "removed"]) }).strict(),
@@ -28,7 +28,7 @@ export const liveMessageSchema = z.union([z.object({ what: z.literal("ready") })
 export type LiveMessage = z.infer<typeof liveMessageSchema>;
 
 /** News on its way between servers: which gym's open lines it is for. */
-export const liveNewsForGymSchema = z.object({ gymId: z.string().uuid(), news: liveNewsSchema }).strict();
+export const liveNewsForGymSchema = z.object({ gymId: z.uuid(), news: liveNewsSchema }).strict();
 export type LiveNewsForGym = z.infer<typeof liveNewsForGymSchema>;
 
 /** Refusals of the line, in the console's words. */

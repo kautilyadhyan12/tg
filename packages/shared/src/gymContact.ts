@@ -52,7 +52,7 @@ export function cleanGymContactPhone(typed: string): string | null {
   return gymContactPhoneProblem(typed) === null ? tidyPhone(typed) : null;
 }
 
-const emailSchema = z.string().max(GYM_CONTACT_EMAIL_MAX_CHARS).email();
+const emailSchema = z.email().max(GYM_CONTACT_EMAIL_MAX_CHARS);
 
 /** An email address as a gym types it, trimmed. Null for anything that is not one. */
 export function cleanGymContactEmail(typed: string): string | null {

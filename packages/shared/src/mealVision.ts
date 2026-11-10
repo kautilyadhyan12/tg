@@ -54,7 +54,7 @@ const dropFields = (fields: readonly string[]) => (v: unknown): unknown =>
     : v;
 
 /** A slot's value where it is one, else unknown (null). */
-const orUnknown = <O>(schema: z.ZodType<O, z.ZodTypeDef, unknown>) =>
+const orUnknown = <O>(schema: z.ZodType<O>) =>
   z.unknown().transform((v): O | null => {
     const read = schema.safeParse(v);
     return read.success ? read.data : null;
@@ -166,7 +166,7 @@ export const openAiCompletionSchema = z.object({
     prompt_tokens: z.number().int().nonnegative(),
     // Thinking tokens are counted inside completion_tokens and billed as output.
     completion_tokens: z.number().int().nonnegative(),
-    completion_tokens_details: z.object({ reasoning_tokens: z.number().int().nonnegative().default(0) }).default({}),
+    completion_tokens_details: z.object({ reasoning_tokens: z.number().int().nonnegative().default(0) }).prefault({}),
   }),
 });
 

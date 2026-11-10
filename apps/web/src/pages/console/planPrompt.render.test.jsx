@@ -80,7 +80,7 @@ const Overview = (await import('./Overview')).default;
 const Members = (await import('./Members')).default;
 const NewGym = (await import('./NewGym')).default;
 
-const GYM_ID = '11111111-1111-1111-1111-111111111111';
+const GYM_ID = '11111111-1111-4111-8111-111111111111';
 
 /** An owner's row as `/v1/orgs/mine` serves it. `privileges` is spelled out
  *  rather than left absent: the prompt's gate reads the effective set, and a

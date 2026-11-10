@@ -169,7 +169,7 @@ export const labelFoodSaveSchema = z.object({
 }).strict();
 export type LabelFoodSave = z.infer<typeof labelFoodSaveSchema>;
 
-export const labelFoodParamSchema = z.object({ id: z.string().uuid() }).strict();
+export const labelFoodParamSchema = z.object({ id: z.uuid() }).strict();
 
 /** The photo line the spec asks for in the scan screen (Part 2B §7, amended 2026-10-28). */
 export const PHOTO_PRIVACY_LINE = "Photos aren’t kept on our servers. An unsaved one stays on this device until you save or discard it. The scanning service keeps a copy for up to 30 days to check for abuse.";

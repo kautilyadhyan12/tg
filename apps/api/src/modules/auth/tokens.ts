@@ -11,11 +11,11 @@ import type { AppConfig } from "../../config.js";
 
 // A presented JWT is external input (R2.3) — parse, don't cast.
 const accessClaimsSchema = z.object({
-  sub: z.string().uuid(),
+  sub: z.uuid(),
   typ: z.literal("access"),
   // The sign-in session (refresh family) the token was issued under. Absent on a
   // token signed before the claim existed.
-  fid: z.string().uuid().optional(),
+  fid: z.uuid().optional(),
   // When it runs out, in seconds; jsonwebtoken writes it on every token it signs.
   exp: z.number().int().optional(),
 });

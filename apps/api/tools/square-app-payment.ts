@@ -24,7 +24,7 @@ import { squareSettings } from "../src/modules/orgs/payments/settings.js";
 
 const env = z
   .object({
-    DATABASE_URL: z.string().url(),
+    DATABASE_URL: z.url(),
     SQUARE_ENV: z.literal("sandbox"),
     SQUARE_APPLICATION_ID: z.string().regex(/^sandbox-sq0idb-[A-Za-z0-9_-]{10,60}$/),
     SQUARE_APPLICATION_SECRET: z.string().regex(/^sandbox-sq0csb-[A-Za-z0-9_-]{10,100}$/),
@@ -37,11 +37,11 @@ if (!env.success) {
 }
 const args = z
   .union([
-    z.tuple([z.literal("pay"), z.string().uuid(), z.string().email()]),
-    z.tuple([z.literal("pay-fee"), z.string().uuid(), z.string().email()]),
-    z.tuple([z.enum(["check", "close", "check-buy", "close-buy"]), z.string().uuid(), z.string().email(), z.string().uuid()]),
-    z.tuple([z.literal("buy"), z.string().uuid(), z.string().email(), z.string().min(1)]),
-    z.tuple([z.literal("buy"), z.string().uuid(), z.string().email(), z.string().min(1), z.string().min(1).max(200)]),
+    z.tuple([z.literal("pay"), z.uuid(), z.email()]),
+    z.tuple([z.literal("pay-fee"), z.uuid(), z.email()]),
+    z.tuple([z.enum(["check", "close", "check-buy", "close-buy"]), z.uuid(), z.email(), z.uuid()]),
+    z.tuple([z.literal("buy"), z.uuid(), z.email(), z.string().min(1)]),
+    z.tuple([z.literal("buy"), z.uuid(), z.email(), z.string().min(1), z.string().min(1).max(200)]),
   ])
   .safeParse(process.argv.slice(2));
 if (!args.success) {

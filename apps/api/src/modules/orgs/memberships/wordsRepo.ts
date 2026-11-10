@@ -256,7 +256,7 @@ async function placeInTurns(
 
 /** The type as the price list holds it now, with when it last changed. */
 function typeNow(raw: unknown): { type: HeldMembershipTypeChoice; updatedAt: Date } {
-  return { type: typeChoice(raw), updatedAt: z.object({ updated_at: z.date() }).passthrough().parse(raw).updated_at };
+  return { type: typeChoice(raw), updatedAt: z.object({ updated_at: z.date() }).loose().parse(raw).updated_at };
 }
 
 /** Whether the word is the type's own name, folded as every match here is. */

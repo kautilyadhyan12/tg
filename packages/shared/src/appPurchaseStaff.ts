@@ -6,7 +6,7 @@ const daySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
 /** For staff, on the person's page: a purchase page open now. */
 export const appPurchaseOpenSchema = z
-  .object({ id: z.string().uuid(), typeName: z.string().min(1), payerName: z.string().nullable(), closesAt: z.string().datetime() })
+  .object({ id: z.uuid(), typeName: z.string().min(1), payerName: z.string().nullable(), closesAt: z.iso.datetime() })
   .strict();
 export type AppPurchaseOpen = z.infer<typeof appPurchaseOpenSchema>;
 
@@ -14,7 +14,7 @@ export type AppPurchaseOpen = z.infer<typeof appPurchaseOpenSchema>;
  *  checked. `amountMinor`: what Square took, where it is known. */
 export const appPurchaseCheckSchema = z
   .object({
-    id: z.string().uuid(),
+    id: z.uuid(),
     typeName: z.string().min(1),
     why: z.enum(["taken", "unknown"]),
     amountMinor: z.number().int().min(0).max(99_999_999).nullable(),

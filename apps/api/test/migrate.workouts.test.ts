@@ -4,8 +4,8 @@ import { transformWorkout } from "../tools/migrate-mongo/collections/workouts.js
 import { uuidv5 } from "../tools/migrate-mongo/uuid5.js";
 
 // squat + jump_squat are "seeded"; bench_press is NOT (a P4 name → skipped).
-const SQUAT = "11111111-1111-1111-1111-111111111111";
-const JUMP = "22222222-2222-2222-2222-222222222222";
+const SQUAT = "11111111-1111-4111-8111-111111111111";
+const JUMP = "22222222-2222-4222-8222-222222222222";
 const idBySlug = new Map<string, string>([
   ["squat", SQUAT],
   ["jump_squat", JUMP],

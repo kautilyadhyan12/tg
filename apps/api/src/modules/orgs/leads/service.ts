@@ -357,7 +357,7 @@ function emailOkAt(
 const escapeLike = (text: string): string => text.replace(/[\\%_]/g, (char) => `\\${char}`);
 
 const cursorSchema = z
-  .object({ at: z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/), id: z.string().uuid() })
+  .object({ at: z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/), id: z.uuid() })
   .strict();
 
 /** The digits of a search that could be a phone number (at least four), with a

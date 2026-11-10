@@ -39,7 +39,7 @@ import { expireLapsedGymTrials } from "../src/modules/orgs/trialSweep.js";
 // tools/orgs-sweep.ts. Deliberately NOT loadConfig() — that demands WEB_ORIGIN
 // and JWT_SECRET, and ending a trial should not require the app's HTTP secrets.
 const envSchema = z.object({
-  DATABASE_URL: z.string().url(),
+  DATABASE_URL: z.url(),
   LOG_LEVEL: z.string().optional(),
   NODE_ENV: z.string().optional(),
 });

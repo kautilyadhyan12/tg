@@ -54,7 +54,7 @@ const { setCurrentUserId } = await import('../../utils/storage');
 const ConsoleLayout = (await import('../../components/console/ConsoleLayout')).default;
 const Overview = (await import('./Overview')).default;
 
-const GYM_ID = '11111111-1111-1111-1111-111111111111';
+const GYM_ID = '11111111-1111-4111-8111-111111111111';
 const PORTAL = 'https://sandbox-customer-portal.paddle.com/cpl_01j7zbyqs3vah3aafp4jf62qaw';
 
 const OWNER = {

@@ -12,28 +12,28 @@ import { expectApplied } from "../src/modules/orgs/memberList/service.js";
 describe("the confirm's applied-count guard", () => {
   it("says nothing when a statement did exactly what the rule said", () => {
     expect(() => {
-      expectApplied(7, 7, "added", "11111111-1111-1111-1111-111111111111");
+      expectApplied(7, 7, "added", "11111111-1111-4111-8111-111111111111");
     }).not.toThrow();
     expect(() => {
-      expectApplied(0, 0, "removed", "11111111-1111-1111-1111-111111111111");
+      expectApplied(0, 0, "removed", "11111111-1111-4111-8111-111111111111");
     }).not.toThrow();
   });
 
   it("throws when a statement wrote FEWER rows than the rule promised", () => {
     expect(() => {
-      expectApplied(6, 7, "added", "22222222-2222-2222-2222-222222222222");
+      expectApplied(6, 7, "added", "22222222-2222-4222-8222-222222222222");
     }).toThrow(/added 6 entries where the rule said 7/);
   });
 
   it("throws when a statement wrote MORE rows than the rule promised", () => {
     expect(() => {
-      expectApplied(9, 7, "removed", "33333333-3333-3333-3333-333333333333");
+      expectApplied(9, 7, "removed", "33333333-3333-4333-8333-333333333333");
     }).toThrow(/removed 9 entries where the rule said 7/);
   });
 
   it("names the upload, so an incident can find which file it was", () => {
     expect(() => {
-      expectApplied(1, 2, "updated", "44444444-4444-4444-4444-444444444444");
-    }).toThrow(/44444444-4444-4444-4444-444444444444/);
+      expectApplied(1, 2, "updated", "44444444-4444-4444-8444-444444444444");
+    }).toThrow(/44444444-4444-4444-8444-444444444444/);
   });
 });

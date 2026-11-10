@@ -28,7 +28,7 @@ const { orgService } = await import('../../api/orgsApi');
 const { resetConsoleOrgs } = await import('./consoleOrgs');
 const Members = (await import('./Members')).default;
 
-const GYM = '11111111-1111-1111-1111-111111111111';
+const GYM = '11111111-1111-4111-8111-111111111111';
 const ORG = {
   id: GYM,
   slug: 'iron-house',

@@ -80,7 +80,7 @@ d("a database error carries a person, and nothing we write carries it on", () =>
       await sql`
         INSERT INTO gym_member_list_entries
           (gym_id, full_name, email, phone_e164, member_number, status, identity_key, source)
-        VALUES ('11111111-2222-3333-4444-555555555555', ${NAME}, ${ADDRESS}, ${PHONE},
+        VALUES ('11111111-2222-4333-8444-555555555555', ${NAME}, ${ADDRESS}, ${PHONE},
                 ${MEMBER_NUMBER}, ${"x".repeat(60)}, ${"a".repeat(64)}, 'upload')`;
     } catch (err) {
       if (err instanceof Error) return err;
@@ -168,14 +168,14 @@ d("a database error carries a person, and nothing we write carries it on", () =>
     expect(
       safeRequestSerializer({
         method: "GET",
-        url: `/v1/orgs/11111111-2222-3333-4444-555555555555/member-list/entries?query=${ADDRESS}`,
+        url: `/v1/orgs/11111111-2222-4333-8444-555555555555/member-list/entries?query=${ADDRESS}`,
         host: "gym.example",
         ip: "10.0.0.9",
         socket: { remotePort: 51234 },
       }),
     ).toEqual({
       method: "GET",
-      url: "/v1/orgs/11111111-2222-3333-4444-555555555555/member-list/entries",
+      url: "/v1/orgs/11111111-2222-4333-8444-555555555555/member-list/entries",
       host: "gym.example",
       remoteAddress: "10.0.0.9",
       remotePort: 51234,

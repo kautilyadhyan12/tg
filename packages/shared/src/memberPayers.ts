@@ -15,7 +15,7 @@ export const PAYS_FOR_MAX = 10;
  *  in the app holds, or that two accounts share, is told nothing. */
 export const memberPayerPersonSchema = z
   .object({
-    entryId: z.string().uuid(),
+    entryId: z.uuid(),
     name: z.string(),
     past: z.boolean(),
     inApp: z.boolean(),
@@ -38,7 +38,7 @@ export const memberPayersResponseSchema = z
 export type MemberPayersResponse = z.infer<typeof memberPayersResponseSchema>;
 
 /** Name the record that pays for this one; it replaces any payer they had. */
-export const setMemberPayerRequestSchema = z.object({ payerEntryId: z.string().uuid() }).strict();
+export const setMemberPayerRequestSchema = z.object({ payerEntryId: z.uuid() }).strict();
 export type SetMemberPayerRequest = z.infer<typeof setMemberPayerRequestSchema>;
 
 export const MEMBER_PAYER_WORDS = {

@@ -15,7 +15,7 @@ import { stopSquare } from "../src/modules/orgs/payments/stop.js";
 
 const env = z
   .object({
-    DATABASE_URL: z.string().url(),
+    DATABASE_URL: z.url(),
     // Named, never assumed: run against production with it unset, a default would stop nothing.
     SQUARE_ENV: z.enum(["sandbox", "production"]),
     SQUARE_APPLICATION_ID: z.string().regex(/^(sandbox-)?sq0id[bp]-[A-Za-z0-9_-]{10,60}$/),
@@ -34,7 +34,7 @@ const gymAt = args.indexOf("--gym");
 const gymId = gymAt === -1 ? null : (args[gymAt + 1] ?? "");
 const all = args.includes("--all");
 const apply = args.includes("--yes");
-if ((gymId === null) === !all || (gymId !== null && !z.string().uuid().safeParse(gymId).success)) {
+if ((gymId === null) === !all || (gymId !== null && !z.uuid().safeParse(gymId).success)) {
   console.error("Name one gym (--gym <gymId>) or every gym (--all). Add --yes to stop; without it nothing changes.");
   process.exit(1);
 }

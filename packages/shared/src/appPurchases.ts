@@ -17,11 +17,11 @@ const minorSchema = z.number().int().min(1).max(99_999_999);
  *  for its agreement, the wording read and who signed it. The same key sent again is the same press. */
 export const appPurchaseRequestSchema = z
   .object({
-    requestKey: z.string().uuid(),
-    typeId: z.string().uuid(),
+    requestKey: z.uuid(),
+    typeId: z.uuid(),
     amountMinor: minorSchema,
     factsKey: factsKeySchema,
-    agreement: z.object({ agreementId: z.string().uuid(), signer: deskSignerSchema, name: signedNameSchema }).strict().nullable(),
+    agreement: z.object({ agreementId: z.uuid(), signer: deskSignerSchema, name: signedNameSchema }).strict().nullable(),
   })
   .strict();
 export type AppPurchaseRequest = z.infer<typeof appPurchaseRequestSchema>;
@@ -31,15 +31,15 @@ export type AppPurchaseRequest = z.infer<typeof appPurchaseRequestSchema>;
  *  was given, so the front desk checks it. */
 export const appPurchaseSchema = z
   .object({
-    id: z.string().uuid(),
-    typeId: z.string().uuid(),
+    id: z.uuid(),
+    typeId: z.uuid(),
     name: z.string().min(1),
     amountMinor: minorSchema,
     currency: z.string().regex(/^[A-Z]{3}$/),
     state: appPaymentStateSchema,
-    url: z.string().url().nullable(),
-    closesAt: z.string().datetime().nullable(),
-    membershipId: z.string().uuid().nullable(),
+    url: z.url().nullable(),
+    closesAt: z.iso.datetime().nullable(),
+    membershipId: z.uuid().nullable(),
     receiptNumber: z.number().int().min(1).max(2_147_483_647).nullable(),
   })
   .strict();
@@ -51,14 +51,14 @@ export type AppPurchaseResponse = z.infer<typeof appPurchaseResponseSchema>;
 /** The signature as the member gave it on Buy, kept with the page until the membership is given: the wording read, who
  *  signed, the name typed, the details they read and when. */
 export const appPurchaseSignSchema = z
-  .object({ agreementId: z.string().uuid(), signer: deskSignerSchema, name: signedNameSchema, facts: agreementFactsSchema, at: z.string().datetime() })
+  .object({ agreementId: z.uuid(), signer: deskSignerSchema, name: signedNameSchema, facts: agreementFactsSchema, at: z.iso.datetime() })
   .strict();
 export type AppPurchaseSign = z.infer<typeof appPurchaseSignSchema>;
 
 /** Who bought it, for a member not on the gym's list yet (18k-iii-b): their name, proved email and the phone they gave,
  *  kept with the page until it ends, so they are put on the list as they were when they pressed Buy. */
 export const appPurchaseBuyerSchema = z
-  .object({ name: z.string().min(1).max(200), email: z.string().email().max(320), phone: z.string().max(40).nullable() })
+  .object({ name: z.string().min(1).max(200), email: z.email().max(320), phone: z.string().max(40).nullable() })
   .strict();
 export type AppPurchaseBuyer = z.infer<typeof appPurchaseBuyerSchema>;
 

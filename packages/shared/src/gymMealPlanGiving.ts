@@ -7,7 +7,7 @@ import { gymMealPlanDaySchema, gymMealPlanMealSchema } from "./gymMealPlans.js";
 import { memberListSelectionSchema } from "./memberList.js";
 import { DIET_LABEL_CAUTION, FOOD_ALLERGY_CAUTION, lowestKcalSchema } from "./nutrition.js";
 
-const idSchema = z.string().uuid().toLowerCase();
+const idSchema = z.uuid().toLowerCase();
 
 /** How many people a box names before "and N more". */
 export const GYM_MEAL_PLAN_BOX_NAMES_MAX = 5;
@@ -32,12 +32,12 @@ export type GiveGymMealPlanToSelectedRequest = z.infer<typeof giveGymMealPlanToS
 export const stopGymMealPlanRequestSchema = z.object({ audienceIds: z.array(idSchema).min(1).max(GYM_MEAL_PLAN_STOP_MOST) }).strict();
 export type StopGymMealPlanRequest = z.infer<typeof stopGymMealPlanRequestSchema>;
 
-const personSchema = z.object({ entryId: z.string().uuid(), name: z.string() }).strict();
+const personSchema = z.object({ entryId: z.uuid(), name: z.string() }).strict();
 export type GymMealPlanPerson = z.infer<typeof personSchema>;
 
 /** The box before Give: who gets it, and what it changes for them. */
 export const gymMealPlanGivePreviewSchema = z.object({
-  plan: z.object({ id: z.string().uuid(), name: z.string().min(1) }).strict(),
+  plan: z.object({ id: z.uuid(), name: z.string().min(1) }).strict(),
   /** The type's or tag's name; null for everybody and for members ticked. */
   groupName: z.string().nullable(),
   /** How many people on the list it reaches now. */
@@ -59,7 +59,7 @@ export const gymMealPlanGivePreviewResponseSchema = z.object({ preview: gymMealP
 const byNameSchema = z.string().min(1).nullable();
 
 export const gymMealPlanGivenGroupSchema = z.object({
-  audienceId: z.string().uuid(),
+  audienceId: z.uuid(),
   kind: z.enum(["everyone", "membership_type", "tag"]),
   /** The type's or tag's name; null for everybody. */
   name: z.string().nullable(),
@@ -68,18 +68,18 @@ export const gymMealPlanGivenGroupSchema = z.object({
   /** Of them, how many get this plan (the rest were given a newer one another way). */
   gets: z.number().int().nonnegative(),
   givenBy: byNameSchema,
-  givenAt: z.string().datetime({ offset: true }),
+  givenAt: z.iso.datetime({ offset: true }),
 }).strict();
 export type GymMealPlanGivenGroup = z.infer<typeof gymMealPlanGivenGroupSchema>;
 
 export const gymMealPlanGivenMemberSchema = z.object({
-  audienceId: z.string().uuid(),
-  entryId: z.string().uuid(),
+  audienceId: z.uuid(),
+  entryId: z.uuid(),
   name: z.string(),
   /** The plan they get instead, given to them later another way; null when they get this one. */
   instead: z.string().nullable(),
   givenBy: byNameSchema,
-  givenAt: z.string().datetime({ offset: true }),
+  givenAt: z.iso.datetime({ offset: true }),
 }).strict();
 export type GymMealPlanGivenMember = z.infer<typeof gymMealPlanGivenMemberSchema>;
 
@@ -103,20 +103,20 @@ export const gymMealPlanGivenToSelectedResponseSchema = z.object({ given: gymMea
 
 /** A person's page: the plan this person gets, and through which group. */
 export const gymMealPlanForEntryResponseSchema = z.object({
-  plan: z.object({ id: z.string().uuid(), name: z.string().min(1) }).strict().nullable(),
+  plan: z.object({ id: z.uuid(), name: z.string().min(1) }).strict().nullable(),
   through: z.object({ kind: z.enum(["everyone", "membership_type", "tag", "member"]), name: z.string().nullable() }).strict().nullable(),
 }).strict();
 export type GymMealPlanForEntryResponse = z.infer<typeof gymMealPlanForEntryResponseSchema>;
-export const gymMealPlanEntryParamsSchema = z.object({ gymId: z.string().uuid(), entryId: idSchema }).strict();
-export const gymMealPlanAudienceParamsSchema = z.object({ gymId: z.string().uuid(), planId: idSchema }).strict();
+export const gymMealPlanEntryParamsSchema = z.object({ gymId: z.uuid(), entryId: idSchema }).strict();
+export const gymMealPlanAudienceParamsSchema = z.object({ gymId: z.uuid(), planId: idSchema }).strict();
 
 /** The member's own: the gym's plan for them, as written, with the writer's name. */
 export const memberGymMealPlanSchema = z.object({
-  id: z.string().uuid(),
+  id: z.uuid(),
   name: z.string().min(1),
   writtenBy: byNameSchema,
-  updatedAt: z.string().datetime({ offset: true }),
-  givenAt: z.string().datetime({ offset: true }),
+  updatedAt: z.iso.datetime({ offset: true }),
+  givenAt: z.iso.datetime({ offset: true }),
   days: z.array(gymMealPlanDaySchema).length(7),
   caution: z.literal(FOOD_ALLERGY_CAUTION),
 }).strict();
@@ -128,7 +128,7 @@ export type MemberGymMealPlanResponse = z.infer<typeof memberGymMealPlanResponse
  *  it gave them or null, each day with the least this person may eat where the day holds less. */
 export const myGymMealPlansResponseSchema = z.object({
   gyms: z.array(z.object({
-    gymId: z.string().uuid(),
+    gymId: z.uuid(),
     name: z.string().min(1),
     orgType: z.string(),
     /** How the member reaches the gym, as the inbox gives it: null where it added none. */
@@ -151,8 +151,8 @@ export const MY_GYM_MEAL_PLANS_PATH = "/v1/nutrition/gym-meal-plans";
 
 /** What a plan can be given to from its page: the gym's live membership types and its tags. */
 export const gymMealPlanGroupsResponseSchema = z.object({
-  membershipTypes: z.array(z.object({ id: z.string().uuid(), name: z.string().min(1) }).strict()),
-  tags: z.array(z.object({ id: z.string().uuid(), name: z.string().min(1) }).strict()),
+  membershipTypes: z.array(z.object({ id: z.uuid(), name: z.string().min(1) }).strict()),
+  tags: z.array(z.object({ id: z.uuid(), name: z.string().min(1) }).strict()),
 }).strict();
 export type GymMealPlanGroupsResponse = z.infer<typeof gymMealPlanGroupsResponseSchema>;
 

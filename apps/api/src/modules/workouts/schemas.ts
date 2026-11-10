@@ -30,7 +30,7 @@ export type {
 
 export const syncResponseSchema = z
   .object({
-    workoutId: z.string().uuid(),
+    workoutId: z.uuid(),
     // 'duplicate' = the workout id already existed for this user (a retried
     // sync); by §3.5 construction that is a successful no-op, not an error.
     status: z.enum(["created", "duplicate"]),
