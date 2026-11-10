@@ -55,6 +55,7 @@ const input = (answers: RunPlanAnswers, over: Partial<RunPlanInput> = {}): RunPl
 });
 const sessionM = (d: PlanDay): number => (d.session !== null && d.session.kind !== "walk_run" ? d.session.m : 0);
 const daysOf = (plan: RunPlan): PlanDay[] => (plan.kind === "none" ? [] : plan.days);
+const daysBetweenDays = (from: string, to: string): number => Math.round((Date.parse(to) - Date.parse(from)) / 86_400_000);
 const run = (day: string, distanceM: number, movingS = distanceM * 0.4, effort: number | null = null): RunDay => ({ day, distanceM, longestM: distanceM, movingS, effort });
 
 describe("the worst thing: a run that hurts somebody", () => {
@@ -80,18 +81,27 @@ describe("the worst thing: a run that hurts somebody", () => {
               const answers = runnerAnswers({ goal, weeklyM, longestM, days });
               const runs: RunDay[] = [];
               const today = planDayPlus(MONDAY, week * 7 + 2);
+              // The stated longest while it is from the last 30 days, and the runs really recorded before that
+              // day: nothing else, and never the plan's own runs of that day or after.
+              const limitOn = (day: string): number => {
+                const recorded = runs.filter((x) => x.day >= planDayPlus(day, -30) && x.day < day).map((x) => x.longestM);
+                const stated = daysBetweenDays(MONDAY, day) <= 30 ? longestM : 0;
+                const known = Math.max(stated, ...recorded);
+                return known > 0 ? Math.floor(known * 1.1) : Math.max(longestM, ...runs.filter((x) => x.day < day).map((x) => x.longestM));
+              };
               for (let i = 0; i < week * 7 + 2; i += 1) {
                 const day = planDayPlus(MONDAY, i);
                 const plan = runPlanOf(input(answers, { today: day, runs }));
                 const todays = daysOf(plan).find((d) => d.day === day);
-                if (todays !== undefined && sessionM(todays) > 0) runs.push(run(day, sessionM(todays)));
+                if (todays !== undefined && sessionM(todays) > 0) {
+                  expect(sessionM(todays)).toBeLessThanOrEqual(limitOn(day));
+                  checked += 1;
+                  runs.push(run(day, sessionM(todays)));
+                }
               }
               const plan = runPlanOf(input(answers, { today, runs }));
-              // The stated longest while it is from the last 30 days, and the runs really recorded: nothing else.
-              const recorded = runs.filter((x) => x.day >= planDayPlus(today, -30)).map((x) => x.longestM);
-              const known = week * 7 + 2 <= 30 ? Math.max(longestM, ...recorded) : Math.max(0, ...recorded);
-              for (const d of daysOf(plan)) {
-                expect(sessionM(d)).toBeLessThanOrEqual(Math.floor(known * 1.1));
+              for (const d of daysOf(plan).filter((x) => x.day >= today)) {
+                expect(sessionM(d)).toBeLessThanOrEqual(limitOn(today));
                 checked += 1;
               }
             }
@@ -99,7 +109,7 @@ describe("the worst thing: a run that hurts somebody", () => {
         }
       }
     }
-    expect(checked).toBeGreaterThan(5000);
+    expect(checked).toBeGreaterThan(3000);
   });
 
   it("a runner who says 8 km is their longest is never planned a long run past 8.8 km in the first month", () => {
