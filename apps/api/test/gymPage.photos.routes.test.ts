@@ -15,6 +15,7 @@ import { proveAddress } from "./proveAddress.js";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { createDiskPhotoStore } from "../src/modules/orgs/gymPage/photoStore.js";
+import { createMemoryRedis } from "../src/redis.js";
 import type { RobotCheck } from "../src/modules/orgs/gymPage/robotCheck.js";
 import { GYM_PAGE_MAX_PHOTOS, type GymPage, type GymPagePhoto, type PublicGymPage } from "@app/shared";
 
@@ -96,6 +97,8 @@ const closeGate = (need: number): void => {
 d("photos on a gym's page (real Postgres, real disk)", () => {
   const sql = postgres(url ?? "", { prepare: false, max: 5 });
   let folder = "";
+  /** One store for both apps' rate limits, so a test can count a person's allowance as spent. */
+  const redis = createMemoryRedis();
   let app: App | undefined;
   /** A second api on the same database and folder: one api holds one connection, so
    *  two uploads race only across two of them. */
@@ -193,6 +196,7 @@ d("photos on a gym's page (real Postgres, real disk)", () => {
       ON CONFLICT (code) DO UPDATE SET active = true`;
     const disk = createDiskPhotoStore(folder);
     const overrides = {
+      redis,
       emailSender: { sendVerificationEmail: () => Promise.resolve(), sendPasswordResetEmail: () => Promise.resolve(), sendSignInCodeEmail: () => Promise.resolve() },
       robotCheck: passing,
       // The disk store, with a gate a test can close: every write waits there until the
@@ -308,6 +312,15 @@ d("photos on a gym's page (real Postgres, real disk)", () => {
       expect((await get(staffPhotoUrl(rivalGym.org.id, mine.id), rival.cookies)).statusCode).toBe(404);
       expect((await del(staffPhotoUrl(rivalGym.org.id, mine.id), rival.cookies)).statusCode).toBe(404);
       expect((await put(`${photosUrl(rivalGym.org.id)}/order`, { photoIds: [mine.id] }, rival.cookies)).statusCode).toBe(409);
+
+      // Who is asking and whether they may come before a photo is read (21a-iii-c): a body
+      // that is not even JSON gets each person's own refusal; read first, it would be 400.
+      const broken = (cookies: Record<string, string>) =>
+        api().inject({ method: "POST", url: photosUrl(gym.org.id), remoteAddress: nextIp(), headers: { "content-type": "application/json" }, cookies, payload: '{"contentBase64": ' });
+      expect((await broken({})).statusCode).toBe(401);
+      for (const outsider of [rival, stranger]) expect((await broken(outsider.cookies)).statusCode).toBe(404);
+      for (const staff of [manager, trainer]) expect((await broken(staff.cookies)).statusCode).toBe(403);
+      expect((await broken(owner.cookies)).statusCode).toBe(400);
       expect((await stored(gym.org.id)).map((r) => r.id)).toEqual([mine.id]);
       expect(await filesOf(gym.org.id)).toHaveLength(1);
       // Signed out: the console's photo is not a public one.
@@ -473,6 +486,27 @@ d("photos on a gym's page (real Postgres, real disk)", () => {
       expect(replay.statusCode, replay.body).toBe(201);
       expect(idOf(replay)).toBe(idOf(tenth));
       expect(puts).toBe(putsBefore);
+    },
+    TIMEOUT_MS,
+  );
+
+  it(
+    "photo adds are limited to 300 an hour each, spent once, and the last one past it is refused before the photo is read",
+    async () => {
+      const owner = await makeUser("limit-owner");
+      const gym = await makeOrg(owner.cookies, "Limit Photo Gym");
+      const id = (await sql<{ id: string }[]>`SELECT id FROM users WHERE email = ${owner.email}`)[0]?.id ?? "";
+      expect(id).not.toBe("");
+      // 298 already spent this hour; a real photo is the 299th (spent twice, it would be the 300th).
+      for (let i = 0; i < 298; i++) await redis.incrWithTtl(`rl:gym_page_photo_write:id:${id}`, 3600);
+      await add(gym, owner.cookies);
+      const notJson = () =>
+        api().inject({ method: "POST", url: photosUrl(gym.org.id), remoteAddress: nextIp(), cookies: owner.cookies, headers: { "content-type": "application/json" }, payload: '{"contentBase64": ' });
+      // The 300th is read (and is not JSON); the 301st is refused unread.
+      expect((await notJson()).statusCode).toBe(400);
+      expect((await notJson()).statusCode).toBe(429);
+      expect((await post(photosUrl(gym.org.id), { contentBase64: PNG, uploadKey: randomUUID() }, owner.cookies)).statusCode).toBe(429);
+      expect(await stored(gym.org.id)).toHaveLength(1);
     },
     TIMEOUT_MS,
   );
