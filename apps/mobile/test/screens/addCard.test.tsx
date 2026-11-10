@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
+import { StyleSheet } from "react-native";
 import { myCardViewSchema, myMembershipResponseSchema } from "@app/shared";
 import { App } from "../../src/App";
 import type { Ask } from "../../src/session/calls";
@@ -151,6 +152,8 @@ describe("the worst thing: a card added for one gym is saved at that gym alone",
     });
     expect(page().getByText("Card saved: Visa ending 1111.")).toBeTruthy();
     expect(page().getByText("Visa ending 1111")).toBeTruthy();
+    // No card on file's dashed picture becomes the card's solid one: Android keeps dashed unless told.
+    expect(StyleSheet.flatten(page().getByTestId("card-face").props.style)).toMatchObject({ borderStyle: "solid" });
     const posts = server.asked.filter((a) => a.method === "POST" && a.path.endsWith("/my-card"));
     expect(posts).toHaveLength(1);
     expect(posts[0]?.path).toBe(cardPath(LOTUS));

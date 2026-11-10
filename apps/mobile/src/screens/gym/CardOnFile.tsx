@@ -33,7 +33,7 @@ export function CardOnFile({ view, said, onAdd }: { view: MyCardView; said: stri
         ) : box.kind === "card" ? (
           <>
             <View style={styles.row}>
-              <View style={[styles.face, box.expired ? styles.faceBad : null]}>
+              <View testID="card-face" style={[styles.face, box.expired ? styles.faceBad : null]}>
                 <Icon name="card" size={18} colour={box.expired ? "badText" : "textSoft"} />
               </View>
               <View style={styles.grow}>
@@ -42,9 +42,9 @@ export function CardOnFile({ view, said, onAdd }: { view: MyCardView; said: stri
                   {box.expiry}
                 </Txt>
               </View>
-              {box.expired ? <Pill label="Expired" tone="bad" /> : box.button === null ? null : <Button label={box.button} kind="link" small onPress={onAdd} />}
+              {box.expired ? <Pill label="Expired" tone="bad" /> : null}
             </View>
-            {box.expired && box.button !== null ? <Button label={box.button} icon="card" wide onPress={onAdd} /> : null}
+            {box.button === null ? null : <Button label={box.button} icon="card" kind={box.expired ? "main" : "soft"} wide onPress={onAdd} />}
           </>
         ) : (
           <>
@@ -75,6 +75,8 @@ const styles = StyleSheet.create({
     minHeight: 36,
     borderRadius: 8,
     borderWidth: 1,
+    // Said outright: Android keeps a dashed border once set, after No card on file turns into a card.
+    borderStyle: "solid",
     borderColor: colours.lineStrong,
     backgroundColor: colours.raised,
     alignItems: "center",
