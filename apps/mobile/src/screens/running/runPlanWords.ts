@@ -30,12 +30,13 @@ export function paceOf(perKm: number, units: Units): string {
 const per = (units: Units): string => (units === "imperial" ? "/mi" : "/km");
 const range = ([fast, slow]: readonly [number, number], units: Units): string => `${paceOf(fast, units)}–${paceOf(slow, units)}${NBSP}${per(units)}`;
 
-/** A walk-and-run session in one line: "Walk 5 min, then 8 runs of 1 min with 1½ min walks between, then walk 5 min". */
+/** A walk-and-run session in one line, as Couch to 5K apps say it: "5 min warm-up walk, then alternate 1 min
+ *  running and 1½ min walking (8 runs), then 5 min cool-down walk". */
 export function walkRunWords(parts: readonly Part[]): string {
-  return `Walk ${minutes(parts[0]?.s ?? 0)}, then ${walkRunCore(parts)}, then walk ${minutes(parts.at(-1)?.s ?? 0)}`;
+  return `${minutes(parts[0]?.s ?? 0)} warm-up walk, then ${walkRunCore(parts)}, then ${minutes(parts.at(-1)?.s ?? 0)} cool-down walk`;
 }
 
-/** The runs and walks between the walks before and after: "8 runs of 1 min with 1½ min walks between". */
+/** The runs and walks between the warm-up and cool-down: "alternate 1 min running and 1½ min walking (8 runs)". */
 export function walkRunCore(parts: readonly Part[]): string {
   const middle = parts.slice(1, -1);
   const runs = middle.filter((p) => p.kind === "run");
@@ -43,14 +44,14 @@ export function walkRunCore(parts: readonly Part[]): string {
   const same = (list: readonly Part[]) => list.every((p) => p.s === list[0]?.s);
   let core: string;
   if (runs.length === 1 && walks.length === 0) core = `run ${minutes(runs[0]?.s ?? 0)}`;
-  else if (runs.length > 1 && same(runs) && same(walks)) core = `${String(runs.length)} runs of ${minutes(runs[0]?.s ?? 0)} with ${minutes(walks[0]?.s ?? 0)} walks between`;
+  else if (runs.length > 1 && same(runs) && same(walks)) core = `alternate ${minutes(runs[0]?.s ?? 0)} running and ${minutes(walks[0]?.s ?? 0)} walking (${String(runs.length)} runs)`;
   else core = middle.map((p) => `${p.kind} ${minutes(p.s)}`).join(", ");
   return core;
 }
 
 export const totalSeconds = (parts: readonly Part[]): number => parts.reduce((t, p) => t + p.s, 0);
 
-const KIND_WORDS = { easy: "Easy run", long: "Long run", steady: "Faster run", fast: "Faster run" } as const;
+const KIND_WORDS = { easy: "Easy run", long: "Long run", steady: "Tempo run", fast: "Interval run" } as const;
 
 /** A session's name: "Run 2 · 28½ min", "Long run · 7 km". */
 export function sessionTitle(session: PlanSession, units: Units): string {
@@ -58,14 +59,14 @@ export function sessionTitle(session: PlanSession, units: Units): string {
   return `${KIND_WORDS[session.kind]} · ${planDistance(session.m, units)}`;
 }
 
-export const EASY_BY_FEEL = "Easy: you can still talk";
-const STEADY_BY_FEEL = "comfortably hard, a few words at a time";
-const FAST_BY_FEEL = "hard, but in control";
+export const EASY_BY_FEEL = "Easy, conversational pace";
+const TEMPO_BY_FEEL = "comfortably hard";
+const INTERVAL_BY_FEEL = "hard but controlled";
 
 /** What to do, in one line. */
 export function sessionDetail(session: PlanSession, paces: Paces | null, units: Units): string {
   if (session.kind === "walk_run") return walkRunWords(session.parts);
-  const easy = paces === null ? EASY_BY_FEEL : `Easy, ${range(paces.easy, units)}`;
+  const easy = paces === null ? EASY_BY_FEEL : `Easy pace, ${range(paces.easy, units)}`;
   if (session.kind === "easy" || session.kind === "long" || session.reps === null) return easy;
   const reps = session.reps;
   // Repeats are measured as a track measures them: 1 km, 800 m; 1.6 km is a mile to someone in miles.
@@ -73,10 +74,10 @@ export function sessionDetail(session: PlanSession, paces: Paces | null, units: 
   const rest = reps.restS >= 60 ? minutes(reps.restS) : `${String(reps.restS)} s`;
   const how =
     session.kind === "steady"
-      ? `steady ${paces === null ? `(${STEADY_BY_FEEL})` : `at ${range(paces.steady, units)}`}`
-      : `fast ${paces === null ? `(${FAST_BY_FEEL})` : `at ${paceOf(paces.fast, units)}${NBSP}${per(units)}`}`;
-  if (reps.count === 1) return `Easy to warm up, then ${rep} ${how}, then easy`;
-  return `Easy to warm up, then ${String(reps.count)} × ${rep} ${how} with ${rest} easy between, then easy`;
+      ? `at tempo pace (${paces === null ? TEMPO_BY_FEEL : range(paces.steady, units)})`
+      : `at interval pace (${paces === null ? INTERVAL_BY_FEEL : `${paceOf(paces.fast, units)}${NBSP}${per(units)}`})`;
+  if (reps.count === 1) return `Warm up, ${rep} ${how}, cool down`;
+  return `Warm up, ${String(reps.count)} × ${rep} ${how} with ${rest} jog recovery, cool down`;
 }
 
 const WEEKDAY_SHORT = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;

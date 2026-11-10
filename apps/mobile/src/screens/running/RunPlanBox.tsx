@@ -19,11 +19,11 @@ export const RUN_PLAN_PATH = "/v1/geo/run-plan";
 
 export type PlanRead = { kind: "loading" } | { kind: "failed"; again: () => void } | { kind: "ok"; data: RunPlanResponse };
 
-/** "Week 3 · aiming for 10K · 24 km this week"; "Couch to 5K · Week 1 of 9". */
+/** "10K plan · Week 3 · 24 km"; "Couch to 5K · Week 1 of 9". */
 export function weekLine(plan: Exclude<RunPlan, { kind: "none" }>, units: Units): string {
   if (plan.kind === "c25k") return `Couch to 5K · Week ${String(plan.week)} of 9`;
-  const easier = plan.easier ? " · an easier week" : "";
-  return `Week ${String(plan.week)} · aiming for ${GOAL_WORDS[plan.goal]} · ${planDistance(plan.weekM, units)} this week${easier}`;
+  const easier = plan.easier ? " · recovery week" : "";
+  return `${GOAL_WORDS[plan.goal]} plan · Week ${String(plan.week)} · ${planDistance(plan.weekM, units)}${easier}`;
 }
 
 /** Today's run, or the next one this week, or null. */
@@ -69,7 +69,7 @@ export function RunPlanBox({ read, units, onMake, onOpen, onCleared }: { read: P
     return (
       <View style={[styles.box, styles.row]}>
         <Txt kind="small" style={styles.grow}>
-          Your run plan couldn’t load.
+          Your training plan couldn’t load.
         </Txt>
         <Button kind="link" label="Try again" say="Try your run plan again" onPress={read.again} />
       </View>
@@ -84,18 +84,18 @@ export function RunPlanBox({ read, units, onMake, onOpen, onCleared }: { read: P
           <Image source={pictures.runners} style={[styles.artPicture, safe ? styles.artFaint : null]} resizeMode="cover" />
         </View>
         <View style={styles.words}>
-          <Txt kind="h3">Your run plan</Txt>
+          <Txt kind="h3">Training plan</Txt>
           <Txt kind="small">
             {safe
-              ? "No run plan until a professional has cleared you to exercise. You can still record a run."
+              ? "No training plan until a professional has cleared you to exercise. You can still record a run."
               : plan?.why === "not_for_me"
-                ? "You said running isn’t for you. Make a plan any time."
-                : "Runs for your week, from how you run now."}
+                ? "No training plan for now. Create one any time."
+                : "A weekly plan built from your current running."}
           </Txt>
           {safe ? (
             <Button kind="link" label="I’ve been cleared" say="Change your health answer" onPress={() => { setClearing(true); }} />
           ) : (
-            <Button label="Make my plan" compact style={styles.make} onPress={onMake} />
+            <Button label="Create plan" compact style={styles.make} onPress={onMake} />
           )}
         </View>
         <ClearedSheet open={clearing} onClose={() => { setClearing(false); }} onSaved={() => { setClearing(false); onCleared(); }} />
@@ -108,8 +108,8 @@ export function RunPlanBox({ read, units, onMake, onOpen, onCleared }: { read: P
   return (
     <View style={styles.box} testID="run-plan-box">
       <View style={styles.head}>
-        <Txt kind="h3">Your run plan</Txt>
-        <Button kind="link" label="See plan" say="See your run plan" onPress={onOpen} />
+        <Txt kind="h3">Training plan</Txt>
+        <Button kind="link" label="View plan" say="View your training plan" onPress={onOpen} />
       </View>
       <Txt kind="tiny" colour="textSoft">
         {weekLine(plan, units)}
@@ -117,10 +117,10 @@ export function RunPlanBox({ read, units, onMake, onOpen, onCleared }: { read: P
       <FootprintWeek days={plan.days} today={today} />
       <View style={styles.next}>
         {next === null || next.day.session === null ? (
-          <Txt kind="small">{plan.days.some((d) => d.done) ? "This week’s runs are done. Rest well." : "No more runs this week."}</Txt>
+          <Txt kind="small">{plan.days.some((d) => d.done) ? "All runs done this week." : "No more runs this week."}</Txt>
         ) : (
           <>
-            <Txt kind="eyebrow">{next.today ? "Today" : `Next · ${dayName(next.day.weekday)}`}</Txt>
+            <Txt kind="eyebrow">{next.today ? "Today’s run" : `Next run · ${dayName(next.day.weekday)}`}</Txt>
             <Txt kind="strong">{sessionTitle(next.day.session, units)}</Txt>
             <Txt kind="small">{sessionDetail(next.day.session, paces, units)}</Txt>
           </>

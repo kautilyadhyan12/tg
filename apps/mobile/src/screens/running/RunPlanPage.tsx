@@ -13,7 +13,7 @@ import { phoneToday } from "./RunPlanBox";
 
 type Shown = Exclude<RunPlan, { kind: "none" }>;
 
-export const RULES_LINE = "No run is more than 10\u00a0% longer than your longest of the last month (a 2025 study of 5,205 runners), and a week grows by 10\u00a0% at most, with an easier week every fourth.";
+export const RULES_LINE = "No run is more than 10\u00a0% longer than your longest of the last 30 days (a 2025 study of 5,205 runners), and a week grows by 10\u00a0% at most, with a recovery week every fourth.";
 export const NHS_LINE = "Go at a pace where you can still talk. Have a rest day between runs. If a week felt hard, do it again: the plan waits for you. From the NHS Couch to 5K plan.";
 
 export function RunPlanPage({ plan, units, onClose, onChange }: { plan: Shown | null; units: Units; onClose: () => void; onChange: () => void }) {
@@ -23,22 +23,22 @@ export function RunPlanPage({ plan, units, onClose, onChange }: { plan: Shown | 
       <PictureTop
         picture={plan.kind === "c25k" ? "runner" : "greekrun"}
         tall={0.62}
-        eyebrow={plan.kind === "c25k" ? "Couch to 5K" : `Aiming for ${GOAL_WORDS[plan.goal]}`}
+        eyebrow={plan.kind === "c25k" ? "Couch to 5K" : `${GOAL_WORDS[plan.goal]} plan`}
         title={plan.kind === "c25k" ? `Week ${String(plan.week)} of 9` : `Week ${String(plan.week)}`}
         foot={
           <Txt kind="small" colour="textSoft">
-            {plan.kind === "c25k" ? `${String(runs)} ${runs === 1 ? "run" : "runs"} this week` : `${planDistance(plan.weekM, units)} · ${String(runs)} ${runs === 1 ? "run" : "runs"}${plan.easier ? " · an easier week" : ""}`}
+            {plan.kind === "c25k" ? `${String(runs)} ${runs === 1 ? "run" : "runs"} this week` : `${planDistance(plan.weekM, units)} · ${String(runs)} ${runs === 1 ? "run" : "runs"}${plan.easier ? " · recovery week" : ""}`}
           </Txt>
         }
       />
     );
   const today = phoneToday();
   return (
-    <CoverPage open={plan !== null} title="Your run plan" onClose={onClose} {...(hero === undefined ? {} : { hero })}>
+    <CoverPage open={plan !== null} title="Training plan" onClose={onClose} {...(hero === undefined ? {} : { hero })}>
       {plan === null ? null : (
         <>
-          {plan.kind === "runner" && plan.ready ? <Txt kind="small" colour="goodText">{`You’re ready for a ${GOAL_WORDS[plan.goal]}. Your plan keeps this week steady now.`}</Txt> : null}
-          {plan.kind === "runner" && plan.held ? <Txt kind="small" colour="gold">No run was recorded last week, so this week stays the same. Record your runs here so your plan can grow.</Txt> : null}
+          {plan.kind === "runner" && plan.ready ? <Txt kind="small" colour="goodText">{`You’re ready for ${GOAL_WORDS[plan.goal] === "Half marathon" ? "a half marathon" : `a ${GOAL_WORDS[plan.goal]}`}. Your plan now holds at this level.`}</Txt> : null}
+          {plan.kind === "runner" && plan.held ? <Txt kind="small" colour="gold">No runs recorded last week, so this week stays the same. Record your runs in the app so your plan can build.</Txt> : null}
           <View style={styles.list}>
             {plan.days.filter((d) => d.session !== null).map((d, i, shown) => (
               <Session key={d.day} day={d} first={i === 0} today={d.day === today} plan={plan} units={units} sameAs={sameRunBefore(d, shown.slice(0, i))} />
@@ -48,8 +48,8 @@ export function RunPlanPage({ plan, units, onClose, onChange }: { plan: Shown | 
           {plan.ahead.length === 0 ? null : (
             <>
               <View style={styles.monthRow}>
-                <Txt kind="eyebrow">Weeks ahead</Txt>
-                <Txt kind="tiny">{plan.kind === "runner" ? "grows from what you run" : "after each week’s runs"}</Txt>
+                <Txt kind="eyebrow">Upcoming weeks</Txt>
+                <Txt kind="tiny">{plan.kind === "runner" ? "builds from what you run" : "after this week’s runs"}</Txt>
               </View>
               <View style={styles.list}>
                 {plan.ahead.map((a, i) =>
@@ -60,7 +60,7 @@ export function RunPlanPage({ plan, units, onClose, onChange }: { plan: Shown | 
                     </View>
                   ) : (
                     <View key={a.week} style={[styles.ahead, i === 0 ? null : styles.line]}>
-                      <Txt kind="body" style={styles.grow}>{`Week ${String(a.week)}${a.easier ? " · easier week" : ""}`}</Txt>
+                      <Txt kind="body" style={styles.grow}>{`Week ${String(a.week)}${a.easier ? " · recovery week" : ""}`}</Txt>
                       <Txt kind="strong">{a.m === null ? "" : planDistance(a.m, units)}</Txt>
                     </View>
                   ),
@@ -75,10 +75,10 @@ export function RunPlanPage({ plan, units, onClose, onChange }: { plan: Shown | 
           {plan.kind === "c25k" ? (
             <View style={styles.box}>
               <Txt kind="h3">After week 9</Txt>
-              <Txt kind="small">{`Running for 30 minutes without stopping. Your plan then grows towards a ${GOAL_WORDS[plan.goal]}.`}</Txt>
+              <Txt kind="small">{`Running 30 minutes without stopping. Your plan then builds towards ${plan.goal === "half" ? "a half marathon" : `a ${GOAL_WORDS[plan.goal]}`}.`}</Txt>
             </View>
           ) : null}
-          <Button kind="link" label="Change my answers" say="Change your run plan answers" style={styles.change} onPress={onChange} />
+          <Button kind="link" label="Edit plan" say="Edit your training plan" style={styles.change} onPress={onChange} />
         </>
       )}
     </CoverPage>
@@ -100,7 +100,7 @@ function Session({ day, first, today, plan, units, sameAs }: { day: PlanDay; fir
   const session = day.session;
   if (session === null) return null;
   const paces = plan.kind === "runner" ? plan.paces : null;
-  const detail = sameAs === null ? sessionDetail(session, paces, units) : `The same as Run ${String(sameAs)}`;
+  const detail = sameAs === null ? sessionDetail(session, paces, units) : `Same as Run ${String(sameAs)}`;
   return (
     <View style={[styles.session, first ? null : styles.line]} accessible accessibilityLabel={`${weekdayShort(day.weekday)}${today ? ", today" : ""}: ${sessionTitle(session, units)}. ${detail}.${day.done ? " Done." : ""}`}>
       <Txt kind="tiny" colour={today ? "gold" : "textFaint"} style={styles.dayName}>
@@ -135,15 +135,15 @@ function Paces({ plan, units, onChange }: { plan: Extract<Shown, { kind: "runner
       <Txt kind="h3">Your paces</Txt>
       {p === null ? (
         <>
-          <Txt kind="small">{plan.raceOld ? "Your race time is more than 6 weeks old, so you run by feel until you add a new one." : "By feel: easy is a pace where you can still talk; steady is comfortably hard; fast is hard, but in control."}</Txt>
-          <Button kind="link" label="Add a race time" say="Add a race time for your paces" onPress={onChange} />
+          <Txt kind="small">{plan.raceOld ? "Your race time is more than 6 weeks old. Paces are by feel until you add a new one." : "By feel: easy is a conversational pace, tempo is comfortably hard, intervals are hard but controlled."}</Txt>
+          <Button kind="link" label="Add a race time" say="Add a race time to set your paces" onPress={onChange} />
         </>
       ) : (
         <>
           <View style={styles.paces}>
             <Pace value={`${paceOf(p.easy[0], units)}–${paceOf(p.easy[1], units)}`} label={`Easy ${per}`} />
-            <Pace value={`${paceOf(p.steady[0], units)}–${paceOf(p.steady[1], units)}`} label={`Steady ${per}`} />
-            <Pace value={paceOf(p.fast, units)} label={`Fast ${per}`} />
+            <Pace value={`${paceOf(p.steady[0], units)}–${paceOf(p.steady[1], units)}`} label={`Tempo ${per}`} />
+            <Pace value={paceOf(p.fast, units)} label={`Interval ${per}`} />
           </View>
           <Txt kind="tiny">From your race time, by Jack Daniels’ formula.</Txt>
         </>

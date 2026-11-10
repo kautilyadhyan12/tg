@@ -14,11 +14,11 @@ const { paceOf, planDistance } = words;
 
 describe("Couch to 5K in words", () => {
   it.each([
-    [0, "Walk 5 min, then 8 runs of 1 min with 1½ min walks between, then walk 5 min"],
-    [3, "Walk 5 min, then 6 runs of 1½ min with 2 min walks between, then walk 5 min"],
-    [6, "Walk 5 min, then run 1½ min, walk 1½ min, run 3 min, walk 3 min, run 1½ min, walk 1½ min, run 3 min, then walk 5 min"],
-    [14, "Walk 5 min, then run 20 min, then walk 5 min"],
-    [24, "Walk 5 min, then run 30 min, then walk 5 min"],
+    [0, "5 min warm-up walk, then alternate 1 min running and 1½ min walking (8 runs), then 5 min cool-down walk"],
+    [3, "5 min warm-up walk, then alternate 1½ min running and 2 min walking (6 runs), then 5 min cool-down walk"],
+    [6, "5 min warm-up walk, then run 1½ min, walk 1½ min, run 3 min, walk 3 min, run 1½ min, walk 1½ min, run 3 min, then 5 min cool-down walk"],
+    [14, "5 min warm-up walk, then run 20 min, then 5 min cool-down walk"],
+    [24, "5 min warm-up walk, then run 30 min, then 5 min cool-down walk"],
   ])("NHS run %i", (index, words) => {
     expect(walkRunWords(c25kParts(index))).toBe(words);
   });
@@ -40,15 +40,15 @@ describe("a runner's run in words", () => {
 
   it("easy and long runs with their pace range, or by feel", () => {
     expect(sessionTitle({ kind: "long", m: 7000, reps: null }, "metric")).toBe("Long run · 7 km");
-    expect(sessionDetail({ kind: "easy", m: 5500, reps: null }, paces, "metric")).toBe(`Easy, ${paceOf(paces?.easy[0] ?? 0, "metric")}–${paceOf(paces?.easy[1] ?? 0, "metric")} /km`);
-    expect(sessionDetail({ kind: "easy", m: 5500, reps: null }, null, "metric")).toBe("Easy: you can still talk");
+    expect(sessionDetail({ kind: "easy", m: 5500, reps: null }, paces, "metric")).toBe(`Easy pace, ${paceOf(paces?.easy[0] ?? 0, "metric")}–${paceOf(paces?.easy[1] ?? 0, "metric")} /km`);
+    expect(sessionDetail({ kind: "easy", m: 5500, reps: null }, null, "metric")).toBe("Easy, conversational pace");
   });
 
   it("a faster run says its repeats, pace and rest; a mile's pace is a mile's", () => {
     const steady = { kind: "steady" as const, m: 6000, reps: { count: 2, m: 1000, restS: 60 } };
-    expect(sessionDetail(steady, paces, "metric")).toBe(`Easy to warm up, then 2 × 1 km steady at ${paceOf(paces?.steady[0] ?? 0, "metric")}–${paceOf(paces?.steady[1] ?? 0, "metric")} /km with 1 min easy between, then easy`);
-    expect(sessionDetail(steady, null, "metric")).toBe("Easy to warm up, then 2 × 1 km steady (comfortably hard, a few words at a time) with 1 min easy between, then easy");
+    expect(sessionDetail(steady, paces, "metric")).toBe(`Warm up, 2 × 1 km at tempo pace (${paceOf(paces?.steady[0] ?? 0, "metric")}–${paceOf(paces?.steady[1] ?? 0, "metric")} /km) with 1 min jog recovery, cool down`);
+    expect(sessionDetail(steady, null, "metric")).toBe("Warm up, 2 × 1 km at tempo pace (comfortably hard) with 1 min jog recovery, cool down");
     expect(paceOf(300, "imperial")).toBe("8:03");
-    expect(sessionDetail({ kind: "fast", m: 7000, reps: { count: 4, m: 800, restS: 180 } }, null, "imperial")).toBe("Easy to warm up, then 4 × 800 m fast (hard, but in control) with 3 min easy between, then easy");
+    expect(sessionDetail({ kind: "fast", m: 7000, reps: { count: 4, m: 800, restS: 180 } }, null, "imperial")).toBe("Warm up, 4 × 800 m at interval pace (hard but controlled) with 3 min jog recovery, cool down");
   });
 });

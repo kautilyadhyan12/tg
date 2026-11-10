@@ -20,17 +20,17 @@ import { METRES_PER_MILE, clock } from "./runWords";
 type Step = "run" | "jog" | "days" | "runner";
 
 export const JOG_OPTIONS: readonly { value: JogBand; label: string }[] = [
-  { value: "none", label: "I can’t jog yet" },
-  { value: "upto5", label: "Up to 5 minutes" },
+  { value: "none", label: "I can’t run yet" },
+  { value: "upto5", label: "Less than 5 minutes" },
   { value: "5to10", label: "5 to 10 minutes" },
   { value: "10to20", label: "10 to 20 minutes" },
   { value: "20to30", label: "20 to 30 minutes" },
   { value: "30plus", label: "30 minutes or more" },
 ];
 const RUN_OPTIONS: readonly { value: RunDoesRun; label: string; desc?: string }[] = [
-  { value: "yes", label: "Yes, I run" },
-  { value: "start", label: "I want to start" },
-  { value: "no", label: "Not for me", desc: "No plan. You can make one any time." },
+  { value: "start", label: "New to running" },
+  { value: "yes", label: "I already run" },
+  { value: "no", label: "Not interested", desc: "No training plan for now." },
 ];
 const RACE_WORDS: Record<(typeof RACE_DISTANCES_M)[number], string> = { 1609: "1 mile", 5000: "5K", 10000: "10K", 21097: "Half marathon", 42195: "Marathon" };
 
@@ -87,7 +87,7 @@ export function RunPlanAsk({ open, units, before, onClose, onSaved }: { open: bo
     const answer = await session.signedIn({ method: "PUT", path: RUN_PLAN_PATH, body: answers }, runPlanResponseSchema);
     setSaving(false);
     if (answer.kind !== "ok") {
-      setProblem("Couldn’t make your plan. Check your connection and try again.");
+      setProblem("Couldn’t create your plan. Check your connection and try again.");
       return;
     }
     onSaved(answer.data);
@@ -113,13 +113,13 @@ export function RunPlanAsk({ open, units, before, onClose, onSaved }: { open: bo
 
   const foot =
     step === "days" ? (
-      <Button label={runner ? "Next" : "Make my plan"} wide disabled={!daysReady} busy={saving} onPress={() => { if (runner) setStep("runner"); else make(); }} />
+      <Button label={runner ? "Next" : "Create plan"} wide disabled={!daysReady} busy={saving} onPress={() => { if (runner) setStep("runner"); else make(); }} />
     ) : step === "runner" ? (
-      <Button label="Make my plan" wide disabled={!runnerReady} busy={saving} onPress={make} />
+      <Button label="Create plan" wide disabled={!runnerReady} busy={saving} onPress={make} />
     ) : undefined;
 
   return (
-    <CoverPage open={open} title="Your run plan" onClose={onClose} {...(foot === undefined ? {} : { foot })}>
+    <CoverPage open={open} title="Training plan" onClose={onClose} {...(foot === undefined ? {} : { foot })}>
       <View style={styles.steps}>
         <View style={styles.bar} accessible accessibilityLabel={`Question ${String(at + 1)} of ${String(order.length)}`}>
           {order.map((s, i) => (
@@ -130,7 +130,7 @@ export function RunPlanAsk({ open, units, before, onClose, onSaved }: { open: bo
       </View>
       {step === "run" ? (
         <View style={styles.q}>
-          <Txt kind="h2">Do you run now?</Txt>
+          <Txt kind="h2">What’s your running experience?</Txt>
           <Options
             options={RUN_OPTIONS}
             selected={doesRun}
@@ -144,8 +144,8 @@ export function RunPlanAsk({ open, units, before, onClose, onSaved }: { open: bo
         </View>
       ) : step === "jog" ? (
         <View style={styles.q}>
-          <Txt kind="h2">How long can you jog without stopping?</Txt>
-          <Txt kind="small">At an easy pace, where you could still talk.</Txt>
+          <Txt kind="h2">How long can you run without stopping?</Txt>
+          <Txt kind="small">At an easy, conversational pace.</Txt>
           <Options
             options={JOG_OPTIONS}
             selected={jog}
@@ -157,8 +157,8 @@ export function RunPlanAsk({ open, units, before, onClose, onSaved }: { open: bo
         </View>
       ) : step === "days" ? (
         <View style={styles.q}>
-          <Txt kind="h2">Which days can you run?</Txt>
-          <Txt kind="small">{runner ? "Pick two or more." : "Pick two or more. The plan runs three days a week, with a rest day between."}</Txt>
+          <Txt kind="h2">Which days do you want to run?</Txt>
+          <Txt kind="small">{runner ? "Pick at least two." : "Pick at least two. Couch to 5K uses three days a week, with a rest day between runs."}</Txt>
           <View style={styles.days}>
             {[1, 2, 3, 4, 5, 6, 7].map((d) => {
               const on = days.includes(d);
@@ -179,9 +179,9 @@ export function RunPlanAsk({ open, units, before, onClose, onSaved }: { open: bo
             })}
           </View>
           <Txt kind="h3" style={styles.gap}>
-            What are you aiming for?
+            What’s your goal?
           </Txt>
-          <Txt kind="small">{runner ? "Your plan grows until you’re ready for it." : "After Couch to 5K, your plan grows towards it."}</Txt>
+          <Txt kind="small">{runner ? "Your plan builds up until you’re ready for it." : "After Couch to 5K, your plan builds towards it."}</Txt>
           <View style={styles.chips}>
             {(["5k", "10k", "half"] as const).map((g) => (
               <Chip key={g} label={GOAL_WORDS[g]} on={goal === g} onPress={() => { setGoal(g); }} />
@@ -191,9 +191,9 @@ export function RunPlanAsk({ open, units, before, onClose, onSaved }: { open: bo
         </View>
       ) : (
         <View style={styles.q}>
-          <Txt kind="h2">Your running now</Txt>
+          <Txt kind="h2">Your current running</Txt>
           <Ruler
-            label="How far you run in a usual week"
+            label="Weekly distance"
             rows={rowsOf(units, units === "imperial" ? 100 : 150, false)}
             index={weeklyM === null ? 15 : Math.round(weeklyM / per(units))}
             isSet={weeklyM !== null}
@@ -203,7 +203,7 @@ export function RunPlanAsk({ open, units, before, onClose, onSaved }: { open: bo
             onPick={(i) => { setWeeklyM(Math.round(i * per(units))); }}
           />
           <Ruler
-            label="Your longest run in the last month"
+            label="Longest run in the last 4 weeks"
             rows={rowsOf(units, units === "imperial" ? 26 : 42, true)}
             index={longestM === null ? 10 : Math.round((longestM / per(units)) * 2)}
             isSet={longestM !== null}
@@ -213,9 +213,9 @@ export function RunPlanAsk({ open, units, before, onClose, onSaved }: { open: bo
             onPick={(i) => { setLongestM(Math.round((i / 2) * per(units))); }}
           />
           <Txt kind="h3" style={styles.gap}>
-            A race time from the last 6 weeks
+            Recent race time
           </Txt>
-          <Txt kind="small">Optional. It sets your paces; without one, you run by feel.</Txt>
+          <Txt kind="small">Optional. From the last 6 weeks. Used to set your training paces.</Txt>
           <View style={styles.chips}>
             <Chip label="None" small on={raceDistance === null} onPress={() => { setRaceDistance(null); setRace(null); }} />
             {RACE_DISTANCES_M.map((m) => (
