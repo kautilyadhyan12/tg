@@ -6,7 +6,7 @@
 // candidates only.
 import type { FastifyBaseLogger } from "fastify";
 import type { Sql } from "postgres";
-import { RUN_CALC_VERSION, runPlanAnswersSchema, runPlanOf, runsFrom, climbFromHeights, climbSamples, decodePolyline, encodePolyline, hillLineOf, hillLineSchema, paceLineSchema, routeShape, runSplitSchema, runSums } from "@app/shared";
+import { RUN_CALC_VERSION, restartsPlan, runPlanAnswersSchema, runPlanOf, runsFrom, sameRace, climbFromHeights, climbSamples, decodePolyline, encodePolyline, hillLineOf, hillLineSchema, paceLineSchema, routeShape, runSplitSchema, runSums } from "@app/shared";
 import type {
   GenerateRoutesRequest,
   RouteCandidate,
@@ -473,16 +473,23 @@ export async function runPlan(deps: ReadDeps & { now: () => Date }, userId: stri
   ]);
   const safeMode = rules.answers.health?.safeMode === true;
   const answers = row === null ? null : answersOf(row.answers);
-  if (safeMode) return { answers, plan: { kind: "none", why: "safe_mode" } };
-  if (row === null || answers === null) return { answers: null, plan: null };
   const timeZone = safeTimeZone(ctx.timezone);
   const today = dayInTz(deps.now(), timeZone);
-  const answeredDay = dayInTz(row.answeredAt, timeZone);
-  const runs = answers.doesRun === "no" ? [] : await repo.getRunPlanDays(deps.sql, userId, timeZone, runsFrom(answeredDay, today));
-  return { answers, plan: runPlanOf({ answers, answeredDay, today, safeMode, runs }) };
+  if (safeMode) return { answers, plan: { kind: "none", why: "safe_mode" }, today };
+  if (row === null || answers === null) return { answers: null, plan: null, today };
+  const startDay = dayInTz(row.startedAt, timeZone);
+  const raceDay = row.raceAt === null ? null : dayInTz(row.raceAt, timeZone);
+  const runs = answers.doesRun === "no" ? [] : await repo.getRunPlanDays(deps.sql, userId, timeZone, runsFrom(startDay, today));
+  return { answers, plan: runPlanOf({ answers, startDay, raceDay, today, safeMode, runs }), today };
 }
 
 export async function setRunPlan(deps: ReadDeps & { now: () => Date }, userId: string, answers: RunPlanAnswers): Promise<RunPlanResponse> {
-  await repo.putRunPlan(deps.sql, userId, answers, deps.now());
+  const now = deps.now();
+  const before = await repo.getRunPlan(deps.sql, userId);
+  const kept = before === null ? null : answersOf(before.answers);
+  // Its weeks are kept unless what the plan starts from changed; a race time keeps the day it was given.
+  const startedAt = before !== null && kept !== null && !restartsPlan(kept, answers) ? before.startedAt : now;
+  const raceAt = answers.race === null ? null : before !== null && kept !== null && sameRace(kept.race, answers.race) ? (before.raceAt ?? now) : now;
+  await repo.putRunPlan(deps.sql, userId, answers, startedAt, raceAt, now);
   return runPlan(deps, userId);
 }

@@ -4,7 +4,7 @@
 // before is already picked.
 import { useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
-import { RACE_DISTANCES_M, runPlanResponseSchema, vdotOf, type JogBand, type RaceTime, type RunDoesRun, type RunGoal, type RunPlanAnswers, type RunPlanResponse, type Units } from "@app/shared";
+import { RACE_DISTANCES_M, couchTo5kFor, hasRestDayBetween, runPlanResponseSchema, vdotOf, type JogBand, type RaceTime, type RunDoesRun, type RunGoal, type RunPlanAnswers, type RunPlanResponse, type Units } from "@app/shared";
 import { Button } from "../../look/Button";
 import { Options } from "../../look/Choice";
 import { Chip } from "../../look/Chip";
@@ -94,6 +94,11 @@ export function RunPlanAsk({ open, units, before, onClose, onSaved }: { open: bo
   };
   const make = () => {
     if (doesRun === null || doesRun === "no" || jog === null || goal === null) return;
+    // A runner who runs nothing now starts at Couch to 5K's last week, which needs a rest day between runs.
+    if (couchTo5kFor({ jog, weeklyM, longestM }) && !hasRestDayBetween(days)) {
+      setProblem("Couch to 5K needs a rest day between runs. Go back and pick days with a day between them.");
+      return;
+    }
     void send({
       doesRun,
       jog,
@@ -108,7 +113,9 @@ export function RunPlanAsk({ open, units, before, onClose, onSaved }: { open: bo
   const order: Step[] = runner ? ["run", "jog", "days", "runner"] : ["run", "jog", "days"];
   const at = Math.max(0, order.indexOf(step));
   const back = at > 0 ? () => { setStep(order[at - 1] ?? "run"); } : null;
-  const daysReady = days.length >= 2 && goal !== null;
+  // Couch to 5K runs with a rest day between: two picked days side by side cannot hold it.
+  const restDayMissing = !runner && days.length >= 2 && !hasRestDayBetween(days);
+  const daysReady = days.length >= 2 && goal !== null && !restDayMissing;
   const runnerReady = weeklyM !== null && longestM !== null && (raceDistance === null || race !== null);
 
   const foot =
@@ -178,6 +185,11 @@ export function RunPlanAsk({ open, units, before, onClose, onSaved }: { open: bo
               );
             })}
           </View>
+          {restDayMissing ? (
+            <Txt kind="small" colour="badText">
+              Pick two days with a rest day between them.
+            </Txt>
+          ) : null}
           <Txt kind="h3" style={styles.gap}>
             What’s your goal?
           </Txt>

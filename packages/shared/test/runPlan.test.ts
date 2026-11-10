@@ -46,7 +46,8 @@ const beginnerAnswers = (over: Partial<RunPlanAnswers> = {}): RunPlanAnswers => 
 });
 const input = (answers: RunPlanAnswers, over: Partial<RunPlanInput> = {}): RunPlanInput => ({
   answers,
-  answeredDay: MONDAY,
+  startDay: MONDAY,
+  raceDay: MONDAY,
   today: MONDAY,
   safeMode: false,
   runs: [],
@@ -72,7 +73,7 @@ describe("the worst thing: a run that hurts somebody", () => {
     let checked = 0;
     for (const goal of RUN_GOALS) {
       for (const weeklyM of [8_000, 20_000, 45_000, 90_000]) {
-        for (const longestM of [3_000, 6_000, 12_000, 30_000]) {
+        for (const longestM of [1_500, 2_000, 3_000, 6_000, 12_000, 30_000]) {
           for (const days of [[2, 6], [1, 3, 5, 7], [1, 2, 3, 4, 5, 6, 7]]) {
             for (const week of [0, 1, 2, 5, 9]) {
               // Runs recorded each planned day at the planned distance, then the plan read week by week.
@@ -86,8 +87,9 @@ describe("the worst thing: a run that hurts somebody", () => {
                 if (todays !== undefined && sessionM(todays) > 0) runs.push(run(day, sessionM(todays)));
               }
               const plan = runPlanOf(input(answers, { today, runs }));
-              const longest30 = Math.max(longestM, 4_000, ...runs.filter((x) => x.day >= planDayPlus(today, -30)).map((x) => x.longestM));
-              const known = week * 7 + 2 <= 30 ? longest30 : Math.max(4_000, ...runs.filter((x) => x.day >= planDayPlus(today, -30)).map((x) => x.longestM));
+              // The stated longest while it is from the last 30 days, and the runs really recorded: nothing else.
+              const recorded = runs.filter((x) => x.day >= planDayPlus(today, -30)).map((x) => x.longestM);
+              const known = week * 7 + 2 <= 30 ? Math.max(longestM, ...recorded) : Math.max(0, ...recorded);
               for (const d of daysOf(plan)) {
                 expect(sessionM(d)).toBeLessThanOrEqual(Math.floor(known * 1.1));
                 checked += 1;
@@ -193,6 +195,22 @@ describe("Couch to 5K: the NHS printable plan", () => {
 });
 
 describe("a runner's week", () => {
+  it("a small week and a short longest run are planned as they are, never raised", () => {
+    for (const [weeklyM, longestM] of [[5_000, 2_000], [8_000, 3_000], [3_000, 1_500]] as const) {
+      const plan = runPlanOf(input(runnerAnswers({ weeklyM, longestM, race: null })));
+      expect(plan.kind).toBe("runner");
+      expect(plan.kind === "runner" ? plan.weekM : 99_999).toBeLessThanOrEqual(weeklyM);
+      expect(Math.max(...daysOf(plan).map(sessionM))).toBeLessThanOrEqual(Math.floor(longestM * 1.1));
+    }
+  });
+
+  it("someone who can run 30 minutes but runs nothing now starts at Couch to 5K's last week", () => {
+    for (const over of [{ weeklyM: 0 }, { longestM: 0 }]) {
+      const plan = runPlanOf(input(runnerAnswers({ ...over, race: null })));
+      expect(plan.kind === "c25k" ? plan.week : 0).toBe(9);
+    }
+  });
+
   it("starts at the week they run now, never more, with one long run on the weekend", () => {
     const plan = runPlanOf(input(runnerAnswers()));
     expect(plan.kind).toBe("runner");
@@ -240,10 +258,12 @@ describe("a runner's week", () => {
     expect(held.kind === "runner" ? held.weekM : 0).toBeLessThanOrEqual(20_000);
   });
 
-  it("a week half run grows from 80 % of it, never back up by running more", () => {
+  it("a week run short grows only from what was run, never back up by running more", () => {
     const answers = runnerAnswers({ weeklyM: 30_000, longestM: 12_000 });
     const plan = runPlanOf(input(answers, { today: planDayPlus(MONDAY, 14), runs: [run(planDayPlus(MONDAY, 7), 5000)] }));
-    expect(plan.kind === "runner" ? plan.weekM : 99_999).toBeLessThanOrEqual(Math.round(30_000 * 0.8 * 1.1) + 400);
+    expect(plan.kind === "runner" ? plan.weekM : 99_999).toBeLessThanOrEqual(5_500);
+    const tiny = runPlanOf(input(runnerAnswers({ weeklyM: 20_000, longestM: 8_000 }), { today: planDayPlus(MONDAY, 14), runs: [run(planDayPlus(MONDAY, 7), 1000)] }));
+    expect(tiny.kind === "runner" ? tiny.weekM : 99_999).toBeLessThanOrEqual(1_100);
   });
 
   it("stops growing at the distance picked", () => {
@@ -262,6 +282,11 @@ describe("a runner's week", () => {
     expect(plan.kind === "runner" && plan.paces === null && plan.raceOld).toBe(true);
   });
 
+  it("the race time's own day counts, never the plan's: two months old is by feel, however new the plan", () => {
+    const plan = runPlanOf(input(runnerAnswers(), { startDay: planDayPlus(MONDAY, 50), raceDay: MONDAY, today: planDayPlus(MONDAY, 50) }));
+    expect(plan.kind === "runner" && plan.paces === null && plan.raceOld).toBe(true);
+  });
+
   it("no race time: paces by feel", () => {
     const plan = runPlanOf(input(runnerAnswers({ race: null })));
     expect(plan.kind === "runner" && plan.paces).toBeNull();
@@ -277,8 +302,10 @@ describe("Daniels' paces against his published table", () => {
   ])("5 km in %i s: VDOT %i, steady near %i s/km, fast near %i s/km", (timeS, vdot, steady, fast) => {
     expect(Math.abs((vdotOf({ distanceM: 5000, timeS }) ?? 0) - vdot)).toBeLessThan(0.6);
     const paces = pacesOf({ distanceM: 5000, timeS });
-    expect(Math.abs((paces?.steady[0] ?? 0) - steady)).toBeLessThanOrEqual(6);
-    expect(Math.abs((paces?.fast ?? 0) - fast)).toBeLessThanOrEqual(6);
+    expect(Math.abs((paces?.steady[0] ?? 0) - steady)).toBeLessThanOrEqual(3);
+    expect(Math.abs((paces?.fast ?? 0) - fast)).toBeLessThanOrEqual(3);
+    // Easy is slower than steady at both ends, its slow end at 59 % of VDOT (the book's own share).
+    expect(paces?.easy[0] ?? 0).toBeGreaterThan(paces?.steady[1] ?? 0);
   });
 
   it("a time faster than the world record, or slower than any table, is no race time", () => {
@@ -303,6 +330,7 @@ describe("the answers", () => {
     ["no goal", runnerAnswers({ goal: null })],
     ["a 300 km week", runnerAnswers({ weeklyM: 300_000 })],
     ["a 5 km in 9 minutes", runnerAnswers({ race: { distanceM: 5000, timeS: 540 } })],
+    ["Couch to 5K on two days side by side", beginnerAnswers({ days: [6, 7] })],
     ["a no with a goal", { doesRun: "no", jog: null, days: [], goal: "5k", weeklyM: null, longestM: null, race: null }],
   ])("refuses %s", (_name, answers) => {
     expect(runPlanAnswersSchema.safeParse(answers).success).toBe(false);

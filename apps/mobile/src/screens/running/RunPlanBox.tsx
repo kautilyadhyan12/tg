@@ -108,7 +108,8 @@ export function RunPlanBox({ read, units, onMake, onOpen, onCleared }: { read: P
       </View>
     );
   }
-  const today = phoneToday();
+  // The server's today, in the person's own time zone: the day the plan was worked out for.
+  const today = read.data.today;
   const next = nextRun(plan.days, today);
   const paces = plan.kind === "runner" ? plan.paces : null;
   return (

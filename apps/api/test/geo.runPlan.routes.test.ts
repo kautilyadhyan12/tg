@@ -147,7 +147,7 @@ d("the run plan (real Postgres)", () => {
       const stranger = await makeUser("stranger");
       await answer(me.cookies, RUNNER);
       await keep(me.id, "2026-11-09T01:00:00.000Z", 5_000, 1800);
-      expect(await read(stranger.cookies)).toEqual({ answers: null, plan: null });
+      expect(await read(stranger.cookies)).toEqual({ answers: null, plan: null, today: "2026-11-09" });
       // The stranger answers: only their own row changes.
       await answer(stranger.cookies, BEGINNER);
       expect((await read(me.cookies)).answers).toEqual(RUNNER);
@@ -186,6 +186,27 @@ d("the run plan (real Postgres)", () => {
       expect((await answer(me.cookies, no)).plan).toEqual({ kind: "none", why: "not_for_me" });
       const rows = await sql<{ n: string }[]>`SELECT count(*) AS n FROM run_plans WHERE user_id = ${me.id}`;
       expect(Number(rows[0]?.n)).toBe(1);
+    });
+
+    it("Edit plan with new days or a race time keeps the weeks; a new week restarts them; a race time keeps its own day", { timeout: 60_000 }, async () => {
+      clock = new Date("2026-11-09T04:30:00.000Z");
+      const me = await makeUser("edit");
+      await answer(me.cookies, { ...RUNNER, race: null });
+      // Three weeks on: week 4. New days keep it; a race time added keeps it.
+      clock = new Date("2026-11-30T04:30:00.000Z");
+      const newDays = await answer(me.cookies, { ...RUNNER, race: null, days: [2, 4, 6] });
+      expect(newDays.plan?.kind === "runner" ? newDays.plan.week : 0).toBe(4);
+      const withRace = await answer(me.cookies, { ...RUNNER, days: [2, 4, 6] });
+      expect(withRace.plan?.kind === "runner" ? withRace.plan.week : 0).toBe(4);
+      expect(withRace.plan?.kind === "runner" && withRace.plan.paces !== null).toBe(true);
+      // Seven weeks after the race time was given, a change of days does not make it new again.
+      clock = new Date("2027-01-18T04:30:00.000Z");
+      const later = await answer(me.cookies, { ...RUNNER, days: [1, 3, 5, 7] });
+      expect(later.plan?.kind === "runner" && later.plan.raceOld).toBe(true);
+      // A new weekly distance starts the plan again.
+      const restarted = await answer(me.cookies, { ...RUNNER, weeklyM: 30_000 });
+      expect(restarted.plan?.kind === "runner" ? restarted.plan.week : 0).toBe(1);
+      expect(restarted.today).toBe("2027-01-18");
     });
 
     it("Couch to 5K: a run this app recorded ticks the run off in the person's own day; an imported run counts for nothing", { timeout: 60_000 }, async () => {

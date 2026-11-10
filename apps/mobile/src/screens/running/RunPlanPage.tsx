@@ -9,14 +9,14 @@ import { Icon } from "../../look/Icon";
 import { PictureTop } from "../../look/PictureTop";
 import { fonts, Txt } from "../../look/Txt";
 import { GOAL_WORDS, paceOf, planDistance, sessionDetail, sessionTitle, walkRunCore, weekdayShort } from "./runPlanWords";
-import { heldLine, phoneToday } from "./RunPlanBox";
+import { heldLine } from "./RunPlanBox";
 
 type Shown = Exclude<RunPlan, { kind: "none" }>;
 
 export const RULES_LINE = "No run is more than 10\u00a0% longer than your longest of the last 30 days (a 2025 study of 5,205 runners), and a week grows by 10\u00a0% at most, with a recovery week every fourth.";
 export const NHS_LINE = "Go at a pace where you can still talk. Have a rest day between runs. If a week felt hard, do it again: the plan waits for you. From the NHS Couch to 5K plan.";
 
-export function RunPlanPage({ plan, units, onClose, onChange }: { plan: Shown | null; units: Units; onClose: () => void; onChange: () => void }) {
+export function RunPlanPage({ plan, today, units, onClose, onChange }: { plan: Shown | null; today: string; units: Units; onClose: () => void; onChange: () => void }) {
   const runs = plan === null ? 0 : plan.days.filter((d) => d.session !== null).length;
   const hero =
     plan === null ? undefined : (
@@ -32,7 +32,6 @@ export function RunPlanPage({ plan, units, onClose, onChange }: { plan: Shown | 
         }
       />
     );
-  const today = phoneToday();
   return (
     <CoverPage open={plan !== null} title="Training plan" onClose={onClose} {...(hero === undefined ? {} : { hero })}>
       {plan === null ? null : (

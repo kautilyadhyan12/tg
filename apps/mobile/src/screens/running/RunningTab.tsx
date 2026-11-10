@@ -385,6 +385,7 @@ export function RunningTab({ units, parts }: { units: Units; parts: ReactNode })
           />
           <RunPlanPage
             plan={planOpen ? shownPlan : null}
+            today={plan.kind === "ok" ? plan.data.today : ""}
             units={units}
             onClose={() => {
               setPlanOpen(false);

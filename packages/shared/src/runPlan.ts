@@ -43,6 +43,16 @@ const raceSchema = z
   .strict();
 export type RaceTime = z.infer<typeof raceSchema>;
 
+/** Couch to 5K is the plan for somebody who cannot yet run 30 minutes, and for somebody who can but runs
+ *  nothing now (no weekly distance or no run in the last 4 weeks): they start at its last week. */
+export const couchTo5kFor = (a: { jog: JogBand | null; weeklyM: number | null; longestM: number | null }): boolean =>
+  a.jog !== "30plus" || a.weeklyM === 0 || a.longestM === 0;
+
+/** Two of the picked days with a rest day between (the NHS: "a rest day between runs"), the week round. */
+export function hasRestDayBetween(days: readonly number[]): boolean {
+  return days.some((a) => days.some((b) => a !== b && Math.min(Math.abs(a - b), 7 - Math.abs(a - b)) >= 2));
+}
+
 /** Daniels' VDOT from a race, or null when the time is outside his tables (30 to 85), widened to
  *  20 so a slow beginner's 5 km still counts: faster than the tables is no real race time. */
 export function vdotOf(race: RaceTime): number | null {
@@ -87,6 +97,7 @@ export const runPlanAnswersSchema = z
       wrong("jog", "only a runner gives a week, a longest run and a race");
     }
     if (a.race !== null && vdotOf(a.race) === null) wrong("race", "not a race time");
+    if (couchTo5kFor(a) && !hasRestDayBetween(a.days)) wrong("days", "two days a day apart");
   });
 export type RunPlanAnswers = z.infer<typeof runPlanAnswersSchema>;
 
@@ -177,14 +188,10 @@ export const RUN_GROWTH = 1.1;
 export const EASIER_EVERY = 4;
 export const EASIER_SHARE = 0.8;
 /** A week in which fewer than this share of the planned distance was run grows from this share. */
-const WEEK_FLOOR_SHARE = 0.8;
 export const LONG_SHARE = 0.3;
 export const LONG_MOST_S = 150 * 60;
 export const STEADY_SHARE = 0.1;
 export const FAST_SHARE = 0.08;
-/** Somebody who can jog 30 minutes and runs less: three runs of 30 minutes, the NHS plan's last
- *  week, at a slow jog of 7:30 a kilometre. */
-const THIRTY_MIN_M = 4_000;
 const LEAST_RUN_M = 2_000;
 /** A run with steady or fast running: 1.5 km easy before and after (about ten minutes, Daniels' warm-up). */
 const WARM_M = 1_500;
@@ -268,7 +275,7 @@ export interface RunDay {
   longestM: number;
   /** The longest moving time of one run that day. */
   movingS: number;
-  /** How the hardest run of the day felt, 1 to 10, as the person rated it after the run; null unrated. */
+  /** How the day's longest run felt, 1 to 10, as the person rated it after the run; null unrated. */
   effort: number | null;
 }
 
@@ -283,8 +290,10 @@ const feltHard = (runs: readonly RunDay[]): boolean => {
 
 export interface RunPlanInput {
   answers: RunPlanAnswers;
-  /** The day the answers were given, in the person's time zone. */
-  answeredDay: string;
+  /** The plan's first day, in the person's time zone: kept when only the days, the goal or the race time change. */
+  startDay: string;
+  /** The day the race time was given, in the person's time zone; null with none. */
+  raceDay: string | null;
   today: string;
   safeMode: boolean;
   /** From 30 days before the answers to today, in day order. */
@@ -292,11 +301,15 @@ export interface RunPlanInput {
 }
 
 /** The days a plan reads runs from. */
-export const runsFrom = (answeredDay: string, today: string): string => planDayPlus(answeredDay < today ? answeredDay : today, -30);
+export const runsFrom = (startDay: string, today: string): string => planDayPlus(startDay < today ? startDay : today, -30);
 
 const roundM = (m: number): number => Math.max(0, Math.floor(m / ROUND_M) * ROUND_M);
 
 // ── Paces ──────────────────────────────────────────────────────────────────────────────────────
+
+/** Daniels' interval pace sits a little under VO2max: about 97.5 % of VDOT matches his table (3:55 a
+ *  kilometre at VDOT 50, 4:42 at VDOT 40). */
+const INTERVAL_SHARE = 0.975;
 
 /** The speed, in metres a minute, at which running costs `vo2` (Daniels' cost of running, solved). */
 const speedFor = (vo2: number): number => {
@@ -313,7 +326,7 @@ export function pacesOf(race: RaceTime): Paces | null {
   return {
     easy: [secondsPerKm(vdot, 0.74), secondsPerKm(vdot, 0.59)],
     steady: [secondsPerKm(vdot, 0.88), secondsPerKm(vdot, 0.85)],
-    fast: secondsPerKm(vdot, 1),
+    fast: secondsPerKm(vdot, INTERVAL_SHARE),
   };
 }
 
@@ -323,12 +336,17 @@ export function runPlanOf(input: RunPlanInput): RunPlan {
   if (input.safeMode) return { kind: "none", why: "safe_mode" };
   const { answers } = input;
   if (answers.doesRun === "no" || answers.jog === null || answers.goal === null) return { kind: "none", why: "not_for_me" };
-  if (answers.jog !== "30plus") return couchTo5k(input, answers.jog, answers.goal);
+  if (couchTo5kFor(answers)) {
+    const startWeek = answers.jog === "30plus" ? C25K_WEEK_COUNT : C25K_START_WEEK[answers.jog];
+    return couchTo5k(input, (startWeek - 1) * C25K_RUNS_A_WEEK, answers.goal);
+  }
+  // Exactly what the person said they run: never raised, so the 10 % limit is theirs.
   return runner(input, answers.goal, {
-    startM: Math.max(answers.weeklyM ?? 0, Math.min(3, answers.days.length) * THIRTY_MIN_M),
-    longestM: Math.max(answers.longestM ?? 0, THIRTY_MIN_M),
+    startM: answers.weeklyM ?? 0,
+    longestM: answers.longestM ?? 0,
     race: answers.race,
-    from: input.answeredDay,
+    raceDay: input.raceDay,
+    from: input.startDay,
     experienced: (answers.weeklyM ?? 0) >= EXPERIENCED_FROM_M,
   });
 }
@@ -347,8 +365,7 @@ function spacedDays(picked: readonly number[], weekStart: string, from: string, 
   return out;
 }
 
-function couchTo5k(input: RunPlanInput, jog: Exclude<JogBand, "30plus">, goal: RunGoal): RunPlan {
-  const start = (C25K_START_WEEK[jog] - 1) * C25K_RUNS_A_WEEK;
+function couchTo5k(input: RunPlanInput, start: number, goal: RunGoal): RunPlan {
   // Each day's run counts as the next run of the plan once it is long enough: one a day.
   const done = new Map<string, number>();
   let next = start;
@@ -356,7 +373,7 @@ function couchTo5k(input: RunPlanInput, jog: Exclude<JogBand, "30plus">, goal: R
   // to repeat any of the runs or weeks, that's totally okay").
   let repeat = false;
   for (const run of input.runs) {
-    if (run.day < input.answeredDay || run.day > input.today || next >= C25K_SESSIONS) continue;
+    if (run.day < input.startDay || run.day > input.today || next >= C25K_SESSIONS) continue;
     if (run.movingS >= countsFor(next)) {
       done.set(run.day, next);
       repeat = run.effort !== null && run.effort >= VERY_HARD_EFFORT;
@@ -368,9 +385,10 @@ function couchTo5k(input: RunPlanInput, jog: Exclude<JogBand, "30plus">, goal: R
     const finishedOn = [...done.keys()].at(-1) ?? input.today;
     const last = input.runs.filter((x) => x.day > planDayPlus(finishedOn, -7) && x.day <= finishedOn);
     return runner(input, goal, {
-      startM: Math.max(last.reduce((t, x) => t + x.distanceM, 0), THIRTY_MIN_M),
-      longestM: Math.max(THIRTY_MIN_M, ...last.map((x) => x.longestM)),
+      startM: last.reduce((t, x) => t + x.distanceM, 0),
+      longestM: Math.max(0, ...last.map((x) => x.longestM)),
       race: null,
+      raceDay: null,
       from: planDayPlus(finishedOn, 1),
       experienced: false,
     });
@@ -405,6 +423,8 @@ interface RunnerStart {
   startM: number;
   longestM: number;
   race: RaceTime | null;
+  /** The day the race time was given; null with none. */
+  raceDay: string | null;
   /** The plan's first day: its week is week 1. */
   from: string;
   experienced: boolean;
@@ -439,7 +459,8 @@ function weekTargets(input: RunPlanInput, start: RunnerStart, peakM: number, upT
     // An easier week is judged against its own smaller distance.
     const plannedM = (wk - 1) % EASIER_EVERY === 0 ? before * EASIER_SHARE : before;
     const share = plannedM > 0 ? ranM / plannedM : 1;
-    const from = before * Math.min(1, Math.max(share, WEEK_FLOOR_SHARE));
+    // Only from what was really run: a week half run grows from that half.
+    const from = before * Math.min(1, share);
     nominal.push(Math.min(ceiling, from * WEEK_GROWTH));
   }
   return { nominal, held, hard };
@@ -465,7 +486,7 @@ function runner(input: RunPlanInput, goal: RunGoal, start: RunnerStart): RunPlan
   const thisNominal = nominal[week - 1] ?? start.startM;
   const easier = week % EASIER_EVERY === 0;
   const targetM = easier ? thisNominal * EASIER_SHARE : thisNominal;
-  const raceOld = start.race !== null && daysBetween(start.from, input.today) > RACE_KEPT_DAYS;
+  const raceOld = start.race !== null && (start.raceDay === null || daysBetween(start.raceDay, input.today) > RACE_KEPT_DAYS);
   const paces = start.race !== null && !raceOld ? pacesOf(start.race) : null;
   const capM = runCapM(input, start);
   const plan = weekOf(input, start, targetM, capM, peak.longM, paces, easier, weekStart);
@@ -505,7 +526,8 @@ function weekOf(input: RunPlanInput, start: RunnerStart, targetM: number, capM: 
   // Six runs at most: the day after the long run rests.
   const runDays = picked.length > MOST_RUN_DAYS ? picked.filter((d) => d !== (longDay % 7) + 1) : picked;
   const easySlow = paces?.easy[1] ?? SLOW_EASY_S_PER_KM;
-  const longM = roundM(Math.min(targetM * LONG_SHARE, capM, peakLongM, (LONG_MOST_S / easySlow) * 1000));
+  // A small week is one run: the long run takes the whole of it up to 2 km, never past the cap.
+  const longM = roundM(Math.min(Math.max(targetM * LONG_SHARE, Math.min(targetM, LEAST_RUN_M)), capM, peakLongM, (LONG_MOST_S / easySlow) * 1000));
   const hardWanted = runDays.length >= 3 && targetM >= HARD_FROM_WEEK_M ? (easier ? 1 : start.experienced ? 2 : 1) : 0;
   const hardDays: number[] = [];
   for (const d of runDays) {
@@ -629,5 +651,15 @@ export const runPlanSchema = z.discriminatedUnion("kind", [
 export const runPlanResponseSchema = z.object({
   answers: runPlanAnswersSchema.nullable(),
   plan: runPlanSchema.nullable(),
+  /** Today in the person's own time zone, as the plan was worked out: the phone lights this day. */
+  today: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
 });
+
+/** New answers restart the plan only when what it starts from changes: running or not, how long they
+ *  can run, their week or their longest run. New days, a new goal or a race time keep its weeks. */
+export function restartsPlan(before: RunPlanAnswers, after: RunPlanAnswers): boolean {
+  return before.doesRun !== after.doesRun || before.jog !== after.jog || before.weeklyM !== after.weeklyM || before.longestM !== after.longestM;
+}
+
+export const sameRace = (a: RaceTime | null, b: RaceTime | null): boolean => (a === null || b === null ? a === b : a.distanceM === b.distanceM && a.timeS === b.timeS);
 export type RunPlanResponse = z.infer<typeof runPlanResponseSchema>;

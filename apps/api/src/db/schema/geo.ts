@@ -134,7 +134,8 @@ export const runPlans = pgTable(
       .primaryKey()
       .references(() => users.id, { onDelete: "cascade" }),
     answers: jsonb("answers").notNull(),
-    answeredAt: timestamp("answered_at", { withTimezone: true }).notNull(),
+    startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
+    raceAt: timestamp("race_at", { withTimezone: true }),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [check("run_plans_answers_check", sql`jsonb_typeof(${t.answers}) = 'object'`)],
