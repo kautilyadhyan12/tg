@@ -234,7 +234,15 @@ export interface PlanAhead {
 
 export type RunPlan =
   | { kind: "none"; why: "safe_mode" | "not_for_me" }
-  | { kind: "c25k"; week: number; days: PlanDay[]; ahead: PlanAhead[]; goal: RunGoal }
+  | {
+      kind: "c25k";
+      week: number;
+      days: PlanDay[];
+      ahead: PlanAhead[];
+      goal: RunGoal;
+      /** True when the newest run felt very hard: the next run is the same one again. */
+      repeat: boolean;
+    }
   | {
       kind: "runner";
       week: number;
@@ -249,6 +257,8 @@ export type RunPlan =
       raceOld: boolean;
       /** True when no run was recorded last week, so the week did not grow. */
       held: boolean;
+      /** True when last week's runs felt very hard, so the week did not grow. */
+      hard: boolean;
     };
 
 /** What the plan reads of the person's recorded runs: one row a day, this app's runs only. */
@@ -258,7 +268,18 @@ export interface RunDay {
   longestM: number;
   /** The longest moving time of one run that day. */
   movingS: number;
+  /** How the hardest run of the day felt, 1 to 10, as the person rated it after the run; null unrated. */
+  effort: number | null;
 }
+
+/** A rating of this or more is "very hard" (the run's own 1-to-10 scale, its top fifth). */
+export const VERY_HARD_EFFORT = 8;
+
+/** Runs felt very hard: at least two rated, and half or more of them very hard. */
+const feltHard = (runs: readonly RunDay[]): boolean => {
+  const rated = runs.flatMap((x) => (x.effort === null ? [] : [x.effort]));
+  return rated.length >= 2 && rated.filter((e) => e >= VERY_HARD_EFFORT).length * 2 >= rated.length;
+};
 
 export interface RunPlanInput {
   answers: RunPlanAnswers;
@@ -331,11 +352,15 @@ function couchTo5k(input: RunPlanInput, jog: Exclude<JogBand, "30plus">, goal: R
   // Each day's run counts as the next run of the plan once it is long enough: one a day.
   const done = new Map<string, number>();
   let next = start;
+  // A run that felt very hard is ticked, and the next run is the same one again (the NHS: "if you need
+  // to repeat any of the runs or weeks, that's totally okay").
+  let repeat = false;
   for (const run of input.runs) {
     if (run.day < input.answeredDay || run.day > input.today || next >= C25K_SESSIONS) continue;
     if (run.movingS >= countsFor(next)) {
       done.set(run.day, next);
-      next += 1;
+      repeat = run.effort !== null && run.effort >= VERY_HARD_EFFORT;
+      if (!repeat) next += 1;
     }
   }
   if (next >= C25K_SESSIONS) {
@@ -373,7 +398,7 @@ function couchTo5k(input: RunPlanInput, jog: Exclude<JogBand, "30plus">, goal: R
   for (let wk = week + 1; wk <= Math.min(C25K_WEEK_COUNT, week + 3); wk += 1) {
     ahead.push({ week: wk, m: null, easier: false, parts: c25kParts((wk - 1) * C25K_RUNS_A_WEEK) });
   }
-  return { kind: "c25k", week, days, ahead, goal };
+  return { kind: "c25k", week, days, ahead, goal, repeat };
 }
 
 interface RunnerStart {
@@ -386,12 +411,13 @@ interface RunnerStart {
 }
 
 /** The planned distance of each week up to `upTo`, from what was run in the weeks before it. */
-function weekTargets(input: RunPlanInput, start: RunnerStart, peakM: number, upTo: number): { nominal: number[]; held: boolean } {
+function weekTargets(input: RunPlanInput, start: RunnerStart, peakM: number, upTo: number): { nominal: number[]; held: boolean; hard: boolean } {
   const firstMonday = mondayOf(start.from);
   // Week 1 begun after its Monday is part of a week: it holds, and growth starts from week 2's runs.
   const ceiling = Math.max(peakM, start.startM);
   const nominal: number[] = [start.startM];
   let held = false;
+  let hard = false;
   for (let wk = 2; wk <= upTo; wk += 1) {
     const before = nominal[wk - 2] ?? start.startM;
     const monday = planDayPlus(firstMonday, (wk - 2) * 7);
@@ -404,13 +430,19 @@ function weekTargets(input: RunPlanInput, start: RunnerStart, peakM: number, upT
       if (wk === upTo) held = ran.length === 0 && wk % EASIER_EVERY !== 0;
       continue;
     }
+    // Runs that felt very hard last week: this week stays the same.
+    if (feltHard(ran)) {
+      nominal.push(before);
+      if (wk === upTo) hard = true;
+      continue;
+    }
     // An easier week is judged against its own smaller distance.
     const plannedM = (wk - 1) % EASIER_EVERY === 0 ? before * EASIER_SHARE : before;
     const share = plannedM > 0 ? ranM / plannedM : 1;
     const from = before * Math.min(1, Math.max(share, WEEK_FLOOR_SHARE));
     nominal.push(Math.min(ceiling, from * WEEK_GROWTH));
   }
-  return { nominal, held };
+  return { nominal, held, hard };
 }
 
 /** The longest run allowed today: 10 % over the longest of the last 30 days, or the newest longest
@@ -429,7 +461,7 @@ function runner(input: RunPlanInput, goal: RunGoal, start: RunnerStart): RunPlan
   const peak = RUN_GOAL_PEAK[goal];
   const weekStart = mondayOf(input.today);
   const week = Math.max(1, Math.floor(daysBetween(mondayOf(start.from), weekStart) / 7) + 1);
-  const { nominal, held } = weekTargets(input, start, peak.weekM, week);
+  const { nominal, held, hard } = weekTargets(input, start, peak.weekM, week);
   const thisNominal = nominal[week - 1] ?? start.startM;
   const easier = week % EASIER_EVERY === 0;
   const targetM = easier ? thisNominal * EASIER_SHARE : thisNominal;
@@ -457,6 +489,7 @@ function runner(input: RunPlanInput, goal: RunGoal, start: RunnerStart): RunPlan
     paces,
     raceOld,
     held,
+    hard,
   };
 }
 
@@ -515,7 +548,32 @@ function weekOf(input: RunPlanInput, start: RunnerStart, targetM: number, capM: 
     const m = session !== null && session.kind !== "walk_run" ? session.m : 0;
     days.push({ day, weekday: i + 1, session, done: session !== null && ran !== undefined && ran.longestM >= m / 2 });
   }
-  return days;
+  return tickMovedRuns(days, input.runs, start.from);
+}
+
+/** A run recorded on a day with no planned run, or past its own day's, ticks the nearest planned run of
+ *  the week not yet ticked that it covers (half its distance or more), the earlier of two as near: a
+ *  person who runs on Tuesday instead of Monday has done Monday's run, as Runna counts it. */
+function tickMovedRuns(days: PlanDay[], runs: readonly RunDay[], from: string): PlanDay[] {
+  const out = days.map((d) => ({ ...d }));
+  const weekRuns = runs.filter((x) => x.day >= from && out.some((d) => d.day === x.day));
+  for (const run of weekRuns) {
+    const own = out.find((d) => d.day === run.day);
+    if (own?.done === true) continue;
+    const at = out.findIndex((d) => d.day === run.day);
+    let best: PlanDay | null = null;
+    let bestGap = Infinity;
+    for (const [i, d] of out.entries()) {
+      if (d.session === null || d.done || d.session.kind === "walk_run" || run.longestM < d.session.m / 2) continue;
+      const gap = Math.abs(i - at);
+      if (gap < bestGap) {
+        best = d;
+        bestGap = gap;
+      }
+    }
+    if (best !== null) best.done = true;
+  }
+  return out;
 }
 
 /** Steady running at threshold, as repeats of 1 km (1.6 km past 3 km), a minute's easy jog between. */
@@ -549,7 +607,7 @@ const pacesSchema = z.object({ easy: z.tuple([z.number(), z.number()]), steady: 
 
 export const runPlanSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("none"), why: z.enum(["safe_mode", "not_for_me"]) }),
-  z.object({ kind: z.literal("c25k"), week: z.number().int(), days: z.array(planDaySchema), ahead: z.array(aheadSchema), goal: z.enum(RUN_GOALS) }),
+  z.object({ kind: z.literal("c25k"), week: z.number().int(), days: z.array(planDaySchema), ahead: z.array(aheadSchema), goal: z.enum(RUN_GOALS), repeat: z.boolean() }),
   z.object({
     kind: z.literal("runner"),
     week: z.number().int(),
@@ -562,6 +620,7 @@ export const runPlanSchema = z.discriminatedUnion("kind", [
     paces: pacesSchema.nullable(),
     raceOld: z.boolean(),
     held: z.boolean(),
+    hard: z.boolean(),
   }),
 ]);
 

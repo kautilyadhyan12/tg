@@ -26,6 +26,12 @@ export function weekLine(plan: Exclude<RunPlan, { kind: "none" }>, units: Units)
   return `${GOAL_WORDS[plan.goal]} plan · Week ${String(plan.week)} · ${planDistance(plan.weekM, units)}${easier}`;
 }
 
+/** Why the plan held back this week, in one line, or null: the person's own ratings after their runs. */
+export function heldLine(plan: Exclude<RunPlan, { kind: "none" }>): string | null {
+  if (plan.kind === "c25k") return plan.repeat ? "Your last run felt very hard, so your next run is the same one again." : null;
+  return plan.hard ? "Your runs last week felt very hard, so this week stays the same." : null;
+}
+
 /** Today's run, or the next one this week, or null. */
 export function nextRun(days: readonly PlanDay[], today: string): { day: PlanDay; today: boolean } | null {
   const todays = days.find((d) => d.day === today && d.session !== null && !d.done);
@@ -114,6 +120,11 @@ export function RunPlanBox({ read, units, onMake, onOpen, onCleared }: { read: P
       <Txt kind="tiny" colour="textSoft">
         {weekLine(plan, units)}
       </Txt>
+      {heldLine(plan) === null ? null : (
+        <Txt kind="small" colour="gold">
+          {heldLine(plan)}
+        </Txt>
+      )}
       <FootprintWeek days={plan.days} today={today} />
       <View style={styles.next}>
         {next === null || next.day.session === null ? (

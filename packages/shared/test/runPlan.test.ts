@@ -54,7 +54,7 @@ const input = (answers: RunPlanAnswers, over: Partial<RunPlanInput> = {}): RunPl
 });
 const sessionM = (d: PlanDay): number => (d.session !== null && d.session.kind !== "walk_run" ? d.session.m : 0);
 const daysOf = (plan: RunPlan): PlanDay[] => (plan.kind === "none" ? [] : plan.days);
-const run = (day: string, distanceM: number, movingS = distanceM * 0.4): RunDay => ({ day, distanceM, longestM: distanceM, movingS });
+const run = (day: string, distanceM: number, movingS = distanceM * 0.4, effort: number | null = null): RunDay => ({ day, distanceM, longestM: distanceM, movingS, effort });
 
 describe("the worst thing: a run that hurts somebody", () => {
   it("nobody in Safe mode gets a plan, whatever they answered", () => {
@@ -315,5 +315,42 @@ describe("the answers", () => {
   it("weekdays run Monday 1 to Sunday 7", () => {
     expect(planWeekdayOf(MONDAY)).toBe(1);
     expect(planWeekdayOf(planDayPlus(MONDAY, 6))).toBe(7);
+  });
+});
+
+describe("the plan follows what the person really ran and how it felt", () => {
+  it("a run on Tuesday instead of Monday ticks Monday's run; a short one ticks nothing", () => {
+    const answers = runnerAnswers({ weeklyM: 20_000, longestM: 10_000, days: [1, 3, 5, 7] });
+    const before = runPlanOf(input(answers, { today: planDayPlus(MONDAY, 2) }));
+    const monday = before.kind === "runner" ? sessionM(before.days[0] ?? { day: "", weekday: 1, session: null, done: false }) : 0;
+    expect(monday).toBeGreaterThan(0);
+    const moved = runPlanOf(input(answers, { today: planDayPlus(MONDAY, 2), runs: [run(planDayPlus(MONDAY, 1), monday)] }));
+    expect(daysOf(moved)[0]?.done).toBe(true);
+    expect(daysOf(moved).filter((d) => d.done)).toHaveLength(1);
+    const short = runPlanOf(input(answers, { today: planDayPlus(MONDAY, 2), runs: [run(planDayPlus(MONDAY, 1), 500)] }));
+    expect(daysOf(short).some((d) => d.done)).toBe(false);
+  });
+
+  it("a week whose runs felt very hard does not grow, and says so; one hard run among easy ones still grows", () => {
+    const answers = runnerAnswers({ weeklyM: 20_000, longestM: 10_000 });
+    const week1 = [0, 2, 4, 6].map((d) => planDayPlus(MONDAY, d));
+    const hardRuns = week1.map((d) => run(d, 5_000, 1800, 9));
+    const hard = runPlanOf(input(answers, { today: planDayPlus(MONDAY, 7), runs: hardRuns }));
+    expect(hard.kind === "runner" && hard.hard).toBe(true);
+    expect(hard.kind === "runner" ? hard.weekM : 99_999).toBeLessThanOrEqual(20_000);
+    const mixed = runPlanOf(input(answers, { today: planDayPlus(MONDAY, 7), runs: week1.map((d, i) => run(d, 5_000, 1800, i === 0 ? 9 : 4)) }));
+    expect(mixed.kind === "runner" && mixed.hard).toBe(false);
+    expect(mixed.kind === "runner" ? mixed.weekM : 0).toBeGreaterThan(20_000);
+  });
+
+  it("Couch to 5K: a run that felt very hard is ticked and the next run is the same one again", () => {
+    const answers = beginnerAnswers();
+    const plan = runPlanOf(input(answers, { today: planDayPlus(MONDAY, 2), runs: [run(MONDAY, 2000, 900, 9)] }));
+    expect(plan.kind === "c25k" && plan.repeat).toBe(true);
+    expect(daysOf(plan)[0]?.done).toBe(true);
+    const next = daysOf(plan).find((d) => !d.done && d.session !== null);
+    expect(next?.session?.kind === "walk_run" ? next.session.run : 0).toBe(1);
+    const easy = runPlanOf(input(answers, { today: planDayPlus(MONDAY, 2), runs: [run(MONDAY, 2000, 900, 5)] }));
+    expect(easy.kind === "c25k" && easy.repeat).toBe(false);
   });
 });

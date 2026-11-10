@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
-import { runPlanAnswersSchema, runPlanOf, type RunPlanAnswers, type RunPlanResponse } from "@app/shared";
+import { runPlanAnswersSchema, runPlanOf, type RunDay, type RunPlanAnswers, type RunPlanResponse } from "@app/shared";
 import { App } from "../../src/App";
 import { phoneToday } from "../../src/screens/running/RunPlanBox";
 import { RAVI, fakeServer, kept, memoryStore, profile, tokens, type Reply } from "../kit";
@@ -15,7 +15,7 @@ const HEALTH = "/v1/users/me/health-screening";
 const RUNNER: RunPlanAnswers = { doesRun: "yes", jog: "30plus", days: [1, 3, 5, 7], goal: "10k", weeklyM: 20_000, longestM: 8_000, race: { distanceM: 5000, timeS: 1500 } };
 
 /** The server: the answers kept, the plan worked out by the server's own rules from today. */
-function planServer(start: { answers: RunPlanAnswers | null; safe?: boolean }) {
+function planServer(start: { answers: RunPlanAnswers | null; safe?: boolean; runs?: RunDay[] }) {
   const state = { answers: start.answers, safe: start.safe === true };
   const puts: unknown[] = [];
   const healthPuts: unknown[] = [];
@@ -23,7 +23,7 @@ function planServer(start: { answers: RunPlanAnswers | null; safe?: boolean }) {
     if (state.safe) return { answers: state.answers, plan: { kind: "none", why: "safe_mode" } };
     if (state.answers === null) return { answers: null, plan: null };
     const today = phoneToday();
-    return { answers: state.answers, plan: runPlanOf({ answers: state.answers, answeredDay: today, today, safeMode: false, runs: [] }) };
+    return { answers: state.answers, plan: runPlanOf({ answers: state.answers, answeredDay: today, today, safeMode: false, runs: start.runs ?? [] }) };
   };
   const server = fakeServer({
     "/v1/auth/refresh": () => ({ status: 200, body: { tokens: tokens(2) } }),
@@ -114,6 +114,15 @@ describe("making a plan", () => {
       expect(s.puts).toEqual([{ doesRun: "no", jog: null, days: [], goal: null, weeklyM: null, longestM: null, race: null }]);
     });
     expect(await screen.findByText("No training plan for now. Create one any time.")).toBeTruthy();
+  });
+});
+
+describe("a run that felt very hard", () => {
+  it("Couch to 5K says the next run is the same one again, on Running and on the plan", async () => {
+    const beginner: RunPlanAnswers = { doesRun: "start", jog: "none", days: [1, 2, 3, 4, 5, 6, 7], goal: "5k", weeklyM: null, longestM: null, race: null };
+    const s = planServer({ answers: beginner, runs: [{ day: phoneToday(), distanceM: 2000, longestM: 2000, movingS: 1000, effort: 9 }] });
+    const box = await openRunning(s);
+    expect(await within(box).findByText("Your last run felt very hard, so your next run is the same one again.")).toBeTruthy();
   });
 });
 

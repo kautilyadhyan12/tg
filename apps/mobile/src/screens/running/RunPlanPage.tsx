@@ -9,7 +9,7 @@ import { Icon } from "../../look/Icon";
 import { PictureTop } from "../../look/PictureTop";
 import { fonts, Txt } from "../../look/Txt";
 import { GOAL_WORDS, paceOf, planDistance, sessionDetail, sessionTitle, walkRunCore, weekdayShort } from "./runPlanWords";
-import { phoneToday } from "./RunPlanBox";
+import { heldLine, phoneToday } from "./RunPlanBox";
 
 type Shown = Exclude<RunPlan, { kind: "none" }>;
 
@@ -38,6 +38,7 @@ export function RunPlanPage({ plan, units, onClose, onChange }: { plan: Shown | 
       {plan === null ? null : (
         <>
           {plan.kind === "runner" && plan.ready ? <Txt kind="small" colour="goodText">{`You’re ready for ${GOAL_WORDS[plan.goal] === "Half marathon" ? "a half marathon" : `a ${GOAL_WORDS[plan.goal]}`}. Your plan now holds at this level.`}</Txt> : null}
+          {heldLine(plan) === null ? null : <Txt kind="small" colour="gold">{heldLine(plan)}</Txt>}
           {plan.kind === "runner" && plan.held ? <Txt kind="small" colour="gold">No runs recorded last week, so this week stays the same. Record your runs in the app so your plan can build.</Txt> : null}
           <View style={styles.list}>
             {plan.days.filter((d) => d.session !== null).map((d, i, shown) => (

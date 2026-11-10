@@ -624,14 +624,15 @@ export async function putRunPlan(sql: Sql, userId: string, answers: RunPlanAnswe
 }
 
 /** One row a day of the person's runs that this app recorded (as XP and the records count them), in
- *  their own time zone, from `fromDay`: the day's distance, its longest run and its longest moving time. */
-export async function getRunPlanDays(sql: Sql, userId: string, timeZone: string, fromDay: string): Promise<{ day: string; distanceM: number; longestM: number; movingS: number }[]> {
-  const rows = await sql<{ day: string; m: string; longest: number; moving: number }[]>`
+ *  their own time zone, from `fromDay`: the day's distance, its longest run, its longest moving time and
+ *  how its hardest run felt. */
+export async function getRunPlanDays(sql: Sql, userId: string, timeZone: string, fromDay: string): Promise<{ day: string; distanceM: number; longestM: number; movingS: number; effort: number | null }[]> {
+  const rows = await sql<{ day: string; m: string; longest: number; moving: number; effort: number | null }[]>`
     SELECT to_char(started_at AT TIME ZONE ${timeZone}, 'YYYY-MM-DD') AS day,
-           sum(distance_m) AS m, max(distance_m) AS longest, max(duration_s) AS moving
+           sum(distance_m) AS m, max(distance_m) AS longest, max(duration_s) AS moving, max(effort) AS effort
     FROM runs
     WHERE user_id = ${userId} AND run_calc_version IS NOT NULL
       AND started_at >= (${fromDay}::date::timestamp AT TIME ZONE ${timeZone})
     GROUP BY 1 ORDER BY 1`;
-  return rows.map((r) => ({ day: r.day, distanceM: Number(r.m), longestM: r.longest, movingS: r.moving }));
+  return rows.map((r) => ({ day: r.day, distanceM: Number(r.m), longestM: r.longest, movingS: r.moving, effort: r.effort }));
 }
