@@ -23,6 +23,7 @@ import {
 import type { RedisLike } from "../../../redis.js";
 import { createDualRateLimit } from "../../auth/rateLimit.js";
 import { orgParamsSchema } from "../schemas.js";
+import { requireWritablePrivilege } from "../service.js";
 import type { PhotoStore } from "./photoStore.js";
 import type { RobotCheck } from "./robotCheck.js";
 import * as referrals from "../referrals/service.js";
@@ -286,13 +287,24 @@ export function registerGymPageRoutes(app: FastifyInstance, deps: GymPageRouteDe
 
   // ── PHOTOS (20c-iv-b) ──
 
-  app.post("/v1/orgs/:gymId/page/photos", { bodyLimit: PHOTO_BODY_LIMIT, preHandler: [app.authenticate] }, async (req, reply) => {
+  /** A photo of up to 2 MB arrives as about 2.8 MB of base64: who is asking, whether they
+   *  may, and the limit are settled before it is read, or a stranger's would be. The
+   *  service checks the privilege again; the limit is spent here once. */
+  const mayAddPhoto = async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    await requireWritablePrivilege(pageDeps, params.gymId, requireUserId(req), "org.manage");
+    await photoWriteLimit(req, reply);
+  };
+  const spentBeforeTheBody = (): Promise<boolean> => Promise.resolve(true);
+
+  app.post("/v1/orgs/:gymId/page/photos", { bodyLimit: PHOTO_BODY_LIMIT, onRequest: [app.authenticate, mayAddPhoto] }, async (req, reply) => {
     const params = parseOr400(orgParamsSchema, req.params, req, reply);
     if (params === null) return;
     const body = parseOr400(addGymPagePhotoRequestSchema, req.body, req, reply);
     if (body === null) return;
     const bytes = new Uint8Array(Buffer.from(body.contentBase64, "base64"));
-    const photo = await service.addPhoto(pageDeps, requireUserId(req), params.gymId, bytes, body.uploadKey, gate(photoWriteLimit)(req, reply));
+    const photo = await service.addPhoto(pageDeps, requireUserId(req), params.gymId, bytes, body.uploadKey, spentBeforeTheBody);
     if (photo === null) return;
     return reply.status(201).send({ photo });
   });

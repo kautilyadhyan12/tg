@@ -1,5 +1,6 @@
 // A gym's leads (spec Part 3 §16.3; ROADMAP 20c-i). Thin: authenticate, parse, hand
-// to the service, which checks the privilege before it spends the rate limit.
+// to the service, which checks the privilege before it spends the rate limit. The two
+// file routes settle both before the file is read (`mayReadFile`).
 //
 // Both limits are keyed on the user with an explicit `ipMax`: a front desk is one
 // address with several staff signed in on it.
@@ -28,6 +29,7 @@ import { pageTurnedAwayKey } from "../gymPage/service.js";
 import type { InviteSettings } from "../invites/settings.js";
 import { leadParamsSchema, orgParamsSchema } from "../schemas.js";
 import { deleteSelectedLeads, LeadSelectionChanged, previewDeleteLeads, selectAllLeads } from "./deleteSelected.js";
+import { requireWritablePrivilege } from "../service.js";
 import * as emailSettings from "./emailSettings.js";
 import * as fileService from "./fileService.js";
 import * as service from "./service.js";
@@ -137,6 +139,18 @@ export function registerLeadRoutes(app: FastifyInstance, deps: LeadRouteDeps): v
   });
   const readGate = gate(readLimit);
   const writeGate = gate(writeLimit);
+  /** A file of up to 5 MB arrives as about 7 MB of base64: who is asking, whether they may,
+   *  and the limit are settled before it is read, or a stranger's file would be. The
+   *  service checks the privilege again; the limit is spent here once. */
+  const mayReadFile =
+    (limit: (req: FastifyRequest, reply: FastifyReply) => Promise<void>) =>
+    async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
+      const params = parseOr400(orgParamsSchema, req.params, req, reply);
+      if (params === null) return;
+      await requireWritablePrivilege(deps, params.gymId, requireUserId(req), "members.confirm");
+      await limit(req, reply);
+    };
+  const spentBeforeTheBody = (): Promise<boolean> => Promise.resolve(true);
   const fileDeps: fileService.LeadFileDeps = { sql: deps.sql, redis: deps.redis, log: app.log, addressKey: invites?.hmacKey ?? null };
   const signedIn = { preHandler: [app.authenticate] };
 
@@ -164,13 +178,13 @@ export function registerLeadRoutes(app: FastifyInstance, deps: LeadRouteDeps): v
   /** Leads from a file (20c-iii): who would be added, and nothing written. */
   app.post(
     "/v1/orgs/:gymId/leads/from-file/check",
-    { bodyLimit: FILE_BODY_LIMIT, preHandler: [app.authenticate] },
+    { bodyLimit: FILE_BODY_LIMIT, onRequest: [app.authenticate, mayReadFile(fileCheckLimit)] },
     async (req, reply) => {
       const params = parseOr400(orgParamsSchema, req.params, req, reply);
       if (params === null) return;
       const body = parseOr400(leadFileCheckRequestSchema, req.body, req, reply);
       if (body === null) return;
-      const preview = await fileService.checkLeadFile(fileDeps, requireUserId(req), params.gymId, body, gate(fileCheckLimit)(req, reply));
+      const preview = await fileService.checkLeadFile(fileDeps, requireUserId(req), params.gymId, body, spentBeforeTheBody);
       if (preview === null) return;
       return reply.status(200).send({ preview });
     },
@@ -179,13 +193,13 @@ export function registerLeadRoutes(app: FastifyInstance, deps: LeadRouteDeps): v
   /** Add exactly the leads the check showed, or nothing (409 `lead_file_changed`). */
   app.post(
     "/v1/orgs/:gymId/leads/from-file",
-    { bodyLimit: FILE_BODY_LIMIT, preHandler: [app.authenticate] },
+    { bodyLimit: FILE_BODY_LIMIT, onRequest: [app.authenticate, mayReadFile(fileAddLimit)] },
     async (req, reply) => {
       const params = parseOr400(orgParamsSchema, req.params, req, reply);
       if (params === null) return;
       const body = parseOr400(leadFileAddRequestSchema, req.body, req, reply);
       if (body === null) return;
-      const done = await fileService.addLeadFile(fileDeps, requireUserId(req), params.gymId, body, gate(fileAddLimit)(req, reply));
+      const done = await fileService.addLeadFile(fileDeps, requireUserId(req), params.gymId, body, spentBeforeTheBody);
       if (done === null) return;
       return reply.status(200).send(done);
     },

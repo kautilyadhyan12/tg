@@ -308,6 +308,15 @@ d("photos on a gym's page (real Postgres, real disk)", () => {
       expect((await get(staffPhotoUrl(rivalGym.org.id, mine.id), rival.cookies)).statusCode).toBe(404);
       expect((await del(staffPhotoUrl(rivalGym.org.id, mine.id), rival.cookies)).statusCode).toBe(404);
       expect((await put(`${photosUrl(rivalGym.org.id)}/order`, { photoIds: [mine.id] }, rival.cookies)).statusCode).toBe(409);
+
+      // Who is asking and whether they may come before a photo is read (21a-iii-c): a body
+      // that is not even JSON gets each person's own refusal; read first, it would be 400.
+      const broken = (cookies: Record<string, string>) =>
+        api().inject({ method: "POST", url: photosUrl(gym.org.id), remoteAddress: nextIp(), headers: { "content-type": "application/json" }, cookies, payload: '{"contentBase64": ' });
+      expect((await broken({})).statusCode).toBe(401);
+      for (const outsider of [rival, stranger]) expect((await broken(outsider.cookies)).statusCode).toBe(404);
+      for (const staff of [manager, trainer]) expect((await broken(staff.cookies)).statusCode).toBe(403);
+      expect((await broken(owner.cookies)).statusCode).toBe(400);
       expect((await stored(gym.org.id)).map((r) => r.id)).toEqual([mine.id]);
       expect(await filesOf(gym.org.id)).toHaveLength(1);
       // Signed out: the console's photo is not a public one.

@@ -304,6 +304,17 @@ d("leads from a file (real Postgres, real worker)", () => {
       expect(await storedLeads(org.org.id)).toEqual([]);
       expect(await storedLeads(rivalOrg.org.id)).toEqual([]);
 
+      // Who is asking and whether they may come before the file is read (21a-iii-c): a body
+      // that is not even JSON gets each person's own refusal; read first, it would be 400.
+      for (const path of [checkUrl(org.org.id), addUrl(org.org.id)]) {
+        const broken = (cookies: Record<string, string>) =>
+          api().inject({ method: "POST", url: path, remoteAddress: nextIp(), headers: { "content-type": "application/json" }, cookies, payload: '{"contentBase64": ' });
+        for (const { who, cookies, status } of outsiders) {
+          expect({ who, path, status: (await broken(cookies)).statusCode }).toEqual({ who, path, status });
+        }
+        expect({ path, status: (await broken(owner.cookies)).statusCode }).toEqual({ path, status: 400 });
+      }
+
       // A manager holds the tick; unticked, refused.
       const manager = await makeStaff(org, owner.cookies, "gate-manager", "manager");
       expect((await add(org.org.id, manager.cookies, file, preview)).statusCode).toBe(200);

@@ -174,6 +174,23 @@ d("record a run (real Postgres)", () => {
     it("nobody signed in gets nothing", async () => {
       expect((await save({}, body())).statusCode).toBe(401);
     });
+
+    it("who is asking and the limit come before the points are read, for the phone's sign-in and the browser's", async () => {
+      // 21a-iii-c. A body that is not even JSON: a server that read it first would answer 400 to all.
+      const broken = (headers: Record<string, string>, cookies: Cookies = {}) =>
+        api().inject({ method: "POST", url: "/v1/geo/runs", remoteAddress: nextIp(), headers: { "content-type": "application/json", "idempotency-key": randomUUID(), ...headers }, cookies, payload: '{"points": ' });
+      expect((await broken({})).statusCode).toBe(401);
+      expect((await broken({ authorization: "Bearer not-a-token" })).statusCode).toBe(401);
+      const me = await makeUser("before-the-body");
+      const token = me.cookies["accessToken"] ?? "";
+      expect(token).not.toBe("");
+      // The phone signs in with its token, the browser with its cookie: both reach the reader.
+      expect((await broken({ authorization: `Bearer ${token}` })).statusCode).toBe(400);
+      expect((await broken({}, me.cookies)).statusCode).toBe(400);
+      // Ten a minute each: two spent, eight more read, the eleventh refused unread.
+      for (let i = 3; i <= 10; i++) expect({ i, status: (await broken({ authorization: `Bearer ${token}` })).statusCode }).toEqual({ i, status: 400 });
+      expect((await broken({ authorization: `Bearer ${token}` })).statusCode).toBe(429);
+    });
   });
 
   it("works every number out itself, from the points, with the same rules the phone shows", async () => {

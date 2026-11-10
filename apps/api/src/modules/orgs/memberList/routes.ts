@@ -1,7 +1,8 @@
 // THE MEMBER LIST'S ROUTES (Part 3 §9.9), thin as every other route file in this
 // module: authenticate, Zod-parse, hand to the service, which owns the
 // authorisation and the rate limit in that order (CLAUDE.md §4; the service's own
-// header says why the limiter is called there and not hung on the route).
+// header says why the limiter is called there and not hung on the route). The upload
+// settles both before its file is read (`mayUpload`).
 //
 // Registered from `registerOrgRoutes` rather than from `app.ts`, because these
 // are the same console behind the same gates and share its deps.
@@ -91,6 +92,7 @@ import { deleteSelected, previewDeleteSelected } from "./deleteSelected.js";
 import { keepListed } from "./tidy.js";
 import { SelectionChanged, selectAll } from "./selection.js";
 import * as groupMessages from "../messages/group.js";
+import { requireWritablePrivilege } from "../service.js";
 import * as service from "./service.js";
 import { tellPeopleAfter, type LiveNewsSender } from "../../live/news.js";
 
@@ -213,12 +215,21 @@ export function registerMemberListRoutes(app: FastifyInstance, deps: MemberListR
       await limit(req, reply);
       return !reply.sent;
     };
-  const uploadGate = gate(uploadLimit);
   const readGate = gate(readLimit);
+  /** A file of up to 5 MB arrives as about 7 MB of base64: who is asking, whether they may,
+   *  and the limit are settled before it is read, or a stranger's file would be. The
+   *  service checks the privilege again; the limit is spent here once. */
+  const mayUpload = async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    await requireWritablePrivilege(listDeps, params.gymId, requireUserId(req), "members.confirm");
+    await uploadLimit(req, reply);
+  };
+  const spentBeforeTheBody = (): Promise<boolean> => Promise.resolve(true);
 
   app.post(
     "/v1/orgs/:gymId/member-list/uploads",
-    { bodyLimit: UPLOAD_BODY_LIMIT, preHandler: [app.authenticate] },
+    { bodyLimit: UPLOAD_BODY_LIMIT, onRequest: [app.authenticate, mayUpload] },
     async (req, reply) => {
       const params = parseOr400(orgParamsSchema, req.params, req, reply);
       if (params === null) return;
@@ -229,9 +240,8 @@ export function registerMemberListRoutes(app: FastifyInstance, deps: MemberListR
         requireUserId(req),
         params.gymId,
         { contentBase64: body.contentBase64, mode: body.mode, mapping: body.mapping },
-        uploadGate(req, reply),
+        spentBeforeTheBody,
       );
-      // Null means the limiter has already answered.
       if (preview === null) return;
       return reply.status(201).send({ preview });
     },
