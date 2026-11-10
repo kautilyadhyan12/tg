@@ -5,7 +5,7 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
-import { runClimbResponseSchema, saveRunResponseSchema, type RunClimbRequest, type SaveRunRequest } from "@app/shared";
+import { PACE_LINE_MOST, runClimbResponseSchema, runDetailResponseSchema, saveRunResponseSchema, type RunClimbRequest, type SaveRunRequest } from "@app/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import type { EmailSender } from "../src/modules/auth/email.js";
@@ -132,7 +132,10 @@ d("a run's elevation gain (real Postgres)", () => {
       const run = body();
       const res = await ask(me.cookies, askOf(run));
       expect(res.statusCode).toBe(200);
-      expect(JSON.parse(res.body)).toEqual({ climb: { state: "done", m: 72 } });
+      // The climb, and the hills behind the pace chart (37c-iii): heights, nothing of where they are.
+      expect(JSON.parse(res.body)).toEqual({ climb: { state: "done", m: 72, hills: expect.any(Array) as unknown } });
+      const hills = runClimbResponseSchema.parse(JSON.parse(res.body)).climb;
+      expect(hills.state === "done" ? hills.hills : []).toHaveLength(PACE_LINE_MOST);
       expect(await sql`SELECT 1 FROM runs WHERE id = ${run.runId}`).toHaveLength(0);
       expect(await sql`SELECT 1 FROM runs WHERE user_id = ${me.id}`).toHaveLength(0);
     });
@@ -159,7 +162,7 @@ d("a run's elevation gain (real Postgres)", () => {
       // 1.2 km north with a pause, the line starting again 150 m on: 1,050 m of a 2 % hill.
       const run = body({ points: northRun(400, 3), elapsedMs: 400_000, pauses: [[150_000, 200_000]] });
       const asked = runClimbResponseSchema.parse(JSON.parse((await ask(me.cookies, askOf(run))).body)).climb;
-      expect(asked).toEqual({ state: "done", m: 21 });
+      expect(asked).toMatchObject({ state: "done", m: 21 });
       const saved = saveRunResponseSchema.parse(JSON.parse((await save(me.cookies, run)).body));
       expect(saved.run.climbM).toBe(21);
       expect(await row(run.runId)).toEqual({ climb_m: 21, climb_state: "done" });
@@ -167,6 +170,13 @@ d("a run's elevation gain (real Postgres)", () => {
       const before = heights.asked;
       expect(saveRunResponseSchema.parse(JSON.parse((await save(me.cookies, run)).body)).run.climbM).toBe(21);
       expect(heights.asked).toBe(before);
+      // The run's page draws the pace chart from what was kept: the same hills the summary was given.
+      const page = runDetailResponseSchema.parse(JSON.parse((await inject({ method: "GET", url: `/v1/geo/runs/${run.runId}`, cookies: me.cookies })).body)).run;
+      expect(page.hillLine).toEqual(asked.state === "done" ? asked.hills : null);
+      expect(page.paceLine.length).toBe(page.hillLine.length);
+      expect(page.paceLine.every((v) => Math.abs(v - 300) <= 10)).toBe(true);
+      // The hill rises 2 m every 100 m north: from the start to the finish, higher.
+      expect((page.hillLine[page.hillLine.length - 1] ?? 0) - (page.hillLine[0] ?? 0)).toBeGreaterThan(15);
     });
 
     it("a flat run climbs nothing, and a run of one point climbs nothing", async () => {
@@ -174,9 +184,9 @@ d("a run's elevation gain (real Postgres)", () => {
       const me = await makeUser("flat");
       const east: SaveRunRequest["points"] = Array.from({ length: 600 }, (_, i) => [i * 1000, START_LAT, 91.7362 + (i * 3) / 100_000, 5]);
       const flat = body({ points: east, elapsedMs: 600_000 });
-      expect(JSON.parse((await ask(me.cookies, askOf(flat))).body)).toEqual({ climb: { state: "done", m: 0 } });
+      expect(JSON.parse((await ask(me.cookies, askOf(flat))).body)).toMatchObject({ climb: { state: "done", m: 0 } });
       const one = body({ points: [[0, START_LAT, 91.7362, 5]], elapsedMs: 1000 });
-      expect(JSON.parse((await ask(me.cookies, askOf(one))).body)).toEqual({ climb: { state: "done", m: 0 } });
+      expect(JSON.parse((await ask(me.cookies, askOf(one))).body)).toEqual({ climb: { state: "done", m: 0, hills: [] } });
     });
 
     it("where the map has no heights the run has no number, and says so", async () => {
@@ -186,6 +196,10 @@ d("a run's elevation gain (real Postgres)", () => {
       expect(JSON.parse((await ask(me.cookies, askOf(run))).body)).toEqual({ climb: { state: "none" } });
       expect(saveRunResponseSchema.parse(JSON.parse((await save(me.cookies, run)).body)).run.climbM).toBeNull();
       expect(await row(run.runId)).toEqual({ climb_m: null, climb_state: "none" });
+      // No hills behind its pace chart, never a made-up line; the pace line itself is kept.
+      const page = runDetailResponseSchema.parse(JSON.parse((await inject({ method: "GET", url: `/v1/geo/runs/${run.runId}`, cookies: me.cookies })).body)).run;
+      expect(page.hillLine).toEqual([]);
+      expect(page.paceLine).toHaveLength(PACE_LINE_MOST);
     });
   });
 
@@ -214,6 +228,15 @@ d("a run's elevation gain (real Postgres)", () => {
       ]);
       expect(await row(run.runId)).toEqual({ climb_m: 72, climb_state: "done" });
       expect(a.kept + b.kept).toBeGreaterThanOrEqual(1);
+      // Its pace chart's hills come with the climb, at the pace line's places, the line itself unchanged.
+      const page = runDetailResponseSchema.parse(JSON.parse((await inject({ method: "GET", url: `/v1/geo/runs/${run.runId}`, cookies: me.cookies })).body)).run;
+      expect(page.paceLine).toHaveLength(PACE_LINE_MOST);
+      expect(page.hillLine).toHaveLength(PACE_LINE_MOST);
+      expect(page.splitsKm.length).toBeGreaterThan(0);
+      // This run's own hills: the very ones the summary's ask gives for its points.
+      const asked = runClimbResponseSchema.parse(JSON.parse((await ask(me.cookies, askOf(run))).body)).climb;
+      expect(page.hillLine).toEqual(asked.state === "done" ? asked.hills : null);
+      expect((page.hillLine[page.hillLine.length - 1] ?? 0) - (page.hillLine[0] ?? 0)).toBeGreaterThan(15);
       const mineKept = await sql`SELECT 1 FROM runs WHERE user_id = ${me.id} AND climb_state = 'done'`;
       expect(mineKept).toHaveLength(1);
       // The phone, sending it again, now reads the climb.
@@ -261,10 +284,10 @@ d("a run's elevation gain (real Postgres)", () => {
       const stranger = await makeUser("not-owner");
       const run = body();
       expect((await save(me.cookies, run)).statusCode).toBe(201);
-      expect(await keepWaitingClimb(sql, { id: run.runId, userId: stranger.id }, { state: "done", m: 999 })).toBe(false);
+      expect(await keepWaitingClimb(sql, { id: run.runId, userId: stranger.id }, { state: "done", m: 999, hills: [] })).toBe(false);
       expect(await row(run.runId)).toEqual({ climb_m: null, climb_state: "waiting" });
-      expect(await keepWaitingClimb(sql, { id: run.runId, userId: me.id }, { state: "done", m: 5 })).toBe(true);
-      expect(await keepWaitingClimb(sql, { id: run.runId, userId: me.id }, { state: "done", m: 6 })).toBe(false);
+      expect(await keepWaitingClimb(sql, { id: run.runId, userId: me.id }, { state: "done", m: 5, hills: [] })).toBe(true);
+      expect(await keepWaitingClimb(sql, { id: run.runId, userId: me.id }, { state: "done", m: 6, hills: [] })).toBe(false);
       expect(await row(run.runId)).toEqual({ climb_m: 5, climb_state: "done" });
       heights.mode = "hill";
     });

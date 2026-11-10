@@ -457,7 +457,7 @@ export interface NewRun {
   leftOutM: number;
   leftOutS: number;
   kcal: number;
-  splits: { km: { m: number; s: number }[]; mi: { m: number; s: number }[]; starts: number[] };
+  splits: { km: { m: number; s: number }[]; mi: { m: number; s: number }[]; starts: number[]; pace: number[]; hills: number[] };
   polyline: string;
   calcVersion: number;
   climb: RunClimb;
@@ -592,7 +592,10 @@ export async function giveUpOldClimbs(sql: Sql, days: number): Promise<number> {
  *  same one twice, changes nothing. True when this call kept it. */
 export async function keepWaitingClimb(sql: Sql, run: { id: string; userId: string }, climb: Exclude<RunClimb, { state: "waiting" }>): Promise<boolean> {
   const done = await sql`
-    UPDATE runs SET climb_m = ${climb.state === "done" ? climb.m : null}, climb_state = ${climb.state}
+    UPDATE runs SET climb_m = ${climb.state === "done" ? climb.m : null}, climb_state = ${climb.state},
+      splits = CASE WHEN jsonb_typeof(splits) = 'object'
+                    THEN splits || jsonb_build_object('hills', ${sql.json(climb.state === "done" ? climb.hills : [])}::jsonb)
+                    ELSE splits END
     WHERE id = ${run.id} AND user_id = ${run.userId} AND climb_state = 'waiting'`;
   return done.count === 1;
 }

@@ -324,7 +324,12 @@ export function privacyPolicy(facts: LegalFacts = LEGAL_FACTS): LegalDocument {
           list("Body weight.", "Body measurements."),
           h3("3.10. Running and Location Information"),
           p("When you activate the running-tracking functionality, KWAZO accesses your device's location information to record:"),
-          list("Running routes.", "Distances traveled.", "Running times."),
+          list(
+            "Running routes.",
+            "Distances traveled.",
+            "Running times.",
+            "Your pace along each route, and the elevation gain and height of the ground along it, worked out from the route.",
+          ),
           p("Location information is accessed while a running session is being recorded and the Application is open or the active running notification is displayed, and while the Running page is open, to show the strength of the GPS signal. That reading stays on your device and is not kept."),
           p("KWAZO does not otherwise collect your location in the background outside these circumstances."),
           h3("3.11. Business Page and Community Information"),

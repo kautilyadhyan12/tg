@@ -49,7 +49,7 @@ import { useMapSource } from "./mapSource";
 import { useRunClimb } from "./runClimb";
 import { RouteLine } from "./RunDrawings";
 import { NewRecordBox } from "./RecordParts";
-import { FeelCard, NoteCard, RouteCard, RunFigures, SplitsCard } from "./RunParts";
+import { FeelCard, NoteCard, PaceCard, RouteCard, RunFigures, SplitsCard } from "./RunParts";
 import { newRecords, RECORDS_PATH } from "./runRecords";
 import { RunMap, useMapScheme } from "./RunMap";
 import { useRunOutbox } from "./RunOutbox";
@@ -693,6 +693,7 @@ function Summary({ run, units, kg, onSaved }: { run: LiveRun; units: Units; kg: 
           units={units}
         />
         <RouteCard track={sums.track} starts={sums.trackStarts} units={units} name={name} distanceM={sums.distanceM} movingS={sums.movingS} />
+        <PaceCard paceLine={sums.paceLine} hillLine={climb.kind === "done" ? climb.hills : []} distanceM={sums.distanceM} movingS={sums.movingS} units={units} />
         <SplitsCard splits={units === "imperial" ? sums.splitsMi : sums.splitsKm} units={units} />
         <FeelCard effort={effort} onPick={setEffort} />
         <NoteCard note={note} onChange={setNote} />
