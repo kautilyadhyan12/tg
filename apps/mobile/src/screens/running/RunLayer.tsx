@@ -11,6 +11,7 @@ import {
   runRecordsSchema,
   runSums,
   userProfileResponseSchema,
+  type KeptRunGuide,
   type RunClimbRequest,
   type RunRecords,
   type RunSums,
@@ -40,6 +41,7 @@ import {
   runIsFull,
   chooseAutoPause,
   keepRunUnits,
+  movingMsOf,
   runNow,
   startRun,
   subscribeRun,
@@ -47,6 +49,7 @@ import {
 } from "./recorder";
 import { useMapSource } from "./mapSource";
 import { useRunClimb } from "./runClimb";
+import { RunGuideCard } from "./RunGuideCard";
 import { RouteLine } from "./RunDrawings";
 import { NewRecordBox } from "./RecordParts";
 import { FeelCard, NoteCard, PaceCard, RouteCard, RunFigures, SplitsCard } from "./RunParts";
@@ -70,8 +73,9 @@ export const START_PROBLEM_WORDS: Record<StartProblem, string> = {
 export type RunDone = { name: string; waiting: boolean } | null;
 
 interface RunLayerValue {
-  /** Start: asks for the location if it must, then counts down. null when the count has begun. */
-  start: (autoPause: boolean) => Promise<StartProblem | null>;
+  /** Start: asks for the location if it must, then counts down. null when the count has begun. With
+   *  a guide, today's planned run, step by step (37d-ii). */
+  start: (autoPause: boolean, guide?: KeptRunGuide | null) => Promise<StartProblem | null>;
   /** Back to the run that is going on. */
   open: () => void;
   run: LiveRun | null;
@@ -118,7 +122,7 @@ export function RunLayerProvider({ children }: { children: ReactNode }) {
   const units: Units = (state.kind === "in" ? accountUnits(state.user.units) : null) ?? "metric";
   const run = useMyRun(me);
   const [shown, setShown] = useState(true);
-  const [counting, setCounting] = useState<{ autoPause: boolean } | null>(null);
+  const [counting, setCounting] = useState<{ autoPause: boolean; guide: KeptRunGuide | null } | null>(null);
   const [done, setDone] = useState<RunDone>(null);
   const [kg, setKg] = useState(0);
 
@@ -150,12 +154,12 @@ export function RunLayerProvider({ children }: { children: ReactNode }) {
     });
   }, [me, session, hasRun, finished]);
 
-  const start = useCallback(async (autoPause: boolean): Promise<StartProblem | null> => {
+  const start = useCallback(async (autoPause: boolean, guide: KeptRunGuide | null = null): Promise<StartProblem | null> => {
     const problem = await askLocation();
     if (problem !== null) return problem;
     setDone(null);
     setShown(true);
-    setCounting({ autoPause });
+    setCounting({ autoPause, guide });
     return null;
   }, []);
 
@@ -165,7 +169,7 @@ export function RunLayerProvider({ children }: { children: ReactNode }) {
     if (count === null || me === null) return;
     Vibration.vibrate(300);
     try {
-      await startRun(me, newGoalId(), count.autoPause);
+      await startRun(me, newGoalId(), count.autoPause, Date.now(), count.guide);
     } catch {
       await forgetRun();
       setDone(null);
@@ -400,6 +404,8 @@ function Live({ run, units, kg, onHide }: { run: LiveRun; units: Units; kg: numb
     });
   };
   const onMap = view === "map";
+  // Today's planned run (37d-ii): the step, what is left of it, and the next.
+  const guide = run.guide === null ? null : <RunGuideCard guide={run.guide} movingMs={movingMsOf(run, now)} metres={metres} units={units} paused={isPaused} />;
   const top = (
     <View style={styles.liveTop}>
       {isPaused ? (
@@ -461,6 +467,7 @@ function Live({ run, units, kg, onHide }: { run: LiveRun; units: Units; kg: numb
             setPanel(Math.round(e.nativeEvent.layout.height));
           }}
         >
+          {guide}
           <View style={styles.panelFigures}>
             <Figure label="Time" value={clock(moving)} dim={isPaused} />
             <Figure label="Distance" value={distance(metres, units)} unit={unitWord(units)} dim={isPaused} />
@@ -477,6 +484,7 @@ function Live({ run, units, kg, onHide }: { run: LiveRun; units: Units; kg: numb
       {isPaused ? <View style={styles.pausedBar} /> : null}
       {top}
       <ScrollView style={styles.grow} contentContainerStyle={styles.liveNumbers}>
+        {guide === null ? null : <View style={styles.guideOnNumbers}>{guide}</View>}
         <Txt kind="eyebrow" colour="textFaint">
           Time
         </Txt>
@@ -828,6 +836,7 @@ const styles = StyleSheet.create({
     boxShadow: shadows.sheet,
   },
   panelFigures: { flexDirection: "row", gap: 12 },
+  guideOnNumbers: { marginBottom: 14 },
   sideWrap: { alignItems: "center", width: 84, paddingTop: 20 },
   side: { width: 56, height: 56, borderRadius: sizes.round, alignItems: "center", justifyContent: "center", borderWidth: 1.5, borderColor: colours.grab, backgroundColor: colours.fill },
   sideSpace: { width: 84 },

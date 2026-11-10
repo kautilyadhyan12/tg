@@ -17,6 +17,9 @@ export interface RunVoiceNative {
   say(text: string): Promise<void>;
   /** Stop at once and let the phone's voice go. */
   quiet(): Promise<void>;
+  /** Say each line this many ms from now, in place of those handed over before (37d-ii); none, to
+   *  say none of them. Said on time with the screen off. */
+  sayAt(texts: string[], inMs: number[]): Promise<void>;
   /** Whether this phone can speak English (read through speakState). */
   check(): Promise<unknown>;
 }

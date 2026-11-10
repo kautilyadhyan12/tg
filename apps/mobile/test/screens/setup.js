@@ -332,7 +332,8 @@ jest.mock("expo-location", () => {
 // `missing` stands for a phone with no such code (an iPhone, until item 21).
 jest.mock("../../src/screens/running/runVoiceNative", () => {
   const actual = jest.requireActual("../../src/screens/running/runVoiceNative");
-  const voice = { said: [], quieted: 0, canSpeak: "ok", missing: false };
+  // `ahead`: the lines last handed over to be said later (37d-ii), each with its ms from then.
+  const voice = { said: [], quieted: 0, canSpeak: "ok", missing: false, ahead: [] };
   const native = {
     say: (text) => {
       voice.said.push(text);
@@ -340,6 +341,11 @@ jest.mock("../../src/screens/running/runVoiceNative", () => {
     },
     quiet: () => {
       voice.quieted += 1;
+      voice.ahead = [];
+      return Promise.resolve();
+    },
+    sayAt: (texts, inMs) => {
+      voice.ahead = texts.map((text, i) => ({ text, inMs: inMs[i] }));
       return Promise.resolve();
     },
     check: () => Promise.resolve(voice.canSpeak),

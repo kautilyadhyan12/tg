@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type Re
 import { AppState, Linking, Pressable, ScrollView, StyleSheet, Switch, View } from "react-native";
 import * as Location from "expo-location";
 import { useIsFocused } from "@react-navigation/native";
-import { runPageSchema, runPlanResponseSchema, runRecordsSchema, type MapColours, type Units } from "@app/shared";
+import { runPageSchema, runPlanResponseSchema, runRecordsSchema, type KeptRunGuide, type MapColours, type Units } from "@app/shared";
 import { Button } from "../../look/Button";
 import { Options } from "../../look/Choice";
 import { Sheet } from "../../look/Sheet";
@@ -105,6 +105,9 @@ export function RunningTab({ units, parts }: { units: Units; parts: ReactNode })
   // No voice code of this app's on this phone (an iPhone, until Stage 5 item 21): the row stays.
   const noVoiceYet = runVoiceNative === null;
   const [problem, setProblem] = useState<StartProblem | null>(null);
+  // Start, or Start today's run from the plan (37d-ii): what stood in the way is said under the
+  // button that was pressed.
+  const [from, setFrom] = useState<KeptRunGuide | null>(null);
   const [settings, setSettings] = useState(false);
   const [runsOpen, setRunsOpen] = useState(false);
   const [openRun, setOpenRun] = useState<string | null>(null);
@@ -133,21 +136,42 @@ export function RunningTab({ units, parts }: { units: Units; parts: ReactNode })
   useEffect(() => {
     if (layer.done !== null) setDeleted(null);
   }, [layer.done]);
-  const saidUnderStart = problem !== null || layer.done !== null || view.refused.length > 0;
+  const saidUnderStart = (problem !== null && from === null) || layer.done !== null || view.refused.length > 0;
   useEffect(() => {
     if (saidUnderStart) showEnd();
   }, [saidUnderStart, problem, layer.done, showEnd]);
 
-  const start = async () => {
+  const start = async (guide: KeptRunGuide | null = null) => {
     if (look !== null) {
       look();
       return;
     }
     setProblem(null);
-    const said = await layer.start(autoPause);
+    setFrom(guide);
+    const said = await layer.start(autoPause, guide);
     setProblem(said);
     setAsked((n) => n + 1);
   };
+  const problemBox =
+    problem === null ? null : (
+      <View style={styles.problem}>
+        <Txt kind="small" colour="badText">
+          {START_PROBLEM_WORDS[problem]}
+        </Txt>
+        {problem === "approximate" ? (
+          <View style={styles.choices}>
+            <Button kind="link" label="Allow precise location" onPress={() => void start(from)} />
+            <Button kind="quiet" label="Open settings" onPress={openAppSettings} />
+          </View>
+        ) : problem === "settings" ? (
+          <Button kind="link" label="Open settings" onPress={openAppSettings} />
+        ) : problem === "denied" ? (
+          <Button kind="link" label="Allow location" onPress={() => void start(from)} />
+        ) : problem === "off" ? (
+          <Button kind="link" label="Turn on location" onPress={() => void turnOnLocation().then((on) => (on ? start(from) : undefined))} />
+        ) : null}
+      </View>
+    );
 
   return (
     <View style={styles.grow}>
@@ -193,7 +217,9 @@ export function RunningTab({ units, parts }: { units: Units; parts: ReactNode })
             onCleared={() => {
               setPlanChanged((n) => n + 1);
             }}
+            onStartToday={going ? null : (guide) => void start(guide)}
           />
+          {problem !== null && from !== null ? problemBox : null}
           {lastRun === null ? null : (
             <View style={styles.yours} testID="your-runs">
               <View style={styles.yoursHead}>
@@ -251,7 +277,7 @@ export function RunningTab({ units, parts }: { units: Units; parts: ReactNode })
               <View style={styles.grow}>
                 <Txt kind="body">Voice</Txt>
                 <Txt kind="small" colour="textFaint">
-                  {noVoiceYet ? "Coming soon" : units === "imperial" ? "Your time and pace each mile" : "Your time and pace each kilometre"}
+                  {noVoiceYet ? "Coming soon" : units === "imperial" ? "Your time and pace each mile, and your plan's steps" : "Your time and pace each kilometre, and your plan's steps"}
                 </Txt>
                 {voiceOn && canSpeak !== "ok" ? (
                   <View style={styles.problem}>
@@ -311,25 +337,7 @@ export function RunningTab({ units, parts }: { units: Units; parts: ReactNode })
               />
             </View>
           </View>
-          {problem === null ? null : (
-            <View style={styles.problem}>
-              <Txt kind="small" colour="badText">
-                {START_PROBLEM_WORDS[problem]}
-              </Txt>
-              {problem === "approximate" ? (
-                <View style={styles.choices}>
-                  <Button kind="link" label="Allow precise location" onPress={() => void start()} />
-                  <Button kind="quiet" label="Open settings" onPress={openAppSettings} />
-                </View>
-              ) : problem === "settings" ? (
-                <Button kind="link" label="Open settings" onPress={openAppSettings} />
-              ) : problem === "denied" ? (
-                <Button kind="link" label="Allow location" onPress={() => void start()} />
-              ) : problem === "off" ? (
-                <Button kind="link" label="Turn on location" onPress={() => void turnOnLocation().then((on) => (on ? start() : undefined))} />
-              ) : null}
-            </View>
-          )}
+          {problem !== null && from === null ? problemBox : null}
           {layer.done === null ? null : (
             <Txt kind="small" colour={layer.done.waiting ? "textSoft" : "goodText"} style={styles.said}>
               {layer.done.waiting ? `${layer.done.name} is saved on this phone. It will be sent when you're online.` : `${layer.done.name} is saved.`}
