@@ -5,7 +5,7 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
-import { PACE_LINE_MOST, runClimbResponseSchema, runDetailResponseSchema, saveRunResponseSchema, type RunClimbRequest, type SaveRunRequest } from "@app/shared";
+import { PACE_LINE_MOST, RUN_MAX_PAUSES, RUN_MAX_POINTS, runClimbResponseSchema, runDetailResponseSchema, saveRunResponseSchema, type RunClimbRequest, type SaveRunRequest } from "@app/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import type { EmailSender } from "../src/modules/auth/email.js";
@@ -160,6 +160,18 @@ d("a run's elevation gain (real Postgres)", () => {
       for (let i = 3; i <= 10; i++) expect({ i, status: (await broken({ authorization: `Bearer ${token}` })).statusCode }).toEqual({ i, status: 400 });
       expect((await broken({ authorization: `Bearer ${token}` })).statusCode).toBe(429);
     });
+
+    it("the longest run a phone keeps is answered; one point more is refused by the list count", async () => {
+      const me = await makeUser("longest-climb");
+      const pauses: SaveRunRequest["pauses"] = [];
+      for (let i = 0; i < RUN_MAX_PAUSES; i++) pauses.push([i * 20_000 + 1000, i * 20_000 + 2000]);
+      const longest = body({ points: northRun(RUN_MAX_POINTS - 1, 3), elapsedMs: RUN_MAX_POINTS * 1000, pauses });
+      expect(longest.points.length).toBe(RUN_MAX_POINTS);
+      const res = await ask(me.cookies, askOf(longest));
+      expect(res.statusCode, res.body).toBe(200);
+      const past = await ask(me.cookies, askOf({ ...longest, points: northRun(RUN_MAX_POINTS, 3) }));
+      expect([past.statusCode, (JSON.parse(past.body) as { error: string }).error]).toEqual([413, "too_many_items"]);
+    }, 30_000);
 
     it("a body that is not a run's points is refused, and says which field, never its values", async () => {
       const me = await makeUser("bad");

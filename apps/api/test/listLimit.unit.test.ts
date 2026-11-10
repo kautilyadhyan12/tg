@@ -1,7 +1,9 @@
 // The most list items one request may carry (`src/listLimit.ts`). No database: every request here
 // is signed out, so a request the check lets through is answered 401 by the route's sign-in, and
 // one it refuses is answered 413 before the route reads anything.
-// The first block is the job's worst thing: a member's longest run refused and lost.
+// The job's worst thing, a member's longest run refused and lost, is tested signed in: the two run
+// routes settle who is asking before they read a body (21a-iii-c), so signed out they never reach
+// the check (`geo.runs.record.routes.test.ts`, `geo.runs.climb.routes.test.ts`).
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { RUN_MAX_PAUSES, RUN_MAX_POINTS, runClimbRequestSchema, saveRunRequestSchema } from "@app/shared";
 import { buildApp } from "../src/app.js";
@@ -67,21 +69,8 @@ describe("the most list items one request may carry", () => {
     await app?.close();
   });
 
-  describe("the worst thing: a member's longest run is refused", () => {
-    it("twelve hours of points and 2,000 pauses pass the check on both run routes", async () => {
-      const run = longestRun();
-      expect(countListItems(run, Number.MAX_SAFE_INTEGER)).toBe(RUN_MAX_POINTS * 5 + RUN_MAX_PAUSES * 3);
-      for (const url of ["/v1/geo/runs", "/v1/geo/runs/climb"]) {
-        const res = await post(url, run);
-        expect(res.statusCode, `${url} ${res.body}`).toBe(401);
-      }
-    });
-
-    it("one point past what a run may hold is refused on both", async () => {
-      for (const url of ["/v1/geo/runs", "/v1/geo/runs/climb"]) {
-        expect((await post(url, longestRun(1))).statusCode, url).toBe(413);
-      }
-    });
+  it("twelve hours of points and 2,000 pauses count exactly what the run routes allow", () => {
+    expect(countListItems(longestRun(), Number.MAX_SAFE_INTEGER)).toBe(RUN_MAX_POINTS * 5 + RUN_MAX_PAUSES * 3);
   });
 
   it(`an ordinary route takes ${LIST_ITEMS_MOST.toLocaleString("en")} list items and refuses one more`, async () => {

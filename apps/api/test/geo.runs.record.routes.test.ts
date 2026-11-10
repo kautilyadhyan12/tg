@@ -235,6 +235,17 @@ d("record a run (real Postgres)", () => {
     expect((await sql`SELECT 1 FROM runs WHERE user_id = ${me.id}`).length).toBe(1);
   }, 30_000);
 
+  it("one point past the longest run is refused by the list count, and nothing is saved", async () => {
+    const me = await makeUser("past-longest");
+    const pauses: SaveRunRequest["pauses"] = [];
+    for (let i = 0; i < RUN_MAX_PAUSES; i++) pauses.push([i * 20_000 + 1000, i * 20_000 + 2000]);
+    const run = body({ points: northRun(RUN_MAX_POINTS, 3), elapsedMs: RUN_MAX_POINTS * 1000, pauses });
+    expect(run.points.length).toBe(RUN_MAX_POINTS + 1);
+    const res = await save(me.cookies, run);
+    expect([res.statusCode, (JSON.parse(res.body) as { error: string }).error]).toEqual([413, "too_many_items"]);
+    expect((await sql`SELECT 1 FROM runs WHERE user_id = ${me.id}`).length).toBe(0);
+  }, 30_000);
+
   it("is saved once when sent twice, and the second send reads back the first", async () => {
     const me = await makeUser("twice");
     const run = body();
