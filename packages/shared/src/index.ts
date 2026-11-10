@@ -21,6 +21,7 @@ export * from "./labelRead.js";
 export * from "./mealVision.js";
 export * from "./geo.js";
 export * from "./runMaths.js";
+export * from "./runPlan.js";
 export * from "./runClimb.js";
 export * from "./runShape.js";
 export * from "./privacy.js";

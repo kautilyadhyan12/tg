@@ -124,3 +124,18 @@ export const geoCache = pgTable(
   },
   (t) => [primaryKey({ columns: [t.lat3, t.lng3] })],
 );
+
+// 0230 (ROADMAP 37d-i): the running questions' answers, read through `runPlanAnswersSchema`; the plan is
+// worked out from them and the runs recorded each time it is read, never kept.
+export const runPlans = pgTable(
+  "run_plans",
+  {
+    userId: uuid("user_id")
+      .primaryKey()
+      .references(() => users.id, { onDelete: "cascade" }),
+    answers: jsonb("answers").notNull(),
+    answeredAt: timestamp("answered_at", { withTimezone: true }).notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [check("run_plans_answers_check", sql`jsonb_typeof(${t.answers}) = 'object'`)],
+);

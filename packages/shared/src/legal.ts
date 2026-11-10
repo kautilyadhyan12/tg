@@ -19,7 +19,7 @@ export const LEGAL_PATHS = {
 } as const;
 
 /** The day the words below last changed, `YYYY-MM-DD`. */
-export const LEGAL_UPDATED_ON = "2026-11-09";
+export const LEGAL_UPDATED_ON = "2026-11-10";
 
 /** Who runs KWAZO (Kd, 2026-11-08: his full name; a sole proprietorship, RULINGS 2026-09-15). */
 export const LEGAL_OWNER = "Kautilya Darshan Baruah";
@@ -332,6 +332,7 @@ export function privacyPolicy(facts: LegalFacts = LEGAL_FACTS): LegalDocument {
           ),
           p("Location information is accessed while a running session is being recorded and the Application is open or the active running notification is displayed, and while the Running page is open, to show the strength of the GPS signal. That reading stays on your device and is not kept."),
           p("KWAZO does not otherwise collect your location in the background outside these circumstances."),
+          p("If you ask for a run plan, we keep your answers to its questions: whether you run, how long you can jog without stopping, the days you can run and the distance you are aiming for, and, if you give them, the distance you usually run in a week, your longest run in the last month and a recent race time. Your plan is worked out from these answers and from the runs you record, and is not kept."),
           h3("3.11. Business Page and Community Information"),
           p("When you interact with pages operated by participating businesses, we may collect and process:"),
           list("Posts and photographs you publish.", "Comments and reactions.", "Reports submitted by you.", "Blocking actions initiated by you."),
