@@ -232,7 +232,7 @@ describe("the hills behind it", () => {
   });
 });
 
-const fixtureSchema = z.object({ runs: z.record(z.object({ points: z.array(z.tuple([z.number(), z.number(), z.number()])) })) });
+const fixtureSchema = z.object({ runs: z.record(z.string(), z.object({ points: z.array(z.tuple([z.number(), z.number(), z.number()])) })) });
 
 describe("three real runs: the line agrees with each kilometre's own time", () => {
   const raw = fixtureSchema.parse(JSON.parse(readFileSync(new URL("../../../apps/mobile/test/fixtures/real-runs.json", import.meta.url), "utf8")));
