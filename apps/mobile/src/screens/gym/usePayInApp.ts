@@ -5,6 +5,7 @@ import { openInTab } from "../../look/browserTab";
 import { colours } from "../../look/colours";
 import { useSession } from "../../session/SessionProvider";
 import { newRequestKey } from "./classesView";
+import { forgetPayAway, keepPayAway } from "./payAway";
 import {
   PAY_CHECKING,
   PAY_NOT_OPENED,
@@ -51,7 +52,8 @@ interface Away {
 }
 
 export function usePayInApp(gymId: string, onEnded: () => void): PayInApp {
-  const { session } = useSession();
+  const { session, state } = useSession();
+  const userId = state.kind === "in" ? state.user.id : null;
   const [inApp, setInApp] = useState(false);
   const [busy, setBusy] = useState<{ key: string; line: string } | null>(null);
   const [said, setSaid] = useState<{ key: string; said: PaySaid } | null>(null);
@@ -64,6 +66,7 @@ export function usePayInApp(gymId: string, onEnded: () => void): PayInApp {
   const unanswered = useRef<{ key: string; payment: AppPayment } | null>(null);
   // A press whose answer was lost keeps its key: pressed again, the server gives back the page it may have made.
   const lostPress = useRef<{ key: string; requestKey: string } | null>(null);
+  const gone = useCallback(() => !live.current, []);
   const ended = useRef(onEnded);
   useEffect(() => {
     ended.current = onEnded;
@@ -92,6 +95,7 @@ export function usePayInApp(gymId: string, onEnded: () => void): PayInApp {
           setSaid({ key, said: { tone: "warn", line: PAY_WAITING, again: true } });
           return;
         }
+        void forgetPayAway();
         // A page that never opened says so, unless Square says it was paid after all.
         setSaid({ key, said: notOpened && answer.data.payment.state === "closed" ? { tone: "bad", line: PAY_NOT_OPENED } : how });
         ended.current();
@@ -102,6 +106,7 @@ export function usePayInApp(gymId: string, onEnded: () => void): PayInApp {
         setSaid({ key, said: { tone: "bad", line: PAY_NO_ANSWER, again: true } });
         return;
       }
+      void forgetPayAway();
       setSaid({ key, said: payRefusalSaid(answer.error, answer.message) });
       ended.current();
     },
@@ -181,6 +186,10 @@ export function usePayInApp(gymId: string, onEnded: () => void): PayInApp {
         }
         const there: Away = { key: target.key, payment, left: false };
         away.current = there;
+        // Android may close the app behind the tab: kept, the app opens this place's My membership when it starts again.
+        if (userId !== null) await keepPayAway(userId, gymId);
+        // The page may have closed while it was kept: a ref read again after an await.
+        if (gone()) return;
         working({ key: target.key, line: PAY_AWAY });
         try {
           const opened = await openInTab(payment.url, { bar: colours.page, controls: colours.orange });
@@ -197,7 +206,7 @@ export function usePayInApp(gymId: string, onEnded: () => void): PayInApp {
         }
       })();
     },
-    [session, gymId, finish, working],
+    [session, gymId, finish, working, userId, gone],
   );
 
   const checkAgain = useCallback(() => {

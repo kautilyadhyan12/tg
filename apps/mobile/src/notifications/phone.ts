@@ -47,8 +47,9 @@ export type Tapped =
   | { kind: "training"; open: "workout" | "food" }
   | { kind: "progress"; open: "running" | "achievements" | "dashboard" };
 
-/** A tap that opens a place's page on the Gym tab. */
-export type GymTapped = Exclude<Tapped, { kind: "training" } | { kind: "progress" }>;
+/** A tap that opens a place's page on the Gym tab; or, when the app starts again after Android closed it behind Square's
+ *  payment page, that place's My membership (20f). */
+export type GymTapped = Exclude<Tapped, { kind: "training" } | { kind: "progress" }> | { kind: "membership"; gymId: string };
 
 /** What a notification of ours asks to open, or null for anything else. */
 export function tappedOf(data: unknown): Tapped | null {

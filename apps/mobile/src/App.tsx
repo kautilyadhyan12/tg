@@ -35,7 +35,7 @@ import { AppMinutes } from "./session/MinutesInApp";
 import { DashboardScreen } from "./screens/Dashboard";
 import { GymScreen } from "./screens/GymTab";
 import { NotificationsProvider } from "./notifications/Notifications";
-import { forgetNotifications, type Tapped } from "./notifications/phone";
+import { forgetNotifications, type GymTapped, type Tapped } from "./notifications/phone";
 import { emptyPhotoFolder } from "./screens/gym/photoFiles";
 import { forgetExports, rememberPerson } from "./session/personFiles";
 import { PlacesProvider, usePlaces } from "./screens/places";
@@ -146,13 +146,13 @@ function SignedInOrOut({ mealStore, bodyStore, runStore, minutesStore, lookMs, w
 const tabsRef = createNavigationContainerRef<Record<string, undefined>>();
 type TappedTab = "Gym" | "Workout" | "Food" | "Dashboard" | "Me";
 // The streak reminder opens Workout on Running, the summary the Dashboard, a badge Achievements on Me (19e-ii).
-export const tabOfTap = (tapped: Tapped): TappedTab => {
+export const tabOfTap = (tapped: Tapped | GymTapped): TappedTab => {
   if (tapped.kind === "progress") return tapped.open === "running" ? "Workout" : tapped.open === "dashboard" ? "Dashboard" : "Me";
   return tapped.kind !== "training" ? "Gym" : tapped.open === "workout" ? "Workout" : "Food";
 };
 // A tap that opened the app arrives before the tabs are drawn: held until they are.
 let heldTab: TappedTab | null = null;
-const openTappedTab = (tapped: Tapped) => {
+const openTappedTab = (tapped: Tapped | GymTapped) => {
   if (tapped.kind === "progress" && tapped.open === "achievements") openAchievements();
   if (tapped.kind === "progress" && tapped.open === "running") openRunning();
   if (tabsRef.isReady()) tabsRef.navigate(tabOfTap(tapped));

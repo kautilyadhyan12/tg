@@ -316,3 +316,53 @@ describe("coming back, and every way it ends", () => {
     expect(keys[1]).not.toBe(keys[0]);
   });
 });
+
+describe("Android closes the app behind Square's page", () => {
+  const store = jest.requireMock<{ kept: Map<string, string> }>("expo-secure-store").kept;
+  const RAVI_ID = "7b0c8a52-6f0e-4d59-9a3c-1f2e3d4c5b6a";
+  const routes = () => ({
+    "/v1/auth/refresh": ok({ tokens: tokens(2) }),
+    "/v1/orgs/mine": mine(IRON),
+    [membershipPath(IRON)]: ok(view("Iron House")),
+    [paymentsPath(IRON)]: (body?: unknown) => (body === undefined ? payments(true, [page()])() : ok({ payment: page() })()),
+    [closePath(IRON)]: ok({ payment: page({ state: "closed", url: null, closesAt: null }) }),
+  });
+  beforeEach(() => {
+    store.delete("pay-away");
+  });
+
+  it("the place is kept while the tab is up and let go once the page ends", async () => {
+    const server = fakeServer({ ...routes(), [paymentsPath(IRON)]: (body?: unknown) => (body === undefined ? payments()() : ok({ payment: page() })()) });
+    await openMembership(server.ask, IRON);
+    await fireEvent.press(await onPage().findByLabelText("Pay $49.00 for Gold Monthly"));
+    await waitFor(() => {
+      expect(tab.opened).toHaveLength(1);
+    });
+    expect(JSON.parse(store.get("pay-away") ?? "{}")).toMatchObject({ userId: RAVI_ID, gymId: IRON.id });
+    await backFromTab();
+    expect(await onPage().findByText(NOT_PAID)).toBeTruthy();
+    expect(store.has("pay-away")).toBe(false);
+  });
+
+  it("started again, the app opens that place's My membership, ends the page and says how it went", async () => {
+    store.set("pay-away", JSON.stringify({ userId: RAVI_ID, gymId: IRON.id, at: Date.now() - 60_000 }));
+    const server = fakeServer(routes());
+    await render(<App extra={extra} ask={server.ask} store={memoryStore(kept(1))} wait={noWait} />);
+    expect(await within(await screen.findByTestId("membership-page")).findByText(NOT_PAID)).toBeTruthy();
+    expect(posts(server.asked, closePath(IRON))).toHaveLength(1);
+    expect(store.has("pay-away")).toBe(false);
+  });
+
+  it("somebody else's, or one older than a page can be open, opens nothing", async () => {
+    for (const kept1 of [{ userId: "someone-else", gymId: IRON.id, at: Date.now() }, { userId: RAVI_ID, gymId: IRON.id, at: Date.now() - 16 * 60_000 }]) {
+      store.set("pay-away", JSON.stringify(kept1));
+      const server = fakeServer({ ...routes(), [paymentsPath(IRON)]: payments() });
+      const { unmount } = await render(<App extra={extra} ask={server.ask} store={memoryStore(kept(1))} wait={noWait} />);
+      expect((await screen.findAllByText("Start Training")).length).toBeGreaterThan(0);
+      expect(screen.queryByTestId("membership-page")).toBeNull();
+      expect(server.paths().filter((p) => p.includes("/my-membership"))).toEqual([]);
+      expect(store.has("pay-away")).toBe(false);
+      await unmount();
+    }
+  });
+});
