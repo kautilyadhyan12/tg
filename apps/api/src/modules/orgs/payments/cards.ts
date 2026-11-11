@@ -37,6 +37,7 @@ import {
   memberCardResponseSchema,
   myCardResponseSchema,
   myCardStaysLine,
+  myCardsOffLine,
   squareMadeByMerge,
   type CardForm,
   type MemberCard,
@@ -344,7 +345,7 @@ export async function removalOf(sql: Sql | TransactionSql, gymId: string, entryI
   return { canRemove: true, stays: null, paysFor: null };
 }
 
-type Removed = { kind: "gone" } | { kind: "changed" } | { kind: "paid_by"; payer: string } | { kind: "stays"; removal: Removal } | { kind: "removed"; disableId: string };
+type Removed = { kind: "gone" } | { kind: "changed" } | { kind: "off" } | { kind: "paid_by"; payer: string } | { kind: "stays"; removal: Removal } | { kind: "removed"; disableId: string };
 
 /** Remove card, in the app: the card the screen showed, under the gym's lock, only while `removalOf` lets it go, in
  *  the same transaction as Square's stop is owed; Square is told now, and by the worker where it does not answer.
@@ -365,6 +366,8 @@ export async function removeMyCard(deps: PaymentsDeps, userId: string, gymId: st
     const kept = await cards.readCard(tx, gymId, entryId, true);
     const card = shownCard(kept, square, row);
     if (kept === null) return { kind: "gone" };
+    // The gym switched Square off meanwhile: nothing can be changed here, and the card did not change.
+    if (row?.state !== "connected") return { kind: "off" };
     // Kept, but no longer the card shown (the gym moved to another Square account meanwhile): not removed here.
     if (card === null) return { kind: "changed" };
     if (card.last4 !== body.last4 || card.savedAt.toISOString() !== new Date(body.savedAt).toISOString()) return { kind: "changed" };
@@ -386,6 +389,7 @@ export async function removeMyCard(deps: PaymentsDeps, userId: string, gymId: st
     return { kind: "removed", disableId };
   });
   if (outcome.kind === "removed") await sendOwedCardDisables(deps, square, [outcome.disableId]);
+  if (outcome.kind === "off") throw new OrgsError(409, "card_not_connected", myCardsOffLine(gym.name));
   if (outcome.kind === "changed") throw new OrgsError(409, "card_changed", MEMBER_CARD_WORDS.card_changed);
   if (outcome.kind === "paid_by") throw paidBy(outcome.payer, "");
   if (outcome.kind === "stays" && outcome.removal.stays !== null) {

@@ -51,7 +51,7 @@ export const removeCardLine = (gymName: string): string => `${gymName} won’t b
 export const cardRemovedLine = (card: { brand: string; last4: string }): string => `Card removed: ${cardName(card)}.`;
 /** What a refused Remove card says in its box, in a member's words; `final`: pressing again cannot change it. */
 export function removeRefusalLine(code: string, serverWords: string, gymName: string): { line: string; final: boolean } {
-  if (code === "card_stays" || code === "card_changed") return { line: serverWords, final: true };
+  if (code === "card_stays" || code === "card_changed" || code === "card_not_connected") return { line: serverWords, final: true };
   if (code === "card_paid_by_payer" || code === "card_not_your_record") return { line: cardRefusalLine(code, serverWords, gymName), final: true };
   return { line: serverWords, final: false };
 }

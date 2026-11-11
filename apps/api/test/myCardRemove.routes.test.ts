@@ -348,6 +348,16 @@ d("Remove card in the member's app: only while nothing can be charged to it (rea
     const now = await myCard(gym, mo);
     expect(now.card).toBeNull();
     expect(now.earlierCard).toEqual({ brand: "VISA", last4: "6060" });
+
+    // The gym switched Square off as the press came: said so, never that the card changed, and nothing removed.
+    const sam = await person(gym, "Sam Switched Off");
+    const samApp = await member(gym, sam);
+    const samCard = await cardFor(gym, sam, "7070");
+    await sql`UPDATE gym_payment_connections SET state = 'removed', access_token = NULL, refresh_token = NULL, removed_at = now() WHERE gym_id = ${gym.id}`;
+    const off = await remove(gym, samApp, samCard);
+    expect(off.statusCode, off.body).toBe(409);
+    expect(errorOf(off).error).toEqual({ code: "card_not_connected", message: `${gym.name} can’t change cards in the app right now. Ask the front desk.` });
+    expect(await cardOn(gym.id, sam)).toBe(samCard.cardId);
   });
 
   it("a membership that starts renewing while the press waits for the gym is read before anything is removed", async () => {

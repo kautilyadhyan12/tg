@@ -154,6 +154,7 @@ describe("Remove card (20e)", () => {
   it.each<[string, string, { line: string; final: boolean }]>([
     ["card_stays", "This card also pays for Aarav Sharma, so it stays on file. Ask the front desk.", { line: "This card also pays for Aarav Sharma, so it stays on file. Ask the front desk.", final: true }],
     ["card_changed", MEMBER_CARD_WORDS.card_changed, { line: MEMBER_CARD_WORDS.card_changed, final: true }],
+    ["card_not_connected", "Iron House can’t change cards in the app right now. Ask the front desk.", { line: "Iron House can’t change cards in the app right now. Ask the front desk.", final: true }],
     ["card_paid_by_payer", "Priya Sharma pays for this person, so Priya Sharma's card is used.", { line: "Somebody else pays for you now, so their card is used.", final: true }],
     ["card_not_your_record", MEMBER_CARD_WORDS.not_your_card, { line: MEMBER_CARD_WORDS.not_your_card, final: true }],
     ["rate_limited", "Too many requests. Try again later.", { line: "Too many requests. Try again later.", final: false }],

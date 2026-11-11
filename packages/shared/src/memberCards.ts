@@ -268,6 +268,9 @@ export type MyCardView = z.infer<typeof myCardViewSchema>;
 export const removeMyCardRequestSchema = z.object({ last4: memberCardSchema.shape.last4, savedAt: z.iso.datetime() }).strict();
 export type RemoveMyCardRequest = z.infer<typeof removeMyCardRequestSchema>;
 
+/** Remove card pressed as the gym switched Square off: "Iron House can't change cards in the app right now. Ask the front desk." */
+export const myCardsOffLine = (gymName: string): string => `${gymName} can’t change cards in the app right now. Ask the front desk.`;
+
 /** "This card also pays for Aarav Sharma, so it stays on file. Use Update card to change it, or ask the front desk." */
 export function myCardStaysLine(stays: MyCardStays, paysFor: { names: readonly string[]; more: number } | null, canUpdate: boolean): string {
   const tail = canUpdate ? " Use Update card to change it, or ask the front desk." : " Ask the front desk.";
