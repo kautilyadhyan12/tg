@@ -39,7 +39,8 @@ var box=document.getElementById("card");
 var card=null,busy=false,tall=false,lastPx=0;
 function say(m){window.ReactNativeWebView.postMessage(JSON.stringify(m));}
 function height(){var px=Math.ceil(box.getBoundingClientRect().height);if(px>0&&px!==lastPx){lastPx=px;say({kind:"height",px:px});}}
-function check(){var on=false;var all=document.body.children;for(var i=0;i<all.length;i++){var el=all[i];if(el===box||el.tagName==="SCRIPT")continue;if(el.getBoundingClientRect().height>150)on=true;}if(on!==tall){tall=on;say({kind:"tall",on:on});}}
+function shown(el){var st=window.getComputedStyle(el);if(st.display==="none"||st.visibility==="hidden")return false;var r=el.getBoundingClientRect();return r.width>0&&r.height>0;}
+function check(){var on=false;var all=document.body.children;for(var i=0;i<all.length;i++){var el=all[i];if(el===box||el.tagName==="SCRIPT")continue;if(shown(el))on=true;}if(on!==tall){tall=on;say({kind:"tall",on:on});}}
 function draw(){
 if(!window.Square){say({kind:"blocked"});return;}
 var payments;
@@ -51,8 +52,12 @@ if(card===null||busy)return;
 busy=true;
 card.tokenize({intent:"STORE",customerInitiated:true,sellerKeyedIn:false,billingContact:form.contact}).then(function(r){busy=false;if(r&&r.status==="OK"&&typeof r.token==="string")say({kind:"token",token:r.token});else say({kind:"not_taken"});},function(){busy=false;say({kind:"not_taken"});});
 };
-if(window.ResizeObserver)new ResizeObserver(height).observe(box);
-new MutationObserver(function(){check();height();}).observe(document.body,{childList:true,subtree:true,attributes:true});
+var sizes=window.ResizeObserver?new ResizeObserver(function(){check();height();}):null,watched=[];
+function watch(){if(sizes===null)return;var all=document.body.children;for(var i=0;i<all.length;i++){var el=all[i];if(el.tagName==="SCRIPT"||watched.indexOf(el)>=0)continue;watched.push(el);sizes.observe(el);}}
+watch();
+new MutationObserver(function(){watch();check();height();}).observe(document.body,{childList:true,subtree:true,attributes:true});
+document.addEventListener("transitionend",check,true);
+document.addEventListener("animationend",check,true);
 var s=document.createElement("script");
 s.src=form.script;
 s.onload=draw;

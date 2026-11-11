@@ -1,3 +1,4 @@
+import { runInNewContext } from "node:vm";
 import { describe, expect, it } from "vitest";
 import { sha256 } from "@noble/hashes/sha2";
 import { utf8ToBytes } from "@noble/hashes/utils";
@@ -106,5 +107,115 @@ describe("the page never moves off itself", () => {
     ["a file", "file:///sdcard/x", false, "refuse"],
   ])("%s", (_name, url, top, where) => {
     expect(cardWhereTo(url, top, PAGE)).toBe(where);
+  });
+});
+
+/** A part of the page as the page's script measures it: its box, and how it is drawn. */
+interface Part {
+  tagName: string;
+  rect: { width: number; height: number };
+  style: { display: string; visibility: string };
+}
+const part = (tagName: string, width: number, height: number, style: Partial<Part["style"]> = {}): Part => ({
+  tagName,
+  rect: { width, height },
+  style: { display: "block", visibility: "visible", ...style },
+});
+
+/** The page's own script, run with these parts on the page; its watchers are run by hand. */
+function pageWith(parts: Part[]) {
+  const html = cardPage(form());
+  if (html === null) throw new Error("no page");
+  const script = runningScripts(html)[0] ?? "";
+  const box = part("DIV", 366, 139);
+  const said: { kind: string; on?: boolean }[] = [];
+  let changed: () => void = () => undefined;
+  const sizes: { run: () => void; watched: unknown[] }[] = [];
+  const heard: { name: string; run: () => void }[] = [];
+  const all = [box, part("SCRIPT", 0, 0, { display: "none" }), ...parts];
+  const shown = all.map((p) => ({ ...p, getBoundingClientRect: () => p.rect }));
+  const document = {
+    body: { children: shown },
+    head: { appendChild: () => undefined },
+    addEventListener: (name: string, run: () => void) => heard.push({ name, run }),
+    createElement: () => ({}),
+    getElementById: (id: string) => (id === "form" ? { textContent: JSON.stringify(dataOf(html)) } : shown[0]),
+  };
+  const window = {
+    ReactNativeWebView: { postMessage: (m: string) => said.push(JSON.parse(m) as { kind: string; on?: boolean }) },
+    getComputedStyle: (p: Part) => p.style,
+    ResizeObserver: class {
+      watched: unknown[] = [];
+      constructor(run: () => void) { sizes.push({ run, watched: this.watched }); }
+      observe(el: unknown) { this.watched.push(el); }
+    },
+  };
+  class MutationObserver {
+    constructor(run: () => void) { changed = run; }
+    observe() { return undefined; }
+  }
+  runInNewContext(script, { window, document, MutationObserver, ResizeObserver: window.ResizeObserver });
+  return {
+    /** What the page asked about room. */
+    asked: () => said.filter((m) => m.kind === "tall"),
+    /** Parts were added to the page. */
+    added: () => { changed(); },
+    /** A part's fade or animation ends with it drawn this way, with nothing added or changed on the page. */
+    faded: (p: Part, style: Partial<Part["style"]>, name = "transitionend") => {
+      Object.assign(p.style, style);
+      for (const h of heard) if (h.name === name) h.run();
+    },
+    /** A part takes a new size with nothing added or changed on the page: its style arrived, or the page laid out again. */
+    grew: (p: Part, height: number) => {
+      p.rect.height = height;
+      const el = shown[all.indexOf(p)];
+      for (const s of sizes) if (s.watched.includes(el)) s.run();
+    },
+  };
+}
+
+/** What the page asks about room once these parts are added. */
+function roomAsked(parts: Part[]): { kind: string; on?: boolean }[] {
+  const page = pageWith(parts);
+  page.added();
+  return page.asked();
+}
+
+describe("the bank's check gets room on the page", () => {
+  // What Square adds, measured in a real browser at the phone's own size: the card's boxes sit 142 points tall, and the
+  // bank's check is a layer over the whole page, so it is exactly as tall as the page.
+  it("Square's check layer over the whole page asks for room, however small the page is", () => {
+    expect(roomAsked([part("DIV", 366, 142)])).toEqual([{ kind: "tall", on: true }]);
+    expect(roomAsked([part("DIV", 366, 860)])).toEqual([{ kind: "tall", on: true }]);
+  });
+
+  it("Square's hidden helper frame and the check's empty form ask for nothing", () => {
+    expect(roomAsked([part("IFRAME", 0, 0, { visibility: "hidden" }), part("FORM", 366, 0)])).toEqual([]);
+    expect(roomAsked([part("DIV", 366, 142, { display: "none" })])).toEqual([]);
+  });
+
+  it("Square's layer added before its style has loaded asks for room once it takes its size", () => {
+    // On the phone Square adds the layer with no size yet; it grows when Square's style arrives, which adds nothing to the page.
+    const layer = part("DIV", 366, 0);
+    const page = pageWith([layer]);
+    page.added();
+    expect(page.asked()).toEqual([]);
+    page.grew(layer, 142);
+    expect(page.asked()).toEqual([{ kind: "tall", on: true }]);
+    page.grew(layer, 0);
+    expect(page.asked()).toEqual([{ kind: "tall", on: true }, { kind: "tall", on: false }]);
+  });
+
+  it("Square's layer that fades in asks for room when the fade ends", () => {
+    // Measured on the phone: the layer is added full size but hidden, and stays so while it fades in; the fade's end
+    // changes nothing on the page.
+    const layer = part("DIV", 366, 142, { visibility: "hidden" });
+    const page = pageWith([layer]);
+    page.added();
+    expect(page.asked()).toEqual([]);
+    page.faded(layer, { visibility: "visible" });
+    expect(page.asked()).toEqual([{ kind: "tall", on: true }]);
+    page.faded(layer, { visibility: "hidden" }, "animationend");
+    expect(page.asked()).toEqual([{ kind: "tall", on: true }, { kind: "tall", on: false }]);
   });
 });

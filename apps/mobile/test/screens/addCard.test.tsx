@@ -80,7 +80,13 @@ const membershipPath = (place: Place) => `/v1/orgs/${place.id}/my-membership`;
 const cardPath = (place: Place) => `/v1/orgs/${place.id}/my-card`;
 
 type Box = {
-  props: { testID?: string; source: { html: string; baseUrl: string }; onMessage: (event: { nativeEvent: { data: string; url: string } }) => void };
+  props: {
+    testID?: string;
+    source: { html: string; baseUrl: string };
+    scrollEnabled?: boolean;
+    nestedScrollEnabled?: boolean;
+    onMessage: (event: { nativeEvent: { data: string; url: string } }) => void;
+  };
   gone: boolean;
   injected: string[];
 };
@@ -406,6 +412,49 @@ describe("the page while Square's boxes work", () => {
     expect(save).toBeDisabled();
     await say(openBox(), { kind: "ready" });
     expect(screen.getByLabelText("Save this card for Iron House")).toBeEnabled();
+  });
+
+  it("the bank's check gets the room it asks for, and scrolls inside the page, not the page under it", async () => {
+    const server = fakeServer({
+      "/v1/auth/refresh": ok({ tokens: tokens(2) }),
+      "/v1/orgs/mine": mine(IRON),
+      [membershipPath(IRON)]: ok(membershipOf("Iron House")),
+      [cardPath(IRON)]: ok(cardOf("Iron House", "LOCATIONIRON01")),
+    });
+    await openMembership(server.ask, IRON);
+    await fireEvent.press(await page().findByText("Add card"));
+    await waitFor(() => {
+      expect(cardBoxes()).toHaveLength(1);
+    });
+    const box = openBox();
+    await say(box, { kind: "ready" });
+    await say(box, { kind: "height", px: 139 });
+    /** The place the page is drawn in, and its height. */
+    const place = () => {
+      let node = screen.getByTestId("card-boxes").parent;
+      while (node !== null && typeof node.props["onLayout"] !== "function") node = node.parent;
+      if (node === null) throw new Error("no place for the page");
+      return node;
+    };
+    const room = () => StyleSheet.flatten(place().props["style"] as object) as { height?: number };
+    expect(room().height).toBe(139);
+    expect([openBox().props.scrollEnabled, openBox().props.nestedScrollEnabled]).toEqual([false, false]);
+    await say(box, { kind: "tall", on: true });
+    expect(room().height).toBe(600);
+    // On a narrow phone the bank's form is taller than its room: a swipe inside it scrolls the form itself.
+    expect([openBox().props.scrollEnabled, openBox().props.nestedScrollEnabled]).toEqual([true, true]);
+    await say(box, { kind: "tall", on: false });
+    expect(room().height).toBe(139);
+    expect([openBox().props.scrollEnabled, openBox().props.nestedScrollEnabled]).toEqual([false, false]);
+    // A small phone (measured on one: 569 points show between the bar and Save card, the boxes 105 points down): the
+    // check fits what shows, so the bank's whole form is on the screen and scrolls inside itself.
+    await fireEvent(screen.getByTestId("cover-body"), "layout", { nativeEvent: { layout: { x: 0, y: 0, width: 360, height: 569 } } });
+    const card = screen.getByTestId("add-card").parent;
+    if (card === null) throw new Error("no card");
+    await fireEvent(card, "layout", { nativeEvent: { layout: { x: 16, y: 8, width: 328, height: 400 } } });
+    await fireEvent(place(), "layout", { nativeEvent: { layout: { x: 16, y: 97, width: 294, height: 139 } } });
+    await say(box, { kind: "tall", on: true });
+    expect(room().height).toBe(569 - 8 - 97 - 8);
   });
 
   it("what Square did not take is said; boxes that did not load are drawn again on Try again", async () => {

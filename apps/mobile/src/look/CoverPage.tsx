@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { KeyboardAvoidingView, Pressable, ScrollView, StyleSheet, View, type NativeScrollEvent, type NativeSyntheticEvent } from "react-native";
+import { KeyboardAvoidingView, Pressable, ScrollView, StyleSheet, View, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent } from "react-native";
 import { Modal } from "./Modal";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colours, sizes } from "./colours";
@@ -24,13 +24,15 @@ interface CoverPageProps {
   hero?: ReactNode;
   /** Scrolled near its foot: a long list reads its next part (Your runs, 37c-i). */
   onNearEnd?: () => void;
+  /** The height of the part of the page that shows between the bar and the foot. */
+  onSeenHeight?: (height: number) => void;
 }
 
 /** How near the foot, in points, a scroll asks for the next part. */
 const NEAR_END = 600;
 
 /** A page that opens over the tab for one task, closed by its ✕, its action held at the bottom. */
-export function CoverPage({ open, title, onClose, children, foot, picture, tall = 0.62, hero, onNearEnd }: CoverPageProps) {
+export function CoverPage({ open, title, onClose, children, foot, picture, tall = 0.62, hero, onNearEnd, onSeenHeight }: CoverPageProps) {
   const insets = useSafeAreaInsets();
   const top = hero !== undefined || picture !== undefined;
   return (
@@ -48,7 +50,9 @@ export function CoverPage({ open, title, onClose, children, foot, picture, tall 
           </View>
         ) : null}
         <ScrollView
+          testID="cover-body"
           keyboardShouldPersistTaps="handled"
+          {...(onSeenHeight === undefined ? {} : { onLayout: (e: LayoutChangeEvent) => { onSeenHeight(e.nativeEvent.layout.height); } })}
           contentContainerStyle={[styles.body, top ? styles.underPicture : null]}
           {...(onNearEnd === undefined
             ? {}

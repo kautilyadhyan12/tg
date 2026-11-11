@@ -41,9 +41,10 @@ export interface CardPlace {
 /** Refusals that mean the page is out of date. */
 const CHANGED = ["card_agreement_changed", "card_not_ready", "card_paid_by_payer", "card_not_your_record", "card_not_taken"];
 
-/** The boxes' height before Square says its own, and the room Square's or the bank's check takes over the page. */
+/** The boxes' height before Square says its own, and the most and least room Square's or the bank's check takes. */
 const FIRST_TALL = 110;
 const CHECK_TALL = 600;
+const CHECK_LEAST = 240;
 /** How long Save card waits for Square's token: the bank's own check, typed by hand, fits well inside it. */
 const SAVE_WAIT_MS = 5 * 60 * 1000;
 
@@ -66,6 +67,11 @@ function Body({ place, onClose, onSaved }: { place: CardPlace; onClose: () => vo
   const [blocked, setBlocked] = useState(false);
   const [tall, setTall] = useState(FIRST_TALL);
   const [checking, setChecking] = useState(false);
+  // Where the boxes sit on the page and how much of the page shows: the bank's check fits what shows, on any phone,
+  // and scrolls inside itself.
+  const [seen, setSeen] = useState(0);
+  const [cardTop, setCardTop] = useState(0);
+  const [boxTop, setBoxTop] = useState(0);
   const [agreed, setAgreed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState("");
@@ -169,6 +175,7 @@ function Body({ place, onClose, onSaved }: { place: CardPlace; onClose: () => vo
   };
 
   const title = view !== null && view.card !== null ? UPDATE_CARD : ADD_CARD;
+  const checkRoom = seen === 0 ? CHECK_TALL : Math.min(CHECK_TALL, Math.max(CHECK_LEAST, Math.floor(seen - cardTop - boxTop - 8)));
   const canSave = view !== null && view.canSave && page !== null && address !== null;
 
   const foot = !canSave ? undefined : (
@@ -184,113 +191,116 @@ function Body({ place, onClose, onSaved }: { place: CardPlace; onClose: () => vo
   );
 
   return (
-    <CoverPage open title={title} onClose={onClose} foot={foot}>
-      <Card testID="add-card" style={styles.paper}>
-        <View style={styles.head}>
-          <Avatar name={place.name} size={52} />
-          <View style={styles.grow}>
-            <Txt kind="h3" numberOfLines={1}>
-              {place.name}
-            </Txt>
+    <CoverPage open title={title} onClose={onClose} foot={foot} onSeenHeight={setSeen}>
+      <View onLayout={(e) => { setCardTop(e.nativeEvent.layout.y); }}>
+        <Card testID="add-card" style={styles.paper}>
+          <View style={styles.head}>
+            <Avatar name={place.name} size={52} />
+            <View style={styles.grow}>
+              <Txt kind="h3" numberOfLines={1}>
+                {place.name}
+              </Txt>
+            </View>
           </View>
-        </View>
-        <View style={styles.line} />
-        {held.kind === "loading" ? (
-          <Txt kind="small">Loading…</Txt>
-        ) : held.kind === "failed" ? (
-          <>
-            <Txt colour="badText">{held.message}</Txt>
-            <Button
-              label="Try again"
-              kind="soft"
-              small
-              onPress={() => {
-                setHeld({ kind: "loading" });
-                void load();
-              }}
-            />
-          </>
-        ) : !canSave ? (
-          <Txt colour="text">{problem === "" ? MEMBER_CARD_WORDS.not_taken : problem}</Txt>
-        ) : (
-          <>
-            {blocked ? (
-              <View style={styles.trouble}>
-                <Txt colour="badText">{CARD_NOT_LOADED}</Txt>
-                <Button label="Try again" kind="link" onPress={redraw} />
-              </View>
-            ) : (
-              <View style={{ height: checking ? CHECK_TALL : tall }}>
-                <WebView
-                  ref={web}
-                  key={round}
-                  testID="card-boxes"
-                  source={{ html: page, baseUrl: address }}
-                  originWhitelist={["*"]}
-                  style={styles.web}
-                  containerStyle={styles.web}
-                  scrollEnabled={checking}
-                  allowFileAccess={false}
-                  mixedContentMode="never"
-                  onMessage={(event) => {
-                    // Only the page itself speaks, never a frame inside it.
-                    if (pageAddress(event.nativeEvent.url) !== address) return;
-                    let said: unknown;
-                    try {
-                      said = JSON.parse(event.nativeEvent.data);
-                    } catch {
-                      return;
-                    }
-                    const message = cardFormMessageSchema.safeParse(said);
-                    if (!message.success) return;
-                    const m = message.data;
-                    if (m.kind === "ready") setDrawn(true);
-                    else if (m.kind === "height") setTall(Math.min(Math.max(m.px, 48), CHECK_TALL));
-                    else if (m.kind === "tall") setChecking(m.on);
-                    else if (m.kind === "blocked") {
+          <View style={styles.line} />
+          {held.kind === "loading" ? (
+            <Txt kind="small">Loading…</Txt>
+          ) : held.kind === "failed" ? (
+            <>
+              <Txt colour="badText">{held.message}</Txt>
+              <Button
+                label="Try again"
+                kind="soft"
+                small
+                onPress={() => {
+                  setHeld({ kind: "loading" });
+                  void load();
+                }}
+              />
+            </>
+          ) : !canSave ? (
+            <Txt colour="text">{problem === "" ? MEMBER_CARD_WORDS.not_taken : problem}</Txt>
+          ) : (
+            <>
+              {blocked ? (
+                <View style={styles.trouble}>
+                  <Txt colour="badText">{CARD_NOT_LOADED}</Txt>
+                  <Button label="Try again" kind="link" onPress={redraw} />
+                </View>
+              ) : (
+                <View style={{ height: checking ? checkRoom : tall }} onLayout={(e) => { setBoxTop(e.nativeEvent.layout.y); }}>
+                  <WebView
+                    ref={web}
+                    key={round}
+                    testID="card-boxes"
+                    source={{ html: page, baseUrl: address }}
+                    originWhitelist={["*"]}
+                    style={styles.web}
+                    containerStyle={styles.web}
+                    scrollEnabled={checking}
+                    nestedScrollEnabled={checking}
+                    allowFileAccess={false}
+                    mixedContentMode="never"
+                    onMessage={(event) => {
+                      // Only the page itself speaks, never a frame inside it.
+                      if (pageAddress(event.nativeEvent.url) !== address) return;
+                      let said: unknown;
+                      try {
+                        said = JSON.parse(event.nativeEvent.data);
+                      } catch {
+                        return;
+                      }
+                      const message = cardFormMessageSchema.safeParse(said);
+                      if (!message.success) return;
+                      const m = message.data;
+                      if (m.kind === "ready") setDrawn(true);
+                      else if (m.kind === "height") setTall(Math.min(Math.max(m.px, 48), CHECK_TALL));
+                      else if (m.kind === "tall") setChecking(m.on);
+                      else if (m.kind === "blocked") {
+                        stopSaving();
+                        setBusy(false);
+                        setBlocked(true);
+                      } else if (m.kind === "not_taken") {
+                        if (!saving.current) return;
+                        stopSaving();
+                        setBusy(false);
+                        setProblem(CARD_NOT_TAKEN);
+                      } else {
+                        // A token nobody asked for is never sent.
+                        if (!saving.current) return;
+                        stopSaving();
+                        void send(m.token);
+                      }
+                    }}
+                    onError={() => {
                       stopSaving();
                       setBusy(false);
                       setBlocked(true);
-                    } else if (m.kind === "not_taken") {
-                      if (!saving.current) return;
-                      stopSaving();
-                      setBusy(false);
-                      setProblem(CARD_NOT_TAKEN);
-                    } else {
-                      // A token nobody asked for is never sent.
-                      if (!saving.current) return;
-                      stopSaving();
-                      void send(m.token);
-                    }
-                  }}
-                  onError={() => {
-                    stopSaving();
-                    setBusy(false);
-                    setBlocked(true);
-                  }}
-                  onShouldStartLoadWithRequest={(request) => {
-                    const where = cardWhereTo(request.url, request.isTopFrame, address);
-                    if (where === "outside") void Linking.openURL(request.url);
-                    return where === "load";
-                  }}
-                  onOpenWindow={(event) => {
-                    if (cardWhereTo(event.nativeEvent.targetUrl, true, address) === "outside") void Linking.openURL(event.nativeEvent.targetUrl);
-                  }}
-                />
-              </View>
-            )}
-            <Tick
-              testID="card-agree"
-              label={view.agreement}
-              ticked={agreed}
-              disabled={busy}
-              onPress={() => {
-                setAgreed((now) => !now);
-              }}
-            />
-          </>
-        )}
-      </Card>
+                    }}
+                    onShouldStartLoadWithRequest={(request) => {
+                      const where = cardWhereTo(request.url, request.isTopFrame, address);
+                      if (where === "outside") void Linking.openURL(request.url);
+                      return where === "load";
+                    }}
+                    onOpenWindow={(event) => {
+                      if (cardWhereTo(event.nativeEvent.targetUrl, true, address) === "outside") void Linking.openURL(event.nativeEvent.targetUrl);
+                    }}
+                  />
+                </View>
+              )}
+              <Tick
+                testID="card-agree"
+                label={view.agreement}
+                ticked={agreed}
+                disabled={busy}
+                onPress={() => {
+                  setAgreed((now) => !now);
+                }}
+              />
+            </>
+          )}
+        </Card>
+      </View>
     </CoverPage>
   );
 }
