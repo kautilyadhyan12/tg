@@ -362,8 +362,11 @@ export async function removeMyCard(deps: PaymentsDeps, userId: string, gymId: st
   const outcome = await deps.sql.begin(async (tx): Promise<Removed> => {
     await lockGym(tx, gymId);
     const row = await repo.readConnection(tx, gymId, square.environment);
-    const card = shownCard(await cards.readCard(tx, gymId, entryId, true), square, row);
-    if (card === null) return { kind: "gone" };
+    const kept = await cards.readCard(tx, gymId, entryId, true);
+    const card = shownCard(kept, square, row);
+    if (kept === null) return { kind: "gone" };
+    // Kept, but no longer the card shown (the gym moved to another Square account meanwhile): not removed here.
+    if (card === null) return { kind: "changed" };
     if (card.last4 !== body.last4 || card.savedAt.toISOString() !== new Date(body.savedAt).toISOString()) return { kind: "changed" };
     const payer = await payerOf(tx, gymId, entryId);
     if (payer !== null) return { kind: "paid_by", payer: payer.name };

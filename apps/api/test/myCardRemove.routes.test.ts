@@ -254,9 +254,16 @@ d("Remove card in the member's app: only while nothing can be charged to it (rea
     expect(his.card).toBeNull();
     expect(his.canRemove).toBe(false);
     expect((await remove(gym, aaravApp, card)).statusCode).toBe(200);
+    // An old card of his own still on his record: his press is refused, because Priya pays for him, and it stays.
+    const his0 = await cardFor(gym, aarav, "9999");
+    const paid = await remove(gym, aaravApp, his0);
+    expect(paid.statusCode, paid.body).toBe(409);
+    expect(errorOf(paid).error.code).toBe("card_paid_by_payer");
+    expect(await cardOn(gym.id, aarav)).toBe(his0.cardId);
 
     expect(await cardOn(gym.id, priya)).toBe(card.cardId);
     expect(square.stopped).not.toContain(card.cardId);
+    expect(square.stopped).not.toContain(his0.cardId);
     expect(await stopsOwed(gym.id)).toEqual([]);
   });
 
@@ -273,8 +280,9 @@ d("Remove card in the member's app: only while nothing can be charged to it (rea
     const otherCard = await cardFor(lotus, other, "3333");
     const stranger = await signedIn("Stranger");
 
-    // A stranger to Lotus gets 404, and so does Lotus's owner pressing a member's own route without a record.
+    // A stranger to Lotus gets 404, and so does Lotus's owner, who is no member of it.
     expect((await remove(lotus, stranger, lotusCard)).statusCode).toBe(404);
+    expect((await remove(lotus, lotus.owner, lotusCard)).statusCode).toBe(404);
     expect((await send("GET", `/v1/orgs/${lotus.id}/my-card`, stranger.cookies)).statusCode).toBe(404);
     // A request that names no card is refused before anything is read.
     const bad = await send("POST", `/v1/orgs/${lotus.id}/my-card/remove`, tara.cookies, { last4: "22", savedAt: "yesterday" });
@@ -323,6 +331,61 @@ d("Remove card in the member's app: only while nothing can be charged to it (rea
     // The same last four, saved later: still not the card the screen showed.
     expect((await remove(gym, rhea, { last4: "5555", savedAt: old.savedAt })).statusCode).toBe(409);
     expect(await cardOn(gym.id, entry)).toBe(now.cardId);
+  });
+
+  it("keeps a card the gym's Square account no longer shows, and says it changed instead of removed", async () => {
+    const gym = await makeGym("Moved Account Gym");
+    const entry = await person(gym, "Mo Moved");
+    const mo = await member(gym, entry);
+    const card = await cardFor(gym, entry, "6060");
+    // The gym moved to another Square account after the screen read the card.
+    await sql`UPDATE gym_member_cards SET account_id = ${"MCROLDACCOUNT" + uniq()} WHERE gym_id = ${gym.id} AND entry_id = ${entry}`;
+    const res = await remove(gym, mo, card);
+    expect(res.statusCode, res.body).toBe(409);
+    expect(errorOf(res).error.code).toBe("card_changed");
+    expect(await cardOn(gym.id, entry)).toBe(card.cardId);
+    expect(square.stopped).not.toContain(card.cardId);
+    const now = await myCard(gym, mo);
+    expect(now.card).toBeNull();
+    expect(now.earlierCard).toEqual({ brand: "VISA", last4: "6060" });
+  });
+
+  it("a membership that starts renewing while the press waits for the gym is read before anything is removed", async () => {
+    const gym = await makeGym("Race Gym");
+    const typeId = await typeOf(gym);
+    const entry = await person(gym, "Rita Race");
+    const m = await give(gym, typeId, entry);
+    await sql`UPDATE gym_held_memberships SET renews = false WHERE id = ${m}`;
+    const card = await cardFor(gym, entry, "8080");
+    const rita = await member(gym, entry);
+    expect((await myCard(gym, rita)).canRemove).toBe(true);
+
+    // The desk holds the gym while it turns the renewal back on; the press arrives meanwhile and must wait for it.
+    let release = (): void => undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let held = (): void => undefined;
+    const holding = new Promise<void>((resolve) => {
+      held = resolve;
+    });
+    const desk = sql.begin(async (tx) => {
+      await tx`SELECT 1 FROM gyms WHERE id = ${gym.id} FOR UPDATE`;
+      await tx`UPDATE gym_held_memberships SET renews = true WHERE id = ${m}`;
+      held();
+      await gate;
+    });
+    await holding;
+    const pressing = remove(gym, rita, card);
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    release();
+    await desk;
+    const res = await pressing;
+    expect(res.statusCode, res.body).toBe(409);
+    expect(errorOf(res).error.code).toBe("card_stays");
+    expect(errorOf(res).error.message).toContain("Your membership renews on this card");
+    expect(await cardOn(gym.id, entry)).toBe(card.cardId);
+    expect(square.stopped).not.toContain(card.cardId);
   });
 
   it("removes the card here when Square does not answer, and owes Square its stop for the worker", async () => {
@@ -402,6 +465,19 @@ d("Remove card in the member's app: only while nothing can be charged to it (rea
         set: async (e) => {
           const m = await give(gym, typeId, e, { paid: false });
           await sql`UPDATE gym_held_memberships SET status = 'cancelled', cancelled_on = starts_on WHERE id = ${m}`;
+        },
+        want: { stays: "owed" },
+      },
+      {
+        name: "Fay Fee Later",
+        set: async (e) => {
+          const m = await give(gym, typeId, e);
+          await sql`UPDATE gym_held_memberships SET renews = false WHERE id = ${m}`;
+          // A late-cancel fee whose day has not come: the Members list does not read it yet; the open bill does.
+          await sql`
+            INSERT INTO gym_member_bills (gym_id, held_membership_id, amount_minor, currency, due_on, covers_from, covers_to, fee, fee_for)
+            SELECT gym_id, id, 1500, currency, ${future}::date, ${future}::date, ${future}::date, 'late_cancel', 'Spin'
+            FROM gym_held_memberships WHERE id = ${m}`;
         },
         want: { stays: "owed" },
       },

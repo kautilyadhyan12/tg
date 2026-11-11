@@ -13,7 +13,7 @@ import { CARD_TITLE, REMOVE_CARD, cardBox } from "./cardView";
 // to the card; otherwise a line says why it stays.
 
 export function CardOnFile({ view, said, onAdd, onRemove }: { view: MyCardView; said: string | null; onAdd: () => void; onRemove: () => void }) {
-  const box = cardBox(view);
+  const box = cardBox(view, said !== null);
   if (box === null) return null;
   return (
     <View style={styles.section}>
@@ -64,7 +64,7 @@ export function CardOnFile({ view, said, onAdd, onRemove }: { view: MyCardView; 
               </Txt>
             </View>
             {box.line === null ? null : <Txt colour="text">{box.line}</Txt>}
-            <Button label={box.button} icon="card" kind={box.line === null ? "soft" : "main"} wide onPress={onAdd} />
+            {box.button === null ? null : <Button label={box.button} icon="card" kind={box.line === null ? "soft" : "main"} wide onPress={onAdd} />}
           </>
         )}
       </Card>

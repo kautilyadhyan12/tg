@@ -167,7 +167,9 @@ function MembershipBody({ place, onClose, bottom }: { place: MembershipPlace; on
       setRemoving(null);
       setCardSaid(cardRemovedLine(shown));
     };
-    if (answer.kind === "ok" && answer.data.myCard.card === null) {
+    // Gone, and not kept for an earlier Square account: removed. Anything else is shown as it is now.
+    const gone = (now: MyCardView): boolean => now.card === null && now.earlierCard === null;
+    if (answer.kind === "ok" && gone(answer.data.myCard)) {
       done(answer.data.myCard);
       return;
     }
@@ -181,7 +183,7 @@ function MembershipBody({ place, onClose, bottom }: { place: MembershipPlace; on
       const now = await session.signedIn({ method: "GET", path: myCardPath(place.id) }, myCardResponseSchema);
       // The page may have closed while it read: a ref read again after an await.
       if (closed()) return;
-      if (now.kind === "ok" && now.data.myCard.card === null) done(now.data.myCard);
+      if (now.kind === "ok" && gone(now.data.myCard)) done(now.data.myCard);
       else setRemoving((r) => (r === null ? null : { ...r, busy: false, problem: NO_ANSWER }));
       return;
     }
