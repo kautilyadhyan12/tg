@@ -2,20 +2,25 @@
 require("../../src/look/Motion").setMotionAllowed(false);
 // The phone's own bars are measured by Android; a test gives the screen a plain one.
 jest.mock("react-native-safe-area-context", () => require("react-native-safe-area-context/jest/mock").default);
-// The robot check's web page runs only on a phone. A test's box is a plain view, and each box
-// drawn is kept (`boxes`, newest last, `gone` once closed), so a test can say back what
-// Cloudflare's box would.
+// The robot check's and Add card's web pages run only on a phone. A test's box is a plain view, and
+// each box drawn is kept (`boxes`, newest last, `gone` once closed), so a test can say back what
+// Cloudflare's or Square's page would; what the app asks the page to run is kept in `injected`.
 jest.mock("react-native-webview", () => {
-  const { createElement, useEffect, useRef } = require("react");
+  const { createElement, useEffect, useImperativeHandle, useRef } = require("react");
   const { View } = require("react-native");
   const boxes = [];
   function WebView(props) {
     const self = useRef(null);
     if (self.current === null) {
-      self.current = { props, gone: false };
+      self.current = { props, gone: false, injected: [] };
       boxes.push(self.current);
     }
     self.current.props = props;
+    useImperativeHandle(props.ref, () => ({
+      injectJavaScript: (script) => {
+        self.current.injected.push(script);
+      },
+    }));
     useEffect(() => () => {
       self.current.gone = true;
     }, []);
@@ -361,6 +366,31 @@ jest.mock("../../src/screens/running/runVoiceNative", () => {
     speakState: actual.speakState,
     get runVoiceNative() {
       return voice.missing ? null : native;
+    },
+  };
+});
+// Add card's screenshot block (20d), expo-screen-capture's Android code: a test reads each mark in order (`marks`,
+// "on" and "off"), holds the next "on" unanswered (`hold`, then `release()`), and `missing` stands for a copy of the
+// app built before it.
+jest.mock("../../src/look/screenCaptureNative", () => {
+  const screen = { marks: [], missing: false, hold: false, release: () => undefined };
+  const native = {
+    preventScreenCapture: () => {
+      screen.marks.push("on");
+      if (!screen.hold) return Promise.resolve();
+      return new Promise((resolve) => {
+        screen.release = resolve;
+      });
+    },
+    allowScreenCapture: () => {
+      screen.marks.push("off");
+      return Promise.resolve();
+    },
+  };
+  return {
+    screen,
+    get screenCaptureNative() {
+      return screen.missing ? null : native;
     },
   };
 });
