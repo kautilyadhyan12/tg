@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import { StyleSheet } from "react-native";
 import { myCardViewSchema, myMembershipResponseSchema } from "@app/shared";
 import { App } from "../../src/App";
+import { NO_ANSWER } from "../../src/screens/SignIn";
 import type { Ask } from "../../src/session/calls";
 import { fakeServer, kept, memoryStore, refusal, tokens, type Reply } from "../kit";
 
@@ -215,6 +216,85 @@ describe("the worst thing: a card added for one gym is saved at that gym alone",
     expect(screen.getByTestId("add-card")).toBeTruthy();
     expect(screen.getByLabelText("Save this card for Iron House")).toBeEnabled();
     expect(screen.queryByText(/Card saved/)).toBeNull();
+  });
+
+  it("a lost answer says Card saved only when the card read again is newer than the one the page found", async () => {
+    const older = { ...VISA, savedAt: "2026-11-01T10:00:00.000Z" };
+    let saved = false;
+    const server = fakeServer({
+      "/v1/auth/refresh": ok({ tokens: tokens(2) }),
+      "/v1/orgs/mine": mine(IRON),
+      [membershipPath(IRON)]: ok(membershipOf("Iron House")),
+      [cardPath(IRON)]: (body) => {
+        if (body !== undefined) throw new TypeError("Network request failed");
+        return { status: 200, body: cardOf("Iron House", "LOCATIONIRON01", { card: saved ? { ...VISA, last4: "4242", savedAt: "2026-11-11T10:00:00.000Z" } : older }) };
+      },
+    });
+    await openMembership(server.ask, IRON);
+    await fireEvent.press(await page().findByText("Update card"));
+    await screen.findByTestId("add-card");
+    await waitFor(() => {
+      expect(cardBoxes()).toHaveLength(1);
+    });
+    let box = openBox();
+    await say(box, { kind: "ready" });
+    await fireEvent.press(screen.getByTestId("card-agree"));
+    // The save never answered and the card read again is the one already there: not saved.
+    await fireEvent.press(screen.getByLabelText("Save this card for Iron House"));
+    await say(box, { kind: "token", token: "cnon:lost-1" });
+    expect(await screen.findByText(NO_ANSWER)).toBeTruthy();
+    expect(screen.queryByText(/Card saved/)).toBeNull();
+    expect(screen.getByTestId("add-card")).toBeTruthy();
+
+    // The next save went through before its answer was lost: the newer card is said.
+    saved = true;
+    box = openBox();
+    await fireEvent.press(screen.getByLabelText("Save this card for Iron House"));
+    await say(box, { kind: "token", token: "cnon:lost-2" });
+    expect(await page().findByText("Card saved: Visa ending 4242.")).toBeTruthy();
+  });
+
+  it("words changed meanwhile: the tick comes off and the new words are shown, never sent unread", async () => {
+    const newWords = "I agree that Iron House may save this card and charge it for my membership, fees and shop purchases when they are due. I can remove it at the front desk at any time.";
+    let changed = false;
+    const posted: unknown[] = [];
+    const server = fakeServer({
+      "/v1/auth/refresh": ok({ tokens: tokens(2) }),
+      "/v1/orgs/mine": mine(IRON),
+      [membershipPath(IRON)]: ok(membershipOf("Iron House")),
+      [cardPath(IRON)]: (body) => {
+        if (body === undefined) return { status: 200, body: cardOf("Iron House", "LOCATIONIRON01", changed ? { agreement: newWords } : {}) };
+        posted.push(body);
+        changed = true;
+        return refusal(409, "card_agreement_changed", "The words to agree to have changed. Read them again, then tick the box.");
+      },
+    });
+    await openMembership(server.ask, IRON);
+    const box = await readyToSave();
+    await fireEvent.press(screen.getByLabelText("Save this card for Iron House"));
+    await say(box, { kind: "token", token: "cnon:old-words" });
+    expect(await screen.findByText("The words to agree to have changed. Read them again, then tick the box.")).toBeTruthy();
+    expect(await screen.findByLabelText(newWords)).not.toBeChecked();
+    expect(screen.getByLabelText("Save this card for Iron House")).toBeDisabled();
+    expect(posted).toHaveLength(1);
+  });
+
+  it("a refusal worded for the front desk is said to the member in their own words", async () => {
+    const server = fakeServer({
+      "/v1/auth/refresh": ok({ tokens: tokens(2) }),
+      "/v1/orgs/mine": mine(IRON),
+      [membershipPath(IRON)]: ok(membershipOf("Iron House")),
+      [cardPath(IRON)]: (body) =>
+        body === undefined
+          ? { status: 200, body: cardOf("Iron House", "LOCATIONIRON01") }
+          : refusal(409, "card_contact_refused", "Square didn't accept this person's email address or phone number. Check them with Edit, then try again."),
+    });
+    await openMembership(server.ask, IRON);
+    const box = await readyToSave();
+    await fireEvent.press(screen.getByLabelText("Save this card for Iron House"));
+    await say(box, { kind: "token", token: "cnon:contact" });
+    expect(await screen.findByText("Square didn’t accept the email address or phone number the gym has for you. Ask at the front desk to check them.")).toBeTruthy();
+    expect(screen.queryByText(/Edit/)).toBeNull();
   });
 });
 

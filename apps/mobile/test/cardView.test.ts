@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { myCardViewSchema, type MyCardView } from "@app/shared";
-import { cardBox, cardExpiryLine, cardReadyToSave, cardSavedLine } from "../src/screens/gym/cardView";
+import { MEMBER_CARD_WORDS, myCardViewSchema, type MyCardView } from "@app/shared";
+import { cardBox, cardExpiryLine, cardReadyToSave, cardRefusalLine, cardSavedLine } from "../src/screens/gym/cardView";
 
 // Card on file on My membership (20d): what the box shows for every answer the server can send. Each answer is read
 // through the server's own shape.
@@ -63,6 +63,37 @@ describe("what the box shows", () => {
     ["a form missing though the server says yes: no Add card", { form: null }, null],
   ])("%s", (_name, over, expected) => {
     expect(cardBox(view(over))).toEqual(expected);
+  });
+});
+
+describe("a refusal said to the member", () => {
+  const GYM = "Iron House can’t save cards in the app right now. Ask at the front desk.";
+  // Every code the save can answer (cards.ts, `cardRefusalOf` and its own refusals), with the server's words.
+  it.each<[string, keyof typeof MEMBER_CARD_WORDS | "paid", string]>([
+    ["card_not_ready", "not_ready", GYM],
+    ["card_connection_refused", "connection_refused", GYM],
+    ["card_processing_off", "processing_off", GYM],
+    ["card_not_taken", "not_taken", GYM],
+    ["card_contact_refused", "contact_refused", "Square didn’t accept the email address or phone number the gym has for you. Ask at the front desk to check them."],
+    ["card_customer_gone", "customer_gone", "Square didn’t save this card. Type the card again."],
+    ["card_merged_away", "merged_away", "Square didn’t save this card. Type the card again."],
+    ["card_paid_by_payer", "paid", "Somebody else pays for you now, so their card is used."],
+    ["card_declined", "declined", MEMBER_CARD_WORDS.declined],
+    ["card_invalid", "invalid", MEMBER_CARD_WORDS.invalid],
+    ["card_expired", "expired", MEMBER_CARD_WORDS.expired],
+    ["card_not_supported", "not_supported", MEMBER_CARD_WORDS.not_supported],
+    ["card_verification", "verification", MEMBER_CARD_WORDS.verification],
+    ["card_form_expired", "form_expired", MEMBER_CARD_WORDS.form_expired],
+    ["card_not_saved", "not_saved", MEMBER_CARD_WORDS.not_saved],
+    ["card_square_unavailable", "square_unavailable", MEMBER_CARD_WORDS.square_unavailable],
+    ["card_agreement_changed", "agreement_changed", MEMBER_CARD_WORDS.agreement_changed],
+    ["card_not_your_record", "not_your_card", MEMBER_CARD_WORDS.not_your_card],
+  ])("%s", (code, key, expected) => {
+    const server = key === "paid" ? "Somebody else on your list pays for this person, so their card is used." : MEMBER_CARD_WORDS[key];
+    const said = cardRefusalLine(code, server, "Iron House");
+    expect(said).toBe(expected);
+    // Nothing a member is told sends them to the desk's own screens.
+    expect(said).not.toMatch(/\bEdit\b|Settings|your customers|Your Square location|The owner/);
   });
 });
 

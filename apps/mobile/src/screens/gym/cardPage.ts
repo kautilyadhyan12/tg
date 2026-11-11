@@ -6,8 +6,9 @@ import { colours } from "../../look/colours";
 // Add card on the phone (ROADMAP Stage 5 item 20d): Square's own card boxes (its Web Payments SDK, as the desk's Card on
 // file uses), drawn in a small web page the app writes itself, as the robot check's is. What is typed in the boxes goes
 // to Square inside Square's own frames, never to the app or our server; the page hands back only Square's one-time
-// token (`cardFormMessageSchema`). The page's policy lets it run its own script and Square's alone, and frame Square
-// alone: a changed copy of the page cannot draw a box of its own. Square draws only on a secure page: the page is given
+// token (`cardFormMessageSchema`). The page's policy lets it run its own script and Square's alone, so nothing else on
+// the page can draw a box of its own; it frames https pages alone (Square's, and the card's bank's own check, at any
+// bank's address), and only the page itself is listened to. Square draws only on a secure page: the page is given
 // the api's own address (https, or localhost on the laptop).
 
 const SCRIPT = { sandbox: "https://sandbox.web.squarecdn.com/v1/square.js", production: "https://web.squarecdn.com/v1/square.js" } as const;
@@ -78,8 +79,8 @@ function base64(bytes: Uint8Array): string {
 /** The fingerprint the policy lets run: the page's own script, and nothing else written into it. */
 export const PAGE_SCRIPT_HASH = `'sha256-${base64(sha256(utf8ToBytes(PAGE_SCRIPT)))}'`;
 
-/** The page's policy: its own script by fingerprint, Square's scripts, frames, styles, fonts and the address the card
- *  goes to; nothing else. */
+/** The page's policy: its own script by fingerprint, Square's scripts, styles, fonts and the address the card goes to,
+ *  and https frames and forms for Square and the bank's check; nothing else. */
 export const CARD_PAGE_POLICY = [
   "default-src 'none'",
   `script-src ${PAGE_SCRIPT_HASH} ${SQUARE.join(" ")}`,
@@ -87,10 +88,12 @@ export const CARD_PAGE_POLICY = [
   `font-src data: ${SQUARE_FONTS.join(" ")}`,
   `img-src data: ${SQUARE.join(" ")}`,
   `connect-src ${[...SQUARE, ...SQUARE_CONNECT].join(" ")}`,
-  `frame-src ${SQUARE.join(" ")}`,
+  // The bank's own check (3-D Secure): Square's script puts the card's bank's frame on the page itself and posts its form
+  // there, at any bank's address. Only the page itself is listened to (AddCard's onMessage), never a frame.
+  "frame-src https:",
   "object-src 'none'",
   "base-uri 'none'",
-  "form-action 'none'",
+  "form-action https:",
 ].join("; ");
 
 /** Data in the page, safe inside its block: no "<" that could end it. */
@@ -125,7 +128,7 @@ export function cardPage(form: CardForm): string | null {
 export const SAVE_SCRIPT = "window.kwazoSave&&window.kwazoSave();true;";
 
 /** Where a load the page starts goes. `load`: in the page (the page itself, Square's frames, and the bank's own check
- *  that Square's frame opens inside it). `outside`: the phone's browser (a link Square shows, such as its privacy
+ *  that Square's script frames on it). `outside`: the phone's browser (a link Square shows, such as its privacy
  *  page). `refuse`: nowhere — the page never moves off itself. */
 export function cardWhereTo(url: string, topFrame: boolean, page: string): "load" | "outside" | "refuse" {
   if (url === "about:blank" || url === "about:srcdoc") return "load";
@@ -133,6 +136,6 @@ export function cardWhereTo(url: string, topFrame: boolean, page: string): "load
     if (url === page) return "load";
     return url.startsWith("https://") ? "outside" : "refuse";
   }
-  // A frame: the page's policy frames only Square, and Square's frame opens the bank's own check (any bank's address).
+  // A frame: Square's, and the bank's own check that Square's script puts on the page (any bank's address).
   return url.startsWith("https://") ? "load" : "refuse";
 }

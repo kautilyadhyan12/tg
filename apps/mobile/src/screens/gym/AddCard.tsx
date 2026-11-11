@@ -14,7 +14,18 @@ import { pageAddress } from "../robotCheckPage";
 import { NO_ANSWER } from "../SignIn";
 import { CopyContext } from "../ThisCopy";
 import { SAVE_SCRIPT, cardPage, cardWhereTo } from "./cardPage";
-import { ADD_CARD, CARD_NOT_LOADED, CARD_NOT_READY, CARD_NOT_SAVED, CARD_NOT_TAKEN, SAVE_CARD, UPDATE_CARD, cardReadyToSave, myCardPath } from "./cardView";
+import {
+  ADD_CARD,
+  CARD_NOT_LOADED,
+  CARD_NOT_READY,
+  CARD_NOT_SAVED,
+  CARD_NOT_TAKEN,
+  SAVE_CARD,
+  UPDATE_CARD,
+  cardReadyToSave,
+  cardRefusalLine,
+  myCardPath,
+} from "./cardView";
 import { newRequestKey } from "./classesView";
 
 // Add card and Update card (ROADMAP Stage 5 item 20d): a page over My membership with Square's own card boxes, the
@@ -33,6 +44,8 @@ const CHANGED = ["card_agreement_changed", "card_not_ready", "card_paid_by_payer
 /** The boxes' height before Square says its own, and the room Square's or the bank's check takes over the page. */
 const FIRST_TALL = 110;
 const CHECK_TALL = 600;
+/** How long Save card waits for Square's token: the bank's own check, typed by hand, fits well inside it. */
+const SAVE_WAIT_MS = 5 * 60 * 1000;
 
 type Held = { kind: "loading" } | { kind: "failed"; message: string } | { kind: "ok"; view: MyCardView };
 
@@ -59,6 +72,13 @@ function Body({ place, onClose, onSaved }: { place: CardPlace; onClose: () => vo
   const web = useRef<WebView>(null);
   // Square's token is taken only between a press of Save card and its answer.
   const saving = useRef(false);
+  // A save Square never answers (a lost connection mid-way) ends after `SAVE_WAIT_MS`, so Save card never spins for good.
+  const waiting = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const stopSaving = () => {
+    saving.current = false;
+    if (waiting.current !== null) clearTimeout(waiting.current);
+    waiting.current = null;
+  };
   const live = useRef(true);
   // The card as this page found it: after a lost answer, a newer one means the save went through.
   const savedBefore = useRef<string | null>(null);
@@ -81,6 +101,7 @@ function Body({ place, onClose, onSaved }: { place: CardPlace; onClose: () => vo
     });
     return () => {
       live.current = false;
+      if (waiting.current !== null) clearTimeout(waiting.current);
     };
   }, [load]);
 
@@ -125,7 +146,7 @@ function Body({ place, onClose, onSaved }: { place: CardPlace; onClose: () => vo
       else setProblem(NO_ANSWER);
       return;
     }
-    setProblem(answer.message);
+    setProblem(cardRefusalLine(answer.error, answer.message, place.name));
     // The agreement's words changed, or the gym or the record changed meanwhile: show what is asked now. A card the bank
     // or Square refused keeps the page as it is, to try again.
     if (answer.error === "card_agreement_changed") setAgreed(false);
@@ -137,6 +158,13 @@ function Body({ place, onClose, onSaved }: { place: CardPlace; onClose: () => vo
     setBusy(true);
     setProblem("");
     saving.current = true;
+    waiting.current = setTimeout(() => {
+      waiting.current = null;
+      if (!live.current || !saving.current) return;
+      saving.current = false;
+      setBusy(false);
+      setProblem(MEMBER_CARD_WORDS.square_unavailable);
+    }, SAVE_WAIT_MS);
     web.current?.injectJavaScript(SAVE_SCRIPT);
   };
 
@@ -220,22 +248,24 @@ function Body({ place, onClose, onSaved }: { place: CardPlace; onClose: () => vo
                     else if (m.kind === "height") setTall(Math.min(Math.max(m.px, 48), CHECK_TALL));
                     else if (m.kind === "tall") setChecking(m.on);
                     else if (m.kind === "blocked") {
-                      saving.current = false;
+                      stopSaving();
                       setBusy(false);
                       setBlocked(true);
                     } else if (m.kind === "not_taken") {
                       if (!saving.current) return;
-                      saving.current = false;
+                      stopSaving();
                       setBusy(false);
                       setProblem(CARD_NOT_TAKEN);
                     } else {
                       // A token nobody asked for is never sent.
                       if (!saving.current) return;
-                      saving.current = false;
+                      stopSaving();
                       void send(m.token);
                     }
                   }}
                   onError={() => {
+                    stopSaving();
+                    setBusy(false);
                     setBlocked(true);
                   }}
                   onShouldStartLoadWithRequest={(request) => {

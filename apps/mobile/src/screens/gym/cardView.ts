@@ -11,6 +11,27 @@ export const CARD_NOT_READY = "Type your card and tick the box to save it.";
 export const CARD_NOT_LOADED = "Square’s card boxes didn’t load. Check your internet and try again.";
 export const CARD_NOT_TAKEN = "Check the card details in the boxes above, then try again.";
 export const CARD_NOT_SAVED = MEMBER_CARD_WORDS.not_saved;
+/** A refusal the server words for the front desk (the owner, Settings, Edit), said to the member instead. A refusal about
+ *  the card itself, or already in a member's words, keeps the server's. */
+export function cardRefusalLine(code: string, serverWords: string, gymName: string): string {
+  switch (code) {
+    case "card_not_ready":
+    case "card_connection_refused":
+    case "card_processing_off":
+    case "card_not_taken":
+      return `${gymName} can’t save cards in the app right now. Ask at the front desk.`;
+    case "card_contact_refused":
+      return "Square didn’t accept the email address or phone number the gym has for you. Ask at the front desk to check them.";
+    case "card_customer_gone":
+    case "card_merged_away":
+      return "Square didn’t save this card. Type the card again.";
+    case "card_paid_by_payer":
+      return "Somebody else pays for you now, so their card is used.";
+    default:
+      return serverWords;
+  }
+}
+
 /** Only the gym removes a card (18d-ii); the member is told where. */
 export const CARD_REMOVE_AT_DESK = "To remove this card, ask the front desk.";
 

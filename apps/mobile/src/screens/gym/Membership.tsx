@@ -214,15 +214,15 @@ function MembershipBody({ place, onClose, bottom }: { place: MembershipPlace; on
       />
       <AddCardPage
         place={addingCard}
-        onSaved={(gymId, saved) => {
-          // Only this place's page takes the answer.
-          if (gymId !== place.id) return;
+        onSaved={(_gymId, saved) => {
           cardStarted.current += 1;
           setCard(saved);
           if (saved.card !== null) setCardSaid(cardSavedLine(saved.card));
         }}
         onClose={() => {
           setAddingCard(null);
+          // What the page learnt meanwhile (somebody now pays, a card saved elsewhere) shows in the box behind it.
+          void loadCard();
         }}
       />
       <AgreementPage

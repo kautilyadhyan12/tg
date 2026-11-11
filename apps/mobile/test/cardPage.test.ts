@@ -40,11 +40,14 @@ describe("the page runs only its own script and Square's", () => {
     expect(html).toContain(`content="${CARD_PAGE_POLICY}"`);
   });
 
-  it("the policy lets no other script, frame or address in", () => {
+  it("the policy lets no other script or address in, and frames only https pages: Square's and the bank's check", () => {
     const parts: Record<string, string[]> = Object.fromEntries(CARD_PAGE_POLICY.split("; ").map((d): [string, string[]] => [d.split(" ")[0] ?? "", d.split(" ").slice(1)]));
     expect(parts["default-src"]).toEqual(["'none'"]);
     expect(parts["script-src"]).toEqual([PAGE_SCRIPT_HASH, "https://web.squarecdn.com", "https://sandbox.web.squarecdn.com"]);
-    expect(parts["frame-src"]).toEqual(["https://web.squarecdn.com", "https://sandbox.web.squarecdn.com"]);
+    // Square's script frames the card's bank's own check on the page and posts its form there, at any bank's address.
+    expect(parts["frame-src"]).toEqual(["https:"]);
+    expect(parts["form-action"]).toEqual(["https:"]);
+    expect(parts["object-src"]).toEqual(["'none'"]);
     expect(parts["connect-src"]?.every((a) => a.startsWith("https://") && /square|sentry/.test(a))).toBe(true);
     expect(CARD_PAGE_POLICY).not.toContain("unsafe-eval");
     expect(parts["script-src"]).not.toContain("'unsafe-inline'");
@@ -98,7 +101,7 @@ describe("the page never moves off itself", () => {
     ["a script address in its place", "javascript:alert(1)", true, "refuse"],
     ["an app's own address", "intent://pay", true, "refuse"],
     ["Square's frame", "https://sandbox.web.squarecdn.com/v1/card", false, "load"],
-    ["the bank's check inside Square's frame", "https://acs.examplebank.com/3ds", false, "load"],
+    ["the bank's check Square's script frames on the page", "https://acs.examplebank.com/3ds", false, "load"],
     ["a frame that is not https", "http://evil.example/frame", false, "refuse"],
     ["a file", "file:///sdcard/x", false, "refuse"],
   ])("%s", (_name, url, top, where) => {
