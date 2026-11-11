@@ -1,10 +1,11 @@
 // Running in Recommended For You (ROADMAP Stage 5 item 37d-iii-a; spec Part 6 §16.6): today's run from
 // the training plan beside the runner, Go to Running and See plan; on a rest day the next run; with no
 // plan, Create plan; in Safe mode, why there is none. Go to Running opens the Running page, where today's
-// run is started (Kd, 2026-11-11: never started from the Dashboard at once).
+// run is started (Kd, 2026-11-11: never started from the Dashboard at once). Suggested or My plan under
+// the tabs (37d-iii-b): My plan shows the person's own week, Build my own and Edit plan.
 import { useState } from "react";
 import { Image, StyleSheet, View } from "react-native";
-import { runPlanResponseSchema, type Units } from "@app/shared";
+import type { PlanDay, Units } from "@app/shared";
 import { Button } from "../../look/Button";
 import { Card } from "../../look/Card";
 import { colours, raisedArtFadeAcross, raisedArtFadeDown } from "../../look/colours";
@@ -13,15 +14,16 @@ import { pictures } from "../../look/pictures";
 import { Txt } from "../../look/Txt";
 import { SoftBar } from "../../look/Waiting";
 import { useKindTabs } from "../dashboard/KindTabs";
-import { useRead } from "../dashboard/useRead";
 import { ART_SIZE, EmptyBox, Eyebrow, FromRow } from "../food/MealCard";
 import { useLookOpen } from "../setupFirst";
 import { useRunLayer } from "./RunLayer";
 import { useRunOutbox } from "./RunOutbox";
 import { RunPlanAsk } from "./RunPlanAsk";
-import { ClearedSheet, dayName, heldLine, nextRun, RUN_PLAN_PATH, todayGuide, weekLine, type PlanRead } from "./RunPlanBox";
+import { OwnRunWeek } from "./OwnRunWeek";
+import { RunChoiceRow, isSafeMode, useRunChoice, useRunPlan } from "./RunChoice";
+import { ClearedSheet, dayName, heldLine, nextRun, todayGuide, weekLine } from "./RunPlanBox";
 import { RunPlanPage } from "./RunPlanPage";
-import { sessionDetail, sessionTitle } from "./runPlanWords";
+import { ownCount, overCapLine, sessionDetail, sessionTitle } from "./runPlanWords";
 
 export const SAFE_MODE_WORDS = "No training plan until a professional has cleared you to exercise. You can still record a run.";
 
@@ -34,12 +36,14 @@ export function RunRecommended({ units, onOpenRunning }: { units: Units; onOpenR
   const { view } = useRunOutbox();
   const [changed, setChanged] = useState(0);
   // Read again when a run lands: it ticks today's run and moves the box to the next.
-  const planRead = useRead(RUN_PLAN_PATH, runPlanResponseSchema, view.sent + changed);
-  const read: PlanRead = planRead.read.kind === "ok" ? { kind: "ok", data: planRead.read.data } : planRead.read.kind === "failed" ? { kind: "failed", again: planRead.again } : { kind: "loading" };
+  const { read, took } = useRunPlan(view.sent + changed);
+  const choice = useRunChoice(read, took);
   const [asking, setAsking] = useState(false);
   const [planOpen, setPlanOpen] = useState(false);
   const [clearing, setClearing] = useState(false);
-  const guide = todayGuide(read, units);
+  const [building, setBuilding] = useState(false);
+  const picked = choice.shown ?? (read.kind === "ok" ? read.data.choice : "suggested");
+  const guide = todayGuide(read, units, picked);
   const going = layer.run !== null;
 
   const create = () => {
@@ -66,27 +70,46 @@ export function RunRecommended({ units, onOpenRunning }: { units: Units; onOpenR
     // Safe mode shows no run from any choice until a professional's clearance (spec Part 6 §16.6).
     body = <Txt kind="small">{SAFE_MODE_WORDS}</Txt>;
     rest = <Button kind="link" compact label="I’ve been cleared" say="Change your health answer" style={styles.start} onPress={() => { setClearing(true); }} />;
+  } else if (picked === "mine" && read.data.own === null) {
+    body = <EmptyBox icon="footprints" title="No plan of your own yet." line="Choose a run or a rest day for each day." />;
+    rest = <Button label="Build my own" compact style={styles.start} onPress={() => { setBuilding(true); }} />;
+  } else if (picked === "mine" && read.data.own !== null) {
+    const own = read.data.own;
+    const caution = overCapLine(own.days, read.data.capM, units);
+    body = (
+      <>
+        <FromRow badge={{ icon: "user" }} title="My plan" sub={ownCount(own.days, units)} />
+        <NextRun days={own.days} today={read.data.today} paces={plan?.kind === "runner" ? plan.paces : null} units={units} />
+      </>
+    );
+    rest = (
+      <>
+        {caution === null ? null : (
+          <Txt kind="tiny" colour="gold">
+            {caution}
+          </Txt>
+        )}
+        <View style={styles.actions}>
+          {going ? (
+            <Button label="Open run" compact say="Open your run" onPress={layer.open} />
+          ) : guide !== null ? (
+            <Button label="Go to Running" icon="footprints" compact say="Go to Running to start today’s run" onPress={onOpenRunning} />
+          ) : null}
+          <Button kind="link" compact label="Edit plan" say="Edit your own run plan" onPress={() => { setBuilding(true); }} />
+        </View>
+      </>
+    );
   } else if (shown === null) {
     body = <EmptyBox icon="footprints" title={plan?.kind === "none" ? "No training plan for now." : "No training plan yet."} line="A weekly plan built from your current running." />;
     rest = <Button label="Create plan" compact style={styles.start} onPress={create} />;
   } else {
-    const today = read.data.today;
-    const next = nextRun(shown.days, today);
     const held = heldLine(shown);
     const paces = shown.kind === "runner" ? shown.paces : null;
     const seePlan = <Button kind="link" compact label="See plan" say="See your training plan" onPress={() => { setPlanOpen(true); }} />;
     body = (
       <>
         <FromRow badge={{ icon: "sparkles" }} title="Picked for you" sub={weekLine(shown, units)} />
-        {next === null || next.day.session === null ? (
-          <EmptyBox icon="footprints" title={shown.days.some((d) => d.done) ? "All runs done this week." : "No more runs this week."} line={null} />
-        ) : (
-          <View style={styles.words}>
-            <Eyebrow words={next.today ? "Today’s run" : `Next run · ${dayName(next.day.weekday)}`} />
-            <Txt kind="strong">{sessionTitle(next.day.session, units)}</Txt>
-            <Txt kind="small">{sessionDetail(next.day.session, paces, units)}</Txt>
-          </View>
-        )}
+        <NextRun days={shown.days} today={read.data.today} paces={paces} units={units} />
       </>
     );
     rest = (
@@ -117,6 +140,8 @@ export function RunRecommended({ units, onOpenRunning }: { units: Units; onOpenR
         </Txt>
       </View>
       {tabs}
+      {/* Safe mode shows no run from any plan, so there is nothing to pick between (spec Part 6 §16.6). */}
+      {read.kind === "ok" && !isSafeMode(read.data) ? <RunChoiceRow shown={picked} pick={choice.pick} trouble={choice.trouble} /> : null}
       {/* The run beside the picture, never under it; the buttons across the box. */}
       <View style={styles.beside}>
         <View style={styles.leftWords}>{body}</View>
@@ -153,6 +178,17 @@ export function RunRecommended({ units, onOpenRunning }: { units: Units; onOpenR
           setAsking(true);
         }}
       />
+      <OwnRunWeek
+        data={building && read.kind === "ok" ? read.data : null}
+        units={units}
+        onClose={() => {
+          setBuilding(false);
+        }}
+        onSaved={(reply) => {
+          setBuilding(false);
+          took(reply);
+        }}
+      />
       <ClearedSheet
         open={clearing}
         onClose={() => {
@@ -164,6 +200,19 @@ export function RunRecommended({ units, onOpenRunning }: { units: Units; onOpenR
         }}
       />
     </Card>
+  );
+}
+
+/** The day's run, or the next one this week. */
+function NextRun({ days, today, paces, units }: { days: readonly PlanDay[]; today: string; paces: Parameters<typeof sessionDetail>[1]; units: Units }) {
+  const next = nextRun(days, today);
+  if (next === null || next.day.session === null) return <EmptyBox icon="footprints" title={days.some((d) => d.done) ? "All runs done this week." : "No more runs this week."} line={null} />;
+  return (
+    <View style={styles.words}>
+      <Eyebrow words={next.today ? "Today’s run" : `Next run · ${dayName(next.day.weekday)}`} />
+      <Txt kind="strong">{sessionTitle(next.day.session, units)}</Txt>
+      <Txt kind="small">{sessionDetail(next.day.session, paces, units)}</Txt>
+    </View>
   );
 }
 

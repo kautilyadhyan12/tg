@@ -1,6 +1,6 @@
 // The run plan's words (ROADMAP Stage 5 item 37d-i), in the person's own units. Pure.
 import { METRES_PER_MILE } from "./runWords";
-import type { Part, PlanSession, RunGoal, Paces, Units } from "@app/shared";
+import { overCap, type Part, type PlanDay, type PlanSession, type RunGoal, type Paces, type Units } from "@app/shared";
 
 /** Keeps "/km" on the line of its pace, and "min" on the line of its number. */
 const NBSP = "\u00a0";
@@ -84,3 +84,28 @@ export function sessionDetail(session: PlanSession, paces: Paces | null, units: 
 const WEEKDAY_SHORT = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
 export const weekdayShort = (weekday: number): string => WEEKDAY_SHORT[weekday - 1] ?? "";
 export const weekdayLetter = (weekday: number): string => (WEEKDAY_SHORT[weekday - 1] ?? "").slice(0, 1);
+
+const DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"] as const;
+export const dayName = (weekday: number): string => DAY_NAMES[weekday - 1] ?? "";
+
+/** The kinds of run one's own plan offers, by the names running apps give them. */
+export const OWN_KIND_WORDS = { easy: "Easy run", long: "Long run", steady: "Tempo run", fast: "Interval run", walk_run: "Walk and run" } as const;
+
+/** "3 runs · 23 km"; a walk and run has no distance, so only the runs are counted. */
+export function ownCount(days: readonly PlanDay[], units: Units): string {
+  const runs = days.filter((d) => d.session !== null).length;
+  const m = days.reduce((t, d) => t + (d.session !== null && d.session.kind !== "walk_run" ? d.session.m : 0), 0);
+  return `${String(runs)} ${runs === 1 ? "run" : "runs"}${m > 0 ? ` · ${planDistance(m, units)}` : ""}`;
+}
+
+/** "My plan · 3 runs · 23 km". */
+export const ownLine = (days: readonly PlanDay[], units: Units): string => `My plan · ${ownCount(days, units)}`;
+
+/** Said beside one's own runs past the 10 % line, never changing them; null when none is. */
+export function overCapLine(days: readonly PlanDay[], capM: number | null, units: Units): string | null {
+  const over = days.filter((d) => overCap(d.session, capM));
+  const first = over[0];
+  if (first === undefined || first.session === null || first.session.kind === "walk_run") return null;
+  if (over.length > 1) return `${String(over.length)} of your runs are more than 10 % longer than your longest run in the last 30 days. Build up slowly.`;
+  return `${dayName(first.weekday)}’s ${planDistance(first.session.m, units)} run is more than 10 % longer than your longest run in the last 30 days. Build up slowly.`;
+}

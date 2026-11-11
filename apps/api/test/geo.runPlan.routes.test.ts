@@ -147,7 +147,7 @@ d("the run plan (real Postgres)", () => {
       const stranger = await makeUser("stranger");
       await answer(me.cookies, RUNNER);
       await keep(me.id, "2026-11-09T01:00:00.000Z", 5_000, 1800);
-      expect(await read(stranger.cookies)).toEqual({ answers: null, plan: null, today: "2026-11-09", choice: "suggested", own: null });
+      expect(await read(stranger.cookies)).toEqual({ answers: null, plan: null, today: "2026-11-09", choice: "suggested", own: null, capM: null });
       // The stranger answers: only their own row changes.
       await answer(stranger.cookies, BEGINNER);
       expect((await read(me.cookies)).answers).toEqual(RUNNER);

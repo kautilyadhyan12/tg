@@ -26,7 +26,7 @@ const BEGINNER = (): RunPlanAnswers => ({ doesRun: "start", jog: "none", days: d
 function server(answers: RunPlanAnswers) {
   const reply = (): RunPlanResponse => {
     const today = phoneToday();
-    return { answers, plan: runPlanOf({ answers, startDay: today, raceDay: today, today, safeMode: false, runs: [] }), today };
+    return { answers, plan: runPlanOf({ answers, startDay: today, raceDay: today, today, safeMode: false, runs: [] }), today, choice: "suggested", own: null, capM: null };
   };
   return fakeServer({
     "/v1/auth/refresh": () => ({ status: 200, body: { tokens: tokens(2) } }),

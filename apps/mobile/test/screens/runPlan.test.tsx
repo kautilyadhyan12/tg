@@ -21,9 +21,9 @@ function planServer(start: { answers: RunPlanAnswers | null; safe?: boolean; run
   const healthPuts: unknown[] = [];
   const reply = (): RunPlanResponse => {
     const today = phoneToday();
-    if (state.safe) return { answers: state.answers, plan: { kind: "none", why: "safe_mode" }, today };
-    if (state.answers === null) return { answers: null, plan: null, today };
-    return { answers: state.answers, plan: runPlanOf({ answers: state.answers, startDay: today, raceDay: today, today, safeMode: false, runs: start.runs ?? [] }), today };
+    if (state.safe) return { answers: state.answers, plan: { kind: "none", why: "safe_mode" }, today, choice: "suggested", own: null, capM: null };
+    if (state.answers === null) return { answers: null, plan: null, today, choice: "suggested", own: null, capM: null };
+    return { answers: state.answers, plan: runPlanOf({ answers: state.answers, startDay: today, raceDay: today, today, safeMode: false, runs: start.runs ?? [] }), today, choice: "suggested", own: null, capM: null };
   };
   const server = fakeServer({
     "/v1/auth/refresh": () => ({ status: 200, body: { tokens: tokens(2) } }),

@@ -128,6 +128,7 @@ d("your own run plan (real Postgres)", () => {
       await health(cookies, { hasCondition: true, checkFirst: "not_yet" });
       for (const reply of [await read(cookies), await pick(cookies, "mine"), await pick(cookies, "suggested"), await writeWeek(cookies, WEEK)]) {
         expect(reply.own).toBeNull();
+        expect(reply.capM).toBeNull();
         expect(reply.plan).toEqual({ kind: "none", why: "safe_mode" });
         expect(runsIn(reply)).toBe(0);
         expect(JSON.stringify(reply)).not.toContain("\"session\"");
@@ -219,16 +220,18 @@ d("your own run plan (real Postgres)", () => {
     it("the 10 % line comes from the runs this app recorded in the last 30 days, in the person's own day", { timeout: 60_000 }, async () => {
       clock = new Date("2026-11-11T04:30:00.000Z");
       const me = await makeUser("cap");
-      expect((await writeWeek(me.cookies, WEEK)).own?.capM).toBeNull();
+      // Before any week of one's own, for the week being written; then with it.
+      expect((await read(me.cookies)).capM).toBeNull();
+      expect((await writeWeek(me.cookies, WEEK)).capM).toBeNull();
       // 31 days before Wednesday 11 November, in Kolkata: too old.
       await keep(me.id, "2026-10-11T06:00:00.000Z", 15_000, 5400);
-      expect((await read(me.cookies)).own?.capM).toBeNull();
+      expect((await read(me.cookies)).capM).toBeNull();
       // 30 days before: it counts.
       await keep(me.id, "2026-10-12T06:00:00.000Z", 8000, 2900);
-      expect((await read(me.cookies)).own?.capM).toBe(8800);
+      expect((await read(me.cookies)).capM).toBe(8800);
       // The answers' longest run, given today, counts as well.
       await answer(me.cookies, { ...RUNNER, longestM: 10_000 });
-      expect((await read(me.cookies)).own?.capM).toBe(11_000);
+      expect((await read(me.cookies)).capM).toBe(11_000);
     });
   });
 });

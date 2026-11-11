@@ -13,6 +13,7 @@ import {
   c25kParts,
   hasOwnRun,
   overCap,
+  ownCapOf,
   ownPlanOf,
   ownRunOf,
   ownSessionOf,
@@ -71,7 +72,7 @@ describe("the 10 % line: 10 % over the longest run of the last 30 days", () => {
     ["a run of 2,345 m: the line rounds down", [ran(planDayPlus(WEDNESDAY, -1), 2345)], null, 2579],
   ];
   it.each(cases)("%s", (_name, runs, answeredLongest, capM) => {
-    expect(ownPlanOf({ week, today: WEDNESDAY, runs, answeredLongest }).capM).toBe(capM);
+    expect(ownCapOf({ today: WEDNESDAY, runs, answeredLongest })).toBe(capM);
   });
 
   const said: [string, PlanSession | null, number | null, boolean][] = [
@@ -100,9 +101,9 @@ describe("which runs tick a day of one's own plan", () => {
     ["a run dated after today ticks nothing", weekWith(4, { kind: "easy", m: 3000 }), [ran(planDayPlus(MONDAY, 4), 9000)], []],
   ];
   it.each(cases)("%s", (_name, week, runs, ticked) => {
-    const plan = ownPlanOf({ week, today: WEDNESDAY, runs, answeredLongest: null });
-    expect(plan.days.map((d) => d.day)).toEqual(Array.from({ length: 7 }, (_, i) => planDayPlus(MONDAY, i)));
-    expect(plan.days.flatMap((d, i) => (d.done ? [i] : []))).toEqual(ticked);
+    const days = ownPlanOf({ week, today: WEDNESDAY, runs });
+    expect(days.map((d) => d.day)).toEqual(Array.from({ length: 7 }, (_, i) => planDayPlus(MONDAY, i)));
+    expect(days.flatMap((d, i) => (d.done ? [i] : []))).toEqual(ticked);
   });
 });
 

@@ -6,7 +6,7 @@
 // candidates only.
 import type { FastifyBaseLogger } from "fastify";
 import type { Sql } from "postgres";
-import { RUN_CALC_VERSION, RUN_CHOICES, hasOwnRun, ownPlanOf, ownWeekSchema, planDayPlus, restartsPlan, runChoiceOf, runPlanAnswersSchema, runPlanOf, runsFrom, sameRace, climbFromHeights, climbSamples, decodePolyline, encodePolyline, hillLineOf, hillLineSchema, paceLineSchema, routeShape, runSplitSchema, runSums } from "@app/shared";
+import { RUN_CALC_VERSION, RUN_CHOICES, hasOwnRun, ownCapOf, ownPlanOf, ownWeekSchema, planDayPlus, restartsPlan, runChoiceOf, runPlanAnswersSchema, runPlanOf, runsFrom, sameRace, climbFromHeights, climbSamples, decodePolyline, encodePolyline, hillLineOf, hillLineSchema, paceLineSchema, routeShape, runSplitSchema, runSums } from "@app/shared";
 import type {
   GenerateRoutesRequest,
   RouteCandidate,
@@ -487,23 +487,19 @@ export async function runPlan(deps: ReadDeps & { now: () => Date }, userId: stri
   const choice = runChoiceOf(choiceOf(ownRow?.choice ?? null), week);
   const timeZone = safeTimeZone(ctx.timezone);
   const today = dayInTz(deps.now(), timeZone);
-  if (safeMode) return { answers, plan: { kind: "none", why: "safe_mode" }, today, choice, own: null };
+  if (safeMode) return { answers, plan: { kind: "none", why: "safe_mode" }, today, choice, own: null, capM: null };
   const startDay = row === null || answers === null ? null : dayInTz(row.startedAt, timeZone);
   const planFrom = startDay !== null && answers !== null && answers.doesRun !== "no" ? runsFrom(startDay, today) : null;
-  const ownFrom = hasOwnRun(week) ? planDayPlus(today, -30) : null;
-  const from = planFrom === null ? ownFrom : ownFrom === null || planFrom < ownFrom ? planFrom : ownFrom;
-  const runs = from === null ? [] : await repo.getRunPlanDays(deps.sql, userId, timeZone, from);
-  const own = hasOwnRun(week)
-    ? {
-        week,
-        ...ownPlanOf({ week, today, runs, answeredLongest: startDay !== null && answers?.longestM != null ? { day: startDay, m: answers.longestM } : null }),
-      }
-    : null;
-  if (row === null || answers === null || startDay === null) return { answers: null, plan: null, today, choice, own };
+  // The last 30 days, for the 10 % line beside a run of one's own, written or being written.
+  const ownFrom = planDayPlus(today, -30);
+  const runs = await repo.getRunPlanDays(deps.sql, userId, timeZone, planFrom !== null && planFrom < ownFrom ? planFrom : ownFrom);
+  const own = hasOwnRun(week) ? { week, days: ownPlanOf({ week, today, runs }) } : null;
+  const capM = ownCapOf({ today, runs, answeredLongest: startDay !== null && answers?.longestM != null ? { day: startDay, m: answers.longestM } : null });
+  if (row === null || answers === null || startDay === null) return { answers: null, plan: null, today, choice, own, capM };
   const raceDay = row.raceAt === null ? null : dayInTz(row.raceAt, timeZone);
   // The suggested plan reads only the runs it always has: an older run changes its longest-run limit.
   const planRuns = planFrom === null ? [] : runs.filter((x) => x.day >= planFrom);
-  return { answers, plan: runPlanOf({ answers, startDay, raceDay, today, safeMode, runs: planRuns }), today, choice, own };
+  return { answers, plan: runPlanOf({ answers, startDay, raceDay, today, safeMode, runs: planRuns }), today, choice, own, capM };
 }
 
 export async function setRunPlan(deps: ReadDeps & { now: () => Date }, userId: string, answers: RunPlanAnswers): Promise<RunPlanResponse> {

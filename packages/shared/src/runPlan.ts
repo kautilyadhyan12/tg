@@ -712,15 +712,19 @@ export const hasOwnRun = (week: OwnWeek | null): week is OwnWeek => week !== nul
 /** Before the person picks: My plan where they have one, else Suggested. */
 export const runChoiceOf = (picked: RunChoice | null, week: OwnWeek | null): RunChoice => picked ?? (hasOwnRun(week) ? "mine" : "suggested");
 
-export interface OwnPlan {
-  days: PlanDay[];
-  /** 10 % over the longest run of the last 30 days; null when nothing is known of the last 30 days. */
-  capM: number | null;
+/** 10 % over the longest run of the last 30 days, the longest run answered among them; null when nothing is
+ *  known of the last 30 days. */
+export function ownCapOf(input: { today: string; runs: readonly RunDay[]; answeredLongest: { day: string; m: number } | null }): number | null {
+  const since = planDayPlus(input.today, -30);
+  const recent = input.runs.filter((x) => x.day >= since && x.day <= input.today).map((x) => x.longestM);
+  if (input.answeredLongest !== null && input.answeredLongest.day >= since && input.answeredLongest.day <= input.today) recent.push(input.answeredLongest.m);
+  const longest = Math.max(0, ...recent);
+  return longest > 0 ? Math.floor(longest * RUN_GROWTH) : null;
 }
 
 /** This week of one's own plan, each run ticked by a run recorded that day, or by a run on a day with none
  *  planned that covers it, as the suggested plan counts them. */
-export function ownPlanOf(input: { week: OwnWeek; today: string; runs: readonly RunDay[]; answeredLongest: { day: string; m: number } | null }): OwnPlan {
+export function ownPlanOf(input: { week: OwnWeek; today: string; runs: readonly RunDay[] }): PlanDay[] {
   const weekStart = mondayOf(input.today);
   const days: PlanDay[] = input.week.map((run, i) => {
     const day = planDayPlus(weekStart, i);
@@ -734,17 +738,13 @@ export function ownPlanOf(input: { week: OwnWeek; today: string; runs: readonly 
           : session.kind !== "walk_run" && ran.longestM >= session.m / 2;
     return { day, weekday: i + 1, session, done };
   });
-  const since = planDayPlus(input.today, -30);
-  const recent = input.runs.filter((x) => x.day >= since && x.day <= input.today).map((x) => x.longestM);
-  if (input.answeredLongest !== null && input.answeredLongest.day >= since) recent.push(input.answeredLongest.m);
-  const longest = Math.max(0, ...recent);
-  return { days: tickMovedRuns(days, input.runs.filter((x) => x.day <= input.today), weekStart), capM: longest > 0 ? Math.floor(longest * RUN_GROWTH) : null };
+  return tickMovedRuns(days, input.runs.filter((x) => x.day <= input.today), weekStart);
 }
 
 /** A run of one's own longer than the 10 % limit: said beside it, never changed. */
 export const overCap = (session: PlanSession | null, capM: number | null): boolean => session !== null && capM !== null && session.kind !== "walk_run" && session.m > capM;
 
-export const ownPlanSchema = z.object({ week: ownWeekSchema, days: z.array(planDaySchema).length(7), capM: z.number().int().positive().nullable() });
+export const ownPlanSchema = z.object({ week: ownWeekSchema, days: z.array(planDaySchema).length(7) });
 export type OwnPlanReply = z.infer<typeof ownPlanSchema>;
 
 /** GET and PUT /v1/geo/run-plan, and the PUTs of the choice and one's own week: the answers (null before
@@ -759,5 +759,8 @@ export const runPlanResponseSchema = z.object({
   choice: z.enum(RUN_CHOICES),
   /** This week of the person's own plan; null with none, and in Safe mode, which shows no run from any plan. */
   own: ownPlanSchema.nullable(),
+  /** A run of one's own past this many metres is said to be more than 10 % longer than the longest of the
+   *  last 30 days; null when none is known, and in Safe mode. */
+  capM: z.number().int().positive().nullable(),
 });
 export type RunPlanResponse = z.infer<typeof runPlanResponseSchema>;
