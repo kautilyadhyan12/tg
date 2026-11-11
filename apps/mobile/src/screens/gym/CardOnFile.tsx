@@ -5,7 +5,7 @@ import { Card, Pill } from "../../look/Card";
 import { colours } from "../../look/colours";
 import { Icon } from "../../look/Icon";
 import { Txt } from "../../look/Txt";
-import { CARD_TITLE, cardBox } from "./cardView";
+import { CARD_REMOVE_AT_DESK, CARD_TITLE, cardBox } from "./cardView";
 
 // Card on file on My membership (ROADMAP Stage 5 item 20d): the card the gym charges, with Update card; or No card on
 // file with Add card; or who pays for them. Nothing where the gym does not take cards in the app. What was just saved
@@ -45,6 +45,9 @@ export function CardOnFile({ view, said, onAdd }: { view: MyCardView; said: stri
               {box.expired ? <Pill label="Expired" tone="bad" /> : null}
             </View>
             {box.button === null ? null : <Button label={box.button} icon="card" kind={box.expired ? "main" : "soft"} wide onPress={onAdd} />}
+            <Txt kind="small" colour="textSoft">
+              {CARD_REMOVE_AT_DESK}
+            </Txt>
           </>
         ) : (
           <>

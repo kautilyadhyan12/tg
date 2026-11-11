@@ -97,8 +97,24 @@ const say = async (box: Box, message: unknown, url = PAGE) => {
   });
 };
 
+type PhoneScreen = { marks: string[]; missing: boolean; hold: boolean; release: () => void };
+const { screen: phoneScreen } = jest.requireMock<{ screen: PhoneScreen }>("../../src/look/screenCaptureNative");
+const backKey = async () => {
+  const shown = screen.container.queryAll((node) => node.props["visible"] === true && typeof node.props["onRequestClose"] === "function").at(-1);
+  if (shown === undefined) throw new Error("no page open");
+  await fireEvent(shown, "requestClose");
+};
+const closeButton = () => {
+  const close = screen.getAllByLabelText("Close").at(-1);
+  if (close === undefined) throw new Error("no Close");
+  return close;
+};
+
 beforeEach(() => {
   boxes.length = 0;
+  phoneScreen.marks.length = 0;
+  phoneScreen.missing = false;
+  phoneScreen.hold = false;
 });
 
 async function openMembership(ask: Ask, place: Place) {
@@ -228,8 +244,65 @@ describe("the box on My membership", () => {
     await openMembership(server.ask, IRON);
     expect(await page().findByText("Visa ending 1111")).toBeTruthy();
     expect(page().getByText("Expires 12/2028")).toBeTruthy();
+    expect(page().getByText("To remove this card, ask the front desk.")).toBeTruthy();
     await fireEvent.press(page().getByText("Update card"));
     expect(await screen.findByTestId("add-card")).toBeTruthy();
+  });
+});
+
+describe("the card numbers never show in a screenshot or a screen recording", () => {
+  const irons = () =>
+    fakeServer({
+      "/v1/auth/refresh": ok({ tokens: tokens(2) }),
+      "/v1/orgs/mine": mine(IRON),
+      [membershipPath(IRON)]: ok(membershipOf("Iron House")),
+      [cardPath(IRON)]: (body) => ({ status: 200, body: cardOf("Iron House", "LOCATIONIRON01", body === undefined ? {} : { card: VISA }) }),
+    });
+
+  it("the page opens only once screenshots are blanked, and they come back when it is closed", async () => {
+    await openMembership(irons().ask, IRON);
+    phoneScreen.hold = true;
+    await fireEvent.press(await page().findByText("Add card"));
+    // Android copies the mark into the page's own window only as it opens: the page waits for it.
+    expect(phoneScreen.marks).toEqual(["on"]);
+    expect(screen.queryByTestId("add-card")).toBeNull();
+    await act(async () => {
+      phoneScreen.release();
+      await Promise.resolve();
+    });
+    expect(await screen.findByTestId("add-card")).toBeTruthy();
+
+    await fireEvent.press(closeButton());
+    await waitFor(() => {
+      expect(screen.queryByTestId("add-card")).toBeNull();
+    });
+    expect(phoneScreen.marks).toEqual(["on", "off"]);
+  });
+
+  it("they come back after the phone's back key and after a save, never left blanked", async () => {
+    await openMembership(irons().ask, IRON);
+    await fireEvent.press(await page().findByText("Add card"));
+    await screen.findByTestId("add-card");
+    await backKey();
+    await waitFor(() => {
+      expect(phoneScreen.marks).toEqual(["on", "off"]);
+    });
+
+    const box = await readyToSave();
+    expect(phoneScreen.marks).toEqual(["on", "off", "on"]);
+    await fireEvent.press(screen.getByLabelText("Save this card for Iron House"));
+    await say(box, { kind: "token", token: "cnon:card-nonce-ok" });
+    expect(await page().findByTestId("card-said")).toBeTruthy();
+    expect(screen.queryByTestId("add-card")).toBeNull();
+    expect(phoneScreen.marks).toEqual(["on", "off", "on", "off"]);
+  });
+
+  it("a copy of the app built before the block still opens the page", async () => {
+    phoneScreen.missing = true;
+    await openMembership(irons().ask, IRON);
+    await fireEvent.press(await page().findByText("Add card"));
+    expect(await screen.findByTestId("add-card")).toBeTruthy();
+    expect(phoneScreen.marks).toEqual([]);
   });
 });
 

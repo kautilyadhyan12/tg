@@ -357,6 +357,31 @@ jest.mock("../../src/screens/running/runVoiceNative", () => {
     },
   };
 });
+// Add card's screenshot block (20d), expo-screen-capture's Android code: a test reads each mark in order (`marks`,
+// "on" and "off"), holds the next "on" unanswered (`hold`, then `release()`), and `missing` stands for a copy of the
+// app built before it.
+jest.mock("../../src/look/screenCaptureNative", () => {
+  const screen = { marks: [], missing: false, hold: false, release: () => undefined };
+  const native = {
+    preventScreenCapture: () => {
+      screen.marks.push("on");
+      if (!screen.hold) return Promise.resolve();
+      return new Promise((resolve) => {
+        screen.release = resolve;
+      });
+    },
+    allowScreenCapture: () => {
+      screen.marks.push("off");
+      return Promise.resolve();
+    },
+  };
+  return {
+    screen,
+    get screenCaptureNative() {
+      return screen.missing ? null : native;
+    },
+  };
+});
 // The map is MapLibre's, drawn by the phone (37b-i). A test's map is a plain view, and each map drawn
 // is kept (`maps`, newest last, `gone` once closed) with what it was given: its style, the shapes of
 // each of its sources, its layers, its camera and its markers. A test reads them, and says back what

@@ -11,6 +11,8 @@ export const CARD_NOT_READY = "Type your card and tick the box to save it.";
 export const CARD_NOT_LOADED = "Square’s card boxes didn’t load. Check your internet and try again.";
 export const CARD_NOT_TAKEN = "Check the card details in the boxes above, then try again.";
 export const CARD_NOT_SAVED = MEMBER_CARD_WORDS.not_saved;
+/** Only the gym removes a card (18d-ii); the member is told where. */
+export const CARD_REMOVE_AT_DESK = "To remove this card, ask the front desk.";
 
 export const myCardPath = (gymId: string): string => `/v1/orgs/${gymId}/my-card`;
 

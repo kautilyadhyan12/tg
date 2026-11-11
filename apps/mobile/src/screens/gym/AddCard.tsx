@@ -8,6 +8,7 @@ import { colours } from "../../look/colours";
 import { CoverPage } from "../../look/CoverPage";
 import { Tick } from "../../look/Tick";
 import { Txt } from "../../look/Txt";
+import { useNoScreenshots } from "../../look/useNoScreenshots";
 import { useSession } from "../../session/SessionProvider";
 import { pageAddress } from "../robotCheckPage";
 import { NO_ANSWER } from "../SignIn";
@@ -37,7 +38,9 @@ type Held = { kind: "loading" } | { kind: "failed"; message: string } | { kind: 
 
 /** The page; closed while `place` is null. `onSaved` has the box as the server answers it, with the card saved. */
 export function AddCardPage({ place, onClose, onSaved }: { place: CardPlace | null; onClose: () => void; onSaved: (gymId: string, view: MyCardView) => void }) {
-  return place === null ? null : <Body key={place.id} place={place} onClose={onClose} onSaved={onSaved} />;
+  // The card numbers typed here never show in a screenshot or a screen recording.
+  const marked = useNoScreenshots(place !== null);
+  return place === null || !marked ? null : <Body key={place.id} place={place} onClose={onClose} onSaved={onSaved} />;
 }
 
 function Body({ place, onClose, onSaved }: { place: CardPlace; onClose: () => void; onSaved: (gymId: string, view: MyCardView) => void }) {
