@@ -1078,198 +1078,203 @@ export interface CancelBookings {
   ) => Promise<{ booked: number; packClasses: number; ptSessions?: number; ptPackSessions?: number }>;
 }
 
+export interface MoveHeldInput {
+  gymId: string;
+  entryId: string;
+  membershipId: string;
+  event: HeldMembershipEvent;
+  /** The gym's own day. */
+  today: string;
+  /** A cancel: the number of bookings the screen was told it would end. */
+  confirmBookings: string | null;
+  /** A cancel: the mark of the personal training sessions it was told it would end. */
+  confirmPtSessions?: string | null;
+  /** A freeze: the fee a month the screen showed and staff left ticked, or 0 for none (18z). */
+  freezeFeeMinor?: number;
+  /** Whether this reader may freeze with no fee where the gym charges one (`billing.members`). */
+  mayWaiveFreezeFee?: boolean;
+  /** Leaving early (18v-ii-b): the early cancellation fee the screen showed. */
+  leaveFeeMinor?: number;
+  actorUserId: string;
+  now: Date;
+  /** Pressed by the member, or whoever pays for them, in the app (18l): kept under its own action, so Staff activity,
+   *  which lists what staff did, leaves it out. */
+  via?: "app";
+}
+
 /** One change to a held membership, decided by the rule on the row as it is under its
  *  lock. A change that is already so writes nothing and answers ok. A cancel that would
  *  end bookings answers who they are until the request sends their number back. */
-export async function moveHeld(
-  sql: Sql,
-  bookings: CancelBookings,
-  input: {
-    gymId: string;
-    entryId: string;
-    membershipId: string;
-    event: HeldMembershipEvent;
-    /** The gym's own day. */
-    today: string;
-    /** A cancel: the number of bookings the screen was told it would end. */
-    confirmBookings: string | null;
-    /** A cancel: the mark of the personal training sessions it was told it would end. */
-    confirmPtSessions?: string | null;
-    /** A freeze: the fee a month the screen showed and staff left ticked, or 0 for none (18z). */
-    freezeFeeMinor?: number;
-    /** Whether this reader may freeze with no fee where the gym charges one (`billing.members`). */
-    mayWaiveFreezeFee?: boolean;
-    /** Leaving early (18v-ii-b): the early cancellation fee the screen showed. */
-    leaveFeeMinor?: number;
-    actorUserId: string;
-    now: Date;
-  },
-): Promise<HeldWriteOutcome | HasBookings> {
-  return await sql.begin(async (tx): Promise<HeldWriteOutcome | HasBookings> => {
-    const entry = await lockedEntry(tx, input.gymId, input.entryId);
-    if (entry === null) return { kind: "entry_not_found" };
-    const [raw] = await tx`
-      SELECT ${COLUMNS(tx)}
-      FROM gym_held_memberships h
-      JOIN gym_membership_types t ON t.gym_id = h.gym_id AND t.id = h.membership_type_id
-      WHERE h.gym_id = ${input.gymId} AND h.entry_id = ${input.entryId} AND h.id = ${input.membershipId}
-      FOR UPDATE OF h`;
-    if (raw === undefined) return { kind: "membership_not_found" };
-    if (entry.past) return { kind: "past_member" };
-    await settle(tx, input.gymId, input.entryId, input.today, input.now);
-    // Read again: what the clock has done is written now, and the change is decided on that.
-    const before = await lockedHeld(tx, input.gymId, input.entryId, input.membershipId);
-    if (before === null) return { kind: "membership_not_found" };
-    // Frozen, cancelled or marked paid while the Terminal waits, the member would pay for it anyway.
-    const out = await squareMoneyOut(tx, input.gymId, before.id);
-    if (out !== null) return out;
+export async function moveHeld(sql: Sql, bookings: CancelBookings, input: MoveHeldInput): Promise<HeldWriteOutcome | HasBookings> {
+  return await sql.begin((tx) => moveHeldIn(tx, bookings, input));
+}
 
-    // Leaving early charges the fee the membership holds, and only the one the screen showed (18v-ii-b).
-    const leaving = input.event.type === "cancel" && input.event.when === "leave_early";
-    if (leaving && before.membership.leftEarly !== true && input.leaveFeeMinor !== (before.membership.leaveFeeMinor ?? null)) return { kind: "leave_fee_changed" };
-    const move = moveHeldMembership(before.membership, input.event, input.today);
-    const coolingOff = input.event.type === "cancel" && input.event.when === "cooling_off";
-    if (!move.ok) return coolingOff ? { kind: "cooling_off_over" } : { kind: move.reason };
-    if (!move.changed) return { kind: "ok" };
-    const m = move.membership;
-    const leftEarly = leaving && m.leftEarly === true && before.membership.leftEarly !== true;
-    // A member let out of a running contract keeps the reason staff gave (18v-i).
-    // Kept only where the cancel let them out early and its row is let out (round one, L1, L2).
-    const released = input.event.type === "cancel" && input.event.release !== undefined && releaseAsked(heldMembershipView(before.membership, input.today), input.event.when) && (m.status === "cancelled" || !m.renews);
-    const release = released && input.event.type === "cancel" && input.event.release !== undefined ? input.event.release : before.contractRelease;
-    // Ended before its notice allowed, outside a minimum term, keeps the reason too (18v-ii-a): a
-    // release from the term lets them out of the notice with it, and is the one kept.
-    const waived =
-      !released && input.event.type === "cancel" && input.event.release !== undefined && noticeAsked(heldMembershipView(before.membership, input.today), input.event.when) && (m.status === "cancelled" || !m.renews);
-    const noticeWaived = waived && input.event.type === "cancel" && input.event.release !== undefined ? input.event.release : before.noticeWaived;
+/** `moveHeld` inside a transaction the caller holds: Cancel in the app checks what the member was shown under the
+ *  same locks first (18l). */
+export async function moveHeldIn(tx: TransactionSql, bookings: CancelBookings, input: MoveHeldInput): Promise<HeldWriteOutcome | HasBookings> {
+  const entry = await lockedEntry(tx, input.gymId, input.entryId);
+  if (entry === null) return { kind: "entry_not_found" };
+  const [raw] = await tx`
+    SELECT ${COLUMNS(tx)}
+    FROM gym_held_memberships h
+    JOIN gym_membership_types t ON t.gym_id = h.gym_id AND t.id = h.membership_type_id
+    WHERE h.gym_id = ${input.gymId} AND h.entry_id = ${input.entryId} AND h.id = ${input.membershipId}
+    FOR UPDATE OF h`;
+  if (raw === undefined) return { kind: "membership_not_found" };
+  if (entry.past) return { kind: "past_member" };
+  await settle(tx, input.gymId, input.entryId, input.today, input.now);
+  // Read again: what the clock has done is written now, and the change is decided on that.
+  const before = await lockedHeld(tx, input.gymId, input.entryId, input.membershipId);
+  if (before === null) return { kind: "membership_not_found" };
+  // Frozen, cancelled or marked paid while the Terminal waits, the member would pay for it anyway.
+  const out = await squareMoneyOut(tx, input.gymId, before.id);
+  if (out !== null) return out;
 
-    // A freeze charges the gym's fee where staff left it ticked: refused where the screen showed
-    // another, or a fee on a membership that freezes with none (18z).
-    let freezeFee = m.status === "frozen" ? before.freezeFeeMinor : 0;
-    let freezeOffered = 0;
-    if (input.event.type === "freeze") {
-      const offered = freezeFeeApplies(before.membership) ? await freezeFeeOf(tx, input.gymId) : 0;
-      freezeOffered = offered;
-      const asked = input.freezeFeeMinor ?? 0;
-      if (asked !== 0 && asked !== offered) return { kind: "freeze_fee_changed" };
-      // Staff who do not record payments freeze with the gym's fee; for them 0 is a screen that
-      // showed none.
-      if (asked === 0 && offered > 0 && input.mayWaiveFreezeFee !== true) return { kind: "freeze_fee_changed" };
-      freezeFee = asked;
-    }
+  // Leaving early charges the fee the membership holds, and only the one the screen showed (18v-ii-b).
+  const leaving = input.event.type === "cancel" && input.event.when === "leave_early";
+  if (leaving && before.membership.leftEarly !== true && input.leaveFeeMinor !== (before.membership.leaveFeeMinor ?? null)) return { kind: "leave_fee_changed" };
+  const move = moveHeldMembership(before.membership, input.event, input.today);
+  const coolingOff = input.event.type === "cancel" && input.event.when === "cooling_off";
+  if (!move.ok) return coolingOff ? { kind: "cooling_off_over" } : { kind: move.reason };
+  if (!move.changed) return { kind: "ok" };
+  const m = move.membership;
+  const leftEarly = leaving && m.leftEarly === true && before.membership.leftEarly !== true;
+  // A member let out of a running contract keeps the reason staff gave (18v-i).
+  // Kept only where the cancel let them out early and its row is let out (round one, L1, L2).
+  const released = input.event.type === "cancel" && input.event.release !== undefined && releaseAsked(heldMembershipView(before.membership, input.today), input.event.when) && (m.status === "cancelled" || !m.renews);
+  const release = released && input.event.type === "cancel" && input.event.release !== undefined ? input.event.release : before.contractRelease;
+  // Ended before its notice allowed, outside a minimum term, keeps the reason too (18v-ii-a): a
+  // release from the term lets them out of the notice with it, and is the one kept.
+  const waived =
+    !released && input.event.type === "cancel" && input.event.release !== undefined && noticeAsked(heldMembershipView(before.membership, input.today), input.event.when) && (m.status === "cancelled" || !m.renews);
+  const noticeWaived = waived && input.event.type === "cancel" && input.event.release !== undefined ? input.event.release : before.noticeWaived;
 
-    // A cancel takes with it the bills for days after its last day (18a-i): nobody is left
-    // owing, or reading Overdue, for a month they never had.
-    let voided: string[] = [];
-    if (coolingOff) {
-      // Cancelled in its cooling-off period, nothing of it is owed (18v-iii): every bill with nothing paid on it
-      // is cancelled, whatever day it fell due. A bill part paid can be neither refunded nor cancelled until
-      // that payment is voided, so it stops the cancel.
+  // A freeze charges the gym's fee where staff left it ticked: refused where the screen showed
+  // another, or a fee on a membership that freezes with none (18z).
+  let freezeFee = m.status === "frozen" ? before.freezeFeeMinor : 0;
+  let freezeOffered = 0;
+  if (input.event.type === "freeze") {
+    const offered = freezeFeeApplies(before.membership) ? await freezeFeeOf(tx, input.gymId) : 0;
+    freezeOffered = offered;
+    const asked = input.freezeFeeMinor ?? 0;
+    if (asked !== 0 && asked !== offered) return { kind: "freeze_fee_changed" };
+    // Staff who do not record payments freeze with the gym's fee; for them 0 is a screen that
+    // showed none.
+    if (asked === 0 && offered > 0 && input.mayWaiveFreezeFee !== true) return { kind: "freeze_fee_changed" };
+    freezeFee = asked;
+  }
+
+  // A cancel takes with it the bills for days after its last day (18a-i): nobody is left
+  // owing, or reading Overdue, for a month they never had.
+  let voided: string[] = [];
+  if (coolingOff) {
+    // Cancelled in its cooling-off period, nothing of it is owed (18v-iii): every bill with nothing paid on it
+    // is cancelled, whatever day it fell due. A bill part paid can be neither refunded nor cancelled until
+    // that payment is voided, so it stops the cancel.
+    const bills = await billsFor(tx, input.gymId, [before.id]);
+    const open = bills.filter((b) => b.status === "open");
+    if (open.some((b) => b.paidMinor > 0)) return { kind: "cooling_off_part_paid" };
+    voided = open.map((b) => b.id);
+  } else if (input.event.type === "cancel") {
+    const lastDay = m.status === "cancelled" ? input.today : heldMembershipView(m, input.today).endsOn;
+    if (lastDay !== null) {
       const bills = await billsFor(tx, input.gymId, [before.id]);
-      const open = bills.filter((b) => b.status === "open");
-      if (open.some((b) => b.paidMinor > 0)) return { kind: "cooling_off_part_paid" };
-      voided = open.map((b) => b.id);
-    } else if (input.event.type === "cancel") {
-      const lastDay = m.status === "cancelled" ? input.today : heldMembershipView(m, input.today).endsOn;
-      if (lastDay !== null) {
-        const bills = await billsFor(tx, input.gymId, [before.id]);
-        const after = billsAtCancel(bills, lastDay);
-        if (after.blocked) return { kind: "early_payment" };
-        voided = bills.filter((b) => after.voids.includes(b.periodIndex)).map((b) => b.id);
-      }
+      const after = billsAtCancel(bills, lastDay);
+      if (after.blocked) return { kind: "early_payment" };
+      voided = bills.filter((b) => after.voids.includes(b.periodIndex)).map((b) => b.id);
     }
+  }
 
-    // A cancel ends the places booked on it (17c-iii): every class not yet started, or,
-    // where it runs on to the end of what is paid, the classes after its last day.
-    let ends: MembershipScope | null = null;
-    if (input.event.type === "cancel") {
-      const last = m.status === "cancelled" ? null : heldMembershipView(m, input.today).endsOn;
-      if (m.status === "cancelled" || last !== null) ends = { membership: before.id, now: input.now, afterDay: last };
-    }
-    if (ends !== null) {
-      const ask = await bookings.ask(tx, input.gymId, ends, { bookings: input.confirmBookings, ptSessions: input.confirmPtSessions ?? null });
-      if (ask !== null) return ask;
-    }
+  // A cancel ends the places booked on it (17c-iii): every class not yet started, or,
+  // where it runs on to the end of what is paid, the classes after its last day.
+  let ends: MembershipScope | null = null;
+  if (input.event.type === "cancel") {
+    const last = m.status === "cancelled" ? null : heldMembershipView(m, input.today).endsOn;
+    if (m.status === "cancelled" || last !== null) ends = { membership: before.id, now: input.now, afterDay: last };
+  }
+  if (ends !== null) {
+    const ask = await bookings.ask(tx, input.gymId, ends, { bookings: input.confirmBookings, ptSessions: input.confirmPtSessions ?? null });
+    if (ask !== null) return ask;
+  }
 
-    await tx`
-      UPDATE gym_held_memberships
-      SET status = ${m.status}, frozen_days = ${m.frozenDays}, frozen_on = ${m.frozenOn}::date,
-          cancelled_on = ${m.cancelledOn}::date, paid_periods = ${m.paidPeriods}, renews = ${m.renews},
-          contract_then = ${m.contractThen ?? null}, contract_release = ${release},
-          stops_after = ${m.stopsAfter ?? null}, notice_waived = ${noticeWaived}, left_early = ${m.leftEarly === true},
-          changed_mind = ${m.changedMind === true}, freeze_fee_minor = ${freezeFee}, updated_at = ${input.now}
-      WHERE gym_id = ${input.gymId} AND entry_id = ${input.entryId} AND id = ${input.membershipId}`;
-    const ended = ends === null ? null : await bookings.end(tx, input.gymId, ends, input.now);
-    // The early cancellation fee, a fee bill of its own, due today (18v-ii-b).
-    const leaveFeeOpened = leftEarly ? await openLeaveFee(tx, input.gymId, before.id, input.today, input.now) : false;
-    // Its first month's freeze fee, at once; an unfreeze or a cancel takes off the unpaid fees of
-    // months that begin today or later (18z).
-    const feesOpened = m.status === "frozen" && input.event.type === "freeze" && freezeFee > 0 ? await openFreezeFee(tx, input.gymId, before.id, input.now) : 0;
-    const feesRemoved =
-      before.membership.status === "frozen" && m.status !== "frozen" ? await removeFreezeFees(tx, input.gymId, before.id, input.today, input.now) : 0;
-    // A change on the next payment date undone before the new one starts: the one it replaced
-    // renews again, as it did before the change (18x, round one, Low-2).
-    let renewsAgain = false;
-    if (input.event.type === "cancel" && m.status === "cancelled" && before.membership.startsOn > input.today) {
-      const back = await tx<{ id: string; starts_on: string }[]>`
-        UPDATE gym_held_memberships o SET renews = true, updated_at = ${input.now}
-        FROM gym_held_memberships n
-        WHERE n.gym_id = ${input.gymId} AND n.id = ${before.id} AND n.replaced_stopped
-          AND o.gym_id = n.gym_id AND o.id = n.replaces_id AND o.entry_id = ${input.entryId}
-          AND o.status = 'active' AND o.kind = 'recurring' AND NOT o.renews
-        RETURNING o.id, n.starts_on::text AS starts_on`;
-      renewsAgain = back.length > 0;
-      // The bills the change cancelled with it (unpaid, for days after its last day) are owed again,
-      // so a payment due always has its bill to pay (re-check, Low).
-      for (const old of back) {
-        await tx`
-          UPDATE gym_member_bills SET status = 'open', updated_at = ${input.now}
-          WHERE gym_id = ${input.gymId} AND held_membership_id = ${old.id} AND status = 'void'
-            AND void_reason IS NULL AND period_index IS NOT NULL AND due_on >= ${old.starts_on}::date`;
-      }
+  await tx`
+    UPDATE gym_held_memberships
+    SET status = ${m.status}, frozen_days = ${m.frozenDays}, frozen_on = ${m.frozenOn}::date,
+        cancelled_on = ${m.cancelledOn}::date, paid_periods = ${m.paidPeriods}, renews = ${m.renews},
+        contract_then = ${m.contractThen ?? null}, contract_release = ${release},
+        stops_after = ${m.stopsAfter ?? null}, notice_waived = ${noticeWaived}, left_early = ${m.leftEarly === true},
+        changed_mind = ${m.changedMind === true}, freeze_fee_minor = ${freezeFee}, updated_at = ${input.now}
+    WHERE gym_id = ${input.gymId} AND entry_id = ${input.entryId} AND id = ${input.membershipId}`;
+  const ended = ends === null ? null : await bookings.end(tx, input.gymId, ends, input.now);
+  // The early cancellation fee, a fee bill of its own, due today (18v-ii-b).
+  const leaveFeeOpened = leftEarly ? await openLeaveFee(tx, input.gymId, before.id, input.today, input.now) : false;
+  // Its first month's freeze fee, at once; an unfreeze or a cancel takes off the unpaid fees of
+  // months that begin today or later (18z).
+  const feesOpened = m.status === "frozen" && input.event.type === "freeze" && freezeFee > 0 ? await openFreezeFee(tx, input.gymId, before.id, input.now) : 0;
+  const feesRemoved =
+    before.membership.status === "frozen" && m.status !== "frozen" ? await removeFreezeFees(tx, input.gymId, before.id, input.today, input.now) : 0;
+  // A change on the next payment date undone before the new one starts: the one it replaced
+  // renews again, as it did before the change (18x, round one, Low-2).
+  let renewsAgain = false;
+  if (input.event.type === "cancel" && m.status === "cancelled" && before.membership.startsOn > input.today) {
+    const back = await tx<{ id: string; starts_on: string }[]>`
+      UPDATE gym_held_memberships o SET renews = true, updated_at = ${input.now}
+      FROM gym_held_memberships n
+      WHERE n.gym_id = ${input.gymId} AND n.id = ${before.id} AND n.replaced_stopped
+        AND o.gym_id = n.gym_id AND o.id = n.replaces_id AND o.entry_id = ${input.entryId}
+        AND o.status = 'active' AND o.kind = 'recurring' AND NOT o.renews
+      RETURNING o.id, n.starts_on::text AS starts_on`;
+    renewsAgain = back.length > 0;
+    // The bills the change cancelled with it (unpaid, for days after its last day) are owed again,
+    // so a payment due always has its bill to pay (re-check, Low).
+    for (const old of back) {
+      await tx`
+        UPDATE gym_member_bills SET status = 'open', updated_at = ${input.now}
+        WHERE gym_id = ${input.gymId} AND held_membership_id = ${old.id} AND status = 'void'
+          AND void_reason IS NULL AND period_index IS NOT NULL AND due_on >= ${old.starts_on}::date`;
     }
-    await voidBills(tx, input.gymId, voided, input.now);
-    // A Refer a friend gift taken off a bill cancelled with it waits for the next bill.
-    await giftUseUndone(tx, input.gymId, { billIds: voided }, input.today, input.now);
+  }
+  await voidBills(tx, input.gymId, voided, input.now);
+  // A Refer a friend gift taken off a bill cancelled with it waits for the next bill.
+  await giftUseUndone(tx, input.gymId, { billIds: voided }, input.today, input.now);
 
-    await insertAudit(tx, {
-      actorUserId: input.actorUserId,
-      gymId: input.gymId,
-      action: AUDIT_ACTION[input.event.type],
-      targetType: "gym_held_membership",
-      targetId: before.id,
-      meta: {
-        entryId: input.entryId,
-        type: before.typeName,
-        on: input.today,
-        statusBefore: before.membership.status,
-        statusAfter: m.status,
-        paidBefore: String(before.membership.paidPeriods),
-        paidAfter: String(m.paidPeriods),
-        renews: String(m.renews),
-        ...(input.event.type === "cancel" ? { when: input.event.when } : {}),
-        ...(release !== before.contractRelease && release !== null ? { release } : {}),
-        ...(noticeWaived !== before.noticeWaived && noticeWaived !== null ? { noticeWaived } : {}),
-        ...((m.stopsAfter ?? null) !== (before.membership.stopsAfter ?? null) && m.stopsAfter != null ? { stopsAfter: String(m.stopsAfter) } : {}),
-        ...(m.contractThen !== before.membership.contractThen && m.contractThen != null ? { contractThen: m.contractThen } : {}),
-        ...(voided.length === 0 ? {} : { billsCancelled: String(voided.length) }),
-        ...(input.event.type === "freeze" ? { freezeFeeMinor: String(freezeFee), freezeFeeOffered: String(freezeOffered) } : {}),
-        ...(feesOpened === 0 ? {} : { freezeFeesOpened: String(feesOpened) }),
-        ...(leftEarly ? { leaveFeeMinor: String(before.membership.leaveFeeMinor ?? 0), leaveFeeOpened: String(leaveFeeOpened) } : {}),
-        ...(feesRemoved === 0 ? {} : { freezeFeesRemoved: String(feesRemoved) }),
-        ...(renewsAgain ? { replacedRenewsAgain: "true" } : {}),
-        ...(ended === null
-          ? {}
-          : {
-              bookingsEnded: String(ended.booked),
-              packClassesBack: String(ended.packClasses),
-              ptSessionsEnded: String(ended.ptSessions ?? 0),
-              ptPackSessionsBack: String(ended.ptPackSessions ?? 0),
-            }),
-      },
-    });
-    return { kind: "ok" };
+  await insertAudit(tx, {
+    actorUserId: input.actorUserId,
+    gymId: input.gymId,
+    action: input.via === "app" && input.event.type === "cancel" ? "org.held_membership_cancelled_in_app" : AUDIT_ACTION[input.event.type],
+    targetType: "gym_held_membership",
+    targetId: before.id,
+    meta: {
+      entryId: input.entryId,
+      type: before.typeName,
+      on: input.today,
+      statusBefore: before.membership.status,
+      statusAfter: m.status,
+      paidBefore: String(before.membership.paidPeriods),
+      paidAfter: String(m.paidPeriods),
+      renews: String(m.renews),
+      ...(input.event.type === "cancel" ? { when: input.event.when } : {}),
+      ...(release !== before.contractRelease && release !== null ? { release } : {}),
+      ...(noticeWaived !== before.noticeWaived && noticeWaived !== null ? { noticeWaived } : {}),
+      ...((m.stopsAfter ?? null) !== (before.membership.stopsAfter ?? null) && m.stopsAfter != null ? { stopsAfter: String(m.stopsAfter) } : {}),
+      ...(m.contractThen !== before.membership.contractThen && m.contractThen != null ? { contractThen: m.contractThen } : {}),
+      ...(voided.length === 0 ? {} : { billsCancelled: String(voided.length) }),
+      ...(input.event.type === "freeze" ? { freezeFeeMinor: String(freezeFee), freezeFeeOffered: String(freezeOffered) } : {}),
+      ...(feesOpened === 0 ? {} : { freezeFeesOpened: String(feesOpened) }),
+      ...(leftEarly ? { leaveFeeMinor: String(before.membership.leaveFeeMinor ?? 0), leaveFeeOpened: String(leaveFeeOpened) } : {}),
+      ...(feesRemoved === 0 ? {} : { freezeFeesRemoved: String(feesRemoved) }),
+      ...(renewsAgain ? { replacedRenewsAgain: "true" } : {}),
+      ...(ended === null
+        ? {}
+        : {
+            bookingsEnded: String(ended.booked),
+            packClassesBack: String(ended.packClasses),
+            ptSessionsEnded: String(ended.ptSessions ?? 0),
+            ptPackSessionsBack: String(ended.ptPackSessions ?? 0),
+          }),
+    },
   });
+  return { kind: "ok" };
 }
 
 const forBookingSchema = z.object({

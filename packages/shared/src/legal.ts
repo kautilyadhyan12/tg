@@ -19,7 +19,7 @@ export const LEGAL_PATHS = {
 } as const;
 
 /** The day the words below last changed, `YYYY-MM-DD`. */
-export const LEGAL_UPDATED_ON = "2026-11-10";
+export const LEGAL_UPDATED_ON = "2026-11-12";
 
 /** Who runs KWAZO (Kd, 2026-11-08: his full name; a sole proprietorship, RULINGS 2026-09-15). */
 export const LEGAL_OWNER = "Kautilya Darshan Baruah";
@@ -191,7 +191,7 @@ export const KEPT_AFTER_DELETION = [
   },
   {
     id: "business_records",
-    what: "Business-controlled records, including memberships, visits, bookings, payments, bills, notes, and the last four digits of a payment card",
+    what: "Business-controlled records, including memberships, a cancellation made in the app and the reason picked for it, visits, bookings, payments, bills, notes, and the last four digits of a payment card",
     howLong: "Retained until the business deletes the information or the records are removed through KWAZO's cleanup process for businesses that have discontinued use of the Services.",
   },
   {
@@ -460,7 +460,7 @@ export function privacyPolicy(facts: LegalFacts = LEGAL_FACTS): LegalDocument {
           h3("7.6. Business-Controlled Records"),
           p("A participating business may independently maintain information relating to its relationship with you through KWAZO, including:"),
           list(
-            "Membership records.",
+            "Membership records, including a cancellation you make in the app and the reason you pick for it, if you pick one.",
             "Attendance and visit histories.",
             "Bookings.",
             "Payment information.",

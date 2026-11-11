@@ -618,6 +618,11 @@ export const USER_LINKED_NOT_PURGED_TABLES = [
   // the account was deleted meanwhile, as the gym's record of who paid; a closed one is forgotten a day after it ends, and
   // a record deleted for good lets go of `entry_id`.
   "gym_app_payments",
+  // gym_app_cancels.user_id — the member's account that pressed Cancel in the app (`0231`; 18l), and by_entry_id, their
+  // record on the gym's list, on gym_app_payments' footing: the gym's record of a membership cancelled; `ON DELETE set
+  // null`. It holds the way it was cancelled, its days and a reason from a fixed list, no typed word; a record deleted
+  // for good lets go of `by_entry_id`, and the membership going takes the row with it.
+  "gym_app_cancels",
   // gym_card_charges.started_by — which member of staff pressed Charge card on file (`0158`;
   // 18d-iii-i); null for the app's own charge on a bill's date. On gym_member_payments' footing: the
   // gym's record of money asked for; `ON DELETE set null`. It holds Square's ids, the card's brand

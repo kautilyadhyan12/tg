@@ -16,11 +16,15 @@ import {
   RECEIPT_WORDS,
   agreementSignable,
   membershipTerms,
+  myCancelPaidByLine,
+  myCancelWays,
+  myCancelledLine,
   myMembershipResponseSchema,
   receiptSchema,
   type HeldMembershipItem,
   type MembershipTerm,
   type MyMembership,
+  type MyMembershipCancel,
   type MyMembershipResponse,
   type MyPurchase,
   type Receipt,
@@ -29,6 +33,8 @@ import type { Sql } from "postgres";
 import { dayInTz } from "../../gamification/streak.js";
 import { OrgsError } from "../service.js";
 import { readOwnHeld } from "../memberships/heldService.js";
+import { heldRowsOf } from "../memberships/heldRepo.js";
+import { cancelsOf } from "./cancelRepo.js";
 import { atDeskOf, myMembershipAgreements } from "../agreement/toSign.js";
 import { paidForBy, payerOf } from "../payers/repo.js";
 import { purchasesOf, type SaleRow } from "../register/repo.js";
@@ -89,6 +95,7 @@ function membershipOf(m: HeldMembershipItem): MyMembership {
     // The words its agreement and the Terminal say (16d).
     terms: membershipTerms(m),
     agreement: null,
+    cancel: null,
   };
 }
 
@@ -140,6 +147,20 @@ export async function getMyMembership(deps: MyMembershipDeps, userId: string, gy
       return { name: p.name, memberships: theirs.memberships.map(membershipOf), earlierNotShown: theirs.earlierNotShown };
     }),
   );
+  // Cancel in the app (18l): the button, who can instead, or the line once it was cancelled in the app.
+  const ids = [...held.memberships.map((m) => m.id), ...paysFor.flatMap((p) => p.memberships.map((m) => m.id))];
+  const [rows, cancelled] = await Promise.all([heldRowsOf(deps.sql, gymId, ids), cancelsOf(deps.sql, gymId, ids)]);
+  const cancelOf = (id: string, paidBy: string | null): MyMembershipCancel | null => {
+    const done = cancelled.get(id);
+    if (done !== undefined) return { state: "cancelled", line: myCancelledLine(done.cancelledOn, done.userId === userId, done.byName) };
+    const row = rows.get(id);
+    const ways = row === undefined ? [] : myCancelWays(row.membership, today);
+    const only = ways.length === 1 ? ways[0] : undefined;
+    if (only === undefined && ways.length === 0) return null;
+    if (paidBy !== null) return { state: "elsewhere", line: myCancelPaidByLine(paidBy) };
+    return { state: "can", button: only?.when === "cooling_off" ? "Cancel with full refund" : "Cancel membership" };
+  };
+  for (const p of paysFor) p.memberships = p.memberships.map((m) => ({ ...m, cancel: cancelOf(m.id, null) }));
   const purchases = purchasesFrom(bought?.sales ?? []);
   // Each own membership's agreement (20c): to sign in the app, signed, or at the front desk.
   const atDesk = await atDeskOf(deps.sql, gymId, reader.own, today, payer !== null);
@@ -150,7 +171,7 @@ export async function getMyMembership(deps: MyMembershipDeps, userId: string, gy
     held.memberships.map((m) => ({ id: m.id, signable: agreementSignable(m.view.status) })),
     atDesk,
   );
-  const own = held.memberships.map((m) => ({ ...membershipOf(m), agreement: agreements.get(m.id) ?? null }));
+  const own = held.memberships.map((m) => ({ ...membershipOf(m), agreement: agreements.get(m.id) ?? null, cancel: cancelOf(m.id, payer?.name ?? null) }));
   return myMembershipResponseSchema.parse({
     ...empty,
     record: "own",

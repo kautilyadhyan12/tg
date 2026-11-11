@@ -15,6 +15,7 @@ import {
   giveHeldMembership,
   heldMembershipView,
   isUnder18,
+  paymentOverdue,
   type AppPurchaseBought,
   type AppPurchaseBuyer,
   type AppPurchaseCheck,
@@ -28,7 +29,8 @@ import type { Sql, TransactionSql } from "postgres";
 import { factsKeyOf } from "../agreement/factsKey.js";
 import { gymContact, typeDocumentSql } from "../agreement/repo.js";
 import { lockGym } from "../memberList/repo.js";
-import { billDayOf } from "../memberships/billsSql.js";
+import { billDayOf, billsFor, overdueDaysOf } from "../memberships/billsSql.js";
+import { feesFor } from "../memberships/feesRepo.js";
 import { giveHeldIn, lockedEntry, settle, wouldRefuseGiving } from "../memberships/heldRepo.js";
 import { friendGiftOffer } from "../referrals/friendGift.js";
 import { waitingGiftFor } from "../referrals/memberGiftRepo.js";
@@ -73,7 +75,9 @@ export type PurchasableOutcome =
   /** A page for this record is open: the same press's is answered instead of a second. */
   | { kind: "open"; row: AppPayRow }
   | { kind: "entry_not_found" | "shared" | "paid_by_other" | "changed" | "agreement_changed" | "guardian_needed" | "person_signs" | "too_many" | "currency" | "check" | "too_late" }
-  | { kind: "already_held"; name: string };
+  | { kind: "already_held"; name: string }
+  /** Money of theirs is overdue: paid first (18l). */
+  | { kind: "owed"; amountMinor: number; currency: string };
 
 /** The newest wording of the agreement a line asks for today, or null for none: the main agreement unless the line is
  *  ticked on another, as a membership of it is signed (`agreementForMembership`). */
@@ -131,6 +135,28 @@ async function personOf(tx: SqlOrTx, gymId: string, entryId: string): Promise<{ 
   return row === undefined ? null : { fullName: row.full_name.trim(), dateOfBirth: row.date_of_birth };
 }
 
+/** What a record owes that is overdue by the gym's own days of grace: its memberships' bills and their fees still owed.
+ *  Null for nothing. */
+export async function overdueOwed(tx: SqlOrTx, gymId: string, entryId: string, today: string): Promise<{ amountMinor: number; currency: string } | null> {
+  const ids = (await tx<{ id: string }[]>`SELECT id FROM gym_held_memberships WHERE gym_id = ${gymId} AND entry_id = ${entryId}`).map((r) => r.id);
+  if (ids.length === 0) return null;
+  const [afterDays, bills, fees] = await Promise.all([overdueDaysOf(tx, gymId), billsFor(tx, gymId, ids), feesFor(tx, gymId, ids)]);
+  let amountMinor = 0;
+  let currency: string | null = null;
+  for (const b of bills) {
+    if (b.status !== "open" || !paymentOverdue(b.dueOn, today, afterDays)) continue;
+    amountMinor += Math.max(0, b.amountMinor - b.paidMinor);
+    currency = b.currency;
+  }
+  for (const f of fees.fees) {
+    if (f.status !== "open" || !f.stillOwed || !paymentOverdue(f.dueOn, today, afterDays)) continue;
+    const paid = fees.payments.filter((p) => p.billId === f.id && p.voided === null).reduce((n, p) => n + p.amountMinor, 0);
+    amountMinor += Math.max(0, f.amountMinor - paid);
+    currency = f.currency;
+  }
+  return amountMinor > 0 && currency !== null ? { amountMinor, currency } : null;
+}
+
 /** Whether a purchase can be made now, asked under the gym's lock and the record's: the same rules giving it will meet. */
 async function purchasableIn(tx: TransactionSql, s: Buying): Promise<PurchasableOutcome> {
   // The record the purchase lands on: their own, or, for a member not on the list yet, the one already holding the very
@@ -176,6 +202,10 @@ async function purchasableIn(tx: TransactionSql, s: Buying): Promise<Purchasable
     if (who === undefined || who.holders < holders) return { kind: "entry_not_found" };
     if (who.holders > holders) return s.entryId === null ? { kind: "entry_not_found" } : { kind: "shared" };
     if (who.paid_by_other) return { kind: "paid_by_other" };
+    // Money overdue on their own record is paid before anything new is bought (18l; Kd, 2026-11-12): by the gym's own
+    // days of grace, the rule the bill on their page and the booking stop read (17i).
+    const late = await overdueOwed(tx, s.gymId, landsOn, s.today);
+    if (late !== null) return { kind: "owed", ...late };
     const own = await personOf(tx, s.gymId, landsOn);
     if (own === null) return { kind: "entry_not_found" };
     person = own;
