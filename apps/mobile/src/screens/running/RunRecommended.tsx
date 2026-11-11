@@ -1,13 +1,13 @@
 // Running in Recommended For You (ROADMAP Stage 5 item 37d-iii-a; spec Part 6 §16.6): today's run from
-// the training plan beside the runner, Start run and See plan; on a rest day the next run; with no plan,
-// Create plan; in Safe mode, why there is none. Start run counts down and starts today's run with each
-// step said, as the Running page's own does; what stands in the way is said under the box.
-import { useEffect, useState, useSyncExternalStore } from "react";
+// the training plan beside the runner, Go to Running and See plan; on a rest day the next run; with no
+// plan, Create plan; in Safe mode, why there is none. Go to Running opens the Running page, where today's
+// run is started (Kd, 2026-11-11: never started from the Dashboard at once).
+import { useState } from "react";
 import { Image, StyleSheet, View } from "react-native";
 import { runPlanResponseSchema, type Units } from "@app/shared";
 import { Button } from "../../look/Button";
 import { Card } from "../../look/Card";
-import { colours, sizes } from "../../look/colours";
+import { colours, raisedArtFadeAcross, raisedArtFadeDown } from "../../look/colours";
 import { Icon } from "../../look/Icon";
 import { pictures } from "../../look/pictures";
 import { Txt } from "../../look/Txt";
@@ -16,18 +16,17 @@ import { useKindTabs } from "../dashboard/KindTabs";
 import { useRead } from "../dashboard/useRead";
 import { ART_SIZE, EmptyBox, Eyebrow, FromRow } from "../food/MealCard";
 import { useLookOpen } from "../setupFirst";
-import { autoPauseChoice, readRunChoices, subscribeRun } from "./recorder";
-import { useRunLayer, type StartProblem } from "./RunLayer";
+import { useRunLayer } from "./RunLayer";
 import { useRunOutbox } from "./RunOutbox";
 import { RunPlanAsk } from "./RunPlanAsk";
 import { ClearedSheet, dayName, heldLine, nextRun, RUN_PLAN_PATH, todayGuide, weekLine, type PlanRead } from "./RunPlanBox";
 import { RunPlanPage } from "./RunPlanPage";
 import { sessionDetail, sessionTitle } from "./runPlanWords";
-import { StartProblemBox } from "./StartProblem";
 
 export const SAFE_MODE_WORDS = "No training plan until a professional has cleared you to exercise. You can still record a run.";
 
-export function RunRecommended({ units }: { units: Units }) {
+/** onOpenRunning: the Workout tab on Running, where today's run is started. */
+export function RunRecommended({ units, onOpenRunning }: { units: Units; onOpenRunning: () => void }) {
   const tabs = useKindTabs("running");
   // While the person looks at the app before setup (14d), a run or a plan waits for setup.
   const look = useLookOpen();
@@ -37,26 +36,12 @@ export function RunRecommended({ units }: { units: Units }) {
   // Read again when a run lands: it ticks today's run and moves the box to the next.
   const planRead = useRead(RUN_PLAN_PATH, runPlanResponseSchema, view.sent + changed);
   const read: PlanRead = planRead.read.kind === "ok" ? { kind: "ok", data: planRead.read.data } : planRead.read.kind === "failed" ? { kind: "failed", again: planRead.again } : { kind: "loading" };
-  const autoPause = useSyncExternalStore(subscribeRun, autoPauseChoice);
-  useEffect(() => {
-    void readRunChoices();
-  }, []);
   const [asking, setAsking] = useState(false);
   const [planOpen, setPlanOpen] = useState(false);
   const [clearing, setClearing] = useState(false);
-  const [problem, setProblem] = useState<StartProblem | null>(null);
   const guide = todayGuide(read, units);
   const going = layer.run !== null;
 
-  const start = async () => {
-    if (look !== null) {
-      look();
-      return;
-    }
-    if (guide === null) return;
-    setProblem(null);
-    setProblem(await layer.start(autoPause, guide));
-  };
   const create = () => {
     if (look !== null) look();
     else setAsking(true);
@@ -115,15 +100,10 @@ export function RunRecommended({ units }: { units: Units }) {
           {going ? (
             <Button label="Open run" compact say="Open your run" onPress={layer.open} />
           ) : guide !== null ? (
-            <Button label="Start today’s run" icon="play" compact say="Start today’s run, with each step said" onPress={() => void start()} />
+            <Button label="Go to Running" icon="footprints" compact say="Go to Running to start today’s run" onPress={onOpenRunning} />
           ) : null}
           {seePlan}
         </View>
-        {problem === null || going ? null : (
-          <View testID="problem-under-recommended">
-            <StartProblemBox problem={problem} onAgain={() => void start()} />
-          </View>
-        )}
       </>
     );
   }
@@ -140,8 +120,11 @@ export function RunRecommended({ units }: { units: Units }) {
       {/* The run beside the picture, never under it; the buttons across the box. */}
       <View style={styles.beside}>
         <View style={styles.leftWords}>{body}</View>
-        <View style={styles.art}>
+        {/* The drawing melts into the box on every side, never a box of its own (Kd, 2026-11-11). */}
+        <View style={styles.art} pointerEvents="none">
           <Image source={pictures.runner} resizeMode="cover" style={[styles.artFill, plan?.kind === "none" && plan.why === "safe_mode" ? styles.faint : null]} accessible={false} />
+          <View style={[StyleSheet.absoluteFill, styles.fadeAcross]} />
+          <View style={[StyleSheet.absoluteFill, styles.fadeDown]} />
         </View>
       </View>
       {rest}
@@ -192,8 +175,10 @@ const styles = StyleSheet.create({
   boxTitle: { fontSize: 14, lineHeight: 18, color: colours.textSoft },
   beside: { flexDirection: "row", gap: 8 },
   leftWords: { flex: 1, gap: 10 },
-  art: { width: ART_SIZE, height: ART_SIZE, borderRadius: sizes.boxRadius, overflow: "hidden" },
+  art: { width: ART_SIZE, height: ART_SIZE },
   artFill: { width: "100%", height: "100%" },
+  fadeAcross: { experimental_backgroundImage: raisedArtFadeAcross },
+  fadeDown: { experimental_backgroundImage: raisedArtFadeDown },
   faint: { opacity: 0.45 },
   words: { gap: 3 },
   actions: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 4 },

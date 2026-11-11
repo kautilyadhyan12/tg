@@ -123,6 +123,13 @@ export const topShade =
  *  For You and Recent Activity). */
 export const raisedShade = "linear-gradient(90deg, rgba(26,25,25,1) 0%, rgba(33,32,32,1) 45%, rgba(43,42,42,1) 100%)";
 
+/** Over a drawing on a raised box's right (Recommended For You's runner, 37d-iii-a): each edge melts into
+ *  the box's own grey there, so it never reads as a box of its own (Kd, 2026-11-11). */
+export const raisedArtFadeAcross =
+  "linear-gradient(90deg, rgba(40,39,39,1) 0%, rgba(40,39,39,0) 38%, rgba(40,39,39,0) 72%, rgba(40,39,39,1) 100%)";
+export const raisedArtFadeDown =
+  "linear-gradient(to bottom, rgba(40,39,39,1) 0%, rgba(40,39,39,0) 26%, rgba(40,39,39,0) 68%, rgba(40,39,39,1) 100%)";
+
 /** Over a picture, so the words on it can be read. */
 export const pictureShade =
   "linear-gradient(to top, rgba(10,9,8,0.94) 0%, rgba(10,9,8,0.45) 50%, rgba(10,9,8,0.05) 100%)";

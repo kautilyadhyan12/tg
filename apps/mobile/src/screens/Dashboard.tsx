@@ -59,6 +59,7 @@ import { useMealOutbox } from "./food/MealOutbox";
 import { useRunOutbox } from "./running/RunOutbox";
 import { RunPage } from "./running/RunPage";
 import { RunRecommended } from "./running/RunRecommended";
+import { openRunning } from "./tabs";
 import { KindTabs, KindTabsContext, type RecommendedKind } from "./dashboard/KindTabs";
 import { accountUnits } from "./setup/Setup";
 import { GOALS_READ, GoalsBox, GoalsPage, type GoalsOpen } from "./Goals";
@@ -225,7 +226,13 @@ export function DashboardScreen() {
       </Swipe>
       <KindTabsContext.Provider value={<KindTabs kind={kind} onPick={setKind} />}>
         {kind === "running" ? (
-          <RunRecommended units={units} />
+          <RunRecommended
+            units={units}
+            onOpenRunning={first(() => {
+              go.navigate("Workout");
+              openRunning();
+            })}
+          />
         ) : (
           <Recommended
             onMore={() => {

@@ -15,6 +15,7 @@ const extra = { copyName: "Feature 2", apiUrl: "http://localhost:3000" };
 const voice = jest.requireMock<{ voice: { said: string[]; quieted: number; canSpeak: string; missing: boolean; ahead: { text: string; inMs: number }[]; warmed: number; handed: string[] } }>("../../src/screens/running/runVoiceNative").voice;
 const location = jest.requireMock<{ state: Record<string, unknown> }>("expo-location").state;
 const START_TODAY = "Start today’s run, with each step said";
+const GO_RUNNING = "Go to Running to start today’s run";
 
 /** Three days a week, a rest day between, from today (`from` 0) or from tomorrow (`from` 1). */
 const days = (from: number): number[] => {
@@ -70,18 +71,26 @@ async function openRunningBox(s: ReturnType<typeof planServer>) {
   return screen.getByTestId("recommended-box");
 }
 
+/** Go to Running from the box, then today's run started from the Running page's own plan box. */
+async function startFromRunningPage(box: ReturnType<typeof screen.getByTestId>) {
+  await fireEvent.press(within(box).getByRole("button", { name: GO_RUNNING }));
+  const planBox = await screen.findByTestId("run-plan-box");
+  await fireEvent.press(within(planBox).getByRole("button", { name: START_TODAY }));
+  await fireEvent.press(await screen.findByRole("button", { name: "Start now" }));
+}
+
 describe("the worst thing: a run offered from the Dashboard to somebody in Safe mode", () => {
   it("Safe mode shows no run and no Start, says why, and only a professional's clearance brings today's run", async () => {
     const s = planServer({ answers: BEGINNER(), safe: true });
     const box = await openRunningBox(s);
     expect(within(box).getByText(SAFE_MODE_WORDS)).toBeTruthy();
-    expect(within(box).queryByRole("button", { name: START_TODAY })).toBeNull();
+    expect(within(box).queryByRole("button", { name: GO_RUNNING })).toBeNull();
     expect(within(box).queryByText(/Today’s run|Run 1|Week 1/i)).toBeNull();
     expect(within(box).queryByRole("button", { name: "Create plan" })).toBeNull();
 
     await fireEvent.press(within(box).getByRole("button", { name: "Change your health answer" }));
     await fireEvent.press(await screen.findByText("A professional has cleared me"));
-    expect(await within(screen.getByTestId("recommended-box")).findByRole("button", { name: START_TODAY })).toBeTruthy();
+    expect(await within(screen.getByTestId("recommended-box")).findByRole("button", { name: GO_RUNNING })).toBeTruthy();
     expect(within(screen.getByTestId("recommended-box")).getByText("TODAY’S RUN")).toBeTruthy();
   });
 });
@@ -89,8 +98,7 @@ describe("the worst thing: a run offered from the Dashboard to somebody in Safe 
 describe("the worst thing: a skip that leaves the voice saying run while the screen says walk", () => {
   it("Skip step on the warm-up: the run is said at once, the step card shows it, and every line ahead moves with it", async () => {
     const box = await openRunningBox(planServer({ answers: BEGINNER() }));
-    await fireEvent.press(within(box).getByRole("button", { name: START_TODAY }));
-    await fireEvent.press(await screen.findByRole("button", { name: "Start now" }));
+    await startFromRunningPage(box);
     await waitFor(() => {
       expect(runNow()?.guide?.title).toMatch(/^Run 1 · 28½\smin$/);
     });
@@ -115,8 +123,7 @@ describe("the worst thing: a skip that leaves the voice saying run while the scr
 
   it("Skip step while paused: said at the press, nothing handed ahead until Resume, which says what is left", async () => {
     const box = await openRunningBox(planServer({ answers: BEGINNER() }));
-    await fireEvent.press(within(box).getByRole("button", { name: START_TODAY }));
-    await fireEvent.press(await screen.findByRole("button", { name: "Start now" }));
+    await startFromRunningPage(box);
     await screen.findByTestId("run-guide");
     await fireEvent.press(screen.getByRole("button", { name: "Pause" }));
     await waitFor(() => {
@@ -159,7 +166,7 @@ describe("Running in Recommended For You", () => {
     const tomorrow = ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"][(planWeekdayOf(phoneToday()) % 7)];
     // Tomorrow's run is next unless the week ends today.
     expect(within(box).queryByText(`NEXT RUN · ${tomorrow ?? ""}`) ?? within(box).queryByText("No more runs this week.")).toBeTruthy();
-    expect(within(box).queryByRole("button", { name: START_TODAY })).toBeNull();
+    expect(within(box).queryByRole("button", { name: GO_RUNNING })).toBeNull();
     expect(within(box).getByRole("button", { name: "See your training plan" })).toBeTruthy();
   });
 
@@ -171,19 +178,18 @@ describe("Running in Recommended For You", () => {
     expect(await screen.findByText("New to running")).toBeTruthy();
   });
 
-  it("location off: what stands in the way is said under the box, with its button, and the run starts once it is on", async () => {
-    Object.assign(location, { services: false });
+  it("Go to Running opens the Running page on today's run and starts nothing by itself (Kd, 2026-11-11)", async () => {
     const box = await openRunningBox(planServer({ answers: BEGINNER() }));
-    await fireEvent.press(within(box).getByRole("button", { name: START_TODAY }));
-    const under = await screen.findByTestId("problem-under-recommended");
-    expect(within(under).getByText("Turn on your phone's location to record your run.")).toBeTruthy();
+    const titleWords = String(within(box).getByText(/^Run 1 · /).props.children);
+    await fireEvent.press(within(box).getByRole("button", { name: GO_RUNNING }));
+    const planBox = await screen.findByTestId("run-plan-box");
+    expect(within(planBox).getByText(titleWords)).toBeTruthy();
+    expect(within(planBox).getByRole("button", { name: START_TODAY })).toBeTruthy();
+    // No count, no run, no voice, no location asked for.
+    expect(screen.queryByText("Get ready")).toBeNull();
     expect(runNow()).toBeNull();
-    Object.assign(location, { services: true });
-    await fireEvent.press(within(under).getByRole("button", { name: "Turn on location" }));
-    await fireEvent.press(await screen.findByRole("button", { name: "Start now" }));
-    await waitFor(() => {
-      expect(runNow()?.guide?.title).toMatch(/^Run 1 · 28½\smin$/);
-    });
+    expect(voice.said).toEqual([]);
+    expect(location.asked).toBe(0);
   });
 
   it("Food and Running across the box's top: Food again shows the meal box", async () => {
