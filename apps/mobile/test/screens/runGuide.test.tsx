@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import { AppState } from "react-native";
 import { OPENFREEMAP, c25kParts, planWeekdayOf, runPlanOf, type RunPlanAnswers, type RunPlanResponse } from "@app/shared";
 import { App } from "../../src/App";
-import { loadRun, phoneRunFiles, resetRecorder, runNow, startRun, takeLocations } from "../../src/screens/running/recorder";
+import { chooseVoice, loadRun, movingMsOf, phoneRunFiles, resetRecorder, runNow, startRun, takeLocations } from "../../src/screens/running/recorder";
 import { guideOf } from "../../src/screens/running/runGuide";
 import { phoneToday } from "../../src/screens/running/RunPlanBox";
 import { RAVI, fakeServer, kept, memoryStore, profile, tokens } from "../kit";
@@ -13,7 +13,7 @@ import { RAVI, fakeServer, kept, memoryStore, profile, tokens } from "../kit";
 // takes them back, Resume says what to do now, and the app opened again mid-run says it at once.
 
 const extra = { copyName: "Feature 2", apiUrl: "http://localhost:3000" };
-const voice = jest.requireMock<{ voice: { said: string[]; quieted: number; canSpeak: string; missing: boolean; ahead: { text: string; inMs: number }[]; warmed: number } }>("../../src/screens/running/runVoiceNative").voice;
+const voice = jest.requireMock<{ voice: { said: string[]; quieted: number; canSpeak: string; missing: boolean; ahead: { text: string; inMs: number }[]; warmed: number; handed: string[] } }>("../../src/screens/running/runVoiceNative").voice;
 const location = jest.requireMock<{ state: Record<string, unknown> }>("expo-location").state;
 
 /** Three days a week from today, a rest day between: today is a Couch to 5K day. */
@@ -43,7 +43,7 @@ beforeEach(async () => {
   Object.assign(location, { services: true, granted: true, canAskAgain: true, accuracy: "fine", asked: 0, started: [], running: false, acceptsTurnOn: true });
   for (const name of ["run-now.json", "run-now-0.json", "run-now-1.json", "run-settings.json", "run-map.json"]) phoneRunFiles.remove(name);
   resetRecorder();
-  Object.assign(voice, { said: [], quieted: 0, canSpeak: "ok", missing: false, ahead: [], warmed: 0 });
+  Object.assign(voice, { said: [], quieted: 0, canSpeak: "ok", missing: false, ahead: [], warmed: 0, handed: [] });
   await Promise.resolve();
 });
 
@@ -126,6 +126,64 @@ describe("the worst thing: a beginner told to keep running when the plan says wa
     });
   });
 
+  it("location off: Today's run beside START says so above START, the plan box's button under the box", async () => {
+    Object.assign(location, { services: false });
+    await openRunning(BEGINNER());
+    const side = screen.getAllByRole("button", { name: "Start today’s run, with each step said" }).find(
+      (b) => within(screen.getByTestId("run-plan-box")).queryAllByRole("button").every((inBox) => inBox !== b),
+    );
+    if (side === undefined) throw new Error("no button beside START");
+    await fireEvent.press(side);
+    expect(await screen.findByText("Turn on your phone's location to record your run.")).toBeTruthy();
+    expect(screen.queryByTestId("problem-under-plan")).toBeNull();
+    await fireEvent.press(within(screen.getByTestId("run-plan-box")).getByRole("button", { name: "Start today’s run, with each step said" }));
+    const under = await screen.findByTestId("problem-under-plan");
+    expect(within(under).getByText("Turn on your phone's location to record your run.")).toBeTruthy();
+    expect(screen.getAllByText("Turn on your phone's location to record your run.")).toHaveLength(1);
+  });
+
+  it("Auto-pause at a crossing: nothing is said ahead while stopped, and moving again says what is left", async () => {
+    await startRun(RAVI.id, "4a1d2c3b-4a5e-4f60-8a7b-9c0d1e2f3a4b", true, Date.now(), guideOf({ kind: "walk_run", week: 1, run: 1, parts: c25kParts(0) }, "Run 1 · 28½ min"));
+    await feed(0, 200, 1.6);
+    expect(voice.ahead[0]?.text).toBe("Now run for 1 minute.");
+    await feed(200, 30, 0);
+    expect(runNow()?.phase).toBe("paused");
+    expect(voice.said.at(-1)).toBe("Auto-paused.");
+    expect(voice.ahead).toEqual([]);
+    await feed(230, 10, 1.6);
+    expect(runNow()?.phase).toBe("running");
+    expect(voice.said).toContain("Run resumed.");
+    expect(voice.said.at(-1)).toMatch(/^Now walk\. \d+ seconds left\.$|^Now walk\. 1 minute( \d+ seconds)? left\.$/);
+    expect(voice.ahead[0]?.text).toBe("Now run for 1 minute.");
+  });
+
+  it("stopped just as a run began: the Auto-pause starts before it, so the run begins again after the pause", async () => {
+    await startRun(RAVI.id, "3a1d2c3b-4a5e-4f60-8a7b-9c0d1e2f3a4b", true, Date.now(), guideOf({ kind: "walk_run", week: 1, run: 1, parts: c25kParts(0) }, "Run 1 · 28½ min"));
+    await feed(0, 297, 1.6);
+    // Still from 297 s: the clock begins the first run at 300 s, then the Auto-pause is dated 297 s.
+    await feed(297, 30, 0);
+    expect(runNow()?.phase).toBe("paused");
+    expect(runNow()?.guide?.at.index).toBe(0);
+    // Moving again: the run is handed over to begin at 300 s of the run's own time, not before.
+    let s = 327;
+    while (runNow()?.phase !== "running" && s < 360) {
+      await feed(s, 1, 1.6);
+      s += 1;
+    }
+    const run = runNow();
+    if (run === null) throw new Error("no run going");
+    const first = voice.ahead.find((l) => l.text === "Now run for 1 minute.");
+    if (first === undefined) throw new Error("the run was not handed over");
+    expect(Math.abs(movingMsOf(run, run.startedAt + (s - 1) * 1000) + first.inMs - 300_000)).toBeLessThan(1500);
+  });
+
+  it("the voice switched off mid-run: nothing is left to be said ahead", async () => {
+    await startRun(RAVI.id, "2a1d2c3b-4a5e-4f60-8a7b-9c0d1e2f3a4b", false, Date.now(), guideOf({ kind: "walk_run", week: 1, run: 1, parts: c25kParts(0) }, "Run 1 · 28½ min"));
+    expect(voice.handed.length).toBeGreaterThan(0);
+    await act(() => chooseVoice(false));
+    expect(voice.handed).toEqual([]);
+  });
+
   it("the app opened again mid-run, after a walk began: it says walk now with what is left, and hands over the rest", async () => {
     // Go was 400 s ago; the first run ended at 360 s, and nobody said the walk.
     await startRun(RAVI.id, "6f1d2c3b-4a5e-4f60-8a7b-9c0d1e2f3a4b", true, Date.now() - 400_000, guideOf({ kind: "walk_run", week: 1, run: 1, parts: c25kParts(0) }, "Run 1 · 28½ min"));
@@ -176,7 +234,9 @@ describe("a runner's planned run", () => {
     await feed(0, 200, 3);
     expect(voice.said.filter((l) => l.includes("complete"))).toEqual([]);
     await feed(200, 200, 3);
-    expect(voice.said.filter((l) => l.includes("complete"))).toEqual(["That's 1 kilometre. Today's run is complete. Well done. To save it, pause, then press Finish."]);
+    // The kilometre voice says the kilometre; the guide says it is complete, once, and no distance again.
+    expect(voice.said.filter((l) => l.includes("complete"))).toEqual(["Today's run is complete. Well done. To save it, pause, then press Finish."]);
+    expect(voice.said.filter((l) => /^1 kilometre/.test(l))).toHaveLength(1);
     expect(runNow()?.guide?.at.index).toBe(1);
   });
 

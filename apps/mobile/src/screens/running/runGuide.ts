@@ -54,8 +54,14 @@ function stepEnd(step: GuideStep, at: GuidePlace): { ms: number } | { m: number 
 
 /** The steps begun since the last look, oldest first, each with whether the clock began it (its line
  *  was handed to the phone's voice ahead) or the distance did (its line is said now). `metres` is
- *  worked out only when a step by distance needs it. */
-export function guideAdvance(guide: KeptRunGuide, movingMs: number, metres: () => number): { guide: KeptRunGuide; begun: { index: number; byClock: boolean }[] } {
+ *  worked out only when a step by distance needs it; `reachedAt(m)`, the moving ms when the run first
+ *  had `m` metres, so a step after it is timed from there and not from a late batch of points. */
+export function guideAdvance(
+  guide: KeptRunGuide,
+  movingMs: number,
+  metres: () => number,
+  reachedAt: (m: number) => number = () => movingMs,
+): { guide: KeptRunGuide; begun: { index: number; byClock: boolean }[] } {
   let { index, fromMs, fromM } = guide.at;
   let known: number | null = null;
   const run = (): number => (known ??= metres());
@@ -75,7 +81,7 @@ export function guideAdvance(guide: KeptRunGuide, movingMs: number, metres: () =
     } else {
       if (run() < end.m) break;
       fromM = end.m;
-      fromMs = Math.max(fromMs, movingMs);
+      fromMs = Math.max(fromMs, Math.min(movingMs, reachedAt(end.m)));
       index += 1;
       begun.push({ index, byClock: false });
     }
@@ -155,6 +161,12 @@ export function spokenDistance(metres: number, units: Units): string {
 const isLastRun = (guide: KeptRunGuide, index: number): boolean =>
   guide.steps[index]?.kind === "run" && guide.steps.slice(index + 1).every((s) => s.kind !== "run") && guide.steps.filter((s) => s.kind === "run").length > 1;
 
+/** A distance the kilometre (mile) voice says as it is reached. */
+const wholeUnit = (m: number, units: Units): boolean => {
+  const n = units === "imperial" ? m / METRES_PER_MILE : m / 1000;
+  return Math.abs(n - Math.round(n)) < 0.01;
+};
+
 export const DONE_LINE = "Today's run is complete. Well done. To save it, pause, then press Finish.";
 
 /** The line said as step `index` begins; past the last step, the run is complete. */
@@ -162,7 +174,8 @@ export function beginLine(guide: KeptRunGuide, index: number, units: Units): str
   const step = guide.steps[index];
   if (step === undefined) {
     const only = guide.steps.length === 1 ? guide.steps[0]?.until : undefined;
-    return only !== undefined && "m" in only ? `That's ${spokenDistance(only.m, units)}. ${DONE_LINE}` : DONE_LINE;
+    // A whole kilometre (mile) was just said by the kilometre voice: not said twice.
+    return only !== undefined && "m" in only && !wholeUnit(only.m, units) ? `That's ${spokenDistance(only.m, units)}. ${DONE_LINE}` : DONE_LINE;
   }
   const u = step.until;
   const length = "s" in u ? spokenLength(u.s) : "m" in u ? spokenDistance(u.m, units) : "";
@@ -250,6 +263,8 @@ function shortLength(step: GuideStep, units: Units): string {
   if ("s" in u) {
     const whole = Math.floor(u.s / 60);
     if (u.s < 60) return `${String(u.s)} s`;
+    // A jog of 3:20 is shown as it is said, not as 3 min.
+    if (u.s % 30 !== 0) return clock(u.s);
     return `${whole === 0 ? "" : String(whole)}${u.s % 60 >= 30 ? "½" : ""} min`;
   }
   if ("m" in u) return u.m < 1000 ? `${String(u.m)} m` : units === "imperial" && u.m === 1600 ? "1 mi" : shortDistance(u.m, units);

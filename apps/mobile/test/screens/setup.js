@@ -333,7 +333,8 @@ jest.mock("expo-location", () => {
 jest.mock("../../src/screens/running/runVoiceNative", () => {
   const actual = jest.requireActual("../../src/screens/running/runVoiceNative");
   // `ahead`: the lines last handed over to be said later (37d-ii), each with its ms from then.
-  const voice = { said: [], quieted: 0, canSpeak: "ok", missing: false, ahead: [], warmed: 0 };
+  // `handed`: the lines of the last sayAt itself, which quiet does not clear.
+  const voice = { said: [], quieted: 0, canSpeak: "ok", missing: false, ahead: [], warmed: 0, handed: [] };
   const native = {
     say: (text) => {
       voice.said.push(text);
@@ -346,6 +347,7 @@ jest.mock("../../src/screens/running/runVoiceNative", () => {
     },
     sayAt: (texts, inMs) => {
       voice.ahead = texts.map((text, i) => ({ text, inMs: inMs[i] }));
+      voice.handed = texts;
       return Promise.resolve();
     },
     warm: () => {

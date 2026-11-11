@@ -164,7 +164,8 @@ export async function chooseVoice(on: boolean): Promise<void> {
   if (!on) quietVoice();
   await keepChoices({ voice: on });
   primeVoice(current);
-  if (on) scheduleGuide(current, Date.now());
+  // On, the lines ahead handed over again; off, none.
+  scheduleGuide(current, Date.now());
 }
 
 /** The map's colours (37b-i): by the sun, or always light, or always dark. */
@@ -240,6 +241,33 @@ export function movingMsOf(run: LiveRun, now: number): number {
  *  only when a step by distance could have ended. */
 let guideLookAt = 0;
 
+/** Moving ms at `at` ms from Go: pauses after it are not taken off. */
+const movingAt = (run: LiveRun, at: number): number =>
+  at - run.pauses.reduce((t, [from, to]) => t + Math.max(0, Math.min(to ?? at, at) - from), 0);
+
+/** The moving ms when the run first had `m` metres, found among the points kept by halving: a step
+ *  after a distance is timed from there, not from a late batch of points. */
+function reachedAt(run: LiveRun, m: number, nowMs: number): number {
+  const points = run.points;
+  const metresTo = (k: number): number => {
+    const at = points[k - 1]?.[0] ?? 0;
+    return runSums(points.slice(0, k), closedPauses(run, at), at, 0).distanceM;
+  };
+  if (points.length === 0 || metresTo(points.length) < m) return nowMs;
+  let low = 1;
+  let high = points.length;
+  while (low < high) {
+    const mid = Math.floor((low + high) / 2);
+    if (metresTo(mid) >= m) high = mid;
+    else low = mid + 1;
+  }
+  return Math.min(nowMs, movingAt(run, points[low - 1]?.[0] ?? 0));
+}
+
+/** The guide's place before its last step began: an Auto-pause dated back to the first still point
+ *  can take that step's start back. */
+let guideBack: KeptRunGuide | null = null;
+
 const runMetres = (run: LiveRun): number => {
   const at = run.points[run.points.length - 1]?.[0] ?? 0;
   return runSums(run.points, closedPauses(run, at), at, 0).distanceM;
@@ -264,7 +292,8 @@ function guideNow(run: LiveRun, now: number, force: boolean): { lines: string[];
   if (!force && ms < guideLookAt) return { lines: [], moved: false };
   let metres: number | null = null;
   const dist = () => (metres ??= runMetres(run));
-  const { guide: next, begun } = guideAdvance(guide, ms, dist);
+  const { guide: next, begun } = guideAdvance(guide, ms, dist, (m) => reachedAt(run, m, ms));
+  if (begun.length > 0) guideBack = guide;
   run.guide = next;
   guideLookAt = guideNextLook(next, ms, dist);
   const last = begun[begun.length - 1];
@@ -292,6 +321,7 @@ export function resetRecorder(withFiles: RunFiles = phoneRunFiles): void {
   choicesRead = null;
   voice = VOICE_START;
   guideLookAt = 0;
+  guideBack = null;
   warmedAt = 0;
   files = withFiles;
   current = null;
@@ -468,6 +498,14 @@ export async function takeLocations(data: unknown, now: number = Date.now()): Pr
     if (step.moved) writtenAt = 0;
     say([...markNow(current, false), ...step.lines]);
   } else if (was === "running") {
+    // Stopped at a crossing as a step began: the pause starts at the first still point, before it,
+    // so the step begins again after the pause (Resume says what is left of the one before).
+    if (current.guide !== null && guideBack !== null && current.guide.at.fromMs > movingMsOf(current, now)) {
+      current.guide = guideBack;
+      guideBack = null;
+      guideLookAt = 0;
+      writtenAt = 0;
+    }
     say([...markNow(current, true), PAUSE_WORDS.auto]);
     scheduleGuide(current, now);
   }
@@ -536,6 +574,7 @@ export async function startRun(userId: string, runId: string, autoPause: boolean
   unwritten = 0;
   writtenAt = now;
   guideLookAt = 0;
+  guideBack = null;
   await writeState(run);
   tell();
   warmedAt = 0;

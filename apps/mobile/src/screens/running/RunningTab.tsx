@@ -2,7 +2,7 @@
 // run, and See all), Start, Auto-pause, the voice (37a-ii) and the units. The run itself opens over the
 // app (RunLayer).
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
-import { AppState, Linking, Pressable, ScrollView, StyleSheet, Switch, View } from "react-native";
+import { AppState, Linking, Pressable, ScrollView, StyleSheet, Switch, View, useWindowDimensions } from "react-native";
 import * as Location from "expo-location";
 import { useIsFocused } from "@react-navigation/native";
 import { runPageSchema, runPlanResponseSchema, runRecordsSchema, type KeptRunGuide, type MapColours, type Units } from "@app/shared";
@@ -105,9 +105,14 @@ export function RunningTab({ units, parts }: { units: Units; parts: ReactNode })
   // No voice code of this app's on this phone (an iPhone, until Stage 5 item 21): the row stays.
   const noVoiceYet = runVoiceNative === null;
   const [problem, setProblem] = useState<StartProblem | null>(null);
-  // Start, or Start today's run from the plan (37d-ii): what stood in the way is said under the
-  // button that was pressed.
+  // Start, or Start today's run (37d-ii): what stood in the way is said under the button that was
+  // pressed. The plan box's is said under the box, and the page is moved to show it; START's, and
+  // Today's run beside it, at the page's end above them.
   const [from, setFrom] = useState<KeptRunGuide | null>(null);
+  const [pressedBox, setPressedBox] = useState(false);
+  const scrolled = useRef(0);
+  const underBox = useRef<View>(null);
+  const { height } = useWindowDimensions();
   const [settings, setSettings] = useState(false);
   const [runsOpen, setRunsOpen] = useState(false);
   const [openRun, setOpenRun] = useState<string | null>(null);
@@ -137,18 +142,27 @@ export function RunningTab({ units, parts }: { units: Units; parts: ReactNode })
   useEffect(() => {
     if (layer.done !== null) setDeleted(null);
   }, [layer.done]);
-  const saidUnderStart = (problem !== null && from === null) || layer.done !== null || view.refused.length > 0;
+  const saidUnderStart = (problem !== null && !pressedBox) || layer.done !== null || view.refused.length > 0;
   useEffect(() => {
     if (saidUnderStart) showEnd();
   }, [saidUnderStart, problem, layer.done, showEnd]);
 
-  const start = async (guide: KeptRunGuide | null = null) => {
+  // The page moved up by what of it lies below six tenths of the screen, under START.
+  const showUnderBox = useCallback(() => {
+    underBox.current?.measureInWindow((_x, y, _w, h) => {
+      const hidden = y + h - height * 0.6;
+      if (hidden > 0) scroller.current?.scrollTo({ y: scrolled.current + hidden, animated: true });
+    });
+  }, [height]);
+
+  const start = async (guide: KeptRunGuide | null = null, inBox = false) => {
     if (look !== null) {
       look();
       return;
     }
     setProblem(null);
     setFrom(guide);
+    setPressedBox(inBox);
     const said = await layer.start(autoPause, guide);
     setProblem(said);
     setAsked((n) => n + 1);
@@ -161,15 +175,15 @@ export function RunningTab({ units, parts }: { units: Units; parts: ReactNode })
         </Txt>
         {problem === "approximate" ? (
           <View style={styles.choices}>
-            <Button kind="link" label="Allow precise location" onPress={() => void start(from)} />
+            <Button kind="link" label="Allow precise location" onPress={() => void start(from, pressedBox)} />
             <Button kind="quiet" label="Open settings" onPress={openAppSettings} />
           </View>
         ) : problem === "settings" ? (
           <Button kind="link" label="Open settings" onPress={openAppSettings} />
         ) : problem === "denied" ? (
-          <Button kind="link" label="Allow location" onPress={() => void start(from)} />
+          <Button kind="link" label="Allow location" onPress={() => void start(from, pressedBox)} />
         ) : problem === "off" ? (
-          <Button kind="link" label="Turn on location" onPress={() => void turnOnLocation().then((on) => (on ? start(from) : undefined))} />
+          <Button kind="link" label="Turn on location" onPress={() => void turnOnLocation().then((on) => (on ? start(from, pressedBox) : undefined))} />
         ) : null}
       </View>
     );
@@ -178,6 +192,9 @@ export function RunningTab({ units, parts }: { units: Units; parts: ReactNode })
     <View style={styles.grow}>
       <Page
         scroller={scroller}
+        onScrolled={(y) => {
+          scrolled.current = y;
+        }}
         room={going ? RUN_BAR_ROOM : DOCK_ROOM}
         top={
           <PictureTop
@@ -218,9 +235,13 @@ export function RunningTab({ units, parts }: { units: Units; parts: ReactNode })
             onCleared={() => {
               setPlanChanged((n) => n + 1);
             }}
-            onStartToday={going ? null : (guide) => void start(guide)}
+            onStartToday={going ? null : (guide) => void start(guide, true)}
           />
-          {problem !== null && from !== null ? problemBox : null}
+          {problem !== null && pressedBox ? (
+            <View ref={underBox} testID="problem-under-plan" onLayout={showUnderBox}>
+              {problemBox}
+            </View>
+          ) : null}
           {lastRun === null ? null : (
             <View style={styles.yours} testID="your-runs">
               <View style={styles.yoursHead}>
@@ -338,7 +359,7 @@ export function RunningTab({ units, parts }: { units: Units; parts: ReactNode })
               />
             </View>
           </View>
-          {problem !== null && from === null ? problemBox : null}
+          {problem !== null && !pressedBox ? problemBox : null}
           {layer.done === null ? null : (
             <Txt kind="small" colour={layer.done.waiting ? "textSoft" : "goodText"} style={styles.said}>
               {layer.done.waiting ? `${layer.done.name} is saved on this phone. It will be sent when you're online.` : `${layer.done.name} is saved.`}

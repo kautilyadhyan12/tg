@@ -298,11 +298,12 @@ describe("a runner's planned run", () => {
   });
 
   const byDistance: [PlanSession, string, string][] = [
-    [{ kind: "easy", m: 6000, reps: null }, "Today's run: 6 kilometres at an easy pace.", "That's 6 kilometres. "],
+    // A whole kilometre is said by the kilometre voice as it is reached: the guide does not say it again.
+    [{ kind: "easy", m: 6000, reps: null }, "Today's run: 6 kilometres at an easy pace.", ""],
     [{ kind: "long", m: 12500, reps: null }, "Today's long run: 12.5 kilometres at an easy pace.", "That's 12.5 kilometres. "],
-    [{ kind: "steady", m: 5000, reps: null }, "Today's run: 5 kilometres at an easy pace.", "That's 5 kilometres. "],
+    [{ kind: "steady", m: 5000, reps: null }, "Today's run: 5 kilometres at an easy pace.", ""],
   ];
-  it.each(byDistance)("an easy or long run says its distance at the start and when it is reached", (session, first, last) => {
+  it.each(byDistance)("an easy or long run says its distance at the start and, unless the kilometre voice just said it, when it is reached", (session, first, last) => {
     const { heard } = playRunner(session);
     expect(heard[0]?.[2]).toBe(first);
     expect(heard.at(-1)?.[2]).toBe(`${last}${DONE_LINE}`);
@@ -316,6 +317,20 @@ describe("a runner's planned run", () => {
     expect(spokenDistance(6000, "imperial")).toBe("3.7 miles");
     expect(spokenDistance(1000, "metric")).toBe("1 kilometre");
     expect(beginLine(guideOf({ kind: "steady", m: 12000, reps: { count: 2, m: 1600, restS: 60 } }, "t"), 1, "imperial")).toBe("Repeat 1 of 2. Run 1 mile at tempo pace.");
+  });
+
+  it("in miles a whole mile is said by the mile voice, and 6 km is not a whole mile", () => {
+    expect(beginLine(guideOf({ kind: "easy", m: 8047, reps: null }, "t"), 1, "imperial")).toBe(DONE_LINE);
+    expect(beginLine(guideOf({ kind: "easy", m: 6000, reps: null }, "t"), 1, "imperial")).toBe(`That's 3.7 miles. ${DONE_LINE}`);
+  });
+
+  it("the jog after a repeat is timed from where the distance was reached, not from a late batch of points", () => {
+    const g = guideOf(tempo, "t");
+    // The warm-up's 1.5 km were reached at 500 s; the points showing it came at 530 s.
+    const moved = guideAdvance(g, 530_000, () => 1600, (m) => (m === RUN_WARM_M ? 500_000 : 530_000));
+    expect(moved.guide.at).toEqual({ index: 1, fromMs: 500_000, fromM: RUN_WARM_M });
+    // Never later than now, never earlier than the step before began.
+    expect(guideAdvance(g, 530_000, () => 1600, () => 900_000).guide.at.fromMs).toBe(530_000);
   });
 
   it("a step by distance is looked at no sooner than the fastest runner alive could end it, and never less than a second apart", () => {
@@ -342,6 +357,9 @@ describe("the screen's words", () => {
     expect(t.steps.map(stepName)).toEqual(["Warm-up", "Tempo 1 of 3", "Recovery jog", "Tempo 2 of 3", "Recovery jog", "Tempo 3 of 3", "Cool-down"]);
     expect(plain(leftWords(t, 0, 940, "metric"))).toBe("0.6 km left");
     expect(plain(nextWords(t, "metric"))).toBe("Next: Tempo 1 of 3 1.0 km");
+    // A jog of 3:20, as the voice says it, not rounded down to 3 min.
+    const jog = guideOf({ kind: "fast", m: 9000, reps: { count: 3, m: 800, restS: 200 } }, "t");
+    expect(plain(nextWords(guideAdvance(jog, 1, () => RUN_WARM_M).guide, "metric"))).toBe("Next: Recovery jog 3:20");
   });
 
   it("the bar gives each step its share of the time, runs apart from walks", () => {
