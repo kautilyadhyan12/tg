@@ -48,6 +48,8 @@ export const DIRECT_DELETE_TABLES = [
   "run_removed_ids",
   // The running questions' answers (migration 0230, ROADMAP Stage 5 37d-i): their own, deleted and exported.
   "run_plans",
+  // Suggested or My plan, and the person's own week of runs (migration 0232, 37d-iii-b): their own, deleted and exported.
+  "own_run_plans",
   // Kd's own number of meal scans or route plans a day for the person (migration 0226, ROADMAP
   // Stage 2 item 14a-i): about them, so deleted and exported with their own records.
   "usage_limits",

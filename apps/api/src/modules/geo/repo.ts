@@ -6,7 +6,7 @@
 // module; written here like the nutrition/coach tasks' disclosed crossings
 // (getLiveGymId duplicated from nutrition/repo.ts — a cross-module repo import
 // would violate R7.1).
-import type { RunBests, RunClimb, RunPlanAnswers, RunRecordKind } from "@app/shared";
+import type { OwnWeek, RunBests, RunChoice, RunClimb, RunPlanAnswers, RunRecordKind } from "@app/shared";
 import type { Sql, TransactionSql } from "postgres";
 import { ORS_ROUTE_COST_MICRO } from "./cost.js";
 
@@ -628,13 +628,55 @@ export async function putRunPlan(sql: Sql, userId: string, answers: RunPlanAnswe
 /** One row a day of the person's runs that this app recorded (as XP and the records count them), in
  *  their own time zone, from `fromDay`: the day's distance, its longest run, its longest moving time and
  *  how its longest run felt (a short extra jog rated hard says nothing of the planned run). */
-export async function getRunPlanDays(sql: Sql, userId: string, timeZone: string, fromDay: string): Promise<{ day: string; distanceM: number; longestM: number; movingS: number; effort: number | null }[]> {
-  const rows = await sql<{ day: string; m: string; longest: number; moving: number; effort: number | null }[]>`
+export async function getRunPlanDays(
+  sql: Sql,
+  userId: string,
+  timeZone: string,
+  fromDay: string,
+  after: Date | null = null,
+): Promise<{ day: string; distanceM: number; longestM: number; movingS: number; effort: number | null; longestAfterM: number }[]> {
+  // longest_after: the day's longest run started at or after `after` (one's own week saved, 37d-iii-b).
+  const rows = await sql<{ day: string; m: string; longest: number; moving: number; effort: number | null; longest_after: number | null }[]>`
     SELECT to_char(started_at AT TIME ZONE ${timeZone}, 'YYYY-MM-DD') AS day,
-           sum(distance_m) AS m, max(distance_m) AS longest, max(duration_s) AS moving, (array_agg(effort ORDER BY distance_m DESC, started_at))[1] AS effort
+           sum(distance_m) AS m, max(distance_m) AS longest, max(duration_s) AS moving, (array_agg(effort ORDER BY distance_m DESC, started_at))[1] AS effort,
+           max(distance_m) FILTER (WHERE ${after}::timestamptz IS NULL OR started_at >= ${after}::timestamptz) AS longest_after
     FROM runs
     WHERE user_id = ${userId} AND run_calc_version IS NOT NULL
       AND started_at >= (${fromDay}::date::timestamp AT TIME ZONE ${timeZone})
     GROUP BY 1 ORDER BY 1`;
-  return rows.map((r) => ({ day: r.day, distanceM: Number(r.m), longestM: r.longest, movingS: r.moving, effort: r.effort }));
+  return rows.map((r) => ({ day: r.day, distanceM: Number(r.m), longestM: r.longest, movingS: r.moving, effort: r.effort, longestAfterM: r.longest_after ?? 0 }));
+}
+
+// ── Your own run plan (ROADMAP 37d-iii-b) ─────────────────────────────────────────────────────
+
+export interface OwnRunPlanRow {
+  choice: string | null;
+  days: unknown;
+  /** When the week last changed; null before any. */
+  daysSavedAt: Date | null;
+}
+
+/** The person's pick and own week, by their own id only. */
+export async function getOwnRunPlan(sql: Sql, userId: string): Promise<OwnRunPlanRow | null> {
+  const rows = await sql<{ choice: string | null; days: unknown; days_saved_at: Date | null }[]>`
+    SELECT choice, days, days_saved_at FROM own_run_plans WHERE user_id = ${userId}`;
+  const row = rows[0];
+  return row === undefined ? null : { choice: row.choice, days: row.days, daysSavedAt: row.days_saved_at };
+}
+
+/** The pick alone: one statement, the week left as it is. */
+export async function putRunChoice(sql: Sql, userId: string, choice: RunChoice, at: Date): Promise<void> {
+  await sql`
+    INSERT INTO own_run_plans (user_id, choice, updated_at) VALUES (${userId}, ${choice}, ${at})
+    ON CONFLICT (user_id) DO UPDATE SET choice = EXCLUDED.choice, updated_at = EXCLUDED.updated_at`;
+}
+
+/** The whole week, and My plan picked with it: one statement, so two at once leave the newer. When it was
+ *  saved moves only when the week changed, so the same week sent twice leaves the same row. */
+export async function putOwnWeek(sql: Sql, userId: string, days: OwnWeek, at: Date): Promise<void> {
+  await sql`
+    INSERT INTO own_run_plans (user_id, choice, days, days_saved_at, updated_at) VALUES (${userId}, 'mine', ${sql.json(days)}, ${at}, ${at})
+    ON CONFLICT (user_id) DO UPDATE SET choice = 'mine', days = EXCLUDED.days,
+      days_saved_at = CASE WHEN own_run_plans.days IS NOT DISTINCT FROM EXCLUDED.days THEN own_run_plans.days_saved_at ELSE EXCLUDED.days_saved_at END,
+      updated_at = EXCLUDED.updated_at`;
 }

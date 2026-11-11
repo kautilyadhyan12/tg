@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type Re
 import { AppState, Linking, Pressable, ScrollView, StyleSheet, Switch, View, useWindowDimensions } from "react-native";
 import * as Location from "expo-location";
 import { useIsFocused } from "@react-navigation/native";
-import { runPageSchema, runPlanResponseSchema, runRecordsSchema, type KeptRunGuide, type MapColours, type Units } from "@app/shared";
+import { runPageSchema, runRecordsSchema, type KeptRunGuide, type MapColours, type Units } from "@app/shared";
 import { Button } from "../../look/Button";
 import { Options } from "../../look/Choice";
 import { Sheet } from "../../look/Sheet";
@@ -24,7 +24,8 @@ import { useRunOutbox } from "./RunOutbox";
 import { useLookOpen } from "../setupFirst";
 import { RunPage } from "./RunPage";
 import { RunPlanAsk } from "./RunPlanAsk";
-import { RUN_PLAN_PATH, RunPlanBox, type PlanRead } from "./RunPlanBox";
+import { useRunPlan } from "./RunChoice";
+import { RunPlanBox } from "./RunPlanBox";
 import { RunPlanPage } from "./RunPlanPage";
 import { RecordsCard } from "./RecordParts";
 import { RECORDS_PATH } from "./runRecords";
@@ -134,8 +135,7 @@ export function RunningTab({ units, parts }: { units: Units; parts: ReactNode })
   const [planChanged, setPlanChanged] = useState(0);
   const [asking, setAsking] = useState(false);
   const [planOpen, setPlanOpen] = useState(false);
-  const planRead = useRead(RUN_PLAN_PATH, runPlanResponseSchema, view.sent + changed + planChanged);
-  const plan: PlanRead = planRead.read.kind === "ok" ? { kind: "ok", data: planRead.read.data } : planRead.read.kind === "failed" ? { kind: "failed", again: planRead.again } : { kind: "loading" };
+  const { read: plan, took } = useRunPlan(view.sent + changed + planChanged);
   const shownPlan = plan.kind === "ok" && plan.data.plan !== null && plan.data.plan.kind !== "none" ? plan.data.plan : null;
 
   // A run just finished takes the place of what was said of the one deleted before it.
@@ -207,6 +207,7 @@ export function RunningTab({ units, parts }: { units: Units; parts: ReactNode })
           )}
           <RunPlanBox
             read={plan}
+            took={took}
             units={units}
             onMake={() => {
               if (look !== null) look();
