@@ -33,6 +33,14 @@ export function heldLine(plan: Exclude<RunPlan, { kind: "none" }>): string | nul
   return plan.hard ? "Your runs last week felt very hard, so this week stays the same." : null;
 }
 
+/** Today's planned run, step by step (37d-ii); null on a rest day or with no plan. */
+export function todayGuide(read: PlanRead, units: Units): KeptRunGuide | null {
+  if (read.kind !== "ok" || read.data.plan === null || read.data.plan.kind === "none") return null;
+  const next = nextRun(read.data.plan.days, read.data.today);
+  if (next === null || !next.today || next.day.session === null) return null;
+  return guideOf(next.day.session, sessionTitle(next.day.session, units));
+}
+
 /** Today's run, or the next one this week, or null. */
 export function nextRun(days: readonly PlanDay[], today: string): { day: PlanDay; today: boolean } | null {
   const todays = days.find((d) => d.day === today && d.session !== null && !d.done);
@@ -127,6 +135,7 @@ export function RunPlanBox({
   // The server's today, in the person's own time zone: the day the plan was worked out for.
   const today = read.data.today;
   const next = nextRun(plan.days, today);
+  const guide = todayGuide(read, units);
   const paces = plan.kind === "runner" ? plan.paces : null;
   return (
     <View style={styles.box} testID="run-plan-box">
@@ -151,14 +160,14 @@ export function RunPlanBox({
             <Txt kind="eyebrow">{next.today ? "Today’s run" : `Next run · ${dayName(next.day.weekday)}`}</Txt>
             <Txt kind="strong">{sessionTitle(next.day.session, units)}</Txt>
             <Txt kind="small">{sessionDetail(next.day.session, paces, units)}</Txt>
-            {next.today && onStartToday !== null ? (
+            {guide !== null && onStartToday !== null ? (
               <Button
                 label="Start today’s run"
                 say="Start today’s run, with each step said"
                 compact
                 style={styles.make}
                 onPress={() => {
-                  if (next.day.session !== null) onStartToday(guideOf(next.day.session, sessionTitle(next.day.session, units)));
+                  onStartToday(guide);
                 }}
               />
             ) : null}

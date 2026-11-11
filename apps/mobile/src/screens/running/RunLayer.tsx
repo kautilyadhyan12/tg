@@ -21,7 +21,7 @@ import {
 import { BottomRoom } from "../../look/BottomRoom";
 import { Button } from "../../look/Button";
 import { colours, orangeGradient, shadows, sizes } from "../../look/colours";
-import { Icon } from "../../look/Icon";
+import { Icon, type IconName } from "../../look/Icon";
 import { Modal } from "../../look/Modal";
 import { PictureTop } from "../../look/PictureTop";
 import { Sheet } from "../../look/Sheet";
@@ -523,10 +523,11 @@ function Live({ run, units, kg, onHide }: { run: LiveRun; units: Units; kg: numb
 }
 
 /** The run's second thing to do, beside its main button: the map or the big numbers. */
-function SideButton({ icon, label, onPress }: { icon: "map" | "timer"; label: string; onPress: () => void }) {
+/** A round button beside the main one, its word under it: Numbers beside Pause, Today's run beside START. */
+export function SideButton({ icon, label, say, onPress }: { icon: IconName; label: string; say?: string; onPress: () => void }) {
   return (
     <View style={styles.sideWrap}>
-      <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} style={({ pressed }) => [styles.side, pressed ? styles.pressed : null]}>
+      <Pressable accessibilityRole="button" accessibilityLabel={say ?? label} onPress={onPress} style={({ pressed }) => [styles.side, pressed ? styles.pressed : null]}>
         <Icon name={icon} size={22} />
       </Pressable>
       <Txt kind="small" colour="textSoft" numberOfLines={1} fit style={styles.roundLabel}>

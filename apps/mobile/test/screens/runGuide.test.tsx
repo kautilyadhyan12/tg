@@ -111,6 +111,21 @@ describe("the worst thing: a beginner told to keep running when the plan says wa
     expect(voice.ahead[0]?.text).toBe("Now walk for 1 and a half minutes.");
   });
 
+  it("Today's run beside START starts the plan's run too, and START itself a run of one's own", async () => {
+    await openRunning(BEGINNER());
+    const buttons = screen.getAllByRole("button", { name: "Start today’s run, with each step said" });
+    // One in the plan box, one beside START, where the page's foot is hidden under START.
+    expect(buttons).toHaveLength(2);
+    expect(within(screen.getByTestId("run-plan-box")).getAllByRole("button", { name: "Start today’s run, with each step said" })).toHaveLength(1);
+    const side = buttons.find((b) => within(screen.getByTestId("run-plan-box")).queryAllByRole("button").every((inBox) => inBox !== b));
+    if (side === undefined) throw new Error("no button beside START");
+    await fireEvent.press(side);
+    await fireEvent.press(await screen.findByRole("button", { name: "Start now" }));
+    await waitFor(() => {
+      expect(runNow()?.guide?.title).toBe("Run 1 · 28½ min");
+    });
+  });
+
   it("the app opened again mid-run, after a walk began: it says walk now with what is left, and hands over the rest", async () => {
     // Go was 400 s ago; the first run ended at 360 s, and nobody said the walk.
     await startRun(RAVI.id, "6f1d2c3b-4a5e-4f60-8a7b-9c0d1e2f3a4b", true, Date.now() - 400_000, guideOf({ kind: "walk_run", week: 1, run: 1, parts: c25kParts(0) }, "Run 1 · 28½ min"));
