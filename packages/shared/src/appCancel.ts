@@ -21,7 +21,7 @@ export const MY_CANCEL_REASON_WORDS: Readonly<Record<MyCancelReason, string>> = 
   moving: "Moving away",
   cost: "Cost",
   not_using: "Not using it enough",
-  other_gym: "Joining another gym",
+  other_gym: "Joining another place",
   service: "Not happy with the service",
   other: "Other reason",
 };
