@@ -493,7 +493,8 @@ export async function runPlan(deps: ReadDeps & { now: () => Date }, userId: stri
   // The last 30 days, for the 10 % line beside a run of one's own, written or being written.
   const ownFrom = planDayPlus(today, -30);
   const runs = await repo.getRunPlanDays(deps.sql, userId, timeZone, planFrom !== null && planFrom < ownFrom ? planFrom : ownFrom);
-  const own = hasOwnRun(week) ? { week, days: ownPlanOf({ week, today, runs }) } : null;
+  const savedDay = ownRow?.daysSavedAt == null ? null : dayInTz(ownRow.daysSavedAt, timeZone);
+  const own = hasOwnRun(week) ? { week, days: ownPlanOf({ week, today, runs, savedDay }) } : null;
   const capM = ownCapOf({ today, runs, answeredLongest: startDay !== null && answers?.longestM != null ? { day: startDay, m: answers.longestM } : null });
   if (row === null || answers === null || startDay === null) return { answers: null, plan: null, today, choice, own, capM };
   const raceDay = row.raceAt === null ? null : dayInTz(row.raceAt, timeZone);

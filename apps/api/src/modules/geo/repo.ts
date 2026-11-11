@@ -644,12 +644,16 @@ export async function getRunPlanDays(sql: Sql, userId: string, timeZone: string,
 export interface OwnRunPlanRow {
   choice: string | null;
   days: unknown;
+  /** When the week last changed; null before any. */
+  daysSavedAt: Date | null;
 }
 
 /** The person's pick and own week, by their own id only. */
 export async function getOwnRunPlan(sql: Sql, userId: string): Promise<OwnRunPlanRow | null> {
-  const rows = await sql<{ choice: string | null; days: unknown }[]>`SELECT choice, days FROM own_run_plans WHERE user_id = ${userId}`;
-  return rows[0] ?? null;
+  const rows = await sql<{ choice: string | null; days: unknown; days_saved_at: Date | null }[]>`
+    SELECT choice, days, days_saved_at FROM own_run_plans WHERE user_id = ${userId}`;
+  const row = rows[0];
+  return row === undefined ? null : { choice: row.choice, days: row.days, daysSavedAt: row.days_saved_at };
 }
 
 /** The pick alone: one statement, the week left as it is. */
@@ -659,9 +663,12 @@ export async function putRunChoice(sql: Sql, userId: string, choice: RunChoice, 
     ON CONFLICT (user_id) DO UPDATE SET choice = EXCLUDED.choice, updated_at = EXCLUDED.updated_at`;
 }
 
-/** The whole week, and My plan picked with it: one statement, so two at once leave the newer. */
+/** The whole week, and My plan picked with it: one statement, so two at once leave the newer. When it was
+ *  saved moves only when the week changed, so the same week sent twice leaves the same row. */
 export async function putOwnWeek(sql: Sql, userId: string, days: OwnWeek, at: Date): Promise<void> {
   await sql`
-    INSERT INTO own_run_plans (user_id, choice, days, updated_at) VALUES (${userId}, 'mine', ${sql.json(days)}, ${at})
-    ON CONFLICT (user_id) DO UPDATE SET choice = 'mine', days = EXCLUDED.days, updated_at = EXCLUDED.updated_at`;
+    INSERT INTO own_run_plans (user_id, choice, days, days_saved_at, updated_at) VALUES (${userId}, 'mine', ${sql.json(days)}, ${at}, ${at})
+    ON CONFLICT (user_id) DO UPDATE SET choice = 'mine', days = EXCLUDED.days,
+      days_saved_at = CASE WHEN own_run_plans.days IS NOT DISTINCT FROM EXCLUDED.days THEN own_run_plans.days_saved_at ELSE EXCLUDED.days_saved_at END,
+      updated_at = EXCLUDED.updated_at`;
 }

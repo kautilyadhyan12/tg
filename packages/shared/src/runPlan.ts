@@ -723,8 +723,10 @@ export function ownCapOf(input: { today: string; runs: readonly RunDay[]; answer
 }
 
 /** This week of one's own plan, each run ticked by a run recorded that day, or by a run on a day with none
- *  planned that covers it, as the suggested plan counts them. */
-export function ownPlanOf(input: { week: OwnWeek; today: string; runs: readonly RunDay[] }): PlanDay[] {
+ *  planned that covers it, as the suggested plan counts them, but only a run recorded once the week was saved
+ *  (`savedDay`): a run from before one's own plan was written never fills a day of it still to come (Kd,
+ *  2026-11-12). Null: no day known, every run of the week counts. */
+export function ownPlanOf(input: { week: OwnWeek; today: string; runs: readonly RunDay[]; savedDay: string | null }): PlanDay[] {
   const weekStart = mondayOf(input.today);
   const days: PlanDay[] = input.week.map((run, i) => {
     const day = planDayPlus(weekStart, i);
@@ -738,7 +740,8 @@ export function ownPlanOf(input: { week: OwnWeek; today: string; runs: readonly 
           : session.kind !== "walk_run" && ran.longestM >= session.m / 2;
     return { day, weekday: i + 1, session, done };
   });
-  return tickMovedRuns(days, input.runs.filter((x) => x.day <= input.today), weekStart);
+  const moved = input.runs.filter((x) => x.day <= input.today && (input.savedDay === null || x.day >= input.savedDay));
+  return tickMovedRuns(days, moved, weekStart);
 }
 
 /** A run of one's own longer than the 10 % limit: said beside it, never changed. */

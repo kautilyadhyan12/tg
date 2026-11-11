@@ -150,6 +150,7 @@ export const ownRunPlans = pgTable(
       .references(() => users.id, { onDelete: "cascade" }),
     choice: text("choice"),
     days: jsonb("days"),
+    daysSavedAt: timestamp("days_saved_at", { withTimezone: true }),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [

@@ -100,8 +100,24 @@ describe("which runs tick a day of one's own plan", () => {
     ["a run dated after today ticks nothing", weekWith(4, { kind: "easy", m: 3000 }), [ran(planDayPlus(MONDAY, 4), 9000)], []],
   ];
   it.each(cases)("%s", (_name, week, runs, ticked) => {
-    const days = ownPlanOf({ week, today: WEDNESDAY, runs });
+    const days = ownPlanOf({ week, today: WEDNESDAY, runs, savedDay: null });
     expect(days.map((d) => d.day)).toEqual(Array.from({ length: 7 }, (_, i) => planDayPlus(MONDAY, i)));
+    expect(days.flatMap((d, i) => (d.done ? [i] : []))).toEqual(ticked);
+  });
+});
+
+describe("a run from before the week was saved fills only its own day (Kd, 2026-11-12)", () => {
+  const tuesday = planDayPlus(MONDAY, 1);
+  const cases: [string, OwnWeek, RunDay[], string, number[]][] = [
+    ["Monday's runs on a rest day, the week saved Wednesday: Saturday still to do", weekWith(5, { kind: "easy", m: 8000 }), [ran(MONDAY, 10_000)], WEDNESDAY, []],
+    ["the same runs, the week saved Monday: Saturday is done early", weekWith(5, { kind: "easy", m: 8000 }), [ran(MONDAY, 10_000)], MONDAY, [5]],
+    ["a run on its own day, before the week was saved, still ticks it", weekWith(0, { kind: "easy", m: 5000 }), [ran(MONDAY, 5000)], WEDNESDAY, [0]],
+    ["Tuesday instead of Monday, saved on Monday: Monday is done", weekWith(0, { kind: "easy", m: 5000 }), [ran(tuesday, 5000)], MONDAY, [0]],
+    ["Tuesday instead of Monday, saved on Wednesday: Monday stays to do", weekWith(0, { kind: "easy", m: 5000 }), [ran(tuesday, 5000)], WEDNESDAY, []],
+    ["a run on the day it was saved counts", weekWith(5, { kind: "easy", m: 8000 }), [ran(WEDNESDAY, 9000)], WEDNESDAY, [5]],
+  ];
+  it.each(cases)("%s", (_name, week, runs, savedDay, ticked) => {
+    const days = ownPlanOf({ week, today: WEDNESDAY, runs, savedDay });
     expect(days.flatMap((d, i) => (d.done ? [i] : []))).toEqual(ticked);
   });
 });
