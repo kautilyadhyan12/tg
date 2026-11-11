@@ -647,15 +647,6 @@ export const runPlanSchema = z.discriminatedUnion("kind", [
   }),
 ]);
 
-/** GET and PUT /v1/geo/run-plan: the answers (null before any) and the plan from them (null with
- *  no answers, except in Safe mode, which says why). */
-export const runPlanResponseSchema = z.object({
-  answers: runPlanAnswersSchema.nullable(),
-  plan: runPlanSchema.nullable(),
-  /** Today in the person's own time zone, as the plan was worked out: the phone lights this day. */
-  today: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-});
-
 /** New answers restart the plan only when what it starts from changes: running or not, how long they
  *  can run, their week or their longest run. New days, a new goal or a race time keep its weeks. */
 export function restartsPlan(before: RunPlanAnswers, after: RunPlanAnswers): boolean {
@@ -663,4 +654,110 @@ export function restartsPlan(before: RunPlanAnswers, after: RunPlanAnswers): boo
 }
 
 export const sameRace = (a: RaceTime | null, b: RaceTime | null): boolean => (a === null || b === null ? a === b : a.distanceM === b.distanceM && a.timeS === b.timeS);
+
+// ── Your own run plan (ROADMAP Stage 5 item 37d-iii-b; spec Part 6 §16.6) ─────────────────────
+// Suggested is the app's plan above, never changed by hand. My plan is the person's own week, one run
+// or a rest day for each weekday, written by them and never resized by the app: a run more than 10 %
+// longer than their longest of the last 30 days (Frandsen and colleagues, BJSM 2025) is said beside it.
+
+/** Which run plan Recommended For You and the Running page show. */
+export const RUN_CHOICES = ["suggested", "mine"] as const;
+export type RunChoice = (typeof RUN_CHOICES)[number];
+
+export const OWN_RUN_KINDS = ["easy", "long", "steady", "fast"] as const;
+/** The shortest run of one's own: 1 km. */
+export const OWN_RUN_LEAST_M = 1_000;
+/** A tempo run and an interval run hold their warm-up and cool-down, and one repeat or two. */
+export const OWN_STEADY_LEAST_M = 2 * WARM_M + STEADY_LEAST_M;
+export const OWN_FAST_LEAST_M = 2 * WARM_M + 2 * FAST_REP_M;
+
+const ownRunSchema = z.union([
+  z
+    .object({ kind: z.enum(OWN_RUN_KINDS), m: z.number().int().min(OWN_RUN_LEAST_M).max(RUN_LONGEST_MOST_M).multipleOf(ROUND_M) })
+    .strict()
+    .refine((x) => (x.kind === "steady" ? x.m >= OWN_STEADY_LEAST_M : x.kind === "fast" ? x.m >= OWN_FAST_LEAST_M : true), { message: "too short for its repeats" }),
+  z.object({ kind: z.literal("walk_run"), index: z.number().int().min(0).max(C25K_SESSIONS - 1) }).strict(),
+]);
+export type OwnRun = z.infer<typeof ownRunSchema>;
+/** Monday to Sunday: a run, or null for a rest day. */
+export const ownWeekSchema = z.array(ownRunSchema.nullable()).length(7);
+export type OwnWeek = z.infer<typeof ownWeekSchema>;
+
+/** PUT /v1/geo/run-plan/own: the whole week each time, so a PUT sent twice leaves the same row. */
+export const putOwnRunPlanRequestSchema = z.object({ days: ownWeekSchema }).strict();
+export type PutOwnRunPlanRequest = z.infer<typeof putOwnRunPlanRequestSchema>;
+/** PUT /v1/geo/run-plan/choice. */
+export const putRunChoiceRequestSchema = z.object({ choice: z.enum(RUN_CHOICES) }).strict();
+export type PutRunChoiceRequest = z.infer<typeof putRunChoiceRequestSchema>;
+
+/** A run of one's own as the plan's own session, so the step card and the voice guide it the same way:
+ *  a tempo run and an interval run take the plan's own repeats for their distance. */
+export function ownSessionOf(run: OwnRun): PlanSession {
+  if (run.kind === "walk_run") return { kind: "walk_run", week: Math.floor(run.index / C25K_RUNS_A_WEEK) + 1, run: (run.index % C25K_RUNS_A_WEEK) + 1, parts: c25kParts(run.index) };
+  if (run.kind === "steady") return steadyRun(run.m, Infinity, null);
+  if (run.kind === "fast") return fastRun(run.m, Infinity, null);
+  return { kind: run.kind, m: run.m, reps: null };
+}
+
+/** A suggested run as a run of one's own, so Build my own starts from this week's plan. */
+export function ownRunOf(session: PlanSession): OwnRun {
+  if (session.kind === "walk_run") return { kind: "walk_run", index: (session.week - 1) * C25K_RUNS_A_WEEK + session.run - 1 };
+  const m = Math.max(OWN_RUN_LEAST_M, Math.min(RUN_LONGEST_MOST_M, Math.floor(session.m / ROUND_M) * ROUND_M));
+  const kind = session.kind === "steady" && m < OWN_STEADY_LEAST_M ? "easy" : session.kind === "fast" && m < OWN_FAST_LEAST_M ? "easy" : session.kind;
+  return { kind, m };
+}
+
+export const hasOwnRun = (week: OwnWeek | null): week is OwnWeek => week !== null && week.some((d) => d !== null);
+
+/** Before the person picks: My plan where they have one, else Suggested. */
+export const runChoiceOf = (picked: RunChoice | null, week: OwnWeek | null): RunChoice => picked ?? (hasOwnRun(week) ? "mine" : "suggested");
+
+export interface OwnPlan {
+  days: PlanDay[];
+  /** 10 % over the longest run of the last 30 days; null when nothing is known of the last 30 days. */
+  capM: number | null;
+}
+
+/** This week of one's own plan, each run ticked by a run recorded that day, or by a run on a day with none
+ *  planned that covers it, as the suggested plan counts them. */
+export function ownPlanOf(input: { week: OwnWeek; today: string; runs: readonly RunDay[]; answeredLongest: { day: string; m: number } | null }): OwnPlan {
+  const weekStart = mondayOf(input.today);
+  const days: PlanDay[] = input.week.map((run, i) => {
+    const day = planDayPlus(weekStart, i);
+    const session = run === null ? null : ownSessionOf(run);
+    const ran = input.runs.find((x) => x.day === day && x.day <= input.today);
+    const done =
+      session === null || ran === undefined || run === null
+        ? false
+        : run.kind === "walk_run"
+          ? ran.movingS >= countsFor(run.index)
+          : session.kind !== "walk_run" && ran.longestM >= session.m / 2;
+    return { day, weekday: i + 1, session, done };
+  });
+  const since = planDayPlus(input.today, -30);
+  const recent = input.runs.filter((x) => x.day >= since && x.day <= input.today).map((x) => x.longestM);
+  if (input.answeredLongest !== null && input.answeredLongest.day >= since) recent.push(input.answeredLongest.m);
+  const longest = Math.max(0, ...recent);
+  return { days: tickMovedRuns(days, input.runs.filter((x) => x.day <= input.today), weekStart), capM: longest > 0 ? Math.floor(longest * RUN_GROWTH) : null };
+}
+
+/** A run of one's own longer than the 10 % limit: said beside it, never changed. */
+export const overCap = (session: PlanSession | null, capM: number | null): boolean => session !== null && capM !== null && session.kind !== "walk_run" && session.m > capM;
+
+export const ownPlanSchema = z.object({ week: ownWeekSchema, days: z.array(planDaySchema).length(7), capM: z.number().int().positive().nullable() });
+export type OwnPlanReply = z.infer<typeof ownPlanSchema>;
+
+/** GET and PUT /v1/geo/run-plan, and the PUTs of the choice and one's own week: the answers (null before
+ *  any), the plan from them (null with no answers, except in Safe mode, which says why), the person's
+ *  pick and their own week. */
+export const runPlanResponseSchema = z.object({
+  answers: runPlanAnswersSchema.nullable(),
+  plan: runPlanSchema.nullable(),
+  /** Today in the person's own time zone, as the plan was worked out: the phone lights this day. */
+  today: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  /** Suggested or My plan: the person's pick, kept on the server; before they pick, My plan where they have one. */
+  choice: z.enum(RUN_CHOICES),
+  /** This week of the person's own plan; null with none, and in Safe mode, which shows no run from any plan. */
+  own: ownPlanSchema.nullable(),
+});
 export type RunPlanResponse = z.infer<typeof runPlanResponseSchema>;

@@ -6,7 +6,7 @@
 // module; written here like the nutrition/coach tasks' disclosed crossings
 // (getLiveGymId duplicated from nutrition/repo.ts — a cross-module repo import
 // would violate R7.1).
-import type { RunBests, RunClimb, RunPlanAnswers, RunRecordKind } from "@app/shared";
+import type { OwnWeek, RunBests, RunChoice, RunClimb, RunPlanAnswers, RunRecordKind } from "@app/shared";
 import type { Sql, TransactionSql } from "postgres";
 import { ORS_ROUTE_COST_MICRO } from "./cost.js";
 
@@ -637,4 +637,31 @@ export async function getRunPlanDays(sql: Sql, userId: string, timeZone: string,
       AND started_at >= (${fromDay}::date::timestamp AT TIME ZONE ${timeZone})
     GROUP BY 1 ORDER BY 1`;
   return rows.map((r) => ({ day: r.day, distanceM: Number(r.m), longestM: r.longest, movingS: r.moving, effort: r.effort }));
+}
+
+// ── Your own run plan (ROADMAP 37d-iii-b) ─────────────────────────────────────────────────────
+
+export interface OwnRunPlanRow {
+  choice: string | null;
+  days: unknown;
+}
+
+/** The person's pick and own week, by their own id only. */
+export async function getOwnRunPlan(sql: Sql, userId: string): Promise<OwnRunPlanRow | null> {
+  const rows = await sql<{ choice: string | null; days: unknown }[]>`SELECT choice, days FROM own_run_plans WHERE user_id = ${userId}`;
+  return rows[0] ?? null;
+}
+
+/** The pick alone: one statement, the week left as it is. */
+export async function putRunChoice(sql: Sql, userId: string, choice: RunChoice, at: Date): Promise<void> {
+  await sql`
+    INSERT INTO own_run_plans (user_id, choice, updated_at) VALUES (${userId}, ${choice}, ${at})
+    ON CONFLICT (user_id) DO UPDATE SET choice = EXCLUDED.choice, updated_at = EXCLUDED.updated_at`;
+}
+
+/** The whole week, and My plan picked with it: one statement, so two at once leave the newer. */
+export async function putOwnWeek(sql: Sql, userId: string, days: OwnWeek, at: Date): Promise<void> {
+  await sql`
+    INSERT INTO own_run_plans (user_id, choice, days, updated_at) VALUES (${userId}, 'mine', ${sql.json(days)}, ${at})
+    ON CONFLICT (user_id) DO UPDATE SET choice = 'mine', days = EXCLUDED.days, updated_at = EXCLUDED.updated_at`;
 }

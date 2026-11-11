@@ -15,7 +15,7 @@ import { heightMapFor, type HeightMap } from "./heights.adapter.js";
 import { mapSourceFor } from "./mapSource.js";
 import { createOrsRouteProvider, type RouteProvider } from "./ors.adapter.js";
 import { ForeignRunError } from "./repo.js";
-import { RUN_MAX_PAUSES, RUN_MAX_POINTS, RUN_WORDS, runPlanAnswersSchema, changeRunRequestSchema, runDaysQuerySchema, runListQuerySchema } from "@app/shared";
+import { RUN_MAX_PAUSES, RUN_MAX_POINTS, RUN_WORDS, runPlanAnswersSchema, putOwnRunPlanRequestSchema, putRunChoiceRequestSchema, changeRunRequestSchema, runDaysQuerySchema, runListQuerySchema } from "@app/shared";
 import { generateRoutesRequestSchema, geoListQuerySchema, runClimbRequestSchema, saveRunRequestSchema, savedRouteCreateSchema } from "./schemas.js";
 import * as service from "./service.js";
 import type { GeoDeps } from "./service.js";
@@ -315,5 +315,19 @@ export function registerGeoRoutes(
     const answers = parse(runPlanAnswersSchema, req.body, req, reply);
     if (answers === null) return;
     return reply.send(await service.setRunPlan(planDeps, authedUserId(req), answers));
+  });
+
+  // Suggested or My plan (ROADMAP 37d-iii-b), the person's own only.
+  app.put("/v1/geo/run-plan/choice", { preHandler: [app.authenticate, changeLimit] }, async (req, reply) => {
+    const input = parse(putRunChoiceRequestSchema, req.body, req, reply);
+    if (input === null) return;
+    return reply.send(await service.setRunChoice(planDeps, authedUserId(req), input.choice));
+  });
+
+  // The person's own week, the whole of it each time: a PUT sent twice leaves the same row.
+  app.put("/v1/geo/run-plan/own", { preHandler: [app.authenticate, changeLimit] }, async (req, reply) => {
+    const input = parse(putOwnRunPlanRequestSchema, req.body, req, reply);
+    if (input === null) return;
+    return reply.send(await service.setOwnRunPlan(planDeps, authedUserId(req), input.days));
   });
 }

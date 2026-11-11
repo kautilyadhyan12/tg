@@ -73,6 +73,7 @@ export const EXPORT_READERS: Record<ExportedTable, (sql: Sql, userId: string) =>
   run_removed_ids: (sql, u) =>
     sql<Row[]>`SELECT * FROM run_removed_ids WHERE user_id = ${u} ORDER BY removed_at, id`,
   run_plans: (sql, u) => sql<Row[]>`SELECT * FROM run_plans WHERE user_id = ${u}`,
+  own_run_plans: (sql, u) => sql<Row[]>`SELECT * FROM own_run_plans WHERE user_id = ${u}`,
   usage_limits: (sql, u) =>
     sql<Row[]>`SELECT meal_scans_a_day, route_plans_a_day, updated_at FROM usage_limits WHERE user_id = ${u}`,
   app_minutes: (sql, u) => sql<Row[]>`SELECT day::text AS day, minutes, zone FROM app_minutes WHERE user_id = ${u} ORDER BY day`,

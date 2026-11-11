@@ -6,7 +6,7 @@
 // candidates only.
 import type { FastifyBaseLogger } from "fastify";
 import type { Sql } from "postgres";
-import { RUN_CALC_VERSION, restartsPlan, runPlanAnswersSchema, runPlanOf, runsFrom, sameRace, climbFromHeights, climbSamples, decodePolyline, encodePolyline, hillLineOf, hillLineSchema, paceLineSchema, routeShape, runSplitSchema, runSums } from "@app/shared";
+import { RUN_CALC_VERSION, RUN_CHOICES, hasOwnRun, ownPlanOf, ownWeekSchema, planDayPlus, restartsPlan, runChoiceOf, runPlanAnswersSchema, runPlanOf, runsFrom, sameRace, climbFromHeights, climbSamples, decodePolyline, encodePolyline, hillLineOf, hillLineSchema, paceLineSchema, routeShape, runSplitSchema, runSums } from "@app/shared";
 import type {
   GenerateRoutesRequest,
   RouteCandidate,
@@ -20,6 +20,8 @@ import type {
   RunMonthTotal,
   RunRecord,
   RunRecordKind,
+  OwnWeek,
+  RunChoice,
   RunPlanAnswers,
   RunPlanResponse,
   RunRecords,
@@ -463,24 +465,45 @@ const answersOf = (stored: unknown): RunPlanAnswers | null => {
   return parsed.success ? parsed.data : null;
 };
 
-/** The person's answers and the plan from them and from the runs they recorded. Safe mode makes no
- *  plan, answered or not, and says so. */
+/** A week kept before a rule changed and no longer read is treated as none: the person writes it again. */
+const ownWeekOf = (stored: unknown): OwnWeek | null => {
+  const parsed = ownWeekSchema.safeParse(stored);
+  return parsed.success ? parsed.data : null;
+};
+const choiceOf = (stored: string | null): RunChoice | null => RUN_CHOICES.find((c) => c === stored) ?? null;
+
+/** The person's answers and the plan from them and from the runs they recorded, their pick and their own
+ *  week. Safe mode makes no plan of either kind, answered or not, and says so. */
 export async function runPlan(deps: ReadDeps & { now: () => Date }, userId: string): Promise<RunPlanResponse> {
-  const [row, ctx, rules] = await Promise.all([
+  const [row, ownRow, ctx, rules] = await Promise.all([
     repo.getRunPlan(deps.sql, userId),
+    repo.getOwnRunPlan(deps.sql, userId),
     getUserSyncContext(deps.sql, userId),
     getUserPlanAndCutRules(deps.sql, userId, null),
   ]);
   const safeMode = rules.answers.health?.safeMode === true;
   const answers = row === null ? null : answersOf(row.answers);
+  const week = ownRow === null ? null : ownWeekOf(ownRow.days);
+  const choice = runChoiceOf(choiceOf(ownRow?.choice ?? null), week);
   const timeZone = safeTimeZone(ctx.timezone);
   const today = dayInTz(deps.now(), timeZone);
-  if (safeMode) return { answers, plan: { kind: "none", why: "safe_mode" }, today };
-  if (row === null || answers === null) return { answers: null, plan: null, today };
-  const startDay = dayInTz(row.startedAt, timeZone);
+  if (safeMode) return { answers, plan: { kind: "none", why: "safe_mode" }, today, choice, own: null };
+  const startDay = row === null || answers === null ? null : dayInTz(row.startedAt, timeZone);
+  const planFrom = startDay !== null && answers !== null && answers.doesRun !== "no" ? runsFrom(startDay, today) : null;
+  const ownFrom = hasOwnRun(week) ? planDayPlus(today, -30) : null;
+  const from = planFrom === null ? ownFrom : ownFrom === null || planFrom < ownFrom ? planFrom : ownFrom;
+  const runs = from === null ? [] : await repo.getRunPlanDays(deps.sql, userId, timeZone, from);
+  const own = hasOwnRun(week)
+    ? {
+        week,
+        ...ownPlanOf({ week, today, runs, answeredLongest: startDay !== null && answers?.longestM != null ? { day: startDay, m: answers.longestM } : null }),
+      }
+    : null;
+  if (row === null || answers === null || startDay === null) return { answers: null, plan: null, today, choice, own };
   const raceDay = row.raceAt === null ? null : dayInTz(row.raceAt, timeZone);
-  const runs = answers.doesRun === "no" ? [] : await repo.getRunPlanDays(deps.sql, userId, timeZone, runsFrom(startDay, today));
-  return { answers, plan: runPlanOf({ answers, startDay, raceDay, today, safeMode, runs }), today };
+  // The suggested plan reads only the runs it always has: an older run changes its longest-run limit.
+  const planRuns = planFrom === null ? [] : runs.filter((x) => x.day >= planFrom);
+  return { answers, plan: runPlanOf({ answers, startDay, raceDay, today, safeMode, runs: planRuns }), today, choice, own };
 }
 
 export async function setRunPlan(deps: ReadDeps & { now: () => Date }, userId: string, answers: RunPlanAnswers): Promise<RunPlanResponse> {
@@ -491,5 +514,17 @@ export async function setRunPlan(deps: ReadDeps & { now: () => Date }, userId: s
   const startedAt = before !== null && kept !== null && !restartsPlan(kept, answers) ? before.startedAt : now;
   const raceAt = answers.race === null ? null : before !== null && kept !== null && sameRace(kept.race, answers.race) ? (before.raceAt ?? now) : now;
   await repo.putRunPlan(deps.sql, userId, answers, startedAt, raceAt, now);
+  return runPlan(deps, userId);
+}
+
+/** Suggested or My plan, kept on the server so every screen and phone shows the same. */
+export async function setRunChoice(deps: ReadDeps & { now: () => Date }, userId: string, choice: RunChoice): Promise<RunPlanResponse> {
+  await repo.putRunChoice(deps.sql, userId, choice, deps.now());
+  return runPlan(deps, userId);
+}
+
+/** The person's own week, the whole of it each time; writing it picks My plan. */
+export async function setOwnRunPlan(deps: ReadDeps & { now: () => Date }, userId: string, days: OwnWeek): Promise<RunPlanResponse> {
+  await repo.putOwnWeek(deps.sql, userId, days, deps.now());
   return runPlan(deps, userId);
 }
