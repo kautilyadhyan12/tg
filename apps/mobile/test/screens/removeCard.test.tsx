@@ -146,6 +146,40 @@ describe("pressing it", () => {
       [removePath(IRON)]: remove,
     });
 
+  it("at a gym no longer taking cards in the app, the box stays to say the card was removed", async () => {
+    let gone = false;
+    const server = fakeServer({
+      "/v1/auth/refresh": ok({ tokens: tokens(2) }),
+      "/v1/orgs/mine": mine(IRON),
+      [membershipPath(IRON)]: ok(membershipOf("Iron House")),
+      [cardPath(IRON)]: () => ({ status: 200, body: cardOf("Iron House", { canSave: false, form: null, ...(gone ? {} : { card: IRON_CARD, canRemove: true }) }) }),
+      [removePath(IRON)]: () => {
+        gone = true;
+        return { status: 200, body: cardOf("Iron House", { canSave: false, form: null }) };
+      },
+    });
+    await openMembership(server.ask, IRON);
+    expect(page().queryByText("Update card")).toBeNull();
+    await fireEvent.press(await page().findByText("Remove card"));
+    await confirmRemove();
+    await waitFor(() => {
+      expect(page().getByText("Card removed: Visa ending 4242.")).toBeTruthy();
+    });
+    expect(page().getByText("No card on file")).toBeTruthy();
+    expect(page().queryByText("Add card")).toBeNull();
+  });
+
+  it("the gym moved to another Square account meanwhile: never said to be removed", async () => {
+    const server = withCard(() => ({ status: 200, body: cardOf("Iron House", { earlierCard: { brand: "VISA", last4: "4242" } }) }));
+    await openMembership(server.ask, IRON);
+    await fireEvent.press(await page().findByText("Remove card"));
+    await confirmRemove();
+    await waitFor(() => {
+      expect(screen.queryByText("Remove Visa ending 4242?")).toBeNull();
+    });
+    expect(page().queryByText(/Card removed/)).toBeNull();
+  });
+
   it("Cancel sends nothing and keeps the card", async () => {
     const server = withCard(() => ({ status: 200, body: cardOf("Iron House") }));
     await openMembership(server.ask, IRON);

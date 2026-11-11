@@ -106,6 +106,13 @@ describe("what the box shows", () => {
   });
 });
 
+describe("the box after Remove card", () => {
+  it("stays on screen, with no button, to say the card went where cards cannot be added in the app", () => {
+    expect(cardBox(view({ canSave: false, form: null }), true)).toEqual({ kind: "none", line: null, button: null });
+    expect(cardBox(view({ canSave: false, form: null }), false)).toBeNull();
+  });
+});
+
 describe("a refusal said to the member", () => {
   const GYM = "Iron House can’t save cards in the app right now. Ask at the front desk.";
   // Every code the save can answer (cards.ts, `cardRefusalOf` and its own refusals), with the server's words.
