@@ -13,7 +13,7 @@ import { RAVI, fakeServer, kept, memoryStore, profile, tokens } from "../kit";
 // takes them back, Resume says what to do now, and the app opened again mid-run says it at once.
 
 const extra = { copyName: "Feature 2", apiUrl: "http://localhost:3000" };
-const voice = jest.requireMock<{ voice: { said: string[]; quieted: number; canSpeak: string; missing: boolean; ahead: { text: string; inMs: number }[] } }>("../../src/screens/running/runVoiceNative").voice;
+const voice = jest.requireMock<{ voice: { said: string[]; quieted: number; canSpeak: string; missing: boolean; ahead: { text: string; inMs: number }[]; warmed: number } }>("../../src/screens/running/runVoiceNative").voice;
 const location = jest.requireMock<{ state: Record<string, unknown> }>("expo-location").state;
 
 /** Three days a week from today, a rest day between: today is a Couch to 5K day. */
@@ -43,7 +43,7 @@ beforeEach(async () => {
   Object.assign(location, { services: true, granted: true, canAskAgain: true, accuracy: "fine", asked: 0, started: [], running: false, acceptsTurnOn: true });
   for (const name of ["run-now.json", "run-now-0.json", "run-now-1.json", "run-settings.json", "run-map.json"]) phoneRunFiles.remove(name);
   resetRecorder();
-  Object.assign(voice, { said: [], quieted: 0, canSpeak: "ok", missing: false, ahead: [] });
+  Object.assign(voice, { said: [], quieted: 0, canSpeak: "ok", missing: false, ahead: [], warmed: 0 });
   await Promise.resolve();
 });
 
@@ -138,6 +138,18 @@ describe("the worst thing: a beginner told to keep running when the plan says wa
     expect(voice.ahead[0]?.text).toBe("Now run for 1 minute.");
     expect(Math.round((voice.ahead[0]?.inMs ?? 0) / 1000)).toBeGreaterThanOrEqual(49);
     expect(Math.round((voice.ahead[0]?.inMs ?? 0) / 1000)).toBeLessThanOrEqual(50);
+  });
+});
+
+describe("the phone's voice made ready, so Run paused is said at once (Kd: late on a run of one's own)", () => {
+  it("at Go of a run with no plan, and again each minute it goes on", async () => {
+    await startRun(RAVI.id, "5a1d2c3b-4a5e-4f60-8a7b-9c0d1e2f3a4b", false, Date.now());
+    expect(voice.said).toEqual([]);
+    expect(voice.warmed).toBe(1);
+    await feed(0, 50, 3);
+    expect(voice.warmed).toBe(1);
+    await feed(50, 20, 3);
+    expect(voice.warmed).toBe(2);
   });
 });
 

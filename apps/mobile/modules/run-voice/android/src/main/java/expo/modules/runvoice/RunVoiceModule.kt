@@ -74,6 +74,9 @@ class RunVoiceModule : Module() {
      *  none of them (a pause). */
     AsyncFunction("sayAt") { texts: List<String>, inMs: List<Double> -> sayAt(texts, inMs) }
 
+    /** The engine made ready now, so the next line is said at once (Run paused, a kilometre). */
+    AsyncFunction("warm") { warm() }
+
     /** "ok", "off" (no text-to-speech that starts) or "noEnglish", for the Running page's line. */
     AsyncFunction("check") { promise: Promise -> check(promise) }
 
@@ -101,8 +104,8 @@ class RunVoiceModule : Module() {
     earlyStatus?.let { started(mine, it) }
   }
 
-  /** A fresh engine before a line handed over ahead, its speech service started again if Android
-   *  closed it; never while a line is being said or waits for the engine. */
+  /** A fresh engine, its speech service started again if Android closed it: before a line handed
+   *  over ahead, at Go and each minute of a run. Never while a line is being said or waits for it. */
   @Synchronized
   private fun warm() {
     val ctx = context ?: return

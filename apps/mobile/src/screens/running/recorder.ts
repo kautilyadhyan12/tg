@@ -186,6 +186,17 @@ export async function keepRunUnits(units: Units): Promise<void> {
 
 let voice: VoiceState = VOICE_START;
 
+/** When the phone's voice was last made ready. Android closes its speech service when memory is short
+ *  and nothing is said; started again for the line itself, Run paused came seconds late (Kd, 37d-ii). */
+let warmedAt = 0;
+const WARM_EVERY_MS = 60_000;
+
+function warmVoice(now: number): void {
+  if (!choices.voice || runVoiceNative === null || now - warmedAt < WARM_EVERY_MS) return;
+  warmedAt = now;
+  void runVoiceNative.warm().catch(() => undefined);
+}
+
 function say(lines: readonly string[]): void {
   if (!choices.voice || runVoiceNative === null) return;
   for (const line of lines) void runVoiceNative.say(line).catch(() => undefined);
@@ -281,6 +292,7 @@ export function resetRecorder(withFiles: RunFiles = phoneRunFiles): void {
   choicesRead = null;
   voice = VOICE_START;
   guideLookAt = 0;
+  warmedAt = 0;
   files = withFiles;
   current = null;
   auto = AUTO_START;
@@ -451,6 +463,7 @@ export async function takeLocations(data: unknown, now: number = Date.now()): Pr
     scheduleGuide(current, now);
     writtenAt = 0;
   } else if (current.phase === "running") {
+    warmVoice(now);
     const step = guideNow(current, now, false);
     if (step.moved) writtenAt = 0;
     say([...markNow(current, false), ...step.lines]);
@@ -525,6 +538,8 @@ export async function startRun(userId: string, runId: string, autoPause: boolean
   guideLookAt = 0;
   await writeState(run);
   tell();
+  warmedAt = 0;
+  warmVoice(now);
   if (guide !== null) {
     say([beginLine(guide, 0, choices.units)]);
     scheduleGuide(run, now);
