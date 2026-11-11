@@ -77,12 +77,10 @@ function httpsOrigin(name: string, written: string): string {
  *  it runs, and gets no notifications. */
 export const GOOGLE_SERVICES_FILE = "./google-services.json";
 
-/** The permissions expo-screen-capture's Android code adds, kept out of the app. */
-export const SCREENSHOT_PERMISSIONS = [
-  "android.permission.READ_EXTERNAL_STORAGE",
-  "android.permission.READ_MEDIA_IMAGES",
-  "android.permission.DETECT_SCREEN_CAPTURE",
-];
+/** The photos permissions expo-screen-capture's Android code adds, kept out of the app. Its third,
+ *  DETECT_SCREEN_CAPTURE, stays: from Android 14 the package watches for screenshots as it loads, and
+ *  without it the app stops on opening (seen on Kd's phone, 2026-11-11). It asks the person nothing. */
+export const SCREENSHOT_PERMISSIONS = ["android.permission.READ_EXTERNAL_STORAGE", "android.permission.READ_MEDIA_IMAGES"];
 
 export function configFor(copy: Copy, firebase = false): ExpoConfig {
   const extra: PhoneAppExtra = { copyName: copy.name, apiUrl: copy.apiUrl, webUrl: copy.webUrl };
@@ -98,8 +96,8 @@ export function configFor(copy: Copy, firebase = false): ExpoConfig {
     android: {
       package: copy.applicationId,
       allowBackup: false,
-      // expo-screen-capture (Add card, 20d) asks for these to tell the app a screenshot was taken, which nothing here uses;
-      // blanking a page needs none, and Google Play asks a declaration for the photos permission.
+      // expo-screen-capture (Add card, 20d) asks for these to tell the app a screenshot was taken on older Androids, which
+      // nothing here uses; blanking a page needs neither, and Google Play asks a declaration for the photos permission.
       blockedPermissions: SCREENSHOT_PERMISSIONS,
       ...(firebase ? { googleServicesFile: GOOGLE_SERVICES_FILE } : {}),
     },
