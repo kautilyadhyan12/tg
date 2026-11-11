@@ -740,7 +740,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
       - 37d-i. [x] **Your run plan** · merged 2026-11-10 · PR #519
       - 37d-ii. [x] **Today's run with the voice** · merged 2026-11-11 · PR #522
       - 37d-iii. **Running in Recommended For You, and your own run plan** (split 2026-11-11 in two, Kd's "go": the Dashboard and Skip step first; `handoff/2026-11-11-37d-iii-a.md` keeps its line as first written).
-        - 37d-iii-a. [ ] **Running on the Dashboard, and Skip step**
+        - 37d-iii-a. [x] **Running on the Dashboard, and Skip step** · merged 2026-11-11 · PR #523
         - 37d-iii-b. [ ] **Your own run plan**: Suggested and My plan on the Dashboard's Running tab and the Running page; move or change a run.
     - 37e. [ ] **Routes.**
     - 37f. [ ] **Heart rate from a chest strap or watch.**
