@@ -18,13 +18,13 @@ import { useRead } from "../dashboard/useRead";
 import { SettingsPage } from "../Settings";
 import { autoPauseChoice, chooseAutoPause, chooseMapColours, chooseVoice, mapColoursChoice, readRunChoices, subscribeRun, voiceChoice } from "./recorder";
 import { RefusedRuns } from "./RefusedRuns";
-import { RUN_BAR_ROOM, SideButton, gpsLight, useRunLayer, type StartProblem } from "./RunLayer";
+import { RUN_BAR_ROOM, gpsLight, useRunLayer, type StartProblem } from "./RunLayer";
 import { StartProblemBox } from "./StartProblem";
 import { useRunOutbox } from "./RunOutbox";
 import { useLookOpen } from "../setupFirst";
 import { RunPage } from "./RunPage";
 import { RunPlanAsk } from "./RunPlanAsk";
-import { RUN_PLAN_PATH, RunPlanBox, todayGuide, type PlanRead } from "./RunPlanBox";
+import { RUN_PLAN_PATH, RunPlanBox, type PlanRead } from "./RunPlanBox";
 import { RunPlanPage } from "./RunPlanPage";
 import { RecordsCard } from "./RecordParts";
 import { RECORDS_PATH } from "./runRecords";
@@ -136,7 +136,6 @@ export function RunningTab({ units, parts }: { units: Units; parts: ReactNode })
   const [planOpen, setPlanOpen] = useState(false);
   const planRead = useRead(RUN_PLAN_PATH, runPlanResponseSchema, view.sent + changed + planChanged);
   const plan: PlanRead = planRead.read.kind === "ok" ? { kind: "ok", data: planRead.read.data } : planRead.read.kind === "failed" ? { kind: "failed", again: planRead.again } : { kind: "loading" };
-  const todayRun = todayGuide(plan, units);
   const shownPlan = plan.kind === "ok" && plan.data.plan !== null && plan.data.plan.kind !== "none" ? plan.data.plan : null;
 
   // A run just finished takes the place of what was said of the one deleted before it.
@@ -425,13 +424,12 @@ export function RunningTab({ units, parts }: { units: Units; parts: ReactNode })
       </Page>
       {going ? null : (
         <View pointerEvents="box-none" style={styles.dock}>
-          {/* A plan's run today beside START, which records a run of one's own: the page's foot is
-              under START, and the plan box's own button with it (37d-ii). */}
-          {todayRun === null ? null : <SideButton icon="footprints" label="Today’s run" say="Start today’s run, with each step said" onPress={() => void start(todayRun)} />}
+          {/* START alone, with the running footprints (Kd, 2026-11-11): today's planned run is started
+              from the plan box, which the page scrolls above START. */}
           <Pressable accessibilityRole="button" accessibilityLabel="Start run" onPress={() => void start()} style={({ pressed }) => [styles.go, pressed ? styles.pressed : null]}>
+            <Icon name="footprints" size={30} colour="onOrange" />
             <Txt style={styles.goWord}>START</Txt>
           </Pressable>
-          {todayRun === null ? null : <View style={styles.sideSpace} />}
         </View>
       )}
     </View>
@@ -478,7 +476,6 @@ const styles = StyleSheet.create({
   runTitle: { flexDirection: "row", alignItems: "center", gap: 10 },
   // START over the page's foot, the page fading out under it.
   dock: { position: "absolute", left: 0, right: 0, bottom: 0, flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 16, paddingTop: 18, experimental_backgroundImage: dockShade },
-  sideSpace: { width: 84 },
   grow: { flex: 1 },
   pressed: { opacity: 0.88 },
   pill: { alignSelf: "flex-start", flexDirection: "row", alignItems: "center", gap: 7, paddingHorizontal: 12, paddingVertical: 7, borderRadius: sizes.round, backgroundColor: colours.veil, borderWidth: 1, borderColor: colours.lineStrong },
@@ -496,6 +493,7 @@ const styles = StyleSheet.create({
     borderRadius: sizes.round,
     alignItems: "center",
     justifyContent: "center",
+    gap: 4,
     experimental_backgroundImage: orangeGradient,
     boxShadow: shadows.roundButton,
   },
