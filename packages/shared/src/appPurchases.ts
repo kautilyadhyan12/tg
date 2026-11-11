@@ -82,6 +82,8 @@ export const APP_PURCHASE_WORDS = {
   guardian_needed: "As you're under 18, a parent or guardian signs this for you.",
   person_signs: "You sign this yourself.",
   already_held: (name: string): string => `You already have ${name}.`,
+  /** Money overdue by the gym's own days of grace, on their own record (18l; Kd, 2026-11-12). */
+  owed: (amount: string, gymName: string): string => `You owe ${amount} at ${gymName}. Pay it in the app or at the front desk, then buy this.`,
   too_many: "You have as many memberships here as the app allows. Ask the front desk.",
   other_open: "A payment page is already open. Finish that payment or close it first.",
   check_first: "We couldn't confirm your last payment for this. Ask the front desk to check it with Square before you buy it again.",

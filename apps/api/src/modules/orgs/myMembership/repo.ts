@@ -1,6 +1,6 @@
 // MY MEMBERSHIP: WHOSE IT IS (spec Part 3 §14.2; ROADMAP 18j). The reader's own record of a
 // gym, and the record a receipt is for. Every read names the gym.
-import type { Sql } from "postgres";
+import type { Sql, TransactionSql } from "postgres";
 
 export interface Reader {
   gymName: string;
@@ -12,7 +12,7 @@ export interface Reader {
 }
 
 /** The reader as a live app member of an active gym, or null for anybody else. */
-export async function readerOf(sql: Sql, gymId: string, userId: string): Promise<Reader | null> {
+export async function readerOf(sql: Sql | TransactionSql, gymId: string, userId: string): Promise<Reader | null> {
   const [row] = await sql<{ name: string; timezone: string; entry_id: string | null; holders: number }[]>`
     SELECT g.name, g.timezone, m.entry_id,
            (SELECT count(*) FROM gym_members o JOIN users u ON u.id = o.user_id AND u.status = 'active'

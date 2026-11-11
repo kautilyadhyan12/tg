@@ -271,13 +271,16 @@ export default function Settings() {
           server gates it. Keyed per gym for the panels' reason above: it holds choices
           not saved yet. */}
       {canEditGym ? (
-        <CheckinRulesPanel
-          key={`checkin-rules-${org.id}`}
-          org={org}
-          readOnly={readOnly}
-          attendanceTo={placeTo(orgSlug, 'attendance') ?? '../attendance'}
-          waiverTo={placeTo(orgSlug, 'waiver')}
-        />
+        <div id={SETTINGS_SECTION.checkinRules} style={{ scrollMarginTop: 16 }}>
+          <CheckinRulesPanel
+            key={`checkin-rules-${org.id}`}
+            org={org}
+            readOnly={readOnly}
+            startOpen={linked(section === SETTINGS_SECTION.checkinRules)}
+            attendanceTo={placeTo(orgSlug, 'attendance') ?? '../attendance'}
+            waiverTo={placeTo(orgSlug, 'waiver')}
+          />
+        </div>
       ) : null}
 
       {/* WAIVER (3e-i): the gym's own waiver, signed in the app, on `org.manage` as the server

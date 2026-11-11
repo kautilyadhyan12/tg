@@ -85,6 +85,7 @@ import * as agreementRepo from "../agreement/repo.js";
 import { recordStopped, unsignedStopsRecord } from "../classes/bookingStops.js";
 import { freezeFeeOf } from "./freezeFees.js";
 import { chargesOfBills } from "../payments/cardChargesRepo.js";
+import { appCancelsOf } from "../myMembership/cancelRepo.js";
 import { checksOnMemberships, openOnMemberships, type AppCheckRow, type OpenPage } from "../payments/appPaymentsRepo.js";
 import { openPurchaseOf, purchaseChecksOf } from "../payments/appPurchasesRepo.js";
 import { openPressesOf } from "../payments/cardRefundsRepo.js";
@@ -537,7 +538,7 @@ async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: 
   // The membership agreements (18u-i, 18u-ii-a): which memberships' lines of the price list
   // ask for one, and which were signed.
   const listed = [...inUse, ...shown].map((m) => m.id);
-  const [anyAsked, asked, agreementSigned, agreementLinks, unsignedStops] = await Promise.all([
+  const [anyAsked, asked, agreementSigned, agreementLinks, unsignedStops, appCancels] = await Promise.all([
     agreementRepo.anyInUse(deps.sql, gymId),
     agreementRepo.askedFor(deps.sql, gymId, listed),
     agreementRepo.signedAtOf(deps.sql, gymId, listed),
@@ -545,6 +546,8 @@ async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: 
     agreementRepo.workingLinksOf(deps.sql, gymId, listed, deps.now()),
     // No new bookings until it is signed (18u-iv): said under a membership not signed.
     list.past ? false : unsignedStopsRecord(deps.sql, gymId, entryId),
+    // Cancelled by the member in the app (18l): when, by whom and why.
+    appCancelsOf(deps.sql, gymId, listed),
   ]);
   return heldMembershipsResponseSchema.parse({
     today,
@@ -554,6 +557,7 @@ async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: 
       agreement: ((at) => (at === undefined ? null : { at: at.toISOString() }))(agreementSigned.get(m.id)),
       agreementAsked: asked.has(m.id),
       agreementLink: ((l) => (l === undefined ? null : { sentAt: l.sentAt.toISOString(), expiresAt: l.expiresAt.toISOString() }))(agreementLinks.get(m.id)),
+      appCancel: appCancels.get(m.id) ?? null,
     })),
     agreementInUse: anyAsked,
     unsignedStopsBookings: anyAsked && unsignedStops,

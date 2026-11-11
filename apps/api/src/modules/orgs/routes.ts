@@ -63,6 +63,7 @@ import { registerAgreementRoutes } from "./agreement/routes.js";
 import { registerDeletedFormsRoutes } from "./deletedForms/routes.js";
 import type { LiveNewsSender } from "../live/news.js";
 import type { AgreementEmailSender } from "./agreement/email.js";
+import type { CancelEmailSender } from "./myMembership/cancelEmail.js";
 import { registerStaffInviteRoutes } from "./staffInvites/routes.js";
 import type { InviteSettings } from "./invites/settings.js";
 import { registerMemberListRoutes } from "./memberList/routes.js";
@@ -148,6 +149,8 @@ export function registerOrgRoutes(
     coOwnerEmail: CoOwnerEmailSender;
     /** The copy of a signed membership agreement (18u-i). */
     agreementEmail: AgreementEmailSender;
+    /** The confirmation of a membership cancelled in the app (18l). */
+    cancelEmail: CancelEmailSender;
     /** Paddle and Razorpay, for the payment windows a hand-over closes (4b-ii); absent or null
      *  where neither is set up. */
     billing?: BillingDeps | null;
@@ -264,7 +267,14 @@ export function registerOrgRoutes(
   // Who pays for a person: family plans (ROADMAP 18i).
   registerPayerRoutes(app, { sql: deps.sql, redis: deps.redis, now: overrides.now ?? (() => new Date()) });
   // My membership: a member's own memberships, payments and receipts (ROADMAP 18j).
-  registerMyMembershipRoutes(app, { sql: deps.sql, redis: deps.redis, now: overrides.now ?? (() => new Date()) });
+  registerMyMembershipRoutes(app, {
+    sql: deps.sql,
+    redis: deps.redis,
+    now: overrides.now ?? (() => new Date()),
+    news: deps.news,
+    cancelEmail: deps.cancelEmail,
+    addressKey: deps.invites?.hmacKey ?? null,
+  });
   registerPaymentsDownloadRoutes(app, { sql: deps.sql, redis: deps.redis, now: overrides.now ?? (() => new Date()) });
   registerWeekRoutes(app, { sql: deps.sql, redis: deps.redis, now: overrides.now ?? (() => new Date()) });
 

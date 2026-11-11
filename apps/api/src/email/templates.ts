@@ -442,3 +442,26 @@ export function agreementLinkEmail(words: {
     `<p style="color:#666;font-size:12px">${escapeHtml(lines.footer)}</p>`;
   return { to: words.to, subject: `Sign your membership agreement with ${gym}`, text, html };
 }
+
+/** A membership cancelled in the app (ROADMAP 18l), to the account that pressed Cancel: the day and time it was
+ *  cancelled, and the box's own sentences, so the email says what the screen said. The gym's name arrives already
+ *  cleaned (`gymNameForEmail`). */
+export function membershipCancelledEmail(words: {
+  to: string;
+  gymName: string;
+  membershipName: string;
+  /** "11 Nov 2026 at 14:05", on the business's own clock. */
+  cancelledAt: string;
+  /** "Cancelled. Gold Monthly ends on 30 Nov 2026." */
+  done: string;
+  lines: readonly string[];
+  notes: readonly string[];
+}): EmailMessage {
+  const gym = words.gymName;
+  const lead = `You cancelled ${words.membershipName} at ${gym} in the app on ${words.cancelledAt}. Keep this email as your confirmation.`;
+  const footer = `Sent by ${APP_NAME} on behalf of ${gym}.`;
+  const body = [words.done, ...words.lines, ...words.notes];
+  const text = `${lead}\n\n${body.join("\n")}\n\n${footer}\n`;
+  const html = `<p>${escapeHtml(lead)}</p>` + body.map((line) => `<p>${escapeHtml(line)}</p>`).join("") + `<p style="color:#666;font-size:12px">${escapeHtml(footer)}</p>`;
+  return { to: words.to, subject: `${words.membershipName} at ${gym} is cancelled`, text, html };
+}
