@@ -22,6 +22,7 @@
 //   POST   …/member-list/entries/:entryId/card/autopay/resume   Resume automatic payments
 //   GET    /v1/orgs/:gymId/my-card                             the member's own, for the phone
 //   POST   /v1/orgs/:gymId/my-card                             the member adds or updates their own
+//   POST   /v1/orgs/:gymId/my-card/remove                      the member removes their own, while nothing is charged to it (Stage 5 item 20e)
 //
 // What a gym sells in the app (ROADMAP 18k-i), for the phone:
 //   GET    /v1/orgs/:gymId/for-sale                            the lines a member can buy, as the agreement words them
@@ -95,6 +96,7 @@ import {
   chargebackParamsSchema,
   squareDisputeIdSchema,
   refundsToReviewQuerySchema,
+  removeMyCardRequestSchema,
   saveCardRequestSchema,
   squareCardIdSchema,
   terminalFeePaymentRequestSchema,
@@ -620,6 +622,16 @@ export function registerPaymentRoutes(app: FastifyInstance, deps: Omit<service.P
     const body = parseOr400(saveCardRequestSchema, req.body, req, reply);
     if (body === null) return;
     const mine = await cards.saveMyCard(paymentsDeps, callerId(req), params.gymId, body, gate(myCardWriteLimit, req, reply));
+    if (mine === null) return;
+    return reply.status(200).send(mine);
+  });
+
+  app.post("/v1/orgs/:gymId/my-card/remove", { preHandler: app.authenticate }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(removeMyCardRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    const mine = await cards.removeMyCard(paymentsDeps, callerId(req), params.gymId, body, gate(myCardWriteLimit, req, reply));
     if (mine === null) return;
     return reply.status(200).send(mine);
   });

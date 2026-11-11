@@ -210,6 +210,16 @@ export async function deleteCard(tx: TransactionSql, gymId: string, entryId: str
   return rows.length === 1;
 }
 
+/** A bill of the record's still open, whatever its day, a fee's among them (Stage 5 item 20e): the card stays. */
+export async function hasOpenBill(sql: SqlOrTx, gymId: string, entryId: string): Promise<boolean> {
+  const [row] = await sql<{ open: boolean }[]>`
+    SELECT EXISTS (
+      SELECT 1 FROM gym_member_bills b
+      JOIN gym_held_memberships h ON h.gym_id = b.gym_id AND h.id = b.held_membership_id
+      WHERE b.gym_id = ${gymId} AND h.entry_id = ${entryId} AND b.status = 'open') AS open`;
+  return row?.open === true;
+}
+
 /** The record holding this Square card, for Square's message about it. */
 export async function cardsOfSquareCard(sql: SqlOrTx, environment: SquareEnvironment, accountId: string, cardId: string): Promise<CardRow[]> {
   const rows = await sql<RawCard[]>`

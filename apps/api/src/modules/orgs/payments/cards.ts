@@ -15,8 +15,11 @@
 // The person's own tick is required, word for word what was shown, and kept apart from the
 // card with its time and screen.
 //
-// One card a person: a new one replaces the old, which Square is told to stop. Only staff
-// remove a card (PushPress and Mindbody: only the business does); a member adds or updates.
+// One card a person: a new one replaces the old, which Square is told to stop. Staff remove a
+// card; a member adds or updates theirs, and removes it only while nothing can be charged to it:
+// it pays for nobody else, no membership renews on it and no payment is still to make (Stage 5
+// item 20e; Kd 2026-11-11, as PushPress lets a member). That is checked again under the gym's
+// lock in the transaction that removes it, so a membership given at the same moment waits.
 //
 // A card saved on the gym's Square Terminal (18d-ii-b-ii, `terminalCards.ts`) is kept by the
 // same step as a typed one (`keepCard`), with the same checks.
@@ -24,6 +27,7 @@ import { randomUUID } from "node:crypto";
 import {
   MEMBER_CARD_WORDS,
   MEMBER_LIST_BY_HAND_WORDS,
+  MY_CARD_PAYS_FOR_NAMED,
   cardAgreementWords,
   cardExpired,
   cardExpiresThisMonth,
@@ -32,23 +36,28 @@ import {
   gymPaymentsAvailability,
   memberCardResponseSchema,
   myCardResponseSchema,
+  myCardStaysLine,
+  myCardsOffLine,
   squareMadeByMerge,
   type CardForm,
   type MemberCard,
   type MemberCardResponse,
   type MemberCardState,
   type MyCardResponse,
+  type MyCardView,
+  type RemoveMyCardRequest,
   type SaveCardRequest,
   type CardTerminal,
   type SquareCard,
   type SquareCustomer,
   type TerminalSave,
 } from "@app/shared";
-import type { TransactionSql } from "postgres";
+import type { Sql, TransactionSql } from "postgres";
 import { dayInTz } from "../../gamification/streak.js";
 import { lockGym } from "../memberList/repo.js";
+import { heldOnListOf } from "../memberships/onList.js";
 import { readerOf } from "../myMembership/repo.js";
-import { payerOf } from "../payers/repo.js";
+import { paidForBy, payerOf } from "../payers/repo.js";
 import { gymHasLivePlan, insertAudit, type OrgRow } from "../repo.js";
 import { OrgsError, requirePrivilege, requireWritablePrivilege } from "../service.js";
 import { cardPaysForRenewal, noticeOfCard, remindersOn } from "./cardExpiryRepo.js";
@@ -299,16 +308,95 @@ async function myView(deps: PaymentsDeps, gymId: string, mine: { own: string | n
   if (person === null) return myCardResponseSchema.parse({ myCard: { ...base, record: "none" } });
   const shown = shownCard(card, deps.square, row);
   const canSave = state === "ready" && live && payer === null;
+  const now = deps.now();
+  const today = dayInTz(now, gym.timezone);
+  const removal = shown === null || payer !== null ? NOT_SHOWN : await removalOf(deps.sql, gymId, mine.own, now, today);
   return myCardResponseSchema.parse({
     myCard: {
       ...base,
-      card: shown === null ? null : cardOf(shown, dayInTz(deps.now(), gym.timezone)),
+      card: shown === null ? null : cardOf(shown, today),
       earlierCard: earlierOf(card, shown),
       paidBy: payer === null ? null : payer.name,
       canSave,
       form: canSave && deps.square !== null && row !== null ? formOf(deps.square, row, gym, person) : null,
+      ...removal,
     },
   });
+}
+
+type Removal = Pick<MyCardView, "canRemove" | "stays" | "paysFor">;
+const NOT_SHOWN: Removal = { canRemove: false, stays: null, paysFor: null };
+const stays = (why: "renews" | "owed"): Removal => ({ canRemove: false, stays: why, paysFor: null });
+
+/** THE RULE of Remove card in the app (Stage 5 item 20e): the member's own card goes only while nothing can be
+ *  charged to it. In order: it pays for nobody else (whatever they hold); no membership renews on it, running or
+ *  frozen (`cardPaysForRenewal`, the rule the expiry reminders and the app's own charges read); and no payment is still
+ *  to make, due now or later, as the Members list's Payment reads it ("Payment due", "Not due yet"), nor any bill of
+ *  theirs left open. The record has a card and nobody pays for them: the caller has checked. */
+export async function removalOf(sql: Sql | TransactionSql, gymId: string, entryId: string, now: Date, today: string): Promise<Removal> {
+  const others = await paidForBy(sql, gymId, entryId);
+  if (others.length > 0) {
+    const names = others.slice(0, MY_CARD_PAYS_FOR_NAMED).map((p) => p.name);
+    return { canRemove: false, stays: "pays_for", paysFor: { names, more: others.length - names.length } };
+  }
+  if (await cardPaysForRenewal(sql, { gymId, entryId }, now)) return stays("renews");
+  const payment = (await heldOnListOf(sql, gymId, today, [entryId])).get(entryId)?.shown.payment?.state;
+  if (payment === "due" || payment === "later" || (await cards.hasOpenBill(sql, gymId, entryId))) return stays("owed");
+  return { canRemove: true, stays: null, paysFor: null };
+}
+
+type Removed = { kind: "gone" } | { kind: "changed" } | { kind: "off" } | { kind: "paid_by"; payer: string } | { kind: "stays"; removal: Removal } | { kind: "removed"; disableId: string };
+
+/** Remove card, in the app: the card the screen showed, under the gym's lock, only while `removalOf` lets it go, in
+ *  the same transaction as Square's stop is owed; Square is told now, and by the worker where it does not answer.
+ *  Pressed twice, removed once: a card already gone answers as it is now. */
+export async function removeMyCard(deps: PaymentsDeps, userId: string, gymId: string, body: RemoveMyCardRequest, limit: Limit): Promise<MyCardResponse | null> {
+  const mine = await ownRecord(deps, gymId, userId);
+  if (!(await limit())) return null;
+  const entryId = mine.own;
+  if (entryId === null) throw new OrgsError(409, "card_not_your_record", MEMBER_CARD_WORDS.not_your_card);
+  const gym = await repo.readGym(deps.sql, gymId);
+  const square = deps.square;
+  if (gym === null) throw orgNotFound();
+  if (square === null) return await myView(deps, gymId, mine);
+  const now = deps.now();
+  const outcome = await deps.sql.begin(async (tx): Promise<Removed> => {
+    await lockGym(tx, gymId);
+    const row = await repo.readConnection(tx, gymId, square.environment);
+    const kept = await cards.readCard(tx, gymId, entryId, true);
+    const card = shownCard(kept, square, row);
+    if (kept === null) return { kind: "gone" };
+    // The gym switched Square off meanwhile: nothing can be changed here, and the card did not change.
+    if (row?.state !== "connected") return { kind: "off" };
+    // Kept, but no longer the card shown (the gym moved to another Square account meanwhile): not removed here.
+    if (card === null) return { kind: "changed" };
+    if (card.last4 !== body.last4 || card.savedAt.toISOString() !== new Date(body.savedAt).toISOString()) return { kind: "changed" };
+    const payer = await payerOf(tx, gymId, entryId);
+    if (payer !== null) return { kind: "paid_by", payer: payer.name };
+    const removal = await removalOf(tx, gymId, entryId, now, dayInTz(now, gym.timezone));
+    if (!removal.canRemove) return { kind: "stays", removal };
+    if (!(await cards.deleteCard(tx, gymId, entryId, card.cardId))) return { kind: "gone" };
+    const disableId = await cards.oweDisable(tx, { gymId, environment: card.environment, accountId: card.accountId, cardId: card.cardId, notBefore: now });
+    await insertAudit(tx, {
+      actorUserId: userId,
+      gymId,
+      // A member's own press is not something staff did (Staff activity, 4d).
+      action: "member.card_removed",
+      targetType: "member_list_entry",
+      targetId: entryId,
+      meta: { brand: card.brand, last4: card.last4 },
+    });
+    return { kind: "removed", disableId };
+  });
+  if (outcome.kind === "removed") await sendOwedCardDisables(deps, square, [outcome.disableId]);
+  if (outcome.kind === "off") throw new OrgsError(409, "card_not_connected", myCardsOffLine(gym.name));
+  if (outcome.kind === "changed") throw new OrgsError(409, "card_changed", MEMBER_CARD_WORDS.card_changed);
+  if (outcome.kind === "paid_by") throw paidBy(outcome.payer, "");
+  if (outcome.kind === "stays" && outcome.removal.stays !== null) {
+    const view = await myView(deps, gymId, mine);
+    throw new OrgsError(409, "card_stays", myCardStaysLine(outcome.removal.stays, outcome.removal.paysFor, view.myCard.canSave));
+  }
+  return await myView(deps, gymId, mine);
 }
 
 /** The member's own card, for the phone. Membership first and the limit after it: a stranger's

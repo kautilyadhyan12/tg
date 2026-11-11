@@ -5,14 +5,15 @@ import { Card, Pill } from "../../look/Card";
 import { colours } from "../../look/colours";
 import { Icon } from "../../look/Icon";
 import { Txt } from "../../look/Txt";
-import { CARD_REMOVE_AT_DESK, CARD_TITLE, cardBox } from "./cardView";
+import { CARD_TITLE, REMOVE_CARD, cardBox } from "./cardView";
 
 // Card on file on My membership (ROADMAP Stage 5 item 20d): the card the gym charges, with Update card; or No card on
 // file with Add card; or who pays for them. Nothing where the gym does not take cards in the app. What was just saved
-// is said in this box (`said`).
+// or removed is said in this box (`said`). Remove card (20e) is words under Update card while nothing can be charged
+// to the card; otherwise a line says why it stays.
 
-export function CardOnFile({ view, said, onAdd }: { view: MyCardView; said: string | null; onAdd: () => void }) {
-  const box = cardBox(view);
+export function CardOnFile({ view, said, onAdd, onRemove }: { view: MyCardView; said: string | null; onAdd: () => void; onRemove: () => void }) {
+  const box = cardBox(view, said !== null);
   if (box === null) return null;
   return (
     <View style={styles.section}>
@@ -45,9 +46,12 @@ export function CardOnFile({ view, said, onAdd }: { view: MyCardView; said: stri
               {box.expired ? <Pill label="Expired" tone="bad" /> : null}
             </View>
             {box.button === null ? null : <Button label={box.button} icon="card" kind={box.expired ? "main" : "soft"} wide onPress={onAdd} />}
-            <Txt kind="small" colour="textSoft">
-              {CARD_REMOVE_AT_DESK}
-            </Txt>
+            {box.remove ? <Button label={REMOVE_CARD} kind="dangerLink" onPress={onRemove} style={styles.remove} /> : null}
+            {box.line === null ? null : (
+              <Txt kind="small" colour="textSoft">
+                {box.line}
+              </Txt>
+            )}
           </>
         ) : (
           <>
@@ -60,7 +64,7 @@ export function CardOnFile({ view, said, onAdd }: { view: MyCardView; said: stri
               </Txt>
             </View>
             {box.line === null ? null : <Txt colour="text">{box.line}</Txt>}
-            <Button label={box.button} icon="card" kind={box.line === null ? "soft" : "main"} wide onPress={onAdd} />
+            {box.button === null ? null : <Button label={box.button} icon="card" kind={box.line === null ? "soft" : "main"} wide onPress={onAdd} />}
           </>
         )}
       </Card>
@@ -73,6 +77,7 @@ const styles = StyleSheet.create({
   box: { padding: 16, gap: 12 },
   row: { flexDirection: "row", alignItems: "center", gap: 12 },
   grow: { flex: 1 },
+  remove: { alignSelf: "center" },
   face: {
     width: 52,
     minHeight: 36,
