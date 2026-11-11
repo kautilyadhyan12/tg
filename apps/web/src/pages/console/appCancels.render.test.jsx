@@ -36,7 +36,7 @@ const row = (over = {}) => ({
   reason: 'cost',
   ...over,
 });
-const answer = (rows, over = {}) => ({ count: rows.length, rows, letsEveryoneIn: false, ...over });
+const answer = (rows, over = {}) => ({ count: rows.length, rows, letsEveryoneIn: false, today: '2026-11-12', ...over });
 
 function Settings() {
   return <p data-testid="settings">{window.location.hash}</p>;

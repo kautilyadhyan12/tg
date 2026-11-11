@@ -21,7 +21,7 @@ const PLAIN_STYLE = { background: 'rgba(255,255,255,0.08)', color: '#fff' };
 const QUIET = { color: 'rgba(255,255,255,0.45)' };
 const SOFT = { color: 'rgba(255,255,255,0.75)' };
 
-function Row({ row, onOpen }) {
+function Row({ row, today, onOpen }) {
   return (
     <li className="flex flex-col gap-1 py-3" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }} data-testid="app-cancel-row">
       <div className="flex flex-wrap items-baseline gap-x-2">
@@ -41,7 +41,7 @@ function Row({ row, onOpen }) {
         ) : null}
       </div>
       <p className="text-sm m-0" style={SOFT}>
-        {appCancelRowWhat(row)}
+        {appCancelRowWhat(row, today)}
       </p>
       {row.reason !== null ? (
         <p className="text-sm m-0" style={QUIET}>
@@ -118,7 +118,7 @@ export default function AppCancelsCard({ org, orgSlug, privileges, readOnly }) {
         </p>
         <ul className="list-none m-0 p-0">
           {list.rows.map((row) => (
-            <Row key={row.id} row={row} onOpen={openPerson} />
+            <Row key={row.id} row={row} today={list.today} onOpen={openPerson} />
           ))}
         </ul>
         {more > 0 ? (

@@ -1005,6 +1005,8 @@ export const gymAppCancels = pgTable(
     reason: text("reason"),
     reasonAt: timestamp("reason_at", { withTimezone: true }),
     emailedAt: timestamp("emailed_at", { withTimezone: true }),
+    /** What the box said, for a confirmation sent again: the choice's sentences and the notes under it. */
+    said: jsonb("said").notNull(),
     createdAt: createdAt(),
   },
   (t) => [

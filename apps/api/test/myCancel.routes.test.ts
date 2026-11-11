@@ -433,6 +433,11 @@ it("round one: a frozen one held by a notice is the front desk's; a gift comes o
     expect(await sql`SELECT 1 FROM gym_app_cancels WHERE held_membership_id = ${eveGold}`).toHaveLength(1);
     expect(sent.length - before).toBe(1);
     expect(sent[sent.length - 1]).toMatchObject({ gymName: "Cancel Twice", membershipName: "Gold", done: "Cancelled. Gold ends on 3 Dec 2026.", cancelledAt: "10 Nov 2026 at 12:00 PM" });
+    // A confirmation that did not go is sent again by the same press, saying all the first one would have (round one, L3, N1).
+    await sql`UPDATE gym_app_cancels SET emailed_at = NULL WHERE held_membership_id = ${eveGold}`;
+    const retried = await press(gym, eve, eveGold, "period_end", key, requestKey);
+    expect(myCancelDoneSchema.parse(JSON.parse(retried.body)).emailed).toBe(true);
+    expect(sent[sent.length - 1]?.lines).toEqual(box.choices[0]?.lines);
     // Pressed again with a new key, the box has nothing more to press.
     expect((await press(gym, eve, eveGold, "period_end", key)).statusCode).toBe(409);
     expect((await ask(gym, eve, eveGold)).choices).toEqual([]);

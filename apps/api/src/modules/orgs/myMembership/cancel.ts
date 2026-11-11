@@ -337,7 +337,7 @@ export async function cancelInApp(deps: CancelDeps, userId: string, gymId: strin
     });
     if (outcome.kind === "has_bookings") throw changed();
     if (outcome.kind !== "ok") throw refusal(outcome);
-    const id = await cancels.insertCancel(tx, { gymId, membershipId, byEntryId: whose.ownId, userId, requestKey: body.requestKey, when: body.when, endsOn: choice.endsOn, cancelledOn: today, now });
+    const id = await cancels.insertCancel(tx, { gymId, membershipId, byEntryId: whose.ownId, userId, requestKey: body.requestKey, when: body.when, endsOn: choice.endsOn, cancelledOn: today, said: { lines: choice.lines, notes: worked.ask.notes }, now });
     return { kind: "new" as const, id, choice, said, notes: worked.ask.notes, entryId: whose.entryId, gymName: whose.gymName, timezone: whose.timezone };
   });
   if (done.kind === "again") {
@@ -353,7 +353,7 @@ export async function cancelInApp(deps: CancelDeps, userId: string, gymId: strin
     const line = myCancelDoneLine({ gymName: first.gymName, membershipName: held.typeName, forName, currency: held.currency, today: r.cancelledOn, way: { when: r.when, endsOn: r.endsOn }, refundMinor });
     // A confirmation that did not go is tried again by the same press (round one, L3).
     const named = forName === null ? held.typeName : `${forName}'s ${held.typeName}`;
-    const emailed = r.emailed || (await confirm(deps, gymId, r.id, { userId, gymName: first.gymName, membershipName: named, at: now, timezone: first.timezone, done: line, lines: [], notes: [] }));
+    const emailed = r.emailed || (await confirm(deps, gymId, r.id, { userId, gymName: first.gymName, membershipName: named, at: now, timezone: first.timezone, done: line, lines: r.said.lines, notes: r.said.notes }));
     return myCancelDoneSchema.parse({ cancelId: r.id, line, endsOn: r.endsOn, emailed, reason: r.reason });
   }
   deps.news.tell(gymId, { what: "memberships", entryId: done.entryId });

@@ -4,8 +4,9 @@
 -- A member, or whoever pays for them, cancels a membership in the app. The membership itself changes as the front
 -- desk's Cancel changes it; this row is what the gym is told: when, the way it was cancelled, its last day, who pressed
 -- it (their account, and their record on the gym's list), the reason they picked afterwards, and when the confirmation
--- email went. The same press sent twice is one row (`request_key`); a membership is cancelled in the app once. A record
--- deleted for good lets go of `by_entry_id`; the membership going takes its row with it.
+-- email went, with what it says (`said`: the box's sentences), so one sent again says all of it. The same press sent
+-- twice is one row (`request_key`); a membership is cancelled in the app once. A record deleted for good lets go of
+-- `by_entry_id`; the membership going takes its row with it.
 CREATE TABLE "gym_app_cancels" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"gym_id" uuid NOT NULL,
@@ -19,6 +20,7 @@ CREATE TABLE "gym_app_cancels" (
 	"reason" text,
 	"reason_at" timestamp with time zone,
 	"emailed_at" timestamp with time zone,
+	"said" jsonb NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "gym_app_cancels_when_check" CHECK ("when" IN ('cooling_off','period_end','today','notice','contract_end','leave_early')),
 	CONSTRAINT "gym_app_cancels_reason_check" CHECK (("reason" IS NULL) = ("reason_at" IS NULL) AND ("reason" IS NULL OR "reason" IN ('moving','cost','not_using','other_gym','service','other'))),

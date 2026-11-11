@@ -178,8 +178,9 @@ describe("what the box says", () => {
     expect(myCancelledLine("2026-11-10", true, "Maya Test")).toBe("You cancelled it in the app on 10 Nov 2026.");
     expect(myCancelledLine("2026-11-10", false, "Priya Sharma")).toBe("Priya Sharma cancelled it in the app on 10 Nov 2026.");
     expect(appCancelLine({ on: "2026-11-10", byName: "Maya Test", reason: "cost" })).toBe("Cancelled in the app on 10 Nov 2026 by Maya Test · Reason: Cost");
-    expect(appCancelRowWhat({ membershipName: "Gold", on: "2026-11-10", endsOn: "2026-11-30", when: "period_end" })).toBe("Gold · Cancelled 10 Nov 2026 · Ends 30 Nov 2026");
-    expect(appCancelRowWhat({ membershipName: "Gold", on: "2026-11-10", endsOn: "2026-11-10", when: "cooling_off" })).toBe("Gold · Cancelled 10 Nov 2026 · Ended in its cooling-off period");
-    expect(appCancelRowWhat({ membershipName: "Gold", on: "2026-11-10", endsOn: null, when: "period_end" })).toBe("Gold · Cancelled 10 Nov 2026 · Frozen, no end day yet");
+    expect(appCancelRowWhat({ membershipName: "Gold", on: "2026-11-10", endsOn: "2026-11-30", when: "period_end" }, TODAY)).toBe("Gold · Cancelled 10 Nov 2026 · Ends 30 Nov 2026");
+    expect(appCancelRowWhat({ membershipName: "Gold", on: "2026-11-10", endsOn: "2026-11-30", when: "period_end" }, "2026-12-02")).toBe("Gold · Cancelled 10 Nov 2026 · Ended 30 Nov 2026");
+    expect(appCancelRowWhat({ membershipName: "Gold", on: "2026-11-10", endsOn: "2026-11-10", when: "cooling_off" }, TODAY)).toBe("Gold · Cancelled 10 Nov 2026 · Ended in its cooling-off period");
+    expect(appCancelRowWhat({ membershipName: "Gold", on: "2026-11-10", endsOn: null, when: "period_end" }, TODAY)).toBe("Gold · Cancelled 10 Nov 2026 · Frozen, no end day yet");
   });
 });

@@ -2,6 +2,7 @@
 // The membership itself is changed by the front desk's own step (`moveHeldIn`); this file keeps what the gym is told
 // (`gym_app_cancels`) and reads what the box says about money.
 import type { Sql, TransactionSql } from "postgres";
+import { z } from "zod";
 import { dayInTz } from "../../gamification/streak.js";
 import { heldRowsOf } from "../memberships/heldRepo.js";
 import { APP_CANCELS_DAYS, APP_CANCELS_SHOWN, heldMembershipView, myCancelReasonSchema, myCancelWhenSchema, type AppCancel, type AppCancelRow, type MyCancelReason, type MyCancelWhen } from "@app/shared";
@@ -17,6 +18,8 @@ export interface CancelRow {
   cancelledOn: string;
   reason: MyCancelReason | null;
   emailed: boolean;
+  /** What the box said: its sentences and the notes under it. */
+  said: { lines: string[]; notes: string[] };
 }
 
 interface RawCancel {
@@ -28,7 +31,10 @@ interface RawCancel {
   cancelled_on: string;
   reason: string | null;
   emailed: boolean;
+  said: unknown;
 }
+
+const saidSchema = z.object({ lines: z.array(z.string()), notes: z.array(z.string()) }).strict();
 
 // Text columns under a CHECK: parsed, so a value this build does not know fails here.
 const shape = (r: RawCancel): CancelRow => ({
@@ -40,11 +46,12 @@ const shape = (r: RawCancel): CancelRow => ({
   cancelledOn: r.cancelled_on,
   reason: r.reason === null ? null : myCancelReasonSchema.parse(r.reason),
   emailed: r.emailed,
+  said: saidSchema.parse(r.said),
 });
 
 const COLUMNS = (sql: SqlOrTx) => sql`
   c.id, c.held_membership_id, c.user_id, c."when", c.ends_on::text AS ends_on, c.cancelled_on::text AS cancelled_on, c.reason,
-  (c.emailed_at IS NOT NULL) AS emailed`;
+  (c.emailed_at IS NOT NULL) AS emailed, c.said`;
 
 /** The cancel this press already made, if it made one. */
 export async function cancelOfRequest(sql: SqlOrTx, gymId: string, requestKey: string): Promise<CancelRow | null> {
@@ -78,14 +85,15 @@ export interface NewCancel {
   when: MyCancelWhen;
   endsOn: string;
   cancelledOn: string;
+  said: { lines: string[]; notes: string[] };
   now: Date;
 }
 
 /** The row the gym is told by, written in the cancel's own transaction. */
 export async function insertCancel(tx: TransactionSql, c: NewCancel): Promise<string> {
   const [row] = await tx<{ id: string }[]>`
-    INSERT INTO gym_app_cancels (gym_id, held_membership_id, by_entry_id, user_id, request_key, "when", ends_on, cancelled_on, created_at)
-    VALUES (${c.gymId}, ${c.membershipId}, ${c.byEntryId}, ${c.userId}, ${c.requestKey}, ${c.when}, ${c.endsOn}::date, ${c.cancelledOn}::date, ${c.now})
+    INSERT INTO gym_app_cancels (gym_id, held_membership_id, by_entry_id, user_id, request_key, "when", ends_on, cancelled_on, said, created_at)
+    VALUES (${c.gymId}, ${c.membershipId}, ${c.byEntryId}, ${c.userId}, ${c.requestKey}, ${c.when}, ${c.endsOn}::date, ${c.cancelledOn}::date, ${tx.json(c.said)}, ${c.now})
     RETURNING id`;
   if (row === undefined) throw new Error("gym_app_cancels insert returned no row");
   return row.id;
@@ -146,7 +154,7 @@ export async function chargeableCard(sql: SqlOrTx, gymId: string, payerEntryId: 
     FROM gym_payment_connections c
     JOIN gym_member_cards k ON k.gym_id = c.gym_id AND k.environment = c.environment AND k.account_id = c.account_id AND k.entry_id = ${payerEntryId}
     WHERE c.gym_id = ${gymId} AND c.state = 'connected' AND c.location_id IS NOT NULL
-    ORDER BY c.connected_at DESC
+    ORDER BY c.connected_at DESC, k.updated_at DESC, k.card_id
     LIMIT 1`;
   return row === undefined || row.declined ? null : { brand: row.brand, last4: row.last4 };
 }
@@ -199,7 +207,7 @@ export async function nameOfRecord(sql: SqlOrTx, gymId: string, entryId: string)
 
 /** Overview's Cancelled in the app: a gym's newest from the last `APP_CANCELS_DAYS` days, and how many there are. Each
  *  one's last day is read from the membership as it stands, so a cancel staff made after it is said (round one, H2). */
-export async function recentCancels(sql: SqlOrTx, gymId: string, now: Date): Promise<{ count: number; rows: AppCancelRow[]; letsEveryoneIn: boolean }> {
+export async function recentCancels(sql: SqlOrTx, gymId: string, now: Date): Promise<{ count: number; rows: AppCancelRow[]; letsEveryoneIn: boolean; today: string }> {
   const since = new Date(now.getTime() - APP_CANCELS_DAYS * 86_400_000);
   const [counted] = await sql<{ n: number; everyone: boolean; timezone: string }[]>`
     SELECT (SELECT count(*) FROM gym_app_cancels WHERE gym_id = ${gymId} AND created_at >= ${since})::int AS n,
@@ -226,6 +234,7 @@ export async function recentCancels(sql: SqlOrTx, gymId: string, now: Date): Pro
   return {
     count: counted?.n ?? 0,
     letsEveryoneIn: counted?.everyone === true,
+    today,
     rows: rows.map((r) => ({
       id: r.id,
       entryId: r.name === null ? null : r.entry_id,

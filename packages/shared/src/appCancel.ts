@@ -67,14 +67,25 @@ export const appCancelsResponseSchema = z
     /** The front desk lets in everyone on the gym's list (16d, where every gym starts), so somebody whose membership
      *  ended can still check in: the card says so, with the way to change it. */
     letsEveryoneIn: z.boolean(),
+    /** The gym's own day, so a last day already past reads "Ended". */
+    today: daySchema,
   })
   .strict();
 export type AppCancelsResponse = z.infer<typeof appCancelsResponseSchema>;
 
-/** One row's second line: "Gold Monthly · Cancelled 11 Nov 2026 · Ends 30 Nov 2026". */
-export function appCancelRowWhat(row: Pick<AppCancelRow, "membershipName" | "on" | "endsOn" | "when">): string {
+/** One row's second line: "Gold Monthly · Cancelled 11 Nov 2026 · Ends 30 Nov 2026", or "Ended 30 Nov 2026" once that
+ *  day has passed on the gym's `today`. */
+export function appCancelRowWhat(row: Pick<AppCancelRow, "membershipName" | "on" | "endsOn" | "when">, today: string): string {
   const ends =
-    row.when === "cooling_off" ? "Ended in its cooling-off period" : row.endsOn === null ? "Frozen, no end day yet" : row.endsOn <= row.on ? "Ended that day" : `Ends ${dayWords(row.endsOn)}`;
+    row.when === "cooling_off"
+      ? "Ended in its cooling-off period"
+      : row.endsOn === null
+        ? "Frozen, no end day yet"
+        : row.endsOn <= row.on
+          ? "Ended that day"
+          : row.endsOn < today
+            ? `Ended ${dayWords(row.endsOn)}`
+            : `Ends ${dayWords(row.endsOn)}`;
   return `${row.membershipName} · Cancelled ${dayWords(row.on)} · ${ends}`;
 }
 
