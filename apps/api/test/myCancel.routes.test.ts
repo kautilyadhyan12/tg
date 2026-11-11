@@ -86,6 +86,9 @@ d("cancel in the app (real Postgres)", { timeout: T }, () => {
     const myUsers = sql`SELECT id FROM users WHERE email LIKE 'cancel-t-%@example.com'`;
     await sql`DELETE FROM subscriptions WHERE owner_type = 'gym' AND owner_id IN (${mine})`;
     await sql`DELETE FROM gym_app_cancels WHERE gym_id IN (${mine})`;
+    await sql`DELETE FROM gym_member_cards WHERE gym_id IN (${mine})`;
+    await sql`DELETE FROM gym_card_agreements WHERE gym_id IN (${mine})`;
+    await sql`DELETE FROM gym_payment_connections WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM gym_member_payers WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM gym_member_refunds WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM gym_member_payments WHERE gym_id IN (${mine})`;
@@ -294,6 +297,38 @@ d("cancel in the app (real Postgres)", { timeout: T }, () => {
     expect(c.choice.payments).toHaveLength(11);
     expect(c.choice.lines[1]).toBe("11 more payments of $50.00 are due, the last on 4 Oct 2027.");
     expect(await billsOpenedOn(gym, caraMax, months(14), 0)).toEqual(c.choice.payments);
+  });
+
+  it("the box names the card the app charges: it won't be charged again, or once more; never where money is owed", async () => {
+    clock = noon("2026-11-04");
+    const gym = await makeGym("Cancel Card");
+    const ida = await member(gym, "Ida Cancel");
+    const jon = await member(gym, "Jon Cancel");
+    const idaGold = await give(gym, ida, "Gold", "2026-11-04");
+    const jonNotice = await give(gym, jon, "Gold Notice", "2026-11-04");
+    const acct = `MLCANCEL${uniq().slice(-8)}`;
+    await sql`
+      INSERT INTO gym_payment_connections (gym_id, provider, environment, state, account_id, business_name, country, currency,
+        location_id, location_name, access_token, refresh_token, access_expires_at, refresh_due_at, connected_at, connected_by)
+      VALUES (${gym.id}, 'square', 'production', 'connected', ${acct}, 'Cancel Card LLC', 'US', 'USD', 'LCANCEL', 'Main',
+        'v1.sealed-access', 'v1.sealed-refresh', now() + interval '30 days', now() + interval '6 days', now(), ${gym.owner.userId})`;
+    for (const who of [ida, jon]) {
+      const [agreed] = await sql<{ id: string }[]>`
+        INSERT INTO gym_card_agreements (gym_id, entry_id, words, screen, screen_user_id, brand, last4, agreed_at)
+        VALUES (${gym.id}, ${who.entryId}, 'I agree that this gym may save this card and charge it for my membership.', 'desk', ${gym.owner.userId}, 'VISA', '1111', now())
+        RETURNING id`;
+      await sql`
+        INSERT INTO gym_member_cards (gym_id, entry_id, environment, account_id, customer_id, card_id, brand, last4, exp_month, exp_year, saved_from, saved_by, agreement_id, saved_at, updated_at)
+        VALUES (${gym.id}, ${who.entryId}, 'production', ${acct}, ${`CUST${uniq()}`}, ${`ccof:${randomUUID()}`}, 'VISA', '1111', 12, 2031, 'desk', ${gym.owner.userId}, ${agreed?.id ?? null}, now(), now())`;
+    }
+    clock = noon("2026-11-10");
+    expect((await ask(gym, ida, idaGold)).choices[0]?.lines).toEqual(["Gold ends on 3 Dec 2026, the last day you've paid for.", "Visa ending 1111 won't be charged again."]);
+    expect((await ask(gym, jon, jonNotice)).choices[0]?.lines[1]).toBe("Visa ending 1111 is charged $50.00 once more, on 4 Dec 2026.");
+    // Money owed: the card is not said to be done with, as staff can still charge it for that.
+    await sql`UPDATE gym_member_bills SET status = 'open' WHERE gym_id = ${gym.id} AND held_membership_id = ${idaGold}`;
+    await sql`DELETE FROM gym_member_payments WHERE gym_id = ${gym.id} AND bill_id IN (SELECT id FROM gym_member_bills WHERE held_membership_id = ${idaGold})`;
+    const owing = await ask(gym, ida, idaGold);
+    expect(JSON.stringify(owing)).not.toContain("won't be charged again");
   });
 
   it("a member somebody else pays for is told who can; the payer cancels it, and the person's page says so", async () => {

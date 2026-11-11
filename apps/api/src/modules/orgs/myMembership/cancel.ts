@@ -140,6 +140,12 @@ async function workOut(tx: TransactionSql, gymId: string, whose: Whose, membersh
   const m = row.membership;
   const view = heldMembershipView(m, today);
   const renewsAgain = view.status === "upcoming" ? await cancels.replacedStopped(tx, gymId, row.id) : null;
+  // Money owed before the cancel stays owed: the bills already due, and the fees still owed.
+  const owedBills = bills.filter((b) => b.status === "open" && b.dueOn <= today).reduce((n, b) => n + Math.max(0, b.amountMinor - b.paidMinor), 0);
+  const owedFees = fees.fees
+    .filter((f) => f.status === "open" && f.stillOwed)
+    .reduce((n, f) => n + Math.max(0, f.amountMinor - fees.payments.filter((p) => p.billId === f.id && p.voided === null).reduce((s, p) => s + p.amountMinor, 0)), 0);
+  const owedMinor = owedBills + owedFees;
   const choices: MyCancelChoice[] = [];
   const facts = new Map<MyCancelWhen, MyCancelFacts>();
   let blocked: string | null = null;
@@ -157,7 +163,9 @@ async function workOut(tx: TransactionSql, gymId: string, whose: Whose, membersh
     const coming = way.when === "cooling_off" ? [] : paymentsToCome(row, after, lastDay, bills, today);
     const first = coming[0];
     // Named only where the app charges it by itself, as the renewal reminder names it (18v-iv).
-    const card = first === undefined ? null : await chargedCard(tx, gymId, row.id, first.periodIndex);
+    // With nothing to come, the card the app charges today, so the box says it won't be charged again; never where money
+    // is owed, which staff can still charge to it.
+    const card = first !== undefined ? await chargedCard(tx, gymId, row.id, first.periodIndex) : owedMinor > 0 ? null : await chargedCard(tx, gymId, row.id, m.paidPeriods);
     const toCome: MyCancelPayment[] = coming.map((c) => ({ dueOn: c.dueOn, amountMinor: c.amountMinor }));
     const asked = await membershipBookingsAsk(tx, gymId, { membership: row.id, now, afterDay: after.status === "cancelled" ? null : lastDay }, { bookings: null, ptSessions: null });
     const ending = {
@@ -191,14 +199,9 @@ async function workOut(tx: TransactionSql, gymId: string, whose: Whose, membersh
     choices.push({ ...choice, button: myCancelButton(way.when, feeMinor, row.currency), key: keyOf(row.id, choice) });
   }
   const notes: string[] = [];
-  // Money owed before the cancel stays owed: the bills already due, and the fees still owed.
-  const owedBills = bills.filter((b) => b.status === "open" && b.dueOn <= today).reduce((n, b) => n + Math.max(0, b.amountMinor - b.paidMinor), 0);
-  const owedFees = fees.fees
-    .filter((f) => f.status === "open" && f.stillOwed)
-    .reduce((n, f) => n + Math.max(0, f.amountMinor - fees.payments.filter((p) => p.billId === f.id && p.voided === null).reduce((s, p) => s + p.amountMinor, 0)), 0);
-  if (owedBills + owedFees > 0 && choices.some((c) => c.when !== "cooling_off")) {
+  if (owedMinor > 0 && choices.some((c) => c.when !== "cooling_off")) {
     const payer = (await payerOf(tx, gymId, whose.entryId))?.entryId ?? whose.entryId;
-    notes.push(myCancelOwedNote(owedBills + owedFees, row.currency, whose.gymName, await cancels.chargeableCard(tx, gymId, payer)));
+    notes.push(myCancelOwedNote(owedMinor, row.currency, whose.gymName, await cancels.chargeableCard(tx, gymId, payer)));
   }
   if (choices.length > 0 && myCancelFrontDeskSooner(m, today)) notes.push(MY_CANCEL_WORDS.frontDeskSooner);
   if (choices.length === 0 && blocked !== null) notes.push(blocked);
