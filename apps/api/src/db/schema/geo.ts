@@ -141,7 +141,7 @@ export const runPlans = pgTable(
   (t) => [check("run_plans_answers_check", sql`jsonb_typeof(${t.answers}) = 'object'`)],
 );
 
-// 0231 (ROADMAP 37d-iii-b): Suggested or My plan, and the person's own week, read through `ownWeekSchema`.
+// 0232 (ROADMAP 37d-iii-b): Suggested or My plan, and the person's own week, read through `ownWeekSchema`.
 export const ownRunPlans = pgTable(
   "own_run_plans",
   {

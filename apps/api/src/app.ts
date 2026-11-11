@@ -30,6 +30,7 @@ import { changeEmailSenderFor, type ChangeEmailSender } from "./modules/users/ch
 import { OnboardingIncompleteError, UsersError } from "./modules/users/service.js";
 import { createDevCoOwnerEmailSender, createResendCoOwnerEmailSender, type CoOwnerEmailSender } from "./modules/orgs/coOwners/email.js";
 import { createDevAgreementEmailSender, createResendAgreementEmailSender, type AgreementEmailSender } from "./modules/orgs/agreement/email.js";
+import { createDevCancelEmailSender, createResendCancelEmailSender, type CancelEmailSender } from "./modules/orgs/myMembership/cancelEmail.js";
 import { emailBoughtCopy } from "./modules/orgs/agreement/service.js";
 import { registerUserRoutes } from "./modules/users/routes.js";
 import { registerPrivacyRoutes } from "./modules/privacy/routes.js";
@@ -82,6 +83,8 @@ export interface BuildAppOverrides {
   coOwnerEmailSender?: CoOwnerEmailSender;
   /** The copy of a signed membership agreement (ROADMAP 18u-i). */
   agreementEmailSender?: AgreementEmailSender;
+  /** The confirmation of a membership cancelled in the app (18l). */
+  cancelEmailSender?: CancelEmailSender;
   /** Tests inject the in-memory adapter (with its `down` switch) to drive
    *  fail-open/fail-closed paths deterministically (P2.4). */
   redis?: RedisLike;
@@ -431,6 +434,7 @@ export async function buildApp(
         overrides.coOwnerEmailSender ??
         (transport !== null ? createResendCoOwnerEmailSender(transport, app.log) : createDevCoOwnerEmailSender(app.log, config)),
       agreementEmail,
+      cancelEmail: overrides.cancelEmailSender ?? (transport !== null ? createResendCancelEmailSender(transport, app.log) : createDevCancelEmailSender(app.log, config)),
       webOrigin: config.WEB_ORIGIN,
       news,
       joinCodes: config.JOIN_CODES,

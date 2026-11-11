@@ -1,5 +1,6 @@
 -- Your own run plan (ROADMAP Stage 5 item 37d-iii-b). Forward-only. Hand-written, as `0016` onwards
--- are; its journal entry is part of this commit.
+-- are; renumbered from 0231 because 18l's 0231_app_cancels merged first (CLAUDE.md §8). Its journal entry
+-- is part of this commit.
 --
 -- One row per person once they pick Suggested or My plan, or write their own week: the pick (null until
 -- they pick: My plan where they have one, else Suggested), and their own week, Monday to Sunday, a run or

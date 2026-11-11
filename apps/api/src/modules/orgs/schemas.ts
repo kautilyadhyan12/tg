@@ -194,6 +194,10 @@ export const terminalPaymentParamsSchema = z
 /** A sale on the Terminal at Sell (18d-vi-b-ii). */
 export const terminalSaleParamsSchema = z.object({ gymId: z.uuid(), paymentId: z.uuid() }).strict();
 
+/** Cancel in the app (18l): a membership of the reader's, and a cancel of theirs. */
+export const myCancelParamsSchema = z.object({ gymId: z.uuid(), membershipId: z.uuid() }).strict();
+export const myCancelReasonParamsSchema = z.object({ gymId: z.uuid(), cancelId: z.uuid() }).strict();
+
 export const memberNoteParamsSchema = z
   .object({ gymId: z.uuid(), entryId: z.uuid(), noteId: z.uuid() })
   .strict();

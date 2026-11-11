@@ -45,6 +45,8 @@ export * from "./heldMemberships.js";
 export * from "./heldOnList.js";
 export * from "./memberBills.js";
 export * from "./myMembership.js";
+export * from "./appCancel.js";
+export * from "./myCancel.js";
 export * from "./receipts.js";
 export * from "./memberBillRules.js";
 export * from "./membershipChange.js";

@@ -26,6 +26,8 @@ export const SETTINGS_SECTION = {
   // The Overdue payments part of Booking rules (17i): the box opens, with the part in view.
   overdueBookings: 'overdue-bookings',
   frontDesk: 'check-in-devices',
+  // Who can check in (16d): the box opens, in view (18l: Overview's Cancelled in the app opens it).
+  checkinRules: 'who-can-check-in',
   leadEmails: 'follow-up-emails',
   waiver: 'waiver',
   agreement: 'membership-agreement',
@@ -55,6 +57,7 @@ const PLACES = {
   bookingRules: { path: `/settings#${SETTINGS_SECTION.bookingRules}`, may: canManageSchedule },
   overdueBookings: { path: `/settings#${SETTINGS_SECTION.overdueBookings}`, may: canManageSchedule },
   frontDesk: { path: `/settings#${SETTINGS_SECTION.frontDesk}`, may: canManageOrg },
+  checkinRules: { path: `/settings#${SETTINGS_SECTION.checkinRules}`, may: canManageOrg },
   leadEmails: { path: `/settings#${SETTINGS_SECTION.leadEmails}`, may: canManageOrg },
   waiver: { path: `/settings#${SETTINGS_SECTION.waiver}`, may: canManageOrg },
   agreement: { path: `/settings#${SETTINGS_SECTION.agreement}`, may: canManageOrg },
