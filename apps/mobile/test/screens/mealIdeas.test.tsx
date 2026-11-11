@@ -314,8 +314,11 @@ describe("the Dashboard's Recommended box", () => {
     expect(box.queryByText(/^Dal/)).toBeNull();
     expect(box.getByText(FOOD_ALLERGY_CAUTION)).toBeTruthy();
     expect(box.getByText(DIET_LABEL_CAUTION)).toBeTruthy();
+    // Workout joins with item 36; Running came with the run plan (37d-iii-a).
     expect(box.queryByRole("radio", { name: "Exercise" })).toBeNull();
-    expect(box.queryByRole("radio", { name: "Running" })).toBeNull();
+    expect(box.queryByRole("radio", { name: "Workout" })).toBeNull();
+    expect(box.getByRole("radio", { name: "Running" }).props.accessibilityState).toMatchObject({ selected: false });
+    expect(box.getByRole("radio", { name: "Food" }).props.accessibilityState).toMatchObject({ selected: true });
     await fireEvent.press(box.getByRole("button", { name: "Log Chicken breast + Rice" }));
     // The Food page, at its box, where the same meal is logged with one more press.
     const food = within(await screen.findByTestId("meal-ideas-box"));

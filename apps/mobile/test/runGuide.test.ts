@@ -15,9 +15,12 @@ import {
   guideNextLook,
   guideOf,
   guideSchedule,
+  guideSkip,
+  leftOf,
   leftWords,
   nextWords,
   nowLine,
+  skipLine,
   spokenDistance,
   spokenLength,
   stepName,
@@ -41,12 +44,22 @@ interface Heard {
   text: string;
 }
 
+/** What the screen's step card says to do: run, walk, or that the run is complete. */
+function shows(g: KeptRunGuide): "run" | "walk" | "done" {
+  const step = g.steps[g.at.index];
+  if (step === undefined) return "done";
+  return step.kind === "run" ? "run" : "walk";
+}
+
 /** A Couch to 5K run played through as the recorder plays it, a point a second. `pauses` are
  *  [from, to] in wall seconds; `closed` is [from, to] in wall seconds while the app is closed (the
- *  person goes on doing what they last heard, and nothing handed over is said). */
-function play(guide: KeptRunGuide, opts: { pauses?: [number, number][]; closed?: [number, number] | null } = {}): { heard: Heard[]; guide: KeptRunGuide } {
+ *  person goes on doing what they last heard, and nothing handed over is said); `skips`, the wall
+ *  seconds Skip step is pressed (37d-iii-a). Every line that says run or walk is checked against what
+ *  the step card shows that same second. */
+function play(guide: KeptRunGuide, opts: { pauses?: [number, number][]; closed?: [number, number] | null; skips?: number[] } = {}): { heard: Heard[]; guide: KeptRunGuide } {
   const pauses = opts.pauses ?? [];
   const closed = opts.closed ?? null;
+  const skips = opts.skips ?? [];
   let g = guide;
   let ahead: { atWall: number; text: string }[] = [];
   const heard: Heard[] = [];
@@ -65,6 +78,7 @@ function play(guide: KeptRunGuide, opts: { pauses?: [number, number][]; closed?:
     if (wall > total * 3 + 3_600_000) throw new Error("never ended");
     const isPaused = pauses.some(([a, b]) => wall >= a * 1000 && wall < b * 1000);
     const isDead = closed !== null && wall >= closed[0] * 1000 && wall < closed[1] * 1000;
+    const heardBefore = heard.length;
     if (isDead && !dead) {
       // The app is gone, and with it what was handed over.
       dead = true;
@@ -89,6 +103,16 @@ function play(guide: KeptRunGuide, opts: { pauses?: [number, number][]; closed?:
         heard.push({ wallMs: wall, movingMs: moving, text: nowLine(g, moving, 0, "metric") });
         hand(wall);
       }
+      if (skips.includes(wall / 1000)) {
+        // As the recorder does: the guide to now, then the next step, said at once and handed over again.
+        if (!isPaused) g = guideAdvance(g, moving, () => 0).guide;
+        if (!guideDone(g)) {
+          g = guideSkip(g, moving, 0);
+          heard.push({ wallMs: wall, movingMs: moving, text: skipLine(g, "metric") });
+          if (isPaused) ahead = [];
+          else hand(wall);
+        }
+      }
       for (const line of ahead.filter((l) => l.atWall <= wall)) heard.push({ wallMs: line.atWall, movingMs: moving - (wall - line.atWall), text: line.text });
       ahead = ahead.filter((l) => l.atWall > wall);
       if (!isPaused) {
@@ -96,6 +120,10 @@ function play(guide: KeptRunGuide, opts: { pauses?: [number, number][]; closed?:
         g = moved.guide;
         // A walk-run's steps are all by the clock: none of their lines is said here.
         expect(moved.begun.every((b) => b.byClock)).toBe(true);
+      }
+      for (const h of heard.slice(heardBefore)) {
+        const what = told(h.text);
+        if (what !== null) expect([h.movingMs, what]).toEqual([h.movingMs, shows(g)]);
       }
     }
     if (!isPaused) moving += 1000;
@@ -189,6 +217,79 @@ describe("the worst thing: the voice keeps a beginner running when the plan says
   });
 });
 
+/** Where step `k` begins in the plan, in seconds. */
+const planStart = (index: number, k: number): number => c25kParts(index).slice(0, k).reduce((t, p) => t + p.s, 0);
+const EVERY_STEP = Array.from({ length: SESSIONS }, (_, i) => i).flatMap((i) => c25kParts(i).map((_, k) => [i, k] as const));
+
+describe("Skip step (37d-iii-a): the voice never says run while the screen says walk", () => {
+  it.each(EVERY_STEP)("NHS run %i, step %i skipped 7 seconds in: the next step said at once, every other run the plan's own, each step said once", (index, k) => {
+    const parts = c25kParts(index);
+    const at = planStart(index, k) + 7;
+    const { heard, guide } = play(guideOf(walkRun(index), "t"), { skips: [at] });
+    const pressed = heard.find((h) => h.wallMs === at * 1000 && told(h.text) !== null);
+    expect(pressed?.text).toBe(k === parts.length - 1 ? DONE_LINE : beginLine(guide, k + 1, "metric"));
+    const runs = planRuns(index);
+    const skippedRun = parts.slice(0, k + 1).filter((p) => p.kind === "run").length - 1;
+    const expected = parts[k]?.kind === "run" ? runs.map((s, r) => (r === skippedRun ? 7 : s)) : runs;
+    expect(runLengths(heard)).toEqual(expected);
+    // Each step begun once, and the run complete once, at the plan's time less what was skipped.
+    expect(heard.filter((h) => told(h.text) !== null)).toHaveLength(parts.length + 1);
+    const total = parts.reduce((t, p) => t + p.s, 0);
+    expect(heard.filter((h) => told(h.text) === "done").map((h) => h.movingMs)).toEqual([(total - ((parts[k]?.s ?? 0) - 7)) * 1000]);
+    expect(guideDone(guide)).toBe(true);
+  });
+
+  it.each(Array.from({ length: SESSIONS }, (_, i) => i))("NHS run %i, the warm-up skipped at 60 s: halfway is said once, at the plan's halfway less the 4 minutes skipped", (index) => {
+    const total = c25kParts(index).reduce((t, p) => t + p.s, 0);
+    const { heard } = play(guideOf(walkRun(index), "t"), { skips: [60] });
+    const half = heard.filter((h) => h.text.includes(HALFWAY));
+    expect(half).toHaveLength(1);
+    // Said with a step's line when within 15 s of one.
+    expect(Math.abs((half[0]?.movingMs ?? 0) / 1000 - (total / 2 - 240))).toBeLessThan(15);
+  });
+
+  it("a skip past the plan's halfway never says it later", () => {
+    // NHS run 16 (week 6 run 1): 5, 5, 3, 8, 3, 5, 5 minutes: halfway at 17 min, inside the 8-minute run.
+    const index = C25K_RUNS_A_WEEK * 5;
+    const parts = c25kParts(index);
+    const runStart = planStart(index, 3);
+    expect(parts[3]).toEqual({ kind: "run", s: 480 });
+    expect(runStart).toBeLessThan(parts.reduce((t, p) => t + p.s, 0) / 2);
+    const { heard } = play(guideOf(walkRun(index), "t"), { skips: [runStart + 60] });
+    expect(heard.filter((h) => h.text.includes(HALFWAY))).toEqual([]);
+  });
+
+  it("skipped while paused: the next step is said at the press, Resume says it again with what is left, and it lasts its full time", () => {
+    // NHS run 1: paused in the first run (300 to 360 s) from 320, skipped at 330, resumed at 400.
+    const { heard } = play(guideOf(walkRun(0), "t"), { pauses: [[320, 400]], skips: [330] });
+    expect(heard.filter((h) => h.wallMs >= 320_000 && h.wallMs <= 400_000).map((h) => h.text)).toEqual(["Now walk for 1 and a half minutes.", "Now walk. 1 minute 30 seconds left."]);
+    expect(runLengths(heard)).toEqual(planRuns(0).map((s, r) => (r === 0 ? 20 : s)));
+  });
+
+  it("a skip, then the app closed and opened again: it carries on from the step skipped to", () => {
+    // NHS run 1: the warm-up skipped at 10 s, so the first run is 10 to 70 s; closed from 50 to 100.
+    const { heard } = play(guideOf(walkRun(0), "t"), { skips: [10], closed: [50, 100] });
+    expect(heard.find((h) => h.wallMs === 100_000)?.text).toBe("Now walk. 1 minute left.");
+  });
+
+  it("two presses skip two steps from the same second, and nothing is skipped past the end", () => {
+    let g = guideOf(walkRun(0), "t");
+    g = guideSkip(g, 5000, 0);
+    g = guideSkip(g, 5000, 0);
+    expect(g.at).toEqual({ index: 2, fromMs: 5000, fromM: 0 });
+    expect(skipLine(g, "metric")).toBe("Now walk for 1 and a half minutes.");
+    const end = { ...g, at: { index: g.steps.length, fromMs: 5000, fromM: 0 } };
+    expect(guideSkip(end, 9000, 0)).toBe(end);
+  });
+
+  it("a skip never moves the step's start back, so what is left is never more than the step", () => {
+    const g = guideAdvance(guideOf(walkRun(0), "t"), 300_000, () => 0).guide;
+    const skipped = guideSkip(g, 200_000, 0);
+    expect(skipped.at.fromMs).toBe(300_000);
+    expect(leftOf(skipped, 300_000, 0)).toEqual({ kind: "s", amount: 90 });
+  });
+});
+
 describe("what the voice says in a Couch to 5K run", () => {
   it("NHS run 1, line by line, at the plan's seconds", () => {
     const { heard } = play(guideOf(walkRun(0), "t"));
@@ -241,14 +342,23 @@ describe("a runner's planned run", () => {
 
   /** Played at a steady 3 m a second (5:33 a km), a point a second; the distance's lines said as the
    *  points show them, the clock's handed over ahead. */
-  function playRunner(session: PlanSession, units: "metric" | "imperial" = "metric"): { heard: [number, number, string][]; guide: KeptRunGuide } {
+  function playRunner(session: PlanSession, units: "metric" | "imperial" = "metric", skips: number[] = []): { heard: [number, number, string][]; guide: KeptRunGuide } {
     let g = guideOf(session, "t");
     const heard: [number, number, string][] = [[0, 0, beginLine(g, 0, units)]];
     let ahead = guideSchedule(g, 0, units).map((l) => ({ at: l.inMs, text: l.text }));
     for (let ms = 1000; ms < 7_200_000; ms += 1000) {
+      const metres = (ms / 1000) * 3;
+      // Skip step (37d-iii-a), pressed first in its second, as the recorder does it.
+      if (skips.includes(ms / 1000)) {
+        g = guideAdvance(g, ms, () => metres).guide;
+        if (!guideDone(g)) {
+          g = guideSkip(g, ms, metres);
+          heard.push([ms / 1000, metres, skipLine(g, units)]);
+          ahead = guideSchedule(g, ms, units).map((l) => ({ at: ms + l.inMs, text: l.text }));
+        }
+      }
       for (const l of ahead.filter((a) => a.at <= ms)) heard.push([l.at / 1000, (l.at / 1000) * 3, l.text]);
       ahead = ahead.filter((a) => a.at > ms);
-      const metres = (ms / 1000) * 3;
       const moved = guideAdvance(g, ms, () => metres);
       g = moved.guide;
       const last = moved.begun.at(-1);
@@ -331,6 +441,39 @@ describe("a runner's planned run", () => {
     expect(moved.guide.at).toEqual({ index: 1, fromMs: 500_000, fromM: RUN_WARM_M });
     // Never later than now, never earlier than the step before began.
     expect(guideAdvance(g, 530_000, () => 1600, () => 900_000).guide.at.fromMs).toBe(530_000);
+  });
+
+  it("Skip step on the warm-up: the first repeat begins where the person is, and runs its whole distance", () => {
+    // 200 s in, at 600 m of the 1.5 km warm-up.
+    const { heard } = playRunner(tempo, "metric", [200]);
+    expect(heard.slice(0, 3)).toEqual([
+      [0, 0, "Warm up with easy running for 1.5 kilometres."],
+      [200, 600, "Repeat 1 of 3. Run 1 kilometre at tempo pace."],
+      [534, 1602, "Jog easy for 1 minute to recover."],
+    ]);
+    expect(heard.at(-1)?.[2]).toBe(DONE_LINE);
+    expect(heard.at(-1)?.[1]).toBeGreaterThanOrEqual(8000);
+  });
+
+  it("Skip step on a recovery jog: the next repeat is said once, at the press, and the jog's line never comes late", () => {
+    // Intervals: the warm-up ends at 500 s, the first 800 m at 767 s; the jog of 150 s skipped at 800 s.
+    const { heard } = playRunner(intervals, "metric", [800]);
+    const rep2 = heard.filter(([, , t]) => t === "Repeat 2 of 5. Run 800 metres at interval pace.");
+    expect(rep2).toEqual([[800, 2400, "Repeat 2 of 5. Run 800 metres at interval pace."]]);
+    expect(heard.filter(([, , t]) => t.startsWith("Repeat"))).toHaveLength(5);
+    expect(heard.filter(([, , t]) => t.startsWith("Jog easy"))).toHaveLength(4);
+    expect(heard.filter(([, , t]) => t === DONE_LINE)).toHaveLength(1);
+  });
+
+  it("Skip step on the cool-down, or on an easy run's only step: the run is complete, and no distance is said that was not run", () => {
+    const cool = playRunner(tempo, "metric", [2000]);
+    expect(cool.heard.at(-1)).toEqual([2000, 6000, DONE_LINE]);
+    expect(guideDone(cool.guide)).toBe(true);
+    const long = playRunner({ kind: "long", m: 12500, reps: null }, "metric", [700]);
+    expect(long.heard).toEqual([
+      [0, 0, "Today's long run: 12.5 kilometres at an easy pace."],
+      [700, 2100, DONE_LINE],
+    ]);
   });
 
   it("a step by distance is looked at no sooner than the fastest runner alive could end it, and never less than a second apart", () => {

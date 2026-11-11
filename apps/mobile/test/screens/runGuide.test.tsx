@@ -2,8 +2,8 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import { AppState } from "react-native";
 import { OPENFREEMAP, c25kParts, planWeekdayOf, runPlanOf, type RunPlanAnswers, type RunPlanResponse } from "@app/shared";
 import { App } from "../../src/App";
-import { chooseVoice, loadRun, movingMsOf, phoneRunFiles, resetRecorder, runNow, startRun, takeLocations } from "../../src/screens/running/recorder";
-import { guideOf } from "../../src/screens/running/runGuide";
+import { chooseVoice, loadRun, movingMsOf, phoneRunFiles, resetRecorder, runNow, skipStep, startRun, takeLocations } from "../../src/screens/running/recorder";
+import { guideOf, leftOf } from "../../src/screens/running/runGuide";
 import { phoneToday } from "../../src/screens/running/RunPlanBox";
 import { RAVI, fakeServer, kept, memoryStore, profile, tokens } from "../kit";
 
@@ -111,34 +111,32 @@ describe("the worst thing: a beginner told to keep running when the plan says wa
     expect(voice.ahead[0]?.text).toBe("Now walk for 1 and a half minutes.");
   });
 
-  it("Today's run beside START starts the plan's run too, and START itself a run of one's own", async () => {
+  it("START alone records a run of one's own, with the footprints; today's run is started from the plan box only (Kd, 2026-11-11)", async () => {
     await openRunning(BEGINNER());
-    const buttons = screen.getAllByRole("button", { name: "Start today’s run, with each step said" });
-    // One in the plan box, one beside START, where the page's foot is hidden under START.
-    expect(buttons).toHaveLength(2);
+    // One Start today's run, in the plan box; nothing beside START.
+    expect(screen.getAllByRole("button", { name: "Start today’s run, with each step said" })).toHaveLength(1);
     expect(within(screen.getByTestId("run-plan-box")).getAllByRole("button", { name: "Start today’s run, with each step said" })).toHaveLength(1);
-    const side = buttons.find((b) => within(screen.getByTestId("run-plan-box")).queryAllByRole("button").every((inBox) => inBox !== b));
-    if (side === undefined) throw new Error("no button beside START");
-    await fireEvent.press(side);
+    // "Today's run" only as the plan box's own label, never a button beside START.
+    expect(screen.getAllByText("Today’s run")).toHaveLength(within(screen.getByTestId("run-plan-box")).getAllByText("Today’s run").length);
+    await fireEvent.press(screen.getByRole("button", { name: "Start run" }));
     await fireEvent.press(await screen.findByRole("button", { name: "Start now" }));
     await waitFor(() => {
-      expect(runNow()?.guide?.title).toBe("Run 1 · 28½ min");
+      expect(runNow()?.phase).toBe("running");
     });
+    expect(runNow()?.guide).toBeNull();
   });
 
-  it("location off: Today's run beside START says so above START, the plan box's button under the box", async () => {
+  it("location off: the plan box's button says so under the box, START above START, never both", async () => {
     Object.assign(location, { services: false });
     await openRunning(BEGINNER());
-    const side = screen.getAllByRole("button", { name: "Start today’s run, with each step said" }).find(
-      (b) => within(screen.getByTestId("run-plan-box")).queryAllByRole("button").every((inBox) => inBox !== b),
-    );
-    if (side === undefined) throw new Error("no button beside START");
-    await fireEvent.press(side);
-    expect(await screen.findByText("Turn on your phone's location to record your run.")).toBeTruthy();
-    expect(screen.queryByTestId("problem-under-plan")).toBeNull();
     await fireEvent.press(within(screen.getByTestId("run-plan-box")).getByRole("button", { name: "Start today’s run, with each step said" }));
     const under = await screen.findByTestId("problem-under-plan");
     expect(within(under).getByText("Turn on your phone's location to record your run.")).toBeTruthy();
+    expect(screen.getAllByText("Turn on your phone's location to record your run.")).toHaveLength(1);
+    await fireEvent.press(screen.getByRole("button", { name: "Start run" }));
+    await waitFor(() => {
+      expect(screen.queryByTestId("problem-under-plan")).toBeNull();
+    });
     expect(screen.getAllByText("Turn on your phone's location to record your run.")).toHaveLength(1);
   });
 
@@ -155,6 +153,30 @@ describe("the worst thing: a beginner told to keep running when the plan says wa
     expect(voice.said).toContain("Run resumed.");
     expect(voice.said.at(-1)).toMatch(/^Now walk\. \d+ seconds left\.$|^Now walk\. 1 minute( \d+ seconds)? left\.$/);
     expect(voice.ahead[0]?.text).toBe("Now run for 1 minute.");
+  });
+
+  it("Skip step while standing, then an Auto-pause dated back before the press: the step is never longer than itself, and the skipped one never comes back (37d-iii-a)", async () => {
+    await startRun(RAVI.id, "5a1d2c3b-4a5e-4f60-8a7b-9c0d1e2f3a4b", true, Date.now(), guideOf({ kind: "walk_run", week: 1, run: 1, parts: c25kParts(0) }, "Run 1 · 28½ min"));
+    await feed(0, 100, 1.6);
+    // Still from 100 s; Skip step pressed at 105 s, before Auto-pause has judged the stop.
+    await feed(100, 5, 0);
+    const startedAt = runNow()?.startedAt ?? 0;
+    await act(() => skipStep(startedAt + 105_000));
+    expect(runNow()?.guide?.at.index).toBe(1);
+    expect(voice.said.at(-1)).toBe("Now run for 1 minute.");
+    // Still on: the Auto-pause is dated back to the first still point, before the press.
+    await feed(105, 25, 0);
+    const run = runNow();
+    if (run === null || run.guide === null) throw new Error("no guided run");
+    expect(run.phase).toBe("paused");
+    expect(run.guide.at.index).toBe(1);
+    const moving = movingMsOf(run, startedAt + 130_000);
+    expect(run.guide.at.fromMs).toBeLessThanOrEqual(moving);
+    expect(leftOf(run.guide, moving, 0)).toEqual({ kind: "s", amount: 60 });
+    // Moving again: what is left is the run's whole minute, never more.
+    await feed(130, 3, 1.6);
+    expect(runNow()?.phase).toBe("running");
+    expect(voice.said.at(-1)).toMatch(/^Now run\. (1 minute|5\d seconds) left\.$/);
   });
 
   it("stopped just as a run began: the Auto-pause starts before it, so the run begins again after the pause", async () => {

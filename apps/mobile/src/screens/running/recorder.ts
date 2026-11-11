@@ -25,7 +25,7 @@ import {
 } from "@app/shared";
 import { colours } from "../../look/colours";
 import { AUTO_START, nextAutoPause, type AutoPauseState } from "./autoPause";
-import { beginLine, guideAdvance, guideDone, guideNextLook, guideSchedule, nowLine } from "./runGuide";
+import { beginLine, guideAdvance, guideDone, guideNextLook, guideSchedule, guideSkip, nowLine, skipLine } from "./runGuide";
 import { PAUSE_WORDS, VOICE_AFTER_LOAD, VOICE_START, voiceCheck, type VoiceState } from "./runVoice";
 import { runVoiceNative } from "./runVoiceNative";
 
@@ -500,8 +500,12 @@ export async function takeLocations(data: unknown, now: number = Date.now()): Pr
   } else if (was === "running") {
     // Stopped at a crossing as a step began: the pause starts at the first still point, before it,
     // so the step begins again after the pause (Resume says what is left of the one before).
-    if (current.guide !== null && guideBack !== null && current.guide.at.fromMs > movingMsOf(current, now)) {
-      current.guide = guideBack;
+    // A step the person skipped while standing never comes back: it begins at the pause instead, so it
+    // is never longer than itself (37d-iii-a).
+    const moving = movingMsOf(current, now);
+    if (current.guide !== null && current.guide.at.fromMs > moving) {
+      if (guideBack !== null) current.guide = guideBack;
+      else current.guide = { ...current.guide, at: { ...current.guide.at, fromMs: moving } };
       guideBack = null;
       guideLookAt = 0;
       writtenAt = 0;
@@ -619,6 +623,37 @@ export async function resumeRun(now: number = Date.now()): Promise<void> {
   tell();
   // A run taken up again after the app was closed: Android's service is started once more.
   if (!(await Location.hasStartedLocationUpdatesAsync(RUN_TASK))) await Location.startLocationUpdatesAsync(RUN_TASK, RUN_LOCATION_OPTIONS);
+}
+
+/** Skip step (37d-iii-a): the step the screen shows ends now, the next one is said at once and the
+ *  lines ahead are handed over again from it. Paused, it waits for Resume to count. */
+export async function skipStep(now: number = Date.now()): Promise<void> {
+  const run = current;
+  if (run === null || run.phase === "finished" || run.guide === null) return;
+  // First to now, so the step skipped is the one on the screen; a line a distance just began is
+  // not said, as the next one is said in its place.
+  const caught = run.phase === "running" ? guideNow(run, now, true) : { lines: [], moved: false };
+  const guide = run.guide;
+  if (guideDone(guide)) {
+    // The last step had just ended: its line is the one said.
+    say(caught.lines);
+    if (caught.moved) {
+      current = { ...run };
+      await keep(current);
+      tell();
+    }
+    return;
+  }
+  const next = guideSkip(guide, movingMsOf(run, now), runMetres(run));
+  run.guide = next;
+  // An Auto-pause dated back never brings a skipped step back.
+  guideBack = null;
+  guideLookAt = 0;
+  current = { ...run };
+  say([skipLine(next, choices.units)]);
+  scheduleGuide(current, now);
+  await keep(current);
+  tell();
 }
 
 /** Auto-pause turned on or off while a run goes on: off, a run Auto-pause had paused starts again
