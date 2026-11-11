@@ -690,12 +690,32 @@ export type PutOwnRunPlanRequest = z.infer<typeof putOwnRunPlanRequestSchema>;
 export const putRunChoiceRequestSchema = z.object({ choice: z.enum(RUN_CHOICES) }).strict();
 export type PutRunChoiceRequest = z.infer<typeof putRunChoiceRequestSchema>;
 
-/** A run of one's own as the plan's own session, so the step card and the voice guide it the same way:
- *  a tempo run and an interval run take the plan's own repeats for their distance. */
-export function ownSessionOf(run: OwnRun): PlanSession {
+/** Steady running in one tempo run of one's own, at most: the terminal's own, about 30 minutes at most
+ *  runners' threshold pace, since a week written by hand gives no race time to set it by (Daniels: about
+ *  20 to 30 minutes of steady running in one session). */
+export const OWN_STEADY_MOST_M = 5_000;
+/** Fast running in one interval run, at most (Daniels' 10 km, as the suggested plan holds it). */
+export const OWN_FAST_MOST_M = 10_000;
+
+/** The week's distance, its walk-and-run days left out: what the tempo and interval shares are of. */
+export const ownWeekM = (week: readonly (OwnRun | null)[]): number => week.reduce((t, d) => t + (d !== null && d.kind !== "walk_run" ? d.m : 0), 0);
+
+/** A run of one's own as the plan's own session, so the step card and the voice guide it the same way. A
+ *  tempo run holds the suggested plan's limits: steady running at most 10 % of the week (`weekM`) and
+ *  OWN_STEADY_MOST_M; an interval run at most 8 % and 10 km. Where that leaves less than the smallest,
+ *  the kind the person picked keeps its smallest: one steady kilometre, two fast 800 m. */
+export function ownSessionOf(run: OwnRun, weekM: number): PlanSession {
   if (run.kind === "walk_run") return { kind: "walk_run", week: Math.floor(run.index / C25K_RUNS_A_WEEK) + 1, run: (run.index % C25K_RUNS_A_WEEK) + 1, parts: c25kParts(run.index) };
-  if (run.kind === "steady") return steadyRun(run.m, Infinity, null);
-  if (run.kind === "fast") return fastRun(run.m, Infinity, null);
+  const room = run.m - 2 * WARM_M;
+  if (run.kind === "steady") {
+    const steadyM = Math.min(weekM * STEADY_SHARE, room, OWN_STEADY_MOST_M);
+    const repM = steadyM > 3000 ? 1600 : STEADY_LEAST_M;
+    return { kind: "steady", m: run.m, reps: { count: Math.max(1, Math.floor(steadyM / repM)), m: repM, restS: 60 } };
+  }
+  if (run.kind === "fast") {
+    const fastM = Math.min(weekM * FAST_SHARE, room, OWN_FAST_MOST_M);
+    return { kind: "fast", m: run.m, reps: { count: Math.max(2, Math.floor(fastM / FAST_REP_M)), m: FAST_REP_M, restS: 180 } };
+  }
   return { kind: run.kind, m: run.m, reps: null };
 }
 
@@ -722,15 +742,16 @@ export function ownCapOf(input: { today: string; runs: readonly RunDay[]; answer
   return longest > 0 ? Math.floor(longest * RUN_GROWTH) : null;
 }
 
-/** This week of one's own plan, each run ticked by a run recorded that day, or by a run on a day with none
- *  planned that covers it, as the suggested plan counts them, but only a run recorded once the week was saved
- *  (`savedDay`): a run from before one's own plan was written never fills a day of it still to come (Kd,
- *  2026-11-12). Null: no day known, every run of the week counts. */
-export function ownPlanOf(input: { week: OwnWeek; today: string; runs: readonly RunDay[]; savedDay: string | null }): PlanDay[] {
+/** This week of one's own plan, each run ticked by a run recorded that day (`runs`), or by a run on a day
+ *  with none planned that covers it, as the suggested plan counts them, but only a run recorded after the
+ *  week was saved (`after`, the server's own read of the runs started since): a run from before one's own
+ *  plan was written never fills a day of it still to come (Kd, 2026-11-12). */
+export function ownPlanOf(input: { week: OwnWeek; today: string; runs: readonly RunDay[]; after: readonly RunDay[] }): PlanDay[] {
+  const weekM = ownWeekM(input.week);
   const weekStart = mondayOf(input.today);
   const days: PlanDay[] = input.week.map((run, i) => {
     const day = planDayPlus(weekStart, i);
-    const session = run === null ? null : ownSessionOf(run);
+    const session = run === null ? null : ownSessionOf(run, weekM);
     const ran = input.runs.find((x) => x.day === day && x.day <= input.today);
     const done =
       session === null || ran === undefined || run === null
@@ -740,7 +761,7 @@ export function ownPlanOf(input: { week: OwnWeek; today: string; runs: readonly 
           : session.kind !== "walk_run" && ran.longestM >= session.m / 2;
     return { day, weekday: i + 1, session, done };
   });
-  const moved = input.runs.filter((x) => x.day <= input.today && (input.savedDay === null || x.day >= input.savedDay));
+  const moved = input.after.filter((x) => x.day <= input.today);
   return tickMovedRuns(days, moved, weekStart);
 }
 

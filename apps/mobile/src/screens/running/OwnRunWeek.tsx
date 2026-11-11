@@ -12,6 +12,7 @@ import {
   overCap,
   ownRunOf,
   ownSessionOf,
+  ownWeekM,
   runPlanResponseSchema,
   type OwnRun,
   type OwnWeek,
@@ -101,7 +102,8 @@ export function OwnRunWeek({ data, units, onClose, onSaved }: { data: RunPlanRes
   }, [open]);
 
   const changed = JSON.stringify(draft) !== JSON.stringify(from);
-  const ownDays = draft.map((run, i) => ({ day: String(i), weekday: i + 1, session: run === null ? null : ownSessionOf(run), done: false }));
+  const weekM = ownWeekM(draft);
+  const ownDays = draft.map((run, i) => ({ day: String(i), weekday: i + 1, session: run === null ? null : ownSessionOf(run, weekM), done: false }));
   const capM = data?.capM ?? null;
   const paces = data?.plan?.kind === "runner" ? data.plan.paces : null;
   const close = () => {
@@ -142,7 +144,7 @@ export function OwnRunWeek({ data, units, onClose, onSaved }: { data: RunPlanRes
     >
       <View style={styles.list}>
         {draft.map((run, i) => {
-          const s = run === null ? null : ownSessionOf(run);
+          const s = run === null ? null : ownSessionOf(run, weekM);
           return (
             <View key={dayName(i + 1)} style={i === 0 ? null : styles.line}>
               <Pressable
@@ -184,6 +186,7 @@ export function OwnRunWeek({ data, units, onClose, onSaved }: { data: RunPlanRes
       <DaySheet
         at={editing}
         run={editing === null ? null : (draft[editing] ?? null)}
+        weekM={weekM}
         units={units}
         capM={capM}
         paces={paces}
@@ -202,9 +205,11 @@ export function OwnRunWeek({ data, units, onClose, onSaved }: { data: RunPlanRes
   );
 }
 
-function DaySheet({ at, run, units, capM, paces, onPick, onMove, onClose }: {
+function DaySheet({ at, run, weekM, units, capM, paces, onPick, onMove, onClose }: {
   at: number | null;
   run: OwnRun | null;
+  /** The week's distance with this day's run as it is now: its tempo and interval share. */
+  weekM: number;
   units: Units;
   capM: number | null;
   paces: Parameters<typeof sessionDetail>[1];
@@ -212,7 +217,7 @@ function DaySheet({ at, run, units, capM, paces, onPick, onMove, onClose }: {
   onMove: (to: number) => void;
   onClose: () => void;
 }) {
-  const s = run === null ? null : ownSessionOf(run);
+  const s = run === null ? null : ownSessionOf(run, weekM);
   const rows = run !== null && run.kind !== "walk_run" ? distanceRows(run.kind, units) : [];
   return (
     <Sheet open={at !== null} title={at === null ? "" : dayName(at + 1)} onClose={onClose}>

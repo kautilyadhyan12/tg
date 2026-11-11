@@ -628,15 +628,23 @@ export async function putRunPlan(sql: Sql, userId: string, answers: RunPlanAnswe
 /** One row a day of the person's runs that this app recorded (as XP and the records count them), in
  *  their own time zone, from `fromDay`: the day's distance, its longest run, its longest moving time and
  *  how its longest run felt (a short extra jog rated hard says nothing of the planned run). */
-export async function getRunPlanDays(sql: Sql, userId: string, timeZone: string, fromDay: string): Promise<{ day: string; distanceM: number; longestM: number; movingS: number; effort: number | null }[]> {
-  const rows = await sql<{ day: string; m: string; longest: number; moving: number; effort: number | null }[]>`
+export async function getRunPlanDays(
+  sql: Sql,
+  userId: string,
+  timeZone: string,
+  fromDay: string,
+  after: Date | null = null,
+): Promise<{ day: string; distanceM: number; longestM: number; movingS: number; effort: number | null; longestAfterM: number }[]> {
+  // longest_after: the day's longest run started at or after `after` (one's own week saved, 37d-iii-b).
+  const rows = await sql<{ day: string; m: string; longest: number; moving: number; effort: number | null; longest_after: number | null }[]>`
     SELECT to_char(started_at AT TIME ZONE ${timeZone}, 'YYYY-MM-DD') AS day,
-           sum(distance_m) AS m, max(distance_m) AS longest, max(duration_s) AS moving, (array_agg(effort ORDER BY distance_m DESC, started_at))[1] AS effort
+           sum(distance_m) AS m, max(distance_m) AS longest, max(duration_s) AS moving, (array_agg(effort ORDER BY distance_m DESC, started_at))[1] AS effort,
+           max(distance_m) FILTER (WHERE ${after}::timestamptz IS NULL OR started_at >= ${after}::timestamptz) AS longest_after
     FROM runs
     WHERE user_id = ${userId} AND run_calc_version IS NOT NULL
       AND started_at >= (${fromDay}::date::timestamp AT TIME ZONE ${timeZone})
     GROUP BY 1 ORDER BY 1`;
-  return rows.map((r) => ({ day: r.day, distanceM: Number(r.m), longestM: r.longest, movingS: r.moving, effort: r.effort }));
+  return rows.map((r) => ({ day: r.day, distanceM: Number(r.m), longestM: r.longest, movingS: r.moving, effort: r.effort, longestAfterM: r.longest_after ?? 0 }));
 }
 
 // ── Your own run plan (ROADMAP 37d-iii-b) ─────────────────────────────────────────────────────

@@ -6,8 +6,10 @@ import { describe, expect, it } from "vitest";
 import {
   JOG_BANDS,
   OWN_FAST_LEAST_M,
+  OWN_FAST_MOST_M,
   OWN_RUN_LEAST_M,
   OWN_STEADY_LEAST_M,
+  OWN_STEADY_MOST_M,
   RUN_GOALS,
   RUN_LONGEST_MOST_M,
   c25kParts,
@@ -17,6 +19,7 @@ import {
   ownPlanOf,
   ownRunOf,
   ownSessionOf,
+  ownWeekM,
   ownWeekSchema,
   planDayPlus,
   putOwnRunPlanRequestSchema,
@@ -77,9 +80,9 @@ describe("the 10 % line: 10 % over the longest run of the last 30 days", () => {
   const said: [string, PlanSession | null, number | null, boolean][] = [
     ["at the line", { kind: "easy", m: 8800, reps: null }, 8800, false],
     ["100 m past it", { kind: "long", m: 8900, reps: null }, 8800, true],
-    ["a tempo run past it", ownSessionOf({ kind: "steady", m: 10_000 }), 8800, true],
+    ["a tempo run past it", ownSessionOf({ kind: "steady", m: 10_000 }, 30_000), 8800, true],
     ["no line known", { kind: "long", m: 30_000, reps: null }, null, false],
-    ["a walk and run has no distance to hold to the line", ownSessionOf({ kind: "walk_run", index: 26 }), 100, false],
+    ["a walk and run has no distance to hold to the line", ownSessionOf({ kind: "walk_run", index: 26 }, 0), 100, false],
     ["a rest day", null, 100, false],
   ];
   it.each(said)("said beside the run: %s", (_name, session, capM, over) => {
@@ -100,49 +103,96 @@ describe("which runs tick a day of one's own plan", () => {
     ["a run dated after today ticks nothing", weekWith(4, { kind: "easy", m: 3000 }), [ran(planDayPlus(MONDAY, 4), 9000)], []],
   ];
   it.each(cases)("%s", (_name, week, runs, ticked) => {
-    const days = ownPlanOf({ week, today: WEDNESDAY, runs, savedDay: null });
+    // Every run here recorded after the week was saved.
+    const days = ownPlanOf({ week, today: WEDNESDAY, runs, after: runs });
     expect(days.map((d) => d.day)).toEqual(Array.from({ length: 7 }, (_, i) => planDayPlus(MONDAY, i)));
     expect(days.flatMap((d, i) => (d.done ? [i] : []))).toEqual(ticked);
   });
 });
 
 describe("a run from before the week was saved fills only its own day (Kd, 2026-11-12)", () => {
+  // `after`: the server's read of each day's longest run started once the week was saved, by the time.
   const tuesday = planDayPlus(MONDAY, 1);
-  const cases: [string, OwnWeek, RunDay[], string, number[]][] = [
-    ["Monday's runs on a rest day, the week saved Wednesday: Saturday still to do", weekWith(5, { kind: "easy", m: 8000 }), [ran(MONDAY, 10_000)], WEDNESDAY, []],
-    ["the same runs, the week saved Monday: Saturday is done early", weekWith(5, { kind: "easy", m: 8000 }), [ran(MONDAY, 10_000)], MONDAY, [5]],
-    ["a run on its own day, before the week was saved, still ticks it", weekWith(0, { kind: "easy", m: 5000 }), [ran(MONDAY, 5000)], WEDNESDAY, [0]],
-    ["Tuesday instead of Monday, saved on Monday: Monday is done", weekWith(0, { kind: "easy", m: 5000 }), [ran(tuesday, 5000)], MONDAY, [0]],
-    ["Tuesday instead of Monday, saved on Wednesday: Monday stays to do", weekWith(0, { kind: "easy", m: 5000 }), [ran(tuesday, 5000)], WEDNESDAY, []],
-    ["a run on the day it was saved counts", weekWith(5, { kind: "easy", m: 8000 }), [ran(WEDNESDAY, 9000)], WEDNESDAY, [5]],
+  const saturday8 = weekWith(5, { kind: "easy", m: 8000 });
+  const cases: [string, OwnWeek, RunDay[], RunDay[], number[]][] = [
+    ["Monday's run on a rest day, from before the save: Saturday still to do", saturday8, [ran(MONDAY, 10_000)], [], []],
+    ["the same run, recorded after the save: Saturday is done early", saturday8, [ran(MONDAY, 10_000)], [ran(MONDAY, 10_000)], [5]],
+    ["a run on its own day, from before the save, still ticks it", weekWith(0, { kind: "easy", m: 5000 }), [ran(MONDAY, 5000)], [], [0]],
+    ["Tuesday instead of Monday, after the save: Monday is done", weekWith(0, { kind: "easy", m: 5000 }), [ran(tuesday, 5000)], [ran(tuesday, 5000)], [0]],
+    ["Tuesday instead of Monday, before the save: Monday stays to do", weekWith(0, { kind: "easy", m: 5000 }), [ran(tuesday, 5000)], [], []],
+    ["the day of the save: a 9 km run that morning, a 3 km run after it; only the 3 km may fill Saturday, and it is too short", saturday8, [ran(WEDNESDAY, 9000)], [ran(WEDNESDAY, 3000)], []],
   ];
-  it.each(cases)("%s", (_name, week, runs, savedDay, ticked) => {
-    const days = ownPlanOf({ week, today: WEDNESDAY, runs, savedDay });
+  it.each(cases)("%s", (_name, week, runs, after, ticked) => {
+    const days = ownPlanOf({ week, today: WEDNESDAY, runs, after });
     expect(days.flatMap((d, i) => (d.done ? [i] : []))).toEqual(ticked);
   });
 });
 
-describe("one's own runs, step by step", () => {
-  it("a tempo run and an interval run keep their repeats at every distance allowed; nothing becomes an easy run", () => {
-    for (let m = OWN_STEADY_LEAST_M; m <= RUN_LONGEST_MOST_M; m += 100) {
-      const s = ownSessionOf({ kind: "steady", m });
-      expect(s.kind === "steady" && s.reps !== null && s.reps.count >= 1 && s.m === m).toBe(true);
+describe("one's own tempo and interval runs keep the suggested plan's limits", () => {
+  const steadyOf = (m: number, weekM: number) => {
+    const sOwn = ownSessionOf({ kind: "steady", m }, weekM);
+    return sOwn.kind === "steady" && sOwn.reps !== null ? sOwn.reps : null;
+  };
+  const fastOf = (m: number, weekM: number) => {
+    const sOwn = ownSessionOf({ kind: "fast", m }, weekM);
+    return sOwn.kind === "fast" && sOwn.reps !== null ? sOwn.reps : null;
+  };
+
+  it("at every distance from the least to 60 km, in weeks of that run alone up to 250 km: steady at most 10 % of the week and 5 km, fast at most 8 % and 10 km, else the smallest", () => {
+    let checked = 0;
+    for (const extraM of [0, 15_000, 40_000, 190_000]) {
+      for (let m = OWN_STEADY_LEAST_M; m <= RUN_LONGEST_MOST_M; m += 100) {
+        const weekM = m + extraM;
+        const r = steadyOf(m, weekM);
+        expect(r).not.toBeNull();
+        if (r === null) continue;
+        const most = Math.min(weekM * 0.1, m - 3000, OWN_STEADY_MOST_M);
+        expect(r.count * r.m <= most || (r.count === 1 && r.m === 1000)).toBe(true);
+        expect(r.count * r.m).toBeLessThanOrEqual(m - 3000);
+        checked += 1;
+      }
+      for (let m = OWN_FAST_LEAST_M; m <= RUN_LONGEST_MOST_M; m += 100) {
+        const weekM = m + extraM;
+        const r = fastOf(m, weekM);
+        expect(r).not.toBeNull();
+        if (r === null) continue;
+        const most = Math.min(weekM * 0.08, m - 3000, OWN_FAST_MOST_M);
+        expect(r.count * r.m <= most || r.count === 2).toBe(true);
+        expect(r.count * r.m).toBeLessThanOrEqual(m - 3000);
+        checked += 1;
+      }
     }
-    for (let m = OWN_FAST_LEAST_M; m <= RUN_LONGEST_MOST_M; m += 100) {
-      const s = ownSessionOf({ kind: "fast", m });
-      expect(s.kind === "fast" && s.reps !== null && s.reps.count >= 2 && s.m === m).toBe(true);
-    }
+    expect(checked).toBeGreaterThan(4000);
   });
 
+  const named: [string, { count: number; m: number } | null, { count: number; m: number }][] = [
+    ["the review's 20 km tempo run in a 20 km week: 2 × 1 km, never 10 × 1.6 km", steadyOf(20_000, 20_000), { count: 2, m: 1000 }],
+    ["a 60 km tempo run in a 250 km week: 5 km at most, 3 × 1.6 km", steadyOf(60_000, 250_000), { count: 3, m: 1600 }],
+    ["an 8 km tempo run in a 25 km week: 2 × 1 km, as the suggested plan has it", steadyOf(8000, 25_000), { count: 2, m: 1000 }],
+    ["a 4 km tempo run alone in its week: the smallest, 1 × 1 km", steadyOf(4000, 4000), { count: 1, m: 1000 }],
+    ["a 60 km interval run in a 60 km week: 8 % is 4.8 km, 6 × 800 m", fastOf(60_000, 60_000), { count: 6, m: 800 }],
+    ["a 60 km interval run in a 250 km week: 10 km at most, 12 × 800 m", fastOf(60_000, 250_000), { count: 12, m: 800 }],
+    ["a 4.6 km interval run alone in its week: the smallest, 2 × 800 m", fastOf(4600, 4600), { count: 2, m: 800 }],
+  ];
+  it.each(named)("%s", (_name, got, want) => {
+    expect(got === null ? null : { count: got.count, m: got.m }).toEqual(want);
+  });
+
+  it("the week's distance leaves out walk-and-run days", () => {
+    expect(ownWeekM([{ kind: "easy", m: 5000 }, { kind: "walk_run", index: 3 }, null, { kind: "steady", m: 6000 }, null, null, null])).toBe(11_000);
+  });
+});
+
+describe("one's own runs, step by step", () => {
   it("every Couch to 5K run is the NHS run of its week, and comes back as the same run", () => {
     for (let index = 0; index < 27; index += 1) {
-      const s = ownSessionOf({ kind: "walk_run", index });
+      const s = ownSessionOf({ kind: "walk_run", index }, 0);
       expect(s).toEqual({ kind: "walk_run", week: Math.floor(index / 3) + 1, run: (index % 3) + 1, parts: c25kParts(index) });
       expect(ownRunOf(s)).toEqual({ kind: "walk_run", index });
     }
   });
 
-  it("every run the app suggests, for every kind of person and week, can be kept as one's own", () => {
+  it("every run the app suggests, for every kind of person and week, can be kept as one's own, the same kind and distance", () => {
     const answers: RunPlanAnswers[] = [];
     for (const jog of JOG_BANDS) {
       for (const goal of RUN_GOALS) {
@@ -161,10 +211,14 @@ describe("one's own runs, step by step", () => {
       if (plan.kind === "none") continue;
       const week = plan.days.map((d) => (d.session === null ? null : ownRunOf(d.session)));
       expect(ownWeekSchema.safeParse(week).success).toBe(true);
-      // Kept as one's own, each run is the same run again.
+      const weekM = ownWeekM(week);
       plan.days.forEach((d, i) => {
         const own = week[i];
-        if (d.session !== null && own !== null && own !== undefined) expect(ownSessionOf(own)).toEqual(d.session.kind === "walk_run" ? d.session : ownSessionOf(ownRunOf(d.session)));
+        if (d.session === null || own === null || own === undefined) return;
+        const kept = ownSessionOf(own, weekM);
+        expect(kept.kind).toBe(d.session.kind);
+        if (kept.kind !== "walk_run" && d.session.kind !== "walk_run") expect(kept.m).toBe(d.session.m);
+        else expect(kept).toEqual(d.session);
       });
       sessions += week.filter((d) => d !== null).length;
     }

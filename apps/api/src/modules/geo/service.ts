@@ -490,17 +490,17 @@ export async function runPlan(deps: ReadDeps & { now: () => Date }, userId: stri
   if (safeMode) return { answers, plan: { kind: "none", why: "safe_mode" }, today, choice, own: null, capM: null };
   const startDay = row === null || answers === null ? null : dayInTz(row.startedAt, timeZone);
   const planFrom = startDay !== null && answers !== null && answers.doesRun !== "no" ? runsFrom(startDay, today) : null;
-  // The last 30 days, for the 10 % line beside a run of one's own, written or being written.
-  const ownFrom = planDayPlus(today, -30);
-  const runs = await repo.getRunPlanDays(deps.sql, userId, timeZone, planFrom !== null && planFrom < ownFrom ? planFrom : ownFrom);
-  const savedDay = ownRow?.daysSavedAt == null ? null : dayInTz(ownRow.daysSavedAt, timeZone);
-  const own = hasOwnRun(week) ? { week, days: ownPlanOf({ week, today, runs, savedDay }) } : null;
+  // The last 30 days, for the 10 % line beside a run of one's own. The suggested plan's own window starts 30
+  // days before its start or today, whichever is earlier, so it is never later than these 30 days: it reads
+  // exactly the runs it read before one's own plan existed.
+  const runs = await repo.getRunPlanDays(deps.sql, userId, timeZone, planFrom ?? planDayPlus(today, -30), ownRow?.daysSavedAt ?? null);
+  // Runs started since the week was saved, their longest that day: the only ones that may fill another day.
+  const after = runs.flatMap((x) => (x.longestAfterM > 0 ? [{ ...x, longestM: x.longestAfterM }] : []));
+  const own = hasOwnRun(week) ? { week, days: ownPlanOf({ week, today, runs, after }) } : null;
   const capM = ownCapOf({ today, runs, answeredLongest: startDay !== null && answers?.longestM != null ? { day: startDay, m: answers.longestM } : null });
   if (row === null || answers === null || startDay === null) return { answers: null, plan: null, today, choice, own, capM };
   const raceDay = row.raceAt === null ? null : dayInTz(row.raceAt, timeZone);
-  // The suggested plan reads only the runs it always has: an older run changes its longest-run limit.
-  const planRuns = planFrom === null ? [] : runs.filter((x) => x.day >= planFrom);
-  return { answers, plan: runPlanOf({ answers, startDay, raceDay, today, safeMode, runs: planRuns }), today, choice, own, capM };
+  return { answers, plan: runPlanOf({ answers, startDay, raceDay, today, safeMode, runs: planFrom === null ? [] : runs }), today, choice, own, capM };
 }
 
 export async function setRunPlan(deps: ReadDeps & { now: () => Date }, userId: string, answers: RunPlanAnswers): Promise<RunPlanResponse> {

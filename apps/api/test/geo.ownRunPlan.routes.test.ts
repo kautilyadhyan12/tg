@@ -217,21 +217,22 @@ d("your own run plan (real Postgres)", () => {
       expect(after.answers).toEqual(RUNNER);
     });
 
-    it("a run recorded before the week was saved fills only its own day; one after fills the nearest run, and the same week sent again keeps its day", { timeout: 60_000 }, async () => {
-      // Wednesday 11 November in Kolkata; Saturday the 14th holds an 8 km run.
+    it("a run recorded before the week was saved fills only its own day, by the time and not the day; one after fills the nearest run; the same week sent again keeps its time", { timeout: 60_000 }, async () => {
+      // Wednesday 11 November, 10:00 in Kolkata; Saturday the 14th holds an 8 km run.
       clock = new Date("2026-11-11T04:30:00.000Z");
       const me = await makeUser("saved");
       const saturdayRun: OwnWeek = [null, null, null, null, null, { kind: "easy", m: 8000 }, null];
-      // 10 km on Monday, a rest day, before the week existed.
+      // 10 km on Monday and 9 km at 06:30 this morning, both rest days, both before the week was written.
       await keep(me.id, "2026-11-09T01:00:00.000Z", 10_000, 3600);
-      expect((await writeWeek(me.cookies, saturdayRun)).own?.days[5]?.done).toBe(false);
-      // A run on Wednesday, the day it was saved, a rest day: it fills Saturday.
       await keep(me.id, "2026-11-11T01:00:00.000Z", 9000, 3200);
+      expect((await writeWeek(me.cookies, saturdayRun)).own?.days[5]?.done).toBe(false);
+      // 11:00 the same day, after the save: it fills Saturday.
+      await keep(me.id, "2026-11-11T05:30:00.000Z", 8500, 3000);
       expect((await read(me.cookies)).own?.days[5]?.done).toBe(true);
-      // Thursday, the same week sent again: its saved day stays Wednesday, so Saturday stays done.
+      // Thursday, the same week sent again: its saved time stays 10:00 on Wednesday, so Saturday stays done.
       clock = new Date("2026-11-12T04:30:00.000Z");
       expect((await writeWeek(me.cookies, saturdayRun)).own?.days[5]?.done).toBe(true);
-      // A changed week is saved on Thursday: the Wednesday run is from before it.
+      // A changed week is saved on Thursday: the Wednesday runs are from before it.
       expect((await writeWeek(me.cookies, [{ kind: "easy", m: 3000 }, ...saturdayRun.slice(1)])).own?.days[5]?.done).toBe(false);
     });
 

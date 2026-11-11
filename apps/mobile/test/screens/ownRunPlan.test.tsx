@@ -36,7 +36,7 @@ function planServer(start: { answers?: RunPlanAnswers | null; week?: OwnWeek | n
     const today = phoneToday();
     const choice = runChoiceOf(state.choice, state.week);
     if (state.safe) return { answers: state.answers, plan: { kind: "none", why: "safe_mode" }, today, choice, own: null, capM: null };
-    const own = hasOwnRun(state.week) ? { week: state.week, days: ownPlanOf({ week: state.week, today, runs: [], savedDay: null }) } : null;
+    const own = hasOwnRun(state.week) ? { week: state.week, days: ownPlanOf({ week: state.week, today, runs: [], after: [] }) } : null;
     const plan = state.answers === null ? null : runPlanOf({ answers: state.answers, startDay: today, raceDay: today, today, safeMode: false, runs: [] });
     return { answers: state.answers, plan, today, choice, own, capM: state.capM };
   };
