@@ -3,7 +3,7 @@
 // recorded, today's run under them, and See plan; in Safe mode, why there is none.
 import { useState } from "react";
 import { Image, StyleSheet, View } from "react-native";
-import { CHECK_FIRST_OPTIONS, healthScreeningResponseSchema, type CheckFirst, type PlanDay, type RunPlan, type RunPlanResponse, type Units } from "@app/shared";
+import { CHECK_FIRST_OPTIONS, healthScreeningResponseSchema, type CheckFirst, type KeptRunGuide, type PlanDay, type RunPlan, type RunPlanResponse, type Units } from "@app/shared";
 import { Button } from "../../look/Button";
 import { Options } from "../../look/Choice";
 import { colours, shadows, sizes } from "../../look/colours";
@@ -13,6 +13,7 @@ import { Sheet } from "../../look/Sheet";
 import { fonts, Txt } from "../../look/Txt";
 import { useSession } from "../../session/SessionProvider";
 import { HEALTH_PATH } from "../setup/useHealthStep";
+import { guideOf } from "./runGuide";
 import { GOAL_WORDS, planDistance, sessionDetail, sessionTitle, weekdayLetter } from "./runPlanWords";
 
 export const RUN_PLAN_PATH = "/v1/geo/run-plan";
@@ -30,6 +31,14 @@ export function weekLine(plan: Exclude<RunPlan, { kind: "none" }>, units: Units)
 export function heldLine(plan: Exclude<RunPlan, { kind: "none" }>): string | null {
   if (plan.kind === "c25k") return plan.repeat ? "Your last run felt very hard, so your next run is the same one again." : null;
   return plan.hard ? "Your runs last week felt very hard, so this week stays the same." : null;
+}
+
+/** Today's planned run, step by step (37d-ii); null on a rest day or with no plan. */
+export function todayGuide(read: PlanRead, units: Units): KeptRunGuide | null {
+  if (read.kind !== "ok" || read.data.plan === null || read.data.plan.kind === "none") return null;
+  const next = nextRun(read.data.plan.days, read.data.today);
+  if (next === null || !next.today || next.day.session === null) return null;
+  return guideOf(next.day.session, sessionTitle(next.day.session, units));
 }
 
 /** Today's run, or the next one this week, or null. */
@@ -68,7 +77,22 @@ export function FootprintWeek({ days, today }: { days: readonly PlanDay[]; today
   );
 }
 
-export function RunPlanBox({ read, units, onMake, onOpen, onCleared }: { read: PlanRead; units: Units; onMake: () => void; onOpen: () => void; onCleared: () => void }) {
+/** onStartToday: Start today's run, step by step (37d-ii); null while a run is going on. */
+export function RunPlanBox({
+  read,
+  units,
+  onMake,
+  onOpen,
+  onCleared,
+  onStartToday = null,
+}: {
+  read: PlanRead;
+  units: Units;
+  onMake: () => void;
+  onOpen: () => void;
+  onCleared: () => void;
+  onStartToday?: ((guide: KeptRunGuide) => void) | null;
+}) {
   const [clearing, setClearing] = useState(false);
   if (read.kind === "loading") return null;
   if (read.kind === "failed") {
@@ -111,6 +135,7 @@ export function RunPlanBox({ read, units, onMake, onOpen, onCleared }: { read: P
   // The server's today, in the person's own time zone: the day the plan was worked out for.
   const today = read.data.today;
   const next = nextRun(plan.days, today);
+  const guide = todayGuide(read, units);
   const paces = plan.kind === "runner" ? plan.paces : null;
   return (
     <View style={styles.box} testID="run-plan-box">
@@ -135,6 +160,17 @@ export function RunPlanBox({ read, units, onMake, onOpen, onCleared }: { read: P
             <Txt kind="eyebrow">{next.today ? "Today’s run" : `Next run · ${dayName(next.day.weekday)}`}</Txt>
             <Txt kind="strong">{sessionTitle(next.day.session, units)}</Txt>
             <Txt kind="small">{sessionDetail(next.day.session, paces, units)}</Txt>
+            {guide !== null && onStartToday !== null ? (
+              <Button
+                label="Start today’s run"
+                say="Start today’s run, with each step said"
+                compact
+                style={styles.make}
+                onPress={() => {
+                  onStartToday(guide);
+                }}
+              />
+            ) : null}
           </>
         )}
       </View>

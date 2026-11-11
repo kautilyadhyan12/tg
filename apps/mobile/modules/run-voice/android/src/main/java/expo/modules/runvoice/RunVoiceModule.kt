@@ -8,6 +8,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.PowerManager
 import android.os.SystemClock
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
@@ -25,6 +26,13 @@ import java.util.Locale
 // line is said (Android's transient focus that lets others duck) and comes back after; the voice
 // lives on the app's own context until the run ends (`quiet`). A voice on the phone is taken over
 // one that needs the internet, so a run with no signal is still spoken.
+//
+// A planned run's steps by the clock (37d-ii) are handed over ahead (`sayAt`), so "Now walk" is said on
+// the second with the screen locked, or with no GPS point coming to wake the app (a treadmill). The
+// phone is kept awake (a partial wake lock: the screen stays off) only until the last of them. Android
+// closes its own speech service when memory is short and nothing is being said (measured 2026-11-11: a
+// line after 5 quiet minutes came 6 s late while it started again), so the engine is made afresh 15 s
+// before each of them.
 class RunVoiceModule : Module() {
   private var engine: TextToSpeech? = null
   /** Which engine is the current one: an answer from one let go, or replaced, is not listened to. */
@@ -41,6 +49,9 @@ class RunVoiceModule : Module() {
   private val main = Handler(Looper.getMainLooper())
   /** When the lines given so far should all have been said, on the uptime clock. */
   private var queueEnds = 0L
+  /** The lines handed over ahead are posted with this, so a new list takes their place alone. */
+  private val timed = Any()
+  private var awake: PowerManager.WakeLock? = null
 
   private val speech: AudioAttributes = AudioAttributes.Builder()
     .setUsage(AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE)
@@ -59,6 +70,13 @@ class RunVoiceModule : Module() {
     /** Stop at once, and let the phone's voice go: the run has ended. */
     AsyncFunction("quiet") { quiet() }
 
+    /** Say each line this many ms from now, in place of the lines handed over before; none, to say
+     *  none of them (a pause). */
+    AsyncFunction("sayAt") { texts: List<String>, inMs: List<Double> -> sayAt(texts, inMs) }
+
+    /** The engine made ready now, so the next line is said at once (Run paused, a kilometre). */
+    AsyncFunction("warm") { warm() }
+
     /** "ok", "off" (no text-to-speech that starts) or "noEnglish", for the Running page's line. */
     AsyncFunction("check") { promise: Promise -> check(promise) }
 
@@ -69,17 +87,32 @@ class RunVoiceModule : Module() {
   private fun say(text: String) {
     val ctx = context ?: return
     if (engine == null) {
-      engineNo += 1
-      val mine = engineNo
-      ready = false
-      earlyStatus = null
-      val made = TextToSpeech(ctx) { status -> started(mine, status) }
-      engine = made
-      earlyStatus?.let { started(mine, it) }
+      makeEngine(ctx)
       // It failed inside its constructor: nothing is kept to be said later.
       if (engine == null) return
     }
     if (ready) speakNow(text) else waiting.add(text)
+  }
+
+  private fun makeEngine(ctx: Context) {
+    engineNo += 1
+    val mine = engineNo
+    ready = false
+    earlyStatus = null
+    val made = TextToSpeech(ctx) { status -> started(mine, status) }
+    engine = made
+    earlyStatus?.let { started(mine, it) }
+  }
+
+  /** A fresh engine, its speech service started again if Android closed it: before a line handed
+   *  over ahead, at Go and each minute of a run. Never while a line is being said or waits for it. */
+  @Synchronized
+  private fun warm() {
+    val ctx = context ?: return
+    if (pending.isNotEmpty() || waiting.isNotEmpty()) return
+    engine?.shutdown()
+    engine = null
+    makeEngine(ctx)
   }
 
   @Synchronized
@@ -137,6 +170,33 @@ class RunVoiceModule : Module() {
   }
 
   @Synchronized
+  private fun sayAt(texts: List<String>, inMs: List<Double>) {
+    main.removeCallbacksAndMessages(timed)
+    letSleep()
+    if (texts.isEmpty() || texts.size != inMs.size) return
+    val now = SystemClock.uptimeMillis()
+    var last = 0L
+    for (i in texts.indices) {
+      val wait = maxOf(0L, inMs[i].toLong())
+      val text = texts[i]
+      main.postAtTime({ say(text) }, timed, now + wait)
+      if (wait > WARM_AHEAD_MS) main.postAtTime({ warm() }, timed, now + wait - WARM_AHEAD_MS)
+      last = maxOf(last, wait)
+    }
+    // Without it the uptime clock stops while the phone sleeps, and the line waits with it.
+    val power = context?.getSystemService(PowerManager::class.java) ?: return
+    awake = power.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "kwazo:run-steps").apply {
+      setReferenceCounted(false)
+      acquire(last + AWAKE_AFTER_MS)
+    }
+  }
+
+  private fun letSleep() {
+    awake?.let { if (it.isHeld) it.release() }
+    awake = null
+  }
+
+  @Synchronized
   private fun quiet() {
     engineNo += 1
     waiting.clear()
@@ -146,6 +206,7 @@ class RunVoiceModule : Module() {
     ready = false
     pending.clear()
     main.removeCallbacksAndMessages(null)
+    letSleep()
     dropFocus()
   }
 
@@ -232,5 +293,9 @@ class RunVoiceModule : Module() {
   private companion object {
     const val LINE_GRACE_MS = 5_000L
     const val MS_PER_LETTER = 70L
+    /** Awake this long past the last line handed over: time for it to be said. */
+    const val AWAKE_AFTER_MS = 30_000L
+    /** The engine made again this long before a line handed over ahead: a cold start measured 7 s. */
+    const val WARM_AHEAD_MS = 15_000L
   }
 }

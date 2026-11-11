@@ -529,7 +529,7 @@ describe("the voice, through the whole app", () => {
     await openRunning(s);
     const toggle = await screen.findByRole("switch", { name: "Voice" });
     expect(toggle.props.value).toBe(true);
-    expect(screen.getByText("Your time and pace each kilometre")).toBeTruthy();
+    expect(screen.getByText("Your time and pace each kilometre, and your plan's steps")).toBeTruthy();
     await fireEvent(toggle, "valueChange", false);
     await waitFor(() => {
       expect(voice.quieted).toBe(1);
@@ -681,7 +681,7 @@ describe("the voice, through the whole app", () => {
     const user = { ...RAVI, units: "imperial" as const };
     const s = runServer(user);
     await openRunning(s, user);
-    expect(screen.getByText("Your time and pace each mile")).toBeTruthy();
+    expect(screen.getByText("Your time and pace each mile, and your plan's steps")).toBeTruthy();
     await waitFor(async () => {
       expect(JSON.parse((await phoneRunFiles.read("run-settings.json")) ?? "{}")).toMatchObject({ units: "imperial", voice: true, autoPause: true });
     });

@@ -194,7 +194,8 @@ export const STEADY_SHARE = 0.1;
 export const FAST_SHARE = 0.08;
 const LEAST_RUN_M = 2_000;
 /** A run with steady or fast running: 1.5 km easy before and after (about ten minutes, Daniels' warm-up). */
-const WARM_M = 1_500;
+export const RUN_WARM_M = 1_500;
+const WARM_M = RUN_WARM_M;
 const STEADY_LEAST_M = 1_000;
 const FAST_REP_M = 800;
 /** Distances are planned in whole 100 m, rounded down: never more than the week allows. */

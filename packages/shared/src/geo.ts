@@ -326,6 +326,39 @@ export type GeoListQuery = z.infer<typeof geoListQuerySchema>;
 // ── The phone's own files for a run (apps/mobile; ROADMAP 37a) ─────────────────────────────────
 // Read back through these, so a file the phone cannot read is never taken for a run.
 
+/** Today's planned run, step by step, kept with the run it guides (37d-ii,
+ *  `apps/mobile/src/screens/running/runGuide.ts`). A step ends after its seconds, after its metres,
+ *  or, a cool-down, once the run's whole distance is reached and it has run at least its least. */
+const guideUntilSchema = z.union([
+  z.object({ s: z.number().int().positive() }),
+  z.object({ m: z.number().int().positive() }),
+  z.object({ totalM: z.number().int().nonnegative(), leastM: z.number().int().nonnegative() }),
+]);
+export const GUIDE_STEP_KINDS = ["warm_walk", "run", "walk", "cool_walk", "warm", "tempo", "fast", "recover", "cool", "easy", "long"] as const;
+export const keptRunGuideSchema = z.object({
+  /** The session's name as the plan shows it: "Run 2 · 28½ min". */
+  title: z.string().max(80),
+  /** Couch to 5K: walks and runs by the clock, and no kilometre lines. */
+  walkRun: z.boolean(),
+  steps: z
+    .array(
+      z.object({
+        kind: z.enum(GUIDE_STEP_KINDS),
+        until: guideUntilSchema,
+        /** A repeat's number and how many: [2, 6]. */
+        rep: z.tuple([z.number().int().positive(), z.number().int().positive()]).nullable(),
+      }),
+    )
+    .min(1)
+    .max(200),
+  /** Where the run is: the step it is on (steps.length once all are done), and the moving
+   *  milliseconds and metres at which that step began. */
+  at: z.object({ index: z.number().int().nonnegative(), fromMs: z.number().nonnegative(), fromM: z.number().nonnegative() }),
+});
+export type KeptRunGuide = z.infer<typeof keptRunGuideSchema>;
+export type GuideStep = KeptRunGuide["steps"][number];
+export type GuidePlace = KeptRunGuide["at"];
+
 /** The run going on, kept beside its points (`apps/mobile/src/screens/running/recorder.ts`). */
 export const keptRunStateSchema = z.object({
   runId: z.uuid(),
@@ -337,6 +370,8 @@ export const keptRunStateSchema = z.object({
   pauses: z.array(z.tuple([z.number(), z.number().nullable()])),
   finishedMs: z.number().nullable(),
   files: z.number().int().nonnegative(),
+  /** A run started from the plan; none for one kept before 37d-ii. */
+  guide: keptRunGuideSchema.nullable().default(null),
 });
 export const keptRunPointsSchema = z.array(z.tuple([z.number(), z.number(), z.number(), z.number().nullable()]));
 

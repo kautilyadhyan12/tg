@@ -17,6 +17,7 @@ import {
   phoneLocationsSchema,
   runSums,
   type KeptRunChoices,
+  type KeptRunGuide,
   type MapColours,
   type RunPause,
   type RunPoint,
@@ -24,6 +25,7 @@ import {
 } from "@app/shared";
 import { colours } from "../../look/colours";
 import { AUTO_START, nextAutoPause, type AutoPauseState } from "./autoPause";
+import { beginLine, guideAdvance, guideDone, guideNextLook, guideSchedule, nowLine } from "./runGuide";
 import { PAUSE_WORDS, VOICE_AFTER_LOAD, VOICE_START, voiceCheck, type VoiceState } from "./runVoice";
 import { runVoiceNative } from "./runVoiceNative";
 
@@ -51,6 +53,8 @@ export interface LiveRun {
   finishedMs: number | null;
   /** The last point's time on the phone's clock and how sure it was, for the GPS light. */
   lastFix: { at: number; accuracyM: number | null } | null;
+  /** Today's planned run, step by step (37d-ii); null for a run that is not the plan's. */
+  guide: KeptRunGuide | null;
 }
 
 // ── The run kept on the phone ─────────────────────────────────────────────────────────────────
@@ -160,6 +164,8 @@ export async function chooseVoice(on: boolean): Promise<void> {
   if (!on) quietVoice();
   await keepChoices({ voice: on });
   primeVoice(current);
+  // On, the lines ahead handed over again; off, none.
+  scheduleGuide(current, Date.now());
 }
 
 /** The map's colours (37b-i): by the sun, or always light, or always dark. */
@@ -174,11 +180,23 @@ export async function keepRunUnits(units: Units): Promise<void> {
   if (choices.units === units) return;
   await keepChoices({ units });
   primeVoice(current);
+  scheduleGuide(current, Date.now());
 }
 
 // ── The voice (37a-ii) ────────────────────────────────────────────────────────────────────────
 
 let voice: VoiceState = VOICE_START;
+
+/** When the phone's voice was last made ready. Android closes its speech service when memory is short
+ *  and nothing is said; started again for the line itself, Run paused came seconds late (Kd, 37d-ii). */
+let warmedAt = 0;
+const WARM_EVERY_MS = 60_000;
+
+function warmVoice(now: number): void {
+  if (!choices.voice || runVoiceNative === null || now - warmedAt < WARM_EVERY_MS) return;
+  warmedAt = now;
+  void runVoiceNative.warm().catch(() => undefined);
+}
 
 function say(lines: readonly string[]): void {
   if (!choices.voice || runVoiceNative === null) return;
@@ -204,10 +222,96 @@ function primeVoice(run: LiveRun | null): void {
 /** The mark to say now, if any, as of the run's last point; settled at a pause. */
 function markNow(run: LiveRun, settled: boolean): string[] {
   const at = run.points[run.points.length - 1]?.[0];
-  if (!choices.voice || at === undefined) return [];
+  // Couch to 5K says its walks and runs, not the kilometres, as the NHS app does.
+  if (!choices.voice || at === undefined || run.guide?.walkRun === true) return [];
   const result = voiceCheck(voice, at, choices.units, () => runSums(run.points, closedPauses(run, at), at, 0), settled);
   voice = result.state;
   return result.line === null ? [] : [result.line];
+}
+
+// ── Today's planned run (37d-ii) ──────────────────────────────────────────────────────────────
+
+/** The guide's clock: ms from Go to `now`, the pauses left out. */
+export function movingMsOf(run: LiveRun, now: number): number {
+  const elapsed = elapsedMs(run, now);
+  return Math.max(0, elapsed - closedPauses(run, elapsed).reduce((t, [a, b]) => t + (b - a), 0));
+}
+
+/** The next look at the guide, in moving ms: points come each second, and the sums are worked out
+ *  only when a step by distance could have ended. */
+let guideLookAt = 0;
+
+/** Moving ms at `at` ms from Go: pauses after it are not taken off. */
+const movingAt = (run: LiveRun, at: number): number =>
+  at - run.pauses.reduce((t, [from, to]) => t + Math.max(0, Math.min(to ?? at, at) - from), 0);
+
+/** The moving ms when the run first had `m` metres, found among the points kept by halving: a step
+ *  after a distance is timed from there, not from a late batch of points. */
+function reachedAt(run: LiveRun, m: number, nowMs: number): number {
+  const points = run.points;
+  const metresTo = (k: number): number => {
+    const at = points[k - 1]?.[0] ?? 0;
+    return runSums(points.slice(0, k), closedPauses(run, at), at, 0).distanceM;
+  };
+  if (points.length === 0 || metresTo(points.length) < m) return nowMs;
+  let low = 1;
+  let high = points.length;
+  while (low < high) {
+    const mid = Math.floor((low + high) / 2);
+    if (metresTo(mid) >= m) high = mid;
+    else low = mid + 1;
+  }
+  return Math.min(nowMs, movingAt(run, points[low - 1]?.[0] ?? 0));
+}
+
+/** The guide's place before its last step began: an Auto-pause dated back to the first still point
+ *  can take that step's start back. */
+let guideBack: KeptRunGuide | null = null;
+
+const runMetres = (run: LiveRun): number => {
+  const at = run.points[run.points.length - 1]?.[0] ?? 0;
+  return runSums(run.points, closedPauses(run, at), at, 0).distanceM;
+};
+
+/** The lines of the steps the clock begins, handed to the phone's voice ahead; none while paused. */
+function scheduleGuide(run: LiveRun | null, now: number): void {
+  const native = runVoiceNative;
+  const guide = run?.guide ?? null;
+  if (native === null || run === null || guide === null) return;
+  const lines = run.phase === "running" && choices.voice && !guideDone(guide) ? guideSchedule(guide, movingMsOf(run, now), choices.units) : [];
+  void native.sayAt(lines.map((l) => l.text), lines.map((l) => l.inMs)).catch(() => undefined);
+}
+
+/** The guide moved on to `now`: the line to say when a step by distance ended (one the clock ended
+ *  was said by the phone's voice), and the lines ahead handed over again then. `run` is changed in
+ *  place; `moved` when the step changed, to be written at once. */
+function guideNow(run: LiveRun, now: number, force: boolean): { lines: string[]; moved: boolean } {
+  const guide = run.guide;
+  if (guide === null || run.phase !== "running" || guideDone(guide)) return { lines: [], moved: false };
+  const ms = movingMsOf(run, now);
+  if (!force && ms < guideLookAt) return { lines: [], moved: false };
+  let metres: number | null = null;
+  const dist = () => (metres ??= runMetres(run));
+  const { guide: next, begun } = guideAdvance(guide, ms, dist, (m) => reachedAt(run, m, ms));
+  if (begun.length > 0) guideBack = guide;
+  run.guide = next;
+  guideLookAt = guideNextLook(next, ms, dist);
+  const last = begun[begun.length - 1];
+  if (last === undefined || begun.every((b) => b.byClock)) return { lines: [], moved: last !== undefined };
+  scheduleGuide(run, now);
+  return { lines: choices.voice ? [beginLine(next, last.index, choices.units)] : [], moved: true };
+}
+
+/** Said with Run resumed: what to do now. A step the clock began on the second of the pause was
+ *  perhaps never said, so it is said here. */
+function resumeLines(run: LiveRun, now: number): string[] {
+  const step = guideNow(run, now, true);
+  const guide = run.guide;
+  if (!choices.voice || guide === null || guideDone(guide)) return step.lines;
+  if (step.lines.length > 0) return step.lines;
+  const on = guide.steps[guide.at.index];
+  const metres = on !== undefined && !("s" in on.until) ? runMetres(run) : 0;
+  return [nowLine(guide, movingMsOf(run, now), metres, choices.units)];
 }
 
 /** Tests hand in their own files and start from nothing. */
@@ -216,6 +320,9 @@ export function resetRecorder(withFiles: RunFiles = phoneRunFiles): void {
   choices = DEFAULT_CHOICES;
   choicesRead = null;
   voice = VOICE_START;
+  guideLookAt = 0;
+  guideBack = null;
+  warmedAt = 0;
   files = withFiles;
   current = null;
   auto = AUTO_START;
@@ -240,6 +347,7 @@ async function writeState(run: LiveRun): Promise<void> {
       pauses: run.pauses,
       finishedMs: run.finishedMs,
       files: fileCount,
+      guide: run.guide,
     }),
   );
 }
@@ -288,9 +396,23 @@ export async function loadRun(): Promise<LiveRun | null> {
       points,
       finishedMs: state.finishedMs,
       lastFix: last === undefined ? null : { at: state.startedAt + last[0], accuracyM: last[3] },
+      guide: state.guide,
     };
     auto = { ...AUTO_START, paused: state.phase === "paused" };
     primeVoice(current);
+    // The app was closed mid-run: a step begun since was said by nobody, so what is left of the step
+    // it is on is said now, and the steps ahead are handed over again.
+    if (current.guide !== null && current.phase === "running") {
+      const now = Date.now();
+      guideLookAt = 0;
+      const was = current.guide.at.index;
+      guideNow(current, now, true);
+      if (current.guide.at.index !== was) {
+        say([nowLine(current.guide, movingMsOf(current, now), runMetres(current), choices.units)]);
+        await writeState(current);
+      }
+      scheduleGuide(current, now);
+    }
     tell();
     return current;
   } catch {
@@ -306,7 +428,7 @@ const WRITE_EVERY_MS = 10_000;
 
 /** The phone's points, as Android hands them over (one a second, or several at once after the
  *  screen was off). Points before Go or after Finish are not the run's. */
-export async function takeLocations(data: unknown): Promise<void> {
+export async function takeLocations(data: unknown, now: number = Date.now()): Promise<void> {
   const parsed = phoneLocationsSchema.safeParse(data);
   if (!parsed.success) return;
   const mine = generation;
@@ -366,10 +488,29 @@ export async function takeLocations(data: unknown): Promise<void> {
   }
   // Only Auto-pause pauses a run here: a pause ends the stretch the maths smooths, so a mark passed
   // before it is said at once.
-  if (current.phase === "running") say([...(was === "paused" ? [PAUSE_WORDS.resumed] : []), ...markNow(current, false)]);
-  else if (was === "running") say([...markNow(current, true), PAUSE_WORDS.auto]);
-  if (Date.now() - writtenAt >= WRITE_EVERY_MS) {
-    writtenAt = Date.now();
+  if (current.phase === "running" && was === "paused") {
+    say([PAUSE_WORDS.resumed, ...markNow(current, false), ...resumeLines(current, now)]);
+    scheduleGuide(current, now);
+    writtenAt = 0;
+  } else if (current.phase === "running") {
+    warmVoice(now);
+    const step = guideNow(current, now, false);
+    if (step.moved) writtenAt = 0;
+    say([...markNow(current, false), ...step.lines]);
+  } else if (was === "running") {
+    // Stopped at a crossing as a step began: the pause starts at the first still point, before it,
+    // so the step begins again after the pause (Resume says what is left of the one before).
+    if (current.guide !== null && guideBack !== null && current.guide.at.fromMs > movingMsOf(current, now)) {
+      current.guide = guideBack;
+      guideBack = null;
+      guideLookAt = 0;
+      writtenAt = 0;
+    }
+    say([...markNow(current, true), PAUSE_WORDS.auto]);
+    scheduleGuide(current, now);
+  }
+  if (now - writtenAt >= WRITE_EVERY_MS) {
+    writtenAt = now;
     await keep(current);
   }
   tell();
@@ -410,7 +551,7 @@ export const RUN_LOCATION_OPTIONS: Location.LocationTaskOptions = {
 };
 
 /** Go: the run starts now. Its id is made here, so a run sent twice is the same run. */
-export async function startRun(userId: string, runId: string, autoPause: boolean, now: number = Date.now()): Promise<LiveRun> {
+export async function startRun(userId: string, runId: string, autoPause: boolean, now: number = Date.now(), guide: KeptRunGuide | null = null): Promise<LiveRun> {
   const run: LiveRun = {
     runId,
     userId,
@@ -422,6 +563,7 @@ export async function startRun(userId: string, runId: string, autoPause: boolean
     points: [],
     finishedMs: null,
     lastFix: null,
+    guide,
   };
   generation += 1;
   current = run;
@@ -431,8 +573,16 @@ export async function startRun(userId: string, runId: string, autoPause: boolean
   loaded = true;
   unwritten = 0;
   writtenAt = now;
+  guideLookAt = 0;
+  guideBack = null;
   await writeState(run);
   tell();
+  warmedAt = 0;
+  warmVoice(now);
+  if (guide !== null) {
+    say([beginLine(guide, 0, choices.units)]);
+    scheduleGuide(run, now);
+  }
   await Location.startLocationUpdatesAsync(RUN_TASK, RUN_LOCATION_OPTIONS);
   return run;
 }
@@ -441,12 +591,15 @@ export async function pauseRun(now: number = Date.now()): Promise<void> {
   const run = current;
   if (run === null || run.phase === "finished") return;
   const was = run.phase;
+  // The guide is moved on to the pause, so the step it holds is the one the person is on.
+  const step = was === "running" ? guideNow(run, now, true) : { lines: [] };
   if (run.phase === "running") run.pauses.push([Math.max(now - run.startedAt, lastOpenEnd(run)), null]);
   run.phase = "paused";
   run.pausedByPerson = true;
   auto = { ...AUTO_START, paused: true };
   current = { ...run };
-  if (was === "running") say([...markNow(current, true), PAUSE_WORDS.person]);
+  if (was === "running") say([...markNow(current, true), ...step.lines, PAUSE_WORDS.person]);
+  scheduleGuide(current, now);
   await keep(current);
   tell();
 }
@@ -460,7 +613,8 @@ export async function resumeRun(now: number = Date.now()): Promise<void> {
   auto = AUTO_START;
   pausedTail = [];
   current = { ...run };
-  say([PAUSE_WORDS.resumed]);
+  say([PAUSE_WORDS.resumed, ...resumeLines(current, now)]);
+  scheduleGuide(current, now);
   await keep(current);
   tell();
   // A run taken up again after the app was closed: Android's service is started once more.
@@ -475,7 +629,8 @@ export async function setAutoPause(on: boolean, now: number = Date.now()): Promi
   if (!on && run.phase === "paused" && !run.pausedByPerson) {
     closePause(run, elapsedMs(run, now));
     run.phase = "running";
-    say([PAUSE_WORDS.resumed]);
+    say([PAUSE_WORDS.resumed, ...resumeLines(run, now)]);
+    scheduleGuide(run, now);
   }
   auto = run.phase === "paused" ? { ...AUTO_START, paused: true } : AUTO_START;
   current = { ...run, autoPause: on };
