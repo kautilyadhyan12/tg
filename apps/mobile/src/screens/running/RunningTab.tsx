@@ -2,10 +2,10 @@
 // run, and See all), Start, Auto-pause, the voice (37a-ii) and the units. The run itself opens over the
 // app (RunLayer).
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
-import { AppState, Linking, Pressable, ScrollView, StyleSheet, Switch, View } from "react-native";
+import { AppState, Linking, Pressable, ScrollView, StyleSheet, Switch, View, useWindowDimensions } from "react-native";
 import * as Location from "expo-location";
 import { useIsFocused } from "@react-navigation/native";
-import { runPageSchema, runPlanResponseSchema, runRecordsSchema, type MapColours, type Units } from "@app/shared";
+import { runPageSchema, runPlanResponseSchema, runRecordsSchema, type KeptRunGuide, type MapColours, type Units } from "@app/shared";
 import { Button } from "../../look/Button";
 import { Options } from "../../look/Choice";
 import { Sheet } from "../../look/Sheet";
@@ -18,12 +18,12 @@ import { useRead } from "../dashboard/useRead";
 import { SettingsPage } from "../Settings";
 import { autoPauseChoice, chooseAutoPause, chooseMapColours, chooseVoice, mapColoursChoice, readRunChoices, subscribeRun, voiceChoice } from "./recorder";
 import { RefusedRuns } from "./RefusedRuns";
-import { RUN_BAR_ROOM, gpsLight, openAppSettings, START_PROBLEM_WORDS, useRunLayer, type StartProblem } from "./RunLayer";
+import { RUN_BAR_ROOM, SideButton, gpsLight, openAppSettings, START_PROBLEM_WORDS, useRunLayer, type StartProblem } from "./RunLayer";
 import { useRunOutbox } from "./RunOutbox";
 import { useLookOpen } from "../setupFirst";
 import { RunPage } from "./RunPage";
 import { RunPlanAsk } from "./RunPlanAsk";
-import { RUN_PLAN_PATH, RunPlanBox, type PlanRead } from "./RunPlanBox";
+import { RUN_PLAN_PATH, RunPlanBox, todayGuide, type PlanRead } from "./RunPlanBox";
 import { RunPlanPage } from "./RunPlanPage";
 import { RecordsCard } from "./RecordParts";
 import { RECORDS_PATH } from "./runRecords";
@@ -105,6 +105,14 @@ export function RunningTab({ units, parts }: { units: Units; parts: ReactNode })
   // No voice code of this app's on this phone (an iPhone, until Stage 5 item 21): the row stays.
   const noVoiceYet = runVoiceNative === null;
   const [problem, setProblem] = useState<StartProblem | null>(null);
+  // Start, or Start today's run (37d-ii): what stood in the way is said under the button that was
+  // pressed. The plan box's is said under the box, and the page is moved to show it; START's, and
+  // Today's run beside it, at the page's end above them.
+  const [from, setFrom] = useState<KeptRunGuide | null>(null);
+  const [pressedBox, setPressedBox] = useState(false);
+  const scrolled = useRef(0);
+  const underBox = useRef<View>(null);
+  const { height } = useWindowDimensions();
   const [settings, setSettings] = useState(false);
   const [runsOpen, setRunsOpen] = useState(false);
   const [openRun, setOpenRun] = useState<string | null>(null);
@@ -127,32 +135,66 @@ export function RunningTab({ units, parts }: { units: Units; parts: ReactNode })
   const [planOpen, setPlanOpen] = useState(false);
   const planRead = useRead(RUN_PLAN_PATH, runPlanResponseSchema, view.sent + changed + planChanged);
   const plan: PlanRead = planRead.read.kind === "ok" ? { kind: "ok", data: planRead.read.data } : planRead.read.kind === "failed" ? { kind: "failed", again: planRead.again } : { kind: "loading" };
+  const todayRun = todayGuide(plan, units);
   const shownPlan = plan.kind === "ok" && plan.data.plan !== null && plan.data.plan.kind !== "none" ? plan.data.plan : null;
 
   // A run just finished takes the place of what was said of the one deleted before it.
   useEffect(() => {
     if (layer.done !== null) setDeleted(null);
   }, [layer.done]);
-  const saidUnderStart = problem !== null || layer.done !== null || view.refused.length > 0;
+  const saidUnderStart = (problem !== null && !pressedBox) || layer.done !== null || view.refused.length > 0;
   useEffect(() => {
     if (saidUnderStart) showEnd();
   }, [saidUnderStart, problem, layer.done, showEnd]);
 
-  const start = async () => {
+  // The page moved up by what of it lies below six tenths of the screen, under START.
+  const showUnderBox = useCallback(() => {
+    underBox.current?.measureInWindow((_x, y, _w, h) => {
+      const hidden = y + h - height * 0.6;
+      if (hidden > 0) scroller.current?.scrollTo({ y: scrolled.current + hidden, animated: true });
+    });
+  }, [height]);
+
+  const start = async (guide: KeptRunGuide | null = null, inBox = false) => {
     if (look !== null) {
       look();
       return;
     }
     setProblem(null);
-    const said = await layer.start(autoPause);
+    setFrom(guide);
+    setPressedBox(inBox);
+    const said = await layer.start(autoPause, guide);
     setProblem(said);
     setAsked((n) => n + 1);
   };
+  const problemBox =
+    problem === null ? null : (
+      <View style={styles.problem}>
+        <Txt kind="small" colour="badText">
+          {START_PROBLEM_WORDS[problem]}
+        </Txt>
+        {problem === "approximate" ? (
+          <View style={styles.choices}>
+            <Button kind="link" label="Allow precise location" onPress={() => void start(from, pressedBox)} />
+            <Button kind="quiet" label="Open settings" onPress={openAppSettings} />
+          </View>
+        ) : problem === "settings" ? (
+          <Button kind="link" label="Open settings" onPress={openAppSettings} />
+        ) : problem === "denied" ? (
+          <Button kind="link" label="Allow location" onPress={() => void start(from, pressedBox)} />
+        ) : problem === "off" ? (
+          <Button kind="link" label="Turn on location" onPress={() => void turnOnLocation().then((on) => (on ? start(from, pressedBox) : undefined))} />
+        ) : null}
+      </View>
+    );
 
   return (
     <View style={styles.grow}>
       <Page
         scroller={scroller}
+        onScrolled={(y) => {
+          scrolled.current = y;
+        }}
         room={going ? RUN_BAR_ROOM : DOCK_ROOM}
         top={
           <PictureTop
@@ -193,7 +235,13 @@ export function RunningTab({ units, parts }: { units: Units; parts: ReactNode })
             onCleared={() => {
               setPlanChanged((n) => n + 1);
             }}
+            onStartToday={going ? null : (guide) => void start(guide, true)}
           />
+          {problem !== null && pressedBox ? (
+            <View ref={underBox} testID="problem-under-plan" onLayout={showUnderBox}>
+              {problemBox}
+            </View>
+          ) : null}
           {lastRun === null ? null : (
             <View style={styles.yours} testID="your-runs">
               <View style={styles.yoursHead}>
@@ -251,7 +299,7 @@ export function RunningTab({ units, parts }: { units: Units; parts: ReactNode })
               <View style={styles.grow}>
                 <Txt kind="body">Voice</Txt>
                 <Txt kind="small" colour="textFaint">
-                  {noVoiceYet ? "Coming soon" : units === "imperial" ? "Your time and pace each mile" : "Your time and pace each kilometre"}
+                  {noVoiceYet ? "Coming soon" : units === "imperial" ? "Your time and pace each mile, and your plan's steps" : "Your time and pace each kilometre, and your plan's steps"}
                 </Txt>
                 {voiceOn && canSpeak !== "ok" ? (
                   <View style={styles.problem}>
@@ -311,25 +359,7 @@ export function RunningTab({ units, parts }: { units: Units; parts: ReactNode })
               />
             </View>
           </View>
-          {problem === null ? null : (
-            <View style={styles.problem}>
-              <Txt kind="small" colour="badText">
-                {START_PROBLEM_WORDS[problem]}
-              </Txt>
-              {problem === "approximate" ? (
-                <View style={styles.choices}>
-                  <Button kind="link" label="Allow precise location" onPress={() => void start()} />
-                  <Button kind="quiet" label="Open settings" onPress={openAppSettings} />
-                </View>
-              ) : problem === "settings" ? (
-                <Button kind="link" label="Open settings" onPress={openAppSettings} />
-              ) : problem === "denied" ? (
-                <Button kind="link" label="Allow location" onPress={() => void start()} />
-              ) : problem === "off" ? (
-                <Button kind="link" label="Turn on location" onPress={() => void turnOnLocation().then((on) => (on ? start() : undefined))} />
-              ) : null}
-            </View>
-          )}
+          {problem !== null && !pressedBox ? problemBox : null}
           {layer.done === null ? null : (
             <Txt kind="small" colour={layer.done.waiting ? "textSoft" : "goodText"} style={styles.said}>
               {layer.done.waiting ? `${layer.done.name} is saved on this phone. It will be sent when you're online.` : `${layer.done.name} is saved.`}
@@ -413,9 +443,13 @@ export function RunningTab({ units, parts }: { units: Units; parts: ReactNode })
       </Page>
       {going ? null : (
         <View pointerEvents="box-none" style={styles.dock}>
+          {/* A plan's run today beside START, which records a run of one's own: the page's foot is
+              under START, and the plan box's own button with it (37d-ii). */}
+          {todayRun === null ? null : <SideButton icon="footprints" label="Today’s run" say="Start today’s run, with each step said" onPress={() => void start(todayRun)} />}
           <Pressable accessibilityRole="button" accessibilityLabel="Start run" onPress={() => void start()} style={({ pressed }) => [styles.go, pressed ? styles.pressed : null]}>
             <Txt style={styles.goWord}>START</Txt>
           </Pressable>
+          {todayRun === null ? null : <View style={styles.sideSpace} />}
         </View>
       )}
     </View>
@@ -473,7 +507,8 @@ const styles = StyleSheet.create({
   page: { gap: 16 },
   runTitle: { flexDirection: "row", alignItems: "center", gap: 10 },
   // START over the page's foot, the page fading out under it.
-  dock: { position: "absolute", left: 0, right: 0, bottom: 0, alignItems: "center", paddingTop: 18, experimental_backgroundImage: dockShade },
+  dock: { position: "absolute", left: 0, right: 0, bottom: 0, flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 16, paddingTop: 18, experimental_backgroundImage: dockShade },
+  sideSpace: { width: 84 },
   grow: { flex: 1 },
   pressed: { opacity: 0.88 },
   pill: { alignSelf: "flex-start", flexDirection: "row", alignItems: "center", gap: 7, paddingHorizontal: 12, paddingVertical: 7, borderRadius: sizes.round, backgroundColor: colours.veil, borderWidth: 1, borderColor: colours.lineStrong },
