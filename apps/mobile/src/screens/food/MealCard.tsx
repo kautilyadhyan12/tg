@@ -151,11 +151,11 @@ export function Notice({ children }: { children: ReactNode }) {
 }
 
 /** Nothing to show: a dashed box with its sign and its words. */
-export function EmptyBox({ title, line }: { title: string; line: string | null }) {
+export function EmptyBox({ title, line, icon = "utensils" }: { title: string; line: string | null; icon?: IconName }) {
   return (
     <View style={styles.empty}>
       <View style={styles.emptySign}>
-        <Icon name="utensils" size={16} colour="textSoft" />
+        <Icon name={icon} size={16} colour="textSoft" />
       </View>
       <View style={styles.grow}>
         <Txt kind="small" colour="text" style={styles.fromTitle}>

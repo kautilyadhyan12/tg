@@ -45,7 +45,8 @@ export function todayGuide(read: PlanRead, units: Units): KeptRunGuide | null {
 export function nextRun(days: readonly PlanDay[], today: string): { day: PlanDay; today: boolean } | null {
   const todays = days.find((d) => d.day === today && d.session !== null && !d.done);
   if (todays !== undefined) return { day: todays, today: true };
-  const later = days.find((d) => d.day > today && d.session !== null);
+  // A later run already ticked (a run on another day counts toward it, 37d-i) is not next.
+  const later = days.find((d) => d.day > today && d.session !== null && !d.done);
   return later === undefined ? null : { day: later, today: false };
 }
 
@@ -182,7 +183,7 @@ const DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Satu
 export const dayName = (weekday: number): string => DAY_NAMES[weekday - 1] ?? "";
 
 /** Safe mode's way out: the health answer's second question, asked again here. */
-function ClearedSheet({ open, onClose, onSaved }: { open: boolean; onClose: () => void; onSaved: () => void }) {
+export function ClearedSheet({ open, onClose, onSaved }: { open: boolean; onClose: () => void; onSaved: () => void }) {
   const { session } = useSession();
   const [saving, setSaving] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);

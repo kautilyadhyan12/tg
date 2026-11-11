@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Image, Pressable, StyleSheet, View } from "react-native";
+import { Image, StyleSheet, View } from "react-native";
 import { useIsFocused } from "@react-navigation/native";
 import { IDEA_WHY_WORDS, mealIdeasResponseSchema, missingText, type DietPlanMeal, type SetupScreenId, type SuggestedIdea, type WaitingMeal } from "@app/shared";
 import { Button } from "../../look/Button";
@@ -19,6 +19,7 @@ import { mealTypeName } from "./day";
 import { ideaAmountWords, ideaAsMeal, ideaMealType, ideaName } from "./ideaRules";
 import { useMealOutbox } from "./MealOutbox";
 import { useLookOpen } from "../setupFirst";
+import { useKindTabs } from "../dashboard/KindTabs";
 import { AllergyFoot, ART_SIZE, EmptyBox, Eyebrow, FoodLines, FromRow, NumberTiles, nextMealWords, planFoods } from "./MealCard";
 import { planDayName, planDayOf } from "./planRules";
 
@@ -84,6 +85,7 @@ export function MealIdeas({ onMore, onAnswered, fresh = 0, below = null, bare = 
   const [logging, setLogging] = useState(false);
   const loggingNow = useRef(false);
   const focused = useIsFocused();
+  const tabs = useKindTabs("food");
   useEffect(() => {
     if (!focused) setSaid(null);
   }, [focused]);
@@ -366,14 +368,7 @@ export function MealIdeas({ onMore, onAnswered, fresh = 0, below = null, bare = 
               Recommended For You
             </Txt>
           </View>
-          {/* The Exercise and Running options join with their own plans (ROADMAP 36, 37). */}
-          <View style={styles.options}>
-            <Pressable accessibilityRole="radio" accessibilityLabel="Food" accessibilityState={{ selected: true }} hitSlop={OPTION_SLOP} style={styles.option}>
-              <Txt kind="tiny" colour="orange" style={styles.optionWord}>
-                Food
-              </Txt>
-            </Pressable>
-          </View>
+          {tabs}
           {choices}
           {/* Whose meal and the meal beside the picture, never under it; its numbers and the button across the box. */}
           <View style={styles.beside}>
@@ -459,8 +454,6 @@ function IdeaRow({ idea, held, onLog }: { idea: SuggestedIdea; held: boolean; on
 /** My plan is picked and the person has none yet. */
 export const NO_PLAN_YET = "You don’t have a meal plan yet.";
 
-const OPTION_SLOP = { top: 12, bottom: 12, left: 8, right: 8 };
-
 const styles = StyleSheet.create({
   card: { gap: 10 },
   grow: { flex: 1 },
@@ -471,9 +464,6 @@ const styles = StyleSheet.create({
   art: { width: ART_SIZE, height: ART_SIZE },
   artFill: { position: "absolute", top: 0, right: 0, bottom: 0, left: 0, width: "100%", height: "100%" },
   leftWords: { flex: 1, gap: 10 },
-  options: { flexDirection: "row", gap: 14 },
-  option: { alignSelf: "flex-start", paddingBottom: 3, borderBottomWidth: 2, borderBottomColor: colours.orange },
-  optionWord: { fontFamily: fonts.semibold },
   mealWords: { gap: 4 },
   lead: { gap: 10 },
   ideaWords: { gap: 6 },

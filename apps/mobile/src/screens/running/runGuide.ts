@@ -103,11 +103,26 @@ export function guideNextLook(guide: KeptRunGuide, movingMs: number, metres: () 
 /** Faster than anybody runs, as the kilometre voice takes it (runVoice.ts). */
 const FASTEST_MPS = 12.5;
 
-/** Couch to 5K: halfway through the session's whole time. */
+/** Skip step (37d-iii-a): the next step begins now, where the person is. Past the last, the run is complete. */
+export function guideSkip(guide: KeptRunGuide, movingMs: number, metres: number): KeptRunGuide {
+  if (guideDone(guide)) return guide;
+  return { ...guide, at: { index: guide.at.index + 1, fromMs: Math.max(guide.at.fromMs, movingMs), fromM: Math.max(guide.at.fromM, metres) } };
+}
+
+/** The line said at Skip step: the step it begins; past the last, only that the run is complete,
+ *  never the distance an easy run would have reached. */
+export function skipLine(skipped: KeptRunGuide, units: Units): string {
+  return guideDone(skipped) ? DONE_LINE : beginLine(skipped, skipped.at.index, units);
+}
+
+/** Couch to 5K: halfway through the session's whole time, in the run's moving ms. It is the plan's
+ *  halfway, counted from where the step the run is on began, so a skipped step moves it with the rest. */
 const halfwayMs = (guide: KeptRunGuide): number | null => {
   if (!guide.walkRun) return null;
-  const total = guide.steps.reduce((t, s) => t + ("s" in s.until ? s.until.s : 0), 0);
-  return (total * 1000) / 2;
+  const secs = guide.steps.map((s) => ("s" in s.until ? s.until.s : 0));
+  const total = secs.reduce((t, x) => t + x, 0);
+  const before = secs.slice(0, guide.at.index).reduce((t, x) => t + x, 0);
+  return guide.at.fromMs + (total / 2 - before) * 1000;
 };
 
 /** The lines the phone's voice says ahead, in ms from now: each step after this one that the clock

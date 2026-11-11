@@ -10,6 +10,9 @@ interface PictureTopProps {
   picture: PictureName;
   /** Its height for the phone's width: 0.6 is a band, 0.9 nearly a square. */
   tall: number;
+  /** A band shorter than the picture, for the width, that keeps the picture's top: the page's words come
+   *  up under a figure at the top of the picture (Running, Kd 2026-11-11). Without it the foot is kept. */
+  band?: number;
   /** Over its top, under the phone's clock: who the page greets. */
   above?: ReactNode;
   eyebrow?: string;
@@ -23,15 +26,15 @@ interface PictureTopProps {
 /** A page's own picture: edge to edge from the top of the phone, running into the page under it.
  *  Never a box of its own. The page's first words lie over it. On a wide screen it takes part of the
  *  screen's height and keeps its foot, where its figures and words are. */
-export function PictureTop({ picture, tall, above, eyebrow, title, foot, fade = "words" }: PictureTopProps) {
+export function PictureTop({ picture, tall, band, above, eyebrow, title, foot, fade = "words" }: PictureTopProps) {
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const full = Math.round(width * tall);
   return (
-    <View style={{ height: pictureTopHeight(width, height, tall) }}>
+    <View style={{ height: pictureTopHeight(width, height, band ?? tall) }}>
       {/* The picture alone is cut to the band; the words and the button on it never are. */}
       <View style={[StyleSheet.absoluteFill, styles.clip]}>
-        <Image source={pictures[picture]} resizeMode="cover" style={[styles.photo, { height: full }]} accessible={false} />
+        <Image source={pictures[picture]} resizeMode="cover" style={[styles.photo, band === undefined ? styles.keepFoot : styles.keepTop, { height: full }]} accessible={false} />
       </View>
       <View style={[StyleSheet.absoluteFill, fade === "light" ? styles.fadeLight : styles.fade]} />
       {above === undefined ? null : <View style={[styles.above, { top: insets.top + 12 }]}>{above}</View>}
@@ -50,7 +53,9 @@ const styles = StyleSheet.create({
   clip: { overflow: "hidden" },
   // A picture has a size of its own, so it is told its shape for the width; "cover" then cuts it to
   // fit, and a band shorter than it shows its foot.
-  photo: { position: "absolute", left: 0, right: 0, bottom: 0, width: "100%" },
+  photo: { position: "absolute", left: 0, right: 0, width: "100%" },
+  keepFoot: { bottom: 0 },
+  keepTop: { top: 0 },
   fade: { experimental_backgroundImage: pictureFadeUnderWords },
   fadeLight: { experimental_backgroundImage: pictureFadeLight },
   above: { position: "absolute", left: sizes.edge, right: sizes.edge },

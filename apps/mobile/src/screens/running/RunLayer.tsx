@@ -38,6 +38,7 @@ import {
   loadRun,
   pauseRun,
   resumeRun,
+  skipStep,
   runIsFull,
   chooseAutoPause,
   keepRunUnits,
@@ -405,7 +406,7 @@ function Live({ run, units, kg, onHide }: { run: LiveRun; units: Units; kg: numb
   };
   const onMap = view === "map";
   // Today's planned run (37d-ii): the step, what is left of it, and the next.
-  const guide = run.guide === null ? null : <RunGuideCard guide={run.guide} movingMs={movingMsOf(run, now)} metres={metres} units={units} paused={isPaused} />;
+  const guide = run.guide === null ? null : <RunGuideCard guide={run.guide} movingMs={movingMsOf(run, now)} metres={metres} units={units} paused={isPaused} onSkip={press(() => skipStep())} />;
   const top = (
     <View style={styles.liveTop}>
       {isPaused ? (
