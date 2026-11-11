@@ -24,7 +24,7 @@ import { useRunOutbox } from "./RunOutbox";
 import { useLookOpen } from "../setupFirst";
 import { RunPage } from "./RunPage";
 import { RunPlanAsk } from "./RunPlanAsk";
-import { RUN_PLAN_PATH, RunPlanBox, type PlanRead } from "./RunPlanBox";
+import { RUN_PLAN_PATH, RunPlanBox, todayGuide, type PlanRead } from "./RunPlanBox";
 import { RunPlanPage } from "./RunPlanPage";
 import { RecordsCard } from "./RecordParts";
 import { RECORDS_PATH } from "./runRecords";
@@ -75,6 +75,10 @@ function useGpsBefore(watching: boolean, asked: number): ReturnType<typeof gpsLi
   }, [watching, asked]);
   return allowed ? gpsLight(fix, now) : null;
 }
+
+/** The plan box's padding under its button, and the room kept between that button and START. */
+const BOX_PAD = 16;
+const START_CLEAR = 12;
 
 /** How much of the page's foot START keeps for itself, over the page (37b-i). */
 const DOCK_ROOM = 190;
@@ -155,6 +159,35 @@ export function RunningTab({ units, parts }: { units: Units; parts: ReactNode })
     });
   }, [height]);
 
+  // Today's run: where the plan box's own Start today's run lies under START (a small phone, large
+  // text), the page opens moved up just enough to show it above START (Kd, 2026-11-11: no button
+  // beside START). Once each time the page is opened, and never once the person has scrolled.
+  const planBoxRef = useRef<View>(null);
+  const goRef = useRef<View>(null);
+  const hasToday = todayGuide(plan, units) !== null;
+  const todayShown = useRef(false);
+  useEffect(() => {
+    if (!focused) todayShown.current = false;
+  }, [focused]);
+  const showToday = useCallback(() => {
+    if (!focused || !hasToday || going || todayShown.current || scrolled.current > 8) return;
+    todayShown.current = true;
+    planBoxRef.current?.measureInWindow((_x, y, _w, h) => {
+      goRef.current?.measureInWindow((_gx, goTop) => {
+        // The box's button sits at its foot, over the box's 16 of padding; it stays 12 clear of START.
+        const hidden = y + h - BOX_PAD - (goTop - START_CLEAR);
+        if (hidden > 0) scroller.current?.scrollTo({ y: scrolled.current + hidden, animated: true });
+      });
+    });
+  }, [focused, hasToday, going]);
+  useEffect(() => {
+    if (!focused || !hasToday) return;
+    const frame = requestAnimationFrame(showToday);
+    return () => {
+      cancelAnimationFrame(frame);
+    };
+  }, [focused, hasToday, showToday]);
+
   const start = async (guide: KeptRunGuide | null = null, inBox = false) => {
     if (look !== null) {
       look();
@@ -181,6 +214,8 @@ export function RunningTab({ units, parts }: { units: Units; parts: ReactNode })
           <PictureTop
             picture="track"
             tall={0.8}
+            // Run comes up under the runner, clear of him (Kd, 2026-11-11), so the plan box rises above START.
+            band={0.57}
             foot={
               <View style={styles.runTitle}>
                 <Icon name="footprints" size={26} colour="orange" />
@@ -203,6 +238,7 @@ export function RunningTab({ units, parts }: { units: Units; parts: ReactNode })
               {deleted}
             </Txt>
           )}
+          <View ref={planBoxRef} onLayout={showToday}>
           <RunPlanBox
             read={plan}
             units={units}
@@ -218,6 +254,7 @@ export function RunningTab({ units, parts }: { units: Units; parts: ReactNode })
             }}
             onStartToday={going ? null : (guide) => void start(guide, true)}
           />
+          </View>
           {problem !== null && pressedBox ? (
             <View ref={underBox} testID="problem-under-plan" onLayout={showUnderBox}>
               {problemBox}
@@ -426,7 +463,7 @@ export function RunningTab({ units, parts }: { units: Units; parts: ReactNode })
         <View pointerEvents="box-none" style={styles.dock}>
           {/* START alone, with the running footprints (Kd, 2026-11-11): today's planned run is started
               from the plan box, which the page scrolls above START. */}
-          <Pressable accessibilityRole="button" accessibilityLabel="Start run" onPress={() => void start()} style={({ pressed }) => [styles.go, pressed ? styles.pressed : null]}>
+          <Pressable ref={goRef} accessibilityRole="button" accessibilityLabel="Start run" onPress={() => void start()} style={({ pressed }) => [styles.go, pressed ? styles.pressed : null]}>
             <Icon name="footprints" size={30} colour="onOrange" />
             <Txt style={styles.goWord}>START</Txt>
           </Pressable>
