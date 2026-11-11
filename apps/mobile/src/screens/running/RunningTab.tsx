@@ -18,7 +18,8 @@ import { useRead } from "../dashboard/useRead";
 import { SettingsPage } from "../Settings";
 import { autoPauseChoice, chooseAutoPause, chooseMapColours, chooseVoice, mapColoursChoice, readRunChoices, subscribeRun, voiceChoice } from "./recorder";
 import { RefusedRuns } from "./RefusedRuns";
-import { RUN_BAR_ROOM, SideButton, gpsLight, openAppSettings, START_PROBLEM_WORDS, useRunLayer, type StartProblem } from "./RunLayer";
+import { RUN_BAR_ROOM, SideButton, gpsLight, useRunLayer, type StartProblem } from "./RunLayer";
+import { StartProblemBox } from "./StartProblem";
 import { useRunOutbox } from "./RunOutbox";
 import { useLookOpen } from "../setupFirst";
 import { RunPage } from "./RunPage";
@@ -167,26 +168,7 @@ export function RunningTab({ units, parts }: { units: Units; parts: ReactNode })
     setProblem(said);
     setAsked((n) => n + 1);
   };
-  const problemBox =
-    problem === null ? null : (
-      <View style={styles.problem}>
-        <Txt kind="small" colour="badText">
-          {START_PROBLEM_WORDS[problem]}
-        </Txt>
-        {problem === "approximate" ? (
-          <View style={styles.choices}>
-            <Button kind="link" label="Allow precise location" onPress={() => void start(from, pressedBox)} />
-            <Button kind="quiet" label="Open settings" onPress={openAppSettings} />
-          </View>
-        ) : problem === "settings" ? (
-          <Button kind="link" label="Open settings" onPress={openAppSettings} />
-        ) : problem === "denied" ? (
-          <Button kind="link" label="Allow location" onPress={() => void start(from, pressedBox)} />
-        ) : problem === "off" ? (
-          <Button kind="link" label="Turn on location" onPress={() => void turnOnLocation().then((on) => (on ? start(from, pressedBox) : undefined))} />
-        ) : null}
-      </View>
-    );
+  const problemBox = problem === null ? null : <StartProblemBox problem={problem} onAgain={() => void start(from, pressedBox)} />;
 
   return (
     <View style={styles.grow}>
@@ -486,18 +468,6 @@ function useCanSpeak(asking: boolean): SpeakState {
   return can;
 }
 
-/** The phone's location turned on in Android's own box (Google's, as the GPS light asks); its
- *  Location page where a phone has no such box. True once it is on. */
-async function turnOnLocation(): Promise<boolean> {
-  try {
-    await Location.enableNetworkProviderAsync();
-    return true;
-  } catch {
-    await Linking.sendIntent("android.settings.LOCATION_SOURCE_SETTINGS").catch(() => Linking.openSettings());
-    return false;
-  }
-}
-
 /** Android's own Text-to-speech page; the app's settings where a phone has none by that name. */
 const openSpeechSettings = (): void => {
   void Linking.sendIntent("com.android.settings.TTS_SETTINGS").catch(() => Linking.openSettings());
@@ -532,7 +502,6 @@ const styles = StyleSheet.create({
   // The width of the round, not the word's own: Android cut the T of START on a small phone (37b-i).
   goWord: { alignSelf: "stretch", textAlign: "center", fontFamily: fonts.bold, fontSize: 21, letterSpacing: 0.5, color: colours.onOrange },
   problem: { gap: 4, alignItems: "flex-start" },
-  choices: { flexDirection: "row", gap: 16, flexWrap: "wrap" },
   said: { textAlign: "center" },
   rows: { borderRadius: sizes.boxRadius, backgroundColor: colours.box, borderWidth: 1, borderColor: colours.line },
   row: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingVertical: 12, minHeight: 64 },

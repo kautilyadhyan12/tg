@@ -4,6 +4,7 @@
 // from the same maths, so it never waits for the next point.
 import { StyleSheet, View } from "react-native";
 import type { KeptRunGuide, Units } from "@app/shared";
+import { Button } from "../../look/Button";
 import { colours, sizes } from "../../look/colours";
 import { Txt } from "../../look/Txt";
 import { guideAdvance, guideBar, guideDone, leftWords, nextWords, stepName } from "./runGuide";
@@ -11,16 +12,20 @@ import { guideAdvance, guideBar, guideDone, leftWords, nextWords, stepName } fro
 /** Where the guide is at `movingMs`, with the run's distance as the screen shows it. */
 export const guideShown = (guide: KeptRunGuide, movingMs: number, metres: number): KeptRunGuide => guideAdvance(guide, movingMs, () => metres).guide;
 
-export function RunGuideCard({ guide, movingMs, metres, units, paused }: { guide: KeptRunGuide; movingMs: number; metres: number; units: Units; paused: boolean }) {
+/** onSkip: Skip step (37d-iii-a), as Runna and Garmin offer it; the plan's own minutes never change. */
+export function RunGuideCard({ guide, movingMs, metres, units, paused, onSkip = null }: { guide: KeptRunGuide; movingMs: number; metres: number; units: Units; paused: boolean; onSkip?: (() => void) | null }) {
   const shown = guideShown(guide, movingMs, metres);
   const done = guideDone(shown);
   const step = shown.steps[shown.at.index];
   const bar = guideBar(shown);
   return (
     <View style={styles.card} testID="run-guide">
-      <Txt kind="tiny" colour="textSoft" numberOfLines={1}>
-        {shown.title}
-      </Txt>
+      <View style={styles.head}>
+        <Txt kind="tiny" colour="textSoft" numberOfLines={1} style={styles.grow}>
+          {shown.title}
+        </Txt>
+        {done || step === undefined || onSkip === null ? null : <Button kind="link" compact label="Skip step" say={`Skip ${stepName(step)}`} onPress={onSkip} />}
+      </View>
       {done || step === undefined ? (
         <View style={styles.words} accessible accessibilityLabel="Today's run is complete. Pause, then Finish to save it.">
           <Txt kind="h2" colour="goodText">
@@ -63,6 +68,7 @@ export function RunGuideCard({ guide, movingMs, metres, units, paused }: { guide
 
 const styles = StyleSheet.create({
   card: { borderRadius: sizes.boxRadius, backgroundColor: colours.box, borderWidth: 1, borderColor: colours.orangeLine, paddingVertical: 12, paddingHorizontal: 14, gap: 6 },
+  head: { flexDirection: "row", alignItems: "center", gap: 8, minHeight: 34 },
   row: { flexDirection: "row", alignItems: "center", gap: 10 },
   grow: { flex: 1, gap: 2 },
   words: { gap: 2 },

@@ -58,6 +58,8 @@ import { useSetupFirst } from "./setupFirst";
 import { useMealOutbox } from "./food/MealOutbox";
 import { useRunOutbox } from "./running/RunOutbox";
 import { RunPage } from "./running/RunPage";
+import { RunRecommended } from "./running/RunRecommended";
+import { KindTabs, KindTabsContext, type RecommendedKind } from "./dashboard/KindTabs";
 import { accountUnits } from "./setup/Setup";
 import { GOALS_READ, GoalsBox, GoalsPage, type GoalsOpen } from "./Goals";
 import { LeaderboardPage, type LeaderboardPlace } from "./gym/Leaderboard";
@@ -115,6 +117,8 @@ export function DashboardScreen() {
   // A run of Recent Activity opened on its own page (37c-i).
   const [openRun, setOpenRun] = useState<string | null>(null);
   const [runDeleted, setRunDeleted] = useState<string | null>(null);
+  // Recommended For You's kind: Food or Running (37d-iii-a).
+  const [kind, setKind] = useState<RecommendedKind>("food");
   const units = (state.kind === "in" ? accountUnits(state.user.units) : null) ?? "metric";
   // Your Rank is the person's first gym's board; somebody using the app alone has a board of their own to come (item 38).
   const places = useRead(PLACES_READ, myOrgsResponseSchema);
@@ -219,17 +223,23 @@ export function DashboardScreen() {
           }}
         />
       </Swipe>
-      <Recommended
-        onMore={() => {
-          go.navigate("Food", { today: Date.now() });
-        }}
-        onPlan={first((gymId: string | null) => {
-          go.navigate("Food", gymId === null ? { today: Date.now(), week: Date.now() } : { today: Date.now(), week: Date.now(), weekGym: gymId });
-        })}
-        onLog={first(() => {
-          go.navigate("Food", { today: Date.now(), next: Date.now() });
-        })}
-      />
+      <KindTabsContext.Provider value={<KindTabs kind={kind} onPick={setKind} />}>
+        {kind === "running" ? (
+          <RunRecommended units={units} />
+        ) : (
+          <Recommended
+            onMore={() => {
+              go.navigate("Food", { today: Date.now() });
+            }}
+            onPlan={first((gymId: string | null) => {
+              go.navigate("Food", gymId === null ? { today: Date.now(), week: Date.now() } : { today: Date.now(), week: Date.now(), weekGym: gymId });
+            })}
+            onLog={first(() => {
+              go.navigate("Food", { today: Date.now(), next: Date.now() });
+            })}
+          />
+        )}
+      </KindTabsContext.Provider>
       <Recent workouts={recent.read} runs={runs.read} meals={meals.read} units={units} onRun={(id) => { setRunDeleted(null); setOpenRun(id); }} said={runDeleted} />
       <Ready onPress={toWorkout} />
       <GoalsPage

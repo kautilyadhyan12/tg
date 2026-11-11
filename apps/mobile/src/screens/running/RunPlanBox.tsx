@@ -182,7 +182,7 @@ const DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Satu
 export const dayName = (weekday: number): string => DAY_NAMES[weekday - 1] ?? "";
 
 /** Safe mode's way out: the health answer's second question, asked again here. */
-function ClearedSheet({ open, onClose, onSaved }: { open: boolean; onClose: () => void; onSaved: () => void }) {
+export function ClearedSheet({ open, onClose, onSaved }: { open: boolean; onClose: () => void; onSaved: () => void }) {
   const { session } = useSession();
   const [saving, setSaving] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
