@@ -329,6 +329,44 @@ d("cancel in the app (real Postgres)", { timeout: T }, () => {
     await sql`DELETE FROM gym_member_payments WHERE gym_id = ${gym.id} AND bill_id IN (SELECT id FROM gym_member_bills WHERE held_membership_id = ${idaGold})`;
     const owing = await ask(gym, ida, idaGold);
     expect(JSON.stringify(owing)).not.toContain("won't be charged again");
+    expect(owing.notes[0]).toMatch(/^You still owe \$\d+\.\d{2}\. Pay it in the app or at the front desk\. Cancel Card can charge your saved card, Visa ending 1111, for it\.$/);
+  });
+
+it("round one: a frozen one held by a notice is the front desk's; a gift comes off the payment it names; Overview reads the end as it stands", async () => {
+    clock = noon("2026-11-04");
+    const gym = await makeGym("Cancel Round One");
+    const kim = await member(gym, "Kim Cancel");
+    const lou = await member(gym, "Lou Cancel");
+    const max = await member(gym, "Max Cancel");
+    const kimNotice = await give(gym, kim, "Gold Notice", "2026-11-04");
+    const louNotice = await give(gym, lou, "Gold Notice", "2026-11-04");
+    const maxGold = await give(gym, max, "Gold", "2026-11-04");
+    clock = noon("2026-11-10");
+
+    // H1: frozen, its days stand still, so no end day it is told would hold: the front desk cancels it.
+    const froze = await inject("POST", `${heldUrl(gym, kim.entryId)}/${kimNotice}/freeze`, gym.owner.cookies, { feeMinor: 0 });
+    expect(froze.statusCode, froze.body).toBe(200);
+    const frozenBox = await ask(gym, kim, kimNotice);
+    expect(frozenBox.choices).toEqual([]);
+    expect(frozenBox.notes).toEqual(["It's frozen, so the front desk cancels it. Ask them, or unfreeze it first."]);
+    expect((await mine(gym, kim)).memberships.find((m) => m.id === kimNotice)?.cancel).toEqual({ state: "elsewhere", line: "It's frozen, so the front desk cancels it. Ask them, or unfreeze it first." });
+
+    // H3: a $10.00 Refer a friend gift waiting comes off the one payment the box names, and off that very bill.
+    const today = "2026-11-10";
+    await sql`
+      INSERT INTO gym_referral_member_gifts (gym_id, member_user_id, kind, amount_minor, currency, given_at, given_on)
+      VALUES (${gym.id}, ${lou.userId}, 'amount', 1000, 'USD', ${clock}, ${today})`;
+    const l = await cancel(gym, lou, louNotice, "notice");
+    expect(l.choice.payments).toEqual([{ dueOn: "2026-12-04", amountMinor: 4000 }]);
+    expect(l.choice.lines[1]).toBe("One more payment of $40.00 is due on 4 Dec 2026.");
+    expect(await billsOpenedOn(gym, louNotice, months(3), 0)).toEqual(l.choice.payments);
+
+    // H2: cancelled in the app at the end of what is paid, then ended today at the desk: Overview says today.
+    await cancel(gym, max, maxGold, "period_end");
+    const desk = await inject("POST", `${heldUrl(gym, max.entryId)}/${maxGold}/cancel`, gym.owner.cookies, { when: "today" });
+    expect(desk.statusCode, desk.body).toBe(200);
+    const overview = appCancelsResponseSchema.parse(JSON.parse((await inject("GET", `/v1/orgs/${gym.id}/app-cancels`, gym.owner.cookies)).body));
+    expect(overview.rows.find((r) => r.entryId === max.entryId)?.endsOn).toBe("2026-11-10");
   });
 
   it("a member somebody else pays for is told who can; the payer cancels it, and the person's page says so", async () => {
@@ -349,6 +387,9 @@ d("cancel in the app (real Postgres)", { timeout: T }, () => {
     const hers = await mine(gym, priya);
     expect(hers.paysFor[0]?.memberships.find((m) => m.id === devGold)?.cancel).toEqual({ state: "can", button: "Cancel membership" });
     const done = await cancel(gym, priya, devGold, "period_end");
+    expect(done.choice.lines[0]).toBe("Dev Cancel's Gold ends on 3 Dec 2026, the last day you've paid for.");
+    expect(done.done.line).toBe("Cancelled. Dev Cancel's Gold ends on 3 Dec 2026.");
+    expect(sent[sent.length - 1]?.membershipName).toBe("Dev Cancel's Gold");
     expect(done.done.emailed).toBe(true);
     expect((await mine(gym, dev)).memberships.find((m) => m.id === devGold)?.cancel).toEqual({ state: "cancelled", line: "Priya Cancel cancelled it in the app on 10 Nov 2026." });
     expect((await mine(gym, priya)).paysFor[0]?.memberships.find((m) => m.id === devGold)?.cancel).toEqual({ state: "cancelled", line: "You cancelled it in the app on 10 Nov 2026." });
@@ -410,7 +451,14 @@ d("cancel in the app (real Postgres)", { timeout: T }, () => {
     expect(box.choices.map((c) => [c.when, c.button, c.refundMinor])).toEqual([["cooling_off", "Cancel with full refund", 5000]]);
     expect(box.choices[0]?.lines).toEqual(["You're in your cooling-off period until 7 Nov 2026. Summer month ends today, and Cancel Cool refunds the $50.00 you paid."]);
     expect((await mine(gym, gus)).memberships.find((m) => m.id === gusSummer)?.cancel).toEqual({ state: "can", button: "Cancel with full refund" });
-    await cancel(gym, gus, gusSummer, "cooling_off");
+    const gusBox = await ask(gym, gus, gusSummer);
+    const gusKey = randomUUID();
+    const once = await press(gym, gus, gusSummer, "cooling_off", gusBox.choices[0]?.key ?? "", gusKey);
+    const again = await press(gym, gus, gusSummer, "cooling_off", gusBox.choices[0]?.key ?? "", gusKey);
+    expect(myCancelDoneSchema.parse(JSON.parse(once.body)).line).toBe("Cancelled. Cancel Cool refunds the $50.00 you paid.");
+    expect(myCancelDoneSchema.parse(JSON.parse(again.body)).line).toBe("Cancelled. Cancel Cool refunds the $50.00 you paid.");
+    const gusPage = heldMembershipsResponseSchema.parse(JSON.parse((await inject("GET", heldUrl(gym, gus.entryId), gym.owner.cookies)).body));
+    expect(gusPage.memberships.find((m) => m.id === gusSummer)?.billing?.coolingOffRefund?.leftMinor).toBe(5000);
     expect(await sql`SELECT status, changed_mind FROM gym_held_memberships WHERE id = ${gusSummer}`).toEqual([{ status: "cancelled", changed_mind: true }]);
 
     // Nothing paid since 4 November: it ends today, and what is owed stays owed, said under the choice.

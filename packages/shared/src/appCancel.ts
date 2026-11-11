@@ -51,7 +51,8 @@ export const appCancelRowSchema = z
     past: z.boolean(),
     membershipName: z.string(),
     on: daySchema,
-    endsOn: daySchema,
+    /** Its last day as it stands now, whatever staff did after (round one, H2); null while it is frozen, when it has none. */
+    endsOn: daySchema.nullable(),
     when: myCancelWhenSchema,
     reason: myCancelReasonSchema.nullable(),
   })
@@ -72,7 +73,8 @@ export type AppCancelsResponse = z.infer<typeof appCancelsResponseSchema>;
 
 /** One row's second line: "Gold Monthly · Cancelled 11 Nov 2026 · Ends 30 Nov 2026". */
 export function appCancelRowWhat(row: Pick<AppCancelRow, "membershipName" | "on" | "endsOn" | "when">): string {
-  const ends = row.when === "cooling_off" ? "Ended in its cooling-off period" : row.endsOn <= row.on ? "Ended that day" : `Ends ${dayWords(row.endsOn)}`;
+  const ends =
+    row.when === "cooling_off" ? "Ended in its cooling-off period" : row.endsOn === null ? "Frozen, no end day yet" : row.endsOn <= row.on ? "Ended that day" : `Ends ${dayWords(row.endsOn)}`;
   return `${row.membershipName} · Cancelled ${dayWords(row.on)} · ${ends}`;
 }
 

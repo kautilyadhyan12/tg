@@ -25,6 +25,9 @@ import {
   myCancelDoneLine,
   myCancelDoneSchema,
   myCancelFrontDeskSooner,
+  myCancelFrozen,
+  memberGiftOff,
+  periodListedMinor,
   myCancelLines,
   myCancelOwedNote,
   myCancelPaidByLine,
@@ -48,8 +51,8 @@ import { emailHmac } from "../invites/address.js";
 import { gymNameForEmail } from "../invites/gymText.js";
 import { suppressionsFor } from "../invites/repo.js";
 import { coolingOffRefundOf } from "../memberships/heldService.js";
-import { heldRowsOf, lockedEntry, moveHeldIn, type HeldRow, type HeldWriteOutcome } from "../memberships/heldRepo.js";
-import { billsFor, paymentsFor, type BillRow } from "../memberships/billsSql.js";
+import { heldRowsOf, lockedEntry, moveHeldIn, periodPriceMinor, type HeldRow, type HeldWriteOutcome } from "../memberships/heldRepo.js";
+import { billOf, billsFor, paymentsFor, type BillRow } from "../memberships/billsSql.js";
 import { feesFor } from "../memberships/feesRepo.js";
 import { chargedCard, renewalAmountMinor } from "../memberships/renewalRemindersRepo.js";
 import { lockEntries } from "../memberList/repo.js";
@@ -105,19 +108,21 @@ async function whoseOf(sql: Sql | TransactionSql, gymId: string, userId: string,
 
 /** The payments still to come before `lastDay`, after the cancel, as their bills will open: none for one that no longer
  *  renews. A period already due with its bill open is owed, said apart. */
-function paymentsToCome(row: HeldRow, after: HeldMembership, lastDay: string, bills: readonly BillRow[], today: string): (MyCancelPayment & { periodIndex: number })[] {
+type Coming = MyCancelPayment & { periodIndex: number; opens: boolean };
+
+function paymentsToCome(row: HeldRow, after: HeldMembership, lastDay: string, bills: readonly BillRow[], today: string): Coming[] {
   if (after.kind !== "recurring" || after.free || !after.renews || (after.status !== "active" && after.status !== "frozen")) return [];
   // A frozen one counts the days frozen so far, as its unfreeze will (`noticeOf`).
   const frozenSoFar = after.status === "frozen" && after.frozenOn !== null ? Math.max(0, daysBetween(after.frozenOn, today)) : 0;
   const at: HeldMembership = { ...after, frozenDays: after.frozenDays + frozenSoFar };
-  const out: (MyCancelPayment & { periodIndex: number })[] = [];
+  const out: Coming[] = [];
   for (let i = after.paidPeriods; i < after.paidPeriods + 400; i++) {
     const due = periodStart(at, i);
     if (due > lastDay) break;
     const bill = bills.find((b) => b.periodIndex === i);
     if (bill !== undefined && (bill.status !== "open" || bill.dueOn <= today)) continue;
     const amountMinor = bill === undefined ? renewalAmountMinor(row, i) : bill.amountMinor - bill.paidMinor;
-    if (amountMinor > 0) out.push({ dueOn: bill?.dueOn ?? due, amountMinor, periodIndex: i });
+    if (amountMinor > 0) out.push({ dueOn: bill?.dueOn ?? due, amountMinor, periodIndex: i, opens: bill === undefined });
   }
   return out;
 }
@@ -140,6 +145,11 @@ async function workOut(tx: TransactionSql, gymId: string, whose: Whose, membersh
   const m = row.membership;
   const view = heldMembershipView(m, today);
   const renewsAgain = view.status === "upcoming" ? await cancels.replacedStopped(tx, gymId, row.id) : null;
+  // Whoever pays for them pressed it: the box says whose it is (round one, L1).
+  const forName = whose.ownId === whose.entryId ? null : await cancels.nameOfRecord(tx, gymId, whose.entryId);
+  // A money-off Refer a friend gift waiting for the record's next bill comes off it as the bill opens (round one, H3).
+  const gift = await cancels.waitingMoneyGift(tx, gymId, whose.entryId);
+  const others = gift === null ? [] : await cancels.otherNextBills(tx, gymId, whose.entryId, row.id, today);
   // Money owed before the cancel stays owed: the bills already due, and the fees still owed.
   const owedBills = bills.filter((b) => b.status === "open" && b.dueOn <= today).reduce((n, b) => n + Math.max(0, b.amountMinor - b.paidMinor), 0);
   const owedFees = fees.fees
@@ -166,7 +176,13 @@ async function workOut(tx: TransactionSql, gymId: string, whose: Whose, membersh
     // With nothing to come, the card the app charges today, so the box says it won't be charged again; never where money
     // is owed, which staff can still charge to it.
     const card = first !== undefined ? await chargedCard(tx, gymId, row.id, first.periodIndex) : owedMinor > 0 ? null : await chargedCard(tx, gymId, row.id, m.paidPeriods);
-    const toCome: MyCancelPayment[] = coming.map((c) => ({ dueOn: c.dueOn, amountMinor: c.amountMinor }));
+    const toCome: MyCancelPayment[] = coming.map((c, at) => {
+      // The gift goes on the earliest bill to open: this one's first, unless another membership of theirs bills sooner.
+      if (at !== 0 || gift === null || !c.opens || others.some((day) => day <= c.dueOn)) return { dueOn: c.dueOn, amountMinor: c.amountMinor };
+      const listed = periodListedMinor(m, c.periodIndex, periodPriceMinor(row, c.periodIndex));
+      const off = memberGiftOff(gift, listed, row.currency);
+      return { dueOn: c.dueOn, amountMinor: off === 0 ? c.amountMinor : billOf(listed - off, row.taxApplied).amountMinor };
+    });
     const asked = await membershipBookingsAsk(tx, gymId, { membership: row.id, now, afterDay: after.status === "cancelled" ? null : lastDay }, { bookings: null, ptSessions: null });
     const ending = {
       classes: asked === null ? 0 : asked.ending.booked + asked.ending.waiting,
@@ -179,6 +195,7 @@ async function workOut(tx: TransactionSql, gymId: string, whose: Whose, membersh
     const said: MyCancelFacts = {
       gymName: whose.gymName,
       membershipName: row.typeName,
+      forName,
       currency: row.currency,
       today,
       way,
@@ -205,6 +222,7 @@ async function workOut(tx: TransactionSql, gymId: string, whose: Whose, membersh
   }
   if (choices.length > 0 && myCancelFrontDeskSooner(m, today)) notes.push(MY_CANCEL_WORDS.frontDeskSooner);
   if (choices.length === 0 && blocked !== null) notes.push(blocked);
+  if (choices.length === 0 && myCancelFrozen(m, today)) notes.push(MY_CANCEL_WORDS.frozen);
   return { ask: myCancelAskSchema.parse({ membership: { id: row.id, name: row.typeName }, currency: row.currency, choices, notes }), row, facts };
 }
 
@@ -326,12 +344,22 @@ export async function cancelInApp(deps: CancelDeps, userId: string, gymId: strin
     const r = done.row;
     const held = (await heldRowsOf(deps.sql, gymId, [membershipId])).get(membershipId);
     if (held === undefined) throw notFound();
-    const line = myCancelDoneLine({ gymName: first.gymName, membershipName: held.typeName, currency: held.currency, today: r.cancelledOn, way: { when: r.when, endsOn: r.endsOn }, refundMinor: null });
-    return myCancelDoneSchema.parse({ cancelId: r.id, line, endsOn: r.endsOn, emailed: r.emailed, reason: r.reason });
+    // The same sentence as the first answer: a cooling-off refund worked out again, and whose it is (round one, L2).
+    const refundMinor =
+      r.when === "cooling_off"
+        ? (coolingOffRefundOf(held.membership, heldMembershipView(held.membership, r.cancelledOn), await billsFor(deps.sql, gymId, [held.id]), await paymentsFor(deps.sql, gymId, [held.id]))?.leftMinor ?? 0)
+        : null;
+    const forName = first.ownId === first.entryId ? null : await cancels.nameOfRecord(deps.sql, gymId, first.entryId);
+    const line = myCancelDoneLine({ gymName: first.gymName, membershipName: held.typeName, forName, currency: held.currency, today: r.cancelledOn, way: { when: r.when, endsOn: r.endsOn }, refundMinor });
+    // A confirmation that did not go is tried again by the same press (round one, L3).
+    const named = forName === null ? held.typeName : `${forName}'s ${held.typeName}`;
+    const emailed = r.emailed || (await confirm(deps, gymId, r.id, { userId, gymName: first.gymName, membershipName: named, at: now, timezone: first.timezone, done: line, lines: [], notes: [] }));
+    return myCancelDoneSchema.parse({ cancelId: r.id, line, endsOn: r.endsOn, emailed, reason: r.reason });
   }
   deps.news.tell(gymId, { what: "memberships", entryId: done.entryId });
   const line = myCancelDoneLine(done.said);
-  const emailed = await confirm(deps, gymId, done.id, { userId, gymName: done.gymName, membershipName: done.said.membershipName, at: now, timezone: done.timezone, done: line, lines: done.choice.lines, notes: done.notes });
+  const named = done.said.forName === null ? done.said.membershipName : `${done.said.forName}'s ${done.said.membershipName}`;
+  const emailed = await confirm(deps, gymId, done.id, { userId, gymName: done.gymName, membershipName: named, at: now, timezone: done.timezone, done: line, lines: done.choice.lines, notes: done.notes });
   return myCancelDoneSchema.parse({ cancelId: done.id, line, endsOn: done.choice.endsOn, emailed, reason: null });
 }
 

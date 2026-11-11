@@ -11,6 +11,7 @@ import {
   myCancelButton,
   myCancelDoneLine,
   myCancelFrontDeskSooner,
+  myCancelFrozen,
   myCancelLines,
   myCancelOwedNote,
   myCancelPaidByLine,
@@ -48,6 +49,8 @@ describe("the ways a member may cancel in the app, for every class of membership
     ["repeating, nothing paid past today: today", { ...paidTwo(monthly), paidPeriods: 1 }, TODAY, ["today 2026-11-10"]],
     ["repeating, still to start and paid: with what is paid, as the desk", given(monthly, "2026-12-01", TODAY), TODAY, ["period_end 2026-12-31"]],
     ["repeating, still to start, nothing paid: today", { ...given(monthly, "2026-12-01", TODAY), paidPeriods: 0 }, TODAY, ["today 2026-11-10"]],
+    ["frozen with a notice: nothing dated, the front desk cancels it", { ...paidTwo({ ...monthly, noticeDays: 30 }), status: "frozen", frozenOn: "2026-11-05" }, TODAY, []],
+    ["frozen inside a minimum term: nothing dated, the front desk cancels it", { ...paidTwo({ ...monthly, contractPeriods: 12, contractThen: "renews", leaveFeeMinor: 9900 }), status: "frozen", frozenOn: "2026-11-05" }, TODAY, []],
     ["repeating, frozen: today, as the desk", { ...paidTwo(monthly), status: "frozen", frozenOn: "2026-11-05" }, TODAY, ["today 2026-11-10"]],
     ["set to end already: nothing", { ...paidTwo(monthly), renews: false }, TODAY, []],
     ["cancelled already: nothing", { ...paidTwo(monthly), status: "cancelled", cancelledOn: "2026-11-01" }, TODAY, []],
@@ -83,6 +86,12 @@ describe("the ways a member may cancel in the app, for every class of membership
     }
   });
 
+  it("a frozen one held by a term or a notice is the front desk's; one held by nothing ends today", () => {
+    expect(myCancelFrozen({ ...paidTwo({ ...monthly, noticeDays: 30 }), status: "frozen", frozenOn: "2026-11-05" }, TODAY)).toBe(true);
+    expect(myCancelFrozen({ ...paidTwo(monthly), status: "frozen", frozenOn: "2026-11-05" }, TODAY)).toBe(false);
+    expect(myCancelFrozen(paidTwo({ ...monthly, noticeDays: 30 }), TODAY)).toBe(false);
+  });
+
   it("says the front desk can end it sooner only inside a minimum term or a notice", () => {
     expect(myCancelFrontDeskSooner(paidTwo(monthly), TODAY)).toBe(false);
     expect(myCancelFrontDeskSooner(paidTwo({ ...monthly, noticeDays: 30 }), TODAY)).toBe(true);
@@ -95,6 +104,7 @@ describe("what the box says", () => {
   const facts = (over: Partial<MyCancelFacts>): MyCancelFacts => ({
     gymName: "Iron Gym",
     membershipName: "Gold Monthly",
+    forName: null,
     currency: "USD",
     today: TODAY,
     way: { when: "period_end", endsOn: "2026-11-30" },
@@ -142,6 +152,19 @@ describe("what the box says", () => {
     expect(myCancelLines(facts({ ending: { classes: 1, sessions: 0 } }))[2]).toBe("Your 1 class booking after 30 Nov 2026 is cancelled too.");
   });
 
+  it("pressed by whoever pays for them, every sentence says whose it is", () => {
+    const dev = { forName: "Dev Shah" };
+    expect(myCancelLines(facts(dev))[0]).toBe("Dev Shah's Gold Monthly ends on 30 Nov 2026, the last day you've paid for.");
+    expect(myCancelLines(facts({ ...dev, way: { when: "contract_end", endsOn: "2027-09-30" }, termUntil: "2027-09-30" }))[0]).toBe(
+      "Dev Shah's minimum term runs until 30 Sep 2027, so Dev Shah's Gold Monthly ends on 30 Sep 2027.",
+    );
+    expect(myCancelLines(facts({ ...dev, way: { when: "cooling_off", endsOn: TODAY }, coolingOffUntil: "2026-11-12", refundMinor: 5000 }))).toEqual([
+      "Dev Shah's Gold Monthly is in its cooling-off period until 12 Nov 2026. It ends today, and Iron Gym refunds the $50.00 you paid.",
+    ]);
+    expect(myCancelLines(facts({ ...dev, ending: { classes: 2, sessions: 0 } }))[2]).toBe("Dev Shah's 2 class bookings after 30 Nov 2026 are cancelled too.");
+    expect(myCancelDoneLine(facts(dev))).toBe("Cancelled. Dev Shah's Gold Monthly ends on 30 Nov 2026.");
+  });
+
   it("the buttons, the done line, the owed note and who else can", () => {
     expect(myCancelButton("period_end", null, "USD")).toBe("Cancel membership");
     expect(myCancelButton("leave_early", 9900, "USD")).toBe("Cancel early, $99.00 fee");
@@ -157,5 +180,6 @@ describe("what the box says", () => {
     expect(appCancelLine({ on: "2026-11-10", byName: "Maya Test", reason: "cost" })).toBe("Cancelled in the app on 10 Nov 2026 by Maya Test · Reason: Cost");
     expect(appCancelRowWhat({ membershipName: "Gold", on: "2026-11-10", endsOn: "2026-11-30", when: "period_end" })).toBe("Gold · Cancelled 10 Nov 2026 · Ends 30 Nov 2026");
     expect(appCancelRowWhat({ membershipName: "Gold", on: "2026-11-10", endsOn: "2026-11-10", when: "cooling_off" })).toBe("Gold · Cancelled 10 Nov 2026 · Ended in its cooling-off period");
+    expect(appCancelRowWhat({ membershipName: "Gold", on: "2026-11-10", endsOn: null, when: "period_end" })).toBe("Gold · Cancelled 10 Nov 2026 · Frozen, no end day yet");
   });
 });

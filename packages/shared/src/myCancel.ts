@@ -35,6 +35,9 @@ export function myCancelWays(stored: HeldMembership, today: string): MyCancelWay
   // Inside its cooling-off period they cancel with a full refund, held to nothing else (18v-iii).
   if (can.coolingOff !== null) return [{ when: "cooling_off", endsOn: today }];
   if (stored.kind !== "recurring" || !can.cancel || !stored.renews) return [];
+  // Frozen, its dates stand still until it is unfrozen, so no day it would end on is true: it ends today where nothing holds
+  // it, as at the desk; held by a minimum term or a notice, the front desk cancels it (round one, H1).
+  if (view.status === "frozen") return myCancelFrozen(stored, today) ? [] : [{ when: "today", endsOn: today }];
   const paid = can.cancelAtPeriodEnd;
   // Inside a running minimum term (18v-i): it ends with the term, after the notice, or with what is paid past the
   // term; and early with the fee where it has one (18v-ii-b).
@@ -58,6 +61,12 @@ export function myCancelWays(stored: HeldMembership, today: string): MyCancelWay
   }
   // At the end of what is paid; today where nothing is paid past today, it is frozen, or it has not started.
   return paid !== null ? [{ when: "period_end", endsOn: paid }] : [{ when: "today", endsOn: today }];
+}
+
+/** Frozen, and held by a minimum term or a notice: the front desk cancels it (round one, H1). */
+export function myCancelFrozen(stored: HeldMembership, today: string): boolean {
+  const view = heldMembershipView(stored, today);
+  return stored.kind === "recurring" && stored.renews && view.status === "frozen" && view.can.coolingOff === null && ((view.can.releaseNeeded && view.contract !== null) || view.can.noticeEnds !== null);
 }
 
 /** Whether the front desk could end it sooner than the app offers, for a reason: inside a minimum term or a notice. */
@@ -157,6 +166,8 @@ export type MyMembershipCancel = z.infer<typeof myMembershipCancelSchema>;
 export interface MyCancelFacts {
   gymName: string;
   membershipName: string;
+  /** Whoever pays for them pressed it (18i): the member's name, so the box says whose it is; null for their own. */
+  forName: string | null;
   currency: string;
   today: string;
   way: MyCancelWay;
@@ -180,6 +191,9 @@ export interface MyCancelFacts {
   renewsAgain: string | null;
 }
 
+/** "Gold Monthly", or "Dev's Gold Monthly" where whoever pays for them pressed it. */
+const whose = (f: Pick<MyCancelFacts, "membershipName" | "forName">): string => (f.forName === null ? f.membershipName : `${f.forName}'s ${f.membershipName}`);
+
 const plural = (n: number, one: string, many: string): string => `${String(n)} ${n === 1 ? one : many}`;
 const noticeWords = (days: number): string => (days === 1 ? "1 day's notice" : `${String(days)} days' notice`);
 
@@ -192,13 +206,16 @@ export function myCancelButton(way: MyCancelWhen, feeMinor: number | null, curre
 
 /** The first sentence of a way: when it ends, and why that day. */
 function endLine(f: MyCancelFacts): string {
-  const name = f.membershipName;
+  const name = whose(f);
   const on = dayWords(f.way.endsOn);
   switch (f.way.when) {
-    case "cooling_off":
+    case "cooling_off": {
+      const until = dayWords(f.coolingOffUntil ?? f.today);
+      const lead = f.forName === null ? `You're in your cooling-off period until ${until}.` : `${name} is in its cooling-off period until ${until}.`;
       return f.refundMinor !== null && f.refundMinor > 0
-        ? `You're in your cooling-off period until ${dayWords(f.coolingOffUntil ?? f.today)}. ${name} ends today, and ${f.gymName} refunds the ${formatMinor(f.refundMinor, f.currency)} you paid.`
-        : `You're in your cooling-off period until ${dayWords(f.coolingOffUntil ?? f.today)}. ${name} ends today, with nothing to pay.`;
+        ? `${lead} ${f.forName === null ? name : "It"} ends today, and ${f.gymName} refunds the ${formatMinor(f.refundMinor, f.currency)} you paid.`
+        : `${lead} ${f.forName === null ? name : "It"} ends today, with nothing to pay.`;
+    }
     case "period_end":
       return `${name} ends on ${on}, the last day you've paid for.`;
     case "today":
@@ -206,7 +223,7 @@ function endLine(f: MyCancelFacts): string {
     case "notice":
       return `${name} has ${noticeWords(f.noticeDays ?? 0)} to cancel, so it ends on ${on}.`;
     case "contract_end":
-      return `Your minimum term runs until ${dayWords(f.termUntil ?? f.way.endsOn)}, so ${name} ends on ${on}.`;
+      return `${f.forName === null ? "Your" : `${f.forName}'s`} minimum term runs until ${dayWords(f.termUntil ?? f.way.endsOn)}, so ${name} ends on ${on}.`;
     case "leave_early": {
       const fee = f.feeMinor === null ? "the early cancellation fee" : `the early cancellation fee of ${formatMinor(f.feeMinor, f.currency)}`;
       return `Cancel early: you pay ${fee}, and ${name} ends ${f.way.endsOn === f.today ? "today" : `on ${on}`}.`;
@@ -237,7 +254,7 @@ function endingLine(f: MyCancelFacts): string | null {
   if (parts.length === 0) return null;
   const many = f.ending.classes + f.ending.sessions > 1;
   const after = f.way.endsOn === f.today ? "" : ` after ${dayWords(f.way.endsOn)}`;
-  return `Your ${parts.join(" and ")}${after} ${many ? "are" : "is"} cancelled too.`;
+  return `${f.forName === null ? "Your" : `${f.forName}'s`} ${parts.join(" and ")}${after} ${many ? "are" : "is"} cancelled too.`;
 }
 
 /** THE BOX'S SENTENCES for one way, in the order they are read, and the same in the confirmation email. */
@@ -268,7 +285,8 @@ export const MY_CANCEL_WORDS = {
   terminalWaiting: "A payment for it is waiting at the front desk. Try again in a few minutes.",
   appPaying: "A payment page for it is open. Finish that payment or close it first.",
   partPaid: "Part of a payment for it is paid and the rest is still owed, so the front desk cancels it. Ask them.",
-  sharedRecord: "Two app accounts share your record here, so cancel it at the front desk.",
+  /** Frozen, and held by a minimum term or a notice (round one, H1). */
+  frozen: "It's frozen, so the front desk cancels it. Ask them, or unfreeze it first.",
   requestReused: "That press was already used. Go back and look again.",
 } as const;
 
@@ -278,9 +296,10 @@ export function myCancelPaidByLine(payerName: string): string {
 }
 
 /** Once it is cancelled: what the screen says, and what the confirmation says first. */
-export function myCancelDoneLine(f: Pick<MyCancelFacts, "gymName" | "membershipName" | "currency" | "today" | "way" | "refundMinor">): string {
-  if (f.way.when === "cooling_off") return f.refundMinor !== null && f.refundMinor > 0 ? `Cancelled. ${f.gymName} refunds the ${formatMinor(f.refundMinor, f.currency)} you paid.` : `Cancelled. ${f.membershipName} has ended.`;
-  return f.way.endsOn === f.today ? `Cancelled. ${f.membershipName} ends today.` : `Cancelled. ${f.membershipName} ends on ${dayWords(f.way.endsOn)}.`;
+export function myCancelDoneLine(f: Pick<MyCancelFacts, "gymName" | "membershipName" | "forName" | "currency" | "today" | "way" | "refundMinor">): string {
+  const name = whose(f);
+  if (f.way.when === "cooling_off") return f.refundMinor !== null && f.refundMinor > 0 ? `Cancelled. ${f.gymName} refunds the ${formatMinor(f.refundMinor, f.currency)} you paid.` : `Cancelled. ${name} has ended.`;
+  return f.way.endsOn === f.today ? `Cancelled. ${name} ends today.` : `Cancelled. ${name} ends on ${dayWords(f.way.endsOn)}.`;
 }
 
 /** My membership's line for one cancelled in the app: by the reader, or by whoever pays for them. */

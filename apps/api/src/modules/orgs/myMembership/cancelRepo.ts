@@ -2,7 +2,9 @@
 // The membership itself is changed by the front desk's own step (`moveHeldIn`); this file keeps what the gym is told
 // (`gym_app_cancels`) and reads what the box says about money.
 import type { Sql, TransactionSql } from "postgres";
-import { APP_CANCELS_DAYS, APP_CANCELS_SHOWN, myCancelReasonSchema, myCancelWhenSchema, type AppCancel, type AppCancelRow, type MyCancelReason, type MyCancelWhen } from "@app/shared";
+import { dayInTz } from "../../gamification/streak.js";
+import { heldRowsOf } from "../memberships/heldRepo.js";
+import { APP_CANCELS_DAYS, APP_CANCELS_SHOWN, heldMembershipView, myCancelReasonSchema, myCancelWhenSchema, type AppCancel, type AppCancelRow, type MyCancelReason, type MyCancelWhen } from "@app/shared";
 
 type SqlOrTx = Sql | TransactionSql;
 
@@ -144,6 +146,7 @@ export async function chargeableCard(sql: SqlOrTx, gymId: string, payerEntryId: 
     FROM gym_payment_connections c
     JOIN gym_member_cards k ON k.gym_id = c.gym_id AND k.environment = c.environment AND k.account_id = c.account_id AND k.entry_id = ${payerEntryId}
     WHERE c.gym_id = ${gymId} AND c.state = 'connected' AND c.location_id IS NOT NULL
+    ORDER BY c.connected_at DESC
     LIMIT 1`;
   return row === undefined || row.declined ? null : { brand: row.brand, last4: row.last4 };
 }
@@ -160,17 +163,53 @@ export async function emailOfUser(sql: SqlOrTx, userId: string): Promise<string 
   return row?.email ?? null;
 }
 
-/** Overview's Cancelled in the app: a gym's newest from the last `APP_CANCELS_DAYS` days, and how many there are. */
+/** A money-off Refer a friend gift waiting for this record's next membership bill, as the bill opener takes it
+ *  (`giftsOntoOpenBills`): the oldest given; null for none. */
+export async function waitingMoneyGift(sql: SqlOrTx, gymId: string, entryId: string): Promise<{ kind: "percent" | "amount"; percentBp: number | null; amountMinor: number | null; currency: string | null } | null> {
+  const [row] = await sql<{ kind: string; percent_bp: number | null; amount_minor: number | null; currency: string | null }[]>`
+    SELECT g.kind, g.percent_bp, g.amount_minor, g.currency
+    FROM gym_referral_member_gifts g
+    JOIN gym_members m ON m.gym_id = g.gym_id AND m.user_id = g.member_user_id AND m.removed_at IS NULL AND m.entry_id = ${entryId}
+    JOIN users u ON u.id = m.user_id AND u.status = 'active'
+    JOIN gym_member_list_entries e ON e.gym_id = m.gym_id AND e.id = m.entry_id AND e.former_at IS NULL
+    WHERE g.gym_id = ${gymId} AND g.used_at IS NULL AND g.taken_back_at IS NULL AND g.gift_on = 'membership' AND g.days IS NULL
+    ORDER BY g.given_at, g.id
+    LIMIT 1`;
+  if (row === undefined || (row.kind !== "percent" && row.kind !== "amount")) return null;
+  return { kind: row.kind, percentBp: row.percent_bp, amountMinor: row.amount_minor, currency: row.currency };
+}
+
+/** The next day each other repeating membership of this record in use is billed: the gift goes on the earliest bill. */
+export async function otherNextBills(sql: SqlOrTx, gymId: string, entryId: string, exceptId: string, today: string): Promise<string[]> {
+  const ids = (await sql<{ id: string }[]>`
+    SELECT id FROM gym_held_memberships
+    WHERE gym_id = ${gymId} AND entry_id = ${entryId} AND id <> ${exceptId} AND kind = 'recurring' AND renews AND status IN ('active','frozen')`).map((r) => r.id);
+  const rows = await heldRowsOf(sql, gymId, ids);
+  return [...rows.values()].flatMap((r) => {
+    const view = heldMembershipView(r.membership, today);
+    return view.renewsOn === null ? [] : [view.renewsOn];
+  });
+}
+
+/** The record's name on the gym's list. */
+export async function nameOfRecord(sql: SqlOrTx, gymId: string, entryId: string): Promise<string | null> {
+  const [row] = await sql<{ full_name: string }[]>`SELECT full_name FROM gym_member_list_entries WHERE gym_id = ${gymId} AND id = ${entryId}`;
+  return row === undefined ? null : row.full_name.trim();
+}
+
+/** Overview's Cancelled in the app: a gym's newest from the last `APP_CANCELS_DAYS` days, and how many there are. Each
+ *  one's last day is read from the membership as it stands, so a cancel staff made after it is said (round one, H2). */
 export async function recentCancels(sql: SqlOrTx, gymId: string, now: Date): Promise<{ count: number; rows: AppCancelRow[]; letsEveryoneIn: boolean }> {
   const since = new Date(now.getTime() - APP_CANCELS_DAYS * 86_400_000);
-  const [counted] = await sql<{ n: number; everyone: boolean }[]>`
+  const [counted] = await sql<{ n: number; everyone: boolean; timezone: string }[]>`
     SELECT (SELECT count(*) FROM gym_app_cancels WHERE gym_id = ${gymId} AND created_at >= ${since})::int AS n,
-           (SELECT checkin_who = 'everyone' FROM gyms WHERE id = ${gymId}) AS everyone`;
+           g.checkin_who = 'everyone' AS everyone, g.timezone
+    FROM gyms g WHERE g.id = ${gymId}`;
   const rows = await sql<
-    { id: string; entry_id: string | null; name: string | null; past: boolean | null; type_name: string; cancelled_on: string; ends_on: string; when: string; reason: string | null }[]
+    { id: string; held_id: string; entry_id: string | null; name: string | null; past: boolean | null; type_name: string; cancelled_on: string; when: string; reason: string | null }[]
   >`
-    SELECT c.id, h.entry_id, e.full_name AS name, (e.former_at IS NOT NULL) AS past, t.name AS type_name,
-           c.cancelled_on::text AS cancelled_on, c.ends_on::text AS ends_on, c."when", c.reason
+    SELECT c.id, c.held_membership_id AS held_id, h.entry_id, e.full_name AS name, (e.former_at IS NOT NULL) AS past, t.name AS type_name,
+           c.cancelled_on::text AS cancelled_on, c."when", c.reason
     FROM gym_app_cancels c
     JOIN gym_held_memberships h ON h.gym_id = c.gym_id AND h.id = c.held_membership_id
     JOIN gym_membership_types t ON t.gym_id = h.gym_id AND t.id = h.membership_type_id
@@ -178,6 +217,12 @@ export async function recentCancels(sql: SqlOrTx, gymId: string, now: Date): Pro
     WHERE c.gym_id = ${gymId} AND c.created_at >= ${since}
     ORDER BY c.created_at DESC, c.id
     LIMIT ${APP_CANCELS_SHOWN}`;
+  const today = dayInTz(now, counted?.timezone ?? "UTC");
+  const held = await heldRowsOf(sql, gymId, rows.map((r) => r.held_id));
+  const endOf = (id: string): string | null => {
+    const row = held.get(id);
+    return row === undefined ? null : heldMembershipView(row.membership, today).endsOn;
+  };
   return {
     count: counted?.n ?? 0,
     letsEveryoneIn: counted?.everyone === true,
@@ -188,7 +233,7 @@ export async function recentCancels(sql: SqlOrTx, gymId: string, now: Date): Pro
       past: r.past === true,
       membershipName: r.type_name,
       on: r.cancelled_on,
-      endsOn: r.ends_on,
+      endsOn: endOf(r.held_id),
       when: myCancelWhenSchema.parse(r.when),
       reason: r.reason === null ? null : myCancelReasonSchema.parse(r.reason),
     })),

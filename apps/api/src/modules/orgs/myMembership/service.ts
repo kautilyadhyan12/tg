@@ -16,6 +16,8 @@ import {
   RECEIPT_WORDS,
   agreementSignable,
   membershipTerms,
+  MY_CANCEL_WORDS,
+  myCancelFrozen,
   myCancelPaidByLine,
   myCancelWays,
   myCancelledLine,
@@ -156,7 +158,8 @@ export async function getMyMembership(deps: MyMembershipDeps, userId: string, gy
     const row = rows.get(id);
     const ways = row === undefined ? [] : myCancelWays(row.membership, today);
     const only = ways.length === 1 ? ways[0] : undefined;
-    if (only === undefined && ways.length === 0) return null;
+    // Frozen and held by a term or a notice: the line saying the front desk cancels it (round one, H1).
+    if (ways.length === 0) return row !== undefined && myCancelFrozen(row.membership, today) ? { state: "elsewhere", line: MY_CANCEL_WORDS.frozen } : null;
     if (paidBy !== null) return { state: "elsewhere", line: myCancelPaidByLine(paidBy) };
     return { state: "can", button: only?.when === "cooling_off" ? "Cancel with full refund" : "Cancel membership" };
   };
