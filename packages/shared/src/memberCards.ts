@@ -226,6 +226,15 @@ export const saveCardRequestSchema = z
   .strict();
 export type SaveCardRequest = z.infer<typeof saveCardRequestSchema>;
 
+/** Why a member's own card stays on file instead of being removed in the app (Stage 5 item 20e; Kd 2026-11-11,
+ *  `rulings/2026-11-10-20d.md`), checked in this order: it pays for somebody else too; a membership renews on it; a
+ *  payment is still to make, due now or later. */
+export const myCardStaysSchema = z.enum(["pays_for", "renews", "owed"]);
+export type MyCardStays = z.infer<typeof myCardStaysSchema>;
+
+/** How many of the people a card also pays for are named. */
+export const MY_CARD_PAYS_FOR_NAMED = 2;
+
 /** The member's own card, for the phone (Stage 5 item 20). `record` as My membership's: only
  *  "own" carries a card. */
 export const myCardViewSchema = z
@@ -240,9 +249,43 @@ export const myCardViewSchema = z
     gymName: z.string().max(200),
     agreement: z.string().max(600),
     form: cardFormSchema.nullable(),
+    /** The member may remove the card shown, in the app, now (Stage 5 item 20e). */
+    canRemove: z.boolean().default(false),
+    /** Why the card shown stays on file, where nobody else pays for them; null where it can be removed. */
+    stays: myCardStaysSchema.nullable().default(null),
+    /** Who else the card pays for (`pays_for`): the first names, and how many more. */
+    paysFor: z
+      .object({ names: z.array(z.string().max(120)).max(MY_CARD_PAYS_FOR_NAMED), more: z.number().int().min(0) })
+      .strict()
+      .nullable()
+      .default(null),
   })
   .strict();
 export type MyCardView = z.infer<typeof myCardViewSchema>;
+
+/** Remove card, in the app: the card the screen showed, so a press sent twice, or one after the card was replaced,
+ *  never removes another. */
+export const removeMyCardRequestSchema = z.object({ last4: memberCardSchema.shape.last4, savedAt: z.iso.datetime() }).strict();
+export type RemoveMyCardRequest = z.infer<typeof removeMyCardRequestSchema>;
+
+/** "This card also pays for Aarav Sharma, so it stays on file. Use Update card to change it, or ask the front desk." */
+export function myCardStaysLine(stays: MyCardStays, paysFor: { names: readonly string[]; more: number } | null, canUpdate: boolean): string {
+  const tail = canUpdate ? " Use Update card to change it, or ask the front desk." : " Ask the front desk.";
+  if (stays === "renews") return `Your membership renews on this card, so it stays on file.${tail}`;
+  if (stays === "owed") return `You have a payment still to make, so this card stays on file.${tail}`;
+  const names = paysFor?.names ?? [];
+  const more = paysFor?.more ?? 0;
+  const last = names[names.length - 1];
+  const who =
+    last === undefined
+      ? "somebody else"
+      : more > 0
+        ? `${names.join(", ")} and ${String(more)} more`
+        : names.length === 1
+          ? last
+          : `${names.slice(0, -1).join(", ")} and ${last}`;
+  return `This card also pays for ${who}, so it stays on file.${tail}`;
+}
 
 export const myCardResponseSchema = z.object({ myCard: myCardViewSchema }).strict();
 export type MyCardResponse = z.infer<typeof myCardResponseSchema>;
@@ -287,6 +330,7 @@ export const MEMBER_CARD_WORDS = {
   not_your_card: "Your app isn't linked to your membership yet. Ask at the front desk.",
   not_taken: "Cards can't be saved here right now.",
   no_card: "There's no card on file to remove.",
+  card_changed: "Your card on file has changed. Check it, then try again.",
   terminal_gone: "This Terminal is no longer paired. Choose another, or type the card instead.",
   terminal_busy: "This Terminal is busy. Try again in a minute, or choose another Terminal.",
   terminal_refused: "Square couldn't send this to the Terminal. Check it's on and signed in, then try again.",

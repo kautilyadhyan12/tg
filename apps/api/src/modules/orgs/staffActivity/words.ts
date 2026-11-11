@@ -621,6 +621,7 @@ export const NOT_STAFF: ReadonlySet<string> = new Set([
   "org.payments_square_removed_in_square",
   "org.payments_square_stopped",
   "member.card_saved",
+  "member.card_removed",
   // A member paying a bill on Square's own page in the app (18k-ii-a): the payment shows on their page.
   "member.app_payment_paid",
   "member.app_payment_not_recorded",
