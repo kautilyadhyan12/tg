@@ -737,7 +737,9 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
     - 37d. **The run plan** (split 2026-11-10 in three, Kd's "go", `rulings/2026-11-10-37d-i.md`: the plan first).
       - 37d-i. [x] **Your run plan** · merged 2026-11-10 · PR #519
       - 37d-ii. [x] **Today's run with the voice** · merged 2026-11-11 · PR #522
-      - 37d-iii. [ ] **Running in Recommended For You, and your own run plan**: the Dashboard's Running tab with Suggested and My plan; move or change a run; Skip step during a planned run (Kd, 2026-11-11).
+      - 37d-iii. **Running in Recommended For You, and your own run plan** (split 2026-11-11 in two, Kd's "go": the Dashboard and Skip step first; `handoff/2026-11-11-37d-iii-a.md` keeps its line as first written).
+        - 37d-iii-a. [ ] **Running on the Dashboard, and Skip step**
+        - 37d-iii-b. [ ] **Your own run plan**: Suggested and My plan on the Dashboard's Running tab and the Running page; move or change a run.
     - 37e. [ ] **Routes.**
     - 37f. [ ] **Heart rate from a chest strap or watch.**
 38. [ ] **The global board** (its reminders moved to item 19e on 2026-11-05): last, as Kd ruled on 2026-11-01 (`rulings/2026-11-01-17c-ii-a.md`): Active days and Running, the server's checks, a stranger's profile, and follow requests for somebody who chose Hide me, seen from outside their gym; Follow with Followers and Following counts everywhere, gyms included (`rulings/2026-11-01-17c-ii-b.md`). It waits for items 18, 37, 53 and 64.
