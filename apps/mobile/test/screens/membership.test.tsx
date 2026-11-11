@@ -121,7 +121,8 @@ describe("the worst thing: nobody else's money on this phone, and no fee reads P
     await openMembership(server.ask, LOTUS);
     expect(await page().findByText("Lotus Ten Classes")).toBeTruthy();
     expect(page().queryByText("Iron Gold")).toBeNull();
-    expect(server.paths().filter((path) => path.includes("/my-membership"))).toEqual([pathOf(LOTUS)]);
+    // Its membership and whether it takes payments in the app (20f), both Lotus's alone.
+    expect(server.paths().filter((path) => path.includes("/my-membership")).sort()).toEqual([pathOf(LOTUS), `${pathOf(LOTUS)}/payments`]);
 
     await fireEvent.press(page().getByLabelText("View receipt #40 for Lotus Ten Classes"));
     expect(await screen.findByText("Receipt #40")).toBeTruthy();

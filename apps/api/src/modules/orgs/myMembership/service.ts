@@ -68,7 +68,7 @@ function membershipOf(m: HeldMembershipItem): MyMembership {
     frozenOn: m.frozenOn,
     classesLeft: m.classesLeft,
     packClasses: m.packClasses,
-    owed: billing.pay === null ? null : { amountMinor: billing.pay.leftMinor, dueOn: billing.pay.dueOn, state: billing.pay.state, periodIndex: billing.pay.periodIndex },
+    owed: billing.pay === null ? null : { amountMinor: billing.pay.leftMinor, dueOn: billing.pay.dueOn, state: billing.pay.state, periodIndex: billing.pay.periodIndex, check: billing.appCheck !== null },
     // The bills come newest first; a bill's own payments in the order they were taken.
     payments: billing.bills.flatMap((b) =>
       [...b.payments].reverse().map((p) => ({
@@ -84,7 +84,7 @@ function membershipOf(m: HeldMembershipItem): MyMembership {
     fees: billing.fees.flatMap((f) =>
       f.state === "removed"
         ? []
-        : [{ id: f.id, fee: f.fee, forName: f.forName, on: f.on, amountMinor: f.amountMinor, dueOn: f.dueOn, state: f.state, refundedMinor: f.refundedMinor, refundPending: f.payments.some((p) => p.refunds.some((r) => r.square?.state === "pending")), receiptNumber: f.state === "paid" || f.state === "refunded" ? (f.payments[0]?.receiptNumber ?? null) : null, stillOwed: f.stillOwed }],
+        : [{ id: f.id, fee: f.fee, forName: f.forName, on: f.on, amountMinor: f.amountMinor, dueOn: f.dueOn, state: f.state, refundedMinor: f.refundedMinor, refundPending: f.payments.some((p) => p.refunds.some((r) => r.square?.state === "pending")), receiptNumber: f.state === "paid" || f.state === "refunded" ? (f.payments[0]?.receiptNumber ?? null) : null, stillOwed: f.stillOwed, check: f.appCheck !== null }],
     ),
     // The words its agreement and the Terminal say (16d).
     terms: membershipTerms(m),

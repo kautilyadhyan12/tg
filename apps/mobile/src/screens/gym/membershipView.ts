@@ -127,12 +127,14 @@ export interface FeeItem {
   fee: MyFee;
   currency: string;
   membership: string;
+  /** The membership it is on, for paying it in the app (20f). */
+  membershipId: string;
 }
 
 /** Every fee of these memberships, newest day first. */
 export function feesOf(memberships: readonly MyMembership[]): FeeItem[] {
   return memberships
-    .flatMap((m) => m.fees.map((fee) => ({ fee, currency: m.currency, membership: m.name })))
+    .flatMap((m) => m.fees.map((fee) => ({ fee, currency: m.currency, membership: m.name, membershipId: m.id })))
     .sort((a, b) => (a.fee.on < b.fee.on ? 1 : a.fee.on > b.fee.on ? -1 : 0));
 }
 

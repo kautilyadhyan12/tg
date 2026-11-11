@@ -18,6 +18,9 @@ import { membershipAgreementRow } from "./agreementView";
 import { CardOnFile } from "./CardOnFile";
 import { cardRemovedLine, cardSavedLine, myCardPath, myCardRemovePath, removeRefusalLine } from "./cardView";
 import { RemoveCardAsk, type RemoveAsk } from "./RemoveCardAsk";
+import { PayButton, PayLines } from "./PayPart";
+import { billKeyStart, billTarget, feeKey, feeTarget } from "./payView";
+import { usePayInApp, type PayInApp } from "./usePayInApp";
 import {
   NO_PAYMENTS,
   cancelledLine,
@@ -114,6 +117,10 @@ function MembershipBody({ place, onClose, bottom }: { place: MembershipPlace; on
     },
     [session, place.id],
   );
+
+  // Pay (20f): a page that ended reads the place again, so its payment and receipt show.
+  const readAgain = useCallback(() => void load(true), [load]);
+  const pay = usePayInApp(place.id, readAgain);
 
   // The box reads by itself: a read that fails leaves it as it was, and the page stands without it.
   const loadCard = useCallback(async () => {
@@ -246,6 +253,7 @@ function MembershipBody({ place, onClose, bottom }: { place: MembershipPlace; on
               )
             }
             receiptButton={receiptButton}
+            pay={pay}
             onAgreement={(m) => {
               setAgreementAt({ id: place.id, name: place.name, membershipId: m.id, membershipName: m.name });
             }}
@@ -297,8 +305,9 @@ function MembershipBody({ place, onClose, bottom }: { place: MembershipPlace; on
 
 type ReceiptButton = (number: number, what: string, refund?: boolean) => React.JSX.Element;
 
-function Sections({ view, card, receiptButton, onAgreement }: { view: MyMembershipResponse; card: React.ReactNode; receiptButton: ReceiptButton; onAgreement: (m: MyMembership) => void }) {
+function Sections({ view, card, receiptButton, pay, onAgreement }: { view: MyMembershipResponse; card: React.ReactNode; receiptButton: ReceiptButton; pay: PayInApp; onAgreement: (m: MyMembership) => void }) {
   const gym = view.gym.name;
+  const today = view.today;
   const none = noRecordText(view);
   if (none !== null) {
     return (
@@ -321,7 +330,7 @@ function Sections({ view, card, receiptButton, onAgreement }: { view: MyMembersh
         )}
         {view.memberships.length === 0 ? <Txt>{noMembershipText(gym)}</Txt> : null}
         {view.memberships.map((m) => (
-          <MembershipCard key={m.id} m={m} gym={gym} paidBy={view.paidBy !== null} receiptButton={receiptButton} onAgreement={onAgreement} />
+          <MembershipCard key={m.id} m={m} gym={gym} paidBy={view.paidBy !== null} receiptButton={receiptButton} pay={pay} today={today} onAgreement={onAgreement} />
         ))}
         {view.earlierNotShown > 0 ? <Txt kind="small">{olderMemberships(gym)}</Txt> : null}
       </View>
@@ -334,7 +343,7 @@ function Sections({ view, card, receiptButton, onAgreement }: { view: MyMembersh
             Fees
           </Txt>
           {fees.map((item, i) => (
-            <FeeCard key={`${item.fee.on}-${String(i)}`} item={item} gym={gym} receiptButton={receiptButton} />
+            <FeeCard key={`${item.fee.on}-${String(i)}`} item={item} gym={gym} receiptButton={receiptButton} pay={pay} today={today} />
           ))}
         </View>
       )}
@@ -394,10 +403,10 @@ function Sections({ view, card, receiptButton, onAgreement }: { view: MyMembersh
             <Txt>{paysForText(person.name)}</Txt>
             {person.memberships.length === 0 ? <Txt>{theirNoMembershipText(person.name, gym)}</Txt> : null}
             {person.memberships.map((m) => (
-              <MembershipCard key={m.id} m={m} gym={gym} paidBy={false} receiptButton={receiptButton} onAgreement={null} />
+              <MembershipCard key={m.id} m={m} gym={gym} paidBy={false} receiptButton={receiptButton} pay={pay} today={today} onAgreement={null} />
             ))}
             {theirFees.map((item, j) => (
-              <FeeCard key={`${item.fee.on}-${String(j)}`} item={item} gym={gym} receiptButton={receiptButton} />
+              <FeeCard key={`${item.fee.on}-${String(j)}`} item={item} gym={gym} receiptButton={receiptButton} pay={pay} today={today} />
             ))}
             {person.earlierNotShown > 0 ? <Txt kind="small">{olderMemberships(gym)}</Txt> : null}
           </View>
@@ -407,7 +416,23 @@ function Sections({ view, card, receiptButton, onAgreement }: { view: MyMembersh
   );
 }
 
-function MembershipCard({ m, gym, paidBy, receiptButton, onAgreement }: { m: MyMembership; gym: string; paidBy: boolean; receiptButton: ReceiptButton; onAgreement: ((m: MyMembership) => void) | null }) {
+function MembershipCard({
+  m,
+  gym,
+  paidBy,
+  receiptButton,
+  pay,
+  today,
+  onAgreement,
+}: {
+  m: MyMembership;
+  gym: string;
+  paidBy: boolean;
+  receiptButton: ReceiptButton;
+  pay: PayInApp;
+  today: string;
+  onAgreement: ((m: MyMembership) => void) | null;
+}) {
   const tag = statusTag(m);
   const dates = datesText(m);
   const classes = classesText(m);
@@ -422,7 +447,16 @@ function MembershipCard({ m, gym, paidBy, receiptButton, onAgreement }: { m: MyM
       </View>
       {dates === null ? null : <Txt kind="small">{dates}</Txt>}
       {classes === null ? null : <Txt kind="small">{classes}</Txt>}
-      {owed === null ? null : <Txt colour={TEXT_TONES[owed.tone]}>{owed.text}</Txt>}
+      {owed === null ? null : (
+        <View style={styles.row}>
+          <Txt colour={TEXT_TONES[owed.tone]} style={styles.grow}>
+            {owed.text}
+          </Txt>
+          <PayButton target={billTarget(m, today)} pay={pay} />
+        </View>
+      )}
+      {/* What Pay did stays under the membership once the bill it paid is gone from it. */}
+      <PayLines testID={`pay-${m.id}`} mine={(key) => key.startsWith(billKeyStart(m.id))} check={m.owed?.check === true} pay={pay} />
       {m.payments.map((p) => {
         const t = paymentText(p, m.currency);
         return (
@@ -491,8 +525,9 @@ function AgreementRow({ m, agreement, gym, onOpen }: { m: MyMembership; agreemen
   );
 }
 
-function FeeCard({ item, gym, receiptButton }: { item: FeeItem; gym: string; receiptButton: ReceiptButton }) {
+function FeeCard({ item, gym, receiptButton, pay, today }: { item: FeeItem; gym: string; receiptButton: ReceiptButton; pay: PayInApp; today: string }) {
   const t = feeText(item, gym);
+  const key = feeKey(item.fee.id);
   return (
     <Card style={styles.box}>
       <View style={styles.row}>
@@ -502,12 +537,14 @@ function FeeCard({ item, gym, receiptButton }: { item: FeeItem; gym: string; rec
         <Pill label={t.tag.label} tone={PILL_TONES[t.tag.tone]} />
       </View>
       <View style={styles.row}>
-        <Txt kind="small" style={styles.grow}>
-          {t.line}
-        </Txt>
+        <View style={styles.grow}>
+          <Txt kind="small">{t.line}</Txt>
+          {t.note === null ? null : <Txt colour={TEXT_TONES[t.tag.tone]}>{t.note}</Txt>}
+        </View>
         {t.receipt === null ? null : receiptButton(t.receipt, t.title)}
+        <PayButton target={feeTarget(item, today)} pay={pay} />
       </View>
-      {t.note === null ? null : <Txt colour={TEXT_TONES[t.tag.tone]}>{t.note}</Txt>}
+      <PayLines testID={`pay-${item.fee.id}`} mine={(k) => k === key} check={item.fee.check} pay={pay} />
     </Card>
   );
 }

@@ -138,8 +138,8 @@ describe("a membership", () => {
   });
 
   it("what is owed: due in orange, overdue in red, nothing where nothing is", () => {
-    expect(owedText(held({ owed: { amountMinor: 150_000, dueOn: "2026-11-04", state: "due", periodIndex: 0 } }))).toEqual({ text: "₹1,500.00 due on 4 Nov 2026.", tone: "orange" });
-    expect(owedText(held({ owed: { amountMinor: 150_000, dueOn: "2026-10-04", state: "overdue", periodIndex: 0 } }))).toEqual({ text: "₹1,500.00 overdue since 4 Oct 2026.", tone: "bad" });
+    expect(owedText(held({ owed: { amountMinor: 150_000, dueOn: "2026-11-04", state: "due", periodIndex: 0, check: false } }))).toEqual({ text: "₹1,500.00 due on 4 Nov 2026.", tone: "orange" });
+    expect(owedText(held({ owed: { amountMinor: 150_000, dueOn: "2026-10-04", state: "overdue", periodIndex: 0, check: false } }))).toEqual({ text: "₹1,500.00 overdue since 4 Oct 2026.", tone: "bad" });
     expect(owedText(held())).toBeNull();
   });
 
@@ -163,9 +163,10 @@ describe("fees", () => {
     refundPending: false,
     receiptNumber: state === "paid" || state === "refunded" ? 31 : null,
     stillOwed: true,
+    check: false,
     ...over,
   });
-  const item = (f: ReturnType<typeof fee>) => ({ fee: f, currency: "INR", membership: "Gold Monthly" });
+  const item = (f: ReturnType<typeof fee>) => ({ fee: f, currency: "INR", membership: "Gold Monthly", membershipId: "11111111-1111-4111-8111-111111111111" });
 
   it("each state: only Paid is paid and only Paid has a receipt", () => {
     expect(feeText(item(fee("due")), "Iron House")).toEqual({
@@ -191,10 +192,10 @@ describe("fees", () => {
   it("every membership's fees, newest day first, each with its own membership and money", () => {
     const a = held({ name: "Gold Monthly", fees: [fee("paid", { on: "2026-10-10" }), fee("due", { on: "2026-10-25" })] });
     const b = held({ id: "22222222-2222-4222-8222-222222222222", name: "Ten Classes", currency: "USD", fees: [fee("waived", { on: "2026-10-15" })] });
-    expect(feesOf([a, b]).map((f) => [f.fee.on, f.membership, f.currency])).toEqual([
-      ["2026-10-25", "Gold Monthly", "INR"],
-      ["2026-10-15", "Ten Classes", "USD"],
-      ["2026-10-10", "Gold Monthly", "INR"],
+    expect(feesOf([a, b]).map((f) => [f.fee.on, f.membership, f.currency, f.membershipId])).toEqual([
+      ["2026-10-25", "Gold Monthly", "INR", a.id],
+      ["2026-10-15", "Ten Classes", "USD", b.id],
+      ["2026-10-10", "Gold Monthly", "INR", a.id],
     ]);
   });
 });

@@ -61,6 +61,9 @@ export const myFeeSchema = z
      *  paid in the app as they were marked (18k-ii-b): it comes off once that payment page closes with nothing paid, or once
      *  the front desk has checked it with Square, and it is not paid in the app. */
     stillOwed: z.boolean().default(true),
+    /** Its last payment page in the app ended with money Square may have taken (18k-ii-b): the front desk checks it with
+     *  Square, and it is not paid in the app until then (20f). */
+    check: z.boolean().default(false),
   })
   .strict();
 export type MyFee = z.infer<typeof myFeeSchema>;
@@ -85,7 +88,18 @@ export const myMembershipSchema = z
     /** What is owed now and since when; null where nothing is. `periodIndex` names that bill, for paying it in the app
      *  (18k-ii-a) once `dueOn` has come (a bill not due yet is paid ahead at the desk): all of `amountMinor` is what a payment
      *  there takes. */
-    owed: z.object({ amountMinor: minorSchema, dueOn: daySchema, state: z.enum(["due", "overdue"]), periodIndex: z.number().int().min(0) }).strict().nullable(),
+    owed: z
+      .object({
+        amountMinor: minorSchema,
+        dueOn: daySchema,
+        state: z.enum(["due", "overdue"]),
+        periodIndex: z.number().int().min(0),
+        /** Its last payment page in the app ended with money Square may have taken (18k-ii-a): the front desk checks it with
+         *  Square, and it is not paid in the app until then (20f). */
+        check: z.boolean().default(false),
+      })
+      .strict()
+      .nullable(),
     payments: z.array(myPaymentSchema),
     /** Older periods' payments kept off this answer; the gym holds them. */
     olderPeriodsNotShown: z.number().int().min(0),
