@@ -77,6 +77,11 @@ function httpsOrigin(name: string, written: string): string {
  *  it runs, and gets no notifications. */
 export const GOOGLE_SERVICES_FILE = "./google-services.json";
 
+/** The photos permissions expo-screen-capture's Android code adds, kept out of the app. Its third,
+ *  DETECT_SCREEN_CAPTURE, stays: from Android 14 the package watches for screenshots as it loads, and
+ *  without it the app stops on opening (seen on Kd's phone, 2026-11-11). It asks the person nothing. */
+export const SCREENSHOT_PERMISSIONS = ["android.permission.READ_EXTERNAL_STORAGE", "android.permission.READ_MEDIA_IMAGES"];
+
 export function configFor(copy: Copy, firebase = false): ExpoConfig {
   const extra: PhoneAppExtra = { copyName: copy.name, apiUrl: copy.apiUrl, webUrl: copy.webUrl };
   return {
@@ -88,7 +93,14 @@ export function configFor(copy: Copy, firebase = false): ExpoConfig {
     userInterfaceStyle: "dark",
     backgroundColor: "#0A0908",
     scheme: copy.scheme,
-    android: { package: copy.applicationId, allowBackup: false, ...(firebase ? { googleServicesFile: GOOGLE_SERVICES_FILE } : {}) },
+    android: {
+      package: copy.applicationId,
+      allowBackup: false,
+      // expo-screen-capture (Add card, 20d) asks for these to tell the app a screenshot was taken on older Androids, which
+      // nothing here uses; blanking a page needs neither, and Google Play asks a declaration for the photos permission.
+      blockedPermissions: SCREENSHOT_PERMISSIONS,
+      ...(firebase ? { googleServicesFile: GOOGLE_SERVICES_FILE } : {}),
+    },
     // Keeps the key store's sign-in out of Android's backups, so it never lands on another phone.
     // shortNativeBuild: C++ build folders kept under Windows' path limit (its own file says why).
     // The meal photo (ROADMAP Stage 5 33b-i): the camera and the photos the person picks, and never the

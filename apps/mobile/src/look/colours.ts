@@ -12,6 +12,10 @@ export const colours = {
   passLight: "#FFFFFF",
   passDark: "#000000",
   box: "#121110",
+  /** Square's card boxes (20d) take plain colours only: the field's line, words and hint, mixed on `box`. */
+  cardBoxLine: "#2C2B29",
+  cardBoxText: "#F3F3F3",
+  cardBoxHint: "#7A7978",
   raised: "#1A1815",
   tabBar: "#0D0C0B",
   glass: "rgba(255,255,255,0.035)",

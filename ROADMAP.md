@@ -646,6 +646,8 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
     - 20a. [x] **Invite a friend** · merged 2026-11-07 · PR #490
     - 20b. [x] **Sign the waiver** · merged 2026-11-07 · PR #493
     - 20c. [x] **Sign the membership agreement** · merged 2026-11-07 · PR #496
+    - 20d. [x] **Add my card** · merged 2026-11-11 · PR #521
+    - 20e. [ ] **Remove my card**: a member removes their own saved card in the app when no membership renews on it, nothing is owed and it pays for nobody else; otherwise the line says why, and to ask the front desk or use Update card. Kd 2026-11-11, `rulings/2026-11-10-20d.md`.
 21. **Release** (split 2026-11-07, Kd: the release is prepared alongside the building, and Google's closed test starts as soon as the app can be installed from Google Play, without waiting for workouts or exercises; `rulings/2026-11-07-21-closed-test-early.md` keeps the line as first written and Google's rules as read that day).
     - 21a. **The server online, free for the test** (split 2026-11-08: the server first; on AWS's free plan in Sydney, Oracle having refused Kd's card; `handoff/2026-11-09-21a-i.md` keeps its line as first written).
       - 21a-i. [x] **The server at its own https address** · merged 2026-11-09 · PR #509

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { phoneAppExtraSchema } from "@app/shared";
-import { COPY_KEYS, configFor, copyFor, withServer } from "../app.config";
+import { COPY_KEYS, SCREENSHOT_PERMISSIONS, configFor, copyFor, withServer } from "../app.config";
 
 describe("a folder's copy of the app", () => {
   it("each folder has its own name, application id, api and bundler port", () => {
@@ -25,6 +25,10 @@ describe("a folder's copy of the app", () => {
     const config = configFor(copyFor("exercise2"));
     expect(config.name).toBe("Exercise 2");
     expect(config.android?.package).toBe("com.aihomegym.dev.exercise2");
+    // Add card's screenshot block brings no photos permission with it; the one it needs to load stays.
+    expect(config.android?.blockedPermissions).toEqual(SCREENSHOT_PERMISSIONS);
+    expect(SCREENSHOT_PERMISSIONS).toContain("android.permission.READ_MEDIA_IMAGES");
+    expect(SCREENSHOT_PERMISSIONS).not.toContain("android.permission.DETECT_SCREEN_CAPTURE");
     expect(phoneAppExtraSchema.parse(config.extra)).toEqual({
       copyName: "Exercise 2",
       apiUrl: "http://localhost:3003",
