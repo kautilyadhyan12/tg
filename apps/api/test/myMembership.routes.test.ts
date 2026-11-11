@@ -350,6 +350,8 @@ d("my membership: a member's own memberships, payments and receipts (real Postgr
         terms: [],
         // The gym asks for no agreement (20c).
         agreement: null,
+        // Paid once, with no cooling-off period: nothing to cancel in the app (18l).
+        cancel: null,
       },
     ]);
     expect(numbersIn(his)).toEqual([aaravBought.receipt]);

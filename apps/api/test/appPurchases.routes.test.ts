@@ -852,4 +852,33 @@ d("Buy in the app: given once, on their own record, only for what Square took (r
     await sql`UPDATE gym_members SET removed_at = ${clock} WHERE gym_id = ${gym.id} AND user_id = ${other.app.userId}`;
     expect(errorOf(await buyPress(gym, quinn, await lineOf(gym, quinn, pack), {}, "Quinn Late"))).toBe("app_payment_check");
   });
+
+  it("18l: money overdue on their own record is paid before they buy, by the gym's own days of grace; nobody else's counts", async () => {
+    clock = new Date();
+    const acct = account(`ABOW${uniq().slice(-6)}`);
+    const gym = await makeGym("App Buy Owed", acct);
+    const pack = await addType(gym, { name: "10-class pack" });
+    const monthlyLine = await addType(gym, { name: "Gold", kind: "recurring", priceMinor: 5000, termCount: 1, termUnit: "month", packClasses: null, packDays: null, soldInApp: false });
+    const sam = await member(gym, "Sam Owes");
+    const una = await member(gym, "Una Owes Nothing");
+    const today = (await held(gym, sam.entryId)).today;
+    const back = (days: number) => new Date(Date.parse(`${today}T12:00:00Z`) - days * 86_400_000).toISOString().slice(0, 10);
+    // Gold from 40 days ago, nothing paid: its first bill is far past the gym's days of grace.
+    const given = await send("POST", `${entryUrl(gym, sam.entryId)}/memberships`, gym.owner.cookies, { requestKey: randomUUID(), typeId: monthlyLine, startsOn: back(40), paid: false, priceMinor: 5000, totalMinor: 5000 });
+    expect(given.statusCode, given.body).toBe(201);
+    const refused = await buyPress(gym, sam.app, await lineOf(gym, sam.app, pack), {}, "Sam Owes");
+    expect(refused.statusCode).toBe(409);
+    expect(errorOf(refused)).toBe("app_purchase_owed");
+    expect((JSON.parse(refused.body) as { message: string }).message).toBe("You owe $50.00 at App Buy Owed. Pay it in the app or at the front desk, then buy this.");
+    expect(await sql`SELECT 1 FROM gym_app_payments WHERE gym_id = ${gym.id} AND opened_by = ${sam.app.userId}`).toHaveLength(0);
+    // Somebody else's debt is never theirs: Una buys.
+    expect((await buyPress(gym, una.app, await lineOf(gym, una.app, pack), {}, "Una Owes Nothing")).statusCode).toBe(200);
+    // Paid at the desk, Sam buys too.
+    const gold = (await held(gym, sam.entryId)).memberships[0];
+    const owed = gold?.billing?.pay;
+    if (gold === undefined || owed === null || owed === undefined) throw new Error("nothing owed on the page");
+    const paid = await send("POST", `${entryUrl(gym, sam.entryId)}/memberships/${gold.id}/payments`, gym.owner.cookies, { requestKey: randomUUID(), periodIndex: owed.periodIndex, amountMinor: owed.leftMinor, method: "cash" });
+    expect(paid.statusCode, paid.body).toBe(200);
+    expect((await buyPress(gym, sam.app, await lineOf(gym, sam.app, pack), {}, "Sam Owes")).statusCode).toBe(200);
+  });
 });

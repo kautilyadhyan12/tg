@@ -155,8 +155,8 @@ d("cancel in the app (real Postgres)", { timeout: T }, () => {
       const made = await inject("POST", `/v1/orgs/${id}/membership-types`, owner.cookies, body);
       expect(made.statusCode, made.body).toBe(201);
       const found = (JSON.parse(made.body) as GymMembershipTypesResponse).types.find((t) => t.name === body.name);
-      if (found === undefined) throw new Error(`no type ${String(body.name)}`);
-      types.set(String(body.name), found.id);
+      if (found === undefined) throw new Error(`no type ${body.name}`);
+      types.set(body.name, found.id);
     }
     return { id, owner, types };
   };
