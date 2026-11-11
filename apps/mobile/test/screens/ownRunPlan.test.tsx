@@ -194,7 +194,7 @@ describe("changing one's own week", () => {
     await fireEvent.press(await screen.findByRole("button", { name: `${dayName(at + 1)}: Easy run · 5 km. Change` }));
     const short = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][to] ?? "";
     await fireEvent.press(await screen.findByRole("radio", { name: short }));
-    expect(screen.getByText(`Easy run · 5 km moved to ${dayName(to + 1)}.`)).toBeTruthy();
+    expect(screen.getByText(`Moved from ${dayName(at + 1)}.`)).toBeTruthy();
     expect(screen.getByRole("button", { name: `${dayName(at + 1)}: Rest day. Change` })).toBeTruthy();
     expect(screen.getByRole("button", { name: `${dayName(to + 1)}: Easy run · 5 km. Change` })).toBeTruthy();
     await fireEvent.press(screen.getByRole("button", { name: "Save" }));
@@ -232,7 +232,7 @@ describe("changing one's own week", () => {
   it("a run past the 10 % line is said beside it on the Dashboard and in the week, and kept as written", async () => {
     const s = planServer({ week: todayRun(12_000), capM: 8800 });
     const box = await openRunningBox(s);
-    expect(within(box()).getByText(`${dayName(todayAt() + 1)}’s 12 km run is more than 10 % longer than your longest run in the last 30 days. Build up slowly.`)).toBeTruthy();
+    expect(within(box()).getByText(`${dayName(todayAt() + 1)}’s 12 km run is more than 10% longer than your longest run in the last 30 days. Build up slowly.`)).toBeTruthy();
     await fireEvent.press(within(box()).getByRole("button", { name: "Edit your own run plan" }));
     expect(await screen.findByText(OVER_CAP_SHORT)).toBeTruthy();
     expect(screen.getByRole("button", { name: `${dayName(todayAt() + 1)}: Easy run · 12 km. Change` })).toBeTruthy();

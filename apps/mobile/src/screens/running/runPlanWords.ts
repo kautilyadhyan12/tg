@@ -106,6 +106,6 @@ export function overCapLine(days: readonly PlanDay[], capM: number | null, units
   const over = days.filter((d) => overCap(d.session, capM));
   const first = over[0];
   if (first === undefined || first.session === null || first.session.kind === "walk_run") return null;
-  if (over.length > 1) return `${String(over.length)} of your runs are more than 10 % longer than your longest run in the last 30 days. Build up slowly.`;
-  return `${dayName(first.weekday)}’s ${planDistance(first.session.m, units)} run is more than 10 % longer than your longest run in the last 30 days. Build up slowly.`;
+  if (over.length > 1) return `${String(over.length)} of your runs are more than 10% longer than your longest run in the last 30 days. Build up slowly.`;
+  return `${dayName(first.weekday)}’s ${planDistance(first.session.m, units)} run is more than 10% longer than your longest run in the last 30 days. Build up slowly.`;
 }

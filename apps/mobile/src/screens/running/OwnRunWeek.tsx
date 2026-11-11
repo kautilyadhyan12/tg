@@ -23,18 +23,19 @@ import { Chip } from "../../look/Chip";
 import { colours, sizes } from "../../look/colours";
 import { CoverPage } from "../../look/CoverPage";
 import { Icon } from "../../look/Icon";
+import { PictureTop } from "../../look/PictureTop";
 import { Ruler } from "../../look/Ruler";
 import { Sheet } from "../../look/Sheet";
 import { fonts, Txt } from "../../look/Txt";
 import { useSession } from "../../session/SessionProvider";
 import { OWN_PLAN_PATH } from "./RunChoice";
-import { OWN_KIND_WORDS, dayName, planDistance, sessionDetail, sessionTitle, weekdayShort } from "./runPlanWords";
+import { OWN_KIND_WORDS, dayName, ownCount, planDistance, sessionDetail, sessionTitle, weekdayShort } from "./runPlanWords";
 import { METRES_PER_MILE } from "./runWords";
 
 const REST: OwnWeek = [null, null, null, null, null, null, null];
 type Kind = OwnRun["kind"];
 const KINDS: readonly Kind[] = ["easy", "long", "steady", "fast", "walk_run"];
-export const OVER_CAP_SHORT = "More than 10 % longer than your longest run in the last 30 days.";
+export const OVER_CAP_SHORT = "More than 10% longer than your longest run in the last 30 days.";
 
 /** Where Build my own starts: the week kept, else this week's suggested runs, else rest days. */
 export function startingWeek(data: RunPlanResponse): OwnWeek {
@@ -42,6 +43,10 @@ export function startingWeek(data: RunPlanResponse): OwnWeek {
   if (data.plan === null || data.plan.kind === "none") return REST;
   return data.plan.days.map((d) => (d.session === null ? null : ownRunOf(d.session)));
 }
+
+const C25K_ROWS: readonly number[] = Array.from({ length: 27 }, (_, i) => i);
+/** "Week 5 · Run 1". */
+export const c25kName = (index: number): string => `Week ${String(Math.floor(index / 3) + 1)} · Run ${String((index % 3) + 1)}`;
 
 const leastFor = (kind: Exclude<Kind, "walk_run">): number => (kind === "steady" ? OWN_STEADY_LEAST_M : kind === "fast" ? OWN_FAST_LEAST_M : OWN_RUN_LEAST_M);
 
@@ -96,6 +101,7 @@ export function OwnRunWeek({ data, units, onClose, onSaved }: { data: RunPlanRes
   }, [open]);
 
   const changed = JSON.stringify(draft) !== JSON.stringify(from);
+  const ownDays = draft.map((run, i) => ({ day: String(i), weekday: i + 1, session: run === null ? null : ownSessionOf(run), done: false }));
   const capM = data?.capM ?? null;
   const paces = data?.plan?.kind === "runner" ? data.plan.paces : null;
   const close = () => {
@@ -111,8 +117,7 @@ export function OwnRunWeek({ data, units, onClose, onSaved }: { data: RunPlanRes
     const there = draft[to] ?? null;
     setDraft((w) => w.map((d, i) => (i === at ? there : i === to ? here : d)));
     setEditing(null);
-    const name = here === null ? "" : sessionTitle(ownSessionOf(here), units);
-    setSaid({ at: to, words: there === null ? `${name} moved to ${dayName(to + 1)}.` : `${dayName(at + 1)} and ${dayName(to + 1)} swapped.` });
+    setSaid({ at: to, words: there === null ? `Moved from ${dayName(at + 1)}.` : `Swapped with ${dayName(at + 1)}.` });
   };
   const save = async () => {
     setSaving(true);
@@ -128,10 +133,13 @@ export function OwnRunWeek({ data, units, onClose, onSaved }: { data: RunPlanRes
 
   const foot = <Button label="Save" wide busy={saving} onPress={() => void save()} />;
   return (
-    <CoverPage open={open} title="My plan" onClose={close} foot={foot}>
-      <Txt kind="small" colour="textSoft">
-        Pick a run or a rest day for each day.
-      </Txt>
+    <CoverPage
+      open={open}
+      title="My plan"
+      onClose={close}
+      foot={foot}
+      hero={<PictureTop picture="runners" tall={0.62} eyebrow="Training plan" title="My plan" foot={<Txt kind="small" colour="textSoft">{ownCount(ownDays, units)}</Txt>} />}
+    >
       <View style={styles.list}>
         {draft.map((run, i) => {
           const s = run === null ? null : ownSessionOf(run);
@@ -206,8 +214,6 @@ function DaySheet({ at, run, units, capM, paces, onPick, onMove, onClose }: {
 }) {
   const s = run === null ? null : ownSessionOf(run);
   const rows = run !== null && run.kind !== "walk_run" ? distanceRows(run.kind, units) : [];
-  const week = run?.kind === "walk_run" ? Math.floor(run.index / 3) : 0;
-  const nth = run?.kind === "walk_run" ? run.index % 3 : 0;
   return (
     <Sheet open={at !== null} title={at === null ? "" : dayName(at + 1)} onClose={onClose}>
       <View style={styles.sheet}>
@@ -236,19 +242,15 @@ function DaySheet({ at, run, units, capM, paces, onPick, onMove, onClose }: {
           />
         ) : null}
         {run?.kind === "walk_run" ? (
-          <>
-            <Txt kind="eyebrow">Couch to 5K</Txt>
-            <View style={styles.chips} accessibilityRole="radiogroup" accessibilityLabel="Week">
-              {Array.from({ length: 9 }, (_, w) => (
-                <Chip key={w} small label={`Week ${String(w + 1)}`} on={week === w} onPress={() => { onPick({ kind: "walk_run", index: w * 3 + nth }); }} />
-              ))}
-            </View>
-            <View style={styles.chips} accessibilityRole="radiogroup" accessibilityLabel="Run of the week">
-              {[0, 1, 2].map((n) => (
-                <Chip key={n} small label={`Run ${String(n + 1)}`} on={nth === n} onPress={() => { onPick({ kind: "walk_run", index: week * 3 + n }); }} />
-              ))}
-            </View>
-          </>
+          <Ruler
+            label="Couch to 5K"
+            rows={C25K_ROWS}
+            index={run.index}
+            isSet
+            shown={c25kName}
+            major={(i) => (i % 3 === 0 ? `W${String(i / 3 + 1)}` : null)}
+            onPick={(i) => { onPick({ kind: "walk_run", index: i }); }}
+          />
         ) : null}
         {s === null ? null : <Txt kind="small">{sessionDetail(s, paces, units)}</Txt>}
         {overCap(s, capM) ? (
