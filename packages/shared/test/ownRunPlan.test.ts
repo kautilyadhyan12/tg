@@ -58,7 +58,6 @@ describe("which plan shows before the person picks", () => {
 });
 
 describe("the 10 % line: 10 % over the longest run of the last 30 days", () => {
-  const week = weekWith(5, { kind: "long", m: 12_000 });
   const cases: [string, RunDay[], { day: string; m: number } | null, number | null][] = [
     ["nothing run, nothing answered", [], null, null],
     ["an 8 km run 10 days ago", [ran(planDayPlus(WEDNESDAY, -10), 8000)], null, 8800],
