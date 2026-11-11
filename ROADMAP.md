@@ -736,7 +736,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
       - 37c-iii. [x] **The pace chart** · merged 2026-11-10 · PR #517
     - 37d. **The run plan** (split 2026-11-10 in three, Kd's "go", `rulings/2026-11-10-37d-i.md`: the plan first).
       - 37d-i. [x] **Your run plan** · merged 2026-11-10 · PR #519
-      - 37d-ii. [ ] **Today's run with the voice**: Start a planned run; the voice and the screen say when to run and when to walk.
+      - 37d-ii. [x] **Today's run with the voice** · merged 2026-11-11 · PR #522
       - 37d-iii. [ ] **Running in Recommended For You, and your own run plan**: the Dashboard's Running tab with Suggested and My plan; move or change a run; Skip step during a planned run (Kd, 2026-11-11).
     - 37e. [ ] **Routes.**
     - 37f. [ ] **Heart rate from a chest strap or watch.**
