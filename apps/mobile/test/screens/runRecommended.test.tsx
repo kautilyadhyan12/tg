@@ -1,9 +1,9 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
 import { AppState } from "react-native";
-import { OPENFREEMAP, planWeekdayOf, runPlanOf, type RunPlanAnswers, type RunPlanResponse } from "@app/shared";
+import { OPENFREEMAP, planWeekdayOf, runPlanOf, type PlanDay, type RunPlanAnswers, type RunPlanResponse } from "@app/shared";
 import { App } from "../../src/App";
 import { phoneRunFiles, resetRecorder, runNow } from "../../src/screens/running/recorder";
-import { phoneToday } from "../../src/screens/running/RunPlanBox";
+import { dayName, nextRun, phoneToday } from "../../src/screens/running/RunPlanBox";
 import { SAFE_MODE_WORDS } from "../../src/screens/running/RunRecommended";
 import { RAVI, fakeServer, kept, memoryStore, profile, tokens, type Reply } from "../kit";
 
@@ -143,6 +143,31 @@ describe("the worst thing: a skip that leaves the voice saying run while the scr
   });
 });
 
+describe("the next run is never one already done (round one)", () => {
+  const easy = { kind: "easy" as const, m: 5000, reps: null };
+  const day = (d: string, weekday: number, planned: boolean, done: boolean): PlanDay => ({ day: d, weekday, session: planned ? easy : null, done });
+  const cases: [string, PlanDay[], string | null][] = [
+    ["today's run still to do", [day("2026-11-11", 3, true, false), day("2026-11-12", 4, true, false)], "2026-11-11"],
+    ["today's run done: the next later one", [day("2026-11-11", 3, true, true), day("2026-11-13", 5, true, false)], "2026-11-13"],
+    ["a later run ticked by today's run: the one after it", [day("2026-11-11", 3, false, false), day("2026-11-12", 4, true, true), day("2026-11-14", 6, true, false)], "2026-11-14"],
+    ["every later run done: none", [day("2026-11-12", 4, true, true), day("2026-11-14", 6, true, true)], null],
+    ["a run before today not done is never next", [day("2026-11-10", 2, true, false), day("2026-11-12", 4, true, false)], "2026-11-12"],
+  ];
+  it.each(cases)("%s", (_name, days, expected) => {
+    expect(nextRun(days, "2026-11-11")?.day.day ?? null).toBe(expected);
+  });
+
+  it("the runner's plan itself: a 9 km run on a Wednesday with no run ticks Thursday's, and Thursday is not next", () => {
+    const answers: RunPlanAnswers = { doesRun: "yes", jog: "30plus", days: [4, 6, 7], goal: "10k", weeklyM: 20_000, longestM: 8_000, race: null };
+    const today = "2026-11-11";
+    const plan = runPlanOf({ answers, startDay: today, raceDay: null, today, safeMode: false, runs: [{ day: today, distanceM: 9000, longestM: 9000, movingS: 3000, effort: null }] });
+    if (plan.kind === "none") throw new Error("no plan");
+    const thursday = plan.days.find((d) => d.day === "2026-11-12");
+    expect(thursday?.done).toBe(true);
+    expect(nextRun(plan.days, today)?.day.day).not.toBe("2026-11-12");
+  });
+});
+
 describe("Running in Recommended For You", () => {
   it("today's run: the same run the Running page shows, with the plan's week, and See plan opens the plan", async () => {
     const box = await openRunningBox(planServer({ answers: BEGINNER() }));
@@ -162,10 +187,16 @@ describe("Running in Recommended For You", () => {
   });
 
   it("a rest day: the next run and its day, See plan, and no Start", async () => {
-    const box = await openRunningBox(planServer({ answers: BEGINNER(1) }));
-    const tomorrow = ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"][(planWeekdayOf(phoneToday()) % 7)];
-    // Tomorrow's run is next unless the week ends today.
-    expect(within(box).queryByText(`NEXT RUN · ${tomorrow ?? ""}`) ?? within(box).queryByText("No more runs this week.")).toBeTruthy();
+    const answers = BEGINNER(1);
+    const box = await openRunningBox(planServer({ answers }));
+    // The very line for the plan the server makes today: the next run's day, or none left this week.
+    const today = phoneToday();
+    const plan = runPlanOf({ answers, startDay: today, raceDay: today, today, safeMode: false, runs: [] });
+    if (plan.kind === "none") throw new Error("no plan");
+    const next = nextRun(plan.days, today);
+    expect(next?.today ?? false).toBe(false);
+    if (next === null) expect(within(box).getByText("No more runs this week.")).toBeTruthy();
+    else expect(within(box).getByText(`NEXT RUN · ${dayName(next.day.weekday).toUpperCase()}`)).toBeTruthy();
     expect(within(box).queryByRole("button", { name: GO_RUNNING })).toBeNull();
     expect(within(box).getByRole("button", { name: "See your training plan" })).toBeTruthy();
   });

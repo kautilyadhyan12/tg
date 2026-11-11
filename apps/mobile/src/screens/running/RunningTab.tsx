@@ -427,7 +427,7 @@ export function RunningTab({ units, parts }: { units: Units; parts: ReactNode })
       {going ? null : (
         <View pointerEvents="box-none" style={styles.dock}>
           {/* START alone, with the running footprints (Kd, 2026-11-11): today's planned run is started
-              from the plan box, beside the run's name. */}
+              from the plan box, under the run's steps. */}
           <Pressable accessibilityRole="button" accessibilityLabel="Start run" onPress={() => void start()} style={({ pressed }) => [styles.go, pressed ? styles.pressed : null]}>
             <Icon name="footprints" size={30} colour="onOrange" />
             <Txt style={styles.goWord}>START</Txt>

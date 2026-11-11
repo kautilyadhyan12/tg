@@ -500,8 +500,12 @@ export async function takeLocations(data: unknown, now: number = Date.now()): Pr
   } else if (was === "running") {
     // Stopped at a crossing as a step began: the pause starts at the first still point, before it,
     // so the step begins again after the pause (Resume says what is left of the one before).
-    if (current.guide !== null && guideBack !== null && current.guide.at.fromMs > movingMsOf(current, now)) {
-      current.guide = guideBack;
+    // A step the person skipped while standing never comes back: it begins at the pause instead, so it
+    // is never longer than itself (37d-iii-a).
+    const moving = movingMsOf(current, now);
+    if (current.guide !== null && current.guide.at.fromMs > moving) {
+      if (guideBack !== null) current.guide = guideBack;
+      else current.guide = { ...current.guide, at: { ...current.guide.at, fromMs: moving } };
       guideBack = null;
       guideLookAt = 0;
       writtenAt = 0;
