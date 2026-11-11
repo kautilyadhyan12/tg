@@ -11,11 +11,13 @@ import { Sheet } from "../../look/Sheet";
 import { RECEIPT_MOST } from "../../look/sizing";
 import { Txt } from "../../look/Txt";
 import { useSession } from "../../session/SessionProvider";
+import { NO_ANSWER } from "../SignIn";
 import { AddCardPage, type CardPlace } from "./AddCard";
 import { AgreementPage, type AgreementPlace } from "./Agreement";
 import { membershipAgreementRow } from "./agreementView";
 import { CardOnFile } from "./CardOnFile";
-import { cardSavedLine, myCardPath } from "./cardView";
+import { cardRemovedLine, cardSavedLine, myCardPath, myCardRemovePath, removeRefusalLine } from "./cardView";
+import { RemoveCardAsk, type RemoveAsk } from "./RemoveCardAsk";
 import {
   NO_PAYMENTS,
   cancelledLine,
@@ -92,6 +94,8 @@ function MembershipBody({ place, onClose, bottom }: { place: MembershipPlace; on
   const [card, setCard] = useState<MyCardView | null>(null);
   const [cardSaid, setCardSaid] = useState<string | null>(null);
   const [addingCard, setAddingCard] = useState<CardPlace | null>(null);
+  // Remove card (20e): the box from the bottom while it is open.
+  const [removing, setRemoving] = useState<RemoveAsk | null>(null);
   const cardStarted = useRef(0);
   // Reads are numbered as they start: an answer stands only if no later read has started.
   const started = useRef(0);
@@ -149,6 +153,43 @@ function MembershipBody({ place, onClose, bottom }: { place: MembershipPlace; on
     },
     [session, place.id],
   );
+  // The card the box named goes, or the box says why not; Card on file behind it reads again either way.
+  const closed = useCallback(() => !live.current, []);
+  const removeCard = useCallback(async () => {
+    const shown = card?.card ?? null;
+    if (shown === null || removing === null || removing.busy) return;
+    setRemoving({ ...removing, busy: true, problem: null });
+    cardStarted.current += 1;
+    const answer = await session.signedIn({ method: "POST", path: myCardRemovePath(place.id), body: { last4: shown.last4, savedAt: shown.savedAt } }, myCardResponseSchema);
+    if (!live.current) return;
+    const done = (now: MyCardView) => {
+      setCard(now);
+      setRemoving(null);
+      setCardSaid(cardRemovedLine(shown));
+    };
+    if (answer.kind === "ok" && answer.data.myCard.card === null) {
+      done(answer.data.myCard);
+      return;
+    }
+    if (answer.kind === "ok") {
+      setCard(answer.data.myCard);
+      setRemoving(null);
+      return;
+    }
+    if (answer.kind === "no_answer") {
+      // The press may have gone through before the answer was lost: read the card again.
+      const now = await session.signedIn({ method: "GET", path: myCardPath(place.id) }, myCardResponseSchema);
+      // The page may have closed while it read: a ref read again after an await.
+      if (closed()) return;
+      if (now.kind === "ok" && now.data.myCard.card === null) done(now.data.myCard);
+      else setRemoving((r) => (r === null ? null : { ...r, busy: false, problem: NO_ANSWER }));
+      return;
+    }
+    const refused = removeRefusalLine(answer.error, answer.message, place.name);
+    setRemoving((r) => (r === null ? null : { ...r, busy: false, problem: refused.line, final: refused.final }));
+    void loadCard();
+  }, [card, removing, session, place.id, place.name, loadCard, closed]);
+
   const receiptButton = (number: number, what: string, refund = false) => (
     <Button label="Receipt" kind="link" small say={receiptSay(number, what, refund)} onPress={() => void openReceipt(number, refund)} />
   );
@@ -194,6 +235,11 @@ function MembershipBody({ place, onClose, bottom }: { place: MembershipPlace; on
                     setCardSaid(null);
                     setAddingCard({ id: place.id, name: place.name });
                   }}
+                  onRemove={() => {
+                    if (card.card === null) return;
+                    setCardSaid(null);
+                    setRemoving({ card: card.card, gymName: card.gymName, busy: false, problem: null, final: false });
+                  }}
                 />
               )
             }
@@ -222,6 +268,14 @@ function MembershipBody({ place, onClose, bottom }: { place: MembershipPlace; on
         onClose={() => {
           setAddingCard(null);
           // What the page learnt meanwhile (somebody now pays, a card saved elsewhere) shows in the box behind it.
+          void loadCard();
+        }}
+      />
+      <RemoveCardAsk
+        ask={removing}
+        onRemove={() => void removeCard()}
+        onClose={() => {
+          setRemoving(null);
           void loadCard();
         }}
       />

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { MEMBER_CARD_WORDS, myCardViewSchema, type MyCardView } from "@app/shared";
-import { cardBox, cardExpiryLine, cardReadyToSave, cardRefusalLine, cardSavedLine } from "../src/screens/gym/cardView";
+import { cardBox, cardExpiryLine, cardReadyToSave, cardRefusalLine, cardRemovedLine, cardSavedLine, removeCardLine, removeCardTitle, removeRefusalLine } from "../src/screens/gym/cardView";
 
 // Card on file on My membership (20d): what the box shows for every answer the server can send. Each answer is read
 // through the server's own shape.
@@ -41,11 +41,51 @@ const view = (over: Record<string, unknown> = {}): MyCardView =>
 describe("what the box shows", () => {
   it.each<[string, Record<string, unknown>, ReturnType<typeof cardBox>]>([
     ["no card, Square ready: Add card", {}, { kind: "none", line: null, button: "Add card" }],
-    ["a card: its name, expiry and Update card", { card: CARD }, { kind: "card", name: "Visa ending 1111", expiry: "Expires 12/2028", expired: false, button: "Update card" }],
+    ["a card the server gives no word on: Update card, and ask the desk", { card: CARD }, { kind: "card", name: "Visa ending 1111", expiry: "Expires 12/2028", expired: false, button: "Update card", remove: false, line: "To remove this card, ask the front desk." }],
+    [
+      "a card nothing is charged to: Update card and Remove card",
+      { card: CARD, canRemove: true },
+      { kind: "card", name: "Visa ending 1111", expiry: "Expires 12/2028", expired: false, button: "Update card", remove: true, line: null },
+    ],
+    [
+      "a membership renews on it: why it stays, no Remove card",
+      { card: CARD, stays: "renews" },
+      { kind: "card", name: "Visa ending 1111", expiry: "Expires 12/2028", expired: false, button: "Update card", remove: false, line: "Your membership renews on this card, so it stays on file. Use Update card to change it, or ask the front desk." },
+    ],
+    [
+      "a payment still to make: why it stays",
+      { card: CARD, stays: "owed" },
+      { kind: "card", name: "Visa ending 1111", expiry: "Expires 12/2028", expired: false, button: "Update card", remove: false, line: "You have a payment still to make, so this card stays on file. Use Update card to change it, or ask the front desk." },
+    ],
+    [
+      "it pays for one other person: named",
+      { card: CARD, stays: "pays_for", paysFor: { names: ["Aarav Sharma"], more: 0 } },
+      { kind: "card", name: "Visa ending 1111", expiry: "Expires 12/2028", expired: false, button: "Update card", remove: false, line: "This card also pays for Aarav Sharma, so it stays on file. Use Update card to change it, or ask the front desk." },
+    ],
+    [
+      "it pays for two: both named",
+      { card: CARD, stays: "pays_for", paysFor: { names: ["Aarav Sharma", "Meera Sharma"], more: 0 } },
+      { kind: "card", name: "Visa ending 1111", expiry: "Expires 12/2028", expired: false, button: "Update card", remove: false, line: "This card also pays for Aarav Sharma and Meera Sharma, so it stays on file. Use Update card to change it, or ask the front desk." },
+    ],
+    [
+      "it pays for five: two named, and how many more",
+      { card: CARD, stays: "pays_for", paysFor: { names: ["Aarav Sharma", "Meera Sharma"], more: 3 } },
+      { kind: "card", name: "Visa ending 1111", expiry: "Expires 12/2028", expired: false, button: "Update card", remove: false, line: "This card also pays for Aarav Sharma, Meera Sharma and 3 more, so it stays on file. Use Update card to change it, or ask the front desk." },
+    ],
+    [
+      "a card that stays where it cannot be updated in the app: the desk alone",
+      { card: CARD, stays: "renews", canSave: false, form: null },
+      { kind: "card", name: "Visa ending 1111", expiry: "Expires 12/2028", expired: false, button: null, remove: false, line: "Your membership renews on this card, so it stays on file. Ask the front desk." },
+    ],
+    [
+      "can remove, though a reason came with it: the reason wins",
+      { card: CARD, canRemove: true, stays: "owed" },
+      { kind: "card", name: "Visa ending 1111", expiry: "Expires 12/2028", expired: false, button: "Update card", remove: false, line: "You have a payment still to make, so this card stays on file. Use Update card to change it, or ask the front desk." },
+    ],
     [
       "an expired card: Expired, and Update card",
       { card: { ...CARD, expYear: 2025, expired: true } },
-      { kind: "card", name: "Visa ending 1111", expiry: "Expired 12/2025", expired: true, button: "Update card" },
+      { kind: "card", name: "Visa ending 1111", expiry: "Expired 12/2025", expired: true, button: "Update card", remove: false, line: "To remove this card, ask the front desk." },
     ],
     [
       "a card saved on the gym's earlier Square account: add it again",
@@ -53,7 +93,7 @@ describe("what the box shows", () => {
       { kind: "none", line: "Mastercard ending 4444 was saved with the Square account Iron House used before. Add the card again.", button: "Add card" },
     ],
     ["somebody else pays: their card, no button", { paidBy: "Priya Sharma", canSave: false, form: null }, { kind: "paid_by", line: "Priya Sharma pays for you, so Priya Sharma’s card is used." }],
-    ["a card, the gym no longer taking cards in the app: the card, no button", { card: CARD, canSave: false, form: null }, { kind: "card", name: "Visa ending 1111", expiry: "Expires 12/2028", expired: false, button: null }],
+    ["a card, the gym no longer taking cards in the app: the card, no button", { card: CARD, canSave: false, form: null }, { kind: "card", name: "Visa ending 1111", expiry: "Expires 12/2028", expired: false, button: null, remove: false, line: "To remove this card, ask the front desk." }],
     ["Square not connected yet: no box", { state: "connect", canSave: false, form: null }, null],
     ["the owner still choosing a location: no box", { state: "choose_location", canSave: false, form: null }, null],
     ["the gym not on a paid plan: no box", { canSave: false, form: null }, null],
@@ -94,6 +134,24 @@ describe("a refusal said to the member", () => {
     expect(said).toBe(expected);
     // Nothing a member is told sends them to the desk's own screens.
     expect(said).not.toMatch(/\bEdit\b|Settings|your customers|Your Square location|The owner/);
+  });
+});
+
+describe("Remove card (20e)", () => {
+  it("asks about the card shown, and says it went", () => {
+    expect(removeCardTitle({ brand: "VISA", last4: "1111" })).toBe("Remove Visa ending 1111?");
+    expect(removeCardLine("Iron House")).toBe("Iron House won’t be able to charge it. You can add a card again at any time.");
+    expect(cardRemovedLine({ brand: "MASTERCARD", last4: "5100" })).toBe("Card removed: Mastercard ending 5100.");
+  });
+
+  it.each<[string, string, { line: string; final: boolean }]>([
+    ["card_stays", "This card also pays for Aarav Sharma, so it stays on file. Ask the front desk.", { line: "This card also pays for Aarav Sharma, so it stays on file. Ask the front desk.", final: true }],
+    ["card_changed", MEMBER_CARD_WORDS.card_changed, { line: MEMBER_CARD_WORDS.card_changed, final: true }],
+    ["card_paid_by_payer", "Priya Sharma pays for this person, so Priya Sharma's card is used.", { line: "Somebody else pays for you now, so their card is used.", final: true }],
+    ["card_not_your_record", MEMBER_CARD_WORDS.not_your_card, { line: MEMBER_CARD_WORDS.not_your_card, final: true }],
+    ["rate_limited", "Too many requests. Try again later.", { line: "Too many requests. Try again later.", final: false }],
+  ])("a refusal %s", (code, server, expected) => {
+    expect(removeRefusalLine(code, server, "Iron House")).toEqual(expected);
   });
 });
 
