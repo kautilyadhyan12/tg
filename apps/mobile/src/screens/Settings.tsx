@@ -8,6 +8,7 @@ import {
   displayNameSchema,
   dpdpExportSchema,
   GYM_COMMENTS_CHANNEL,
+  GYM_PAYMENTS_CHANNEL,
   GYM_MESSAGES_CHANNEL,
   GYM_PLACES_CHANNEL,
   TRAINING_PROGRESS_CHANNEL,
@@ -78,17 +79,18 @@ export function SettingsPage({ open, onClose }: { open: boolean; onClose: () => 
 
 type Places = { kind: "loading" } | { kind: "failed" } | { kind: "ok"; orgs: MyOrgsResponse["orgs"] };
 
-export type PushSwitch = "pushGymMessages" | "pushPlaces" | "pushComments" | "pushStreak" | "pushBadges" | "pushSummary";
+export type PushSwitch = "pushGymMessages" | "pushPlaces" | "pushComments" | "pushPayments" | "pushStreak" | "pushBadges" | "pushSummary";
 type PushNow = Pick<UserProfile, PushSwitch>;
 type Push = { kind: "loading" } | { kind: "failed" } | { kind: "ok"; now: PushNow };
 
-/** The three switches, named as the phone's own settings name the app's notification channels. Every
+/** The place's switches, named as the phone's own settings name the app's notification channels. Every
  *  word fits each kind of place (a gym, a studio, a trainer, a clinic); the place itself is named by
  *  `messagesFrom`. */
 export const PUSH_SWITCHES: readonly { key: PushSwitch; channel: string; label: string; on: string; off: string }[] = [
   { key: "pushGymMessages", channel: GYM_MESSAGES_CHANNEL.id, label: "Messages", on: "From the places you belong to.", off: "Off. They still arrive in each Inbox." },
   { key: "pushPlaces", channel: GYM_PLACES_CHANNEL.id, label: "Classes and events", on: "A place for you, or a free place from the waitlist.", off: "Off. Check Classes and Events for places." },
   { key: "pushComments", channel: GYM_COMMENTS_CHANNEL.id, label: "Comments", on: "On your posts, and replies to your comments.", off: "Off. New comments still show on Updates." },
+  { key: "pushPayments", channel: GYM_PAYMENTS_CHANNEL.id, label: "Payments", on: "When a payment you made in the app goes through.", off: "Off. Receipts still show on My membership." },
 ];
 
 /** The three the app decides by itself (19e-ii), under Your training for everyone. */
@@ -103,6 +105,7 @@ const pushOf = (user: UserProfile): PushNow => ({
   pushGymMessages: user.pushGymMessages,
   pushPlaces: user.pushPlaces,
   pushComments: user.pushComments,
+  pushPayments: user.pushPayments,
   pushStreak: user.pushStreak,
   pushBadges: user.pushBadges,
   pushSummary: user.pushSummary,

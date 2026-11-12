@@ -2,7 +2,7 @@
 // in, and what one says. Every class of case, garbage included.
 import { describe, expect, it } from "vitest";
 import { bookingTime, tellsPlaceFree } from "../src/classBookings.js";
-import { phonePushSchema } from "../src/phoneNotifications.js";
+import { gymPaymentPushDataSchema, paymentNotification, phonePushSchema } from "../src/phoneNotifications.js";
 import { COMMENT_NOTIFICATION_LINES, COMMENT_NOTIFICATION_LINE_WORDS, COMMENT_NOTIFICATION_WORDS, commentNotification, gymCommentPushDataSchema, gymMessageNotification, gymPlacePushDataSchema, placeNotification, pushHourOpen, pushTokenRequestSchema } from "../src/phoneNotifications.js";
 
 describe("pushHourOpen: from 04:00 up to 23:00 on the person's clock", () => {
@@ -187,5 +187,33 @@ describe("phonePushSchema: what the app draws itself", () => {
     expect(phonePushSchema.safeParse({ ...push, to: "asha" }).success).toBe(false);
     // The shape the notifications package draws by itself is not ours.
     expect(phonePushSchema.safeParse({ title: "Lotus Yoga", message: "Hi", body: push.body, channelId: "gym-messages", tag: "gym-1" }).success).toBe(false);
+  });
+});
+
+describe("Payment received's words (20h)", () => {
+  it.each([
+    [{ kind: "membership", name: "Gold Monthly" } as const, 4999, "USD", "$49.99 paid to Iron House for Gold Monthly."],
+    [{ kind: "membership", name: "Gold Monthly" } as const, 150000, "INR", "₹1,500.00 paid to Iron House for Gold Monthly."],
+    [{ kind: "membership", name: "Gold Monthly" } as const, 5000, "JPY", "¥5,000 paid to Iron House for Gold Monthly."],
+    [{ kind: "fee", fee: "late_cancel" } as const, 1500, "USD", "$15.00 paid to Iron House for a late cancel fee."],
+    [{ kind: "fee", fee: "no_show" } as const, 1500, "USD", "$15.00 paid to Iron House for a no-show fee."],
+    [{ kind: "fee", fee: "freeze" } as const, 1000, "CAD", "CA$10.00 paid to Iron House for a freeze fee."],
+    [{ kind: "fee", fee: "leave_early" } as const, 9900, "USD", "$99.00 paid to Iron House for an early cancellation fee."],
+    [{ kind: "bought", name: "Day pass" } as const, 1500, "USD", "$15.00 paid to Iron House for Day pass. Show your pass when you arrive."],
+  ])("%o, %i %s", (paidFor, amountMinor, currency, body) => {
+    expect(paymentNotification({ gymName: "Iron House", amountMinor, currency, paidFor })).toEqual({ title: "Payment received", body });
+  });
+
+  it("a long name is cut, by whole characters", () => {
+    const { body } = paymentNotification({ gymName: "Iron House", amountMinor: 100, currency: "USD", paidFor: { kind: "membership", name: `${"Platinum ".repeat(20)}🏋️` } });
+    expect(body.length).toBeLessThan(140);
+    expect(body).toMatch(/…\.$/);
+  });
+
+  it("a tap's data: the place and the page, both ids; anything else is not ours", () => {
+    const ok = { kind: "gym_payment", gymId: "1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f", paymentId: "c1111111-1111-4111-8111-111111111111" };
+    expect(gymPaymentPushDataSchema.parse(ok)).toEqual(ok);
+    expect(gymPaymentPushDataSchema.safeParse({ ...ok, paymentId: "x" }).success).toBe(false);
+    expect(gymPaymentPushDataSchema.safeParse({ ...ok, kind: "gym_inbox" }).success).toBe(false);
   });
 });

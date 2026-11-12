@@ -1,4 +1,4 @@
-// The phone's own notifications (ROADMAP Stage 5 items 18b-i, 18b-ii-a and 18b-ii-b): the one file that knows the package.
+// The phone's own notifications (ROADMAP Stage 5 items 18b-i, 18b-ii-a, 18b-ii-b and 20h): the one file that knows the package.
 // The app draws each of ours itself, only for the person signed in (`drawn.ts`); each has one
 // identifier a gym's Inbox, class or comments, so the next replaces it. In the app, one is shown
 // unless that gym's Inbox (or, for comments, its Updates) is already open.
@@ -7,11 +7,13 @@ import * as SecureStore from "expo-secure-store";
 import {
   GYM_COMMENTS_CHANNEL,
   GYM_MESSAGES_CHANNEL,
+  GYM_PAYMENTS_CHANNEL,
   GYM_PLACES_CHANNEL,
   TRAINING_PROGRESS_CHANNEL,
   TRAINING_REMINDERS_CHANNEL,
   gymCommentPushDataSchema,
   gymMessagePushDataSchema,
+  gymPaymentPushDataSchema,
   gymPlacePushDataSchema,
   trainingNudgePushDataSchema,
   trainingReminderPushDataSchema,
@@ -44,12 +46,14 @@ export type Tapped =
   | { kind: "inbox"; gymId: string }
   | ({ kind: "place" } & Omit<GymPlacePushData, "kind">)
   | { kind: "comment"; gymId: string; postId: string }
+  /** Payment received (20h): a tap opens that place's My membership, where its receipt is. */
+  | { kind: "payment"; gymId: string; paymentId: string }
   | { kind: "training"; open: "workout" | "food" }
   | { kind: "progress"; open: "running" | "achievements" | "dashboard" };
 
 /** A tap that opens a place's page on the Gym tab; or, when the app starts again after Android closed it behind Square's
  *  payment page, that place's My membership (20f), or its Buy where a line was being bought, to end that page (20g). */
-export type GymTapped = Exclude<Tapped, { kind: "training" } | { kind: "progress" }> | { kind: "membership"; gymId: string } | { kind: "buy"; gymId: string; purchaseId: string };
+export type GymTapped = Exclude<Tapped, { kind: "training" } | { kind: "progress" } | { kind: "payment" }> | { kind: "membership"; gymId: string } | { kind: "buy"; gymId: string; purchaseId: string };
 
 /** What a notification of ours asks to open, or null for anything else. */
 export function tappedOf(data: unknown): Tapped | null {
@@ -57,6 +61,8 @@ export function tappedOf(data: unknown): Tapped | null {
   if (inbox.success) return { kind: "inbox", gymId: inbox.data.gymId };
   const comment = gymCommentPushDataSchema.safeParse(data);
   if (comment.success) return { kind: "comment", gymId: comment.data.gymId, postId: comment.data.postId };
+  const payment = gymPaymentPushDataSchema.safeParse(data);
+  if (payment.success) return { kind: "payment", gymId: payment.data.gymId, paymentId: payment.data.paymentId };
   const training = trainingReminderPushDataSchema.safeParse(data);
   if (training.success) return { kind: "training", open: training.data.open };
   const progress = trainingNudgePushDataSchema.safeParse(data);
@@ -94,6 +100,8 @@ export function identifierOf(tapped: Tapped): string {
   if (tapped.kind === "comment") return `comments:${tapped.gymId}`;
   if (tapped.kind === "training") return "training-reminder";
   if (tapped.kind === "progress") return "training-progress";
+  // Each payment its own: a second never replaces the first.
+  if (tapped.kind === "payment") return `payment:${tapped.paymentId}`;
   return `place:${tapped.id}`;
 }
 
@@ -106,7 +114,9 @@ export const channelOf = (tapped: Tapped): string =>
         ? TRAINING_REMINDERS_CHANNEL.id
         : tapped.kind === "progress"
           ? TRAINING_PROGRESS_CHANNEL.id
-        : GYM_PLACES_CHANNEL.id;
+          : tapped.kind === "payment"
+            ? GYM_PAYMENTS_CHANNEL.id
+            : GYM_PLACES_CHANNEL.id;
 
 /** When the tabs open: the channel the phone's settings name, and what shows in the app. Safe to repeat. */
 export function startNotifications(): void {
@@ -118,7 +128,7 @@ export function startNotifications(): void {
       return Promise.resolve({ shouldShowBanner: show, shouldShowList: show, shouldPlaySound: false, shouldSetBadge: false });
     },
   });
-  for (const channel of [GYM_MESSAGES_CHANNEL, GYM_PLACES_CHANNEL, GYM_COMMENTS_CHANNEL, TRAINING_REMINDERS_CHANNEL, TRAINING_PROGRESS_CHANNEL]) {
+  for (const channel of [GYM_MESSAGES_CHANNEL, GYM_PLACES_CHANNEL, GYM_COMMENTS_CHANNEL, GYM_PAYMENTS_CHANNEL, TRAINING_REMINDERS_CHANNEL, TRAINING_PROGRESS_CHANNEL]) {
     void Notifications.setNotificationChannelAsync(channel.id, {
       name: channel.name,
       importance: Notifications.AndroidImportance.DEFAULT,

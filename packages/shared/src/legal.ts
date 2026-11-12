@@ -890,7 +890,7 @@ export function washingtonHealthDataPolicy(facts: LegalFacts = LEGAL_FACTS): Leg
               ? "Hosting Infrastructure Provider: The company responsible for hosting KWAZO's server infrastructure and supporting the operation of the Application."
               : `Hosting Infrastructure Provider: ${facts.hosting.company}, responsible for hosting KWAZO's server infrastructure and supporting the operation of the Application.`,
             "OpenAI: Processes submitted meal photographs to identify and analyze food information.",
-            "Google Firebase: Facilitates the delivery of application notifications, which may contain information relating to your workouts, training activities, or meals.",
+            "Google Firebase: Facilitates the delivery of application notifications, which may contain information relating to your workouts, training activities, meals, or payments you make in the Application.",
             "OpenFreeMap: Provides the maps in the mobile Application, including while a run is recorded, and receives your IP address and the map area around you.",
             "OpenStreetMap and LocationIQ: Provide maps and place search on the running-related pages of the KWAZO website, and receive your IP address, the map area displayed, and the places you search for.",
           ),

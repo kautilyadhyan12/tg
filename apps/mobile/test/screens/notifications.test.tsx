@@ -111,6 +111,7 @@ describe("asking for notifications", () => {
       expect.objectContaining({ id: "gym-messages", name: "Messages" }),
       expect.objectContaining({ id: "gym-places", name: "Classes and events" }),
       expect.objectContaining({ id: "gym-comments", name: "Comments" }),
+      expect.objectContaining({ id: "gym-payments", name: "Payments" }),
       expect.objectContaining({ id: "training-reminders", name: "Reminders" }),
       expect.objectContaining({ id: "training-progress", name: "Streaks, badges and your week" }),
     ]);
@@ -599,5 +600,64 @@ describe("THE WORST THING: a message Firebase hands the phone is drawn only for 
     await arrive(null);
     await arrive({ actionIdentifier: "expo.modules.notifications.actions.DEFAULT", notification: {} });
     expect(scheduled()).toEqual([]);
+  });
+});
+
+describe("Payment received (20h): its own on the Payments channel, and a tap opens that place's My membership", () => {
+  const PAGE = "c1111111-1111-4111-8111-111111111111";
+  const OTHER_PAGE = "c2222222-2222-4222-8222-222222222222";
+  const paymentTap = (gymId: string, paymentId = PAGE) => ({
+    notification: { request: { identifier: `payment:${paymentId}`, content: { data: { kind: "gym_payment", gymId, paymentId } } } },
+  });
+  const membershipRoutes = () =>
+    routes({
+      [`/v1/orgs/${IRON.id}/my-membership`]: ok({ gym: { name: IRON.name }, today: "2026-11-12", record: "own", paidBy: null, memberships: [], paysFor: [], earlierNotShown: 0, purchases: [], purchasesNotShown: 0 }),
+      [`/v1/orgs/${IRON.id}/my-membership/payments`]: ok({ inApp: true, open: [] }),
+    });
+
+  it("a tap opens that place's My membership on the Gym tab", async () => {
+    notifications.permission = YES;
+    await open(fakeServer(membershipRoutes()));
+    await act(async () => {
+      for (const tap of notifications.taps) tap(paymentTap(IRON.id));
+      await Promise.resolve();
+    });
+    expect(await screen.findByTestId("membership-page")).toBeTruthy();
+    expect(screen.queryByTestId("inbox-page")).toBeNull();
+  });
+
+  it("the one that opened the app opens My membership too", async () => {
+    notifications.permission = YES;
+    notifications.last = paymentTap(IRON.id);
+    await open(fakeServer(membershipRoutes()));
+    expect(await screen.findByTestId("membership-page")).toBeTruthy();
+  });
+
+  it("a place that is not one of this person's opens nothing", async () => {
+    notifications.permission = YES;
+    await open(fakeServer(membershipRoutes()));
+    await act(async () => {
+      for (const tap of notifications.taps) tap(paymentTap(STRANGER_GYM));
+      await Promise.resolve();
+    });
+    await settle();
+    expect(screen.queryByTestId("membership-page")).toBeNull();
+  });
+
+  it("arriving, each payment is drawn as its own on the Payments channel, never replacing another", async () => {
+    notifications.permission = YES;
+    await open(fakeServer(routes()));
+    expect(notifications.channels.map((c) => c.name)).toContain("Payments");
+    secureStore.kept.set("session", kept(1));
+    const first = { kind: "gym_payment", gymId: IRON.id, paymentId: PAGE };
+    const second = { kind: "gym_payment", gymId: IRON.id, paymentId: OTHER_PAGE };
+    await act(async () => {
+      await drawPush(pushed(first, "Payment received", "$49.99 paid to Iron House for Gold Monthly."));
+      await drawPush(pushed(second, "Payment received", "$15.00 paid to Iron House for a no-show fee."));
+    });
+    expect(notifications.scheduled).toEqual([
+      { identifier: `payment:${PAGE}`, content: { title: "Payment received", body: "$49.99 paid to Iron House for Gold Monthly.", data: first }, trigger: { channelId: "gym-payments" } },
+      { identifier: `payment:${OTHER_PAGE}`, content: { title: "Payment received", body: "$15.00 paid to Iron House for a no-show fee.", data: second }, trigger: { channelId: "gym-payments" } },
+    ]);
   });
 });
