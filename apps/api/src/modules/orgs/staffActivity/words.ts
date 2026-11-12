@@ -250,6 +250,8 @@ export const STAFF_LINES: Readonly<Record<string, (s: Said) => string>> = {
     `Froze ${whose(s, membershipOf(s))}${(count(s, "freezeFeeOffered") ?? 0) > 0 && count(s, "freezeFeeMinor") === 0 ? " with no freeze fee" : ""}`,
   "org.held_membership_unfrozen": (s) => `Unfroze ${whose(s, membershipOf(s))}`,
   "org.held_membership_cancelled": (s) => `Cancelled ${whose(s, membershipOf(s))}`,
+  // A cancel undone, so it renews again (18l-ii-a; staff's own Undo cancel is 18l-ii-b).
+  "org.held_membership_kept": (s) => `Reactivated ${whose(s, membershipOf(s))}`,
   "org.held_membership_changed": (s) => {
     const to = text(s, "toType");
     return `Changed ${whose(s, membershipOf(s))}${to === null ? "" : ` to ${to}`}`;
@@ -599,6 +601,8 @@ export const NOT_STAFF: ReadonlySet<string> = new Set([
   "org.agreement_signed_by_link",
   // The member, or whoever pays for them, cancels in the app (18l): said on the person's page and Overview instead.
   "org.held_membership_cancelled_in_app",
+  // The member, or whoever pays for them, keeps it in the app (18l-ii-a), said as the cancel is.
+  "org.held_membership_kept_in_app",
   // The member signs in the app (20c).
   "member.agreement_signed",
   "org.lead_unsubscribed",

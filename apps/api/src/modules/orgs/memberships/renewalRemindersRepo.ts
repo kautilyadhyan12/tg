@@ -215,8 +215,9 @@ export async function gymToday(sql: SqlOrTx, gymId: string, now: Date): Promise<
 }
 
 /** The card the app would charge for this membership by itself: whoever pays for it, in the Square account the
- *  gym is connected to, with automatic payments not paused and no chargeback stopping them. "Visa", "1111". */
-export async function chargedCard(sql: SqlOrTx, gymId: string, heldId: string, periodIndex: number): Promise<{ brand: string; last4: string } | null> {
+ *  gym is connected to, with automatic payments not paused and no chargeback stopping them. "Visa", "1111".
+ *  `renewsAgain`: read as it will be once kept (18l-ii-a), so the keep box names the card its next payment goes to. */
+export async function chargedCard(sql: SqlOrTx, gymId: string, heldId: string, periodIndex: number, renewsAgain = false): Promise<{ brand: string; last4: string } | null> {
   const [row] = await sql<{ brand: string; last4: string }[]>`
     SELECT k.brand, k.last4
     FROM gym_held_memberships h
@@ -224,7 +225,7 @@ export async function chargedCard(sql: SqlOrTx, gymId: string, heldId: string, p
     JOIN gym_member_cards k ON k.gym_id = h.gym_id AND k.environment = c.environment AND k.account_id = c.account_id
       AND k.entry_id = COALESCE((SELECT p.payer_entry_id FROM gym_member_payers p WHERE p.gym_id = h.gym_id AND p.entry_id = h.entry_id), h.entry_id)
     WHERE h.gym_id = ${gymId} AND h.id = ${heldId} AND h.currency = c.currency
-      AND h.kind = 'recurring' AND h.renews AND h.status = 'active'
+      AND h.kind = 'recurring' AND (h.renews OR ${renewsAgain}) AND h.status = 'active'
       AND NOT EXISTS (${autopayPaused(sql)}) AND NOT EXISTS (${chargebackStops(sql)})
       -- As the app's own charge reads it (appChargesKind in cardChargesRepo.ts): periods are paid in order, so a
       -- renewal is charged only while no earlier period's bill is still owed (round one, H2).

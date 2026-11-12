@@ -237,6 +237,7 @@ d("cancel in the app (real Postgres)", { timeout: T }, () => {
           sent.push(letter);
           return Promise.resolve();
         },
+        sendKeepConfirmation: () => Promise.resolve(),
       },
     });
     await api().ready();
@@ -391,15 +392,15 @@ it("round one: a frozen one held by a notice is the front desk's; a gift comes o
     expect(done.done.line).toBe("Cancelled. Dev Cancel's Gold ends on 3 Dec 2026.");
     expect(sent[sent.length - 1]?.membershipName).toBe("Dev Cancel's Gold");
     expect(done.done.emailed).toBe(true);
-    expect((await mine(gym, dev)).memberships.find((m) => m.id === devGold)?.cancel).toEqual({ state: "cancelled", line: "Priya Cancel cancelled it in the app on 10 Nov 2026." });
-    expect((await mine(gym, priya)).paysFor[0]?.memberships.find((m) => m.id === devGold)?.cancel).toEqual({ state: "cancelled", line: "You cancelled it in the app on 10 Nov 2026." });
+    expect((await mine(gym, dev)).memberships.find((m) => m.id === devGold)?.cancel).toEqual({ state: "cancelled", line: "Priya Cancel cancelled it in the app on 10 Nov 2026.", keep: null });
+    expect((await mine(gym, priya)).paysFor[0]?.memberships.find((m) => m.id === devGold)?.cancel).toEqual({ state: "cancelled", line: "You cancelled it in the app on 10 Nov 2026.", keep: "Keep my membership" });
 
     // Staff read when, by whom and why, on the person's page and Overview; Staff activity lists only what staff did.
     const reason = await inject("POST", `/v1/orgs/${gym.id}/my-membership/cancels/${done.done.cancelId}/reason`, priya.cookies, { reason: "cost" });
     expect(reason.statusCode, reason.body).toBe(200);
     expect((await inject("POST", `/v1/orgs/${gym.id}/my-membership/cancels/${done.done.cancelId}/reason`, dev.cookies, { reason: "other" })).statusCode).toBe(404);
     const page = heldMembershipsResponseSchema.parse(JSON.parse((await inject("GET", heldUrl(gym, dev.entryId), gym.owner.cookies)).body));
-    expect(page.memberships.find((m) => m.id === devGold)?.appCancel).toEqual({ on: "2026-11-10", byName: "Priya Cancel", reason: "cost" });
+    expect(page.memberships.find((m) => m.id === devGold)?.appCancel).toEqual({ on: "2026-11-10", byName: "Priya Cancel", reason: "cost", keptOn: null, keptByName: null });
     const overview = appCancelsResponseSchema.parse(JSON.parse((await inject("GET", `/v1/orgs/${gym.id}/app-cancels`, gym.owner.cookies)).body));
     expect(overview).toMatchObject({ count: 1, letsEveryoneIn: true, rows: [{ entryId: dev.entryId, name: "Dev Cancel", membershipName: "Gold", on: "2026-11-10", endsOn: "2026-12-03", when: "period_end", reason: "cost" }] });
     expect([403, 404]).toContain((await inject("GET", `/v1/orgs/${gym.id}/app-cancels`, priya.cookies)).statusCode);

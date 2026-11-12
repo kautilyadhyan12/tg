@@ -465,3 +465,24 @@ export function membershipCancelledEmail(words: {
   const html = `<p>${escapeHtml(lead)}</p>` + body.map((line) => `<p>${escapeHtml(line)}</p>`).join("") + `<p style="color:#666;font-size:12px">${escapeHtml(footer)}</p>`;
   return { to: words.to, subject: `${words.membershipName} at ${gym} is cancelled`, text, html };
 }
+
+/** A membership kept in the app after it was cancelled there (ROADMAP 18l-ii-a), to the account that pressed Keep: the
+ *  day and time, and the keep box's own sentences, so the email says what the screen said. */
+export function membershipKeptEmail(words: {
+  to: string;
+  gymName: string;
+  membershipName: string;
+  /** "13 Nov 2026 at 14:05", on the business's own clock. */
+  keptAt: string;
+  /** "Cancellation removed. Gold Monthly will keep renewing until you cancel." */
+  done: string;
+  lines: readonly string[];
+}): EmailMessage {
+  const gym = words.gymName;
+  const lead = `You removed your cancellation of ${words.membershipName} at ${gym} in the app on ${words.keptAt}. Keep this email as your confirmation.`;
+  const footer = `Sent by ${APP_NAME} on behalf of ${gym}.`;
+  const body = [words.done, ...words.lines];
+  const text = `${lead}\n\n${body.join("\n")}\n\n${footer}\n`;
+  const html = `<p>${escapeHtml(lead)}</p>` + body.map((line) => `<p>${escapeHtml(line)}</p>`).join("") + `<p style="color:#666;font-size:12px">${escapeHtml(footer)}</p>`;
+  return { to: words.to, subject: `Your cancellation of ${words.membershipName} at ${gym} is removed`, text, html };
+}

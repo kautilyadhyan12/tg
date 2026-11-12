@@ -17,10 +17,15 @@ import {
   myCancelPaidByLine,
   myCancelWays,
   myCancelledLine,
+  myKeepDoneLine,
+  myKeepLines,
+  myKeepReplacedNote,
   type HeldMembership,
   type HeldMembershipEvent,
   type HeldMembershipTerms,
   type MyCancelFacts,
+  type KeepWhen,
+  type MyKeepFacts,
 } from "../src/index.js";
 
 const monthly: HeldMembershipTerms = { kind: "recurring", termCount: 1, termUnit: "month", packClasses: null, packDays: null, priceMinor: 5000 };
@@ -182,5 +187,70 @@ describe("what the box says", () => {
     expect(appCancelRowWhat({ membershipName: "Gold", on: "2026-11-10", endsOn: "2026-11-30", when: "period_end" }, "2026-12-02")).toBe("Gold · Cancelled 10 Nov 2026 · Ended 30 Nov 2026");
     expect(appCancelRowWhat({ membershipName: "Gold", on: "2026-11-10", endsOn: "2026-11-10", when: "cooling_off" }, TODAY)).toBe("Gold · Cancelled 10 Nov 2026 · Ended in its cooling-off period");
     expect(appCancelRowWhat({ membershipName: "Gold", on: "2026-11-10", endsOn: null, when: "period_end" }, TODAY)).toBe("Gold · Cancelled 10 Nov 2026 · Frozen, no end day yet");
+  });
+});
+
+// Keep my membership (18l-ii-a): every way a cancel can leave a membership, and what a keep makes of it. Each case is
+// cancelled by the rule itself first, so the keep meets exactly what a cancel leaves.
+describe("keep: a cancel that left it running to a last day is put back as it was; anything else is refused", () => {
+  const plain = paidTwo(monthly);
+  const notice = paidTwo({ ...monthly, noticeDays: 30 });
+  const term = paidTwo({ ...monthly, contractPeriods: 6, contractThen: "renews", leaveFeeMinor: 2500 });
+  const keep = (m: HeldMembership, when: KeepWhen, today = TODAY) => moveHeldMembership(m, { type: "keep", when }, today);
+  const cases: [string, HeldMembership, KeepWhen, string][] = [
+    ["set to end with what is paid", moved(plain, { type: "cancel", when: "period_end" }, TODAY), "period_end", "renews"],
+    ["its notice given", moved(notice, { type: "cancel", when: "notice" }, TODAY), "notice", "renews"],
+    ["set to end with its minimum term", moved(term, { type: "cancel", when: "contract_end" }, TODAY), "contract_end", "renews"],
+    ["left early with its fee", moved(term, { type: "cancel", when: "leave_early" }, TODAY), "leave_early", "renews"],
+    ["kept already: the same press twice changes nothing", plain, "period_end", "same"],
+    ["its notice not given: nothing to put back", notice, "notice", "same"],
+    ["cancelled today: over", moved(plain, { type: "cancel", when: "today" }, TODAY), "period_end", "refused"],
+    ["cancelled in its cooling-off period: over", moved({ ...given({ ...monthly, coolingOffDays: 14 }, "2026-11-05", "2026-11-05") }, { type: "cancel", when: "cooling_off" }, TODAY), "period_end", "refused"],
+    ["left early, kept as if set to end: refused, as the fee is a leave's", moved(term, { type: "cancel", when: "leave_early" }, TODAY), "period_end", "refused"],
+    ["set to end, kept as if it left early: refused", moved(plain, { type: "cancel", when: "period_end" }, TODAY), "leave_early", "refused"],
+  ];
+  it.each(cases)("%s", (_name, m, when, want) => {
+    const move = keep(m, when);
+    const got = !move.ok ? "refused" : !move.changed ? "same" : "renews";
+    expect(got).toBe(want);
+    if (move.ok && move.changed) {
+      const after = heldMembershipView(move.membership, TODAY);
+      expect(move.membership).toMatchObject({ renews: true, stopsAfter: null, leftEarly: false, status: "active" });
+      expect(after.endsOn).toBeNull();
+      expect(after.renewsOn).toBe("2026-12-01");
+    }
+  });
+  it("only until its last day: the day after, the clock has ended it", () => {
+    const ending = moved(plain, { type: "cancel", when: "period_end" }, TODAY);
+    expect(keep(ending, "period_end", "2026-11-30")).toMatchObject({ ok: true, changed: true });
+    expect(keep(ending, "period_end", "2026-12-01")).toMatchObject({ ok: false });
+  });
+  it("a minimum term kept: held to the term again, as before the cancel", () => {
+    const kept = keep(moved(term, { type: "cancel", when: "contract_end" }, TODAY), "contract_end");
+    expect(kept.ok && heldMembershipView(kept.membership, TODAY).contract).toEqual({ until: "2027-03-31", then: "renews" });
+  });
+});
+
+describe("the keep box's sentences", () => {
+  const base: MyKeepFacts = { membershipName: "Gold", forName: null, currency: "USD", next: { dueOn: "2026-12-01", amountMinor: 5000 }, card: null, feeOffMinor: null, ended: { classes: 0, sessions: 0 } };
+  it.each<[string, Partial<MyKeepFacts>, string[]]>([
+    ["plain", {}, ["Your cancellation will be removed, and Gold will keep renewing until you cancel.", "Your next payment is $50.00 on 1 Dec 2026."]],
+    ["the card the app charges", { card: { brand: "VISA", last4: "1111" } }, ["Your cancellation will be removed, and Gold will keep renewing until you cancel.", "Your next payment of $50.00 will be charged to Visa ending 1111 on 1 Dec 2026."]],
+    ["free", { next: null }, ["Your cancellation will be removed, and Gold will keep renewing until you cancel.", "There's nothing to pay for it."]],
+    ["whoever pays for them", { forName: "Dev" }, ["Your cancellation will be removed, and Dev's Gold will keep renewing until you cancel.", "Your next payment is $50.00 on 1 Dec 2026."]],
+    ["the fee taken off", { feeOffMinor: 2500 }, ["Your cancellation will be removed, and Gold will keep renewing until you cancel.", "Your next payment is $50.00 on 1 Dec 2026.", "The $25.00 early cancellation fee will be removed."]],
+    ["one booking ended", { ended: { classes: 1, sessions: 0 } }, ["Your cancellation will be removed, and Gold will keep renewing until you cancel.", "Your next payment is $50.00 on 1 Dec 2026.", "The 1 class booking cancelled with your membership isn't booked again. Book it again if you want."]],
+    ["several ended", { ended: { classes: 2, sessions: 1 } }, ["Your cancellation will be removed, and Gold will keep renewing until you cancel.", "Your next payment is $50.00 on 1 Dec 2026.", "The 2 class bookings and 1 personal training session cancelled with your membership aren't booked again. Book them again if you want."]],
+  ])("%s", (_name, over, lines) => {
+    expect(myKeepLines({ ...base, ...over })).toEqual(lines);
+  });
+  it("done, and what staff read", () => {
+    expect(myKeepReplacedNote("Silver", "2026-12-04", null, true)).toBe("You're moving to Silver on 4 Dec 2026, so this membership can't be kept. Ask the front desk.");
+    expect(myKeepReplacedNote("Silver", "2026-12-04", "Dev", true)).toBe("Dev is moving to Silver on 4 Dec 2026, so this membership can't be kept. Ask the front desk.");
+    expect(myKeepReplacedNote("Yoga Monthly", "2026-12-04", null, false)).toBe("Another membership, Yoga Monthly, starts on 4 Dec 2026, so this one can't be kept. Ask the front desk.");
+    expect(myKeepDoneLine({ membershipName: "Gold", forName: "Dev" })).toBe("Cancellation removed. Dev's Gold will keep renewing until you cancel.");
+    expect(appCancelLine({ on: "2026-11-10", byName: "Maya Test", reason: "cost", keptOn: "2026-11-13", keptByName: "Maya Test" })).toBe("Cancelled in the app on 10 Nov 2026 by Maya Test · Reason: Cost · Reactivated in the app on 13 Nov 2026");
+    expect(appCancelLine({ on: "2026-11-10", byName: "Priya", reason: null, keptOn: "2026-11-13", keptByName: "Dev" })).toBe("Cancelled in the app on 10 Nov 2026 by Priya · Reactivated in the app on 13 Nov 2026 by Dev");
+    expect(appCancelRowWhat({ membershipName: "Gold", on: "2026-11-10", endsOn: null, when: "period_end", keptOn: "2026-11-13" }, "2026-11-20")).toBe("Gold · Cancelled 10 Nov 2026 · Reactivated 13 Nov 2026");
   });
 });

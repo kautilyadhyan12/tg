@@ -665,6 +665,9 @@ function throwOnFailure(outcome: repo.HeldWriteOutcome): void {
       throw new OrgsError(409, "card_charge_waiting", CARD_CHARGE_WORDS.charging);
     case "app_paying":
       throw new OrgsError(409, "app_payment_open", APP_PAYMENT_STAFF_WORDS.paying);
+    case "leave_fee_paid":
+      // Only Keep my membership is refused so (18l-ii-a); staff never keep a member's cancel.
+      throw new OrgsError(409, "leave_fee_paid", "The early cancellation fee is paid. Refund it first.");
     case "early_payment":
       throw new OrgsError(
         409,

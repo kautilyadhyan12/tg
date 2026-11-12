@@ -39,6 +39,7 @@ import {
   giftDaysNeverReached,
   takeBackGiftDays,
   billsAtCancel,
+  billCovers,
   billsToOpen,
   periodListedMinor,
   raisedListedMinor,
@@ -78,7 +79,7 @@ import { lockedDiscount, takeUse } from "../register/discountsRepo.js";
 import { friendGiftOpen } from "../referrals/friendGiftRepo.js";
 import { giftUseUndone, giveMemberGift, lockedWaitingGift, markUsed } from "../referrals/memberGiftRepo.js";
 import { ratesOf, taxIncludedOf } from "../register/taxRepo.js";
-import { appliedOf, heldTaxesSql, keepHeldRates, ratesOfJson, typeTaxesSql, typeTaxRateIdsSql } from "./taxesSql.js";
+import { appliedOf, heldTaxesSql, keepHeldRates, ratesOfJson, taxColumns, typeTaxesSql, typeTaxRateIdsSql } from "./taxesSql.js";
 import { feesFor, openLeaveFee, type FeePaymentRow, type FeeRow } from "./feesRepo.js";
 import { freezeFeeOf, openFreezeFee, removeFreezeFees } from "./freezeFees.js";
 import {
@@ -532,6 +533,8 @@ export type HeldWriteOutcome =
   | { kind: "cooling_off_changed" }
   /** Cancel with a full refund, where the membership's cooling-off period is not open today (18v-iii). */
   | { kind: "cooling_off_over" }
+  /** Keep my membership after leaving early, and the early cancellation fee is paid and not refunded (18l-ii-a). */
+  | { kind: "leave_fee_paid" }
   /** Cancel with a full refund, and part of a bill of it is paid while the rest is owed (18v-iii). */
   | { kind: "cooling_off_part_paid" }
   /** The person has this type running already. `ends`: the one they hold has a last day,
@@ -1061,8 +1064,50 @@ const AUDIT_ACTION: Record<HeldMembershipEvent["type"], string> = {
   freeze: "org.held_membership_frozen",
   unfreeze: "org.held_membership_unfrozen",
   cancel: "org.held_membership_cancelled",
+  keep: "org.held_membership_kept",
   paid: "org.held_membership_paid",
 };
+
+/** THE BILLS A KEEP OWES AGAIN (18l-ii-a): those its cancel took off (`billsAtCancel`'s voids, for days after
+ *  `lastDay`, nothing paid on them, cancelled by no one by hand). Left cancelled, their periods would never be billed. */
+export function billsKeepReopens(bills: readonly BillRow[], lastDay: string): BillRow[] {
+  return bills.filter((b) => b.status === "void" && b.cancelled === null && b.dueOn > lastDay && b.paidMinor === 0);
+}
+
+/** Opens those bills again, each as a bill opened now reads (`renewalAmountMinor`'s sum, its period's days as they now
+ *  stand, a freeze since moving them): a Refer a friend gift the cancel took off them waits for the next bill, as it did.
+ *  One holding a joining fee, a change's credit or money moved keeps what it was. */
+async function reopenBills(tx: TransactionSql, gymId: string, row: HeldRow, m: HeldMembership, bills: readonly BillRow[], now: Date): Promise<void> {
+  for (const b of bills) {
+    const covers = billCovers(m, b.periodIndex);
+    if (b.joiningFeeMinor !== 0 || b.changeCreditMinor !== 0 || b.movedMinor !== 0) {
+      await tx`
+        UPDATE gym_member_bills
+        SET status = 'open', due_on = ${periodStart(m, b.periodIndex)}::date, covers_from = ${covers?.from ?? null}::date, covers_to = ${covers?.to ?? null}::date, updated_at = ${now}
+        WHERE gym_id = ${gymId} AND id = ${b.id} AND status = 'void' AND void_reason IS NULL`;
+      continue;
+    }
+    const fresh = billOf(periodListedMinor(m, b.periodIndex, periodPriceMinor(row, b.periodIndex)), row.taxApplied);
+    const cols = taxColumns(fresh.taxes);
+    await tx`
+      UPDATE gym_member_bills
+      SET status = 'open', amount_minor = ${fresh.amountMinor}, tax_minor = ${cols.tm}, tax_pcm = ${cols.tb}, taxes = ${tx.json(cols.tx)},
+          tax_included = ${cols.ti}, due_on = ${periodStart(m, b.periodIndex)}::date, covers_from = ${covers?.from ?? null}::date,
+          covers_to = ${covers?.to ?? null}::date, updated_at = ${now}
+      WHERE gym_id = ${gymId} AND id = ${b.id} AND status = 'void' AND void_reason IS NULL`;
+  }
+}
+
+/** Leaving early's fee bills on a membership, not cancelled: what each asks, and what is paid on it and not refunded. */
+export async function leaveFeesOf(tx: TransactionSql, gymId: string, membershipId: string): Promise<{ id: string; status: string; amountMinor: number; keptMinor: number }[]> {
+  return await tx<{ id: string; status: string; amountMinor: number; keptMinor: number }[]>`
+    SELECT b.id, b.status, b.amount_minor AS "amountMinor",
+           (COALESCE((SELECT sum(p.amount_minor) FROM gym_member_payments p WHERE p.gym_id = b.gym_id AND p.bill_id = b.id AND p.undone_at IS NULL), 0)
+            - COALESCE((SELECT sum(r.amount_minor) FROM gym_member_refunds r JOIN gym_member_payments p ON p.gym_id = r.gym_id AND p.id = r.payment_id
+                        WHERE r.gym_id = b.gym_id AND p.bill_id = b.id AND p.undone_at IS NULL AND r.undone_at IS NULL), 0))::int AS "keptMinor"
+    FROM gym_member_bills b
+    WHERE b.gym_id = ${gymId} AND b.held_membership_id = ${membershipId} AND b.fee = 'leave_early' AND b.status <> 'void'`;
+}
 
 /** What a cancel does about the places booked on the membership, handed in by the service
  *  so this file runs none of the booking code (which imports this one; its types alone
@@ -1097,6 +1142,8 @@ export interface MoveHeldInput {
   leaveFeeMinor?: number;
   actorUserId: string;
   now: Date;
+  /** Keep (18l-ii-a): the last day its cancel left it, so the bills that cancel took off are the ones owed again. */
+  keepFrom?: string;
   /** Pressed by the member, or whoever pays for them, in the app (18l): kept under its own action, so Staff activity,
    *  which lists what staff did, leaves it out. */
   via?: "app";
@@ -1138,6 +1185,19 @@ export async function moveHeldIn(tx: TransactionSql, bookings: CancelBookings, i
   if (!move.ok) return coolingOff ? { kind: "cooling_off_over" } : { kind: move.reason };
   if (!move.changed) return { kind: "ok" };
   const m = move.membership;
+  // Kept (18l-ii-a): the bills the cancel took off with it are owed again, as a bill opened now reads, and leaving
+  // early's fee is taken off; one paid, and not refunded, is the gym's to refund first.
+  let reopen: BillRow[] = [];
+  let feesOff: string[] = [];
+  if (input.event.type === "keep") {
+    const lastDay = input.keepFrom ?? heldMembershipView(before.membership, input.today).endsOn;
+    reopen = lastDay === null ? [] : billsKeepReopens(await billsFor(tx, input.gymId, [before.id]), lastDay);
+    if (input.event.when === "leave_early") {
+      const fees = await leaveFeesOf(tx, input.gymId, before.id);
+      if (fees.some((f) => f.keptMinor > 0)) return { kind: "leave_fee_paid" };
+      feesOff = fees.filter((f) => f.status === "open").map((f) => f.id);
+    }
+  }
   const leftEarly = leaving && m.leftEarly === true && before.membership.leftEarly !== true;
   // A member let out of a running contract keeps the reason staff gave (18v-i).
   // Kept only where the cancel let them out early and its row is let out (round one, L1, L2).
@@ -1237,11 +1297,18 @@ export async function moveHeldIn(tx: TransactionSql, bookings: CancelBookings, i
   await voidBills(tx, input.gymId, voided, input.now);
   // A Refer a friend gift taken off a bill cancelled with it waits for the next bill.
   await giftUseUndone(tx, input.gymId, { billIds: voided }, input.today, input.now);
+  await reopenBills(tx, input.gymId, before, m, reopen, input.now);
+  await voidBills(tx, input.gymId, feesOff, input.now);
 
   await insertAudit(tx, {
     actorUserId: input.actorUserId,
     gymId: input.gymId,
-    action: input.via === "app" && input.event.type === "cancel" ? "org.held_membership_cancelled_in_app" : AUDIT_ACTION[input.event.type],
+    action:
+      input.via === "app" && input.event.type === "cancel"
+        ? "org.held_membership_cancelled_in_app"
+        : input.via === "app" && input.event.type === "keep"
+          ? "org.held_membership_kept_in_app"
+          : AUDIT_ACTION[input.event.type],
     targetType: "gym_held_membership",
     targetId: before.id,
     meta: {
@@ -1253,7 +1320,9 @@ export async function moveHeldIn(tx: TransactionSql, bookings: CancelBookings, i
       paidBefore: String(before.membership.paidPeriods),
       paidAfter: String(m.paidPeriods),
       renews: String(m.renews),
-      ...(input.event.type === "cancel" ? { when: input.event.when } : {}),
+      ...(input.event.type === "cancel" || input.event.type === "keep" ? { when: input.event.when } : {}),
+      ...(reopen.length === 0 ? {} : { billsOwedAgain: String(reopen.length) }),
+      ...(feesOff.length === 0 ? {} : { leaveFeeTakenOff: String(feesOff.length) }),
       ...(release !== before.contractRelease && release !== null ? { release } : {}),
       ...(noticeWaived !== before.noticeWaived && noticeWaived !== null ? { noticeWaived } : {}),
       ...((m.stopsAfter ?? null) !== (before.membership.stopsAfter ?? null) && m.stopsAfter != null ? { stopsAfter: String(m.stopsAfter) } : {}),
