@@ -180,6 +180,10 @@ object Strap {
   private var address: String? = null
   private var gatt: BluetoothGatt? = null
   private var connected = false
+  /** Connections that read the monitor's services and found no heart rate: after NO_HEART_MOST the phone stops
+   *  calling it until it is watched again (round one's re-check, L5). */
+  private var noHeart = 0
+  private const val NO_HEART_MOST = 3
   private val waiting = ArrayDeque<Map<String, Any>>()
 
   @Synchronized
@@ -190,6 +194,7 @@ object Strap {
     if (!HeartRateModule.allowed(ctx)) return false
     val device = HeartRateModule.adapter(ctx)?.getRemoteDevice(to) ?: return false
     address = to
+    noHeart = 0
     return connect(ctx.applicationContext, device, again = false)
   }
 
@@ -254,12 +259,14 @@ object Strap {
         connected = false
         // Dropped (out of reach, switched off): let this one go, and connect again whenever it comes back.
         val to = address ?: return
+        val givenUp = noHeart >= NO_HEART_MOST
         try {
           g.close()
         } catch (e: SecurityException) {
           // Already let go.
         }
         gatt = null
+        if (givenUp) return
         val device = HeartRateModule.adapter(ctx)?.getRemoteDevice(to) ?: return
         connect(ctx, device, again = true)
       }
@@ -274,6 +281,7 @@ object Strap {
       // Its services not read, or no heart rate among them: let it drop and connect again, never sit
       // connected with no readings (round one, L2).
       if (measurement == null) {
+        if (status == BluetoothGatt.GATT_SUCCESS) synchronized(Strap) { noHeart += 1 }
         try {
           g.disconnect()
         } catch (e: SecurityException) {
