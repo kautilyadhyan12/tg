@@ -688,4 +688,27 @@ d("Buy a repeating membership in the app: on their own card, once, given only fo
     }
     expect(square.charged.filter((p) => p.accountId === gym.acct.merchantId)).toHaveLength(0);
   });
+  it("re-check N1: a card the desk is removing is not charged by a Buy pressed meanwhile; Square not stopping it leaves it usable", async () => {
+    clock = new Date();
+    const gym = await makeGym("Card Buy Removing");
+    const gold = await addType(gym, { name: "Gold Monthly" });
+    const tara = await member(gym, "Tara Removing");
+    await cardFor(gym, tara.entryId);
+    const shown = await lineOf(gym, tara.app, gold);
+    // While staff's Remove card waits on Square, the card is marked: Buy finds no card to charge.
+    await sql`UPDATE gym_member_cards SET removing_since = now() WHERE gym_id = ${gym.id} AND entry_id = ${tara.entryId}`;
+    expect((await forSale(gym, tara.app)).card).toBeNull();
+    expect(errorOf(await buyPress(gym, tara.app, shown))).toBe("app_purchase_card_needed");
+    // A mark left past five minutes (the press died midway) no longer counts.
+    await sql`UPDATE gym_member_cards SET removing_since = now() - interval '6 minutes' WHERE gym_id = ${gym.id} AND entry_id = ${tara.entryId}`;
+    expect((await forSale(gym, tara.app)).card).not.toBeNull();
+    // Square not answering the desk's Remove card: 503, the card stays and its mark is taken off.
+    square.state.down = true;
+    expect((await send("DELETE", `${entryUrl(gym, tara.entryId)}/card`, gym.owner.cookies)).statusCode).toBe(503);
+    square.state.down = false;
+    const [kept] = await sql<{ removing_since: Date | null }[]>`SELECT removing_since FROM gym_member_cards WHERE gym_id = ${gym.id} AND entry_id = ${tara.entryId}`;
+    expect(kept).toEqual({ removing_since: null });
+    expect(takenAt(gym)).toHaveLength(0);
+    expect(parsed(await buyPress(gym, tara.app, await lineOf(gym, tara.app, gold))).purchase.state).toBe("paid");
+  });
 });

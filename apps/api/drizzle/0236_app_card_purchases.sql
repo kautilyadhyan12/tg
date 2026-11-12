@@ -21,4 +21,6 @@ ALTER TABLE "gym_app_payments" ADD CONSTRAINT "gym_app_payments_way_check" CHECK
     THEN "card_customer_id" IS NULL AND "link_key" IS NOT NULL AND "link_id" IS NOT NULL AND "order_id" IS NOT NULL AND "url" IS NOT NULL
     ELSE "card_customer_id" IS NOT NULL AND "membership_type_id" IS NOT NULL AND "card_brand" IS NOT NULL
       AND "link_key" IS NULL AND "link_id" IS NULL AND "order_id" IS NULL AND "url" IS NULL
-  END);
+  END);--> statement-breakpoint
+-- Staff pressed Remove card and Square is being told to stop it: Buy in the app does not charge that card meanwhile.
+ALTER TABLE "gym_member_cards" ADD COLUMN "removing_since" timestamp with time zone;

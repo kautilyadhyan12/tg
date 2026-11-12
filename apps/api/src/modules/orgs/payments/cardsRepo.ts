@@ -220,6 +220,20 @@ export async function cardPurchaseWaiting(sql: SqlOrTx, gymId: string, entryId: 
   return row?.waiting === true;
 }
 
+/** Staff's Remove card, before Square is told (round one's re-check, N1): under the gym's lock (the caller's), which Buy's
+ *  write takes too, the card is marked as being removed unless a purchase charged to it already waits for Square. False
+ *  where one waits. */
+export async function markRemoving(tx: TransactionSql, gymId: string, entryId: string, cardId: string): Promise<boolean> {
+  if (await cardPurchaseWaiting(tx, gymId, entryId)) return false;
+  await tx`UPDATE gym_member_cards SET removing_since = now() WHERE gym_id = ${gymId} AND entry_id = ${entryId} AND card_id = ${cardId}`;
+  return true;
+}
+
+/** Square did not stop it: the card stays, and Buy may charge it again. */
+export async function clearRemoving(sql: SqlOrTx, gymId: string, entryId: string, cardId: string): Promise<void> {
+  await sql`UPDATE gym_member_cards SET removing_since = NULL WHERE gym_id = ${gymId} AND entry_id = ${entryId} AND card_id = ${cardId}`;
+}
+
 export async function hasOpenBill(sql: SqlOrTx, gymId: string, entryId: string): Promise<boolean> {
   const [row] = await sql<{ open: boolean }[]>`
     SELECT EXISTS (

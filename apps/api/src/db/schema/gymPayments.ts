@@ -231,6 +231,9 @@ export const gymMemberCards = pgTable(
       .references(() => gymCardAgreements.id),
     savedAt: timestamp("saved_at", { withTimezone: true }).notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+    /** Staff pressed Remove card and Square is being told to stop it (0236; 18k-iv round one's re-check, N1): Buy in the app
+     *  does not charge it meanwhile. Cleared if Square refuses; past five minutes it no longer counts. */
+    removingSince: timestamp("removing_since", { withTimezone: true }),
     /** Square merged the card's customer into somebody of another name (0167; ROADMAP 18d-iii-b-ii-b-ii-a): the
      *  card is charged through that customer, which never links to this record. */
     mergedAwayAt: timestamp("merged_away_at", { withTimezone: true }),

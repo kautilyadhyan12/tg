@@ -27,7 +27,9 @@ export interface OwnCard {
 export async function ownCardIn(sql: SqlOrTx, gymId: string, entryId: string, environment: SquareEnvironment, accountId: string): Promise<OwnCard | null> {
   const [row] = await sql<{ card_id: string; customer_id: string; brand: string; last4: string; exp_month: number; exp_year: number }[]>`
     SELECT card_id, customer_id, brand, last4, exp_month, exp_year FROM gym_member_cards
-    WHERE gym_id = ${gymId} AND entry_id = ${entryId} AND environment = ${environment} AND account_id = ${accountId}`;
+    WHERE gym_id = ${gymId} AND entry_id = ${entryId} AND environment = ${environment} AND account_id = ${accountId}
+      -- Not one staff are removing right now (round one's re-check, N1); a mark left past five minutes no longer counts.
+      AND (removing_since IS NULL OR removing_since < now() - interval '5 minutes')`;
   return row === undefined
     ? null
     : { cardId: row.card_id, customerId: row.customer_id, brand: row.brand, last4: row.last4, expMonth: row.exp_month, expYear: row.exp_year };

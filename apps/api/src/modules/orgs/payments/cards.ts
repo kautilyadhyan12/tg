@@ -257,10 +257,17 @@ export async function removeMemberCard(deps: PaymentsDeps, userId: string, gymId
   if ((await cards.readPerson(deps.sql, gymId, entryId)) === null) throw entryNotFound();
   const ready = await readyOrThrow(deps, gymId, gym);
   const card = shownCard(await cards.readCard(deps.sql, gymId, entryId), ready.square, ready.row);
-  // A purchase in the app charged to it waits for Square: what it gives renews on this card (18k-iv, round one H3).
-  if (card !== null && (await cards.cardPurchaseWaiting(deps.sql, gymId, entryId))) throw new OrgsError(409, "card_purchase_waiting", APP_PURCHASE_STAFF_WORDS.card_waiting);
   if (card !== null) {
+    // A purchase in the app charged to it waits for Square: what it gives renews on this card (18k-iv, round one H3). Checked
+    // under the gym's lock, and the card marked as being removed, so a Buy pressed while Square is told does not take it (N1).
+    const marked = await deps.sql.begin(async (tx) => {
+      await lockGym(tx, gymId);
+      return await cards.markRemoving(tx, gymId, entryId, card.cardId);
+    });
+    if (!marked) throw new OrgsError(409, "card_purchase_waiting", APP_PURCHASE_STAFF_WORDS.card_waiting);
     const result = await ready.square.api.disableCard(ready.token, card.cardId);
+    const stopped = result.kind === "ok" || (result.kind === "refused" && result.status === 404);
+    if (!stopped) await cards.clearRemoving(deps.sql, gymId, entryId, card.cardId);
     if (result.kind === "unavailable") throw unavailable();
     if (result.kind === "refused" && result.status === 401) throw connectionRefused();
     // Square no longer having the card is as good as stopped; any other refusal is not.
