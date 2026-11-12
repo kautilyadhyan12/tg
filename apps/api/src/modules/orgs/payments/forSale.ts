@@ -7,7 +7,22 @@
 // For buying it (18k-iii-a), each line comes with the key of its details and the agreement it asks them to sign, and is
 // worked out with the Refer a friend gifts Add membership would fill in for the reader's own record: what Buy is checked
 // against (`appPurchasesRepo.ts`).
-import { discountFits, forSaleResponseSchema, forSaleWorked, isUnder18, type ForSaleFriendGift, type ForSaleLine, type ForSaleResponse } from "@app/shared";
+//
+// A repeating line (18k-iv) is listed only to a phone that asks for them (`repeating`), as a phone built before it would
+// offer it on Square's payment page, which keeps no card. It is paid with the card the reader saved in the app: the list
+// names it, and each repeating line carries its own tick in words naming it (`repeatingChargeWords`), which Buy sends
+// back. A reader with no record of their own has no card to pay with, and reads no tick.
+import {
+  cardExpired,
+  discountFits,
+  forSaleResponseSchema,
+  forSaleWorked,
+  isUnder18,
+  repeatingChargeWords,
+  type ForSaleFriendGift,
+  type ForSaleLine,
+  type ForSaleResponse,
+} from "@app/shared";
 import type { Sql } from "postgres";
 import { z } from "zod";
 import { dayInTz } from "../../gamification/streak.js";
@@ -23,6 +38,7 @@ import { waitingGiftFor } from "../referrals/memberGiftRepo.js";
 import { taxIncludedOf } from "../register/taxRepo.js";
 import { gymHasLivePlan } from "../repo.js";
 import { orgNotFound, stateOf } from "./cards.js";
+import { ownCardIn } from "./appCardPurchasesRepo.js";
 import { soldInApp } from "./forSaleRepo.js";
 import * as repo from "./repo.js";
 import type { PaymentsDeps } from "./service.js";
@@ -55,7 +71,7 @@ async function personOf(sql: Sql, gymId: string, entryId: string): Promise<{ ful
   return row === undefined ? null : { fullName: row.full_name.trim(), dateOfBirth: row.date_of_birth };
 }
 
-export async function readForSale(deps: PaymentsDeps, userId: string, gymId: string, limit: Limit): Promise<ForSaleResponse | null> {
+export async function readForSale(deps: PaymentsDeps, userId: string, gymId: string, limit: Limit, repeating = false): Promise<ForSaleResponse | null> {
   const reader = await readerOf(deps.sql, gymId, userId);
   if (reader === null) throw orgNotFound();
   if (!(await limit())) return null;
@@ -87,6 +103,11 @@ export async function readForSale(deps: PaymentsDeps, userId: string, gymId: str
   ]);
   if (taxIncluded === null) throw orgNotFound();
   const minor = person === null ? null : isUnder18(person.dateOfBirth, today);
+  // Their own saved card, in the account the gym is connected to now: only their own record's (nobody pays for a buyer).
+  const saved = repeating && record === "own" && reader.entryId !== null && deps.square !== null && connection !== null
+      ? await ownCardIn(deps.sql, gymId, reader.entryId, deps.square.environment, connection.accountId)
+      : null;
+  const card = saved === null ? null : { brand: saved.brand, last4: saved.last4, expired: cardExpired(saved, today) };
   const items = lines.flatMap((line): ForSaleLine[] => {
     const d = friendOffer?.discount ?? null;
     const friendGift: ForSaleFriendGift | null =
@@ -105,7 +126,9 @@ export async function readForSale(deps: PaymentsDeps, userId: string, gymId: str
       friendGift,
       memberGift: memberGift === null ? null : { id: memberGift.id, kind: memberGift.kind, percentBp: memberGift.percentBp, amountMinor: memberGift.amountMinor, currency: memberGift.currency },
     });
-    return worked === null ? [] : [{ ...worked.item, factsKey: forSaleKeyOf(worked.item), agreement: wordings.get(line.type.id) ?? null }];
+    if (worked === null || (worked.item.repeats && !repeating)) return [];
+    const charge = worked.item.repeats && card !== null && !card.expired ? repeatingChargeWords(gym.name, card, worked.item) : null;
+    return [{ ...worked.item, factsKey: forSaleKeyOf(worked.item), agreement: wordings.get(line.type.id) ?? null, charge }];
   });
-  return forSaleResponseSchema.parse({ ...empty, signer: minor === true ? "guardian" : minor === false ? "person" : "either", items });
+  return forSaleResponseSchema.parse({ ...empty, signer: minor === true ? "guardian" : minor === false ? "person" : "either", items, card: repeating ? card : null });
 }

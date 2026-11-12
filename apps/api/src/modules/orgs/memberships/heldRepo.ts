@@ -1042,6 +1042,18 @@ export async function wouldRefuseGiving(
   return running.some((row) => row.typeId === typeId && sameTypeTwice(row.membership, m, today)) ? "already_held" : null;
 }
 
+/** A repeating membership of the record that still renews (18k-iv): in use, frozen or not, with no last day set. Its name,
+ *  or null. Buying another in the app waits for it, so two never bill at once. */
+export async function renewingHeldName(tx: TransactionSql, gymId: string, entryId: string, today: string): Promise<string | null> {
+  const running = (await held(tx, gymId, entryId, IN_USE, IN_USE_READ)).map(shape);
+  const found = running.find((row) => {
+    if (row.membership.kind !== "recurring") return false;
+    const view = heldMembershipView(row.membership, today);
+    return view.status !== "ended" && view.endsOn === null;
+  });
+  return found?.typeName ?? null;
+}
+
 /** One membership of a record, held for a write, or null where it is not that record's.
  *  Under the gym's lock and the record's. */
 export async function lockedHeld(tx: TransactionSql, gymId: string, entryId: string, membershipId: string): Promise<HeldRow | null> {

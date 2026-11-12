@@ -267,7 +267,7 @@ export function coolingOffLine(type) {
 
 /** The ways of paying a member can buy in the app (18k-i): a paid-once membership or a pack (a day pass is one). A
  *  repeating membership waits for 18k-iv, once members can cancel it in the app (18l); never a trial. */
-export const usesSellInApp = (choice) => choice === 'one_time' || choice === 'pack' || choice === 'day_pass';
+export const usesSellInApp = (choice) => choice === 'recurring' || choice === 'one_time' || choice === 'pack' || choice === 'day_pass';
 
 /** WHETHER SQUARE CAN TAKE A MEMBER'S PAYMENT NOW (18k-i), from the Payments box: `ready`; `connect` or `location` for
  *  what the owner still has to do; `country` where Square is not offered; `off` where it can't be connected here yet;
@@ -282,11 +282,13 @@ export function squareSellState(payments) {
 }
 
 /** What the form says under Sell in the app, and the button to the place to fix it, by the state of Square. */
-export function sellInAppHint(state, canConnect) {
+export function sellInAppHint(state, canConnect, choice = null) {
   if (state === 'connect') return canConnect ? { text: 'Connect Square to sell in the app.', button: 'Connect Square' } : { text: 'Only the owner can connect Square.', button: null };
   if (state === 'location') return canConnect ? { text: 'Choose your Square location to sell in the app.', button: 'Choose location' } : { text: 'Only the owner can choose the Square location.', button: null };
   if (state === 'country') return { text: "Selling in the app isn't available in your country yet.", button: null };
   if (state === 'off') return { text: "Selling in the app isn't available yet.", button: null };
+  // A repeating one is paid with the card the member saves in the app, and renews on it (18k-iv).
+  if (state === 'ready' && choice === 'recurring') return { text: 'Members can buy it in the app with a card they save there. It renews on that card.', button: null };
   if (state === 'ready') return { text: 'Members can buy it in the app and pay by card through Square.', button: null };
   // Square's state not known yet (still loading, or its read failed): what the tick does, and no more.
   return { text: 'Lets members buy it in the app.', button: null };

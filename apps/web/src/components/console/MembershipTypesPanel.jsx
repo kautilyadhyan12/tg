@@ -353,7 +353,7 @@ function RaiseField({ gymId, draft, setDraft, currency, problem, id, busy }) {
 /** Sell in the app (18k-i): the tick, what it does, and while Square still has to be set up, the button to that place
  *  for whoever may and a sentence for whoever may not. A line already sold stays unticked-able whatever Square's state. */
 function SellInAppField({ draft, set, problem, busy, sell }) {
-  const hint = sellInAppHint(sell.state, sell.canConnect);
+  const hint = sellInAppHint(sell.state, sell.canConnect, draft.choice);
   const blocked = draft.soldInApp !== true && sell.state !== null && sell.state !== 'ready';
   return (
     <div className="flex flex-col gap-2">
