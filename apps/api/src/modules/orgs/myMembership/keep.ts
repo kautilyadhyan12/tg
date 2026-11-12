@@ -74,7 +74,7 @@ async function workOut(tx: TransactionSql, gymId: string, whose: Whose, membersh
   // Another membership follows it, or takes its place: keeping it would bill both.
   const forName = whose.ownId === whose.entryId ? null : await cancels.nameOfRecord(tx, gymId, whose.entryId);
   const follower = (await cancels.followersOf(tx, gymId, [row.id], today)).get(row.id);
-  if (follower !== undefined) return nothing(myKeepReplacedNote(follower.name, follower.startsOn, forName));
+  if (follower !== undefined) return nothing(myKeepReplacedNote(follower.name, follower.startsOn, forName, follower.replaces));
   let feeOffMinor: number | null = null;
   if (cancel.when === "leave_early") {
     const fees = await leaveFeesOf(tx, gymId, row.id);

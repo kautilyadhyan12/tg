@@ -96,17 +96,17 @@ export async function cancelsOf(sql: SqlOrTx, gymId: string, membershipIds: read
 
 /** The membership that follows each of these on its record: one that replaces it (Change membership on the next payment
  *  date), or a repeating one still to start. Keeping one of these would leave two billing every month (18l-ii-a). */
-export async function followersOf(sql: SqlOrTx, gymId: string, membershipIds: readonly string[], today: string): Promise<Map<string, { name: string; startsOn: string }>> {
+export async function followersOf(sql: SqlOrTx, gymId: string, membershipIds: readonly string[], today: string): Promise<Map<string, { name: string; startsOn: string; replaces: boolean }>> {
   if (membershipIds.length === 0) return new Map();
-  const rows = await sql<{ id: string; name: string; starts_on: string }[]>`
-    SELECT DISTINCT ON (h.id) h.id, t.name, o.starts_on::text AS starts_on
+  const rows = await sql<{ id: string; name: string; starts_on: string; replaces: boolean }[]>`
+    SELECT DISTINCT ON (h.id) h.id, t.name, o.starts_on::text AS starts_on, (o.replaces_id IS NOT DISTINCT FROM h.id) AS replaces
     FROM gym_held_memberships h
     JOIN gym_held_memberships o ON o.gym_id = h.gym_id AND o.entry_id = h.entry_id AND o.id <> h.id AND o.status IN ('active','frozen')
       AND (o.replaces_id = h.id OR (o.kind = 'recurring' AND o.starts_on > ${today}::date))
     JOIN gym_membership_types t ON t.gym_id = o.gym_id AND t.id = o.membership_type_id
     WHERE h.gym_id = ${gymId} AND h.id = ANY(${[...membershipIds]}::uuid[])
-    ORDER BY h.id, o.starts_on, o.id`;
-  return new Map(rows.map((r) => [r.id, { name: r.name, startsOn: r.starts_on }]));
+    ORDER BY h.id, (o.replaces_id IS NOT DISTINCT FROM h.id) DESC, o.starts_on, o.id`;
+  return new Map(rows.map((r) => [r.id, { name: r.name, startsOn: r.starts_on, replaces: r.replaces }]));
 }
 
 /** For the person's page: each membership's newest cancel in the app, kept or not, as staff read it. */

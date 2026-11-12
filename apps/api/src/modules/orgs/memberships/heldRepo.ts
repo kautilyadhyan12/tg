@@ -1079,13 +1079,16 @@ export function billsKeepReopens(bills: readonly BillRow[], lastDay: string): Bi
  *  One holding a joining fee, a change's credit or money moved keeps what it was. */
 async function reopenBills(tx: TransactionSql, gymId: string, row: HeldRow, m: HeldMembership, bills: readonly BillRow[], now: Date): Promise<void> {
   for (const b of bills) {
+    const covers = billCovers(m, b.periodIndex);
     if (b.joiningFeeMinor !== 0 || b.changeCreditMinor !== 0 || b.movedMinor !== 0) {
-      await tx`UPDATE gym_member_bills SET status = 'open', updated_at = ${now} WHERE gym_id = ${gymId} AND id = ${b.id} AND status = 'void' AND void_reason IS NULL`;
+      await tx`
+        UPDATE gym_member_bills
+        SET status = 'open', due_on = ${periodStart(m, b.periodIndex)}::date, covers_from = ${covers?.from ?? null}::date, covers_to = ${covers?.to ?? null}::date, updated_at = ${now}
+        WHERE gym_id = ${gymId} AND id = ${b.id} AND status = 'void' AND void_reason IS NULL`;
       continue;
     }
     const fresh = billOf(periodListedMinor(m, b.periodIndex, periodPriceMinor(row, b.periodIndex)), row.taxApplied);
     const cols = taxColumns(fresh.taxes);
-    const covers = billCovers(m, b.periodIndex);
     await tx`
       UPDATE gym_member_bills
       SET status = 'open', amount_minor = ${fresh.amountMinor}, tax_minor = ${cols.tm}, tax_pcm = ${cols.tb}, taxes = ${tx.json(cols.tx)},

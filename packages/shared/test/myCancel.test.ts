@@ -19,6 +19,7 @@ import {
   myCancelledLine,
   myKeepDoneLine,
   myKeepLines,
+  myKeepReplacedNote,
   type HeldMembership,
   type HeldMembershipEvent,
   type HeldMembershipTerms,
@@ -244,6 +245,9 @@ describe("the keep box's sentences", () => {
     expect(myKeepLines({ ...base, ...over })).toEqual(lines);
   });
   it("done, and what staff read", () => {
+    expect(myKeepReplacedNote("Silver", "2026-12-04", null, true)).toBe("You're moving to Silver on 4 Dec 2026, so this membership can't be kept. Ask the front desk.");
+    expect(myKeepReplacedNote("Silver", "2026-12-04", "Dev", true)).toBe("Dev is moving to Silver on 4 Dec 2026, so this membership can't be kept. Ask the front desk.");
+    expect(myKeepReplacedNote("Yoga Monthly", "2026-12-04", null, false)).toBe("Another membership, Yoga Monthly, starts on 4 Dec 2026, so this one can't be kept. Ask the front desk.");
     expect(myKeepDoneLine({ membershipName: "Gold", forName: "Dev" })).toBe("Cancellation removed. Dev's Gold will keep renewing until you cancel.");
     expect(appCancelLine({ on: "2026-11-10", byName: "Maya Test", reason: "cost", keptOn: "2026-11-13", keptByName: "Maya Test" })).toBe("Cancelled in the app on 10 Nov 2026 by Maya Test · Reason: Cost · Reactivated in the app on 13 Nov 2026");
     expect(appCancelLine({ on: "2026-11-10", byName: "Priya", reason: null, keptOn: "2026-11-13", keptByName: "Dev" })).toBe("Cancelled in the app on 10 Nov 2026 by Priya · Reactivated in the app on 13 Nov 2026 by Dev");

@@ -412,6 +412,7 @@ export const MY_KEEP_WORDS = {
 } as const;
 
 /** Another membership starts after it, or in its place (Change membership): keeping it would bill both. */
-export function myKeepReplacedNote(newName: string, startsOn: string, forName: string | null): string {
+export function myKeepReplacedNote(newName: string, startsOn: string, forName: string | null, replaces: boolean): string {
+  if (!replaces) return `Another membership, ${newName}, starts on ${dayWords(startsOn)}, so this one can't be kept. Ask the front desk.`;
   return `${forName === null ? "You're" : `${forName} is`} moving to ${newName} on ${dayWords(startsOn)}, so this membership can't be kept. Ask the front desk.`;
 }

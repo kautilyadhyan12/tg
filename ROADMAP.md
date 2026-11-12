@@ -353,7 +353,9 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
      - 18k-iv. [ ] **Buy a repeating membership**: its own tick, kept with its time and words, a card typed on Square's form and kept; on sale only once 18l is built.
      - 18k-v. [ ] **A promo code typed in the app** (spec Part 3 §14.3).
    - 18l. [x] **A member stops their own repeating membership** — merged 2026-11-12 (PR #525).
-   - 18l-ii. [ ] **Keep my membership** (Kd, 2026-11-12, `rulings/2026-11-11-18l.md`): a member who cancelled in the app undoes it there until the last day; staff undo only a cancel staff made. Web folder, straight after 18l.
+   - 18l-ii. **Undoing a cancel** (Kd, 2026-11-12; split in two that day, `handoff/2026-11-12-18l-ii-a.md` keeps the line as first written).
+     - 18l-ii-a. [ ] **Keep my membership**: the member who cancelled in the app undoes it there until its last day.
+     - 18l-ii-b. [ ] **Undo cancel for staff**: staff undo a cancel staff made, never a member's. Web folder, straight after 18l-ii-a.
    - 18t. [x] **Joining fee** · merged 2026-10-22 · PR #336
    - 18u. **Membership agreement**, in two jobs since 2026-10-23 (no lawyer: `rulings/2026-10-23-18u-i.md`; the line as first written is in `handoff/2026-10-23-18u-i.md`). Web folder 2.
      - 18u-i. [x] **The business writes it, and the member signs at the desk** — merged 2026-10-23 (PR #349).
