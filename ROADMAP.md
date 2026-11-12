@@ -352,6 +352,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
        - 18k-iii-b. [x] **A member not on the gym's list yet, or sharing a record, buys it** — merged 2026-11-07 (PR #494).
      - 18k-iv. [ ] **Buy a repeating membership**: its own tick, kept with its time and words, a card typed on Square's form and kept; on sale only once 18l is built.
      - 18k-v. [ ] **A promo code typed in the app** (spec Part 3 §14.3).
+     - 18k-vi. [ ] **Overview: payments in the app to check in Square** (Kd, 2026-11-12, `rulings/2026-11-12-20g.md`): a line on Overview for each payment or purchase in the app that Square may have taken and nothing recorded, with a button to that person. The web folder, after 14a.
    - 18l. [x] **A member stops their own repeating membership** — merged 2026-11-12 (PR #525).
    - 18l-ii. [ ] **Keep my membership** (Kd, 2026-11-12, `rulings/2026-11-11-18l.md`): a member who cancelled in the app undoes it there until the last day; staff undo only a cancel staff made. Web folder, straight after 18l.
    - 18t. [x] **Joining fee** · merged 2026-10-22 · PR #336
@@ -651,6 +652,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
     - 20e. [x] **Remove my card** · merged 2026-11-11 · PR #524
     - 20f. [x] **Pay what I owe** · merged 2026-11-12 · PR #526
     - 20g. [ ] **Buy in the app**: the gym's packs and passes sold in the app, their details and agreement, Buy on Square's own page (18k-iii's server).
+    - 20h. [ ] **Payment received** (Kd, 2026-11-12, `rulings/2026-11-12-20g.md`): a phone notification when a payment or purchase in the app is confirmed after the member left it.
 21. **Release** (split 2026-11-07, Kd: the release is prepared alongside the building, and Google's closed test starts as soon as the app can be installed from Google Play, without waiting for workouts or exercises; `rulings/2026-11-07-21-closed-test-early.md` keeps the line as first written and Google's rules as read that day).
     - 21a. **The server online, free for the test** (split 2026-11-08: the server first; on AWS's free plan in Sydney, Oracle having refused Kd's card; `handoff/2026-11-09-21a-i.md` keeps its line as first written).
       - 21a-i. [x] **The server at its own https address** · merged 2026-11-09 · PR #509
