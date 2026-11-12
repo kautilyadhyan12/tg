@@ -350,7 +350,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
      - 18k-iii. **Buy something paid once**, in two parts since 2026-11-07 (`handoff/2026-11-07-18k-iii-a.md` keeps its line as first written):
        - 18k-iii-a. [x] **A member on the gym's list buys it** — merged 2026-11-07 (PR #492).
        - 18k-iii-b. [x] **A member not on the gym's list yet, or sharing a record, buys it** — merged 2026-11-07 (PR #494).
-     - 18k-iv. [ ] **Buy a repeating membership**: its own tick, kept with its time and words, a card typed on Square's form and kept; on sale only once 18l is built.
+     - 18k-iv. [x] **Buy a repeating membership** — merged 2026-11-12 (PR #535).
      - 18k-v. [ ] **A promo code typed in the app** (spec Part 3 §14.3).
      - 18k-vi. [ ] **Overview: payments in the app to check in Square** (Kd, 2026-11-12, `rulings/2026-11-12-20g.md`): a line on Overview for each payment or purchase in the app that Square may have taken and nothing recorded, with a button to that person. The web folder, after 14a.
    - 18l. [x] **A member stops their own repeating membership** — merged 2026-11-12 (PR #525).
