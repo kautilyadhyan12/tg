@@ -56,9 +56,8 @@ class HeartRateModule : Module() {
     Function("scan") { scan() }
     Function("stopScan") { stopScan() }
 
-    /** Connect to this monitor, and keep connecting to it whenever it is in reach, until `unwatch`. Its name
-     *  follows a monitor whose address is one that changes (below). */
-    Function("watch") { address: String, name: String -> context?.let { Strap.watch(it, address, name) } ?: false }
+    /** Connect to this monitor, and keep connecting to it whenever it is in reach, until `unwatch`. */
+    Function("watch") { address: String -> context?.let { Strap.watch(it, address) } ?: false }
     Function("unwatch") { Strap.unwatch() }
 
     /** Every reading since the last take, and forgets them. */
@@ -168,61 +167,36 @@ class HeartRateModule : Module() {
 }
 
 /** The one monitor the app is connected to, held by the app's process so a run keeps it with the screen
- *  locked.
- *
- *  A watch, a phone or a laptop may send from a private address that changes every few minutes (a Bluetooth
- *  "resolvable private address", its first two bits 01; seen 2026-11-12 on the laptop used as a strap: picked
- *  as 7B:FC:57:F2:73:2F, gone after the app restarted). A strap keeps one address and is only ever called at
- *  it. For a monitor picked at a private address, when it has not been connected for FOLLOW_AFTER_MS the phone
- *  looks for the heart rate monitors in reach and follows the one of exactly the same name to its new
- *  address. Its readings keep the address it was picked by, the one the app knows it by. */
+ *  locked. It is only ever called at the address the person picked, so every reading kept here is that
+ *  monitor's. A monitor whose address changes (a watch's or a phone's private address) is not followed to
+ *  another: after a change the person finds it again in the box, and sees its heart rate before Save. A
+ *  stranger's of the same name is never connected (round one of 37f-i, H1). */
 @SuppressLint("MissingPermission")
 object Strap {
   /** At most this many readings wait to be taken: hours of them at one a second, then the oldest go. */
   private const val MOST_WAITING = 20_000
-  private const val FOLLOW_AFTER_MS = 8_000L
-  private const val FOLLOW_LOOK_MS = 20_000L
-  private const val FOLLOW_EVERY_MS = 30_000L
 
   private val main = Handler(Looper.getMainLooper())
-  /** The address the monitor was picked by; null for none watched. */
   private var address: String? = null
-  private var name: String = ""
-  /** Where it is called now: its own address, or the one it was followed to. */
-  private var calling: String? = null
   private var gatt: BluetoothGatt? = null
   private var connected = false
-  private var appContext: Context? = null
-  private var following: ScanCallback? = null
   private val waiting = ArrayDeque<Map<String, Any>>()
-  private val follow = Runnable { lookFor() }
-
-  /** A resolvable private address: its first two bits 01. */
-  private fun changes(at: String): Boolean = (at.substring(0, 2).toIntOrNull(16) ?: 0) and 0xC0 == 0x40
 
   @Synchronized
-  fun watch(ctx: Context, to: String, called: String): Boolean {
+  fun watch(ctx: Context, to: String): Boolean {
     if (!BluetoothAdapter.checkBluetoothAddress(to)) return false
     if (address == to && gatt != null) return true
     unwatch()
     if (!HeartRateModule.allowed(ctx)) return false
     val device = HeartRateModule.adapter(ctx)?.getRemoteDevice(to) ?: return false
-    appContext = ctx.applicationContext
     address = to
-    name = called.trim()
-    calling = to
-    if (changes(to) && name != "") main.postDelayed(follow, FOLLOW_AFTER_MS)
     return connect(ctx.applicationContext, device, again = false)
   }
 
   @Synchronized
   fun unwatch() {
     address = null
-    calling = null
-    name = ""
     connected = false
-    main.removeCallbacks(follow)
-    stopLooking()
     val was = gatt ?: return
     gatt = null
     try {
@@ -230,69 +204,6 @@ object Strap {
       was.close()
     } catch (e: SecurityException) {
       // Permission taken away: Android has let it go itself.
-    }
-  }
-
-  /** Not connected for a while, at an address that changes: look for the same name for FOLLOW_LOOK_MS. */
-  @Synchronized
-  private fun lookFor() {
-    val ctx = appContext ?: return
-    if (address == null || connected || following != null) return
-    val scanner = HeartRateModule.adapter(ctx)?.bluetoothLeScanner ?: return
-    val callback = object : ScanCallback() {
-      override fun onScanResult(callbackType: Int, result: ScanResult) = heard(result)
-      override fun onBatchScanResults(results: MutableList<ScanResult>) = results.forEach { heard(it) }
-    }
-    val filters = listOf(ScanFilter.Builder().setServiceUuid(ParcelUuid(HeartRateModule.HEART_SERVICE)).build())
-    try {
-      scanner.startScan(filters, ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build(), callback)
-      following = callback
-    } catch (e: SecurityException) {
-      return
-    } catch (e: IllegalStateException) {
-      return
-    }
-    main.postDelayed({
-      synchronized(Strap) {
-        stopLooking()
-        if (address != null && !connected) main.postDelayed(follow, FOLLOW_EVERY_MS)
-      }
-    }, FOLLOW_LOOK_MS)
-  }
-
-  private fun heard(result: ScanResult) {
-    val heardName = try {
-      result.device.name ?: result.scanRecord?.deviceName ?: ""
-    } catch (e: SecurityException) {
-      ""
-    }
-    synchronized(Strap) {
-      val ctx = appContext ?: return
-      val now = result.device.address
-      if (address == null || connected || heardName != name || now == calling || !changes(now)) return
-      stopLooking()
-      calling = now
-      gatt?.let {
-        try {
-          it.close()
-        } catch (e: SecurityException) {
-          // Already let go.
-        }
-      }
-      gatt = null
-      connect(ctx, result.device, again = false)
-    }
-  }
-
-  private fun stopLooking() {
-    val callback = following ?: return
-    following = null
-    try {
-      appContext?.let { HeartRateModule.adapter(it)?.bluetoothLeScanner?.stopScan(callback) }
-    } catch (e: SecurityException) {
-      // Nothing is looking now.
-    } catch (e: IllegalStateException) {
-      // Bluetooth switched off: the same.
     }
   }
 
@@ -320,9 +231,17 @@ object Strap {
     override fun onConnectionStateChange(g: BluetoothGatt, status: Int, newState: Int) {
       synchronized(Strap) {
         if (g !== gatt) return
+        // Connected with a fault: let it drop, and the drop below connects again (round one, L2).
+        if (newState == BluetoothProfile.STATE_CONNECTED && status != BluetoothGatt.GATT_SUCCESS) {
+          try {
+            g.disconnect()
+          } catch (e: SecurityException) {
+            // Already let go.
+          }
+          return
+        }
         if (newState == BluetoothProfile.STATE_CONNECTED) {
           connected = true
-          main.removeCallbacks(follow)
           main.post {
             try {
               g.discoverServices()
@@ -334,12 +253,7 @@ object Strap {
         }
         connected = false
         // Dropped (out of reach, switched off): let this one go, and connect again whenever it comes back.
-        val picked = address ?: return
-        val to = calling ?: picked
-        if (changes(picked) && name != "") {
-          main.removeCallbacks(follow)
-          main.postDelayed(follow, FOLLOW_AFTER_MS)
-        }
+        val to = address ?: return
         try {
           g.close()
         } catch (e: SecurityException) {
@@ -352,7 +266,21 @@ object Strap {
     }
 
     override fun onServicesDiscovered(g: BluetoothGatt, status: Int) {
-      val measurement = g.getService(HeartRateModule.HEART_SERVICE)?.getCharacteristic(HeartRateModule.HEART_MEASUREMENT) ?: return
+      val measurement = if (status == BluetoothGatt.GATT_SUCCESS) {
+        g.getService(HeartRateModule.HEART_SERVICE)?.getCharacteristic(HeartRateModule.HEART_MEASUREMENT)
+      } else {
+        null
+      }
+      // Its services not read, or no heart rate among them: let it drop and connect again, never sit
+      // connected with no readings (round one, L2).
+      if (measurement == null) {
+        try {
+          g.disconnect()
+        } catch (e: SecurityException) {
+          // Already let go.
+        }
+        return
+      }
       try {
         g.setCharacteristicNotification(measurement, true)
         val switch = measurement.getDescriptor(HeartRateModule.NOTIFY_SWITCH) ?: return

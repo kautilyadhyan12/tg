@@ -85,6 +85,14 @@ export function HeartMonitorSheet({ open, onClose, monitor }: { open: boolean; o
     endTry();
     onClose();
   };
+  // However the box goes (closed, or the page under it gone), a monitor tried and not saved is never left
+  // watched in place of the saved one (round one, L1).
+  useEffect(() => {
+    if (!open) endTry();
+  }, [open]);
+  useEffect(() => () => {
+    endTry();
+  }, []);
   const running = runNow() !== null && runNow()?.phase !== "finished";
   return (
     <Sheet open={open} title="Heart rate monitor" onClose={close}>
@@ -125,7 +133,7 @@ export function HeartMonitorSheet({ open, onClose, monitor }: { open: boolean; o
         <FindStep
           active={open}
           onPick={(heard) => {
-            tryMonitor(heard.id, heard.name);
+            tryMonitor(heard.id);
             setStep({ kind: "try", heard, since: Date.now() });
           }}
         />
@@ -155,7 +163,7 @@ function SavedStep({ monitor, said, running, onChange, onRemove }: { monitor: Mo
       <BluetoothProblem state={bluetooth} />
       {bluetooth === "on" && bpm === null ? (
         <Txt kind="small" colour="textFaint" style={styles.centredText}>
-          Wear it to connect.
+          {running ? "Wear it to connect." : "Wear it to connect. Still no signal? Change monitor and find it again."}
         </Txt>
       ) : null}
       {running ? null : (

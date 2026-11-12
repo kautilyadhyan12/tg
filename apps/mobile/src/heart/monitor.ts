@@ -63,7 +63,6 @@ let saved: Monitor | null = null;
 let watching: string | null = null;
 /** A monitor picked in the box and not yet saved: watched in place of the saved one while it is tried. */
 let trying: string | null = null;
-let tryingName = "";
 let holds = 0;
 let latest: (Reading & { device: string }) | null = null;
 let pending: Reading[] = [];
@@ -104,7 +103,7 @@ function rewatch(): void {
   latest = null;
   if (native === null) return;
   if (target === null) native.unwatch();
-  else native.watch(target, trying !== null ? tryingName : (saved?.name ?? ""));
+  else native.watch(target);
 }
 
 /** This person's monitor, read once they are signed in. Anything unreadable is no monitor. */
@@ -154,9 +153,8 @@ export function holdHeart(): () => void {
 }
 
 /** Watch a monitor picked in the box, in place of the saved one, until `endTry`. */
-export function tryMonitor(id: string, name = ""): void {
+export function tryMonitor(id: string): void {
   trying = id;
-  tryingName = name;
   rewatch();
   tell();
 }

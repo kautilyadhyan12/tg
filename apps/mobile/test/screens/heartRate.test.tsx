@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-
 import { AppState } from "react-native";
 import { heartSums, runSums, saveRunRequestSchema, type SaveRunRequest } from "@app/shared";
 import { App } from "../../src/App";
+import { HeartMonitorSheet } from "../../src/heart/HeartMonitor";
 import { heartNative } from "../../src/heart/heartNative";
 import { HEART_FRESH_MS, endTry, heartNow, holdHeart, loadMonitor, pullHeart, resetHeart, saveMonitor, takeHeartReadings, tryMonitor } from "../../src/heart/monitor";
 import { closedPauses, pauseRun, phoneRunFiles, resetRecorder, runNow, takeLocations } from "../../src/screens/running/recorder";
@@ -51,6 +52,8 @@ describe("the worst thing: a heart rate that is not the person's, shown as their
     await saveMonitor({ id: MINE, name: "Polar H10 9EF6E824" });
   });
 
+  // The phone's Bluetooth code only ever connects to the address picked, so on a phone no other strap's
+  // reading arrives at all; this is the app's own second check, should one ever be handed over.
   it("a stranger's strap near by is never shown nor kept: only the one picked, by its address", () => {
     const release = holdHeart();
     expect(strap.watched).toBe(MINE);
@@ -89,6 +92,19 @@ describe("the worst thing: a heart rate that is not the person's, shown as their
     strap.send(MINE, polar(96), now - HEART_FRESH_MS + 1000);
     pullHeart();
     expect(heartNow(now)).toBe(96);
+  });
+
+  it("a monitor tried and not saved is let go however the box goes: the saved one is watched again (round one, L1)", async () => {
+    holdHeart();
+    const shown = await render(<HeartMonitorSheet open monitor={{ id: MINE, name: "Polar H10 9EF6E824" }} onClose={() => undefined} />);
+    tryMonitor(STRANGER);
+    expect(strap.watched).toBe(STRANGER);
+    await shown.rerender(<HeartMonitorSheet open={false} monitor={{ id: MINE, name: "Polar H10 9EF6E824" }} onClose={() => undefined} />);
+    expect(strap.watched).toBe(MINE);
+    await shown.rerender(<HeartMonitorSheet open monitor={{ id: MINE, name: "Polar H10 9EF6E824" }} onClose={() => undefined} />);
+    tryMonitor(STRANGER);
+    await shown.unmount();
+    expect(strap.watched).toBe(MINE);
   });
 
   it("a monitor tried in the box is shown while tried, and keeps nothing for a run", () => {

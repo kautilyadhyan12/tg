@@ -11,10 +11,8 @@ export interface HeartNative {
   /** Look for heart rate monitors for 30 s; each heard is sent as "found". False when it cannot. */
   scan(): boolean;
   stopScan(): void;
-  /** Connect to this monitor by its Bluetooth address, and again whenever it comes back in reach. Its name
-   *  follows a monitor whose address changes (a watch's or a phone's private address) to its new one; its
-   *  readings keep the address it was picked by. */
-  watch(address: string, name: string): boolean;
+  /** Connect to this monitor by its Bluetooth address, and again whenever it comes back in reach. */
+  watch(address: string): boolean;
   unwatch(): void;
   /** The readings since the last take (read through phoneHeartSamplesSchema). */
   take(): unknown;

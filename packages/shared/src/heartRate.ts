@@ -92,6 +92,7 @@ export function heartSums(samples: readonly HeartSample[], pauses: readonly RunP
     const next = inOrder[i + 1]?.[0] ?? elapsed;
     const end = Math.min(next, at + HEART_STANDS_MS, pause?.[0] ?? elapsed, elapsed);
     const ms = Math.max(0, end - at);
+    if (ms <= 0) continue; // a reading that stands for no time is in neither number (round one, L3)
     weighted += bpm * ms;
     counted += ms;
     max = Math.max(max, bpm);

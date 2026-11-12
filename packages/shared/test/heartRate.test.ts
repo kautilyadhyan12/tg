@@ -102,6 +102,12 @@ describe("a run's average and highest heart rate", () => {
     expect(heartSums([], [], 3_600_000)).toBeNull();
   });
 
+  it("a reading that stands for no time is in neither the average nor the highest", () => {
+    // A reading at the run's very end stands for no time.
+    const samples: HeartSample[] = [...steady(0, 120_000, 1000, () => 140), [120_000, 210]];
+    expect(heartSums(samples, [], 120_000)).toEqual({ avg: 140, max: 140 });
+  });
+
   it("takes readings in time order, and none from after the run or before it", () => {
     const samples = steady(0, 120_000, 1000, () => 140).reverse();
     expect(heartSums([...samples, [200_000, 230]], [], 120_000)).toEqual({ avg: 140, max: 140 });
