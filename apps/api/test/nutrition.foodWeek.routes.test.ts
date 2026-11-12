@@ -54,7 +54,9 @@ const item = (kcal: number, proteinG: number, source = "usda", sodiumMg: number 
   more: { fiberG: null, sugarsG: null, satFatG: null, unsatFatG: null, sodiumMg, potassiumMg: null, calciumMg: null, ironMg: null, magnesiumMg: null, vitaminDUg: null },
 });
 
-d("your week in food (real Postgres)", () => {
+// A minute a test, as the other database files allow: adding the test's trigger waits for every other file's open use of
+// food_day_targets, which on GitHub's full parallel run took past vitest's default 5 s (master, 2026-11-12, twice).
+d("your week in food (real Postgres)", { timeout: 60_000 }, () => {
   const sql = postgres(url ?? "", { prepare: false, max: 5 });
   let app: App | undefined;
   const api = (): App => {
