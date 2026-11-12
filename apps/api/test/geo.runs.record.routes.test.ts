@@ -241,8 +241,15 @@ d("record a run (real Postgres)", () => {
     for (let i = 0; i < RUN_MAX_PAUSES; i++) pauses.push([i * 20_000 + 1000, i * 20_000 + 2000]);
     const run = body({ points: northRun(RUN_MAX_POINTS, 3), elapsedMs: RUN_MAX_POINTS * 1000, pauses });
     expect(run.points.length).toBe(RUN_MAX_POINTS + 1);
+    // The route's list count leaves room for twelve hours of heart rate (37f-i), so the points' own count
+    // refuses it, before one point is read.
     const res = await save(me.cookies, run);
-    expect([res.statusCode, (JSON.parse(res.body) as { error: string }).error]).toEqual([413, "too_many_items"]);
+    expect([res.statusCode, (JSON.parse(res.body) as { error: string }).error]).toEqual([400, "validation_error"]);
+    // Past the longest run and its longest heart rate together, the list count refuses it unread.
+    const heart: [number, number][] = [];
+    for (let i = 0; i <= RUN_MAX_POINTS; i++) heart.push([i * 1000, 120]);
+    const over = await save(me.cookies, { ...run, runId: randomUUID(), heart });
+    expect([over.statusCode, (JSON.parse(over.body) as { error: string }).error]).toEqual([413, "too_many_items"]);
     expect((await sql`SELECT 1 FROM runs WHERE user_id = ${me.id}`).length).toBe(0);
   }, 30_000);
 

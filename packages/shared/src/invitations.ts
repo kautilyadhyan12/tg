@@ -183,4 +183,4 @@ export const GYM_CAN_SEE = [
 
 export const GYM_SEES_IF_YOU_ALLOW = ["Your meals and nutrition", "Your weight and body measurements"] as const;
 
-export const GYM_NEVER_SEES = ["Your running routes"] as const;
+export const GYM_NEVER_SEES = ["Your running routes", "Your heart rate"] as const;

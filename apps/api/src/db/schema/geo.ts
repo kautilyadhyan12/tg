@@ -56,6 +56,9 @@ export const runs = pgTable(
     bestMileS: integer("best_mile_s"),
     best5kS: integer("best_5k_s"),
     best10kS: integer("best_10k_s"),
+    // 0235 (ROADMAP 37f-i): the average and highest heart rate from a strap or watch (`heartSums`).
+    heartAvg: smallint("heart_avg"),
+    heartMax: smallint("heart_max"),
   },
   (t) => [
     index("runs_user_started_idx").on(t.userId, t.startedAt.desc()),
@@ -73,6 +76,10 @@ export const runs = pgTable(
     index("runs_climb_waiting_idx").on(t.createdAt).where(sql`${t.climbState} = 'waiting'`),
     check("runs_shape_check", sql`char_length(${t.shape}) BETWEEN 1 AND 4000`),
     check("runs_bests_check", sql`${t.best1kS} > 0 AND ${t.bestMileS} > 0 AND ${t.best5kS} > 0 AND ${t.best10kS} > 0`),
+    check(
+      "runs_heart_check",
+      sql`(${t.heartAvg} IS NULL AND ${t.heartMax} IS NULL) OR (${t.heartAvg} BETWEEN 30 AND 240 AND ${t.heartMax} BETWEEN 30 AND 240 AND ${t.heartAvg} <= ${t.heartMax})`,
+    ),
   ],
 );
 

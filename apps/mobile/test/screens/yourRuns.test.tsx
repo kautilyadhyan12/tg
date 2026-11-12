@@ -63,6 +63,8 @@ function makeRun(n: number, name: string, km: number, minutes: number, daysAgo: 
     records: [],
     paceLine: [],
     hillLine: [],
+    heartAvg: null,
+    heartMax: null,
   };
 }
 

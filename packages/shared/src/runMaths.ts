@@ -328,7 +328,7 @@ const speed = (a: Fix, b: Fix): number => {
 };
 
 /** The pauses inside the run, in order, with any overlap joined. */
-function cleanPauses(pauses: readonly RunPause[], elapsedMs: number): [number, number][] {
+export function cleanPauses(pauses: readonly RunPause[], elapsedMs: number): [number, number][] {
   const inside = pauses
     .map(([from, to]): [number, number] => [Math.max(0, from), Math.min(elapsedMs, to)])
     .filter(([from, to]) => to > from)

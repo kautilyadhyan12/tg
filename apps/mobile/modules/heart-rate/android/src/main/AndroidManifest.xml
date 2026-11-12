@@ -1,0 +1,11 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
+  <!-- Heart rate from a strap or a watch (37f-i). Android 12 and later: "Nearby devices", asked when the
+       person looks for a monitor; Bluetooth is never used to work out where they are. -->
+  <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation" tools:targetApi="s" />
+  <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+  <!-- Android 11 and before: Bluetooth's own two, and the location runs already ask for to find a monitor. -->
+  <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+  <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
+  <!-- A phone with no Bluetooth Low Energy still installs the app: it has no monitor to connect. -->
+  <uses-feature android:name="android.hardware.bluetooth_le" android:required="false" />
+</manifest>

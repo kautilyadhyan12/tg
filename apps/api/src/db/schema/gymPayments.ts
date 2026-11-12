@@ -930,7 +930,7 @@ export const gymAppPayments = pgTable(
     /** A purchase Square took money for that could not be given, marked checked by staff (0221). */
     clearedAt: timestamp("cleared_at", { withTimezone: true }),
     clearedBy: uuid("cleared_by").references(() => users.id, { onDelete: "set null" }),
-    /** Paid with the member not asking (0235; 20h): owed one Payment received notification, until sent or read. */
+    /** Paid with the member not asking (0236; 20h): owed one Payment received notification, until sent or read. */
     pushDueAt: timestamp("push_due_at", { withTimezone: true }),
     pushClaimedAt: timestamp("push_claimed_at", { withTimezone: true }),
   },

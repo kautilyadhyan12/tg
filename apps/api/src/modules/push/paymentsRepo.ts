@@ -1,5 +1,5 @@
 // PAYMENT RECEIVED, FOR THE PHONE (ROADMAP Stage 5 item 20h): the only file that reads or clears what a paid page in the
-// app is owed (`push_due_at`, migration 0235) for sending. The page's recording writes it (`appPaymentsRepo.recordPaid`,
+// app is owed (`push_due_at`, migration 0236) for sending. The page's recording writes it (`appPaymentsRepo.recordPaid`,
 // `appPurchasesRepo.recordBought`) when nobody was asking; the member's own phone reading the page takes it off
 // (`paidSeen`); the worker sends it here.
 import type { Sql, TransactionSql } from "postgres";
