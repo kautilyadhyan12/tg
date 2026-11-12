@@ -372,6 +372,47 @@ d("Buy in the app: given once, on their own record, only for what Square took (r
     expect((await typeChange(gymA, packA, { priceMinor: 9500 })).statusCode).toBe(200);
   });
 
+  it("what a line gives is read through the route, and a change to it, or to the gym's words, between reading and Pay is refused (20g round one H1)", async () => {
+    clock = new Date();
+    const gym = await makeGym("App Buy Gives", account(`ABGV${uniq().slice(-6)}`));
+    const [yoga] = await sql<{ id: string }[]>`
+      INSERT INTO gym_class_types (gym_id, name, minutes, places, colour, open_gym) VALUES (${gym.id}, 'Yoga', 45, NULL, 'blue', false) RETURNING id`;
+    const [spin] = await sql<{ id: string }[]>`
+      INSERT INTO gym_class_types (gym_id, name, minutes, places, colour, open_gym) VALUES (${gym.id}, 'Spin', 45, NULL, 'blue', false) RETURNING id`;
+    if (yoga === undefined || spin === undefined) throw new Error("no class types");
+    const pack = await addType(gym, { name: "10-class pack", description: "Any class on the timetable." });
+    const pass = await addType(gym, { name: "Day pass", priceMinor: 1500, packClasses: 1, packDays: 1 });
+    const tara = await member(gym, "Tara Singh");
+    const links = square.links.size;
+
+    // Read through the real route, in the price list's own words: a gym's day pass names the gym.
+    const shown = await lineOf(gym, tara.app, pack);
+    expect(shown.includes).toEqual(["Any class"]);
+    expect((await lineOf(gym, tara.app, pass)).includes).toEqual(["The gym or any class"]);
+
+    // Staff narrow the pack to two classes, by name in order, and add personal training, while Tara reads the old page.
+    const narrowed = await typeChange(gym, pack, { classTypeIds: [yoga.id, spin.id], includesPt: true });
+    expect(narrowed.statusCode, narrowed.body).toBe(200);
+    expect((await lineOf(gym, tara.app, pack)).includes).toEqual(["Only Spin, Yoga", "Personal training"]);
+    // Her Pay on the page she read is refused, and no page is made.
+    const refused = await buyPress(gym, tara.app, shown, { agreement: null });
+    expect(refused.statusCode, refused.body).toBe(409);
+    expect(errorOf(refused)).toBe("app_payment_changed");
+
+    // The gym's own words change the same way.
+    const before = await lineOf(gym, tara.app, pack);
+    const reworded = await typeChange(gym, pack, { classTypeIds: [yoga.id, spin.id], includesPt: true, description: "Yoga and Spin only." });
+    expect(reworded.statusCode, reworded.body).toBe(200);
+    const stale = await buyPress(gym, tara.app, before, { agreement: null });
+    expect(stale.statusCode, stale.body).toBe(409);
+    expect(errorOf(stale)).toBe("app_payment_changed");
+    expect(square.links.size).toBe(links);
+
+    // What is shown now is what is bought.
+    const page = parsed(await buyPress(gym, tara.app, await lineOf(gym, tara.app, pack), { agreement: null }));
+    expect(page.purchase).toMatchObject({ state: "open", typeId: pack, amountMinor: 9000 });
+  });
+
   it("a page left, or closed by staff, gives nothing and can no longer be paid", async () => {
     clock = new Date();
     const acct = account(`ABCL${uniq().slice(-6)}`);

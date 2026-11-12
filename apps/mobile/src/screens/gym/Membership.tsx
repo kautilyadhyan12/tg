@@ -18,6 +18,7 @@ import { membershipAgreementRow } from "./agreementView";
 import { CardOnFile } from "./CardOnFile";
 import { cardRemovedLine, cardSavedLine, myCardPath, myCardRemovePath, removeRefusalLine } from "./cardView";
 import { RemoveCardAsk, type RemoveAsk } from "./RemoveCardAsk";
+import { BUY_A_MEMBERSHIP } from "./buyView";
 import { PayButton, PayLines } from "./PayPart";
 import { billKeyStart, billTarget, feeKey, feeTarget } from "./payView";
 import { usePayInApp, type PayInApp } from "./usePayInApp";
@@ -69,13 +70,14 @@ export interface MembershipPlace {
   name: string;
 }
 
-/** The page over the Gym tab; closed while `place` is null. */
-export function MembershipPage({ place, onClose }: { place: MembershipPlace | null; onClose: () => void }) {
+/** The page over the Gym tab; closed while `place` is null. `onBuy` opens the place's Buy where it sells something in the
+ *  app (20g): offered where they hold no membership there. */
+export function MembershipPage({ place, onClose, onBuy = null }: { place: MembershipPlace | null; onClose: () => void; onBuy?: (() => void) | null }) {
   const insets = useSafeAreaInsets();
   return (
     <Modal visible={place !== null} animationType="slide" statusBarTranslucent navigationBarTranslucent onRequestClose={onClose}>
       <View testID="membership-page" accessibilityViewIsModal style={[styles.page, { paddingTop: insets.top }]}>
-        {place === null ? null : <MembershipBody key={place.id} place={place} onClose={onClose} bottom={insets.bottom} />}
+        {place === null ? null : <MembershipBody key={place.id} place={place} onClose={onClose} onBuy={onBuy} bottom={insets.bottom} />}
       </View>
     </Modal>
   );
@@ -87,7 +89,7 @@ type Opened = { number: number; refund: boolean } & ({ kind: "loading" } | { kin
 const PILL_TONES: Readonly<Record<Tone, "good" | "orange" | "bad" | "plain">> = { good: "good", orange: "orange", bad: "bad", plain: "plain" };
 const TEXT_TONES: Readonly<Record<Tone, "goodText" | "orange" | "badText" | "textSoft">> = { good: "goodText", orange: "orange", bad: "badText", plain: "textSoft" };
 
-function MembershipBody({ place, onClose, bottom }: { place: MembershipPlace; onClose: () => void; bottom: number }) {
+function MembershipBody({ place, onClose, onBuy, bottom }: { place: MembershipPlace; onClose: () => void; onBuy: (() => void) | null; bottom: number }) {
   const { session } = useSession();
   const [held, setHeld] = useState<Held>({ kind: "loading" });
   const [opened, setOpened] = useState<Opened | null>(null);
@@ -254,6 +256,7 @@ function MembershipBody({ place, onClose, bottom }: { place: MembershipPlace; on
             }
             receiptButton={receiptButton}
             pay={pay}
+            onBuy={onBuy}
             onAgreement={(m) => {
               setAgreementAt({ id: place.id, name: place.name, membershipId: m.id, membershipName: m.name });
             }}
@@ -305,14 +308,32 @@ function MembershipBody({ place, onClose, bottom }: { place: MembershipPlace; on
 
 type ReceiptButton = (number: number, what: string, refund?: boolean) => React.JSX.Element;
 
-function Sections({ view, card, receiptButton, pay, onAgreement }: { view: MyMembershipResponse; card: React.ReactNode; receiptButton: ReceiptButton; pay: PayInApp; onAgreement: (m: MyMembership) => void }) {
+function Sections({
+  view,
+  card,
+  receiptButton,
+  pay,
+  onBuy,
+  onAgreement,
+}: {
+  view: MyMembershipResponse;
+  card: React.ReactNode;
+  receiptButton: ReceiptButton;
+  pay: PayInApp;
+  onBuy: (() => void) | null;
+  onAgreement: (m: MyMembership) => void;
+}) {
   const gym = view.gym.name;
   const today = view.today;
   const none = noRecordText(view);
+  // Where they hold nothing here and the place sells in the app: Buy, under the line saying so (20g). A shared record buys
+  // at the front desk.
+  const buyButton = onBuy === null ? null : <Button label={BUY_A_MEMBERSHIP} kind="soft" small icon="bag" say={`Buy a membership or pack at ${gym}`} onPress={onBuy} />;
   if (none !== null) {
     return (
       <Card style={styles.box}>
         <Txt colour="text">{none}</Txt>
+        {view.record === "none" ? buyButton : null}
       </Card>
     );
   }
@@ -328,7 +349,12 @@ function Sections({ view, card, receiptButton, pay, onAgreement }: { view: MyMem
             {paidByText(view.paidBy, gym)}
           </Txt>
         )}
-        {view.memberships.length === 0 ? <Txt>{noMembershipText(gym)}</Txt> : null}
+        {view.memberships.length === 0 ? (
+          <>
+            <Txt>{noMembershipText(gym)}</Txt>
+            {view.paidBy === null ? buyButton : null}
+          </>
+        ) : null}
         {view.memberships.map((m) => (
           <MembershipCard key={m.id} m={m} gym={gym} paidBy={view.paidBy !== null} receiptButton={receiptButton} pay={pay} today={today} onAgreement={onAgreement} />
         ))}

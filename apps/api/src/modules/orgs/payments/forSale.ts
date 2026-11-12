@@ -11,7 +11,7 @@ import { discountFits, forSaleResponseSchema, forSaleWorked, isUnder18, type For
 import type { Sql } from "postgres";
 import { z } from "zod";
 import { dayInTz } from "../../gamification/streak.js";
-import { factsKeyOf } from "../agreement/factsKey.js";
+import { forSaleKeyOf } from "../agreement/factsKey.js";
 import { gymContact, typeDocumentSql } from "../agreement/repo.js";
 import { billDayOf } from "../memberships/billsSql.js";
 import { appMemberValues } from "../memberList/placeOnList.js";
@@ -95,6 +95,7 @@ export async function readForSale(deps: PaymentsDeps, userId: string, gymId: str
         : null;
     const worked = forSaleWorked({
       type: line.type,
+      included: line.included,
       taxes: line.taxes,
       taxIncluded,
       billDay,
@@ -104,7 +105,7 @@ export async function readForSale(deps: PaymentsDeps, userId: string, gymId: str
       friendGift,
       memberGift: memberGift === null ? null : { id: memberGift.id, kind: memberGift.kind, percentBp: memberGift.percentBp, amountMinor: memberGift.amountMinor, currency: memberGift.currency },
     });
-    return worked === null ? [] : [{ ...worked.item, factsKey: factsKeyOf(worked.item.facts), agreement: wordings.get(line.type.id) ?? null }];
+    return worked === null ? [] : [{ ...worked.item, factsKey: forSaleKeyOf(worked.item), agreement: wordings.get(line.type.id) ?? null }];
   });
   return forSaleResponseSchema.parse({ ...empty, signer: minor === true ? "guardian" : minor === false ? "person" : "either", items });
 }
