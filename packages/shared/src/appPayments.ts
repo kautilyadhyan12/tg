@@ -68,7 +68,14 @@ export type MyAppPaymentsResponse = z.infer<typeof myAppPaymentsResponseSchema>;
  *  since when, so the app opens that place's My membership if Android closed the app meanwhile. For a line bought (20g),
  *  the purchase too, so the app opens that place's Buy and ends that page. */
 export const phonePayAwaySchema = z
-  .object({ userId: z.string().min(1).max(64), gymId: z.uuid(), at: z.number().int().min(0), purchaseId: z.uuid().nullable().default(null) })
+  .object({
+    userId: z.string().min(1).max(64),
+    gymId: z.uuid(),
+    at: z.number().int().min(0),
+    purchaseId: z.uuid().nullable().default(null),
+    /** The page in the tab (20h): only that page's end lets it go. Null on one kept before. */
+    pageId: z.uuid().nullable().default(null),
+  })
   .strict();
 export type PhonePayAway = z.infer<typeof phonePayAwaySchema>;
 

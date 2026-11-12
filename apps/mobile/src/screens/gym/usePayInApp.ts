@@ -101,7 +101,7 @@ export function usePayInApp(gymId: string, onEnded: () => void): PayInApp {
           setSaid({ key, said: { tone: "warn", line: PAY_WAITING, again: true } });
           return;
         }
-        void forgetPayAway();
+        void forgetPayAway(payment.id);
         // A page that never opened says so, unless Square says it was paid after all.
         setSaid({ key, said: notOpened && answer.data.payment.state === "closed" ? { tone: "bad", line: PAY_NOT_OPENED } : how });
         ended.current();
@@ -112,7 +112,7 @@ export function usePayInApp(gymId: string, onEnded: () => void): PayInApp {
         setSaid({ key, said: { tone: "bad", line: PAY_NO_ANSWER, again: true } });
         return;
       }
-      void forgetPayAway();
+      void forgetPayAway(payment.id);
       setSaid({ key, said: payRefusalSaid(answer.error, answer.message) });
       ended.current();
     },
@@ -222,7 +222,7 @@ export function usePayInApp(gymId: string, onEnded: () => void): PayInApp {
         const there: Away = { key: target.key, payment, left: false, tabOpen: true };
         away.current = there;
         // Android may close the app behind the tab: kept, the app opens this place's My membership when it starts again.
-        if (userId !== null) await keepPayAway(userId, gymId);
+        if (userId !== null) await keepPayAway(userId, gymId, payment.id);
         // The page may have closed while it was kept: a ref read again after an await.
         if (gone()) return;
         working({ key: target.key, line: PAY_AWAY });

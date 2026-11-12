@@ -84,7 +84,7 @@ export function useBuyInApp(gymId: string, onEnded: () => void): BuyInApp {
       const answer = await session.signedIn({ method: "POST", path: purchaseClosePath(gymId, purchaseId) }, appPurchaseResponseSchema);
       ending.current.delete(purchaseId);
       // A page that has ended is let go on the phone even where Buy was closed meanwhile, so the app does not open it again.
-      if (answer.kind === "ok" && answer.data.purchase.id === purchaseId && answer.data.purchase.state !== "open") void forgetPayAway();
+      if (answer.kind === "ok" && answer.data.purchase.id === purchaseId && answer.data.purchase.state !== "open") void forgetPayAway(purchaseId);
       if (!live.current) return;
       working(null);
       if (answer.kind === "ok") {
@@ -96,7 +96,7 @@ export function useBuyInApp(gymId: string, onEnded: () => void): BuyInApp {
           return;
         }
         if (purchase.state === "paid") {
-          void forgetPayAway();
+          void forgetPayAway(purchaseId);
           setPaid({ at, purchase });
           ended.current();
           return;
@@ -108,7 +108,7 @@ export function useBuyInApp(gymId: string, onEnded: () => void): BuyInApp {
           if (how !== null) setSaid({ at, said: how });
           return;
         }
-        void forgetPayAway();
+        void forgetPayAway(purchaseId);
         if (how !== null) setSaid({ at, said: notOpened && purchase.state === "closed" ? { tone: "bad", line: PAY_NOT_OPENED, ended: true } : how });
         ended.current();
         return;
@@ -119,7 +119,7 @@ export function useBuyInApp(gymId: string, onEnded: () => void): BuyInApp {
         setSaid({ at, said: { tone: "bad", line: PAY_NO_ANSWER, again: true, ended: true } });
         return;
       }
-      void forgetPayAway();
+      void forgetPayAway(purchaseId);
       setSaid({ at, said: { ...buyRefusalSaid(answer.error, answer.message), ended: true } });
       ended.current();
     },
@@ -207,7 +207,7 @@ export function useBuyInApp(gymId: string, onEnded: () => void): BuyInApp {
         const there: Away = { at: typeId, purchase, left: false, tabOpen: true };
         away.current = there;
         // Android may close the app behind the tab: kept, the app opens this place's Buy when it starts again.
-        if (userId !== null) await keepPayAway(userId, gymId, Date.now(), purchase.id);
+        if (userId !== null) await keepPayAway(userId, gymId, purchase.id, Date.now(), purchase.id);
         // The page may have closed while it was kept: a ref read again after an await.
         if (gone()) return;
         working({ at: typeId, line: PAY_AWAY });
