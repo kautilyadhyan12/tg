@@ -34,6 +34,8 @@ export interface BuyInApp {
   resume: (purchaseId: string) => void;
   /** Forgets what was said (another line opened). */
   clear: () => void;
+  /** Closes the box saying how a page ended: forgets it, and what was bought. */
+  dismiss: () => void;
 }
 
 interface Away {
@@ -88,7 +90,7 @@ export function useBuyInApp(gymId: string, onEnded: () => void): BuyInApp {
         if (purchase.id !== purchaseId) {
           // An answer about another page is no answer about this one.
           unanswered.current = { at, id: purchaseId };
-          setSaid({ at, said: { tone: "bad", line: PAY_NO_ANSWER, again: true } });
+          setSaid({ at, said: { tone: "bad", line: PAY_NO_ANSWER, again: true, ended: true } });
           return;
         }
         if (purchase.state === "paid") {
@@ -105,17 +107,17 @@ export function useBuyInApp(gymId: string, onEnded: () => void): BuyInApp {
           return;
         }
         void forgetPayAway();
-        if (how !== null) setSaid({ at, said: notOpened && purchase.state === "closed" ? { tone: "bad", line: PAY_NOT_OPENED } : how });
+        if (how !== null) setSaid({ at, said: notOpened && purchase.state === "closed" ? { tone: "bad", line: PAY_NOT_OPENED, ended: true } : how });
         ended.current();
         return;
       }
       if (answer.kind === "no_answer") {
         unanswered.current = { at, id: purchaseId };
-        setSaid({ at, said: { tone: "bad", line: PAY_NO_ANSWER, again: true } });
+        setSaid({ at, said: { tone: "bad", line: PAY_NO_ANSWER, again: true, ended: true } });
         return;
       }
       void forgetPayAway();
-      setSaid({ at, said: buyRefusalSaid(answer.error, answer.message) });
+      setSaid({ at, said: { ...buyRefusalSaid(answer.error, answer.message), ended: true } });
       ended.current();
     },
     [session, gymId, working],
@@ -246,5 +248,11 @@ export function useBuyInApp(gymId: string, onEnded: () => void): BuyInApp {
     setSaid(null);
   }, []);
 
-  return { busy, said, paid, pay, checkAgain, resume, clear };
+  const dismiss = useCallback(() => {
+    if (busyNow.current) return;
+    setSaid(null);
+    setPaid(null);
+  }, []);
+
+  return { busy, said, paid, pay, checkAgain, resume, clear, dismiss };
 }

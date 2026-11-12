@@ -7,7 +7,7 @@ import {
   endedBuySaid,
   lineSummary,
   nameLabel,
-  paidBuyLine,
+  paidShortLine,
   payLabel,
   signerOf,
   todayLine,
@@ -77,16 +77,15 @@ describe("how it ended: bought only from the server's own paid", () => {
     appPurchaseSchema.parse({ id: "7a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d", typeId: PACK_ID, name: "10-class pack", amountMinor: 9000, currency: "USD", state, url: null, closesAt: null, membershipId: null, receiptNumber: null });
 
   it("every state that is not paid never reads as bought", () => {
-    expect(endedBuySaid(purchase("closed"))).toEqual({ tone: "plain", line: NOT_PAID });
-    expect(endedBuySaid(purchase("check"))).toEqual({ tone: "warn", line: PAY_CHECK });
-    expect(endedBuySaid(purchase("open"))).toEqual({ tone: "warn", line: PAY_WAITING, again: true });
+    expect(endedBuySaid(purchase("closed"))).toEqual({ tone: "plain", line: NOT_PAID, ended: true });
+    expect(endedBuySaid(purchase("check"))).toEqual({ tone: "warn", line: PAY_CHECK, ended: true });
+    expect(endedBuySaid(purchase("open"))).toEqual({ tone: "warn", line: PAY_WAITING, again: true, ended: true });
     for (const state of ["closed", "check", "open"] as const) expect(endedBuySaid(purchase(state))?.line).not.toMatch(/success|yours/i);
     expect(endedBuySaid(purchase("paid"))).toBeNull();
   });
 
-  it("the paid line names what was bought, and the agreement only where one was signed", () => {
-    expect(paidBuyLine(purchase("paid"), true)).toBe("$90.00 paid. 10-class pack is yours, and your signed agreement is on My membership.");
-    expect(paidBuyLine(purchase("paid"), false)).toBe("$90.00 paid. 10-class pack is yours. It’s on My membership.");
+  it("the paid line names what was bought and what was paid", () => {
+    expect(paidShortLine(purchase("paid"))).toBe("$90.00 paid. 10-class pack is yours.");
   });
 
   it("a refusal says the server's words; what changed reads the list again; money owed opens My membership", () => {

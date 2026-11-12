@@ -21,6 +21,13 @@ export const BUY_A_MEMBERSHIP = "Buy a membership";
 export const VIEW_MEMBERSHIP = "View My membership";
 export const TO_MEMBERSHIP = "Go to My membership";
 export const PAID_TITLE = "Payment successful";
+export const CANCELLED_TITLE = "Payment cancelled";
+export const PENDING_TITLE = "Payment pending";
+export const CONFIRMING_TITLE = "Confirming your payment";
+export const SHOW_PASS = "Show my pass";
+export const PASS_LINE = "Show your pass at the front desk when you arrive.";
+export const WHAT_YOU_GET = "What you get";
+export const MY_PURCHASES = "My purchases and receipts";
 export const WHO_SIGNS = "Who is signing?";
 export const SIGNER_LABELS: Readonly<Record<DeskSigner, string>> = { person: "Me", guardian: "My parent or guardian" };
 export const NOT_READY = "Type the full name and tick the box to pay.";
@@ -85,15 +92,21 @@ export function buyBody(line: Pick<ForSaleLine, "typeId" | "firstPayment" | "fac
   };
 }
 
-/** "$90.00 paid. 10-class pack is yours, and your signed agreement is on My membership." */
-export function paidBuyLine(p: Pick<AppPurchase, "amountMinor" | "currency" | "name">, signed: boolean): string {
-  const paid = `${formatMinor(p.amountMinor, p.currency)} paid. ${p.name} is yours`;
-  return signed ? `${paid}, and your signed agreement is on My membership.` : `${paid}. It’s on My membership.`;
+/** "$15.00 paid. Day pass is yours.", where whether an agreement was signed is not known here. */
+export const paidShortLine = (p: Pick<AppPurchase, "amountMinor" | "currency" | "name">): string => `${formatMinor(p.amountMinor, p.currency)} paid. ${p.name} is yours.`;
+
+/** What a line gives, in the order a member reads it: what the price list says it includes, how many classes and until
+ *  when, then the gym's own description. */
+export function whatYouGet(line: Pick<ForSaleLine, "includes" | "facts" | "priceMinor" | "currency" | "description">): string[] {
+  const summary = lineSummary(line);
+  const out = [...line.includes, summary.price, ...(summary.until === null ? [] : [summary.until])];
+  const d = line.description?.trim() ?? "";
+  return d === "" ? out : [...out, d];
 }
-/** On Buy, for a page ended after the app started again: "Payment successful. 10-class pack is yours." */
-export const paidResumedLine = (p: Pick<AppPurchase, "name">): string => `${PAID_TITLE}. ${p.name} is yours.`;
 
 export interface BuySaid extends PaySaid {
+  /** How a page ended, or that Square has not said: shown in the box in the middle of the screen. */
+  ended?: boolean;
   /** A Go to My membership button in place of Pay: what stands in the way is paid there. */
   toMembership?: boolean;
   /** What was shown has changed: the list is read again. */
@@ -104,11 +117,11 @@ export interface BuySaid extends PaySaid {
 export function endedBuySaid(p: Pick<AppPurchase, "state">): BuySaid | null {
   switch (p.state) {
     case "closed":
-      return { tone: "plain", line: NOT_PAID };
+      return { tone: "plain", line: NOT_PAID, ended: true };
     case "check":
-      return { tone: "warn", line: PAY_CHECK };
+      return { tone: "warn", line: PAY_CHECK, ended: true };
     case "open":
-      return { tone: "warn", line: PAY_WAITING, again: true };
+      return { tone: "warn", line: PAY_WAITING, again: true, ended: true };
     case "paid":
       return null;
   }

@@ -10,6 +10,7 @@ import { CoverPage } from "../../look/CoverPage";
 import { Field } from "../../look/Field";
 import { Icon } from "../../look/Icon";
 import { Modal } from "../../look/Modal";
+import { Sheet } from "../../look/Sheet";
 import { Tick } from "../../look/Tick";
 import { Txt } from "../../look/Txt";
 import { useSession } from "../../session/SessionProvider";
@@ -22,8 +23,14 @@ import {
   GUARDIAN_LINE,
   NOT_READY,
   NOT_READY_WHO,
+  CANCELLED_TITLE,
+  CONFIRMING_TITLE,
+  MY_PURCHASES,
   PAID_TITLE,
+  PASS_LINE,
   PAY_SECURE,
+  PENDING_TITLE,
+  SHOW_PASS,
   SIGNER_LABELS,
   TODAY_TITLE,
   TO_MEMBERSHIP,
@@ -37,15 +44,16 @@ import {
   nameLabel,
   nothingForSale,
   notSoldNow,
-  paidBuyLine,
-  paidResumedLine,
+  paidShortLine,
   payLabel,
   signerOf,
   todayLine,
   todayParts,
+  WHAT_YOU_GET,
+  whatYouGet,
 } from "./buyView";
 import { SaidBox } from "./PayPart";
-import { CHECK_AGAIN } from "./payView";
+import { CHECK_AGAIN, NOT_PAID } from "./payView";
 import { RESUMED, useBuyInApp, type BuyInApp } from "./useBuyInApp";
 
 // Buy in the app (ROADMAP Stage 5 item 20g; spec Part 3 §14.8; Kd's drawing of 2026-11-12, `reviews/20g-mock.png`). The
@@ -87,12 +95,12 @@ export function useSellsInApp(gymIds: readonly string[], read: unknown): Readonl
 }
 
 /** The page over the Gym tab; closed while `place` is null. */
-export function BuyPage({ place, onClose, onMembership }: { place: BuyPlace | null; onClose: () => void; onMembership: (place: BuyPlace) => void }) {
+export function BuyPage({ place, onClose, onMembership, onPass }: { place: BuyPlace | null; onClose: () => void; onMembership: (place: BuyPlace) => void; onPass: (place: BuyPlace) => void }) {
   const insets = useSafeAreaInsets();
   return (
     <Modal visible={place !== null} animationType="slide" statusBarTranslucent navigationBarTranslucent onRequestClose={onClose}>
       <View testID="buy-page" accessibilityViewIsModal style={[styles.page, { paddingTop: insets.top }]}>
-        {place === null ? null : <BuyBody key={place.id} place={place} onClose={onClose} onMembership={onMembership} bottom={insets.bottom} />}
+        {place === null ? null : <BuyBody key={place.id} place={place} onClose={onClose} onMembership={onMembership} onPass={onPass} bottom={insets.bottom} />}
       </View>
     </Modal>
   );
@@ -100,7 +108,19 @@ export function BuyPage({ place, onClose, onMembership }: { place: BuyPlace | nu
 
 type Held = { kind: "loading" } | { kind: "failed"; status: number | null } | { kind: "ok"; view: ForSaleResponse };
 
-function BuyBody({ place, onClose, onMembership, bottom }: { place: BuyPlace; onClose: () => void; onMembership: (place: BuyPlace) => void; bottom: number }) {
+function BuyBody({
+  place,
+  onClose,
+  onMembership,
+  onPass,
+  bottom,
+}: {
+  place: BuyPlace;
+  onClose: () => void;
+  onMembership: (place: BuyPlace) => void;
+  onPass: (place: BuyPlace) => void;
+  bottom: number;
+}) {
   const { session } = useSession();
   const [held, setHeld] = useState<Held>({ kind: "loading" });
   // The line whose page is open, by its type id: read from the newest list each time.
@@ -143,10 +163,20 @@ function BuyBody({ place, onClose, onMembership, bottom }: { place: BuyPlace; on
     resume(place.resume);
   }, [place.resume, resume]);
 
+  // Bought: its page closes, and the box in the middle says so over the list.
+  const boughtNow = buy.paid !== null;
+  useEffect(() => {
+    if (boughtNow) setOpenLine(null);
+  }, [boughtNow]);
+
   const view = held.kind === "ok" ? held.view : null;
   const line = view === null || openLine === null ? null : (view.items.find((one) => one.typeId === openLine) ?? null);
   const toMembership = () => {
     onMembership(place);
+  };
+  const open = (typeId: string) => {
+    buy.clear();
+    setOpenLine(typeId);
   };
 
   return (
@@ -163,7 +193,7 @@ function BuyBody({ place, onClose, onMembership, bottom }: { place: BuyPlace; on
         </View>
       </View>
       <ScrollView style={styles.grow} contentContainerStyle={[styles.list, { paddingBottom: bottom + 24 }]}>
-        <Resumed buy={buy} onMembership={toMembership} />
+        {buy.busy?.at === RESUMED ? <Txt kind="small">{buy.busy.line}</Txt> : null}
         {held.kind === "loading" ? (
           <Txt kind="small">Loading…</Txt>
         ) : held.kind === "failed" ? (
@@ -196,9 +226,8 @@ function BuyBody({ place, onClose, onMembership, bottom }: { place: BuyPlace; on
                 key={item.typeId}
                 item={item}
                 canBuy={held.view.record !== "shared"}
-                onBuy={() => {
-                  buy.clear();
-                  setOpenLine(item.typeId);
+                onOpen={() => {
+                  open(item.typeId);
                 }}
               />
             ))}
@@ -208,6 +237,7 @@ function BuyBody({ place, onClose, onMembership, bottom }: { place: BuyPlace; on
             </View>
           </View>
         )}
+        {held.kind === "ok" ? <Button label={MY_PURCHASES} kind="link" icon="folder" small say={`${MY_PURCHASES} at ${place.name}`} onPress={toMembership} /> : null}
       </ScrollView>
       <LinePage
         open={openLine !== null}
@@ -222,65 +252,107 @@ function BuyBody({ place, onClose, onMembership, bottom }: { place: BuyPlace; on
         }}
         onMembership={toMembership}
       />
+      <ResultBox
+        gym={place.name}
+        buy={buy}
+        onMembership={toMembership}
+        onPass={() => {
+          onPass(place);
+        }}
+      />
     </>
   );
 }
 
 const SHARED_LINE = "Two app accounts share your record here, so buy at the front desk.";
 
-/** What happened to a page kept from before the app was closed, at the top of the list. */
-function Resumed({ buy, onMembership }: { buy: BuyInApp; onMembership: () => void }) {
-  const busy = buy.busy?.at === RESUMED ? buy.busy.line : null;
-  const paid = buy.paid?.at === RESUMED ? buy.paid.purchase : null;
-  const said = buy.said?.at === RESUMED ? buy.said.said : null;
-  if (busy !== null) return <Txt kind="small">{busy}</Txt>;
-  if (paid !== null) {
-    return (
-      <View testID="buy-resumed" style={styles.said}>
-        <SaidBox testID="buy-resumed-paid" tone="good" line={paidResumedLine(paid)} />
-        <Button label={VIEW_MEMBERSHIP} kind="link" small onPress={onMembership} />
-      </View>
-    );
-  }
-  if (said === null) return null;
+/** How a page ended, in a box in the middle of the screen, over whatever is open: bought, with Show my pass and My
+ *  membership; cancelled, pending, or not answered yet with Check status. A refusal at Pay is said beside Pay instead. */
+function ResultBox({ gym, buy, onMembership, onPass }: { gym: string; buy: BuyInApp; onMembership: () => void; onPass: () => void }) {
+  const paid = buy.paid?.purchase ?? null;
+  const said = buy.said?.said.ended === true ? buy.said.said : null;
+  const busy = buy.busy !== null && said !== null ? buy.busy.line : null;
+  const cancelled = said?.line === NOT_PAID;
+  const title = paid !== null ? PAID_TITLE : said === null ? "" : said.again === true ? CONFIRMING_TITLE : cancelled ? CANCELLED_TITLE : said.tone === "warn" ? PENDING_TITLE : "";
+  const icon = paid !== null ? "check" : cancelled ? "x" : "info";
+  const tone = paid !== null ? styles.markGood : said?.tone === "bad" ? styles.markBad : cancelled ? styles.markPlain : styles.markWarn;
+  const iconColour = paid !== null ? "goodText" : said?.tone === "bad" ? "badText" : cancelled ? "textSoft" : "orange";
+  const words = paid !== null ? `${paidShortLine(paid)} ${PASS_LINE}` : said === null ? "" : cancelled ? NOT_CHARGED : said.line;
   return (
-    <View testID="buy-resumed" style={styles.said}>
-      <SaidBox testID="buy-resumed-said" tone={said.tone} line={said.line} />
-      {said.again === true ? <Button label={CHECK_AGAIN} kind="link" small onPress={buy.checkAgain} /> : null}
-    </View>
-  );
-}
-
-function LineCard({ item, canBuy, onBuy }: { item: ForSaleLine; canBuy: boolean; onBuy: () => void }) {
-  const summary = lineSummary(item);
-  const today = todayLine(item);
-  return (
-    <Card testID={`for-sale-${item.typeId}`} style={styles.box}>
-      <View style={styles.row}>
-        <Txt kind="h3" style={styles.grow}>
-          {item.name}
-        </Txt>
-        <Txt kind="h3">{formatMinor(item.priceMinor, item.currency)}</Txt>
-      </View>
-      <View style={styles.lines}>
-        <Txt kind="small">{summary.price}</Txt>
-        {summary.until === null ? null : <Txt kind="small">{summary.until}</Txt>}
-        {item.description === null || item.description.trim() === "" ? null : <Txt kind="small">{item.description}</Txt>}
-        {today === null ? null : (
-          <Txt kind="small" colour="orange">
-            {today}
+    <Sheet open={paid !== null || said !== null} place="middle" title={title} onClose={buy.dismiss}>
+      <View testID={paid !== null ? "buy-paid" : "buy-ended"} style={styles.result}>
+        <View style={[styles.mark, tone]}>
+          <Icon name={icon} size={28} colour={iconColour} />
+        </View>
+        <Txt style={styles.centre}>{words}</Txt>
+        {busy === null ? null : (
+          <Txt kind="small" style={styles.centre}>
+            {busy}
           </Txt>
         )}
       </View>
-      {canBuy ? (
-        <View style={[styles.row, styles.rule]}>
-          <View style={styles.grow} />
-          <Button label={BUY} compact say={buySay(item)} onPress={onBuy} />
+      {paid !== null ? (
+        <View style={styles.resultButtons}>
+          <Button label={SHOW_PASS} icon="qr" wide say={`${SHOW_PASS} at ${gym}`} onPress={onPass} />
+          <Button label={VIEW_MEMBERSHIP} kind="link" icon="folder" onPress={onMembership} />
+          <Button label="Done" kind="quiet" onPress={buy.dismiss} />
         </View>
-      ) : null}
-    </Card>
+      ) : (
+        <View style={styles.resultButtons}>
+          {said?.again === true ? <Button label={CHECK_AGAIN} wide busy={busy !== null} onPress={buy.checkAgain} /> : null}
+          {said?.again === true ? <Button label="Close" kind="quiet" onPress={buy.dismiss} /> : <Button label="OK" wide onPress={buy.dismiss} />}
+        </View>
+      )}
+    </Sheet>
   );
 }
+
+const NOT_CHARGED = "You weren’t charged.";
+
+function LineCard({ item, canBuy, onOpen }: { item: ForSaleLine; canBuy: boolean; onOpen: () => void }) {
+  const summary = lineSummary(item);
+  const today = todayLine(item);
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${item.name}, ${formatMinor(item.priceMinor, item.currency)}. ${DETAILS}`}
+      onPress={onOpen}
+      style={({ pressed }) => (pressed ? styles.pressed : null)}
+    >
+      <Card testID={`for-sale-${item.typeId}`} style={styles.box}>
+        <View style={styles.row}>
+          <Txt kind="h3" style={styles.grow}>
+            {item.name}
+          </Txt>
+          <Txt kind="h3">{formatMinor(item.priceMinor, item.currency)}</Txt>
+        </View>
+        <View style={styles.lines}>
+          {item.includes.map((one) => (
+            <Txt key={one} kind="small" colour="text">
+              {one}
+            </Txt>
+          ))}
+          <Txt kind="small">{summary.price}</Txt>
+          {summary.until === null ? null : <Txt kind="small">{summary.until}</Txt>}
+          {item.description === null || item.description.trim() === "" ? null : <Txt kind="small">{item.description}</Txt>}
+          {today === null ? null : (
+            <Txt kind="small" colour="orange">
+              {today}
+            </Txt>
+          )}
+        </View>
+        <View style={[styles.row, styles.rule]}>
+          <Txt kind="small" colour="orange" style={styles.grow}>
+            {DETAILS}
+          </Txt>
+          {canBuy ? <Button label={BUY} compact say={buySay(item)} onPress={onOpen} /> : null}
+        </View>
+      </Card>
+    </Pressable>
+  );
+}
+
+const DETAILS = "See details";
 
 /** A line's page: what they pay today, its details, the agreement to sign where the gym asks for one, and Pay. Closed while
  *  `open` is false. `line` is the newest list's; null where the gym no longer sells it. */
@@ -327,12 +399,10 @@ function LineBody({
   const [picked, setPicked] = useState<DeskSigner | null>(null);
   const [name, setName] = useState("");
   const [agreed, setAgreed] = useState(false);
-  // Whether the press that was paid signed the agreement, for the line saying so.
-  const [sentSigned, setSentSigned] = useState(false);
   const signer = known ?? picked;
   const busy = buy.busy?.at === typeId ? buy.busy.line : null;
-  const said = buy.said?.at === typeId ? buy.said.said : null;
-  const paid = buy.paid?.at === typeId ? buy.paid.purchase : null;
+  // What Pay was refused with is said beside it; how a page ended is the box in the middle.
+  const said = buy.said?.at === typeId && buy.said.said.ended !== true ? buy.said.said : null;
   // What they read changed (the details, the wording or who signs): the tick is given again on what is shown now.
   const agreementId = line?.agreement?.id ?? null;
   const factsKey = line?.factsKey ?? null;
@@ -344,36 +414,9 @@ function LineBody({
   }
   const ready = line !== null && (line.agreement === null || (signer !== null && waiverReadyToSign(name, agreed)));
 
-  if (paid !== null) {
-    return (
-      <CoverPage
-        open
-        title={paid.name}
-        onClose={onClose}
-        foot={
-          <>
-            <Button label={VIEW_MEMBERSHIP} icon="folder" wide onPress={onMembership} />
-            <Button label="Done" kind="quiet" onPress={onClose} />
-          </>
-        }
-      >
-        <View testID="buy-paid" style={styles.done}>
-          <View style={styles.doneMark}>
-            <Icon name="check" size={32} colour="goodText" />
-          </View>
-          <Txt kind="h2" style={styles.centre}>
-            {PAID_TITLE}
-          </Txt>
-          <Txt style={styles.centre}>{paidBuyLine(paid, sentSigned)}</Txt>
-        </View>
-      </CoverPage>
-    );
-  }
-
   const pay = () => {
     if (line === null || !ready || busy !== null) return;
     const sign = line.agreement === null || signer === null ? null : { signer, name: cleanSignedName(name) };
-    setSentSigned(sign !== null);
     buy.pay(line.typeId, buyBody(line, sign));
   };
 
@@ -423,6 +466,19 @@ function LineBody({
                 {line.name}
               </Txt>
             </View>
+          </View>
+          <View testID="buy-what" style={styles.what}>
+            <Txt kind="eyebrow" colour="textFaint">
+              {WHAT_YOU_GET}
+            </Txt>
+            {whatYouGet(line).map((one) => (
+              <View key={one} style={styles.whatRow}>
+                <Icon name="check" size={16} colour="orange" />
+                <Txt colour="text" style={styles.grow}>
+                  {one}
+                </Txt>
+              </View>
+            ))}
           </View>
           <View testID="buy-today" style={styles.today}>
             <View style={styles.grow}>
@@ -533,15 +589,14 @@ const styles = StyleSheet.create({
   words: { lineHeight: 21 },
   who: { gap: 10 },
   centre: { textAlign: "center" },
-  done: { alignItems: "center", gap: 10, paddingTop: 48 },
-  doneMark: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colours.goodFill,
-    borderWidth: 1,
-    borderColor: colours.goodLine,
-  },
+  pressed: { opacity: 0.85 },
+  what: { gap: 8 },
+  whatRow: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
+  result: { alignItems: "center", gap: 12 },
+  resultButtons: { gap: 4, alignItems: "center", alignSelf: "stretch", paddingTop: 8 },
+  mark: { width: 64, height: 64, borderRadius: 32, alignItems: "center", justifyContent: "center", borderWidth: 1 },
+  markGood: { backgroundColor: colours.goodFill, borderColor: colours.goodLine },
+  markBad: { backgroundColor: colours.badFill, borderColor: colours.badLine },
+  markWarn: { backgroundColor: colours.orangeFill, borderColor: colours.orangeLine },
+  markPlain: { backgroundColor: colours.fill, borderColor: colours.lineStrong },
 });

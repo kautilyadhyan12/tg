@@ -1,4 +1,4 @@
-import { forSaleLineSchema, forSaleWorked, type ForSaleLine, type ForSaleType } from "@app/shared";
+import { forSaleLineSchema, forSaleWorked, type ForSaleIncluded, type ForSaleLine, type ForSaleType } from "@app/shared";
 
 // Lines a gym sells in the app, as the server words them: made by the server's own `forSaleWorked` (Buy in the app, 20g),
 // so a test reads what the server would send, never a hand-made copy of its words.
@@ -31,10 +31,18 @@ export const PACK_TYPE = type({ id: PACK_ID, name: "10-class pack", kind: "pack"
 export const DAY_TYPE = type({ id: DAY_ID, name: "Day pass", kind: "pack", priceMinor: 1500, packClasses: 1, packDays: 1 });
 export const SUMMER_TYPE = type({ id: SUMMER_ID, name: "Summer month", kind: "one_time", priceMinor: 12000, termCount: 1, termUnit: "month", joiningFeeMinor: 2500 });
 
+/** Every class, no personal training: a pack reads "Any class". */
+export const ANY_CLASS: ForSaleIncluded = { access: "all_classes", bookingsLimit: null, bookingsPeriod: null, classNames: null, includesPt: false, ptLimit: null, ptPeriod: null };
+
 /** A line as the phone reads it, with the key of its details and, where `agreement`, the gym's agreement to sign. */
-export function lineOf(t: ForSaleType, options: { agreement?: boolean; factsKey?: string; personName?: string; friendGift?: boolean } = {}): ForSaleLine {
+
+export function lineOf(
+  t: ForSaleType,
+  options: { agreement?: boolean; factsKey?: string; personName?: string; friendGift?: boolean; included?: ForSaleIncluded } = {},
+): ForSaleLine {
   const worked = forSaleWorked({
     type: t,
+    included: { lines: options.included ?? ANY_CLASS, orgType: "gym" },
     taxes: [],
     taxIncluded: false,
     billDay: null,

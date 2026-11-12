@@ -501,6 +501,10 @@ export function GymScreen() {
           setBuyAt(null);
           setMembershipAt({ id: at.id, name: at.name });
         }}
+        onPass={(at) => {
+          setBuyAt(null);
+          setPassOrgType(joined.find((org) => org.id === at.id)?.orgType ?? "unknown");
+        }}
         onClose={() => {
           setBuyAt(null);
           void readMine();

@@ -95,6 +95,7 @@ export async function readForSale(deps: PaymentsDeps, userId: string, gymId: str
         : null;
     const worked = forSaleWorked({
       type: line.type,
+      included: line.included,
       taxes: line.taxes,
       taxIncluded,
       billDay,
