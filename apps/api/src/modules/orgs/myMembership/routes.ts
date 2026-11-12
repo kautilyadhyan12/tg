@@ -6,17 +6,20 @@
 //   GET  /v1/orgs/:gymId/my-membership/memberships/:membershipId/cancel   the box under Cancel membership (18l)
 //   POST /v1/orgs/:gymId/my-membership/memberships/:membershipId/cancel   cancel it, as the box said
 //   POST /v1/orgs/:gymId/my-membership/cancels/:cancelId/reason           why they are leaving, afterwards
+//   GET  /v1/orgs/:gymId/my-membership/memberships/:membershipId/keep     the box under Keep my membership (18l-ii-a)
+//   POST /v1/orgs/:gymId/my-membership/memberships/:membershipId/keep     keep it, as the box said
 //   GET  /v1/orgs/:gymId/app-cancels                                       Overview's Cancelled in the app, for staff
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { Sql } from "postgres";
 import type { z } from "zod";
-import { myCancelReasonRequestSchema, myCancelRequestSchema, receiptParamsSchema } from "@app/shared";
+import { myCancelReasonRequestSchema, myCancelRequestSchema, myKeepRequestSchema, receiptParamsSchema } from "@app/shared";
 import type { LiveNewsSender } from "../../live/news.js";
 import type { RedisLike } from "../../../redis.js";
 import { createDualRateLimit } from "../../auth/rateLimit.js";
 import { myCancelParamsSchema, myCancelReasonParamsSchema, orgParamsSchema } from "../schemas.js";
 import * as cancel from "./cancel.js";
 import type { CancelEmailSender } from "./cancelEmail.js";
+import * as keep from "./keep.js";
 import * as service from "./service.js";
 
 function parseOr400<S extends z.ZodType>(schema: S, value: unknown, req: FastifyRequest, reply: FastifyReply): z.output<S> | null {
@@ -98,6 +101,27 @@ export function registerMyMembershipRoutes(
     const body = parseOr400(myCancelRequestSchema, req.body, req, reply);
     if (body === null) return;
     const done = await cancel.cancelInApp(cancelDeps, requireUserId(req), params.gymId, params.membershipId, body, cancelGate(req, reply));
+    if (done === null) return;
+    return reply.status(200).header("cache-control", "no-store").send(done);
+  });
+
+  // Keep my membership (18l-ii-a): the cancel's own limit, as a member keeps as seldom as they cancel.
+  const keepUrl = "/v1/orgs/:gymId/my-membership/memberships/:membershipId/keep";
+
+  app.get(keepUrl, { preHandler: app.authenticate }, async (req, reply) => {
+    const params = parseOr400(myCancelParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const ask = await keep.readKeepAsk(cancelDeps, requireUserId(req), params.gymId, params.membershipId, gate(req, reply));
+    if (ask === null) return;
+    return reply.status(200).header("cache-control", "no-store").send(ask);
+  });
+
+  app.post(keepUrl, { preHandler: app.authenticate }, async (req, reply) => {
+    const params = parseOr400(myCancelParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(myKeepRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    const done = await keep.keepInApp(cancelDeps, requireUserId(req), params.gymId, params.membershipId, body, cancelGate(req, reply));
     if (done === null) return;
     return reply.status(200).header("cache-control", "no-store").send(done);
   });

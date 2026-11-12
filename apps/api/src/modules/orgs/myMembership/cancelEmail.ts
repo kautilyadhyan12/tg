@@ -1,9 +1,10 @@
-// The confirmation of a membership cancelled in the app (ROADMAP 18l): the same three shapes as the agreement copy's
-// seam (log-only · dev · resend). The log-only sender rejects, so the app never says an email went that did not.
+// The confirmation of a membership cancelled in the app (ROADMAP 18l), and of one kept there afterwards (18l-ii-a): the
+// same three shapes as the agreement copy's seam (log-only · dev · resend). The log-only sender rejects, so the app
+// never says an email went that did not.
 import type { FastifyBaseLogger } from "fastify";
 import type { AppConfig } from "../../../config.js";
 import type { EmailTransport } from "../../../email/resend.js";
-import { membershipCancelledEmail } from "../../../email/templates.js";
+import { membershipCancelledEmail, membershipKeptEmail } from "../../../email/templates.js";
 
 export interface CancelLetter {
   to: string;
@@ -15,8 +16,18 @@ export interface CancelLetter {
   notes: readonly string[];
 }
 
+export interface KeepLetter {
+  to: string;
+  gymName: string;
+  membershipName: string;
+  keptAt: string;
+  done: string;
+  lines: readonly string[];
+}
+
 export interface CancelEmailSender {
   sendCancelConfirmation(letter: CancelLetter): Promise<void>;
+  sendKeepConfirmation(letter: KeepLetter): Promise<void>;
 }
 
 export function createLogOnlyCancelEmailSender(log: FastifyBaseLogger): CancelEmailSender {
@@ -24,6 +35,10 @@ export function createLogOnlyCancelEmailSender(log: FastifyBaseLogger): CancelEm
     sendCancelConfirmation: () => {
       log.info({ event: "email.cancel_confirmation.not_sent" }, "log-only sender delivers nothing");
       return Promise.reject(new Error("log-only email sender: the cancel confirmation was NOT sent"));
+    },
+    sendKeepConfirmation: () => {
+      log.info({ event: "email.keep_confirmation.not_sent" }, "log-only sender delivers nothing");
+      return Promise.reject(new Error("log-only email sender: the keep confirmation was NOT sent"));
     },
   };
 }
@@ -36,6 +51,10 @@ export function createDevCancelEmailSender(log: FastifyBaseLogger, config: AppCo
       log.info({ event: "email.cancel_confirmation.dev" }, "DEV ONLY — cancel confirmation (no RESEND_API_KEY set)");
       return Promise.resolve();
     },
+    sendKeepConfirmation: () => {
+      log.info({ event: "email.keep_confirmation.dev" }, "DEV ONLY — keep confirmation (no RESEND_API_KEY set)");
+      return Promise.resolve();
+    },
   };
 }
 
@@ -44,6 +63,10 @@ export function createResendCancelEmailSender(transport: EmailTransport, log: Fa
     sendCancelConfirmation: async (letter) => {
       await transport.send(membershipCancelledEmail(letter));
       log.info({ event: "email.cancel_confirmation.sent" }, "cancel confirmation email sent");
+    },
+    sendKeepConfirmation: async (letter) => {
+      await transport.send(membershipKeptEmail(letter));
+      log.info({ event: "email.keep_confirmation.sent" }, "keep confirmation email sent");
     },
   };
 }

@@ -158,7 +158,8 @@ export type MyCancelDone = z.infer<typeof myCancelDoneSchema>;
 export const myMembershipCancelSchema = z.discriminatedUnion("state", [
   z.object({ state: z.literal("can"), button: z.string().min(1) }).strict(),
   z.object({ state: z.literal("elsewhere"), line: z.string().min(1) }).strict(),
-  z.object({ state: z.literal("cancelled"), line: z.string().min(1) }).strict(),
+  // `keep`: the Keep my membership button (18l-ii-a), where it still runs to a last day; null where it cannot be kept.
+  z.object({ state: z.literal("cancelled"), line: z.string().min(1), keep: z.string().min(1).nullable().default(null) }).strict(),
 ]);
 export type MyMembershipCancel = z.infer<typeof myMembershipCancelSchema>;
 
@@ -307,3 +308,105 @@ export function myCancelledLine(on: string, byReader: boolean, byName: string | 
   if (byReader) return `You cancelled it in the app on ${dayWords(on)}.`;
   return byName === null ? `Cancelled in the app on ${dayWords(on)}.` : `${byName} cancelled it in the app on ${dayWords(on)}.`;
 }
+
+// ── Keep my membership (18l-ii-a) ──────────────────────────────────────────────────────────────────────────────────
+//
+// A member who cancelled in the app, or whoever pays for them, undoes it there until its last day: the member stopped
+// the charges, so only the member starts them again (Kd, rulings/2026-11-11-18l.md). A cancel that ended it at once
+// (today, or inside a cooling-off period) is over and cannot be kept.
+
+export const MY_KEEP_BUTTON = "Keep my membership";
+
+export const myKeepChoiceSchema = z
+  .object({
+    button: z.string().min(1),
+    /** The box's sentences, in the order they are read. */
+    lines: z.array(z.string().min(1)).max(6),
+    /** The next payment once it renews again, as its bill will open; null where none comes due (a free one). */
+    next: myCancelPaymentSchema.nullable(),
+    /** Leaving early: the early cancellation fee taken off, not paid yet. */
+    feeOffMinor: minorSchema.nullable(),
+    /** One value for exactly what the box says, sent back with the keep: refused where it changed. */
+    key: markSchema,
+  })
+  .strict();
+export type MyKeepChoice = z.infer<typeof myKeepChoiceSchema>;
+
+/** The box under Keep my membership. Null `choice` with a note says why there is nothing to press. */
+export const myKeepAskSchema = z
+  .object({
+    membership: z.object({ id: z.uuid(), name: z.string() }).strict(),
+    currency: z.string().regex(/^[A-Z]{3}$/),
+    choice: myKeepChoiceSchema.nullable(),
+    notes: z.array(z.string().min(1)).max(4),
+  })
+  .strict();
+export type MyKeepAsk = z.infer<typeof myKeepAskSchema>;
+
+export const myKeepRequestSchema = z
+  .object({
+    /** The same press sent twice is one keep, answered as it was. */
+    requestKey: z.uuid(),
+    key: markSchema,
+  })
+  .strict();
+export type MyKeepRequest = z.infer<typeof myKeepRequestSchema>;
+
+export const myKeepDoneSchema = z
+  .object({
+    /** "Kept. Gold Monthly renews until you cancel." */
+    line: z.string().min(1),
+    /** Whether the confirmation email went to their address. */
+    emailed: z.boolean(),
+  })
+  .strict();
+export type MyKeepDone = z.infer<typeof myKeepDoneSchema>;
+
+/** What the keep box's sentences are made from, worked out by the server. */
+export interface MyKeepFacts {
+  membershipName: string;
+  /** Whoever pays for them pressed it: the member's name; null for their own. */
+  forName: string | null;
+  currency: string;
+  /** The last day the cancel left it, as it stands now. */
+  endsOn: string;
+  next: MyCancelPayment | null;
+  /** The card the app charges the next payment to by itself, where it does. */
+  card: { brand: string; last4: string } | null;
+  feeOffMinor: number | null;
+  /** The bookings the cancel ended: they stay cancelled. */
+  ended: { classes: number; sessions: number };
+}
+
+/** THE KEEP BOX'S SENTENCES, and the same in the confirmation email. */
+export function myKeepLines(f: MyKeepFacts): string[] {
+  const name = whose(f);
+  const lines = [`${name} won't end on ${dayWords(f.endsOn)}. It renews until you cancel.`];
+  const card = f.card === null ? null : cardName(f.card);
+  if (f.next === null) lines.push("No payments come due for it.");
+  else if (card !== null) lines.push(`${card} is charged ${formatMinor(f.next.amountMinor, f.currency)} next, on ${dayWords(f.next.dueOn)}.`);
+  else lines.push(`The next payment of ${formatMinor(f.next.amountMinor, f.currency)} is due on ${dayWords(f.next.dueOn)}.`);
+  if (f.feeOffMinor !== null && f.feeOffMinor > 0) lines.push(`The ${formatMinor(f.feeOffMinor, f.currency)} early cancellation fee is taken off.`);
+  const parts = [
+    f.ended.classes > 0 ? plural(f.ended.classes, "class booking", "class bookings") : null,
+    f.ended.sessions > 0 ? plural(f.ended.sessions, "personal training session", "personal training sessions") : null,
+  ].filter((p): p is string => p !== null);
+  if (parts.length > 0) {
+    const many = f.ended.classes + f.ended.sessions > 1;
+    lines.push(`The ${parts.join(" and ")} cancelled with it ${many ? "stay" : "stays"} cancelled. Book again if you want ${many ? "them" : "it"}.`);
+  }
+  return lines;
+}
+
+/** Once it is kept: what the screen says, and what the confirmation says first. */
+export function myKeepDoneLine(f: Pick<MyKeepFacts, "membershipName" | "forName">): string {
+  return `Kept. ${whose(f)} renews until you cancel.`;
+}
+
+export const MY_KEEP_WORDS = {
+  /** Leaving early, with the fee paid: staff refund it first, as refunds are the gym's. */
+  feePaid: "You've paid the early cancellation fee. Ask the front desk to refund it, then keep your membership here.",
+  changed: "What you're keeping has changed. Go back and look again.",
+  /** Its last day passed, or the front desk ended it since. */
+  over: "It has ended, so it can't be kept. Ask the front desk to start a new one.",
+} as const;

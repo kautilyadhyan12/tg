@@ -28,14 +28,27 @@ export const MY_CANCEL_REASON_WORDS: Readonly<Record<MyCancelReason, string>> = 
 
 /** A membership cancelled in the app, on the person's page: the gym's day, whoever pressed it (their record's name on
  *  the gym's list now; null where it is gone) and the reason they picked. */
-export const appCancelSchema = z.object({ on: daySchema, byName: z.string().min(1).nullable(), reason: myCancelReasonSchema.nullable() }).strict();
+export const appCancelSchema = z
+  .object({
+    on: daySchema,
+    byName: z.string().min(1).nullable(),
+    reason: myCancelReasonSchema.nullable(),
+    /** Kept in the app (18l-ii-a): the gym's day, and whoever pressed Keep (their record's name now). */
+    keptOn: daySchema.nullable().default(null),
+    keptByName: z.string().min(1).nullable().default(null),
+  })
+  .strict();
 export type AppCancel = z.infer<typeof appCancelSchema>;
 
-/** "Cancelled in the app on 11 Nov 2026 by Maya Test · Reason: Cost". */
-export function appCancelLine(c: AppCancel): string {
+/** "Cancelled in the app on 11 Nov 2026 by Maya Test · Reason: Cost", then " · Kept on 13 Nov 2026" once kept, naming
+ *  whoever kept it where that was not whoever cancelled. */
+export function appCancelLine(c: Pick<AppCancel, "on" | "byName" | "reason"> & Partial<Pick<AppCancel, "keptOn" | "keptByName">>): string {
   const by = c.byName === null ? "" : ` by ${c.byName}`;
   const why = c.reason === null ? "" : ` · Reason: ${MY_CANCEL_REASON_WORDS[c.reason]}`;
-  return `Cancelled in the app on ${dayWords(c.on)}${by}${why}`;
+  const keptOn = c.keptOn ?? null;
+  const keptBy = c.keptByName ?? null;
+  const kept = keptOn === null ? "" : ` · Kept on ${dayWords(keptOn)}${keptBy !== null && keptBy !== c.byName ? ` by ${keptBy}` : ""}`;
+  return `Cancelled in the app on ${dayWords(c.on)}${by}${why}${kept}`;
 }
 
 /** Overview's Cancelled in the app: the newest first, from the last `APP_CANCELS_DAYS` days. */
@@ -55,6 +68,8 @@ export const appCancelRowSchema = z
     endsOn: daySchema.nullable(),
     when: myCancelWhenSchema,
     reason: myCancelReasonSchema.nullable(),
+    /** Kept in the app afterwards (18l-ii-a): the gym's day. */
+    keptOn: daySchema.nullable().default(null),
   })
   .strict();
 export type AppCancelRow = z.infer<typeof appCancelRowSchema>;
@@ -74,10 +89,13 @@ export const appCancelsResponseSchema = z
 export type AppCancelsResponse = z.infer<typeof appCancelsResponseSchema>;
 
 /** One row's second line: "Gold Monthly · Cancelled 11 Nov 2026 · Ends 30 Nov 2026", or "Ended 30 Nov 2026" once that
- *  day has passed on the gym's `today`. */
-export function appCancelRowWhat(row: Pick<AppCancelRow, "membershipName" | "on" | "endsOn" | "when">, today: string): string {
+ *  day has passed on the gym's `today`, or "Kept 13 Nov 2026" once the member kept it (18l-ii-a). */
+export function appCancelRowWhat(row: Pick<AppCancelRow, "membershipName" | "on" | "endsOn" | "when"> & Partial<Pick<AppCancelRow, "keptOn">>, today: string): string {
+  const keptOn = row.keptOn ?? null;
   const ends =
-    row.when === "cooling_off"
+    keptOn !== null
+      ? `Kept ${dayWords(keptOn)}`
+      : row.when === "cooling_off"
       ? "Ended in its cooling-off period"
       : row.endsOn === null
         ? "Frozen, no end day yet"
@@ -91,7 +109,7 @@ export function appCancelRowWhat(row: Pick<AppCancelRow, "membershipName" | "on"
 
 export const APP_CANCELS_WORDS = {
   title: "Cancelled in the app",
-  intro: `Members who cancelled in the app in the last ${String(APP_CANCELS_DAYS)} days. Each ends on the day shown.`,
+  intro: `Members who cancelled in the app in the last ${String(APP_CANCELS_DAYS)} days, with the day each ends, or the day they kept it.`,
   open: "Open their page",
   gone: "Deleted for good",
   /** Under the list, at a gym whose front desk lets everyone on its list in. */

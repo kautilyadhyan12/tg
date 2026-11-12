@@ -1122,6 +1122,8 @@ d("member list: keeping it by hand (real Postgres)", () => {
       // go of `by_entry_id` alone, and the line on the person's page then names nobody (`myCancel.routes.test.ts`).
       "gym_app_cancels.by_entry_id",
       "gym_app_cancels.gym_id",
+      // Who kept it in the app afterwards (0233; 18l-ii-a), on by_entry_id's footing.
+      "gym_app_cancels.kept_by_entry_id",
       // A member's payment page in the app (0217; 18k-ii-a): moved by the join with its membership, and Delete permanently
       // waits for an open one (`appPayments.routes.test.ts`); a record deleted for good lets go of it.
       "gym_app_payments.entry_id",
