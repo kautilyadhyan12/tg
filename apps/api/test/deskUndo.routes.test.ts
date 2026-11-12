@@ -291,6 +291,12 @@ d("undo cancellation, for staff (real Postgres)", { timeout: T }, () => {
     // Dan's was cancelled at the desk. Another gym's owner, this gym's owner through Ana's record, and through another
     // gym's address, get 404 and nothing changes.
     await deskCancel(gym, dan, danGold, { when: "period_end" });
+    // As a cancel leaves a bill opened ahead with nothing on it: cancelled, by nobody's hand. Left so, December would
+    // never be billed; the undo owes it again, at its price.
+    const [ahead] = await sql<{ id: string }[]>`
+      INSERT INTO gym_member_bills (gym_id, held_membership_id, period_index, amount_minor, currency, due_on, covers_from, covers_to, status, created_at, updated_at)
+      VALUES (${gym.id}, ${danGold}, 1, 4000, 'USD', '2026-12-04', '2026-12-04', '2027-01-03', 'void', now(), now())
+      RETURNING id`;
     expect(await shownUndo(gym, dan, danGold)).toBe(true);
     const box = await undoAsk(gym, gym.owner, dan, danGold);
     const key = box.choice?.key ?? "";
@@ -318,6 +324,7 @@ d("undo cancellation, for staff (real Postgres)", { timeout: T }, () => {
     const done = await undo(gym, dan, danGold);
     expect(done.list.memberships.find((m) => m.id === danGold)).toMatchObject({ undoCancel: false, view: { renewsOn: "2026-12-04" } });
     expect(await state(danGold)).toMatchObject({ status: "active", renews: true });
+    expect(await sql`SELECT status, amount_minor FROM gym_member_bills WHERE id = ${ahead?.id ?? ""}`).toEqual([{ status: "open", amount_minor: 5000 }]);
     const bills = await billsOpenedOn(gym, danGold, months(3), 0);
     expect(bills[0]).toEqual(done.choice.next);
     expect(bills).toEqual([
