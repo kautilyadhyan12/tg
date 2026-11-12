@@ -459,7 +459,8 @@ describe("a read that fails or is slow never shows a number it does not know", (
     expect(screen.getByText("1 of 7 days active")).toBeTruthy();
     expect(screen.queryByText(/^Level \d/)).toBeNull();
     // The streak box shows no 12; a calendar date of the 12th, in a week that has one, is not the streak.
-    const twelfths = weekOf(new Date()).filter((day) => String(day.date) === "12").length;
+    // Today is trained here, so its circle holds a tick, never its date: on the 12th no 12 is drawn.
+    const twelfths = weekOf(new Date()).filter((day) => String(day.date) === "12" && !day.today).length;
     expect(screen.queryAllByText("12")).toHaveLength(twelfths);
     expect(screen.getAllByTestId("soft-bar").length).toBeGreaterThanOrEqual(4);
     expect(screen.queryByText("–")).toBeNull();
