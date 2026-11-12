@@ -32,6 +32,7 @@ import { APP_PAYMENT } from "../src/modules/orgs/payments/appPayments.js";
 import { squareSettings } from "../src/modules/orgs/payments/settings.js";
 import { processSquareWork } from "../src/modules/orgs/payments/work.js";
 import type { PushMessage, PushResult, PushSender } from "../src/modules/push/fcm.adapter.js";
+import { claimPayment, duePayments, unclaimPayment } from "../src/modules/push/paymentsRepo.js";
 import { sendPaymentNotifications } from "../src/modules/push/paymentsSweep.js";
 import { account, fakeSquare, type Account } from "./fakeSquareTerminal.js";
 import { recordingHub } from "./liveNewsRecorder.js";
@@ -473,6 +474,15 @@ d("Payment received, told to the phone (real Postgres)", { timeout: T }, () => {
     expect(await owed(page.payment.id)).toBe(true);
     answers.delete(ivy.phone);
     fresh();
+
+    // Two runs that both read it before either took it: the second cannot take it.
+    const read = { since: new Date(clock.getTime() - 3_600_000), claimedBefore: new Date(clock.getTime() - 60_000), limit: 10, after: null, gymIds: [gym.id] };
+    const [first] = await duePayments(sql, read);
+    const [second] = await duePayments(sql, read);
+    if (first === undefined || second === undefined) throw new Error("not owed");
+    expect(await claimPayment(sql, first, { claimedAt: clock, claimedBefore: read.claimedBefore })).toBe(true);
+    expect(await claimPayment(sql, second, { claimedAt: new Date(clock.getTime() + 1), claimedBefore: read.claimedBefore })).toBe(false);
+    await unclaimPayment(sql, first, clock);
 
     // A sender that waits a moment, so both runs are sending at once.
     const slow: PushSender = { send: (m) => new Promise((resolve) => setTimeout(() => void sender.send(m).then(resolve), 50)) };
