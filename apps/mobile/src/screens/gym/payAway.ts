@@ -10,12 +10,26 @@ import { APP_PAYMENT_LIMITS, phonePayAwaySchema } from "@app/shared";
 const KEY = "pay-away";
 export const PAY_AWAY_MS = APP_PAYMENT_LIMITS.openMinutes * 60_000;
 
-export async function keepPayAway(userId: string, gymId: string, now: number = Date.now(), purchaseId: string | null = null): Promise<void> {
-  await SecureStore.setItemAsync(KEY, JSON.stringify({ userId, gymId, at: now, purchaseId })).catch(() => undefined);
+export async function keepPayAway(userId: string, gymId: string, pageId: string, now: number = Date.now(), purchaseId: string | null = null): Promise<void> {
+  await SecureStore.setItemAsync(KEY, JSON.stringify({ userId, gymId, at: now, purchaseId, pageId })).catch(() => undefined);
 }
 
-export async function forgetPayAway(): Promise<void> {
-  await SecureStore.deleteItemAsync(KEY).catch(() => undefined);
+/** Lets go of what is kept. With `pageId`, only where it is that page's (20h): an older page ending, told by Payment received
+ *  while the member is on another page in the tab, never lets go of the one they are on. One kept before 20h names no
+ *  page, and goes with any. */
+export async function forgetPayAway(pageId: string | null = null): Promise<void> {
+  try {
+    if (pageId !== null) {
+      const raw = await SecureStore.getItemAsync(KEY);
+      if (raw === null) return;
+      const kept = phonePayAwaySchema.safeParse(JSON.parse(raw));
+      const named = kept.success ? kept.data.pageId : null;
+      if (named !== null && named !== pageId) return;
+    }
+    await SecureStore.deleteItemAsync(KEY);
+  } catch {
+    // Nothing kept, or nothing to read: nothing to let go.
+  }
 }
 
 /** The place this person was paying at when the app was closed, and the purchase where they were buying, or null: none

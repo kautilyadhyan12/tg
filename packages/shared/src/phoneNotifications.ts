@@ -3,6 +3,8 @@
 // One notification a gym, replaced by the next, and none at night (Kd, 2026-11-02).
 import { z } from "zod";
 import { unreadBadge } from "./gymInboxWords.js";
+import type { MemberFeeKind } from "./memberBills.js";
+import { formatMinor } from "./memberships.js";
 
 /** The phone's notification address, as Firebase gives it to the phone. */
 export const pushTokenRequestSchema = z
@@ -103,6 +105,39 @@ export const gymPlacePushDataSchema = z
   })
   .strip();
 export type GymPlacePushData = z.infer<typeof gymPlacePushDataSchema>;
+
+// ── PAYMENT RECEIVED (ROADMAP Stage 5 item 20h) ──
+
+/** The Android channel for a payment or purchase in the app that went through after the member left it. */
+export const GYM_PAYMENTS_CHANNEL = { id: "gym-payments", name: "Payments" } as const;
+
+/** What a payment in the app paid for: a membership's bill, one of its fees, or a line of the price list bought. */
+export type PaymentPaidFor = { kind: "membership"; name: string } | { kind: "fee"; fee: MemberFeeKind } | { kind: "bought"; name: string };
+
+/** A fee as it reads inside a sentence. */
+const FEE_IN_A_SENTENCE: Readonly<Record<MemberFeeKind, string>> = {
+  late_cancel: "a late cancel fee",
+  no_show: "a no-show fee",
+  freeze: "a freeze fee",
+  leave_early: "an early cancellation fee",
+};
+
+/** The longest name of a membership a payment notification shows. */
+export const PAYMENT_NOTIFICATION_NAME_WORDS = 80;
+
+/** What the phone shows once Square says a payment in the app went through and the member was no longer looking:
+ *  "$90.00 paid to Sunset Strength for Gold Monthly." A line bought adds where its pass is. */
+export function paymentNotification(input: { gymName: string; amountMinor: number; currency: string; paidFor: PaymentPaidFor }): { title: string; body: string } {
+  const { gymName, amountMinor, currency, paidFor } = input;
+  const what = paidFor.kind === "fee" ? FEE_IN_A_SENTENCE[paidFor.fee] : clip(paidFor.name, PAYMENT_NOTIFICATION_NAME_WORDS);
+  const paid = `${formatMinor(amountMinor, currency)} paid to ${gymName} for ${what}.`;
+  return { title: "Payment received", body: paidFor.kind === "bought" ? `${paid} Show your pass when you arrive.` : paid };
+}
+
+/** What a payment's notification carries for the app: the place, the page paid, and what it paid. A tap opens that place's
+ *  My membership for a bill or fee, where its receipt is; its Buy on that purchase for a line bought, where Show my pass is. */
+export const gymPaymentPushDataSchema = z.object({ kind: z.literal("gym_payment"), gymId: z.uuid(), paymentId: z.uuid(), what: z.enum(["bill", "bought"]) }).strip();
+export type GymPaymentPushData = z.infer<typeof gymPaymentPushDataSchema>;
 
 // ── A COMMENT OR REPLY ON YOUR POST (ROADMAP Stage 5 item 18b-ii-b) ──
 

@@ -37,6 +37,7 @@ export const profile = (agreed: boolean, user = RAVI, setupDone = true) => ({
     pushGymMessages: true,
     pushPlaces: true,
     pushComments: true,
+    pushPayments: true,
     pushStreak: true,
     pushBadges: true,
     pushSummary: true,

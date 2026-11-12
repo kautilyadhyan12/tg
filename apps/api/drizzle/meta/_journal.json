@@ -1653,6 +1653,13 @@
       "when": 1790985600236,
       "tag": "0236_app_card_purchases",
       "breakpoints": true
+    },
+    {
+      "idx": 236,
+      "version": "7",
+      "when": 1790985600237,
+      "tag": "0237_payment_notices",
+      "breakpoints": true
     }
   ]
 }

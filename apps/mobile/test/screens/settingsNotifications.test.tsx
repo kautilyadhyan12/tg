@@ -20,10 +20,10 @@ const noWait = () => Promise.resolve();
 const ok = (body: unknown) => (): Reply => ({ status: 200, body });
 const ME = "/v1/users/me";
 
-type Held = { pushGymMessages: boolean; pushPlaces: boolean; pushComments: boolean; pushStreak: boolean; pushBadges: boolean; pushSummary: boolean };
+type Held = { pushGymMessages: boolean; pushPlaces: boolean; pushComments: boolean; pushPayments: boolean; pushStreak: boolean; pushBadges: boolean; pushSummary: boolean };
 /** The server's own switches: only its answers change them. */
 function account(start: Partial<Held> = {}) {
-  const held: Held = { pushGymMessages: true, pushPlaces: true, pushComments: true, pushStreak: true, pushBadges: true, pushSummary: true, ...start };
+  const held: Held = { pushGymMessages: true, pushPlaces: true, pushComments: true, pushPayments: true, pushStreak: true, pushBadges: true, pushSummary: true, ...start };
   const me: Route = (body) => {
     if (body !== undefined) Object.assign(held, body);
     return { status: 200, body: { user: { ...profile(true).user, ...held } } };
@@ -111,6 +111,21 @@ describe("the notification switches show and save only the server's answer", () 
       expect(screen.getByLabelText("Comments notifications").props.value).toBe(true);
     });
     expect(acct.held.pushComments).toBe(true);
+  });
+
+  it("Payments (20h): reads what the server holds, and off sends that switch alone and says where receipts still are", async () => {
+    const acct = account({ pushPayments: true });
+    const server = fakeServer(routes({ [ME]: acct.me }));
+    await openSettings(server.ask);
+    expect((await switchOf("Payments")).props.value).toBe(true);
+    expect(screen.getByText(words("pushPayments").on)).toBeTruthy();
+    await act(() => fireEvent(screen.getByLabelText("Payments notifications"), "valueChange", false));
+    await waitFor(() => {
+      expect(screen.getByLabelText("Payments notifications").props.value).toBe(false);
+    });
+    expect(server.asked.filter((a) => a.path === ME && a.method === "PATCH").map((a) => a.body)).toEqual([{ pushPayments: false }]);
+    expect(acct.held).toMatchObject({ pushComments: true, pushPayments: false });
+    expect(screen.getByText("Off. Receipts still show on My membership.")).toBeTruthy();
   });
 
   it("a refused save keeps the switch on, as the server holds it, and says the server's words", async () => {

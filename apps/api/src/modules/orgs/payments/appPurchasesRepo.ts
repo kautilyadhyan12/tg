@@ -470,6 +470,8 @@ export interface Bought {
   taken: number | null;
   today: string;
   now: Date;
+  /** A Payment received is owed once it is given (20h, `appPayments.ts`'s `Asking.tell`). */
+  tell: boolean;
   refuse?: string;
 }
 
@@ -565,7 +567,8 @@ export async function recordBought(sql: Sql, p: Bought): Promise<{ outcome: "pai
           UPDATE gym_app_payments SET state = 'done', outcome = 'paid', entry_id = ${home.entryId}, held_membership_id = ${done.id}, square_payment_id = ${p.squarePaymentId},
                  member_payment_id = ${done.paymentId}, card_brand = ${p.card?.brand ?? null}, card_last4 = ${p.card?.last4 ?? null}, taken_minor = ${p.taken},
                  -- The signature now lives with the membership, and the buyer on their record; the page keeps no name or details.
-                 bought = bought || '{"sign":null,"buyer":null,"charge":null}'::jsonb, finished_at = ${p.now}, checking_until = NULL
+                 bought = bought || '{"sign":null,"buyer":null,"charge":null}'::jsonb, finished_at = ${p.now}, checking_until = NULL,
+                 push_due_at = ${p.tell ? p.now : null}
           WHERE gym_id = ${row.gymId} AND id = ${row.id}`;
         await insertAudit(tx, {
           actorUserId: row.openedBy,

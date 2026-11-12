@@ -27,6 +27,7 @@ import postgres from "postgres";
 import { loadConfig } from "./config.js";
 import { createFcmSender, readServiceAccount } from "./modules/push/fcm.adapter.js";
 import { sendCommentNotifications } from "./modules/push/commentsSweep.js";
+import { sendPaymentNotifications } from "./modules/push/paymentsSweep.js";
 import { sendPlaceNotifications } from "./modules/push/placesSweep.js";
 import { sendGymMessageNotifications } from "./modules/push/sweep.js";
 import { sendTrainingReminders } from "./modules/reminders/sweep.js";
@@ -919,6 +920,24 @@ if (pushAccount === null) {
         });
         if (commentsRun.sent + commentsRun.skipped + commentsRun.failed > 0) {
           log.info({ ...commentsRun, durationMs: Date.now() - commentsStartedAt, event: "job.finished", job: "push.comments" }, "job finished");
+        }
+      } catch (err) {
+        failure ??= err instanceof Error ? err : new Error(String(err));
+      }
+      // Payment received (20h), in the same minute.
+      const paymentsStartedAt = Date.now();
+      try {
+        const paymentsRun = await sendPaymentNotifications({
+          sql,
+          sender: pushSender,
+          now: () => new Date(),
+          onError: (err) => {
+            const e = err instanceof Error ? err : new Error(String(err));
+            log.warn({ errName: e.name, errMessage: e.message, event: "job.item_failed", job: "push.payments" }, "a payment notification failed and was kept for the next run");
+          },
+        });
+        if (paymentsRun.sent + paymentsRun.skipped + paymentsRun.failed > 0) {
+          log.info({ ...paymentsRun, durationMs: Date.now() - paymentsStartedAt, event: "job.finished", job: "push.payments" }, "job finished");
         }
       } catch (err) {
         failure ??= err instanceof Error ? err : new Error(String(err));

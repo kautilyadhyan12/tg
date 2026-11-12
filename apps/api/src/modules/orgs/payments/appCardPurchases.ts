@@ -48,7 +48,7 @@ function ours(row: pays.AppPayRow, payment: SquarePayment): boolean {
 
 /** Square's answer to the charge, and what follows from it. `first`: the press's own ask, so a refusal means nothing was
  *  taken; on a later ask Square may have taken it before, so it is left for staff to check. */
-async function answered(deps: PaymentsDeps, row: pays.AppPayRow, result: CardPaymentResult, first: boolean): Promise<ChargeStep> {
+async function answered(deps: PaymentsDeps, row: pays.AppPayRow, result: CardPaymentResult, first: boolean, tell: boolean): Promise<ChargeStep> {
   const now = deps.now();
   if (result.kind === "unavailable") return { kind: "wait" };
   if (result.kind === "declined") {
@@ -93,6 +93,8 @@ async function answered(deps: PaymentsDeps, row: pays.AppPayRow, result: CardPay
     taken: taken.currency === row.currency ? taken.amount : null,
     today: believed ? dayInTz(takenAt, tz) : dayInTz(now, tz),
     now,
+    // Given while nobody waited on the answer (the worker, or the phone's look after the press got none): Payment received (20h).
+    tell,
     ...(mine ? {} : { refuse: "amount_differs" }),
   });
   if (bought?.outcome === "not_recorded") deps.log.error({ event: "square.app_purchase_not_recorded", gymId: row.gymId }, "money taken for a line bought in the app gave nothing");
@@ -102,12 +104,12 @@ async function answered(deps: PaymentsDeps, row: pays.AppPayRow, result: CardPay
 
 /** Ask Square to charge a purchase this request holds: sent with its key for an hour from the press, then only looked
  *  for among the location's payments, never sent again. */
-export async function chargeStep(deps: PaymentsDeps, square: SquareSettings, token: string, row: pays.AppPayRow, first: boolean): Promise<ChargeStep> {
+export async function chargeStep(deps: PaymentsDeps, square: SquareSettings, token: string, row: pays.AppPayRow, first: boolean, tell = false): Promise<ChargeStep> {
   const card = row.card;
   if (card === null) throw new Error("a purchase with no card reached the card's charge");
   if (deps.now().getTime() - row.openedAt.getTime() > CARD_CHARGE.resendForMs) {
     const found = await lookUp(deps, square, token, { id: row.id, startedAt: row.openedAt, locationId: row.locationId });
-    if (found.kind !== "absent") return await answered(deps, row, found, false);
+    if (found.kind !== "absent") return await answered(deps, row, found, false, tell);
     // Not among the payments Square made while it could have been sent: still ended as one to check, never as nothing taken.
     deps.log.warn({ event: "square.app_card_purchase_absent", gymId: row.gymId }, "an unanswered card purchase was not among the location's payments");
     await pays.finish(deps.sql, row.gymId, row.id, "gone", deps.now());
@@ -125,5 +127,5 @@ export async function chargeStep(deps: PaymentsDeps, square: SquareSettings, tok
     note: NOTE,
     verificationToken: boughtOf(row)?.charge?.verificationToken ?? null,
   });
-  return await answered(deps, row, result, first);
+  return await answered(deps, row, result, first, tell);
 }

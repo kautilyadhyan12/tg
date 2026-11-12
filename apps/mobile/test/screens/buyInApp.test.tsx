@@ -598,6 +598,20 @@ describe("Android closes the app behind Square's page", () => {
     expect(await screen.findByTestId("membership-page")).toBeTruthy();
   });
 
+  it("Payment received for a line bought, tapped (20h): that place's Buy on that purchase, paid, with Show my pass", async () => {
+    const { notifications } = jest.requireMock<{ notifications: { last: unknown } }>("expo-notifications");
+    notifications.last = { notification: { request: { identifier: `payment:${PAGE}`, content: { data: { kind: "gym_payment", gymId: IRON.id, paymentId: PAGE, what: "bought" } } } } };
+    try {
+      const server = fakeServer(routes(paidAnswer));
+      await render(<App extra={extra} ask={server.ask} store={memoryStore(kept(1))} wait={noWait} />);
+      expect(await screen.findByTestId("buy-page")).toBeTruthy();
+      expect(within(await screen.findByTestId("buy-paid")).getByText("$90.00 paid. 10-class pack is yours. Show your pass at the front desk when you arrive.")).toBeTruthy();
+      expect(posts(server.asked, closePath(IRON))).toHaveLength(1);
+    } finally {
+      notifications.last = null;
+    }
+  });
+
   it("started again with the page unpaid, it reads cancelled, never bought", async () => {
     store.set("pay-away", JSON.stringify({ userId: RAVI_ID, gymId: IRON.id, at: Date.now() - 60_000, purchaseId: PAGE }));
     const server = fakeServer(routes(ended("closed")));

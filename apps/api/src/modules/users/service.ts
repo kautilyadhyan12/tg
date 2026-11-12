@@ -191,6 +191,7 @@ async function toUserProfile(sql: Sql, row: repo.ProfileRow): Promise<UserProfil
     pushGymMessages: row.pushGymMessages,
     pushPlaces: row.pushPlaces,
     pushComments: row.pushComments,
+    pushPayments: row.pushPayments,
     pushStreak: row.pushStreak,
     pushBadges: row.pushBadges,
     pushSummary: row.pushSummary,

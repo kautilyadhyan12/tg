@@ -322,6 +322,58 @@ describe("coming back, and every way it ends", () => {
     expect(posts(server.asked, closePath(IRON))).toHaveLength(2);
   });
 
+  /** Waiting on Square, then Square confirms it while the member is away: the server reads it paid from now on. */
+  const waitingThenPaid = async () => {
+    let answer: Row = page();
+    let held = view("Iron House");
+    const server = fakeServer(
+      routes({ [closePath(IRON)]: () => ok({ payment: answer })(), [membershipPath(IRON)]: () => ok(held)() }),
+    );
+    await openMembership(server.ask, IRON);
+    await fireEvent.press(await onPage().findByLabelText("Pay $49.00 for Gold Monthly"));
+    await waitFor(() => { expect(tab.opened).toHaveLength(1); });
+    await backFromTab();
+    expect(await onPage().findByText(PAY_WAITING)).toBeTruthy();
+    // The worker records it and Payment received goes out (20h).
+    answer = page({ state: "paid", url: null, closesAt: null, receiptNumber: 12 });
+    held = view("Iron House", { memberships: [membership(GOLD, "Gold Monthly", { owed: null })] });
+    return server;
+  };
+
+  it("still being confirmed, then confirmed while they were away: coming back reads Paid, never 'still being confirmed' (20h)", async () => {
+    const server = await waitingThenPaid();
+    await appIs("background");
+    await appIs("active");
+    expect(await onPage().findByText("Payment successful. $49.00 paid.")).toBeTruthy();
+    expect(onPage().queryByText(PAY_WAITING)).toBeNull();
+    expect(onPage().queryByLabelText("Pay $49.00 for Gold Monthly")).toBeNull();
+    expect(posts(server.asked, closePath(IRON))).toHaveLength(2);
+  });
+
+  it("still being confirmed, and Payment received arrives with My membership open, or is tapped: it reads Paid (20h)", async () => {
+    const { notifications } = jest.requireMock<{ notifications: { received: ((n: unknown) => void)[]; taps: ((r: unknown) => void)[] } }>("expo-notifications");
+    const data = { kind: "gym_payment", gymId: IRON.id, paymentId: PAGE, what: "bill" };
+    const server = await waitingThenPaid();
+    // Another place's says nothing about this one.
+    await act(() => {
+      for (const one of [...notifications.received]) one({ request: { content: { data: { ...data, gymId: LOTUS.id } } } });
+    });
+    expect(posts(server.asked, closePath(IRON))).toHaveLength(1);
+    await act(() => {
+      for (const one of [...notifications.received]) one({ request: { content: { data } } });
+    });
+    expect(await onPage().findByText("Payment successful. $49.00 paid.")).toBeTruthy();
+    expect(onPage().queryByLabelText("Pay $49.00 for Gold Monthly")).toBeNull();
+    expect(posts(server.asked, closePath(IRON))).toHaveLength(2);
+    // Tapped as well: the place is read again, and nothing is asked twice of a page already ended.
+    const reads = server.asked.filter((a) => a.path === membershipPath(IRON)).length;
+    await act(() => {
+      for (const one of [...notifications.taps]) one({ notification: { request: { identifier: `payment:${PAGE}`, content: { data } } } });
+    });
+    await waitFor(() => { expect(server.asked.filter((a) => a.path === membershipPath(IRON)).length).toBeGreaterThan(reads); });
+    expect(posts(server.asked, closePath(IRON))).toHaveLength(2);
+  });
+
   it("a lost answer whose page has since been closed opens a page of its own on the next press, never 'cancelled'", async () => {
     let lostOnce = true;
     const made: string[] = [];

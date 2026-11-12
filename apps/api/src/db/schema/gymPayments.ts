@@ -939,6 +939,9 @@ export const gymAppPayments = pgTable(
     /** A purchase Square took money for that could not be given, marked checked by staff (0221). */
     clearedAt: timestamp("cleared_at", { withTimezone: true }),
     clearedBy: uuid("cleared_by").references(() => users.id, { onDelete: "set null" }),
+    /** Paid with the member not asking (0237; 20h): owed one Payment received notification, until sent or read. */
+    pushDueAt: timestamp("push_due_at", { withTimezone: true }),
+    pushClaimedAt: timestamp("push_claimed_at", { withTimezone: true }),
   },
   (t) => [
     check("gym_app_payments_taken_check", sql`${t.takenMinor} IS NULL OR ${t.takenMinor} BETWEEN 0 AND 99999999`),
@@ -968,6 +971,7 @@ export const gymAppPayments = pgTable(
           AND (${t.clearedAt} IS NULL OR ${t.outcome} IN ('not_recorded','gone','no_answer'))
       END`,
     ),
+    check("gym_app_payments_push_check", sql`(${t.pushDueAt} IS NULL OR ${t.outcome} = 'paid') AND (${t.pushClaimedAt} IS NULL OR ${t.pushDueAt} IS NOT NULL)`),
     check("gym_app_payments_charge_code_check", sql`${t.chargeCode} IS NULL OR (${t.cardId} IS NOT NULL AND ${t.chargeCode} ~ '^[A-Z0-9_]{1,60}$')`),
     check("gym_app_payments_cleared_check", sql`${t.clearedBy} IS NULL OR ${t.clearedAt} IS NOT NULL`),
     check("gym_app_payments_state_check", sql`${t.state} IN ('open','done')`),
@@ -988,6 +992,7 @@ export const gymAppPayments = pgTable(
     index("gym_app_payments_entry_idx").on(t.gymId, t.entryId).where(sql`${t.state} = 'open'`),
     index("gym_app_payments_open_idx").on(t.checkedAt).where(sql`${t.state} = 'open'`),
     index("gym_app_payments_member_payment_idx").on(t.gymId, t.memberPaymentId).where(sql`${t.memberPaymentId} IS NOT NULL`),
+    index("gym_app_payments_push_due_idx").on(t.pushDueAt).where(sql`${t.pushDueAt} IS NOT NULL`),
     index("gym_app_payments_done_idx").on(t.finishedAt).where(sql`${t.finishedAt} IS NOT NULL AND ${t.outcome} = 'closed'`),
     index("gym_app_payments_check_idx").on(t.gymId, t.heldMembershipId).where(sql`${t.outcome} IN ('not_recorded','gone','no_answer')`),
     uniqueIndex("gym_app_payments_purchase_uq").on(t.gymId, t.entryId).where(sql`${t.state} = 'open' AND ${t.membershipTypeId} IS NOT NULL`),

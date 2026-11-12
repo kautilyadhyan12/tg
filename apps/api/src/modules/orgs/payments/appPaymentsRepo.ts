@@ -466,7 +466,7 @@ export async function finish(sql: Sql, gymId: string, id: string, outcome: "clos
  *  longer take it, kept as not recorded with Square's payment. Null when another request finished it first. */
 export async function recordPaid(
   sql: Sql,
-  p: { row: AppPayRow; squarePaymentId: string; card: { brand: string; last4: string } | null; taken: number | null; today: string; now: Date; refuse?: string },
+  p: { row: AppPayRow; squarePaymentId: string; card: { brand: string; last4: string } | null; taken: number | null; today: string; now: Date; tell: boolean; refuse?: string },
 ): Promise<{ outcome: "paid" | "not_recorded" } | null> {
   const { row } = p;
   const membershipId = row.membershipId;
@@ -505,7 +505,8 @@ export async function recordPaid(
     if (done?.kind === "recorded") {
       await tx`
         UPDATE gym_app_payments SET state = 'done', outcome = 'paid', square_payment_id = ${p.squarePaymentId}, member_payment_id = ${done.paymentId},
-               card_brand = ${p.card?.brand ?? null}, card_last4 = ${p.card?.last4 ?? null}, taken_minor = ${p.taken}, entry_id = ${holder}, finished_at = ${p.now}, checking_until = NULL
+               card_brand = ${p.card?.brand ?? null}, card_last4 = ${p.card?.last4 ?? null}, taken_minor = ${p.taken}, entry_id = ${holder}, finished_at = ${p.now}, checking_until = NULL,
+               push_due_at = ${p.tell ? p.now : null}
         WHERE gym_id = ${row.gymId} AND id = ${row.id}`;
       await insertAudit(tx, {
         actorUserId: row.openedBy,
@@ -561,6 +562,11 @@ export async function forgetDone(sql: Sql, before: Date, gymIds: readonly string
       AND (${gymIds === null}::boolean OR gym_id = ANY(${[...(gymIds ?? [])]}::uuid[]))
     RETURNING id`;
   return rows.length;
+}
+
+/** The member's own phone read the page as paid: a Payment received not yet sent for it is not sent (20h). */
+export async function paidSeen(sql: SqlOrTx, gymId: string, id: string): Promise<void> {
+  await sql`UPDATE gym_app_payments SET push_due_at = NULL, push_claimed_at = NULL WHERE gym_id = ${gymId} AND id = ${id} AND push_due_at IS NOT NULL`;
 }
 
 /** How a page ended, read afresh: null while it is open, or where there is no such page at the gym. */
