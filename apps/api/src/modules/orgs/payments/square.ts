@@ -227,6 +227,8 @@ export interface NewCardPayment {
   locationId: string;
   referenceId: string;
   note: string;
+  /** The bank's own check of the buyer (Square's `verification_token`), where a purchase in the app had one (18k-iv). */
+  verificationToken?: string | null;
 }
 
 /** CreatePayment's answer: `declined` is the card's bank saying no, with Square's code and the
@@ -609,6 +611,7 @@ export function createSquareApi(opts: {
         location_id: p.locationId,
         reference_id: p.referenceId,
         note: p.note,
+        ...(p.verificationToken == null ? {} : { verification_token: p.verificationToken }),
       });
       if (sent === null) return { kind: "unavailable", status: null };
       if (sent.status === 429 || sent.status >= 500) return { kind: "unavailable", status: sent.status };

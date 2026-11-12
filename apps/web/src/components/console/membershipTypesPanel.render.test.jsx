@@ -806,12 +806,13 @@ describe('sell in the app (18k-i)', () => {
     expect(orgService.updateMembershipType.mock.calls[0][2]).toMatchObject({ soldInApp: true });
   });
 
-  it('a repeating membership has no tick yet, and a trial never does', async () => {
+  it('a repeating membership has the tick since 18k-iv, saying it renews on the card saved in the app; a trial never does', async () => {
     openWith(listOf(), box());
     fireEvent.click(await screen.findByRole('button', { name: 'Add a membership type' }));
     await waitFor(() => expect(orgService.getGymPayments).toHaveBeenCalled());
     expect(screen.getByRole('radio', { name: /Recurring/ }).checked).toBe(true);
-    expect(screen.queryByRole('checkbox', { name: /Sell in the app/ })).toBeNull();
+    expect(screen.getByRole('checkbox', { name: /Sell in the app/ })).toBeTruthy();
+    expect(await screen.findByText('Members can buy it in the app with a card they save there. It renews on that card.')).toBeTruthy();
     fireEvent.click(screen.getByRole('radio', { name: /Trial/ }));
     expect(screen.queryByRole('checkbox', { name: /Sell in the app/ })).toBeNull();
     fireEvent.click(screen.getByRole('radio', { name: /Class pack/ }));

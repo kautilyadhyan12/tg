@@ -282,19 +282,24 @@ d("what a gym sells in the app (real Postgres)", () => {
   );
 
   it(
-    "a repeating membership is not sold in the app before members can cancel it there (18l): it cannot be ticked, and one ticked by hand is never listed",
+    "a repeating membership is sold in the app since 18k-iv, listed only to a phone that asks for repeating lines (one built before pays on Square's page, which keeps no card)",
     async () => {
       const owner = await makeUser("p-owner");
       const gymId = await makeGym(owner.cookies, "Repeat Gym");
       await connectSquare(gymId, owner.id);
-      const refused = await send("POST", `/v1/orgs/${gymId}/membership-types`, owner.cookies, line({ name: "Gold Monthly", kind: "recurring" }));
-      expect(refused.statusCode, refused.body).toBe(400);
-      await addType(gymId, owner.cookies, line({ name: "Gold Monthly", kind: "recurring", soldInApp: false }));
+      await addType(gymId, owner.cookies, line({ name: "Gold Monthly", kind: "recurring" }));
       await addType(gymId, owner.cookies, pack({ name: "10 classes" }));
-      await sql`UPDATE gym_membership_types SET sold_in_app = true WHERE gym_id = ${gymId} AND name = 'Gold Monthly'`;
       const ana = await makeUser("p-ana");
       await inApp(gymId, ana.id, await addPerson(gymId, owner.cookies, "Ana Ruiz"));
       expect((await forSale(gymId, ana.cookies)).items.map((i) => i.name)).toEqual(["10 classes"]);
+      const res = await send("GET", `/v1/orgs/${gymId}/for-sale?repeating=true`, ana.cookies);
+      expect(res.statusCode, res.body).toBe(200);
+      const asked = forSaleResponseSchema.parse(JSON.parse(res.body));
+      expect(asked.items.map((i) => [i.name, i.repeats])).toEqual([["10 classes", false], ["Gold Monthly", true]]);
+      // Ana has no card saved: none named, and no tick to read.
+      expect(asked.card).toBeNull();
+      expect(asked.items.map((i) => i.charge)).toEqual([null, null]);
+      expect((await send("GET", `/v1/orgs/${gymId}/for-sale?repeating=maybe`, ana.cookies)).statusCode).toBe(400);
     },
     T,
   );

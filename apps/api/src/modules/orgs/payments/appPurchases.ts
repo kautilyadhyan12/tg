@@ -19,6 +19,7 @@ import {
   APP_PURCHASE_WORDS,
   appPaymentCloseResponseSchema,
   appPurchaseResponseSchema,
+  cardName,
   formatMinor,
   type AppPaymentCloseResponse,
   type AppPurchase,
@@ -34,6 +35,7 @@ import { payerOf } from "../payers/repo.js";
 import { OrgsError, requirePrivilege } from "../service.js";
 import { BILLING, orgNotFound } from "./cards.js";
 import { APP_PAYMENT, lookNow, readyForApp, type Told } from "./appPayments.js";
+import { chargeStep } from "./appCardPurchases.js";
 import * as pays from "./appPaymentsRepo.js";
 import * as buys from "./appPurchasesRepo.js";
 import { accessContext, type PaymentsDeps } from "./service.js";
@@ -96,17 +98,31 @@ function viewOf(row: pays.AppPayRow): AppPurchase {
 
 const answerOf = (row: pays.AppPayRow): AppPurchaseResponse => appPurchaseResponseSchema.parse({ purchase: viewOf(row) });
 
+/** Why a card purchase took nothing, in the member's words (18k-iv): the bank asking to confirm it was them is never
+ *  called a decline, as it tells them to replace a good card. */
+function chargeRefusal(code: string, card: { brand: string; last4: string } | null): OrgsError {
+  if (code === "CARD_DECLINED_VERIFICATION_REQUIRED") return new OrgsError(409, "app_purchase_verification", APP_PURCHASE_WORDS.verification);
+  if (code === "CANCELED" || code === "CARD_REFUSED") return new OrgsError(409, "app_purchase_card_refused", APP_PURCHASE_WORDS.card_refused);
+  return new OrgsError(409, "app_purchase_declined", APP_PURCHASE_WORDS.declined(card === null ? "Your card" : cardName(card)));
+}
+
 /** The same press, or the page already open for this record: given back where it is this reader's, for this line at this
  *  amount; otherwise the reader is told what stands in the way. */
 function sameOr(row: pays.AppPayRow, userId: string, body: AppPurchaseRequest): AppPurchaseResponse {
   const sameLine = row.openedBy === userId && row.typeId === body.typeId && row.amountMinor === body.amountMinor;
+  // The same press of a card purchase Square did not take is told why again, as the first answer may have been lost.
+  if (sameLine && row.requestKey === body.requestKey && row.chargeCode !== null) throw chargeRefusal(row.chargeCode, row.card);
   if (sameLine && row.requestKey === body.requestKey) return answerOf(row);
   // Another press on the page open: given back only where it is signed the same, never a signature it did not send.
   const sign = buys.boughtOf(row)?.sign ?? null;
   const signedSame =
     body.agreement === null ? sign === null : sign !== null && sign.agreementId === body.agreement.agreementId && sign.signer === body.agreement.signer && sign.name === body.agreement.name;
   if (sameLine && row.state === "open" && signedSame) return answerOf(row);
-  if (row.state === "open" && row.requestKey !== body.requestKey) throw new OrgsError(409, "app_payment_other_open", APP_PURCHASE_WORDS.other_open);
+  if (row.state === "open" && row.requestKey !== body.requestKey) {
+    // A card charged has no page to finish: Square is still to say how it went (18k-iv).
+    if (row.card !== null) throw new OrgsError(409, "app_purchase_charging", APP_PURCHASE_WORDS.charging);
+    throw new OrgsError(409, "app_payment_other_open", APP_PURCHASE_WORDS.other_open);
+  }
   throw changed();
 }
 
@@ -141,6 +157,20 @@ function refusalOf(outcome: Exclude<buys.PurchasableOutcome, { kind: "ok" }>, gy
       throw notOffered();
     case "check":
       throw new OrgsError(409, "app_payment_check", APP_PURCHASE_WORDS.check_first);
+    case "card_needed":
+      throw new OrgsError(409, "app_purchase_card_needed", APP_PURCHASE_WORDS.card_needed);
+    case "card_no_record":
+      throw new OrgsError(409, "app_purchase_card_no_record", APP_PURCHASE_WORDS.card_no_record);
+    case "card_expired":
+      throw new OrgsError(409, "app_purchase_card_expired", APP_PURCHASE_WORDS.card_expired);
+    case "card_stopped":
+      throw new OrgsError(409, "app_purchase_card_stopped", APP_PURCHASE_WORDS.card_stopped);
+    case "card_paused":
+      throw new OrgsError(409, "app_purchase_card_paused", APP_PURCHASE_WORDS.card_paused);
+    case "card_changed":
+      throw new OrgsError(409, "app_purchase_card_changed", APP_PURCHASE_WORDS.card_changed);
+    case "renewing_held":
+      throw new OrgsError(409, "app_purchase_renewing_held", APP_PURCHASE_WORDS.renewing_held(outcome.name));
     default: {
       const never: never = outcome;
       throw new Error(`unhandled purchase check: ${JSON.stringify(never)}`);
@@ -158,6 +188,8 @@ export async function startPurchase(deps: PaymentsDeps, userId: string, gymId: s
   const ready = await readyForApp(deps, gymId);
   if (ready === null) throw notOffered();
   const now = deps.now();
+  // A repeating line is charged to their own card (18k-iv): a member not on the list yet has no card here.
+  if (body.charge !== undefined && own.entryId === null) throw new OrgsError(409, "app_purchase_card_no_record", APP_PURCHASE_WORDS.card_no_record);
   const buying: buys.Buying = {
     gymId,
     userId,
@@ -167,6 +199,8 @@ export async function startPurchase(deps: PaymentsDeps, userId: string, gymId: s
     amountMinor: body.amountMinor,
     factsKey: body.factsKey,
     agreement: body.agreement,
+    charge: body.charge ?? null,
+    square: { environment: ready.square.environment, accountId: ready.row.accountId },
     accountCurrency: ready.row.currency,
     gymName: own.gymName,
     today: dayInTz(now, ready.timezone),
@@ -177,6 +211,7 @@ export async function startPurchase(deps: PaymentsDeps, userId: string, gymId: s
 
   const token = ready.square.tokens.open(ready.row.accessToken ?? "", accessContext(gymId));
   if (token === null) throw notOffered();
+  if (before.card !== null) return await chargeCard(deps, ready.square, token, buying, body, userId, ready.row.locationId, own.gymName);
   const id = randomUUID();
   const linkKey = randomUUID();
   const made = await ready.square.api.createPaymentLink(token, {
@@ -226,6 +261,47 @@ export async function startPurchase(deps: PaymentsDeps, userId: string, gymId: s
   return { answer: refusalOf(written, own.gymName, userId, body), tell: null };
 }
 
+/** Buy on the card (18k-iv): the purchase written under the locks, held by this request, then charged by Square with its
+ *  own id as the key. Declined or refused, nothing was taken and the member is told why; no answer yet, it reads open and
+ *  is asked again by the phone and the worker. */
+async function chargeCard(
+  deps: PaymentsDeps,
+  square: NonNullable<PaymentsDeps["square"]>,
+  token: string,
+  buying: buys.Buying,
+  body: AppPurchaseRequest,
+  userId: string,
+  locationId: string,
+  gymName: string,
+): Promise<Told<AppPurchaseResponse>> {
+  const at = deps.now();
+  const leaseUntil = new Date(at.getTime() + APP_PAYMENT.leaseMs);
+  const written = await buys.writeOpenCharge(deps.sql, {
+    ...buying,
+    now: at,
+    id: randomUUID(),
+    requestKey: body.requestKey,
+    locationId,
+    openedBy: userId,
+    leaseUntil,
+    closesAt: new Date(at.getTime() + APP_PAYMENT.giveUpMs),
+  });
+  if (written.kind === "key_reused") return { answer: sameOr(written.row, userId, body), tell: null };
+  if (written.kind !== "new") return { answer: refusalOf(written, gymName, userId, body), tell: null };
+  const row = written.row;
+  let step: Awaited<ReturnType<typeof chargeStep>>;
+  try {
+    step = await chargeStep(deps, square, token, row, true);
+  } finally {
+    await pays.release(deps.sql, buying.gymId, row.id, leaseUntil);
+  }
+  if (step.kind === "declined") throw chargeRefusal(step.code, row.card);
+  if (step.kind === "refused") throw step.code === "CARD_DECLINED_VERIFICATION_REQUIRED" ? chargeRefusal(step.code, row.card) : chargeRefusal("CARD_REFUSED", row.card);
+  const now = await buys.readOwnPurchase(deps.sql, buying.gymId, userId, row.id);
+  if (now === null) throw notFound();
+  return { answer: answerOf(now), tell: buying.entryId };
+}
+
 /** Where a purchase stands: Square is asked, unless another request is asking right now. */
 export async function checkPurchase(deps: PaymentsDeps, userId: string, gymId: string, id: string, limit: Limit): Promise<Told<AppPurchaseResponse> | null> {
   if ((await readerOf(deps.sql, gymId, userId)) === null) throw orgNotFound();
@@ -243,7 +319,8 @@ export async function closePurchase(deps: PaymentsDeps, userId: string, gymId: s
   const row = await buys.readOwnPurchase(deps.sql, gymId, userId, id);
   if (row === null) throw notFound();
   if (row.state === "open" && deps.square !== null) {
-    await pays.wantClose(deps.sql, gymId, id, "member", null, deps.now());
+    // A card charged has no page to close: Square is asked how it went (18k-iv).
+    if (row.card === null) await pays.wantClose(deps.sql, gymId, id, "member", null, deps.now());
     await lookNow(deps, deps.square, gymId, id, APP_PAYMENT.closeWaitMs);
   }
   return await toldOf(deps, userId, gymId, id, row);

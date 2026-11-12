@@ -231,6 +231,9 @@ export const gymMemberCards = pgTable(
       .references(() => gymCardAgreements.id),
     savedAt: timestamp("saved_at", { withTimezone: true }).notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+    /** Staff pressed Remove card and Square is being told to stop it (0236; 18k-iv round one's re-check, N1): Buy in the app
+     *  does not charge it meanwhile. Cleared if Square refuses; past five minutes it no longer counts. */
+    removingSince: timestamp("removing_since", { withTimezone: true }),
     /** Square merged the card's customer into somebody of another name (0167; ROADMAP 18d-iii-b-ii-b-ii-a): the
      *  card is charged through that customer, which never links to this record. */
     mergedAwayAt: timestamp("merged_away_at", { withTimezone: true }),
@@ -907,10 +910,16 @@ export const gymAppPayments = pgTable(
     openedBy: uuid("opened_by").references(() => users.id, { onDelete: "set null" }),
     openedAt: timestamp("opened_at", { withTimezone: true }).notNull(),
     closesAt: timestamp("closes_at", { withTimezone: true }).notNull(),
-    linkKey: uuid("link_key").notNull(),
-    linkId: text("link_id").notNull(),
-    orderId: text("order_id").notNull(),
-    url: text("url").notNull(),
+    /** Square's payment page; all four empty for a purchase charged to the card saved in the app (0236; 18k-iv). */
+    linkKey: uuid("link_key"),
+    linkId: text("link_id"),
+    orderId: text("order_id"),
+    url: text("url"),
+    /** The card a purchase of a repeating line is charged to, and the customer it is saved on (0236; 18k-iv). */
+    cardId: text("card_id"),
+    cardCustomerId: text("card_customer_id"),
+    /** Why Square did not take a card purchase, where it said (0236): the same press sent again is told the same. */
+    chargeCode: text("charge_code"),
     state: text("state").notNull(),
     outcome: text("outcome"),
     /** Somebody asked for it closed: the next look at Square deletes the page first. */
@@ -936,7 +945,15 @@ export const gymAppPayments = pgTable(
     check("gym_app_payments_environment_check", sql`${t.environment} IN ('sandbox','production')`),
     check(
       "gym_app_payments_ids_check",
-      sql`${t.accountId} ~ '^[A-Za-z0-9_-]{1,64}$' AND ${t.locationId} ~ '^[A-Za-z0-9_-]{1,64}$' AND ${t.linkId} ~ '^[A-Za-z0-9_-]{1,64}$' AND ${t.orderId} ~ '^[A-Za-z0-9_-]{1,192}$' AND char_length(${t.url}) <= 300 AND (${t.squarePaymentId} IS NULL OR ${t.squarePaymentId} ~ '^[A-Za-z0-9_-]{1,192}$')`,
+      sql`${t.accountId} ~ '^[A-Za-z0-9_-]{1,64}$' AND ${t.locationId} ~ '^[A-Za-z0-9_-]{1,64}$' AND (${t.linkId} IS NULL OR ${t.linkId} ~ '^[A-Za-z0-9_-]{1,64}$') AND (${t.orderId} IS NULL OR ${t.orderId} ~ '^[A-Za-z0-9_-]{1,192}$') AND (${t.url} IS NULL OR char_length(${t.url}) <= 300) AND (${t.squarePaymentId} IS NULL OR ${t.squarePaymentId} ~ '^[A-Za-z0-9_-]{1,192}$') AND (${t.cardId} IS NULL OR ${t.cardId} ~ '^[A-Za-z0-9_:-]{1,192}$') AND (${t.cardCustomerId} IS NULL OR ${t.cardCustomerId} ~ '^[A-Za-z0-9_-]{1,192}$')`,
+    ),
+    check(
+      "gym_app_payments_way_check",
+      sql`CASE WHEN ${t.cardId} IS NULL
+        THEN ${t.cardCustomerId} IS NULL AND ${t.linkKey} IS NOT NULL AND ${t.linkId} IS NOT NULL AND ${t.orderId} IS NOT NULL AND ${t.url} IS NOT NULL
+        ELSE ${t.cardCustomerId} IS NOT NULL AND ${t.membershipTypeId} IS NOT NULL AND ${t.cardBrand} IS NOT NULL
+          AND ${t.linkKey} IS NULL AND ${t.linkId} IS NULL AND ${t.orderId} IS NULL AND ${t.url} IS NULL
+      END`,
     ),
     check(
       "gym_app_payments_amount_check",
@@ -951,6 +968,7 @@ export const gymAppPayments = pgTable(
           AND (${t.clearedAt} IS NULL OR ${t.outcome} IN ('not_recorded','gone','no_answer'))
       END`,
     ),
+    check("gym_app_payments_charge_code_check", sql`${t.chargeCode} IS NULL OR (${t.cardId} IS NOT NULL AND ${t.chargeCode} ~ '^[A-Z0-9_]{1,60}$')`),
     check("gym_app_payments_cleared_check", sql`${t.clearedBy} IS NULL OR ${t.clearedAt} IS NOT NULL`),
     check("gym_app_payments_state_check", sql`${t.state} IN ('open','done')`),
     check(

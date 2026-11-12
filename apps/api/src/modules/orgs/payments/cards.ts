@@ -25,6 +25,7 @@
 // same step as a typed one (`keepCard`), with the same checks.
 import { randomUUID } from "node:crypto";
 import {
+  APP_PURCHASE_STAFF_WORDS,
   MEMBER_CARD_WORDS,
   MEMBER_LIST_BY_HAND_WORDS,
   MY_CARD_PAYS_FOR_NAMED,
@@ -257,7 +258,16 @@ export async function removeMemberCard(deps: PaymentsDeps, userId: string, gymId
   const ready = await readyOrThrow(deps, gymId, gym);
   const card = shownCard(await cards.readCard(deps.sql, gymId, entryId), ready.square, ready.row);
   if (card !== null) {
+    // A purchase in the app charged to it waits for Square: what it gives renews on this card (18k-iv, round one H3). Checked
+    // under the gym's lock, and the card marked as being removed, so a Buy pressed while Square is told does not take it (N1).
+    const marked = await deps.sql.begin(async (tx) => {
+      await lockGym(tx, gymId);
+      return await cards.markRemoving(tx, gymId, entryId, card.cardId);
+    });
+    if (!marked) throw new OrgsError(409, "card_purchase_waiting", APP_PURCHASE_STAFF_WORDS.card_waiting);
     const result = await ready.square.api.disableCard(ready.token, card.cardId);
+    const stopped = result.kind === "ok" || (result.kind === "refused" && result.status === 404);
+    if (!stopped) await cards.clearRemoving(deps.sql, gymId, entryId, card.cardId);
     if (result.kind === "unavailable") throw unavailable();
     if (result.kind === "refused" && result.status === 401) throw connectionRefused();
     // Square no longer having the card is as good as stopped; any other refusal is not.
@@ -341,7 +351,9 @@ export async function removalOf(sql: Sql | TransactionSql, gymId: string, entryI
   }
   if (await cardPaysForRenewal(sql, { gymId, entryId }, now)) return stays("renews");
   const payment = (await heldOnListOf(sql, gymId, today, [entryId])).get(entryId)?.shown.payment?.state;
-  if (payment === "due" || payment === "later" || (await cards.hasOpenBill(sql, gymId, entryId))) return stays("owed");
+  if (payment === "due" || payment === "later" || (await cards.hasOpenBill(sql, gymId, entryId)) || (await cards.cardPurchaseWaiting(sql, gymId, entryId))) {
+    return stays("owed");
+  }
   return { canRemove: true, stays: null, paysFor: null };
 }
 

@@ -350,7 +350,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
      - 18k-iii. **Buy something paid once**, in two parts since 2026-11-07 (`handoff/2026-11-07-18k-iii-a.md` keeps its line as first written):
        - 18k-iii-a. [x] **A member on the gym's list buys it** — merged 2026-11-07 (PR #492).
        - 18k-iii-b. [x] **A member not on the gym's list yet, or sharing a record, buys it** — merged 2026-11-07 (PR #494).
-     - 18k-iv. [ ] **Buy a repeating membership**: its own tick, kept with its time and words, a card typed on Square's form and kept; on sale only once 18l is built.
+     - 18k-iv. [x] **Buy a repeating membership** — merged 2026-11-12 (PR #535).
      - 18k-v. [ ] **A promo code typed in the app** (spec Part 3 §14.3).
      - 18k-vi. [ ] **Overview: payments in the app to check in Square** (Kd, 2026-11-12, `rulings/2026-11-12-20g.md`): a line on Overview for each payment or purchase in the app that Square may have taken and nothing recorded, with a button to that person. The web folder, after 14a.
    - 18l. [x] **A member stops their own repeating membership** — merged 2026-11-12 (PR #525).
@@ -655,6 +655,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
     - 20f. [x] **Pay what I owe** · merged 2026-11-12 · PR #526
     - 20g. [x] **Buy in the app** · merged 2026-11-12 · PR #530
     - 20h. [ ] **Payment received** (Kd, 2026-11-12, `rulings/2026-11-12-20g.md`): a phone notification when a payment or purchase in the app is confirmed after the member left it.
+    - 20i. [ ] **Buy a repeating membership** (18k-iv's server, `rulings/2026-11-12-18k-iv.md`): repeating lines on Buy (`?repeating=true`), the tick of its own, Pay with the card saved in the app or Add card first, and the bank's check where it asks. Feature folder 1.
 21. **Release** (split 2026-11-07, Kd: the release is prepared alongside the building, and Google's closed test starts as soon as the app can be installed from Google Play, without waiting for workouts or exercises; `rulings/2026-11-07-21-closed-test-early.md` keeps the line as first written and Google's rules as read that day).
     - 21a. **The server online, free for the test** (split 2026-11-08: the server first; on AWS's free plan in Sydney, Oracle having refused Kd's card; `handoff/2026-11-09-21a-i.md` keeps its line as first written).
       - 21a-i. [x] **The server at its own https address** · merged 2026-11-09 · PR #509

@@ -26,6 +26,7 @@ import {
   wholeNumber,
   withChoice,
   restoredTypeWords,
+  sellInAppHint,
   soldInAppWords,
   squareSellState,
 } from './membershipTypesView';
@@ -243,15 +244,14 @@ describe('the form', () => {
     }
   });
 
-  // 18k-i: the tick goes with a paid-once membership or a pack, whatever the form still holds for another kind.
-  it('Sell in the app is sent for a paid-once membership or a pack, not yet for a repeating one, never for a trial, and a change states it', () => {
-    for (const choice of ['one_time', 'pack', 'day_pass']) {
+  // 18k-i: the tick goes with a paid-once membership or a pack, and a repeating one since 18k-iv, whatever the form still holds for another kind.
+  it('Sell in the app is sent for a repeating or paid-once membership or a pack, never for a trial, and a change states it', () => {
+    for (const choice of ['recurring', 'one_time', 'pack', 'day_pass']) {
       const draft = named({ choice, soldInApp: true, termUnit: 'month' });
       expect(draftProblems(draft, 'USD'), choice).toBeNull();
       expect(draftBody(draft, 'USD').soldInApp, choice).toBe(true);
       expect(valid(draftBody(draft, 'USD')), choice).toBe(true);
     }
-    expect(draftBody(named({ soldInApp: true }), 'USD').soldInApp).toBe(false);
     expect(draftBody(named({ choice: 'trial', soldInApp: true, price: '0', termCount: '7', termUnit: 'day' }), 'USD').soldInApp).toBe(false);
     expect(draftProblems(named({ choice: 'one_time', soldInApp: true, price: '0' }), 'USD')).toEqual({ soldInApp: "A free membership can't be sold in the app. Untick Sell in the app." });
     const once = type({ kind: 'one_time', termCount: 3, soldInApp: true });
@@ -275,8 +275,10 @@ describe('the form', () => {
     expect(squareSellState(box({ availability: 'india_soon', squareReady: false }))).toBe('country');
     const sold = type({ kind: 'one_time', termCount: 3, soldInApp: true });
     expect(soldInAppWords(type(), 'ready')).toBeNull();
-    // A repeating line ticked before 18k-iv is never said to be sold.
-    expect(soldInAppWords(type({ soldInApp: true }), 'ready')).toBeNull();
+    // A repeating line is sold in the app since 18k-iv.
+    expect(soldInAppWords(type({ soldInApp: true }), 'ready')).toEqual({ tag: 'Sold in the app', line: null });
+    expect(sellInAppHint('ready', true, 'recurring').text).toBe('Members can buy it in the app with a card they save there. It renews on that card.');
+    expect(sellInAppHint('ready', true, 'pack').text).toBe('Members can buy it in the app and pay by card through Square.');
     expect(soldInAppWords(sold, 'no_plan', 'studio')).toEqual({ tag: null, line: "Members can't buy it in the app until this studio has a plan." });
     expect(soldInAppWords(sold, 'ready')).toEqual({ tag: 'Sold in the app', line: null });
     expect(soldInAppWords(sold, 'connect')).toEqual({ tag: null, line: "Members can't buy it in the app until Square is connected." });
