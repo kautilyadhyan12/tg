@@ -369,6 +369,56 @@ jest.mock("../../src/screens/running/runVoiceNative", () => {
     },
   };
 });
+// The heart rate monitor's Bluetooth (37f-i), modules/heart-rate's Android code. `strap.near`: the monitors in
+// reach, each with the bytes it sends (`send(id, bytes, at)` hands one notification over as the Android code
+// would, whether it is watched or not: the app's own code must leave out what is not its monitor's).
+// `radio`, `allowed` and `missing` stand for Bluetooth off, Nearby devices refused, and a copy built before it.
+jest.mock("../../src/heart/heartNative", () => {
+  const strap = { radio: "on", allowed: true, missing: false, near: [], watched: null, watches: [], waiting: [], scans: 0, found: new Set() };
+  strap.send = (id, bytes, at = Date.now()) => {
+    strap.waiting.push({ device: id, at, bytes });
+  };
+  strap.reset = () => {
+    Object.assign(strap, { radio: "on", allowed: true, missing: false, near: [], watched: null, watches: [], waiting: [], scans: 0 });
+    strap.found.clear();
+  };
+  const native = {
+    radio: () => strap.radio,
+    allowed: () => strap.allowed,
+    scan: () => {
+      if (strap.radio !== "on" || !strap.allowed) return false;
+      strap.scans += 1;
+      for (const one of strap.near) for (const listener of strap.found) listener({ id: one.id, name: one.name, rssi: one.rssi });
+      return true;
+    },
+    stopScan: () => undefined,
+    watch: (id) => {
+      strap.watched = id;
+      strap.watches.push(id);
+      return true;
+    },
+    unwatch: () => {
+      strap.watched = null;
+    },
+    take: () => {
+      const out = strap.waiting;
+      strap.waiting = [];
+      return out;
+    },
+    status: () => ({ device: strap.watched, connected: strap.watched !== null }),
+    askRadio: () => true,
+    addListener: (event, listener) => {
+      strap.found.add(listener);
+      return { remove: () => strap.found.delete(listener) };
+    },
+  };
+  return {
+    strap,
+    get heartNative() {
+      return strap.missing ? null : native;
+    },
+  };
+});
 // Add card's screenshot block (20d), expo-screen-capture's Android code: a test reads each mark in order (`marks`,
 // "on" and "off"), holds the next "on" unanswered (`hold`, then `release()`), and `missing` stands for a copy of the
 // app built before it.

@@ -225,6 +225,7 @@ export function RunPage({ runId, units, onClose, onChanged, onDeleted }: {
             kcal={read.run.kcalPoint ?? 0}
             climb={read.run.climbM === null ? { kind: "none" } : { kind: "done", m: read.run.climbM, hills: read.run.hillLine }}
             units={units}
+            heart={read.run.heartAvg === null || read.run.heartMax === null ? null : { avg: read.run.heartAvg, max: read.run.heartMax }}
           />
           <RouteCard track={track} starts={read.run.trackStarts} units={units} name={read.run.name} distanceM={read.run.distanceM} movingS={read.run.durationS} testID="run-map" />
           <PaceCard paceLine={read.run.paceLine} hillLine={read.run.hillLine} distanceM={read.run.distanceM} movingS={read.run.durationS} units={units} />

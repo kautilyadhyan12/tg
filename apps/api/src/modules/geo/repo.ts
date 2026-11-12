@@ -40,7 +40,17 @@ export interface RunDetailRow extends RunRow {
   leftOutM: number | null;
   leftOutS: number | null;
   bests: RunBests;
+  /** Heart rate from a strap or watch (37f-i); null for a run with none. */
+  heart: RunHeart | null;
 }
+
+/** A run's average and highest heart rate, beats a minute. */
+export interface RunHeart {
+  avg: number;
+  max: number;
+}
+
+const heartOf = (avg: number | null, max: number | null): RunHeart | null => (avg === null || max === null ? null : { avg, max });
 
 export interface SavedRouteRow {
   id: string;
@@ -79,6 +89,8 @@ interface RunDetailDbRow extends RunDbRow {
   best_mile_s: number | null;
   best_5k_s: number | null;
   best_10k_s: number | null;
+  heart_avg: number | null;
+  heart_max: number | null;
 }
 
 interface SavedRouteDbRow {
@@ -115,6 +127,7 @@ const toRunDetail = (r: RunDetailDbRow): RunDetailRow => ({
   leftOutM: r.left_out_m,
   leftOutS: r.left_out_s,
   bests: { k1: r.best_1k_s, mile: r.best_mile_s, k5: r.best_5k_s, k10: r.best_10k_s },
+  heart: heartOf(r.heart_avg, r.heart_max),
 });
 
 const toSavedRoute = (r: SavedRouteDbRow): SavedRouteRow => ({
@@ -237,7 +250,7 @@ const runDetailColumns = (sql: Sql, timeZone: string) => sql`
   to_char(started_at AT TIME ZONE ${timeZone}, 'YYYY-MM-DD') AS day,
   CASE WHEN shape IS NULL THEN polyline END AS shape_polyline, CASE WHEN shape IS NULL THEN splits END AS shape_splits,
   splits, effort, note, left_out_m, left_out_s, legacy_mongo_id IS NOT NULL AS legacy,
-  best_1k_s, best_mile_s, best_5k_s, best_10k_s`;
+  best_1k_s, best_mile_s, best_5k_s, best_10k_s, heart_avg, heart_max`;
 
 export async function getRun(sql: Sql, userId: string, id: string, timeZone: string): Promise<RunDetailRow | null> {
   const rows = await sql<RunDetailDbRow[]>`
@@ -465,6 +478,8 @@ export interface NewRun {
   shape: string | null;
   /** Its fastest 1 km, mile, 5 km and 10 km (37c-ii). */
   bests: RunBests;
+  /** Its average and highest heart rate (37f-i); none for a run without it. */
+  heart?: RunHeart | null;
 }
 
 export interface SavedRunRow {
@@ -482,6 +497,7 @@ export interface SavedRunRow {
   splits: unknown;
   polyline: string | null;
   climbM: number | null;
+  heart: RunHeart | null;
 }
 
 interface SavedRunDbRow {
@@ -499,6 +515,8 @@ interface SavedRunDbRow {
   splits: unknown;
   polyline: string | null;
   climb_m: number | null;
+  heart_avg: number | null;
+  heart_max: number | null;
 }
 
 const toSavedRun = (r: SavedRunDbRow): SavedRunRow => ({
@@ -516,6 +534,7 @@ const toSavedRun = (r: SavedRunDbRow): SavedRunRow => ({
   splits: r.splits,
   polyline: r.polyline,
   climbM: r.climb_m,
+  heart: heartOf(r.heart_avg, r.heart_max),
 });
 
 /** Saves a run once: a second send of the same id changes nothing and reads back what the first
@@ -534,16 +553,18 @@ export async function insertRun(sql: Sql, userId: string, run: NewRun): Promise<
     const inserted = await tx`
       INSERT INTO runs (id, user_id, started_at, duration_s, distance_m, polyline, splits, kcal_point,
                         kcal_calc_version, source, name, effort, note, elapsed_s, left_out_m, left_out_s,
-                        run_calc_version, climb_m, climb_state, shape, best_1k_s, best_mile_s, best_5k_s, best_10k_s)
+                        run_calc_version, climb_m, climb_state, shape, best_1k_s, best_mile_s, best_5k_s, best_10k_s,
+                        heart_avg, heart_max)
       VALUES (${run.id}, ${userId}, ${run.startedAt}, ${run.movingS}, ${run.distanceM}, ${run.polyline},
               ${tx.json(run.splits)}, ${run.kcal}, ${run.calcVersion}, 'mobile', ${run.name}, ${run.effort},
               ${run.note}, ${run.elapsedS}, ${run.leftOutM}, ${run.leftOutS}, ${run.calcVersion},
               ${run.climb.state === "done" ? run.climb.m : null}, ${run.climb.state}, ${run.shape},
-              ${run.bests.k1}, ${run.bests.mile}, ${run.bests.k5}, ${run.bests.k10})
+              ${run.bests.k1}, ${run.bests.mile}, ${run.bests.k5}, ${run.bests.k10},
+              ${run.heart?.avg ?? null}, ${run.heart?.max ?? null})
       ON CONFLICT (id) DO NOTHING`;
     const rows = await tx<(SavedRunDbRow & { user_id: string })[]>`
       SELECT id, user_id, started_at, name, effort, note, distance_m, duration_s, elapsed_s, left_out_m,
-             left_out_s, kcal_point, splits, polyline, climb_m
+             left_out_s, kcal_point, splits, polyline, climb_m, heart_avg, heart_max
       FROM runs WHERE id = ${run.id}`;
     const row = rows[0];
     if (row === undefined || row.user_id !== userId) throw new ForeignRunError();
@@ -555,7 +576,7 @@ export async function insertRun(sql: Sql, userId: string, run: NewRun): Promise<
 export async function getSavedRun(sql: Sql, userId: string, id: string): Promise<SavedRunRow | null> {
   const rows = await sql<SavedRunDbRow[]>`
     SELECT id, started_at, name, effort, note, distance_m, duration_s, elapsed_s, left_out_m, left_out_s,
-           kcal_point, splits, polyline, climb_m
+           kcal_point, splits, polyline, climb_m, heart_avg, heart_max
     FROM runs WHERE id = ${id} AND user_id = ${userId}`;
   return rows[0] === undefined ? null : toSavedRun(rows[0]);
 }

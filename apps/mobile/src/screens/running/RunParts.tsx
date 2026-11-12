@@ -18,8 +18,9 @@ import { PaceWave } from "./RunDrawings";
 import { RunMap, useMapScheme } from "./RunMap";
 import { EFFORT_ENDS, clock, distance, leftOutLine, pace, paceWord, unitWord } from "./runWords";
 
-/** The big distance, the four tiles, the climb, what was paused and what was left out. */
-export function RunFigures({ distanceM, movingS, elapsedS, leftOutM, leftOutS, kcal, climb, units }: {
+/** The big distance, the four tiles, the heart rate where there was a monitor (37f-i), the climb, what was
+ *  paused and what was left out. */
+export function RunFigures({ distanceM, movingS, elapsedS, leftOutM, leftOutS, kcal, climb, units, heart = null }: {
   distanceM: number;
   movingS: number;
   elapsedS: number;
@@ -28,6 +29,8 @@ export function RunFigures({ distanceM, movingS, elapsedS, leftOutM, leftOutS, k
   kcal: number;
   climb: ClimbShown;
   units: Units;
+  /** Average and highest, beats a minute; null for a run with no monitor. */
+  heart?: { avg: number; max: number } | null;
 }) {
   const [credits, setCredits] = useState(false);
   const insets = useSafeAreaInsets();
@@ -46,6 +49,12 @@ export function RunFigures({ distanceM, movingS, elapsedS, leftOutM, leftOutS, k
         <Tile value={pace(movingS, distanceM < 50 ? 0 : distanceM, units)} label={`Avg pace ${paceWord(units)}`} />
         <Tile value={String(kcal)} label="Calories" />
       </View>
+      {heart === null ? null : (
+        <View style={styles.three}>
+          <Tile value={`${String(heart.avg)} bpm`} label="Avg heart rate" />
+          <Tile value={`${String(heart.max)} bpm`} label="Max heart rate" />
+        </View>
+      )}
       <View style={[styles.tile, styles.climbTile]}>
         <Txt style={styles.tileValue} fit numberOfLines={1}>
           {climbWords(climb, units)}

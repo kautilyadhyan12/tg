@@ -907,12 +907,12 @@ export const gymAppPayments = pgTable(
     openedBy: uuid("opened_by").references(() => users.id, { onDelete: "set null" }),
     openedAt: timestamp("opened_at", { withTimezone: true }).notNull(),
     closesAt: timestamp("closes_at", { withTimezone: true }).notNull(),
-    /** Square's payment page; all four empty for a purchase charged to the card saved in the app (0235; 18k-iv). */
+    /** Square's payment page; all four empty for a purchase charged to the card saved in the app (0236; 18k-iv). */
     linkKey: uuid("link_key"),
     linkId: text("link_id"),
     orderId: text("order_id"),
     url: text("url"),
-    /** The card a purchase of a repeating line is charged to, and the customer it is saved on (0235; 18k-iv). */
+    /** The card a purchase of a repeating line is charged to, and the customer it is saved on (0236; 18k-iv). */
     cardId: text("card_id"),
     cardCustomerId: text("card_customer_id"),
     state: text("state").notNull(),

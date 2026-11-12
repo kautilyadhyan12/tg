@@ -32,6 +32,8 @@ import { RECORDS_PATH } from "./runRecords";
 import { RunRow } from "./RunRow";
 import { RunsPage } from "./RunsPage";
 import { runVoiceNative, speakState, type SpeakState } from "./runVoiceNative";
+import { HeartMonitorRow, HeartMonitorSheet } from "../../heart/HeartMonitor";
+import { useMonitor } from "../../heart/monitor";
 
 /** The map's colours (37b-i): by the sun where the person is, as Google Maps and Waze switch, or fixed. */
 export const MAP_COLOUR_CHOICES: readonly { value: MapColours; label: string; desc?: string }[] = [
@@ -100,6 +102,8 @@ export function RunningTab({ units, parts }: { units: Units; parts: ReactNode })
   const voiceOn = useSyncExternalStore(subscribeRun, voiceChoice);
   const mapColours = useSyncExternalStore(subscribeRun, mapColoursChoice);
   const [pickingColours, setPickingColours] = useState(false);
+  const [heartOpen, setHeartOpen] = useState(false);
+  const monitor = useMonitor();
   useEffect(() => {
     void readRunChoices();
   }, []);
@@ -311,6 +315,14 @@ export function RunningTab({ units, parts }: { units: Units; parts: ReactNode })
               />
             </View>
             <View style={[styles.row, styles.rowLine]}>
+              <HeartMonitorRow
+                active={focused && !going}
+                onOpen={() => {
+                  setHeartOpen(true);
+                }}
+              />
+            </View>
+            <View style={[styles.row, styles.rowLine]}>
               <View style={styles.grow}>
                 <Txt kind="body">Units</Txt>
                 <Txt kind="small" colour="textFaint">
@@ -350,6 +362,13 @@ export function RunningTab({ units, parts }: { units: Units; parts: ReactNode })
             </Txt>
           )}
           <RefusedRuns />
+          <HeartMonitorSheet
+            open={heartOpen}
+            monitor={monitor}
+            onClose={() => {
+              setHeartOpen(false);
+            }}
+          />
           <Sheet
             open={pickingColours}
             title="Map colours"
