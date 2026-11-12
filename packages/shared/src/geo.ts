@@ -186,8 +186,9 @@ export const runDetailSchema = runSummarySchema.extend({
   hillLine: hillLineSchema,
   /** Heart rate from a strap or watch (37f-i): beats a minute over the time running; null for a run
    *  with none. */
-  heartAvg: heartBpmSchema.nullable(),
-  heartMax: heartBpmSchema.nullable(),
+  // A server from before 37f sends neither: read as none.
+  heartAvg: heartBpmSchema.nullable().default(null),
+  heartMax: heartBpmSchema.nullable().default(null),
 });
 export type RunDetail = z.infer<typeof runDetailSchema>;
 export const runDetailResponseSchema = z.object({ run: runDetailSchema });
@@ -271,8 +272,9 @@ export const savedRunSchema = z.object({
   /** Metres climbed (37b-ii), from the server's height map; null while it waits for the map, where the
    *  map has no heights, or for a run saved before. */
   climbM: z.number().int().nonnegative().nullable(),
-  heartAvg: heartBpmSchema.nullable(),
-  heartMax: heartBpmSchema.nullable(),
+  // A server from before 37f sends neither: read as none.
+  heartAvg: heartBpmSchema.nullable().default(null),
+  heartMax: heartBpmSchema.nullable().default(null),
 });
 export type SavedRun = z.infer<typeof savedRunSchema>;
 
@@ -384,7 +386,11 @@ export const keptRunStateSchema = z.object({
   files: z.number().int().nonnegative(),
   /** A run started from the plan; none for one kept before 37d-ii. */
   guide: keptRunGuideSchema.nullable().default(null),
+  /** Its heart rate's files (37f-i); none for one kept before. */
+  heartFiles: z.number().int().nonnegative().default(0),
 });
+/** A run's heart rate kept beside its points: [ms into the run, bpm]. */
+export const keptRunHeartSchema = z.array(z.tuple([z.number(), z.number().int().min(HEART_BPM_LEAST).max(HEART_BPM_MOST)]));
 export const keptRunPointsSchema = z.array(z.tuple([z.number(), z.number(), z.number(), z.number().nullable()]));
 
 /** The run's choices (37a, 37a-ii, 37b-i): Auto-pause, the voice, the account's units, kept for a run

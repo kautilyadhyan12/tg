@@ -8,6 +8,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   RUN_MAX_POINTS,
   geodesicMetres,
+  heartSums,
   runRecordsSchema,
   runSums,
   userProfileResponseSchema,
@@ -27,6 +28,7 @@ import { PictureTop } from "../../look/PictureTop";
 import { Sheet } from "../../look/Sheet";
 import { fonts, Txt } from "../../look/Txt";
 import { useSession } from "../../session/SessionProvider";
+import { loadMonitor, useHeartNow } from "../../heart/monitor";
 import { newGoalId } from "../goals/words";
 import { accountUnits } from "../setup/Setup";
 import {
@@ -126,6 +128,11 @@ export function RunLayerProvider({ children }: { children: ReactNode }) {
   const [counting, setCounting] = useState<{ autoPause: boolean; guide: KeptRunGuide | null } | null>(null);
   const [done, setDone] = useState<RunDone>(null);
   const [kg, setKg] = useState(0);
+
+  // The person's heart rate monitor (37f-i), kept on this phone for them.
+  useEffect(() => {
+    if (me !== null) void loadMonitor(me);
+  }, [me]);
 
   // The account's units, kept with the run's choices: the voice speaks in them with the app closed.
   const signedIn = state.kind === "in";
@@ -329,6 +336,18 @@ export function gpsLight(lastFix: LiveRun["lastFix"], now: number): Gps {
   return { word: "GPS", tone: "good" };
 }
 
+/** The heart rate now beside the GPS light (37f-i): No signal, never 0 and never an old number. */
+function HeartPill({ bpm }: { bpm: number | null }) {
+  return (
+    <View accessibilityLabel={bpm === null ? "Heart rate: no signal" : `Heart rate ${String(bpm)} beats a minute`} style={styles.heartPill}>
+      <Icon name="heart" size={14} colour={bpm === null ? "textFaint" : "orange"} />
+      <Txt kind="small" colour={bpm === null ? "textFaint" : "text"}>
+        {bpm === null ? "No signal" : `${String(bpm)} bpm`}
+      </Txt>
+    </View>
+  );
+}
+
 function GpsPill({ gps }: { gps: Gps }) {
   return (
     <View style={styles.pill} accessible accessibilityLabel={gps.word}>
@@ -405,6 +424,8 @@ function Live({ run, units, kg, onHide }: { run: LiveRun; units: Units; kg: numb
     });
   };
   const onMap = view === "map";
+  // The heart rate now from the person's monitor (37f-i); none shown without one.
+  const heartNowShown = useHeartNow(true);
   // Today's planned run (37d-ii): the step, what is left of it, and the next.
   const guide = run.guide === null ? null : <RunGuideCard guide={run.guide} movingMs={movingMsOf(run, now)} metres={metres} units={units} paused={isPaused} onSkip={press(() => skipStep())} />;
   const top = (
@@ -419,7 +440,10 @@ function Live({ run, units, kg, onHide }: { run: LiveRun; units: Units; kg: numb
           {run.pausedByPerson ? null : <Button kind="link" label="Turn off Auto-pause" onPress={press(() => chooseAutoPause(false))} />}
         </View>
       ) : (
-        <GpsPill gps={gpsLight(run.lastFix, now)} />
+        <View style={styles.pills}>
+          <GpsPill gps={gpsLight(run.lastFix, now)} />
+          {heartNowShown.monitor === null ? null : <HeartPill bpm={heartNowShown.bpm} />}
+        </View>
       )}
       <Pressable accessibilityRole="button" accessibilityLabel="Back to the app" onPress={onHide} hitSlop={10} style={[styles.hide, onMap ? styles.hideOnMap : null]}>
         <Icon name="down" size={22} colour={onMap ? "text" : "textSoft"} />
@@ -513,6 +537,11 @@ function Live({ run, units, kg, onHide }: { run: LiveRun; units: Units; kg: numb
           {/* No average until there is ground to average: a standing start reads as no pace. */}
           <Figure label="Average pace" value={pace(moving, metres < 50 ? 0 : metres, units)} unit={paceWord(units)} dim={isPaused} />
         </View>
+        {heartNowShown.monitor === null ? null : (
+          <View style={styles.pairs}>
+            <Figure label="Heart rate" value={heartNowShown.bpm === null ? "No signal" : String(heartNowShown.bpm)} {...(heartNowShown.bpm === null ? {} : { unit: "bpm" })} dim={isPaused} />
+          </View>
+        )}
         <View style={styles.pairs}>
           <Figure label="Calories" value={String(sums?.kcal ?? 0)} dim={isPaused} />
           <Figure label={units === "imperial" ? "This mile" : "This km"} value={distance(metres % per, units)} unit={unitWord(units)} dim={isPaused} />
@@ -588,6 +617,8 @@ function Summary({ run, units, kg, onSaved }: { run: LiveRun; units: Units; kg: 
   const insets = useSafeAreaInsets();
   const finished = run.finishedMs ?? 0;
   const sums = useMemo(() => runSums(run.points, closedPauses(run, finished), finished, kg), [run, finished, kg]);
+  // The heart rate as the server will work it out (37f-i): the same rule, the same readings.
+  const heart = useMemo(() => heartSums(run.heart, closedPauses(run, finished), finished), [run, finished]);
   const { session } = useSession();
   const startedAt = new Date(run.startedAt);
   const [name, setName] = useState(runName(startedAt));
@@ -634,6 +665,7 @@ function Summary({ run, units, kg, onSaved }: { run: LiveRun; units: Units; kg: 
       runId: run.runId,
       startedAt: startedAt.toISOString(),
       ...sent,
+      ...(run.heart.length > 0 ? { heart: run.heart.slice(0, RUN_MAX_POINTS) } : {}),
       name: kept,
       effort,
       note: note.trim() === "" ? null : note.trim().slice(0, 1000),
@@ -701,6 +733,7 @@ function Summary({ run, units, kg, onSaved }: { run: LiveRun; units: Units; kg: 
           kcal={sums.kcal}
           climb={climb}
           units={units}
+          heart={heart}
         />
         <RouteCard track={sums.track} starts={sums.trackStarts} units={units} name={name} distanceM={sums.distanceM} movingS={sums.movingS} />
         <PaceCard paceLine={sums.paceLine} hillLine={climb.kind === "done" ? climb.hills : []} distanceM={sums.distanceM} movingS={sums.movingS} units={units} />
@@ -848,6 +881,8 @@ const styles = StyleSheet.create({
   bigTitle: { flexShrink: 1, borderRadius: 14, backgroundColor: colours.veil, borderWidth: 1, borderColor: colours.lineStrong, paddingHorizontal: 12, paddingVertical: 6 },
   bigName: { fontFamily: fonts.bold },
   pill: { flexDirection: "row", alignItems: "center", gap: 7, paddingHorizontal: 12, paddingVertical: 7, borderRadius: sizes.round, backgroundColor: colours.veil, borderWidth: 1, borderColor: colours.lineStrong },
+  pills: { flexDirection: "row", alignItems: "center", gap: 8, flexShrink: 1, flexWrap: "wrap" },
+  heartPill: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 12, paddingVertical: 7, borderRadius: sizes.round, backgroundColor: colours.veil, borderWidth: 1, borderColor: colours.lineStrong },
   dot: { width: 8, height: 8, borderRadius: sizes.round },
   dotGood: { backgroundColor: colours.good, boxShadow: `0 0 10px ${colours.good}` },
   dotWeak: { backgroundColor: colours.gold },

@@ -12,6 +12,7 @@ import {
   RUN_MAX_PAUSES,
   RUN_MAX_POINTS,
   keptRunChoicesSchema,
+  keptRunHeartSchema,
   keptRunPointsSchema,
   keptRunStateSchema,
   phoneLocationsSchema,
@@ -28,6 +29,7 @@ import { AUTO_START, nextAutoPause, type AutoPauseState } from "./autoPause";
 import { beginLine, guideAdvance, guideDone, guideNextLook, guideSchedule, guideSkip, nowLine, skipLine } from "./runGuide";
 import { PAUSE_WORDS, VOICE_AFTER_LOAD, VOICE_START, voiceCheck, type VoiceState } from "./runVoice";
 import { runVoiceNative } from "./runVoiceNative";
+import { holdHeart, loadMonitor, takeHeartReadings } from "../../heart/monitor";
 
 export const RUN_TASK = "run-location";
 
@@ -55,6 +57,8 @@ export interface LiveRun {
   lastFix: { at: number; accuracyM: number | null } | null;
   /** Today's planned run, step by step (37d-ii); null for a run that is not the plan's. */
   guide: KeptRunGuide | null;
+  /** The heart rate from the person's monitor (37f-i), [ms into the run, bpm], while it runs. */
+  heart: [number, number][];
 }
 
 // ── The run kept on the phone ─────────────────────────────────────────────────────────────────
@@ -85,6 +89,9 @@ export const phoneRunFiles: RunFiles = {
 
 const STATE_FILE = "run-now.json";
 const pointsFile = (i: number) => `run-now-${String(i)}.json`;
+const heartFile = (i: number) => `run-now-heart-${String(i)}.json`;
+/** At most one heart rate a second is kept: straps send about that. */
+const HEART_EVERY_MS = 900;
 
 // ── What the screens see ──────────────────────────────────────────────────────────────────────
 
@@ -95,7 +102,10 @@ let loaded = false;
 const listeners = new Set<() => void>();
 /** Points of the open file not yet written, and when the file was last written. */
 let unwritten = 0;
+let heartUnwritten = 0;
 let writtenAt = 0;
+/** The monitor kept connected while a run is going (37f-i). */
+let heartHeld: (() => void) | null = null;
 /** The last points taken while paused, and how many are kept. */
 const PAUSED_TAIL = 4;
 let pausedTail: RunPoint[] = [];
@@ -329,6 +339,9 @@ export function resetRecorder(withFiles: RunFiles = phoneRunFiles): void {
   pausedTail = [];
   loaded = false;
   unwritten = 0;
+  heartUnwritten = 0;
+  heartHeld?.();
+  heartHeld = null;
   writtenAt = 0;
   tell();
 }
@@ -348,6 +361,7 @@ async function writeState(run: LiveRun): Promise<void> {
       finishedMs: run.finishedMs,
       files: fileCount,
       guide: run.guide,
+      heartFiles: Math.ceil(run.heart.length / POINTS_PER_FILE),
     }),
   );
 }
@@ -364,9 +378,46 @@ async function writePoints(run: LiveRun): Promise<void> {
   unwritten = 0;
 }
 
+/** The open heart rate file, as the points' are written. */
+async function writeHeart(run: LiveRun): Promise<void> {
+  if (run.heart.length === 0) return;
+  const last = Math.floor((run.heart.length - 1) / POINTS_PER_FILE);
+  await files.write(heartFile(last), JSON.stringify(run.heart.slice(last * POINTS_PER_FILE)));
+  if (last > 0 && run.heart.length % POINTS_PER_FILE <= heartUnwritten) {
+    await files.write(heartFile(last - 1), JSON.stringify(run.heart.slice((last - 1) * POINTS_PER_FILE, last * POINTS_PER_FILE)));
+  }
+  heartUnwritten = 0;
+}
+
 async function keep(run: LiveRun): Promise<void> {
   await writePoints(run);
+  await writeHeart(run);
   await writeState(run);
+}
+
+/** The monitor's readings since the last look, kept while the run is running: never one from before Go,
+ *  after Finish, or while paused (the server leaves a pause out too), never two inside a second. */
+function takeHeart(run: LiveRun): void {
+  const readings = takeHeartReadings();
+  if (run.phase !== "running") return;
+  for (const { at, bpm } of readings) {
+    const ms = Math.round(at - run.startedAt);
+    const lastAt = run.heart[run.heart.length - 1]?.[0] ?? -HEART_EVERY_MS;
+    if (ms < 0 || ms > RUN_MAX_ELAPSED_MS || ms - lastAt < HEART_EVERY_MS || run.heart.length >= RUN_MAX_POINTS) continue;
+    run.heart.push([ms, bpm]);
+    heartUnwritten += 1;
+  }
+}
+
+/** The person's monitor kept connected from Go until the run is finished. */
+function holdMonitor(userId: string): void {
+  if (heartHeld !== null) return;
+  heartHeld = holdHeart();
+  void loadMonitor(userId);
+}
+function releaseMonitor(): void {
+  heartHeld?.();
+  heartHeld = null;
 }
 
 /** The run kept on the phone, read once: after the app was closed, or in Android's own start of the
@@ -384,6 +435,13 @@ export async function loadRun(): Promise<LiveRun | null> {
       const part = await files.read(pointsFile(i));
       if (part !== null) points.push(...keptRunPointsSchema.parse(JSON.parse(part)));
     }
+    const heart: [number, number][] = [];
+    for (let i = 0; i < state.heartFiles; i++) {
+      const part = await files.read(heartFile(i));
+      // A heart rate file that cannot be read loses its heart rate, never the run.
+      const kept = part === null ? null : keptRunHeartSchema.safeParse(JSON.parse(part));
+      if (kept?.success === true) heart.push(...kept.data);
+    }
     const last = points[points.length - 1];
     current = {
       runId: state.runId,
@@ -397,7 +455,9 @@ export async function loadRun(): Promise<LiveRun | null> {
       finishedMs: state.finishedMs,
       lastFix: last === undefined ? null : { at: state.startedAt + last[0], accuracyM: last[3] },
       guide: state.guide,
+      heart,
     };
+    if (current.phase !== "finished") holdMonitor(current.userId);
     auto = { ...AUTO_START, paused: state.phase === "paused" };
     primeVoice(current);
     // The app was closed mid-run: a step begun since was said by nobody, so what is left of the step
@@ -480,6 +540,7 @@ export async function takeLocations(data: unknown, now: number = Date.now()): Pr
     }
   }
   if (mine !== generation || current?.runId !== run.runId) return;
+  takeHeart(run);
   current = { ...run };
   if (full) {
     // Twelve hours of points, or a day since Go: the run ends there and waits to be saved.
@@ -568,6 +629,7 @@ export async function startRun(userId: string, runId: string, autoPause: boolean
     finishedMs: null,
     lastFix: null,
     guide,
+    heart: [],
   };
   generation += 1;
   current = run;
@@ -576,7 +638,11 @@ export async function startRun(userId: string, runId: string, autoPause: boolean
   pausedTail = [];
   loaded = true;
   unwritten = 0;
+  heartUnwritten = 0;
   writtenAt = now;
+  // Readings from before Go are not the run's.
+  takeHeartReadings();
+  holdMonitor(userId);
   guideLookAt = 0;
   guideBack = null;
   await writeState(run);
@@ -597,6 +663,7 @@ export async function pauseRun(now: number = Date.now()): Promise<void> {
   const was = run.phase;
   // The guide is moved on to the pause, so the step it holds is the one the person is on.
   const step = was === "running" ? guideNow(run, now, true) : { lines: [] };
+  takeHeart(run);
   if (run.phase === "running") run.pauses.push([Math.max(now - run.startedAt, lastOpenEnd(run)), null]);
   run.phase = "paused";
   run.pausedByPerson = true;
@@ -611,6 +678,8 @@ export async function pauseRun(now: number = Date.now()): Promise<void> {
 export async function resumeRun(now: number = Date.now()): Promise<void> {
   const run = current;
   if (run === null || run.phase !== "paused") return;
+  // What the monitor sent while paused is not the run's.
+  takeHeartReadings();
   closePause(run, now - run.startedAt);
   run.phase = "running";
   run.pausedByPerson = false;
@@ -687,7 +756,12 @@ export async function finishRun(now: number = Date.now()): Promise<LiveRun | nul
   if (run === null) return null;
   quietVoice();
   await stopLocations();
-  if (run.phase === "finished") return run;
+  if (run.phase === "finished") {
+    releaseMonitor();
+    return run;
+  }
+  takeHeart(run);
+  releaseMonitor();
   // Never past a day: the most the server takes.
   const end = Math.min(RUN_MAX_ELAPSED_MS, Math.max(now - run.startedAt, run.points[run.points.length - 1]?.[0] ?? 0));
   closePause(run, end);
@@ -705,7 +779,10 @@ export async function forgetRun(): Promise<void> {
   const run = current;
   const count = run === null ? 0 : Math.ceil(run.points.length / POINTS_PER_FILE);
   for (let i = 0; i < Math.max(count, 1); i++) files.remove(pointsFile(i));
+  const hearts = run === null ? 0 : Math.ceil(run.heart.length / POINTS_PER_FILE);
+  for (let i = 0; i < Math.max(hearts, 1); i++) files.remove(heartFile(i));
   files.remove(STATE_FILE);
+  releaseMonitor();
   current = null;
   auto = AUTO_START;
   pausedTail = [];

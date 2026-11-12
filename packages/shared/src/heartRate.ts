@@ -53,6 +53,9 @@ export const phoneHeartSamplesSchema = z
   .max(100_000);
 export type PhoneHeartSample = z.infer<typeof phoneHeartSamplesSchema>[number];
 
+/** The monitor a person connected, kept on their phone: its Bluetooth address and its own name. */
+export const keptHeartMonitorSchema = z.object({ id: z.string().min(1).max(64), name: z.string().max(100) });
+
 /** A heart rate kept with a run: milliseconds into it and beats a minute. */
 export type HeartSample = readonly [atMs: number, bpm: number];
 
