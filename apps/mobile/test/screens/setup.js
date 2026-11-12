@@ -394,6 +394,29 @@ jest.mock("../../src/look/screenCaptureNative", () => {
     },
   };
 });
+// Square's payment page in a tab over the app (20f), expo-web-browser's own code: a test reads each page opened (`opened`),
+// says how the tab answers (`answer`: Android's "opened", an iPhone's "cancel" once closed, or "throw"), holds that answer
+// until `close()` where `hold` is set (an iPhone's sheet, up until the member closes it), and `missing` stands for a copy
+// of the app built before it, which opens the phone's own browser instead.
+jest.mock("../../src/look/browserTabNative", () => {
+  const tab = { opened: [], answer: "opened", missing: false, hold: false, close: () => undefined };
+  const native = {
+    openBrowserAsync: (url, options) => {
+      tab.opened.push({ url, options });
+      if (tab.answer === "throw") return Promise.reject(new Error("no browser"));
+      if (!tab.hold) return Promise.resolve({ type: tab.answer });
+      return new Promise((resolve) => {
+        tab.close = () => resolve({ type: tab.answer });
+      });
+    },
+  };
+  return {
+    tab,
+    get browserTabNative() {
+      return tab.missing ? null : native;
+    },
+  };
+});
 // The map is MapLibre's, drawn by the phone (37b-i). A test's map is a plain view, and each map drawn
 // is kept (`maps`, newest last, `gone` once closed) with what it was given: its style, the shapes of
 // each of its sources, its layers, its camera and its markers. A test reads them, and says back what

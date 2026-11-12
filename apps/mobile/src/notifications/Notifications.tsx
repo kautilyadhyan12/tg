@@ -5,6 +5,7 @@ import { Button } from "../look/Button";
 import { Sheet } from "../look/Sheet";
 import { useSetupComing } from "../screens/setupFirst";
 import { Txt } from "../look/Txt";
+import { payAwayGym } from "../screens/gym/payAway";
 import { useSession } from "../session/SessionProvider";
 import {
   ASK_AGAIN_MS,
@@ -55,8 +56,9 @@ export const NOTIFICATIONS_ASK = {
   line: "Get your reminders and messages, even when the app is closed.",
 } as const;
 
-export function NotificationsProvider({ children, onTapped }: { children: ReactNode; onTapped?: (tapped: Tapped) => void }) {
-  const { session } = useSession();
+export function NotificationsProvider({ children, onTapped }: { children: ReactNode; onTapped?: (tapped: Tapped | GymTapped) => void }) {
+  const { session, state } = useSession();
+  const userId = state.kind === "in" ? state.user.id : null;
   const [asking, setAsking] = useState(false);
   const [tapAsked, setTapAsked] = useState<GymTapped | null>(null);
   const [allowed, setAllowed] = useState<NotificationsAllowed | null>(null);
@@ -125,6 +127,22 @@ export function NotificationsProvider({ children, onTapped }: { children: ReactN
     await askNotifications();
     await readAgain();
   }, [readAgain]);
+  // Android closed the app behind Square's payment page (20f): it opens that place's My membership, where the page is ended.
+  useEffect(() => {
+    if (userId === null) return;
+    const run = { live: true };
+    void (async () => {
+      const gymId = await payAwayGym(userId);
+      if (!run.live || gymId === null) return;
+      const ask: GymTapped = { kind: "membership", gymId };
+      setTapAsked(ask);
+      onTapped?.(ask);
+    })();
+    return () => {
+      run.live = false;
+    };
+  }, [userId, onTapped]);
+
   const tapOpened = useCallback(() => {
     setTapAsked(null);
   }, []);

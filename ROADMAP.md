@@ -649,6 +649,8 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
     - 20c. [x] **Sign the membership agreement** · merged 2026-11-07 · PR #496
     - 20d. [x] **Add my card** · merged 2026-11-11 · PR #521
     - 20e. [x] **Remove my card** · merged 2026-11-11 · PR #524
+    - 20f. [x] **Pay what I owe** · merged 2026-11-12 · PR #526
+    - 20g. [ ] **Buy in the app**: the gym's packs and passes sold in the app, their details and agreement, Buy on Square's own page (18k-iii's server).
 21. **Release** (split 2026-11-07, Kd: the release is prepared alongside the building, and Google's closed test starts as soon as the app can be installed from Google Play, without waiting for workouts or exercises; `rulings/2026-11-07-21-closed-test-early.md` keeps the line as first written and Google's rules as read that day).
     - 21a. **The server online, free for the test** (split 2026-11-08: the server first; on AWS's free plan in Sydney, Oracle having refused Kd's card; `handoff/2026-11-09-21a-i.md` keeps its line as first written).
       - 21a-i. [x] **The server at its own https address** · merged 2026-11-09 · PR #509
