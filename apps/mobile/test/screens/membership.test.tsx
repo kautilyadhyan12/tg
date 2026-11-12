@@ -184,10 +184,10 @@ describe("the worst thing: nobody else's money on this phone, and no fee reads P
     const due = page().getByText("Late cancel fee · Spin at 6");
     expect(due).toBeTruthy();
     expect(page().getAllByText("Payment due")).toHaveLength(1);
-    expect(page().getByText("Due on 21 Oct 2026.")).toBeTruthy();
+    expect(page().getByText("Due 21 Oct 2026")).toBeTruthy();
     expect(page().getByText("No-show fee · Personal training with Sam Trainer")).toBeTruthy();
     expect(page().getByText("₹300.00 · 18 Oct 2026 · Gold Monthly")).toBeTruthy();
-    expect(page().getByText("Overdue since 19 Oct 2026.")).toBeTruthy();
+    expect(page().getByText("Due 19 Oct 2026")).toBeTruthy();
     expect(page().getAllByText("Paid")).toHaveLength(1);
     expect(page().getByText("Iron House waived this fee.")).toBeTruthy();
     // One receipt for the membership's payment, one for the paid fee: none for the owed or waived ones.
@@ -338,7 +338,7 @@ describe("the My membership page", () => {
     await openMembership(server.ask, IRON);
     const card = within(await page().findByTestId(`membership-${M1}`));
     expect(card.getByText("Active")).toBeTruthy();
-    expect(card.getByText("₹1,500.00 due on 4 Nov 2026.")).toBeTruthy();
+    expect(card.getByText("Next payment: ₹1,500.00 on 4 Nov 2026")).toBeTruthy();
     expect(card.getByText("₹1,500.00 · Card at the desk")).toBeTruthy();
     expect(card.getByText("Paid 4 Oct 2026 · for 4 Oct – 3 Nov 2026")).toBeTruthy();
     expect(card.getByText("₹500.00 given back · Cash")).toBeTruthy();

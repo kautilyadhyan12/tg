@@ -436,7 +436,7 @@ function MembershipCard({
   const tag = statusTag(m);
   const dates = datesText(m);
   const classes = classesText(m);
-  const owed = owedText(m);
+  const owed = owedText(m, today);
   return (
     <Card testID={`membership-${m.id}`} style={styles.box}>
       <View style={styles.row}>

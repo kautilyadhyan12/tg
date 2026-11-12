@@ -227,12 +227,12 @@ describe("what has Pay", () => {
     expect(onPage().getByLabelText("Pay $10.00 for No-show fee, Spin")).toBeTruthy();
     expect(onPage().queryByLabelText("Pay $10.00 for No-show fee, Yoga")).toBeNull();
     expect(within(onPage().getByTestId("pay-6e1f3a9f-7c1b-4d2f-8b54-3a7d2e0f8b12-check")).getByText(PAY_CHECK)).toBeTruthy();
-    expect(onPage().getByText("$29.00 due on 20 Nov 2026.")).toBeTruthy();
+    expect(onPage().getByText("Next payment: $29.00 on 20 Nov 2026")).toBeTruthy();
     expect(onPage().queryByLabelText("Pay $29.00 for Off-peak Monthly")).toBeNull();
 
     await fireEvent.press(onPage().getByLabelText("Back"));
     await fireEvent.press(await screen.findByLabelText(`My membership at ${LOTUS.name}`));
-    expect(await onPage().findByText("$49.00 overdue since 4 Nov 2026.")).toBeTruthy();
+    expect(await onPage().findByText("Overdue: $49.00 · due 4 Nov 2026")).toBeTruthy();
     expect(onPage().queryByLabelText(/^Pay /)).toBeNull();
   });
 });

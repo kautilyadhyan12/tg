@@ -137,10 +137,13 @@ describe("a membership", () => {
     expect(classesText(held())).toBeNull();
   });
 
-  it("what is owed: due in orange, overdue in red, nothing where nothing is", () => {
-    expect(owedText(held({ owed: { amountMinor: 150_000, dueOn: "2026-11-04", state: "due", periodIndex: 0, check: false } }))).toEqual({ text: "₹1,500.00 due on 4 Nov 2026.", tone: "orange" });
-    expect(owedText(held({ owed: { amountMinor: 150_000, dueOn: "2026-10-04", state: "overdue", periodIndex: 0, check: false } }))).toEqual({ text: "₹1,500.00 overdue since 4 Oct 2026.", tone: "bad" });
-    expect(owedText(held())).toBeNull();
+  it("what is owed, as billing apps say it: the next payment before its day, due from it, overdue in red, nothing where nothing is", () => {
+    const owed = (dueOn: string, state: "due" | "overdue") => held({ owed: { amountMinor: 150_000, dueOn, state, periodIndex: 0, check: false } });
+    expect(owedText(owed("2026-11-04", "due"), "2026-10-29")).toEqual({ text: "Next payment: ₹1,500.00 on 4 Nov 2026", tone: "plain" });
+    expect(owedText(owed("2026-11-04", "due"), "2026-11-04")).toEqual({ text: "Payment due: ₹1,500.00", tone: "orange" });
+    expect(owedText(owed("2026-11-04", "due"), "2026-11-06")).toEqual({ text: "Payment due: ₹1,500.00", tone: "orange" });
+    expect(owedText(owed("2026-10-04", "overdue"), "2026-10-29")).toEqual({ text: "Overdue: ₹1,500.00 · due 4 Oct 2026", tone: "bad" });
+    expect(owedText(held(), "2026-10-29")).toBeNull();
   });
 
   it("a payment with its days, and one for a membership of one period", () => {
@@ -173,15 +176,20 @@ describe("fees", () => {
       title: "Late cancel fee · Spin at 6",
       tag: { label: "Payment due", tone: "orange" },
       line: "₹200.00 · 20 Oct 2026 · Gold Monthly",
-      note: "Due on 21 Oct 2026.",
+      note: "Due 21 Oct 2026",
       receipt: null,
     });
-    expect(feeText(item(fee("overdue")), "Iron House")).toMatchObject({ tag: { label: "Overdue", tone: "bad" }, note: "Overdue since 21 Oct 2026.", receipt: null });
+    expect(feeText(item(fee("overdue")), "Iron House")).toMatchObject({ tag: { label: "Overdue", tone: "bad" }, note: "Due 21 Oct 2026", receipt: null });
     expect(feeText(item(fee("paid")), "Iron House")).toMatchObject({ tag: { label: "Paid", tone: "good" }, note: null, receipt: 31 });
     expect(feeText(item(fee("waived")), "Iron House")).toMatchObject({ tag: { label: "Waived", tone: "plain" }, note: "Iron House waived this fee.", receipt: null });
     expect(feeText(item(fee("refunded", { refundedMinor: 20_000 })), "Iron House")).toMatchObject({ tag: { label: "Refunded", tone: "plain" }, note: "Iron House refunded this fee.", receipt: 31 });
     expect(feeText(item(fee("paid", { refundedMinor: 5_000 })), "Iron House")).toMatchObject({ tag: { label: "Paid", tone: "good" }, note: "Iron House refunded ₹50.00 of this fee.", receipt: 31 });
     expect(feeText(item(fee("refunded", { refundedMinor: 20_000, refundPending: true })), "Iron House")).toMatchObject({ tag: { label: "Refund pending", tone: "plain" }, note: "Iron House is refunding this fee.", receipt: 31 });
+  });
+
+  it("a fee for the membership itself names it once, a class's fee says which membership it is on", () => {
+    expect(feeText(item(fee("due", { fee: "leave_early", forName: "Gold Monthly" })), "Iron House").line).toBe("₹200.00 · 20 Oct 2026");
+    expect(feeText(item(fee("due")), "Iron House").line).toBe("₹200.00 · 20 Oct 2026 · Gold Monthly");
   });
 
   it("a no-show and a freeze fee are named as the gym's list names them", () => {
