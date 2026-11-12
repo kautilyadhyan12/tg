@@ -102,18 +102,18 @@ describe("the worst thing: Pay only where the server would take it, for exactly 
   it("only the server's paid reads Paid; closed reads not paid; check sends them to the desk; open says nothing yet", () => {
     const page = (state: string) =>
       appPaymentSchema.parse({ id: "7a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d", membershipId: M, periodIndex: 1, feeId: null, amountMinor: 4900, currency: "USD", state, url: null, closesAt: null, receiptNumber: state === "paid" ? 12 : null });
-    expect(endedSaid(page("paid"))).toEqual({ tone: "good", line: "Paid $49.00 in the app." });
+    expect(endedSaid(page("paid"))).toEqual({ tone: "good", line: "Payment successful. $49.00 paid." });
     expect(endedSaid(page("closed"))).toEqual({ tone: "plain", line: NOT_PAID });
     expect(endedSaid(page("check"))).toEqual({ tone: "warn", line: PAY_CHECK });
     expect(endedSaid(page("open"))).toBeNull();
-    for (const state of ["closed", "check", "open"]) expect(endedSaid(page(state))?.line ?? "", state).not.toMatch(/^Paid/);
+    for (const state of ["closed", "check", "open"]) expect(endedSaid(page(state))?.line ?? "", state).not.toMatch(/^Payment successful/);
     expect(keyOfPayment(page("open"))).toBe(billKey(M, 1));
     expect(keyOfPayment({ membershipId: M, periodIndex: null, feeId: F })).toBe(feeKey(F));
   });
 
   it("refusals are said in the member's words, a changed bill asks them to look again", () => {
     expect(payRefusalSaid("app_payment_changed", APP_PAYMENT_WORDS.changed)).toEqual({ tone: "warn", line: PAY_CHANGED });
-    expect(payRefusalSaid("app_payment_check", APP_PAYMENT_WORDS.check_first)).toEqual({ tone: "warn", line: APP_PAYMENT_WORDS.check_first });
+    expect(payRefusalSaid("app_payment_check", APP_PAYMENT_WORDS.check_first)).toEqual({ tone: "warn", line: PAY_CHECK });
     expect(payRefusalSaid("app_payment_at_desk", APP_PAYMENT_WORDS.at_desk)).toEqual({ tone: "bad", line: APP_PAYMENT_WORDS.at_desk });
     expect(payRefusalSaid("app_payment_not_offered", APP_PAYMENT_WORDS.not_offered).line).toBe("You can't pay in the app here yet. Pay at the front desk.");
   });

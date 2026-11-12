@@ -167,7 +167,7 @@ describe("the worst thing: never Paid unless the server says so, and Pay pays ex
     await backFromTab();
     expect(await onPage().findByText(NOT_PAID)).toBeTruthy();
     expect(posts(server.asked, closePath(IRON))).toHaveLength(1);
-    expect(onPage().queryByText(/^Paid \$/)).toBeNull();
+    expect(onPage().queryByText(/^Payment successful/)).toBeNull();
     expect(onPage().getByLabelText("Pay $29.00 for Teen Monthly")).toBeTruthy();
 
     // Her own bill: Square says paid, and only then does it read Paid, and the place is read again for its receipt.
@@ -177,7 +177,7 @@ describe("the worst thing: never Paid unless the server says so, and Pay pays ex
     await waitFor(() => { expect(tab.opened).toHaveLength(2); });
     expect(posts(server.asked, paymentsPath(IRON))[1]?.body).toMatchObject({ membershipId: GOLD, amountMinor: 4900, periodIndex: 1 });
     await backFromTab();
-    expect(await within(screen.getByTestId(`pay-${GOLD}-said`)).findByText("Paid $49.00 in the app.")).toBeTruthy();
+    expect(await within(screen.getByTestId(`pay-${GOLD}-said`)).findByText("Payment successful. $49.00 paid.")).toBeTruthy();
     await waitFor(() => { expect(memberships).toBeGreaterThan(before); });
   });
 
@@ -198,7 +198,7 @@ describe("the worst thing: never Paid unless the server says so, and Pay pays ex
     await waitFor(() => { expect(tab.opened).toHaveLength(1); });
     await backFromTab();
     expect(await onPage().findByText(PAY_CHECK)).toBeTruthy();
-    expect(onPage().queryByText(/^Paid \$/)).toBeNull();
+    expect(onPage().queryByText(/^Payment successful/)).toBeNull();
     await waitFor(() => { expect(onPage().queryByLabelText("Pay $49.00 for Gold Monthly")).toBeNull(); });
     // Read again later, the line stays, once.
     expect(onPage().getAllByText(PAY_CHECK)).toHaveLength(1);
@@ -291,8 +291,8 @@ describe("coming back, and every way it ends", () => {
     await backFromTab();
     expect(await onPage().findByText(PAY_WAITING)).toBeTruthy();
     answer = page({ state: "paid", url: null, closesAt: null, receiptNumber: 12 });
-    await fireEvent.press(onPage().getByLabelText("Check again"));
-    expect(await onPage().findByText("Paid $49.00 in the app.")).toBeTruthy();
+    await fireEvent.press(onPage().getByLabelText("Check status"));
+    expect(await onPage().findByText("Payment successful. $49.00 paid.")).toBeTruthy();
     expect(posts(server.asked, closePath(IRON))).toHaveLength(2);
   });
 
@@ -306,7 +306,7 @@ describe("coming back, and every way it ends", () => {
 
     reply = lost;
     await fireEvent.press(onPage().getByLabelText("Pay $49.00 for Gold Monthly"));
-    expect(await onPage().findByText("Couldn’t open the payment page. Check your internet and try again.")).toBeTruthy();
+    expect(await onPage().findByText("Couldn’t connect. Check your internet and try again.")).toBeTruthy();
     reply = ok({ payment: page() });
     await fireEvent.press(onPage().getByLabelText("Pay $49.00 for Gold Monthly"));
     await waitFor(() => { expect(tab.opened).toHaveLength(1); });

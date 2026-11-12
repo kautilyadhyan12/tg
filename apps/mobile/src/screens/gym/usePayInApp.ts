@@ -30,7 +30,7 @@ import {
 // waiting on it.
 
 /** Said while the tab is over the app. */
-export const PAY_AWAY = "Finish paying on Square’s page, then close it to come back here.";
+export const PAY_AWAY = "Complete your payment in the checkout window.";
 
 export interface PayInApp {
   /** This place takes payments in the app now. */

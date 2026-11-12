@@ -1,4 +1,4 @@
-import { APP_PAYMENT_WORDS, MEMBER_FEE_WORDS, formatMinor, type AppPayment, type AppPaymentRequest, type MyMembership } from "@app/shared";
+import { MEMBER_FEE_WORDS, formatMinor, type AppPayment, type AppPaymentRequest, type MyMembership } from "@app/shared";
 import type { FeeItem } from "./membershipView";
 
 // Pay what I owe, on My membership (ROADMAP Stage 5 item 20f; the server's `/my-membership/payments`, built in 18k-ii).
@@ -45,7 +45,7 @@ export function payBody(target: PayTarget, requestKey: string): AppPaymentReques
     : { requestKey, membershipId: target.membershipId, amountMinor: target.amountMinor, feeId: target.feeId };
 }
 
-export const PAY = "Pay";
+export const PAY = "Pay now";
 /** What a screen reader says for Pay: "Pay $49.00 for Gold Monthly". */
 export const paySay = (target: PayTarget): string => `Pay ${formatMinor(target.amountMinor, target.currency)} for ${target.what}`;
 
@@ -57,19 +57,19 @@ export interface PaySaid {
   again?: boolean;
 }
 
-/** "Paid $49.00 in the app." */
-export const paidLine = (amountMinor: number, currency: string): string => `Paid ${formatMinor(amountMinor, currency)} in the app.`;
-export const NOT_PAID = "Not paid. Nothing was taken.";
+/** "Payment successful. $49.00 paid." */
+export const paidLine = (amountMinor: number, currency: string): string => `Payment successful. ${formatMinor(amountMinor, currency)} paid.`;
+export const NOT_PAID = "Payment cancelled. You weren’t charged.";
 /** Under a bill or fee whose page ended with money Square may have taken, each time the page is read. */
-export const PAY_CHECK = APP_PAYMENT_WORDS.check;
-export const PAY_OPENING = "Opening the payment page…";
-export const PAY_CHECKING = "Checking your payment…";
-export const PAY_NOT_OPENED = "Couldn’t open the payment page. Try again.";
-export const PAY_WAITING = "Square hasn’t said yet whether this was paid. Check again in a minute.";
-export const PAY_NO_ANSWER = "Couldn’t check your payment. Check your internet and try again.";
-export const PAY_NO_ANSWER_PRESS = "Couldn’t open the payment page. Check your internet and try again.";
-export const PAY_CHANGED = "What you owe has changed. Check it, then press Pay again.";
-export const CHECK_AGAIN = "Check again";
+export const PAY_CHECK = "Payment pending. The front desk will confirm it.";
+export const PAY_OPENING = "Opening secure checkout…";
+export const PAY_CHECKING = "Confirming your payment…";
+export const PAY_NOT_OPENED = "Checkout couldn’t open. Try again.";
+export const PAY_WAITING = "Your payment is still being confirmed. Check again in a minute.";
+export const PAY_NO_ANSWER = "Couldn’t connect. Check your internet and try again.";
+export const PAY_NO_ANSWER_PRESS = PAY_NO_ANSWER;
+export const PAY_CHANGED = "The amount due has changed. Review it and try again.";
+export const CHECK_AGAIN = "Check status";
 
 /** How a page ended, in the place Pay was; null while it is still open. Only the server's `paid` ever reads Paid. */
 export function endedSaid(p: AppPayment): PaySaid | null {
@@ -89,6 +89,6 @@ export function endedSaid(p: AppPayment): PaySaid | null {
  *  changed, which the page reads again. */
 export function payRefusalSaid(code: string, serverWords: string): PaySaid {
   if (code === "app_payment_changed" || code === "app_payment_not_found") return { tone: "warn", line: PAY_CHANGED };
-  if (code === "app_payment_check") return { tone: "warn", line: serverWords };
+  if (code === "app_payment_check") return { tone: "warn", line: PAY_CHECK };
   return { tone: "bad", line: serverWords === "" ? PAY_NOT_OPENED : serverWords };
 }
