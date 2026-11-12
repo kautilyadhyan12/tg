@@ -319,7 +319,7 @@ d("Buy a repeating membership in the app: on their own card, once, given only fo
     expect(list.card).toEqual({ brand: "VISA", last4: "1111", expired: false });
     const shown = await lineOf(gymA, tara.app, gold);
     expect(shown).toMatchObject({ repeats: true, firstPayment: { amountMinor: 4999 }, renews: { amountMinor: 4999, every: { count: 1, unit: "month" } } });
-    expect(shown.renews?.from > shown.firstPayment.dueOn).toBe(true);
+    expect((shown.renews?.from ?? "") > shown.firstPayment.dueOn).toBe(true);
     expect(shown.charge).toBe(wordsOf(gymA.name, shown));
     // Leo has no card: no tick to read.
     expect((await forSale(gymA, leo.app)).card).toBeNull();
