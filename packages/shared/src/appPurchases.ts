@@ -135,7 +135,9 @@ export const APP_PURCHASE_WORDS = {
 /** What staff read about purchases. */
 export const APP_PURCHASE_STAFF_WORDS = {
   /** Saving or archiving a line of the price list while a member is buying it. */
-  type_buying: "A member is buying this in the app right now. Save again once their payment page closes.",
+  type_buying: "A member is buying this in the app right now. Save again once their payment is finished.",
+  /** Remove card while a purchase in the app charged to it waits for Square (18k-iv). */
+  card_waiting: "This card is paying for a purchase in the app that Square hasn't confirmed yet. Remove it once the payment is confirmed.",
   /** Delete permanently while a purchase that may have taken money waits for a check. */
   delete_check: "A payment this person made in the app needs checking. Check it in Square and mark it as checked on their page first.",
   /** Joining two records while both have a purchase page open. */

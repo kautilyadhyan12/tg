@@ -1042,14 +1042,18 @@ export async function wouldRefuseGiving(
   return running.some((row) => row.typeId === typeId && sameTypeTwice(row.membership, m, today)) ? "already_held" : null;
 }
 
-/** A repeating membership of the record that still renews (18k-iv): in use, frozen or not, with no last day set. Its name,
- *  or null. Buying another in the app waits for it, so two never bill at once. */
+/** A repeating membership of the record still to bill (18k-iv): in use, frozen or not, renewing, with a payment still to
+ *  come. Its name, or null. Buying another in the app waits for it, so two never bill at once. */
 export async function renewingHeldName(tx: TransactionSql, gymId: string, entryId: string, today: string): Promise<string | null> {
   const running = (await held(tx, gymId, entryId, IN_USE, IN_USE_READ)).map(shape);
   const found = running.find((row) => {
     if (row.membership.kind !== "recurring") return false;
-    const view = heldMembershipView(row.membership, today);
-    return view.status !== "ended" && view.endsOn === null;
+    const m = row.membership;
+    const view = heldMembershipView(m, today);
+    if (view.status === "ended" || !m.renews) return false;
+    // Still to bill: renewing with no last day, or a last day after what is paid (a minimum term that then ends, notice
+    // given), so its next bill would fall in the same months as the one bought (round one, H2).
+    return view.endsOn === null || view.endsOn >= periodStart(m, m.paidPeriods);
   });
   return found?.typeName ?? null;
 }

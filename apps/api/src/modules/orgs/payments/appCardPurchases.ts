@@ -52,23 +52,28 @@ async function answered(deps: PaymentsDeps, row: pays.AppPayRow, result: CardPay
   const now = deps.now();
   if (result.kind === "unavailable") return { kind: "wait" };
   if (result.kind === "declined") {
-    // The bank said no to this very charge: nothing was taken.
+    // The bank said no to this very charge, or asked to confirm it was them: nothing was taken.
     await pays.finish(deps.sql, row.gymId, row.id, "closed", now);
+    await pays.noteChargeCode(deps.sql, row.gymId, row.id, result.code);
     return { kind: "declined", code: result.code };
   }
   if (result.kind === "refused") {
     deps.log.warn({ event: "square.app_card_purchase_refused", gymId: row.gymId, status: result.status, code: result.code }, "Square refused a card purchase");
     await pays.finish(deps.sql, row.gymId, row.id, first ? "closed" : "gone", now);
+    // Kept as Square's refusal, never as a decline, unless the bank asked to confirm.
+    if (first) await pays.noteChargeCode(deps.sql, row.gymId, row.id, result.code === "CARD_DECLINED_VERIFICATION_REQUIRED" ? result.code : "CARD_REFUSED");
     return { kind: "refused", code: result.code };
   }
   const payment = result.value;
   if (payment.status === "APPROVED" || payment.status === "PENDING") return { kind: "wait" };
   if (payment.status === "FAILED") {
     await pays.finish(deps.sql, row.gymId, row.id, "closed", now);
+    await pays.noteChargeCode(deps.sql, row.gymId, row.id, "UNKNOWN");
     return { kind: "declined", code: "UNKNOWN" };
   }
   if (payment.status !== "COMPLETED") {
     await pays.finish(deps.sql, row.gymId, row.id, first ? "closed" : "gone", now);
+    if (first) await pays.noteChargeCode(deps.sql, row.gymId, row.id, payment.status);
     return { kind: "refused", code: payment.status };
   }
   const gym = await repo.readGym(deps.sql, row.gymId);

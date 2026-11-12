@@ -915,6 +915,8 @@ export const gymAppPayments = pgTable(
     /** The card a purchase of a repeating line is charged to, and the customer it is saved on (0236; 18k-iv). */
     cardId: text("card_id"),
     cardCustomerId: text("card_customer_id"),
+    /** Why Square did not take a card purchase, where it said (0236): the same press sent again is told the same. */
+    chargeCode: text("charge_code"),
     state: text("state").notNull(),
     outcome: text("outcome"),
     /** Somebody asked for it closed: the next look at Square deletes the page first. */
@@ -963,6 +965,7 @@ export const gymAppPayments = pgTable(
           AND (${t.clearedAt} IS NULL OR ${t.outcome} IN ('not_recorded','gone','no_answer'))
       END`,
     ),
+    check("gym_app_payments_charge_code_check", sql`${t.chargeCode} IS NULL OR (${t.cardId} IS NOT NULL AND ${t.chargeCode} ~ '^[A-Z0-9_]{1,60}$')`),
     check("gym_app_payments_cleared_check", sql`${t.clearedBy} IS NULL OR ${t.clearedAt} IS NOT NULL`),
     check("gym_app_payments_state_check", sql`${t.state} IN ('open','done')`),
     check(

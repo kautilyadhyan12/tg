@@ -211,6 +211,15 @@ export async function deleteCard(tx: TransactionSql, gymId: string, entryId: str
 }
 
 /** A bill of the record's still open, whatever its day, a fee's among them (Stage 5 item 20e): the card stays. */
+/** Whether a purchase in the app charged to this record's card waits for Square's answer (18k-iv): the card stays, as
+ *  the membership it gives renews on it (round one, H3). */
+export async function cardPurchaseWaiting(sql: SqlOrTx, gymId: string, entryId: string): Promise<boolean> {
+  const [row] = await sql<{ waiting: boolean }[]>`
+    SELECT EXISTS (
+      SELECT 1 FROM gym_app_payments WHERE gym_id = ${gymId} AND entry_id = ${entryId} AND state = 'open' AND card_id IS NOT NULL) AS waiting`;
+  return row?.waiting === true;
+}
+
 export async function hasOpenBill(sql: SqlOrTx, gymId: string, entryId: string): Promise<boolean> {
   const [row] = await sql<{ open: boolean }[]>`
     SELECT EXISTS (

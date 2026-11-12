@@ -25,6 +25,7 @@
 // same step as a typed one (`keepCard`), with the same checks.
 import { randomUUID } from "node:crypto";
 import {
+  APP_PURCHASE_STAFF_WORDS,
   MEMBER_CARD_WORDS,
   MEMBER_LIST_BY_HAND_WORDS,
   MY_CARD_PAYS_FOR_NAMED,
@@ -256,6 +257,8 @@ export async function removeMemberCard(deps: PaymentsDeps, userId: string, gymId
   if ((await cards.readPerson(deps.sql, gymId, entryId)) === null) throw entryNotFound();
   const ready = await readyOrThrow(deps, gymId, gym);
   const card = shownCard(await cards.readCard(deps.sql, gymId, entryId), ready.square, ready.row);
+  // A purchase in the app charged to it waits for Square: what it gives renews on this card (18k-iv, round one H3).
+  if (card !== null && (await cards.cardPurchaseWaiting(deps.sql, gymId, entryId))) throw new OrgsError(409, "card_purchase_waiting", APP_PURCHASE_STAFF_WORDS.card_waiting);
   if (card !== null) {
     const result = await ready.square.api.disableCard(ready.token, card.cardId);
     if (result.kind === "unavailable") throw unavailable();
@@ -341,7 +344,9 @@ export async function removalOf(sql: Sql | TransactionSql, gymId: string, entryI
   }
   if (await cardPaysForRenewal(sql, { gymId, entryId }, now)) return stays("renews");
   const payment = (await heldOnListOf(sql, gymId, today, [entryId])).get(entryId)?.shown.payment?.state;
-  if (payment === "due" || payment === "later" || (await cards.hasOpenBill(sql, gymId, entryId))) return stays("owed");
+  if (payment === "due" || payment === "later" || (await cards.hasOpenBill(sql, gymId, entryId)) || (await cards.cardPurchaseWaiting(sql, gymId, entryId))) {
+    return stays("owed");
+  }
   return { canRemove: true, stays: null, paysFor: null };
 }
 

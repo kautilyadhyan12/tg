@@ -98,10 +98,20 @@ function viewOf(row: pays.AppPayRow): AppPurchase {
 
 const answerOf = (row: pays.AppPayRow): AppPurchaseResponse => appPurchaseResponseSchema.parse({ purchase: viewOf(row) });
 
+/** Why a card purchase took nothing, in the member's words (18k-iv): the bank asking to confirm it was them is never
+ *  called a decline, as it tells them to replace a good card. */
+function chargeRefusal(code: string, card: { brand: string; last4: string } | null): OrgsError {
+  if (code === "CARD_DECLINED_VERIFICATION_REQUIRED") return new OrgsError(409, "app_purchase_verification", APP_PURCHASE_WORDS.verification);
+  if (code === "CANCELED" || code === "CARD_REFUSED") return new OrgsError(409, "app_purchase_card_refused", APP_PURCHASE_WORDS.card_refused);
+  return new OrgsError(409, "app_purchase_declined", APP_PURCHASE_WORDS.declined(card === null ? "Your card" : cardName(card)));
+}
+
 /** The same press, or the page already open for this record: given back where it is this reader's, for this line at this
  *  amount; otherwise the reader is told what stands in the way. */
 function sameOr(row: pays.AppPayRow, userId: string, body: AppPurchaseRequest): AppPurchaseResponse {
   const sameLine = row.openedBy === userId && row.typeId === body.typeId && row.amountMinor === body.amountMinor;
+  // The same press of a card purchase Square did not take is told why again, as the first answer may have been lost.
+  if (sameLine && row.requestKey === body.requestKey && row.chargeCode !== null) throw chargeRefusal(row.chargeCode, row.card);
   if (sameLine && row.requestKey === body.requestKey) return answerOf(row);
   // Another press on the page open: given back only where it is signed the same, never a signature it did not send.
   const sign = buys.boughtOf(row)?.sign ?? null;
@@ -285,12 +295,8 @@ async function chargeCard(
   } finally {
     await pays.release(deps.sql, buying.gymId, row.id, leaseUntil);
   }
-  const card = row.card === null ? "Your card" : cardName(row.card);
-  if (step.kind === "declined") throw new OrgsError(409, "app_purchase_declined", APP_PURCHASE_WORDS.declined(card));
-  if (step.kind === "refused") {
-    if (step.code === "CARD_DECLINED_VERIFICATION_REQUIRED") throw new OrgsError(409, "app_purchase_verification", APP_PURCHASE_WORDS.verification);
-    throw new OrgsError(409, "app_purchase_card_refused", APP_PURCHASE_WORDS.card_refused);
-  }
+  if (step.kind === "declined") throw chargeRefusal(step.code, row.card);
+  if (step.kind === "refused") throw step.code === "CARD_DECLINED_VERIFICATION_REQUIRED" ? chargeRefusal(step.code, row.card) : chargeRefusal("CARD_REFUSED", row.card);
   const now = await buys.readOwnPurchase(deps.sql, buying.gymId, userId, row.id);
   if (now === null) throw notFound();
   return { answer: answerOf(now), tell: buying.entryId };

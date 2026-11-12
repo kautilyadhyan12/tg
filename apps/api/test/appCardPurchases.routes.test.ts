@@ -24,6 +24,7 @@ import { createMemoryRedis } from "../src/redis.js";
 import { loadConfig } from "../src/config.js";
 import { squareSettings } from "../src/modules/orgs/payments/settings.js";
 import { processSquareWork } from "../src/modules/orgs/payments/work.js";
+import { openDueBills } from "../src/modules/orgs/memberships/billsRepo.js";
 import { account, fakeSquare, type Account, type CardBehaviour } from "./fakeSquareTerminal.js";
 import { recordingHub } from "./liveNewsRecorder.js";
 import { proveAddress } from "./proveAddress.js";
@@ -523,5 +524,168 @@ d("Buy a repeating membership in the app: on their own card, once, given only fo
     for (const r of [a, b].filter((x) => x.statusCode !== 200)) expect(["app_purchase_charging", "app_purchase_renewing_held"]).toContain(errorOf(r));
     expect(square.charged.filter((p) => p.cardId === card.cardId)).toHaveLength(1);
     expect((await held(gym, tara.entryId)).memberships).toHaveLength(1);
+  });
+  it("round one H1 and L2: the bank asking to confirm is never called a decline, and the same press sent again is told the same", async () => {
+    clock = new Date();
+    const gym = await makeGym("Card Buy Confirm");
+    const gold = await addType(gym, { name: "Gold Monthly" });
+    const ana = await member(gym, "Ana Confirm");
+    await cardFor(gym, ana.entryId, { declines: "CARD_DECLINED_VERIFICATION_REQUIRED" });
+    const key = randomUUID();
+    const first = await buyPress(gym, ana.app, await lineOf(gym, ana.app, gold), { requestKey: key });
+    expect(first.statusCode, first.body).toBe(409);
+    expect(errorOf(first)).toBe("app_purchase_verification");
+    expect(messageOf(first)).toBe("Your bank needs to confirm this payment. Try again, and follow your bank's steps.");
+    const again = await buyPress(gym, ana.app, await lineOf(gym, ana.app, gold), { requestKey: key });
+    expect(errorOf(again)).toBe("app_purchase_verification");
+    // A decline, sent again with its key, is still a decline.
+    const ben = await member(gym, "Ben Declined");
+    await cardFor(gym, ben.entryId, "insufficient");
+    const benKey = randomUUID();
+    expect(errorOf(await buyPress(gym, ben.app, await lineOf(gym, ben.app, gold), { requestKey: benKey }))).toBe("app_purchase_declined");
+    const benAgain = await buyPress(gym, ben.app, await lineOf(gym, ben.app, gold), { requestKey: benKey });
+    expect(errorOf(benAgain)).toBe("app_purchase_declined");
+    expect(messageOf(benAgain)).toBe("Visa ending 1111 was declined, so nothing was charged. Update your card or try again later.");
+    // The bank's check, where the phone sends one, reaches Square with the charge.
+    const cara = await member(gym, "Cara Checked");
+    const caraCard = await cardFor(gym, cara.entryId);
+    const shown = await lineOf(gym, cara.app, gold);
+    const paid = parsed(await buyPress(gym, cara.app, shown, { charge: { words: shown.charge ?? "", verificationToken: "verf:CBASE-abc_123" } }));
+    expect(paid.purchase.state).toBe("paid");
+    expect(square.cardPaymentBodies().filter((b) => b.cardId === caraCard.cardId).map((b) => b.verificationToken)).toEqual(["verf:CBASE-abc_123"]);
+  });
+
+  it("round one H2: a repeating membership with a last day still to bill counts, so two never bill at once", async () => {
+    clock = new Date();
+    const gym = await makeGym("Card Buy Term");
+    const term = await addType(gym, { name: "Gold 12 months", contractPeriods: 12, contractThen: "ends" });
+    const offPeak = await addType(gym, { name: "Off-peak Monthly", priceMinor: 2500 });
+    const tara = await member(gym, "Tara Term");
+    await cardFor(gym, tara.entryId);
+    expect(parsed(await buyPress(gym, tara.app, await lineOf(gym, tara.app, term))).purchase.state).toBe("paid");
+    const other = await buyPress(gym, tara.app, await lineOf(gym, tara.app, offPeak));
+    expect(other.statusCode, other.body).toBe(409);
+    expect(errorOf(other)).toBe("app_purchase_renewing_held");
+    expect(messageOf(other)).toBe("You already have Gold 12 months, which renews. To change it, ask the front desk.");
+    expect(takenAt(gym)).toHaveLength(1);
+  });
+
+  it("round one H3: neither the member nor the desk removes a card while a purchase charged to it waits for Square", async () => {
+    clock = new Date();
+    const gym = await makeGym("Card Buy Remove");
+    const gold = await addType(gym, { name: "Gold Monthly" });
+    const tara = await member(gym, "Tara Remove");
+    const card = await cardFor(gym, tara.entryId);
+    square.state.down = true;
+    const open = parsed(await buyPress(gym, tara.app, await lineOf(gym, tara.app, gold)));
+    square.state.down = false;
+    expect(open.purchase.state).toBe("open");
+    const mine = JSON.parse((await send("GET", `/v1/orgs/${gym.id}/my-card`, tara.app.cookies)).body) as { myCard: { canRemove: boolean; stays: string | null; card: { savedAt: string } | null } };
+    expect(mine.myCard).toMatchObject({ canRemove: false, stays: "owed" });
+    const mineRemove = await send("POST", `/v1/orgs/${gym.id}/my-card/remove`, tara.app.cookies, { last4: "1111", savedAt: mine.myCard.card?.savedAt });
+    expect(mineRemove.statusCode, mineRemove.body).not.toBe(200);
+    const deskRemove = await send("DELETE", `${entryUrl(gym, tara.entryId)}/card`, gym.owner.cookies);
+    expect(deskRemove.statusCode, deskRemove.body).toBe(409);
+    expect(errorOf(deskRemove)).toBe("card_purchase_waiting");
+    expect(square.stopped).not.toContain(card.cardId);
+    expect(await sql`SELECT 1 FROM gym_member_cards WHERE gym_id = ${gym.id} AND entry_id = ${tara.entryId}`).toHaveLength(1);
+  });
+
+  it("the membership bought renews on the same card: a month on, the worker charges the next payment to it", async () => {
+    clock = new Date();
+    const gym = await makeGym("Card Buy Renews");
+    const gold = await addType(gym, { name: "Gold Monthly" });
+    const tara = await member(gym, "Tara Renews");
+    const card = await cardFor(gym, tara.entryId);
+    const shown = await lineOf(gym, tara.app, gold);
+    const bought = parsed(await buyPress(gym, tara.app, shown));
+    expect(bought.purchase.state).toBe("paid");
+    // 08:00 in Chicago on the day the tick named.
+    clock = new Date(`${shown.renews?.from ?? ""}T14:00:00Z`);
+    await openDueBills({ sql, log: quiet }, { now: clock, gymIds: [gym.id] });
+    await work();
+    expect(square.charged.filter((p) => p.cardId === card.cardId && p.status === "COMPLETED").map((p) => p.amount_money.amount)).toEqual([4999, 4999]);
+    const [two] = await sql<{ n: number }[]>`
+      SELECT count(*)::int AS n FROM gym_member_payments p JOIN gym_member_bills b ON b.gym_id = p.gym_id AND b.id = p.bill_id
+      WHERE b.held_membership_id = ${bought.purchase.membershipId} AND p.undone_at IS NULL`;
+    expect(two?.n).toBe(2);
+  });
+
+  it("refused before anything is charged: a card an earlier decline stopped, a chargeback stopping charges", async () => {
+    clock = new Date();
+    const gym = await makeGym("Card Buy Stopped");
+    const gold = await addType(gym, { name: "Gold Monthly" });
+    const silver = await addType(gym, { name: "Silver Monthly", priceMinor: 2999 });
+    // Stan's card was declined for good on an earlier bill: never this card again.
+    const stan = await member(gym, "Stan Stopped");
+    const stanCard = await cardFor(gym, stan.entryId);
+    const stanBought = parsed(await buyPress(gym, stan.app, await lineOf(gym, stan.app, gold)));
+    await sql`
+      INSERT INTO gym_card_charges (gym_id, entry_id, held_membership_id, period_index, customer_id, card_id, brand, last4, amount_minor, currency, environment, account_id,
+                                    location_id, request_key, payment_key, state, outcome, decline_code, by_schedule, started_by, started_at, checked_at, finished_at)
+      VALUES (${gym.id}, ${stan.entryId}, ${stanBought.purchase.membershipId}, 0, ${stanCard.customerId}, ${stanCard.cardId}, 'VISA', '1111', 4999, 'USD', 'production',
+              ${gym.acct.merchantId}, ${gym.acct.locations[0]?.id ?? ""}, ${randomUUID()}, ${randomUUID()}, 'done', 'declined', 'CARD_EXPIRED', false, ${gym.owner.userId}, now(), now(), now())`;
+    expect(errorOf(await buyPress(gym, stan.app, await lineOf(gym, stan.app, silver)))).toBe("app_purchase_card_stopped");
+    // A chargeback on Pia's payment stops charges on her card.
+    const pia = await member(gym, "Pia Chargeback");
+    await cardFor(gym, pia.entryId);
+    parsed(await buyPress(gym, pia.app, await lineOf(gym, pia.app, gold)));
+    const [paid] = await sql<{ id: string }[]>`
+      SELECT p.provider_payment_id AS id FROM gym_member_payments p JOIN gym_member_bills b ON b.gym_id = p.gym_id AND b.id = p.bill_id
+      JOIN gym_held_memberships h ON h.gym_id = b.gym_id AND h.id = b.held_membership_id WHERE h.entry_id = ${pia.entryId}`;
+    await sql`INSERT INTO gym_square_disputes (gym_id, environment, account_id, square_dispute_id, square_payment_id, amount_minor, currency, state, changed_at)
+              VALUES (${gym.id}, 'production', ${gym.acct.merchantId}, ${"D" + uniq()}, ${paid?.id ?? ""}, 4999, 'USD', 'EVIDENCE_REQUIRED', now())`;
+    expect(errorOf(await buyPress(gym, pia.app, await lineOf(gym, pia.app, silver)))).toBe("app_purchase_card_paused");
+    expect(takenAt(gym)).toHaveLength(2);
+  });
+
+  it("Square's payment for another customer or another purchase is never given as this one", async () => {
+    clock = new Date();
+    const gym = await makeGym("Card Buy Not Ours");
+    const gold = await addType(gym, { name: "Gold Monthly" });
+    for (const [name, answerWith] of [
+      ["Ola Other Customer", { customer_id: "CUSTOTHER" }],
+      ["Rex Other Reference", { reference_id: randomUUID() }],
+    ] as const) {
+      const who = await member(gym, name);
+      await cardFor(gym, who.entryId);
+      square.state.answerWith = answerWith;
+      const res = parsed(await buyPress(gym, who.app, await lineOf(gym, who.app, gold)));
+      square.state.answerWith = null;
+      expect(res.purchase.state, name).toBe("check");
+      expect((await held(gym, who.entryId)).memberships, name).toEqual([]);
+    }
+  });
+
+  it("only the card the record holds in the Square account the gym is connected to now, and never on a record two accounts share", async () => {
+    clock = new Date();
+    const gym = await makeGym("Card Buy Account");
+    const gold = await addType(gym, { name: "Gold Monthly" });
+    // A card saved in another Square account, or Square's other environment, is not one the gym can charge now.
+    for (const [name, column, value] of [
+      ["Ivy Other Account", "account_id", "MLOTHERACCOUNT"],
+      ["Jon Other Place", "environment", "sandbox"],
+    ] as const) {
+      const who = await member(gym, name);
+      await cardFor(gym, who.entryId);
+      await sql`UPDATE gym_member_cards SET ${sql({ [column]: value })} WHERE gym_id = ${gym.id} AND entry_id = ${who.entryId}`;
+      expect((await forSale(gym, who.app)).card, name).toBeNull();
+      const line = await lineOf(gym, who.app, gold);
+      expect(line.charge, name).toBeNull();
+      expect(errorOf(await buyPress(gym, who.app, line, { charge: { words: "I agree.", verificationToken: null } })), name).toBe("app_purchase_card_needed");
+    }
+    // Two app accounts on one record: neither reads the card's digits nor a tick, and neither buys.
+    const kim = await member(gym, "Kim Shared");
+    await cardFor(gym, kim.entryId);
+    const second = await signedIn("Kim Second Phone");
+    await sql`INSERT INTO gym_members (gym_id, user_id, entry_id) VALUES (${gym.id}, ${second.userId}, ${kim.entryId})`;
+    for (const who of [kim.app, second]) {
+      const list = await forSale(gym, who);
+      expect(list.card).toBeNull();
+      expect(list.items.map((i) => i.charge)).toEqual([null]);
+      const line = await lineOf(gym, who, gold);
+      expect(errorOf(await buyPress(gym, who, line, { charge: { words: "I agree.", verificationToken: null } }))).toBe("app_purchase_shared");
+    }
+    expect(square.charged.filter((p) => p.accountId === gym.acct.merchantId)).toHaveLength(0);
   });
 });
