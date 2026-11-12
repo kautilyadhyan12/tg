@@ -237,7 +237,8 @@ export function GymScreen() {
     if (asked === null || tapAsked === null) return;
     if (asked !== false) {
       const at = { id: asked.id, name: asked.name, clockFormat: asked.clockFormat };
-      if (tapAsked.kind === "inbox") setInboxAt({ id: asked.id, name: asked.name, orgType: asked.orgType, latestCheer: asked.latestCheer, latestNudge: asked.latestNudge });
+      if (tapAsked.kind === "membership") setMembershipAt({ id: asked.id, name: asked.name });
+      else if (tapAsked.kind === "inbox") setInboxAt({ id: asked.id, name: asked.name, orgType: asked.orgType, latestCheer: asked.latestCheer, latestNudge: asked.latestNudge });
       else if (tapAsked.kind === "comment") setUpdatesAt({ ...at, postId: tapAsked.postId });
       else if (tapAsked.what === "class") setClassesAt({ ...at, week: weekOfDay(tapAsked.day, asked.timezone, Date.now()), sessionId: tapAsked.id });
       else setEventsAt({ ...at, eventId: tapAsked.id });

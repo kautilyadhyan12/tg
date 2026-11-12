@@ -508,9 +508,15 @@ d("Pay what they owe in the app: charged once, on this bill alone (real Postgres
       const again = await payPress(gym, kimApp, kim);
       expect(again.statusCode, again.body).toBe(409);
       expect(errorOf(again), what).toBe("app_payment_check");
+      // The member's own My membership says so before they press Pay (20f).
+      const own = myMembershipResponseSchema.parse(JSON.parse((await send("GET", `/v1/orgs/${gym.id}/my-membership`, kimApp.cookies)).body));
+      expect(own.memberships[0]?.owed, what).toMatchObject({ amountMinor: 4999, check: true });
     }
     // A card fee the business adds on top, which Square names, is the bill paid.
     const { holder: kim, app: kimApp } = await member(gym, typeId, "Kim Cho");
+    // Another member of the same gym, owing the same, with no page that needs a check: not waiting for the desk (20f).
+    const other = myMembershipResponseSchema.parse(JSON.parse((await send("GET", `/v1/orgs/${gym.id}/my-membership`, kimApp.cookies)).body));
+    expect(other.memberships[0]?.owed).toMatchObject({ amountMinor: 4999, check: false });
     const page = await pay(gym, kimApp, kim);
     const link = linksOf(acct).find((l) => l.referenceId === page.payment.id);
     square.payLink(link?.id ?? "", {
@@ -1117,10 +1123,16 @@ d("Pay what they owe in the app: charged once, on this bill alone (real Postgres
     const again = await feePress(gym, mia.app, mia.holder, mia.fee, { amountMinor: 1500 });
     expect(again.statusCode, again.body).toBe(409);
     expect(errorOf(again)).toBe("app_payment_check");
+    // Her My membership says the fee waits for the desk (20f); Ned's fee, never paid in the app, does not.
+    const miaOwn = async () => myMembershipResponseSchema.parse(JSON.parse((await send("GET", `/v1/orgs/${gym.id}/my-membership`, mia.app.cookies)).body));
+    expect((await miaOwn()).memberships[0]?.fees.find((f) => f.id === mia.fee)).toMatchObject({ state: "due", check: true });
+    const nedOwn = myMembershipResponseSchema.parse(JSON.parse((await send("GET", `/v1/orgs/${gym.id}/my-membership`, ned.app.cookies)).body));
+    expect(nedOwn.memberships[0]?.fees.every((f) => !f.check)).toBe(true);
     // Once staff have checked Square and taken it at the desk, the line goes.
     const cash = await send("POST", `${feeUrl(gym, mia.holder, mia.fee)}/payments`, gym.owner.cookies, { requestKey: randomUUID(), amountMinor: 1500, method: "cash" });
     expect(cash.statusCode, cash.body).toBe(200);
     expect((await feesOf(gym, mia.holder))[0]?.appCheck).toBeNull();
+    expect((await miaOwn()).memberships[0]?.fees.find((f) => f.id === mia.fee)).toMatchObject({ state: "paid", check: false });
   });
 
   it("a fee: another amount, one waived, paid or taken off, another page open, and a press naming both are refused before Square", async () => {

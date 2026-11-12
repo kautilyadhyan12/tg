@@ -64,6 +64,11 @@ export type AppPaymentResponse = z.infer<typeof appPaymentResponseSchema>;
 export const myAppPaymentsResponseSchema = z.object({ inApp: z.boolean(), open: z.array(appPaymentSchema) }).strict();
 export type MyAppPaymentsResponse = z.infer<typeof myAppPaymentsResponseSchema>;
 
+/** Kept on the phone while Square's page is in its tab over the app (Stage 5 item 20f): who was paying, at which place and
+ *  since when, so the app opens that place's My membership if Android closed the app meanwhile. */
+export const phonePayAwaySchema = z.object({ userId: z.string().min(1).max(64), gymId: z.uuid(), at: z.number().int().min(0) }).strict();
+export type PhonePayAway = z.infer<typeof phonePayAwaySchema>;
+
 /** A page open on a membership, for staff on the person's page: who is paying (the payer's name where somebody else
  *  pays), and when it closes. */
 export const appPaymentOpenSchema = z

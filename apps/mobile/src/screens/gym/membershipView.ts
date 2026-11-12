@@ -93,13 +93,15 @@ export function classesText(m: MyMembership): string | null {
   return `${String(m.classesLeft)} of ${String(m.packClasses)} ${m.packClasses === 1 ? "class" : "classes"} left`;
 }
 
-/** What is owed on it now: "₹1,500.00 due on 4 Nov 2026." or "… overdue since …". Null where nothing is. */
-export function owedText(m: MyMembership): { text: string; tone: Tone } | null {
+/** What is owed on it, as billing apps say it (Kd, 20f): "Next payment: $49.00 on 11 Dec 2026" before its day,
+ *  "Payment due: $90.00" from its day (`today`, the place's), "Overdue: $49.00 · due 4 Nov 2026" once overdue. Null where
+ *  nothing is. */
+export function owedText(m: MyMembership, today: string): { text: string; tone: Tone } | null {
   if (m.owed === null) return null;
   const money = formatMinor(m.owed.amountMinor, m.currency);
-  return m.owed.state === "overdue"
-    ? { text: `${money} overdue since ${dayText(m.owed.dueOn)}.`, tone: "bad" }
-    : { text: `${money} due on ${dayText(m.owed.dueOn)}.`, tone: "orange" };
+  if (m.owed.state === "overdue") return { text: `Overdue: ${money} · due ${dayText(m.owed.dueOn)}`, tone: "bad" };
+  if (m.owed.dueOn > today) return { text: `Next payment: ${money} on ${dayText(m.owed.dueOn)}`, tone: "plain" };
+  return { text: `Payment due: ${money}`, tone: "orange" };
 }
 
 /** A payment's two lines: "₹1,500.00 · Cash", and "Paid 4 Oct 2026 · for 4 Oct – 3 Nov 2026". */
@@ -127,12 +129,14 @@ export interface FeeItem {
   fee: MyFee;
   currency: string;
   membership: string;
+  /** The membership it is on, for paying it in the app (20f). */
+  membershipId: string;
 }
 
 /** Every fee of these memberships, newest day first. */
 export function feesOf(memberships: readonly MyMembership[]): FeeItem[] {
   return memberships
-    .flatMap((m) => m.fees.map((fee) => ({ fee, currency: m.currency, membership: m.name })))
+    .flatMap((m) => m.fees.map((fee) => ({ fee, currency: m.currency, membership: m.name, membershipId: m.id })))
     .sort((a, b) => (a.fee.on < b.fee.on ? 1 : a.fee.on > b.fee.on ? -1 : 0));
 }
 
@@ -144,16 +148,15 @@ const FEE_TAGS: Readonly<Record<MyFee["state"], Tag>> = {
   waived: { label: "Waived", tone: "plain" },
 };
 
-/** A fee's words: "Late cancel fee · Yoga Flow", its tag, "₹200.00 · 12 Oct 2026", and where it is owed when, or
- *  that the place took it off. Only a paid fee has a receipt to open. */
+/** A fee's words: "Late cancel fee · Yoga Flow", its tag, "₹200.00 · 12 Oct 2026 · Gold Monthly" (the membership left
+ *  out where the title already names it), and the day it is due, or that the place took it off. Only a paid fee has a
+ *  receipt to open. */
 export function feeText(item: FeeItem, gymName: string): { title: string; tag: Tag; line: string; note: string | null; receipt: number | null } {
   const f = item.fee;
   const note =
-    f.state === "due"
-      ? `Due on ${dayText(f.dueOn)}.`
-      : f.state === "overdue"
-        ? `Overdue since ${dayText(f.dueOn)}.`
-        : f.state === "waived"
+    f.state === "due" || f.state === "overdue"
+      ? `Due ${dayText(f.dueOn)}`
+      : f.state === "waived"
           ? `${gymName} waived this fee.`
           : f.refundPending
             ? `${gymName} is refunding this fee.`
@@ -165,7 +168,7 @@ export function feeText(item: FeeItem, gymName: string): { title: string; tag: T
   return {
     title: `${MEMBER_FEE_WORDS[f.fee]} · ${f.forName}`,
     tag: f.refundPending ? { label: "Refund pending", tone: "plain" } : FEE_TAGS[f.state],
-    line: `${formatMinor(f.amountMinor, item.currency)} · ${dayText(f.on)} · ${item.membership}`,
+    line: `${formatMinor(f.amountMinor, item.currency)} · ${dayText(f.on)}${f.forName === item.membership ? "" : ` · ${item.membership}`}`,
     note,
     receipt: f.state === "paid" || f.state === "refunded" ? f.receiptNumber : null,
   };
