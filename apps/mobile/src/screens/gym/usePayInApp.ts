@@ -163,13 +163,17 @@ export function usePayInApp(gymId: string, onEnded: () => void): PayInApp {
       void (async () => {
         const send = (requestKey: string) => session.signedIn({ method: "POST", path: myPaymentsPath(gymId), body: payBody(target, requestKey) }, appPaymentResponseSchema);
         let requestKey = lost ?? newRequestKey();
-        let answer = await send(requestKey);
-        // The page a lost press made has ended since (left open, then closed): this press asks for a page of its own.
-        if (lost !== null && answer.kind === "ok" && answer.data.payment.state === "closed") {
-          requestKey = newRequestKey();
+        let answer: Awaited<ReturnType<typeof send>>;
+        try {
           answer = await send(requestKey);
+          // The page a lost press made has ended since (left open, then closed): this press asks for a page of its own.
+          if (lost !== null && answer.kind === "ok" && answer.data.payment.state === "closed") {
+            requestKey = newRequestKey();
+            answer = await send(requestKey);
+          }
+        } finally {
+          pressing.current = false;
         }
-        pressing.current = false;
         if (!live.current) return;
         if (answer.kind === "no_answer") {
           lostPress.current = { key: target.key, requestKey };
