@@ -26,7 +26,7 @@ import {
   type ForSaleFriendGift,
 } from "@app/shared";
 import type { Sql, TransactionSql } from "postgres";
-import { factsKeyOf } from "../agreement/factsKey.js";
+import { forSaleKeyOf } from "../agreement/factsKey.js";
 import { gymContact, typeDocumentSql } from "../agreement/repo.js";
 import { lockGym } from "../memberList/repo.js";
 import { billDayOf, billsFor, overdueDaysOf } from "../memberships/billsSql.js";
@@ -114,6 +114,7 @@ export async function workedFor(
       : await Promise.all([friendGiftFor(tx, s.gymId, s.entryId, s.typeId, line.type.currency, s.today), waitingGiftFor(tx, s.gymId, s.entryId, "membership")]);
   const worked = forSaleWorked({
     type: line.type,
+    included: line.included,
     taxes: line.taxes,
     taxIncluded,
     billDay,
@@ -211,8 +212,8 @@ async function purchasableIn(tx: TransactionSql, s: Buying): Promise<Purchasable
   // days of grace, the rule the bill on their page and the booking stop read (17i), in the line's own money.
   const late = landsOn === null ? null : await overdueOwed(tx, s.gymId, landsOn, s.today, item.currency);
   if (late !== null) return { kind: "owed", ...late };
-  // Only what the screen showed: its first payment and its details, to the character.
-  if (item.firstPayment.amountMinor !== s.amountMinor || factsKeyOf(item.facts) !== s.factsKey) return { kind: "changed" };
+  // Only what the screen showed: its first payment, its details, what it gives and the gym's words for it, to the character.
+  if (item.firstPayment.amountMinor !== s.amountMinor || forSaleKeyOf(item) !== s.factsKey) return { kind: "changed" };
   const asked = await askedWording(tx, s.gymId, s.typeId);
   if ((asked === null) !== (s.agreement === null)) return { kind: "agreement_changed" };
   if (asked !== null && s.agreement !== null) {

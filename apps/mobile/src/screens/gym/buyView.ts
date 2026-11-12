@@ -1,0 +1,144 @@
+import { APP_PURCHASE_WORDS, formatMinor, type AppPurchase, type AppPurchaseRequest, type DeskSigner, type ForSaleLine, type ForSaleSigner } from "@app/shared";
+import { NOT_PAID, PAY_CHECK, PAY_NOT_OPENED, PAY_WAITING, type PaySaid } from "./payView";
+
+// Buy in the app (ROADMAP Stage 5 item 20g; the server's `/for-sale` and `/for-sale/purchases`, built in 18k-iii). The
+// gym's packs, day passes and memberships paid once that it sells in the app, each with what it gives; a line's page
+// with every detail in the agreement's own words, the agreement to sign where the gym asks for one, and Pay on Square's
+// own page. Pure: the server works out each line, what is paid today and how a page ended.
+
+const gymPath = (gymId: string): string => `/v1/orgs/${encodeURIComponent(gymId)}`;
+export const forSalePath = (gymId: string): string => `${gymPath(gymId)}/for-sale`;
+export const purchasesPath = (gymId: string): string => `${forSalePath(gymId)}/purchases`;
+export const purchaseClosePath = (gymId: string, purchaseId: string): string => `${purchasesPath(gymId)}/${encodeURIComponent(purchaseId)}/close`;
+
+export const BUY = "Buy";
+export const BUY_HEADING = "Memberships and packs";
+export const BUY_SECURE = "Paid on Square’s secure checkout.";
+export const PAY_SECURE = "Secure checkout by Square";
+export const TODAY_TITLE = "You pay today";
+export const FACTS_HEADING = "The membership";
+export const BUY_A_MEMBERSHIP = "Buy a membership";
+export const VIEW_MEMBERSHIP = "View My membership";
+export const TO_MEMBERSHIP = "Go to My membership";
+export const PAID_TITLE = "Payment successful";
+export const CANCELLED_TITLE = "Payment cancelled";
+export const PENDING_TITLE = "Payment pending";
+export const NOT_COMPLETED_TITLE = "Payment not completed";
+export const CONFIRMING_TITLE = "Confirming your payment";
+export const SHOW_PASS = "Show my pass";
+export const PASS_LINE = "Show your pass at the front desk when you arrive.";
+export const WHAT_YOU_GET = "What you get";
+export const MY_PURCHASES = "My purchases and receipts";
+export const WHO_SIGNS = "Who is signing?";
+export const SIGNER_LABELS: Readonly<Record<DeskSigner, string>> = { person: "Me", guardian: "My parent or guardian" };
+export const NOT_READY = "Type the full name and tick the box to pay.";
+export const NOT_READY_WHO = "Choose who is signing, type the full name and tick the box to pay.";
+
+/** What a screen reader says for Buy: "Buy 10-class pack, $90.00". */
+export const buySay = (line: Pick<ForSaleLine, "name" | "priceMinor" | "currency">): string => `Buy ${line.name}, ${formatMinor(line.priceMinor, line.currency)}`;
+/** "Pay $90.00". */
+export const payLabel = (line: Pick<ForSaleLine, "firstPayment" | "currency">): string => `Pay ${formatMinor(line.firstPayment.amountMinor, line.currency)}`;
+
+export const nothingForSale = (gym: string): string => `${gym} isn’t selling anything in the app right now. Ask at the front desk.`;
+export const notSoldNow = (gym: string): string => `This isn’t sold in the app at ${gym} right now. Ask at the front desk.`;
+export function couldNotLoadForSale(status: number | null, gym: string): string {
+  return status === 404 ? `${gym} isn’t showing what it sells right now.` : "Couldn’t load what’s for sale. Check your internet and try again.";
+}
+
+const factOf = (line: Pick<ForSaleLine, "facts">, label: string): string | null => line.facts.find((f) => f.label === label)?.value ?? null;
+
+/** Under a line's name: its price as its agreement words it ("$90.00 for 10 classes"), and until when it lasts ("Use by
+ *  11 January 2027"), both read from the agreement's own lines. */
+export function lineSummary(line: Pick<ForSaleLine, "facts" | "priceMinor" | "currency">): { price: string; until: string | null } {
+  const price = factOf(line, "Price") ?? formatMinor(line.priceMinor, line.currency);
+  const useBy = factOf(line, "Use by");
+  const ends = factOf(line, "Ends");
+  return { price, until: useBy !== null ? `Use by ${useBy}` : ends !== null ? `Ends ${ends}` : null };
+}
+
+const andList = (items: readonly string[]): string => (items.length < 2 ? items.join("") : `${items.slice(0, -1).join(", ")} and ${items.at(-1) ?? ""}`);
+
+/** What they pay today where it is not the price: "$145.00 today, with a $25.00 joining fee". Null where it is. */
+export function todayLine(line: Pick<ForSaleLine, "firstPayment" | "priceMinor" | "currency">): string | null {
+  const fp = line.firstPayment;
+  if (fp.amountMinor === line.priceMinor) return null;
+  const reasons: string[] = [];
+  if (fp.joiningFeeMinor > 0) reasons.push(`a ${formatMinor(fp.joiningFeeMinor, line.currency)} joining fee`);
+  if (fp.friendGift !== null || fp.memberGiftOffMinor > 0) reasons.push("your Refer a friend gift");
+  // What those make up; anything else is tax added on top of the price (round one, L2).
+  const explained = fp.joiningFeeMinor - (fp.friendGift?.offMinor ?? 0) - fp.memberGiftOffMinor;
+  if (fp.amountMinor - line.priceMinor !== explained) reasons.push("tax");
+  const today = `${formatMinor(fp.amountMinor, line.currency)} today`;
+  return reasons.length === 0 ? today : `${today}, with ${andList(reasons)}`;
+}
+
+/** Under "You pay today": the price and the joining fee, where those two alone make the amount. */
+export function todayParts(line: Pick<ForSaleLine, "firstPayment" | "priceMinor" | "currency">): string | null {
+  const fp = line.firstPayment;
+  if (fp.joiningFeeMinor === 0 || line.priceMinor + fp.joiningFeeMinor !== fp.amountMinor) return null;
+  return `${formatMinor(line.priceMinor, line.currency)} + ${formatMinor(fp.joiningFeeMinor, line.currency)} joining fee`;
+}
+
+/** Who signs, where the server already knows (by the record's date of birth); null where they choose. */
+export const signerOf = (signer: ForSaleSigner): DeskSigner | null => (signer === "either" ? null : signer);
+export const nameLabel = (signer: DeskSigner | null): string => (signer === "guardian" ? "Parent or guardian’s full name" : "Full name");
+/** Above the name, for somebody under 18. */
+export const GUARDIAN_LINE = APP_PURCHASE_WORDS.guardian_needed;
+
+/** What Pay sends but its key: the line, what its list showed (today's amount and the key of its details) and, where the
+ *  gym asks for its agreement, the wording read, who signed and the name typed. */
+export function buyBody(line: Pick<ForSaleLine, "typeId" | "firstPayment" | "factsKey" | "agreement">, sign: { signer: DeskSigner; name: string } | null): Omit<AppPurchaseRequest, "requestKey"> {
+  return {
+    typeId: line.typeId,
+    amountMinor: line.firstPayment.amountMinor,
+    factsKey: line.factsKey,
+    agreement: line.agreement === null || sign === null ? null : { agreementId: line.agreement.id, signer: sign.signer, name: sign.name },
+  };
+}
+
+/** "$15.00 paid. Day pass is yours.", where whether an agreement was signed is not known here. */
+export const paidShortLine = (p: Pick<AppPurchase, "amountMinor" | "currency" | "name">): string => `${formatMinor(p.amountMinor, p.currency)} paid. ${p.name} is yours.`;
+
+/** What a line gives, in the order a member reads it: what the price list says it includes, how many classes and until
+ *  when, then the gym's own description. */
+export function whatYouGet(line: Pick<ForSaleLine, "includes" | "facts" | "priceMinor" | "currency" | "description">): string[] {
+  const summary = lineSummary(line);
+  const out = [...line.includes, summary.price, ...(summary.until === null ? [] : [summary.until])];
+  const d = line.description?.trim() ?? "";
+  return d === "" ? out : [...out, d];
+}
+
+export interface BuySaid extends PaySaid {
+  /** How a page ended, or that Square has not said: shown in the box in the middle of the screen. */
+  ended?: boolean;
+  /** A Go to My membership button in place of Pay: what stands in the way is paid there. */
+  toMembership?: boolean;
+  /** What was shown has changed: the list is read again. */
+  reread?: boolean;
+}
+
+/** How a page ended that was not paid; null while Square has not said, and for paid, which the page says in full. */
+export function endedBuySaid(p: Pick<AppPurchase, "state">): BuySaid | null {
+  switch (p.state) {
+    case "closed":
+      return { tone: "plain", line: NOT_PAID, ended: true };
+    case "check":
+      return { tone: "warn", line: PAY_CHECK, ended: true };
+    case "open":
+      return { tone: "warn", line: PAY_WAITING, again: true, ended: true };
+    case "paid":
+      return null;
+  }
+}
+
+const REREAD = new Set(["app_payment_changed", "app_payment_not_found", "agreement_changed", "guardian_needed", "person_signs"]);
+
+/** A refused Pay, in the member's words: the server's own, written for the member. What changed reads the list again; money
+ *  owed here is paid on My membership. */
+export function buyRefusalSaid(code: string, serverWords: string): BuySaid {
+  const line = serverWords === "" ? PAY_NOT_OPENED : serverWords;
+  if (REREAD.has(code)) return { tone: "warn", line, reread: true };
+  if (code === "app_purchase_owed") return { tone: "bad", line, toMembership: true };
+  if (code === "app_payment_check") return { tone: "warn", line };
+  return { tone: "bad", line };
+}

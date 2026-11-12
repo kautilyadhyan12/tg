@@ -18,7 +18,8 @@ export function PayButton({ target, pay }: { target: PayTarget | null; pay: PayI
 const TONE_STYLE = { good: "goodSaid", plain: "plainSaid", warn: "warnSaid", bad: "badSaid" } as const;
 const TONE_TEXT = { good: "goodText", plain: "textSoft", warn: "orange", bad: "badText" } as const;
 
-function SaidBox({ tone, line, testID }: { tone: PayTone; line: string; testID: string }) {
+/** What happened, in a box of its tone (Buy says it the same way, 20g). */
+export function SaidBox({ tone, line, testID }: { tone: PayTone; line: string; testID: string }) {
   return (
     <View testID={testID} style={[styles.box, styles[TONE_STYLE[tone]]]}>
       {tone === "good" ? <Icon name="check" size={14} colour="goodText" /> : null}

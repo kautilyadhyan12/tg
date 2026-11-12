@@ -19,6 +19,8 @@ import { agreementFactSchema, agreementFacts, factsKeySchema, type AgreementFact
 import {
   MEMBERSHIP_TYPES_MAX,
   canSellInApp,
+  type MembershipAccess,
+  type MembershipLimitPeriod,
   contractThenSchema,
   isDayPass,
   membershipKindSchema,
@@ -61,6 +63,9 @@ export const forSaleItemSchema = z
       .strict(),
     /** It is charged again every period, until they cancel or its minimum term ends: a repeating charge. */
     repeats: z.boolean(),
+    /** What it gives, in the price list's own words (20g): "Any class", "8 classes a month", "Only Yoga, Spin",
+     *  "Personal training". */
+    includes: z.array(z.string().min(1).max(200)).max(4).default([]),
     /** The membership agreement's own lines for it, in its order: the business, its price and first payment, its
      *  minimum term, early cancellation fee, renewal, notice to cancel and cooling-off period. */
     facts: z.array(agreementFactSchema).min(1),
@@ -129,8 +134,53 @@ export interface ForSaleFriendGift {
   membershipPayments: MembershipPayments | null;
 }
 
+/** What a line gives, as the price list keeps it: its classes and its personal training (20g). */
+export interface ForSaleIncluded {
+  access: MembershipAccess;
+  bookingsLimit: number | null;
+  bookingsPeriod: MembershipLimitPeriod | null;
+  /** The classes it covers by name; null for every class. */
+  classNames: readonly string[] | null;
+  includesPt: boolean;
+  ptLimit: number | null;
+  ptPeriod: MembershipLimitPeriod | null;
+}
+
+const STUDIOS = ["studio", "yoga_studio", "pilates_studio"];
+const OPEN_GYMS = ["crossfit_box", "personal_trainer", "clinic"];
+const plural = (n: number, one: string, many: string): string => `${String(n)} ${n === 1 ? one : many}`;
+
+/** WHAT IT GIVES, as the console's price list words it (`includesLine` in the web's `membershipTypesView.js`), one line a
+ *  part: its classes, which classes, and its personal training. `orgType` names a place without classes as it calls
+ *  itself: a gym's floor "gym", a studio's "open studio", a CrossFit box's "open gym". */
+export function includedLines(inc: ForSaleIncluded, type: Pick<ForSaleType, "kind" | "packClasses" | "packDays">, orgType: string | null): string[] {
+  const place = orgType !== null && STUDIOS.includes(orgType) ? "open studio" : orgType !== null && OPEN_GYMS.includes(orgType) ? "open gym" : "gym";
+  const names = inc.classNames;
+  const ptOnly = inc.includesPt && names !== null && names.length === 0;
+  const ptLimit = inc.includesPt && inc.ptLimit !== null && inc.ptPeriod !== null ? { n: inc.ptLimit, per: inc.ptPeriod } : null;
+  const lines: string[] = [];
+  if (!ptOnly) {
+    if (inc.access === "gym_only") lines.push(`No classes, ${place} only`);
+    else if (inc.access === "limited" && inc.bookingsLimit !== null && inc.bookingsPeriod !== null) lines.push(`${plural(inc.bookingsLimit, "class", "classes")} a ${inc.bookingsPeriod}`);
+    else if (names === null) lines.push(isDayPass(type) ? (place === "gym" ? "The gym or any class" : `${place.charAt(0).toUpperCase()}${place.slice(1)} or any class`) : type.kind === "pack" ? "Any class" : "Unlimited classes");
+    if (inc.access !== "gym_only" && names !== null && names.length > 0) {
+      const shown = names.length <= 3 ? names.join(", ") : `${names.slice(0, 3).join(", ")} and ${String(names.length - 3)} more`;
+      lines.push(`Only ${shown}`);
+    }
+  }
+  if (ptOnly) {
+    lines.push("Personal training only");
+    if (ptLimit !== null) lines.push(`${plural(ptLimit.n, "session", "sessions")} a ${ptLimit.per}`);
+  } else if (inc.includesPt) {
+    lines.push(ptLimit === null ? "Personal training" : `${plural(ptLimit.n, "personal training session", "personal training sessions")} a ${ptLimit.per}`);
+  }
+  return lines.map((l) => l.slice(0, 200)).slice(0, 4);
+}
+
 export interface ForSaleInput {
   type: ForSaleType;
+  /** What it gives, and the kind of place (20g); none read, nothing said. */
+  included?: { lines: ForSaleIncluded; orgType: string | null } | null;
   /** The type's tax rates as each is now, in its order. */
   taxes: readonly HeldTax[];
   taxIncluded: boolean;
@@ -230,6 +280,7 @@ export function forSaleWorked(input: ForSaleInput): { item: ForSaleItem; given: 
     currency: type.currency,
     firstPayment,
     repeats: type.kind === "recurring",
+    includes: input.included == null ? [] : includedLines(input.included.lines, type, input.included.orgType),
     facts,
   };
   return {
