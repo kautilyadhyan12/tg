@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useInRouterContext } from 'react-router-dom';
 import { Check, CreditCard, Loader2, Plus } from 'lucide-react';
-import { MEMBER_FEE_WORDS, formatMinor, memberGiftDaysLine, paidThroughSquare } from '@app/shared';
+import { MEMBER_FEE_WORDS, appCancelLine, formatMinor, memberGiftDaysLine, paidThroughSquare } from '@app/shared';
 import { orgService, errorCode, errorText } from '../../api/orgsApi';
 import PlaceLink from '../../components/console/PlaceLink';
 import PtSessionsEnding from '../../components/console/PtSessionsEnding';
@@ -2282,6 +2282,11 @@ export default function MemberMemberships({
         {leaveFeeShownLine(m) !== null ? (
           <span className="c-s14 c-t2" data-testid="held-leave-fee-line">
             {leaveFeeShownLine(m)}
+          </span>
+        ) : null}
+        {m.appCancel ? (
+          <span className="c-s14 c-t2" data-testid="held-app-cancel-line">
+            {appCancelLine(m.appCancel)}
           </span>
         ) : null}
         {releaseShownLine(m) !== null ? (

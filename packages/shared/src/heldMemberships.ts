@@ -62,6 +62,7 @@ import {
 import { confirmPtSessionsField } from "./ptSessionsEnding.js";
 import { MEMBERSHIP_PAYMENTS, gymDiscountSchema } from "./discounts.js";
 import { appPurchaseCheckSchema, appPurchaseOpenSchema } from "./appPurchaseStaff.js";
+import { appCancelSchema } from "./appCancel.js";
 import { friendGiftSchema } from "./friendGift.js";
 import { GIFT_DAYS_MAX, memberGiftSchema } from "./memberGift.js";
 import { memberBillingSchema, memberPaymentByHandSchema } from "./memberBills.js";
@@ -1205,6 +1206,8 @@ export const heldMembershipSchema = z
     /** The emailed link to sign its agreement (18u-ii-b), while it works: unused, not expired,
      *  and sent to the address the record has now. */
     agreementLink: z.object({ sentAt: z.string(), expiresAt: z.string() }).strict().nullable().default(null),
+    /** Cancelled by the member, or whoever pays for them, in the app (18l): when, by whom and why. */
+    appCancel: appCancelSchema.nullable().default(null),
   })
   .strict();
 export type HeldMembershipItem = z.infer<typeof heldMembershipSchema>;

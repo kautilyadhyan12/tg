@@ -14,6 +14,7 @@ import { heldMembershipShownSchema } from "./heldMemberships.js";
 import { membershipKindSchema } from "./memberships.js";
 import { membershipTermSchema } from "./membershipAgreement.js";
 import { myMembershipAgreementSchema } from "./myAgreementState.js";
+import { myMembershipCancelSchema } from "./myCancel.js";
 
 const daySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const minorSchema = z.number().int().min(0).max(99_999_999);
@@ -110,6 +111,9 @@ export const myMembershipSchema = z
     /** Its agreement (20c): to sign in the app, signed, or to sign at the front desk; null where the business asks
      *  for none, on somebody the reader pays for, and from an api too old to send it. */
     agreement: myMembershipAgreementSchema.nullable().default(null),
+    /** Cancel in the app (18l): the button, who can cancel it instead, or the line once it was cancelled in the app;
+     *  null where there is nothing to cancel, and from an api too old to send it. */
+    cancel: myMembershipCancelSchema.nullable().default(null),
   })
   .strict();
 export type MyMembership = z.infer<typeof myMembershipSchema>;

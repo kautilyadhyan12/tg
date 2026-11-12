@@ -352,7 +352,8 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
        - 18k-iii-b. [x] **A member not on the gym's list yet, or sharing a record, buys it** — merged 2026-11-07 (PR #494).
      - 18k-iv. [ ] **Buy a repeating membership**: its own tick, kept with its time and words, a card typed on Square's form and kept; on sale only once 18l is built.
      - 18k-v. [ ] **A promo code typed in the app** (spec Part 3 §14.3).
-   - 18l. [ ] **A member stops their own repeating membership** (RULINGS 2026-10-08; with 18d): Cancel in the app ends it on the last day paid for, stops the payment company's schedule in the same step (the screen never says stopped while the company still charges), and tells the gym; refunds and exceptions stay the gym's. Every member, including those who joined at the desk, and charging stops at once (Kd, 2026-10-22: New York, Virginia, Connecticut and Maryland require it, so the gym's switch to turn the button off is gone). Web folder 1, once 18v has merged.
+   - 18l. [x] **A member stops their own repeating membership** — merged 2026-11-12 (PR #525).
+   - 18l-ii. [ ] **Keep my membership** (Kd, 2026-11-12, `rulings/2026-11-11-18l.md`): a member who cancelled in the app undoes it there until the last day; staff undo only a cancel staff made. Web folder, straight after 18l.
    - 18t. [x] **Joining fee** · merged 2026-10-22 · PR #336
    - 18u. **Membership agreement**, in two jobs since 2026-10-23 (no lawyer: `rulings/2026-10-23-18u-i.md`; the line as first written is in `handoff/2026-10-23-18u-i.md`). Web folder 2.
      - 18u-i. [x] **The business writes it, and the member signs at the desk** — merged 2026-10-23 (PR #349).
@@ -743,7 +744,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
       - 37d-ii. [x] **Today's run with the voice** · merged 2026-11-11 · PR #522
       - 37d-iii. **Running in Recommended For You, and your own run plan** (split 2026-11-11 in two, Kd's "go": the Dashboard and Skip step first; `handoff/2026-11-11-37d-iii-a.md` keeps its line as first written).
         - 37d-iii-a. [x] **Running on the Dashboard, and Skip step** · merged 2026-11-11 · PR #523
-        - 37d-iii-b. [ ] **Your own run plan**: Suggested and My plan on the Dashboard's Running tab and the Running page; move or change a run.
+        - 37d-iii-b. [x] **Your own run plan** · merged 2026-11-12 · PR #527
     - 37e. [ ] **Routes.**
     - 37f. [ ] **Heart rate from a chest strap or watch.**
 38. [ ] **The global board** (its reminders moved to item 19e on 2026-11-05): last, as Kd ruled on 2026-11-01 (`rulings/2026-11-01-17c-ii-a.md`): Active days and Running, the server's checks, a stranger's profile, and follow requests for somebody who chose Hide me, seen from outside their gym; Follow with Followers and Following counts everywhere, gyms included (`rulings/2026-11-01-17c-ii-b.md`). It waits for items 18, 37, 53 and 64.

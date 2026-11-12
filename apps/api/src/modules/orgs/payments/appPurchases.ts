@@ -19,6 +19,7 @@ import {
   APP_PURCHASE_WORDS,
   appPaymentCloseResponseSchema,
   appPurchaseResponseSchema,
+  formatMinor,
   type AppPaymentCloseResponse,
   type AppPurchase,
   type AppPurchaseRequest,
@@ -132,6 +133,8 @@ function refusalOf(outcome: Exclude<buys.PurchasableOutcome, { kind: "ok" }>, gy
       throw new OrgsError(409, "person_signs", APP_PURCHASE_WORDS.person_signs);
     case "already_held":
       throw new OrgsError(409, "already_held", APP_PURCHASE_WORDS.already_held(outcome.name));
+    case "owed":
+      throw new OrgsError(409, "app_purchase_owed", APP_PURCHASE_WORDS.owed(formatMinor(outcome.amountMinor, outcome.currency), gymName));
     case "too_many":
       throw new OrgsError(409, "too_many", APP_PURCHASE_WORDS.too_many);
     case "currency":

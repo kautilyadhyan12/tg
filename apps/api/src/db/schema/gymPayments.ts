@@ -3,7 +3,7 @@ import { boolean, check, date, foreignKey, index, integer, jsonb, pgTable, prima
 import { citext, createdAt } from "./common.js";
 import { users } from "./identity.js";
 import { gymMemberListEntries } from "./memberList.js";
-import { gymMemberPayments } from "./memberships.js";
+import { gymHeldMemberships, gymMemberPayments } from "./memberships.js";
 import { gymSales } from "./register.js";
 import { gyms } from "./tenancy.js";
 
@@ -981,5 +981,44 @@ export const gymAppPayments = pgTable(
     index("gym_app_payments_purchase_check_idx")
       .on(t.gymId, t.entryId)
       .where(sql`${t.membershipTypeId} IS NOT NULL AND ${t.outcome} IN ('not_recorded','gone','no_answer') AND ${t.clearedAt} IS NULL`),
+  ],
+);
+
+/** A membership cancelled in the app (0231; ROADMAP 18l): what the gym is told. The membership itself changes as the
+ *  front desk's Cancel changes it. `by_entry_id` is the record of whoever pressed it (the member, or whoever pays for
+ *  them); a record deleted for good lets go of it alone (`ON DELETE SET NULL ("by_entry_id")`, in the migration only).
+ *  The membership going takes the row with it. */
+export const gymAppCancels = pgTable(
+  "gym_app_cancels",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    gymId: uuid("gym_id")
+      .notNull()
+      .references(() => gyms.id, { onDelete: "cascade" }),
+    heldMembershipId: uuid("held_membership_id").notNull(),
+    byEntryId: uuid("by_entry_id"),
+    userId: uuid("user_id").references(() => users.id, { onDelete: "set null" }),
+    requestKey: uuid("request_key").notNull(),
+    when: text("when").notNull(),
+    endsOn: date("ends_on").notNull(),
+    cancelledOn: date("cancelled_on").notNull(),
+    reason: text("reason"),
+    reasonAt: timestamp("reason_at", { withTimezone: true }),
+    emailedAt: timestamp("emailed_at", { withTimezone: true }),
+    /** What the box said, for a confirmation sent again: the choice's sentences and the notes under it. */
+    said: jsonb("said").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    check("gym_app_cancels_when_check", sql`${t.when} IN ('cooling_off','period_end','today','notice','contract_end','leave_early')`),
+    check(
+      "gym_app_cancels_reason_check",
+      sql`(${t.reason} IS NULL) = (${t.reasonAt} IS NULL) AND (${t.reason} IS NULL OR ${t.reason} IN ('moving','cost','not_using','other_gym','service','other'))`,
+    ),
+    check("gym_app_cancels_days_check", sql`${t.endsOn} >= ${t.cancelledOn}`),
+    foreignKey({ name: "gym_app_cancels_held_fk", columns: [t.gymId, t.heldMembershipId], foreignColumns: [gymHeldMemberships.gymId, gymHeldMemberships.id] }).onDelete("cascade"),
+    uniqueIndex("gym_app_cancels_request_uq").on(t.gymId, t.requestKey),
+    uniqueIndex("gym_app_cancels_held_uq").on(t.gymId, t.heldMembershipId),
+    index("gym_app_cancels_recent_idx").on(t.gymId, t.createdAt),
   ],
 );

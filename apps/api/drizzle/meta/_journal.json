@@ -1611,6 +1611,20 @@
       "when": 1790726400230,
       "tag": "0230_run_plans",
       "breakpoints": true
+    },
+    {
+      "idx": 230,
+      "version": "7",
+      "when": 1790726400231,
+      "tag": "0231_app_cancels",
+      "breakpoints": true
+    },
+    {
+      "idx": 231,
+      "version": "7",
+      "when": 1790726400232,
+      "tag": "0232_own_run_plans",
+      "breakpoints": true
     }
   ]
 }

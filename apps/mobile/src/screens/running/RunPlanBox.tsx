@@ -1,9 +1,10 @@
 // Your run plan on the Running page (ROADMAP Stage 5 item 37d-i): Make my plan before any answers;
 // this week as seven footprints (Kd, 2026-11-10: footprints, not circles), lit where a run was
-// recorded, today's run under them, and See plan; in Safe mode, why there is none.
+// recorded, today's run under them, and See plan; in Safe mode, why there is none. Suggested or My plan
+// across its top (37d-iii-b): My plan is the person's own week, Build my own and Edit plan.
 import { useState } from "react";
 import { Image, StyleSheet, View } from "react-native";
-import { CHECK_FIRST_OPTIONS, healthScreeningResponseSchema, type CheckFirst, type KeptRunGuide, type PlanDay, type RunPlan, type RunPlanResponse, type Units } from "@app/shared";
+import { CHECK_FIRST_OPTIONS, healthScreeningResponseSchema, type CheckFirst, type KeptRunGuide, type PlanDay, type RunChoice, type RunPlan, type RunPlanResponse, type Units } from "@app/shared";
 import { Button } from "../../look/Button";
 import { Options } from "../../look/Choice";
 import { colours, shadows, sizes } from "../../look/colours";
@@ -14,7 +15,9 @@ import { fonts, Txt } from "../../look/Txt";
 import { useSession } from "../../session/SessionProvider";
 import { HEALTH_PATH } from "../setup/useHealthStep";
 import { guideOf } from "./runGuide";
-import { GOAL_WORDS, planDistance, sessionDetail, sessionTitle, weekdayLetter } from "./runPlanWords";
+import { OwnRunWeek } from "./OwnRunWeek";
+import { RunChoiceRow, isSafeMode, shownDays, useRunChoice } from "./RunChoice";
+import { GOAL_WORDS, dayName, ownLine, overCapLine, planDistance, sessionDetail, sessionTitle, weekdayLetter } from "./runPlanWords";
 
 export const RUN_PLAN_PATH = "/v1/geo/run-plan";
 
@@ -33,10 +36,12 @@ export function heldLine(plan: Exclude<RunPlan, { kind: "none" }>): string | nul
   return plan.hard ? "Your runs last week felt very hard, so this week stays the same." : null;
 }
 
-/** Today's planned run, step by step (37d-ii); null on a rest day or with no plan. */
-export function todayGuide(read: PlanRead, units: Units): KeptRunGuide | null {
-  if (read.kind !== "ok" || read.data.plan === null || read.data.plan.kind === "none") return null;
-  const next = nextRun(read.data.plan.days, read.data.today);
+/** Today's planned run, step by step (37d-ii), from the plan picked (37d-iii-b); null on a rest day or with no plan. */
+export function todayGuide(read: PlanRead, units: Units, picked: RunChoice | null = null): KeptRunGuide | null {
+  if (read.kind !== "ok") return null;
+  const days = shownDays(picked === null ? read.data : { ...read.data, choice: picked });
+  if (days === null) return null;
+  const next = nextRun(days, read.data.today);
   if (next === null || !next.today || next.day.session === null) return null;
   return guideOf(next.day.session, sessionTitle(next.day.session, units));
 }
@@ -78,9 +83,47 @@ export function FootprintWeek({ days, today }: { days: readonly PlanDay[]; today
   );
 }
 
-/** onStartToday: Start today's run, step by step (37d-ii); null while a run is going on. */
+/** The day's run, or the next one, with Start today's run under it. */
+function NextRunPart({ days, today, paces, units, guide, onStartToday }: {
+  days: readonly PlanDay[];
+  today: string;
+  paces: Parameters<typeof sessionDetail>[1];
+  units: Units;
+  guide: KeptRunGuide | null;
+  onStartToday: ((guide: KeptRunGuide) => void) | null;
+}) {
+  const next = nextRun(days, today);
+  return (
+    <View style={styles.next}>
+      {next === null || next.day.session === null ? (
+        <Txt kind="small">{days.some((d) => d.done) ? "All runs done this week." : "No more runs this week."}</Txt>
+      ) : (
+        <>
+          <Txt kind="eyebrow">{next.today ? "Today’s run" : `Next run · ${dayName(next.day.weekday)}`}</Txt>
+          <Txt kind="strong">{sessionTitle(next.day.session, units)}</Txt>
+          <Txt kind="small">{sessionDetail(next.day.session, paces, units)}</Txt>
+          {guide !== null && onStartToday !== null ? (
+            <Button
+              label="Start today’s run"
+              say="Start today’s run, with each step said"
+              compact
+              style={styles.make}
+              onPress={() => {
+                onStartToday(guide);
+              }}
+            />
+          ) : null}
+        </>
+      )}
+    </View>
+  );
+}
+
+/** onStartToday: Start today's run, step by step (37d-ii); null while a run is going on. took: a reply the
+ *  person's own change brought (37d-iii-b). */
 export function RunPlanBox({
   read,
+  took,
   units,
   onMake,
   onOpen,
@@ -88,6 +131,7 @@ export function RunPlanBox({
   onStartToday = null,
 }: {
   read: PlanRead;
+  took: (data: RunPlanResponse) => void;
   units: Units;
   onMake: () => void;
   onOpen: () => void;
@@ -95,6 +139,8 @@ export function RunPlanBox({
   onStartToday?: ((guide: KeptRunGuide) => void) | null;
 }) {
   const [clearing, setClearing] = useState(false);
+  const [building, setBuilding] = useState(false);
+  const choice = useRunChoice(read, took);
   if (read.kind === "loading") return null;
   if (read.kind === "failed") {
     return (
@@ -106,9 +152,72 @@ export function RunPlanBox({
       </View>
     );
   }
-  const plan = read.data.plan;
+  const data = read.data;
+  const plan = data.plan;
+  const safe = isSafeMode(data);
+  const picked = choice.shown ?? data.choice;
+  // Safe mode shows no run from any plan, so there is nothing to pick between (spec Part 6 §16.6).
+  const row = safe ? null : (
+    <View style={styles.rowGap}>
+      <RunChoiceRow shown={picked} pick={choice.pick} trouble={choice.trouble} />
+    </View>
+  );
+  const week = (
+    <OwnRunWeek
+      data={building ? data : null}
+      units={units}
+      onClose={() => {
+        setBuilding(false);
+      }}
+      onSaved={(reply) => {
+        setBuilding(false);
+        took(reply);
+      }}
+    />
+  );
+  // The server's today, in the person's own time zone: the day the plan was worked out for.
+  const today = data.today;
+  const guide = todayGuide(read, units, picked);
+  const paces = plan?.kind === "runner" ? plan.paces : null;
+
+  if (picked === "mine" && !safe) {
+    const own = data.own;
+    if (own === null) {
+      return (
+        <View style={styles.box} testID="run-plan-box">
+          <Txt kind="h3">Training plan</Txt>
+          {row}
+          <Txt kind="strong">No plan of your own yet.</Txt>
+          <Txt kind="small">Choose a run or a rest day for each day of your week.</Txt>
+          <Button label="Build my own" compact style={styles.make} onPress={() => { setBuilding(true); }} />
+          {week}
+        </View>
+      );
+    }
+    const caution = overCapLine(own.days, data.capM, units);
+    return (
+      <View style={styles.box} testID="run-plan-box">
+        <View style={styles.head}>
+          <Txt kind="h3">Training plan</Txt>
+          <Button kind="link" label="Edit plan" say="Edit your own run plan" onPress={() => { setBuilding(true); }} />
+        </View>
+        {row}
+        <Txt kind="tiny" colour="textSoft">
+          {ownLine(own.days, units)}
+        </Txt>
+        {caution === null ? null : (
+          <Txt kind="small" colour="gold">
+            {caution}
+          </Txt>
+        )}
+        <FootprintWeek days={own.days} today={today} />
+        <NextRunPart days={own.days} today={today} paces={paces} units={units} guide={guide} onStartToday={onStartToday} />
+        {week}
+      </View>
+    );
+  }
+
   if (plan === null || plan.kind === "none") {
-    const safe = plan?.why === "safe_mode";
     return (
       <View style={[styles.box, styles.withArt]} testID="run-plan-box">
         <View style={styles.art} pointerEvents="none">
@@ -116,6 +225,7 @@ export function RunPlanBox({
         </View>
         <View style={styles.words}>
           <Txt kind="h3">Training plan</Txt>
+          {row}
           <Txt kind="small">
             {safe
               ? "No training plan until a professional has cleared you to exercise. You can still record a run."
@@ -133,17 +243,13 @@ export function RunPlanBox({
       </View>
     );
   }
-  // The server's today, in the person's own time zone: the day the plan was worked out for.
-  const today = read.data.today;
-  const next = nextRun(plan.days, today);
-  const guide = todayGuide(read, units);
-  const paces = plan.kind === "runner" ? plan.paces : null;
   return (
     <View style={styles.box} testID="run-plan-box">
       <View style={styles.head}>
         <Txt kind="h3">Training plan</Txt>
         <Button kind="link" label="View plan" say="View your training plan" onPress={onOpen} />
       </View>
+      {row}
       <Txt kind="tiny" colour="textSoft">
         {weekLine(plan, units)}
       </Txt>
@@ -153,34 +259,12 @@ export function RunPlanBox({
         </Txt>
       )}
       <FootprintWeek days={plan.days} today={today} />
-      <View style={styles.next}>
-        {next === null || next.day.session === null ? (
-          <Txt kind="small">{plan.days.some((d) => d.done) ? "All runs done this week." : "No more runs this week."}</Txt>
-        ) : (
-          <>
-            <Txt kind="eyebrow">{next.today ? "Today’s run" : `Next run · ${dayName(next.day.weekday)}`}</Txt>
-            <Txt kind="strong">{sessionTitle(next.day.session, units)}</Txt>
-            <Txt kind="small">{sessionDetail(next.day.session, paces, units)}</Txt>
-            {guide !== null && onStartToday !== null ? (
-              <Button
-                label="Start today’s run"
-                say="Start today’s run, with each step said"
-                compact
-                style={styles.make}
-                onPress={() => {
-                  onStartToday(guide);
-                }}
-              />
-            ) : null}
-          </>
-        )}
-      </View>
+      <NextRunPart days={plan.days} today={today} paces={paces} units={units} guide={guide} onStartToday={onStartToday} />
     </View>
   );
 }
 
-const DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"] as const;
-export const dayName = (weekday: number): string => DAY_NAMES[weekday - 1] ?? "";
+export { dayName };
 
 /** Safe mode's way out: the health answer's second question, asked again here. */
 export function ClearedSheet({ open, onClose, onSaved }: { open: boolean; onClose: () => void; onSaved: () => void }) {
@@ -237,4 +321,5 @@ const styles = StyleSheet.create({
   printToday: { borderColor: colours.gold },
   next: { marginTop: 6, paddingTop: 12, borderTopWidth: 1, borderTopColor: colours.line, gap: 3 },
   sheet: { gap: 12 },
+  rowGap: { marginBottom: 4 },
 });

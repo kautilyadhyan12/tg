@@ -140,3 +140,21 @@ export const runPlans = pgTable(
   },
   (t) => [check("run_plans_answers_check", sql`jsonb_typeof(${t.answers}) = 'object'`)],
 );
+
+// 0232 (ROADMAP 37d-iii-b): Suggested or My plan, and the person's own week, read through `ownWeekSchema`.
+export const ownRunPlans = pgTable(
+  "own_run_plans",
+  {
+    userId: uuid("user_id")
+      .primaryKey()
+      .references(() => users.id, { onDelete: "cascade" }),
+    choice: text("choice"),
+    days: jsonb("days"),
+    daysSavedAt: timestamp("days_saved_at", { withTimezone: true }),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    check("own_run_plans_choice_check", sql`${t.choice} IN ('suggested', 'mine')`),
+    check("own_run_plans_days_check", sql`jsonb_typeof(${t.days}) = 'array'`),
+  ],
+);
