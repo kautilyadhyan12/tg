@@ -1041,3 +1041,42 @@ export const gymAppCancels = pgTable(
     index("gym_app_cancels_recent_idx").on(t.gymId, t.createdAt),
   ],
 );
+
+/** A membership the front desk cancelled to end on a later day (0234; ROADMAP 18l-ii-b), so staff can undo it until then:
+ *  who pressed it, every way it was cancelled (`ways`), the soonest last day it was given (null where it was frozen), and
+ *  the bookings it ended. Undone, when, the gym's day, by whom and the press. The membership going takes the row with it. */
+export const gymDeskCancels = pgTable(
+  "gym_desk_cancels",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    gymId: uuid("gym_id")
+      .notNull()
+      .references(() => gyms.id, { onDelete: "cascade" }),
+    heldMembershipId: uuid("held_membership_id").notNull(),
+    userId: uuid("user_id").references(() => users.id, { onDelete: "set null" }),
+    ways: text("ways").array().notNull(),
+    endsOn: date("ends_on"),
+    cancelledOn: date("cancelled_on").notNull(),
+    endedClasses: integer("ended_classes").notNull().default(0),
+    endedSessions: integer("ended_sessions").notNull().default(0),
+    undoneAt: timestamp("undone_at", { withTimezone: true }),
+    undoneOn: date("undone_on"),
+    undoneByUserId: uuid("undone_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    undoRequestKey: uuid("undo_request_key"),
+    createdAt: createdAt(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    check("gym_desk_cancels_ways_check", sql`cardinality(${t.ways}) BETWEEN 1 AND 4 AND ${t.ways} <@ ARRAY['period_end','notice','contract_end','leave_early']::text[]`),
+    check("gym_desk_cancels_ended_check", sql`${t.endedClasses} >= 0 AND ${t.endedSessions} >= 0`),
+    check("gym_desk_cancels_days_check", sql`${t.endsOn} IS NULL OR ${t.endsOn} >= ${t.cancelledOn}`),
+    check(
+      "gym_desk_cancels_undone_check",
+      sql`(${t.undoneAt} IS NULL) = (${t.undoneOn} IS NULL) AND (${t.undoneAt} IS NULL) = (${t.undoRequestKey} IS NULL) AND (${t.undoneAt} IS NOT NULL OR ${t.undoneByUserId} IS NULL) AND (${t.undoneOn} IS NULL OR ${t.undoneOn} >= ${t.cancelledOn})`,
+    ),
+    foreignKey({ name: "gym_desk_cancels_held_fk", columns: [t.gymId, t.heldMembershipId], foreignColumns: [gymHeldMemberships.gymId, gymHeldMemberships.id] }).onDelete("cascade"),
+    // One open cancel a membership; undone, it can be cancelled again.
+    uniqueIndex("gym_desk_cancels_held_uq").on(t.gymId, t.heldMembershipId).where(sql`${t.undoneAt} IS NULL`),
+    uniqueIndex("gym_desk_cancels_undo_request_uq").on(t.gymId, t.undoRequestKey).where(sql`${t.undoRequestKey} IS NOT NULL`),
+  ],
+);

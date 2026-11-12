@@ -164,6 +164,7 @@ const KEPT_TABLES: Record<string, KeptAfterDeletionId> = {
   gym_terminal_payments: "business_records",
   gym_app_payments: "business_records",
   gym_app_cancels: "business_records",
+  gym_desk_cancels: "business_records",
   gym_card_charges: "business_records",
   gym_square_refunds: "business_records",
   gym_square_disputes: "business_records",

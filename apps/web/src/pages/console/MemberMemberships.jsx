@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useInRouterContext } from 'react-router-dom';
 import { Check, CreditCard, Loader2, Plus } from 'lucide-react';
-import { MEMBER_FEE_WORDS, appCancelLine, formatMinor, memberGiftDaysLine, paidThroughSquare } from '@app/shared';
+import { MEMBER_FEE_WORDS, UNDO_CANCEL_BUTTON, UNDO_CANCEL_WORDS, appCancelLine, formatMinor, memberGiftDaysLine, paidThroughSquare, undoCancelDoneLine } from '@app/shared';
 import { orgService, errorCode, errorText } from '../../api/orgsApi';
 import PlaceLink from '../../components/console/PlaceLink';
 import PtSessionsEnding from '../../components/console/PtSessionsEnding';
@@ -168,8 +168,10 @@ const STOP = 'c-btn c-btn-danger c-btn-sm';
 const VOIDED = { color: 'var(--t3)', textDecoration: 'line-through' };
 // A payment or a refund: columns with its button at the end; on a phone, one under another.
 const LINE = 'flex flex-col gap-1.5 md:flex-row md:items-center md:gap-x-3';
+/** A cancel in the app not kept, on a membership still running: only the member can undo it (18l-ii-b). */
+const appCancelStands = (m) => m.appCancel !== null && m.appCancel !== undefined && m.appCancel.keptOn === null && (m.view.status === 'active' || m.view.status === 'frozen');
 /** Refusals that mean the page is out of date: it is read again. */
-const STALE_CODES = ['held_membership_changed', 'membership_type_not_found', 'bill_has_payment', 'refund_too_much', 'refund_not_settled', 'member_fee_changed', 'cooling_off_over'];
+const STALE_CODES = ['held_membership_changed', 'membership_type_not_found', 'bill_has_payment', 'refund_too_much', 'refund_not_settled', 'member_fee_changed', 'cooling_off_over', 'undo_cancel_changed', 'undo_cancel_refused'];
 /** A card on file that may not be charged again yet, or at all (18d-iii-ii-a): said under its button. */
 const CARD_RETRY_REFUSALS = ['card_charge_wait', 'card_charge_stopped', 'card_charge_tried_out'];
 
@@ -218,6 +220,8 @@ export default function MemberMemberships({
   const [form, setForm] = useState(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState(null);
+  /** Undo cancellation's box (18l-ii-b): { id, ask, error, requestKey }, read when it opens. */
+  const [undoAsk, setUndoAsk] = useState(null);
   /** Close payment page (18k-ii-a), on one membership: { membershipId, busy, said }, said in the place it was pressed. */
   const [appClose, setAppClose] = useState(null);
   /** The notice that says a card was not kept from a Terminal payment: Open Card on file is offered under that notice alone. */
@@ -636,6 +640,74 @@ export default function MemberMemberships({
     setOpen({ what: 'change', id: m.id });
   };
 
+  /** Undo cancellation (18l-ii-b): its box opens under the membership and reads what undoing it would do. */
+  const startUndoCancel = (m) => {
+    setNotice(null);
+    setRefusal(null);
+    setEnding(null);
+    const asked = { id: m.id, ask: null, error: null, requestKey: newRequestKey() };
+    setUndoAsk(asked);
+    setOpen({ what: 'undoCancel', id: m.id });
+    orgService.getUndoCancel(gymId, entryId, m.id).then(
+      (res) => setUndoAsk((u) => (u === null || u.requestKey !== asked.requestKey ? u : { ...u, ask: res.data })),
+      (err) => setUndoAsk((u) => (u === null || u.requestKey !== asked.requestKey ? u : { ...u, error: errorText(err, "We couldn't read this membership. Please try again.") })),
+    );
+  };
+
+  const renderUndoCancel = (m) => {
+    if (undoAsk === null || undoAsk.id !== m.id) return null;
+    const ask = undoAsk.ask;
+    const choice = ask?.choice ?? null;
+    return (
+      <div className="rounded-[14px] p-3 flex flex-col gap-2" style={{ background: 'var(--raise)' }} data-testid="held-ask-undoCancel">
+        {ask === null ? (
+          undoAsk.error === null ? (
+            <p className="c-s14 c-t2 m-0 flex items-center gap-2">
+              <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" />
+              Reading this membership…
+            </p>
+          ) : (
+            <p className="c-s14 c-t1 m-0" role="alert">
+              {undoAsk.error}
+            </p>
+          )
+        ) : (
+          <>
+            <p className="c-s15 c-w6 c-t1 m-0">{ask.question}</p>
+            {(choice?.lines ?? []).map((line) => (
+              <p key={line} className="c-s14 c-t2 m-0">
+                {line}
+              </p>
+            ))}
+            {ask.notes.map((note) => (
+              <p key={note} className="c-s14 c-w5 c-t1 m-0" data-testid="held-undo-cancel-note">
+                {note}
+              </p>
+            ))}
+          </>
+        )}
+        <div className="flex flex-wrap gap-2">
+          {choice !== null ? (
+            <button
+              type="button"
+              className={MAIN}
+              disabled={busy}
+              onClick={() =>
+                void run('undoCancel', m, () => orgService.changeHeldMembership(gymId, entryId, m.id, 'undo-cancel', { requestKey: undoAsk.requestKey, key: choice.key }), undoCancelDoneLine(m.typeName))
+              }
+            >
+              {busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
+              {choice.button}
+            </button>
+          ) : null}
+          <button type="button" className={PLAIN} disabled={busy} onClick={close}>
+            {choice !== null ? UNDO_CANCEL_WORDS.dismiss : 'Close'}
+          </button>
+        </div>
+      </div>
+    );
+  };
+
   const startCancelBill = (m) => {
     setNotice(null);
     setRefusal(null);
@@ -686,6 +758,7 @@ export default function MemberMemberships({
 
   const close = () => {
     setRefusal(null);
+    setUndoAsk(null);
     setChargeSaid(null);
     setTerminalPay(null);
     setOpen(null);
@@ -2054,6 +2127,7 @@ export default function MemberMemberships({
 
   const renderAsk = (m) => {
     if (ending !== null && ending.id === m.id) return renderEnding(m);
+    if (open.what === 'undoCancel') return renderUndoCancel(m);
     const undo = open.what === 'undo' ? (m.billing?.undo ?? null) : null;
     if (open.what === 'undo' && undo === null) return null;
     const words = undo !== null ? undoWords(m, name) : askWords(open.what, m, name, today);
@@ -2286,7 +2360,7 @@ export default function MemberMemberships({
         ) : null}
         {m.appCancel ? (
           <span className="c-s14 c-t2" data-testid="held-app-cancel-line">
-            {appCancelLine(m.appCancel)}
+            {appCancelStands(m) ? `${appCancelLine(m.appCancel)} · ${UNDO_CANCEL_WORDS.inApp}` : appCancelLine(m.appCancel)}
           </span>
         ) : null}
         {releaseShownLine(m) !== null ? (
@@ -2418,7 +2492,7 @@ export default function MemberMemberships({
             {payButton}
             {undoLink}
           </div>
-        ) : inUse && (payButton !== null || can.freeze || can.unfreeze || can.cancel || canUndo || showsChange(m)) ? (
+        ) : inUse && (payButton !== null || can.freeze || can.unfreeze || can.cancel || canUndo || showsChange(m) || (m.undoCancel === true && !appCancelStands(m))) ? (
           <div className={BAR} style={BAR_LINE}>
             {payButton}
             {showsChange(m) ? (
@@ -2434,6 +2508,12 @@ export default function MemberMemberships({
             {can.unfreeze ? (
               <button type="button" className={SMALL} disabled={busy} onClick={() => ask('unfreeze', m)}>
                 Unfreeze
+              </button>
+            ) : null}
+            {/* A cancel the front desk made to end on a later day (18l-ii-b); never one made in the app. */}
+            {(m.undoCancel === true && !appCancelStands(m)) ? (
+              <button type="button" className={SMALL} disabled={busy} onClick={() => startUndoCancel(m)}>
+                {UNDO_CANCEL_BUTTON}
               </button>
             ) : null}
             {can.cancel ? (
