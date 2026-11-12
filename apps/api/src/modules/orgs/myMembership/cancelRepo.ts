@@ -20,10 +20,12 @@ export interface CancelRow {
   emailed: boolean;
   /** What the box said: its sentences and the notes under it. */
   said: { lines: string[]; notes: string[] };
+  /** When it was cancelled, for a confirmation sent again. */
+  createdAt: Date;
   /** The bookings the cancel ended (18l-ii-a). */
   ended: { classes: number; sessions: number };
   /** Kept in the app (18l-ii-a): the gym's day, the account that pressed it, what the box said, whether its email went. */
-  kept: { on: string; userId: string | null; said: { lines: string[]; notes: string[] }; emailed: boolean } | null;
+  kept: { on: string; at: Date; userId: string | null; said: { lines: string[]; notes: string[] }; emailed: boolean } | null;
 }
 
 interface RawCancel {
@@ -36,9 +38,11 @@ interface RawCancel {
   reason: string | null;
   emailed: boolean;
   said: unknown;
+  created_at: Date;
   ended_classes: number;
   ended_sessions: number;
   kept_on: string | null;
+  kept_at: Date | null;
   kept_by_user_id: string | null;
   keep_said: unknown;
   keep_emailed: boolean;
@@ -57,13 +61,14 @@ const shape = (r: RawCancel): CancelRow => ({
   reason: r.reason === null ? null : myCancelReasonSchema.parse(r.reason),
   emailed: r.emailed,
   said: saidSchema.parse(r.said),
+  createdAt: r.created_at,
   ended: { classes: r.ended_classes, sessions: r.ended_sessions },
-  kept: r.kept_on === null ? null : { on: r.kept_on, userId: r.kept_by_user_id, said: saidSchema.parse(r.keep_said), emailed: r.keep_emailed },
+  kept: r.kept_on === null || r.kept_at === null ? null : { on: r.kept_on, at: r.kept_at, userId: r.kept_by_user_id, said: saidSchema.parse(r.keep_said), emailed: r.keep_emailed },
 });
 
 const COLUMNS = (sql: SqlOrTx) => sql`
   c.id, c.held_membership_id, c.user_id, c."when", c.ends_on::text AS ends_on, c.cancelled_on::text AS cancelled_on, c.reason,
-  (c.emailed_at IS NOT NULL) AS emailed, c.said, c.ended_classes, c.ended_sessions, c.kept_on::text AS kept_on, c.kept_by_user_id,
+  (c.emailed_at IS NOT NULL) AS emailed, c.said, c.created_at, c.ended_classes, c.ended_sessions, c.kept_on::text AS kept_on, c.kept_at, c.kept_by_user_id,
   c.keep_said, (c.keep_emailed_at IS NOT NULL) AS keep_emailed`;
 
 /** The cancel this press already made, if it made one. */
@@ -87,6 +92,21 @@ export async function cancelsOf(sql: SqlOrTx, gymId: string, membershipIds: read
     LEFT JOIN gym_member_list_entries e ON e.gym_id = c.gym_id AND e.id = c.by_entry_id
     WHERE c.gym_id = ${gymId} AND c.held_membership_id = ANY(${[...membershipIds]}::uuid[]) AND c.kept_at IS NULL`;
   return new Map(rows.map((r) => [r.held_membership_id, { ...shape(r), byName: r.by_name }]));
+}
+
+/** The membership that follows each of these on its record: one that replaces it (Change membership on the next payment
+ *  date), or a repeating one still to start. Keeping one of these would leave two billing every month (18l-ii-a). */
+export async function followersOf(sql: SqlOrTx, gymId: string, membershipIds: readonly string[], today: string): Promise<Map<string, { name: string; startsOn: string }>> {
+  if (membershipIds.length === 0) return new Map();
+  const rows = await sql<{ id: string; name: string; starts_on: string }[]>`
+    SELECT DISTINCT ON (h.id) h.id, t.name, o.starts_on::text AS starts_on
+    FROM gym_held_memberships h
+    JOIN gym_held_memberships o ON o.gym_id = h.gym_id AND o.entry_id = h.entry_id AND o.id <> h.id AND o.status IN ('active','frozen')
+      AND (o.replaces_id = h.id OR (o.kind = 'recurring' AND o.starts_on > ${today}::date))
+    JOIN gym_membership_types t ON t.gym_id = o.gym_id AND t.id = o.membership_type_id
+    WHERE h.gym_id = ${gymId} AND h.id = ANY(${[...membershipIds]}::uuid[])
+    ORDER BY h.id, o.starts_on, o.id`;
+  return new Map(rows.map((r) => [r.id, { name: r.name, startsOn: r.starts_on }]));
 }
 
 /** For the person's page: each membership's newest cancel in the app, kept or not, as staff read it. */

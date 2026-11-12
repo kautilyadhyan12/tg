@@ -355,7 +355,7 @@ export async function cancelInApp(deps: CancelDeps, userId: string, gymId: strin
     const line = myCancelDoneLine({ gymName: first.gymName, membershipName: held.typeName, forName, currency: held.currency, today: r.cancelledOn, way: { when: r.when, endsOn: r.endsOn }, refundMinor });
     // A confirmation that did not go is tried again by the same press (round one, L3).
     const named = forName === null ? held.typeName : `${forName}'s ${held.typeName}`;
-    const emailed = r.emailed || (await confirm(deps, gymId, r.id, { userId, gymName: first.gymName, membershipName: named, at: now, timezone: first.timezone, done: line, lines: r.said.lines, notes: r.said.notes }));
+    const emailed = r.emailed || (await confirm(deps, gymId, r.id, { userId, gymName: first.gymName, membershipName: named, at: r.createdAt, timezone: first.timezone, done: line, lines: r.said.lines, notes: r.said.notes }));
     return myCancelDoneSchema.parse({ cancelId: r.id, line, endsOn: r.endsOn, emailed, reason: r.reason });
   }
   deps.news.tell(gymId, { what: "memberships", entryId: done.entryId });

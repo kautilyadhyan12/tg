@@ -39,6 +39,7 @@ import {
   giftDaysNeverReached,
   takeBackGiftDays,
   billsAtCancel,
+  billCovers,
   billsToOpen,
   periodListedMinor,
   raisedListedMinor,
@@ -1073,9 +1074,9 @@ export function billsKeepReopens(bills: readonly BillRow[], lastDay: string): Bi
   return bills.filter((b) => b.status === "void" && b.cancelled === null && b.dueOn > lastDay && b.paidMinor === 0);
 }
 
-/** Opens those bills again, each as a bill opened now reads (`renewalAmountMinor`'s sum): a Refer a friend gift the
- *  cancel took off them waits for the next bill, as it did. One holding a joining fee, a change's credit or money moved
- *  keeps what it was. */
+/** Opens those bills again, each as a bill opened now reads (`renewalAmountMinor`'s sum, its period's days as they now
+ *  stand, a freeze since moving them): a Refer a friend gift the cancel took off them waits for the next bill, as it did.
+ *  One holding a joining fee, a change's credit or money moved keeps what it was. */
 async function reopenBills(tx: TransactionSql, gymId: string, row: HeldRow, m: HeldMembership, bills: readonly BillRow[], now: Date): Promise<void> {
   for (const b of bills) {
     if (b.joiningFeeMinor !== 0 || b.changeCreditMinor !== 0 || b.movedMinor !== 0) {
@@ -1084,10 +1085,12 @@ async function reopenBills(tx: TransactionSql, gymId: string, row: HeldRow, m: H
     }
     const fresh = billOf(periodListedMinor(m, b.periodIndex, periodPriceMinor(row, b.periodIndex)), row.taxApplied);
     const cols = taxColumns(fresh.taxes);
+    const covers = billCovers(m, b.periodIndex);
     await tx`
       UPDATE gym_member_bills
       SET status = 'open', amount_minor = ${fresh.amountMinor}, tax_minor = ${cols.tm}, tax_pcm = ${cols.tb}, taxes = ${tx.json(cols.tx)},
-          tax_included = ${cols.ti}, updated_at = ${now}
+          tax_included = ${cols.ti}, due_on = ${periodStart(m, b.periodIndex)}::date, covers_from = ${covers?.from ?? null}::date,
+          covers_to = ${covers?.to ?? null}::date, updated_at = ${now}
       WHERE gym_id = ${gymId} AND id = ${b.id} AND status = 'void' AND void_reason IS NULL`;
   }
 }
@@ -1136,6 +1139,8 @@ export interface MoveHeldInput {
   leaveFeeMinor?: number;
   actorUserId: string;
   now: Date;
+  /** Keep (18l-ii-a): the last day its cancel left it, so the bills that cancel took off are the ones owed again. */
+  keepFrom?: string;
   /** Pressed by the member, or whoever pays for them, in the app (18l): kept under its own action, so Staff activity,
    *  which lists what staff did, leaves it out. */
   via?: "app";
@@ -1182,7 +1187,7 @@ export async function moveHeldIn(tx: TransactionSql, bookings: CancelBookings, i
   let reopen: BillRow[] = [];
   let feesOff: string[] = [];
   if (input.event.type === "keep") {
-    const lastDay = heldMembershipView(before.membership, input.today).endsOn;
+    const lastDay = input.keepFrom ?? heldMembershipView(before.membership, input.today).endsOn;
     reopen = lastDay === null ? [] : billsKeepReopens(await billsFor(tx, input.gymId, [before.id]), lastDay);
     if (input.event.when === "leave_early") {
       const fees = await leaveFeesOf(tx, input.gymId, before.id);

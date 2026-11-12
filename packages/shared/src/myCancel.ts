@@ -63,7 +63,7 @@ export function myCancelWays(stored: HeldMembership, today: string): MyCancelWay
   return paid !== null ? [{ when: "period_end", endsOn: paid }] : [{ when: "today", endsOn: today }];
 }
 
-/** Frozen, and held by a minimum term or a notice: the front desk cancels it (round one, H1). */
+/** Frozen, and held by a minimum term or a notice: the front desk cancels it. */
 export function myCancelFrozen(stored: HeldMembership, today: string): boolean {
   const view = heldMembershipView(stored, today);
   return stored.kind === "recurring" && stored.renews && view.status === "frozen" && view.can.coolingOff === null && ((view.can.releaseNeeded && view.contract !== null) || view.can.noticeEnds !== null);
@@ -286,7 +286,7 @@ export const MY_CANCEL_WORDS = {
   terminalWaiting: "A payment for it is waiting at the front desk. Try again in a few minutes.",
   appPaying: "A payment page for it is open. Finish that payment or close it first.",
   partPaid: "Part of a payment for it is paid and the rest is still owed, so the front desk cancels it. Ask them.",
-  /** Frozen, and held by a minimum term or a notice (round one, H1). */
+  /** Frozen, and held by a minimum term or a notice. */
   frozen: "It's frozen, so the front desk cancels it. Ask them, or unfreeze it first.",
   requestReused: "That press was already used. Go back and look again.",
 } as const;
@@ -405,6 +405,13 @@ export const MY_KEEP_WORDS = {
   /** Leaving early, with the fee paid: staff refund it first, as refunds are the gym's. */
   feePaid: "You've paid the early cancellation fee. Ask the front desk to refund it, then you can keep your membership here.",
   changed: "Something about this membership has changed. Close this and try again.",
+  /** Frozen, its dates stand still: kept once it is unfrozen. */
+  frozen: "It's frozen. Ask the front desk to unfreeze it, then you can keep it here.",
   /** Its last day passed, or the front desk ended it since. */
   over: "This membership has ended, so it can't be kept. Ask the front desk about joining again.",
 } as const;
+
+/** Another membership starts after it, or in its place (Change membership): keeping it would bill both. */
+export function myKeepReplacedNote(newName: string, startsOn: string, forName: string | null): string {
+  return `${forName === null ? "You're" : `${forName} is`} moving to ${newName} on ${dayWords(startsOn)}, so this membership can't be kept. Ask the front desk.`;
+}

@@ -113,7 +113,7 @@ d("keep my membership in the app (real Postgres)", { timeout: T }, () => {
     await sql`DELETE FROM plans WHERE code = ${LIVE_PLAN}`;
   };
 
-  const inject = (method: "GET" | "POST" | "PUT", path: string, cookies: Cookies, payload?: unknown) =>
+  const inject = (method: "GET" | "POST" | "PUT" | "DELETE", path: string, cookies: Cookies, payload?: unknown) =>
     api().inject({
       method,
       url: path,
@@ -148,6 +148,7 @@ d("keep my membership in the app (real Postgres)", { timeout: T }, () => {
     monthly({ name: "Gold Max", contractPeriods: 12, contractThen: "renews", leaveFeeMinor: 9900, noticeDays: 30, coolingOffDays: 3 }),
     monthly({ name: "Gold Term", contractPeriods: 3, contractThen: "renews", leaveFeeMinor: 2500 }),
     monthly({ name: "Gold Cool", coolingOffDays: 3 }),
+    monthly({ name: "Silver", priceMinor: 4000 }),
   ];
   const makeGym = async (name: string): Promise<Gym> => {
     const owner = await signedIn(`${name} Owner`);
@@ -479,9 +480,12 @@ d("keep my membership in the app (real Postgres)", { timeout: T }, () => {
     expect(kept.length - before).toBe(1);
     expect(await sql`SELECT 1 FROM audit_log WHERE gym_id = ${gym.id} AND action = 'org.held_membership_kept_in_app'`).toHaveLength(1);
     // A confirmation that did not go is sent again by the same press.
+    // A day later, and still the time it was kept.
+    clock = noon("2026-11-11");
     await sql`UPDATE gym_app_cancels SET keep_emailed_at = NULL WHERE held_membership_id = ${halGold}`;
     expect(myKeepDoneSchema.parse(JSON.parse((await press(gym, hal, halGold, box.choice?.key ?? "", requestKey)).body)).emailed).toBe(true);
     expect(kept.length - before).toBe(2);
+    expect(kept[kept.length - 1]?.keptAt).toBe("10 Nov 2026 at 12:00 PM");
     // Pressed again with a new key, there is nothing left to keep.
     expect((await press(gym, hal, halGold, box.choice?.key ?? "")).statusCode).toBe(409);
     expect((await keepAsk(gym, hal, halGold)).choice).toBeNull();
@@ -495,5 +499,98 @@ d("keep my membership in the app (real Postgres)", { timeout: T }, () => {
     expect(ivyNow?.state === "cancelled" ? ivyNow.keep : null).toBeNull();
     expect(await keepAsk(gym, ivy, ivyGold)).toMatchObject({ choice: null });
     expect((await press(gym, ivy, ivyGold, ivyBox.choice?.key ?? "")).statusCode).toBe(409);
+  });
+
+  it("round one, C1: moved to another membership by Change membership, it cannot be kept, so two never bill at once", async () => {
+    clock = noon("2026-11-04");
+    const gym = await makeGym("Keep Change");
+    const mo = await member(gym, "Mo Keep");
+    const moGold = await give(gym, mo, "Gold", "2026-11-04");
+    clock = noon("2026-11-10");
+    await cancel(gym, mo, moGold, "period_end");
+    const box = await keepAsk(gym, mo, moGold);
+    const change = await inject("POST", `${heldUrl(gym, mo.entryId)}/${moGold}/change`, gym.owner.cookies, {
+      requestKey: randomUUID(),
+      typeId: gym.types.get("Silver") ?? "",
+      when: "next_payment",
+      startsOn: "2026-12-04",
+      priceMinor: 4000,
+      creditMinor: 0,
+      totalMinor: 4000,
+      paid: false,
+    });
+    expect(change.statusCode, change.body).toBe(200);
+    expect((await mine(gym, mo)).memberships.find((m) => m.id === moGold)?.cancel).toMatchObject({ state: "cancelled", keep: null });
+    expect(await keepAsk(gym, mo, moGold)).toMatchObject({ choice: null, notes: ["You're moving to Silver on 4 Dec 2026, so this membership can't be kept. Ask the front desk."] });
+    expect((await press(gym, mo, moGold, box.choice?.key ?? "")).statusCode).toBe(409);
+    expect(await state(moGold)).toMatchObject({ renews: false });
+    expect(await billsOpenedOn(gym, moGold, months(3), 0)).toEqual([]);
+  });
+
+  it("round one, H1: frozen, it is kept once unfrozen, and the bill the cancel took off opens on its period's day", async () => {
+    clock = noon("2026-11-04");
+    const gym = await makeGym("Keep Frozen");
+    const nia = await member(gym, "Nia Keep");
+    const niaGold = await give(gym, nia, "Gold", "2026-11-04");
+    clock = noon("2026-11-10");
+    await cancel(gym, nia, niaGold, "period_end");
+    // As a cancel leaves a bill opened ahead with nothing on it: cancelled, by nobody's hand.
+    await sql`
+      INSERT INTO gym_member_bills (gym_id, held_membership_id, period_index, amount_minor, currency, due_on, covers_from, covers_to, status, created_at, updated_at)
+      VALUES (${gym.id}, ${niaGold}, 1, 5000, 'USD', '2026-12-04', '2026-12-04', '2027-01-03', 'void', now(), now())`;
+    expect((await inject("POST", `${heldUrl(gym, nia.entryId)}/${niaGold}/freeze`, gym.owner.cookies, { feeMinor: 0 })).statusCode).toBe(200);
+    clock = noon("2026-11-12");
+    const frozen = await keepAsk(gym, nia, niaGold);
+    expect(frozen).toMatchObject({ choice: null, notes: ["It's frozen. Ask the front desk to unfreeze it, then you can keep it here."] });
+    clock = noon("2026-11-20");
+    expect((await inject("POST", `${heldUrl(gym, nia.entryId)}/${niaGold}/unfreeze`, gym.owner.cookies, {})).statusCode).toBe(200);
+    // Ten days frozen move every later day by ten: the period it took off now starts on 14 Dec. Opened to 5 Feb, the
+    // bill of 14 Feb has not come due.
+    const k = await keep(gym, nia, niaGold);
+    expect(k.choice.next).toEqual({ dueOn: "2026-12-14", amountMinor: 5000 });
+    expect(await billsOpenedOn(gym, niaGold, months(3), 0)).toEqual([
+      { dueOn: "2026-12-14", amountMinor: 5000 },
+      { dueOn: "2027-01-14", amountMinor: 5000 },
+    ]);
+  });
+
+  it("round one: a box that changed between reading and pressing is refused; so is a payer taken off meanwhile", async () => {
+    clock = noon("2026-11-04");
+    const gym = await makeGym("Keep Changed");
+    const ola = await member(gym, "Ola Keep");
+    const pia = await member(gym, "Pia Keep");
+    const raj = await member(gym, "Raj Keep");
+    expect((await inject("PUT", `/v1/orgs/${gym.id}/member-list/entries/${raj.entryId}/payer`, gym.owner.cookies, { payerEntryId: pia.entryId })).statusCode).toBe(200);
+    const olaGold = await give(gym, ola, "Gold", "2026-11-04");
+    const rajGold = await give(gym, raj, "Gold", "2026-11-04");
+    clock = noon("2026-11-10");
+    await cancel(gym, ola, olaGold, "period_end");
+    await cancel(gym, pia, rajGold, "period_end");
+
+    // A card saved after the box was read: the box would now name it, so the old key is refused.
+    const before = await keepAsk(gym, ola, olaGold);
+    const acct = `MLKEEPX${uniq().slice(-8)}`;
+    await sql`
+      INSERT INTO gym_payment_connections (gym_id, provider, environment, state, account_id, business_name, country, currency,
+        location_id, location_name, access_token, refresh_token, access_expires_at, refresh_due_at, connected_at, connected_by)
+      VALUES (${gym.id}, 'square', 'production', 'connected', ${acct}, 'Keep Changed LLC', 'US', 'USD', 'LKEEPX', 'Main',
+        'v1.sealed-access', 'v1.sealed-refresh', now() + interval '30 days', now() + interval '6 days', now(), ${gym.owner.userId})`;
+    const [agreed] = await sql<{ id: string }[]>`
+      INSERT INTO gym_card_agreements (gym_id, entry_id, words, screen, screen_user_id, brand, last4, agreed_at)
+      VALUES (${gym.id}, ${ola.entryId}, 'I agree that this gym may save this card and charge it for my membership.', 'desk', ${gym.owner.userId}, 'VISA', '1111', now())
+      RETURNING id`;
+    await sql`
+      INSERT INTO gym_member_cards (gym_id, entry_id, environment, account_id, customer_id, card_id, brand, last4, exp_month, exp_year, saved_from, saved_by, agreement_id, saved_at, updated_at)
+      VALUES (${gym.id}, ${ola.entryId}, 'production', ${acct}, ${`CUST${uniq()}`}, ${`ccof:${randomUUID()}`}, 'VISA', '1111', 12, 2031, 'desk', ${gym.owner.userId}, ${agreed?.id ?? null}, now(), now())`;
+    const stale = await press(gym, ola, olaGold, before.choice?.key ?? "");
+    expect(stale.statusCode).toBe(409);
+    expect((JSON.parse(stale.body) as { error: string }).error).toBe("keep_changed");
+    expect(await state(olaGold)).toMatchObject({ renews: false });
+
+    // The payer taken off after reading the box: it is no longer hers to keep.
+    const piaBox = await keepAsk(gym, pia, rajGold);
+    expect((await inject("DELETE", `/v1/orgs/${gym.id}/member-list/entries/${raj.entryId}/payer`, gym.owner.cookies)).statusCode).toBe(200);
+    expect((await press(gym, pia, rajGold, piaBox.choice?.key ?? "")).statusCode).toBe(404);
+    expect(await state(rajGold)).toMatchObject({ renews: false });
   });
 });

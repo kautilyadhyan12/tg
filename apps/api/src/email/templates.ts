@@ -479,10 +479,10 @@ export function membershipKeptEmail(words: {
   lines: readonly string[];
 }): EmailMessage {
   const gym = words.gymName;
-  const lead = `You reactivated ${words.membershipName} at ${gym} in the app on ${words.keptAt}, so your cancellation is removed. Keep this email as your confirmation.`;
+  const lead = `You removed your cancellation of ${words.membershipName} at ${gym} in the app on ${words.keptAt}. Keep this email as your confirmation.`;
   const footer = `Sent by ${APP_NAME} on behalf of ${gym}.`;
   const body = [words.done, ...words.lines];
   const text = `${lead}\n\n${body.join("\n")}\n\n${footer}\n`;
   const html = `<p>${escapeHtml(lead)}</p>` + body.map((line) => `<p>${escapeHtml(line)}</p>`).join("") + `<p style="color:#666;font-size:12px">${escapeHtml(footer)}</p>`;
-  return { to: words.to, subject: `${words.membershipName} at ${gym} is active again`, text, html };
+  return { to: words.to, subject: `Your cancellation of ${words.membershipName} at ${gym} is removed`, text, html };
 }

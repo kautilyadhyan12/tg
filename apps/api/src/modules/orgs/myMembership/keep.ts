@@ -21,6 +21,7 @@ import {
   myKeepDoneLine,
   myKeepDoneSchema,
   myKeepLines,
+  myKeepReplacedNote,
   periodListedMinor,
   type MyCancelPayment,
   type MyKeepAsk,
@@ -68,8 +69,12 @@ async function workOut(tx: TransactionSql, gymId: string, whose: Whose, membersh
   const move = moveHeldMembership(m, { type: "keep", when: cancel.when }, today);
   if (!move.ok || !move.changed) return nothing(MY_KEEP_WORDS.over);
   const after = move.membership;
-  // Its last day as it stands (none while it is frozen).
-  const lastDay = heldMembershipView(m, today).endsOn;
+  // Frozen, its dates stand still and no bill opens: it is kept once unfrozen, when every day is known.
+  if (heldMembershipView(m, today).status === "frozen") return nothing(MY_KEEP_WORDS.frozen);
+  // Another membership follows it, or takes its place: keeping it would bill both.
+  const forName = whose.ownId === whose.entryId ? null : await cancels.nameOfRecord(tx, gymId, whose.entryId);
+  const follower = (await cancels.followersOf(tx, gymId, [row.id], today)).get(row.id);
+  if (follower !== undefined) return nothing(myKeepReplacedNote(follower.name, follower.startsOn, forName));
   let feeOffMinor: number | null = null;
   if (cancel.when === "leave_early") {
     const fees = await leaveFeesOf(tx, gymId, row.id);
@@ -77,11 +82,15 @@ async function workOut(tx: TransactionSql, gymId: string, whose: Whose, membersh
     const off = fees.filter((f) => f.status === "open").reduce((n, f) => n + f.amountMinor, 0);
     feeOffMinor = off > 0 ? off : null;
   }
-  // The bills the cancel took off are owed again, each as a bill opened now reads: read as not there, so the next
-  // payment is the amount it will ask. No gift goes on one of those, as the bill opener puts it only on a bill it opens.
-  const bills = await billsFor(tx, gymId, [row.id]);
-  const reopens = new Set((lastDay === null ? [] : billsKeepReopens(bills, lastDay)).map((b) => b.periodIndex));
-  const [first] = paymentsToCome(row, after, NO_END, bills.filter((b) => !reopens.has(b.periodIndex)), today, true);
+  // The bills this cancel took off are owed again (`reopenBills`): a plain one as a bill opened now reads, so it is read
+  // as not there; one holding a joining fee, a change's credit or money moved as it was, so it is read as open. No gift
+  // goes on one of those, as the bill opener puts it only on a bill it opens.
+  const stored = await billsFor(tx, gymId, [row.id]);
+  const reopened = billsKeepReopens(stored, cancel.endsOn);
+  const reopens = new Set(reopened.map((b) => b.periodIndex));
+  const plain = new Set(reopened.filter((b) => b.joiningFeeMinor === 0 && b.changeCreditMinor === 0 && b.movedMinor === 0).map((b) => b.periodIndex));
+  const bills = stored.filter((b) => !plain.has(b.periodIndex)).map((b) => (reopens.has(b.periodIndex) ? { ...b, status: "open" as const } : b));
+  const [first] = paymentsToCome(row, after, NO_END, bills, today, true);
   let next: MyCancelPayment | null = null;
   if (first !== undefined) {
     // A money-off Refer a friend gift waiting for the record's next bill comes off it as the bill opens, as the cancel
@@ -97,7 +106,6 @@ async function workOut(tx: TransactionSql, gymId: string, whose: Whose, membersh
     next = { dueOn: first.dueOn, amountMinor };
   }
   const card = first === undefined ? null : await chargedCard(tx, gymId, row.id, first.periodIndex, true);
-  const forName = whose.ownId === whose.entryId ? null : await cancels.nameOfRecord(tx, gymId, whose.entryId);
   const facts: MyKeepFacts = {
     membershipName: row.typeName,
     forName,
@@ -205,6 +213,7 @@ export async function keepInApp(deps: CancelDeps, userId: string, gymId: string,
       entryId: whose.entryId,
       membershipId,
       event: { type: "keep", when: open.when },
+      keepFrom: open.endsOn,
       today,
       confirmBookings: null,
       actorUserId: userId,
@@ -224,7 +233,7 @@ export async function keepInApp(deps: CancelDeps, userId: string, gymId: string,
     const line = myKeepDoneLine({ membershipName: held.typeName, forName });
     // A confirmation that did not go is tried again by the same press.
     const named = forName === null ? held.typeName : `${forName}'s ${held.typeName}`;
-    const emailed = done.row.kept.emailed || (await confirm(deps, gymId, done.row.id, { userId, gymName: first.gymName, membershipName: named, at: now, timezone: first.timezone, done: line, lines: done.row.kept.said.lines }));
+    const emailed = done.row.kept.emailed || (await confirm(deps, gymId, done.row.id, { userId, gymName: first.gymName, membershipName: named, at: done.row.kept.at, timezone: first.timezone, done: line, lines: done.row.kept.said.lines }));
     return myKeepDoneSchema.parse({ line, emailed });
   }
   deps.news.tell(gymId, { what: "memberships", entryId: done.entryId });
@@ -235,9 +244,9 @@ export async function keepInApp(deps: CancelDeps, userId: string, gymId: string,
 }
 
 /** Whether My membership shows Keep my membership on a membership cancelled in the app this way: it still runs to a
- *  last day, as the cancel left it. */
-export function keepable(cancel: Pick<cancels.CancelRow, "when">, row: { membership: Parameters<typeof moveHeldMembership>[0] } | undefined, today: string): boolean {
-  if (row === undefined || !isKeepWhen(cancel.when)) return false;
+ *  last day, as the cancel left it, and no other membership follows it (`followed`). */
+export function keepable(cancel: Pick<cancels.CancelRow, "when">, row: { membership: Parameters<typeof moveHeldMembership>[0] } | undefined, today: string, followed: boolean): boolean {
+  if (row === undefined || followed || !isKeepWhen(cancel.when)) return false;
   const move = moveHeldMembership(row.membership, { type: "keep", when: cancel.when }, today);
   return move.ok && move.changed;
 }
