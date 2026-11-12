@@ -20,6 +20,12 @@ export interface CancelRow {
   emailed: boolean;
   /** What the box said: its sentences and the notes under it. */
   said: { lines: string[]; notes: string[] };
+  /** When it was cancelled, for a confirmation sent again. */
+  createdAt: Date;
+  /** The bookings the cancel ended (18l-ii-a). */
+  ended: { classes: number; sessions: number };
+  /** Kept in the app (18l-ii-a): the gym's day, the account that pressed it, what the box said, whether its email went. */
+  kept: { on: string; at: Date; userId: string | null; said: { lines: string[]; notes: string[] }; emailed: boolean } | null;
 }
 
 interface RawCancel {
@@ -32,6 +38,14 @@ interface RawCancel {
   reason: string | null;
   emailed: boolean;
   said: unknown;
+  created_at: Date;
+  ended_classes: number;
+  ended_sessions: number;
+  kept_on: string | null;
+  kept_at: Date | null;
+  kept_by_user_id: string | null;
+  keep_said: unknown;
+  keep_emailed: boolean;
 }
 
 const saidSchema = z.object({ lines: z.array(z.string()), notes: z.array(z.string()) }).strict();
@@ -47,11 +61,15 @@ const shape = (r: RawCancel): CancelRow => ({
   reason: r.reason === null ? null : myCancelReasonSchema.parse(r.reason),
   emailed: r.emailed,
   said: saidSchema.parse(r.said),
+  createdAt: r.created_at,
+  ended: { classes: r.ended_classes, sessions: r.ended_sessions },
+  kept: r.kept_on === null || r.kept_at === null ? null : { on: r.kept_on, at: r.kept_at, userId: r.kept_by_user_id, said: saidSchema.parse(r.keep_said), emailed: r.keep_emailed },
 });
 
 const COLUMNS = (sql: SqlOrTx) => sql`
   c.id, c.held_membership_id, c.user_id, c."when", c.ends_on::text AS ends_on, c.cancelled_on::text AS cancelled_on, c.reason,
-  (c.emailed_at IS NOT NULL) AS emailed, c.said`;
+  (c.emailed_at IS NOT NULL) AS emailed, c.said, c.created_at, c.ended_classes, c.ended_sessions, c.kept_on::text AS kept_on, c.kept_at, c.kept_by_user_id,
+  c.keep_said, (c.keep_emailed_at IS NOT NULL) AS keep_emailed`;
 
 /** The cancel this press already made, if it made one. */
 export async function cancelOfRequest(sql: SqlOrTx, gymId: string, requestKey: string): Promise<CancelRow | null> {
@@ -59,21 +77,61 @@ export async function cancelOfRequest(sql: SqlOrTx, gymId: string, requestKey: s
   return row === undefined ? null : shape(row);
 }
 
-/** These memberships' cancels in the app, by membership. */
+/** The cancel this Keep press already kept, if it kept one (18l-ii-a). */
+export async function cancelOfKeepRequest(sql: SqlOrTx, gymId: string, requestKey: string): Promise<CancelRow | null> {
+  const [row] = await sql<RawCancel[]>`SELECT ${COLUMNS(sql)} FROM gym_app_cancels c WHERE c.gym_id = ${gymId} AND c.keep_request_key = ${requestKey}`;
+  return row === undefined ? null : shape(row);
+}
+
+/** These memberships' cancels in the app that stand, not kept, by membership: one at most each. */
 export async function cancelsOf(sql: SqlOrTx, gymId: string, membershipIds: readonly string[]): Promise<Map<string, CancelRow & { byName: string | null }>> {
   if (membershipIds.length === 0) return new Map();
   const rows = await sql<(RawCancel & { by_name: string | null })[]>`
     SELECT ${COLUMNS(sql)}, e.full_name AS by_name
     FROM gym_app_cancels c
     LEFT JOIN gym_member_list_entries e ON e.gym_id = c.gym_id AND e.id = c.by_entry_id
-    WHERE c.gym_id = ${gymId} AND c.held_membership_id = ANY(${[...membershipIds]}::uuid[])`;
+    WHERE c.gym_id = ${gymId} AND c.held_membership_id = ANY(${[...membershipIds]}::uuid[]) AND c.kept_at IS NULL`;
   return new Map(rows.map((r) => [r.held_membership_id, { ...shape(r), byName: r.by_name }]));
 }
 
-/** For the person's page: each membership's cancel in the app, as staff read it. */
+/** The membership that follows each of these on its record: one that replaces it (Change membership on the next payment
+ *  date), or a repeating one still to start. Keeping one of these would leave two billing every month (18l-ii-a). */
+export async function followersOf(sql: SqlOrTx, gymId: string, membershipIds: readonly string[], today: string): Promise<Map<string, { name: string; startsOn: string; replaces: boolean }>> {
+  if (membershipIds.length === 0) return new Map();
+  const rows = await sql<{ id: string; name: string; starts_on: string; replaces: boolean }[]>`
+    SELECT DISTINCT ON (h.id) h.id, t.name, o.starts_on::text AS starts_on, (o.replaces_id IS NOT DISTINCT FROM h.id) AS replaces
+    FROM gym_held_memberships h
+    JOIN gym_held_memberships o ON o.gym_id = h.gym_id AND o.entry_id = h.entry_id AND o.id <> h.id AND o.status IN ('active','frozen')
+      AND (o.replaces_id = h.id OR (o.kind = 'recurring' AND o.starts_on > ${today}::date))
+    JOIN gym_membership_types t ON t.gym_id = o.gym_id AND t.id = o.membership_type_id
+    WHERE h.gym_id = ${gymId} AND h.id = ANY(${[...membershipIds]}::uuid[])
+    ORDER BY h.id, (o.replaces_id IS NOT DISTINCT FROM h.id) DESC, o.starts_on, o.id`;
+  return new Map(rows.map((r) => [r.id, { name: r.name, startsOn: r.starts_on, replaces: r.replaces }]));
+}
+
+/** For the person's page: each membership's newest cancel in the app, kept or not, as staff read it. */
 export async function appCancelsOf(sql: SqlOrTx, gymId: string, membershipIds: readonly string[]): Promise<Map<string, AppCancel>> {
-  const found = await cancelsOf(sql, gymId, membershipIds);
-  return new Map([...found].map(([id, c]) => [id, { on: c.cancelledOn, byName: c.byName, reason: c.reason }]));
+  if (membershipIds.length === 0) return new Map();
+  const rows = await sql<{ held_membership_id: string; cancelled_on: string; by_name: string | null; reason: string | null; kept_on: string | null; kept_by_name: string | null }[]>`
+    SELECT DISTINCT ON (c.held_membership_id) c.held_membership_id, c.cancelled_on::text AS cancelled_on, e.full_name AS by_name, c.reason,
+           c.kept_on::text AS kept_on, k.full_name AS kept_by_name
+    FROM gym_app_cancels c
+    LEFT JOIN gym_member_list_entries e ON e.gym_id = c.gym_id AND e.id = c.by_entry_id
+    LEFT JOIN gym_member_list_entries k ON k.gym_id = c.gym_id AND k.id = c.kept_by_entry_id
+    WHERE c.gym_id = ${gymId} AND c.held_membership_id = ANY(${[...membershipIds]}::uuid[])
+    ORDER BY c.held_membership_id, c.created_at DESC, c.id DESC`;
+  return new Map(
+    rows.map((r) => [
+      r.held_membership_id,
+      {
+        on: r.cancelled_on,
+        byName: r.by_name,
+        reason: r.reason === null ? null : myCancelReasonSchema.parse(r.reason),
+        keptOn: r.kept_on,
+        keptByName: r.kept_on === null ? null : r.kept_by_name,
+      },
+    ]),
+  );
 }
 
 export interface NewCancel {
@@ -86,14 +144,16 @@ export interface NewCancel {
   endsOn: string;
   cancelledOn: string;
   said: { lines: string[]; notes: string[] };
+  ended: { classes: number; sessions: number };
   now: Date;
 }
 
 /** The row the gym is told by, written in the cancel's own transaction. */
 export async function insertCancel(tx: TransactionSql, c: NewCancel): Promise<string> {
   const [row] = await tx<{ id: string }[]>`
-    INSERT INTO gym_app_cancels (gym_id, held_membership_id, by_entry_id, user_id, request_key, "when", ends_on, cancelled_on, said, created_at)
-    VALUES (${c.gymId}, ${c.membershipId}, ${c.byEntryId}, ${c.userId}, ${c.requestKey}, ${c.when}, ${c.endsOn}::date, ${c.cancelledOn}::date, ${tx.json(c.said)}, ${c.now})
+    INSERT INTO gym_app_cancels (gym_id, held_membership_id, by_entry_id, user_id, request_key, "when", ends_on, cancelled_on, said, ended_classes, ended_sessions, created_at)
+    VALUES (${c.gymId}, ${c.membershipId}, ${c.byEntryId}, ${c.userId}, ${c.requestKey}, ${c.when}, ${c.endsOn}::date, ${c.cancelledOn}::date, ${tx.json(c.said)},
+            ${c.ended.classes}, ${c.ended.sessions}, ${c.now})
     RETURNING id`;
   if (row === undefined) throw new Error("gym_app_cancels insert returned no row");
   return row.id;
@@ -114,6 +174,32 @@ export async function setReason(sql: SqlOrTx, gymId: string, cancelId: string, u
 export async function claimEmail(sql: SqlOrTx, gymId: string, cancelId: string, now: Date): Promise<boolean> {
   const rows = await sql`UPDATE gym_app_cancels SET emailed_at = ${now} WHERE gym_id = ${gymId} AND id = ${cancelId} AND emailed_at IS NULL RETURNING id`;
   return rows.length > 0;
+}
+
+/** KEPT (18l-ii-a), in the keep's own transaction: whoever pressed it, the press, and what the box said. False where it
+ *  was kept already. */
+export async function markKept(
+  tx: TransactionSql,
+  k: { gymId: string; cancelId: string; byEntryId: string; userId: string; requestKey: string; keptOn: string; said: { lines: string[]; notes: string[] }; now: Date },
+): Promise<boolean> {
+  const rows = await tx`
+    UPDATE gym_app_cancels
+    SET kept_at = ${k.now}, kept_on = ${k.keptOn}::date, kept_by_entry_id = ${k.byEntryId}, kept_by_user_id = ${k.userId},
+        keep_request_key = ${k.requestKey}, keep_said = ${tx.json(k.said)}
+    WHERE gym_id = ${k.gymId} AND id = ${k.cancelId} AND kept_at IS NULL
+    RETURNING id`;
+  return rows.length > 0;
+}
+
+/** Claims the keep's confirmation email: only the press that claims it sends it. */
+export async function claimKeepEmail(sql: SqlOrTx, gymId: string, cancelId: string, now: Date): Promise<boolean> {
+  const rows = await sql`UPDATE gym_app_cancels SET keep_emailed_at = ${now} WHERE gym_id = ${gymId} AND id = ${cancelId} AND kept_at IS NOT NULL AND keep_emailed_at IS NULL RETURNING id`;
+  return rows.length > 0;
+}
+
+/** Gives the keep's claim back where the email did not go. */
+export async function unclaimKeepEmail(sql: SqlOrTx, gymId: string, cancelId: string, at: Date): Promise<void> {
+  await sql`UPDATE gym_app_cancels SET keep_emailed_at = NULL WHERE gym_id = ${gymId} AND id = ${cancelId} AND keep_emailed_at = ${at}`;
 }
 
 /** Gives the claim back where the email did not go. */
@@ -214,10 +300,10 @@ export async function recentCancels(sql: SqlOrTx, gymId: string, now: Date): Pro
            g.checkin_who = 'everyone' AS everyone, g.timezone
     FROM gyms g WHERE g.id = ${gymId}`;
   const rows = await sql<
-    { id: string; held_id: string; entry_id: string | null; name: string | null; past: boolean | null; type_name: string; cancelled_on: string; when: string; reason: string | null }[]
+    { id: string; held_id: string; entry_id: string | null; name: string | null; past: boolean | null; type_name: string; cancelled_on: string; when: string; reason: string | null; kept_on: string | null }[]
   >`
     SELECT c.id, c.held_membership_id AS held_id, h.entry_id, e.full_name AS name, (e.former_at IS NOT NULL) AS past, t.name AS type_name,
-           c.cancelled_on::text AS cancelled_on, c."when", c.reason
+           c.cancelled_on::text AS cancelled_on, c."when", c.reason, c.kept_on::text AS kept_on
     FROM gym_app_cancels c
     JOIN gym_held_memberships h ON h.gym_id = c.gym_id AND h.id = c.held_membership_id
     JOIN gym_membership_types t ON t.gym_id = h.gym_id AND t.id = h.membership_type_id
@@ -245,6 +331,7 @@ export async function recentCancels(sql: SqlOrTx, gymId: string, now: Date): Pro
       endsOn: endOf(r.held_id),
       when: myCancelWhenSchema.parse(r.when),
       reason: r.reason === null ? null : myCancelReasonSchema.parse(r.reason),
+      keptOn: r.kept_on,
     })),
   };
 }

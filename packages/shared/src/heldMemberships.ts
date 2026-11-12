@@ -688,8 +688,17 @@ export type HeldMembershipEvent =
    *  (18v-i). Today or at the end of what is paid, while a contract runs, lets the member
    *  out of it: `release` says why, and without it the cancel is refused. */
   | { type: "cancel"; when: CancelWhen; release?: ContractRelease; change?: true }
+  /** Keep my membership (18l-ii-a): a cancel that left it running to a last day, undone before that day passes. `when`
+   *  is the way it was cancelled, so exactly what that cancel changed is put back. */
+  | { type: "keep"; when: KeepWhen }
   /** The count of paid periods to move to: one more, or one fewer. */
   | { type: "paid"; paidPeriods: number };
+
+/** The ways of cancelling that leave a membership running to a last day, and so can be kept. Today and inside a
+ *  cooling-off period end it at once. */
+export const KEEP_WHENS = ["period_end", "notice", "contract_end", "leave_early"] as const satisfies readonly CancelWhen[];
+export type KeepWhen = (typeof KEEP_WHENS)[number];
+export const isKeepWhen = (when: CancelWhen): when is KeepWhen => when === "period_end" || when === "notice" || when === "contract_end" || when === "leave_early";
 
 /** `notice`: it runs, and is paid for, to the end of the period its notice ends in, then stops (18v-ii-a).
  *  `leave_early`: it leaves a running minimum term with its early cancellation fee, ending as `leaveOf` says (18v-ii-b).
@@ -768,6 +777,31 @@ export function moveHeldMembership(stored: HeldMembership, event: HeldMembership
       if (m.status === "cancelled") return same;
       if (!view.can.cancel) return refused;
       return { ok: true, membership: { ...m, status: "cancelled", frozenOn: null, cancelledOn: today }, changed: true };
+
+    case "keep": {
+      // Only while it still runs: the clock has ended one whose last day passed, and a cancel today ended it already.
+      if (m.kind !== "recurring" || (m.status !== "active" && m.status !== "frozen")) return refused;
+      const stops = m.stopsAfter ?? null;
+      const left = m.leftEarly === true;
+      switch (event.when) {
+        case "period_end":
+          if (left) return refused;
+          if (m.renews) return same;
+          return { ok: true, membership: { ...m, renews: true, stopsAfter: null }, changed: true };
+        case "notice":
+          if (left || !m.renews) return refused;
+          if (stops === null) return same;
+          return { ok: true, membership: { ...m, stopsAfter: null }, changed: true };
+        case "contract_end":
+          if (left || !m.renews) return refused;
+          if (m.contractThen === "renews") return same;
+          if (m.contractThen !== "ends" || contractOf(m) === null) return refused;
+          return { ok: true, membership: { ...m, contractThen: "renews" }, changed: true };
+        case "leave_early":
+          if (!left) return m.renews && stops === null ? same : refused;
+          return { ok: true, membership: { ...m, leftEarly: false, renews: true, stopsAfter: null }, changed: true };
+      }
+    }
 
     case "paid":
       if (event.paidPeriods === m.paidPeriods && (m.status === "active" || m.status === "frozen")) return same;
