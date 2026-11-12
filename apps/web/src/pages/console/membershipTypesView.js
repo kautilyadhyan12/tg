@@ -265,8 +265,8 @@ export function coolingOffLine(type) {
   return `Cooling-off period: ${String(type.coolingOffDays)} day${type.coolingOffDays === 1 ? '' : 's'}`;
 }
 
-/** The ways of paying a member can buy in the app (18k-i): a paid-once membership or a pack (a day pass is one). A
- *  repeating membership waits for 18k-iv, once members can cancel it in the app (18l); never a trial. */
+/** The ways of paying a member can buy in the app (18k-i): a paid-once membership or a pack (a day pass is one), and a
+ *  repeating membership since 18k-iv, on the card saved in the app; never a trial. */
 export const usesSellInApp = (choice) => choice === 'recurring' || choice === 'one_time' || choice === 'pack' || choice === 'day_pass';
 
 /** WHETHER SQUARE CAN TAKE A MEMBER'S PAYMENT NOW (18k-i), from the Payments box: `ready`; `connect` or `location` for
