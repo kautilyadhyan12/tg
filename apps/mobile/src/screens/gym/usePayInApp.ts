@@ -49,6 +49,9 @@ interface Away {
   payment: AppPayment;
   /** The app went behind the tab: coming to the front again means they left Square's page. */
   left: boolean;
+  /** The tab has not answered yet. An iPhone's answers only once it is closed, and until then the app going behind and
+   *  coming back (the Apple Pay sheet, Face ID, the bank's app for a card check) is the member still paying. */
+  tabOpen: boolean;
 }
 
 export function usePayInApp(gymId: string, onEnded: () => void): PayInApp {
@@ -66,6 +69,8 @@ export function usePayInApp(gymId: string, onEnded: () => void): PayInApp {
   const unanswered = useRef<{ key: string; payment: AppPayment } | null>(null);
   // A press whose answer was lost keeps its key: pressed again, the server gives back the page it may have made.
   const lostPress = useRef<{ key: string; requestKey: string } | null>(null);
+  // A press on its way: a read of the place answered meanwhile must not end the page it is making.
+  const pressing = useRef(false);
   const gone = useCallback(() => !live.current, []);
   const ended = useRef(onEnded);
   useEffect(() => {
@@ -117,8 +122,8 @@ export function usePayInApp(gymId: string, onEnded: () => void): PayInApp {
     const answer = await session.signedIn({ method: "GET", path: myPaymentsPath(gymId) }, myAppPaymentsResponseSchema);
     if (!live.current || answer.kind !== "ok") return;
     setInApp(answer.data.inApp);
-    // A page left open while the app was closed: they are not on it now.
-    if (away.current !== null) return;
+    // A page left open while the app was closed: they are not on it now. Never one they are on, or one a press is making.
+    if (away.current !== null || pressing.current) return;
     for (const payment of answer.data.open) {
       const key = keyOfPayment(payment);
       if (key !== null && payment.state === "open") void finish(key, payment);
@@ -134,7 +139,7 @@ export function usePayInApp(gymId: string, onEnded: () => void): PayInApp {
         if (there !== null) there.left = true;
         return;
       }
-      if (there !== null && there.left) {
+      if (there !== null && there.left && !there.tabOpen) {
         away.current = null;
         void finish(there.key, there.payment);
         return;
@@ -150,12 +155,21 @@ export function usePayInApp(gymId: string, onEnded: () => void): PayInApp {
   const pay = useCallback(
     (target: PayTarget) => {
       if (busyNow.current || away.current !== null) return;
-      const requestKey = lostPress.current?.key === target.key ? lostPress.current.requestKey : newRequestKey();
+      const lost = lostPress.current?.key === target.key ? lostPress.current.requestKey : null;
       lostPress.current = null;
       setSaid(null);
       working({ key: target.key, line: PAY_OPENING });
+      pressing.current = true;
       void (async () => {
-        const answer = await session.signedIn({ method: "POST", path: myPaymentsPath(gymId), body: payBody(target, requestKey) }, appPaymentResponseSchema);
+        const send = (requestKey: string) => session.signedIn({ method: "POST", path: myPaymentsPath(gymId), body: payBody(target, requestKey) }, appPaymentResponseSchema);
+        let requestKey = lost ?? newRequestKey();
+        let answer = await send(requestKey);
+        // The page a lost press made has ended since (left open, then closed): this press asks for a page of its own.
+        if (lost !== null && answer.kind === "ok" && answer.data.payment.state === "closed") {
+          requestKey = newRequestKey();
+          answer = await send(requestKey);
+        }
+        pressing.current = false;
         if (!live.current) return;
         if (answer.kind === "no_answer") {
           lostPress.current = { key: target.key, requestKey };
@@ -184,7 +198,7 @@ export function usePayInApp(gymId: string, onEnded: () => void): PayInApp {
           void finish(target.key, payment, true);
           return;
         }
-        const there: Away = { key: target.key, payment, left: false };
+        const there: Away = { key: target.key, payment, left: false, tabOpen: true };
         away.current = there;
         // Android may close the app behind the tab: kept, the app opens this place's My membership when it starts again.
         if (userId !== null) await keepPayAway(userId, gymId);
@@ -193,8 +207,11 @@ export function usePayInApp(gymId: string, onEnded: () => void): PayInApp {
         working({ key: target.key, line: PAY_AWAY });
         try {
           const opened = await openInTab(payment.url, { bar: colours.page, controls: colours.orange });
-          // On an iPhone the tab says when it closes; on Android the app learns it from coming to the front.
-          if (opened === "closed" && away.current === there) {
+          if (away.current !== there) return;
+          // On an iPhone the tab says when it closes; on Android it only opens, and the app learns they are back when it
+          // comes to the front again.
+          there.tabOpen = false;
+          if (opened === "closed" || (there.left && AppState.currentState === "active")) {
             away.current = null;
             working(null);
             void finish(there.key, there.payment);

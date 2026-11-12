@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import { AppState, Linking, type AppStateStatus } from "react-native";
 import { APP_PAYMENT_WORDS, myMembershipResponseSchema } from "@app/shared";
 import { App } from "../../src/App";
-import { NOT_PAID, PAY_CHECK, PAY_NOT_OPENED, PAY_WAITING } from "../../src/screens/gym/payView";
+import { NOT_PAID, PAY_CHECK, PAY_NO_ANSWER, PAY_NOT_OPENED, PAY_WAITING } from "../../src/screens/gym/payView";
 import { PAY_AWAY } from "../../src/screens/gym/usePayInApp";
 import type { Ask } from "../../src/session/calls";
 import { fakeServer, kept, lost, memoryStore, refusal, tokens, type Reply } from "../kit";
@@ -13,7 +13,9 @@ import { fakeServer, kept, lost, memoryStore, refusal, tokens, type Reply } from
 // the server's own answer.
 
 // The tab's test stand-in (test/screens/setup.js).
-const { tab } = jest.requireMock<{ tab: { opened: { url: string; options: unknown }[]; answer: string; missing: boolean } }>("../../src/look/browserTabNative");
+const { tab } = jest.requireMock<{ tab: { opened: { url: string; options: unknown }[]; answer: string; missing: boolean; hold: boolean; close: () => void } }>(
+  "../../src/look/browserTabNative",
+);
 
 // The app coming to the front and going behind the tab, said by the test. Kept for the whole file: put back mid-file,
 // a spy breaks every later render.
@@ -42,6 +44,7 @@ beforeEach(() => {
   tab.opened = [];
   tab.answer = "opened";
   tab.missing = false;
+  tab.hold = false;
 });
 
 const extra = { copyName: "Feature 1", apiUrl: "http://localhost:3000" };
@@ -255,6 +258,29 @@ describe("coming back, and every way it ends", () => {
     expect(tab.opened).toEqual([]);
   });
 
+  it("on an iPhone the page stays open through the Apple Pay sheet, Face ID or the bank's app, and is ended once the tab closes", async () => {
+    tab.answer = "cancel";
+    tab.hold = true;
+    const server = fakeServer(routes());
+    await openMembership(server.ask, IRON);
+    await fireEvent.press(await onPage().findByLabelText("Pay $49.00 for Gold Monthly"));
+    await waitFor(() => {
+      expect(tab.opened).toHaveLength(1);
+    });
+    // The app goes behind and comes back while Square's sheet is still up: they are still paying.
+    await appIs("inactive");
+    await appIs("active");
+    await appIs("background");
+    await appIs("active");
+    expect(posts(server.asked, closePath(IRON))).toHaveLength(0);
+    expect(onPage().getByText(PAY_AWAY)).toBeTruthy();
+    await act(() => {
+      tab.close();
+    });
+    expect(await onPage().findByText(NOT_PAID)).toBeTruthy();
+    expect(posts(server.asked, closePath(IRON))).toHaveLength(1);
+  });
+
   it("on an iPhone the tab says it closed, and the page is ended then", async () => {
     tab.answer = "cancel";
     const server = fakeServer(routes());
@@ -294,6 +320,65 @@ describe("coming back, and every way it ends", () => {
     await fireEvent.press(onPage().getByLabelText("Check status"));
     expect(await onPage().findByText("Payment successful. $49.00 paid.")).toBeTruthy();
     expect(posts(server.asked, closePath(IRON))).toHaveLength(2);
+  });
+
+  it("a lost answer whose page has since been closed opens a page of its own on the next press, never 'cancelled'", async () => {
+    let lostOnce = true;
+    const made: string[] = [];
+    const server = fakeServer({
+      ...routes(),
+      [paymentsPath(IRON)]: (body?: unknown) => {
+        if (body === undefined) return payments(true, made.length === 1 ? [page()] : [])();
+        const key = (body as { requestKey: string }).requestKey;
+        if (lostOnce) {
+          lostOnce = false;
+          made.push(key);
+          return lost();
+        }
+        // The lost press's page was closed when the app came back; a new key makes a new page.
+        return ok({ payment: key === made[0] ? page({ state: "closed", url: null, closesAt: null }) : page({ id: "8b2c3d4e-5f6a-4b7c-8d9e-0f1a2b3c4d5e" }) })();
+      },
+    });
+    await openMembership(server.ask, IRON);
+    await fireEvent.press(await onPage().findByLabelText("Pay $49.00 for Gold Monthly"));
+    expect(await onPage().findByText(PAY_NO_ANSWER)).toBeTruthy();
+    await appIs("background");
+    await appIs("active");
+    await waitFor(() => {
+      expect(posts(server.asked, closePath(IRON))).toHaveLength(1);
+    });
+    await fireEvent.press(onPage().getByLabelText("Pay $49.00 for Gold Monthly"));
+    await waitFor(() => {
+      expect(tab.opened).toHaveLength(1);
+    });
+    expect(onPage().queryByText(NOT_PAID)).toBeNull();
+    const keys = posts(server.asked, paymentsPath(IRON)).map((a) => (a.body as { requestKey: string }).requestKey);
+    expect(keys).toEqual([made[0], made[0], expect.not.stringMatching(made[0] ?? "") as unknown]);
+  });
+
+  it("a read of the place answered after Pay opened a page never ends that page", async () => {
+    let answerRead: (reply: Reply) => void = () => undefined;
+    let reads = 0;
+    const server = fakeServer({
+      ...routes(),
+      [paymentsPath(IRON)]: (body?: unknown) => {
+        if (body !== undefined) return ok({ payment: page() })();
+        reads += 1;
+        // The second read (the app coming to the front) is slow, and answers with the page Pay opened.
+        return reads === 1 ? payments()() : new Promise<Reply>((resolve) => (answerRead = resolve));
+      },
+    });
+    await openMembership(server.ask, IRON);
+    await appIs("active");
+    await fireEvent.press(await onPage().findByLabelText("Pay $49.00 for Gold Monthly"));
+    await waitFor(() => {
+      expect(tab.opened).toHaveLength(1);
+    });
+    await act(() => {
+      answerRead(payments(true, [page()])());
+    });
+    expect(posts(server.asked, closePath(IRON))).toHaveLength(0);
+    expect(onPage().getByText(PAY_AWAY)).toBeTruthy();
   });
 
   it("a refusal is said where Pay was; a lost answer sends the same press again, so a page made meanwhile is given back", async () => {

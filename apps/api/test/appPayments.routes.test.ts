@@ -508,12 +508,15 @@ d("Pay what they owe in the app: charged once, on this bill alone (real Postgres
       const again = await payPress(gym, kimApp, kim);
       expect(again.statusCode, again.body).toBe(409);
       expect(errorOf(again), what).toBe("app_payment_check");
-      // The member's own My membership says so before they press Pay (20f), and another member's does not.
+      // The member's own My membership says so before they press Pay (20f).
       const own = myMembershipResponseSchema.parse(JSON.parse((await send("GET", `/v1/orgs/${gym.id}/my-membership`, kimApp.cookies)).body));
       expect(own.memberships[0]?.owed, what).toMatchObject({ amountMinor: 4999, check: true });
     }
     // A card fee the business adds on top, which Square names, is the bill paid.
     const { holder: kim, app: kimApp } = await member(gym, typeId, "Kim Cho");
+    // Another member of the same gym, owing the same, with no page that needs a check: not waiting for the desk (20f).
+    const other = myMembershipResponseSchema.parse(JSON.parse((await send("GET", `/v1/orgs/${gym.id}/my-membership`, kimApp.cookies)).body));
+    expect(other.memberships[0]?.owed).toMatchObject({ amountMinor: 4999, check: false });
     const page = await pay(gym, kimApp, kim);
     const link = linksOf(acct).find((l) => l.referenceId === page.payment.id);
     square.payLink(link?.id ?? "", {
