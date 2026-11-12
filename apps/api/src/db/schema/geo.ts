@@ -56,7 +56,7 @@ export const runs = pgTable(
     bestMileS: integer("best_mile_s"),
     best5kS: integer("best_5k_s"),
     best10kS: integer("best_10k_s"),
-    // 0234 (ROADMAP 37f-i): the average and highest heart rate from a strap or watch (`heartSums`).
+    // 0235 (ROADMAP 37f-i): the average and highest heart rate from a strap or watch (`heartSums`).
     heartAvg: smallint("heart_avg"),
     heartMax: smallint("heart_max"),
   },

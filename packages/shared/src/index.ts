@@ -48,6 +48,7 @@ export * from "./memberBills.js";
 export * from "./myMembership.js";
 export * from "./appCancel.js";
 export * from "./myCancel.js";
+export * from "./undoCancel.js";
 export * from "./receipts.js";
 export * from "./memberBillRules.js";
 export * from "./membershipChange.js";

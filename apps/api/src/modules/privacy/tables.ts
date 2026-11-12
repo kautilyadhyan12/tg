@@ -626,6 +626,11 @@ export const USER_LINKED_NOT_PURGED_TABLES = [
   // for good lets go of `by_entry_id`, and the membership going takes the row with it.
   // Keep my membership (`0233`; 18l-ii-a) adds kept_by_user_id and kept_by_entry_id, whoever pressed Keep, on the same footing.
   "gym_app_cancels",
+  // gym_desk_cancels.user_id and undone_by_user_id — which member of staff cancelled a membership at the front desk to end on a
+  // later day, and who undid it (`0234`; 18l-ii-b), on gym_app_cancels' footing: the gym's record of a membership
+  // cancelled; `ON DELETE set null`. It holds the ways it was cancelled, its days and the bookings it ended; the
+  // membership going takes the row with it.
+  "gym_desk_cancels",
   // gym_card_charges.started_by — which member of staff pressed Charge card on file (`0158`;
   // 18d-iii-i); null for the app's own charge on a bill's date. On gym_member_payments' footing: the
   // gym's record of money asked for; `ON DELETE set null`. It holds Square's ids, the card's brand

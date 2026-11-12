@@ -118,6 +118,7 @@ import {
   renewalReminderPreviewResponseSchema,
   priceRaisePreviewResponseSchema,
   heldMembershipsResponseSchema,
+  undoCancelAskSchema,
   memberGymTagsResponseSchema,
   memberPayersResponseSchema,
   memberCardResponseSchema,
@@ -2026,6 +2027,13 @@ export const orgService = {
       heldMembershipsResponseSchema,
       "this person's memberships",
       authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/entries/${encodeURIComponent(entryId)}/memberships`, body),
+    ),
+  /** The box under Undo cancellation (18l-ii-b); pressed through `changeHeldMembership(…, 'undo-cancel', …)`. */
+  getUndoCancel: (gymId, entryId, membershipId) =>
+    readThrough(
+      undoCancelAskSchema,
+      "this membership",
+      authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/entries/${encodeURIComponent(entryId)}/memberships/${encodeURIComponent(membershipId)}/undo-cancel`),
     ),
   changeHeldMembership: (gymId, entryId, membershipId, what, body = {}) =>
     readThrough(

@@ -34,6 +34,7 @@ import type { z } from "zod";
 import {
   MEMBERSHIP_HAS_BOOKINGS_ERROR,
   cancelHeldMembershipRequestSchema,
+  undoCancelRequestSchema,
   freezeHeldMembershipRequestSchema,
   changeHeldMembershipRequestSchema,
   giveHeldMembershipRequestSchema,
@@ -69,6 +70,7 @@ import {
 } from "../schemas.js";
 import { staffOnly } from "../staffLimit.js";
 import * as held from "./heldService.js";
+import * as undoCancel from "./undoCancel.js";
 import * as service from "./service.js";
 import * as words from "./wordsService.js";
 
@@ -307,6 +309,24 @@ export function registerMembershipRoutes(app: FastifyInstance, deps: MembershipR
       body.leaveFeeMinor,
     );
     return sendHeld(reply, req, answer);
+  });
+
+  // Undo cancellation (18l-ii-b): a cancel the front desk made to end on a later day, never one made in the app. The box
+  // is read under the same allowance as the changes, as it is opened only to press.
+  app.get(`${heldUrl}/:membershipId/undo-cancel`, { preHandler: [app.authenticate, staffOnly(deps.sql, heldLimit)] }, async (req, reply) => {
+    const params = parseOr400(heldMembershipParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const ask = await undoCancel.readUndoCancel(heldDeps, requireUserId(req), params.gymId, params.entryId, params.membershipId);
+    return reply.status(200).send(ask);
+  });
+
+  app.post(`${heldUrl}/:membershipId/undo-cancel`, heldGuarded, async (req, reply) => {
+    const params = parseOr400(heldMembershipParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(undoCancelRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    const list = await undoCancel.undoCancel(heldDeps, requireUserId(req), params.gymId, params.entryId, params.membershipId, body);
+    return reply.status(200).send(list);
   });
 
   // Keep the old price (18w): a raise not yet charged is taken off.

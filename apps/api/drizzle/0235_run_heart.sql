@@ -1,5 +1,5 @@
 -- Heart rate from a strap or a watch (ROADMAP Stage 5 item 37f-i). Forward-only. Hand-written, as `0016`
--- onwards are; renumbered from 0233 because 18l-ii-a's 0233_app_keeps merged first (CLAUDE.md §8). Its journal entry
+-- onwards are; renumbered from 0233, then 0234, because 18l-ii-a's 0233 and 18l-ii-b's 0234 merged first (CLAUDE.md §8). Its journal entry
 -- is part of this commit.
 --
 -- A run's average and highest heart rate, beats a minute over its time running, worked out on the server
