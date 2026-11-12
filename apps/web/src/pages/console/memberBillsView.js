@@ -20,6 +20,7 @@ import {
   APP_PAYMENT_FEE_STAFF_WORDS,
   appBuyCheckLine,
   appBuyingLine,
+  appChargingLine,
   appCheckLine,
   appPayingLine,
   APP_PURCHASE_STAFF_WORDS,
@@ -723,7 +724,10 @@ export function appCheckNotice(m) {
 /** A member buying a line in the app for this record now: who, what, and when the page closes; null for none. */
 export function appBuyingNotice(shown, timezone) {
   const open = shown?.appBuying ?? null;
-  return open === null ? null : { id: open.id, line: appBuyingLine(open.payerName, open.typeName, closesAtWords(open.closesAt, timezone)) };
+  if (open === null) return null;
+  // Charged to the card saved in the app (18k-iv): nothing to close, only Square's answer to wait for.
+  if (open.card != null) return { id: open.id, line: appChargingLine(open.payerName, open.typeName, cardName(open.card)), closable: false };
+  return { id: open.id, line: appBuyingLine(open.payerName, open.typeName, closesAtWords(open.closesAt, timezone)), closable: true };
 }
 
 /** Purchases in the app that gave nothing though Square may have taken money: what to check, each with its id. */

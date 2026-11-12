@@ -612,7 +612,7 @@ d("Buy in the app: given once, on their own record, only for what Square took (r
     const pack = await addType(gym, { name: "10-class pack" });
     const ivy = await member(gym, "Ivy Lock");
     const shown = await lineOf(gym, ivy.app, pack);
-    const buying = { gymId: gym.id, userId: ivy.app.userId, entryId: ivy.entryId, buyer: null, typeId: pack, amountMinor: shown.firstPayment.amountMinor, factsKey: shown.factsKey, agreement: null, accountCurrency: "USD", gymName: gym.name, today: (await held(gym, ivy.entryId)).today, now: clock };
+    const buying = { gymId: gym.id, userId: ivy.app.userId, entryId: ivy.entryId, buyer: null, typeId: pack, amountMinor: shown.firstPayment.amountMinor, factsKey: shown.factsKey, agreement: null, charge: null, square: { environment: "sandbox" as const, accountId: "unused" }, accountCurrency: "USD", gymName: gym.name, today: (await held(gym, ivy.entryId)).today, now: clock };
     expect((await purchasable(sql, buying)).kind).toBe("ok");
     // A second account joins her record after the route read it: the check under the lock refuses.
     const other = await signedIn("Ivy Phone Two");

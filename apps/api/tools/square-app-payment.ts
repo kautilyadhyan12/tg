@@ -12,6 +12,9 @@
 //   … tools/square-app-payment.ts buy <gymId> <member's email> "<line's name>" ["<name signed>"]   (18k-iii-a; signs as the
 //         member, or as a parent or guardian where the record is under 18, with the name given or the account's own)
 //   … tools/square-app-payment.ts check-buy|close-buy <gymId> <member's email> <paymentId>
+//   … tools/square-app-payment.ts add-card <gymId> <member's email>   (Square's test card, as Add card in the app saves one,
+//         with the card agreement ticked; 18k-iv). A repeating line is then bought with `buy`: charged to that card, with its
+//         own tick as the list words it.
 import { randomUUID } from "node:crypto";
 import postgres from "postgres";
 import { z } from "zod";
@@ -19,6 +22,7 @@ import { formatMinor } from "@app/shared";
 import { getMyMembership } from "../src/modules/orgs/myMembership/service.js";
 import { checkAppPayment, closeAppPayment, startAppPayment } from "../src/modules/orgs/payments/appPayments.js";
 import { checkPurchase, closePurchase, startPurchase } from "../src/modules/orgs/payments/appPurchases.js";
+import { readMyCard, saveMyCard } from "../src/modules/orgs/payments/cards.js";
 import { readForSale } from "../src/modules/orgs/payments/forSale.js";
 import { squareSettings } from "../src/modules/orgs/payments/settings.js";
 
@@ -39,13 +43,14 @@ const args = z
   .union([
     z.tuple([z.literal("pay"), z.uuid(), z.email()]),
     z.tuple([z.literal("pay-fee"), z.uuid(), z.email()]),
+    z.tuple([z.literal("add-card"), z.uuid(), z.email()]),
     z.tuple([z.enum(["check", "close", "check-buy", "close-buy"]), z.uuid(), z.email(), z.uuid()]),
     z.tuple([z.literal("buy"), z.uuid(), z.email(), z.string().min(1)]),
     z.tuple([z.literal("buy"), z.uuid(), z.email(), z.string().min(1), z.string().min(1).max(200)]),
   ])
   .safeParse(process.argv.slice(2));
 if (!args.success) {
-  console.error('Usage: square-app-payment.ts pay|pay-fee <gymId> <email> | check|close|check-buy|close-buy <gymId> <email> <paymentId> | buy <gymId> <email> "<line>" ["<name signed>"]');
+  console.error('Usage: square-app-payment.ts pay|pay-fee|add-card <gymId> <email> | check|close|check-buy|close-buy <gymId> <email> <paymentId> | buy <gymId> <email> "<line>" ["<name signed>"]');
   process.exit(2);
 }
 
@@ -68,17 +73,26 @@ try {
   if (user === undefined) throw new Error("No account has that email.");
   if (args.data[0] === "buy") {
     const lineName = args.data[3];
-    const list = await readForSale(deps, user.id, gymId, always);
+    const list = await readForSale(deps, user.id, gymId, always, true);
     const shown = list?.items.find((i) => i.name === lineName);
     if (shown === undefined) throw new Error(`"${lineName}" is not sold in the app to this member now.`);
     const name = args.data[4] ?? user.display_name ?? email;
     const signer = list?.signer === "guardian" ? "guardian" : "person";
     const agreement = shown.agreement === null ? null : { agreementId: shown.agreement.id, signer, name } as const;
-    const done = await startPurchase(deps, user.id, gymId, { requestKey: randomUUID(), typeId: shown.typeId, amountMinor: shown.firstPayment.amountMinor, factsKey: shown.factsKey, agreement }, always);
+    if (shown.repeats && shown.charge === null) throw new Error(`"${lineName}" renews: save a card for this member first (add-card).`);
+    const charge = shown.charge === null ? {} : { charge: { words: shown.charge, verificationToken: null } };
+    if (shown.charge !== null) console.log(`Ticked: ${shown.charge}`);
+    const done = await startPurchase(deps, user.id, gymId, { requestKey: randomUUID(), typeId: shown.typeId, amountMinor: shown.firstPayment.amountMinor, factsKey: shown.factsKey, agreement, ...charge }, always);
     const page = done?.answer.purchase;
     if (page === undefined) throw new Error("No answer.");
     console.log(`${shown.name}: ${formatMinor(page.amountMinor, page.currency)}${agreement === null ? "" : `, signed by ${name}`}. Purchase ${page.id}`);
-    console.log(`Square's page: ${page.url ?? "(not open)"}`);
+    console.log(page.url === null ? `Charged to the card: ${page.state}` : `Square's page: ${page.url}`);
+  } else if (args.data[0] === "add-card") {
+    const mine = await readMyCard(deps, user.id, gymId, always);
+    if (mine === null) throw new Error("No answer.");
+    // Square's sandbox card that saves (its test values: "cnon:card-nonce-ok", a Visa ending 1111).
+    const saved = await saveMyCard(deps, user.id, gymId, { sourceId: "cnon:card-nonce-ok", agreed: true, agreement: mine.myCard.agreement, requestKey: randomUUID() }, always);
+    console.log(`Card on file: ${saved?.myCard.card == null ? "none" : `${saved.myCard.card.brand} ending ${saved.myCard.card.last4}`}`);
   } else if (args.data[0] === "check-buy" || args.data[0] === "close-buy") {
     const id = args.data[3];
     const done = args.data[0] === "check-buy" ? await checkPurchase(deps, user.id, gymId, id, always) : await closePurchase(deps, user.id, gymId, id, always);

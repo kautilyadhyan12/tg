@@ -1041,6 +1041,8 @@ export function fakeSquare() {
     cards,
     stopped,
     charged,
+    /** What each card charge was sent with, by its key (18k-iv: the bank's check). */
+    cardPaymentBodies: (): NewCardPayment[] => [...cardPayments.values()].map((v) => v.body),
     taken,
     customer,
     subscription,

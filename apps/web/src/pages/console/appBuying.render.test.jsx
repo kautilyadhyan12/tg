@@ -48,12 +48,19 @@ describe('a member buying in the app, on their page', () => {
     ).toBeTruthy();
     expect(
       screen.getByText(
-        "The member's payment page for Day pass in the app ended on 6 November 2026 without an answer from Square, so it may have been paid. Check it in Square, then refund it there or give it with Add membership.",
+        "The member's payment for Day pass in the app ended on 6 November 2026 without an answer from Square, so it may have been paid. Check it in Square, then refund it there or give it with Add membership.",
       ),
     ).toBeTruthy();
     fireEvent.click(screen.getAllByRole('button', { name: 'Mark as checked' })[1]);
     await waitFor(() => expect(orgService.markAppPurchaseChecked).toHaveBeenCalledWith(GYM, TARA, UNKNOWN));
     expect(await screen.findByRole('status')).toHaveProperty('textContent', 'Marked as checked.');
+  });
+
+  it('a card charged in the app that Square has not answered about names the card and has nothing to close (18k-iv)', () => {
+    const charging = { ...buying, typeName: 'Gold Monthly', card: { brand: 'VISA', last4: '1111' } };
+    render(<AppBuying gymId={GYM} entryId={TARA} shown={shown({ appBuying: charging })} timezone="America/Chicago" canAct />);
+    expect(screen.getByText("Square hasn't answered yet about Tara Singh's payment for Gold Monthly in the app, charged to Visa ending 1111. It's added once Square confirms it.")).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Close payment page' })).toBeNull();
   });
 
   it('shows nothing when no purchase is open or waiting, and no button to a reader who cannot act', () => {

@@ -350,7 +350,8 @@ const membershipTypeObject = z.object(membershipTypeFields);
 /** The kinds members may buy in the app (18k-i): a paid-once membership or a pack. A repeating one joins them with
  *  18k-iv, once members can cancel it in the app (18l; RULINGS 2026-10-22). A trial has its own rules for who may have
  *  one, and a product is bought at the desk (Kd, 2026-11-06). */
-export const SOLD_IN_APP_KINDS: readonly MembershipKind[] = ["one_time", "pack"];
+// A repeating one too since 18k-iv, once members could cancel in the app (18l): bought on the card saved in the app.
+export const SOLD_IN_APP_KINDS: readonly MembershipKind[] = ["recurring", "one_time", "pack"];
 export const canSellInApp = (type: { kind: MembershipKind; priceMinor: number }): boolean => SOLD_IN_APP_KINDS.includes(type.kind) && type.priceMinor > 0;
 
 /** The rules between the fields: each kind in its own shape. */

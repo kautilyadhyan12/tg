@@ -1,6 +1,6 @@
 -- Payment received, told to the phone (ROADMAP Stage 5 item 20h). Forward-only.
--- Hand-written, as `0016` onwards are; its journal entry is part of this commit. Renumbered from 0235: feature
--- folder 2's 0235_run_heart merged first.
+-- Hand-written, as `0016` onwards are; its journal entry is part of this commit. Renumbered from 0235, then 0236: feature
+-- folder 2's 0235_run_heart, then 18k-iv's 0236_app_card_purchases, merged first.
 --
 -- A payment page Square says was paid, recorded by the worker or by staff's Close payment page rather than by the
 -- member's own phone asking, owes the member who pressed Pay one notification (`push_due_at`). The member's phone

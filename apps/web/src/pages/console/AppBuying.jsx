@@ -43,7 +43,7 @@ export default function AppBuying({ gymId, entryId, shown, timezone, canAct, onC
           <span className="c-s13 c-w5" style={{ color: 'var(--warn)' }}>
             {open.line}
           </span>
-          {canAct ? (
+          {canAct && open.closable ? (
             <button type="button" className={SMALL} disabled={busy} onClick={() => void closePage(open.id)}>
               {APP_CLOSE_BUTTON}
             </button>

@@ -201,8 +201,14 @@ async function advance(deps: PaymentsDeps, square: SquareSettings, charge: charg
 }
 
 /** The charge among the location's payments Square made from just before it was first sent to just
- *  after it was last sent, by its own id: found, absent, or no clear answer. Never sends it. */
-async function lookUp(deps: PaymentsDeps, square: SquareSettings, token: string, charge: charges.ChargeRow): Promise<CardPaymentResult | { kind: "absent" }> {
+ *  after it was last sent, by its own id: found, absent, or no clear answer. Never sends it. A purchase
+ *  charged to a card in the app (18k-iv) is looked up the same way. */
+export async function lookUp(
+  deps: PaymentsDeps,
+  square: SquareSettings,
+  token: string,
+  charge: Pick<charges.ChargeRow, "id" | "startedAt" | "locationId">,
+): Promise<CardPaymentResult | { kind: "absent" }> {
   const beginTime = new Date(charge.startedAt.getTime() - 60_000);
   const endTime = new Date(Math.min(deps.now().getTime(), charge.startedAt.getTime() + CARD_CHARGE.resendForMs + 5 * 60_000));
   let cursor: string | null = null;

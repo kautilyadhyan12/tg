@@ -53,9 +53,14 @@ export interface AppPayRow {
   openedBy: string | null;
   openedAt: Date;
   closesAt: Date;
-  linkId: string;
-  orderId: string;
-  url: string;
+  /** Square's payment page; null for a purchase charged to their card (18k-iv). */
+  linkId: string | null;
+  orderId: string | null;
+  url: string | null;
+  /** The card a purchase of a repeating line is charged to, the customer it is on, and what a screen shows of it (18k-iv). */
+  card: { cardId: string; customerId: string; brand: string; last4: string } | null;
+  /** Why Square did not take a card purchase, where it said. */
+  chargeCode: string | null;
   state: "open" | "done";
   outcome: AppPayOutcome | null;
   closeWantedAt: Date | null;
@@ -85,9 +90,14 @@ export interface RawPay {
   opened_by: string | null;
   opened_at: Date;
   closes_at: Date;
-  link_id: string;
-  order_id: string;
-  url: string;
+  link_id: string | null;
+  order_id: string | null;
+  url: string | null;
+  card_id: string | null;
+  card_customer_id: string | null;
+  card_brand: string | null;
+  card_last4: string | null;
+  charge_code: string | null;
   state: "open" | "done";
   outcome: string | null;
   close_wanted_at: Date | null;
@@ -121,6 +131,11 @@ export const toRow = (r: RawPay): AppPayRow => ({
   linkId: r.link_id,
   orderId: r.order_id,
   url: r.url,
+  card:
+    r.card_id !== null && r.card_customer_id !== null && r.card_brand !== null && r.card_last4 !== null
+      ? { cardId: r.card_id, customerId: r.card_customer_id, brand: r.card_brand, last4: r.card_last4 }
+      : null,
+  chargeCode: r.charge_code,
   state: r.state,
   // Our own columns under a CHECK: a value this build does not know is read as none.
   outcome: OUTCOMES.find((o) => o === r.outcome) ?? null,
@@ -133,7 +148,8 @@ export const toRow = (r: RawPay): AppPayRow => ({
 
 export const COLUMNS = (sql: SqlOrTx) =>
   sql`a.id, a.gym_id, a.entry_id, a.held_membership_id, a.membership_type_id, a.bought, a.period_index, a.fee_bill_id, a.amount_minor, a.currency, a.environment, a.account_id,
-      a.location_id, a.request_key, a.opened_by, a.opened_at, a.closes_at, a.link_id, a.order_id, a.url, a.state, a.outcome,
+      a.location_id, a.request_key, a.opened_by, a.opened_at, a.closes_at, a.link_id, a.order_id, a.url, a.card_id, a.card_customer_id, a.card_brand,
+      a.card_last4, a.charge_code, a.state, a.outcome,
       a.close_wanted_at, a.close_wanted_by, a.square_payment_id, a.finished_at,
       (SELECT p.receipt_number FROM gym_member_payments p WHERE p.gym_id = a.gym_id AND p.id = a.member_payment_id) AS receipt_number`;
 
@@ -428,7 +444,7 @@ export async function finish(sql: Sql, gymId: string, id: string, outcome: "clos
       UPDATE gym_app_payments SET state = 'done', outcome = ${outcome}, finished_at = ${at}, checking_until = NULL,
              entry_id = COALESCE(entry_id, ${home?.entryId ?? null}::uuid),
              -- A purchase that gave nothing keeps no name or details typed (18k-iii-a), nor who bought it (18k-iii-b).
-             bought = CASE WHEN membership_type_id IS NULL THEN bought ELSE bought || '{"sign":null,"buyer":null}'::jsonb END
+             bought = CASE WHEN membership_type_id IS NULL THEN bought ELSE bought || '{"sign":null,"buyer":null,"charge":null}'::jsonb END
       WHERE gym_id = ${gymId} AND id = ${id} AND state = 'open'
       RETURNING id`;
     if (rows.length !== 1) return false;
@@ -529,6 +545,12 @@ export async function recordPaid(
     });
     return { outcome: "not_recorded" as const };
   });
+}
+
+/** Why Square did not take a card purchase (18k-iv), kept once it ended with nothing taken. */
+export async function noteChargeCode(sql: SqlOrTx, gymId: string, id: string, code: string): Promise<void> {
+  const kept = /^[A-Z0-9_]{1,60}$/.test(code) ? code : "UNKNOWN";
+  await sql`UPDATE gym_app_payments SET charge_code = ${kept} WHERE gym_id = ${gymId} AND id = ${id} AND card_id IS NOT NULL AND outcome = 'closed'`;
 }
 
 /** Closed ones are kept a day, for the phone that asks how one ended; paid ones keep the card they name, and one Square

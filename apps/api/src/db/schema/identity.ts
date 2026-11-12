@@ -34,7 +34,7 @@ export const users = pgTable(
     pushGymMessages: boolean("push_gym_messages").notNull().default(true),
     pushPlaces: boolean("push_places").notNull().default(true),
     pushComments: boolean("push_comments").notNull().default(true),
-    // 0236: Payment received (20h); on by default.
+    // 0237: Payment received (20h); on by default.
     pushPayments: boolean("push_payments").notNull().default(true),
     // 0214: the streak reminder, badges and the Sunday summary (19e-ii); each on by default. When the newest
     // three notifications reached the phone, the day one of the three last went, the week summed up last.

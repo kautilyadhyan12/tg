@@ -14,16 +14,20 @@ import { z } from "zod";
 import { membershipDiscount, type DiscountKind, type MembershipPayments } from "./discounts.js";
 import { billsToOpen } from "./memberBillRules.js";
 import { memberGiftOff, type MemberGiftTerms } from "./memberGift.js";
-import { giveHeldMembership, heldMembershipView, periodListedMinor, type HeldTax } from "./heldMemberships.js";
+import { giveHeldMembership, heldMembershipView, periodListedMinor, periodStart, type HeldTax } from "./heldMemberships.js";
+import { cardName } from "./memberCards.js";
+import { dayWords } from "./paymentsDownload.js";
 import { agreementFactSchema, agreementFacts, factsKeySchema, type AgreementFact, type AgreementFactsInput } from "./membershipAgreement.js";
 import {
   MEMBERSHIP_TYPES_MAX,
   canSellInApp,
+  formatMinor,
   type MembershipAccess,
   type MembershipLimitPeriod,
   contractThenSchema,
   isDayPass,
   membershipKindSchema,
+  membershipTermUnitSchema,
   type ContractThen,
   type MembershipKind,
   type MembershipTermUnit,
@@ -63,6 +67,13 @@ export const forSaleItemSchema = z
       .strict(),
     /** It is charged again every period, until they cancel or its minimum term ends: a repeating charge. */
     repeats: z.boolean(),
+    /** A repeating one's payment after the first (18k-iv): its amount with the tax, from which day, and how often. Null
+     *  for a line paid once, and for one that ends before a second payment. */
+    renews: z
+      .object({ amountMinor: minorSchema, from: daySchema, every: z.object({ count: z.number().int().min(1), unit: membershipTermUnitSchema }).strict() })
+      .strict()
+      .nullable()
+      .default(null),
     /** What it gives, in the price list's own words (20g): "Any class", "8 classes a month", "Only Yoga, Spin",
      *  "Personal training". */
     includes: z.array(z.string().min(1).max(200)).max(4).default([]),
@@ -82,7 +93,13 @@ export type ForSaleAgreement = z.infer<typeof forSaleAgreementSchema>;
 
 /** A line as the phone reads it: the line, and for buying it, the key of its details and the agreement to sign, if any. */
 export const forSaleLineSchema = forSaleItemSchema
-  .extend({ factsKey: factsKeySchema, agreement: forSaleAgreementSchema.nullable() })
+  .extend({
+    factsKey: factsKeySchema,
+    agreement: forSaleAgreementSchema.nullable(),
+    /** A repeating line's own tick (18k-iv), word for word what Buy sends back: what is charged to which card, how often
+     *  and until when. Null for a line paid once, and where the reader has no card in the app to pay with. */
+    charge: z.string().min(1).max(1000).nullable().default(null),
+  })
   .strict();
 export type ForSaleLine = z.infer<typeof forSaleLineSchema>;
 
@@ -100,9 +117,19 @@ export const forSaleResponseSchema = z
     record: z.enum(["own", "none", "shared"]),
     signer: forSaleSignerSchema.default("either"),
     items: z.array(forSaleLineSchema).max(MEMBERSHIP_TYPES_MAX),
+    /** The card a repeating line is paid with (18k-iv): the reader's own, saved in the gym's Square account now; `expired`
+     *  past its month. Null where they have none; read only where repeating lines are asked for. */
+    card: z
+      .object({ brand: z.string().regex(/^[A-Z_]{1,40}$/), last4: z.string().regex(/^[0-9]{4}$/), expired: z.boolean() })
+      .strict()
+      .nullable()
+      .default(null),
   })
   .strict();
 export type ForSaleResponse = z.infer<typeof forSaleResponseSchema>;
+
+/** `repeating=true`: the list with its repeating lines too (18k-iv), for a phone that pays them with a saved card. */
+export const forSaleQuerySchema = z.object({ repeating: z.enum(["true", "false"]).optional() }).strict();
 
 /** A line of the price list, as the list reads it. */
 export interface ForSaleType {
@@ -216,8 +243,8 @@ export const appPurchaseGivenSchema = z
 export type AppPurchaseGiven = z.infer<typeof appPurchaseGivenSchema>;
 
 /** ONE LINE AS A MEMBER READS IT, and what buying it gives: the membership as Add membership would give it today, from
- *  today, with the Refer a friend gifts it fills in; null for a line that cannot be sold in the app (a repeating one
- *  until 18k-iv, a trial, a free one) or that gives nothing today. */
+ *  today, with the Refer a friend gifts it fills in; null for a line that cannot be sold in the app (a trial, a free one)
+ *  or that gives nothing today. */
 export function forSaleWorked(input: ForSaleInput): { item: ForSaleItem; given: AppPurchaseGiven } | null {
   const { type, today } = input;
   if (!canSellInApp(type)) return null;
@@ -247,6 +274,15 @@ export function forSaleWorked(input: ForSaleInput): { item: ForSaleItem; given: 
     memberGiftOffMinor: giftOff,
   };
   const heldPriceMinor = discount === null ? type.priceMinor : discount.heldPriceMinor;
+  // A repeating one's second payment, as its bill will open: the price kept on it, the tax added as on the first; none
+  // where it ends before then.
+  let renews: ForSaleItem["renews"] = null;
+  if (type.kind === "recurring" && type.termCount !== null && type.termUnit !== null) {
+    const from = periodStart(m, 1);
+    const endsOn = heldMembershipView(m, today).endsOn;
+    const next = billAmounts(periodListedMinor(m, 1, heldPriceMinor), tax);
+    if ((endsOn === null || endsOn >= from) && next.ok && next.totalMinor >= 1) renews = { amountMinor: next.totalMinor, from, every: { count: type.termCount, unit: type.termUnit } };
+  }
   const facts: AgreementFact[] = agreementFacts({
     gym: input.gym,
     personName: input.personName,
@@ -280,6 +316,7 @@ export function forSaleWorked(input: ForSaleInput): { item: ForSaleItem; given: 
     currency: type.currency,
     firstPayment,
     repeats: type.kind === "recurring",
+    renews,
     includes: input.included == null ? [] : includedLines(input.included.lines, type, input.included.orgType),
     facts,
   };
@@ -304,4 +341,16 @@ export function forSaleWorked(input: ForSaleInput): { item: ForSaleItem; given: 
 /** One line as a member reads it, without the reader's gifts unless they are given: `forSaleWorked`'s line. */
 export function forSaleItem(input: ForSaleInput): ForSaleItem | null {
   return forSaleWorked(input)?.item ?? null;
+}
+
+const every = (e: { count: number; unit: string }): string => (e.count === 1 ? `every ${e.unit}` : `every ${String(e.count)} ${e.unit}s`);
+
+/** THE TICK FOR A REPEATING CHARGE (18k-iv; Visa Core Rules, Table 5-20): what is charged today and after, to which card,
+ *  how often, from when and until when, in one sentence the member ticks apart from the agreement. Kept word for word with
+ *  the time and the membership; Buy is refused unless it is this very sentence. */
+export function repeatingChargeWords(gymName: string, card: { brand: string; last4: string }, item: Pick<ForSaleItem, "firstPayment" | "renews" | "currency">): string {
+  const head = `I agree that ${gymName.trim()} may charge my ${cardName(card)} ${formatMinor(item.firstPayment.amountMinor, item.currency)} today`;
+  const r = item.renews;
+  if (r === null) return `${head}.`;
+  return `${head}, then ${formatMinor(r.amountMinor, item.currency)} ${every(r.every)} from ${dayWords(r.from)}, until my membership ends or I cancel it.`;
 }

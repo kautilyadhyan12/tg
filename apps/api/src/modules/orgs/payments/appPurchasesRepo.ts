@@ -36,7 +36,9 @@ import { friendGiftOffer } from "../referrals/friendGift.js";
 import { waitingGiftFor } from "../referrals/memberGiftRepo.js";
 import { taxIncludedOf } from "../register/taxRepo.js";
 import { insertAudit } from "../repo.js";
+import { cardCheckIn, type OwnCard } from "./appCardPurchasesRepo.js";
 import { detailsRecordOf, homeOf } from "./appPurchaseHome.js";
+import { insertAgreement } from "./cardsRepo.js";
 import { COLUMNS, toRow, type AppPayRow, type RawPay } from "./appPaymentsRepo.js";
 import { soldInAppLine } from "./forSaleRepo.js";
 import type { SquareEnvironment } from "./square.js";
@@ -56,6 +58,10 @@ export interface Buying {
   amountMinor: number;
   factsKey: string;
   agreement: { agreementId: string; signer: DeskSigner; name: string } | null;
+  /** A repeating line (18k-iv): the tick read and the bank's check, paid with their card; null for a line paid once. */
+  charge: { words: string; verificationToken: string | null } | null;
+  /** The Square account the gym is connected to: their card is the one saved in it. */
+  square: { environment: SquareEnvironment; accountId: string };
   /** The Square account's own money: a line priced in another is not sent. */
   accountCurrency: string;
   gymName: string;
@@ -71,11 +77,14 @@ export const MIN_OPEN_MS = 5 * 60_000;
 
 export type PurchasableOutcome =
   /** `deadline`: when the page must close, the line's last day being near; null where it is far. */
-  | { kind: "ok"; bought: AppPurchaseBought; currency: string; deadline: Date | null; landsOn: string | null }
+  | { kind: "ok"; bought: AppPurchaseBought; currency: string; deadline: Date | null; landsOn: string | null; card: OwnCard | null }
   /** A page for this record is open: the same press's is answered instead of a second. */
   | { kind: "open"; row: AppPayRow }
   | { kind: "entry_not_found" | "shared" | "paid_by_other" | "changed" | "agreement_changed" | "guardian_needed" | "person_signs" | "too_many" | "currency" | "check" | "too_late" }
   | { kind: "already_held"; name: string }
+  /** A repeating line (18k-iv): no card of their own to pay with, or not one that can be charged now. */
+  | { kind: "card_needed" | "card_no_record" | "card_expired" | "card_stopped" | "card_paused" | "card_changed" }
+  | { kind: "renewing_held"; name: string }
   /** Money of theirs is overdue: paid first (18l). */
   | { kind: "owed"; amountMinor: number; currency: string };
 
@@ -235,6 +244,17 @@ async function purchasableIn(tx: TransactionSql, s: Buying): Promise<Purchasable
     LIMIT 1`;
   if (check !== undefined) return { kind: "check" };
   if (item.currency !== s.accountCurrency) return { kind: "currency" };
+  // A repeating line is paid with their own card, on the sentence they ticked (18k-iv); a line paid once never is.
+  let card: OwnCard | null = null;
+  if (item.repeats) {
+    if (s.charge === null) return { kind: "card_needed" };
+    if (s.entryId === null || landsOn === null) return { kind: "card_no_record" };
+    const checked = await cardCheckIn(tx, { gymId: s.gymId, entryId: landsOn, ...s.square, gymName: s.gymName, today: s.today, item, words: s.charge.words });
+    if (checked.kind !== "ok") return checked;
+    card = checked.card;
+  } else if (s.charge !== null) {
+    return { kind: "changed" };
+  }
   // The page closes before the line's last day ends on the gym's clock: what is paid is never already over.
   const endsOn = heldMembershipView(found.m.membership, s.today).endsOn;
   const [end] =
@@ -247,7 +267,9 @@ async function purchasableIn(tx: TransactionSql, s: Buying): Promise<Purchasable
   if (deadline !== null && deadline.getTime() - s.now.getTime() < MIN_OPEN_MS) return { kind: "too_late" };
   const sign: AppPurchaseSign | null =
     asked === null || s.agreement === null ? null : { agreementId: asked.id, signer: s.agreement.signer, name: s.agreement.name, facts: item.facts, at: s.now.toISOString() };
-  return { kind: "ok", bought: { ...given, sign, buyer: s.entryId === null ? s.buyer : null }, currency: item.currency, deadline, landsOn };
+  const charge =
+    card === null || s.charge === null ? null : { words: s.charge.words, at: s.now.toISOString(), brand: card.brand, last4: card.last4, verificationToken: s.charge.verificationToken };
+  return { kind: "ok", bought: { ...given, sign, buyer: s.entryId === null ? s.buyer : null, charge }, currency: item.currency, deadline, landsOn, card };
 }
 
 /** The check before Square is asked to make the page: nothing is written but what the clock had already done. */
@@ -288,6 +310,42 @@ export async function writeOpenPurchase(sql: Sql, s: NewPurchase): Promise<OpenP
               ${s.url}, 'open', ${s.now})`;
     const [written] = await tx<RawPay[]>`SELECT ${COLUMNS(tx)} FROM gym_app_payments a WHERE a.gym_id = ${s.gymId} AND a.id = ${s.id}`;
     if (written === undefined) throw new Error("a purchase page just written was not read back");
+    return { kind: "new", row: toRow(written) };
+  });
+}
+
+export interface NewCharge extends Buying {
+  id: string;
+  requestKey: string;
+  locationId: string;
+  openedBy: string;
+  /** Held for this request while it asks Square (`checking_until`), so nobody else sends it meanwhile. */
+  leaseUntil: Date;
+  /** Given up on if Square has not answered by then. */
+  closesAt: Date;
+}
+
+/** A purchase of a repeating line, charged to their card (18k-iv): written under the gym's lock and the record's once the
+ *  same check passes, before Square is asked, held by this request, with the card it is charged to. What it gives and the
+ *  tick are the check's own, never the screen's. */
+export async function writeOpenCharge(sql: Sql, s: NewCharge): Promise<OpenPurchaseOutcome> {
+  return await sql.begin(async (tx): Promise<OpenPurchaseOutcome> => {
+    // The gym's lock first, as a card's save takes it: the card read is the one saved now.
+    await lockGym(tx, s.gymId);
+    const check = await purchasableIn(tx, s);
+    if (check.kind !== "ok") return check;
+    if (check.card === null) return { kind: "changed" };
+    const [same] = await tx<RawPay[]>`SELECT ${COLUMNS(tx)} FROM gym_app_payments a WHERE a.gym_id = ${s.gymId} AND a.request_key = ${s.requestKey}`;
+    if (same !== undefined) return { kind: "key_reused", row: toRow(same) };
+    await tx`
+      INSERT INTO gym_app_payments (id, gym_id, entry_id, membership_type_id, bought, amount_minor, currency, environment, account_id, location_id,
+                                    request_key, opened_by, opened_at, closes_at, card_id, card_customer_id, card_brand, card_last4, state,
+                                    checking_until, checked_at)
+      VALUES (${s.id}, ${s.gymId}, ${check.landsOn}, ${s.typeId}, ${tx.json(check.bought)}, ${s.amountMinor}, ${check.currency}, ${s.square.environment},
+              ${s.square.accountId}, ${s.locationId}, ${s.requestKey}, ${s.openedBy}, ${s.now}, ${s.closesAt}, ${check.card.cardId}, ${check.card.customerId},
+              ${check.card.brand}, ${check.card.last4}, 'open', ${s.leaseUntil}, ${s.now})`;
+    const [written] = await tx<RawPay[]>`SELECT ${COLUMNS(tx)} FROM gym_app_payments a WHERE a.gym_id = ${s.gymId} AND a.id = ${s.id}`;
+    if (written === undefined) throw new Error("a card purchase just written was not read back");
     return { kind: "new", row: toRow(written) };
   });
 }
@@ -342,13 +400,14 @@ const payerName = (sql: SqlOrTx) => sql`
 
 /** For staff on the person's page: the purchase page open for this record now, if any. */
 export async function openPurchaseOf(sql: SqlOrTx, gymId: string, entryId: string): Promise<AppPurchaseOpen | null> {
-  const [row] = await sql<{ id: string; bought: unknown; membership_type_id: string; closes_at: Date; payer_name: string | null }[]>`
-    SELECT a.id, a.bought, a.membership_type_id, a.closes_at, ${payerName(sql)} AS payer_name
+  const [row] = await sql<{ id: string; bought: unknown; membership_type_id: string; closes_at: Date; payer_name: string | null; card_id: string | null; card_brand: string | null; card_last4: string | null }[]>`
+    SELECT a.id, a.bought, a.membership_type_id, a.closes_at, ${payerName(sql)} AS payer_name, a.card_id, a.card_brand, a.card_last4
     FROM gym_app_payments a
     WHERE a.gym_id = ${gymId} AND a.entry_id = ${entryId} AND a.state = 'open' AND a.membership_type_id IS NOT NULL`;
   if (row === undefined) return null;
   const bought = boughtOf({ typeId: row.membership_type_id, bought: row.bought });
-  return { id: row.id, typeName: bought?.typeName ?? "a membership", payerName: row.payer_name, closesAt: row.closes_at.toISOString() };
+  const card = row.card_id !== null && row.card_brand !== null && row.card_last4 !== null ? { brand: row.card_brand, last4: row.card_last4 } : null;
+  return { id: row.id, typeName: bought?.typeName ?? "a membership", payerName: row.payer_name, closesAt: row.closes_at.toISOString(), card };
 }
 
 /** For staff on the person's page: purchases that gave nothing though Square may have taken money, not yet marked checked,
@@ -381,7 +440,8 @@ export async function staffClosePurchase(sql: Sql, s: { gymId: string; entryId: 
     const [row] = await tx<{ id: string }[]>`
       UPDATE gym_app_payments SET close_wanted_at = COALESCE(close_wanted_at, ${s.now}), close_wanted_by = COALESCE(close_wanted_by, 'staff'),
              closed_by_staff = COALESCE(closed_by_staff, ${s.staffUserId})
-      WHERE gym_id = ${s.gymId} AND id = ${s.id} AND entry_id = ${s.entryId} AND state = 'open' AND membership_type_id IS NOT NULL
+      -- A card charged has no page to close: Square's answer ends it (18k-iv).
+      WHERE gym_id = ${s.gymId} AND id = ${s.id} AND entry_id = ${s.entryId} AND state = 'open' AND membership_type_id IS NOT NULL AND card_id IS NULL
       RETURNING id`;
     if (row === undefined) return null;
     await insertAudit(tx, { actorUserId: s.staffUserId, gymId: s.gymId, action: "org.app_payment_closed", targetType: "gym_app_payment", targetId: row.id, meta: { entryId: s.entryId, purchase: "true" } });
@@ -487,11 +547,27 @@ export async function recordBought(sql: Sql, p: Bought): Promise<{ outcome: "pai
       });
       if (done.kind === "given" && done.paymentId !== null) {
         const signed = bought.sign === null ? null : await signBought(tx, row.gymId, done.id, bought.sign);
+        // The tick for the repeating charge, word for word, with when and on which card, kept with the membership as Save
+        // card keeps the card's own (18k-iv).
+        if (bought.charge !== null) {
+          await insertAgreement(tx, {
+            gymId: row.gymId,
+            entryId: home.entryId,
+            words: bought.charge.words,
+            screen: "app",
+            screenUserId: row.openedBy,
+            deviceId: null,
+            brand: bought.charge.brand,
+            last4: bought.charge.last4,
+            agreedAt: new Date(bought.charge.at),
+            membershipId: done.id,
+          });
+        }
         await tx`
           UPDATE gym_app_payments SET state = 'done', outcome = 'paid', entry_id = ${home.entryId}, held_membership_id = ${done.id}, square_payment_id = ${p.squarePaymentId},
                  member_payment_id = ${done.paymentId}, card_brand = ${p.card?.brand ?? null}, card_last4 = ${p.card?.last4 ?? null}, taken_minor = ${p.taken},
                  -- The signature now lives with the membership, and the buyer on their record; the page keeps no name or details.
-                 bought = bought || '{"sign":null,"buyer":null}'::jsonb, finished_at = ${p.now}, checking_until = NULL,
+                 bought = bought || '{"sign":null,"buyer":null,"charge":null}'::jsonb, finished_at = ${p.now}, checking_until = NULL,
                  push_due_at = ${p.tell ? p.now : null}
           WHERE gym_id = ${row.gymId} AND id = ${row.id}`;
         await insertAudit(tx, {
@@ -513,8 +589,8 @@ export async function recordBought(sql: Sql, p: Bought): Promise<{ outcome: "pai
     await tx`
       UPDATE gym_app_payments SET state = 'done', outcome = 'not_recorded', entry_id = ${entryId}, square_payment_id = ${p.squarePaymentId},
              card_brand = ${p.card?.brand ?? null}, card_last4 = ${p.card?.last4 ?? null}, taken_minor = ${p.taken}, finished_at = ${p.now}, checking_until = NULL,
-             -- Nothing was signed for: the page keeps no name or details typed.
-             bought = bought || '{"sign":null,"buyer":null}'::jsonb
+             -- Nothing was signed for: the page keeps no name or details typed, nor the tick and the bank's check.
+             bought = bought || '{"sign":null,"buyer":null,"charge":null}'::jsonb
       WHERE gym_id = ${row.gymId} AND id = ${row.id}`;
     await insertAudit(tx, {
       actorUserId: row.openedBy,

@@ -446,7 +446,10 @@ edge while the other folder was working. Kd wants it light, never slow. So, on t
 - Before a test run that takes more than a minute, check free memory (PowerShell:
   `(Get-CimInstance Win32_OperatingSystem).FreePhysicalMemory/1MB`, in GB). A run of five copies
   takes about 6.5 GB, so under 9.5 GB free pass `--maxWorkers=2` (jest) or `--poolOptions.forks.maxForks=2`
-  (vitest); under 5 GB free, tell Kd what is using it and wait, never start it anyway.
+  (vitest); under 1 GB free, tell Kd what is using it and wait, never start it anyway (Kd, 2026-11-12,
+  `rulings/2026-11-12-18k-iv.md`: *"498 gb is more then enough only if 1 gb left then only stop"*, meaning 4.98 GB).
+  The api's `test:local` refuses `--poolOptions.forks.maxForks=2` ("minThreads and maxThreads must not conflict"):
+  run it one file at a time, without the flag.
 - A server or bundler the terminal started (api, web, Metro) is stopped when the walk it was
   for is done, and the terminal says so. Nothing of a terminal's keeps running after its job.
 

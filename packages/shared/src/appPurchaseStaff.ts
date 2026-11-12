@@ -6,7 +6,14 @@ const daySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
 /** For staff, on the person's page: a purchase page open now. */
 export const appPurchaseOpenSchema = z
-  .object({ id: z.uuid(), typeName: z.string().min(1), payerName: z.string().nullable(), closesAt: z.iso.datetime() })
+  .object({
+    id: z.uuid(),
+    typeName: z.string().min(1),
+    payerName: z.string().nullable(),
+    closesAt: z.iso.datetime(),
+    /** Charged to the card saved in the app (18k-iv), and Square has not answered yet: there is no page to close. */
+    card: z.object({ brand: z.string().regex(/^[A-Z_]{1,40}$/), last4: z.string().regex(/^[0-9]{4}$/) }).strict().nullable().default(null),
+  })
   .strict();
 export type AppPurchaseOpen = z.infer<typeof appPurchaseOpenSchema>;
 

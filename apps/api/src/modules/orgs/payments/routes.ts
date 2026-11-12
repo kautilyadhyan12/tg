@@ -25,7 +25,8 @@
 //   POST   /v1/orgs/:gymId/my-card/remove                      the member removes their own, while nothing is charged to it (Stage 5 item 20e)
 //
 // What a gym sells in the app (ROADMAP 18k-i), for the phone:
-//   GET    /v1/orgs/:gymId/for-sale                            the lines a member can buy, as the agreement words them
+//   GET    /v1/orgs/:gymId/for-sale                            the lines a member can buy, as the agreement words them;
+//                                                               `?repeating=true` with repeating ones, on their saved card (18k-iv)
 //   GET    /v1/orgs/:gymId/my-membership/payments              whether they can pay in the app, and their pages open (18k-ii-a)
 //   POST   /v1/orgs/:gymId/my-membership/payments              Pay: Square's own page for the bill they owe
 //   GET    /v1/orgs/:gymId/my-membership/payments/:paymentId   how it went, back from Square's page
@@ -102,6 +103,7 @@ import {
   terminalFeePaymentRequestSchema,
   appPaymentRequestSchema,
   appPurchaseRequestSchema,
+  forSaleQuerySchema,
   terminalPaymentRequestSchema,
   terminalSaleRequestSchema,
   terminalSaveRequestSchema,
@@ -716,7 +718,9 @@ export function registerPaymentRoutes(app: FastifyInstance, deps: Omit<service.P
   app.get("/v1/orgs/:gymId/for-sale", { preHandler: app.authenticate }, async (req, reply) => {
     const params = parseOr400(orgParamsSchema, req.params, req, reply);
     if (params === null) return;
-    const list = await readForSale(paymentsDeps, callerId(req), params.gymId, gate(forSaleLimit, req, reply));
+    const query = parseOr400(forSaleQuerySchema, req.query, req, reply);
+    if (query === null) return;
+    const list = await readForSale(paymentsDeps, callerId(req), params.gymId, gate(forSaleLimit, req, reply), query.repeating === "true");
     if (list === null) return;
     return reply.status(200).header("cache-control", "no-store").send(list);
   });

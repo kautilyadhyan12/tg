@@ -47,6 +47,7 @@ import { gymHasLivePlan } from "../repo.js";
 import { OrgsError, requirePrivilege } from "../service.js";
 import { BILLING, orgNotFound, stateOf } from "./cards.js";
 import * as pays from "./appPaymentsRepo.js";
+import { chargeStep } from "./appCardPurchases.js";
 import { recordBought } from "./appPurchasesRepo.js";
 import * as repo from "./repo.js";
 import { accessContext, appPaymentsAllowed, type PaymentsDeps } from "./service.js";
@@ -179,7 +180,7 @@ async function tokenFor(deps: PaymentsDeps, square: SquareSettings, row: pays.Ap
 
 /** The order's one payment, when Square has taken exactly what was asked: this order's, at the gym's location, in its
  *  money, with no tip, its amount the bill's (a card fee the business adds on top, which Square names, aside). */
-function exactly(row: pays.AppPayRow, payment: SquarePayment): boolean {
+function exactly(row: pays.AppPayRow & { orderId: string }, payment: SquarePayment): boolean {
   const surcharge = payment.card_details?.applied_card_surcharge_details?.card_surcharge_money ?? null;
   if (surcharge !== null && surcharge.currency !== row.currency) return false;
   const tip = payment.tip_money?.amount ?? 0;
@@ -197,7 +198,7 @@ function exactly(row: pays.AppPayRow, payment: SquarePayment): boolean {
 /** What Square's order says was paid, read from its payments: `none` where no payment took money (none named, or each
  *  FAILED or CANCELED, so the page can still close); `wait` while one is on its way or cannot be read; `done` once a
  *  payment Square took is recorded on the bill, or, where it is not exactly what was asked, kept as not recorded. */
-async function settle(a: Asking, order: SquareOrder): Promise<"none" | "wait" | "done"> {
+async function settle(a: Asking & { row: { orderId: string } }, order: SquareOrder): Promise<"none" | "wait" | "done"> {
   const { deps, square, token, row } = a;
   const ids = (order.tenders ?? []).flatMap((t) => (t.payment_id == null ? [] : [t.payment_id]));
   if (ids.length === 0) return "none";
@@ -253,14 +254,19 @@ async function settle(a: Asking, order: SquareOrder): Promise<"none" | "wait" | 
 /** One look at Square for a page this request holds: paid, closed, or still open. A page past its time, or one somebody
  *  asked to close, is deleted at Square first, and read again: Square may have taken the money just before. */
 async function step(a: Asking): Promise<void> {
-  const { deps, square, token, row, now } = a;
+  const { deps, square, token, now } = a;
+  const { orderId, linkId } = a.row;
+  // A purchase charged to a card has no page (18k-iv): `chargeStep`.
+  if (orderId === null || linkId === null) return;
+  const row = { ...a.row, orderId, linkId };
+  const paged = { ...a, row };
   const closing = row.closeWantedAt !== null || now.getTime() >= row.closesAt.getTime();
   if (closing && row.closeWantedAt === null) await pays.wantClose(deps.sql, row.gymId, row.id, "expired", null, now);
   const read = await square.api.getOrder(token, row.orderId);
   if (read.kind === "ok") {
     const order = read.value;
     if (order.id !== row.orderId) return;
-    if ((await settle(a, order)) !== "none") return;
+    if ((await settle(paged, order)) !== "none") return;
     if (order.state === "CANCELED") {
       await pays.finish(deps.sql, row.gymId, row.id, "closed", now);
       return;
@@ -274,7 +280,7 @@ async function step(a: Asking): Promise<void> {
   // Square's answer to the delete is a doorbell: the order says how it ended.
   const after = await square.api.getOrder(token, row.orderId);
   if (after.kind !== "ok" || after.value.id !== row.orderId) return;
-  if ((await settle(a, after.value)) !== "none") return;
+  if ((await settle(paged, after.value)) !== "none") return;
   if (after.value.state === "CANCELED") await pays.finish(deps.sql, row.gymId, row.id, "closed", now);
 }
 
@@ -291,7 +297,8 @@ async function advance(deps: PaymentsDeps, square: SquareSettings, row: pays.App
       await pays.finish(deps.sql, row.gymId, row.id, "gone", now);
       return;
     }
-    await step({ deps, square, token, row, now, tell });
+    if (row.card === null) await step({ deps, square, token, row, now, tell });
+    else await chargeStep(deps, square, token, row, false, tell);
     if (now.getTime() - row.openedAt.getTime() >= APP_PAYMENT.giveUpMs && (await pays.finish(deps.sql, row.gymId, row.id, "no_answer", now))) {
       deps.log.error({ event: "square.app_payment_given_up", gymId: row.gymId }, "Square never said how a payment page ended");
     }
