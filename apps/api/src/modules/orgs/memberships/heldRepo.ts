@@ -25,6 +25,7 @@ import { z } from "zod";
 import {
   HELD_EARLIER_PAGE,
   releaseAsked,
+  isKeepWhen,
   noticeAsked,
   contractReleaseSchema,
   contractThenSchema,
@@ -80,6 +81,7 @@ import { friendGiftOpen } from "../referrals/friendGiftRepo.js";
 import { giftUseUndone, giveMemberGift, lockedWaitingGift, markUsed } from "../referrals/memberGiftRepo.js";
 import { ratesOf, taxIncludedOf } from "../register/taxRepo.js";
 import { appliedOf, heldTaxesSql, keepHeldRates, ratesOfJson, taxColumns, typeTaxesSql, typeTaxRateIdsSql } from "./taxesSql.js";
+import { recordDeskCancel } from "./deskCancelsRepo.js";
 import { feesFor, openLeaveFee, type FeePaymentRow, type FeeRow } from "./feesRepo.js";
 import { freezeFeeOf, openFreezeFee, removeFreezeFees } from "./freezeFees.js";
 import {
@@ -1065,6 +1067,8 @@ const AUDIT_ACTION: Record<HeldMembershipEvent["type"], string> = {
   unfreeze: "org.held_membership_unfrozen",
   cancel: "org.held_membership_cancelled",
   keep: "org.held_membership_kept",
+  // Staff activity reads it "Reactivated Maya Test's Gold Monthly" (18l-ii-b).
+  undo_cancel: "org.held_membership_kept",
   paid: "org.held_membership_paid",
 };
 
@@ -1189,10 +1193,12 @@ export async function moveHeldIn(tx: TransactionSql, bookings: CancelBookings, i
   // early's fee is taken off; one paid, and not refunded, is the gym's to refund first.
   let reopen: BillRow[] = [];
   let feesOff: string[] = [];
-  if (input.event.type === "keep") {
+  // Undo cancellation (18l-ii-b) puts back every cancel staff made, and so does the same.
+  const keeping = input.event.type === "keep" || input.event.type === "undo_cancel";
+  if (keeping) {
     const lastDay = input.keepFrom ?? heldMembershipView(before.membership, input.today).endsOn;
     reopen = lastDay === null ? [] : billsKeepReopens(await billsFor(tx, input.gymId, [before.id]), lastDay);
-    if (input.event.when === "leave_early") {
+    if (input.event.type === "keep" ? input.event.when === "leave_early" : input.event.type === "undo_cancel" && input.event.ways.includes("leave_early")) {
       const fees = await leaveFeesOf(tx, input.gymId, before.id);
       if (fees.some((f) => f.keptMinor > 0)) return { kind: "leave_fee_paid" };
       feesOff = fees.filter((f) => f.status === "open").map((f) => f.id);
@@ -1202,12 +1208,13 @@ export async function moveHeldIn(tx: TransactionSql, bookings: CancelBookings, i
   // A member let out of a running contract keeps the reason staff gave (18v-i).
   // Kept only where the cancel let them out early and its row is let out (round one, L1, L2).
   const released = input.event.type === "cancel" && input.event.release !== undefined && releaseAsked(heldMembershipView(before.membership, input.today), input.event.when) && (m.status === "cancelled" || !m.renews);
-  const release = released && input.event.type === "cancel" && input.event.release !== undefined ? input.event.release : before.contractRelease;
+  // Kept, or its cancel undone, it is no longer let out of anything: the reason that cancel took goes with it (18l-ii-b).
+  const release = released && input.event.type === "cancel" && input.event.release !== undefined ? input.event.release : keeping ? null : before.contractRelease;
   // Ended before its notice allowed, outside a minimum term, keeps the reason too (18v-ii-a): a
   // release from the term lets them out of the notice with it, and is the one kept.
   const waived =
     !released && input.event.type === "cancel" && input.event.release !== undefined && noticeAsked(heldMembershipView(before.membership, input.today), input.event.when) && (m.status === "cancelled" || !m.renews);
-  const noticeWaived = waived && input.event.type === "cancel" && input.event.release !== undefined ? input.event.release : before.noticeWaived;
+  const noticeWaived = waived && input.event.type === "cancel" && input.event.release !== undefined ? input.event.release : keeping ? null : before.noticeWaived;
 
   // A freeze charges the gym's fee where staff left it ticked: refused where the screen showed
   // another, or a fee on a membership that freezes with none (18z).
@@ -1266,6 +1273,20 @@ export async function moveHeldIn(tx: TransactionSql, bookings: CancelBookings, i
         changed_mind = ${m.changedMind === true}, freeze_fee_minor = ${freezeFee}, updated_at = ${input.now}
     WHERE gym_id = ${input.gymId} AND entry_id = ${input.entryId} AND id = ${input.membershipId}`;
   const ended = ends === null ? null : await bookings.end(tx, input.gymId, ends, input.now);
+  // A cancel staff made that leaves it running to a last day is kept, so staff can undo it until then (18l-ii-b). Not one
+  // made in the app, which is the member's to keep (`gym_app_cancels`), nor Change membership's.
+  if (input.via !== "app" && input.event.type === "cancel" && input.event.change !== true && isKeepWhen(input.event.when) && m.status !== "cancelled") {
+    await recordDeskCancel(tx, {
+      gymId: input.gymId,
+      membershipId: before.id,
+      userId: input.actorUserId,
+      when: input.event.when,
+      endsOn: ((day) => (day !== null && day >= input.today ? day : null))(heldMembershipView(m, input.today).endsOn),
+      today: input.today,
+      ended: { classes: ended?.booked ?? 0, sessions: ended?.ptSessions ?? 0 },
+      now: input.now,
+    });
+  }
   // The early cancellation fee, a fee bill of its own, due today (18v-ii-b).
   const leaveFeeOpened = leftEarly ? await openLeaveFee(tx, input.gymId, before.id, input.today, input.now) : false;
   // Its first month's freeze fee, at once; an unfreeze or a cancel takes off the unpaid fees of
@@ -1321,6 +1342,7 @@ export async function moveHeldIn(tx: TransactionSql, bookings: CancelBookings, i
       paidAfter: String(m.paidPeriods),
       renews: String(m.renews),
       ...(input.event.type === "cancel" || input.event.type === "keep" ? { when: input.event.when } : {}),
+      ...(input.event.type === "undo_cancel" ? { ways: input.event.ways.join(",") } : {}),
       ...(reopen.length === 0 ? {} : { billsOwedAgain: String(reopen.length) }),
       ...(feesOff.length === 0 ? {} : { leaveFeeTakenOff: String(feesOff.length) }),
       ...(release !== before.contractRelease && release !== null ? { release } : {}),

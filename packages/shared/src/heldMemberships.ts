@@ -691,6 +691,10 @@ export type HeldMembershipEvent =
   /** Keep my membership (18l-ii-a): a cancel that left it running to a last day, undone before that day passes. `when`
    *  is the way it was cancelled, so exactly what that cancel changed is put back. */
   | { type: "keep"; when: KeepWhen }
+  /** Undo cancellation (18l-ii-b): every front desk cancel that left it running to a last day (`ways`: staff may end it
+   *  sooner after giving notice, or leave early after ending it with the minimum term), undone together, each by its own
+   *  `keep`, in the order those need. */
+  | { type: "undo_cancel"; ways: readonly KeepWhen[] }
   /** The count of paid periods to move to: one more, or one fewer. */
   | { type: "paid"; paidPeriods: number };
 
@@ -698,6 +702,9 @@ export type HeldMembershipEvent =
  *  cooling-off period end it at once. */
 export const KEEP_WHENS = ["period_end", "notice", "contract_end", "leave_early"] as const satisfies readonly CancelWhen[];
 export type KeepWhen = (typeof KEEP_WHENS)[number];
+/** The order `undo_cancel` undoes them in: leaving early first (the others refuse one that left early), then the end of
+ *  what is paid (the notice and the minimum term ask for one that renews). */
+export const UNDO_CANCEL_ORDER = ["leave_early", "period_end", "notice", "contract_end"] as const satisfies readonly KeepWhen[];
 export const isKeepWhen = (when: CancelWhen): when is KeepWhen => when === "period_end" || when === "notice" || when === "contract_end" || when === "leave_early";
 
 /** `notice`: it runs, and is paid for, to the end of the period its notice ends in, then stops (18v-ii-a).
@@ -801,6 +808,20 @@ export function moveHeldMembership(stored: HeldMembership, event: HeldMembership
           if (!left) return m.renews && stops === null ? same : refused;
           return { ok: true, membership: { ...m, leftEarly: false, renews: true, stopsAfter: null }, changed: true };
       }
+    }
+
+    case "undo_cancel": {
+      const ways = UNDO_CANCEL_ORDER.filter((w) => event.ways.includes(w));
+      if (ways.length === 0) return refused;
+      let at = m;
+      let moved = settled;
+      for (const when of ways) {
+        const step = moveHeldMembership(at, { type: "keep", when }, today);
+        if (!step.ok) return refused;
+        at = step.membership;
+        moved = moved || step.changed;
+      }
+      return { ok: true, membership: at, changed: moved };
     }
 
     case "paid":
@@ -1242,6 +1263,9 @@ export const heldMembershipSchema = z
     agreementLink: z.object({ sentAt: z.string(), expiresAt: z.string() }).strict().nullable().default(null),
     /** Cancelled by the member, or whoever pays for them, in the app (18l): when, by whom and why. */
     appCancel: appCancelSchema.nullable().default(null),
+    /** Cancelled at the front desk to end on a later day, still running, and not cancelled in the app (18l-ii-b):
+     *  staff see Undo cancellation. */
+    undoCancel: z.boolean().default(false),
   })
   .strict();
 export type HeldMembershipItem = z.infer<typeof heldMembershipSchema>;
