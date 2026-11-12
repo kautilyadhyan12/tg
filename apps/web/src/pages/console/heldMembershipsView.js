@@ -192,7 +192,7 @@ export function askWords(what, m, name, today) {
         detail:
           last === null
             ? `It stops today.${back} This can't be undone, but you can add a membership again.`
-            : `${name} has paid up to ${dayWords(last)}. Cancel it on that day and they keep it until then, with no more payments; or stop it today. This can't be undone, but you can add a membership again.`,
+            : `${name} has paid up to ${dayWords(last)}. Cancel it on that day and they keep it until then, with no more payments; or stop it today. Cancelling on ${dayWords(last)} can be undone until then; stopping it today can't.`,
         button: 'Cancel today',
         laterButton: last === null ? null : `Cancel on ${dayWords(last)}`,
       };

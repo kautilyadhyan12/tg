@@ -86,6 +86,7 @@ import { recordStopped, unsignedStopsRecord } from "../classes/bookingStops.js";
 import { freezeFeeOf } from "./freezeFees.js";
 import { chargesOfBills } from "../payments/cardChargesRepo.js";
 import { appCancelsOf } from "../myMembership/cancelRepo.js";
+import { openDeskCancelsOf } from "./deskCancelsRepo.js";
 import { checksOnMemberships, openOnMemberships, type AppCheckRow, type OpenPage } from "../payments/appPaymentsRepo.js";
 import { openPurchaseOf, purchaseChecksOf } from "../payments/appPurchasesRepo.js";
 import { openPressesOf } from "../payments/cardRefundsRepo.js";
@@ -404,7 +405,7 @@ function viewOf(row: { id: string; membership: HeldMembership }, bills: readonly
 
 /** `offers`: what the Add form fills in (discounts and Refer a friend's gifts), read for
  *  staff who take payments and never for the member's own view (`readOwnHeld`). */
-async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: string, canBill: boolean, offers = canBill): Promise<HeldMembershipsResponse> {
+export async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: string, canBill: boolean, offers = canBill): Promise<HeldMembershipsResponse> {
   // A discount and its promo code are read and used by whoever takes payments, as on Sell.
   const [list, offered, friendGift] = await Promise.all([
     repo.readHeld(deps.sql, gymId, entryId),
@@ -538,7 +539,7 @@ async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: 
   // The membership agreements (18u-i, 18u-ii-a): which memberships' lines of the price list
   // ask for one, and which were signed.
   const listed = [...inUse, ...shown].map((m) => m.id);
-  const [anyAsked, asked, agreementSigned, agreementLinks, unsignedStops, appCancels] = await Promise.all([
+  const [anyAsked, asked, agreementSigned, agreementLinks, unsignedStops, appCancels, deskCancels] = await Promise.all([
     agreementRepo.anyInUse(deps.sql, gymId),
     agreementRepo.askedFor(deps.sql, gymId, listed),
     agreementRepo.signedAtOf(deps.sql, gymId, listed),
@@ -548,6 +549,8 @@ async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: 
     list.past ? false : unsignedStopsRecord(deps.sql, gymId, entryId),
     // Cancelled by the member in the app (18l): when, by whom and why.
     appCancelsOf(deps.sql, gymId, listed),
+    // Cancelled at the front desk to end on a later day (18l-ii-b): staff may undo it.
+    openDeskCancelsOf(deps.sql, gymId, listed),
   ]);
   return heldMembershipsResponseSchema.parse({
     today,
@@ -558,6 +561,8 @@ async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: 
       agreementAsked: asked.has(m.id),
       agreementLink: ((l) => (l === undefined ? null : { sentAt: l.sentAt.toISOString(), expiresAt: l.expiresAt.toISOString() }))(agreementLinks.get(m.id)),
       appCancel: appCancels.get(m.id) ?? null,
+      // Never on one the member cancelled in the app that stands: only the member starts those charges again.
+      undoCancel: deskCancels.has(m.id) && !appCancelStands(appCancels.get(m.id)) && (m.view.status === "active" || m.view.status === "frozen"),
     })),
     agreementInUse: anyAsked,
     unsignedStopsBookings: anyAsked && unsignedStops,
@@ -579,7 +584,10 @@ async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: 
   });
 }
 
-function throwOnFailure(outcome: repo.HeldWriteOutcome): void {
+/** A cancel in the app not kept: the member's to undo, never staff's (18l-ii-b). */
+const appCancelStands = (c: { keptOn: string | null } | undefined): boolean => c !== undefined && c.keptOn === null;
+
+export function throwOnFailure(outcome: repo.HeldWriteOutcome): void {
   switch (outcome.kind) {
     case "ok":
       return;
@@ -754,7 +762,7 @@ export async function giveHeldMembership(
   return await readOr404(deps, gymId, entryId, today, canBill);
 }
 
-const CANCEL_BOOKINGS = { ask: membershipBookingsAsk, end: endMembershipBookings };
+export const CANCEL_BOOKINGS = { ask: membershipBookingsAsk, end: endMembershipBookings };
 
 export async function moveHeldMembership(
   deps: HeldDeps,
