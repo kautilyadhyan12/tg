@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import { AppState, type AppStateStatus } from "react-native";
 import { APP_PURCHASE_WORDS, AGREEMENT_AGREE_LABEL, myMembershipResponseSchema, type ForSaleLine } from "@app/shared";
 import { App } from "../../src/App";
-import { BUY_A_MEMBERSHIP, CANCELLED_TITLE, MY_PURCHASES, NOT_READY, NOT_READY_WHO, PAID_TITLE, SHOW_PASS, TO_MEMBERSHIP, VIEW_MEMBERSHIP, WHAT_YOU_GET, nothingForSale } from "../../src/screens/gym/buyView";
+import { BUY_A_MEMBERSHIP, CANCELLED_TITLE, MY_PURCHASES, NOT_COMPLETED_TITLE, NOT_READY, NOT_READY_WHO, PAID_TITLE, SHOW_PASS, TO_MEMBERSHIP, VIEW_MEMBERSHIP, WHAT_YOU_GET, nothingForSale } from "../../src/screens/gym/buyView";
 import { PAY_CHECK, PAY_NO_ANSWER, PAY_WAITING } from "../../src/screens/gym/payView";
 
 const NOT_CHARGED = "You weren’t charged.";
@@ -390,11 +390,12 @@ describe("what stands in the way, and every way it ends", () => {
     expect(await screen.findByTestId("membership-page")).toBeTruthy();
   });
 
-  it("what they read changed: the list is read again and the tick is asked for again on what is shown now", async () => {
+  it("what they read changed (what it gives, too): the list is read again and the tick is asked for again on what is shown now", async () => {
     let key = "c";
     const server = fakeServer(
       routes({
-        [forSalePath(IRON)]: () => forSale([lineOf(PACK_TYPE, { factsKey: key.repeat(64) })])(),
+        [forSalePath(IRON)]: () =>
+          forSale([lineOf(PACK_TYPE, key === "c" ? { factsKey: key.repeat(64) } : { factsKey: key.repeat(64), included: { ...ANY_CLASS, classNames: ["Yoga"] } })])(),
         [buyPath(IRON)]: () => {
           key = "d";
           return refusal(409, "app_payment_changed", APP_PURCHASE_WORDS.changed);
@@ -408,6 +409,8 @@ describe("what stands in the way, and every way it ends", () => {
     await waitFor(() => {
       expect(screen.getByText(NOT_READY)).toBeTruthy();
     });
+    expect(within(screen.getByTestId("buy-what")).getByText("Only Yoga")).toBeTruthy();
+    expect(within(screen.getByTestId("buy-what")).queryByText("Any class")).toBeNull();
     await fireEvent.press(screen.getByLabelText(AGREEMENT_AGREE_LABEL));
     await fireEvent.press(payButton("$90.00", "10-class pack"));
     await waitFor(() => {
@@ -482,6 +485,79 @@ describe("what stands in the way, and every way it ends", () => {
     await appIs("active");
     expect(await onBuy().findByText(nothingForSale("Iron House"))).toBeTruthy();
     expect(onBuy().queryByLabelText(/^Buy /)).toBeNull();
+  });
+});
+
+describe("round one's Lows", () => {
+  const routes = (over: Record<string, (body?: unknown) => Reply | Promise<Reply>> = {}) => ({
+    "/v1/auth/refresh": ok({ tokens: tokens(2) }),
+    "/v1/orgs/mine": mine(IRON),
+    [forSalePath(IRON)]: forSale([lineOf(PACK_TYPE)]),
+    [buyPath(IRON)]: ok({ purchase: purchase() }),
+    [closePath(IRON)]: ended("closed"),
+    [membershipPath(IRON)]: noMembership,
+    ...over,
+  });
+
+  it("a record two app accounts share reads each line's details, with nothing to sign or pay", async () => {
+    const server = fakeServer(routes({ [forSalePath(IRON)]: forSale([lineOf(PACK_TYPE)], { record: "shared" }) }));
+    await openBuy(server.ask);
+    await fireEvent.press(await onBuy().findByLabelText("10-class pack, $90.00. See details"));
+    expect(await screen.findByTestId("buy-shared")).toBeTruthy();
+    expect(screen.queryByLabelText("Pay $90.00 for 10-class pack")).toBeNull();
+    expect(screen.queryByLabelText("Full name")).toBeNull();
+    expect(posts(server.asked, buyPath(IRON))).toEqual([]);
+  });
+
+  it("a close refused for too many asks or a failing server keeps the page held, with Check status, and kept on the phone", async () => {
+    let close: () => Reply = () => refusal(503, "unavailable", "Try again");
+    const server = fakeServer(routes({ [closePath(IRON)]: () => close() }));
+    await openBuy(server.ask);
+    await readAndSign(lineOf(PACK_TYPE));
+    await fireEvent.press(payButton("$90.00", "10-class pack"));
+    await waitFor(() => {
+      expect(tab.opened).toHaveLength(1);
+    });
+    await backFromTab();
+    expect(await screen.findByText(PAY_NO_ANSWER)).toBeTruthy();
+    expect(secureStore.has("pay-away")).toBe(true);
+    close = paidAnswer;
+    await fireEvent.press(screen.getByText("Check status"));
+    expect(await screen.findByTestId("buy-paid")).toBeTruthy();
+    expect(secureStore.has("pay-away")).toBe(false);
+  });
+
+  it("a page that never opened is a box with its own heading", async () => {
+    tab.answer = "throw";
+    const server = fakeServer(routes());
+    await openBuy(server.ask);
+    await readAndSign(lineOf(PACK_TYPE));
+    await fireEvent.press(payButton("$90.00", "10-class pack"));
+    expect(await screen.findByText("Checkout couldn\u2019t open. Try again.")).toBeTruthy();
+    expect(screen.getByText(NOT_COMPLETED_TITLE)).toBeTruthy();
+  });
+
+  it("a page ended while Buy was closed is let go on the phone, so the app does not open it again", async () => {
+    let answerClose: (reply: Reply) => void = () => undefined;
+    const server = fakeServer(routes({ [closePath(IRON)]: () => new Promise<Reply>((resolve) => (answerClose = resolve)) }));
+    await openBuy(server.ask);
+    await readAndSign(lineOf(PACK_TYPE));
+    await fireEvent.press(payButton("$90.00", "10-class pack"));
+    await waitFor(() => {
+      expect(tab.opened).toHaveLength(1);
+    });
+    await backFromTab();
+    await waitFor(() => {
+      expect(posts(server.asked, closePath(IRON))).toHaveLength(1);
+    });
+    await fireEvent.press(screen.getByLabelText("Close"));
+    await fireEvent.press(onBuy().getByLabelText("Back"));
+    await act(() => {
+      answerClose(ended("closed")());
+    });
+    await waitFor(() => {
+      expect(secureStore.has("pay-away")).toBe(false);
+    });
   });
 });
 

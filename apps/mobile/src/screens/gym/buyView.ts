@@ -23,6 +23,7 @@ export const TO_MEMBERSHIP = "Go to My membership";
 export const PAID_TITLE = "Payment successful";
 export const CANCELLED_TITLE = "Payment cancelled";
 export const PENDING_TITLE = "Payment pending";
+export const NOT_COMPLETED_TITLE = "Payment not completed";
 export const CONFIRMING_TITLE = "Confirming your payment";
 export const SHOW_PASS = "Show my pass";
 export const PASS_LINE = "Show your pass at the front desk when you arrive.";
@@ -64,6 +65,9 @@ export function todayLine(line: Pick<ForSaleLine, "firstPayment" | "priceMinor" 
   const reasons: string[] = [];
   if (fp.joiningFeeMinor > 0) reasons.push(`a ${formatMinor(fp.joiningFeeMinor, line.currency)} joining fee`);
   if (fp.friendGift !== null || fp.memberGiftOffMinor > 0) reasons.push("your Refer a friend gift");
+  // What those make up; anything else is tax added on top of the price (round one, L2).
+  const explained = fp.joiningFeeMinor - (fp.friendGift?.offMinor ?? 0) - fp.memberGiftOffMinor;
+  if (fp.amountMinor - line.priceMinor !== explained) reasons.push("tax");
   const today = `${formatMinor(fp.amountMinor, line.currency)} today`;
   return reasons.length === 0 ? today : `${today}, with ${andList(reasons)}`;
 }

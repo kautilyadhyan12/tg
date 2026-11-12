@@ -83,6 +83,8 @@ export function useBuyInApp(gymId: string, onEnded: () => void): BuyInApp {
       working({ at, line: PAY_CHECKING });
       const answer = await session.signedIn({ method: "POST", path: purchaseClosePath(gymId, purchaseId) }, appPurchaseResponseSchema);
       ending.current.delete(purchaseId);
+      // A page that has ended is let go on the phone even where Buy was closed meanwhile, so the app does not open it again.
+      if (answer.kind === "ok" && answer.data.purchase.id === purchaseId && answer.data.purchase.state !== "open") void forgetPayAway();
       if (!live.current) return;
       working(null);
       if (answer.kind === "ok") {
@@ -111,7 +113,8 @@ export function useBuyInApp(gymId: string, onEnded: () => void): BuyInApp {
         ended.current();
         return;
       }
-      if (answer.kind === "no_answer") {
+      // No answer, too many asks or the server failing says nothing of how the page ended: it stays held, and Check again asks.
+      if (answer.kind === "no_answer" || answer.status >= 429) {
         unanswered.current = { at, id: purchaseId };
         setSaid({ at, said: { tone: "bad", line: PAY_NO_ANSWER, again: true, ended: true } });
         return;

@@ -26,6 +26,7 @@ import {
   CANCELLED_TITLE,
   CONFIRMING_TITLE,
   MY_PURCHASES,
+  NOT_COMPLETED_TITLE,
   PAID_TITLE,
   PASS_LINE,
   PAY_SECURE,
@@ -81,7 +82,9 @@ export function useSellsInApp(gymIds: readonly string[], read: unknown): Readonl
     void Promise.all(
       asked.map(async (id) => {
         const answer = await session.signedIn({ method: "GET", path: forSalePath(id) }, forSaleResponseSchema);
-        return { id, sells: answer.kind === "ok" ? answer.data.items.length > 0 : answer.kind === "refused" ? false : null };
+        // Only "not found" means the place sells nothing to this reader; a refusal for too many asks or a failing server keeps
+        // what was known.
+        return { id, sells: answer.kind === "ok" ? answer.data.items.length > 0 : answer.kind === "refused" && answer.status === 404 ? false : null };
       }),
     ).then((answers) => {
       if (!run.live) return;
@@ -273,7 +276,7 @@ function ResultBox({ gym, buy, onMembership, onPass }: { gym: string; buy: BuyIn
   const said = buy.said?.said.ended === true ? buy.said.said : null;
   const busy = buy.busy !== null && said !== null ? buy.busy.line : null;
   const cancelled = said?.line === NOT_PAID;
-  const title = paid !== null ? PAID_TITLE : said === null ? "" : said.again === true ? CONFIRMING_TITLE : cancelled ? CANCELLED_TITLE : said.tone === "warn" ? PENDING_TITLE : "";
+  const title = paid !== null ? PAID_TITLE : said === null ? "" : said.again === true ? CONFIRMING_TITLE : cancelled ? CANCELLED_TITLE : said.tone === "warn" ? PENDING_TITLE : NOT_COMPLETED_TITLE;
   const icon = paid !== null ? "check" : cancelled ? "x" : "info";
   const tone = paid !== null ? styles.markGood : said?.tone === "bad" ? styles.markBad : cancelled ? styles.markPlain : styles.markWarn;
   const iconColour = paid !== null ? "goodText" : said?.tone === "bad" ? "badText" : cancelled ? "textSoft" : "orange";
@@ -412,7 +415,9 @@ function LineBody({
     setReadKey(nowKey);
     setAgreed(false);
   }
-  const ready = line !== null && (line.agreement === null || (signer !== null && waiverReadyToSign(name, agreed)));
+  // A record two app accounts share buys at the front desk: its page reads, with nothing to sign or pay.
+  const shared = view?.record === "shared";
+  const ready = line !== null && !shared && (line.agreement === null || (signer !== null && waiverReadyToSign(name, agreed)));
 
   const pay = () => {
     if (line === null || !ready || busy !== null) return;
@@ -421,7 +426,13 @@ function LineBody({
   };
 
   const foot =
-    line === null ? undefined : (
+    line === null ? undefined : shared ? (
+      <View testID="buy-shared">
+        <Txt colour="orange" style={styles.centre}>
+          {SHARED_LINE}
+        </Txt>
+      </View>
+    ) : (
       <>
         {busy !== null ? (
           <Txt kind="small" style={styles.centre}>
@@ -502,7 +513,7 @@ function LineBody({
               </View>
             ))}
           </View>
-          {line.agreement === null ? null : (
+          {line.agreement === null || shared ? null : (
             <>
               <View style={styles.line} />
               <Txt kind="eyebrow" colour="textFaint">

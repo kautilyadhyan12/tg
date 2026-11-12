@@ -1,4 +1,4 @@
-import { forSaleLineSchema, forSaleWorked, type ForSaleIncluded, type ForSaleLine, type ForSaleType } from "@app/shared";
+import { forSaleLineSchema, forSaleWorked, type ForSaleIncluded, type ForSaleLine, type ForSaleType, type HeldTax } from "@app/shared";
 
 // Lines a gym sells in the app, as the server words them: made by the server's own `forSaleWorked` (Buy in the app, 20g),
 // so a test reads what the server would send, never a hand-made copy of its words.
@@ -38,12 +38,12 @@ export const ANY_CLASS: ForSaleIncluded = { access: "all_classes", bookingsLimit
 
 export function lineOf(
   t: ForSaleType,
-  options: { agreement?: boolean; factsKey?: string; personName?: string; friendGift?: boolean; included?: ForSaleIncluded } = {},
+  options: { agreement?: boolean; factsKey?: string; personName?: string; friendGift?: boolean; included?: ForSaleIncluded; taxes?: HeldTax[] } = {},
 ): ForSaleLine {
   const worked = forSaleWorked({
     type: t,
     included: { lines: options.included ?? ANY_CLASS, orgType: "gym" },
-    taxes: [],
+    taxes: options.taxes ?? [],
     taxIncluded: false,
     billDay: null,
     today: TODAY,

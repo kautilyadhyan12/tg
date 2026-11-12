@@ -53,6 +53,11 @@ describe("how a line reads", () => {
     expect(todayLine(summer)).toBe("$145.00 today, with a $25.00 joining fee");
     expect(todayParts(summer)).toBe("$120.00 + $25.00 joining fee");
     expect(todayLine(lineOf(PACK_TYPE, { friendGift: true }))).toBe("$80.00 today, with your Refer a friend gift");
+    // Tax added on top is named too, never left for the joining fee to seem to explain (round one, L2).
+    const taxed = lineOf(SUMMER_TYPE, { taxes: [{ name: "Sales tax", pcm: 8250 }] });
+    expect(todayLine(taxed)).toBe("$156.96 today, with a $25.00 joining fee and tax");
+    expect(todayParts(taxed)).toBeNull();
+    expect(todayLine(lineOf(PACK_TYPE, { taxes: [{ name: "Sales tax", pcm: 8250 }] }))).toBe("$97.43 today, with tax");
     expect(lineSummary(lineOf(DAY_TYPE))).toEqual({ price: "$15.00 for 1 class", until: "Use by 12 Nov 2026" });
   });
 
