@@ -273,6 +273,7 @@ describe("the privacy policy against the code", () => {
       "Your meals and nutrition": "Meals and nutritional information.",
       "Your weight and body measurements": "Body weight and body measurements.",
       "Your running routes": "Your recorded running routes.",
+      "Your heart rate": "Your heart rate from a heart rate monitor.",
     };
     const screen: string[] = [...GYM_CAN_SEE, ...GYM_SEES_IF_YOU_ALLOW, ...GYM_NEVER_SEES];
     expect(screen.filter((line) => !Object.hasOwn(SAID_AS, line))).toEqual([]);

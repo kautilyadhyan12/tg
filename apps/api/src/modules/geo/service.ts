@@ -6,7 +6,7 @@
 // candidates only.
 import type { FastifyBaseLogger } from "fastify";
 import type { Sql } from "postgres";
-import { RUN_CALC_VERSION, RUN_CHOICES, hasOwnRun, ownCapOf, ownPlanOf, ownWeekSchema, planDayPlus, restartsPlan, runChoiceOf, runPlanAnswersSchema, runPlanOf, runsFrom, sameRace, climbFromHeights, climbSamples, decodePolyline, encodePolyline, hillLineOf, hillLineSchema, paceLineSchema, routeShape, runSplitSchema, runSums } from "@app/shared";
+import { RUN_CALC_VERSION, RUN_CHOICES, hasOwnRun, ownCapOf, ownPlanOf, ownWeekSchema, planDayPlus, restartsPlan, runChoiceOf, runPlanAnswersSchema, runPlanOf, runsFrom, sameRace, climbFromHeights, climbSamples, heartSums, decodePolyline, encodePolyline, hillLineOf, hillLineSchema, paceLineSchema, routeShape, runSplitSchema, runSums } from "@app/shared";
 import type {
   GenerateRoutesRequest,
   RouteCandidate,
@@ -243,6 +243,8 @@ const asRunDetail = (row: repo.RunDetailRow): RunDetail => {
     leftOutS: row.leftOutS ?? 0,
     bests: row.bests,
     records: [],
+    heartAvg: row.heart?.avg ?? null,
+    heartMax: row.heart?.max ?? null,
   };
 };
 
@@ -319,6 +321,8 @@ const asSavedRun = (r: repo.SavedRunRow): SavedRun => {
     polyline: r.polyline ?? "",
     trackStarts: splits.success ? (splits.data.starts ?? [0]) : [0],
     climbM: r.climbM,
+    heartAvg: r.heart?.avg ?? null,
+    heartMax: r.heart?.max ?? null,
   };
 };
 
@@ -449,6 +453,8 @@ export async function saveRun(
     climb,
     shape: routeShape(sums.track, sums.trackStarts),
     bests: sums.bests,
+    // Worked out here from the readings, never taken from the phone; the readings are not kept.
+    heart: heartSums(input.heart ?? [], input.pauses, input.elapsedMs),
   });
   if (saved === "removed") throw new RemovedRunError();
   // On every send, a repeat included, as a workout's sync does: the streak, badges and XP are
