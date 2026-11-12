@@ -232,7 +232,7 @@ export async function checkPurchase(deps: PaymentsDeps, userId: string, gymId: s
   if (!(await limit())) return null;
   const row = await buys.readOwnPurchase(deps.sql, gymId, userId, id);
   if (row === null) throw notFound();
-  if (row.state === "open" && deps.square !== null) await lookNow(deps, deps.square, gymId, id, 0);
+  if (row.state === "open" && deps.square !== null) await lookNow(deps, deps.square, gymId, id, 0, false);
   return await toldOf(deps, userId, gymId, id, row);
 }
 
@@ -244,7 +244,7 @@ export async function closePurchase(deps: PaymentsDeps, userId: string, gymId: s
   if (row === null) throw notFound();
   if (row.state === "open" && deps.square !== null) {
     await pays.wantClose(deps.sql, gymId, id, "member", null, deps.now());
-    await lookNow(deps, deps.square, gymId, id, APP_PAYMENT.closeWaitMs);
+    await lookNow(deps, deps.square, gymId, id, APP_PAYMENT.closeWaitMs, false);
   }
   return await toldOf(deps, userId, gymId, id, row);
 }
@@ -252,6 +252,8 @@ export async function closePurchase(deps: PaymentsDeps, userId: string, gymId: s
 async function toldOf(deps: PaymentsDeps, userId: string, gymId: string, id: string, before: pays.AppPayRow): Promise<Told<AppPurchaseResponse>> {
   const now = await buys.readOwnPurchase(deps.sql, gymId, userId, id);
   if (now === null) throw notFound();
+  // The member's phone has the answer: a Payment received still owed for it would say it twice.
+  if (now.outcome === "paid") await pays.paidSeen(deps.sql, gymId, id);
   return { answer: answerOf(now), tell: before.state === "open" && now.state !== "open" ? now.entryId : null };
 }
 
@@ -263,7 +265,7 @@ export async function closePurchaseByStaff(deps: PaymentsDeps, userId: string, g
   await requirePrivilege(deps, gymId, userId, BILLING);
   const closing = await buys.staffClosePurchase(deps.sql, { gymId, entryId, id, staffUserId: userId, now: deps.now() });
   if (closing === null) throw new OrgsError(404, "app_payment_not_found", APP_PURCHASE_STAFF_WORDS.none);
-  if (deps.square !== null) await lookNow(deps, deps.square, gymId, id, APP_PAYMENT.closeWaitMs);
+  if (deps.square !== null) await lookNow(deps, deps.square, gymId, id, APP_PAYMENT.closeWaitMs, true);
   const ended = await pays.outcomeOf(deps.sql, gymId, id);
   const outcome = ended === null ? "waiting" : ended === "paid" ? "paid" : pays.CHECK_OUTCOMES.includes(ended) ? "check" : "closed";
   return appPaymentCloseResponseSchema.parse({ outcome });

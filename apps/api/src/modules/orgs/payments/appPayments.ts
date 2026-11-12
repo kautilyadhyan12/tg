@@ -166,6 +166,9 @@ interface Asking {
   token: string;
   row: pays.AppPayRow;
   now: Date;
+  /** Nobody is waiting on the answer (the worker, or staff's Close payment page): a page found paid owes the member who
+   *  pressed Pay one Payment received notification (20h). False for the member's own phone asking, which says it there. */
+  tell: boolean;
 }
 
 async function tokenFor(deps: PaymentsDeps, square: SquareSettings, row: pays.AppPayRow): Promise<string | null> {
@@ -228,7 +231,7 @@ async function settle(a: Asking, order: SquareOrder): Promise<"none" | "wait" | 
   // bill's amount, or another; null where Square named another money.
   const totals = taken.map((p) => p.total_money ?? p.amount_money);
   const tookMinor = totals.every((t) => t.currency === row.currency) ? totals.reduce((sum, t) => sum + t.amount, 0) : null;
-  const paid = { row, squarePaymentId: payment.id, card: cardSeen, taken: tookMinor, today, now, ...(refuse === undefined ? {} : { refuse }) };
+  const paid = { row, squarePaymentId: payment.id, card: cardSeen, taken: tookMinor, today, now, tell: a.tell, ...(refuse === undefined ? {} : { refuse }) };
   if (row.typeId !== null) {
     // A line bought is given as of the day Square took the money on the gym's clock, not the day it is recorded: a day pass
     // paid at 23:50 and first looked at after midnight is still that day's (round one's re-check, H1b).
@@ -278,7 +281,7 @@ async function step(a: Asking): Promise<void> {
 /** Ask Square about a page this request holds until `until`, then let it go. A page Square has not said the end of within a
  *  day of opening, whatever it answered meanwhile, is given up on (`no_answer`): it holds the membership no longer, and its
  *  bill says to check Square before taking the payment again. */
-async function advance(deps: PaymentsDeps, square: SquareSettings, row: pays.AppPayRow, until: Date): Promise<void> {
+async function advance(deps: PaymentsDeps, square: SquareSettings, row: pays.AppPayRow, until: Date, tell: boolean): Promise<void> {
   try {
     const now = deps.now();
     const token = await tokenFor(deps, square, row);
@@ -288,7 +291,7 @@ async function advance(deps: PaymentsDeps, square: SquareSettings, row: pays.App
       await pays.finish(deps.sql, row.gymId, row.id, "gone", now);
       return;
     }
-    await step({ deps, square, token, row, now });
+    await step({ deps, square, token, row, now, tell });
     if (now.getTime() - row.openedAt.getTime() >= APP_PAYMENT.giveUpMs && (await pays.finish(deps.sql, row.gymId, row.id, "no_answer", now))) {
       deps.log.error({ event: "square.app_payment_given_up", gymId: row.gymId }, "Square never said how a payment page ended");
     }
@@ -297,14 +300,15 @@ async function advance(deps: PaymentsDeps, square: SquareSettings, row: pays.App
   }
 }
 
-/** Asked by this request now, or left to the one already asking for at most `waitMs`. */
-export async function lookNow(deps: PaymentsDeps, square: SquareSettings, gymId: string, id: string, waitMs: number): Promise<void> {
+/** Asked by this request now, or left to the one already asking for at most `waitMs`. `tell`: nobody is waiting on this
+ *  answer, so a page found paid owes a notification (`Asking.tell`). */
+export async function lookNow(deps: PaymentsDeps, square: SquareSettings, gymId: string, id: string, waitMs: number, tell: boolean): Promise<void> {
   const waitUntil = Date.now() + waitMs;
   for (;;) {
     const now = deps.now();
     const held = await pays.claim(deps.sql, gymId, id, now, leaseFrom(now));
     if (held !== null) {
-      await advance(deps, square, held, leaseFrom(now));
+      await advance(deps, square, held, leaseFrom(now), tell);
       return;
     }
     if (Date.now() >= waitUntil) return;
@@ -447,7 +451,7 @@ export async function checkAppPayment(deps: PaymentsDeps, userId: string, gymId:
   if (!(await limit())) return null;
   const row = await pays.readOwn(deps.sql, gymId, userId, id);
   if (row === null) throw notFound();
-  if (row.state === "open" && deps.square !== null) await lookNow(deps, deps.square, gymId, id, 0);
+  if (row.state === "open" && deps.square !== null) await lookNow(deps, deps.square, gymId, id, 0, false);
   return await toldOf(deps, userId, gymId, id, row);
 }
 
@@ -459,7 +463,7 @@ export async function closeAppPayment(deps: PaymentsDeps, userId: string, gymId:
   if (row === null) throw notFound();
   if (row.state === "open" && deps.square !== null) {
     await pays.wantClose(deps.sql, gymId, id, "member", null, deps.now());
-    await lookNow(deps, deps.square, gymId, id, APP_PAYMENT.closeWaitMs);
+    await lookNow(deps, deps.square, gymId, id, APP_PAYMENT.closeWaitMs, false);
   }
   return await toldOf(deps, userId, gymId, id, row);
 }
@@ -468,6 +472,8 @@ export async function closeAppPayment(deps: PaymentsDeps, userId: string, gymId:
 async function toldOf(deps: PaymentsDeps, userId: string, gymId: string, id: string, before: pays.AppPayRow): Promise<Told<AppPaymentResponse>> {
   const now = await pays.readOwn(deps.sql, gymId, userId, id);
   if (now === null) throw notFound();
+  // The member's phone has the answer: a Payment received still owed for it would say it twice.
+  if (now.outcome === "paid") await pays.paidSeen(deps.sql, gymId, id);
   return { answer: answerOf(now), tell: before.state === "open" && now.state !== "open" ? now.entryId : null };
 }
 
@@ -483,7 +489,7 @@ export async function closeAppPaymentByStaff(deps: PaymentsDeps, userId: string,
   if (found === undefined || holder !== entryId) throw new OrgsError(404, "app_payment_not_found", APP_PAYMENT_STAFF_WORDS.none);
   if (deps.square !== null) {
     await pays.staffClose(deps.sql, { gymId, id: found.id, entryId, membershipId, staffUserId: userId, now: deps.now() });
-    await lookNow(deps, deps.square, gymId, found.id, APP_PAYMENT.closeWaitMs);
+    await lookNow(deps, deps.square, gymId, found.id, APP_PAYMENT.closeWaitMs, true);
   }
   const ended = await pays.outcomeOf(deps.sql, gymId, found.id);
   const outcome = ended === null ? "waiting" : ended === "paid" ? "paid" : pays.CHECK_OUTCOMES.includes(ended) ? "check" : "closed";
@@ -501,7 +507,7 @@ export async function processAppPayments(deps: PaymentsDeps, square: SquareSetti
     const [row] = await pays.claimIdle(deps.sql, square.environment, at, APP_PAYMENT.idleMs, leaseFrom(at), 1, gymIds);
     if (row === undefined) break;
     asked += 1;
-    await advance(deps, square, row, leaseFrom(at));
+    await advance(deps, square, row, leaseFrom(at), true);
   }
   const forgotten = await pays.forgetDone(deps.sql, new Date(deps.now().getTime() - APP_PAYMENT.keepMs), gymIds);
   return { asked, forgotten };

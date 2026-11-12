@@ -23,6 +23,8 @@ export const userProfileSchema = z.object({
   pushGymMessages: z.boolean(),
   pushPlaces: z.boolean(),
   pushComments: z.boolean(),
+  /** Payment received (20h): on until switched off. */
+  pushPayments: z.boolean(),
   /** The streak reminder, badges and the Sunday summary (19e-ii): on until switched off. */
   pushStreak: z.boolean(),
   pushBadges: z.boolean(),
@@ -67,6 +69,7 @@ export const updateProfileRequestSchema = z
     pushGymMessages: z.boolean().optional(),
     pushPlaces: z.boolean().optional(),
     pushComments: z.boolean().optional(),
+    pushPayments: z.boolean().optional(),
     pushStreak: z.boolean().optional(),
     pushBadges: z.boolean().optional(),
     pushSummary: z.boolean().optional(),

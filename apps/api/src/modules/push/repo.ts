@@ -49,13 +49,14 @@ export async function saveToken(
 
 /** The kinds of phone notification, each with the person's own switch in Settings (Stage 5 19d). A
  *  training reminder's switch is its own row (`training_reminders`, 19e-i), read by its sender. */
-export type PushKind = "gym_messages" | "places" | "comments" | "training" | "streak" | "badges" | "summary";
+export type PushKind = "gym_messages" | "places" | "comments" | "payments" | "training" | "streak" | "badges" | "summary";
 
 /** Fixed kind→column map: the column name is never built from input. */
 const SWITCH_COLUMN: Record<PushKind, string | null> = {
   gym_messages: "push_gym_messages",
   places: "push_places",
   comments: "push_comments",
+  payments: "push_payments",
   training: null,
   streak: "push_streak",
   badges: "push_badges",

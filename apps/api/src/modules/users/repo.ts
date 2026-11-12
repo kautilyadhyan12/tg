@@ -31,6 +31,7 @@ export interface ProfileRow {
   pushGymMessages: boolean;
   pushPlaces: boolean;
   pushComments: boolean;
+  pushPayments: boolean;
   pushStreak: boolean;
   pushBadges: boolean;
   pushSummary: boolean;
@@ -50,6 +51,7 @@ interface ProfileDbRow {
   push_gym_messages: boolean;
   push_places: boolean;
   push_comments: boolean;
+  push_payments: boolean;
   push_streak: boolean;
   push_badges: boolean;
   push_summary: boolean;
@@ -70,6 +72,7 @@ const toProfile = (r: ProfileDbRow, weightKg: number | null): ProfileRow => ({
   pushGymMessages: r.push_gym_messages,
   pushPlaces: r.push_places,
   pushComments: r.push_comments,
+  pushPayments: r.push_payments,
   pushStreak: r.push_streak,
   pushBadges: r.push_badges,
   pushSummary: r.push_summary,
@@ -87,7 +90,7 @@ const toProfile = (r: ProfileDbRow, weightKg: number | null): ProfileRow => ({
 async function selectProfile(sql: SqlOrTx, userId: string): Promise<ProfileRow | null> {
   const rows = await sql<ProfileDbRow[]>`
     SELECT u.id, u.email, u.display_name, u.locale, u.units, u.timezone,
-           u.leaderboard_opt_out, u.push_gym_messages, u.push_places, u.push_comments, u.push_streak, u.push_badges, u.push_summary, u.created_at,
+           u.leaderboard_opt_out, u.push_gym_messages, u.push_places, u.push_comments, u.push_payments, u.push_streak, u.push_badges, u.push_summary, u.created_at,
            COALESCE(f.onboarding_completed, false) AS onboarding_completed,
            EXISTS (
              SELECT 1 FROM consent_log c
@@ -148,6 +151,7 @@ export async function updateProfile(
     if (patch.pushGymMessages !== undefined) cols["push_gym_messages"] = patch.pushGymMessages;
     if (patch.pushPlaces !== undefined) cols["push_places"] = patch.pushPlaces;
     if (patch.pushComments !== undefined) cols["push_comments"] = patch.pushComments;
+    if (patch.pushPayments !== undefined) cols["push_payments"] = patch.pushPayments;
     if (patch.pushStreak !== undefined) cols["push_streak"] = patch.pushStreak;
     if (patch.pushBadges !== undefined) cols["push_badges"] = patch.pushBadges;
     if (patch.pushSummary !== undefined) cols["push_summary"] = patch.pushSummary;
