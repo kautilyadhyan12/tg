@@ -309,7 +309,9 @@ describe("I connect my chest strap once, and my runs show my heart rate", () => 
     if (me === undefined) throw new Error("no fifth tab");
     await fireEvent.press(me);
     await fireEvent.press(await screen.findByLabelText("Settings"));
-    expect(await screen.findByText(/^Polar H10 9EF6E824 · /)).toBeTruthy();
+    // Under its own heading the row does not say "Heart rate monitor" again.
+    expect(await screen.findByText("Polar H10 9EF6E824")).toBeTruthy();
+    expect(screen.getAllByText("Heart rate monitor")).toHaveLength(1);
     await fireEvent.press(screen.getByRole("button", { name: "Change heart rate monitor" }));
     await fireEvent.press(await screen.findByRole("button", { name: "Remove" }));
     // Asked first, with who it is about; Keep it leaves it.

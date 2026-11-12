@@ -295,6 +295,7 @@ function HeartMonitorPart() {
       <View style={styles.heartRow}>
         <HeartMonitorRow
           active
+          named={false}
           onOpen={() => {
             setOpen(true);
           }}

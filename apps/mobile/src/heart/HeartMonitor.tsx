@@ -125,7 +125,7 @@ export function HeartMonitorSheet({ open, onClose, monitor }: { open: boolean; o
         <FindStep
           active={open}
           onPick={(heard) => {
-            tryMonitor(heard.id);
+            tryMonitor(heard.id, heard.name);
             setStep({ kind: "try", heard, since: Date.now() });
           }}
         />
@@ -310,16 +310,23 @@ function BluetoothProblem({ state }: { state: BluetoothState }) {
   );
 }
 
-/** The row on the Running page: the monitor and its heart rate now, or Connect. */
-export function HeartMonitorRow({ active, onOpen }: { active: boolean; onOpen: () => void }) {
+/** The row on the Running page, and under Settings' own heading (`named` false): the monitor and its heart
+ *  rate now, or Connect. */
+export function HeartMonitorRow({ active, onOpen, named = true }: { active: boolean; onOpen: () => void; named?: boolean }) {
   const { monitor, bpm } = useHeartNow(active);
+  const what = monitor === null ? "Chest strap or watch" : named ? `${monitorName(monitor.name)} · ${bpmWords(bpm)}` : monitorName(monitor.name);
   return (
     <>
       <View style={styles.rowWords}>
-        <Txt kind="body">Heart rate monitor</Txt>
-        <Txt kind="small" colour="textFaint" numberOfLines={1}>
-          {monitor === null ? "Chest strap or watch" : `${monitorName(monitor.name)} · ${bpmWords(bpm)}`}
+        {named ? <Txt kind="body">Heart rate monitor</Txt> : null}
+        <Txt kind={named ? "small" : "body"} colour={named ? "textFaint" : "textSoft"} numberOfLines={1}>
+          {what}
         </Txt>
+        {!named && monitor !== null ? (
+          <Txt kind="small" colour="textFaint">
+            {bpmWords(bpm)}
+          </Txt>
+        ) : null}
       </View>
       <Button kind="link" label={monitor === null ? "Connect" : "Change"} say={monitor === null ? "Connect a heart rate monitor" : "Change heart rate monitor"} onPress={onOpen} />
     </>
