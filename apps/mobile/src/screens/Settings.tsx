@@ -41,6 +41,8 @@ import { CanSee } from "./Invitation";
 import { tabWord } from "./placesHeading";
 import { SAFE_MODE_LINE } from "./remindersView";
 import { TrainingReminders } from "./TrainingReminders";
+import { HeartMonitorRow, HeartMonitorSheet } from "../heart/HeartMonitor";
+import { useMonitor } from "../heart/monitor";
 import { Setup, accountUnits } from "./setup/Setup";
 import { UNIT_OPTIONS } from "./setup/SetupScreens";
 import { setupPath } from "./setup/useSetupAnswers";
@@ -172,6 +174,7 @@ function SettingsBody({ onClose }: { onClose: () => void }) {
       <Profile since={since} />
       <NamePart saves={saves} />
       <UnitsPart saves={saves} />
+      <HeartMonitorPart />
       <NotificationsPart push={push} setPush={setPush} saves={saves} places={memberOf} onAgain={() => { setPush({ kind: "loading" }); setPushTries((n) => n + 1); }} />
       <BoardsPart belongs={memberOf.kind === "ok" && memberOf.orgs.length > 0} />
       <PlacesPart places={memberOf} onAgain={() => { setTries((n) => n + 1); }} />
@@ -279,6 +282,32 @@ function UnitsPart({ saves }: { saves: RefObject<number> }) {
       <Txt kind="small">Weights and heights in the app.</Txt>
       <Segments options={UNIT_OPTIONS} selected={busy ?? now} onPick={(units) => void pick(units)} />
       <Said words={said} bad />
+    </Part>
+  );
+}
+
+/** Heart rate monitor (37f-i): the same row and box as the Running page's, one monitor for both. */
+function HeartMonitorPart() {
+  const monitor = useMonitor();
+  const [open, setOpen] = useState(false);
+  return (
+    <Part title="Heart rate monitor" icon="heart">
+      <View style={styles.heartRow}>
+        <HeartMonitorRow
+          active
+          named={false}
+          onOpen={() => {
+            setOpen(true);
+          }}
+        />
+      </View>
+      <HeartMonitorSheet
+        open={open}
+        monitor={monitor}
+        onClose={() => {
+          setOpen(false);
+        }}
+      />
     </Part>
   );
 }
@@ -978,6 +1007,7 @@ function DeleteAsk({ open, places, onStale, onClose }: { open: boolean; places: 
 
 const styles = StyleSheet.create({
   page: { gap: 14 },
+  heartRow: { flexDirection: "row", alignItems: "center", gap: 12 },
   profile: { flexDirection: "row", alignItems: "center", gap: 14 },
   card: { gap: 12 },
   head: { flexDirection: "row", alignItems: "center", gap: 10 },

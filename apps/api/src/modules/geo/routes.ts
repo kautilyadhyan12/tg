@@ -176,8 +176,10 @@ export function registerGeoRoutes(
   // Ten a minute for a person, wherever they are (never by address: a gym's members share one). A
   // phone sends its waiting runs one after another; nobody records ten runs in a minute.
   // The longest run a phone may send, counted as `listLimit.ts` counts: each point is a list
-  // item holding four, each pause one holding two.
+  // item holding four, each pause one holding two. A run's heart rate (37f-i), on its save alone, is
+  // one a second at most, each a list item holding two.
   const RUN_LIST_ITEMS_MOST = RUN_MAX_POINTS * 5 + RUN_MAX_PAUSES * 3;
+  const SAVE_RUN_LIST_ITEMS_MOST = RUN_LIST_ITEMS_MOST + RUN_MAX_POINTS * 3;
   const runLimit = createDualRateLimit({
     name: "geo_run_save",
     max: 10,
@@ -186,11 +188,12 @@ export function registerGeoRoutes(
     identifier: (req) => req.authUser?.id ?? null,
     redis: deps.redis,
   });
-  // Twelve hours of points at one a second is about 2 MB of JSON; anything past this is refused
-  // before it is read, and so is a stranger's or one past the limit: both run before the body.
+  // Twelve hours of points at one a second is about 2 MB of JSON, and their heart rate about 0.7 MB more;
+  // anything past this is refused before it is read, and so is a stranger's or one past the limit: both
+  // run before the body.
   app.post(
     "/v1/geo/runs",
-    { onRequest: [app.authenticate, runLimit], bodyLimit: 3 * 1024 * 1024, config: { listItemsMost: RUN_LIST_ITEMS_MOST } },
+    { onRequest: [app.authenticate, runLimit], bodyLimit: 4 * 1024 * 1024, config: { listItemsMost: SAVE_RUN_LIST_ITEMS_MOST } },
     async (req, reply) => {
       // A run sent again is answered from the row before its points are read or worked out: a
       // repeat costs the server a lookup, never the maths (round one of 37a, H2).
