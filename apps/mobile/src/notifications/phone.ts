@@ -46,8 +46,9 @@ export type Tapped =
   | { kind: "inbox"; gymId: string }
   | ({ kind: "place" } & Omit<GymPlacePushData, "kind">)
   | { kind: "comment"; gymId: string; postId: string }
-  /** Payment received (20h): a tap opens that place's My membership, where its receipt is. */
-  | { kind: "payment"; gymId: string; paymentId: string }
+  /** Payment received (20h): a tap opens that place's My membership, where its receipt is; for a line bought, its Buy on
+   *  that purchase, where Show my pass is. */
+  | { kind: "payment"; gymId: string; paymentId: string; bought: boolean }
   | { kind: "training"; open: "workout" | "food" }
   | { kind: "progress"; open: "running" | "achievements" | "dashboard" };
 
@@ -62,7 +63,7 @@ export function tappedOf(data: unknown): Tapped | null {
   const comment = gymCommentPushDataSchema.safeParse(data);
   if (comment.success) return { kind: "comment", gymId: comment.data.gymId, postId: comment.data.postId };
   const payment = gymPaymentPushDataSchema.safeParse(data);
-  if (payment.success) return { kind: "payment", gymId: payment.data.gymId, paymentId: payment.data.paymentId };
+  if (payment.success) return { kind: "payment", gymId: payment.data.gymId, paymentId: payment.data.paymentId, bought: payment.data.what === "bought" };
   const training = trainingReminderPushDataSchema.safeParse(data);
   if (training.success) return { kind: "training", open: training.data.open };
   const progress = trainingNudgePushDataSchema.safeParse(data);
@@ -212,6 +213,25 @@ export function onTapped(listener: (tapped: Tapped) => void): () => void {
   if (held !== null) listener(held);
   return () => {
     tapWatchers.delete(listener);
+  };
+}
+
+/** Payment received (20h) for a place, arriving while the app is open or tapped: that place's My membership asks again
+ *  about a payment it was still waiting on, and reads the place again. */
+export function onPaymentNews(listener: (gymId: string) => void): () => void {
+  const heard = (data: unknown) => {
+    const parsed = gymPaymentPushDataSchema.safeParse(data);
+    if (parsed.success) listener(parsed.data.gymId);
+  };
+  const arrived = Notifications.addNotificationReceivedListener((notification) => {
+    heard(notification.request.content.data);
+  });
+  const tapped = Notifications.addNotificationResponseReceivedListener((response) => {
+    heard(response.notification.request.content.data);
+  });
+  return () => {
+    arrived.remove();
+    tapped.remove();
   };
 }
 

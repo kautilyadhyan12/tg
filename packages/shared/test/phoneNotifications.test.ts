@@ -211,7 +211,10 @@ describe("Payment received's words (20h)", () => {
   });
 
   it("a tap's data: the place and the page, both ids; anything else is not ours", () => {
-    const ok = { kind: "gym_payment", gymId: "1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f", paymentId: "c1111111-1111-4111-8111-111111111111" };
+    const ok = { kind: "gym_payment", gymId: "1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f", paymentId: "c1111111-1111-4111-8111-111111111111", what: "bill" };
+    expect(gymPaymentPushDataSchema.safeParse({ ...ok, what: "bought" }).success).toBe(true);
+    expect(gymPaymentPushDataSchema.safeParse({ ...ok, what: "pass" }).success).toBe(false);
+    expect(gymPaymentPushDataSchema.safeParse({ kind: ok.kind, gymId: ok.gymId, paymentId: ok.paymentId }).success).toBe(false);
     expect(gymPaymentPushDataSchema.parse(ok)).toEqual(ok);
     expect(gymPaymentPushDataSchema.safeParse({ ...ok, paymentId: "x" }).success).toBe(false);
     expect(gymPaymentPushDataSchema.safeParse({ ...ok, kind: "gym_inbox" }).success).toBe(false);

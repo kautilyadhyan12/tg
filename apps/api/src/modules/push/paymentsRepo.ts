@@ -107,6 +107,12 @@ export async function claimPayment(sql: SqlOrTx, p: Pick<DuePayment, "gymId" | "
   return rows.length === 1;
 }
 
+/** Still owed and still this run's: false once the member's phone read the page as paid (`paidSeen`). */
+export async function stillOwed(sql: SqlOrTx, p: Pick<DuePayment, "gymId" | "id">, claimedAt: Date): Promise<boolean> {
+  const rows = await sql<{ id: string }[]>`SELECT id FROM gym_app_payments WHERE gym_id = ${p.gymId} AND id = ${p.id} AND push_due_at IS NOT NULL AND push_claimed_at = ${claimedAt}`;
+  return rows.length === 1;
+}
+
 /** Firebase did not answer: put back for the next run, unless another run has taken it since. */
 export async function unclaimPayment(sql: SqlOrTx, p: Pick<DuePayment, "gymId" | "id">, claimedAt: Date): Promise<void> {
   await sql`UPDATE gym_app_payments SET push_claimed_at = NULL WHERE gym_id = ${p.gymId} AND id = ${p.id} AND push_claimed_at = ${claimedAt}`;

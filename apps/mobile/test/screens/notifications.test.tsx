@@ -607,7 +607,7 @@ describe("Payment received (20h): its own on the Payments channel, and a tap ope
   const PAGE = "c1111111-1111-4111-8111-111111111111";
   const OTHER_PAGE = "c2222222-2222-4222-8222-222222222222";
   const paymentTap = (gymId: string, paymentId = PAGE) => ({
-    notification: { request: { identifier: `payment:${paymentId}`, content: { data: { kind: "gym_payment", gymId, paymentId } } } },
+    notification: { request: { identifier: `payment:${paymentId}`, content: { data: { kind: "gym_payment", gymId, paymentId, what: "bill" } } } },
   });
   const membershipRoutes = () =>
     routes({
@@ -649,8 +649,8 @@ describe("Payment received (20h): its own on the Payments channel, and a tap ope
     await open(fakeServer(routes()));
     expect(notifications.channels.map((c) => c.name)).toContain("Payments");
     secureStore.kept.set("session", kept(1));
-    const first = { kind: "gym_payment", gymId: IRON.id, paymentId: PAGE };
-    const second = { kind: "gym_payment", gymId: IRON.id, paymentId: OTHER_PAGE };
+    const first = { kind: "gym_payment", gymId: IRON.id, paymentId: PAGE, what: "bill" };
+    const second = { kind: "gym_payment", gymId: IRON.id, paymentId: OTHER_PAGE, what: "bill" };
     await act(async () => {
       await drawPush(pushed(first, "Payment received", "$49.99 paid to Iron House for Gold Monthly."));
       await drawPush(pushed(second, "Payment received", "$15.00 paid to Iron House for a no-show fee."));

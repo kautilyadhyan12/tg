@@ -38,10 +38,11 @@ export async function sendPaymentNotifications(deps: {
 
   // `reached`: some phone has it, so it is never put back to be sent again. `again`: Firebase did not answer for any
   // phone, so the next run tries again.
-  const tell = async (due: payments.DuePayment, state: { reached: boolean; again: boolean }): Promise<void> => {
+  const tell = async (due: payments.DuePayment, claimedAt: Date, state: { reached: boolean; again: boolean }): Promise<void> => {
     const userId = due.userId;
     const tokens = due.stale || userId === null || due.paidFor === null ? [] : await repo.liveTokens(sql, userId, now, "payments");
-    if (userId === null || due.paidFor === null || tokens.length === 0) {
+    // Read again just before it goes: the member's phone may have read the page as paid since it was claimed.
+    if (userId === null || due.paidFor === null || tokens.length === 0 || !(await payments.stillOwed(sql, due, claimedAt))) {
       result.skipped += 1;
       return;
     }
@@ -56,7 +57,7 @@ export async function sendPaymentNotifications(deps: {
         // Each payment its own: a second one never replaces the first.
         tag: `payment:${due.id}`,
         channelId: GYM_PAYMENTS_CHANNEL.id,
-        data: { kind: "gym_payment", gymId: due.gymId, paymentId: due.id },
+        data: { kind: "gym_payment", gymId: due.gymId, paymentId: due.id, what: due.paidFor.kind === "bought" ? "bought" : "bill" },
       });
       if (sent === "sent") {
         result.sent += 1;
@@ -77,7 +78,7 @@ export async function sendPaymentNotifications(deps: {
     if (!(await payments.claimPayment(sql, due, { claimedAt, claimedBefore }))) return;
     const state = { reached: false, again: false };
     try {
-      await tell(due, state);
+      await tell(due, claimedAt, state);
     } catch (err) {
       // A failure after the claim (a dropped connection): told to the worker, put back for the next run unless a phone
       // already has it, and the rest of this run goes on.

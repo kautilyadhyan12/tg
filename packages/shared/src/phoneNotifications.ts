@@ -134,8 +134,9 @@ export function paymentNotification(input: { gymName: string; amountMinor: numbe
   return { title: "Payment received", body: paidFor.kind === "bought" ? `${paid} Show your pass when you arrive.` : paid };
 }
 
-/** What a payment's notification carries for the app: the place whose My membership a tap opens, and the page paid. */
-export const gymPaymentPushDataSchema = z.object({ kind: z.literal("gym_payment"), gymId: z.uuid(), paymentId: z.uuid() }).strip();
+/** What a payment's notification carries for the app: the place, the page paid, and what it paid. A tap opens that place's
+ *  My membership for a bill or fee, where its receipt is; its Buy on that purchase for a line bought, where Show my pass is. */
+export const gymPaymentPushDataSchema = z.object({ kind: z.literal("gym_payment"), gymId: z.uuid(), paymentId: z.uuid(), what: z.enum(["bill", "bought"]) }).strip();
 export type GymPaymentPushData = z.infer<typeof gymPaymentPushDataSchema>;
 
 // ── A COMMENT OR REPLY ON YOUR POST (ROADMAP Stage 5 item 18b-ii-b) ──

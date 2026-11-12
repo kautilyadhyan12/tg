@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AppState } from "react-native";
 import { appPaymentResponseSchema, myAppPaymentsResponseSchema, type AppPayment } from "@app/shared";
 import { openInTab } from "../../look/browserTab";
+import { onPaymentNews } from "../../notifications/phone";
 import { colours } from "../../look/colours";
 import { useSession } from "../../session/SessionProvider";
 import { newRequestKey } from "./classesView";
@@ -133,6 +134,18 @@ export function usePayInApp(gymId: string, onEnded: () => void): PayInApp {
   useEffect(() => {
     live.current = true;
     void readPayments();
+    // A page Square had not said the end of: asked again, so a payment confirmed meanwhile reads Paid, never "still being
+    // confirmed" under a bill the place now shows paid (20h).
+    const askAgain = () => {
+      const waiting = unanswered.current;
+      if (waiting !== null && !busyNow.current) void finish(waiting.key, waiting.payment);
+    };
+    // Payment received for this place, while the app is open or tapped: asked again, and the place read again.
+    const offNews = onPaymentNews((id) => {
+      if (id !== gymId) return;
+      askAgain();
+      ended.current();
+    });
     const back = AppState.addEventListener("change", (state) => {
       const there = away.current;
       if (state !== "active") {
@@ -144,13 +157,17 @@ export function usePayInApp(gymId: string, onEnded: () => void): PayInApp {
         void finish(there.key, there.payment);
         return;
       }
-      if (there === null) void readPayments();
+      if (there === null) {
+        askAgain();
+        void readPayments();
+      }
     });
     return () => {
       live.current = false;
       back.remove();
+      offNews();
     };
-  }, [readPayments, finish]);
+  }, [readPayments, finish, gymId]);
 
   const pay = useCallback(
     (target: PayTarget) => {

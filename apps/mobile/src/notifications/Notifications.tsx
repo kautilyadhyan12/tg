@@ -97,8 +97,9 @@ export function NotificationsProvider({ children, onTapped }: { children: ReactN
     const offAddress = onNewAddress((address) => void give(address));
     const offTap = onNotificationTapped((tapped) => {
       if (!live()) return;
-      // Payment received opens that place's My membership, where its receipt is (20h).
-      if (tapped.kind === "payment") setTapAsked({ kind: "membership", gymId: tapped.gymId });
+      // Payment received opens that place's My membership, where its receipt is; a line bought, its Buy on that purchase,
+      // where Show my pass is (20h).
+      if (tapped.kind === "payment") setTapAsked(tapped.bought ? { kind: "buy", gymId: tapped.gymId, purchaseId: tapped.paymentId } : { kind: "membership", gymId: tapped.gymId });
       else if (tapped.kind !== "training" && tapped.kind !== "progress") setTapAsked(tapped);
       onTapped?.(tapped);
     });

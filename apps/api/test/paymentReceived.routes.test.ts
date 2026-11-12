@@ -148,6 +148,9 @@ d("Payment received, told to the phone (real Postgres)", { timeout: T }, () => {
     const mine = sql`SELECT id FROM gyms WHERE owner_user_id IN (${myUsers})`;
     await sql`DELETE FROM gym_app_payments WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM gym_agreement_signatures WHERE gym_id IN (${mine})`;
+    await sql`DELETE FROM gym_class_bookings WHERE gym_id IN (${mine})`;
+    await sql`DELETE FROM gym_class_sessions WHERE gym_id IN (${mine})`;
+    await sql`DELETE FROM gym_class_types WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM gym_held_memberships WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM gym_membership_types WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM gym_payment_revokes WHERE gym_id IN (${mine})`;
@@ -329,7 +332,7 @@ d("Payment received, told to the phone (real Postgres)", { timeout: T }, () => {
       tag: `payment:${pending.payment.id}`,
       channelId: GYM_PAYMENTS_CHANNEL.id,
     });
-    expect(gymPaymentPushDataSchema.parse(sent[0]?.data)).toEqual({ kind: "gym_payment", gymId: gym.id, paymentId: pending.payment.id });
+    expect(gymPaymentPushDataSchema.parse(sent[0]?.data)).toEqual({ kind: "gym_payment", gymId: gym.id, paymentId: pending.payment.id, what: "bill" });
     // Asked again: never twice.
     await sweep();
     await workLater();
@@ -426,6 +429,7 @@ d("Payment received, told to the phone (real Postgres)", { timeout: T }, () => {
     expect(await outcome(bought.purchase.id)).toBe("paid");
     await sweep();
     expect(sent.map((m) => [m.token, m.body])).toEqual([[ava.phone, `$15.00 paid to ${gym.name} for Day pass. Show your pass when you arrive.`]]);
+    expect(sent[0]?.data).toEqual({ kind: "gym_payment", gymId: gym.id, paymentId: bought.purchase.id, what: "bought" });
   });
 
   it("Payments switched off in Settings, or no phone signed in: nothing, and switched on again tells nothing old (19d)", async () => {
@@ -489,5 +493,112 @@ d("Payment received, told to the phone (real Postgres)", { timeout: T }, () => {
     await Promise.all([sweep(slow), sweep(slow), sweep(slow)]);
     expect(sent.map((m) => m.token)).toEqual([ivy.phone]);
     expect(await owed(page.payment.id)).toBe(false);
+  });
+
+  /** A day pass bought by the member, its page opened, paid at Square; nothing asked yet. */
+  const buyDayPass = async (gym: Gym, who: Phone, entryId: string) => {
+    const types = (JSON.parse((await request("GET", `/v1/orgs/${gym.id}/membership-types`, { cookies: gym.owner.cookies })).body) as GymMembershipTypesResponse).types;
+    if (!types.some((t) => t.name === "Day pass")) {
+      const add = await request("POST", `/v1/orgs/${gym.id}/membership-types`, {
+        cookies: gym.owner.cookies,
+        payload: { ...gold, name: "Day pass", kind: "pack", priceMinor: 1500, termCount: null, termUnit: null, packClasses: 1, packDays: 1, soldInApp: true },
+      });
+      expect(add.statusCode, add.body).toBe(201);
+    }
+    await sql`INSERT INTO gym_members (gym_id, user_id, entry_id) VALUES (${gym.id}, ${who.userId}, ${entryId}) ON CONFLICT DO NOTHING`;
+    const sale = forSaleResponseSchema.parse(JSON.parse((await request("GET", `/v1/orgs/${gym.id}/for-sale`, { bearer: who.accessToken })).body));
+    const shown = sale.items.find((i) => i.name === "Day pass");
+    if (shown === undefined) throw new Error("the day pass is not listed");
+    const press = await request("POST", `/v1/orgs/${gym.id}/for-sale/purchases`, {
+      bearer: who.accessToken,
+      payload: { requestKey: randomUUID(), typeId: shown.typeId, amountMinor: shown.firstPayment.amountMinor, factsKey: shown.factsKey, agreement: null },
+    });
+    expect(press.statusCode, press.body).toBe(200);
+    const bought = appPurchaseResponseSchema.parse(JSON.parse(press.body));
+    expect(square.payLink(linkOf(bought.purchase.id).id)).toBe(true);
+    return bought.purchase.id;
+  };
+  const listed = async (gym: Gym, fullName: string): Promise<string> => {
+    const res = await request("POST", `/v1/orgs/${gym.id}/member-list/entries`, { cookies: gym.owner.cookies, payload: { fullName, email: `payrx-r-${uniq()}@example.com` } });
+    expect(res.statusCode, res.body).toBe(201);
+    return (JSON.parse(res.body) as { entry: { entryId: string } }).entry.entryId;
+  };
+
+  it("owed for longer than a notification is told for: nothing is sent, and it is owed no more", async () => {
+    clock = new Date();
+    fresh();
+    const gym = await makeGym("Pay Received Late");
+    const max = await phoneOf("Max Reed");
+    const bill = await owing(gym, "Max Reed", max);
+    const page = await pay(gym, max, bill);
+    expect(square.payLink(linkOf(page.payment.id).id)).toBe(true);
+    await workLater();
+    expect(await owed(page.payment.id)).toBe(true);
+    // The worker's push run was down for a day and a minute.
+    clock = new Date(clock.getTime() + 24 * 3_600_000 + 60_000);
+    expect(await sweep()).toMatchObject({ sent: 0, skipped: 1 });
+    expect(sent).toEqual([]);
+    expect(await owed(page.payment.id)).toBe(false);
+  });
+
+  it("a line bought: the member's own phone reading it paid owes nothing; staff's Close on a purchase found paid tells them", async () => {
+    clock = new Date();
+    fresh();
+    const gym = await makeGym("Pay Received Buy Seen");
+    const ola = await phoneOf("Ola Bern");
+    const olaEntry = await listed(gym, "Ola Bern");
+    // Recorded by the worker, then her phone reads it before the notification goes.
+    const first = await buyDayPass(gym, ola, olaEntry);
+    await workLater();
+    expect(await outcome(first)).toBe("paid");
+    expect(await owed(first)).toBe(true);
+    const read = await request("GET", `/v1/orgs/${gym.id}/for-sale/purchases/${first}`, { bearer: ola.accessToken });
+    expect(read.statusCode, read.body).toBe(200);
+    expect(appPurchaseResponseSchema.parse(JSON.parse(read.body)).purchase.state).toBe("paid");
+    expect(await owed(first)).toBe(false);
+    await sweep();
+    expect(sent).toEqual([]);
+
+    // Another, paid, and staff press Close payment page under it on his page: found paid, he is told.
+    const pip = await phoneOf("Pip Lane");
+    const pipEntry = await listed(gym, "Pip Lane");
+    const second = await buyDayPass(gym, pip, pipEntry);
+    const shut = await request("POST", `${entryUrl(gym, pipEntry)}/app-purchases/${second}/close`, { cookies: gym.owner.cookies });
+    expect(shut.statusCode, shut.body).toBe(200);
+    expect(appPaymentCloseResponseSchema.parse(JSON.parse(shut.body)).outcome).toBe("paid");
+    await sweep();
+    expect(sent.map((m) => [m.token, m.body])).toEqual([[pip.phone, `$15.00 paid to ${gym.name} for Day pass. Show your pass when you arrive.`]]);
+  });
+
+  it("a fee paid while the member was away: told what it was for", async () => {
+    clock = new Date();
+    fresh();
+    const gym = await makeGym("Pay Received Fee");
+    await sql`UPDATE gyms SET class_no_show_fee_minor = 1000 WHERE id = ${gym.id}`;
+    const rae = await phoneOf("Rae Moon");
+    const bill = await owing(gym, "Rae Moon", rae);
+    // Booked on yesterday's Spin and marked No-show: a $10.00 fee.
+    const [classType] = await sql<{ id: string }[]>`
+      INSERT INTO gym_class_types (gym_id, name, minutes, places, colour, open_gym) VALUES (${gym.id}, 'Spin', 45, NULL, 'blue', false) RETURNING id`;
+    const startsAt = new Date(clock.getTime() - 24 * 60 * 60_000);
+    const [session] = await sql<{ id: string }[]>`
+      INSERT INTO gym_class_sessions (gym_id, class_type_id, local_date, local_start_minute, starts_at, minutes, places, status)
+      SELECT ${gym.id}, ${classType?.id ?? ""}, l::date, (EXTRACT(HOUR FROM l) * 60 + EXTRACT(MINUTE FROM l))::int, ${startsAt}, 45, NULL, 'scheduled'
+      FROM (SELECT ${startsAt}::timestamptz AT TIME ZONE 'America/Chicago' AS l) x
+      RETURNING id`;
+    const [booking] = await sql<{ id: string }[]>`
+      INSERT INTO gym_class_bookings (gym_id, session_id, user_id, entry_id, held_membership_id, status, request_key, booked_at)
+      VALUES (${gym.id}, ${session?.id ?? ""}, ${rae.userId}, ${bill.entryId}, ${bill.membershipId}, 'booked', ${randomUUID()}, ${new Date(startsAt.getTime() - 60 * 60_000)})
+      RETURNING id`;
+    const mark = await request("POST", `/v1/orgs/${gym.id}/class-sessions/${session?.id ?? ""}/bookings/${booking?.id ?? ""}/mark`, { cookies: gym.owner.cookies, payload: { status: "no_show" } });
+    expect(mark.statusCode, mark.body).toBe(200);
+    const held = heldMembershipsResponseSchema.parse(JSON.parse((await request("GET", `${entryUrl(gym, bill.entryId)}/memberships`, { cookies: gym.owner.cookies })).body));
+    const feeId = held.memberships.find((m) => m.id === bill.membershipId)?.billing?.fees[0]?.id ?? "";
+    const page = parsed(await request("POST", payUrl(gym), { bearer: rae.accessToken, payload: { requestKey: randomUUID(), membershipId: bill.membershipId, feeId, amountMinor: 1000 } }));
+    expect(square.payLink(linkOf(page.payment.id).id)).toBe(true);
+    await workLater();
+    expect(await outcome(page.payment.id)).toBe("paid");
+    await sweep();
+    expect(sent.map((m) => [m.token, m.body])).toEqual([[rae.phone, `$10.00 paid to ${gym.name} for a no-show fee.`]]);
   });
 });
