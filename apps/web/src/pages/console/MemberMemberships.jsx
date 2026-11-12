@@ -2360,7 +2360,7 @@ export default function MemberMemberships({
         ) : null}
         {m.appCancel ? (
           <span className="c-s14 c-t2" data-testid="held-app-cancel-line">
-            {appCancelStands(m) ? `${appCancelLine(m.appCancel)}. ${UNDO_CANCEL_WORDS.inApp}` : appCancelLine(m.appCancel)}
+            {appCancelStands(m) ? `${appCancelLine(m.appCancel)} · ${UNDO_CANCEL_WORDS.inApp}` : appCancelLine(m.appCancel)}
           </span>
         ) : null}
         {releaseShownLine(m) !== null ? (

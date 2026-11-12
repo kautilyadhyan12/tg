@@ -124,7 +124,7 @@ describe('Undo cancellation', () => {
     orgService.getHeldMemberships.mockResolvedValue(answer([inApp]));
     render(draw());
     const row = await screen.findByTestId('held-membership');
-    expect(within(row).getByTestId('held-app-cancel-line').textContent).toBe('Cancelled in the app on 20 Oct 2026 by Ada Lovelace · Reason: Cost. It can be undone only in the app.');
+    expect(within(row).getByTestId('held-app-cancel-line').textContent).toBe('Cancelled in the app on 20 Oct 2026 by Ada Lovelace · Reason: Cost · It can be undone only in the app.');
     expect(within(row).queryByRole('button', { name: 'Undo cancellation' })).toBeNull();
   });
 

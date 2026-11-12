@@ -105,6 +105,10 @@ export const UNDO_CANCEL_WORDS = {
   frozen: "It's frozen. Unfreeze it first, then undo the cancellation.",
   feePaid: "The early cancellation fee is paid. Refund it first, then undo the cancellation.",
   over: "This membership has ended, so the cancellation can't be undone. Add a membership again instead.",
+  /** Undone meanwhile (another member of staff, another tab): it renews, with nothing cancelled. */
+  notCancelled: "It isn't cancelled any more, so there's nothing to undo.",
+  /** Set to end by a cancel this page never kept: one made at the front desk before 18l-ii-b. */
+  cantUndo: "This cancellation can't be undone.",
 } as const;
 
 /** Another membership starts after it, or in its place (Change membership): undoing it would bill both. */

@@ -85,6 +85,9 @@ d("undo cancellation, for staff (real Postgres)", { timeout: T }, () => {
     await sql`DELETE FROM subscriptions WHERE owner_type = 'gym' AND owner_id IN (${mine})`;
     await sql`DELETE FROM gym_desk_cancels WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM gym_app_cancels WHERE gym_id IN (${mine})`;
+    await sql`DELETE FROM gym_class_bookings WHERE gym_id IN (${mine})`;
+    await sql`DELETE FROM gym_class_sessions WHERE gym_id IN (${mine})`;
+    await sql`DELETE FROM gym_class_types WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM gym_member_refunds WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM gym_member_payments WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM gym_member_bills WHERE gym_id IN (${mine})`;
@@ -464,11 +467,83 @@ d("undo cancellation, for staff (real Postgres)", { timeout: T }, () => {
     expect(await sql`SELECT count(*)::int AS n FROM audit_log WHERE gym_id = ${gym.id} AND action = 'org.held_membership_kept'`).toEqual([{ n: 1 }]);
     // Sent once more later, it is still the one undo.
     expect((await press(gym, gym.owner, mo, moGold, box.choice?.key ?? "", requestKey)).statusCode).toBe(200);
+    // Opened again from a page that was out of date, it says nothing is cancelled, never that it ended (round one, H1).
+    const stale = "It isn't cancelled any more, so there's nothing to undo.";
+    expect(await undoAsk(gym, gym.owner, mo, moGold)).toMatchObject({ choice: null, notes: [stale] });
+    const late = await press(gym, gym.owner, mo, moGold, box.choice?.key ?? "");
+    expect(late.statusCode, late.body).toBe(409);
+    expect((JSON.parse(late.body) as { message: string }).message).toBe(stale);
     // The same key on Ned's is refused, and Ned's stays cancelled.
     const nedBox = await undoAsk(gym, gym.owner, ned, nedGold);
     const reused = await press(gym, gym.owner, ned, nedGold, nedBox.choice?.key ?? "", requestKey);
     expect(reused.statusCode, reused.body).toBe(409);
     expect(await state(nedGold)).toMatchObject({ renews: false });
     expect(await billsOpenedOn(gym, moGold, months(1), 0)).toEqual([{ dueOn: "2026-12-04", amountMinor: 5000 }]);
+  });
+
+  it("round one: staff without the person's page are refused; a keep in the app and Change membership write no desk cancel; the bookings a cancel ended are named", async () => {
+    clock = noon("2026-11-04");
+    const gym = await makeGym("Undo Round One");
+    const [pia, quin, rae, sam] = [await member(gym, "Pia Undo"), await member(gym, "Quin Undo"), await member(gym, "Rae Undo"), await member(gym, "Sam Undo")];
+    const piaGold = await give(gym, pia, "Gold", "2026-11-04");
+    const quinGold = await give(gym, quin, "Gold", "2026-11-04");
+    const raeGold = await give(gym, rae, "Gold", "2026-11-04");
+    const samGold = await give(gym, sam, "Gold", "2026-11-04");
+    clock = noon("2026-11-10");
+
+    // This gym's staff who may not change memberships get 403; staff who may get the box.
+    const reader = await signedIn("Undo Reader");
+    const desk = await signedIn("Undo Desk");
+    await sql`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${gym.id}, ${reader.userId}, 'trainer', ${["members.read"]})`;
+    await sql`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${gym.id}, ${desk.userId}, 'trainer', ${["members.read", "members.confirm"]})`;
+    await deskCancel(gym, pia, piaGold, { when: "period_end" });
+    expect((await inject("GET", undoUrl(gym, pia.entryId, piaGold), reader.cookies)).statusCode).toBe(403);
+    const piaBox = await undoAsk(gym, desk, pia, piaGold);
+    expect((await press(gym, reader, pia, piaGold, piaBox.choice?.key ?? "")).statusCode).toBe(403);
+    expect(await state(piaGold)).toMatchObject({ renews: false });
+    expect((await press(gym, desk, pia, piaGold, piaBox.choice?.key ?? "")).statusCode).toBe(200);
+    expect(await state(piaGold)).toMatchObject({ renews: true });
+
+    // Cancelled in the app, then kept there: no desk cancel was ever written, and staff see no Undo.
+    await appCancel(gym, quin, quinGold, "period_end");
+    const keepPath = `/v1/orgs/${gym.id}/my-membership/memberships/${quinGold}/keep`;
+    const keepBox = await inject("GET", keepPath, quin.cookies);
+    expect(keepBox.statusCode, keepBox.body).toBe(200);
+    const keepKey = (JSON.parse(keepBox.body) as { choice: { key: string } }).choice.key;
+    expect((await inject("POST", keepPath, quin.cookies, { requestKey: randomUUID(), key: keepKey })).statusCode).toBe(200);
+    expect(await sql`SELECT 1 FROM gym_desk_cancels WHERE held_membership_id = ${quinGold}`).toHaveLength(0);
+    expect(await shownUndo(gym, quin, quinGold)).toBe(false);
+
+    // Change membership on the next payment date stops the old one: that is no desk cancel either.
+    const change = await inject("POST", `${heldUrl(gym, rae.entryId)}/${raeGold}/change`, gym.owner.cookies, {
+      requestKey: randomUUID(),
+      typeId: gym.types.get("Silver") ?? "",
+      when: "next_payment",
+      startsOn: "2026-12-04",
+      priceMinor: 4000,
+      creditMinor: 0,
+      totalMinor: 4000,
+      paid: false,
+    });
+    expect(change.statusCode, change.body).toBe(200);
+    expect(await sql`SELECT 1 FROM gym_desk_cancels WHERE held_membership_id = ${raeGold}`).toHaveLength(0);
+    expect(await shownUndo(gym, rae, raeGold)).toBe(false);
+
+    // A class booked after the last day ends with the cancel; the undo box says it stays cancelled.
+    const [type] = await sql<{ id: string }[]>`
+      INSERT INTO gym_class_types (gym_id, name, minutes, places, colour, open_gym) VALUES (${gym.id}, 'Spin', 45, null, 'blue', false) RETURNING id`;
+    const startsAt = new Date("2026-12-10T18:00:00Z");
+    const [session] = await sql<{ id: string }[]>`
+      INSERT INTO gym_class_sessions (gym_id, class_type_id, local_date, local_start_minute, starts_at, minutes, places, coach_user_id, status)
+      VALUES (${gym.id}, ${type?.id ?? ""}, '2026-12-10', 720, ${startsAt}, 45, null, null, 'scheduled') RETURNING id`;
+    // Booked as the booking route writes it (booking for a class four weeks away is not open yet).
+    await sql`INSERT INTO gym_class_bookings (gym_id, session_id, user_id, entry_id, held_membership_id, request_key, status, pack_charged, created_at, booked_at)
+              VALUES (${gym.id}, ${session?.id ?? ""}, ${sam.userId}, ${sam.entryId}, ${samGold}, gen_random_uuid(), 'booked', false, now(), now())`;
+    const asked = await inject("POST", `${heldUrl(gym, sam.entryId)}/${samGold}/cancel`, gym.owner.cookies, { when: "period_end" });
+    expect(asked.statusCode, asked.body).toBe(409);
+    const mark = (JSON.parse(asked.body) as { ending: { mark: string } }).ending.mark;
+    await deskCancel(gym, sam, samGold, { when: "period_end", confirmBookings: mark });
+    expect(await sql`SELECT ended_classes, ended_sessions FROM gym_desk_cancels WHERE held_membership_id = ${samGold}`).toEqual([{ ended_classes: 1, ended_sessions: 0 }]);
+    expect((await undoAsk(gym, gym.owner, sam, samGold)).choice?.lines).toContain("The 1 class booking cancelled with it isn't booked again.");
   });
 });

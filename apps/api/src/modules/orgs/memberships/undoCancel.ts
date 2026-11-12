@@ -10,11 +10,13 @@
 import type { TransactionSql } from "postgres";
 import {
   UNDO_CANCEL_BUTTON,
+  heldMembershipView,
   UNDO_CANCEL_WORDS,
   undoCancelAskSchema,
   undoCancelLines,
   undoCancelQuestion,
   undoCancelReplacedNote,
+  type HeldMembership,
   type HeldMembershipsResponse,
   type UndoCancelAsk,
   type UndoCancelFacts,
@@ -35,6 +37,14 @@ export interface UndoWorked {
   cancel: DeskCancelRow | null;
 }
 
+/** Why there is nothing to undo where no desk cancel stands: over, already renewing again (undone meanwhile), or set to
+ *  end by a cancel nothing kept. */
+function noOpenCancel(m: HeldMembership, today: string): string {
+  const view = heldMembershipView(m, today);
+  if (view.status !== "active" && view.status !== "frozen" && view.status !== "upcoming") return UNDO_CANCEL_WORDS.over;
+  return m.renews && (m.stopsAfter ?? null) === null && m.leftEarly !== true && m.contractThen !== "ends" ? UNDO_CANCEL_WORDS.notCancelled : UNDO_CANCEL_WORDS.cantUndo;
+}
+
 /** THE BOX, worked out from the cancels, the membership and its bills as they stand: the same read for the box and,
  *  under the locks, for the press. Null where the gym has no such membership on this record. */
 export async function workOutUndo(tx: TransactionSql, gymId: string, entryId: string, membershipId: string, today: string): Promise<UndoWorked | null> {
@@ -47,7 +57,7 @@ export async function workOutUndo(tx: TransactionSql, gymId: string, entryId: st
   // The member stopped these charges, so only the member starts them again (Kd, 2026-11-11).
   if ((await cancels.cancelsOf(tx, gymId, [row.id])).has(row.id)) return nothing(UNDO_CANCEL_WORDS.inApp);
   const cancel = (await openDeskCancelsOf(tx, gymId, [row.id])).get(row.id);
-  if (cancel === undefined) return nothing(UNDO_CANCEL_WORDS.over);
+  if (cancel === undefined) return nothing(noOpenCancel(row.membership, today));
   const money = await keepMoney(tx, gymId, entryId, row, { type: "undo_cancel", ways: cancel.ways }, cancel.endsOn, today);
   if (money.kind === "over") return nothing(UNDO_CANCEL_WORDS.over);
   if (money.kind === "frozen") return nothing(UNDO_CANCEL_WORDS.frozen);
