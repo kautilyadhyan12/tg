@@ -17,6 +17,7 @@ import {
   agreementSignable,
   membershipTerms,
   MY_CANCEL_WORDS,
+  MY_KEEP_BUTTON,
   myCancelFrozen,
   myCancelPaidByLine,
   myCancelWays,
@@ -36,7 +37,8 @@ import { dayInTz } from "../../gamification/streak.js";
 import { OrgsError } from "../service.js";
 import { readOwnHeld } from "../memberships/heldService.js";
 import { heldRowsOf } from "../memberships/heldRepo.js";
-import { cancelsOf } from "./cancelRepo.js";
+import { cancelsOf, followersOf } from "./cancelRepo.js";
+import { keepable } from "./keep.js";
 import { atDeskOf, myMembershipAgreements } from "../agreement/toSign.js";
 import { paidForBy, payerOf } from "../payers/repo.js";
 import { purchasesOf, type SaleRow } from "../register/repo.js";
@@ -152,10 +154,12 @@ export async function getMyMembership(deps: MyMembershipDeps, userId: string, gy
   // Cancel in the app (18l): the button, who can instead, or the line once it was cancelled in the app.
   const ids = [...held.memberships.map((m) => m.id), ...paysFor.flatMap((p) => p.memberships.map((m) => m.id))];
   const [rows, cancelled] = await Promise.all([heldRowsOf(deps.sql, gymId, ids), cancelsOf(deps.sql, gymId, ids)]);
+  const followed = await followersOf(deps.sql, gymId, [...cancelled.keys()], today);
   const cancelOf = (id: string, paidBy: string | null): MyMembershipCancel | null => {
     const done = cancelled.get(id);
-    if (done !== undefined) return { state: "cancelled", line: myCancelledLine(done.cancelledOn, done.userId === userId, done.byName) };
     const row = rows.get(id);
+    // Keep my membership (18l-ii-a), for whoever pays for it now, while it still runs to its last day.
+    if (done !== undefined) return { state: "cancelled", line: myCancelledLine(done.cancelledOn, done.userId === userId, done.byName), keep: paidBy === null && keepable(done, row, today, followed.has(id)) ? MY_KEEP_BUTTON : null };
     const ways = row === undefined ? [] : myCancelWays(row.membership, today);
     const only = ways.length === 1 ? ways[0] : undefined;
     // Frozen and held by a term or a notice: the line saying the front desk cancels it (round one, H1).

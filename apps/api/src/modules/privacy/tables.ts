@@ -624,6 +624,7 @@ export const USER_LINKED_NOT_PURGED_TABLES = [
   // record on the gym's list, on gym_app_payments' footing: the gym's record of a membership cancelled; `ON DELETE set
   // null`. It holds the way it was cancelled, its days and a reason from a fixed list, no typed word; a record deleted
   // for good lets go of `by_entry_id`, and the membership going takes the row with it.
+  // Keep my membership (`0233`; 18l-ii-a) adds kept_by_user_id and kept_by_entry_id, whoever pressed Keep, on the same footing.
   "gym_app_cancels",
   // gym_card_charges.started_by — which member of staff pressed Charge card on file (`0158`;
   // 18d-iii-i); null for the app's own charge on a bill's date. On gym_member_payments' footing: the

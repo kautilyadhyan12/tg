@@ -1008,8 +1008,25 @@ export const gymAppCancels = pgTable(
     /** What the box said, for a confirmation sent again: the choice's sentences and the notes under it. */
     said: jsonb("said").notNull(),
     createdAt: createdAt(),
+    /** The bookings the cancel ended, which a keep does not book again (18l-ii-a). */
+    endedClasses: integer("ended_classes").notNull().default(0),
+    endedSessions: integer("ended_sessions").notNull().default(0),
+    /** Keep my membership (18l-ii-a): when, the gym's day, by whom (`kept_by_entry_id` lets go as `by_entry_id` does,
+     *  in the migration only), the press, what the box said, and when its confirmation went. */
+    keptAt: timestamp("kept_at", { withTimezone: true }),
+    keptOn: date("kept_on"),
+    keptByEntryId: uuid("kept_by_entry_id"),
+    keptByUserId: uuid("kept_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    keepRequestKey: uuid("keep_request_key"),
+    keepSaid: jsonb("keep_said"),
+    keepEmailedAt: timestamp("keep_emailed_at", { withTimezone: true }),
   },
   (t) => [
+    check("gym_app_cancels_ended_check", sql`${t.endedClasses} >= 0 AND ${t.endedSessions} >= 0`),
+    check(
+      "gym_app_cancels_kept_check",
+      sql`(${t.keptAt} IS NULL) = (${t.keptOn} IS NULL) AND (${t.keptAt} IS NULL) = (${t.keepRequestKey} IS NULL) AND (${t.keptAt} IS NULL) = (${t.keepSaid} IS NULL) AND (${t.keptAt} IS NOT NULL OR (${t.keptByEntryId} IS NULL AND ${t.keptByUserId} IS NULL AND ${t.keepEmailedAt} IS NULL)) AND (${t.keptOn} IS NULL OR ${t.keptOn} >= ${t.cancelledOn})`,
+    ),
     check("gym_app_cancels_when_check", sql`${t.when} IN ('cooling_off','period_end','today','notice','contract_end','leave_early')`),
     check(
       "gym_app_cancels_reason_check",
@@ -1018,7 +1035,9 @@ export const gymAppCancels = pgTable(
     check("gym_app_cancels_days_check", sql`${t.endsOn} >= ${t.cancelledOn}`),
     foreignKey({ name: "gym_app_cancels_held_fk", columns: [t.gymId, t.heldMembershipId], foreignColumns: [gymHeldMemberships.gymId, gymHeldMemberships.id] }).onDelete("cascade"),
     uniqueIndex("gym_app_cancels_request_uq").on(t.gymId, t.requestKey),
-    uniqueIndex("gym_app_cancels_held_uq").on(t.gymId, t.heldMembershipId),
+    // One open cancel a membership; kept, it can be cancelled in the app again (18l-ii-a).
+    uniqueIndex("gym_app_cancels_held_uq").on(t.gymId, t.heldMembershipId).where(sql`${t.keptAt} IS NULL`),
+    uniqueIndex("gym_app_cancels_keep_request_uq").on(t.gymId, t.keepRequestKey).where(sql`${t.keepRequestKey} IS NOT NULL`),
     index("gym_app_cancels_recent_idx").on(t.gymId, t.createdAt),
   ],
 );

@@ -77,11 +77,11 @@ type Limit = () => Promise<boolean>;
 const CANCEL_BOOKINGS = { ask: membershipBookingsAsk, end: endMembershipBookings };
 const MEMBERS = "members.confirm";
 
-const notFound = (): OrgsError => new OrgsError(404, "membership_not_found", "Membership not found.");
+export const notFound = (): OrgsError => new OrgsError(404, "membership_not_found", "Membership not found.");
 const changed = (): OrgsError => new OrgsError(409, "cancel_changed", MY_CANCEL_WORDS.changed);
 
 /** Who the reader is and whose membership this is: the record it is on, and the reader's own record, which pressed it. */
-interface Whose {
+export interface Whose {
   gymName: string;
   timezone: string;
   /** The record the membership is on. */
@@ -91,7 +91,7 @@ interface Whose {
 }
 
 /** Whose it is, or 404; a member somebody else pays for is told who can cancel it (409). Asked again under the locks. */
-async function whoseOf(sql: Sql | TransactionSql, gymId: string, userId: string, membershipId: string): Promise<Whose> {
+export async function whoseOf(sql: Sql | TransactionSql, gymId: string, userId: string, membershipId: string): Promise<Whose> {
   const reader = await repo.readerOf(sql, gymId, userId);
   if (reader === null) throw new OrgsError(404, "org_not_found", "Organisation not found.");
   const own = reader.entryId !== null && reader.holders === 1 ? reader.entryId : null;
@@ -108,9 +108,10 @@ async function whoseOf(sql: Sql | TransactionSql, gymId: string, userId: string,
 
 /** The payments still to come before `lastDay`, after the cancel, as their bills will open: none for one that no longer
  *  renews. A period already due with its bill open is owed, said apart. */
-type Coming = MyCancelPayment & { periodIndex: number; opens: boolean };
+export type Coming = MyCancelPayment & { periodIndex: number; opens: boolean };
 
-function paymentsToCome(row: HeldRow, after: HeldMembership, lastDay: string, bills: readonly BillRow[], today: string): Coming[] {
+/** `first`: the next one alone (Keep my membership, 18l-ii-a). */
+export function paymentsToCome(row: HeldRow, after: HeldMembership, lastDay: string, bills: readonly BillRow[], today: string, first = false): Coming[] {
   if (after.kind !== "recurring" || after.free || !after.renews || (after.status !== "active" && after.status !== "frozen")) return [];
   // A frozen one counts the days frozen so far, as its unfreeze will (`noticeOf`).
   const frozenSoFar = after.status === "frozen" && after.frozenOn !== null ? Math.max(0, daysBetween(after.frozenOn, today)) : 0;
@@ -123,12 +124,13 @@ function paymentsToCome(row: HeldRow, after: HeldMembership, lastDay: string, bi
     if (bill !== undefined && (bill.status !== "open" || bill.dueOn <= today)) continue;
     const amountMinor = bill === undefined ? renewalAmountMinor(row, i) : bill.amountMinor - bill.paidMinor;
     if (amountMinor > 0) out.push({ dueOn: bill?.dueOn ?? due, amountMinor, periodIndex: i, opens: bill === undefined });
+    if (first && out.length > 0) break;
   }
   return out;
 }
 
 /** The key of one choice of one membership: what it says, for exactly that membership. */
-const keyOf = (membershipId: string, c: Omit<MyCancelChoice, "key" | "button">): string => createHash("sha256").update(JSON.stringify({ membershipId, ...c }), "utf8").digest("hex");
+export const keyOf = (membershipId: string, c: object): string => createHash("sha256").update(JSON.stringify({ membershipId, ...c }), "utf8").digest("hex");
 
 interface Worked {
   ask: MyCancelAsk;
@@ -263,7 +265,7 @@ function refusal(outcome: Exclude<HeldWriteOutcome, { kind: "ok" }>): OrgsError 
 }
 
 /** "11 Nov 2026 at 2:05 PM", on the business's own clock. */
-function atWords(at: Date, timezone: string, country: string | null): string {
+export function atWords(at: Date, timezone: string, country: string | null): string {
   const day = new Intl.DateTimeFormat("en-GB", { timeZone: timezone, day: "numeric", month: "short", year: "numeric" }).format(at);
   const time = new Intl.DateTimeFormat(`en-${country ?? "US"}`, { timeZone: timezone, hour: "numeric", minute: "2-digit" }).format(at);
   return `${day} at ${time}`;
@@ -337,7 +339,7 @@ export async function cancelInApp(deps: CancelDeps, userId: string, gymId: strin
     });
     if (outcome.kind === "has_bookings") throw changed();
     if (outcome.kind !== "ok") throw refusal(outcome);
-    const id = await cancels.insertCancel(tx, { gymId, membershipId, byEntryId: whose.ownId, userId, requestKey: body.requestKey, when: body.when, endsOn: choice.endsOn, cancelledOn: today, said: { lines: choice.lines, notes: worked.ask.notes }, now });
+    const id = await cancels.insertCancel(tx, { gymId, membershipId, byEntryId: whose.ownId, userId, requestKey: body.requestKey, when: body.when, endsOn: choice.endsOn, cancelledOn: today, said: { lines: choice.lines, notes: worked.ask.notes }, ended: { classes: choice.ending.classes, sessions: choice.ending.sessions }, now });
     return { kind: "new" as const, id, choice, said, notes: worked.ask.notes, entryId: whose.entryId, gymName: whose.gymName, timezone: whose.timezone };
   });
   if (done.kind === "again") {
@@ -353,7 +355,7 @@ export async function cancelInApp(deps: CancelDeps, userId: string, gymId: strin
     const line = myCancelDoneLine({ gymName: first.gymName, membershipName: held.typeName, forName, currency: held.currency, today: r.cancelledOn, way: { when: r.when, endsOn: r.endsOn }, refundMinor });
     // A confirmation that did not go is tried again by the same press (round one, L3).
     const named = forName === null ? held.typeName : `${forName}'s ${held.typeName}`;
-    const emailed = r.emailed || (await confirm(deps, gymId, r.id, { userId, gymName: first.gymName, membershipName: named, at: now, timezone: first.timezone, done: line, lines: r.said.lines, notes: r.said.notes }));
+    const emailed = r.emailed || (await confirm(deps, gymId, r.id, { userId, gymName: first.gymName, membershipName: named, at: r.createdAt, timezone: first.timezone, done: line, lines: r.said.lines, notes: r.said.notes }));
     return myCancelDoneSchema.parse({ cancelId: r.id, line, endsOn: r.endsOn, emailed, reason: r.reason });
   }
   deps.news.tell(gymId, { what: "memberships", entryId: done.entryId });

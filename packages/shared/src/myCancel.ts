@@ -63,7 +63,7 @@ export function myCancelWays(stored: HeldMembership, today: string): MyCancelWay
   return paid !== null ? [{ when: "period_end", endsOn: paid }] : [{ when: "today", endsOn: today }];
 }
 
-/** Frozen, and held by a minimum term or a notice: the front desk cancels it (round one, H1). */
+/** Frozen, and held by a minimum term or a notice: the front desk cancels it. */
 export function myCancelFrozen(stored: HeldMembership, today: string): boolean {
   const view = heldMembershipView(stored, today);
   return stored.kind === "recurring" && stored.renews && view.status === "frozen" && view.can.coolingOff === null && ((view.can.releaseNeeded && view.contract !== null) || view.can.noticeEnds !== null);
@@ -158,7 +158,8 @@ export type MyCancelDone = z.infer<typeof myCancelDoneSchema>;
 export const myMembershipCancelSchema = z.discriminatedUnion("state", [
   z.object({ state: z.literal("can"), button: z.string().min(1) }).strict(),
   z.object({ state: z.literal("elsewhere"), line: z.string().min(1) }).strict(),
-  z.object({ state: z.literal("cancelled"), line: z.string().min(1) }).strict(),
+  // `keep`: the Keep my membership button (18l-ii-a), where it still runs to a last day; null where it cannot be kept.
+  z.object({ state: z.literal("cancelled"), line: z.string().min(1), keep: z.string().min(1).nullable().default(null) }).strict(),
 ]);
 export type MyMembershipCancel = z.infer<typeof myMembershipCancelSchema>;
 
@@ -285,7 +286,7 @@ export const MY_CANCEL_WORDS = {
   terminalWaiting: "A payment for it is waiting at the front desk. Try again in a few minutes.",
   appPaying: "A payment page for it is open. Finish that payment or close it first.",
   partPaid: "Part of a payment for it is paid and the rest is still owed, so the front desk cancels it. Ask them.",
-  /** Frozen, and held by a minimum term or a notice (round one, H1). */
+  /** Frozen, and held by a minimum term or a notice. */
   frozen: "It's frozen, so the front desk cancels it. Ask them, or unfreeze it first.",
   requestReused: "That press was already used. Go back and look again.",
 } as const;
@@ -306,4 +307,112 @@ export function myCancelDoneLine(f: Pick<MyCancelFacts, "gymName" | "membershipN
 export function myCancelledLine(on: string, byReader: boolean, byName: string | null): string {
   if (byReader) return `You cancelled it in the app on ${dayWords(on)}.`;
   return byName === null ? `Cancelled in the app on ${dayWords(on)}.` : `${byName} cancelled it in the app on ${dayWords(on)}.`;
+}
+
+// ── Keep my membership (18l-ii-a) ──────────────────────────────────────────────────────────────────────────────────
+//
+// A member who cancelled in the app, or whoever pays for them, undoes it there until its last day: the member stopped
+// the charges, so only the member starts them again (Kd, rulings/2026-11-11-18l.md). A cancel that ended it at once
+// (today, or inside a cooling-off period) is over and cannot be kept.
+
+export const MY_KEEP_BUTTON = "Keep my membership";
+
+export const myKeepChoiceSchema = z
+  .object({
+    button: z.string().min(1),
+    /** The box's sentences, in the order they are read. */
+    lines: z.array(z.string().min(1)).max(6),
+    /** The next payment once it renews again, as its bill will open; null where none comes due (a free one). */
+    next: myCancelPaymentSchema.nullable(),
+    /** Leaving early: the early cancellation fee taken off, not paid yet. */
+    feeOffMinor: minorSchema.nullable(),
+    /** One value for exactly what the box says, sent back with the keep: refused where it changed. */
+    key: markSchema,
+  })
+  .strict();
+export type MyKeepChoice = z.infer<typeof myKeepChoiceSchema>;
+
+/** The box under Keep my membership. Null `choice` with a note says why there is nothing to press. */
+export const myKeepAskSchema = z
+  .object({
+    membership: z.object({ id: z.uuid(), name: z.string() }).strict(),
+    currency: z.string().regex(/^[A-Z]{3}$/),
+    choice: myKeepChoiceSchema.nullable(),
+    notes: z.array(z.string().min(1)).max(4),
+  })
+  .strict();
+export type MyKeepAsk = z.infer<typeof myKeepAskSchema>;
+
+export const myKeepRequestSchema = z
+  .object({
+    /** The same press sent twice is one keep, answered as it was. */
+    requestKey: z.uuid(),
+    key: markSchema,
+  })
+  .strict();
+export type MyKeepRequest = z.infer<typeof myKeepRequestSchema>;
+
+export const myKeepDoneSchema = z
+  .object({
+    /** "Cancellation removed. Gold Monthly will keep renewing until you cancel." */
+    line: z.string().min(1),
+    /** Whether the confirmation email went to their address. */
+    emailed: z.boolean(),
+  })
+  .strict();
+export type MyKeepDone = z.infer<typeof myKeepDoneSchema>;
+
+/** What the keep box's sentences are made from, worked out by the server. */
+export interface MyKeepFacts {
+  membershipName: string;
+  /** Whoever pays for them pressed it: the member's name; null for their own. */
+  forName: string | null;
+  currency: string;
+  next: MyCancelPayment | null;
+  /** The card the app charges the next payment to by itself, where it does. */
+  card: { brand: string; last4: string } | null;
+  feeOffMinor: number | null;
+  /** The bookings the cancel ended: they stay cancelled. */
+  ended: { classes: number; sessions: number };
+}
+
+/** THE KEEP BOX'S SENTENCES, and the same in the confirmation email. */
+export function myKeepLines(f: MyKeepFacts): string[] {
+  const name = whose(f);
+  const lines = [`Your cancellation will be removed, and ${name} will keep renewing until you cancel.`];
+  const card = f.card === null ? null : cardName(f.card);
+  if (f.next === null) lines.push("There's nothing to pay for it.");
+  else if (card !== null) lines.push(`Your next payment of ${formatMinor(f.next.amountMinor, f.currency)} will be charged to ${card} on ${dayWords(f.next.dueOn)}.`);
+  else lines.push(`Your next payment is ${formatMinor(f.next.amountMinor, f.currency)} on ${dayWords(f.next.dueOn)}.`);
+  if (f.feeOffMinor !== null && f.feeOffMinor > 0) lines.push(`The ${formatMinor(f.feeOffMinor, f.currency)} early cancellation fee will be removed.`);
+  const parts = [
+    f.ended.classes > 0 ? plural(f.ended.classes, "class booking", "class bookings") : null,
+    f.ended.sessions > 0 ? plural(f.ended.sessions, "personal training session", "personal training sessions") : null,
+  ].filter((p): p is string => p !== null);
+  if (parts.length > 0) {
+    const many = f.ended.classes + f.ended.sessions > 1;
+    lines.push(`The ${parts.join(" and ")} cancelled with your membership ${many ? "aren't" : "isn't"} booked again. Book ${many ? "them" : "it"} again if you want.`);
+  }
+  return lines;
+}
+
+/** Once it is kept: what the screen says, and what the confirmation says first. */
+export function myKeepDoneLine(f: Pick<MyKeepFacts, "membershipName" | "forName">): string {
+  return `Cancellation removed. ${whose(f)} will keep renewing until you cancel.`;
+}
+
+export const MY_KEEP_WORDS = {
+  /** Leaving early, with the fee paid: staff refund it first, as refunds are the gym's. */
+  feePaid: "You've paid the early cancellation fee. Ask the front desk to refund it, then you can keep your membership here.",
+  changed: "Something about this membership has changed. Close this and try again.",
+  /** Frozen, its dates stand still: kept once it is unfrozen. */
+  frozen: "It's frozen. Ask the front desk to unfreeze it, then you can keep it here.",
+  /** Its last day passed, or the front desk ended it since. */
+  over: "This membership has ended, so it can't be kept. Ask the front desk about joining again.",
+} as const;
+
+/** Another membership starts after it, or in its place (Change membership): keeping it would bill both. */
+export function myKeepReplacedNote(newName: string, startsOn: string, forName: string | null, replaces: boolean): string {
+  if (!replaces) return `Another membership, ${newName}, starts on ${dayWords(startsOn)}, so this one can't be kept. Ask the front desk.`;
+  return `${forName === null ? "You're" : `${forName} is`} moving to ${newName} on ${dayWords(startsOn)}, so this membership can't be kept. Ask the front desk.`;
 }
