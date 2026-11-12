@@ -5,7 +5,7 @@ import { Button } from "../look/Button";
 import { Sheet } from "../look/Sheet";
 import { useSetupComing } from "../screens/setupFirst";
 import { Txt } from "../look/Txt";
-import { payAwayGym } from "../screens/gym/payAway";
+import { payAwayPlace } from "../screens/gym/payAway";
 import { useSession } from "../session/SessionProvider";
 import {
   ASK_AGAIN_MS,
@@ -127,14 +127,15 @@ export function NotificationsProvider({ children, onTapped }: { children: ReactN
     await askNotifications();
     await readAgain();
   }, [readAgain]);
-  // Android closed the app behind Square's payment page (20f): it opens that place's My membership, where the page is ended.
+  // Android closed the app behind Square's payment page (20f): it opens that place's My membership, where the page is ended;
+  // or its Buy, where a line was being bought (20g).
   useEffect(() => {
     if (userId === null) return;
     const run = { live: true };
     void (async () => {
-      const gymId = await payAwayGym(userId);
-      if (!run.live || gymId === null) return;
-      const ask: GymTapped = { kind: "membership", gymId };
+      const kept = await payAwayPlace(userId);
+      if (!run.live || kept === null) return;
+      const ask: GymTapped = kept.purchaseId === null ? { kind: "membership", gymId: kept.gymId } : { kind: "buy", gymId: kept.gymId, purchaseId: kept.purchaseId };
       setTapAsked(ask);
       onTapped?.(ask);
     })();

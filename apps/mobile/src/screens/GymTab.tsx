@@ -34,6 +34,7 @@ import { InviteFriendPage, InviteLine, type InvitePlace } from "./gym/InviteFrie
 import { inboxButtonLabel, inboxButtonSay } from "./gym/inboxView";
 import { LeaderboardPage, type LeaderboardPlace } from "./gym/Leaderboard";
 import { MembershipPage, type MembershipPlace } from "./gym/Membership";
+import { BuyPage, useSellsInApp, type BuyPlace } from "./gym/Buy";
 import { PersonalTrainingPage, type PtPlace } from "./gym/PersonalTraining";
 import { OWN_PASS_AFTER_MS, PASS_PATH, PassSheet } from "./gym/Pass";
 import { UpdatesPage, type UpdatesPlace } from "./gym/Updates";
@@ -44,7 +45,8 @@ import { makePhonePass, phoneDay } from "./gym/phonePass";
 import { NO_ANSWER } from "./SignIn";
 
 // The Gym tab (docs/design/phone/pages/Gym and GymNone): the places the person joined, each with
-// Show my pass, its waiver to sign where it asks for one, its Inbox, its Updates, its Classes, its Events, its Personal training, My membership, Invite a friend where it
+// Show my pass, its waiver to sign where it asks for one, its Inbox, its Updates, its Classes, its Events, its Personal training, My membership, Buy where it sells
+// something in the app (20g), Invite a friend where it
 // has switched Refer a friend on, and the days they came there, a place that removed them, and every invitation still open for their address. It reads again when the
 // tab is opened or the app comes back, at most every 30 seconds. With the internet it also asks for
 // this sign-in's keys for passes with no signal, today's and tomorrow's, whenever the phone lacks
@@ -97,6 +99,8 @@ export function GymScreen() {
   // The place whose Personal training page is open over the tab, or null.
   const [ptAt, setPtAt] = useState<PtPlace | null>(null);
   const [membershipAt, setMembershipAt] = useState<MembershipPlace | null>(null);
+  // The place whose Buy page is open over the tab, or null (20g).
+  const [buyAt, setBuyAt] = useState<BuyPlace | null>(null);
   // The place whose Updates page is open over the tab, or null.
   const [updatesAt, setUpdatesAt] = useState<UpdatesPlace | null>(null);
   // The place whose Inbox is open over the tab, or null.
@@ -204,6 +208,11 @@ export function GymScreen() {
   };
 
   const joined = mine?.kind === "ok" ? mine.data.orgs.filter((org) => org.isMember) : [];
+  // Read again with the places: Buy shows where a place sells something in the app now (20g).
+  const sellsInApp = useSellsInApp(
+    joined.map((org) => org.id),
+    mine,
+  );
   // Sign agreement on Classes and Personal training, where the business stops bookings until it is signed: opens the
   // one membership to sign, or My membership where there are several (the stop holds until all are signed); null where
   // there is none, and they read the server's own words.
@@ -238,6 +247,7 @@ export function GymScreen() {
     if (asked !== false) {
       const at = { id: asked.id, name: asked.name, clockFormat: asked.clockFormat };
       if (tapAsked.kind === "membership") setMembershipAt({ id: asked.id, name: asked.name });
+      else if (tapAsked.kind === "buy") setBuyAt({ id: asked.id, name: asked.name, resume: tapAsked.purchaseId });
       else if (tapAsked.kind === "inbox") setInboxAt({ id: asked.id, name: asked.name, orgType: asked.orgType, latestCheer: asked.latestCheer, latestNudge: asked.latestNudge });
       else if (tapAsked.kind === "comment") setUpdatesAt({ ...at, postId: tapAsked.postId });
       else if (tapAsked.what === "class") setClassesAt({ ...at, week: weekOfDay(tapAsked.day, asked.timezone, Date.now()), sessionId: tapAsked.id });
@@ -386,6 +396,17 @@ export function GymScreen() {
                   setMembershipAt({ id: org.id, name: org.name });
                 }}
               />
+              {sellsInApp.has(org.id) ? (
+                <Button
+                  label="Buy"
+                  kind="link"
+                  icon="bag"
+                  say={`Buy a membership or pack at ${org.name}`}
+                  onPress={() => {
+                    setBuyAt({ id: org.id, name: org.name });
+                  }}
+                />
+              ) : null}
               {org.waiver === "signed" ? (
                 <Button
                   label="Waiver"
@@ -457,11 +478,35 @@ export function GymScreen() {
       />
       <MembershipPage
         place={membershipAt}
+        onBuy={
+          membershipAt !== null && sellsInApp.has(membershipAt.id)
+            ? () => {
+                const at = membershipAt;
+                setMembershipAt(null);
+                setBuyAt({ id: at.id, name: at.name });
+              }
+            : null
+        }
         onClose={() => {
           setMembershipAt(null);
           // An agreement signed there is what the card says when it closes, and what Classes or Personal training
           // under it say, where its Sign agreement opened it (20c).
           setAgreementClosed((n) => n + 1);
+          void readMine();
+        }}
+      />
+      <BuyPage
+        place={buyAt}
+        onMembership={(at) => {
+          setBuyAt(null);
+          setMembershipAt({ id: at.id, name: at.name });
+        }}
+        onPass={(at) => {
+          setBuyAt(null);
+          setPassOrgType(joined.find((org) => org.id === at.id)?.orgType ?? "unknown");
+        }}
+        onClose={() => {
+          setBuyAt(null);
           void readMine();
         }}
       />
