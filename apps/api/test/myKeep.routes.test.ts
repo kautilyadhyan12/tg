@@ -293,9 +293,9 @@ d("keep my membership in the app (real Postgres)", { timeout: T }, () => {
     expect(await sql`SELECT 1 FROM gym_app_cancels WHERE held_membership_id = ${anaGold} AND kept_at IS NOT NULL`).toHaveLength(0);
 
     // Plain: it renews on 4 Dec for $50.00, and every month after the 3 Dec it would have ended on.
-    expect(anaBox.choice?.lines).toEqual(["Gold won't end on 3 Dec 2026. It renews until you cancel.", "The next payment of $50.00 is due on 4 Dec 2026."]);
+    expect(anaBox.choice?.lines).toEqual(["Your cancellation will be removed, and Gold will keep renewing until you cancel.", "Your next payment is $50.00 on 4 Dec 2026."]);
     const a = await keep(gym, ana, anaGold);
-    expect(a.done).toEqual({ line: "Kept. Gold renews until you cancel.", emailed: true });
+    expect(a.done).toEqual({ line: "Cancellation removed. Gold will keep renewing until you cancel.", emailed: true });
     expect(await state(anaGold)).toMatchObject({ status: "active", renews: true });
     const anaBills = await billsOpenedOn(gym, anaGold, months(3), 0);
     expect(anaBills[0]).toEqual(a.choice.next);
@@ -307,14 +307,14 @@ d("keep my membership in the app (real Postgres)", { timeout: T }, () => {
 
     // A notice given: the payment it still owed, then every month after 3 Jan 2027.
     const b = await keep(gym, ben, benNotice);
-    expect(b.choice.lines[0]).toBe("Gold Notice won't end on 3 Jan 2027. It renews until you cancel.");
+    expect(b.choice.lines[0]).toBe("Your cancellation will be removed, and Gold Notice will keep renewing until you cancel.");
     expect(b.choice.next).toEqual({ dueOn: "2026-12-04", amountMinor: 5000 });
     expect(await state(benNotice)).toMatchObject({ renews: true, stops_after: null });
     expect((await billsOpenedOn(gym, benNotice, months(4), 0)).map((x) => x.dueOn)).toEqual(["2026-12-04", "2027-01-04", "2027-02-04", "2027-03-04"]);
 
     // A minimum term set to end with it: it renews after the term.
     const c = await keep(gym, cara, caraTerm);
-    expect(c.choice.lines[0]).toBe("Gold Term won't end on 3 Feb 2027. It renews until you cancel.");
+    expect(c.choice.lines[0]).toBe("Your cancellation will be removed, and Gold Term will keep renewing until you cancel.");
     expect(c.choice.next).toEqual({ dueOn: "2026-12-04", amountMinor: 5000 });
     expect(await state(caraTerm)).toMatchObject({ renews: true, contract_then: "renews" });
     expect((await billsOpenedOn(gym, caraTerm, months(5), 0)).map((x) => x.dueOn)).toEqual(["2026-12-04", "2027-01-04", "2027-02-04", "2027-03-04", "2027-04-04"]);
@@ -372,7 +372,7 @@ d("keep my membership in the app (real Postgres)", { timeout: T }, () => {
     clock = noon("2026-11-10");
     await cancel(gym, kit, kitGold, "period_end");
     await cancel(gym, lou, louGold, "period_end");
-    expect((await keepAsk(gym, kit, kitGold)).choice?.lines[1]).toBe("Visa ending 1111 is charged $50.00 next, on 4 Dec 2026.");
+    expect((await keepAsk(gym, kit, kitGold)).choice?.lines[1]).toBe("Your next payment of $50.00 will be charged to Visa ending 1111 on 4 Dec 2026.");
     // A $10.00 gift waiting comes off the next payment, and off that very bill.
     await sql`
       INSERT INTO gym_referral_member_gifts (gym_id, member_user_id, kind, amount_minor, currency, given_at, given_on)
@@ -396,7 +396,7 @@ d("keep my membership in the app (real Postgres)", { timeout: T }, () => {
 
     const f = await keep(gym, fia, fiaTerm);
     expect(f.choice.feeOffMinor).toBe(2500);
-    expect(f.choice.lines).toContain("The $25.00 early cancellation fee is taken off.");
+    expect(f.choice.lines).toContain("The $25.00 early cancellation fee will be removed.");
     expect((await fee(fiaTerm))?.status).toBe("void");
     expect(await state(fiaTerm)).toMatchObject({ renews: true, left_early: false, stops_after: null });
 
@@ -405,7 +405,7 @@ d("keep my membership in the app (real Postgres)", { timeout: T }, () => {
     const paid = await inject("POST", `${heldUrl(gym, gil.entryId)}/${gilTerm}/fees/${gilFee?.id ?? ""}/payments`, gym.owner.cookies, { requestKey: randomUUID(), amountMinor: 2500, method: "cash" });
     expect(paid.statusCode, paid.body).toBe(200);
     const box = await keepAsk(gym, gil, gilTerm);
-    expect(box).toMatchObject({ choice: null, notes: ["You've paid the early cancellation fee. Ask the front desk to refund it, then keep your membership here."] });
+    expect(box).toMatchObject({ choice: null, notes: ["You've paid the early cancellation fee. Ask the front desk to refund it, then you can keep your membership here."] });
     expect(await state(gilTerm)).toMatchObject({ left_early: true });
     // Its payment taken back, it can be kept, and the fee comes off.
     const [payment] = await sql<{ id: string }[]>`SELECT id FROM gym_member_payments WHERE bill_id = ${gilFee?.id ?? ""}`;
@@ -433,8 +433,8 @@ d("keep my membership in the app (real Postgres)", { timeout: T }, () => {
 
     clock = noon("2026-11-13");
     const k = await keep(gym, priya, devGold);
-    expect(k.choice.lines[0]).toBe("Dev Keep's Gold won't end on 3 Dec 2026. It renews until you cancel.");
-    expect(k.done.line).toBe("Kept. Dev Keep's Gold renews until you cancel.");
+    expect(k.choice.lines[0]).toBe("Your cancellation will be removed, and Dev Keep's Gold will keep renewing until you cancel.");
+    expect(k.done.line).toBe("Cancellation removed. Dev Keep's Gold will keep renewing until you cancel.");
     expect(kept[kept.length - 1]).toMatchObject({ gymName: "Keep Family", membershipName: "Dev Keep's Gold", keptAt: "13 Nov 2026 at 12:00 PM", done: k.done.line, lines: k.choice.lines });
 
     const page = heldMembershipsResponseSchema.parse(JSON.parse((await inject("GET", heldUrl(gym, dev.entryId), gym.owner.cookies)).body));
@@ -488,7 +488,7 @@ d("keep my membership in the app (real Postgres)", { timeout: T }, () => {
 
     // Ended in its cooling-off period: over, with nothing to press.
     expect((await mine(gym, jo)).memberships.find((m) => m.id === joCool)?.cancel).toMatchObject({ state: "cancelled", keep: null });
-    expect(await keepAsk(gym, jo, joCool)).toMatchObject({ choice: null, notes: ["It has ended, so it can't be kept. Ask the front desk to start a new one."] });
+    expect(await keepAsk(gym, jo, joCool)).toMatchObject({ choice: null, notes: ["This membership has ended, so it can't be kept. Ask the front desk about joining again."] });
     // Past its last day: over too.
     clock = noon("2026-12-04");
     const ivyNow = (await mine(gym, ivy)).memberships.find((m) => m.id === ivyGold)?.cancel;

@@ -68,7 +68,7 @@ async function workOut(tx: TransactionSql, gymId: string, whose: Whose, membersh
   const move = moveHeldMembership(m, { type: "keep", when: cancel.when }, today);
   if (!move.ok || !move.changed) return nothing(MY_KEEP_WORDS.over);
   const after = move.membership;
-  // Its last day as it stands (none while it is frozen: the cancel's own then).
+  // Its last day as it stands (none while it is frozen).
   const lastDay = heldMembershipView(m, today).endsOn;
   let feeOffMinor: number | null = null;
   if (cancel.when === "leave_early") {
@@ -102,7 +102,6 @@ async function workOut(tx: TransactionSql, gymId: string, whose: Whose, membersh
     membershipName: row.typeName,
     forName,
     currency: row.currency,
-    endsOn: lastDay ?? cancel.endsOn,
     next,
     card,
     feeOffMinor,

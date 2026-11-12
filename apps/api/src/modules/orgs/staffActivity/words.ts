@@ -251,7 +251,7 @@ export const STAFF_LINES: Readonly<Record<string, (s: Said) => string>> = {
   "org.held_membership_unfrozen": (s) => `Unfroze ${whose(s, membershipOf(s))}`,
   "org.held_membership_cancelled": (s) => `Cancelled ${whose(s, membershipOf(s))}`,
   // A cancel undone, so it renews again (18l-ii-a; staff's own Undo cancel is 18l-ii-b).
-  "org.held_membership_kept": (s) => `Undid the cancel of ${whose(s, membershipOf(s))}`,
+  "org.held_membership_kept": (s) => `Reactivated ${whose(s, membershipOf(s))}`,
   "org.held_membership_changed": (s) => {
     const to = text(s, "toType");
     return `Changed ${whose(s, membershipOf(s))}${to === null ? "" : ` to ${to}`}`;

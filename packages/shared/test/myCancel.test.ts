@@ -231,22 +231,22 @@ describe("keep: a cancel that left it running to a last day is put back as it wa
 });
 
 describe("the keep box's sentences", () => {
-  const base: MyKeepFacts = { membershipName: "Gold", forName: null, currency: "USD", endsOn: "2026-11-30", next: { dueOn: "2026-12-01", amountMinor: 5000 }, card: null, feeOffMinor: null, ended: { classes: 0, sessions: 0 } };
+  const base: MyKeepFacts = { membershipName: "Gold", forName: null, currency: "USD", next: { dueOn: "2026-12-01", amountMinor: 5000 }, card: null, feeOffMinor: null, ended: { classes: 0, sessions: 0 } };
   it.each<[string, Partial<MyKeepFacts>, string[]]>([
-    ["plain", {}, ["Gold won't end on 30 Nov 2026. It renews until you cancel.", "The next payment of $50.00 is due on 1 Dec 2026."]],
-    ["the card the app charges", { card: { brand: "VISA", last4: "1111" } }, ["Gold won't end on 30 Nov 2026. It renews until you cancel.", "Visa ending 1111 is charged $50.00 next, on 1 Dec 2026."]],
-    ["free", { next: null }, ["Gold won't end on 30 Nov 2026. It renews until you cancel.", "No payments come due for it."]],
-    ["whoever pays for them", { forName: "Dev" }, ["Dev's Gold won't end on 30 Nov 2026. It renews until you cancel.", "The next payment of $50.00 is due on 1 Dec 2026."]],
-    ["the fee taken off", { feeOffMinor: 2500 }, ["Gold won't end on 30 Nov 2026. It renews until you cancel.", "The next payment of $50.00 is due on 1 Dec 2026.", "The $25.00 early cancellation fee is taken off."]],
-    ["one booking ended", { ended: { classes: 1, sessions: 0 } }, ["Gold won't end on 30 Nov 2026. It renews until you cancel.", "The next payment of $50.00 is due on 1 Dec 2026.", "The 1 class booking cancelled with it stays cancelled. Book again if you want it."]],
-    ["several ended", { ended: { classes: 2, sessions: 1 } }, ["Gold won't end on 30 Nov 2026. It renews until you cancel.", "The next payment of $50.00 is due on 1 Dec 2026.", "The 2 class bookings and 1 personal training session cancelled with it stay cancelled. Book again if you want them."]],
+    ["plain", {}, ["Your cancellation will be removed, and Gold will keep renewing until you cancel.", "Your next payment is $50.00 on 1 Dec 2026."]],
+    ["the card the app charges", { card: { brand: "VISA", last4: "1111" } }, ["Your cancellation will be removed, and Gold will keep renewing until you cancel.", "Your next payment of $50.00 will be charged to Visa ending 1111 on 1 Dec 2026."]],
+    ["free", { next: null }, ["Your cancellation will be removed, and Gold will keep renewing until you cancel.", "There's nothing to pay for it."]],
+    ["whoever pays for them", { forName: "Dev" }, ["Your cancellation will be removed, and Dev's Gold will keep renewing until you cancel.", "Your next payment is $50.00 on 1 Dec 2026."]],
+    ["the fee taken off", { feeOffMinor: 2500 }, ["Your cancellation will be removed, and Gold will keep renewing until you cancel.", "Your next payment is $50.00 on 1 Dec 2026.", "The $25.00 early cancellation fee will be removed."]],
+    ["one booking ended", { ended: { classes: 1, sessions: 0 } }, ["Your cancellation will be removed, and Gold will keep renewing until you cancel.", "Your next payment is $50.00 on 1 Dec 2026.", "The 1 class booking cancelled with your membership isn't booked again. Book it again if you want."]],
+    ["several ended", { ended: { classes: 2, sessions: 1 } }, ["Your cancellation will be removed, and Gold will keep renewing until you cancel.", "Your next payment is $50.00 on 1 Dec 2026.", "The 2 class bookings and 1 personal training session cancelled with your membership aren't booked again. Book them again if you want."]],
   ])("%s", (_name, over, lines) => {
     expect(myKeepLines({ ...base, ...over })).toEqual(lines);
   });
   it("done, and what staff read", () => {
-    expect(myKeepDoneLine({ membershipName: "Gold", forName: "Dev" })).toBe("Kept. Dev's Gold renews until you cancel.");
-    expect(appCancelLine({ on: "2026-11-10", byName: "Maya Test", reason: "cost", keptOn: "2026-11-13", keptByName: "Maya Test" })).toBe("Cancelled in the app on 10 Nov 2026 by Maya Test · Reason: Cost · Kept on 13 Nov 2026");
-    expect(appCancelLine({ on: "2026-11-10", byName: "Priya", reason: null, keptOn: "2026-11-13", keptByName: "Dev" })).toBe("Cancelled in the app on 10 Nov 2026 by Priya · Kept on 13 Nov 2026 by Dev");
-    expect(appCancelRowWhat({ membershipName: "Gold", on: "2026-11-10", endsOn: null, when: "period_end", keptOn: "2026-11-13" }, "2026-11-20")).toBe("Gold · Cancelled 10 Nov 2026 · Kept 13 Nov 2026");
+    expect(myKeepDoneLine({ membershipName: "Gold", forName: "Dev" })).toBe("Cancellation removed. Dev's Gold will keep renewing until you cancel.");
+    expect(appCancelLine({ on: "2026-11-10", byName: "Maya Test", reason: "cost", keptOn: "2026-11-13", keptByName: "Maya Test" })).toBe("Cancelled in the app on 10 Nov 2026 by Maya Test · Reason: Cost · Reactivated in the app on 13 Nov 2026");
+    expect(appCancelLine({ on: "2026-11-10", byName: "Priya", reason: null, keptOn: "2026-11-13", keptByName: "Dev" })).toBe("Cancelled in the app on 10 Nov 2026 by Priya · Reactivated in the app on 13 Nov 2026 by Dev");
+    expect(appCancelRowWhat({ membershipName: "Gold", on: "2026-11-10", endsOn: null, when: "period_end", keptOn: "2026-11-13" }, "2026-11-20")).toBe("Gold · Cancelled 10 Nov 2026 · Reactivated 13 Nov 2026");
   });
 });

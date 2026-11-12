@@ -474,15 +474,15 @@ export function membershipKeptEmail(words: {
   membershipName: string;
   /** "13 Nov 2026 at 14:05", on the business's own clock. */
   keptAt: string;
-  /** "Kept. Gold Monthly renews until you cancel." */
+  /** "Cancellation removed. Gold Monthly will keep renewing until you cancel." */
   done: string;
   lines: readonly string[];
 }): EmailMessage {
   const gym = words.gymName;
-  const lead = `You kept ${words.membershipName} at ${gym} in the app on ${words.keptAt}, so it is no longer cancelled. Keep this email as your confirmation.`;
+  const lead = `You reactivated ${words.membershipName} at ${gym} in the app on ${words.keptAt}, so your cancellation is removed. Keep this email as your confirmation.`;
   const footer = `Sent by ${APP_NAME} on behalf of ${gym}.`;
   const body = [words.done, ...words.lines];
   const text = `${lead}\n\n${body.join("\n")}\n\n${footer}\n`;
   const html = `<p>${escapeHtml(lead)}</p>` + body.map((line) => `<p>${escapeHtml(line)}</p>`).join("") + `<p style="color:#666;font-size:12px">${escapeHtml(footer)}</p>`;
-  return { to: words.to, subject: `${words.membershipName} at ${gym} is no longer cancelled`, text, html };
+  return { to: words.to, subject: `${words.membershipName} at ${gym} is active again`, text, html };
 }

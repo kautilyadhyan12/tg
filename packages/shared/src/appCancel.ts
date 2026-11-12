@@ -40,14 +40,14 @@ export const appCancelSchema = z
   .strict();
 export type AppCancel = z.infer<typeof appCancelSchema>;
 
-/** "Cancelled in the app on 11 Nov 2026 by Maya Test · Reason: Cost", then " · Kept on 13 Nov 2026" once kept, naming
- *  whoever kept it where that was not whoever cancelled. */
+/** "Cancelled in the app on 11 Nov 2026 by Maya Test · Reason: Cost", then " · Reactivated in the app on 13 Nov 2026"
+ *  once kept (18l-ii-a), naming whoever kept it where that was not whoever cancelled. */
 export function appCancelLine(c: Pick<AppCancel, "on" | "byName" | "reason"> & Partial<Pick<AppCancel, "keptOn" | "keptByName">>): string {
   const by = c.byName === null ? "" : ` by ${c.byName}`;
   const why = c.reason === null ? "" : ` · Reason: ${MY_CANCEL_REASON_WORDS[c.reason]}`;
   const keptOn = c.keptOn ?? null;
   const keptBy = c.keptByName ?? null;
-  const kept = keptOn === null ? "" : ` · Kept on ${dayWords(keptOn)}${keptBy !== null && keptBy !== c.byName ? ` by ${keptBy}` : ""}`;
+  const kept = keptOn === null ? "" : ` · Reactivated in the app on ${dayWords(keptOn)}${keptBy !== null && keptBy !== c.byName ? ` by ${keptBy}` : ""}`;
   return `Cancelled in the app on ${dayWords(c.on)}${by}${why}${kept}`;
 }
 
@@ -89,12 +89,12 @@ export const appCancelsResponseSchema = z
 export type AppCancelsResponse = z.infer<typeof appCancelsResponseSchema>;
 
 /** One row's second line: "Gold Monthly · Cancelled 11 Nov 2026 · Ends 30 Nov 2026", or "Ended 30 Nov 2026" once that
- *  day has passed on the gym's `today`, or "Kept 13 Nov 2026" once the member kept it (18l-ii-a). */
+ *  day has passed on the gym's `today`, or "Reactivated 13 Nov 2026" once the member kept it (18l-ii-a). */
 export function appCancelRowWhat(row: Pick<AppCancelRow, "membershipName" | "on" | "endsOn" | "when"> & Partial<Pick<AppCancelRow, "keptOn">>, today: string): string {
   const keptOn = row.keptOn ?? null;
   const ends =
     keptOn !== null
-      ? `Kept ${dayWords(keptOn)}`
+      ? `Reactivated ${dayWords(keptOn)}`
       : row.when === "cooling_off"
       ? "Ended in its cooling-off period"
       : row.endsOn === null
@@ -109,7 +109,7 @@ export function appCancelRowWhat(row: Pick<AppCancelRow, "membershipName" | "on"
 
 export const APP_CANCELS_WORDS = {
   title: "Cancelled in the app",
-  intro: `Members who cancelled in the app in the last ${String(APP_CANCELS_DAYS)} days, with the day each ends, or the day they kept it.`,
+  intro: `Members who cancelled in the app in the last ${String(APP_CANCELS_DAYS)} days.`,
   open: "Open their page",
   gone: "Deleted for good",
   /** Under the list, at a gym whose front desk lets everyone on its list in. */
