@@ -1,4 +1,4 @@
-// PAYMENTS TO CHECK IN SQUARE, ON OVERVIEW (ROADMAP 18k-vi; Kd, rulings/2026-11-12-20g.md). THE WORST THING is a member whose
+// APP PAYMENTS TO REVIEW, ON OVERVIEW (ROADMAP 18k-vi; Kd, rulings/2026-11-12-20g.md). THE WORST THING is a member whose
 // money Square took left off the list, so nobody gives them what they paid for. So a row is what the person's page says, by
 // the page's own rules: a membership's newest page for one of its bills that ended needing a check, while that bill's period
 // is the one a payment is taken for now (`owedPeriodOf`); a fee's newest, while the fee is open; a purchase, until it is
@@ -23,7 +23,7 @@ import { owedPeriodOf, type HeldDeps } from "./heldService.js";
 
 const BILLING = "billing.members";
 const MEMBERS = "members.confirm";
-const NO_MEMBERS = "Payments to check are settled on the member's page, which needs \"Keep the member list and invite\". Ask the owner to turn it on for you.";
+const NO_MEMBERS = "App payments to review are resolved on the member's page, which needs \"Keep the member list and invite\". Ask the owner to turn it on for you.";
 
 type Row = Omit<AppPaymentCheckRow, "name" | "past">;
 

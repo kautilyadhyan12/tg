@@ -9,8 +9,8 @@ import { canRemoveMembers, orgWords } from '../../pages/console/consoleView';
 import { appPaymentCheckLines, canSeeAppPaymentChecks } from '../../pages/console/appPaymentChecksView';
 import { ConsoleCard } from './ConsoleStates';
 
-// Overview's Payments to check in Square (ROADMAP 18k-vi; Kd, `rulings/2026-11-12-20g.md`): each payment or purchase in the
-// app that Square may have taken and that didn't go through here, as the member's page says it, the newest first, each
+// Overview's App payments to review (ROADMAP 18k-vi; Kd, `rulings/2026-11-12-20g.md`): each payment or purchase in the
+// app that Square may have charged and that wasn't applied here, as the member's page says it, the newest first, each
 // opening that page at its line. In Overview's own look, as Refunds to review is. It reads for itself, on live news and when
 // staff come back, and draws nothing where the list is empty.
 
@@ -21,7 +21,7 @@ const QUIET = { color: 'rgba(255,255,255,0.45)' };
 const SOFT = { color: 'rgba(255,255,255,0.75)' };
 
 function Row({ row, onOpen }) {
-  const { what, sentence } = appPaymentCheckLines(row);
+  const { what, status } = appPaymentCheckLines(row);
   return (
     <li className="flex flex-col gap-1.5 py-3" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }} data-testid="app-payment-check-row">
       <div className="flex flex-wrap items-baseline gap-x-2">
@@ -38,7 +38,7 @@ function Row({ row, onOpen }) {
         {what}
       </p>
       <p className="text-sm m-0" style={QUIET}>
-        {sentence}
+        {status}
       </p>
       <button type="button" className={`${BUTTON} self-start`} style={MAIN_STYLE} onClick={() => onOpen(row)} aria-label={`${APP_PAYMENT_CHECKS_WORDS.open}: ${row.name}`}>
         {APP_PAYMENT_CHECKS_WORDS.open}
@@ -80,7 +80,7 @@ export default function AppPaymentChecksCard({ org, privileges, readOnly }) {
       live = false;
     };
   }, [gymId, may]);
-  // A payment taken, a fee waived or a purchase marked as checked changes that person's memberships; a name changes people.
+  // A payment taken, a fee waived or a purchase marked as resolved changes that person's memberships; a name changes people.
   useLiveNews(
     gymId,
     (message) => {

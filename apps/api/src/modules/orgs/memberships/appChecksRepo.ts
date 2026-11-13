@@ -1,4 +1,4 @@
-// Overview's Payments to check in Square (ROADMAP 18k-vi): who holds the memberships with one, and those people.
+// Overview's App payments to review (ROADMAP 18k-vi): who holds the memberships with one, and those people.
 import type { Sql } from "postgres";
 
 /** The record holding each of these memberships now. */

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-// Overview's Payments to check in Square (ROADMAP 18k-vi): each payment in the app Square may have taken that didn't go
-// through, in the member's page's own words, each opening that page at its line; ten, then Show more.
+// Overview's App payments to review (ROADMAP 18k-vi): each payment in the app Square may have charged that wasn't applied
+// here, what it was for and where it stands, each opening the member's page at its line; ten, then Show more.
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -21,7 +21,6 @@ vi.mock('./MemberListPerson', () => ({
 const { default: AppPaymentChecksCard } = await import('../../components/console/AppPaymentChecksCard');
 const { appPaymentCheckLines, canSeeAppPaymentChecks } = await import('./appPaymentChecksView');
 const { appPaymentChecksHeadline } = await import('@app/shared');
-const { appBuyCheckNotices, appCheckNotice, feeAppCheckNotice } = await import('./memberBillsView');
 
 const ENTRY = '11111111-1111-4111-8111-111111111111';
 const org = { id: '77777777-7777-4777-8777-777777777777', orgType: 'gym', slug: 'demo' };
@@ -52,38 +51,25 @@ const draw = (privileges = STAFF) =>
 beforeEach(() => svc.list.mockReset());
 afterEach(cleanup);
 
-describe('Payments to check in Square', () => {
-  it('its words, for each kind, in the member page’s own sentences', () => {
+describe('App payments to review', () => {
+  it('its words, for each kind: what it was for and where it stands', () => {
     expect(appPaymentChecksHeadline(0)).toBeNull();
-    expect(appPaymentChecksHeadline(1)).toBe('1 payment to check in Square');
-    expect(appPaymentChecksHeadline(3)).toBe('3 payments to check in Square');
-    expect(appPaymentCheckLines(row())).toEqual({
-      what: 'Gold Monthly · bill',
-      sentence: "Square took $54.99 from Tara Singh in the app on 12 November 2026, but it couldn't go on this bill. Check it in Square before taking this payment again. It won't be charged to the card on file automatically.",
-    });
+    expect(appPaymentChecksHeadline(1)).toBe('1 app payment to review');
+    expect(appPaymentChecksHeadline(3)).toBe('3 app payments to review');
+    expect(appPaymentCheckLines(row())).toEqual({ what: 'Gold Monthly · Membership payment', status: 'Charged $54.99 on 12 November 2026, but not applied to the bill.' });
     expect(appPaymentCheckLines(row({ kind: 'fee', fee: 'late_cancel', why: 'unknown', amountMinor: null, payerName: null }))).toEqual({
-      what: 'Gold Monthly · late cancel fee',
-      sentence: "The member's payment page in the app ended on 12 November 2026 without an answer from Square, so it may have been paid. Check it in Square before taking this payment again.",
+      what: 'Gold Monthly · Late cancel fee',
+      status: 'Not confirmed by Square on 12 November 2026. The member may have been charged.',
     });
-    expect(appPaymentCheckLines(row({ kind: 'purchase', typeName: '5-class pack', amountMinor: 5000, payerName: 'Priya Sharma' }))).toEqual({
-      what: '5-class pack · bought in the app',
-      sentence: "Square took $50.00 from Priya Sharma in the app on 12 November 2026 for 5-class pack, but it couldn't be given to them. Check it in Square, then refund it there or give it with Add membership.",
+    expect(appPaymentCheckLines(row({ kind: 'fee', fee: 'freeze', amountMinor: 1700, currency: 'CAD' }))).toEqual({
+      what: 'Gold Monthly · Freeze fee',
+      status: 'Charged CA$17.00 on 12 November 2026, but not applied to the fee.',
     });
-  });
-
-  it('each sentence is the member page’s own for that payment, word for word', () => {
-    for (const r of [row(), row({ why: 'unknown', amountMinor: null, payerName: null }), row({ currency: 'CAD', amountMinor: 120000 })]) {
-      const check = { why: r.why, amountMinor: r.amountMinor, on: r.on, payerName: r.payerName };
-      expect(appPaymentCheckLines(r).sentence).toBe(appCheckNotice({ currency: r.currency, billing: { appCheck: check } }));
-    }
-    for (const fee of ['late_cancel', 'no_show', 'freeze', 'leave_early']) {
-      const r = row({ kind: 'fee', fee });
-      const check = { why: r.why, amountMinor: r.amountMinor, on: r.on, payerName: r.payerName };
-      expect(appPaymentCheckLines(r).sentence).toBe(feeAppCheckNotice({ fee, appCheck: check }, r.currency));
-    }
-    const bought = row({ id: 'purchase:p1', kind: 'purchase', typeName: '5-class pack', amountMinor: 5000 });
-    const page = appBuyCheckNotices({ appBuyChecks: [{ id: 'p1', typeName: '5-class pack', why: 'taken', amountMinor: 5000, currency: 'USD', on: bought.on, payerName: 'Tara Singh' }] });
-    expect(appPaymentCheckLines(bought).sentence).toBe(page[0].line);
+    expect(appPaymentCheckLines(row({ kind: 'purchase', typeName: '10-class pack', amountMinor: 9000, payerName: 'Priya Sharma' }))).toEqual({
+      what: '10-class pack · App purchase',
+      status: "Charged $90.00 on 12 November 2026, but 10-class pack wasn't added. Paid by Priya Sharma.",
+    });
+    expect(appPaymentCheckLines(row({ amountMinor: null })).status).toBe('Charged on 12 November 2026, but not applied to the bill.');
   });
 
   it('who may read it: who takes payments and keeps the member list', () => {
@@ -96,12 +82,12 @@ describe('Payments to check in Square', () => {
   it('lists each one and opens that member’s page at its line', async () => {
     svc.list.mockResolvedValue({ rows: [row({ id: 'bill:aaa' }), row({ id: 'purchase:bbb', name: 'Ana Ruiz', past: true, kind: 'purchase', typeName: '5-class pack' })], more: false });
     draw();
-    expect((await screen.findByTestId('app-payment-checks-headline')).textContent).toBe('2 payments to check in Square');
-    expect(screen.getByText("Square may have taken these payments in the app, but they didn't go through here. Check each one in Square, then settle it on the member's page.")).toBeTruthy();
-    expect(screen.getByText('Gold Monthly · bill')).toBeTruthy();
-    expect(screen.getByText('5-class pack · bought in the app')).toBeTruthy();
+    expect((await screen.findByTestId('app-payment-checks-headline')).textContent).toBe('2 app payments to review');
+    expect(screen.getByText("Square may have charged these members in the app, but the payments weren't applied here. Review each one in your Square Dashboard, then resolve it on the member's page.")).toBeTruthy();
+    expect(screen.getByText('Gold Monthly · Membership payment')).toBeTruthy();
+    expect(screen.getByText('5-class pack · App purchase')).toBeTruthy();
     expect(screen.getByText('Past member')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Open their page: Ana Ruiz' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Review payment: Ana Ruiz' }));
     expect(screen.getByRole('dialog', { name: `person ${ENTRY}` }).getAttribute('data-check-now')).toBe('purchase:bbb');
     fireEvent.click(screen.getByRole('button', { name: 'Close page' }));
     await waitFor(() => expect(svc.list).toHaveBeenCalledTimes(2));
@@ -111,13 +97,13 @@ describe('Payments to check in Square', () => {
   it('ten at first, then Show more; and where more people have one than were read, says so', async () => {
     svc.list.mockResolvedValue({ rows: Array.from({ length: 12 }, (_, i) => row({ id: `bill:${String(i)}`, name: `Person ${String(i)}` })), more: true });
     draw();
-    expect((await screen.findByTestId('app-payment-checks-headline')).textContent).toBe('12 payments to check in Square');
+    expect((await screen.findByTestId('app-payment-checks-headline')).textContent).toBe('12 app payments to review');
     expect(screen.getAllByTestId('app-payment-check-row')).toHaveLength(10);
-    expect(screen.queryByText('Only the 100 newest people are shown. More appear here as you settle these.')).toBeNull();
+    expect(screen.queryByText('Showing the 100 most recent members. More appear here as you resolve these.')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Show more' }));
     expect(screen.getAllByTestId('app-payment-check-row')).toHaveLength(12);
     expect(screen.queryByRole('button', { name: 'Show more' })).toBeNull();
-    expect(screen.getByText('Only the 100 newest people are shown. More appear here as you settle these.')).toBeTruthy();
+    expect(screen.getByText('Showing the 100 most recent members. More appear here as you resolve these.')).toBeTruthy();
   });
 
   it('draws nothing with none, a failed read, or without both ticks', async () => {

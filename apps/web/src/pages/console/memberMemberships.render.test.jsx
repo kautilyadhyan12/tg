@@ -1845,7 +1845,7 @@ describe('Refund on Refunds to review (18d-iv-b-iii)', () => {
   });
 });
 
-describe('Open their page on Payments to check in Square (18k-vi)', () => {
+describe('Review payment on App payments to review (18k-vi)', () => {
   it('brings that payment’s line into view, once their memberships have loaded', async () => {
     const gold = held(1, GOLD, '2026-10-04', false);
     gold.billing = { ...gold.billing, appCheck: { why: 'unknown', amountMinor: null, on: '2026-11-12', payerName: 'Ada Lovelace' } };

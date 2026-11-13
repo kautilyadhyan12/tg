@@ -202,7 +202,7 @@ export default function MemberMemberships({
    *  bill whose Record payment is open already, once, when their memberships have loaded. */
   payNow = null,
   refundNow = null,
-  /** Opened by Overview's Payments to check in Square (18k-vi): the line to bring into view, `bill:`, `fee:` or `purchase:`
+  /** Opened by Overview's App payments to review (18k-vi): the line to bring into view, `bill:`, `fee:` or `purchase:`
    *  and its id, once, when their memberships have loaded. */
   checkNow = null,
   /** How often the Terminal's box asks the server; the box's own unless a test says. */
@@ -469,7 +469,7 @@ export default function MemberMemberships({
       setNotice(refundNow.voidFeeId === null ? `${REFUND_NOT_SHOWN} Check it in your Square Dashboard.` : REFUND_NOT_SHOWN);
     }
   }
-  // Opened by Overview's Payments to check in Square: that line, brought into view, among the earlier ones too.
+  // Opened by Overview's App payments to review: that line, brought into view, among the earlier ones too.
   const [checkedNow, setCheckedNow] = useState(false);
   if (checkNow !== null && shown !== null && !checkedNow) {
     setCheckedNow(true);

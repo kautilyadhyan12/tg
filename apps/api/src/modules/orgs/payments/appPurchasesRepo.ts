@@ -467,7 +467,7 @@ export async function purchaseChecksOf(sql: SqlOrTx, gymId: string, entryId: str
   }));
 }
 
-/** Overview's Payments to check in Square (18k-vi): `purchaseChecksOf` for every record of the gym at once, each record's
+/** Overview's App payments to review (18k-vi): `purchaseChecksOf` for every record of the gym at once, each record's
  *  newest 20 as its page shows them, the newest first. */
 export async function purchaseChecksOfGym(sql: SqlOrTx, gymId: string): Promise<(AppPurchaseCheck & { entryId: string })[]> {
   const rows = await sql<{ id: string; entry_id: string; bought: unknown; membership_type_id: string; outcome: string; taken_minor: number | null; currency: string; on: string; payer_name: string | null }[]>`

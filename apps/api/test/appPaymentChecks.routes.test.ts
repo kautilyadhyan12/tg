@@ -1,4 +1,4 @@
-// Overview's Payments to check in Square (ROADMAP 18k-vi), through its route against real Postgres (DATABASE_URL-gated),
+// Overview's App payments to review (ROADMAP 18k-vi), through its route against real Postgres (DATABASE_URL-gated),
 // with Square answered by the fake in `fakeSquareTerminal.ts`. Every page is ended the way a real one ends: Square taking
 // another amount, Square never answering for a day, a price changed under a purchase.
 //
@@ -94,7 +94,7 @@ const gold = {
 const pack = { ...gold, name: "5-class pack", kind: "pack", priceMinor: 5000, termCount: null, termUnit: null, packClasses: 5, packDays: 60, soldInApp: true };
 const TIP = { tip_money: { amount: 500, currency: "USD" }, total_money: { amount: 5499, currency: "USD" } };
 
-d("Payments to check in Square on Overview: every one the person's page says, and only this gym's (real Postgres)", { timeout: T }, () => {
+d("App payments to review on Overview: every one the person's page says, and only this gym's (real Postgres)", { timeout: T }, () => {
   const sql = postgres(url ?? "", { prepare: false, max: 6 });
   const square = fakeSquare();
   const hub = recordingHub();

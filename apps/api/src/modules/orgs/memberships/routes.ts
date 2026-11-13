@@ -12,7 +12,7 @@
 // A person's memberships (§13.2; 17a-ii), under their record on the gym's list:
 //
 //   GET  /v1/orgs/:gymId/member-list/entries/:entryId/memberships            (`members.confirm`)
-//   GET  /v1/orgs/:gymId/app-payment-checks                                    Overview's Payments to check in Square (18k-vi)
+//   GET  /v1/orgs/:gymId/app-payment-checks                                    Overview's App payments to review (18k-vi)
 //   POST /v1/orgs/:gymId/member-list/entries/:entryId/memberships            give one
 //   POST …/memberships/:membershipId/freeze | unfreeze | cancel | paid       change one
 //   POST …/memberships/:membershipId/price-raise/keep                        keep the old price (18w)
@@ -250,7 +250,7 @@ export function registerMembershipRoutes(app: FastifyInstance, deps: MembershipR
     return reply.status(200).send(list);
   });
 
-  // Overview's Payments to check in Square (18k-vi): read again when staff come back and on the gym's live news.
+  // Overview's App payments to review (18k-vi): read again when staff come back and on the gym's live news.
   const checksLimit = createDualRateLimit({
     name: "org_app_payment_checks",
     max: 600,

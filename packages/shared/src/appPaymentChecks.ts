@@ -1,10 +1,8 @@
-// PAYMENTS TO CHECK IN SQUARE, ON OVERVIEW (ROADMAP 18k-vi; Kd, rulings/2026-11-12-20g.md): every payment or purchase in the
+// APP PAYMENTS TO REVIEW, ON OVERVIEW (ROADMAP 18k-vi; Kd, rulings/2026-11-12-20g.md): every payment or purchase in the
 // app that Square may have taken and that is on no bill or gave nothing, as the person's page says it, with a button to them.
 // The rows are the person's page's own: a bill's while that bill is owed, a fee's while it is owed, a purchase's until it is
-// marked as checked.
+// marked as resolved.
 import { z } from "zod";
-import { appCheckLine } from "./appPayments.js";
-import { appBuyCheckLine } from "./appPurchases.js";
 import { MEMBER_FEE_WORDS, memberFeeKindSchema } from "./memberBills.js";
 
 const daySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
@@ -48,29 +46,36 @@ export const appPaymentChecksResponseSchema = z
 export type AppPaymentChecksResponse = z.infer<typeof appPaymentChecksResponseSchema>;
 
 export const APP_PAYMENT_CHECKS_WORDS = {
-  title: "Payments to check in Square",
-  intro: "Square may have taken these payments in the app, but they didn't go through here. Check each one in Square, then settle it on the member's page.",
-  open: "Open their page",
-  more: `Only the ${String(APP_PAYMENT_CHECKS_PEOPLE)} newest people are shown. More appear here as you settle these.`,
+  title: "App payments to review",
+  intro: "Square may have charged these members in the app, but the payments weren't applied here. Review each one in your Square Dashboard, then resolve it on the member's page.",
+  open: "Review payment",
+  more: `Showing the ${String(APP_PAYMENT_CHECKS_PEOPLE)} most recent members. More appear here as you resolve these.`,
   showMore: "Show more",
 } as const;
 
-/** "1 payment to check in Square", "3 payments to check in Square"; null for none. */
+/** "1 app payment to review", "3 app payments to review"; null for none. */
 export function appPaymentChecksHeadline(count: number): string | null {
   if (count <= 0) return null;
-  return count === 1 ? "1 payment to check in Square" : `${String(count)} payments to check in Square`;
+  return count === 1 ? "1 app payment to review" : `${String(count)} app payments to review`;
 }
 
-/** What it was for: "Gold Monthly · bill", "Gold Monthly · late cancel fee", "10-class pack · bought in the app". */
+/** What it was for: "Gold Monthly · Membership payment", "Gold Monthly · Late cancel fee", "10-class pack · App purchase". */
 export function appPaymentCheckWhat(row: Pick<AppPaymentCheckRow, "kind" | "typeName" | "fee">): string {
-  if (row.kind === "purchase") return `${row.typeName} · bought in the app`;
-  if (row.kind === "fee" && row.fee !== null) return `${row.typeName} · ${MEMBER_FEE_WORDS[row.fee].toLowerCase()}`;
-  return `${row.typeName} · bill`;
+  if (row.kind === "purchase") return `${row.typeName} · App purchase`;
+  if (row.kind === "fee" && row.fee !== null) return `${row.typeName} · ${MEMBER_FEE_WORDS[row.fee]}`;
+  return `${row.typeName} · Membership payment`;
 }
 
-/** The person's page's own sentence for it. `money`: the amount in the gym's words, or null where Square did not say; `day`:
- *  the day it ended, in the words the page writes it. */
-export function appPaymentCheckSentence(row: Pick<AppPaymentCheckRow, "kind" | "typeName" | "fee" | "why" | "payerName">, money: string | null, day: string): string {
-  if (row.kind === "purchase") return appBuyCheckLine(row, money, day);
-  return appCheckLine(row, money, day, row.kind === "fee" ? row.fee : null);
+/** Where it stands, in one sentence: "Charged $54.99 on 13 November 2026, but not applied to the bill.", or "Not confirmed by
+ *  Square on 13 November 2026. The member may have been charged."; who paid where it was somebody else. `money`: the amount
+ *  in the gym's words, or null where Square did not say; `day`: the day it ended, as the member's page writes it. */
+export function appPaymentCheckStatus(row: Pick<AppPaymentCheckRow, "kind" | "typeName" | "why" | "name" | "payerName">, money: string | null, day: string): string {
+  const charged = `Charged${money === null ? "" : ` ${money}`} on ${day}`;
+  const status =
+    row.why === "unknown"
+      ? `Not confirmed by Square on ${day}. The member may have been charged.`
+      : row.kind === "purchase"
+        ? `${charged}, but ${row.typeName} wasn't added.`
+        : `${charged}, but not applied to the ${row.kind === "fee" ? "fee" : "bill"}.`;
+  return row.payerName !== null && row.payerName !== row.name ? `${status} Paid by ${row.payerName}.` : status;
 }

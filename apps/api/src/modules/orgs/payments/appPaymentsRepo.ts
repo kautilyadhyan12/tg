@@ -630,7 +630,7 @@ export async function checksOnMemberships(
   return { bills, fees };
 }
 
-/** Overview's Payments to check in Square (18k-vi), for the whole gym, by the rule `checksOnMemberships` keeps for one
+/** Overview's App payments to review (18k-vi), for the whole gym, by the rule `checksOnMemberships` keeps for one
  *  record: each membership's newest page for one of its bills that ended needing a check, and each fee's newest. A bill's
  *  is left out where its period's bill is settled (paid, voided or refunded), and a fee's where the fee is no longer open:
  *  the person's page says neither. The newest first. */

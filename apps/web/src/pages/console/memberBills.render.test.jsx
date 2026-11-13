@@ -860,7 +860,7 @@ describe('a member paying in the app (18k-ii-a)', () => {
     orgService.getHeldMemberships.mockResolvedValue(answer([{ ...m, billing: { ...m.billing, appCheck: { why: 'taken', amountMinor: 4999, on: TODAY, payerName: 'Ada Lovelace' } } }]));
     render(draw());
     expect((await screen.findByTestId('held-app-check')).textContent).toBe(
-      'Square took £49.99 from Ada Lovelace in the app on 20 October 2026, but it couldn\x27t go on this bill. Check it in Square before taking this payment again. It won\x27t be charged to the card on file automatically.',
+      "Square charged Ada Lovelace £49.99 in the app on 20 October 2026, but the payment wasn't applied to this bill. Review it in your Square Dashboard before taking payment again. The card on file won't be charged automatically.",
     );
     expect(within(screen.getByTestId('held-app-payment')).queryByRole('button')).toBeNull();
   });
@@ -869,7 +869,7 @@ describe('a member paying in the app (18k-ii-a)', () => {
     const m = held(1, GOLD, TODAY, false);
     orgService.getHeldMemberships.mockResolvedValue(answer([{ ...m, billing: { ...m.billing, appCheck: { why: 'taken', amountMinor: null, on: TODAY, payerName: null } } }]));
     render(draw());
-    expect((await screen.findByTestId('held-app-check')).textContent).toMatch(/^Square took a payment from the member in the app on 20 October 2026, but it couldn't go on this bill./);
+    expect((await screen.findByTestId('held-app-check')).textContent).toMatch(/^Square charged the member in the app on 20 October 2026, but the payment wasn't applied to this bill./);
   });
 
   it('Close payment page says to check Square where it may have been paid', async () => {
@@ -877,7 +877,7 @@ describe('a member paying in the app (18k-ii-a)', () => {
     orgService.closeAppPayment.mockResolvedValue({ data: { outcome: 'check' } });
     render(draw());
     fireEvent.click(within(await screen.findByTestId('held-app-payment')).getByRole('button', { name: 'Close payment page' }));
-    expect((await screen.findByRole('status')).textContent).toBe("Square may have taken a payment on this page that isn't on the bill. Check it in Square before taking this payment again.");
+    expect((await screen.findByRole('status')).textContent).toBe("Square may have charged this payment, but it wasn't applied to the bill. Review it in your Square Dashboard before taking payment again.");
   });
 
   it('a read-only page says it with no button', async () => {
@@ -932,14 +932,14 @@ describe('a member paying a fee in the app (18k-ii-b)', () => {
     orgService.closeAppPayment.mockResolvedValue({ data: { outcome: 'check' } });
     render(draw());
     fireEvent.click(within(await screen.findByTestId('held-fee-app-payment')).getByRole('button', { name: 'Close payment page' }));
-    expect((await screen.findByRole('status')).textContent).toBe("Square may have taken a payment on this page that isn't on the fee. Check it in Square before taking this payment again.");
+    expect((await screen.findByRole('status')).textContent).toBe("Square may have charged this payment, but it wasn't applied to the fee. Review it in your Square Dashboard before taking payment again.");
   });
 
   it('a no-show fee Square took money for says to check Square; a freeze fee also says the card on file will not be charged', async () => {
     orgService.getHeldMemberships.mockResolvedValue(answer([withFee({ appCheck: { why: 'taken', amountMinor: 1000, on: TODAY, payerName: 'Ada Lovelace' } })]));
     const { unmount } = render(draw());
     expect((await screen.findByTestId('held-fee-app-check')).textContent).toBe(
-      'Square took £10.00 from Ada Lovelace in the app on 20 October 2026, but it couldn\x27t go on this fee. Check it in Square before taking this payment again.',
+      "Square charged Ada Lovelace £10.00 in the app on 20 October 2026, but the payment wasn't applied to this fee. Review it in your Square Dashboard before taking payment again.",
     );
     expect(within(screen.getByTestId('held-fee-app-payment')).queryByRole('button')).toBeNull();
     unmount();
@@ -948,7 +948,7 @@ describe('a member paying a fee in the app (18k-ii-b)', () => {
     );
     render(draw());
     expect((await screen.findByTestId('held-fee-app-check')).textContent).toBe(
-      'Ada Lovelace\x27s payment page in the app ended on 20 October 2026 without an answer from Square, so it may have been paid. Check it in Square before taking this payment again. It won\x27t be charged to the card on file automatically.',
+      "Square didn't confirm Ada Lovelace's payment in the app on 20 October 2026, so they may have been charged. Review it in your Square Dashboard before taking payment again. The card on file won't be charged automatically.",
     );
   });
 

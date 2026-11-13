@@ -495,7 +495,7 @@ export default function Overview() {
       {/* REFUNDS TO REVIEW (18d-iv-b-iii): fees no longer owed and refunds that went wrong. Drawn only where there are some. */}
       <RefundsToReviewCard org={org} orgSlug={orgSlug} privileges={viewerPrivileges(org)} readOnly={readOnly} />
 
-      {/* PAYMENTS TO CHECK IN SQUARE (18k-vi): payments in the app Square may have taken that didn't go through here. Drawn only
+      {/* APP PAYMENTS TO REVIEW (18k-vi): payments in the app Square may have charged that weren't applied here. Drawn only
           where there are some. */}
       <AppPaymentChecksCard org={org} privileges={viewerPrivileges(org)} readOnly={readOnly} />
 
