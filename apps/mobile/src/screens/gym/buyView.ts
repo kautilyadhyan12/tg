@@ -1,19 +1,22 @@
-import { APP_PURCHASE_WORDS, formatMinor, type AppPurchase, type AppPurchaseRequest, type DeskSigner, type ForSaleLine, type ForSaleSigner } from "@app/shared";
+import { APP_PURCHASE_WORDS, cardName, formatMinor, type AppPurchase, type AppPurchaseRequest, type DeskSigner, type ForSaleLine, type ForSaleResponse, type ForSaleSigner } from "@app/shared";
 import { NOT_PAID, PAY_CHECK, PAY_NOT_OPENED, PAY_WAITING, type PaySaid } from "./payView";
 
 // Buy in the app (ROADMAP Stage 5 item 20g; the server's `/for-sale` and `/for-sale/purchases`, built in 18k-iii). The
 // gym's packs, day passes and memberships paid once that it sells in the app, each with what it gives; a line's page
 // with every detail in the agreement's own words, the agreement to sign where the gym asks for one, and Pay on Square's
-// own page. Pure: the server works out each line, what is paid today and how a page ended.
+// own page. Pure: the server works out each line, what is paid today and how a page ended. A repeating membership (20i-i,
+// the server's 18k-iv) is paid with the card saved in the app, on a tick of its own the server words: no page opens.
 
 const gymPath = (gymId: string): string => `/v1/orgs/${encodeURIComponent(gymId)}`;
 export const forSalePath = (gymId: string): string => `${gymPath(gymId)}/for-sale`;
+/** The list with its repeating memberships too, which this phone pays with the saved card (20i-i). */
+export const forSaleListPath = (gymId: string): string => `${forSalePath(gymId)}?repeating=true`;
 export const purchasesPath = (gymId: string): string => `${forSalePath(gymId)}/purchases`;
 export const purchaseClosePath = (gymId: string, purchaseId: string): string => `${purchasesPath(gymId)}/${encodeURIComponent(purchaseId)}/close`;
 
 export const BUY = "Buy";
 export const BUY_HEADING = "Memberships and packs";
-export const BUY_SECURE = "Paid on Square’s secure checkout.";
+export const BUY_SECURE = "Paid securely through Square.";
 export const PAY_SECURE = "Secure checkout by Square";
 export const TODAY_TITLE = "You pay today";
 export const FACTS_HEADING = "The membership";
@@ -33,6 +36,18 @@ export const WHO_SIGNS = "Who is signing?";
 export const SIGNER_LABELS: Readonly<Record<DeskSigner, string>> = { person: "Me", guardian: "My parent or guardian" };
 export const NOT_READY = "Type the full name and tick the box to pay.";
 export const NOT_READY_WHO = "Choose who is signing, type the full name and tick the box to pay.";
+/** A repeating membership with the gym's agreement: two ticks, the agreement's and the card's. */
+export const NOT_READY_BOTH = "Type the full name and tick both boxes to pay.";
+export const NOT_READY_WHO_BOTH = "Choose who is signing, type the full name and tick both boxes to pay.";
+export const NOT_READY_CARD = "Tick the box to pay.";
+export const PAID_WITH = "Paid with";
+export const CHARGING = "Charging your card…";
+/** Under Pay on a repeating membership: "Your Visa ending 1111 is charged through Square." */
+export const chargedThrough = (card: { brand: string; last4: string }): string => `Your ${cardName(card)} is charged through Square.`;
+/** The bank asked to confirm it was them: the bank's own check on the phone is not built yet (20i-ii). */
+export const BANK_CHECK_DESK = "Your bank needs to confirm this payment, so buy this at the front desk.";
+/** A card charge that ended with nothing taken, said after Check status. */
+export const CARD_NOT_TAKEN = "Square didn’t take this payment, so nothing was charged.";
 
 /** What a screen reader says for Buy: "Buy 10-class pack, $90.00". */
 export const buySay = (line: Pick<ForSaleLine, "name" | "priceMinor" | "currency">): string => `Buy ${line.name}, ${formatMinor(line.priceMinor, line.currency)}`;
@@ -87,13 +102,45 @@ export const GUARDIAN_LINE = APP_PURCHASE_WORDS.guardian_needed;
 
 /** What Pay sends but its key: the line, what its list showed (today's amount and the key of its details) and, where the
  *  gym asks for its agreement, the wording read, who signed and the name typed. */
-export function buyBody(line: Pick<ForSaleLine, "typeId" | "firstPayment" | "factsKey" | "agreement">, sign: { signer: DeskSigner; name: string } | null): Omit<AppPurchaseRequest, "requestKey"> {
+export function buyBody(
+  line: Pick<ForSaleLine, "typeId" | "firstPayment" | "factsKey" | "agreement" | "repeats" | "charge">,
+  sign: { signer: DeskSigner; name: string } | null,
+): Omit<AppPurchaseRequest, "requestKey"> {
   return {
     typeId: line.typeId,
     amountMinor: line.firstPayment.amountMinor,
     factsKey: line.factsKey,
     agreement: line.agreement === null || sign === null ? null : { agreementId: line.agreement.id, signer: sign.signer, name: sign.name },
+    // A repeating membership: the card's tick word for word as the server sent it. No bank's check yet (20i-ii).
+    ...(line.repeats && line.charge !== null ? { charge: { words: line.charge, verificationToken: null } } : {}),
   };
+}
+
+/** How a repeating membership is paid, for the reader: on their card (with its tick), or what stands in the way first. A
+ *  line paid once is `page`, Square's own page. */
+export type PaidHow =
+  | { kind: "page" }
+  | { kind: "card"; card: { brand: string; last4: string }; words: string }
+  | { kind: "no_record"; line: string }
+  | { kind: "add_card"; line: string }
+  | { kind: "update_card"; line: string }
+  /** A card in date and no tick from the server: what was read no longer fits together. */
+  | { kind: "changed"; line: string };
+
+export function paidHow(line: Pick<ForSaleLine, "repeats" | "charge">, view: Pick<ForSaleResponse, "record" | "card">): PaidHow {
+  if (!line.repeats) return { kind: "page" };
+  if (view.record !== "own") return { kind: "no_record", line: APP_PURCHASE_WORDS.card_no_record };
+  if (view.card === null) return { kind: "add_card", line: APP_PURCHASE_WORDS.card_needed };
+  if (view.card.expired) return { kind: "update_card", line: APP_PURCHASE_WORDS.card_expired };
+  if (line.charge === null) return { kind: "changed", line: APP_PURCHASE_WORDS.card_changed };
+  return { kind: "card", card: { brand: view.card.brand, last4: view.card.last4 }, words: line.charge };
+}
+
+/** Under Pay while it cannot be pressed yet: what is still to do. */
+export function notReadyLine(agreement: boolean, card: boolean, signerKnown: boolean): string {
+  if (!agreement) return NOT_READY_CARD;
+  if (!card) return signerKnown ? NOT_READY : NOT_READY_WHO;
+  return signerKnown ? NOT_READY_BOTH : NOT_READY_WHO_BOTH;
 }
 
 /** "$15.00 paid. Day pass is yours.", where whether an agreement was signed is not known here. */
@@ -115,13 +162,16 @@ export interface BuySaid extends PaySaid {
   toMembership?: boolean;
   /** What was shown has changed: the list is read again. */
   reread?: boolean;
+  /** An Update card button beside it: the card is what stands in the way. */
+  updateCard?: boolean;
 }
 
 /** How a page ended that was not paid; null while Square has not said, and for paid, which the page says in full. */
-export function endedBuySaid(p: Pick<AppPurchase, "state">): BuySaid | null {
+export function endedBuySaid(p: Pick<AppPurchase, "state">, card = false): BuySaid | null {
   switch (p.state) {
     case "closed":
-      return { tone: "plain", line: NOT_PAID, ended: true };
+      // A card charged has no page to cancel: closed is Square taking nothing (20i-i).
+      return card ? { tone: "bad", line: CARD_NOT_TAKEN, ended: true } : { tone: "plain", line: NOT_PAID, ended: true };
     case "check":
       return { tone: "warn", line: PAY_CHECK, ended: true };
     case "open":
@@ -131,13 +181,28 @@ export function endedBuySaid(p: Pick<AppPurchase, "state">): BuySaid | null {
   }
 }
 
-const REREAD = new Set(["app_payment_changed", "app_payment_not_found", "agreement_changed", "guardian_needed", "person_signs"]);
+const REREAD = new Set([
+  "app_payment_changed",
+  "app_payment_not_found",
+  "agreement_changed",
+  "guardian_needed",
+  "person_signs",
+  // The card or the payments changed, or the card is gone: the list names the card now (20i-i).
+  "app_purchase_card_changed",
+  "app_purchase_card_needed",
+  "app_purchase_card_expired",
+]);
+/** The card is what stands in the way: Update card beside the words. */
+const UPDATE_CARD_CODES = new Set(["app_purchase_declined", "app_purchase_card_stopped", "app_purchase_card_expired"]);
 
 /** A refused Pay, in the member's words: the server's own, written for the member. What changed reads the list again; money
  *  owed here is paid on My membership. */
 export function buyRefusalSaid(code: string, serverWords: string): BuySaid {
+  // The bank's own check is not on the phone yet (20i-ii): "try again" would be asked again, so the desk takes it.
+  if (code === "app_purchase_verification") return { tone: "bad", line: BANK_CHECK_DESK };
   const line = serverWords === "" ? PAY_NOT_OPENED : serverWords;
-  if (REREAD.has(code)) return { tone: "warn", line, reread: true };
+  if (REREAD.has(code)) return { tone: "warn", line, reread: true, ...(UPDATE_CARD_CODES.has(code) ? { updateCard: true } : {}) };
+  if (UPDATE_CARD_CODES.has(code)) return { tone: "bad", line, updateCard: true };
   if (code === "app_purchase_owed") return { tone: "bad", line, toMembership: true };
   if (code === "app_payment_check") return { tone: "warn", line };
   return { tone: "bad", line };

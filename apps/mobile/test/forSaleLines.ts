@@ -1,4 +1,4 @@
-import { forSaleLineSchema, forSaleWorked, type ForSaleIncluded, type ForSaleLine, type ForSaleType, type HeldTax } from "@app/shared";
+import { forSaleLineSchema, forSaleWorked, repeatingChargeWords, type ForSaleIncluded, type ForSaleLine, type ForSaleType, type HeldTax } from "@app/shared";
 
 // Lines a gym sells in the app, as the server words them: made by the server's own `forSaleWorked` (Buy in the app, 20g),
 // so a test reads what the server would send, never a hand-made copy of its words.
@@ -6,6 +6,7 @@ import { forSaleLineSchema, forSaleWorked, type ForSaleIncluded, type ForSaleLin
 export const PACK_ID = "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d";
 export const DAY_ID = "b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e";
 export const SUMMER_ID = "c3d4e5f6-a7b8-4c9d-8e1f-2a3b4c5d6e7f";
+export const GOLD_ID = "f6a7b8c9-d0e1-4f2a-8b3c-5d6e7f809102";
 export const AGREEMENT_ID = "d4e5f6a7-b8c9-4d0e-9f2a-3b4c5d6e7f80";
 export const TODAY = "2026-11-12";
 
@@ -29,6 +30,8 @@ const type = (over: Partial<ForSaleType> & Pick<ForSaleType, "id" | "name" | "ki
 
 export const PACK_TYPE = type({ id: PACK_ID, name: "10-class pack", kind: "pack", priceMinor: 9000, packClasses: 10, packDays: 60, description: "Any class on the timetable.", coolingOffDays: 3 });
 export const DAY_TYPE = type({ id: DAY_ID, name: "Day pass", kind: "pack", priceMinor: 1500, packClasses: 1, packDays: 1 });
+/** A repeating membership (20i-i): paid with the card saved in the app. */
+export const GOLD_TYPE = type({ id: GOLD_ID, name: "Gold Monthly", kind: "recurring", priceMinor: 4999, termCount: 1, termUnit: "month" });
 export const SUMMER_TYPE = type({ id: SUMMER_ID, name: "Summer month", kind: "one_time", priceMinor: 12000, termCount: 1, termUnit: "month", joiningFeeMinor: 2500 });
 
 /** Every class, no personal training: a pack reads "Any class". */
@@ -38,7 +41,16 @@ export const ANY_CLASS: ForSaleIncluded = { access: "all_classes", bookingsLimit
 
 export function lineOf(
   t: ForSaleType,
-  options: { agreement?: boolean; factsKey?: string; personName?: string; friendGift?: boolean; included?: ForSaleIncluded; taxes?: HeldTax[] } = {},
+  options: {
+    agreement?: boolean;
+    factsKey?: string;
+    personName?: string;
+    friendGift?: boolean;
+    included?: ForSaleIncluded;
+    taxes?: HeldTax[];
+    /** A repeating line's card: its tick in the server's own words (`repeatingChargeWords`). */
+    card?: { brand: string; last4: string };
+  } = {},
 ): ForSaleLine {
   const worked = forSaleWorked({
     type: t,
@@ -56,6 +68,7 @@ export function lineOf(
   return forSaleLineSchema.parse({
     ...worked.item,
     factsKey: options.factsKey ?? "a".repeat(64),
+    charge: worked.item.repeats && options.card !== undefined ? repeatingChargeWords(GYM.name, options.card, worked.item) : null,
     agreement:
       options.agreement === false
         ? null
