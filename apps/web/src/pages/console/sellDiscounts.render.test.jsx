@@ -264,7 +264,7 @@ describe('the Discounts list', () => {
     fireEvent.click(within(form).getByRole('button', { name: 'Add discount' }));
     expect(within(form).getByText('Tick at least one product.')).toBeTruthy();
     fireEvent.click(within(form).getByLabelText('Water'));
-    fireEvent.click(within(form).getByLabelText('Limit how many times it can be used'));
+    fireEvent.click(within(form).getByLabelText('Limit how many times it can be used in total'));
     fireEvent.change(within(form).getByLabelText('Usage limit'), { target: { value: '25' } });
     const added = discount({ id: 'd-week', name: 'Members week', code: 'WEEK5', kind: 'amount', percentBp: null, amountMinor: 150, currency: 'USD', maxUses: 25, allProducts: false, productIds: ['p-water'] });
     svc.addDiscount.mockResolvedValue(page({ discounts: [added] }));
@@ -326,27 +326,28 @@ describe('the Discounts list', () => {
     expect(within(discounts()).queryByTestId('discount-row')).toBeNull();
   });
 
-  it('a promo code says who can use it: Once per member ticked on a new one, Members can use it in the app on memberships, both sent (18k-v)', async () => {
+  it('a promo code says how it can be used: one use per member and in the app, both ticked on a new one, the app one on memberships only, both sent (18k-v)', async () => {
     const types = [{ id: 't-gold', name: 'Gold Monthly' }];
     svc.get.mockResolvedValue(page({ discounts: [], membershipTypes: types }));
     open();
     fireEvent.click(await within(await screen.findByRole('region', { name: 'Discounts' })).findByRole('button', { name: 'Add a discount' }));
     const form = within(within(discounts()).getByRole('form', { name: 'Add a discount' }));
     // No code yet: nothing to say about who uses it.
-    expect(form.queryByRole('checkbox', { name: 'Once per member' })).toBeNull();
+    expect(form.queryByRole('checkbox', { name: 'Limit to one use per member' })).toBeNull();
     fireEvent.change(form.getByLabelText('Discount name'), { target: { value: 'Spring' } });
     fireEvent.change(form.getByRole('textbox', { name: 'Percentage off' }), { target: { value: '20' } });
     fireEvent.change(form.getByLabelText('Promo code (optional)'), { target: { value: 'spring' } });
-    expect(form.getByRole('group', { name: 'Who can use SPRING' })).toBeTruthy();
-    expect(form.getByRole('checkbox', { name: 'Once per member' }).checked).toBe(true);
+    expect(form.getByRole('group', { name: 'How SPRING can be used' })).toBeTruthy();
+    expect(form.getByRole('checkbox', { name: 'Limit to one use per member' }).checked).toBe(true);
+    expect(form.getByText('A member can use SPRING once, at the front desk or in the app. Untick this to let members use it every time they buy.')).toBeTruthy();
     // On products alone the app has nothing to sell with it: no app tick.
-    expect(form.queryByRole('checkbox', { name: 'Members can use it in the app' })).toBeNull();
+    expect(form.queryByRole('checkbox', { name: 'Members can enter this code in the app' })).toBeNull();
     fireEvent.click(form.getByRole('checkbox', { name: 'Products' }));
     fireEvent.click(form.getByRole('checkbox', { name: 'Memberships' }));
     fireEvent.click(form.getByLabelText('Every payment'));
-    const inApp = form.getByRole('checkbox', { name: 'Members can use it in the app' });
-    expect(inApp.checked).toBe(false);
-    fireEvent.click(inApp);
+    const inApp = form.getByRole('checkbox', { name: 'Members can enter this code in the app' });
+    expect(inApp.checked).toBe(true);
+    expect(form.getByText(/^Members type SPRING when they buy a membership in the app, and the discount comes off what they pay./)).toBeTruthy();
     const added = discount({ id: 'd-spring', name: 'Spring', code: 'SPRING', forProducts: false, forMemberships: true, membershipPayments: 'every', oncePerMember: true, inApp: true });
     svc.addDiscount.mockResolvedValue(page({ discounts: [added], membershipTypes: types }));
     fireEvent.click(form.getByRole('button', { name: 'Add discount' }));

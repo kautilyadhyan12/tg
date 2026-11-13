@@ -3873,17 +3873,18 @@ codes on products, as Gymdesk and Mindbody do them.
   for nothing; a code a member types in their own app (built by 18k-v, below); discounts in Reports.
 
 **As built, 18k-v (2026-11-13; `rulings/2026-11-13-18k-v.md`).** A promo code typed in the app, on a membership.
-- **Two ticks on a code** (`gym_discounts.in_app`, `once_per_member`, `0238`): **Members can use it in the app** (a code
-  for memberships only; off until ticked, and off on every code made before) and **Once per member** (ticked on a new
-  code; each record uses it once, at the desk or in the app; a walk-in has no record to count it on). Refer a friend's
-  own code is never typed.
+- **Two ticks on a code**, under "How SPRING20 can be used" (`gym_discounts.in_app`, `once_per_member`, `0238`): **Members
+  can enter this code in the app** (a code for memberships only) and **Limit to one use per member** (each record uses it
+  once, at the desk or in the app; a walk-in has no record to count it on). Both ticked on a new code (Kd, 2026-11-13);
+  both off on every code made before. The older box reads "Limit how many times it can be used in total". Refer a
+  friend's own code is never typed.
 - **The app's list with a code** (`GET /for-sale?code=`): the code checked as Buy checks it (`promoFits`: the gym's own,
   ticked, in its dates, within its uses counting those kept, once per member), then each line worked out with it where
   it fits, in place of the friend's gift (one discount a membership; the line says the code is used instead). A line it
   does not fit says so; a code that fits none, or cannot be used, says why once.
 - **Buy with a code** keeps one use of it while the member pays (`gym_app_payments.discount_id`, open): nobody else
-  takes its last use meanwhile (the desk's count reads it too), and staff cannot change or archive it ("A member is
-  paying with this discount in the app right now."). A page left unpaid gives the use back. Paid, the membership is
+  takes its last use meanwhile (the desk's count reads it too), and staff cannot change or archive it ("You can't change
+  this discount right now because a member is paying with it in the app."). A page left unpaid gives the use back. Paid, the membership is
   given with the code as it was on the day Buy was pressed.
 - **Typing codes is limited** apart from reading the list (20 an hour a person, 600 an address), Buy with a code included.
 - **Not built**: the phone's box for it (Stage 5 item 20j); a code for named members only (a code with 1 use sent to

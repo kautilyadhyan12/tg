@@ -159,8 +159,8 @@ export function discountRow(discount, products, types = []) {
     discount.forMemberships ? discountMembershipsWords(discount, types) : null,
     discountDatesWords(discount),
     discountUsesWords(discount),
-    discount.oncePerMember === true ? 'Once per member' : null,
-    discount.inApp === true ? 'Members can use it in the app' : null,
+    discount.oncePerMember === true ? 'One use per member' : null,
+    discount.inApp === true ? 'Can be used in the app' : null,
   ]
     .filter((x) => x !== null)
     .join(' · ');
@@ -429,9 +429,9 @@ export function emptyDiscountDraft(use = 'products') {
     endsOn: '',
     limited: false,
     maxUses: '',
-    // A new code is used once per member unless the gym unticks it (Kd, 2026-11-13); it is in the app only once ticked.
+    // A new code is used once per member and can be entered in the app, unless the gym unticks them (Kd, 2026-11-13).
     oncePerMember: true,
-    inApp: false,
+    inApp: true,
     updatedAt: null,
   };
 }
@@ -455,9 +455,9 @@ export function draftFromDiscount(discount) {
     endsOn: discount.endsOn ?? '',
     limited: discount.maxUses !== null,
     maxUses: discount.maxUses === null ? '' : String(discount.maxUses),
-    // A discount saved without a code keeps the new-code tick ready, should a code be typed.
+    // A discount saved without a code keeps the new-code ticks ready, should a code be typed; a code keeps its own.
     oncePerMember: discount.code === null ? true : discount.oncePerMember === true,
-    inApp: discount.inApp === true,
+    inApp: discount.code === null ? true : discount.inApp === true,
     updatedAt: discount.updatedAt,
   };
 }

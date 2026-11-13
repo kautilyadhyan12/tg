@@ -47,12 +47,13 @@ describe("whether a member may use a code they typed in the app", () => {
   });
 
   it("says each refusal in a member's words", () => {
-    expect(promoRefusalWords("not_found", null)).toBe("That code isn't valid here. Check it and try again.");
+    expect(promoRefusalWords("not_found", null)).toBe("This code isn't valid. Check the spelling and try again.");
     expect(promoRefusalWords("expired", null)).toBe("This code has expired.");
-    expect(promoRefusalWords("used_up", null)).toBe("This code has reached its usage limit.");
+    expect(promoRefusalWords("used_up", null)).toBe("This code has been used the maximum number of times.");
     expect(promoRefusalWords("used_by_member", null)).toBe("You've already used this code.");
-    expect(promoRefusalWords("not_started", "1 Dec 2026")).toBe("This code can be used from 1 Dec 2026.");
-    expect(PROMO_CODE_WORDS.not_for("Day pass")).toBe("This code can't be used on Day pass.");
+    expect(promoRefusalWords("not_started", "1 Dec 2026")).toBe("This code starts on 1 Dec 2026.");
+    expect(PROMO_CODE_WORDS.not_for("Day pass")).toBe("This code doesn't apply to Day pass.");
+    expect(PROMO_CODE_WORDS.fits_nothing).toBe("This code doesn't apply to anything you can buy in the app.");
   });
 });
 

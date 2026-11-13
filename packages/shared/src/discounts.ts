@@ -186,7 +186,7 @@ export function discountRefusalWords(name: string, reason: DiscountRefusal, use:
     case "not_for_membership":
       return `${name} does not apply to this membership. ${nothingDone(use)}`;
     case "used_by_member":
-      return `${name} can be used once per member, and this person has used it already. ${nothingDone(use)}`;
+      return `This member has already used ${name}, and it is limited to one use per member. ${nothingDone(use)}`;
     case "other_currency":
       return `${name} is a fixed amount in another currency. ${use === "sale" ? "Nothing was sold" : "Nothing was saved"}: open ${name} under Discounts and save its amount again.`;
     default: {
@@ -354,18 +354,18 @@ export function promoFits(d: PromoTerms | null, today: string, heldUses: number,
 
 /** What a member reads about a code they typed in the app. `day`: the day it starts, in the gym's words. */
 export const PROMO_CODE_WORDS = {
-  not_found: "That code isn't valid here. Check it and try again.",
+  not_found: "This code isn't valid. Check the spelling and try again.",
   expired: "This code has expired.",
-  not_started: (day: string): string => `This code can be used from ${day}.`,
-  used_up: "This code has reached its usage limit.",
+  not_started: (day: string): string => `This code starts on ${day}.`,
+  used_up: "This code has been used the maximum number of times.",
   used_by_member: "You've already used this code.",
   /** It fits none of the lines sold in the app now. */
-  fits_nothing: "This code can't be used on anything sold in the app.",
+  fits_nothing: "This code doesn't apply to anything you can buy in the app.",
   /** It fits other lines, not this one. `name`: the line's own. */
-  not_for: (name: string): string => `This code can't be used on ${name}.`,
+  not_for: (name: string): string => `This code doesn't apply to ${name}.`,
   /** One discount a purchase: the code takes the place of the Refer a friend gift the member had on it. */
-  instead: (giftName: string): string => `Your code is used instead of ${giftName}.`,
-  too_many: "Too many tries. Wait a few minutes, then try again.",
+  instead: "This code replaces your Refer a friend discount. Only one discount can be used.",
+  too_many: "Too many tries. Wait a few minutes and try again.",
 } as const;
 
 /** The sentence for a refusal of `promoFits`. */
@@ -404,5 +404,5 @@ export const DISCOUNT_WORDS = {
   no_currency: "Set your country in Settings before adding a fixed-amount discount.",
   referral_gift: "This is the Refer a friend gift. Nothing was saved: it is changed in Refer a friend, where the offer is set.",
   /** A member is paying with it in the app (18k-v): it keeps a use for them until their payment ends. */
-  being_used: "A member is paying with this discount in the app right now. Try again once their payment is finished.",
+  being_used: "You can't change this discount right now because a member is paying with it in the app. Try again in a few minutes.",
 } as const;

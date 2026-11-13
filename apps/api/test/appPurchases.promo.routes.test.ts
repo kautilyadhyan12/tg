@@ -423,7 +423,7 @@ d("A promo code typed in the app: only where the gym meant it, honoured as shown
     const desk = await deskGive(gym, tara.entryId, pass, 1500, { id: welcome.id, offMinor: 1000 }, day);
     expect(desk.statusCode, desk.body).toBe(409);
     expect(errorOf(desk)).toBe("discount_used_by_member");
-    expect(messageOf(desk)).toBe("Welcome can be used once per member, and this person has used it already. Nothing was saved: pick another discount, or add the membership without one.");
+    expect(messageOf(desk)).toBe("This member has already used Welcome, and it is limited to one use per member. Nothing was saved: pick another discount, or add the membership without one.");
     const product = await send("POST", `/v1/orgs/${gym.id}/register/products`, gym.owner.cookies, { name: "Shaker", priceMinor: 2500, taxRateIds: [], stock: null });
     expect(product.statusCode, product.body).toBe(201);
     const shaker = sellPageResponseSchema.parse(JSON.parse(product.body)).products.find((p) => p.name === "Shaker")?.id ?? "";
