@@ -9,7 +9,7 @@
 // the runs are test/fixtures/real-runs.json), a mark said SETTLE_S after gives the summary's own
 // seconds every time; said at the mark, up to 9 in 12 were a second off. A pause ends the stretch the
 // maths smooths, so a mark is said at once there.
-import type { RunSums, Units } from "@app/shared";
+import { heartZoneOf, type RunSums, type Units } from "@app/shared";
 import { METRES_PER_MILE } from "./runWords";
 
 export const SETTLE_S = 15;
@@ -117,6 +117,14 @@ export function markLine(mark: Mark): string {
     average < SLOWEST_S ? `Average pace ${spokenTime(average)} per ${unit}.` : null,
   ];
   return parts.filter((p) => p !== null).join(" ");
+}
+
+/** The heart rate after a mark (37f-ii-b), as the live pill says it to a screen reader: "Heart rate 152
+ *  beats a minute, zone 4." With no maximum heart rate there is no zone; with no heart rate now (none from
+ *  the person's own monitor in the last HEART_FRESH_MS) nothing is said, never an old number. */
+export function heartLine(bpm: number | null, max: number | null): string | null {
+  if (bpm === null) return null;
+  return `Heart rate ${String(bpm)} beats a minute${max === null ? "" : `, zone ${String(heartZoneOf(bpm, max))}`}.`;
 }
 
 export const PAUSE_WORDS = { auto: "Auto-paused.", person: "Run paused.", resumed: "Run resumed." } as const;

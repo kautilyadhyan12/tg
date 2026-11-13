@@ -1,10 +1,11 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
-import { AppState } from "react-native";
+import { AppState, Linking } from "react-native";
 import { heartSums, runSums, saveRunRequestSchema, type SaveRunRequest } from "@app/shared";
 import { App } from "../../src/App";
 import { HeartMonitorSheet } from "../../src/heart/HeartMonitor";
 import { heartNative } from "../../src/heart/heartNative";
-import { HEART_FRESH_MS, endTry, heartNow, holdHeart, loadMonitor, pullHeart, resetHeart, saveMonitor, takeHeartReadings, tryMonitor } from "../../src/heart/monitor";
+import { forgetHeartMax } from "../../src/heart/heartMax";
+import { HEART_FRESH_MS, endTry, heartNow, holdHeart, loadMonitor, pairMonitor, pullHeart, resetHeart, saveMonitor, savedHeartNow, takeHeartReadings, tryMonitor } from "../../src/heart/monitor";
 import { closedPauses, pauseRun, phoneRunFiles, resetRecorder, runNow, takeLocations } from "../../src/screens/running/recorder";
 import type { Ask, AskInit } from "../../src/session/calls";
 import { RAVI, fakeServer, kept, memoryStore, profile, tokens, type Reply } from "../kit";
@@ -23,10 +24,16 @@ const STRANGER = "C0:FF:EE:12:34:56";
 const polar = (bpm: number): number[] => [16, bpm, 25, 3, 15, 3, 0];
 
 interface Strap {
+  states: Record<string, string>;
+  asked: number;
   radio: string;
   allowed: boolean;
   missing: boolean;
-  near: { id: string; name: string; rssi: number }[];
+  near: { id: string; name: string; rssi: number; type?: string }[];
+  bonded: string[];
+  pairs: string[];
+  pairAnswer: string;
+  bond: (device: string, state: "bonded" | "bonding" | "none", silent?: boolean) => void;
   watched: string | null;
   watches: string[];
   scans: number;
@@ -43,6 +50,8 @@ beforeEach(async () => {
   strap.reset();
   resetHeart(heartNative);
   resetRecorder();
+  // The maximum read in the last test is not this one's.
+  forgetHeartMax();
   await Promise.resolve();
 });
 
@@ -123,8 +132,122 @@ describe("the worst thing: a heart rate that is not the person's, shown as their
   });
 });
 
-/** The server: a POST kept once for its id. */
-function runServer() {
+// The voice saying the heart rate (ROADMAP Stage 5 item 37f-ii-b).
+// THE WORST THING THIS JOB COULD DO TO A REAL PERSON: a heart rate said out loud that is not theirs now (an
+// old reading from a strap that went quiet, a stranger's strap, a monitor tried in the box), so they push
+// harder than is safe. The mark is then said alone, never with that number.
+const voice = jest.requireMock<{ voice: { said: string[] } }>("../../src/screens/running/runVoiceNative").voice;
+const marksSaid = () => voice.said.filter((line) => /^\d+ kilometres?\./.test(line));
+
+/** Past the first kilometre at 3 m/s (333 s), not yet settled; `then` hands the strap's readings over;
+ *  then far enough past the mark for it to be said. */
+async function toFirstKilometre(then: () => void) {
+  await feed(0, 340, null);
+  expect(marksSaid()).toEqual([]);
+  then();
+  await feed(340, 20, null);
+  expect(marksSaid()).toHaveLength(1);
+  return marksSaid()[0] ?? "";
+}
+
+describe("the worst thing: a heart rate said out loud that is not the person's now", () => {
+  beforeEach(async () => {
+    voice.said = [];
+    await loadMonitor(RAVI.id);
+    await saveMonitor({ id: MINE, name: "Polar H10 9EF6E824" });
+  });
+
+  it("a monitor tried in the box is never the saved one's heart rate now", () => {
+    holdHeart();
+    const now = Date.now();
+    strap.send(MINE, polar(140), now);
+    expect(savedHeartNow(now)).toBe(140);
+    tryMonitor(STRANGER);
+    strap.send(STRANGER, polar(166), now);
+    expect(savedHeartNow(now)).toBeNull();
+    endTry();
+    strap.send(MINE, polar(141), now);
+    expect(savedHeartNow(now)).toBe(141);
+  });
+
+  it("a strap gone quiet: the kilometre is said without a heart rate, never the last one heard", async () => {
+    await openRunning(runServer(180));
+    await startRunning();
+    const line = await toFirstKilometre(() => {
+      strap.send(MINE, polar(150), Date.now() - HEART_FRESH_MS - 1000);
+    });
+    expect(line).toMatch(/^1 kilometre\. Time 5 minutes 3\d seconds\./);
+    expect(line).not.toContain("Heart rate");
+    expect(line).not.toContain("150");
+  });
+
+  it("another person's maximum kept on this phone never gives a zone (round one, H2)", async () => {
+    await phoneRunFiles.write("run-settings.json", JSON.stringify({ autoPause: true, voice: true, units: "metric", mapColours: "auto", heartMax: { who: "somebody-else", max: 200 } }));
+    await openRunning(runServer("fail"));
+    await startRunning();
+    const line = await toFirstKilometre(() => {
+      strap.send(MINE, polar(152));
+    });
+    expect(line).toMatch(/ Heart rate 152 beats a minute.$/);
+    // The pill says the same as the voice: no zone.
+    expect(screen.getByLabelText("Heart rate 152 beats a minute")).toBeTruthy();
+    // And it is gone from the phone once this person is signed in.
+    expect(JSON.parse((await phoneRunFiles.read("run-settings.json")) ?? "{}")).toMatchObject({ heartMax: null });
+  });
+
+  it("with no signal at Go, the person's own kept maximum gives the zone, on the pill and in the voice", async () => {
+    await phoneRunFiles.write("run-settings.json", JSON.stringify({ autoPause: true, voice: true, units: "metric", mapColours: "auto", heartMax: { who: RAVI.id, max: 180 } }));
+    await openRunning(runServer("fail"));
+    await startRunning();
+    const line = await toFirstKilometre(() => {
+      strap.send(MINE, polar(152));
+    });
+    expect(line).toMatch(/ Heart rate 152 beats a minute, zone 4.$/);
+    expect(await screen.findByLabelText("Heart rate 152 beats a minute, zone 4")).toBeTruthy();
+  });
+
+  it("a monitor tried in the box mid-run is never said as the person's, however fresh (round one, tests 1)", async () => {
+    await openRunning(runServer(180));
+    await startRunning();
+    const line = await toFirstKilometre(() => {
+      tryMonitor(STRANGER);
+      strap.send(STRANGER, polar(166));
+      strap.send(MINE, polar(140), Date.now() - HEART_FRESH_MS - 1000);
+    });
+    endTry();
+    expect(line).not.toContain("Heart rate");
+  });
+
+  it("a stranger's strap near by is never said, however fresh", async () => {
+    await openRunning(runServer(180));
+    await startRunning();
+    const line = await toFirstKilometre(() => {
+      strap.send(STRANGER, polar(171));
+    });
+    expect(line).not.toContain("Heart rate");
+  });
+
+  it.each([
+    ["with a maximum of 180, its zone", 180, "Heart rate 152 beats a minute, zone 4."],
+    ["with no maximum heart rate, no zone", null, "Heart rate 152 beats a minute."],
+  ] as const)("the person's own heart rate now is said after the kilometre: %s", async (_name, max, words) => {
+    await openRunning(runServer(max));
+    await startRunning();
+    // The maximum read as the run opened, kept for the voice with the app closed.
+    await waitFor(async () => {
+      expect(JSON.parse((await phoneRunFiles.read("run-settings.json")) ?? "{}")).toMatchObject({ heartMax: { who: RAVI.id, max } });
+    });
+    const line = await toFirstKilometre(() => {
+      strap.send(MINE, polar(152));
+    });
+    expect(line).toMatch(/^1 kilometre\. Time 5 minutes 3\d seconds\./);
+    expect(line.endsWith(` ${words}`)).toBe(true);
+  });
+});
+
+/** The server: a POST kept once for its id; the maximum heart rate the zones are worked from, none unless
+ *  a test says ("fail": no answer, as with no signal at Go). */
+function runServer(heartMax: number | null | "fail" = null) {
   const posts: unknown[] = [];
   const saved: SaveRunRequest[] = [];
   const server = fakeServer({
@@ -133,6 +256,7 @@ function runServer() {
     "/v1/geo/runs/records": () => ({ status: 503, body: { error: "unavailable" } }),
     "/v1/geo/runs/climb": () => ({ status: 200, body: { climb: { state: "none" } } }),
     "/v1/users/me": () => ({ status: 200, body: profile(true, RAVI) }),
+    "/v1/geo/heart-max": () => (heartMax === "fail" ? { status: 503, body: { error: "unavailable" } } : { status: 200, body: { own: heartMax, fromAge: null, max: heartMax } }),
     [PATH]: (body): Reply => {
       if (body === undefined) return { status: 200, body: { items: [], nextCursor: null, months: [], total: { runs: 0, distanceM: 0 } } };
       const run = saveRunRequestSchema.parse(body);
@@ -337,5 +461,191 @@ describe("I connect my chest strap once, and my runs show my heart rate", () => 
     await waitFor(async () => {
       expect(await phoneRunFiles.read(`heart-monitor-${RAVI.id}.json`)).toBeNull();
     });
+    expect(screen.getByText("Removed. Polar H10 9EF6E824 won't connect to your runs.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Open Bluetooth settings to unpair it" })).toBeNull();
+  });
+});
+
+// A watch whose Bluetooth address changes, kept connected by pairing it (37f-ii-b).
+// THE WORST THING: after pairing, the phone follows a device that is not the one picked, and its heart rate
+// is shown and said as the person's. So the monitor is kept at the address Android pairs THE ONE PICKED at,
+// and with any doubt (another device paired at the same moment, Cancel, no answer) at the address picked,
+// as before. The task: "I connect my watch once, and it stays connected when its address changes."
+const WATCH = "5A:3C:91:0E:77:12"; // the private address a watch shows for a few minutes
+const LASTING = "C8:2B:96:41:0A:E3"; // the same watch's own lasting address, once paired
+const EARBUDS = "F4:7B:09:22:6D:01";
+
+/** Connect, pick the watch, see its heart rate, and press Save: Android is asked to pair it. */
+async function saveTheWatch(type = "random") {
+  strap.near = [{ id: WATCH, name: "Forerunner 265", rssi: -55, type }];
+  const s = runServer();
+  await openRunning(s);
+  await fireEvent.press(screen.getByRole("button", { name: "Connect a heart rate monitor" }));
+  await fireEvent.press(await screen.findByRole("button", { name: "Connect Forerunner 265" }));
+  strap.send(WATCH, polar(77));
+  expect(await screen.findByText("77 bpm", {}, { timeout: 3000 })).toBeTruthy();
+  await fireEvent.press(screen.getByRole("button", { name: "Save" }));
+}
+const keptMonitor = async () => JSON.parse((await phoneRunFiles.read(`heart-monitor-${RAVI.id}.json`)) ?? "null") as { id: string } | null;
+
+describe("the worst thing: a device that is not the one picked, followed after pairing", () => {
+  it("another device paired at the same moment is never kept: the watch stays at the address picked", async () => {
+    strap.bonded = [];
+    await saveTheWatch();
+    expect(await screen.findByText("Pairing…")).toBeTruthy();
+    // Only the earbuds joined the list: one new address, and it is a device Android said was pairing on its own.
+    await act(() => {
+      strap.bond(WATCH, "bonding");
+      strap.bond(EARBUDS, "bonding");
+      strap.bonded = [EARBUDS];
+      strap.bond(EARBUDS, "bonded");
+      strap.bond(WATCH, "bonded");
+    });
+    expect(await screen.findByText("Saved, not paired. If it says No signal later, press Change monitor.")).toBeTruthy();
+    expect((await keptMonitor())?.id).toBe(WATCH);
+    expect(strap.watched).toBe(WATCH);
+  });
+
+  it("the earbuds paired while the watch is still pairing are not the watch", async () => {
+    strap.bonded = [];
+    await saveTheWatch();
+    await act(() => {
+      strap.bond(WATCH, "bonding");
+      strap.bonded = [EARBUDS];
+      strap.bond(EARBUDS, "bonded");
+    });
+    expect(screen.getByText("Pairing…")).toBeTruthy();
+    expect(await keptMonitor()).toBeNull();
+  });
+
+  it("Cancel where Android's messages never reach the app: seen at once, kept unpaired (round one, H1)", async () => {
+    await saveTheWatch();
+    expect(await screen.findByText("Pairing…")).toBeTruthy();
+    strap.bond(WATCH, "bonding", true);
+    // Until the app has asked once since it began pairing (round one's re-check, L4).
+    const asked = strap.asked;
+    await waitFor(
+      () => {
+        expect(strap.asked).toBeGreaterThan(asked);
+      },
+      { timeout: 3000 },
+    );
+    strap.bond(WATCH, "none", true);
+    expect(await screen.findByText("Saved, not paired. If it says No signal later, press Change monitor.", {}, { timeout: 3000 })).toBeTruthy();
+    expect((await keptMonitor())?.id).toBe(WATCH);
+  });
+
+  it("no answer to Android's box: not paired once the wait is over (round one, tests 4)", async () => {
+    await expect(pairMonitor({ id: WATCH, name: "Forerunner 265", rssi: -55, type: "random" }, 100)).resolves.toEqual({ kind: "notPaired" });
+    expect(strap.pairs).toEqual([WATCH]);
+  });
+
+  it("Cancel on Android's box: kept unpaired at the address picked", async () => {
+    await saveTheWatch();
+    await act(() => {
+      strap.bond(WATCH, "bonding");
+      strap.bond(WATCH, "none");
+    });
+    expect(await screen.findByText("Saved, not paired. If it says No signal later, press Change monitor.")).toBeTruthy();
+    expect((await keptMonitor())?.id).toBe(WATCH);
+  });
+});
+
+describe("I connect my watch once, and it stays connected when its address changes", () => {
+  it("Save pairs it, and it is kept and watched at its lasting address", async () => {
+    strap.bonded = [EARBUDS];
+    await saveTheWatch();
+    expect(strap.pairs).toEqual([WATCH]);
+    expect(await screen.findByText("Tap Pair when your phone asks.")).toBeTruthy();
+    await act(() => {
+      strap.bond(WATCH, "bonding");
+      strap.bonded = [EARBUDS, LASTING];
+      strap.bond(WATCH, "bonded");
+    });
+    expect(await screen.findByText("Paired and saved. It connects when you start a run.")).toBeTruthy();
+    expect(await keptMonitor()).toEqual({ id: LASTING, name: "Forerunner 265" });
+    await waitFor(() => {
+      expect(strap.watched).toBe(LASTING);
+    });
+    // Its heart rate from the lasting address is the person's; the old private address is nobody's now.
+    strap.send(WATCH, polar(80));
+    strap.send(LASTING, polar(81));
+    expect(await screen.findByText("81 bpm", {}, { timeout: 3000 })).toBeTruthy();
+  });
+
+  it("as on the phone: Android lists it at the address picked and says nothing the app sees, and it is paired", async () => {
+    strap.bonded = [EARBUDS];
+    await saveTheWatch();
+    expect(await screen.findByText("Pairing…")).toBeTruthy();
+    strap.bonded = [EARBUDS, WATCH];
+    expect(await screen.findByText("Paired and saved. It connects when you start a run.", {}, { timeout: 3000 })).toBeTruthy();
+    expect((await keptMonitor())?.id).toBe(WATCH);
+  });
+
+  it("Save without pairing keeps it at the address picked, and a late answer changes nothing", async () => {
+    await saveTheWatch();
+    await fireEvent.press(await screen.findByRole("button", { name: "Save without pairing" }));
+    expect(await screen.findByText("Saved, not paired. If it says No signal later, press Change monitor.")).toBeTruthy();
+    await act(() => {
+      strap.bonded = [LASTING];
+      strap.bond(WATCH, "bonded");
+    });
+    expect((await keptMonitor())?.id).toBe(WATCH);
+  });
+
+  it("a strap whose address never changes is not asked to pair", async () => {
+    await saveTheWatch("public");
+    expect(await screen.findByText("Saved. It connects when you start a run.")).toBeTruthy();
+    expect(strap.pairs).toEqual([]);
+    expect((await keptMonitor())?.id).toBe(WATCH);
+  });
+
+  it("Android says paired a moment before its paired list has it: paired once the list catches up (round one's re-check, L5)", async () => {
+    strap.bonded = [EARBUDS];
+    await saveTheWatch();
+    strap.bond(WATCH, "bonding", true);
+    strap.bond(WATCH, "bonded", true);
+    const asked = strap.asked;
+    await waitFor(
+      () => {
+        expect(strap.asked).toBeGreaterThan(asked);
+      },
+      { timeout: 3000 },
+    );
+    expect(screen.getByText("Pairing…")).toBeTruthy();
+    strap.bonded = [EARBUDS, WATCH];
+    expect(await screen.findByText("Paired and saved. It connects when you start a run.", {}, { timeout: 3000 })).toBeTruthy();
+    expect((await keptMonitor())?.id).toBe(WATCH);
+  });
+
+  it("Android saying it is paired already: paired, at the address picked (round one, L1)", async () => {
+    strap.pairAnswer = "already";
+    await saveTheWatch();
+    expect(await screen.findByText("Paired and saved. It connects when you start a run.")).toBeTruthy();
+    expect((await keptMonitor())?.id).toBe(WATCH);
+  });
+
+  it("Android refusing to start pairing: kept unpaired, said so", async () => {
+    strap.pairAnswer = "failed";
+    await saveTheWatch();
+    expect(await screen.findByText("Saved, not paired. If it says No signal later, press Change monitor.")).toBeTruthy();
+    expect((await keptMonitor())?.id).toBe(WATCH);
+  });
+
+  it("Remove says it is still paired, with the way to Bluetooth settings", async () => {
+    strap.bonded = [LASTING];
+    await loadMonitor(RAVI.id);
+    await saveMonitor({ id: LASTING, name: "Forerunner 265" });
+    const s = runServer();
+    await openRunning(s);
+    await fireEvent.press(screen.getByRole("button", { name: "Change heart rate monitor" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Remove" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Remove" }));
+    expect(await screen.findByText("Removed. Forerunner 265 is still paired with this phone.")).toBeTruthy();
+    const sendIntent = jest.spyOn(Linking, "sendIntent").mockResolvedValue(undefined);
+    await fireEvent.press(screen.getByRole("button", { name: "Open Bluetooth settings to unpair it" }));
+    expect(sendIntent).toHaveBeenCalledWith("android.settings.BLUETOOTH_SETTINGS");
+    await fireEvent.press(screen.getByRole("button", { name: "Connect another" }));
+    expect(await screen.findByText("Wear your strap, or turn on your watch's heart rate broadcast.")).toBeTruthy();
   });
 });
