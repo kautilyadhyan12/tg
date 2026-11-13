@@ -41,6 +41,10 @@ export interface DiscountRow {
   membershipPayments: MembershipPayments | null;
   /** Refer a friend's own friend's gift (0119): given only to a friend a member invited. */
   referralGift: boolean;
+  /** Members may type its code in the app (0238; 18k-v). */
+  inApp: boolean;
+  /** Each record uses it once (0238; 18k-v). */
+  oncePerMember: boolean;
   archivedAt: Date | null;
   updatedAt: Date;
 }
@@ -65,6 +69,8 @@ interface RawDiscount {
   membership_type_ids: string[];
   membership_payments: string | null;
   referral_gift: boolean;
+  in_app: boolean;
+  once_per_member: boolean;
   archived_at: Date | null;
   updated_at: Date;
 }
@@ -93,6 +99,8 @@ const discount = (r: RawDiscount): DiscountRow => ({
   membershipTypeIds: r.membership_type_ids,
   membershipPayments: paymentsSchema.parse(r.membership_payments),
   referralGift: r.referral_gift,
+  inApp: r.in_app,
+  oncePerMember: r.once_per_member,
   archivedAt: r.archived_at,
   updatedAt: r.updated_at,
 });
@@ -101,7 +109,7 @@ const discount = (r: RawDiscount): DiscountRow => ({
 const columns = (sql: Sql | TransactionSql) => sql`
   d.id, d.name, d.code, d.kind, d.percent_bp, d.amount_minor, d.currency, d.starts_on::text AS starts_on,
   d.ends_on::text AS ends_on, d.max_uses, d.uses, d.for_products, d.all_products, d.for_memberships,
-  d.all_membership_types, d.membership_payments, d.referral_gift, d.archived_at, d.updated_at,
+  d.all_membership_types, d.membership_payments, d.referral_gift, d.in_app, d.once_per_member, d.archived_at, d.updated_at,
   COALESCE((SELECT array_agg(p.product_id::text ORDER BY p.product_id)
             FROM gym_discount_products p WHERE p.gym_id = d.gym_id AND p.discount_id = d.id), '{}') AS product_ids,
   COALESCE((SELECT array_agg(m.membership_type_id::text ORDER BY m.membership_type_id)
@@ -167,14 +175,50 @@ export async function lockedDiscount(tx: TransactionSql, gymId: string, discount
   return raw === undefined ? null : discount(raw);
 }
 
-/** Counts one more use, in one statement that will not pass the limit. False where the
- *  limit is reached. */
-export async function takeUse(tx: TransactionSql, gymId: string, discountId: string): Promise<boolean> {
+/** The open purchases in the app keeping a use of a discount (18k-v): each is one, until its page or its card's charge
+ *  ends. `exceptPurchase`: the purchase whose own use is being counted now. */
+const keptUses = (tx: Sql | TransactionSql, gymId: string, discountId: string, exceptPurchase: string | null) => tx`
+  (SELECT count(*)::int FROM gym_app_payments p
+   WHERE p.gym_id = ${gymId} AND p.discount_id = ${discountId} AND p.state = 'open'
+     AND (${exceptPurchase}::uuid IS NULL OR p.id <> ${exceptPurchase}::uuid))`;
+
+/** Counts one more use, in one statement that will not pass the limit, the uses kept for members paying in the app
+ *  counted with it (18k-v). False where the limit is reached. `exceptPurchase`: a purchase in the app given now, whose kept
+ *  use this one becomes. */
+export async function takeUse(tx: TransactionSql, gymId: string, discountId: string, exceptPurchase: string | null = null): Promise<boolean> {
   const rows = await tx<{ id: string }[]>`
     UPDATE gym_discounts SET uses = uses + 1
-    WHERE gym_id = ${gymId} AND id = ${discountId} AND archived_at IS NULL AND (max_uses IS NULL OR uses < max_uses)
+    WHERE gym_id = ${gymId} AND id = ${discountId} AND archived_at IS NULL
+      AND (max_uses IS NULL OR uses + ${keptUses(tx, gymId, discountId, exceptPurchase)} < max_uses)
     RETURNING id`;
   return rows.length === 1;
+}
+
+/** How many uses of a discount open purchases in the app keep now (18k-v). */
+export async function heldUses(sql: Sql | TransactionSql, gymId: string, discountId: string, exceptPurchase: string | null = null): Promise<number> {
+  const [row] = await sql<{ n: number }[]>`SELECT ${keptUses(sql, gymId, discountId, exceptPurchase)} AS n`;
+  return row?.n ?? 0;
+}
+
+/** WHETHER THIS RECORD HAS USED A DISCOUNT (18k-v), for one used once per member: a membership given with it (it stands
+ *  once given, cancelled or not, as a use does), a product sale with it that was not voided, or a purchase in the app
+ *  open with it, other than `exceptPurchase`. */
+export async function usedByMember(sql: Sql | TransactionSql, gymId: string, discountId: string, entryId: string, exceptPurchase: string | null = null): Promise<boolean> {
+  const [row] = await sql<{ used: boolean }[]>`
+    SELECT EXISTS (SELECT 1 FROM gym_held_memberships h WHERE h.gym_id = ${gymId} AND h.entry_id = ${entryId} AND h.discount_id = ${discountId})
+        OR EXISTS (SELECT 1 FROM gym_sales s WHERE s.gym_id = ${gymId} AND s.entry_id = ${entryId} AND s.discount_id = ${discountId} AND s.undone_at IS NULL)
+        OR EXISTS (SELECT 1 FROM gym_app_payments p WHERE p.gym_id = ${gymId} AND p.entry_id = ${entryId} AND p.discount_id = ${discountId}
+                     AND p.state = 'open' AND (${exceptPurchase}::uuid IS NULL OR p.id <> ${exceptPurchase}::uuid)) AS used`;
+  return row?.used ?? false;
+}
+
+/** The discount in use holding this promo code, or null: one of a code in use at a time (`gym_discounts_code_uq`).
+ *  `lock`: held for the purchase being checked, so its kept uses are counted with nobody passing it meanwhile. */
+export async function discountByCode(tx: Sql | TransactionSql, gymId: string, code: string, lock: boolean): Promise<DiscountRow | null> {
+  const [raw] = lock
+    ? await tx<RawDiscount[]>`SELECT ${columns(tx)} FROM gym_discounts d WHERE d.gym_id = ${gymId} AND d.code = ${code} AND d.archived_at IS NULL FOR UPDATE OF d`
+    : await tx<RawDiscount[]>`SELECT ${columns(tx)} FROM gym_discounts d WHERE d.gym_id = ${gymId} AND d.code = ${code} AND d.archived_at IS NULL`;
+  return raw === undefined ? null : discount(raw);
 }
 
 /** Counts one use whatever its limit: a sale paid on the Terminal (18d-vi-b-ii) that took it when
@@ -206,6 +250,10 @@ export interface DiscountInput {
   allMembershipTypes: boolean;
   membershipTypeIds: string[];
   membershipPayments: MembershipPayments | null;
+  /** Members may type its code in the app (18k-v). */
+  inApp: boolean;
+  /** Each record uses it once (18k-v). */
+  oncePerMember: boolean;
 }
 
 export type DiscountWriteOutcome =
@@ -224,7 +272,9 @@ export type DiscountWriteOutcome =
   | { kind: "no_currency" }
   /** Refer a friend's friend's gift: changed only in Settings → Refer a friend, by whoever
    *  may set the offer, since every invite link promises it. */
-  | { kind: "referral_gift" };
+  | { kind: "referral_gift" }
+  /** A member is paying with it in the app: it keeps a use for them until that ends (18k-v). */
+  | { kind: "being_used" };
 
 async function liveCount(tx: TransactionSql, gymId: string): Promise<number> {
   const [row] = await tx<{ n: number }[]>`
@@ -294,6 +344,8 @@ const what = (input: DiscountInput, currency: string | null): Record<string, str
   products: !input.forProducts ? "none" : input.allProducts ? "all" : String(input.productIds.length),
   memberships: !input.forMemberships ? "none" : input.allMembershipTypes ? "all" : String(input.membershipTypeIds.length),
   ...(input.membershipPayments === null ? {} : { membershipPayments: input.membershipPayments }),
+  inApp: String(input.inApp),
+  oncePerMember: String(input.oncePerMember),
 });
 
 export async function createDiscount(sql: Sql, input: DiscountInput & { gymId: string; actorUserId: string }): Promise<DiscountWriteOutcome> {
@@ -319,10 +371,12 @@ export async function createDiscountInTx(
   if (!(await typesAreLive(tx, input.gymId, input.membershipTypeIds))) return { kind: "membership_type_not_found" };
   const [created] = await tx<{ id: string }[]>`
     INSERT INTO gym_discounts (gym_id, name, code, kind, percent_bp, amount_minor, currency, starts_on, ends_on, max_uses,
-                               for_products, all_products, for_memberships, all_membership_types, membership_payments, referral_gift)
+                               for_products, all_products, for_memberships, all_membership_types, membership_payments, referral_gift,
+                               in_app, once_per_member)
     VALUES (${input.gymId}, ${input.name}, ${input.code}, ${input.kind}, ${input.percentBp}, ${input.amountMinor}, ${money.currency},
             ${input.startsOn}::date, ${input.endsOn}::date, ${input.maxUses}, ${input.forProducts}, ${input.allProducts},
-            ${input.forMemberships}, ${input.allMembershipTypes}, ${input.membershipPayments}, ${input.referralGift === true})
+            ${input.forMemberships}, ${input.allMembershipTypes}, ${input.membershipPayments}, ${input.referralGift === true},
+            ${input.inApp && input.referralGift !== true}, ${input.oncePerMember})
     RETURNING id`;
   if (created === undefined) throw new Error("discount insert returned no row");
   await setProducts(tx, input.gymId, created.id, input.productIds);
@@ -362,8 +416,11 @@ export async function updateDiscountInTx(
 ): Promise<DiscountWriteOutcome> {
   const [before] = await tx<{ name: string; updated_at: Date }[]>`
     SELECT name, updated_at FROM gym_discounts
-    WHERE id = ${input.discountId} AND gym_id = ${input.gymId} AND archived_at IS NULL`;
+    WHERE id = ${input.discountId} AND gym_id = ${input.gymId} AND archived_at IS NULL
+    FOR UPDATE`;
   if (before === undefined) return { kind: "not_found" };
+  // Held, then asked: a purchase being written takes this row's lock before it counts what is kept (18k-v).
+  if ((await heldUses(tx, input.gymId, input.discountId)) > 0) return { kind: "being_used" };
   // To the millisecond, which is what the list sends and a form can send back.
   if (input.readAt !== null && before.updated_at.getTime() !== input.readAt.getTime()) return { kind: "changed" };
   const money = await currencyFor(tx, input.gymId, input.kind);
@@ -378,7 +435,8 @@ export async function updateDiscountInTx(
         amount_minor = ${input.amountMinor}, currency = ${money.currency}, starts_on = ${input.startsOn}::date,
         ends_on = ${input.endsOn}::date, max_uses = ${input.maxUses}, for_products = ${input.forProducts},
         all_products = ${input.allProducts}, for_memberships = ${input.forMemberships},
-        all_membership_types = ${input.allMembershipTypes}, membership_payments = ${input.membershipPayments}, updated_at = ${input.now}
+        all_membership_types = ${input.allMembershipTypes}, membership_payments = ${input.membershipPayments},
+        in_app = ${input.inApp} AND NOT referral_gift, once_per_member = ${input.oncePerMember}, updated_at = ${input.now}
     WHERE id = ${input.discountId} AND gym_id = ${input.gymId}`;
   await setProducts(tx, input.gymId, input.discountId, input.productIds);
   await setMembershipTypes(tx, input.gymId, input.discountId, input.membershipTypeIds);
@@ -403,6 +461,8 @@ export async function archiveDiscount(sql: Sql, input: { gymId: string; discount
 
 /** The same, inside the caller's transaction, which already holds the gym's row lock. */
 export async function archiveDiscountInTx(tx: TransactionSql, input: { gymId: string; discountId: string; actorUserId: string; now: Date }): Promise<DiscountWriteOutcome> {
+  const [held] = await tx<{ id: string }[]>`SELECT id FROM gym_discounts WHERE id = ${input.discountId} AND gym_id = ${input.gymId} FOR UPDATE`;
+  if (held !== undefined && (await heldUses(tx, input.gymId, input.discountId)) > 0) return { kind: "being_used" };
   const [before] = await tx<{ name: string }[]>`
     UPDATE gym_discounts SET archived_at = ${input.now}, updated_at = ${input.now}
     WHERE id = ${input.discountId} AND gym_id = ${input.gymId} AND archived_at IS NULL

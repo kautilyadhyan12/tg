@@ -1660,6 +1660,13 @@
       "when": 1790985600237,
       "tag": "0237_payment_notices",
       "breakpoints": true
+    },
+    {
+      "idx": 237,
+      "version": "7",
+      "when": 1790985600238,
+      "tag": "0238_promo_codes_in_app",
+      "breakpoints": true
     }
   ]
 }

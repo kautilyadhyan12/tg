@@ -171,6 +171,8 @@ function refusalOf(outcome: Exclude<buys.PurchasableOutcome, { kind: "ok" }>, gy
       throw new OrgsError(409, "app_purchase_card_changed", APP_PURCHASE_WORDS.card_changed);
     case "renewing_held":
       throw new OrgsError(409, "app_purchase_renewing_held", APP_PURCHASE_WORDS.renewing_held(outcome.name));
+    case "promo":
+      throw new OrgsError(409, "app_purchase_promo", outcome.words);
     default: {
       const never: never = outcome;
       throw new Error(`unhandled purchase check: ${JSON.stringify(never)}`);
@@ -200,6 +202,7 @@ export async function startPurchase(deps: PaymentsDeps, userId: string, gymId: s
     factsKey: body.factsKey,
     agreement: body.agreement,
     charge: body.charge ?? null,
+    code: body.code ?? null,
     square: { environment: ready.square.environment, accountId: ready.row.accountId },
     accountCurrency: ready.row.currency,
     gymName: own.gymName,

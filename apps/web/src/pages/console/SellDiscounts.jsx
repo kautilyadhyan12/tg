@@ -1,6 +1,6 @@
 import { useId, useState } from 'react';
 import { Loader2, Plus } from 'lucide-react';
-import { DISCOUNTS_MAX } from '@app/shared';
+import { DISCOUNTS_MAX, promoCodeFrom } from '@app/shared';
 import { registerService } from '../../api/registerApi';
 import { errorText } from '../../api/orgsApi';
 import { ConfirmInline } from '../../components/console/ConsoleStates';
@@ -225,6 +225,26 @@ function DiscountForm({ page, draft, setDraft, busy, error, membershipsTo, onSav
           <p className="c-s13 c-t3 m-0">Each sale or membership made with the discount counts as one use. A product sale you void gives its use back.</p>
           {problems.maxUses ? <p className="c-s14 m-0" style={BAD}>{problems.maxUses}</p> : null}
         </div>
+      ) : null}
+
+      {promoCodeFrom(draft.code) !== null ? (
+        <fieldset className="flex flex-col gap-1" style={{ border: 0, padding: 0, margin: 0 }}>
+          <legend className="c-label">Who can use {promoCodeFrom(draft.code)}</legend>
+          <label className="flex items-center gap-3 c-s15 c-t1" style={ROW}>
+            <input type="checkbox" checked={draft.oncePerMember} disabled={busy} onChange={(e) => set({ oncePerMember: e.target.checked })} />
+            Once per member
+          </label>
+          <p className="c-s13 c-t3 m-0">Each member can use this code once, at the front desk or in the app. Untick it for a code they can use every time.</p>
+          {draft.forMemberships ? (
+            <>
+              <label className="flex items-center gap-3 c-s15 c-t1" style={ROW}>
+                <input type="checkbox" checked={draft.inApp} disabled={busy} onChange={(e) => set({ inApp: e.target.checked })} />
+                Members can use it in the app
+              </label>
+              <p className="c-s13 c-t3 m-0">Members type this code when they buy a membership in the app. Anyone who has the code can use it there.</p>
+            </>
+          ) : null}
+        </fieldset>
       ) : null}
 
       <div className="flex flex-wrap gap-2">

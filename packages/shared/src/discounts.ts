@@ -96,7 +96,16 @@ export function discountStatus(d: DiscountTerms, today: string): DiscountStatus 
   return "active";
 }
 
-export type DiscountRefusal = "archived" | "not_started" | "expired" | "used_up" | "not_for_product" | "not_for_membership" | "other_currency";
+export type DiscountRefusal =
+  | "archived"
+  | "not_started"
+  | "expired"
+  | "used_up"
+  | "not_for_product"
+  | "not_for_membership"
+  | "other_currency"
+  /** A code used once per member, and this record has used it (18k-v): never `discountFits`'s, which reads no person. */
+  | "used_by_member";
 
 /** What a discount is for, as the rule below reads it. */
 export interface DiscountReach {
@@ -176,6 +185,8 @@ export function discountRefusalWords(name: string, reason: DiscountRefusal, use:
       return `${name} does not apply to this product. ${nothingDone(use)}`;
     case "not_for_membership":
       return `${name} does not apply to this membership. ${nothingDone(use)}`;
+    case "used_by_member":
+      return `${name} can be used once per member, and this person has used it already. ${nothingDone(use)}`;
     case "other_currency":
       return `${name} is a fixed amount in another currency. ${use === "sale" ? "Nothing was sold" : "Nothing was saved"}: open ${name} under Discounts and save its amount again.`;
     default: {
@@ -232,6 +243,10 @@ export const gymDiscountSchema = z
     membershipPayments: z.enum(MEMBERSHIP_PAYMENTS).nullable(),
     /** Refer a friend's own friend's gift (20e-ii-b-i): offered only to the friend it is for. */
     referralGift: z.boolean().default(false),
+    /** Members may type its promo code in the app (18k-v). */
+    inApp: z.boolean().default(false),
+    /** Each person uses it once, at the desk or in the app (18k-v). */
+    oncePerMember: z.boolean().default(false),
     archivedAt: z.iso.datetime().nullable(),
     updatedAt: z.iso.datetime(),
   })
@@ -256,9 +271,15 @@ function checkDiscountShape(
     allMembershipTypes: boolean;
     membershipTypeIds: string[];
     membershipPayments: MembershipPayments | null;
+    code: string | null;
+    inApp: boolean;
+    oncePerMember: boolean;
   },
   ctx: z.RefinementCtx,
 ): void {
+  // Typed in the app: a promo code, on memberships, as the app sells memberships alone (18k-v).
+  if (v.inApp && (v.code === null || !v.forMemberships)) ctx.addIssue({ code: "custom", path: ["inApp"], message: "in_app_needs_code" });
+  if (v.oncePerMember && v.code === null) ctx.addIssue({ code: "custom", path: ["oncePerMember"], message: "once_needs_code" });
   if (!v.forProducts && !v.forMemberships) ctx.addIssue({ code: "custom", path: ["forProducts"], message: "applies_to_nothing" });
   if (!v.forProducts && !v.allProducts) ctx.addIssue({ code: "custom", path: ["allProducts"], message: "invalid_products" });
   if (!v.forMemberships && !v.allMembershipTypes) ctx.addIssue({ code: "custom", path: ["allMembershipTypes"], message: "invalid_membership_types" });
@@ -291,6 +312,10 @@ const saveGymDiscountFields = z
     allMembershipTypes: z.boolean(),
     membershipTypeIds: z.array(z.uuid()).max(DISCOUNT_MEMBERSHIP_TYPES_MAX),
     membershipPayments: z.enum(MEMBERSHIP_PAYMENTS).nullable(),
+    /** Members may type its code in the app (18k-v): a code for memberships only. Off where a caller sends nothing. */
+    inApp: z.boolean().default(false),
+    /** Each person uses it once (18k-v): a code only. The console's form sends it ticked for a new code. */
+    oncePerMember: z.boolean().default(false),
   })
   .strict();
 
@@ -301,6 +326,67 @@ export type SaveGymDiscountRequest = z.infer<typeof saveGymDiscountRequestSchema
  *  A sale that used it in between does not. */
 export const updateGymDiscountRequestSchema = saveGymDiscountFields.extend({ updatedAt: z.iso.datetime() }).strict().superRefine(checkDiscountShape);
 export type UpdateGymDiscountRequest = z.infer<typeof updateGymDiscountRequestSchema>;
+
+// ── A promo code typed in the app (18k-v) ───────────────────────────────────
+
+export type PromoRefusal = "not_found" | "not_started" | "expired" | "used_up" | "used_by_member";
+
+/** What the rule below reads of a code's discount. */
+export interface PromoTerms extends DiscountTerms {
+  inApp: boolean;
+  referralGift: boolean;
+  oncePerMember: boolean;
+}
+
+/** WHETHER A MEMBER MAY USE A CODE THEY TYPED IN THE APP, today, before it is tried on each line. `d`: the gym's own
+ *  discount holding that code, or null for none. A code the gym has not ticked for the app, Refer a friend's own and an
+ *  archived one are not codes there at all. `heldUses`: the uses other members' open purchases keep (their pages, or
+ *  their cards being charged), which count against its limit as uses do. `usedByMember`: this person has used it, where it
+ *  is once per member. */
+export function promoFits(d: PromoTerms | null, today: string, heldUses: number, usedByMember: boolean): { ok: true } | { ok: false; reason: PromoRefusal } {
+  if (d === null || !d.inApp || d.referralGift || d.archived) return { ok: false, reason: "not_found" };
+  if (d.endsOn !== null && today > d.endsOn) return { ok: false, reason: "expired" };
+  if (d.maxUses !== null && d.uses + Math.max(0, heldUses) >= d.maxUses) return { ok: false, reason: "used_up" };
+  if (d.startsOn !== null && today < d.startsOn) return { ok: false, reason: "not_started" };
+  if (d.oncePerMember && usedByMember) return { ok: false, reason: "used_by_member" };
+  return { ok: true };
+}
+
+/** What a member reads about a code they typed in the app. `day`: the day it starts, in the gym's words. */
+export const PROMO_CODE_WORDS = {
+  not_found: "That code isn't valid here. Check it and try again.",
+  expired: "This code has expired.",
+  not_started: (day: string): string => `This code can be used from ${day}.`,
+  used_up: "This code has reached its usage limit.",
+  used_by_member: "You've already used this code.",
+  /** It fits none of the lines sold in the app now. */
+  fits_nothing: "This code can't be used on anything sold in the app.",
+  /** It fits other lines, not this one. `name`: the line's own. */
+  not_for: (name: string): string => `This code can't be used on ${name}.`,
+  /** One discount a purchase: the code takes the place of the Refer a friend gift the member had on it. */
+  instead: (giftName: string): string => `Your code is used instead of ${giftName}.`,
+  too_many: "Too many tries. Wait a few minutes, then try again.",
+} as const;
+
+/** The sentence for a refusal of `promoFits`. */
+export function promoRefusalWords(reason: PromoRefusal, startsOnWords: string | null): string {
+  switch (reason) {
+    case "not_found":
+      return PROMO_CODE_WORDS.not_found;
+    case "expired":
+      return PROMO_CODE_WORDS.expired;
+    case "used_up":
+      return PROMO_CODE_WORDS.used_up;
+    case "used_by_member":
+      return PROMO_CODE_WORDS.used_by_member;
+    case "not_started":
+      return startsOnWords === null ? PROMO_CODE_WORDS.not_found : PROMO_CODE_WORDS.not_started(startsOnWords);
+    default: {
+      const never: never = reason;
+      throw new Error(`unhandled promo refusal: ${String(never)}`);
+    }
+  }
+}
 
 /** The server's sentences, one place for the routes and the screen's tests. */
 export const DISCOUNT_WORDS = {
@@ -317,4 +403,6 @@ export const DISCOUNT_WORDS = {
   membership_discount_changed: "The discount on this membership has changed since you opened it. Nothing was saved: check the total and try again.",
   no_currency: "Set your country in Settings before adding a fixed-amount discount.",
   referral_gift: "This is the Refer a friend gift. Nothing was saved: it is changed in Refer a friend, where the offer is set.",
+  /** A member is paying with it in the app (18k-v): it keeps a use for them until their payment ends. */
+  being_used: "A member is paying with this discount in the app right now. Try again once their payment is finished.",
 } as const;

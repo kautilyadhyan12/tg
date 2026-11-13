@@ -44,7 +44,7 @@ import {
 } from "@app/shared";
 import { insertAudit, lockOrgRow } from "../repo.js";
 import { nextReceipt } from "../receipts/repo.js";
-import { countUse, lockedDiscount, returnUse, takeUse, type DiscountRow } from "./discountsRepo.js";
+import { countUse, lockedDiscount, returnUse, takeUse, usedByMember, type DiscountRow } from "./discountsRepo.js";
 import { friendGiftOpen } from "../referrals/friendGiftRepo.js";
 import { friendPaymentGone, giftUseUndone, giveMemberGift, lockedWaitingGift, markUsed } from "../referrals/memberGiftRepo.js";
 import { ratesOf, readRates, taxIncludedOf } from "./taxRepo.js";
@@ -910,6 +910,10 @@ export async function priceBasket(
       // walk-in.
       if (found.referralGift && (input.entryId === null || !(await friendGiftOpen(tx, input.gymId, input.entryId, found.id, input.today)))) {
         return { kind: "friend_gift_not_theirs" };
+      }
+      // A code used once per member, on a person's record (18k-v); a walk-in has none to count it on.
+      if (found.oncePerMember && input.entryId !== null && (await usedByMember(tx, input.gymId, found.id, input.entryId))) {
+        return { kind: "discount_refused", name: found.name, reason: "used_by_member" };
       }
       used = { id: found.id, name: found.name, offMinor: discountOff(found, item.price_minor * line.quantity) };
       // No use is spent on a discount that takes nothing off.

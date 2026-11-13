@@ -63,6 +63,13 @@ export const forSaleItemSchema = z
         friendGift: z.object({ name: z.string().min(1), offMinor: z.number().int().min(1) }).strict().nullable().default(null),
         /** The member's own Refer a friend gift waiting for them: what it takes off. */
         memberGiftOffMinor: minorSchema.default(0),
+        /** A promo code the member typed (18k-v), in the friend's gift's place: the code, its discount's name, what it
+         *  takes off each discounted payment, and the name of the Refer a friend gift it is used instead of, if any. */
+        promo: z
+          .object({ code: z.string().min(1).max(20), name: z.string().min(1), offMinor: z.number().int().min(1), instead: z.string().min(1).nullable() })
+          .strict()
+          .nullable()
+          .default(null),
       })
       .strict(),
     /** It is charged again every period, until they cancel or its minimum term ends: a repeating charge. */
@@ -99,6 +106,8 @@ export const forSaleLineSchema = forSaleItemSchema
     /** A repeating line's own tick (18k-iv), word for word what Buy sends back: what is charged to which card, how often
      *  and until when. Null for a line paid once, and where the reader has no card in the app to pay with. */
     charge: z.string().min(1).max(1000).nullable().default(null),
+    /** Why the code typed takes nothing off this line, where it takes something off another (18k-v); null otherwise. */
+    promoWords: z.string().min(1).max(200).nullable().default(null),
   })
   .strict();
 export type ForSaleLine = z.infer<typeof forSaleLineSchema>;
@@ -124,12 +133,19 @@ export const forSaleResponseSchema = z
       .strict()
       .nullable()
       .default(null),
+    /** The code typed (18k-v), as kept: whether it takes something off at least one line, and why not where it does not.
+     *  Null where none was typed. */
+    promo: z
+      .object({ code: z.string().min(1).max(40), applied: z.boolean(), words: z.string().min(1).max(200).nullable() })
+      .strict()
+      .nullable()
+      .default(null),
   })
   .strict();
 export type ForSaleResponse = z.infer<typeof forSaleResponseSchema>;
 
 /** `repeating=true`: the list with its repeating lines too (18k-iv), for a phone that pays them with a saved card. */
-export const forSaleQuerySchema = z.object({ repeating: z.enum(["true", "false"]).optional() }).strict();
+export const forSaleQuerySchema = z.object({ repeating: z.enum(["true", "false"]).optional(), code: z.string().min(1).max(40).optional() }).strict();
 
 /** A line of the price list, as the list reads it. */
 export interface ForSaleType {
@@ -149,6 +165,11 @@ export interface ForSaleType {
   noticeDays: number | null;
   leaveFeeMinor: number | null;
   coolingOffDays: number | null;
+}
+
+/** A promo code the member typed (18k-v): the gym's discount holding it, already found to fit this line today. */
+export interface ForSalePromo extends ForSaleFriendGift {
+  code: string;
 }
 
 /** Refer a friend's gift for this friend (a discount of the gym's), already found to fit this line today. */
@@ -222,6 +243,9 @@ export interface ForSaleInput {
   friendGift?: ForSaleFriendGift | null;
   /** The reader's own Refer a friend gift waiting for them, off a membership (18k-iii-a). */
   memberGift?: (MemberGiftTerms & { id: string }) | null;
+  /** A promo code the reader typed (18k-v), found to fit this line today: one discount a membership, so where it takes
+   *  something off it is used in place of the friend's gift. */
+  promo?: ForSalePromo | null;
 }
 
 /** What buying the line gives, as Add membership would be told it (`giveHeldIn`'s screen values), kept with the page. */
@@ -253,10 +277,16 @@ export function forSaleWorked(input: ForSaleInput): { item: ForSaleItem; given: 
   const m = given.membership;
   const [due] = billsToOpen(m, today, new Set());
   if (due === undefined) return null;
-  // The friend's gift, as Add membership takes a discount: off the price, kept on the membership where it is every payment.
-  const fg = input.friendGift ?? null;
-  const costs = fg === null ? null : membershipDiscount(fg, type);
+  // The discount, as Add membership takes one: off the price, kept on the membership where it is every payment. A code the
+  // member typed where it takes something off (18k-v), otherwise the friend's gift: one discount a membership.
+  const promo = input.promo ?? null;
+  const promoCosts = promo === null ? null : membershipDiscount(promo, type);
+  const gift = input.friendGift ?? null;
+  const giftCosts = gift === null ? null : membershipDiscount(gift, type);
+  const fg = promo !== null && promoCosts?.ok === true ? promo : gift;
+  const costs = fg === promo ? promoCosts : giftCosts;
   const discount = fg !== null && costs?.ok === true ? { id: fg.id, name: fg.name, offMinor: costs.offMinor, payments: costs.payments, heldPriceMinor: costs.heldPriceMinor, firstBillMinor: costs.firstBillMinor } : null;
+  const promoUsed = promo !== null && fg === promo && discount !== null;
   const firstPart = periodListedMinor(m, due.periodIndex, discount === null ? type.priceMinor : discount.firstBillMinor);
   // The member's own gift, off the first bill after any discount (`giveHeldIn`).
   const mg = input.memberGift ?? null;
@@ -270,8 +300,12 @@ export function forSaleWorked(input: ForSaleInput): { item: ForSaleItem; given: 
     part: due.periodIndex === 0 && m.fullFrom !== null,
     covers: due.covers,
     dueOn: due.dueOn,
-    friendGift: discount === null ? null : { name: discount.name, offMinor: discount.offMinor },
+    friendGift: discount === null || promoUsed ? null : { name: discount.name, offMinor: discount.offMinor },
     memberGiftOffMinor: giftOff,
+    promo:
+      promoUsed && promo !== null && discount !== null
+        ? { code: promo.code, name: discount.name, offMinor: discount.offMinor, instead: gift !== null && giftCosts?.ok === true ? gift.name : null }
+        : null,
   };
   const heldPriceMinor = discount === null ? type.priceMinor : discount.heldPriceMinor;
   // A repeating one's second payment, as its bill will open: the price kept on it, the tax added as on the first; none

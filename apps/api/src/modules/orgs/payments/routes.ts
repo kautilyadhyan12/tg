@@ -604,6 +604,9 @@ export function registerPaymentRoutes(app: FastifyInstance, deps: Omit<service.P
   const myCardWriteLimit = createDualRateLimit({ name: "my_card_write", max: 10, ipMax: 300, windowMs: HOUR_MS, identifier: byPerson, redis: deps.redis });
   // The phone asks each time the page opens, the whole gym on one address.
   const forSaleLimit = createDualRateLimit({ name: "for_sale_read", max: 600, ipMax: 30_000, windowMs: HOUR_MS, identifier: byPerson, redis: deps.redis });
+  // A promo code typed (18k-v): a member tries a code or two; the whole gym is on one wi-fi address. Kept apart from reading
+  // the list, so a gym's codes are never tried one by one.
+  const promoCodeLimit = createDualRateLimit({ name: "promo_code_try", max: 20, ipMax: 600, windowMs: HOUR_MS, identifier: byPerson, redis: deps.redis });
   // Membership first and the limit after it: a stranger's 404 is never a 429.
   const gate = (limit: typeof myCardReadLimit, req: FastifyRequest, reply: FastifyReply) => async (): Promise<boolean> => {
     await limit(req, reply);
@@ -691,7 +694,10 @@ export function registerPaymentRoutes(app: FastifyInstance, deps: Omit<service.P
     if (params === null) return;
     const body = parseOr400(appPurchaseRequestSchema, req.body, req, reply);
     if (body === null) return;
-    const done = await appPurchases.startPurchase(paymentsDeps, callerId(req), params.gymId, body, gate(appPayLimit, req, reply));
+    // A code sent with Buy is a try too (18k-v): Buy says why a code cannot be used.
+    const pay = gate(appPayLimit, req, reply);
+    const tries = gate(promoCodeLimit, req, reply);
+    const done = await appPurchases.startPurchase(paymentsDeps, callerId(req), params.gymId, body, body.code === undefined ? pay : async () => (await pay()) && (await tries()));
     if (done === null) return;
     told(params.gymId, done.tell);
     return reply.status(200).header("cache-control", "no-store").send(done.answer);
@@ -720,7 +726,8 @@ export function registerPaymentRoutes(app: FastifyInstance, deps: Omit<service.P
     if (params === null) return;
     const query = parseOr400(forSaleQuerySchema, req.query, req, reply);
     if (query === null) return;
-    const list = await readForSale(paymentsDeps, callerId(req), params.gymId, gate(forSaleLimit, req, reply), query.repeating === "true");
+    const typed = query.code === undefined ? null : { text: query.code, limit: gate(promoCodeLimit, req, reply) };
+    const list = await readForSale(paymentsDeps, callerId(req), params.gymId, gate(forSaleLimit, req, reply), query.repeating === "true", typed);
     if (list === null) return;
     return reply.status(200).header("cache-control", "no-store").send(list);
   });

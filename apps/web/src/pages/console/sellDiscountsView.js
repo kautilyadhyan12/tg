@@ -159,6 +159,8 @@ export function discountRow(discount, products, types = []) {
     discount.forMemberships ? discountMembershipsWords(discount, types) : null,
     discountDatesWords(discount),
     discountUsesWords(discount),
+    discount.oncePerMember === true ? 'Once per member' : null,
+    discount.inApp === true ? 'Members can use it in the app' : null,
   ]
     .filter((x) => x !== null)
     .join(' · ');
@@ -427,6 +429,9 @@ export function emptyDiscountDraft(use = 'products') {
     endsOn: '',
     limited: false,
     maxUses: '',
+    // A new code is used once per member unless the gym unticks it (Kd, 2026-11-13); it is in the app only once ticked.
+    oncePerMember: true,
+    inApp: false,
     updatedAt: null,
   };
 }
@@ -450,6 +455,9 @@ export function draftFromDiscount(discount) {
     endsOn: discount.endsOn ?? '',
     limited: discount.maxUses !== null,
     maxUses: discount.maxUses === null ? '' : String(discount.maxUses),
+    // A discount saved without a code keeps the new-code tick ready, should a code be typed.
+    oncePerMember: discount.code === null ? true : discount.oncePerMember === true,
+    inApp: discount.inApp === true,
     updatedAt: discount.updatedAt,
   };
 }
@@ -509,6 +517,9 @@ export function discountBody(draft, currency, products, types = []) {
     allMembershipTypes: !draft.forMemberships || draft.typeScope === 'all',
     membershipTypeIds: !draft.forMemberships || draft.typeScope === 'all' ? [] : typesPickedOf(draft, types),
     membershipPayments: draft.forMemberships ? draft.payments : null,
+    // Both are a code's: in the app only on memberships, which is all the app sells.
+    oncePerMember: promoCodeFrom(draft.code) !== null && draft.oncePerMember === true,
+    inApp: promoCodeFrom(draft.code) !== null && draft.forMemberships && draft.inApp === true,
   };
   return draft.id === null ? body : { ...body, updatedAt: draft.updatedAt };
 }

@@ -100,6 +100,10 @@ export const gymDiscounts = pgTable(
     membershipPayments: text("membership_payments"),
     /** Refer a friend's own friend's gift (0119): given only to a friend a member invited. */
     referralGift: boolean("referral_gift").notNull().default(false),
+    /** Members may type its promo code in the app (0238; 18k-v). */
+    inApp: boolean("in_app").notNull().default(false),
+    /** Each record uses it once, at the desk or in the app (0238; 18k-v). */
+    oncePerMember: boolean("once_per_member").notNull().default(false),
     archivedAt: timestamp("archived_at", { withTimezone: true }),
     createdAt: createdAt(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -124,6 +128,10 @@ export const gymDiscounts = pgTable(
     check(
       "gym_discounts_applies_check",
       sql`(${t.forProducts} OR ${t.forMemberships}) AND (${t.forProducts} OR ${t.allProducts}) AND (${t.forMemberships} OR ${t.allMembershipTypes}) AND (${t.forMemberships} = (${t.membershipPayments} IS NOT NULL)) AND (${t.membershipPayments} IS NULL OR ${t.membershipPayments} IN ('first','every'))`,
+    ),
+    check(
+      "gym_discounts_in_app_check",
+      sql`(NOT ${t.inApp} OR (${t.code} IS NOT NULL AND ${t.forMemberships} AND NOT ${t.referralGift})) AND (NOT ${t.oncePerMember} OR ${t.code} IS NOT NULL)`,
     ),
     uniqueIndex("gym_discounts_name_uq")
       .on(t.gymId, sql`lower(${t.name})`)
