@@ -3,7 +3,7 @@
 // finger on it reads that place), then the time in each zone, Maximum at the top as Garmin and Polar show
 // them; and the maximum heart rate the zones are worked from, its row in Settings and its box.
 import { useMemo, useRef, useState } from "react";
-import { PanResponder, Pressable, StyleSheet, View, useWindowDimensions, type LayoutChangeEvent } from "react-native";
+import { Keyboard, PanResponder, Pressable, StyleSheet, View, useWindowDimensions, type LayoutChangeEvent } from "react-native";
 import Svg, { Circle, Defs, Line, LinearGradient, Path, Stop } from "react-native-svg";
 import { HEART_MAX_LEAST, HEART_MAX_MOST, HEART_ZONES, heartMaxSchema, heartZoneEdges, heartZoneOf, type HeartZoneNumber, type HeartZones, type Units } from "@app/shared";
 import { Button } from "../look/Button";
@@ -183,11 +183,11 @@ export function ZoneBars({ zones }: { zones: HeartZones }) {
         return (
           <View key={String(z.zone)} style={styles.zoneRow} accessible accessibilityLabel={`Zone ${String(z.zone)}, ${z.name}, ${zoneRange(z.zone, zones.max)}: ${clock(s)}, ${String(share)} percent`}>
             <View style={styles.zoneWords}>
-              <Txt kind="small" style={styles.zoneTitle} numberOfLines={1}>
-                {`Zone ${String(z.zone)} · ${z.name}`}
+              <Txt kind="small" style={styles.zoneTitle}>
+                {z.name}
               </Txt>
-              <Txt kind="tiny" colour="textFaint" numberOfLines={1}>
-                {zoneRange(z.zone, zones.max)}
+              <Txt kind="tiny" colour="textFaint">
+                {`Zone ${String(z.zone)} · ${zoneRange(z.zone, zones.max)}`}
               </Txt>
             </View>
             <View style={styles.barTrack}>
@@ -309,6 +309,8 @@ function HeartMaxForm({ onClose }: { onClose: () => void }) {
   const [typed, setTyped] = useState(data?.own === null || data?.own === undefined ? "" : String(data.own));
   const [busy, setBusy] = useState(false);
   const [trouble, setTrouble] = useState<string | null>(null);
+  // Taking away the only maximum asks first, as Remove does for the monitor: the next runs have no zones.
+  const [removing, setRemoving] = useState(false);
   const number = /^\d{2,3}$/.test(typed.trim()) ? heartMaxSchema.safeParse(Number(typed.trim())) : null;
   const send = async (own: number | null) => {
     if (busy) return;
@@ -316,9 +318,27 @@ function HeartMaxForm({ onClose }: { onClose: () => void }) {
     setTrouble(null);
     const failed = await save(own);
     setBusy(false);
-    if (failed === null) onClose();
+    if (failed === null) {
+      // The keyboard goes with the box, so it never lands in a field on the page behind.
+      Keyboard.dismiss();
+      onClose();
+    }
     else setTrouble(failed);
   };
+  if (removing) {
+    return (
+      <View style={styles.form}>
+        <Txt kind="body">Your next runs won't show heart rate zones.</Txt>
+        {trouble === null ? null : (
+          <Txt kind="small" colour="badText">
+            {trouble}
+          </Txt>
+        )}
+        <Button kind="danger" label="Remove" wide busy={busy} onPress={() => void send(null)} />
+        <Button kind="link" label="Keep it" style={styles.second} onPress={() => { setRemoving(false); setTrouble(null); }} />
+      </View>
+    );
+  }
   return (
     <View style={styles.form}>
       <Txt kind="small" colour="textSoft">
@@ -342,17 +362,25 @@ function HeartMaxForm({ onClose }: { onClose: () => void }) {
       {typed !== "" && number?.success !== true ? (
         <Txt kind="small" colour="badText">{`Enter a number from ${String(HEART_MAX_LEAST)} to ${String(HEART_MAX_MOST)}.`}</Txt>
       ) : null}
-      <Txt kind="small" colour="textFaint">
-        {data?.fromAge === null || data?.fromAge === undefined ? "Add your age in your profile, or enter your own." : `From your age: ${String(data.fromAge)} bpm (220 less your age).`}
-      </Txt>
+      {data?.fromAge === null || data?.fromAge === undefined ? null : (
+        <Txt kind="small" colour="textFaint">{`From your age: ${String(data.fromAge)} bpm (220 less your age).`}</Txt>
+      )}
       {trouble === null ? null : (
         <Txt kind="small" colour="badText">
           {trouble}
         </Txt>
       )}
-      <Button label="Save" busy={busy} disabled={number?.success !== true} onPress={() => { if (number?.success === true) void send(number.data); }} />
+      <Button label="Save" wide busy={busy} disabled={number?.success !== true} onPress={() => { if (number?.success === true) void send(number.data); }} />
       {data?.own !== null && data?.own !== undefined ? (
-        <Pressable accessibilityRole="button" onPress={() => void send(null)} hitSlop={10} style={styles.second}>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => {
+            if (data.fromAge === null) setRemoving(true);
+            else void send(null);
+          }}
+          hitSlop={10}
+          style={styles.second}
+        >
           <Txt kind="small" colour="orange">
             {data.fromAge === null ? "Remove my maximum" : "Use my age instead"}
           </Txt>
@@ -383,7 +411,7 @@ const styles = StyleSheet.create({
   figure: { fontFamily: fonts.bold, fontSize: 20, color: colours.text },
   zones: { gap: 10 },
   zoneRow: { flexDirection: "row", alignItems: "center", gap: 10 },
-  zoneWords: { flexBasis: 128, flexShrink: 1 },
+  zoneWords: { flexBasis: 164, flexShrink: 1 },
   zoneTitle: { fontFamily: fonts.bold },
   barTrack: { flex: 1, flexDirection: "row", height: 10, borderRadius: sizes.round, backgroundColor: colours.track, overflow: "hidden" },
   bar: { height: 10, borderRadius: sizes.round },

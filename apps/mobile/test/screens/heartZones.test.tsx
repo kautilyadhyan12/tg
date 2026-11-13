@@ -226,4 +226,25 @@ describe("I set my maximum heart rate once, and my runs show my zones", () => {
     expect(await screen.findByText("180 bpm · from your age")).toBeTruthy();
     expect(s.puts).toEqual([{ own: 193 }, { own: null }]);
   });
+
+  it("with no age, Remove my maximum asks first; Keep it changes nothing", async () => {
+    const s = server(null, 190);
+    await render(<App extra={extra} store={memoryStore(kept(1, RAVI))} ask={s.ask} runStore={s.runStore} />);
+    const me = (await screen.findAllByRole("tab"))[4];
+    if (me === undefined) throw new Error("no fifth tab");
+    await fireEvent.press(me);
+    await fireEvent.press(await screen.findByLabelText("Settings"));
+    expect(await screen.findByText("190 bpm · your own")).toBeTruthy();
+    await fireEvent.press(screen.getByTestId("heart-max-row"));
+    // No line sending the person to another page for an age.
+    expect(screen.queryByText(/your age/)).toBeNull();
+    await fireEvent.press(await screen.findByRole("button", { name: "Remove my maximum" }));
+    expect(await screen.findByText("Your next runs won't show heart rate zones.")).toBeTruthy();
+    expect(s.puts).toEqual([]);
+    await fireEvent.press(screen.getByRole("button", { name: "Keep it" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Remove my maximum" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Remove" }));
+    expect(await screen.findByText("Not set")).toBeTruthy();
+    expect(s.puts).toEqual([{ own: null }]);
+  });
 });
