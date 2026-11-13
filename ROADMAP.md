@@ -756,7 +756,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
     - 37f. **Heart rate from a chest strap or watch** (split 2026-11-12 in two, Kd's "go": connecting it and a run's numbers first).
       - 37f-i. [x] **Connect a heart rate monitor, and your heart rate on a run** · merged 2026-11-12 · PR #532
       - 37f-ii. **The heart rate chart and zones, the voice, and pairing a watch** (split 2026-11-13 in two, Kd's "go": the chart and zones first).
-        - 37f-ii-a. [ ] **The heart rate chart and your five heart rate zones**
+        - 37f-ii-a. [x] **The heart rate chart and your five heart rate zones** · merged 2026-11-13 · PR #539
         - 37f-ii-b. [ ] **The voice saying your heart rate, and a watch whose Bluetooth address changes kept connected by pairing it** (37f-i's round one).
 38. [ ] **The global board** (its reminders moved to item 19e on 2026-11-05): last, as Kd ruled on 2026-11-01 (`rulings/2026-11-01-17c-ii-a.md`): Active days and Running, the server's checks, a stranger's profile, and follow requests for somebody who chose Hide me, seen from outside their gym; Follow with Followers and Following counts everywhere, gyms included (`rulings/2026-11-01-17c-ii-b.md`). It waits for items 18, 37, 53 and 64.
 40. [ ] **Workouts and runs from your watch** (Kd, 2026-11-12, `rulings/2026-11-12-37f-i.md`), after 37f: Android's Health Connect and a file upload (GPX, TCX, FIT) first, then Garmin's and Polar's own connections (Kd applies to Garmin's); Apple Health with the iPhone version. Workouts and runs with their heart rate, calories and distance, and weight from a smart scale; never sleep or heart rate variability.
