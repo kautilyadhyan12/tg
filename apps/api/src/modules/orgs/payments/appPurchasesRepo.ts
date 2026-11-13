@@ -467,6 +467,33 @@ export async function purchaseChecksOf(sql: SqlOrTx, gymId: string, entryId: str
   }));
 }
 
+/** Overview's Payments to check in Square (18k-vi): `purchaseChecksOf` for every record of the gym at once, each record's
+ *  newest 20 as its page shows them, the newest first. */
+export async function purchaseChecksOfGym(sql: SqlOrTx, gymId: string): Promise<(AppPurchaseCheck & { entryId: string })[]> {
+  const rows = await sql<{ id: string; entry_id: string; bought: unknown; membership_type_id: string; outcome: string; taken_minor: number | null; currency: string; on: string; payer_name: string | null }[]>`
+    SELECT * FROM (
+      SELECT a.id, a.entry_id, a.bought, a.membership_type_id, a.outcome, a.taken_minor, a.currency, a.finished_at,
+             ((a.finished_at AT TIME ZONE g.timezone)::date)::text AS on, ${payerName(sql)} AS payer_name,
+             row_number() OVER (PARTITION BY a.entry_id ORDER BY a.finished_at DESC, a.id) AS n
+      FROM gym_app_payments a
+      JOIN gyms g ON g.id = a.gym_id
+      WHERE a.gym_id = ${gymId} AND a.entry_id IS NOT NULL AND a.membership_type_id IS NOT NULL
+        AND a.outcome IN ('not_recorded','gone','no_answer') AND a.cleared_at IS NULL
+    ) x
+    WHERE x.n <= 20
+    ORDER BY x.finished_at DESC, x.id`;
+  return rows.map((r) => ({
+    id: r.id,
+    entryId: r.entry_id,
+    typeName: boughtOf({ typeId: r.membership_type_id, bought: r.bought })?.typeName ?? "a membership",
+    why: r.outcome === "not_recorded" ? "taken" : "unknown",
+    amountMinor: r.outcome === "not_recorded" ? r.taken_minor : null,
+    currency: r.currency,
+    on: r.on,
+    payerName: r.payer_name,
+  }));
+}
+
 /** Staff pressed Close payment page on a purchase: asked for it closed, and told to the gym's Staff activity. The id of
  *  the page, or null where none of this record is open. */
 export async function staffClosePurchase(sql: Sql, s: { gymId: string; entryId: string; id: string; staffUserId: string; now: Date }): Promise<string | null> {

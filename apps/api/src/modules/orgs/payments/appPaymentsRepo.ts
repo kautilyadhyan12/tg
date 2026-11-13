@@ -630,6 +630,46 @@ export async function checksOnMemberships(
   return { bills, fees };
 }
 
+/** Overview's Payments to check in Square (18k-vi), for the whole gym, by the rule `checksOnMemberships` keeps for one
+ *  record: each membership's newest page for one of its bills that ended needing a check, and each fee's newest. A bill's
+ *  is left out where its period's bill is settled (paid, voided or refunded), and a fee's where the fee is no longer open:
+ *  the person's page says neither. The newest first. */
+export async function checksOfGym(
+  sql: SqlOrTx,
+  gymId: string,
+): Promise<{ bills: (AppCheckRow & { membershipId: string; periodIndex: number })[]; fees: (AppCheckRow & { membershipId: string; feeId: string; fee: MemberFeeKind })[] }> {
+  const rows = await sql<(RawCheck & { fee: string | null })[]>`
+    SELECT c.held_membership_id, c.period_index, c.fee_bill_id, c.taken_minor, c.outcome, fb.fee,
+           ((c.finished_at AT TIME ZONE g.timezone)::date)::text AS on,
+           (SELECT o.full_name FROM gym_members gm
+            JOIN gym_member_list_entries o ON o.gym_id = gm.gym_id AND o.id = gm.entry_id
+            WHERE gm.gym_id = c.gym_id AND gm.user_id = c.opened_by LIMIT 1) AS payer_name
+    FROM (
+      SELECT DISTINCT ON (a.held_membership_id, a.fee_bill_id) a.*
+      FROM gym_app_payments a
+      WHERE a.gym_id = ${gymId} AND a.state = 'done' AND a.outcome IN ('not_recorded','gone','no_answer')
+        AND a.membership_type_id IS NULL AND (a.fee_bill_id IS NOT NULL OR a.period_index IS NOT NULL)
+      ORDER BY a.held_membership_id, a.fee_bill_id, a.finished_at DESC, a.id
+    ) c
+    JOIN gyms g ON g.id = c.gym_id
+    LEFT JOIN gym_member_bills fb ON fb.gym_id = c.gym_id AND fb.id = c.fee_bill_id
+    WHERE CASE WHEN c.fee_bill_id IS NULL
+      THEN NOT EXISTS (SELECT 1 FROM gym_member_bills x WHERE x.gym_id = c.gym_id AND x.held_membership_id = c.held_membership_id AND x.period_index = c.period_index AND x.status <> 'open')
+      ELSE fb.status = 'open'
+    END
+    ORDER BY c.finished_at DESC, c.id`;
+  const bills: (AppCheckRow & { membershipId: string; periodIndex: number })[] = [];
+  const fees: (AppCheckRow & { membershipId: string; feeId: string; fee: MemberFeeKind })[] = [];
+  for (const r of rows) {
+    const fee = memberFeeKindSchema.safeParse(r.fee);
+    if (r.fee_bill_id !== null) {
+      if (fee.success) fees.push({ ...checkOf(r), membershipId: r.held_membership_id, feeId: r.fee_bill_id, fee: fee.data });
+    }
+    else if (r.period_index !== null) bills.push({ ...checkOf(r), membershipId: r.held_membership_id, periodIndex: r.period_index });
+  }
+  return { bills, fees };
+}
+
 /** Whether a page is open on any membership these records hold, or for a line one of them is buying (18k-iii-a): Delete
  *  permanently waits for it, as what Square took would have no bill to go on, or no record to be given to. */
 export async function anyOpenOfEntries(tx: TransactionSql, gymId: string, entryIds: readonly string[]): Promise<boolean> {

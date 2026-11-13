@@ -248,6 +248,23 @@ function billingOf(
   };
 }
 
+/** A membership in use as the next write will find it: its count moved over the periods nobody was asked for
+ *  (`countAfterGap`), which `settle` then writes. */
+function readAsOfToday<R extends { id: string; membership: HeldMembership }>(row: R, bills: readonly BillRow[], today: string): R {
+  const have = new Set(bills.filter((b) => b.membershipId === row.id).map((b) => b.periodIndex));
+  const count = countAfterGap(row.membership, today, have);
+  return count === null ? row : { ...row, membership: { ...row.membership, paidPeriods: count, paidFloor: count } };
+}
+
+/** The period a payment can be taken for now on this membership, read as the person's page reads it: a page in the app
+ *  that ended needing a check is said under its bill while its period is this one (`appCheckOn`). Overview's Payments to
+ *  check in Square (18k-vi) asks it of each membership with one. `bills`: the membership's own. */
+export function owedPeriodOf(row: repo.HeldRow, bills: readonly BillRow[], today: string, past: boolean): number | null {
+  const inUse = row.membership.status === "active" || row.membership.status === "frozen";
+  const read = past || !inUse ? row : readAsOfToday(row, bills, today);
+  return memberPayTarget(read.membership, read.nextBillMinor, today, bills, past)?.periodIndex ?? null;
+}
+
 const checkView = (check: AppCheckRow): NonNullable<MemberBilling["appCheck"]> => ({ why: check.why, amountMinor: check.amountMinor, on: check.on, payerName: check.payerName });
 
 const appCheckOn = (check: AppCheckRow | undefined, owedPeriod: number | null): MemberBilling["appCheck"] =>
@@ -442,12 +459,7 @@ export async function readOr404(deps: HeldDeps, gymId: string, entryId: string, 
   const ctx = { today, past: list.past, overdueAfterDays: list.overdueAfterDays, gifts, charges, presses, chargebacks, chargeStops, appOpen, appChecks };
   // The page reads a membership as the next write will find it: with its count moved
   // over the periods nobody was asked for (`countAfterGap`), which `settle` then writes.
-  const asOfToday = (row: repo.HeldRow): repo.HeldRow => {
-    if (list.past) return row;
-    const have = new Set(list.bills.filter((b) => b.membershipId === row.id).map((b) => b.periodIndex));
-    const count = countAfterGap(row.membership, today, have);
-    return count === null ? row : { ...row, membership: { ...row.membership, paidPeriods: count, paidFloor: count } };
-  };
+  const asOfToday = (row: repo.HeldRow): repo.HeldRow => (list.past ? row : readAsOfToday(row, list.bills, today));
   // Change membership (18x): worked out by the rule the write uses, for each one in use.
   const replaced = new Set(list.changes.filter((c) => c.newStatus !== "cancelled").map((c) => c.oldId));
   const changeOf = (row: repo.HeldRow): MemberBilling["change"] => {
