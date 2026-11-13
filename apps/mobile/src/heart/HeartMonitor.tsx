@@ -119,6 +119,8 @@ export function HeartMonitorSheet({ open, onClose, monitor }: { open: boolean; o
     endTry();
   }, [open]);
   useEffect(() => () => {
+    // The box gone, a pairing still waiting saves nothing, as after Close.
+    saving.current += 1;
     endTry();
   }, []);
   const running = runNow() !== null && runNow()?.phase !== "finished";
