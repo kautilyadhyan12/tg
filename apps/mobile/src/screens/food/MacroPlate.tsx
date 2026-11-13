@@ -88,7 +88,8 @@ export function MacroPlate({ goal, eaten, left }: { goal: PlateNumbers; eaten: P
               const to = p.from + PART_SWEEP;
               return (
                 <G key={p.key}>
-                  <Path d={partPath(C, C, p.from, to, INNER, OUTER)} fill={colours.glass} stroke={colours[p.colour]} strokeOpacity={0.5} strokeWidth={1.2} strokeDasharray="3 3" />
+                  <Path d={partPath(C, C, p.from, to, INNER, OUTER)} fill={colours[p.colour]} fillOpacity={0.1} stroke={colours[p.colour]} strokeOpacity={0.85} strokeWidth={1.5} strokeDasharray="4 3" />
+                  <Path d={edgePath(C, C, p.from + 2, to - 2, OUTER + 4)} stroke={colours[p.colour]} strokeOpacity={0.55} strokeWidth={3} strokeLinecap="round" fill="none" />
                   {share > 0 ? (
                     <>
                       <G clipPath={`url(#${clipId(p.key, id, reach)})`}>
@@ -96,7 +97,8 @@ export function MacroPlate({ goal, eaten, left }: { goal: PlateNumbers; eaten: P
                           <SvgImage href={pictures[p.picture]} width={OUTER * 2} height={OUTER * 2} preserveAspectRatio="xMidYMid slice" />
                         </G>
                       </G>
-                      <Path d={edgePath(C, C, p.from + 1, to - 1, reach)} stroke={colours[p.colour]} strokeWidth={3} strokeLinecap="round" fill="none" />
+                      <Path d={edgePath(C, C, p.from + 1, to - 1, reach)} stroke={colours[p.colour]} strokeOpacity={0.3} strokeWidth={9} strokeLinecap="round" fill="none" />
+                      <Path d={edgePath(C, C, p.from + 1, to - 1, reach)} stroke={colours[p.colour]} strokeWidth={4} strokeLinecap="round" fill="none" />
                     </>
                   ) : null}
                 </G>
@@ -109,7 +111,7 @@ export function MacroPlate({ goal, eaten, left }: { goal: PlateNumbers; eaten: P
               {eaten === null ? NOT_KNOWN : count(eaten.kcal)}
             </Txt>
             <Txt kind="tiny" colour="textSoft" numberOfLines={1} fit>
-              of {count(goal.kcal)} kcal
+              kcal eaten
             </Txt>
           </View>
         </View>

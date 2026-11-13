@@ -43,6 +43,13 @@ export function monthLabel(day: string, fromEnd: number): string {
   return fromEnd % 7 === 0 ? String(dateOf(day).getUTCDate()) : "";
 }
 
+/** Which way a figure's days went most: the band its fact leads with, as `factWords` says it. */
+export function factLead(fact: FoodWeekFact): FoodBand | null {
+  if (fact.judged === 0) return null;
+  const most = Math.max(fact.under, fact.on, fact.over);
+  return BAND_ORDER.find((b) => fact[b] === most) ?? null;
+}
+
 /** One fact in words: "Protein was under target on 5 of 6 days." Null while no finished day is judged. */
 export function factWords(figure: FoodWeekFigure, fact: FoodWeekFact): string | null {
   if (fact.judged === 0) return null;

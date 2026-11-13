@@ -308,8 +308,8 @@ describe("the day's food", () => {
     });
     await openFood({ meals: [breakfast] });
     expect(await screen.findByLabelText("Calories, 307 of 2,300 kcal")).toBeTruthy();
-    expect(screen.getByText("Remaining today")).toBeTruthy();
-    expect(screen.getByText("1,993 kcal left")).toBeTruthy();
+    expect(screen.getByLabelText("Remaining today, 1,993 kcal left")).toBeTruthy();
+    expect(screen.getByText("of 2,300 kcal")).toBeTruthy();
     for (const [name, left] of [["Protein", "109 g left"], ["Carbs", "225 g left"], ["Fat", "70 g left"]] as const) {
       const part = screen.getByLabelText(new RegExp(`^${name}, `));
       expect(within(part).getByText(left)).toBeTruthy();
@@ -362,7 +362,9 @@ describe("the day's food", () => {
     const next = await screen.findByRole("button", { name: "This is today" });
     expect(next.props.accessibilityState).toMatchObject({ disabled: true });
     await fireEvent.press(screen.getByRole("button", { name: "Previous day" }));
-    expect(await screen.findByText("Yesterday")).toBeTruthy();
+    // The day shown is said in the plate's title and on Pick a day (32c-i).
+    expect(await screen.findByText("Macros · Yesterday")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Yesterday, pick a day" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Add to Breakfast" })).toBeNull();
   });
 });
@@ -426,7 +428,7 @@ describe("picking a day", () => {
   it("opens a month, goes to the day pressed, and offers no day after today", async () => {
     await openFood({ meals: [] });
     await fireEvent.press(await screen.findByRole("button", { name: "Today, pick a day" }));
-    expect(screen.getByText("Pick a day")).toBeTruthy();
+    expect(screen.getAllByText("Pick a day")).toHaveLength(2);
     expect(screen.getByRole("button", { name: "Next month" }).props.accessibilityState).toMatchObject({ disabled: true });
     await fireEvent.press(screen.getByRole("button", { name: "Previous month" }));
     const now = new Date();
@@ -436,7 +438,7 @@ describe("picking a day", () => {
     }`;
     await fireEvent.press(screen.getByRole("button", { name: label }));
     expect(await screen.findByRole("button", { name: `${label}, pick a day` })).toBeTruthy();
-    expect(screen.queryByText("Pick a day")).toBeNull();
+    expect(screen.getAllByText("Pick a day")).toHaveLength(1);
     expect(screen.queryByRole("button", { name: "Add to Breakfast" })).toBeNull();
   });
 });
@@ -993,6 +995,22 @@ describe("the Food tab drawn again (32c-i)", () => {
     await fireEvent.press(await screen.findByRole("button", { name: "Search" }));
     expect(await screen.findByText(`Add to ${mealTypeName(mealTypeAtHour(new Date().getHours()))}`)).toBeTruthy();
     expect(screen.getByRole("button", { name: "Today, pick a day" })).toBeTruthy();
+  });
+
+  it("the Add box starts on the hour's meal and saves to the meal picked in it (Kd: what if I want Dinner?)", async () => {
+    const server = await openFood({ meals: [] });
+    await fireEvent.press(await screen.findByRole("button", { name: "Search" }));
+    const hour = mealTypeName(mealTypeAtHour(new Date().getHours()));
+    expect(screen.getByRole("radio", { name: hour }).props.accessibilityState).toMatchObject({ selected: true });
+    const other = hour === "Dinner" ? "Lunch" : "Dinner";
+    await fireEvent.press(screen.getByRole("radio", { name: other }));
+    expect(await screen.findByText(`Add to ${other}`)).toBeTruthy();
+    await fireEvent.changeText(screen.getByLabelText("Search food"), "oats");
+    await fireEvent.press(await screen.findByRole("button", { name: "Oats, rolled, 307 kcal · 1 cup, USDA" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Add Oats, rolled · 307 kcal" }));
+    await fireEvent.press(await screen.findByRole("button", { name: `Save meal to ${other}` }));
+    await waitFor(() => { expect(posts(server)).toHaveLength(1); });
+    expect(posts(server)[0]?.body).toMatchObject({ mealType: other.toLowerCase() });
   });
 
   it("What to eat from another day says it is for today, and one press goes back there", async () => {

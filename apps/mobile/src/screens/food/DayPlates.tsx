@@ -4,7 +4,7 @@ import { colours, sizes, type ColourName } from "../../look/colours";
 import { Fork, Knife } from "../../look/Cutlery";
 import { Icon } from "../../look/Icon";
 import { fonts, Txt } from "../../look/Txt";
-import { addDays, dayWords, sameDay, startOfDay } from "./day";
+import { addDays, dayWords, monthWords, sameDay, startOfDay } from "./day";
 import { plateShare, slicePath } from "./plateRules";
 import { localDayKey, type Bar } from "./weekRules";
 
@@ -90,29 +90,37 @@ export function DayPlates({ day, bars, onGo, onPick }: { day: Date; bars: Readon
   const today = sameDay(day, now);
   return (
     <View style={styles.box}>
+      {/* As drawn: the month, and Pick a day; the arrows a day back and on are kept beside it. */}
       <View style={styles.head}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`${dayWords(day, now)}, pick a day`}
-          onPress={onPick}
-          style={({ pressed }) => [styles.dayWords, pressed ? styles.pressed : null]}
-        >
-          <Icon name="calendar" size={16} colour="orange" />
-          <Txt kind="h3">{dayWords(day, now)}</Txt>
-        </Pressable>
-        <Pressable accessibilityRole="button" accessibilityLabel="Previous day" onPress={() => { onGo(addDays(day, -1)); }} style={styles.arrow}>
-          <Icon name="back" size={18} />
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={today ? "This is today" : "Next day"}
-          accessibilityState={{ disabled: today }}
-          disabled={today}
-          onPress={() => { onGo(addDays(day, 1)); }}
-          style={[styles.arrow, today ? styles.dim : null]}
-        >
-          <Icon name="go" size={18} />
-        </Pressable>
+        <Txt kind="h3" style={styles.month}>
+          {monthWords(day)}
+        </Txt>
+        <View style={styles.steps}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Previous day" onPress={() => { onGo(addDays(day, -1)); }} style={styles.arrow}>
+            <Icon name="back" size={16} />
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`${dayWords(day, now)}, pick a day`}
+            onPress={onPick}
+            style={({ pressed }) => [styles.pick, pressed ? styles.pressed : null]}
+          >
+            <Icon name="calendar" size={16} colour="orange" />
+            <Txt kind="small" colour="orange" style={styles.pickWords}>
+              Pick a day
+            </Txt>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={today ? "This is today" : "Next day"}
+            accessibilityState={{ disabled: today }}
+            disabled={today}
+            onPress={() => { onGo(addDays(day, 1)); }}
+            style={[styles.arrow, today ? styles.dim : null]}
+          >
+            <Icon name="go" size={16} />
+          </Pressable>
+        </View>
       </View>
       <View style={styles.week}>
         {weekOf(day).map((d, i) => {
@@ -144,18 +152,12 @@ export function DayPlates({ day, bars, onGo, onPick }: { day: Date; bars: Readon
 
 const styles = StyleSheet.create({
   box: { gap: 10 },
-  head: { flexDirection: "row", alignItems: "center", gap: 10 },
-  dayWords: { flex: 1, flexDirection: "row", alignItems: "center", gap: 8, minHeight: sizes.press },
-  arrow: {
-    width: sizes.press,
-    height: sizes.press,
-    borderRadius: sizes.round,
-    borderWidth: 1,
-    borderColor: colours.lineStrong,
-    backgroundColor: colours.fill,
-    alignItems: "center",
-    justifyContent: "center",
-  },
+  head: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 },
+  month: { flexShrink: 1 },
+  steps: { flexDirection: "row", alignItems: "center", borderRadius: sizes.round, borderWidth: 1, borderColor: colours.lineStrong, backgroundColor: colours.fill },
+  arrow: { width: sizes.press, height: sizes.press, borderRadius: sizes.round, alignItems: "center", justifyContent: "center" },
+  pick: { flexDirection: "row", alignItems: "center", gap: 6, minHeight: sizes.press, paddingHorizontal: 6 },
+  pickWords: { fontFamily: fonts.semibold },
   week: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end" },
   day: { alignItems: "center", gap: 6, minHeight: sizes.press },
   set: { flexDirection: "row", alignItems: "center", gap: 2 },

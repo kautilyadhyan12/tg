@@ -308,7 +308,7 @@ export function FoodScreen() {
         uncounted={rows === null ? 0 : rows.filter((r) => r.totals === null).length}
         about={rows !== null && rows.some((r) => hasEstimate(r.items))}
         onSetup={setSetupAt}
-        foot={rows === null || rows.length === 0 ? null : <FiguresLink onPress={() => { setDayFigures(true); }} />}
+        foot={rows === null || rows.length === 0 ? null : <NutrientsLine onPress={() => { setDayFigures(true); }} />}
       />
       <Sheet open={dayFigures && rows !== null} title={`Nutrients · ${dayWords(day, new Date())}`} onClose={() => { setDayFigures(false); }}>
         <FiguresList
@@ -581,18 +581,16 @@ function Macros({ title, today, targets, retry, eaten, uncounted, about, onSetup
         eaten={eaten}
         left={today && eaten !== null ? (key) => left(goal[key], eaten[key], "g") : null}
       />
-      {today && eaten !== null ? (
-        <View style={styles.left}>
-          <Txt kind="tiny" style={styles.label}>
-            Remaining today
-          </Txt>
-          <View style={styles.leftPill}>
+      <View style={styles.left}>
+        <Txt kind="small">of {count(goal.kcal)} kcal</Txt>
+        {today && eaten !== null ? (
+          <View style={styles.leftPill} accessible accessibilityLabel={`Remaining today, ${left(goal.kcal, eaten.kcal, "kcal")}`}>
             <Txt kind="small" colour="orangeLight">
               {left(goal.kcal, eaten.kcal, "kcal")}
             </Txt>
           </View>
-        </View>
-      ) : null}
+        ) : null}
+      </View>
       {uncounted > 0 ? (
         <Txt kind="small">
           {uncountedWords(uncounted)}
@@ -622,6 +620,21 @@ function Macros({ title, today, targets, retry, eaten, uncounted, about, onSetup
       )}
       {foot === null ? null : <View style={styles.plateFoot}>{foot}</View>}
     </Card>
+  );
+}
+
+/** Under the plate (32c-i, as drawn): the ten figures the day's Nutrients holds, and the link to them. */
+function NutrientsLine({ onPress }: { onPress: () => void }) {
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel="Nutrients" onPress={onPress} style={({ pressed }) => [styles.nutrients, pressed ? styles.pressed : null]}>
+      <Txt kind="tiny" style={styles.grow}>
+        Fibre, sugar, sodium and 7 more
+      </Txt>
+      <Txt kind="small" colour="orange" style={styles.nutrientsLink}>
+        Nutrients
+      </Txt>
+      <Icon name="go" size={14} colour="orange" />
+    </Pressable>
   );
 }
 
@@ -717,6 +730,7 @@ function Section({ type, rows, canAdd, said, onAdd, onOpen }: SectionProps) {
             <Txt kind="small" colour="text">
               {row.totals === null ? NOT_KNOWN : aboutKcal(row.totals.kcalPoint, hasEstimate(row.items))}
             </Txt>
+            <Icon name="go" size={16} colour="textFaint" />
           </Pressable>
         ))
       )}
@@ -1252,6 +1266,9 @@ type Priced = { kind: "none" } | { kind: "ok"; preview: MealPreview; for: string
  *  goes on the list. A food logged before opens at the amount last had (Kd, 2026-10-29). */
 function AddFood({ type, plan, onClose, onAdded }: { type: MealType | null; plan?: PlanMealTarget; onClose: () => void; onAdded: (type: MealType, name: string) => void }) {
   const { session } = useSession();
+  // Which meal the foods go to: where the box was opened from, and any of the four the person picks
+  // (Kd, 2026-11-14: Search opened Snack at one in the morning, with no way to say Dinner).
+  const [meal, setMeal] = useState<MealType | null>(type);
   const { outbox } = useMealOutbox();
   const [query, setQuery] = useState("");
   const [found, setFound] = useState<Found>({ kind: "idle" });
@@ -1324,6 +1341,7 @@ function AddFood({ type, plan, onClose, onAdded }: { type: MealType | null; plan
     setChanging(null);
     setOwnAgain(null);
     setMealName("");
+    setMeal(type);
     // Opened again for another meal only when `type` changes; a plan meal's box is a new box each time.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [type]);
@@ -1395,7 +1413,8 @@ function AddFood({ type, plan, onClose, onAdded }: { type: MealType | null; plan
   }, [key, tooSmall, session, dishAsk]);
 
   if (type === null) return null;
-  const name = mealTypeName(type);
+  const chosen = meal ?? type;
+  const name = mealTypeName(chosen);
   const preview = priced.kind === "ok" && priced.for === key ? priced.preview : null;
   const refusedWords = priced.kind === "refused" && priced.for === key ? priced.words : null;
   const held = item === null || tooSmall || refusedWords !== null || outbox === null || adding;
@@ -1414,14 +1433,14 @@ function AddFood({ type, plan, onClose, onAdded }: { type: MealType | null; plan
     const numbers = basketNumbers(basket);
     const kept = await outbox.add({
       id,
-      body: { id, mealName: named, takenAt: new Date().toISOString(), mealType: type, items: basket.map((f) => f.chosen) },
+      body: { id, mealName: named, takenAt: new Date().toISOString(), mealType: chosen, items: basket.map((f) => f.chosen) },
       items: numbers?.items ?? null,
       totals: numbers?.totals ?? null,
       tried: false,
     });
     addingNow.current = false;
     setAdding(false);
-    if (kept) onAdded(type, named);
+    if (kept) onAdded(chosen, named);
     else setFull(true);
   };
   /** A food on the meal's list, and back to the search for the next. */
@@ -1503,6 +1522,15 @@ function AddFood({ type, plan, onClose, onAdded }: { type: MealType | null; plan
     else onClose();
   };
   const saveHeld = plan === undefined ? outbox === null || adding : plan.busy;
+  // The four meals to pick from, in a meal of the person's own; a plan's meal is the plan's.
+  const mealChoice =
+    plan === undefined ? (
+      <View style={styles.chips} accessibilityRole="radiogroup" accessibilityLabel="Meal">
+        {MEAL_TYPES.map((m) => (
+          <Chip key={m.type} label={m.name} small on={chosen === m.type} onPress={() => { setMeal(m.type); }} />
+        ))}
+      </View>
+    ) : null;
   const saveLabel = plan === undefined ? `Save meal to ${name}` : "Save to your plan";
   const planTrouble = plan?.trouble == null ? null : (
     <Txt kind="small" colour="badText">
@@ -1529,6 +1557,7 @@ function AddFood({ type, plan, onClose, onAdded }: { type: MealType | null; plan
     return (
       <Sheet open title={plan === undefined ? `Add to ${name}` : plan.title} onClose={close} onBack={back}>
         <ScrollView style={{ maxHeight: Math.max(SHEET_LIST_LEAST, height - keyboard - insets.top - SHEET_ABOVE_LIST - SHEET_FOOT) }} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.sheetList}>
+          {mealChoice}
           {plan === undefined ? <Field label="Meal name" value={mealName} onChange={setMealName} placeholder={basketName(basket)} maxLength={200} /> : null}
           <Txt kind="tiny" style={styles.label}>
             Your meal
@@ -1594,6 +1623,7 @@ function AddFood({ type, plan, onClose, onAdded }: { type: MealType | null; plan
           <OwnFood start={ownAgain} name={query.trim()} action="Add" onDone={(mine) => { toList({ name: mine.name, chosen: mine, amount: `${formatAmount(mine.grams)} g · your numbers`, item: null }); }} />
         </ScrollView>
       ) : null}
+      {food === null && !own ? mealChoice : null}
       {food === null && !own ? <Field label="Search food" bare value={query} onChange={setQuery} placeholder="Search food" ready maxLength={100} /> : null}
       {own ? null : (
       <ScrollView style={{ maxHeight: Math.max(SHEET_LIST_LEAST, height - keyboard - insets.top - (food === null ? SHEET_ABOVE_SEARCH + (basket.length > 0 ? 50 : 0) : SHEET_ABOVE_LIST + (panel ? 0 : SHEET_FOOT))) }} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.sheetList}>
@@ -1832,7 +1862,9 @@ const styles = StyleSheet.create({
   kept: { gap: 10, borderColor: colours.orangeLine },
   titleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   macros: { gap: 14 },
-  left: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10 },
+  left: { flexDirection: "row", alignItems: "center", justifyContent: "center", flexWrap: "wrap", gap: 10 },
+  nutrients: { flexDirection: "row", alignItems: "center", gap: 6, minHeight: sizes.press },
+  nutrientsLink: { fontFamily: fonts.semibold },
   leftPill: { paddingHorizontal: 12, minHeight: 28, justifyContent: "center", borderRadius: sizes.round, borderWidth: 1, borderColor: colours.orangeLine, backgroundColor: colours.orangeFill },
   plateFoot: { paddingTop: 4, borderTopWidth: 1, borderTopColor: colours.line },
   topButtons: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 14, marginTop: 6 },

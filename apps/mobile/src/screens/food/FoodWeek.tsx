@@ -4,6 +4,8 @@ import { foodWeekResponseSchema, type FoodWeekFigure, type FoodWeekResponse } fr
 import { Button } from "../../look/Button";
 import { Card } from "../../look/Card";
 import { Chip } from "../../look/Chip";
+import Svg, { Line } from "react-native-svg";
+import type { FoodBand } from "@app/shared";
 import { colours, weekBarGlow, weekBarLight, type ColourName } from "../../look/colours";
 import { Icon } from "../../look/Icon";
 import { Txt } from "../../look/Txt";
@@ -17,6 +19,7 @@ import {
   barSaid,
   chartTop,
   dayLetter,
+  factLead,
   factWords,
   monthLabel,
   TARGETS_DIFFER_WORDS,
@@ -129,7 +132,10 @@ function ReadOr({ read, again, children }: { read: Read<FoodWeekResponse>; again
 function Detail({ week, figure, ctx, month }: { week: FoodWeekResponse; figure: FoodWeekFigure; ctx: Ctx; month: boolean }) {
   const bars = weekBars(week, figure, ctx.here);
   const line = weekLine(week, ctx.here);
-  const facts = WEEK_FIGURES.map((f) => factWords(f.key, week.facts[f.key])).filter((w): w is string => w !== null);
+  const facts = WEEK_FIGURES.flatMap((f) => {
+    const words = factWords(f.key, week.facts[f.key]);
+    return words === null ? [] : [{ words, lead: factLead(week.facts[f.key]) }];
+  });
   const average = averageLine(week);
   const of = WEEK_FIGURES.find((f) => f.key === figure);
   const target = week.days.at(-1)?.targets?.[figure];
@@ -149,11 +155,7 @@ function Detail({ week, figure, ctx, month }: { week: FoodWeekResponse; figure: 
       )}
       <View style={styles.facts}>
         {facts.length > 0 ? (
-          facts.map((words) => (
-            <Txt key={words} kind="small" colour="text">
-              {words}
-            </Txt>
-          ))
+          facts.map((fact) => <Fact key={fact.words} words={fact.words} lead={fact.lead} />)
         ) : (
           <>
             <Txt kind="small" colour="text">
@@ -167,12 +169,35 @@ function Detail({ week, figure, ctx, month }: { week: FoodWeekResponse; figure: 
             {line.words}
           </Txt>
         ) : null}
-        {average === null ? null : <Txt kind="small">{average.words}</Txt>}
+        {average === null ? null : (
+          <View style={styles.average}>
+            <Txt kind="small">{average.words}</Txt>
+          </View>
+        )}
       </View>
       {bars.some((b) => b.about) ? <Txt kind="tiny">~ Includes a scan’s estimate.</Txt> : null}
       {bars.some((b) => b.current) ? <Txt kind="tiny">Some days are shown against today’s daily numbers.</Txt> : null}
       {average?.partial === true ? <Txt kind="tiny">* Some foods have no fibre or sodium figure.</Txt> : null}
     </>
+  );
+}
+
+/** A fact in a box of its colour, with its sign: a cup on target, an arrow under or over (32c-i, as drawn). */
+const FACT_LOOK = {
+  on: { icon: "trophy", colour: "goodText", fill: "goodFill", line: "goodLine" },
+  under: { icon: "down", colour: "blue", fill: "blueFill", line: "blueFill" },
+  over: { icon: "up", colour: "orange", fill: "orangeFill", line: "orangeLine" },
+} as const;
+
+function Fact({ words, lead }: { words: string; lead: FoodBand | null }) {
+  const look = lead === null ? null : FACT_LOOK[lead];
+  return (
+    <View style={[styles.fact, look === null ? null : { backgroundColor: colours[look.fill], borderColor: colours[look.line] }]}>
+      {look === null ? null : <Icon name={look.icon} size={18} colour={look.colour} />}
+      <Txt kind="small" colour="text" style={styles.grow}>
+        {words}
+      </Txt>
+    </View>
   );
 }
 
@@ -220,7 +245,13 @@ function Chart({ bars, figure, month, line }: { bars: readonly Bar[]; figure: Fo
             )}
           </View>
         ))}
-        {line === null ? null : <View pointerEvents="none" style={[styles.target, { bottom: height(line) }]} />}
+        {line === null ? null : (
+          <View pointerEvents="none" style={[styles.target, { bottom: height(line) }]}>
+            <Svg width="100%" height={2}>
+              <Line x1="0" y1="1" x2="100%" y2="1" stroke={colours.textSoft} strokeWidth={1.5} strokeDasharray="5 4" />
+            </Svg>
+          </View>
+        )}
         {line === null ? null : (
           <Txt kind="tiny" colour="textSoft" style={[styles.lineWords, { bottom: height(line) + 4 }]}>
             {count(line)}
@@ -264,7 +295,7 @@ const styles = StyleSheet.create({
   start: { alignSelf: "flex-start" },
   detail: { gap: 12 },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  facts: { gap: 6 },
+  facts: { gap: 8 },
   chart: { gap: 6 },
   bars: { flexDirection: "row", alignItems: "flex-end", gap: 6 },
   labels: { flexDirection: "row", gap: 6 },
@@ -273,9 +304,11 @@ const styles = StyleSheet.create({
   // A date under a thin bar of the 30 days is wider than its bar, and is drawn across the bars beside it.
   date: { width: 32 },
   thin: { marginHorizontal: -2 },
-  bar: { marginHorizontal: 3, borderTopLeftRadius: 999, borderTopRightRadius: 999, borderBottomLeftRadius: 8, borderBottomRightRadius: 8 },
+  bar: { marginHorizontal: 6, borderTopLeftRadius: 999, borderTopRightRadius: 999, borderBottomLeftRadius: 8, borderBottomRightRadius: 8 },
   thinBar: { marginHorizontal: 0, borderTopLeftRadius: 4, borderTopRightRadius: 4, borderBottomLeftRadius: 2, borderBottomRightRadius: 2 },
-  target: { position: "absolute", left: 0, right: 0, height: 2, borderRadius: 1, backgroundColor: colours.textSoft },
+  target: { position: "absolute", left: 0, right: 0, height: 2 },
+  fact: { flexDirection: "row", alignItems: "center", gap: 10, padding: 12, borderRadius: 14, borderWidth: 1, borderColor: colours.line },
+  average: { paddingTop: 10, borderTopWidth: 1, borderTopColor: colours.line },
   lineWords: { position: "absolute", right: 0 },
   about: { textAlign: "center" },
   centre: { textAlign: "center" },
