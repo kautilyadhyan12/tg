@@ -168,6 +168,8 @@ export function FoodScreen() {
   const today = sameDay(day, new Date());
   // Meals, What to eat or Week (32c-i): one at a time under the day's plate, so the page is short.
   const [tab, setTab] = useState<FoodTab>("meals");
+  // A meal shows two of its foods, and See all opens the rest; opening another closes it (Kd, 2026-11-14).
+  const [allOf, setAllOf] = useState<MealType | null>(null);
   // More ideas on the Dashboard opens this page's box, so the page goes to today.
   const asked = useRoute().params;
   const toToday = typeof asked === "object" && "today" in asked ? asked.today : null;
@@ -234,6 +236,7 @@ export function FoodScreen() {
   const loggedNow = (type: MealType, name: string) => {
     goTo(new Date());
     setSaid({ section: type, words: `${name} added.` });
+    setAllOf(type);
   };
 
   return (
@@ -353,6 +356,8 @@ export function FoodScreen() {
                   type={type}
                   rows={rows.filter((r) => r.section === type)}
                   canAdd={today}
+                  all={allOf === type}
+                  onAll={(on) => { setAllOf(on ? type : null); }}
                   said={said?.section === type ? said.words : null}
                   onAdd={first(() => {
                     setSaid(null);
@@ -438,6 +443,8 @@ export function FoodScreen() {
         onAdded={(type, name) => {
           setAdding(null);
           setSaid({ section: type, words: `${name} added.` });
+          // What was just added is in view, however many the meal holds.
+          setAllOf(type);
         }}
       />
       <MealSheet
@@ -671,14 +678,19 @@ interface SectionProps {
   type: MealType;
   rows: Row[];
   canAdd: boolean;
+  /** Every food shown, or the first `SHOWN_FOODS` and See all. */
+  all: boolean;
+  onAll: (on: boolean) => void;
   said: string | null;
   onAdd: () => void;
   onOpen: (row: Row) => void;
 }
 
+const SHOWN_FOODS = 2;
+
 const MEAL_PICTURES: Record<MealType, PictureName> = { breakfast: "mealbreakfast", lunch: "meallunch", dinner: "mealdinner", snack: "mealsnack" };
 
-function Section({ type, rows, canAdd, said, onAdd, onOpen }: SectionProps) {
+function Section({ type, rows, canAdd, all, onAll, said, onAdd, onOpen }: SectionProps) {
   const name = mealTypeName(type);
   const sums = daySums(rows);
   const unknown = rows.some((r) => r.totals === null);
@@ -713,7 +725,7 @@ function Section({ type, rows, canAdd, said, onAdd, onOpen }: SectionProps) {
           No {name.toLowerCase()} logged yet.
         </Txt>
       ) : (
-        rows.map((row) => (
+        (all ? rows : rows.slice(0, SHOWN_FOODS)).map((row) => (
           <Pressable
             key={row.id}
             accessibilityRole="button"
@@ -734,6 +746,19 @@ function Section({ type, rows, canAdd, said, onAdd, onOpen }: SectionProps) {
           </Pressable>
         ))
       )}
+      {rows.length > SHOWN_FOODS ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={all ? `Show less of ${name}` : `See all ${String(rows.length)} in ${name}`}
+          onPress={() => { onAll(!all); }}
+          style={({ pressed }) => [styles.seeAll, pressed ? styles.pressed : null]}
+        >
+          <Txt kind="small" colour="orange" style={styles.nutrientsLink}>
+            {all ? "Show less" : `See all (${String(rows.length)})`}
+          </Txt>
+          <Icon name={all ? "up" : "down"} size={14} colour="orange" />
+        </Pressable>
+      ) : null}
     </Card>
   );
 }
@@ -1864,6 +1889,7 @@ const styles = StyleSheet.create({
   macros: { gap: 10 },
   left: { flexDirection: "row", alignItems: "center", justifyContent: "center", flexWrap: "wrap", gap: 10 },
   nutrients: { flexDirection: "row", alignItems: "center", gap: 6, minHeight: sizes.press },
+  seeAll: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, minHeight: sizes.press, borderTopWidth: 1, borderTopColor: colours.line },
   nutrientsLink: { fontFamily: fonts.semibold },
   leftPill: { paddingHorizontal: 12, minHeight: 28, justifyContent: "center", borderRadius: sizes.round, borderWidth: 1, borderColor: colours.orangeLine, backgroundColor: colours.orangeFill },
   plateFoot: { paddingTop: 4, borderTopWidth: 1, borderTopColor: colours.line },

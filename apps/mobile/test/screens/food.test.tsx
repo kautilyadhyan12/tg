@@ -1035,3 +1035,30 @@ describe("the Food tab drawn again (32c-i)", () => {
     expect(await screen.findByRole("button", { name: "Nutrients" })).toBeTruthy();
   });
 });
+
+describe("a meal shows two of its foods (Kd, 2026-11-14)", () => {
+  it("See all opens the rest, and opening another meal's closes the first", async () => {
+    const now = new Date();
+    const at = (h: number, m: number) => new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m).toISOString();
+    const meals = [
+      savedMeal("11111111-1111-4111-8111-111111111111", { mealName: "Oats one", takenAt: at(0, 10), mealType: "breakfast" }),
+      savedMeal("11111111-1111-4111-8111-111111111112", { mealName: "Oats two", takenAt: at(0, 20), mealType: "breakfast" }),
+      savedMeal("11111111-1111-4111-8111-111111111113", { mealName: "Oats three", takenAt: at(0, 30), mealType: "breakfast" }),
+      savedMeal("11111111-1111-4111-8111-111111111114", { mealName: "Rice one", takenAt: at(0, 40), mealType: "lunch" }),
+      savedMeal("11111111-1111-4111-8111-111111111115", { mealName: "Rice two", takenAt: at(0, 41), mealType: "lunch" }),
+      savedMeal("11111111-1111-4111-8111-111111111116", { mealName: "Rice three", takenAt: at(0, 42), mealType: "lunch" }),
+    ];
+    await openFood({ meals });
+    await screen.findByRole("button", { name: "See all 3 in Breakfast" });
+    const shown = (word: string) => screen.queryAllByRole("button", { name: new RegExp(`^${word} (one|two|three), `) }).length;
+    expect([shown("Oats"), shown("Rice")]).toEqual([2, 2]);
+    await fireEvent.press(screen.getByRole("button", { name: "See all 3 in Breakfast" }));
+    expect([shown("Oats"), shown("Rice")]).toEqual([3, 2]);
+    await fireEvent.press(screen.getByRole("button", { name: "See all 3 in Lunch" }));
+    expect([shown("Oats"), shown("Rice")]).toEqual([2, 3]);
+    await fireEvent.press(screen.getByRole("button", { name: "Show less of Lunch" }));
+    expect([shown("Oats"), shown("Rice")]).toEqual([2, 2]);
+    // Every food still counts: each meal's line holds all three.
+    expect(screen.getAllByText(/^3 meals · /)).toHaveLength(2);
+  });
+});
