@@ -610,12 +610,14 @@ export function registerPaymentRoutes(app: FastifyInstance, deps: Omit<service.P
   const codeTries = (req: FastifyRequest): CodeTries => {
     const keys = [`rl:promo_code_try:id:${callerId(req)}`, `rl:promo_code_try:ip:${req.ip}`] as const;
     return {
-      spent: async () => {
-        const [id, ip] = await Promise.all([deps.redis.get(keys[0]), deps.redis.get(keys[1])]);
-        return Number(id ?? 0) >= PROMO_TRIES.max || Number(ip ?? 0) >= PROMO_TRIES.ipMax;
+      // Counted before the code is looked at, so tries at the same instant never pass the limit together. Redis down: open,
+      // as every limit here is (its `incrWithTtl` answers null).
+      take: async () => {
+        const [id, ip] = await Promise.all(keys.map((k) => deps.redis.incrWithTtl(k, PROMO_TRIES.seconds)));
+        return (id ?? 0) <= PROMO_TRIES.max && (ip ?? 0) <= PROMO_TRIES.ipMax;
       },
-      miss: async () => {
-        await Promise.all(keys.map((k) => deps.redis.incrWithTtl(k, PROMO_TRIES.seconds)));
+      giveBack: async () => {
+        await Promise.all(keys.map((k) => deps.redis.decrIfPositive(k)));
       },
     };
   };

@@ -57,11 +57,12 @@ import type { PaymentsDeps } from "./service.js";
 
 type Limit = () => Promise<boolean>;
 
-/** The codes a member tried that took nothing off (18k-v round one, L2): `spent` once too many, read without counting;
- *  `miss` counts one more. A code that takes something off is never counted. */
+/** The codes a member tried that took nothing off (18k-v round one, L2). `take` counts a try before the code is looked at,
+ *  and answers false once too many, so tries sent at the same instant are each counted first (the re-check, N1);
+ *  `giveBack` returns it where the code took something off, or was never judged. A code that works costs nothing. */
 export interface CodeTries {
-  spent(): Promise<boolean>;
-  miss(): Promise<void>;
+  take(): Promise<boolean>;
+  giveBack(): Promise<void>;
 }
 
 const wordingSchema = z.object({ type_id: z.uuid(), id: z.uuid(), version: z.number().int(), body: z.string(), name: z.string().nullable() });
@@ -149,7 +150,7 @@ export async function readForSale(
   let found: Awaited<ReturnType<typeof discountByCode>> = null;
   let promoWords: string | null = null;
   if (typed !== null) {
-    if (await typed.tries.spent()) {
+    if (!(await typed.tries.take())) {
       promoWords = PROMO_CODE_WORDS.too_many;
     } else {
       found = code === null ? null : await discountByCode(deps.sql, gymId, code, false);
@@ -185,7 +186,7 @@ export async function readForSale(
   });
   // Where the code takes something off one line, each line it does not says so; where it fits none, the list says it once.
   const applied = items.some((i) => i.firstPayment.promo !== null);
-  if (typed !== null && !applied && promoWords !== PROMO_CODE_WORDS.too_many) await typed.tries.miss();
+  if (typed !== null && applied) await typed.tries.giveBack();
   const shown = usable !== null && applied ? items.map((i) => (i.firstPayment.promo === null ? { ...i, promoWords: PROMO_CODE_WORDS.not_for(i.name) } : i)) : items;
   const promo =
     typed === null

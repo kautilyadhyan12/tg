@@ -194,8 +194,6 @@ export async function startPurchase(
 ): Promise<Told<AppPurchaseResponse> | null> {
   const own = await buyerOf(deps, gymId, userId);
   if (!(await limit())) return null;
-  // Too many codes tried that took nothing off (18k-v round one, L2): the code is not looked at.
-  if (body.code !== undefined && tries !== null && (await tries.spent())) throw new OrgsError(429, "promo_code_tries", PROMO_CODE_WORDS.too_many);
   const same = await pays.readByKey(deps.sql, gymId, body.requestKey);
   if (same !== null) return { answer: sameOr(same, userId, body), tell: null };
   const ready = await readyForApp(deps, gymId);
@@ -220,8 +218,12 @@ export async function startPurchase(
     today: dayInTz(now, ready.timezone),
     now,
   };
+  // Too many codes tried that took nothing off (18k-v round one, L2): the code is not looked at. The try is counted just
+  // before it is, and given back unless the code itself was refused (the re-check, N1).
+  const counted = body.code !== undefined && tries !== null;
+  if (counted && !(await tries.take())) throw new OrgsError(429, "promo_code_tries", PROMO_CODE_WORDS.too_many);
   const before = await buys.purchasable(deps.sql, buying);
-  if (before.kind === "promo") await tries?.miss();
+  if (counted && before.kind !== "promo") await tries.giveBack();
   if (before.kind !== "ok") return { answer: refusalOf(before, own.gymName, userId, body), tell: null };
 
   const token = ready.square.tokens.open(ready.row.accessToken ?? "", accessContext(gymId));

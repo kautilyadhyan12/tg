@@ -75,7 +75,7 @@ try {
   if (user === undefined) throw new Error("No account has that email.");
   if (args.data[0] === "buy") {
     const lineName = args.data[3];
-    const list = await readForSale(deps, user.id, gymId, always, true, typedCode === null ? null : { text: typedCode, tries: { spent: () => Promise.resolve(false), miss: () => Promise.resolve() } });
+    const list = await readForSale(deps, user.id, gymId, always, true, typedCode === null ? null : { text: typedCode, tries: { take: () => Promise.resolve(true), giveBack: () => Promise.resolve() } });
     const shown = list?.items.find((i) => i.name === lineName);
     if (shown === undefined) throw new Error(`"${lineName}" is not sold in the app to this member now.`);
     const promo = shown.firstPayment.promo;

@@ -567,6 +567,13 @@ d("A promo code typed in the app: only where the gym meant it, honoured as shown
     expect(there.statusCode, there.body).toBe(200);
     expect(forSaleResponseSchema.parse(JSON.parse(there.body)).promo?.words).toBe(PROMO_CODE_WORDS.too_many);
     expect((await listWith(gym, ann.app, "REAL20")).promo?.applied).toBe(true);
+    // Thirty wrong codes sent at the same instant are each counted before they are looked at: twenty looked up, no more
+    // (the re-check, N1).
+    const bo = await member(gym, "Bo Burst");
+    const burst = await Promise.all(Array.from({ length: 30 }, (_, n) => listWith(gym, bo.app, `BURST${String(n).padStart(2, "0")}`)));
+    const said = burst.map((l) => l.promo?.words);
+    expect(said.filter((w) => w === PROMO_CODE_WORDS.not_found)).toHaveLength(20);
+    expect(said.filter((w) => w === PROMO_CODE_WORDS.too_many)).toHaveLength(10);
   });
 
   it("staff tick a code for the app only on memberships, and read both ticks on the Discounts list; a stranger changes nothing", async () => {
