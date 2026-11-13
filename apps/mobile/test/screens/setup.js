@@ -377,7 +377,7 @@ jest.mock("../../src/screens/running/runVoiceNative", () => {
 // `pairAnswer` what asking says, and `bond(device, state)` hands over one of Android's paired-or-not messages and
 // is what asking a device's state says after it (`silent` keeps the message from the app, as a lost one).
 jest.mock("../../src/heart/heartNative", () => {
-  const fresh = () => ({ radio: "on", allowed: true, missing: false, near: [], watched: null, watches: [], waiting: [], scans: 0, bonded: [], pairs: [], pairAnswer: "started", states: {} });
+  const fresh = () => ({ radio: "on", allowed: true, missing: false, near: [], watched: null, watches: [], waiting: [], scans: 0, bonded: [], pairs: [], pairAnswer: "started", states: {}, asked: 0 });
   const strap = { ...fresh(), found: new Set(), bonds: new Set() };
   strap.send = (id, bytes, at = Date.now()) => {
     strap.waiting.push({ device: id, at, bytes });
@@ -417,7 +417,10 @@ jest.mock("../../src/heart/heartNative", () => {
     status: () => ({ device: strap.watched, connected: strap.watched !== null }),
     askRadio: () => true,
     bonded: () => [...strap.bonded],
-    bondState: (id) => strap.states[id.toUpperCase()] ?? "none",
+    bondState: (id) => {
+      strap.asked += 1;
+      return strap.states[id.toUpperCase()] ?? "none";
+    },
     pair: (id) => {
       strap.pairs.push(id);
       return strap.pairAnswer;

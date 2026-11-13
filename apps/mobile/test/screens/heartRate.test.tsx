@@ -25,6 +25,7 @@ const polar = (bpm: number): number[] => [16, bpm, 25, 3, 15, 3, 0];
 
 interface Strap {
   states: Record<string, string>;
+  asked: number;
   radio: string;
   allowed: boolean;
   missing: boolean;
@@ -521,10 +522,14 @@ describe("the worst thing: a device that is not the one picked, followed after p
     await saveTheWatch();
     expect(await screen.findByText("Pairing…")).toBeTruthy();
     strap.bond(WATCH, "bonding", true);
-    await waitFor(() => {
-      expect(strap.states[WATCH]).toBe("bonding");
-    });
-    await new Promise((done) => setTimeout(done, 1200));
+    // Until the app has asked once since it began pairing (round one's re-check, L4).
+    const asked = strap.asked;
+    await waitFor(
+      () => {
+        expect(strap.asked).toBeGreaterThan(asked);
+      },
+      { timeout: 3000 },
+    );
     strap.bond(WATCH, "none", true);
     expect(await screen.findByText("Saved, not paired. If it says No signal later, press Change monitor.", {}, { timeout: 3000 })).toBeTruthy();
     expect((await keptMonitor())?.id).toBe(WATCH);
@@ -592,6 +597,24 @@ describe("I connect my watch once, and it stays connected when its address chang
     await saveTheWatch("public");
     expect(await screen.findByText("Saved. It connects when you start a run.")).toBeTruthy();
     expect(strap.pairs).toEqual([]);
+    expect((await keptMonitor())?.id).toBe(WATCH);
+  });
+
+  it("Android says paired a moment before its paired list has it: paired once the list catches up (round one's re-check, L5)", async () => {
+    strap.bonded = [EARBUDS];
+    await saveTheWatch();
+    strap.bond(WATCH, "bonding", true);
+    strap.bond(WATCH, "bonded", true);
+    const asked = strap.asked;
+    await waitFor(
+      () => {
+        expect(strap.asked).toBeGreaterThan(asked);
+      },
+      { timeout: 3000 },
+    );
+    expect(screen.getByText("Pairing…")).toBeTruthy();
+    strap.bonded = [EARBUDS, WATCH];
+    expect(await screen.findByText("Paired and saved. It connects when you start a run.", {}, { timeout: 3000 })).toBeTruthy();
     expect((await keptMonitor())?.id).toBe(WATCH);
   });
 

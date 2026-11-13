@@ -270,12 +270,16 @@ export function pairMonitor(found: HeartFound, waitMs: number = PAIR_WAIT_MS): P
     };
     const look = () => {
       const asked = bt.bondState(found.id);
+      const after = bondedNow();
       const mineLast = [...bonds].reverse().find((b) => same(b.device, found.id))?.state;
       const began = bonds.some((b) => same(b.device, found.id) && b.state === "bonding");
-      // "none" counts only after it was pairing: before Android begins, the one picked reads "none" too.
-      const counts = asked === "bonding" || asked === "bonded" || (asked === "none" && began);
+      // "none" counts only after it was pairing: before Android begins, the one picked reads "none" too. "bonded"
+      // counts once the paired list has changed: read a moment before the list catches up, it would find nothing
+      // new and end not paired (round one's re-check, L5); the next look sees both.
+      const listChanged = after.some((a) => !before.some((b) => same(a, b)));
+      const counts = asked === "bonding" || (asked === "bonded" && listChanged) || (asked === "none" && began);
       if (counts && asked !== mineLast) bonds.push({ device: found.id, state: asked });
-      const out = pairOutcome(found.id, before, bondedNow(), bonds);
+      const out = pairOutcome(found.id, before, after, bonds);
       if (out.kind !== "waiting") finish(out);
     };
     listening = bt.addListener("bond", (raw) => {
