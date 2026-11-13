@@ -178,6 +178,11 @@ describe("whether pairing finished, from what Android says", () => {
     ["two joined at once: neither", [], [EARBUDS, LASTING], [B(PICKED, "bonding"), B(PICKED, "bonded")], { kind: "notPaired" }],
     ["a device Android only says the lasting address of is not the one picked", [], [LASTING], [B(LASTING, "bonded")], { kind: "waiting" }],
     ["paired, then unpaired again", [], [], [B(PICKED, "bonded"), B(PICKED, "none")], { kind: "notPaired" }],
+    // What a Moto g35 (Android 15) did on 2026-11-13: the list named the laptop at the address picked
+    // ("71:4D:40:20:BD:55 => E0:D4:E8:7E:2A:8D" in its Bluetooth report), with no message the app saw.
+    ["the address picked joined the list, Android said nothing", [EARBUDS], [EARBUDS, PICKED], [], { kind: "paired", id: PICKED }],
+    ["the address picked joined the list, Android named only its lasting address", [EARBUDS], [EARBUDS, PICKED], [B(LASTING, "bonded")], { kind: "paired", id: PICKED }],
+    ["the address picked in the list before is not a new pairing", [PICKED], [PICKED], [], { kind: "waiting" }],
   ] as const)("%s", (_name, before, after, bonds, outcome) => {
     expect(pairOutcome(PICKED, before, after, bonds)).toEqual(outcome);
   });

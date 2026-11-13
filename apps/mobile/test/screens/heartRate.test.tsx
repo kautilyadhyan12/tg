@@ -508,6 +508,15 @@ describe("I connect my watch once, and it stays connected when its address chang
     expect(await screen.findByText("81 bpm", {}, { timeout: 3000 })).toBeTruthy();
   });
 
+  it("as on the phone: Android lists it at the address picked and says nothing the app sees, and it is paired", async () => {
+    strap.bonded = [EARBUDS];
+    await saveTheWatch();
+    expect(await screen.findByText("Pairing…")).toBeTruthy();
+    strap.bonded = [EARBUDS, WATCH];
+    expect(await screen.findByText("Paired and saved. It connects when you start a run.", {}, { timeout: 3000 })).toBeTruthy();
+    expect((await keptMonitor())?.id).toBe(WATCH);
+  });
+
   it("Save without pairing keeps it at the address picked, and a late answer changes nothing", async () => {
     await saveTheWatch();
     await fireEvent.press(await screen.findByRole("button", { name: "Save without pairing" }));

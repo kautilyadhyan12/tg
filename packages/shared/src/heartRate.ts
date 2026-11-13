@@ -111,13 +111,17 @@ export type HeartBond = z.infer<typeof heartBondSchema>;
 export type PairOutcome = { kind: "waiting" } | { kind: "paired"; id: string } | { kind: "notPaired" };
 
 /** Where pairing `picked` stands, from what Android has said since it was asked (`bonds`, in order) and the
- *  paired list before and now. Paired only once Android says THE ONE PICKED is paired; the address to keep
- *  is then `pairedAddress`'s, and never a device Android said was pairing apart from it (earbuds paired at
- *  the same moment). Android saying the one picked is not paired (the person said Cancel, or the monitor
- *  refused) is not paired; anything else is still waiting, and the app gives up after a while. */
+ *  paired list before and now. The address picked joining the list is paired, whatever Android's messages
+ *  say: on a Moto g35 (Android 15) the list named the laptop at the address picked, and the app never saw
+ *  a message saying so (37f-ii-b's walk). Else paired only once Android says THE ONE PICKED is paired; the
+ *  address to keep is then `pairedAddress`'s, and never a device Android said was pairing apart from it
+ *  (earbuds paired at the same moment). Android saying the one picked is not paired (the person said
+ *  Cancel, or the monitor refused) is not paired; anything else is still waiting, and the app gives up
+ *  after a while. */
 export function pairOutcome(picked: string, before: readonly string[], after: readonly string[], bonds: readonly HeartBond[]): PairOutcome {
   const up = (a: string) => a.toUpperCase();
   const mine = up(picked);
+  if (after.some((a) => up(a) === mine) && !before.some((a) => up(a) === mine)) return { kind: "paired", id: mine };
   const others = new Set(bonds.filter((b) => up(b.device) !== mine).map((b) => up(b.device)));
   const myLast = [...bonds].reverse().find((b) => up(b.device) === mine);
   if (myLast === undefined || myLast.state === "bonding") return { kind: "waiting" };

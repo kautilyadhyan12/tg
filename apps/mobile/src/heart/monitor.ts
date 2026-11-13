@@ -226,6 +226,8 @@ export function savedHeartNow(now: number): number | null {
 
 /** How long Android's pairing box waits for the person before the monitor is kept unpaired. */
 export const PAIR_WAIT_MS = 60_000;
+/** The paired list is read again this often while pairing: Android's own message may name another address. */
+const PAIR_LOOK_MS = 1000;
 export type Paired = { kind: "paired"; id: string } | { kind: "notPaired" } | { kind: "notNeeded" };
 
 /** The addresses of the devices paired with this phone. */
@@ -252,21 +254,29 @@ export function pairMonitor(found: HeartFound, waitMs: number = PAIR_WAIT_MS): P
     let done = false;
     let listening: { remove: () => void } | null = null;
     let late: ReturnType<typeof setTimeout> | null = null;
+    let looking: ReturnType<typeof setInterval> | null = null;
     const finish = (out: Paired) => {
       if (done) return;
       done = true;
       listening?.remove();
       if (late !== null) clearTimeout(late);
+      if (looking !== null) clearInterval(looking);
       resolve(out);
+    };
+    const look = () => {
+      const out = pairOutcome(found.id, before, bondedNow(), bonds);
+      if (out.kind !== "waiting") finish(out);
     };
     listening = bt.addListener("bond", (raw) => {
       const bond = heartBondSchema.safeParse(raw);
       if (!bond.success) return;
       bonds.push(bond.data);
-      const out = pairOutcome(found.id, before, bondedNow(), bonds);
-      if (out.kind !== "waiting") finish(out);
+      look();
     });
+    looking = setInterval(look, PAIR_LOOK_MS);
     late = setTimeout(() => {
+      // One last look: paired in the last moment is paired.
+      look();
       finish({ kind: "notPaired" });
     }, waitMs);
     if (bt.pair(found.id) !== "started") finish({ kind: "notPaired" });
