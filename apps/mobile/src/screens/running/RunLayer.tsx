@@ -48,7 +48,10 @@ import {
   skipStep,
   runIsFull,
   chooseAutoPause,
+  dropOtherHeartMax,
+  keepRunHeartMax,
   keepRunUnits,
+  runHeartMaxFor,
   movingMsOf,
   runNow,
   startRun,
@@ -144,6 +147,10 @@ export function RunLayerProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (signedIn) void keepRunUnits(units);
   }, [signedIn, units]);
+  // Another person's kept maximum heart rate is never kept on for this one (round one, H2).
+  useEffect(() => {
+    if (me !== null) void dropOtherHeartMax(me);
+  }, [me]);
 
   // The run kept on the phone, once: after the app was closed, it is there to carry on or finish. A
   // run whose service Android stopped (the phone restarted) is paused where its last point was.
@@ -436,7 +443,14 @@ function Live({ run, units, kg, onHide }: { run: LiveRun; units: Units; kg: numb
   const heartNowShown = useHeartNow(true);
   // The maximum the zones are worked from (37f-ii-a): read once as the run opens, kept if the signal goes.
   const heartMaxRead = useHeartMax().read;
-  const heartMaxNow = heartMaxRead.kind === "ok" ? heartMaxRead.data.max : null;
+  // Kept with the run's choices for this person, so the voice says the zone with the app closed (37f-ii-b);
+  // before the read answers (no signal at Go), the pill shows the zone from what is kept, as the voice says it.
+  const heartMaxKnown = heartMaxRead.kind === "ok";
+  const readMax = heartMaxRead.kind === "ok" ? heartMaxRead.data.max : null;
+  useEffect(() => {
+    if (heartMaxKnown) void keepRunHeartMax(run.userId, readMax);
+  }, [heartMaxKnown, readMax, run.userId]);
+  const heartMaxNow = heartMaxKnown ? readMax : runHeartMaxFor(run.userId);
   // Today's planned run (37d-ii): the step, what is left of it, and the next.
   const guide = run.guide === null ? null : <RunGuideCard guide={run.guide} movingMs={movingMsOf(run, now)} metres={metres} units={units} paused={isPaused} onSkip={press(() => skipStep())} />;
   const top = (

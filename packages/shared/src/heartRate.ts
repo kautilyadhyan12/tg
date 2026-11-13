@@ -56,6 +56,81 @@ export type PhoneHeartSample = z.infer<typeof phoneHeartSamplesSchema>[number];
 /** The monitor a person connected, kept on their phone: its Bluetooth address and its own name. */
 export const keptHeartMonitorSchema = z.object({ id: z.string().min(1).max(64), name: z.string().max(100) });
 
+// ── Pairing a monitor whose address changes (37f-ii-b) ─────────────────────────────────────────────
+// Most watches, and phones and laptops sending a heart rate, change their Bluetooth address every few
+// minutes (a "resolvable private address"), so a phone told only the address picked loses them. Paired once,
+// Android knows them by their own lasting address (their "identity address") and finds them whatever address
+// they show. Android gives an app no way to ask a paired device's lasting address, so it is read from the
+// phone's own list of paired devices: the one device that joined it while this monitor was paired.
+
+/** A monitor heard while looking (the Android code's "found"): its address, its name, how strongly it is
+ *  heard, and what kind of address Android says it is (Android 15 and later; "unknown" before). */
+export const heartFoundSchema = z.object({
+  id: z.string().min(1).max(64),
+  name: z
+    .string()
+    .catch("")
+    .transform((name) => name.slice(0, 100)),
+  rssi: z.number().catch(-100),
+  type: z.enum(["public", "random", "unknown"]).catch("unknown"),
+});
+export type HeartFound = z.infer<typeof heartFoundSchema>;
+
+/** The phone's list of paired devices' addresses (the Android code's `bonded`). */
+export const phoneBondedSchema = z.array(z.string().min(1).max(64)).max(1000);
+
+/** A paired-or-not change Android tells the app of (the Android code's "bond"), for any device. */
+export const heartBondSchema = z.object({ device: z.string().min(1).max(64), state: z.enum(["bonded", "bonding", "none"]) });
+
+const BLUETOOTH_ADDRESS = /^[0-9A-F]{2}(:[0-9A-F]{2}){5}$/;
+
+/** Whether a monitor's address is one that changes and that pairing can follow: a random address whose two
+ *  highest bits are 0 and 1 (Bluetooth's resolvable private address). A public address (Android 15 says
+ *  which) never changes. Before Android 15 the kind is unknown, and the bits alone decide: a strap whose
+ *  fixed address happens to begin so is asked to pair too. It costs that person Android's pairing box once;
+ *  Cancel or a refusal is seen at once and keeps it at its address, where it is found (round one, L2). */
+export function addressChanges(address: string, type: HeartFound["type"]): boolean {
+  const upper = address.toUpperCase();
+  if (type === "public" || !BLUETOOTH_ADDRESS.test(upper)) return false;
+  const first = Number.parseInt(upper.slice(0, 2), 16);
+  return first >> 6 === 1;
+}
+
+/** The lasting address to keep after pairing `picked`: `picked` itself where the list holds it, else the
+ *  ONE address that joined the list while it was paired. Two that joined together (another device paired at
+ *  the same moment), or none, is no answer: the monitor is kept at the address picked, never at a guess. */
+export function pairedAddress(picked: string, before: readonly string[], after: readonly string[]): string | null {
+  const up = (a: string) => a.toUpperCase();
+  const was = new Set(before.map(up));
+  const now = [...new Set(after.map(up))];
+  if (now.includes(up(picked))) return up(picked);
+  const joined = now.filter((a) => !was.has(a) && BLUETOOTH_ADDRESS.test(a));
+  return joined.length === 1 ? (joined[0] ?? null) : null;
+}
+
+export type HeartBond = z.infer<typeof heartBondSchema>;
+export type PairOutcome = { kind: "waiting" } | { kind: "paired"; id: string } | { kind: "notPaired" };
+
+/** Where pairing `picked` stands, from what Android has said since it was asked (`bonds`, in order) and the
+ *  paired list before and now. The address picked joining the list is paired, whatever Android's messages
+ *  say: on a Moto g35 (Android 15) the list named the laptop at the address picked, and the app never saw
+ *  a message saying so (37f-ii-b's walk). Else paired only once Android says THE ONE PICKED is paired; the
+ *  address to keep is then `pairedAddress`'s, and never a device Android said was pairing apart from it
+ *  (earbuds paired at the same moment). Android saying the one picked is not paired (the person said
+ *  Cancel, or the monitor refused) is not paired; anything else is still waiting, and the app gives up
+ *  after a while. */
+export function pairOutcome(picked: string, before: readonly string[], after: readonly string[], bonds: readonly HeartBond[]): PairOutcome {
+  const up = (a: string) => a.toUpperCase();
+  const mine = up(picked);
+  if (after.some((a) => up(a) === mine) && !before.some((a) => up(a) === mine)) return { kind: "paired", id: mine };
+  const others = new Set(bonds.filter((b) => up(b.device) !== mine).map((b) => up(b.device)));
+  const myLast = [...bonds].reverse().find((b) => up(b.device) === mine);
+  if (myLast === undefined || myLast.state === "bonding") return { kind: "waiting" };
+  if (myLast.state === "none") return { kind: "notPaired" };
+  const id = pairedAddress(picked, before, after);
+  return id === null || others.has(id) ? { kind: "notPaired" } : { kind: "paired", id };
+}
+
 /** A heart rate kept with a run: milliseconds into it and beats a minute. */
 export type HeartSample = readonly [atMs: number, bpm: number];
 

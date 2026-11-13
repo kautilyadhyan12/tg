@@ -11,7 +11,17 @@
 import { useEffect, useReducer, useSyncExternalStore } from "react";
 import { PermissionsAndroid, Platform } from "react-native";
 import { File, Paths } from "expo-file-system";
-import { heartReadingOf, keptHeartMonitorSchema, phoneHeartSamplesSchema } from "@app/shared";
+import {
+  addressChanges,
+  heartBondSchema,
+  heartReadingOf,
+  keptHeartMonitorSchema,
+  pairOutcome,
+  phoneBondedSchema,
+  phoneHeartSamplesSchema,
+  type HeartBond,
+  type HeartFound,
+} from "@app/shared";
 import { heartNative, type HeartNative } from "./heartNative";
 
 /** A reading older than this is not the heart rate now. Straps send one a second. */
@@ -64,6 +74,8 @@ let watching: string | null = null;
 /** A monitor picked in the box and not yet saved: watched in place of the saved one while it is tried. */
 let trying: string | null = null;
 let holds = 0;
+/** Bumped by resetHeart: a hold taken before it is not let go after it. */
+let generation = 0;
 let latest: (Reading & { device: string }) | null = null;
 let pending: Reading[] = [];
 let changes = 0;
@@ -91,6 +103,7 @@ export function resetHeart(withNative: HeartNative | null = heartNative, withFil
   watching = null;
   trying = null;
   holds = 0;
+  generation += 1;
   latest = null;
   pending = [];
   tell();
@@ -143,9 +156,10 @@ export function forgetMonitor(): void {
 export function holdHeart(): () => void {
   holds += 1;
   rewatch();
+  const mine = generation;
   let released = false;
   return () => {
-    if (released) return;
+    if (released || mine !== generation) return;
     released = true;
     holds -= 1;
     rewatch();
@@ -202,6 +216,89 @@ export function heartNow(now: number): number | null {
   if (latest === null || !same(latest.device, watching)) return null;
   if (now - latest.at > HEART_FRESH_MS || latest.at - now > HEART_FRESH_MS) return null;
   return latest.bpm;
+}
+
+/** The heart rate now from the person's SAVED monitor, for the run's voice (37f-ii-b): null while another
+ *  is tried in the box, when the saved one is not the one watched, or as heartNow. */
+export function savedHeartNow(now: number): number | null {
+  pullHeart();
+  if (trying !== null || !same(watching, saved?.id ?? null)) return null;
+  return heartNow(now);
+}
+
+// ── Pairing a monitor whose address changes (37f-ii-b) ──────────────────────────────────────────────
+
+/** How long Android's pairing box waits for the person before the monitor is kept unpaired. */
+export const PAIR_WAIT_MS = 60_000;
+/** The paired list is read again this often while pairing: Android's own message may name another address. */
+const PAIR_LOOK_MS = 1000;
+export type Paired = { kind: "paired"; id: string } | { kind: "notPaired" } | { kind: "notNeeded" };
+
+/** The addresses of the devices paired with this phone. */
+export function bondedNow(): string[] {
+  if (native === null) return [];
+  const parsed = phoneBondedSchema.safeParse(native.bonded());
+  return parsed.success ? parsed.data : [];
+}
+export const isPaired = (id: string): boolean => bondedNow().some((a) => same(a, id));
+
+/** Whether Save pairs this monitor first: its address changes, and it is not paired at it already. */
+export const needsPairing = (found: HeartFound): boolean => native !== null && addressChanges(found.id, found.type) && !isPaired(found.id);
+
+/** Pairs a monitor whose address changes, so Android finds it whatever address it shows: the lasting
+ *  address to keep, once Android says the one picked is paired (`pairOutcome`). One with a fixed address,
+ *  or already paired at the address picked, needs none. Cancel, a refusal, or no answer in PAIR_WAIT_MS is
+ *  not paired: it is kept at the address picked. Android's messages are read as they come, and the one picked
+ *  is also asked each PAIR_LOOK_MS, so Cancel is seen at once where a message is lost (round one, H1). */
+export function pairMonitor(found: HeartFound, waitMs: number = PAIR_WAIT_MS): Promise<Paired> {
+  const bt = native;
+  if (bt === null || !needsPairing(found)) return Promise.resolve({ kind: "notNeeded" });
+  const before = bondedNow();
+  return new Promise((resolve) => {
+    const bonds: HeartBond[] = [];
+    let done = false;
+    let listening: { remove: () => void } | null = null;
+    let late: ReturnType<typeof setTimeout> | null = null;
+    let looking: ReturnType<typeof setInterval> | null = null;
+    const finish = (out: Paired) => {
+      if (done) return;
+      done = true;
+      listening?.remove();
+      if (late !== null) clearTimeout(late);
+      if (looking !== null) clearInterval(looking);
+      resolve(out);
+    };
+    const look = () => {
+      const asked = bt.bondState(found.id);
+      const after = bondedNow();
+      const mineLast = [...bonds].reverse().find((b) => same(b.device, found.id))?.state;
+      const began = bonds.some((b) => same(b.device, found.id) && b.state === "bonding");
+      // "none" counts only after it was pairing: before Android begins, the one picked reads "none" too. "bonded"
+      // counts once the paired list has changed: read a moment before the list catches up, it would find nothing
+      // new and end not paired (round one's re-check, L5); the next look sees both.
+      const listChanged = after.some((a) => !before.some((b) => same(a, b)));
+      const counts = asked === "bonding" || (asked === "bonded" && listChanged) || (asked === "none" && began);
+      if (counts && asked !== mineLast) bonds.push({ device: found.id, state: asked });
+      const out = pairOutcome(found.id, before, after, bonds);
+      if (out.kind !== "waiting") finish(out);
+    };
+    listening = bt.addListener("bond", (raw) => {
+      const bond = heartBondSchema.safeParse(raw);
+      if (!bond.success) return;
+      bonds.push(bond.data);
+      look();
+    });
+    looking = setInterval(look, PAIR_LOOK_MS);
+    late = setTimeout(() => {
+      // One last look: paired in the last moment is paired.
+      look();
+      finish({ kind: "notPaired" });
+    }, waitMs);
+    const answer = bt.pair(found.id);
+    // Android says it is paired already: it finds it, as it does any device it has paired (round one, L1).
+    if (answer === "already") finish({ kind: "paired", id: found.id });
+    else if (answer !== "started") finish({ kind: "notPaired" });
+  });
 }
 
 export type BluetoothState = "none" | "denied" | "off" | "on";

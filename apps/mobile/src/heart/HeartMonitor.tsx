@@ -1,8 +1,9 @@
 // Connect a heart rate monitor (ROADMAP Stage 5 item 37f-i): the box from the bottom that finds the
 // monitors near the phone, tries the one picked, shows its heart rate so the person sees it is theirs,
 // and keeps it; and the row that opens it, on the Running page and in Settings. One monitor, read from
-// one place (`monitor.ts`), on both.
-import { useEffect, useReducer, useState } from "react";
+// one place (`monitor.ts`), on both. A monitor whose address changes is paired as it is saved (37f-ii-b).
+import { useEffect, useReducer, useRef, useState } from "react";
+import { heartFoundSchema, type HeartFound } from "@app/shared";
 import { AppState, Linking, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { Button } from "../look/Button";
 import { colours, sizes } from "../look/colours";
@@ -18,6 +19,9 @@ import {
   endTry,
   forgetMonitor,
   heartNow,
+  isPaired,
+  needsPairing,
+  pairMonitor,
   pullHeart,
   saveMonitor,
   tryMonitor,
@@ -26,12 +30,9 @@ import {
   type Monitor,
 } from "./monitor";
 
-/** A monitor heard while looking: its address, its name, how strong it is heard (nearest first). */
-interface Heard {
-  id: string;
-  name: string;
-  rssi: number;
-}
+/** A monitor heard while looking: its address, its name, how strong it is heard (nearest first), and
+ *  what kind of address it has. */
+type Heard = HeartFound;
 
 /** Looking stops by itself after this (the Bluetooth code's own 30 s). */
 const LOOK_MS = 30_000;
@@ -42,11 +43,21 @@ export const monitorName = (name: string): string => (name.trim() === "" ? "Hear
 export const bpmWords = (bpm: number | null): string => (bpm === null ? "No signal" : `${String(bpm)} bpm`);
 
 function readHeard(raw: unknown): Heard | null {
-  if (typeof raw !== "object" || raw === null) return null;
-  const { id, name, rssi } = raw as Record<string, unknown>;
-  if (typeof id !== "string" || id === "") return null;
-  return { id, name: typeof name === "string" ? name.slice(0, 100) : "", rssi: typeof rssi === "number" ? rssi : -100 };
+  const heard = heartFoundSchema.safeParse(raw);
+  return heard.success ? heard.data : null;
 }
+
+const SAVED = "Saved. It connects when you start a run.";
+/** What Save says, after pairing or none. */
+const PAIR_SAID = {
+  paired: "Paired and saved. It connects when you start a run.",
+  notNeeded: SAVED,
+  notPaired: "Saved, not paired. If it says No signal later, press Change monitor.",
+} as const;
+
+const openBluetoothSettings = (): void => {
+  void Linking.sendIntent("android.settings.BLUETOOTH_SETTINGS").catch(() => Linking.openSettings());
+};
 
 /** Bluetooth's state, asked again each second and when the person comes back to the app. */
 function useBluetooth(active: boolean): BluetoothState {
@@ -69,11 +80,25 @@ function useBluetooth(active: boolean): BluetoothState {
   return state;
 }
 
-type Step = { kind: "saved" } | { kind: "find" } | { kind: "try"; heard: Heard; since: number } | { kind: "remove" };
+type Step =
+  | { kind: "saved" }
+  | { kind: "find" }
+  | { kind: "try"; heard: Heard; since: number }
+  | { kind: "pairing"; heard: Heard }
+  | { kind: "remove" }
+  | { kind: "removed"; name: string; paired: boolean };
 
 export function HeartMonitorSheet({ open, onClose, monitor }: { open: boolean; onClose: () => void; monitor: Monitor | null }) {
   const [step, setStep] = useState<Step>(monitor === null ? { kind: "find" } : { kind: "saved" });
   const [said, setSaid] = useState<string | null>(null);
+  /** Each Save's own number: a pairing answered after the box moved on saves nothing. */
+  const saving = useRef(0);
+  const save = (heard: Heard, id: string, words: string) => {
+    void saveMonitor({ id, name: heard.name }).then(() => {
+      setSaid(words);
+      setStep({ kind: "saved" });
+    });
+  };
   useEffect(() => {
     if (!open) return;
     setStep(monitor === null ? { kind: "find" } : { kind: "saved" });
@@ -82,15 +107,20 @@ export function HeartMonitorSheet({ open, onClose, monitor }: { open: boolean; o
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
   const close = () => {
+    saving.current += 1;
     endTry();
     onClose();
   };
   // However the box goes (closed, or the page under it gone), a monitor tried and not saved is never left
   // watched in place of the saved one (round one, L1).
   useEffect(() => {
-    if (!open) endTry();
+    if (open) return;
+    saving.current += 1;
+    endTry();
   }, [open]);
   useEffect(() => () => {
+    // The box gone, a pairing still waiting saves nothing, as after Close.
+    saving.current += 1;
     endTry();
   }, []);
   const running = runNow() !== null && runNow()?.phase !== "finished";
@@ -106,20 +136,58 @@ export function HeartMonitorSheet({ open, onClose, monitor }: { open: boolean; o
             label="Remove"
             wide
             onPress={() => {
+              const paired = isPaired(monitor.id);
               forgetMonitor();
-              setStep({ kind: "find" });
+              setStep({ kind: "removed", name: monitorName(monitor.name), paired });
             }}
           />
           <Button kind="link" label="Keep it" style={styles.centred} onPress={() => { setStep({ kind: "saved" }); }} />
+        </View>
+      ) : step.kind === "removed" ? (
+        <View style={styles.step}>
+          <Txt kind="body">{step.paired ? `Removed. ${step.name} is still paired with this phone.` : `Removed. ${step.name} won't connect to your runs.`}</Txt>
+          {step.paired ? <Button kind="plain" label="Bluetooth settings" say="Open Bluetooth settings to unpair it" wide onPress={openBluetoothSettings} /> : null}
+          <Button kind="link" label="Connect another" style={styles.centred} onPress={() => { setStep({ kind: "find" }); }} />
+        </View>
+      ) : step.kind === "pairing" ? (
+        <View style={styles.step}>
+          <View style={styles.live}>
+            <Icon name="heart" size={28} colour="orange" />
+            <Txt kind="h1" fit numberOfLines={1}>
+              Pairing…
+            </Txt>
+          </View>
+          <Txt kind="strong" style={styles.centredText}>
+            {monitorName(step.heard.name)}
+          </Txt>
+          <Txt kind="small" colour="textFaint" style={styles.centredText}>
+            Tap Pair when your phone asks.
+          </Txt>
+          <Button
+            kind="link"
+            label="Save without pairing"
+            style={styles.centred}
+            onPress={() => {
+              saving.current += 1;
+              save(step.heard, step.heard.id, PAIR_SAID.notPaired);
+            }}
+          />
         </View>
       ) : step.kind === "try" ? (
         <TryStep
           heard={step.heard}
           since={step.since}
           onSave={() => {
-            void saveMonitor({ id: step.heard.id, name: step.heard.name }).then(() => {
-              setSaid("Saved. It connects when you start a run.");
-              setStep({ kind: "saved" });
+            const heard = step.heard;
+            const mine = (saving.current += 1);
+            if (!needsPairing(heard)) {
+              save(heard, heard.id, SAVED);
+              return;
+            }
+            setStep({ kind: "pairing", heard });
+            void pairMonitor(heard).then((paired) => {
+              if (saving.current !== mine) return;
+              save(heard, paired.kind === "paired" ? paired.id : heard.id, PAIR_SAID[paired.kind]);
             });
           }}
           onNotThis={() => {
@@ -327,7 +395,8 @@ export function HeartMonitorRow({ active, onOpen, named = true }: { active: bool
     <>
       <View style={styles.rowWords}>
         {named ? <Txt kind="body">Heart rate monitor</Txt> : null}
-        <Txt kind={named ? "small" : "body"} colour={named ? "textFaint" : "textSoft"} numberOfLines={1}>
+        {/* Two lines: on a small phone the heart rate after the name was cut to "120 b…" (37f-ii-b's walk). */}
+        <Txt kind={named ? "small" : "body"} colour={named ? "textFaint" : "textSoft"} numberOfLines={2}>
           {what}
         </Txt>
         {!named && monitor !== null ? (

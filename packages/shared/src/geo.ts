@@ -4,7 +4,7 @@
 import { z } from "zod";
 import { PACE_LINE_MOST, RUN_MAX_ELAPSED_MS, RUN_MAX_PAUSES, RUN_MAX_POINTS } from "./runMaths.js";
 import { RUN_SHAPE_MOST_CHARS } from "./runShape.js";
-import { HEART_BPM_LEAST, HEART_BPM_MOST, heartLineSchema, heartSamplesSchema, heartZonesSchema } from "./heartRate.js";
+import { HEART_BPM_LEAST, HEART_BPM_MOST, heartLineSchema, heartMaxSchema, heartSamplesSchema, heartZonesSchema } from "./heartRate.js";
 
 // ── route generation (POST /v1/geo/routes/generate) ─────────────────────────
 // Bounds ported verbatim from running.py:123,126 (Part 0 rule 4): targetKm
@@ -410,6 +410,12 @@ export const keptRunChoicesSchema = z.object({
   units: z.enum(["metric", "imperial"]).catch("metric"),
   /** "auto": light from sunrise to sunset where the person is, dark after (Kd, 37b-i). */
   mapColours: z.enum(["auto", "light", "dark"]).catch("auto"),
+  /** The maximum heart rate the zones are worked from (37f-ii-a), as last read, and whose it is, so the voice
+   *  says the zone with the app closed (37f-ii-b) and never from another person's. Null before one was read. */
+  heartMax: z
+    .object({ who: z.string().min(1).max(64), max: heartMaxSchema.nullable() })
+    .nullable()
+    .catch(null),
 });
 export type MapColours = KeptRunChoices["mapColours"];
 export type KeptRunChoices = z.infer<typeof keptRunChoicesSchema>;
