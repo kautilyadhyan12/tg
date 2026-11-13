@@ -477,7 +477,28 @@ export async function readHeld(sql: Sql, gymId: string, entryId: string): Promis
       SELECT count(*)::int AS n FROM gym_held_memberships
       WHERE gym_id = ${gymId} AND entry_id = ${entryId} AND status = ANY(${[...OVER]}::text[])`;
     const types = await liveTypes(tx, gymId, null);
-    const rows = { inUse: inUse.map(shape), over: over.map(shape) };
+    const overRows = over.map(shape);
+    // One that is over and older than that page is read too where a page in the app on it ended needing a check, so the
+    // page says it, as Overview's App payments to review does (18k-vi, round one L1).
+    const read = new Set(overRows.map((row) => row.id));
+    const checked = (
+      await tx<{ id: string }[]>`
+        SELECT DISTINCT h.id FROM gym_held_memberships h
+        JOIN gym_app_payments a ON a.gym_id = h.gym_id AND a.held_membership_id = h.id
+        WHERE h.gym_id = ${gymId} AND h.entry_id = ${entryId} AND h.status = ANY(${[...OVER]}::text[])
+          AND a.outcome IN ('not_recorded','gone','no_answer') AND a.membership_type_id IS NULL`
+    )
+      .map((r) => r.id)
+      .filter((id) => !read.has(id));
+    const older =
+      checked.length === 0
+        ? []
+        : await tx`
+            SELECT ${COLUMNS(tx)}
+            FROM gym_held_memberships h
+            JOIN gym_membership_types t ON t.gym_id = h.gym_id AND t.id = h.membership_type_id
+            WHERE h.gym_id = ${gymId} AND h.id = ANY(${checked}::uuid[])`;
+    const rows = { inUse: inUse.map(shape), over: [...overRows, ...older.map(shape)] };
     const ids = [...rows.inUse, ...rows.over].map((row) => row.id);
     return {
       past: entry.past,

@@ -609,9 +609,13 @@ const checkOf = (r: RawCheck): AppCheckRow => ({
   payerName: r.payer_name === "" ? null : r.payer_name,
 });
 
-/** For each of these memberships, the newest page for one of its bills that ended needing a check (`CHECK_OUTCOMES`), what
- *  Square took where it is known, and who opened it; and for each of their fees, the newest of the fee's own (18k-ii-b). The
- *  caller shows a bill's while that bill is the one owed, and a fee's while the fee is. */
+/** A bill's key among `checksOnMemberships`' bills: its membership and period. */
+export const billCheckKey = (membershipId: string, periodIndex: number): string => `${membershipId}:${String(periodIndex)}`;
+
+/** For each bill of these memberships, the newest page for it that ended needing a check (`CHECK_OUTCOMES`), keyed by
+ *  `billCheckKey`, what Square took where it is known, and who opened it; and for each of their fees, the newest of the fee's
+ *  own (18k-ii-b). The caller shows a bill's while that bill is the one owed, and a fee's while the fee is. Each period's own,
+ *  so a later month's page never hides an earlier month owed again (18k-vi, round one L4). */
 export async function checksOnMemberships(
   sql: SqlOrTx,
   gymId: string,
@@ -623,9 +627,52 @@ export async function checksOnMemberships(
   for (const r of await checkRows(sql, gymId, membershipIds)) {
     if (r.fee_bill_id !== null) {
       if (!fees.has(r.fee_bill_id)) fees.set(r.fee_bill_id, checkOf(r));
-    } else if (r.period_index !== null && !bills.has(r.held_membership_id)) {
-      bills.set(r.held_membership_id, checkOf(r));
+    } else if (r.period_index !== null && !bills.has(billCheckKey(r.held_membership_id, r.period_index))) {
+      bills.set(billCheckKey(r.held_membership_id, r.period_index), checkOf(r));
     }
+  }
+  return { bills, fees };
+}
+
+/** Overview's App payments to review (18k-vi), for the whole gym, by the rule `checksOnMemberships` keeps for one
+ *  record: each bill's newest page that ended needing a check, and each fee's newest. A bill's
+ *  is left out where its period's bill is settled (paid, voided or refunded), and a fee's where the fee is no longer open:
+ *  the person's page says neither. The newest first. */
+export async function checksOfGym(
+  sql: SqlOrTx,
+  gymId: string,
+): Promise<{
+  bills: (AppCheckRow & { membershipId: string; periodIndex: number; finishedAt: string })[];
+  fees: (AppCheckRow & { membershipId: string; feeId: string; fee: MemberFeeKind; finishedAt: string })[];
+}> {
+  const rows = await sql<(RawCheck & { fee: string | null; finished_at: Date })[]>`
+    SELECT c.held_membership_id, c.period_index, c.fee_bill_id, c.taken_minor, c.outcome, fb.fee, c.finished_at,
+           ((c.finished_at AT TIME ZONE g.timezone)::date)::text AS on,
+           (SELECT o.full_name FROM gym_members gm
+            JOIN gym_member_list_entries o ON o.gym_id = gm.gym_id AND o.id = gm.entry_id
+            WHERE gm.gym_id = c.gym_id AND gm.user_id = c.opened_by LIMIT 1) AS payer_name
+    FROM (
+      SELECT DISTINCT ON (a.held_membership_id, a.period_index, a.fee_bill_id) a.*
+      FROM gym_app_payments a
+      WHERE a.gym_id = ${gymId} AND a.state = 'done' AND a.outcome IN ('not_recorded','gone','no_answer')
+        AND a.membership_type_id IS NULL AND (a.fee_bill_id IS NOT NULL OR a.period_index IS NOT NULL)
+      ORDER BY a.held_membership_id, a.period_index, a.fee_bill_id, a.finished_at DESC, a.id
+    ) c
+    JOIN gyms g ON g.id = c.gym_id
+    LEFT JOIN gym_member_bills fb ON fb.gym_id = c.gym_id AND fb.id = c.fee_bill_id
+    WHERE CASE WHEN c.fee_bill_id IS NULL
+      THEN NOT EXISTS (SELECT 1 FROM gym_member_bills x WHERE x.gym_id = c.gym_id AND x.held_membership_id = c.held_membership_id AND x.period_index = c.period_index AND x.status <> 'open')
+      ELSE fb.status = 'open'
+    END
+    ORDER BY c.finished_at DESC, c.id`;
+  const bills: (AppCheckRow & { membershipId: string; periodIndex: number; finishedAt: string })[] = [];
+  const fees: (AppCheckRow & { membershipId: string; feeId: string; fee: MemberFeeKind; finishedAt: string })[] = [];
+  for (const r of rows) {
+    const fee = memberFeeKindSchema.safeParse(r.fee);
+    const finishedAt = r.finished_at.toISOString();
+    if (r.fee_bill_id !== null) {
+      if (fee.success) fees.push({ ...checkOf(r), membershipId: r.held_membership_id, feeId: r.fee_bill_id, fee: fee.data, finishedAt });
+    } else if (r.period_index !== null) bills.push({ ...checkOf(r), membershipId: r.held_membership_id, periodIndex: r.period_index, finishedAt });
   }
   return { bills, fees };
 }

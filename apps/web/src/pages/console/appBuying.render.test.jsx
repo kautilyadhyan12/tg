@@ -34,7 +34,7 @@ describe('a member buying in the app, on their page', () => {
     expect(onChanged).toHaveBeenCalled();
   });
 
-  it('names what Square took and what to do, and Mark as checked acts on that purchase alone', async () => {
+  it('names what Square charged and what to do, and Mark as resolved acts on that purchase alone', async () => {
     orgService.markAppPurchaseChecked.mockResolvedValue({ data: { ok: true } });
     const checks = [
       { id: TAKEN, typeName: '5-class pack', why: 'taken', amountMinor: 5000, currency: 'USD', on: '2026-11-07', payerName: 'Tara Singh' },
@@ -43,17 +43,17 @@ describe('a member buying in the app, on their page', () => {
     render(<AppBuying gymId={GYM} entryId={TARA} shown={shown({ appBuyChecks: checks })} timezone="America/Chicago" canAct />);
     expect(
       screen.getByText(
-        'Square took $50.00 from Tara Singh in the app on 7 November 2026 for 5-class pack, but it couldn\'t be given to them. Check it in Square, then refund it there or give it with Add membership.',
+        "Square charged Tara Singh $50.00 in the app for 5-class pack on 7 November 2026, but the purchase wasn't completed. Review it in your Square Dashboard, then refund it there or add it with Add membership.",
       ),
     ).toBeTruthy();
     expect(
       screen.getByText(
-        "The member's payment for Day pass in the app ended on 6 November 2026 without an answer from Square, so it may have been paid. Check it in Square, then refund it there or give it with Add membership.",
+        "Square didn't confirm the member's purchase of Day pass in the app on 6 November 2026, so they may have been charged. Review it in your Square Dashboard, then refund it there or add it with Add membership.",
       ),
     ).toBeTruthy();
-    fireEvent.click(screen.getAllByRole('button', { name: 'Mark as checked' })[1]);
+    fireEvent.click(screen.getAllByRole('button', { name: 'Mark as resolved' })[1]);
     await waitFor(() => expect(orgService.markAppPurchaseChecked).toHaveBeenCalledWith(GYM, TARA, UNKNOWN));
-    expect(await screen.findByRole('status')).toHaveProperty('textContent', 'Marked as checked.');
+    expect(await screen.findByRole('status')).toHaveProperty('textContent', 'Marked as resolved.');
   });
 
   it('a card charged in the app that Square has not answered about names the card and has nothing to close (18k-iv)', () => {
