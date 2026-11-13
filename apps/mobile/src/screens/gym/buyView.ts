@@ -69,7 +69,8 @@ export const promoApplied = (code: string): string => `${code} applied`;
 /** Under "You pay today": "SPRING20 · Spring offer: −$18.00". Null where no code is used on the line. */
 export function promoLine(line: Pick<ForSaleLine, "firstPayment" | "currency">): string | null {
   const p = line.firstPayment.promo;
-  return p === null ? null : `${p.code} · ${p.name}: −${formatMinor(p.offMinor, line.currency)}`;
+  // A word joiner keeps the minus with its amount, so a narrow line never breaks between them.
+  return p === null ? null : `${p.code} · ${p.name}: −\u2060${formatMinor(p.offMinor, line.currency)}`;
 }
 /** Where the code is used in place of the member's Refer a friend discount. */
 export const PROMO_INSTEAD = PROMO_CODE_WORDS.instead;

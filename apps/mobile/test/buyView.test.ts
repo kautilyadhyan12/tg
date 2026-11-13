@@ -206,7 +206,7 @@ describe("a promo code (20j)", () => {
   it("reads what it takes off, with whatever else makes today's amount", () => {
     const pack = lineOf(PACK_TYPE, { promo: SPRING20 });
     expect(todayLine(pack)).toBe("$72.00 today, with the code SPRING20");
-    expect(promoLine(pack)).toBe("SPRING20 · Spring offer: −$18.00");
+    expect(promoLine(pack)).toBe("SPRING20 · Spring offer: −\u2060$18.00");
     expect(todayLine(lineOf(SUMMER_TYPE, { promo: SPRING20 }))).toBe("$121.00 today, with a $25.00 joining fee and the code SPRING20");
     expect(todayLine(lineOf(PACK_TYPE, { promo: SPRING20, taxes: [{ name: "Sales tax", pcm: 8250 }] }))).toBe("$77.94 today, with the code SPRING20 and tax");
     // Used in place of the Refer a friend gift: the gift is not said, the code is.

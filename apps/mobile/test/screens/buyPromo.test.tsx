@@ -127,7 +127,7 @@ describe("the worst thing: what Pay charges is what the screen showed, with the 
     expect(await screen.findByText("SPRING20 applied")).toBeTruthy();
     expect(lists(server.asked).at(-1)?.search).toBe("?repeating=true&code=SPRING20");
     expect(within(screen.getByTestId("buy-today")).getByText("$72.00")).toBeTruthy();
-    expect(within(screen.getByTestId("buy-today")).getByText("SPRING20 · Spring offer: −$18.00")).toBeTruthy();
+    expect(within(screen.getByTestId("buy-today")).getByText("SPRING20 · Spring offer: −\u2060$18.00")).toBeTruthy();
     await fireEvent.press(screen.getByLabelText("Pay $72.00 for 10-class pack"));
     await waitFor(() => {
       expect(presses(server.asked)).toHaveLength(1);
@@ -335,7 +335,7 @@ describe("a code that takes nothing off says why, in the server's words, and is 
     await fireEvent.press(screen.getByLabelText("Pay $72.00 for 10-class pack"));
     expect(await screen.findByLabelText("Pay $90.00 for 10-class pack")).toBeTruthy();
     expect(screen.getAllByText(PROMO_CODE_WORDS.used_up).length).toBeGreaterThan(0);
-    expect(screen.queryByText("SPRING20 · Spring offer: −$18.00")).toBeNull();
+    expect(screen.queryByText("SPRING20 · Spring offer: −\u2060$18.00")).toBeNull();
     expect(screen.queryByText("SPRING20 applied")).toBeNull();
   });
 
