@@ -124,7 +124,7 @@ export type PaidHow =
   | { kind: "no_record"; line: string }
   | { kind: "add_card"; line: string }
   | { kind: "update_card"; line: string }
-  /** A card in date and no tick from the server: what was read no longer fits together, so the list is read again. */
+  /** A card in date and no tick from the server: what was read no longer fits together. */
   | { kind: "changed"; line: string };
 
 export function paidHow(line: Pick<ForSaleLine, "repeats" | "charge">, view: Pick<ForSaleResponse, "record" | "card">): PaidHow {
