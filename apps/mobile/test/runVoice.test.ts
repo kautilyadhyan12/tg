@@ -10,6 +10,7 @@ import {
   CHECK_MS,
   SETTLE_S,
   VOICE_AFTER_LOAD,
+  heartLine,
   VOICE_START,
   markLine,
   newMark,
@@ -180,5 +181,24 @@ describe("when the voice speaks", () => {
       return sums(900, [[900, 300]], 302);
     }, false);
     expect(worked).toBe(0);
+  });
+});
+
+// The heart rate after a mark (37f-ii-b), from Polar's five zones of a maximum (180: zone 2 from 108, 3 from
+// 126, 4 from 144, 5 from 162). None now is nothing said.
+describe("the heart rate said after a mark", () => {
+  it.each([
+    [null, 180, null],
+    [null, null, null],
+    [152, null, "Heart rate 152 beats a minute."],
+    [90, 180, "Heart rate 90 beats a minute, zone 1."],
+    [107, 180, "Heart rate 107 beats a minute, zone 1."],
+    [108, 180, "Heart rate 108 beats a minute, zone 2."],
+    [143, 180, "Heart rate 143 beats a minute, zone 3."],
+    [144, 180, "Heart rate 144 beats a minute, zone 4."],
+    [162, 180, "Heart rate 162 beats a minute, zone 5."],
+    [195, 180, "Heart rate 195 beats a minute, zone 5."],
+  ] as const)("%s bpm with a maximum of %s", (bpm, max, words) => {
+    expect(heartLine(bpm, max)).toBe(words);
   });
 });

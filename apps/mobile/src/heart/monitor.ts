@@ -204,7 +204,15 @@ export function heartNow(now: number): number | null {
   return latest.bpm;
 }
 
-export type BluetoothState = "none" | "denied" | "off" | "on";
+/** The heart rate now from the person's SAVED monitor, for the run's voice (37f-ii-b): null while another
+ *  is tried in the box, when the saved one is not the one watched, or as heartNow. */
+export function savedHeartNow(now: number): number | null {
+  pullHeart();
+  if (trying !== null || !same(watching, saved?.id ?? null)) return null;
+  return heartNow(now);
+}
+
+export type BluetoothState ="none" | "denied" | "off" | "on";
 export function bluetoothState(): BluetoothState {
   if (native === null) return "none";
   const radio = native.radio();

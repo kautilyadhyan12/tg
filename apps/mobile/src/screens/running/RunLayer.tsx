@@ -48,6 +48,7 @@ import {
   skipStep,
   runIsFull,
   chooseAutoPause,
+  keepRunHeartMax,
   keepRunUnits,
   movingMsOf,
   runNow,
@@ -437,6 +438,11 @@ function Live({ run, units, kg, onHide }: { run: LiveRun; units: Units; kg: numb
   // The maximum the zones are worked from (37f-ii-a): read once as the run opens, kept if the signal goes.
   const heartMaxRead = useHeartMax().read;
   const heartMaxNow = heartMaxRead.kind === "ok" ? heartMaxRead.data.max : null;
+  // Kept with the run's choices, so the voice says the zone with the app closed (37f-ii-b).
+  const heartMaxKnown = heartMaxRead.kind === "ok";
+  useEffect(() => {
+    if (heartMaxKnown) void keepRunHeartMax(heartMaxNow);
+  }, [heartMaxKnown, heartMaxNow]);
   // Today's planned run (37d-ii): the step, what is left of it, and the next.
   const guide = run.guide === null ? null : <RunGuideCard guide={run.guide} movingMs={movingMsOf(run, now)} metres={metres} units={units} paused={isPaused} onSkip={press(() => skipStep())} />;
   const top = (

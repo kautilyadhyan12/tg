@@ -4,7 +4,7 @@ import { heartSums, runSums, saveRunRequestSchema, type SaveRunRequest } from "@
 import { App } from "../../src/App";
 import { HeartMonitorSheet } from "../../src/heart/HeartMonitor";
 import { heartNative } from "../../src/heart/heartNative";
-import { HEART_FRESH_MS, endTry, heartNow, holdHeart, loadMonitor, pullHeart, resetHeart, saveMonitor, takeHeartReadings, tryMonitor } from "../../src/heart/monitor";
+import { HEART_FRESH_MS, endTry, heartNow, holdHeart, loadMonitor, pullHeart, resetHeart, saveMonitor, savedHeartNow, takeHeartReadings, tryMonitor } from "../../src/heart/monitor";
 import { closedPauses, pauseRun, phoneRunFiles, resetRecorder, runNow, takeLocations } from "../../src/screens/running/recorder";
 import type { Ask, AskInit } from "../../src/session/calls";
 import { RAVI, fakeServer, kept, memoryStore, profile, tokens, type Reply } from "../kit";
@@ -123,8 +123,85 @@ describe("the worst thing: a heart rate that is not the person's, shown as their
   });
 });
 
-/** The server: a POST kept once for its id. */
-function runServer() {
+// The voice saying the heart rate (ROADMAP Stage 5 item 37f-ii-b).
+// THE WORST THING THIS JOB COULD DO TO A REAL PERSON: a heart rate said out loud that is not theirs now (an
+// old reading from a strap that went quiet, a stranger's strap, a monitor tried in the box), so they push
+// harder than is safe. The mark is then said alone, never with that number.
+const voice = jest.requireMock<{ voice: { said: string[] } }>("../../src/screens/running/runVoiceNative").voice;
+const marksSaid = () => voice.said.filter((line) => /^\d+ kilometres?\./.test(line));
+
+/** Past the first kilometre at 3 m/s (333 s), not yet settled; `then` hands the strap's readings over;
+ *  then far enough past the mark for it to be said. */
+async function toFirstKilometre(then: () => void) {
+  await feed(0, 340, null);
+  expect(marksSaid()).toEqual([]);
+  then();
+  await feed(340, 20, null);
+  expect(marksSaid()).toHaveLength(1);
+  return marksSaid()[0] ?? "";
+}
+
+describe("the worst thing: a heart rate said out loud that is not the person's now", () => {
+  beforeEach(async () => {
+    voice.said = [];
+    await loadMonitor(RAVI.id);
+    await saveMonitor({ id: MINE, name: "Polar H10 9EF6E824" });
+  });
+
+  it("a monitor tried in the box is never the saved one's heart rate now", () => {
+    holdHeart();
+    const now = Date.now();
+    strap.send(MINE, polar(140), now);
+    expect(savedHeartNow(now)).toBe(140);
+    tryMonitor(STRANGER);
+    strap.send(STRANGER, polar(166), now);
+    expect(savedHeartNow(now)).toBeNull();
+    endTry();
+    strap.send(MINE, polar(141), now);
+    expect(savedHeartNow(now)).toBe(141);
+  });
+
+  it("a strap gone quiet: the kilometre is said without a heart rate, never the last one heard", async () => {
+    await openRunning(runServer(180));
+    await startRunning();
+    const line = await toFirstKilometre(() => {
+      strap.send(MINE, polar(150), Date.now() - HEART_FRESH_MS - 1000);
+    });
+    expect(line).toMatch(/^1 kilometre\. Time 5 minutes 3\d seconds\./);
+    expect(line).not.toContain("Heart rate");
+    expect(line).not.toContain("150");
+  });
+
+  it("a stranger's strap near by is never said, however fresh", async () => {
+    await openRunning(runServer(180));
+    await startRunning();
+    const line = await toFirstKilometre(() => {
+      strap.send(STRANGER, polar(171));
+    });
+    expect(line).not.toContain("Heart rate");
+  });
+
+  it.each([
+    ["with a maximum of 180, its zone", 180, "Heart rate 152 beats a minute, zone 4."],
+    ["with no maximum heart rate, no zone", null, "Heart rate 152 beats a minute."],
+  ] as const)("the person's own heart rate now is said after the kilometre: %s", async (_name, max, words) => {
+    await openRunning(runServer(max));
+    await startRunning();
+    // The maximum read as the run opened, kept for the voice with the app closed.
+    await waitFor(async () => {
+      expect(JSON.parse((await phoneRunFiles.read("run-settings.json")) ?? "{}")).toMatchObject({ heartMax: max });
+    });
+    const line = await toFirstKilometre(() => {
+      strap.send(MINE, polar(152));
+    });
+    expect(line).toMatch(/^1 kilometre\. Time 5 minutes 3\d seconds\./);
+    expect(line.endsWith(` ${words}`)).toBe(true);
+  });
+});
+
+/** The server: a POST kept once for its id; the maximum heart rate the zones are worked from, none unless
+ *  a test says. */
+function runServer(heartMax: number | null = null) {
   const posts: unknown[] = [];
   const saved: SaveRunRequest[] = [];
   const server = fakeServer({
@@ -133,6 +210,7 @@ function runServer() {
     "/v1/geo/runs/records": () => ({ status: 503, body: { error: "unavailable" } }),
     "/v1/geo/runs/climb": () => ({ status: 200, body: { climb: { state: "none" } } }),
     "/v1/users/me": () => ({ status: 200, body: profile(true, RAVI) }),
+    "/v1/geo/heart-max": () => ({ status: 200, body: { own: heartMax, fromAge: null, max: heartMax } }),
     [PATH]: (body): Reply => {
       if (body === undefined) return { status: 200, body: { items: [], nextCursor: null, months: [], total: { runs: 0, distanceM: 0 } } };
       const run = saveRunRequestSchema.parse(body);
