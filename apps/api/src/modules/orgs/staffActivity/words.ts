@@ -263,7 +263,7 @@ export const STAFF_LINES: Readonly<Record<string, (s: Said) => string>> = {
   // A member's payment page in the app, closed by staff from the person's page (18k-ii-a).
   "org.app_payment_closed": (s) => `Closed the payment page in the app for ${whose(s, text(s, "purchase") === "true" ? "purchase" : "bill")}`,
   // A purchase in the app that gave nothing, checked in Square by staff (18k-iii-a).
-  "org.app_purchase_checked": (s) => `Marked ${whose(s, "purchase in the app")} as checked`,
+  "org.app_purchase_checked": (s) => `Marked ${whose(s, "app purchase")} as resolved`,
   "org.terminal_payment_unchecked": (s) =>
     text(s, "sale") === "true"
       ? `Started a sale${amountOf(s)} on a Square Terminal that couldn't be checked. Check it in Square`

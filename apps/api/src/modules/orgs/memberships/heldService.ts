@@ -87,7 +87,7 @@ import { freezeFeeOf } from "./freezeFees.js";
 import { chargesOfBills } from "../payments/cardChargesRepo.js";
 import { appCancelsOf } from "../myMembership/cancelRepo.js";
 import { openDeskCancelsOf } from "./deskCancelsRepo.js";
-import { checksOnMemberships, openOnMemberships, type AppCheckRow, type OpenPage } from "../payments/appPaymentsRepo.js";
+import { billCheckKey, checksOnMemberships, openOnMemberships, type AppCheckRow, type OpenPage } from "../payments/appPaymentsRepo.js";
 import { openPurchaseOf, purchaseChecksOf } from "../payments/appPurchasesRepo.js";
 import { openPressesOf } from "../payments/cardRefundsRepo.js";
 import { chargeStopsOfBills } from "../payments/cardChargesRepo.js";
@@ -244,8 +244,25 @@ function billingOf(
     // A page for one of its fees is said under that fee.
     appPayment: appPaymentOn(ctx.appOpen.get(row.id), null),
     // Said while that bill is still the one owed: once it is paid or cancelled, staff have dealt with it.
-    appCheck: appCheckOn(ctx.appChecks.bills.get(row.id), pay?.periodIndex ?? null),
+    appCheck: appCheckOn(pay === null ? undefined : ctx.appChecks.bills.get(billCheckKey(row.id, pay.periodIndex)), pay?.periodIndex ?? null),
   };
+}
+
+/** A membership in use as the next write will find it: its count moved over the periods nobody was asked for
+ *  (`countAfterGap`), which `settle` then writes. */
+function readAsOfToday<R extends { id: string; membership: HeldMembership }>(row: R, bills: readonly BillRow[], today: string): R {
+  const have = new Set(bills.filter((b) => b.membershipId === row.id).map((b) => b.periodIndex));
+  const count = countAfterGap(row.membership, today, have);
+  return count === null ? row : { ...row, membership: { ...row.membership, paidPeriods: count, paidFloor: count } };
+}
+
+/** The period a payment can be taken for now on this membership, read as the person's page reads it: a page in the app
+ *  that ended needing a check is said under its bill while its period is this one (`appCheckOn`). Overview's Payments to
+ *  check in Square (18k-vi) asks it of each membership with one. `bills`: the membership's own. */
+export function owedPeriodOf(row: repo.HeldRow, bills: readonly BillRow[], today: string, past: boolean): number | null {
+  const inUse = row.membership.status === "active" || row.membership.status === "frozen";
+  const read = past || !inUse ? row : readAsOfToday(row, bills, today);
+  return memberPayTarget(read.membership, read.nextBillMinor, today, bills, past)?.periodIndex ?? null;
 }
 
 const checkView = (check: AppCheckRow): NonNullable<MemberBilling["appCheck"]> => ({ why: check.why, amountMinor: check.amountMinor, on: check.on, payerName: check.payerName });
@@ -442,12 +459,7 @@ export async function readOr404(deps: HeldDeps, gymId: string, entryId: string, 
   const ctx = { today, past: list.past, overdueAfterDays: list.overdueAfterDays, gifts, charges, presses, chargebacks, chargeStops, appOpen, appChecks };
   // The page reads a membership as the next write will find it: with its count moved
   // over the periods nobody was asked for (`countAfterGap`), which `settle` then writes.
-  const asOfToday = (row: repo.HeldRow): repo.HeldRow => {
-    if (list.past) return row;
-    const have = new Set(list.bills.filter((b) => b.membershipId === row.id).map((b) => b.periodIndex));
-    const count = countAfterGap(row.membership, today, have);
-    return count === null ? row : { ...row, membership: { ...row.membership, paidPeriods: count, paidFloor: count } };
-  };
+  const asOfToday = (row: repo.HeldRow): repo.HeldRow => (list.past ? row : readAsOfToday(row, list.bills, today));
   // Change membership (18x): worked out by the rule the write uses, for each one in use.
   const replaced = new Set(list.changes.filter((c) => c.newStatus !== "cancelled").map((c) => c.oldId));
   const changeOf = (row: repo.HeldRow): MemberBilling["change"] => {
@@ -535,7 +547,8 @@ export async function readOr404(deps: HeldDeps, gymId: string, entryId: string, 
   // ended since the last write come first among those, being the newest.
   const inUse = all.filter((m) => ORDER[m.view.status] < 2);
   const over = all.filter((m) => ORDER[m.view.status] === 2);
-  const shown = over.slice(0, HELD_EARLIER_PAGE);
+  // And any older one with a payment in the app to review on it (18k-vi, round one L1).
+  const shown = over.filter((m, i) => i < HELD_EARLIER_PAGE || (m.billing !== null && (m.billing.appCheck !== null || m.billing.fees.some((f) => f.appCheck !== null))));
   const stored = list.overTotal - list.over.length;
   // The membership agreements (18u-i, 18u-ii-a): which memberships' lines of the price list
   // ask for one, and which were signed.

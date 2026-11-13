@@ -142,13 +142,13 @@ export const APP_PURCHASE_STAFF_WORDS = {
   /** Remove card while a purchase in the app charged to it waits for Square (18k-iv). */
   card_waiting: "This card is paying for a purchase in the app that Square hasn't confirmed yet. Remove it once the payment is confirmed.",
   /** Delete permanently while a purchase that may have taken money waits for a check. */
-  delete_check: "A payment this person made in the app needs checking. Check it in Square and mark it as checked on their page first.",
+  delete_check: "This person has an app payment to review. Review it in your Square Dashboard and mark it as resolved on their page first.",
   /** Joining two records while both have a purchase page open. */
   merge_buying: "Both records are buying in the app right now. Merge them once their payment pages close.",
   none: "No payment page is open for this person now.",
-  /** Mark as checked on a purchase already marked, or not one that needs it. */
-  not_checking: "There's nothing to check for this payment now.",
-  checked: "Marked as checked.",
+  /** Mark as resolved on a purchase already marked, or not one that needs it. */
+  not_checking: "This payment no longer needs review.",
+  checked: "Marked as resolved.",
 } as const;
 
 /** The line on the person's page while they buy: "Tara Test is buying 10-class pack in the app. The payment page closes
@@ -166,5 +166,5 @@ export const appChargingLine = (payerName: string | null, typeName: string, card
  *  Square took, or null where not known; `day`: when; both in the gym's words. */
 export const appBuyCheckLine = (check: Pick<AppPurchaseCheck, "why" | "payerName" | "typeName">, money: string | null, day: string): string =>
   check.why === "taken"
-    ? `Square took ${money ?? "a payment"} from ${check.payerName ?? "the member"} in the app on ${day} for ${check.typeName}, but it couldn't be given to them. Check it in Square, then refund it there or give it with Add membership.`
-    : `${check.payerName ?? "The member"}'s payment for ${check.typeName} in the app ended on ${day} without an answer from Square, so it may have been paid. Check it in Square, then refund it there or give it with Add membership.`;
+    ? `Square charged ${check.payerName ?? "the member"}${money === null ? "" : ` ${money}`} in the app for ${check.typeName} on ${day}, but the purchase wasn't completed. Review it in your Square Dashboard, then refund it there or add it with Add membership.`
+    : `Square didn't confirm ${check.payerName ?? "the member"}'s purchase of ${check.typeName} in the app on ${day}, so they may have been charged. Review it in your Square Dashboard, then refund it there or add it with Add membership.`;

@@ -124,7 +124,7 @@ export const APP_PAYMENT_STAFF_WORDS = {
   closed: "Payment page closed. Nothing was paid in the app.",
   paid: "It was paid in the app before the page closed.",
   waiting: "Square isn't answering, so the payment page is still open. Try again in a minute.",
-  check: "Square may have taken a payment on this page that isn't on the bill. Check it in Square before taking this payment again.",
+  check: "Square may have charged this payment, but it wasn't applied to the bill. Review it in your Square Dashboard before taking payment again.",
   none: "No payment page is open on this membership now.",
   /** Disconnect Square while a member's page is open: it could still be paid, with nothing here to record it. */
   disconnect_open: "A member is paying or buying in the app right now. Disconnect Square once their payment is finished.",
@@ -136,7 +136,7 @@ export const APP_PAYMENT_STAFF_WORDS = {
 
 /** Close payment page pressed under a fee (18k-ii-b): as `APP_PAYMENT_STAFF_WORDS`, naming the fee. */
 export const APP_PAYMENT_FEE_STAFF_WORDS = {
-  check: "Square may have taken a payment on this page that isn't on the fee. Check it in Square before taking this payment again.",
+  check: "Square may have charged this payment, but it wasn't applied to the fee. Review it in your Square Dashboard before taking payment again.",
 } as const;
 
 /** The bill's line while a page is open: "Priya Sharma is paying this in the app. The payment page closes at 10:42 if it
@@ -148,8 +148,9 @@ export const appPayingLine = (payerName: string | null, at: string, fee = false)
  *  `money`: what Square took, or null where that is not known; `day`: when; both in the gym's words. Only a bill and a freeze
  *  fee are ever charged to the card on file by the app, so only they say it won't be. */
 export const appCheckLine = (check: Pick<AppPaymentCheck, "why" | "payerName">, money: string | null, day: string, fee: MemberFeeKind | null = null): string => {
-  const card = fee === null || fee === "freeze" ? " It won't be charged to the card on file automatically." : "";
+  const card = fee === null || fee === "freeze" ? " The card on file won't be charged automatically." : "";
+  const what = fee === null ? "bill" : "fee";
   return check.why === "taken"
-    ? `Square took ${money ?? "a payment"} from ${check.payerName ?? "the member"} in the app on ${day}, but it couldn't go on this ${fee === null ? "bill" : "fee"}. Check it in Square before taking this payment again.${card}`
-    : `${check.payerName ?? "The member"}'s payment page in the app ended on ${day} without an answer from Square, so it may have been paid. Check it in Square before taking this payment again.${card}`;
+    ? `Square charged ${check.payerName ?? "the member"}${money === null ? "" : ` ${money}`} in the app on ${day}, but the payment wasn't applied to this ${what}. Review it in your Square Dashboard before taking payment again.${card}`
+    : `Square didn't confirm ${check.payerName ?? "the member"}'s payment in the app on ${day}, so they may have been charged. Review it in your Square Dashboard before taking payment again.${card}`;
 };

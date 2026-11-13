@@ -738,8 +738,8 @@ export function appBuyCheckNotices(shown) {
   }));
 }
 
-/** Mark as checked, and what it says once done. */
-export const APP_BUY_CHECKED_BUTTON = 'Mark as checked';
+/** Mark as resolved, and what it says once done. */
+export const APP_BUY_CHECKED_BUTTON = 'Mark as resolved';
 export const APP_BUY_CHECKED_WORDS = APP_PURCHASE_STAFF_WORDS.checked;
 
 /** What Close payment page says when done, in the place it was pressed. */
