@@ -484,6 +484,8 @@ function throwOnDiscountFailure(outcome: discounts.DiscountWriteOutcome): void {
       throw new OrgsError(409, "no_member_currency", DISCOUNT_WORDS.no_currency);
     case "referral_gift":
       throw new OrgsError(409, "referral_gift_in_settings", DISCOUNT_WORDS.referral_gift);
+    case "being_used":
+      throw new OrgsError(409, "discount_being_used", DISCOUNT_WORDS.being_used(outcome.who));
     default: {
       const never: never = outcome;
       throw new Error(`unhandled discount outcome: ${JSON.stringify(never)}`);
@@ -507,6 +509,8 @@ const discountInput = (req: SaveGymDiscountRequest): discounts.DiscountInput => 
   allMembershipTypes: req.allMembershipTypes,
   membershipTypeIds: req.membershipTypeIds,
   membershipPayments: req.membershipPayments,
+  inApp: req.inApp,
+  oncePerMember: req.oncePerMember,
 });
 
 export async function createDiscount(deps: RegisterDeps, userId: string, gymId: string, viewer: Viewer, req: SaveGymDiscountRequest): Promise<SellPageResponse> {

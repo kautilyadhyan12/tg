@@ -41,7 +41,7 @@ import {
 } from "./cancelView";
 import { newRequestKey } from "./classesView";
 
-// The boxes from the bottom under Cancel membership and Keep my membership (ROADMAP Stage 5 item 20j). Nothing changes
+// The boxes from the bottom under Cancel membership and Keep my membership (ROADMAP Stage 5 item 20k). Nothing changes
 // until the member presses a button the box shows; that button sends back the box's own key, so the server refuses a
 // cancel or keep whose box has changed since it was read. A press whose answer was lost is sent again with the same
 // request key when pressed again, so it is one cancel, answered as it was.

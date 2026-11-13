@@ -1,4 +1,4 @@
-// Cancel and Keep a membership on the phone (ROADMAP Stage 5 item 20j; spec Part 3 §14.8, "Cancelling"; the server is
+// Cancel and Keep a membership on the phone (ROADMAP Stage 5 item 20k; spec Part 3 §14.8, "Cancelling"; the server is
 // 18l's and 18l-ii-a's, `rulings/2026-11-11-18l.md`). The server works out every sentence the boxes say; the phone shows
 // them, sends back the key of what it showed, and says what happened. Pure.
 import { MY_CANCEL_REASONS, MY_CANCEL_REASON_WORDS, type MyCancelReason } from "@app/shared";

@@ -4,7 +4,7 @@
 import { z } from "zod";
 import { PACE_LINE_MOST, RUN_MAX_ELAPSED_MS, RUN_MAX_PAUSES, RUN_MAX_POINTS } from "./runMaths.js";
 import { RUN_SHAPE_MOST_CHARS } from "./runShape.js";
-import { HEART_BPM_LEAST, HEART_BPM_MOST, heartSamplesSchema } from "./heartRate.js";
+import { HEART_BPM_LEAST, HEART_BPM_MOST, heartLineSchema, heartSamplesSchema, heartZonesSchema } from "./heartRate.js";
 
 // ── route generation (POST /v1/geo/routes/generate) ─────────────────────────
 // Bounds ported verbatim from running.py:123,126 (Part 0 rule 4): targetKm
@@ -189,6 +189,12 @@ export const runDetailSchema = runSummarySchema.extend({
   // A server from before 37f sends neither: read as none.
   heartAvg: heartBpmSchema.nullable().default(null),
   heartMax: heartBpmSchema.nullable().default(null),
+  /** The heart rate chart (37f-ii-a): the heart rate at the pace line's places, 0 where the monitor had
+   *  no signal; empty for a run with none, too short for a pace chart, or saved before 37f-ii-a. */
+  heartLine: heartLineSchema.default([]),
+  /** Its time in each of the five heart rate zones, and the maximum they were worked from; null for a
+   *  run with no heart rate, no maximum when it was saved, or saved before 37f-ii-a. */
+  heartZones: heartZonesSchema.nullable().default(null),
 });
 export type RunDetail = z.infer<typeof runDetailSchema>;
 export const runDetailResponseSchema = z.object({ run: runDetailSchema });
@@ -275,6 +281,8 @@ export const savedRunSchema = z.object({
   // A server from before 37f sends neither: read as none.
   heartAvg: heartBpmSchema.nullable().default(null),
   heartMax: heartBpmSchema.nullable().default(null),
+  /** Its time in each heart rate zone (37f-ii-a), as the run's page shows it. */
+  heartZones: heartZonesSchema.nullable().default(null),
 });
 export type SavedRun = z.infer<typeof savedRunSchema>;
 

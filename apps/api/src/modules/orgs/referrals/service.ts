@@ -12,6 +12,7 @@
 // while they are a member; anybody with a link reads the invite page.
 import { randomBytes } from "node:crypto";
 import {
+  DISCOUNT_WORDS,
   memberCurrencyForCountry,
   minorToPriceText,
   orgTypeSchema,
@@ -160,6 +161,9 @@ function giftDiscount(gift: ReferralGiftInput): DiscountInput {
     allMembershipTypes: true,
     membershipTypeIds: [],
     membershipPayments: gift.on === "products" ? null : gift.on,
+    // Never typed: the app gives it to the friend it is for, and no promo code finds it (18k-v).
+    inApp: false,
+    oncePerMember: false,
   };
 }
 
@@ -197,9 +201,11 @@ async function freeCode(tx: TransactionSql, gymId: string, gift: ReferralGiftInp
 }
 
 /** What one discount write answered, as the owner reads it. */
-function refused(outcome: { kind: string }): OrgsError {
+function refused(outcome: { kind: string; who?: string | null }): OrgsError {
   if (outcome.kind === "no_currency") return new OrgsError(409, "no_currency", REFERRAL_WORDS.no_currency);
   if (outcome.kind === "too_many") return new OrgsError(409, "too_many", REFERRAL_WORDS.too_many);
+  // A friend is paying with the gift in the app: it keeps a use for them until that ends (18k-v).
+  if (outcome.kind === "being_used") return new OrgsError(409, "discount_being_used", DISCOUNT_WORDS.being_used(outcome.who ?? null));
   return new OrgsError(409, outcome.kind, "We couldn't save that. Please try again.");
 }
 
@@ -217,7 +223,8 @@ async function placeGift(
 ): Promise<string | null> {
   const live = current !== undefined && current.archivedAt === null ? current : undefined;
   const archive = async (d: DiscountRow): Promise<void> => {
-    await archiveDiscountInTx(tx, { gymId: ctx.gymId, discountId: d.id, actorUserId: ctx.userId, now: ctx.at });
+    const done = await archiveDiscountInTx(tx, { gymId: ctx.gymId, discountId: d.id, actorUserId: ctx.userId, now: ctx.at });
+    if (done.kind === "being_used") throw refused(done);
   };
   if (gift === null) {
     if (live !== undefined) await archive(live);

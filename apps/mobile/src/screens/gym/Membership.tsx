@@ -102,7 +102,7 @@ function MembershipBody({ place, onClose, onBuy, bottom }: { place: MembershipPl
   const [addingCard, setAddingCard] = useState<CardPlace | null>(null);
   // Remove card (20e): the box from the bottom while it is open.
   const [removing, setRemoving] = useState<RemoveAsk | null>(null);
-  // Cancel and Keep (20j): the box open, and what the last one did, said under its membership.
+  // Cancel and Keep (20k): the box open, and what the last one did, said under its membership.
   const [cancelling, setCancelling] = useState<BoxFor | null>(null);
   const [keeping, setKeeping] = useState<BoxFor | null>(null);
   const [cancelSaid, setCancelSaid] = useState<{ membershipId: string; line: string } | null>(null);
@@ -348,7 +348,7 @@ function MembershipBody({ place, onClose, onBuy, bottom }: { place: MembershipPl
 
 type ReceiptButton = (number: number, what: string, refund?: boolean) => React.JSX.Element;
 
-/** Cancel and Keep (20j): what each membership's buttons open, and the line the last box left under its membership. */
+/** Cancel and Keep (20k): what each membership's buttons open, and the line the last box left under its membership. */
 interface Cancels {
   said: { membershipId: string; line: string } | null;
   onCancel: (m: MyMembership) => void;
@@ -579,7 +579,7 @@ function MembershipCard({
   );
 }
 
-/** Cancel in the app (20j), as the server says for this membership: the button, who can cancel it instead, or the line
+/** Cancel in the app (20k), as the server says for this membership: the button, who can cancel it instead, or the line
  *  once it was cancelled in the app with Keep my membership while it can still be kept. What the last box did is said
  *  here, under the membership it was about. */
 function CancelRow({ m, cancels }: { m: MyMembership; cancels: Cancels }) {

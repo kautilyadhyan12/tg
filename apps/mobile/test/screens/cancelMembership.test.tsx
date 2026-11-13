@@ -4,7 +4,7 @@ import { App } from "../../src/App";
 import type { Ask } from "../../src/session/calls";
 import { fakeServer, kept, lost, memoryStore, refusal, tokens, type Asked, type Reply } from "../kit";
 
-// Cancel and Keep a membership on the phone (ROADMAP Stage 5 item 20j; the server is 18l's and 18l-ii-a's,
+// Cancel and Keep a membership on the phone (ROADMAP Stage 5 item 20k; the server is 18l's and 18l-ii-a's,
 // `myCancel.routes.test.ts`, `myKeep.routes.test.ts`). The server works out every sentence; the phone shows the box it
 // sent, sends back that box's key for the membership pressed, says "Cancelled" only on the server's yes, and a press
 // whose answer was lost is the same press when pressed again.

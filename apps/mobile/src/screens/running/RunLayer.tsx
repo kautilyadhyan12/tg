@@ -8,7 +8,10 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   RUN_MAX_POINTS,
   geodesicMetres,
+  heartLineOf,
   heartSums,
+  heartZoneOf,
+  heartZoneSeconds,
   runRecordsSchema,
   runSums,
   userProfileResponseSchema,
@@ -28,6 +31,8 @@ import { PictureTop } from "../../look/PictureTop";
 import { Sheet } from "../../look/Sheet";
 import { fonts, Txt } from "../../look/Txt";
 import { useSession } from "../../session/SessionProvider";
+import { useHeartMax } from "../../heart/heartMax";
+import { HeartCard, HeartMaxSheet, zoneColour } from "../../heart/HeartZones";
 import { loadMonitor, useHeartNow } from "../../heart/monitor";
 import { newGoalId } from "../goals/words";
 import { accountUnits } from "../setup/Setup";
@@ -336,13 +341,16 @@ export function gpsLight(lastFix: LiveRun["lastFix"], now: number): Gps {
   return { word: "GPS", tone: "good" };
 }
 
-/** The heart rate now beside the GPS light (37f-i): No signal, never 0 and never an old number. */
-function HeartPill({ bpm }: { bpm: number | null }) {
+/** The heart rate now beside the GPS light (37f-i): No signal, never 0 and never an old number. With a
+ *  maximum heart rate (37f-ii-a), its zone too, in the zone's colour. */
+function HeartPill({ bpm, max }: { bpm: number | null; max: number | null }) {
+  const zone = bpm === null || max === null ? null : heartZoneOf(bpm, max);
+  const said = bpm === null ? "Heart rate: no signal" : `Heart rate ${String(bpm)} beats a minute${zone === null ? "" : `, zone ${String(zone)}`}`;
   return (
-    <View accessibilityLabel={bpm === null ? "Heart rate: no signal" : `Heart rate ${String(bpm)} beats a minute`} style={styles.heartPill}>
-      <Icon name="heart" size={14} colour={bpm === null ? "textFaint" : "orange"} />
+    <View accessibilityLabel={said} style={[styles.heartPill, zone === null ? null : { borderColor: colours[zoneColour(zone)] }]} testID="heart-pill">
+      <Icon name="heart" size={14} colour={bpm === null ? "textFaint" : zone === null ? "orange" : zoneColour(zone)} />
       <Txt kind="small" colour={bpm === null ? "textFaint" : "text"}>
-        {bpm === null ? "No signal" : `${String(bpm)} bpm`}
+        {bpm === null ? "No signal" : `${String(bpm)} bpm${zone === null ? "" : ` · Zone ${String(zone)}`}`}
       </Txt>
     </View>
   );
@@ -426,6 +434,9 @@ function Live({ run, units, kg, onHide }: { run: LiveRun; units: Units; kg: numb
   const onMap = view === "map";
   // The heart rate now from the person's monitor (37f-i); none shown without one.
   const heartNowShown = useHeartNow(true);
+  // The maximum the zones are worked from (37f-ii-a): read once as the run opens, kept if the signal goes.
+  const heartMaxRead = useHeartMax().read;
+  const heartMaxNow = heartMaxRead.kind === "ok" ? heartMaxRead.data.max : null;
   // Today's planned run (37d-ii): the step, what is left of it, and the next.
   const guide = run.guide === null ? null : <RunGuideCard guide={run.guide} movingMs={movingMsOf(run, now)} metres={metres} units={units} paused={isPaused} onSkip={press(() => skipStep())} />;
   const top = (
@@ -442,7 +453,7 @@ function Live({ run, units, kg, onHide }: { run: LiveRun; units: Units; kg: numb
       ) : (
         <View style={styles.pills}>
           <GpsPill gps={gpsLight(run.lastFix, now)} />
-          {heartNowShown.monitor === null ? null : <HeartPill bpm={heartNowShown.bpm} />}
+          {heartNowShown.monitor === null ? null : <HeartPill bpm={heartNowShown.bpm} max={heartMaxNow} />}
         </View>
       )}
       <Pressable accessibilityRole="button" accessibilityLabel="Back to the app" onPress={onHide} hitSlop={10} style={[styles.hide, onMap ? styles.hideOnMap : null]}>
@@ -619,6 +630,13 @@ function Summary({ run, units, kg, onSaved }: { run: LiveRun; units: Units; kg: 
   const sums = useMemo(() => runSums(run.points, closedPauses(run, finished), finished, kg), [run, finished, kg]);
   // The heart rate as the server will work it out (37f-i): the same rule, the same readings.
   const heart = useMemo(() => heartSums(run.heart, closedPauses(run, finished), finished), [run, finished]);
+  // The heart rate chart and zones (37f-ii-a), as the server will work them out at Save, from the maximum
+  // known now: one set here gives this run its zones.
+  const heartMaxRead = useHeartMax().read;
+  const maxNow = heartMaxRead.kind === "ok" ? heartMaxRead.data.max : null;
+  const heartLine = useMemo(() => heartLineOf(run.heart, closedPauses(run, finished), finished, sums.paceSpans), [run, finished, sums]);
+  const zoneSeconds = useMemo(() => heartZoneSeconds(run.heart, closedPauses(run, finished), finished, maxNow), [run, finished, maxNow]);
+  const [settingMax, setSettingMax] = useState(false);
   const { session } = useSession();
   const startedAt = new Date(run.startedAt);
   const [name, setName] = useState(runName(startedAt));
@@ -737,6 +755,25 @@ function Summary({ run, units, kg, onSaved }: { run: LiveRun; units: Units; kg: 
         />
         <RouteCard track={sums.track} starts={sums.trackStarts} units={units} name={name} distanceM={sums.distanceM} movingS={sums.movingS} />
         <PaceCard paceLine={sums.paceLine} hillLine={climb.kind === "done" ? climb.hills : []} distanceM={sums.distanceM} movingS={sums.movingS} units={units} />
+        <HeartCard
+          heartAvg={heart?.avg ?? null}
+          heartMax={heart?.max ?? null}
+          line={heartLine}
+          zones={zoneSeconds === null || maxNow === null ? null : { max: maxNow, seconds: zoneSeconds }}
+          maxRead={heartMaxRead}
+          distanceM={sums.distanceM}
+          units={units}
+          when="summary"
+          onSetMax={() => {
+            setSettingMax(true);
+          }}
+        />
+        <HeartMaxSheet
+          open={settingMax}
+          onClose={() => {
+            setSettingMax(false);
+          }}
+        />
         <SplitsCard splits={units === "imperial" ? sums.splitsMi : sums.splitsKm} units={units} />
         <FeelCard effort={effort} onPick={setEffort} />
         <NoteCard note={note} onChange={setNote} />

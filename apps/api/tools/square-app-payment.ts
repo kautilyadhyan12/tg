@@ -15,6 +15,7 @@
 //   … tools/square-app-payment.ts add-card <gymId> <member's email>   (Square's test card, as Add card in the app saves one,
 //         with the card agreement ticked; 18k-iv). A repeating line is then bought with `buy`: charged to that card, with its
 //         own tick as the list words it.
+//   … add --code=SUMMER20 to `buy` to type a promo code as the member would (18k-v): the list says what it takes off, or why not.
 import { randomUUID } from "node:crypto";
 import postgres from "postgres";
 import { z } from "zod";
@@ -48,7 +49,8 @@ const args = z
     z.tuple([z.literal("buy"), z.uuid(), z.email(), z.string().min(1)]),
     z.tuple([z.literal("buy"), z.uuid(), z.email(), z.string().min(1), z.string().min(1).max(200)]),
   ])
-  .safeParse(process.argv.slice(2));
+  .safeParse(process.argv.slice(2).filter((a) => !a.startsWith("--code=")));
+const typedCode = process.argv.slice(2).find((a) => a.startsWith("--code="))?.slice("--code=".length) ?? null;
 if (!args.success) {
   console.error('Usage: square-app-payment.ts pay|pay-fee|add-card <gymId> <email> | check|close|check-buy|close-buy <gymId> <email> <paymentId> | buy <gymId> <email> "<line>" ["<name signed>"]');
   process.exit(2);
@@ -73,16 +75,22 @@ try {
   if (user === undefined) throw new Error("No account has that email.");
   if (args.data[0] === "buy") {
     const lineName = args.data[3];
-    const list = await readForSale(deps, user.id, gymId, always, true);
+    const list = await readForSale(deps, user.id, gymId, always, true, typedCode === null ? null : { text: typedCode, tries: { take: () => Promise.resolve(true), giveBack: () => Promise.resolve() } });
     const shown = list?.items.find((i) => i.name === lineName);
     if (shown === undefined) throw new Error(`"${lineName}" is not sold in the app to this member now.`);
+    const promo = shown.firstPayment.promo;
+    if (list?.promo != null) {
+      const why = list.promo.words ?? shown.promoWords;
+      if (promo === null) throw new Error(`Code ${list.promo.code}: ${why ?? "takes nothing off."}`);
+      console.log(`Code ${promo.code} (${promo.name}): ${formatMinor(promo.offMinor, shown.currency)} off${promo.instead === null ? "" : `, instead of ${promo.instead}`}.`);
+    }
     const name = args.data[4] ?? user.display_name ?? email;
     const signer = list?.signer === "guardian" ? "guardian" : "person";
     const agreement = shown.agreement === null ? null : { agreementId: shown.agreement.id, signer, name } as const;
     if (shown.repeats && shown.charge === null) throw new Error(`"${lineName}" renews: save a card for this member first (add-card).`);
     const charge = shown.charge === null ? {} : { charge: { words: shown.charge, verificationToken: null } };
     if (shown.charge !== null) console.log(`Ticked: ${shown.charge}`);
-    const done = await startPurchase(deps, user.id, gymId, { requestKey: randomUUID(), typeId: shown.typeId, amountMinor: shown.firstPayment.amountMinor, factsKey: shown.factsKey, agreement, ...charge }, always);
+    const done = await startPurchase(deps, user.id, gymId, { requestKey: randomUUID(), typeId: shown.typeId, amountMinor: shown.firstPayment.amountMinor, factsKey: shown.factsKey, agreement, ...charge, ...(promo === null ? {} : { code: promo.code }) }, always);
     const page = done?.answer.purchase;
     if (page === undefined) throw new Error("No answer.");
     console.log(`${shown.name}: ${formatMinor(page.amountMinor, page.currency)}${agreement === null ? "" : `, signed by ${name}`}. Purchase ${page.id}`);

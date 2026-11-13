@@ -29,6 +29,9 @@ export const appPurchaseRequestSchema = z
       .object({ words: z.string().min(1).max(1000), verificationToken: z.string().regex(/^[A-Za-z0-9_:.=+/-]{1,1024}$/).nullable() })
       .strict()
       .optional(),
+    /** A promo code typed (18k-v), as the list kept it (`ForSaleResponse.promo.code`), where the line read takes
+     *  something off with it. Left out for none. */
+    code: z.string().regex(/^[A-Z0-9]{3,20}$/).optional(),
   })
   .strict();
 export type AppPurchaseRequest = z.infer<typeof appPurchaseRequestSchema>;
