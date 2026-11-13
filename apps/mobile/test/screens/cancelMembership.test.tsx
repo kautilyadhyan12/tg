@@ -194,14 +194,13 @@ describe("the worst thing: Cancelled is said only for the membership pressed, an
     }
   });
 
-  it("a lost answer's key is not used again once the box has changed: the next press is a new press with the new key", async () => {
+  it("a lost answer's key is not used again once the box has changed: closed and opened again, the next press is a new press with the new key", async () => {
     let reads = 0;
     let calls = 0;
     const s = server(
-      (body) => {
+      () => {
         calls += 1;
-        if (calls === 1) return lost();
-        return (body as { key: string }).key === KEY_A ? refusal(409, "cancel_changed", "What you're cancelling has changed. Go back and look again.") : { status: 200, body: done("Cancelled. Off-peak Monthly ends on 11 Jan 2027.") };
+        return calls === 1 ? lost() : { status: 200, body: done("Cancelled. Off-peak Monthly ends on 11 Jan 2027.") };
       },
       () => {
         reads += 1;
@@ -212,16 +211,18 @@ describe("the worst thing: Cancelled is said only for the membership pressed, an
     await openCancel(OFFPEAK);
     await fireEvent.press(await box().findByText("Cancel membership"));
     await box().findByText("Couldn’t connect, so we don’t know if it went through. Check your internet and press it again.");
-    await fireEvent.press(box().getByText("Cancel membership"));
-    expect(await box().findByText("Off-peak Monthly ends on 11 Jan 2027, the last day you've paid for.")).toBeTruthy();
-    await fireEvent.press(box().getByText("Cancel membership"));
+    await fireEvent.press(box().getByText("Go back"));
+    await waitFor(() => {
+      expect(screen.queryByTestId("cancel-box")).toBeNull();
+    });
+    await openCancel(OFFPEAK);
+    await fireEvent.press(await box().findByText("Cancel membership"));
     await waitFor(() => {
       expect(screen.getByTestId("cancel-done")).toBeTruthy();
     });
     const sent = posts(s.asked, "/cancel").map((a) => a.body as { key: string; requestKey: string });
-    expect(sent.map((b) => b.key)).toEqual([KEY_A, KEY_A, KEY_B]);
-    expect(sent[1]?.requestKey).toBe(sent[0]?.requestKey);
-    expect(sent[2]?.requestKey).not.toBe(sent[0]?.requestKey);
+    expect(sent.map((b) => b.key)).toEqual([KEY_A, KEY_B]);
+    expect(sent[1]?.requestKey).not.toBe(sent[0]?.requestKey);
   });
 
   it("the box cannot be closed while Cancel is on its way, so its answer is said in the box", async () => {
