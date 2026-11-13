@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
-import { AppState } from "react-native";
+import { AppState, Linking } from "react-native";
 import { heartSums, runSums, saveRunRequestSchema, type SaveRunRequest } from "@app/shared";
 import { App } from "../../src/App";
 import { HeartMonitorSheet } from "../../src/heart/HeartMonitor";
@@ -26,7 +26,11 @@ interface Strap {
   radio: string;
   allowed: boolean;
   missing: boolean;
-  near: { id: string; name: string; rssi: number }[];
+  near: { id: string; name: string; rssi: number; type?: string }[];
+  bonded: string[];
+  pairs: string[];
+  pairAnswer: string;
+  bond: (device: string, state: "bonded" | "bonding" | "none") => void;
   watched: string | null;
   watches: string[];
   scans: number;
@@ -415,5 +419,134 @@ describe("I connect my chest strap once, and my runs show my heart rate", () => 
     await waitFor(async () => {
       expect(await phoneRunFiles.read(`heart-monitor-${RAVI.id}.json`)).toBeNull();
     });
+    expect(screen.getByText("Removed. Polar H10 9EF6E824 won't connect to your runs.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Open Bluetooth settings to unpair it" })).toBeNull();
+  });
+});
+
+// A watch whose Bluetooth address changes, kept connected by pairing it (37f-ii-b).
+// THE WORST THING: after pairing, the phone follows a device that is not the one picked, and its heart rate
+// is shown and said as the person's. So the monitor is kept at the address Android pairs THE ONE PICKED at,
+// and with any doubt (another device paired at the same moment, Cancel, no answer) at the address picked,
+// as before. The task: "I connect my watch once, and it stays connected when its address changes."
+const WATCH = "5A:3C:91:0E:77:12"; // the private address a watch shows for a few minutes
+const LASTING = "C8:2B:96:41:0A:E3"; // the same watch's own lasting address, once paired
+const EARBUDS = "F4:7B:09:22:6D:01";
+
+/** Connect, pick the watch, see its heart rate, and press Save: Android is asked to pair it. */
+async function saveTheWatch(type = "random") {
+  strap.near = [{ id: WATCH, name: "Forerunner 265", rssi: -55, type }];
+  const s = runServer();
+  await openRunning(s);
+  await fireEvent.press(screen.getByRole("button", { name: "Connect a heart rate monitor" }));
+  await fireEvent.press(await screen.findByRole("button", { name: "Connect Forerunner 265" }));
+  strap.send(WATCH, polar(77));
+  expect(await screen.findByText("77 bpm", {}, { timeout: 3000 })).toBeTruthy();
+  await fireEvent.press(screen.getByRole("button", { name: "Save" }));
+}
+const keptMonitor = async () => JSON.parse((await phoneRunFiles.read(`heart-monitor-${RAVI.id}.json`)) ?? "null") as { id: string } | null;
+
+describe("the worst thing: a device that is not the one picked, followed after pairing", () => {
+  it("another device paired at the same moment is never kept: the watch stays at the address picked", async () => {
+    strap.bonded = [];
+    await saveTheWatch();
+    expect(await screen.findByText("Pairing…")).toBeTruthy();
+    await act(() => {
+      strap.bond(WATCH, "bonding");
+      strap.bond(EARBUDS, "bonding");
+      strap.bonded = [EARBUDS, LASTING];
+      strap.bond(EARBUDS, "bonded");
+      strap.bond(WATCH, "bonded");
+    });
+    expect(await screen.findByText("Saved, not paired. If it says No signal later, press Change monitor.")).toBeTruthy();
+    expect((await keptMonitor())?.id).toBe(WATCH);
+    expect(strap.watched).toBe(WATCH);
+  });
+
+  it("the earbuds paired while the watch is still pairing are not the watch", async () => {
+    strap.bonded = [];
+    await saveTheWatch();
+    await act(() => {
+      strap.bond(WATCH, "bonding");
+      strap.bonded = [EARBUDS];
+      strap.bond(EARBUDS, "bonded");
+    });
+    expect(screen.getByText("Pairing…")).toBeTruthy();
+    expect(await keptMonitor()).toBeNull();
+  });
+
+  it("Cancel on Android's box: kept unpaired at the address picked", async () => {
+    await saveTheWatch();
+    await act(() => {
+      strap.bond(WATCH, "bonding");
+      strap.bond(WATCH, "none");
+    });
+    expect(await screen.findByText("Saved, not paired. If it says No signal later, press Change monitor.")).toBeTruthy();
+    expect((await keptMonitor())?.id).toBe(WATCH);
+  });
+});
+
+describe("I connect my watch once, and it stays connected when its address changes", () => {
+  it("Save pairs it, and it is kept and watched at its lasting address", async () => {
+    strap.bonded = [EARBUDS];
+    await saveTheWatch();
+    expect(strap.pairs).toEqual([WATCH]);
+    expect(await screen.findByText("Tap Pair when your phone asks.")).toBeTruthy();
+    await act(() => {
+      strap.bond(WATCH, "bonding");
+      strap.bonded = [EARBUDS, LASTING];
+      strap.bond(WATCH, "bonded");
+    });
+    expect(await screen.findByText("Paired and saved. It connects when you start a run.")).toBeTruthy();
+    expect(await keptMonitor()).toEqual({ id: LASTING, name: "Forerunner 265" });
+    await waitFor(() => {
+      expect(strap.watched).toBe(LASTING);
+    });
+    // Its heart rate from the lasting address is the person's; the old private address is nobody's now.
+    strap.send(WATCH, polar(80));
+    strap.send(LASTING, polar(81));
+    expect(await screen.findByText("81 bpm", {}, { timeout: 3000 })).toBeTruthy();
+  });
+
+  it("Save without pairing keeps it at the address picked, and a late answer changes nothing", async () => {
+    await saveTheWatch();
+    await fireEvent.press(await screen.findByRole("button", { name: "Save without pairing" }));
+    expect(await screen.findByText("Saved, not paired. If it says No signal later, press Change monitor.")).toBeTruthy();
+    await act(() => {
+      strap.bonded = [LASTING];
+      strap.bond(WATCH, "bonded");
+    });
+    expect((await keptMonitor())?.id).toBe(WATCH);
+  });
+
+  it("a strap whose address never changes is not asked to pair", async () => {
+    await saveTheWatch("public");
+    expect(await screen.findByText("Saved. It connects when you start a run.")).toBeTruthy();
+    expect(strap.pairs).toEqual([]);
+    expect((await keptMonitor())?.id).toBe(WATCH);
+  });
+
+  it("Android refusing to start pairing: kept unpaired, said so", async () => {
+    strap.pairAnswer = "failed";
+    await saveTheWatch();
+    expect(await screen.findByText("Saved, not paired. If it says No signal later, press Change monitor.")).toBeTruthy();
+    expect((await keptMonitor())?.id).toBe(WATCH);
+  });
+
+  it("Remove says it is still paired, with the way to Bluetooth settings", async () => {
+    strap.bonded = [LASTING];
+    await loadMonitor(RAVI.id);
+    await saveMonitor({ id: LASTING, name: "Forerunner 265" });
+    const s = runServer();
+    await openRunning(s);
+    await fireEvent.press(screen.getByRole("button", { name: "Change heart rate monitor" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Remove" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Remove" }));
+    expect(await screen.findByText("Removed. Forerunner 265 is still paired with this phone.")).toBeTruthy();
+    const sendIntent = jest.spyOn(Linking, "sendIntent").mockResolvedValue(undefined);
+    await fireEvent.press(screen.getByRole("button", { name: "Open Bluetooth settings to unpair it" }));
+    expect(sendIntent).toHaveBeenCalledWith("android.settings.BLUETOOTH_SETTINGS");
+    await fireEvent.press(screen.getByRole("button", { name: "Connect another" }));
+    expect(await screen.findByText("Wear your strap, or turn on your watch's heart rate broadcast.")).toBeTruthy();
   });
 });

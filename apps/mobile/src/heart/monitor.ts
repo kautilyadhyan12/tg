@@ -11,7 +11,17 @@
 import { useEffect, useReducer, useSyncExternalStore } from "react";
 import { PermissionsAndroid, Platform } from "react-native";
 import { File, Paths } from "expo-file-system";
-import { heartReadingOf, keptHeartMonitorSchema, phoneHeartSamplesSchema } from "@app/shared";
+import {
+  addressChanges,
+  heartBondSchema,
+  heartReadingOf,
+  keptHeartMonitorSchema,
+  pairOutcome,
+  phoneBondedSchema,
+  phoneHeartSamplesSchema,
+  type HeartBond,
+  type HeartFound,
+} from "@app/shared";
 import { heartNative, type HeartNative } from "./heartNative";
 
 /** A reading older than this is not the heart rate now. Straps send one a second. */
@@ -212,7 +222,58 @@ export function savedHeartNow(now: number): number | null {
   return heartNow(now);
 }
 
-export type BluetoothState ="none" | "denied" | "off" | "on";
+// ── Pairing a monitor whose address changes (37f-ii-b) ──────────────────────────────────────────────
+
+/** How long Android's pairing box waits for the person before the monitor is kept unpaired. */
+export const PAIR_WAIT_MS = 60_000;
+export type Paired = { kind: "paired"; id: string } | { kind: "notPaired" } | { kind: "notNeeded" };
+
+/** The addresses of the devices paired with this phone. */
+export function bondedNow(): string[] {
+  if (native === null) return [];
+  const parsed = phoneBondedSchema.safeParse(native.bonded());
+  return parsed.success ? parsed.data : [];
+}
+export const isPaired = (id: string): boolean => bondedNow().some((a) => same(a, id));
+
+/** Whether Save pairs this monitor first: its address changes, and it is not paired at it already. */
+export const needsPairing = (found: HeartFound): boolean => native !== null && addressChanges(found.id, found.type) && !isPaired(found.id);
+
+/** Pairs a monitor whose address changes, so Android finds it whatever address it shows: the lasting
+ *  address to keep, once Android says the one picked is paired (`pairOutcome`). One with a fixed address,
+ *  or already paired at the address picked, needs none. Cancel, a refusal, or no answer in PAIR_WAIT_MS is
+ *  not paired: it is kept at the address picked. */
+export function pairMonitor(found: HeartFound, waitMs: number = PAIR_WAIT_MS): Promise<Paired> {
+  const bt = native;
+  if (bt === null || !needsPairing(found)) return Promise.resolve({ kind: "notNeeded" });
+  const before = bondedNow();
+  return new Promise((resolve) => {
+    const bonds: HeartBond[] = [];
+    let done = false;
+    let listening: { remove: () => void } | null = null;
+    let late: ReturnType<typeof setTimeout> | null = null;
+    const finish = (out: Paired) => {
+      if (done) return;
+      done = true;
+      listening?.remove();
+      if (late !== null) clearTimeout(late);
+      resolve(out);
+    };
+    listening = bt.addListener("bond", (raw) => {
+      const bond = heartBondSchema.safeParse(raw);
+      if (!bond.success) return;
+      bonds.push(bond.data);
+      const out = pairOutcome(found.id, before, bondedNow(), bonds);
+      if (out.kind !== "waiting") finish(out);
+    });
+    late = setTimeout(() => {
+      finish({ kind: "notPaired" });
+    }, waitMs);
+    if (bt.pair(found.id) !== "started") finish({ kind: "notPaired" });
+  });
+}
+
+export type BluetoothState = "none" | "denied" | "off" | "on";
 export function bluetoothState(): BluetoothState {
   if (native === null) return "none";
   const radio = native.radio();

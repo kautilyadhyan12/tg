@@ -9,7 +9,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { HEART_LEAST_MS, HEART_STANDS_MS, heartReadingOf, heartSamplesSchema, heartSums, saveRunRequestSchema, type HeartSample } from "../src/index.js";
+import { HEART_LEAST_MS, HEART_STANDS_MS, addressChanges, heartFoundSchema, heartReadingOf, heartSamplesSchema, heartSums, pairOutcome, pairedAddress, saveRunRequestSchema, type HeartSample } from "../src/index.js";
 
 describe("a strap's notification read (worst thing first)", () => {
   it("is no heart rate when the strap says it feels no skin, whatever number it sends", () => {
@@ -137,5 +137,76 @@ describe("what the server takes", () => {
     expect(saveRunRequestSchema.safeParse({ ...run, heart: [[0, 241]] }).success).toBe(false);
     expect(heartSamplesSchema.safeParse(Array.from({ length: 43_201 }, (_, i) => [i, 100])).success).toBe(false);
     expect(saveRunRequestSchema.safeParse({ ...run, heart: [[0, 120], [1000, 121]] }).success).toBe(true);
+  });
+});
+
+// Pairing a monitor whose address changes (37f-ii-b). THE WORST THING: after pairing, the phone follows a
+// device that is not the one picked (another device paired at the same moment, a stranger's), and its heart
+// rate is said as the person's. So the address kept after pairing is the one picked, or the ONE that joined
+// the phone's paired list while it paired, never a guess.
+describe("the address kept after pairing (worst thing first)", () => {
+  const PICKED = "5A:3C:91:0E:77:12"; // a private address, as a watch or a laptop shows for a few minutes
+  const LASTING = "C8:2B:96:41:0A:E3"; // the same device's own lasting address, once paired
+  const EARBUDS = "F4:7B:09:22:6D:01"; // somebody's earbuds, paired long ago
+  it.each([
+    ["the device picked, paired at its own address", [EARBUDS], [EARBUDS, PICKED], PICKED],
+    ["the one address that joined the list", [EARBUDS], [EARBUDS, LASTING], LASTING],
+    ["already in the list before, at the address picked", [PICKED], [PICKED], PICKED],
+    ["two that joined at once: neither", [EARBUDS], [EARBUDS, LASTING, "D0:11:22:33:44:55"], null],
+    ["nothing joined (pairing refused): none", [EARBUDS], [EARBUDS], null],
+    ["a device that left the list is not one that joined", [EARBUDS, LASTING], [LASTING], null],
+    ["small letters are the same address", [EARBUDS.toLowerCase()], [EARBUDS, LASTING.toLowerCase()], LASTING],
+    ["what is not an address never is one", [EARBUDS], [EARBUDS, "not an address"], null],
+  ] as const)("%s", (_name, before, after, kept) => {
+    expect(pairedAddress(PICKED, before, after)).toBe(kept);
+  });
+});
+
+describe("whether pairing finished, from what Android says", () => {
+  const PICKED = "5A:3C:91:0E:77:12";
+  const LASTING = "C8:2B:96:41:0A:E3";
+  const EARBUDS = "F4:7B:09:22:6D:01";
+  const B = (device: string, state: "bonded" | "bonding" | "none") => ({ device, state });
+  it.each([
+    ["Android has said nothing yet", [], [EARBUDS], [], { kind: "waiting" }],
+    ["the one picked is pairing", [], [EARBUDS], [B(PICKED, "bonding")], { kind: "waiting" }],
+    ["paired at the address picked", [EARBUDS], [EARBUDS, PICKED], [B(PICKED, "bonding"), B(PICKED, "bonded")], { kind: "paired", id: PICKED }],
+    ["paired, listed at its lasting address", [EARBUDS], [EARBUDS, LASTING], [B(PICKED, "bonding"), B(PICKED, "bonded")], { kind: "paired", id: LASTING }],
+    ["the person said Cancel", [EARBUDS], [EARBUDS], [B(PICKED, "bonding"), B(PICKED, "none")], { kind: "notPaired" }],
+    ["another device paired, the one picked not yet", [], [EARBUDS], [B(PICKED, "bonding"), B(EARBUDS, "bonding"), B(EARBUDS, "bonded")], { kind: "waiting" }],
+    ["another device that paired is never kept", [], [EARBUDS], [B(EARBUDS, "bonding"), B(EARBUDS, "bonded"), B(PICKED, "bonded")], { kind: "notPaired" }],
+    ["two joined at once: neither", [], [EARBUDS, LASTING], [B(PICKED, "bonding"), B(PICKED, "bonded")], { kind: "notPaired" }],
+    ["a device Android only says the lasting address of is not the one picked", [], [LASTING], [B(LASTING, "bonded")], { kind: "waiting" }],
+    ["paired, then unpaired again", [], [], [B(PICKED, "bonded"), B(PICKED, "none")], { kind: "notPaired" }],
+  ] as const)("%s", (_name, before, after, bonds, outcome) => {
+    expect(pairOutcome(PICKED, before, after, bonds)).toEqual(outcome);
+  });
+});
+
+// The kinds are Bluetooth's own (Core Specification, Vol 6 Part B, 1.3): a random address's two highest bits
+// say which, 01 a resolvable private address (the one that changes), 11 a static one, 00 a non-resolvable one.
+describe("which monitors are asked to pair", () => {
+  it.each([
+    ["a resolvable private address (Android 15 says random)", "5A:3C:91:0E:77:12", "random", true],
+    ["the same before Android 15", "7E:01:02:03:04:05", "unknown", true],
+    ["its lowest and highest first byte", "40:00:00:00:00:00", "random", true],
+    ["", "7F:FF:FF:FF:FF:FF", "random", true],
+    ["a static random address (a strap's fixed one)", "C8:2B:96:41:0A:E3", "random", false],
+    ["a non-resolvable one", "3A:2B:96:41:0A:E3", "random", false],
+    ["a public address beginning as a private one would", "5A:3C:91:0E:77:12", "public", false],
+    ["Polar's own public addresses", "A0:9E:1A:8C:14:2F", "public", false],
+    ["Polar's before Android 15: not 01", "A0:9E:1A:8C:14:2F", "unknown", false],
+    ["small letters", "5a:3c:91:0e:77:12", "unknown", true],
+    ["not an address", "5A3C910E7712", "unknown", false],
+  ] as const)("%s %s (%s): %s", (_name, address, type, asks) => {
+    expect(addressChanges(address, type)).toBe(asks);
+  });
+
+  it("reads what the Android code hands over, and makes do with what it leaves out", () => {
+    expect(heartFoundSchema.parse({ id: "5A:3C:91:0E:77:12", name: "Forerunner 265", rssi: -61, type: "random" })).toEqual({ id: "5A:3C:91:0E:77:12", name: "Forerunner 265", rssi: -61, type: "random" });
+    expect(heartFoundSchema.parse({ id: "A0:9E:1A:8C:14:2F" })).toEqual({ id: "A0:9E:1A:8C:14:2F", name: "", rssi: -100, type: "unknown" });
+    expect(heartFoundSchema.parse({ id: "A0:9E:1A:8C:14:2F", name: "x".repeat(300), type: "lost" }).name).toHaveLength(100);
+    expect(heartFoundSchema.safeParse({ id: "" }).success).toBe(false);
+    expect(heartFoundSchema.safeParse(null).success).toBe(false);
   });
 });

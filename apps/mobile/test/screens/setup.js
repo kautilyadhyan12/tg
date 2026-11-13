@@ -373,14 +373,21 @@ jest.mock("../../src/screens/running/runVoiceNative", () => {
 // reach, each with the bytes it sends (`send(id, bytes, at)` hands one notification over as the Android code
 // would, whether it is watched or not: the app's own code must leave out what is not its monitor's).
 // `radio`, `allowed` and `missing` stand for Bluetooth off, Nearby devices refused, and a copy built before it.
+// Pairing (37f-ii-b): `bonded` is the phone's list of paired devices, `pairs` the addresses asked to pair,
+// `pairAnswer` what asking says, and `bond(device, state)` hands over one of Android's paired-or-not messages.
 jest.mock("../../src/heart/heartNative", () => {
-  const strap = { radio: "on", allowed: true, missing: false, near: [], watched: null, watches: [], waiting: [], scans: 0, found: new Set() };
+  const fresh = () => ({ radio: "on", allowed: true, missing: false, near: [], watched: null, watches: [], waiting: [], scans: 0, bonded: [], pairs: [], pairAnswer: "started" });
+  const strap = { ...fresh(), found: new Set(), bonds: new Set() };
   strap.send = (id, bytes, at = Date.now()) => {
     strap.waiting.push({ device: id, at, bytes });
   };
+  strap.bond = (device, state) => {
+    for (const listener of strap.bonds) listener({ device, state });
+  };
   strap.reset = () => {
-    Object.assign(strap, { radio: "on", allowed: true, missing: false, near: [], watched: null, watches: [], waiting: [], scans: 0 });
+    Object.assign(strap, fresh());
     strap.found.clear();
+    strap.bonds.clear();
   };
   const native = {
     radio: () => strap.radio,
@@ -388,7 +395,7 @@ jest.mock("../../src/heart/heartNative", () => {
     scan: () => {
       if (strap.radio !== "on" || !strap.allowed) return false;
       strap.scans += 1;
-      for (const one of strap.near) for (const listener of strap.found) listener({ id: one.id, name: one.name, rssi: one.rssi });
+      for (const one of strap.near) for (const listener of strap.found) listener({ id: one.id, name: one.name, rssi: one.rssi, type: one.type ?? "unknown" });
       return true;
     },
     stopScan: () => undefined,
@@ -407,9 +414,15 @@ jest.mock("../../src/heart/heartNative", () => {
     },
     status: () => ({ device: strap.watched, connected: strap.watched !== null }),
     askRadio: () => true,
+    bonded: () => [...strap.bonded],
+    pair: (id) => {
+      strap.pairs.push(id);
+      return strap.pairAnswer;
+    },
     addListener: (event, listener) => {
-      strap.found.add(listener);
-      return { remove: () => strap.found.delete(listener) };
+      const set = event === "bond" ? strap.bonds : strap.found;
+      set.add(listener);
+      return { remove: () => set.delete(listener) };
     },
   };
   return {

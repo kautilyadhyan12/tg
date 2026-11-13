@@ -127,4 +127,4 @@ export function heartLine(bpm: number | null, max: number | null): string | null
   return `Heart rate ${String(bpm)} beats a minute${max === null ? "" : `, zone ${String(heartZoneOf(bpm, max))}`}.`;
 }
 
-export const PAUSE_WORDS ={ auto: "Auto-paused.", person: "Run paused.", resumed: "Run resumed." } as const;
+export const PAUSE_WORDS = { auto: "Auto-paused.", person: "Run paused.", resumed: "Run resumed." } as const;
