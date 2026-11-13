@@ -356,13 +356,14 @@ const COLUMNS = (sql: Sql | TransactionSql) => sql`
                             'fromOn', rz.from_on::text, 'sentOn', rz.sent_on::text)
    FROM gym_price_raises rz WHERE rz.gym_id = h.gym_id AND rz.held_membership_id = h.id) AS raise`;
 
-/** The record's memberships of the statuses named, newest start first. */
+/** The record's memberships of the statuses named, newest start first; on the same start day, the one added last first
+ *  (20i-i: a membership just bought read below the day passes bought earlier that day). */
 const held = (sql: Sql | TransactionSql, gymId: string, entryId: string, statuses: readonly string[], limit: number) => sql`
   SELECT ${COLUMNS(sql)}
   FROM gym_held_memberships h
   JOIN gym_membership_types t ON t.gym_id = h.gym_id AND t.id = h.membership_type_id
   WHERE h.gym_id = ${gymId} AND h.entry_id = ${entryId} AND h.status = ANY(${[...statuses]}::text[])
-  ORDER BY h.starts_on DESC, h.id
+  ORDER BY h.starts_on DESC, h.created_at DESC, h.id
   LIMIT ${limit}`;
 
 const IN_USE = ["active", "frozen"] as const;

@@ -527,8 +527,8 @@ export async function readOr404(deps: HeldDeps, gymId: string, entryId: string, 
     .sort(
       (a, b) =>
         ORDER[a.view.status] - ORDER[b.view.status] ||
-        (a.startsOn < b.startsOn ? 1 : a.startsOn > b.startsOn ? -1 : 0) ||
-        (a.id < b.id ? -1 : 1),
+        (a.startsOn < b.startsOn ? 1 : a.startsOn > b.startsOn ? -1 : 0),
+      // The same start day keeps the read's order, the one added last first (a stable sort; 20i-i).
     );
   // Every one in use, and a page of the ones that are over: the ones the clock has
   // ended since the last write come first among those, being the newest.

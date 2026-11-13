@@ -543,6 +543,26 @@ d("my membership: a member's own memberships, payments and receipts (real Postgr
     expect((await myReceipt(gym, maya, paid.receipt)).statusCode).toBe(404);
   });
 
+  it("memberships that start the same day read the one added last first, so a membership just bought is at the top (20i-i)", async () => {
+    const gym = await makeGym("Mine Order House");
+    const asha = await member(gym, "Asha Walk");
+    // Five lines of the price list, one bought after another today, as a member buying day passes then a membership does.
+    const given: string[] = [];
+    for (let i = 0; i < 5; i += 1) {
+      const made = await inject("POST", `/v1/orgs/${gym.id}/membership-types`, gym.owner.cookies, { ...THIRTY_DAYS, name: `Thirty days ${String(i)}` });
+      expect(made.statusCode, made.body).toBe(201);
+      const typeId = (JSON.parse(made.body) as { types: { id: string; name: string }[] }).types.find((t) => t.name === `Thirty days ${String(i)}`)?.id;
+      if (typeId === undefined) throw new Error("no type");
+      const res = await inject("POST", heldUrl(gym, asha.entryId), gym.owner.cookies, { requestKey: randomUUID(), typeId, startsOn: today, paid: false });
+      expect(res.statusCode, res.body).toBe(201);
+      const [row] = await sql<{ id: string }[]>`SELECT id FROM gym_held_memberships WHERE gym_id = ${gym.id} AND entry_id = ${asha.entryId} ORDER BY created_at DESC LIMIT 1`;
+      if (row === undefined) throw new Error("no membership");
+      given.push(row.id);
+    }
+    // Five on one day: their random ids alone would put the newest first about once in 120 reads.
+    expect((await mine(gym, asha)).memberships.map((m) => m.id)).toEqual([...given].reverse());
+  });
+
   it("refuses a malformed gym or receipt number with 400", async () => {
     const gym = await makeGym("Mine Shape House");
     const maya = await member(gym, "Maya Rao");
