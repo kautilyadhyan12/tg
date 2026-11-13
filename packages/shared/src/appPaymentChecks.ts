@@ -9,6 +9,8 @@ const daySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
 /** The people read at most, the newest first: beyond them the card says there are more. */
 export const APP_PAYMENT_CHECKS_PEOPLE = 100;
+/** Rows sent at most: past them, the newest are sent and the card says there are more. */
+export const APP_PAYMENT_CHECKS_ROWS = 2000;
 /** Rows drawn at first, and added by each Show more. */
 export const APP_PAYMENT_CHECKS_SHOWN = 10;
 
@@ -38,8 +40,8 @@ export type AppPaymentCheckRow = z.infer<typeof appPaymentCheckRowSchema>;
 
 export const appPaymentChecksResponseSchema = z
   .object({
-    rows: z.array(appPaymentCheckRowSchema).max(2000),
-    /** More people have one than were read: the newest are shown. */
+    rows: z.array(appPaymentCheckRowSchema).max(APP_PAYMENT_CHECKS_ROWS),
+    /** More people, or more rows, than were sent: the newest are shown. */
     more: z.boolean(),
   })
   .strict();

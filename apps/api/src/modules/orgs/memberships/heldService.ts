@@ -87,7 +87,7 @@ import { freezeFeeOf } from "./freezeFees.js";
 import { chargesOfBills } from "../payments/cardChargesRepo.js";
 import { appCancelsOf } from "../myMembership/cancelRepo.js";
 import { openDeskCancelsOf } from "./deskCancelsRepo.js";
-import { checksOnMemberships, openOnMemberships, type AppCheckRow, type OpenPage } from "../payments/appPaymentsRepo.js";
+import { billCheckKey, checksOnMemberships, openOnMemberships, type AppCheckRow, type OpenPage } from "../payments/appPaymentsRepo.js";
 import { openPurchaseOf, purchaseChecksOf } from "../payments/appPurchasesRepo.js";
 import { openPressesOf } from "../payments/cardRefundsRepo.js";
 import { chargeStopsOfBills } from "../payments/cardChargesRepo.js";
@@ -244,7 +244,7 @@ function billingOf(
     // A page for one of its fees is said under that fee.
     appPayment: appPaymentOn(ctx.appOpen.get(row.id), null),
     // Said while that bill is still the one owed: once it is paid or cancelled, staff have dealt with it.
-    appCheck: appCheckOn(ctx.appChecks.bills.get(row.id), pay?.periodIndex ?? null),
+    appCheck: appCheckOn(pay === null ? undefined : ctx.appChecks.bills.get(billCheckKey(row.id, pay.periodIndex)), pay?.periodIndex ?? null),
   };
 }
 
@@ -547,7 +547,8 @@ export async function readOr404(deps: HeldDeps, gymId: string, entryId: string, 
   // ended since the last write come first among those, being the newest.
   const inUse = all.filter((m) => ORDER[m.view.status] < 2);
   const over = all.filter((m) => ORDER[m.view.status] === 2);
-  const shown = over.slice(0, HELD_EARLIER_PAGE);
+  // And any older one with a payment in the app to review on it (18k-vi, round one L1).
+  const shown = over.filter((m, i) => i < HELD_EARLIER_PAGE || (m.billing !== null && (m.billing.appCheck !== null || m.billing.fees.some((f) => f.appCheck !== null))));
   const stored = list.overTotal - list.over.length;
   // The membership agreements (18u-i, 18u-ii-a): which memberships' lines of the price list
   // ask for one, and which were signed.

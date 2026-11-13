@@ -238,6 +238,11 @@ d("App payments to review on Overview: every one the person's page says, and onl
   const bare = (rows: readonly AppPaymentCheckRow[]): Omit<AppPaymentCheckRow, "name" | "past">[] =>
     rows.map((r) => ({ id: r.id, entryId: r.entryId, kind: r.kind, typeName: r.typeName, fee: r.fee, why: r.why, amountMinor: r.amountMinor, currency: r.currency, on: r.on, payerName: r.payerName }));
   const byId = <R extends { id: string }>(rows: readonly R[]) => [...rows].sort((a, b) => (a.id < b.id ? -1 : 1));
+  /** A table's columns but these, for copying one of its rows as it stands. */
+  const columnsBut = async (table: string, but: readonly string[]): Promise<string[]> =>
+    (await sql<{ column_name: string }[]>`SELECT column_name FROM information_schema.columns WHERE table_name = ${table} AND NOT (column_name = ANY(${[...but]}::text[]))`).map(
+      (r) => r.column_name,
+    );
 
   beforeAll(async () => {
     await cleanup();
@@ -368,6 +373,21 @@ d("App payments to review on Overview: every one the person's page says, and onl
     expect(byId(bare(listB.rows))).toEqual(byId(await pageSays(gymB, [bea.holder.entryId])));
     expect(listA.rows.some((r) => r.entryId === bea.holder.entryId)).toBe(false);
 
+    // Ana with 21 purchases to review (20 more, each ended a minute before the last): her page shows her newest 20, and so
+    // does the list (round one, test gap 2).
+    const kept = await columnsBut("gym_app_payments", ["id", "request_key", "link_key", "link_id", "order_id", "square_payment_id", "finished_at"]);
+    await sql`
+      INSERT INTO gym_app_payments (${sql(kept)}, request_key, link_key, link_id, order_id, square_payment_id, finished_at)
+      SELECT ${sql(kept)}, gen_random_uuid(), gen_random_uuid(), 'L' || md5(random()::text || g), 'O' || md5(random()::text || g), 'P' || md5(random()::text || g),
+             finished_at - g * interval '1 minute'
+      FROM gym_app_payments, generate_series(1, 20) AS g
+      WHERE gym_id = ${gymA.id} AND id = ${anaBuy.id}`;
+    const anaRows = (await checks(gymA)).rows.filter((r) => r.entryId === anaEntry);
+    expect(anaRows).toHaveLength(20);
+    expect(anaRows[0]?.id).toBe(`purchase:${anaBuy.id}`);
+    expect(byId(bare(anaRows))).toEqual(byId(await pageSays(gymA, [anaEntry])));
+    await sql`DELETE FROM gym_app_payments WHERE gym_id = ${gymA.id} AND entry_id = ${anaEntry} AND id <> ${anaBuy.id}`;
+
     // Each goes as it goes from the page: Tara's bill taken at the desk, Mia's fee paid there, Ana's marked as checked.
     expect((await byHand(gymA, tara.holder)).statusCode).toBe(200);
     const miaCash = await send("POST", `${entryUrl(gymA, mia.holder.entryId)}/memberships/${mia.holder.membershipId}/fees/${miaFee?.id ?? ""}/payments`, gymA.owner.cookies, {
@@ -429,6 +449,62 @@ d("App payments to review on Overview: every one the person's page says, and onl
     const back = await checks(gym);
     expect(back.rows.map((r) => r.name)).toEqual(["Uma Shah"]);
     expect(byId(bare(back.rows))).toEqual(byId(await pageSays(gym, [uma.holder.entryId])));
+  });
+
+  it("an earlier month owed again says its own page, even after a later month's ended needing review too (round one, L4)", async () => {
+    clock = new Date();
+    clock.setUTCHours(18, 0, 0, 0);
+    const gym = await makeGym("App Checks Earlier");
+    const goldId = await addType(gym, gold);
+    const vic = await member(gym, goldId, "Vic Hale");
+    // His first month: Square never answers, and a day on the page is given up on.
+    const first = await pay(gym, vic.app, vic.holder);
+    square.payLink(linkOf(first.payment.id)?.id ?? "", { status: "APPROVED" });
+    clock = new Date(clock.getTime() + APP_PAYMENT.giveUpMs + 60_000);
+    await work(gym);
+    expect((await checkPay(gym, vic.app, first.payment.id)).payment.state).toBe("check");
+    // The desk checked Square and took it in cash; his second month falls due and he pays it in the app, with a tip.
+    expect((await byHand(gym, vic.holder)).statusCode).toBe(200);
+    await sql`UPDATE gym_held_memberships SET starts_on = (starts_on - interval '1 month')::date WHERE gym_id = ${gym.id} AND id = ${vic.holder.membershipId}`;
+    await sql`UPDATE gym_member_bills SET due_on = (due_on - interval '1 month')::date, covers_from = (covers_from - interval '1 month')::date, covers_to = (covers_to - interval '1 month')::date WHERE gym_id = ${gym.id} AND held_membership_id = ${vic.holder.membershipId}`;
+    await openDueBills({ sql, log: quiet }, { now: clock, gymIds: [gym.id] });
+    const second = await pay(gym, vic.app, vic.holder, { periodIndex: 1 });
+    square.payLink(linkOf(second.payment.id)?.id ?? "", TIP);
+    expect((await checkPay(gym, vic.app, second.payment.id)).payment.state).toBe("check");
+    expect((await checks(gym)).rows.map((r) => [r.name, r.why])).toEqual([["Vic Hale", "taken"]]);
+
+    // Staff void the first month's cash: it is owed again, and Square may have charged it already. The page and the list say
+    // the first month's own page, never nothing (the second's is the newest on the membership).
+    const page = await held(gym, vic.holder.entryId);
+    const cashId = page.memberships[0]?.billing?.bills.find((b) => b.periodIndex === 0)?.payments[0]?.id ?? "";
+    const voided = await send("POST", `${entryUrl(gym, vic.holder.entryId)}/memberships/${vic.holder.membershipId}/payments/${cashId}/void`, gym.owner.cookies, { reason: "mistake" });
+    expect(voided.statusCode, voided.body).toBe(200);
+    const owedFirst = await checks(gym);
+    expect(owedFirst.rows.map((r) => [r.name, r.why, r.amountMinor])).toEqual([["Vic Hale", "unknown", null]]);
+    expect(byId(bare(owedFirst.rows))).toEqual(byId(await pageSays(gym, [vic.holder.entryId])));
+  });
+
+  it("a payment to review on an old membership that is over is said on the member's page as well as the list (round one, L1)", async () => {
+    clock = new Date();
+    const gym = await makeGym("App Checks Old");
+    const goldId = await addType(gym, gold);
+    const ola = await member(gym, goldId, "Ola Berg");
+    const page = await pay(gym, ola.app, ola.holder);
+    square.payLink(linkOf(page.payment.id)?.id ?? "", TIP);
+    expect((await checkPay(gym, ola.app, page.payment.id)).payment.state).toBe("check");
+    // Her membership long over, and 30 newer ones over since: more than the page's earlier ones it reads by date.
+    await sql`UPDATE gym_held_memberships SET status = 'ended', starts_on = starts_on - 1000 WHERE gym_id = ${gym.id} AND id = ${ola.holder.membershipId}`;
+    const cols = await columnsBut("gym_held_memberships", ["id", "request_key", "starts_on", "created_at"]);
+    await sql`
+      INSERT INTO gym_held_memberships (${sql(cols)}, request_key, starts_on, created_at)
+      SELECT ${sql(cols)}, gen_random_uuid(), starts_on + g * 20, now()
+      FROM gym_held_memberships, generate_series(1, 30) AS g
+      WHERE gym_id = ${gym.id} AND id = ${ola.holder.membershipId}`;
+    const shown = await held(gym, ola.holder.entryId);
+    expect(shown.memberships.find((m) => m.id === ola.holder.membershipId)?.billing?.appCheck).toMatchObject({ why: "taken", amountMinor: 5499 });
+    const list = await checks(gym);
+    expect(list.rows.map((r) => r.id)).toEqual([`bill:${ola.holder.membershipId}`]);
+    expect(byId(bare(list.rows))).toEqual(byId(await pageSays(gym, [ola.holder.entryId])));
   });
 
   it("only staff who take payments and keep the member list read it; a member, a stranger and another gym get nothing", async () => {

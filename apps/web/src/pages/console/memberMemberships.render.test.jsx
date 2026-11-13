@@ -1864,6 +1864,58 @@ describe('Review payment on App payments to review (18k-vi)', () => {
       Element.prototype.scrollIntoView = was;
     }
   });
+
+  /** Opens the page for `checkNow` and gives back the lines brought into view. */
+  const scrolledTo = async (shown, checkNow, testId) => {
+    orgService.getHeldMemberships.mockResolvedValue(shown);
+    const seen = [];
+    const was = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = function scrolled() {
+      seen.push(this.getAttribute('data-check'));
+    };
+    try {
+      render(draw(ADA, 'Ada Lovelace', { checkNow }));
+      expect((await screen.findByTestId(testId)).getAttribute('data-check')).toBe(checkNow);
+      await waitFor(() => expect(seen).toContain(checkNow));
+    } finally {
+      Element.prototype.scrollIntoView = was;
+    }
+  };
+  const check = { why: 'taken', amountMinor: 1000, on: '2026-11-12', payerName: 'Ada Lovelace' };
+
+  it('a fee’s line', async () => {
+    const fee = {
+      id: '66666666-6666-4666-8666-666666666666',
+      fee: 'freeze',
+      of: 'membership',
+      forName: 'Gold Monthly',
+      on: TODAY,
+      to: '2026-11-19',
+      amountMinor: 1000,
+      taxes: [],
+      dueOn: TODAY,
+      state: 'due',
+      waived: null,
+      stillOwed: true,
+      payments: [],
+      voidedPayments: [],
+      can: { pay: false, waive: true, voidPaymentId: null },
+      appCheck: check,
+    };
+    const base = held(1, GOLD, '2026-10-04', true);
+    await scrolledTo(answer([{ ...base, billing: { ...base.billing, fees: [fee] } }]), `fee:${fee.id}`, 'held-fee-app-check');
+  });
+
+  it('a purchase’s line', async () => {
+    const id = '55555555-5555-4555-8555-555555555555';
+    await scrolledTo(answer([], false, { appBuyChecks: [{ id, typeName: '10 classes', ...check, currency: 'GBP' }] }), `purchase:${id}`, 'app-buy-check');
+  });
+
+  it('a line on a membership that is over, among the earlier ones', async () => {
+    const base = held(2, PACK, '2025-01-04', false);
+    expect(base.view.status).toBe('ended');
+    await scrolledTo(answer([{ ...base, billing: { ...base.billing, appCheck: { ...check, why: 'unknown', amountMinor: null } } }]), `bill:${base.id}`, 'held-app-check');
+  });
 });
 
 describe('Take payment on Failed payments (18d-iii-ii-b)', () => {

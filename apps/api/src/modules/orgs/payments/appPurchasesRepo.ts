@@ -469,8 +469,8 @@ export async function purchaseChecksOf(sql: SqlOrTx, gymId: string, entryId: str
 
 /** Overview's App payments to review (18k-vi): `purchaseChecksOf` for every record of the gym at once, each record's
  *  newest 20 as its page shows them, the newest first. */
-export async function purchaseChecksOfGym(sql: SqlOrTx, gymId: string): Promise<(AppPurchaseCheck & { entryId: string })[]> {
-  const rows = await sql<{ id: string; entry_id: string; bought: unknown; membership_type_id: string; outcome: string; taken_minor: number | null; currency: string; on: string; payer_name: string | null }[]>`
+export async function purchaseChecksOfGym(sql: SqlOrTx, gymId: string): Promise<(AppPurchaseCheck & { entryId: string; finishedAt: string })[]> {
+  const rows = await sql<{ id: string; entry_id: string; bought: unknown; membership_type_id: string; outcome: string; taken_minor: number | null; currency: string; on: string; payer_name: string | null; finished_at: Date }[]>`
     SELECT * FROM (
       SELECT a.id, a.entry_id, a.bought, a.membership_type_id, a.outcome, a.taken_minor, a.currency, a.finished_at,
              ((a.finished_at AT TIME ZONE g.timezone)::date)::text AS on, ${payerName(sql)} AS payer_name,
@@ -485,6 +485,7 @@ export async function purchaseChecksOfGym(sql: SqlOrTx, gymId: string): Promise<
   return rows.map((r) => ({
     id: r.id,
     entryId: r.entry_id,
+    finishedAt: r.finished_at.toISOString(),
     typeName: boughtOf({ typeId: r.membership_type_id, bought: r.bought })?.typeName ?? "a membership",
     why: r.outcome === "not_recorded" ? "taken" : "unknown",
     amountMinor: r.outcome === "not_recorded" ? r.taken_minor : null,
