@@ -264,7 +264,7 @@ export function HeartCard({ heartAvg, heartMax, line, zones, maxRead, said = nul
       ) : when === "summary" ? (
         <>
           <Txt kind="small" colour="textSoft">
-            {noMaximum ? "Add your maximum heart rate to see your zones." : "Your zones are worked out when you save."}
+            {noMaximum ? "Add your maximum heart rate to see your zones." : "Your zones are added when you save, if you have a maximum heart rate."}
           </Txt>
           {noMaximum ? <Button label="Set maximum heart rate" small onPress={onSetMax} style={styles.start} /> : null}
         </>

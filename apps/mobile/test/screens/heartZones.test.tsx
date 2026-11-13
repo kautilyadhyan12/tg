@@ -195,7 +195,7 @@ describe("the worst thing: an easier zone than the person is in, or a zone from 
     // No maximum read: the heart rate with no zone, never a guessed one.
     expect(await screen.findByText("185 bpm", {}, { timeout: 3000 })).toBeTruthy();
     await runTenMinutes();
-    expect(await screen.findByText("Your zones are worked out when you save.")).toBeTruthy();
+    expect(await screen.findByText("Your zones are added when you save, if you have a maximum heart rate.")).toBeTruthy();
     expect(screen.queryByText("Add your maximum heart rate to see your zones.")).toBeNull();
     expect(screen.queryByRole("button", { name: "Set maximum heart rate" })).toBeNull();
   });
