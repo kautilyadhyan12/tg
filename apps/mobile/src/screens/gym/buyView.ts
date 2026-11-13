@@ -57,6 +57,8 @@ export const PROMO_LABEL = "Promo code";
 export const PROMO_APPLY = "Apply";
 export const PROMO_REMOVE = "Remove";
 export const PROMO_CHECKING = "Checking your code…";
+/** Under Pay while a code is typed and not applied: Pay waits, so nobody pays thinking a code came off. */
+export const PROMO_PRESS_APPLY = "Press Apply to use your code, or clear the box.";
 export const PROMO_NOT_CHECKED = "Couldn’t check the code. Check your internet and try again.";
 /** A gym's codes are letters and numbers, at most 20 (the console's own rule). */
 export const PROMO_MAX = 20;

@@ -38,6 +38,7 @@ import {
   PROMO_LABEL,
   PROMO_MAX,
   PROMO_NOT_CHECKED,
+  PROMO_PRESS_APPLY,
   PROMO_REMOVE,
   SHOW_PASS,
   SIGNER_LABELS,
@@ -80,8 +81,9 @@ import { RESUMED, useBuyInApp, type BuyInApp } from "./useBuyInApp";
 // line is theirs and on My membership. The server works out every line and refuses anything but what was shown. A
 // repeating membership (20i-i) is paid with the card saved in the app: its page names the card, asks for the card's own
 // tick, word for word the server's, and Pay charges the card; with no card, or an expired one, Add card or Update card
-// opens over the page and the list is read again once it closes. A promo code (20j) is typed above the lines: Apply reads
-// the list again with it, each line showing what it takes off or why not, and Pay waits while that read is on its way.
+// opens over the page and the list is read again once it closes. A promo code (20j) is typed on a line's page, under what
+// they pay today, as checkouts ask for one: Apply reads the list again with it, the page says what it takes off or why
+// not, and Pay waits while that read is on its way or while a code is typed and not applied. Closing the page drops it.
 
 export interface BuyPlace {
   id: string;
@@ -255,9 +257,22 @@ function BuyBody({
   };
   const open = (typeId: string) => {
     buy.clear();
-    // A code typed and not applied yet is applied as the line opens; its page waits for it.
-    if (shownCode === "" && !codeBusy && codeSaid === null && codeOf(typed) !== "") void readWith(codeOf(typed));
     setOpenLine(typeId);
+  };
+  const promo: PromoControl = {
+    typed,
+    shown: shownCode,
+    busy: codeBusy,
+    said: codeSaid,
+    onType: (text) => {
+      setTyped(text.toUpperCase());
+      setCodeSaid(null);
+    },
+    onApply: apply,
+    onRemove: () => {
+      setTyped("");
+      void readWith("");
+    },
   };
 
   return (
@@ -298,23 +313,6 @@ function BuyBody({
           </Card>
         ) : (
           <View style={styles.section}>
-            {held.view.record === "shared" ? null : (
-              <PromoBox
-                applied={shownCode}
-                typed={typed}
-                busy={codeBusy}
-                said={codeSaid}
-                onType={(text) => {
-                  setTyped(text.toUpperCase());
-                  setCodeSaid(null);
-                }}
-                onApply={apply}
-                onRemove={() => {
-                  setTyped("");
-                  void readWith("");
-                }}
-              />
-            )}
             <Txt kind="eyebrow" colour="textFaint">
               {BUY_HEADING}
             </Txt>
@@ -344,11 +342,14 @@ function BuyBody({
         view={view}
         buy={buy}
         typeId={openLine}
-        codeBusy={codeBusy}
-        codeSaid={codeSaid}
+        promo={promo}
         onClose={() => {
           setOpenLine(null);
           buy.clear();
+          // A code goes with the page it was typed on: the list is read without it again.
+          setTyped("");
+          setCodeSaid(null);
+          if (code.current !== "" || shownCode !== "") void readWith("");
         }}
         onMembership={toMembership}
         onCard={() => {
@@ -422,7 +423,20 @@ function ResultBox({ gym, buy, onMembership, onPass }: { gym: string; buy: BuyIn
 
 const NOT_CHARGED = "You weren’t charged.";
 
-/** Above the lines (20j), as the code changes their prices: the Promo code box with Apply, and why a code takes nothing off; once one does, the code with Remove. */
+/** What a line's page needs for its promo code box (20j): what is typed, the code the list shown was read with, whether
+ *  another read is on its way, and why the code takes nothing off. */
+interface PromoControl {
+  typed: string;
+  shown: string;
+  busy: boolean;
+  said: string | null;
+  onType: (text: string) => void;
+  onApply: () => void;
+  onRemove: () => void;
+}
+
+/** On a line's page, under what they pay today (20j): the Promo code box with Apply, and why a code takes nothing off;
+ *  once it takes something off this line, the code with Remove. */
 function PromoBox({
   applied,
   typed,
@@ -442,13 +456,13 @@ function PromoBox({
 }) {
   if (applied !== "")
     return (
-      <Card testID="promo-applied" style={[styles.box, styles.row]}>
+      <View testID="promo-applied" style={styles.row}>
         <Icon name="check" size={18} colour="goodText" />
         <Txt colour="text" style={styles.grow}>
           {promoApplied(applied)}
         </Txt>
         <Button label={PROMO_REMOVE} kind="link" small disabled={busy} say={`${PROMO_REMOVE} the code ${applied}`} onPress={onRemove} />
-      </Card>
+      </View>
     );
   return (
     <View testID="promo-box" style={styles.said}>
@@ -522,8 +536,7 @@ function LinePage({
   view,
   buy,
   typeId,
-  codeBusy,
-  codeSaid,
+  promo,
   onClose,
   onMembership,
   onCard,
@@ -534,8 +547,7 @@ function LinePage({
   view: ForSaleResponse | null;
   buy: BuyInApp;
   typeId: string | null;
-  codeBusy: boolean;
-  codeSaid: string | null;
+  promo: PromoControl;
   onClose: () => void;
   onMembership: () => void;
   onCard: () => void;
@@ -548,8 +560,7 @@ function LinePage({
       view={view}
       buy={buy}
       typeId={typeId}
-      codeBusy={codeBusy}
-      codeSaid={codeSaid}
+      promo={promo}
       onClose={onClose}
       onMembership={onMembership}
       onCard={onCard}
@@ -563,8 +574,7 @@ function LineBody({
   view,
   buy,
   typeId,
-  codeBusy,
-  codeSaid,
+  promo,
   onClose,
   onMembership,
   onCard,
@@ -574,10 +584,8 @@ function LineBody({
   view: ForSaleResponse | null;
   buy: BuyInApp;
   typeId: string;
-  /** The list with another promo code is on its way: Pay waits for it (20j). */
-  codeBusy: boolean;
-  /** Why the code typed takes nothing off, said where no code is used on this line. */
-  codeSaid: string | null;
+  /** The promo code box (20j). */
+  promo: PromoControl;
   onClose: () => void;
   onMembership: () => void;
   onCard: () => void;
@@ -614,10 +622,18 @@ function LineBody({
   const charging = buy.waiting === typeId && busy === null && said === null;
   // A record two app accounts share buys at the front desk: its page reads, with nothing to sign or pay.
   const shared = view?.record === "shared";
+  // The promo code (20j): the code this line was worked out with; why the code typed takes nothing off here (the list's
+  // reason, or this line's where it fits another); and a code typed and not applied, which Pay waits for.
+  const codeBusy = promo.busy;
+  const lineCode = line?.firstPayment.promo?.code ?? "";
+  const typedCode = codeOf(promo.typed);
+  const codeSaid = promo.said ?? (promo.shown !== "" && lineCode === "" && typedCode === promo.shown ? (line?.promoWords ?? null) : null);
+  const unapplied = !codeBusy && typedCode !== "" && typedCode !== lineCode && codeSaid === null;
   const ready =
     line !== null &&
     !shared &&
     !codeBusy &&
+    !unapplied &&
     (how.kind === "page" || (how.kind === "card" && cardAgreed)) &&
     (line.agreement === null || (signer !== null && waiverReadyToSign(name, agreed)));
 
@@ -670,16 +686,14 @@ function LineBody({
         )}
         {charging || said?.toMembership === true || (how.kind !== "page" && how.kind !== "card") ? null : (
           <Txt kind="tiny" style={styles.centre}>
-            {codeBusy ? PROMO_CHECKING : ready ? (how.kind === "card" ? chargedThrough(how.card) : PAY_SECURE) : notReadyLine(line.agreement !== null, how.kind === "card", signer !== null)}
+            {codeBusy ? PROMO_CHECKING : unapplied ? PROMO_PRESS_APPLY : ready ? (how.kind === "card" ? chargedThrough(how.card) : PAY_SECURE) : notReadyLine(line.agreement !== null, how.kind === "card", signer !== null)}
           </Txt>
         )}
       </>
     );
 
   const parts = line === null ? null : todayParts(line);
-  const promo = line === null ? null : promoLine(line);
-  // Why no code comes off this line: the line's own reason, or the list's where the code takes nothing off anywhere.
-  const noCode = line === null || line.firstPayment.promo !== null ? null : (line.promoWords ?? codeSaid);
+  const off = line === null ? null : promoLine(line);
   return (
     <CoverPage open title={line?.name ?? ""} onClose={onClose} foot={foot}>
       {line === null ? (
@@ -717,16 +731,18 @@ function LineBody({
             <View style={styles.grow}>
               <Txt colour="text">{TODAY_TITLE}</Txt>
               {parts === null ? null : <Txt kind="small">{parts}</Txt>}
-              {promo === null ? null : (
+              {off === null ? null : (
                 <Txt kind="small" colour="goodText">
-                  {promo}
+                  {off}
                 </Txt>
               )}
               {line.firstPayment.promo?.instead == null ? null : <Txt kind="small">{PROMO_INSTEAD}</Txt>}
-              {noCode === null ? null : <Txt kind="small">{noCode}</Txt>}
             </View>
             <Txt kind="h3">{formatMinor(line.firstPayment.amountMinor, line.currency)}</Txt>
           </View>
+          {shared ? null : (
+            <PromoBox applied={lineCode} typed={promo.typed} busy={codeBusy || busy !== null} said={codeSaid} onType={promo.onType} onApply={promo.onApply} onRemove={promo.onRemove} />
+          )}
           <Txt kind="eyebrow" colour="textFaint">
             {FACTS_HEADING}
           </Txt>

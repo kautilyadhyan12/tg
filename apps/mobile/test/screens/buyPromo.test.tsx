@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import { AppState, type AppStateStatus } from "react-native";
 import { PROMO_CODE_WORDS, type ForSaleLine } from "@app/shared";
 import { App } from "../../src/App";
-import { PROMO_CHECKING, PROMO_INSTEAD, PROMO_NOT_CHECKED } from "../../src/screens/gym/buyView";
+import { PROMO_CHECKING, PROMO_INSTEAD, PROMO_NOT_CHECKED, PROMO_PRESS_APPLY } from "../../src/screens/gym/buyView";
 import type { Ask } from "../../src/session/calls";
 import { fakeServer, kept, lost, memoryStore, refusal, tokens, type Reply } from "../kit";
 import { DAY_ID, DAY_TYPE, GOLD_ID, GOLD_TYPE, PACK_ID, PACK_TYPE, SPRING20, lineOf } from "../forSaleLines";
@@ -92,19 +92,25 @@ async function openBuy(ask: Ask) {
   await fireEvent.press(await screen.findByLabelText("Buy a membership or pack at Iron House"));
 }
 const onBuy = () => within(screen.getByTestId("buy-page"));
+const onLine = () => within(screen.getByTestId("buy-line"));
 async function typeCode(text: string) {
-  await fireEvent.changeText(await onBuy().findByLabelText("Promo code"), text);
+  await fireEvent.changeText(await screen.findByLabelText("Promo code"), text);
 }
 async function applyCode(text: string) {
   await typeCode(text);
-  await fireEvent.press(onBuy().getByLabelText("Apply the promo code"));
+  await fireEvent.press(screen.getByLabelText("Apply the promo code"));
 }
 const openPack = async () => {
   await fireEvent.press(await onBuy().findByLabelText("Buy 10-class pack, $90.00"));
 };
+const closeLine = async () => {
+  const close = screen.getAllByLabelText("Close").at(-1);
+  if (close === undefined) throw new Error("no Close");
+  await fireEvent.press(close);
+};
 
 describe("the worst thing: what Pay charges is what the screen showed, with the code it was worked out with", () => {
-  it("SPRING20 applied: the pack reads $72.00 and Pay sends SPRING20 with $72.00; removed, it reads $90.00 and Pay sends no code", async () => {
+  it("SPRING20 applied on the pack's page: it reads $72.00 and Pay sends SPRING20 with $72.00; removed, $90.00 and no code", async () => {
     expect(PACK_CODED.firstPayment.amountMinor).toBe(7200);
     const server = fakeServer({
       "/v1/auth/refresh": ok({ tokens: tokens(2) }),
@@ -113,14 +119,13 @@ describe("the worst thing: what Pay charges is what the screen showed, with the 
       [buyPath]: notOpened,
     });
     await openBuy(server.ask);
+    // The list itself has no box: a code is asked for where the member pays.
+    expect(onBuy().queryByLabelText("Promo code")).toBeNull();
+    await openPack();
     // The code is sent as the gym writes it, whatever the case or spaces it was typed with.
     await applyCode(" spring20 ");
-    expect(await onBuy().findByText("SPRING20 applied")).toBeTruthy();
+    expect(await screen.findByText("SPRING20 applied")).toBeTruthy();
     expect(lists(server.asked).at(-1)?.search).toBe("?repeating=true&code=SPRING20");
-    expect(onBuy().getByText("$72.00 today, with the code SPRING20")).toBeTruthy();
-    expect(onBuy().getByText("This code doesn't apply to Day pass.")).toBeTruthy();
-
-    await openPack();
     expect(within(screen.getByTestId("buy-today")).getByText("$72.00")).toBeTruthy();
     expect(within(screen.getByTestId("buy-today")).getByText("SPRING20 · Spring offer: −$18.00")).toBeTruthy();
     await fireEvent.press(screen.getByLabelText("Pay $72.00 for 10-class pack"));
@@ -135,14 +140,12 @@ describe("the worst thing: what Pay charges is what the screen showed, with the 
       agreement: null,
       code: "SPRING20",
     });
-    await fireEvent.press(screen.getAllByLabelText("Close").at(-1) ?? screen.getByText("never"));
 
     // Removed: the list is read without it, and nothing Pay sends names it.
-    await fireEvent.press(await onBuy().findByLabelText("Remove the code SPRING20"));
-    expect(await onBuy().findByLabelText("Promo code")).toBeTruthy();
+    await fireEvent.press(screen.getByLabelText("Remove the code SPRING20"));
+    expect(await screen.findByLabelText("Pay $90.00 for 10-class pack")).toBeTruthy();
     expect(lists(server.asked).at(-1)?.search).toBe("?repeating=true");
-    await openPack();
-    await fireEvent.press(await screen.findByLabelText("Pay $90.00 for 10-class pack"));
+    await fireEvent.press(screen.getByLabelText("Pay $90.00 for 10-class pack"));
     await waitFor(() => {
       expect(presses(server.asked)).toHaveLength(2);
     });
@@ -150,7 +153,7 @@ describe("the worst thing: what Pay charges is what the screen showed, with the 
     expect(presses(server.asked)[1]?.amountMinor).toBe(9000);
   });
 
-  it("a code typed and not applied is applied as the line opens, and Pay waits for the list worked out with it", async () => {
+  it("Pay waits while the code is checked, and while a code is typed and not applied", async () => {
     let release: (reply: Reply) => void = () => undefined;
     const server = fakeServer({
       "/v1/auth/refresh": ok({ tokens: tokens(2) }),
@@ -160,13 +163,20 @@ describe("the worst thing: what Pay charges is what the screen showed, with the 
       [buyPath]: notOpened,
     });
     await openBuy(server.ask);
-    await typeCode("SPRING20");
     await openPack();
-    // The list with the code is on its way: Pay can't be pressed on the $90.00 still shown.
-    const pay = await screen.findByLabelText("Pay $90.00 for 10-class pack");
+    // Typed and not applied: Pay can't be pressed on the $90.00 shown, and says what to do.
+    await typeCode("SPRING20");
+    const pay = screen.getByLabelText("Pay $90.00 for 10-class pack");
     expect(disabled(pay)).toBe(true);
-    expect(screen.getByText(PROMO_CHECKING)).toBeTruthy();
+    expect(screen.getByText(PROMO_PRESS_APPLY)).toBeTruthy();
     await fireEvent.press(pay);
+    expect(presses(server.asked)).toEqual([]);
+
+    // Applied and on its way: still waiting.
+    await fireEvent.press(screen.getByLabelText("Apply the promo code"));
+    expect(disabled(screen.getByLabelText("Pay $90.00 for 10-class pack"))).toBe(true);
+    expect(screen.getByText(PROMO_CHECKING)).toBeTruthy();
+    await fireEvent.press(screen.getByLabelText("Pay $90.00 for 10-class pack"));
     expect(presses(server.asked)).toEqual([]);
 
     await act(() => {
@@ -181,7 +191,7 @@ describe("the worst thing: what Pay charges is what the screen showed, with the 
     expect(presses(server.asked)[0]).toMatchObject({ amountMinor: 7200, code: "SPRING20" });
   });
 
-  it("a line the code doesn't fit sends no code, though the code is applied to another", async () => {
+  it("a code that fits another line, not this one, says so here and is not sent", async () => {
     const server = fakeServer({
       "/v1/auth/refresh": ok({ tokens: tokens(2) }),
       "/v1/orgs/mine": mine,
@@ -189,10 +199,10 @@ describe("the worst thing: what Pay charges is what the screen showed, with the 
       [buyPath]: notOpened,
     });
     await openBuy(server.ask);
+    await fireEvent.press(await onBuy().findByLabelText("Buy Day pass, $15.00"));
     await applyCode("SPRING20");
-    await onBuy().findByText("SPRING20 applied");
-    await fireEvent.press(onBuy().getByLabelText("Buy Day pass, $15.00"));
-    expect(within(await screen.findByTestId("buy-today")).getByText("This code doesn't apply to Day pass.")).toBeTruthy();
+    expect(await onLine().findByText("This code doesn't apply to Day pass.")).toBeTruthy();
+    expect(screen.queryByText("SPRING20 applied")).toBeNull();
     await fireEvent.press(screen.getByLabelText("Pay $15.00 for Day pass"));
     await waitFor(() => {
       expect(presses(server.asked)).toHaveLength(1);
@@ -201,27 +211,57 @@ describe("the worst thing: what Pay charges is what the screen showed, with the 
     expect(presses(server.asked)[0]).not.toHaveProperty("code");
   });
 
-  it("a monthly membership's card tick is the one worked out with the code, sent word for word with the code", async () => {
+  it("a monthly membership's card tick is the one worked out with the code, sent word for word with the code; bought, the code is dropped", async () => {
     const gold = lineOf(GOLD_TYPE, { agreement: false, card: VISA, promo: SPRING20 });
     expect(gold.charge).toBe("I agree that Iron House may charge my Visa ending 1111 $39.99 today, then $49.99 every month from 12 Dec 2026, until my membership ends or I cancel it.");
+    const plainGold = lineOf(GOLD_TYPE, { agreement: false, card: VISA });
     const server = fakeServer({
       "/v1/auth/refresh": ok({ tokens: tokens(2) }),
       "/v1/orgs/mine": mine,
-      [forSalePath]: byCode(() => view([gold], APPLIED), () => view([lineOf(GOLD_TYPE, { agreement: false, card: VISA })])),
+      [forSalePath]: byCode(() => view([gold], APPLIED), () => view([plainGold])),
       [buyPath]: ok({ purchase: { id: PURCHASE, typeId: GOLD_ID, name: "Gold Monthly", amountMinor: 3999, currency: "USD", state: "paid", url: null, closesAt: null, membershipId: "9b8a7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d", receiptNumber: 41 } }),
     });
     await openBuy(server.ask);
+    await fireEvent.press(await onBuy().findByLabelText("Buy Gold Monthly, $49.99"));
+    // The tick read before the code is taken away when the amounts change.
+    await fireEvent.press(await screen.findByLabelText(plainGold.charge ?? ""));
     await applyCode("SPRING20");
-    await onBuy().findByText("SPRING20 applied");
-    await fireEvent.press(onBuy().getByLabelText("Buy Gold Monthly, $49.99"));
-    await fireEvent.press(await screen.findByLabelText(gold.charge ?? ""));
+    await screen.findByText("SPRING20 applied");
+    expect(disabled(screen.getByLabelText("Pay $39.99 for Gold Monthly"))).toBe(true);
+    await fireEvent.press(screen.getByLabelText(gold.charge ?? ""));
     await fireEvent.press(screen.getByLabelText("Pay $39.99 for Gold Monthly"));
     await screen.findByTestId("buy-paid");
     expect(presses(server.asked)[0]).toMatchObject({ amountMinor: 3999, code: "SPRING20", charge: { words: gold.charge, verificationToken: null } });
-    // Bought: the code goes with that purchase, and the list is read again without it.
     await waitFor(() => {
       expect(lists(server.asked).at(-1)?.search).toBe("?repeating=true");
     });
+  });
+
+  it("closing the page drops the code: the list is read without it, and another line's page starts empty", async () => {
+    const server = fakeServer({
+      "/v1/auth/refresh": ok({ tokens: tokens(2) }),
+      "/v1/orgs/mine": mine,
+      [forSalePath]: byCode(codedList),
+      [buyPath]: notOpened,
+    });
+    await openBuy(server.ask);
+    await openPack();
+    await applyCode("SPRING20");
+    await screen.findByText("SPRING20 applied");
+    await closeLine();
+    await waitFor(() => {
+      expect(lists(server.asked).at(-1)?.search).toBe("?repeating=true");
+    });
+    expect(await onBuy().findByLabelText("Buy 10-class pack, $90.00")).toBeTruthy();
+    expect(onBuy().queryByText("$72.00 today, with the code SPRING20")).toBeNull();
+    await openPack();
+    expect(await screen.findByLabelText("Promo code")).toBeTruthy();
+    expect(screen.queryByText("SPRING20 applied")).toBeNull();
+    await fireEvent.press(await screen.findByLabelText("Pay $90.00 for 10-class pack"));
+    await waitFor(() => {
+      expect(presses(server.asked)).toHaveLength(1);
+    });
+    expect(presses(server.asked)[0]).not.toHaveProperty("code");
   });
 });
 
@@ -244,18 +284,18 @@ describe("a code that takes nothing off says why, in the server's words, and is 
       [buyPath]: notOpened,
     });
     await openBuy(server.ask);
+    await openPack();
     await applyCode("summer-20");
-    expect(await onBuy().findByText(words)).toBeTruthy();
+    expect(await screen.findByText(words)).toBeTruthy();
     expect(lists(server.asked).at(-1)?.search).toBe("?repeating=true&code=SUMMER-20");
-    expect(onBuy().queryByText("SUMMER-20 applied")).toBeNull();
-    expect(onBuy().getByLabelText("Promo code").props).toMatchObject({ value: "SUMMER-20" });
+    expect(screen.queryByText("SUMMER-20 applied")).toBeNull();
+    expect(screen.getByLabelText("Promo code").props).toMatchObject({ value: "SUMMER-20" });
     // Back in the app later, the list is read without it: a refused code is not tried again by itself.
     await appIs("active");
     await waitFor(() => {
       expect(lists(server.asked).at(-1)?.search).toBe("?repeating=true");
     });
-    await openPack();
-    expect(within(await screen.findByTestId("buy-today")).getByText(words)).toBeTruthy();
+    // The refusal is on screen, so Pay is not held back: it charges the full price, with no code.
     await fireEvent.press(screen.getByLabelText("Pay $90.00 for 10-class pack"));
     await waitFor(() => {
       expect(presses(server.asked)).toHaveLength(1);
@@ -270,11 +310,11 @@ describe("a code that takes nothing off says why, in the server's words, and is 
       [forSalePath]: (_body, search = "") => (search.includes("code=") ? lost() : { status: 200, body: view([PACK, DAY]) }),
     });
     await openBuy(server.ask);
-    await applyCode("SPRING20");
-    expect(await onBuy().findByText(PROMO_NOT_CHECKED)).toBeTruthy();
-    expect(onBuy().queryByText("SPRING20 applied")).toBeNull();
     await openPack();
-    expect(disabled(await screen.findByLabelText("Pay $90.00 for 10-class pack"))).toBe(false);
+    await applyCode("SPRING20");
+    expect(await screen.findByText(PROMO_NOT_CHECKED)).toBeTruthy();
+    expect(screen.queryByText("SPRING20 applied")).toBeNull();
+    expect(disabled(screen.getByLabelText("Pay $90.00 for 10-class pack"))).toBe(false);
   });
 
   it("the code's last use taken while on the page: Pay's refusal reads the list again, which says why, at the full price", async () => {
@@ -289,16 +329,17 @@ describe("a code that takes nothing off says why, in the server's words, and is 
       },
     });
     await openBuy(server.ask);
-    await applyCode("SPRING20");
-    await onBuy().findByText("SPRING20 applied");
     await openPack();
-    await fireEvent.press(await screen.findByLabelText("Pay $72.00 for 10-class pack"));
+    await applyCode("SPRING20");
+    await screen.findByText("SPRING20 applied");
+    await fireEvent.press(screen.getByLabelText("Pay $72.00 for 10-class pack"));
     expect(await screen.findByLabelText("Pay $90.00 for 10-class pack")).toBeTruthy();
     expect(screen.getAllByText(PROMO_CODE_WORDS.used_up).length).toBeGreaterThan(0);
     expect(screen.queryByText("SPRING20 · Spring offer: −$18.00")).toBeNull();
+    expect(screen.queryByText("SPRING20 applied")).toBeNull();
   });
 
-  it("used in place of the member's Refer a friend discount, the line says so", async () => {
+  it("used in place of the member's Refer a friend discount, the page says so", async () => {
     const gifted = lineOf(PACK_TYPE, { agreement: false, friendGift: true, promo: SPRING20 });
     expect(gifted.firstPayment.promo?.instead).toBe("Refer a friend");
     const server = fakeServer({
@@ -307,9 +348,10 @@ describe("a code that takes nothing off says why, in the server's words, and is 
       [forSalePath]: byCode(() => view([gifted], APPLIED), () => view([lineOf(PACK_TYPE, { agreement: false, friendGift: true })])),
     });
     await openBuy(server.ask);
+    await fireEvent.press(await onBuy().findByLabelText("Buy 10-class pack, $90.00"));
     await applyCode("SPRING20");
-    await onBuy().findByText("SPRING20 applied");
-    await openPack();
-    expect(within(await screen.findByTestId("buy-today")).getByText(PROMO_INSTEAD)).toBeTruthy();
+    await screen.findByText("SPRING20 applied");
+    expect(within(screen.getByTestId("buy-today")).getByText(PROMO_INSTEAD)).toBeTruthy();
+    expect(onLine().getByText("SPRING20 applied")).toBeTruthy();
   });
 });
