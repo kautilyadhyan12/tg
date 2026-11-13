@@ -1,4 +1,4 @@
-import { APP_PURCHASE_WORDS, PROMO_CODE_WORDS, cardName, dayWords, formatMinor, type AppPurchase, type AppPurchaseRequest, type DeskSigner, type ForSaleLine, type ForSaleResponse, type ForSaleSigner } from "@app/shared";
+import { APP_PURCHASE_WORDS, PROMO_CODE_WORDS, cardName, coversWords, formatMinor, type AppPurchase, type AppPurchaseRequest, type DeskSigner, type ForSaleLine, type ForSaleResponse, type ForSaleSigner } from "@app/shared";
 import { NOT_PAID, PAY_CHECK, PAY_NOT_OPENED, PAY_WAITING, type PaySaid } from "./payView";
 
 // Buy in the app (ROADMAP Stage 5 item 20g; the server's `/for-sale` and `/for-sale/purchases`, built in 18k-iii). The
@@ -112,11 +112,11 @@ export function todayLine(line: Pick<ForSaleLine, "firstPayment" | "priceMinor" 
   if (fp.promo !== null) reasons.push(`the code ${fp.promo.code}`);
   if (fp.friendGift !== null || fp.memberGiftOffMinor > 0) reasons.push("your Refer a friend gift");
   // What those make up; anything else is tax added on top of the price (round one, L2). Part of a month is not the price
-  // at all, so it says until when instead of guessing at tax (20j round one, H2).
+  // at all, so it says which days it pays for instead of guessing at tax (20j round one, H2).
   const explained = fp.joiningFeeMinor - (fp.friendGift?.offMinor ?? 0) - fp.memberGiftOffMinor - (fp.promo?.offMinor ?? 0);
   if (!fp.part && fp.amountMinor - line.priceMinor !== explained) reasons.push("tax");
-  const until = fp.part && fp.covers !== null ? `, to ${dayWords(fp.covers.to)}` : "";
-  const today = `${formatMinor(fp.amountMinor, line.currency)} today${until}`;
+  const span = fp.part && fp.covers !== null ? ` for ${coversWords(fp.covers.from, fp.covers.to)}` : "";
+  const today = `${formatMinor(fp.amountMinor, line.currency)} today${span}`;
   return reasons.length === 0 ? today : `${today}, with ${andList(reasons)}`;
 }
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { APP_PURCHASE_WORDS, PROMO_CODE_WORDS, appPurchaseRequestSchema, appPurchaseSchema, type AppPaymentState, type ForSaleLine, type ForSaleResponse } from "@app/shared";
+import { APP_PURCHASE_WORDS, PROMO_CODE_WORDS, formatMinor, appPurchaseRequestSchema, appPurchaseSchema, type AppPaymentState, type ForSaleLine, type ForSaleResponse } from "@app/shared";
 import {
   BANK_CHECK_DESK,
   CARD_NOT_TAKEN,
@@ -223,9 +223,8 @@ describe("a promo code (20j)", () => {
     expect(coded.firstPayment.promo?.offMinor).not.toBe(savedToday);
     expect(promoLine(coded)).toBe("SPRING20 · Spring offer");
     // No tax at this gym, so the line never says tax.
-    expect(todayLine(coded)).not.toContain("tax");
-    expect(todayLine(coded)).toContain("the code SPRING20");
-    expect(todayLine(plain)).not.toContain("tax");
+    expect(todayLine(coded)).toBe(`${formatMinor(coded.firstPayment.amountMinor, "USD")} today for 12 Nov – 30 Nov 2026, with the code SPRING20`);
+    expect(todayLine(plain)).toBe(`${formatMinor(plain.firstPayment.amountMinor, "USD")} today for 12 Nov – 30 Nov 2026`);
   });
 
   it("refused at Pay as no longer usable: the list is read again, which says why", () => {
