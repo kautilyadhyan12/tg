@@ -52,7 +52,8 @@ export interface BoxFor {
   name: string;
 }
 
-type Step<A, D> = { kind: "loading" } | { kind: "failed" } | { kind: "ask"; ask: A } | { kind: "done"; done: D };
+/** `failed`: the box could not be read, with what to say over Try again. */
+type Step<A, D> = { kind: "loading" } | { kind: "failed"; line: string } | { kind: "ask"; ask: A } | { kind: "done"; done: D };
 
 /** A press whose answer was lost: pressed again, it is sent with the same request key. */
 type Lost = { membershipId: string; what: string; key: string; requestKey: string };
@@ -102,8 +103,8 @@ export function CancelBox({ gymId, open, onDone, onClose }: { gymId: string; ope
       // Only the membership pressed is shown in its box.
       if (answer.kind === "ok" && answer.data.membership.id === target.membershipId) setStep({ kind: "ask", ask: answer.data });
       else if (answer.kind === "refused" && refusedLine(answer.status, answer.error, answer.message).final) setProblem({ line: refusedLine(answer.status, answer.error, answer.message).line, final: true });
-      // A fault or too many tries: Try again reads it again.
-      else setStep({ kind: "failed" });
+      // A fault or too many tries: Try again reads it again, under the refusal's own words.
+      else setStep({ kind: "failed", line: answer.kind === "refused" ? refusedLine(answer.status, answer.error, answer.message).line : COULD_NOT_READ });
     },
     [session, gymId],
   );
@@ -150,7 +151,8 @@ export function CancelBox({ gymId, open, onDone, onClose }: { gymId: string; ope
       setReason({ picked, busy: true, failed: null, sent: false });
       const answer = await session.signedIn({ method: "POST", path: myCancelReasonPath(gymId, cancelId), body: { reason: picked } }, myCancelReasonResponseSchema);
       if (!live.current) return;
-      if (answer.kind === "ok" && answer.data.reason === picked) {
+      // The server keeps the first reason saved and answers with it, so any answer means a reason stands.
+      if (answer.kind === "ok") {
         setReason({ picked, busy: false, failed: null, sent: true });
         return;
       }
@@ -177,7 +179,7 @@ export function CancelBox({ gymId, open, onDone, onClose }: { gymId: string; ope
           )}
           {step.kind === "failed" ? (
             <>
-              <Txt colour="badText">{COULD_NOT_READ}</Txt>
+              <Txt colour="badText">{step.line}</Txt>
               <Button
                 label="Try again"
                 kind="soft"
@@ -262,8 +264,8 @@ export function KeepBox({ gymId, open, onDone, onClose }: { gymId: string; open:
       if (!live.current || number !== asked.current) return;
       if (answer.kind === "ok" && answer.data.membership.id === target.membershipId) setStep({ kind: "ask", ask: answer.data });
       else if (answer.kind === "refused" && refusedLine(answer.status, answer.error, answer.message).final) setProblem({ line: refusedLine(answer.status, answer.error, answer.message).line, final: true });
-      // A fault or too many tries: Try again reads it again.
-      else setStep({ kind: "failed" });
+      // A fault or too many tries: Try again reads it again, under the refusal's own words.
+      else setStep({ kind: "failed", line: answer.kind === "refused" ? refusedLine(answer.status, answer.error, answer.message).line : COULD_NOT_READ });
     },
     [session, gymId],
   );
@@ -320,7 +322,7 @@ export function KeepBox({ gymId, open, onDone, onClose }: { gymId: string; open:
           )}
           {step.kind === "failed" ? (
             <>
-              <Txt colour="badText">{COULD_NOT_READ}</Txt>
+              <Txt colour="badText">{step.line}</Txt>
               <Button
                 label="Try again"
                 kind="soft"

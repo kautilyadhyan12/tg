@@ -377,7 +377,7 @@ describe("the box says what the server says", () => {
     );
     await openMembership(s.ask);
     await openCancel(OFFPEAK);
-    expect(await box().findByText("Couldn’t load this. Check your internet and try again.")).toBeTruthy();
+    expect(await box().findByText("Something went wrong. Try again.")).toBeTruthy();
     await fireEvent.press(box().getByText("Try again"));
     expect(await box().findByText("Off-peak Monthly ends on 11 Dec 2026, the last day you've paid for.")).toBeTruthy();
   });
@@ -430,6 +430,27 @@ describe("why are you leaving", () => {
     expect(await box().findByText("Couldn’t send your answer. Check your internet and try again.")).toBeTruthy();
     await fireEvent.press(box().getByText("Moving away"));
     expect(await box().findByText("Thanks for telling us.")).toBeTruthy();
+  });
+
+  it("the server keeps the first reason it saved: a later pick answered with that one still reads as sent", async () => {
+    const s = server(() => ({ status: 200, body: done("Cancelled. Off-peak Monthly ends on 11 Dec 2026.") }), undefined, {
+      [reasonPath]: () => ({ status: 200, body: { reason: "moving" } }),
+    });
+    await openMembership(s.ask);
+    await openCancel(OFFPEAK);
+    await fireEvent.press(await box().findByText("Cancel membership"));
+    await fireEvent.press(await box().findByText("Cost"));
+    expect(await box().findByText("Thanks for telling us.")).toBeTruthy();
+    expect(box().queryByText("Couldn’t send your answer. Check your internet and try again.")).toBeNull();
+  });
+
+  it("too many tries while the box loads says so, with Try again", async () => {
+    const s = server(() => ({ status: 200, body: done("x") }), () => refusal(429, "rate_limited", "Too many requests"));
+    await openMembership(s.ask);
+    await openCancel(OFFPEAK);
+    expect(await box().findByText("Too many tries. Please wait a few minutes and try again.")).toBeTruthy();
+    expect(box().queryByText("Couldn’t load this. Check your internet and try again.")).toBeNull();
+    expect(box().getByText("Try again")).toBeTruthy();
   });
 
   it("a reason the server refused is not taken as sent", async () => {
