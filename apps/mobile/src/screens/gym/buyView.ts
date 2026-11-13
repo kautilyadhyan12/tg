@@ -1,16 +1,20 @@
-import { APP_PURCHASE_WORDS, cardName, formatMinor, type AppPurchase, type AppPurchaseRequest, type DeskSigner, type ForSaleLine, type ForSaleResponse, type ForSaleSigner } from "@app/shared";
+import { APP_PURCHASE_WORDS, PROMO_CODE_WORDS, cardName, formatMinor, type AppPurchase, type AppPurchaseRequest, type DeskSigner, type ForSaleLine, type ForSaleResponse, type ForSaleSigner } from "@app/shared";
 import { NOT_PAID, PAY_CHECK, PAY_NOT_OPENED, PAY_WAITING, type PaySaid } from "./payView";
 
 // Buy in the app (ROADMAP Stage 5 item 20g; the server's `/for-sale` and `/for-sale/purchases`, built in 18k-iii). The
 // gym's packs, day passes and memberships paid once that it sells in the app, each with what it gives; a line's page
 // with every detail in the agreement's own words, the agreement to sign where the gym asks for one, and Pay on Square's
 // own page. Pure: the server works out each line, what is paid today and how a page ended. A repeating membership (20i-i,
-// the server's 18k-iv) is paid with the card saved in the app, on a tick of its own the server words: no page opens.
+// the server's 18k-iv) is paid with the card saved in the app, on a tick of its own the server words: no page opens. A
+// promo code typed on the list (20j, the server's 18k-v) reads the list again with it: each line it takes something off
+// carries it, and Pay sends the code of the line shown with that line's amount, never the box's words.
 
 const gymPath = (gymId: string): string => `/v1/orgs/${encodeURIComponent(gymId)}`;
 export const forSalePath = (gymId: string): string => `${gymPath(gymId)}/for-sale`;
-/** The list with its repeating memberships too, which this phone pays with the saved card (20i-i). */
-export const forSaleListPath = (gymId: string): string => `${forSalePath(gymId)}?repeating=true`;
+/** The list with its repeating memberships too, which this phone pays with the saved card (20i-i), and worked out with
+ *  the promo code applied, if any (20j). */
+export const forSaleListPath = (gymId: string, code = ""): string =>
+  `${forSalePath(gymId)}?repeating=true${code === "" ? "" : `&code=${encodeURIComponent(code)}`}`;
 export const purchasesPath = (gymId: string): string => `${forSalePath(gymId)}/purchases`;
 export const purchaseClosePath = (gymId: string, purchaseId: string): string => `${purchasesPath(gymId)}/${encodeURIComponent(purchaseId)}/close`;
 
@@ -49,6 +53,25 @@ export const BANK_CHECK_DESK = "Your bank needs to confirm this payment, so buy 
 /** A card charge that ended with nothing taken, said after Check status. */
 export const CARD_NOT_TAKEN = "Square didn’t take this payment, so nothing was charged.";
 
+export const PROMO_LABEL = "Promo code";
+export const PROMO_APPLY = "Apply";
+export const PROMO_REMOVE = "Remove";
+export const PROMO_CHECKING = "Checking your code…";
+export const PROMO_NOT_CHECKED = "Couldn’t check the code. Check your internet and try again.";
+/** A gym's codes are letters and numbers, at most 20 (the console's own rule). */
+export const PROMO_MAX = 20;
+/** The box's words as they are sent: in capitals, as the gym writes its codes. */
+export const codeOf = (typed: string): string => typed.trim().toUpperCase();
+/** Once a code takes something off: "SPRING20 applied". */
+export const promoApplied = (code: string): string => `${code} applied`;
+/** Under "You pay today": "SPRING20 · Spring offer: −$18.00". Null where no code is used on the line. */
+export function promoLine(line: Pick<ForSaleLine, "firstPayment" | "currency">): string | null {
+  const p = line.firstPayment.promo;
+  return p === null ? null : `${p.code} · ${p.name}: −${formatMinor(p.offMinor, line.currency)}`;
+}
+/** Where the code is used in place of the member's Refer a friend discount. */
+export const PROMO_INSTEAD = PROMO_CODE_WORDS.instead;
+
 /** What a screen reader says for Buy: "Buy 10-class pack, $90.00". */
 export const buySay = (line: Pick<ForSaleLine, "name" | "priceMinor" | "currency">): string => `Buy ${line.name}, ${formatMinor(line.priceMinor, line.currency)}`;
 /** "Pay $90.00". */
@@ -79,9 +102,10 @@ export function todayLine(line: Pick<ForSaleLine, "firstPayment" | "priceMinor" 
   if (fp.amountMinor === line.priceMinor) return null;
   const reasons: string[] = [];
   if (fp.joiningFeeMinor > 0) reasons.push(`a ${formatMinor(fp.joiningFeeMinor, line.currency)} joining fee`);
+  if (fp.promo !== null) reasons.push(`the code ${fp.promo.code}`);
   if (fp.friendGift !== null || fp.memberGiftOffMinor > 0) reasons.push("your Refer a friend gift");
   // What those make up; anything else is tax added on top of the price (round one, L2).
-  const explained = fp.joiningFeeMinor - (fp.friendGift?.offMinor ?? 0) - fp.memberGiftOffMinor;
+  const explained = fp.joiningFeeMinor - (fp.friendGift?.offMinor ?? 0) - fp.memberGiftOffMinor - (fp.promo?.offMinor ?? 0);
   if (fp.amountMinor - line.priceMinor !== explained) reasons.push("tax");
   const today = `${formatMinor(fp.amountMinor, line.currency)} today`;
   return reasons.length === 0 ? today : `${today}, with ${andList(reasons)}`;
@@ -101,7 +125,8 @@ export const nameLabel = (signer: DeskSigner | null): string => (signer === "gua
 export const GUARDIAN_LINE = APP_PURCHASE_WORDS.guardian_needed;
 
 /** What Pay sends but its key: the line, what its list showed (today's amount and the key of its details) and, where the
- *  gym asks for its agreement, the wording read, who signed and the name typed. */
+ *  gym asks for its agreement, the wording read, who signed and the name typed. The promo code is the line's own, the one
+ *  its amount was worked out with (20j): a line read without one sends none. */
 export function buyBody(
   line: Pick<ForSaleLine, "typeId" | "firstPayment" | "factsKey" | "agreement" | "repeats" | "charge">,
   sign: { signer: DeskSigner; name: string } | null,
@@ -113,6 +138,7 @@ export function buyBody(
     agreement: line.agreement === null || sign === null ? null : { agreementId: line.agreement.id, signer: sign.signer, name: sign.name },
     // A repeating membership: the card's tick word for word as the server sent it. No bank's check yet (20i-ii).
     ...(line.repeats && line.charge !== null ? { charge: { words: line.charge, verificationToken: null } } : {}),
+    ...(line.firstPayment.promo === null ? {} : { code: line.firstPayment.promo.code }),
   };
 }
 
@@ -191,6 +217,8 @@ const REREAD = new Set([
   "app_purchase_card_changed",
   "app_purchase_card_needed",
   "app_purchase_card_expired",
+  // The code can't be used now (its last use taken, or it ended at midnight): the list says why, without it (20j).
+  "app_purchase_promo",
 ]);
 /** The card is what stands in the way: Update card beside the words. */
 const UPDATE_CARD_CODES = new Set(["app_purchase_declined", "app_purchase_card_stopped", "app_purchase_card_expired"]);

@@ -52,7 +52,8 @@ export interface Reply {
   body: unknown;
 }
 /** What a route does with a request: answer, fail as a lost connection does (`throw`), or never answer. */
-export type Route = (body: unknown) => Reply | Promise<Reply>;
+/** `search`: the call's query, "?repeating=true", or "" for none. */
+export type Route = (body: unknown, search?: string) => Reply | Promise<Reply>;
 
 export const never = (): Promise<Reply> => new Promise(() => undefined);
 export const lost = (): Reply => {
@@ -169,7 +170,7 @@ export function fakeServer(routes: Record<string, Route>): { ask: Ask; asked: As
       headers: init.headers ?? {},
     });
     const route = all[path];
-    const reply = route === undefined ? refusal(404, "not_found", "Not found") : await route(asked.at(-1)?.body);
+    const reply = route === undefined ? refusal(404, "not_found", "Not found") : await route(asked.at(-1)?.body, new URL(url).search);
     return { ok: reply.status >= 200 && reply.status < 300, status: reply.status, json: () => Promise.resolve(reply.body) };
   };
   return { ask, asked, paths: () => asked.map((one) => one.path) };
