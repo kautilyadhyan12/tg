@@ -14,6 +14,8 @@ const LIQUID: Partial<Record<ColourName, readonly [ColourName, ColourName]>> = {
   good: ["good", "goodText"],
   blue: ["blueDeep", "blueLight"],
   orange: ["orangeDeep", "orangeLight"],
+  textFaint: ["greyDeep", "greyLight"],
+  textSoft: ["greyDeep", "greyLight"],
 };
 
 export function WeekGlass({ level, height, colour, over, id }: { level: number | null; height: number; colour: ColourName; over: boolean; id: string }) {

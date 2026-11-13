@@ -126,6 +126,9 @@ export const colours = {
   bubble: "rgba(255,255,255,0.45)",
   blueDeep: "#2563eb",
   blueLight: "#93c5fd",
+  /** Today so far, and a day with no target: a grey that reads as not judged yet. */
+  greyDeep: "#5f5f5f",
+  greyLight: "#a3a3a3",
 } as const;
 
 export type ColourName = keyof typeof colours;

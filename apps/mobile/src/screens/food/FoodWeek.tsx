@@ -265,7 +265,7 @@ function Chart({ bars, figure, month, line }: { bars: readonly Bar[]; figure: Fo
           </View>
         )}
         {line === null ? null : (
-          <Txt kind="tiny" colour="textSoft" style={[styles.lineWords, { bottom: height(line) + 4 }]}>
+          <Txt kind="tiny" colour="textSoft" numberOfLines={1} style={[styles.lineWords, { bottom: height(line) + 4 }]}>
             {count(line)}
           </Txt>
         )}
@@ -322,7 +322,7 @@ const styles = StyleSheet.create({
   target: { position: "absolute", left: 0, right: 0, height: 2 },
   fact: { flexDirection: "row", alignItems: "center", gap: 10, padding: 12, borderRadius: 14, borderWidth: 1, borderColor: colours.line },
   average: { paddingTop: 10, borderTopWidth: 1, borderTopColor: colours.line },
-  lineWords: { position: "absolute", right: 0 },
+  lineWords: { position: "absolute", right: 0, minWidth: 44, textAlign: "center", paddingHorizontal: 5, borderRadius: 6, backgroundColor: colours.raised },
   about: { textAlign: "center" },
   centre: { textAlign: "center" },
   legend: { flexDirection: "row", flexWrap: "wrap", columnGap: 14, rowGap: 6 },
