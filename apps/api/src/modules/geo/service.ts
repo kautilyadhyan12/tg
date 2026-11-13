@@ -6,7 +6,7 @@
 // candidates only.
 import type { FastifyBaseLogger } from "fastify";
 import type { Sql } from "postgres";
-import { RUN_CALC_VERSION, RUN_CHOICES, hasOwnRun, ownCapOf, ownPlanOf, ownWeekSchema, planDayPlus, restartsPlan, runChoiceOf, runPlanAnswersSchema, runPlanOf, runsFrom, sameRace, climbFromHeights, climbSamples, heartLineOf, heartLineSchema, heartMaxOf, heartSums, heartZoneSeconds, heartZonesSchema, type HeartMaxResponse, type HeartZones, decodePolyline, encodePolyline, hillLineOf, hillLineSchema, paceLineSchema, routeShape, runSplitSchema, runSums } from "@app/shared";
+import { RUN_CALC_VERSION, RUN_CHOICES, hasOwnRun, ownCapOf, ownPlanOf, ownWeekSchema, planDayPlus, restartsPlan, runChoiceOf, runPlanAnswersSchema, runPlanOf, runsFrom, sameRace, climbFromHeights, climbSamples, heartLineFrom, heartLineSchema, heartMaxOf, heartStretches, heartSumsFrom, heartZoneSecondsFrom, heartZonesSchema, type HeartMaxResponse, type HeartZones, decodePolyline, encodePolyline, hillLineOf, hillLineSchema, paceLineSchema, routeShape, runSplitSchema, runSums } from "@app/shared";
 import type {
   GenerateRoutesRequest,
   RouteCandidate,
@@ -443,11 +443,12 @@ export async function saveRun(
   const polyline = encodePolyline(sums.track);
   // The heart rate chart and the zones (37f-ii-a), worked out here from the readings and the person's
   // maximum as it is now, and kept as they were on the day; the readings themselves are not kept.
-  const heartIn = input.heart ?? [];
-  const heart = heartSums(heartIn, input.pauses, input.elapsedMs);
-  const heartLine = heart === null ? [] : heartLineOf(heartIn, input.pauses, input.elapsedMs, sums.paceSpans);
+  // The readings are put in order and cut at the pauses once, for all three.
+  const stretches = heartStretches(input.heart ?? [], input.pauses, input.elapsedMs);
+  const heart = heartSumsFrom(stretches);
+  const heartLine = heart === null ? [] : heartLineFrom(stretches, sums.paceSpans);
   const maxNow = heart === null ? null : await heartMaxNow(deps.sql, userId);
-  const zoneSeconds = maxNow === null ? null : heartZoneSeconds(heartIn, input.pauses, input.elapsedMs, maxNow);
+  const zoneSeconds = maxNow === null ? null : heartZoneSecondsFrom(stretches, maxNow);
   // The run is saved whatever the height map does: anything wrong there leaves its climb waiting.
   let climb: RunClimb;
   try {

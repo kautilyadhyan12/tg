@@ -323,8 +323,18 @@ const styles = StyleSheet.create({
  *  maximum keeps none; a maximum set here counts for the runs after it. */
 function SavedRunHeart({ run, units }: { run: RunDetail; units: Units }) {
   const [settingMax, setSettingMax] = useState(false);
+  const [saved, setSaved] = useState(false);
   const maxRead = useHeartMax().read;
   if (run.heartAvg === null) return null;
+  // A maximum changed from here counts for the next runs; this run keeps the zones it was saved with (round one, L1).
+  const next = maxRead.kind === "ok" ? maxRead.data.max : null;
+  const said = !saved
+    ? null
+    : next === null
+      ? "Saved. Your next runs won't show heart rate zones."
+      : run.heartZones === null
+        ? `Saved. Your next runs use ${String(next)} bpm.`
+        : `Saved. Your next runs use ${String(next)} bpm; this run keeps its zones.`;
   return (
     <>
       <HeartCard
@@ -332,7 +342,8 @@ function SavedRunHeart({ run, units }: { run: RunDetail; units: Units }) {
         heartMax={run.heartMax}
         line={run.heartLine}
         zones={run.heartZones}
-        maxNow={maxRead.kind === "ok" ? maxRead.data.max : null}
+        maxRead={maxRead}
+        said={said}
         distanceM={run.distanceM}
         units={units}
         when="saved"
@@ -342,6 +353,9 @@ function SavedRunHeart({ run, units }: { run: RunDetail; units: Units }) {
       />
       <HeartMaxSheet
         open={settingMax}
+        onSaved={() => {
+          setSaved(true);
+        }}
         onClose={() => {
           setSettingMax(false);
         }}

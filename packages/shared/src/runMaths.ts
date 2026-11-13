@@ -806,12 +806,14 @@ export function runSums(points: readonly RunPoint[], pauses: readonly RunPause[]
 }
 
 /** The clock at a distance along the run, between the two marks either side of it. Where a pause
- *  holds the distance still, the first mark at it is taken: the clock stops where the running did. */
-function clockAtDistance(marks: readonly RunMark[], d: number): number {
+ *  holds the distance still, the first mark at it is taken: the clock stops where the running did.
+ *  `from` is the mark to start looking at: distances asked in order never look behind it again. */
+function clockAtDistance(marks: readonly RunMark[], d: number, from: { k: number }): number {
   const first = marks[0];
   if (first === undefined) return 0;
   if (d <= first.d) return first.t;
-  for (let k = 1; k < marks.length; k++) {
+  for (let k = Math.max(1, from.k); k < marks.length; k++) {
+    from.k = k;
     const b = marks[k];
     const a = marks[k - 1];
     if (a === undefined || b === undefined || b.d < d) continue;
@@ -827,9 +829,12 @@ function placeSpansOf(marks: readonly RunMark[], n: number): [number, number][] 
   if (n < 2 || total <= 0) return [];
   const half = total / (n - 1) / 2;
   const out: [number, number][] = [];
+  // Every span's start and end go forward along the run, so the marks are walked once.
+  const starts = { k: 1 };
+  const ends = { k: 1 };
   for (let i = 0; i < n; i++) {
     const d = (total * i) / (n - 1);
-    out.push([Math.round(clockAtDistance(marks, Math.max(0, d - half))), Math.round(clockAtDistance(marks, Math.min(total, d + half)))]);
+    out.push([Math.round(clockAtDistance(marks, Math.max(0, d - half), starts)), Math.round(clockAtDistance(marks, Math.min(total, d + half), ends))]);
   }
   return out;
 }

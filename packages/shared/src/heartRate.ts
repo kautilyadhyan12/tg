@@ -101,7 +101,14 @@ const heartMs = (stretches: readonly (readonly [number, number, number])[]): num
 /** A run's average and highest heart rate, over its time running (`heartStretches`). Null with less
  *  than HEART_LEAST_MS of it. */
 export function heartSums(samples: readonly HeartSample[], pauses: readonly RunPause[], elapsedMs: number): { avg: number; max: number } | null {
-  const stretches = heartStretches(samples, pauses, elapsedMs);
+  return heartSumsFrom(heartStretches(samples, pauses, elapsedMs));
+}
+
+/** One reading's stretch of the run (`heartStretches`): from, to, beats a minute. */
+export type HeartStretch = readonly [fromMs: number, toMs: number, bpm: number];
+
+/** `heartSums` from stretches already worked out, so a save works them out once for all three numbers. */
+export function heartSumsFrom(stretches: readonly HeartStretch[]): { avg: number; max: number } | null {
   const counted = heartMs(stretches);
   if (counted < HEART_LEAST_MS) return null;
   const weighted = stretches.reduce((sum, [from, to, bpm]) => sum + bpm * (to - from), 0);
@@ -114,7 +121,11 @@ export function heartSums(samples: readonly HeartSample[], pauses: readonly RunP
  *  heart rate over the stretch of the run it stands for, weighted by time; 0 where there is none (the
  *  monitor had no signal there). Empty for a run with no heart rate (`heartSums` null) or no pace line. */
 export function heartLineOf(samples: readonly HeartSample[], pauses: readonly RunPause[], elapsedMs: number, spans: readonly (readonly [number, number])[]): number[] {
-  const stretches = heartStretches(samples, pauses, elapsedMs);
+  return heartLineFrom(heartStretches(samples, pauses, elapsedMs), spans);
+}
+
+/** `heartLineOf` from stretches already worked out. */
+export function heartLineFrom(stretches: readonly HeartStretch[], spans: readonly (readonly [number, number])[]): number[] {
   if (spans.length < 2 || heartMs(stretches) < HEART_LEAST_MS) return [];
   let k = 0;
   return spans.map(([from, to]) => {
@@ -186,8 +197,11 @@ export type HeartZoneSeconds = [number, number, number, number, number];
  *  They add up to the run's whole seconds with a heart rate (the largest remainders round up). Null
  *  where the run has no heart rate (`heartSums` null) or there is no maximum. */
 export function heartZoneSeconds(samples: readonly HeartSample[], pauses: readonly RunPause[], elapsedMs: number, max: number | null): HeartZoneSeconds | null {
-  if (max === null) return null;
-  const stretches = heartStretches(samples, pauses, elapsedMs);
+  return max === null ? null : heartZoneSecondsFrom(heartStretches(samples, pauses, elapsedMs), max);
+}
+
+/** `heartZoneSeconds` from stretches already worked out. */
+export function heartZoneSecondsFrom(stretches: readonly HeartStretch[], max: number): HeartZoneSeconds | null {
   const total = heartMs(stretches);
   if (total < HEART_LEAST_MS) return null;
   const ms = [0, 0, 0, 0, 0];

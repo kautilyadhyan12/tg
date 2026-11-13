@@ -97,6 +97,17 @@ describe("Polar's own table", () => {
     ];
     for (const [bpm, zone] of cases) expect([bpm, heartZoneOf(bpm, 190)]).toEqual([bpm, zone]);
   });
+
+  it("an edge that falls on a half rounds up, so a beat is never put in an easier zone than by hand (a maximum of 175)", () => {
+    // 70 % of 175 is 122.5: 122 is Light, 123 Moderate; 90 % is 157.5: 157 is Hard, 158 Maximum.
+    const cases: [number, number][] = [
+      [122, 2],
+      [123, 3],
+      [157, 4],
+      [158, 5],
+    ];
+    for (const [bpm, zone] of cases) expect([bpm, heartZoneOf(bpm, 175)]).toEqual([bpm, zone]);
+  });
 });
 
 describe("the time in each zone", () => {

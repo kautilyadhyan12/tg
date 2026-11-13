@@ -2,7 +2,7 @@
 // on the run's summary and on the run's page, the heart rate along the run on the same distance scale (a
 // finger on it reads that place), then the time in each zone, Maximum at the top as Garmin and Polar show
 // them; and the maximum heart rate the zones are worked from, its row in Settings and its box.
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Keyboard, PanResponder, Pressable, StyleSheet, View, useWindowDimensions, type LayoutChangeEvent } from "react-native";
 import Svg, { Circle, Defs, Line, LinearGradient, Path, Stop } from "react-native-svg";
 import { HEART_MAX_LEAST, HEART_MAX_MOST, HEART_ZONES, heartMaxSchema, heartZoneEdges, heartZoneOf, type HeartZoneNumber, type HeartZones, type Units } from "@app/shared";
@@ -13,7 +13,7 @@ import { Icon } from "../look/Icon";
 import { Sheet } from "../look/Sheet";
 import { fonts, Txt } from "../look/Txt";
 import { clock, distance, unitWord } from "../screens/running/runWords";
-import { useHeartMax } from "./heartMax";
+import { useHeartMax, type HeartMaxRead } from "./heartMax";
 
 const HEIGHT = 150;
 /** As the pace chart's, so the two lines fall one under the other. */
@@ -212,8 +212,11 @@ export interface HeartCardProps {
   heartMax: number | null;
   line: readonly number[];
   zones: HeartZones | null;
-  /** The maximum known now (for the bands behind a summary's line, and to say whether one is set). */
-  maxNow: number | null;
+  /** The maximum as read now (for the bands behind a summary's line, and to say whether one is set): a
+   *  read not answered yet is never taken for "no maximum" (round one, H2). */
+  maxRead: HeartMaxRead;
+  /** What the person's last change of maximum did, said under the card (a saved run's page). */
+  said?: string | null;
   distanceM: number;
   units: Units;
   /** "summary": the run is not saved yet, so a maximum set now gives it zones; "saved": zones stay as saved. */
@@ -222,8 +225,10 @@ export interface HeartCardProps {
 }
 
 /** The heart rate card: nothing for a run without a heart rate. */
-export function HeartCard({ heartAvg, heartMax, line, zones, maxNow, distanceM, units, when, onSetMax }: HeartCardProps) {
+export function HeartCard({ heartAvg, heartMax, line, zones, maxRead, said = null, distanceM, units, when, onSetMax }: HeartCardProps) {
   if (heartAvg === null || heartMax === null) return null;
+  const maxNow = maxRead.kind === "ok" ? maxRead.data.max : null;
+  const noMaximum = maxRead.kind === "ok" && maxRead.data.max === null;
   const bandMax = zones?.max ?? (when === "summary" ? maxNow : null);
   return (
     <View style={styles.card} testID="heart-card">
@@ -256,13 +261,32 @@ export function HeartCard({ heartAvg, heartMax, line, zones, maxNow, distanceM, 
             </Pressable>
           </View>
         </>
+      ) : when === "summary" ? (
+        <>
+          <Txt kind="small" colour="textSoft">
+            {noMaximum ? "Add your maximum heart rate to see your zones." : "Your zones are worked out when you save."}
+          </Txt>
+          {noMaximum ? <Button label="Set maximum heart rate" small onPress={onSetMax} style={styles.start} /> : null}
+        </>
       ) : (
         <>
           <Txt kind="small" colour="textSoft">
-            {when === "summary" ? "Add your maximum heart rate to see your zones." : "This run was saved before a maximum heart rate was set."}
+            No heart rate zones for this run.
           </Txt>
-          {maxNow === null ? <Button label="Set maximum heart rate" small onPress={onSetMax} style={styles.start} /> : null}
+          {noMaximum ? (
+            <>
+              <Txt kind="small" colour="textSoft">
+                Add your maximum heart rate to see zones on your next runs.
+              </Txt>
+              <Button label="Set maximum heart rate" small onPress={onSetMax} style={styles.start} />
+            </>
+          ) : null}
         </>
+      )}
+      {said === null ? null : (
+        <Txt kind="small" colour="goodText">
+          {said}
+        </Txt>
       )}
     </View>
   );
@@ -279,7 +303,7 @@ export function HeartMaxRow({ onOpen }: { onOpen: () => void }) {
       : read.data.own !== null
         ? `${String(read.data.own)} bpm · your own`
         : read.data.fromAge !== null
-          ? `${String(read.data.fromAge)} bpm · from your age`
+          ? `${String(read.data.fromAge)} bpm · from your age (${String(220 - read.data.fromAge)})`
           : "Not set";
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={`Maximum heart rate. ${words}`} onPress={onOpen} style={styles.row} testID="heart-max-row">
@@ -295,18 +319,24 @@ export function HeartMaxRow({ onOpen }: { onOpen: () => void }) {
 }
 
 /** The box: the person's own maximum typed, or taken away to use their age's. */
-export function HeartMaxSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function HeartMaxSheet({ open, onClose, onSaved }: { open: boolean; onClose: () => void; onSaved?: () => void }) {
   return (
     <Sheet open={open} title="Maximum heart rate" onClose={onClose}>
-      {open ? <HeartMaxForm onClose={onClose} /> : null}
+      {open ? <HeartMaxForm onClose={onClose} {...(onSaved === undefined ? {} : { onSaved })} /> : null}
     </Sheet>
   );
 }
 
-function HeartMaxForm({ onClose }: { onClose: () => void }) {
+function HeartMaxForm({ onClose, onSaved }: { onClose: () => void; onSaved?: () => void }) {
   const { read, save } = useHeartMax();
   const data = read.kind === "ok" ? read.data : null;
   const [typed, setTyped] = useState(data?.own === null || data?.own === undefined ? "" : String(data.own));
+  // Opened before the maximum was read, the box fills in when it arrives, unless the person has typed (round one, L2).
+  const touched = useRef(false);
+  const own = data?.own ?? null;
+  useEffect(() => {
+    if (!touched.current && own !== null) setTyped(String(own));
+  }, [own]);
   const [busy, setBusy] = useState(false);
   const [trouble, setTrouble] = useState<string | null>(null);
   // Taking away the only maximum asks first, as Remove does for the monitor: the next runs have no zones.
@@ -321,6 +351,7 @@ function HeartMaxForm({ onClose }: { onClose: () => void }) {
     if (failed === null) {
       // The keyboard goes with the box, so it never lands in a field on the page behind.
       Keyboard.dismiss();
+      onSaved?.();
       onClose();
     }
     else setTrouble(failed);
@@ -348,6 +379,7 @@ function HeartMaxForm({ onClose }: { onClose: () => void }) {
         label="Your maximum heart rate (bpm)"
         value={typed}
         onChange={(v) => {
+          touched.current = true;
           setTyped(v.replace(/[^0-9]/g, ""));
           setTrouble(null);
         }}
@@ -363,7 +395,7 @@ function HeartMaxForm({ onClose }: { onClose: () => void }) {
         <Txt kind="small" colour="badText">{`Enter a number from ${String(HEART_MAX_LEAST)} to ${String(HEART_MAX_MOST)}.`}</Txt>
       ) : null}
       {data?.fromAge === null || data?.fromAge === undefined ? null : (
-        <Txt kind="small" colour="textFaint">{`From your age: ${String(data.fromAge)} bpm (220 less your age).`}</Txt>
+        <Txt kind="small" colour="textFaint">{`From your age (${String(220 - data.fromAge)}): ${String(data.fromAge)} bpm, 220 less your age.`}</Txt>
       )}
       {trouble === null ? null : (
         <Txt kind="small" colour="badText">

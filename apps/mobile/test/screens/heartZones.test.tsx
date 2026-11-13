@@ -1,8 +1,9 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
 import { AppState } from "react-native";
-import { heartMaxOf, heartSums, heartZoneSeconds, putHeartMaxRequestSchema, runSums, saveRunRequestSchema, type HeartMaxResponse, type SaveRunRequest } from "@app/shared";
+import { heartMaxOf, heartSums, heartZoneSeconds, putHeartMaxRequestSchema, runSums, saveRunRequestSchema, type HeartMaxResponse, type HeartZones, type SaveRunRequest } from "@app/shared";
 import { App } from "../../src/App";
 import { HeartCard } from "../../src/heart/HeartZones";
+import type { HeartMaxRead } from "../../src/heart/heartMax";
 import { forgetHeartMax } from "../../src/heart/heartMax";
 import { heartNative } from "../../src/heart/heartNative";
 import { loadMonitor, resetHeart, saveMonitor } from "../../src/heart/monitor";
@@ -42,8 +43,9 @@ beforeEach(async () => {
   await saveMonitor({ id: MINE, name: "Polar H10 9EF6E824" });
 });
 
-/** The server: the person's age (null for none) and own maximum, changed by a PUT; a run saved once. */
-function server(age: number | null, own: number | null = null) {
+/** The server: the person's age (null for none) and own maximum, changed by a PUT; a run saved once.
+ *  `maxDown`: the maximum's route does not answer (no signal, the server busy). */
+function server(age: number | null, own: number | null = null, maxDown = false) {
   const saved: SaveRunRequest[] = [];
   const puts: unknown[] = [];
   let mine = own;
@@ -55,6 +57,7 @@ function server(age: number | null, own: number | null = null) {
     "/v1/geo/runs/climb": () => ({ status: 200, body: { climb: { state: "none" } } }),
     "/v1/users/me": () => ({ status: 200, body: profile(true, RAVI) }),
     "/v1/geo/heart-max": (body): Reply => {
+      if (maxDown) return { status: 503, body: { error: "unavailable" } };
       if (body !== undefined) {
         puts.push(body);
         mine = putHeartMaxRequestSchema.parse(body).own;
@@ -160,6 +163,17 @@ describe("the worst thing: an easier zone than the person is in, or a zone from 
     expect(screen.getByText("From a maximum heart rate of 190 bpm.")).toBeTruthy();
   });
 
+  it("one beat under Maximum's edge is Hard on the run, and the edge itself is Maximum", async () => {
+    // 30 years old: 190, Maximum from 171.
+    const s = server(30);
+    await openRunning(s);
+    await startRunning();
+    strap.send(MINE, polar(170));
+    expect(await screen.findByText("170 bpm · Zone 4", {}, { timeout: 3000 })).toBeTruthy();
+    strap.send(MINE, polar(171));
+    expect(await screen.findByText("171 bpm · Zone 5", {}, { timeout: 3000 })).toBeTruthy();
+  });
+
   it("with no age and no maximum, no zone is shown anywhere: never Zone 1", async () => {
     const s = server(null);
     await openRunning(s);
@@ -173,9 +187,32 @@ describe("the worst thing: an easier zone than the person is in, or a zone from 
     expect(screen.getByText("Add your maximum heart rate to see your zones.")).toBeTruthy();
   });
 
+  it("a maximum that could not be read is never taken for none: no Add, no button, the zones come at Save (round one, H2)", async () => {
+    const s = server(30, null, true);
+    await openRunning(s);
+    await startRunning();
+    strap.send(MINE, polar(185));
+    // No maximum read: the heart rate with no zone, never a guessed one.
+    expect(await screen.findByText("185 bpm", {}, { timeout: 3000 })).toBeTruthy();
+    await runTenMinutes();
+    expect(await screen.findByText("Your zones are worked out when you save.")).toBeTruthy();
+    expect(screen.queryByText("Add your maximum heart rate to see your zones.")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Set maximum heart rate" })).toBeNull();
+  });
+
   it("a saved run shows the zones it was saved with, not today's maximum", async () => {
     await render(
-      <HeartCard heartAvg={150} heartMax={175} line={[120, 150, 175]} zones={{ max: 200, seconds: [0, 300, 0, 300, 0] }} maxNow={190} distanceM={1800} units="metric" when="saved" onSetMax={() => undefined} />,
+      <HeartCard
+        heartAvg={150}
+        heartMax={175}
+        line={[120, 150, 175]}
+        zones={{ max: 200, seconds: [0, 300, 0, 300, 0] }}
+        maxRead={{ kind: "ok", data: { own: null, fromAge: 190, max: 190 } }}
+        distanceM={1800}
+        units="metric"
+        when="saved"
+        onSetMax={() => undefined}
+      />,
     );
     expect(screen.getByText("From a maximum heart rate of 200 bpm.")).toBeTruthy();
     expect(screen.getByLabelText("Zone 4, Hard, 160–179 bpm: 5:00, 50 percent")).toBeTruthy();
@@ -215,15 +252,15 @@ describe("I set my maximum heart rate once, and my runs show my zones", () => {
     if (me === undefined) throw new Error("no fifth tab");
     await fireEvent.press(me);
     await fireEvent.press(await screen.findByLabelText("Settings"));
-    expect(await screen.findByText("180 bpm · from your age")).toBeTruthy();
+    expect(await screen.findByText("180 bpm · from your age (40)")).toBeTruthy();
     await fireEvent.press(screen.getByTestId("heart-max-row"));
-    expect(await screen.findByText("From your age: 180 bpm (220 less your age).")).toBeTruthy();
+    expect(await screen.findByText("From your age (40): 180 bpm, 220 less your age.")).toBeTruthy();
     await fireEvent.changeText(screen.getByLabelText("Your maximum heart rate (bpm)"), "193");
     await fireEvent.press(screen.getByRole("button", { name: "Save" }));
     expect(await screen.findByText("193 bpm · your own")).toBeTruthy();
     await fireEvent.press(screen.getByTestId("heart-max-row"));
     await fireEvent.press(await screen.findByRole("button", { name: "Use my age instead" }));
-    expect(await screen.findByText("180 bpm · from your age")).toBeTruthy();
+    expect(await screen.findByText("180 bpm · from your age (40)")).toBeTruthy();
     expect(s.puts).toEqual([{ own: 193 }, { own: null }]);
   });
 
@@ -246,5 +283,38 @@ describe("I set my maximum heart rate once, and my runs show my zones", () => {
     await fireEvent.press(await screen.findByRole("button", { name: "Remove" }));
     expect(await screen.findByText("Not set")).toBeTruthy();
     expect(s.puts).toEqual([{ own: null }]);
+  });
+});
+
+describe("a saved run's heart rate, as its page says it", () => {
+  const card = (zones: HeartZones | null, maxRead: HeartMaxRead, said: string | null = null) => (
+    <HeartCard heartAvg={150} heartMax={175} line={[120, 150, 175]} zones={zones} maxRead={maxRead} said={said} distanceM={1800} units="metric" when="saved" onSetMax={() => undefined} />
+  );
+
+  it("no zones and no maximum ever set: says so truly, and the button is for the next runs (round one, H1)", async () => {
+    await render(card(null, { kind: "ok", data: { own: null, fromAge: null, max: null } }));
+    expect(screen.getByText("No heart rate zones for this run.")).toBeTruthy();
+    expect(screen.getByText("Add your maximum heart rate to see zones on your next runs.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Set maximum heart rate" })).toBeTruthy();
+    expect(screen.queryByText(/saved before/)).toBeNull();
+  });
+
+  it("a run kept before zones, by somebody with an age: nothing false, no button to set what is set", async () => {
+    await render(card(null, { kind: "ok", data: { own: null, fromAge: 190, max: 190 } }));
+    expect(screen.getByText("No heart rate zones for this run.")).toBeTruthy();
+    expect(screen.queryByText(/Add your maximum/)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Set maximum heart rate" })).toBeNull();
+  });
+
+  it("the maximum not read: no zones said, no button", async () => {
+    await render(card(null, { kind: "failed" }));
+    expect(screen.getByText("No heart rate zones for this run.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Set maximum heart rate" })).toBeNull();
+  });
+
+  it("a change of maximum is said under the card, and the zones stay as saved (round one, L1)", async () => {
+    await render(card({ max: 190, seconds: [0, 300, 0, 300, 0] }, { kind: "ok", data: { own: 185, fromAge: 190, max: 185 } }, "Saved. Your next runs use 185 bpm; this run keeps its zones."));
+    expect(screen.getByText("Saved. Your next runs use 185 bpm; this run keeps its zones.")).toBeTruthy();
+    expect(screen.getByText("From a maximum heart rate of 190 bpm.")).toBeTruthy();
   });
 });

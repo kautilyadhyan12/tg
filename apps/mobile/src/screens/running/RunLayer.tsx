@@ -760,7 +760,7 @@ function Summary({ run, units, kg, onSaved }: { run: LiveRun; units: Units; kg: 
           heartMax={heart?.max ?? null}
           line={heartLine}
           zones={zoneSeconds === null || maxNow === null ? null : { max: maxNow, seconds: zoneSeconds }}
-          maxNow={maxNow}
+          maxRead={heartMaxRead}
           distanceM={sums.distanceM}
           units={units}
           when="summary"
