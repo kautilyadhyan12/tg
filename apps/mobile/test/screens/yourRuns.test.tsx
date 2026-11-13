@@ -65,6 +65,8 @@ function makeRun(n: number, name: string, km: number, minutes: number, daysAgo: 
     hillLine: [],
     heartAvg: null,
     heartMax: null,
+    heartLine: [],
+    heartZones: null,
   };
 }
 
@@ -458,5 +460,36 @@ describe("Your records holds four at most (37c-iii, Kd: more records will be add
     expect(screen.getByText("Longest run")).toBeTruthy();
     await fireEvent.press(screen.getByRole("button", { name: /^Fastest 10K, 50:00/ }));
     expect(opened).toEqual([run.id]);
+  });
+});
+
+describe("A saved run's heart rate (37f-ii-a)", () => {
+  it("Change from a run's page saves the new maximum, says it counts from the next runs, and the run keeps its zones", async () => {
+    const run: RunDetail = { ...makeRun(1, "Zone Run", 3.9, 20, 1), heartAvg: 154, heartMax: 176, heartLine: [120, 150, 176], heartZones: { max: 190, seconds: [27, 142, 152, 650, 203] } };
+    const s = runsServer([run]);
+    const puts: unknown[] = [];
+    let own: number | null = null;
+    const ask: Ask = async (url: string, init: AskInit) => {
+      if (new URL(url).pathname !== "/v1/geo/heart-max") return s.ask(url, init);
+      if (init.method === "PUT" && init.body !== undefined) {
+        const body = JSON.parse(init.body) as { own: number | null };
+        puts.push(body);
+        own = body.own;
+      }
+      return { ok: true, status: 200, json: () => Promise.resolve({ own, fromAge: 190, max: own ?? 190 }) };
+    };
+    await render(<App extra={extra} store={memoryStore(kept(1, RAVI))} ask={ask} />);
+    await fireEvent.press(await screen.findByRole("tab", { name: "Workout" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Running" }));
+    await fireEvent.press(within(await screen.findByTestId("your-runs")).getByRole("button", { name: /^Zone Run, / }));
+    const card = await screen.findByTestId("heart-card", {}, { timeout: 4000 });
+    expect(within(card).getByText("From a maximum heart rate of 190 bpm.")).toBeTruthy();
+    await fireEvent.press(within(card).getByRole("button", { name: "Change maximum heart rate" }));
+    await fireEvent.changeText(await screen.findByLabelText("Your maximum heart rate (bpm)"), "185");
+    await fireEvent.press(screen.getByRole("button", { name: "Save" }));
+    expect(await screen.findByText("Saved. Your next runs use 185 bpm; this run keeps its zones.")).toBeTruthy();
+    expect(puts).toEqual([{ own: 185 }]);
+    // The run keeps the zones it was saved with.
+    expect(within(screen.getByTestId("heart-card")).getByText("From a maximum heart rate of 190 bpm.")).toBeTruthy();
   });
 });

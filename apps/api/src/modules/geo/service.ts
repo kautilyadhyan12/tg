@@ -6,7 +6,7 @@
 // candidates only.
 import type { FastifyBaseLogger } from "fastify";
 import type { Sql } from "postgres";
-import { RUN_CALC_VERSION, RUN_CHOICES, hasOwnRun, ownCapOf, ownPlanOf, ownWeekSchema, planDayPlus, restartsPlan, runChoiceOf, runPlanAnswersSchema, runPlanOf, runsFrom, sameRace, climbFromHeights, climbSamples, heartSums, decodePolyline, encodePolyline, hillLineOf, hillLineSchema, paceLineSchema, routeShape, runSplitSchema, runSums } from "@app/shared";
+import { RUN_CALC_VERSION, RUN_CHOICES, hasOwnRun, ownCapOf, ownPlanOf, ownWeekSchema, planDayPlus, restartsPlan, runChoiceOf, runPlanAnswersSchema, runPlanOf, runsFrom, sameRace, climbFromHeights, climbSamples, heartLineFrom, heartLineSchema, heartMaxOf, heartStretches, heartSumsFrom, heartZoneSecondsFrom, heartZonesSchema, type HeartMaxResponse, type HeartZones, decodePolyline, encodePolyline, hillLineOf, hillLineSchema, paceLineSchema, routeShape, runSplitSchema, runSums } from "@app/shared";
 import type {
   GenerateRoutesRequest,
   RouteCandidate,
@@ -225,6 +225,13 @@ export async function runDays(deps: ReadDeps, userId: string, since: Date | null
   return repo.getRunDays(deps.sql, userId, since, timeZone);
 }
 
+/** A run's heart rate zones as kept (37f-ii-a); none for a run with no heart rate. */
+const zonesOf = (row: { splits: unknown; heart: repo.RunHeart | null }): HeartZones | null => {
+  if (row.heart === null) return null;
+  const splits = splitsStoredSchema.safeParse(row.splits);
+  return splits.success ? (splits.data.zones ?? null) : null;
+};
+
 const asRunDetail = (row: repo.RunDetailRow): RunDetail => {
   const splits = splitsStoredSchema.safeParse(row.splits);
   // The phone draws a coded line: an old app's path is sent as one, or not at all where it cannot be read.
@@ -237,6 +244,8 @@ const asRunDetail = (row: repo.RunDetailRow): RunDetail => {
     splitsMi: splits.success ? splits.data.mi : [],
     paceLine: splits.success && !row.legacy ? (splits.data.pace ?? []) : [],
     hillLine: splits.success && !row.legacy ? (splits.data.hills ?? []) : [],
+    heartLine: splits.success && !row.legacy && row.heart !== null ? (splits.data.heart ?? []) : [],
+    heartZones: zonesOf(row),
     effort: row.effort,
     note: row.note,
     leftOutM: row.leftOutM ?? 0,
@@ -300,6 +309,10 @@ const splitsStoredSchema = z.object({
   /** The pace chart's two lines (37c-iii); a run saved before it has neither. */
   pace: paceLineSchema.optional(),
   hills: hillLineSchema.optional(),
+  /** The heart rate chart and the five zones (37f-ii-a); a run with no heart rate, or saved before, has
+   *  neither. Read through their schemas, so a line or zones that do not read are none. */
+  heart: heartLineSchema.optional().catch(undefined),
+  zones: heartZonesSchema.optional().catch(undefined),
 });
 
 const asSavedRun = (r: repo.SavedRunRow): SavedRun => {
@@ -323,6 +336,7 @@ const asSavedRun = (r: repo.SavedRunRow): SavedRun => {
     climbM: r.climbM,
     heartAvg: r.heart?.avg ?? null,
     heartMax: r.heart?.max ?? null,
+    heartZones: zonesOf(r),
   };
 };
 
@@ -427,6 +441,14 @@ export async function saveRun(
   const sums = runSums(input.points, input.pauses, input.elapsedMs, ctx.weightKg ?? 0);
   const note = input.note === null || input.note === "" ? null : input.note;
   const polyline = encodePolyline(sums.track);
+  // The heart rate chart and the zones (37f-ii-a), worked out here from the readings and the person's
+  // maximum as it is now, and kept as they were on the day; the readings themselves are not kept.
+  // The readings are put in order and cut at the pauses once, for all three.
+  const stretches = heartStretches(input.heart ?? [], input.pauses, input.elapsedMs);
+  const heart = heartSumsFrom(stretches);
+  const heartLine = heart === null ? [] : heartLineFrom(stretches, sums.paceSpans);
+  const maxNow = heart === null ? null : await heartMaxNow(deps.sql, userId);
+  const zoneSeconds = maxNow === null ? null : heartZoneSecondsFrom(stretches, maxNow);
   // The run is saved whatever the height map does: anything wrong there leaves its climb waiting.
   let climb: RunClimb;
   try {
@@ -447,20 +469,48 @@ export async function saveRun(
     leftOutM: sums.leftOutM,
     leftOutS: sums.leftOutS,
     kcal: sums.kcal,
-    splits: { km: sums.splitsKm, mi: sums.splitsMi, starts: sums.trackStarts, pace: sums.paceLine, hills: climb.state === "done" ? climb.hills : [] },
+    splits: {
+      km: sums.splitsKm,
+      mi: sums.splitsMi,
+      starts: sums.trackStarts,
+      pace: sums.paceLine,
+      hills: climb.state === "done" ? climb.hills : [],
+      ...(heartLine.length > 0 ? { heart: heartLine } : {}),
+      ...(zoneSeconds === null || maxNow === null ? {} : { zones: { max: maxNow, seconds: zoneSeconds } }),
+    },
     polyline,
     calcVersion: RUN_CALC_VERSION,
     climb,
     shape: routeShape(sums.track, sums.trackStarts),
     bests: sums.bests,
     // Worked out here from the readings, never taken from the phone; the readings are not kept.
-    heart: heartSums(input.heart ?? [], input.pauses, input.elapsedMs),
+    heart,
   });
   if (saved === "removed") throw new RemovedRunError();
   // On every send, a repeat included, as a workout's sync does: the streak, badges and XP are
   // worked out again from history, so a send whose first try failed here heals on the next.
   await onWorkoutSynced({ sql: deps.sql }, userId, ctx.timezone);
   return { status: saved.created ? "created" : "duplicate", run: asSavedRun(saved.row) };
+}
+
+// ── The maximum heart rate the zones are worked from (ROADMAP 37f-ii-a) ───────────────────────────
+
+/** The person's own maximum heart rate, the one from their age, and the one the zones use now. */
+export async function heartMax(deps: ReadDeps, userId: string): Promise<HeartMaxResponse> {
+  const kept = await repo.getHeartMax(deps.sql, userId);
+  return { own: kept.own, fromAge: heartMaxOf(null, kept.age), max: heartMaxOf(kept.own, kept.age) };
+}
+
+async function heartMaxNow(sql: Sql, userId: string): Promise<number | null> {
+  const kept = await repo.getHeartMax(sql, userId);
+  return heartMaxOf(kept.own, kept.age);
+}
+
+/** The person's own maximum, or none to go back to the one from their age. Runs already saved keep the
+ *  zones they were saved with. */
+export async function setHeartMax(deps: ReadDeps & { now: () => Date }, userId: string, own: number | null): Promise<HeartMaxResponse> {
+  await repo.putHeartMax(deps.sql, userId, own, deps.now());
+  return await heartMax(deps, userId);
 }
 
 // ── The run plan (ROADMAP 37d-i) ──────────────────────────────────────────────────────────────

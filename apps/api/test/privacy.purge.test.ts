@@ -249,6 +249,7 @@ d("DPDP Day-14 purge (real Postgres)", () => {
     await sql`INSERT INTO run_removed_ids (id, user_id) VALUES (gen_random_uuid(), ${userId})`;
     await sql`INSERT INTO run_plans (user_id, answers, started_at) VALUES (${userId}, '{"doesRun":"no"}'::jsonb, now())`;
     await sql`INSERT INTO own_run_plans (user_id, choice, days) VALUES (${userId}, 'mine', '[null,null,null,null,null,null,null]'::jsonb)`;
+    await sql`INSERT INTO user_heart_max (user_id, bpm) VALUES (${userId}, 187)`;
     await sql`INSERT INTO usage_limits (user_id, meal_scans_a_day) VALUES (${userId}, 15)`;
     await sql`INSERT INTO admin_passwords (user_id, password_hash, hash_algo) VALUES (${userId}, 'not-a-real-hash', 'argon2id')`;
     await sql`INSERT INTO app_minutes (user_id, day, minutes, zone) VALUES (${userId}, current_date, 12, 'Asia/Kolkata')`;
