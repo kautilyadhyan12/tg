@@ -1,4 +1,4 @@
-import { forSaleLineSchema, forSaleWorked, repeatingChargeWords, type ForSaleIncluded, type ForSaleLine, type ForSaleType, type HeldTax } from "@app/shared";
+import { forSaleLineSchema, forSaleWorked, repeatingChargeWords, type ForSaleIncluded, type ForSaleLine, type ForSalePromo, type ForSaleType, type HeldTax } from "@app/shared";
 
 // Lines a gym sells in the app, as the server words them: made by the server's own `forSaleWorked` (Buy in the app, 20g),
 // so a test reads what the server would send, never a hand-made copy of its words.
@@ -34,6 +34,9 @@ export const DAY_TYPE = type({ id: DAY_ID, name: "Day pass", kind: "pack", price
 export const GOLD_TYPE = type({ id: GOLD_ID, name: "Gold Monthly", kind: "recurring", priceMinor: 4999, termCount: 1, termUnit: "month" });
 export const SUMMER_TYPE = type({ id: SUMMER_ID, name: "Summer month", kind: "one_time", priceMinor: 12000, termCount: 1, termUnit: "month", joiningFeeMinor: 2500 });
 
+/** A promo code of the gym's, 20% off, as the server finds it fits a line (18k-v): typed in the app as SPRING20. */
+export const SPRING20: ForSalePromo = { id: "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d", name: "Spring offer", kind: "percent", percentBp: 2000, amountMinor: null, membershipPayments: "first", code: "SPRING20" };
+
 /** Every class, no personal training: a pack reads "Any class". */
 export const ANY_CLASS: ForSaleIncluded = { access: "all_classes", bookingsLimit: null, bookingsPeriod: null, classNames: null, includesPt: false, ptLimit: null, ptPeriod: null };
 
@@ -50,6 +53,12 @@ export function lineOf(
     taxes?: HeldTax[];
     /** A repeating line's card: its tick in the server's own words (`repeatingChargeWords`). */
     card?: { brand: string; last4: string };
+    /** A promo code typed, where it fits this line (20j). */
+    promo?: ForSalePromo;
+    /** Why the code typed takes nothing off this line, where it takes something off another. */
+    promoWords?: string;
+    /** The day of the month the gym bills everyone on (18y): a membership started today pays part of a month first. */
+    billDay?: number;
   } = {},
 ): ForSaleLine {
   const worked = forSaleWorked({
@@ -57,18 +66,20 @@ export function lineOf(
     included: { lines: options.included ?? ANY_CLASS, orgType: "gym" },
     taxes: options.taxes ?? [],
     taxIncluded: false,
-    billDay: null,
+    billDay: options.billDay ?? null,
     today: TODAY,
     gym: GYM,
     personName: options.personName ?? "Asha Walk",
     friendGift:
       options.friendGift === true ? { id: "e5f6a7b8-c9d0-4e1f-8a3b-4c5d6e7f8091", name: "Refer a friend", kind: "amount", percentBp: null, amountMinor: 1000, membershipPayments: null } : null,
+    promo: options.promo ?? null,
   });
   if (worked === null) throw new Error(`${t.name} is not sold in the app`);
   return forSaleLineSchema.parse({
     ...worked.item,
     factsKey: options.factsKey ?? "a".repeat(64),
     charge: worked.item.repeats && options.card !== undefined ? repeatingChargeWords(GYM.name, options.card, worked.item) : null,
+    promoWords: options.promoWords ?? null,
     agreement:
       options.agreement === false
         ? null

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { APP_PURCHASE_WORDS, appPurchaseRequestSchema, appPurchaseSchema, type AppPaymentState, type ForSaleLine, type ForSaleResponse } from "@app/shared";
+import { APP_PURCHASE_WORDS, PROMO_CODE_WORDS, formatMinor, appPurchaseRequestSchema, appPurchaseSchema, type AppPaymentState, type ForSaleLine, type ForSaleResponse } from "@app/shared";
 import {
   BANK_CHECK_DESK,
   CARD_NOT_TAKEN,
@@ -13,6 +13,9 @@ import {
   buyBody,
   buyRefusalSaid,
   buySay,
+  codeOf,
+  forSaleListPath,
+  promoLine,
   endedBuySaid,
   lineSummary,
   nameLabel,
@@ -23,7 +26,7 @@ import {
   todayParts,
 } from "../src/screens/gym/buyView";
 import { NOT_PAID, PAY_CHECK, PAY_WAITING } from "../src/screens/gym/payView";
-import { AGREEMENT_ID, DAY_TYPE, GOLD_TYPE, PACK_ID, PACK_TYPE, SUMMER_TYPE, lineOf } from "./forSaleLines";
+import { AGREEMENT_ID, DAY_TYPE, GOLD_TYPE, PACK_ID, PACK_TYPE, SPRING20, SUMMER_TYPE, lineOf } from "./forSaleLines";
 
 // Buy in the app (ROADMAP Stage 5 item 20g): how a line reads, what Pay sends, and how the end is said. The server decides
 // all of it (`appPurchases.routes.test.ts`); the phone sends exactly what it showed, and reads bought only from `paid`.
@@ -167,5 +170,65 @@ describe("a repeating membership, paid with the card saved in the app (20i-i)", 
     expect(notReadyLine(true, true, false)).toBe(NOT_READY_WHO_BOTH);
     expect(notReadyLine(true, false, true)).toBe(NOT_READY);
     expect(notReadyLine(true, false, false)).toBe(NOT_READY_WHO);
+  });
+});
+
+describe("a promo code (20j)", () => {
+  it("is sent as the gym writes its codes, however it was typed", () => {
+    // As people type a code from a poster or a message: lower case, a space copied with it.
+    expect(codeOf(" spring20 ")).toBe("SPRING20");
+    expect(codeOf("Spring20")).toBe("SPRING20");
+    expect(codeOf("   ")).toBe("");
+    expect(forSaleListPath("g1")).toBe("/v1/orgs/g1/for-sale?repeating=true");
+    expect(forSaleListPath("g1", "SPRING20")).toBe("/v1/orgs/g1/for-sale?repeating=true&code=SPRING20");
+    // A code the gym could never have made is still asked about, so the server says why it isn't valid.
+    expect(forSaleListPath("g1", "SUMMER 20&X")).toBe("/v1/orgs/g1/for-sale?repeating=true&code=SUMMER%2020%26X");
+  });
+
+  it("Pay sends the code a line was worked out with, and only that line's; every body passes the server's own check", () => {
+    const cases = [
+      { line: lineOf(PACK_TYPE, { agreement: false, promo: SPRING20 }), code: "SPRING20", amount: 7200 },
+      { line: lineOf(PACK_TYPE, { agreement: false }), code: null, amount: 9000 },
+      // The code fits another line, not this one: nothing is sent with it.
+      { line: lineOf(DAY_TYPE, { agreement: false, promoWords: PROMO_CODE_WORDS.not_for("Day pass") }), code: null, amount: 1500 },
+      { line: lineOf(SUMMER_TYPE, { agreement: false, promo: SPRING20 }), code: "SPRING20", amount: 12100 },
+      { line: lineOf(GOLD_TYPE, { agreement: false, card: { brand: "VISA", last4: "1111" }, promo: SPRING20 }), code: "SPRING20", amount: 3999 },
+    ];
+    for (const c of cases) {
+      const body = buyBody(c.line, null);
+      expect(body.amountMinor).toBe(c.amount);
+      if (c.code === null) expect(body).not.toHaveProperty("code");
+      else expect(body.code).toBe(c.code);
+      expect(appPurchaseRequestSchema.safeParse({ ...body, requestKey: PRESS }).success).toBe(true);
+    }
+  });
+
+  it("reads what it takes off, with whatever else makes today's amount", () => {
+    const pack = lineOf(PACK_TYPE, { promo: SPRING20 });
+    expect(todayLine(pack)).toBe("$72.00 today, with the code SPRING20");
+    expect(promoLine(pack)).toBe("SPRING20 · Spring offer: −\u2060$18.00");
+    expect(todayLine(lineOf(SUMMER_TYPE, { promo: SPRING20 }))).toBe("$121.00 today, with a $25.00 joining fee and the code SPRING20");
+    expect(todayLine(lineOf(PACK_TYPE, { promo: SPRING20, taxes: [{ name: "Sales tax", pcm: 8250 }] }))).toBe("$77.94 today, with the code SPRING20 and tax");
+    // Used in place of the Refer a friend gift: the gift is not said, the code is.
+    expect(todayLine(lineOf(PACK_TYPE, { friendGift: true, promo: SPRING20 }))).toBe("$72.00 today, with the code SPRING20");
+    expect(promoLine(lineOf(PACK_TYPE, {}))).toBeNull();
+  });
+
+  it("on a first payment that is part of a month, never an amount the code does not take off today", () => {
+    // A gym that bills everyone on the 1st: joined on the 12th, the first payment covers the rest of November.
+    const plain = lineOf(GOLD_TYPE, { billDay: 1 });
+    const coded = lineOf(GOLD_TYPE, { billDay: 1, promo: SPRING20 });
+    expect(coded.firstPayment.part).toBe(true);
+    const savedToday = plain.firstPayment.amountMinor - coded.firstPayment.amountMinor;
+    expect(coded.firstPayment.promo?.offMinor).not.toBe(savedToday);
+    expect(promoLine(coded)).toBe("SPRING20 · Spring offer");
+    // No tax at this gym, so the line never says tax.
+    expect(todayLine(coded)).toBe(`${formatMinor(coded.firstPayment.amountMinor, "USD")} today for 12 Nov – 30 Nov 2026, with the code SPRING20`);
+    expect(todayLine(plain)).toBe(`${formatMinor(plain.firstPayment.amountMinor, "USD")} today for 12 Nov – 30 Nov 2026`);
+  });
+
+  it("refused at Pay as no longer usable: the list is read again, which says why", () => {
+    expect(buyRefusalSaid("app_purchase_promo", PROMO_CODE_WORDS.used_up)).toEqual({ tone: "warn", line: PROMO_CODE_WORDS.used_up, reread: true });
+    expect(buyRefusalSaid("promo_code_tries", PROMO_CODE_WORDS.too_many)).toEqual({ tone: "bad", line: PROMO_CODE_WORDS.too_many });
   });
 });
