@@ -21,6 +21,10 @@ const HUB = 35;
 const INNER = 36;
 const OUTER = 82;
 
+/** A part's cut-out is named by how far its food reaches: Android keeps a cut-out's first shape under its
+ *  name, so a plate filled after it was first drawn would stay as it was (seen on Kd's phone, 32c-i). */
+const clipId = (part: string, plate: string, reach: number) => `${part}${plate}r${String(Math.round(reach * 10))}`;
+
 export interface PlateNumbers {
   kcal: number;
   proteinG: number;
@@ -52,11 +56,14 @@ export function MacroPlate({ goal, eaten, left }: { goal: PlateNumbers; eaten: P
                 <Stop offset="0" stopColor={colours.orangeLight} />
                 <Stop offset="1" stopColor={colours.calDeep} />
               </LinearGradient>
-              {PLATE_PARTS.map((p) => (
-                <ClipPath key={p.key} id={`${p.key}${id}`}>
-                  <Path d={partPath(C, C, p.from, p.from + PART_SWEEP, INNER, fillReach(plateShare(eaten?.[p.key] ?? null, goal[p.key]), INNER, OUTER))} />
-                </ClipPath>
-              ))}
+              {PLATE_PARTS.map((p) => {
+                const reach = fillReach(plateShare(eaten?.[p.key] ?? null, goal[p.key]), INNER, OUTER);
+                return (
+                  <ClipPath key={clipId(p.key, id, reach)} id={clipId(p.key, id, reach)}>
+                    <Path d={partPath(C, C, p.from, p.from + PART_SWEEP, INNER, reach)} />
+                  </ClipPath>
+                );
+              })}
             </Defs>
             <Circle cx={C} cy={C} r={C - 4} fill={`url(#rim${id})`} stroke={colours.plateEdge} strokeWidth={1} />
             <Path d={edgePath(C, C, 200, 290, 104)} stroke={colours.plateRimLight} strokeWidth={2} strokeLinecap="round" fill="none" />
@@ -84,7 +91,7 @@ export function MacroPlate({ goal, eaten, left }: { goal: PlateNumbers; eaten: P
                   <Path d={partPath(C, C, p.from, to, INNER, OUTER)} fill={colours.glass} stroke={colours[p.colour]} strokeOpacity={0.5} strokeWidth={1.2} strokeDasharray="3 3" />
                   {share > 0 ? (
                     <>
-                      <G clipPath={`url(#${p.key}${id})`}>
+                      <G clipPath={`url(#${clipId(p.key, id, reach)})`}>
                         <G transform={`translate(${String(C - OUTER)} ${String(C - OUTER)})`}>
                           <SvgImage href={pictures[p.picture]} width={OUTER * 2} height={OUTER * 2} preserveAspectRatio="xMidYMid slice" />
                         </G>

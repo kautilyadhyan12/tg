@@ -4,7 +4,7 @@ import { foodWeekResponseSchema, type FoodWeekFigure, type FoodWeekResponse } fr
 import { Button } from "../../look/Button";
 import { Card } from "../../look/Card";
 import { Chip } from "../../look/Chip";
-import { colours, type ColourName } from "../../look/colours";
+import { colours, weekBarGlow, weekBarLight, type ColourName } from "../../look/colours";
 import { Icon } from "../../look/Icon";
 import { Txt } from "../../look/Txt";
 import { SoftBar } from "../../look/Waiting";
@@ -191,6 +191,14 @@ function barColour(bar: Bar): ColourName {
   return bar.band === null ? "textSoft" : BAND_COLOUR[bar.band];
 }
 
+/** A bar in its colour; the three judged colours lit from the top and glowing (32c-i). */
+function barLight(colour: ColourName) {
+  if (colour === "good" || colour === "blue" || colour === "orange") {
+    return { backgroundColor: colours[colour], experimental_backgroundImage: weekBarLight[colour], boxShadow: weekBarGlow[colour] };
+  }
+  return { backgroundColor: colours[colour] };
+}
+
 /** `line`: today's target, drawn once straight across the bars (null while there is none). */
 function Chart({ bars, figure, month, line }: { bars: readonly Bar[]; figure: FoodWeekFigure; month: boolean; line: number | null }) {
   const top = chartTop(bars);
@@ -207,12 +215,17 @@ function Chart({ bars, figure, month, line }: { bars: readonly Bar[]; figure: Fo
                     ~
                   </Txt>
                 ) : null}
-                <View style={[styles.bar, { height: height(bar.value), backgroundColor: colours[barColour(bar)] }]} />
+                <View style={[styles.bar, month ? styles.thinBar : null, barLight(barColour(bar)), { height: height(bar.value) }]} />
               </>
             )}
           </View>
         ))}
         {line === null ? null : <View pointerEvents="none" style={[styles.target, { bottom: height(line) }]} />}
+        {line === null ? null : (
+          <Txt kind="tiny" colour="textSoft" style={[styles.lineWords, { bottom: height(line) + 4 }]}>
+            {count(line)}
+          </Txt>
+        )}
       </View>
       <View style={styles.labels}>
         {bars.map((bar, i) => (
@@ -260,8 +273,10 @@ const styles = StyleSheet.create({
   // A date under a thin bar of the 30 days is wider than its bar, and is drawn across the bars beside it.
   date: { width: 32 },
   thin: { marginHorizontal: -2 },
-  bar: { borderTopLeftRadius: 6, borderTopRightRadius: 6 },
-  target: { position: "absolute", left: 0, right: 0, height: 2, borderRadius: 1, backgroundColor: colours.text },
+  bar: { marginHorizontal: 3, borderTopLeftRadius: 999, borderTopRightRadius: 999, borderBottomLeftRadius: 8, borderBottomRightRadius: 8 },
+  thinBar: { marginHorizontal: 0, borderTopLeftRadius: 4, borderTopRightRadius: 4, borderBottomLeftRadius: 2, borderBottomRightRadius: 2 },
+  target: { position: "absolute", left: 0, right: 0, height: 2, borderRadius: 1, backgroundColor: colours.textSoft },
+  lineWords: { position: "absolute", right: 0 },
   about: { textAlign: "center" },
   centre: { textAlign: "center" },
   legend: { flexDirection: "row", flexWrap: "wrap", columnGap: 14, rowGap: 6 },

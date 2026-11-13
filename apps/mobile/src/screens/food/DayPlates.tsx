@@ -69,7 +69,7 @@ export function DayPlate({ date, size, bar, picked, later }: { date: number; siz
 function Number({ words, size, colour }: { words: string; size: number; colour: ColourName }) {
   return (
     <View style={[StyleSheet.absoluteFill, styles.centre]} pointerEvents="none">
-      <Txt colour={colour} style={[styles.date, { fontSize: size * 0.36, lineHeight: size * 0.46 }]}>
+      <Txt colour={colour} numberOfLines={1} fit style={[styles.date, { fontSize: size * 0.36, lineHeight: size * 0.46, maxWidth: size * 0.7 }]}>
         {words}
       </Txt>
     </View>

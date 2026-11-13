@@ -133,6 +133,19 @@ export const lightGradient = `linear-gradient(to bottom, ${colours.light}, ${col
 export const signInGradient = `linear-gradient(to bottom, ${colours.signInTop}, ${colours.signInFoot})`;
 /** A chart's bar: light orange at its top running to orange at its foot (Progress, 35c-i). */
 export const barGradient = `linear-gradient(to bottom, ${colours.orangeLight}, ${colours.orange})`;
+/** The Week tab's bars (32c-i, Kd's drawing of 2026-11-14): each lit from its top in its own colour, and
+ *  glowing faintly: on target, under, over. */
+export const weekBarLight = {
+  good: `linear-gradient(to bottom, ${colours.goodText}, ${colours.good})`,
+  blue: "linear-gradient(to bottom, #93c5fd, #3b82f6)",
+  orange: `linear-gradient(to bottom, ${colours.orangeLight}, ${colours.orangeDeep})`,
+} as const;
+export const weekBarGlow = {
+  good: "0 0 14px rgba(34,197,94,0.35)",
+  blue: "0 0 14px rgba(96,165,250,0.35)",
+  orange: "0 0 14px rgba(255,138,31,0.4)",
+} as const;
+
 /** Across a box with a chalk drawing on its right: the box's own colour under the words, the drawing
  *  showing through on the right (Progress, 35c-i). */
 export const artShade =
