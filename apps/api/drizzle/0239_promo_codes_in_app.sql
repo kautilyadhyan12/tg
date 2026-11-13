@@ -1,5 +1,6 @@
 -- A promo code typed in the app (ROADMAP Stage 2 item 18k-v; Kd, 2026-11-13). Forward-only.
--- Hand-written, as `0016` onwards are; its journal entry is part of this commit.
+-- Hand-written, as `0016` onwards are; its journal entry is part of this commit. Renumbered from 0238: 37f-ii-a merged
+-- its own 0238_user_heart_max first.
 --
 -- A gym ticks which of its promo codes members may type in the app (`in_app`), and whether a code is used once per member
 -- (`once_per_member`, at the desk and in the app). Both off for a discount made before this job: it works as it did.

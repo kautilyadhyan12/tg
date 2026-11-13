@@ -942,7 +942,7 @@ export const gymAppPayments = pgTable(
     /** Paid with the member not asking (0237; 20h): owed one Payment received notification, until sent or read. */
     pushDueAt: timestamp("push_due_at", { withTimezone: true }),
     pushClaimedAt: timestamp("push_claimed_at", { withTimezone: true }),
-    /** The discount a purchase is bought with (0238; 18k-v): while it is open, it keeps one use of it. */
+    /** The discount a purchase is bought with (0239; 18k-v): while it is open, it keeps one use of it. */
     discountId: uuid("discount_id"),
   },
   (t) => [

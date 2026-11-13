@@ -100,9 +100,9 @@ export const gymDiscounts = pgTable(
     membershipPayments: text("membership_payments"),
     /** Refer a friend's own friend's gift (0119): given only to a friend a member invited. */
     referralGift: boolean("referral_gift").notNull().default(false),
-    /** Members may type its promo code in the app (0238; 18k-v). */
+    /** Members may type its promo code in the app (0239; 18k-v). */
     inApp: boolean("in_app").notNull().default(false),
-    /** Each record uses it once, at the desk or in the app (0238; 18k-v). */
+    /** Each record uses it once, at the desk or in the app (0239; 18k-v). */
     oncePerMember: boolean("once_per_member").notNull().default(false),
     archivedAt: timestamp("archived_at", { withTimezone: true }),
     createdAt: createdAt(),

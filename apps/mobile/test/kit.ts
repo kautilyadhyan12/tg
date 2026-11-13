@@ -154,6 +154,8 @@ export function fakeServer(routes: Record<string, Route>): { ask: Ask; asked: As
     "/v1/geo/map": () => ({ status: 200, body: { map: OPENFREEMAP } }),
     // No run plan answered yet, unless a test says otherwise (37d-i).
     "/v1/geo/run-plan": () => ({ status: 200, body: { answers: null, plan: null } }),
+    // No maximum heart rate of their own and no age, unless a test says otherwise (37f-ii-a).
+    "/v1/geo/heart-max": () => ({ status: 200, body: { own: null, fromAge: null, max: null } }),
     ...routes,
   };
   const ask: Ask = async (url: string, init: AskInit) => {

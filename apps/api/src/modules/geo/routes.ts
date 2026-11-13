@@ -15,7 +15,7 @@ import { heightMapFor, type HeightMap } from "./heights.adapter.js";
 import { mapSourceFor } from "./mapSource.js";
 import { createOrsRouteProvider, type RouteProvider } from "./ors.adapter.js";
 import { ForeignRunError } from "./repo.js";
-import { RUN_MAX_PAUSES, RUN_MAX_POINTS, RUN_WORDS, runPlanAnswersSchema, putOwnRunPlanRequestSchema, putRunChoiceRequestSchema, changeRunRequestSchema, runDaysQuerySchema, runListQuerySchema } from "@app/shared";
+import { RUN_MAX_PAUSES, RUN_MAX_POINTS, RUN_WORDS, runPlanAnswersSchema, putHeartMaxRequestSchema, putOwnRunPlanRequestSchema, putRunChoiceRequestSchema, changeRunRequestSchema, runDaysQuerySchema, runListQuerySchema } from "@app/shared";
 import { generateRoutesRequestSchema, geoListQuerySchema, runClimbRequestSchema, saveRunRequestSchema, savedRouteCreateSchema } from "./schemas.js";
 import * as service from "./service.js";
 import type { GeoDeps } from "./service.js";
@@ -332,5 +332,15 @@ export function registerGeoRoutes(
     const input = parse(putOwnRunPlanRequestSchema, req.body, req, reply);
     if (input === null) return;
     return reply.send(await service.setOwnRunPlan(planDeps, authedUserId(req), input.days));
+  });
+
+  // The maximum heart rate the five heart rate zones are worked from (ROADMAP 37f-ii-a), the person's own only.
+  app.get("/v1/geo/heart-max", { preHandler: [app.authenticate] }, async (req, reply) => reply.send(await service.heartMax(readDeps, authedUserId(req))));
+
+  // The person's own maximum, or null for the one from their age: a PUT sent twice leaves the same row.
+  app.put("/v1/geo/heart-max", { preHandler: [app.authenticate, changeLimit] }, async (req, reply) => {
+    const input = parse(putHeartMaxRequestSchema, req.body, req, reply);
+    if (input === null) return;
+    return reply.send(await service.setHeartMax(planDeps, authedUserId(req), input.own));
   });
 }

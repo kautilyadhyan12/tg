@@ -3873,7 +3873,7 @@ codes on products, as Gymdesk and Mindbody do them.
   for nothing; a code a member types in their own app (built by 18k-v, below); discounts in Reports.
 
 **As built, 18k-v (2026-11-13; `rulings/2026-11-13-18k-v.md`).** A promo code typed in the app, on a membership.
-- **Two ticks on a code**, under "How SPRING20 can be used" (`gym_discounts.in_app`, `once_per_member`, `0238`): **Members
+- **Two ticks on a code**, under "How SPRING20 can be used" (`gym_discounts.in_app`, `once_per_member`, `0239`): **Members
   can enter this code in the app** (a code for memberships only) and **Limit to one use per member** (each record uses it
   once, at the desk or in the app; a walk-in has no record to count it on). Both ticked on a new code (Kd, 2026-11-13);
   both off on every code made before. The older box reads "Limit how many times it can be used in total". Refer a

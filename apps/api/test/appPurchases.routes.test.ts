@@ -417,7 +417,8 @@ d("Buy in the app: given once, on their own record, only for what Square took (r
     clock = new Date();
     const acct = account(`ABCL${uniq().slice(-6)}`);
     const gym = await makeGym("App Buy Close", acct);
-    const pass = await addType(gym, { name: "Day pass", priceMinor: 1500, packClasses: 1, packDays: 1 });
+    // A 60-day pack: a day pass is rightly refused from 23:50 on the gym's clock, which this test is not about.
+    const pass = await addType(gym, { name: "10-class pack", packDays: 60 });
     const leo = await member(gym, "Leo Park");
     const shown = await lineOf(gym, leo.app, pass);
     expect(shown.agreement).toBeNull();

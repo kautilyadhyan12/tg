@@ -41,9 +41,9 @@ export interface DiscountRow {
   membershipPayments: MembershipPayments | null;
   /** Refer a friend's own friend's gift (0119): given only to a friend a member invited. */
   referralGift: boolean;
-  /** Members may type its code in the app (0238; 18k-v). */
+  /** Members may type its code in the app (0239; 18k-v). */
   inApp: boolean;
-  /** Each record uses it once (0238; 18k-v). */
+  /** Each record uses it once (0239; 18k-v). */
   oncePerMember: boolean;
   /** Uses kept for members paying with it in the app now (18k-v). */
   keptUses: number;

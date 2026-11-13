@@ -165,3 +165,16 @@ export const ownRunPlans = pgTable(
     check("own_run_plans_days_check", sql`jsonb_typeof(${t.days}) = 'array'`),
   ],
 );
+
+// 0238 (ROADMAP 37f-ii-a): the person's own maximum heart rate, which the heart rate zones are worked from.
+export const userHeartMax = pgTable(
+  "user_heart_max",
+  {
+    userId: uuid("user_id")
+      .primaryKey()
+      .references(() => users.id, { onDelete: "cascade" }),
+    bpm: smallint("bpm").notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [check("user_heart_max_bpm_check", sql`${t.bpm} BETWEEN 100 AND 230`)],
+);
