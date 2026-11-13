@@ -23,6 +23,7 @@ import {
 } from "@app/shared";
 import { buildApp } from "../src/app.js";
 import { createMemoryRedis } from "../src/redis.js";
+import { openDueBills } from "../src/modules/orgs/memberships/billsRepo.js";
 import { openDueFreezeFees } from "../src/modules/orgs/memberships/freezeFees.js";
 import { loadConfig } from "../src/config.js";
 import { APP_PAYMENT } from "../src/modules/orgs/payments/appPayments.js";
@@ -390,6 +391,43 @@ d("Payments to check in Square on Overview: every one the person's page says, an
     const pastRows = (await checks(gymA)).rows;
     expect(byId(bare(pastRows))).toEqual(byId(await pageSays(gymA, everyoneA)));
     expect(pastRows.map((r) => [r.name, r.past])).toEqual([["Pia Moss", true]]);
+  });
+
+  it("a bill's check is said while that bill is the one owed now, as on the page: not while an earlier month is owed again", async () => {
+    clock = new Date();
+    clock.setUTCHours(18, 0, 0, 0);
+    const gym = await makeGym("App Checks Owed");
+    const goldId = await addType(gym, gold);
+    const uma = await member(gym, goldId, "Uma Shah");
+    // Her first month paid at the desk; her membership moved a month back, so her second month's bill is owed today.
+    const cash = await byHand(gym, uma.holder);
+    expect(cash.statusCode, cash.body).toBe(200);
+    await sql`UPDATE gym_held_memberships SET starts_on = (starts_on - interval '1 month')::date WHERE gym_id = ${gym.id} AND id = ${uma.holder.membershipId}`;
+    await sql`UPDATE gym_member_bills SET due_on = (due_on - interval '1 month')::date, covers_from = (covers_from - interval '1 month')::date, covers_to = (covers_to - interval '1 month')::date WHERE gym_id = ${gym.id} AND held_membership_id = ${uma.holder.membershipId}`;
+    await openDueBills({ sql, log: quiet }, { now: clock, gymIds: [gym.id] });
+    // She pays the second month in the app, and Square takes another amount.
+    const second = await pay(gym, uma.app, uma.holder, { periodIndex: 1 });
+    square.payLink(linkOf(second.payment.id)?.id ?? "", TIP);
+    expect((await checkPay(gym, uma.app, second.payment.id)).payment.state).toBe("check");
+    const owedSecond = await checks(gym);
+    expect(owedSecond.rows.map((r) => [r.name, r.kind])).toEqual([["Uma Shah", "bill"]]);
+    expect(byId(bare(owedSecond.rows))).toEqual(byId(await pageSays(gym, [uma.holder.entryId])));
+
+    // Staff void the first month's cash payment: the first month is owed again, and the page says nothing of the second's
+    // check until it is paid. Neither does the list.
+    const page = await held(gym, uma.holder.entryId);
+    const firstPayment = page.memberships[0]?.billing?.bills.find((b) => b.periodIndex === 0)?.payments[0]?.id ?? "";
+    const voided = await send("POST", `${entryUrl(gym, uma.holder.entryId)}/memberships/${uma.holder.membershipId}/payments/${firstPayment}/void`, gym.owner.cookies, { reason: "mistake" });
+    expect(voided.statusCode, voided.body).toBe(200);
+    expect((await held(gym, uma.holder.entryId)).memberships[0]?.billing?.pay?.periodIndex).toBe(0);
+    expect(await pageSays(gym, [uma.holder.entryId])).toEqual([]);
+    expect((await checks(gym)).rows).toEqual([]);
+
+    // The first month paid again: the second is owed, and its check is back on both.
+    expect((await byHand(gym, uma.holder)).statusCode).toBe(200);
+    const back = await checks(gym);
+    expect(back.rows.map((r) => r.name)).toEqual(["Uma Shah"]);
+    expect(byId(bare(back.rows))).toEqual(byId(await pageSays(gym, [uma.holder.entryId])));
   });
 
   it("only staff who take payments and keep the member list read it; a member, a stranger and another gym get nothing", async () => {
