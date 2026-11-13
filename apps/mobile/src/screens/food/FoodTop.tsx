@@ -1,8 +1,7 @@
 import type { ReactNode } from "react";
-import { Animated, Image, StyleSheet, View, useWindowDimensions } from "react-native";
+import { Image, StyleSheet, View, useWindowDimensions } from "react-native";
 import Svg, { Circle, Defs, RadialGradient, Stop } from "react-native-svg";
 import { colours, floatFade, sizes } from "../../look/colours";
-import { useLoop } from "../../look/Motion";
 import { pictures } from "../../look/pictures";
 import { pictureTopHeight } from "../../look/sizing";
 import { Txt } from "../../look/Txt";
@@ -19,9 +18,6 @@ export function FoodTop({ eyebrow, title, foot }: { eyebrow: string; title: stri
   const tall = pictureTopHeight(width, height, TALL);
   const bowlHigh = tall * 0.94;
   const bowlWide = (bowlHigh * BOWL.width) / BOWL.height;
-  // The bowl bobs slowly, as if it floats; still where the phone asks for no motion.
-  const bob = useLoop(2600);
-  const lift = bob.interpolate({ inputRange: [0, 1], outputRange: [0, -6] });
   return (
     <View style={{ height: tall }}>
       <View style={[StyleSheet.absoluteFill, styles.clip]}>
@@ -45,9 +41,10 @@ export function FoodTop({ eyebrow, title, foot }: { eyebrow: string; title: stri
           <Circle cx={width * 0.02} cy={tall * 0.3} r={width * 0.45} fill="url(#foodLeaf)" />
           <Circle cx={width * 0.72} cy={tall * 0.96} r={width * 0.34} fill="url(#foodTomato)" />
         </Svg>
-        <Animated.View style={[styles.bowl, { width: bowlWide, height: bowlHigh, top: tall * 0.08, right: -bowlWide * 0.07, transform: [{ translateY: lift }] }]}>
+        {/* Still: the bowl never moves (Kd, 2026-11-14). */}
+        <View style={[styles.bowl, { width: bowlWide, height: bowlHigh, top: tall * 0.08, right: -bowlWide * 0.07 }]}>
           <Image source={pictures.foodfloat} resizeMode="contain" style={styles.fill} accessible={false} />
-        </Animated.View>
+        </View>
       </View>
       <View style={[StyleSheet.absoluteFill, styles.fade]} />
       <View style={styles.words}>
