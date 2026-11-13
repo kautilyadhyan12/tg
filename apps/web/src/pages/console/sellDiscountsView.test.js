@@ -304,9 +304,30 @@ describe('the discount form', () => {
       allMembershipTypes: true,
       membershipTypeIds: [],
       membershipPayments: null,
+      // A new code is once per member (Kd, 2026-11-13); a code on products alone is never in the app.
+      oncePerMember: true,
+      inApp: false,
     });
     const flat = { ...emptyDiscountDraft(), name: 'Staff', kind: 'amount', amount: '5', percent: '99', productIds: [TOWEL.id], maxUses: '7' };
-    expect(discountBody(flat, 'USD', products)).toEqual({ name: 'Staff', code: null, kind: 'amount', percentBp: null, amountMinor: 500, startsOn: null, endsOn: null, maxUses: null, forProducts: true, allProducts: true, productIds: [], forMemberships: false, allMembershipTypes: true, membershipTypeIds: [], membershipPayments: null });
+    expect(discountBody(flat, 'USD', products)).toEqual({ name: 'Staff', code: null, kind: 'amount', percentBp: null, amountMinor: 500, startsOn: null, endsOn: null, maxUses: null, forProducts: true, allProducts: true, productIds: [], forMemberships: false, allMembershipTypes: true, membershipTypeIds: [], membershipPayments: null, oncePerMember: false, inApp: false });
+  });
+
+  it('a promo code: both ticks are on for a new one, can be unticked, and the app one only counts on memberships (18k-v; Kd, 2026-11-13)', () => {
+    const fresh = emptyDiscountDraft('memberships');
+    expect(fresh).toMatchObject({ oncePerMember: true, inApp: true });
+    const typed = { ...fresh, name: 'Spring', percent: '20', code: 'spring', payments: 'every' };
+    expect(discountBody(typed, 'USD', products)).toMatchObject({ code: 'SPRING', oncePerMember: true, inApp: true });
+    expect(discountBody({ ...typed, inApp: false }, 'USD', products)).toMatchObject({ oncePerMember: true, inApp: false });
+    expect(discountBody({ ...typed, oncePerMember: false }, 'USD', products)).toMatchObject({ oncePerMember: false, inApp: true });
+    // No code: neither, whatever the boxes held. On products alone: never in the app.
+    expect(discountBody({ ...typed, code: '', inApp: true }, 'USD', products)).toMatchObject({ code: null, oncePerMember: false, inApp: false });
+    expect(discountBody({ ...typed, inApp: true, forMemberships: false, forProducts: true }, 'USD', products)).toMatchObject({ inApp: false });
+    // A code saved before this job opens as it was: neither ticked.
+    expect(draftFromDiscount(discount({}))).toMatchObject({ oncePerMember: false, inApp: false });
+    expect(draftFromDiscount(discount({ oncePerMember: true, inApp: true }))).toMatchObject({ oncePerMember: true, inApp: true });
+    // The list says both.
+    expect(discountRow(discount({ oncePerMember: true, inApp: true }), products)).toContain('One use per member · Can be used in the app');
+    expect(discountRow(discount({}), products)).not.toContain('One use per member');
   });
 
   it('opens a discount as it is, and sends back the moment it was read', () => {

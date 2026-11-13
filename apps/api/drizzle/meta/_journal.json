@@ -1667,6 +1667,13 @@
       "when": 1790985600238,
       "tag": "0238_user_heart_max",
       "breakpoints": true
+    },
+    {
+      "idx": 238,
+      "version": "7",
+      "when": 1790985600239,
+      "tag": "0239_promo_codes_in_app",
+      "breakpoints": true
     }
   ]
 }

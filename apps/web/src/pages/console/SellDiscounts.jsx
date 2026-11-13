@@ -1,6 +1,6 @@
 import { useId, useState } from 'react';
 import { Loader2, Plus } from 'lucide-react';
-import { DISCOUNTS_MAX } from '@app/shared';
+import { DISCOUNTS_MAX, promoCodeFrom } from '@app/shared';
 import { registerService } from '../../api/registerApi';
 import { errorText } from '../../api/orgsApi';
 import { ConfirmInline } from '../../components/console/ConsoleStates';
@@ -214,7 +214,7 @@ function DiscountForm({ page, draft, setDraft, busy, error, membershipsTo, onSav
 
       <label className="flex items-center gap-3 c-s15 c-t1" style={ROW}>
         <input type="checkbox" checked={draft.limited} disabled={busy} onChange={(e) => set({ limited: e.target.checked })} />
-        Limit how many times it can be used
+        Limit how many times it can be used in total
       </label>
       {draft.limited ? (
         <div className="c-field">
@@ -225,6 +225,31 @@ function DiscountForm({ page, draft, setDraft, busy, error, membershipsTo, onSav
           <p className="c-s13 c-t3 m-0">Each sale or membership made with the discount counts as one use. A product sale you void gives its use back.</p>
           {problems.maxUses ? <p className="c-s14 m-0" style={BAD}>{problems.maxUses}</p> : null}
         </div>
+      ) : null}
+
+      {promoCodeFrom(draft.code) !== null ? (
+        <fieldset className="flex flex-col gap-1" style={{ border: 0, padding: 0, margin: 0 }}>
+          <legend className="c-label">How {promoCodeFrom(draft.code)} can be used</legend>
+          <label className="flex items-center gap-3 c-s15 c-t1" style={ROW}>
+            <input type="checkbox" checked={draft.oncePerMember} disabled={busy} onChange={(e) => set({ oncePerMember: e.target.checked })} />
+            Limit to one use per member
+          </label>
+          <p className="c-s13 c-t3 m-0">
+            A member can use {promoCodeFrom(draft.code)} once, at the front desk or in the app. Untick this to let members use it every time they buy.
+          </p>
+          {draft.forMemberships ? (
+            <>
+              <label className="flex items-center gap-3 c-s15 c-t1" style={ROW}>
+                <input type="checkbox" checked={draft.inApp} disabled={busy} onChange={(e) => set({ inApp: e.target.checked })} />
+                Members can enter this code in the app
+              </label>
+              <p className="c-s13 c-t3 m-0">
+                Members type {promoCodeFrom(draft.code)} when they buy a membership in the app, and the discount comes off what they pay. Anyone who knows the code
+                can use it.
+              </p>
+            </>
+          ) : null}
+        </fieldset>
       ) : null}
 
       <div className="flex flex-wrap gap-2">
