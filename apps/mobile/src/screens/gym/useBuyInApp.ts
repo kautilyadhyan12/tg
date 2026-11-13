@@ -38,6 +38,8 @@ export interface BuyInApp {
   clear: () => void;
   /** Closes the box saying how a page ended: forgets it, and what was bought. */
   dismiss: () => void;
+  /** The line whose card charge Square has not answered yet (20i-i): its page says so, with Check status, in place of Pay. */
+  waiting: string | null;
 }
 
 interface Away {
@@ -63,6 +65,7 @@ export function useBuyInApp(gymId: string, onEnded: () => void): BuyInApp {
   const ending = useRef(new Set<string>());
   // A page whose end was not answered, for Check again.
   const unanswered = useRef<{ at: string; id: string } | null>(null);
+  const [waiting, setWaiting] = useState<string | null>(null);
   // A press whose answer was lost keeps its key, for the very same body: pressed again, the server gives back the page it
   // may have made. A changed body (another name typed) is a press of its own.
   const lostPress = useRef<{ typeId: string; body: string; requestKey: string } | null>(null);
@@ -74,6 +77,12 @@ export function useBuyInApp(gymId: string, onEnded: () => void): BuyInApp {
     ended.current = onEnded;
   }, [onEnded]);
 
+  // A charge Square has not answered is said on its line's page too, so closing the box never hides it.
+  const leave = useCallback((now: { at: string; id: string } | null) => {
+    unanswered.current = now;
+    setWaiting(now !== null && charged.current.has(now.id) ? now.at : null);
+  }, []);
+
   const working = useCallback((now: { at: string; line: string } | null) => {
     busyNow.current = now !== null;
     setBusy(now);
@@ -83,7 +92,7 @@ export function useBuyInApp(gymId: string, onEnded: () => void): BuyInApp {
     async (at: string, purchaseId: string, notOpened = false) => {
       if (ending.current.has(purchaseId)) return;
       ending.current.add(purchaseId);
-      unanswered.current = null;
+      leave(null);
       working({ at, line: PAY_CHECKING });
       const answer = await session.signedIn({ method: "POST", path: purchaseClosePath(gymId, purchaseId) }, appPurchaseResponseSchema);
       ending.current.delete(purchaseId);
@@ -95,7 +104,7 @@ export function useBuyInApp(gymId: string, onEnded: () => void): BuyInApp {
         const purchase = answer.data.purchase;
         if (purchase.id !== purchaseId) {
           // An answer about another page is no answer about this one.
-          unanswered.current = { at, id: purchaseId };
+          leave({ at, id: purchaseId });
           setSaid({ at, said: { tone: "bad", line: PAY_NO_ANSWER, again: true, ended: true } });
           return;
         }
@@ -108,7 +117,7 @@ export function useBuyInApp(gymId: string, onEnded: () => void): BuyInApp {
         const how = endedBuySaid(purchase, charged.current.has(purchaseId));
         if (purchase.state === "open") {
           // Square has not said yet: the page stays held until it does, and Check again asks.
-          unanswered.current = { at, id: purchaseId };
+          leave({ at, id: purchaseId });
           if (how !== null) setSaid({ at, said: how });
           return;
         }
@@ -119,7 +128,7 @@ export function useBuyInApp(gymId: string, onEnded: () => void): BuyInApp {
       }
       // No answer, too many asks or the server failing says nothing of how the page ended: it stays held, and Check again asks.
       if (answer.kind === "no_answer" || answer.status >= 429) {
-        unanswered.current = { at, id: purchaseId };
+        leave({ at, id: purchaseId });
         setSaid({ at, said: { tone: "bad", line: PAY_NO_ANSWER, again: true, ended: true } });
         return;
       }
@@ -127,7 +136,7 @@ export function useBuyInApp(gymId: string, onEnded: () => void): BuyInApp {
       setSaid({ at, said: { ...buyRefusalSaid(answer.error, answer.message), ended: true } });
       ended.current();
     },
-    [session, gymId, working],
+    [session, gymId, working, leave],
   );
 
   useEffect(() => {
@@ -208,7 +217,7 @@ export function useBuyInApp(gymId: string, onEnded: () => void): BuyInApp {
         if (card) {
           // Square has not said yet: Check status asks, and the worker asks too.
           working(null);
-          unanswered.current = { at: typeId, id: purchase.id };
+          leave({ at: typeId, id: purchase.id });
           setSaid({ at: typeId, said: { ...(endedBuySaid(purchase, true) ?? { tone: "warn", line: PAY_CHECKING }), again: true, ended: true } });
           return;
         }
@@ -242,7 +251,7 @@ export function useBuyInApp(gymId: string, onEnded: () => void): BuyInApp {
         }
       })();
     },
-    [session, gymId, finish, working, userId, gone],
+    [session, gymId, finish, working, userId, gone, leave],
   );
 
   const checkAgain = useCallback(() => {
@@ -270,5 +279,5 @@ export function useBuyInApp(gymId: string, onEnded: () => void): BuyInApp {
     setPaid(null);
   }, []);
 
-  return { busy, said, paid, pay, checkAgain, resume, clear, dismiss };
+  return { busy, said, paid, pay, checkAgain, resume, clear, dismiss, waiting };
 }

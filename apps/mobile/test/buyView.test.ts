@@ -129,7 +129,7 @@ describe("a repeating membership, paid with the card saved in the app (20i-i)", 
       ["own record, a card in date", gold, view(), { kind: "card", card: { brand: "VISA", last4: "1111" }, words: gold.charge ?? "" }],
       ["own record, no card", { ...gold, charge: null }, view({ card: null }), { kind: "add_card", line: APP_PURCHASE_WORDS.card_needed }],
       ["own record, an expired card", { ...gold, charge: null }, view({ card: { brand: "VISA", last4: "1111", expired: true } }), { kind: "update_card", line: APP_PURCHASE_WORDS.card_expired }],
-      ["a card but no tick from the server", { ...gold, charge: null }, view(), { kind: "update_card", line: APP_PURCHASE_WORDS.card_expired }],
+      ["a card in date but no tick from the server: changed, never called expired", { ...gold, charge: null }, view(), { kind: "changed", line: APP_PURCHASE_WORDS.card_changed }],
       ["not on the gym's list yet", { ...gold, charge: null }, view({ record: "none", card: null }), { kind: "no_record", line: APP_PURCHASE_WORDS.card_no_record }],
       ["a shared record", gold, view({ record: "shared" }), { kind: "no_record", line: APP_PURCHASE_WORDS.card_no_record }],
     ];

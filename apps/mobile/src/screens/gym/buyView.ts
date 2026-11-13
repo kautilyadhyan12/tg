@@ -42,8 +42,8 @@ export const NOT_READY_WHO_BOTH = "Choose who is signing, type the full name and
 export const NOT_READY_CARD = "Tick the box to pay.";
 export const PAID_WITH = "Paid with";
 export const CHARGING = "Charging your card…";
-/** Under Pay on a repeating membership: "Charged to Visa ending 1111 through Square." */
-export const chargedThrough = (card: { brand: string; last4: string }): string => `Charged to ${cardName(card)} through Square.`;
+/** Under Pay on a repeating membership: "Your Visa ending 1111 is charged through Square." */
+export const chargedThrough = (card: { brand: string; last4: string }): string => `Your ${cardName(card)} is charged through Square.`;
 /** The bank asked to confirm it was them: the bank's own check on the phone is not built yet (20i-ii). */
 export const BANK_CHECK_DESK = "Your bank needs to confirm this payment, so buy this at the front desk.";
 /** A card charge that ended with nothing taken, said after Check status. */
@@ -123,13 +123,16 @@ export type PaidHow =
   | { kind: "card"; card: { brand: string; last4: string }; words: string }
   | { kind: "no_record"; line: string }
   | { kind: "add_card"; line: string }
-  | { kind: "update_card"; line: string };
+  | { kind: "update_card"; line: string }
+  /** A card in date and no tick from the server: what was read no longer fits together, so the list is read again. */
+  | { kind: "changed"; line: string };
 
 export function paidHow(line: Pick<ForSaleLine, "repeats" | "charge">, view: Pick<ForSaleResponse, "record" | "card">): PaidHow {
   if (!line.repeats) return { kind: "page" };
   if (view.record !== "own") return { kind: "no_record", line: APP_PURCHASE_WORDS.card_no_record };
   if (view.card === null) return { kind: "add_card", line: APP_PURCHASE_WORDS.card_needed };
-  if (view.card.expired || line.charge === null) return { kind: "update_card", line: APP_PURCHASE_WORDS.card_expired };
+  if (view.card.expired) return { kind: "update_card", line: APP_PURCHASE_WORDS.card_expired };
+  if (line.charge === null) return { kind: "changed", line: APP_PURCHASE_WORDS.card_changed };
   return { kind: "card", card: { brand: view.card.brand, last4: view.card.last4 }, words: line.charge };
 }
 

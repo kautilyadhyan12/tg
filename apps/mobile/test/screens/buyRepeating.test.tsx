@@ -102,6 +102,27 @@ const openGold = async () => {
 };
 const payGold = () => screen.getByLabelText("Pay $49.99 for Gold Monthly");
 const disabled = (el: ReturnType<typeof screen.getByLabelText>) => (el.props as { accessibilityState?: { disabled?: boolean } }).accessibilityState?.disabled === true;
+const ticked = (el: ReturnType<typeof screen.getByLabelText>) => (el.props as { accessibilityState?: { checked?: boolean } }).accessibilityState?.checked === true;
+/** The Confirming box's own Check status, not the one on the line's page behind it. */
+async function boxCheck() {
+  await screen.findByTestId("buy-ended");
+  const page = screen.queryByTestId("buy-charging");
+  const inPage = page === null ? [] : within(page).queryAllByText("Check status");
+  const own = screen.getAllByText("Check status").find((el) => !inPage.includes(el));
+  if (own === undefined) throw new Error("no Check status in the box");
+  return own;
+}
+/** Presses `button` and expects Add card / Update card's page to open over the line's page, then closes it. */
+async function cardPageOpensFrom(button: ReturnType<typeof screen.getByText>) {
+  await fireEvent.press(button);
+  expect(await screen.findByTestId("add-card")).toBeTruthy();
+  const close = screen.getAllByLabelText("Close").at(-1);
+  if (close === undefined) throw new Error("no Close");
+  await fireEvent.press(close);
+  await waitFor(() => {
+    expect(screen.queryByTestId("add-card")).toBeNull();
+  });
+}
 /** Signs the gym's agreement and ticks the card's own box. */
 async function signAndTick(gold: ForSaleLine) {
   await fireEvent.changeText(await screen.findByLabelText("Full name"), "Asha Walk");
@@ -128,6 +149,7 @@ describe("the worst thing: the card is charged only for what was shown and ticke
 
     await openGold();
     expect(within(screen.getByTestId("buy-card")).getByText("Visa ending 1111")).toBeTruthy();
+    await cardPageOpensFrom(within(screen.getByTestId("buy-card")).getByText(UPDATE_CARD));
     expect(disabled(payGold())).toBe(true);
     expect(screen.getByText(NOT_READY_BOTH)).toBeTruthy();
     // The agreement alone is not enough: the card's own tick is asked for too.
@@ -136,7 +158,7 @@ describe("the worst thing: the card is charged only for what was shown and ticke
     expect(disabled(payGold())).toBe(true);
     await fireEvent.press(screen.getByLabelText(gold.charge ?? ""));
     expect(disabled(payGold())).toBe(false);
-    expect(screen.getByText("Charged to Visa ending 1111 through Square.")).toBeTruthy();
+    expect(screen.getByText("Your Visa ending 1111 is charged through Square.")).toBeTruthy();
 
     await fireEvent.press(payGold());
     const done = within(await screen.findByTestId("buy-paid"));
@@ -201,14 +223,21 @@ describe("the worst thing: the card is charged only for what was shown and ticke
     // Asked straight after the press: only Check status asks Square again.
     expect(posts(server.asked, closePath(IRON))).toHaveLength(0);
 
-    await fireEvent.press(screen.getByText("Check status"));
+    // Closing the box leaves the line's page saying the charge is still being confirmed, with Check status, never Pay.
+    await fireEvent.press(screen.getByText("Close"));
+    const charging = within(await screen.findByTestId("buy-charging"));
+    expect(charging.getByText(PAY_WAITING)).toBeTruthy();
+    expect(screen.queryByLabelText("Pay $49.99 for Gold Monthly")).toBeNull();
+    expect(screen.queryByText("Your Visa ending 1111 is charged through Square.")).toBeNull();
+
+    await fireEvent.press(charging.getByText("Check status"));
     await waitFor(() => {
       expect(posts(server.asked, closePath(IRON))).toHaveLength(1);
     });
     expect(screen.queryByTestId("buy-paid")).toBeNull();
 
     closeAnswer = ok({ purchase: purchase() });
-    await fireEvent.press(screen.getByText("Check status"));
+    await fireEvent.press(await boxCheck());
     expect(await screen.findByTestId("buy-paid")).toBeTruthy();
   });
 
@@ -225,7 +254,7 @@ describe("the worst thing: the card is charged only for what was shown and ticke
     await openGold();
     await signAndTick(gold);
     await fireEvent.press(payGold());
-    await fireEvent.press(await screen.findByText("Check status"));
+    await fireEvent.press(await boxCheck());
     expect(await screen.findByText(CARD_NOT_TAKEN)).toBeTruthy();
     expect(screen.getByText(NOT_COMPLETED_TITLE)).toBeTruthy();
     expect(screen.queryByTestId("buy-paid")).toBeNull();
@@ -250,6 +279,27 @@ describe("the worst thing: the card is charged only for what was shown and ticke
     expect(await within(screen.getByTestId("buy-card")).findByText("Mastercard ending 4444")).toBeTruthy();
     expect(disabled(payGold())).toBe(true);
     expect(screen.getByText(NOT_READY_CARD)).toBeTruthy();
+  });
+
+  it("another card takes the card's tick alone: the gym's agreement, unchanged, stays signed", async () => {
+    let card = VISA;
+    const server = fakeServer({
+      "/v1/auth/refresh": ok({ tokens: tokens(2) }),
+      "/v1/orgs/mine": mine(IRON),
+      [forSalePath(IRON)]: () => forSale([lineOf(GOLD_TYPE, { card })], { card: { ...card, expired: false } })(),
+    });
+    await openBuy(server.ask);
+    await openGold();
+    await signAndTick(lineOf(GOLD_TYPE, { card: VISA }));
+    expect(disabled(payGold())).toBe(false);
+
+    card = MASTERCARD;
+    await appIs("background");
+    await appIs("active");
+    expect(await within(screen.getByTestId("buy-card")).findByText("Mastercard ending 4444")).toBeTruthy();
+    expect(ticked(screen.getByLabelText(AGREEMENT_AGREE_LABEL))).toBe(true);
+    expect(ticked(screen.getByLabelText(lineOf(GOLD_TYPE, { card: MASTERCARD }).charge ?? ""))).toBe(false);
+    expect(disabled(payGold())).toBe(true);
   });
 });
 
@@ -290,8 +340,8 @@ describe("what stands in the way of paying with the card", () => {
     await openBuy(server.ask);
     await openGold();
     expect(within(screen.getByTestId("buy-card-first")).getByText(APP_PURCHASE_WORDS.card_expired)).toBeTruthy();
-    expect(within(screen.getByTestId("buy-card-first")).getByText(UPDATE_CARD)).toBeTruthy();
     expect(screen.queryByLabelText("Pay $49.99 for Gold Monthly")).toBeNull();
+    await cardPageOpensFrom(within(screen.getByTestId("buy-card-first")).getByText(UPDATE_CARD));
 
     over = { record: "none", card: null };
     await appIs("background");
@@ -319,10 +369,34 @@ describe("what stands in the way of paying with the card", () => {
     // Update card beside the words, and the card row's own.
     expect(screen.getAllByText(UPDATE_CARD)).toHaveLength(2);
     expect(screen.queryByTestId("buy-paid")).toBeNull();
+    const beside = screen.getAllByText(UPDATE_CARD).find((el) => within(screen.getByTestId("buy-card")).queryAllByText(UPDATE_CARD).every((row) => row !== el));
+    if (beside === undefined) throw new Error("no Update card beside the words");
+    await cardPageOpensFrom(beside);
 
     answer = () => refusal(409, "app_purchase_verification", APP_PURCHASE_WORDS.verification);
     await fireEvent.press(payGold());
     expect(await screen.findByText(BANK_CHECK_DESK)).toBeTruthy();
     expect(screen.queryByText(APP_PURCHASE_WORDS.verification)).toBeNull();
+  });
+
+  it("a card that expired since the list was read: Pay's refusal reads the list again, and Update card takes Pay's place", async () => {
+    let over: Row = {};
+    const server = fakeServer({
+      "/v1/auth/refresh": ok({ tokens: tokens(2) }),
+      "/v1/orgs/mine": mine(IRON),
+      [forSalePath(IRON)]: () => forSale([lineOf(GOLD_TYPE, over["card"] === undefined ? { card: VISA } : {})], over)(),
+      [buyPath(IRON)]: () => {
+        over = { card: { ...VISA, expired: true } };
+        return refusal(409, "app_purchase_card_expired", APP_PURCHASE_WORDS.card_expired);
+      },
+    });
+    await openBuy(server.ask);
+    await openGold();
+    await signAndTick(lineOf(GOLD_TYPE, { card: VISA }));
+    await fireEvent.press(payGold());
+    const first = within(await screen.findByTestId("buy-card-first"));
+    expect(first.getAllByText(APP_PURCHASE_WORDS.card_expired).length).toBeGreaterThan(0);
+    expect(screen.queryByLabelText("Pay $49.99 for Gold Monthly")).toBeNull();
+    await cardPageOpensFrom(first.getByText(UPDATE_CARD));
   });
 });

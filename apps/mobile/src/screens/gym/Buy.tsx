@@ -59,7 +59,7 @@ import {
   whatYouGet,
 } from "./buyView";
 import { SaidBox } from "./PayPart";
-import { CHECK_AGAIN, NOT_PAID } from "./payView";
+import { CHECK_AGAIN, NOT_PAID, PAY_WAITING } from "./payView";
 import { RESUMED, useBuyInApp, type BuyInApp } from "./useBuyInApp";
 
 // Buy in the app (ROADMAP Stage 5 item 20g; spec Part 3 §14.8; Kd's drawing of 2026-11-12, `reviews/20g-mock.png`). The
@@ -270,9 +270,8 @@ function BuyBody({
       />
       <AddCardPage
         place={addingCard}
-        onSaved={() => {
-          readAgain();
-        }}
+        // Saving closes the page, and closing reads the list again.
+        onSaved={() => undefined}
         onClose={() => {
           setAddingCard(null);
           // The card saved, or what the page learnt meanwhile: the list names the card and the tick again.
@@ -442,15 +441,22 @@ function LineBody({
   // What they read changed (the details, the wording or who signs): the tick is given again on what is shown now.
   const agreementId = line?.agreement?.id ?? null;
   const factsKey = line?.factsKey ?? null;
-  // The card's tick names the card and the amounts: another card, or other amounts, are ticked again.
-  const chargeWords = how.kind === "card" ? how.words : "";
-  const [readKey, setReadKey] = useState(`${agreementId ?? ""}:${factsKey ?? ""}:${known ?? ""}:${chargeWords}`);
-  const nowKey = `${agreementId ?? ""}:${factsKey ?? ""}:${known ?? ""}:${chargeWords}`;
+  const [readKey, setReadKey] = useState(`${agreementId ?? ""}:${factsKey ?? ""}:${known ?? ""}`);
+  const nowKey = `${agreementId ?? ""}:${factsKey ?? ""}:${known ?? ""}`;
   if (nowKey !== readKey) {
     setReadKey(nowKey);
     setAgreed(false);
     setCardAgreed(false);
   }
+  // The card's tick names the card and the amounts: another card, or other amounts, take that tick alone away.
+  const chargeWords = how.kind === "card" ? how.words : "";
+  const [readWords, setReadWords] = useState(chargeWords);
+  if (chargeWords !== readWords) {
+    setReadWords(chargeWords);
+    setCardAgreed(false);
+  }
+  // A card charge Square has not answered yet: said here, with Check status, in place of Pay.
+  const charging = buy.waiting === typeId && busy === null && said === null;
   // A record two app accounts share buys at the front desk: its page reads, with nothing to sign or pay.
   const shared = view?.record === "shared";
   const ready =
@@ -485,7 +491,12 @@ function LineBody({
           </View>
         ) : null}
         {said?.updateCard === true && how.kind === "card" ? <Button label={UPDATE_CARD} kind="link" icon="card" small onPress={onCard} /> : null}
-        {how.kind === "no_record" ? (
+        {charging ? (
+          <View testID="buy-charging" style={styles.said}>
+            <SaidBox testID="buy-charging-said" tone="warn" line={PAY_WAITING} />
+            <Button label={CHECK_AGAIN} wide onPress={buy.checkAgain} />
+          </View>
+        ) : how.kind === "no_record" || how.kind === "changed" ? (
           <Txt colour="orange" style={styles.centre}>
             {how.line}
           </Txt>
@@ -501,7 +512,7 @@ function LineBody({
         ) : (
           <Button label={payLabel(line)} icon="shield" wide busy={busy !== null} disabled={busy !== null || !ready} say={`${payLabel(line)} for ${line.name}`} onPress={pay} />
         )}
-        {said?.toMembership === true || (how.kind !== "page" && how.kind !== "card") ? null : (
+        {charging || said?.toMembership === true || (how.kind !== "page" && how.kind !== "card") ? null : (
           <Txt kind="tiny" style={styles.centre}>
             {ready ? (how.kind === "card" ? chargedThrough(how.card) : PAY_SECURE) : notReadyLine(line.agreement !== null, how.kind === "card", signer !== null)}
           </Txt>
