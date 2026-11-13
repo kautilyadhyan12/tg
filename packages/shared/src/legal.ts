@@ -19,7 +19,7 @@ export const LEGAL_PATHS = {
 } as const;
 
 /** The day the words below last changed, `YYYY-MM-DD`. */
-export const LEGAL_UPDATED_ON = "2026-11-12";
+export const LEGAL_UPDATED_ON = "2026-11-13";
 
 /** Who runs KWAZO (Kd, 2026-11-08: his full name; a sole proprietorship, RULINGS 2026-09-15). */
 export const LEGAL_OWNER = "Kautilya Darshan Baruah";
@@ -336,7 +336,8 @@ export function privacyPolicy(facts: LegalFacts = LEGAL_FACTS): LegalDocument {
           p("If you connect a heart rate monitor, such as a chest strap or a watch that broadcasts its heart rate, KWAZO uses your device's Bluetooth to find the monitors near you and to connect to the one you choose. Bluetooth is not used to work out where you are."),
           p("While you record a run, the monitor's heart rate readings are kept on your device. When you save the run, they are sent with it, and for that run we keep your average and highest heart rate, your heart rate along the route (one number for each of up to 150 places along it, for the heart rate chart) and how long you spent in each of five heart rate zones. The readings themselves are not kept after the run is saved."),
           p("Your heart rate zones are worked out from a maximum heart rate: 220 less the age you gave us, or the maximum heart rate you enter yourself, which we keep until you remove it or delete your account."),
-          p("Which monitor you connected is kept on your device only."),
+          p("Which monitor you connected is kept on your device only. If its Bluetooth address changes from time to time, as a watch's does, KWAZO asks your device to pair with it, so that your device finds it again. The pairing is kept in your device's Bluetooth settings until you remove it there."),
+          p("While the voice for your runs is on, it says your heart rate after each kilometre or mile. It is spoken by your device, and nothing it says is sent to us."),
           p("If you ask for a run plan, we keep your answers to its questions: whether you run, how long you can jog without stopping, the days you can run and the distance you are aiming for, and, if you give them, the distance you usually run in a week, your longest run in the last month and a recent race time. Your plan is worked out from these answers and from the runs you record, and is not kept. If you write your own run plan, we keep the run you set for each day of the week, and whether you chose the suggested plan or your own."),
           h3("3.11. Business Page and Community Information"),
           p("When you interact with pages operated by participating businesses, we may collect and process:"),
