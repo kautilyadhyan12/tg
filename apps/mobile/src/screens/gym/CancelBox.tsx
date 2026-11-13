@@ -161,7 +161,7 @@ export function CancelBox({ gymId, open, onDone, onClose }: { gymId: string; ope
   return (
     <Sheet open={open !== null} title={step.kind === "done" ? MY_CANCEL_REASON_QUESTION : title} onClose={onClose}>
       {open === null ? null : (
-        <ScrollView testID="cancel-box" style={{ maxHeight: height * RECEIPT_MOST }} contentContainerStyle={styles.body}>
+        <ScrollView testID="cancel-box" style={[styles.scroll, { maxHeight: height * RECEIPT_MOST }]} contentContainerStyle={styles.body}>
           {step.kind === "loading" && problem === null ? <Txt kind="small">Loading…</Txt> : null}
           {step.kind === "failed" ? (
             <>
@@ -186,7 +186,7 @@ export function CancelBox({ gymId, open, onDone, onClose }: { gymId: string; ope
                     </Txt>
                   ))}
                   {problem?.final === true ? null : (
-                    <Button label={c.button} kind="danger" busy={busy === c.when} disabled={busy !== null && busy !== c.when} onPress={() => void press(open, c.when, c.key)} />
+                    <Button label={c.button} kind="danger" wide busy={busy === c.when} disabled={busy !== null && busy !== c.when} onPress={() => void press(open, c.when, c.key)} />
                   )}
                 </View>
               ))}
@@ -205,7 +205,7 @@ export function CancelBox({ gymId, open, onDone, onClose }: { gymId: string; ope
               </View>
               <Options options={REASON_OPTIONS} selected={reason.picked} disabled={reason.busy} onPick={(r) => void sendReason(step.done.cancelId, r)} />
               {reason.failed ? <Txt colour="badText">{REASON_NOT_SAVED}</Txt> : null}
-              <Button label={SKIP} kind="plain" disabled={reason.busy} onPress={onClose} />
+              <Button label={SKIP} kind="plain" wide disabled={reason.busy} onPress={onClose} />
             </>
           ) : null}
           {problem === null ? null : (
@@ -213,7 +213,7 @@ export function CancelBox({ gymId, open, onDone, onClose }: { gymId: string; ope
               <Txt colour="badText">{problem.line}</Txt>
             </View>
           )}
-          {step.kind === "done" ? null : <Button label={step.kind === "ask" && step.ask.choices.length > 0 && problem?.final !== true ? GO_BACK : CLOSE} kind="plain" onPress={onClose} />}
+          {step.kind === "done" ? null : <Button label={step.kind === "ask" && step.ask.choices.length > 0 && problem?.final !== true ? GO_BACK : CLOSE} kind="plain" wide onPress={onClose} />}
         </ScrollView>
       )}
     </Sheet>
@@ -286,12 +286,12 @@ export function KeepBox({ gymId, open, onDone, onClose }: { gymId: string; open:
     [busy, session, gymId, lost, onDone, read],
   );
 
-  const title = open === null ? "" : keepTitle(step.kind === "ask" ? step.ask.membership.name : open.name);
+  const title = open === null ? "" : step.kind === "done" ? open.name : keepTitle(step.kind === "ask" ? step.ask.membership.name : open.name);
   const choice = step.kind === "ask" ? step.ask.choice : null;
   return (
     <Sheet open={open !== null} title={title} onClose={onClose}>
       {open === null ? null : (
-        <ScrollView testID="keep-box" style={{ maxHeight: height * RECEIPT_MOST }} contentContainerStyle={styles.body}>
+        <ScrollView testID="keep-box" style={[styles.scroll, { maxHeight: height * RECEIPT_MOST }]} contentContainerStyle={styles.body}>
           {step.kind === "loading" && problem === null ? <Txt kind="small">Loading…</Txt> : null}
           {step.kind === "failed" ? (
             <>
@@ -320,7 +320,7 @@ export function KeepBox({ gymId, open, onDone, onClose }: { gymId: string; open:
                   {note}
                 </Txt>
               ))}
-              {choice === null || problem?.final === true ? null : <Button label={choice.button} busy={busy} onPress={() => void press(open, choice.key)} />}
+              {choice === null || problem?.final === true ? null : <Button label={choice.button} wide busy={busy} onPress={() => void press(open, choice.key)} />}
             </>
           ) : null}
           {step.kind === "done" ? (
@@ -334,7 +334,7 @@ export function KeepBox({ gymId, open, onDone, onClose }: { gymId: string; open:
               <Txt colour="badText">{problem.line}</Txt>
             </View>
           )}
-          <Button label={step.kind === "done" ? DONE : choice !== null && problem?.final !== true ? GO_BACK : CLOSE} kind="plain" onPress={onClose} />
+          <Button label={step.kind === "done" ? DONE : choice !== null && problem?.final !== true ? GO_BACK : CLOSE} kind="plain" wide onPress={onClose} />
         </ScrollView>
       )}
     </Sheet>
@@ -342,6 +342,8 @@ export function KeepBox({ gymId, open, onDone, onClose }: { gymId: string; open:
 }
 
 const styles = StyleSheet.create({
-  body: { gap: 14, paddingBottom: 4 },
+  // Room round the buttons, so the main one's glow is not cut off by the scroll's edge.
+  scroll: { marginHorizontal: -14 },
+  body: { gap: 14, paddingHorizontal: 14, paddingBottom: 18 },
   way: { gap: 10 },
 });
