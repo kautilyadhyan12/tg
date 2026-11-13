@@ -12,6 +12,7 @@
 // A person's memberships (§13.2; 17a-ii), under their record on the gym's list:
 //
 //   GET  /v1/orgs/:gymId/member-list/entries/:entryId/memberships            (`members.confirm`)
+//   GET  /v1/orgs/:gymId/app-payment-checks                                    Overview's Payments to check in Square (18k-vi)
 //   POST /v1/orgs/:gymId/member-list/entries/:entryId/memberships            give one
 //   POST …/memberships/:membershipId/freeze | unfreeze | cancel | paid       change one
 //   POST …/memberships/:membershipId/price-raise/keep                        keep the old price (18w)
@@ -69,6 +70,7 @@ import {
   orgParamsSchema,
 } from "../schemas.js";
 import { staffOnly } from "../staffLimit.js";
+import * as appChecks from "./appChecks.js";
 import * as held from "./heldService.js";
 import * as undoCancel from "./undoCancel.js";
 import * as service from "./service.js";
@@ -246,6 +248,22 @@ export function registerMembershipRoutes(app: FastifyInstance, deps: MembershipR
     if (params === null) return;
     const list = await held.getHeldMemberships(heldDeps, requireUserId(req), params.gymId, params.entryId);
     return reply.status(200).send(list);
+  });
+
+  // Overview's Payments to check in Square (18k-vi): read again when staff come back and on the gym's live news.
+  const checksLimit = createDualRateLimit({
+    name: "org_app_payment_checks",
+    max: 600,
+    ipMax: 3000,
+    windowMs: 60 * 60 * 1000,
+    identifier: (req) => req.authUser?.id ?? null,
+    redis: deps.redis,
+  });
+  app.get("/v1/orgs/:gymId/app-payment-checks", { preHandler: [app.authenticate, staffOnly(deps.sql, checksLimit)] }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const list = await appChecks.readAppPaymentChecks(heldDeps, requireUserId(req), params.gymId);
+    return reply.status(200).header("cache-control", "no-store").send(list);
   });
 
   app.post(heldUrl, heldGuarded, async (req, reply) => {
