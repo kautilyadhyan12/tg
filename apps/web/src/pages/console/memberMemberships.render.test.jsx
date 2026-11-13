@@ -1911,10 +1911,12 @@ describe('Review payment on App payments to review (18k-vi)', () => {
     await scrolledTo(answer([], false, { appBuyChecks: [{ id, typeName: '10 classes', ...check, currency: 'GBP' }] }), `purchase:${id}`, 'app-buy-check');
   });
 
-  it('a line on a membership that is over, among the earlier ones', async () => {
+  it('a line on a membership that is over: it owes, so it is drawn with the ones in use, earlier ones left shut', async () => {
     const base = held(2, PACK, '2025-01-04', false);
     expect(base.view.status).toBe('ended');
-    await scrolledTo(answer([{ ...base, billing: { ...base.billing, appCheck: { ...check, why: 'unknown', amountMinor: null } } }]), `bill:${base.id}`, 'held-app-check');
+    // One in use as well: the earlier ones stay shut, and the ended one that owes is drawn above them.
+    const gold = held(1, GOLD, '2026-10-04', true);
+    await scrolledTo(answer([gold, { ...base, billing: { ...base.billing, appCheck: { ...check, why: 'unknown', amountMinor: null } } }]), `bill:${base.id}`, 'held-app-check');
   });
 });
 

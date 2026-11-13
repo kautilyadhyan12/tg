@@ -469,12 +469,10 @@ export default function MemberMemberships({
       setNotice(refundNow.voidFeeId === null ? `${REFUND_NOT_SHOWN} Check it in your Square Dashboard.` : REFUND_NOT_SHOWN);
     }
   }
-  // Opened by Overview's App payments to review: that line, brought into view, among the earlier ones too.
+  // Opened by Overview's App payments to review: that line, brought into view. A payment to review is only ever said on a
+  // membership that owes (its bill or fee), which is drawn with the ones in use even once it is over.
   const [checkedNow, setCheckedNow] = useState(false);
-  if (checkNow !== null && shown !== null && !checkedNow) {
-    setCheckedNow(true);
-    setShowPast(true);
-  }
+  if (checkNow !== null && shown !== null && !checkedNow) setCheckedNow(true);
   useEffect(() => {
     if (!checkedNow || checkNow === null) return;
     document.querySelector(`[data-check="${checkNow}"]`)?.scrollIntoView?.({ block: 'center' });
