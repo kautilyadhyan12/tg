@@ -303,7 +303,7 @@ export function forSaleWorked(input: ForSaleInput): { item: ForSaleItem; given: 
     friendGift: discount === null || promoUsed ? null : { name: discount.name, offMinor: discount.offMinor },
     memberGiftOffMinor: giftOff,
     promo:
-      promoUsed && promo !== null && discount !== null
+      promoUsed
         ? { code: promo.code, name: discount.name, offMinor: discount.offMinor, instead: gift !== null && giftCosts?.ok === true ? gift.name : null }
         : null,
   };
