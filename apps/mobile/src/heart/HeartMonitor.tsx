@@ -393,7 +393,8 @@ export function HeartMonitorRow({ active, onOpen, named = true }: { active: bool
     <>
       <View style={styles.rowWords}>
         {named ? <Txt kind="body">Heart rate monitor</Txt> : null}
-        <Txt kind={named ? "small" : "body"} colour={named ? "textFaint" : "textSoft"} numberOfLines={1}>
+        {/* Two lines: on a small phone the heart rate after the name was cut to "120 b…" (37f-ii-b's walk). */}
+        <Txt kind={named ? "small" : "body"} colour={named ? "textFaint" : "textSoft"} numberOfLines={2}>
           {what}
         </Txt>
         {!named && monitor !== null ? (

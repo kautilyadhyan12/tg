@@ -431,6 +431,19 @@ object Strap {
       }
     }
 
+    // The monitor says its services moved (a laptop serving a strap restarts it; seen on 37f-ii-b's walk, the
+    // readings stopping though still connected): read them again, and ask for the heart rate again.
+    override fun onServiceChanged(g: BluetoothGatt) {
+      synchronized(Strap) { if (g !== gatt) return }
+      main.post {
+        try {
+          g.discoverServices()
+        } catch (e: SecurityException) {
+          // Permission taken away: no readings.
+        }
+      }
+    }
+
     // Android 13 and later call this one alone.
     override fun onCharacteristicChanged(g: BluetoothGatt, characteristic: BluetoothGattCharacteristic, value: ByteArray) {
       keep(g, characteristic, value)
