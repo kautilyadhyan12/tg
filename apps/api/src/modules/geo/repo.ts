@@ -677,6 +677,28 @@ export interface OwnRunPlanRow {
   daysSavedAt: Date | null;
 }
 
+/** The person's own maximum heart rate (37f-ii-a) and their age, by their own id only; null for each
+ *  they have not given. */
+export async function getHeartMax(sql: Sql, userId: string): Promise<{ own: number | null; age: number | null }> {
+  const rows = await sql<{ own: number | null; age: number | null }[]>`
+    SELECT (SELECT bpm FROM user_heart_max WHERE user_id = ${userId}) AS own,
+           (SELECT age FROM user_fitness_profiles WHERE user_id = ${userId}) AS age`;
+  const row = rows[0];
+  return { own: row?.own ?? null, age: row?.age ?? null };
+}
+
+/** The person's own maximum heart rate, one statement; none deletes it. The same sent twice leaves the
+ *  same row. */
+export async function putHeartMax(sql: Sql, userId: string, own: number | null, at: Date): Promise<void> {
+  if (own === null) {
+    await sql`DELETE FROM user_heart_max WHERE user_id = ${userId}`;
+    return;
+  }
+  await sql`
+    INSERT INTO user_heart_max (user_id, bpm, updated_at) VALUES (${userId}, ${own}, ${at})
+    ON CONFLICT (user_id) DO UPDATE SET bpm = EXCLUDED.bpm, updated_at = EXCLUDED.updated_at`;
+}
+
 /** The person's pick and own week, by their own id only. */
 export async function getOwnRunPlan(sql: Sql, userId: string): Promise<OwnRunPlanRow | null> {
   const rows = await sql<{ choice: string | null; days: unknown; days_saved_at: Date | null }[]>`

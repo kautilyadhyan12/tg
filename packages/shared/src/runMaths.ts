@@ -231,6 +231,10 @@ export interface RunSums {
   /** The pace chart (37c-iii): the speed in centimetres a second at evenly spaced places from the
    *  start to the finish (`paceLine`); empty under PACE_LINE_FROM_M. */
   paceLine: number[];
+  /** The stretch of the run's clock each place of the pace line stands for (37f-ii-a), milliseconds
+   *  since the start: from halfway back to the place before to halfway on to the next. The heart rate
+   *  chart reads the heart rate over these, so its line falls under the pace line's. */
+  paceSpans: [number, number][];
 }
 
 /** A run's fastest 1 km, mile, 5 km and 10 km in whole seconds; null where it did not cover it. */
@@ -710,6 +714,8 @@ export function runSums(points: readonly RunPoint[], pauses: readonly RunPause[]
   const segments: RunMark[][] = [];
   let segment: RunMark[] = [];
   let walked = 0;
+  // Every place the distance was counted to, with its clock, in order: the pace line's places in time.
+  const marks: RunMark[] = [];
   for (const raw of piecesBetweenPauses(points, cleaned, elapsed)) {
     const piece = withoutSpikes(raw);
     // On the smoothed path: the raw points of a phone standing still wander past STILL_M, and the stop
@@ -748,6 +754,7 @@ export function runSums(points: readonly RunPoint[], pauses: readonly RunPause[]
       trackStarts.push(track.length);
       track.push([last.lat, last.lng]);
       segment.push({ d: walked, t: last.at });
+      marks.push({ d: walked, t: last.at });
       for (let i = 1; i < path.length; i++) {
         const fix = path[i];
         if (fix === undefined) continue;
@@ -757,6 +764,7 @@ export function runSums(points: readonly RunPoint[], pauses: readonly RunPause[]
         track.push([fix.lat, fix.lng]);
         walked += m;
         segment.push({ d: walked, t: fix.at });
+        marks.push({ d: walked, t: fix.at });
         last = fix;
       }
     }
@@ -765,6 +773,7 @@ export function runSums(points: readonly RunPoint[], pauses: readonly RunPause[]
   const distanceM = steps.reduce((sum, step) => sum + step.m, 0);
   const movingS = Math.max(0, (elapsed - pausedMs - leftOutMs - stillMs) / 1000);
   const splitsKm = splitsOf(steps, 1000);
+  const paceLine = paceLineOf(steps);
   // Calories: each kilometre at its own speed, and any moving time no step covers (before the first
   // point, a gap in the signal) at the run's average speed.
   const stepS = steps.reduce((sum, step) => sum + step.s, 0);
@@ -791,8 +800,38 @@ export function runSums(points: readonly RunPoint[], pauses: readonly RunPause[]
       k5: fastestStretch(segments, RECORD_DISTANCES_M.k5),
       k10: fastestStretch(segments, RECORD_DISTANCES_M.k10),
     },
-    paceLine: paceLineOf(steps),
+    paceLine,
+    paceSpans: placeSpansOf(marks, paceLine.length),
   };
+}
+
+/** The clock at a distance along the run, between the two marks either side of it. Where a pause
+ *  holds the distance still, the first mark at it is taken: the clock stops where the running did. */
+function clockAtDistance(marks: readonly RunMark[], d: number): number {
+  const first = marks[0];
+  if (first === undefined) return 0;
+  if (d <= first.d) return first.t;
+  for (let k = 1; k < marks.length; k++) {
+    const b = marks[k];
+    const a = marks[k - 1];
+    if (a === undefined || b === undefined || b.d < d) continue;
+    return b.d > a.d ? a.t + ((b.t - a.t) * (d - a.d)) / (b.d - a.d) : a.t;
+  }
+  return marks[marks.length - 1]?.t ?? 0;
+}
+
+/** `n` evenly spaced places from the start to the finish (as `paceLineOf` places them), each as the
+ *  stretch of the clock from halfway back to the place before to halfway on to the next. */
+function placeSpansOf(marks: readonly RunMark[], n: number): [number, number][] {
+  const total = marks[marks.length - 1]?.d ?? 0;
+  if (n < 2 || total <= 0) return [];
+  const half = total / (n - 1) / 2;
+  const out: [number, number][] = [];
+  for (let i = 0; i < n; i++) {
+    const d = (total * i) / (n - 1);
+    out.push([Math.round(clockAtDistance(marks, Math.max(0, d - half))), Math.round(clockAtDistance(marks, Math.min(total, d + half)))]);
+  }
+  return out;
 }
 
 /** A path as Google's encoded polyline, at five decimal places (about a metre). */
