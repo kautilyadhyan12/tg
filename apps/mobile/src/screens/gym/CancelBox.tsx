@@ -4,7 +4,7 @@ import {
   MY_CANCEL_REASON_QUESTION,
   myCancelAskSchema,
   myCancelDoneSchema,
-  myCancelReasonRequestSchema,
+  myCancelReasonResponseSchema,
   myKeepAskSchema,
   myKeepDoneSchema,
   type MyCancelAsk,
@@ -26,9 +26,11 @@ import {
   DONE,
   EMAILED,
   GO_BACK,
+  NOTHING_HERE,
   NO_ANSWER_PRESS,
   REASON_NOT_SAVED,
   REASON_OPTIONS,
+  REASON_THANKS,
   SKIP,
   cancelTitle,
   keepTitle,
@@ -78,9 +80,10 @@ export function CancelBox({ gymId, open, onDone, onClose }: { gymId: string; ope
   const [step, setStep] = useState<Step<MyCancelAsk, MyCancelDone>>({ kind: "loading" });
   const [busy, setBusy] = useState<MyCancelWhen | null>(null);
   const [problem, setProblem] = useState<{ line: string; final: boolean } | null>(null);
-  const [reason, setReason] = useState<{ picked: MyCancelReason | null; busy: boolean; failed: boolean }>({ picked: null, busy: false, failed: false });
+  const [reason, setReason] = useState<{ picked: MyCancelReason | null; busy: boolean; failed: string | null; sent: boolean }>({ picked: null, busy: false, failed: null, sent: false });
   const lost = useLostPress();
-  // Reads are numbered as they start: an answer stands only if no later read or press has started.
+  // Reads are numbered as they start: an answer stands only if no later read has started. A press always stands: the box
+  // cannot be closed, so no read starts, while a press is on its way.
   const asked = useRef(0);
   const live = useRef(true);
   useEffect(() => {
@@ -98,7 +101,8 @@ export function CancelBox({ gymId, open, onDone, onClose }: { gymId: string; ope
       if (!live.current || number !== asked.current) return;
       // Only the membership pressed is shown in its box.
       if (answer.kind === "ok" && answer.data.membership.id === target.membershipId) setStep({ kind: "ask", ask: answer.data });
-      else if (answer.kind === "refused") setProblem({ line: refusedLine(answer.status, answer.error, answer.message).line, final: true });
+      else if (answer.kind === "refused" && refusedLine(answer.status, answer.error, answer.message).final) setProblem({ line: refusedLine(answer.status, answer.error, answer.message).line, final: true });
+      // A fault or too many tries: Try again reads it again.
       else setStep({ kind: "failed" });
     },
     [session, gymId],
@@ -109,7 +113,7 @@ export function CancelBox({ gymId, open, onDone, onClose }: { gymId: string; ope
     setStep({ kind: "loading" });
     setBusy(null);
     setProblem(null);
-    setReason({ picked: null, busy: false, failed: false });
+    setReason({ picked: null, busy: false, failed: null, sent: false });
     void read(open);
   }, [open, read]);
 
@@ -118,11 +122,9 @@ export function CancelBox({ gymId, open, onDone, onClose }: { gymId: string; ope
       if (busy !== null) return;
       setBusy(when);
       setProblem(null);
-      asked.current += 1;
-      const number = asked.current;
       const requestKey = lost.keyFor(target.membershipId, when, key);
       const answer = await session.signedIn({ method: "POST", path: myCancelPath(gymId, target.membershipId), body: { requestKey, when, key } }, myCancelDoneSchema);
-      if (!live.current || number !== asked.current) return;
+      if (!live.current) return;
       setBusy(null);
       if (answer.kind === "ok") {
         setStep({ kind: "done", done: answer.data });
@@ -145,24 +147,34 @@ export function CancelBox({ gymId, open, onDone, onClose }: { gymId: string; ope
   const sendReason = useCallback(
     async (cancelId: string, picked: MyCancelReason) => {
       if (reason.busy) return;
-      setReason({ picked, busy: true, failed: false });
-      const answer = await session.signedIn({ method: "POST", path: myCancelReasonPath(gymId, cancelId), body: { reason: picked } }, myCancelReasonRequestSchema);
+      setReason({ picked, busy: true, failed: null, sent: false });
+      const answer = await session.signedIn({ method: "POST", path: myCancelReasonPath(gymId, cancelId), body: { reason: picked } }, myCancelReasonResponseSchema);
       if (!live.current) return;
-      if (answer.kind === "ok") {
-        onClose();
+      if (answer.kind === "ok" && answer.data.reason === picked) {
+        setReason({ picked, busy: false, failed: null, sent: true });
         return;
       }
-      setReason({ picked: null, busy: false, failed: true });
+      const failed = answer.kind === "refused" ? refusedLine(answer.status, answer.error, answer.message).line : REASON_NOT_SAVED;
+      setReason({ picked: null, busy: false, failed, sent: false });
     },
-    [reason.busy, session, gymId, onClose],
+    [reason.busy, session, gymId],
   );
 
   const title = open === null ? "" : step.kind === "ask" ? cancelTitle(step.ask.membership.name) : cancelTitle(open.name);
+  // Not closed while a press is on its way, so its answer is always the box's.
+  const close = () => {
+    if (busy === null && !reason.busy) onClose();
+  };
   return (
-    <Sheet open={open !== null} title={step.kind === "done" ? MY_CANCEL_REASON_QUESTION : title} onClose={onClose}>
+    <Sheet open={open !== null} title={step.kind === "done" ? MY_CANCEL_REASON_QUESTION : title} onClose={close}>
       {open === null ? null : (
         <ScrollView testID="cancel-box" style={[styles.scroll, { maxHeight: height * RECEIPT_MOST }]} contentContainerStyle={styles.body}>
           {step.kind === "loading" && problem === null ? <Txt kind="small">Loading…</Txt> : null}
+          {problem === null ? null : (
+            <View testID="cancel-problem">
+              <Txt colour="badText">{problem.line}</Txt>
+            </View>
+          )}
           {step.kind === "failed" ? (
             <>
               <Txt colour="badText">{COULD_NOT_READ}</Txt>
@@ -195,6 +207,7 @@ export function CancelBox({ gymId, open, onDone, onClose }: { gymId: string; ope
                   {note}
                 </Txt>
               ))}
+              {step.ask.choices.length === 0 && step.ask.notes.length === 0 ? <Txt colour="textSoft">{NOTHING_HERE}</Txt> : null}
             </>
           ) : null}
           {step.kind === "done" ? (
@@ -203,17 +216,21 @@ export function CancelBox({ gymId, open, onDone, onClose }: { gymId: string; ope
                 <Txt colour="goodText">{step.done.line}</Txt>
                 {step.done.emailed ? <Txt kind="small">{EMAILED}</Txt> : null}
               </View>
-              <Options options={REASON_OPTIONS} selected={reason.picked} disabled={reason.busy} onPick={(r) => void sendReason(step.done.cancelId, r)} />
-              {reason.failed ? <Txt colour="badText">{REASON_NOT_SAVED}</Txt> : null}
-              <Button label={SKIP} kind="plain" wide disabled={reason.busy} onPress={onClose} />
+              {reason.sent ? (
+                <View testID="reason-sent" style={styles.way}>
+                  <Txt colour="text">{REASON_THANKS}</Txt>
+                  <Button label={DONE} kind="plain" wide onPress={onClose} />
+                </View>
+              ) : (
+                <>
+                  <Options options={REASON_OPTIONS} selected={reason.picked} disabled={reason.busy} onPick={(r) => void sendReason(step.done.cancelId, r)} />
+                  {reason.failed === null ? null : <Txt colour="badText">{reason.failed}</Txt>}
+                  <Button label={SKIP} kind="plain" wide disabled={reason.busy} onPress={close} />
+                </>
+              )}
             </>
           ) : null}
-          {problem === null ? null : (
-            <View testID="cancel-problem">
-              <Txt colour="badText">{problem.line}</Txt>
-            </View>
-          )}
-          {step.kind === "done" ? null : <Button label={step.kind === "ask" && step.ask.choices.length > 0 && problem?.final !== true ? GO_BACK : CLOSE} kind="plain" wide onPress={onClose} />}
+          {step.kind === "done" ? null : <Button label={step.kind === "ask" && step.ask.choices.length > 0 && problem?.final !== true ? GO_BACK : CLOSE} kind="plain" wide disabled={busy !== null} onPress={close} />}
         </ScrollView>
       )}
     </Sheet>
@@ -244,7 +261,8 @@ export function KeepBox({ gymId, open, onDone, onClose }: { gymId: string; open:
       const answer = await session.signedIn({ method: "GET", path: myKeepPath(gymId, target.membershipId) }, myKeepAskSchema);
       if (!live.current || number !== asked.current) return;
       if (answer.kind === "ok" && answer.data.membership.id === target.membershipId) setStep({ kind: "ask", ask: answer.data });
-      else if (answer.kind === "refused") setProblem({ line: refusedLine(answer.status, answer.error, answer.message).line, final: true });
+      else if (answer.kind === "refused" && refusedLine(answer.status, answer.error, answer.message).final) setProblem({ line: refusedLine(answer.status, answer.error, answer.message).line, final: true });
+      // A fault or too many tries: Try again reads it again.
       else setStep({ kind: "failed" });
     },
     [session, gymId],
@@ -263,11 +281,9 @@ export function KeepBox({ gymId, open, onDone, onClose }: { gymId: string; open:
       if (busy) return;
       setBusy(true);
       setProblem(null);
-      asked.current += 1;
-      const number = asked.current;
       const requestKey = lost.keyFor(target.membershipId, "keep", key);
       const answer = await session.signedIn({ method: "POST", path: myKeepPath(gymId, target.membershipId), body: { requestKey, key } }, myKeepDoneSchema);
-      if (!live.current || number !== asked.current) return;
+      if (!live.current) return;
       setBusy(false);
       if (answer.kind === "ok") {
         setStep({ kind: "done", done: answer.data });
@@ -288,11 +304,20 @@ export function KeepBox({ gymId, open, onDone, onClose }: { gymId: string; open:
 
   const title = open === null ? "" : step.kind === "done" ? open.name : keepTitle(step.kind === "ask" ? step.ask.membership.name : open.name);
   const choice = step.kind === "ask" ? step.ask.choice : null;
+  // Not closed while a press is on its way, so its answer is always the box's.
+  const close = () => {
+    if (!busy) onClose();
+  };
   return (
-    <Sheet open={open !== null} title={title} onClose={onClose}>
+    <Sheet open={open !== null} title={title} onClose={close}>
       {open === null ? null : (
         <ScrollView testID="keep-box" style={[styles.scroll, { maxHeight: height * RECEIPT_MOST }]} contentContainerStyle={styles.body}>
           {step.kind === "loading" && problem === null ? <Txt kind="small">Loading…</Txt> : null}
+          {problem === null ? null : (
+            <View testID="keep-problem">
+              <Txt colour="badText">{problem.line}</Txt>
+            </View>
+          )}
           {step.kind === "failed" ? (
             <>
               <Txt colour="badText">{COULD_NOT_READ}</Txt>
@@ -320,6 +345,7 @@ export function KeepBox({ gymId, open, onDone, onClose }: { gymId: string; open:
                   {note}
                 </Txt>
               ))}
+              {choice === null && step.ask.notes.length === 0 ? <Txt colour="textSoft">{NOTHING_HERE}</Txt> : null}
               {choice === null || problem?.final === true ? null : <Button label={choice.button} wide busy={busy} onPress={() => void press(open, choice.key)} />}
             </>
           ) : null}
@@ -329,12 +355,7 @@ export function KeepBox({ gymId, open, onDone, onClose }: { gymId: string; open:
               {step.done.emailed ? <Txt kind="small">{EMAILED}</Txt> : null}
             </View>
           ) : null}
-          {problem === null ? null : (
-            <View testID="keep-problem">
-              <Txt colour="badText">{problem.line}</Txt>
-            </View>
-          )}
-          <Button label={step.kind === "done" ? DONE : choice !== null && problem?.final !== true ? GO_BACK : CLOSE} kind="plain" wide onPress={onClose} />
+          <Button label={step.kind === "done" ? DONE : choice !== null && problem?.final !== true ? GO_BACK : CLOSE} kind="plain" wide disabled={busy} onPress={close} />
         </ScrollView>
       )}
     </Sheet>

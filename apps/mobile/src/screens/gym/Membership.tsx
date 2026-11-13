@@ -587,7 +587,7 @@ function CancelRow({ m, cancels }: { m: MyMembership; cancels: Cancels }) {
   const c = m.cancel;
   if (c === null && said === null) return null;
   return (
-    <View testID={`cancel-row-${m.id}`} style={styles.agreement}>
+    <View testID={`cancel-row-${m.id}`} style={styles.cancelRow}>
       {said === null ? null : <Txt colour="goodText">{said}</Txt>}
       {c === null ? null : c.state === "can" ? (
         <Button label={c.button} kind="soft" small say={`${c.button}: ${m.name}`} onPress={() => {
@@ -747,6 +747,7 @@ const styles = StyleSheet.create({
   receipt: { gap: 12 },
   terms: { gap: 8, paddingTop: 10, borderTopWidth: 1, borderTopColor: colours.line },
   agreement: { paddingTop: 10, borderTopWidth: 1, borderTopColor: colours.line, gap: 10 },
+  cancelRow: { paddingTop: 10, borderTopWidth: 1, borderTopColor: colours.line, gap: 10 },
   rule: { gap: 6, paddingTop: 10, borderTopWidth: 1, borderTopColor: colours.line },
   middle: { alignSelf: "center" },
 });

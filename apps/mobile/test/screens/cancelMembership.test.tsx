@@ -170,13 +170,14 @@ describe("the worst thing: Cancelled is said only for the membership pressed, an
     expect(posts(s.asked, "/reason")).toHaveLength(0);
   });
 
-  it.each<[string, () => Reply, string]>([
-    ["a card payment going through", () => refusal(409, "card_charge_waiting", "A payment for it is going through right now. Try again in a minute."), "A payment for it is going through right now. Try again in a minute."],
-    ["somebody else pays", () => refusal(409, "paid_by_someone", "Dev Rao pays for this membership, so Dev Rao can cancel it in the app. Or ask the front desk."), "Dev Rao pays for this membership, so Dev Rao can cancel it in the app. Or ask the front desk."],
-    ["no longer theirs", () => refusal(404, "held_membership_not_found", "Not found"), "This membership isn’t on your list any more."],
-    ["too many presses", () => refusal(429, "rate_limited", "Too many requests"), "Too many tries. Please wait a few minutes and try again."],
-    ["a server fault", () => refusal(500, "internal", "Internal error"), "Something went wrong. Try again."],
-  ])("refused for %s: the box says why, and nothing reads Cancelled", async (_name, reply, line) => {
+  it.each<[string, () => Reply, string, boolean]>([
+    ["a card payment going through", () => refusal(409, "card_charge_waiting", "A payment for it is going through right now. Try again in a minute."), "A payment for it is going through right now. Try again in a minute.", true],
+    ["somebody else pays", () => refusal(409, "paid_by_someone", "Dev Rao pays for this membership, so Dev Rao can cancel it in the app. Or ask the front desk."), "Dev Rao pays for this membership, so Dev Rao can cancel it in the app. Or ask the front desk.", false],
+    ["paid ahead", () => refusal(409, "early_payment", "You've paid for days after it would end, so the front desk cancels it. Ask them."), "You've paid for days after it would end, so the front desk cancels it. Ask them.", false],
+    ["no longer theirs", () => refusal(404, "held_membership_not_found", "Not found"), "This membership isn’t on your list any more.", false],
+    ["too many presses", () => refusal(429, "rate_limited", "Too many requests"), "Too many tries. Please wait a few minutes and try again.", true],
+    ["a server fault", () => refusal(500, "internal", "Internal error"), "Something went wrong. Try again.", true],
+  ])("refused for %s: the box says why, and nothing reads Cancelled", async (_name, reply, line, again) => {
     const s = server(reply);
     await openMembership(s.ask);
     await openCancel(OFFPEAK);
@@ -185,6 +186,66 @@ describe("the worst thing: Cancelled is said only for the membership pressed, an
     expect(screen.queryByTestId("cancel-done")).toBeNull();
     expect(screen.queryByText(/^Cancelled\./)).toBeNull();
     expect(s.state.cancelled).toBe(false);
+    // A refusal that stands leaves nothing to press but Close; one that may pass later keeps the button.
+    if (again) expect(box().getByText("Cancel membership")).toBeTruthy();
+    else {
+      expect(box().queryByText("Cancel membership")).toBeNull();
+      expect(box().getByText("Close")).toBeTruthy();
+    }
+  });
+
+  it("a lost answer's key is not used again once the box has changed: the next press is a new press with the new key", async () => {
+    let reads = 0;
+    let calls = 0;
+    const s = server(
+      (body) => {
+        calls += 1;
+        if (calls === 1) return lost();
+        return (body as { key: string }).key === KEY_A ? refusal(409, "cancel_changed", "What you're cancelling has changed. Go back and look again.") : { status: 200, body: done("Cancelled. Off-peak Monthly ends on 11 Jan 2027.") };
+      },
+      () => {
+        reads += 1;
+        return { status: 200, body: askOf(OFFPEAK, "Off-peak Monthly", [reads === 1 ? choice() : choice({ endsOn: "2027-01-11", lines: ["Off-peak Monthly ends on 11 Jan 2027, the last day you've paid for."], key: KEY_B })]) };
+      },
+    );
+    await openMembership(s.ask);
+    await openCancel(OFFPEAK);
+    await fireEvent.press(await box().findByText("Cancel membership"));
+    await box().findByText("Couldn’t connect, so we don’t know if it went through. Check your internet and press it again.");
+    await fireEvent.press(box().getByText("Cancel membership"));
+    expect(await box().findByText("Off-peak Monthly ends on 11 Jan 2027, the last day you've paid for.")).toBeTruthy();
+    await fireEvent.press(box().getByText("Cancel membership"));
+    await waitFor(() => {
+      expect(screen.getByTestId("cancel-done")).toBeTruthy();
+    });
+    const sent = posts(s.asked, "/cancel").map((a) => a.body as { key: string; requestKey: string });
+    expect(sent.map((b) => b.key)).toEqual([KEY_A, KEY_A, KEY_B]);
+    expect(sent[1]?.requestKey).toBe(sent[0]?.requestKey);
+    expect(sent[2]?.requestKey).not.toBe(sent[0]?.requestKey);
+  });
+
+  it("the box cannot be closed while Cancel is on its way, so its answer is said in the box", async () => {
+    let answer: (r: Reply) => void = () => undefined;
+    const s = fakeServer({
+      "/v1/auth/refresh": ok({ tokens: tokens(2) }),
+      "/v1/orgs/mine": mine,
+      [membershipPath]: ok(myMembership()),
+      [cancelPath(OFFPEAK)]: (body) =>
+        body === undefined
+          ? { status: 200, body: askOf(OFFPEAK, "Off-peak Monthly", [choice()]) }
+          : new Promise<Reply>((resolve) => {
+              answer = resolve;
+            }),
+    });
+    await openMembership(s.ask);
+    await openCancel(OFFPEAK);
+    await fireEvent.press(await box().findByText("Cancel membership"));
+    await fireEvent.press(screen.getByLabelText("Close"));
+    expect(screen.getByTestId("cancel-box")).toBeTruthy();
+    answer({ status: 200, body: done("Cancelled. Off-peak Monthly ends on 11 Dec 2026.") });
+    await waitFor(() => {
+      expect(screen.getByTestId("cancel-done")).toBeTruthy();
+    });
   });
 
   it("a lost answer is never said as cancelled; pressed again it is the same press, and then it reads as the server says", async () => {
@@ -241,7 +302,8 @@ describe("the box says what the server says", () => {
     await openMembership(s.ask);
     await openCancel(OFFPEAK);
     await fireEvent.press(await box().findByText("Cancel membership"));
-    expect(await box().findByText("What you're cancelling has changed. Go back and look again.")).toBeTruthy();
+    expect(await box().findByText("This changed since you opened it. Check it again below.")).toBeTruthy();
+    expect(box().queryByText("What you're cancelling has changed. Go back and look again.")).toBeNull();
     expect(await box().findByText("Off-peak Monthly ends on 11 Jan 2027, the last day you've paid for.")).toBeTruthy();
     await fireEvent.press(box().getByText("Cancel membership"));
     await waitFor(() => {
@@ -303,6 +365,30 @@ describe("the box says what the server says", () => {
     expect(await box().findByText("Off-peak Monthly ends on 11 Dec 2026, the last day you've paid for.")).toBeTruthy();
   });
 
+  it("a server fault while the box loads offers Try again", async () => {
+    let reads = 0;
+    const s = server(
+      () => ({ status: 200, body: done("x") }),
+      () => {
+        reads += 1;
+        return reads === 1 ? refusal(500, "internal", "Internal error") : { status: 200, body: askOf(OFFPEAK, "Off-peak Monthly", [choice()]) };
+      },
+    );
+    await openMembership(s.ask);
+    await openCancel(OFFPEAK);
+    expect(await box().findByText("Couldn’t load this. Check your internet and try again.")).toBeTruthy();
+    await fireEvent.press(box().getByText("Try again"));
+    expect(await box().findByText("Off-peak Monthly ends on 11 Dec 2026, the last day you've paid for.")).toBeTruthy();
+  });
+
+  it("nothing to show at all (cancelled elsewhere since the page was read): the box says so", async () => {
+    const s = server(() => ({ status: 200, body: done("x") }), ok(askOf(OFFPEAK, "Off-peak Monthly", [], [])));
+    await openMembership(s.ask);
+    await openCancel(OFFPEAK);
+    expect(await box().findByText("This membership has changed. Close this to see it as it is now.")).toBeTruthy();
+    expect(box().getByText("Close")).toBeTruthy();
+  });
+
   it("a box for another membership is never shown as this one's", async () => {
     const s = server(() => ({ status: 200, body: done("x") }), ok(askOf(GOLD, "Gold Monthly", [choice()])));
     await openMembership(s.ask);
@@ -319,10 +405,12 @@ describe("why are you leaving", () => {
     await openCancel(OFFPEAK);
     await fireEvent.press(await box().findByText("Cancel membership"));
     await fireEvent.press(await box().findByText("Cost"));
+    expect(await within(screen.getByTestId("reason-sent")).findByText("Thanks for telling us.")).toBeTruthy();
+    expect(posts(s.asked, "/reason").map((a) => a.body)).toEqual([{ reason: "cost" }]);
+    await fireEvent.press(box().getByText("Done"));
     await waitFor(() => {
       expect(screen.queryByTestId("cancel-box")).toBeNull();
     });
-    expect(posts(s.asked, "/reason").map((a) => a.body)).toEqual([{ reason: "cost" }]);
     expect(screen.queryByText("A confirmation was emailed to you.")).toBeNull();
   });
 
@@ -340,9 +428,20 @@ describe("why are you leaving", () => {
     await fireEvent.press(await box().findByText("Moving away"));
     expect(await box().findByText("Couldn’t send your answer. Check your internet and try again.")).toBeTruthy();
     await fireEvent.press(box().getByText("Moving away"));
-    await waitFor(() => {
-      expect(screen.queryByTestId("cancel-box")).toBeNull();
+    expect(await box().findByText("Thanks for telling us.")).toBeTruthy();
+  });
+
+  it("a reason the server refused is not taken as sent", async () => {
+    const s = server(() => ({ status: 200, body: done("Cancelled. Off-peak Monthly ends on 11 Dec 2026.") }), undefined, {
+      [reasonPath]: () => refusal(404, "cancel_not_found", "Cancel not found."),
     });
+    await openMembership(s.ask);
+    await openCancel(OFFPEAK);
+    await fireEvent.press(await box().findByText("Cancel membership"));
+    await fireEvent.press(await box().findByText("Cost"));
+    expect(await box().findByText("This membership isn’t on your list any more.")).toBeTruthy();
+    expect(box().queryByText("Thanks for telling us.")).toBeNull();
+    expect(screen.getByTestId("cancel-box")).toBeTruthy();
   });
 });
 
@@ -473,13 +572,24 @@ describe("keep my membership", () => {
     await openMembership(s.ask);
     await fireEvent.press(await card(OFFPEAK).findByText("Keep my membership"));
     await fireEvent.press(await keepBox().findByText("Keep my membership"));
-    expect(await keepBox().findByText("Something about this membership has changed. Close this and try again.")).toBeTruthy();
+    expect(await keepBox().findByText("This changed since you opened it. Check it again below.")).toBeTruthy();
     expect(await keepBox().findByText("Your next payment is $30.00 on 12 Dec 2026.")).toBeTruthy();
     await fireEvent.press(keepBox().getByText("Keep my membership"));
     await waitFor(() => {
       expect(screen.getByTestId("keep-done")).toBeTruthy();
     });
     expect(posts(s.asked, "/keep").map((a) => (a.body as { key: string }).key)).toEqual([KEY_C, KEY_B]);
+  });
+
+  it("refused as the early cancellation fee is paid: the line stands, and only Close is left", async () => {
+    const s = keepServer(() => refusal(409, "leave_fee_paid", "You've paid the early cancellation fee. Ask the front desk to refund it, then you can keep your membership here."));
+    await openMembership(s.ask);
+    await fireEvent.press(await card(OFFPEAK).findByText("Keep my membership"));
+    await fireEvent.press(await keepBox().findByText("Keep my membership"));
+    expect(await keepBox().findByText("You've paid the early cancellation fee. Ask the front desk to refund it, then you can keep your membership here.")).toBeTruthy();
+    expect(keepBox().queryByText("Keep my membership")).toBeNull();
+    expect(keepBox().getByText("Close")).toBeTruthy();
+    expect(s.state.kept).toBe(false);
   });
 
   it("a cancel that cannot be kept reads its line with no button", async () => {
