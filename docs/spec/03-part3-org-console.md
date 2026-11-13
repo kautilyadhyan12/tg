@@ -3886,7 +3886,12 @@ codes on products, as Gymdesk and Mindbody do them.
   takes its last use meanwhile (the desk's count reads it too), and staff cannot change or archive it ("You can't change
   this discount right now because a member is paying with it in the app."). A page left unpaid gives the use back. Paid, the membership is
   given with the code as it was on the day Buy was pressed.
-- **Typing codes is limited** apart from reading the list (20 an hour a person, 600 an address), Buy with a code included.
+- **Typing codes is limited**: codes that take nothing off are counted (20 an hour a person, 600 an address), Buy with a code
+  included; a code that works is never counted. Once too many, no code is looked at, and the list is read as ever with
+  "Too many codes tried. Try again in an hour."
+- **A kept use is the member's**: a sale at the desk, or one asked of the Terminal, is refused it ("Summer's last use is kept
+  for a member who is paying with it in the app right now."; the Discounts row adds "· 1 kept for a member paying in the
+  app"), and a member who paid is given it even where a Terminal sale asked before their page counted past the limit.
 - **Not built**: the phone's box for it (Stage 5 item 20j); a code for named members only (a code with 1 use sent to
   one member does it).
 
