@@ -50,12 +50,10 @@ export type AppPaymentChecksResponse = z.infer<typeof appPaymentChecksResponseSc
 
 export const APP_PAYMENT_CHECKS_WORDS = {
   title: "Payments to check in Square",
-  intro: "Square may have taken these payments in the app, but the app couldn't add them. Check each one in Square, then settle it on the member's page.",
+  intro: "Square may have taken these payments in the app, but they didn't go through here. Check each one in Square, then settle it on the member's page.",
   open: "Open their page",
-  more: "Only the newest are shown. More will show here as you settle these.",
+  more: `Only the ${String(APP_PAYMENT_CHECKS_PEOPLE)} newest people are shown. More appear here as you settle these.`,
   showMore: "Show more",
-  /** Staff who take payments but don't keep the member list: they can't open the page. */
-  noPage: "Ask the owner or a manager to settle these on the member's page.",
 } as const;
 
 /** "1 payment to check in Square", "3 payments to check in Square"; null for none. */

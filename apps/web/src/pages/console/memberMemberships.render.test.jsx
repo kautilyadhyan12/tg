@@ -1845,6 +1845,27 @@ describe('Refund on Refunds to review (18d-iv-b-iii)', () => {
   });
 });
 
+describe('Open their page on Payments to check in Square (18k-vi)', () => {
+  it('brings that payment’s line into view, once their memberships have loaded', async () => {
+    const gold = held(1, GOLD, '2026-10-04', false);
+    gold.billing = { ...gold.billing, appCheck: { why: 'unknown', amountMinor: null, on: '2026-11-12', payerName: 'Ada Lovelace' } };
+    orgService.getHeldMemberships.mockResolvedValue(answer([gold]));
+    const seen = [];
+    const was = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = function scrolled() {
+      seen.push(this.getAttribute('data-check'));
+    };
+    try {
+      render(draw(ADA, 'Ada Lovelace', { checkNow: `bill:${gold.id}` }));
+      const line = await screen.findByTestId('held-app-check');
+      expect(line.getAttribute('data-check')).toBe(`bill:${gold.id}`);
+      await waitFor(() => expect(seen).toContain(`bill:${gold.id}`));
+    } finally {
+      Element.prototype.scrollIntoView = was;
+    }
+  });
+});
+
 describe('Take payment on Failed payments (18d-iii-ii-b)', () => {
   it("opens that bill's Record payment, under its own membership, once; another membership's stays shut", async () => {
     const gold = held(1, GOLD, '2026-10-04', true);

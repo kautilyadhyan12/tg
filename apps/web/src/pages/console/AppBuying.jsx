@@ -52,7 +52,7 @@ export default function AppBuying({ gymId, entryId, shown, timezone, canAct, onC
         </div>
       ) : null}
       {checks.map((c) => (
-        <div key={c.id} className="flex flex-col items-start gap-1.5" data-testid="app-buy-check">
+        <div key={c.id} className="flex flex-col items-start gap-1.5" data-testid="app-buy-check" data-check={`purchase:${c.id}`}>
           <span className="c-s13 c-w5" style={{ color: 'var(--bad)' }}>
             {c.line}
           </span>

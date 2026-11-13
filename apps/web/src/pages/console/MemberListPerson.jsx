@@ -400,7 +400,7 @@ function WaiverLine({ member, desk, timeZone }) {
   );
 }
 
-export default function MemberListPerson({ gymId, gym, entryId, list, words, readOnly, canRemove = false, pair = null, addMembership = false, payNow = null, refundNow = null, onClose, onChanged }) {
+export default function MemberListPerson({ gymId, gym, entryId, list, words, readOnly, canRemove = false, pair = null, addMembership = false, payNow = null, refundNow = null, checkNow = null, onClose, onChanged }) {
   const titleId = useId();
   const dialogRef = useRef(null);
   const fields = list?.fields ?? [];
@@ -1407,6 +1407,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
           addNow={addMembership || (addNowFor !== null && addNowFor === p.entryId)}
           payNow={payNow}
           refundNow={refundNow}
+          checkNow={checkNow}
           hasEmail={typeof p.email === 'string' && p.email !== ''}
           onCardAsked={() => setCardReads((n) => n + 1)}
         />

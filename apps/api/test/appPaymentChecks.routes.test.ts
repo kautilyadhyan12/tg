@@ -235,7 +235,8 @@ d("Payments to check in Square on Overview: every one the person's page says, an
     }
     return out;
   };
-  const bare = (rows: readonly AppPaymentCheckRow[]) => rows.map(({ name: _n, past: _p, ...rest }) => rest);
+  const bare = (rows: readonly AppPaymentCheckRow[]): Omit<AppPaymentCheckRow, "name" | "past">[] =>
+    rows.map((r) => ({ id: r.id, entryId: r.entryId, kind: r.kind, typeName: r.typeName, fee: r.fee, why: r.why, amountMinor: r.amountMinor, currency: r.currency, on: r.on, payerName: r.payerName }));
   const byId = <R extends { id: string }>(rows: readonly R[]) => [...rows].sort((a, b) => (a.id < b.id ? -1 : 1));
 
   beforeAll(async () => {

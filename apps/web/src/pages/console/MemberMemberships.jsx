@@ -202,6 +202,9 @@ export default function MemberMemberships({
    *  bill whose Record payment is open already, once, when their memberships have loaded. */
   payNow = null,
   refundNow = null,
+  /** Opened by Overview's Payments to check in Square (18k-vi): the line to bring into view, `bill:`, `fee:` or `purchase:`
+   *  and its id, once, when their memberships have loaded. */
+  checkNow = null,
   /** How often the Terminal's box asks the server; the box's own unless a test says. */
   checkEveryMs,
   squareEveryMs = 30_000,
@@ -466,6 +469,16 @@ export default function MemberMemberships({
       setNotice(refundNow.voidFeeId === null ? `${REFUND_NOT_SHOWN} Check it in your Square Dashboard.` : REFUND_NOT_SHOWN);
     }
   }
+  // Opened by Overview's Payments to check in Square: that line, brought into view, among the earlier ones too.
+  const [checkedNow, setCheckedNow] = useState(false);
+  if (checkNow !== null && shown !== null && !checkedNow) {
+    setCheckedNow(true);
+    setShowPast(true);
+  }
+  useEffect(() => {
+    if (!checkedNow || checkNow === null) return;
+    document.querySelector(`[data-check="${checkNow}"]`)?.scrollIntoView?.({ block: 'center' });
+  }, [checkedNow, checkNow]);
   const scrolledNow = useRef(false);
   const payOpenNow = (paidNow && (open?.what === 'pay' || open?.what === 'payFee')) || (refundedNow && (open?.what === 'cardRefund' || open?.what === 'voidFeePayment' || open?.what === 'refund')) || (addsNow && open?.what === 'add');
   useEffect(() => {
@@ -1660,7 +1673,7 @@ export default function MemberMemberships({
     return (
       <div className="flex flex-col items-start gap-1.5 px-3 pb-2.5" data-testid="held-fee-app-payment">
         {check !== null ? (
-          <span className="c-s13 c-w5" style={{ color: 'var(--bad)' }} data-testid="held-fee-app-check">
+          <span className="c-s13 c-w5" style={{ color: 'var(--bad)' }} data-testid="held-fee-app-check" data-check={`fee:${fee.id}`}>
             {check}
           </span>
         ) : null}
@@ -1694,7 +1707,7 @@ export default function MemberMemberships({
     return (
       <div className="flex flex-col items-start gap-1.5 pt-1" data-testid="held-app-payment">
         {check !== null ? (
-          <span className="c-s13 c-w5" style={{ color: 'var(--bad)' }} data-testid="held-app-check">
+          <span className="c-s13 c-w5" style={{ color: 'var(--bad)' }} data-testid="held-app-check" data-check={`bill:${m.id}`}>
             {check}
           </span>
         ) : null}

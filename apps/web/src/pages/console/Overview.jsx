@@ -10,6 +10,7 @@ import LastSevenDays from '../../components/console/LastSevenDays';
 import FailedPaymentsCard from '../../components/console/FailedPaymentsCard';
 import ChargebacksCard from '../../components/console/ChargebacksCard';
 import RefundsToReviewCard from '../../components/console/RefundsToReviewCard';
+import AppPaymentChecksCard from '../../components/console/AppPaymentChecksCard';
 import AppCancelsCard from '../../components/console/AppCancelsCard';
 import TrialCard from '../../components/console/TrialCard';
 import CoOwnerRequest from '../../components/console/CoOwnerRequest';
@@ -493,6 +494,10 @@ export default function Overview() {
 
       {/* REFUNDS TO REVIEW (18d-iv-b-iii): fees no longer owed and refunds that went wrong. Drawn only where there are some. */}
       <RefundsToReviewCard org={org} orgSlug={orgSlug} privileges={viewerPrivileges(org)} readOnly={readOnly} />
+
+      {/* PAYMENTS TO CHECK IN SQUARE (18k-vi): payments in the app Square may have taken that didn't go through here. Drawn only
+          where there are some. */}
+      <AppPaymentChecksCard org={org} privileges={viewerPrivileges(org)} readOnly={readOnly} />
 
       {/* CANCELLED IN THE APP (18l): members who cancelled in the app in the last 30 days. Drawn only where there are some. */}
       <AppCancelsCard org={org} orgSlug={orgSlug} privileges={viewerPrivileges(org)} readOnly={readOnly} />
