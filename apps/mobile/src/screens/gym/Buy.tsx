@@ -80,7 +80,7 @@ import { RESUMED, useBuyInApp, type BuyInApp } from "./useBuyInApp";
 // line is theirs and on My membership. The server works out every line and refuses anything but what was shown. A
 // repeating membership (20i-i) is paid with the card saved in the app: its page names the card, asks for the card's own
 // tick, word for word the server's, and Pay charges the card; with no card, or an expired one, Add card or Update card
-// opens over the page and the list is read again once it closes. A promo code (20j) is typed under the list: Apply reads
+// opens over the page and the list is read again once it closes. A promo code (20j) is typed above the lines: Apply reads
 // the list again with it, each line showing what it takes off or why not, and Pay waits while that read is on its way.
 
 export interface BuyPlace {
@@ -273,7 +273,7 @@ function BuyBody({
           </Txt>
         </View>
       </View>
-      <ScrollView style={styles.grow} contentContainerStyle={[styles.list, { paddingBottom: bottom + 24 }]}>
+      <ScrollView style={styles.grow} keyboardShouldPersistTaps="handled" contentContainerStyle={[styles.list, { paddingBottom: bottom + 24 }]}>
         {buy.busy?.at === RESUMED ? <Txt kind="small">{buy.busy.line}</Txt> : null}
         {held.kind === "loading" ? (
           <Txt kind="small">Loading…</Txt>
@@ -298,20 +298,6 @@ function BuyBody({
           </Card>
         ) : (
           <View style={styles.section}>
-            <Txt kind="eyebrow" colour="textFaint">
-              {BUY_HEADING}
-            </Txt>
-            {held.view.record === "shared" ? <Txt colour="orange">{SHARED_LINE}</Txt> : null}
-            {held.view.items.map((item) => (
-              <LineCard
-                key={item.typeId}
-                item={item}
-                canBuy={held.view.record !== "shared"}
-                onOpen={() => {
-                  open(item.typeId);
-                }}
-              />
-            ))}
             {held.view.record === "shared" ? null : (
               <PromoBox
                 applied={shownCode}
@@ -329,6 +315,20 @@ function BuyBody({
                 }}
               />
             )}
+            <Txt kind="eyebrow" colour="textFaint">
+              {BUY_HEADING}
+            </Txt>
+            {held.view.record === "shared" ? <Txt colour="orange">{SHARED_LINE}</Txt> : null}
+            {held.view.items.map((item) => (
+              <LineCard
+                key={item.typeId}
+                item={item}
+                canBuy={held.view.record !== "shared"}
+                onOpen={() => {
+                  open(item.typeId);
+                }}
+              />
+            ))}
             <View style={styles.secure}>
               <Icon name="shield" size={12} colour="textFaint" />
               <Txt kind="tiny">{BUY_SECURE}</Txt>
@@ -422,7 +422,7 @@ function ResultBox({ gym, buy, onMembership, onPass }: { gym: string; buy: BuyIn
 
 const NOT_CHARGED = "You weren’t charged.";
 
-/** Under the list (20j): the Promo code box with Apply, and why a code takes nothing off; once one does, the code with Remove. */
+/** Above the lines (20j), as the code changes their prices: the Promo code box with Apply, and why a code takes nothing off; once one does, the code with Remove. */
 function PromoBox({
   applied,
   typed,
@@ -454,7 +454,7 @@ function PromoBox({
     <View testID="promo-box" style={styles.said}>
       <View style={styles.promoRow}>
         <View style={styles.grow}>
-          <Field label={PROMO_LABEL} value={typed} onChange={onType} maxLength={PROMO_MAX} disabled={busy} onDone={onApply} />
+          <Field label={PROMO_LABEL} bare placeholder={PROMO_LABEL} value={typed} onChange={onType} maxLength={PROMO_MAX} disabled={busy} onDone={onApply} />
         </View>
         <Button label={PROMO_APPLY} kind="soft" busy={busy} disabled={busy || codeOf(typed) === ""} say={`${PROMO_APPLY} the promo code`} onPress={onApply} />
       </View>
@@ -829,7 +829,7 @@ const styles = StyleSheet.create({
   rule: { paddingTop: 10, borderTopWidth: 1, borderTopColor: colours.line },
   grow: { flex: 1 },
   secure: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingTop: 4 },
-  promoRow: { flexDirection: "row", alignItems: "flex-end", gap: 10 },
+  promoRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   said: { gap: 4 },
   paper: { padding: 16, gap: 14 },
   today: {
