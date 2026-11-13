@@ -612,9 +612,13 @@ export function registerPaymentRoutes(app: FastifyInstance, deps: Omit<service.P
     return {
       // Counted before the code is looked at, so tries at the same instant never pass the limit together. Redis down: open,
       // as every limit here is (its `incrWithTtl` answers null).
+      // The person's first: one past their 20 is refused without counting against the gym's address, so one member never
+      // spends the whole wi-fi's tries (the second re-check, N2).
       take: async () => {
-        const [id, ip] = await Promise.all(keys.map((k) => deps.redis.incrWithTtl(k, PROMO_TRIES.seconds)));
-        return (id ?? 0) <= PROMO_TRIES.max && (ip ?? 0) <= PROMO_TRIES.ipMax;
+        const id = await deps.redis.incrWithTtl(keys[0], PROMO_TRIES.seconds);
+        if ((id ?? 0) > PROMO_TRIES.max) return false;
+        const ip = await deps.redis.incrWithTtl(keys[1], PROMO_TRIES.seconds);
+        return (ip ?? 0) <= PROMO_TRIES.ipMax;
       },
       giveBack: async () => {
         await Promise.all(keys.map((k) => deps.redis.decrIfPositive(k)));

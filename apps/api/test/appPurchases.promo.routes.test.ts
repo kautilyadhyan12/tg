@@ -574,6 +574,13 @@ d("A promo code typed in the app: only where the gym meant it, honoured as shown
     const said = burst.map((l) => l.promo?.words);
     expect(said.filter((w) => w === PROMO_CODE_WORDS.not_found)).toHaveLength(20);
     expect(said.filter((w) => w === PROMO_CODE_WORDS.too_many)).toHaveLength(10);
+    // Bo's ten past his twenty never counted against the address he sent them from (the second re-check, N2).
+    const cy = await member(gym, "Cy One Wifi");
+    const shared = "10.99.0.8";
+    const atShared = (who: Person, code: string) => api().inject({ method: "GET", url: `/v1/orgs/${gym.id}/for-sale?code=${code}`, remoteAddress: shared, cookies: who.cookies });
+    for (let n = 0; n < 20; n++) await redis.incrWithTtl(`rl:promo_code_try:id:${cy.app.userId}`, 3600);
+    for (let n = 0; n < 5; n++) expect((await atShared(cy.app, `CYTRY${String(n)}`)).statusCode).toBe(200);
+    expect(Number((await redis.get(`rl:promo_code_try:ip:${shared}`)) ?? 0)).toBe(0);
   });
 
   it("staff tick a code for the app only on memberships, and read both ticks on the Discounts list; a stranger changes nothing", async () => {
