@@ -13,7 +13,9 @@ import { PART_SWEEP, PLATE_PARTS, edgePath, fillReach, partPath, plateShare } fr
 // parts fill from the middle outward with chicken (protein), quinoa (carbs) and avocado (fat) as they are
 // eaten. Under it, each figure's numbers in words. Every number is the server's.
 
+/** The plate is drawn on a 224 grid and shown at 180 (Kd, 2026-11-14: "a little compact"). */
 const SIZE = 224;
+const SHOWN = 180;
 const C = SIZE / 2;
 const RIM = 100;
 const WELL = 90;
@@ -40,13 +42,13 @@ export function MacroPlate({ goal, eaten, left }: { goal: PlateNumbers; eaten: P
   return (
     <View style={styles.box}>
       <View style={styles.table}>
-        <Fork height={150} />
+        <Fork height={118} />
         <View
           style={styles.plate}
           accessible
           accessibilityLabel={`Calories, ${eaten === null ? "not known" : count(eaten.kcal)} of ${count(goal.kcal)} kcal`}
         >
-          <Svg width={SIZE} height={SIZE} viewBox={`0 0 ${String(SIZE)} ${String(SIZE)}`}>
+          <Svg width={SHOWN} height={SHOWN} viewBox={`0 0 ${String(SIZE)} ${String(SIZE)}`}>
             <Defs>
               <RadialGradient id={`rim${id}`} cx="38%" cy="32%" r="80%">
                 <Stop offset="0" stopColor={colours.plateRim} />
@@ -115,19 +117,21 @@ export function MacroPlate({ goal, eaten, left }: { goal: PlateNumbers; eaten: P
             </Txt>
           </View>
         </View>
-        <Knife height={150} />
+        <Knife height={118} />
       </View>
       <View style={styles.parts}>
         {PLATE_PARTS.map((p) => {
           const had = eaten === null ? null : eaten[p.key];
           return (
             <View key={p.key} style={styles.part} accessible accessibilityLabel={`${p.name}, ${had === null ? "not known" : count(had)} of ${count(goal[p.key])} g`}>
-              <View style={[styles.food, { borderColor: colours[p.colour] }]}>
-                <Image source={pictures[p.picture]} resizeMode="cover" style={styles.fill} accessible={false} />
+              <View style={styles.named}>
+                <View style={[styles.food, { borderColor: colours[p.colour] }]}>
+                  <Image source={pictures[p.picture]} resizeMode="cover" style={styles.fill} accessible={false} />
+                </View>
+                <Txt kind="tiny" colour="textSoft">
+                  {p.name}
+                </Txt>
               </View>
-              <Txt kind="tiny" colour="textSoft">
-                {p.name}
-              </Txt>
               <Txt kind="strong" numberOfLines={1} fit>
                 {had === null ? NOT_KNOWN : count(had)}
                 <Txt kind="tiny"> / {count(goal[p.key])} g</Txt>
@@ -142,13 +146,14 @@ export function MacroPlate({ goal, eaten, left }: { goal: PlateNumbers; eaten: P
 }
 
 const styles = StyleSheet.create({
-  box: { gap: 12 },
-  table: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 12 },
-  plate: { width: SIZE, height: SIZE, alignItems: "center", justifyContent: "center" },
-  hub: { position: "absolute", width: HUB * 2 - 6, alignItems: "center" },
-  hubNumber: { fontSize: 19, lineHeight: 23 },
+  box: { gap: 10 },
+  table: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10 },
+  plate: { width: SHOWN, height: SHOWN, alignItems: "center", justifyContent: "center" },
+  hub: { position: "absolute", width: ((HUB * 2 - 6) * SHOWN) / SIZE, alignItems: "center" },
+  hubNumber: { fontSize: 16, lineHeight: 20 },
   parts: { flexDirection: "row", gap: 8 },
-  part: { flex: 1, alignItems: "center", gap: 3 },
-  food: { width: 30, height: 30, borderRadius: 15, borderWidth: 2, overflow: "hidden" },
+  part: { flex: 1, alignItems: "center", gap: 1 },
+  named: { flexDirection: "row", alignItems: "center", gap: 5 },
+  food: { width: 20, height: 20, borderRadius: 10, borderWidth: 2, overflow: "hidden" },
   fill: { width: "100%", height: "100%" },
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fillReach, partPath, plateShare, slicePath } from "../src/screens/food/plateRules";
+import { fillReach, glassShape, partPath, plateShare, slicePath } from "../src/screens/food/plateRules";
 
 // The worst thing the Food tab's plate could do (32c-i): look fuller than what was eaten. Every class of
 // number the server can send, with what the plate must draw.
@@ -43,5 +43,25 @@ describe("a plate is never drawn fuller than was eaten", () => {
 
   it("a part of the plate is the ring between the hub and its reach", () => {
     expect(partPath(112, 112, 0, 90, 36, 82)).toBe("M194.00,112.00 A82,82 0 0 1 112.00,194.00 L112.00,148.00 A36,36 0 0 0 148.00,112.00 Z");
+  });
+});
+
+// The Week tab's glasses: a day is never drawn fuller than its bar's height, nor past the glass's brim.
+describe("a day's glass", () => {
+  it("is empty with no meals, and its liquid's surface sits at the bar's height", () => {
+    expect(glassShape(34, 112, 12, null).liquid).toBeNull();
+    expect(glassShape(34, 112, 12, 0).liquid).toBeNull();
+    expect(glassShape(34, 112, 12, Number.NaN).liquid).toBeNull();
+    expect(glassShape(34, 112, 12, 56).liquid?.top).toBe(68);
+  });
+
+  it("never runs past its brim, and a little is still a sliver", () => {
+    expect(glassShape(34, 112, 12, 500).liquid?.top).toBe(14);
+    expect(glassShape(34, 112, 12, 2).liquid?.top).toBe(115);
+  });
+
+  it("has bubbles only where there is room for them", () => {
+    expect(glassShape(34, 112, 12, 10).liquid?.bubbles).toEqual([]);
+    expect(glassShape(34, 112, 12, 80).liquid?.bubbles).toHaveLength(3);
   });
 });

@@ -1861,7 +1861,7 @@ const styles = StyleSheet.create({
   refused: { flexDirection: "row", alignItems: "center", gap: 10, borderColor: colours.badLine },
   kept: { gap: 10, borderColor: colours.orangeLine },
   titleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  macros: { gap: 14 },
+  macros: { gap: 10 },
   left: { flexDirection: "row", alignItems: "center", justifyContent: "center", flexWrap: "wrap", gap: 10 },
   nutrients: { flexDirection: "row", alignItems: "center", gap: 6, minHeight: sizes.press },
   nutrientsLink: { fontFamily: fonts.semibold },

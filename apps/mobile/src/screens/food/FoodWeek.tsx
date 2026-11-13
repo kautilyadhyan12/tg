@@ -10,6 +10,7 @@ import { colours, weekBarGlow, weekBarLight, type ColourName } from "../../look/
 import { Icon } from "../../look/Icon";
 import { Txt } from "../../look/Txt";
 import { SoftBar } from "../../look/Waiting";
+import { GLASS_WIDTH, WeekGlass } from "./WeekGlass";
 import { useZoneSaved } from "../../session/TimeZoneSync";
 import { useRead, type Read } from "../dashboard/useRead";
 import { count } from "../dashboard/words";
@@ -233,6 +234,11 @@ function Chart({ bars, figure, month, line }: { bars: readonly Bar[]; figure: Fo
       <View style={[styles.bars, { height: CHART_HEIGHT }]}>
         {bars.map((bar) => (
           <View key={bar.day} style={[styles.column, month ? styles.thin : null]} accessible accessibilityLabel={barSaid(bar, figure)}>
+            {bar.value === null && !month ? (
+              <View style={styles.glass}>
+                <WeekGlass level={null} height={CHART_HEIGHT} colour="textSoft" over={false} id={bar.day} />
+              </View>
+            ) : null}
             {bar.value === null ? null : (
               <>
                 {bar.about ? (
@@ -240,7 +246,13 @@ function Chart({ bars, figure, month, line }: { bars: readonly Bar[]; figure: Fo
                     ~
                   </Txt>
                 ) : null}
-                <View style={[styles.bar, month ? styles.thinBar : null, barLight(barColour(bar)), { height: height(bar.value) }]} />
+                {month ? (
+                  <View style={[styles.bar, styles.thinBar, barLight(barColour(bar)), { height: height(bar.value) }]} />
+                ) : (
+                  <View style={styles.glass}>
+                    <WeekGlass level={height(bar.value)} height={CHART_HEIGHT} colour={barColour(bar)} over={bar.band === "over"} id={`${bar.day}${String(height(bar.value))}`} />
+                  </View>
+                )}
               </>
             )}
           </View>
@@ -304,6 +316,7 @@ const styles = StyleSheet.create({
   // A date under a thin bar of the 30 days is wider than its bar, and is drawn across the bars beside it.
   date: { width: 32 },
   thin: { marginHorizontal: -2 },
+  glass: { position: "absolute", bottom: 0, left: "50%", marginLeft: -GLASS_WIDTH / 2 },
   bar: { marginHorizontal: 6, borderTopLeftRadius: 999, borderTopRightRadius: 999, borderBottomLeftRadius: 8, borderBottomRightRadius: 8 },
   thinBar: { marginHorizontal: 0, borderTopLeftRadius: 4, borderTopRightRadius: 4, borderBottomLeftRadius: 2, borderBottomRightRadius: 2 },
   target: { position: "absolute", left: 0, right: 0, height: 2 },

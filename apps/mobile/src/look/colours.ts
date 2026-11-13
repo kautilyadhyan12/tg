@@ -119,6 +119,13 @@ export const colours = {
   /** A fork and a knife: steel, dark at its edges and bright down its middle. */
   steelEdge: "#8D8A86",
   steelShine: "#F4F2EF",
+  /** The Week tab's glasses (32c-i): the glass, its shine, the bubbles in it, and the under-target blue
+   *  deep at its foot and light at its top. */
+  glassEdge: "rgba(255,255,255,0.55)",
+  glassShine: "rgba(255,255,255,0.25)",
+  bubble: "rgba(255,255,255,0.45)",
+  blueDeep: "#2563eb",
+  blueLight: "#93c5fd",
 } as const;
 
 export type ColourName = keyof typeof colours;
