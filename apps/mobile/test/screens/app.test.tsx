@@ -4,6 +4,7 @@ import { App, TABS } from "../../src/App";
 import { colours } from "../../src/look/colours";
 import { DASHBOARD_READS } from "../../src/screens/Dashboard";
 import { weekOf } from "../../src/screens/dashboard/words";
+import { monthWords } from "../../src/screens/food/day";
 import { fakeServer, isClockWords, kept, memoryStore, tokens } from "../kit";
 
 const extra = { copyName: "Feature 1", apiUrl: "http://localhost:3000" };
@@ -80,9 +81,12 @@ describe("the five tabs", () => {
       const first = tab.name === "Gym" ? "Check for an invitation" : tab.name === "Food" ? "Scan food" : tab.name === "Me" ? "Achievements" : "Coming soon";
       expect(await screen.findAllByText(first)).toBeTruthy();
       expect(screen.queryAllByText("Coming soon")).toHaveLength(tab.name === "Me" || tab.name === "Gym" || tab.name === "Food" ? 0 : 1);
-      // The Dashboard's calendar shows this week's dates and its clock the phone's time; its numbers did
-      // not load here, so none shows.
-      const dates = tab.name === "Dashboard" ? weekOf(new Date()).map((day) => String(day.date)) : [];
+      // The Dashboard's calendar shows this week's dates and its clock the phone's time; Food's plates of the
+      // week (32c-i) this week's dates too, and its month; their numbers did not load here, so none shows.
+      const dates =
+        tab.name === "Dashboard" || tab.name === "Food"
+          ? [...weekOf(new Date()).map((day) => String(day.date)), ...(tab.name === "Food" ? [monthWords(new Date())] : [])]
+          : [];
       const withDigits = screen
         .queryAllByText(/\d/)
         .map(words)
