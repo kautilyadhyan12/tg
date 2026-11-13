@@ -658,8 +658,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
     - 20i. **Buy a repeating membership** (18k-iv's server, `rulings/2026-11-12-18k-iv.md`; split 2026-11-13: the bank's check needs Square's newer way tried first).
       - 20i-i. [x] **Buy a repeating membership with the card saved in the app** · merged 2026-11-13 · PR #536
       - 20i-ii. [ ] **The bank's check on the phone** (UK, Europe, Japan): Square's check before the charge where the bank asks, tried on Square's test cards first (its `verifyBuyer` is being retired). Feature folder 1.
-    - 20j. [ ] **A promo code on Buy** (18k-v's server, `rulings/2026-11-13-18k-v.md`): a Promo code box and Apply on Buy, the line read again with the code
-      off (or why not, too many tries included, in `promo.words`), the Refer a friend line it replaces, and the code sent with Pay. Feature folder 1.
+    - 20j. [x] **A promo code on Buy** · merged 2026-11-13 · PR #543
     - 20k. [x] **Cancel and keep a membership on the phone** · merged 2026-11-13 · PR #540
 21. **Release** (split 2026-11-07, Kd: the release is prepared alongside the building, and Google's closed test starts as soon as the app can be installed from Google Play, without waiting for workouts or exercises; `rulings/2026-11-07-21-closed-test-early.md` keeps the line as first written and Google's rules as read that day).
     - 21a. **The server online, free for the test** (split 2026-11-08: the server first; on AWS's free plan in Sydney, Oracle having refused Kd's card; `handoff/2026-11-09-21a-i.md` keeps its line as first written).
