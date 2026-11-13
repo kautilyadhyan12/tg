@@ -1,4 +1,4 @@
-import { APP_PURCHASE_WORDS, PROMO_CODE_WORDS, cardName, formatMinor, type AppPurchase, type AppPurchaseRequest, type DeskSigner, type ForSaleLine, type ForSaleResponse, type ForSaleSigner } from "@app/shared";
+import { APP_PURCHASE_WORDS, PROMO_CODE_WORDS, cardName, dayWords, formatMinor, type AppPurchase, type AppPurchaseRequest, type DeskSigner, type ForSaleLine, type ForSaleResponse, type ForSaleSigner } from "@app/shared";
 import { NOT_PAID, PAY_CHECK, PAY_NOT_OPENED, PAY_WAITING, type PaySaid } from "./payView";
 
 // Buy in the app (ROADMAP Stage 5 item 20g; the server's `/for-sale` and `/for-sale/purchases`, built in 18k-iii). The
@@ -6,8 +6,8 @@ import { NOT_PAID, PAY_CHECK, PAY_NOT_OPENED, PAY_WAITING, type PaySaid } from "
 // with every detail in the agreement's own words, the agreement to sign where the gym asks for one, and Pay on Square's
 // own page. Pure: the server works out each line, what is paid today and how a page ended. A repeating membership (20i-i,
 // the server's 18k-iv) is paid with the card saved in the app, on a tick of its own the server words: no page opens. A
-// promo code typed on the list (20j, the server's 18k-v) reads the list again with it: each line it takes something off
-// carries it, and Pay sends the code of the line shown with that line's amount, never the box's words.
+// promo code typed on a line's page (20j, the server's 18k-v) reads the list again with it: each line it takes something
+// off carries it, and Pay sends the code of the line shown with that line's amount, never the box's words.
 
 const gymPath = (gymId: string): string => `/v1/orgs/${encodeURIComponent(gymId)}`;
 export const forSalePath = (gymId: string): string => `${gymPath(gymId)}/for-sale`;
@@ -66,11 +66,15 @@ export const PROMO_MAX = 20;
 export const codeOf = (typed: string): string => typed.trim().toUpperCase();
 /** Once a code takes something off: "SPRING20 applied". */
 export const promoApplied = (code: string): string => `${code} applied`;
-/** Under "You pay today": "SPRING20 · Spring offer: −$18.00". Null where no code is used on the line. */
+/** Under "You pay today": "SPRING20 · Spring offer: −$18.00". Null where no code is used on the line. A first payment
+ *  for part of a month is worked out from the price with the code off, so it saves less than the code's own amount: the
+ *  code is named with no amount (round one, H2). */
 export function promoLine(line: Pick<ForSaleLine, "firstPayment" | "currency">): string | null {
   const p = line.firstPayment.promo;
+  if (p === null) return null;
+  if (line.firstPayment.part) return `${p.code} · ${p.name}`;
   // A word joiner keeps the minus with its amount, so a narrow line never breaks between them.
-  return p === null ? null : `${p.code} · ${p.name}: −\u2060${formatMinor(p.offMinor, line.currency)}`;
+  return `${p.code} · ${p.name}: −\u2060${formatMinor(p.offMinor, line.currency)}`;
 }
 /** Where the code is used in place of the member's Refer a friend discount. */
 export const PROMO_INSTEAD = PROMO_CODE_WORDS.instead;
@@ -107,10 +111,12 @@ export function todayLine(line: Pick<ForSaleLine, "firstPayment" | "priceMinor" 
   if (fp.joiningFeeMinor > 0) reasons.push(`a ${formatMinor(fp.joiningFeeMinor, line.currency)} joining fee`);
   if (fp.promo !== null) reasons.push(`the code ${fp.promo.code}`);
   if (fp.friendGift !== null || fp.memberGiftOffMinor > 0) reasons.push("your Refer a friend gift");
-  // What those make up; anything else is tax added on top of the price (round one, L2).
+  // What those make up; anything else is tax added on top of the price (round one, L2). Part of a month is not the price
+  // at all, so it says until when instead of guessing at tax (20j round one, H2).
   const explained = fp.joiningFeeMinor - (fp.friendGift?.offMinor ?? 0) - fp.memberGiftOffMinor - (fp.promo?.offMinor ?? 0);
-  if (fp.amountMinor - line.priceMinor !== explained) reasons.push("tax");
-  const today = `${formatMinor(fp.amountMinor, line.currency)} today`;
+  if (!fp.part && fp.amountMinor - line.priceMinor !== explained) reasons.push("tax");
+  const until = fp.part && fp.covers !== null ? `, to ${dayWords(fp.covers.to)}` : "";
+  const today = `${formatMinor(fp.amountMinor, line.currency)} today${until}`;
   return reasons.length === 0 ? today : `${today}, with ${andList(reasons)}`;
 }
 

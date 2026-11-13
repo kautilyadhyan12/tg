@@ -57,6 +57,8 @@ export function lineOf(
     promo?: ForSalePromo;
     /** Why the code typed takes nothing off this line, where it takes something off another. */
     promoWords?: string;
+    /** The day of the month the gym bills everyone on (18y): a membership started today pays part of a month first. */
+    billDay?: number;
   } = {},
 ): ForSaleLine {
   const worked = forSaleWorked({
@@ -64,7 +66,7 @@ export function lineOf(
     included: { lines: options.included ?? ANY_CLASS, orgType: "gym" },
     taxes: options.taxes ?? [],
     taxIncluded: false,
-    billDay: null,
+    billDay: options.billDay ?? null,
     today: TODAY,
     gym: GYM,
     personName: options.personName ?? "Asha Walk",

@@ -158,6 +158,10 @@ function BuyBody({
   // The promo code every read of the list is asked with (20j): "" for none. `wanted` is the same, for the screen: while it
   // differs from the code of the list shown, the list with it is on its way and Pay waits.
   const code = useRef("");
+  // The code of the list shown, and whether the read on its way drops the code (the page closed): a read with no answer
+  // goes back to the list shown, or, for a dropped code, to no list at all, never to a code the member left behind.
+  const shown = useRef("");
+  const dropping = useRef(false);
   const [wanted, setWanted] = useState("");
   const [typed, setTyped] = useState("");
   // Why the code typed takes nothing off, or could not be checked: said under the box.
@@ -180,28 +184,42 @@ function BuyBody({
           setTyped(asked);
           setCodeSaid(answer.data.promo?.words ?? PROMO_CODE_WORDS.fits_nothing);
         }
-        setHeld({ kind: "ok", view: answer.data, code: takes ? asked : "" });
+        shown.current = takes ? asked : "";
+        dropping.current = false;
+        setHeld({ kind: "ok", view: answer.data, code: shown.current });
         return "ok";
       }
-      if (!quiet || (answer.kind === "refused" && answer.status === 404)) setHeld({ kind: "failed", status: answer.kind === "refused" ? answer.status : null });
+      // No answer for a read with another code than the list shown (Apply, Remove, or one that overtook them): the screen
+      // goes back to the list shown and says so, so Pay never waits on a read nobody is making any more (round one, H1).
+      if (asked !== shown.current && code.current === asked) {
+        if (dropping.current) {
+          // The page that held the code is closed: the list is shown again only once it is read without it.
+          dropping.current = false;
+          shown.current = "";
+          setHeld({ kind: "failed", status: null });
+          return "failed";
+        }
+        code.current = shown.current;
+        setWanted(shown.current);
+        setCodeSaid(PROMO_NOT_CHECKED);
+      }
+      if (!quiet || (answer.kind === "refused" && answer.status === 404)) {
+        shown.current = "";
+        setHeld({ kind: "failed", status: answer.kind === "refused" ? answer.status : null });
+      }
       return "failed";
     },
     [session, place.id],
   );
   const readAgain = useCallback(() => void load(true), [load]);
-  // Apply and Remove: the list read again with the code, or without one.
+  // Apply and Remove: the list read again with the code, or without one; `drop` when the page that held it closes.
   const readWith = useCallback(
-    async (next: string) => {
-      const before = code.current;
+    async (next: string, drop = false) => {
       code.current = next;
+      dropping.current = drop;
       setWanted(next);
       setCodeSaid(null);
-      const got = await load(true, next);
-      if (got === "failed" && live.current && code.current === next) {
-        code.current = before;
-        setWanted(before);
-        setCodeSaid(PROMO_NOT_CHECKED);
-      }
+      await load(true, next);
     },
     [load],
   );
@@ -234,11 +252,11 @@ function BuyBody({
     if (!boughtNow) return;
     setOpenLine(null);
     // A code goes with one purchase: the list is read again without it.
+    setTyped("");
+    setCodeSaid(null);
     if (code.current === "") return;
     code.current = "";
     setWanted("");
-    setTyped("");
-    setCodeSaid(null);
     void load(true, "");
   }, [boughtNow, load]);
 
@@ -349,7 +367,7 @@ function BuyBody({
           // A code goes with the page it was typed on: the list is read without it again.
           setTyped("");
           setCodeSaid(null);
-          if (code.current !== "" || shownCode !== "") void readWith("");
+          if (code.current !== "" || shownCode !== "") void readWith("", true);
         }}
         onMembership={toMembership}
         onCard={() => {
@@ -456,12 +474,19 @@ function PromoBox({
 }) {
   if (applied !== "")
     return (
-      <View testID="promo-applied" style={styles.row}>
-        <Icon name="check" size={18} colour="goodText" />
-        <Txt colour="text" style={styles.grow}>
-          {promoApplied(applied)}
-        </Txt>
-        <Button label={PROMO_REMOVE} kind="link" small disabled={busy} say={`${PROMO_REMOVE} the code ${applied}`} onPress={onRemove} />
+      <View testID="promo-applied" style={styles.said}>
+        <View style={styles.row}>
+          <Icon name="check" size={18} colour="goodText" />
+          <Txt colour="text" style={styles.grow}>
+            {promoApplied(applied)}
+          </Txt>
+          <Button label={PROMO_REMOVE} kind="link" small disabled={busy} say={`${PROMO_REMOVE} the code ${applied}`} onPress={onRemove} />
+        </View>
+        {said === null ? null : (
+          <Txt kind="small" colour="badText">
+            {said}
+          </Txt>
+        )}
       </View>
     );
   return (

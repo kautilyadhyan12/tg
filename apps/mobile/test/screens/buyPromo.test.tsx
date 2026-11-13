@@ -4,7 +4,7 @@ import { PROMO_CODE_WORDS, type ForSaleLine } from "@app/shared";
 import { App } from "../../src/App";
 import { PROMO_CHECKING, PROMO_INSTEAD, PROMO_NOT_CHECKED, PROMO_PRESS_APPLY } from "../../src/screens/gym/buyView";
 import type { Ask } from "../../src/session/calls";
-import { fakeServer, kept, lost, memoryStore, refusal, tokens, type Reply } from "../kit";
+import { fakeServer, kept, lost, memoryStore, never, refusal, tokens, type Reply } from "../kit";
 import { DAY_ID, DAY_TYPE, GOLD_ID, GOLD_TYPE, PACK_ID, PACK_TYPE, SPRING20, lineOf } from "../forSaleLines";
 
 // A promo code on Buy (ROADMAP Stage 5 item 20j; the server's 18k-v, whose own tests prove a code works only where its gym
@@ -334,9 +334,119 @@ describe("a code that takes nothing off says why, in the server's words, and is 
     await screen.findByText("SPRING20 applied");
     await fireEvent.press(screen.getByLabelText("Pay $72.00 for 10-class pack"));
     expect(await screen.findByLabelText("Pay $90.00 for 10-class pack")).toBeTruthy();
-    expect(screen.getAllByText(PROMO_CODE_WORDS.used_up).length).toBeGreaterThan(0);
+    // The list's own reason, under the box, not only Pay's refusal.
+    expect(await within(screen.getByTestId("promo-box")).findByText(PROMO_CODE_WORDS.used_up)).toBeTruthy();
     expect(screen.queryByText("SPRING20 · Spring offer: −\u2060$18.00")).toBeNull();
     expect(screen.queryByText("SPRING20 applied")).toBeNull();
+  });
+
+  it("a read with the code that overtakes Apply's and gets no answer: the box says so and Pay is not held back", async () => {
+    let tries = 0;
+    const server = fakeServer({
+      "/v1/auth/refresh": ok({ tokens: tokens(2) }),
+      "/v1/orgs/mine": mine,
+      // Apply's read never answers; the one made on coming back to the app gets nothing.
+      [forSalePath]: (_body, search = "") => {
+        if (!search.includes("code=")) return { status: 200, body: view([PACK, DAY]) };
+        tries += 1;
+        return tries === 1 ? never() : lost();
+      },
+      [buyPath]: notOpened,
+    });
+    await openBuy(server.ask);
+    await openPack();
+    await applyCode("SPRING20");
+    expect(screen.getByText(PROMO_CHECKING)).toBeTruthy();
+    await appIs("active");
+    expect(await within(screen.getByTestId("promo-box")).findByText(PROMO_NOT_CHECKED)).toBeTruthy();
+    expect(screen.queryByText(PROMO_CHECKING)).toBeNull();
+    expect(disabled(screen.getByLabelText("Pay $90.00 for 10-class pack"))).toBe(false);
+  });
+
+  it("the page closed while the code is checked: the code is dropped even when the next read gets no answer", async () => {
+    // The read made as the page closes gets nothing; the ones before and after answer.
+    let failNext = false;
+    const server = fakeServer({
+      "/v1/auth/refresh": ok({ tokens: tokens(2) }),
+      "/v1/orgs/mine": mine,
+      [forSalePath]: (_body, search = "") => {
+        if (search.includes("code=")) return never();
+        if (failNext) {
+          failNext = false;
+          return lost();
+        }
+        return { status: 200, body: view([PACK, DAY]) };
+      },
+      [buyPath]: notOpened,
+    });
+    await openBuy(server.ask);
+    await openPack();
+    await applyCode("SPRING20");
+    failNext = true;
+    await closeLine();
+    await fireEvent.press(await onBuy().findByLabelText("Buy Day pass, $15.00"));
+    expect(screen.queryByText(PROMO_CHECKING)).toBeNull();
+    expect(screen.getByLabelText("Promo code").props).toMatchObject({ value: "" });
+    expect(disabled(screen.getByLabelText("Pay $15.00 for Day pass"))).toBe(false);
+    // Back in the app, the list is asked for without the code dropped.
+    await appIs("active");
+    await waitFor(() => {
+      expect(lists(server.asked).at(-1)?.search).toBe("?repeating=true");
+    });
+    expect(lists(server.asked).filter((a) => a.search?.includes("code=")).length).toBe(1);
+  });
+
+  it("the page closed with the code applied and no answer: the list is not shown with the dropped code, and reads again without it", async () => {
+    let failNext = false;
+    const server = fakeServer({
+      "/v1/auth/refresh": ok({ tokens: tokens(2) }),
+      "/v1/orgs/mine": mine,
+      [forSalePath]: (_body, search = "") => {
+        if (search.includes("code=SPRING20")) return { status: 200, body: codedList() };
+        if (failNext) {
+          failNext = false;
+          return lost();
+        }
+        return { status: 200, body: view([PACK, DAY]) };
+      },
+      [buyPath]: notOpened,
+    });
+    await openBuy(server.ask);
+    await openPack();
+    await applyCode("SPRING20");
+    await screen.findByText("SPRING20 applied");
+    failNext = true;
+    await closeLine();
+    expect(await onBuy().findByText("Try again")).toBeTruthy();
+    expect(onBuy().queryByText("$72.00 today, with the code SPRING20")).toBeNull();
+    await fireEvent.press(onBuy().getByText("Try again"));
+    expect(lists(server.asked).at(-1)?.search).toBe("?repeating=true");
+    await openPack();
+    expect(await screen.findByLabelText("Promo code")).toBeTruthy();
+    expect(screen.queryByText("SPRING20 applied")).toBeNull();
+    expect(disabled(screen.getByLabelText("Pay $90.00 for 10-class pack"))).toBe(false);
+  });
+
+  it("Remove that gets no answer says so beside the code, which stays applied", async () => {
+    let removeFails = false;
+    const server = fakeServer({
+      "/v1/auth/refresh": ok({ tokens: tokens(2) }),
+      "/v1/orgs/mine": mine,
+      [forSalePath]: (_body, search = "") => {
+        if (search.includes("code=SPRING20")) return { status: 200, body: codedList() };
+        return removeFails ? lost() : { status: 200, body: view([PACK, DAY]) };
+      },
+      [buyPath]: notOpened,
+    });
+    await openBuy(server.ask);
+    await openPack();
+    await applyCode("SPRING20");
+    await screen.findByText("SPRING20 applied");
+    removeFails = true;
+    await fireEvent.press(screen.getByLabelText("Remove the code SPRING20"));
+    expect(await within(screen.getByTestId("promo-applied")).findByText(PROMO_NOT_CHECKED)).toBeTruthy();
+    expect(screen.getByText("SPRING20 applied")).toBeTruthy();
+    expect(disabled(screen.getByLabelText("Pay $72.00 for 10-class pack"))).toBe(false);
   });
 
   it("used in place of the member's Refer a friend discount, the page says so", async () => {

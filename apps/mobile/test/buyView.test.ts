@@ -214,6 +214,20 @@ describe("a promo code (20j)", () => {
     expect(promoLine(lineOf(PACK_TYPE, {}))).toBeNull();
   });
 
+  it("on a first payment that is part of a month, never an amount the code does not take off today", () => {
+    // A gym that bills everyone on the 1st: joined on the 12th, the first payment covers the rest of November.
+    const plain = lineOf(GOLD_TYPE, { billDay: 1 });
+    const coded = lineOf(GOLD_TYPE, { billDay: 1, promo: SPRING20 });
+    expect(coded.firstPayment.part).toBe(true);
+    const savedToday = plain.firstPayment.amountMinor - coded.firstPayment.amountMinor;
+    expect(coded.firstPayment.promo?.offMinor).not.toBe(savedToday);
+    expect(promoLine(coded)).toBe("SPRING20 · Spring offer");
+    // No tax at this gym, so the line never says tax.
+    expect(todayLine(coded)).not.toContain("tax");
+    expect(todayLine(coded)).toContain("the code SPRING20");
+    expect(todayLine(plain)).not.toContain("tax");
+  });
+
   it("refused at Pay as no longer usable: the list is read again, which says why", () => {
     expect(buyRefusalSaid("app_purchase_promo", PROMO_CODE_WORDS.used_up)).toEqual({ tone: "warn", line: PROMO_CODE_WORDS.used_up, reread: true });
     expect(buyRefusalSaid("promo_code_tries", PROMO_CODE_WORDS.too_many)).toEqual({ tone: "bad", line: PROMO_CODE_WORDS.too_many });
