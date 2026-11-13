@@ -98,6 +98,12 @@ export const colours = {
   flamePale: "#FFF6D6",
   /** A number written on an orange bar. */
   onBar: "#3a1f05",
+  /** The five heart rate zones (37f-ii-a), grey to red as Garmin and Polar colour them. */
+  zone1: "#a3a3a3",
+  zone2: "#60a5fa",
+  zone3: "#22c55e",
+  zone4: "#FF8A1F",
+  zone5: "#ef4444",
 } as const;
 
 export type ColourName = keyof typeof colours;

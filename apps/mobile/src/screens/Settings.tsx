@@ -44,6 +44,7 @@ import { SAFE_MODE_LINE } from "./remindersView";
 import { TrainingReminders } from "./TrainingReminders";
 import { HeartMonitorRow, HeartMonitorSheet } from "../heart/HeartMonitor";
 import { useMonitor } from "../heart/monitor";
+import { HeartMaxRow, HeartMaxSheet } from "../heart/HeartZones";
 import { Setup, accountUnits } from "./setup/Setup";
 import { UNIT_OPTIONS } from "./setup/SetupScreens";
 import { setupPath } from "./setup/useSetupAnswers";
@@ -293,6 +294,7 @@ function UnitsPart({ saves }: { saves: RefObject<number> }) {
 function HeartMonitorPart() {
   const monitor = useMonitor();
   const [open, setOpen] = useState(false);
+  const [maxOpen, setMaxOpen] = useState(false);
   return (
     <Part title="Heart rate monitor" icon="heart">
       <View style={styles.heartRow}>
@@ -309,6 +311,18 @@ function HeartMonitorPart() {
         monitor={monitor}
         onClose={() => {
           setOpen(false);
+        }}
+      />
+      {/* The maximum the heart rate zones are worked from (37f-ii-a). */}
+      <HeartMaxRow
+        onOpen={() => {
+          setMaxOpen(true);
+        }}
+      />
+      <HeartMaxSheet
+        open={maxOpen}
+        onClose={() => {
+          setMaxOpen(false);
         }}
       />
     </Part>

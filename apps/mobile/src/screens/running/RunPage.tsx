@@ -13,6 +13,8 @@ import { PictureTop } from "../../look/PictureTop";
 import { Sheet } from "../../look/Sheet";
 import { fonts, Txt } from "../../look/Txt";
 import { useSession } from "../../session/SessionProvider";
+import { useHeartMax } from "../../heart/heartMax";
+import { HeartCard, HeartMaxSheet } from "../../heart/HeartZones";
 import { BestEffortsCard } from "./RecordParts";
 import { FeelCard, NoteCard, PaceCard, RouteCard, RunFigures, SplitsCard } from "./RunParts";
 import { distance, runWhen, unitWord } from "./runWords";
@@ -229,6 +231,7 @@ export function RunPage({ runId, units, onClose, onChanged, onDeleted }: {
           />
           <RouteCard track={track} starts={read.run.trackStarts} units={units} name={read.run.name} distanceM={read.run.distanceM} movingS={read.run.durationS} testID="run-map" />
           <PaceCard paceLine={read.run.paceLine} hillLine={read.run.hillLine} distanceM={read.run.distanceM} movingS={read.run.durationS} units={units} />
+          <SavedRunHeart run={read.run} units={units} />
           <SplitsCard splits={units === "imperial" ? read.run.splitsMi : read.run.splitsKm} units={units} />
           <BestEffortsCard bests={read.run.bests} held={read.run.records} units={units} />
           <FeelCard effort={draft.effort} onPick={(effort) => { change({ effort }); }} />
@@ -315,3 +318,34 @@ const styles = StyleSheet.create({
   nameBox: { borderRadius: 14, backgroundColor: colours.overWords, borderWidth: 1, borderColor: colours.fieldOnLine, paddingHorizontal: 12, minHeight: 48, justifyContent: "center" },
   nameInput: { fontFamily: fonts.bold, fontSize: 24, color: colours.text, paddingVertical: 8 },
 });
+
+/** A saved run's heart rate (37f-ii-a): its line and the zones it was saved with. A run saved with no
+ *  maximum keeps none; a maximum set here counts for the runs after it. */
+function SavedRunHeart({ run, units }: { run: RunDetail; units: Units }) {
+  const [settingMax, setSettingMax] = useState(false);
+  const maxRead = useHeartMax().read;
+  if (run.heartAvg === null) return null;
+  return (
+    <>
+      <HeartCard
+        heartAvg={run.heartAvg}
+        heartMax={run.heartMax}
+        line={run.heartLine}
+        zones={run.heartZones}
+        maxNow={maxRead.kind === "ok" ? maxRead.data.max : null}
+        distanceM={run.distanceM}
+        units={units}
+        when="saved"
+        onSetMax={() => {
+          setSettingMax(true);
+        }}
+      />
+      <HeartMaxSheet
+        open={settingMax}
+        onClose={() => {
+          setSettingMax(false);
+        }}
+      />
+    </>
+  );
+}
