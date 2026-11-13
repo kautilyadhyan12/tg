@@ -21,6 +21,7 @@ vi.mock('./MemberListPerson', () => ({
 const { default: AppPaymentChecksCard } = await import('../../components/console/AppPaymentChecksCard');
 const { appPaymentCheckLines, canSeeAppPaymentChecks } = await import('./appPaymentChecksView');
 const { appPaymentChecksHeadline } = await import('@app/shared');
+const { appBuyCheckNotices, appCheckNotice, feeAppCheckNotice } = await import('./memberBillsView');
 
 const ENTRY = '11111111-1111-4111-8111-111111111111';
 const org = { id: '77777777-7777-4777-8777-777777777777', orgType: 'gym', slug: 'demo' };
@@ -58,16 +59,31 @@ describe('Payments to check in Square', () => {
     expect(appPaymentChecksHeadline(3)).toBe('3 payments to check in Square');
     expect(appPaymentCheckLines(row())).toEqual({
       what: 'Gold Monthly · bill',
-      sentence: "Square took $54.99 from Tara Singh in the app on 12 Nov 2026, but it couldn't go on this bill. Check it in Square before taking this payment again. It won't be charged to the card on file automatically.",
+      sentence: "Square took $54.99 from Tara Singh in the app on 12 November 2026, but it couldn't go on this bill. Check it in Square before taking this payment again. It won't be charged to the card on file automatically.",
     });
     expect(appPaymentCheckLines(row({ kind: 'fee', fee: 'late_cancel', why: 'unknown', amountMinor: null, payerName: null }))).toEqual({
       what: 'Gold Monthly · late cancel fee',
-      sentence: "The member's payment page in the app ended on 12 Nov 2026 without an answer from Square, so it may have been paid. Check it in Square before taking this payment again.",
+      sentence: "The member's payment page in the app ended on 12 November 2026 without an answer from Square, so it may have been paid. Check it in Square before taking this payment again.",
     });
     expect(appPaymentCheckLines(row({ kind: 'purchase', typeName: '5-class pack', amountMinor: 5000, payerName: 'Priya Sharma' }))).toEqual({
       what: '5-class pack · bought in the app',
-      sentence: "Square took $50.00 from Priya Sharma in the app on 12 Nov 2026 for 5-class pack, but it couldn't be given to them. Check it in Square, then refund it there or give it with Add membership.",
+      sentence: "Square took $50.00 from Priya Sharma in the app on 12 November 2026 for 5-class pack, but it couldn't be given to them. Check it in Square, then refund it there or give it with Add membership.",
     });
+  });
+
+  it('each sentence is the member page’s own for that payment, word for word', () => {
+    for (const r of [row(), row({ why: 'unknown', amountMinor: null, payerName: null }), row({ currency: 'CAD', amountMinor: 120000 })]) {
+      const check = { why: r.why, amountMinor: r.amountMinor, on: r.on, payerName: r.payerName };
+      expect(appPaymentCheckLines(r).sentence).toBe(appCheckNotice({ currency: r.currency, billing: { appCheck: check } }));
+    }
+    for (const fee of ['late_cancel', 'no_show', 'freeze', 'leave_early']) {
+      const r = row({ kind: 'fee', fee });
+      const check = { why: r.why, amountMinor: r.amountMinor, on: r.on, payerName: r.payerName };
+      expect(appPaymentCheckLines(r).sentence).toBe(feeAppCheckNotice({ fee, appCheck: check }, r.currency));
+    }
+    const bought = row({ id: 'purchase:p1', kind: 'purchase', typeName: '5-class pack', amountMinor: 5000 });
+    const page = appBuyCheckNotices({ appBuyChecks: [{ id: 'p1', typeName: '5-class pack', why: 'taken', amountMinor: 5000, currency: 'USD', on: bought.on, payerName: 'Tara Singh' }] });
+    expect(appPaymentCheckLines(bought).sentence).toBe(page[0].line);
   });
 
   it('who may read it: who takes payments and keeps the member list', () => {

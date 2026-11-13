@@ -6,7 +6,6 @@ import { z } from "zod";
 import { appCheckLine } from "./appPayments.js";
 import { appBuyCheckLine } from "./appPurchases.js";
 import { MEMBER_FEE_WORDS, memberFeeKindSchema } from "./memberBills.js";
-import { dayWords } from "./paymentsDownload.js";
 
 const daySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
@@ -69,9 +68,9 @@ export function appPaymentCheckWhat(row: Pick<AppPaymentCheckRow, "kind" | "type
   return `${row.typeName} · bill`;
 }
 
-/** The person's page's own sentence for it. `money`: the amount in the gym's words, or null where Square did not say. */
-export function appPaymentCheckSentence(row: Pick<AppPaymentCheckRow, "kind" | "typeName" | "fee" | "why" | "payerName" | "on">, money: string | null): string {
-  const day = dayWords(row.on);
+/** The person's page's own sentence for it. `money`: the amount in the gym's words, or null where Square did not say; `day`:
+ *  the day it ended, in the words the page writes it. */
+export function appPaymentCheckSentence(row: Pick<AppPaymentCheckRow, "kind" | "typeName" | "fee" | "why" | "payerName">, money: string | null, day: string): string {
   if (row.kind === "purchase") return appBuyCheckLine(row, money, day);
   return appCheckLine(row, money, day, row.kind === "fee" ? row.fee : null);
 }
