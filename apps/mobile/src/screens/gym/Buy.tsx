@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AppState, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { WAIVER_NAME_MAX_CHARS, AGREEMENT_AGREE_LABEL, cleanSignedName, forSaleResponseSchema, formatMinor, waiverReadyToSign, type DeskSigner, type ForSaleLine, type ForSaleResponse } from "@app/shared";
+import { WAIVER_NAME_MAX_CHARS, AGREEMENT_AGREE_LABEL, cardName, cleanSignedName, forSaleResponseSchema, formatMinor, waiverReadyToSign, type DeskSigner, type ForSaleLine, type ForSaleResponse } from "@app/shared";
 import { Button } from "../../look/Button";
 import { Avatar, Card } from "../../look/Card";
 import { Options } from "../../look/Choice";
@@ -14,15 +14,16 @@ import { Sheet } from "../../look/Sheet";
 import { Tick } from "../../look/Tick";
 import { Txt } from "../../look/Txt";
 import { useSession } from "../../session/SessionProvider";
+import { AddCardPage, type CardPlace } from "./AddCard";
 import { termsHeading } from "./agreementView";
+import { ADD_CARD, UPDATE_CARD } from "./cardView";
 import {
   BUY,
   BUY_HEADING,
   BUY_SECURE,
   FACTS_HEADING,
   GUARDIAN_LINE,
-  NOT_READY,
-  NOT_READY_WHO,
+  PAID_WITH,
   CANCELLED_TITLE,
   CONFIRMING_TITLE,
   MY_PURCHASES,
@@ -39,9 +40,13 @@ import {
   WHO_SIGNS,
   buyBody,
   buySay,
+  chargedThrough,
   couldNotLoadForSale,
-  forSalePath,
+  forSaleListPath,
   lineSummary,
+  notReadyLine,
+  paidHow,
+  type PaidHow,
   nameLabel,
   nothingForSale,
   notSoldNow,
@@ -62,7 +67,10 @@ import { RESUMED, useBuyInApp, type BuyInApp } from "./useBuyInApp";
 // paid once, each with its price and until when it lasts. Buy on a line opens its page: what they pay today, every detail
 // in the agreement's own words, the gym's agreement with their name and the tick where it asks for one, and Pay held at
 // the foot. Pay opens Square's own page in a tab; back in the app, how it ended is said on that page, and once paid the
-// line is theirs and on My membership. The server works out every line and refuses anything but what was shown.
+// line is theirs and on My membership. The server works out every line and refuses anything but what was shown. A
+// repeating membership (20i-i) is paid with the card saved in the app: its page names the card, asks for the card's own
+// tick, word for word the server's, and Pay charges the card; with no card, or an expired one, Add card or Update card
+// opens over the page and the list is read again once it closes.
 
 export interface BuyPlace {
   id: string;
@@ -81,7 +89,7 @@ export function useSellsInApp(gymIds: readonly string[], read: unknown): Readonl
     const asked = ids === "" ? [] : ids.split(",");
     void Promise.all(
       asked.map(async (id) => {
-        const answer = await session.signedIn({ method: "GET", path: forSalePath(id) }, forSaleResponseSchema);
+        const answer = await session.signedIn({ method: "GET", path: forSaleListPath(id) }, forSaleResponseSchema);
         // Only "not found" means the place sells nothing to this reader; a refusal for too many asks or a failing server keeps
         // what was known.
         return { id, sells: answer.kind === "ok" ? answer.data.items.length > 0 : answer.kind === "refused" && answer.status === 404 ? false : null };
@@ -128,6 +136,8 @@ function BuyBody({
   const [held, setHeld] = useState<Held>({ kind: "loading" });
   // The line whose page is open, by its type id: read from the newest list each time.
   const [openLine, setOpenLine] = useState<string | null>(null);
+  // Add card or Update card, over a repeating membership's page.
+  const [addingCard, setAddingCard] = useState<CardPlace | null>(null);
   const started = useRef(0);
   const live = useRef(true);
 
@@ -135,7 +145,7 @@ function BuyBody({
     async (quiet: boolean) => {
       started.current += 1;
       const number = started.current;
-      const answer = await session.signedIn({ method: "GET", path: forSalePath(place.id) }, forSaleResponseSchema);
+      const answer = await session.signedIn({ method: "GET", path: forSaleListPath(place.id) }, forSaleResponseSchema);
       if (!live.current || number !== started.current) return;
       if (answer.kind === "ok") setHeld({ kind: "ok", view: answer.data });
       else if (!quiet || (answer.kind === "refused" && answer.status === 404)) setHeld({ kind: "failed", status: answer.kind === "refused" ? answer.status : null });
@@ -254,6 +264,20 @@ function BuyBody({
           buy.clear();
         }}
         onMembership={toMembership}
+        onCard={() => {
+          setAddingCard({ id: place.id, name: place.name });
+        }}
+      />
+      <AddCardPage
+        place={addingCard}
+        onSaved={() => {
+          readAgain();
+        }}
+        onClose={() => {
+          setAddingCard(null);
+          // The card saved, or what the page learnt meanwhile: the list names the card and the tick again.
+          readAgain();
+        }}
       />
       <ResultBox
         gym={place.name}
@@ -368,6 +392,7 @@ function LinePage({
   typeId,
   onClose,
   onMembership,
+  onCard,
 }: {
   open: boolean;
   place: BuyPlace;
@@ -377,8 +402,11 @@ function LinePage({
   typeId: string | null;
   onClose: () => void;
   onMembership: () => void;
+  onCard: () => void;
 }) {
-  return open && typeId !== null ? <LineBody key={typeId} place={place} line={line} view={view} buy={buy} typeId={typeId} onClose={onClose} onMembership={onMembership} /> : null;
+  return open && typeId !== null ? (
+    <LineBody key={typeId} place={place} line={line} view={view} buy={buy} typeId={typeId} onClose={onClose} onMembership={onMembership} onCard={onCard} />
+  ) : null;
 }
 
 function LineBody({
@@ -389,6 +417,7 @@ function LineBody({
   typeId,
   onClose,
   onMembership,
+  onCard,
 }: {
   place: BuyPlace;
   line: ForSaleLine | null;
@@ -397,11 +426,15 @@ function LineBody({
   typeId: string;
   onClose: () => void;
   onMembership: () => void;
+  onCard: () => void;
 }) {
   const known = view === null ? null : signerOf(view.signer);
   const [picked, setPicked] = useState<DeskSigner | null>(null);
   const [name, setName] = useState("");
   const [agreed, setAgreed] = useState(false);
+  // The card's own tick, on a repeating membership.
+  const [cardAgreed, setCardAgreed] = useState(false);
+  const how: PaidHow = line === null || view === null ? { kind: "page" } : paidHow(line, view);
   const signer = known ?? picked;
   const busy = buy.busy?.at === typeId ? buy.busy.line : null;
   // What Pay was refused with is said beside it; how a page ended is the box in the middle.
@@ -409,15 +442,22 @@ function LineBody({
   // What they read changed (the details, the wording or who signs): the tick is given again on what is shown now.
   const agreementId = line?.agreement?.id ?? null;
   const factsKey = line?.factsKey ?? null;
-  const [readKey, setReadKey] = useState(`${agreementId ?? ""}:${factsKey ?? ""}:${known ?? ""}`);
-  const nowKey = `${agreementId ?? ""}:${factsKey ?? ""}:${known ?? ""}`;
+  // The card's tick names the card and the amounts: another card, or other amounts, are ticked again.
+  const chargeWords = how.kind === "card" ? how.words : "";
+  const [readKey, setReadKey] = useState(`${agreementId ?? ""}:${factsKey ?? ""}:${known ?? ""}:${chargeWords}`);
+  const nowKey = `${agreementId ?? ""}:${factsKey ?? ""}:${known ?? ""}:${chargeWords}`;
   if (nowKey !== readKey) {
     setReadKey(nowKey);
     setAgreed(false);
+    setCardAgreed(false);
   }
   // A record two app accounts share buys at the front desk: its page reads, with nothing to sign or pay.
   const shared = view?.record === "shared";
-  const ready = line !== null && !shared && (line.agreement === null || (signer !== null && waiverReadyToSign(name, agreed)));
+  const ready =
+    line !== null &&
+    !shared &&
+    (how.kind === "page" || (how.kind === "card" && cardAgreed)) &&
+    (line.agreement === null || (signer !== null && waiverReadyToSign(name, agreed)));
 
   const pay = () => {
     if (line === null || !ready || busy !== null) return;
@@ -444,14 +484,26 @@ function LineBody({
             {said.again === true ? <Button label={CHECK_AGAIN} kind="link" small onPress={buy.checkAgain} /> : null}
           </View>
         ) : null}
-        {said?.toMembership === true ? (
+        {said?.updateCard === true && how.kind === "card" ? <Button label={UPDATE_CARD} kind="link" icon="card" small onPress={onCard} /> : null}
+        {how.kind === "no_record" ? (
+          <Txt colour="orange" style={styles.centre}>
+            {how.line}
+          </Txt>
+        ) : how.kind === "add_card" || how.kind === "update_card" ? (
+          <View testID="buy-card-first" style={styles.said}>
+            <Txt colour="orange" style={styles.centre}>
+              {how.line}
+            </Txt>
+            <Button label={how.kind === "add_card" ? ADD_CARD : UPDATE_CARD} icon="card" wide onPress={onCard} />
+          </View>
+        ) : said?.toMembership === true ? (
           <Button label={TO_MEMBERSHIP} icon="folder" wide onPress={onMembership} />
         ) : (
           <Button label={payLabel(line)} icon="shield" wide busy={busy !== null} disabled={busy !== null || !ready} say={`${payLabel(line)} for ${line.name}`} onPress={pay} />
         )}
-        {said?.toMembership === true ? null : (
+        {said?.toMembership === true || (how.kind !== "page" && how.kind !== "card") ? null : (
           <Txt kind="tiny" style={styles.centre}>
-            {ready ? PAY_SECURE : signer === null ? NOT_READY_WHO : NOT_READY}
+            {ready ? (how.kind === "card" ? chargedThrough(how.card) : PAY_SECURE) : notReadyLine(line.agreement !== null, how.kind === "card", signer !== null)}
           </Txt>
         )}
       </>
@@ -547,6 +599,28 @@ function LineBody({
                 disabled={busy !== null}
                 onPress={() => {
                   setAgreed((now) => !now);
+                }}
+              />
+            </>
+          )}
+          {how.kind !== "card" || shared ? null : (
+            <>
+              <View style={styles.line} />
+              <View testID="buy-card" style={styles.row}>
+                <Icon name="card" size={18} colour="orange" />
+                <View style={styles.grow}>
+                  <Txt kind="small">{PAID_WITH}</Txt>
+                  <Txt colour="text">{cardName(how.card)}</Txt>
+                </View>
+                <Button label={UPDATE_CARD} kind="link" small disabled={busy !== null} say={`${UPDATE_CARD}, ${cardName(how.card)}`} onPress={onCard} />
+              </View>
+              <Tick
+                testID="buy-card-tick"
+                label={how.words}
+                ticked={cardAgreed}
+                disabled={busy !== null}
+                onPress={() => {
+                  setCardAgreed((now) => !now);
                 }}
               />
             </>

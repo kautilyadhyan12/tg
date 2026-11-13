@@ -4,7 +4,7 @@ import { appPurchaseResponseSchema, type AppPurchase, type AppPurchaseRequest } 
 import { openInTab } from "../../look/browserTab";
 import { colours } from "../../look/colours";
 import { useSession } from "../../session/SessionProvider";
-import { buyRefusalSaid, endedBuySaid, purchaseClosePath, purchasesPath, type BuySaid } from "./buyView";
+import { CHARGING, buyRefusalSaid, endedBuySaid, purchaseClosePath, purchasesPath, type BuySaid } from "./buyView";
 import { newRequestKey } from "./classesView";
 import { forgetPayAway, keepPayAway } from "./payAway";
 import { PAY_CHECKING, PAY_NO_ANSWER, PAY_NOT_OPENED, PAY_OPENING } from "./payView";
@@ -15,6 +15,8 @@ import { PAY_AWAY } from "./usePayInApp";
 // again) the page is closed at Square, which records it instead where it was paid, and how it ended is said where Pay
 // was. Only the server's `paid` ever reads as bought. Android may close the app behind the tab: the purchase is kept on
 // the phone, and Buy ends it when the app starts again (`resume`). The tab's comings and goings are 20f's (`usePayInApp`).
+// A repeating membership (20i-i) opens no tab: Pay charges the saved card, and the answer is paid, or Square still to say
+// (Check status asks again), or the server's sentence why nothing was charged.
 
 /** Where what happened is said: a line's page (its type id), or Buy's list for a page ended after the app started again. */
 export const RESUMED = "resumed";
@@ -64,6 +66,8 @@ export function useBuyInApp(gymId: string, onEnded: () => void): BuyInApp {
   // A press whose answer was lost keeps its key, for the very same body: pressed again, the server gives back the page it
   // may have made. A changed body (another name typed) is a press of its own.
   const lostPress = useRef<{ typeId: string; body: string; requestKey: string } | null>(null);
+  // Purchases charged to the card, not paid on a page: closed reads as nothing taken, never as cancelled.
+  const charged = useRef(new Set<string>());
   const gone = useCallback(() => !live.current, []);
   const ended = useRef(onEnded);
   useEffect(() => {
@@ -101,7 +105,7 @@ export function useBuyInApp(gymId: string, onEnded: () => void): BuyInApp {
           ended.current();
           return;
         }
-        const how = endedBuySaid(purchase);
+        const how = endedBuySaid(purchase, charged.current.has(purchaseId));
         if (purchase.state === "open") {
           // Square has not said yet: the page stays held until it does, and Check again asks.
           unanswered.current = { at, id: purchaseId };
@@ -154,7 +158,8 @@ export function useBuyInApp(gymId: string, onEnded: () => void): BuyInApp {
       lostPress.current = null;
       setSaid(null);
       setPaid(null);
-      working({ at: typeId, line: PAY_OPENING });
+      const card = body.charge !== undefined;
+      working({ at: typeId, line: card ? CHARGING : PAY_OPENING });
       void (async () => {
         const send = (requestKey: string) => session.signedIn({ method: "POST", path: purchasesPath(gymId), body: { ...body, requestKey } }, appPurchaseResponseSchema);
         let requestKey = lost ?? newRequestKey();
@@ -192,11 +197,19 @@ export function useBuyInApp(gymId: string, onEnded: () => void): BuyInApp {
           ended.current();
           return;
         }
+        if (card) charged.current.add(purchase.id);
         if (purchase.state !== "open") {
           working(null);
-          const how = endedBuySaid(purchase);
+          const how = endedBuySaid(purchase, card);
           if (how !== null) setSaid({ at: typeId, said: how });
           ended.current();
+          return;
+        }
+        if (card) {
+          // Square has not said yet: Check status asks, and the worker asks too.
+          working(null);
+          unanswered.current = { at: typeId, id: purchase.id };
+          setSaid({ at: typeId, said: { ...(endedBuySaid(purchase, true) ?? { tone: "warn", line: PAY_CHECKING }), again: true, ended: true } });
           return;
         }
         if (purchase.url === null) {

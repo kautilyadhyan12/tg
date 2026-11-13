@@ -66,6 +66,8 @@ export const refusal = (status: number, error: string, message: string, more: ob
 export interface Asked {
   method: string;
   path: string;
+  /** The query, "?repeating=true", or "". */
+  search?: string;
   body: unknown;
   headers: Record<string, string>;
 }
@@ -159,6 +161,7 @@ export function fakeServer(routes: Record<string, Route>): { ask: Ask; asked: As
     asked.push({
       method: init.method ?? "GET",
       path,
+      search: new URL(url).search,
       body: init.body === undefined ? undefined : (JSON.parse(init.body) as unknown),
       headers: init.headers ?? {},
     });

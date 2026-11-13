@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { APP_PURCHASE_WORDS, appPurchaseRequestSchema, appPurchaseSchema, type AppPaymentState } from "@app/shared";
+import { APP_PURCHASE_WORDS, appPurchaseRequestSchema, appPurchaseSchema, type AppPaymentState, type ForSaleLine, type ForSaleResponse } from "@app/shared";
 import {
+  BANK_CHECK_DESK,
+  CARD_NOT_TAKEN,
+  NOT_READY,
+  NOT_READY_BOTH,
+  NOT_READY_CARD,
+  NOT_READY_WHO,
+  NOT_READY_WHO_BOTH,
+  notReadyLine,
+  paidHow,
   buyBody,
   buyRefusalSaid,
   buySay,
@@ -14,7 +23,7 @@ import {
   todayParts,
 } from "../src/screens/gym/buyView";
 import { NOT_PAID, PAY_CHECK, PAY_WAITING } from "../src/screens/gym/payView";
-import { AGREEMENT_ID, DAY_TYPE, PACK_ID, PACK_TYPE, SUMMER_TYPE, lineOf } from "./forSaleLines";
+import { AGREEMENT_ID, DAY_TYPE, GOLD_TYPE, PACK_ID, PACK_TYPE, SUMMER_TYPE, lineOf } from "./forSaleLines";
 
 // Buy in the app (ROADMAP Stage 5 item 20g): how a line reads, what Pay sends, and how the end is said. The server decides
 // all of it (`appPurchases.routes.test.ts`); the phone sends exactly what it showed, and reads bought only from `paid`.
@@ -102,5 +111,61 @@ describe("how it ended: bought only from the server's own paid", () => {
     expect(buyRefusalSaid("already_held", APP_PURCHASE_WORDS.already_held("Summer month"))).toEqual({ tone: "bad", line: "You already have Summer month." });
     expect(buyRefusalSaid("app_payment_check", APP_PURCHASE_WORDS.check_first).tone).toBe("warn");
     expect(buyRefusalSaid("square_unavailable", "").line).toBe("Checkout couldn’t open. Try again.");
+  });
+});
+
+describe("a repeating membership, paid with the card saved in the app (20i-i)", () => {
+  const gold = lineOf(GOLD_TYPE, { card: { brand: "VISA", last4: "1111" } });
+  const view = (over: Partial<Pick<ForSaleResponse, "record" | "card">> = {}): Pick<ForSaleResponse, "record" | "card"> => ({
+    record: "own",
+    card: { brand: "VISA", last4: "1111", expired: false },
+    ...over,
+  });
+
+  it("how it is paid, for every reader: a line paid once on Square's page; the card with its tick; or what to do first", () => {
+    const pack = lineOf(PACK_TYPE);
+    const cases: [string, Pick<ForSaleLine, "repeats" | "charge">, Pick<ForSaleResponse, "record" | "card">, ReturnType<typeof paidHow>][] = [
+      ["a line paid once, whatever the card", pack, view({ card: null }), { kind: "page" }],
+      ["own record, a card in date", gold, view(), { kind: "card", card: { brand: "VISA", last4: "1111" }, words: gold.charge ?? "" }],
+      ["own record, no card", { ...gold, charge: null }, view({ card: null }), { kind: "add_card", line: APP_PURCHASE_WORDS.card_needed }],
+      ["own record, an expired card", { ...gold, charge: null }, view({ card: { brand: "VISA", last4: "1111", expired: true } }), { kind: "update_card", line: APP_PURCHASE_WORDS.card_expired }],
+      ["a card but no tick from the server", { ...gold, charge: null }, view(), { kind: "update_card", line: APP_PURCHASE_WORDS.card_expired }],
+      ["not on the gym's list yet", { ...gold, charge: null }, view({ record: "none", card: null }), { kind: "no_record", line: APP_PURCHASE_WORDS.card_no_record }],
+      ["a shared record", gold, view({ record: "shared" }), { kind: "no_record", line: APP_PURCHASE_WORDS.card_no_record }],
+    ];
+    for (const [name, line, v, want] of cases) expect([name, paidHow(line, v)]).toEqual([name, want]);
+  });
+
+  it("Pay sends the card's tick word for word with no bank's check; a line paid once sends none", () => {
+    const body = buyBody(gold, { signer: "person", name: "Asha Walk" });
+    expect(body.charge).toEqual({ words: gold.charge, verificationToken: null });
+    expect(appPurchaseRequestSchema.safeParse({ ...body, requestKey: PRESS }).success).toBe(true);
+    expect("charge" in buyBody(lineOf(PACK_TYPE), { signer: "person", name: "Asha Walk" })).toBe(false);
+  });
+
+  it("refusals about the card offer Update card; what changed about it reads the list again; the bank's check goes to the desk", () => {
+    expect(buyRefusalSaid("app_purchase_declined", "Visa ending 1111 was declined.")).toEqual({ tone: "bad", line: "Visa ending 1111 was declined.", updateCard: true });
+    expect(buyRefusalSaid("app_purchase_card_stopped", APP_PURCHASE_WORDS.card_stopped)).toEqual({ tone: "bad", line: APP_PURCHASE_WORDS.card_stopped, updateCard: true });
+    expect(buyRefusalSaid("app_purchase_card_expired", APP_PURCHASE_WORDS.card_expired)).toMatchObject({ reread: true, updateCard: true });
+    expect(buyRefusalSaid("app_purchase_card_changed", APP_PURCHASE_WORDS.card_changed)).toMatchObject({ reread: true });
+    expect(buyRefusalSaid("app_purchase_card_needed", APP_PURCHASE_WORDS.card_needed)).toMatchObject({ reread: true });
+    expect(buyRefusalSaid("app_purchase_verification", APP_PURCHASE_WORDS.verification)).toEqual({ tone: "bad", line: BANK_CHECK_DESK });
+    expect(buyRefusalSaid("app_purchase_charging", APP_PURCHASE_WORDS.charging)).toEqual({ tone: "bad", line: APP_PURCHASE_WORDS.charging });
+  });
+
+  it("a card charge closed is nothing taken, never cancelled; open and check read as for a page", () => {
+    expect(endedBuySaid({ state: "closed" }, true)).toEqual({ tone: "bad", line: CARD_NOT_TAKEN, ended: true });
+    expect(endedBuySaid({ state: "closed" })?.line).not.toBe(CARD_NOT_TAKEN);
+    expect(endedBuySaid({ state: "open" }, true)).toEqual(endedBuySaid({ state: "open" }));
+    expect(endedBuySaid({ state: "check" }, true)).toEqual(endedBuySaid({ state: "check" }));
+    expect(endedBuySaid({ state: "paid" }, true)).toBeNull();
+  });
+
+  it("under Pay: what is still to do, by what the page asks", () => {
+    expect(notReadyLine(false, true, true)).toBe(NOT_READY_CARD);
+    expect(notReadyLine(true, true, true)).toBe(NOT_READY_BOTH);
+    expect(notReadyLine(true, true, false)).toBe(NOT_READY_WHO_BOTH);
+    expect(notReadyLine(true, false, true)).toBe(NOT_READY);
+    expect(notReadyLine(true, false, false)).toBe(NOT_READY_WHO);
   });
 });
