@@ -15,6 +15,7 @@ import { NO_ANSWER } from "../SignIn";
 import { AddCardPage, type CardPlace } from "./AddCard";
 import { AgreementPage, type AgreementPlace } from "./Agreement";
 import { membershipAgreementRow } from "./agreementView";
+import { CancelBox, KeepBox, type BoxFor } from "./CancelBox";
 import { CardOnFile } from "./CardOnFile";
 import { cardRemovedLine, cardSavedLine, myCardPath, myCardRemovePath, removeRefusalLine } from "./cardView";
 import { RemoveCardAsk, type RemoveAsk } from "./RemoveCardAsk";
@@ -101,6 +102,10 @@ function MembershipBody({ place, onClose, onBuy, bottom }: { place: MembershipPl
   const [addingCard, setAddingCard] = useState<CardPlace | null>(null);
   // Remove card (20e): the box from the bottom while it is open.
   const [removing, setRemoving] = useState<RemoveAsk | null>(null);
+  // Cancel and Keep (20j): the box open, and what the last one did, said under its membership.
+  const [cancelling, setCancelling] = useState<BoxFor | null>(null);
+  const [keeping, setKeeping] = useState<BoxFor | null>(null);
+  const [cancelSaid, setCancelSaid] = useState<{ membershipId: string; line: string } | null>(null);
   const cardStarted = useRef(0);
   // Reads are numbered as they start: an answer stands only if no later read has started.
   const started = useRef(0);
@@ -257,6 +262,17 @@ function MembershipBody({ place, onClose, onBuy, bottom }: { place: MembershipPl
             receiptButton={receiptButton}
             pay={pay}
             onBuy={onBuy}
+            cancels={{
+              said: cancelSaid,
+              onCancel: (m) => {
+                setCancelSaid(null);
+                setCancelling({ membershipId: m.id, name: m.name });
+              },
+              onKeep: (m) => {
+                setCancelSaid(null);
+                setKeeping({ membershipId: m.id, name: m.name });
+              },
+            }}
             onAgreement={(m) => {
               setAgreementAt({ id: place.id, name: place.name, membershipId: m.id, membershipName: m.name });
             }}
@@ -292,6 +308,30 @@ function MembershipBody({ place, onClose, onBuy, bottom }: { place: MembershipPl
           void loadCard();
         }}
       />
+      <CancelBox
+        gymId={place.id}
+        open={cancelling}
+        onDone={(membershipId, line) => {
+          setCancelSaid({ membershipId, line });
+          void load(true);
+        }}
+        onClose={() => {
+          setCancelling(null);
+          void load(true);
+        }}
+      />
+      <KeepBox
+        gymId={place.id}
+        open={keeping}
+        onDone={(membershipId, line) => {
+          setCancelSaid({ membershipId, line });
+          void load(true);
+        }}
+        onClose={() => {
+          setKeeping(null);
+          void load(true);
+        }}
+      />
       <AgreementPage
         place={agreementAt}
         onSigned={() => {
@@ -308,12 +348,20 @@ function MembershipBody({ place, onClose, onBuy, bottom }: { place: MembershipPl
 
 type ReceiptButton = (number: number, what: string, refund?: boolean) => React.JSX.Element;
 
+/** Cancel and Keep (20j): what each membership's buttons open, and the line the last box left under its membership. */
+interface Cancels {
+  said: { membershipId: string; line: string } | null;
+  onCancel: (m: MyMembership) => void;
+  onKeep: (m: MyMembership) => void;
+}
+
 function Sections({
   view,
   card,
   receiptButton,
   pay,
   onBuy,
+  cancels,
   onAgreement,
 }: {
   view: MyMembershipResponse;
@@ -321,6 +369,7 @@ function Sections({
   receiptButton: ReceiptButton;
   pay: PayInApp;
   onBuy: (() => void) | null;
+  cancels: Cancels;
   onAgreement: (m: MyMembership) => void;
 }) {
   const gym = view.gym.name;
@@ -356,7 +405,7 @@ function Sections({
           </>
         ) : null}
         {view.memberships.map((m) => (
-          <MembershipCard key={m.id} m={m} gym={gym} paidBy={view.paidBy !== null} receiptButton={receiptButton} pay={pay} today={today} onAgreement={onAgreement} />
+          <MembershipCard key={m.id} m={m} gym={gym} paidBy={view.paidBy !== null} receiptButton={receiptButton} pay={pay} today={today} cancels={cancels} onAgreement={onAgreement} />
         ))}
         {view.earlierNotShown > 0 ? <Txt kind="small">{olderMemberships(gym)}</Txt> : null}
       </View>
@@ -429,7 +478,7 @@ function Sections({
             <Txt>{paysForText(person.name)}</Txt>
             {person.memberships.length === 0 ? <Txt>{theirNoMembershipText(person.name, gym)}</Txt> : null}
             {person.memberships.map((m) => (
-              <MembershipCard key={m.id} m={m} gym={gym} paidBy={false} receiptButton={receiptButton} pay={pay} today={today} onAgreement={null} />
+              <MembershipCard key={m.id} m={m} gym={gym} paidBy={false} receiptButton={receiptButton} pay={pay} today={today} cancels={cancels} onAgreement={null} />
             ))}
             {theirFees.map((item, j) => (
               <FeeCard key={`${item.fee.on}-${String(j)}`} item={item} gym={gym} receiptButton={receiptButton} pay={pay} today={today} />
@@ -449,6 +498,7 @@ function MembershipCard({
   receiptButton,
   pay,
   today,
+  cancels,
   onAgreement,
 }: {
   m: MyMembership;
@@ -457,6 +507,7 @@ function MembershipCard({
   receiptButton: ReceiptButton;
   pay: PayInApp;
   today: string;
+  cancels: Cancels;
   onAgreement: ((m: MyMembership) => void) | null;
 }) {
   const tag = statusTag(m);
@@ -523,7 +574,36 @@ function MembershipCard({
         </View>
       )}
       {m.agreement === null || onAgreement === null ? null : <AgreementRow m={m} agreement={m.agreement} gym={gym} onOpen={onAgreement} />}
+      <CancelRow m={m} cancels={cancels} />
     </Card>
+  );
+}
+
+/** Cancel in the app (20j), as the server says for this membership: the button, who can cancel it instead, or the line
+ *  once it was cancelled in the app with Keep my membership while it can still be kept. What the last box did is said
+ *  here, under the membership it was about. */
+function CancelRow({ m, cancels }: { m: MyMembership; cancels: Cancels }) {
+  const said = cancels.said?.membershipId === m.id ? cancels.said.line : null;
+  const c = m.cancel;
+  if (c === null && said === null) return null;
+  return (
+    <View testID={`cancel-row-${m.id}`} style={styles.agreement}>
+      {said === null ? null : <Txt colour="goodText">{said}</Txt>}
+      {c === null ? null : c.state === "can" ? (
+        <Button label={c.button} kind="soft" small say={`${c.button}: ${m.name}`} onPress={() => {
+            cancels.onCancel(m);
+          }} />
+      ) : c.state === "elsewhere" ? (
+        <Txt kind="small">{c.line}</Txt>
+      ) : (
+        <>
+          {said === null ? <Txt kind="small">{c.line}</Txt> : null}
+          {c.keep === null ? null : <Button label={c.keep} kind="soft" small say={`${c.keep}: ${m.name}`} onPress={() => {
+            cancels.onKeep(m);
+          }} />}
+        </>
+      )}
+    </View>
   );
 }
 
