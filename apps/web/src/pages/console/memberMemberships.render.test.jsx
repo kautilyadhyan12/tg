@@ -1845,6 +1845,81 @@ describe('Refund on Refunds to review (18d-iv-b-iii)', () => {
   });
 });
 
+describe('Review payment on App payments to review (18k-vi)', () => {
+  it('brings that payment’s line into view, once their memberships have loaded', async () => {
+    const gold = held(1, GOLD, '2026-10-04', false);
+    gold.billing = { ...gold.billing, appCheck: { why: 'unknown', amountMinor: null, on: '2026-11-12', payerName: 'Ada Lovelace' } };
+    orgService.getHeldMemberships.mockResolvedValue(answer([gold]));
+    const seen = [];
+    const was = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = function scrolled() {
+      seen.push(this.getAttribute('data-check'));
+    };
+    try {
+      render(draw(ADA, 'Ada Lovelace', { checkNow: `bill:${gold.id}` }));
+      const line = await screen.findByTestId('held-app-check');
+      expect(line.getAttribute('data-check')).toBe(`bill:${gold.id}`);
+      await waitFor(() => expect(seen).toContain(`bill:${gold.id}`));
+    } finally {
+      Element.prototype.scrollIntoView = was;
+    }
+  });
+
+  /** Opens the page for `checkNow` and gives back the lines brought into view. */
+  const scrolledTo = async (shown, checkNow, testId) => {
+    orgService.getHeldMemberships.mockResolvedValue(shown);
+    const seen = [];
+    const was = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = function scrolled() {
+      seen.push(this.getAttribute('data-check'));
+    };
+    try {
+      render(draw(ADA, 'Ada Lovelace', { checkNow }));
+      expect((await screen.findByTestId(testId)).getAttribute('data-check')).toBe(checkNow);
+      await waitFor(() => expect(seen).toContain(checkNow));
+    } finally {
+      Element.prototype.scrollIntoView = was;
+    }
+  };
+  const check = { why: 'taken', amountMinor: 1000, on: '2026-11-12', payerName: 'Ada Lovelace' };
+
+  it('a fee’s line', async () => {
+    const fee = {
+      id: '66666666-6666-4666-8666-666666666666',
+      fee: 'freeze',
+      of: 'membership',
+      forName: 'Gold Monthly',
+      on: TODAY,
+      to: '2026-11-19',
+      amountMinor: 1000,
+      taxes: [],
+      dueOn: TODAY,
+      state: 'due',
+      waived: null,
+      stillOwed: true,
+      payments: [],
+      voidedPayments: [],
+      can: { pay: false, waive: true, voidPaymentId: null },
+      appCheck: check,
+    };
+    const base = held(1, GOLD, '2026-10-04', true);
+    await scrolledTo(answer([{ ...base, billing: { ...base.billing, fees: [fee] } }]), `fee:${fee.id}`, 'held-fee-app-check');
+  });
+
+  it('a purchase’s line', async () => {
+    const id = '55555555-5555-4555-8555-555555555555';
+    await scrolledTo(answer([], false, { appBuyChecks: [{ id, typeName: '10 classes', ...check, currency: 'GBP' }] }), `purchase:${id}`, 'app-buy-check');
+  });
+
+  it('a line on a membership that is over: it owes, so it is drawn with the ones in use, earlier ones left shut', async () => {
+    const base = held(2, PACK, '2025-01-04', false);
+    expect(base.view.status).toBe('ended');
+    // One in use as well: the earlier ones stay shut, and the ended one that owes is drawn above them.
+    const gold = held(1, GOLD, '2026-10-04', true);
+    await scrolledTo(answer([gold, { ...base, billing: { ...base.billing, appCheck: { ...check, why: 'unknown', amountMinor: null } } }]), `bill:${base.id}`, 'held-app-check');
+  });
+});
+
 describe('Take payment on Failed payments (18d-iii-ii-b)', () => {
   it("opens that bill's Record payment, under its own membership, once; another membership's stays shut", async () => {
     const gold = held(1, GOLD, '2026-10-04', true);

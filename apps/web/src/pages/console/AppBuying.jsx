@@ -6,7 +6,7 @@ const SMALL = 'c-btn c-btn-s c-btn-sm';
 
 /** A member buying a line in the app for this record (18k-iii-a), on their page, for staff who take payments: who is
  *  buying what, until when, with Close payment page; and each purchase that gave nothing though Square may have taken
- *  money, with what to check and Mark as checked. What a press did is said under it. */
+ *  money, with what to review and Mark as resolved. What a press did is said under it. */
 export default function AppBuying({ gymId, entryId, shown, timezone, canAct, onChanged }) {
   const [said, setSaid] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -27,7 +27,7 @@ export default function AppBuying({ gymId, entryId, shown, timezone, canAct, onC
   };
   const closePage = (id) =>
     press(id, () => orgService.closeAppPurchase(gymId, entryId, id), (data) => APP_CLOSE_WORDS[data.outcome], "We couldn't close the payment page. Try again.");
-  const markChecked = (id) => press(id, () => orgService.markAppPurchaseChecked(gymId, entryId, id), () => APP_BUY_CHECKED_WORDS, "We couldn't mark it as checked. Try again.");
+  const markChecked = (id) => press(id, () => orgService.markAppPurchaseChecked(gymId, entryId, id), () => APP_BUY_CHECKED_WORDS, "We couldn't mark it as resolved. Try again.");
   const saidFor = (id) =>
     said !== null && said.id === id ? (
       <span className="c-s13 c-t2" role="status">
@@ -52,7 +52,7 @@ export default function AppBuying({ gymId, entryId, shown, timezone, canAct, onC
         </div>
       ) : null}
       {checks.map((c) => (
-        <div key={c.id} className="flex flex-col items-start gap-1.5" data-testid="app-buy-check">
+        <div key={c.id} className="flex flex-col items-start gap-1.5" data-testid="app-buy-check" data-check={`purchase:${c.id}`}>
           <span className="c-s13 c-w5" style={{ color: 'var(--bad)' }}>
             {c.line}
           </span>

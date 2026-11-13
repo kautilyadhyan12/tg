@@ -76,6 +76,7 @@ export * from "./myAgreementState.js";
 export * from "./forSale.js";
 export * from "./appPayments.js";
 export * from "./appPurchases.js";
+export * from "./appPaymentChecks.js";
 export * from "./appPurchaseStaff.js";
 export * from "./leaderboard.js";
 export * from "./posts.js";
