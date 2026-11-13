@@ -198,6 +198,7 @@ describe("the worst thing: Cancelled is said only for the membership pressed, an
     await fireEvent.press(await box().findByText("Cancel membership"));
     expect(await box().findByText("Couldn’t connect, so we don’t know if it went through. Check your internet and press it again.")).toBeTruthy();
     expect(screen.queryByTestId("cancel-done")).toBeNull();
+    expect(screen.queryByText(/Cancelled\./)).toBeNull();
 
     await fireEvent.press(box().getByText("Cancel membership"));
     await waitFor(() => {
@@ -438,6 +439,7 @@ describe("keep my membership", () => {
     await fireEvent.press(await keepBox().findByText("Keep my membership"));
     expect(await keepBox().findByText("Couldn’t connect, so we don’t know if it went through. Check your internet and press it again.")).toBeTruthy();
     expect(screen.queryByTestId("keep-done")).toBeNull();
+    expect(screen.queryByText(/Cancellation removed/)).toBeNull();
     await fireEvent.press(keepBox().getByText("Keep my membership"));
     await waitFor(() => {
       expect(screen.getByTestId("keep-done")).toBeTruthy();
