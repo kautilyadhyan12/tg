@@ -104,6 +104,21 @@ export const colours = {
   zone3: "#22c55e",
   zone4: "#FF8A1F",
   zone5: "#ef4444",
+  /** The Food tab's top (32c-i, Kd's drawing of 2026-11-14): warm light behind the floating bowl, a leaf's
+   *  green and a tomato's red glowing faintly beside it. */
+  foodSun: "#FFBA6E",
+  foodLeaf: "#7ED957",
+  foodTomato: "#FF6B4A",
+  /** A plate on the Food tab: its glazed rim, its lit edge and its well. */
+  plateRim: "#34302C",
+  plateRimLight: "rgba(255,255,255,0.45)",
+  plateWell: "#121110",
+  plateEdge: "rgba(255,255,255,0.14)",
+  /** The calories on the plate's rim, light orange running deep. */
+  calDeep: "#FF6A1F",
+  /** A fork and a knife: steel, dark at its edges and bright down its middle. */
+  steelEdge: "#8D8A86",
+  steelShine: "#F4F2EF",
 } as const;
 
 export type ColourName = keyof typeof colours;
@@ -151,6 +166,11 @@ export const boxShade =
 /** A page's own picture running into the page under it, a little darker at the top for the phone's clock. */
 export const pictureFade =
   "linear-gradient(to top, rgba(10,9,8,1) 0%, rgba(10,9,8,0.8) 24%, rgba(10,9,8,0.16) 60%, rgba(10,9,8,0.3) 100%)";
+
+/** Under the Food tab's floating bowl (32c-i): clear over the bowl, the page's black under its words and at
+ *  the phone's clock. */
+export const floatFade =
+  "linear-gradient(to top, rgba(10,9,8,1) 0%, rgba(10,9,8,0.55) 14%, rgba(10,9,8,0) 34%, rgba(10,9,8,0) 82%, rgba(10,9,8,0.45) 100%)";
 
 /** The same under a page's first words: darker at the top, where a greeting or the clock is read. */
 export const pictureFadeUnderWords =

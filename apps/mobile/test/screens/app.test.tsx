@@ -58,10 +58,12 @@ describe("the five tabs", () => {
     for (const words of shows) expect(await screen.findByText(words)).toBeTruthy();
     // No page says its tab's name again above itself: the lit tab below already does.
     expect(screen.queryByRole("header", { name: tab })).toBeNull();
-    const on = (await screen.findAllByRole("tab")).filter((drawn) => lit(drawn) === true);
+    // The five tabs at the foot; a page's own tabs (Food's Meals, What to eat and Week) are its own.
+    const five = async () => (await screen.findAllByRole("tab")).filter((drawn) => TABS.some((each) => each.name === label(drawn)));
+    const on = (await five()).filter((drawn) => lit(drawn) === true);
     expect(on.map(label)).toEqual([tab]);
     // What is drawn, not only what a screen reader is told: its word is orange, the other four are not.
-    const inks = (await screen.findAllByRole("tab")).map((one) => [
+    const inks = (await five()).map((one) => [
       label(one),
       drawn(within(one).getByText(String(label(one)))).color === colours.orange,
     ]);

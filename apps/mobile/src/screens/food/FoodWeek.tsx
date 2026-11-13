@@ -6,7 +6,6 @@ import { Card } from "../../look/Card";
 import { Chip } from "../../look/Chip";
 import { colours, type ColourName } from "../../look/colours";
 import { Icon } from "../../look/Icon";
-import { Sheet } from "../../look/Sheet";
 import { Txt } from "../../look/Txt";
 import { SoftBar } from "../../look/Waiting";
 import { useZoneSaved } from "../../session/TimeZoneSync";
@@ -28,15 +27,16 @@ import {
   type TodayHere,
 } from "./weekRules";
 
-// Your week in food (ROADMAP Stage 5 34f-ii): a box on the Food screen with the last 7 days' calories,
-// and a box from the bottom with 7 or 30 days of any of the four figures, and the facts in words.
+// Your week in food (ROADMAP Stage 5 34f-ii; one Week tab since 32c-i, Kd's drawing of 2026-11-14): the last
+// 7 or 30 days of any of the four figures, and the facts in words. The 7 days are read once for the page:
+// its plates of the week are coloured from the same read.
 
 export const FOOD_WEEK_READ = "/v1/nutrition/food-week";
 const MONTH_READ = `${FOOD_WEEK_READ}?days=30`;
 const CHART_HEIGHT = 112;
 
 interface Ctx {
-  /** Today as the day's rings show it, or null where the phone cannot say. */
+  /** Today as the day's plate shows it, or null where the phone cannot say. */
   here: TodayHere | null;
   /** Moves each time the server takes a meal or a change: the week is read again. */
   sent: number;
@@ -46,29 +46,19 @@ interface Ctx {
   onSetup: () => void;
 }
 
-interface FoodWeekProps extends Ctx {
-  /** Moves when the daily numbers or the setup answers change. */
-  fresh: number;
+/** The last 7 days, read again when the numbers or answers change (`fresh`), a meal is sent, or the day moves on. */
+export function useFoodWeek({ fresh, sent, today }: { fresh: number; sent: number; today: string }): { read: Read<FoodWeekResponse>; again: () => void } {
+  const week = useRead(FOOD_WEEK_READ, foodWeekResponseSchema, useZoneSaved() + fresh);
+  useAgainOn(sent, week.again);
+  useAgainOn(today, week.again);
+  return week;
 }
 
-export function FoodWeek({ fresh, ...ctx }: FoodWeekProps) {
-  const { read, again } = useRead(FOOD_WEEK_READ, foodWeekResponseSchema, useZoneSaved() + fresh);
-  const [open, setOpen] = useState(false);
-  useAgainOn(ctx.sent, again);
-  useAgainOn(ctx.today, again);
-  const setUp = () => {
-    setOpen(false);
-    ctx.onSetup();
-  };
+/** The Week tab. */
+export function FoodWeek({ week, ...ctx }: Ctx & { week: { read: Read<FoodWeekResponse>; again: () => void } }) {
+  const { read, again } = week;
   return (
     <Card style={styles.box}>
-      <View style={styles.row}>
-        <View style={[styles.titleRow, styles.grow]}>
-          <Icon name="chart" size={16} colour="orange" />
-          <Txt kind="h3">This Week</Txt>
-        </View>
-        {read.kind === "ok" ? <Button label="See your week" kind="link" onPress={() => { setOpen(true); }} /> : null}
-      </View>
       {read.kind === "failed" ? (
         <View style={styles.row}>
           <Icon name="wifioff" size={18} colour="textSoft" />
@@ -80,11 +70,8 @@ export function FoodWeek({ fresh, ...ctx }: FoodWeekProps) {
       ) : read.kind === "loading" ? (
         <SoftBar width="70%" />
       ) : (
-        <WeekBody week={read.data} here={ctx.here} onSetup={ctx.onSetup} />
+        <WeekDetail week={read.data} ctx={ctx} />
       )}
-      <Sheet open={open && read.kind === "ok"} title="Your Week in Food" onClose={() => { setOpen(false); }}>
-        {read.kind === "ok" && open ? <WeekDetail week={read.data} ctx={{ ...ctx, onSetup: setUp }} /> : null}
-      </Sheet>
     </Card>
   );
 }
@@ -98,30 +85,6 @@ function useAgainOn(moved: number | string, again: () => void) {
 }
 
 const SET_UP_WORDS = "Set daily numbers";
-
-function WeekBody({ week, here, onSetup }: { week: FoodWeekResponse; here: TodayHere | null; onSetup: () => void }) {
-  const bars = weekBars(week, "kcal", here);
-  const line = weekLine(week, here);
-  const target = week.days.at(-1)?.targets?.kcal;
-  return (
-    <>
-      {bars.every((b) => b.value === null) ? null : (
-        <>
-          <Chart bars={bars} figure="kcal" month={false} line={target ?? null} />
-          <Legend bars={bars} />
-        </>
-      )}
-      {bars.every((b) => b.value === null) || target === undefined ? null : (
-        <Txt kind="tiny">Line: your daily target, {count(target)} kcal today</Txt>
-      )}
-      {targetsDiffer(bars, target ?? null) ? <Txt kind="tiny">{TARGETS_DIFFER_WORDS}</Txt> : null}
-      <Txt kind="small" colour="text">
-        {line.words}
-      </Txt>
-      {line.setUp ? <Button label={SET_UP_WORDS} kind="soft" small onPress={onSetup} style={styles.start} /> : null}
-    </>
-  );
-}
 
 function WeekDetail({ week, ctx }: { week: FoodWeekResponse; ctx: Ctx }) {
   const [month, setMonth] = useState(false);
@@ -199,6 +162,11 @@ function Detail({ week, figure, ctx, month }: { week: FoodWeekResponse; figure: 
             {line.setUp ? <Button label={SET_UP_WORDS} kind="soft" small onPress={ctx.onSetup} style={styles.start} /> : null}
           </>
         )}
+        {facts.length > 0 && !month && factWords("kcal", week.facts.kcal) === null ? (
+          <Txt kind="small" colour="text">
+            {line.words}
+          </Txt>
+        ) : null}
         {average === null ? null : <Txt kind="small">{average.words}</Txt>}
       </View>
       {bars.some((b) => b.about) ? <Txt kind="tiny">~ Includes a scan’s estimate.</Txt> : null}

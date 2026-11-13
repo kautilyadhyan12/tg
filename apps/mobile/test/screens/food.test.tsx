@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
-import type { Meal, NutritionTargetsResponse, RecentFood } from "@app/shared";
+import { mealTypeAtHour, type Meal, type NutritionTargetsResponse, type RecentFood } from "@app/shared";
+import { mealTypeName } from "../../src/screens/food/day";
 import { App } from "../../src/App";
 import type { TextStore } from "../../src/screens/food/outbox";
 import type { Ask, AskInit } from "../../src/session/calls";
@@ -214,8 +215,14 @@ const posts = (server: ReturnType<typeof foodServer>) => server.asked.filter((a)
 const deletes = (server: ReturnType<typeof foodServer>) => server.asked.filter((a) => a.method === "DELETE");
 const patches = (server: ReturnType<typeof foodServer>) => server.asked.filter((a) => a.method === "PATCH");
 
-/** Adds a cup of oats to Breakfast from the Food tab. */
+/** Opens one of the Food tab's own tabs (32c-i): Meals, What to eat or Week. */
+async function foodTab(name: "Meals" | "What to eat" | "Week") {
+  await fireEvent.press(await screen.findByRole("tab", { name }));
+}
+
+/** Adds a cup of oats to Breakfast from the Food tab's Meals. */
 async function addOats() {
+  await foodTab("Meals");
   await fireEvent.press(await screen.findByRole("button", { name: "Add to Breakfast" }));
   await fireEvent.changeText(screen.getByLabelText("Search food"), "oats");
   await fireEvent.press(await screen.findByRole("button", { name: "Oats, rolled, 307 kcal · 1 cup, USDA" }));
@@ -301,7 +308,12 @@ describe("the day's food", () => {
     });
     await openFood({ meals: [breakfast] });
     expect(await screen.findByLabelText("Calories, 307 of 2,300 kcal")).toBeTruthy();
-    expect(screen.getByText(/^1,993 kcal left · Protein 109 g left · Carbs 225 g left · Fat 70 g left$/)).toBeTruthy();
+    expect(screen.getByText("Remaining today")).toBeTruthy();
+    expect(screen.getByText("1,993 kcal left")).toBeTruthy();
+    for (const [name, left] of [["Protein", "109 g left"], ["Carbs", "225 g left"], ["Fat", "70 g left"]] as const) {
+      const part = screen.getByLabelText(new RegExp(`^${name}, `));
+      expect(within(part).getByText(left)).toBeTruthy();
+    }
     expect(screen.getByRole("button", { name: "Oats, rolled, 307 kcal" })).toBeTruthy();
     expect(screen.getByText("No lunch logged yet.")).toBeTruthy();
   });
@@ -880,17 +892,20 @@ describe("your week in food (34f-ii)", () => {
 
   it("the worst thing: today's bar is the rings' own numbers, never a half day judged, and yesterday is yesterday's", async () => {
     await openFood({ meals: [] }, undefined, { "/v1/nutrition/food-week": () => ({ status: 200, body: week() }) });
+    await foodTab("Week");
     expect(await screen.findByText("Calories were on target on 3 of 6 days.")).toBeTruthy();
     expect(screen.getByLabelText("Today, no meals")).toBeTruthy();
     expect(screen.getAllByLabelText(/, 2,001 kcal of 2,300 kcal, over target$/)).toHaveLength(1);
     await addOats();
-    // The server still says today has none; the bar says what the rings say.
+    await foodTab("Week");
+    // The server still says today has none; the bar says what the plate says.
     expect(await screen.findByLabelText("Today, 307 kcal of 2,300 kcal, so far")).toBeTruthy();
     expect(screen.getByLabelText("Calories, 307 of 2,300 kcal")).toBeTruthy();
   });
 
   it("is read again once the server takes a meal", async () => {
     const server = await openFood({ meals: [] });
+    await foodTab("Week");
     await screen.findByText("Your week shows here once you log meals.");
     const reads = () => server.asked.filter((a) => a.path === "/v1/nutrition/food-week").length;
     const before = reads();
@@ -898,7 +913,7 @@ describe("your week in food (34f-ii)", () => {
     await waitFor(() => { expect(reads()).toBeGreaterThan(before); });
   });
 
-  it("See your week: any of the four figures, 7 or 30 days, and every fact in words", async () => {
+  it("the Week tab: any of the four figures, 7 or 30 days, and every fact in words", async () => {
     const server = foodServer({ meals: [] });
     const asked: string[] = [];
     const ask: Ask = (url, init) => {
@@ -909,7 +924,7 @@ describe("your week in food (34f-ii)", () => {
     };
     await render(<App extra={extra} ask={ask} store={memoryStore(kept(1))} wait={noWait} mealStore={files().store} />);
     await fireEvent.press(await screen.findByRole("tab", { name: "Food" }));
-    await fireEvent.press(await screen.findByRole("button", { name: "See your week" }));
+    await foodTab("Week");
     expect(await screen.findByText("Protein was under target on all 6 days.")).toBeTruthy();
     expect(screen.getByText("Carbs were on target on all 6 days.")).toBeTruthy();
     expect(screen.getByText("Fat was on target on all 6 days.")).toBeTruthy();
@@ -921,15 +936,14 @@ describe("your week in food (34f-ii)", () => {
     expect(asked).toContain("?days=30");
   });
 
-  it("with no daily numbers: bars keyed No target, and a button to set them in the box and in See your week", async () => {
+  it("with no daily numbers: bars keyed No target, and a button to set them on the Week tab", async () => {
     const none = foodWeekReply(7, (back) => ({ targets: null, ...(back === 0 ? {} : { meals: 2, kcal: 1800 }) }));
     await openFood({ meals: [] }, undefined, { "/v1/nutrition/food-week": () => ({ status: 200, body: none }) });
+    await foodTab("Week");
     expect(await screen.findByText("Set your daily numbers to compare your days.")).toBeTruthy();
     expect(screen.getByText("No target")).toBeTruthy();
     expect(screen.queryByText("On target")).toBeNull();
     expect(screen.getByRole("button", { name: "Set daily numbers" })).toBeTruthy();
-    await fireEvent.press(screen.getByRole("button", { name: "See your week" }));
-    expect(await screen.findAllByRole("button", { name: "Set daily numbers" })).toHaveLength(2);
   });
 
   it("a week that could not load says so, and Try again reads it", async () => {
@@ -937,9 +951,69 @@ describe("your week in food (34f-ii)", () => {
     await openFood({ meals: [] }, undefined, {
       "/v1/nutrition/food-week": () => (fails ? { status: 503, body: { error: "unavailable", message: "Try again.", requestId: "r" } } : { status: 200, body: week() }),
     });
+    await foodTab("Week");
     expect(await screen.findByText("Your week couldn’t load.")).toBeTruthy();
     fails = false;
     await fireEvent.press(screen.getByRole("button", { name: "Load your week again" }));
     expect(await screen.findByText("Calories were on target on 3 of 6 days.")).toBeTruthy();
+  });
+});
+
+describe("the Food tab drawn again (32c-i)", () => {
+  const short = (d: Date) =>
+    `${["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d.getDay()] ?? ""}, ${String(d.getDate())} ${
+      ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][d.getMonth()] ?? ""
+    }`;
+
+  it("a plate of the week goes to its day; a day to come is a plate that can't be pressed", async () => {
+    await openFood({ meals: [] });
+    const now = new Date();
+    const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now.getDay() + 6) % 7));
+    for (let i = 0; i < 7; i += 1) {
+      const d = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + i);
+      if (d.getTime() <= now.getTime()) continue;
+      expect(screen.getByRole("button", { name: short(d) }).props.accessibilityState).toMatchObject({ disabled: true });
+    }
+    // A week wholly past: the 10th of last month, picked from the month, and another day of its week pressed.
+    await fireEvent.press(await screen.findByRole("button", { name: "Today, pick a day" }));
+    await fireEvent.press(screen.getByRole("button", { name: "Previous month" }));
+    const tenth = new Date(now.getFullYear(), now.getMonth() - 1, 10);
+    await fireEvent.press(screen.getByRole("button", { name: short(tenth) }));
+    expect(await screen.findByRole("button", { name: `${short(tenth)}, pick a day` })).toBeTruthy();
+    const other = new Date(tenth.getFullYear(), tenth.getMonth(), tenth.getDate() + (tenth.getDay() === 1 ? 1 : -((tenth.getDay() + 6) % 7)));
+    await fireEvent.press(screen.getByRole("button", { name: short(other) }));
+    expect(await screen.findByRole("button", { name: `${short(other)}, pick a day` })).toBeTruthy();
+    // The day shown is never pressed again from its own plate.
+    expect(screen.getByRole("button", { name: short(other) }).props.accessibilityState).toMatchObject({ selected: true, disabled: true });
+  });
+
+  it("Search beside Scan food opens the Add box for the meal that fits the hour, on today", async () => {
+    await openFood({ meals: [] });
+    await fireEvent.press(await screen.findByRole("button", { name: "Previous day" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Search" }));
+    expect(await screen.findByText(`Add to ${mealTypeName(mealTypeAtHour(new Date().getHours()))}`)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Today, pick a day" })).toBeTruthy();
+  });
+
+  it("What to eat from another day says it is for today, and one press goes back there", async () => {
+    await openFood({ meals: [] });
+    await fireEvent.press(await screen.findByRole("button", { name: "Previous day" }));
+    await foodTab("What to eat");
+    expect(await screen.findByText("What to eat is for today.")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "Go to today" }));
+    expect(await screen.findByRole("button", { name: "Today, pick a day" })).toBeTruthy();
+    expect(screen.queryByText("What to eat is for today.")).toBeNull();
+  });
+
+  it("the Nutrients link stays with no daily numbers yet, as it was before the plate", async () => {
+    const now = new Date();
+    const breakfast = savedMeal("11111111-1111-4111-8111-111111111111", {
+      mealName: "Oats, rolled",
+      takenAt: new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 30).toISOString(),
+      mealType: "breakfast",
+    });
+    await openFood({ meals: [breakfast], targets: targets({ targets: null, appTargets: null, missing: ["heightCm"] }) });
+    expect(await screen.findByText(/^To see your daily calories and macros, answer /)).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "Nutrients" })).toBeTruthy();
   });
 });

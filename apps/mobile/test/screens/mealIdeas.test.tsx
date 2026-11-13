@@ -95,6 +95,8 @@ async function open(world: World, tab: "Food" | "Dashboard", store = files()) {
   const s = server(world);
   await render(<App extra={extra} ask={s.ask} store={memoryStore(kept(1))} wait={noWait} mealStore={store} />);
   await fireEvent.press(await screen.findByRole("tab", { name: tab }));
+  // The ideas are on the Food tab's What to eat (32c-i).
+  if (tab === "Food") await fireEvent.press(await screen.findByRole("tab", { name: "What to eat" }));
   return s;
 }
 
@@ -272,6 +274,7 @@ describe("why the box has no ideas", () => {
     await open({ ideas: () => ({ status: 200, body: { status: "needs_plan" } }), meals: [] }, "Dashboard");
     expect(await screen.findByText("Finish setting up to see meal ideas.")).toBeTruthy();
     await fireEvent.press(await screen.findByRole("tab", { name: "Food" }));
+    await fireEvent.press(await screen.findByRole("tab", { name: "What to eat" }));
     await waitFor(() => {
       expect(screen.queryByTestId("meal-ideas-box")).toBeNull();
     });
