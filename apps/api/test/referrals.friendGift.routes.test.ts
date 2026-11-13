@@ -102,6 +102,7 @@ d("Refer a friend: the friend's gift (real Postgres)", () => {
     await sql`DELETE FROM gym_referral_links WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM gym_sales WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM gym_held_memberships WHERE gym_id IN (${mine})`;
+    await sql`DELETE FROM gym_app_payments WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM gym_discounts WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM gym_products WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM gym_membership_types WHERE gym_id IN (${mine})`;
@@ -603,6 +604,39 @@ d("Refer a friend: the friend's gift (real Postgres)", () => {
           forProducts: false,
           skipped: { on: "Gold Monthly", day: today, by: "Owner A" },
         });
+      },
+      TIMEOUT_MS,
+    );
+  });
+
+  describe("a friend paying with the gift in the app (18k-v round one)", () => {
+    it(
+      "the owner cannot change the gift while a friend pays with it: the old gift stays live, and the change goes through once the payment ends",
+      async () => {
+        const ownerC = await makeUser("owner-c", "Owner C");
+        const gymC = await makeOrg(ownerC.cookies, "Eastside Gift C");
+        await switchOn(gymC, ownerC.cookies, pct(20));
+        const gift = await friendDiscountOf(gymC.org.id);
+        // Used once already, so a new gift archives this one rather than changing it in place.
+        await sql`UPDATE gym_discounts SET uses = 1 WHERE id = ${gift}`;
+        expect((await post(`/v1/orgs/${gymC.org.id}/membership-types`, gold, ownerC.cookies)).statusCode).toBe(201);
+        const [type] = await sql<{ id: string }[]>`SELECT id FROM gym_membership_types WHERE gym_id = ${gymC.org.id} AND name = 'Gold Monthly'`;
+        const fay = await added(gymC.org.id, ownerC.cookies, { fullName: "Fay Friend", email: "fgift-fay@example.com" });
+        const [paying] = await sql<{ id: string }[]>`
+          INSERT INTO gym_app_payments (gym_id, entry_id, membership_type_id, bought, amount_minor, currency, environment, account_id, location_id,
+            request_key, opened_at, closes_at, link_key, link_id, order_id, url, state, checked_at, discount_id)
+          VALUES (${gymC.org.id}, ${fay.entryId}, ${type?.id ?? null}, '{}'::jsonb, 4000, 'USD', 'sandbox', 'MLFGIFT', 'LFGIFT', gen_random_uuid(),
+            now(), now() + interval '15 minutes', gen_random_uuid(), 'LINKFGIFT', 'ORDERFGIFT', 'https://example.invalid/pay', 'open', now(), ${gift})
+          RETURNING id`;
+        const res = await put(`/v1/orgs/${gymC.org.id}/referral-settings`, { on: true, member: null, friend: pct(30) }, ownerC.cookies);
+        expect(res.statusCode, res.body).toBe(409);
+        expect(errorOf(res)).toBe("discount_being_used");
+        expect(await friendDiscountOf(gymC.org.id)).toBe(gift);
+        expect(await sql`SELECT id FROM gym_discounts WHERE gym_id = ${gymC.org.id} AND archived_at IS NULL`).toHaveLength(1);
+        await sql`UPDATE gym_app_payments SET state = 'done', outcome = 'closed', finished_at = now() WHERE id = ${paying?.id ?? null}`;
+        expect((await put(`/v1/orgs/${gymC.org.id}/referral-settings`, { on: true, member: null, friend: pct(30) }, ownerC.cookies)).statusCode).toBe(200);
+        expect(await friendDiscountOf(gymC.org.id)).not.toBe(gift);
+        await sql`DELETE FROM gym_app_payments WHERE gym_id = ${gymC.org.id}`;
       },
       TIMEOUT_MS,
     );

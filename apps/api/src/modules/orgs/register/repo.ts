@@ -911,6 +911,11 @@ export async function priceBasket(
       if (found.referralGift && (input.entryId === null || !(await friendGiftOpen(tx, input.gymId, input.entryId, found.id, input.today)))) {
         return { kind: "friend_gift_not_theirs" };
       }
+      // Its last uses kept for members paying with it in the app: not the desk's to sell (18k-v round one, H1). A Terminal sale
+      // asked for now is counted past the limit once its card is taken, so it is refused here, before the card is asked.
+      if (found.maxUses !== null && found.uses < found.maxUses && found.uses + found.keptUses >= found.maxUses) {
+        return { kind: "discount_refused", name: found.name, reason: "kept_in_app" };
+      }
       // A code used once per member, on a person's record (18k-v); a walk-in has none to count it on.
       if (found.oncePerMember && input.entryId !== null && (await usedByMember(tx, input.gymId, found.id, input.entryId))) {
         return { kind: "discount_refused", name: found.name, reason: "used_by_member" };

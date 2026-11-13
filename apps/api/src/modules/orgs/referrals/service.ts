@@ -201,11 +201,11 @@ async function freeCode(tx: TransactionSql, gymId: string, gift: ReferralGiftInp
 }
 
 /** What one discount write answered, as the owner reads it. */
-function refused(outcome: { kind: string }): OrgsError {
+function refused(outcome: { kind: string; who?: string | null }): OrgsError {
   if (outcome.kind === "no_currency") return new OrgsError(409, "no_currency", REFERRAL_WORDS.no_currency);
   if (outcome.kind === "too_many") return new OrgsError(409, "too_many", REFERRAL_WORDS.too_many);
   // A friend is paying with the gift in the app: it keeps a use for them until that ends (18k-v).
-  if (outcome.kind === "being_used") return new OrgsError(409, "discount_being_used", DISCOUNT_WORDS.being_used);
+  if (outcome.kind === "being_used") return new OrgsError(409, "discount_being_used", DISCOUNT_WORDS.being_used(outcome.who ?? null));
   return new OrgsError(409, outcome.kind, "We couldn't save that. Please try again.");
 }
 

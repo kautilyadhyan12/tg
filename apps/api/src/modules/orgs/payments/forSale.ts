@@ -15,7 +15,8 @@
 //
 // A promo code the member typed (18k-v) is checked as Buy checks it (`promoFits`): the gym's own, ticked for the app, in its
 // dates, within its uses, once per member where the gym asks; then each line is worked out with it where it fits, in place
-// of the friend's gift. Typing codes is limited apart from reading the list, so nobody tries a gym's codes one by one.
+// of the friend's gift. Codes that take nothing off are counted (`CodeTries`), so nobody tries a gym's codes one by one; once
+// too many were tried, a code is not looked at, and the list says so in words (round one, L2).
 import {
   PROMO_CODE_WORDS,
   cardExpired,
@@ -56,6 +57,13 @@ import type { PaymentsDeps } from "./service.js";
 
 type Limit = () => Promise<boolean>;
 
+/** The codes a member tried that took nothing off (18k-v round one, L2): `spent` once too many, read without counting;
+ *  `miss` counts one more. A code that takes something off is never counted. */
+export interface CodeTries {
+  spent(): Promise<boolean>;
+  miss(): Promise<void>;
+}
+
 const wordingSchema = z.object({ type_id: z.uuid(), id: z.uuid(), version: z.number().int(), body: z.string(), name: z.string().nullable() });
 
 /** The newest wording, not stopped, of the agreement each line sold in the app asks for, by line. */
@@ -75,6 +83,15 @@ async function wordingsOf(sql: Sql, gymId: string): Promise<Map<string, ForSaleL
   return found;
 }
 
+/** The purchase page this reader has open now, theirs or their record's, if any. */
+async function ownOpenPurchase(sql: Sql, gymId: string, userId: string, entryId: string | null): Promise<string | null> {
+  const [row] = await sql<{ id: string }[]>`
+    SELECT id FROM gym_app_payments
+    WHERE gym_id = ${gymId} AND state = 'open' AND membership_type_id IS NOT NULL AND (opened_by = ${userId} OR entry_id = ${entryId})
+    LIMIT 1`;
+  return row?.id ?? null;
+}
+
 /** The record's name and date of birth; a past member's too, whose record comes back on the list by what they buy. */
 async function personOf(sql: Sql, gymId: string, entryId: string): Promise<{ fullName: string; dateOfBirth: string | null } | null> {
   const [row] = await sql<{ full_name: string; date_of_birth: string | null }[]>`
@@ -88,12 +105,11 @@ export async function readForSale(
   gymId: string,
   limit: Limit,
   repeating = false,
-  typed: { text: string; limit: Limit } | null = null,
+  typed: { text: string; tries: CodeTries } | null = null,
 ): Promise<ForSaleResponse | null> {
   const reader = await readerOf(deps.sql, gymId, userId);
   if (reader === null) throw orgNotFound();
   if (!(await limit())) return null;
-  if (typed !== null && !(await typed.limit())) return null;
   const record = reader.entryId === null ? "none" : reader.holders === 1 ? "own" : "shared";
   const gym = await repo.readGym(deps.sql, gymId);
   if (gym === null) throw orgNotFound();
@@ -127,14 +143,21 @@ export async function readForSale(
       ? await ownCardIn(deps.sql, gymId, reader.entryId, deps.square.environment, connection.accountId)
       : null;
   const card = saved === null ? null : { brand: saved.brand, last4: saved.last4, expired: cardExpired(saved, today) };
-  // The code typed: usable by this reader today, before it is tried on each line.
+  // The code typed: usable by this reader today, before it is tried on each line. Their own open page, if any, is not
+  // counted against them: Buy answers it (round one, L1).
   const code = typed === null ? null : promoCodeFrom(typed.text);
-  const found = code === null ? null : await discountByCode(deps.sql, gymId, code, false);
+  let found: Awaited<ReturnType<typeof discountByCode>> = null;
   let promoWords: string | null = null;
   if (typed !== null) {
-    const used = found !== null && found.oncePerMember && own !== null ? await usedByMember(deps.sql, gymId, found.id, own) : false;
-    const fits = promoFits(found === null ? null : { ...found, archived: found.archivedAt !== null }, today, found === null ? 0 : await heldUses(deps.sql, gymId, found.id), used);
-    if (!fits.ok) promoWords = promoRefusalWords(fits.reason, found?.startsOn == null ? null : dayWords(found.startsOn));
+    if (await typed.tries.spent()) {
+      promoWords = PROMO_CODE_WORDS.too_many;
+    } else {
+      found = code === null ? null : await discountByCode(deps.sql, gymId, code, false);
+      const mine = found === null ? null : await ownOpenPurchase(deps.sql, gymId, userId, own);
+      const used = found !== null && found.oncePerMember && own !== null ? await usedByMember(deps.sql, gymId, found.id, own, mine) : false;
+      const fits = promoFits(found === null ? null : { ...found, archived: found.archivedAt !== null }, today, found === null ? 0 : await heldUses(deps.sql, gymId, found.id, mine), used);
+      if (!fits.ok) promoWords = promoRefusalWords(fits.reason, found?.startsOn == null ? null : dayWords(found.startsOn));
+    }
   }
   const usable = promoWords === null ? found : null;
   const items = lines.flatMap((line): ForSaleLine[] => {
@@ -162,6 +185,7 @@ export async function readForSale(
   });
   // Where the code takes something off one line, each line it does not says so; where it fits none, the list says it once.
   const applied = items.some((i) => i.firstPayment.promo !== null);
+  if (typed !== null && !applied && promoWords !== PROMO_CODE_WORDS.too_many) await typed.tries.miss();
   const shown = usable !== null && applied ? items.map((i) => (i.firstPayment.promo === null ? { ...i, promoWords: PROMO_CODE_WORDS.not_for(i.name) } : i)) : items;
   const promo =
     typed === null

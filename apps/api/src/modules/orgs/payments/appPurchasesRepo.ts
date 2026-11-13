@@ -235,8 +235,9 @@ async function purchasableIn(tx: TransactionSql, s: Buying): Promise<Purchasable
     person = own;
   }
   // The code typed (18k-v): the gym's own, ticked for the app, in its dates, within its uses counting those other members'
-  // purchases keep, and not used by this record already where it is once per member. Its row is held from here to the
-  // write, so two purchases never pass each other for its last use, and staff cannot change it meanwhile.
+  // purchases keep, and not used by this record already where it is once per member. Two purchases never pass each other
+  // for its last use: the gym's lock (taken with the record's) orders every writer, the desk's included; its own row is
+  // held too, for a change or an archive of it, which take that row first.
   let promo: { code: string; discount: DiscountRow } | null = null;
   if (s.code !== null) {
     const d = await discountByCode(tx, s.gymId, s.code, true);

@@ -105,7 +105,9 @@ export type DiscountRefusal =
   | "not_for_membership"
   | "other_currency"
   /** A code used once per member, and this record has used it (18k-v): never `discountFits`'s, which reads no person. */
-  | "used_by_member";
+  | "used_by_member"
+  /** Its last uses are kept for members paying with it in the app right now (18k-v round one, H2): not used up. */
+  | "kept_in_app";
 
 /** What a discount is for, as the rule below reads it. */
 export interface DiscountReach {
@@ -185,6 +187,8 @@ export function discountRefusalWords(name: string, reason: DiscountRefusal, use:
       return `${name} does not apply to this product. ${nothingDone(use)}`;
     case "not_for_membership":
       return `${name} does not apply to this membership. ${nothingDone(use)}`;
+    case "kept_in_app":
+      return `${name}'s last use is kept for a member who is paying with it in the app right now. ${nothingDone(use)}`;
     case "used_by_member":
       return `This member has already used ${name}, and it is limited to one use per member. ${nothingDone(use)}`;
     case "other_currency":
@@ -247,6 +251,8 @@ export const gymDiscountSchema = z
     inApp: z.boolean().default(false),
     /** Each person uses it once, at the desk or in the app (18k-v). */
     oncePerMember: z.boolean().default(false),
+    /** Uses kept for members paying with it in the app right now (18k-v round one, H2): counted against its limit. */
+    keptUses: z.number().int().min(0).default(0),
     archivedAt: z.iso.datetime().nullable(),
     updatedAt: z.iso.datetime(),
   })
@@ -365,7 +371,7 @@ export const PROMO_CODE_WORDS = {
   not_for: (name: string): string => `This code doesn't apply to ${name}.`,
   /** One discount a purchase: the code takes the place of the Refer a friend gift the member had on it. */
   instead: "This code replaces your Refer a friend discount. Only one discount can be used.",
-  too_many: "Too many tries. Wait a few minutes and try again.",
+  too_many: "Too many codes tried. Try again in an hour.",
 } as const;
 
 /** The sentence for a refusal of `promoFits`. */
@@ -404,5 +410,6 @@ export const DISCOUNT_WORDS = {
   no_currency: "Set your country in Settings before adding a fixed-amount discount.",
   referral_gift: "This is the Refer a friend gift. Nothing was saved: it is changed in Refer a friend, where the offer is set.",
   /** A member is paying with it in the app (18k-v): it keeps a use for them until their payment ends. */
-  being_used: "You can't change this discount right now because a member is paying with it in the app. Try again in a few minutes.",
+  being_used: (who: string | null): string =>
+    `You can't change this discount right now because ${who ?? "a member"} is paying with it in the app. Try again once their payment is finished.`,
 } as const;

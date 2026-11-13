@@ -159,6 +159,7 @@ export function discountRow(discount, products, types = []) {
     discount.forMemberships ? discountMembershipsWords(discount, types) : null,
     discountDatesWords(discount),
     discountUsesWords(discount),
+    (discount.keptUses ?? 0) > 0 ? `${String(discount.keptUses)} kept for ${discount.keptUses === 1 ? 'a member' : 'members'} paying in the app` : null,
     discount.oncePerMember === true ? 'One use per member' : null,
     discount.inApp === true ? 'Can be used in the app' : null,
   ]

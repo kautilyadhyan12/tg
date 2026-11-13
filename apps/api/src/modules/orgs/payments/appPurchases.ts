@@ -17,6 +17,7 @@ import {
   APP_PAYMENT_WORDS,
   APP_PURCHASE_STAFF_WORDS,
   APP_PURCHASE_WORDS,
+  PROMO_CODE_WORDS,
   appPaymentCloseResponseSchema,
   appPurchaseResponseSchema,
   cardName,
@@ -38,6 +39,7 @@ import { APP_PAYMENT, lookNow, readyForApp, type Told } from "./appPayments.js";
 import { chargeStep } from "./appCardPurchases.js";
 import * as pays from "./appPaymentsRepo.js";
 import * as buys from "./appPurchasesRepo.js";
+import type { CodeTries } from "./forSale.js";
 import { accessContext, type PaymentsDeps } from "./service.js";
 
 /** What the gym's Square Dashboard lists the payment as: no name of the person goes to Square. */
@@ -182,9 +184,18 @@ function refusalOf(outcome: Exclude<buys.PurchasableOutcome, { kind: "ok" }>, gy
 
 /** Buy: Square's page for the line's first payment, as the list showed it to this reader. The same press sent twice is
  *  one page; a page already open for the same line is given back instead of a second. */
-export async function startPurchase(deps: PaymentsDeps, userId: string, gymId: string, body: AppPurchaseRequest, limit: Limit): Promise<Told<AppPurchaseResponse> | null> {
+export async function startPurchase(
+  deps: PaymentsDeps,
+  userId: string,
+  gymId: string,
+  body: AppPurchaseRequest,
+  limit: Limit,
+  tries: CodeTries | null = null,
+): Promise<Told<AppPurchaseResponse> | null> {
   const own = await buyerOf(deps, gymId, userId);
   if (!(await limit())) return null;
+  // Too many codes tried that took nothing off (18k-v round one, L2): the code is not looked at.
+  if (body.code !== undefined && tries !== null && (await tries.spent())) throw new OrgsError(429, "promo_code_tries", PROMO_CODE_WORDS.too_many);
   const same = await pays.readByKey(deps.sql, gymId, body.requestKey);
   if (same !== null) return { answer: sameOr(same, userId, body), tell: null };
   const ready = await readyForApp(deps, gymId);
@@ -210,6 +221,7 @@ export async function startPurchase(deps: PaymentsDeps, userId: string, gymId: s
     now,
   };
   const before = await buys.purchasable(deps.sql, buying);
+  if (before.kind === "promo") await tries?.miss();
   if (before.kind !== "ok") return { answer: refusalOf(before, own.gymName, userId, body), tell: null };
 
   const token = ready.square.tokens.open(ready.row.accessToken ?? "", accessContext(gymId));

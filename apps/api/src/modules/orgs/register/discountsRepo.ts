@@ -45,6 +45,8 @@ export interface DiscountRow {
   inApp: boolean;
   /** Each record uses it once (0238; 18k-v). */
   oncePerMember: boolean;
+  /** Uses kept for members paying with it in the app now (18k-v). */
+  keptUses: number;
   archivedAt: Date | null;
   updatedAt: Date;
 }
@@ -71,6 +73,7 @@ interface RawDiscount {
   referral_gift: boolean;
   in_app: boolean;
   once_per_member: boolean;
+  kept_uses: number;
   archived_at: Date | null;
   updated_at: Date;
 }
@@ -101,6 +104,7 @@ const discount = (r: RawDiscount): DiscountRow => ({
   referralGift: r.referral_gift,
   inApp: r.in_app,
   oncePerMember: r.once_per_member,
+  keptUses: r.kept_uses,
   archivedAt: r.archived_at,
   updatedAt: r.updated_at,
 });
@@ -110,6 +114,7 @@ const columns = (sql: Sql | TransactionSql) => sql`
   d.id, d.name, d.code, d.kind, d.percent_bp, d.amount_minor, d.currency, d.starts_on::text AS starts_on,
   d.ends_on::text AS ends_on, d.max_uses, d.uses, d.for_products, d.all_products, d.for_memberships,
   d.all_membership_types, d.membership_payments, d.referral_gift, d.in_app, d.once_per_member, d.archived_at, d.updated_at,
+  (SELECT count(*)::int FROM gym_app_payments p WHERE p.gym_id = d.gym_id AND p.discount_id = d.id AND p.state = 'open') AS kept_uses,
   COALESCE((SELECT array_agg(p.product_id::text ORDER BY p.product_id)
             FROM gym_discount_products p WHERE p.gym_id = d.gym_id AND p.discount_id = d.id), '{}') AS product_ids,
   COALESCE((SELECT array_agg(m.membership_type_id::text ORDER BY m.membership_type_id)
@@ -194,6 +199,17 @@ export async function takeUse(tx: TransactionSql, gymId: string, discountId: str
   return rows.length === 1;
 }
 
+/** Who is paying with a discount in the app now, as staff read it: the record of the newest open purchase keeping a use of
+ *  it; null where it has none or no name. */
+async function keptBy(tx: TransactionSql, gymId: string, discountId: string): Promise<string | null> {
+  const [row] = await tx<{ name: string | null }[]>`
+    SELECT NULLIF(btrim(e.full_name), '') AS name FROM gym_app_payments p
+    LEFT JOIN gym_member_list_entries e ON e.gym_id = p.gym_id AND e.id = p.entry_id
+    WHERE p.gym_id = ${gymId} AND p.discount_id = ${discountId} AND p.state = 'open'
+    ORDER BY p.opened_at DESC LIMIT 1`;
+  return row?.name ?? null;
+}
+
 /** How many uses of a discount open purchases in the app keep now (18k-v). */
 export async function heldUses(sql: Sql | TransactionSql, gymId: string, discountId: string, exceptPurchase: string | null = null): Promise<number> {
   const [row] = await sql<{ n: number }[]>`SELECT ${keptUses(sql, gymId, discountId, exceptPurchase)} AS n`;
@@ -273,8 +289,8 @@ export type DiscountWriteOutcome =
   /** Refer a friend's friend's gift: changed only in Settings → Refer a friend, by whoever
    *  may set the offer, since every invite link promises it. */
   | { kind: "referral_gift" }
-  /** A member is paying with it in the app: it keeps a use for them until that ends (18k-v). */
-  | { kind: "being_used" };
+  /** A member is paying with it in the app: it keeps a use for them until that ends (18k-v); `who`, their record's name. */
+  | { kind: "being_used"; who: string | null };
 
 async function liveCount(tx: TransactionSql, gymId: string): Promise<number> {
   const [row] = await tx<{ n: number }[]>`
@@ -420,7 +436,7 @@ export async function updateDiscountInTx(
     FOR UPDATE`;
   if (before === undefined) return { kind: "not_found" };
   // Held, then asked: a purchase being written takes this row's lock before it counts what is kept (18k-v).
-  if ((await heldUses(tx, input.gymId, input.discountId)) > 0) return { kind: "being_used" };
+  if ((await heldUses(tx, input.gymId, input.discountId)) > 0) return { kind: "being_used", who: await keptBy(tx, input.gymId, input.discountId) };
   // To the millisecond, which is what the list sends and a form can send back.
   if (input.readAt !== null && before.updated_at.getTime() !== input.readAt.getTime()) return { kind: "changed" };
   const money = await currencyFor(tx, input.gymId, input.kind);
@@ -462,7 +478,7 @@ export async function archiveDiscount(sql: Sql, input: { gymId: string; discount
 /** The same, inside the caller's transaction, which already holds the gym's row lock. */
 export async function archiveDiscountInTx(tx: TransactionSql, input: { gymId: string; discountId: string; actorUserId: string; now: Date }): Promise<DiscountWriteOutcome> {
   const [held] = await tx<{ id: string }[]>`SELECT id FROM gym_discounts WHERE id = ${input.discountId} AND gym_id = ${input.gymId} FOR UPDATE`;
-  if (held !== undefined && (await heldUses(tx, input.gymId, input.discountId)) > 0) return { kind: "being_used" };
+  if (held !== undefined && (await heldUses(tx, input.gymId, input.discountId)) > 0) return { kind: "being_used", who: await keptBy(tx, input.gymId, input.discountId) };
   const [before] = await tx<{ name: string }[]>`
     UPDATE gym_discounts SET archived_at = ${input.now}, updated_at = ${input.now}
     WHERE id = ${input.discountId} AND gym_id = ${input.gymId} AND archived_at IS NULL

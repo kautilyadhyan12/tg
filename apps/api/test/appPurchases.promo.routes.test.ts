@@ -352,10 +352,17 @@ d("A promo code typed in the app: only where the gym meant it, honoured as shown
     expect(messageOf(samBuy)).toBe(PROMO_CODE_WORDS.used_up);
     const desk = await deskGive(gymA, priya.entryId, pack, 9000, { id: summer.id, offMinor: 1800 }, await today(gymA, priya.entryId));
     expect(desk.statusCode, desk.body).toBe(409);
-    expect(errorOf(desk)).toBe("discount_used_up");
+    expect(errorOf(desk)).toBe("discount_kept_in_app");
+    expect(messageOf(desk)).toBe("Summer's last use is kept for a member who is paying with it in the app right now. Nothing was saved: pick another discount, or add the membership without one.");
+    // The Discounts list says the same: nothing used yet, one kept for a member paying in the app.
+    const listed = sellPageResponseSchema.parse(JSON.parse((await send("GET", `/v1/orgs/${gymA.id}/register`, gymA.owner.cookies)).body)).discounts.find((x) => x.id === summer.id);
+    expect(listed).toMatchObject({ uses: 0, keptUses: 1 });
+    // Tara's own list, her page open, still shows her code applied: her own kept use is not counted against her.
+    expect((await listWith(gymA, tara.app, "SUMMER20")).promo).toEqual({ code: "SUMMER20", applied: true, words: null });
     const edit = await change(gymA, summer, "Summer", { percentBp: 9000 });
     expect(edit.statusCode, edit.body).toBe(409);
     expect(errorOf(edit)).toBe("discount_being_used");
+    expect(messageOf(edit)).toBe("You can't change this discount right now because Tara Singh is paying with it in the app. Try again once their payment is finished.");
     const archive = await send("DELETE", `${discounts(gymA)}/${summer.id}`, gymA.owner.cookies);
     expect(errorOf(archive)).toBe("discount_being_used");
     expect(square.links.size).toBe(1);
@@ -372,6 +379,31 @@ d("A promo code typed in the app: only where the gym meant it, honoured as shown
     expect((await listWith(gymA, sam.app, "SUMMER20")).promo?.words).toBe(PROMO_CODE_WORDS.used_up);
     expect(await heldOf(gymA.id, sam.entryId)).toEqual([]);
     expect(await heldOf(gymA.id, priya.entryId)).toEqual([]);
+  });
+
+  it("a sale never takes a use kept for a member paying in the app, and the member is given what they paid for even if a Terminal sale counted past the limit (round one, H1)", async () => {
+    clock = new Date();
+    const gym = await makeGym("Promo Terminal", account(`APTM${uniq().slice(-6)}`));
+    const pack = await addType(gym, { name: "10-class pack" });
+    const both = await addDiscount(gym, "Both ways", { code: "BOTHWAYS", maxUses: 1, forProducts: true, oncePerMember: false });
+    const tara = await member(gym, "Tara Terminal");
+    const page = parsed(await buyPress(gym, tara.app, lineIn(await listWith(gym, tara.app, "BOTHWAYS"), pack)));
+    // The desk sells a towel with the same code while Tara pays: refused before anything is taken (a Terminal sale asks the
+    // same pricing before the card is asked).
+    const product = await send("POST", `/v1/orgs/${gym.id}/register/products`, gym.owner.cookies, { name: "Towel", priceMinor: 2000, taxRateIds: [], stock: null });
+    expect(product.statusCode, product.body).toBe(201);
+    const towel = sellPageResponseSchema.parse(JSON.parse(product.body)).products.find((p) => p.name === "Towel")?.id ?? "";
+    const sale = await send("POST", `/v1/orgs/${gym.id}/register/sales`, gym.owner.cookies, { requestKey: randomUUID(), productId: towel, quantity: 1, entryId: null, method: "cash", totalMinor: 1600, discountId: both.id });
+    expect(sale.statusCode, sale.body).toBe(409);
+    expect(errorOf(sale)).toBe("discount_kept_in_app");
+    expect(await usesOf(both.id)).toBe(0);
+    // A Terminal sale asked for before her page was made is counted past the limit once its card is taken (recordTakenSale):
+    // her use was kept, so she is still given what she paid for.
+    await sql`UPDATE gym_discounts SET uses = 1 WHERE id = ${both.id}`;
+    expect(square.payLink(linkOf(page.purchase.id)?.id ?? "")).toBe(true);
+    expect((await check(gym, tara.app, page.purchase.id)).purchase.state).toBe("paid");
+    expect(await heldOf(gym.id, tara.entryId)).toEqual([{ discount_id: both.id, discount_minor: 1800, price_minor: 7200 }]);
+    expect(await usesOf(both.id)).toBe(2);
   });
 
   it("two members press Buy for a code's last use at the same instant: one page, and a page left unpaid gives its use back", async () => {
@@ -435,6 +467,14 @@ d("A promo code typed in the app: only where the gym meant it, honoured as shown
     // Somebody else may, at the desk; a walk-in has no record to count it on.
     expect((await deskGive(gym, sam.entryId, pass, 1500, { id: welcome.id, offMinor: 1000 }, day)).statusCode).toBe(201);
     expect((await sale(null)).statusCode).toBe(201);
+    // A sale voided gives the use back: Lee buys a shaker with it, it is voided, and the code works for Lee in the app.
+    const lee = await member(gym, "Lee Void");
+    const leeSale = await sale(lee.entryId);
+    expect(leeSale.statusCode, leeSale.body).toBe(201);
+    expect((await listWith(gym, lee.app, "WELCOME")).promo?.words).toBe(PROMO_CODE_WORDS.used_by_member);
+    const saleId = (JSON.parse(leeSale.body) as { saleId: string }).saleId;
+    expect((await send("POST", `/v1/orgs/${gym.id}/register/sales/${saleId}/void`, gym.owner.cookies, { reason: "mistake" })).statusCode).toBe(200);
+    expect((await listWith(gym, lee.app, "WELCOME")).promo?.applied).toBe(true);
     // Sam, who used it at the desk, reads it used in the app too.
     expect((await listWith(gym, sam.app, "WELCOME")).promo?.words).toBe(PROMO_CODE_WORDS.used_by_member);
     // The gym unticks Once per member: Tara can use it again.
@@ -493,21 +533,40 @@ d("A promo code typed in the app: only where the gym meant it, honoured as shown
     expect((await listWith(gym, mo.app, "SOON")).promo?.words).toBe(PROMO_CODE_WORDS.not_started("1 Jan 2099"));
   });
 
-  it("typing codes is limited apart from reading the list, so a gym's codes are never tried one by one", async () => {
+  it("codes that take nothing off are counted, never one that works; once too many, a code is not looked at and the list says so (round one, L2)", async () => {
     clock = new Date();
     const gym = await makeGym("Promo Limit", account(`APLM${uniq().slice(-6)}`));
     await addType(gym, { name: "10-class pack" });
+    await addDiscount(gym, "Real one", { code: "REAL20", oncePerMember: false });
     const kim = await member(gym, "Kim Tries");
+    const tries = async () => Number((await redis.get(`rl:promo_code_try:id:${kim.app.userId}`)) ?? 0);
+    for (let n = 0; n < 19; n++) await redis.incrWithTtl(`rl:promo_code_try:id:${kim.app.userId}`, 3600);
+    // A code that works, read again and again as the phone re-reads the list, is never counted.
+    for (let n = 0; n < 3; n++) expect((await listWith(gym, kim.app, "REAL20")).promo?.applied).toBe(true);
+    expect(await tries()).toBe(19);
+    // The twentieth that takes nothing off is counted, and from then on no code is looked at, the real one included: the
+    // list is read as ever, and says why in words.
+    expect((await listWith(gym, kim.app, "GUESS20")).promo?.words).toBe(PROMO_CODE_WORDS.not_found);
+    expect(await tries()).toBe(20);
+    const spent = await listWith(gym, kim.app, "REAL20");
+    expect(spent.promo).toEqual({ code: "REAL20", applied: false, words: PROMO_CODE_WORDS.too_many });
+    expect(spent.items).toHaveLength(1);
+    expect(spent.items[0]?.firstPayment.amountMinor).toBe(9000);
+    // Buy with a code is refused in the same words; the list and Buy without one are not.
     const [pack] = (await listWith(gym, kim.app, null)).items;
     if (pack === undefined) throw new Error("the line is not listed");
-    for (let n = 0; n < 19; n++) await redis.incrWithTtl(`rl:promo_code_try:id:${kim.app.userId}`, 3600);
-    expect((await listWith(gym, kim.app, "GUESS20")).promo?.words).toBe(PROMO_CODE_WORDS.not_found);
-    const tooMany = await send("GET", `/v1/orgs/${gym.id}/for-sale?code=GUESS21`, kim.app.cookies);
-    expect(tooMany.statusCode).toBe(429);
-    // Buy with a code is a try too; the list without one, and Buy without one, are not.
-    expect((await buyPress(gym, kim.app, pack, { code: "GUESS22" })).statusCode).toBe(429);
-    expect((await listWith(gym, kim.app, null)).items).toHaveLength(1);
+    const buyWith = await buyPress(gym, kim.app, pack, { code: "REAL20" });
+    expect(buyWith.statusCode).toBe(429);
+    expect(messageOf(buyWith)).toBe(PROMO_CODE_WORDS.too_many);
     expect(parsed(await buyPress(gym, kim.app, pack)).purchase.amountMinor).toBe(9000);
+    // One wi-fi address is held to 600: another member there, who tried nothing, is told the same.
+    const ann = await member(gym, "Ann Same Wifi");
+    const wifi = "10.99.0.7";
+    for (let n = 0; n < 600; n++) await redis.incrWithTtl(`rl:promo_code_try:ip:${wifi}`, 3600);
+    const there = await api().inject({ method: "GET", url: `/v1/orgs/${gym.id}/for-sale?code=REAL20`, remoteAddress: wifi, cookies: ann.app.cookies });
+    expect(there.statusCode, there.body).toBe(200);
+    expect(forSaleResponseSchema.parse(JSON.parse(there.body)).promo?.words).toBe(PROMO_CODE_WORDS.too_many);
+    expect((await listWith(gym, ann.app, "REAL20")).promo?.applied).toBe(true);
   });
 
   it("staff tick a code for the app only on memberships, and read both ticks on the Discounts list; a stranger changes nothing", async () => {

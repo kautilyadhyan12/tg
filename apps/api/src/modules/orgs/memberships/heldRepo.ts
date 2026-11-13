@@ -76,7 +76,7 @@ import {
 import { typeAskedSql } from "../agreement/repo.js";
 import { insertAudit, insertAudits } from "../repo.js";
 import { lockEntries, lockGym } from "../memberList/repo.js";
-import { lockedDiscount, takeUse, usedByMember } from "../register/discountsRepo.js";
+import { countUse, lockedDiscount, takeUse, usedByMember } from "../register/discountsRepo.js";
 import { friendGiftOpen } from "../referrals/friendGiftRepo.js";
 import { giftUseUndone, giveMemberGift, lockedWaitingGift, markUsed } from "../referrals/memberGiftRepo.js";
 import { ratesOf, taxIncludedOf } from "../register/taxRepo.js";
@@ -846,12 +846,17 @@ export async function giveHeldIn(tx: TransactionSql, input: GiveHeldInput): Prom
 
   // The discount is this gym's own, read under its lock, judged on the gym's own day,
   // and what it takes off is worked out again here: nothing is given at any other price.
-  let used: { id: string; name: string; offMinor: number; payments: MembershipPayments; heldPriceMinor: number; firstBillMinor: number } | null = null;
+  let used: { id: string; name: string; offMinor: number; payments: MembershipPayments; heldPriceMinor: number; firstBillMinor: number; full: boolean } | null = null;
   if (input.discount !== null) {
     const found = await lockedDiscount(tx, input.gymId, input.discount.id);
     if (found === null) return { kind: "discount_not_found" };
     const purchase = input.purchase ?? null;
-    const fits = discountFits({ ...found, archived: found.archivedAt !== null }, { today: purchase?.boughtOn ?? input.today, membershipTypeId: type.id, currency: type.currency });
+    // A purchase in the app kept one use of it while it was paid: that use is the member's, whatever was counted meanwhile
+    // (a Terminal sale counts past the limit once its card is taken; round one, H1).
+    const fits = discountFits(
+      { ...found, archived: found.archivedAt !== null, maxUses: purchase === null ? found.maxUses : null },
+      { today: purchase?.boughtOn ?? input.today, membershipTypeId: type.id, currency: type.currency },
+    );
     if (!fits.ok) return { kind: "discount_refused", name: found.name, reason: fits.reason };
     // Refer a friend's gift goes only to the friend it is for, once (20e-ii-b-i).
     if (found.referralGift && !(await friendGiftOpen(tx, input.gymId, input.entryId, found.id, input.today))) return { kind: "friend_gift_not_theirs" };
@@ -862,7 +867,7 @@ export async function giveHeldIn(tx: TransactionSql, input: GiveHeldInput): Prom
     const costs = membershipDiscount(found, type);
     if (!costs.ok) return costs.reason === "nothing_off" ? { kind: "discount_nothing_off", name: found.name } : { kind: "discount_nothing_to_pay" };
     if (costs.offMinor !== input.discount.shownOffMinor) return { kind: "discount_changed" };
-    used = { id: found.id, name: found.name, ...costs };
+    used = { id: found.id, name: found.name, ...costs, full: found.maxUses !== null && found.uses >= found.maxUses };
   }
   const priceMinor = used === null ? type.priceMinor : used.heldPriceMinor;
   const firstListed = used === null ? type.priceMinor : used.firstBillMinor;
@@ -925,7 +930,14 @@ export async function giveHeldIn(tx: TransactionSql, input: GiveHeldInput): Prom
   }
 
   // One use, in one statement that will not pass the limit, in this same transaction.
-  if (used !== null && !(await takeUse(tx, input.gymId, used.id, input.purchase?.id ?? null))) return { kind: "discount_refused", name: used.name, reason: "used_up" };
+  if (used !== null) {
+    if (input.purchase != null) {
+      await countUse(tx, input.gymId, used.id);
+    } else if (!(await takeUse(tx, input.gymId, used.id))) {
+      // Full only by the uses kept for members paying in the app: said as that, not as used up (round one, H2).
+      return { kind: "discount_refused", name: used.name, reason: used.full ? "used_up" : "kept_in_app" };
+    }
+  }
 
   const [created] = await tx<{ id: string }[]>`
     INSERT INTO gym_held_memberships

@@ -485,7 +485,7 @@ function throwOnDiscountFailure(outcome: discounts.DiscountWriteOutcome): void {
     case "referral_gift":
       throw new OrgsError(409, "referral_gift_in_settings", DISCOUNT_WORDS.referral_gift);
     case "being_used":
-      throw new OrgsError(409, "discount_being_used", DISCOUNT_WORDS.being_used);
+      throw new OrgsError(409, "discount_being_used", DISCOUNT_WORDS.being_used(outcome.who));
     default: {
       const never: never = outcome;
       throw new Error(`unhandled discount outcome: ${JSON.stringify(never)}`);

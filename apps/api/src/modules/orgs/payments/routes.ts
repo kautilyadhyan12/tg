@@ -136,7 +136,7 @@ import * as cardCharges from "./cardCharges.js";
 import * as cardRefunds from "./cardRefunds.js";
 import * as cards from "./cards.js";
 import * as failedPayments from "./failedPayments.js";
-import { readForSale } from "./forSale.js";
+import { readForSale, type CodeTries } from "./forSale.js";
 import * as appPayments from "./appPayments.js";
 import * as appPurchases from "./appPurchases.js";
 import * as refundsToReview from "./refundsToReview.js";
@@ -604,9 +604,21 @@ export function registerPaymentRoutes(app: FastifyInstance, deps: Omit<service.P
   const myCardWriteLimit = createDualRateLimit({ name: "my_card_write", max: 10, ipMax: 300, windowMs: HOUR_MS, identifier: byPerson, redis: deps.redis });
   // The phone asks each time the page opens, the whole gym on one address.
   const forSaleLimit = createDualRateLimit({ name: "for_sale_read", max: 600, ipMax: 30_000, windowMs: HOUR_MS, identifier: byPerson, redis: deps.redis });
-  // A promo code typed (18k-v): a member tries a code or two; the whole gym is on one wi-fi address. Kept apart from reading
-  // the list, so a gym's codes are never tried one by one.
-  const promoCodeLimit = createDualRateLimit({ name: "promo_code_try", max: 20, ipMax: 600, windowMs: HOUR_MS, identifier: byPerson, redis: deps.redis });
+  // A promo code typed (18k-v): codes that took nothing off are counted, 20 an hour a person and 600 an address (the whole gym
+  // on one wi-fi), so a gym's codes are never tried one by one; a code that works is never counted (round one, L2).
+  const PROMO_TRIES = { max: 20, ipMax: 600, seconds: HOUR_MS / 1000 };
+  const codeTries = (req: FastifyRequest): CodeTries => {
+    const keys = [`rl:promo_code_try:id:${callerId(req)}`, `rl:promo_code_try:ip:${req.ip}`] as const;
+    return {
+      spent: async () => {
+        const [id, ip] = await Promise.all([deps.redis.get(keys[0]), deps.redis.get(keys[1])]);
+        return Number(id ?? 0) >= PROMO_TRIES.max || Number(ip ?? 0) >= PROMO_TRIES.ipMax;
+      },
+      miss: async () => {
+        await Promise.all(keys.map((k) => deps.redis.incrWithTtl(k, PROMO_TRIES.seconds)));
+      },
+    };
+  };
   // Membership first and the limit after it: a stranger's 404 is never a 429.
   const gate = (limit: typeof myCardReadLimit, req: FastifyRequest, reply: FastifyReply) => async (): Promise<boolean> => {
     await limit(req, reply);
@@ -694,10 +706,8 @@ export function registerPaymentRoutes(app: FastifyInstance, deps: Omit<service.P
     if (params === null) return;
     const body = parseOr400(appPurchaseRequestSchema, req.body, req, reply);
     if (body === null) return;
-    // A code sent with Buy is a try too (18k-v): Buy says why a code cannot be used.
-    const pay = gate(appPayLimit, req, reply);
-    const tries = gate(promoCodeLimit, req, reply);
-    const done = await appPurchases.startPurchase(paymentsDeps, callerId(req), params.gymId, body, body.code === undefined ? pay : async () => (await pay()) && (await tries()));
+    // A code sent with Buy that takes nothing off is a try too (18k-v): Buy says why a code cannot be used.
+    const done = await appPurchases.startPurchase(paymentsDeps, callerId(req), params.gymId, body, gate(appPayLimit, req, reply), codeTries(req));
     if (done === null) return;
     told(params.gymId, done.tell);
     return reply.status(200).header("cache-control", "no-store").send(done.answer);
@@ -726,7 +736,7 @@ export function registerPaymentRoutes(app: FastifyInstance, deps: Omit<service.P
     if (params === null) return;
     const query = parseOr400(forSaleQuerySchema, req.query, req, reply);
     if (query === null) return;
-    const typed = query.code === undefined ? null : { text: query.code, limit: gate(promoCodeLimit, req, reply) };
+    const typed = query.code === undefined ? null : { text: query.code, tries: codeTries(req) };
     const list = await readForSale(paymentsDeps, callerId(req), params.gymId, gate(forSaleLimit, req, reply), query.repeating === "true", typed);
     if (list === null) return;
     return reply.status(200).header("cache-control", "no-store").send(list);
