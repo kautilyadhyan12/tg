@@ -1,11 +1,8 @@
 // APP PAYMENTS TO REVIEW, ON OVERVIEW (ROADMAP 18k-vi; Kd, rulings/2026-11-12-20g.md). THE WORST THING is a member whose
 // money Square took left off the list, so nobody gives them what they paid for. So a row is what the person's page says, by
-// the page's own rules: a membership's newest page for one of its bills that ended needing a check, while that bill's period
-// is the one a payment is taken for now (`owedPeriodOf`); a fee's newest, while the fee is open; a purchase, until it is
-// marked as checked. The whole gym is read at once, never one page a person.
-//
-// One case the page shows and this does not differ on: a membership that is over and is not among the page's newest 30 of
-// those (`HELD_EARLIER_PAGE`) is said here and not on the page; never the other way round.
+// the page's own rules: each bill's newest page that ended needing a check, while that bill's period is the one a payment is
+// taken for now (`owedPeriodOf`); a fee's newest, while the fee is open; a purchase, until it is marked as resolved. The
+// whole gym is read at once, never one page a person.
 import {
   APP_PAYMENT_CHECKS_PEOPLE,
   APP_PAYMENT_CHECKS_ROWS,
