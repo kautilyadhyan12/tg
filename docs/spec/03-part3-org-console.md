@@ -3870,7 +3870,30 @@ codes on products, as Gymdesk and Mindbody do them.
   rewrites no sale, and the database refuses to delete a discount a sale points at. The day's list, a person's purchases and the note under the day's
   total say it; the total is what was paid.
 - **Not built**: discounts on memberships (18b-ii-b, below); two discounts on one sale; a sale
-  for nothing; a code a member types in their own app (18k); discounts in Reports.
+  for nothing; a code a member types in their own app (built by 18k-v, below); discounts in Reports.
+
+**As built, 18k-v (2026-11-13; `rulings/2026-11-13-18k-v.md`).** A promo code typed in the app, on a membership.
+- **Two ticks on a code**, under "How SPRING20 can be used" (`gym_discounts.in_app`, `once_per_member`, `0239`): **Members
+  can enter this code in the app** (a code for memberships only) and **Limit to one use per member** (each record uses it
+  once, at the desk or in the app; a walk-in has no record to count it on). Both ticked on a new code (Kd, 2026-11-13);
+  both off on every code made before. The older box reads "Limit how many times it can be used in total". Refer a
+  friend's own code is never typed.
+- **The app's list with a code** (`GET /for-sale?code=`): the code checked as Buy checks it (`promoFits`: the gym's own,
+  ticked, in its dates, within its uses counting those kept, once per member), then each line worked out with it where
+  it fits, in place of the friend's gift (one discount a membership; the line says the code is used instead). A line it
+  does not fit says so; a code that fits none, or cannot be used, says why once.
+- **Buy with a code** keeps one use of it while the member pays (`gym_app_payments.discount_id`, open): nobody else
+  takes its last use meanwhile (the desk's count reads it too), and staff cannot change or archive it ("You can't change
+  this discount right now because a member is paying with it in the app."). A page left unpaid gives the use back. Paid, the membership is
+  given with the code as it was on the day Buy was pressed.
+- **Typing codes is limited**: codes that take nothing off are counted (20 an hour a person, 600 an address), Buy with a code
+  included; a code that works is never counted. Once too many, no code is looked at, and the list is read as ever with
+  "Too many codes tried. Try again in an hour."
+- **A kept use is the member's**: a sale at the desk, or one asked of the Terminal, is refused it ("Summer's last use is kept
+  for a member who is paying with it in the app right now."; the Discounts row adds "· 1 kept for a member paying in the
+  app"), and a member who paid is given it even where a Terminal sale asked before their page counted past the limit.
+- **Not built**: the phone's box for it (Stage 5 item 20j); a code for named members only (a code with 1 use sent to
+  one member does it).
 
 **As built, 18b-ii-b (2026-10-14; `rulings/2026-10-14-18b-ii-b.md`).** The same discounts on
 memberships.

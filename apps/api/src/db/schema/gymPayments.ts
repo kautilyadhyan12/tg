@@ -4,7 +4,7 @@ import { citext, createdAt } from "./common.js";
 import { users } from "./identity.js";
 import { gymMemberListEntries } from "./memberList.js";
 import { gymHeldMemberships, gymMemberPayments } from "./memberships.js";
-import { gymSales } from "./register.js";
+import { gymDiscounts, gymSales } from "./register.js";
 import { gyms } from "./tenancy.js";
 
 /** A gym's own payment company (0142; ROADMAP 18d-i): Square today, one row a gym and
@@ -942,6 +942,8 @@ export const gymAppPayments = pgTable(
     /** Paid with the member not asking (0237; 20h): owed one Payment received notification, until sent or read. */
     pushDueAt: timestamp("push_due_at", { withTimezone: true }),
     pushClaimedAt: timestamp("push_claimed_at", { withTimezone: true }),
+    /** The discount a purchase is bought with (0239; 18k-v): while it is open, it keeps one use of it. */
+    discountId: uuid("discount_id"),
   },
   (t) => [
     check("gym_app_payments_taken_check", sql`${t.takenMinor} IS NULL OR ${t.takenMinor} BETWEEN 0 AND 99999999`),
@@ -975,6 +977,11 @@ export const gymAppPayments = pgTable(
     check("gym_app_payments_charge_code_check", sql`${t.chargeCode} IS NULL OR (${t.cardId} IS NOT NULL AND ${t.chargeCode} ~ '^[A-Z0-9_]{1,60}$')`),
     check("gym_app_payments_cleared_check", sql`${t.clearedBy} IS NULL OR ${t.clearedAt} IS NOT NULL`),
     check("gym_app_payments_state_check", sql`${t.state} IN ('open','done')`),
+    foreignKey({ name: "gym_app_payments_discount_fk", columns: [t.gymId, t.discountId], foreignColumns: [gymDiscounts.gymId, gymDiscounts.id] }),
+    check("gym_app_payments_discount_check", sql`${t.discountId} IS NULL OR ${t.membershipTypeId} IS NOT NULL`),
+    index("gym_app_payments_discount_idx")
+      .on(t.gymId, t.discountId)
+      .where(sql`${t.state} = 'open' AND ${t.discountId} IS NOT NULL`),
     check(
       "gym_app_payments_outcome_check",
       sql`(${t.state} = 'open') = (${t.outcome} IS NULL AND ${t.finishedAt} IS NULL) AND (${t.outcome} IS NULL OR ${t.outcome} IN ('paid','closed','not_recorded','gone','no_answer'))`,

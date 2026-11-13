@@ -31,6 +31,7 @@ import {
   myCancelLines,
   myCancelOwedNote,
   myCancelPaidByLine,
+  myCancelReasonResponseSchema,
   myCancelWays,
   periodStart,
   type AppCancelsResponse,
@@ -41,6 +42,7 @@ import {
   type MyCancelFacts,
   type MyCancelPayment,
   type MyCancelReason,
+  type MyCancelReasonResponse,
   type MyCancelRequest,
   type MyCancelWhen,
 } from "@app/shared";
@@ -366,13 +368,13 @@ export async function cancelInApp(deps: CancelDeps, userId: string, gymId: strin
 }
 
 /** Why they are leaving, once the cancel is done: theirs alone to answer, once. */
-export async function setCancelReason(deps: CancelDeps, userId: string, gymId: string, cancelId: string, reason: MyCancelReason, limit: Limit): Promise<{ reason: MyCancelReason } | null> {
+export async function setCancelReason(deps: CancelDeps, userId: string, gymId: string, cancelId: string, reason: MyCancelReason, limit: Limit): Promise<MyCancelReasonResponse | null> {
   const reader = await repo.readerOf(deps.sql, gymId, userId);
   if (reader === null) throw new OrgsError(404, "org_not_found", "Organisation not found.");
   if (!(await limit())) return null;
   const stands = await cancels.setReason(deps.sql, gymId, cancelId, userId, reason, deps.now());
   if (stands === null) throw new OrgsError(404, "cancel_not_found", "Cancel not found.");
-  return { reason: stands };
+  return myCancelReasonResponseSchema.parse({ reason: stands });
 }
 
 /** Overview's Cancelled in the app, for staff who keep the member list. */

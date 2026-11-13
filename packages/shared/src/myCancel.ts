@@ -139,6 +139,10 @@ export const MY_CANCEL_REASON_QUESTION = "Why are you leaving?";
 export const myCancelReasonRequestSchema = z.object({ reason: myCancelReasonSchema }).strict();
 export type MyCancelReasonRequest = z.infer<typeof myCancelReasonRequestSchema>;
 
+/** The reason route's answer: the reason now kept. */
+export const myCancelReasonResponseSchema = z.object({ reason: myCancelReasonSchema }).strict();
+export type MyCancelReasonResponse = z.infer<typeof myCancelReasonResponseSchema>;
+
 export const myCancelDoneSchema = z
   .object({
     cancelId: z.uuid(),

@@ -9,13 +9,17 @@
 // says it is paid it is given by `giveHeldIn`, told exactly what the screen showed, so a line changed meanwhile gives
 // nothing and the money is kept for staff to check. While a page is open the price list holds its line (`holdsLine`).
 import {
+  PROMO_CODE_WORDS,
   appPurchaseBoughtSchema,
+  dayWords,
   discountFits,
   forSaleWorked,
   giveHeldMembership,
   heldMembershipView,
   isUnder18,
   paymentOverdue,
+  promoFits,
+  promoRefusalWords,
   type AppPurchaseBought,
   type AppPurchaseBuyer,
   type AppPurchaseCheck,
@@ -24,6 +28,7 @@ import {
   type AppPurchaseSign,
   type DeskSigner,
   type ForSaleFriendGift,
+  type ForSalePromo,
 } from "@app/shared";
 import type { Sql, TransactionSql } from "postgres";
 import { forSaleKeyOf } from "../agreement/factsKey.js";
@@ -34,6 +39,7 @@ import { feesFor } from "../memberships/feesRepo.js";
 import { giveHeldIn, lockedEntry, settle, wouldRefuseGiving } from "../memberships/heldRepo.js";
 import { friendGiftOffer } from "../referrals/friendGift.js";
 import { waitingGiftFor } from "../referrals/memberGiftRepo.js";
+import { discountByCode, heldUses, usedByMember, type DiscountRow } from "../register/discountsRepo.js";
 import { taxIncludedOf } from "../register/taxRepo.js";
 import { insertAudit } from "../repo.js";
 import { cardCheckIn, type OwnCard } from "./appCardPurchasesRepo.js";
@@ -60,6 +66,8 @@ export interface Buying {
   agreement: { agreementId: string; signer: DeskSigner; name: string } | null;
   /** A repeating line (18k-iv): the tick read and the bank's check, paid with their card; null for a line paid once. */
   charge: { words: string; verificationToken: string | null } | null;
+  /** A promo code they typed (18k-v), as the list kept it; null for none. */
+  code: string | null;
   /** The Square account the gym is connected to: their card is the one saved in it. */
   square: { environment: SquareEnvironment; accountId: string };
   /** The Square account's own money: a line priced in another is not sent. */
@@ -86,7 +94,9 @@ export type PurchasableOutcome =
   | { kind: "card_needed" | "card_no_record" | "card_expired" | "card_stopped" | "card_paused" | "card_changed" }
   | { kind: "renewing_held"; name: string }
   /** Money of theirs is overdue: paid first (18l). */
-  | { kind: "owed"; amountMinor: number; currency: string };
+  | { kind: "owed"; amountMinor: number; currency: string }
+  /** The code typed cannot be used now, or takes nothing off this line (18k-v): the member's own sentence. */
+  | { kind: "promo"; words: string };
 
 /** The newest wording of the agreement a line asks for today, or null for none: the main agreement unless the line is
  *  ticked on another, as a membership of it is signed (`agreementForMembership`). */
@@ -108,13 +118,22 @@ async function friendGiftFor(tx: SqlOrTx, gymId: string, entryId: string, typeId
   return fits.ok ? { id: d.id, name: d.name, kind: d.kind, percentBp: d.percentBp, amountMinor: d.amountMinor, membershipPayments: d.membershipPayments } : null;
 }
 
-/** The line as this record would buy it now, with what buying it gives; null where it is not sold in the app now. */
+/** A code's discount as a line reads it (18k-v), where it fits that line today; null where it does not. */
+export function promoFor(d: DiscountRow | null, code: string | null, line: { typeId: string; currency: string }, today: string): ForSalePromo | null {
+  if (d === null || code === null) return null;
+  const fits = discountFits({ ...d, archived: d.archivedAt !== null }, { today, membershipTypeId: line.typeId, currency: line.currency });
+  return fits.ok ? { id: d.id, code, name: d.name, kind: d.kind, percentBp: d.percentBp, amountMinor: d.amountMinor, membershipPayments: d.membershipPayments } : null;
+}
+
+/** The line as this record would buy it now, with what buying it gives; null where it is not sold in the app now.
+ *  `promo`: the code typed and its discount, already found usable by this record today (18k-v). */
 export async function workedFor(
   tx: SqlOrTx,
-  s: { gymId: string; entryId: string | null; typeId: string; gymName: string; today: string; personName: string },
+  s: { gymId: string; entryId: string | null; typeId: string; gymName: string; today: string; personName: string; promo?: { code: string; discount: DiscountRow } | null },
 ): Promise<{ worked: NonNullable<ReturnType<typeof forSaleWorked>>; m: ReturnType<typeof giveHeldMembership> } | null> {
   const line = await soldInAppLine(tx, s.gymId, s.typeId);
   if (line === null) return null;
+  const promo = s.promo == null ? null : promoFor(s.promo.discount, s.promo.code, { typeId: s.typeId, currency: line.type.currency }, s.today);
   const [contact, billDay, taxIncluded] = await Promise.all([gymContact(tx, s.gymId), billDayOf(tx, s.gymId), taxIncludedOf(tx, s.gymId)]);
   if (taxIncluded === null) return null;
   const [friendGift, memberGift] =
@@ -132,6 +151,7 @@ export async function workedFor(
     personName: s.personName,
     friendGift,
     memberGift: memberGift === null ? null : { id: memberGift.id, kind: memberGift.kind, percentBp: memberGift.percentBp, amountMinor: memberGift.amountMinor, currency: memberGift.currency },
+    promo,
   });
   if (worked === null) return null;
   return { worked, m: giveHeldMembership(line.type, s.today, false, s.today, billDay) };
@@ -214,9 +234,22 @@ async function purchasableIn(tx: TransactionSql, s: Buying): Promise<Purchasable
     if (own === null) return { kind: "entry_not_found" };
     person = own;
   }
-  const found = await workedFor(tx, { gymId: s.gymId, entryId: landsOn, typeId: s.typeId, gymName: s.gymName, today: s.today, personName: person.fullName });
+  // The code typed (18k-v): the gym's own, ticked for the app, in its dates, within its uses counting those other members'
+  // purchases keep, and not used by this record already where it is once per member. Two purchases never pass each other
+  // for its last use: the gym's lock (taken with the record's) orders every writer, the desk's included; its own row is
+  // held too, for a change or an archive of it, which take that row first.
+  let promo: { code: string; discount: DiscountRow } | null = null;
+  if (s.code !== null) {
+    const d = await discountByCode(tx, s.gymId, s.code, true);
+    const used = d !== null && d.oncePerMember && landsOn !== null ? await usedByMember(tx, s.gymId, d.id, landsOn) : false;
+    const fits = promoFits(d === null ? null : { ...d, archived: d.archivedAt !== null }, s.today, d === null ? 0 : await heldUses(tx, s.gymId, d.id), used);
+    if (!fits.ok) return { kind: "promo", words: promoRefusalWords(fits.reason, d?.startsOn == null ? null : dayWords(d.startsOn)) };
+    if (d !== null) promo = { code: s.code, discount: d };
+  }
+  const found = await workedFor(tx, { gymId: s.gymId, entryId: landsOn, typeId: s.typeId, gymName: s.gymName, today: s.today, personName: person.fullName, promo });
   if (found === null || !found.m.ok) return { kind: "changed" };
   const { item, given } = found.worked;
+  if (promo !== null && item.firstPayment.promo === null) return { kind: "promo", words: PROMO_CODE_WORDS.not_for(item.name) };
   // Money overdue on their own record is paid before anything new is bought (18l; Kd, 2026-11-12): by the gym's own
   // days of grace, the rule the bill on their page and the booking stop read (17i), in the line's own money.
   const late = landsOn === null ? null : await overdueOwed(tx, s.gymId, landsOn, s.today, item.currency);
@@ -304,10 +337,11 @@ export async function writeOpenPurchase(sql: Sql, s: NewPurchase): Promise<OpenP
     const closesAt = check.deadline !== null && check.deadline < s.closesAt ? check.deadline : s.closesAt;
     await tx`
       INSERT INTO gym_app_payments (id, gym_id, entry_id, membership_type_id, bought, amount_minor, currency, environment, account_id,
-                                    location_id, request_key, opened_by, opened_at, closes_at, link_key, link_id, order_id, url, state, checked_at)
+                                    location_id, request_key, opened_by, opened_at, closes_at, link_key, link_id, order_id, url, state, checked_at,
+                                    discount_id)
       VALUES (${s.id}, ${s.gymId}, ${check.landsOn}, ${s.typeId}, ${tx.json(check.bought)}, ${s.amountMinor}, ${check.currency}, ${s.environment},
               ${s.accountId}, ${s.locationId}, ${s.requestKey}, ${s.openedBy}, ${s.now}, ${closesAt}, ${s.linkKey}, ${s.linkId}, ${s.orderId},
-              ${s.url}, 'open', ${s.now})`;
+              ${s.url}, 'open', ${s.now}, ${check.bought.discount?.id ?? null})`;
     const [written] = await tx<RawPay[]>`SELECT ${COLUMNS(tx)} FROM gym_app_payments a WHERE a.gym_id = ${s.gymId} AND a.id = ${s.id}`;
     if (written === undefined) throw new Error("a purchase page just written was not read back");
     return { kind: "new", row: toRow(written) };
@@ -340,10 +374,10 @@ export async function writeOpenCharge(sql: Sql, s: NewCharge): Promise<OpenPurch
     await tx`
       INSERT INTO gym_app_payments (id, gym_id, entry_id, membership_type_id, bought, amount_minor, currency, environment, account_id, location_id,
                                     request_key, opened_by, opened_at, closes_at, card_id, card_customer_id, card_brand, card_last4, state,
-                                    checking_until, checked_at)
+                                    checking_until, checked_at, discount_id)
       VALUES (${s.id}, ${s.gymId}, ${check.landsOn}, ${s.typeId}, ${tx.json(check.bought)}, ${s.amountMinor}, ${check.currency}, ${s.square.environment},
               ${s.square.accountId}, ${s.locationId}, ${s.requestKey}, ${s.openedBy}, ${s.now}, ${s.closesAt}, ${check.card.cardId}, ${check.card.customerId},
-              ${check.card.brand}, ${check.card.last4}, 'open', ${s.leaseUntil}, ${s.now})`;
+              ${check.card.brand}, ${check.card.last4}, 'open', ${s.leaseUntil}, ${s.now}, ${check.bought.discount?.id ?? null})`;
     const [written] = await tx<RawPay[]>`SELECT ${COLUMNS(tx)} FROM gym_app_payments a WHERE a.gym_id = ${s.gymId} AND a.id = ${s.id}`;
     if (written === undefined) throw new Error("a card purchase just written was not read back");
     return { kind: "new", row: toRow(written) };
@@ -505,7 +539,11 @@ export async function recordBought(sql: Sql, p: Bought): Promise<{ outcome: "pai
   return await sql.begin(async (tx) => {
     // The gym's lock, then the page, then the record: Add membership takes the gym's first too.
     await lockGym(tx, row.gymId);
-    const [still] = await tx<{ id: string }[]>`SELECT id FROM gym_app_payments WHERE gym_id = ${row.gymId} AND id = ${row.id} AND state = 'open' FOR UPDATE`;
+    const [still] = await tx<{ id: string; bought_on: string }[]>`
+      SELECT a.id, ((a.opened_at AT TIME ZONE g.timezone)::date)::text AS bought_on
+      FROM gym_app_payments a JOIN gyms g ON g.id = a.gym_id
+      WHERE a.gym_id = ${row.gymId} AND a.id = ${row.id} AND a.state = 'open'
+      FOR UPDATE OF a`;
     if (still === undefined) return null;
     // Square took the money: the record it lands on, a member not on the list put on it now (18k-iii-b), so whatever
     // happens next is on a page staff read.
@@ -544,6 +582,8 @@ export async function recordBought(sql: Sql, p: Bought): Promise<{ outcome: "pai
         // No member of staff gave it: the member bought it (`member.app_purchase_paid` below).
         actorUserId: null,
         now: p.now,
+        // Its discount's use, kept while it was paid, becomes the use; its dates as on the day it was bought (18k-v).
+        purchase: { id: row.id, boughtOn: still.bought_on },
       });
       if (done.kind === "given" && done.paymentId !== null) {
         const signed = bought.sign === null ? null : await signBought(tx, row.gymId, done.id, bought.sign);
