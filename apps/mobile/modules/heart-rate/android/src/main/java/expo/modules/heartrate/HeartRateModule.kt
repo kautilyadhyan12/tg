@@ -82,6 +82,10 @@ class HeartRateModule : Module() {
     /** Pair with this monitor: "started" (Android asks the person), "already" (paired before), "failed". */
     Function("pair") { address: String -> pair(address) }
 
+    /** Whether Android has this monitor paired now: "bonded", "bonding", "none", or "unknown". Read each second
+     *  while pairing, so Cancel is seen even where Android's own message does not reach the app. */
+    Function("bondState") { address: String -> bondState(address) }
+
     OnCreate { listenForBonds() }
     OnDestroy {
       stopScan()
@@ -96,9 +100,27 @@ class HeartRateModule : Module() {
   private val heardDevices = HashMap<String, BluetoothDevice>()
 
   @SuppressLint("MissingPermission")
+  private fun bondState(address: String): String {
+    val ctx = context ?: return "unknown"
+    if (!BluetoothAdapter.checkBluetoothAddress(address) || !allowed(ctx)) return "unknown"
+    val device = synchronized(heardDevices) { heardDevices[address] } ?: adapter(ctx)?.getRemoteDevice(address) ?: return "unknown"
+    return try {
+      when (device.bondState) {
+        BluetoothDevice.BOND_BONDED -> "bonded"
+        BluetoothDevice.BOND_BONDING -> "bonding"
+        else -> "none"
+      }
+    } catch (e: SecurityException) {
+      "unknown"
+    }
+  }
+
+  @SuppressLint("MissingPermission")
   private fun pair(address: String): String {
     val ctx = context ?: return "failed"
     if (!BluetoothAdapter.checkBluetoothAddress(address) || !allowed(ctx) || radio(ctx) != "on") return "failed"
+    // Listening from here too: when the module was made, the app's context may not have been there yet.
+    if (bondListener == null) listenForBonds()
     val device = synchronized(heardDevices) { heardDevices[address] } ?: adapter(ctx)?.getRemoteDevice(address) ?: return "failed"
     return try {
       when {
@@ -136,9 +158,10 @@ class HeartRateModule : Module() {
     }
     val filter = IntentFilter(BluetoothDevice.ACTION_BOND_STATE_CHANGED)
     try {
-      // Android's own message: none from another app is taken.
+      // Exported: the message comes from Android's Bluetooth app, not from the system itself, and a receiver that is
+      // not exported does not hear it (round one, H1). It is a protected message: no other app can send it.
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-        ctx.registerReceiver(listener, filter, Context.RECEIVER_NOT_EXPORTED)
+        ctx.registerReceiver(listener, filter, Context.RECEIVER_EXPORTED)
       } else {
         ctx.registerReceiver(listener, filter)
       }
@@ -464,6 +487,8 @@ object Strap {
     synchronized(Strap) {
       if (g !== gatt) return
       val from = address ?: return
+      // A monitor sending its heart rate has its heart rate service: earlier misses no longer count (round one, L3).
+      noHeart = 0
       waiting.addLast(mapOf("device" to from, "at" to at.toDouble(), "bytes" to value.map { it.toInt() and 0xff }))
       while (waiting.size > MOST_WAITING) waiting.removeFirst()
     }

@@ -374,15 +374,17 @@ jest.mock("../../src/screens/running/runVoiceNative", () => {
 // would, whether it is watched or not: the app's own code must leave out what is not its monitor's).
 // `radio`, `allowed` and `missing` stand for Bluetooth off, Nearby devices refused, and a copy built before it.
 // Pairing (37f-ii-b): `bonded` is the phone's list of paired devices, `pairs` the addresses asked to pair,
-// `pairAnswer` what asking says, and `bond(device, state)` hands over one of Android's paired-or-not messages.
+// `pairAnswer` what asking says, and `bond(device, state)` hands over one of Android's paired-or-not messages and
+// is what asking a device's state says after it (`silent` keeps the message from the app, as a lost one).
 jest.mock("../../src/heart/heartNative", () => {
-  const fresh = () => ({ radio: "on", allowed: true, missing: false, near: [], watched: null, watches: [], waiting: [], scans: 0, bonded: [], pairs: [], pairAnswer: "started" });
+  const fresh = () => ({ radio: "on", allowed: true, missing: false, near: [], watched: null, watches: [], waiting: [], scans: 0, bonded: [], pairs: [], pairAnswer: "started", states: {} });
   const strap = { ...fresh(), found: new Set(), bonds: new Set() };
   strap.send = (id, bytes, at = Date.now()) => {
     strap.waiting.push({ device: id, at, bytes });
   };
-  strap.bond = (device, state) => {
-    for (const listener of strap.bonds) listener({ device, state });
+  strap.bond = (device, state, silent = false) => {
+    strap.states[device.toUpperCase()] = state;
+    if (!silent) for (const listener of strap.bonds) listener({ device, state });
   };
   strap.reset = () => {
     Object.assign(strap, fresh());
@@ -415,6 +417,7 @@ jest.mock("../../src/heart/heartNative", () => {
     status: () => ({ device: strap.watched, connected: strap.watched !== null }),
     askRadio: () => true,
     bonded: () => [...strap.bonded],
+    bondState: (id) => strap.states[id.toUpperCase()] ?? "none",
     pair: (id) => {
       strap.pairs.push(id);
       return strap.pairAnswer;

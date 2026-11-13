@@ -24,6 +24,8 @@ export interface HeartNative {
   bonded(): unknown;
   /** Pair with this monitor (37f-ii-b): "started" (Android asks the person), "already", "failed". */
   pair(address: string): string;
+  /** Whether Android has this monitor paired now: "bonded", "bonding", "none" or "unknown". */
+  bondState(address: string): string;
   /** "found": a monitor heard while looking (heartFoundSchema); "bond": a device paired or not (heartBondSchema). */
   addListener(event: "found" | "bond", listener: (said: unknown) => void): { remove: () => void };
 }

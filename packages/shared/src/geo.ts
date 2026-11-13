@@ -410,9 +410,12 @@ export const keptRunChoicesSchema = z.object({
   units: z.enum(["metric", "imperial"]).catch("metric"),
   /** "auto": light from sunrise to sunset where the person is, dark after (Kd, 37b-i). */
   mapColours: z.enum(["auto", "light", "dark"]).catch("auto"),
-  /** The maximum heart rate the zones are worked from (37f-ii-a), as last read, so the voice says the zone
-   *  with the app closed (37f-ii-b). Null with none, or none read yet. */
-  heartMax: heartMaxSchema.nullable().catch(null),
+  /** The maximum heart rate the zones are worked from (37f-ii-a), as last read, and whose it is, so the voice
+   *  says the zone with the app closed (37f-ii-b) and never from another person's. Null before one was read. */
+  heartMax: z
+    .object({ who: z.string().min(1).max(64), max: heartMaxSchema.nullable() })
+    .nullable()
+    .catch(null),
 });
 export type MapColours = KeptRunChoices["mapColours"];
 export type KeptRunChoices = z.infer<typeof keptRunChoicesSchema>;

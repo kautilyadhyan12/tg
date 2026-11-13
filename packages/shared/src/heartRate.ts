@@ -87,7 +87,8 @@ const BLUETOOTH_ADDRESS = /^[0-9A-F]{2}(:[0-9A-F]{2}){5}$/;
 /** Whether a monitor's address is one that changes and that pairing can follow: a random address whose two
  *  highest bits are 0 and 1 (Bluetooth's resolvable private address). A public address (Android 15 says
  *  which) never changes. Before Android 15 the kind is unknown, and the bits alone decide: a strap whose
- *  fixed address happens to begin so is asked to pair too, which does no harm. */
+ *  fixed address happens to begin so is asked to pair too. It costs that person Android's pairing box once;
+ *  Cancel or a refusal is seen at once and keeps it at its address, where it is found (round one, L2). */
 export function addressChanges(address: string, type: HeartFound["type"]): boolean {
   const upper = address.toUpperCase();
   if (type === "public" || !BLUETOOTH_ADDRESS.test(upper)) return false;

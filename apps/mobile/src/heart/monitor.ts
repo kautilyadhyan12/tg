@@ -74,6 +74,8 @@ let watching: string | null = null;
 /** A monitor picked in the box and not yet saved: watched in place of the saved one while it is tried. */
 let trying: string | null = null;
 let holds = 0;
+/** Bumped by resetHeart: a hold taken before it is not let go after it. */
+let generation = 0;
 let latest: (Reading & { device: string }) | null = null;
 let pending: Reading[] = [];
 let changes = 0;
@@ -101,6 +103,7 @@ export function resetHeart(withNative: HeartNative | null = heartNative, withFil
   watching = null;
   trying = null;
   holds = 0;
+  generation += 1;
   latest = null;
   pending = [];
   tell();
@@ -153,9 +156,10 @@ export function forgetMonitor(): void {
 export function holdHeart(): () => void {
   holds += 1;
   rewatch();
+  const mine = generation;
   let released = false;
   return () => {
-    if (released) return;
+    if (released || mine !== generation) return;
     released = true;
     holds -= 1;
     rewatch();
@@ -244,7 +248,8 @@ export const needsPairing = (found: HeartFound): boolean => native !== null && a
 /** Pairs a monitor whose address changes, so Android finds it whatever address it shows: the lasting
  *  address to keep, once Android says the one picked is paired (`pairOutcome`). One with a fixed address,
  *  or already paired at the address picked, needs none. Cancel, a refusal, or no answer in PAIR_WAIT_MS is
- *  not paired: it is kept at the address picked. */
+ *  not paired: it is kept at the address picked. Android's messages are read as they come, and the one picked
+ *  is also asked each PAIR_LOOK_MS, so Cancel is seen at once where a message is lost (round one, H1). */
 export function pairMonitor(found: HeartFound, waitMs: number = PAIR_WAIT_MS): Promise<Paired> {
   const bt = native;
   if (bt === null || !needsPairing(found)) return Promise.resolve({ kind: "notNeeded" });
@@ -264,6 +269,12 @@ export function pairMonitor(found: HeartFound, waitMs: number = PAIR_WAIT_MS): P
       resolve(out);
     };
     const look = () => {
+      const asked = bt.bondState(found.id);
+      const mineLast = [...bonds].reverse().find((b) => same(b.device, found.id))?.state;
+      const began = bonds.some((b) => same(b.device, found.id) && b.state === "bonding");
+      // "none" counts only after it was pairing: before Android begins, the one picked reads "none" too.
+      const counts = asked === "bonding" || asked === "bonded" || (asked === "none" && began);
+      if (counts && asked !== mineLast) bonds.push({ device: found.id, state: asked });
       const out = pairOutcome(found.id, before, bondedNow(), bonds);
       if (out.kind !== "waiting") finish(out);
     };
@@ -279,7 +290,10 @@ export function pairMonitor(found: HeartFound, waitMs: number = PAIR_WAIT_MS): P
       look();
       finish({ kind: "notPaired" });
     }, waitMs);
-    if (bt.pair(found.id) !== "started") finish({ kind: "notPaired" });
+    const answer = bt.pair(found.id);
+    // Android says it is paired already: it finds it, as it does any device it has paired (round one, L1).
+    if (answer === "already") finish({ kind: "paired", id: found.id });
+    else if (answer !== "started") finish({ kind: "notPaired" });
   });
 }
 

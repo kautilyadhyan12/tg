@@ -193,11 +193,23 @@ export async function keepRunUnits(units: Units): Promise<void> {
   scheduleGuide(current, Date.now());
 }
 
-/** The maximum heart rate as last read (37f-ii-a), kept so the voice says the zone with the app closed. */
-export async function keepRunHeartMax(max: number | null): Promise<void> {
+/** The maximum heart rate as last read for this person (37f-ii-a), kept so the voice says the zone with the app
+ *  closed. Kept with whose it is: the file is the phone's, not the person's (round one, H2). */
+export async function keepRunHeartMax(who: string, max: number | null): Promise<void> {
   await readRunChoices();
-  if (choices.heartMax === max) return;
-  await keepChoices({ heartMax: max });
+  if (choices.heartMax?.who === who && choices.heartMax.max === max) return;
+  await keepChoices({ heartMax: { who, max } });
+}
+
+/** The maximum kept for this person; none for anybody else, nor before one was read. */
+export const runHeartMaxFor = (who: string | null): number | null =>
+  who !== null && choices.heartMax?.who === who ? choices.heartMax.max : null;
+
+/** Another person's kept maximum is dropped once somebody else is signed in on this phone. */
+export async function dropOtherHeartMax(who: string): Promise<void> {
+  await readRunChoices();
+  if (choices.heartMax === null || choices.heartMax.who === who) return;
+  await keepChoices({ heartMax: null });
 }
 
 // ── The voice (37a-ii) ────────────────────────────────────────────────────────────────────────
@@ -245,7 +257,7 @@ function markNow(run: LiveRun, settled: boolean): string[] {
   voice = result.state;
   if (result.line === null) return [];
   // The heart rate now from the person's own monitor (37f-ii-b), said at the moment the mark is.
-  const heart = heartLine(savedHeartNow(Date.now()), choices.heartMax);
+  const heart = heartLine(savedHeartNow(Date.now()), runHeartMaxFor(run.userId));
   return [heart === null ? result.line : `${result.line} ${heart}`];
 }
 
