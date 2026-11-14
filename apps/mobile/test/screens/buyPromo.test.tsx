@@ -6,6 +6,7 @@ import { PROMO_CHECKING, PROMO_INSTEAD, PROMO_NOT_CHECKED, PROMO_PRESS_APPLY } f
 import type { Ask } from "../../src/session/calls";
 import { fakeServer, kept, lost, memoryStore, never, refusal, tokens, type Reply } from "../kit";
 import { DAY_ID, DAY_TYPE, GOLD_ID, GOLD_TYPE, PACK_ID, PACK_TYPE, SPRING20, lineOf } from "../forSaleLines";
+import { PASS, listCard, passTheBank } from "../bankCheck";
 
 // A promo code on Buy (ROADMAP Stage 5 item 20j; the server's 18k-v, whose own tests prove a code works only where its gym
 // meant it and that Square is asked for what the list showed: `appPurchases.promo.routes.test.ts`). The phone sends the
@@ -62,7 +63,7 @@ const mine = ok({ orgs: [org(IRON)], formerOrgs: [] });
 const PURCHASE = "8b2c3d4e-5f6a-4b7c-9d8e-0f1a2b3c4d5e";
 const VISA = { brand: "VISA", last4: "1111" };
 type Row = Record<string, unknown>;
-const view = (items: ForSaleLine[], promo: Row | null = null): Row => ({ gym: { name: "Iron House" }, record: "own", signer: "person", items, card: { ...VISA, expired: false }, promo });
+const view = (items: ForSaleLine[], promo: Row | null = null): Row => ({ gym: { name: "Iron House" }, record: "own", signer: "person", items, card: listCard(VISA), promo });
 const forSalePath = `/v1/orgs/${IRON.id}/for-sale`;
 const buyPath = `/v1/orgs/${IRON.id}/for-sale/purchases`;
 type Asked = { method: string; path: string; search?: string; body: unknown };
@@ -230,8 +231,11 @@ describe("the worst thing: what Pay charges is what the screen showed, with the 
     expect(disabled(screen.getByLabelText("Pay $39.99 for Gold Monthly"))).toBe(true);
     await fireEvent.press(screen.getByLabelText(gold.charge ?? ""));
     await fireEvent.press(screen.getByLabelText("Pay $39.99 for Gold Monthly"));
+    // The card's bank checks the amount worked out with the code (20i-ii).
+    const page = await passTheBank();
+    expect(page.props.source.html).toContain('"amount":"39.99","currencyCode":"USD"');
     await screen.findByTestId("buy-paid");
-    expect(presses(server.asked)[0]).toMatchObject({ amountMinor: 3999, code: "SPRING20", charge: { words: gold.charge, verificationToken: null } });
+    expect(presses(server.asked)[0]).toMatchObject({ amountMinor: 3999, code: "SPRING20", charge: { words: gold.charge, verificationToken: PASS } });
     await waitFor(() => {
       expect(lists(server.asked).at(-1)?.search).toBe("?repeating=true");
     });

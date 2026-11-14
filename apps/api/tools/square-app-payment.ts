@@ -13,8 +13,8 @@
 //         member, or as a parent or guardian where the record is under 18, with the name given or the account's own)
 //   … tools/square-app-payment.ts check-buy|close-buy <gymId> <member's email> <paymentId>
 //   … tools/square-app-payment.ts add-card <gymId> <member's email>   (Square's test card, as Add card in the app saves one,
-//         with the card agreement ticked; 18k-iv). A repeating line is then bought with `buy`: charged to that card, with its
-//         own tick as the list words it.
+//         with the card agreement ticked; 18k-iv). A repeating line is then bought on the phone, which runs the bank's check
+//         first (20i-ii).
 //   … add --code=SUMMER20 to `buy` to type a promo code as the member would (18k-v): the list says what it takes off, or why not.
 import { randomUUID } from "node:crypto";
 import postgres from "postgres";
@@ -87,14 +87,13 @@ try {
     const name = args.data[4] ?? user.display_name ?? email;
     const signer = list?.signer === "guardian" ? "guardian" : "person";
     const agreement = shown.agreement === null ? null : { agreementId: shown.agreement.id, signer, name } as const;
-    if (shown.repeats && shown.charge === null) throw new Error(`"${lineName}" renews: save a card for this member first (add-card).`);
-    const charge = shown.charge === null ? {} : { charge: { words: shown.charge, verificationToken: null } };
-    if (shown.charge !== null) console.log(`Ticked: ${shown.charge}`);
-    const done = await startPurchase(deps, user.id, gymId, { requestKey: randomUUID(), typeId: shown.typeId, amountMinor: shown.firstPayment.amountMinor, factsKey: shown.factsKey, agreement, ...charge, ...(promo === null ? {} : { code: promo.code }) }, always);
+    // A repeating line is charged with the pass from the bank's check, which Square's form makes on the phone (20i-ii).
+    if (shown.repeats) throw new Error(`"${lineName}" renews: buy it on the phone, where Square runs the bank's check before Pay.`);
+    const done = await startPurchase(deps, user.id, gymId, { requestKey: randomUUID(), typeId: shown.typeId, amountMinor: shown.firstPayment.amountMinor, factsKey: shown.factsKey, agreement, ...(promo === null ? {} : { code: promo.code }) }, always);
     const page = done?.answer.purchase;
     if (page === undefined) throw new Error("No answer.");
     console.log(`${shown.name}: ${formatMinor(page.amountMinor, page.currency)}${agreement === null ? "" : `, signed by ${name}`}. Purchase ${page.id}`);
-    console.log(page.url === null ? `Charged to the card: ${page.state}` : `Square's page: ${page.url}`);
+    console.log(`Square's page: ${page.url ?? "none"}`);
   } else if (args.data[0] === "add-card") {
     const mine = await readMyCard(deps, user.id, gymId, always);
     if (mine === null) throw new Error("No answer.");

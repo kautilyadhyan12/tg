@@ -30,8 +30,8 @@ const NOTE = "Bought in the app";
  *  request itself with nothing taken, or no answer yet. */
 export type ChargeStep = { kind: "done" } | { kind: "declined"; code: string } | { kind: "refused"; code: string } | { kind: "wait" };
 
-/** The payment is this purchase's: the amount and money asked, no tip, at the gym's location, on the card's customer,
- *  naming the row. */
+/** The payment is this purchase's: the amount and money asked, no tip, at the gym's location, on the card's customer and
+ *  card, naming the row. */
 function ours(row: pays.AppPayRow, payment: SquarePayment): boolean {
   const card = row.card;
   if (card === null) return false;
@@ -42,7 +42,10 @@ function ours(row: pays.AppPayRow, payment: SquarePayment): boolean {
     (payment.tip_money == null || payment.tip_money.amount === 0) &&
     (payment.location_id == null || payment.location_id === row.locationId) &&
     (payment.customer_id == null || payment.customer_id === card.customerId) &&
-    (payment.reference_id == null || payment.reference_id === row.id)
+    (payment.reference_id == null || payment.reference_id === row.id) &&
+    // The card Square charged is the one the tick names (20i-ii): a pass is charged in place of the card id.
+    (payment.card_details?.card?.card_brand == null || payment.card_details.card.card_brand === card.brand) &&
+    (payment.card_details?.card?.last_4 == null || payment.card_details.card.last_4 === card.last4)
   );
 }
 
@@ -102,6 +105,11 @@ async function answered(deps: PaymentsDeps, row: pays.AppPayRow, result: CardPay
   return { kind: "done" };
 }
 
+function passOf(row: pays.AppPayRow): { pass: string; initiated: "member" } | { initiated: "gym" } {
+  const pass = boughtOf(row)?.charge?.verificationToken ?? null;
+  return pass === null ? { initiated: "gym" } : { pass, initiated: "member" };
+}
+
 /** Ask Square to charge a purchase this request holds: sent with its key for an hour from the press, then only looked
  *  for among the location's payments, never sent again. */
 export async function chargeStep(deps: PaymentsDeps, square: SquareSettings, token: string, row: pays.AppPayRow, first: boolean, tell = false): Promise<ChargeStep> {
@@ -125,7 +133,9 @@ export async function chargeStep(deps: PaymentsDeps, square: SquareSettings, tok
     locationId: row.locationId,
     referenceId: row.id,
     note: NOTE,
-    verificationToken: boughtOf(row)?.charge?.verificationToken ?? null,
+    // The member pressed Pay with Square's pass for the card, made once its bank was happy (20i-ii): charged in place of the
+    // card, as theirs. A purchase kept from before it has no pass and is sent as it was then.
+    ...passOf(row),
   });
   return await answered(deps, row, result, first, tell);
 }

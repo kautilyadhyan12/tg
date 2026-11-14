@@ -265,7 +265,7 @@ function Body({ place, onClose, onSaved }: { place: CardPlace; onClose: () => vo
                         stopSaving();
                         setBusy(false);
                         setProblem(CARD_NOT_TAKEN);
-                      } else {
+                      } else if (m.kind === "token") {
                         // A token nobody asked for is never sent.
                         if (!saving.current) return;
                         stopSaving();

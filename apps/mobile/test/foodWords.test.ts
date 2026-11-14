@@ -13,6 +13,8 @@ const REPLACED: Readonly<Record<string, string>> = {
   "Your Week in Food": "the Week tab",
   // The box's "Line: your daily target, 2,300 kcal today" is the Week tab's same line, its unit read from the figure.
   "kcal today": "the Week tab's \"Line: your daily target, … {unit} today\"",
+  // What to eat's box under its tab had its own title (32c-ii-b, drawings 5b and 5c): the What to eat tab is its title.
+  "What to eat next": "the What to eat tab",
 };
 
 const before: readonly string[] = (JSON.parse(readFileSync(join(__dirname, "fixtures", "food-words.json"), "utf8")) as string[]).map((w) => w.trim()).filter((w) => w !== "");

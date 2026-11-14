@@ -88,6 +88,10 @@ export const squareCardIdSchema = z.string().regex(/^[A-Za-z0-9:_-]{1,192}$/);
 /** What Square's own form hands back for a card typed into it (`cnon:…`), for CreateCard. */
 export const squareCardSourceSchema = z.string().regex(/^[A-Za-z0-9:_-]{1,1024}$/);
 
+/** Square's pass for a saved card once its bank is happy (`Card.tokenize(verificationDetails, cardId)`; 20i-ii): seen in its
+ *  test area on 2026-11-14 as the card's id, `#verf:` and Square's own letters. */
+export const squareCardPassSchema = z.string().regex(/^[A-Za-z0-9:#_-]{1,1024}$/);
+
 /** A card as Square keeps it. A card Square has forgotten keeps its ids alone, so the rest is
  *  optional; the card number never leaves Square. */
 export const squareCardSchema = z.object({

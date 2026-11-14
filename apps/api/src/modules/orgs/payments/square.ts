@@ -227,8 +227,13 @@ export interface NewCardPayment {
   locationId: string;
   referenceId: string;
   note: string;
-  /** The bank's own check of the buyer (Square's `verification_token`), where a purchase in the app had one (18k-iv). */
-  verificationToken?: string | null;
+  /** Square's pass for this card, made on the phone once its bank was happy (20i-ii): charged in place of `cardId`. */
+  pass?: string | null;
+  /** Who started the charge, for Square's `customer_details` ("SCA overview", read 2026-11-14): the member paying in the
+   *  app with a pass, or the gym (a renewal, a retry, staff), so the bank is never asked to check a charge nobody is
+   *  there to confirm. Measured in Square's test area 2026-11-14: a saved card that asks for its bank's check was refused
+   *  CARD_DECLINED_VERIFICATION_REQUIRED with neither, and taken as the gym's own with `customer_initiated: false`. */
+  initiated: "member" | "gym";
 }
 
 /** CreatePayment's answer: `declined` is the card's bank saying no, with Square's code and the
@@ -604,14 +609,14 @@ export function createSquareApi(opts: {
     async createCardPayment(accessToken, p) {
       const sent = await send("POST", "/v2/payments", bearer(accessToken), {
         idempotency_key: p.idempotencyKey,
-        source_id: p.cardId,
+        source_id: p.pass ?? p.cardId,
         customer_id: p.customerId,
         amount_money: { amount: p.amountMinor, currency: p.currency },
         autocomplete: true,
         location_id: p.locationId,
         reference_id: p.referenceId,
         note: p.note,
-        ...(p.verificationToken == null ? {} : { verification_token: p.verificationToken }),
+        customer_details: { customer_initiated: p.initiated === "member", seller_keyed_in: false },
       });
       if (sent === null) return { kind: "unavailable", status: null };
       if (sent.status === 429 || sent.status >= 500) return { kind: "unavailable", status: sent.status };

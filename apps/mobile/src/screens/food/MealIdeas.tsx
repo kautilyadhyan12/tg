@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Image, StyleSheet, View } from "react-native";
+import { Image, Pressable, StyleSheet, View } from "react-native";
 import { useIsFocused } from "@react-navigation/native";
 import { IDEA_WHY_WORDS, mealIdeasResponseSchema, missingText, type DietPlanMeal, type SetupScreenId, type SuggestedIdea, type WaitingMeal } from "@app/shared";
 import { Button } from "../../look/Button";
@@ -20,7 +20,7 @@ import { ideaAmountWords, ideaAsMeal, ideaMealType, ideaName } from "./ideaRules
 import { useMealOutbox } from "./MealOutbox";
 import { useLookOpen } from "../setupFirst";
 import { useKindTabs } from "../dashboard/KindTabs";
-import { AllergyFoot, ART_SIZE, EmptyBox, Eyebrow, FoodLines, FromRow, NumberTiles, nextMealWords, planFoods } from "./MealCard";
+import { AllergyFoot, ART_SIZE, EmptyBox, Eyebrow, FoodBox, FoodLines, FromRow, NumberTiles, nextMealWords, PickedTop, planFoods } from "./MealCard";
 import { planDayName, planDayOf } from "./planRules";
 
 export const IDEAS_READ = "/v1/nutrition/suggestions";
@@ -56,11 +56,11 @@ interface MealIdeasProps {
   bare?: boolean;
   /** The Dashboard's Recommended box, for somebody with a meal plan: the plan's next meal, in place of an idea. */
   planned?: PlannedNow;
-  /** The Dashboard's Log meal: it opens the Food page's What to eat next, never logs by itself (Kd, 2026-11-02). */
+  /** The Dashboard's Log meal: it opens the Food page's What to eat, never logs by itself (Kd, 2026-11-02). */
   onLog?: () => void;
   /** A line above the ideas, with its one button: on a day the person's own plan has no meals, it says so. */
   lead?: { words: string; action: { label: string; onPress: () => void } };
-  /** Under the box's title: Suggested or My plan (31f). */
+  /** Above the box: Suggested, each gym or My plan (31f). */
   choices?: ReactNode;
 }
 
@@ -268,7 +268,11 @@ export function MealIdeas({ onMore, onAnswered, fresh = 0, below = null, bare = 
         {/* Whose ideas these are; under My plan's empty day, the ideas are said to be the app's. */}
         {best === undefined ? (
           <>
-            {lead !== undefined ? <FromRow badge={{ icon: "sparkles" }} title="Picked for you" sub={null} /> : null}
+            {onDashboard ? (
+              lead !== undefined ? <FromRow badge={{ icon: "sparkles" }} title="Picked for you" sub={null} /> : null
+            ) : lead !== undefined || !bare ? (
+              <PickedTop />
+            ) : null}
             {onDashboard ? null : next.ideas.map(row)}
           </>
         ) : (
@@ -281,10 +285,8 @@ export function MealIdeas({ onMore, onAnswered, fresh = 0, below = null, bare = 
           </>
         )}
         {onDashboard || laterMeals.length === 0 ? null : (
-          <Button
+          <MoreLink
             label={laterMeals.length === 1 ? "1 more meal today" : `${String(laterMeals.length)} more meals today`}
-            kind="link"
-            style={styles.start}
             onPress={() => {
               setLater(true);
             }}
@@ -401,18 +403,13 @@ export function MealIdeas({ onMore, onAnswered, fresh = 0, below = null, bare = 
           {foot}
         </Card>
       ) : (
-        <Card style={styles.card} testID="meal-ideas-box">
-          <View style={styles.titleRow}>
-            <Icon name="apple" size={16} colour="orange" />
-            <Txt kind="h3">What to eat next</Txt>
-          </View>
-          {choices}
+        <FoodBox choices={choices} testID="meal-ideas-box">
           {saidLine}
           {body}
           {rest}
-          {foot}
           {below}
-        </Card>
+          {foot}
+        </FoodBox>
       )}
       {setup}
     </>
@@ -437,10 +434,10 @@ function IdeaRow({ idea, held, onLog }: { idea: SuggestedIdea; held: boolean; on
       <View style={[styles.grow, styles.ideaWords]}>
         <FoodLines list foods={idea.items.map((f) => ({ name: f.name, amount: ideaAmountWords(f) }))} />
         <View style={styles.tags}>
-          <Txt kind="tiny" colour="orangeLight" style={styles.tag}>
+          <Txt kind="tiny" colour="orangeLight" style={[styles.tag, styles.kcalTag]}>
             {count(idea.totals.kcal)} kcal
           </Txt>
-          <Txt kind="tiny" colour="text" style={styles.tag}>
+          <Txt kind="tiny" colour="blue" style={[styles.tag, styles.proteinTag]}>
             {count(Math.round(idea.totals.proteinG))} g protein
           </Txt>
         </View>
@@ -448,6 +445,18 @@ function IdeaRow({ idea, held, onLog }: { idea: SuggestedIdea; held: boolean; on
       </View>
       <Button label="Log" kind="soft" small disabled={held} say={`Log ${ideaName(idea)}`} onPress={onLog} />
     </View>
+  );
+}
+
+/** "2 more meals today ›": the later meals' box, in orange words with their arrow (drawing 5b). */
+function MoreLink({ label, onPress }: { label: string; onPress: () => void }) {
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} style={({ pressed }) => [styles.more, pressed ? styles.pressed : null]}>
+      <Txt kind="small" colour="orange" style={styles.moreWords}>
+        {label}
+      </Txt>
+      <Icon name="go" size={14} colour="orange" />
+    </Pressable>
   );
 }
 
@@ -469,6 +478,11 @@ const styles = StyleSheet.create({
   ideaWords: { gap: 6 },
   tags: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
   tag: { fontFamily: fonts.semibold, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999, backgroundColor: colours.raised, overflow: "hidden" },
+  kcalTag: { backgroundColor: colours.orangeFill },
+  proteinTag: { backgroundColor: colours.blueFill },
+  more: { flexDirection: "row", alignItems: "center", alignSelf: "flex-start", gap: 4, minHeight: 44 },
+  moreWords: { fontFamily: fonts.semibold },
+  pressed: { opacity: 0.7 },
   actions: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 4 },
   start: { alignSelf: "flex-start" },
   idea: { flexDirection: "row", alignItems: "center", gap: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: colours.line },

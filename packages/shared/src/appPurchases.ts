@@ -23,10 +23,11 @@ export const appPurchaseRequestSchema = z
     factsKey: factsKeySchema,
     agreement: z.object({ agreementId: z.uuid(), signer: deskSignerSchema, name: signedNameSchema }).strict().nullable(),
     /** A repeating line (18k-iv): paid with the card they saved in the app, on the tick they read (`ForSaleLine.charge`),
-     *  sent back word for word, and the bank's own check where the bank asked for one (Square's verification token). Left
-     *  out for a line paid once. */
+     *  sent back word for word, with the pass Square gave the phone once the card's bank was happy (20i-ii): Square's
+     *  `Card.tokenize(verificationDetails, cardId)`, seen in its test area as the card's id and `#verf:` and Square's own
+     *  letters. The server charges that pass in place of the card, once. Left out for a line paid once. */
     charge: z
-      .object({ words: z.string().min(1).max(1000), verificationToken: z.string().regex(/^[A-Za-z0-9_:.=+/-]{1,1024}$/).nullable() })
+      .object({ words: z.string().min(1).max(1000), verificationToken: z.string().regex(/^[A-Za-z0-9_:#.=+/-]{1,1024}$/).nullable() })
       .strict()
       .optional(),
     /** A promo code typed (18k-v), as the list kept it (`ForSaleResponse.promo.code`), where the line read takes
@@ -36,7 +37,8 @@ export const appPurchaseRequestSchema = z
   .strict();
 export type AppPurchaseRequest = z.infer<typeof appPurchaseRequestSchema>;
 
-/** What a purchase on the card keeps until the membership is given: the tick as read, when, the card and the bank's check. */
+/** What a purchase on the card keeps until the membership is given: the tick as read, when, the card and Square's pass for
+ *  it (20i-ii; null on a purchase made before it). */
 export const appPurchaseChargeSchema = z
   .object({
     words: z.string().min(1).max(1000),
@@ -128,7 +130,7 @@ export const APP_PURCHASE_WORDS = {
   renewing_held: (name: string): string => `You already have ${name}, which renews. To change it, ask the front desk.`,
   declined: (card: string): string => `${card} was declined, so nothing was charged. Update your card or try again later.`,
   /** The bank asked to check it was them, and the check was not done. */
-  verification: "Your bank needs to confirm this payment. Try again, and follow your bank's steps.",
+  verification: "Your bank needs to verify this payment. You weren’t charged. Press Pay to try again.",
   /** Square refused the charge itself, nothing taken. */
   card_refused: "Your card couldn't be charged, so nothing was taken. Try again, or buy this at the front desk.",
   /** `check`, said on the phone where a purchase ended that way. */

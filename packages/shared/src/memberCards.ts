@@ -7,7 +7,7 @@
 // their own in the app.
 import { z } from "zod";
 import { SQUARE_TERMINALS_MAX, squarePracticeTerminalSchema } from "./gymPayments.js";
-import { squareCardSourceSchema, squareObjectIdSchema } from "./square.js";
+import { squareCardPassSchema, squareCardSourceSchema, squareObjectIdSchema } from "./square.js";
 
 /** Square's card brands (its `CardBrand`), as a card names itself. Any other is a "Card". */
 const BRAND_WORDS: Readonly<Record<string, string>> = {
@@ -308,6 +308,9 @@ export const cardFormMessageSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("not_taken") }).strict(),
   z.object({ kind: z.literal("blocked") }).strict(),
   z.object({ kind: z.literal("tall"), on: z.boolean() }).strict(),
+  /** The bank's check before Pay (20i-ii): Square's pass for the saved card, or the bank (or the member) said no. */
+  z.object({ kind: z.literal("pass"), token: squareCardPassSchema }).strict(),
+  z.object({ kind: z.literal("bank_no") }).strict(),
 ]);
 export type CardFormMessage = z.infer<typeof cardFormMessageSchema>;
 

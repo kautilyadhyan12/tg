@@ -222,6 +222,25 @@ describe("the worst thing: one tap saves one meal, at the calories it showed", (
   });
 });
 
+describe("32c-ii-b's worst thing: the ideas drawn again log the idea each row shows", () => {
+  it("each Log saves the idea on its own row, by its own foods; Picked for you, the numbers and the allergy line stay in the box", async () => {
+    const world: World = { ideas: () => ({ status: 200, body: answer() }), meals: [] };
+    const s = await open(world, "Food");
+    const box = within(await screen.findByTestId("meal-ideas-box"));
+    expect(await box.findByText("Picked for you")).toBeTruthy();
+    expect(box.getByText("300 kcal")).toBeTruthy();
+    expect(box.getByText(FOOD_ALLERGY_CAUTION)).toBeTruthy();
+    expect(box.getByText(IDEA_WHY_WORDS.under)).toBeTruthy();
+    // The second row's Log, never the first's.
+    await fireEvent.press(box.getByRole("button", { name: "Log Dal" }));
+    await waitFor(() => { expect(posts(s)).toHaveLength(1); });
+    expect(posts(s)[0]?.body).toMatchObject({ mealName: "Dal", items: [{ canonical: "dal", grams: 240 }] });
+    // Its later meal is still behind its button, with that meal's own idea.
+    await fireEvent.press(await box.findByRole("button", { name: "1 more meal today" }));
+    expect(await within(await screen.findByTestId("sheet")).findByRole("button", { name: "Log Salmon" })).toBeTruthy();
+  });
+});
+
 describe("the Food screen's box", () => {
   it("shows the next meal's ideas with amounts and numbers, and the later meals behind a button", async () => {
     await open({ ideas: () => ({ status: 200, body: answer() }), meals: [] }, "Food");

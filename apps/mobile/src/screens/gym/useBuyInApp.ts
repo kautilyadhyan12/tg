@@ -4,7 +4,8 @@ import { appPurchaseResponseSchema, type AppPurchase, type AppPurchaseRequest } 
 import { openInTab } from "../../look/browserTab";
 import { colours } from "../../look/colours";
 import { useSession } from "../../session/SessionProvider";
-import { CHARGING, buyRefusalSaid, endedBuySaid, purchaseClosePath, purchasesPath, type BuySaid } from "./buyView";
+import type { BankCheckOutcome } from "./BankCheck";
+import { CHARGING, CHECKING_BANK, bankSaid, buyRefusalSaid, endedBuySaid, purchaseClosePath, purchasesPath, withPass, type BuySaid } from "./buyView";
 import { newRequestKey } from "./classesView";
 import { forgetPayAway, keepPayAway } from "./payAway";
 import { PAY_CHECKING, PAY_NO_ANSWER, PAY_NOT_OPENED, PAY_OPENING } from "./payView";
@@ -29,7 +30,8 @@ export interface BuyInApp {
   /** A purchase Square took and the server gave, where. */
   paid: { at: string; purchase: AppPurchase } | null;
   /** Pay: the line's body without its key. */
-  pay: (typeId: string, body: Omit<AppPurchaseRequest, "requestKey">) => void;
+  /** `check`: the bank's check before a repeating membership is charged (20i-ii), ending with Square's pass or why not. */
+  pay: (typeId: string, body: Omit<AppPurchaseRequest, "requestKey">, check?: () => Promise<BankCheckOutcome>) => void;
   /** Asks again how the page that was not answered ended. */
   checkAgain: () => void;
   /** Ends a page kept from before the app was closed. */
@@ -67,8 +69,9 @@ export function useBuyInApp(gymId: string, onEnded: () => void): BuyInApp {
   const unanswered = useRef<{ at: string; id: string } | null>(null);
   const [waiting, setWaiting] = useState<string | null>(null);
   // A press whose answer was lost keeps its key, for the very same body: pressed again, the server gives back the page it
-  // may have made. A changed body (another name typed) is a press of its own.
-  const lostPress = useRef<{ typeId: string; body: string; requestKey: string } | null>(null);
+  // may have made. A changed body (another name typed) is a press of its own. On a card it keeps the pass it sent too, so
+  // the same press is sent again without asking the bank twice (20i-ii).
+  const lostPress = useRef<{ typeId: string; body: string; requestKey: string; sent: Omit<AppPurchaseRequest, "requestKey"> } | null>(null);
   // Purchases charged to the card, not paid on a page: closed reads as nothing taken, never as cancelled.
   const charged = useRef(new Set<string>());
   const gone = useCallback(() => !live.current, []);
@@ -160,27 +163,42 @@ export function useBuyInApp(gymId: string, onEnded: () => void): BuyInApp {
   }, [finish]);
 
   const pay = useCallback(
-    (typeId: string, body: Omit<AppPurchaseRequest, "requestKey">) => {
+    (typeId: string, body: Omit<AppPurchaseRequest, "requestKey">, check?: () => Promise<BankCheckOutcome>) => {
       if (busyNow.current || away.current !== null) return;
       const bodyKey = JSON.stringify(body);
-      const lost = lostPress.current !== null && lostPress.current.typeId === typeId && lostPress.current.body === bodyKey ? lostPress.current.requestKey : null;
+      const lost = lostPress.current !== null && lostPress.current.typeId === typeId && lostPress.current.body === bodyKey ? lostPress.current : null;
       lostPress.current = null;
       setSaid(null);
       setPaid(null);
       const card = body.charge !== undefined;
-      working({ at: typeId, line: card ? CHARGING : PAY_OPENING });
+      // A repeating membership asks the card's bank first (20i-ii), unless it is the same press sent again.
+      const asking = card && lost === null;
+      working({ at: typeId, line: asking ? CHECKING_BANK : card ? CHARGING : PAY_OPENING });
       void (async () => {
-        const send = (requestKey: string) => session.signedIn({ method: "POST", path: purchasesPath(gymId), body: { ...body, requestKey } }, appPurchaseResponseSchema);
-        let requestKey = lost ?? newRequestKey();
+        let sent = lost?.sent ?? body;
+        if (asking) {
+          const outcome = check === undefined ? ({ kind: "not_reached" } as const) : await check();
+          if (!live.current) return;
+          if (outcome.kind !== "pass") {
+            working(null);
+            setSaid({ at: typeId, said: bankSaid(outcome.kind) });
+            return;
+          }
+          sent = withPass(body, outcome.pass);
+          working({ at: typeId, line: CHARGING });
+        }
+        const send = (requestKey: string) => session.signedIn({ method: "POST", path: purchasesPath(gymId), body: { ...sent, requestKey } }, appPurchaseResponseSchema);
+        let requestKey = lost?.requestKey ?? newRequestKey();
         let answer = await send(requestKey);
-        // The page a lost press made has ended since: this press asks for a page of its own.
-        if (lost !== null && answer.kind === "ok" && answer.data.purchase.state === "closed") {
+        // The page a lost press made has ended since: this press asks for a page of its own. A card's pass is used once, so
+        // a card purchase that ended is said as it ended.
+        if (lost !== null && !card && answer.kind === "ok" && answer.data.purchase.state === "closed") {
           requestKey = newRequestKey();
           answer = await send(requestKey);
         }
         if (!live.current) return;
         if (answer.kind === "no_answer") {
-          lostPress.current = { typeId, body: bodyKey, requestKey };
+          lostPress.current = { typeId, body: bodyKey, requestKey, sent };
           working(null);
           setSaid({ at: typeId, said: { tone: "bad", line: PAY_NO_ANSWER } });
           return;

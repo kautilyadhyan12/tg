@@ -659,7 +659,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
     - 20h. [x] **Payment received** · merged 2026-11-12 · PR #534
     - 20i. **Buy a repeating membership** (18k-iv's server, `rulings/2026-11-12-18k-iv.md`; split 2026-11-13: the bank's check needs Square's newer way tried first).
       - 20i-i. [x] **Buy a repeating membership with the card saved in the app** · merged 2026-11-13 · PR #536
-      - 20i-ii. [ ] **The bank's check on the phone** (UK, Europe, Japan): Square's check before the charge where the bank asks, tried on Square's test cards first (its `verifyBuyer` is being retired). Feature folder 1.
+      - 20i-ii. [x] **The bank's check on the phone** · merged 2026-11-14 · PR #545
     - 20j. [x] **A promo code on Buy** · merged 2026-11-13 · PR #543
     - 20k. [x] **Cancel and keep a membership on the phone** · merged 2026-11-13 · PR #540
     - 20l. [ ] **Add card from the gym's request** (18d-vii's message, `rulings/2026-11-14-18d-vii.md`): the inbox message of kind `card_request`
@@ -707,7 +707,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
       - 32c-i. [x] **The Food page: the floating bowl, the days as plates, the macros on a plate, Meals, What to eat and Week** · merged 2026-11-14 · PR #544
       - 32c-ii. **The boxes** (split 2026-11-14 in two, Kd's "go": the logging boxes first).
         - 32c-ii-a. [x] **Add food, How much, Your meal, a logged meal, Daily numbers and the Nutrients pantry** · merged 2026-11-14 · PR #546
-        - 32c-ii-b. [ ] **Your meal plan, What to eat's ideas, your gym's plan, and the "not saved yet" lines** (drawings 4d, 5a to 5c)
+        - 32c-ii-b. [x] **Your meal plan, What to eat's ideas, your gym's plan, and the "not saved yet" lines** · merged 2026-11-14 · PR #549
       - 32c-iii. [ ] **Scan food**
 33. **The meal scan** (Kd, 2026-10-28: the scanner moves to GPT-6 Luna first).
     - 33a. [x] **The meal scan on GPT-6 Luna, thinking off** — merged 2026-10-28 (PR #380).

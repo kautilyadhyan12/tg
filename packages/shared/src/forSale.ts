@@ -15,7 +15,8 @@ import { membershipDiscount, type DiscountKind, type MembershipPayments } from "
 import { billsToOpen } from "./memberBillRules.js";
 import { memberGiftOff, type MemberGiftTerms } from "./memberGift.js";
 import { giveHeldMembership, heldMembershipView, periodListedMinor, periodStart, type HeldTax } from "./heldMemberships.js";
-import { cardName } from "./memberCards.js";
+import { cardFormSchema, cardName } from "./memberCards.js";
+import { squareCardIdSchema } from "./square.js";
 import { dayWords } from "./paymentsDownload.js";
 import { agreementFactSchema, agreementFacts, factsKeySchema, type AgreementFact, type AgreementFactsInput } from "./membershipAgreement.js";
 import {
@@ -127,9 +128,16 @@ export const forSaleResponseSchema = z
     signer: forSaleSignerSchema.default("either"),
     items: z.array(forSaleLineSchema).max(MEMBERSHIP_TYPES_MAX),
     /** The card a repeating line is paid with (18k-iv): the reader's own, saved in the gym's Square account now; `expired`
-     *  past its month. Null where they have none; read only where repeating lines are asked for. */
+     *  past its month. Null where they have none; read only where repeating lines are asked for. `id` and `form` are for the
+     *  bank's check on the phone before Pay (20i-ii): Square's id for this card, theirs alone, and the gym's Square form. */
     card: z
-      .object({ brand: z.string().regex(/^[A-Z_]{1,40}$/), last4: z.string().regex(/^[0-9]{4}$/), expired: z.boolean() })
+      .object({
+        brand: z.string().regex(/^[A-Z_]{1,40}$/),
+        last4: z.string().regex(/^[0-9]{4}$/),
+        expired: z.boolean(),
+        id: squareCardIdSchema,
+        form: cardFormSchema.nullable(),
+      })
       .strict()
       .nullable()
       .default(null),

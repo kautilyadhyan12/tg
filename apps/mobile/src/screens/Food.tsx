@@ -32,7 +32,7 @@ import { colours, orangeGradient, shadows, sizes } from "../look/colours";
 import { Field } from "../look/Field";
 import { Icon } from "../look/Icon";
 import { Page } from "../look/Page";
-import { pictures, type PictureName } from "../look/pictures";
+import { pictures } from "../look/pictures";
 import { Sheet } from "../look/Sheet";
 import { fonts, Txt } from "../look/Txt";
 import { SoftBar } from "../look/Waiting";
@@ -105,6 +105,7 @@ import { FiguresLink, FiguresList, useDailyAmounts } from "./food/MoreFigures";
 import { FoodWeek, useFoodWeek } from "./food/FoodWeek";
 import { localDayKey, weekBars, type TodayHere } from "./food/weekRules";
 import { FoodTop } from "./food/FoodTop";
+import { MEAL_PICTURES } from "./food/MealCard";
 import { MacroPlate } from "./food/MacroPlate";
 import { DayPlate, DayPlates } from "./food/DayPlates";
 import { PackWords } from "./food/PackWords";
@@ -192,7 +193,7 @@ export function FoodScreen() {
     setDay(startOfDay(new Date()));
     setTab("eat");
   }, [toToday]);
-  // The Dashboard's Log meal opens this page at What to eat next, where the meal is logged (Kd,
+  // The Dashboard's Log meal opens this page at What to eat, where the meal is logged (Kd,
   // 2026-11-02). The page keeps the box in view as the boxes above it load, until the person scrolls.
   const askedNext = typeof asked === "object" && "next" in asked && typeof asked.next === "number" ? asked.next : null;
   const nextSeen = useRef<number | null>(null);
@@ -280,19 +281,25 @@ export function FoodScreen() {
     >
       {photoKept ? (
         // Finish is the picture's own button above; this says why, and offers the other way out.
-        <Card style={[styles.row, styles.kept]}>
-          <Icon name="camera" size={18} colour="orange" />
-          <Txt kind="small" colour="text" style={styles.grow}>
-            Your photo meal isn’t saved yet.
-          </Txt>
-          <Button label="Scan a barcode" kind="link" onPress={first(() => { setSaid(null); setBarcodeFirst(true); setPhotoOpen(true); })} />
-          <Button label="Discard" kind="quiet" onPress={() => { setDiscarding(true); }} />
+        <Card style={[styles.lineCard, styles.kept]}>
+          <View style={styles.lineSign}>
+            <Icon name="camera" size={18} colour="orange" />
+          </View>
+          <View style={styles.grow}>
+            <Txt kind="small" colour="text" style={styles.lineWords}>
+              Your photo meal isn’t saved yet.
+            </Txt>
+            <View style={styles.lineButtons}>
+              <Button label="Scan a barcode" kind="link" onPress={first(() => { setSaid(null); setBarcodeFirst(true); setPhotoOpen(true); })} />
+              <Button label="Discard" kind="quiet" onPress={() => { setDiscarding(true); }} />
+            </View>
+          </View>
         </Card>
       ) : null}
       {view.refused.map((r) => (
         <Card key={r.id} style={styles.refused}>
           <Icon name="warn" size={18} colour="badText" />
-          <Txt kind="small" style={styles.grow}>
+          <Txt kind="small" colour="text" style={styles.grow}>
             {r.name} wasn’t saved. {r.message}
           </Txt>
           <Button label="OK" kind="link" onPress={() => { outbox?.forget(r.id); }} />
@@ -563,7 +570,14 @@ function Macros({ title, today, targets, retry, eaten, uncounted, about, onSetup
     return (
       <Card raised style={styles.macros}>
         {heading}
-        <Txt kind="small">{words}</Txt>
+        <View style={styles.row}>
+          <View style={styles.targetRing}>
+            <Icon name="target" size={22} colour="orange" />
+          </View>
+          <Txt kind="small" style={styles.grow}>
+            {words}
+          </Txt>
+        </View>
         <Button
           label={t.targetWrongSide ? "Pick a new target" : "Answer now"}
           kind="soft"
@@ -696,8 +710,6 @@ interface SectionProps {
 }
 
 const SHOWN_FOODS = 2;
-
-const MEAL_PICTURES: Record<MealType, PictureName> = { breakfast: "mealbreakfast", lunch: "meallunch", dinner: "mealdinner", snack: "mealsnack" };
 
 function Section({ type, rows, canAdd, all, onAll, said, onAdd, onOpen }: SectionProps) {
   const name = mealTypeName(type);
@@ -1930,8 +1942,22 @@ const styles = StyleSheet.create({
   dim: { opacity: 0.4 },
   pressed: { opacity: 0.8 },
   label: { textTransform: "uppercase", letterSpacing: 0.9 },
-  refused: { flexDirection: "row", alignItems: "center", gap: 10, borderColor: colours.badLine },
-  kept: { gap: 10, borderColor: colours.orangeLine },
+  refused: { flexDirection: "row", alignItems: "center", gap: 10, borderColor: colours.badLine, backgroundColor: colours.badFill },
+  kept: { borderColor: colours.orangeLine, backgroundColor: colours.boxPicked },
+  lineCard: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
+  lineSign: { minHeight: 20, justifyContent: "center", paddingTop: 1 },
+  lineWords: { lineHeight: 20 },
+  lineButtons: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 12, marginLeft: -4 },
+  targetRing: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: colours.orangeLine,
+    backgroundColor: colours.orangeFill,
+  },
   titleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   macros: { gap: 10 },
   left: { flexDirection: "row", alignItems: "center", justifyContent: "center", flexWrap: "wrap", gap: 10 },

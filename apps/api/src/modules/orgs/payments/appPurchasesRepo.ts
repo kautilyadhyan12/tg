@@ -42,7 +42,7 @@ import { waitingGiftFor } from "../referrals/memberGiftRepo.js";
 import { discountByCode, heldUses, usedByMember, type DiscountRow } from "../register/discountsRepo.js";
 import { taxIncludedOf } from "../register/taxRepo.js";
 import { insertAudit } from "../repo.js";
-import { cardCheckIn, type OwnCard } from "./appCardPurchasesRepo.js";
+import { cardCheckIn, passHash, type OwnCard } from "./appCardPurchasesRepo.js";
 import { detailsRecordOf, homeOf } from "./appPurchaseHome.js";
 import { insertAgreement } from "./cardsRepo.js";
 import { COLUMNS, toRow, type AppPayRow, type RawPay } from "./appPaymentsRepo.js";
@@ -91,7 +91,7 @@ export type PurchasableOutcome =
   | { kind: "entry_not_found" | "shared" | "paid_by_other" | "changed" | "agreement_changed" | "guardian_needed" | "person_signs" | "too_many" | "currency" | "check" | "too_late" }
   | { kind: "already_held"; name: string }
   /** A repeating line (18k-iv): no card of their own to pay with, or not one that can be charged now. */
-  | { kind: "card_needed" | "card_no_record" | "card_expired" | "card_stopped" | "card_paused" | "card_changed" }
+  | { kind: "card_needed" | "card_no_record" | "card_expired" | "card_stopped" | "card_paused" | "card_changed" | "verification" }
   | { kind: "renewing_held"; name: string }
   /** Money of theirs is overdue: paid first (18l). */
   | { kind: "owed"; amountMinor: number; currency: string }
@@ -282,7 +282,7 @@ async function purchasableIn(tx: TransactionSql, s: Buying): Promise<Purchasable
   if (item.repeats) {
     if (s.charge === null) return { kind: "card_needed" };
     if (s.entryId === null || landsOn === null) return { kind: "card_no_record" };
-    const checked = await cardCheckIn(tx, { gymId: s.gymId, entryId: landsOn, ...s.square, gymName: s.gymName, today: s.today, item, words: s.charge.words });
+    const checked = await cardCheckIn(tx, { gymId: s.gymId, entryId: landsOn, ...s.square, gymName: s.gymName, today: s.today, item, words: s.charge.words, pass: s.charge.verificationToken });
     if (checked.kind !== "ok") return checked;
     card = checked.card;
   } else if (s.charge !== null) {
@@ -374,10 +374,11 @@ export async function writeOpenCharge(sql: Sql, s: NewCharge): Promise<OpenPurch
     await tx`
       INSERT INTO gym_app_payments (id, gym_id, entry_id, membership_type_id, bought, amount_minor, currency, environment, account_id, location_id,
                                     request_key, opened_by, opened_at, closes_at, card_id, card_customer_id, card_brand, card_last4, state,
-                                    checking_until, checked_at, discount_id)
+                                    checking_until, checked_at, discount_id, card_pass_hash)
       VALUES (${s.id}, ${s.gymId}, ${check.landsOn}, ${s.typeId}, ${tx.json(check.bought)}, ${s.amountMinor}, ${check.currency}, ${s.square.environment},
               ${s.square.accountId}, ${s.locationId}, ${s.requestKey}, ${s.openedBy}, ${s.now}, ${s.closesAt}, ${check.card.cardId}, ${check.card.customerId},
-              ${check.card.brand}, ${check.card.last4}, 'open', ${s.leaseUntil}, ${s.now}, ${check.bought.discount?.id ?? null})`;
+              ${check.card.brand}, ${check.card.last4}, 'open', ${s.leaseUntil}, ${s.now}, ${check.bought.discount?.id ?? null},
+              ${s.charge?.verificationToken == null ? null : passHash(s.charge.verificationToken)})`;
     const [written] = await tx<RawPay[]>`SELECT ${COLUMNS(tx)} FROM gym_app_payments a WHERE a.gym_id = ${s.gymId} AND a.id = ${s.id}`;
     if (written === undefined) throw new Error("a card purchase just written was not read back");
     return { kind: "new", row: toRow(written) };
