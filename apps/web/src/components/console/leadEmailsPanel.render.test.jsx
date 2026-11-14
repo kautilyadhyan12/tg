@@ -77,7 +77,7 @@ describe('Follow-up emails to leads', () => {
     render(<LeadEmailsPanel org={ORG} readOnly={false} />);
     const box = await open();
     expect(box.checked).toBe(false);
-    expect(screen.getByText(/They come from “Iron House via AI Home Gym”/)).toBeTruthy();
+    expect(screen.getByText(/They come from “Iron House via KWAZO”/)).toBeTruthy();
     expect(screen.getByText('0 of 100 new leads emailed for you this month.')).toBeTruthy();
     const save = screen.getByRole('button', { name: 'Save changes' });
     expect(save.disabled).toBe(true);

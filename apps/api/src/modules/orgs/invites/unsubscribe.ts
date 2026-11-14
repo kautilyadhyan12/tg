@@ -19,6 +19,7 @@ import type { Sql } from "postgres";
 import type { RedisLike } from "../../../redis.js";
 import { createDualRateLimit } from "../../auth/rateLimit.js";
 import { cleanGymText, GYM_TEXT_IN_EMAIL_CHARS, gymNameForEmail } from "./gymText.js";
+import { BRAND } from "../../../email/layout.js";
 import * as repo from "./repo.js";
 import { notMeByLink } from "./join.js";
 import { stopLeadEmails } from "../leads/emailSettings.js";
@@ -26,7 +27,7 @@ import { sendForStop } from "../leads/emailsRepo.js";
 import type { InviteSettings } from "./settings.js";
 import { readInviteLinkToken, readUnsubscribeToken } from "./token.js";
 
-const APP_NAME = "AI Home Gym";
+const APP_NAME = BRAND;
 
 /** The token rides in the query string, which the api's request log never writes
  *  (`logSafety.ts`); its shape and MAC are checked after. */

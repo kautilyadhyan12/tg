@@ -824,7 +824,7 @@ if (square === null) {
   // The copy of an agreement signed as a line is bought in the app, where the worker finds the page paid (18k-iii-a).
   const boughtCopySender =
     config.RESEND_API_KEY !== undefined && config.EMAIL_FROM !== undefined
-      ? createResendAgreementEmailSender(createResendTransport({ apiKey: config.RESEND_API_KEY, from: config.EMAIL_FROM }), log)
+      ? createResendAgreementEmailSender(createResendTransport({ apiKey: config.RESEND_API_KEY, from: config.EMAIL_FROM }), log, config.INVITE_EMAIL_FROM ?? config.EMAIL_FROM)
       : createLogOnlyAgreementEmailSender(log);
   const agreementCopy = (gymId: string, membershipId: string): Promise<void> =>
     emailBoughtCopy({ sql, now: () => new Date(), email: boughtCopySender, addressKey: invites?.hmacKey ?? null, log }, gymId, membershipId);

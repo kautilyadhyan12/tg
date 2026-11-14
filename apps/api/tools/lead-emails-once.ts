@@ -33,7 +33,7 @@ const transport: InviteTransport = {
   send: (message) => {
     console.log("─".repeat(72));
     console.log(`To:       ${message.to}`);
-    console.log(`From:     ${message.from === "" ? "{gym} via AI Home Gym <the invitations' mailbox>" : message.from}`);
+    console.log(`From:     ${message.from === "" ? "{gym} via KWAZO <the invitations' mailbox>" : message.from}`);
     console.log(`Reply-To: ${message.replyTo ?? "(none)"}`);
     console.log(`Subject:  ${message.subject}`);
     console.log("");

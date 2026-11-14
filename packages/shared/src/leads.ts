@@ -64,7 +64,7 @@ export type LeadEmailNotSent = (typeof LEAD_EMAIL_NOT_SENT)[number];
 
 /** The end of "Not sent for you: …", said to staff. */
 export const LEAD_EMAIL_NOT_SENT_WORDS: Record<LeadEmailNotSent, string> = {
-  unsubscribed: "they asked not to get your emails through AI Home Gym",
+  unsubscribed: "they asked not to get your emails through KWAZO",
   complained: "they marked one of your emails as spam",
   bounced: "emails to this address bounce",
   refused: "our email service won't send to this address",
@@ -83,26 +83,26 @@ export function leadFollowUpLetter(step: number, gymName: string): { subject: st
   switch (step) {
     case 1:
       return {
-        subject: `Thanks for asking about ${gymName}`,
+        subject: `Thank you for your interest in ${gymName}`,
         lines: [
-          `Thanks for asking about ${gymName}. We'd love to show you around.`,
-          "Come in any time we are open, or reply to this email with any questions.",
+          `We'd be happy to show you around ${gymName}.`,
+          "You're welcome to visit during our opening hours, or reply to this email with any questions.",
         ],
       };
     case 2:
       return {
         subject: `Come and see us at ${gymName}`,
         lines: [
-          "Just checking in. Would you like to come in for a look around, or try a session?",
-          "Reply with a day that suits you and we'll have it ready.",
+          "We're following up on your interest in joining. Would you like to visit for a tour or try a session?",
+          "Reply with a day that suits you and we'll arrange it.",
         ],
       };
     case 3:
       return {
         subject: `Still thinking about ${gymName}?`,
         lines: [
-          "This is our last note, so we won't fill your inbox.",
-          "If you'd like to join or have a question, just reply. We'd be glad to see you.",
+          "This is our last follow-up email.",
+          "If you'd like to join or have any questions, reply to this email. We'd be glad to welcome you.",
         ],
       };
     default:
@@ -153,9 +153,9 @@ export const LEAD_EMAIL_SETTINGS_WORDS = {
   needs_postal_address: "Add your postal address first. The law asks for it at the foot of these emails.",
   gym_name: "An email can't show your business name as it is written. Change it to the name in words first.",
   sending_stopped:
-    "Your emails through AI Home Gym are stopped, because too many bounced or one was marked as spam. Send follow-ups yourself from each lead's panel.",
-  paused: "Emails through AI Home Gym are paused just now. Until they start again, your leads' follow-ups wait for you on the Leads page.",
-  invites_off: "Emails through AI Home Gym aren't set up yet, so this can't be switched on.",
+    "Your emails through KWAZO are stopped, because too many bounced or one was marked as spam. Send follow-ups yourself from each lead's panel.",
+  paused: "Emails through KWAZO are paused just now. Until they start again, your leads' follow-ups wait for you on the Leads page.",
+  invites_off: "Emails through KWAZO aren't set up yet, so this can't be switched on.",
 } as const;
 
 export const leadFollowUpSchema = z

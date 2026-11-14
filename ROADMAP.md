@@ -506,8 +506,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
      - 24a-ii. [x] **Give it to members** — merged 2026-11-06 (PR #480).
    - 24b. [ ] **A workout plan**, once Stage 5's items 36 and 60 are built.
    - 24c. [ ] **A run plan**, once Stage 5's item 37 is built.
-25. [ ] **Every member email in the new layout** (Kd, 2026-11-14, `rulings/2026-11-14-18d-vii.md`): invitations, receipts, reminders and the rest move onto 18d-vii's
-    `email/layout.ts` (the gym at the top, a heading, the words in a card, a footer saying who sent it and why), each shown to Kd as a picture first. The web folder, next.
+25. [x] **Every member email in the new layout** · merged 2026-11-14 · PR #548
 
 ## Stage 3 — Money
 

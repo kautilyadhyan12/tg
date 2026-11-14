@@ -129,16 +129,16 @@ export function renewalReminderWords(input: RenewalReminderWordsInput): RenewalR
   const noticeLine = (lead: string): string | null =>
     input.notice === null
       ? null
-      : `${lead} cancelling needs ${input.notice.days === 1 ? "1 day's" : `${String(input.notice.days)} days'`} notice: if you cancel today, the last day is ${dayWords(input.notice.lastDay)}.`;
+      : `${lead} you need to give ${input.notice.days === 1 ? "1 day's" : `${String(input.notice.days)} days'`} notice. If you cancel today, your last day will be ${dayWords(input.notice.lastDay)}.`;
 
   if (input.what === "ends") {
     return {
       subject: `${whose} membership at ${input.gymName} ends on ${day}`,
-      lines: [`${membership} ends on ${day}.`, "If you'd like to keep coming, just let us know and we'll help you choose a membership."],
+      lines: [`${membership} ends on ${day}.`, "If you'd like to continue, please contact us and we'll help you choose a new membership."],
     };
   }
   if (input.what === "term_renews") {
-    const carriesOn = amount === null ? "After that, it carries on until you cancel." : `After that, it carries on at ${amount} every ${input.every} until you cancel.`;
+    const carriesOn = amount === null ? "After that, it continues until you cancel." : `After that, it continues at ${amount} every ${input.every} until you cancel.`;
     const cancel =
       input.endWithTermOn !== null
         ? `If you'd like it to end with the minimum term instead, please let us know before ${dayWords(input.endWithTermOn)}.`
@@ -159,7 +159,7 @@ export function renewalReminderWords(input: RenewalReminderWordsInput): RenewalR
       ? `The minimum term runs until ${dayWords(term.until)}${term.ends ? ", then it ends" : ""}.`
       : input.lastDay !== null
       ? `It then ends on ${dayWords(input.lastDay)}.`
-      : (noticeLine("If you'd rather it didn't renew,") ?? `If you'd rather it didn't renew, please let us know before ${day}.`);
+      : (noticeLine("If you don't want it to renew,") ?? `If you don't want it to renew, please let us know before ${day}.`);
   return {
     subject: `${whose} membership at ${input.gymName} renews on ${day}`,
     lines: [`${membership} renews on ${day}${amount === null ? "" : ` for ${amount}`}.`, paid, cancel],

@@ -5,7 +5,7 @@ import type { FastifyBaseLogger } from "fastify";
 import type { AgreementFact } from "@app/shared";
 import type { AppConfig } from "../../../config.js";
 import type { EmailTransport } from "../../../email/resend.js";
-import { agreementLinkEmail, membershipAgreementEmail } from "../../../email/templates.js";
+import { agreementLinkEmail, memberInviteFrom, membershipAgreementEmail } from "../../../email/templates.js";
 
 export interface AgreementCopyLetter {
   to: string;
@@ -66,14 +66,15 @@ export function createDevAgreementEmailSender(log: FastifyBaseLogger, config: Ap
   };
 }
 
-export function createResendAgreementEmailSender(transport: EmailTransport, log: FastifyBaseLogger): AgreementEmailSender {
+/** `mailbox` is the configured sender the gym's name is put on: "Iron House via KWAZO <box>", as every member email. */
+export function createResendAgreementEmailSender(transport: EmailTransport, log: FastifyBaseLogger, mailbox: string): AgreementEmailSender {
   return {
     sendAgreementCopy: async (letter) => {
-      await transport.send(membershipAgreementEmail(letter));
+      await transport.send({ ...membershipAgreementEmail(letter), from: memberInviteFrom(mailbox, letter.gymName) });
       log.info({ event: "email.agreement_copy.sent" }, "agreement copy email sent");
     },
     sendAgreementLink: async (letter) => {
-      await transport.send(agreementLinkEmail(letter));
+      await transport.send({ ...agreementLinkEmail(letter), from: memberInviteFrom(mailbox, letter.gymName) });
       log.info({ event: "email.agreement_link.sent" }, "agreement link email sent");
     },
   };

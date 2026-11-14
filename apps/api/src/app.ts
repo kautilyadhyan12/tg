@@ -416,8 +416,11 @@ export async function buildApp(
   const paddle = paddleSettings(config, overrides.paddleApi);
   const razorpay = razorpaySettings(config, overrides.razorpayApi);
   const billing = { sql, redis, paddle, razorpay, log: app.log, now: () => new Date() };
+  // Member emails come from "Iron House via KWAZO", on the invitations' mailbox where one is set.
+  const memberMailbox = config.INVITE_EMAIL_FROM ?? config.EMAIL_FROM;
   const agreementEmail =
-    overrides.agreementEmailSender ?? (transport !== null ? createResendAgreementEmailSender(transport, app.log) : createDevAgreementEmailSender(app.log, config));
+    overrides.agreementEmailSender ??
+    (transport !== null && memberMailbox !== undefined ? createResendAgreementEmailSender(transport, app.log, memberMailbox) : createDevAgreementEmailSender(app.log, config));
   registerOrgRoutes(
     app,
     {
@@ -434,7 +437,9 @@ export async function buildApp(
         overrides.coOwnerEmailSender ??
         (transport !== null ? createResendCoOwnerEmailSender(transport, app.log) : createDevCoOwnerEmailSender(app.log, config)),
       agreementEmail,
-      cancelEmail: overrides.cancelEmailSender ?? (transport !== null ? createResendCancelEmailSender(transport, app.log) : createDevCancelEmailSender(app.log, config)),
+      cancelEmail:
+        overrides.cancelEmailSender ??
+        (transport !== null && memberMailbox !== undefined ? createResendCancelEmailSender(transport, app.log, memberMailbox) : createDevCancelEmailSender(app.log, config)),
       webOrigin: config.WEB_ORIGIN,
       news,
       joinCodes: config.JOIN_CODES,
