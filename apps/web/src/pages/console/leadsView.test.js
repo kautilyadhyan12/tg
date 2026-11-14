@@ -133,7 +133,7 @@ describe('the follow-up emails (20c-ii)', () => {
     const one = followUpEmail(1, { ...lead, fullName: 'Priya  Shah', email: 'priya+gym@example.com' }, GYM);
     expect(one.subject).toBe('Thank you for your interest in Iron House');
     expect(one.body).toBe(
-      "Hi Priya,\n\nThank you for your interest in Iron House. We'd be happy to show you around.\n\n" +
+      "Hi Priya,\n\nWe'd be happy to show you around Iron House.\n\n" +
         "You're welcome to visit during our opening hours, or reply to this email with any questions.\n\nIron House\n12 Kirkgate, Leeds LS1 6BY",
     );
     const url = new URL(one.href);

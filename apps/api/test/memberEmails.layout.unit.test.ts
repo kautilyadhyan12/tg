@@ -3,11 +3,15 @@
 // asks for both), a signed agreement's terms or signature, a payment's pay-by day. The lines below are the emails as
 // they were sent BEFORE the move (taken from the old templates' own output on 2026-11-14), not from the new code; the
 // lines that changed on purpose say so: the app's name, and the casual sentences Kd asked to be made standard (2026-11-14).
+import Fastify from "fastify";
 import { describe, expect, it } from "vitest";
 import type { EmailMessage } from "../src/email/resend.js";
+import { createResendAgreementEmailSender } from "../src/modules/orgs/agreement/email.js";
+import { createResendCancelEmailSender } from "../src/modules/orgs/myMembership/cancelEmail.js";
 import {
   agreementLinkEmail,
   cardDeclinedEmail,
+  cardRequestEmail,
   cardExpiringEmail,
   leadFollowUpEmail,
   memberInviteEmail,
@@ -60,7 +64,7 @@ const CASES: Record<string, Case> = {
     mail: leadEmail(1),
     subject: "Thank you for your interest in Iron House",
     // Standard words on purpose (Kd, 2026-11-14), here and in the two below.
-    lines: ["Hi Priya,", "Thank you for your interest in Iron House. We'd be happy to show you around.", "You're welcome to visit during our opening hours, or reply to this email with any questions.", "you asked Iron House about joining and said they could email you."],
+    lines: ["Hi Priya,", "We'd be happy to show you around Iron House.", "You're welcome to visit during our opening hours, or reply to this email with any questions.", "you asked Iron House about joining and said they could email you."],
     links: [LEAD.unsubscribeLink],
     sentBy: "Sent by KWAZO on behalf of Iron House, 12 Kirkgate, Leeds LS1 6BY.",
   },
@@ -262,6 +266,48 @@ const CASES: Record<string, Case> = {
   },
 };
 
+CASES.cardRequest = {
+  mail: cardRequestEmail({
+    to: "maya@example.test",
+    gymName: "Iron House",
+    greeting: "Hi Maya,",
+    ask: "Iron House asks you to add a card for your Gold Monthly membership.",
+    then: "Once it is added, it is charged automatically each time the membership renews.",
+    contact: CONTACT,
+    others: false,
+  }),
+  subject: "Iron House asks you to add a card for your membership",
+  lines: [
+    "Hi Maya,",
+    "Iron House asks you to add a card for your Gold Monthly membership. Once it is added, it is charged automatically each time the membership renews.",
+    "How to add it",
+    "Open the app on your phone.",
+    "Go to My membership.",
+    "Tap Add card.",
+    CONTACT,
+  ],
+  links: [],
+  sentBy: "Sent by KWAZO on behalf of Iron House.",
+};
+
+/** Each email's whole reason, so two emails' reasons can never be swapped unseen. */
+const WHY: Record<string, string> = {
+  invite: "You're receiving this because Iron House has you on its member list and asked us to invite you. We won't send you another unless you ask Iron House for one.",
+  lead1: "You're receiving this because you asked Iron House about joining and said they could email you.",
+  lead2: "You're receiving this because you asked Iron House about joining and said they could email you.",
+  lead3: "You're receiving this because you asked Iron House about joining and said they could email you.",
+  declined: "You're receiving this because a payment you agreed to with Iron House did not go through.",
+  expiring: "You're receiving this because you saved a card with Iron House.",
+  renewal: "You're receiving this because you have or pay for a membership with Iron House.",
+  priceRaise: "You're receiving this because you have or pay for a membership with Iron House.",
+  agreementCopy: "You're receiving this as your copy of a membership agreement signed with Iron House.",
+  agreementCopyGuardian: "You're receiving this as your copy of a membership agreement signed with Iron House.",
+  agreementLink: "You're receiving this because Iron House asked you to sign your membership agreement.",
+  cancelled: "You're receiving this because you cancelled a membership with Iron House in the app.",
+  kept: "You're receiving this because you removed a cancellation with Iron House in the app.",
+  cardRequest: "You're receiving this because Iron House asked you to add a card for your membership.",
+};
+
 /** What a person reads in the html: the tags taken out, the five entities put back, the spaces made one. */
 function readHtml(html: string): string {
   const body = html.slice(html.indexOf("<body"));
@@ -292,7 +338,10 @@ describe("every member email keeps every line it carried before the move", () =>
       }
       expect(c.mail.text).toContain(c.sentBy);
       expect(read).toContain(c.sentBy);
-      expect(read).toContain("You're receiving this");
+      const why = WHY[name];
+      if (why === undefined) throw new Error(`no reason written down for ${name}`);
+      expect(c.mail.text).toContain(why);
+      expect(read).toContain(why);
       expect(hrefs(c.mail.html).sort()).toEqual([...c.links].sort());
       for (const link of c.links) expect(c.mail.text).toContain(link);
       expect(c.mail.text.match(/https?:\/\//g) ?? []).toHaveLength(c.links.length);
@@ -337,7 +386,7 @@ describe("every member email keeps every line it carried before the move", () =>
       invite: "Join Iron House in the app",
       lead1: "Thank you for your interest",
       lead2: "Come and see us",
-      lead3: "Still thinking about joining\\?",
+      lead3: "Still thinking about joining?",
       declined: "Your payment could not be processed",
       expiring: "Your card on file expires this month",
       renewal: "Upcoming membership renewal",
@@ -349,9 +398,32 @@ describe("every member email keeps every line it carried before the move", () =>
     };
     for (const [name, heading] of Object.entries(headings)) {
       const c = CASES[name];
-      expect(c?.mail.html).toMatch(new RegExp(`<h1 [^>]*>${heading}</h1>`));
-      expect(c?.lines[0]).not.toBe(heading);
+      expect(c?.mail.html).toContain(`>${heading}</h1>`);
+      const first = c?.lines.find((line): line is string => typeof line === "string" && !line.startsWith("Hi "));
+      expect(first).toBeDefined();
+      // Not the same words again: the first sentence never opens with the heading, nor the heading with it.
+      const opening = (text: string): string => text.toLowerCase().split(/\s+/).slice(0, 3).join(" ");
+      expect(opening(first ?? "")).not.toBe(opening(heading));
     }
+  });
+
+  it("the agreement and cancellation emails also come from 'Iron House via KWAZO', on the mailbox they are given", async () => {
+    const sent: EmailMessage[] = [];
+    const transport = {
+      send: (message: EmailMessage): Promise<void> => {
+        sent.push(message);
+        return Promise.resolve();
+      },
+    };
+    const log = Fastify({ logger: false }).log;
+    const box = "KWAZO <members@mail.example.com>";
+    const agreement = createResendAgreementEmailSender(transport, log, box);
+    const cancel = createResendCancelEmailSender(transport, log, box);
+    await agreement.sendAgreementCopy({ to: "a@example.test", gymName: "Iron House", signedName: "A", byGuardian: false, signedOn: "d", facts: [], text: "t", agreementName: null });
+    await agreement.sendAgreementLink({ to: "a@example.test", gymName: "Iron House", membershipName: "Gold", worksUntil: "d", signLink: "https://app.example/sign#t" });
+    await cancel.sendCancelConfirmation({ to: "a@example.test", gymName: "Iron House", membershipName: "Gold", cancelledAt: "d", done: "Cancelled.", lines: [], notes: [] });
+    await cancel.sendKeepConfirmation({ to: "a@example.test", gymName: "Iron House", membershipName: "Gold", keptAt: "d", done: "Kept.", lines: [] });
+    expect(sent.map((m) => m.from)).toEqual(Array(4).fill("Iron House via KWAZO <members@mail.example.com>"));
   });
 
   it("a gym's emails come from 'Iron House via KWAZO'; a staff invitation keeps its own name until its words move too", () => {

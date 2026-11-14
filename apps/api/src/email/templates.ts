@@ -135,7 +135,7 @@ export function memberInviteEmail(words: {
     body: [
       paragraph(lead),
       paragraph(`To join ${gym} in the app, sign in with this email address, ${words.to}.`),
-      { kind: "button", label: `Join ${gym}`, href: words.joinLink, showLink: false },
+      { kind: "button", label: `Join ${gym}`, href: words.joinLink, showLink: true },
       paragraph("This invitation only works when you sign in with this email address."),
       { kind: "link", text: `Not a member of ${gym}?`, label: `Let ${gym} know`, href: words.notMeLink },
     ],

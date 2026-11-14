@@ -4,7 +4,7 @@
 import type { FastifyBaseLogger } from "fastify";
 import type { AppConfig } from "../../../config.js";
 import type { EmailTransport } from "../../../email/resend.js";
-import { membershipCancelledEmail, membershipKeptEmail } from "../../../email/templates.js";
+import { memberInviteFrom, membershipCancelledEmail, membershipKeptEmail } from "../../../email/templates.js";
 
 export interface CancelLetter {
   to: string;
@@ -58,14 +58,15 @@ export function createDevCancelEmailSender(log: FastifyBaseLogger, config: AppCo
   };
 }
 
-export function createResendCancelEmailSender(transport: EmailTransport, log: FastifyBaseLogger): CancelEmailSender {
+/** `mailbox` is the configured sender the gym's name is put on: "Iron House via KWAZO <box>", as every member email. */
+export function createResendCancelEmailSender(transport: EmailTransport, log: FastifyBaseLogger, mailbox: string): CancelEmailSender {
   return {
     sendCancelConfirmation: async (letter) => {
-      await transport.send(membershipCancelledEmail(letter));
+      await transport.send({ ...membershipCancelledEmail(letter), from: memberInviteFrom(mailbox, letter.gymName) });
       log.info({ event: "email.cancel_confirmation.sent" }, "cancel confirmation email sent");
     },
     sendKeepConfirmation: async (letter) => {
-      await transport.send(membershipKeptEmail(letter));
+      await transport.send({ ...membershipKeptEmail(letter), from: memberInviteFrom(mailbox, letter.gymName) });
       log.info({ event: "email.keep_confirmation.sent" }, "keep confirmation email sent");
     },
   };

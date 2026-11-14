@@ -287,7 +287,7 @@ export default function Login() {
               className="font-bold text-lg tracking-tight"
               style={{ color: 'rgba(255,255,255,0.95)' }}
             >
-              AI Home Gym
+              KWAZO
             </span>
           </div>
 

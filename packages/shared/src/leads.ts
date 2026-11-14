@@ -85,7 +85,7 @@ export function leadFollowUpLetter(step: number, gymName: string): { subject: st
       return {
         subject: `Thank you for your interest in ${gymName}`,
         lines: [
-          `Thank you for your interest in ${gymName}. We'd be happy to show you around.`,
+          `We'd be happy to show you around ${gymName}.`,
           "You're welcome to visit during our opening hours, or reply to this email with any questions.",
         ],
       };
