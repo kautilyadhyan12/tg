@@ -192,7 +192,8 @@ describe("32c-ii-b's worst thing: the boxes drawn again log the meal each row sh
     const box = await open(world);
     await fireEvent.press(await box.findByRole("button", { name: "See the week" }));
     const sheet = within(await screen.findByTestId("sheet"));
-    expect(sheet.getByText("Rice 212 g · Dal 150 g")).toBeTruthy();
+    // The raw words, never normalised: a plain space between 212 and g would let "g" fall to the next line.
+    expect(sheet.getByText(/^Rice 212/, { normalizer: (s) => s }).props.children).toBe("Rice 212\u00A0g · Dal 150\u00A0g");
     expect(sheet.getByText("Not in your diet: Salmon.")).toBeTruthy();
     expect(sheet.getByText(FOOD_ALLERGY_CAUTION)).toBeTruthy();
     expect(sheet.getByText(DIET_LABEL_CAUTION)).toBeTruthy();
@@ -939,7 +940,7 @@ describe("the gym's meal plan (31g)", () => {
     expect(card.getByText(FOOD_ALLERGY_CAUTION)).toBeTruthy();
     await fireEvent.press(card.getByRole("button", { name: "See the week" }));
     const sheet = within(await screen.findByTestId("sheet"));
-    expect(sheet.getByText("Oatmeal 250 g")).toBeTruthy();
+    expect(sheet.getByText("Oatmeal 250\u00A0g")).toBeTruthy();
     expect(sheet.getByText(FOOD_ALLERGY_CAUTION)).toBeTruthy();
     await fireEvent.press(sheet.getByRole("button", { name: "Log Salmon" }));
     await waitFor(() => { expect(posts(world, "/v1/nutrition/meals")).toHaveLength(1); });

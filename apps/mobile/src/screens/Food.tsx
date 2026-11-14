@@ -193,7 +193,7 @@ export function FoodScreen() {
     setDay(startOfDay(new Date()));
     setTab("eat");
   }, [toToday]);
-  // The Dashboard's Log meal opens this page at What to eat next, where the meal is logged (Kd,
+  // The Dashboard's Log meal opens this page at What to eat, where the meal is logged (Kd,
   // 2026-11-02). The page keeps the box in view as the boxes above it load, until the person scrolls.
   const askedNext = typeof asked === "object" && "next" in asked && typeof asked.next === "number" ? asked.next : null;
   const nextSeen = useRef<number | null>(null);

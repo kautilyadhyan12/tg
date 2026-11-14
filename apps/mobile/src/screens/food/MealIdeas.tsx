@@ -56,11 +56,11 @@ interface MealIdeasProps {
   bare?: boolean;
   /** The Dashboard's Recommended box, for somebody with a meal plan: the plan's next meal, in place of an idea. */
   planned?: PlannedNow;
-  /** The Dashboard's Log meal: it opens the Food page's What to eat next, never logs by itself (Kd, 2026-11-02). */
+  /** The Dashboard's Log meal: it opens the Food page's What to eat, never logs by itself (Kd, 2026-11-02). */
   onLog?: () => void;
   /** A line above the ideas, with its one button: on a day the person's own plan has no meals, it says so. */
   lead?: { words: string; action: { label: string; onPress: () => void } };
-  /** Under the box's title: Suggested or My plan (31f). */
+  /** Above the box: Suggested, each gym or My plan (31f). */
   choices?: ReactNode;
 }
 

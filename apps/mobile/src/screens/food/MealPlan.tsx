@@ -587,7 +587,7 @@ export function WhatToEatNext({ foodsToday, fresh, onAnswered, todayFailed, retr
 }
 
 /** The Dashboard's Recommended box: the same answer as the Food page's. Today's meals are read only
- *  for somebody with a plan. Its Log meal opens the Food page's What to eat next, where the meal is
+ *  for somebody with a plan. Its Log meal opens the Food page's What to eat, where the meal is
  *  logged: the Dashboard never logs one by itself (Kd, 2026-11-02). */
 export function Recommended({ onMore, onPlan, onLog }: { onMore: () => void; onPlan: (gymId: string | null) => void; onLog: () => void }) {
   const ownPlan = () => { onPlan(null); };
@@ -692,7 +692,6 @@ function MealWords({ meal }: { meal: DietPlanMeal }) {
 }
 
 const styles = StyleSheet.create({
-  card: { gap: 10 },
   grow: { flex: 1 },
   row: { flexDirection: "row", alignItems: "center", gap: 8 },
   start: { alignSelf: "flex-start" },

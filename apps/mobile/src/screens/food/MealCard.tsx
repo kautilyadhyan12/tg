@@ -11,7 +11,7 @@ import { mealTypeName } from "./day";
 import { loggedAmount } from "./measures";
 import { foodTitle } from "./rows";
 
-// The pieces of the food boxes (Recommended For You, What to eat next), in one order for every choice
+// The pieces of the food boxes (Recommended For You, What to eat), in one order for every choice
 // (Kd, 2026-11-08): whose it is, the meal, its numbers, a note, the one thing to do, the allergy line.
 
 /** The picture's room on the Dashboard: the words beside it never run under it. */

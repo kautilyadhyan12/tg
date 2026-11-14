@@ -17,7 +17,7 @@ import { AllergyFoot, DayBar, FoodBox, foodsLine, FromRow, initialsOf, LoggedPil
 import { useMealOutbox } from "./MealOutbox";
 import { loggedOfDay, planDayName, planDayOf, planMealAsMeal, stepDay } from "./planRules";
 
-// The plan a gym gave the person, on the Food page's What to eat next (ROADMAP Stage 5 31g; spec Part 6
+// The plan a gym gave the person, on the Food page's What to eat (ROADMAP Stage 5 31g; spec Part 6
 // §16.6): today's next meal from it with Log meal, and its week as the gym wrote it. Nothing on it is
 // changed from the phone; the person's own plan is My plan.
 
@@ -101,7 +101,7 @@ interface GymPlanBoxProps {
 /** A request from another page to open a week: the gym's, or the person's own when gymId is null. */
 export interface WeekAsk { at: number; gymId: string | null }
 
-/** The Food page's What to eat next with the gym's plan picked. */
+/** The Food page's What to eat with the gym's plan picked. */
 export function GymPlanBox({ gym, retry, choices, foodsToday, todayFailed, retryToday, openWeekAt, onWeekOpened }: GymPlanBoxProps) {
   const { outbox } = useMealOutbox();
   const today = planDayOf(new Date());
@@ -326,7 +326,6 @@ function GymMealWords({ meal }: { meal: DietPlanMeal }) {
 }
 
 const styles = StyleSheet.create({
-  card: { gap: 10 },
   grow: { flex: 1 },
   row: { flexDirection: "row", alignItems: "center", gap: 8 },
   start: { alignSelf: "flex-start" },
