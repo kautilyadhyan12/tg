@@ -354,7 +354,8 @@ d("Ask to add card: only the people the box names are asked, and only at their o
     expect(mail.map((m) => m.to).sort()).toEqual([await addressOf(iron.id, maya), await addressOf(iron.id, pat)].sort());
     const mayaMail = mail.find((m) => m.text.includes("Gold Weekly"));
     expect(mayaMail?.subject).toBe(`${iron.name} asks you to add a card for your membership`);
-    expect(mayaMail?.text).toContain(`Hi Maya,\n\n${iron.name} asks you to add a card for your Gold Weekly membership. Once it is added, it is charged automatically each time the membership renews.\n\nTo add it, open the app, go to My membership and tap Add card.`);
+    expect(mayaMail?.text).toContain(`Hi Maya,\n\n${iron.name} asks you to add a card for your Gold Weekly membership. Once it is added, it is charged automatically each time the membership renews.\n\nHow to add it\n1. Open the app on your phone.\n2. Go to My membership.\n3. Tap Add card.`);
+    expect(mayaMail?.html).toContain("Add a card for your membership");
     expect(mail.find((m) => m.text.includes("the memberships you pay for"))?.text).toContain("Hi Pat,");
     expect(mail.every((m) => m.idempotencyKey.startsWith("card-request-"))).toBe(true);
     expect((await emailRows(iron.id)).map((r) => r.state)).toEqual(["sent", "sent"]);

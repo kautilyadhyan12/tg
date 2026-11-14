@@ -4,6 +4,7 @@
 // with. The deletion-undo email carries exactly one link, to our own origin.
 import { leadFollowUpLetter, leadGreeting, withArticle } from "@app/shared";
 import type { EmailMessage } from "./resend.js";
+import { memberEmail } from "./layout.js";
 
 const APP_NAME = "AI Home Gym";
 
@@ -356,8 +357,8 @@ export function cardExpiringEmail(words: {
   return { to: words.to, subject: `Your card on file with ${words.gymName} expires this month`, text, html };
 }
 
-/** The gym asks the member to add a card in the app (ROADMAP 18d-vii), sent with the message in their inbox.
- *  The gym name and the membership names arrive already cleaned. */
+/** The gym asks the member to add a card in the app (ROADMAP 18d-vii), sent with the message in their inbox, in
+ *  the members' email layout (`layout.ts`). The gym name and the membership names arrive already cleaned. */
 export function cardRequestEmail(words: {
   to: string;
   gymName: string;
@@ -369,14 +370,19 @@ export function cardRequestEmail(words: {
   /** "If you have any questions, you can call 555 0100 or email desk@irongym.com." or null. */
   contact: string | null;
 }): EmailMessage {
-  const lines = [words.greeting, `${words.ask} ${words.then}`, "To add it, open the app, go to My membership and tap Add card.", ...(words.contact === null ? [] : [words.contact]), "Thank you."];
-  const footer = `Sent by ${APP_NAME} on behalf of ${words.gymName}, about your membership with them.`;
-  const text = `${lines.join("\n\n")}\n\n${words.gymName}\n\n${footer}\n`;
-  const html =
-    lines.map((line) => `<p>${escapeHtml(line)}</p>`).join("") +
-    `<p>${escapeHtml(words.gymName)}</p>` +
-    `<p style="color:#666;font-size:12px">${escapeHtml(footer)}</p>`;
-  return { to: words.to, subject: `${words.gymName} asks you to add a card for your membership`, text, html };
+  return memberEmail({
+    to: words.to,
+    subject: `${words.gymName} asks you to add a card for your membership`,
+    gymName: words.gymName,
+    preheader: words.ask,
+    heading: "Add a card for your membership",
+    greeting: words.greeting,
+    paragraphs: [`${words.ask} ${words.then}`],
+    steps: { title: "How to add it", items: ["Open the app on your phone.", "Go to My membership.", "Tap Add card."] },
+    button: null,
+    contact: words.contact,
+    why: `You're receiving this because ${words.gymName} asked you to add a card for your membership.`,
+  });
 }
 
 /** The reminder before a membership renews or its minimum term ends (ROADMAP 18v-iv), sent by the gym to
