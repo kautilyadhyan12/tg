@@ -41,12 +41,11 @@ export type CardCheck =
   | { kind: "card_needed" | "card_expired" | "card_stopped" | "card_paused" | "card_changed" | "verification" }
   | { kind: "renewing_held"; name: string };
 
-/** Square's pass names the card it was made for (`ccof:…#verf:…`, measured in Square's test area 2026-11-14), so a pass
- *  for another card is refused before anything is charged. A pass in another shape (none was seen) is let through: the
- *  card Square says it charged is matched to the tick's after (`appCardPurchases.ts`), and Square refuses a card that is
- *  not the customer's ("Payment on file not found", measured the same day). */
+/** Square's pass names the card it was made for: the card's id, `#verf:` and Square's own letters, the only shape Square
+ *  gave in its test area (2026-11-14, the builder's run and round one's). Any other is refused before anything is charged:
+ *  a nonce for a card typed by hand would charge a card the tick does not name (round one, L1). */
 export function passFits(pass: string, cardId: string): boolean {
-  return pass.startsWith("ccof:") ? pass.startsWith(`${cardId}#`) : true;
+  return pass.startsWith(`${cardId}#verf:`);
 }
 
 /** What a purchase keeps of its pass once the pass itself is wiped (0240). */
@@ -77,9 +76,13 @@ export async function cardCheckIn(
   const renewing = await renewingHeldName(tx, c.gymId, c.entryId, c.today);
   if (renewing !== null) return { kind: "renewing_held", name: renewing };
   if (repeatingChargeWords(c.gymName, card, c.item) !== c.words) return { kind: "card_changed" };
-  // No pass, or one used before: the bank's check is asked again. A pass for another card: the card changed since.
+  // No pass, one not Square's for a saved card, or one used before: the bank's check is asked again. A pass for another
+  // saved card: the card changed since.
   if (c.pass === null) return { kind: "verification" };
-  if (!passFits(c.pass, card.cardId)) return { kind: "card_changed" };
+  if (!passFits(c.pass, card.cardId)) {
+    const otherCard = c.pass.startsWith("ccof:") && c.pass !== card.cardId && !c.pass.startsWith(`${card.cardId}#`);
+    return { kind: otherCard ? "card_changed" : "verification" };
+  }
   if (await passKept(tx, c.gymId, c.pass)) return { kind: "verification" };
   return { kind: "ok", card };
 }

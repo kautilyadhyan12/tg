@@ -219,3 +219,109 @@ describe("the bank's check gets room on the page", () => {
     expect(page.asked()).toEqual([{ kind: "tall", on: true }, { kind: "tall", on: false }]);
   });
 });
+
+/** The page with a check (20i-ii), run with a stand-in for Square: what it asks Square, and what it says back. */
+function checkPageWith(answer: () => Promise<{ status: string; token?: string }>) {
+  const html = cardPage(form(), { cardId: "ccof:CA4SEtara", amount: "49.99", currencyCode: "USD" });
+  if (html === null) throw new Error("no page");
+  const script = runningScripts(html)[0] ?? "";
+  const said: { kind: string; token?: string }[] = [];
+  const asked: unknown[][] = [];
+  let attached = 0;
+  const loaded: { onload?: () => void } = {};
+  const card = {
+    attach: () => {
+      attached += 1;
+      return Promise.resolve();
+    },
+    tokenize: (...args: unknown[]) => {
+      asked.push(args);
+      return answer();
+    },
+  };
+  const document = {
+    body: { children: [] },
+    head: { appendChild: () => undefined },
+    addEventListener: () => undefined,
+    createElement: () => loaded,
+    getElementById: (id: string) => (id === "form" ? { textContent: JSON.stringify(dataOf(html)) } : { getBoundingClientRect: () => ({ width: 0, height: 0 }) }),
+  };
+  const window: Record<string, unknown> = {
+    ReactNativeWebView: { postMessage: (m: string) => said.push(JSON.parse(m) as { kind: string }) },
+    getComputedStyle: () => ({ display: "block", visibility: "visible" }),
+  };
+  class MutationObserver {
+    observe() { return undefined; }
+  }
+  runInNewContext(script, { window, document, MutationObserver });
+  const settle = () => new Promise((done) => setTimeout(done, 0));
+  return {
+    said,
+    asked,
+    attached: () => attached,
+    /** Square's script loads. */
+    load: async () => {
+      window["Square"] = { payments: () => ({ card: () => Promise.resolve(card) }) };
+      loaded.onload?.();
+      await settle();
+    },
+    /** The app runs CHECK_SCRIPT. */
+    check: async () => {
+      (window["kwazoCheck"] as () => void)();
+      await settle();
+    },
+  };
+}
+
+describe("the bank's check before Pay asks Square about the saved card, for Pay's amount (20i-ii; round one, T1)", () => {
+  it("draws no boxes, and asks Square to check that card for that amount, as a member's own charge, with the person named", async () => {
+    const page = checkPageWith(() => Promise.resolve({ status: "OK", token: "ccof:CA4SEtara#verf:CA4SEyes" }));
+    await page.load();
+    expect(page.said).toEqual([{ kind: "ready" }]);
+    expect(page.attached()).toBe(0);
+    await page.check();
+    expect(page.asked).toEqual([
+      [
+        {
+          amount: "49.99",
+          currencyCode: "USD",
+          intent: "CHARGE",
+          customerInitiated: true,
+          sellerKeyedIn: false,
+          billingContact: { givenName: "Tara", familyName: "Shah", email: "tara@gmail.com", countryCode: "US" },
+        },
+        "ccof:CA4SEtara",
+      ],
+    ]);
+    expect(page.said.at(-1)).toEqual({ kind: "pass", token: "ccof:CA4SEtara#verf:CA4SEyes" });
+  });
+
+  it("Square's own words decide the ending: the bank's check refused or cancelled, or a card Square can't use", async () => {
+    // Square's errors as its test area threw them on 2026-11-14.
+    for (const [answer, kind] of [
+      [() => Promise.reject(new Error("Tokenization has failed\n  An error occurred while verifying the buyer")), "bank_no"],
+      [() => Promise.reject(new Error("An unexpected error occurred while using Card.")), "not_taken"],
+      [() => Promise.resolve({ status: "Invalid" }), "not_taken"],
+      [() => Promise.resolve({ status: "Cancel" }), "not_taken"],
+    ] as const) {
+      const page = checkPageWith(answer);
+      await page.load();
+      await page.check();
+      expect(page.said.at(-1)).toEqual({ kind });
+    }
+  });
+
+  it("asks once a press: before Square is ready nothing, and a second press while it works asks nothing more", async () => {
+    let done: (v: { status: string; token?: string }) => void = () => undefined;
+    const page = checkPageWith(() => new Promise((r) => (done = r)));
+    await page.check();
+    expect(page.asked).toEqual([]);
+    await page.load();
+    await page.check();
+    await page.check();
+    expect(page.asked).toHaveLength(1);
+    done({ status: "OK", token: "ccof:CA4SEtara#verf:CA4SEyes" });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(page.said.filter((m) => m.kind === "pass")).toHaveLength(1);
+  });
+});

@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
 import { AGREEMENT_AGREE_LABEL, type ForSaleLine } from "@app/shared";
 import { App } from "../../src/App";
-import { BANK_CLOSED, BANK_NO, BANK_NOT_REACHED, BANK_TITLE, CHARGING, CHECKING_BANK, PAID_TITLE } from "../../src/screens/gym/buyView";
+import { BANK_CARD_REFUSED, BANK_CLOSED, BANK_NO, BANK_NOT_REACHED, BANK_TITLE, CHARGING, CHECKING_BANK, PAID_TITLE } from "../../src/screens/gym/buyView";
 import { UPDATE_CARD } from "../../src/screens/gym/cardView";
 import type { Ask } from "../../src/session/calls";
 import { fakeServer, kept, memoryStore, tokens, type Reply } from "../kit";
@@ -90,7 +90,8 @@ describe("the worst thing: only the card the tick names, for the amount Pay char
     const page = await bankPage();
     expect(checked(page.props.source.html)).toEqual({ cardId: CARD_ID, amount: "49.99", currencyCode: "USD" });
     expect(page.props.source.baseUrl).toBe("http://localhost:3000/");
-    expect(screen.getByText(CHECKING_BANK)).toBeTruthy();
+    // While Square works the screen says so, in a box with Cancel (round one, L2).
+    expect(within(screen.getByTestId("bank-check-wait")).getByText(CHECKING_BANK)).toBeTruthy();
     // Square's page ready: the check starts. Nothing reaches the server while the bank is asked.
     await bankSays({ kind: "ready" });
     expect(presses(server.asked)).toEqual([]);
@@ -103,17 +104,19 @@ describe("the worst thing: only the card the tick names, for the amount Pay char
     expect(bankPages()).toEqual([]);
   });
 
-  it("the bank saying no, the member closing it, Square not answering, or a pass for another card: nothing is sent, and the next press asks the bank again", async () => {
+  it("the bank saying no, a card Square can't use, Square not answering, or a pass for another card: nothing is sent, and the next press asks the bank again", async () => {
     const gold = lineOf(GOLD_TYPE, { card: VISA });
     const server = serverFor(gold);
     await openGoldPage(server.ask, gold);
     for (const [ends, line] of [
       [[{ kind: "ready" }, { kind: "bank_no" }], BANK_NO],
-      [[{ kind: "ready" }, { kind: "not_taken" }], BANK_NOT_REACHED],
+      // Square answered with no pass: a card deleted or replaced at Square. Never "check your internet" (round one, H1).
+      [[{ kind: "ready" }, { kind: "not_taken" }], BANK_CARD_REFUSED],
       [[{ kind: "blocked" }], BANK_NOT_REACHED],
-      // Square's pass names its card: one for another card is never sent.
-      [[{ kind: "ready" }, { kind: "pass", token: "ccof:CA4SEsomebodyElse#verf:CA4SEabc" }], BANK_NOT_REACHED],
-      [[{ kind: "ready" }, { kind: "pass", token: `${CARD_ID}x#verf:CA4SEabc` }], BANK_NOT_REACHED],
+      // Square's pass names its card: one for another card, or in any other shape, is never sent (round one, L1).
+      [[{ kind: "ready" }, { kind: "pass", token: "ccof:CA4SEsomebodyElse#verf:CA4SEabc" }], BANK_CARD_REFUSED],
+      [[{ kind: "ready" }, { kind: "pass", token: `${CARD_ID}x#verf:CA4SEabc` }], BANK_CARD_REFUSED],
+      [[{ kind: "ready" }, { kind: "pass", token: "cnon:CA4SEtypedByHand" }], BANK_CARD_REFUSED],
     ] as const) {
       await pay();
       await bankSays(...ends);
@@ -121,8 +124,7 @@ describe("the worst thing: only the card the tick names, for the amount Pay char
       expect(presses(server.asked)).toEqual([]);
       expect(bankPages()).toEqual([]);
     }
-    // The bank said no: Update card beside the words.
-    expect(everyBankPage()).toHaveLength(5);
+    expect(everyBankPage()).toHaveLength(6);
     expect(screen.queryByTestId("buy-paid")).toBeNull();
 
     // A pass Square never hands back for a page that did not start the check is not taken either.
@@ -134,6 +136,29 @@ describe("the worst thing: only the card the tick names, for the amount Pay char
     expect(presses(server.asked)).toHaveLength(1);
   });
 
+  it("Cancel while Square works sends nothing", async () => {
+    const gold = lineOf(GOLD_TYPE, { card: VISA });
+    const server = serverFor(gold);
+    await openGoldPage(server.ask, gold);
+    await pay();
+    await bankSays({ kind: "ready" });
+    await fireEvent.press(within(screen.getByTestId("bank-check-wait")).getByText("Cancel"));
+    expect(await within(await screen.findByTestId("buy-said")).findByText(BANK_CLOSED)).toBeTruthy();
+    expect(bankPages()).toEqual([]);
+    expect(presses(server.asked)).toEqual([]);
+  });
+
+  it("a card Square can't use offers Update card beside the words", async () => {
+    const gold = lineOf(GOLD_TYPE, { card: VISA });
+    const server = serverFor(gold);
+    await openGoldPage(server.ask, gold);
+    await pay();
+    await bankSays({ kind: "ready" }, { kind: "not_taken" });
+    await screen.findByText(BANK_CARD_REFUSED);
+    expect(screen.getAllByText(UPDATE_CARD).length).toBeGreaterThan(1);
+    expect(screen.queryByText(BANK_NOT_REACHED)).toBeNull();
+  });
+
   it("where the bank asks, its box rises with the bank's page; closing it sends nothing", async () => {
     const gold = lineOf(GOLD_TYPE, { card: VISA });
     const server = serverFor(gold);
@@ -141,6 +166,7 @@ describe("the worst thing: only the card the tick names, for the amount Pay char
     await pay();
     await bankSays({ kind: "ready" });
     expect(screen.queryByTestId("bank-check-box")).toBeNull();
+    expect(screen.getByTestId("bank-check-wait")).toBeTruthy();
     await bankSays({ kind: "tall", on: true });
     expect(within(screen.getByTestId("bank-check-box")).getByText(BANK_TITLE)).toBeTruthy();
     const close = screen.getAllByLabelText("Close").at(-1);

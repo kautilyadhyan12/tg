@@ -55,6 +55,8 @@ export const BANK_TITLE = "Verify your payment";
 export const BANK_NO = "Your bank couldn’t verify this payment. You weren’t charged. Try again or update your card.";
 export const BANK_CLOSED = "Payment cancelled. You weren’t charged.";
 export const BANK_NOT_REACHED = "Couldn’t connect. You weren’t charged. Check your internet and try again.";
+/** Square answered the check with no pass: a card it can no longer use (deleted or replaced at Square), round one H1. */
+export const BANK_CARD_REFUSED = "This card couldn’t be used. You weren’t charged. Update your card or try again.";
 /** A card charge that ended with nothing taken, said after Check status. */
 export const CARD_NOT_TAKEN = "Square didn’t take this payment, so nothing was charged.";
 
@@ -236,8 +238,9 @@ const REREAD = new Set([
   "app_purchase_promo",
 ]);
 /** How a bank's check that sent nothing ended (20i-ii), beside Pay. */
-export function bankSaid(outcome: "bank_no" | "closed" | "not_reached"): BuySaid {
+export function bankSaid(outcome: "bank_no" | "card_refused" | "closed" | "not_reached"): BuySaid {
   if (outcome === "bank_no") return { tone: "bad", line: BANK_NO, updateCard: true };
+  if (outcome === "card_refused") return { tone: "bad", line: BANK_CARD_REFUSED, updateCard: true };
   if (outcome === "closed") return { tone: "warn", line: BANK_CLOSED };
   return { tone: "bad", line: BANK_NOT_REACHED };
 }

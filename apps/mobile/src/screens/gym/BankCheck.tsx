@@ -1,5 +1,5 @@
 import { useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
-import { Linking, Modal, Pressable, StyleSheet, View } from "react-native";
+import { ActivityIndicator, Linking, Modal, Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { WebView } from "react-native-webview";
 import { cardFormMessageSchema, minorToPriceText, type CardForm } from "@app/shared";
@@ -10,7 +10,8 @@ import { useNoScreenshots } from "../../look/useNoScreenshots";
 import { pageAddress } from "../robotCheckPage";
 import { CopyContext } from "../ThisCopy";
 import { CHECK_SCRIPT, cardPage, cardWhereTo } from "./cardPage";
-import { BANK_TITLE } from "./buyView";
+import { BANK_TITLE, CHECKING_BANK } from "./buyView";
+import { Button } from "../../look/Button";
 
 // The bank's check before Pay on a repeating membership (ROADMAP Stage 5 item 20i-ii). Pay asks Square to check the saved
 // card for today's amount in Square's own page (`cardPage` with a check), held unseen while Square works; where the card's
@@ -18,7 +19,8 @@ import { BANK_TITLE } from "./buyView";
 // then hands back its pass for that card, which Pay sends to the server, which charges it once. The member closing the box,
 // the bank saying no, or Square not answering ends the check with nothing sent.
 
-export type BankCheckOutcome = { kind: "pass"; pass: string } | { kind: "bank_no" } | { kind: "closed" } | { kind: "not_reached" };
+/** `card_refused`: Square answered, but with no pass (a card it cannot use, round one H1); `not_reached`: no answer. */
+export type BankCheckOutcome = { kind: "pass"; pass: string } | { kind: "bank_no" } | { kind: "card_refused" } | { kind: "closed" } | { kind: "not_reached" };
 
 export interface BankCheckAsk {
   form: CardForm;
@@ -27,14 +29,15 @@ export interface BankCheckAsk {
   currency: string;
 }
 
+/** Cancel on the box while Square works. */
+const CANCEL = "Cancel";
 /** Square's page not ready in this long reads as not reached; a bank's box typed by hand fits well inside the whole wait. */
 const READY_WAIT_MS = 30 * 1000;
 const CHECK_WAIT_MS = 10 * 60 * 1000;
 
-/** A pass names the card it was made for (`ccof:…#verf:…`): one for another card is never sent. Another shape is let
- *  through for the server, which matches the card Square charged to the tick's. */
+/** A pass names the card it was made for (`<card id>#verf:…`): any other is never sent (round one, L1). */
 export function passForCard(pass: string, cardId: string): boolean {
-  return pass.startsWith("ccof:") ? pass.startsWith(`${cardId}#`) : true;
+  return pass.startsWith(`${cardId}#verf:`);
 }
 
 interface Asked {
@@ -109,8 +112,10 @@ export function useBankCheck(): { run: (ask: BankCheckAsk) => Promise<BankCheckO
   const view =
     asked === null || !marked ? null : (
       <Modal visible transparent animationType="none" statusBarTranslucent navigationBarTranslucent onRequestClose={close}>
-        <View testID="bank-check" style={tall ? styles.scrim : styles.unseen} pointerEvents={tall ? "auto" : "none"}>
-          <View style={tall ? [styles.sheet, { marginTop: insets.top + 8, paddingBottom: insets.bottom + 12 }] : styles.tiny}>
+        {/* The box covers the screen as soon as the check starts (round one, L2): while Square works it says so, with Cancel;
+            where the bank asks, it rises with the bank's page. Square's page stays the same one throughout. */}
+        <View testID="bank-check" style={tall ? styles.scrim : styles.waitScrim}>
+          <View style={tall ? [styles.sheet, { marginTop: insets.top + 8, paddingBottom: insets.bottom + 12 }] : styles.wait}>
             {tall ? (
               <View key="head" testID="bank-check-box" style={styles.head}>
                 <Txt kind="h2" style={styles.title}>
@@ -120,7 +125,15 @@ export function useBankCheck(): { run: (ask: BankCheckAsk) => Promise<BankCheckO
                   <Icon name="x" size={18} />
                 </Pressable>
               </View>
-            ) : null}
+            ) : (
+              <View key="wait" testID="bank-check-wait" style={styles.waitBody}>
+                <ActivityIndicator color={colours.orange} />
+                <Txt colour="text" style={styles.centre}>
+                  {CHECKING_BANK}
+                </Txt>
+                <Button label={CANCEL} kind="link" small onPress={close} />
+              </View>
+            )}
             <WebView
               key={`web-${String(asked.round)}`}
               ref={web}
@@ -128,7 +141,7 @@ export function useBankCheck(): { run: (ask: BankCheckAsk) => Promise<BankCheckO
               source={{ html: asked.page, baseUrl: asked.address }}
               originWhitelist={["*"]}
               style={styles.web}
-              containerStyle={styles.web}
+              containerStyle={tall ? styles.web : styles.unseen}
               scrollEnabled={tall}
               nestedScrollEnabled={tall}
               allowFileAccess={false}
@@ -152,10 +165,11 @@ export function useBankCheck(): { run: (ask: BankCheckAsk) => Promise<BankCheckO
                 } else if (m.kind === "tall") setTall(m.on);
                 else if (m.kind === "pass") {
                   if (!started.current) return;
-                  finish(passForCard(m.token, asked.cardId) ? { kind: "pass", pass: m.token } : { kind: "not_reached" });
+                  finish(passForCard(m.token, asked.cardId) ? { kind: "pass", pass: m.token } : { kind: "card_refused" });
                 } else if (m.kind === "bank_no") {
                   if (started.current) finish({ kind: "bank_no" });
-                } else if (m.kind === "not_taken" || m.kind === "blocked") finish({ kind: "not_reached" });
+                } else if (m.kind === "not_taken") finish({ kind: "card_refused" });
+                else if (m.kind === "blocked") finish({ kind: "not_reached" });
               }}
               onError={() => {
                 finish({ kind: "not_reached" });
@@ -179,7 +193,19 @@ export function useBankCheck(): { run: (ask: BankCheckAsk) => Promise<BankCheckO
 
 const styles = StyleSheet.create({
   unseen: { position: "absolute", top: 0, left: 0, width: 1, height: 1, opacity: 0 },
-  tiny: { width: 1, height: 1 },
+  waitScrim: { flex: 1, backgroundColor: colours.scrim, justifyContent: "center", alignItems: "center", padding: sizes.edge },
+  wait: {
+    minWidth: 240,
+    maxWidth: 360,
+    paddingVertical: 22,
+    paddingHorizontal: 24,
+    backgroundColor: colours.box,
+    borderWidth: 1,
+    borderColor: colours.lineStrong,
+    borderRadius: 24,
+  },
+  waitBody: { alignItems: "center", gap: 12 },
+  centre: { textAlign: "center" },
   scrim: { flex: 1, backgroundColor: colours.scrim, justifyContent: "flex-end" },
   sheet: {
     flex: 1,

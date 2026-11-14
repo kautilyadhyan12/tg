@@ -414,6 +414,11 @@ d("Buy a repeating membership in the app: on their own card, once, given only fo
       [passFor(ivyCard.cardId), "app_purchase_card_changed"],
       [passFor(`ccof:${randomUUID()}`), "app_purchase_card_changed"],
       [`${taraCard.cardId}x#verf:CA4SEabc`, "app_purchase_card_changed"],
+      // Square's pass always names its saved card (round one, L1): a nonce for a card typed by hand, or her card's id
+      // without Square's check, is never charged.
+      ["cnon:CA4SEtypedByHand", "app_purchase_verification"],
+      [taraCard.cardId, "app_purchase_verification"],
+      [`${taraCard.cardId}#CA4SEnoVerf`, "app_purchase_verification"],
     ] as const) {
       const res = await buyPress(gym, tara.app, shown, { charge: { words, verificationToken: pass } });
       expect(res.statusCode, res.body).toBe(409);
