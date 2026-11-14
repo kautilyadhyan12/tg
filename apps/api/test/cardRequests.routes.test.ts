@@ -90,7 +90,9 @@ const pack = { ...weekly, name: "10-class pack", kind: "pack", priceMinor: 9000,
 d("Ask to add card: only the people the box names are asked, and only at their own gym (real Postgres)", { timeout: T }, () => {
   const sql = postgres(url ?? "", { prepare: false, max: 8 });
   const square = fakeSquare();
-  let clock = new Date();
+  /** How far the tests have moved the clock ahead of the real one. */
+  let shift = 0;
+  const clock = (): Date => new Date(Date.now() + shift);
   let app: App | undefined;
   const api = (): App => {
     if (app === undefined) throw new Error("beforeAll did not build the app");
@@ -241,7 +243,7 @@ d("Ask to add card: only the people the box names are asked, and only at their o
         },
       },
       environment: "production",
-      now: () => clock,
+      now: clock,
       sleep: () => Promise.resolve(),
       gymIds,
     });
@@ -258,7 +260,7 @@ d("Ask to add card: only the people the box names are asked, and only at their o
       ON CONFLICT (code) DO UPDATE SET active = true`;
     app = await buildApp(loadConfig(baseEnv), {
       squareApi: square.api,
-      orgs: { now: () => clock, gymLimits: { perAccount: 1000, perAddress: 1000, unpaid: 1000 } },
+      orgs: { now: clock, gymLimits: { perAccount: 1000, perAddress: 1000, unpaid: 1000 } },
       emailSender: { sendVerificationEmail: () => Promise.resolve(), sendPasswordResetEmail: () => Promise.resolve(), sendSignInCodeEmail: () => Promise.resolve() },
     });
     await api().ready();
@@ -564,18 +566,17 @@ d("Ask to add card: only the people the box names are asked, and only at their o
     const eve = await person(gym, "Eve Week");
     await give(gym, gold, eve);
     await member(gym, eve);
-    const start = clock;
     try {
       const box = await preview(gym, ticked([eve]));
       expect((await askRes(gym, gym.owner, ticked([eve]), box)).statusCode).toBe(200);
-      clock = new Date(start.getTime() + 7 * 86_400_000 - 60_000);
+      shift = 7 * 86_400_000 - 60_000;
       const soon = await preview(gym, ticked([eve]));
       expect(soon.askCount).toBe(0);
       expect(keptNames(soon)).toEqual({ asked_recently: ["Eve Week"] });
-      clock = new Date(start.getTime() + 7 * 86_400_000 + 60_000);
+      shift = 7 * 86_400_000 + 60_000;
       expect((await preview(gym, ticked([eve]))).askCount).toBe(1);
     } finally {
-      clock = start;
+      shift = 0;
     }
   });
 
