@@ -6,7 +6,7 @@
 // The first test is the worst thing this job could do to a real person: the request reaches somebody
 // it should not (a member of another gym, a past member, a record two accounts share, a child whose
 // parent pays) and they save a card the gym then charges.
-import { randomUUID } from "node:crypto";
+import { createHmac, randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
 import {
@@ -90,6 +90,7 @@ const pack = { ...weekly, name: "10-class pack", kind: "pack", priceMinor: 9000,
 d("Ask to add card: only the people the box names are asked, and only at their own gym (real Postgres)", { timeout: T }, () => {
   const sql = postgres(url ?? "", { prepare: false, max: 8 });
   const square = fakeSquare();
+  let clock = new Date();
   let app: App | undefined;
   const api = (): App => {
     if (app === undefined) throw new Error("beforeAll did not build the app");
@@ -240,7 +241,7 @@ d("Ask to add card: only the people the box names are asked, and only at their o
         },
       },
       environment: "production",
-      now: () => new Date(),
+      now: () => clock,
       sleep: () => Promise.resolve(),
       gymIds,
     });
@@ -257,7 +258,7 @@ d("Ask to add card: only the people the box names are asked, and only at their o
       ON CONFLICT (code) DO UPDATE SET active = true`;
     app = await buildApp(loadConfig(baseEnv), {
       squareApi: square.api,
-      orgs: { gymLimits: { perAccount: 1000, perAddress: 1000, unpaid: 1000 } },
+      orgs: { now: () => clock, gymLimits: { perAccount: 1000, perAddress: 1000, unpaid: 1000 } },
       emailSender: { sendVerificationEmail: () => Promise.resolve(), sendPasswordResetEmail: () => Promise.resolve(), sendSignInCodeEmail: () => Promise.resolve() },
     });
     await api().ready();
@@ -356,7 +357,11 @@ d("Ask to add card: only the people the box names are asked, and only at their o
     expect(mayaMail?.subject).toBe(`${iron.name} asks you to add a card for your membership`);
     expect(mayaMail?.text).toContain(`Hi Maya,\n\n${iron.name} asks you to add a card for your Gold Weekly membership. Once it is added, it is charged automatically each time the membership renews.\n\nHow to add it\n1. Open the app on your phone.\n2. Go to My membership.\n3. Tap Add card.`);
     expect(mayaMail?.html).toContain("Add a card for your membership");
-    expect(mail.find((m) => m.text.includes("the memberships you pay for"))?.text).toContain("Hi Pat,");
+    const patMail = mail.find((m) => m.text.includes("the memberships you pay for"));
+    expect(patMail?.text).toContain("Hi Pat,");
+    expect(patMail?.subject).toBe(`${iron.name} asks you to add a card for the memberships you pay for`);
+    expect(patMail?.html).toContain("Add a card for the memberships you pay for");
+    expect(patMail?.html).not.toContain("for your membership");
     expect(mail.every((m) => m.idempotencyKey.startsWith("card-request-"))).toBe(true);
     expect((await emailRows(iron.id)).map((r) => r.state)).toEqual(["sent", "sent"]);
     await sendEmails([iron.id, lotus.id]);
@@ -421,8 +426,21 @@ d("Ask to add card: only the people the box names are asked, and only at their o
       const pressed = await askRes(iron, who, selection, box);
       expect(pressed.statusCode, pressed.body).toBe(status);
     }
-    // The manager without the payments tick reads no count either.
+    // The manager without the payments tick reads no count either, and the Filter and Select all find nobody (round one, H2).
     expect(await listCount(iron, manager)).toBeNull();
+    const asManager = await send("GET", `/v1/orgs/${iron.id}/member-list/entries?card=none`, manager.cookies);
+    expect(asManager.statusCode, asManager.body).toBe(200);
+    expect(memberListEntriesResponseSchema.parse(JSON.parse(asManager.body)).page.entries).toEqual([]);
+    const managerAll = await send("POST", `/v1/orgs/${iron.id}/member-list/selection`, manager.cookies, { filter: { card: "none" } });
+    expect(managerAll.statusCode, managerAll.body).toBe(200);
+    expect(memberListSelectedAllResponseSchema.parse(JSON.parse(managerAll.body)).selection.count).toBe(0);
+    expect(await noCardList(iron)).toEqual(["Maya Gate"]);
+    // Takes payments but does not keep the list: Card on file shows no Ask they could not press (round one, L3).
+    const deskCard = await send("GET", `${entryUrl(iron, maya)}/card`, desk.cookies);
+    expect(deskCard.statusCode, deskCard.body).toBe(200);
+    expect(memberCardResponseSchema.parse(JSON.parse(deskCard.body)).cardOnFile.canAsk).toBe(false);
+    const ownerCard = await send("GET", `${entryUrl(iron, maya)}/card`, iron.owner.cookies);
+    expect(memberCardResponseSchema.parse(JSON.parse(ownerCard.body)).cardOnFile.canAsk).toBe(true);
     expect(await askedUsers(iron.id)).toEqual([]);
 
     const bad = await send("POST", `/v1/orgs/${iron.id}/member-list/selected/card-request`, iron.owner.cookies, { selection, askCount: 0, askDigest: "", key: "nope" });
@@ -502,6 +520,105 @@ d("Ask to add card: only the people the box names are asked, and only at their o
     expect(run).toMatchObject({ sent: 0, dropped: 1 });
     expect(mail).toEqual([]);
     expect(await emailRows(gym.id)).toEqual([]);
+  });
+
+  it("the same press twice asks once, a key in capitals is the same key, and two presses at once ask each person once", async () => {
+    const gym = await makeGym("Press Gym");
+    const gold = await typeOf(gym);
+    const ana = await person(gym, "Ana Press");
+    const bo = await person(gym, "Bo Press");
+    for (const id of [ana, bo]) await give(gym, gold, id);
+    const anaApp = await member(gym, ana);
+    const boApp = await member(gym, bo);
+    const both = ticked([ana, bo]);
+    const box = await preview(gym, both);
+    const key = randomUUID();
+    // A key typed in capitals (round one, L1): asked, never a 500.
+    const first = await askRes(gym, gym.owner, both, box, key.toUpperCase());
+    expect(first.statusCode, first.body).toBe(200);
+    expect(cardRequestDoneResponseSchema.parse(JSON.parse(first.body)).done).toMatchObject({ asked: 2, emailed: 2 });
+    // The same press again: the same answer, nobody asked twice.
+    const again = await askRes(gym, gym.owner, both, box, key);
+    expect(again.statusCode, again.body).toBe(200);
+    expect(cardRequestDoneResponseSchema.parse(JSON.parse(again.body)).done).toMatchObject({ asked: 2, emailed: 2 });
+    for (const who of [anaApp, boApp]) expect((await sql`SELECT 1 FROM gym_member_messages WHERE user_id = ${who.userId} AND kind = 'card_request'`).length).toBe(1);
+    expect((await emailRows(gym.id)).length).toBe(2);
+
+    // Two boxes pressed at the same instant, each with its own key: the gym's lock asks each person once.
+    const cy = await person(gym, "Cy Press");
+    const di = await person(gym, "Di Press");
+    for (const id of [cy, di]) await give(gym, gold, id);
+    const cyApp = await member(gym, cy);
+    const diApp = await member(gym, di);
+    const two = ticked([cy, di]);
+    const box2 = await preview(gym, two);
+    const presses = await Promise.all([askRes(gym, gym.owner, two, box2), askRes(gym, gym.owner, two, box2)]);
+    expect(presses.map((r) => r.statusCode).sort()).toEqual([200, 409]);
+    for (const who of [cyApp, diApp]) expect((await sql`SELECT 1 FROM gym_member_messages WHERE user_id = ${who.userId} AND kind = 'card_request'`).length).toBe(1);
+    expect((await emailRows(gym.id)).length).toBe(4);
+  });
+
+  it("is not asked again for 7 days, and is on the 7th", async () => {
+    const gym = await makeGym("Week Gym");
+    const gold = await typeOf(gym);
+    const eve = await person(gym, "Eve Week");
+    await give(gym, gold, eve);
+    await member(gym, eve);
+    const start = clock;
+    try {
+      const box = await preview(gym, ticked([eve]));
+      expect((await askRes(gym, gym.owner, ticked([eve]), box)).statusCode).toBe(200);
+      clock = new Date(start.getTime() + 7 * 86_400_000 - 60_000);
+      const soon = await preview(gym, ticked([eve]));
+      expect(soon.askCount).toBe(0);
+      expect(keptNames(soon)).toEqual({ asked_recently: ["Eve Week"] });
+      clock = new Date(start.getTime() + 7 * 86_400_000 + 60_000);
+      expect((await preview(gym, ticked([eve]))).askCount).toBe(1);
+    } finally {
+      clock = start;
+    }
+  });
+
+  it("the worker sends no email to a record that left, is paid for by someone else, changed its address, bounced, or is gone", async () => {
+    const gym = await makeGym("Worker Gym");
+    const gold = await typeOf(gym);
+    const names = ["Bo Left", "Cy Paid", "Di Moved", "Ed Bounced", "Fi Gone", "Gil Blocked", "Hal Sent"];
+    const ids: Record<string, string> = {};
+    for (const name of names) {
+      ids[name] = await person(gym, name);
+      await give(gym, gold, ids[name] ?? "");
+      await member(gym, ids[name] ?? "");
+    }
+    const id = (name: string): string => ids[name] ?? "";
+    const hmacOf = (email: string) => createHmac("sha256", baseEnv.INVITE_HMAC_SECRET).update(email.trim().toLowerCase(), "utf8").digest("hex");
+    const block = async (entryId: string) => {
+      await sql`INSERT INTO email_suppressions (email_hmac, gym_id, reason) VALUES (${hmacOf(await addressOf(gym.id, entryId))}, NULL, 'bounced')`;
+    };
+    // Gil's address bounced before the press: the box counts him as app only, and no email is written for him.
+    await block(id("Gil Blocked"));
+    const everyone = ticked(names.map(id));
+    const box = await preview(gym, everyone);
+    expect(box).toMatchObject({ askCount: 7, emailed: true, noEmail: 1 });
+    const done = await askRes(gym, gym.owner, everyone, box);
+    expect(cardRequestDoneResponseSchema.parse(JSON.parse(done.body)).done).toMatchObject({ asked: 7, emailed: 6 });
+    // Between the press and the worker's minute:
+    await sql`UPDATE gym_member_list_entries SET former_at = now() WHERE gym_id = ${gym.id} AND id = ${id("Bo Left")}`;
+    await sql`INSERT INTO gym_member_payers (gym_id, entry_id, payer_entry_id) VALUES (${gym.id}, ${id("Cy Paid")}, ${id("Hal Sent")})`;
+    await sql`UPDATE gym_member_list_entries SET email = ${`crq-r-moved-${uniq()}@example.com`} WHERE gym_id = ${gym.id} AND id = ${id("Di Moved")}`;
+    await block(id("Ed Bounced"));
+    // Fi's record deleted for good: its email lets go of the record, as the foreign key does.
+    await sql`UPDATE gym_card_request_emails SET entry_id = NULL WHERE gym_id = ${gym.id} AND entry_id = ${id("Fi Gone")}`;
+    mail.length = 0;
+    const run = await sendEmails([gym.id]);
+    expect(run).toMatchObject({ sent: 1, dropped: 3, skipped: 2, failed: 0 });
+    expect(mail.map((m) => m.text.split("\n")[0])).toEqual(["Hi Hal,"]);
+    const left = await sql<{ state: string; reason: string | null; email: string | null }[]>`
+      SELECT state, reason, email::text AS email FROM gym_card_request_emails WHERE gym_id = ${gym.id} ORDER BY state, reason`;
+    expect(left).toEqual([
+      { state: "sent", reason: null, email: null },
+      { state: "skipped", reason: "address_blocked", email: null },
+      { state: "skipped", reason: "record_gone", email: null },
+    ]);
   });
 
   it("Select all of No card on file asks the same people, and the person's page says when they were asked", async () => {

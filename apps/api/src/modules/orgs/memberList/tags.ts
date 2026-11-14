@@ -104,7 +104,7 @@ export async function previewTagSelected(
 ): Promise<MemberTagsPreview | null> {
   await requirePrivilege(deps, gymId, userId, "members.confirm");
   if (!(await limit())) return null;
-  const ids = await selectedIds(deps, gymId, request.selection);
+  const ids = await selectedIds(deps, gymId, request.selection, userId);
   const tag = await tagAsked(deps.sql, gymId, request);
   const plan = tagPlan(request.action, await notesRepo.tagStateOf(deps.sql, gymId, ids, tag.id), ids.length);
   // The box names the first people of each group and counts the rest.
@@ -130,7 +130,7 @@ export async function tagSelected(
 ): Promise<{ done: MemberTagsDone; tags: MemberGymTag[] } | null> {
   await requireWritablePrivilege(deps, gymId, userId, "members.confirm");
   if (!(await limit())) return null;
-  const ids = await selectedIds(deps, gymId, request.selection);
+  const ids = await selectedIds(deps, gymId, request.selection, userId);
   // Each tag row written is checked against its record, and on a list uploaded in the last
   // few minutes that check read the gym's whole list for every row: 11 s for 10,000 people
   // with the gym held. So a big press first has Postgres count the list again if it has

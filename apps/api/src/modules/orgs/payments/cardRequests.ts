@@ -142,7 +142,7 @@ export async function previewCardRequest(
 ): Promise<CardRequestPreview | null> {
   const account = await allowed(deps, gymId, userId, false);
   if (!(await limit())) return null;
-  const ids = await selectedIds(deps, gymId, request.selection);
+  const ids = await selectedIds(deps, gymId, request.selection, userId);
   const now = deps.now();
   const rows = await requests.requestStateOf(deps.sql, gymId, ids, account, now);
   const plan = cardRequestPlan(rows, ids.length, againSinceOf(now));
@@ -169,8 +169,9 @@ export async function sendCardRequest(
 ): Promise<CardRequestDone | null> {
   const account = await allowed(deps, gymId, userId, true);
   if (!(await limit())) return null;
-  const ids = await selectedIds(deps, gymId, request.selection);
-  const occasion = `card:${request.key}`;
+  const ids = await selectedIds(deps, gymId, request.selection, userId);
+  // Lower-cased as the table's check spells a key (round one, L1): a key typed in capitals is the same press.
+  const occasion = `card:${request.key.toLowerCase()}`;
   return await deps.sql.begin(async (tx): Promise<CardRequestDone> => {
     // The gym's row: a join, a removal, a payer set and another press wait, so the people are read
     // once and are who is written.

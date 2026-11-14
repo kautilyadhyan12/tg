@@ -161,7 +161,7 @@ try {
   }, 5);
   console.log(`${"  the box asks".padEnd(62)} ${String(asking)}`);
   // Where the box's time goes: who Select all means, and the one read of their state.
-  await runs(`  of which: Select all resolved (${String(all.count)})`, () => selectedIds(deps, big.id, selection), 5);
+  await runs(`  of which: Select all resolved (${String(all.count)})`, () => selectedIds(deps, big.id, selection, big.owner), 5);
   const ids = await needsCardIds(sql, big.id, a, now());
   await runs(`  of which: the one read of ${String(ids.length)} records`, () => requestStateOf(sql, big.id, ids, a, now()), 5);
   const smallAll = await selectAll(deps, first.owner, first.id, { filter: { card: "none" } }, yes);

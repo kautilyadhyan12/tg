@@ -34,7 +34,7 @@ export async function invitePeople(
   if (settings === null) return { total: 0, people: [], cursor: null };
   const now = deps.now();
   const today = dayInTz(now, org.timezone);
-  const group = await workOutGroup(deps.sql, settings, gymId, await filtersFor(deps, gymId, query), today);
+  const group = await workOutGroup(deps.sql, settings, gymId, await filtersFor(deps, gymId, query, userId), today);
   const chosen = group.people.filter(({ why }) => (query.group === "reach") === (why === "reach"));
   // A page continues after the last person the one before showed, in the list's order
   // (a keyset): the group can gain or lose people in between — another press, the

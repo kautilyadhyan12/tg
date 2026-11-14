@@ -369,19 +369,22 @@ export function cardRequestEmail(words: {
   then: string;
   /** "If you have any questions, you can call 555 0100 or email desk@irongym.com." or null. */
   contact: string | null;
+  /** They pay for somebody else's membership: "the memberships you pay for", everywhere in it (round one, L2). */
+  others: boolean;
 }): EmailMessage {
+  const what = words.others ? "the memberships you pay for" : "your membership";
   return memberEmail({
     to: words.to,
-    subject: `${words.gymName} asks you to add a card for your membership`,
+    subject: `${words.gymName} asks you to add a card for ${what}`,
     gymName: words.gymName,
     preheader: words.ask,
-    heading: "Add a card for your membership",
+    heading: words.others ? "Add a card for the memberships you pay for" : "Add a card for your membership",
     greeting: words.greeting,
     paragraphs: [`${words.ask} ${words.then}`],
     steps: { title: "How to add it", items: ["Open the app on your phone.", "Go to My membership.", "Tap Add card."] },
     button: null,
     contact: words.contact,
-    why: `You're receiving this because ${words.gymName} asked you to add a card for your membership.`,
+    why: `You're receiving this because ${words.gymName} asked you to add a card for ${what}.`,
   });
 }
 

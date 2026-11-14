@@ -81,7 +81,7 @@ import * as invites from "../invites/service.js";
 import type { InviteSettings } from "../invites/settings.js";
 import { insertAudit } from "../repo.js";
 import * as orgRepo from "../repo.js";
-import { OrgsError, requirePrivilege, requireWritablePrivilege } from "../service.js";
+import { OrgsError, requirePrivilege, requireStaff, requireWritablePrivilege } from "../service.js";
 import { appViewsOf, currentAppWords } from "./appViews.js";
 import { decodeEntryCursor, encodeEntryCursor } from "./cursor.js";
 import { extraForWriting, growFields, keptFields, wordForWriting, type FieldSlot } from "./extraFields.js";
@@ -1598,6 +1598,7 @@ export async function entriesFilter(
   deps: MemberListDeps,
   gymId: string,
   query: MemberListFilter,
+  userId: string,
 ): Promise<{ input: repo.EntriesFilterInput; members: repo.MemberAgainstList[] }> {
   // THE THREE KINDS OF THE GYM'S OWN WORD, FOLDED EXACTLY AS THE RULE FOLDS THEM, and
   // "" is the people with none of that kind (§9.9, §11.5). One function for all three,
@@ -1659,10 +1660,12 @@ export async function entriesFilter(
     const toSign = await agreementNotSignedRecords(deps.sql, gymId, dayInTz(deps.now(), await repo.gymTimeZone(deps.sql, gymId)));
     agreementNotSigned = [...(toSign ?? [])];
   }
-  // "NO CARD ON FILE" (18d-vii): by the one rule its count reads; nobody where the gym takes no cards in the app.
+  // "NO CARD ON FILE" (18d-vii): by the one rule its count reads; nobody where the gym takes no cards in the app,
+  // and nobody for staff who don't record payments, whose list never says who has a card (round one, H2).
   let noCardIds: string[] | null = null;
   if (query.card === "none" && records === "current") {
-    const cards = await cardsAccountOf(deps.sql, deps.cardsEnvironment ?? null, gymId);
+    const { privileges } = await requireStaff(deps, gymId, userId);
+    const cards = privileges.includes("billing.members") ? await cardsAccountOf(deps.sql, deps.cardsEnvironment ?? null, gymId) : null;
     noCardIds = cards === null ? [] : await needsCardIds(deps.sql, gymId, cards, deps.now());
   }
   return {
@@ -1722,7 +1725,7 @@ export async function readEntries(
   }
 
   const settings = deps.invites ?? null;
-  const { input, members } = await entriesFilter(deps, gymId, query);
+  const { input, members } = await entriesFilter(deps, gymId, query, userId);
   const page = await repo.entriesPage(deps.sql, { ...input, cursor, limit: MEMBER_LIST_ENTRIES_PAGE + 1 });
   const shown = page.entries.slice(0, MEMBER_LIST_ENTRIES_PAGE);
   const last = page.entries.length > MEMBER_LIST_ENTRIES_PAGE ? shown[shown.length - 1] : undefined;

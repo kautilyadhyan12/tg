@@ -145,6 +145,7 @@ export function cardRequestLines(gymName: string, gym: { contactEmail: string | 
         : `${gymName} asks you to add a card for your ${named} membership.`,
     then: letter.others ? "Once it is added, it is charged automatically each time one of them renews." : "Once it is added, it is charged automatically each time the membership renews.",
     contact: contact.length === 0 ? null : `If you have any questions, you can ${contact.join(" or ")}.`,
+    others: letter.others,
   };
 }
 

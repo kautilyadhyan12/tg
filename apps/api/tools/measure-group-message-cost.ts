@@ -118,7 +118,7 @@ try {
   const pass = (): Promise<boolean> => Promise.resolve(true);
 
   const everybody = async (gym: Gym): Promise<MemberListSelection> => {
-    const ids = await idsMatching(deps, gym.gymId, {});
+    const ids = await idsMatching(deps, gym.gymId, {}, gym.owner);
     return { kind: "all", filter: {}, count: ids.length, digest: selectionDigest(gym.gymId, ids) };
   };
   const selections = new Map<string, MemberListSelection>();
