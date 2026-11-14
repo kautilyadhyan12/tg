@@ -132,7 +132,7 @@ a.btn:hover{transform:translate(2px,2px);box-shadow:2px 3px 0 var(--ink)}
   .say{font-size:16px;margin-top:18px}
   .st{font-size:clamp(9px,1.3cqw,14px)}
   .tag{font-size:clamp(6px,.8cqw,11px)}
-  .mark{width:88px}.top{gap:10px;padding-left:16px}.top .signin{display:none}.top .btn{margin-left:auto}
+  .mark{width:88px}.top{gap:12px;padding-left:16px}.top .signin{margin-left:auto;font-size:13.5px}.top .btn{padding:0 14px;font-size:13.5px}
   .cue{display:none}
   .wide-only{display:none}
   .faq summary{font-size:15px}.faq p{font-size:14.5px}

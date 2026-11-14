@@ -24,18 +24,33 @@ import Caddyfile.api
 	# The built files carry their content's hash in their names, so they never change in place;
 	# the page itself is read again on every visit so a new build is seen at once
 	# (matched on the address asked for: every page is index.html, or home.html at the site's own address).
-	@hashed path /assets/*
+	@hashed {
+		path /assets/*
+		file
+	}
 	header @hashed Cache-Control "public, max-age=31536000, immutable"
+	# A built file that is not there (a visit in the middle of an update) is "not found", kept by
+	# nobody, and never the console's page kept for a year in its place (12a's security pass, L1).
+	@missingAsset {
+		path /assets/*
+		not file
+	}
+	header @missingAsset Cache-Control "no-store"
 	@page not path /assets/*
 	header @page Cache-Control "no-cache"
 
 	encode zstd gzip
-	# The front page (ROADMAP Stage 4 item 12a): the site's own address, and only that one, shows
-	# `home.html`. Every other address is the console as before, `/login` and its pages included.
-	@front path /
-	rewrite @front /home.html
-	try_files {path} /index.html
-	file_server
+	handle /assets/* {
+		file_server
+	}
+	handle {
+		# The front page (ROADMAP Stage 4 item 12a): the site's own address, and only that one, shows
+		# `home.html`. Every other address is the console as before, `/login` and its pages included.
+		@front path /
+		rewrite @front /home.html
+		try_files {path} /index.html
+		file_server
+	}
 
 	log {
 		output stdout

@@ -80,6 +80,59 @@ describe("the security rules: the console's unchanged, the front page's stricter
     expect(devPlugin.transformIndexHtml('', { path: '/home.html' })[0].attrs.content).toBe(frontPageContentSecurityPolicy({ dev: true }));
   });
 
+  it("holds exactly these server rules for the site, nothing added, nothing taken away", () => {
+    // Pinned whole (12a's security pass, L2): one added line such as `header @front -Content-Security-Policy`
+    // would let the front page be framed while every line checked below was still there. A change here is
+    // deliberate, and is run with `node tools/check-web-locally.mjs <build>` before it is pinned again.
+    expect(siteLines).toEqual([
+      '{$WEB_DOMAIN} {',
+      'root * /srv/web',
+      '@notEmbed not {',
+      'path_regexp ^/gyms/[^/]+/?$',
+      'query embed=1',
+      '}',
+      'header @notEmbed Content-Security-Policy "frame-ancestors \'none\'"',
+      'header {',
+      'Strict-Transport-Security "max-age=31536000; includeSubDomains"',
+      'X-Content-Type-Options "nosniff"',
+      'Referrer-Policy "strict-origin-when-cross-origin"',
+      '}',
+      '@hashed {',
+      'path /assets/*',
+      'file',
+      '}',
+      'header @hashed Cache-Control "public, max-age=31536000, immutable"',
+      '@missingAsset {',
+      'path /assets/*',
+      'not file',
+      '}',
+      'header @missingAsset Cache-Control "no-store"',
+      '@page not path /assets/*',
+      'header @page Cache-Control "no-cache"',
+      'encode zstd gzip',
+      'handle /assets/* {',
+      'file_server',
+      '}',
+      'handle {',
+      '@front path /',
+      'rewrite @front /home.html',
+      'try_files {path} /index.html',
+      'file_server',
+      '}',
+      'log {',
+      'output stdout',
+      'format filter {',
+      'wrap json',
+      'fields {',
+      'request>uri regexp "\\?.*$" ""',
+      'request>headers>Referer delete',
+      '}',
+      '}',
+      '}',
+      '}',
+    ]);
+  });
+
   it("keeps the server's rules on every page, the front page's address included", () => {
     // Only a gym's page as its embed escapes "never in a frame"; the bare address is not one.
     expect(siteLines).toContain('@notEmbed not {');
@@ -146,7 +199,9 @@ describe('the front page keeps its own rules', () => {
     expect(fromCss.length).toBe(10);
     for (const file of fromCss) expect(exists(`./${file}`), file).toBe(true);
     const fromScript = [...script.matchAll(/from '\.\/([^']+)'/g)].map((m) => m[1]);
-    expect(fromScript.length).toBe(8);
+    // The eight clips and the clip rule: nothing else, so the page loads no console code.
+    expect(fromScript.sort()).toEqual(['clipRules.js', ...[1, 2, 3, 4, 5, 6, 7, 8].map((n) => `img/w${String(n)}-clip.mp4`)]);
+    expect(script).not.toMatch(/from ['"](?!\.\/)/);
     for (const file of fromScript) expect(exists(`./${file}`), file).toBe(true);
     // Each room's clip is one the script brought in.
     for (const [, n] of page.matchAll(/data-clip="(\d)"/g)) expect(script).toContain(`import clip${n} from './img/w${n}-clip.mp4'`);
@@ -179,6 +234,9 @@ describe('what the front page says', () => {
 
   it('shows no price anywhere (Kd, 2026-11-14: "PRICES WILL NOT BE SHOWN")', () => {
     expect(text).not.toMatch(/[$€£₹]|\b(?:USD|INR|EUR|GBP)\b|per month|\/\s?mo(?:nth)?\b|per year|\/\s?yr\b/i);
+    // A bare number by a period of time reads as a price too: "from 49 a month", "49 monthly", "79/month billed yearly".
+    expect(text).not.toMatch(/\d[\d.,]*\s*(?:\/\s*|a\s+|an\s+|per\s+|each\s+)?(?:months?|monthly|years?|yearly|annual(?:ly)?|weeks?|weekly)\b/i);
+    expect(text).not.toMatch(/\b(?:billed|pricing|price|plans? from|subscription)\b/i);
   });
 
   it('never calls KWAZO a health or medical app', () => {

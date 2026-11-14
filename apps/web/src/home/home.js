@@ -8,6 +8,7 @@ import clip5 from './img/w5-clip.mp4';
 import clip6 from './img/w6-clip.mp4';
 import clip7 from './img/w7-clip.mp4';
 import clip8 from './img/w8-clip.mp4';
+import { mayLoadClip, picturesOnly } from './clipRules.js';
 
 const CLIPS = { 1: clip1, 2: clip2, 3: clip3, 4: clip4, 5: clip5, 6: clip6, 7: clip7, 8: clip8 };
 
@@ -37,32 +38,19 @@ const CLIPS = { 1: clip1, 2: clip2, 3: clip3, 4: clip4, 5: clip5, 6: clip6, 7: c
     e.preventDefault(); window.scrollTo({ top: s.i === 0 ? 0 : stopOf(s), behavior: REDUCE ? 'auto' : 'smooth' });
   }));
 
-  // THE CLIPS NEVER HOLD THE PAGE UP. Every room is a still picture first; its clip is extra.
-  //  - no clip starts downloading until the page itself has finished loading;
-  //  - only the room on screen downloads its clip, and only after it has been there a moment, so racing past a room costs nothing;
-  //  - leaving a room before its clip is ready stops that download; leaving after pauses it;
-  //  - a data saver, a 2G connection, a connection measured slower than 1.5 Mbit/s, or Reduce motion gets the still pictures only
-  //    (the speed is measured from how fast this page's own pictures arrived: the browser's own guess is often wrong);
-  //  - a hidden browser tab pauses everything.
-  const NET = navigator.connection || {};
-  let LIGHT = !!NET.saveData || /2g$/.test(NET.effectiveType || '');
-  function measuredSlow() {
-    const got = performance.getEntriesByType('resource').filter((e) => /\.webp(\?|$)/.test(e.name) && e.transferSize > 15000 && e.responseEnd > e.responseStart);
-    if (got.length < 2) return false;                                   // from the browser's cache, or not measurable: not slow
-    // only the time something was actually arriving counts: pauses between downloads are not slowness
-    const spans = got.map((e) => [e.responseStart, e.responseEnd]).sort((x, y) => x[0] - y[0]); let ms = 0, end = -1;
-    for (const [a, z] of spans) { if (z <= end) continue; ms += z - Math.max(a, end); end = z; }
-    const bytes = got.reduce((a, e) => a + e.transferSize, 0);
-    return ms > 0 && (bytes * 8) / ms < 1500;                          // kilobits per millisecond = megabits per second x 1000
-  }
-  let clipsOK = false;
-  const allow = () => setTimeout(() => { if (measuredSlow()) LIGHT = true; clipsOK = true; }, 500);
+  // THE CLIPS NEVER HOLD THE PAGE UP: the rule is `clipRules.js`. Here, leaving a room before its clip is ready stops
+  // that download, leaving after pauses it, and a hidden browser tab pauses everything.
+  let LIGHT = true, clipsOK = false;   // nothing downloads until the page has loaded and the rule has been asked
+  const allow = () => setTimeout(() => {
+    LIGHT = picturesOnly({ reduceMotion: REDUCE, connection: navigator.connection || null, entries: performance.getEntriesByType('resource') });
+    clipsOK = true;
+  }, 500);
   if (document.readyState === 'complete') allow(); else addEventListener('load', allow, { once: true });
   function want(s, on, time) {
-    const c = s.clip; if (!c || REDUCE || LIGHT) return;
+    const c = s.clip; if (!c || REDUCE || (clipsOK && LIGHT)) return;
     if (on) {
       if (s.seenAt < 0) s.seenAt = time;
-      if (!clipsOK || document.hidden || time - s.seenAt < 0.35) return;
+      if (!mayLoadClip({ pageLoaded: clipsOK, hidden: document.hidden, onScreenFor: time - s.seenAt })) return;
       if (!c.getAttribute('src')) { c.preload = 'auto'; c.src = CLIPS[c.dataset.clip]; c.addEventListener('playing', () => { c.classList.add('playing'); s.live = true; }, { once: true }); }
       if (!s.asked) { s.asked = true; const p = c.play(); if (p && p.catch) p.catch(() => { s.asked = false; }); }
     } else if (s.seenAt >= 0) {

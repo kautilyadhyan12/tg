@@ -8,7 +8,7 @@
 // The built site: `VITE_API_URL=https://api.getkwazo.com VITE_AUTH_API_URL= VITE_ML_API_URL= VITE_WS_URL=
 // VITE_TRACE_RECORD= corepack pnpm --filter web exec vite build --outDir <folder> --emptyOutDir` (RUNBOOK/test-server.md).
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, readdirSync, writeFileSync, existsSync } from "node:fs";
+import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync, existsSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
@@ -79,6 +79,12 @@ try {
   const part = await get(`/assets/${clip}`, { headers: { Range: "bytes=0-99" } });
   check("a clip can be read in parts (Safari needs it)", part.status === 206 && (part.headers.get("content-range") ?? "").startsWith("bytes 0-99/") && part.headers.get("content-type") === "video/mp4", `${part.status} ${part.headers.get("content-range")} ${part.headers.get("content-type")}`);
   check("a clip is not compressed again", part.headers.get("content-encoding") === null, part.headers.get("content-encoding") ?? "none");
+  // A built file that is not there (a visit in the middle of an update) is "not found" and kept by nobody,
+  // never the console's page kept for a year in its place (12a's security pass, L1).
+  for (const p of ["/assets/home-NOSUCHFILE.css", "/assets/no-such-chunk.js", "/assets/"]) {
+    const r = await get(p); const text = await r.text();
+    check(`${p} is "not found", kept by nobody`, r.status === 404 && r.headers.get("cache-control") === "no-store" && !text.includes(CONSOLE), `${r.status} ${r.headers.get("cache-control")}`);
+  }
 
   // Nothing of the server's own can be read through the new address.
   for (const p of ["/home.html/../Caddyfile", "/%2e%2e/etc/caddy/Caddyfile", "/../etc/passwd"]) {
@@ -87,6 +93,7 @@ try {
   }
 } finally {
   spawnSync("docker", ["rm", "-f", name], { encoding: "utf8" });
+  rmSync(dir, { recursive: true, force: true });
 }
 
 for (const r of results) console.log(`${r.pass ? "PASS" : "FAIL"}  ${r.what}${r.pass ? "" : `  (seen: ${r.seen})`}`);
