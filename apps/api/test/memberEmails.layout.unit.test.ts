@@ -2,7 +2,7 @@
 // email that lost a line it carried before — an invitation's or a lead email's Stop link or postal address (the law
 // asks for both), a signed agreement's terms or signature, a payment's pay-by day. The lines below are the emails as
 // they were sent BEFORE the move (taken from the old templates' own output on 2026-11-14), not from the new code; the
-// two lines that changed on purpose say so.
+// lines that changed on purpose say so: the app's name, and the casual sentences Kd asked to be made standard (2026-11-14).
 import { describe, expect, it } from "vitest";
 import type { EmailMessage } from "../src/email/resend.js";
 import {
@@ -46,11 +46,11 @@ const CASES: Record<string, Case> = {
     mail: memberInviteEmail({ to: "maya@example.test", gymName: "Iron House", gymCity: "Leeds", postalAddress: "12 High Street, Leeds LS1 1AA", ...INVITE_LINKS }),
     subject: "You're a member of Iron House — get the app",
     lines: [
-      // Changed on purpose: the app's name is KWAZO; the sentence before the button ends with a full stop.
+      // Changed on purpose: the app's name is KWAZO; the sentence before the button ends with a full stop; standard words.
       "Iron House in Leeds has invited you to KWAZO, the app its members use.",
       "To join Iron House in the app, sign in with this email address, maya@example.test.",
-      "The invitation works only for someone who signs in with this address.",
-      "Not a member of Iron House? Tell them it's not you",
+      "This invitation only works when you sign in with this email address.",
+      "Not a member of Iron House? Let Iron House know",
       "Iron House has you on its member list and asked us to invite you. We won't send you another unless you ask Iron House for one.",
     ],
     links: [INVITE_LINKS.joinLink, INVITE_LINKS.notMeLink, INVITE_LINKS.unsubscribeLink],
@@ -58,22 +58,23 @@ const CASES: Record<string, Case> = {
   },
   lead1: {
     mail: leadEmail(1),
-    subject: "Thanks for asking about Iron House",
-    lines: ["Hi Priya,", "Thanks for asking about Iron House. We'd love to show you around.", "Come in any time we are open, or reply to this email with any questions.", "you asked Iron House about joining and said they could email you."],
+    subject: "Thank you for your interest in Iron House",
+    // Standard words on purpose (Kd, 2026-11-14), here and in the two below.
+    lines: ["Hi Priya,", "Thank you for your interest in Iron House. We'd be happy to show you around.", "You're welcome to visit during our opening hours, or reply to this email with any questions.", "you asked Iron House about joining and said they could email you."],
     links: [LEAD.unsubscribeLink],
     sentBy: "Sent by KWAZO on behalf of Iron House, 12 Kirkgate, Leeds LS1 6BY.",
   },
   lead2: {
     mail: leadEmail(2),
     subject: "Come and see us at Iron House",
-    lines: ["Hi Priya,", "Just checking in. Would you like to come in for a look around, or try a session?", "Reply with a day that suits you and we'll have it ready.", "you asked Iron House about joining and said they could email you."],
+    lines: ["Hi Priya,", "We're following up on your interest in joining. Would you like to visit for a tour or try a session?", "Reply with a day that suits you and we'll arrange it.", "you asked Iron House about joining and said they could email you."],
     links: [LEAD.unsubscribeLink],
     sentBy: "Sent by KWAZO on behalf of Iron House, 12 Kirkgate, Leeds LS1 6BY.",
   },
   lead3: {
     mail: leadEmail(3),
     subject: "Still thinking about Iron House?",
-    lines: ["Hi Priya,", "This is our last note, so we won't fill your inbox.", "If you'd like to join or have a question, just reply. We'd be glad to see you.", "you asked Iron House about joining and said they could email you."],
+    lines: ["Hi Priya,", "This is our last follow-up email.", "If you'd like to join or have any questions, reply to this email. We'd be glad to welcome you.", "you asked Iron House about joining and said they could email you."],
     links: [LEAD.unsubscribeLink],
     sentBy: "Sent by KWAZO on behalf of Iron House, 12 Kirkgate, Leeds LS1 6BY.",
   },
@@ -110,14 +111,14 @@ const CASES: Record<string, Case> = {
       greeting: "Hi Gina,",
       what: "Your Visa ending in 1111 expires at the end of November 2026.",
       paysFor: "It pays for your membership at Iron House.",
-      ask: "To keep your payments going, please give Iron House your new card before then at the front desk.",
+      ask: "To avoid any interruption to your payments, please give Iron House your new card before then at the front desk.",
       contact: CONTACT,
     }),
     subject: "Your card on file with Iron House expires this month",
     lines: [
       "Hi Gina,",
       "Your Visa ending in 1111 expires at the end of November 2026. It pays for your membership at Iron House.",
-      "To keep your payments going, please give Iron House your new card before then at the front desk.",
+      "To avoid any interruption to your payments, please give Iron House your new card before then at the front desk.",
       CONTACT,
     ],
     links: [],
@@ -334,7 +335,7 @@ describe("every member email keeps every line it carried before the move", () =>
   it("each has a short heading of its own, never its first sentence again", () => {
     const headings: Record<string, string> = {
       invite: "Join Iron House in the app",
-      lead1: "Thanks for getting in touch",
+      lead1: "Thank you for your interest",
       lead2: "Come and see us",
       lead3: "Still thinking about joining\\?",
       declined: "Your payment could not be processed",

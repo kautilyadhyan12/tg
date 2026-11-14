@@ -161,7 +161,7 @@ export function noticeLines(gymName: string, facts: repo.NoticeFacts): Omit<Para
     // "Visa ending in 1111", as a card is named to its holder.
     what: `Your ${cardName(card).replace(" ending ", " ending in ")} expires at the end of ${monthWords(card.expMonth, card.expYear)}.`,
     paysFor: `It pays for ${paysForWords(facts.paysForSelf, facts.paysForOthers)} at ${gymName}.`,
-    ask: `To keep your payments going, please give ${gymName} your new card at the front desk before then.`,
+    ask: `To avoid any interruption to your payments, please give ${gymName} your new card at the front desk before then.`,
     contact: contact.length === 0 ? null : `If you have any questions, you can ${contact.join(" or ")}.`,
   };
 }

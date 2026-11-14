@@ -21,7 +21,7 @@ export type EmailBlock =
   | { kind: "bullets"; items: readonly string[] }
   /** The one main button, to our own pages. `showLink` prints the address under it, for an email program that hides buttons. */
   | { kind: "button"; label: string; href: string; showLink: boolean }
-  /** A sentence that ends with a small link: "Not a member of Iron House? Tell them it's not you". */
+  /** A sentence that ends with a small link: "Not a member of Iron House? Let Iron House know". */
   | { kind: "link"; text: string; label: string; href: string }
   /** Labelled facts under a small title: a signed membership's name, price and start. */
   | { kind: "details"; title: string; rows: readonly { label: string; value: string }[] }

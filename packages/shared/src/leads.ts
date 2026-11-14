@@ -83,26 +83,26 @@ export function leadFollowUpLetter(step: number, gymName: string): { subject: st
   switch (step) {
     case 1:
       return {
-        subject: `Thanks for asking about ${gymName}`,
+        subject: `Thank you for your interest in ${gymName}`,
         lines: [
-          `Thanks for asking about ${gymName}. We'd love to show you around.`,
-          "Come in any time we are open, or reply to this email with any questions.",
+          `Thank you for your interest in ${gymName}. We'd be happy to show you around.`,
+          "You're welcome to visit during our opening hours, or reply to this email with any questions.",
         ],
       };
     case 2:
       return {
         subject: `Come and see us at ${gymName}`,
         lines: [
-          "Just checking in. Would you like to come in for a look around, or try a session?",
-          "Reply with a day that suits you and we'll have it ready.",
+          "We're following up on your interest in joining. Would you like to visit for a tour or try a session?",
+          "Reply with a day that suits you and we'll arrange it.",
         ],
       };
     case 3:
       return {
         subject: `Still thinking about ${gymName}?`,
         lines: [
-          "This is our last note, so we won't fill your inbox.",
-          "If you'd like to join or have a question, just reply. We'd be glad to see you.",
+          "This is our last follow-up email.",
+          "If you'd like to join or have any questions, reply to this email. We'd be glad to welcome you.",
         ],
       };
     default:

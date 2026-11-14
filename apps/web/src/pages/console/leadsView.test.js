@@ -131,10 +131,10 @@ describe('the follow-up emails (20c-ii)', () => {
 
   it("each email goes to the lead's saved address, names them and the gym, and ends with where the gym is", () => {
     const one = followUpEmail(1, { ...lead, fullName: 'Priya  Shah', email: 'priya+gym@example.com' }, GYM);
-    expect(one.subject).toBe('Thanks for asking about Iron House');
+    expect(one.subject).toBe('Thank you for your interest in Iron House');
     expect(one.body).toBe(
-      "Hi Priya,\n\nThanks for asking about Iron House. We'd love to show you around.\n\n" +
-        'Come in any time we are open, or reply to this email with any questions.\n\nIron House\n12 Kirkgate, Leeds LS1 6BY',
+      "Hi Priya,\n\nThank you for your interest in Iron House. We'd be happy to show you around.\n\n" +
+        "You're welcome to visit during our opening hours, or reply to this email with any questions.\n\nIron House\n12 Kirkgate, Leeds LS1 6BY",
     );
     const url = new URL(one.href);
     expect(url.protocol).toBe('mailto:');
@@ -143,7 +143,7 @@ describe('the follow-up emails (20c-ii)', () => {
     expect(url.searchParams.get('body')).toBe(one.body);
     expect(followUpEmail(2, lead, GYM).subject).toBe('Come and see us at Iron House');
     expect(followUpEmail(3, lead, GYM).subject).toBe('Still thinking about Iron House?');
-    expect(followUpEmail(3, lead, GYM).body).toContain("This is our last note, so we won't fill your inbox.");
+    expect(followUpEmail(3, lead, GYM).body).toContain('This is our last follow-up email.');
     expect(followUpEmail(4, lead, GYM)).toBeNull();
   });
 
@@ -155,7 +155,7 @@ describe('the follow-up emails (20c-ii)', () => {
   it('a name the gym typed with & or ? cannot break the email link', () => {
     const odd = followUpEmail(1, { ...lead, fullName: 'Jo & Sam?' }, { ...GYM, name: 'Fit & Well? Gym' });
     const url = new URL(odd.href);
-    expect(url.searchParams.get('subject')).toBe('Thanks for asking about Fit & Well? Gym');
+    expect(url.searchParams.get('subject')).toBe('Thank you for your interest in Fit & Well? Gym');
     expect(url.searchParams.get('body').startsWith('Hi Jo,')).toBe(true);
   });
 

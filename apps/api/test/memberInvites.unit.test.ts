@@ -365,7 +365,7 @@ describe("the invitation email", () => {
     expect(email.subject).toBe("You're a member of Iron House — get the app");
     expect(email.to).toBe("ann@example.org");
     expect(email.text).toContain(words.joinLink);
-    expect(email.text).toContain(`Not a member of Iron House? Tell them it's not you:\n${words.notMeLink}`);
+    expect(email.text).toContain(`Not a member of Iron House? Let Iron House know:\n${words.notMeLink}`);
     expect(email.html).toContain(`href="${words.notMeLink}"`);
     expect(email.text).toContain(words.unsubscribeLink);
     expect(email.text).toContain("12 High Street, Leeds LS1 1AA");

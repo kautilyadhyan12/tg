@@ -314,7 +314,7 @@ d("the app sends a lead's follow-ups (real Postgres)", () => {
 
       // Exactly one email: Priya's first, once.
       expect(outbox.map((m) => m.to)).toEqual(["priya@example.com"]);
-      expect(outbox[0]?.subject).toBe("Thanks for asking about Worst Sent Gym");
+      expect(outbox[0]?.subject).toBe("Thank you for your interest in Worst Sent Gym");
       for (const address of ["ana", "kit", "lee", "mo", "sam", "eve", "jo", "jo.park", "uma", "ray"]) {
         expect(emailsTo(`${address}@example.com`)).toEqual([]);
       }
@@ -447,7 +447,7 @@ d("the app sends a lead's follow-ups (real Postgres)", () => {
       outbox.length = 0;
       await runSender();
       await runSender();
-      expect(emailsTo("asha.page@example.com").map((m) => m.subject)).toEqual(["Thanks for asking about Page Sent Gym"]);
+      expect(emailsTo("asha.page@example.com").map((m) => m.subject)).toEqual(["Thank you for your interest in Page Sent Gym"]);
       expect(emailsTo("bo.page@example.com")).toEqual([]);
 
       const [first] = emailsTo("asha.page@example.com");
@@ -508,7 +508,7 @@ d("the app sends a lead's follow-ups (real Postgres)", () => {
       const sendId = (await sql<{ id: string }[]>`SELECT id FROM gym_lead_sends WHERE lead_id = ${lead.id}`)[0]?.id ?? "";
       expect(message.from).toBe("Iron House Words via KWAZO <invites@mail.example.com>");
       expect(message.replyTo).toBe("front.desk@ironhouse.example.com");
-      expect(message.subject).toBe("Thanks for asking about Iron House Words");
+      expect(message.subject).toBe("Thank you for your interest in Iron House Words");
       expect(message.text.startsWith("Hi,\n\n")).toBe(true);
       expect(message.text).not.toContain("evil-site");
       expect(message.text).toContain(`Sent by KWAZO on behalf of Iron House Words, ${POSTAL}.`);
@@ -539,7 +539,7 @@ d("the app sends a lead's follow-ups (real Postgres)", () => {
 
       outbox.length = 0;
       await runSender();
-      expect(emailsTo("dee.days@example.com").map((m) => m.subject)).toEqual(["Thanks for asking about Days Sent Gym"]);
+      expect(emailsTo("dee.days@example.com").map((m) => m.subject)).toEqual(["Thank you for your interest in Days Sent Gym"]);
       expect((await readLead(gym, lead.id, owner.cookies)).followUp).toMatchObject({ sent: 1, dueOn: addDays(today(), 3), by: "app" });
 
       // Two days later: not yet.
@@ -549,7 +549,7 @@ d("the app sends a lead's follow-ups (real Postgres)", () => {
       await daysPass(lead.id, 1);
       await runSender();
       expect(emailsTo("dee.days@example.com").map((m) => m.subject)).toEqual([
-        "Thanks for asking about Days Sent Gym",
+        "Thank you for your interest in Days Sent Gym",
         "Come and see us at Days Sent Gym",
       ]);
       expect(await storedLead(lead.id)).toMatchObject({ sent: 2, due: addDays(today(), 4) });
@@ -560,7 +560,7 @@ d("the app sends a lead's follow-ups (real Postgres)", () => {
       await runSender();
       await runSender();
       expect(emailsTo("dee.days@example.com").map((m) => m.subject)).toEqual([
-        "Thanks for asking about Days Sent Gym",
+        "Thank you for your interest in Days Sent Gym",
         "Come and see us at Days Sent Gym",
         "Still thinking about Days Sent Gym?",
       ]);
@@ -640,7 +640,7 @@ d("the app sends a lead's follow-ups (real Postgres)", () => {
       await runSender();
       expect(emailsTo("ann.month@example.com")).toHaveLength(1);
       expect(emailsTo("ben.month@example.com")).toEqual([]);
-      expect(emailsTo("old.month@example.com").map((m) => m.subject)).toEqual(["Thanks for asking about Month Sent Gym", "Come and see us at Month Sent Gym"]);
+      expect(emailsTo("old.month@example.com").map((m) => m.subject)).toEqual(["Thank you for your interest in Month Sent Gym", "Come and see us at Month Sent Gym"]);
       expect(settingsOf(await get(settingsUrl(gym), owner.cookies)).usedThisMonth).toBe(LEAD_EMAILS_PER_MONTH);
 
       // Ben is staff's: his panel offers the buttons and he is in Email due.

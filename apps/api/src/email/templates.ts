@@ -136,8 +136,8 @@ export function memberInviteEmail(words: {
       paragraph(lead),
       paragraph(`To join ${gym} in the app, sign in with this email address, ${words.to}.`),
       { kind: "button", label: `Join ${gym}`, href: words.joinLink, showLink: false },
-      paragraph("The invitation works only for someone who signs in with this address."),
-      { kind: "link", text: `Not a member of ${gym}?`, label: "Tell them it's not you", href: words.notMeLink },
+      paragraph("This invitation only works when you sign in with this email address."),
+      { kind: "link", text: `Not a member of ${gym}?`, label: `Let ${gym} know`, href: words.notMeLink },
     ],
     contact: null,
     why: `You're receiving this because ${gym} has you on its member list and asked us to invite you. We won't send you another unless you ask ${gym} for one.`,
@@ -273,7 +273,7 @@ export function leadFollowUpEmail(words: {
 }
 
 /** Each follow-up's heading, short, so it never repeats the letter's first sentence. */
-const LEAD_HEADING: Record<number, string> = { 1: "Thanks for getting in touch", 2: "Come and see us", 3: "Still thinking about joining?" };
+const LEAD_HEADING: Record<number, string> = { 1: "Thank you for your interest", 2: "Come and see us", 3: "Still thinking about joining?" };
 
 /** Part 4 §5.2's Day-0 undo email: the one link, to our own restore page,
  *  and the number of days it stays good for — interpolated from the caller,
@@ -351,7 +351,7 @@ export function cardExpiringEmail(words: {
   what: string;
   /** "It pays for your membership at Iron Gym." */
   paysFor: string;
-  /** "To keep your payments going, please give Iron Gym your new card before then at the front desk." */
+  /** "To avoid any interruption to your payments, please give Iron Gym your new card before then at the front desk." */
   ask: string;
   /** "If you have any questions, you can call 555 0100 or email desk@irongym.com." or null. */
   contact: string | null;
@@ -424,7 +424,7 @@ export function renewalReminderEmail(words: {
     greeting: words.greeting,
     body: words.lines.map((text) => paragraph(text)),
     contact: words.contact,
-    why: `You're receiving this because of a membership with ${words.gymName}.`,
+    why: `You're receiving this because you have or pay for a membership with ${words.gymName}.`,
   });
 }
 

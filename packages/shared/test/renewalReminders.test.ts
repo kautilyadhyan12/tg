@@ -197,7 +197,7 @@ describe("the email's words", () => {
       lines: [
         "Your Gold Yearly membership at Iron Gym renews on 3 Dec 2026 for $499.00.",
         "The payment is due that day.",
-        "If you'd rather it didn't renew, please let us know before 3 Dec 2026.",
+        "If you don't want it to renew, please let us know before 3 Dec 2026.",
       ],
     });
   });
@@ -207,7 +207,7 @@ describe("the email's words", () => {
     expect(words.lines).toEqual([
       "Sam Lee's Gold Yearly membership at Iron Gym renews on 3 Dec 2026 for $499.00.",
       "It will be paid with the Visa ending in 4242 that day.",
-      "If you'd rather it didn't renew, cancelling needs 30 days' notice: if you cancel today, the last day is 2 Jan 2027.",
+      "If you don't want it to renew, you need to give 30 days' notice. If you cancel today, your last day will be 2 Jan 2027.",
     ]);
   });
 
@@ -229,7 +229,7 @@ describe("the email's words", () => {
       subject: "Your minimum term at Iron Gym ends on 2 Nov 2027",
       lines: [
         "The minimum term of your Gold Monthly membership at Iron Gym ends on 2 Nov 2027.",
-        "After that, it carries on at $49.99 every month until you cancel.",
+        "After that, it continues at $49.99 every month until you cancel.",
         "If you'd like it to end with the minimum term instead, please let us know before 2 Nov 2027.",
       ],
     });
@@ -238,7 +238,7 @@ describe("the email's words", () => {
   it("a membership that ends", () => {
     expect(renewalReminderWords({ ...base, forName: "Sam Lee", what: "ends", aboutOn: "2027-11-02", amountMinor: null })).toEqual({
       subject: "Sam Lee's membership at Iron Gym ends on 2 Nov 2027",
-      lines: ["Sam Lee's Gold Yearly membership at Iron Gym ends on 2 Nov 2027.", "If you'd like to keep coming, just let us know and we'll help you choose a membership."],
+      lines: ["Sam Lee's Gold Yearly membership at Iron Gym ends on 2 Nov 2027.", "If you'd like to continue, please contact us and we'll help you choose a new membership."],
     });
   });
 });

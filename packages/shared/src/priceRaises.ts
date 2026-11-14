@@ -120,8 +120,8 @@ export function priceRaiseWords(input: PriceRaiseWordsInput): PriceRaiseWords {
   const to = formatMinor(input.toMinor, input.currency);
   const cancel =
     input.notice === null
-      ? `If you'd rather not carry on at the new price, please let us know before ${day}.`
-      : `If you'd rather not carry on at the new price, cancelling needs ${input.notice.days === 1 ? "1 day's" : `${String(input.notice.days)} days'`} notice: if you cancel today, the last day is ${dayWords(input.notice.lastDay)}.`;
+      ? `If you don't want to continue at the new price, please let us know before ${day}.`
+      : `If you don't want to continue at the new price, you need to give ${input.notice.days === 1 ? "1 day's" : `${String(input.notice.days)} days'`} notice. If you cancel today, your last day will be ${dayWords(input.notice.lastDay)}.`;
   return {
     subject: `The price of ${whose} membership at ${input.gymName} is going up on ${day}`,
     lines: [
