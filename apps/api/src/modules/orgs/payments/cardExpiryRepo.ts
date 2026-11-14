@@ -13,7 +13,7 @@ type SqlOrTx = Sql | TransactionSql;
 /** The card (alias `k`) pays for a membership that renews: its holder's own, where nobody else pays
  *  for them, or that of somebody they pay for; of a current member, running or frozen. The card the
  *  app would charge for it (`payerCard` in `cardChargesRepo.ts`). */
-const paysForRenewal = (sql: SqlOrTx, now: Date) => sql`
+export const paysForRenewal = (sql: SqlOrTx, now: Date) => sql`
       (EXISTS (
          SELECT 1 FROM gym_held_memberships h
          WHERE h.gym_id = k.gym_id AND h.entry_id = k.entry_id AND ${renewing(sql, now)}

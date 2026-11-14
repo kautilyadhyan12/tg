@@ -1,4 +1,5 @@
 import {
+  CARD_REQUEST_AGAIN_DAYS,
   HELD_PAYMENT_WORDS,
   HELD_STATUS_WORDS,
   MEMBER_APP_FILTER_ORDER,
@@ -48,6 +49,8 @@ export const EMPTY_FILTERS = {
   waiverNotSigned: false,
   /** Only the members with a membership agreement still to sign (18u-ii-a). */
   agreementNotSigned: false,
+  /** Only the members who pay for a membership that renews automatically and have no card on file (18d-vii). */
+  noCard: false,
   query: '',
 };
 
@@ -56,6 +59,9 @@ export const WAIVER_NOT_SIGNED_WORDS = 'Waiver not signed';
 
 /** The pill and the Filter's choice for the people with a membership agreement still to sign. */
 export const AGREEMENT_NOT_SIGNED_WORDS = 'Agreement not signed';
+
+/** The pill and the Filter's choice for the people with no card on file who need one (18d-vii). */
+export const NO_CARD_WORDS = 'No card on file';
 
 /** The pill for the list the sign atop Members opens. */
 export const OVER_FILTER_WORDS = 'Membership ended or cancelled';
@@ -92,6 +98,7 @@ export function entriesQueryString(filters, cursor) {
     else if (filters.overOwing) params.append('membership', 'over_owing');
     if (filters.waiverNotSigned) params.append('waiver', 'not_signed');
     if (filters.agreementNotSigned) params.append('agreement', 'not_signed');
+    if (filters.noCard) params.append('card', 'none');
   } else {
     // Past members have one word to be found by: who still owes (18a-ii).
     for (const word of filters.paymentStatus) params.append('paymentStatus', word);
@@ -129,6 +136,7 @@ export function activeFilters(filters, words) {
   }
   if (filters.waiverNotSigned) out.push({ key: 'waiver', text: WAIVER_NOT_SIGNED_WORDS, without: { ...filters, waiverNotSigned: false } });
   if (filters.agreementNotSigned) out.push({ key: 'agreement', text: AGREEMENT_NOT_SIGNED_WORDS, without: { ...filters, agreementNotSigned: false } });
+  if (filters.noCard) out.push({ key: 'card', text: NO_CARD_WORDS, without: { ...filters, noCard: false } });
   return [...out, ...tag];
 }
 
@@ -139,6 +147,7 @@ export function filtersAreEmpty(filters) {
     !filters.overOwing &&
     !filters.waiverNotSigned &&
     !filters.agreementNotSigned &&
+    !filters.noCard &&
     filters.app.length === 0 &&
     filters.query.trim() === '' &&
     CHIP_KINDS.every(({ kind }) => filters[kind].length === 0)
@@ -470,6 +479,7 @@ export function selectionFilter(filters) {
     else if (filters.overOwing) out.membership = 'over_owing';
     if (filters.waiverNotSigned) out.waiver = 'not_signed';
     if (filters.agreementNotSigned) out.agreement = 'not_signed';
+    if (filters.noCard) out.card = 'none';
   } else if (filters.paymentStatus.length > 0) {
     out.paymentStatus = [...filters.paymentStatus];
   }
@@ -1062,6 +1072,44 @@ export function messageBoxWords(preview) {
           : `You can send ${String(left)} more messages to groups today.`,
     full: left === 0,
   };
+}
+
+/** THE ASK TO ADD CARD BOX (18d-vii): who will be asked and who won't, each reason in one line. A
+ *  name kept because somebody else pays says who; one asked lately says when. */
+export function cardAskBoxWords(preview, today = null) {
+  const k = preview.askCount;
+  const lines = {
+    has_card: 'Already have a card on file.',
+    paid_by: 'Someone else on your list pays for them. Ask the person who pays instead.',
+    nothing_renews: "Don't have a membership that renews automatically, so no card is needed.",
+    not_in_app: "Not in the app yet, so they can't add a card there.",
+    shared: "Two app accounts are on this one person's page, so we can't tell whose inbox it is. Open their page to see both.",
+    asked_recently: `Already asked in the last ${String(CARD_REQUEST_AGAIN_DAYS)} days.`,
+    former: 'No longer a member.',
+    gone: 'No longer on your list.',
+  };
+  const named = (person) => {
+    if (person.payerName) return { ...person, name: `${person.name || 'No name'} · paid for by ${person.payerName}` };
+    if (person.askedOn) return { ...person, name: `${person.name || 'No name'} · asked ${shortDay(person.askedOn, today)}` };
+    return person;
+  };
+  const kept = preview.kept.reduce((sum, group) => sum + group.count, 0);
+  return {
+    heading: k === 0 ? null : `${people(k)} will be asked to add a card`,
+    what: 'Each gets a message in their inbox in the app asking them to add a card for their membership. Once added, the card is charged automatically each time the membership renews.',
+    nobody: 'Nobody you selected can be asked to add a card.',
+    button: k === 0 ? null : `Ask ${people(k)}`,
+    keptHeading: kept === 0 ? null : `${people(kept)} won't be asked`,
+    kept: preview.kept.map((group) => ({ key: group.reason, count: group.count, people: group.people.map(named), line: lines[group.reason] })),
+    invite: 'Invite them to the app',
+  };
+}
+
+/** What a press did: "Asked 12 people to add a card. 2 weren't asked." */
+export function cardAskDoneLine(done) {
+  const kept = done.kept.reduce((sum, group) => sum + group.count, 0);
+  const did = `Asked ${people(done.asked)} to add a card. They'll see it in their inbox in the app.`;
+  return kept === 0 ? did : `${did} ${n(kept)} weren't asked.`;
 }
 
 /** What a press did: "Message sent to 12 people. 2 didn't get it." */

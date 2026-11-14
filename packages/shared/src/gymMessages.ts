@@ -37,8 +37,11 @@ export const GYM_GROUP_MESSAGE_KIND = "group";
 /** Refer a friend's member's gift, given (20e-ii-b-ii-a): a notice about money, written with
  *  the friend's payment, never one of the day's automatic messages and never switched off. */
 export const GYM_REFERRAL_GIFT_MESSAGE_KIND = "referral_gift";
+/** Staff asked the member to add their card in the app (18d-vii): a payment notice, never one of
+ *  the day's automatic messages and never switched off. */
+export const CARD_REQUEST_MESSAGE_KIND = "card_request";
 /** Every kind a member's inbox can hold. */
-export const gymInboxKindSchema = z.enum([...GYM_MESSAGE_KINDS, GYM_GROUP_MESSAGE_KIND, GYM_REFERRAL_GIFT_MESSAGE_KIND]);
+export const gymInboxKindSchema = z.enum([...GYM_MESSAGE_KINDS, GYM_GROUP_MESSAGE_KIND, GYM_REFERRAL_GIFT_MESSAGE_KIND, CARD_REQUEST_MESSAGE_KIND]);
 export type GymInboxKind = z.infer<typeof gymInboxKindSchema>;
 
 /** The kinds a person cannot switch off (§16.2: "except a payment notice"). */

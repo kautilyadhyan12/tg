@@ -1674,6 +1674,13 @@
       "when": 1790985600239,
       "tag": "0239_promo_codes_in_app",
       "breakpoints": true
+    },
+    {
+      "idx": 239,
+      "version": "7",
+      "when": 1790985600240,
+      "tag": "0240_card_requests",
+      "breakpoints": true
     }
   ]
 }

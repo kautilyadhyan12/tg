@@ -185,6 +185,9 @@ import {
   withKnownStartHereSteps,
   startOrgTrialResponseSchema,
   updateOrgResponseSchema,
+  cardRequestDoneResponseSchema,
+  cardRequestPreviewResponseSchema,
+  cardRequestPreviewSchema,
   gymGroupMessageDoneResponseSchema,
   gymGroupMessagePreviewResponseSchema,
   gymGroupMessagePreviewSchema,
@@ -1793,6 +1796,11 @@ export const orgService = {
     readThrough(gymGroupMessagePreviewResponseSchema, 'who would get it', authApi.post(`${tagsUrl(gymId)}/selected/message-preview`, { selection })),
   sendGroupMessage: (gymId, body) =>
     readThrough(gymGroupMessageDoneResponseSchema, 'that message', authApi.post(`${tagsUrl(gymId)}/selected/message`, body)),
+  // Ask to add card (18d-vii): who would be asked and who won't, then the press.
+  previewCardRequest: (gymId, selection) =>
+    readThrough(cardRequestPreviewResponseSchema, 'who would be asked', authApi.post(`${tagsUrl(gymId)}/selected/card-request-preview`, { selection })),
+  sendCardRequest: (gymId, body) =>
+    readThrough(cardRequestDoneResponseSchema, 'that request', authApi.post(`${tagsUrl(gymId)}/selected/card-request`, body)),
   // The messages the gym has sent to groups (20f-ii), twenty at a time after the id `after`.
   getSentMessages: (gymId, after) =>
     readThrough(
@@ -2477,6 +2485,14 @@ export function groupMessagePeopleChanged(err) {
   const data = err?.response?.data;
   if (data?.error !== 'group_message_people_changed') return null;
   const parsed = gymGroupMessagePreviewSchema.safeParse(data.preview);
+  return parsed.success ? parsed.data : null;
+}
+
+/** The Ask to add card box as it now stands, when the people changed and nobody was asked; else null. */
+export function cardRequestPeopleChanged(err) {
+  const data = err?.response?.data;
+  if (data?.error !== 'card_request_people_changed') return null;
+  const parsed = cardRequestPreviewSchema.safeParse(data.preview);
   return parsed.success ? parsed.data : null;
 }
 

@@ -1,0 +1,429 @@
+// Ask members to add their card (ROADMAP 18d-vii): staff tick members on the list, the box names who
+// will be asked to add their card in the app and who won't, and each person asked gets one message in
+// their inbox. Against real Postgres (DATABASE_URL-gated), with Square answered by the fake in
+// `fakeSquareTerminal.ts`.
+//
+// The first test is the worst thing this job could do to a real person: the request reaches somebody
+// it should not (a member of another gym, a past member, a record two accounts share, a child whose
+// parent pays) and they save a card the gym then charges.
+import { randomUUID } from "node:crypto";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import postgres from "postgres";
+import {
+  ROLE_PRIVILEGES,
+  cardRequestDoneResponseSchema,
+  cardRequestPreviewResponseSchema,
+  gymInboxResponseSchema,
+  heldMembershipsResponseSchema,
+  memberCardResponseSchema,
+  memberListEntriesResponseSchema,
+  memberListSelectedAllResponseSchema,
+  memberListViewResponseSchema,
+  squareConnectResponseSchema,
+  squareFinishResponseSchema,
+  type CardRequestPreview,
+  type GymMembershipTypesResponse,
+} from "@app/shared";
+import { buildApp } from "../src/app.js";
+import { loadConfig } from "../src/config.js";
+import { account, fakeSquare, type Account } from "./fakeSquareTerminal.js";
+import { proveAddress } from "./proveAddress.js";
+
+const url = process.env["DATABASE_URL"];
+const d = describe.skipIf(url === undefined || url === "");
+
+const PASSWORD = "a-Perfectly-fine-pw-1"; // dummy fixture, gitleaks:allow
+const LOCK_KEY = Buffer.alloc(32, 7).toString("base64"); // dummy test key, gitleaks:allow
+
+const baseEnv = {
+  NODE_ENV: "test",
+  DATABASE_URL: url ?? "",
+  WEB_ORIGIN: "http://localhost:5173",
+  JWT_SECRET: "card-requests-secret-0123456789abcd", // dummy test value, gitleaks:allow
+  LOG_LEVEL: "error",
+  SQUARE_APPLICATION_ID: "sq0idp-CARDREQUESTSAPP", // dummy, gitleaks:allow
+  SQUARE_ENV: "production",
+  SQUARE_APPLICATION_SECRET: "sq0csp-CARDREQUESTSSECRET", // dummy, gitleaks:allow
+  PAYMENT_TOKENS_KEY: LOCK_KEY,
+};
+
+const T = 300_000;
+const LIVE_PLAN = "zz_card_requests";
+
+type App = Awaited<ReturnType<typeof buildApp>>;
+type Cookies = Record<string, string>;
+interface Person {
+  userId: string;
+  cookies: Cookies;
+}
+interface Gym {
+  id: string;
+  name: string;
+  owner: Person;
+  acct: Account | null;
+}
+
+let ipCounter = 0;
+const nextIp = () => `10.71.${String(Math.floor(ipCounter / 250) % 250)}.${String((ipCounter++ % 250) + 1)}`;
+const cookieMap = (res: { cookies: { name: string; value: string }[] }): Cookies => Object.fromEntries(res.cookies.map((c) => [c.name, c.value]));
+let seq = 0;
+const uniq = (): string => `${String(Date.now())}${String(seq++)}`;
+const weekly = {
+  name: "Gold Weekly",
+  description: null,
+  kind: "recurring",
+  priceMinor: 2500,
+  termCount: 1,
+  termUnit: "week",
+  packClasses: null,
+  packDays: null,
+  access: "all_classes",
+  bookingsLimit: null,
+  bookingsPeriod: null,
+  classTypeIds: null,
+};
+const pack = { ...weekly, name: "10-class pack", kind: "pack", priceMinor: 9000, termCount: null, termUnit: null, packClasses: 10, packDays: 60 };
+
+d("Ask to add card: only the people the box names are asked, and only at their own gym (real Postgres)", { timeout: T }, () => {
+  const sql = postgres(url ?? "", { prepare: false, max: 8 });
+  const square = fakeSquare();
+  let app: App | undefined;
+  const api = (): App => {
+    if (app === undefined) throw new Error("beforeAll did not build the app");
+    return app;
+  };
+
+  const mineSql = sql`SELECT id FROM gyms WHERE owner_user_id IN (SELECT id FROM users WHERE email LIKE 'crq-t-%@example.com')`;
+  const cleanup = async () => {
+    const myUsers = sql`SELECT id FROM users WHERE email LIKE 'crq-t-%@example.com'`;
+    await sql`DELETE FROM gym_member_messages WHERE gym_id IN (${mineSql})`;
+    await sql`DELETE FROM gym_member_cards WHERE gym_id IN (${mineSql})`;
+    await sql`DELETE FROM gym_card_agreements WHERE gym_id IN (${mineSql})`;
+    await sql`DELETE FROM gym_card_disables WHERE gym_id IN (${mineSql})`;
+    await sql`DELETE FROM gym_member_payers WHERE gym_id IN (${mineSql})`;
+    await sql`DELETE FROM gym_held_memberships WHERE gym_id IN (${mineSql})`;
+    await sql`DELETE FROM gym_membership_types WHERE gym_id IN (${mineSql})`;
+    await sql`DELETE FROM gym_payment_revokes WHERE gym_id IN (${mineSql})`;
+    await sql`DELETE FROM subscriptions WHERE owner_type = 'gym' AND owner_id IN (${mineSql})`;
+    await sql`DELETE FROM gym_members WHERE gym_id IN (${mineSql})`;
+    await sql`DELETE FROM gym_member_list_entries WHERE gym_id IN (${mineSql})`;
+    await sql`DELETE FROM gym_member_lists WHERE gym_id IN (${mineSql})`;
+    await sql`DELETE FROM gym_staff WHERE gym_id IN (${mineSql})`;
+    await sql`DELETE FROM audit_log WHERE gym_id IN (${mineSql})`;
+    await sql`DELETE FROM gyms WHERE id IN (${mineSql})`;
+    await sql`DELETE FROM user_fitness_profiles WHERE user_id IN (${myUsers})`;
+    await sql`DELETE FROM one_time_tokens WHERE user_id IN (${myUsers})`;
+    await sql`DELETE FROM refresh_tokens WHERE user_id IN (${myUsers})`;
+    await sql`DELETE FROM consent_log WHERE user_id IN (${myUsers})`;
+    await sql`DELETE FROM users WHERE email LIKE 'crq-t-%@example.com'`;
+    await sql`DELETE FROM plans WHERE code = ${LIVE_PLAN}`;
+  };
+
+  const send = (method: "GET" | "POST", path: string, cookies: Cookies, payload?: unknown) =>
+    api().inject({
+      method,
+      url: path,
+      remoteAddress: nextIp(),
+      cookies,
+      ...(payload === undefined ? {} : { headers: { "content-type": "application/json" }, payload: JSON.stringify(payload) }),
+    });
+  const signedIn = async (name: string): Promise<Person> => {
+    const email = `crq-t-${uniq()}@example.com`;
+    const reg = await send("POST", "/v1/auth/register", {}, { email, password: PASSWORD, displayName: name });
+    expect(reg.statusCode, reg.body).toBe(201);
+    const { userId } = JSON.parse(reg.body) as { userId: string };
+    await proveAddress(sql, email);
+    const login = await send("POST", "/v1/auth/login", {}, { email, password: PASSWORD });
+    expect(login.statusCode).toBe(200);
+    return { userId, cookies: cookieMap(login) };
+  };
+  /** A gym in Chicago's time, on a live plan, connected to its own Square account unless `connect` is false. */
+  const makeGym = async (label: string, connect = true): Promise<Gym> => {
+    const owner = await signedIn(`${label} Owner`);
+    const name = `${label} ${uniq()}`;
+    const res = await send("POST", "/v1/orgs", owner.cookies, { trainsHere: false, name, city: "Chicago", country: "US", timezone: "America/Chicago" });
+    expect(res.statusCode, res.body).toBe(201);
+    const id = (JSON.parse(res.body) as { org: { id: string } }).org.id;
+    await sql`INSERT INTO subscriptions (owner_type, owner_id, plan_id, status, provider) VALUES ('gym', ${id}, (SELECT id FROM plans WHERE code = ${LIVE_PLAN}), 'trialing', 'pilot')`;
+    if (!connect) return { id, name, owner, acct: null };
+    const acct = account(`CRQ${uniq()}`);
+    const start = await send("POST", `/v1/orgs/${id}/payments/square/connect`, owner.cookies);
+    expect(start.statusCode, start.body).toBe(200);
+    const state = new URL(squareConnectResponseSchema.parse(JSON.parse(start.body)).url).searchParams.get("state") ?? "";
+    const done = await send("POST", "/v1/payments/square/finish", owner.cookies, { state, code: square.allow(acct) });
+    expect(squareFinishResponseSchema.parse(JSON.parse(done.body)).outcome).toBe("connected");
+    return { id, name, owner, acct };
+  };
+  const typeOf = async (gym: Gym, body: Record<string, unknown> = weekly): Promise<string> => {
+    const res = await send("POST", `/v1/orgs/${gym.id}/membership-types`, gym.owner.cookies, body);
+    expect(res.statusCode, res.body).toBe(201);
+    const found = (JSON.parse(res.body) as GymMembershipTypesResponse).types.find((t) => t.name === body["name"]);
+    if (found === undefined) throw new Error("no type");
+    return found.id;
+  };
+  const entryUrl = (gym: Gym, entryId: string) => `/v1/orgs/${gym.id}/member-list/entries/${entryId}`;
+  const person = async (gym: Gym, fullName: string): Promise<string> => {
+    const add = await send("POST", `/v1/orgs/${gym.id}/member-list/entries`, gym.owner.cookies, { fullName, email: `crq-r-${uniq()}@example.com` });
+    expect(add.statusCode, add.body).toBe(201);
+    return (JSON.parse(add.body) as { entry: { entryId: string } }).entry.entryId;
+  };
+  /** The person, signed in to the app and linked to their record. */
+  const member = async (gym: Gym, entryId: string, who?: Person): Promise<Person> => {
+    const p = who ?? (await signedIn("Member"));
+    await sql`INSERT INTO gym_members (gym_id, user_id, entry_id) VALUES (${gym.id}, ${p.userId}, ${entryId})`;
+    return p;
+  };
+  const todayOf = async (gym: Gym, entryId: string): Promise<string> =>
+    heldMembershipsResponseSchema.parse(JSON.parse((await send("GET", `${entryUrl(gym, entryId)}/memberships`, gym.owner.cookies)).body)).today;
+  /** A membership from today, paid at the desk. */
+  const give = async (gym: Gym, typeId: string, entryId: string): Promise<void> => {
+    const startsOn = await todayOf(gym, entryId);
+    const given = await send("POST", `${entryUrl(gym, entryId)}/memberships`, gym.owner.cookies, { requestKey: randomUUID(), method: "cash", typeId, startsOn, paid: true });
+    expect(given.statusCode, given.body).toBe(201);
+  };
+  /** A card on file for the record, in the gym's connected account. */
+  const cardFor = async (gym: Gym, entryId: string): Promise<void> => {
+    const cardId = `ccof:${randomUUID()}`;
+    const customerId = `CUST${uniq()}`;
+    const merchant = gym.acct?.merchantId ?? "none";
+    square.card(cardId, merchant, customerId);
+    const [agreed] = await sql<{ id: string }[]>`
+      INSERT INTO gym_card_agreements (gym_id, entry_id, words, screen, screen_user_id, brand, last4, agreed_at)
+      VALUES (${gym.id}, ${entryId}, 'I agree that this gym may save this card and charge it for my membership.', 'app', NULL, 'VISA', '4242', now())
+      RETURNING id`;
+    await sql`
+      INSERT INTO gym_member_cards (gym_id, entry_id, environment, account_id, customer_id, card_id, brand, last4, exp_month, exp_year, saved_from, saved_by, agreement_id, saved_at, updated_at)
+      VALUES (${gym.id}, ${entryId}, 'production', ${merchant}, ${customerId}, ${cardId}, 'VISA', '4242', 12, 2031, 'app', NULL, ${agreed?.id ?? null}, now(), now())`;
+  };
+  const ticked = (entryIds: string[]) => ({ kind: "ticked" as const, entryIds });
+  const previewRes = (gym: Gym, who: Person, selection: unknown) => send("POST", `/v1/orgs/${gym.id}/member-list/selected/card-request-preview`, who.cookies, { selection });
+  const preview = async (gym: Gym, selection: unknown, who: Person = gym.owner): Promise<CardRequestPreview> => {
+    const res = await previewRes(gym, who, selection);
+    expect(res.statusCode, res.body).toBe(200);
+    return cardRequestPreviewResponseSchema.parse(JSON.parse(res.body)).preview;
+  };
+  const askRes = (gym: Gym, who: Person, selection: unknown, box: CardRequestPreview, key: string = randomUUID()) =>
+    send("POST", `/v1/orgs/${gym.id}/member-list/selected/card-request`, who.cookies, { selection, askCount: box.askCount, askDigest: box.askDigest, key });
+  /** Who at this gym has been sent a card request, by user. */
+  const askedUsers = async (gymId: string): Promise<string[]> =>
+    (await sql<{ user_id: string }[]>`SELECT user_id FROM gym_member_messages WHERE gym_id = ${gymId} AND kind = 'card_request' ORDER BY user_id`).map((r) => r.user_id);
+  const keptNames = (box: CardRequestPreview) => Object.fromEntries(box.kept.map((g) => [g.reason, g.people.map((p) => p.name).sort()]));
+  const noCardList = async (gym: Gym): Promise<string[]> => {
+    const res = await send("GET", `/v1/orgs/${gym.id}/member-list/entries?card=none`, gym.owner.cookies);
+    expect(res.statusCode, res.body).toBe(200);
+    return memberListEntriesResponseSchema.parse(JSON.parse(res.body)).page.entries.map((e) => e.fullName).sort();
+  };
+  const listCount = async (gym: Gym, who: Person = gym.owner): Promise<number | null> => {
+    const res = await send("GET", `/v1/orgs/${gym.id}/member-list`, who.cookies);
+    expect(res.statusCode, res.body).toBe(200);
+    return memberListViewResponseSchema.parse(JSON.parse(res.body)).list.noCard;
+  };
+  const errorOf = (res: { body: string }) => JSON.parse(res.body) as { error: string; message: string };
+
+  beforeAll(async () => {
+    await cleanup();
+    await sql`
+      INSERT INTO plans (code, audience, name_key, price_minor, currency, interval, seat_cap, trial_days, rank, entitlements, member_entitlements)
+      VALUES (${LIVE_PLAN}, 'org', ${"plan." + LIVE_PLAN}, 0, 'USD', 'month', 100000, 0, 10, '{}'::jsonb, '{}'::jsonb)
+      ON CONFLICT (code) DO UPDATE SET active = true`;
+    app = await buildApp(loadConfig(baseEnv), {
+      squareApi: square.api,
+      orgs: { gymLimits: { perAccount: 1000, perAddress: 1000, unpaid: 1000 } },
+      emailSender: { sendVerificationEmail: () => Promise.resolve(), sendPasswordResetEmail: () => Promise.resolve(), sendSignInCodeEmail: () => Promise.resolve() },
+    });
+    await api().ready();
+  }, T);
+  afterAll(async () => {
+    await cleanup();
+    await app?.close();
+    await sql.end();
+  }, T);
+
+  it("asks only the members who pay for a renewal with no card, each once, and never anybody at another gym", async () => {
+    const iron = await makeGym("Iron");
+    const lotus = await makeGym("Lotus");
+    const gold = await typeOf(iron);
+    const tenPack = await typeOf(iron, pack);
+    const lotusGold = await typeOf(lotus);
+
+    // Maya pays for her own Gold Weekly and is in the app: asked.
+    const maya = await person(iron, "Maya Fernandes");
+    await give(iron, gold, maya);
+    const mayaApp = await member(iron, maya);
+    // Pat pays for Sam, a child on Gold Weekly; Pat holds nothing of her own: Pat is asked, Sam never.
+    const pat = await person(iron, "Pat Lee");
+    const sam = await person(iron, "Sam Lee");
+    await give(iron, gold, sam);
+    await sql`INSERT INTO gym_member_payers (gym_id, entry_id, payer_entry_id) VALUES (${iron.id}, ${sam}, ${pat})`;
+    const patApp = await member(iron, pat);
+    const samApp = await member(iron, sam);
+    // Priya already has a card on file.
+    const priya = await person(iron, "Priya Shah");
+    await give(iron, gold, priya);
+    await cardFor(iron, priya);
+    const priyaApp = await member(iron, priya);
+    // Ken holds a class pack, which never renews: no card is needed.
+    const ken = await person(iron, "Ken Ito");
+    await give(iron, tenPack, ken);
+    const kenApp = await member(iron, ken);
+    // Ben needs a card but is not in the app yet.
+    const ben = await person(iron, "Ben Okafor");
+    await give(iron, gold, ben);
+    // Tara's record is held by two app accounts: whose inbox is it?
+    const tara = await person(iron, "Tara Singh");
+    await give(iron, gold, tara);
+    const taraOne = await member(iron, tara);
+    const taraTwo = await member(iron, tara);
+    // Owen left the gym; his account is still on his record.
+    const owen = await person(iron, "Owen Park");
+    await give(iron, gold, owen);
+    const owenApp = await member(iron, owen);
+    await sql`UPDATE gym_member_list_entries SET former_at = now() WHERE gym_id = ${iron.id} AND id = ${owen}`;
+    // Lena is a member of Lotus, on the same footing as Maya: Iron's press never reaches her.
+    const lena = await person(lotus, "Lena Novak");
+    await give(lotus, lotusGold, lena);
+    const lenaApp = await member(lotus, lena);
+    // Maya is a member of Lotus too: Iron asking her is no Lotus message.
+    const mayaAtLotus = await person(lotus, "Maya Fernandes");
+    await give(lotus, lotusGold, mayaAtLotus);
+    await member(lotus, mayaAtLotus, mayaApp);
+
+    // The Filter's No card on file: the people the rule says need a card, in the app or not.
+    expect(await noCardList(iron)).toEqual(["Ben Okafor", "Maya Fernandes", "Pat Lee", "Tara Singh"]);
+    expect(await listCount(iron)).toBe(4);
+
+    const everyone = ticked([maya, pat, sam, priya, ken, ben, tara, owen, lena]);
+    const box = await preview(iron, everyone);
+    expect(box.selected).toBe(9);
+    expect(box.askCount).toBe(2);
+    expect(box.ask.map((p) => p.name).sort()).toEqual(["Maya Fernandes", "Pat Lee"]);
+    expect(keptNames(box)).toEqual({
+      has_card: ["Priya Shah"],
+      paid_by: ["Sam Lee"],
+      nothing_renews: ["Ken Ito"],
+      not_in_app: ["Ben Okafor"],
+      shared: ["Tara Singh"],
+      former: ["Owen Park"],
+      gone: [],
+    });
+    expect(box.kept.find((g) => g.reason === "paid_by")?.people[0]?.payerName).toBe("Pat Lee");
+    // Lena's record is Lotus's: from Iron it is a record that is not on its list.
+    expect(box.kept.find((g) => g.reason === "gone")?.count).toBe(1);
+
+    const done = await askRes(iron, iron.owner, everyone, box);
+    expect(done.statusCode, done.body).toBe(200);
+    expect(cardRequestDoneResponseSchema.parse(JSON.parse(done.body)).done.asked).toBe(2);
+    expect(await askedUsers(iron.id)).toEqual([mayaApp.userId, patApp.userId].sort());
+    expect(await askedUsers(lotus.id)).toEqual([]);
+    for (const nobody of [samApp, priyaApp, kenApp, taraOne, taraTwo, owenApp, lenaApp]) {
+      expect((await sql`SELECT 1 FROM gym_member_messages WHERE user_id = ${nobody.userId} AND kind = 'card_request'`).length).toBe(0);
+    }
+
+    // What each reads in their inbox, at Iron only: Maya names her membership; Pat the ones she pays for.
+    const inbox = async (gym: Gym, who: Person) => gymInboxResponseSchema.parse(JSON.parse((await send("GET", `/v1/orgs/${gym.id}/inbox`, who.cookies)).body));
+    expect((await inbox(iron, mayaApp)).messages.map((m) => m.body)).toContain(
+      `${iron.name} asks you to add a card for your Gold Weekly membership. It will be charged automatically each time it renews. To add it, open My membership and tap Add card.`,
+    );
+    expect((await inbox(iron, patApp)).messages.map((m) => m.body)).toContain(
+      `${iron.name} asks you to add a card for the memberships you pay for. It will be charged automatically each time one renews. To add it, open My membership and tap Add card.`,
+    );
+    expect((await inbox(lotus, mayaApp)).messages.filter((m) => m.kind === "card_request")).toEqual([]);
+
+    // Pressed again, the same box asks nobody twice; a new box says they were asked today.
+    const again = await askRes(iron, iron.owner, everyone, box, randomUUID());
+    expect(again.statusCode, again.body).toBe(409);
+    expect(errorOf(again).error).toBe("card_request_people_changed");
+    const later = await preview(iron, everyone);
+    expect(later.askCount).toBe(0);
+    expect(keptNames(later)["asked_recently"]).toEqual(["Maya Fernandes", "Pat Lee"]);
+    expect(await askedUsers(iron.id)).toEqual([mayaApp.userId, patApp.userId].sort());
+
+    // Staff activity names the press.
+    const audit = await sql<{ meta: { people: string } }[]>`SELECT meta FROM audit_log WHERE gym_id = ${iron.id} AND action = 'org.card_request_sent'`;
+    expect(audit.map((a) => a.meta.people)).toEqual(["2"]);
+  });
+
+  it("refuses strangers, staff without both ticks, a bad request, and a gym that takes no cards in the app", async () => {
+    const iron = await makeGym("Iron Gate");
+    const gold = await typeOf(iron);
+    const maya = await person(iron, "Maya Gate");
+    await give(iron, gold, maya);
+    await member(iron, maya);
+    const other = await makeGym("Other");
+    const stranger = await signedIn("A Stranger");
+    const trainer = await signedIn("Tia Trainer");
+    const desk = await signedIn("Dee Desk");
+    const manager = await signedIn("Mo Manager");
+    await sql`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${iron.id}, ${trainer.userId}, 'trainer', ${[...ROLE_PRIVILEGES.trainer]})`;
+    // Takes payments but does not keep the member list.
+    await sql`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${iron.id}, ${desk.userId}, 'manager', ${["billing.members"]})`;
+    await sql`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${iron.id}, ${manager.userId}, 'manager', ${["members.confirm"]})`;
+    const selection = ticked([maya]);
+    const box = await preview(iron, selection);
+    expect(box.askCount).toBe(1);
+
+    for (const [who, status] of [
+      [stranger, 404],
+      [other.owner, 404],
+      [trainer, 403],
+      [desk, 403],
+      [manager, 403],
+    ] as const) {
+      const seen = await previewRes(iron, who, selection);
+      expect(seen.statusCode, seen.body).toBe(status);
+      expect(seen.body).not.toContain("Maya Gate");
+      const pressed = await askRes(iron, who, selection, box);
+      expect(pressed.statusCode, pressed.body).toBe(status);
+    }
+    // The manager without the payments tick reads no count either.
+    expect(await listCount(iron, manager)).toBeNull();
+    expect(await askedUsers(iron.id)).toEqual([]);
+
+    const bad = await send("POST", `/v1/orgs/${iron.id}/member-list/selected/card-request`, iron.owner.cookies, { selection, askCount: 0, askDigest: "", key: "nope" });
+    expect(bad.statusCode).toBe(400);
+
+    // A gym not connected to Square: no count, no box, nothing sent.
+    const plain = await makeGym("Plain", false);
+    const plainGold = await typeOf(plain);
+    const pia = await person(plain, "Pia Plain");
+    await give(plain, plainGold, pia);
+    await member(plain, pia);
+    expect(await listCount(plain)).toBeNull();
+    expect(await noCardList(plain)).toEqual([]);
+    const off = await previewRes(plain, plain.owner, ticked([pia]));
+    expect(off.statusCode, off.body).toBe(409);
+    expect(errorOf(off).error).toBe("card_request_not_offered");
+    expect(await askedUsers(plain.id)).toEqual([]);
+  });
+
+  it("Select all of No card on file asks the same people, and the person's page says when they were asked", async () => {
+    const gym = await makeGym("Sunset");
+    const gold = await typeOf(gym);
+    const a = await person(gym, "Ana Diaz");
+    const b = await person(gym, "Bo Chen");
+    const c = await person(gym, "Cy Moss");
+    for (const id of [a, b, c]) await give(gym, gold, id);
+    await member(gym, a);
+    await member(gym, b);
+    await cardFor(gym, c);
+
+    const all = await send("POST", `/v1/orgs/${gym.id}/member-list/selection`, gym.owner.cookies, { filter: { card: "none" } });
+    expect(all.statusCode, all.body).toBe(200);
+    const picked = memberListSelectedAllResponseSchema.parse(JSON.parse(all.body)).selection;
+    expect(picked.count).toBe(2);
+    const selection = { kind: "all" as const, filter: { card: "none" as const }, count: picked.count, digest: picked.digest };
+
+    const card = async (entryId: string) =>
+      memberCardResponseSchema.parse(JSON.parse((await send("GET", `${entryUrl(gym, entryId)}/card`, gym.owner.cookies)).body)).cardOnFile;
+    expect(await card(a)).toMatchObject({ canAsk: true, cardAskedOn: null });
+    expect(await card(c)).toMatchObject({ canAsk: false, cardAskedOn: null });
+
+    const box = await preview(gym, selection);
+    expect(box.ask.map((p) => p.name).sort()).toEqual(["Ana Diaz", "Bo Chen"]);
+    const done = await askRes(gym, gym.owner, selection, box);
+    expect(done.statusCode, done.body).toBe(200);
+    const asked = await card(a);
+    expect(asked.canAsk).toBe(false);
+    expect(asked.cardAskedOn).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+});

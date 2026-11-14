@@ -13,6 +13,7 @@ import {
   CARD_NOT_TAKEN,
   CHOOSE_TERMINAL,
   TERMINAL_STOPPING,
+  cardAskOneKeptLine,
   cardBoxView,
   cardFormWords,
   cardRemovedLine,
@@ -445,6 +446,9 @@ export default function MemberCard({ gymId, gym, entryId, name, readOnly, checkE
   const [busy, setBusy] = useState(false);
   const [refusal, setRefusal] = useState(null);
   const [done, setDone] = useState(null);
+  /** Ask to add card for this person (18d-vii): pressed, and what it did. */
+  const [asking, setAsking] = useState(false);
+  const [askNote, setAskNote] = useState(null);
   /** The save on the Terminal this box is following, and the Terminal last pressed. */
   const [followed, setFollowed] = useState({ entryId: null, save: null });
   const save = followed.entryId === entryId ? followed.save : null;
@@ -599,6 +603,30 @@ export default function MemberCard({ gymId, gym, entryId, name, readOnly, checkE
     }
   };
 
+  // Ask to add card for this person alone (18d-vii): the same rule and press as the Members list's,
+  // for one; what happened is said under the button.
+  const askToAdd = async () => {
+    if (asking) return;
+    setAsking(true);
+    setAskNote(null);
+    const selection = { kind: 'ticked', entryIds: [entryId] };
+    try {
+      const preview = (await orgService.previewCardRequest(gymId, selection)).data.preview;
+      if (preview.askCount !== 1) {
+        setAskNote(cardAskOneKeptLine(preview));
+      } else {
+        await orgService.sendCardRequest(gymId, { selection, askCount: 1, askDigest: preview.askDigest, key: crypto.randomUUID() });
+        setAskNote(`Asked ${personNames(name).first} to add a card. They'll see it in their inbox in the app.`);
+      }
+      const res = await orgService.getMemberCard(gymId, entryId);
+      setState({ entryId, view: res.data.cardOnFile, error: null });
+    } catch (err) {
+      setAskNote(errorText(err, "We couldn't send that. Please try again."));
+    } finally {
+      setAsking(false);
+    }
+  };
+
   return (
     <section className="c-card px-4 py-3 md:px-5 md:py-4 flex flex-col gap-2" aria-label={MEMBER_CARD_WORDS.title} data-testid="card-on-file">
       <h3 className="c-h2">{MEMBER_CARD_WORDS.title}</h3>
@@ -634,6 +662,24 @@ export default function MemberCard({ gymId, gym, entryId, name, readOnly, checkE
       {box.noneLine !== null ? <p className="c-s15 c-t1 m-0">{box.noneLine}</p> : null}
       {box.earlierLine !== null ? <p className="c-s14 c-t2 m-0">{box.earlierLine}</p> : null}
       {box.appLine !== null ? <p className="c-s14 c-t2 m-0">{box.appLine}</p> : null}
+      {box.askedLine !== null ? (
+        <p className="c-s14 c-t2 m-0" data-testid="card-asked">
+          {box.askedLine}
+        </p>
+      ) : null}
+      {box.ask !== null && !readOnly ? (
+        <div className="flex flex-col gap-1.5">
+          <button type="button" onClick={() => void askToAdd()} disabled={asking} data-testid="card-ask-one" className={`${SMALL} self-start`}>
+            {asking ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
+            {box.ask}
+          </button>
+        </div>
+      ) : null}
+      {askNote !== null ? (
+        <p className="c-s14 c-t1 m-0" role="status" data-testid="card-ask-one-done">
+          {askNote}
+        </p>
+      ) : null}
       {box.connectLine !== null ? <p className="c-s14 c-t2 m-0">{box.connectLine}</p> : null}
       {box.ownerOnly !== null ? <p className="c-s14 c-t2 m-0">{box.ownerOnly}</p> : null}
 

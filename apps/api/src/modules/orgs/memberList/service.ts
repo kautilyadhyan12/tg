@@ -116,6 +116,8 @@ import { heldChips, heldOnListOf, heldPassing, heldWithOwedOf, mergeChips, type 
 import { keepLeftDays } from "../memberships/over.js";
 import { heldAndTidyOf, overOwingIdsOf, tidyIdsOf } from "./tidy.js";
 import { listBillFacts, overdueDaysOf, pastOwing } from "../memberships/billsSql.js";
+import { cardsAccountOf, needsCardCount, needsCardIds } from "../payments/cardRequestsRepo.js";
+import type { SquareEnvironment } from "../payments/square.js";
 
 export interface MemberListDeps {
   sql: Sql;
@@ -139,6 +141,9 @@ export interface MemberListDeps {
   /** Runs after each batch of a press has committed; a test changes the list here to
    *  reach the next batch's lock. Production passes nothing. */
   afterInviteBatch?: () => Promise<void>;
+  /** The Square environment cards are kept in on this server, or null where Square is not set up:
+   *  the Filter's "No card on file" and its count (18d-vii). */
+  cardsEnvironment?: SquareEnvironment | null;
 }
 
 /** A file refusal as this route answers it. 400 for everything the uploader can
@@ -1488,10 +1493,12 @@ export async function readList(
   gymId: string,
   limit: () => Promise<boolean>,
 ): Promise<MemberListView | null> {
-  const { org } = await requirePrivilege(deps, gymId, userId, "members.confirm");
+  const { org, privileges } = await requirePrivilege(deps, gymId, userId, "members.confirm");
   if (!(await limit())) return null;
   const today = dayInTz(deps.now(), org.timezone);
-  const [state, members, fields, { held, tidy, owing: overOwing }, owing] = await Promise.all([
+  // "No card on file" (18d-vii), for the staff who record payments at a gym that takes cards in the app.
+  const cards = privileges.includes("billing.members") ? await cardsAccountOf(deps.sql, deps.cardsEnvironment ?? null, gymId) : null;
+  const [state, members, fields, { held, tidy, owing: overOwing }, owing, noCard] = await Promise.all([
     repo.listState(deps.sql, gymId),
     repo.membersAgainstList(deps.sql, gymId),
     repo.listFields(deps.sql, gymId),
@@ -1501,6 +1508,7 @@ export async function readList(
     heldAndTidyOf(deps.sql, gymId, today),
     // The past members who still owe, for the one chip Past members has (18a-ii).
     pastOwing(deps.sql, gymId, today),
+    cards === null ? null : needsCardCount(deps.sql, gymId, cards, deps.now()),
   ]);
   const inApp = inAppEntryIds(members);
   const mine = heldChips(held, new Set(inApp));
@@ -1539,6 +1547,7 @@ export async function readList(
     waiverNotSigned: signed === null ? null : Math.max(0, totals.entries - signed.records.size),
     // The current records with a membership agreement to sign (18u-ii-a).
     agreementNotSigned: agreementToSign === null ? null : agreementToSign.size,
+    noCard,
     review,
     duplicates,
     over: { count: tidy.length, owing: overOwing.length },
@@ -1650,6 +1659,12 @@ export async function entriesFilter(
     const toSign = await agreementNotSignedRecords(deps.sql, gymId, dayInTz(deps.now(), await repo.gymTimeZone(deps.sql, gymId)));
     agreementNotSigned = [...(toSign ?? [])];
   }
+  // "NO CARD ON FILE" (18d-vii): by the one rule its count reads; nobody where the gym takes no cards in the app.
+  let noCardIds: string[] | null = null;
+  if (query.card === "none" && records === "current") {
+    const cards = await cardsAccountOf(deps.sql, deps.cardsEnvironment ?? null, gymId);
+    noCardIds = cards === null ? [] : await needsCardIds(deps.sql, gymId, cards, deps.now());
+  }
   return {
     members,
     input: {
@@ -1675,6 +1690,7 @@ export async function entriesFilter(
       like: typed === "" ? null : `%${escapeLike(typed)}%`,
       waiverNotSigned,
       agreementNotSigned,
+      noCardIds,
     },
   };
 }
