@@ -1,0 +1,196 @@
+/* The two typefaces are served from this site, never a font service: Bowlby One (headings) and Lexend (text),
+   both under the SIL Open Font License 1.1 (fonts/OFL-*.txt), latin subset. */
+@font-face{font-family:'Bowlby One';font-style:normal;font-weight:400;font-display:swap;src:url(./fonts/bowlby-one-latin.woff2) format('woff2')}
+@font-face{font-family:'Lexend';font-style:normal;font-weight:400 700;font-display:swap;src:url(./fonts/lexend-latin.woff2) format('woff2')}
+
+/* Layout: eight full-screen rooms, each with its words on its own calm wall, alternating sides. Each room is
+   alive (a looping clip), the things nearest to us move apart from it, and scrolling walks the camera in.
+   The next room rises through the current one as a liquid with bubbles. On a phone the rooms stack, picture
+   on top and words under it. */
+:root{
+  --bar:#15110E; --bar-ink:#F5F2EC; --bar-soft:#A9A29A; --kz:#FF8A1F;
+  --display:'Bowlby One','Arial Black',system-ui,sans-serif; --body:'Lexend',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --T:55vh; --step:135vh;
+  color-scheme:light;
+}
+*{box-sizing:border-box}
+html{scroll-padding-top:0}
+body{margin:0;background:#15110E;color:#210A08;font-family:var(--body);font-size:17px;line-height:1.55;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+img,video{display:block}
+:focus-visible{outline:3px solid #fff;outline-offset:3px;border-radius:10px}
+
+.top{position:fixed;z-index:30;top:calc(env(safe-area-inset-top,0px) + 14px);left:max(16px,env(safe-area-inset-left,0px));right:max(16px,env(safe-area-inset-right,0px));display:flex;align-items:center;gap:18px;padding:9px 9px 9px 20px;border-radius:999px;background:var(--bar);color:var(--bar-ink);box-shadow:0 5px 0 rgba(0,0,0,.28);transition:transform .35s cubic-bezier(.2,.7,.2,1)}
+.top.away{transform:translateY(calc(-100% - 34px))}
+.top:focus-within{transform:none}
+.mark{display:block;width:104px;flex:none}
+.mark svg{display:block;width:100%;height:auto}
+.top nav{display:flex;gap:4px;margin-inline:auto}
+.top nav a{font-size:13.5px;font-weight:600;color:var(--bar-soft);text-decoration:none;padding:8px 11px;border-radius:999px;white-space:nowrap;transition:color .2s,background .2s}
+.top nav a:hover{color:var(--bar-ink)}
+.top nav a.on{color:var(--bar);background:var(--bar-ink)}
+.signin{font-size:14px;font-weight:600;color:var(--bar-ink);text-decoration:none;white-space:nowrap}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;min-height:52px;padding:0 26px;border-radius:999px;font:700 16.5px/1 var(--body);text-decoration:none;white-space:nowrap;border:3px solid var(--ink);background:var(--btn);color:#15110E;box-shadow:4px 5px 0 var(--ink);transition:transform .15s,box-shadow .15s}
+a.btn:hover{transform:translate(2px,2px);box-shadow:2px 3px 0 var(--ink)}
+.btn.plain{background:#fff;padding-right:10px}
+.soon{font-size:12px;letter-spacing:.06em;text-transform:uppercase;padding:9px 12px;border-radius:999px;background:var(--ink);color:#fff}
+.top .btn{min-height:42px;padding:0 18px;font-size:14.5px;border:0;background:var(--kz);color:#15110E;box-shadow:none}
+
+/* A scene is taller than the screen: its stage stays put while the scroll walks the camera in, and it stays
+   underneath while the next scene rises over it. */
+.scene{position:relative;height:calc(100vh + var(--step) + var(--T));margin-top:calc(-100vh - var(--T))}
+.scene:first-child{height:calc(100vh + var(--step));margin-top:0}
+.scene:last-child{height:calc(100vh + var(--step))}
+.stage{position:sticky;top:0;height:100vh;pointer-events:none}
+.rim,.shot{position:absolute;inset:0}
+.rim{background:var(--rim);display:none}
+.shot{overflow:hidden;background:var(--bg);color:var(--txt);pointer-events:auto}
+/* The room: a 16:9 box that always covers the screen, held at the edge its words are on */
+.world{position:absolute;top:50%;width:max(100vw,177.78vh);height:max(56.25vw,100vh);margin-top:calc(max(56.25vw,100vh) / -2);container-type:inline-size;transform-origin:var(--origin);will-change:transform}
+.left .world{left:calc(max(0px,177.78vh - 100vw) * -1 * var(--hold))}
+.right .world{right:calc(max(0px,177.78vh - 100vw) * -1 * var(--hold))}
+.room,.front,.rays,.pins{position:absolute;inset:0;width:100%;height:100%}
+.clip{position:absolute;object-fit:fill;opacity:0;transition:opacity .7s;-webkit-mask-image:var(--mask);mask-image:var(--mask);-webkit-mask-size:100% 100%;mask-size:100% 100%;-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat}
+.clip.playing{opacity:1}
+.rays{pointer-events:none;mix-blend-mode:screen}
+.rays i{position:absolute;inset:0;background:linear-gradient(180deg,rgba(255,224,160,.2),rgba(255,214,140,.03));animation:ray 7s ease-in-out infinite alternate}
+.rays i:nth-child(1){clip-path:polygon(35.4% 1%,39.6% 1%,30.5% 80%,21.5% 76%)}
+.rays i:nth-child(2){clip-path:polygon(41% 1%,45.4% 1%,42.5% 83%,33.5% 79.5%);animation-delay:-3s}
+@keyframes ray{from{opacity:.35}to{opacity:1}}
+.front{will-change:transform;pointer-events:none}
+
+/* Stickers pinned to things in the room */
+.st{position:absolute;font-family:var(--display);font-size:clamp(10px,1.12cqw,20px);line-height:1;text-transform:uppercase;white-space:nowrap;padding:.62em .8em .58em;border-radius:.7em;border:.17em solid var(--ink);box-shadow:.22em .26em 0 var(--ink);background:var(--c,#fff);color:var(--ci,#15110E);transform:rotate(var(--r,-5deg)) scale(0);opacity:0;transition:transform .45s cubic-bezier(.34,1.56,.64,1),opacity .2s}
+.st b{font-weight:400}
+.st.on{transform:rotate(var(--r,-5deg)) scale(1);opacity:1}
+.st.on:hover{transform:rotate(0deg) scale(1.14)}
+.st.nofit{display:none}
+.tag{position:absolute;display:grid;place-items:center;font:700 clamp(7px,.74cqw,14px)/1 var(--body);color:#12241F;letter-spacing:.01em}
+
+/* The words, on the wall */
+.copy{position:absolute;z-index:3;top:clamp(88px,13.5vh,140px);width:var(--cw);will-change:transform,opacity}
+.left .copy{left:max(var(--cm),env(safe-area-inset-left,0px))}
+.right .copy{right:max(var(--cm),env(safe-area-inset-right,0px))}
+.kicker{display:inline-block;font:700 12.5px/1 var(--body);letter-spacing:.16em;text-transform:uppercase;padding:9px 13px;border-radius:999px;background:var(--kb);color:var(--kc);margin:0 0 20px}
+.head{font-family:var(--display);font-weight:400;font-size:clamp(34px,var(--hs),80px);line-height:.98;text-transform:uppercase;margin:0;color:#fff;-webkit-text-stroke:.09em var(--ink);paint-order:stroke fill;text-shadow:.03em .03em 0 var(--ink),.06em .06em 0 var(--ink),.09em .09em 0 var(--ink),.12em .12em 0 var(--ink)}
+.head span,.head em{display:block;width:max-content;max-width:none;white-space:nowrap}
+.head em{font-style:normal;color:var(--em)}
+.say{font-size:clamp(15.5px,1.2vw,18.5px);font-weight:500;margin:22px 0 0;max-width:25em}
+.acts{margin-top:20px;display:flex;flex-wrap:wrap;align-items:center;gap:12px 16px}
+.acts .small{margin:0}
+.small{font-size:14px;font-weight:600;margin:14px 0 0}
+.who{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0 0}
+.who a{font-size:13.5px;font-weight:700;color:var(--ink);text-decoration:none;padding:7px 13px;border-radius:999px;border:2px solid var(--ink);background:#FFF3EA}
+.who a:hover{background:#fff}
+.cue{position:absolute;z-index:3;left:50%;bottom:26px;transform:translateX(-50%);font:700 12px/1 var(--body);letter-spacing:.18em;text-transform:uppercase;color:var(--ink);display:flex;align-items:center;gap:10px;transition:opacity .4s;pointer-events:none}
+.cue i{width:26px;height:26px;border-radius:50%;border:2.5px solid currentColor;display:grid;place-items:center;font-style:normal;animation:nudge 1.4s ease-in-out infinite}
+@keyframes nudge{50%{transform:translateY(5px)}}
+
+/* Questions */
+.faq{margin-top:20px;display:grid;gap:8px}
+.faq details{border:2.5px solid var(--ink);border-radius:16px;background:#F7EFE2;color:#1B1436;box-shadow:3px 4px 0 var(--ink)}
+.faq summary{cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center;gap:12px;padding:11px 15px;font-weight:700;font-size:clamp(14px,1.02vw,16px);line-height:1.3}
+.faq summary::-webkit-details-marker{display:none}
+.faq summary::after{content:"+";font:400 20px/1 var(--display);flex:none}
+.faq details[open] summary::after{content:"–"}
+.faq p{margin:0;padding:0 15px 13px;font-size:clamp(13.5px,.98vw,15.5px);line-height:1.5}
+
+/* The end of the page */
+.foot{position:relative;z-index:6;background:#15110E;color:#F5F2EC;padding:clamp(48px,7vw,96px) max(clamp(20px,5vw,84px),env(safe-area-inset-right,0px)) 40px max(clamp(20px,5vw,84px),env(safe-area-inset-left,0px));--ink:#000;--btn:#FF8A1F}
+.foot::before{content:"";position:absolute;left:0;right:0;bottom:calc(100% - 1px);height:54px;background:radial-gradient(circle at 50% 100%,#15110E 0 60%,#FF8A1F 61% 68%,transparent 69%) 50% 0/108px 54px repeat-x;pointer-events:none}
+.foot-top{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:24px;padding-bottom:36px;border-bottom:1px solid rgba(245,242,236,.16)}
+.foot-say{font-family:var(--display);font-size:clamp(28px,4vw,56px);line-height:1;text-transform:uppercase;margin:0}
+.foot-say em{font-style:normal;color:var(--kz)}
+.foot .btn{border-color:#F5F2EC;box-shadow:4px 5px 0 #F5F2EC}
+.foot a.btn:hover{box-shadow:2px 3px 0 #F5F2EC}
+.foot-links{list-style:none;display:flex;flex-wrap:wrap;gap:10px 28px;padding:0;margin:30px 0 26px;font-size:15px;font-weight:600}
+.foot-links a{color:#F5F2EC;text-decoration:none}
+.foot-links a:hover{text-decoration:underline}
+.mail{color:#A9A29A;text-decoration:none}
+.mail:hover{text-decoration:underline}
+.foot small{display:block;max-width:74em;font-size:13px;line-height:1.6;color:#A9A29A}
+
+@media (max-width:1240px){.top nav{display:none}.top .signin{margin-left:auto}}
+@media (min-width:821px) and (max-height:760px){
+  .copy{top:clamp(80px,12vh,120px)}
+  .kicker{margin-bottom:14px}
+  .say{margin-top:16px}.acts{margin-top:16px}
+  .faq{margin-top:14px;gap:6px}.faq summary{padding:8px 13px}.faq p{padding:0 13px 10px;font-size:13.5px}
+}
+/* Phones and upright screens: the rooms stack, the picture on top and the words under it */
+@media (max-width:820px),(max-aspect-ratio:7/5){
+  .scene,.scene:first-child,.scene:last-child{height:auto;margin-top:0}
+  .stage{position:relative;height:auto}
+  .rim{display:none!important}
+  .shot{position:relative;inset:auto;padding-bottom:104px;clip-path:none!important}
+  .view{position:relative;height:56svh;overflow:hidden}
+  .world,.left .world,.right .world{top:0;margin-top:0;height:56svh;width:calc(56svh * 16 / 9);left:50%;right:auto;margin-left:calc(56svh * 16 / 9 * var(--focus) * -1);transform:none!important}
+  .front{transform:none!important}
+  .copy,.left .copy,.right .copy{position:relative;left:auto;right:auto;top:auto;width:auto;padding:24px 16px 0;transform:none!important;opacity:1!important}
+  .head{font-size:clamp(34px,10.4vw,56px)}
+  .head span,.head em{display:inline;width:auto;white-space:normal}
+  .head{font-size:clamp(32px,9.6vw,54px)!important}
+  .say{font-size:16px;margin-top:18px}
+  .st{font-size:clamp(9px,1.3cqw,14px)}
+  .tag{font-size:clamp(6px,.8cqw,11px)}
+  .mark{width:88px}.top{gap:12px;padding-left:16px}.top .signin{margin-left:auto;font-size:13.5px}.top .btn{padding:0 14px;font-size:13.5px}
+  .cue{display:none}
+  .wide-only{display:none}
+  .faq summary{font-size:15px}.faq p{font-size:14.5px}
+  /* bubbles of the next room's colour along the foot of each room */
+  .shot::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:46px;background:radial-gradient(circle at 50% 100%,var(--nb) 0 60%,var(--nr) 61% 69%,transparent 70%) 50% 0/92px 46px repeat-x}
+}
+@media (prefers-reduced-motion:reduce){
+  .rays i,.cue i{animation:none}
+  .top{transition:none}
+  .scene,.scene:first-child,.scene:last-child{height:100vh;margin-top:0}
+  .st{transition:none}
+}
+
+/* Where each room's colours, stickers, labels and clip sit (kept here, not on the elements, so the page's
+   policy can refuse any style written into the page). */
+#gyms{--bg:#F95A1B;--ink:#210A08;--txt:#210A08;--em:#BFED55;--kb:#210A08;--kc:#FF9A5C;--btn:#BFED55;--rim:#F988C0;--nb:#AE7DDC;--nr:#F6CE7A;--cw:26.5vw;--cm:clamp(20px,4.6vw,84px);--hs:4.3vw;--hold:0.15;--focus:0.705;--origin:38% 56%}
+#tools{--bg:#AE7DDC;--ink:#2A1550;--txt:#22103F;--em:#F6CE7A;--kb:#2A1550;--kc:#F6CE7A;--btn:#F6CE7A;--rim:#F6CE7A;--nb:#0F1854;--nr:#61CEC1;--cw:27vw;--cm:3.5vw;--hs:4vw;--hold:0.3;--focus:0.32;--origin:66% 42%}
+#members{--bg:#0F1854;--ink:#060822;--txt:#EEEAFB;--em:#F988C0;--kb:#F988C0;--kc:#0B1438;--btn:#61CEC1;--rim:#61CEC1;--nb:#6778E7;--nr:#DE90D6;--cw:24vw;--cm:3.2vw;--hs:3.9vw;--hold:0.25;--focus:0.72;--origin:32% 52%}
+#camera{--bg:#6778E7;--ink:#2A1550;--txt:#170B36;--em:#F4C768;--kb:#2A1550;--kc:#C6ECF8;--btn:#F4C768;--rim:#DE90D6;--nb:#F6E9D5;--nr:#1C5F54;--cw:29.5vw;--cm:clamp(20px,4.5vw,84px);--hs:4.3vw;--hold:0.3;--focus:0.29;--origin:59% 48%}
+#meal{--bg:#F6E9D5;--ink:#12241F;--txt:#12241F;--em:#EA9D35;--kb:#1C5F54;--kc:#F3F0E8;--btn:#A8D63C;--rim:#1C5F54;--nb:#0B2338;--nr:#17BE82;--cw:25vw;--cm:4vw;--hs:3.6vw;--hold:1;--focus:0.745;--origin:50% 45%}
+#run{--bg:#0B2338;--ink:#03070D;--txt:#E4F3EE;--em:#57F1C7;--kb:#57F1C7;--kc:#09181C;--btn:#F2B63A;--rim:#17BE82;--nb:#5182F4;--nr:#E4406A;--cw:31vw;--cm:clamp(20px,5vw,84px);--hs:4.3vw;--hold:0.7;--focus:0.3;--origin:53% 50%}
+#solo{--bg:#5182F4;--ink:#16154A;--txt:#12113A;--em:#F7C6DF;--kb:#16154A;--kc:#F7C6DF;--btn:#F7C6DF;--rim:#E4406A;--nb:#403468;--nr:#EF9964;--cw:27.5vw;--cm:3.6vw;--hs:4.2vw;--hold:0.4;--focus:0.73;--origin:37% 50%}
+#questions{--bg:#403468;--ink:#170F33;--txt:#F3EBDD;--em:#EF9964;--kb:#EF9964;--kc:#241A47;--btn:#EF9964;--rim:#EF9964;--nb:#15110E;--nr:#FF8A1F;--cw:28vw;--cm:3.6vw;--hs:4.2vw;--hold:0.35;--focus:0.27;--origin:64% 52%}
+#gyms .clip{left:30%;top:0%;width:70%;height:80%;--mask:url(./img/w1-mask.webp)}
+#gyms-s1{left:66%;top:35.5%;--c:#FFFFFF;--r:-4deg}
+#gyms-s2{left:66.5%;top:57.5%;--c:#3F3BC6;--ci:#fff;--r:4deg}
+#gyms-s3{left:53%;top:70%;--c:#BFED55;--r:-4deg}
+#gyms-s4{left:31%;top:76%;--c:#FC4B66;--ci:#fff;--r:4deg}
+#tools .clip{left:10%;top:16.389%;width:36.406%;height:46.389%;--mask:url(./img/w2-mask.webp)}
+#tools-s1{left:21.5%;top:19.5%;--c:#FFFFFF;--r:-4deg}
+#tools-s2{left:38.5%;top:46.5%;--c:#F6CE7A;--r:4deg}
+#tools-s3{left:45.5%;top:33%;--c:#C3376D;--ci:#fff;--r:-5deg}
+#tools-s4{left:18.5%;top:70%;--c:#6B68DC;--ci:#fff;--r:5deg}
+#tools-s5{left:30%;top:78%;--c:#FFFFFF;--r:-3deg}
+#tools-s6{left:50%;top:76.5%;--c:#F6CE7A;--r:4deg}
+#members .clip{left:45.9375%;top:30%;width:52.5%;height:44.444%;--mask:url(./img/w3-mask.webp)}
+#members-s1{left:71%;top:38.5%;--c:#61CEC1;--r:-5deg}
+#members-s2{left:51.5%;top:22.5%;--c:#F988C0;--r:-6deg}
+#members-s3{left:57%;top:76%;--c:#F6ECF1;--r:5deg}
+#members-s4{left:76.5%;top:74%;--c:#DF7635;--r:4deg}
+#members-s5{left:30.5%;top:61%;--c:#927BE9;--ci:#fff;--r:-4deg}
+#camera .clip{left:6.875%;top:18.889%;width:43.125%;height:61.111%;--mask:url(./img/w4-mask.webp)}
+#camera-s1{left:41%;top:56.5%;--c:#F4C768;--r:-5deg}
+#camera-s2{left:23%;top:77%;--c:#FFFFFF;--r:5deg}
+#meal .clip{left:46.875%;top:2.778%;width:53.125%;height:74.167%;--mask:url(./img/w5-mask.webp)}
+#meal-t1{left:72.5%;top:17.8%;width:4.8%;height:3.7%}
+#meal-t2{left:88.6%;top:13.4%;width:6.7%;height:4.0%}
+#meal-t3{left:90.0%;top:32.3%;width:5.3%;height:3.9%}
+#meal-s4{left:76%;top:45.5%;--c:#EA9D35;--r:-5deg}
+#meal-s5{left:40%;top:49%;--c:#7EB917;--r:4deg}
+#meal-s6{left:54%;top:76%;--c:#C31634;--ci:#fff;--r:-4deg}
+#run .clip{left:0%;top:0%;width:57.969%;height:80%;--mask:url(./img/w6-mask.webp)}
+#run-s1{left:36.5%;top:56%;--c:#F2B63A;--r:-5deg}
+#run-s2{left:47%;top:69%;--c:#57F1C7;--r:5deg}
+#run-s3{left:31%;top:22.5%;--c:#FFFFFF;--r:-4deg}
+#run-s4{left:39%;top:77%;--c:#6252BC;--ci:#fff;--r:3deg}
+#solo .clip{left:27.969%;top:3.889%;width:58.906%;height:73.056%;--mask:url(./img/w7-mask.webp)}
+#solo-s1{left:67%;top:27.5%;--c:#F7C6DF;--r:-5deg}
+#solo-s2{left:66%;top:77%;--c:#37BFD8;--r:5deg}
+#solo-s3{left:44%;top:74%;--c:#E4406A;--ci:#fff;--r:-4deg}
+#questions .clip{left:8.4375%;top:21.944%;width:36.5625%;height:55%;--mask:url(./img/w8-mask.webp)}

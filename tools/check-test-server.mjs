@@ -73,7 +73,22 @@ check("the api keeps to https", (health.headers.get("strict-transport-security")
 const plain = await get(`http://${apiName}/health`, { redirect: "manual" });
 check("plain http is sent to https", plain.status >= 300 && plain.status < 400 && (plain.headers.get("location") ?? "").startsWith("https://"), `${plain.status} ${plain.headers.get("location") ?? ""}`);
 
-const page = await get(`https://${webName}/`);
+// The front page (ROADMAP Stage 4 item 12a): the site's own address alone. Its policy runs only its own
+// script; the server's rules (never in a frame, https) hold on it as on the console.
+const front = await get(`https://${webName}/`);
+const frontBody = await front.text();
+const frontPolicy = (frontBody.match(/http-equiv="Content-Security-Policy" content="([^"]+)"/)?.[1] ?? "").replaceAll("&#39;", "'");
+check("the front page answers over https", front.status === 200 && frontBody.includes("<title>KWAZO") && !frontBody.includes("<div id=\"root\">"), String(front.status));
+check("the front page runs only its own script", /(?:^|; )script-src 'self'(?:;|$)/.test(frontPolicy) && !frontPolicy.includes("unsafe"), frontPolicy || "no policy");
+check("the front page may not be framed", (front.headers.get("content-security-policy") ?? "").includes("frame-ancestors 'none'"), front.headers.get("content-security-policy") ?? "none");
+check("the front page keeps to https", (front.headers.get("strict-transport-security") ?? "").includes("max-age="), front.headers.get("strict-transport-security") ?? "none");
+const robots = await get(`https://${webName}/robots.txt`);
+check("Google is told where the front page is", robots.status === 200 && (await robots.text()).includes(`Sitemap: https://${webName}/sitemap.xml`), String(robots.status));
+const sitemap = await get(`https://${webName}/sitemap.xml`);
+check("the site map lists the front page", sitemap.status === 200 && (await sitemap.text()).includes(`<loc>https://${webName}/</loc>`), String(sitemap.status));
+
+// The console: every address but the site's own, sign-in first.
+const page = await get(`https://${webName}/login`);
 const body = await page.text();
 check("the console answers over https", page.status === 200 && body.includes("<div id=\"root\">"), String(page.status));
 check("the console may not be framed", (page.headers.get("content-security-policy") ?? "").includes("frame-ancestors 'none'"), page.headers.get("content-security-policy") ?? "none");
@@ -87,7 +102,7 @@ check("the console's policy names this api", body.includes(`https://${apiName}`)
 // (the pages loaded later, such as /admin). Any address on the visitor's own device or network with a port
 // fires Chrome's question: localhost, 127.x, [::1], 10.x, 172.16-31.x, 192.168.x.
 const LOCAL_ADDRESS = /(?:https?|wss?):\/\/(?:localhost|127(?:\.\d{1,3}){3}|\[::1\]|10(?:\.\d{1,3}){3}|172\.(?:1[6-9]|2\d|3[01])(?:\.\d{1,3}){2}|192\.168(?:\.\d{1,3}){2}):\d+[^"'`\s]*/g;
-const queue = [...body.matchAll(/<script[^>]+src="([^"]+\.js)"/g)].map((m) => new URL(m[1] ?? "", `https://${webName}/`).href);
+const queue = [...body.matchAll(/<script[^>]+src="([^"]+\.js)"/g), ...frontBody.matchAll(/<script[^>]+src="([^"]+\.js)"/g)].map((m) => new URL(m[1] ?? "", `https://${webName}/`).href);
 const scripts = new Set();
 const laptopAddresses = [];
 while (queue.length > 0) {

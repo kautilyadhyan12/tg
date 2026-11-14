@@ -559,7 +559,9 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
 
 11. [x] **The API talks to the database on ten connections** — merged 2026-10-02 (PR #156).
 
-12. [ ] **The front page, built LAST** (Kd, RULINGS 2026-09-25): what the app does, "Create your gym" into today's console pages, "Get the app", and the list of gyms that said yes to being shown, filtered by city, each opening its page and lead form (20c-iv).
+12. [ ] **The front page** (built now, not last: Kd, 2026-11-14, `rulings/2026-11-15-12a-front-page.md`)
+       - 12a. [x] **The front page at getkwazo.com** — merged 2026-11-15 (PR #551).
+       - 12b. [ ] The list of gyms that said yes to being shown, by city, each opening its page and lead form (20c-iv): not in 12a's design; Kd to say whether he still wants it.
 
 13. [x] **A gym that stops paying is never closed by the clock** — merged 2026-10-02 (PR #158).
 
