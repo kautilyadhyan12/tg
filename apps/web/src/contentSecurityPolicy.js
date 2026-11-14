@@ -72,8 +72,43 @@ export function contentSecurityPolicy({ apiAddresses = [], dev = false } = {}) {
     .join('; ');
 }
 
+/**
+ * THE FRONT PAGE'S POLICY (ROADMAP Stage 4 item 12a): stricter than the console's, because the page
+ * needs nothing from anybody. It talks to no api, takes no payment and shows no outside picture: only
+ * its own script, stylesheet, pictures, clips and fonts, all from this site. Not even a style written
+ * into the page (every style is in its stylesheet; its script moves things through the style object,
+ * which a policy does not govern). `dev`: Vite's development server writes one script and its styles
+ * into the page and reloads over a websocket; never in a build.
+ */
+export function frontPageContentSecurityPolicy({ dev = false } = {}) {
+  const directives = {
+    'default-src': ["'self'"],
+    'script-src': ["'self'", ...(dev ? ["'unsafe-inline'"] : [])],
+    'style-src': ["'self'", ...(dev ? ["'unsafe-inline'"] : [])],
+    // The build writes its smallest pictures (the clips' masks) into the stylesheet as data.
+    'img-src': ["'self'", 'data:'],
+    'media-src': ["'self'"],
+    'font-src': ["'self'"],
+    'connect-src': ["'self'", ...(dev ? ['ws:', 'wss:'] : [])],
+    'frame-src': ["'none'"],
+    'worker-src': ["'none'"],
+    'object-src': ["'none'"],
+    'base-uri': ["'self'"],
+    'form-action': ["'self'"],
+  };
+  return Object.entries(directives)
+    .map(([name, values]) => `${name} ${values.join(' ')}`)
+    .join('; ');
+}
+
+/** Whether the page being built is the front page (`home.html`) rather than the console's. */
+export function isFrontPage(ctx) {
+  const name = (ctx && (ctx.filename || ctx.path)) || '';
+  return /(^|[\\/])home\.html$/.test(name);
+}
+
 /** Vite's part: the policy written into the page's head, first, for the build and for Vite's
- *  own development server alike. */
+ *  own development server alike; the front page gets its own. */
 export function contentSecurityPolicyPlugin(env) {
   const apiAddresses = [env.VITE_API_URL, env.VITE_AUTH_API_URL, env.VITE_ML_API_URL, env.VITE_WS_URL];
   let dev = false;
@@ -82,11 +117,12 @@ export function contentSecurityPolicyPlugin(env) {
     configResolved(config) {
       dev = config.command === 'serve';
     },
-    transformIndexHtml() {
+    transformIndexHtml(_html, ctx) {
+      const content = isFrontPage(ctx) ? frontPageContentSecurityPolicy({ dev }) : contentSecurityPolicy({ apiAddresses, dev });
       return [
         {
           tag: 'meta',
-          attrs: { 'http-equiv': 'Content-Security-Policy', content: contentSecurityPolicy({ apiAddresses, dev }) },
+          attrs: { 'http-equiv': 'Content-Security-Policy', content },
           injectTo: 'head-prepend',
         },
       ];
