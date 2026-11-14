@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { APP_PURCHASE_WORDS, PROMO_CODE_WORDS, formatMinor, appPurchaseRequestSchema, appPurchaseSchema, type AppPaymentState, type ForSaleLine, type ForSaleResponse } from "@app/shared";
 import {
-  BANK_CHECK_DESK,
   CARD_NOT_TAKEN,
   NOT_READY,
   NOT_READY_BOTH,
@@ -26,7 +25,7 @@ import {
   todayParts,
 } from "../src/screens/gym/buyView";
 import { NOT_PAID, PAY_CHECK, PAY_WAITING } from "../src/screens/gym/payView";
-import { AGREEMENT_ID, DAY_TYPE, GOLD_TYPE, PACK_ID, PACK_TYPE, SPRING20, SUMMER_TYPE, lineOf } from "./forSaleLines";
+import { AGREEMENT_ID, DAY_TYPE, GOLD_TYPE, PACK_ID, PACK_TYPE, SPRING20, SUMMER_TYPE, lineOf, listCard } from "./forSaleLines";
 
 // Buy in the app (ROADMAP Stage 5 item 20g): how a line reads, what Pay sends, and how the end is said. The server decides
 // all of it (`appPurchases.routes.test.ts`); the phone sends exactly what it showed, and reads bought only from `paid`.
@@ -121,7 +120,7 @@ describe("a repeating membership, paid with the card saved in the app (20i-i)", 
   const gold = lineOf(GOLD_TYPE, { card: { brand: "VISA", last4: "1111" } });
   const view = (over: Partial<Pick<ForSaleResponse, "record" | "card">> = {}): Pick<ForSaleResponse, "record" | "card"> => ({
     record: "own",
-    card: { brand: "VISA", last4: "1111", expired: false },
+    card: listCard({ brand: "VISA", last4: "1111" }),
     ...over,
   });
 
@@ -131,7 +130,7 @@ describe("a repeating membership, paid with the card saved in the app (20i-i)", 
       ["a line paid once, whatever the card", pack, view({ card: null }), { kind: "page" }],
       ["own record, a card in date", gold, view(), { kind: "card", card: { brand: "VISA", last4: "1111" }, words: gold.charge ?? "" }],
       ["own record, no card", { ...gold, charge: null }, view({ card: null }), { kind: "add_card", line: APP_PURCHASE_WORDS.card_needed }],
-      ["own record, an expired card", { ...gold, charge: null }, view({ card: { brand: "VISA", last4: "1111", expired: true } }), { kind: "update_card", line: APP_PURCHASE_WORDS.card_expired }],
+      ["own record, an expired card", { ...gold, charge: null }, view({ card: listCard({ brand: "VISA", last4: "1111" }, { expired: true }) }), { kind: "update_card", line: APP_PURCHASE_WORDS.card_expired }],
       ["a card in date but no tick from the server: changed, never called expired", { ...gold, charge: null }, view(), { kind: "changed", line: APP_PURCHASE_WORDS.card_changed }],
       ["not on the gym's list yet", { ...gold, charge: null }, view({ record: "none", card: null }), { kind: "no_record", line: APP_PURCHASE_WORDS.card_no_record }],
       ["a shared record", gold, view({ record: "shared" }), { kind: "no_record", line: APP_PURCHASE_WORDS.card_no_record }],
@@ -152,7 +151,7 @@ describe("a repeating membership, paid with the card saved in the app (20i-i)", 
     expect(buyRefusalSaid("app_purchase_card_expired", APP_PURCHASE_WORDS.card_expired)).toMatchObject({ reread: true, updateCard: true });
     expect(buyRefusalSaid("app_purchase_card_changed", APP_PURCHASE_WORDS.card_changed)).toMatchObject({ reread: true });
     expect(buyRefusalSaid("app_purchase_card_needed", APP_PURCHASE_WORDS.card_needed)).toMatchObject({ reread: true });
-    expect(buyRefusalSaid("app_purchase_verification", APP_PURCHASE_WORDS.verification)).toEqual({ tone: "bad", line: BANK_CHECK_DESK });
+    expect(buyRefusalSaid("app_purchase_verification", APP_PURCHASE_WORDS.verification)).toEqual({ tone: "bad", line: APP_PURCHASE_WORDS.verification });
     expect(buyRefusalSaid("app_purchase_charging", APP_PURCHASE_WORDS.charging)).toEqual({ tone: "bad", line: APP_PURCHASE_WORDS.charging });
   });
 

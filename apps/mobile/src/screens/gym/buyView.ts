@@ -48,8 +48,13 @@ export const PAID_WITH = "Paid with";
 export const CHARGING = "Charging your card…";
 /** Under Pay on a repeating membership: "Your Visa ending 1111 is charged through Square." */
 export const chargedThrough = (card: { brand: string; last4: string }): string => `Your ${cardName(card)} is charged through Square.`;
-/** The bank asked to confirm it was them: the bank's own check on the phone is not built yet (20i-ii). */
-export const BANK_CHECK_DESK = "Your bank needs to confirm this payment, so buy this at the front desk.";
+/** The bank's check before Pay on a repeating membership (20i-ii): under Pay while Square checks, the box's title where the
+ *  card's bank asks, and how a check that sent nothing ended. */
+export const CHECKING_BANK = "Checking with your bank…";
+export const BANK_TITLE = "Confirm with your bank";
+export const BANK_NO = "Your bank didn’t confirm this payment, so nothing was charged. Try again or update your card.";
+export const BANK_CLOSED = "Payment not completed, so nothing was charged. Press Pay to try again.";
+export const BANK_NOT_REACHED = "Couldn’t connect to Square, so nothing was charged. Check your internet and try again.";
 /** A card charge that ended with nothing taken, said after Check status. */
 export const CARD_NOT_TAKEN = "Square didn’t take this payment, so nothing was charged.";
 
@@ -145,7 +150,8 @@ export function buyBody(
     amountMinor: line.firstPayment.amountMinor,
     factsKey: line.factsKey,
     agreement: line.agreement === null || sign === null ? null : { agreementId: line.agreement.id, signer: sign.signer, name: sign.name },
-    // A repeating membership: the card's tick word for word as the server sent it. No bank's check yet (20i-ii).
+    // A repeating membership: the card's tick word for word as the server sent it. Square's pass from the bank's check is
+    // added by Pay once the check ends (20i-ii).
     ...(line.repeats && line.charge !== null ? { charge: { words: line.charge, verificationToken: null } } : {}),
     ...(line.firstPayment.promo === null ? {} : { code: line.firstPayment.promo.code }),
   };
@@ -229,14 +235,24 @@ const REREAD = new Set([
   // The code can't be used now (its last use taken, or it ended at midnight): the list says why, without it (20j).
   "app_purchase_promo",
 ]);
+/** How a bank's check that sent nothing ended (20i-ii), beside Pay. */
+export function bankSaid(outcome: "bank_no" | "closed" | "not_reached"): BuySaid {
+  if (outcome === "bank_no") return { tone: "bad", line: BANK_NO, updateCard: true };
+  if (outcome === "closed") return { tone: "warn", line: BANK_CLOSED };
+  return { tone: "bad", line: BANK_NOT_REACHED };
+}
+
+/** Pay's body with Square's pass from the bank's check (20i-ii). */
+export function withPass(body: Omit<AppPurchaseRequest, "requestKey">, pass: string): Omit<AppPurchaseRequest, "requestKey"> {
+  return body.charge === undefined ? body : { ...body, charge: { ...body.charge, verificationToken: pass } };
+}
+
 /** The card is what stands in the way: Update card beside the words. */
 const UPDATE_CARD_CODES = new Set(["app_purchase_declined", "app_purchase_card_stopped", "app_purchase_card_expired"]);
 
 /** A refused Pay, in the member's words: the server's own, written for the member. What changed reads the list again; money
  *  owed here is paid on My membership. */
 export function buyRefusalSaid(code: string, serverWords: string): BuySaid {
-  // The bank's own check is not on the phone yet (20i-ii): "try again" would be asked again, so the desk takes it.
-  if (code === "app_purchase_verification") return { tone: "bad", line: BANK_CHECK_DESK };
   const line = serverWords === "" ? PAY_NOT_OPENED : serverWords;
   if (REREAD.has(code)) return { tone: "warn", line, reread: true, ...(UPDATE_CARD_CODES.has(code) ? { updateCard: true } : {}) };
   if (UPDATE_CARD_CODES.has(code)) return { tone: "bad", line, updateCard: true };

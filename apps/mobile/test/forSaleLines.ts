@@ -86,3 +86,17 @@ export function lineOf(
         : { id: AGREEMENT_ID, name: null, version: 1, text: "1. Classes in this pack must be used by the date shown.\n2. Packs are personal and can't be shared." },
   });
 }
+
+/** The card the list names, with its Square id and the gym's form. */
+export const CARD_ID = "ccof:CA4SEtestVisa1111";
+export const CARD_FORM = {
+  environment: "sandbox",
+  applicationId: "sandbox-sq0idb-AbCdEfGhIjKlMnOp",
+  locationId: "L5KSRHCHY40BP",
+  contact: { givenName: "Asha", familyName: "Walk", email: "asha@gmail.com", countryCode: "US" },
+} as const;
+/** Square's pass for that card once its bank is happy. */
+export const PASS = `${CARD_ID}#verf:CA4SEtestPass01`;
+
+/** The list's card: `{ brand, last4 }` with what the bank's check needs. */
+export const listCard = (card: { brand: string; last4: string }, over: Record<string, unknown> = {}) => ({ ...card, expired: false, id: CARD_ID, form: CARD_FORM, ...over });

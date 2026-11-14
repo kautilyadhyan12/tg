@@ -1,6 +1,6 @@
 import { sha256 } from "@noble/hashes/sha2";
 import { utf8ToBytes } from "@noble/hashes/utils";
-import { cardFormSchema, type CardForm } from "@app/shared";
+import { cardFormSchema, squareCardIdSchema, type CardForm } from "@app/shared";
 import { colours } from "../../look/colours";
 
 // Add card on the phone (ROADMAP Stage 5 item 20d): Square's own card boxes (its Web Payments SDK, as the desk's Card on
@@ -10,6 +10,12 @@ import { colours } from "../../look/colours";
 // the page can draw a box of its own; it frames https pages alone (Square's, and the card's bank's own check, at any
 // bank's address), and only the page itself is listened to. Square draws only on a secure page: the page is given
 // the api's own address (https, or localhost on the laptop).
+//
+// The same page runs the bank's check before Pay on a repeating membership (20i-ii): with no boxes, Square checks the saved
+// card for the amount to be charged (`Card.tokenize(verificationDetails, cardId)`, its newer way for a card on file),
+// draws the card's bank's own box where the bank asks, and hands back its pass for that card. Tried in Square's test area
+// on 2026-11-14: no boxes are needed, an ordinary card answers in about two seconds with no box, and Cancel in the bank's
+// box makes Square refuse with "An error occurred while verifying the buyer".
 
 const SCRIPT = { sandbox: "https://sandbox.web.squarecdn.com/v1/square.js", production: "https://web.squarecdn.com/v1/square.js" } as const;
 const SQUARE = ["https://web.squarecdn.com", "https://sandbox.web.squarecdn.com"];
@@ -45,8 +51,15 @@ function draw(){
 if(!window.Square){say({kind:"blocked"});return;}
 var payments;
 try{payments=window.Square.payments(form.applicationId,form.locationId);}catch(e){say({kind:"blocked"});return;}
+if(form.check){payments.card().then(function(c){card=c;say({kind:"ready"});}).catch(function(){say({kind:"blocked"});});return;}
 payments.card({style:form.style}).then(function(c){return c.attach("#card").then(function(){card=c;say({kind:"ready"});height();});}).catch(function(){say({kind:"blocked"});});
 }
+window.kwazoCheck=function(){
+if(card===null||busy||!form.check)return;
+busy=true;
+var k=form.check;
+card.tokenize({amount:k.amount,currencyCode:k.currencyCode,intent:"CHARGE",customerInitiated:true,sellerKeyedIn:false,billingContact:form.contact},k.cardId).then(function(r){busy=false;if(r&&r.status==="OK"&&typeof r.token==="string")say({kind:"pass",token:r.token});else say({kind:"not_taken"});},function(e){busy=false;var m=String((e&&e.message)||"");say({kind:/verif/i.test(m)?"bank_no":"not_taken"});});
+};
 window.kwazoSave=function(){
 if(card===null||busy)return;
 busy=true;
@@ -104,8 +117,16 @@ export const CARD_PAGE_POLICY = [
 /** Data in the page, safe inside its block: no "<" that could end it. */
 const inert = (value: unknown): string => JSON.stringify(value).replace(/</g, "\\u003c").replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029");
 
-/** The page for one gym's form, or null for a form that is not one the server would send. */
-export function cardPage(form: CardForm): string | null {
+/** What the bank's check before Pay checks (20i-ii): the saved card, and today's amount as Square takes it ("25.00"). */
+export interface CardCheck {
+  cardId: string;
+  amount: string;
+  currencyCode: string;
+}
+
+/** The page for one gym's form, or null for a form that is not one the server would send. With `check`, no boxes: the
+ *  bank's check of the saved card before Pay (20i-ii). */
+export function cardPage(form: CardForm, check: CardCheck | null = null): string | null {
   const parsed = cardFormSchema.safeParse(form);
   if (!parsed.success) return null;
   const f = parsed.data;
@@ -115,7 +136,8 @@ export function cardPage(form: CardForm): string | null {
     ...(f.contact.email === null ? {} : { email: f.contact.email }),
     countryCode: f.contact.countryCode,
   };
-  const data = { script: SCRIPT[f.environment], applicationId: f.applicationId, locationId: f.locationId, contact, style: STYLE };
+  if (check !== null && !(squareCardIdSchema.safeParse(check.cardId).success && /^[0-9]{1,8}(\.[0-9]{1,3})?$/.test(check.amount) && /^[A-Z]{3}$/.test(check.currencyCode))) return null;
+  const data = { script: SCRIPT[f.environment], applicationId: f.applicationId, locationId: f.locationId, contact, style: STYLE, check };
   return `<!doctype html>
 <html><head>
 <meta http-equiv="Content-Security-Policy" content="${CARD_PAGE_POLICY}">
@@ -131,6 +153,9 @@ export function cardPage(form: CardForm): string | null {
 
 /** The script the app runs in the page when Save card is pressed: Square makes its token for the card typed. */
 export const SAVE_SCRIPT = "window.kwazoSave&&window.kwazoSave();true;";
+
+/** The script the app runs to start the bank's check before Pay (20i-ii). */
+export const CHECK_SCRIPT = "window.kwazoCheck&&window.kwazoCheck();true;";
 
 /** Where a load the page starts goes. `load`: in the page (the page itself, Square's frames, and the bank's own check
  *  that Square's script frames on it). `outside`: the phone's browser (a link Square shows, such as its privacy

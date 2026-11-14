@@ -15,6 +15,7 @@ import { Tick } from "../../look/Tick";
 import { Txt } from "../../look/Txt";
 import { useSession } from "../../session/SessionProvider";
 import { AddCardPage, type CardPlace } from "./AddCard";
+import { useBankCheck, type BankCheckAsk, type BankCheckOutcome } from "./BankCheck";
 import { termsHeading } from "./agreementView";
 import { ADD_CARD, UPDATE_CARD } from "./cardView";
 import {
@@ -224,6 +225,8 @@ function BuyBody({
     [load],
   );
   const buy = useBuyInApp(place.id, readAgain);
+  // The bank's check before a repeating membership is charged (20i-ii): Square's page, held here while it works.
+  const bank = useBankCheck();
   const { resume } = buy;
 
   useEffect(() => {
@@ -373,7 +376,9 @@ function BuyBody({
         onCard={() => {
           setAddingCard({ id: place.id, name: place.name });
         }}
+        check={bank.run}
       />
+      {bank.view}
       <AddCardPage
         place={addingCard}
         // Saving closes the page, and closing reads the list again.
@@ -565,6 +570,7 @@ function LinePage({
   onClose,
   onMembership,
   onCard,
+  check,
 }: {
   open: boolean;
   place: BuyPlace;
@@ -576,6 +582,7 @@ function LinePage({
   onClose: () => void;
   onMembership: () => void;
   onCard: () => void;
+  check: (ask: BankCheckAsk) => Promise<BankCheckOutcome>;
 }) {
   return open && typeId !== null ? (
     <LineBody
@@ -589,6 +596,7 @@ function LinePage({
       onClose={onClose}
       onMembership={onMembership}
       onCard={onCard}
+      check={check}
     />
   ) : null;
 }
@@ -603,6 +611,7 @@ function LineBody({
   onClose,
   onMembership,
   onCard,
+  check,
 }: {
   place: BuyPlace;
   line: ForSaleLine | null;
@@ -614,6 +623,8 @@ function LineBody({
   onClose: () => void;
   onMembership: () => void;
   onCard: () => void;
+  /** The bank's check before a repeating membership is charged (20i-ii). */
+  check: (ask: BankCheckAsk) => Promise<BankCheckOutcome>;
 }) {
   const known = view === null ? null : signerOf(view.signer);
   const [picked, setPicked] = useState<DeskSigner | null>(null);
@@ -665,7 +676,11 @@ function LineBody({
   const pay = () => {
     if (line === null || !ready || busy !== null) return;
     const sign = line.agreement === null || signer === null ? null : { signer, name: cleanSignedName(name) };
-    buy.pay(line.typeId, buyBody(line, sign));
+    // The card's bank checks exactly what Pay charges: the saved card the tick names, for today's amount (20i-ii).
+    const card = view?.card ?? null;
+    const form = card?.form ?? null;
+    const ask = how.kind === "card" && card !== null && form !== null ? { form, cardId: card.id, amountMinor: line.firstPayment.amountMinor, currency: line.currency } : null;
+    buy.pay(line.typeId, buyBody(line, sign), ask === null ? undefined : () => check(ask));
   };
 
   const foot =
