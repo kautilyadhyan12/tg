@@ -1064,3 +1064,22 @@ describe("a meal shows two of its foods (Kd, 2026-11-14)", () => {
     expect(screen.getAllByText(/^3 meals · /)).toHaveLength(2);
   });
 });
+
+describe("See all only where a food is hidden (32c-i, the re-check's Low)", () => {
+  it("a meal whose third food waits to send shows all three and no See all", async () => {
+    const now = new Date();
+    const at = (m: number) => new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, m).toISOString();
+    const meals = [
+      savedMeal("11111111-1111-4111-8111-111111111121", { mealName: "Oats one", takenAt: at(10), mealType: "breakfast" }),
+      savedMeal("11111111-1111-4111-8111-111111111122", { mealName: "Oats two", takenAt: at(20), mealType: "breakfast" }),
+    ];
+    await openFood({ meals, save: () => lost() });
+    await addOats();
+    expect(await screen.findByText("Waiting to send")).toBeTruthy();
+    // Just added, the meal is open whole; closed, its waiting food is still shown and nothing is hidden.
+    await fireEvent.press(screen.getByRole("button", { name: "Show less of Breakfast" }));
+    expect(screen.getByText("Waiting to send")).toBeTruthy();
+    expect(screen.getAllByRole("button", { name: /^Oats( one| two|, rolled)/ })).toHaveLength(3);
+    expect(screen.queryByRole("button", { name: /^See all \d+ in Breakfast$/ })).toBeNull();
+  });
+});

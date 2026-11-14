@@ -755,7 +755,8 @@ function Section({ type, rows, canAdd, all, onAll, said, onAdd, onOpen }: Sectio
           </Pressable>
         ))
       )}
-      {rows.length > SHOWN_FOODS ? (
+      {/* Only where a food is hidden, or all are open to close again. */}
+      {(all ? rows.length > SHOWN_FOODS : rows.some((r, i) => i >= SHOWN_FOODS && !r.waiting)) ? (
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={all ? `Show less of ${name}` : `See all ${String(rows.length)} in ${name}`}
