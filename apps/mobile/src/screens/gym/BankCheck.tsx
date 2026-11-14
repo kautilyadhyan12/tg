@@ -57,8 +57,9 @@ export function useBankCheck(): { run: (ask: BankCheckAsk) => Promise<BankCheckO
   const started = useRef(false);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const round = useRef(0);
-  // The bank's box shows the card's number: never in a screenshot or a screen recording.
-  useNoScreenshots(asked !== null);
+  // The bank's box shows the card's number: never in a screenshot or a screen recording. The box is a window of its own,
+  // which Android marks only if it opens after the app's mark, so it opens once the mark is on (as Add card does).
+  const marked = useNoScreenshots(asked !== null);
 
   const finish = useCallback((outcome: BankCheckOutcome) => {
     for (const t of timers.current) clearTimeout(t);
@@ -106,7 +107,7 @@ export function useBankCheck(): { run: (ask: BankCheckAsk) => Promise<BankCheckO
   }, [finish]);
 
   const view =
-    asked === null ? null : (
+    asked === null || !marked ? null : (
       <Modal visible transparent animationType="none" statusBarTranslucent navigationBarTranslucent onRequestClose={close}>
         <View testID="bank-check" style={tall ? styles.scrim : styles.unseen} pointerEvents={tall ? "auto" : "none"}>
           <View style={tall ? [styles.sheet, { marginTop: insets.top + 8, paddingBottom: insets.bottom + 12 }] : styles.tiny}>

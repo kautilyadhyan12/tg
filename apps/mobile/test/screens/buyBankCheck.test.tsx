@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
 import { AGREEMENT_AGREE_LABEL, type ForSaleLine } from "@app/shared";
 import { App } from "../../src/App";
 import { BANK_CLOSED, BANK_NO, BANK_NOT_REACHED, BANK_TITLE, CHARGING, CHECKING_BANK, PAID_TITLE } from "../../src/screens/gym/buyView";
@@ -14,8 +14,14 @@ import { CARD_ID, PASS, bankPage, bankPages, bankSays, everyBankPage, forgetBank
 // card and the amount Pay charges, Pay sends nothing until Square hands back its pass for that very card, and a check that
 // ends any other way sends nothing.
 
+type PhoneScreen = { marks: string[]; missing: boolean; hold: boolean; release: () => void };
+const { screen: phoneScreen } = jest.requireMock<{ screen: PhoneScreen }>("../../src/look/screenCaptureNative");
+
 beforeEach(() => {
   forgetBankPages();
+  phoneScreen.marks.length = 0;
+  phoneScreen.missing = false;
+  phoneScreen.hold = false;
 });
 
 const extra = { copyName: "Feature 1", apiUrl: "http://localhost:3000" };
@@ -148,6 +154,25 @@ describe("the worst thing: only the card the tick names, for the amount Pay char
     await passTheBank();
     await screen.findByTestId("buy-paid");
     expect(presses(server.asked)).toHaveLength(1);
+  });
+
+  it("Square's page opens only once screenshots are blanked (the bank's box shows the card's number), and they come back after", async () => {
+    const gold = lineOf(GOLD_TYPE, { card: VISA });
+    const server = serverFor(gold);
+    await openGoldPage(server.ask, gold);
+    phoneScreen.hold = true;
+    await pay();
+    expect(phoneScreen.marks).toEqual(["on"]);
+    expect(everyBankPage()).toEqual([]);
+    await act(async () => {
+      phoneScreen.release();
+      await Promise.resolve();
+    });
+    await passTheBank();
+    await screen.findByTestId("buy-paid");
+    await waitFor(() => {
+      expect(phoneScreen.marks).toEqual(["on", "off"]);
+    });
   });
 
   it("the bank said no: Update card beside the words; once checked, Pay reads Charging your card", async () => {
