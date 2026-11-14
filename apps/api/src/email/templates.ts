@@ -356,6 +356,29 @@ export function cardExpiringEmail(words: {
   return { to: words.to, subject: `Your card on file with ${words.gymName} expires this month`, text, html };
 }
 
+/** The gym asks the member to add a card in the app (ROADMAP 18d-vii), sent with the message in their inbox.
+ *  The gym name and the membership names arrive already cleaned. */
+export function cardRequestEmail(words: {
+  to: string;
+  gymName: string;
+  greeting: string;
+  /** "Iron Gym asks you to add a card for your Gold Monthly membership." */
+  ask: string;
+  /** "Once it is added, it is charged automatically each time the membership renews." */
+  then: string;
+  /** "If you have any questions, you can call 555 0100 or email desk@irongym.com." or null. */
+  contact: string | null;
+}): EmailMessage {
+  const lines = [words.greeting, `${words.ask} ${words.then}`, "To add it, open the app, go to My membership and tap Add card.", ...(words.contact === null ? [] : [words.contact]), "Thank you."];
+  const footer = `Sent by ${APP_NAME} on behalf of ${words.gymName}, about your membership with them.`;
+  const text = `${lines.join("\n\n")}\n\n${words.gymName}\n\n${footer}\n`;
+  const html =
+    lines.map((line) => `<p>${escapeHtml(line)}</p>`).join("") +
+    `<p>${escapeHtml(words.gymName)}</p>` +
+    `<p style="color:#666;font-size:12px">${escapeHtml(footer)}</p>`;
+  return { to: words.to, subject: `${words.gymName} asks you to add a card for your membership`, text, html };
+}
+
 /** The reminder before a membership renews or its minimum term ends (ROADMAP 18v-iv), sent by the gym to
  *  whoever pays for it. The words are `renewalReminderWords`'s, from names already cleaned. */
 export function renewalReminderEmail(words: {

@@ -109,7 +109,7 @@ export const OUTSIDE_SERVICES = [
     id: "resend",
     healthData: false,
     name: "Resend",
-    forWhat: "Delivers emails, including authentication codes, invitations, receipts, and reminders.",
+    forWhat: "Delivers emails, including authentication codes, invitations, receipts, reminders, and a gym's request to add a payment card.",
     gets: "The recipient's email address and the contents of the relevant email.",
   },
   {

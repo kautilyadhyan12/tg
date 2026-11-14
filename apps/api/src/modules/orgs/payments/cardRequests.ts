@@ -10,6 +10,7 @@
 // members' payments", and a live plan for the press), then the gym taking cards in the app, then
 // the rate limit, then the handler.
 import {
+  authEmailSchema,
   CARD_REQUEST_AGAIN_DAYS,
   CARD_REQUEST_BOX_NAMES_MAX,
   CARD_REQUEST_MESSAGE_KIND,
@@ -28,6 +29,7 @@ import type { Sql, TransactionSql } from "postgres";
 import { lockGym } from "../memberList/repo.js";
 import { selectedIds } from "../memberList/selection.js";
 import type { MemberListDeps } from "../memberList/service.js";
+import { emailHmac } from "../invites/address.js";
 import { gymNow, insertMessages } from "../messages/repo.js";
 import { insertAudit } from "../repo.js";
 import { OrgsError, requirePrivilege, requireWritablePrivilege } from "../service.js";
@@ -42,7 +44,7 @@ const DAY_MS = 86_400_000;
 
 /** Who is asked, each with the one account the message goes to, and who is not, with why. */
 export interface CardRequestPlan {
-  ask: (CardRequestPerson & { userId: string; body: { own: string[]; others: boolean } })[];
+  ask: (CardRequestPerson & { userId: string; body: { own: string[]; others: boolean }; email: string | null })[];
   kept: { reason: CardRequestKeptReason; people: CardRequestPerson[]; count: number }[];
 }
 
@@ -68,7 +70,7 @@ export function cardRequestPlan(rows: readonly requests.RequestStateRow[], selec
     else if (row.askedAt !== null && row.askedAt.getTime() >= againSince.getTime()) keep("asked_recently", { ...person, askedOn: row.askedOn });
     else {
       taken.add(userId);
-      ask.push({ ...person, userId, body: { own: row.ownTypes, others: row.paysForOthers } });
+      ask.push({ ...person, userId, body: { own: row.ownTypes, others: row.paysForOthers }, email: row.email });
     }
   }
   const order: readonly CardRequestKeptReason[] = ["has_card", "paid_by", "nothing_renews", "not_in_app", "shared", "asked_recently", "former"];
@@ -90,14 +92,31 @@ function askDigestOf(gymId: string, ask: readonly { entryId: string; userId: str
 
 const strip = ({ entryId, name, payerName, askedOn }: CardRequestPerson): CardRequestPerson => ({ entryId, name, payerName, askedOn });
 
-function previewOf(gymId: string, plan: CardRequestPlan, selected: number): CardRequestPreview {
+function previewOf(gymId: string, plan: CardRequestPlan, selected: number, emails: ReadonlyMap<string, string> | null): CardRequestPreview {
   return {
     selected,
     askCount: plan.ask.length,
     ask: plan.ask.slice(0, CARD_REQUEST_BOX_NAMES_MAX).map(strip),
     kept: plan.kept.map((group) => ({ ...group, people: group.people.slice(0, CARD_REQUEST_BOX_NAMES_MAX).map(strip) })),
     askDigest: askDigestOf(gymId, plan.ask),
+    emailed: emails !== null,
+    noEmail: emails === null ? 0 : plan.ask.length - emails.size,
   };
+}
+
+/** THE EMAILS THAT GO WITH THE MESSAGES (Kd, 2026-11-14): each person asked whose record has an address that
+ *  can be emailed (one that never bounced or was refused). Null where this server sends no member emails. */
+async function emailsFor(sql: Sql | TransactionSql, deps: CardRequestDeps, ask: CardRequestPlan["ask"]): Promise<Map<string, string> | null> {
+  const settings = deps.invites ?? null;
+  if (settings === null || settings.sender === null) return null;
+  const typed = ask.flatMap((person) =>
+    person.email !== null && authEmailSchema.safeParse(person.email).success ? [{ entryId: person.entryId, email: person.email, hmac: emailHmac(settings.hmacKey, person.email) }] : [],
+  );
+  const blocked = await requests.blockedOf(
+    sql,
+    typed.map((t) => t.hmac),
+  );
+  return new Map(typed.filter((t) => !blocked.has(t.hmac)).map((t) => [t.entryId, t.email]));
 }
 
 const gymNotFound = (): OrgsError => new OrgsError(404, "org_not_found", "Organisation not found.");
@@ -126,7 +145,8 @@ export async function previewCardRequest(
   const ids = await selectedIds(deps, gymId, request.selection);
   const now = deps.now();
   const rows = await requests.requestStateOf(deps.sql, gymId, ids, account, now);
-  return previewOf(gymId, cardRequestPlan(rows, ids.length, againSinceOf(now)), ids.length);
+  const plan = cardRequestPlan(rows, ids.length, againSinceOf(now));
+  return previewOf(gymId, plan, ids.length, await emailsFor(deps.sql, deps, plan.ask));
 }
 
 /** The people who would be asked are not the ones the box named: nobody was asked, and this is
@@ -159,10 +179,10 @@ export async function sendCardRequest(
     const gym = await gymNow(tx, gymId, now);
     if (gym === null) throw gymNotFound();
     const before = await sentWithKey(tx, gymId, occasion);
-    if (before > 0) return { asked: before, kept: [] };
+    if (before.asked > 0) return { ...before, kept: [] };
     const plan = cardRequestPlan(await requests.requestStateOf(tx, gymId, ids, account, now), ids.length, againSinceOf(now));
     if (plan.ask.length !== request.askCount || askDigestOf(gymId, plan.ask) !== request.askDigest) {
-      throw new CardRequestPeopleChanged(previewOf(gymId, plan, ids.length));
+      throw new CardRequestPeopleChanged(previewOf(gymId, plan, ids.length, await emailsFor(tx, deps, plan.ask)));
     }
     if (plan.ask.length === 0) throw new OrgsError(409, "card_request_nobody", CARD_REQUEST_WORDS.nobody);
     const asked = await insertMessages(
@@ -179,23 +199,27 @@ export async function sendCardRequest(
       now,
       GYM_MESSAGE_KEPT_DAYS,
     );
+    // The email with each message, written in the same transaction and sent by the worker.
+    const emails = await emailsFor(tx, deps, plan.ask);
+    const emailed = emails === null ? 0 : await requests.queueEmails(tx, gymId, occasion, [...emails].map(([entryId, email]) => ({ entryId, email })), now);
     await insertAudit(tx, {
       actorUserId: userId,
       gymId,
       action: "org.card_request_sent",
       targetType: "org",
       targetId: gymId,
-      meta: { people: String(asked) },
+      meta: { people: String(asked), emailed: String(emailed) },
     });
-    return { asked, kept: plan.kept.map(({ reason, count }) => ({ reason, count })) };
+    return { asked, emailed, kept: plan.kept.map(({ reason, count }) => ({ reason, count })) };
   });
 }
 
-/** How many were asked by the press with this key. */
-async function sentWithKey(tx: TransactionSql, gymId: string, occasion: string): Promise<number> {
-  const [row] = await tx<{ n: number }[]>`
-    SELECT count(*)::int AS n FROM gym_member_messages WHERE gym_id = ${gymId} AND kind = ${CARD_REQUEST_MESSAGE_KIND} AND occasion = ${occasion}`;
-  return row?.n ?? 0;
+/** How many were asked, and emailed, by the press with this key. */
+async function sentWithKey(tx: TransactionSql, gymId: string, occasion: string): Promise<{ asked: number; emailed: number }> {
+  const [row] = await tx<{ asked: number; emailed: number }[]>`
+    SELECT (SELECT count(*)::int FROM gym_member_messages WHERE gym_id = ${gymId} AND kind = ${CARD_REQUEST_MESSAGE_KIND} AND occasion = ${occasion}) AS asked,
+           (SELECT count(*)::int FROM gym_card_request_emails WHERE gym_id = ${gymId} AND occasion = ${occasion}) AS emailed`;
+  return { asked: row?.asked ?? 0, emailed: row?.emailed ?? 0 };
 }
 
 /** For one person's page: the gym's day they were last asked, and whether Ask to add card would ask

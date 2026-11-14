@@ -25,6 +25,8 @@ import {
   type GymMembershipTypesResponse,
 } from "@app/shared";
 import { buildApp } from "../src/app.js";
+import type { InviteEmail } from "../src/email/resend.js";
+import { sendDueCardRequestEmails } from "../src/modules/orgs/payments/cardRequestEmails.js";
 import { loadConfig } from "../src/config.js";
 import { account, fakeSquare, type Account } from "./fakeSquareTerminal.js";
 import { proveAddress } from "./proveAddress.js";
@@ -45,6 +47,7 @@ const baseEnv = {
   SQUARE_ENV: "production",
   SQUARE_APPLICATION_SECRET: "sq0csp-CARDREQUESTSSECRET", // dummy, gitleaks:allow
   PAYMENT_TOKENS_KEY: LOCK_KEY,
+  INVITE_HMAC_SECRET: "card-requests-invite-hmac-secret-0123456789", // dummy test value, gitleaks:allow
 };
 
 const T = 300_000;
@@ -97,6 +100,7 @@ d("Ask to add card: only the people the box names are asked, and only at their o
   const cleanup = async () => {
     const myUsers = sql`SELECT id FROM users WHERE email LIKE 'crq-t-%@example.com'`;
     await sql`DELETE FROM gym_member_messages WHERE gym_id IN (${mineSql})`;
+    await sql`DELETE FROM gym_card_request_emails WHERE gym_id IN (${mineSql})`;
     await sql`DELETE FROM gym_member_cards WHERE gym_id IN (${mineSql})`;
     await sql`DELETE FROM gym_card_agreements WHERE gym_id IN (${mineSql})`;
     await sql`DELETE FROM gym_card_disables WHERE gym_id IN (${mineSql})`;
@@ -219,6 +223,31 @@ d("Ask to add card: only the people the box names are asked, and only at their o
     return memberListViewResponseSchema.parse(JSON.parse(res.body)).list.noCard;
   };
   const errorOf = (res: { body: string }) => JSON.parse(res.body) as { error: string; message: string };
+  const mail: InviteEmail[] = [];
+  const quiet = { info: () => undefined, warn: () => undefined };
+  const sender = { from: "Invites <invites@example.test>", apiOrigin: "http://localhost:3000" };
+  /** One minute of the worker's sender, for these gyms. */
+  const sendEmails = (gymIds: string[]) =>
+    sendDueCardRequestEmails({
+      sql,
+      log: quiet,
+      settings: { hmacKey: Buffer.from(baseEnv.INVITE_HMAC_SECRET, "utf8"), webOrigin: "http://localhost:5173", perDay: 0, paused: false, sender },
+      sender,
+      transport: {
+        send: (m) => {
+          mail.push(m);
+          return Promise.resolve({ kind: "sent", id: `re_${uniq()}` });
+        },
+      },
+      environment: "production",
+      now: () => new Date(),
+      sleep: () => Promise.resolve(),
+      gymIds,
+    });
+  const addressOf = async (gymId: string, entryId: string): Promise<string> =>
+    (await sql<{ email: string }[]>`SELECT email::text AS email FROM gym_member_list_entries WHERE gym_id = ${gymId} AND id = ${entryId}`)[0]?.email ?? "";
+  const emailRows = async (gymId: string) =>
+    await sql<{ entry_id: string; state: string }[]>`SELECT entry_id, state FROM gym_card_request_emails WHERE gym_id = ${gymId} ORDER BY entry_id`;
 
   beforeAll(async () => {
     await cleanup();
@@ -312,9 +341,25 @@ d("Ask to add card: only the people the box names are asked, and only at their o
 
     const done = await askRes(iron, iron.owner, everyone, box);
     expect(done.statusCode, done.body).toBe(200);
-    expect(cardRequestDoneResponseSchema.parse(JSON.parse(done.body)).done.asked).toBe(2);
+    expect(cardRequestDoneResponseSchema.parse(JSON.parse(done.body)).done).toMatchObject({ asked: 2, emailed: 2 });
     expect(await askedUsers(iron.id)).toEqual([mayaApp.userId, patApp.userId].sort());
     expect(await askedUsers(lotus.id)).toEqual([]);
+    expect(box.emailed).toBe(true);
+    expect(box.noEmail).toBe(0);
+    // The email with each message: written for Maya and Pat alone, at Iron, and sent once each.
+    expect((await emailRows(iron.id)).map((r) => r.entry_id)).toEqual([maya, pat].sort());
+    expect(await emailRows(lotus.id)).toEqual([]);
+    mail.length = 0;
+    await sendEmails([iron.id, lotus.id]);
+    expect(mail.map((m) => m.to).sort()).toEqual([await addressOf(iron.id, maya), await addressOf(iron.id, pat)].sort());
+    const mayaMail = mail.find((m) => m.text.includes("Gold Weekly"));
+    expect(mayaMail?.subject).toBe(`${iron.name} asks you to add a card for your membership`);
+    expect(mayaMail?.text).toContain(`Hi Maya,\n\n${iron.name} asks you to add a card for your Gold Weekly membership. Once it is added, it is charged automatically each time the membership renews.\n\nTo add it, open the app, go to My membership and tap Add card.`);
+    expect(mail.find((m) => m.text.includes("the memberships you pay for"))?.text).toContain("Hi Pat,");
+    expect(mail.every((m) => m.idempotencyKey.startsWith("card-request-"))).toBe(true);
+    expect((await emailRows(iron.id)).map((r) => r.state)).toEqual(["sent", "sent"]);
+    await sendEmails([iron.id, lotus.id]);
+    expect(mail.length).toBe(2);
     for (const nobody of [samApp, priyaApp, kenApp, taraOne, taraTwo, owenApp, lenaApp]) {
       expect((await sql`SELECT 1 FROM gym_member_messages WHERE user_id = ${nobody.userId} AND kind = 'card_request'`).length).toBe(0);
     }
@@ -429,6 +474,33 @@ d("Ask to add card: only the people the box names are asked, and only at their o
     expect(jonsMessage?.body).toBe(
       `${gym.name} asks you to add a card for the memberships you pay for. It will be charged automatically each time one renews. To add it, open My membership and tap Add card.`,
     );
+  });
+
+  it("emails only while it is still due, and a member with no address is asked in the app alone", async () => {
+    const gym = await makeGym("Mail Gym");
+    const gold = await typeOf(gym);
+    const ana = await person(gym, "Ana Ruiz");
+    const noa = await person(gym, "Noa Hill");
+    for (const id of [ana, noa]) await give(gym, gold, id);
+    await member(gym, ana);
+    await member(gym, noa);
+    await sql`UPDATE gym_member_list_entries SET email = NULL, phone_e164 = '+15125550147' WHERE gym_id = ${gym.id} AND id = ${noa}`;
+
+    const both = ticked([ana, noa]);
+    const box = await preview(gym, both);
+    expect(box).toMatchObject({ askCount: 2, emailed: true, noEmail: 1 });
+    const done = await askRes(gym, gym.owner, both, box);
+    expect(done.statusCode, done.body).toBe(200);
+    expect(cardRequestDoneResponseSchema.parse(JSON.parse(done.body)).done).toMatchObject({ asked: 2, emailed: 1 });
+    expect((await emailRows(gym.id)).map((r) => r.entry_id)).toEqual([ana]);
+
+    // Ana adds her card before the worker's minute: the email is taken off, never sent.
+    await cardFor(gym, ana);
+    mail.length = 0;
+    const run = await sendEmails([gym.id]);
+    expect(run).toMatchObject({ sent: 0, dropped: 1 });
+    expect(mail).toEqual([]);
+    expect(await emailRows(gym.id)).toEqual([]);
   });
 
   it("Select all of No card on file asks the same people, and the person's page says when they were asked", async () => {

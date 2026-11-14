@@ -615,8 +615,8 @@ export default function MemberCard({ gymId, gym, entryId, name, readOnly, checkE
       if (preview.askCount !== 1) {
         setAskNote(cardAskOneKeptLine(preview));
       } else {
-        await orgService.sendCardRequest(gymId, { selection, askCount: 1, askDigest: preview.askDigest, key: crypto.randomUUID() });
-        setAskNote(`Asked ${personNames(name).first} to add a card. They'll see it in their inbox in the app.`);
+        const sent = (await orgService.sendCardRequest(gymId, { selection, askCount: 1, askDigest: preview.askDigest, key: crypto.randomUUID() })).data.done;
+        setAskNote(`Asked ${personNames(name).first} to add a card. They'll see it in their inbox in the app${sent.emailed > 0 ? ' and by email' : ''}.`);
       }
       const res = await orgService.getMemberCard(gymId, entryId);
       setState({ entryId, view: res.data.cardOnFile, error: null });

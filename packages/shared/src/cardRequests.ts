@@ -50,6 +50,10 @@ export const cardRequestPreviewSchema = z
     /** Who exactly will be asked, as a fingerprint the press sends back: anybody else, and
      *  nobody is asked. */
     askDigest: z.string().max(128),
+    /** Each person asked is also emailed, at the address on their record (Kd, 2026-11-14). */
+    emailed: z.boolean().default(false),
+    /** Of the people asked, how many have no address that can be emailed: the message in the app only. */
+    noEmail: z.number().int().min(0).default(0),
   })
   .strict();
 export type CardRequestPreview = z.infer<typeof cardRequestPreviewSchema>;
@@ -71,6 +75,8 @@ export type CardRequestSendRequest = z.infer<typeof cardRequestSendRequestSchema
 export const cardRequestDoneSchema = z
   .object({
     asked: z.number().int().min(0),
+    /** Of them, how many were also emailed. */
+    emailed: z.number().int().min(0).default(0),
     kept: z.array(z.object({ reason: cardRequestKeptReasonSchema, count: z.number().int().min(1) }).strict()),
   })
   .strict();

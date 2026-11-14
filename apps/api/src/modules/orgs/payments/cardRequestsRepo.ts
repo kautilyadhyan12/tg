@@ -93,6 +93,8 @@ export interface RequestStateRow {
   ownTypes: string[];
   /** They pay for somebody else's membership that renews. */
   paysForOthers: boolean;
+  /** The address on the record, as typed. */
+  email: string | null;
 }
 
 /** Each of these records of the gym, as the box reads them; a record not the gym's is not in it. */
@@ -111,6 +113,7 @@ export async function requestStateOf(sql: SqlOrTx, gymId: string, ids: readonly 
       asked_on: string | null;
       own_types: string[] | null;
       pays_for_others: boolean;
+      email: string | null;
     }[]
   >`
     WITH ${PAYS(sql, gymId, now, ids)},
@@ -138,7 +141,8 @@ export async function requestStateOf(sql: SqlOrTx, gymId: string, ids: readonly 
            (c.entry_id IS NOT NULL) AS has_card,
            EXISTS (SELECT 1 FROM pays s WHERE s.id = e.id) AS renews,
            ac.user_ids, asked.sent_at AS asked_at, asked.gym_day::text AS asked_on, own.names AS own_types,
-           EXISTS (SELECT 1 FROM pays s WHERE s.id = e.id AND s.for_others) AS pays_for_others
+           EXISTS (SELECT 1 FROM pays s WHERE s.id = e.id AND s.for_others) AS pays_for_others,
+           e.email::text AS email
     FROM gym_member_list_entries e
     LEFT JOIN gym_member_payers p ON p.gym_id = e.gym_id AND p.entry_id = e.id
     LEFT JOIN gym_member_list_entries pe ON pe.gym_id = p.gym_id AND pe.id = p.payer_entry_id
@@ -160,5 +164,118 @@ export async function requestStateOf(sql: SqlOrTx, gymId: string, ids: readonly 
     askedOn: r.asked_on,
     ownTypes: r.own_types ?? [],
     paysForOthers: r.pays_for_others,
+    email: r.email,
   }));
+}
+
+// ── THE EMAIL SENT WITH EACH REQUEST (Kd, 2026-11-14) ──
+
+/** Of these address keys, the ones that bounced or were refused anywhere: never sent to. */
+export async function blockedOf(sql: SqlOrTx, hmacs: readonly string[]): Promise<Set<string>> {
+  if (hmacs.length === 0) return new Set();
+  const rows = await sql<{ email_hmac: string }[]>`
+    SELECT email_hmac FROM email_suppressions WHERE gym_id IS NULL AND email_hmac = ANY(${[...hmacs]}::text[])`;
+  return new Set(rows.map((r) => r.email_hmac));
+}
+
+/** Write the emails of one press, one a record. Safe to run twice. Answers how many were written. */
+export async function queueEmails(sql: SqlOrTx, gymId: string, occasion: string, rows: readonly { entryId: string; email: string }[], now: Date): Promise<number> {
+  if (rows.length === 0) return 0;
+  const written = await sql<{ id: string }[]>`
+    INSERT INTO gym_card_request_emails (gym_id, entry_id, occasion, email, state, not_before, created_at)
+    SELECT ${gymId}, r.entry_id, ${occasion}, r.email, 'queued', ${now}, ${now}
+    FROM unnest(${rows.map((r) => r.entryId)}::uuid[], ${rows.map((r) => r.email)}::citext[]) AS r(entry_id, email)
+    ON CONFLICT (gym_id, entry_id, occasion) DO NOTHING
+    RETURNING id`;
+  return written.length;
+}
+
+export interface ClaimedEmail {
+  id: string;
+  gymId: string;
+  entryId: string | null;
+  email: string | null;
+  attempts: number;
+  maybeSentAt: Date | null;
+  createdAt: Date;
+}
+
+/** Take the next email that is due, and lease it. One that may already have gone is taken first: it is the same
+ *  email again. */
+export async function claimNextEmail(sql: SqlOrTx, q: { now: Date; leaseMs: number; gymIds: readonly string[] | null }): Promise<ClaimedEmail | null> {
+  const rows = await sql<{ id: string; gym_id: string; entry_id: string | null; email: string | null; attempts: number; maybe_sent_at: Date | null; created_at: Date }[]>`
+    WITH next AS (
+      SELECT n.id FROM gym_card_request_emails n
+      WHERE ((n.state = 'queued' AND n.not_before <= ${q.now}) OR (n.state = 'sending' AND n.lease_until < ${q.now}))
+        AND (${q.gymIds === null}::boolean OR n.gym_id = ANY(${[...(q.gymIds ?? [])]}::uuid[]))
+      ORDER BY (n.maybe_sent_at IS NULL), n.not_before, n.id
+      LIMIT 1
+      FOR UPDATE SKIP LOCKED
+    )
+    UPDATE gym_card_request_emails u
+    SET state = 'sending', lease_until = ${new Date(q.now.getTime() + q.leaseMs)}, attempts = u.attempts + 1
+    FROM next
+    WHERE u.id = next.id
+    RETURNING u.id, u.gym_id, u.entry_id, u.email::text AS email, u.attempts, u.maybe_sent_at, u.created_at`;
+  const r = rows[0];
+  return r === undefined
+    ? null
+    : { id: r.id, gymId: r.gym_id, entryId: r.entry_id, email: r.email, attempts: r.attempts, maybeSentAt: r.maybe_sent_at, createdAt: r.created_at };
+}
+
+/** Hold the record while the check before an email reads it: a card saved, a payer set or a removal waits until
+ *  the email is marked as maybe sent. */
+export async function holdRecord(tx: TransactionSql, gymId: string, entryId: string): Promise<void> {
+  await tx`SELECT 1 FROM gym_member_list_entries WHERE gym_id = ${gymId} AND id = ${entryId} FOR SHARE`;
+}
+
+/** Record, before the email is handed to the email service, that from now on it may have gone. False when the
+ *  claim is no longer this run's, or the address bounced or was refused anywhere. */
+export async function markEmailMaybeSent(sql: SqlOrTx, n: ClaimedEmail, hmac: string, at: Date): Promise<boolean> {
+  const rows = await sql<{ id: string }[]>`
+    UPDATE gym_card_request_emails s SET maybe_sent_at = coalesce(s.maybe_sent_at, ${at})
+    WHERE s.id = ${n.id} AND s.gym_id = ${n.gymId} AND s.state = 'sending' AND s.attempts = ${n.attempts}
+      AND NOT EXISTS (SELECT 1 FROM email_suppressions x WHERE x.email_hmac = ${hmac} AND x.gym_id IS NULL)
+    RETURNING s.id`;
+  return rows.length === 1;
+}
+
+/** A claimed email no longer due and never handed over: taken off. False when the claim was no longer this run's. */
+export async function dropEmail(sql: SqlOrTx, n: ClaimedEmail): Promise<boolean> {
+  const rows = await sql<{ id: string }[]>`
+    DELETE FROM gym_card_request_emails
+    WHERE id = ${n.id} AND gym_id = ${n.gymId} AND state = 'sending' AND attempts = ${n.attempts} AND maybe_sent_at IS NULL
+    RETURNING id`;
+  return rows.length === 1;
+}
+
+export type EmailOutcome = { kind: "sent"; providerId: string | null } | { kind: "skipped" | "failed"; reason: string };
+
+/** Finish a claimed email; the address is cleared in the same statement. False when the claim was no longer
+ *  this run's. */
+export async function finishEmail(sql: SqlOrTx, n: ClaimedEmail, outcome: EmailOutcome, at: Date): Promise<boolean> {
+  const reason = outcome.kind === "sent" ? null : outcome.reason;
+  const providerId = outcome.kind === "sent" ? outcome.providerId : null;
+  const rows = await sql<{ id: string }[]>`
+    UPDATE gym_card_request_emails
+    SET state = ${outcome.kind}, reason = ${reason}, provider_id = ${providerId}, email = NULL, lease_until = NULL, finished_at = ${at}
+    WHERE id = ${n.id} AND gym_id = ${n.gymId} AND state = 'sending' AND attempts = ${n.attempts}
+    RETURNING id`;
+  return rows.length === 1;
+}
+
+/** Put a claimed email back to wait until `notBefore`. */
+export async function retryEmail(sql: SqlOrTx, n: ClaimedEmail, notBefore: Date): Promise<boolean> {
+  const rows = await sql<{ id: string }[]>`
+    UPDATE gym_card_request_emails SET state = 'queued', lease_until = NULL, not_before = ${notBefore}
+    WHERE id = ${n.id} AND gym_id = ${n.gymId} AND state = 'sending' AND attempts = ${n.attempts}
+    RETURNING id`;
+  return rows.length === 1;
+}
+
+/** The gym's name and how to reach it, while it is open. */
+export async function gymContact(sql: SqlOrTx, gymId: string): Promise<{ name: string; contactEmail: string | null; contactPhone: string | null } | null> {
+  const [gym] = await sql<{ name: string; contact_email: string | null; contact_phone: string | null }[]>`
+    SELECT name, contact_email, contact_phone FROM gyms WHERE id = ${gymId} AND status = 'active'`;
+  return gym === undefined ? null : { name: gym.name, contactEmail: gym.contact_email, contactPhone: gym.contact_phone };
 }

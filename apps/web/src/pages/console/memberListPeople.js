@@ -1096,7 +1096,16 @@ export function cardAskBoxWords(preview, today = null) {
   const kept = preview.kept.reduce((sum, group) => sum + group.count, 0);
   return {
     heading: k === 0 ? null : `${people(k)} will be asked to add a card`,
-    what: 'Each gets a message in their inbox in the app asking them to add a card for their membership. Once added, the card is charged automatically each time the membership renews.',
+    what: preview.emailed
+      ? 'Each gets a message in their inbox in the app and an email, asking them to add a card for their membership. Once added, the card is charged automatically each time the membership renews.'
+      : 'Each gets a message in their inbox in the app asking them to add a card for their membership. Once added, the card is charged automatically each time the membership renews.',
+    // Asked, but with no address that can be emailed (Kd, 2026-11-14).
+    noEmail:
+      !preview.emailed || preview.noEmail === 0 || k === 0
+        ? null
+        : preview.noEmail === k
+          ? `${k === 1 ? 'They have' : 'None of them has'} ${k === 1 ? 'no email address' : 'an email address'} we can send to, so they get the message in the app only.`
+          : `${n(preview.noEmail)} of them ${preview.noEmail === 1 ? 'has' : 'have'} no email address we can send to, so they get the message in the app only.`,
     nobody: 'Nobody you selected can be asked to add a card.',
     button: k === 0 ? null : `Ask ${people(k)}`,
     keptHeading: kept === 0 ? null : `${people(kept)} won't be asked`,
@@ -1108,7 +1117,14 @@ export function cardAskBoxWords(preview, today = null) {
 /** What a press did: "Asked 12 people to add a card. 2 weren't asked." */
 export function cardAskDoneLine(done) {
   const kept = done.kept.reduce((sum, group) => sum + group.count, 0);
-  const did = `Asked ${people(done.asked)} to add a card. They'll see it in their inbox in the app.`;
+  const emailed = done.emailed ?? 0;
+  const where =
+    emailed === 0
+      ? "They'll see it in their inbox in the app."
+      : emailed >= done.asked
+        ? "They'll see it in their inbox in the app and by email."
+        : `They'll see it in their inbox in the app, and ${n(emailed)} of them by email too.`;
+  const did = `Asked ${people(done.asked)} to add a card. ${where}`;
   return kept === 0 ? did : `${did} ${n(kept)} ${kept === 1 ? "wasn't" : "weren't"} asked.`;
 }
 

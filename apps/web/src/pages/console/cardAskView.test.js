@@ -54,3 +54,20 @@ describe('where Ask members to add their card starts', () => {
     expect(askCardsTo(undefined, ['billing.members', 'members.confirm'])).toBeNull();
   });
 });
+
+describe('the email with each request (Kd, 2026-11-14)', () => {
+  const box = (over) => ({ selected: 2, askCount: 2, ask: [], kept: [], askDigest: 'd', emailed: true, noEmail: 0, ...over });
+
+  it('says each gets an email, and who gets the message in the app only', async () => {
+    const { cardAskBoxWords, cardAskDoneLine } = await import('./memberListPeople');
+    expect(cardAskBoxWords(box()).what).toBe('Each gets a message in their inbox in the app and an email, asking them to add a card for their membership. Once added, the card is charged automatically each time the membership renews.');
+    expect(cardAskBoxWords(box()).noEmail).toBeNull();
+    expect(cardAskBoxWords(box({ noEmail: 1 })).noEmail).toBe('1 of them has no email address we can send to, so they get the message in the app only.');
+    expect(cardAskBoxWords(box({ noEmail: 2 })).noEmail).toBe('None of them has an email address we can send to, so they get the message in the app only.');
+    expect(cardAskBoxWords(box({ askCount: 1, noEmail: 1 })).noEmail).toBe('They have no email address we can send to, so they get the message in the app only.');
+    expect(cardAskBoxWords(box({ emailed: false, noEmail: 0 })).what).toBe('Each gets a message in their inbox in the app asking them to add a card for their membership. Once added, the card is charged automatically each time the membership renews.');
+    expect(cardAskDoneLine({ asked: 2, emailed: 2, kept: [] })).toBe("Asked 2 people to add a card. They'll see it in their inbox in the app and by email.");
+    expect(cardAskDoneLine({ asked: 3, emailed: 1, kept: [] })).toBe("Asked 3 people to add a card. They'll see it in their inbox in the app, and 1 of them by email too.");
+    expect(cardAskDoneLine({ asked: 1, emailed: 0, kept: [] })).toBe("Asked 1 person to add a card. They'll see it in their inbox in the app.");
+  });
+});

@@ -5,7 +5,7 @@
 // thread is busy (answering nobody):
 //   - "No card on file"'s count, which the Members list reads for staff who take payments;
 //   - the Filter's list of them (a page of the list, and Select all);
-//   - the box for everybody it names, and the press that asks them all.
+//   - the box for everybody it names, and the press that asks them all (and writes their emails).
 //
 //   $env:DATABASE_URL='postgres://aihg:aihg@localhost:5433/aihg'
 //   corepack pnpm --filter api exec tsx tools/measure-card-requests-cost.ts
@@ -36,6 +36,7 @@ const PREFIX = "card-req-cost-";
 async function cleanup(): Promise<void> {
   const gyms = sql`SELECT id FROM gyms WHERE slug LIKE ${PREFIX + "%"}`;
   await sql`DELETE FROM gym_member_messages WHERE gym_id IN (${gyms})`;
+  await sql`DELETE FROM gym_card_request_emails WHERE gym_id IN (${gyms})`;
   await sql`DELETE FROM gym_member_cards WHERE gym_id IN (${gyms})`;
   await sql`DELETE FROM gym_card_agreements WHERE gym_id IN (${gyms})`;
   await sql`DELETE FROM gym_member_payers WHERE gym_id IN (${gyms})`;
@@ -149,7 +150,7 @@ try {
   await runs(`No card on file's count, gym of ${String(PEOPLE)}`, () => needsCardCount(sql, first.id, { environment: "production", accountId: first.account }, now()));
   await runs(`the Filter's list of them, gym of ${String(BIG)}`, () => needsCardIds(sql, big.id, a, now()));
 
-  const deps = { sql, redis: createMemoryRedis(), log: { warn: () => undefined }, now, invites: null, cardsEnvironment: "production" as const };
+  const deps = { sql, redis: createMemoryRedis(), log: { warn: () => undefined }, now, invites: { hmacKey: Buffer.alloc(32, 1), webOrigin: "http://localhost:5183", perDay: 0, paused: false, sender: { from: null, apiOrigin: "http://localhost:3000" } }, cardsEnvironment: "production" as const };
   const yes = () => Promise.resolve(true);
   const all = await selectAll(deps, big.owner, big.id, { filter: { card: "none" } }, yes);
   if (all === null) throw new Error("no selection");

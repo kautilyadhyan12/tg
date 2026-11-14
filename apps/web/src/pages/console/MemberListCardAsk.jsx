@@ -108,6 +108,11 @@ export default function MemberListCardAsk({ gymId, selection, picked, today = nu
             <h3 className="c-s16 c-w6 c-t1">{words.heading}</h3>
             <p className="c-s14 c-t2">{words.what}</p>
             <Names people={preview.ask} total={preview.askCount} testId="card-ask-names" />
+            {words.noEmail !== null ? (
+              <p className="c-s14 c-t2" data-testid="card-ask-no-email">
+                {words.noEmail}
+              </p>
+            ) : null}
           </section>
         ) : (
           <p className="c-s15 c-t1" data-testid="card-ask-nobody">
