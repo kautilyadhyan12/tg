@@ -30,13 +30,15 @@ interface FieldProps {
   disabled?: boolean;
   /** A small orange sign inside the box's start, saying what goes in it (sign-in's envelope, 12e). */
   icon?: IconName;
+  /** The sign alone, grey, with no box round it: a search box's magnifier (32c-ii-a). */
+  iconBare?: boolean;
   /** A white box with dark words, on a coloured box (sign-in's, 12e). */
   light?: boolean;
 }
 
 /** One line to type in, as tall as a main button; its edge turns orange while it is typed in.
  *  The box is a View round the input: Android drops an input's own padding when its edge is restyled. */
-export function Field({ label, bare = false, value, onChange, placeholder, keyboard, fills, maxLength, spaced = false, ready = false, onDone, name = false, lines, disabled = false, icon, light = false }: FieldProps) {
+export function Field({ label, bare = false, value, onChange, placeholder, keyboard, fills, maxLength, spaced = false, ready = false, onDone, name = false, lines, disabled = false, icon, iconBare = false, light = false }: FieldProps) {
   const many = lines !== undefined && lines > 1;
   const [on, setOn] = useState(false);
   return (
@@ -48,8 +50,8 @@ export function Field({ label, bare = false, value, onChange, placeholder, keybo
       )}
       <View style={[styles.box, many ? [styles.manyBox, { minHeight: LINE * lines + 24 }] : null, icon === undefined ? null : styles.withIcon, on ? styles.on : null, light ? styles.light : null]}>
         {icon === undefined ? null : (
-          <View style={styles.icon}>
-            <Icon name={icon} size={18} colour="orange" />
+          <View style={iconBare ? styles.iconBare : styles.icon}>
+            <Icon name={icon} size={18} colour={iconBare ? "textSoft" : "orange"} />
           </View>
         )}
         <TextInput
@@ -108,6 +110,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colours.orangeLine,
   },
+  iconBare: { width: 28, height: 40, alignItems: "flex-end", justifyContent: "center" },
   inputBeside: { flex: 1, height: 50 },
   light: { backgroundColor: colours.light, borderColor: colours.light },
   lightInput: { color: colours.onLight },

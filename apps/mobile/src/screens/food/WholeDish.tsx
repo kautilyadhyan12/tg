@@ -136,7 +136,7 @@ export function WholeDish({ applied, held, onUse, onClear, onDishChanged }: { ap
               }}
               style={({ pressed }) => [styles.fill, on(f.value) ? styles.fillOn : null, pressed ? styles.pressed : null]}
             >
-              <FillDish containerClass={dish.containerClass} fill={f.value} size={56} colour={on(f.value) ? "orange" : "text"} />
+              <FillDish containerClass={dish.containerClass} fill={f.value} size={56} colour={on(f.value) ? "orange" : "textSoft"} contents="orange" />
             </Pressable>
           ))}
         </View>

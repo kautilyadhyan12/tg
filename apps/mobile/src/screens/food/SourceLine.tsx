@@ -25,7 +25,8 @@ export function SourceLine({ source, before = "" }: { source: FoodSource; before
     <View style={styles.source}>
       {before === "" ? null : <Txt kind="tiny">{before}</Txt>}
       {source === "curated" ? <Icon name="check" size={12} colour="goodText" /> : null}
-      <Txt kind="tiny" colour={source === "curated" ? "goodText" : "textFaint"}>
+      {/* USDA in blue under the food, as Kd's drawing 3b has it (32c-ii-a). */}
+      <Txt kind="tiny" colour={source === "curated" ? "goodText" : source === "usda" ? "blue" : "textFaint"}>
         {SOURCE_WORDS[source]}
       </Txt>
     </View>

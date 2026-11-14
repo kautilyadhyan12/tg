@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { colours, orangeGradient, sizes } from "./colours";
-import { Icon } from "./Icon";
+import { Badge } from "./Card";
+import { Icon, type IconName } from "./Icon";
 import { fonts, Txt } from "./Txt";
 
 // What a person picks by tapping, drawn over a page's own picture, which shows through every box
@@ -15,6 +16,8 @@ export interface Option<V> {
   desc?: string;
   /** A short gold line: why this one suits the person. */
   note?: string | null;
+  /** A small sign before the words, in its own colour (Daily numbers: the app's plan, my own; 32c-ii-a). */
+  icon?: { name: IconName; tone: "orange" | "good" };
 }
 
 /** One of a few: a card each. `solid` for cards of long words, darker so the words read over the picture. */
@@ -55,6 +58,7 @@ export function Options<V extends string | number>({
               disabled ? styles.off : null,
             ]}
           >
+            {o.icon === undefined ? null : <Badge icon={o.icon.name} tone={o.icon.tone} />}
             <View style={styles.grow}>
               <Txt style={[styles.cardLabel, on ? styles.labelOn : null]}>{o.label}</Txt>
               {o.desc === undefined ? null : <Txt style={styles.desc}>{o.desc}</Txt>}

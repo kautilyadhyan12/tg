@@ -129,6 +129,10 @@ export const colours = {
   /** Today so far, and a day with no target: a grey that reads as not judged yet. */
   greyDeep: "#5f5f5f",
   greyLight: "#a3a3a3",
+  /** The Nutrients pantry (32c-ii-a): a limit's gold, deep at its foot, and the holes in the cheese and
+   *  the salt shaker. */
+  limitDeep: "#E9A417",
+  jarDot: "rgba(0,0,0,0.4)",
 } as const;
 
 export type ColourName = keyof typeof colours;
