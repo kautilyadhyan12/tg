@@ -49,7 +49,8 @@ import { promoFor } from "./appPurchasesRepo.js";
 import { waitingGiftFor } from "../referrals/memberGiftRepo.js";
 import { taxIncludedOf } from "../register/taxRepo.js";
 import { gymHasLivePlan } from "../repo.js";
-import { orgNotFound, stateOf } from "./cards.js";
+import { formOf, orgNotFound, stateOf } from "./cards.js";
+import * as cards from "./cardsRepo.js";
 import { ownCardIn } from "./appCardPurchasesRepo.js";
 import { soldInApp } from "./forSaleRepo.js";
 import * as repo from "./repo.js";
@@ -143,7 +144,11 @@ export async function readForSale(
   const saved = repeating && record === "own" && reader.entryId !== null && deps.square !== null && connection !== null
       ? await ownCardIn(deps.sql, gymId, reader.entryId, deps.square.environment, connection.accountId)
       : null;
-  const card = saved === null ? null : { brand: saved.brand, last4: saved.last4, expired: cardExpired(saved, today) };
+  // The bank's check on the phone before Pay (20i-ii) needs Square's id for this card and the gym's form, named as Add card
+  // names the person.
+  const cardPerson = saved === null || reader.entryId === null ? null : await cards.readPerson(deps.sql, gymId, reader.entryId);
+  const form = cardPerson === null || deps.square === null || connection === null ? null : formOf(deps.square, connection, gym, cardPerson);
+  const card = saved === null ? null : { brand: saved.brand, last4: saved.last4, expired: cardExpired(saved, today), id: saved.cardId, form };
   // The code typed: usable by this reader today, before it is tried on each line. Their own open page, if any, is not
   // counted against them: Buy answers it (round one, L1).
   const code = typed === null ? null : promoCodeFrom(typed.text);

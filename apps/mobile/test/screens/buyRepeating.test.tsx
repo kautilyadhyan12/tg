@@ -2,12 +2,13 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import { AppState, type AppStateStatus } from "react-native";
 import { APP_PURCHASE_WORDS, AGREEMENT_AGREE_LABEL, type ForSaleLine } from "@app/shared";
 import { App } from "../../src/App";
-import { BANK_CHECK_DESK, CARD_NOT_TAKEN, CONFIRMING_TITLE, NOT_COMPLETED_TITLE, NOT_READY_BOTH, NOT_READY_CARD, PAID_TITLE } from "../../src/screens/gym/buyView";
+import { CARD_NOT_TAKEN, CONFIRMING_TITLE, NOT_COMPLETED_TITLE, NOT_READY_BOTH, NOT_READY_CARD, PAID_TITLE } from "../../src/screens/gym/buyView";
 import { ADD_CARD, UPDATE_CARD } from "../../src/screens/gym/cardView";
 import { PAY_NO_ANSWER, PAY_WAITING } from "../../src/screens/gym/payView";
 import type { Ask } from "../../src/session/calls";
 import { fakeServer, kept, lost, memoryStore, refusal, tokens, type Reply } from "../kit";
 import { GOLD_ID, GOLD_TYPE, PACK_TYPE, lineOf } from "../forSaleLines";
+import { PASS, everyBankPage, forgetBankPages, listCard, passTheBank } from "../bankCheck";
 
 // A repeating membership bought on the phone (ROADMAP Stage 5 item 20i-i; the server's 18k-iv, whose own tests prove it
 // charges only the buyer's own card once a press: `appCardPurchases.routes.test.ts`). The phone asks for the repeating
@@ -35,6 +36,7 @@ const appIs = async (state: AppStateStatus) => {
 const secureStore = jest.requireMock<{ kept: Map<string, string> }>("expo-secure-store").kept;
 
 beforeEach(() => {
+  forgetBankPages();
   secureStore.delete("pay-away");
   tab.opened = [];
   tab.answer = "opened";
@@ -68,7 +70,7 @@ const MASTERCARD = { brand: "MASTERCARD", last4: "4444" };
 
 type Row = Record<string, unknown>;
 const forSale = (items: ForSaleLine[], over: Row = {}) =>
-  ok({ gym: { name: "Iron House" }, record: "own", signer: "person", items, card: { ...VISA, expired: false }, ...over });
+  ok({ gym: { name: "Iron House" }, record: "own", signer: "person", items, card: listCard(VISA), ...over });
 const purchase = (over: Row = {}): Row => ({
   id: PURCHASE,
   typeId: GOLD_ID,
@@ -161,6 +163,7 @@ describe("the worst thing: the card is charged only for what was shown and ticke
     expect(screen.getByText("Your Visa ending 1111 is charged through Square.")).toBeTruthy();
 
     await fireEvent.press(payGold());
+    await passTheBank();
     const done = within(await screen.findByTestId("buy-paid"));
     expect(screen.getByText(PAID_TITLE)).toBeTruthy();
     expect(done.getByText("$49.99 paid. Gold Monthly is yours. Show your pass at the front desk when you arrive.")).toBeTruthy();
@@ -172,7 +175,7 @@ describe("the worst thing: the card is charged only for what was shown and ticke
       amountMinor: 4999,
       factsKey: "d".repeat(64),
       agreement: { agreementId: gold.agreement?.id, signer: "person", name: "Asha Walk" },
-      charge: { words: gold.charge, verificationToken: null },
+      charge: { words: gold.charge, verificationToken: PASS },
     });
     expect(tab.opened).toEqual([]);
     expect(server.asked.filter((a) => a.method === "POST" && a.path.includes(LOTUS.id))).toEqual([]);
@@ -191,6 +194,7 @@ describe("the worst thing: the card is charged only for what was shown and ticke
     await openGold();
     await signAndTick(gold);
     await fireEvent.press(payGold());
+    await passTheBank();
     expect(await screen.findByText(PAY_NO_ANSWER)).toBeTruthy();
     expect(screen.queryByTestId("buy-paid")).toBeNull();
 
@@ -200,6 +204,9 @@ describe("the worst thing: the card is charged only for what was shown and ticke
     const [first, second] = posts(server.asked, buyPath(IRON)).map((p) => (p.body as { requestKey: string }).requestKey);
     expect(first).toBeDefined();
     expect(second).toBe(first);
+    // The same press sends the same pass: the bank is not asked twice (20i-ii).
+    expect(everyBankPage()).toHaveLength(1);
+    expect(posts(server.asked, buyPath(IRON)).map((p) => (p.body as { charge: { verificationToken: string } }).charge.verificationToken)).toEqual([PASS, PASS]);
   });
 
   it("Square not answering yet reads Confirming with Check status, never bought, until the server says paid", async () => {
@@ -216,6 +223,7 @@ describe("the worst thing: the card is charged only for what was shown and ticke
     await openGold();
     await signAndTick(gold);
     await fireEvent.press(payGold());
+    await passTheBank();
     const box = within(await screen.findByTestId("buy-ended"));
     expect(screen.getByText(CONFIRMING_TITLE)).toBeTruthy();
     expect(box.getByText(PAY_WAITING)).toBeTruthy();
@@ -254,6 +262,7 @@ describe("the worst thing: the card is charged only for what was shown and ticke
     await openGold();
     await signAndTick(gold);
     await fireEvent.press(payGold());
+    await passTheBank();
     await fireEvent.press(await boxCheck());
     expect(await screen.findByText(CARD_NOT_TAKEN)).toBeTruthy();
     expect(screen.getByText(NOT_COMPLETED_TITLE)).toBeTruthy();
@@ -265,7 +274,7 @@ describe("the worst thing: the card is charged only for what was shown and ticke
     const server = fakeServer({
       "/v1/auth/refresh": ok({ tokens: tokens(2) }),
       "/v1/orgs/mine": mine(IRON),
-      [forSalePath(IRON)]: () => forSale([lineOf(GOLD_TYPE, { card, agreement: false })], { card: { ...card, expired: false } })(),
+      [forSalePath(IRON)]: () => forSale([lineOf(GOLD_TYPE, { card, agreement: false })], { card: listCard(card) })(),
     });
     await openBuy(server.ask);
     await openGold();
@@ -286,7 +295,7 @@ describe("the worst thing: the card is charged only for what was shown and ticke
     const server = fakeServer({
       "/v1/auth/refresh": ok({ tokens: tokens(2) }),
       "/v1/orgs/mine": mine(IRON),
-      [forSalePath(IRON)]: () => forSale([lineOf(GOLD_TYPE, { card })], { card: { ...card, expired: false } })(),
+      [forSalePath(IRON)]: () => forSale([lineOf(GOLD_TYPE, { card })], { card: listCard(card) })(),
     });
     await openBuy(server.ask);
     await openGold();
@@ -331,7 +340,7 @@ describe("what stands in the way of paying with the card", () => {
   });
 
   it("an expired card: Update card in place of Pay; not on the gym's list: no Pay and no card to add", async () => {
-    let over: Row = { card: { ...VISA, expired: true } };
+    let over: Row = { card: listCard(VISA, { expired: true }) };
     const server = fakeServer({
       "/v1/auth/refresh": ok({ tokens: tokens(2) }),
       "/v1/orgs/mine": mine(IRON),
@@ -351,7 +360,7 @@ describe("what stands in the way of paying with the card", () => {
     expect(screen.queryByLabelText("Pay $49.99 for Gold Monthly")).toBeNull();
   });
 
-  it("declined: the server's sentence with Update card beside it; the bank asking to confirm sends them to the front desk", async () => {
+  it("declined: the server's sentence with Update card beside it; the bank asking to confirm says so, and Pay checks again", async () => {
     const gold = lineOf(GOLD_TYPE, { card: VISA });
     let answer: () => Reply = () => refusal(409, "app_purchase_declined", APP_PURCHASE_WORDS.declined("Visa ending 1111"));
     const server = fakeServer({
@@ -364,6 +373,7 @@ describe("what stands in the way of paying with the card", () => {
     await openGold();
     await signAndTick(gold);
     await fireEvent.press(payGold());
+    await passTheBank();
     const said = within(await screen.findByTestId("buy-said"));
     expect(said.getByText("Visa ending 1111 was declined, so nothing was charged. Update your card or try again later.")).toBeTruthy();
     // Update card beside the words, and the card row's own.
@@ -375,8 +385,10 @@ describe("what stands in the way of paying with the card", () => {
 
     answer = () => refusal(409, "app_purchase_verification", APP_PURCHASE_WORDS.verification);
     await fireEvent.press(payGold());
-    expect(await screen.findByText(BANK_CHECK_DESK)).toBeTruthy();
-    expect(screen.queryByText(APP_PURCHASE_WORDS.verification)).toBeNull();
+    await passTheBank();
+    expect(await screen.findByText(APP_PURCHASE_WORDS.verification)).toBeTruthy();
+    // Each press asked the bank afresh: a pass is used once.
+    expect(everyBankPage()).toHaveLength(2);
   });
 
   it("a card that expired since the list was read: Pay's refusal reads the list again, and Update card takes Pay's place", async () => {
@@ -386,7 +398,7 @@ describe("what stands in the way of paying with the card", () => {
       "/v1/orgs/mine": mine(IRON),
       [forSalePath(IRON)]: () => forSale([lineOf(GOLD_TYPE, over["card"] === undefined ? { card: VISA } : {})], over)(),
       [buyPath(IRON)]: () => {
-        over = { card: { ...VISA, expired: true } };
+        over = { card: listCard(VISA, { expired: true }) };
         return refusal(409, "app_purchase_card_expired", APP_PURCHASE_WORDS.card_expired);
       },
     });
@@ -394,6 +406,7 @@ describe("what stands in the way of paying with the card", () => {
     await openGold();
     await signAndTick(lineOf(GOLD_TYPE, { card: VISA }));
     await fireEvent.press(payGold());
+    await passTheBank();
     const first = within(await screen.findByTestId("buy-card-first"));
     expect(first.getAllByText(APP_PURCHASE_WORDS.card_expired).length).toBeGreaterThan(0);
     expect(screen.queryByLabelText("Pay $49.99 for Gold Monthly")).toBeNull();

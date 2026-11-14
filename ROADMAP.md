@@ -659,7 +659,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
     - 20h. [x] **Payment received** · merged 2026-11-12 · PR #534
     - 20i. **Buy a repeating membership** (18k-iv's server, `rulings/2026-11-12-18k-iv.md`; split 2026-11-13: the bank's check needs Square's newer way tried first).
       - 20i-i. [x] **Buy a repeating membership with the card saved in the app** · merged 2026-11-13 · PR #536
-      - 20i-ii. [ ] **The bank's check on the phone** (UK, Europe, Japan): Square's check before the charge where the bank asks, tried on Square's test cards first (its `verifyBuyer` is being retired). Feature folder 1.
+      - 20i-ii. [x] **The bank's check on the phone** · merged 2026-11-14 · PR #545
     - 20j. [x] **A promo code on Buy** · merged 2026-11-13 · PR #543
     - 20k. [x] **Cancel and keep a membership on the phone** · merged 2026-11-13 · PR #540
     - 20l. [ ] **Add card from the gym's request** (18d-vii's message, `rulings/2026-11-14-18d-vii.md`): the inbox message of kind `card_request`
