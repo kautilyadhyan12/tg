@@ -381,6 +381,9 @@ describe("every member email keeps every line it carried before the move", () =>
     }
   });
 
+  /** The emails that open with a greeting, and the greeting. */
+  const GREETING: Record<string, string> = { lead1: "Hi Priya,", lead2: "Hi Priya,", lead3: "Hi Priya,", declined: "Hi Nadia,", expiring: "Hi Gina,", renewal: "Hi Ana,", priceRaise: "Hi Ann," };
+
   it("each has a short heading of its own, never its first sentence again", () => {
     const headings: Record<string, string> = {
       invite: "Join Iron House in the app",
@@ -399,8 +402,11 @@ describe("every member email keeps every line it carried before the move", () =>
     for (const [name, heading] of Object.entries(headings)) {
       const c = CASES[name];
       expect(c?.mail.html).toContain(`>${heading}</h1>`);
-      // The first paragraph of the email as sent, after the greeting.
-      const first = c?.mail.text.split("\n\n").find((part) => part.trim() !== "" && !part.startsWith("Hi ") && part !== "Hi,");
+      // The first paragraph of the email as sent, after its greeting where it has one.
+      const greeting = GREETING[name];
+      const parts = c?.mail.text.split("\n\n") ?? [];
+      if (greeting !== undefined) expect(parts[0]).toBe(greeting);
+      const first = parts[greeting === undefined ? 0 : 1];
       expect(first).toBeDefined();
       // Not the same words again: the first sentence never opens with the heading, nor the heading with it.
       const opening = (text: string): string => text.toLowerCase().split(/\s+/).slice(0, 3).join(" ");

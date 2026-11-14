@@ -115,6 +115,19 @@ describe("createResendTransport", () => {
     });
   });
 
+  it("a member email's own From line is sent instead of the transport's; a message without one keeps the transport's", async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockImplementation(() => Promise.resolve(ok()));
+    const transport = createResendTransport({ apiKey: "re_secret", from: "AI Home Gym <hi@example.com>", fetchImpl });
+    await transport.send({ to: "m@example.com", subject: "s", text: "t", html: "<p>t</p>", from: "Iron House via KWAZO <invites@example.com>" });
+    await transport.send({ to: "m@example.com", subject: "s", text: "t", html: "<p>t</p>" });
+    const froms = fetchImpl.mock.calls.map(([, init]) => {
+      const raw = init?.body;
+      if (typeof raw !== "string") throw new Error("the request body must be a JSON string");
+      return (JSON.parse(raw) as { from: unknown }).from;
+    });
+    expect(froms).toEqual(["Iron House via KWAZO <invites@example.com>", "AI Home Gym <hi@example.com>"]);
+  });
+
   it("a non-2xx answer throws with the status and WITHOUT the key or the address", async () => {
     const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
       new Response(JSON.stringify({ message: "kd@example.com is not allowed" }), { status: 422 }),
