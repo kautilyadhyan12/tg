@@ -191,6 +191,10 @@ export const boxShade =
   "linear-gradient(90deg, rgba(18,17,16,1) 0%, rgba(18,17,16,1) 30%, rgba(18,17,16,0.7) 50%, rgba(18,17,16,0.1) 100%)";
 
 /** A page's own picture running into the page under it, a little darker at the top for the phone's clock. */
+/** The warm light that sweeps a meal photo while it is read (Scan food, 32c-iii): soft either side of
+ *  its line, fading to nothing at its edges, never a box. */
+export const readingSweep = `linear-gradient(180deg, transparent, ${colours.orangeFill} 45%, ${colours.orangeLine} 50%, ${colours.orangeFill} 55%, transparent)`;
+
 export const pictureFade =
   "linear-gradient(to top, rgba(10,9,8,1) 0%, rgba(10,9,8,0.8) 24%, rgba(10,9,8,0.16) 60%, rgba(10,9,8,0.3) 100%)";
 

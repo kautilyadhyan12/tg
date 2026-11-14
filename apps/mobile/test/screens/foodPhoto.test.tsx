@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { Linking } from "react-native";
+import { Linking, StyleSheet } from "react-native";
+import { setMotionAllowed } from "../../src/look/Motion";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
 import type { Meal, MealPhotoAnalysis, NutritionTargetsResponse } from "@app/shared";
 import { App } from "../../src/App";
@@ -371,7 +372,8 @@ describe("a meal from a photo", () => {
     await fireEvent.changeText(screen.getByLabelText("Search food"), "milk");
     await fireEvent.press(await screen.findByRole("button", { name: "Add Milk, whole, 144 kcal · 240 g" }));
     expect(await screen.findByText("Milk, whole added.")).toBeTruthy();
-    expect(await screen.findByLabelText(/^344\skcal · /)).toBeTruthy();
+    // The tiles on screen, not only the line read aloud, follow the food added (round one, T1).
+    expect(within(await screen.findByLabelText(/^344\skcal · /)).getByText("344")).toBeTruthy();
     await fireEvent.press(screen.getByRole("button", { name: /^Save to / }));
     await waitFor(() => {
       expect(saves(server)).toHaveLength(1);
@@ -974,12 +976,61 @@ describe("the camera and the reading as drawn (32c-iii)", () => {
     expect(screen.queryByTestId("plate-corners")).toBeNull();
   });
 
-  it("while the photo is read, it says so under the turning arc, with Close", async () => {
+  it("while the photo is read, it says so under the turning arc, with Close, the circles on the food and no moving light where motion is off", async () => {
     const phone: Phone = { meals: [], scans: [never] };
     await openFood(phone);
     await takePhoto();
     expect(await screen.findByText("Reading your meal…")).toBeTruthy();
     expect(screen.getByTestId("reading-arc")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Close" })).toBeTruthy();
+    expect(screen.getAllByTestId("reading-spot")).toHaveLength(3);
+    // The screen tests run as a phone that asks for less motion (test/screens/setup.js): no moving light.
+    await act(async () => {
+      await fireEvent(screen.getByTestId("reading-light"), "layout", { nativeEvent: { layout: { x: 0, y: 0, width: 400, height: 800 } } });
+      await Promise.resolve();
+    });
+    expect(screen.queryByTestId("reading-sweep")).toBeNull();
+  });
+
+  it("with motion, the warm light sweeps the photo (round one, T3)", async () => {
+    setMotionAllowed(true);
+    try {
+      await openFood({ meals: [], scans: [never] });
+      await takePhoto();
+      await screen.findByText("Reading your meal…");
+      await act(async () => {
+        await fireEvent(screen.getByTestId("reading-light"), "layout", { nativeEvent: { layout: { x: 0, y: 0, width: 400, height: 800 } } });
+        await Promise.resolve();
+      });
+      expect(screen.getByTestId("reading-sweep")).toBeTruthy();
+    } finally {
+      setMotionAllowed(false);
+    }
+  });
+
+  it("the plate's corners sit between the buttons at the top and the words at the foot, and none are drawn where four would run together (round one, T2 and L2)", async () => {
+    await openFood({ meals: [], scans: [] });
+    await fireEvent.press(await screen.findByRole("button", { name: "Scan food" }));
+    await screen.findByTestId("plate-room");
+    await act(async () => {
+      await fireEvent(screen.getByTestId("camera-foot"), "layout", { nativeEvent: { layout: { x: 0, y: 1500, width: 400, height: 420 } } });
+      await Promise.resolve();
+    });
+    const room = screen.getByTestId("plate-room");
+    const placed = StyleSheet.flatten(room.props.style as Parameters<typeof StyleSheet.flatten>[0]) as { top?: number; bottom?: number };
+    expect(placed.bottom).toBe(420);
+    expect(placed.top ?? 0).toBeGreaterThanOrEqual(56);
+    // Room for a frame: four corners.
+    await act(async () => {
+      await fireEvent(room, "layout", { nativeEvent: { layout: { x: 0, y: 0, width: 400, height: 500 } } });
+      await Promise.resolve();
+    });
+    expect(screen.getAllByTestId("plate-corner")).toHaveLength(4);
+    // A sliver of room: none, never four run together.
+    await act(async () => {
+      await fireEvent(room, "layout", { nativeEvent: { layout: { x: 0, y: 0, width: 400, height: 80 } } });
+      await Promise.resolve();
+    });
+    expect(screen.queryAllByTestId("plate-corner")).toHaveLength(0);
   });
 });

@@ -587,6 +587,8 @@ describe("a pack's label (33b-iii-c)", () => {
     await openScan(labelRoutes({ "/v1/nutrition/labels/read": () => new Promise<Reply>((resolve) => { answer = resolve; }) }));
     await toLabel();
     await screen.findByText("Reading the label\u2026");
+    // A label is no food: the circles that pulse on a meal's food are not drawn on it (round one, L3).
+    expect(screen.queryAllByTestId("reading-spot")).toHaveLength(0);
     await fireEvent.press(screen.getByRole("button", { name: "Close" }));
     await fireEvent.press(await screen.findByRole("button", { name: "Scan food" }));
     await screen.findByText("Reading the label\u2026");

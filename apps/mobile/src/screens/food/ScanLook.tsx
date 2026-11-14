@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Animated, Easing, Pressable, StyleSheet, View } from "react-native";
-import { colours, orangeGradient, shadows, sizes } from "../../look/colours";
+import { colours, orangeGradient, readingSweep, shadows, sizes } from "../../look/colours";
 import { Icon, type IconName } from "../../look/Icon";
 import { useLoop, useMotion } from "../../look/Motion";
 import { fonts, Txt } from "../../look/Txt";
@@ -18,17 +18,21 @@ const FRAME_GAP = 12;
 export function PlateCorners({ top, bottom }: { top: number; bottom: number }) {
   const [room, setRoom] = useState<{ width: number; height: number } | null>(null);
   const across = room === null ? 0 : Math.max(0, Math.min(room.width * FRAME_WIDTH, (room.height - FRAME_GAP * 2) * FRAME_SHAPE));
+  // Too little room for four corners apart: none, never four run together into one shape.
+  const drawn = across / FRAME_SHAPE >= CORNER * 2 && across >= CORNER * 2;
   return (
     <View
       style={[styles.cornersWrap, { top, bottom }]}
       pointerEvents="none"
+      testID="plate-room"
       onLayout={(e) => { setRoom({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height }); }}
     >
       <View style={[styles.corners, { width: across, height: across / FRAME_SHAPE }]} testID="plate-corners">
-        <View style={[styles.corner, styles.topLeft]} />
-        <View style={[styles.corner, styles.topRight]} />
-        <View style={[styles.corner, styles.bottomLeft]} />
-        <View style={[styles.corner, styles.bottomRight]} />
+        {drawn
+          ? [styles.topLeft, styles.topRight, styles.bottomLeft, styles.bottomRight].map((place, i) => (
+              <View key={String(i)} style={[styles.corner, place]} testID="plate-corner" />
+            ))
+          : null}
       </View>
     </View>
   );
@@ -101,16 +105,17 @@ function Pulse({ left, top, delay }: { left: `${number}%`; top: `${number}%`; de
   const scale = value.interpolate({ inputRange: [0, 1], outputRange: [0.85, 1.1] });
   const glow = value.interpolate({ inputRange: [0, 1], outputRange: [0.35, 0.9] });
   return (
-    <Animated.View style={[styles.spot, { left, top, opacity: on ? glow : 0.8, transform: [{ scale }] }]}>
+    <Animated.View style={[styles.spot, { left, top, opacity: on ? glow : 0.8, transform: [{ scale }] }]} testID="reading-spot">
       <View style={styles.spotHalo} />
       <View style={styles.spotDot} />
     </Animated.View>
   );
 }
 
-/** The warm light that sweeps the photo, the circles on the food and a turning arc while it is read.
- *  Still, with the arc and circles shown, where the phone asks for less motion. */
-export function ReadingLight({ words }: { words: string }) {
+/** The warm light that sweeps the photo, the circles on the food (`food`: a meal's photo, never a
+ *  label's) and a turning arc while it is read. Still, with the arc and circles shown, where the phone
+ *  asks for less motion. */
+export function ReadingLight({ words, food }: { words: string; food: boolean }) {
   const on = useMotion();
   const sweep = useLoop(1600);
   const turn = useRef(new Animated.Value(0)).current;
@@ -127,16 +132,14 @@ export function ReadingLight({ words }: { words: string }) {
   const translateY = sweep.interpolate({ inputRange: [0, 1], outputRange: [tall * 0.18, tall * 0.72] });
   const rotate = turn.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "360deg"] });
   return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="none" onLayout={(e) => { setTall(e.nativeEvent.layout.height); }}>
+    <View style={StyleSheet.absoluteFill} pointerEvents="none" testID="reading-light" onLayout={(e) => { setTall(e.nativeEvent.layout.height); }}>
       {on && tall > 0 ? (
         <Animated.View style={[styles.sweep, { transform: [{ translateY }] }]} testID="reading-sweep">
           <View style={styles.sweepGlow} />
           <View style={styles.sweepLine} />
         </Animated.View>
       ) : null}
-      {SPOTS.map((s, i) => (
-        <Pulse key={`${s.left}-${s.top}`} left={s.left} top={s.top} delay={i * 300} />
-      ))}
+      {food ? SPOTS.map((s, i) => <Pulse key={`${s.left}-${s.top}`} left={s.left} top={s.top} delay={i * 300} />) : null}
       <View style={styles.readingFoot} accessibilityLiveRegion="polite">
         <Animated.View style={[styles.arc, { transform: [{ rotate }] }]} testID="reading-arc" />
         <Txt kind="h3" style={styles.readingWords}>
@@ -176,8 +179,7 @@ const styles = StyleSheet.create({
   modeLabel: { flexShrink: 1, fontFamily: fonts.medium, fontSize: 15, lineHeight: 20 },
   modeLabelOn: { flexShrink: 1, fontFamily: fonts.semibold, fontSize: 15, lineHeight: 20 },
   sweep: { position: "absolute", top: -30, left: 0, right: 0, height: 60, justifyContent: "center" },
-  // A soft light either side of the line, fading to nothing at its edges: never a box.
-  sweepGlow: { position: "absolute", left: 0, right: 0, top: 0, bottom: 0, experimental_backgroundImage: `linear-gradient(180deg, transparent, ${colours.orangeFill} 45%, ${colours.orangeLine} 50%, ${colours.orangeFill} 55%, transparent)` },
+  sweepGlow: { position: "absolute", left: 0, right: 0, top: 0, bottom: 0, experimental_backgroundImage: readingSweep },
   sweepLine: { height: 2, marginHorizontal: "12%", borderRadius: sizes.round, backgroundColor: colours.orangeLight, boxShadow: shadows.dotGlow },
   spot: { position: "absolute", width: SPOT, height: SPOT, marginLeft: -SPOT / 2, marginTop: -SPOT / 2, alignItems: "center", justifyContent: "center" },
   spotHalo: { position: "absolute", width: SPOT, height: SPOT, borderRadius: sizes.round, borderWidth: 3, borderColor: colours.text, backgroundColor: colours.overPicture, boxShadow: shadows.logo },

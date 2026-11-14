@@ -552,7 +552,7 @@ function Camera({
           {look.kind === "looking" ? <ActivityIndicator size="large" color={colours.orange} /> : null}
         </View>
       ) : null}
-      <View style={[styles.footBar, { paddingBottom: insets.bottom + 28 }]} onLayout={(e) => { setFootTall(e.nativeEvent.layout.height); }}>
+      <View style={[styles.footBar, { paddingBottom: insets.bottom + 28 }]} testID="camera-foot" onLayout={(e) => { setFootTall(e.nativeEvent.layout.height); }}>
         {words === null ? null : (
           <View style={styles.notice} accessibilityLiveRegion="polite">
             <Txt kind="small" colour="text" style={styles.centre}>
@@ -672,7 +672,7 @@ function Reading({ uri, what, onClose }: { uri: string; what: "meal" | "label"; 
     <View style={styles.page}>
       <Image source={{ uri }} resizeMode="cover" style={StyleSheet.absoluteFill} accessible={false} />
       <View style={[StyleSheet.absoluteFill, styles.fade]} />
-      <ReadingLight words={what === "label" ? "Reading the label…" : "Reading your meal…"} />
+      <ReadingLight words={what === "label" ? "Reading the label…" : "Reading your meal…"} food={what === "meal"} />
       <View style={[styles.topBar, { top: insets.top + 12 }]}>
         <Round icon="x" say="Close" onPress={onClose} />
       </View>
