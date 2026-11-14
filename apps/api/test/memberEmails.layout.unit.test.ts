@@ -399,7 +399,8 @@ describe("every member email keeps every line it carried before the move", () =>
     for (const [name, heading] of Object.entries(headings)) {
       const c = CASES[name];
       expect(c?.mail.html).toContain(`>${heading}</h1>`);
-      const first = c?.lines.find((line): line is string => typeof line === "string" && !line.startsWith("Hi "));
+      // The first paragraph of the email as sent, after the greeting.
+      const first = c?.mail.text.split("\n\n").find((part) => part.trim() !== "" && !part.startsWith("Hi ") && part !== "Hi,");
       expect(first).toBeDefined();
       // Not the same words again: the first sentence never opens with the heading, nor the heading with it.
       const opening = (text: string): string => text.toLowerCase().split(/\s+/).slice(0, 3).join(" ");
