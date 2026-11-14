@@ -15,6 +15,9 @@
 // Invite a friend (20a, 2026-11-06): `highfive` is Kd's poster "High five across the bridge", cut above its words and
 // logo, its sky made the page's black and its people warm black-and-white (Kd: "too much red … match my theme").
 // Your runs (37c-i, 2026-11-07): `runners` is his "Runners in timeless monochrome", cut to its two runners.
+// Food (32c-i, 2026-11-14): `foodfloat` is Kd's "Floating bowl ingredient scan" cut from its background and turned
+// to face left; the meal pictures and the plate's chicken, quinoa and avocado are cut from his bright food posters,
+// without their words or numbers.
 import anatomy from "../../assets/pictures/anatomy.webp";
 import balance from "../../assets/pictures/balance.webp";
 import benchpress from "../../assets/pictures/benchpress.webp";
@@ -32,6 +35,7 @@ import experiencepoints from "../../assets/pictures/experiencepoints.webp";
 import food from "../../assets/pictures/food.webp";
 import foodbg from "../../assets/pictures/foodbg.webp";
 import foodbowl from "../../assets/pictures/foodbowl.webp";
+import foodfloat from "../../assets/pictures/foodfloat.webp";
 import goals from "../../assets/pictures/goals.webp";
 import goalsbox from "../../assets/pictures/goalsbox.webp";
 import goddess from "../../assets/pictures/goddess.webp";
@@ -42,6 +46,10 @@ import highfive from "../../assets/pictures/highfive.webp";
 import hourstrained from "../../assets/pictures/hourstrained.webp";
 import jumpsquat from "../../assets/pictures/jumpsquat.webp";
 import latestbadges from "../../assets/pictures/latestbadges.webp";
+import mealbreakfast from "../../assets/pictures/mealbreakfast.webp";
+import mealdinner from "../../assets/pictures/mealdinner.webp";
+import meallunch from "../../assets/pictures/meallunch.webp";
+import mealsnack from "../../assets/pictures/mealsnack.webp";
 import monalisa from "../../assets/pictures/monalisa.webp";
 import motivation from "../../assets/pictures/motivation.webp";
 import plank from "../../assets/pictures/plank.webp";
@@ -61,6 +69,9 @@ import setup from "../../assets/pictures/setup.webp";
 import signin from "../../assets/pictures/signin.webp";
 import squat from "../../assets/pictures/squat.webp";
 import steps from "../../assets/pictures/steps.webp";
+import texcarbs from "../../assets/pictures/texcarbs.webp";
+import texfat from "../../assets/pictures/texfat.webp";
+import texprotein from "../../assets/pictures/texprotein.webp";
 import thisweek from "../../assets/pictures/thisweek.webp";
 import totalworkout from "../../assets/pictures/totalworkout.webp";
 import track from "../../assets/pictures/track.webp";
@@ -88,6 +99,7 @@ export const pictures = {
   food,
   foodbg,
   foodbowl,
+  foodfloat,
   goals,
   goalsbox,
   goddess,
@@ -98,6 +110,10 @@ export const pictures = {
   hourstrained,
   jumpsquat,
   latestbadges,
+  mealbreakfast,
+  mealdinner,
+  meallunch,
+  mealsnack,
   monalisa,
   motivation,
   plank,
@@ -117,6 +133,9 @@ export const pictures = {
   signin,
   squat,
   steps,
+  texcarbs,
+  texfat,
+  texprotein,
   thisweek,
   totalworkout,
   track,

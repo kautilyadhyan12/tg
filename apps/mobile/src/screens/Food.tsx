@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Keyboard, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { Image, Keyboard, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRoute } from "@react-navigation/native";
 import {
   MEAL_MOST_FOODS,
+  MORE_NUTRIENTS,
   foodSearchResponseSchema,
   mealMeasuresResponseSchema,
   mealPreviewSchema,
@@ -27,14 +28,13 @@ import {
 import { Button } from "../look/Button";
 import { Card } from "../look/Card";
 import { Chip } from "../look/Chip";
-import { colours, sizes } from "../look/colours";
+import { colours, orangeGradient, shadows, sizes } from "../look/colours";
 import { Field } from "../look/Field";
 import { Icon } from "../look/Icon";
 import { Page } from "../look/Page";
-import { PictureTop } from "../look/PictureTop";
-import { Ring } from "../look/Ring";
+import { pictures, type PictureName } from "../look/pictures";
 import { Sheet } from "../look/Sheet";
-import { Txt } from "../look/Txt";
+import { fonts, Txt } from "../look/Txt";
 import { SoftBar } from "../look/Waiting";
 import { useSession } from "../session/SessionProvider";
 import { NOT_KNOWN, count } from "./dashboard/words";
@@ -47,7 +47,6 @@ import { foodsOfRow } from "./food/planRules";
 import {
   MEAL_TYPES,
   aboutKcal,
-  addDays,
   daySums,
   dayWords,
   hasEstimate,
@@ -103,14 +102,18 @@ import {
 } from "./food/rows";
 import { newGoalId } from "./goals/words";
 import { FiguresLink, FiguresList, useDailyAmounts } from "./food/MoreFigures";
-import { FoodWeek } from "./food/FoodWeek";
-import { localDayKey } from "./food/weekRules";
+import { FoodWeek, useFoodWeek } from "./food/FoodWeek";
+import { localDayKey, weekBars, type TodayHere } from "./food/weekRules";
+import { FoodTop } from "./food/FoodTop";
+import { MacroPlate } from "./food/MacroPlate";
+import { DayPlate, DayPlates } from "./food/DayPlates";
 import { PackWords } from "./food/PackWords";
 import { Credits, SOURCE_WORDS, SourceLine } from "./food/SourceLine";
 import { Setup } from "./setup/Setup";
 
-// The Food tab (ROADMAP Stage 5 items 32b-i and 32b-ii-a): the day's macros against the person's daily
-// numbers, the day's four meals, a food added by search and measure or from the person's recent foods,
+// The Food tab (ROADMAP Stage 5 items 32b-i and 32b-ii-a; drawn again in 32c-i, Kd's drawing of 2026-11-14:
+// his floating bowl at the top, the week's days as plates, the day's macros on a plate, and three tabs, Meals,
+// What to eat and Week): the day's macros against the person's daily numbers, the day's four meals, a food added by search and measure or from the person's recent foods,
 // a meal changed or removed. Every number is the server's. A meal logged, and a change to one, is kept
 // on the phone until the server has it (food/outbox.ts).
 
@@ -164,6 +167,10 @@ export function FoodScreen() {
   const [discarding, setDiscarding] = useState(false);
   const photoKept = kept.sheet !== null && kept.sheet !== undefined;
   const today = sameDay(day, new Date());
+  // Meals, What to eat or Week (32c-i): one at a time under the day's plate, so the page is short.
+  const [tab, setTab] = useState<FoodTab>("meals");
+  // A meal shows two of its foods, and See all opens the rest; opening another closes it (Kd, 2026-11-14).
+  const [allOf, setAllOf] = useState<MealType | null>(null);
   // More ideas on the Dashboard opens this page's box, so the page goes to today.
   const asked = useRoute().params;
   const toToday = typeof asked === "object" && "today" in asked ? asked.today : null;
@@ -177,9 +184,13 @@ export function FoodScreen() {
     if (askedWeek === null || askedWeek === weekSeen.current) return;
     weekSeen.current = askedWeek;
     setToWeek({ at: askedWeek, gymId: askedWeekGym });
+    setDay(startOfDay(new Date()));
+    setTab("eat");
   }, [askedWeek, askedWeekGym]);
   useEffect(() => {
-    if (toToday !== null) setDay(startOfDay(new Date()));
+    if (toToday === null) return;
+    setDay(startOfDay(new Date()));
+    setTab("eat");
   }, [toToday]);
   // The Dashboard's Log meal opens this page at What to eat next, where the meal is logged (Kd,
   // 2026-11-02). The page keeps the box in view as the boxes above it load, until the person scrolls.
@@ -189,6 +200,8 @@ export function FoodScreen() {
   useEffect(() => {
     if (askedNext === null || askedNext === nextSeen.current) return;
     nextSeen.current = askedNext;
+    setDay(startOfDay(new Date()));
+    setTab("eat");
     setToNext(true);
   }, [askedNext]);
   const scroller = useRef<ScrollView | null>(null);
@@ -206,6 +219,13 @@ export function FoodScreen() {
   }, [toNext, showNext]);
 
   const rows = dayRows(read, view, day);
+  // Today as the plate shows it: the week's bars draw today from it where the server has not caught up.
+  const here: TodayHere | null =
+    today && rows !== null && rows.every((r) => r.totals !== null)
+      ? { day: localDayKey(day), sums: daySums(rows), meals: rows.length, about: rows.some((r) => hasEstimate(r.items)) }
+      : null;
+  const week = useFoodWeek({ fresh: weekFresh, sent: view.sent, today: localDayKey(new Date()) });
+  const dayBars = new Map(week.read.kind === "ok" ? weekBars(week.read.data, "kcal", here).map((b) => [b.day, b] as const) : []);
   // The meal open in its box, as the day now reads it: a change saved there shows at once.
   const openRow = open === null ? null : (rows?.find((r) => r.id === open.id) ?? open);
 
@@ -216,7 +236,9 @@ export function FoodScreen() {
   // A meal logged now lands today: the day goes there, and says so in the meal it went to.
   const loggedNow = (type: MealType, name: string) => {
     goTo(new Date());
+    setTab("meals");
     setSaid({ section: type, words: `${name} added.` });
+    setAllOf(type);
   };
 
   return (
@@ -232,13 +254,27 @@ export function FoodScreen() {
             if (toNext) showNext();
           }}
         >
-        <PictureTop
-          picture="food"
-          tall={0.62}
-          eyebrow="Nutrition"
-          title="Fuel Your Training"
-          foot={<Button label={photoKept ? "Finish photo meal" : "Scan food"} icon="camera" onPress={first(() => { setSaid(null); setBarcodeFirst(false); setPhotoOpen(true); })} />}
-        />
+          <FoodTop
+            eyebrow="Nutrition"
+            title="Fuel Your Training"
+            foot={
+              <View style={styles.topButtons}>
+                <Button label={photoKept ? "Finish photo meal" : "Scan food"} icon="camera" raised onPress={first(() => { setSaid(null); setBarcodeFirst(false); setPhotoOpen(true); })} />
+                {/* Beside the scan (32c-i): the Add box for the meal that fits the hour, as the scan's own Search food instead opens. */}
+                <Button
+                  label="Search"
+                  icon="search"
+                  kind="link"
+                  onPress={first(() => {
+                    setSaid(null);
+                    goTo(new Date());
+                    setTab("meals");
+                    setAdding(sectionOf({ mealType: null, takenAt: new Date().toISOString() }));
+                  })}
+                />
+              </View>
+            }
+          />
         </View>
       }
     >
@@ -262,6 +298,7 @@ export function FoodScreen() {
           <Button label="OK" kind="link" onPress={() => { outbox?.forget(r.id); }} />
         </Card>
       ))}
+      <DayPlates day={day} bars={dayBars} onGo={goTo} onPick={() => { setPicking(true); }} />
       <Macros
         title={today ? "Today’s Macros" : `Macros · ${dayWords(day, new Date())}`}
         today={today}
@@ -276,23 +313,7 @@ export function FoodScreen() {
         uncounted={rows === null ? 0 : rows.filter((r) => r.totals === null).length}
         about={rows !== null && rows.some((r) => hasEstimate(r.items))}
         onSetup={setSetupAt}
-      />
-      {rows === null || rows.length === 0 ? null : (
-        <Card>
-          <FiguresLink onPress={() => { setDayFigures(true); }} />
-        </Card>
-      )}
-      <FoodWeek
-        here={
-          today && rows !== null && rows.every((r) => r.totals !== null)
-            ? { day: localDayKey(day), sums: daySums(rows), meals: rows.length, about: rows.some((r) => hasEstimate(r.items)) }
-            : null
-        }
-        sent={view.sent}
-        today={localDayKey(new Date())}
-        fresh={weekFresh}
-        // Where the rings send somebody with no daily numbers: the target weight when it is on the wrong side.
-        onSetup={() => { setSetupAt(shownTargets.kind === "ok" && shownTargets.data.targetWrongSide ? "target" : "where"); }}
+        foot={rows === null || rows.length === 0 ? null : <NutrientsLine onPress={() => { setDayFigures(true); }} />}
       />
       <Sheet open={dayFigures && rows !== null} title={`Nutrients · ${dayWords(day, new Date())}`} onClose={() => { setDayFigures(false); }}>
         <FiguresList
@@ -308,91 +329,89 @@ export function FoodScreen() {
           }
         />
       </Sheet>
-      {today ? (
-        <View
-          onLayout={(e) => {
-            nextAt.current = e.nativeEvent.layout.y;
-            if (toNext) showNext();
-          }}
-        >
-        <WhatToEatNext
-          pickFoods={(plan, onClose) => <AddFood type={plan.mealType} plan={plan} onClose={onClose} onAdded={onClose} />}
-          foodsToday={rows === null ? null : rows.map((r) => foodsOfRow(r, view.waiting))}
-          todayFailed={read.kind === "failed"}
-          retryToday={again}
-          openWeekAt={toWeek}
-          onWeekOpened={() => {
-            setToWeek(null);
-          }}
-          fresh={answers}
-          onAnswered={answered}
-        />
-        </View>
-      ) : null}
-      <View style={styles.dayRow}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Previous day"
-          onPress={() => { goTo(addDays(day, -1)); }}
-          style={styles.arrow}
-        >
-          <Icon name="back" size={18} />
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`${dayWords(day, new Date())}, pick a day`}
-          onPress={() => { setPicking(true); }}
-          style={({ pressed }) => [styles.dayWords, pressed ? styles.pressed : null]}
-        >
-          <Icon name="calendar" size={16} colour="orange" />
-          <Txt kind="h3">{dayWords(day, new Date())}</Txt>
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={today ? "This is today" : "Next day"}
-          accessibilityState={{ disabled: today }}
-          disabled={today}
-          onPress={() => { goTo(addDays(day, 1)); }}
-          style={[styles.arrow, today ? styles.dim : null]}
-        >
-          <Icon name="go" size={18} />
-        </Pressable>
-      </View>
-      {rows === null ? (
-        read.kind === "failed" ? (
-          <Card style={styles.row}>
-            <Icon name="wifioff" size={18} colour="textSoft" />
-            <Txt kind="small" style={styles.grow}>
-              Your meals couldn’t load.
-            </Txt>
-            <Button label="Try again" kind="link" onPress={again} />
-          </Card>
-        ) : (
-          <SoftBar width="70%" />
-        )
-      ) : (
-        <>
-          {MEAL_TYPES.map(({ type }) => (
-            <Section
-              key={type}
-              type={type}
-              rows={rows.filter((r) => r.section === type)}
-              canAdd={today}
-              said={said?.section === type ? said.words : null}
-              onAdd={first(() => {
-                setSaid(null);
-                setAdding(type);
-              })}
-              onOpen={(row) => {
-                setSaid(null);
-                setOpen(row);
+      <View
+        style={styles.tabbed}
+        onLayout={(e) => {
+          nextAt.current = e.nativeEvent.layout.y;
+          if (toNext) showNext();
+        }}
+      >
+        <FoodTabs tab={tab} onTab={(t) => { setToNext(false); setTab(t); }} />
+        {tab === "meals" ? (
+          rows === null ? (
+            read.kind === "failed" ? (
+              <Card style={styles.row}>
+                <Icon name="wifioff" size={18} colour="textSoft" />
+                <Txt kind="small" style={styles.grow}>
+                  Your meals couldn’t load.
+                </Txt>
+                <Button label="Try again" kind="link" onPress={again} />
+              </Card>
+            ) : (
+              <SoftBar width="70%" />
+            )
+          ) : (
+            <>
+              {MEAL_TYPES.map(({ type }) => (
+                <Section
+                  key={type}
+                  type={type}
+                  rows={rows.filter((r) => r.section === type)}
+                  canAdd={today}
+                  all={allOf === type}
+                  onAll={(on) => { setAllOf(on ? type : null); }}
+                  said={said?.section === type ? said.words : null}
+                  onAdd={first(() => {
+                    setSaid(null);
+                    setAdding(type);
+                  })}
+                  onOpen={(row) => {
+                    setSaid(null);
+                    setOpen(row);
+                  }}
+                />
+              ))}
+              {read.kind === "ok" && read.cut ? <Txt kind="small">Meals this far back couldn’t all be read.</Txt> : null}
+            </>
+          )
+        ) : null}
+        {today ? (
+          <View style={tab === "eat" ? null : styles.hidden}>
+            <WhatToEatNext
+              pickFoods={(plan, onClose) => <AddFood type={plan.mealType} plan={plan} onClose={onClose} onAdded={onClose} />}
+              foodsToday={rows === null ? null : rows.map((r) => foodsOfRow(r, view.waiting))}
+              todayFailed={read.kind === "failed"}
+              retryToday={again}
+              openWeekAt={toWeek}
+              onWeekOpened={() => {
+                setToWeek(null);
               }}
+              fresh={answers}
+              onAnswered={answered}
             />
-          ))}
-          {read.kind === "ok" && read.cut ? <Txt kind="small">Meals this far back couldn’t all be read.</Txt> : null}
-          <Credits sources={new Set(rows.flatMap((r) => (r.items ?? []).map((i) => i.nutritionSource)))} />
-        </>
-      )}
+          </View>
+        ) : tab === "eat" ? (
+          // What to eat is about today's meals: from another day, one press goes back to today.
+          <Card style={styles.row}>
+            <Txt kind="small" style={styles.grow}>
+              What to eat is for today.
+            </Txt>
+            <Button label="Go to today" kind="link" onPress={() => { goTo(new Date()); }} />
+          </Card>
+        ) : null}
+        {tab === "week" ? (
+          <FoodWeek
+            week={week}
+            here={here}
+            sent={view.sent}
+            today={localDayKey(new Date())}
+            // Where the chart sends somebody with no daily numbers: the target weight when it is on the wrong side.
+            onSetup={() => { setSetupAt(shownTargets.kind === "ok" && shownTargets.data.targetWrongSide ? "target" : "where"); }}
+          />
+        ) : null}
+      </View>
+      {/* Where the day's numbers come from, whichever tab is shown. */}
+      {rows === null ? null : <Credits sources={new Set(rows.flatMap((r) => (r.items ?? []).map((i) => i.nutritionSource)))} />}
       <MealPhoto
         open={photoOpen}
         barcode={barcodeFirst}
@@ -405,6 +424,7 @@ export function FoodScreen() {
         onSearch={() => {
           setPhotoOpen(false);
           goTo(new Date());
+          setTab("meals");
           setAdding(sectionOf({ mealType: null, takenAt: new Date().toISOString() }));
         }}
       />
@@ -427,6 +447,8 @@ export function FoodScreen() {
         onAdded={(type, name) => {
           setAdding(null);
           setSaid({ section: type, words: `${name} added.` });
+          // What was just added is in view, however many the meal holds.
+          setAllOf(type);
         }}
       />
       <MealSheet
@@ -482,13 +504,6 @@ export function FoodScreen() {
   );
 }
 
-const MACROS = [
-  { key: "kcal", name: "Calories", unit: "kcal", colour: "orange" },
-  { key: "proteinG", name: "Protein", unit: "g", colour: "blue" },
-  { key: "carbsG", name: "Carbs", unit: "g", colour: "gold" },
-  { key: "fatG", name: "Fat", unit: "g", colour: "purple" },
-] as const;
-
 interface MacrosProps {
   title: string;
   today: boolean;
@@ -505,12 +520,14 @@ interface MacrosProps {
   said: string | null;
   /** Opens the daily numbers: the app's plan or the person's own. */
   onChange: () => void;
+  /** Under the plate: the day's Nutrients, once it has a meal. */
+  foot: ReactNode;
 }
 
-/** The day's four rings against the person's daily numbers, what is left of them today, and why the
- *  calories hold no cut where the plan holds none. With no daily numbers it says which answer is
- *  missing and opens setup on it. */
-function Macros({ title, today, targets, retry, eaten, uncounted, about, onSetup, said, onChange }: MacrosProps) {
+/** The day's plate against the person's daily numbers (32c-i: a plate, not four rings), what is left of
+ *  them today, and why the calories hold no cut where the plan holds none. With no daily numbers it says
+ *  which answer is missing and opens setup on it. */
+function Macros({ title, today, targets, retry, eaten, uncounted, about, onSetup, said, onChange, foot }: MacrosProps) {
   const left = (target: number, had: number, unit: "kcal" | "g") => `${about ? "about " : ""}${leftWords(target, had, unit)}`;
   const heading = (
     <View style={styles.titleRow}>
@@ -520,7 +537,7 @@ function Macros({ title, today, targets, retry, eaten, uncounted, about, onSetup
   );
   if (targets.kind !== "ok") {
     return (
-      <Card style={styles.macros}>
+      <Card raised style={styles.macros}>
         {heading}
         {targets.kind === "failed" ? (
           <View style={styles.row}>
@@ -532,6 +549,7 @@ function Macros({ title, today, targets, retry, eaten, uncounted, about, onSetup
         ) : (
           <SoftBar width="70%" />
         )}
+        {foot === null ? null : <View style={styles.plateFoot}>{foot}</View>}
       </Card>
     );
   }
@@ -543,7 +561,7 @@ function Macros({ title, today, targets, retry, eaten, uncounted, about, onSetup
         ? `To see your daily calories and macros, answer ${missingText(t.missing)}.`
         : "Finish setting up to see your daily calories and macros.";
     return (
-      <Card style={styles.macros}>
+      <Card raised style={styles.macros}>
         {heading}
         <Txt kind="small">{words}</Txt>
         <Button
@@ -553,6 +571,7 @@ function Macros({ title, today, targets, retry, eaten, uncounted, about, onSetup
           onPress={() => { onSetup(t.targetWrongSide ? "target" : "where"); }}
           style={styles.start}
         />
+        {foot === null ? null : <View style={styles.plateFoot}>{foot}</View>}
       </Card>
     );
   }
@@ -560,7 +579,7 @@ function Macros({ title, today, targets, retry, eaten, uncounted, about, onSetup
   const noCut = noCutWords(t);
   const hold = holdWords(t.ownHeld);
   return (
-    <Card style={styles.macros}>
+    <Card raised style={styles.macros}>
       <View style={styles.row}>
         <View style={[styles.titleRow, styles.grow]}>
           <Icon name="target" size={16} colour="orange" />
@@ -568,41 +587,26 @@ function Macros({ title, today, targets, retry, eaten, uncounted, about, onSetup
         </View>
         <Button label="Change" kind="link" say="Change your daily numbers" onPress={onChange} />
       </View>
-      <View style={styles.rings}>
-        {MACROS.map((m) => {
-          const of = goal[m.key];
-          const had = eaten === null ? null : eaten[m.key];
-          return (
-            <View key={m.key} style={styles.mac} accessible accessibilityLabel={`${m.name}, ${had === null ? "not known" : count(had)} of ${count(of)} ${m.unit}`}>
-              <View style={styles.ringBox}>
-                <Ring share={had === null || of <= 0 ? 0 : had / of} colour={m.colour} />
-                <View style={styles.ringWords}>
-                  <Txt kind="strong" numberOfLines={1} fit>
-                    {had === null ? NOT_KNOWN : count(had)}
-                  </Txt>
-                </View>
-              </View>
-              <Txt kind="tiny" colour="textSoft" style={styles.centre}>
-                {m.name}
-              </Txt>
-              <Txt kind="tiny" style={styles.centre}>
-                of {count(of)} {m.unit}
+      <MacroPlate
+        goal={goal}
+        eaten={eaten}
+        left={today && eaten !== null ? (key) => left(goal[key], eaten[key], "g") : null}
+      />
+      <View style={styles.left}>
+        <Txt kind="small">of {count(goal.kcal)} kcal</Txt>
+        {today && eaten !== null ? (
+          <View style={styles.leftWords} accessible accessibilityLabel={`Remaining today, ${left(goal.kcal, eaten.kcal, "kcal")}`}>
+            <Txt kind="tiny" style={styles.label}>
+              Remaining today
+            </Txt>
+            <View style={styles.leftPill}>
+              <Txt kind="small" colour="orangeLight">
+                {left(goal.kcal, eaten.kcal, "kcal")}
               </Txt>
             </View>
-          );
-        })}
+          </View>
+        ) : null}
       </View>
-      {today && eaten !== null ? (
-        <View style={styles.left}>
-          <Txt kind="tiny" style={styles.label}>
-            Remaining today
-          </Txt>
-          <Txt kind="small" colour="text">
-            {left(goal.kcal, eaten.kcal, "kcal")} · Protein {left(goal.proteinG, eaten.proteinG, "g")} · Carbs{" "}
-            {left(goal.carbsG, eaten.carbsG, "g")} · Fat {left(goal.fatG, eaten.fatG, "g")}
-          </Txt>
-        </View>
-      ) : null}
       {uncounted > 0 ? (
         <Txt kind="small">
           {uncountedWords(uncounted)}
@@ -630,7 +634,52 @@ function Macros({ title, today, targets, retry, eaten, uncounted, about, onSetup
           </Txt>
         </View>
       )}
+      {foot === null ? null : <View style={styles.plateFoot}>{foot}</View>}
     </Card>
+  );
+}
+
+/** Under the plate (32c-i, as drawn): the ten figures the day's Nutrients holds, and the link to them. */
+function NutrientsLine({ onPress }: { onPress: () => void }) {
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel="Nutrients" onPress={onPress} style={({ pressed }) => [styles.nutrients, pressed ? styles.pressed : null]}>
+      <Txt kind="tiny" style={styles.grow}>
+        Fibre, sugar, sodium and {String(MORE_NUTRIENTS.length - 3)} more
+      </Txt>
+      <Txt kind="small" colour="orange" style={styles.nutrientsLink}>
+        Nutrients
+      </Txt>
+      <Icon name="go" size={14} colour="orange" />
+    </Pressable>
+  );
+}
+
+type FoodTab = "meals" | "eat" | "week";
+const FOOD_TABS: readonly { key: FoodTab; label: string }[] = [
+  { key: "meals", label: "Meals" },
+  { key: "eat", label: "What to eat" },
+  { key: "week", label: "Week" },
+];
+
+/** Meals, What to eat and Week under the day's plate, as Progress's tabs (32c-i). */
+function FoodTabs({ tab, onTab }: { tab: FoodTab; onTab: (tab: FoodTab) => void }) {
+  return (
+    <View style={styles.tabs} accessibilityRole="tablist">
+      {FOOD_TABS.map((t) => (
+        <Pressable
+          key={t.key}
+          accessibilityRole="tab"
+          accessibilityLabel={t.label}
+          accessibilityState={{ selected: tab === t.key }}
+          onPress={() => { onTab(t.key); }}
+          style={[styles.tab, tab === t.key ? styles.tabOn : null]}
+        >
+          <Txt kind="small" colour={tab === t.key ? "onOrange" : "textSoft"} numberOfLines={1} fit style={styles.tabWords}>
+            {t.label}
+          </Txt>
+        </Pressable>
+      ))}
+    </View>
   );
 }
 
@@ -638,18 +687,28 @@ interface SectionProps {
   type: MealType;
   rows: Row[];
   canAdd: boolean;
+  /** Every food shown, or the first `SHOWN_FOODS` and See all. */
+  all: boolean;
+  onAll: (on: boolean) => void;
   said: string | null;
   onAdd: () => void;
   onOpen: (row: Row) => void;
 }
 
-function Section({ type, rows, canAdd, said, onAdd, onOpen }: SectionProps) {
+const SHOWN_FOODS = 2;
+
+const MEAL_PICTURES: Record<MealType, PictureName> = { breakfast: "mealbreakfast", lunch: "meallunch", dinner: "mealdinner", snack: "mealsnack" };
+
+function Section({ type, rows, canAdd, all, onAll, said, onAdd, onOpen }: SectionProps) {
   const name = mealTypeName(type);
   const sums = daySums(rows);
   const unknown = rows.some((r) => r.totals === null);
   return (
-    <Card style={styles.section}>
+    <Card raised style={styles.section}>
       <View style={styles.sectionHead}>
+        <View style={styles.mealPicture}>
+          <Image source={pictures[MEAL_PICTURES[type]]} resizeMode="cover" style={styles.fill} accessible={false} />
+        </View>
         <View style={styles.grow}>
           <Txt kind="h3">{name}</Txt>
           <Txt kind="tiny">
@@ -675,7 +734,7 @@ function Section({ type, rows, canAdd, said, onAdd, onOpen }: SectionProps) {
           No {name.toLowerCase()} logged yet.
         </Txt>
       ) : (
-        rows.map((row) => (
+        (all ? rows : rows.filter((r, i) => i < SHOWN_FOODS || r.waiting)).map((row) => (
           <Pressable
             key={row.id}
             accessibilityRole="button"
@@ -692,9 +751,24 @@ function Section({ type, rows, canAdd, said, onAdd, onOpen }: SectionProps) {
             <Txt kind="small" colour="text">
               {row.totals === null ? NOT_KNOWN : aboutKcal(row.totals.kcalPoint, hasEstimate(row.items))}
             </Txt>
+            <Icon name="go" size={16} colour="textFaint" />
           </Pressable>
         ))
       )}
+      {/* Only where a food is hidden, or all are open to close again. */}
+      {(all ? rows.length > SHOWN_FOODS : rows.some((r, i) => i >= SHOWN_FOODS && !r.waiting)) ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={all ? `Show less of ${name}` : `See all ${String(rows.length)} in ${name}`}
+          onPress={() => { onAll(!all); }}
+          style={({ pressed }) => [styles.seeAll, pressed ? styles.pressed : null]}
+        >
+          <Txt kind="small" colour="orange" style={styles.nutrientsLink}>
+            {all ? "Show less" : `See all (${String(rows.length)})`}
+          </Txt>
+          <Icon name={all ? "up" : "down"} size={14} colour="orange" />
+        </Pressable>
+      ) : null}
     </Card>
   );
 }
@@ -1227,6 +1301,9 @@ type Priced = { kind: "none" } | { kind: "ok"; preview: MealPreview; for: string
  *  goes on the list. A food logged before opens at the amount last had (Kd, 2026-10-29). */
 function AddFood({ type, plan, onClose, onAdded }: { type: MealType | null; plan?: PlanMealTarget; onClose: () => void; onAdded: (type: MealType, name: string) => void }) {
   const { session } = useSession();
+  // Which meal the foods go to: where the box was opened from, and any of the four the person picks
+  // (Kd, 2026-11-14: Search opened Snack at one in the morning, with no way to say Dinner).
+  const [meal, setMeal] = useState<MealType | null>(type);
   const { outbox } = useMealOutbox();
   const [query, setQuery] = useState("");
   const [found, setFound] = useState<Found>({ kind: "idle" });
@@ -1299,6 +1376,7 @@ function AddFood({ type, plan, onClose, onAdded }: { type: MealType | null; plan
     setChanging(null);
     setOwnAgain(null);
     setMealName("");
+    setMeal(type);
     // Opened again for another meal only when `type` changes; a plan meal's box is a new box each time.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [type]);
@@ -1370,7 +1448,8 @@ function AddFood({ type, plan, onClose, onAdded }: { type: MealType | null; plan
   }, [key, tooSmall, session, dishAsk]);
 
   if (type === null) return null;
-  const name = mealTypeName(type);
+  const chosen = meal ?? type;
+  const name = mealTypeName(chosen);
   const preview = priced.kind === "ok" && priced.for === key ? priced.preview : null;
   const refusedWords = priced.kind === "refused" && priced.for === key ? priced.words : null;
   const held = item === null || tooSmall || refusedWords !== null || outbox === null || adding;
@@ -1389,14 +1468,14 @@ function AddFood({ type, plan, onClose, onAdded }: { type: MealType | null; plan
     const numbers = basketNumbers(basket);
     const kept = await outbox.add({
       id,
-      body: { id, mealName: named, takenAt: new Date().toISOString(), mealType: type, items: basket.map((f) => f.chosen) },
+      body: { id, mealName: named, takenAt: new Date().toISOString(), mealType: chosen, items: basket.map((f) => f.chosen) },
       items: numbers?.items ?? null,
       totals: numbers?.totals ?? null,
       tried: false,
     });
     addingNow.current = false;
     setAdding(false);
-    if (kept) onAdded(type, named);
+    if (kept) onAdded(chosen, named);
     else setFull(true);
   };
   /** A food on the meal's list, and back to the search for the next. */
@@ -1478,6 +1557,15 @@ function AddFood({ type, plan, onClose, onAdded }: { type: MealType | null; plan
     else onClose();
   };
   const saveHeld = plan === undefined ? outbox === null || adding : plan.busy;
+  // The four meals to pick from, in a meal of the person's own; a plan's meal is the plan's.
+  const mealChoice =
+    plan === undefined ? (
+      <View style={styles.chips} accessibilityRole="radiogroup" accessibilityLabel="Meal">
+        {MEAL_TYPES.map((m) => (
+          <Chip key={m.type} label={m.name} small on={chosen === m.type} onPress={() => { setMeal(m.type); }} />
+        ))}
+      </View>
+    ) : null;
   const saveLabel = plan === undefined ? `Save meal to ${name}` : "Save to your plan";
   const planTrouble = plan?.trouble == null ? null : (
     <Txt kind="small" colour="badText">
@@ -1504,6 +1592,7 @@ function AddFood({ type, plan, onClose, onAdded }: { type: MealType | null; plan
     return (
       <Sheet open title={plan === undefined ? `Add to ${name}` : plan.title} onClose={close} onBack={back}>
         <ScrollView style={{ maxHeight: Math.max(SHEET_LIST_LEAST, height - keyboard - insets.top - SHEET_ABOVE_LIST - SHEET_FOOT) }} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.sheetList}>
+          {mealChoice}
           {plan === undefined ? <Field label="Meal name" value={mealName} onChange={setMealName} placeholder={basketName(basket)} maxLength={200} /> : null}
           <Txt kind="tiny" style={styles.label}>
             Your meal
@@ -1569,6 +1658,7 @@ function AddFood({ type, plan, onClose, onAdded }: { type: MealType | null; plan
           <OwnFood start={ownAgain} name={query.trim()} action="Add" onDone={(mine) => { toList({ name: mine.name, chosen: mine, amount: `${formatAmount(mine.grams)} g · your numbers`, item: null }); }} />
         </ScrollView>
       ) : null}
+      {food === null && !own ? mealChoice : null}
       {food === null && !own ? <Field label="Search food" bare value={query} onChange={setQuery} placeholder="Search food" ready maxLength={100} /> : null}
       {own ? null : (
       <ScrollView style={{ maxHeight: Math.max(SHEET_LIST_LEAST, height - keyboard - insets.top - (food === null ? SHEET_ABOVE_SEARCH + (basket.length > 0 ? 50 : 0) : SHEET_ABOVE_LIST + (panel ? 0 : SHEET_FOOT))) }} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.sheetList}>
@@ -1727,6 +1817,7 @@ function MonthPick({ open, day, onClose, onPick }: { open: boolean; day: Date; o
   const thisMonth = month.getFullYear() === today.getFullYear() && month.getMonth() === today.getMonth();
   return (
     <Sheet open title="Pick a day" onClose={onClose}>
+      {/* The days are plates (32c-i): every day up to today a plate, the one shown with its fork and knife. */}
       <View style={styles.monthHead}>
         <Pressable
           accessibilityRole="button"
@@ -1771,11 +1862,15 @@ function MonthPick({ open, day, onClose, onPick }: { open: boolean; day: Date; o
                 accessibilityState={{ disabled: after, selected: on }}
                 disabled={after}
                 onPress={() => { onPick(d); }}
-                style={[styles.cell, styles.dayCell, on ? styles.dayOn : null, after ? styles.dim : null]}
+                style={[styles.cell, styles.dayCell]}
               >
-                <Txt kind="small" colour={on ? "onOrange" : sameDay(d, today) ? "orange" : "text"}>
-                  {String(d.getDate())}
-                </Txt>
+                {after ? (
+                  <Txt kind="small" colour="textFaint">
+                    {String(d.getDate())}
+                  </Txt>
+                ) : (
+                  <DayPlate date={d.getDate()} size={on ? 40 : 34} bar={null} picked={on} later={false} today={sameDay(d, today)} />
+                )}
               </Pressable>
             );
           })}
@@ -1792,7 +1887,6 @@ const styles = StyleSheet.create({
   week: { flexDirection: "row" },
   cell: { flex: 1, textAlign: "center", alignItems: "center", justifyContent: "center" },
   dayCell: { minHeight: sizes.press, borderRadius: sizes.round },
-  dayOn: { backgroundColor: colours.orange },
   grow: { flex: 1 },
   row: { flexDirection: "row", alignItems: "center", gap: 10 },
   centre: { textAlign: "center" },
@@ -1802,12 +1896,23 @@ const styles = StyleSheet.create({
   refused: { flexDirection: "row", alignItems: "center", gap: 10, borderColor: colours.badLine },
   kept: { gap: 10, borderColor: colours.orangeLine },
   titleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  macros: { gap: 14 },
-  rings: { flexDirection: "row", justifyContent: "space-between", gap: 6 },
-  mac: { flex: 1, alignItems: "center", gap: 4 },
-  ringBox: { alignItems: "center", justifyContent: "center" },
-  ringWords: { position: "absolute", top: 0, right: 0, bottom: 0, left: 0, alignItems: "center", justifyContent: "center", paddingHorizontal: 8 },
-  left: { gap: 4, paddingTop: 10, borderTopWidth: 1, borderTopColor: colours.line },
+  macros: { gap: 10 },
+  left: { flexDirection: "row", alignItems: "center", justifyContent: "center", flexWrap: "wrap", gap: 10 },
+  nutrients: { flexDirection: "row", alignItems: "center", gap: 6, minHeight: sizes.press },
+  hidden: { display: "none" },
+  leftWords: { flexDirection: "row", alignItems: "center", gap: 8 },
+  seeAll: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, minHeight: sizes.press, borderTopWidth: 1, borderTopColor: colours.line },
+  nutrientsLink: { fontFamily: fonts.semibold },
+  leftPill: { paddingHorizontal: 12, minHeight: 28, justifyContent: "center", borderRadius: sizes.round, borderWidth: 1, borderColor: colours.orangeLine, backgroundColor: colours.orangeFill },
+  plateFoot: { paddingTop: 4, borderTopWidth: 1, borderTopColor: colours.line },
+  topButtons: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 14, marginTop: 6 },
+  tabbed: { gap: sizes.gap },
+  tabs: { flexDirection: "row", padding: 4, borderRadius: sizes.round, borderWidth: 1, borderColor: colours.line, backgroundColor: colours.fill },
+  tab: { flex: 1, minHeight: 38, paddingHorizontal: 6, borderRadius: sizes.round, alignItems: "center", justifyContent: "center" },
+  tabOn: { backgroundColor: colours.orange, experimental_backgroundImage: orangeGradient, boxShadow: shadows.chip },
+  tabWords: { fontFamily: fonts.semibold, textAlign: "center" },
+  mealPicture: { width: 52, height: 52, borderRadius: 26, overflow: "hidden", borderWidth: 2, borderColor: colours.lineStrong, boxShadow: shadows.chip },
+  fill: { width: "100%", height: "100%" },
   start: { alignSelf: "flex-start" },
   dayRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   dayWords: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },

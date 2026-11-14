@@ -875,3 +875,16 @@ describe("a food's ten figures on the photo's review (34b)", () => {
     expect(screen.queryByLabelText(/^Sodium, /)).toBeNull();
   });
 });
+
+describe("what was just saved is said where it is seen (32c-i, round one H1)", () => {
+  it("a photo meal saved from What to eat brings the page to Meals, where its line is", async () => {
+    const phone: Phone = { meals: [], scans: [] };
+    await openFood(phone);
+    await fireEvent.press(await screen.findByRole("tab", { name: "What to eat" }));
+    await takePhoto();
+    await screen.findByText("Toast and eggs");
+    await fireEvent.press(await screen.findByRole("button", { name: /^Save to / }));
+    expect(await screen.findByText("Toast and eggs added.")).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "Meals", selected: true })).toBeTruthy();
+  });
+});
