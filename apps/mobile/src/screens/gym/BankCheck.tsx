@@ -127,11 +127,11 @@ export function useBankCheck(): { run: (ask: BankCheckAsk) => Promise<BankCheckO
               </View>
             ) : (
               <View key="wait" testID="bank-check-wait" style={styles.waitBody}>
-                <ActivityIndicator color={colours.orange} />
+                <ActivityIndicator size="large" color={colours.orange} />
                 <Txt colour="text" style={styles.centre}>
                   {CHECKING_BANK}
                 </Txt>
-                <Button label={CANCEL} kind="link" small onPress={close} />
+                <Button label={CANCEL} kind="link" small style={styles.cancel} onPress={close} />
               </View>
             )}
             <WebView
@@ -206,6 +206,7 @@ const styles = StyleSheet.create({
   },
   waitBody: { alignItems: "center", gap: 12 },
   centre: { textAlign: "center" },
+  cancel: { alignSelf: "center" },
   scrim: { flex: 1, backgroundColor: colours.scrim, justifyContent: "flex-end" },
   sheet: {
     flex: 1,
