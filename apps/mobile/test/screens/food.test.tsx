@@ -790,6 +790,9 @@ describe("the ten figures (34b)", () => {
     expect(await screen.findByLabelText("Sodium, 3 mg*. Limit 2,300 mg")).toBeTruthy();
     expect(screen.getByLabelText("Iron, 5 mg*. Recommended 18 mg")).toBeTruthy();
     expect(screen.getByLabelText("Unsaturated fat, No data")).toBeTruthy();
+    // The pantry (32c-ii-a): iron's leaf at 5 of 18 mg reads 28 %; a nutrient with no figure has no percent.
+    expect(within(screen.getByTestId("jar-ironMg")).getByText("28%")).toBeTruthy();
+    expect(within(screen.getByTestId("jar-unsatFatG")).queryByText(/%$/)).toBeNull();
     expect(screen.getByText("* Some data is missing for Pizza.")).toBeTruthy();
     expect(screen.getByText("Daily amounts for women aged 19 to 30.")).toBeTruthy();
     expect(screen.getByText("These are general guidelines, not goals set by the app.")).toBeTruthy();

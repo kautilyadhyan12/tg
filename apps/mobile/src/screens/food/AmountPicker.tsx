@@ -562,7 +562,8 @@ const styles = StyleSheet.create({
     minHeight: sizes.press,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: colours.fieldLine,
+    // The amount being picked is the box's one orange edge (Kd's drawing 3b).
+    borderColor: colours.fieldOnLine,
     backgroundColor: colours.field,
     color: colours.text,
     fontFamily: fonts.semibold,

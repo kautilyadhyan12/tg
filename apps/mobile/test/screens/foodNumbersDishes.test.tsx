@@ -221,6 +221,40 @@ async function pickOats() {
   await fireEvent.press(await screen.findByRole("button", { name: "Oats, rolled, 307 kcal · 1 cup, USDA" }));
 }
 
+describe("32c-ii-a's worst thing: a meal is saved with the amount the bowl showed", () => {
+  it("each of the four bowls prices and saves its own fill, and Your meal's cards and the logged meal show what the button said", async () => {
+    const state: State = { targets: targets(), dishes: [BOWL], meals: [] };
+    const s = await openFood(state);
+    await pickOats();
+    await fireEvent.press(await screen.findByRole("radio", { name: "My blue bowl · 375 ml" }));
+    // The fake server weighs a bowl as 375 ml × fill × 0.4 g, at 3.79 kcal a gram: every tile its own.
+    for (const [words, fill, grams, kcal] of [
+      ["quarter full", 0.25, 38, 144],
+      ["three quarters full", 0.75, 113, 428],
+      ["full", 1, 150, 569],
+      ["half full", 0.5, 75, 284],
+    ] as const) {
+      await fireEvent.press(screen.getByRole("radio", { name: `My blue bowl, ${words}` }));
+      expect(screen.getByRole("radio", { name: `My blue bowl, ${words}` }).props.accessibilityState).toMatchObject({ selected: true });
+      expect(await screen.findByRole("button", { name: `Add Oats, rolled · ${String(kcal)} kcal` })).toBeTruthy();
+      expect(screen.getByText(`= ${String(grams)} g`)).toBeTruthy();
+      expect(s.sent.filter((a) => a.path === "/v1/nutrition/meals/preview").at(-1)?.body).toEqual({ items: [{ canonical: "oats_rolled", dishwareId: BOWL.id, fillLevel: fill }] });
+    }
+    await fireEvent.press(screen.getByRole("button", { name: "Add Oats, rolled · 284 kcal" }));
+    // Your meal: the row and the four cards are the half bowl's numbers, never another tile's.
+    expect(await screen.findByLabelText("284 kcal, 10 g protein, 50 g carbs, 5 g fat")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Change Oats, rolled, My blue bowl, half full · 75 g" })).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: /^Save meal to / }));
+    await waitFor(() => {
+      expect(state.meals).toHaveLength(1);
+    });
+    const posted = s.sent.find((a) => a.method === "POST" && a.path === "/v1/nutrition/meals");
+    expect(posted?.body).toMatchObject({ items: [{ canonical: "oats_rolled", dishwareId: BOWL.id, fillLevel: 0.5 }] });
+    await fireEvent.press(await screen.findByRole("button", { name: "Oats, rolled, 284 kcal" }));
+    expect(await screen.findByRole("button", { name: "Change Oats, rolled, My blue bowl, half full · 75 g" })).toBeTruthy();
+  });
+});
+
 describe("the worst thing: own calories the safety rules forbid are never shown as in use", () => {
   it("numbers the server refuses are said in the box, and the rings stay on the app's plan", async () => {
     const state: State = {

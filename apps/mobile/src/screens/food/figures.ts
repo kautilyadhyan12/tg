@@ -31,6 +31,10 @@ export interface FigureLine {
   value: string;
   /** Under the value: the published amount beside it. */
   note: string | null;
+  /** The amount as a share of the published one (0.64 for 64 %); null where either is not there. */
+  share: number | null;
+  /** The published amount is a most to stay under (sodium, saturated fat), not one to reach. */
+  limit: boolean;
 }
 
 /** `partial`: meals of the day whose foods are not here yet, so even a figure every food here gives
@@ -48,9 +52,16 @@ export function figureLines(items: readonly Pick<MealItem, "more">[], partial: b
       name,
       value: none ? "No data" : `${amountWords(amount)} ${unit}${incomplete ? "*" : ""}`,
       note: daily === null ? null : `${daily.kind === "most" ? "Limit" : "Recommended"} ${amountWords(daily.amount)} ${unit}`,
+      share: none || daily === null || !(daily.amount > 0) ? null : amount / daily.amount,
+      limit: daily?.kind === "most",
     };
   });
 }
+
+/** A nutrient's picture is filled to its share of the published amount (32c-ii-a, the pantry), never
+ *  past full; the words beside it say the whole share, 130 % included. */
+export const jarFill = (share: number | null): number => (share === null || !Number.isFinite(share) ? 0 : Math.min(1, Math.max(0, share)));
+export const shareWords = (share: number | null): string | null => (share === null || !Number.isFinite(share) ? null : `${String(Math.round(share * 100))}%`);
 
 /** Which foods hold totals back, where a total adds up some foods and not others. Null where no total
  *  does: a row reading No data already says it. */
