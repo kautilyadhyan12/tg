@@ -112,7 +112,7 @@ export function cardRequestMessage(gymName: string, what: CardRequestFor): strin
 
 /** The refusals, by the code the server answers with. */
 export const CARD_REQUEST_WORDS = {
-  not_offered: "Members can't add a card in the app at this gym right now, so nobody was asked.",
+  not_offered: "Members can't add a card in the app right now, so nobody was asked.",
   people_changed: "The people who will be asked changed while the box was open. Nobody was asked. Check the names again, then press Ask.",
   nobody: "Nobody you selected can be asked to add a card, so nobody was asked.",
 } as const;
