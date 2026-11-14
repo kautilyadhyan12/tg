@@ -142,7 +142,7 @@ describe("the pantry's pictures fill by what they hold, never by their height (r
 
   it("a quarter of the cheese is a quarter of what it holds: its level as measured, well under a quarter of its height", () => {
     // The cheese runs from 11 (its point) to 38 (its foot). A quarter of its height is 31.25; a quarter of
-    // what it holds lies at 34.7, its wide foot holding most of it.
+    // what it holds lies at 33.8, its wide foot holding most of it.
     expect(fillLevel("satFatG", 0.25)).toBeCloseTo(33.8, 5);
     expect(fillLevel("satFatG", 0.25)).toBeGreaterThan(31.25);
     // Between two measured shares, a straight line: 12.5 % halfway from 10 % to 15 %.
