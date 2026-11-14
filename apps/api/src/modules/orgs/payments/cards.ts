@@ -146,7 +146,7 @@ const cardOf = (c: cards.CardRow, today: string, reminder: Reminder = NO_REMINDE
   savedFrom: c.savedFrom,
 });
 
-function formOf(square: SquareSettings, row: repo.ConnectionRow, gym: repo.GymForPayments, person: cards.CardPerson): CardForm | null {
+export function formOf(square: SquareSettings, row: repo.ConnectionRow, gym: repo.GymForPayments, person: cards.CardPerson): CardForm | null {
   if (row.locationId === null || gym.country === null) return null;
   const { givenName, familyName } = cardNameParts(person.fullName);
   return {

@@ -171,6 +171,9 @@ function refusalOf(outcome: Exclude<buys.PurchasableOutcome, { kind: "ok" }>, gy
       throw new OrgsError(409, "app_purchase_card_paused", APP_PURCHASE_WORDS.card_paused);
     case "card_changed":
       throw new OrgsError(409, "app_purchase_card_changed", APP_PURCHASE_WORDS.card_changed);
+    case "verification":
+      // No pass from the bank's check, or one used before (20i-ii): the phone checks again, nothing was charged.
+      throw new OrgsError(409, "app_purchase_verification", APP_PURCHASE_WORDS.verification);
     case "renewing_held":
       throw new OrgsError(409, "app_purchase_renewing_held", APP_PURCHASE_WORDS.renewing_held(outcome.name));
     case "promo":

@@ -220,17 +220,23 @@ d("Buy a repeating membership in the app: on their own card, once, given only fo
     return found;
   };
   const buyUrl = (gym: Gym) => `/v1/orgs/${gym.id}/for-sale/purchases`;
-  /** Buy, as the phone sends it: what the list showed, the tick read word for word, signed where the line asks. */
-  const buyPress = (gym: Gym, who: Person, shown: ForSaleLine, over: Record<string, unknown> = {}, name = "Tara Singh") =>
-    send("POST", buyUrl(gym), who.cookies, {
+  /** Square's pass for a card once its bank is happy, in the shape its test area gave on 2026-11-14 (20i-ii). */
+  const passFor = (cardId: string) => `${cardId}#verf:CA4SE${randomUUID().replace(/-/g, "")}`;
+  /** Buy, as the phone sends it: what the list showed, the tick read word for word with a new pass for the card the list
+   *  names (the bank's check on the phone, 20i-ii), signed where the line asks. */
+  const buyPress = async (gym: Gym, who: Person, shown: ForSaleLine, over: Record<string, unknown> = {}, name = "Tara Singh") => {
+    const list = "charge" in over ? null : await send("GET", `/v1/orgs/${gym.id}/for-sale?repeating=true`, who.cookies);
+    const card = list?.statusCode === 200 ? forSaleResponseSchema.parse(JSON.parse(list.body)).card : null;
+    return await send("POST", buyUrl(gym), who.cookies, {
       requestKey: randomUUID(),
       typeId: shown.typeId,
       amountMinor: shown.firstPayment.amountMinor,
       factsKey: shown.factsKey,
       agreement: shown.agreement === null ? null : { agreementId: shown.agreement.id, signer: "person", name },
-      charge: { words: shown.charge ?? "I agree.", verificationToken: null },
+      charge: { words: shown.charge ?? "I agree.", verificationToken: card === null ? null : passFor(card.id) },
       ...over,
     });
+  };
   const parsed = (res: { statusCode: number; body: string }): AppPurchaseResponse => {
     expect(res.statusCode, res.body).toBe(200);
     return appPurchaseResponseSchema.parse(JSON.parse(res.body));
@@ -317,7 +323,7 @@ d("Buy a repeating membership in the app: on their own card, once, given only fo
     expect((await forSale(gymA, tara.app, false)).card).toBeNull();
     // Asked for, the line names her card and its own tick, in words naming the card, today's payment and the next.
     const list = await forSale(gymA, tara.app);
-    expect(list.card).toEqual({ brand: "VISA", last4: "1111", expired: false });
+    expect(list.card).toMatchObject({ brand: "VISA", last4: "1111", expired: false, id: taraCard.cardId, form: { applicationId: APP_ID, contact: { givenName: "Tara" } } });
     const shown = await lineOf(gymA, tara.app, gold);
     expect(shown).toMatchObject({ repeats: true, firstPayment: { amountMinor: 4999 }, renews: { amountMinor: 4999, every: { count: 1, unit: "month" } } });
     expect((shown.renews?.from ?? "") > shown.firstPayment.dueOn).toBe(true);
@@ -390,6 +396,56 @@ d("Buy a repeating membership in the app: on their own card, once, given only fo
     expect(square.charged.map((p) => p.cardId)).toEqual([taraCard.cardId]);
     expect(square.charged.some((p) => p.cardId === priyaCard.cardId)).toBe(false);
     for (const other of [sam, priya, leo]) expect((await held(gymA, other.entryId)).memberships).toEqual([]);
+  });
+
+  it("20i-ii, the worst thing: only a pass for her own card, from her bank's check, is charged, once", async () => {
+    clock = new Date();
+    const gym = await makeGym("Card Buy Pass");
+    const gold = await addType(gym, { name: "Gold Monthly" });
+    const tara = await member(gym, "Tara Pass");
+    const taraCard = await cardFor(gym, tara.entryId);
+    const ivy = await member(gym, "Ivy Other");
+    const ivyCard = await cardFor(gym, ivy.entryId);
+    const shown = await lineOf(gym, tara.app, gold);
+    const words = shown.charge ?? "";
+    // No pass (the bank never checked), or a pass for another card (Ivy's, or a card Tara had before): nothing charged.
+    for (const [pass, code] of [
+      [null, "app_purchase_verification"],
+      [passFor(ivyCard.cardId), "app_purchase_card_changed"],
+      [passFor(`ccof:${randomUUID()}`), "app_purchase_card_changed"],
+      [`${taraCard.cardId}x#verf:CA4SEabc`, "app_purchase_card_changed"],
+    ] as const) {
+      const res = await buyPress(gym, tara.app, shown, { charge: { words, verificationToken: pass } });
+      expect(res.statusCode, res.body).toBe(409);
+      expect(errorOf(res), String(pass)).toBe(code);
+    }
+    expect(takenAt(gym)).toHaveLength(0);
+    expect((await held(gym, tara.entryId)).memberships).toEqual([]);
+
+    // Her bank said no (Square answers that the check is still needed): told so, nothing given; and the pass that press
+    // used is never charged again under a new press (Square would take it: measured 2026-11-14).
+    const declinedPass = passFor(taraCard.cardId);
+    square.card(taraCard.cardId, gym.acct.merchantId, taraCard.customerId, { declines: "CARD_DECLINED_VERIFICATION_REQUIRED" });
+    const no = await buyPress(gym, tara.app, shown, { charge: { words, verificationToken: declinedPass } });
+    expect(errorOf(no)).toBe("app_purchase_verification");
+    expect((await held(gym, tara.entryId)).memberships).toEqual([]);
+    square.card(taraCard.cardId, gym.acct.merchantId, taraCard.customerId, "pays");
+    const reused = await buyPress(gym, tara.app, shown, { charge: { words, verificationToken: declinedPass } });
+    expect(errorOf(reused)).toBe("app_purchase_verification");
+    expect(takenAt(gym).filter((p) => p.status === "COMPLETED")).toHaveLength(0);
+
+    // A new check's pass for her own card: charged once, as hers; the same press again gives back the same purchase.
+    const pass = passFor(taraCard.cardId);
+    const key = randomUUID();
+    const bought = parsed(await buyPress(gym, tara.app, shown, { requestKey: key, charge: { words, verificationToken: pass } }));
+    expect(bought.purchase.state).toBe("paid");
+    expect(parsed(await buyPress(gym, tara.app, shown, { requestKey: key, charge: { words, verificationToken: pass } })).purchase.id).toBe(bought.purchase.id);
+    const completed = takenAt(gym).filter((p) => p.status === "COMPLETED");
+    expect(completed.map((p) => [p.cardId, p.customer_id, p.amount_money.amount, p.key])).toEqual([[taraCard.cardId, taraCard.customerId, 4999, bought.purchase.id]]);
+    expect(square.cardPaymentBodies().filter((b) => b.idempotencyKey === bought.purchase.id).map((b) => [b.pass, b.initiated])).toEqual([[pass, "member"]]);
+    // Ivy's card was never touched, and she was given nothing.
+    expect(square.charged.some((p) => p.cardId === ivyCard.cardId)).toBe(false);
+    expect((await held(gym, ivy.entryId)).memberships).toEqual([]);
   });
 
   it("a declined card takes nothing and gives nothing; a card that pays then buys it", async () => {
@@ -479,7 +535,7 @@ d("Buy a repeating membership in the app: on their own card, once, given only fo
 
     const old = await member(gym, "Olive Old Card");
     await cardFor(gym, old.entryId, "pays", { month: 1, year: 2020 });
-    expect((await forSale(gym, old.app)).card).toEqual({ brand: "VISA", last4: "1111", expired: true });
+    expect((await forSale(gym, old.app)).card).toMatchObject({ brand: "VISA", last4: "1111", expired: true });
     const oldLine = await lineOf(gym, old.app, gold);
     expect(oldLine.charge).toBeNull();
     expect(errorOf(await buyPress(gym, old.app, oldLine, { charge: { words: "I agree.", verificationToken: null } }))).toBe("app_purchase_card_expired");
@@ -546,13 +602,14 @@ d("Buy a repeating membership in the app: on their own card, once, given only fo
     const benAgain = await buyPress(gym, ben.app, await lineOf(gym, ben.app, gold), { requestKey: benKey });
     expect(errorOf(benAgain)).toBe("app_purchase_declined");
     expect(messageOf(benAgain)).toBe("Visa ending 1111 was declined, so nothing was charged. Update your card or try again later.");
-    // The bank's check, where the phone sends one, reaches Square with the charge.
+    // The pass from the bank's check is what Square charges, as the member's own payment (20i-ii).
     const cara = await member(gym, "Cara Checked");
     const caraCard = await cardFor(gym, cara.entryId);
     const shown = await lineOf(gym, cara.app, gold);
-    const paid = parsed(await buyPress(gym, cara.app, shown, { charge: { words: shown.charge ?? "", verificationToken: "verf:CBASE-abc_123" } }));
+    const pass = passFor(caraCard.cardId);
+    const paid = parsed(await buyPress(gym, cara.app, shown, { charge: { words: shown.charge ?? "", verificationToken: pass } }));
     expect(paid.purchase.state).toBe("paid");
-    expect(square.cardPaymentBodies().filter((b) => b.cardId === caraCard.cardId).map((b) => b.verificationToken)).toEqual(["verf:CBASE-abc_123"]);
+    expect(square.cardPaymentBodies().filter((b) => b.cardId === caraCard.cardId).map((b) => [b.pass, b.initiated])).toEqual([[pass, "member"]]);
   });
 
   it("round one H2: a repeating membership with a last day still to bill counts, so two never bill at once", async () => {
@@ -605,6 +662,11 @@ d("Buy a repeating membership in the app: on their own card, once, given only fo
     await openDueBills({ sql, log: quiet }, { now: clock, gymIds: [gym.id] });
     await work();
     expect(square.charged.filter((p) => p.cardId === card.cardId && p.status === "COMPLETED").map((p) => p.amount_money.amount)).toEqual([4999, 4999]);
+    // Bought by the member with the bank's pass; renewed by the gym, with no pass and nobody asked to confirm (20i-ii).
+    expect(square.cardPaymentBodies().filter((b) => b.cardId === card.cardId).map((b) => [typeof b.pass === "string", b.initiated])).toEqual([
+      [true, "member"],
+      [false, "gym"],
+    ]);
     const [two] = await sql<{ n: number }[]>`
       SELECT count(*)::int AS n FROM gym_member_payments p JOIN gym_member_bills b ON b.gym_id = p.gym_id AND b.id = p.bill_id
       WHERE b.held_membership_id = ${bought.purchase.membershipId} AND p.undone_at IS NULL`;
@@ -646,6 +708,8 @@ d("Buy a repeating membership in the app: on their own card, once, given only fo
     for (const [name, answerWith] of [
       ["Ola Other Customer", { customer_id: "CUSTOTHER" }],
       ["Rex Other Reference", { reference_id: randomUUID() }],
+      // A pass is charged in place of the card id (20i-ii): Square's payment must name the card the tick names.
+      ["Kim Other Card", { card_details: { card: { card_brand: "VISA", last_4: "4242" } } }],
     ] as const) {
       const who = await member(gym, name);
       await cardFor(gym, who.entryId);

@@ -5,6 +5,7 @@
 // the gym is connected to now, on the very sentence they ticked, which names that card. Nobody pays for a buyer (18i), so
 // the card is never another person's. Asked under the gym's lock, which a card's save and removal take too, so a card
 // replaced meanwhile is read as it is.
+import { createHash } from "node:crypto";
 import { cardExpired, repeatingChargeWords, type ForSaleItem } from "@app/shared";
 import type { Sql, TransactionSql } from "postgres";
 import { renewingHeldName } from "../memberships/heldRepo.js";
@@ -37,16 +38,36 @@ export async function ownCardIn(sql: SqlOrTx, gymId: string, entryId: string, en
 
 export type CardCheck =
   | { kind: "ok"; card: OwnCard }
-  | { kind: "card_needed" | "card_expired" | "card_stopped" | "card_paused" | "card_changed" }
+  | { kind: "card_needed" | "card_expired" | "card_stopped" | "card_paused" | "card_changed" | "verification" }
   | { kind: "renewing_held"; name: string };
+
+/** Square's pass names the card it was made for (`ccof:…#verf:…`, measured in Square's test area 2026-11-14), so a pass
+ *  for another card is refused before anything is charged. A pass in another shape (none was seen) is let through: the
+ *  card Square says it charged is matched to the tick's after (`appCardPurchases.ts`), and Square refuses a card that is
+ *  not the customer's ("Payment on file not found", measured the same day). */
+export function passFits(pass: string, cardId: string): boolean {
+  return pass.startsWith("ccof:") ? pass.startsWith(`${cardId}#`) : true;
+}
+
+/** What a purchase keeps of its pass once the pass itself is wiped (0240). */
+export function passHash(pass: string): string {
+  return createHash("sha256").update(pass, "utf8").digest("hex");
+}
+
+/** A pass a purchase at this gym was already charged with: Square charges a pass again under a new key (measured
+ *  2026-11-14), so each is taken once. The unique index on `card_pass_hash` holds it too. */
+async function passKept(tx: TransactionSql, gymId: string, pass: string): Promise<boolean> {
+  const [row] = await tx<{ id: string }[]>`SELECT id FROM gym_app_payments WHERE gym_id = ${gymId} AND card_pass_hash = ${passHash(pass)} LIMIT 1`;
+  return row !== undefined;
+}
 
 /** Whether the record's own card can pay for this repeating line now, on the sentence the screen showed: it has one, in
  *  date, not stopped by a decline that asked for a new card, its automatic payments not paused by staff or a chargeback,
- *  no other repeating membership of theirs still renewing, and the sentence is the one worked out now. Under the gym's
- *  lock and the record's (the caller's). */
+ *  no other repeating membership of theirs still renewing, the sentence is the one worked out now, and the phone brings
+ *  Square's pass for this very card, never used before (20i-ii). Under the gym's lock and the record's (the caller's). */
 export async function cardCheckIn(
   tx: TransactionSql,
-  c: { gymId: string; entryId: string; environment: SquareEnvironment; accountId: string; gymName: string; today: string; item: ForSaleItem; words: string },
+  c: { gymId: string; entryId: string; environment: SquareEnvironment; accountId: string; gymName: string; today: string; item: ForSaleItem; words: string; pass: string | null },
 ): Promise<CardCheck> {
   const card = await ownCardIn(tx, c.gymId, c.entryId, c.environment, c.accountId);
   if (card === null) return { kind: "card_needed" };
@@ -56,5 +77,9 @@ export async function cardCheckIn(
   const renewing = await renewingHeldName(tx, c.gymId, c.entryId, c.today);
   if (renewing !== null) return { kind: "renewing_held", name: renewing };
   if (repeatingChargeWords(c.gymName, card, c.item) !== c.words) return { kind: "card_changed" };
+  // No pass, or one used before: the bank's check is asked again. A pass for another card: the card changed since.
+  if (c.pass === null) return { kind: "verification" };
+  if (!passFits(c.pass, card.cardId)) return { kind: "card_changed" };
+  if (await passKept(tx, c.gymId, c.pass)) return { kind: "verification" };
   return { kind: "ok", card };
 }

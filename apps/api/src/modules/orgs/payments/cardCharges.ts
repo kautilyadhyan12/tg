@@ -193,6 +193,8 @@ async function advance(deps: PaymentsDeps, square: SquareSettings, charge: charg
       referenceId: charge.id,
       // A fee is named as one ("Freeze fee"), so staff refunding it in Square find it.
       note: noteOf(charge),
+      // A bill's date, a retry or staff: the gym's charge, never one a bank asks the member to confirm (20i-ii).
+      initiated: "gym",
     });
     return await answered(deps, charge, result, deps.now());
   } finally {

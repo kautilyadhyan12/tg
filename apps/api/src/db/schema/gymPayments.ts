@@ -944,6 +944,9 @@ export const gymAppPayments = pgTable(
     pushClaimedAt: timestamp("push_claimed_at", { withTimezone: true }),
     /** The discount a purchase is bought with (0239; 18k-v): while it is open, it keeps one use of it. */
     discountId: uuid("discount_id"),
+    /** The sha256 of Square's pass a card purchase was charged with (0240; 20i-ii), kept after the pass itself is wiped:
+     *  Square charges a pass again under a new key, so each is taken once. */
+    cardPassHash: text("card_pass_hash"),
   },
   (t) => [
     check("gym_app_payments_taken_check", sql`${t.takenMinor} IS NULL OR ${t.takenMinor} BETWEEN 0 AND 99999999`),
@@ -979,6 +982,10 @@ export const gymAppPayments = pgTable(
     check("gym_app_payments_state_check", sql`${t.state} IN ('open','done')`),
     foreignKey({ name: "gym_app_payments_discount_fk", columns: [t.gymId, t.discountId], foreignColumns: [gymDiscounts.gymId, gymDiscounts.id] }),
     check("gym_app_payments_discount_check", sql`${t.discountId} IS NULL OR ${t.membershipTypeId} IS NOT NULL`),
+    check("gym_app_payments_card_pass_check", sql`${t.cardPassHash} IS NULL OR (${t.cardId} IS NOT NULL AND ${t.cardPassHash} ~ '^[0-9a-f]{64}$')`),
+    uniqueIndex("gym_app_payments_card_pass_uq")
+      .on(t.gymId, t.cardPassHash)
+      .where(sql`${t.cardPassHash} IS NOT NULL`),
     index("gym_app_payments_discount_idx")
       .on(t.gymId, t.discountId)
       .where(sql`${t.state} = 'open' AND ${t.discountId} IS NOT NULL`),
