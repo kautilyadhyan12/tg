@@ -60,8 +60,9 @@ import { heldOnListOf } from "../memberships/onList.js";
 import { readerOf } from "../myMembership/repo.js";
 import { paidForBy, payerOf } from "../payers/repo.js";
 import { gymHasLivePlan, insertAudit, type OrgRow } from "../repo.js";
-import { OrgsError, requirePrivilege, requireWritablePrivilege } from "../service.js";
+import { OrgsError, requirePrivilege, requireStaff, requireWritablePrivilege } from "../service.js";
 import { cardPaysForRenewal, noticeOfCard, remindersOn } from "./cardExpiryRepo.js";
+import { askOfRecord } from "./cardRequests.js";
 import { pausedOn } from "./autopayRepo.js";
 import * as cards from "./cardsRepo.js";
 import * as repo from "./repo.js";
@@ -216,6 +217,8 @@ export async function staffView(deps: PaymentsDeps, org: OrgRow, userId: string,
       pairTerminal: withTerminals && canChange && gym.ownerUserId === userId && paired.length === 0,
       terminalSave: open === null ? null : terminalSaveView(open, gym.country, await terminalsOf(deps, open.environment, open.gymId, open.accountId)),
       autopayPausedOn: await pausedOn(deps.sql, org.id, payer?.entryId ?? entryId),
+      // Ask to add card (18d-vii) needs "Keep the member list and invite" as well (round one, L3).
+      ...(await askOfRecord(deps.sql, org.id, entryId, canChange && shown === null && payer === null && row !== null && deps.square !== null && (await requireStaff(deps, org.id, userId)).privileges.includes("members.confirm") ? { environment: deps.square.environment, accountId: row.accountId } : null, deps.now())),
     },
   });
 }

@@ -112,7 +112,7 @@ export async function previewGroupMessage(
 ): Promise<GymGroupMessagePreview | null> {
   await requirePrivilege(deps, gymId, userId, "members.confirm");
   if (!(await limit())) return null;
-  const ids = await selectedIds(deps, gymId, request.selection);
+  const ids = await selectedIds(deps, gymId, request.selection, userId);
   const gym = await gymNow(deps.sql, gymId, deps.now());
   if (gym === null) throw gymNotFound();
   const [rows, sentToday] = await Promise.all([groupRepo.groupStateOf(deps.sql, gymId, ids), groupRepo.sentOnDay(deps.sql, gymId, gym.today)]);
@@ -145,7 +145,7 @@ export async function sendGroupMessage(
   if (problem !== null) throw new OrgsError(400, `group_message_${problem}`, GYM_GROUP_MESSAGE_PROBLEM_WORDS[problem]);
   const words = badWordsIn(body);
   if (words.length > 0) throw new OrgsError(400, "group_message_bad_words", GYM_GROUP_MESSAGE_WORDS.bad_words(words));
-  const ids = await selectedIds(deps, gymId, request.selection);
+  const ids = await selectedIds(deps, gymId, request.selection, userId);
   return await deps.sql.begin(async (tx): Promise<GymGroupMessageDone> => {
     // The gym's row: a join, a removal and another send wait, so the day's count and the
     // people are read once and are what is written.

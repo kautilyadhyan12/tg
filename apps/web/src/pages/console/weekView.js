@@ -10,6 +10,8 @@ export const PAYMENT_DUE_SHOW = 'payment-due';
 export const PAST_PAYMENT_DUE_SHOW = 'past-payment-due';
 /** Members opened showing who has a membership agreement to sign (Membership agreements' See all, 18u-iv). */
 export const AGREEMENT_NOT_SIGNED_SHOW = 'agreement-not-signed';
+/** Members opened showing who pays for a membership that renews and has no card on file (18d-vii). */
+export const NO_CARD_SHOW = 'no-card';
 
 const n = (count) => count.toLocaleString('en');
 

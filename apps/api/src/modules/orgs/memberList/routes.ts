@@ -16,6 +16,9 @@ import {
   memberNumberTakenWords,
   MEMBER_LIST_CONFIRM_REFUSAL_WORDS,
   MEMBER_INVITE_WORDS,
+  CARD_REQUEST_WORDS,
+  cardRequestPreviewRequestSchema,
+  cardRequestSendRequestSchema,
   GYM_GROUP_MESSAGE_WORDS,
   MEMBER_LIST_SELECTION_CHANGED_WORDS,
   gymGroupMessagePreviewRequestSchema,
@@ -92,6 +95,8 @@ import { deleteSelected, previewDeleteSelected } from "./deleteSelected.js";
 import { keepListed } from "./tidy.js";
 import { SelectionChanged, selectAll } from "./selection.js";
 import * as groupMessages from "../messages/group.js";
+import * as cardRequests from "../payments/cardRequests.js";
+import type { SquareEnvironment } from "../payments/square.js";
 import { requireWritablePrivilege } from "../service.js";
 import { spentBeforeTheBody } from "../spentBeforeTheBody.js";
 import * as service from "./service.js";
@@ -151,6 +156,9 @@ function requireUserId(req: FastifyRequest): string {
 /** Group messages one member of staff may press Send on in an hour. */
 export const GROUP_MESSAGE_SENDS_PER_HOUR = 20;
 
+/** Ask to add card presses one member of staff may make in an hour (18d-vii). */
+export const CARD_REQUEST_SENDS_PER_HOUR = 20;
+
 /** Notes and tags one member of staff may write in an hour: 200 people, a few presses each. */
 export const MEMBER_NOTES_WRITES_PER_HOUR = 1200;
 
@@ -161,6 +169,8 @@ export interface MemberListRouteDeps {
   invites: InviteSettings | null;
   /** Tells the gym's open console windows that its people changed (Stage 4 item 18). */
   news: LiveNewsSender;
+  /** The Square environment cards are kept in, or null where Square is not set up (18d-vii). */
+  cardsEnvironment: SquareEnvironment | null;
   /** Tests move the clock; production uses the real one. A removal decides which personal
    *  training sessions are still to come by it, so it is the clock a booking reads. */
   now?: () => Date;
@@ -174,7 +184,9 @@ export function registerMemberListRoutes(app: FastifyInstance, deps: MemberListR
     log: app.log,
     now: deps.now ?? (() => new Date()),
     invites: deps.invites,
+    cardsEnvironment: deps.cardsEnvironment,
   };
+  const cardDeps: cardRequests.CardRequestDeps = { ...listDeps, cardsEnvironment: deps.cardsEnvironment };
 
   /** **`ipMax` IS EXPLICIT AND IT IS THE WHOLE POINT OF THIS LIMITER'S SHAPE.**
    *  A gym's front desk is one address with several staff signed in on it, and a
@@ -851,6 +863,58 @@ export function registerMemberListRoutes(app: FastifyInstance, deps: MemberListR
         return await reply.status(409).send({
           error: "group_message_people_changed",
           message: GYM_GROUP_MESSAGE_WORDS.people_changed,
+          preview: err.preview,
+          requestId: req.id,
+        });
+      }
+      throw err;
+    }
+  });
+
+  /** Ask to add card (18d-vii): a few presses an hour each; the address is counted a gym at a time. */
+  const cardRequestGate = gate(
+    createDualRateLimit({
+      name: "memberlist_card_request",
+      max: CARD_REQUEST_SENDS_PER_HOUR,
+      ipMax: CARD_REQUEST_SENDS_PER_HOUR * 4,
+      ipScope: gymInPath,
+      windowMs: 60 * 60 * 1000,
+      identifier: (req) => req.authUser?.id ?? null,
+      redis: deps.redis,
+    }),
+  );
+
+  app.post("/v1/orgs/:gymId/member-list/selected/card-request-preview", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(cardRequestPreviewRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    try {
+      const preview = await cardRequests.previewCardRequest(cardDeps, requireUserId(req), params.gymId, body, readGate(req, reply));
+      if (preview === null) return;
+      return await reply.status(200).send({ preview });
+    } catch (err) {
+      if (err instanceof SelectionChanged) return await sendSelectionChanged(err, req, reply);
+      throw err;
+    }
+  });
+
+  app.post("/v1/orgs/:gymId/member-list/selected/card-request", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(cardRequestSendRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    try {
+      const done = await cardRequests.sendCardRequest(cardDeps, requireUserId(req), params.gymId, body, cardRequestGate(req, reply));
+      if (done === null) return;
+      return await reply.status(200).send({ done });
+    } catch (err) {
+      if (err instanceof SelectionChanged) return await sendSelectionChanged(err, req, reply);
+      // Nobody was asked: the box as it now stands, for staff to read again.
+      if (err instanceof cardRequests.CardRequestPeopleChanged) {
+        return await reply.status(409).send({
+          error: "card_request_people_changed",
+          message: CARD_REQUEST_WORDS.people_changed,
           preview: err.preview,
           requestId: req.id,
         });

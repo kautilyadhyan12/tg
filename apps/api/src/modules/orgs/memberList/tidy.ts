@@ -72,7 +72,7 @@ export async function keepListed(
 ): Promise<MemberListKeptListed | null> {
   const { org } = await requireWritablePrivilege(deps, gymId, userId, "members.confirm");
   if (!(await limit())) return null;
-  const ids = await selectedIds(deps, gymId, request.selection);
+  const ids = await selectedIds(deps, gymId, request.selection, userId);
   const at = deps.now();
   const today = dayInTz(at, org.timezone);
   return await deps.sql.begin(async (tx) => {

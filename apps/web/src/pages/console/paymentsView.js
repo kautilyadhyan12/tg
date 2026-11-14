@@ -269,3 +269,13 @@ export function reconnectWords(allowFor) {
   return { line: RECONNECT_LINE, hint: RECONNECT_HINT, others: RECONNECT_OTHERS };
 }
 export const TERMINAL_OWNER_ONLY = 'Only the owner can pair or remove Terminals.';
+
+/** WHERE ASK TO ADD CARD STARTS (18d-vii): Members, showing who has no card on file, for staff who
+ *  record payments and keep the member list; null for anybody else. */
+export function askCardsTo(slug, privileges) {
+  if (typeof slug !== 'string' || !privileges.includes('billing.members') || !privileges.includes('members.confirm')) return null;
+  return `/console/${slug}/members?show=no-card`;
+}
+
+/** The button's words. */
+export const ASK_CARDS_WORDS = 'Ask members to add their card';

@@ -3,6 +3,7 @@ import { orgWords } from '@app/shared';
 import { Loader2 } from 'lucide-react';
 import { orgService, errorText } from '../../api/orgsApi';
 import { readOnlyNote } from '../../pages/console/billingView';
+import { viewerPrivileges } from '../../pages/console/consoleView';
 import {
   SQUARE_HEADING,
   SQUARE_INTRO,
@@ -17,6 +18,8 @@ import {
   squareOutcomeLine,
   squareRows,
   reconnectWords,
+  ASK_CARDS_WORDS,
+  askCardsTo,
   billingElsewhereLine,
 } from '../../pages/console/paymentsView';
 import PlaceLink from './PlaceLink';
@@ -296,6 +299,11 @@ export default function PaymentsPanel({ org, readOnly, startOpen = false, outcom
           <p className="text-sm m-0" style={hintStyle} data-testid="billing-elsewhere-note">
             {billingElsewhereLine(orgWords(org.orgType).people)}
           </p>
+          {askCardsTo(org.slug, viewerPrivileges(org)) !== null ? (
+            <PlaceLink to={askCardsTo(org.slug, viewerPrivileges(org))} className="c-lk text-sm self-start" data-testid="ask-cards">
+              {ASK_CARDS_WORDS}
+            </PlaceLink>
+          ) : null}
           {data.needsAllow === true && data.terminals?.needsAllow !== true ? (
             <section aria-label="Reconnect Square" className="flex flex-col gap-2" data-testid="square-reconnect">
               {owner ? (

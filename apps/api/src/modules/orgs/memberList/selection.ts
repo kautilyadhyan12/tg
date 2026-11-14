@@ -28,17 +28,17 @@ export function selectionDigest(gymId: string, ids: readonly string[]): string {
 }
 
 /** Every record this filter and search choose now, in the list's order. */
-export async function idsMatching(deps: MemberListDeps, gymId: string, filter: MemberListFilter): Promise<string[]> {
-  const { input } = await entriesFilter(deps, gymId, filter);
+export async function idsMatching(deps: MemberListDeps, gymId: string, filter: MemberListFilter, userId: string): Promise<string[]> {
+  const { input } = await entriesFilter(deps, gymId, filter, userId);
   return await repo.entryIdsMatching(deps.sql, input);
 }
 
 /** The records selected: the ones ticked, or everyone "Select all" chose if they are
  *  still exactly the same people. Ticked ids are only ids: every reader after this one
  *  reads them with the gym in its WHERE, so another gym's id is nobody. */
-export async function selectedIds(deps: MemberListDeps, gymId: string, selection: MemberListSelection): Promise<string[]> {
+export async function selectedIds(deps: MemberListDeps, gymId: string, selection: MemberListSelection, userId: string): Promise<string[]> {
   if (selection.kind === "ticked") return [...new Set(selection.entryIds)];
-  const ids = await idsMatching(deps, gymId, selection.filter);
+  const ids = await idsMatching(deps, gymId, selection.filter, userId);
   const digest = selectionDigest(gymId, ids);
   if (ids.length !== selection.count || digest !== selection.digest) {
     throw new SelectionChanged({ count: ids.length, digest });
@@ -56,6 +56,6 @@ export async function selectAll(
 ): Promise<MemberListSelectedAll | null> {
   await requirePrivilege(deps, gymId, userId, "members.confirm");
   if (!(await limit())) return null;
-  const ids = await idsMatching(deps, gymId, request.filter);
+  const ids = await idsMatching(deps, gymId, request.filter, userId);
   return { count: ids.length, digest: selectionDigest(gymId, ids) };
 }

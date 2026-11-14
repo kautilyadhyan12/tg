@@ -78,9 +78,9 @@ export interface InviteWho {
 
 /** The group's filters. The people selected are only those records; a "Select all" whose
  *  filter now matches other people throws `SelectionChanged`, and nothing is done. */
-export async function filtersFor(deps: MemberListDeps, gymId: string, who: InviteWho): Promise<repo.WordFilters> {
+export async function filtersFor(deps: MemberListDeps, gymId: string, who: InviteWho, userId: string): Promise<repo.WordFilters> {
   if (who.selection === undefined) return filtersOf(who);
-  return { statuses: null, membershipTypes: null, paymentStatuses: null, entryIds: await selectedIds(deps, gymId, who.selection) };
+  return { statuses: null, membershipTypes: null, paymentStatuses: null, entryIds: await selectedIds(deps, gymId, who.selection, userId) };
 }
 
 interface Group {
@@ -221,7 +221,7 @@ export async function previewInvite(
   const state = await listRepo.listState(deps.sql, gymId);
   const blocked = await blockedFor(deps.sql, settings, gymId, org.status);
   if (settings === null) return { version: state?.version ?? 0, reach: 0, skipped: noneSkipped(), blocked, digest: reachDigest(gymId, []) };
-  const group = await workOutGroup(deps.sql, settings, gymId, await filtersFor(deps, gymId, query), dayInTz(deps.now(), org.timezone));
+  const group = await workOutGroup(deps.sql, settings, gymId, await filtersFor(deps, gymId, query, userId), dayInTz(deps.now(), org.timezone));
   return { version: state?.version ?? 0, reach: group.reach.length, skipped: group.skipped, blocked, digest: reachDigest(gymId, group.reach) };
 }
 
@@ -261,7 +261,7 @@ export async function pressInvite(
   if (!(await limit())) return null;
   const at = deps.now();
   const today = dayInTz(at, org.timezone);
-  const filters = await filtersFor(deps, gymId, request);
+  const filters = await filtersFor(deps, gymId, request, userId);
   const changed = async (): Promise<InviteChanged> => {
     const version = (await listRepo.listState(deps.sql, gymId))?.version ?? 0;
     const group = await workOutGroup(deps.sql, settings, gymId, filters, today);

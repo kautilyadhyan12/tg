@@ -578,6 +578,7 @@ export const STAFF_LINES: Readonly<Record<string, (s: Said) => string>> = {
 
   // Messages
   "org.group_message_sent": (s) => `Sent a message to ${people(count(s, "people"), s.words)}`,
+  "org.card_request_sent": (s) => `Asked ${people(count(s, "people"), s.words)} to add their card in the app`,
   "org.message_settings_changed": (s) => `Changed which messages ${s.words.people} get`,
 };
 
