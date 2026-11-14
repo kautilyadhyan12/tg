@@ -701,7 +701,10 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
         - 32b-ii-b. [x] **Your own numbers, and saved dishes** — merged 2026-10-29 (PR #389).
     - 32c. **The Food tab drawn again** (Kd's five drawings of 2026-11-14, `rulings/2026-11-14-32c-i.md`; split in three, the page first).
       - 32c-i. [x] **The Food page: the floating bowl, the days as plates, the macros on a plate, Meals, What to eat and Week** · merged 2026-11-14 · PR #544
-      - 32c-ii. [ ] **The boxes: Add food, a logged meal, daily numbers, the Nutrients pantry, the meal plans and ideas** · 32c-iii. [ ] **Scan food**
+      - 32c-ii. **The boxes** (split 2026-11-14 in two, Kd's "go": the logging boxes first).
+        - 32c-ii-a. [ ] **Add food, How much, Your meal, a logged meal, Daily numbers and the Nutrients pantry**
+        - 32c-ii-b. [ ] **Your meal plan, What to eat's ideas, your gym's plan, and the "not saved yet" lines** (drawings 4d, 5a to 5c)
+      - 32c-iii. [ ] **Scan food**
 33. **The meal scan** (Kd, 2026-10-28: the scanner moves to GPT-6 Luna first).
     - 33a. [x] **The meal scan on GPT-6 Luna, thinking off** — merged 2026-10-28 (PR #380).
     - 33a-ii. [x] **Luna checks the scan's unclear food matches** — merged 2026-10-28 (PR #382).
