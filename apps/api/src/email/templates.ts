@@ -262,7 +262,7 @@ export function leadFollowUpEmail(words: {
     subject: letter.subject,
     gymName: gym,
     preheader: letter.lines[0] ?? letter.subject,
-    heading: letter.subject,
+    heading: LEAD_HEADING[words.step] ?? letter.subject,
     greeting: leadGreeting(words.firstName),
     body: letter.lines.map((text) => paragraph(text)),
     contact: null,
@@ -271,6 +271,9 @@ export function leadFollowUpEmail(words: {
     unsubscribeHref: words.unsubscribeLink,
   });
 }
+
+/** Each follow-up's heading, short, so it never repeats the letter's first sentence. */
+const LEAD_HEADING: Record<number, string> = { 1: "Thanks for getting in touch", 2: "Come and see us", 3: "Still thinking about joining?" };
 
 /** Part 4 §5.2's Day-0 undo email: the one link, to our own restore page,
  *  and the number of days it stays good for — interpolated from the caller,
@@ -400,12 +403,14 @@ export function cardRequestEmail(words: {
 
 /** The reminder before a membership renews or its minimum term ends (ROADMAP 18v-iv), and the notice of a price raise
  *  (18w), sent by the gym to whoever pays for it. The words are `renewalReminderWords`'s or `priceRaiseWords`'s, from
- *  names already cleaned; the subject is the heading. */
+ *  names already cleaned. */
 export function renewalReminderEmail(words: {
   to: string;
   gymName: string;
   greeting: string;
   subject: string;
+  /** "Upcoming membership renewal": short, and the same whoever pays. */
+  heading: string;
   lines: readonly string[];
   /** "If you have any questions, you can call 555 0100 or email desk@irongym.com." or null. */
   contact: string | null;
@@ -415,7 +420,7 @@ export function renewalReminderEmail(words: {
     subject: words.subject,
     gymName: words.gymName,
     preheader: words.lines[0] ?? words.subject,
-    heading: words.subject,
+    heading: words.heading,
     greeting: words.greeting,
     body: words.lines.map((text) => paragraph(text)),
     contact: words.contact,

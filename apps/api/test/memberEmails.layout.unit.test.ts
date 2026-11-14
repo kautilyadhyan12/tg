@@ -129,6 +129,7 @@ const CASES: Record<string, Case> = {
       gymName: "Iron House",
       greeting: "Hi Ana,",
       subject: "Your Gold Weekly membership at Iron House renews on 21 Nov 2026",
+      heading: "Upcoming membership renewal",
       lines: ["Your Gold Weekly membership at Iron House renews on 21 Nov 2026 for $25.00.", "The payment is due that day.", "Your Visa ending in 1111 will be charged automatically."],
       contact: "If you have any questions, you can email desk@ironhouse.test.",
     }),
@@ -143,6 +144,7 @@ const CASES: Record<string, Case> = {
       gymName: "Iron House",
       greeting: "Hi Ann,",
       subject: "The price of your membership at Iron House is going up on 23 Nov 2026",
+      heading: "Membership price change",
       lines: ["The price of your Gold Weekly membership at Iron House is going up from $25.00 to $30.00 every week.", "The new price starts with the payment on 23 Nov 2026. Payments before then stay at $25.00."],
       contact: null,
     }),
@@ -316,7 +318,7 @@ describe("every member email keeps every line it carried before the move", () =>
       leadFollowUpEmail({ ...LEAD, step: 1, gymName: evil, firstName: "<b>Pri</b>" }),
       cardDeclinedEmail({ to: "n@example.test", gymName: evil, greeting: "Hi <b>N</b>,", what: "w", why: "y", next: null, payBy: "p", options: ["<b>desk</b>"], contact: null }),
       cardExpiringEmail({ to: "g@example.test", gymName: evil, greeting: "Hi,", what: "w", paysFor: "p", ask: "a", contact: null }),
-      renewalReminderEmail({ to: "a@example.test", gymName: evil, greeting: "Hi,", subject: "<b>s</b>", lines: ["<b>l</b>"], contact: null }),
+      renewalReminderEmail({ to: "a@example.test", gymName: evil, greeting: "Hi,", subject: "<b>s</b>", heading: "<b>h</b>", lines: ["<b>l</b>"], contact: null }),
       membershipAgreementEmail({ to: "k@example.test", gymName: evil, signedName: "<b>K</b>", byGuardian: false, signedOn: "d", facts: [{ label: "<b>L</b>", value: "<b>V</b>" }], text: "<script>x</script>", agreementName: null }),
       agreementLinkEmail({ to: "s@example.test", gymName: evil, membershipName: "<b>Gold</b>", worksUntil: "d", signLink: "https://app.example/sign#tok" }),
       membershipCancelledEmail({ to: "c@example.test", gymName: evil, membershipName: "<b>Gold</b>", cancelledAt: "d", done: "<b>done</b>", lines: [], notes: [] }),
@@ -326,6 +328,28 @@ describe("every member email keeps every line it carried before the move", () =>
       expect(mail?.html).not.toContain("evil.example\"");
       expect(mail?.html).not.toMatch(/<(b|i|script)>/);
       expect(mail?.html).toContain("&lt;a href=&quot;https://evil.example&quot;&gt;Iron&lt;/a&gt; &amp; &quot;House&quot;");
+    }
+  });
+
+  it("each has a short heading of its own, never its first sentence again", () => {
+    const headings: Record<string, string> = {
+      invite: "Join Iron House in the app",
+      lead1: "Thanks for getting in touch",
+      lead2: "Come and see us",
+      lead3: "Still thinking about joining\\?",
+      declined: "Your payment could not be processed",
+      expiring: "Your card on file expires this month",
+      renewal: "Upcoming membership renewal",
+      priceRaise: "Membership price change",
+      agreementCopy: "Your membership agreement",
+      agreementLink: "Sign your membership agreement",
+      cancelled: "Your membership is cancelled",
+      kept: "Your cancellation is removed",
+    };
+    for (const [name, heading] of Object.entries(headings)) {
+      const c = CASES[name];
+      expect(c?.mail.html).toMatch(new RegExp(`<h1 [^>]*>${heading}</h1>`));
+      expect(c?.lines[0]).not.toBe(heading);
     }
   });
 
