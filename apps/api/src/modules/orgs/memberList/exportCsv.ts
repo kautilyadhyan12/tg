@@ -187,7 +187,7 @@ export async function exportSelected(
   const { org, privileges } = await requirePrivilege(deps, gymId, userId, "members.confirm");
   if (!(await limit())) return null;
   const { selection } = request;
-  const ids = await selectedIds(deps, gymId, selection);
+  const ids = await selectedIds(deps, gymId, selection, userId);
   const today = dayInTz(deps.now(), org.timezone);
   // What the memberships these people hold say, so the file reads as the list does.
   const [{ held, owedSince }, overdueAfterDays] = await Promise.all([

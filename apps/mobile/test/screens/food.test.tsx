@@ -787,9 +787,15 @@ describe("the ten figures (34b)", () => {
   it("the worst thing: a day with a food missing its sodium marks the total, names the food, with whose amount it is and that it is no goal", async () => {
     await openFood({ meals: [twoFoods()] }, undefined, daily);
     await fireEvent.press(await screen.findByRole("button", { name: "Nutrients" }));
-    expect(await screen.findByLabelText("Sodium, 3 mg*. Limit 2,300 mg")).toBeTruthy();
-    expect(screen.getByLabelText("Iron, 5 mg*. Recommended 18 mg")).toBeTruthy();
+    expect(await screen.findByLabelText("Sodium, 3 mg*. Limit 2,300 mg. 0% of the limit, from the foods that give it")).toBeTruthy();
+    expect(screen.getByLabelText("Iron, 5 mg*. Recommended 18 mg. 28% of the recommended amount, from the foods that give it")).toBeTruthy();
     expect(screen.getByLabelText("Unsaturated fat, No data")).toBeTruthy();
+    // The pantry (32c-ii-a): iron's leaf at 5 of 18 mg reads 28 %, with the * its value has, as Pizza gives
+    // no iron (round one, H1); it is filled. A nutrient with no figure has no percent and no fill.
+    expect(within(screen.getByTestId("jar-ironMg")).getByText("28%*")).toBeTruthy();
+    expect(within(screen.getByTestId("jar-ironMg")).getByTestId("jar-fill")).toBeTruthy();
+    expect(within(screen.getByTestId("jar-unsatFatG")).queryByText(/%/)).toBeNull();
+    expect(within(screen.getByTestId("jar-unsatFatG")).queryByTestId("jar-fill")).toBeNull();
     expect(screen.getByText("* Some data is missing for Pizza.")).toBeTruthy();
     expect(screen.getByText("Daily amounts for women aged 19 to 30.")).toBeTruthy();
     expect(screen.getByText("These are general guidelines, not goals set by the app.")).toBeTruthy();
@@ -804,7 +810,7 @@ describe("the ten figures (34b)", () => {
     const links = await screen.findAllByRole("button", { name: "Nutrients" });
     await fireEvent.press(links[links.length - 1] as NonNullable<(typeof links)[number]>);
     expect(await screen.findByText("Nutrients · Lunch")).toBeTruthy();
-    expect(screen.getByLabelText("Calcium, 29 mg*. Recommended 1,000 mg")).toBeTruthy();
+    expect(screen.getByLabelText("Calcium, 29 mg*. Recommended 1,000 mg. 3% of the recommended amount, from the foods that give it")).toBeTruthy();
   });
 
   it("the amounts not loading still shows the figures, and says nothing about whose they are", async () => {
@@ -838,7 +844,7 @@ describe("the ten figures (34b)", () => {
     now = hers;
     await fireEvent(setup, "requestClose");
     await fireEvent.press(await screen.findByRole("button", { name: "Nutrients" }));
-    expect(await screen.findByLabelText("Iron, 5 mg*. Recommended 18 mg")).toBeTruthy();
+    expect(await screen.findByLabelText("Iron, 5 mg*. Recommended 18 mg. 28% of the recommended amount, from the foods that give it")).toBeTruthy();
     expect(screen.getByText("Daily amounts for women aged 19 to 30.")).toBeTruthy();
   });
 
@@ -870,7 +876,7 @@ describe("the ten figures (34b)", () => {
     const links = await screen.findAllByRole("button", { name: "Nutrients" });
     await fireEvent.press(links[0] as NonNullable<(typeof links)[number]>);
     expect(await screen.findByText("* Meals this far back couldn’t all be read.")).toBeTruthy();
-    expect(await screen.findByLabelText("Fibre, 11.9 g*. Recommended 25 g")).toBeTruthy();
+    expect(await screen.findByLabelText("Fibre, 11.9 g*. Recommended 25 g. 48% of the recommended amount, from the foods that give it")).toBeTruthy();
   });
 
   it("an empty day offers no list", async () => {

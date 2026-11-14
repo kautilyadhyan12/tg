@@ -48,7 +48,7 @@ export function passFits(pass: string, cardId: string): boolean {
   return pass.startsWith(`${cardId}#verf:`);
 }
 
-/** What a purchase keeps of its pass once the pass itself is wiped (0240). */
+/** What a purchase keeps of its pass once the pass itself is wiped (0241). */
 export function passHash(pass: string): string {
   return createHash("sha256").update(pass, "utf8").digest("hex");
 }

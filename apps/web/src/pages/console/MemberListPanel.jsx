@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AGREEMENT_NOT_SIGNED_SHOW, PAST_PAYMENT_DUE_SHOW, PAYMENT_DUE_SHOW } from './weekView';
+import { AGREEMENT_NOT_SIGNED_SHOW, NO_CARD_SHOW, PAST_PAYMENT_DUE_SHOW, PAYMENT_DUE_SHOW } from './weekView';
 import { Link, useParams } from 'react-router-dom';
-import { AlertTriangle, Check, ChevronRight, Download, ListChecks, Loader2, Mail, MessageSquare, Minus, Search, SlidersHorizontal, Tag, Trash2, Upload, UserMinus, UserPlus, Utensils, X } from 'lucide-react';
+import { AlertTriangle, Check, ChevronRight, CreditCard, Download, ListChecks, Loader2, Mail, MessageSquare, Minus, Search, SlidersHorizontal, Tag, Trash2, Upload, UserMinus, UserPlus, Utensils, X } from 'lucide-react';
 import { HELD_PAYMENT_WORDS, MEMBER_APP_FILTER_WORDS, MEMBER_LIST_QUERY_MAX_CHARS, MEMBER_LIST_TICKED_MAX } from '@app/shared';
 import { orgService, errorText, blobError, selectionChanged } from '../../api/orgsApi';
 import { ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
@@ -12,6 +12,7 @@ import MemberListRemove from './MemberListRemove';
 import MemberListDelete from './MemberListDelete';
 import { MemberTagsManage, MemberTagsSelected } from './MemberListTags';
 import MemberListMessage from './MemberListMessage';
+import MemberListCardAsk from './MemberListCardAsk';
 import { GiveMealPlanSheet } from './MealPlanGiving';
 import { canManagePlans } from './mealPlansView';
 import MemberListUpload from './MemberListUpload';
@@ -24,6 +25,7 @@ import {
   EMPTY_FILTERS,
   WAIVER_NOT_SIGNED_WORDS,
   AGREEMENT_NOT_SIGNED_WORDS,
+  NO_CARD_WORDS,
   activeFilters,
   appView,
   chipText,
@@ -160,6 +162,15 @@ function FilterBox({ list, gymTags, filters, words, total, onChange, onClear, on
                 'Agreement',
                 <Chip pressed={filters.agreementNotSigned} onClick={() => onChange({ ...filters, agreementNotSigned: !filters.agreementNotSigned })}>
                   {AGREEMENT_NOT_SIGNED_WORDS} <span className="c-n">{count(list.agreementNotSigned)}</span>
+                </Chip>,
+              )
+            : null}
+          {/* Cards on file (18d-vii): for staff who record payments, at a gym that takes cards in the app. */}
+          {list !== null && !past && typeof list.noCard === 'number'
+            ? group(
+                'Card',
+                <Chip pressed={filters.noCard} onClick={() => onChange({ ...filters, noCard: !filters.noCard })}>
+                  {NO_CARD_WORDS} <span className="c-n">{count(list.noCard)}</span>
                 </Chip>,
               )
             : null}
@@ -386,6 +397,7 @@ function startFilters(show) {
   if (show === PAYMENT_DUE_SHOW) return { ...EMPTY_FILTERS, paymentStatus: [HELD_PAYMENT_WORDS.due] };
   if (show === PAST_PAYMENT_DUE_SHOW) return { ...EMPTY_FILTERS, records: 'former', paymentStatus: [HELD_PAYMENT_WORDS.due] };
   if (show === AGREEMENT_NOT_SIGNED_SHOW) return { ...EMPTY_FILTERS, agreementNotSigned: true };
+  if (show === NO_CARD_SHOW) return { ...EMPTY_FILTERS, noCard: true };
   return EMPTY_FILTERS;
 }
 
@@ -495,6 +507,8 @@ export default function MemberListPanel({
   const [managingTags, setManagingTags] = useState(false);
   /** The selection the Send message box is open for (20f-i). */
   const [messageFor, setMessageFor] = useState(null);
+  /** The selection the Ask to add card box is open for (18d-vii). */
+  const [cardAskFor, setCardAskFor] = useState(null);
   /** The selection the Meal plan box is open for (24a-ii). */
   const [mealPlanFor, setMealPlanFor] = useState(null);
   /** The newest request for a page: an answer to an older one is dropped. */
@@ -819,6 +833,15 @@ export default function MemberListPanel({
   const today = gymToday(gym?.timezone);
   const goneLine = noList ? goneForGoodLine(list, gym?.timezone, words.it) : null;
   const needsCheck = list?.appWords.find((w) => w.word === 'needs_check')?.count ?? 0;
+  // The end of an import (18d-vii): the list showing who has no card on file, for the staff who can ask them.
+  const showNoCard =
+    !readOnly && typeof list?.noCard === 'number'
+      ? () => {
+          setImporting(false);
+          setTyped('');
+          change({ ...EMPTY_FILTERS, noCard: true });
+        }
+      : null;
   const seeWho = (word) => {
     setTyped('');
     change({ ...EMPTY_FILTERS, app: [word] });
@@ -855,6 +878,7 @@ export default function MemberListPanel({
               setTick((n) => n + 1);
               onRosterChanged();
             }}
+            onShowNoCard={showNoCard}
           />
         ) : null}
         {openId !== undefined ? (
@@ -904,6 +928,12 @@ export default function MemberListPanel({
         <button type="button" onClick={() => setMessageFor(selection)} data-testid="bar-message" className="c-btn c-btn-s c-btn-sm">
           <MessageSquare aria-hidden="true" className="w-4 h-4" />
           Send message
+        </button>
+      ) : null}
+      {current && !readOnly && typeof list?.noCard === 'number' ? (
+        <button type="button" onClick={() => setCardAskFor(selection)} data-testid="bar-card-ask" className="c-btn c-btn-s c-btn-sm">
+          <CreditCard aria-hidden="true" className="w-4 h-4" />
+          Ask to add card
         </button>
       ) : null}
       {!readOnly ? (
@@ -1190,6 +1220,28 @@ export default function MemberListPanel({
         />
       ) : null}
 
+      {cardAskFor !== null ? (
+        <MemberListCardAsk
+          gymId={gymId}
+          selection={cardAskFor}
+          picked={picked}
+          today={today}
+          onSelectionChanged={(fresh) => {
+            selectionMoved(fresh);
+            setCardAskFor(null);
+          }}
+          onInvite={() => {
+            setCardAskFor(null);
+            setInvitingSelected(true);
+          }}
+          onOpenPerson={(entryId) => {
+            setCardAskFor(null);
+            setOpenId(entryId);
+          }}
+          onClose={() => setCardAskFor(null)}
+        />
+      ) : null}
+
       {mealPlanFor !== null ? (
         <GiveMealPlanSheet
           gymId={gymId}
@@ -1259,6 +1311,7 @@ export default function MemberListPanel({
             setTick((n) => n + 1);
             onRosterChanged();
           }}
+          onShowNoCard={showNoCard}
         />
       ) : null}
 

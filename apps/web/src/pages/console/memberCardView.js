@@ -2,6 +2,8 @@ import { MEMBER_CARD_WORDS, cardEarlierLine, cardName, cardOnFileLine, cardOwner
 import { PRACTICE_TERMINAL_WORDS } from './paymentsView';
 import { cardReminderLine } from './cardExpiryView';
 import { autopayPayerPausedLine } from './autopayView';
+import { dayWords } from './memberListView';
+import { cardAskBoxWords } from './memberListPeople';
 
 // CARD ON FILE, ON A PERSON'S PAGE (ROADMAP 18d-ii): what the box says, from the server's
 // answer. Only staff holding the payments tick open it; a gym outside Square's countries shows
@@ -44,6 +46,9 @@ export function cardBoxView(view, name) {
     terminals: ready && view.canChange && paidBy === null ? (view.terminals ?? []) : [],
     pairTerminal: ready && view.canChange && paidBy === null && view.isOwner && view.pairTerminal === true,
     appLine: ready && card === null && paidBy === null && view.inApp ? `${who.first} can add a card in the app.` : null,
+    // Ask to add card (18d-vii): when they were last asked, and the button for them alone.
+    askedLine: card === null && paidBy === null && (view.cardAskedOn ?? null) !== null ? `Asked to add a card in the app on ${dayWords(view.cardAskedOn)}.` : null,
+    ask: ready && view.canChange && card === null && paidBy === null && view.canAsk === true ? `Ask ${who.first} to add a card` : null,
     connect: ready || !view.isOwner ? null : view.state === 'choose_location' ? 'choose' : 'connect',
     connectLine: ready || !view.isOwner ? null : view.state === 'choose_location' ? MEMBER_CARD_WORDS.choose_location : MEMBER_CARD_WORDS.connect,
     ownerOnly,
@@ -138,3 +143,10 @@ export const CHOOSE_TERMINAL = 'Choose a Terminal';
 
 /** Cancel was pressed and Square has not stopped the Terminal yet: the box asks again until it has. */
 export const TERMINAL_STOPPING = 'Asking the Terminal to stop…';
+
+/** Ask to add card pressed for one person who is not asked (18d-vii): why, in one sentence. */
+export function cardAskOneKeptLine(preview) {
+  const words = cardAskBoxWords(preview);
+  const group = words.kept[0];
+  return group === undefined ? words.nobody : `Not asked. ${group.line}`;
+}

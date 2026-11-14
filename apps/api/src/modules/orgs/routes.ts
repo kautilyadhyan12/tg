@@ -15,6 +15,7 @@ import { createDualRateLimit, giveBackRateLimit } from "../auth/rateLimit.js";
 import { cookieOptions, mintOpaqueToken, sha256Hex } from "../auth/tokens.js";
 import { TRIAL_DEVICE_COOKIE, startOrgTrialRequestSchema, trialDeviceMarkSchema } from "@app/shared";
 import type { AppConfig } from "../../config.js";
+import { squareSettings } from "./payments/settings.js";
 import {
   addOrgStaffRequestSchema,
   applicationParamsSchema,
@@ -185,7 +186,15 @@ export function registerOrgRoutes(
   // THE MEMBER LIST (Part 3 §9.9), registered here rather than in `app.ts`: it is
   // the same console behind the same two gates, on the same deps, and a second
   // registration point would be a second place to forget one of them.
-  registerMemberListRoutes(app, { sql: deps.sql, redis: deps.redis, invites: deps.invites, news: deps.news, ...(overrides.now === undefined ? {} : { now: overrides.now }) });
+  registerMemberListRoutes(app, {
+    sql: deps.sql,
+    redis: deps.redis,
+    invites: deps.invites,
+    news: deps.news,
+    // Where cards are kept, as the worker reads it: only where Square is set up here (18d-vii).
+    cardsEnvironment: squareSettings(deps.config) === null ? null : deps.config.SQUARE_ENV,
+    ...(overrides.now === undefined ? {} : { now: overrides.now }),
+  });
 
   // THE GYM'S TIMETABLE (Part 3 §13.3), registered here for the same reason the
   // member list is: the same console, the same gates, the same deps.

@@ -72,6 +72,7 @@ import { processSquareWork } from "./modules/orgs/payments/work.js";
 import { createLogOnlyAgreementEmailSender, createResendAgreementEmailSender } from "./modules/orgs/agreement/email.js";
 import { emailBoughtCopy } from "./modules/orgs/agreement/service.js";
 import { sendDueCardExpiryNotices } from "./modules/orgs/payments/cardExpiry.js";
+import { sendDueCardRequestEmails } from "./modules/orgs/payments/cardRequestEmails.js";
 import { sendDueRenewalReminders } from "./modules/orgs/memberships/renewalReminders.js";
 import { sendDueCardNotices } from "./modules/orgs/payments/cardNotices.js";
 // The worker busts no entitlement cache: a gym's members pick a change up within the cache's 60 s.
@@ -676,6 +677,21 @@ if (invites === null || inviteSender === null) {
       });
       if (renewal.queued + renewal.sent + renewal.skipped + renewal.dropped + renewal.failed + renewal.retried > 0) {
         log.info({ ...renewal, durationMs: Date.now() - renewalStartedAt, event: "job.finished", job: "invites.renewal_reminders" }, "job finished");
+      }
+      // The email with each card request (18d-vii): the same sender and kill switch, never the daily cap.
+      const cardAskStartedAt = Date.now();
+      const cardAsk = await sendDueCardRequestEmails({
+        sql,
+        log,
+        settings: invites,
+        sender: inviteSender,
+        transport: inviteTransport,
+        environment: cardsEnvironment,
+        now: () => new Date(),
+        sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+      });
+      if (cardAsk.sent + cardAsk.skipped + cardAsk.dropped + cardAsk.failed + cardAsk.retried > 0) {
+        log.info({ ...cardAsk, durationMs: Date.now() - cardAskStartedAt, event: "job.finished", job: "invites.card_requests" }, "job finished");
       }
     },
     { connection },

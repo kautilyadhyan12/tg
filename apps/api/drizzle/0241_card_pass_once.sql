@@ -1,5 +1,6 @@
 -- The bank's check on the phone (ROADMAP Stage 5 item 20i-ii; Kd, 2026-11-14). Forward-only.
--- Hand-written, as `0016` onwards are; its journal entry is part of this commit.
+-- Hand-written, as `0016` onwards are; its journal entry is part of this commit. Renumbered from 0240: 18d-vii merged
+-- its own 0240_card_requests first.
 --
 -- A repeating membership bought in the app is charged with Square's pass for the member's card, made on the phone once the
 -- card's bank was happy. Square charges the same pass again under a new key (measured in its test area 2026-11-14), and

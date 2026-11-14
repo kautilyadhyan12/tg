@@ -4,6 +4,7 @@
 // with. The deletion-undo email carries exactly one link, to our own origin.
 import { leadFollowUpLetter, leadGreeting, withArticle } from "@app/shared";
 import type { EmailMessage } from "./resend.js";
+import { memberEmail } from "./layout.js";
 
 const APP_NAME = "AI Home Gym";
 
@@ -354,6 +355,37 @@ export function cardExpiringEmail(words: {
     `<p>${escapeHtml(words.gymName)}</p>` +
     `<p style="color:#666;font-size:12px">${escapeHtml(footer)}</p>`;
   return { to: words.to, subject: `Your card on file with ${words.gymName} expires this month`, text, html };
+}
+
+/** The gym asks the member to add a card in the app (ROADMAP 18d-vii), sent with the message in their inbox, in
+ *  the members' email layout (`layout.ts`). The gym name and the membership names arrive already cleaned. */
+export function cardRequestEmail(words: {
+  to: string;
+  gymName: string;
+  greeting: string;
+  /** "Iron Gym asks you to add a card for your Gold Monthly membership." */
+  ask: string;
+  /** "Once it is added, it is charged automatically each time the membership renews." */
+  then: string;
+  /** "If you have any questions, you can call 555 0100 or email desk@irongym.com." or null. */
+  contact: string | null;
+  /** They pay for somebody else's membership: "the memberships you pay for", everywhere in it (round one, L2). */
+  others: boolean;
+}): EmailMessage {
+  const what = words.others ? "the memberships you pay for" : "your membership";
+  return memberEmail({
+    to: words.to,
+    subject: `${words.gymName} asks you to add a card for ${what}`,
+    gymName: words.gymName,
+    preheader: words.ask,
+    heading: words.others ? "Add a card for the memberships you pay for" : "Add a card for your membership",
+    greeting: words.greeting,
+    paragraphs: [`${words.ask} ${words.then}`],
+    steps: { title: "How to add it", items: ["Open the app on your phone.", "Go to My membership.", "Tap Add card."] },
+    button: null,
+    contact: words.contact,
+    why: `You're receiving this because ${words.gymName} asked you to add a card for ${what}.`,
+  });
 }
 
 /** The reminder before a membership renews or its minimum term ends (ROADMAP 18v-iv), sent by the gym to

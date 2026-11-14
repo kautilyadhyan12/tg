@@ -1752,6 +1752,10 @@ export const memberListViewSchema = z.object({
    *  nobody has signed (18u-ii-a), for the Filter's "Agreement not signed"; null where the
    *  business asks for no agreement. */
   agreementNotSigned: z.number().int().min(0).nullable().default(null),
+  /** How many current members pay for a membership that renews by itself and have no card on
+   *  file (18d-vii), for the Filter's "No card on file"; null where the gym takes no cards in
+   *  the app, and for staff who don't record payments. */
+  noCard: z.number().int().min(0).nullable().default(null),
   /** The current members an import found a problem with, until staff fix it (5b-v-d-iv). */
   review: memberListReviewSignSchema.default({ count: 0 }),
   /** How many pairs may be one person twice (5b-iv-a), for the Members sign. */
@@ -1896,6 +1900,9 @@ export const memberListEntriesQuerySchema = z
     /** Only the current members holding a membership whose agreement the business asks for and
      *  that nobody has signed (18u-ii-a). Current members only. */
     agreement: z.literal("not_signed").optional(),
+    /** `none`: only the current members who pay for a membership that renews by itself and have
+     *  no card on file in the gym's Square account (18d-vii). Current members only. */
+    card: z.literal("none").optional(),
     /** `over`: only the people the Members sign counts (21c-iii), whose last membership
      *  here has ended or been cancelled. `over_owing`: only the people left off it because
      *  they still owe on a bill. Current members only. */

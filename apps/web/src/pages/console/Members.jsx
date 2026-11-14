@@ -28,7 +28,7 @@ import {
 } from './consoleView';
 import { canMakeRoomNow, consoleIsReadOnly, memberMeterText, readOnlyNote, seatMeter } from './billingView';
 import { shortWhen } from './memberListPeople';
-import { AGREEMENT_NOT_SIGNED_SHOW, PAST_PAYMENT_DUE_SHOW, PAYMENT_DUE_SHOW } from './weekView';
+import { AGREEMENT_NOT_SIGNED_SHOW, NO_CARD_SHOW, PAST_PAYMENT_DUE_SHOW, PAYMENT_DUE_SHOW } from './weekView';
 import { canManageStaff } from './staffView';
 import PlanChoiceDialog from '../../components/console/PlanChoiceDialog';
 import ApplicationsQueue from './ApplicationsQueue';
@@ -495,7 +495,7 @@ export default function Members() {
   // members who still owe, and Membership agreements who has one to sign (`?show=`), once.
   const [startShow, setStartShow] = useState(() => {
     const show = searchParams.get('show');
-    return show === PAYMENT_DUE_SHOW || show === PAST_PAYMENT_DUE_SHOW || show === AGREEMENT_NOT_SIGNED_SHOW ? show : null;
+    return show === PAYMENT_DUE_SHOW || show === PAST_PAYMENT_DUE_SHOW || show === AGREEMENT_NOT_SIGNED_SHOW || show === NO_CARD_SHOW ? show : null;
   });
   const showing = searchParams.get('show');
   useEffect(() => {

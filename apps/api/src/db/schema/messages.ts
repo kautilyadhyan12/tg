@@ -6,7 +6,7 @@
 // `gym_message_settings` mirrors `0095_gym_message_settings.sql`. `0096_class_reminder.sql`
 // adds the `class_reminder` kind to each list and `hours` to a gym's settings;
 // `0113_review_message.sql` the `review` kind, `visits` and `link` to a gym's settings, and
-// `link` to a message.
+// `link` to a message; `0240_card_requests.sql` the `card_request` kind.
 import { sql } from "drizzle-orm";
 import { boolean, check, date, index, integer, pgTable, primaryKey, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { users } from "./identity.js";
@@ -46,7 +46,7 @@ export const gymMemberMessages = pgTable(
     index("gym_member_messages_inbox_idx").on(t.userId, t.gymId, t.sentAt.desc()),
     check(
       "gym_member_messages_kind_check",
-      sql`${t.kind} IN ('payment_overdue','membership_ending','trial_ending','trial_check_in','welcome','birthday','milestone','miss_you','review','class_reminder','group','referral_gift')`,
+      sql`${t.kind} IN ('payment_overdue','membership_ending','trial_ending','trial_check_in','welcome','birthday','milestone','miss_you','review','class_reminder','group','referral_gift','card_request')`,
     ),
     check("gym_member_messages_occasion_check", sql`length(${t.occasion}) BETWEEN 1 AND 80`),
     check("gym_member_messages_body_check", sql`length(${t.body}) BETWEEN 1 AND 500`),

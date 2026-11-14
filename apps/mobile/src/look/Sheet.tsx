@@ -38,11 +38,13 @@ interface SheetProps {
   /** A drawing across the box's top, its title lying on its foot (Progress's boxes, 35c-i). `focus`
    *  is how far down the drawing the band looks: 0 its top, 1 its foot. */
   picture?: SheetPicture;
+  /** A small round picture before the title: the meal a Food box is for (32c-ii-a, Kd's drawing 3). */
+  thumb?: PictureName;
 }
 
 /** The box from the bottom, or in the middle (`place`): a question, or a short task, over the page it
  *  was opened from. */
-export function Sheet({ open, title, onClose, children, place = "bottom", onBack, picture }: SheetProps) {
+export function Sheet({ open, title, onClose, children, place = "bottom", onBack, picture, thumb }: SheetProps) {
   const middle = place === "middle";
   const [sheetWidth, setSheetWidth] = useState(0);
   const bandTall = picture !== undefined && "source" in picture && picture.whole === true ? wholeTall(picture.source, sheetWidth) : BAND_TALL;
@@ -89,6 +91,11 @@ export function Sheet({ open, title, onClose, children, place = "bottom", onBack
           {middle ? null : <View style={styles.grab} />}
           {picture === undefined || middle ? null : <View style={{ height: bandTall - (BAND_TALL - BAND_ROOM) }} />}
           <View style={styles.head}>
+            {thumb === undefined ? null : (
+              <View style={styles.thumb}>
+                <Image source={pictures[thumb]} resizeMode="cover" accessible={false} style={styles.thumbPicture} />
+              </View>
+            )}
             <Txt kind="h2" style={[styles.title, picture === undefined ? null : styles.titleOnPicture]}>
               {title}
             </Txt>
@@ -161,6 +168,8 @@ const styles = StyleSheet.create({
   grab: { alignSelf: "center", width: 40, height: 4, borderRadius: 999, backgroundColor: colours.grab },
   head: { flexDirection: "row", alignItems: "center", gap: 10 },
   title: { flex: 1 },
+  thumb: { width: 44, height: 44, borderRadius: 22, overflow: "hidden", borderWidth: 2, borderColor: colours.lineStrong, boxShadow: shadows.chip },
+  thumbPicture: { width: "100%", height: "100%" },
   titleOnPicture: { textShadowColor: colours.wordShadow, textShadowRadius: 8 },
   band: { position: "absolute", top: 0, left: 0, right: 0, height: BAND_TALL, borderTopLeftRadius: 24, borderTopRightRadius: 24, overflow: "hidden" },
   bandShade: { experimental_backgroundImage: sheetBandShade },

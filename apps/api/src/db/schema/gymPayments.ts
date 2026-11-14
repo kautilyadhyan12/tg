@@ -944,7 +944,7 @@ export const gymAppPayments = pgTable(
     pushClaimedAt: timestamp("push_claimed_at", { withTimezone: true }),
     /** The discount a purchase is bought with (0239; 18k-v): while it is open, it keeps one use of it. */
     discountId: uuid("discount_id"),
-    /** The sha256 of Square's pass a card purchase was charged with (0240; 20i-ii), kept after the pass itself is wiped:
+    /** The sha256 of Square's pass a card purchase was charged with (0241; 20i-ii), kept after the pass itself is wiped:
      *  Square charges a pass again under a new key, so each is taken once. */
     cardPassHash: text("card_pass_hash"),
   },
@@ -1115,5 +1115,45 @@ export const gymDeskCancels = pgTable(
     // One open cancel a membership; undone, it can be cancelled again.
     uniqueIndex("gym_desk_cancels_held_uq").on(t.gymId, t.heldMembershipId).where(sql`${t.undoneAt} IS NULL`),
     uniqueIndex("gym_desk_cancels_undo_request_uq").on(t.gymId, t.undoRequestKey).where(sql`${t.undoRequestKey} IS NOT NULL`),
+  ],
+);
+
+/** The email sent with a card request (0240; 18d-vii): one a record and press, to the address on the record,
+ *  kept only while it waits to go. Its link to the record (`entry_id`, `ON DELETE SET NULL` of that column
+ *  alone) is in the migration only. */
+export const gymCardRequestEmails = pgTable(
+  "gym_card_request_emails",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    gymId: uuid("gym_id")
+      .notNull()
+      .references(() => gyms.id, { onDelete: "cascade" }),
+    entryId: uuid("entry_id"),
+    /** `card:<the press's key>`, as the inbox message's. */
+    occasion: text("occasion").notNull(),
+    email: citext("email"),
+    state: text("state").notNull(),
+    reason: text("reason"),
+    attempts: integer("attempts").notNull().default(0),
+    notBefore: timestamp("not_before", { withTimezone: true }).notNull(),
+    leaseUntil: timestamp("lease_until", { withTimezone: true }),
+    maybeSentAt: timestamp("maybe_sent_at", { withTimezone: true }),
+    providerId: text("provider_id"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+  },
+  (t) => [
+    check("gym_card_request_emails_occasion_check", sql`${t.occasion} ~ '^card:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'`),
+    check("gym_card_request_emails_state_check", sql`${t.state} IN ('queued','sending','sent','skipped','failed')`),
+    check("gym_card_request_emails_email_check", sql`(${t.state} IN ('queued','sending') OR ${t.email} IS NULL) AND (${t.email} IS NULL OR length(${t.email}) <= 254)`),
+    check("gym_card_request_emails_waiting_check", sql`${t.state} NOT IN ('queued','sending') OR ${t.email} IS NOT NULL`),
+    check("gym_card_request_emails_lease_check", sql`(${t.state} = 'sending') = (${t.leaseUntil} IS NOT NULL)`),
+    check("gym_card_request_emails_finished_check", sql`(${t.state} IN ('sent','skipped','failed')) = (${t.finishedAt} IS NOT NULL)`),
+    check("gym_card_request_emails_reason_check", sql`((${t.state} IN ('skipped','failed')) = (${t.reason} IS NOT NULL)) AND (${t.reason} IS NULL OR ${t.reason} ~ '^[a-z_]{1,40}$')`),
+    check("gym_card_request_emails_provider_check", sql`${t.providerId} IS NULL OR (${t.state} = 'sent' AND length(${t.providerId}) <= 100)`),
+    check("gym_card_request_emails_attempts_check", sql`${t.attempts} >= 0`),
+    uniqueIndex("gym_card_request_emails_occasion_uq").on(t.gymId, t.entryId, t.occasion),
+    index("gym_card_request_emails_due_idx").on(t.notBefore, t.id).where(sql`${t.state} IN ('queued','sending')`),
+    index("gym_card_request_emails_entry_idx").on(t.gymId, t.entryId),
   ],
 );

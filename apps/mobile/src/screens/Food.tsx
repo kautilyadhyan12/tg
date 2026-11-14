@@ -991,7 +991,7 @@ function MealSheet({
     return true;
   };
   return (
-    <Sheet open title={row.name} onClose={onClose}>
+    <Sheet open title={row.name} thumb={MEAL_PICTURES[row.section]} onClose={onClose}>
       {row.waiting ? (
         <Txt kind="small">{unsaved ? "Waiting to send. It couldn’t be saved on this phone yet, so keep the app open." : "Saved on this phone. It’s sent when you’re online."}</Txt>
       ) : null}
@@ -1010,9 +1010,7 @@ function MealSheet({
               {line.numbersFrom === null ? null : <SourceLine source={line.numbersFrom.source} before={`${line.numbersFrom.name} ·`} />}
               <Txt kind="tiny">{line.amount}</Txt>
             </View>
-            <Txt kind="small" colour="text">
-              {line.kcal === null ? NOT_KNOWN : kcalWords(line.kcal)}
-            </Txt>
+            <Kcal words={line.kcal === null ? NOT_KNOWN : kcalWords(line.kcal)} />
           </>
         );
         return held === null ? (
@@ -1037,8 +1035,8 @@ function MealSheet({
       </ScrollView>
       {fullWords}
       {row.totals === null ? null : (
-        <Txt kind="small">
-          {aboutKcal(row.totals.kcalPoint, hasEstimate(row.items))} · Protein {count(Math.round(row.totals.proteinG))} g · Carbs {count(Math.round(row.totals.carbsG))} g · Fat{" "}
+        <Txt kind="small" style={styles.totals}>
+          <Txt kind="strong">{aboutKcal(row.totals.kcalPoint, hasEstimate(row.items))}</Txt> · Protein {count(Math.round(row.totals.proteinG))} g · Carbs {count(Math.round(row.totals.carbsG))} g · Fat{" "}
           {count(Math.round(row.totals.fatG))} g
         </Txt>
       )}
@@ -1263,8 +1261,8 @@ function FoodAmount({
       {panel ? null : (
         <View style={styles.foot}>
           {now === undefined || preview === null ? null : (
-            <Txt kind="small" colour="text">
-              {kcalWords(now.kcalPoint)} · Meal total {kcalWords(preview.totals.kcalPoint)}
+            <Txt kind="small" colour="text" style={styles.totals}>
+              <Txt kind="strong">{kcalWords(now.kcalPoint)}</Txt> · Meal total {kcalWords(preview.totals.kcalPoint)}
             </Txt>
           )}
           <Button label="Save" wide disabled={held} onPress={save} />
@@ -1272,6 +1270,52 @@ function FoodAmount({
         </View>
       )}
     </>
+  );
+}
+
+/** A food's calories as Kd's drawing 3 has them: the number bold, "kcal" small beside it. */
+function Kcal({ words }: { words: string }) {
+  const at = words.lastIndexOf(" kcal");
+  if (at < 0) {
+    return (
+      <Txt kind="small" colour="text">
+        {words}
+      </Txt>
+    );
+  }
+  return (
+    <Txt kind="tiny" colour="textSoft">
+      <Txt kind="strong">{words.slice(0, at)}</Txt> kcal
+    </Txt>
+  );
+}
+
+/** A meal's four numbers in four small cards (Kd's drawing 3c): calories in orange, then protein, carbs
+ *  and fat, read aloud as one. */
+function MealCards({ totals }: { totals: { kcalPoint: number; proteinG: number; carbsG: number; fatG: number } }) {
+  const cards = [
+    { value: count(Math.round(totals.kcalPoint)), label: "kcal" },
+    { value: `${count(Math.round(totals.proteinG))} g`, label: "Protein" },
+    { value: `${count(Math.round(totals.carbsG))} g`, label: "Carbs" },
+    { value: `${count(Math.round(totals.fatG))} g`, label: "Fat" },
+  ];
+  return (
+    <View
+      style={styles.cards}
+      accessible
+      accessibilityLabel={`${kcalWords(totals.kcalPoint)}, ${count(Math.round(totals.proteinG))} g protein, ${count(Math.round(totals.carbsG))} g carbs, ${count(Math.round(totals.fatG))} g fat`}
+    >
+      {cards.map((c, i) => (
+        <View key={c.label} style={styles.card}>
+          <Txt kind="strong" colour={i === 0 ? "orange" : "text"} numberOfLines={1} fit>
+            {c.value}
+          </Txt>
+          <Txt kind="tiny" numberOfLines={1}>
+            {c.label}
+          </Txt>
+        </View>
+      ))}
+    </View>
   );
 }
 
@@ -1590,7 +1634,7 @@ function AddFood({ type, plan, onClose, onAdded }: { type: MealType | null; plan
   if (basket.length > 0 && !searching && food === null && !own) {
     const numbers = basketNumbers(basket);
     return (
-      <Sheet open title={plan === undefined ? `Add to ${name}` : plan.title} onClose={close} onBack={back}>
+      <Sheet open title={plan === undefined ? `Add to ${name}` : plan.title} thumb={MEAL_PICTURES[chosen]} onClose={close} onBack={back}>
         <ScrollView style={{ maxHeight: Math.max(SHEET_LIST_LEAST, height - keyboard - insets.top - SHEET_ABOVE_LIST - SHEET_FOOT) }} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.sheetList}>
           {mealChoice}
           {plan === undefined ? <Field label="Meal name" value={mealName} onChange={setMealName} placeholder={basketName(basket)} maxLength={200} /> : null}
@@ -1610,9 +1654,7 @@ function AddFood({ type, plan, onClose, onAdded }: { type: MealType | null; plan
                 </Txt>
                 <Txt kind="tiny">{f.amount}</Txt>
               </Pressable>
-              <Txt kind="small" colour="text">
-                {f.item === null ? "" : kcalWords(f.item.kcalPoint)}
-              </Txt>
+              {f.item === null ? null : <Kcal words={kcalWords(f.item.kcalPoint)} />}
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={`Take ${f.name} off`}
@@ -1630,12 +1672,7 @@ function AddFood({ type, plan, onClose, onAdded }: { type: MealType | null; plan
           )}
         </ScrollView>
         <View style={styles.foot}>
-          {numbers === null ? null : (
-            <Txt kind="small" colour="text">
-              {kcalWords(numbers.totals.kcalPoint)} · Protein {count(Math.round(numbers.totals.proteinG))} g · Carbs {count(Math.round(numbers.totals.carbsG))} g · Fat{" "}
-              {count(Math.round(numbers.totals.fatG))} g
-            </Txt>
-          )}
+          {numbers === null ? null : <MealCards totals={numbers.totals} />}
           {planTrouble}
           <Button label={saveLabel} wide disabled={saveHeld} onPress={() => { void save(); }} />
           {full ? (
@@ -1649,7 +1686,7 @@ function AddFood({ type, plan, onClose, onAdded }: { type: MealType | null; plan
   }
 
   return (
-    <Sheet open title={own ? "Your own food" : plan === undefined ? `Add to ${name}` : plan.title} onClose={close} onBack={back}>
+    <Sheet open title={own ? "Your own food" : plan === undefined ? `Add to ${name}` : plan.title} thumb={MEAL_PICTURES[chosen]} onClose={close} onBack={back}>
       {food === null && !own && basket.length > 0 ? (
         <Button label={`Back to your meal · ${foodsWords(basket.length)}`} icon="back" kind="link" onPress={() => { setSearching(false); }} style={styles.start} />
       ) : null}
@@ -1659,7 +1696,7 @@ function AddFood({ type, plan, onClose, onAdded }: { type: MealType | null; plan
         </ScrollView>
       ) : null}
       {food === null && !own ? mealChoice : null}
-      {food === null && !own ? <Field label="Search food" bare value={query} onChange={setQuery} placeholder="Search food" ready maxLength={100} /> : null}
+      {food === null && !own ? <Field label="Search food" bare icon="search" iconBare value={query} onChange={setQuery} placeholder="Search food" ready maxLength={100} /> : null}
       {own ? null : (
       <ScrollView style={{ maxHeight: Math.max(SHEET_LIST_LEAST, height - keyboard - insets.top - (food === null ? SHEET_ABOVE_SEARCH + (basket.length > 0 ? 50 : 0) : SHEET_ABOVE_LIST + (panel ? 0 : SHEET_FOOT))) }} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.sheetList}>
         {food === null ? (
@@ -1785,8 +1822,8 @@ function AddFood({ type, plan, onClose, onAdded }: { type: MealType | null; plan
       {food === null || panel ? null : (
         <View style={styles.foot}>
           {preview === null ? null : (
-            <Txt kind="small" colour="text">
-              {kcalWords(preview.totals.kcalPoint)} · Protein {count(Math.round(preview.totals.proteinG))} g · Carbs{" "}
+            <Txt kind="small" colour="text" style={styles.totals}>
+              <Txt kind="strong">{kcalWords(preview.totals.kcalPoint)}</Txt> · Protein {count(Math.round(preview.totals.proteinG))} g · Carbs{" "}
               {count(Math.round(preview.totals.carbsG))} g · Fat {count(Math.round(preview.totals.fatG))} g
             </Txt>
           )}
@@ -1969,5 +2006,8 @@ const styles = StyleSheet.create({
   },
   clock: { minWidth: 96, textAlign: "center" },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  totals: { flexWrap: "wrap" },
+  cards: { flexDirection: "row", gap: 8 },
+  card: { flex: 1, minHeight: 56, justifyContent: "center", paddingHorizontal: 10, paddingVertical: 8, borderRadius: 12, borderWidth: 1, borderColor: colours.line, backgroundColor: colours.glass },
 });
 

@@ -564,7 +564,7 @@ export async function previewRemoveSelected(
 ): Promise<MemberRemovePreview | null> {
   const { privileges } = await requirePrivilege(deps, gymId, userId, "members.confirm");
   if (!(await limit())) return null;
-  const ids = await selectedIds(deps, gymId, request.selection);
+  const ids = await selectedIds(deps, gymId, request.selection, userId);
   const plan = await recordPlanOn(deps.sql, gymId, ids, deps.now(), request.onlyOver === true);
   requireForPlan(plan, privileges);
   return plan.preview;
@@ -582,7 +582,7 @@ export async function removeSelected(
   await requireWritablePrivilege(deps, gymId, userId, "members.confirm");
   const { privileges } = await requirePrivilege(deps, gymId, userId, "members.confirm");
   if (!(await limit())) return { kind: "rate_limited" };
-  const ids = await selectedIds(deps, gymId, input.selection);
+  const ids = await selectedIds(deps, gymId, input.selection, userId);
   return await press(deps, userId, gymId, input, (tx, at) => recordPlanOn(tx, gymId, ids, at, input.onlyOver === true), privileges);
 }
 

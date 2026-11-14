@@ -24,8 +24,9 @@ const paysForRenewal = (sql: SqlOrTx, now: Date) => sql`
          WHERE p.gym_id = k.gym_id AND p.payer_entry_id = k.entry_id AND ${renewing(sql, now)}))`;
 
 /** A membership (alias `h`) that renews, running or frozen, of a current member. Each half of
- *  `paysForRenewal` finds it by its record, so neither reads the gym's other memberships. */
-const renewing = (sql: SqlOrTx, now: Date) => sql`
+ *  `paysForRenewal` finds it by its record, so neither reads the gym's other memberships. Ask to add card
+ *  (`cardRequestsRepo.ts`) reads the same, for a whole gym at once. */
+export const renewing = (sql: SqlOrTx, now: Date) => sql`
       ${STILL_RENEWS(sql, now)} AND h.status IN ('active','frozen')
       AND NOT EXISTS (SELECT 1 FROM gym_member_list_entries m WHERE m.gym_id = h.gym_id AND m.id = h.entry_id AND m.former_at IS NOT NULL)`;
 

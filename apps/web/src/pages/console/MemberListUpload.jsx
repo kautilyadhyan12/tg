@@ -75,7 +75,7 @@ import { goneWords, gymToday } from './memberListPeople';
 import SentencePlace from '../../components/console/SentencePlace';
 import PlaceLink from '../../components/console/PlaceLink';
 import { afterImportSteps } from './membershipWordsView';
-import { billingElsewhereLine } from './paymentsView';
+import { ASK_CARDS_WORDS, billingElsewhereLine } from './paymentsView';
 import { canOpenPlace, membershipBoxTo } from './consolePlaces';
 import { viewerPrivileges } from './consoleView';
 import MemberListImportLeavers from './MemberListImportLeavers';
@@ -564,7 +564,7 @@ function SoftwareSteps() {
 }
 
 /** The import box. Opened from the Members screen's "Import" card. */
-export default function MemberListUpload({ gymId, gym = null, words, readOnly, onClose, onImported }) {
+export default function MemberListUpload({ gymId, gym = null, words, readOnly, onClose, onImported, onShowNoCard = null }) {
   const titleId = useId();
   const dialogRef = useRef(null);
   const fileInput = useRef(null);
@@ -1465,6 +1465,11 @@ export default function MemberListUpload({ gymId, gym = null, words, readOnly, o
         <p className="c-s14 c-t2 mt-1" data-testid="billing-elsewhere-note">
           {billingElsewhereLine(words.people)}
         </p>
+        {onShowNoCard !== null ? (
+          <button type="button" onClick={onShowNoCard} className="c-btn-link c-w6 c-s14 mt-1" data-testid="ask-cards">
+            {ASK_CARDS_WORDS}
+          </button>
+        ) : null}
         {steps.length > 0 ? (
           <div className="flex flex-col gap-3 mt-6 text-left" data-testid="member-import-next">
             <p className="c-th m-0">Still to do</p>

@@ -101,8 +101,8 @@ export function OwnNumbers({
       <Options
         solid
         options={[
-          { value: "app", label: "App’s plan", desc: targets.appTargets === null ? "Not worked out yet" : fourWords(targets.appTargets) },
-          { value: "own", label: "My own", desc: targets.own === null ? "Set your own numbers" : fourWords(targets.own) },
+          { value: "app", label: "App’s plan", desc: targets.appTargets === null ? "Not worked out yet" : fourWords(targets.appTargets), icon: { name: "sparkles", tone: "good" } },
+          { value: "own", label: "My own", desc: targets.own === null ? "Set your own numbers" : fourWords(targets.own), icon: { name: "pen", tone: "orange" } },
         ]}
         selected={choice}
         onPick={(v: Source) => {
