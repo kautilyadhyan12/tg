@@ -64,7 +64,7 @@ export type LeadEmailNotSent = (typeof LEAD_EMAIL_NOT_SENT)[number];
 
 /** The end of "Not sent for you: …", said to staff. */
 export const LEAD_EMAIL_NOT_SENT_WORDS: Record<LeadEmailNotSent, string> = {
-  unsubscribed: "they asked not to get your emails through AI Home Gym",
+  unsubscribed: "they asked not to get your emails through KWAZO",
   complained: "they marked one of your emails as spam",
   bounced: "emails to this address bounce",
   refused: "our email service won't send to this address",
@@ -153,9 +153,9 @@ export const LEAD_EMAIL_SETTINGS_WORDS = {
   needs_postal_address: "Add your postal address first. The law asks for it at the foot of these emails.",
   gym_name: "An email can't show your business name as it is written. Change it to the name in words first.",
   sending_stopped:
-    "Your emails through AI Home Gym are stopped, because too many bounced or one was marked as spam. Send follow-ups yourself from each lead's panel.",
-  paused: "Emails through AI Home Gym are paused just now. Until they start again, your leads' follow-ups wait for you on the Leads page.",
-  invites_off: "Emails through AI Home Gym aren't set up yet, so this can't be switched on.",
+    "Your emails through KWAZO are stopped, because too many bounced or one was marked as spam. Send follow-ups yourself from each lead's panel.",
+  paused: "Emails through KWAZO are paused just now. Until they start again, your leads' follow-ups wait for you on the Leads page.",
+  invites_off: "Emails through KWAZO aren't set up yet, so this can't be switched on.",
 } as const;
 
 export const leadFollowUpSchema = z

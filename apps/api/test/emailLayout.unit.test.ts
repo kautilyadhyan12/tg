@@ -1,18 +1,19 @@
 // The members' email layout (Kd, 2026-11-14): every word escaped, the gym's letter in the circle, the plain-text
 // twin carrying the same words, and the footer saying who sent it and why.
 import { describe, expect, it } from "vitest";
-import { memberEmail } from "../src/email/layout.js";
+import { memberEmail, type MemberEmailWords } from "../src/email/layout.js";
 
-const base = {
+const base: MemberEmailWords = {
   to: "maya@example.com",
   subject: "Iron Gym asks you to add a card for your membership",
   gymName: "Iron Gym",
   preheader: "Iron Gym asks you to add a card.",
   heading: "Add a card for your membership",
   greeting: "Hi Maya,",
-  paragraphs: ["Iron Gym asks you to add a card for your Gold membership."],
-  steps: { title: "How to add it", items: ["Open the app on your phone.", "Tap Add card."] },
-  button: null,
+  body: [
+    { kind: "paragraph", text: "Iron Gym asks you to add a card for your Gold membership." },
+    { kind: "steps", title: "How to add it", items: ["Open the app on your phone.", "Tap Add card."] },
+  ],
   contact: null,
   why: "You're receiving this because Iron Gym asked you to add a card for your membership.",
 };
@@ -31,7 +32,7 @@ describe("the members' email layout", () => {
   });
 
   it("escapes every word a gym or a member wrote, and a button goes where it says", () => {
-    const mail = memberEmail({ ...base, gymName: '<img src=x onerror="alert(1)">', greeting: "Hi <b>Sam</b>,", button: { label: "Open", href: 'https://kwazo.example/a"b' } });
+    const mail = memberEmail({ ...base, gymName: '<img src=x onerror="alert(1)">', greeting: "Hi <b>Sam</b>,", body: [...base.body, { kind: "button", label: "Open", href: 'https://kwazo.example/a"b', showLink: true }] });
     expect(mail.html).not.toContain("<img src=x");
     expect(mail.html).not.toContain("<b>Sam</b>");
     expect(mail.html).toContain("&lt;img src=x onerror=&quot;alert(1)&quot;&gt;");

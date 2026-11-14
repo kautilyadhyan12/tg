@@ -214,10 +214,10 @@ describe("the follow-up email", () => {
       const letter = leadFollowUpLetter(step, "Iron House");
       if (email === null || letter === null) throw new Error(`no email ${String(step)}`);
       expect(email.subject).toBe(letter.subject);
-      expect(email.text.startsWith(`Hi Priya,\n\n${letter.lines.join("\n\n")}\n\nIron House\n12 Kirkgate, Leeds LS1 6BY\n\n`)).toBe(true);
-      expect(email.text).toContain("You're getting this because you asked Iron House about joining and said they could email you.");
-      expect(email.text).toContain("Sent by AI Home Gym on behalf of Iron House, 12 Kirkgate, Leeds LS1 6BY.");
-      expect(email.text).toContain(`Stop emails from Iron House through AI Home Gym: ${words.unsubscribeLink}`);
+      expect(email.text.startsWith(`Hi Priya,\n\n${letter.lines.join("\n\n")}\n\nThank you,\n\nIron House\n\n`)).toBe(true);
+      expect(email.text).toContain("You're receiving this because you asked Iron House about joining and said they could email you.");
+      expect(email.text).toContain("Sent by KWAZO on behalf of Iron House, 12 Kirkgate, Leeds LS1 6BY.");
+      expect(email.text).toContain(`To stop emails from Iron House through KWAZO, unsubscribe here: ${words.unsubscribeLink}`);
       expect(email.html).toContain(`href="${words.unsubscribeLink}"`);
     }
     expect(leadFollowUpEmail({ ...words, step: 4 })).toBeNull();

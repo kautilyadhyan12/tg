@@ -4,7 +4,7 @@
 // kill switch, sender and retry rules (`invites/sender.ts`).
 import { authEmailSchema, STAFF_INVITE_DAYS, STAFF_INVITE_SEND_TAG, staffRoleWord, type StaffInviteEmailReason } from "@app/shared";
 import type { Sql } from "postgres";
-import { memberInviteFrom, staffInviteEmail } from "../../../email/templates.js";
+import { staffInviteEmail, staffInviteFrom } from "../../../email/templates.js";
 import type { InviteEmail, InviteTransport } from "../../../email/resend.js";
 import { emailDomain, emailHmac } from "../invites/address.js";
 import { cleanGymText, GYM_TEXT_IN_EMAIL_CHARS, gymNameForEmail } from "../invites/gymText.js";
@@ -186,7 +186,7 @@ function staffMessage(
   });
   return {
     ...letter,
-    from: deps.sender.from === null ? "" : memberInviteFrom(deps.sender.from, words.gymName),
+    from: deps.sender.from === null ? "" : staffInviteFrom(deps.sender.from, words.gymName),
     headers: {},
     idempotencyKey: `staff-invite-${claim.id}`,
     tags: [{ name: STAFF_INVITE_SEND_TAG, value: claim.id }],

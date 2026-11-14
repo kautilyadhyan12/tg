@@ -380,10 +380,10 @@ describe("the invitation email", () => {
   });
   it("names the gym in From, on the invitations' own mailbox, with no RFC 5322 specials", () => {
     expect(memberInviteFrom("AI Home Gym <invites@invites.example.com>", "Iron House")).toBe(
-      "Iron House via AI Home Gym <invites@invites.example.com>",
+      "Iron House via KWAZO <invites@invites.example.com>",
     );
     expect(memberInviteFrom("invites@invites.example.com", 'Smith, Jones & Co. "Gym" <x> (1)')).toBe(
-      "Smith Jones & Co Gym x 1 via AI Home Gym <invites@invites.example.com>",
+      "Smith Jones & Co Gym x 1 via KWAZO <invites@invites.example.com>",
     );
   });
 });

@@ -171,7 +171,7 @@ export default function LeadEmailsPanel({ org, readOnly, startOpen = false }) {
                 Send them for me
               </span>
               <span className="text-xs block mt-0.5" style={{ color: 'rgba(255,255,255,0.45)' }}>
-                They come from &ldquo;{org.name} via AI Home Gym&rdquo;, from 8 in the morning by your clock. Up to{' '}
+                They come from &ldquo;{org.name} via KWAZO&rdquo;, from 8 in the morning by your clock. Up to{' '}
                 {settings.perMonth} new leads a month; after that, the rest wait for you on the Leads page as they do
                 now.
               </span>

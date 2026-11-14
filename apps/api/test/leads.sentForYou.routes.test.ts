@@ -506,12 +506,12 @@ d("the app sends a lead's follow-ups (real Postgres)", () => {
       if (message === undefined) throw new Error("no email went");
       const sent = await sendsOf(gym);
       const sendId = (await sql<{ id: string }[]>`SELECT id FROM gym_lead_sends WHERE lead_id = ${lead.id}`)[0]?.id ?? "";
-      expect(message.from).toBe("Iron House Words via AI Home Gym <invites@mail.example.com>");
+      expect(message.from).toBe("Iron House Words via KWAZO <invites@mail.example.com>");
       expect(message.replyTo).toBe("front.desk@ironhouse.example.com");
       expect(message.subject).toBe("Thanks for asking about Iron House Words");
       expect(message.text.startsWith("Hi,\n\n")).toBe(true);
       expect(message.text).not.toContain("evil-site");
-      expect(message.text).toContain(`Sent by AI Home Gym on behalf of Iron House Words, ${POSTAL}.`);
+      expect(message.text).toContain(`Sent by KWAZO on behalf of Iron House Words, ${POSTAL}.`);
       expect(message.headers["List-Unsubscribe-Post"]).toBe("List-Unsubscribe=One-Click");
       expect(message.headers["List-Unsubscribe"]).toMatch(/^<http:\/\/localhost:\d+\/v1\/email\/leads\/unsubscribe\?t=[\w-]+\.[\w-]+>$/);
       expect(message.idempotencyKey).toBe(`lead-follow-up-${sendId}`);
@@ -932,7 +932,7 @@ d("the app sends a lead's follow-ups (real Postgres)", () => {
       const pressed = await api().inject({ method: "POST", url: path, remoteAddress: nextIp(), headers: { "content-type": "application/x-www-form-urlencoded" }, payload: "" });
       expect(pressed.statusCode).toBe(200);
       expect(pressed.body).toContain("You're unsubscribed");
-      expect(pressed.body).toContain("Stop Sent Gym won't email you through AI Home Gym again.");
+      expect(pressed.body).toContain("Stop Sent Gym won't email you through KWAZO again.");
       const after = await readLead(gym, lead.id, owner.cookies);
       expect(after).toMatchObject({ mayEmail: false, followUp: { dueOn: null, by: null } });
       expect(after.followUp.optedOutAt).not.toBeNull();

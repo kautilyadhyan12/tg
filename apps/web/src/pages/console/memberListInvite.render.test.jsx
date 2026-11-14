@@ -363,7 +363,7 @@ describe("Invite's page", () => {
     expect(await box().findByText('2 invitations are being sent.')).toBeTruthy();
     expect(onSent).toHaveBeenCalledTimes(1);
     const words = box().getByLabelText("The invitation's words").value;
-    expect(words).toContain('Iron House has invited you to AI Home Gym');
+    expect(words).toContain('Iron House has invited you to KWAZO');
     expect(words).toContain(`${window.location.origin}/join/iron-house`);
     expect(words).toContain('sign in with the email address Iron House has for you');
   });

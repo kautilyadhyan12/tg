@@ -31,7 +31,7 @@ describe("the reminder's words", () => {
         "Your Visa ending in 1111 expires at the end of November 2026. It pays for your membership at Iron Gym.\n\n" +
         "To keep your payments going, please give Iron Gym your new card at the front desk before then.\n\n" +
         "If you have any questions, you can call 555 0100 or email desk@irongym.example.\n\n" +
-        "Thank you.\n\nIron Gym\n\nSent by AI Home Gym on behalf of Iron Gym, about the card you saved with them.\n",
+        "Thank you,\n\nIron Gym\n\n—\n\nSent by KWAZO on behalf of Iron Gym. You're receiving this because you saved a card with Iron Gym.",
     );
     expect(mail.html).not.toContain("<a ");
   });

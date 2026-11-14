@@ -555,8 +555,8 @@ d("A declined card tried again, and the cardholder told (real Postgres)", { time
     expect(nadiaMail?.text).toContain(`Your Visa ending in 1111 was declined on ${fmt(0)}. The card did not have enough funds.`);
     expect(nadiaMail?.text).toContain(`We will retry this payment automatically on ${fmt(3)}.`);
     expect(nadiaMail?.text).toContain(`Please make your payment by ${fmt(7)} using one of the following options:\n\n• Pay at the front desk\n• Pay with another card`);
-    expect(nadiaMail?.text).toContain("If you have any questions, you can call +1 312 555 0199 or email desk@noticegym.test.\n\nThank you.");
-    expect(nadiaMail?.html).toContain("<ul><li>Pay at the front desk</li><li>Pay with another card</li></ul>");
+    expect(nadiaMail?.text).toContain("If you have any questions, you can call +1 312 555 0199 or email desk@noticegym.test.\n\nThank you,");
+    expect(nadiaMail?.html).toMatch(/>•<\/td><td[^>]*>Pay at the front desk<\/td><\/tr>\n<tr><td[^>]*>•<\/td><td[^>]*>Pay with another card<\/td>/);
     expect(nadiaMail?.replyTo).toBe("desk@noticegym.test");
     const meiMail = mail.find((m) => m.to === "crty-mei@example.com");
     expect(meiMail?.text).toContain("Hi Mei,");

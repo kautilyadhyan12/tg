@@ -254,10 +254,10 @@ describe('the follow-up emails (20c-ii)', () => {
   it('a person who asked to stop is said so, with or without any sent', () => {
     const now = new Date('2026-09-27T12:00:00');
     const stopped = { ...lead, mayEmail: false, followUp: { sent: 1, dueOn: null, dueNow: false, overdue: false, lastSentAt: '2026-09-26T09:00:00.000Z', by: null, notSent: null, optedOutAt: '2026-09-26T10:00:00.000Z' } };
-    expect(followUpState(stopped, now).headline).toBe('Follow-up emails stopped: they asked not to get your emails through AI Home Gym');
+    expect(followUpState(stopped, now).headline).toBe('Follow-up emails stopped: they asked not to get your emails through KWAZO');
     expect(followUpState({ ...stopped, followUp: { ...stopped.followUp, sent: 0, lastSentAt: null } }, now)).toMatchObject({
       next: null,
-      headline: 'Follow-up emails stopped: they asked not to get your emails through AI Home Gym',
+      headline: 'Follow-up emails stopped: they asked not to get your emails through KWAZO',
       sentLine: null,
     });
   });
@@ -279,7 +279,7 @@ describe('the follow-up emails (20c-ii)', () => {
     const spam = { ...lead, mayEmail: false, followUp: { sent: 1, dueOn: null, dueNow: false, overdue: false, lastSentAt: '2026-09-26T09:00:00.000Z', by: null, notSent: null, optedOutAt: '2026-09-26T10:00:00.000Z', optedOutHow: 'complained' } };
     expect(followUpState(spam, now).headline).toBe('Follow-up emails stopped: they marked one of your emails as spam');
     expect(followUpState({ ...spam, followUp: { ...spam.followUp, optedOutHow: 'unsubscribed' } }, now).headline).toBe(
-      'Follow-up emails stopped: they asked not to get your emails through AI Home Gym',
+      'Follow-up emails stopped: they asked not to get your emails through KWAZO',
     );
   });
 

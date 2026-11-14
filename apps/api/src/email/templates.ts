@@ -4,9 +4,11 @@
 // with. The deletion-undo email carries exactly one link, to our own origin.
 import { leadFollowUpLetter, leadGreeting, withArticle } from "@app/shared";
 import type { EmailMessage } from "./resend.js";
-import { memberEmail } from "./layout.js";
+import { BRAND, memberEmail, type EmailBlock } from "./layout.js";
 
 const APP_NAME = "AI Home Gym";
+
+const paragraph = (text: string): EmailBlock => ({ kind: "paragraph", text });
 
 const escapeHtml = (s: string): string =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -90,19 +92,25 @@ export function emailChangedEmail(words: {
   return { to: words.to, subject: `Your ${APP_NAME} email address was changed`, text, html };
 }
 
-/** An invitation's From line: the gym named, on our invitations' own mailbox (CAN-SPAM
- *  names the gym as the sender). `configured` is INVITE_EMAIL_FROM. The characters RFC
- *  5322 treats as special are left out of the display name, so it needs no quoting. */
-export function memberInviteFrom(configured: string, gymName: string): string {
+/** A From line naming the gym, on our invitations' own mailbox (CAN-SPAM names the gym as the
+ *  sender). `configured` is INVITE_EMAIL_FROM. The characters RFC 5322 treats as special are left
+ *  out of the display name, so it needs no quoting. */
+function fromLine(configured: string, gymName: string, appName: string): string {
   const open = configured.lastIndexOf("<");
   const box = open >= 0 ? configured.slice(open + 1, configured.lastIndexOf(">")) : configured;
-  const name = `${gymName} via ${APP_NAME}`.replace(/[()<>[\]:;@\\,."]/g, "").replace(/\s+/g, " ").trim();
+  const name = `${gymName} via ${appName}`.replace(/[()<>[\]:;@\\,."]/g, "").replace(/\s+/g, " ").trim();
   return `${name} <${box}>`;
 }
 
+/** The From line of every email a gym sends its members: "Iron House via KWAZO". */
+export const memberInviteFrom = (configured: string, gymName: string): string => fromLine(configured, gymName, BRAND);
+
+/** The From line of a staff invitation, whose words still name the app the old way. */
+export const staffInviteFrom = (configured: string, gymName: string): string => fromLine(configured, gymName, APP_NAME);
+
 /** A gym's invitation to a person on its list (Part 3 §9.12). The words are fixed;
  *  the gym's name, city and postal address arrive already cleaned (`cleanGymText`),
- *  and both links are to our own origins. The join link carries no token: joining
+ *  and every link is to our own origins. The join link carries no token: joining
  *  needs a sign-in with this same address. */
 export function memberInviteEmail(words: {
   to: string;
@@ -116,27 +124,26 @@ export function memberInviteEmail(words: {
 }): EmailMessage {
   const gym = words.gymName;
   const where = words.gymCity === null || words.gymCity === "" ? gym : `${gym} in ${words.gymCity}`;
-  const lines = {
-    lead: `${where} has invited you to ${APP_NAME}, the app its members use.`,
-    how: `To join ${gym} in the app, sign in with this email address, ${words.to}:`,
-    only: "The invitation works only for someone who signs in with this address.",
-    notMe: `Not a member of ${gym}? Tell them it's not you:`,
-    why: `You are getting this email because ${gym} has you on its member list and asked us to invite you. We won't send you another unless you ask ${gym} for one.`,
-    footer: `Sent by ${APP_NAME} on behalf of ${gym}, ${words.postalAddress}.`,
-    stop: `Stop emails from ${gym} through ${APP_NAME}:`,
-  };
-  const text =
-    `${lines.lead}\n\n${lines.how}\n${words.joinLink}\n\n${lines.only}\n\n${lines.notMe}\n${words.notMeLink}\n\n${lines.why}\n\n` +
-    `${lines.footer}\n${lines.stop} ${words.unsubscribeLink}\n`;
-  const link = (href: string) => `<a href="${escapeHtml(href)}">${escapeHtml(href)}</a>`;
-  const html =
-    `<p>${escapeHtml(lines.lead)}</p>` +
-    `<p>${escapeHtml(lines.how)}<br>${link(words.joinLink)}</p>` +
-    `<p>${escapeHtml(lines.only)}</p>` +
-    `<p>${escapeHtml(lines.notMe)}<br>${link(words.notMeLink)}</p>` +
-    `<p>${escapeHtml(lines.why)}</p>` +
-    `<p style="color:#666;font-size:12px">${escapeHtml(lines.footer)}<br>${escapeHtml(lines.stop)} ${link(words.unsubscribeLink)}</p>`;
-  return { to: words.to, subject: `You're a member of ${gym} — get the app`, text, html };
+  const lead = `${where} has invited you to ${BRAND}, the app its members use.`;
+  return memberEmail({
+    to: words.to,
+    subject: `You're a member of ${gym} — get the app`,
+    gymName: gym,
+    preheader: lead,
+    heading: `Join ${gym} in the app`,
+    greeting: null,
+    body: [
+      paragraph(lead),
+      paragraph(`To join ${gym} in the app, sign in with this email address, ${words.to}.`),
+      { kind: "button", label: `Join ${gym}`, href: words.joinLink, showLink: false },
+      paragraph("The invitation works only for someone who signs in with this address."),
+      { kind: "link", text: `Not a member of ${gym}?`, label: "Tell them it's not you", href: words.notMeLink },
+    ],
+    contact: null,
+    why: `You're receiving this because ${gym} has you on its member list and asked us to invite you. We won't send you another unless you ask ${gym} for one.`,
+    postalAddress: words.postalAddress,
+    unsubscribeHref: words.unsubscribeLink,
+  });
 }
 
 /** A gym's invitation to help run it (Part 3 §10.3; ROADMAP 4a-i). Fixed words; the
@@ -235,10 +242,10 @@ ${lines.footer}
 }
 
 /** A lead's follow-up email `step`, sent by the app for the gym (Part 3 §16.3; ROADMAP
- *  20c-v): the letter the lead's panel writes (`leadFollowUpLetter`), signed by the
- *  gym, then who sent it, the gym's postal address and the Stop link. The name, gym
- *  name and address arrive already cleaned (`cleanGymText`), so none can carry a link.
- *  Null for a step that has no letter. */
+ *  20c-v): the letter the lead's panel writes (`leadFollowUpLetter`), signed by the gym,
+ *  then who sent it, the gym's postal address and the Stop link. The name, gym name and
+ *  address arrive already cleaned (`cleanGymText`), so none can carry a link. Null for a
+ *  step that has no letter. */
 export function leadFollowUpEmail(words: {
   to: string;
   step: number;
@@ -250,21 +257,19 @@ export function leadFollowUpEmail(words: {
   const letter = leadFollowUpLetter(words.step, words.gymName);
   if (letter === null) return null;
   const gym = words.gymName;
-  const lines = {
-    why: `You're getting this because you asked ${gym} about joining and said they could email you.`,
-    footer: `Sent by ${APP_NAME} on behalf of ${gym}, ${words.postalAddress}.`,
-    stop: `Stop emails from ${gym} through ${APP_NAME}:`,
-  };
-  const body = [leadGreeting(words.firstName), ...letter.lines];
-  const text =
-    `${body.join("\n\n")}\n\n${gym}\n${words.postalAddress}\n\n` +
-    `${lines.why}\n${lines.footer}\n${lines.stop} ${words.unsubscribeLink}\n`;
-  const link = (href: string) => `<a href="${escapeHtml(href)}">${escapeHtml(href)}</a>`;
-  const html =
-    body.map((line) => `<p>${escapeHtml(line)}</p>`).join("") +
-    `<p>${escapeHtml(gym)}<br>${escapeHtml(words.postalAddress)}</p>` +
-    `<p style="color:#666;font-size:12px">${escapeHtml(lines.why)}<br>${escapeHtml(lines.footer)}<br>${escapeHtml(lines.stop)} ${link(words.unsubscribeLink)}</p>`;
-  return { to: words.to, subject: letter.subject, text, html };
+  return memberEmail({
+    to: words.to,
+    subject: letter.subject,
+    gymName: gym,
+    preheader: letter.lines[0] ?? letter.subject,
+    heading: letter.subject,
+    greeting: leadGreeting(words.firstName),
+    body: letter.lines.map((text) => paragraph(text)),
+    contact: null,
+    why: `You're receiving this because you asked ${gym} about joining and said they could email you.`,
+    postalAddress: words.postalAddress,
+    unsubscribeHref: words.unsubscribeLink,
+  });
 }
 
 /** Part 4 §5.2's Day-0 undo email: the one link, to our own restore page,
@@ -315,20 +320,21 @@ export function cardDeclinedEmail(words: {
   /** "If you have any questions, you can call 555 0100 or email desk@irongym.com." or null. */
   contact: string | null;
 }): EmailMessage {
-  const before = [words.greeting, words.what, words.why, words.next].filter((line): line is string => line !== null);
-  const after = [...(words.contact === null ? [] : [words.contact]), "Thank you."];
-  const footer = `Sent by ${APP_NAME} on behalf of ${words.gymName}, about a payment you agreed to.`;
-  const text =
-    `${before.join("\n\n")}\n\n${words.payBy}\n\n${words.options.map((o) => `• ${o}`).join("\n")}\n\n` +
-    `${after.join("\n\n")}\n\n${words.gymName}\n\n${footer}\n`;
-  const html =
-    before.map((line) => `<p>${escapeHtml(line)}</p>`).join("") +
-    `<p>${escapeHtml(words.payBy)}</p>` +
-    `<ul>${words.options.map((o) => `<li>${escapeHtml(o)}</li>`).join("")}</ul>` +
-    after.map((line) => `<p>${escapeHtml(line)}</p>`).join("") +
-    `<p>${escapeHtml(words.gymName)}</p>` +
-    `<p style="color:#666;font-size:12px">${escapeHtml(footer)}</p>`;
-  return { to: words.to, subject: `Your payment to ${words.gymName} could not be processed`, text, html };
+  return memberEmail({
+    to: words.to,
+    subject: `Your payment to ${words.gymName} could not be processed`,
+    gymName: words.gymName,
+    preheader: words.what,
+    heading: "Your payment could not be processed",
+    greeting: words.greeting,
+    body: [
+      ...[words.what, words.why, words.next].filter((line): line is string => line !== null).map((text) => paragraph(text)),
+      paragraph(words.payBy),
+      { kind: "bullets", items: words.options },
+    ],
+    contact: words.contact,
+    why: `You're receiving this because a payment you agreed to with ${words.gymName} did not go through.`,
+  });
 }
 
 /** A card on file that expires this month (18d-iii-c): to its holder, from the gym, where the gym
@@ -347,18 +353,21 @@ export function cardExpiringEmail(words: {
   /** "If you have any questions, you can call 555 0100 or email desk@irongym.com." or null. */
   contact: string | null;
 }): EmailMessage {
-  const lines = [words.greeting, `${words.what} ${words.paysFor}`, words.ask, ...(words.contact === null ? [] : [words.contact]), "Thank you."];
-  const footer = `Sent by ${APP_NAME} on behalf of ${words.gymName}, about the card you saved with them.`;
-  const text = `${lines.join("\n\n")}\n\n${words.gymName}\n\n${footer}\n`;
-  const html =
-    lines.map((line) => `<p>${escapeHtml(line)}</p>`).join("") +
-    `<p>${escapeHtml(words.gymName)}</p>` +
-    `<p style="color:#666;font-size:12px">${escapeHtml(footer)}</p>`;
-  return { to: words.to, subject: `Your card on file with ${words.gymName} expires this month`, text, html };
+  return memberEmail({
+    to: words.to,
+    subject: `Your card on file with ${words.gymName} expires this month`,
+    gymName: words.gymName,
+    preheader: words.what,
+    heading: "Your card on file expires this month",
+    greeting: words.greeting,
+    body: [paragraph(`${words.what} ${words.paysFor}`), paragraph(words.ask)],
+    contact: words.contact,
+    why: `You're receiving this because you saved a card with ${words.gymName}.`,
+  });
 }
 
-/** The gym asks the member to add a card in the app (ROADMAP 18d-vii), sent with the message in their inbox, in
- *  the members' email layout (`layout.ts`). The gym name and the membership names arrive already cleaned. */
+/** The gym asks the member to add a card in the app (ROADMAP 18d-vii), sent with the message in their inbox. The gym
+ *  name and the membership names arrive already cleaned. */
 export function cardRequestEmail(words: {
   to: string;
   gymName: string;
@@ -380,16 +389,18 @@ export function cardRequestEmail(words: {
     preheader: words.ask,
     heading: words.others ? "Add a card for the memberships you pay for" : "Add a card for your membership",
     greeting: words.greeting,
-    paragraphs: [`${words.ask} ${words.then}`],
-    steps: { title: "How to add it", items: ["Open the app on your phone.", "Go to My membership.", "Tap Add card."] },
-    button: null,
+    body: [
+      paragraph(`${words.ask} ${words.then}`),
+      { kind: "steps", title: "How to add it", items: ["Open the app on your phone.", "Go to My membership.", "Tap Add card."] },
+    ],
     contact: words.contact,
     why: `You're receiving this because ${words.gymName} asked you to add a card for ${what}.`,
   });
 }
 
-/** The reminder before a membership renews or its minimum term ends (ROADMAP 18v-iv), sent by the gym to
- *  whoever pays for it. The words are `renewalReminderWords`'s, from names already cleaned. */
+/** The reminder before a membership renews or its minimum term ends (ROADMAP 18v-iv), and the notice of a price raise
+ *  (18w), sent by the gym to whoever pays for it. The words are `renewalReminderWords`'s or `priceRaiseWords`'s, from
+ *  names already cleaned; the subject is the heading. */
 export function renewalReminderEmail(words: {
   to: string;
   gymName: string;
@@ -399,19 +410,22 @@ export function renewalReminderEmail(words: {
   /** "If you have any questions, you can call 555 0100 or email desk@irongym.com." or null. */
   contact: string | null;
 }): EmailMessage {
-  const lines = [words.greeting, ...words.lines, ...(words.contact === null ? [] : [words.contact]), "Thank you."];
-  const footer = `Sent by ${APP_NAME} on behalf of ${words.gymName}, about a membership with them.`;
-  const text = `${lines.join("\n\n")}\n\n${words.gymName}\n\n${footer}\n`;
-  const html =
-    lines.map((line) => `<p>${escapeHtml(line)}</p>`).join("") +
-    `<p>${escapeHtml(words.gymName)}</p>` +
-    `<p style="color:#666;font-size:12px">${escapeHtml(footer)}</p>`;
-  return { to: words.to, subject: words.subject, text, html };
+  return memberEmail({
+    to: words.to,
+    subject: words.subject,
+    gymName: words.gymName,
+    preheader: words.lines[0] ?? words.subject,
+    heading: words.subject,
+    greeting: words.greeting,
+    body: words.lines.map((text) => paragraph(text)),
+    contact: words.contact,
+    why: `You're receiving this because of a membership with ${words.gymName}.`,
+  });
 }
 
 /** The copy of a membership agreement a person signed at the desk (ROADMAP 18u-i): the
- *  details the app filled in, the business's own words and the signature, as signed. Plain
- *  text in both: the business's words are never made into links here. The gym name arrives
+ *  details the app filled in, the business's own words and the signature, as signed. The
+ *  business's words are kept exactly and never made into links. The gym name arrives
  *  already cleaned (`gymNameForEmail`). */
 export function membershipAgreementEmail(words: {
   to: string;
@@ -425,22 +439,23 @@ export function membershipAgreementEmail(words: {
   agreementName: string | null;
 }): EmailMessage {
   const gym = words.gymName;
-  const terms = words.agreementName ?? `${gym}'s terms`;
   const lead = `Here is the membership agreement signed with ${gym} on ${words.signedOn}. Keep this email as your copy.`;
-  const signed = `Signed by ${words.signedName}${words.byGuardian ? ", parent or guardian," : ""} on ${words.signedOn}.`;
-  const footer = `Sent by ${APP_NAME} on behalf of ${gym}.`;
-  const facts = words.facts.map((fact) => `${fact.label}: ${fact.value}`).join("\n");
-  const text = `${lead}\n\nThe membership\n${facts}\n\n${terms}\n${words.text}\n\n${signed}\n\n${footer}\n`;
-  const factRows = words.facts.map((fact) => `<tr><td style="padding:2px 12px 2px 0;color:#666;vertical-align:top">${escapeHtml(fact.label)}</td><td style="padding:2px 0">${escapeHtml(fact.value)}</td></tr>`).join("");
-  const html =
-    `<p>${escapeHtml(lead)}</p>` +
-    `<p style="font-weight:700;margin-bottom:4px">The membership</p>` +
-    `<table style="border-collapse:collapse">${factRows}</table>` +
-    `<p style="font-weight:700;margin-bottom:4px">${escapeHtml(terms)}</p>` +
-    `<div style="white-space:pre-wrap">${escapeHtml(words.text)}</div>` +
-    `<p>${escapeHtml(signed)}</p>` +
-    `<p style="color:#666;font-size:12px">${escapeHtml(footer)}</p>`;
-  return { to: words.to, subject: `Your membership agreement with ${gym}`, text, html };
+  return memberEmail({
+    to: words.to,
+    subject: `Your membership agreement with ${gym}`,
+    gymName: gym,
+    preheader: lead,
+    heading: "Your membership agreement",
+    greeting: null,
+    body: [
+      paragraph(lead),
+      { kind: "details", title: "The membership", rows: words.facts },
+      { kind: "document", title: words.agreementName ?? `${gym}'s terms`, text: words.text },
+      paragraph(`Signed by ${words.signedName}${words.byGuardian ? ", parent or guardian," : ""} on ${words.signedOn}.`),
+    ],
+    contact: null,
+    why: `You're receiving this as your copy of a membership agreement signed with ${gym}.`,
+  });
 }
 
 /** The link to sign a membership agreement from afar (ROADMAP 18u-ii-b), sent by the business to
@@ -456,23 +471,24 @@ export function agreementLinkEmail(words: {
   signLink: string;
 }): EmailMessage {
   const gym = words.gymName;
-  const lines = {
-    lead: `${gym} has asked you to read and sign your membership agreement for ${words.membershipName}.`,
-    how: "Open this link to read the agreement and sign it:",
-    until: `The link works until ${words.worksUntil}. Once you sign, a copy is emailed to you.`,
-    ignore: `If you weren't expecting this email, you can ignore it, or contact ${gym}.`,
-    footer: `Sent by ${APP_NAME} on behalf of ${gym}.`,
-  };
-  const text = `${lines.lead}\n\n${lines.how}\n${words.signLink}\n\n${lines.until}\n\n${lines.ignore}\n\n${lines.footer}\n`;
-  const html =
-    `<p>${escapeHtml(lines.lead)}</p>` +
-    `<p>${escapeHtml(lines.how)}</p>` +
-    `<p><a href="${escapeHtml(words.signLink)}" style="display:inline-block;padding:12px 22px;border-radius:999px;background:#111;color:#fff;text-decoration:none;font-weight:600">Read and sign</a></p>` +
-    `<p style="color:#666;font-size:13px">${escapeHtml(words.signLink)}</p>` +
-    `<p>${escapeHtml(lines.until)}</p>` +
-    `<p>${escapeHtml(lines.ignore)}</p>` +
-    `<p style="color:#666;font-size:12px">${escapeHtml(lines.footer)}</p>`;
-  return { to: words.to, subject: `Sign your membership agreement with ${gym}`, text, html };
+  const lead = `${gym} has asked you to read and sign your membership agreement for ${words.membershipName}.`;
+  return memberEmail({
+    to: words.to,
+    subject: `Sign your membership agreement with ${gym}`,
+    gymName: gym,
+    preheader: lead,
+    heading: "Sign your membership agreement",
+    greeting: null,
+    body: [
+      paragraph(lead),
+      paragraph("Open this link to read the agreement and sign it:"),
+      { kind: "button", label: "Read and sign", href: words.signLink, showLink: true },
+      paragraph(`The link works until ${words.worksUntil}. Once you sign, a copy is emailed to you.`),
+      paragraph(`If you weren't expecting this email, you can ignore it, or contact ${gym}.`),
+    ],
+    contact: null,
+    why: `You're receiving this because ${gym} asked you to sign your membership agreement.`,
+  });
 }
 
 /** A membership cancelled in the app (ROADMAP 18l), to the account that pressed Cancel: the day and time it was
@@ -491,11 +507,17 @@ export function membershipCancelledEmail(words: {
 }): EmailMessage {
   const gym = words.gymName;
   const lead = `You cancelled ${words.membershipName} at ${gym} in the app on ${words.cancelledAt}. Keep this email as your confirmation.`;
-  const footer = `Sent by ${APP_NAME} on behalf of ${gym}.`;
-  const body = [words.done, ...words.lines, ...words.notes];
-  const text = `${lead}\n\n${body.join("\n")}\n\n${footer}\n`;
-  const html = `<p>${escapeHtml(lead)}</p>` + body.map((line) => `<p>${escapeHtml(line)}</p>`).join("") + `<p style="color:#666;font-size:12px">${escapeHtml(footer)}</p>`;
-  return { to: words.to, subject: `${words.membershipName} at ${gym} is cancelled`, text, html };
+  return memberEmail({
+    to: words.to,
+    subject: `${words.membershipName} at ${gym} is cancelled`,
+    gymName: gym,
+    preheader: words.done,
+    heading: "Your membership is cancelled",
+    greeting: null,
+    body: [lead, words.done, ...words.lines, ...words.notes].map((text) => paragraph(text)),
+    contact: null,
+    why: `You're receiving this because you cancelled a membership with ${gym} in the app.`,
+  });
 }
 
 /** A membership kept in the app after it was cancelled there (ROADMAP 18l-ii-a), to the account that pressed Keep: the
@@ -512,9 +534,15 @@ export function membershipKeptEmail(words: {
 }): EmailMessage {
   const gym = words.gymName;
   const lead = `You removed your cancellation of ${words.membershipName} at ${gym} in the app on ${words.keptAt}. Keep this email as your confirmation.`;
-  const footer = `Sent by ${APP_NAME} on behalf of ${gym}.`;
-  const body = [words.done, ...words.lines];
-  const text = `${lead}\n\n${body.join("\n")}\n\n${footer}\n`;
-  const html = `<p>${escapeHtml(lead)}</p>` + body.map((line) => `<p>${escapeHtml(line)}</p>`).join("") + `<p style="color:#666;font-size:12px">${escapeHtml(footer)}</p>`;
-  return { to: words.to, subject: `Your cancellation of ${words.membershipName} at ${gym} is removed`, text, html };
+  return memberEmail({
+    to: words.to,
+    subject: `Your cancellation of ${words.membershipName} at ${gym} is removed`,
+    gymName: gym,
+    preheader: words.done,
+    heading: "Your cancellation is removed",
+    greeting: null,
+    body: [lead, words.done, ...words.lines].map((text) => paragraph(text)),
+    contact: null,
+    why: `You're receiving this because you removed a cancellation with ${gym} in the app.`,
+  });
 }
