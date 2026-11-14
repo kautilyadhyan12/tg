@@ -5,24 +5,22 @@ import { Fork, Knife } from "../../look/Cutlery";
 import { Icon } from "../../look/Icon";
 import { fonts, Txt } from "../../look/Txt";
 import { addDays, dayWords, monthWords, sameDay, startOfDay } from "./day";
-import { plateShare, slicePath } from "./plateRules";
-import { localDayKey, type Bar } from "./weekRules";
+import type { FoodBand } from "@app/shared";
+import { slicePath } from "./plateRules";
+import { dayFill, localDayKey, type Bar } from "./weekRules";
 
 // The days as plates (32c-i, Kd's drawing of 2026-11-14: "some cutlery"): this week's days across the top of
 // the Food tab, each a small plate filled as far as that day's calories went, in the week's own colours;
 // the day shown is an orange plate with its fork and knife. The same plates in Pick a day.
 
-const BAND_COLOUR: Record<NonNullable<Bar["band"]>, ColourName> = { on: "good", under: "blue", over: "orange" };
+/** The week's colours; a day not judged (today so far, or no target) soft. */
+const FILL_COLOUR: Record<FoodBand | "open", ColourName> = { on: "good", under: "blue", over: "orange", open: "textSoft" };
 const BAND_SAID: Record<NonNullable<Bar["band"]>, string> = { on: "on target", under: "under target", over: "over target" };
 
-/** The colour a day's plate is filled with: the week's own, and a day not judged (today, or no target) soft. */
-export function plateColour(bar: Bar | undefined): ColourName {
-  if (bar === undefined || bar.band === null) return "textSoft";
-  return BAND_COLOUR[bar.band];
-}
-
-/** One day's plate. `picked`: the day the page shows, orange, with its fork and knife. */
-export function DayPlate({ date, size, bar, picked, later }: { date: number; size: number; bar?: Bar | undefined; picked: boolean; later: boolean }) {
+/** One day's plate. `picked`: the day the page shows, orange, with its fork and knife. `bar`: the day's
+ *  reading; undefined where none was read (the plate is drawn as not known), null where none is asked
+ *  (Pick a day). `today`: its date in orange. */
+export function DayPlate({ date, size, bar, picked, later, today = false }: { date: number; size: number; bar: Bar | null | undefined; picked: boolean; later: boolean; today?: boolean }) {
   const half = size / 2;
   const rim = half - 0.5;
   const well = half * 0.74;
@@ -48,19 +46,32 @@ export function DayPlate({ date, size, bar, picked, later }: { date: number; siz
       </View>
     );
   }
-  const share = bar === undefined ? 0 : bar.band === "over" ? 1 : plateShare(bar.value, bar.target ?? 0);
-  const slice = slicePath(half, half, well - 1, share);
-  const fill = colours[plateColour(bar)];
+  const fill = dayFill(bar);
+  const numberColour: ColourName = later ? "textFaint" : today ? "orange" : fill.kind === "unknown" ? "textSoft" : "text";
+  if (fill.kind === "unknown") {
+    // Not read: a dashed rim and no well, never the look of a day with nothing eaten.
+    return (
+      <View style={{ width: size, height: size }}>
+        <Svg width={size} height={size} accessible={false}>
+          <Circle cx={half} cy={half} r={rim - 1} fill="none" stroke={colours.textFaint} strokeWidth={1.4} strokeDasharray="3 3" />
+        </Svg>
+        <Number words={words} size={size} colour={numberColour} />
+      </View>
+    );
+  }
+  const slice = slicePath(half, half, well - 1, fill.kind === "fill" ? fill.share : 0);
+  const paint = colours[fill.kind === "fill" ? FILL_COLOUR[fill.band] : "textSoft"];
+  const strength = fill.kind === "fill" && fill.band === "open" ? 0.45 : 0.9;
   return (
     <View style={{ width: size, height: size }}>
     <Svg width={size} height={size} accessible={false}>
       <Circle cx={half} cy={half} r={rim} fill={colours.plateRim} stroke={colours.plateEdge} />
       <Path d={`M${String(half * 0.26)},${String(half * 0.7)} A${String(rim * 0.8)},${String(rim * 0.8)} 0 0 1 ${String(half * 0.7)},${String(half * 0.26)}`} stroke={colours.plateRimLight} strokeWidth={1.3} strokeLinecap="round" fill="none" />
       <Circle cx={half} cy={half} r={well} fill={colours.plateWell} stroke={colours.scrim} />
-      {slice.kind === "whole" ? <Circle cx={half} cy={half} r={well - 1} fill={fill} fillOpacity={0.9} /> : null}
-      {slice.kind === "slice" ? <Path d={slice.d} fill={fill} fillOpacity={0.9} /> : null}
+      {slice.kind === "whole" ? <Circle cx={half} cy={half} r={well - 1} fill={paint} fillOpacity={strength} /> : null}
+      {slice.kind === "slice" ? <Path d={slice.d} fill={paint} fillOpacity={strength} /> : null}
     </Svg>
-      <Number words={words} size={size} colour={later ? "textFaint" : "text"} />
+      <Number words={words} size={size} colour={numberColour} />
     </View>
   );
 }
@@ -127,7 +138,7 @@ export function DayPlates({ day, bars, onGo, onPick }: { day: Date; bars: Readon
           const later = d.getTime() > startOfDay(now).getTime();
           const picked = sameDay(d, day);
           const bar = bars.get(localDayKey(d));
-          const said = bar?.band === undefined || bar.band === null ? "" : `, ${BAND_SAID[bar.band]}`;
+          const said = bar === undefined ? "" : bar.band !== null ? `, ${BAND_SAID[bar.band]}` : bar.value !== null && bar.target === null ? ", no target" : "";
           return (
             <Pressable
               key={localDayKey(d)}

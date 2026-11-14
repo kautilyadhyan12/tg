@@ -47,7 +47,20 @@ export function monthLabel(day: string, fromEnd: number): string {
 export function factLead(fact: FoodWeekFact): FoodBand | null {
   if (fact.judged === 0) return null;
   const most = Math.max(fact.under, fact.on, fact.over);
-  return BAND_ORDER.find((b) => fact[b] === most) ?? null;
+  const lead = BAND_ORDER.filter((b) => fact[b] === most);
+  return lead.length === 1 ? (lead[0] ?? null) : null;
+}
+
+/** How a day's plate is filled (32c-i). `undefined`: the day lies outside the days read, so nothing is
+ *  known and the plate says so; `null`: a plate with no reading asked of it (Pick a day). A day with meals
+ *  and no target is the whole plate in the soft colour, never an empty one. */
+export type DayFill = { kind: "unknown" } | { kind: "empty" } | { kind: "fill"; share: number; band: FoodBand | "open" };
+export function dayFill(bar: Bar | null | undefined): DayFill {
+  if (bar === undefined) return { kind: "unknown" };
+  if (bar === null || bar.value === null || !(bar.value > 0)) return { kind: "empty" };
+  if (bar.band === "over") return { kind: "fill", share: 1, band: "over" };
+  if (bar.target === null || !(bar.target > 0)) return { kind: "fill", share: 1, band: "open" };
+  return { kind: "fill", share: Math.min(1, bar.value / bar.target), band: bar.band ?? "open" };
 }
 
 /** One fact in words: "Protein was under target on 5 of 6 days." Null while no finished day is judged. */

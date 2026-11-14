@@ -969,6 +969,8 @@ describe("the Food tab drawn again (32c-i)", () => {
 
   it("a plate of the week goes to its day; a day to come is a plate that can't be pressed", async () => {
     await openFood({ meals: [] });
+    // Whatever day of the week it is, nothing after today can be reached.
+    expect((await screen.findByRole("button", { name: "This is today" })).props.accessibilityState).toMatchObject({ disabled: true });
     const now = new Date();
     const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now.getDay() + 6) % 7));
     for (let i = 0; i < 7; i += 1) {

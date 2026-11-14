@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRoute } from "@react-navigation/native";
 import {
   MEAL_MOST_FOODS,
+  MORE_NUTRIENTS,
   foodSearchResponseSchema,
   mealMeasuresResponseSchema,
   mealPreviewSchema,
@@ -235,6 +236,7 @@ export function FoodScreen() {
   // A meal logged now lands today: the day goes there, and says so in the meal it went to.
   const loggedNow = (type: MealType, name: string) => {
     goTo(new Date());
+    setTab("meals");
     setSaid({ section: type, words: `${name} added.` });
     setAllOf(type);
   };
@@ -370,12 +372,11 @@ export function FoodScreen() {
                 />
               ))}
               {read.kind === "ok" && read.cut ? <Txt kind="small">Meals this far back couldn’t all be read.</Txt> : null}
-              <Credits sources={new Set(rows.flatMap((r) => (r.items ?? []).map((i) => i.nutritionSource)))} />
             </>
           )
         ) : null}
-        {tab === "eat" ? (
-          today ? (
+        {today ? (
+          <View style={tab === "eat" ? null : styles.hidden}>
             <WhatToEatNext
               pickFoods={(plan, onClose) => <AddFood type={plan.mealType} plan={plan} onClose={onClose} onAdded={onClose} />}
               foodsToday={rows === null ? null : rows.map((r) => foodsOfRow(r, view.waiting))}
@@ -388,15 +389,15 @@ export function FoodScreen() {
               fresh={answers}
               onAnswered={answered}
             />
-          ) : (
-            // What to eat is about today's meals: from another day, one press goes back to today.
-            <Card style={styles.row}>
-              <Txt kind="small" style={styles.grow}>
-                What to eat is for today.
-              </Txt>
-              <Button label="Go to today" kind="link" onPress={() => { goTo(new Date()); }} />
-            </Card>
-          )
+          </View>
+        ) : tab === "eat" ? (
+          // What to eat is about today's meals: from another day, one press goes back to today.
+          <Card style={styles.row}>
+            <Txt kind="small" style={styles.grow}>
+              What to eat is for today.
+            </Txt>
+            <Button label="Go to today" kind="link" onPress={() => { goTo(new Date()); }} />
+          </Card>
         ) : null}
         {tab === "week" ? (
           <FoodWeek
@@ -409,6 +410,8 @@ export function FoodScreen() {
           />
         ) : null}
       </View>
+      {/* Where the day's numbers come from, whichever tab is shown. */}
+      {rows === null ? null : <Credits sources={new Set(rows.flatMap((r) => (r.items ?? []).map((i) => i.nutritionSource)))} />}
       <MealPhoto
         open={photoOpen}
         barcode={barcodeFirst}
@@ -421,6 +424,7 @@ export function FoodScreen() {
         onSearch={() => {
           setPhotoOpen(false);
           goTo(new Date());
+          setTab("meals");
           setAdding(sectionOf({ mealType: null, takenAt: new Date().toISOString() }));
         }}
       />
@@ -591,10 +595,15 @@ function Macros({ title, today, targets, retry, eaten, uncounted, about, onSetup
       <View style={styles.left}>
         <Txt kind="small">of {count(goal.kcal)} kcal</Txt>
         {today && eaten !== null ? (
-          <View style={styles.leftPill} accessible accessibilityLabel={`Remaining today, ${left(goal.kcal, eaten.kcal, "kcal")}`}>
-            <Txt kind="small" colour="orangeLight">
-              {left(goal.kcal, eaten.kcal, "kcal")}
+          <View style={styles.leftWords} accessible accessibilityLabel={`Remaining today, ${left(goal.kcal, eaten.kcal, "kcal")}`}>
+            <Txt kind="tiny" style={styles.label}>
+              Remaining today
             </Txt>
+            <View style={styles.leftPill}>
+              <Txt kind="small" colour="orangeLight">
+                {left(goal.kcal, eaten.kcal, "kcal")}
+              </Txt>
+            </View>
           </View>
         ) : null}
       </View>
@@ -635,7 +644,7 @@ function NutrientsLine({ onPress }: { onPress: () => void }) {
   return (
     <Pressable accessibilityRole="button" accessibilityLabel="Nutrients" onPress={onPress} style={({ pressed }) => [styles.nutrients, pressed ? styles.pressed : null]}>
       <Txt kind="tiny" style={styles.grow}>
-        Fibre, sugar, sodium and 7 more
+        Fibre, sugar, sodium and {String(MORE_NUTRIENTS.length - 3)} more
       </Txt>
       <Txt kind="small" colour="orange" style={styles.nutrientsLink}>
         Nutrients
@@ -725,7 +734,7 @@ function Section({ type, rows, canAdd, all, onAll, said, onAdd, onOpen }: Sectio
           No {name.toLowerCase()} logged yet.
         </Txt>
       ) : (
-        (all ? rows : rows.slice(0, SHOWN_FOODS)).map((row) => (
+        (all ? rows : rows.filter((r, i) => i < SHOWN_FOODS || r.waiting)).map((row) => (
           <Pressable
             key={row.id}
             accessibilityRole="button"
@@ -1859,7 +1868,7 @@ function MonthPick({ open, day, onClose, onPick }: { open: boolean; day: Date; o
                     {String(d.getDate())}
                   </Txt>
                 ) : (
-                  <DayPlate date={d.getDate()} size={on ? 40 : 34} picked={on} later={false} />
+                  <DayPlate date={d.getDate()} size={on ? 40 : 34} bar={null} picked={on} later={false} today={sameDay(d, today)} />
                 )}
               </Pressable>
             );
@@ -1889,6 +1898,8 @@ const styles = StyleSheet.create({
   macros: { gap: 10 },
   left: { flexDirection: "row", alignItems: "center", justifyContent: "center", flexWrap: "wrap", gap: 10 },
   nutrients: { flexDirection: "row", alignItems: "center", gap: 6, minHeight: sizes.press },
+  hidden: { display: "none" },
+  leftWords: { flexDirection: "row", alignItems: "center", gap: 8 },
   seeAll: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, minHeight: sizes.press, borderTopWidth: 1, borderTopColor: colours.line },
   nutrientsLink: { fontFamily: fonts.semibold },
   leftPill: { paddingHorizontal: 12, minHeight: 28, justifyContent: "center", borderRadius: sizes.round, borderWidth: 1, borderColor: colours.orangeLine, backgroundColor: colours.orangeFill },

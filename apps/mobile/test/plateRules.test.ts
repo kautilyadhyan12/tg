@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { fillReach, glassShape, partPath, plateShare, slicePath } from "../src/screens/food/plateRules";
+import { dayFill, factLead, type Bar } from "../src/screens/food/weekRules";
 
 // The worst thing the Food tab's plate could do (32c-i): look fuller than what was eaten. Every class of
 // number the server can send, with what the plate must draw.
@@ -55,13 +56,39 @@ describe("a day's glass", () => {
     expect(glassShape(34, 112, 12, 56).liquid?.top).toBe(68);
   });
 
-  it("never runs past its brim, and a little is still a sliver", () => {
+  it("never runs past its brim, and a little is drawn as a little: a thin film in its foot", () => {
     expect(glassShape(34, 112, 12, 500).liquid?.top).toBe(14);
-    expect(glassShape(34, 112, 12, 2).liquid?.top).toBe(115);
+    expect(glassShape(34, 112, 12, 2).liquid?.top).toBe(122);
+    expect(glassShape(34, 112, 12, 2).liquid?.half).toBeLessThan(glassShape(34, 112, 12, 9).liquid?.half ?? 0);
   });
 
   it("has bubbles only where there is room for them", () => {
     expect(glassShape(34, 112, 12, 10).liquid?.bubbles).toEqual([]);
     expect(glassShape(34, 112, 12, 80).liquid?.bubbles).toHaveLength(3);
+  });
+});
+
+// The week's plates (round one, H2): a day never looks emptier than what was eaten.
+describe("how a day's plate is filled", () => {
+  const bar = (over: Partial<Bar>): Bar => ({ day: "2026-11-12", value: 1000, target: 2000, band: "under", today: false, about: false, current: false, ...over });
+  it.each([
+    ["outside the days read: not known", undefined, { kind: "unknown" }],
+    ["Pick a day asks no reading: a plain plate", null, { kind: "empty" }],
+    ["no meals: empty", bar({ value: null, band: null }), { kind: "empty" }],
+    ["half its target, under", bar({}), { kind: "fill", share: 0.5, band: "under" }],
+    ["on target", bar({ value: 1950, band: "on" }), { kind: "fill", share: 0.975, band: "on" }],
+    ["over: full", bar({ value: 2600, band: "over" }), { kind: "fill", share: 1, band: "over" }],
+    ["meals and no target: the whole plate, soft", bar({ target: null, band: null }), { kind: "fill", share: 1, band: "open" }],
+    ["today so far, not judged", bar({ band: null, today: true }), { kind: "fill", share: 0.5, band: "open" }],
+  ] as const)("%s", (_, b, fill) => {
+    expect(dayFill(b)).toEqual(fill);
+  });
+});
+
+describe("a fact's sign (round one, L5)", () => {
+  it("a tie leads with no one band, so its box shows no single colour", () => {
+    expect(factLead({ under: 2, on: 0, over: 2, judged: 4 })).toBeNull();
+    expect(factLead({ under: 1, on: 3, over: 0, judged: 4 })).toBe("on");
+    expect(factLead({ under: 0, on: 0, over: 0, judged: 0 })).toBeNull();
   });
 });

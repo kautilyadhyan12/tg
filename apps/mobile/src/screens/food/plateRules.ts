@@ -49,8 +49,8 @@ export const PLATE_PARTS = [
 export const PART_SWEEP = 114;
 
 /** A day of the week as a glass (32c-i): its outline, open at the top, from `room` down `height`; and the
- *  liquid in it `level` points deep (null: an empty glass), never past the brim and always a sliver once
- *  there is any, with a few bubbles, and where a drip down its right side would run. */
+ *  liquid in it `level` points deep (null: an empty glass), never past the brim, a thin film in its foot
+ *  where there is little, with a few bubbles, and where a drip down its right side would run. */
 export function glassShape(width: number, height: number, room: number, level: number | null) {
   const top = room;
   const foot = room + height;
@@ -62,11 +62,19 @@ export function glassShape(width: number, height: number, room: number, level: n
   const glass = `M${w(left(top))},${w(top)} L${w(left(turn))},${w(turn)} Q${w(left(turn) + 1)},${w(foot)} ${w(left(turn) + 7)},${w(foot)} L${w(right(turn) - 7)},${w(foot)} Q${w(right(turn) - 1)},${w(foot)} ${w(right(turn))},${w(turn)} L${w(right(top))},${w(top)}`;
   const shine = `M${w(left(top) + 5)},${w(top + 8)} L${w(left(turn) + 5)},${w(turn - 8)}`;
   if (level === null || !(level > 0)) return { glass, shine, liquid: null };
-  const surface = Math.min(Math.max(foot - level, top + 2), turn - 1);
-  const liquid = `M${w(left(surface))},${w(surface)} L${w(right(surface))},${w(surface)} L${w(right(turn))},${w(turn)} Q${w(right(turn) - 1)},${w(foot)} ${w(right(turn) - 7)},${w(foot)} L${w(left(turn) + 7)},${w(foot)} Q${w(left(turn) + 1)},${w(foot)} ${w(left(turn))},${w(turn)} Z`;
+  const surface = Math.max(foot - level, top + 2);
+  // Above the curved foot, the liquid fills the glass's sides; within it, a thin film narrowing to the foot,
+  // so a little is drawn as a little.
+  const film = surface > turn;
+  const inset = film ? 1 + (6 * (surface - turn)) / (foot - turn) : 0;
+  const leftAt = film ? left(turn) + inset : left(surface);
+  const rightAt = film ? right(turn) - inset : right(surface);
+  const liquid = film
+    ? `M${w(leftAt)},${w(surface)} L${w(rightAt)},${w(surface)} Q${w(right(turn) - 1)},${w(foot)} ${w(right(turn) - 7)},${w(foot)} L${w(left(turn) + 7)},${w(foot)} Q${w(left(turn) + 1)},${w(foot)} ${w(leftAt)},${w(surface)} Z`
+    : `M${w(left(surface))},${w(surface)} L${w(right(surface))},${w(surface)} L${w(right(turn))},${w(turn)} Q${w(right(turn) - 1)},${w(foot)} ${w(right(turn) - 7)},${w(foot)} L${w(left(turn) + 7)},${w(foot)} Q${w(left(turn) + 1)},${w(foot)} ${w(left(turn))},${w(turn)} Z`;
   const deep = foot - surface;
   const bubbles = deep > 16 ? [[0.3, 0.35, 1.6], [0.62, 0.6, 1.2], [0.45, 0.82, 1.4]].map(([x = 0, y = 0, size = 0]) => ({ x: r(width * x), y: r(surface + deep * y), r: size })) : [];
-  const edge = right(surface) + 1;
+  const edge = rightAt + 1;
   return {
     glass,
     shine,
@@ -74,7 +82,7 @@ export function glassShape(width: number, height: number, room: number, level: n
       path: liquid,
       top: r(surface),
       middle: r(width / 2),
-      half: r((right(surface) - left(surface)) / 2),
+      half: r((rightAt - leftAt) / 2),
       bubbles,
       drip: `M${w(edge)},${w(surface + 1)} q3,9 1,18 q-1,5 1,8`,
       dripEnd: { x: r(edge + 1), y: r(surface + 32) },

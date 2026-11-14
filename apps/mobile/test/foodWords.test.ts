@@ -19,10 +19,10 @@ const before: readonly string[] = (JSON.parse(readFileSync(join(__dirname, "fixt
 
 describe("no word of the Food tab is lost (32c)", () => {
   it("every word it had before is still there, or was replaced on purpose", () => {
-    const now = [...foodWords()].map((w) => w.trim());
-    const kept = new Set(now);
+    const kept = new Set([...foodWords()].map((w) => w.trim()));
     const replaced = new Set(Object.keys(REPLACED).map((w) => w.trim()));
-    const lost = before.filter((w) => !replaced.has(w) && !kept.has(w) && !now.some((n) => n.includes(w)));
+    // The whole words, never a part of another string: a word kept only inside a longer line is lost.
+    const lost = before.filter((w) => !replaced.has(w) && !kept.has(w));
     expect(lost).toEqual([]);
   });
 
