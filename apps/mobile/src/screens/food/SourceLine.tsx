@@ -19,16 +19,19 @@ export const SOURCE_WORDS: Readonly<Record<FoodSource, string>> = {
   label: "From your label",
 };
 
-/** Where a food's numbers come from; the hand-checked foods with a tick. */
-export function SourceLine({ source, before = "" }: { source: FoodSource; before?: string }) {
+/** Where a food's numbers come from; the hand-checked foods with a tick. `after`: how much, on the
+ *  same line (a meal photo's food, Kd's drawing 2c). */
+export function SourceLine({ source, before = "", after = "" }: { source: FoodSource; before?: string; after?: string }) {
   return (
     <View style={styles.source}>
       {before === "" ? null : <Txt kind="tiny">{before}</Txt>}
       {source === "curated" ? <Icon name="check" size={12} colour="goodText" /> : null}
-      {/* USDA in blue under the food, as Kd's drawing 3b has it (32c-ii-a). */}
-      <Txt kind="tiny" colour={source === "curated" ? "goodText" : source === "usda" ? "blue" : "textFaint"}>
+      {/* USDA in blue under the food, as Kd's drawing 3b has it (32c-ii-a); a packaged product in
+          orange, as drawing 2d has it (32c-iii). */}
+      <Txt kind="tiny" colour={source === "curated" ? "goodText" : source === "usda" ? "blue" : source === "openfoodfacts" ? "orange" : "textFaint"}>
         {SOURCE_WORDS[source]}
       </Txt>
+      {after === "" ? null : <Txt kind="tiny">· {after}</Txt>}
     </View>
   );
 }
