@@ -69,6 +69,7 @@ apps and services on this device" (21a-ii; the outside check now fails on it):
 ```
 VITE_API_URL=https://api.getkwazo.com VITE_AUTH_API_URL= VITE_ML_API_URL= VITE_WS_URL= VITE_TRACE_RECORD= corepack pnpm --filter web exec vite build --outDir <scratch>/web-dist --emptyOutDir
 grep -rhoE "(https?|wss?)://(localhost|127\.0\.0\.1):[0-9]+" <scratch>/web-dist   # must print nothing
+node tools/check-web-locally.mjs <scratch>/web-dist   # the server's web settings over this build, in Docker: all must pass
 cd <scratch>/web-dist && tar -cf - . | ssh -i ~/.ssh/kwazo_oracle ubuntu@13.237.195.91 'rm -rf /srv/kwazo/app/infra/web && mkdir -p /srv/kwazo/app/infra/web && tar -x -C /srv/kwazo/app/infra/web'
 ```
 
