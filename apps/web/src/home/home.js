@@ -15,7 +15,7 @@ const CLIPS = { 1: clip1, 2: clip2, 3: clip3, 4: clip4, 5: clip5, 6: clip6, 7: c
 (() => {
   const REDUCE = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const FINE = matchMedia('(hover: hover) and (pointer: fine)').matches;
-  const WIDE = matchMedia('(min-width: 821px) and (min-aspect-ratio: 7/5)');
+  const WIDE = matchMedia('(min-width: 821px) and (min-aspect-ratio: 3/2) and (min-height: 540px)');
   const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
   const ease = (x) => x * x * (3 - 2 * x);
   const navLinks = [...document.querySelectorAll('.top nav a')];
@@ -65,7 +65,13 @@ const CLIPS = { 1: clip1, 2: clip2, 3: clip3, 4: clip4, 5: clip5, 6: clip6, 7: c
   const bar = document.querySelector('.top'); let lastY = window.scrollY;
   addEventListener('scroll', () => { const y = window.scrollY, d = y - lastY; if (y < 90) { bar.classList.remove('away'); lastY = y; } else if (d > 6) { bar.classList.add('away'); lastY = y; } else if (d < -6) { bar.classList.remove('away'); lastY = y; } }, { passive: true });
 
-  if (REDUCE) { S.forEach((s) => s.pins.forEach(({ p }) => p.classList.add('on'))); return; }
+  // Reduce motion: everything shown at once and still, but fitted to the screen like any other visit.
+  if (REDUCE) {
+    S.forEach((s) => s.pins.forEach(({ p }) => p.classList.add('on')));
+    addEventListener('resize', measure); addEventListener('load', measure); measure();
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(measure);
+    return;
+  }
 
   // The liquid with bubbles: everything under the level line, bubbles riding on it, loose bubbles rising above it.
   function liquid(s, q, time, W, H, grow) {
@@ -86,7 +92,8 @@ const CLIPS = { 1: clip1, 2: clip2, 3: clip3, 4: clip4, 5: clip5, 6: clip6, 7: c
   }
   function fit() {
     for (const s of S) { const view = s.el.querySelector('.view'), vw = view.clientWidth, vh = view.clientHeight, wl = s.world.offsetLeft, wt = s.world.offsetTop;
-      for (const { p } of s.pins) { p.classList.remove('nofit'); if (WIDE.matches) continue; const x = wl + p.offsetLeft, y = wt + p.offsetTop;
+      // stickers and the labels on a drawn screen alike: one that does not fit inside its picture is left out
+      for (const p of s.el.querySelectorAll('.st, .tag')) { p.classList.remove('nofit'); if (WIDE.matches) continue; const x = wl + p.offsetLeft, y = wt + p.offsetTop;
         if (x < 8 || y < 8 || x + p.offsetWidth > vw - 8 || y + p.offsetHeight > vh - 8) p.classList.add('nofit'); } }
   }
   function fitHeads() {

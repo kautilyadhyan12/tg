@@ -1,7 +1,11 @@
 /* The two typefaces are served from this site, never a font service: Bowlby One (headings) and Lexend (text),
-   both under the SIL Open Font License 1.1 (fonts/OFL-*.txt), latin subset. */
+   both under the SIL Open Font License 1.1 (fonts/OFL-*.txt), latin subset. One file per weight, never one variable
+   file: Safari's engine drew a variable Lexend at a single thin weight (12a-ii). */
 @font-face{font-family:'Bowlby One';font-style:normal;font-weight:400;font-display:swap;src:url(./fonts/bowlby-one-latin.woff2) format('woff2')}
-@font-face{font-family:'Lexend';font-style:normal;font-weight:400 700;font-display:swap;src:url(./fonts/lexend-latin.woff2) format('woff2')}
+@font-face{font-family:'Lexend';font-style:normal;font-weight:400;font-display:swap;src:url(./fonts/lexend-400-latin.woff2) format('woff2')}
+@font-face{font-family:'Lexend';font-style:normal;font-weight:500;font-display:swap;src:url(./fonts/lexend-500-latin.woff2) format('woff2')}
+@font-face{font-family:'Lexend';font-style:normal;font-weight:600;font-display:swap;src:url(./fonts/lexend-600-latin.woff2) format('woff2')}
+@font-face{font-family:'Lexend';font-style:normal;font-weight:700;font-display:swap;src:url(./fonts/lexend-700-latin.woff2) format('woff2')}
 
 /* Layout: eight full-screen rooms, each with its words on its own calm wall, alternating sides. Each room is
    alive (a looping clip), the things nearest to us move apart from it, and scrolling walks the camera in.
@@ -63,7 +67,7 @@ a.btn:hover{transform:translate(2px,2px);box-shadow:2px 3px 0 var(--ink)}
 .st b{font-weight:400}
 .st.on{transform:rotate(var(--r,-5deg)) scale(1);opacity:1}
 .st.on:hover{transform:rotate(0deg) scale(1.14)}
-.st.nofit{display:none}
+.st.nofit,.tag.nofit{display:none}
 .tag{position:absolute;display:grid;place-items:center;font:700 clamp(7px,.74cqw,14px)/1 var(--body);color:#12241F;letter-spacing:.01em}
 
 /* The words, on the wall */
@@ -110,20 +114,21 @@ a.btn:hover{transform:translate(2px,2px);box-shadow:2px 3px 0 var(--ink)}
 .foot small{display:block;max-width:74em;font-size:13px;line-height:1.6;color:#A9A29A}
 
 @media (max-width:1240px){.top nav{display:none}.top .signin{margin-left:auto}}
-@media (min-width:821px) and (max-height:760px){
+@media (min-width:821px) and (min-aspect-ratio:3/2) and (min-height:540px) and (max-height:760px){
   .copy{top:clamp(80px,12vh,120px)}
   .kicker{margin-bottom:14px}
   .say{margin-top:16px}.acts{margin-top:16px}
   .faq{margin-top:14px;gap:6px}.faq summary{padding:8px 13px}.faq p{padding:0 13px 10px;font-size:13.5px}
 }
 /* Phones and upright screens: the rooms stack, the picture on top and the words under it */
-@media (max-width:820px),(max-aspect-ratio:7/5){
+@media (max-width:820px),(max-aspect-ratio:1499/1000),(max-height:539px){
+  :root{--pic:max(56svh,320px,56.25vw)}
   .scene,.scene:first-child,.scene:last-child{height:auto;margin-top:0}
   .stage{position:relative;height:auto}
   .rim{display:none!important}
   .shot{position:relative;inset:auto;padding-bottom:104px;clip-path:none!important}
-  .view{position:relative;height:56svh;overflow:hidden}
-  .world,.left .world,.right .world{top:0;margin-top:0;height:56svh;width:calc(56svh * 16 / 9);left:50%;right:auto;margin-left:calc(56svh * 16 / 9 * var(--focus) * -1);transform:none!important}
+  .view{position:relative;height:var(--pic);overflow:hidden}
+  .world,.left .world,.right .world{top:0;margin-top:0;height:var(--pic);width:calc(var(--pic) * 16 / 9);left:0;right:auto;margin-left:clamp(calc(100vw - var(--pic) * 16 / 9),calc(50vw - var(--pic) * 16 / 9 * var(--focus)),0px);transform:none!important}
   .front{transform:none!important}
   .copy,.left .copy,.right .copy{position:relative;left:auto;right:auto;top:auto;width:auto;padding:24px 16px 0;transform:none!important;opacity:1!important}
   .head{font-size:clamp(34px,10.4vw,56px)}
