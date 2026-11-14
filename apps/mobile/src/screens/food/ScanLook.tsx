@@ -8,11 +8,23 @@ import { fonts, Txt } from "../../look/Txt";
 // Scan food as Kd's drawing 2 has it (32c-iii): orange corners on the plate, Meal, Barcode and Label
 // in one switch at the foot, and a warm light that sweeps the photo while it is read.
 
-/** Four orange corners where the plate goes. */
-export function PlateCorners() {
+/** The frame's shape, across to down, and how much of the free width it takes. */
+const FRAME_SHAPE = 0.9;
+const FRAME_WIDTH = 0.82;
+const FRAME_GAP = 12;
+
+/** Four orange corners where the plate goes, in the free space between the buttons at the top
+ *  (`top`) and the words at the foot (`bottom`): never over either, on a short or folded phone too. */
+export function PlateCorners({ top, bottom }: { top: number; bottom: number }) {
+  const [room, setRoom] = useState<{ width: number; height: number } | null>(null);
+  const across = room === null ? 0 : Math.max(0, Math.min(room.width * FRAME_WIDTH, (room.height - FRAME_GAP * 2) * FRAME_SHAPE));
   return (
-    <View style={styles.cornersWrap} pointerEvents="none">
-      <View style={styles.corners} testID="plate-corners">
+    <View
+      style={[styles.cornersWrap, { top, bottom }]}
+      pointerEvents="none"
+      onLayout={(e) => { setRoom({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height }); }}
+    >
+      <View style={[styles.corners, { width: across, height: across / FRAME_SHAPE }]} testID="plate-corners">
         <View style={[styles.corner, styles.topLeft]} />
         <View style={[styles.corner, styles.topRight]} />
         <View style={[styles.corner, styles.bottomLeft]} />
@@ -28,7 +40,8 @@ export interface ModeChoice<T extends string> {
   icon: IconName;
 }
 
-/** Choices side by side in one rounded switch, each with its picture; the picked one is orange. */
+/** Choices side by side in one rounded switch, each with its picture; the picked one is orange.
+ *  Each takes an equal share of the width, so the switch stays one line on the smallest phone. */
 export function ModeSwitch<T extends string>({ choices, on, onPick }: { choices: readonly ModeChoice<T>[]; on: T; onPick: (value: T) => void }) {
   return (
     <View style={styles.switch} accessibilityRole="radiogroup">
@@ -44,7 +57,7 @@ export function ModeSwitch<T extends string>({ choices, on, onPick }: { choices:
             style={({ pressed }) => [styles.mode, picked ? styles.modeOn : null, pressed ? styles.pressed : null]}
           >
             <Icon name={c.icon} size={16} colour={picked ? "onOrange" : "text"} />
-            <Txt colour={picked ? "onOrange" : "text"} style={picked ? styles.modeLabelOn : styles.modeLabel} numberOfLines={1}>
+            <Txt colour={picked ? "onOrange" : "text"} style={picked ? styles.modeLabelOn : styles.modeLabel} numberOfLines={1} fit>
               {c.label}
             </Txt>
           </Pressable>
@@ -139,8 +152,8 @@ const CORNER_LINE = 4;
 
 const styles = StyleSheet.create({
   pressed: { opacity: 0.85 },
-  cornersWrap: { position: "absolute", top: 0, bottom: 0, left: 0, right: 0, alignItems: "center", justifyContent: "center" },
-  corners: { width: "82%", aspectRatio: 0.9, marginBottom: "18%" },
+  cornersWrap: { position: "absolute", left: 0, right: 0, alignItems: "center", justifyContent: "center" },
+  corners: {},
   corner: { position: "absolute", width: CORNER, height: CORNER, borderColor: colours.orange },
   topLeft: { top: 0, left: 0, borderTopWidth: CORNER_LINE, borderLeftWidth: CORNER_LINE, borderTopLeftRadius: 18 },
   topRight: { top: 0, right: 0, borderTopWidth: CORNER_LINE, borderRightWidth: CORNER_LINE, borderTopRightRadius: 18 },
@@ -148,9 +161,9 @@ const styles = StyleSheet.create({
   bottomRight: { bottom: 0, right: 0, borderBottomWidth: CORNER_LINE, borderRightWidth: CORNER_LINE, borderBottomRightRadius: 18 },
   switch: {
     alignSelf: "center",
+    width: "100%",
+    maxWidth: 440,
     flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "center",
     gap: 4,
     padding: 4,
     borderRadius: sizes.round,
@@ -158,13 +171,14 @@ const styles = StyleSheet.create({
     borderColor: colours.lineStrong,
     backgroundColor: colours.overWords,
   },
-  mode: { flexDirection: "row", alignItems: "center", gap: 6, minHeight: sizes.press, paddingHorizontal: 18, borderRadius: sizes.round },
+  mode: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, minHeight: sizes.press, paddingHorizontal: 8, borderRadius: sizes.round },
   modeOn: { backgroundColor: colours.orange, experimental_backgroundImage: orangeGradient, boxShadow: shadows.chip },
-  modeLabel: { fontFamily: fonts.medium, fontSize: 15, lineHeight: 20 },
-  modeLabelOn: { fontFamily: fonts.semibold, fontSize: 15, lineHeight: 20 },
+  modeLabel: { flexShrink: 1, fontFamily: fonts.medium, fontSize: 15, lineHeight: 20 },
+  modeLabelOn: { flexShrink: 1, fontFamily: fonts.semibold, fontSize: 15, lineHeight: 20 },
   sweep: { position: "absolute", top: -30, left: 0, right: 0, height: 60, justifyContent: "center" },
-  sweepGlow: { position: "absolute", left: 0, right: 0, top: 0, bottom: 0, backgroundColor: colours.orangeFill, boxShadow: shadows.button },
-  sweepLine: { height: 2, marginHorizontal: "12%", backgroundColor: colours.orangeLight, boxShadow: shadows.button },
+  // A soft light either side of the line, fading to nothing at its edges: never a box.
+  sweepGlow: { position: "absolute", left: 0, right: 0, top: 0, bottom: 0, experimental_backgroundImage: `linear-gradient(180deg, transparent, ${colours.orangeFill} 45%, ${colours.orangeLine} 50%, ${colours.orangeFill} 55%, transparent)` },
+  sweepLine: { height: 2, marginHorizontal: "12%", borderRadius: sizes.round, backgroundColor: colours.orangeLight, boxShadow: shadows.dotGlow },
   spot: { position: "absolute", width: SPOT, height: SPOT, marginLeft: -SPOT / 2, marginTop: -SPOT / 2, alignItems: "center", justifyContent: "center" },
   spotHalo: { position: "absolute", width: SPOT, height: SPOT, borderRadius: sizes.round, borderWidth: 3, borderColor: colours.text, backgroundColor: colours.overPicture, boxShadow: shadows.logo },
   spotDot: { width: 12, height: 12, borderRadius: sizes.round, backgroundColor: colours.text },

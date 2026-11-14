@@ -402,6 +402,8 @@ function Camera({
   const [ready, setReady] = useState(false);
   const [taking, setTaking] = useState(false);
   const [failed, setFailed] = useState<string | null>(null);
+  // How tall the words and buttons at the foot are: the plate's corners stay above them.
+  const [footTall, setFootTall] = useState(0);
 
 
   // How many photo scans are left, each time the camera opens; never a reason to hold anything up.
@@ -542,14 +544,15 @@ function Camera({
           <Round icon="zap" say={torch ? "Turn torch off" : "Turn torch on"} on={torch} onPress={() => { setTorch((t) => !t); }} />
         </View>
       ) : null}
-      {!scanning && allowed ? <PlateCorners /> : null}
+      {/* The plate's corners, while nothing is said over them. */}
+      {!scanning && allowed && words === null ? <PlateCorners top={insets.top + 12 + sizes.press + 12} bottom={footTall} /> : null}
       {scanning && allowed ? (
         <View style={styles.guideWrap} pointerEvents="none">
           <View style={styles.guide} />
           {look.kind === "looking" ? <ActivityIndicator size="large" color={colours.orange} /> : null}
         </View>
       ) : null}
-      <View style={[styles.footBar, { paddingBottom: insets.bottom + 28 }]}>
+      <View style={[styles.footBar, { paddingBottom: insets.bottom + 28 }]} onLayout={(e) => { setFootTall(e.nativeEvent.layout.height); }}>
         {words === null ? null : (
           <View style={styles.notice} accessibilityLiveRegion="polite">
             <Txt kind="small" colour="text" style={styles.centre}>

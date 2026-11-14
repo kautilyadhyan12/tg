@@ -965,6 +965,15 @@ describe("the camera and the reading as drawn (32c-iii)", () => {
     expect(screen.getByRole("button", { name: "Take photo" })).toBeTruthy();
   });
 
+  it("a notice over the camera puts the plate's corners away, so its words are never drawn over them (Kd's phone, 32c-iii)", async () => {
+    await openFood({ meals: [], scans: [() => lost()] });
+    await fireEvent.press(await screen.findByRole("button", { name: "Scan food" }));
+    expect(await screen.findByTestId("plate-corners")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "Take photo" }));
+    expect(await screen.findByText("No connection. Try again.")).toBeTruthy();
+    expect(screen.queryByTestId("plate-corners")).toBeNull();
+  });
+
   it("while the photo is read, it says so under the turning arc, with Close", async () => {
     const phone: Phone = { meals: [], scans: [never] };
     await openFood(phone);
