@@ -143,17 +143,19 @@ describe("the worst thing: nobody starts a workout, run, meal or plan before the
     ["Food", "", "Scan food", false],
     ["Food", "", "Change your daily numbers", false],
     ["Food", "", "Add to Breakfast", false],
-    ["Food", "", "Log Paneer", false],
-    ["Food", "", "Make my plan", false],
-    ["Food", "", "Build my own", false],
-    ["Food", "", "Log Oatmeal", true],
-    ["Food", "", "Swap Oatmeal", true],
-    ["Food", "", "See the week", true],
+    ["Food", " → What to eat", "Log Paneer", false],
+    ["Food", " → What to eat", "Make my plan", false],
+    ["Food", " → What to eat", "Build my own", false],
+    ["Food", " → What to eat", "Log Oatmeal", true],
+    ["Food", " → What to eat", "Swap Oatmeal", true],
+    ["Food", " → What to eat", "See the week", true],
     ["Workout", " → Running", "Start run", false],
   ])("on %s%s, %s opens setup at once, and nothing is started (a meal plan: %s)", async (tab, part, button, plan) => {
     const { server } = await signIn(notSetUp, 60_000, fed(plan));
     await fireEvent.press(await screen.findByRole("tab", { name: tab }));
-    if (part !== "") await press(part.replace(" → ", ""));
+    // Running is a button on Workout; What to eat a tab of Food's own (32c-i).
+    if (part === " → What to eat") await fireEvent.press(await screen.findByRole("tab", { name: "What to eat" }));
+    else if (part !== "") await press(part.replace(" → ", ""));
     const [shown] = await screen.findAllByRole("button", { name: button });
     if (shown === undefined) throw new Error(`no ${button}`);
     await fireEvent.press(shown);
@@ -247,6 +249,7 @@ describe("the look", () => {
     await looking(SHORT * 3);
     expect(screen.queryByRole("header", { name: "Your goal" })).toBeNull();
     await fireEvent.press(await screen.findByRole("tab", { name: "Food" }));
+    await fireEvent.press(await screen.findByRole("tab", { name: "What to eat" }));
     await fireEvent.press(await screen.findByRole("button", { name: "Build my own" }));
     await looking(SHORT);
     expect(screen.queryByRole("header", { name: "Your goal" })).toBeNull();
@@ -285,6 +288,7 @@ describe("the look", () => {
       expect(screen.queryByRole("header", { name: "Your goal" })).toBeNull();
     });
     await fireEvent.press(await screen.findByRole("tab", { name: "Food" }));
+    await fireEvent.press(await screen.findByRole("tab", { name: "What to eat" }));
     await fireEvent.press(await screen.findByRole("button", { name: "Build my own" }));
     await looking(SHORT);
     expect(screen.queryByRole("header", { name: "Your goal" })).toBeNull();
@@ -315,6 +319,7 @@ describe("round one: the server has not answered", () => {
     const answer: { now: Route } = { now: never };
     await reopen((body) => answer.now(body));
     await fireEvent.press(await screen.findByRole("tab", { name: "Food" }, { timeout: NOTE_CHECK_WAIT_MS + 3000 }));
+    await fireEvent.press(await screen.findByRole("tab", { name: "What to eat" }));
     answer.now = setUp;
     await turn("active");
     await press("Build my own");
