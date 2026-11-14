@@ -1109,7 +1109,7 @@ export function cardAskBoxWords(preview, today = null) {
 export function cardAskDoneLine(done) {
   const kept = done.kept.reduce((sum, group) => sum + group.count, 0);
   const did = `Asked ${people(done.asked)} to add a card. They'll see it in their inbox in the app.`;
-  return kept === 0 ? did : `${did} ${n(kept)} weren't asked.`;
+  return kept === 0 ? did : `${did} ${n(kept)} ${kept === 1 ? "wasn't" : "weren't"} asked.`;
 }
 
 /** What a press did: "Message sent to 12 people. 2 didn't get it." */

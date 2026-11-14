@@ -122,7 +122,7 @@ describe('Ask to add card, for the people selected', () => {
     orgService.sendCardRequest.mockResolvedValue({ data: cardRequestDoneResponseSchema.parse({ done: { asked: 1, kept: [{ reason: 'paid_by', count: 1 }] } }) });
     fireEvent.click(box.getByTestId('card-ask-press'));
     expect(await box.findByTestId('card-ask-done')).toBeTruthy();
-    expect(box.getByTestId('card-ask-done').textContent).toBe("Asked 1 person to add a card. They'll see it in their inbox in the app. 1 weren't asked.");
+    expect(box.getByTestId('card-ask-done').textContent).toBe("Asked 1 person to add a card. They'll see it in their inbox in the app. 1 wasn't asked.");
     const [gymId, body] = orgService.sendCardRequest.mock.calls[0];
     expect(gymId).toBe(GYM);
     expect(body).toMatchObject({ selection: { kind: 'ticked', entryIds: [maya.entryId, sam.entryId] }, askCount: 1, askDigest: 'box-1' });
