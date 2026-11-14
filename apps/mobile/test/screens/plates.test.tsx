@@ -1,5 +1,5 @@
 import { render, screen } from "@testing-library/react-native";
-import { DayPlate } from "../../src/screens/food/DayPlates";
+import { DayPlate, DayPlates, weekOf } from "../../src/screens/food/DayPlates";
 import { MacroPlate } from "../../src/screens/food/MacroPlate";
 import { PART_SWEEP, PLATE_PARTS, partPath } from "../../src/screens/food/plateRules";
 import type { Bar } from "../../src/screens/food/weekRules";
@@ -66,5 +66,16 @@ describe("a day's plate", () => {
     await render(<DayPlate date={12} size={34} bar={bar({ value: null, band: null })} picked={false} later={false} />);
     expect(filled()).toHaveLength(0);
     expect(dashed()).toHaveLength(0);
+  });
+});
+
+describe("the week's plates", () => {
+  it("a day to come is a plain plate, never drawn as not known", async () => {
+    const today = new Date();
+    await render(<DayPlates day={today} bars={new Map()} onGo={() => undefined} onPick={() => undefined} />);
+    const later = weekOf(today).filter((d) => d.getTime() > today.getTime()).length;
+    const past = 7 - later - 1;
+    // With nothing read, every past day is not known; today is the orange plate; a day to come is plain.
+    expect(drawn("RNSVGCircle").filter((c) => c.props["strokeDasharray"] !== undefined)).toHaveLength(past);
   });
 });

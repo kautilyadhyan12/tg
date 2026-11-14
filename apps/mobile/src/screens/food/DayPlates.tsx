@@ -137,8 +137,9 @@ export function DayPlates({ day, bars, onGo, onPick }: { day: Date; bars: Readon
         {weekOf(day).map((d, i) => {
           const later = d.getTime() > startOfDay(now).getTime();
           const picked = sameDay(d, day);
-          const bar = bars.get(localDayKey(d));
-          const said = bar === undefined ? "" : bar.band !== null ? `, ${BAND_SAID[bar.band]}` : bar.value !== null && bar.target === null ? ", no target" : "";
+          // A day to come has no reading to know: a plain, faded plate, never the "not known" one.
+          const bar = later ? null : bars.get(localDayKey(d));
+          const said = bar === undefined || bar === null ? "" : bar.band !== null ? `, ${BAND_SAID[bar.band]}` : bar.value !== null && bar.target === null ? ", no target" : "";
           return (
             <Pressable
               key={localDayKey(d)}
