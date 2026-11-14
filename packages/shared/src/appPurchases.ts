@@ -130,7 +130,7 @@ export const APP_PURCHASE_WORDS = {
   renewing_held: (name: string): string => `You already have ${name}, which renews. To change it, ask the front desk.`,
   declined: (card: string): string => `${card} was declined, so nothing was charged. Update your card or try again later.`,
   /** The bank asked to check it was them, and the check was not done. */
-  verification: "Your bank needs to confirm this payment. Try again, and follow your bank's steps.",
+  verification: "Your bank needs to verify this payment. You weren’t charged. Press Pay to try again.",
   /** Square refused the charge itself, nothing taken. */
   card_refused: "Your card couldn't be charged, so nothing was taken. Try again, or buy this at the front desk.",
   /** `check`, said on the phone where a purchase ended that way. */

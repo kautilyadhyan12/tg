@@ -591,7 +591,7 @@ d("Buy a repeating membership in the app: on their own card, once, given only fo
     const first = await buyPress(gym, ana.app, await lineOf(gym, ana.app, gold), { requestKey: key });
     expect(first.statusCode, first.body).toBe(409);
     expect(errorOf(first)).toBe("app_purchase_verification");
-    expect(messageOf(first)).toBe("Your bank needs to confirm this payment. Try again, and follow your bank's steps.");
+    expect(messageOf(first)).toBe("Your bank needs to verify this payment. You weren’t charged. Press Pay to try again.");
     const again = await buyPress(gym, ana.app, await lineOf(gym, ana.app, gold), { requestKey: key });
     expect(errorOf(again)).toBe("app_purchase_verification");
     // A decline, sent again with its key, is still a decline.

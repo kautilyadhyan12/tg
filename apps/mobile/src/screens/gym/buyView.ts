@@ -50,11 +50,11 @@ export const CHARGING = "Charging your card…";
 export const chargedThrough = (card: { brand: string; last4: string }): string => `Your ${cardName(card)} is charged through Square.`;
 /** The bank's check before Pay on a repeating membership (20i-ii): under Pay while Square checks, the box's title where the
  *  card's bank asks, and how a check that sent nothing ended. */
-export const CHECKING_BANK = "Checking with your bank…";
-export const BANK_TITLE = "Confirm with your bank";
-export const BANK_NO = "Your bank didn’t confirm this payment, so nothing was charged. Try again or update your card.";
-export const BANK_CLOSED = "Payment not completed, so nothing was charged. Press Pay to try again.";
-export const BANK_NOT_REACHED = "Couldn’t connect to Square, so nothing was charged. Check your internet and try again.";
+export const CHECKING_BANK = "Verifying with your bank…";
+export const BANK_TITLE = "Verify your payment";
+export const BANK_NO = "Your bank couldn’t verify this payment. You weren’t charged. Try again or update your card.";
+export const BANK_CLOSED = "Payment cancelled. You weren’t charged.";
+export const BANK_NOT_REACHED = "Couldn’t connect. You weren’t charged. Check your internet and try again.";
 /** A card charge that ended with nothing taken, said after Check status. */
 export const CARD_NOT_TAKEN = "Square didn’t take this payment, so nothing was charged.";
 
