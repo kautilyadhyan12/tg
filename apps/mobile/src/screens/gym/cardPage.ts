@@ -58,7 +58,7 @@ window.kwazoCheck=function(){
 if(card===null||busy||!form.check)return;
 busy=true;
 var k=form.check;
-card.tokenize({amount:k.amount,currencyCode:k.currencyCode,intent:"CHARGE",customerInitiated:true,sellerKeyedIn:false,billingContact:form.contact},k.cardId).then(function(r){busy=false;if(r&&r.status==="OK"&&typeof r.token==="string")say({kind:"pass",token:r.token});else say({kind:"not_taken"});},function(e){busy=false;var m=String((e&&e.message)||"");say({kind:/verif/i.test(m)?"bank_no":"not_taken"});});
+card.tokenize({amount:k.amount,currencyCode:k.currencyCode,intent:"CHARGE",customerInitiated:true,sellerKeyedIn:false,billingContact:form.contact},k.cardId).then(function(r){busy=false;if(r&&r.status==="OK"&&typeof r.token==="string")say({kind:"pass",token:r.token});else say({kind:"not_taken"});},function(e){busy=false;var m=String((e&&e.message)||"");say({kind:/verif/i.test(m)?"bank_no":navigator.onLine===false?"blocked":"not_taken"});});
 };
 window.kwazoSave=function(){
 if(card===null||busy)return;

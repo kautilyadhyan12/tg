@@ -221,7 +221,7 @@ describe("the bank's check gets room on the page", () => {
 });
 
 /** The page with a check (20i-ii), run with a stand-in for Square: what it asks Square, and what it says back. */
-function checkPageWith(answer: () => Promise<{ status: string; token?: string }>) {
+function checkPageWith(answer: () => Promise<{ status: string; token?: string }>, onLine = true) {
   const html = cardPage(form(), { cardId: "ccof:CA4SEtara", amount: "49.99", currencyCode: "USD" });
   if (html === null) throw new Error("no page");
   const script = runningScripts(html)[0] ?? "";
@@ -253,7 +253,7 @@ function checkPageWith(answer: () => Promise<{ status: string; token?: string }>
   class MutationObserver {
     observe() { return undefined; }
   }
-  runInNewContext(script, { window, document, MutationObserver });
+  runInNewContext(script, { window, document, MutationObserver, navigator: { onLine } });
   const settle = () => new Promise((done) => setTimeout(done, 0));
   return {
     said,
@@ -309,6 +309,17 @@ describe("the bank's check before Pay asks Square about the saved card, for Pay'
       await page.check();
       expect(page.said.at(-1)).toEqual({ kind });
     }
+  });
+
+  it("a check that fails with the phone offline reads as no connection, never as a card Square can't use (the re-check's Low)", async () => {
+    const page = checkPageWith(() => Promise.reject(new Error("An unexpected error occurred while using Card.")), false);
+    await page.load();
+    await page.check();
+    expect(page.said.at(-1)).toEqual({ kind: "blocked" });
+    const bank = checkPageWith(() => Promise.reject(new Error("An error occurred while verifying the buyer")), false);
+    await bank.load();
+    await bank.check();
+    expect(bank.said.at(-1)).toEqual({ kind: "bank_no" });
   });
 
   it("asks once a press: before Square is ready nothing, and a second press while it works asks nothing more", async () => {
