@@ -326,7 +326,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
          - 18d-iv-e-ii-a. [x] **On a member's payment or fee** — merged 2026-11-02 (PR #435).
          - 18d-iv-e-ii-b. [x] **On a sale** — merged 2026-11-02 (PR #438).
        - 18d-iv-f. [x] **Pause automatic payments** — merged 2026-11-02 (PR #441).
-     - 18d-vii. [ ] **Ask members to add their card** (Kd, 2026-10-30, `rulings/2026-10-30-18d-iii-b-iv-f.md`): a button that asks every member with no card on file to add it in the app, as saved cards don't move from a gym's old software. After Stage 5 item 20's saving their card. Web folder 1.
+     - 18d-vii. [x] **Ask members to add their card** — merged 2026-11-14 (PR #547).
      - 18d-v. [ ] **KWAZO listed in Square's App Marketplace, at launch** (Kd, 2026-10-20): once the site is online with Square's live return address. Square's partner page: "Any developer" can list, no fee or developer-country rule named; Square's quality review first. Unproven for a developer in India until applied.
    - 18e. [ ] The second Connect button (GoCardless: the member's bank account): closed to Kd without a business in one of GoCardless's 31 countries (`rulings/2026-10-20-18d-ii.md`). 18f. [ ] **Razorpay, for Indian gyms, before launch** (Kd, 2026-10-22: first launch India, the US and Canada): UPI AutoPay, cards, a page for paying once, refunds, within the RBI's e-mandate rules; waits for Razorpay to accept Kd's partner sign-up. Web folder 2.
    - 18g. **Receipts** (Kd, RULINGS 2026-10-08), split 2026-10-15 in two (the line as first written is in `handoff/2026-10-15-18g-i.md`):
@@ -506,6 +506,8 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
      - 24a-ii. [x] **Give it to members** — merged 2026-11-06 (PR #480).
    - 24b. [ ] **A workout plan**, once Stage 5's items 36 and 60 are built.
    - 24c. [ ] **A run plan**, once Stage 5's item 37 is built.
+25. [ ] **Every member email in the new layout** (Kd, 2026-11-14, `rulings/2026-11-14-18d-vii.md`): invitations, receipts, reminders and the rest move onto 18d-vii's
+    `email/layout.ts` (the gym at the top, a heading, the words in a card, a footer saying who sent it and why), each shown to Kd as a picture first. The web folder, next.
 
 ## Stage 3 — Money
 
@@ -660,6 +662,8 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
       - 20i-ii. [ ] **The bank's check on the phone** (UK, Europe, Japan): Square's check before the charge where the bank asks, tried on Square's test cards first (its `verifyBuyer` is being retired). Feature folder 1.
     - 20j. [x] **A promo code on Buy** · merged 2026-11-13 · PR #543
     - 20k. [x] **Cancel and keep a membership on the phone** · merged 2026-11-13 · PR #540
+    - 20l. [ ] **Add card from the gym's request** (18d-vii's message, `rulings/2026-11-14-18d-vii.md`): the inbox message of kind `card_request`
+      has a button that opens Add card on My membership. Feature folder 1.
 21. **Release** (split 2026-11-07, Kd: the release is prepared alongside the building, and Google's closed test starts as soon as the app can be installed from Google Play, without waiting for workouts or exercises; `rulings/2026-11-07-21-closed-test-early.md` keeps the line as first written and Google's rules as read that day).
     - 21a. **The server online, free for the test** (split 2026-11-08: the server first; on AWS's free plan in Sydney, Oracle having refused Kd's card; `handoff/2026-11-09-21a-i.md` keeps its line as first written).
       - 21a-i. [x] **The server at its own https address** · merged 2026-11-09 · PR #509

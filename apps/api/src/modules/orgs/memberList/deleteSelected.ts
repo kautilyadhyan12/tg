@@ -107,7 +107,7 @@ export async function previewDeleteSelected(
 ): Promise<MemberListDeletePreview | null> {
   const { privileges } = await requirePrivilege(deps, gymId, userId, "members.confirm");
   if (!(await limit())) return null;
-  const ids = await selectedIds(deps, gymId, request.selection);
+  const ids = await selectedIds(deps, gymId, request.selection, userId);
   const records = await repo.recordsAmong(deps.sql, gymId, ids);
   // Only a box that deletes somebody asks about Square and the app; more than the most one press deletes is refused whole.
   const past = pastIds(records);
@@ -139,7 +139,7 @@ export async function deleteSelected(
   });
   let ids: string[];
   try {
-    ids = await selectedIds(deps, gymId, input.selection);
+    ids = await selectedIds(deps, gymId, input.selection, userId);
   } catch (err) {
     // A "Select all" that now chooses nobody at all.
     if (err instanceof SelectionChanged && err.now.count === 0) return await nothingLeft(deps.sql);

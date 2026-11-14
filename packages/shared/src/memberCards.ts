@@ -199,6 +199,10 @@ export const memberCardViewSchema = z
     terminalSave: terminalSaveSchema.nullable(),
     /** Staff paused automatic payments of whoever pays for this person (18d-iv-f): the day, on the gym's calendar. */
     autopayPausedOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().default(null),
+    /** The gym's day staff last asked them to add a card in the app (18d-vii), while they have none. */
+    cardAskedOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().default(null),
+    /** Ask to add card is offered for them now: the one rule says they would be asked. */
+    canAsk: z.boolean().default(false),
   })
   .strict();
 export type MemberCardView = z.infer<typeof memberCardViewSchema>;

@@ -14,7 +14,7 @@ export async function previewMealPlanSelected(
   await requirePrivilege(deps, gymId, userId, "members.confirm");
   await requirePrivilege(deps, gymId, userId, "plans.manage");
   if (!(await limit())) return null;
-  const ids = await selectedIds(deps, gymId, request.selection);
+  const ids = await selectedIds(deps, gymId, request.selection, userId);
   return await giving.previewGiveToRecords(deps, gymId, request.planId, ids);
 }
 
@@ -24,6 +24,6 @@ export async function giveMealPlanSelected(
   await requirePrivilege(deps, gymId, userId, "members.confirm");
   await requireWritablePrivilege(deps, gymId, userId, "plans.manage");
   if (!(await limit())) return null;
-  const ids = await selectedIds(deps, gymId, request.selection);
+  const ids = await selectedIds(deps, gymId, request.selection, userId);
   return await giving.giveToRecords(deps, userId, gymId, request.planId, ids);
 }

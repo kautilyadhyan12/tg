@@ -1773,6 +1773,8 @@ export interface EntriesPageInput {
   /** Only these records, the current ones with a membership agreement to sign (18u-ii-a); null
    *  for no filter. */
   agreementNotSigned: readonly string[] | null;
+  /** Only these records, the current ones with no card on file who need one (18d-vii); null for no filter. */
+  noCardIds: readonly string[] | null;
   /** The people whose three kinds of word the app answers (23a-i: they hold a membership
    *  here), and which of them pass the word filters asked, by the app's own words. Null
    *  where no word filter is asked. */
@@ -1800,6 +1802,7 @@ function entriesWhere(sql: SqlOrTx, input: EntriesFilterInput) {
   const waiverAsked = input.waiverNotSigned === null ? null : input.waiverNotSigned.inUse;
   const waiverSigned = [...(input.waiverNotSigned?.signed ?? [])];
   const agreementIds = input.agreementNotSigned === null ? null : [...input.agreementNotSigned];
+  const noCardIds = input.noCardIds === null ? null : [...input.noCardIds];
   const heldIds = [...(input.held?.ids ?? [])];
   const heldPassing = [...(input.held?.passing ?? [])];
   return sql`
@@ -1840,7 +1843,8 @@ function entriesWhere(sql: SqlOrTx, input: EntriesFilterInput) {
         AND (${overIds}::uuid[] IS NULL OR (e.former_at IS NULL AND e.id = ANY(${overIds}::uuid[])))
         AND (${waiverAsked}::boolean IS NULL
              OR (${waiverAsked}::boolean AND e.former_at IS NULL AND e.id <> ALL(${waiverSigned}::uuid[])))
-        AND (${agreementIds}::uuid[] IS NULL OR (e.former_at IS NULL AND e.id = ANY(${agreementIds}::uuid[])))`;
+        AND (${agreementIds}::uuid[] IS NULL OR (e.former_at IS NULL AND e.id = ANY(${agreementIds}::uuid[])))
+        AND (${noCardIds}::uuid[] IS NULL OR (e.former_at IS NULL AND e.id = ANY(${noCardIds}::uuid[])))`;
 }
 
 /** Every record the filter chooses, in the list's order: who "Select all" selects. */

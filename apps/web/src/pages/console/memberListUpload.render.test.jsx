@@ -126,11 +126,12 @@ const refusal = (status, data) => Object.assign(new Error('refused'), { response
 
 let onClose;
 let onImported;
+let onShowNoCard = null;
 
 function renderBox() {
   onClose = vi.fn();
   onImported = vi.fn();
-  render(<MemberListUpload gymId={GYM} gym={{ name: 'Iron House Gym' }} words={WORDS} readOnly={false} onClose={onClose} onImported={onImported} />);
+  render(<MemberListUpload gymId={GYM} gym={{ name: 'Iron House Gym' }} words={WORDS} readOnly={false} onClose={onClose} onImported={onImported} onShowNoCard={onShowNoCard} />);
 }
 
 /** Opens the box, pastes two rows, and waits for Review with `p`. */
@@ -225,6 +226,8 @@ describe('the worst thing: nobody leaves who was not answered for', () => {
     await screen.findByTestId('member-import-done');
     // A gym moving from other software is told, at the end of the import, that its old billing must stop (Kd, 2026-10-30).
     expect(screen.getByTestId('billing-elsewhere-note').textContent).toBe('If your old software or Square Subscriptions still bills your members, stop that billing before you charge their cards here. Otherwise they pay twice.');
+    // Asking for cards (18d-vii) is offered only where the list says the gym takes them in the app.
+    expect(screen.queryByTestId('ask-cards')).toBeNull();
     expect(orgService.confirmMemberList).toHaveBeenCalledWith(GYM, UPLOAD, {
       permissionConfirmed: true,
       acknowledgeLargeChange: true,
@@ -336,6 +339,26 @@ describe('the worst thing: nobody leaves who was not answered for', () => {
     fireEvent.click(importButton());
     await screen.findByTestId('member-import-done');
     expect(orgService.confirmMemberList.mock.calls[0][2].marks).toEqual({ missingDigest: DIGEST, left: [], stay: [priya.entryId] });
+  });
+
+  it('at a gym that takes cards in the app, the end of an import offers to ask members to add their card (18d-vii)', async () => {
+    onShowNoCard = vi.fn();
+    try {
+      const priya = missingOne(4, 'Priya Nair', {}, { source: 'typed', addedAt: '2026-09-20T09:00:00.000Z' });
+      orgService.getMemberListMissing.mockResolvedValueOnce(missingRead([priya]));
+      await reviewWith(preview({ list: list({ new: 3, unchanged: 7, gone: 1, canBeInvited: 3 }), guard: { ...calm, entriesGoing: 1, listSize: 8 } }));
+      await screen.findByTestId('hero-hand');
+      tickPermission();
+      orgService.confirmMemberList.mockResolvedValueOnce({ data: { confirmed: confirmedAnswer() } });
+      fireEvent.click(importButton());
+      await screen.findByTestId('member-import-done');
+      const ask = screen.getByTestId('ask-cards');
+      expect(ask.textContent).toBe('Ask members to add their card');
+      fireEvent.click(ask);
+      expect(onShowNoCard).toHaveBeenCalledTimes(1);
+    } finally {
+      onShowNoCard = null;
+    }
   });
 
   it('someone added here and unticked leaves through the box before Import, whatever the card says', async () => {

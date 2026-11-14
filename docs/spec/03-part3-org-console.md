@@ -4320,8 +4320,15 @@ is a gym with no country. People who use the app for themselves may be anywhere.
   -f. A gym that uses Square Subscriptions cancels them in Square.
   *A gym moving from other software (Kd, 2026-10-30):* saved cards don't come with an import: they stay with the payment company, and
   members add them again. A connected gym's Settings → Payments and the end of every import say to stop billing in the old software or
-  Square Subscriptions first, as the app cannot see that billing and members would pay twice. *Planned, 18d-vii:* a button that asks every
-  member with no card on file to add it in the app, after Stage 5 item 20's saving their card. The plan and what was tried in Square's
+  Square Subscriptions first, as the app cannot see that billing and members would pay twice. *As built, 18d-vii (2026-11-14):* **Ask to add card**. The Members
+  Filter's **No card on file** shows every current member who pays for a membership that renews by itself (their own, or one they pay for)
+  and has no card in the gym's Square account, by the rule the app's own charges read; staff tick people and press **Ask to add card** in
+  the bar, and a box names who will be asked and who won't, with the reason (already a card, somebody else pays, nothing renews, not in the
+  app with Invite, a page two accounts share, asked in the last 7 days, a past member). Each person asked gets one message in their inbox in
+  the app, a payment notice they cannot switch off ("Iron House asks you to add a card for your Gold Monthly membership. It will be charged
+  automatically each time it renews. To add it, open My membership and tap Add card."). Their Card on file says "Asked to add a card in the
+  app on …", with **Ask Maya to add a card** for one person. Settings → Payments and the end of an import open the list on No card on file.
+  For staff with both "Record members' payments" and "Keep the member list and invite", at a gym that takes cards in the app. The plan and what was tried in Square's
   test area are in `handoff/2026-10-29-18d-iii-b-iii.md` and `rulings/2026-10-29-18d-iii-b-iii.md`.
 - **Cash, bank transfer, a card on another machine, and UPI in India** (18r): recorded.
 

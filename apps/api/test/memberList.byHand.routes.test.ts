@@ -1159,6 +1159,11 @@ d("member list: keeping it by hand (real Postgres)", () => {
       // a record that is gone is never sent (`cardExpiry.routes.test.ts`).
       "gym_card_expiry_notices.entry_id",
       "gym_card_expiry_notices.gym_id",
+      // The email with a card request (0240; 18d-vii): the same. A record joined or deleted for good lets go of it
+      // (`entry_id` alone to null), and the worker never sends one whose record is gone, clearing its address
+      // (`cardRequests.routes.test.ts`).
+      "gym_card_request_emails.entry_id",
+      "gym_card_request_emails.gym_id",
       // A class booking (0075): it is the app account's, so the join moves it to the kept
       // record (driven in `classBookings.routes.test.ts`) and a deleted record lets it go
       // (`db.migration.test.ts`).
