@@ -1,11 +1,9 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Linking, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
+import { Linking, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
 import { useIsFocused } from "@react-navigation/native";
 import { MY_GYM_MEAL_PLANS_PATH, contactGymLabel, gymContactWays, myGymMealPlansResponseSchema, type DietPlanMeal, type LowestKcal, type MyGymMealPlan } from "@app/shared";
 import { Button } from "../../look/Button";
-import { Card } from "../../look/Card";
 import { colours } from "../../look/colours";
-import { Icon } from "../../look/Icon";
 import { Sheet } from "../../look/Sheet";
 import { fonts, Txt } from "../../look/Txt";
 import { SoftBar } from "../../look/Waiting";
@@ -15,7 +13,7 @@ import { newGoalId } from "../goals/words";
 import { mealTypeName } from "./day";
 import { gymMeal, mealPlanEmail, noGymPlanLine, underLine, writtenByLine, type GymOfMine } from "./gymPlanRules";
 import { ideaName } from "./ideaRules";
-import { AllergyFoot, FromRow, initialsOf, nextMealWords, Notice, PlanMealCard } from "./MealCard";
+import { AllergyFoot, DayBar, FoodBox, FromRow, initialsOf, LoggedPill, MealThumb, nextMealWords, Notice, PlanMealCard } from "./MealCard";
 import { useMealOutbox } from "./MealOutbox";
 import { loggedAmount } from "./measures";
 import { loggedOfDay, planDayName, planDayOf, planMealAsMeal, stepDay } from "./planRules";
@@ -210,14 +208,9 @@ export function GymPlanBox({ gym, retry, choices, foodsToday, todayFailed, retry
 
   return (
     <>
-      <Card style={styles.card} testID="gym-plan-box">
-        <View style={styles.row}>
-          <Icon name="apple" size={16} colour="orange" />
-          <Txt kind="h3">What to eat next</Txt>
-        </View>
-        {choices}
+      <FoodBox choices={choices} testID="gym-plan-box">
         {body}
-      </Card>
+      </FoodBox>
       {plan === null || gym === null || gym === "failed" ? null : (
         <GymWeek
           open={week}
@@ -261,13 +254,11 @@ function GymWeek({ open, gymName, plan, today, foodsToday, held, said, trouble, 
     <Sheet open={open} title={`${gymName}’s meal plan`} onClose={onClose}>
       <ScrollView style={{ maxHeight: height * 0.72 }} contentContainerStyle={styles.list}>
         <Txt kind="tiny" colour="textSoft">{writtenByLine(plan)}</Txt>
-        <View style={styles.dayRow}>
-          <DayArrow name="back" say="Previous day" onPress={() => { setShownDay(stepDay(shownDay, -1)); }} />
-          <Txt kind="h3" style={styles.dayName}>
-            {shownDay === today ? `Today · ${planDayName(shownDay)}` : planDayName(shownDay)}
-          </Txt>
-          <DayArrow name="go" say="Next day" onPress={() => { setShownDay(stepDay(shownDay, 1)); }} />
-        </View>
+        <DayBar
+          label={shownDay === today ? `Today · ${planDayName(shownDay)}` : planDayName(shownDay)}
+          onBack={() => { setShownDay(stepDay(shownDay, -1)); }}
+          onGo={() => { setShownDay(stepDay(shownDay, 1)); }}
+        />
         {meals.length === 0 || day === undefined ? null : <Txt kind="small">{count(day.planned.kcal)} kcal planned</Txt>}
         <UnderLine under={day?.under} />
         {said}
@@ -275,19 +266,19 @@ function GymWeek({ open, gymName, plan, today, foodsToday, held, said, trouble, 
         {meals.length === 0 ? <Txt kind="small">Nothing planned for this day.</Txt> : null}
         {meals.map((meal, at) => (
           <View key={String(at)} style={styles.meal}>
-            <GymMealWords meal={meal} />
-            {shownDay !== today ? null : logged[at] === true ? (
-              <View style={styles.actions}>
-                <Icon name="check" size={14} colour="goodText" />
-                <Txt kind="small" colour="goodText">
-                  Logged
-                </Txt>
-              </View>
-            ) : (
-              <View style={styles.actions}>
-                <Button label="Log meal" kind="soft" compact disabled={held} say={`Log ${ideaName(meal)}`} onPress={() => { onLog(meal); }} />
-              </View>
-            )}
+            <MealThumb type={meal.mealType} />
+            <View style={styles.mealRight}>
+              <GymMealWords meal={meal} />
+              {shownDay !== today ? null : logged[at] === true ? (
+                <View style={styles.actions}>
+                  <LoggedPill />
+                </View>
+              ) : (
+                <View style={styles.actions}>
+                  <Button label="Log meal" kind="soft" compact disabled={held} say={`Log ${ideaName(meal)}`} onPress={() => { onLog(meal); }} />
+                </View>
+              )}
+            </View>
           </View>
         ))}
         <Txt kind="tiny">{plan.caution}</Txt>
@@ -320,25 +311,15 @@ export function GymFrom({ gym, plan }: { gym: GymOfMine; plan: Pick<MyGymMealPla
   );
 }
 
-function DayArrow({ name, say, onPress }: { name: "back" | "go"; say: string; onPress: () => void }) {
-  return (
-    <Pressable accessibilityRole="button" accessibilityLabel={say} onPress={onPress} style={styles.arrow}>
-      <Icon name={name} size={18} />
-    </Pressable>
-  );
-}
-
 function GymMealWords({ meal }: { meal: DietPlanMeal }) {
   return (
     <View style={styles.words}>
       <Txt kind="strong">
         {mealTypeName(meal.mealType)} · {count(meal.totals.kcalPoint)} kcal
       </Txt>
-      {meal.items.map((food, at) => (
-        <Txt key={String(at)} kind="small" colour="text">
-          {foodTitle(food)} {loggedAmount(food)}
-        </Txt>
-      ))}
+      <Txt kind="small" colour="text">
+        {meal.items.map((food) => `${foodTitle(food)} ${loggedAmount(food)}`).join(" · ")}
+      </Txt>
       <Txt kind="tiny" style={styles.numbers}>
         {count(Math.round(meal.totals.proteinG))} g protein · {count(Math.round(meal.totals.carbsG))} g carbs · {count(Math.round(meal.totals.fatG))} g fat
       </Txt>
@@ -356,8 +337,6 @@ const styles = StyleSheet.create({
   words: { gap: 3 },
   numbers: { fontFamily: fonts.semibold },
   list: { gap: 12, paddingBottom: 8 },
-  dayRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
-  dayName: { flexShrink: 1, textAlign: "center" },
-  arrow: { minWidth: 44, minHeight: 44, alignItems: "center", justifyContent: "center" },
-  meal: { gap: 8, paddingTop: 12, borderTopWidth: 1, borderTopColor: colours.line },
+  meal: { flexDirection: "row", alignItems: "flex-start", gap: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: colours.line },
+  mealRight: { flex: 1, gap: 8 },
 });

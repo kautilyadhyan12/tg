@@ -1,8 +1,10 @@
 import type { ReactNode } from "react";
-import { StyleSheet, View } from "react-native";
-import type { DietPlanMeal } from "@app/shared";
-import { colours } from "../../look/colours";
+import { Image, Pressable, StyleSheet, Text, View } from "react-native";
+import type { DietPlanMeal, MealType } from "@app/shared";
+import { Card } from "../../look/Card";
+import { colours, shadows } from "../../look/colours";
 import { Icon, type IconName } from "../../look/Icon";
+import { pictures, type PictureName } from "../../look/pictures";
 import { fonts, Txt } from "../../look/Txt";
 import { count } from "../dashboard/words";
 import { mealTypeName } from "./day";
@@ -14,6 +16,78 @@ import { foodTitle } from "./rows";
 
 /** The picture's room on the Dashboard: the words beside it never run under it. */
 export const ART_SIZE = 104;
+
+/** What to eat's box (drawings 5b, 5c): Suggested, the gym and My plan above it, the box under them. The
+ *  tab above already says "What to eat", so the box has no title of its own. */
+export function FoodBox({ choices, testID, children }: { choices: ReactNode; testID?: string; children: ReactNode }) {
+  return (
+    <View style={styles.box}>
+      {choices}
+      <Card raised style={styles.boxCard} {...(testID === undefined ? {} : { testID })}>
+        {children}
+      </Card>
+    </View>
+  );
+}
+
+/** "Picked for you" across the top of the ideas, the food picture at its right (drawing 5b). */
+export function PickedTop() {
+  return (
+    <View style={styles.picked}>
+      <View style={styles.pickedArt}>
+        <Image source={pictures.foodbowl} resizeMode="contain" style={styles.fill} accessible={false} />
+      </View>
+      <FromRow badge={{ icon: "sparkles" }} title="Picked for you" sub={null} />
+    </View>
+  );
+}
+
+/** Each meal's own picture (32c-i), on the meals of the day and of a meal plan. */
+export const MEAL_PICTURES: Record<MealType, PictureName> = { breakfast: "mealbreakfast", lunch: "meallunch", dinner: "mealdinner", snack: "mealsnack" };
+
+/** A meal's round picture. */
+export function MealThumb({ type, size = 48 }: { type: MealType; size?: number }) {
+  return (
+    <View style={[styles.thumb, { width: size, height: size, borderRadius: size / 2 }]}>
+      <Image source={pictures[MEAL_PICTURES[type]]} resizeMode="cover" style={styles.fill} accessible={false} />
+    </View>
+  );
+}
+
+/** "Logged", in a small green pill: a planned meal already on today's list. */
+export function LoggedPill() {
+  return (
+    <View style={styles.loggedPill}>
+      <Icon name="check" size={13} colour="goodText" />
+      <Txt kind="small" colour="goodText" style={styles.loggedWords}>
+        Logged
+      </Txt>
+    </View>
+  );
+}
+
+/** The day shown, in a round bar with a round arrow each side. */
+export function DayBar({ label, onBack, onGo }: { label: string; onBack: () => void; onGo: () => void }) {
+  return (
+    <View style={styles.dayBar}>
+      <DayArrow name="back" say="Previous day" onPress={onBack} />
+      <Txt kind="strong" style={styles.dayName}>
+        {label}
+      </Txt>
+      <DayArrow name="go" say="Next day" onPress={onGo} />
+    </View>
+  );
+}
+
+function DayArrow({ name, say, onPress }: { name: "back" | "go"; say: string; onPress: () => void }) {
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel={say} onPress={onPress} style={styles.arrow}>
+      <View style={styles.arrowRing}>
+        <Icon name={name} size={16} colour="textSoft" />
+      </View>
+    </Pressable>
+  );
+}
 
 /** Whose meal: a round badge, a name and one small line. */
 export function FromRow({ badge, title, sub }: { badge: { initials: string } | { icon: IconName }; title: string; sub: string | null }) {
@@ -78,7 +152,7 @@ export function FoodLines({ foods, list = false }: { foods: readonly FoodLine[];
           <Txt kind="small" colour="text" style={styles.foodName}>
             {f.name}
           </Txt>
-          <View style={styles.leader} />
+          <Leader />
           <Txt kind="tiny">{f.amount}</Txt>
         </View>
       ))}
@@ -86,14 +160,27 @@ export function FoodLines({ foods, list = false }: { foods: readonly FoodLine[];
   );
 }
 
+/** The dotted line from a food to its amount. Android draws no dotted border on one side, so it is dots. */
+function Leader() {
+  return (
+    <View style={styles.leader} accessible={false} importantForAccessibility="no-hide-descendants">
+      <Text numberOfLines={1} ellipsizeMode="clip" style={styles.dots}>
+        {DOTS}
+      </Text>
+    </View>
+  );
+}
+
+const DOTS = "·".repeat(80);
+
 export const planFoods = (meal: DietPlanMeal): FoodLine[] => meal.items.map((f) => ({ name: foodTitle(f), amount: loggedAmount(f) }));
 
 /** The meal's numbers as a row of tiles: kcal, then each macro with a thin bar of its share. */
 export function NumberTiles({ kcal, proteinG, carbsG, fatG = null }: { kcal: number; proteinG: number; carbsG: number; fatG?: number | null }) {
-  const macros: { label: string; grams: number; colour: "blue" | "gold" | "pink" }[] = [
+  const macros: { label: string; grams: number; colour: "blue" | "gold" | "purple" }[] = [
     { label: "Protein", grams: proteinG, colour: "blue" },
     { label: "Carbs", grams: carbsG, colour: "gold" },
-    ...(fatG === null ? [] : [{ label: "Fat", grams: fatG, colour: "pink" as const }]),
+    ...(fatG === null ? [] : [{ label: "Fat", grams: fatG, colour: "purple" as const }]),
   ];
   const total = macros.reduce((n, m) => n + m.grams, 0);
   return (
@@ -211,7 +298,41 @@ const styles = StyleSheet.create({
   foods: { gap: 4 },
   foodLine: { flexDirection: "row", alignItems: "center", gap: 6 },
   foodName: { flexShrink: 1 },
-  leader: { flex: 1, minWidth: 8, height: 1, backgroundColor: colours.line },
+  leader: { flex: 1, minWidth: 8, overflow: "hidden" },
+  dots: { color: colours.textFaint, fontSize: 12, lineHeight: 16, letterSpacing: 2 },
+  box: { gap: 12 },
+  boxCard: { gap: 12 },
+  picked: { minHeight: 64, justifyContent: "center", paddingRight: 96 },
+  pickedArt: { position: "absolute", top: -14, right: -14, bottom: -6, width: 120 },
+  fill: { width: "100%", height: "100%" },
+  thumb: { overflow: "hidden", borderWidth: 2, borderColor: colours.lineStrong, boxShadow: shadows.chip },
+  loggedPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    minHeight: 30,
+    paddingHorizontal: 11,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: colours.goodLine,
+    backgroundColor: colours.goodFill,
+    marginRight: 6,
+  },
+  loggedWords: { fontFamily: fonts.semibold },
+  dayBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 6,
+    paddingHorizontal: 4,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: colours.lineStrong,
+    backgroundColor: colours.fill,
+  },
+  dayName: { flexShrink: 1, textAlign: "center" },
+  arrow: { minWidth: 44, minHeight: 48, alignItems: "center", justifyContent: "center" },
+  arrowRing: { width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center", backgroundColor: colours.raised, borderWidth: 1, borderColor: colours.lineStrong },
   tiles: { flexDirection: "row", backgroundColor: colours.raised, borderWidth: 1, borderColor: colours.line, borderRadius: 14 },
   tile: { flex: 1, alignItems: "center", paddingVertical: 9, paddingHorizontal: 2, gap: 1 },
   tileLine: { borderLeftWidth: 1, borderLeftColor: colours.line },

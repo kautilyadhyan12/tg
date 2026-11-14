@@ -1,12 +1,11 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
+import { ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
 import { useIsFocused } from "@react-navigation/native";
 import {
   MOST_PLAN_MEALS, dietPlanResponseSchema, mealMeasuresResponseSchema, mealTypeSchema, planItemChoice,
   type DietPlanDayReply, type DietPlanMeal, type DietPlanResponse, type MealType,
 } from "@app/shared";
 import { Button } from "../../look/Button";
-import { Card } from "../../look/Card";
 import { colours } from "../../look/colours";
 import { Icon } from "../../look/Icon";
 import { Sheet } from "../../look/Sheet";
@@ -21,7 +20,7 @@ import { dayRows, useDayMeals } from "./dayRows";
 import { ideaName } from "./ideaRules";
 import { FoodChoiceRow, shownOf, useFoodChoice, type Shown } from "./FoodChoice";
 import { GymFrom, GymPlanBox, NoGymPlan, UnderLine, useGymPlans, useNamedGym, type WeekAsk } from "./GymMealPlan";
-import { AllergyFoot, FromRow, nextMealWords, PlanMealCard } from "./MealCard";
+import { AllergyFoot, DayBar, FoodBox, FromRow, LoggedPill, MealThumb, nextMealWords, PlanMealCard } from "./MealCard";
 import { gymMeal, type GymOfMine } from "./gymPlanRules";
 import { MealIdeas, NO_PLAN_YET, type PlannedNow } from "./MealIdeas";
 import { useMealOutbox } from "./MealOutbox";
@@ -307,10 +306,9 @@ export function WhatToEatNext({ foodsToday, fresh, onAnswered, todayFailed, retr
         }
       />
     ) : (
-      <Card style={styles.card}>
-        <Title />
+      <FoodBox choices={null}>
         <SoftBar width="70%" />
-      </Card>
+      </FoodBox>
     );
   }
 
@@ -391,13 +389,11 @@ export function WhatToEatNext({ foodsToday, fresh, onAnswered, todayFailed, retr
             ) : (
               <Button label="Make my plan" kind="link" compact disabled={busy} style={styles.start} onPress={() => { void make(); }} />
             )}
-            <View style={styles.dayRow}>
-              <DayArrow name="back" say="Previous day" onPress={() => { toDay(-1); }} />
-              <Txt kind="h3" style={styles.dayName}>
-                {shownDay === today ? `Today · ${planDayName(shownDay)}` : planDayName(shownDay)}
-              </Txt>
-              <DayArrow name="go" say="Next day" onPress={() => { toDay(1); }} />
-            </View>
+            <DayBar
+              label={shownDay === today ? `Today · ${planDayName(shownDay)}` : planDayName(shownDay)}
+              onBack={() => { toDay(-1); }}
+              onGo={() => { toDay(1); }}
+            />
             <DayNumbers day={shown} />
             {saidLine}
             {troubleLine}
@@ -411,14 +407,13 @@ export function WhatToEatNext({ foodsToday, fresh, onAnswered, todayFailed, retr
               );
               return (
                 <View key={String(at)} style={styles.meal}>
+                  <MealThumb type={meal.mealType} />
+                  <View style={styles.mealRight}>
                   <MealWords meal={meal} />
                   <OutsideDiet meal={meal} />
                   {shownLogged[at] === true ? (
                     <View style={styles.actions}>
-                      <Icon name="check" size={14} colour="goodText" />
-                      <Txt kind="small" colour="goodText" style={styles.logged}>
-                        Logged
-                      </Txt>
+                      <LoggedPill />
                       {change}
                     </View>
                   ) : (
@@ -430,6 +425,7 @@ export function WhatToEatNext({ foodsToday, fresh, onAnswered, todayFailed, retr
                       {change}
                     </View>
                   )}
+                  </View>
                 </View>
               );
             })}
@@ -486,9 +482,7 @@ export function WhatToEatNext({ foodsToday, fresh, onAnswered, todayFailed, retr
     // My plan picked, and none yet: the app's plan, or one's own.
     return (
       <>
-        <Card style={styles.card} testID="meal-plan-box">
-          <Title />
-          {choices}
+        <FoodBox choices={choices} testID="meal-plan-box">
           {week ? null : saidLine}
           <Txt kind="small">{NO_PLAN_YET}</Txt>
           {week ? null : troubleLine}
@@ -496,7 +490,7 @@ export function WhatToEatNext({ foodsToday, fresh, onAnswered, todayFailed, retr
             <Button label="Build my own" compact onPress={openWeek} />
             {plan.make.status === "ok" ? <Button label="Make my plan" kind="link" compact disabled={busy} onPress={() => { void make(); }} /> : null}
           </View>
-        </Card>
+        </FoodBox>
         {sheets}
       </>
     );
@@ -542,9 +536,7 @@ export function WhatToEatNext({ foodsToday, fresh, onAnswered, todayFailed, retr
   );
   return (
     <>
-      <Card style={styles.card} testID="meal-plan-box">
-        <Title />
-        {choices}
+      <FoodBox choices={choices} testID="meal-plan-box">
         {week ? null : saidLine}
         {week ? null : troubleLine}
         {foodsToday === null ? (
@@ -589,7 +581,7 @@ export function WhatToEatNext({ foodsToday, fresh, onAnswered, todayFailed, retr
             <AllergyFoot lines={[plan.caution, plan.labelCaution]} />
           </>
         )}
-      </Card>
+      </FoodBox>
       {sheets}
     </>
   );
@@ -659,23 +651,6 @@ function RecommendedFromPlan({ plan, from, onMore, onIdeas, onLog, choices }: { 
   return <MealIdeas onMore={onMore} onLog={onLog} planned={planned} choices={choices} />;
 }
 
-function Title() {
-  return (
-    <View style={styles.row}>
-      <Icon name="apple" size={16} colour="orange" />
-      <Txt kind="h3">What to eat next</Txt>
-    </View>
-  );
-}
-
-function DayArrow({ name, say, onPress }: { name: "back" | "go"; say: string; onPress: () => void }) {
-  return (
-    <Pressable accessibilityRole="button" accessibilityLabel={say} onPress={onPress} style={styles.arrow}>
-      <Icon name={name} size={18} />
-    </Pressable>
-  );
-}
-
 function DayNumbers({ day }: { day: DietPlanDayReply }) {
   if (day.meals.length === 0) return null;
   return (
@@ -707,11 +682,9 @@ function MealWords({ meal }: { meal: DietPlanMeal }) {
       <Txt kind="strong">
         {mealTypeName(meal.mealType)} · {count(meal.totals.kcalPoint)} kcal
       </Txt>
-      {meal.items.map((food, at) => (
-        <Txt key={String(at)} kind="small" colour="text">
-          {foodTitle(food)} {loggedAmount(food)}
-        </Txt>
-      ))}
+      <Txt kind="small" colour="text">
+        {meal.items.map((food) => `${foodTitle(food)} ${loggedAmount(food)}`).join(" · ")}
+      </Txt>
       <Txt kind="tiny" style={styles.numbers}>
         {count(Math.round(meal.totals.proteinG))} g protein · {count(Math.round(meal.totals.carbsG))} g carbs · {count(Math.round(meal.totals.fatG))} g fat
       </Txt>
@@ -728,9 +701,6 @@ const styles = StyleSheet.create({
   words: { gap: 3 },
   numbers: { fontFamily: fonts.semibold },
   list: { gap: 12, paddingBottom: 8 },
-  dayRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
-  dayName: { flexShrink: 1, textAlign: "center" },
-  logged: { marginRight: 8 },
-  arrow: { minWidth: 44, minHeight: 44, alignItems: "center", justifyContent: "center" },
-  meal: { gap: 8, paddingTop: 12, borderTopWidth: 1, borderTopColor: colours.line },
+  meal: { flexDirection: "row", alignItems: "flex-start", gap: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: colours.line },
+  mealRight: { flex: 1, gap: 8 },
 });

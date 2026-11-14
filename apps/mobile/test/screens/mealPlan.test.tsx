@@ -186,6 +186,30 @@ describe("the worst thing: one tap logs one meal, at what it showed; nobody is s
   });
 });
 
+describe("32c-ii-b's worst thing: the boxes drawn again log the meal each row shows, and every warning stays with its meal", () => {
+  it("in Your meal plan each Log meal logs the meal on its own row; its foods read on one line; Not in your diet and the allergy line stay", async () => {
+    const world = serverOf(() => ok(week([RICE, { ...SALMON, outsideDiet: ["Salmon"] }], { labelCaution: DIET_LABEL_CAUTION })));
+    const box = await open(world);
+    await fireEvent.press(await box.findByRole("button", { name: "See the week" }));
+    const sheet = within(await screen.findByTestId("sheet"));
+    expect(sheet.getByText("Rice 212 g · Dal 150 g")).toBeTruthy();
+    expect(sheet.getByText("Not in your diet: Salmon.")).toBeTruthy();
+    expect(sheet.getByText(FOOD_ALLERGY_CAUTION)).toBeTruthy();
+    expect(sheet.getByText(DIET_LABEL_CAUTION)).toBeTruthy();
+    // The second row's button, never the first's.
+    await fireEvent.press(sheet.getByRole("button", { name: "Log Salmon" }));
+    await waitFor(() => { expect(posts(world, "/v1/nutrition/meals")).toHaveLength(1); });
+    const sent = posts(world, "/v1/nutrition/meals")[0]?.body as SentMeal;
+    expect(sent.mealType).toBe("dinner");
+    expect(sent.items).toEqual([{ canonical: "salmon", grams: 180 }]);
+    // Logged now reads in its pill on that row, and Rice + Dal is still offered.
+    expect(await sheet.findByText("Logged")).toBeTruthy();
+    expect(sheet.getByRole("button", { name: "Log Rice + Dal" })).toBeTruthy();
+    expect(sheet.getByRole("button", { name: "Change Salmon" })).toBeTruthy();
+    expect(sheet.getByRole("button", { name: "Remove Salmon" })).toBeTruthy();
+  });
+});
+
 describe("until today's meals are read (round one, H1)", () => {
   it.each(["Food", "Dashboard"] as const)("on %s no meal is named and nothing can be logged or swapped while they load", async (tab) => {
     const never = () => new Promise<Reply>(() => undefined);
@@ -286,7 +310,9 @@ describe("one box, one answer", () => {
     const box = await open(world);
     expect(await box.findByRole("button", { name: "Log Rice + Dal" })).toBeTruthy();
     expect(box.queryByTestId("meal-ideas-box")).toBeNull();
-    expect(box.getAllByText("What to eat next")).toHaveLength(1);
+    expect(box.getAllByTestId("meal-plan-box")).toHaveLength(1);
+    // The What to eat tab is the box's title (drawing 5b): no title of its own under it.
+    expect(box.queryByText("What to eat next")).toBeNull();
     await fireEvent.press(box.getByRole("button", { name: "Other ideas" }));
     expect(await screen.findByText("No more meals to suggest today.")).toBeTruthy();
   });
@@ -296,7 +322,8 @@ describe("one box, one answer", () => {
     const box = await open(world);
     expect(await box.findByRole("button", { name: "Make my plan" })).toBeTruthy();
     expect(box.queryByTestId("meal-plan-box")).toBeNull();
-    expect(box.getAllByText("What to eat next")).toHaveLength(1);
+    expect(box.getAllByTestId("meal-ideas-box")).toHaveLength(1);
+    expect(box.queryByText("What to eat next")).toBeNull();
   });
 
   it("the Dashboard offers the plan's next meal; its Log meal opens Food's box and logs nothing; Food logs it, as one meal of the plan (Kd, 2026-11-02)", async () => {
@@ -901,6 +928,26 @@ describe("the gym's meal plan (31g)", () => {
     const card = within(await screen.findByTestId("recommended-box"));
     expect(await card.findByRole("radio", { name: "Iron House", selected: true })).toBeTruthy();
     expect(await card.findByText("By Sam · Iron House")).toBeTruthy();
+  });
+
+  it("32c-ii-b's worst thing: in the gym's week each Log meal logs the meal on its own row, with the warning beside it and the allergy line", async () => {
+    const world = member([gym(IRON, "Iron House", gymPlan([OATS, SALMON], null, ["Salmon"]))]);
+    const box = await open(world);
+    const card = within(await box.findByTestId("gym-plan-box"));
+    expect(await card.findByText("Lean week")).toBeTruthy();
+    expect(card.getAllByText("Not in your diet: Salmon.")).toHaveLength(1);
+    expect(card.getByText(FOOD_ALLERGY_CAUTION)).toBeTruthy();
+    await fireEvent.press(card.getByRole("button", { name: "See the week" }));
+    const sheet = within(await screen.findByTestId("sheet"));
+    expect(sheet.getByText("Oatmeal 250 g")).toBeTruthy();
+    expect(sheet.getByText(FOOD_ALLERGY_CAUTION)).toBeTruthy();
+    await fireEvent.press(sheet.getByRole("button", { name: "Log Salmon" }));
+    await waitFor(() => { expect(posts(world, "/v1/nutrition/meals")).toHaveLength(1); });
+    const sent = posts(world, "/v1/nutrition/meals")[0]?.body as SentMeal;
+    expect(sent.mealType).toBe("dinner");
+    expect(sent.items).toEqual([{ canonical: "salmon", grams: 180 }]);
+    expect(await sheet.findByText("Logged")).toBeTruthy();
+    expect(sheet.getByRole("button", { name: "Log Oatmeal" })).toBeTruthy();
   });
 
   it("a member of two gyms sees both; picking one sends that gym, and My plan shows their own again", async () => {
