@@ -35,6 +35,8 @@ export interface FigureLine {
   share: number | null;
   /** The published amount is a most to stay under (sodium, saturated fat), not one to reach. */
   limit: boolean;
+  /** The total leaves out a food that gives no figure, or meals not here yet: its value carries a *. */
+  incomplete: boolean;
 }
 
 /** `partial`: meals of the day whose foods are not here yet, so even a figure every food here gives
@@ -54,6 +56,7 @@ export function figureLines(items: readonly Pick<MealItem, "more">[], partial: b
       note: daily === null ? null : `${daily.kind === "most" ? "Limit" : "Recommended"} ${amountWords(daily.amount)} ${unit}`,
       share: none || daily === null || !(daily.amount > 0) ? null : amount / daily.amount,
       limit: daily?.kind === "most",
+      incomplete: !none && incomplete,
     };
   });
 }
@@ -61,7 +64,15 @@ export function figureLines(items: readonly Pick<MealItem, "more">[], partial: b
 /** A nutrient's picture is filled to its share of the published amount (32c-ii-a, the pantry), never
  *  past full; the words beside it say the whole share, 130 % included. */
 export const jarFill = (share: number | null): number => (share === null || !Number.isFinite(share) ? 0 : Math.min(1, Math.max(0, share)));
-export const shareWords = (share: number | null): string | null => (share === null || !Number.isFinite(share) ? null : `${String(Math.round(share * 100))}%`);
+export const shareWords = (share: number | null, incomplete = false): string | null =>
+  share === null || !Number.isFinite(share) ? null : `${String(Math.round(share * 100))}%${incomplete ? "*" : ""}`;
+
+/** What a screen reader says of the share: the * read as words (round one, L3). */
+export const shareSaid = (line: Pick<FigureLine, "share" | "limit" | "incomplete">): string => {
+  const words = shareWords(line.share);
+  if (words === null) return "";
+  return `. ${words} of the ${line.limit ? "limit" : "recommended amount"}${line.incomplete ? ", from the foods that give it" : ""}`;
+};
 
 /** Which foods hold totals back, where a total adds up some foods and not others. Null where no total
  *  does: a row reading No data already says it. */

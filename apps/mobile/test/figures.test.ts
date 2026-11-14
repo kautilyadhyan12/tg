@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { MORE_NOT_KNOWN, dailyAmountsFor, type MoreNutrients } from "@app/shared";
-import { figureLines, figuresFromALabel, jarFill, missingFoodsWords, shareWords } from "../src/screens/food/figures";
+import { figureLines, figuresFromALabel, jarFill, missingFoodsWords, shareSaid, shareWords } from "../src/screens/food/figures";
+import { LEVELS, fillLevel, fillTop } from "../src/screens/food/jarLevels";
 
 // ROADMAP Stage 5 34b. Real figures: 150 g of USDA's "Lentils, mature seeds, cooked, boiled, without
 // salt", read from the loaded table on 2026-11-01. The pizza stands for any food with no figures: a
@@ -18,7 +19,7 @@ const line = (lines: ReturnType<typeof figureLines>, key: keyof MoreNutrients) =
 describe("the ten figures, read as a list", () => {
   it("the worst thing: a food with no sodium figure never lets the day read as the whole amount", () => {
     expect(line(figureLines([lentils, pizza], false, woman), "sodiumMg")).toEqual({
-      key: "sodiumMg", name: "Sodium", value: "3 mg*", note: "Limit 2,300 mg", share: 3 / 2300, limit: true,
+      key: "sodiumMg", name: "Sodium", value: "3 mg*", note: "Limit 2,300 mg", share: 3 / 2300, limit: true, incomplete: true,
     });
   });
 
@@ -112,9 +113,56 @@ describe("the pantry: each nutrient filled to its share of the published amount 
     // No published amount (sugars), or the daily amounts not loaded: no share invented.
     expect(line(lines, "sugarsG")?.share).toBeNull();
     expect(line(figureLines([lentils], false, null), "ironMg")?.share).toBeNull();
-    // An incomplete total keeps its * and its share of what is known.
-    expect(line(figureLines([lentils, pizza], false, woman), "ironMg")).toMatchObject({ value: "5 mg*", share: 5 / 18 });
+    // An incomplete total keeps its * on the badge too, never a plain share (round one, H1), and says it.
+    const partIron = line(figureLines([lentils, pizza], false, woman), "ironMg");
+    expect(partIron).toMatchObject({ value: "5 mg*", share: 5 / 18, incomplete: true });
+    expect(shareWords(partIron?.share ?? null, partIron?.incomplete)).toBe("28%*");
+    expect(partIron === undefined ? "" : shareSaid(partIron)).toBe(". 28% of the recommended amount, from the foods that give it");
+    // Meals of the day not here yet make every total incomplete; a whole total has no *.
+    expect(line(figureLines([lentils], true, woman), "ironMg")).toMatchObject({ value: "5 mg*", incomplete: true });
+    expect(line(lines, "ironMg")).toMatchObject({ value: "5 mg", incomplete: false });
+    expect(shareSaid({ share: 3 / 2300, limit: true, incomplete: false })).toBe(". 0% of the limit");
+    expect(shareSaid({ share: null, limit: false, incomplete: false })).toBe("");
     // Nothing that is not a number ever fills a picture.
     expect([jarFill(Number.NaN), shareWords(Number.POSITIVE_INFINITY)]).toEqual([0, null]);
+  });
+});
+
+describe("the pantry's pictures fill by what they hold, never by their height (round one, H2)", () => {
+  it("empty at the foot, full at the top, higher for every larger share, for every nutrient", () => {
+    for (const [key, levels] of Object.entries(LEVELS) as [keyof typeof LEVELS, readonly number[]][]) {
+      expect(levels).toHaveLength(21);
+      expect(fillLevel(key, 0)).toBe(levels[0]);
+      expect(fillLevel(key, 1)).toBe(levels[20]);
+      // Past full or under empty, never past the picture.
+      expect([fillLevel(key, 1.5), fillLevel(key, -1)]).toEqual([levels[20], levels[0]]);
+      for (let i = 1; i < levels.length; i++) expect(levels[i]).toBeLessThan(levels[i - 1] ?? 0);
+    }
+  });
+
+  it("a quarter of the cheese is a quarter of what it holds: its level as measured, well under a quarter of its height", () => {
+    // The cheese runs from 11 (its point) to 38 (its foot). A quarter of its height is 31.25; a quarter of
+    // what it holds lies at 34.7, its wide foot holding most of it.
+    expect(fillLevel("satFatG", 0.25)).toBeCloseTo(33.8, 5);
+    expect(fillLevel("satFatG", 0.25)).toBeGreaterThan(31.25);
+    // Between two measured shares, a straight line: 12.5 % halfway from 10 % to 15 %.
+    expect(fillLevel("satFatG", 0.125)).toBeCloseTo((36.4 + 35.5) / 2, 5);
+    // The ear of wheat holds little at its foot: half of it lies far above half its height.
+    expect(fillLevel("fiberG", 0.5)).toBeCloseTo(19.3, 5);
+  });
+});
+
+describe("the fill as drawn (round one's untested fill)", () => {
+  it("no share, no figure, a share of 0 or not a number: no fill at all; past full: full; else the measured level", () => {
+    expect([fillTop("ironMg", null), fillTop("ironMg", 0), fillTop("ironMg", Number.NaN)]).toEqual([null, null, null]);
+    expect(fillTop("ironMg", 1.54)).toEqual({ level: 5.6, swell: 2.6 });
+    expect(fillTop("ironMg", 5 / 18)?.level).toBeCloseTo(fillLevel("ironMg", 5 / 18), 9);
+    // Low in the picture, never upside down: a small share sits near the foot (45), a large one near the top.
+    expect(fillTop("ironMg", 0.1)?.level).toBeGreaterThan(35);
+    expect(fillTop("ironMg", 0.9)?.level).toBeLessThan(12);
+    // A sliver of the cheese's limit: its wave no taller than the fill under it.
+    const sliver = fillTop("satFatG", 0.01);
+    expect(sliver?.swell).toBeCloseTo(2 * (38 - fillLevel("satFatG", 0.01)), 9);
+    expect(sliver?.swell).toBeLessThan(0.5);
   });
 });

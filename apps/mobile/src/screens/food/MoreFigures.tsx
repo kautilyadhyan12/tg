@@ -5,7 +5,7 @@ import { colours } from "../../look/colours";
 import { fonts, Txt } from "../../look/Txt";
 import { useRead } from "../dashboard/useRead";
 import { NutrientJar } from "./NutrientJar";
-import { FIGURES_LINK, figureLines, figuresFromALabel, missingFoodsWords } from "./figures";
+import { FIGURES_LINK, figureLines, shareSaid, figuresFromALabel, missingFoodsWords } from "./figures";
 
 // The ten further figures on the Food screen (ROADMAP Stage 5 34b): for the day, a saved meal and a
 // food of a meal photo. The daily amounts beside them are a reference, never a goal.
@@ -54,8 +54,8 @@ export function FiguresList({ items, daily, partial = false, partialWords = null
       {shelves(figureLines(items, partial, daily?.amounts ?? null)).map((shelf) => (
         <View key={shelf.map((l) => l.key).join("-")} style={styles.shelf}>
           {shelf.map((line) => (
-            <View key={line.key} style={styles.jar} accessible accessibilityLabel={`${line.name}, ${line.value}${line.note === null ? "" : `. ${line.note}`}`}>
-              <NutrientJar nutrient={line.key} share={line.share} limit={line.limit} />
+            <View key={line.key} style={styles.jar} accessible accessibilityLabel={`${line.name}, ${line.value}${line.note === null ? "" : `. ${line.note}`}${shareSaid(line)}`}>
+              <NutrientJar nutrient={line.key} share={line.share} limit={line.limit} incomplete={line.incomplete} />
               <Txt kind="small" colour="text" style={styles.centre}>
                 {line.name}
               </Txt>
