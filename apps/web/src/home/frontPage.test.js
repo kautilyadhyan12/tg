@@ -165,6 +165,18 @@ describe('the front page keeps its own rules', () => {
     expect(script).not.toMatch(/\.innerHTML\s*=|insertAdjacentHTML|document\.write/);
   });
 
+  it('switches between the computer and phone layouts at the same point in its stylesheet and its script', () => {
+    // A computer page needs a screen wide enough, wide in shape and tall enough for its words (12a-ii: a phone held
+    // sideways, 844 x 390, ran its words 264 px below the screen); every other screen gets the phone page. The two
+    // conditions must be exact opposites, or a screen would get half of each.
+    expect(script).toContain("matchMedia('(min-width: 821px) and (min-aspect-ratio: 3/2) and (min-height: 540px)')");
+    expect(css).toContain('@media (max-width:820px),(max-aspect-ratio:1499/1000),(max-height:539px){');
+    expect(css).toContain('@media (min-width:821px) and (min-aspect-ratio:3/2) and (min-height:540px) and (max-height:760px){');
+    expect(css.match(/@media[^{]*aspect-ratio/g)).toHaveLength(2);
+    // On the phone page the picture always covers the width: never shorter than a 16:9 picture as wide as the screen.
+    expect(css).toContain(':root{--pic:max(56svh,320px,56.25vw)}');
+  });
+
   it('names no other site but its own address, for Google and shared links', () => {
     // An inline drawing's `xmlns` names its format and is never fetched; it is the one exception.
     const outside = [...page.matchAll(/(?<!xmlns=")https?:\/\/[^\s"'<>)]+/g)].map((m) => m[0]);
@@ -196,7 +208,9 @@ describe('the front page keeps its own rules', () => {
       expect(exists(where), file).toBe(true);
     }
     const fromCss = [...css.matchAll(/url\(\.\/([^)]+)\)/g)].map((m) => m[1]);
-    expect(fromCss.length).toBe(10);
+    // Bowlby One, Lexend in four weights (one file each: a variable file drew one thin weight in Safari's engine), eight masks.
+    expect(fromCss.length).toBe(13);
+    expect(fromCss.filter((f) => /^fonts\/lexend-(400|500|600|700)-latin\.woff2$/.test(f))).toHaveLength(4);
     for (const file of fromCss) expect(exists(`./${file}`), file).toBe(true);
     const fromScript = [...script.matchAll(/from '\.\/([^']+)'/g)].map((m) => m[1]);
     // The eight clips and the clip rule: nothing else, so the page loads no console code.
