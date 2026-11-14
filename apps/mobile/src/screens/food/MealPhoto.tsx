@@ -78,6 +78,8 @@ import { LabelCheck } from "./LabelCheck";
 import { canReadLabel, labelCostWords, scansLeftWords, typedFromDraft } from "./labelRead";
 import { PackWords } from "./PackWords";
 import { Credits, SourceLine } from "./SourceLine";
+import { Kcal, MealCards } from "./MealNumbers";
+import { ModeSwitch, PlateCorners, ReadingLight, type ModeChoice } from "./ScanLook";
 
 // Log a meal from a photo (ROADMAP Stage 5 33b-i). The live camera opens at once, as food apps open
 // it; a photo taken before is picked from the gallery in the corner. The photo is made small and
@@ -99,6 +101,11 @@ const PHOTO_TALL = 0.78;
 const UNREADABLE = "That photo couldn’t be read. Try another one.";
 
 type CameraMode = "meal" | "barcode" | "label";
+const MODES: readonly ModeChoice<CameraMode>[] = [
+  { value: "meal", label: "Meal", icon: "utensils" },
+  { value: "barcode", label: "Barcode", icon: "barcode" },
+  { value: "label", label: "Label", icon: "book" },
+];
 type Stage =
   | { kind: "camera" }
   | { kind: "reading"; uri: string; what: "meal" | "label" }
@@ -535,6 +542,7 @@ function Camera({
           <Round icon="zap" say={torch ? "Turn torch off" : "Turn torch on"} on={torch} onPress={() => { setTorch((t) => !t); }} />
         </View>
       ) : null}
+      {!scanning && allowed ? <PlateCorners /> : null}
       {scanning && allowed ? (
         <View style={styles.guideWrap} pointerEvents="none">
           <View style={styles.guide} />
@@ -579,11 +587,7 @@ function Camera({
             {left}
           </Txt>
         )}
-        <View style={styles.modes} accessibilityRole="radiogroup">
-          <Chip label="Meal" on={mode === "meal"} onPress={() => { toMode("meal"); }} />
-          <Chip label="Barcode" on={scanning} onPress={() => { toMode("barcode"); }} />
-          <Chip label="Label" on={mode === "label"} onPress={() => { toMode("label"); }} />
-        </View>
+        <ModeSwitch choices={MODES} on={mode} onPick={(next) => { toMode(next); }} />
         {mode === "label" ? <Button label="Your saved labels" kind="link" onPress={() => { void openSaved(); }} style={styles.centreSelf} /> : null}
         {scanning ? null : (
           <Txt kind="tiny" style={styles.centre}>
@@ -664,11 +668,8 @@ function Reading({ uri, what, onClose }: { uri: string; what: "meal" | "label"; 
   return (
     <View style={styles.page}>
       <Image source={{ uri }} resizeMode="cover" style={StyleSheet.absoluteFill} accessible={false} />
-      <View style={[StyleSheet.absoluteFill, styles.veil]} />
-      <View style={styles.readingWords}>
-        <ActivityIndicator size="large" color={colours.orange} />
-        <Txt kind="h3">{what === "label" ? "Reading the label…" : "Reading your meal…"}</Txt>
-      </View>
+      <View style={[StyleSheet.absoluteFill, styles.fade]} />
+      <ReadingLight words={what === "label" ? "Reading the label…" : "Reading your meal…"} />
       <View style={[styles.topBar, { top: insets.top + 12 }]}>
         <Round icon="x" say="Close" onPress={onClose} />
       </View>
@@ -825,9 +826,12 @@ function Review({
           </View>
         </View>
         <View style={styles.reviewBody}>
-          <Txt kind="small" colour="gold">
-            {PHOTO_SCAN_CAUTION}
-          </Txt>
+          <View style={styles.caution} testID="photo-caution">
+            <Icon name="info" size={16} colour="gold" />
+            <Txt kind="small" colour="gold" style={styles.grow}>
+              {PHOTO_SCAN_CAUTION}
+            </Txt>
+          </View>
           <View style={styles.chips} accessibilityRole="radiogroup">
             {MEAL_TYPES.map((m) => (
               <Chip key={m.type} label={m.name} on={sheet.mealType === m.type} onPress={() => { keep({ ...sheet, mealType: m.type }); }} />
@@ -856,7 +860,7 @@ function Review({
             {rows.length === 0 ? <Txt kind="small">No food left on this meal. Add one to save it.</Txt> : null}
           </View>
           {sheet.analysis.unknownItems.length === 0 ? null : (
-            <View style={styles.unknown}>
+            <View style={styles.unknown} testID="not-in-total">
               <Txt kind="tiny" style={styles.label}>
                 Not in the total
               </Txt>
@@ -910,11 +914,7 @@ function Review({
         </View>
       </ScrollView>
       <View style={[styles.reviewFoot, { paddingBottom: insets.bottom + 14 }]}>
-        {numbers === null ? null : (
-          <Txt kind="small" colour="text">
-            {totalsWords(numbers.totals)}
-          </Txt>
-        )}
+        {numbers === null ? null : <MealCards totals={numbers.totals} say={totalsWords(numbers.totals)} />}
         {unfinished === undefined ? null : (
           <Txt kind="small" colour="badText">
             {unfinished.title}: {rowNeeds(unfinished) === "fill" ? "pick how full the dish was" : "pick an amount"}. Tap it to finish, then save.
@@ -1066,16 +1066,17 @@ function FoodRow({ row, item, onPress }: { row: SheetRow; item: MealItem | null;
         <Txt kind="strong" numberOfLines={2}>
           {row.title}
         </Txt>
-        <SourceLine source={row.source} before={row.numbersFrom === null ? "" : `${row.numbersFrom} ·`} />
-        <Txt kind="tiny" colour={needs === null ? "textFaint" : "badText"}>
-          {amount}
-          {needs === null ? mark : ""}
-        </Txt>
+        {/* Where its numbers come from and how much, on one line, as Kd's drawing 2c has it; a food
+            not finished says what it needs on a line of its own, in red. */}
+        <SourceLine source={row.source} before={row.numbersFrom === null ? "" : `${row.numbersFrom} ·`} after={needs === null ? `${amount}${mark}` : ""} />
+        {needs === null ? null : (
+          <Txt kind="tiny" colour="badText">
+            {amount}
+          </Txt>
+        )}
         {row.wasSeen === null ? null : <Txt kind="tiny">Changed from {row.wasSeen}</Txt>}
       </View>
-      <Txt kind="small" colour="text">
-        {kcal === null ? "" : kcalWords(kcal)}
-      </Txt>
+      {kcal === null ? null : <Kcal words={kcalWords(kcal)} />}
       <Icon name="go" size={16} colour="textSoft" />
     </Pressable>
   );
@@ -1334,7 +1335,6 @@ const styles = StyleSheet.create({
   torchBar: { position: "absolute", right: sizes.edge },
   guideWrap: { position: "absolute", top: 0, bottom: 0, left: 0, right: 0, alignItems: "center", justifyContent: "center", gap: 16 },
   guide: { width: "78%", aspectRatio: 1.8, borderRadius: 20, borderWidth: 3, borderColor: colours.orange },
-  modes: { flexDirection: "row", justifyContent: "center", gap: 8 },
   shutterRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 12 },
   shutter: {
     width: 80,
@@ -1361,8 +1361,6 @@ const styles = StyleSheet.create({
     boxShadow: shadows.logo,
     marginBottom: 8,
   },
-  veil: { backgroundColor: colours.veil },
-  readingWords: { flex: 1, alignItems: "center", justifyContent: "center", gap: 14 },
   reviewList: { paddingBottom: 24 },
   band: { overflow: "hidden" },
   bandPicture: { width: "100%", height: "100%" },
@@ -1372,7 +1370,8 @@ const styles = StyleSheet.create({
   chips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   saidRow: { flexDirection: "row", alignItems: "center", gap: 6 },
   food: { flexDirection: "row", alignItems: "center", gap: 10, minHeight: 56, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: colours.line },
-  unknown: { gap: 4 },
+  unknown: { gap: 4, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 14, borderWidth: 1, borderStyle: "dashed", borderColor: colours.lineStrong },
+  caution: { flexDirection: "row", alignItems: "flex-start", gap: 10, padding: 12, borderRadius: 14, borderWidth: 1, borderColor: colours.goldLine, backgroundColor: colours.goldFill },
   unknownRow: { flexDirection: "row", alignItems: "center", gap: 10, minHeight: sizes.press },
   reviewFoot: { gap: 10, paddingTop: 12, paddingHorizontal: sizes.edge, borderTopWidth: 1, borderTopColor: colours.line, backgroundColor: colours.box },
   footRow: { flexDirection: "row", alignItems: "center", gap: 12 },

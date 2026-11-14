@@ -154,6 +154,29 @@ describe("the worst thing: an allergic person is never told a pack is clear", ()
   });
 });
 
+describe("32c-iii's worst thing: drawn again, a pack's allergens are never lost", () => {
+  it("the pack says it is a packaged product, its allergens and the caution sit in their own box, and the line above Add keeps its numbers", async () => {
+    const fake = await openScan(route(NUTELLA_CODE, found({ mayContain: ["eggs"] })));
+    await read("ean13", NUTELLA_CODE);
+    const box = await screen.findByTestId("pack-allergens");
+    expect(within(box).getByText(/^Contains: Milk, Nuts, Soybeans$/)).toBeTruthy();
+    expect(within(box).getByText(/^May contain: Eggs$/)).toBeTruthy();
+    expect(within(box).getByText("Have a food allergy? Always check the label.")).toBeTruthy();
+    expect(screen.getByText("Packaged product")).toBeTruthy();
+    // One serving, 81 kcal, with its amount, protein, carbs and fat beside it.
+    expect(await screen.findByText(/^81\skcal · .+ · Protein \d+ g · Carbs \d+ g · Fat \d+ g$/)).toBeTruthy();
+    const name = mealTypeName(sectionOf({ mealType: null, takenAt: new Date().toISOString() }));
+    const adds = screen.getAllByRole("button", { name: `Add to ${name}` });
+    const add = adds[adds.length - 1];
+    if (add === undefined) throw new Error("no Add button");
+    await fireEvent.press(add);
+    await waitFor(() => {
+      const sent = fake.asked.find((a) => a.method === "POST" && a.path === "/v1/nutrition/meals");
+      expect(sent?.body).toMatchObject({ items: [{ canonical: `pack_${NUTELLA_CODE}`, measure: "serving", amount: 1 }] });
+    });
+  });
+});
+
 describe("the camera", () => {
   it("the worst thing: a single read is never looked up, and the camera looks only for food codes", async () => {
     const fake = await openScan(route(NUTELLA_CODE, found()));

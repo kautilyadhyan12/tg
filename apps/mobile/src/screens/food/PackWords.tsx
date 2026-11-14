@@ -1,4 +1,5 @@
 import { StyleSheet, View } from "react-native";
+import { colours } from "../../look/colours";
 import { FOOD_ALLERGY_CAUTION, type PackagedCheck } from "@app/shared";
 import { Txt } from "../../look/Txt";
 import { allergenWords, checkWords } from "./barcode";
@@ -25,7 +26,8 @@ export function PackWords({ kcal, check, allergens, mayContain, listedAsTyped, b
           {why}
         </Txt>
       )}
-      <View style={styles.allergens} testID="pack-allergens">
+      {/* A product's own box: its allergens first, in a box of their own (Kd's drawing 2d, 32c-iii). */}
+      <View style={brief ? styles.allergens : [styles.allergens, styles.box]} testID="pack-allergens">
         {words.contains === null ? null : (
           <Txt kind="small" colour="text">
             <Txt kind="strong">Contains: </Txt>
@@ -56,4 +58,7 @@ export function PackWords({ kcal, check, allergens, mayContain, listedAsTyped, b
   );
 }
 
-const styles = StyleSheet.create({ allergens: { gap: 4 } });
+const styles = StyleSheet.create({
+  allergens: { gap: 4 },
+  box: { paddingHorizontal: 14, paddingVertical: 12, borderRadius: 14, borderWidth: 1, borderColor: colours.lineStrong, backgroundColor: colours.glass },
+});
