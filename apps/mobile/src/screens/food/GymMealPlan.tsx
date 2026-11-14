@@ -13,11 +13,9 @@ import { newGoalId } from "../goals/words";
 import { mealTypeName } from "./day";
 import { gymMeal, mealPlanEmail, noGymPlanLine, underLine, writtenByLine, type GymOfMine } from "./gymPlanRules";
 import { ideaName } from "./ideaRules";
-import { AllergyFoot, DayBar, FoodBox, FromRow, initialsOf, LoggedPill, MealThumb, nextMealWords, Notice, PlanMealCard } from "./MealCard";
+import { AllergyFoot, DayBar, FoodBox, foodsLine, FromRow, initialsOf, LoggedPill, MealThumb, nextMealWords, Notice, PlanMealCard } from "./MealCard";
 import { useMealOutbox } from "./MealOutbox";
-import { loggedAmount } from "./measures";
 import { loggedOfDay, planDayName, planDayOf, planMealAsMeal, stepDay } from "./planRules";
-import { foodTitle } from "./rows";
 
 // The plan a gym gave the person, on the Food page's What to eat next (ROADMAP Stage 5 31g; spec Part 6
 // §16.6): today's next meal from it with Log meal, and its week as the gym wrote it. Nothing on it is
@@ -318,7 +316,7 @@ function GymMealWords({ meal }: { meal: DietPlanMeal }) {
         {mealTypeName(meal.mealType)} · {count(meal.totals.kcalPoint)} kcal
       </Txt>
       <Txt kind="small" colour="text">
-        {meal.items.map((food) => `${foodTitle(food)} ${loggedAmount(food)}`).join(" · ")}
+        {foodsLine(meal)}
       </Txt>
       <Txt kind="tiny" style={styles.numbers}>
         {count(Math.round(meal.totals.proteinG))} g protein · {count(Math.round(meal.totals.carbsG))} g carbs · {count(Math.round(meal.totals.fatG))} g fat

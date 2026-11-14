@@ -20,15 +20,14 @@ import { dayRows, useDayMeals } from "./dayRows";
 import { ideaName } from "./ideaRules";
 import { FoodChoiceRow, shownOf, useFoodChoice, type Shown } from "./FoodChoice";
 import { GymFrom, GymPlanBox, NoGymPlan, UnderLine, useGymPlans, useNamedGym, type WeekAsk } from "./GymMealPlan";
-import { AllergyFoot, DayBar, FoodBox, FromRow, LoggedPill, MealThumb, nextMealWords, PlanMealCard } from "./MealCard";
+import { AllergyFoot, DayBar, FoodBox, foodsLine, FromRow, LoggedPill, MealThumb, nextMealWords, PlanMealCard } from "./MealCard";
 import { gymMeal, type GymOfMine } from "./gymPlanRules";
 import { MealIdeas, NO_PLAN_YET, type PlannedNow } from "./MealIdeas";
 import { useMealOutbox } from "./MealOutbox";
 import { useLookOpen } from "../setupFirst";
-import { loggedAmount } from "./measures";
 import type { BasketFood, PlanMealTarget } from "./basket";
 import { dayWithMeal, foodsOfRow, hasMeals, loggedOfDay, planBasketFood, planDayName, planDayOf, planMealAsMeal, stepDay } from "./planRules";
-import { foodTitle, measuresWithoutServer } from "./rows";
+import { measuresWithoutServer } from "./rows";
 
 export const PLAN_READ = "/v1/nutrition/diet-plan";
 const NO_CONNECTION = "No connection. Try again.";
@@ -683,7 +682,7 @@ function MealWords({ meal }: { meal: DietPlanMeal }) {
         {mealTypeName(meal.mealType)} · {count(meal.totals.kcalPoint)} kcal
       </Txt>
       <Txt kind="small" colour="text">
-        {meal.items.map((food) => `${foodTitle(food)} ${loggedAmount(food)}`).join(" · ")}
+        {foodsLine(meal)}
       </Txt>
       <Txt kind="tiny" style={styles.numbers}>
         {count(Math.round(meal.totals.proteinG))} g protein · {count(Math.round(meal.totals.carbsG))} g carbs · {count(Math.round(meal.totals.fatG))} g fat

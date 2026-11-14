@@ -173,6 +173,10 @@ function Leader() {
 
 const DOTS = "·".repeat(80);
 
+/** A plan meal's foods on one line, as drawn: "Oats 1/2 cup · Milk 1 cup". An amount never splits from its unit. */
+export const foodsLine = (meal: DietPlanMeal): string =>
+  meal.items.map((f) => `${foodTitle(f)} ${loggedAmount(f).replace(/ /g, KEEP_TOGETHER)}`).join(" · ");
+
 export const planFoods = (meal: DietPlanMeal): FoodLine[] => meal.items.map((f) => ({ name: foodTitle(f), amount: loggedAmount(f) }));
 
 /** The meal's numbers as a row of tiles: kcal, then each macro with a thin bar of its share. */
@@ -302,8 +306,8 @@ const styles = StyleSheet.create({
   dots: { color: colours.textFaint, fontSize: 12, lineHeight: 16, letterSpacing: 2 },
   box: { gap: 12 },
   boxCard: { gap: 12 },
-  picked: { minHeight: 64, justifyContent: "center", paddingRight: 96 },
-  pickedArt: { position: "absolute", top: -14, right: -14, bottom: -6, width: 120 },
+  picked: { minHeight: 84, justifyContent: "center", paddingRight: 128 },
+  pickedArt: { position: "absolute", top: -18, right: -10, bottom: -10, width: 150 },
   fill: { width: "100%", height: "100%" },
   thumb: { overflow: "hidden", borderWidth: 2, borderColor: colours.lineStrong, boxShadow: shadows.chip },
   loggedPill: {
