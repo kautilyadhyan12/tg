@@ -104,6 +104,8 @@ function serverOf(plan: () => Reply | Promise<Reply>, more: Record<string, Route
 async function open(world: ReturnType<typeof serverOf>, store = files(), tab: "Food" | "Dashboard" = "Food") {
   await render(<App extra={extra} ask={world.s.ask} store={memoryStore(kept(1))} wait={noWait} mealStore={store} />);
   await fireEvent.press(await screen.findByRole("tab", { name: tab }));
+  // The plan is on the Food tab's What to eat (32c-i).
+  if (tab === "Food") await fireEvent.press(await screen.findByRole("tab", { name: "What to eat" }));
   return screen;
 }
 const posts = (world: ReturnType<typeof serverOf>, path: string) => world.s.asked.filter((a) => a.method === "POST" && a.path === path);
@@ -734,6 +736,7 @@ describe("Suggested or My plan (31f)", () => {
     // The box is drawn again for the plan: it is looked for again.
     expect(await within(await screen.findByTestId("recommended-box")).findByRole("button", { name: "Log Rice + Dal" })).toBeTruthy();
     await fireEvent.press(screen.getByRole("tab", { name: "Food" }));
+    await fireEvent.press(await screen.findByRole("tab", { name: "What to eat" }));
     expect(await screen.findByRole("radio", { name: "My plan", selected: true })).toBeTruthy();
     expect(picks(world)).toEqual([{ choice: "suggested" }, { choice: "mine" }]);
   });

@@ -4,6 +4,7 @@ import { App, TABS } from "../../src/App";
 import { colours } from "../../src/look/colours";
 import { DASHBOARD_READS } from "../../src/screens/Dashboard";
 import { weekOf } from "../../src/screens/dashboard/words";
+import { monthWords } from "../../src/screens/food/day";
 import { fakeServer, isClockWords, kept, memoryStore, tokens } from "../kit";
 
 const extra = { copyName: "Feature 1", apiUrl: "http://localhost:3000" };
@@ -58,10 +59,12 @@ describe("the five tabs", () => {
     for (const words of shows) expect(await screen.findByText(words)).toBeTruthy();
     // No page says its tab's name again above itself: the lit tab below already does.
     expect(screen.queryByRole("header", { name: tab })).toBeNull();
-    const on = (await screen.findAllByRole("tab")).filter((drawn) => lit(drawn) === true);
+    // The five tabs at the foot; a page's own tabs (Food's Meals, What to eat and Week) are its own.
+    const five = async () => (await screen.findAllByRole("tab")).filter((drawn) => TABS.some((each) => each.name === label(drawn)));
+    const on = (await five()).filter((drawn) => lit(drawn) === true);
     expect(on.map(label)).toEqual([tab]);
     // What is drawn, not only what a screen reader is told: its word is orange, the other four are not.
-    const inks = (await screen.findAllByRole("tab")).map((one) => [
+    const inks = (await five()).map((one) => [
       label(one),
       drawn(within(one).getByText(String(label(one)))).color === colours.orange,
     ]);
@@ -78,9 +81,12 @@ describe("the five tabs", () => {
       const first = tab.name === "Gym" ? "Check for an invitation" : tab.name === "Food" ? "Scan food" : tab.name === "Me" ? "Achievements" : "Coming soon";
       expect(await screen.findAllByText(first)).toBeTruthy();
       expect(screen.queryAllByText("Coming soon")).toHaveLength(tab.name === "Me" || tab.name === "Gym" || tab.name === "Food" ? 0 : 1);
-      // The Dashboard's calendar shows this week's dates and its clock the phone's time; its numbers did
-      // not load here, so none shows.
-      const dates = tab.name === "Dashboard" ? weekOf(new Date()).map((day) => String(day.date)) : [];
+      // The Dashboard's calendar shows this week's dates and its clock the phone's time; Food's plates of the
+      // week (32c-i) this week's dates too, and its month; their numbers did not load here, so none shows.
+      const dates =
+        tab.name === "Dashboard" || tab.name === "Food"
+          ? [...weekOf(new Date()).map((day) => String(day.date)), ...(tab.name === "Food" ? [monthWords(new Date())] : [])]
+          : [];
       const withDigits = screen
         .queryAllByText(/\d/)
         .map(words)

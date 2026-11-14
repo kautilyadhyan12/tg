@@ -297,8 +297,9 @@ describe("the daily numbers", () => {
   it("a save of the daily numbers reads the week in food again, so its line moves to them (34f-ii)", async () => {
     const state: State = { targets: targets(), dishes: [], meals: [] };
     const s = await openFood(state);
-    await screen.findByText("This Week");
     const weekReads = () => s.asked.filter((a) => a.path === "/v1/nutrition/food-week").length;
+    // The week is read once for the page: its plates of the days and its Week tab (32c-i).
+    await waitFor(() => { expect(weekReads()).toBeGreaterThan(0); });
     const before = weekReads();
     await changeNumbers();
     await fireEvent.press(screen.getByRole("button", { name: "My own. Set your own numbers" }));
