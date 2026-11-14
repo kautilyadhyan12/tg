@@ -254,7 +254,7 @@ export function AmountPicker({
                   onPress={() => { onAmount({ measure: amount.measure, amount: on ? "" : String(f.value) }); }}
                   style={({ pressed }) => [styles.fill, on ? styles.fillOn : null, pressed ? styles.pressed : null]}
                 >
-                  <FillDish containerClass={dish?.containerClass ?? "bowl"} fill={f.value} colour={on ? "orange" : "textSoft"} />
+                  <FillDish containerClass={dish?.containerClass ?? "bowl"} fill={f.value} size={48} colour={on ? "orange" : "textSoft"} contents="orange" />
                   <Txt kind="tiny" colour={on ? "orange" : "textSoft"} style={styles.centre}>
                     {f.label}
                   </Txt>
@@ -262,7 +262,7 @@ export function AmountPicker({
               );
             })}
           </View>
-          {FILL_CHOICES.some((f) => amount.amount === String(f.value)) ? <Txt kind="strong">{gramsWords(grams)}</Txt> : <Txt kind="small">Pick how full it was.</Txt>}
+          {FILL_CHOICES.some((f) => amount.amount === String(f.value)) ? <Txt kind="strong" style={styles.end}>{gramsWords(grams)}</Txt> : <Txt kind="small">Pick how full it was.</Txt>}
         </>
       )}
     </>
@@ -543,6 +543,7 @@ const styles = StyleSheet.create({
   centre: { textAlign: "center" },
   pressed: { opacity: 0.8 },
   start: { alignSelf: "flex-start" },
+  end: { alignSelf: "flex-end" },
   label: { textTransform: "uppercase", letterSpacing: 0.9 },
   headRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },

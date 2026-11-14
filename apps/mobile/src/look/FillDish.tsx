@@ -42,9 +42,11 @@ function mugContents(fill: number): string {
   return `M6 ${String(surface)}V16a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V${String(surface)}Z`;
 }
 
-/** The dish's own shape at a fill. */
-export function FillDish({ containerClass, fill, size = 36, colour = "textSoft" }: { containerClass: string; fill: number; size?: number; colour?: ColourName }) {
+/** The dish's own shape at a fill; `contents` colours what is in it apart from the dish (Kd's drawing
+ *  3b: every bowl's food orange, the dish itself grey until it is picked). */
+export function FillDish({ containerClass, fill, size = 36, colour = "textSoft", contents }: { containerClass: string; fill: number; size?: number; colour?: ColourName; contents?: ColourName }) {
   const ink = colours[colour];
+  const food = colours[contents ?? colour];
   const mug = STRAIGHT_SIDED.has(containerClass);
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" accessible={false}>
@@ -52,13 +54,13 @@ export function FillDish({ containerClass, fill, size = 36, colour = "textSoft" 
         <>
           <Path d="M4 5v11a4 4 0 0 0 4 4h6a4 4 0 0 0 4-4V5" stroke={ink} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" fill="none" />
           <Path d="M18 9h1a2.5 2.5 0 0 1 0 5h-1" stroke={ink} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" fill="none" />
-          <Path d={mugContents(fill)} fill={ink} />
+          <Path d={mugContents(fill)} fill={food} />
         </>
       ) : (
         <>
           <Path d={`M${String(CX - BODY_RX)} ${String(RIM_Y)}a${String(BODY_RX)} ${String(BODY_RY)} 0 0 0 ${String(2 * BODY_RX)} 0`} stroke={ink} strokeWidth={2} strokeLinecap="round" fill="none" />
           <Path d={`M8 ${String(RIM_Y + BODY_RY + 3)}h8`} stroke={ink} strokeWidth={2} strokeLinecap="round" fill="none" />
-          <Path d={bowlContents(fill)} fill={ink} />
+          <Path d={bowlContents(fill)} fill={food} />
         </>
       )}
     </Svg>
