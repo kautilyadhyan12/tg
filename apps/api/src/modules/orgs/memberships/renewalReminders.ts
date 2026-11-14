@@ -221,6 +221,7 @@ async function sendPriceOne(
     gymName,
     greeting: leadGreeting(clean(leadFirstName(held.payerName))),
     subject: words.subject,
+    heading: "Membership price change",
     lines: words.lines,
     contact: contact.length === 0 ? null : `If you have any questions, you can ${contact.join(" or ")}.`,
   });
@@ -306,10 +307,14 @@ export function reminderLines(
     gymName,
     greeting: leadGreeting(clean(leadFirstName(held.payerName))),
     subject: words.subject,
+    heading: REMINDER_HEADING[what],
     lines: words.lines,
     contact: contact.length === 0 ? null : `If you have any questions, you can ${contact.join(" or ")}.`,
   };
 }
+
+/** The email's heading for each reminder: short, and the same whoever pays. */
+const REMINDER_HEADING = { renews: "Upcoming membership renewal", term_renews: "Minimum term ending soon", ends: "Membership ending soon" } as const;
 
 function reminderMessage(
   deps: RenewalReminderDeps,

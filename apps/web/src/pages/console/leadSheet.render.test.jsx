@@ -575,7 +575,7 @@ describe('the follow-up emails (20c-ii): the gym sends them, the app reminds', (
     const url = new URL(link.getAttribute('href'));
     expect(url.protocol).toBe('mailto:');
     expect(decodeURIComponent(url.pathname)).toBe('tom@example.com');
-    expect(url.searchParams.get('subject')).toBe('Thanks for asking about Iron House');
+    expect(url.searchParams.get('subject')).toBe('Thank you for your interest in Iron House');
     expect(url.searchParams.get('body')).toContain('Hi Tom,');
   });
 

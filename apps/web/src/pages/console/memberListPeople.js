@@ -718,9 +718,9 @@ export function joinLink(origin, slug) {
 export function inviteShareText({ gymName, link, email = null }) {
   const address = email === null ? `the email address ${gymName} has for you` : `this email address, ${email}`;
   return (
-    `${gymName} has invited you to AI Home Gym, the app it uses.\n\n` +
+    `${gymName} has invited you to KWAZO, the app it uses.\n\n` +
     `To join ${gymName} in the app, open this link and sign in with ${address}:\n${link}\n\n` +
-    `The invitation works only for someone who signs in with that address.`
+    `This invitation only works when you sign in with that email address.`
   );
 }
 

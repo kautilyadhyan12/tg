@@ -149,7 +149,7 @@ describe("the email", () => {
       lines: [
         "The price of your Gold Monthly membership at Iron Works is going up from $54.13 to $59.54 every month.",
         "The new price starts with the payment on 3 Jan 2027. Payments before then stay at $54.13.",
-        "If you'd rather not carry on at the new price, please let us know before 3 Jan 2027.",
+        "If you don't want to continue at the new price, please let us know before 3 Jan 2027.",
       ],
     });
   });
@@ -158,7 +158,7 @@ describe("the email", () => {
     const words = priceRaiseWords({ ...base, forName: "Sam Lee", notice: { days: 30, lastDay: "2027-01-02" } });
     expect(words.subject).toBe("The price of Sam Lee's membership at Iron Works is going up on 3 Jan 2027");
     expect(words.lines[0]).toBe("The price of Sam Lee's Gold Monthly membership at Iron Works is going up from $54.13 to $59.54 every month.");
-    expect(words.lines[2]).toBe("If you'd rather not carry on at the new price, cancelling needs 30 days' notice: if you cancel today, the last day is 2 Jan 2027.");
+    expect(words.lines[2]).toBe("If you don't want to continue at the new price, you need to give 30 days' notice. If you cancel today, your last day will be 2 Jan 2027.");
   });
 });
 

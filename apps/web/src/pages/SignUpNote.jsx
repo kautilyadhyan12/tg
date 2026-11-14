@@ -74,7 +74,7 @@ export default function SignUpNote() {
             <Dumbbell className="w-4 h-4 text-white" />
           </div>
           <span className="font-bold text-lg tracking-tight" style={{ color: 'rgba(255,255,255,0.95)' }}>
-            AI Home Gym
+            KWAZO
           </span>
         </div>
 

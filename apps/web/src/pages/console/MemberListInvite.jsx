@@ -452,7 +452,7 @@ export default function MemberListInvite({
     footer = (
       <div className="flex flex-col gap-3 w-full">
         <p className="c-s13 c-t2">
-          Each {words.person} receives one invitation email from {gym.name}, sent by AI Home Gym, with a link to join. Only someone who signs in with that email address can join.
+          Each {words.person} receives one invitation email from {gym.name}, sent by KWAZO, with a link to join. Only someone who signs in with that email address can join.
         </p>
         {reach > 0 && blocked === null ? (
           <PermissionTick checked={permission} onChange={setPermission}>

@@ -399,7 +399,7 @@ d("A reminder before a renewal or a minimum term's end (real Postgres)", { timeo
     expect(ivyMail.map((m) => m.subject).sort()).toEqual(
       [`Your membership at ${gym.name} renews on ${dayWords(renewsOn)}`, `Your minimum term at ${gym.name} ends on ${dayWords(lastDay)}`].sort(),
     );
-    expect(ivyMail.find((m) => m.subject.includes("minimum term"))?.text).toContain("After that, it carries on at $25.00 every week until you cancel.");
+    expect(ivyMail.find((m) => m.subject.includes("minimum term"))?.text).toContain("After that, it continues at $25.00 every week until you cancel.");
     const page = await pageOf(gym, ivy);
     expect(page.renewalReminders.map((r) => [r.when, r.status.state]).sort()).toEqual([
       ["every_renewal", "sent"],

@@ -14,6 +14,8 @@ export interface EmailMessage {
   subject: string;
   text: string;
   html: string;
+  /** A member email's own From line, "Iron House via KWAZO <box>"; the transport's own when absent. */
+  from?: string;
 }
 
 export interface EmailTransport {
@@ -188,7 +190,7 @@ export function createResendTransport(opts: {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            from: opts.from,
+            from: message.from ?? opts.from,
             to: [message.to],
             subject: message.subject,
             text: message.text,
