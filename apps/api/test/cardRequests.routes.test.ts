@@ -396,6 +396,41 @@ d("Ask to add card: only the people the box names are asked, and only at their o
     expect(await askedUsers(plain.id)).toEqual([]);
   });
 
+  it("reads who pays as the charges do: a payer whose child has left needs no card, and a card on an earlier Square account is no card", async () => {
+    const gym = await makeGym("Rule Gym");
+    const gold = await typeOf(gym);
+    // Gus paid for Hal, who has left: nothing Gus pays for renews now.
+    const gus = await person(gym, "Gus Hale");
+    const hal = await person(gym, "Hal Hale");
+    await give(gym, gold, hal);
+    await sql`INSERT INTO gym_member_payers (gym_id, entry_id, payer_entry_id) VALUES (${gym.id}, ${hal}, ${gus})`;
+    await sql`UPDATE gym_member_list_entries SET former_at = now() WHERE gym_id = ${gym.id} AND id = ${hal}`;
+    await member(gym, gus);
+    // Ivy's card was saved on the Square account the gym was connected to before: it is never charged from here.
+    const ivy = await person(gym, "Ivy Moss");
+    await give(gym, gold, ivy);
+    await member(gym, ivy);
+    await cardFor(gym, ivy);
+    await sql`UPDATE gym_member_cards SET account_id = 'AN-EARLIER-ACCOUNT' WHERE gym_id = ${gym.id} AND entry_id = ${ivy}`;
+    // Jon pays for his own Gold and for Kit's.
+    const jon = await person(gym, "Jon Reyes");
+    const kit = await person(gym, "Kit Reyes");
+    await give(gym, gold, jon);
+    await give(gym, gold, kit);
+    await sql`INSERT INTO gym_member_payers (gym_id, entry_id, payer_entry_id) VALUES (${gym.id}, ${kit}, ${jon})`;
+    const jonApp = await member(gym, jon);
+
+    expect(await noCardList(gym)).toEqual(["Ivy Moss", "Jon Reyes"]);
+    const box = await preview(gym, ticked([gus, ivy, jon, kit]));
+    expect(box.ask.map((p) => p.name).sort()).toEqual(["Ivy Moss", "Jon Reyes"]);
+    expect(keptNames(box)).toEqual({ nothing_renews: ["Gus Hale"], paid_by: ["Kit Reyes"] });
+    expect((await askRes(gym, gym.owner, ticked([gus, ivy, jon, kit]), box)).statusCode).toBe(200);
+    const [jonsMessage] = await sql<{ body: string }[]>`SELECT body FROM gym_member_messages WHERE gym_id = ${gym.id} AND user_id = ${jonApp.userId} AND kind = 'card_request'`;
+    expect(jonsMessage?.body).toBe(
+      `${gym.name} asks you to add a card for the memberships you pay for. It will be charged automatically each time one renews. To add it, open My membership and tap Add card.`,
+    );
+  });
+
   it("Select all of No card on file asks the same people, and the person's page says when they were asked", async () => {
     const gym = await makeGym("Sunset");
     const gold = await typeOf(gym);

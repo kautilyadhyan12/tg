@@ -13,7 +13,7 @@ type SqlOrTx = Sql | TransactionSql;
 /** The card (alias `k`) pays for a membership that renews: its holder's own, where nobody else pays
  *  for them, or that of somebody they pay for; of a current member, running or frozen. The card the
  *  app would charge for it (`payerCard` in `cardChargesRepo.ts`). */
-export const paysForRenewal = (sql: SqlOrTx, now: Date) => sql`
+const paysForRenewal = (sql: SqlOrTx, now: Date) => sql`
       (EXISTS (
          SELECT 1 FROM gym_held_memberships h
          WHERE h.gym_id = k.gym_id AND h.entry_id = k.entry_id AND ${renewing(sql, now)}
@@ -24,8 +24,9 @@ export const paysForRenewal = (sql: SqlOrTx, now: Date) => sql`
          WHERE p.gym_id = k.gym_id AND p.payer_entry_id = k.entry_id AND ${renewing(sql, now)}))`;
 
 /** A membership (alias `h`) that renews, running or frozen, of a current member. Each half of
- *  `paysForRenewal` finds it by its record, so neither reads the gym's other memberships. */
-const renewing = (sql: SqlOrTx, now: Date) => sql`
+ *  `paysForRenewal` finds it by its record, so neither reads the gym's other memberships. Ask to add card
+ *  (`cardRequestsRepo.ts`) reads the same, for a whole gym at once. */
+export const renewing = (sql: SqlOrTx, now: Date) => sql`
       ${STILL_RENEWS(sql, now)} AND h.status IN ('active','frozen')
       AND NOT EXISTS (SELECT 1 FROM gym_member_list_entries m WHERE m.gym_id = h.gym_id AND m.id = h.entry_id AND m.former_at IS NOT NULL)`;
 
