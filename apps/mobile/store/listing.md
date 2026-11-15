@@ -6,7 +6,9 @@ are added when it reaches the store's app (workouts and the camera's form check 
 - **App name** (30 at most): KWAZO
 - **Category:** Health & Fitness · **Contact email:** support@getkwazo.com · **Website:** https://getkwazo.com
 - **Privacy policy:** https://getkwazo.com/privacy · **Delete your account:** https://getkwazo.com/delete-account
-- **Pictures:** `play-icon-512.png`, `play-feature-1024x500.png`, phone screenshots in `screenshots/`
+- **Pictures:** `play-icon-512.png` and `play-feature-1024x500.png` (both declared to Google as made with AI: the wizard),
+  and the eight phone screenshots in `screenshots/` in their numbered order (real screens, not declared): Google's
+  reviewers' account, made-up answers ("Alex"), 1080x1920, a member of KWAZO Demo Gym for 6 to 8.
 
 ## Short description (80 at most)
 
