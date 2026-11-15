@@ -56,6 +56,20 @@ describe("config: email service", () => {
   it("production refuses to boot without a Resend key", () => {
     expect(() => loadConfig({ ...good, NODE_ENV: "production" })).toThrow(/RESEND_API_KEY/);
   });
+  it("the reviewers' address and code are set together, the code six digits, the address kept in small letters (21c-i)", () => {
+    expect(() => loadConfig({ ...good, REVIEW_EMAIL: "review@getkwazo.com" })).toThrow(/REVIEW_CODE/);
+    expect(() => loadConfig({ ...good, REVIEW_CODE: "406213" })).toThrow(/REVIEW_CODE/);
+    for (const bad of ["40621", "4062133", "40621a", " 406213", ""]) {
+      expect(() => loadConfig({ ...good, REVIEW_EMAIL: "review@getkwazo.com", REVIEW_CODE: bad }), bad).toThrow(/REVIEW_CODE/);
+    }
+    expect(() => loadConfig({ ...good, REVIEW_EMAIL: "review", REVIEW_CODE: "406213" })).toThrow(/REVIEW_EMAIL/);
+    const set = loadConfig({ ...good, REVIEW_EMAIL: " Review@GetKwazo.com ", REVIEW_CODE: "406213" });
+    expect(set.REVIEW_EMAIL).toBe("review@getkwazo.com");
+    expect(set.REVIEW_CODE).toBe("406213");
+    const unset = loadConfig(good);
+    expect(unset.REVIEW_EMAIL).toBeUndefined();
+    expect(unset.REVIEW_CODE).toBeUndefined();
+  });
   it("a key without a sender line is refused in every environment", () => {
     expect(() => loadConfig({ ...good, NODE_ENV: "development", RESEND_API_KEY: "re_x" })).toThrow(/EMAIL_FROM/);
   });

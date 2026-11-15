@@ -11,6 +11,9 @@
 //   · the stored value is an HMAC, never the code; single use; one UPDATE
 //   · asking for a code never says whether the address has an account, and
 //     never creates one — the account is created when the code is PROVED
+//   · one address the server's settings name, for Google's reviewers, signs in
+//     with a code that never changes and is emailed nothing; the rules above
+//     still hold there (ROADMAP Stage 5 21c-i, `reviewersCode`)
 //
 // The same mechanism serves four purposes: the sign-in door, the code
 // Settings asks for before deleting an account (bound to the account), the one the website's Delete
@@ -129,6 +132,17 @@ function refuseIfOverRules(recent: SignInCodeRow[], now: number, robot: RobotAns
 /** Whether this request passed the robot check; a door with none passes undefined. */
 export type RobotAnswer = "passed" | "not_passed";
 
+/** The reviewers' code in place of a new one (ROADMAP Stage 5 21c-i): only to sign in, only at the one
+ *  address the server's settings name, compared whole (the address arrives trimmed and in small letters,
+ *  as the setting is kept), and never for the admin's account. Null: an ordinary code, emailed. */
+async function reviewersCode(deps: CodeDeps, input: { email: string; purpose: CodePurpose; boundTo?: string }): Promise<string | null> {
+  const { REVIEW_EMAIL, REVIEW_CODE, ADMIN_USER_ID } = deps.config;
+  if (REVIEW_EMAIL === undefined || REVIEW_CODE === undefined) return null;
+  if (input.purpose !== "sign_in" || input.boundTo !== undefined || input.email !== REVIEW_EMAIL) return null;
+  if (ADMIN_USER_ID !== undefined && (await repo.findUserByEmail(deps.sql, input.email))?.id === ADMIN_USER_ID) return null;
+  return REVIEW_CODE;
+}
+
 /** Ask for a code. Enforces the day cap and the resend gap, mints and stores
  *  the code (hashed), sends it, and takes the row back if the send fails so a
  *  failed email never spends one of the day's three. Same outcome whether or not
@@ -139,7 +153,8 @@ export async function requestCode(
   send: CodeSender,
 ): Promise<{ resendAfterSeconds: number; expiresInSeconds: number }> {
   const now = Date.now();
-  const code = mintSixDigitCode();
+  const reviewers = await reviewersCode(deps, input);
+  const code = reviewers ?? mintSixDigitCode();
   const issued = await repo.issueCode(deps.sql, {
     email: input.email,
     purpose: input.purpose,
@@ -153,6 +168,12 @@ export async function requestCode(
       if (input.boundTo !== undefined && recent.length === 0) refuseIfAddressFull(everyone, now);
     },
   });
+
+  // The reviewers know their code already, and nobody reads that address: nothing is emailed.
+  if (reviewers !== null) {
+    deps.log.info({ event: "auth.code.reviewers" }, "the reviewers' sign-in code was issued");
+    return { resendAfterSeconds: SIGN_IN_CODE_RULES.resendAfterSeconds, expiresInSeconds: SIGN_IN_CODE_RULES.ttlSeconds };
+  }
 
   try {
     await send(input.email, code);
