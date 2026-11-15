@@ -32,12 +32,15 @@ describe("the Gym tab's heading", () => {
   });
 });
 
+// Kd, 2026-11-15 (21c-i): a CrossFit box's members read "CrossFit", and somebody who has joined no business yet
+// reads "Places", never "Gym"; the page under it keeps its words ("Where you train").
 describe("the Gym tab's word under its icon", () => {
   it.each([
-    [[], "Gym"],
+    [[], "Places"],
     [["gym"], "Gym"],
-    [["crossfit_box"], "Gym"],
-    [["gym", "crossfit_box"], "Gym"],
+    [["crossfit_box"], "CrossFit"],
+    [["gym", "crossfit_box"], "Places"],
+    [["crossfit_box", "crossfit_box"], "CrossFit"],
     [["yoga_studio"], "Studio"],
     [["pilates_studio", "studio"], "Studio"],
     [["personal_trainer"], "Trainer"],
@@ -48,7 +51,10 @@ describe("the Gym tab's word under its icon", () => {
     expect(tabWord(types)).toBe(word);
   });
 
+  // Never longer than the bar's longest word, "Dashboard", which fits it at every size. Measured in Inter SemiBold at the
+  // bar's 11 points (2026-11-15): Dashboard 58.0, Workout 45.7, CrossFit 44.2, Trainer 38.0, Places 35.2, Studio 34.1.
   it("no kind is named so long it crowds the bar", () => {
-    for (const type of orgTypeSchema.options) expect(tabWord([type]).length).toBeLessThanOrEqual(7);
+    for (const type of orgTypeSchema.options) expect(tabWord([type]).length).toBeLessThanOrEqual("Dashboard".length);
+    expect(tabWord([]).length).toBeLessThanOrEqual("Dashboard".length);
   });
 });
