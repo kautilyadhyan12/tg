@@ -9,6 +9,7 @@ import {
   loadAlignments,
   readBadging,
   storeFaults,
+  xmlResources,
   type StoreFacts,
 } from "../scripts/storeCheck.mjs";
 import { STORE, STORE_BLOCKED_PERMISSIONS } from "../app.config";
@@ -136,6 +137,11 @@ describe("what the Android tools print", () => {
     // Named, but no such file among the app's XML files: nothing can say, and the check says so.
     expect(cleartextIn(named, [])).toBeNull();
     expect(cleartextIn(named, ["  E: paths (line=2)\n"])).toBeNull();
+  });
+  it("reads a network security file wherever a release build put it, under its shortened name too", () => {
+    // Names from build 458835 (`tar -tf`), and an unshortened one as a debug build keeps it.
+    const paths = ["AndroidManifest.xml", "res/-1.xml", "res/8G.xml", "res/xml/network_security_config.xml", "res/drawable/a.png", "assets/app.config"];
+    expect(xmlResources(paths)).toEqual(["res/-1.xml", "res/8G.xml", "res/xml/network_security_config.xml"]);
   });
   it("reads a certificate's fingerprint the same from apksigner and keytool, and never a public key's", () => {
     expect(fingerprintsIn(APKSIGNER)).toEqual([KEY]);

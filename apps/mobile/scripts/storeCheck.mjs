@@ -171,14 +171,19 @@ function filesUnder(dir) {
     .map((entry) => join(entry.parentPath, entry.name));
 }
 
-/** The xmltree of every compiled XML file under `res/xml*` of the phone file, read only when the manifest names a network
- *  security file (the resource's own name is not in the manifest, only its number). */
+/** Every compiled XML file under `res/` of a phone file, from its paths. A release build shortens its resources' names
+ *  (build 458835: `res/-1.xml`, 786 of them), so a network security file can be any of them, never only `res/xml/…`. */
+export function xmlResources(paths) {
+  return paths.filter((p) => /^res\/.+\.xml$/.test(p));
+}
+
+/** The xmltree of every compiled XML resource of the phone file, read only when the manifest names a network security
+ *  file (the resource's own name is not in the manifest, only its number); `cleartextIn` keeps the network ones. */
 function networkConfigs(t, apkPath, unpacked, manifest) {
   if (!/networkSecurityConfig\(0x[0-9a-f]+\)=/i.test(manifest)) return [];
-  return filesUnder(unpacked)
-    .map((p) => p.slice(unpacked.length + 1).replaceAll("\\", "/"))
-    .filter((p) => /^res\/xml[^/]*\/[^/]+\.xml$/.test(p))
-    .map((p) => tool(t.aapt2, ["dump", "xmltree", "--file", p, apkPath]).text);
+  return xmlResources(filesUnder(unpacked).map((p) => p.slice(unpacked.length + 1).replaceAll("\\", "/"))).map(
+    (p) => tool(t.aapt2, ["dump", "xmltree", "--file", p, apkPath]).text,
+  );
 }
 
 /** Gathers the facts of one build folder. The upload key's fingerprint is read from its key store with the
