@@ -169,10 +169,20 @@ describe('the front page keeps its own rules', () => {
     // A computer page needs a screen wide enough, wide in shape and tall enough for its words (12a-ii: a phone held
     // sideways, 844 x 390, ran its words 264 px below the screen); every other screen gets the phone page. The two
     // conditions must be exact opposites, or a screen would get half of each.
-    expect(script).toContain("matchMedia('(min-width: 821px) and (min-aspect-ratio: 3/2) and (min-height: 540px)')");
-    expect(css).toContain('@media (max-width:820px),(max-aspect-ratio:1499/1000),(max-height:539px){');
-    expect(css).toContain('@media (min-width:821px) and (min-aspect-ratio:3/2) and (min-height:540px) and (max-height:760px){');
-    expect(css.match(/@media[^{]*aspect-ratio/g)).toHaveLength(2);
+    // ONE condition (12a-ii round one, H1: a 1498 x 999 window matched neither half and the rooms piled up).
+    const computer = script.match(/const WIDE = matchMedia\('([^']+)'\)/)[1];
+    expect(computer).toBe('(min-width:821px) and (min-aspect-ratio:3/2) and (min-height:540px)');
+    expect(css).toContain(`@media not all and ${computer}{`);
+    const queries = css.match(/@media[^{]*aspect-ratio[^{]*\{/g);
+    expect(queries).toEqual([`@media ${computer} and (max-height:760px){`, `@media not all and ${computer}{`, `@media (prefers-reduced-motion:reduce) and ${computer}{`]);
+    // Reduce motion makes each room one screen tall on the computer layout only (round one, H3: on a phone the next
+    // room covered every room's words).
+    const reduce = css.match(/@media \(prefers-reduced-motion:reduce\)\{([^@]*)\}/)[1];
+    expect(reduce).not.toMatch(/\.scene\b/);
+    expect(css.split(`@media (prefers-reduced-motion:reduce) and ${computer}{`)[1]).toMatch(/^\s*\.scene,\.scene:first-child,\.scene:last-child\{height:100vh;margin-top:0\}/);
+    // The bubble band sits in the words' own bottom margin, never over them.
+    expect(css).toContain('.shot{position:relative;inset:auto;padding-bottom:var(--band);');
+    expect(css).toMatch(/\.rise\{display:block;position:absolute;left:0;right:0;top:calc\(1px - var\(--band\)\);height:var\(--band\);/);
     // On the phone page the picture always covers the width: never shorter than a 16:9 picture as wide as the screen.
     expect(css).toContain(':root{--pic:max(56svh,320px,56.25vw);--band:150px}');
   });
@@ -211,6 +221,9 @@ describe('the front page keeps its own rules', () => {
     // Bowlby One, Lexend in four weights (one file each: a variable file drew one thin weight in Safari's engine), eight masks.
     expect(fromCss.length).toBe(13);
     expect(fromCss.filter((f) => /^fonts\/lexend-(400|500|600|700)-latin\.woff2$/.test(f))).toHaveLength(4);
+    // four different files, not one weight copied four times
+    const weights = [400, 500, 600, 700].map((w) => readFileSync(new URL(`./fonts/lexend-${String(w)}-latin.woff2`, import.meta.url)).toString('base64'));
+    expect(new Set(weights).size).toBe(4);
     for (const file of fromCss) expect(exists(`./${file}`), file).toBe(true);
     const fromScript = [...script.matchAll(/from '\.\/([^']+)'/g)].map((m) => m[1]);
     // The eight clips and the clip rule: nothing else, so the page loads no console code.
@@ -256,7 +269,9 @@ describe('what the front page says', () => {
 
   it('speaks to every fitness business, never to gyms alone (Kd, 2026-11-15)', () => {
     // "gym" may name a place someone trains ("a gym or studio membership"), never the customer.
-    expect(text).not.toMatch(/\bgym (?:owners?|management|console)\b|\bgyms can\b|\byour gym\b|\bfor gyms\b|\bgym updates\b/i);
+    // The one use allowed (round one, L2): every other "gym" in the words, the pictures' descriptions or the head fails.
+    expect(text.replace(/a gym or studio membership/g, '')).not.toMatch(/\bgyms?\b|\bgym's\b/i);
+    for (const [, value] of page.matchAll(/\s(?:content|alt|title|aria-label)="([^"]*)"/g)) expect(value).not.toMatch(/\bgyms?\b/i);
     expect(text).toContain('For fitness businesses');
     expect(page).not.toMatch(/content="[^"]*\bgym (?:management|owner)/i);
   });

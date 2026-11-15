@@ -122,7 +122,7 @@ a.btn:hover{transform:translate(2px,2px);box-shadow:2px 3px 0 var(--ink)}
   .faq{margin-top:14px;gap:6px}.faq summary{padding:8px 13px}.faq p{padding:0 13px 10px;font-size:13.5px}
 }
 /* Phones and upright screens: the rooms stack, the picture on top and the words under it */
-@media (max-width:820px),(max-aspect-ratio:1499/1000),(max-height:539px){
+@media not all and (min-width:821px) and (min-aspect-ratio:3/2) and (min-height:540px){
   :root{--pic:max(56svh,320px,56.25vw);--band:150px}
   .scene,.scene:first-child,.scene:last-child{height:auto;margin-top:0}
   .stage{position:relative;height:auto}
@@ -152,8 +152,10 @@ a.btn:hover{transform:translate(2px,2px);box-shadow:2px 3px 0 var(--ink)}
 @media (prefers-reduced-motion:reduce){
   .rays i,.cue i{animation:none}
   .top{transition:none}
-  .scene,.scene:first-child,.scene:last-child{height:100vh;margin-top:0}
   .st{transition:none}
+}
+@media (prefers-reduced-motion:reduce) and (min-width:821px) and (min-aspect-ratio:3/2) and (min-height:540px){
+  .scene,.scene:first-child,.scene:last-child{height:100vh;margin-top:0}
 }
 
 /* Where each room's colours, stickers, labels and clip sit (kept here, not on the elements, so the page's
