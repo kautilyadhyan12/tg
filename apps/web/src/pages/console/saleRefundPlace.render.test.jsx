@@ -1,6 +1,6 @@
 // CHOOSE PRODUCT (ROADMAP 18d-iv-d-ii): a refund made in Square on part of a basket, on a person's "Bought at the desk". Only the network is mocked.
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
 const svc = { purchases: vi.fn(), placeSquareRefund: vi.fn() };
@@ -105,6 +105,7 @@ describe('Choose product', () => {
     fireEvent.click(box.getByRole('button', { name: 'Save' }));
     expect(await screen.findByText(/has changed since the page was read/)).toBeTruthy();
     expect(screen.queryByTestId('place-refund-form')).toBeNull();
-    expect(svc.purchases.mock.calls.length).toBeGreaterThan(1);
+    // The page reads again in an effect after the sentence is drawn: waited for, never assumed (red on GitHub, 2026-11-15).
+    await waitFor(() => expect(svc.purchases.mock.calls.length).toBeGreaterThan(1));
   });
 });
