@@ -507,6 +507,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
    - 24b. [ ] **A workout plan**, once Stage 5's items 36 and 60 are built.
    - 24c. [ ] **A run plan**, once Stage 5's item 37 is built.
 25. [x] **Every member email in the new layout** · merged 2026-11-14 · PR #548
+26. [ ] **KWAZO on every screen** (Kd, 2026-11-15, `rulings/2026-11-15-26.md`): every web screen that still says "AI Home Gym" says KWAZO (the menu, Register, the staff invitation page, Restore account, the front desk, after a workout, a run, the paying box), and "Download my data" saves `kwazo-export-<date>.json` on the web and the phone. The test copies of the phone app keep their ids. The web folder, when Kd places it.
 
 ## Stage 3 — Money
 
