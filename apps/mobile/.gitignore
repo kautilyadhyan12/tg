@@ -9,3 +9,5 @@ modules/*/android/.cxx/
 .expo/
 # Firebase's file for the Android app (18b-i), from the kwazo project's console. Each folder copies it in.
 google-services.json
+# The store's files (scripts/store.mjs): each build's .aab and .apk, kept on the laptop, never in git.
+/store-builds/
