@@ -118,7 +118,8 @@ They change how pages look, never what they do (rule 14 on the `Main` board).
 ## Brought up to date (V0, from 2026-11-15)
 
 The boards above were drawn on 2026-10-18; the console has grown since (ROADMAP item 22, V0; `rulings/2026-11-15-v0-a.md`).
-V0 draws what they miss, in the same look and the same blocks, from the real pages: V0-a took a picture and the words of
+The V0 boards are also on their own canvas, https://claude.ai/artifact/7mTA4UbxX7AZ4njAHBNw4g (private to the Claude account
+of the web folder's laptop). V0 draws what they miss, in the same look and the same blocks, from the real pages: V0-a took a picture and the words of
 every console page and of each box a member's page opens, signed in to the US Square test gym on the web folder's own
 database (`apps/api/.cost/v0-a/today.mts` and `boxes.mts`, untracked), and counted, page by page, the lines no board has.
 Every word on a V0 board is the real page's; the gym (Iron House, Austin, in dollars, because cards and the Terminal are
