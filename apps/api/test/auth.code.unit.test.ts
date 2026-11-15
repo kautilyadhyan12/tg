@@ -1,6 +1,9 @@
 // Sign-in code primitives and the Resend transport, with no database and no
 // network: the code's shape, the keyed hash, and the ONE HTTPS call — its
 // request shape, and that a failure never carries the key or the address.
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 import type { FastifyBaseLogger } from "fastify";
 import { createResendTransport, EmailTransportError, type EmailMessage } from "../src/email/resend.js";
@@ -187,6 +190,23 @@ describe("the code emails", () => {
     expect(m.text).toContain("10 minutes");
     expect(m.text).not.toMatch(/https?:\/\//);
     expect(m.html).not.toMatch(/<a\s/i);
+  });
+  it("name the app KWAZO, as testers read it in their inbox, never AI Home Gym (21c-i)", () => {
+    const signIn = signInCodeEmail("kd@example.com", "042917", 10);
+    expect(signIn.subject).toBe("042917 is your KWAZO code");
+    const deletion = deleteAccountCodeEmail("kd@example.com", "042917", 10);
+    const undo = accountDeletionEmail("kd@example.com", "Kd", "https://app.example/restore-account?token=abc", 14);
+    for (const m of [signIn, deletion, undo]) {
+      expect(`${m.subject}\n${m.text}\n${m.html}`).toContain("KWAZO");
+      expect(`${m.subject}\n${m.text}\n${m.html}`).not.toContain("AI Home Gym");
+    }
+  });
+  it("the server writes the app's old name nowhere, so no email can carry it (21c-i)", () => {
+    const src = fileURLToPath(new URL("../src/", import.meta.url));
+    const files = readdirSync(src, { recursive: true, encoding: "utf8" }).filter((f) => f.endsWith(".ts"));
+    expect(files.length).toBeGreaterThan(100);
+    const old = files.filter((f) => readFileSync(join(src, f), "utf8").includes("AI Home Gym"));
+    expect(old).toEqual([]);
   });
   it("the deletion email says what the code is for", () => {
     const m = deleteAccountCodeEmail("kd@example.com", "042917", 10);

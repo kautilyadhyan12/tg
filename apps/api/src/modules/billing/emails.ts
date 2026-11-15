@@ -4,9 +4,8 @@
 // made instead, or none was. Plain text first, a small HTML twin; both links are to our own
 // console. Money arrives formatted by the server; dates are the gym's own time zone.
 import { orgWords } from "@app/shared";
+import { BRAND as APP_NAME } from "../../email/layout.js";
 import type { EmailMessage } from "../../email/resend.js";
-
-const APP_NAME = "AI Home Gym";
 
 const escapeHtml = (s: string): string =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");

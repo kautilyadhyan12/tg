@@ -100,7 +100,7 @@ const envSchema = z.object({
   // unset in dev/test = the DEV sender prints the code in the server log;
   // REQUIRED in production (refinement below) — a production box with no way
   // to send a code is a product nobody can sign in to. EMAIL_FROM is the
-  // sender line Resend expects, e.g. `AI Home Gym <hello@your-domain>`, on a
+  // sender line Resend expects, e.g. `KWAZO <hello@your-domain>`, on a
   // domain verified in the Resend dashboard.
   RESEND_API_KEY: z.string().min(1).optional(),
   // Checked for SHAPE at boot ("Name <box@domain>" or "box@domain"), so a

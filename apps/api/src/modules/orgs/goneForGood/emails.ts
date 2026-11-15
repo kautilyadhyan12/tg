@@ -4,8 +4,7 @@
 import { orgWords } from "@app/shared";
 import type { EmailMessage } from "../../../email/resend.js";
 import type { Notice } from "./repo.js";
-
-const APP_NAME = "AI Home Gym";
+import { BRAND as APP_NAME } from "../../../email/layout.js";
 
 const escapeHtml = (s: string): string =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
