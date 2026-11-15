@@ -30,15 +30,18 @@ const label = (tab: Drawn) => tab.props.accessibilityLabel;
 const lit = (tab: Drawn) => tab.props.accessibilityState?.selected;
 const words = (line: Drawn) => line.props.children;
 
+/** The word under a tab's icon for somebody in no business yet: the fourth tab reads "Places" (Kd, 2026-11-15, 21c-i). */
+const shown = (name: string) => (name === "Gym" ? "Places" : name);
+
 async function open(tab: string) {
-  await fireEvent.press(await screen.findByRole("tab", { name: tab }));
+  await fireEvent.press(await screen.findByRole("tab", { name: shown(tab) }));
 }
 
 describe("the five tabs", () => {
-  it("are Dashboard, Workout, Food, Gym and Me, in that order, opening on Dashboard", async () => {
+  it("are Dashboard, Workout, Food, Places and Me for somebody in no business yet, in that order, opening on Dashboard", async () => {
     await render(<App extra={extra} store={signedIn()} ask={answers(true)} />);
     const tabs = await screen.findAllByRole("tab");
-    expect(tabs.map(label)).toEqual(["Dashboard", "Workout", "Food", "Gym", "Me"]);
+    expect(tabs.map(label)).toEqual(["Dashboard", "Workout", "Food", "Places", "Me"]);
     expect(TABS.map((tab) => tab.name)).toEqual(["Dashboard", "Workout", "Food", "Gym", "Me"]);
     expect(tabs.map(lit)).toEqual([true, false, false, false, false]);
     // The page greets the person by name; the lit tab is what says "Dashboard".
@@ -58,17 +61,17 @@ describe("the five tabs", () => {
     await open(tab);
     for (const words of shows) expect(await screen.findByText(words)).toBeTruthy();
     // No page says its tab's name again above itself: the lit tab below already does.
-    expect(screen.queryByRole("header", { name: tab })).toBeNull();
+    expect(screen.queryByRole("header", { name: shown(tab) })).toBeNull();
     // The five tabs at the foot; a page's own tabs (Food's Meals, What to eat and Week) are its own.
-    const five = async () => (await screen.findAllByRole("tab")).filter((drawn) => TABS.some((each) => each.name === label(drawn)));
+    const five = async () => (await screen.findAllByRole("tab")).filter((drawn) => TABS.some((each) => shown(each.name) === label(drawn)));
     const on = (await five()).filter((drawn) => lit(drawn) === true);
-    expect(on.map(label)).toEqual([tab]);
+    expect(on.map(label)).toEqual([shown(tab)]);
     // What is drawn, not only what a screen reader is told: its word is orange, the other four are not.
     const inks = (await five()).map((one) => [
       label(one),
       drawn(within(one).getByText(String(label(one)))).color === colours.orange,
     ]);
-    expect(inks).toEqual(TABS.map((each) => [each.name, each.name === tab]));
+    expect(inks).toEqual(TABS.map((each) => [shown(each.name), each.name === tab]));
   });
 
   it("no tab shows a made-up number", async () => {

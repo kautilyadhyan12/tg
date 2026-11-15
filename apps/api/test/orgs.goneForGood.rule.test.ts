@@ -114,7 +114,7 @@ describe("a gym gone for good: the email", () => {
   it("names the day in the gym's own zone, what goes, what stays, how to keep it, and where to download", () => {
     const mail = goneForGoodEmail({ ...base, notice: "month" });
     expect(mail.subject).toBe("Iron House: your member list will be deleted on 10 Jul 2026");
-    expect(mail.text).toContain("Iron House has had no paid plan, and nobody from Iron House has signed in to AI Home Gym, since 10 Jan 2026.");
+    expect(mail.text).toContain("Iron House has had no paid plan, and nobody from Iron House has signed in to KWAZO, since 10 Jan 2026.");
     expect(mail.text).toContain("On 10 Jul 2026 we will delete its member list, with the memberships, bills and payments recorded for those people, its leads and its staff invitations. Members who use the app keep their own accounts, workouts and visits.");
     expect(mail.text).toContain("To keep everything, sign in to your gym console before 10 Jul 2026.");
     expect(mail.text).toContain("To keep a copy of your list, sign in and press Download member list:\nhttps://app.example/console/iron-house/members");

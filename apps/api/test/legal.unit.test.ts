@@ -87,6 +87,8 @@ const SENDS_NOTHING_ABOUT_A_PERSON: Record<string, string> = {
   MEMBER_TAP: "the server's own",
   PHOTO_DIR: "our own disk",
   SUPPORT_EMAIL: "our own address",
+  REVIEW_EMAIL: "our own address, for Google's reviewers",
+  REVIEW_CODE: "the code of our own address for Google's reviewers",
   POSTHOG_API_KEY: "nothing calls it: no event is sent (checked below)",
   POSTHOG_HOST: "nothing calls it: no event is sent (checked below)",
   ORS_API_KEY: "route planning: no screen asks the server for a route today (checked below; the policy adds OpenRouteService when one does)",

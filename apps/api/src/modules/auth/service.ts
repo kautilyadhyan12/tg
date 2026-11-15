@@ -352,7 +352,7 @@ export async function requestSignInCode(
   deps: AuthDeps,
   email: string,
   robot: codes.RobotAnswer,
-): Promise<{ resendAfterSeconds: number; expiresInSeconds: number }> {
+): Promise<codes.CodeSent> {
   return await codes.requestCode(codeDeps(deps), { email, purpose: "sign_in", robot }, (to, code) =>
     deps.emailSender.sendSignInCodeEmail(to, code),
   );
@@ -411,7 +411,9 @@ export async function requestEmailCode(
   input: { email: string; purpose: CodePurpose; boundTo?: string; robot?: codes.RobotAnswer },
   send: CodeSender,
 ): Promise<{ resendAfterSeconds: number; expiresInSeconds: number }> {
-  return await codes.requestCode(deps, input, send);
+  // Only sign-in can be the reviewers' code, so these doors answer as they always have.
+  const sent = await codes.requestCode(deps, input, send);
+  return { resendAfterSeconds: sent.resendAfterSeconds, expiresInSeconds: sent.expiresInSeconds };
 }
 
 export async function redeemEmailCode(

@@ -6,7 +6,8 @@ import { leadFollowUpLetter, leadGreeting, withArticle } from "@app/shared";
 import type { EmailMessage } from "./resend.js";
 import { BRAND, memberEmail, type EmailBlock } from "./layout.js";
 
-const APP_NAME = "AI Home Gym";
+// The app's own name in every email it sends (KWAZO since 2026-10-17; the rename of the app's own emails, 21c-i).
+const APP_NAME = BRAND;
 
 const paragraph = (text: string): EmailBlock => ({ kind: "paragraph", text });
 
@@ -61,7 +62,7 @@ export function emailInUseEmail(to: string): EmailMessage {
   ];
   const text = `${lines.join("\n\n")}\n\n— ${APP_NAME}`;
   const html = `${lines.map((line) => `<p>${escapeHtml(line)}</p>`).join("")}<p>— ${APP_NAME}</p>`;
-  return { to, subject: `This address already has an ${APP_NAME} account`, text, html };
+  return { to, subject: `This address already has a ${APP_NAME} account`, text, html };
 }
 
 /** "k***@example.com": enough for the old address's owner to know the new one, not the whole of it. */
@@ -105,7 +106,7 @@ function fromLine(configured: string, gymName: string, appName: string): string 
 /** The From line of every email a gym sends its members: "Iron House via KWAZO". */
 export const memberInviteFrom = (configured: string, gymName: string): string => fromLine(configured, gymName, BRAND);
 
-/** The From line of a staff invitation, whose words still name the app the old way. */
+/** The From line of a staff invitation: "Iron House via KWAZO". */
 export const staffInviteFrom = (configured: string, gymName: string): string => fromLine(configured, gymName, APP_NAME);
 
 /** A gym's invitation to a person on its list (Part 3 §9.12). The words are fixed;

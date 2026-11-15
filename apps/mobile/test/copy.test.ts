@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { phoneAppExtraSchema } from "@app/shared";
-import { COPY_KEYS, SCREENSHOT_PERMISSIONS, configFor, copyFor, withServer } from "../app.config";
+import { COPY_KEYS, MOST_VERSION_CODE, SCREENSHOT_PERMISSIONS, STORE, STORE_BLOCKED_PERMISSIONS, configFor, copyFor, firebaseAppsIn, storeConfig, withServer } from "../app.config";
 
 describe("a folder's copy of the app", () => {
   it("each folder has its own name, application id, api and bundler port", () => {
@@ -72,5 +72,68 @@ describe("a copy pointed at the online test server (21a-i)", () => {
     [{ PHONE_SERVER: "api.getkwazo.com", PHONE_WEBSITE: "https://getkwazo.com" }, /PHONE_SERVER/],
   ])("refuses %j", (env, named) => {
     expect(() => withServer(copy, env)).toThrow(named);
+  });
+});
+
+describe("the store's app, KWAZO (21c-i)", () => {
+  const firebase = ["com.aihomegym.dev.feature1", "com.kwazo.app"];
+  const env = { KWAZO_VERSION_CODE: "459876" };
+
+  it("is KWAZO with its own id, talking to the online server alone, over https, naming no copy", () => {
+    const config = storeConfig(env, firebase);
+    expect(config.name).toBe("KWAZO");
+    expect(config.android?.package).toBe("com.kwazo.app");
+    expect(config.android?.versionCode).toBe(459876);
+    expect(config.version).toBe(STORE.version);
+    expect(config.scheme).toBe("kwazo");
+    expect(phoneAppExtraSchema.parse(config.extra)).toEqual({ apiUrl: "https://api.getkwazo.com", webUrl: "https://getkwazo.com" });
+    expect(config.android?.googleServicesFile).toBe("./google-services.json");
+  });
+
+  it("leaves out the bundler's overlay and the phone-wide brightness, and signs with the upload key", () => {
+    const config = storeConfig(env, firebase);
+    expect(config.android?.blockedPermissions).toEqual(STORE_BLOCKED_PERMISSIONS);
+    expect(STORE_BLOCKED_PERMISSIONS).toEqual(expect.arrayContaining([...SCREENSHOT_PERMISSIONS, "android.permission.SYSTEM_ALERT_WINDOW", "android.permission.WRITE_SETTINGS"]));
+    expect(config.plugins).toContain("./plugins/storeSigning.js");
+    // A folder's copy keeps the overlay its bundler needs, and is never signed with the store's key.
+    const copy = configFor(copyFor("feature1"), true);
+    expect(copy.android?.blockedPermissions).toEqual(SCREENSHOT_PERMISSIONS);
+    expect(copy.plugins).not.toContain("./plugins/storeSigning.js");
+    expect(copy.android?.versionCode).toBeUndefined();
+  });
+
+  it.each(["", "0", "01", "12a", "1.5", "-3", String(MOST_VERSION_CODE + 1), "99999999999"])("refuses the build number %j", (written) => {
+    expect(() => storeConfig({ KWAZO_VERSION_CODE: written }, firebase)).toThrow(/KWAZO_VERSION_CODE/);
+  });
+
+  it("takes the highest build number Google Play allows", () => {
+    expect(storeConfig({ KWAZO_VERSION_CODE: String(MOST_VERSION_CODE) }, firebase).android?.versionCode).toBe(MOST_VERSION_CODE);
+  });
+
+  it("refuses a Firebase file without the store's app: its testers would get no notifications", () => {
+    expect(() => storeConfig(env, ["com.aihomegym.dev.feature1"])).toThrow(/google-services\.json has no Android app com\.kwazo\.app/);
+    expect(() => storeConfig(env, [])).toThrow(/google-services\.json/);
+  });
+
+  it("refuses a folder's server address beside it", () => {
+    expect(() => storeConfig({ ...env, PHONE_SERVER: "http://localhost:3000" }, firebase)).toThrow(/PHONE_SERVER/);
+    expect(() => storeConfig({ ...env, PHONE_WEBSITE: "https://getkwazo.com" }, firebase)).toThrow(/PHONE_WEBSITE/);
+    expect(storeConfig({ ...env, PHONE_SERVER: " ", PHONE_WEBSITE: "" }, firebase).name).toBe("KWAZO");
+  });
+
+  it("reads the Android apps Firebase's file names, and nothing from a file of another shape", () => {
+    const file = JSON.stringify({
+      project_info: { project_id: "kwazo-ae97d" },
+      client: [
+        { client_info: { android_client_info: { package_name: "com.aihomegym.dev.feature1" } } },
+        { client_info: { android_client_info: { package_name: "com.kwazo.app" } } },
+        { client_info: {} },
+        "not a client",
+      ],
+    });
+    expect(firebaseAppsIn(file)).toEqual(["com.aihomegym.dev.feature1", "com.kwazo.app"]);
+    expect(firebaseAppsIn("{}")).toEqual([]);
+    expect(firebaseAppsIn("[]")).toEqual([]);
+    expect(firebaseAppsIn(JSON.stringify({ client: { package_name: "com.kwazo.app" } }))).toEqual([]);
   });
 });

@@ -71,7 +71,13 @@ VITE_API_URL=https://api.getkwazo.com VITE_AUTH_API_URL= VITE_ML_API_URL= VITE_W
 grep -rhoE "(https?|wss?)://(localhost|127\.0\.0\.1):[0-9]+" <scratch>/web-dist   # must print nothing
 node tools/check-web-locally.mjs <scratch>/web-dist   # the server's web settings over this build, in Docker: all must pass
 cd <scratch>/web-dist && tar -cf - . | ssh -i ~/.ssh/kwazo_oracle ubuntu@13.237.195.91 'rm -rf /srv/kwazo/app/infra/web && mkdir -p /srv/kwazo/app/infra/web && tar -x -C /srv/kwazo/app/infra/web'
+ssh -i ~/.ssh/kwazo_oracle ubuntu@13.237.195.91 'cd /srv/kwazo/app && sudo docker compose -f infra/docker-compose.yml -f infra/docker-compose.selfhost.yml up -d --force-recreate caddy'
+node tools/check-test-server.mjs --inside   # all must pass
 ```
+
+Caddy is recreated after every new console: it holds the folder it started with, so a folder removed and
+made again answers 404 for every page until then (seen 2026-11-15, 21c-i: 9 of 40 checks failed, all
+passed after the recreate).
 
 ## Migrations, seeds and the food table
 
@@ -156,6 +162,23 @@ sudo docker rm -f restore-test && rm -f /tmp/r.dump
   `postgres` service the same way, start them, and load the packaged-food lists again.
 - `docker run -i` reads its input: in a script fed through `bash -s`, it swallows the rest of the
   script. Copy a script to the machine and run the file.
+
+## Google's reviewers' sign-in (Stage 5 21c-i)
+
+Play Console asks an app that signs in by a one-time code for "reusable login credentials that can bypass these
+requirements". One address signs in with a code that never changes: `REVIEW_EMAIL` and `REVIEW_CODE` in `infra/api.env`,
+set together (`apps/api/src/config.ts`; the rule is `reviewersCode` in `modules/auth/codes.ts`).
+
+- **The address is the protection.** Every ordinary rule of a code still holds there, so a stranger who knows it can spend
+  its day (five wrong tries end a code; three unused codes, then the robot check, then tomorrow) and keep Google's
+  reviewers out. Make one nobody can guess, and a random code, on the laptop, into a file outside every folder:
+  `node -e "const c=require('crypto');require('fs').writeFileSync(require('os').homedir()+'/.kwazo/review.txt','REVIEW_EMAIL=play-'+c.randomBytes(5).toString('hex')+'@getkwazo.com\nREVIEW_CODE='+String(c.randomInt(0,1e6)).padStart(6,'0')+'\n',{mode:0o600})"`
+- Add those two lines to the server's `infra/api.env` (copied, never printed), then `$C up -d --force-recreate api`.
+  Kd types the same two into Play Console, App content, Sign-in details. Nowhere else: not git, not a message.
+- The address needs no inbox. Signing in emails it nothing; a deletion code sent to it goes nowhere, so a reviewer
+  cannot delete the reviewers' account and lock the next one out for the 14 days of undo. It never opens the admin's
+  account, even if the setting names its address.
+- If the address is ever seen anywhere else, make a new pair and change both places.
 
 ## Phone notifications: Firebase
 

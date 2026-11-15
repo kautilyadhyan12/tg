@@ -435,6 +435,6 @@ describe("every member email keeps every line it carried before the move", () =>
 
   it("a gym's emails come from 'Iron House via KWAZO'; a staff invitation keeps its own name until its words move too", () => {
     expect(memberInviteFrom("AI Home Gym <invites@invites.example.com>", "Iron House")).toBe("Iron House via KWAZO <invites@invites.example.com>");
-    expect(staffInviteFrom("AI Home Gym <invites@invites.example.com>", "Iron House")).toBe("Iron House via AI Home Gym <invites@invites.example.com>");
+    expect(staffInviteFrom("AI Home Gym <invites@invites.example.com>", "Iron House")).toBe("Iron House via KWAZO <invites@invites.example.com>");
   });
 });

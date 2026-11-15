@@ -5,7 +5,7 @@ import { orgWords } from "@app/shared";
  *  Pilates member is never told "gyms" (Kd, `rulings/2026-10-23-18u-i.md`). */
 const TAB_WORDS: Readonly<Record<string, string>> = {
   gym: "Gym",
-  crossfit_box: "Gym",
+  crossfit_box: "CrossFit",
   studio: "Studio",
   yoga_studio: "Studio",
   pilates_studio: "Studio",
@@ -14,11 +14,11 @@ const TAB_WORDS: Readonly<Record<string, string>> = {
 };
 
 /** The fourth tab's word under its icon, short enough for the bar: the kind of place the person
- *  joined ("Gym", "Studio", "Trainer"); "Places" for more than one kind; "Gym" before any. */
+ *  joined ("Gym", "CrossFit", "Studio", "Trainer"); "Places" for more than one kind, and before any (Kd, 2026-11-15). */
 export function tabWord(orgTypes: readonly unknown[]): string {
   const words = new Set(orgTypes.map((type) => (typeof type === "string" ? (TAB_WORDS[type] ?? "Gym") : "Gym")));
   const [only] = words;
-  return words.size === 0 ? "Gym" : words.size === 1 && only !== undefined ? only : "Places";
+  return words.size === 1 && only !== undefined ? only : "Places";
 }
 
 export function placesHeading(orgTypes: readonly unknown[]): string {

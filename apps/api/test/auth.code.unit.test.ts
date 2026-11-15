@@ -1,6 +1,9 @@
 // Sign-in code primitives and the Resend transport, with no database and no
 // network: the code's shape, the keyed hash, and the ONE HTTPS call — its
 // request shape, and that a failure never carries the key or the address.
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 import type { FastifyBaseLogger } from "fastify";
 import { createResendTransport, EmailTransportError, type EmailMessage } from "../src/email/resend.js";
@@ -55,6 +58,20 @@ describe("config: email service", () => {
   };
   it("production refuses to boot without a Resend key", () => {
     expect(() => loadConfig({ ...good, NODE_ENV: "production" })).toThrow(/RESEND_API_KEY/);
+  });
+  it("the reviewers' address and code are set together, the code six digits, the address kept in small letters (21c-i)", () => {
+    expect(() => loadConfig({ ...good, REVIEW_EMAIL: "play-q7x2m9@getkwazo.com" })).toThrow(/REVIEW_CODE/);
+    expect(() => loadConfig({ ...good, REVIEW_CODE: "406213" })).toThrow(/REVIEW_CODE/);
+    for (const bad of ["40621", "4062133", "40621a", " 406213", ""]) {
+      expect(() => loadConfig({ ...good, REVIEW_EMAIL: "play-q7x2m9@getkwazo.com", REVIEW_CODE: bad }), bad).toThrow(/REVIEW_CODE/);
+    }
+    expect(() => loadConfig({ ...good, REVIEW_EMAIL: "review", REVIEW_CODE: "406213" })).toThrow(/REVIEW_EMAIL/);
+    const set = loadConfig({ ...good, REVIEW_EMAIL: " Play-Q7X2M9@GetKwazo.com ", REVIEW_CODE: "406213" });
+    expect(set.REVIEW_EMAIL).toBe("play-q7x2m9@getkwazo.com");
+    expect(set.REVIEW_CODE).toBe("406213");
+    const unset = loadConfig(good);
+    expect(unset.REVIEW_EMAIL).toBeUndefined();
+    expect(unset.REVIEW_CODE).toBeUndefined();
   });
   it("a key without a sender line is refused in every environment", () => {
     expect(() => loadConfig({ ...good, NODE_ENV: "development", RESEND_API_KEY: "re_x" })).toThrow(/EMAIL_FROM/);
@@ -173,6 +190,26 @@ describe("the code emails", () => {
     expect(m.text).toContain("10 minutes");
     expect(m.text).not.toMatch(/https?:\/\//);
     expect(m.html).not.toMatch(/<a\s/i);
+  });
+  it("name the app KWAZO, as testers read it in their inbox, never AI Home Gym (21c-i)", () => {
+    const signIn = signInCodeEmail("kd@example.com", "042917", 10);
+    expect(signIn.subject).toBe("042917 is your KWAZO code");
+    const deletion = deleteAccountCodeEmail("kd@example.com", "042917", 10);
+    const undo = accountDeletionEmail("kd@example.com", "Kd", "https://app.example/restore-account?token=abc", 14);
+    for (const m of [signIn, deletion, undo]) {
+      expect(`${m.subject}\n${m.text}\n${m.html}`).toContain("KWAZO");
+      expect(`${m.subject}\n${m.text}\n${m.html}`).not.toContain("AI Home Gym");
+    }
+  });
+  it("the server and the shared words write the app's old name nowhere, so no email can carry it (21c-i)", () => {
+    // Email words come from the server's own files and from packages/shared (orgWords, the lead and legal words).
+    for (const folder of ["../src/", "../../../packages/shared/src/"]) {
+      const src = fileURLToPath(new URL(folder, import.meta.url));
+      const files = readdirSync(src, { recursive: true, encoding: "utf8" }).filter((f) => f.endsWith(".ts"));
+      expect(files.length, folder).toBeGreaterThan(20);
+      const old = files.filter((f) => readFileSync(join(src, f), "utf8").includes("AI Home Gym"));
+      expect(old, folder).toEqual([]);
+    }
   });
   it("the deletion email says what the code is for", () => {
     const m = deleteAccountCodeEmail("kd@example.com", "042917", 10);

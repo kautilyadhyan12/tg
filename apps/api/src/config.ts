@@ -100,7 +100,7 @@ const envSchema = z.object({
   // unset in dev/test = the DEV sender prints the code in the server log;
   // REQUIRED in production (refinement below) — a production box with no way
   // to send a code is a product nobody can sign in to. EMAIL_FROM is the
-  // sender line Resend expects, e.g. `AI Home Gym <hello@your-domain>`, on a
+  // sender line Resend expects, e.g. `KWAZO <hello@your-domain>`, on a
   // domain verified in the Resend dashboard.
   RESEND_API_KEY: z.string().min(1).optional(),
   // Checked for SHAPE at boot ("Name <box@domain>" or "box@domain"), so a
@@ -226,6 +226,13 @@ const envSchema = z.object({
   // yet (RULINGS 2026-10-05), so it is REQUIRED in production: the site cannot go online
   // without one. Elsewhere unset means no such line is shown.
   SUPPORT_EMAIL: z.string().trim().max(200).pipe(z.email()).optional(),
+  // Google's reviewers sign in with this one address and this one code, which never changes (ROADMAP
+  // Stage 5 21c-i; Play Console asks an app whose sign-in is a one-time code for "reusable login
+  // credentials that can bypass these requirements"). Signing in only; every other rule of a code
+  // still holds there, nothing is emailed to it, and it never opens the admin's account
+  // (`modules/auth/codes.ts`). Set together, and only in the server's own secret settings.
+  REVIEW_EMAIL: z.string().trim().toLowerCase().max(254).pipe(z.email()).optional(),
+  REVIEW_CODE: z.string().regex(/^\d{6}$/, "REVIEW_CODE must be six digits").optional(),
 });
 
 export type AppConfig = Readonly<z.infer<typeof envSchema>>;
@@ -279,6 +286,10 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     .refine((c) => c.NODE_ENV !== "production" || c.SUPPORT_EMAIL !== undefined, {
       path: ["SUPPORT_EMAIL"],
       message: "SUPPORT_EMAIL is required in production (the help address shown where members post)",
+    })
+    .refine((c) => (c.REVIEW_EMAIL === undefined) === (c.REVIEW_CODE === undefined), {
+      path: ["REVIEW_CODE"],
+      message: "REVIEW_EMAIL and REVIEW_CODE are set together",
     })
     .refine((c) => c.MAP_SOURCE !== "protomaps" || (c.MAP_PROTOMAPS_FILE !== undefined && c.MAP_PROTOMAPS_GLYPHS !== undefined), {
       path: ["MAP_PROTOMAPS_FILE"],

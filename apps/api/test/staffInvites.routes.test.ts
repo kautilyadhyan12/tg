@@ -1005,7 +1005,7 @@ d("staff invited by email (real Postgres)", () => {
       expect(mails.length).toBe(1);
       const mail = mails[0];
       if (mail === undefined) throw new Error("no email");
-      expect(mail.subject).toBe("Help run Email Gym on AI Home Gym");
+      expect(mail.subject).toBe("Help run Email Gym on KWAZO");
       expect(mail.text).toContain("Owner of Email Gym invited you to help run Email Gym as a manager.");
       expect(mail.text).toContain(`Sign in with this email address, ${addr("mail-1")}, and press Accept:`);
       const links = mail.text.match(/https?:\/\/\S+/g) ?? [];
