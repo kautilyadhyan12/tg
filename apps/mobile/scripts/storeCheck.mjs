@@ -45,7 +45,9 @@ export function loadAlignments(bytes) {
   return alignments;
 }
 
-/** What `aapt2 dump badging` says of an app. */
+/** What `aapt2 dump badging` says of an app. Its permission lines are not read: badging also prints a permission
+ *  Android only implies ("uses-permission: name='android.permission.READ_EXTERNAL_STORAGE' maxSdkVersion='32'" beside
+ *  "reason='requested WRITE_EXTERNAL_STORAGE'"), which the app never asks for (the first store build, 2026-11-15). */
 export function readBadging(text) {
   const pkg = /^package: name='([^']*)' versionCode='([^']*)' versionName='([^']*)'/m.exec(text);
   const target = /^targetSdkVersion:'(\d+)'/m.exec(text);
@@ -55,8 +57,23 @@ export function readBadging(text) {
     versionName: pkg?.[3] ?? null,
     targetSdk: target === null ? null : Number(target[1]),
     debuggable: /^application-debuggable/m.test(text),
-    permissions: [...text.matchAll(/^uses-permission: name='([^']+)'/gm)].map((m) => m[1]),
   };
+}
+
+/** The permissions the app's own manifest asks for, from `aapt2 dump xmltree --file AndroidManifest.xml`: each
+ *  `uses-permission` element's name, never one Android implies. */
+export function declaredPermissions(xmltree) {
+  const names = [];
+  let inPermission = false;
+  for (const line of xmltree.split(/\r?\n/)) {
+    if (/^\s*E: /.test(line)) inPermission = /^\s*E: uses-permission(?:-sdk-23)? /.test(line);
+    const name = inPermission ? /:name\(0x01010003\)="([^"]+)"/.exec(line) : null;
+    if (name !== null) {
+      names.push(name[1]);
+      inPermission = false;
+    }
+  }
+  return names;
 }
 
 /** The certificates' SHA-256 fingerprints a signing tool printed (apksigner's "certificate SHA-256 digest: ab12…",
@@ -75,7 +92,8 @@ export function storeFaults(f) {
   if (badging.targetSdk === null || badging.targetSdk < ANDROID_16) faults.push(`It is made for Android API ${String(badging.targetSdk)}; Google Play takes ${String(ANDROID_16)} (Android 16) or later.`);
   if (badging.debuggable) faults.push("It is built for debugging.");
   if (f.cleartext) faults.push("It allows plain-http traffic.");
-  for (const blocked of NEVER_IN_THE_STORE) if (badging.permissions.includes(blocked)) faults.push(`It asks for ${blocked}, which the store's app blocks.`);
+  if (f.permissions.length === 0) faults.push("The app's own permissions could not be read.");
+  for (const blocked of NEVER_IN_THE_STORE) if (f.permissions.includes(blocked)) faults.push(`It asks for ${blocked}, which the store's app blocks.`);
   const built = f.builtIn;
   if (built === null) {
     faults.push("The settings built into the app could not be read.");
@@ -171,6 +189,7 @@ export function gather({ folder, versionCode, versionName, keyStore, keyAlias })
       versionCode,
       versionName,
       badging: readBadging(badging.text),
+      permissions: declaredPermissions(manifest.text),
       cleartext: /usesCleartextTraffic\(0x[0-9a-f]+\)=(?:true|\(type 0x12\)0xffffffff)/i.test(manifest.text),
       builtIn,
       uploadKey: fingerprintsIn(key.text)[0] ?? "no upload key",

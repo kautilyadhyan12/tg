@@ -3,6 +3,7 @@ import {
   NEVER_IN_THE_STORE,
   PAGE_16_KB,
   STORE_ID,
+  declaredPermissions,
   fingerprintsIn,
   loadAlignments,
   readBadging,
@@ -62,7 +63,31 @@ uses-permission: name='android.permission.ACCESS_COARSE_LOCATION'
 uses-permission: name='android.permission.CAMERA'
 uses-permission: name='android.permission.FOREGROUND_SERVICE_LOCATION'
 uses-permission: name='android.permission.POST_NOTIFICATIONS'
+uses-permission: name='android.permission.WRITE_EXTERNAL_STORAGE' maxSdkVersion='32'
+uses-permission: name='android.permission.READ_EXTERNAL_STORAGE' maxSdkVersion='32'
+uses-implied-permission: name='android.permission.READ_EXTERNAL_STORAGE' maxSdkVersion='32' reason='requested WRITE_EXTERNAL_STORAGE'
 application-label:'KWAZO'
+`;
+// The first store build's own manifest as `aapt2 dump xmltree --file AndroidManifest.xml` printed it (2026-11-15),
+// shortened. Badging above prints READ_EXTERNAL_STORAGE, which this manifest never asks for.
+const MANIFEST = `N: android=http://schemas.android.com/apk/res/android (line=2)
+  E: manifest (line=2)
+    A: package="com.kwazo.app" (Raw: "com.kwazo.app")
+      E: uses-sdk (line=7)
+        A: http://schemas.android.com/apk/res/android:targetSdkVersion(0x01010270)=36
+      E: uses-permission (line=11)
+        A: http://schemas.android.com/apk/res/android:name(0x01010003)="android.permission.ACCESS_COARSE_LOCATION" (Raw: "android.permission.ACCESS_COARSE_LOCATION")
+      E: uses-permission (line=13)
+        A: http://schemas.android.com/apk/res/android:name(0x01010003)="android.permission.CAMERA" (Raw: "android.permission.CAMERA")
+      E: uses-permission (line=18)
+        A: http://schemas.android.com/apk/res/android:name(0x01010003)="android.permission.WRITE_EXTERNAL_STORAGE" (Raw: "android.permission.WRITE_EXTERNAL_STORAGE")
+        A: http://schemas.android.com/apk/res/android:maxSdkVersion(0x01010271)=32
+      E: queries (line=22)
+          E: intent (line=23)
+              E: action (line=24)
+                A: http://schemas.android.com/apk/res/android:name(0x01010003)="android.intent.action.VIEW" (Raw: "android.intent.action.VIEW")
+      E: uses-feature (line=60)
+        A: http://schemas.android.com/apk/res/android:name(0x01010003)="android.hardware.bluetooth_le" (Raw: "android.hardware.bluetooth_le")
 `;
 const APKSIGNER = `Signer #1 certificate DN: CN=KWAZO
 Signer #1 certificate SHA-256 digest: 5f2c0e9a4b1d7c3e8f6a2b9d0c4e1f7a3b5d8c2e6f0a9b4d1c7e3f8a2b6d0c5e
@@ -79,21 +104,18 @@ Signature algorithm name: SHA256withRSA
 const KEY = "5f2c0e9a4b1d7c3e8f6a2b9d0c4e1f7a3b5d8c2e6f0a9b4d1c7e3f8a2b6d0c5e"; // a made-up fingerprint, gitleaks:allow
 
 describe("what the Android tools print", () => {
-  it("reads the app's id, build number, version, Android level and permissions", () => {
-    expect(readBadging(BADGING)).toEqual({
-      id: "com.kwazo.app",
-      versionCode: "459876",
-      versionName: "1.0.0",
-      targetSdk: 36,
-      debuggable: false,
-      permissions: [
-        "android.permission.ACCESS_COARSE_LOCATION",
-        "android.permission.CAMERA",
-        "android.permission.FOREGROUND_SERVICE_LOCATION",
-        "android.permission.POST_NOTIFICATIONS",
-      ],
-    });
+  it("reads the app's id, build number, version and Android level", () => {
+    expect(readBadging(BADGING)).toEqual({ id: "com.kwazo.app", versionCode: "459876", versionName: "1.0.0", targetSdk: 36, debuggable: false });
     expect(readBadging(`${BADGING}application-debuggable\n`).debuggable).toBe(true);
+  });
+  it("reads the permissions the manifest asks for, never one Android only implies, nor another element's name", () => {
+    expect(declaredPermissions(MANIFEST)).toEqual([
+      "android.permission.ACCESS_COARSE_LOCATION",
+      "android.permission.CAMERA",
+      "android.permission.WRITE_EXTERNAL_STORAGE",
+    ]);
+    expect(declaredPermissions(MANIFEST.replaceAll("\n", "\r\n"))).toHaveLength(3);
+    expect(declaredPermissions("")).toEqual([]);
   });
   it("reads a certificate's fingerprint the same from apksigner and keytool, and never a public key's", () => {
     expect(fingerprintsIn(APKSIGNER)).toEqual([KEY]);
@@ -105,6 +127,7 @@ const good: StoreFacts = {
   versionCode: "459876",
   versionName: "1.0.0",
   badging: readBadging(BADGING),
+  permissions: declaredPermissions(MANIFEST),
   cleartext: false,
   builtIn: { apiUrl: "https://api.getkwazo.com", webUrl: "https://getkwazo.com", package: "com.kwazo.app" },
   uploadKey: KEY,
@@ -131,7 +154,9 @@ describe("the files Google Play gets", () => {
     ["no Android level read", { badging: { ...good.badging, targetSdk: null } }, /Android 16/],
     ["built for debugging", { badging: { ...good.badging, debuggable: true } }, /debugging/],
     ["plain http allowed", { cleartext: true }, /plain-http/],
-    ["the bundler's overlay asked for", { badging: { ...good.badging, permissions: [...good.badging.permissions, "android.permission.SYSTEM_ALERT_WINDOW"] } }, /SYSTEM_ALERT_WINDOW/],
+    ["the bundler's overlay asked for", { permissions: [...declaredPermissions(MANIFEST), "android.permission.SYSTEM_ALERT_WINDOW"] }, /SYSTEM_ALERT_WINDOW/],
+    ["the photos permission asked for", { permissions: [...declaredPermissions(MANIFEST), "android.permission.READ_MEDIA_IMAGES"] }, /READ_MEDIA_IMAGES/],
+    ["no permissions read at all", { permissions: [] }, /permissions could not be read/],
     ["a laptop's api built in", { builtIn: { ...good.builtIn, apiUrl: "http://localhost:3000" } }, /talks to/],
     ["plain http to the right name", { builtIn: { ...good.builtIn, apiUrl: "http://api.getkwazo.com" } }, /talks to/],
     ["a laptop's website built in", { builtIn: { ...good.builtIn, webUrl: "http://localhost:5173" } }, /links open/],
