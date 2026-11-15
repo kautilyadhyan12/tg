@@ -1,7 +1,7 @@
 // Builds the store's app, KWAZO, for Google Play (ROADMAP Stage 5 21c-i).
-//   corepack pnpm --filter mobile store             the store file (.aab) for Google Play, and a phone file (.apk)
+//   corepack pnpm --filter mobile store-version     the store file (.aab) for Google Play, and a phone file (.apk)
 //                                                   of the same build to try on a phone first
-//   corepack pnpm --filter mobile store --new-key   makes KWAZO's upload key, once
+//   corepack pnpm --filter mobile store-version --new-key   makes KWAZO's upload key, once
 // The upload key is the key Google Play knows every update by. It lives outside every folder, in
 // ~/.kwazo (KWAZO_UPLOAD_PROPERTIES names another place), and Kd keeps a copy: lost, Google Play's support has to
 // be asked for a new one, which takes days.
@@ -65,7 +65,7 @@ if (process.argv.includes("--new-key")) {
 }
 
 function readKey() {
-  if (!existsSync(keySettings)) stop(`KWAZO's upload key is not on this laptop (${keySettings}). Make it once with: corepack pnpm --filter mobile store --new-key`);
+  if (!existsSync(keySettings)) stop(`KWAZO's upload key is not on this laptop (${keySettings}). Make it once with: corepack pnpm --filter mobile store-version --new-key`);
   const settings = Object.fromEntries(
     readFileSync(keySettings, "utf8")
       .split(/\r?\n/)

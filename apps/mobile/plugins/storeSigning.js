@@ -28,7 +28,7 @@ if (kwazoMissing.isEmpty()) {
 gradle.taskGraph.whenReady { graph ->
   def release = graph.allTasks.any { it.project.path == project.path && it.name.contains("Release") }
   if (release && !kwazoMissing.isEmpty()) {
-    throw new GradleException("The store's app is signed with KWAZO's upload key, and " + kwazoMissing.join(", ") + " is not set. Build it with: corepack pnpm --filter mobile store")
+    throw new GradleException("The store's app is signed with KWAZO's upload key, and " + kwazoMissing.join(", ") + " is not set. Build it with: corepack pnpm --filter mobile store-version")
   }
 }
 `;

@@ -6,7 +6,7 @@
   "scripts": {
     "phone": "node scripts/phone.mjs",
     "start": "node scripts/phone.mjs --start",
-    "store": "node scripts/store.mjs",
+    "store-version": "node scripts/store.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src test scripts plugins index.ts app.config.ts metro.config.js jest.config.js vitest.config.ts",
     "test": "vitest run && jest"
