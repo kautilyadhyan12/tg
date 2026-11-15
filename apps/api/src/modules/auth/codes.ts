@@ -143,6 +143,14 @@ async function reviewersCode(deps: CodeDeps, input: { email: string; purpose: Co
   return REVIEW_CODE;
 }
 
+/** What asking for a code answers. `emailed` is false only for the reviewers' code, which nobody emails
+ *  (21c-i): the day's email ceiling counts emails, so the door counts this one as none. It never reaches a reply. */
+export interface CodeSent {
+  resendAfterSeconds: number;
+  expiresInSeconds: number;
+  emailed: boolean;
+}
+
 /** Ask for a code. Enforces the day cap and the resend gap, mints and stores
  *  the code (hashed), sends it, and takes the row back if the send fails so a
  *  failed email never spends one of the day's three. Same outcome whether or not
@@ -151,7 +159,7 @@ export async function requestCode(
   deps: CodeDeps,
   input: { email: string; purpose: CodePurpose; robot?: RobotAnswer; boundTo?: string },
   send: CodeSender,
-): Promise<{ resendAfterSeconds: number; expiresInSeconds: number }> {
+): Promise<CodeSent> {
   const now = Date.now();
   const reviewers = await reviewersCode(deps, input);
   const code = reviewers ?? mintSixDigitCode();
@@ -172,7 +180,7 @@ export async function requestCode(
   // The reviewers know their code already, and nobody reads that address: nothing is emailed.
   if (reviewers !== null) {
     deps.log.info({ event: "auth.code.reviewers" }, "the reviewers' sign-in code was issued");
-    return { resendAfterSeconds: SIGN_IN_CODE_RULES.resendAfterSeconds, expiresInSeconds: SIGN_IN_CODE_RULES.ttlSeconds };
+    return { resendAfterSeconds: SIGN_IN_CODE_RULES.resendAfterSeconds, expiresInSeconds: SIGN_IN_CODE_RULES.ttlSeconds, emailed: false };
   }
 
   try {
@@ -193,6 +201,7 @@ export async function requestCode(
   return {
     resendAfterSeconds: SIGN_IN_CODE_RULES.resendAfterSeconds,
     expiresInSeconds: SIGN_IN_CODE_RULES.ttlSeconds,
+    emailed: true,
   };
 }
 

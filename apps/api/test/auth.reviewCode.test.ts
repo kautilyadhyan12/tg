@@ -12,6 +12,7 @@ import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { RobotCheckNeeded, redeemCode, requestCode } from "../src/modules/auth/codes.js";
 import type { EmailSender } from "../src/modules/auth/email.js";
+import { createMemoryRedis } from "../src/redis.js";
 
 const url = process.env["DATABASE_URL"];
 const d = describe.skipIf(url === undefined || url === "");
@@ -44,6 +45,7 @@ d("the reviewers' sign-in code (real Postgres)", () => {
       return Promise.resolve();
     },
   };
+  const redis = createMemoryRedis();
   let app: App | undefined;
   const api = (): App => {
     if (app === undefined) throw new Error("beforeAll did not build the app");
@@ -75,7 +77,7 @@ d("the reviewers' sign-in code (real Postgres)", () => {
 
   beforeAll(async () => {
     await cleanup();
-    app = await buildApp(loadConfig(reviewEnv), { emailSender: sender });
+    app = await buildApp(loadConfig(reviewEnv), { emailSender: sender, redis });
     await api().ready();
   }, 60_000);
 
@@ -145,6 +147,23 @@ d("the reviewers' sign-in code (real Postgres)", () => {
     expect(again.statusCode, again.body).toBe(200);
     expect(await userIdOf(REVIEWER)).toBe(id);
     expect(emailedTo(REVIEWER).length).toBe(0);
+  });
+
+  it("answers the reviewers' send word for word as anybody's, and counts no email against the day's ceiling", async () => {
+    // The day's ceiling is the bill stop for emails (codeDoor.ts); nothing is emailed to the reviewers.
+    const day = async () => Number((await redis.get("rl:code_send:all:day")) ?? "0");
+    await ageCodes(REVIEWER, "61 seconds");
+    const before = await day();
+    const theirs = await send(REVIEWER);
+    expect(theirs.statusCode, theirs.body).toBe(200);
+    expect(await day()).toBe(before);
+    const strangers = await send("review-code-stranger@example.com");
+    expect(strangers.statusCode, strangers.body).toBe(200);
+    expect(await day()).toBe(before + 1);
+    // Told apart from the outside, the address would be the only thing between a stranger and the reviewers' day.
+    expect(JSON.parse(theirs.body)).toEqual(JSON.parse(strangers.body));
+    // Used, so the day's three unused codes are left for the tests below.
+    expect((await verify(REVIEWER, FIXED)).statusCode).toBe(200);
   });
 
   it("keeps every ordinary rule at the reviewers' address: one minute between codes, five wrong tries end a code", async () => {

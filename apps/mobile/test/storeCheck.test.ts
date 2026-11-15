@@ -3,6 +3,7 @@ import {
   NEVER_IN_THE_STORE,
   PAGE_16_KB,
   STORE_ID,
+  cleartextIn,
   declaredPermissions,
   fingerprintsIn,
   loadAlignments,
@@ -117,6 +118,25 @@ describe("what the Android tools print", () => {
     expect(declaredPermissions(MANIFEST.replaceAll("\n", "\r\n"))).toHaveLength(3);
     expect(declaredPermissions("")).toEqual([]);
   });
+  it("reads plain http from the manifest's own line and from a network security file it names, as aapt2 prints them", () => {
+    const allow = (value: string) =>
+      MANIFEST.replace("      E: queries", `        A: http://schemas.android.com/apk/res/android:usesCleartextTraffic(0x010104ec)=${value}\n      E: queries`);
+    expect(cleartextIn(MANIFEST)).toBe(false);
+    expect(cleartextIn(allow("true"))).toBe(true);
+    expect(cleartextIn(allow("(type 0x12)0xffffffff"))).toBe(true);
+    expect(cleartextIn(allow("false"))).toBe(false);
+    const named = MANIFEST.replace(
+      "      E: queries",
+      "        A: http://schemas.android.com/apk/res/android:networkSecurityConfig(0x0101054c)=@0x7f150002\n      E: queries",
+    );
+    const config = (permitted: string) =>
+      `N: android=http://schemas.android.com/apk/res/android (line=2)\n  E: network-security-config (line=2)\n    E: base-config (line=3)\n      A: cleartextTrafficPermitted=${permitted}\n`;
+    expect(cleartextIn(named, [config("true")])).toBe(true);
+    expect(cleartextIn(named, [config("false")])).toBe(false);
+    // Named, but no such file among the app's XML files: nothing can say, and the check says so.
+    expect(cleartextIn(named, [])).toBeNull();
+    expect(cleartextIn(named, ["  E: paths (line=2)\n"])).toBeNull();
+  });
   it("reads a certificate's fingerprint the same from apksigner and keytool, and never a public key's", () => {
     expect(fingerprintsIn(APKSIGNER)).toEqual([KEY]);
     expect(fingerprintsIn(KEYTOOL)).toEqual([KEY]);
@@ -154,6 +174,7 @@ describe("the files Google Play gets", () => {
     ["no Android level read", { badging: { ...good.badging, targetSdk: null } }, /Android 16/],
     ["built for debugging", { badging: { ...good.badging, debuggable: true } }, /debugging/],
     ["plain http allowed", { cleartext: true }, /plain-http/],
+    ["a network security file that could not be read", { cleartext: null }, /network security file/],
     ["the bundler's overlay asked for", { permissions: [...declaredPermissions(MANIFEST), "android.permission.SYSTEM_ALERT_WINDOW"] }, /SYSTEM_ALERT_WINDOW/],
     ["the photos permission asked for", { permissions: [...declaredPermissions(MANIFEST), "android.permission.READ_MEDIA_IMAGES"] }, /READ_MEDIA_IMAGES/],
     ["no permissions read at all", { permissions: [] }, /permissions could not be read/],

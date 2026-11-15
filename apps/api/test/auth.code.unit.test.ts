@@ -60,14 +60,14 @@ describe("config: email service", () => {
     expect(() => loadConfig({ ...good, NODE_ENV: "production" })).toThrow(/RESEND_API_KEY/);
   });
   it("the reviewers' address and code are set together, the code six digits, the address kept in small letters (21c-i)", () => {
-    expect(() => loadConfig({ ...good, REVIEW_EMAIL: "review@getkwazo.com" })).toThrow(/REVIEW_CODE/);
+    expect(() => loadConfig({ ...good, REVIEW_EMAIL: "play-q7x2m9@getkwazo.com" })).toThrow(/REVIEW_CODE/);
     expect(() => loadConfig({ ...good, REVIEW_CODE: "406213" })).toThrow(/REVIEW_CODE/);
     for (const bad of ["40621", "4062133", "40621a", " 406213", ""]) {
-      expect(() => loadConfig({ ...good, REVIEW_EMAIL: "review@getkwazo.com", REVIEW_CODE: bad }), bad).toThrow(/REVIEW_CODE/);
+      expect(() => loadConfig({ ...good, REVIEW_EMAIL: "play-q7x2m9@getkwazo.com", REVIEW_CODE: bad }), bad).toThrow(/REVIEW_CODE/);
     }
     expect(() => loadConfig({ ...good, REVIEW_EMAIL: "review", REVIEW_CODE: "406213" })).toThrow(/REVIEW_EMAIL/);
-    const set = loadConfig({ ...good, REVIEW_EMAIL: " Review@GetKwazo.com ", REVIEW_CODE: "406213" });
-    expect(set.REVIEW_EMAIL).toBe("review@getkwazo.com");
+    const set = loadConfig({ ...good, REVIEW_EMAIL: " Play-Q7X2M9@GetKwazo.com ", REVIEW_CODE: "406213" });
+    expect(set.REVIEW_EMAIL).toBe("play-q7x2m9@getkwazo.com");
     expect(set.REVIEW_CODE).toBe("406213");
     const unset = loadConfig(good);
     expect(unset.REVIEW_EMAIL).toBeUndefined();
@@ -201,12 +201,15 @@ describe("the code emails", () => {
       expect(`${m.subject}\n${m.text}\n${m.html}`).not.toContain("AI Home Gym");
     }
   });
-  it("the server writes the app's old name nowhere, so no email can carry it (21c-i)", () => {
-    const src = fileURLToPath(new URL("../src/", import.meta.url));
-    const files = readdirSync(src, { recursive: true, encoding: "utf8" }).filter((f) => f.endsWith(".ts"));
-    expect(files.length).toBeGreaterThan(100);
-    const old = files.filter((f) => readFileSync(join(src, f), "utf8").includes("AI Home Gym"));
-    expect(old).toEqual([]);
+  it("the server and the shared words write the app's old name nowhere, so no email can carry it (21c-i)", () => {
+    // Email words come from the server's own files and from packages/shared (orgWords, the lead and legal words).
+    for (const folder of ["../src/", "../../../packages/shared/src/"]) {
+      const src = fileURLToPath(new URL(folder, import.meta.url));
+      const files = readdirSync(src, { recursive: true, encoding: "utf8" }).filter((f) => f.endsWith(".ts"));
+      expect(files.length, folder).toBeGreaterThan(20);
+      const old = files.filter((f) => readFileSync(join(src, f), "utf8").includes("AI Home Gym"));
+      expect(old, folder).toEqual([]);
+    }
   });
   it("the deletion email says what the code is for", () => {
     const m = deleteAccountCodeEmail("kd@example.com", "042917", 10);

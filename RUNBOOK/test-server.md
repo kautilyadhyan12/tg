@@ -163,6 +163,23 @@ sudo docker rm -f restore-test && rm -f /tmp/r.dump
 - `docker run -i` reads its input: in a script fed through `bash -s`, it swallows the rest of the
   script. Copy a script to the machine and run the file.
 
+## Google's reviewers' sign-in (Stage 5 21c-i)
+
+Play Console asks an app that signs in by a one-time code for "reusable login credentials that can bypass these
+requirements". One address signs in with a code that never changes: `REVIEW_EMAIL` and `REVIEW_CODE` in `infra/api.env`,
+set together (`apps/api/src/config.ts`; the rule is `reviewersCode` in `modules/auth/codes.ts`).
+
+- **The address is the protection.** Every ordinary rule of a code still holds there, so a stranger who knows it can spend
+  its day (five wrong tries end a code; three unused codes, then the robot check, then tomorrow) and keep Google's
+  reviewers out. Make one nobody can guess, and a random code, on the laptop, into a file outside every folder:
+  `node -e "const c=require('crypto');require('fs').writeFileSync(require('os').homedir()+'/.kwazo/review.txt','REVIEW_EMAIL=play-'+c.randomBytes(5).toString('hex')+'@getkwazo.com\nREVIEW_CODE='+String(c.randomInt(0,1e6)).padStart(6,'0')+'\n',{mode:0o600})"`
+- Add those two lines to the server's `infra/api.env` (copied, never printed), then `$C up -d --force-recreate api`.
+  Kd types the same two into Play Console, App content, Sign-in details. Nowhere else: not git, not a message.
+- The address needs no inbox. Signing in emails it nothing; a deletion code sent to it goes nowhere, so a reviewer
+  cannot delete the reviewers' account and lock the next one out for the 14 days of undo. It never opens the admin's
+  account, even if the setting names its address.
+- If the address is ever seen anywhere else, make a new pair and change both places.
+
 ## Phone notifications: Firebase
 
 `FIREBASE_SERVICE_ACCOUNT_FILE=/run/kwazo-secrets/firebase.json` in `api.env`: the file is

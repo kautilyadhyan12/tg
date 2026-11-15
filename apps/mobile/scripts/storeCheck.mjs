@@ -76,6 +76,17 @@ export function declaredPermissions(xmltree) {
   return names;
 }
 
+/** Whether the app lets plain http through, from `aapt2 dump xmltree` of its manifest and of every network security file
+ *  in it (`configs`): the manifest's own `usesCleartextTraffic`, or a network security file the manifest names that permits
+ *  it (a library or a later plugin can add one). Null: the manifest names such a file and none was found, so nothing can say. */
+export function cleartextIn(manifest, configs = []) {
+  if (/usesCleartextTraffic\(0x[0-9a-f]+\)=(?:true|\(type 0x12\)0xffffffff)/i.test(manifest)) return true;
+  if (!/networkSecurityConfig\(0x[0-9a-f]+\)=/i.test(manifest)) return false;
+  const files = configs.filter((c) => /E: network-security-config/.test(c));
+  if (files.length === 0) return null;
+  return files.some((c) => /cleartextTrafficPermitted(?:\(0x[0-9a-f]+\))?=(?:true|\(type 0x12\)0xffffffff)/i.test(c));
+}
+
 /** The certificates' SHA-256 fingerprints a signing tool printed (apksigner's "certificate SHA-256 digest: ab12…",
  *  keytool's "SHA256: AB:12:…"), each as lower-case hex with no colons. A public key's digest is not a certificate's. */
 export function fingerprintsIn(text) {
@@ -91,7 +102,8 @@ export function storeFaults(f) {
   if (badging.versionName !== f.versionName) faults.push(`The version is ${String(badging.versionName)}, not ${f.versionName}.`);
   if (badging.targetSdk === null || badging.targetSdk < ANDROID_16) faults.push(`It is made for Android API ${String(badging.targetSdk)}; Google Play takes ${String(ANDROID_16)} (Android 16) or later.`);
   if (badging.debuggable) faults.push("It is built for debugging.");
-  if (f.cleartext) faults.push("It allows plain-http traffic.");
+  if (f.cleartext === true) faults.push("It allows plain-http traffic.");
+  if (f.cleartext === null) faults.push("It names a network security file that could not be read.");
   if (f.permissions.length === 0) faults.push("The app's own permissions could not be read.");
   for (const blocked of NEVER_IN_THE_STORE) if (f.permissions.includes(blocked)) faults.push(`It asks for ${blocked}, which the store's app blocks.`);
   const built = f.builtIn;
@@ -159,6 +171,16 @@ function filesUnder(dir) {
     .map((entry) => join(entry.parentPath, entry.name));
 }
 
+/** The xmltree of every compiled XML file under `res/xml*` of the phone file, read only when the manifest names a network
+ *  security file (the resource's own name is not in the manifest, only its number). */
+function networkConfigs(t, apkPath, unpacked, manifest) {
+  if (!/networkSecurityConfig\(0x[0-9a-f]+\)=/i.test(manifest)) return [];
+  return filesUnder(unpacked)
+    .map((p) => p.slice(unpacked.length + 1).replaceAll("\\", "/"))
+    .filter((p) => /^res\/xml[^/]*\/[^/]+\.xml$/.test(p))
+    .map((p) => tool(t.aapt2, ["dump", "xmltree", "--file", p, apkPath]).text);
+}
+
 /** Gathers the facts of one build folder. The upload key's fingerprint is read from its key store with the
  *  password in KWAZO_UPLOAD_STORE_PASSWORD, as Gradle had it. */
 export function gather({ folder, versionCode, versionName, keyStore, keyAlias }) {
@@ -190,7 +212,7 @@ export function gather({ folder, versionCode, versionName, keyStore, keyAlias })
       versionName,
       badging: readBadging(badging.text),
       permissions: declaredPermissions(manifest.text),
-      cleartext: /usesCleartextTraffic\(0x[0-9a-f]+\)=(?:true|\(type 0x12\)0xffffffff)/i.test(manifest.text),
+      cleartext: cleartextIn(manifest.text, networkConfigs(t, join(folder, apk), unpackedApk, manifest.text)),
       builtIn,
       uploadKey: fingerprintsIn(key.text)[0] ?? "no upload key",
       apkSigners: fingerprintsIn(tool(t.apksigner, ["verify", "--print-certs", join(folder, apk)]).text),

@@ -208,17 +208,20 @@ export function registerAuthRoutes(
   app.post("/v1/auth/code/send", { preHandler: door.beforeSend }, async (req, reply) => {
     const input = parseBody(sendCodeRequestSchema, req, reply);
     if (input === null) return;
-    let rules: Awaited<ReturnType<typeof service.requestSignInCode>>;
+    let sent: Awaited<ReturnType<typeof service.requestSignInCode>>;
     try {
-      rules = await service.requestSignInCode(authDeps, input.email, door.passedRobot(req) ? "passed" : "not_passed");
+      sent = await service.requestSignInCode(authDeps, input.email, door.passedRobot(req) ? "passed" : "not_passed");
     } catch (err) {
       if (err instanceof RobotCheckNeeded) return door.askForRobot(req, reply);
       throw err;
     }
-    await door.countSent();
-    // One fixed body for known AND unknown addresses — asking never reveals
-    // whether an account exists.
-    return reply.status(200).send({ message: "We emailed you a 6-digit code.", ...rules });
+    // The day's ceiling counts emails: the reviewers' code is emailed to nobody (21c-i).
+    if (sent.emailed) await door.countSent();
+    // One fixed body for known AND unknown addresses, and for the reviewers' — asking never reveals
+    // whether an account exists, or which address is theirs.
+    return reply
+      .status(200)
+      .send({ message: "We emailed you a 6-digit code.", resendAfterSeconds: sent.resendAfterSeconds, expiresInSeconds: sent.expiresInSeconds });
   });
 
   app.post("/v1/auth/code/verify", { preHandler: [door.guessRoom] }, async (req, reply) => {

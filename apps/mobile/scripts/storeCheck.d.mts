@@ -16,7 +16,7 @@ export interface StoreFacts {
   versionName: string;
   badging: Badging;
   permissions: string[];
-  cleartext: boolean;
+  cleartext: boolean | null;
   builtIn: { apiUrl?: unknown; webUrl?: unknown; copyName?: unknown; package?: unknown } | null;
   uploadKey: string;
   apkSigners: string[];
@@ -28,6 +28,7 @@ export interface StoreFacts {
 export function loadAlignments(bytes: Uint8Array): number[] | null;
 export function readBadging(text: string): Badging;
 export function declaredPermissions(xmltree: string): string[];
+export function cleartextIn(manifest: string, configs?: string[]): boolean | null;
 export function fingerprintsIn(text: string): string[];
 export function storeFaults(facts: StoreFacts): string[];
 export function gather(input: { folder: string; versionCode: string; versionName: string; keyStore: string; keyAlias: string }): StoreFacts;
