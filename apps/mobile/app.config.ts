@@ -82,6 +82,19 @@ export const GOOGLE_SERVICES_FILE = "./google-services.json";
  *  without it the app stops on opening (seen on Kd's phone, 2026-11-11). It asks the person nothing. */
 export const SCREENSHOT_PERMISSIONS = ["android.permission.READ_EXTERNAL_STORAGE", "android.permission.READ_MEDIA_IMAGES"];
 
+/** The KWAZO wizard (ROADMAP Stage 5 item 21g): every file the phone needs, and the night colour behind
+ *  Android's icon shapes, so no edge can show whatever shape a phone maker cuts. */
+export const BRAND = {
+  icon: "./assets/brand/icon.png",
+  adaptiveForeground: "./assets/brand/adaptive-foreground.png",
+  adaptiveMonochrome: "./assets/brand/adaptive-monochrome.png",
+  iosTinted: "./assets/brand/icon-tinted.png",
+  notificationIcon: "./assets/notification-icon.png",
+  splash: "./assets/brand/splash.png",
+  night: "#00001B",
+  violet: "#5B35D0",
+} as const;
+
 export function configFor(copy: Copy, firebase = false): ExpoConfig {
   const extra: PhoneAppExtra = { copyName: copy.name, apiUrl: copy.apiUrl, webUrl: copy.webUrl };
   return {
@@ -93,8 +106,12 @@ export function configFor(copy: Copy, firebase = false): ExpoConfig {
     userInterfaceStyle: "dark",
     backgroundColor: "#0A0908",
     scheme: copy.scheme,
+    icon: BRAND.icon,
+    // The picture is already a night scene, so iOS's dark look uses it as it is; the tinted look gets it in grey.
+    ios: { icon: { light: BRAND.icon, dark: BRAND.icon, tinted: BRAND.iosTinted } },
     android: {
       package: copy.applicationId,
+      adaptiveIcon: { foregroundImage: BRAND.adaptiveForeground, backgroundColor: BRAND.night, monochromeImage: BRAND.adaptiveMonochrome },
       allowBackup: false,
       // expo-screen-capture (Add card, 20d) asks for these to tell the app a screenshot was taken on older Androids, which
       // nothing here uses; blanking a page needs neither, and Google Play asks a declaration for the photos permission.
@@ -110,7 +127,7 @@ export function configFor(copy: Copy, firebase = false): ExpoConfig {
       ["expo-camera", { cameraPermission: "Allow $(PRODUCT_NAME) to take photos of your meals and your gym's updates.", microphonePermission: false, recordAudioAndroid: false }],
       ["expo-image-picker", { photosPermission: "Allow $(PRODUCT_NAME) to open the photos you pick.", microphonePermission: false }],
       // A gym's messages as notifications (18b-i): the small icon and its colour on Android's bar.
-      ["expo-notifications", { icon: "./assets/notification-icon.png", color: "#FF8A1F" }],
+      ["expo-notifications", { icon: BRAND.notificationIcon, color: BRAND.violet }],
       // Record a run (37a): the location while the app is in use, kept through a locked screen by a
       // service with its notification. Never "all the time": Android's own rule is that a service the
       // person starts keeps the location they gave the app in use.
@@ -123,6 +140,9 @@ export function configFor(copy: Copy, firebase = false): ExpoConfig {
           isIosBackgroundLocationEnabled: false,
         },
       ],
+      // The opening screen (21g): the wizard and his ring on the night colour, centred at every size. Android 12 and
+      // later always show it inside a circle, so the picture keeps everything within one.
+      ["expo-splash-screen", { image: BRAND.splash, backgroundColor: BRAND.night, imageWidth: 240, resizeMode: "contain" }],
       "./plugins/shortNativeBuild.js",
     ],
     extra,
