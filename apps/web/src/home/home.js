@@ -130,13 +130,15 @@ const CLIPS = { 1: clip1, 2: clip2, 3: clip3, 4: clip4, 5: clip5, 6: clip6, 7: c
     if (!WIDE.matches) return;
     const room = window.innerHeight - 10;
     for (const s of S) {
-      const top = s.stage.getBoundingClientRect().top; let bottom = 0;
+      // The words shrink in place: the box keeps its own top (zooming the box itself would move it up under the bar,
+      // round one's re-check H5), and only the space below that top is shared out.
+      const top = s.stage.getBoundingClientRect().top, from = s.copy.getBoundingClientRect().top - top; let bottom = 0;
       for (const k of s.copy.children) bottom = Math.max(bottom, k.getBoundingClientRect().bottom - top);
-      if (bottom > room) s.copy.style.zoom = Math.max(0.7, room / bottom).toFixed(3);
+      if (bottom > room) { const z = Math.max(0.7, (room - from) / (bottom - from)).toFixed(3); for (const k of s.copy.children) k.style.zoom = z; }
     }
   }
   function measure() {
-    for (const s of S) { s.copy.style.zoom = ''; s.copy.style.transform = 'none'; }
+    for (const s of S) { for (const k of s.copy.children) k.style.zoom = ''; s.copy.style.transform = 'none'; }
     for (const s of S) s.top = s.el.offsetTop;
     fit(); fitHeads(); fitCopy();
     for (const s of S) s.copy.style.transform = '';
