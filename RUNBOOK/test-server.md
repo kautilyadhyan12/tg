@@ -71,7 +71,13 @@ VITE_API_URL=https://api.getkwazo.com VITE_AUTH_API_URL= VITE_ML_API_URL= VITE_W
 grep -rhoE "(https?|wss?)://(localhost|127\.0\.0\.1):[0-9]+" <scratch>/web-dist   # must print nothing
 node tools/check-web-locally.mjs <scratch>/web-dist   # the server's web settings over this build, in Docker: all must pass
 cd <scratch>/web-dist && tar -cf - . | ssh -i ~/.ssh/kwazo_oracle ubuntu@13.237.195.91 'rm -rf /srv/kwazo/app/infra/web && mkdir -p /srv/kwazo/app/infra/web && tar -x -C /srv/kwazo/app/infra/web'
+ssh -i ~/.ssh/kwazo_oracle ubuntu@13.237.195.91 'cd /srv/kwazo/app && sudo docker compose -f infra/docker-compose.yml -f infra/docker-compose.selfhost.yml up -d --force-recreate caddy'
+node tools/check-test-server.mjs --inside   # all must pass
 ```
+
+Caddy is recreated after every new console: it holds the folder it started with, so a folder removed and
+made again answers 404 for every page until then (seen 2026-11-15, 21c-i: 9 of 40 checks failed, all
+passed after the recreate).
 
 ## Migrations, seeds and the food table
 
