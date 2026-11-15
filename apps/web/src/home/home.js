@@ -81,6 +81,7 @@ const CLIPS = { 1: clip1, 2: clip2, 3: clip3, 4: clip4, 5: clip5, 6: clip6, 7: c
     S.forEach((s) => s.pins.forEach(({ p }) => p.classList.add('on')));
     addEventListener('resize', measure); addEventListener('load', measure); measure();
     if (document.fonts && document.fonts.ready) document.fonts.ready.then(measure);
+    if (document.fonts) document.fonts.addEventListener('loadingdone', measure);
     return;
   }
 
@@ -134,7 +135,13 @@ const CLIPS = { 1: clip1, 2: clip2, 3: clip3, 4: clip4, 5: clip5, 6: clip6, 7: c
       // round one's re-check H5), and only the space below that top is shared out.
       const top = s.stage.getBoundingClientRect().top, from = s.copy.getBoundingClientRect().top - top; let bottom = 0;
       for (const k of s.copy.children) bottom = Math.max(bottom, k.getBoundingClientRect().bottom - top);
-      if (bottom > room) { const z = Math.max(0.7, (room - from) / (bottom - from)).toFixed(3); for (const k of s.copy.children) k.style.zoom = z; }
+      if (bottom > room) {
+        // the first guess can overshoot (shrunk buttons fit more to a row): find the largest size that still fits
+        const fits = (z) => { for (const k of s.copy.children) k.style.zoom = z; let b = 0; for (const k of s.copy.children) b = Math.max(b, k.getBoundingClientRect().bottom - top); return b <= room; };
+        let lo = Math.max(0.7, (room - from) / (bottom - from)), hi = 1;
+        for (let n = 0; n < 6; n++) { const mid = (lo + hi) / 2; if (fits(mid)) lo = mid; else hi = mid; }
+        const z = (Math.floor(lo * 1000) / 1000).toFixed(3); for (const k of s.copy.children) k.style.zoom = z;   // rounded down: up could cross a line's wrap
+      }
     }
   }
   function measure() {
@@ -145,6 +152,8 @@ const CLIPS = { 1: clip1, 2: clip2, 3: clip3, 4: clip4, 5: clip5, 6: clip6, 7: c
     lightNav();
   }
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(measure);
+  // each weight of the text font is its own file and may arrive later: the words are measured again when one does
+  if (document.fonts) document.fonts.addEventListener('loadingdone', measure);
   addEventListener('resize', measure); addEventListener('load', measure); measure();
 
   // Phones: stickers pop and the clip plays while its room is on screen.

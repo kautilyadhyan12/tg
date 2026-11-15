@@ -182,6 +182,7 @@ describe('the front page keeps its own rules', () => {
     expect(css.split(`@media (prefers-reduced-motion:reduce) and ${computer}{`)[1]).toMatch(/^\s*\.scene,\.scene:first-child,\.scene:last-child\{height:100vh;margin-top:0\}/);
     // Short screens shrink each room's words in place: never the box, whose zoom would move it up under the bar (re-check H5).
     expect(script).toMatch(/for \(const k of s\.copy\.children\) k\.style\.zoom = z;/);
+    expect(script).not.toMatch(/s\.copy\.style\.zoom\s*=\s*z/);
     expect(script).not.toMatch(/s\.copy\.style\.zoom\s*=\s*[^'"]/);
     // The bubble band sits in the words' own bottom margin, never over them.
     expect(css).toContain('.shot{position:relative;inset:auto;padding-bottom:var(--band);');
