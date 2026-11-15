@@ -174,7 +174,7 @@ describe('the front page keeps its own rules', () => {
     expect(css).toContain('@media (min-width:821px) and (min-aspect-ratio:3/2) and (min-height:540px) and (max-height:760px){');
     expect(css.match(/@media[^{]*aspect-ratio/g)).toHaveLength(2);
     // On the phone page the picture always covers the width: never shorter than a 16:9 picture as wide as the screen.
-    expect(css).toContain(':root{--pic:max(56svh,320px,56.25vw)}');
+    expect(css).toContain(':root{--pic:max(56svh,320px,56.25vw);--band:150px}');
   });
 
   it('names no other site but its own address, for Google and shared links', () => {
@@ -223,7 +223,8 @@ describe('the front page keeps its own rules', () => {
   });
 
   it('tells Google the name, the words and the picture to show, and where the page lives', () => {
-    expect(page).toContain('<title>KWAZO | Gym Management Software &amp; Fitness App</title>');
+    expect(page).toContain('<title>KWAZO | Software for Fitness Businesses and Their Members</title>');
+    expect(page.match(/<title>([^<]+)<\/title>/)[1].length).toBeLessThanOrEqual(60);
     const description = page.match(/<meta name="description" content="([^"]+)">/)[1];
     expect(description.length).toBeLessThanOrEqual(155);
     expect(page).toContain('<link rel="canonical" href="https://getkwazo.com/">');
@@ -251,6 +252,13 @@ describe('what the front page says', () => {
     // A bare number by a period of time reads as a price too: "from 49 a month", "49 monthly", "79/month billed yearly".
     expect(text).not.toMatch(/\d[\d.,]*\s*(?:\/\s*|a\s+|an\s+|per\s+|each\s+)?(?:months?|monthly|years?|yearly|annual(?:ly)?|weeks?|weekly)\b/i);
     expect(text).not.toMatch(/\b(?:billed|pricing|price|plans? from|subscription)\b/i);
+  });
+
+  it('speaks to every fitness business, never to gyms alone (Kd, 2026-11-15)', () => {
+    // "gym" may name a place someone trains ("a gym or studio membership"), never the customer.
+    expect(text).not.toMatch(/\bgym (?:owners?|management|console)\b|\bgyms can\b|\byour gym\b|\bfor gyms\b|\bgym updates\b/i);
+    expect(text).toContain('For fitness businesses');
+    expect(page).not.toMatch(/content="[^"]*\bgym (?:management|owner)/i);
   });
 
   it('never calls KWAZO a health or medical app', () => {

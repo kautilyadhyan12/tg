@@ -85,6 +85,15 @@ const CLIPS = { 1: clip1, 2: clip2, 3: clip3, 4: clip4, 5: clip5, 6: clip6, 7: c
     return 'path("' + d + '")';
   }
 
+  // The band each room rises through on a phone (shown by the stylesheet only there).
+  for (const s of S) {
+    if (s.i === 0) continue;
+    s.riseR = document.createElement('div'); s.riseR.className = 'rise rise-rim'; s.riseR.setAttribute('aria-hidden', 'true');
+    s.riseF = document.createElement('div'); s.riseF.className = 'rise rise-fill'; s.riseF.setAttribute('aria-hidden', 'true');
+    s.stage.prepend(s.riseF); s.stage.prepend(s.riseR);
+  }
+  document.documentElement.classList.add('rise-on');
+
   let mx = -999, my = -999, lx = 0, ly = 0, active = '', wasWide = null;
   if (FINE) {
     addEventListener('pointermove', (e) => { mx = e.clientX; my = e.clientY; });
@@ -147,7 +156,18 @@ const CLIPS = { 1: clip1, 2: clip2, 3: clip3, 4: clip4, 5: clip5, 6: clip6, 7: c
       }
       if (best !== active) { navLinks.forEach((a) => a.classList.toggle('on', a.dataset.go === best)); active = best; }
       if (cue) cue.style.opacity = y > 30 ? '0' : '1';
-    } else for (const s of S) want(s, s.inView, time);
+    } else {
+      // Phones and upright screens: each room's colour rises into the band above it as the scroll brings it in.
+      const vh = window.innerHeight, seen = [];
+      for (const s of S) {
+        want(s, s.inView, time);
+        if (!s.riseF) continue;
+        const r = s.riseF.getBoundingClientRect();
+        if (r.bottom > -20 && r.top < vh + 20) seen.push([s, clamp((vh - r.top) / (vh * 0.45), 0, 1), r.width, r.height]);
+      }
+      // the liquid never fills its band: a living row of bubbles stays on every border, rising as the room comes in
+      for (const [s, q, w, h] of seen) { const k = 0.62 * q; s.riseR.style.clipPath = liquid(s, k, time, w, h, 8); s.riseF.style.clipPath = liquid(s, k, time, w, h, 0); }
+    }
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);

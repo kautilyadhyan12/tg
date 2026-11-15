@@ -45,7 +45,7 @@ try {
   // The front page: the site's own address alone (a query string does not change the address, and Caddy reads `//` as `/`).
   for (const p of ["/", "/?utm_source=google", "//"]) {
     const r = await get(p); const html = await r.text();
-    check(`${p} is the front page`, r.status === 200 && html.includes("<title>KWAZO | Gym Management Software") && !html.includes(CONSOLE), String(r.status));
+    check(`${p} is the front page`, r.status === 200 && html.includes("<title>KWAZO | Software for Fitness Businesses") && !html.includes(CONSOLE), String(r.status));
     check(`${p} runs only its own script`, /(?:^|; )script-src 'self'(?:;|$)/.test(policyIn(html)) && !policyIn(html).includes("unsafe"), policyIn(html));
     check(`${p} may not be framed`, (r.headers.get("content-security-policy") ?? "") === "frame-ancestors 'none'", r.headers.get("content-security-policy") ?? "none");
     check(`${p} keeps to https, sniffs nothing, and is read again on every visit`, (r.headers.get("strict-transport-security") ?? "").includes("max-age=31536000") && r.headers.get("x-content-type-options") === "nosniff" && r.headers.get("cache-control") === "no-cache", `${r.headers.get("strict-transport-security")} ${r.headers.get("x-content-type-options")} ${r.headers.get("cache-control")}`);
