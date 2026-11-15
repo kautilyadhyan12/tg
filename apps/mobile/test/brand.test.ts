@@ -23,6 +23,16 @@ describe("the KWAZO wizard on the phone and in the stores", () => {
     expect(png(BRAND.adaptiveMonochrome)).toMatchObject({ width: 1024, height: 1024, colourType: 6 });
   });
 
+  it("the opening screen is the wizard on the night colour behind it, square so Android's circle keeps it all", () => {
+    expect(png(BRAND.splash)).toEqual({ width: 1024, height: 1024, colourType: 2 });
+    const config = configFor(copyFor("feature1"));
+    expect(config.plugins).toContainEqual([
+      "expo-splash-screen",
+      { image: BRAND.splash, backgroundColor: BRAND.night, imageWidth: 240, resizeMode: "contain" },
+    ]);
+    expect(config.android?.adaptiveIcon?.backgroundColor).toBe(BRAND.night);
+  });
+
   it("the notification icon is a small shape on clear, as Android draws it in one colour", () => {
     expect(png(BRAND.notificationIcon)).toMatchObject({ width: 96, height: 96, colourType: 6 });
   });
@@ -43,7 +53,7 @@ describe("the KWAZO wizard on the phone and in the stores", () => {
       monochromeImage: BRAND.adaptiveMonochrome,
     });
     expect(config.plugins).toContainEqual(["expo-notifications", { icon: BRAND.notificationIcon, color: BRAND.violet }]);
-    for (const file of [BRAND.icon, BRAND.iosTinted, BRAND.adaptiveForeground, BRAND.adaptiveMonochrome, BRAND.notificationIcon]) {
+    for (const file of [BRAND.icon, BRAND.iosTinted, BRAND.adaptiveForeground, BRAND.adaptiveMonochrome, BRAND.notificationIcon, BRAND.splash]) {
       expect(existsSync(join(root, file)), file).toBe(true);
     }
   });

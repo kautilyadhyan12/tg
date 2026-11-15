@@ -90,7 +90,8 @@ export const BRAND = {
   adaptiveMonochrome: "./assets/brand/adaptive-monochrome.png",
   iosTinted: "./assets/brand/icon-tinted.png",
   notificationIcon: "./assets/notification-icon.png",
-  night: "#0B0824",
+  splash: "./assets/brand/splash.png",
+  night: "#00001B",
   violet: "#5B35D0",
 } as const;
 
@@ -139,6 +140,9 @@ export function configFor(copy: Copy, firebase = false): ExpoConfig {
           isIosBackgroundLocationEnabled: false,
         },
       ],
+      // The opening screen (21g): the wizard and his ring on the night colour, centred at every size. Android 12 and
+      // later always show it inside a circle, so the picture keeps everything within one.
+      ["expo-splash-screen", { image: BRAND.splash, backgroundColor: BRAND.night, imageWidth: 240, resizeMode: "contain" }],
       "./plugins/shortNativeBuild.js",
     ],
     extra,
