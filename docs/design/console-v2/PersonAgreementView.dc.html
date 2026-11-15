@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>A signed agreement — slides in from the right (View)</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./kit.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&amp;display=swap">
+<style>
+body{margin:0;background:#0C0B0A}
+</style>
+</helmet>
+<div class="app t-dark {{look}} over" style="height: 1900px">
+<dc-import name="PersonCard" look="{{lookName}}" hint-size="1440px,1900px"></dc-import>
+<div class="scrim"></div>
+<div class="drawer" style="position: absolute; top: 0; right: 0; bottom: 0; width: 560px">
+<div class="dw-h"><div class="row between top" style="width: 100%"><div class="stack-2"><h3 class="h2">Membership agreement</h3><span class="small">Gold Weekly · Sam Rivera</span></div><span class="icon-btn icon-btn-sm icon-btn-q" aria-label="Close"><svg class="ic ic-s" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg></span></div></div>
+<div class="dw-b stack"><div class="row-m"><span class="tag tag-good">Agreement signed</span><span class="small">on 2 November 2026</span></div>
+<p class="body w6">Signed by Sam Rivera on 2 November 2026.</p>
+<div><div class="kvs"><span class="k">Business</span><span class="v">Iron House</span></div>
+<div class="kvs"><span class="k">Address</span><span class="v">2100 S Lamar Blvd, Austin, TX 78704</span></div>
+<div class="kvs"><span class="k">Member</span><span class="v">Sam Rivera</span></div>
+<div class="kvs"><span class="k">Membership</span><span class="v">Gold Weekly</span></div>
+<div class="kvs"><span class="k">Price</span><span class="v">$25.00 every week</span></div>
+<div class="kvs"><span class="k">First payment</span><span class="v">$25.00, due 2 Nov 2026</span></div>
+<div class="kvs"><span class="k">Starts</span><span class="v">2 Nov 2026</span></div>
+<div class="kvs"><span class="k">Renews</span><span class="v">Every week until you cancel</span></div></div>
+<div class="stack-2"><span class="lbl">Signature</span><div class="input" style="font-size: 18px">Sam Rivera</div></div>
+<p class="small">A copy was emailed to them on 2 November 2026.</p></div>
+<div class="dw-f row-s"><span class="btn btn-s"><svg class="ic" viewBox="0 0 24 24"><path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM22 7l-9 5.7a2 2 0 0 1-2 0L2 7"/></svg>Email a copy</span><span class="btn btn-q">Close</span></div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"look":{"editor":"enum","options":["Dark","Light"],"default":"Dark"},"$preview":{"width":1440,"height":1900}}'>
+class Component extends DCLogic {
+renderVals() {
+const lookName = this.props.look ?? 'Dark';
+return { look: lookName === 'Light' ? 't-light' : '', lookName };
+}
+}
+</script>
+</body>
+</html>

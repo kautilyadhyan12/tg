@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Take a payment — Card on Terminal, or the card on file (opens under Record payment)</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./kit.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&amp;display=swap">
+<style>
+body{margin:0;background:#0C0B0A}
+</style>
+</helmet>
+<div class="app t-dark {{look}} over" style="height: 1900px">
+<dc-import name="PersonCard" look="{{lookName}}" hint-size="1440px,1900px"></dc-import>
+<div class="pop pop-r" style="left: 517px; top: 840px; width: 420px; padding: 22px">
+<div class="row between top" style="width: 100%"><div class="stack-2"><h3 class="h2">Take a payment for Sam Rivera's Gold Weekly</h3></div><span class="icon-btn icon-btn-sm icon-btn-q" aria-label="Close"><svg class="ic ic-s" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg></span></div>
+<p class="small">$25.00 is left to pay for 9 November 2026 to 15 November 2026. The Terminal shows the amount and Sam pays by card.</p>
+<div class="field"><span class="flabel">Amount paid (USD)</span><div class="input input-on"><span class="prefix">$</span><span class="num">25.00</span></div></div>
+<div class="field"><span class="flabel">Payment method</span><div class="stack-s"><div class="radio-row row-m" style="padding: 8px 12px; border-radius: 10px; border: 1px solid var(--accent)"><span class="radio radio-on"></span><span class="body w6">Card on Terminal</span></div><div class="radio-row row-m" style="padding: 8px 12px; border-radius: 10px; border: 1px solid var(--line)"><span class="radio"></span><span class="body">Card on file · Visa ending 1111</span></div><div class="radio-row row-m" style="padding: 8px 12px; border-radius: 10px; border: 1px solid var(--line)"><span class="radio"></span><span class="body">Cash</span></div><div class="radio-row row-m" style="padding: 8px 12px; border-radius: 10px; border: 1px solid var(--line)"><span class="radio"></span><span class="body">Card at the desk</span></div><div class="radio-row row-m" style="padding: 8px 12px; border-radius: 10px; border: 1px solid var(--line)"><span class="radio"></span><span class="body">Bank transfer</span></div></div></div>
+<div class="field"><span class="flabel">Terminal</span><div class="stack-s"><div class="choice choice-on" style="padding: 12px 14px; border-radius: 12px; border: 1px solid var(--accent)"><div class="row-m"><svg class="ic t3" viewBox="0 0 24 24"><path d="M6 2h12a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zM8 6h8v5H8zM8 15h.01M12 15h.01M16 15h.01M8 18h.01M12 18h.01M16 18h.01"/></svg><div class="stack-2"><span class="body w6">Square Terminal</span><span class="small">Serial 221CS1491</span></div></div></div><div class="choice choice-off" style="padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line)"><div class="row-m"><svg class="ic t3" viewBox="0 0 24 24"><path d="M6 2h12a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zM8 6h8v5H8zM8 15h.01M12 15h.01M16 15h.01M8 18h.01M12 18h.01M16 18h.01"/></svg><div class="stack-2"><span class="body w6">Square Terminal</span><span class="small">Serial 221CS2077</span></div></div></div></div></div>
+<label class="row top" style="gap: 10px"><span class="box"></span><span class="small" style="color: var(--t1)">Save the card for automatic payments, in place of Visa ending 1111</span></label>
+<div class="row-s"><span class="btn btn-p"><svg class="ic" viewBox="0 0 24 24"><path d="M6 2h12a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zM8 6h8v5H8zM8 15h.01M12 15h.01M16 15h.01M8 18h.01M12 18h.01M16 18h.01"/></svg>Take payment on Terminal</span><span class="btn btn-q">Back</span></div>
+</div>
+<div class="pop pop-r" style="left: 957px; top: 840px; width: 420px; padding: 22px">
+<div class="row between top" style="width: 100%"><div class="stack-2"><h3 class="h2">Take a payment for Sam Rivera's Gold Weekly</h3></div><span class="icon-btn icon-btn-sm icon-btn-q" aria-label="Close"><svg class="ic ic-s" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg></span></div>
+<p class="small">$25.00 is left to pay for 9 November 2026 to 15 November 2026.</p>
+<div class="field"><span class="flabel">Amount paid (USD)</span><div class="input input-on"><span class="prefix">$</span><span class="num">25.00</span></div></div>
+<div class="field"><span class="flabel">Payment method</span><div class="stack-s"><div class="radio-row row-m" style="padding: 8px 12px; border-radius: 10px; border: 1px solid var(--line)"><span class="radio"></span><span class="body">Card on Terminal</span></div><div class="radio-row row-m" style="padding: 8px 12px; border-radius: 10px; border: 1px solid var(--accent)"><span class="radio radio-on"></span><span class="body w6">Card on file · Visa ending 1111</span></div><div class="radio-row row-m" style="padding: 8px 12px; border-radius: 10px; border: 1px solid var(--line)"><span class="radio"></span><span class="body">Cash</span></div><div class="radio-row row-m" style="padding: 8px 12px; border-radius: 10px; border: 1px solid var(--line)"><span class="radio"></span><span class="body">Card at the desk</span></div><div class="radio-row row-m" style="padding: 8px 12px; border-radius: 10px; border: 1px solid var(--line)"><span class="radio"></span><span class="body">Bank transfer</span></div></div></div>
+<div class="callout callout-plain" style="padding: 10px 12px"><svg class="ic ic-s" viewBox="0 0 24 24"><path d="M2 12a10 10 0 1 0 20 0a10 10 0 1 0-20 0M12 16v-4M12 8h.01"/></svg><p class="small" style="color: var(--t2)">$25.00 is charged to Sam's Visa ending 1111 as soon as you press Charge $25.00.</p></div>
+<div class="row-s"><span class="btn btn-p"><svg class="ic" viewBox="0 0 24 24"><path d="M4 5h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2zM2 10h20M6 15h4"/></svg>Charge $25.00</span><span class="btn btn-q">Back</span></div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"look":{"editor":"enum","options":["Dark","Light"],"default":"Dark"},"$preview":{"width":1440,"height":1900}}'>
+class Component extends DCLogic {
+renderVals() {
+const lookName = this.props.look ?? 'Dark';
+return { look: lookName === 'Light' ? 't-light' : '', lookName };
+}
+}
+</script>
+</body>
+</html>

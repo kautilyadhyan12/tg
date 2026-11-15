@@ -114,3 +114,59 @@ They change how pages look, never what they do (rule 14 on the `Main` board).
 | `MembersNewStaff` | 12 Members & staff (your choice) | Proposal · Staff | V3b |
 | `MembersNewStaffPerson` | 12 Members & staff (your choice) | Proposal · one person on the staff | V3b |
 | `MembersNewPhone` | 12 Members & staff (your choice) | Proposal · on a phone | V3a |
+
+## Brought up to date (V0, from 2026-11-15)
+
+The boards above were drawn on 2026-10-18; the console has grown since (ROADMAP item 22, V0; `rulings/2026-11-15-v0-a.md`).
+The V0 boards are also on their own canvas, https://claude.ai/artifact/7mTA4UbxX7AZ4njAHBNw4g (private to the Claude account
+of the web folder's laptop). V0 draws what they miss, in the same look and the same blocks, from the real pages: V0-a took a picture and the words of
+every console page and of each box a member's page opens, signed in to the US Square test gym on the web folder's own
+database (`apps/api/.cost/v0-a/today.mts` and `boxes.mts`, untracked), and counted, page by page, the lines no board has.
+Every word on a V0 board is the real page's; the gym (Iron House, Austin, in dollars, because cards and the Terminal are
+Square's) and its people are made up. The menu on each V0 board has the two lines the real menu gained: Failed payments
+under Money, Fitness plans under Community.
+
+### Drawn in V0-a: a member's page and its boxes
+
+| Board | Page on the canvas | What it shows | Built in |
+|---|---|---|---|
+| `PersonCard` | 2 A member's page | Pays by card: agreement signed, a payment on the Terminal with View receipt and Refund, Change membership, Meal plan, Card on file | V2a |
+| `PersonCardStates` | 2 A member's page | Card on file in each case: saved, paused, none (in the app, asked, not in the app) | V2a |
+| `PersonChargeback` | 2 A member's page | A lost chargeback and its refund on a bill; agreement not signed | V2a |
+| `PersonChargebackStates` | 2 A member's page | The chargeback line: waiting for an answer, a bank inquiry, won, lost | V2a |
+| `PersonTakePayment` | 2 A member's page | Take a payment: Card on Terminal (choose the Terminal, save the card), or Charge the card on file | V2b |
+| `PersonRefundCard` | 2 A member's page | The Refund menu, then Refund to card in the middle | V2b |
+| `PersonCardTerminal` | 2 A member's page | Save or replace a card on the Terminal, and waiting on it | V2b |
+| `PersonCardType` | 2 A member's page | Type card instead: Square's card form and the member's tick | V2b |
+| `PersonCardRemove` | 2 A member's page | Remove card asks first | V2b |
+| `PersonCardPause` | 2 A member's page | Pause automatic payments asks first, naming each membership | V2b |
+| `PersonAgreementView` | 2 A member's page | A signed agreement, from the right | V2b |
+| `PersonAgreementSign` | 2 A member's page | Sign the agreement at the desk, handed to the member or a parent | V2b |
+| `PersonChange` | 2 A member's page | Change membership: choosing the new one, and the line when a payment is due | V2b |
+| `PhonePersonCard` | 11 On a phone | A member's page on a phone with what it gained | V2a |
+
+Notes for V2a and V2b: the receipt (`PersonReceipt`) gains its "Paid by card on Terminal" and "Taken by" lines; Add a
+membership (`PersonAddMembership`) picks the type from one list; Choose who pays and Add someone they pay for keep
+`PersonQuick`'s search box. Today's page puts Record payment under the membership; the boards keep it on the bill that
+is owed, where the approved boards put it.
+
+### Still to draw in V0-b: money pages and Overview (for V4a, V4b, V5)
+
+- **Overview**: the Start here list as it is now (Take payments, Front desk check-in, How members reach you and the rest),
+  and its new boxes: refunds to review, chargebacks, payments made in the app, cancellations in the app, payments to match,
+  failed payments, the trial.
+- **Sell**: the Terminal (the total on the Terminal, choosing it), a refund or a chargeback on a sale, stock left.
+- **Memberships**: what each type now says (sold in the app, taxes, minimum term, early cancellation fee, cooling-off
+  period), raising a price for existing members, bill settings.
+- **Failed payments**, a page of its own: declined cards still owed, Try again, Add a new card, the email sent.
+- **Square's return page** after Connect Square.
+
+### Still to draw in V0-c: Settings and the new pages (for V1, V3a, V9a, V11 and new V lines)
+
+- **Settings**: Payments (connected to Square, its location, Square Terminals and Pair a Terminal, Ask members to add
+  their card, Disconnect Square), Membership agreement (the default one, other agreements, bookings until signed),
+  Deleted forms, and Booking rules with overdue bookings.
+- **Your account**, **Fitness plans** (the list, a new meal plan, a meal, giving it to members, and Give a meal plan on a
+  member's page), **comments and reactions** on Updates.
+- **Members**: Ask to add card for the people ticked, No card on file in Filter, and Review, Duplicates and Sent messages.
+- **The menu** (`Main`, `PhoneMore`): Failed payments, Fitness plans and Your account.
