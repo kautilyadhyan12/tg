@@ -15,7 +15,8 @@ const CLIPS = { 1: clip1, 2: clip2, 3: clip3, 4: clip4, 5: clip5, 6: clip6, 7: c
 (() => {
   const REDUCE = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const FINE = matchMedia('(hover: hover) and (pointer: fine)').matches;
-  const WIDE = matchMedia('(min-width: 821px) and (min-aspect-ratio: 7/5)');
+  // The computer layout's one condition; the stylesheet's phone layout is its exact negation (`not all and ...`).
+  const WIDE = matchMedia('(min-width:821px) and (min-aspect-ratio:3/2) and (min-height:540px)');
   const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
   const ease = (x) => x * x * (3 - 2 * x);
   const navLinks = [...document.querySelectorAll('.top nav a')];
@@ -61,32 +62,61 @@ const CLIPS = { 1: clip1, 2: clip2, 3: clip3, 4: clip4, 5: clip5, 6: clip6, 7: c
   }
   document.addEventListener('visibilitychange', () => { if (document.hidden) for (const s of S) if (s.clip && !s.clip.paused) { s.clip.pause(); s.asked = false; } });
 
+  // The menu lights the room being read, in every layout. On the computer layout a room counts once it has half risen
+  // over the one before; elsewhere once its top is in the upper third of the screen.
+  let active = '';
+  function lightNav() {
+    const vh = window.innerHeight, rising = WIDE.matches && !REDUCE; let best = S[0].nav;
+    for (const s of S) { if (s.i > 0 && s.el.getBoundingClientRect().top <= (rising ? -0.275 * vh : 0.35 * vh)) best = s.nav; }
+    if (best !== active) { navLinks.forEach((a) => a.classList.toggle('on', a.dataset.go === best)); active = best; }
+  }
+  addEventListener('scroll', lightNav, { passive: true });
+
   // The bar gets out of the way while reading down the page, and comes back the moment the reader scrolls up.
   const bar = document.querySelector('.top'); let lastY = window.scrollY;
   addEventListener('scroll', () => { const y = window.scrollY, d = y - lastY; if (y < 90) { bar.classList.remove('away'); lastY = y; } else if (d > 6) { bar.classList.add('away'); lastY = y; } else if (d < -6) { bar.classList.remove('away'); lastY = y; } }, { passive: true });
 
-  if (REDUCE) { S.forEach((s) => s.pins.forEach(({ p }) => p.classList.add('on'))); return; }
+  // Reduce motion: everything shown at once and still, but fitted to the screen like any other visit.
+  if (REDUCE) {
+    S.forEach((s) => s.pins.forEach(({ p }) => p.classList.add('on')));
+    addEventListener('resize', measure); addEventListener('load', measure); measure();
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(measure);
+    if (document.fonts) document.fonts.addEventListener('loadingdone', measure);
+    return;
+  }
 
   // The liquid with bubbles: everything under the level line, bubbles riding on it, loose bubbles rising above it.
-  function liquid(s, q, time, W, H, grow) {
-    const unit = W / 10, rmax = unit * 1.05;
+  function liquid(s, q, time, W, H, grow, maxUnit = Infinity) {
+    const unit = Math.min(W / 10, maxUnit), rmax = unit * 1.05;
     const lvl = (H + 0.8 * rmax) + (-0.45 * rmax - (H + 0.8 * rmax)) * q - grow;
     let d = 'M-20,' + lvl.toFixed(1) + ' H' + (W + 20) + ' V' + (H + 60) + ' H-20 Z';
-    const dot = (cx, cy, r) => { if (r > 1) d += ' M' + (cx - r).toFixed(1) + ',' + cy.toFixed(1) + ' a' + r.toFixed(1) + ',' + r.toFixed(1) + ' 0 1,1 ' + (2 * r).toFixed(1) + ',0 a' + r.toFixed(1) + ',' + r.toFixed(1) + ' 0 1,1 ' + (-2 * r).toFixed(1) + ',0 Z'; };
+    // in a band (a phone), a bubble never passes the band's top: it shrinks away there, as if it popped
+    const top = maxUnit < Infinity ? 1 : -Infinity;
+    const dot = (cx, cy, r) => { r = Math.min(r, cy - top); if (r > 1) d += ' M' + (cx - r).toFixed(1) + ',' + cy.toFixed(1) + ' a' + r.toFixed(1) + ',' + r.toFixed(1) + ' 0 1,1 ' + (2 * r).toFixed(1) + ',0 a' + r.toFixed(1) + ',' + r.toFixed(1) + ' 0 1,1 ' + (-2 * r).toFixed(1) + ',0 Z'; };
     for (const b of s.foam) { const r = unit * b.r * (1 + 0.07 * Math.sin(time * b.w * 1.7 + b.ph)); dot(b.x * W, lvl + r * 0.28 + 9 * Math.sin(time * b.w + b.ph), r + grow); }
     const live = clamp(q * 5, 0, 1);
     for (const b of s.loose) { const u = (time * b.sp + b.ph) % 1; dot(b.x * W + 14 * Math.sin(time * 1.3 + b.ph * 9), lvl - u * b.span * H * live, (b.r * W * (1 - u * u * u) * live) + (u < 0.97 ? grow * live : 0)); }
     return 'path("' + d + '")';
   }
 
-  let mx = -999, my = -999, lx = 0, ly = 0, active = '', wasWide = null;
+  // The band each room rises through on a phone (shown by the stylesheet only there).
+  for (const s of S) {
+    if (s.i === 0) continue;
+    s.riseR = document.createElement('div'); s.riseR.className = 'rise rise-rim'; s.riseR.setAttribute('aria-hidden', 'true');
+    s.riseF = document.createElement('div'); s.riseF.className = 'rise rise-fill'; s.riseF.setAttribute('aria-hidden', 'true');
+    s.stage.prepend(s.riseF); s.stage.prepend(s.riseR);
+  }
+  document.documentElement.classList.add('rise-on');
+
+  let mx = -999, my = -999, lx = 0, ly = 0, wasWide = null;
   if (FINE) {
     addEventListener('pointermove', (e) => { mx = e.clientX; my = e.clientY; });
     document.documentElement.addEventListener('pointerleave', () => { mx = -999; my = -999; });
   }
   function fit() {
     for (const s of S) { const view = s.el.querySelector('.view'), vw = view.clientWidth, vh = view.clientHeight, wl = s.world.offsetLeft, wt = s.world.offsetTop;
-      for (const { p } of s.pins) { p.classList.remove('nofit'); if (WIDE.matches) continue; const x = wl + p.offsetLeft, y = wt + p.offsetTop;
+      // stickers and the labels on a drawn screen alike: one that does not fit inside its picture is left out
+      for (const p of s.el.querySelectorAll('.st, .tag')) { p.classList.remove('nofit'); if (WIDE.matches) continue; const x = wl + p.offsetLeft, y = wt + p.offsetTop;
         if (x < 8 || y < 8 || x + p.offsetWidth > vw - 8 || y + p.offsetHeight > vh - 8) p.classList.add('nofit'); } }
   }
   function fitHeads() {
@@ -95,8 +125,35 @@ const CLIPS = { 1: clip1, 2: clip2, 3: clip3, 4: clip4, 5: clip5, 6: clip6, 7: c
       const wide = () => lines.some((l) => l.getBoundingClientRect().width + fs * 0.14 > room);
       while (n++ < 40 && fs > 30 && wide()) { fs *= 0.96; h.style.fontSize = fs.toFixed(1) + 'px'; } }
   }
-  function measure() { for (const s of S) s.top = s.el.offsetTop; fit(); fitHeads(); }
+  // A short computer screen: each room's words shrink just enough that the last button or question stays on the screen
+  // (the stage is one screen tall and cannot be scrolled), never below 70%.
+  function fitCopy() {
+    if (!WIDE.matches) return;
+    const room = window.innerHeight - 10;
+    for (const s of S) {
+      // The words shrink in place: the box keeps its own top (zooming the box itself would move it up under the bar,
+      // round one's re-check H5), and only the space below that top is shared out.
+      const top = s.stage.getBoundingClientRect().top, from = s.copy.getBoundingClientRect().top - top; let bottom = 0;
+      for (const k of s.copy.children) bottom = Math.max(bottom, k.getBoundingClientRect().bottom - top);
+      if (bottom > room) {
+        // the first guess can overshoot (shrunk buttons fit more to a row): find the largest size that still fits
+        const fits = (z) => { for (const k of s.copy.children) k.style.zoom = z; let b = 0; for (const k of s.copy.children) b = Math.max(b, k.getBoundingClientRect().bottom - top); return b <= room; };
+        let lo = Math.max(0.7, (room - from) / (bottom - from)), hi = 1;
+        for (let n = 0; n < 6; n++) { const mid = (lo + hi) / 2; if (fits(mid)) lo = mid; else hi = mid; }
+        const z = (Math.floor(lo * 1000) / 1000).toFixed(3); for (const k of s.copy.children) k.style.zoom = z;   // rounded down: up could cross a line's wrap
+      }
+    }
+  }
+  function measure() {
+    for (const s of S) { for (const k of s.copy.children) k.style.zoom = ''; s.copy.style.transform = 'none'; }
+    for (const s of S) s.top = s.el.offsetTop;
+    fit(); fitHeads(); fitCopy();
+    for (const s of S) s.copy.style.transform = '';
+    lightNav();
+  }
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(measure);
+  // each weight of the text font is its own file and may arrive later: the words are measured again when one does
+  if (document.fonts) document.fonts.addEventListener('loadingdone', measure);
   addEventListener('resize', measure); addEventListener('load', measure); measure();
 
   // Phones: stickers pop and the clip plays while its room is on screen.
@@ -111,12 +168,10 @@ const CLIPS = { 1: clip1, 2: clip2, 3: clip3, 4: clip4, 5: clip5, 6: clip6, 7: c
       const y = window.scrollY, H = S[0].stage.offsetHeight, W = S[0].stage.offsetWidth, T = H * 0.55;
       const wantX = mx > -900 ? (mx / W - 0.5) * 2 : 0, wantY = my > -900 ? (my / H - 0.5) * 2 : 0;
       lx += (wantX - lx) * 0.06; ly += (wantY - ly) * 0.06;
-      let best = S[0].nav;
       for (const s of S) {
         const next = S[s.i + 1];
         const q = s.i === 0 ? 1 : clamp((y - s.top) / T, 0, 1);              // how far this scene has risen over the one before
         const qn = next ? clamp((y - next.top) / T, 0, 1) : 0;                // how far the next one has risen over this one
-        if (q >= 0.5) best = s.nav;
         // the liquid edge
         const state = q <= 0 ? 'off' : q >= 1 ? 'full' : 'rise';
         if (state === 'rise') { s.rim.style.display = 'block'; s.rim.style.clipPath = liquid(s, q, time, W, H, 10); s.shot.style.clipPath = liquid(s, q, time, W, H, 0); }
@@ -138,9 +193,19 @@ const CLIPS = { 1: clip1, 2: clip2, 3: clip3, 4: clip4, 5: clip5, 6: clip6, 7: c
         for (const { p: el, at } of s.pins) el.classList.toggle('on', s.since >= 0 && time - s.since > at);
         if (reps && s.el.id === 'camera') reps.textContent = String(clamp(1 + Math.floor(p * 9), 1, 8)).padStart(2, '0');
       }
-      if (best !== active) { navLinks.forEach((a) => a.classList.toggle('on', a.dataset.go === best)); active = best; }
       if (cue) cue.style.opacity = y > 30 ? '0' : '1';
-    } else for (const s of S) want(s, s.inView, time);
+    } else {
+      // Phones and upright screens: each room's colour rises into the band above it as the scroll brings it in.
+      const vh = window.innerHeight, seen = [];
+      for (const s of S) {
+        want(s, s.inView, time);
+        if (!s.riseF) continue;
+        const r = s.riseF.getBoundingClientRect();
+        if (r.bottom > -20 && r.top < vh + 20) seen.push([s, clamp((vh - r.top) / (vh * 0.45), 0, 1), r.width, r.height]);
+      }
+      // the liquid never fills its band: a living row of bubbles stays on every border, rising as the room comes in
+      for (const [s, q, w, h] of seen) { const k = 0.62 * q; s.riseR.style.clipPath = liquid(s, k, time, w, h, 8, h / 3.2); s.riseF.style.clipPath = liquid(s, k, time, w, h, 0, h / 3.2); }   // bubbles sized to the band, so a wide screen never cuts them flat
+    }
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
