@@ -127,5 +127,6 @@ describe('consentService', () => {
     expect(await built('x'.repeat(60))).toBe('x'.repeat(40));
     expect(await built('')).toBe('web-dev');
     expect(await built('   ')).toBe('web-dev');
-  });
+    // Four fresh imports of the module: 936 ms alone on the laptop, 5,016 ms under GitHub's whole run (2026-11-15).
+  }, 20_000);
 });
