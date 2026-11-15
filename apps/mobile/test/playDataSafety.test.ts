@@ -147,11 +147,17 @@ describe("the answers are in Google's own words", () => {
     expect(dataSafetyFaults(today(), answers({ PERMISSIONS: typo }))).toContain('android.permission.CAMERA names "Photo", which is not one of Google\'s types.');
   });
 
-  it("no advertising or analytics purpose, as the privacy policy promises", () => {
-    const promise = privacyPolicy().sections.flatMap((s) => s.blocks).some((b) => b.kind === "p" && b.text === "KWAZO does not display advertisements and does not use advertising or analytics tools.");
-    expect(promise).toBe(true);
+  it("no advertising purpose, as the privacy policy promises, and Analytics only for the minutes the owner's admin page shows", () => {
+    const blocks = privacyPolicy().sections.flatMap((s) => s.blocks);
+    expect(blocks.some((b) => b.kind === "p" && b.text === "KWAZO does not display advertisements and does not use advertising or analytics tools.")).toBe(true);
+    expect(blocks.some((b) => b.kind === "list" && b.items.includes("Time spent using the Application."))).toBe(true);
     for (const c of COLLECTED) expect(c.purposes).not.toContain("Advertising or marketing");
-    for (const c of COLLECTED) expect(c.purposes).not.toContain("Analytics");
+    expect(COLLECTED.filter((c) => c.purposes.includes("Analytics")).map((c) => c.type)).toEqual(["App interactions"]);
+  });
+
+  it("what Play Console holds since 2026-11-16: required for everyone, or the person's choice", () => {
+    const required = COLLECTED.filter((c) => c.required).map((c) => c.type);
+    expect(required).toEqual(["Name", "Email address", "User IDs", "Other info", "Health info", "Fitness info", "App interactions", "Device or other IDs"]);
   });
 
   it("nothing is shared: each company is one of Google's exceptions, or the app sends it nothing", () => {

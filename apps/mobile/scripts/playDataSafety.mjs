@@ -132,8 +132,8 @@ export const COLLECTED = [
     type: "App interactions",
     required: true,
     ephemeral: false,
-    purposes: ["App functionality", "Fraud prevention, security, and compliance"],
-    what: "The minutes the app is open each day, and how many meal scans and route plans were used, for the daily limits.",
+    purposes: ["App functionality", "Analytics", "Fraud prevention, security, and compliance"],
+    what: "The minutes the app is open each day, which the owner's admin page shows (Google's \"Analytics\"), and how many meal scans and route plans were used, for the daily limits.",
   },
   {
     type: "In-app search history",
@@ -158,10 +158,10 @@ export const COLLECTED = [
   },
   {
     type: "Device or other IDs",
-    required: false,
+    required: true,
     ephemeral: false,
     purposes: ["App functionality"],
-    what: "The phone's notification token, so that notifications the person allows reach it.",
+    what: "The phone's notification token, so that notifications reach it; Firebase's part registers the phone when the app opens, even for someone who switches notifications off, so it is answered as required.",
   },
 ];
 
