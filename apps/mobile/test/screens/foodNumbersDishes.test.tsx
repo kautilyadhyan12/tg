@@ -218,7 +218,9 @@ async function changeNumbers() {
 async function pickOats() {
   await fireEvent.press(await screen.findByRole("button", { name: "Add to Breakfast" }));
   await fireEvent.changeText(screen.getByLabelText("Search food"), "oats");
-  await fireEvent.press(await screen.findByRole("button", { name: "Oats, rolled, 307 kcal · 1 cup, USDA" }));
+  // Five seconds for the search result: twice on GitHub (runs 43631717949 and 43680633858, a 70-second file on a busy
+  // machine) the default second ran out before it was drawn; on the laptop it passes even with the search slowed to 3 s.
+  await fireEvent.press(await screen.findByRole("button", { name: "Oats, rolled, 307 kcal · 1 cup, USDA" }, { timeout: 5000 }));
 }
 
 describe("32c-ii-a's worst thing: a meal is saved with the amount the bowl showed", () => {
