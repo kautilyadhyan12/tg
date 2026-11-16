@@ -72,6 +72,22 @@ export function CardOnFile({ view, said, onAdd, onRemove }: { view: MyCardView; 
   );
 }
 
+/** In Card on file's place, where My membership was opened from the place's card request (20l) and there is no box to
+ *  show: the place takes no cards in the app now, or the card could not be read (with Try again). */
+export function CardNotHere({ line, onAgain }: { line: string; onAgain: (() => void) | null }) {
+  return (
+    <View style={styles.section}>
+      <Txt kind="eyebrow" colour="textFaint">
+        {CARD_TITLE}
+      </Txt>
+      <Card testID="card-not-here" style={styles.box}>
+        <Txt colour={onAgain === null ? "text" : "badText"}>{line}</Txt>
+        {onAgain === null ? null : <Button label="Try again" kind="soft" small onPress={onAgain} />}
+      </Card>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   section: { gap: 10 },
   box: { padding: 16, gap: 12 },

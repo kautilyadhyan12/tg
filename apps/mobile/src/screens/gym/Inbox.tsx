@@ -27,13 +27,15 @@ import { Sheet } from "../../look/Sheet";
 import { fonts, Txt } from "../../look/Txt";
 import { clearGym, setInboxOpen } from "../../notifications/phone";
 import { useSession } from "../../session/SessionProvider";
+import { ADD_CARD } from "./cardView";
 import { NO_ANSWER } from "../SignIn";
 import { INBOX_NOT_READ, LINK_NOT_OPENED, SWITCH_NOT_SAVED, inboxPath, inboxReadPath, inboxRow, inboxSwitchPath } from "./inboxView";
 
 // A place's messages to its member (spec Part 3 §16.1; ROADMAP Stage 5 item 18a): the place's pinned note, then its
 // messages, newest first, Contact the gym, and the member's two switches. A page over the Gym tab, read when it opens
 // and when the app comes back. Opening it tells the server the messages shown were seen; the New marks stay until it
-// is read again. A switch shows only what the server's last answer said.
+// is read again. A switch shows only what the server's last answer said. A place's ask for a card has Add card under it,
+// which opens My membership at that same place, on Add card (20l).
 
 export interface InboxPlace {
   id: string;
@@ -43,13 +45,24 @@ export interface InboxPlace {
   latestNudge: GymNudge | null;
 }
 
-/** The page over the Gym tab; closed while `place` is null. `onUnread`: the place's count of new messages, as the server last said it. */
-export function InboxPage({ place, onClose, onUnread }: { place: InboxPlace | null; onClose: () => void; onUnread: (gymId: string, unread: number) => void }) {
+/** The page over the Gym tab; closed while `place` is null. `onUnread`: the place's count of new messages, as the server last said it.
+ *  `onAddCard`: a card request's Add card pressed, with the place whose inbox it is. */
+export function InboxPage({
+  place,
+  onClose,
+  onUnread,
+  onAddCard,
+}: {
+  place: InboxPlace | null;
+  onClose: () => void;
+  onUnread: (gymId: string, unread: number) => void;
+  onAddCard: (place: InboxPlace) => void;
+}) {
   const insets = useSafeAreaInsets();
   return (
     <Modal visible={place !== null} animationType="slide" statusBarTranslucent navigationBarTranslucent onRequestClose={onClose}>
       <View testID="inbox-page" accessibilityViewIsModal style={[styles.page, { paddingTop: insets.top }]}>
-        {place === null ? null : <InboxBody key={place.id} place={place} onClose={onClose} onUnread={onUnread} bottom={insets.bottom} />}
+        {place === null ? null : <InboxBody key={place.id} place={place} onClose={onClose} onUnread={onUnread} onAddCard={onAddCard} bottom={insets.bottom} />}
       </View>
     </Modal>
   );
@@ -58,7 +71,19 @@ export function InboxPage({ place, onClose, onUnread }: { place: InboxPlace | nu
 type Held = { kind: "loading" } | { kind: "failed" } | { kind: "ok"; inbox: GymInboxResponse; readAt: number };
 type Switches = { off: readonly string[]; groupMessages: boolean };
 
-function InboxBody({ place, onClose, onUnread, bottom }: { place: InboxPlace; onClose: () => void; onUnread: (gymId: string, unread: number) => void; bottom: number }) {
+function InboxBody({
+  place,
+  onClose,
+  onUnread,
+  onAddCard,
+  bottom,
+}: {
+  place: InboxPlace;
+  onClose: () => void;
+  onUnread: (gymId: string, unread: number) => void;
+  onAddCard: (place: InboxPlace) => void;
+  bottom: number;
+}) {
   const { session } = useSession();
   const [held, setHeld] = useState<Held>({ kind: "loading" });
   // The switches as the server last said them; null until the inbox is read.
@@ -220,6 +245,20 @@ function InboxBody({ place, onClose, onUnread, bottom }: { place: InboxPlace; on
                     }}
                   />
                 )}
+                {row.addCard ? (
+                  <Button
+                    label={ADD_CARD}
+                    icon="card"
+                    kind="soft"
+                    small
+                    say={`${ADD_CARD} at ${place.name}`}
+                    style={styles.under}
+                    onPress={() => {
+                      // The place whose inbox this is: the message was read from its own inbox alone.
+                      onAddCard(place);
+                    }}
+                  />
+                ) : null}
                 {notOpened === row.id ? (
                   <Txt kind="small" colour="badText" style={styles.under}>
                     {LINK_NOT_OPENED}

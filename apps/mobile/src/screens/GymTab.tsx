@@ -516,6 +516,11 @@ export function GymScreen() {
           setInboxAt(null);
         }}
         onUnread={inboxSaid}
+        onAddCard={(at) => {
+          // A card request's Add card (20l): My membership at the place whose inbox it is, on Add card.
+          setInboxAt(null);
+          setMembershipAt({ id: at.id, name: at.name, addCard: true });
+        }}
       />
       <UpdatesPage
         place={updatesAt}

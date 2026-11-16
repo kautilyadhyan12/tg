@@ -16,8 +16,8 @@ import { AddCardPage, type CardPlace } from "./AddCard";
 import { AgreementPage, type AgreementPlace } from "./Agreement";
 import { membershipAgreementRow } from "./agreementView";
 import { CancelBox, KeepBox, type BoxFor } from "./CancelBox";
-import { CardOnFile } from "./CardOnFile";
-import { cardRemovedLine, cardSavedLine, myCardPath, myCardRemovePath, removeRefusalLine } from "./cardView";
+import { CardNotHere, CardOnFile } from "./CardOnFile";
+import { CARD_NOT_READ, askedCardStep, cardBox, cardRemovedLine, cardSavedLine, cardsNotSavedLine, myCardPath, myCardRemovePath, removeRefusalLine } from "./cardView";
 import { RemoveCardAsk, type RemoveAsk } from "./RemoveCardAsk";
 import { BUY_A_MEMBERSHIP } from "./buyView";
 import { PayButton, PayLines } from "./PayPart";
@@ -69,6 +69,8 @@ import {
 export interface MembershipPlace {
   id: string;
   name: string;
+  /** Opened from the place's card request (20l): Add card opens once the card is read, where it can be added. */
+  addCard?: boolean;
 }
 
 /** The page over the Gym tab; closed while `place` is null. `onBuy` opens the place's Buy where it sells something in the
@@ -107,6 +109,10 @@ function MembershipBody({ place, onClose, onBuy, bottom }: { place: MembershipPl
   const [keeping, setKeeping] = useState<BoxFor | null>(null);
   const [cancelSaid, setCancelSaid] = useState<{ membershipId: string; line: string } | null>(null);
   const cardStarted = useRef(0);
+  // A card request's Add card (20l), still to act on: the first read of the card that answers acts on it, once.
+  const cardAsked = useRef(place.addCard === true);
+  // That read failed: said in the box's place, with Try again.
+  const [cardFailed, setCardFailed] = useState(false);
   // Reads are numbered as they start: an answer stands only if no later read has started.
   const started = useRef(0);
   const receiptAsked = useRef(0);
@@ -135,8 +141,17 @@ function MembershipBody({ place, onClose, onBuy, bottom }: { place: MembershipPl
     const number = cardStarted.current;
     const answer = await session.signedIn({ method: "GET", path: myCardPath(place.id) }, myCardResponseSchema);
     if (!live.current || number !== cardStarted.current) return;
-    if (answer.kind === "ok") setCard(answer.data.myCard);
-  }, [session, place.id]);
+    if (answer.kind !== "ok") {
+      if (cardAsked.current) setCardFailed(true);
+      return;
+    }
+    setCard(answer.data.myCard);
+    setCardFailed(false);
+    if (!cardAsked.current) return;
+    cardAsked.current = false;
+    // Only where the box itself offers Add card; otherwise the box, or the line in its place, says how things stand.
+    if (askedCardStep(answer.data.myCard) === "add") setAddingCard({ id: place.id, name: place.name });
+  }, [session, place.id, place.name]);
 
   useEffect(() => {
     live.current = true;
@@ -243,7 +258,19 @@ function MembershipBody({ place, onClose, onBuy, bottom }: { place: MembershipPl
           <Sections
             view={held.view}
             card={
-              card === null ? null : (
+              card === null ? (
+                cardFailed ? (
+                  <CardNotHere
+                    line={CARD_NOT_READ}
+                    onAgain={() => {
+                      setCardFailed(false);
+                      void loadCard();
+                    }}
+                  />
+                ) : null
+              ) : place.addCard === true && cardBox(card, cardSaid !== null) === null && askedCardStep(card) === "off" ? (
+                <CardNotHere line={cardsNotSavedLine(card.gymName)} onAgain={null} />
+              ) : (
                 <CardOnFile
                   view={card}
                   said={cardSaid}
