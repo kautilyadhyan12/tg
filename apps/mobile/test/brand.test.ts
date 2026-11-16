@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { BRAND, COPY_KEYS, configFor, copyFor } from "../app.config";
@@ -104,11 +104,22 @@ describe("the KWAZO wizard on the phone and in the stores", () => {
   });
 
   it("the store pictures are at the sizes Google Play and the App Store ask for, without transparency", () => {
-    for (const [file, w, h] of [["store/play-icon-512.png", 512, 512], ["store/play-feature-1024x500.png", 1024, 500], ["store/app-store-1024.png", 1024, 1024]] as const) {
+    for (const [file, w, h] of [["store/play-feature-1024x500.png", 1024, 500], ["store/app-store-1024.png", 1024, 1024]] as const) {
       const png = read(file);
       expect([png.width, png.height], file).toEqual([w, h]);
       expectOpaque(png);
     }
+  });
+
+  // Google Play's icon: "32-bit PNG (with alpha)", 512 by 512, at most 1024 KB (its preview assets page, read 2026-11-15),
+  // and still nothing see-through: every pixel's alpha is 255.
+  it("Google Play's icon is a 32-bit PNG with every pixel solid", () => {
+    const png = read("store/play-icon-512.png");
+    expect([png.width, png.height, png.colourType, png.channels]).toEqual([512, 512, 6, 4]);
+    let seeThrough = 0;
+    for (let y = 0; y < png.height; y++) for (let x = 0; x < png.width; x++) if (pixel(png, x, y)[3] !== 255) seeThrough++;
+    expect(seeThrough).toBe(0);
+    expect(statSync(join(root, "store/play-icon-512.png")).size).toBeLessThanOrEqual(1024 * 1024);
   });
 
   it.each(COPY_KEYS)("the %s copy of the app is built with the wizard", (key) => {

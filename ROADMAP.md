@@ -478,7 +478,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
    - V0. **The drawings brought up to date, before V1** (Kd, 2026-11-15, `rulings/2026-11-15-v0-a.md`): the boards of 2026-10-18 miss what the console gained since (43 new screen files). Each part compares today's pages with their boards, draws what is missing in the same look with every button the page has, and names each new board's V job in the README. No code; Opus xhigh. In three:
      - V0-a. [x] **A member's page and its boxes** · merged 2026-11-16 · PR #559
      - V0-b. [x] **Money pages and Overview** · merged 2026-11-16 · PR #561
-     - V0-c. [ ] **Settings and the new pages** (for V9a, V11 and new V lines): Payments with Square, the membership agreement, deleted forms, booking rules; Account; Fitness plans; comments and reactions on Updates; Members' review, duplicates and sent messages.
+     - V0-c. [x] **Settings and the new pages** · merged 2026-11-16 · PR #565
    - V1. [ ] **The building blocks and the menu** (web folder 1): the text sizes, gaps, buttons and tags, the four ways a box opens, the side list, and the menu in five groups with More on a phone (`Main`, `kit.css`, `PhoneMore`).
    - V2a. [ ] **A member's page, a whole page** (web folder 1; the `Person*` pages and `PhonePerson`).
    - V2b. [ ] **A member's page: its boxes** (web folder 1): Add member, edit, add a membership, record a payment, a quick look, freeze, cancel, money back, receipt, remove, merge (`Person*`, `AddMember`, `PhoneRecordPayment`, `PhoneForm`).
@@ -683,7 +683,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
       - 21b-ii. [x] **The "Delete your account" page** — merged 2026-11-09 (PR #507).
     - 21c. **The store version and Play Console** (split 2026-11-15 in two, the store's app first; `handoff/2026-11-15-21c-i.md` keeps the line as first written).
       - 21c-i. [x] **The store version on Kd's phone** · merged 2026-11-15 · PR #557
-      - 21c-ii. [ ] **KWAZO on Google Play's closed test**: the listing, the reviewers' sign-in details, 18+, data safety (time in the app, a run's heart rate), the health declaration as fitness and nutrition only, running's service declaration and its video, "not a medical device"; Google's signing fingerprint added to sign-in; 15 to 20 testers; the first upload.
+      - 21c-ii. [x] **KWAZO on Google Play's closed test** · merged 2026-11-16 · PR #560
     - 21d. [ ] **Google's closed test**, 14 days, at least 12 testers: starts once 21a to 21c, 21f, 12e, 14d, 31h and Stage 2's 14a-i and 14a-ii are done (Kd raises his testers' meal scans on the admin page), never waiting for workouts or exercises, which arrive by update. Production access is applied for the day after, while at least 12 testers are still in; publishing waits for the finished app.
     - 21e. [ ] **Paying in the app and production**: the $10 plan through the stores (item 6), one device one trial (Stage 3's 2c), production access; the paid server and the domain chosen then; then the iPhone version with Apple sign-in.
     - 21f. [x] **Minutes in the app** · merged 2026-11-09 · PR #512

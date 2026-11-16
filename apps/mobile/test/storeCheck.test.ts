@@ -184,6 +184,7 @@ describe("the files Google Play gets", () => {
     ["the bundler's overlay asked for", { permissions: [...declaredPermissions(MANIFEST), "android.permission.SYSTEM_ALERT_WINDOW"] }, /SYSTEM_ALERT_WINDOW/],
     ["the photos permission asked for", { permissions: [...declaredPermissions(MANIFEST), "android.permission.READ_MEDIA_IMAGES"] }, /READ_MEDIA_IMAGES/],
     ["no permissions read at all", { permissions: [] }, /permissions could not be read/],
+    ["a permission Data safety does not answer", { permissions: [...declaredPermissions(MANIFEST), "android.permission.READ_CONTACTS"] }, /READ_CONTACTS, which the Data safety answers do not cover/],
     ["a laptop's api built in", { builtIn: { ...good.builtIn, apiUrl: "http://localhost:3000" } }, /talks to/],
     ["plain http to the right name", { builtIn: { ...good.builtIn, apiUrl: "http://api.getkwazo.com" } }, /talks to/],
     ["a laptop's website built in", { builtIn: { ...good.builtIn, webUrl: "http://localhost:5173" } }, /links open/],
