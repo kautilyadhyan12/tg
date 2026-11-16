@@ -150,16 +150,29 @@ membership (`PersonAddMembership`) picks the type from one list; Choose who pays
 `PersonQuick`'s search box. Today's page puts Record payment under the membership; the boards keep it on the bill that
 is owed, where the approved boards put it.
 
-### Still to draw in V0-b: money pages and Overview (for V4a, V4b, V5)
+### Drawn in V0-b: money pages and Overview
 
-- **Overview**: the Start here list as it is now (Take payments, Front desk check-in, How members reach you and the rest),
-  and its new boxes: refunds to review, chargebacks, payments made in the app, cancellations in the app, payments to match,
-  failed payments, the trial.
-- **Sell**: the Terminal (the total on the Terminal, choosing it), a refund or a chargeback on a sale, stock left.
-- **Memberships**: what each type now says (sold in the app, taxes, minimum term, early cancellation fee, cooling-off
-  period), raising a price for existing members, bill settings.
-- **Failed payments**, a page of its own: declined cards still owed, Try again, Add a new card, the email sent.
-- **Square's return page** after Connect Square.
+From V0-a's pictures of the whole pages and V0-b's of each box they open (`apps/api/.cost/v0-b/shots.mts`, untracked;
+nothing saved, charged or sent). Each Overview box shows only when it has something in it.
+
+| Board | Page on the canvas | What it shows | Built in |
+|---|---|---|---|
+| `OverviewMoney` | 3 Overview & getting in | Start here at 6 of 8, then Failed payments, Refunds to review, App payments to review, Cancelled in the app and Chargebacks, the trial | V5 |
+| `OverviewStartHere` | 3 Overview & getting in | See all 8 steps opened: each step, Done or Not done yet, and its button | V5 |
+| `OverviewMoneyStates` | 3 Overview & getting in | Chargebacks waiting, only lost, Square to reconnect (owner, other staff); refunds to review after a cooling-off cancel, a refund that went wrong, a lost chargeback on a sale; Keep the fee asks first | V5 |
+| `SellTerminal` | 6 Sell & memberships | Card on Terminal and choosing the Terminal, waiting on it, and each way it ends | V4a |
+| `SellDay` | 6 Sell & memberships | Another day's sales: the day's sums, refunds noted, Part refunded and Chargeback lost, the chargeback and refund lines | V4a |
+| `SellRefund` | 6 Sell & memberships | Refund on a sale: Refund to card or Note a refund, then which product | V4a |
+| `MembershipsList` | 6 Sell & memberships | The price list with Sold in the app, taxes, joining fee, minimum term, early cancellation fee, notice and cooling-off; Bills with billing day, freeze fee and the card expiry reminder | V4b |
+| `MembershipTerms` | 6 Sell & memberships | Change membership type: taxes ticked, joining fee, minimum term, early cancellation fee, notice, cooling-off, both reminders, Sell in the app | V4b |
+| `MembershipRaise` | 6 Sell & memberships | A higher price for members already on it: keep or move them, the notice, who pays the new price and who won't change | V4b |
+| `FailedPayments` | 6 Sell & memberships | Failed payments, its own page, with Try again open | V4a |
+| `FailedPaymentsCard` | 6 Sell & memberships | Add a new card opens the card box under the row | V4a |
+| `SquareReturn` | 10 Settings | The page after Connect Square: connecting, nothing connected, finishing failed | V9a |
+
+Notes for V4a, V4b and V5: today's Memberships and Sell are one long page each; the boards keep the approved tabs, with
+Tax and Discounts as drawn in `SellTax` and `MembershipsBills`. Failed payments is a new menu line under Money: V4a builds
+its page. Stock left shows on each product ("24 left"), as `Sell` already draws it.
 
 ### Still to draw in V0-c: Settings and the new pages (for V1, V3a, V9a, V11 and new V lines)
 
