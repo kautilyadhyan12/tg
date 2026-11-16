@@ -56,10 +56,12 @@
   --rail-gym: #2E1D0E;
   --rail-warn: #F2C35B;
   --rail-hover: #1A1815;
+  --rail-grp: #C7884F;
 }
 
 .t-dark {
   --page: #0C0B0A;
+  --grp: #C7884F;
   --card: #151311;
   --card-line: #25221E;
   --line: #25221E;
@@ -100,6 +102,7 @@
 
 .t-light {
   --page: #F5F3EF;
+  --grp: #8F5420;
   --card: #FFFFFF;
   --card-line: #E4DED6;
   --line: #ECE7E0;
@@ -187,7 +190,7 @@
   gap: 2px;
 }
 /* A group's heading reads as a heading, never as one more page: small capitals, spaced,
-   in the menu's quiet grey, under a line that closes the group above. */
+   in copper, apart from the white page names and the orange page you are on, under a line that closes the group above. */
 .c-rail-grp {
   margin: 10px 0 0;
   padding: 14px 12px 6px;
@@ -197,7 +200,7 @@
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--rail-t3);
+  color: var(--rail-grp);
 }
 
 .c-rail-fill {
@@ -480,7 +483,7 @@
   font-weight: 600;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: var(--t3);
+  color: var(--grp);
 }
 .c-more-list {
   padding: 0 16px;
