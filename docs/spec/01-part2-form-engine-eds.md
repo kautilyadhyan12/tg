@@ -1611,6 +1611,24 @@ The body points of four of Kd's videos take 1.7 MB as stored today (measured 202
 so 200 exercises with several videos each would be hundreds of MB. Job 50c makes a compact
 file for them. A video never goes to git (§11.7).
 
+**As built (50c-i, 2026-11-16).** The engine made fresh lives in `packages/movement`, beside
+the old one. Its frame is `movementFrameSchema` in `@app/shared`: the time, the picture's
+shape, which way is down (a unit vector in the picture's own frame; a reference video is
+`[0, 1, 0]`), and every person the model found, up to six, in no particular order, each
+with 33 picture points `[x, y, depth, visibility, presence]` and 33 3D points in metres (or
+none). `corepack pnpm --filter @app/movement measure-points "<video>" --keep` turns a video
+into a `.bodypoints` file (`scripts/bodyPoints.ts` says its bytes) at 30 frames a second,
+asking the model for six people. Each number is rounded once: 1/100,000 of the picture,
+1/10,000 for depth and both kinds of sureness, 0.01 mm in 3D, a tenth of a millisecond.
+On four of Kd's videos the model's own frame-to-frame shake was at least 0.0009 of the
+picture, 0.019 of depth and 1.5 mm in 3D, and the rounding moved no joint angle of a
+well-seen joint by more than 0.03°. A damaged file (a check number, a format number, every
+length) is refused whole. Measured on his six reference videos: 2,054 frames, 2,406 people
+across them, 1.2 MB kept against 13.6 MB as the model gave them; 502 bytes for each person
+in a frame against 2,525 a frame in the old trace files; about 14 KB a second of video for
+one person, so 200 exercises with four 15-second videos each would be about 160 MB. Where
+they are kept once there are that many is job 52a's or 54's question.
+
 ### 12.8 The jobs (ROADMAP Stage 5, exercise folder 1; ROADMAP wins where they differ)
 
 | Job | What it builds |

@@ -1,0 +1,127 @@
+// One command for every video: a video in; its body points, kept small, and pictures a
+// terminal can look at out (spec Part 2 §12.7).
+//   corepack pnpm --filter @app/movement measure-points "<video>" [--label name] [--keep]
+// Options: --fps <8 to 40, default 30> --people <1 to 6, default 6> --out <folder>
+//          --model <.task file> --python <command>
+// --keep also puts the small file in test/body-points/, where the tests read it.
+// Runs on the laptop only: it needs Python with mediapipe and cv2.
+import { spawnSync } from "node:child_process";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { extname, join, resolve } from "node:path";
+import { parseArgs } from "node:util";
+import { MAX_FPS, MAX_PEOPLE, MIN_FPS } from "@app/shared";
+import { beyondHalfStep, decodeBodyPoints, encodeBodyPoints, largestChanges } from "./bodyPoints.js";
+import { TOOL_VERSION, framesToLook, labelFor, readMeasurement, summaryLines } from "./measurePoints.js";
+import { prepareOutFolder } from "./outFolder.js";
+
+const REPO = resolve(import.meta.dirname, "../../..");
+const POINTS_PY = join(import.meta.dirname, "points.py");
+const KEPT = join(import.meta.dirname, "../test/body-points");
+// Item 51 picks the model the phone runs; until then, Kd's strong one.
+const DEFAULT_MODEL = "D:\\vidoe referene\\tools\\pose_landmarker_heavy.task";
+
+// pnpm runs this from the package's folder; a path means what it meant where it was typed.
+const typedFrom = process.env["INIT_CWD"] ?? process.cwd();
+const fromTyped = (path: string): string => resolve(typedFrom, path);
+
+function fail(message: string): never {
+  console.error(message);
+  process.exit(1);
+}
+
+function messageOf(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+function runPython(python: string, args: string[]): void {
+  const r = spawnSync(python, [POINTS_PY, ...args], { stdio: "inherit" });
+  if (r.error) fail(`Python did not start: ${r.error.message}`);
+  if (r.status !== 0) fail(`The Python step stopped with code ${String(r.status)}.`);
+}
+
+const USAGE = 'Usage: measure-points "<video>" [--label name] [--fps 8 to 40] [--people 1 to 6] [--keep] [--out folder]';
+
+function parse() {
+  return parseArgs({
+    allowPositionals: true,
+    options: {
+      label: { type: "string" },
+      fps: { type: "string", default: "30" },
+      people: { type: "string", default: String(MAX_PEOPLE) },
+      keep: { type: "boolean", default: false },
+      out: { type: "string" },
+      model: { type: "string", default: DEFAULT_MODEL },
+      python: { type: "string", default: "python" },
+    },
+  });
+}
+function readOptions(): ReturnType<typeof parse> {
+  try {
+    return parse();
+  } catch (err) {
+    fail(`${messageOf(err)}\n${USAGE}`);
+  }
+}
+
+const { values, positionals } = readOptions();
+const typedInput = positionals[0];
+if (typedInput === undefined || positionals.length > 1) fail(USAGE);
+const input = fromTyped(typedInput);
+if (!existsSync(input)) fail(`No file at ${input}.`);
+if ([".jsonl", ".bodypoints"].includes(extname(input).toLowerCase())) fail("Give a video: this tool measures one.");
+const fps = Number(values.fps);
+if (values.fps.trim() === "" || !(fps >= MIN_FPS && fps <= MAX_FPS)) fail(`--fps is a number from ${String(MIN_FPS)} to ${String(MAX_FPS)}, what the engine accepts.`);
+const people = Number(values.people);
+if (!Number.isInteger(people) || people < 1 || people > MAX_PEOPLE) fail(`--people is a whole number from 1 to ${String(MAX_PEOPLE)}.`);
+const model = fromTyped(values.model);
+
+// The name reaches the kept file, which may go to git: never a path.
+const label = labelFor(values.label, input);
+if (label === "") fail("--label needs at least one letter or number.");
+const out = values.out === undefined ? join(REPO, "measured", label) : fromTyped(values.out);
+try {
+  prepareOutFolder(out, input);
+} catch (err) {
+  fail(messageOf(err));
+}
+if (!existsSync(model)) fail(`No pose model at ${model}. Give one with --model.`);
+
+const started = Date.now();
+const measuredPath = join(out, "measured.jsonl");
+runPython(values.python, [
+  "measure",
+  "--video", input,
+  "--out", measuredPath,
+  "--label", label,
+  "--fps", String(fps),
+  "--people", String(people),
+  "--model", model,
+  "--tool-version", String(TOOL_VERSION),
+]);
+
+const keptPath = join(out, `${label}.bodypoints`);
+let lines: string[] = [];
+try {
+  const measured = readMeasurement(readFileSync(measuredPath, "utf8"));
+  writeFileSync(keptPath, encodeBodyPoints(measured.header, measured.frames));
+  // Read back from the disk, as every later reader will: the file must hold what was measured.
+  const kept = decodeBodyPoints(readFileSync(keptPath));
+  if (JSON.stringify(kept.header) !== JSON.stringify(measured.header)) fail("The kept file's header is not the one measured.");
+  const changes = largestChanges(measured.frames, kept.frames);
+  const beyond = beyondHalfStep(changes);
+  if (beyond.length > 0) fail(`The kept file moved ${beyond.join(", ")} numbers by more than half a step. Nothing is kept.`);
+  const { look, changesLeftOut } = framesToLook(kept.frames);
+  writeFileSync(join(out, "look.json"), JSON.stringify({ frames: look }));
+  lines = summaryLines(kept, { measured: statSync(measuredPath).size, kept: statSync(keptPath).size }, changes, changesLeftOut);
+  runPython(values.python, ["draw", "--look", join(out, "look.json"), "--video", input, "--fps", String(kept.header.fps), "--out", out]);
+} catch (err) {
+  fail(`${label} cannot be kept: ${messageOf(err)}`);
+}
+
+if (values.keep) {
+  mkdirSync(KEPT, { recursive: true });
+  copyFileSync(keptPath, join(KEPT, `${label}.bodypoints`));
+  lines.push(`Kept for the tests: packages/movement/test/body-points/${label}.bodypoints`);
+}
+for (const line of lines) console.log(line);
+console.log(`Took ${((Date.now() - started) / 1000).toFixed(0)} s. Pictures: ${out}`);
