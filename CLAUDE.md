@@ -93,8 +93,8 @@ line, next to the model and effort. When in doubt, the bigger size.
    - A terminal whose whole message is `Review <file>` or `Re-check <file>` is the
      reviewer: it reads that file, does what it says, writes where it says, and touches
      nothing else in the folder. `reviews/` is ignored by git and never committed.
-   - An exercise made on the line (§4, "Exercises") is checked by the line's own tests and
-     Kd's own test; the fresh-terminal review is once for a whole FAMILY of exercises,
+   - An exercise made on the line (§4, "Exercises") is checked by the proof table, and Kd
+     tries one of each kind of movement; the fresh-terminal review is once for a whole FAMILY of exercises,
      never for each one (RULINGS 2026-10-12). The engine and the tools are reviewed as any
      job.
 7. **Commit and open a pull request to `master`**; CI must be green; delete the branch
@@ -316,16 +316,24 @@ every size, a Samsung Fold or an iPhone Duo opened, the phone's largest text.
 - A screen built before 2026-10-28 gets the same check the next time a job touches it; the screens
   still owed it are listed in `handoff/2026-10-27-31b.md`.
 
-**Exercises (Kd, RULINGS 2026-10-12; spec Part 2 §11).** An exercise is data, made on the
-line: Kd names it and gives one or two good-form links; the videos are measured on his
-laptop and never go to git. ONE pose model, the one the phone runs, measures everything,
-and the numbers that set a rule are the app's own engine's, never a second copy of the
-maths. Every common mistake of an exercise, from proper sources, is either checked by the
-camera or marked "the camera cannot see this from here": a green tick has a check behind
-it. An exercise is done when its own video counts what a person counts by eye, each
-mistake clip fires its mistake, every other exercise's video counts nothing unexplained,
-its generated clip passes its own rules, and Kd has done it on the phone from the
-Library. Accuracy is a number shown to him, never a promise.
+**Exercises (Kd, 2026-11-16, `rulings/2026-11-16-movement-engine.md`; spec Part 2 §12, read
+whole before any plan in an exercise folder).** The counting and the form check are made
+fresh: never a rule added on top of the old counter in `packages/engine`, which only the
+web's old workout pages keep. A rep counts, and advice is given, only while what the camera
+sees matches the chosen exercise's whole movement (where the body is, what moves together,
+what stays still, the path, the speed, left against right, the person's own body); never
+from one angle alone, and every other movement gets no count and no word. An exercise is
+data, made on the line: Kd names it and gives 3 to 5 videos of different people and a
+research file; he never records himself and is never asked to. The videos are measured on
+his laptop and never go to git. ONE pose model, the one the phone runs, measures
+everything, and the numbers that set a rule are the app's own engine's, set from all the
+people but one and tested on the one left out. Every common mistake, from proper sources,
+is either checked by the camera or marked "the camera cannot see this from here". An
+exercise is done when it passes the proof table (spec §12.5) and its generated clip passes
+its own rules; one that does not pass is published as "count by hand". Kd tries one
+exercise of each kind of movement on the phone, never each exercise. The coach's lines are
+in proper coaching language and play only for what the camera has just seen. Accuracy is a
+number shown to him, never a promise.
 
 **Tests.** Route tests via `fastify.inject` covering the happy path, a validation failure
 and the cross-tenant denial. Database-backed tests run against the local Postgres
