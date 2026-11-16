@@ -427,15 +427,31 @@
   }
 }
 
-/* A window too short for the list and the foot together (a phone turned sideways, a laptop
-   zoomed in): the whole menu scrolls as one, the foot at its end. */
-@media (min-width: 768px) and (max-height: 460px) {
+/* A window under 600 px tall (a phone turned sideways, a laptop zoomed in, a short screen):
+   the list would show only a few lines above the foot, so the whole menu scrolls as one, and
+   you and Sign out stay at the bottom edge over it. */
+@media (min-width: 768px) and (max-height: 599px) {
   .c-rail {
     overflow-y: auto;
+    gap: 2px;
+    padding-bottom: 0;
   }
   .c-rail-nav {
     flex: none;
     overflow: visible;
+    margin: 10px -6px;
+  }
+  .c-rail-foot {
+    display: contents;
+  }
+  .c-rail-me {
+    position: sticky;
+    bottom: 0;
+    z-index: 1;
+    margin-top: 10px;
+    padding: 10px 0 12px 12px;
+    border-top: 1px solid var(--rail-line);
+    background: var(--rail-bg);
   }
 }
 

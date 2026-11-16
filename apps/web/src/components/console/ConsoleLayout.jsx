@@ -1,4 +1,4 @@
-import { Fragment } from 'react';
+import { Fragment, useEffect, useRef } from 'react';
 import { orgWords } from '@app/shared';
 import { NavLink, Link, useLocation, useParams } from 'react-router-dom';
 import { Building2, ChevronsUpDown, Ellipsis, LogOut, UserRound } from 'lucide-react';
@@ -6,6 +6,7 @@ import ConsoleBanner from './ConsoleBanner';
 import PlanModal from './PlanModal';
 import SizeDecisionPrompt from './SizeDecisionPrompt';
 import { PAGE_ICONS } from './consoleIcons';
+import { railScroller, scrollToShow } from './railScroll';
 import { useAuth } from '../../context/AuthContext';
 import { useConsoleOrg } from '../../pages/console/useConsoleOrg';
 import { useConsoleSignOut } from '../../pages/console/consoleSignOut';
@@ -93,14 +94,28 @@ export default function ConsoleLayout({ children }) {
   const role = org ? roleLabel(org.staffRole, org.orgType, org.coOwner) : '';
   const signOutWords = signingOut ? 'Signing out…' : 'Sign out';
 
+  // A page opened from somewhere else than the menu (a button, a link, a reload) has its lit
+  // line on screen in the menu too. In a short window the whole menu scrolls, and you and
+  // Sign out stay over its foot, so the line is kept clear of them.
+  const railRef = useRef(null);
+  const navRef = useRef(null);
+  const pageCount = menu ? menu.pages.length : 0;
+  useEffect(() => {
+    const rail = railRef.current;
+    const box = railScroller(rail, navRef.current);
+    const on = rail?.querySelector('nav .c-nav-on') ?? null;
+    const cover = box === rail ? (rail?.querySelector('.c-rail-me')?.offsetHeight ?? 0) : 0;
+    scrollToShow(box, on, 8 + cover);
+  }, [pathname, pageCount]);
+
   return (
     <div className={`c-console t-${consoleLook(search, import.meta.env.DEV)}`}>
       {/* ── The menu, on a computer ─────────────────────────────────────────── */}
-      <aside className="c-rail" data-testid="console-rail">
+      <aside ref={railRef} className="c-rail" data-testid="console-rail">
         {menu ? <GymSwitcher org={org} fallback={consoleName} /> : <div className="c-rail-title">{consoleName}</div>}
 
         {menu ? (
-          <nav aria-label="Console" className="c-rail-nav">
+          <nav ref={navRef} aria-label="Console" className="c-rail-nav">
             {/* Overview on top, then the five groups (spec Part 3 §17.10 rule 7). */}
             <RailLink page={menu.pages[0]} dot={reviewDot(menu.pages[0])} />
             {menuGroups(menu.pages).map((group) => (

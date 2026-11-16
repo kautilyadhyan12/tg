@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ROLE_PRIVILEGES } from '@app/shared';
+import { ORG_PRIVILEGES, ROLE_PRIVILEGES } from '@app/shared';
 import { MENU_GROUPS, consoleLook, consoleMenu, menuGroups, moreIsCurrent, membersPageName } from './consoleMenu';
 
 const keys = (list) => list.map((p) => p.key);
@@ -50,6 +50,24 @@ describe('the menu in five groups', () => {
     const menu = consoleMenu('iron-house', ROLE_PRIVILEGES.owner, 'gym');
     expect(menu.pages[0]).toMatchObject({ key: 'overview', group: null });
     expect(MENU_GROUPS.map((g) => g.label)).toEqual(['Today', 'People', 'Money', 'Community', 'Manage']);
+  });
+
+  // A page added later without a group would drop out of the menu and of More: for every mix
+  // of the permissions, each page is in exactly one group (Overview above them) and, on a
+  // phone, in the tabs or under More.
+  it('every mix of the permissions: each page in one group, and in the tabs or under More', () => {
+    const all = [...ORG_PRIVILEGES];
+    for (let mix = 0; mix < 2 ** all.length; mix += 1) {
+      const menu = consoleMenu('iron-house', all.filter((_, i) => mix & (1 << i)), 'gym');
+      const pages = keys(menu.pages);
+      const grouped = menuGroups(menu.pages).flatMap((g) => keys(g.pages));
+      if (pages[0] !== 'overview' || grouped.length + 1 !== pages.length || [...grouped].sort().join() !== pages.slice(1).sort().join()) {
+        throw new Error(`grouped pages differ for ${all.filter((_, i) => mix & (1 << i)).join(' ')}`);
+      }
+      if ([...keys(menu.tabs), ...keys(menu.more)].sort().join() !== [...pages].sort().join()) {
+        throw new Error(`phone pages differ for ${all.filter((_, i) => mix & (1 << i)).join(' ')}`);
+      }
+    }
   });
 
   it('before the permissions arrive: Overview, and Members under People', () => {
