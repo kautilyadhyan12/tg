@@ -13,7 +13,7 @@ import { parseArgs } from "node:util";
 import { MAX_FPS, MAX_PEOPLE, MIN_FPS } from "@app/shared";
 import { beyondHalfStep, decodeBodyPoints, encodeBodyPoints, largestChanges } from "./bodyPoints.js";
 import { TOOL_VERSION, framesToLook, labelFor, readMeasurement, summaryLines } from "./measurePoints.js";
-import { prepareOutFolder } from "./outFolder.js";
+import { checkOutFolder, prepareOutFolder } from "./outFolder.js";
 
 const REPO = resolve(import.meta.dirname, "../../..");
 const POINTS_PY = join(import.meta.dirname, "points.py");
@@ -86,8 +86,13 @@ const keptForTests = join(KEPT, `${label}.bodypoints`);
 if (values.keep && !values.replace && existsSync(keptForTests)) {
   fail(`A file named ${label} is already kept for the tests. Give this video its own --label, or add --replace to measure that video again.`);
 }
+// Every refusal comes before the folder is made: the folder's own, then the model's.
+try {
+  checkOutFolder(out, input);
+} catch (err) {
+  fail(messageOf(err));
+}
 if (!existsSync(model)) fail(`No pose model at ${model}. Give one with --model.`);
-// Every refusal above comes before the folder is made.
 try {
   prepareOutFolder(out, input);
 } catch (err) {

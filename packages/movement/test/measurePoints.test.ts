@@ -164,7 +164,7 @@ describe("the command refuses before any model runs, and makes no folder", () =>
   // Where a run of it would go: the label comes from the file's own name.
   const itsFolder = join(REPO, "measured", "package");
   it.each([
-    [["--out", join(REPO, "packages/movement/test/refused")], /git checkout/],
+    [["--out", join(REPO, "packages/movement/test/refused"), "--model", join(REPO, "no-such-model.task")], /git checkout/],
     [["--fps", "50"], /--fps is a number from 8 to 40/],
     [["--fps", ""], /--fps is a number/],
     [["--people", "7"], /--people is a whole number from 1 to 6/],

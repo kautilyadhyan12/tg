@@ -62,9 +62,9 @@ export function assertFolderStaysOutOfGit(folder: string): void {
   if (git(root, ["check-ignore", "-q", "--", probe]).status !== 0) throw refused;
 }
 
-/** Makes the folder ready for `source`, or throws without touching anything. A folder
- *  holding anything but this tool's own run of the same video is refused. */
-export function prepareOutFolder(folder: string, source: string): void {
+/** Throws, touching nothing, unless the folder may take `source`'s run: out of git, out of
+ *  Kd's folder, and empty or holding only this tool's own run of the same video. */
+export function checkOutFolder(folder: string, source: string): string {
   assertFolderStaysOutOfGit(folder);
   const target = realFolder(folder).target;
   if (isInside(kdVideos(), target)) throw new Error(`${KD_VIDEOS} is Kd's own folder and is never changed.`);
@@ -78,8 +78,14 @@ export function prepareOutFolder(folder: string, source: string): void {
     if (!same) {
       throw new Error(`${target} holds the pictures of another video. Give this one its own --label.`);
     }
-    return;
   }
+  return target;
+}
+
+/** Makes the folder ready for `source`, or throws without touching anything. */
+export function prepareOutFolder(folder: string, source: string): void {
+  const target = checkOutFolder(folder, source);
+  if (existsSync(join(target, MARKER))) return;
   mkdirSync(target, { recursive: true });
-  writeFileSync(marker, JSON.stringify({ source, pictures: [] }));
+  writeFileSync(join(target, MARKER), JSON.stringify({ source, pictures: [] }));
 }
