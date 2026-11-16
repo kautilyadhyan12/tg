@@ -783,17 +783,21 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
 40. [ ] **Workouts and runs from your watch** (Kd, 2026-11-12, `rulings/2026-11-12-37f-i.md`), after 37f: Android's Health Connect and a file upload (GPX, TCX, FIT) first, then Garmin's and Polar's own connections (Kd applies to Garmin's); Apple Health with the iPhone version. Workouts and runs with their heart rate, calories and distance, and weight from a smart scale; never sleep or heart rate variability.
 39. [ ] **Share with your photo** (Kd, 2026-10-18; spec Part 2 §11.8): after a workout, a meal photo or a run, the person takes or picks a photo and the stats are drawn on it, made on the phone and sent through the phone's own share menu. A run's map drawn on it hides its start and end near the person's home, as Strava's does (37a's plan, 2026-11-05). Built once for all three, after items 33 and 37 and exercise folder 2's 64; it brings Part 7 §5's share cards forward from After launch.
 
-**Exercise folder 1 — `D:\Projects\ai-home-gym-ex1`: the camera and the form rules** (spec Part 2 §11).
+**Exercise folder 1 — `D:\Projects\ai-home-gym-ex1`: the camera and the form rules** (spec Part 2 §12, which wins over §11 where they differ). **Re-planned 2026-11-16** (Kd; `rulings/2026-11-16-movement-engine.md`): the counting and the form check are made fresh, beside the old engine, which only the web's old workout pages keep. Each job is built in a fresh terminal.
 
-50. **The measuring line on the laptop** (split 2026-10-31: true proportions first). It needs no phone.
+50. **The measuring line on the laptop.** It needs no phone.
     - 50a. [x] **True proportions** — merged 2026-10-31 (PR #413).
     - 50b. [x] **A video to body points** — merged 2026-11-01 (PR #426).
-    - 50c. [ ] **The cross-check**: each exercise's rules run on every other exercise's video.
-51. [ ] **The camera test on Kd's phone** (item 1's two days; after item 10): which model and library, the speed, heat and battery, and the same numbers as the laptop.
-52. [ ] **The engine's missing parts**: a rep whose stand-up is cut off by the set's end, the other angle numbers measured again in true degrees and pinned by tests, with `shallow_depth` and the lean rule, holds, one side at a time, fast rhythm moves, timed only, the jump check, the floor reference, a leaning phone, steadier points, one person locked on; and Stage 4 item 6's faults, each with its test.
-53. [ ] **The camera screen**: its look as pictures first, then the set-up check, the live skeleton, the count, voice, "Count this set myself" and Follow-along.
-54. [ ] **The first seven through the line**: squat, chair squat, jump squat, bicep curl, bicycle crunch, barbell bench press, dumbbell bench press.
-55. [ ] **Exercises, family by family** (spec Part 2 §11.4): the rest of the 58, then the ones Kd names.
+    - 50c. [ ] **The body's picture** (§12.2, §12.7): a frame's new inputs (3D points, which way is down, several people), compact body-point files, "is this body possible", steady points, and one set of body measures, each taken flat or in 3D by which is steadier on real videos. The cross-check of 2026-11-02 was closed unmerged (PR #434); the proof table is 52a's.
+51. [ ] **The phone test** (after 50c; it needs Kd's phone): which pose model and library, the speed, heat and battery, 3D points and several people at speed, the same numbers as the laptop, and the phone testing itself on the videos (§12.5). Second on purpose: what it finds can change the design before the matcher is built.
+52. **The movement engine** (§12; it replaces "the engine's missing parts").
+    - 52a. [ ] **The movement matcher and the proof table** (§12.3, §12.5): a movement as data, numbers set from all the people but one and tested on the one left out, every other movement's video counting 0, each video replayed the ways the world changes it; the squat movement made fresh as the first proof. It needs 3 to 5 squat videos of different people from Kd.
+    - 52b. [ ] **The form judge, the reason for a rep not counted, and the summary** (§12.1, §2.4).
+    - 52c. [ ] **The other kinds of counting**: one side at a time, holds, fast rhythm, timed only, jumps, floor work.
+    - 52d. [ ] **One person locked on**: a busy gym, a passer-by, a mirror (§11.8).
+53. [ ] **The camera screen**: its look as pictures first, then the reference picture, the live skeleton, the count, the reason a rep did not count, "Count this set myself" and Follow-along; the coach's shared lines and the tool that cuts and checks them (§12.6).
+54. [ ] **Exercises, movement by movement** (§12.4), towards about 200, with no fixed first list: Kd names one and gives its videos and research file; an exercise that does not pass the proof is published as "count by hand".
+55. Folded into 54 on 2026-11-16.
 
 **Exercise folder 2 — `D:\Projects\ai-home-gym-ex2`: the Exercise Library and the Workout section** (spec Part 2 §11).
 

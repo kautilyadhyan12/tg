@@ -1150,7 +1150,8 @@ either resolved or surfaced as honest in-app copy.
 
 Written by a planning terminal that read the engine, the web's workout pages and Kd's
 own video folder that day. No code. Where §7.3, §9.1, §10 or Part 6 §3 differ from this
-section, this section wins. Exercise folder 1 builds the camera and the form rules
+section, this section wins. **Since 2026-11-16 the counting and the form check are made
+fresh: §12 wins where this section differs.** Exercise folder 1 builds the camera and the form rules
 (items 50 to 55); exercise folder 2 builds the Exercise Library and the Workout section
 (items 60 to 65).
 
@@ -1414,6 +1415,226 @@ in front, a class side by side, a mirror) leave the count unchanged; each video 
 replayed the ways the world changes it (the phone tilted, nearer, farther, fewer frames a
 second, shaky points, a passer-by) and the count must not change. Kd gets these as
 numbers for each exercise.
+
+## 12. The movement engine, made fresh (Kd, 2026-11-16; `rulings/2026-11-16-movement-engine.md`)
+
+Written by a planning terminal in exercise folder 1 (Fable 5.2, max) and reviewed once at
+Kd's ask before his *"go"*. No code. **Where §3 to §5, §8, §11.2 tool 4, §11.3, §11.5 or §11.6
+differ from this section, this section wins.** Exercise folder 2 re-made its own side the same
+day; the two meet at the exercise's file (§12.3) and the set's summary (§2.4).
+
+**Why.** At 50c's click-through Kd stood on one leg, bent the other in the air, and a squat
+counted. The counter (`fsm.ts`, a straight port of the old Python `RepCounter`) decides a rep
+from one knee's angle, and its check of the other knee runs only when both knees are seen.
+Measured that day: on Kd's own squat video one knee alone was usable in 74 of 164 frames, on
+his chair squat video in 112 of 112; a one-leg lift drawn on a real standing body counted 3
+of 3 under the squat, chair squat and jump squat rules with the far knee hidden, and 0 with
+both seen. 50c had only added an upright check on top of that counter; its pull request
+(#434) was closed unmerged. Kd: *"it just build a wrapper on top of the exsiting bugs"* ·
+*"regad them as worthless as we need to do everything fresh"*.
+
+**What is replaced.** The old engine's counting and judging (§3.2 to §3.8), its definition
+format (§4), the 12 templates (§5) and the three definitions (squat, chair squat, jump
+squat). The new engine is built beside the old one and shares none of its counting code.
+`packages/engine` as it is today is touched no more: the web's five workout pages keep it
+until Kd says they may go (§11.7).
+
+**What stays.** §1.3's invariants (pure, the same frames in give the same events out,
+garbage decides nothing, an exercise is data, engine code never names an exercise); §2.4's
+outputs, so the workout save, calories, XP, challenges and boards read a set as they do
+today (`SetSummary`; fields may be added, none removed); a video to body points (50b) and
+true proportions (50a); §11.8's steps, privacy and the voice made by hand; §9.3's staged
+release. Everything a person can do today stays: exercises are added as data, the camera
+counts, each rep is scored, the set and the workout are summed up.
+
+### 12.1 The five principles
+
+1. **Count only what matches.** The engine never works from a list of wrong movements. A
+   rep counts, and advice is given, only while what the camera sees matches the chosen
+   exercise; every other movement, whatever it is, gets no count and no word (Kd: walking
+   and standing on one leg were *"only the strnge shape"*, not the rule).
+2. **More than angles** (Kd: *"the camera only depend on correct angle … will not be a
+   correct judgement"*). An exercise's file says which of these matter for it, and the mix
+   differs for every exercise:
+
+   | What the engine looks at | In a squat, for example |
+   |---|---|
+   | Where the body is | standing, both feet on the floor |
+   | What moves together | knees and hips bend while the hips sink |
+   | What stays still | the feet do not lift or travel |
+   | The path and the order | hips and chest come up together |
+   | Speed and rhythm | not a drop, not a bounce |
+   | Left against right | both sides move alike |
+   | The person's own body | depth judged from their own standing height and first reps |
+   | How sure the camera is | a part it sees poorly decides nothing |
+
+3. **Three questions, in order, every frame.** Can I see this person well enough? Is the
+   body in this exercise's position and moving its way? Only then: count, and judge form.
+   A "no" stops everything after it.
+4. **Counting is a little forgiving; advice is strict.** A real rep of a different body is
+   not thrown away for a small difference, and every rep that did not count carries its
+   reason for the screen ("Go lower to count", "Turn side-on", "Can't see your feet"). A
+   correction is spoken only when the engine is sure (§12.6). "Count this set myself" and
+   changing the count by hand stay.
+5. **Accuracy is held by proof, never by Kd's test of each exercise** (about 200 are
+   planned, many on machines; §12.5).
+
+### 12.2 The stages
+
+One frame in: the picture's points and the model's 3D points for up to several people, how
+sure the model is of each, the time, the picture's shape, and which way is down (the phone's
+own sensor; a reference video is taken as upright).
+
+1. **One person locked on** (§11.8's rule; job 52d). The frame format carries several people
+   from the first job.
+2. **Is this body possible?** Bones keep their length, joints do not jump, left and right do
+   not swap. An impossible frame decides nothing. The model's own "how sure" is never
+   trusted alone: a chair once read 0.99, and Kd's barbell video holds a mirror with the
+   man's reflection.
+3. **Steady points**, with every wait a time, never a count of frames.
+4. **The body's picture:** one fixed list of body measures, the same for every exercise
+   (joint angles, the trunk against "down", how high the hips are above what the body
+   stands or lies on as a share of the leg, where hands and feet are, left against right),
+   each with how sure it is. It is worked out once for a video and every movement is then
+   checked against it, so the proof table stays fast.
+5. **The movement matcher** reads the exercise's movement (§12.3) and answers question 2:
+   in position or not, how far through the rep, how well it matches, and why not.
+6. **The form judge** runs only inside a matched rep, on the mistakes that exercise names.
+7. **The coach** picks at most one line (§12.6). **The summary** is §2.4's.
+
+**Flat picture or 3D: measured, never assumed.** On 2026-11-16, with the heavy model: Kd's
+dumbbell bench press clip, filmed from the head end, reads the trunk 171° from upright on
+the flat picture and 90° (lying, right) in 3D; his barbell bench press video, filmed from
+the feet, reads 1° flat and 31° in 3D where the truth is about 90°. So 3D helps and is not
+enough: **each exercise fixes where the phone stands, so that its movement runs across the
+picture** (§11.8 step 4's reference picture), and job 50c measures every body measure both
+ways on real videos and keeps the steadier.
+
+### 12.3 A movement, and an exercise on top of it
+
+Many exercises are one movement with other equipment (a squat with a barbell, with a
+dumbbell, to a chair). So there are two files.
+
+- **A movement:** where the body is, what moves together and how far, what stays still, the
+  path and the order, the speed, the kind of counting (a rep · one side at a time · a hold ·
+  a fast rhythm · timed only · a jump), and where the phone stands. Built and proven once.
+- **An exercise:** the movement it uses, its own ranges, its mistakes from proper sources
+  (each checked by the camera, or marked "the camera cannot see this from here"), its words
+  and voice lines, and one honest level, which the Library shows: **the camera counts and
+  coaches · the camera counts only · count by hand or timer** (a machine that hides the
+  body is the third).
+
+Exercises of one movement are twins by declaration: a count of one on the other's video is
+expected, never a fault. Every number in either file names where it came from (which
+videos, or which source). Adding or removing an exercise changes no engine code.
+
+### 12.4 How one exercise is made (it replaces §11.3 where they differ)
+
+1. Kd names it. The terminal says where the phone stands, which way the person faces, and
+   which of the three levels it expects.
+2. Kd gives **3 to 5 videos of different people**, filmed from about there with the whole
+   body in the picture (1 or 2 for a twin of a movement already proven), and a research
+   file on its form; a coach's "common mistakes" video where one exists. He records nothing
+   himself, and the terminal does not go looking for videos (Kd: *"that will consume more
+   tokken"*).
+3. The line measures them (50b). **The numbers are set from all the people but one and
+   tested on the one left out, in turn**, so the score says how the exercise does on a body
+   it has never seen.
+4. The research file says which mistakes matter and what good form is; the numbers of a
+   rule come from measuring the videos, since an article's angle is not measured the way
+   the camera measures it. A safety claim is checked against one proper source (§11.3
+   step 5).
+5. The proof of §12.5, then the voice script (§12.6), then the clip (§11.3 step 8).
+
+### 12.5 The proof table (it replaces §11.2 tool 4 and §11.6)
+
+For every exercise, on real videos:
+
+- its own good-form videos count what a person counts by eye, and **no correction is
+  spoken on them**;
+- each mistake video fires its own mistake and plays its own line, and no other;
+- **every other movement's videos count 0 and say nothing**, with the parts of every video
+  before and after the set, and a small set of everyday clips found once;
+- each video is replayed the ways the world changes it (nearer, farther, the phone tilted,
+  fewer frames a second, shaky points, a passer-by) and **as a phone lower, higher or
+  turned would see it**, redrawn from the 3D points; the count must hold. The redraw is
+  kept only if, drawn from the phone's own place, it lands on the original points;
+- §7.6's fuzz and speed gates.
+
+The table runs on GitHub for ALL exercises whenever an exercise or the engine changes. One
+page lists every exercise with its real numbers. **The phone tests itself** (job 51): every
+exercise's videos are played through the phone's own pose model while it sits on the
+cable, and its counts must match the laptop's.
+
+An exercise that does not pass is published as "count by hand", never with a wrong camera
+count. Kd tries one exercise of each kind of movement on the phone, about a dozen, never
+each one. After launch the server sees, for each exercise, how often members changed the
+camera's count or left the camera for "Count this set myself" (numbers of the finished set
+only, inside the privacy ruling of 2026-10-18), and a weak exercise is switched to "count
+by hand" with no new app version. The bar an exercise must reach is set from the first
+movements' real numbers and written here then; until then it is not a number.
+
+### 12.6 The coach's voice (added to §11.8)
+
+- **Only what is happening in front of the camera** (Kd: *"it should not be static like say
+  this line after this line … it should be relevent to the scene"*). A line belongs to one
+  thing the engine detects and plays only when that has just happened; nothing plays on a
+  timer or in a fixed order. A correction needs the mistake on more than one rep, or held
+  long enough, from a phone place that can see it; unsure is silent; good form gets no
+  correction. One correction at a time, between reps, the most important first; when the
+  mistake is fixed the coach says so; when it returns, another wording; never the same
+  line rep after rep. With no line for what happened, the coach is silent, never a
+  near-enough line.
+- **Proper wording** (Kd: Opus's wording through the project was *"very cheap … like
+  talking with friend"*). The terms certified coaches use; a correction says what to do in
+  a few words; calm; no slang, hype or jokes; one phrase for one thing in every exercise;
+  two or three wordings a line; always a whole sentence, never glued from pieces. The
+  register: "Lower your hips to knee level." · "Keep your chest up." · "Keep your knees in
+  line with your toes." · "Slower on the way down." · "Better. That's the depth." · "Two
+  more." · "Set complete. Rest."
+- **Made once where it can be.** The shared lines (the counts, rest, praise, and the advice
+  most exercises share) are recorded once, with job 53; an exercise adds only the lines no
+  other has.
+- **One paste, one download.** The terminal gives a script as one text; Kd generates it on
+  his ElevenLabs plan (never the API) and downloads one file; a laptop tool cuts it into
+  its lines, names them, evens the loudness, and **reads each cut clip back as text to
+  check it says its own line**, since a clip cut or named wrongly would speak the wrong
+  advice. Not tried yet: if a batch does not cut cleanly, its failed lines are generated
+  one at a time. The read-back needs a free speech-reading tool on the laptop: Kd's yes in
+  that job's plan. The script's size is counted against his plan's monthly allowance when
+  the first one is written.
+
+### 12.7 Body points, small enough to keep
+
+The body points of four of Kd's videos take 1.7 MB as stored today (measured 2026-11-16),
+so 200 exercises with several videos each would be hundreds of MB. Job 50c makes a compact
+file for them. A video never goes to git (§11.7).
+
+### 12.8 The jobs (ROADMAP Stage 5, exercise folder 1; ROADMAP wins where they differ)
+
+| Job | What it builds |
+|---|---|
+| 50c | The body's picture: the frame's new inputs, compact files, "is this body possible", steady points, the body measures (flat or 3D, whichever is steadier) |
+| 51 | The phone test: model and library, speed, heat and battery, 3D points, several people; the phone testing itself on the videos |
+| 52a | The movement matcher and the proof table, with the squat movement made fresh as the first proof |
+| 52b | The form judge, the reason for a rep not counted, the summary |
+| 52c | The other kinds of counting: one side at a time, holds, fast rhythm, jumps, floor work |
+| 52d | One person locked on (a busy gym, mirrors) |
+| 53 | The camera screen, the shared voice lines and the tool that cuts and checks them |
+| 54 | Exercises, movement by movement, towards about 200; no fixed first list |
+
+The phone test is second on purpose: if the phone cannot give 3D points and several people
+at speed, the design changes before the matcher is built. Each job is built in a fresh
+terminal (Kd, 2026-11-16).
+
+### 12.9 Not measured yet
+
+Whether the phone's library gives 3D points and several people at speed (job 51) · whether
+one long recording cuts cleanly into lines (job 53) · whether a video redrawn from another
+phone place is faithful (job 52a) · what the hips do in a real one-leg lift: on the drawn
+one they moved at most 0.026 of the trunk's length, while the smallest rise in a real rep
+on twelve squat-family videos was 0.110 of the leg's length, under the old rules (job 52a
+measures both again with the new engine).
 
 ---
 
