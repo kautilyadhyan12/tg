@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Overview — a gym taking money</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./kit.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&amp;display=swap">
+<style>
+body{margin:0;background:#0C0B0A}
+</style>
+</helmet>
+<div class="app t-dark {{look}}" style="min-height: 100%">
+<div class="shell">
+<div class="rail">
+<div class="rail-gym"><div class="rail-logo"><svg class="ic" viewBox="0 0 24 24"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18zM6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2M10 6h4M10 10h4M10 14h4M10 18h4"/></svg></div><div class="grow"><div class="rail-name ell">Iron House</div><div class="rail-meta">Austin · Gym</div></div><svg class="ic ic-s" viewBox="0 0 24 24" style="color: var(--rail-t3)"><path d="M7 15l5 5 5-5M7 9l5-5 5 5"/></svg></div>
+<a class="ni ni-on"><svg class="ic" viewBox="0 0 24 24"><path d="M4 3h5a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM15 3h5a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM15 12h5a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1zM4 16h5a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1z"/></svg>Overview</a>
+<div class="rail-grp">Today</div>
+<a class="ni"><svg class="ic" viewBox="0 0 24 24"><path d="M9 2h6a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1zM16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2M9 14l2 2 4-4"/></svg>Attendance</a>
+<a class="ni"><svg class="ic" viewBox="0 0 24 24"><path d="M21 7.5V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3.5M16 2v4M8 2v4M3 10h5M10 16a6 6 0 1 0 12 0a6 6 0 1 0-12 0M16 14v2.2l1.5 1.3"/></svg>Classes</a>
+<a class="ni"><svg class="ic" viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M21 21l-1-1M3 3l1 1M18 22l4-4M2 6l4-4M3 10l7-7M14 21l7-7"/></svg>Personal training</a>
+<div class="rail-grp">People</div>
+<a class="ni"><svg class="ic" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M5 7a4 4 0 1 0 8 0a4 4 0 1 0-8 0M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>Members &amp; staff</a>
+<a class="ni"><svg class="ic" viewBox="0 0 24 24"><path d="M6 7a4 4 0 1 0 8 0a4 4 0 1 0-8 0M10.3 15H7a4 4 0 0 0-4 4v2M14 17a3 3 0 1 0 6 0a3 3 0 1 0-6 0M21 21l-1.9-1.9"/></svg>Leads</a>
+<a class="ni"><svg class="ic" viewBox="0 0 24 24"><path d="M22 17l-8.5-8.5-5 5L2 7M16 17h6v-6"/></svg>At risk</a>
+<div class="rail-grp">Money</div>
+<a class="ni"><svg class="ic" viewBox="0 0 24 24"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4zM3 6h18M16 10a4 4 0 0 1-8 0"/></svg>Sell</a>
+<a class="ni"><svg class="ic" viewBox="0 0 24 24"><path d="M12.6 2.6A2 2 0 0 0 11.2 2H4a2 2 0 0 0-2 2v7.2a2 2 0 0 0 .6 1.4l8.7 8.7a2.4 2.4 0 0 0 3.4 0l6.6-6.6a2.4 2.4 0 0 0 0-3.4zM7 7.5h.01"/></svg>Memberships</a>
+<a class="ni"><svg class="ic" viewBox="0 0 24 24"><path d="M4 5h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2zM2 10h20M6 15h4"/></svg>Failed payments</a>
+<div class="rail-grp">Community</div>
+<a class="ni"><svg class="ic" viewBox="0 0 24 24"><path d="M3 11l18-5v12L3 14v-3zM11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg>Updates</a>
+<a class="ni"><svg class="ic" viewBox="0 0 24 24"><path d="M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM16 2v4M8 2v4M3 10h18M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/></svg>Events</a>
+<a class="ni"><svg class="ic" viewBox="0 0 24 24"><path d="M9 2h6a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1zM16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2M9 12h6M9 16h4"/></svg>Fitness plans</a>
+<a class="ni"><svg class="ic" viewBox="0 0 24 24"><path d="M7.2 15L2.7 7.1a2 2 0 0 1 .1-2.2l1.6-2.1A2 2 0 0 1 6 2h12a2 2 0 0 1 1.6.8l1.6 2.1a2 2 0 0 1 .1 2.2L16.8 15M11 12L5.1 2.2M13 12l5.9-9.8M8 7h8M7 17a5 5 0 1 0 10 0a5 5 0 1 0-10 0"/></svg>Challenges</a>
+<a class="ni"><svg class="ic" viewBox="0 0 24 24"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6M18 9h1.5a2.5 2.5 0 0 0 0-5H18M4 22h16M10 14.7V17c0 .6-.5 1-1 1.2C7.9 18.8 7 20.2 7 22M14 14.7V17c0 .6.5 1 1 1.2 1.1.6 2 2 2 3.8M18 2H6v7a6 6 0 0 0 12 0V2z"/></svg>Leaderboard</a>
+<div class="rail-grp">Manage</div>
+<a class="ni"><svg class="ic" viewBox="0 0 24 24"><path d="M3 3v18h18M18 17V9M13 17V5M8 17v-3"/></svg>Reports</a>
+<a class="ni"><svg class="ic" viewBox="0 0 24 24"><path d="M12.2 2h-.4a2 2 0 0 0-2 2v.2a2 2 0 0 1-1 1.7l-.4.3a2 2 0 0 1-2 0l-.2-.1a2 2 0 0 0-2.7.7l-.2.4a2 2 0 0 0 .7 2.7l.2.1a2 2 0 0 1 1 1.7v.5a2 2 0 0 1-1 1.8l-.2.1a2 2 0 0 0-.7 2.7l.2.4a2 2 0 0 0 2.7.7l.2-.1a2 2 0 0 1 2 0l.4.3a2 2 0 0 1 1 1.7v.2a2 2 0 0 0 2 2h.4a2 2 0 0 0 2-2v-.2a2 2 0 0 1 1-1.7l.4-.3a2 2 0 0 1 2 0l.2.1a2 2 0 0 0 2.7-.7l.2-.4a2 2 0 0 0-.7-2.7l-.2-.1a2 2 0 0 1-1-1.8v-.5a2 2 0 0 1 1-1.7l.2-.1a2 2 0 0 0 .7-2.7l-.2-.4a2 2 0 0 0-2.7-.7l-.2.1a2 2 0 0 1-2 0l-.4-.3a2 2 0 0 1-1-1.7V4a2 2 0 0 0-2-2zM9 12a3 3 0 1 0 6 0a3 3 0 1 0-6 0"/></svg>Settings</a>
+<div class="rail-foot">
+<a class="ni"><svg class="ic" viewBox="0 0 24 24"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18zM6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2M10 6h4M10 10h4M10 14h4M10 18h4"/></svg>Your organisations</a>
+<div class="seg-rail"><span>Light</span><span class="on">Dark</span><span>Auto</span></div>
+<div class="rail-me"><span class="rail-av">DB</span><div class="grow"><div class="rail-name s14 ell">Dana Brooks</div><div class="rail-meta">Owner</div></div><span class="icon-btn icon-btn-sm icon-btn-q" style="color: var(--rail-t3)" aria-label="Sign out"><svg class="ic ic-s" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg></span></div>
+</div>
+</div>
+
+<div class="main">
+<div class="page">
+<div class="ph"><div class="ph-t"><h1 class="h1">Overview</h1><p class="sub">Iron House · Austin · Monday 16 November</p></div></div>
+<div class="card" style="margin-bottom: 24px; padding: 20px 24px">
+<div class="row-l between wrap">
+<div class="row-m" style="min-width: 0"><div style="position: relative; width: 52px; height: 52px; flex-shrink: 0">
+<svg viewBox="0 0 36 36" style="width: 52px; height: 52px; transform: rotate(-90deg)"><circle cx="18" cy="18" r="15.5" fill="none" stroke="var(--raise)" stroke-width="4"/><circle cx="18" cy="18" r="15.5" fill="none" stroke="var(--good)" stroke-width="4" stroke-linecap="round" stroke-dasharray="73.1 97.4"/></svg>
+<span class="w7 s13 num" style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center">6/8</span>
+</div>
+<div class="stack-2" style="min-width: 0; max-width: 560px"><span class="lbl">Start here · 6 of 8 done</span><span class="body w6">Next: Front desk check-in</span><span class="small">Add a tablet or computer at your front desk and open its link on it. People then scan their pass from the app, or their key tag, as they walk in.</span></div>
+</div>
+<div class="row-s"><span class="btn btn-p">Set up check-in</span><span class="btn btn-s">See all 8 steps<svg class="ic" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></span><span class="btn btn-q">Hide this list</span></div>
+</div>
+</div>
+<div class="cols">
+<div class="stack">
+<p class="small" style="padding: 10px 14px; border: 1px dashed var(--line); border-radius: 12px">Today, This week, Last 7 days, In the app and Who's turning up stay as on <b>Overview</b>. Under them, each box below shows only when it has something in it, for staff who may take payments.</p>
+<div class="card-0">
+<div class="card-hp"><div class="stack-2"><h2 class="h2">Last 7 days</h2><span class="small">9 Nov to 15 Nov</span></div></div>
+<div class="trow" style="grid-template-columns: 150px minmax(0,1fr) auto"><span class="body w6">Members</span><span class="sub">3 new · 1 left</span><span class="btn btn-s btn-sm">Open Reports</span></div>
+<div class="trow" style="grid-template-columns: 150px minmax(0,1fr) auto"><span class="body w6">At risk</span><span class="sub">Nobody has stopped coming</span><span class="btn btn-s btn-sm">Open At risk</span></div>
+<div class="trow" style="grid-template-columns: 150px minmax(0,1fr) auto"><span class="body w6">Payment due</span><span class="sub"><b class="warn num">6 members</b> have a payment due · 1 past member has a payment due too.</span><span class="row-s"><span class="btn btn-soft btn-sm">See who</span><span class="btn btn-q btn-sm">See past members</span></span></div>
+</div>
+<div class="card" style="border-color: var(--bad-line, rgba(239,68,68,.35))">
+<div class="row between top wrap" style="gap: 16px">
+<div class="stack-2"><span class="lbl" style="color: var(--bad)">Failed payments</span><h2 class="h2">3 card payments were declined and are still owed.</h2><span class="body w6 num">$60.00 owed</span></div>
+<span class="btn btn-s">Open Failed payments<svg class="ic ic-s" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></span>
+</div>
+</div>
+<div class="card">
+<div class="stack-2" style="margin-bottom: 12px"><span class="lbl">Refunds to review</span><h2 class="h2">2 refunds to review</h2><p class="sub">Money you may need to give back. Nothing is refunded until you press Refund and confirm it.</p></div>
+<div class="stack-s" style="padding: 14px 0; border-top: 1px solid var(--line)">
+<div class="row between top"><div class="stack-2"><div class="row-s"><span class="body w6">Walk-in</span></div><span class="sub">Water bottle and 1 more</span></div><span class="body w6 num">$3.00</span></div>
+<p class="small">Square refunded $3.00 of this sale. Which product was it for? It counts in your reports once you choose.</p>
+<div class="row-s"><span class="btn btn-s btn-sm">Choose product</span></div>
+</div><div class="stack-s" style="padding: 14px 0; border-top: 1px solid var(--line)">
+<div class="row between top"><div class="stack-2"><div class="row-s"><span class="body w6">Jordan Lee</span></div><span class="sub">No-show fee · Yoga on 30 October 2026</span></div><span class="body w6 num">$10.00</span></div>
+<p class="small">No longer owed: they were marked Came, or the class was cancelled. If you gave the money back, void the payment.</p>
+<div class="row-s"><span class="btn btn-s btn-sm">Void payment</span><span class="btn btn-q btn-sm">Keep the fee</span></div>
+</div>
+</div>
+<div class="card">
+<div class="stack-2" style="margin-bottom: 12px"><span class="lbl">App payments to review</span><h2 class="h2">1 app payment to review</h2><p class="sub">Square may have charged these members in the app, but the payments weren't applied here. Review each one in your Square Dashboard, then resolve it on the member's page.</p></div>
+<div class="stack-s" style="padding: 14px 0; border-top: 1px solid var(--line)">
+<div class="row between top"><div class="stack-2"><div class="row-s"><span class="body w6">Priya Nair</span></div><span class="sub">10-class pack · App purchase</span></div></div>
+<p class="small">Charged $90.00 on 13 November 2026, but 10-class pack wasn't added.</p>
+<div class="row-s"><span class="btn btn-s btn-sm">Review payment</span></div>
+</div>
+</div>
+<div class="card">
+<div class="stack-2" style="margin-bottom: 12px"><span class="lbl">Cancelled in the app</span><h2 class="h2">2 members cancelled in the app</h2><p class="sub">Members who cancelled in the app in the last 30 days.</p></div>
+<div class="li" style="padding: 12px 0; border-top: 1px solid var(--line)"><div class="stack-2 grow"><span class="body w6">Marcus Hill</span><span class="small">Off-peak Monthly · Cancelled 12 Nov 2026 · Ends 5 Dec 2026</span></div></div>
+<div class="li" style="padding: 12px 0; border-top: 1px solid var(--line)"><div class="stack-2 grow"><span class="body w6">Ava Chen</span><span class="small">Off-peak Monthly · Cancelled 11 Nov 2026 · Reactivated 12 Nov 2026</span></div></div><div class="row between wrap" style="gap: 12px; margin-top: 12px; padding: 12px 14px; border-radius: 12px; background: var(--raise)"><span class="small" style="max-width: 460px">Your front desk lets in everyone on your list, so members who cancelled can still check in after their membership ends.</span><span class="btn btn-s btn-sm">Change who can check in</span></div>
+</div>
+<div class="card">
+<div class="stack-2" style="margin-bottom: 12px"><span class="lbl">Chargebacks</span><h2 class="h2">2 chargebacks need attention</h2><p class="sub">A cardholder asked their bank to reverse a payment. Respond in Square by the date shown. If you don't, Square challenges it for you.</p></div>
+<div class="stack-s" style="padding: 14px 0; border-top: 1px solid var(--line)">
+<div class="row between top"><div class="stack-2"><div class="row-s"><span class="body w6">Sam Rivera</span></div><span class="sub">Gold Weekly</span></div><span class="body w6 num">$45.00</span></div>
+<p class="small">The cardholder says they did not make this payment. Respond in Square by 20 November 2026.</p>
+<div class="row-s"><span class="btn btn-p btn-sm">Respond in Square<svg class="ic ic-s" viewBox="0 0 24 24"><path d="M15 3h6v6M10 14L21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg></span><span class="btn btn-s btn-sm">Open their page</span></div>
+</div><div class="stack-s" style="padding: 14px 0; border-top: 1px solid var(--line)">
+<div class="row between top"><div class="stack-2"><div class="row-s"><span class="body w6">Maya Brooks</span></div><span class="sub">Gold Weekly</span></div><span class="body w6 num">$45.00</span></div>
+<p class="small">The cardholder says they were charged twice. You lost this chargeback. The money was returned to the cardholder. Automatic payments are paused until you resume them.</p>
+<div class="row-s"><span class="btn btn-p btn-sm">Open their page</span></div>
+</div>
+</div>
+</div>
+<div class="stack">
+<div class="card" style="border-color: rgba(255,138,31,.35)">
+<div class="card-h" style="margin-bottom: 10px"><div class="stack-2"><span class="lbl">Plan</span><h2 class="h2">Free trial</h2></div><span class="tag tag-soft">Ends 30 Nov</span></div>
+<div class="bar" style="margin: 8px 0 6px"><i style="width: 26%; background: var(--accent)"></i></div>
+<p class="small">26 of 100 members.</p>
+<p class="sub" style="margin-top: 12px">Your free trial carries on until it ends. To have more members now, choose a plan: you pay today and get its full size at once.</p>
+<span class="btn btn-p btn-w" style="margin-top: 16px">Choose a plan</span>
+</div>
+<div class="card">
+<div class="card-h" style="margin-bottom: 4px"><h2 class="h2">Details</h2></div>
+<div class="kv" style="grid-template-columns: 110px minmax(0,1fr)"><span class="k">Currency</span><span class="v">USD</span></div>
+<div class="kv" style="grid-template-columns: 110px minmax(0,1fr)"><span class="k">Time zone</span><span class="v">America/Chicago</span></div>
+<div class="kv" style="grid-template-columns: 110px minmax(0,1fr)"><span class="k">Your role</span><span class="v">Owner</span></div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"look":{"editor":"enum","options":["Dark","Light"],"default":"Dark"},"$preview":{"width":1440,"height":2560}}'>
+class Component extends DCLogic {
+renderVals() {
+return { look: (this.props.look ?? 'Dark') === 'Light' ? 't-light' : '' };
+}
+}
+</script>
+</body>
+</html>

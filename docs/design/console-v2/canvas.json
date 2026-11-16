@@ -898,6 +898,225 @@
       "h": 1180,
       "page": "members",
       "title": "Proposal · on a phone"
+    },
+    "PersonCard.dc.html": {
+      "x": 0,
+      "y": 11776,
+      "w": 1440,
+      "h": 1900,
+      "page": "person",
+      "title": "A member's page — pays by card, agreement signed (a US gym with Square)",
+      "expand": "fill"
+    },
+    "PersonCardStates.dc.html": {
+      "x": 1520,
+      "y": 11776,
+      "w": 1440,
+      "h": 1180,
+      "page": "person",
+      "title": "Card on file — what the box says in each case"
+    },
+    "PersonChargeback.dc.html": {
+      "x": 3040,
+      "y": 11776,
+      "w": 1440,
+      "h": 2010,
+      "page": "person",
+      "title": "A member's page — a lost chargeback on a card payment, agreement not signed",
+      "expand": "fill"
+    },
+    "PersonChargebackStates.dc.html": {
+      "x": 0,
+      "y": 13946,
+      "w": 1440,
+      "h": 1000,
+      "page": "person",
+      "title": "A chargeback on a payment — what the line says in each case"
+    },
+    "PersonTakePayment.dc.html": {
+      "x": 1520,
+      "y": 13946,
+      "w": 1440,
+      "h": 1900,
+      "page": "person",
+      "title": "Take a payment — Card on Terminal, or the card on file (opens under Record payment)",
+      "expand": "fill"
+    },
+    "PersonRefundCard.dc.html": {
+      "x": 3040,
+      "y": 13946,
+      "w": 1440,
+      "h": 1900,
+      "page": "person",
+      "title": "Refund a card payment — the Refund menu, then the question in the middle",
+      "expand": "fill"
+    },
+    "PersonCardTerminal.dc.html": {
+      "x": 0,
+      "y": 16006,
+      "w": 1440,
+      "h": 1900,
+      "page": "person",
+      "title": "Save or replace a card on the Terminal — opens under its button",
+      "expand": "fill"
+    },
+    "PersonCardType.dc.html": {
+      "x": 1520,
+      "y": 16006,
+      "w": 1440,
+      "h": 1900,
+      "page": "person",
+      "title": "Type card instead — slides in from the right (Square's card form)",
+      "expand": "fill"
+    },
+    "PersonCardRemove.dc.html": {
+      "x": 3040,
+      "y": 16006,
+      "w": 1440,
+      "h": 1900,
+      "page": "person",
+      "title": "Remove card — asks in the middle",
+      "expand": "fill"
+    },
+    "PersonCardPause.dc.html": {
+      "x": 0,
+      "y": 18066,
+      "w": 1440,
+      "h": 1900,
+      "page": "person",
+      "title": "Pause automatic payments — asks in the middle, naming each membership",
+      "expand": "fill"
+    },
+    "PersonAgreementView.dc.html": {
+      "x": 1520,
+      "y": 18066,
+      "w": 1440,
+      "h": 1900,
+      "page": "person",
+      "title": "A signed agreement — slides in from the right (View)",
+      "expand": "fill"
+    },
+    "PersonAgreementSign.dc.html": {
+      "x": 3040,
+      "y": 18066,
+      "w": 1440,
+      "h": 2010,
+      "page": "person",
+      "title": "Sign agreement at the desk — slides in from the right, handed to the member",
+      "expand": "fill"
+    },
+    "PersonChange.dc.html": {
+      "x": 0,
+      "y": 20236,
+      "w": 1440,
+      "h": 1900,
+      "page": "person",
+      "title": "Change membership — slides in from the right; when a payment is due it says so under the button",
+      "expand": "fill"
+    },
+    "PhonePersonCard.dc.html": {
+      "x": 4080,
+      "y": 0,
+      "w": 390,
+      "h": 1640,
+      "page": "phone",
+      "title": "A member's page on a phone — card on file, agreement, meal plan"
+    },
+    "OverviewMoney.dc.html": {
+      "x": 0,
+      "y": 5925,
+      "w": 1440,
+      "h": 2560,
+      "page": "home",
+      "title": "Overview — a gym taking money: failed payments, refunds, app payments, cancellations, chargebacks"
+    },
+    "OverviewStartHere.dc.html": {
+      "x": 1520,
+      "y": 5925,
+      "w": 1440,
+      "h": 1180,
+      "page": "home",
+      "title": "Overview — Start here, all 8 steps"
+    },
+    "OverviewMoneyStates.dc.html": {
+      "x": 3040,
+      "y": 5925,
+      "w": 1440,
+      "h": 1560,
+      "page": "home",
+      "title": "Overview — the money boxes in each case"
+    },
+    "SellTerminal.dc.html": {
+      "x": 0,
+      "y": 5120,
+      "w": 1440,
+      "h": 1700,
+      "page": "money",
+      "title": "Sell — Card on Terminal, waiting on it, and how it ended"
+    },
+    "SellDay.dc.html": {
+      "x": 1520,
+      "y": 5120,
+      "w": 1440,
+      "h": 1200,
+      "page": "money",
+      "title": "Sell — another day's sales, with refunds and chargebacks"
+    },
+    "SellRefund.dc.html": {
+      "x": 3040,
+      "y": 5120,
+      "w": 1440,
+      "h": 1200,
+      "page": "money",
+      "title": "Sell — Refund on a sale: how, then which product"
+    },
+    "MembershipsList.dc.html": {
+      "x": 0,
+      "y": 7090,
+      "w": 1440,
+      "h": 1180,
+      "page": "money",
+      "title": "Memberships — each type's terms on the price list, and Bills"
+    },
+    "MembershipTerms.dc.html": {
+      "x": 1520,
+      "y": 7090,
+      "w": 1440,
+      "h": 2900,
+      "page": "money",
+      "title": "Change membership type — tax, minimum term, fees, notice, cooling-off, reminders, the app"
+    },
+    "MembershipRaise.dc.html": {
+      "x": 3040,
+      "y": 7090,
+      "w": 1440,
+      "h": 1580,
+      "page": "money",
+      "title": "Change membership type — a higher price for members already on it"
+    },
+    "FailedPayments.dc.html": {
+      "x": 0,
+      "y": 10260,
+      "w": 1440,
+      "h": 1300,
+      "page": "money",
+      "title": "Failed payments — a page of its own, and Try again"
+    },
+    "FailedPaymentsCard.dc.html": {
+      "x": 1520,
+      "y": 10260,
+      "w": 1440,
+      "h": 1000,
+      "page": "money",
+      "title": "Failed payments — Add a new card opens the card box"
+    },
+    "SquareReturn.dc.html": {
+      "x": 0,
+      "y": 6005,
+      "w": 1440,
+      "h": 900,
+      "page": "settings",
+      "title": "After Connect Square — connecting, and when nothing was connected"
     }
   },
   "order": [

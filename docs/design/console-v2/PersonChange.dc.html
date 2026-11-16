@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Change membership — slides in from the right; when a payment is due it says so under the button</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./kit.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&amp;display=swap">
+<style>
+body{margin:0;background:#0C0B0A}
+</style>
+</helmet>
+<div class="app t-dark {{look}} over" style="height: 1900px">
+<dc-import name="PersonCard" look="{{lookName}}" hint-size="1440px,1900px"></dc-import>
+<div class="pop pop-r" style="left: 677px; top: 645px; width: 400px; padding: 20px">
+<div class="stack-2"><span class="lbl">With a payment due, under the button</span><h3 class="h3">Change Sam Rivera's Gold Weekly</h3></div>
+<p class="small" style="color: var(--t2)">This membership has a payment due. Record the payment first, then change it.</p>
+<span class="btn btn-q" style="align-self: flex-start">Back</span>
+</div>
+<div class="scrim"></div>
+<div class="drawer" style="position: absolute; top: 0; right: 0; bottom: 0; width: 560px">
+<div class="dw-h"><div class="row between top" style="width: 100%"><div class="stack-2"><h3 class="h2">Change Sam Rivera's Gold Weekly to another membership</h3><span class="small">Gold Weekly · $25.00 every week</span></div><span class="icon-btn icon-btn-sm icon-btn-q" aria-label="Close"><svg class="ic ic-s" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg></span></div></div>
+<div class="dw-b stack"><div class="field"><span class="flabel">New membership</span><div class="stack-s">
+<div class="row between" style="padding: 12px 14px; border-radius: 12px; border: 1px solid var(--accent)"><div class="row-m"><span class="radio radio-on"></span><span class="body w6">Gold Monthly</span></div><span class="body num">$89.00 every month</span></div>
+<div class="row between" style="padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line)"><div class="row-m"><span class="radio"></span><span class="body w6">Off-peak Monthly</span></div><span class="body num">$45.00 every month</span></div>
+<div class="row between" style="padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line)"><div class="row-m"><span class="radio"></span><span class="body w6">10-class pack</span></div><span class="body num">$90.00 · 10 classes, used within 60 days</span></div>
+<div class="row between" style="padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line)"><div class="row-m"><span class="radio"></span><span class="body w6">Silver Weekly</span></div><span class="body num">$18.00 every week</span></div>
+</div></div></div>
+<div class="dw-f row-s"><span class="btn btn-q">Back</span></div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"look":{"editor":"enum","options":["Dark","Light"],"default":"Dark"},"$preview":{"width":1440,"height":1900}}'>
+class Component extends DCLogic {
+renderVals() {
+const lookName = this.props.look ?? 'Dark';
+return { look: lookName === 'Light' ? 't-light' : '', lookName };
+}
+}
+</script>
+</body>
+</html>

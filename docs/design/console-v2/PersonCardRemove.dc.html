@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Remove card — asks in the middle</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./kit.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&amp;display=swap">
+<style>
+body{margin:0;background:#0C0B0A}
+</style>
+</helmet>
+<div class="app t-dark {{look}} over" style="height: 1900px">
+<dc-import name="PersonCard" look="{{lookName}}" hint-size="1440px,1900px"></dc-import>
+<div class="scrim"></div>
+<div class="dialog" style="position: absolute; left: 50%; top: 640px; transform: translateX(-50%); width: 480px; padding: 28px">
+<h3 class="h2">Remove Visa ending 1111 from Sam Rivera?</h3>
+<p class="body" style="color: var(--t2)">Iron House can't charge this card after it's removed. You can add a card again at any time.</p>
+<div class="row-s end"><span class="btn btn-q">Back</span><span class="btn btn-d">Remove card</span></div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"look":{"editor":"enum","options":["Dark","Light"],"default":"Dark"},"$preview":{"width":1440,"height":1900}}'>
+class Component extends DCLogic {
+renderVals() {
+const lookName = this.props.look ?? 'Dark';
+return { look: lookName === 'Light' ? 't-light' : '', lookName };
+}
+}
+</script>
+</body>
+</html>
