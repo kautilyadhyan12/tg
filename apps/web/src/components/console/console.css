@@ -186,13 +186,17 @@
   flex-direction: column;
   gap: 2px;
 }
+/* A group's heading reads as a heading, never as one more page: small capitals, spaced,
+   in the menu's quiet grey, under a line that closes the group above. */
 .c-rail-grp {
-  margin: 0;
+  margin: 10px 0 0;
   padding: 14px 12px 6px;
-  font-size: 12px;
+  border-top: 1px solid var(--rail-line);
+  font-size: 11px;
   line-height: 16px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
   color: var(--rail-t3);
 }
 
