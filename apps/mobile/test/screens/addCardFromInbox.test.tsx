@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
-import { AppState } from "react-native";
+import { AppState, ScrollView } from "react-native";
 import { myCardViewSchema, myMembershipResponseSchema } from "@app/shared";
 import { App } from "../../src/App";
 import type { Ask } from "../../src/session/calls";
@@ -301,5 +301,93 @@ describe("leaving Add card", () => {
     });
     expect(screen.getByLabelText(/^Inbox at Iron House/)).toBeTruthy();
     expect(screen.getByLabelText("My membership at Iron House")).toBeTruthy();
+  });
+});
+
+describe("the page is scrolled to Card on file", () => {
+  const scrolls = () => {
+    const spy = jest.fn();
+    jest.spyOn(ScrollView.prototype as unknown as { scrollTo: (o: unknown) => void }, "scrollTo").mockImplementation(spy);
+    return spy;
+  };
+  const drawAt = async (y: number) => {
+    await fireEvent(await membership().findByTestId("card-place"), "layout", { nativeEvent: { layout: { x: 0, y, width: 390, height: 200 } } });
+  };
+
+  it("opened from the message: once, to the box, so what Add card did is in view when it closes", async () => {
+    const spy = scrolls();
+    const server = fakeServer(twoPlaces());
+    await openInbox(server.ask, IRON);
+    await pressAddCard(IRON);
+    await screen.findByTestId("add-card");
+    await drawAt(1400);
+    await drawAt(1500);
+    expect(spy.mock.calls).toEqual([[{ y: 1392, animated: false }]]);
+  });
+
+  it("drawn before the page knew its height: scrolled again as it grows, until the box can be reached or the person scrolls", async () => {
+    const spy = scrolls();
+    const server = fakeServer(twoPlaces());
+    await openInbox(server.ask, IRON);
+    await pressAddCard(IRON);
+    await screen.findByTestId("add-card");
+    const page = membership().getByTestId("membership-scroll");
+    await fireEvent(page, "layout", { nativeEvent: { layout: { x: 0, y: 0, width: 390, height: 700 } } });
+    await fireEvent(page, "contentSizeChange", 390, 900);
+    await drawAt(1400);
+    // Not tall enough yet: kept, and scrolled again with each growth.
+    await fireEvent(page, "contentSizeChange", 390, 1500);
+    await fireEvent(page, "contentSizeChange", 390, 2400);
+    // Reached: nothing more.
+    await fireEvent(page, "contentSizeChange", 390, 2600);
+    expect(spy.mock.calls).toEqual([[{ y: 1392, animated: false }], [{ y: 1392, animated: false }], [{ y: 1392, animated: false }]]);
+  });
+
+  it("the person scrolls by hand before the page is tall enough: never scrolled for them after that", async () => {
+    const spy = scrolls();
+    const server = fakeServer(twoPlaces());
+    await openInbox(server.ask, IRON);
+    await pressAddCard(IRON);
+    await screen.findByTestId("add-card");
+    const page = membership().getByTestId("membership-scroll");
+    await fireEvent(page, "layout", { nativeEvent: { layout: { x: 0, y: 0, width: 390, height: 700 } } });
+    await drawAt(1400);
+    await fireEvent(page, "scrollBeginDrag");
+    await fireEvent(page, "contentSizeChange", 390, 2600);
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+
+  it("Add card's page closes: scrolled to the box again once, now this page is in front", async () => {
+    const spy = scrolls();
+    const server = fakeServer(twoPlaces());
+    await openInbox(server.ask, IRON);
+    await pressAddCard(IRON);
+    await screen.findByTestId("add-card");
+    await drawAt(1400);
+    await backKey();
+    await waitFor(() => {
+      expect(screen.queryByTestId("add-card")).toBeNull();
+    });
+    expect(spy.mock.calls).toEqual([[{ y: 1392, animated: false }], [{ y: 1392, animated: false }]]);
+    // Add card pressed again from the box, and closed: the box is already in view, and nothing scrolls.
+    await fireEvent.press(membership().getByText("Add card"));
+    await screen.findByTestId("add-card");
+    await backKey();
+    await waitFor(() => {
+      expect(screen.queryByTestId("add-card")).toBeNull();
+    });
+    expect(spy).toHaveBeenCalledTimes(2);
+  });
+
+  it("opened by itself: never scrolled", async () => {
+    const spy = scrolls();
+    const server = fakeServer(twoPlaces());
+    await render(<App extra={extra} ask={server.ask} store={memoryStore(kept(1))} wait={noWait} />);
+    const tab = (await screen.findAllByRole("tab"))[3];
+    if (tab === undefined) throw new Error("no fourth tab");
+    await fireEvent.press(tab);
+    await fireEvent.press(await screen.findByLabelText("My membership at Iron House"));
+    await drawAt(1400);
+    expect(spy).not.toHaveBeenCalled();
   });
 });

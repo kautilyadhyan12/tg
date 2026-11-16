@@ -265,7 +265,7 @@ function InboxBody({
                   </Txt>
                 ) : null}
                 {row.isNew || row.when !== null ? (
-                  <Txt kind="tiny" style={styles.under}>
+                  <Txt kind="tiny" style={styles.underLine}>
                     {row.isNew ? (
                       <Txt kind="tiny" colour="orange" style={styles.strong}>
                         New
@@ -388,6 +388,9 @@ const styles = StyleSheet.create({
   middle: { alignSelf: "center" },
   // Under the words, beside the envelope.
   under: { marginLeft: 26, alignSelf: "flex-start" },
+  // The message's time, the width of the words above it: sized to itself, Android measured "just now" a little short and
+  // drew "just" alone.
+  underLine: { marginLeft: 26 },
   strong: { fontFamily: fonts.semibold },
   sheet: { gap: 12 },
   switchRow: { flexDirection: "row", alignItems: "center", gap: 12, minHeight: sizes.press },

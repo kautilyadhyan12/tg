@@ -1,4 +1,4 @@
-import { StyleSheet, View } from "react-native";
+import { StyleSheet, View, type LayoutChangeEvent } from "react-native";
 import type { MyCardView } from "@app/shared";
 import { Button } from "../../look/Button";
 import { Card, Pill } from "../../look/Card";
@@ -12,11 +12,24 @@ import { CARD_TITLE, REMOVE_CARD, cardBox } from "./cardView";
 // or removed is said in this box (`said`). Remove card (20e) is words under Update card while nothing can be charged
 // to the card; otherwise a line says why it stays.
 
-export function CardOnFile({ view, said, onAdd, onRemove }: { view: MyCardView; said: string | null; onAdd: () => void; onRemove: () => void }) {
+export function CardOnFile({
+  view,
+  said,
+  onAdd,
+  onRemove,
+  onLayout,
+}: {
+  view: MyCardView;
+  said: string | null;
+  onAdd: () => void;
+  onRemove: () => void;
+  /** Where the box was drawn on the page (20l). */
+  onLayout?: (e: LayoutChangeEvent) => void;
+}) {
   const box = cardBox(view, said !== null);
   if (box === null) return null;
   return (
-    <View style={styles.section}>
+    <View testID="card-place" style={styles.section} onLayout={onLayout}>
       <Txt kind="eyebrow" colour="textFaint">
         {CARD_TITLE}
       </Txt>
@@ -74,9 +87,9 @@ export function CardOnFile({ view, said, onAdd, onRemove }: { view: MyCardView; 
 
 /** In Card on file's place, where My membership was opened from the place's card request (20l) and there is no box to
  *  show: the place takes no cards in the app now, or the card could not be read (with Try again). */
-export function CardNotHere({ line, onAgain }: { line: string; onAgain: (() => void) | null }) {
+export function CardNotHere({ line, onAgain, onLayout }: { line: string; onAgain: (() => void) | null; onLayout?: (e: LayoutChangeEvent) => void }) {
   return (
-    <View style={styles.section}>
+    <View testID="card-place" style={styles.section} onLayout={onLayout}>
       <Txt kind="eyebrow" colour="textFaint">
         {CARD_TITLE}
       </Txt>

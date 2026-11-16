@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AppState, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from "react-native";
+import { AppState, Pressable, ScrollView, StyleSheet, useWindowDimensions, View, type LayoutChangeEvent } from "react-native";
 import { Modal } from "../../look/Modal";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { formatMinor, myCardResponseSchema, myMembershipResponseSchema, receiptSchema, type MyCardView, type MyMembership, type MyMembershipAgreement, type MyMembershipResponse, type Receipt } from "@app/shared";
@@ -113,6 +113,34 @@ function MembershipBody({ place, onClose, onBuy, bottom }: { place: MembershipPl
   const cardAsked = useRef(place.addCard === true);
   // That read failed: said in the box's place, with Try again.
   const [cardFailed, setCardFailed] = useState(false);
+  // Opened from a card request, the page is scrolled to Card on file once it is drawn: what Add card did, or why it cannot
+  // be added, is in view behind Add card's page and when it closes.
+  // The box can be drawn before the page knows how tall it is, and a scroll then stops short: the place to scroll to is
+  // kept until the page is tall enough to reach it, or the person scrolls by hand.
+  const scroller = useRef<ScrollView>(null);
+  const scrolledToCard = useRef(place.addCard !== true);
+  const scrollTarget = useRef<number | null>(null);
+  const pageTall = useRef({ content: 0, shown: 0 });
+  const scrollToCard = useCallback(() => {
+    const y = scrollTarget.current;
+    if (y === null) return;
+    scroller.current?.scrollTo({ y, animated: false });
+    if (pageTall.current.content - pageTall.current.shown >= y) scrollTarget.current = null;
+  }, []);
+  // Where the box is, and whether Add card's page, opened by the request, has yet to close: a scroll made while that page
+  // covers this one can be lost on Android, so it is made again as the page closes.
+  const cardY = useRef<number | null>(null);
+  const againOnAddClose = useRef(place.addCard === true);
+  const cardDrawn = useCallback(
+    (e: LayoutChangeEvent) => {
+      cardY.current = Math.max(0, e.nativeEvent.layout.y - 8);
+      if (scrolledToCard.current) return;
+      scrolledToCard.current = true;
+      scrollTarget.current = cardY.current;
+      scrollToCard();
+    },
+    [scrollToCard],
+  );
   // Reads are numbered as they start: an answer stands only if no later read has started.
   const started = useRef(0);
   const receiptAsked = useRef(0);
@@ -238,7 +266,23 @@ function MembershipBody({ place, onClose, onBuy, bottom }: { place: MembershipPl
           </Txt>
         </View>
       </View>
-      <ScrollView style={styles.grow} contentContainerStyle={[styles.list, { paddingBottom: bottom + 24 }]}>
+      <ScrollView
+        ref={scroller}
+        testID="membership-scroll"
+        style={styles.grow}
+        contentContainerStyle={[styles.list, { paddingBottom: bottom + 24 }]}
+        onLayout={(e) => {
+          pageTall.current.shown = e.nativeEvent.layout.height;
+          scrollToCard();
+        }}
+        onContentSizeChange={(_width, height) => {
+          pageTall.current.content = height;
+          scrollToCard();
+        }}
+        onScrollBeginDrag={() => {
+          scrollTarget.current = null;
+        }}
+      >
         {held.kind === "loading" ? (
           <Txt kind="small">Loading…</Txt>
         ) : held.kind === "failed" ? (
@@ -261,6 +305,7 @@ function MembershipBody({ place, onClose, onBuy, bottom }: { place: MembershipPl
               card === null ? (
                 cardFailed ? (
                   <CardNotHere
+                    onLayout={cardDrawn}
                     line={CARD_NOT_READ}
                     onAgain={() => {
                       setCardFailed(false);
@@ -269,9 +314,10 @@ function MembershipBody({ place, onClose, onBuy, bottom }: { place: MembershipPl
                   />
                 ) : null
               ) : place.addCard === true && cardBox(card, cardSaid !== null) === null && askedCardStep(card) === "off" ? (
-                <CardNotHere line={cardsNotSavedLine(card.gymName)} onAgain={null} />
+                <CardNotHere onLayout={cardDrawn} line={cardsNotSavedLine(card.gymName)} onAgain={null} />
               ) : (
                 <CardOnFile
+                  onLayout={cardDrawn}
                   view={card}
                   said={cardSaid}
                   onAdd={() => {
@@ -325,6 +371,11 @@ function MembershipBody({ place, onClose, onBuy, bottom }: { place: MembershipPl
           setAddingCard(null);
           // What the page learnt meanwhile (somebody now pays, a card saved elsewhere) shows in the box behind it.
           void loadCard();
+          if (againOnAddClose.current && cardY.current !== null) {
+            againOnAddClose.current = false;
+            scrollTarget.current = cardY.current;
+            scrollToCard();
+          }
         }}
       />
       <RemoveCardAsk
