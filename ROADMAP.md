@@ -799,14 +799,16 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
 54. [ ] **Exercises, movement by movement** (§12.4), towards about 200, with no fixed first list: Kd names one and gives its videos and research file; an exercise that does not pass the proof is published as "count by hand".
 55. Folded into 54 on 2026-11-16.
 
-**Exercise folder 2 — `D:\Projects\ai-home-gym-ex2`: the Exercise Library and the Workout section** (spec Part 2 §11).
+**Exercise folder 2 — `D:\Projects\ai-home-gym-ex2`: the Exercise Library and the Workout section** (spec Part 2 §13, which wins over §11 where they differ and never over §12). **Re-planned 2026-11-16** (Kd; `rulings/2026-11-16-exercise-library.md`): made fresh; new code never uses the old exercise code, which only the web's old pages keep; nothing a member can do today is lost (§13.8). Built in this order: 60, 61, 63, 64a, 62, 64b, with 65 alongside from 60.
 
-60. [ ] **One exercise list on the server**: name, muscles, equipment, how it is counted (camera · by hand · timed), where the phone goes, clip, steps, mistakes; sent with the definitions, so a new exercise needs no new app version. It needs no phone, so it is this folder's first job.
-61. [ ] **What a workout keeps**: weight for each set, timed holds, the workout's name, saved workouts on the new server, records for each exercise; and it is kept on the phone until the server has it (item 3 begins here).
-62. [ ] **The clip line**: the original shortened, the generated clip made small, its still picture, the clip checked against its own rules; and where clips are kept (Stage 4 item 4).
-63. [ ] **The Exercise Library on the phone**: search, filters by muscle, equipment and how it is counted, and an exercise's page.
-64. [ ] **Build a workout, do it, and after it** (Stage 1's 6c): sets, reps or time, weight, rest; by hand, by timer or by camera (item 53's screen); the summary set by set; history. The heart rate from the monitor connected in 37f-i (`apps/mobile/src/heart/`), shown during it and kept with it (Kd, 2026-11-12).
-65. [ ] **Exercises**, in the families exercise folder 1 is not doing.
+60. [ ] **The exercise list, made fresh, on the server** (§13.2 to §13.4): one file for each exercise with fixed word lists, publishing that refuses a faulty file, and one download for the phone, so a new exercise needs no new app version. The camera's facts are read from exercise folder 1's data. It needs no phone.
+61. [ ] **What a workout keeps** (§13.5; after 60): weight for each set, reps or time, the workout's name, how each set was counted, saved workouts, records for each exercise, history; an unknown exercise refuses the save instead of dropping a set.
+62. [ ] **The clip line** (after 60): the generated clip made small, its still picture, and where clips are kept (Stage 4 item 4). Checking a clip against its exercise's rules waits for exercise folder 1's 52a and 52b.
+63. [ ] **The Exercise Library on the phone** (§13.6; after 60): the list kept on the phone, search, filters by muscle, equipment, level and how it is counted, and an exercise's page.
+64. **Build a workout, do it, and after it** (Stage 1's 6c; §13.6, §11.8's steps).
+    - 64a. [ ] **By hand and by timer** (after 61 and 63): sets, reps or time, weight, rest; one screen for the workout, kept on the phone at every step; the summary set by set; history. The heart rate from the monitor connected in 37f-i, shown during it and kept with it (Kd, 2026-11-12).
+    - 64b. [ ] **With the camera** (after 64a and item 53's screen): Camera or Count myself, picked every time.
+65. [ ] **Each exercise's Library page**, towards about 200 (§13.2; alongside, from 60): written and checked, never copied across from the old text; Kd's list of names. All camera rules are exercise folder 1's job 54.
 
 **The plan of 2026-09-22 and its items, kept as first written. Where they differ from the lists above, the lists win.**
 

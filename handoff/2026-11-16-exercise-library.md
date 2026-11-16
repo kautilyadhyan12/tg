@@ -1,0 +1,12 @@
+# 2026-11-16 · The Exercise Library and the Workout section, made fresh: the plan (exercise folder 2; branch `exercise-library-plan`; words only)
+
+- **Why:** Kd ruled that "build the next thing" must stop wrapping the old exercise code. One exercise's facts sat in five places that disagree, a workout kept no weight or name, and the phone had two "Coming soon" cards.
+- **What was written:** spec Part 2 §13 (read it whole, and §12, before any plan here); ROADMAP's exercise folder 2 list re-made (60 to 65, the numbers kept, 64 in two); one sentence in §11's first paragraph; `rulings/2026-11-16-exercise-library.md`. No code. Nothing of exercise folder 1's (§12, items 50 to 55, CLAUDE.md's "Exercises" paragraph) was changed.
+- **Measured that day:** 58 rows in the old list; 22 different words for the main muscle and 28 for the others; equipment "None" for 50; the two reps-or-seconds rules disagree for 11 (bridge_pose, cat_cow, high_knees, mountain_climber, skipping_rope, flutter_kick, worlds_greatest_stretch, arm_circles, plank_jack, jogging_in_place, brisk_walking); `ActiveWorkout.jsx` is 1,906 lines; a workout's sets are read by goals, XP, the boards, the gym's numbers and privacy (grep of `apps/api/src`); the old exercise files are used on the phone only by `Goals.tsx`.
+- **For exercise folder 1's terminals (52a, 53, 54):** §13.3 says what this side gives and expects where the two meet: the level read from your data, your files carried unopened in the phone's download, one list of mistakes, `SetSummary` taken as §2.4, the workout asking your screen for one set. If your plan needs it otherwise, say so there and amend §13.3.
+- **For feature folder 2 (item 36) and the web folder (24b):** a planned workout is one shape (§13.5), built in 61.
+- **What is open:** everything in §13.9. Job 60's plan names where the exercise files live, the kinds, the full equipment list and the download's route.
+- **Old code:** left as it is for the web's old pages. New code never imports it; job 60 adds the lint rule.
+- **Next in this folder, in a FRESH terminal:** job 60, the exercise list on the server. It needs no phone.
+- **Not kept in git:** this terminal's working notes and the public list it read (free-exercise-db, the Unlicense) were in its scratch folder. Job 65 downloads the list again.
+- **Effort:** Fable 5.2, max for the review and the design, high for the writing, Kd's settings.
