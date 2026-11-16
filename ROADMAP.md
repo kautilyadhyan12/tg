@@ -683,7 +683,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
       - 21b-ii. [x] **The "Delete your account" page** — merged 2026-11-09 (PR #507).
     - 21c. **The store version and Play Console** (split 2026-11-15 in two, the store's app first; `handoff/2026-11-15-21c-i.md` keeps the line as first written).
       - 21c-i. [x] **The store version on Kd's phone** · merged 2026-11-15 · PR #557
-      - 21c-ii. [ ] **KWAZO on Google Play's closed test**: the listing, the reviewers' sign-in details, 18+, data safety (time in the app, a run's heart rate), the health declaration as fitness and nutrition only, running's service declaration and its video, "not a medical device"; Google's signing fingerprint added to sign-in; 15 to 20 testers; the first upload.
+      - 21c-ii. [x] **KWAZO on Google Play's closed test** · merged 2026-11-16 · PR #560
     - 21d. [ ] **Google's closed test**, 14 days, at least 12 testers: starts once 21a to 21c, 21f, 12e, 14d, 31h and Stage 2's 14a-i and 14a-ii are done (Kd raises his testers' meal scans on the admin page), never waiting for workouts or exercises, which arrive by update. Production access is applied for the day after, while at least 12 testers are still in; publishing waits for the finished app.
     - 21e. [ ] **Paying in the app and production**: the $10 plan through the stores (item 6), one device one trial (Stage 3's 2c), production access; the paid server and the domain chosen then; then the iPhone version with Apple sign-in.
     - 21f. [x] **Minutes in the app** · merged 2026-11-09 · PR #512
