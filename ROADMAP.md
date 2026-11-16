@@ -685,7 +685,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
       - 21b-ii. [x] **The "Delete your account" page** — merged 2026-11-09 (PR #507).
     - 21c. **The store version and Play Console** (split 2026-11-15 in two, the store's app first; `handoff/2026-11-15-21c-i.md` keeps the line as first written).
       - 21c-i. [x] **The store version on Kd's phone** · merged 2026-11-15 · PR #557
-      - 21c-ii. [ ] **KWAZO on Google Play's closed test**: the listing, the reviewers' sign-in details, 18+, data safety (time in the app, a run's heart rate), the health declaration as fitness and nutrition only, running's service declaration and its video, "not a medical device"; Google's signing fingerprint added to sign-in; 15 to 20 testers; the first upload.
+      - 21c-ii. [x] **KWAZO on Google Play's closed test** · merged 2026-11-16 · PR #560
     - 21d. [ ] **Google's closed test**, 14 days, at least 12 testers: starts once 21a to 21c, 21f, 12e, 14d, 31h and Stage 2's 14a-i and 14a-ii are done (Kd raises his testers' meal scans on the admin page), never waiting for workouts or exercises, which arrive by update. Production access is applied for the day after, while at least 12 testers are still in; publishing waits for the finished app.
     - 21e. [ ] **Paying in the app and production**: the $10 plan through the stores (item 6), one device one trial (Stage 3's 2c), production access; the paid server and the domain chosen then; then the iPhone version with Apple sign-in.
     - 21f. [x] **Minutes in the app** · merged 2026-11-09 · PR #512
@@ -790,7 +790,10 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
 50. **The measuring line on the laptop.** It needs no phone.
     - 50a. [x] **True proportions** — merged 2026-10-31 (PR #413).
     - 50b. [x] **A video to body points** — merged 2026-11-01 (PR #426).
-    - 50c. [ ] **The body's picture** (§12.2, §12.7): a frame's new inputs (3D points, which way is down, several people), compact body-point files, "is this body possible", steady points, and one set of body measures, each taken flat or in 3D by which is steadier on real videos. The cross-check of 2026-11-02 was closed unmerged (PR #434); the proof table is 52a's.
+    - 50c. **The body's picture** (§12.2, §12.7; split 2026-11-16 in three). The cross-check of 2026-11-02 was closed unmerged (PR #434); the proof table is 52a's.
+        - 50c-i. [x] **The frame and the small files** — merged 2026-11-16 (PR #564).
+        - 50c-ii. [ ] **Is this body possible, and steady points** (§12.2 stages 2 and 3), measured on those files.
+        - 50c-iii. [ ] **The body measures**, each taken flat or in 3D by which is steadier on real videos (§12.2 stage 4).
 51. [ ] **The phone test** (after 50c; it needs Kd's phone): which pose model and library, the speed, heat and battery, 3D points and several people at speed, the same numbers as the laptop, and the phone testing itself on the videos (§12.5). Second on purpose: what it finds can change the design before the matcher is built.
 52. **The movement engine** (§12; it replaces "the engine's missing parts").
     - 52a. [ ] **The movement matcher and the proof table** (§12.3, §12.5): a movement as data, numbers set from all the people but one and tested on the one left out, every other movement's video counting 0, each video replayed the ways the world changes it; the squat movement made fresh as the first proof. It needs 3 to 5 squat videos of different people from Kd.
