@@ -219,7 +219,7 @@ export function encodeBodyPoints(header: BodyPointsHeader, frames: readonly Move
   frames.forEach((frame, f) => {
     const t = toSteps(frame.t, "time", scale);
     if (t <= lastT) {
-      throw new BodyPointsError(`frame ${String(f + 1)} is not later than the one before it, to a tenth of a millisecond`);
+      throw new BodyPointsError(`frame ${String(f + 1)} is not later than the one before it, to the file's time step`);
     }
     w.whole(last === null ? t : t - lastT);
     lastT = t;

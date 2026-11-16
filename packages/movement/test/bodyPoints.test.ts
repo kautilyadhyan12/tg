@@ -65,7 +65,6 @@ function varint(n: number): number[] {
   out.push(rest);
   return out;
 }
-/** Splits a file into what comes before its header, the header, and what follows. */
 /** Splits a file into what comes before its header (the name, the format and the five
  *  roundings), the header, and what follows. */
 function parts(file: Uint8Array): { head: number[]; header: string; rest: number[] } {
