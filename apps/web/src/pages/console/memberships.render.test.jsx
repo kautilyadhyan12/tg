@@ -338,14 +338,12 @@ describe('staff who may', () => {
     ['the owner', 'owner', [...ROLE_PRIVILEGES.owner]],
     ['a manager on the usual ticks', 'manager', [...ROLE_PRIVILEGES.manager]],
     ['a trainer the owner gave the tick', 'trainer', [...ROLE_PRIVILEGES.trainer, 'memberships.manage']],
-  ])('%s: Memberships is in the menu straight after Members, and the page opens with the price list already open', async (_who, staffRole, privileges) => {
+  ])('%s: Memberships is in the menu under Money, and the page opens with the price list already open', async (_who, staffRole, privileges) => {
     draw([gym({ staffRole, privileges })]);
     expect(await screen.findByRole('heading', { level: 1, name: 'Memberships' })).toBeTruthy();
-    const rail = railLinks();
-    // The line above it is the Members page's: "Members & staff" for the owner (23c-ii).
-    const members = rail.findIndex((label) => label === 'Members' || label === 'Members & staff');
-    expect(members).toBeGreaterThanOrEqual(0);
-    expect(rail.indexOf('Memberships')).toBe(members + 1);
+    // The menu's five groups (spec Part 3 §17.10 rule 7): what the gym sells is Money.
+    const money = within(screen.getByTestId('console-rail')).getByRole('group', { name: 'Money' });
+    expect(within(money).getByRole('link', { name: 'Memberships' }).getAttribute('href')).toBe('/console/iron-house/memberships');
     // Nothing to press first: the list, its price and the main button are there.
     expect(await screen.findByText('Gold Monthly')).toBeTruthy();
     expect(screen.getByText('$49.99 every month')).toBeTruthy();

@@ -30,67 +30,69 @@ export function membersPageName(privileges, orgType) {
   return canManageStaff(privileges) ? `${people} & staff` : people;
 }
 
-/** THE CONSOLE'S PAGES THIS PERSON MAY OPEN, in the menu's order (spec Part 3 §17.5).
+/** THE MENU'S FIVE GROUPS (spec Part 3 §17.10 rule 7), in their order. Overview sits above
+ *  them; a group is drawn only when it holds a page this person may open. */
+export const MENU_GROUPS = [
+  { key: 'today', label: 'Today' },
+  { key: 'people', label: 'People' },
+  { key: 'money', label: 'Money' },
+  { key: 'community', label: 'Community' },
+  { key: 'manage', label: 'Manage' },
+];
+
+/** The phone's bottom bar, in its own order whatever the menu's groups are. */
+const TAB_ORDER = ['overview', 'members', 'attendance', 'classes'];
+
+/** THE CONSOLE'S PAGES THIS PERSON MAY OPEN, in the menu's order (spec Part 3 §17.5, §17.10).
  *
- *  On a computer every page is in the menu on the left. On a phone the pages a gym works in
- *  every day are tabs and the rest sit under More, each page in exactly one of the two.
- *  Drawing a page is not the permission: every route refuses on its own. */
+ *  On a computer every page is in the menu on the left, under its group. On a phone the pages
+ *  a gym works in every day are tabs and the rest sit under More, each page in exactly one of
+ *  the two. Drawing a page is not the permission: every route refuses on its own. */
 export function consoleMenu(orgSlug, privileges, orgType) {
   const has = (p) => Array.isArray(privileges) && privileges.includes(p);
   const base = `/console/${orgSlug}`;
   const pages = [
-    { key: 'overview', to: base, end: true, label: 'Overview', phone: 'tab' },
-    // `tabLabel`: the phone's bottom bar has room for one word.
-    { key: 'members', to: `${base}/members`, end: false, label: membersPageName(privileges, orgType), tabLabel: orgWords(orgType).peopleCap, phone: 'tab' },
-    // What the gym sells (23c-i): its own line, straight after the people who hold it.
-    canManageMemberships(privileges) && { key: 'memberships', to: `${base}/memberships`, end: false, label: 'Memberships', phone: 'more' },
-    // The desk's register (18b-i): used every day, so a line of its own, beside what it sells.
-    canOpenSell(privileges) && { key: 'sell', to: `${base}/sell`, end: false, label: 'Sell', phone: 'more' },
-    // Card payments declined and still owed (18d-iii-ii-b): looked at every week, beside Sell.
-    canSeeFailedPayments(privileges) && { key: 'failed-payments', to: `${base}/failed-payments`, end: false, label: 'Failed payments', phone: 'more' },
-    has('members.confirm') && { key: 'leads', to: `${base}/leads`, end: false, label: 'Leads', phone: 'more' },
-    canReadAttendance(privileges) && {
-      key: 'attendance',
-      to: `${base}/attendance`,
-      end: false,
-      label: 'Attendance',
-      phone: 'tab',
-    },
-    // Who has stopped coming (20d-i): looked at every week, so a line of its own, under
-    // the check-ins it is worked out from.
-    canSeeAtRisk(privileges) && { key: 'at-risk', to: `${base}/at-risk`, end: false, label: 'At risk', phone: 'more' },
-    canManageSchedule(privileges) && { key: 'classes', to: `${base}/classes`, end: false, label: 'Classes', phone: 'tab' },
+    { key: 'overview', to: base, end: true, label: 'Overview', phone: 'tab', group: null },
+    // Today: what happens at the desk and on the timetable.
+    canReadAttendance(privileges) && { key: 'attendance', to: `${base}/attendance`, end: false, label: 'Attendance', phone: 'tab', group: 'today' },
+    canManageSchedule(privileges) && { key: 'classes', to: `${base}/classes`, end: false, label: 'Classes', phone: 'tab', group: 'today' },
     // Every member of staff: their own hours and sessions, or everybody's for whoever
     // runs the timetable.
-    Array.isArray(privileges) && { key: 'training', to: `${base}/personal-training`, end: false, label: 'Personal training', phone: 'more' },
-    canManagePosts(privileges) && { key: 'updates', to: `${base}/updates`, end: false, label: 'Updates', phone: 'more' },
-    canManagePosts(privileges) && { key: 'events', to: `${base}/events`, end: false, label: 'Events', phone: 'more' },
-    // The meal plans the gym gives its members (24a-i): written and changed every week.
-    canManagePlans(privileges) && { key: 'plans', to: `${base}/plans`, end: false, label: 'Fitness plans', phone: 'more' },
-    canSeeLeaderboard(privileges) && {
-      key: 'leaderboard',
-      to: `${base}/leaderboard`,
-      end: false,
-      label: 'Leaderboard',
-      phone: 'more',
-    },
-    canManageChallenges(privileges) && { key: 'challenges', to: `${base}/challenges`, end: false, label: 'Challenges', phone: 'more' },
-    // The gym's figures (21a-i): read every week, so a line of their own.
-    canReadReports(privileges) && { key: 'reports', to: `${base}/reports`, end: false, label: 'Reports', phone: 'more' },
-    settingsIsReachable(privileges) && {
-      key: 'settings',
-      to: `${base}/settings`,
-      end: false,
-      label: 'Settings',
-      phone: 'more',
-    },
+    Array.isArray(privileges) && { key: 'training', to: `${base}/personal-training`, end: false, label: 'Personal training', phone: 'more', group: 'today' },
+    // People. `tabLabel`: the phone's bottom bar has room for one word.
+    { key: 'members', to: `${base}/members`, end: false, label: membersPageName(privileges, orgType), tabLabel: orgWords(orgType).peopleCap, phone: 'tab', group: 'people' },
+    has('members.confirm') && { key: 'leads', to: `${base}/leads`, end: false, label: 'Leads', phone: 'more', group: 'people' },
+    // Who has stopped coming (20d-i).
+    canSeeAtRisk(privileges) && { key: 'at-risk', to: `${base}/at-risk`, end: false, label: 'At risk', phone: 'more', group: 'people' },
+    // Money: the desk's register (18b-i), what the gym sells (23c-i), and card payments
+    // declined and still owed (18d-iii-ii-b).
+    canOpenSell(privileges) && { key: 'sell', to: `${base}/sell`, end: false, label: 'Sell', phone: 'more', group: 'money' },
+    canManageMemberships(privileges) && { key: 'memberships', to: `${base}/memberships`, end: false, label: 'Memberships', phone: 'more', group: 'money' },
+    canSeeFailedPayments(privileges) && { key: 'failed-payments', to: `${base}/failed-payments`, end: false, label: 'Failed payments', phone: 'more', group: 'money' },
+    // Community: what members see in the app.
+    canManagePosts(privileges) && { key: 'updates', to: `${base}/updates`, end: false, label: 'Updates', phone: 'more', group: 'community' },
+    canManagePosts(privileges) && { key: 'events', to: `${base}/events`, end: false, label: 'Events', phone: 'more', group: 'community' },
+    // The meal plans the gym gives its members (24a-i).
+    canManagePlans(privileges) && { key: 'plans', to: `${base}/plans`, end: false, label: 'Fitness plans', phone: 'more', group: 'community' },
+    canManageChallenges(privileges) && { key: 'challenges', to: `${base}/challenges`, end: false, label: 'Challenges', phone: 'more', group: 'community' },
+    canSeeLeaderboard(privileges) && { key: 'leaderboard', to: `${base}/leaderboard`, end: false, label: 'Leaderboard', phone: 'more', group: 'community' },
+    // Manage: the gym's figures (21a-i), and what is set once.
+    canReadReports(privileges) && { key: 'reports', to: `${base}/reports`, end: false, label: 'Reports', phone: 'more', group: 'manage' },
+    settingsIsReachable(privileges) && { key: 'settings', to: `${base}/settings`, end: false, label: 'Settings', phone: 'more', group: 'manage' },
   ].filter(Boolean);
+  const tabs = TAB_ORDER.map((key) => pages.find((p) => p.key === key)).filter((p) => p !== undefined);
   return {
     pages,
-    tabs: pages.filter((p) => p.phone === 'tab'),
+    tabs,
     more: pages.filter((p) => p.phone === 'more'),
     moreTo: `${base}/more`,
   };
+}
+
+/** The pages of a list under the five groups, in order; a group with none of them is left
+ *  out. Overview, which has no group, is in none. */
+export function menuGroups(pages) {
+  return MENU_GROUPS.map((g) => ({ ...g, pages: pages.filter((p) => p.group === g.key) })).filter((g) => g.pages.length > 0);
 }
 
 /** Whether the phone's More tab is the current one: on More itself, or on a page that is

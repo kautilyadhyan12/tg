@@ -55,6 +55,7 @@
   --rail-seg: #2C2824;
   --rail-gym: #2E1D0E;
   --rail-warn: #F2C35B;
+  --rail-hover: #1A1815;
 }
 
 .t-dark {
@@ -165,10 +166,34 @@
   color: var(--rail-t2);
 }
 
+/* The pages, in five groups (spec Part 3 §17.10 rule 7). The list scrolls on its own, so the
+   foot under it (Your organisations, Your account, you and Sign out) stays on screen. */
 .c-rail-nav {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--rail-card-line) transparent;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
+  margin: 0 -6px;
+  padding: 0 6px;
+}
+.c-rail-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.c-rail-grp {
+  margin: 0;
+  padding: 14px 12px 6px;
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--rail-t3);
 }
 
 .c-rail-fill {
@@ -176,19 +201,61 @@
 }
 
 .c-rail-foot {
+  flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding-top: 16px;
+  gap: 2px;
+  padding-top: 12px;
   border-top: 1px solid var(--rail-line);
 }
 
+/* You: your initials, your name and role, and Sign out beside them. */
+.c-rail-me {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0 0 12px;
+  min-width: 0;
+}
+.c-rail-av {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--rail-seg);
+  color: var(--rail-t1);
+  font-size: 12px;
+  font-weight: 700;
+}
 .c-rail-you {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: 0 12px;
+  flex-grow: 1;
   min-width: 0;
+}
+.c-rail-out {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--rail-t3);
+}
+.c-rail-out:hover {
+  background: var(--rail-hover);
+  color: var(--rail-t1);
+}
+.c-rail-out:disabled {
+  opacity: 0.5;
 }
 
 .c-nav {
@@ -196,6 +263,8 @@
   align-items: center;
   gap: 12px;
   width: 100%;
+  min-width: 0;
+  flex-shrink: 0;
   height: 44px;
   padding: 0 12px;
   box-sizing: border-box;
@@ -203,11 +272,15 @@
   border-radius: 10px;
   background: transparent;
   color: var(--rail-t2);
-  font-size: 15px;
+  font-size: 14.5px;
   font-weight: 500;
   text-align: left;
 }
+.c-nav svg {
+  flex-shrink: 0;
+}
 .c-nav:hover {
+  background: var(--rail-hover);
   color: var(--rail-t1);
 }
 .c-nav:disabled {
@@ -274,6 +347,15 @@
   min-width: 0;
   color: var(--rail-t1);
 }
+/* Your initials on the right of the phone's top bar: they open More. */
+.c-topbar-me {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  flex-shrink: 0;
+}
 .c-topbar-gym .c-gymicon {
   width: 32px;
   height: 32px;
@@ -321,9 +403,9 @@
     box-sizing: border-box;
     display: flex;
     flex-direction: column;
-    gap: 24px;
-    padding: 20px 16px;
-    overflow-y: auto;
+    gap: 12px;
+    padding: 16px 12px 12px;
+    overflow: hidden;
     background: var(--rail-bg);
     border-right: 1px solid var(--rail-line);
     color: var(--rail-t1);
@@ -336,6 +418,81 @@
   .c-tabbar {
     display: none;
   }
+}
+
+/* A window too short for the list and the foot together (a phone turned sideways, a laptop
+   zoomed in): the whole menu scrolls as one, the foot at its end. */
+@media (min-width: 768px) and (max-height: 460px) {
+  .c-rail {
+    overflow-y: auto;
+  }
+  .c-rail-nav {
+    flex: none;
+    overflow: visible;
+  }
+}
+
+/* The narrowest screens (a folding phone's cover screen, 280 px): five tab names still fit,
+   in Archivo's narrower letters. */
+@media (max-width: 339px) {
+  .c-tab {
+    font-size: 11px;
+    font-stretch: 85%;
+    letter-spacing: -0.01em;
+  }
+}
+
+/* A touch screen (a tablet, an opened folding phone): Sign out 44 px, as every menu line is. */
+@media (pointer: coarse) {
+  .c-rail-out {
+    width: 44px;
+    height: 44px;
+  }
+}
+
+/* More, on a phone: you, then the menu's groups, each a box of rows, then Sign out. */
+.c-more-me {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px;
+  min-width: 0;
+}
+.c-more-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.c-more-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.c-more-grp {
+  margin: 0;
+  padding-left: 4px;
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--t3);
+}
+.c-more-list {
+  padding: 0 16px;
+  overflow: hidden;
+}
+.c-more-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 52px;
+  padding: 14px 0;
+  box-sizing: border-box;
+  color: var(--t1);
+}
+.c-more-row + .c-more-row {
+  border-top: 1px solid var(--line);
 }
 
 /* ── A page: 16 px at the sides on a phone, 48 on a computer; 20 and 24 between boxes ── */
