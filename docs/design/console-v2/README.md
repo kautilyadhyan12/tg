@@ -174,12 +174,37 @@ Notes for V4a, V4b and V5: today's Memberships and Sell are one long page each; 
 Tax and Discounts as drawn in `SellTax` and `MembershipsBills`. Failed payments is a new menu line under Money: V4a builds
 its page. Stock left shows on each product ("24 left"), as `Sell` already draws it.
 
-### Still to draw in V0-c: Settings and the new pages (for V1, V3a, V9a, V11 and new V lines)
+### Drawn in V0-c: Settings and the new pages
 
-- **Settings**: Payments (connected to Square, its location, Square Terminals and Pair a Terminal, Ask members to add
-  their card, Disconnect Square), Membership agreement (the default one, other agreements, bookings until signed),
-  Deleted forms, and Booking rules with overdue bookings.
-- **Your account**, **Fitness plans** (the list, a new meal plan, a meal, giving it to members, and Give a meal plan on a
-  member's page), **comments and reactions** on Updates.
-- **Members**: Ask to add card for the people ticked, No card on file in Filter, and Review, Duplicates and Sent messages.
-- **The menu** (`Main`, `PhoneMore`): Failed payments, Fitness plans and Your account.
+From V0-a's pictures of the whole pages and V0-c's of each box they open (`apps/api/.cost/v0-c/shots.mts`, untracked;
+nothing saved, sent or paired). Where the test gym has nothing to show (comments, reactions, sent messages, duplicates,
+people to review, kept forms, pairing a Terminal), the words are the code's own. The menu on each V0-c board also has
+Your account at its foot, above Sign out, as the real menu has.
+
+| Board | Page on the canvas | What it shows | Built in |
+|---|---|---|---|
+| `SettingsPayments` | 10 Settings | Payments: connected to Square, the business and location, Square Terminals and Pair a Terminal, the paying-twice line, Ask members to add their card, Disconnect Square | V11 |
+| `SettingsPaymentsBoxes` | 10 Settings | Remove this Terminal?, pairing a Terminal with its code and each way it ends, Disconnect Square? | V11 |
+| `SettingsAgreement` | 10 Settings | Membership agreements: the default one, Other agreements, Add agreement, Before they book with who has not signed | V11 |
+| `SettingsAgreementAdd` | 10 Settings | Add agreement (name, terms, used for), and Stop new bookings until they sign chosen | V11 |
+| `SettingsDeletedForms` | 10 Settings | Signed forms of deleted members: search, the forms kept, one opened | V11 |
+| `SettingsBookingOverdue` | 10 Settings | Booking rules' third box, Overdue payments: stop new bookings until they pay, the grace period, who it stops | V11 |
+| `Account` | 10 Settings | Your account: Delete account, and each step after (an owner first chooses a new owner; anyone else gets a code) | V11 |
+| `Plans` | 8 Community | Fitness plans: the meal plans and who gets each, New meal plan opened | V9a |
+| `PlanOpen` | 8 Community | A meal plan opened: Who gets it, the allergy line, the days, each meal, Add a meal | V9a |
+| `PlanMeal` | 8 Community | A meal opened with Change: amounts, Search food with allergens, Your own food; Add a meal to Monday | V9a |
+| `PlanGive` | 8 Community | Give to members: everybody, a membership, a tag or members chosen, who will get it | V9a |
+| `UpdatesComments` | 8 Community | Members can comment, reactions and who reacted, a post's comments with replies, Reply and the comment box | V9a |
+| `UpdatesCommentsReported` | 8 Community | Reported comments: Keep, Remove, Stop; a hidden comment; Remove and Stop ask first | V9a |
+| `PersonMealPlan` | 2 A member's page | The Meal plan box: Give a meal plan, the plan they get and how | V2b |
+| `MembersCardAsk` | 12 Members & staff | No card on file, people ticked, the bar with Ask to add card and Meal plan, the Ask to add card box | V3a |
+| `MembersFilterCard` | 12 Members & staff | Filter with Show, Agreement and Card | V3a |
+| `MembersReview` | 12 Members & staff | Members who need review | V3a |
+| `MembersDuplicates` | 12 Members & staff | Possible duplicates | V3a |
+| `MembersSent` | 12 Members & staff | Sent messages by day, and Sent to with the names | V3a |
+| `PhoneMoreNow` | 11 On a phone | More on a phone with Failed payments, Fitness plans and Your account | V1 |
+
+Notes: every V0 board now has its V job, so no new V line is needed: Fitness plans is a Community page and goes with V9a;
+the menu's three new lines (Failed payments, Fitness plans, Your account) go with V1's menu, as `PhoneMoreNow` and the V0
+boards' menus draw them. Today's Settings is one long page of folding sections; the boards keep the approved side list
+(`Settings`), with Payments under Your gym and the two agreement sections under Members.

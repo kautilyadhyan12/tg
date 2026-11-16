@@ -1117,6 +1117,166 @@
       "h": 900,
       "page": "settings",
       "title": "After Connect Square — connecting, and when nothing was connected"
+    },
+    "SettingsPayments.dc.html": {
+      "x": 0,
+      "y": 7305,
+      "w": 1440,
+      "h": 1360,
+      "page": "settings",
+      "title": "Settings — Payments: connected to Square, its Terminals, asking for cards"
+    },
+    "SettingsPaymentsBoxes.dc.html": {
+      "x": 1520,
+      "y": 7305,
+      "w": 1440,
+      "h": 1660,
+      "page": "settings",
+      "title": "Settings — Payments: pairing a Terminal, removing one, disconnecting Square"
+    },
+    "SettingsAgreement.dc.html": {
+      "x": 3040,
+      "y": 7305,
+      "w": 1440,
+      "h": 1500,
+      "page": "settings",
+      "title": "Settings — Membership agreements: the default one, another one, bookings until signed"
+    },
+    "SettingsAgreementAdd.dc.html": {
+      "x": 0,
+      "y": 9235,
+      "w": 1440,
+      "h": 1500,
+      "page": "settings",
+      "title": "Settings — Add agreement, and Stop new bookings until they sign"
+    },
+    "SettingsDeletedForms.dc.html": {
+      "x": 1520,
+      "y": 9235,
+      "w": 1440,
+      "h": 1300,
+      "page": "settings",
+      "title": "Settings — Signed forms of deleted members"
+    },
+    "SettingsBookingOverdue.dc.html": {
+      "x": 3040,
+      "y": 9235,
+      "w": 1440,
+      "h": 1250,
+      "page": "settings",
+      "title": "Settings — Booking rules: overdue payments"
+    },
+    "Account.dc.html": {
+      "x": 0,
+      "y": 11005,
+      "w": 1440,
+      "h": 1300,
+      "page": "settings",
+      "title": "Your account — Delete account, each step"
+    },
+    "Plans.dc.html": {
+      "x": 0,
+      "y": 7834,
+      "w": 1440,
+      "h": 1000,
+      "page": "community",
+      "title": "Fitness plans — the meal plans, and New meal plan"
+    },
+    "PlanOpen.dc.html": {
+      "x": 1520,
+      "y": 7834,
+      "w": 1440,
+      "h": 1480,
+      "page": "community",
+      "title": "A meal plan opened — who gets it, the days, the meals"
+    },
+    "PlanMeal.dc.html": {
+      "x": 3040,
+      "y": 7834,
+      "w": 1440,
+      "h": 1860,
+      "page": "community",
+      "title": "A meal plan — a meal opened, Search food, your own food, Add a meal"
+    },
+    "PlanGive.dc.html": {
+      "x": 0,
+      "y": 9964,
+      "w": 1440,
+      "h": 1300,
+      "page": "community",
+      "title": "A meal plan — Give to members"
+    },
+    "UpdatesComments.dc.html": {
+      "x": 1520,
+      "y": 9964,
+      "w": 1440,
+      "h": 2200,
+      "page": "community",
+      "title": "Updates — reactions, who reacted, comments opened"
+    },
+    "UpdatesCommentsReported.dc.html": {
+      "x": 3040,
+      "y": 9964,
+      "w": 1440,
+      "h": 1700,
+      "page": "community",
+      "title": "Updates — reported comments, a hidden comment, Remove and Stop ask first"
+    },
+    "PersonMealPlan.dc.html": {
+      "x": 0,
+      "y": 22536,
+      "w": 1440,
+      "h": 1000,
+      "page": "person",
+      "title": "A member’s page — Give a meal plan, and the plan they get"
+    },
+    "MembersCardAsk.dc.html": {
+      "x": 0,
+      "y": 5240,
+      "w": 1440,
+      "h": 1300,
+      "page": "members",
+      "title": "Members — No card on file, people ticked, Ask to add card"
+    },
+    "MembersFilterCard.dc.html": {
+      "x": 1520,
+      "y": 5240,
+      "w": 1440,
+      "h": 1250,
+      "page": "members",
+      "title": "Members — Filter with Agreement and Card"
+    },
+    "MembersReview.dc.html": {
+      "x": 3040,
+      "y": 5240,
+      "w": 1440,
+      "h": 950,
+      "page": "members",
+      "title": "Members who need review"
+    },
+    "MembersDuplicates.dc.html": {
+      "x": 0,
+      "y": 6810,
+      "w": 1440,
+      "h": 950,
+      "page": "members",
+      "title": "Possible duplicates"
+    },
+    "MembersSent.dc.html": {
+      "x": 1520,
+      "y": 6810,
+      "w": 1440,
+      "h": 1300,
+      "page": "members",
+      "title": "Sent messages, and who it was sent to"
+    },
+    "PhoneMoreNow.dc.html": {
+      "x": 0,
+      "y": 2044,
+      "w": 390,
+      "h": 1420,
+      "page": "phone",
+      "title": "On a phone — More, with Failed payments, Fitness plans and Your account"
     }
   },
   "order": [
