@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>After Connect Square — connecting, and when nothing was connected</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./kit.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&amp;display=swap">
+<style>
+body{margin:0;background:#0C0B0A}
+</style>
+</helmet>
+<div class="app t-dark {{look}}" style="min-height: 100%">
+<div style="background: var(--page); min-height: 900px">
+<div class="row between" style="padding: 14px 24px; border-bottom: 1px solid var(--line)"><span class="body w6">Gym console</span><div class="row-m"><span class="small">Dana Brooks</span><span class="btn btn-q btn-sm">Sign out</span></div></div>
+<div style="padding: 56px 24px">
+<div style="max-width: 720px; margin: 0 auto" class="stack" >
+<span class="lbl">While the app finishes with Square (a few seconds, then Settings · Payments opens by itself)</span>
+<div class="card row-m" style="padding: 22px 24px"><span style="width: 18px; height: 18px; border-radius: 99px; border: 2px solid var(--line); border-top-color: var(--accent)"></span><span class="body">Connecting Square…</span></div>
+<span class="lbl" style="margin-top: 16px">Opened without coming back from Square</span>
+<div class="card stack-s" style="padding: 22px 24px"><p class="body">This page opens when you come back from Square. Nothing was connected.</p><a class="s14 w6" style="color: var(--link)">Back to Payments</a></div>
+<span class="lbl" style="margin-top: 16px">When finishing fails</span>
+<div class="card stack-s" style="padding: 22px 24px"><p class="body">We couldn't finish connecting Square. Press Connect Square again.</p><a class="s14 w6" style="color: var(--link)">Back to Payments</a></div>
+<p class="small" style="padding: 10px 14px; border: 1px dashed var(--line); border-radius: 12px">No menu: only the top bar, between Square and the console. Where it cannot tell which gym pressed Connect Square, the link reads Open your console.</p>
+</div>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"look":{"editor":"enum","options":["Dark","Light"],"default":"Dark"},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+renderVals() {
+return { look: (this.props.look ?? 'Dark') === 'Light' ? 't-light' : '' };
+}
+}
+</script>
+</body>
+</html>

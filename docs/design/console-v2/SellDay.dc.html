@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Sell — another day's sales, with refunds and chargebacks</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./kit.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&amp;display=swap">
+<style>
+body{margin:0;background:#0C0B0A}
+</style>
+</helmet>
+<div class="app t-dark {{look}}" style="min-height: 100%">
+<div class="shell">
+<div class="rail">
+<div class="rail-gym"><div class="rail-logo"><svg class="ic" viewBox="0 0 24 24"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18zM6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2M10 6h4M10 10h4M10 14h4M10 18h4"/></svg></div><div class="grow"><div class="rail-name ell">Iron House</div><div class="rail-meta">Austin · Gym</div></div><svg class="ic ic-s" viewBox="0 0 24 24" style="color: var(--rail-t3)"><path d="M7 15l5 5 5-5M7 9l5-5 5 5"/></svg></div>
+<a class="ni"><svg class="ic" viewBox="0 0 24 24"><path d="M4 3h5a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM15 3h5a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM15 12h5a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1zM4 16h5a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1z"/></svg>Overview</a>
+<div class="rail-grp">Today</div>
+<a class="ni"><svg class="ic" viewBox="0 0 24 24"><path d="M9 2h6a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1zM16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2M9 14l2 2 4-4"/></svg>Attendance</a>
+<a class="ni"><svg class="ic" viewBox="0 0 24 24"><path d="M21 7.5V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3.5M16 2v4M8 2v4M3 10h5M10 16a6 6 0 1 0 12 0a6 6 0 1 0-12 0M16 14v2.2l1.5 1.3"/></svg>Classes</a>
+<a class="ni"><svg class="ic" viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M21 21l-1-1M3 3l1 1M18 22l4-4M2 6l4-4M3 10l7-7M14 21l7-7"/></svg>Personal training</a>
+<div class="rail-grp">People</div>
+<a class="ni"><svg class="ic" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M5 7a4 4 0 1 0 8 0a4 4 0 1 0-8 0M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>Members &amp; staff</a>
+<a class="ni"><svg class="ic" viewBox="0 0 24 24"><path d="M6 7a4 4 0 1 0 8 0a4 4 0 1 0-8 0M10.3 15H7a4 4 0 0 0-4 4v2M14 17a3 3 0 1 0 6 0a3 3 0 1 0-6 0M21 21l-1.9-1.9"/></svg>Leads</a>
+<a class="ni"><svg class="ic" viewBox="0 0 24 24"><path d="M22 17l-8.5-8.5-5 5L2 7M16 17h6v-6"/></svg>At risk</a>
+<div class="rail-grp">Money</div>
+<a class="ni ni-on"><svg class="ic" viewBox="0 0 24 24"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4zM3 6h18M16 10a4 4 0 0 1-8 0"/></svg>Sell</a>
+<a class="ni"><svg class="ic" viewBox="0 0 24 24"><path d="M12.6 2.6A2 2 0 0 0 11.2 2H4a2 2 0 0 0-2 2v7.2a2 2 0 0 0 .6 1.4l8.7 8.7a2.4 2.4 0 0 0 3.4 0l6.6-6.6a2.4 2.4 0 0 0 0-3.4zM7 7.5h.01"/></svg>Memberships</a>
+<a class="ni"><svg class="ic" viewBox="0 0 24 24"><path d="M4 5h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2zM2 10h20M6 15h4"/></svg>Failed payments</a>
+<div class="rail-grp">Community</div>
+<a class="ni"><svg class="ic" viewBox="0 0 24 24"><path d="M3 11l18-5v12L3 14v-3zM11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg>Updates</a>
+<a class="ni"><svg class="ic" viewBox="0 0 24 24"><path d="M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM16 2v4M8 2v4M3 10h18M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/></svg>Events</a>
+<a class="ni"><svg class="ic" viewBox="0 0 24 24"><path d="M9 2h6a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1zM16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2M9 12h6M9 16h4"/></svg>Fitness plans</a>
+<a class="ni"><svg class="ic" viewBox="0 0 24 24"><path d="M7.2 15L2.7 7.1a2 2 0 0 1 .1-2.2l1.6-2.1A2 2 0 0 1 6 2h12a2 2 0 0 1 1.6.8l1.6 2.1a2 2 0 0 1 .1 2.2L16.8 15M11 12L5.1 2.2M13 12l5.9-9.8M8 7h8M7 17a5 5 0 1 0 10 0a5 5 0 1 0-10 0"/></svg>Challenges</a>
+<a class="ni"><svg class="ic" viewBox="0 0 24 24"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6M18 9h1.5a2.5 2.5 0 0 0 0-5H18M4 22h16M10 14.7V17c0 .6-.5 1-1 1.2C7.9 18.8 7 20.2 7 22M14 14.7V17c0 .6.5 1 1 1.2 1.1.6 2 2 2 3.8M18 2H6v7a6 6 0 0 0 12 0V2z"/></svg>Leaderboard</a>
+<div class="rail-grp">Manage</div>
+<a class="ni"><svg class="ic" viewBox="0 0 24 24"><path d="M3 3v18h18M18 17V9M13 17V5M8 17v-3"/></svg>Reports</a>
+<a class="ni"><svg class="ic" viewBox="0 0 24 24"><path d="M12.2 2h-.4a2 2 0 0 0-2 2v.2a2 2 0 0 1-1 1.7l-.4.3a2 2 0 0 1-2 0l-.2-.1a2 2 0 0 0-2.7.7l-.2.4a2 2 0 0 0 .7 2.7l.2.1a2 2 0 0 1 1 1.7v.5a2 2 0 0 1-1 1.8l-.2.1a2 2 0 0 0-.7 2.7l.2.4a2 2 0 0 0 2.7.7l.2-.1a2 2 0 0 1 2 0l.4.3a2 2 0 0 1 1 1.7v.2a2 2 0 0 0 2 2h.4a2 2 0 0 0 2-2v-.2a2 2 0 0 1 1-1.7l.4-.3a2 2 0 0 1 2 0l.2.1a2 2 0 0 0 2.7-.7l.2-.4a2 2 0 0 0-.7-2.7l-.2-.1a2 2 0 0 1-1-1.8v-.5a2 2 0 0 1 1-1.7l.2-.1a2 2 0 0 0 .7-2.7l-.2-.4a2 2 0 0 0-2.7-.7l-.2.1a2 2 0 0 1-2 0l-.4-.3a2 2 0 0 1-1-1.7V4a2 2 0 0 0-2-2zM9 12a3 3 0 1 0 6 0a3 3 0 1 0-6 0"/></svg>Settings</a>
+<div class="rail-foot">
+<a class="ni"><svg class="ic" viewBox="0 0 24 24"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18zM6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2M10 6h4M10 10h4M10 14h4M10 18h4"/></svg>Your organisations</a>
+<div class="seg-rail"><span>Light</span><span class="on">Dark</span><span>Auto</span></div>
+<div class="rail-me"><span class="rail-av">DB</span><div class="grow"><div class="rail-name s14 ell">Dana Brooks</div><div class="rail-meta">Owner</div></div><span class="icon-btn icon-btn-sm icon-btn-q" style="color: var(--rail-t3)" aria-label="Sign out"><svg class="ic ic-s" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg></span></div>
+</div>
+</div>
+
+<div class="main">
+<div class="page">
+<div class="ph"><div class="ph-t"><h1 class="h1">Sell</h1><p class="sub">Record what Iron House sells at the desk.</p></div></div>
+<div class="tabs"><span class="tab tab-on">Register</span><span class="tab">Products <span class="n">6</span></span><span class="tab">Tax</span><span class="tab">Discounts</span></div>
+<div class="cols" style="grid-template-columns: minmax(0,1fr) 380px">
+<div class="stack"><div class="card-0">
+<div class="card-hp"><div class="stack-2"><h2 class="h2">Mon 2 Nov 2026</h2><span class="small">Taken on 2 Nov 2026: $773.18 from 6 sales and 10 membership payments. Cash $200.00 · Card on Terminal $573.18.</span><span class="small warn">Refunds noted that day: $279.09. They are not taken off the total above.</span></div><span class="btn btn-q btn-sm">Back to today</span></div>
+<div class="card-bp" style="padding-top: 0; padding-bottom: 16px"><div class="seg"><span class="on">All · $773.18</span><span>Products · $528.18</span><span>Memberships · $245.00</span><span>Fees · $0.00</span></div></div>
+<div style="border-top: 1px solid var(--line); padding: 14px 24px">
+<div class="row between top" style="gap: 16px">
+<div class="stack-2" style="min-width: 0"><div class="row-s wrap"><span class="body w6">Gold Weekly (membership)</span></div><span class="small">Sam Rivera · Card on Terminal · 13:11 · by Dana Brooks</span></div>
+<div class="row-m" style="flex-shrink: 0"><span class="body w6 num">$25.00</span><div class="row-s"><span class="btn btn-s btn-sm">Open their page</span><span class="btn btn-q btn-sm">View receipt</span></div></div>
+</div>
+</div>
+<div style="border-top: 1px solid var(--line); padding: 14px 24px">
+<div class="row between top" style="gap: 16px">
+<div class="stack-2" style="min-width: 0"><div class="row-s wrap"><span class="body w6">Off-peak Monthly (membership)</span></div><span class="small">Ava Chen · Cash · 12:14 · by Dana Brooks</span></div>
+<div class="row-m" style="flex-shrink: 0"><span class="body w6 num">$20.00</span><div class="row-s"><span class="btn btn-s btn-sm">Open their page</span><span class="btn btn-q btn-sm">View receipt</span></div></div>
+</div>
+</div>
+<div style="border-top: 1px solid var(--line); padding: 14px 24px">
+<div class="row between top" style="gap: 16px">
+<div class="stack-2" style="min-width: 0"><div class="row-s wrap"><span class="body w6">1 × Water bottle, 1 × Gloves</span><span class="tag tag-warn">Part refunded</span></div><span class="small">Walk-in · Card on Terminal · 01:28 · by Dana Brooks</span></div>
+<div class="row-m" style="flex-shrink: 0"><span class="body w6 num">$88.03</span><div class="row-s"><span class="btn btn-s btn-sm">Refund</span><span class="btn btn-q btn-sm">Receipt</span></div></div>
+</div><div style="margin-top: 12px; padding: 12px 14px; border-radius: 12px; border: 1px solid rgba(242,195,91,.35); background: var(--warn-bg)">
+<div class="row between top" style="gap: 12px"><div class="stack-2"><span class="body w6">Chargeback · $5.00 · Visa ending 5858</span><span class="small">The cardholder says they were charged twice. Square may hold this money until the bank decides. Respond in Square by 20 November 2026.</span></div><span class="btn btn-s btn-sm">Respond in Square<svg class="ic ic-s" viewBox="0 0 24 24"><path d="M15 3h6v6M10 14L21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg></span></div>
+</div><div class="row-m" style="margin-top: 10px; padding: 10px 14px; border-radius: 12px; background: var(--raise)"><svg class="ic ic-s t3" viewBox="0 0 24 24"><path d="M3 7v6h6M21 17a9 9 0 0 0-15-6.7L3 13"/></svg><div class="stack-2"><span class="body w5 num">$5.00 refunded</span><span class="small">Gloves · Card on Terminal · 2 Nov 2026</span></div></div>
+</div>
+<div style="border-top: 1px solid var(--line); padding: 14px 24px">
+<div class="row between top" style="gap: 16px">
+<div class="stack-2" style="min-width: 0"><div class="row-s wrap"><span class="body w6">1 × Gym towel</span><span class="tag tag-bad">Chargeback lost</span></div><span class="small">Walk-in · Card on Terminal · 00:42 · by Dana Brooks</span></div>
+<div class="row-m" style="flex-shrink: 0"><span class="body w6 num">$88.03</span><div class="row-s"><span class="btn btn-q btn-sm">Receipt</span></div></div>
+</div><div style="margin-top: 12px; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--bad-line, rgba(239,68,68,.35)); background: var(--bad-bg)">
+<div class="row between top" style="gap: 12px"><div class="stack-2"><span class="body w6">Chargeback · $88.03 · Visa ending 5858</span><span class="small">The cardholder says they were charged twice. You lost this chargeback. The money was returned to the cardholder.</span></div><span class="btn btn-s btn-sm">Open in Square<svg class="ic ic-s" viewBox="0 0 24 24"><path d="M15 3h6v6M10 14L21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg></span></div>
+</div><div class="row-m" style="margin-top: 10px; padding: 10px 14px; border-radius: 12px; background: var(--raise)"><svg class="ic ic-s t3" viewBox="0 0 24 24"><path d="M3 7v6h6M21 17a9 9 0 0 0-15-6.7L3 13"/></svg><div class="stack-2"><span class="body w5 num">$88.03 refunded</span><span class="small">Card on Terminal · 2 Nov 2026 · Chargeback lost</span></div></div>
+</div>
+<div style="border-top: 1px solid var(--line); padding: 14px 24px">
+<div class="row between top" style="gap: 16px">
+<div class="stack-2" style="min-width: 0"><div class="row-s wrap"><span class="body w6">2 × Protein bar</span></div><span class="small">Jordan Lee · Cash · 00:10 · by Dana Brooks</span></div>
+<div class="row-m" style="flex-shrink: 0"><span class="body w6 num">$8.00</span><div class="row-s"><span class="btn btn-s btn-sm">Refund</span><span class="btn btn-q btn-sm">Receipt</span></div></div>
+</div>
+</div>
+<div class="card-bp row between" style="padding-top: 14px; padding-bottom: 14px; border-top: 1px solid var(--line)"><span class="small">To void or refund a membership payment, open the member's page.</span><span class="btn btn-s btn-sm">Show only the newest 10</span></div>
+</div></div>
+<div class="stack">
+<div class="card stack-s"><span class="lbl">See another day's sales</span>
+<div class="row between"><span class="body w6">November 2026</span><div class="row-s"><span class="icon-btn icon-btn-sm icon-btn-q"><svg class="ic ic-s" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg></span><span class="icon-btn icon-btn-sm icon-btn-q"><svg class="ic ic-s" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></span></div></div>
+<div style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; text-align: center"><span class="small">Mo</span><span class="small">Tu</span><span class="small">We</span><span class="small">Th</span><span class="small">Fr</span><span class="small">Sa</span><span class="small">Su</span><span></span><span></span><span></span><span></span><span></span><span></span><span class="s14 num" style="padding: 6px 0; border-radius: 8px;">1</span><span class="s14 num" style="padding: 6px 0; border-radius: 8px; background: var(--accent); color: var(--on-accent); font-weight: 700">2</span><span class="s14 num" style="padding: 6px 0; border-radius: 8px;">3</span><span class="s14 num" style="padding: 6px 0; border-radius: 8px;">4</span><span class="s14 num" style="padding: 6px 0; border-radius: 8px;">5</span><span class="s14 num" style="padding: 6px 0; border-radius: 8px;">6</span><span class="s14 num" style="padding: 6px 0; border-radius: 8px;">7</span><span class="s14 num" style="padding: 6px 0; border-radius: 8px;">8</span><span class="s14 num" style="padding: 6px 0; border-radius: 8px;">9</span><span class="s14 num" style="padding: 6px 0; border-radius: 8px;">10</span><span class="s14 num" style="padding: 6px 0; border-radius: 8px;">11</span><span class="s14 num" style="padding: 6px 0; border-radius: 8px;">12</span><span class="s14 num" style="padding: 6px 0; border-radius: 8px;">13</span><span class="s14 num" style="padding: 6px 0; border-radius: 8px;">14</span><span class="s14 num" style="padding: 6px 0; border-radius: 8px;">15</span><span class="s14 num" style="padding: 6px 0; border-radius: 8px;">16</span><span class="s14 num" style="padding: 6px 0; border-radius: 8px; color: var(--t3)">17</span><span class="s14 num" style="padding: 6px 0; border-radius: 8px; color: var(--t3)">18</span><span class="s14 num" style="padding: 6px 0; border-radius: 8px; color: var(--t3)">19</span><span class="s14 num" style="padding: 6px 0; border-radius: 8px; color: var(--t3)">20</span><span class="s14 num" style="padding: 6px 0; border-radius: 8px; color: var(--t3)">21</span><span class="s14 num" style="padding: 6px 0; border-radius: 8px; color: var(--t3)">22</span><span class="s14 num" style="padding: 6px 0; border-radius: 8px; color: var(--t3)">23</span><span class="s14 num" style="padding: 6px 0; border-radius: 8px; color: var(--t3)">24</span><span class="s14 num" style="padding: 6px 0; border-radius: 8px; color: var(--t3)">25</span><span class="s14 num" style="padding: 6px 0; border-radius: 8px; color: var(--t3)">26</span><span class="s14 num" style="padding: 6px 0; border-radius: 8px; color: var(--t3)">27</span><span class="s14 num" style="padding: 6px 0; border-radius: 8px; color: var(--t3)">28</span><span class="s14 num" style="padding: 6px 0; border-radius: 8px; color: var(--t3)">29</span><span class="s14 num" style="padding: 6px 0; border-radius: 8px; color: var(--t3)">30</span></div>
+</div>
+<div class="card">
+<div class="card-h" style="margin-bottom: 8px"><h2 class="h2">Sell a membership</h2></div>
+<p class="small">Memberships are sold on the member's own page, where you pick the membership, a discount if there is one, and the payment method.</p>
+<div class="input" style="margin-top: 14px"><svg class="ic t3" viewBox="0 0 24 24"><path d="M11 4a7 7 0 1 0 0 14a7 7 0 1 0 0-14M21 21l-4.3-4.3"/></svg><span class="phd">Find them by name or member number</span></div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"look":{"editor":"enum","options":["Dark","Light"],"default":"Dark"},"$preview":{"width":1440,"height":1200}}'>
+class Component extends DCLogic {
+renderVals() {
+return { look: (this.props.look ?? 'Dark') === 'Light' ? 't-light' : '' };
+}
+}
+</script>
+</body>
+</html>
