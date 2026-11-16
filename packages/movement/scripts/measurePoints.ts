@@ -1,6 +1,7 @@
 // What measure-points does between the Python steps: read what the pose model gave,
 // choose the frames worth a picture, and say what happened in plain lines.
-import { basename, extname } from "node:path";
+// The Windows rules split a path at "\" and "/" alike, on every machine.
+import { win32 } from "node:path";
 import { bodyPointsHeaderSchema, movementFrameSchema, type MovementFrame } from "@app/shared";
 import { BodyPointsError, HALF_STEP, KINDS, type BodyPoints, type Changes } from "./bodyPoints.js";
 
@@ -15,7 +16,7 @@ export function safeLabel(name: string): string {
 
 /** The run's name: the one typed, else the video's own, and never a path. */
 export function labelFor(typed: string | undefined, input: string): string {
-  return safeLabel(typed ?? basename(input, extname(input)));
+  return safeLabel(typed ?? win32.basename(input, win32.extname(input)));
 }
 
 /** The Python step's file: a header line, then one frame a line, every number as the
