@@ -144,13 +144,25 @@ describe("a picture of a real person never reaches GitHub", () => {
     }
   });
 
-  it.runIf(process.platform === "win32" && existsSync(KD_VIDEOS))("never writes in Kd's own video folder", () => {
+  it.runIf(process.platform === "win32" && existsSync(KD_VIDEOS))("never writes in Kd's own video folder, by any name of it", () => {
     expect(() => { prepareOutFolder(join(KD_VIDEOS, "squat", "measured"), "a.mp4"); }).toThrow(/Kd's own folder/);
+    // Windows also knows the folder by a short name, D:\VIDOER~1 on Kd's laptop.
+    const short = spawnSync("powershell", ["-NoProfile", "-Command", `(New-Object -ComObject Scripting.FileSystemObject).GetFolder('${KD_VIDEOS}').ShortPath`], { encoding: "utf8" }).stdout.trim();
+    expect(short).not.toBe("");
+    expect(() => { prepareOutFolder(join(short, "squat", "x"), "a.mp4"); }).toThrow(/Kd's own folder/);
+    expect(existsSync(join(KD_VIDEOS, "squat", "x"))).toBe(false);
+  });
+
+  it("refuses the inside of a checkout's .git for the right reason", () => {
+    expect(() => { assertFolderStaysOutOfGit(join(REPO, ".git", "x")); }).toThrow(/git checkout|could not say/);
+    expect(() => { assertFolderStaysOutOfGit(join(REPO, ".git", "x")); }).not.toThrow(/could not run/);
   });
 });
 
 describe("the command refuses before any model runs, and makes no folder", () => {
   const video = join(REPO, "packages/movement/package.json"); // any file that exists
+  // Where a run of it would go: the label comes from the file's own name.
+  const itsFolder = join(REPO, "measured", "package");
   it.each([
     [["--out", join(REPO, "packages/movement/test/refused")], /git checkout/],
     [["--fps", "50"], /--fps is a number from 8 to 40/],
@@ -158,11 +170,17 @@ describe("the command refuses before any model runs, and makes no folder", () =>
     [["--people", "7"], /--people is a whole number from 1 to 6/],
     [["--people", "1.5"], /--people is a whole number/],
     [["--label", "///"], /--label needs/],
+    [["--model", join(REPO, "no-such-model.task")], /No pose model/],
+    [["--replace"], /--replace only goes with --keep/],
+    [["--keep", "--label", "squat_reference"], /already kept for the tests.*--replace/],
   ])("%s", (args, why) => {
+    expect(existsSync(itsFolder)).toBe(false);
     const r = runCommand([video, ...args]);
     expect(r.status).toBe(1);
     expect(r.stderr).toMatch(why);
     expect(existsSync(join(REPO, "packages/movement/test/refused"))).toBe(false);
+    expect(existsSync(itsFolder)).toBe(false);
+    expect(existsSync(join(REPO, "measured", "squat_reference", "package.json"))).toBe(false);
   });
 
   it("refuses a file that is not a video, and one that is not there", () => {

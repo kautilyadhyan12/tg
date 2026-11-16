@@ -2,7 +2,7 @@
 // only where git cannot pick the pictures up, and only in a folder it made itself.
 // (The old engine's measure-video has the same guard; the two packages share no code.)
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 export const MARKER = ".measure-points.json";
@@ -15,19 +15,26 @@ function git(cwd: string, args: string[]): { status: number | null; stdout: stri
   return { status: r.status, stdout: r.stdout, stderr: r.stderr };
 }
 
-/** The folder as the disk really has it, so a junction cannot lead elsewhere. */
+/** The folder as the disk really has it, so neither a junction nor a short Windows name
+ *  (D:\VIDOER~1) can lead elsewhere. It starts from the nearest folder that exists: a
+ *  worktree's `.git` is a file. */
 function realFolder(folder: string): { existing: string; target: string } {
   const typed = resolve(folder);
   let existing = typed;
   const rest: string[] = [];
-  while (!existsSync(existing)) {
+  while (!existsSync(existing) || !statSync(existing).isDirectory()) {
     const up = dirname(existing);
     if (up === existing) break;
     rest.unshift(basename(existing));
     existing = up;
   }
-  const real = realpathSync(existing);
+  const real = realpathSync.native(existing);
   return { existing: real, target: join(real, ...rest) };
+}
+
+/** Kd's folder as the disk names it, when it is on this laptop. */
+function kdVideos(): string {
+  return existsSync(KD_VIDEOS) ? realpathSync.native(KD_VIDEOS) : KD_VIDEOS;
 }
 
 function isInside(root: string, path: string): boolean {
@@ -60,7 +67,7 @@ export function assertFolderStaysOutOfGit(folder: string): void {
 export function prepareOutFolder(folder: string, source: string): void {
   assertFolderStaysOutOfGit(folder);
   const target = realFolder(folder).target;
-  if (isInside(KD_VIDEOS, target)) throw new Error(`${KD_VIDEOS} is Kd's own folder and is never changed.`);
+  if (isInside(kdVideos(), target)) throw new Error(`${KD_VIDEOS} is Kd's own folder and is never changed.`);
   const marker = join(target, MARKER);
   if (existsSync(target) && readdirSync(target).length > 0) {
     if (!existsSync(marker)) {

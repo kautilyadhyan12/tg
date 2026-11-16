@@ -3,10 +3,11 @@
 //   corepack pnpm --filter @app/movement measure-points "<video>" [--label name] [--keep]
 // Options: --fps <8 to 40, default 30> --people <1 to 6, default 6> --out <folder>
 //          --model <.task file> --python <command>
-// --keep also puts the small file in test/body-points/, where the tests read it.
+// --keep also puts the small file in test/body-points/, where the tests read it; a file
+// already kept there under the same name is replaced only with --replace.
 // Runs on the laptop only: it needs Python with mediapipe and cv2.
 import { spawnSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { extname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { MAX_FPS, MAX_PEOPLE, MIN_FPS } from "@app/shared";
@@ -39,7 +40,7 @@ function runPython(python: string, args: string[]): void {
   if (r.status !== 0) fail(`The Python step stopped with code ${String(r.status)}.`);
 }
 
-const USAGE = 'Usage: measure-points "<video>" [--label name] [--fps 8 to 40] [--people 1 to 6] [--keep] [--out folder]';
+const USAGE = 'Usage: measure-points "<video>" [--label name] [--fps 8 to 40] [--people 1 to 6] [--keep [--replace]] [--out folder]';
 
 function parse() {
   return parseArgs({
@@ -49,6 +50,7 @@ function parse() {
       fps: { type: "string", default: "30" },
       people: { type: "string", default: String(MAX_PEOPLE) },
       keep: { type: "boolean", default: false },
+      replace: { type: "boolean", default: false },
       out: { type: "string" },
       model: { type: "string", default: DEFAULT_MODEL },
       python: { type: "string", default: "python" },
@@ -79,12 +81,18 @@ const model = fromTyped(values.model);
 const label = labelFor(values.label, input);
 if (label === "") fail("--label needs at least one letter or number.");
 const out = values.out === undefined ? join(REPO, "measured", label) : fromTyped(values.out);
+if (values.replace && !values.keep) fail("--replace only goes with --keep.");
+const keptForTests = join(KEPT, `${label}.bodypoints`);
+if (values.keep && !values.replace && existsSync(keptForTests)) {
+  fail(`A file named ${label} is already kept for the tests. Give this video its own --label, or add --replace to measure that video again.`);
+}
+if (!existsSync(model)) fail(`No pose model at ${model}. Give one with --model.`);
+// Every refusal above comes before the folder is made.
 try {
   prepareOutFolder(out, input);
 } catch (err) {
   fail(messageOf(err));
 }
-if (!existsSync(model)) fail(`No pose model at ${model}. Give one with --model.`);
 
 const started = Date.now();
 const measuredPath = join(out, "measured.jsonl");
@@ -100,27 +108,35 @@ runPython(values.python, [
 ]);
 
 const keptPath = join(out, `${label}.bodypoints`);
+// Written under another name first: a file that fails its check never takes the kept name.
+const unchecked = `${keptPath}.unchecked`;
+const refuse = (message: string): never => {
+  rmSync(unchecked, { force: true });
+  fail(`${label} cannot be kept: ${message} Nothing from this run is kept.`);
+};
 let lines: string[] = [];
 try {
   const measured = readMeasurement(readFileSync(measuredPath, "utf8"));
-  writeFileSync(keptPath, encodeBodyPoints(measured.header, measured.frames));
+  writeFileSync(unchecked, encodeBodyPoints(measured.header, measured.frames));
   // Read back from the disk, as every later reader will: the file must hold what was measured.
-  const kept = decodeBodyPoints(readFileSync(keptPath));
-  if (JSON.stringify(kept.header) !== JSON.stringify(measured.header)) fail("The kept file's header is not the one measured.");
+  const kept = decodeBodyPoints(readFileSync(unchecked));
+  if (JSON.stringify(kept.header) !== JSON.stringify(measured.header)) refuse("its header is not the one measured.");
   const changes = largestChanges(measured.frames, kept.frames);
   const beyond = beyondHalfStep(changes);
-  if (beyond.length > 0) fail(`The kept file moved ${beyond.join(", ")} numbers by more than half a step. Nothing is kept.`);
+  if (beyond.length > 0) refuse(`it moved ${beyond.join(", ")} numbers by more than half a step.`);
+  renameSync(unchecked, keptPath);
   const { look, changesLeftOut } = framesToLook(kept.frames);
   writeFileSync(join(out, "look.json"), JSON.stringify({ frames: look }));
   lines = summaryLines(kept, { measured: statSync(measuredPath).size, kept: statSync(keptPath).size }, changes, changesLeftOut);
   runPython(values.python, ["draw", "--look", join(out, "look.json"), "--video", input, "--fps", String(kept.header.fps), "--out", out]);
 } catch (err) {
-  fail(`${label} cannot be kept: ${messageOf(err)}`);
+  if (existsSync(unchecked)) refuse(messageOf(err));
+  fail(`${label}: ${messageOf(err)}`);
 }
 
 if (values.keep) {
   mkdirSync(KEPT, { recursive: true });
-  copyFileSync(keptPath, join(KEPT, `${label}.bodypoints`));
+  copyFileSync(keptPath, keptForTests);
   lines.push(`Kept for the tests: packages/movement/test/body-points/${label}.bodypoints`);
 }
 for (const line of lines) console.log(line);

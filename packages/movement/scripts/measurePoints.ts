@@ -19,9 +19,12 @@ export function labelFor(typed: string | undefined, input: string): string {
   return safeLabel(typed ?? win32.basename(input, win32.extname(input)));
 }
 
+/** What the model gave, before anything is rounded. */
+export type Measurement = Omit<BodyPoints, "scale">;
+
 /** The Python step's file: a header line, then one frame a line, every number as the
  *  model gave it. Each line is checked; a broken one stops the run and names its line. */
-export function readMeasurement(text: string): BodyPoints {
+export function readMeasurement(text: string): Measurement {
   const lines = text.split("\n").filter((l) => l.trim() !== "");
   const parsed = (line: string, n: number): unknown => {
     try {

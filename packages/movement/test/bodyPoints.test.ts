@@ -66,19 +66,44 @@ function varint(n: number): number[] {
   return out;
 }
 /** Splits a file into what comes before its header, the header, and what follows. */
+/** Splits a file into what comes before its header (the name, the format and the five
+ *  roundings), the header, and what follows. */
 function parts(file: Uint8Array): { head: number[]; header: string; rest: number[] } {
   const payload = payloadOf(file);
   let pos = 8;
-  let length = 0;
-  let unit = 1;
-  for (;;) {
-    const b = payload[pos++] ?? 0;
-    length += (b & 0x7f) * unit;
-    unit *= 128;
-    if ((b & 0x80) === 0) break;
-  }
+  const whole = (): number => {
+    let value = 0;
+    let unit = 1;
+    for (;;) {
+      const b = payload[pos++] ?? 0;
+      value += (b & 0x7f) * unit;
+      unit *= 128;
+      if ((b & 0x80) === 0) return value;
+    }
+  };
+  for (let k = 0; k < 5; k++) whole();
+  const headEnd = pos;
+  const length = whole();
   const header = String.fromCharCode(...payload.slice(pos, pos + length));
-  return { head: payload.slice(0, 8), header, rest: payload.slice(pos + length) };
+  return { head: payload.slice(0, headEnd), header, rest: payload.slice(pos + length) };
+}
+function f64(v: number): number[] {
+  const b = new Uint8Array(8);
+  new DataView(b.buffer).setFloat64(0, v, true);
+  return [...b];
+}
+function signed(n: number): number[] {
+  return varint(n >= 0 ? 2 * n : -2 * n - 1);
+}
+/** One frame as the writer lays it out: its time step, the picture's shape and down on the
+ *  first, then each person: a mark byte and 33 x 5 numbers, all 0 but the one given. */
+function frameBytes(step: number, first: boolean, people: { mark?: number; at?: [number, number] }[]): number[] {
+  const head = first ? [3, ...f64(0.5625), ...f64(0), ...f64(1), ...f64(0)] : [0];
+  const persons = people.flatMap(({ mark = 0, at }) => [
+    mark,
+    ...Array.from({ length: 33 * 5 }, (_, i) => signed(at !== undefined && at[0] === i ? at[1] : 0)).flat(),
+  ]);
+  return [...varint(step), ...head, ...varint(people.length), ...persons];
 }
 function rebuilt(file: Uint8Array, header: string, rest?: number[]): Uint8Array {
   const p = parts(file);
@@ -159,6 +184,45 @@ describe("a body-points file holds what the camera saw (the worst thing first)",
     expect(kept[5]?.aspect).toBe(1.7778);
   });
 
+  it("holds the very numbers the model gave for Kd's videos, to half a step", () => {
+    // From measured/<label>/measured.jsonl of the run that made the kept files (2026-11-16):
+    // the numbers as the pose model gave them, before any rounding.
+    const squat = stored.find(([n]) => n === "squat_reference.bodypoints")?.[2] ?? fail();
+    const barbell = stored.find(([n]) => n === "barbell_bench_press_reference.bodypoints")?.[2] ?? fail();
+    const given: [MovementFrame | undefined, number, number, readonly number[], readonly number[] | null][] = [
+      [squat.frames[0], 0, 23, [0.7045101523399353, 0.5152546763420105, -0.2592650353908539, 0.99973064661026, 0.999924898147583], [0.00281211594119668, 0.01140730082988739, -0.07762414962053299]],
+      [squat.frames[47], 0, 23, [0.8241519331932068, 0.6378673911094666, -0.181899294257164, 0.9999508857727051, 0.9999847412109375], [0.019282236695289612, 0.027079610154032707, -0.08675768226385117]],
+      [squat.frames[326], 0, 28, [0.6345750689506531, 0.7869077920913696, 0.6728648543357849, 0.1461600363254547, 0.9997286200523376], null],
+      [barbell.frames[68], 3, 0, [0.47326207160949707, 0.49221256375312805, 0.2440442591905594, 0.9999743700027466, 1.0], [-0.0037622731178998947, -0.2772924602031708, 0.08072585612535477]],
+      [barbell.frames[26], 0, 31, [0.4049806296825409, 2.0269296169281006, 0.42722243070602417, 0.0005582713056355715, 0.0018798349192366004], null],
+    ];
+    expect([squat.frames[47]?.t, squat.frames[326]?.t, barbell.frames[68]?.t, barbell.frames[68]?.people.length]).toEqual([1566.7, 10866.7, 2266.7, 4]);
+    const kinds = ["picture", "picture", "depth", "sure", "sure"] as const;
+    for (const [frame, person, point, picture, world] of given) {
+      const seen = frame?.people[person];
+      picture.forEach((v, k) => {
+        expect(Math.abs((seen?.points[point]?.[k] ?? Number.NaN) - v)).toBeLessThanOrEqual(HALF_STEP[kinds[k] ?? "picture"] * (1 + 1e-9));
+      });
+      world?.forEach((v, k) => {
+        expect(Math.abs((seen?.world?.[point]?.[k] ?? Number.NaN) - v)).toBeLessThanOrEqual(HALF_STEP.world * (1 + 1e-9));
+      });
+    }
+  });
+
+  it("is read by its own rounding, so a later change of the steps cannot read it wrong", () => {
+    const [, , decoded] = stored[0] ?? fail();
+    const coarser = { ...SCALE, picture: 50000, world: 10000 };
+    const other = encodeBodyPoints(decoded.header, decoded.frames, coarser);
+    const read = decodeBodyPoints(other);
+    expect(read.scale).toEqual(coarser);
+    expect(other).not.toEqual(encodeBodyPoints(decoded.header, decoded.frames));
+    const changes = largestChanges(decoded.frames, read.frames);
+    expect(changes.picture).toBeLessThanOrEqual((0.5 / 50000) * (1 + 1e-9));
+    expect(changes.world).toBeLessThanOrEqual((0.5 / 10000) * (1 + 1e-9));
+    for (const [, , d] of stored) expect(d.scale).toEqual(SCALE);
+    expect(() => encodeBodyPoints(decoded.header, decoded.frames, { ...SCALE, depth: 0 })).toThrow(/no file keeps depth/);
+  });
+
   it("says which kind of number moved too far", () => {
     expect(beyondHalfStep({ time: 0, picture: HALF_STEP.picture * 1.01, depth: 0, sure: 0, world: Number.NaN })).toEqual(["picture", "world"]);
     expect(KINDS).toEqual(Object.keys(SCALE));
@@ -229,6 +293,30 @@ describe("a damaged file is refused whole, never read in part", () => {
     expect(refuses(rebuilt(file, header, marked))).toMatch(/never writes/);
     const noShape = [...varint(1), 0, 0, 0];
     expect(refuses(rebuilt(file, header, noShape))).toMatch(/first frame/);
+  });
+
+  it("refuses a sound check number around a person, a time or a number that cannot be", () => {
+    const { header } = parts(file);
+    const frames = (list: number[][]): Uint8Array => rebuilt(file, header, [...varint(list.length), ...list.flat()]);
+    // The same bytes with possible numbers are read, so each refusal below is for its own reason.
+    expect(decodeBodyPoints(frames([frameBytes(0, true, [{ at: [3, 10000] }])])).frames[0]?.people[0]?.points[0]?.[3]).toBe(1);
+    expect(decodeBodyPoints(frames([frameBytes(0, true, []), frameBytes(1, false, [])])).frames.length).toBe(2);
+    expect(refuses(frames([frameBytes(0, true, [{ at: [3, 10001] }])]))).toMatch(/not a possible frame/);
+    expect(refuses(frames([frameBytes(0, true, []), frameBytes(0, false, [])]))).toMatch(/same time/);
+    expect(refuses(frames([frameBytes(0, true, [{ mark: 2 }])]))).toMatch(/never writes/);
+    // A time of 0 written in two bytes, where the writer uses one.
+    expect(refuses(rebuilt(file, header, [...varint(1), 0x80, 0x00, ...frameBytes(0, true, []).slice(1)]))).toMatch(/never writes/);
+    // A control character in the header, which the writer never puts there.
+    expect(refuses(rebuilt(file, header.replace('"source"', String.fromCharCode(0x1f) + '"source"')))).toMatch(/not plain/);
+  });
+
+  it("refuses a file that says its numbers were kept in a way no file keeps them", () => {
+    const { header, rest } = parts(file);
+    const chars = Array.from({ length: header.length }, (_, i) => header.charCodeAt(i));
+    const withSteps = (steps: number[]): Uint8Array => withCheck([...payloadOf(file).slice(0, 8), ...steps.flatMap(varint), ...varint(header.length), ...chars, ...rest]);
+    expect(decodeBodyPoints(withSteps([10, 100000, 10000, 10000, 100000])).frames.length).toBeGreaterThan(0);
+    expect(refuses(withSteps([10, 0, 10000, 10000, 100000]))).toMatch(/no file keeps/);
+    expect(refuses(withSteps([10, 100000, 10000, 10000, 10 ** 9]))).toMatch(/no file keeps/);
   });
 });
 

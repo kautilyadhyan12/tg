@@ -8,9 +8,11 @@
 //
 // The bytes. Whole numbers are written 7 bits a byte (LEB128), signed ones zig-zagged,
 // and every point's numbers as the change from the same place in the frame before:
-//   "BODYPTS" · format 1 · header length · header (JSON, plain characters only) ·
-//   number of frames · frames · CRC-32 of everything before it.
-// A frame: its time's change, in tenths of a millisecond (never 0) · one byte saying
+//   "BODYPTS" · format 1 · how many steps make one unit, for time, picture, depth,
+//   sureness and 3D (five numbers: the file says its own rounding, so a later change of
+//   SCALE can never read it wrong) · header length · header (JSON, plain characters
+//   only) · number of frames · frames · CRC-32 of everything before it.
+// A frame: its time's change, in time steps (never 0) · one byte saying
 // whether the picture's shape (8 bytes) or which way is down (3 × 8 bytes, or "not
 // known") follows · the number of people · for each person, one byte saying whether 3D
 // points follow, then 33 × [x, y, depth, visibility, presence] and 33 × [x, y, z].
@@ -28,8 +30,12 @@ export const FORMAT = 1;
 const MAGIC = [0x42, 0x4f, 0x44, 0x59, 0x50, 0x54, 0x53]; // "BODYPTS"
 const LONGEST_HEADER = 65536;
 
-/** How many steps make one unit, for each kind of number the file keeps. */
-export const SCALE = {
+export const KINDS = ["time", "picture", "depth", "sure", "world"] as const;
+export type Kind = (typeof KINDS)[number];
+export type Scale = Readonly<Record<Kind, number>>;
+
+/** How many steps make one unit, for each kind of number a file written now keeps. */
+export const SCALE: Scale = {
   /** milliseconds: a tenth of one */
   time: 10,
   /** x and y, shares of the picture: 1/100,000 of it */
@@ -40,9 +46,9 @@ export const SCALE = {
   sure: 10000,
   /** the 3D points, metres: a hundredth of a millimetre */
   world: 100000,
-} as const;
-export type Kind = keyof typeof SCALE;
-export const KINDS: readonly Kind[] = ["time", "picture", "depth", "sure", "world"];
+};
+/** The finest a file may say its numbers were kept to: no step this fine is ever needed. */
+const MOST_PER_UNIT = 10_000_000;
 const POINT_KINDS: readonly Kind[] = ["picture", "picture", "depth", "sure", "sure"];
 
 const ASPECT_FOLLOWS = 1;
@@ -85,16 +91,16 @@ function unzigzag(u: number): number {
 }
 
 /** A number as whole steps of its kind. Throws for one no file could hold. */
-export function toSteps(value: number, kind: Kind): number {
-  const n = Math.round(value * SCALE[kind]);
+export function toSteps(value: number, kind: Kind, scale: Scale = SCALE): number {
+  const n = Math.round(value * scale[kind]);
   if (!Number.isSafeInteger(n) || Math.abs(n) > LARGEST_SIGNED) {
     throw new BodyPointsError(`${String(value)} is too large to keep as a ${kind} number`);
   }
   return n + 0; // never -0
 }
 
-export function fromSteps(n: number, kind: Kind): number {
-  return n / SCALE[kind];
+export function fromSteps(n: number, kind: Kind, scale: Scale = SCALE): number {
+  return n / scale[kind];
 }
 
 class Writer {
@@ -160,6 +166,7 @@ class Reader {
       const b = this.byte();
       value += (b & 0x7f) * unit;
       if ((b & 0x80) === 0) {
+        if (i > 0 && b === 0) throw new BodyPointsError("a number in the file is written in a way this format never writes");
         if (!Number.isSafeInteger(value)) break;
         return value;
       }
@@ -184,8 +191,9 @@ function sameDown(a: MovementFrame["down"], b: MovementFrame["down"]): boolean {
   return a[0] === b[0] && a[1] === b[1] && a[2] === b[2];
 }
 
-/** The frames are those `movementFrameSchema` accepted, in the order they were seen. */
-export function encodeBodyPoints(header: BodyPointsHeader, frames: readonly MovementFrame[]): Uint8Array {
+/** The frames are those `movementFrameSchema` accepted, in the order they were seen.
+ *  `scale` is SCALE but in the tests, which make files of another rounding with it. */
+export function encodeBodyPoints(header: BodyPointsHeader, frames: readonly MovementFrame[], scale: Scale = SCALE): Uint8Array {
   const checkedHeader = bodyPointsHeaderSchema.parse(header);
   if (frames.length === 0) throw new BodyPointsError("a body-points file needs at least one frame");
   const json = JSON.stringify(checkedHeader);
@@ -196,6 +204,10 @@ export function encodeBodyPoints(header: BodyPointsHeader, frames: readonly Move
   const w = new Writer();
   w.bytes(MAGIC);
   w.byte(FORMAT);
+  for (const kind of KINDS) {
+    if (!Number.isInteger(scale[kind]) || scale[kind] < 1 || scale[kind] > MOST_PER_UNIT) throw new BodyPointsError(`no file keeps ${kind} numbers that way`);
+    w.whole(scale[kind]);
+  }
   w.whole(json.length);
   for (let i = 0; i < json.length; i++) w.byte(json.charCodeAt(i));
   w.whole(frames.length);
@@ -205,7 +217,7 @@ export function encodeBodyPoints(header: BodyPointsHeader, frames: readonly Move
   let lastT = -1;
   let last: MovementFrame | null = null;
   frames.forEach((frame, f) => {
-    const t = toSteps(frame.t, "time");
+    const t = toSteps(frame.t, "time", scale);
     if (t <= lastT) {
       throw new BodyPointsError(`frame ${String(f + 1)} is not later than the one before it, to a tenth of a millisecond`);
     }
@@ -228,7 +240,7 @@ export function encodeBodyPoints(header: BodyPointsHeader, frames: readonly Move
         const point = person.points[i];
         if (point === undefined) throw new BodyPointsError(`frame ${String(f + 1)}: a person has fewer than ${String(KEYPOINT_COUNT)} points`);
         point.forEach((v, k) => {
-          const n = toSteps(v, POINT_KINDS[k] ?? "picture");
+          const n = toSteps(v, POINT_KINDS[k] ?? "picture", scale);
           const at = i * 5 + k;
           w.signed(n - (before[at] ?? 0));
           before[at] = n;
@@ -240,7 +252,7 @@ export function encodeBodyPoints(header: BodyPointsHeader, frames: readonly Move
         const point = person.world[i];
         if (point === undefined) throw new BodyPointsError(`frame ${String(f + 1)}: a person has fewer than ${String(KEYPOINT_COUNT)} 3D points`);
         point.forEach((v, k) => {
-          const n = toSteps(v, "world");
+          const n = toSteps(v, "world", scale);
           const at = i * 3 + k;
           w.signed(n - (beforeWorld[at] ?? 0));
           beforeWorld[at] = n;
@@ -255,6 +267,8 @@ export function encodeBodyPoints(header: BodyPointsHeader, frames: readonly Move
 export interface BodyPoints {
   header: BodyPointsHeader;
   frames: MovementFrame[];
+  /** How finely this file's numbers were kept, as the file itself says. */
+  scale: Scale;
 }
 
 export function decodeBodyPoints(file: Uint8Array): BodyPoints {
@@ -272,12 +286,16 @@ export function decodeBodyPoints(file: Uint8Array): BodyPoints {
 
   const r = new Reader(file, end);
   r.pos = MAGIC.length + 1;
+  const perUnit = KINDS.map(() => r.whole());
+  if (perUnit.some((n) => n < 1 || n > MOST_PER_UNIT)) throw new BodyPointsError("the file says its numbers were kept in a way no file keeps them");
+  const [time, picture, depth, sure, world] = perUnit;
+  const scale: Scale = { time: time ?? 0, picture: picture ?? 0, depth: depth ?? 0, sure: sure ?? 0, world: world ?? 0 };
   const headerLength = r.whole();
   if (headerLength > LONGEST_HEADER || r.pos + headerLength > end) throw new BodyPointsError("the header's length is impossible");
   let json = "";
   for (let i = 0; i < headerLength; i++) {
     const c = r.byte();
-    if (c > 0x7e) throw new BodyPointsError("the header holds a character that is not plain");
+    if (c < 0x20 || c > 0x7e) throw new BodyPointsError("the header holds a character that is not plain");
     json += String.fromCharCode(c);
   }
   let rawHeader: unknown;
@@ -327,7 +345,7 @@ export function decodeBodyPoints(file: Uint8Array): BodyPoints {
           const at = i * 5 + k;
           const n = (before[at] ?? 0) + r.signed();
           before[at] = n;
-          point.push(fromSteps(n, POINT_KINDS[k] ?? "picture"));
+          point.push(fromSteps(n, POINT_KINDS[k] ?? "picture", scale));
         }
         points.push(point);
       }
@@ -341,19 +359,19 @@ export function decodeBodyPoints(file: Uint8Array): BodyPoints {
             const at = i * 3 + k;
             const n = (beforeWorld[at] ?? 0) + r.signed();
             beforeWorld[at] = n;
-            point.push(fromSteps(n, "world"));
+            point.push(fromSteps(n, "world", scale));
           }
           world.push(point);
         }
       }
       people.push({ points, world });
     }
-    const frame = movementFrameSchema.safeParse({ t: fromSteps(t, "time"), aspect, down, people });
+    const frame = movementFrameSchema.safeParse({ t: fromSteps(t, "time", scale), aspect, down, people });
     if (!frame.success) throw new BodyPointsError(`frame ${String(f + 1)} is not a possible frame: ${frame.error.message}`);
     frames.push(frame.data);
   }
   if (r.pos !== end) throw new BodyPointsError("the file holds bytes after its last frame");
-  return { header: checkedHeader.data, frames };
+  return { header: checkedHeader.data, frames, scale };
 }
 
 // ── How far a file is from what was measured ───────────────────────────────────────

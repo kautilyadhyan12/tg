@@ -1619,7 +1619,9 @@ with 33 picture points `[x, y, depth, visibility, presence]` and 33 3D points in
 none). `corepack pnpm --filter @app/movement measure-points "<video>" --keep` turns a video
 into a `.bodypoints` file (`scripts/bodyPoints.ts` says its bytes) at 30 frames a second,
 asking the model for six people. Each number is rounded once: 1/100,000 of the picture,
-1/10,000 for depth and both kinds of sureness, 0.01 mm in 3D, a tenth of a millisecond.
+1/10,000 for depth and both kinds of sureness, 0.01 mm in 3D, a tenth of a millisecond;
+the file says its own rounding and is read by it, so a later change of the steps cannot
+read a kept file wrong.
 On four of Kd's videos the model's own frame-to-frame shake was at least 0.0009 of the
 picture, 0.019 of depth and 1.5 mm in 3D, and the rounding moved no joint angle of a
 well-seen joint by more than 0.03°. A damaged file (a check number, a format number, every
