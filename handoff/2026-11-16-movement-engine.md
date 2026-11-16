@@ -9,3 +9,4 @@
 - **Next in this folder, in a FRESH terminal:** 50c, the body's picture. Its plan says where the new engine lives and the compact file's format. 52a needs 3 to 5 squat videos of different people from Kd; the terminal first says where the phone stands.
 - **Exercise folder 2** re-made its own side the same day. The two meet at the exercise's file (§12.3: an exercise names its movement and its level) and the set's summary (§2.4).
 - **Effort:** written at Fable 5.2 max, the last step at high, Kd's settings.
+- **Merged 2026-11-16** (pull request #562) on Kd's *"merge"*.
