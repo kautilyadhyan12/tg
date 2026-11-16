@@ -4165,9 +4165,10 @@ page, for staff holding the payments tick alone: "Card on file: Visa ending 1111
 12/2028" with Replace card and Remove card, or "No card on file" with Add card (and "Tara can add
 a card in the app." for somebody in the app). Add card opens Square's own card boxes (the Web
 Payments SDK, its window inside our page) in a box under the button: the number goes to Square,
-never to us, and Square decides whether the bank checks the card. The person ticks "I agree that
-{gym} may save this card and charge it for my membership and any fees when they are due. I can
-remove it at the front desk at any time." themselves; the words, the time and whose screen (the
+never to us, and Square decides whether the bank checks the card. The person ticks "I authorize
+{gym} to keep this card on file and charge it for my membership and any fees as they become due. I
+can remove this card in the app when no payments are scheduled or outstanding, or at the front desk
+at any time." (these words since 20l, 2026-11-16) themselves; the words, the time and whose screen (the
 desk's or their own app's) are kept apart from the card, so they outlive a removed card and a
 record deleted for good (then removed a year after that and three after it was agreed, the
 longer of California's two). The person is made a customer in the gym's own Square account once,

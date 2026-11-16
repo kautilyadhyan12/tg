@@ -37,7 +37,7 @@ describe("a card's words", () => {
 
   it("the agreement is Kd's sentence, with the gym's own name", () => {
     expect(cardAgreementWords("Iron House")).toBe(
-      "I agree that Iron House may save this card and charge it for my membership and any fees when they are due. I can remove it at the front desk at any time.",
+      "I authorize Iron House to keep this card on file and charge it for my membership and any fees as they become due. I can remove this card in the app when no payments are scheduled or outstanding, or at the front desk at any time.",
     );
   });
 
