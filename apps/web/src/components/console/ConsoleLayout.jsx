@@ -1,4 +1,4 @@
-import { Fragment } from 'react';
+import { Fragment, useEffect, useRef } from 'react';
 import { orgWords } from '@app/shared';
 import { NavLink, Link, useLocation, useParams } from 'react-router-dom';
 import { Building2, ChevronsUpDown, Ellipsis, LogOut, UserRound } from 'lucide-react';
@@ -6,10 +6,12 @@ import ConsoleBanner from './ConsoleBanner';
 import PlanModal from './PlanModal';
 import SizeDecisionPrompt from './SizeDecisionPrompt';
 import { PAGE_ICONS } from './consoleIcons';
+import { railScroller, scrollToShow } from './railScroll';
 import { useAuth } from '../../context/AuthContext';
 import { useConsoleOrg } from '../../pages/console/useConsoleOrg';
 import { useConsoleSignOut } from '../../pages/console/consoleSignOut';
-import { consoleLook, consoleMenu, moreIsCurrent } from '../../pages/console/consoleMenu';
+import { consoleLook, consoleMenu, menuGroups, moreIsCurrent } from '../../pages/console/consoleMenu';
+import { initialsOf } from '../../pages/console/memberListPeople';
 import { orgTypeLabel, roleLabel, viewerPrivileges } from '../../pages/console/consoleView';
 import './console.css';
 
@@ -49,6 +51,18 @@ function GymSwitcher({ org, fallback, compact }) {
   );
 }
 
+/** One line of the menu on a computer. */
+function RailLink({ page, dot }) {
+  const Icon = PAGE_ICONS[page.key];
+  return (
+    <NavLink to={page.to} end={page.end} className={({ isActive }) => `c-nav${isActive ? ' c-nav-on' : ''}`}>
+      <Icon size={18} />
+      <span className="c-ell">{page.label}</span>
+      {dot}
+    </NavLink>
+  );
+}
+
 /** The glowing dot beside Members, and what it means to a screen reader. */
 function ReviewDot({ count, words }) {
   return (
@@ -80,62 +94,91 @@ export default function ConsoleLayout({ children }) {
   const role = org ? roleLabel(org.staffRole, org.orgType, org.coOwner) : '';
   const signOutWords = signingOut ? 'Signing out…' : 'Sign out';
 
+  // A page opened from somewhere else than the menu (a button, a link, a reload) has its lit
+  // line on screen in the menu too. In a short window the whole menu scrolls, and you and
+  // Sign out stay over its foot, so the line is kept clear of them.
+  const railRef = useRef(null);
+  const navRef = useRef(null);
+  const pageCount = menu ? menu.pages.length : 0;
+  useEffect(() => {
+    const rail = railRef.current;
+    const box = railScroller(rail, navRef.current);
+    const on = rail?.querySelector('nav .c-nav-on') ?? null;
+    const cover = box === rail ? (rail?.querySelector('.c-rail-me')?.offsetHeight ?? 0) : 0;
+    scrollToShow(box, on, 8 + cover);
+  }, [pathname, pageCount]);
+
   return (
     <div className={`c-console t-${consoleLook(search, import.meta.env.DEV)}`}>
       {/* ── The menu, on a computer ─────────────────────────────────────────── */}
-      <aside className="c-rail" data-testid="console-rail">
+      <aside ref={railRef} className="c-rail" data-testid="console-rail">
         {menu ? <GymSwitcher org={org} fallback={consoleName} /> : <div className="c-rail-title">{consoleName}</div>}
 
         {menu ? (
-          <div className="c-rail-nav">
-            <nav aria-label="Console" className="c-rail-nav">
-              {menu.pages.map((page) => {
-                const Icon = PAGE_ICONS[page.key];
-                return (
-                  <NavLink
-                    key={page.key}
-                    to={page.to}
-                    end={page.end}
-                    className={({ isActive }) => `c-nav${isActive ? ' c-nav-on' : ''}`}
-                  >
-                    <Icon size={20} />
-                    <span>{page.label}</span>
-                    {reviewDot(page)}
-                  </NavLink>
-                );
-              })}
-            </nav>
-            <Link to="/console" className="c-nav">
-              <Building2 size={20} />
-              <span>Your organisations</span>
-            </Link>
-          </div>
-        ) : null}
+          <nav ref={navRef} aria-label="Console" className="c-rail-nav">
+            {/* Overview on top, then the five groups (spec Part 3 §17.10 rule 7). */}
+            <RailLink page={menu.pages[0]} dot={reviewDot(menu.pages[0])} />
+            {menuGroups(menu.pages).map((group) => (
+              <div key={group.key} role="group" aria-labelledby={`rail-grp-${group.key}`} className="c-rail-group">
+                <p id={`rail-grp-${group.key}`} className="c-rail-grp">
+                  {group.label}
+                </p>
+                {group.pages.map((page) => (
+                  <RailLink key={page.key} page={page} dot={reviewDot(page)} />
+                ))}
+              </div>
+            ))}
+          </nav>
+        ) : (
+          <div className="c-rail-fill" />
+        )}
 
-        <div className="c-rail-fill" />
-
+        {/* Always on screen, however short the window: the list above scrolls on its own. */}
         <div className="c-rail-foot">
-          {name ? (
-            <div className="c-rail-you">
-              <span className="c-s14 c-w6 c-ell">{name}</span>
-              {role ? (
-                <span className="c-s13" style={{ color: 'var(--rail-t3)' }}>
-                  {role}
-                </span>
-              ) : null}
-            </div>
-          ) : null}
-          {/* Their own account, and Delete account in it (19b-ii). */}
           {menu ? (
-            <NavLink to={`/console/${orgSlug}/account`} className={({ isActive }) => `c-nav${isActive ? ' c-nav-on' : ''}`}>
-              <UserRound size={20} />
-              <span>Your account</span>
-            </NavLink>
+            <>
+              <Link to="/console" className="c-nav">
+                <Building2 size={18} />
+                <span>Your organisations</span>
+              </Link>
+              {/* Their own account, and Delete account in it (19b-ii). */}
+              <NavLink to={`/console/${orgSlug}/account`} className={({ isActive }) => `c-nav${isActive ? ' c-nav-on' : ''}`}>
+                <UserRound size={18} />
+                <span>Your account</span>
+              </NavLink>
+            </>
           ) : null}
-          <button type="button" onClick={signOut} disabled={signingOut} className="c-nav">
-            <LogOut size={20} />
-            <span>{signOutWords}</span>
-          </button>
+          <div className="c-rail-me">
+            {name ? (
+              <>
+                <span className="c-rail-av" aria-hidden="true">
+                  {initialsOf(name)}
+                </span>
+                <span className="c-rail-you">
+                  <span className="c-s14 c-w6 c-ell" style={{ color: 'var(--rail-t1)' }}>
+                    {name}
+                  </span>
+                  {role ? (
+                    <span className="c-s12 c-ell" style={{ color: 'var(--rail-t3)' }}>
+                      {role}
+                    </span>
+                  ) : null}
+                </span>
+              </>
+            ) : (
+              <span className="c-rail-you" />
+            )}
+            <button
+              type="button"
+              onClick={signOut}
+              disabled={signingOut}
+              className="c-rail-out"
+              aria-label={signOutWords}
+              title={signOutWords}
+            >
+              <LogOut size={18} />
+            </button>
+          </div>
         </div>
       </aside>
 
@@ -144,7 +187,16 @@ export default function ConsoleLayout({ children }) {
                under More; without one (your organisations, create) Sign out is here. ── */}
         <header className="c-topbar" data-testid="console-topbar">
           {menu ? (
-            <GymSwitcher org={org} fallback={consoleName} compact />
+            <>
+              <GymSwitcher org={org} fallback={consoleName} compact />
+              {name ? (
+                <Link to={menu.moreTo} className="c-topbar-me" aria-label={`${name}: your account and Sign out, under More`}>
+                  <span className="c-rail-av" aria-hidden="true">
+                    {initialsOf(name)}
+                  </span>
+                </Link>
+              ) : null}
+            </>
           ) : (
             <>
               <span className="c-s15 c-w6" style={{ color: 'var(--rail-t2)' }}>

@@ -479,7 +479,9 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
      - V0-a. [x] **A member's page and its boxes** · merged 2026-11-16 · PR #559
      - V0-b. [x] **Money pages and Overview** · merged 2026-11-16 · PR #561
      - V0-c. [x] **Settings and the new pages** · merged 2026-11-16 · PR #565
-   - V1. [ ] **The building blocks and the menu** (web folder 1): the text sizes, gaps, buttons and tags, the four ways a box opens, the side list, and the menu in five groups with More on a phone (`Main`, `kit.css`, `PhoneMore`).
+   - V1. **The building blocks and the menu** (this folder), in two (2026-11-16): every screen shape, phones, folding phones, tablets and laptops (Kd, `rulings/2026-11-16-v1-a.md`).
+     - V1-a. [x] **The menu in five groups and More on a phone** · merged 2026-11-17 · PR #566
+     - V1-b. [ ] **The building blocks**: the text sizes, gaps, buttons and tags, the four ways a box opens, and the side list (`Main`, `Anatomy`, `kit.css`).
    - V2a. [ ] **A member's page, a whole page** (web folder 1; the `Person*` pages and `PhonePerson`).
    - V2b. [ ] **A member's page: its boxes** (web folder 1): Add member, edit, add a membership, record a payment, a quick look, freeze, cancel, money back, receipt, remove, merge (`Person*`, `AddMember`, `PhoneRecordPayment`, `PhoneForm`).
    - V3a. [ ] **Members: Your list** (web folder 1): the one-press picks, the list, people ticked and the bar, Send message, Tags, Remove, Filter from the right (`MembersNew*`).

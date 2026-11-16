@@ -179,6 +179,50 @@ describe('the banner above every page', () => {
   });
 });
 
+describe('the menu in five groups (spec Part 3 §17.10 rule 7)', () => {
+  const railGroups = () =>
+    within(screen.getByTestId('console-rail'))
+      .getAllByRole('group')
+      .map((g) => [g.getAttribute('aria-labelledby') && document.getElementById(g.getAttribute('aria-labelledby')).textContent, within(g).getAllByRole('link').map((a) => a.textContent)]);
+  const moreGroups = () =>
+    within(screen.getByTestId('console-more'))
+      .getAllByRole('heading', { level: 2 })
+      .map((h) => h.textContent);
+
+  it('an owner: Overview, then Today, People, Money, Community and Manage, the same headings on a phone', async () => {
+    await openMore('owner', [...ROLE_PRIVILEGES.owner]);
+    expect(railGroups()).toEqual([
+      ['Today', ['Attendance', 'Classes', 'Personal training']],
+      ['People', ['Members & staff', 'Leads', 'At risk']],
+      ['Money', ['Sell', 'Memberships', 'Failed payments']],
+      ['Community', ['Updates', 'Events', 'Fitness plans', 'Challenges', 'Leaderboard']],
+      ['Manage', ['Reports', 'Settings']],
+    ]);
+    expect(moreGroups()).toEqual(['Today', 'People', 'Money', 'Community', 'Manage']);
+  });
+
+  it('a trainer: only the headings that hold a page of theirs, and Manage on a phone for their organisations and account', async () => {
+    await openMore('trainer', [...ROLE_PRIVILEGES.trainer]);
+    expect(railGroups()).toEqual([
+      ['Today', ['Attendance', 'Personal training']],
+      ['People', ['Members', 'At risk']],
+    ]);
+    expect(moreGroups()).toEqual(['Today', 'People', 'Manage']);
+    const manage = within(screen.getByTestId('console-more')).getByRole('region', { name: 'Manage' });
+    expect(within(manage).getAllByRole('link').map((a) => a.textContent)).toEqual(['Your organisations', 'Your account']);
+  });
+
+  it('you are named at the foot of the menu and at the top of More, with your initials', async () => {
+    await openMore('trainer', [...ROLE_PRIVILEGES.trainer]);
+    const foot = screen.getByTestId('console-rail').querySelector('.c-rail-me');
+    expect(foot.textContent).toBe('JHJordan HayesTrainer');
+    expect(within(foot).getByRole('button', { name: 'Sign out' })).toBeTruthy();
+    const me = screen.getByTestId('console-more-me');
+    expect(me.textContent).toBe('JHJordan HayesTrainer · Iron House');
+    expect(within(screen.getByTestId('console-topbar')).getByRole('link', { name: /^Jordan Hayes: your account and Sign out/ }).getAttribute('href')).toBe(`${BASE}/more`);
+  });
+});
+
 describe('the way out is always there', () => {
   it('on a computer: Sign out and Your organisations in the menu, and the gym name goes to your organisations', async () => {
     await openMore('trainer', [...ROLE_PRIVILEGES.trainer]);
