@@ -1151,7 +1151,8 @@ either resolved or surfaced as honest in-app copy.
 Written by a planning terminal that read the engine, the web's workout pages and Kd's
 own video folder that day. No code. Where §7.3, §9.1, §10 or Part 6 §3 differ from this
 section, this section wins. **Since 2026-11-16 the counting and the form check are made
-fresh: §12 wins where this section differs.** Exercise folder 1 builds the camera and the form rules
+fresh: §12 wins where this section differs. The same day the Exercise Library and the
+Workout section were made fresh: §13 wins for them.** Exercise folder 1 builds the camera and the form rules
 (items 50 to 55); exercise folder 2 builds the Exercise Library and the Workout section
 (items 60 to 65).
 
@@ -1635,6 +1636,243 @@ phone place is faithful (job 52a) · what the hips do in a real one-leg lift: on
 one they moved at most 0.026 of the trunk's length, while the smallest rise in a real rep
 on twelve squat-family videos was 0.110 of the leg's length, under the old rules (job 52a
 measures both again with the new engine).
+
+## 13. The Exercise Library and the Workout section, made fresh (Kd, 2026-11-16; `rulings/2026-11-16-exercise-library.md`)
+
+Written by a planning terminal in exercise folder 2 (Fable 5.2) after it read the server,
+the member web's workout pages and the phone app that day, and §12 whole. No code. **Where
+§11.1, §11.2 tools 6 and 7, §11.4's "different families", Part 4 §3.4 and §3.5, or Part 6
+§16.3's "built once, with the workout (item 61)" differ from this section, this section
+wins. It never wins over §12, which is not changed by it, nor over §11.8's steps and
+privacy, which are Kd's answers and stand.**
+
+**Why.** Kd: *"when i say build the next thing it just build a wrapper on top of the
+exsiting bugs and unstructred ai slop code"*. Measured on 2026-11-16:
+
+- One exercise's facts sit in five places: `exerciseCatalog.ts`, `exerciseContent.ts`
+  (2,359 lines, a straight copy of the old seed), the `exercises` table (muscles, equipment
+  and difficulty empty), the web's `messages.en.js`, and rules that read a family code. Two
+  of those rules disagree on "reps or seconds" for 11 of the 58.
+- Muscles are free text: 22 different words for the main muscle and 28 for the others.
+  Equipment reads "None" for 50 of 58, Skipping Rope and Chair Squats among them.
+- A workout keeps no weight, no name and no target. Saved workouts read the switched-off
+  backend. The 22 timed exercises are given "12 reps". A set of an exercise the server does
+  not know is dropped in silence while the workout is kept. Calories have three formulas,
+  chosen by the shape of what was sent. Records are three for a whole workout, none for an
+  exercise.
+- On the phone, "Exercises" and "My Workout" are two "Coming soon" cards; four features
+  each keep their own copy of "kept on the phone until the server has it".
+
+**What is replaced, for all new code.** The five places above as the source of an
+exercise's facts; `GET /v1/exercises` and `/v1/exercise-definitions` as what the phone
+reads; `POST /v1/workouts/sync` as how the phone saves; the three records of a whole
+workout; `workout_templates`' shape.
+
+**What stays.** The saved data: every exercise's row and id, every workout and set. The old
+routes, tables' old columns and shared files exactly as they are, for the web's frozen
+pages, until Kd says those pages may go; then they go together. §2.4's `SetSummary`. The
+level curve, the streak, the meal ideas' rules and the stretches (RULINGS 2026-07-24,
+2026-08-06 and its amendments). Nobody adds an exercise of their own (RULINGS 2026-08-16).
+Everything a member can do today (§13.8).
+
+### 13.1 The principles
+
+1. **One fact, one place.** Everything the Library knows about an exercise is in that
+   exercise's own file. Nothing is typed twice, and nothing is worked out from a code that
+   means something else.
+2. **New code never uses the old exercise code.** A lint rule refuses an import of
+   `exerciseCatalog`, `exerciseContent` or the family-code helpers from `apps/mobile` and
+   from the new server modules, so it is GitHub that holds this, not a promise. The server
+   and phone code that use them today (`goals/service.ts`, `orgs/challenges/service.ts`,
+   `summaryContent.ts`, `Goals.tsx`) move to the new facts in the job that reaches each.
+3. **The camera's facts are exercise folder 1's** (§12.3): what the camera can do for an
+   exercise, where the phone stands, which mistakes it checks. This side reads them and
+   never types them again (§13.3).
+4. **Adding or removing an exercise is data.** No new app version, no code change, and a
+   removed exercise is retired, never deleted: old workouts still show its name.
+5. **The server works out what has value**: calories, XP, records. What a phone reports is
+   held inside limits.
+6. **What a person does is kept on the phone until the server has it**, by ONE shared
+   piece, and a workout in progress is written to the phone at every step.
+7. **An installed app never breaks on new data.** A word list may grow: a phone that meets
+   a word it does not know shows it plainly and goes on.
+
+### 13.2 An exercise's file (the Library's part)
+
+One file for each exercise, named by its id word, in a place neither app owns (job 60's
+plan names it). The tools find the files by reading the folder: there is no hand-kept list.
+
+| Fact | Rule |
+|---|---|
+| Id word | lower case, never changed, never used again for another exercise; an exercise that continues from the old 58 keeps its row and id |
+| Name, other names | the other names are for search ("press-up" finds Push-up) |
+| Kind | a fixed list, settled in job 60 from the old web's 11 categories and the public list's 7 |
+| Muscles | main and also-worked, from ONE fixed list: abdominals, abductors, adductors, biceps, calves, chest, forearms, glutes, hamstrings, hip flexors, lats, lower back, middle back, neck, quadriceps, shoulders, traps, triceps |
+| Equipment | from one fixed list (barbell, dumbbell, kettlebell, cable machine, machine, resistance band, pull-up bar, bench, chair, step, jump rope, exercise ball, mat and the rest job 60 settles); empty means none |
+| Level | beginner · intermediate · advanced |
+| A set is measured in | reps or time. This is what a set's target is, said once; it replaces every family-code rule |
+| Weight | a set never takes one · may · usually does |
+| Each side | whether a set is done for each side |
+| Starting numbers | the sets and target offered when it is added to a workout; the person changes them |
+| Energy (MET) | with the Compendium of Physical Activities entry it came from |
+| About, steps, mistakes | in proper wording, each from a named proper source (§11.3 step 5); text is kept by language, English first |
+| Clip, still picture | empty until job 62 |
+| Status | live · retired |
+
+An exercise's page is written and checked for this file (job 65); the old text is never
+copied across in bulk. A draft may start from the public-domain list free-exercise-db (the
+Unlicense; 876 exercises with muscles, equipment and steps, read 2026-11-16) and is then
+checked against proper sources.
+
+### 13.3 Where the two exercise folders meet
+
+§12 names two places: the exercise's file and the set's summary. This is what this side
+gives and expects there. Nothing here changes §12; where 52a's or 53's plan needs it
+otherwise, that plan says so and this section is amended.
+
+- **The level.** The Library shows §12.3's three levels in its words: the camera counts and
+  coaches · the camera counts only · count by hand or timer. It is read from folder 1's
+  data for that exercise. An exercise with no camera data is "count by hand or timer". The
+  old three definitions do not make an exercise camera-counted on the phone.
+- **Camera data rides the same download, unopened.** Folder 1's movement and exercise files
+  are checked by folder 1's own code when the list is published, and sent to the phone as
+  they are, with their versions and §9.3's beta and live. A level lowered on the server
+  reaches every phone with no new app version (§12.5).
+- **One list of mistakes.** Until an exercise has camera data, its mistakes are words in
+  its Library file. Once its camera data lists them with "checked by the camera" or "the
+  camera cannot see this from here", that list is the one shown, and publishing refuses
+  two lists.
+- **A set's summary** is taken as §2.4 gives it; fields may be added there, and this side
+  reads none it does not know.
+- **The camera screen** (job 53). The workout asks for one set to be counted and gets back
+  that set's summary, or "count by hand". A camera failure turns the set into by hand and
+  the workout goes on (§11.8).
+- **For §12.5's numbers after launch** a saved set keeps the camera's own count beside the
+  final count, and whether the person left the camera to count by hand.
+- **Pictures and sound.** Job 62's store may also hold the reference pictures and the voice
+  lines, if folder 1's jobs choose it.
+
+### 13.4 Publishing, and the phone's download (job 60)
+
+- **Publishing is a part of its own**, run when the server is deployed and by the local
+  seed. It reads every exercise file and refuses the whole publish, naming the file and the
+  fact, for: a word outside a fixed list, a missing fact, two exercises sharing a name or
+  other name, a file that was published and is now gone (retire it instead), a number
+  outside its limits. The same check runs on GitHub, so a faulty file never merges.
+- It writes each exercise's row (its id, status and the facts the server reckons with) and,
+  only when the content changed, one new numbered copy of the whole list for each of beta
+  and live. A published copy is never changed; going back is pointing at the copy before.
+- **One download** for a signed-in phone: the whole list, the retired ones marked so that
+  history can name them, and folder 1's camera data. It carries its own fingerprint, and a
+  phone that already holds it is answered "not changed". Its size at 200 exercises is
+  measured in job 60 and written here.
+- The old routes are left exactly as they are, with nothing added.
+
+### 13.5 What a workout keeps (job 61)
+
+- **The save** is one whole workout under the id the phone made. Sent twice it is one
+  workout, and XP and the streak are given once. Somebody else's id is refused as not
+  found. The old save route stays for the web, untouched.
+- **A workout:** its name, start and end, the person's time zone, what it was started from
+  (their saved workout, the app's plan, the gym's plan, or nothing), the effort stars, and
+  the heart rate from a connected monitor (Kd, 2026-11-12).
+- **A set:** the exercise, its place in the workout, its target and what was done (reps or
+  seconds, and weight), the rest taken, how it was counted (camera · by hand · timer), and
+  for a camera set the summary of §2.4 with the two facts of §13.3. Weight is kept in whole
+  grams and shown in the person's kg or lb.
+- **An exercise the server does not know refuses the whole save with a reason the phone
+  understands.** The phone keeps the workout, reads the list again and sends it again.
+  Nothing is dropped in silence.
+- **Limits and reckoning.** Reps, weight, time and the number of sets are held inside
+  limits, time against the workout's own length, and the route has its own rate limit. The
+  server reckons calories with ONE formula with a version number (MET, the person's weight,
+  the active time), XP by the kept level curve, and the records.
+- **Records for each exercise**, worked out from the sets when read and never stored:
+  heaviest weight, most reps, best set by estimated one-rep max (Epley's formula, named on
+  the screen as an estimate), longest hold, most lifted in one workout. "New record" is
+  told against everything before that workout.
+- **A planned workout** is one shape: a name and, in order, exercises with their sets,
+  targets, weight and rest. A person's saved workouts use it now (list, save, delete, with
+  a limit for each person); the app's weekly plan (item 36) and the gym's plan (Stage 2's
+  24b) use the same shape when their folders build them.
+- **History:** a month, a day's workouts, and one workout set by set.
+- **The other readers** (goals, XP, the boards, the gym's numbers) keep reading the same
+  tables; a new column is empty for an old row, and a camera set is still marked as the
+  engine's so none of them changes. Every new column or table joins the privacy download
+  and delete lists and the policy's words in the same pull request.
+
+### 13.6 The phone (jobs 63 and 64)
+
+- **The list is kept on the phone** and searched there, so search answers at once and works
+  with no internet after the first open. Search reads names, other names, muscles and
+  equipment, with name matches first. Filters: muscle, equipment, level, kind, and how it is
+  counted (the three levels).
+- **An exercise's page:** the clip or its still picture, the level in one line, equipment,
+  muscles, about, steps, mistakes (each with its tick or "the camera cannot see this from
+  here" once folder 1 has it), the person's own records, and Add to workout.
+- **The Workout tab** follows §11.8's steps as Kd gave them: Choose the plan you want (the
+  app's, the gym's, your own); one screen for the whole workout; Camera or Count myself
+  picked every time; a set's target from the plan or the person, never from last time; the
+  set ends by itself at its target.
+- **The workout's steps are one pure piece**: the same presses in give the same state out,
+  tested as a table (start, a set done, rest, skip, pause, stop, the phone closed and
+  opened). The screen only draws it. It is written to the phone at every step, so a dead
+  battery loses nothing.
+- **Kept until saved, built once.** One shared piece holds what waits for the server, with
+  the three answers the app already knows (saved · refused · no answer). Job 64a builds it
+  with the workout. The four older copies (meals, weigh-ins, runs, minutes) are not
+  rewritten here.
+- **Ids** are made from the phone's proper random source, never `Math.random`.
+- **Goals' exercise picker** reads this list (names, and "measured in reps") from job 63.
+- Sound in a workout uses one player, shared with job 53; whichever job comes first asks
+  Kd for the package.
+
+### 13.7 The jobs (ROADMAP Stage 5, exercise folder 2; ROADMAP wins where they differ)
+
+| Job | What it builds | Waits for |
+|---|---|---|
+| 60 | The exercise list, made fresh, on the server: the file, publishing, the download, the lint rule | nothing |
+| 61 | What a workout keeps: the save, saved workouts, records, history | 60 |
+| 63 | The Exercise Library on the phone | 60 |
+| 64a | Build a workout, do it by hand or by timer, the summary, history | 61, 63 |
+| 62 | The clip line, and where clips are kept | 60; its check of a clip against its exercise's rules waits for folder 1's 52a and 52b |
+| 64b | The camera in the workout | 64a and folder 1's 53 |
+| 65 | Each exercise's Library page, towards about 200 | 60; alongside the rest |
+
+The numbers stay because other lists point at them (items 36, 38 and 39, Stage 2's 24b).
+All camera rules are folder 1's job 54; this folder writes none. Which exercises the
+Library holds is Kd's list: job 65 brings him names to cross out or add.
+
+### 13.8 Nothing a member can do today is lost
+
+Read in the member web on 2026-11-16. Each line is ticked by the job named.
+
+| What a member does today | Job |
+|---|---|
+| Search exercises; filter by category and difficulty; A to Z; 20 at a time with Load more; "none found" with Clear filters; "could not load" with Try again | 63 |
+| An exercise's card and page: picture, clips, difficulty, equipment, calories a minute, reps or time, sets, about, how to do it, common mistakes, main and other muscles; a link that opens one exercise | 63 (clips: 62) |
+| What the camera can do for it, said on the card (was "AI Supported") | 63, from folder 1's data |
+| Add to workout, no repeats; My Workout with its count | 63, 64a |
+| Name a workout; its exercises, estimated time and calories; move up and down, remove; sets, reps or time, rest; Clear; Add more | 64a |
+| Save a workout, list saved ones, load, delete with a question first | 61, 64a |
+| Start; camera or count myself | 64a, 64b |
+| The timer, "Exercise 2 of 5", the exercise's clip beside it, target and done, +1, change the target, reset the set, Complete set, Skip exercise, Pause and Resume, stop with a question first, Next up, the screen kept awake | 64a |
+| The rest ring, 15 seconds more or less, Skip rest, Coming up next, the next set starting by itself; the sounds at a rep, a set's end and the last 3 seconds | 64a |
+| Setting up the camera; the camera's count, skeleton, one correction, the form score, Count this set myself, the voice and its switch | folder 1's 53, opened by 64b |
+| After it: the confetti, time, calories as an estimate, exercises, form, grade, XP and level, streak, personal records, effort stars, meal ideas with the allergy caution, stretches, the water reminder, New workout | 64a |
+| The share card | feature folder 2's item 39 |
+| History: the calendar's days and a day's workouts; recent workouts | 61, 64a |
+
+Better than today, said to Kd on 2026-11-16: weight for each set; a timer for a timed
+exercise where it was "12 reps"; the name and the stars saved; records for each exercise;
+a workout that survives a dead phone; a summary set by set.
+
+### 13.9 Not measured yet
+
+The download's size and the publish time at 200 exercises (job 60) · many saves arriving at
+once (job 61; CLAUDE.md §4, "Cost at full size") · where clips are kept and what that
+costs each month (job 62, with Stage 4 item 4) · how long Kd's hand time for 200 generated
+clips is (job 62 says it before the first one).
 
 ---
 
