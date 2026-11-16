@@ -18,6 +18,8 @@ Current entries:
   world map, with no new app version (ROADMAP Stage 5 37b-i)
 - `migrate-a-tighter-rule.md` — a migration that tightens a rule the running api still writes
   against: stop, migrate, start (ROADMAP Stage 5 21b-ii, migration 0228)
+- `google-play.md` — sending an update to Google Play, what each of Google's forms holds and what
+  must change with the app, the reviewers' account, testers (ROADMAP Stage 5 21c-ii)
 - (P0.4b adds deploy/rollback; Part 8 tasks add alerts, backup/restore drill,
   break-glass, secret rotation)
 

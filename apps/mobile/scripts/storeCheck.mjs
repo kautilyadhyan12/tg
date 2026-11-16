@@ -3,6 +3,7 @@
 //   · the app's id, its build number and version, made for Android 16 (Google Play's rule since 2026-08-31);
 //   · the settings built into the app: the online server alone, over https, with no folder's copy named;
 //   · no plain-http traffic allowed, nothing left in for debugging, none of the permissions the store's app blocks;
+//   · every permission it asks for answered in Google Play's Data safety form (playDataSafety.mjs, 21c-ii);
 //   · both files signed with KWAZO's upload key, never the development one;
 //   · every 64-bit native library ready for phones with 16 KB memory pages (Google Play refuses updates without
 //     it from 2027-02-01), and the phone file aligned for them.
@@ -13,6 +14,7 @@ import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { dataSafetyFaults } from "./playDataSafety.mjs";
 
 export const STORE_ID = "com.kwazo.app";
 export const ANDROID_16 = 36;
@@ -106,6 +108,8 @@ export function storeFaults(f) {
   if (f.cleartext === null) faults.push("It names a network security file that could not be read.");
   if (f.permissions.length === 0) faults.push("The app's own permissions could not be read.");
   for (const blocked of NEVER_IN_THE_STORE) if (f.permissions.includes(blocked)) faults.push(`It asks for ${blocked}, which the store's app blocks.`);
+  const allowed = f.permissions.filter((p) => !NEVER_IN_THE_STORE.includes(p));
+  faults.push(...dataSafetyFaults({ permissions: allowed, policyParts: [], outsideIds: [] }));
   const built = f.builtIn;
   if (built === null) {
     faults.push("The settings built into the app could not be read.");
