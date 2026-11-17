@@ -11,3 +11,5 @@ apps/api/test/fixtures/photos/*.webp binary
 # Run on the Linux test server as they are (21a-ii): a CR at a line end breaks bash and cron.
 infra/*.sh text eol=lf
 infra/*.cron text eol=lf
+# A patch to a package (patches/): its LF line ends must match the package's files on every checkout.
+patches/*.patch -text

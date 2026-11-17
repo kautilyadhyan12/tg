@@ -1353,6 +1353,16 @@ describe("posting", () => {
     expect(await screen.findByTestId("draft-photo-1")).toBeTruthy();
   });
 
+  it("a post's photo still turns with the phone, so a photo taken sideways is a wide photo, as before (33c)", async () => {
+    const server = serverOf({ [postsOf(IRON)]: on(IRON) });
+    await openUpdates(server.ask, IRON);
+    await fireEvent.press(await page().findByRole("button", { name: "Write a post" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Take a photo" }));
+    expect((await screen.findByTestId("camera-view")).props.responsiveOrientationWhenOrientationLocked).toBe(true);
+    await fireEvent.press(screen.getByRole("button", { name: "Switch to the selfie camera" }));
+    expect(screen.getByTestId("camera-view").props.responsiveOrientationWhenOrientationLocked).toBe(true);
+  });
+
   it("Post waits for something to post, and for words within the limit", async () => {
     const server = serverOf({ [postsOf(IRON)]: on(IRON) });
     await openUpdates(server.ask, IRON);
