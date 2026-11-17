@@ -1,10 +1,11 @@
 // The phone test (ROADMAP Stage 5 item 51a): Kd's reference videos through the phone's own pose model, three sizes,
 // on the main chip and the graphics chip, each against the laptop's run of the same model on the same video.
-//   corepack pnpm --filter @app/movement phone-test [--compare-only] [--models lite,full,heavy] [--chips cpu,gpu]
+//   corepack pnpm --filter @app/movement phone-test [--laptop-only | --compare-only] [--models lite,full,heavy] [--chips cpu,gpu]
 //                                                   [--labels a,b] [--videos <folder>] [--python <command>]
 // It needs this folder's copy of the app on the phone on the USB cable (corepack pnpm --filter mobile phone), puts the
 // videos, the models and a plan in that copy's own files, opens its phone-test screen, waits, takes one file a run
-// back, deletes everything it put there, then compares. --compare-only compares the files already taken back.
+// back, deletes everything it put there, then compares. --laptop-only makes the laptop's side ready and stops before the
+// phone is touched; --compare-only compares the files already taken back.
 // Everything it writes is in measured/phone-test/, which git ignores; the videos never leave Kd's folder but for the
 // phone's copy of the app, and are deleted there when the test ends.
 import { spawnSync } from "node:child_process";
@@ -50,6 +51,7 @@ const { values } = (() => {
   try {
     return parseArgs({
       options: {
+        "laptop-only": { type: "boolean", default: false },
         "compare-only": { type: "boolean", default: false },
         models: { type: "string", default: MODELS.map((m) => m.size).join(",") },
         chips: { type: "string", default: PHONE_TEST_DELEGATES.join(",") },
@@ -59,7 +61,7 @@ const { values } = (() => {
       },
     });
   } catch (err) {
-    fail(`${messageOf(err)}\nUsage: phone-test [--compare-only] [--models lite,full,heavy] [--chips cpu,gpu] [--labels a,b] [--videos <folder>]`);
+    fail(`${messageOf(err)}\nUsage: phone-test [--laptop-only | --compare-only] [--models lite,full,heavy] [--chips cpu,gpu] [--labels a,b] [--videos <folder>]`);
   }
 })();
 
@@ -67,6 +69,7 @@ const listed = (text: string): string[] => text.split(",").map((s) => s.trim()).
 const models: PoseModel[] = listed(values.models).map((size) => MODELS.find((m) => m.size === size) ?? fail(`--models takes lite, full and heavy, not "${size}".`));
 const chips: PhoneTestDelegate[] = listed(values.chips).map((c) => PHONE_TEST_DELEGATES.find((d) => d === c) ?? fail(`--chips takes cpu and gpu, not "${c}".`));
 if (models.length === 0 || chips.length === 0) fail("Give at least one model and one chip.");
+if (values["laptop-only"] && values["compare-only"]) fail("--laptop-only and --compare-only do not go together.");
 const keptLabels = readdirSync(KEPT)
   .filter((f) => f.endsWith(".bodypoints"))
   .map((f) => basename(f, ".bodypoints"))
@@ -79,7 +82,7 @@ try {
 } catch (err) {
   fail(messageOf(err));
 }
-for (const folder of ["models", "laptop", "frames", "phone"]) mkdirSync(join(HERE, folder), { recursive: true });
+for (const folder of ["models", "laptop", "frames", "videos", "phone"]) mkdirSync(join(HERE, folder), { recursive: true });
 const started = Date.now();
 const sha256 = (bytes: Uint8Array): string => createHash("sha256").update(bytes).digest("hex");
 
@@ -147,6 +150,35 @@ function framesOf(label: string, runs: readonly BodyPoints[]): VideoFrames {
   return list.data;
 }
 
+/** Each picture of a video as ffmpeg decodes it, by its check sum, in the order it plays. */
+function pictureSums(video: string): string[] {
+  const r = spawnSync("ffmpeg", ["-v", "error", "-i", video, "-map", "0:v:0", "-f", "framemd5", "-"], { encoding: "utf8", maxBuffer: 1 << 28 });
+  if (r.status !== 0) fail(`ffmpeg could not read ${basename(video)}: ${r.stderr.trim()}`);
+  return r.stdout.split("\n").flatMap((line) => (line.startsWith("#") || line.trim() === "" ? [] : [line.split(",").at(-1)?.trim() ?? ""]));
+}
+
+/** The video as the phone gets it: its pictures packed again in one piece (`-c copy`: nothing decoded or made again),
+ *  since Android cannot number the frames of a video stored in pieces, as the two bench videos are (YouTube's "dash").
+ *  Sent only when every picture, decoded, is the original's, in the same order, and points.py lists the same frames. */
+function phoneCopyOf(label: string, list: VideoFrames): string {
+  const original = videoOf(label);
+  const copyPath = join(HERE, "videos", `${label}.mp4`);
+  if (!existsSync(copyPath)) {
+    mkdirSync(join(HERE, "videos"), { recursive: true });
+    const r = spawnSync("ffmpeg", ["-v", "error", "-y", "-i", original, "-map", "0:v:0", "-c", "copy", "-movflags", "+faststart", copyPath], { encoding: "utf8" });
+    if (r.status !== 0) fail(`ffmpeg could not pack ${label} for the phone: ${r.stderr.trim()}`);
+  }
+  const a = pictureSums(original);
+  const b = pictureSums(copyPath);
+  if (a.length === 0 || a.length !== b.length || a.some((sum, i) => sum !== b[i])) fail(`The phone's copy of ${label} does not hold the original's pictures. Delete ${copyPath}.`);
+  const listPath = join(HERE, "frames", `${label}.copy.json`);
+  const r = spawnSync(values.python, [POINTS_PY, "frames", "--video", copyPath, "--fps", String(list.fps), "--out", listPath], { stdio: "inherit" });
+  if (r.status !== 0) fail(`The laptop could not list the frames of the phone's copy of ${label}.`);
+  const copyList = videoFramesSchema.safeParse(JSON.parse(readFileSync(listPath, "utf8")));
+  if (!copyList.success || JSON.stringify(copyList.data) !== JSON.stringify(list)) fail(`The phone's copy of ${label} is not read at the original's frames. Delete ${copyPath}.`);
+  return copyPath;
+}
+
 const laptop = new Map<string, BodyPoints>();
 const lists = new Map<string, VideoFrames>();
 for (const label of labels) {
@@ -156,6 +188,13 @@ for (const label of labels) {
     return run;
   });
   lists.set(label, framesOf(label, runs));
+}
+const copies = new Map<string, string>();
+if (!values["compare-only"]) {
+  for (const label of labels) {
+    const list = lists.get(label);
+    if (list !== undefined) copies.set(label, phoneCopyOf(label, list));
+  }
 }
 
 // ── 3. The phone ─────────────────────────────────────────────────────────────────
@@ -216,7 +255,9 @@ async function onThePhone(): Promise<void> {
   if (!inApp("true").ok) fail(`The phone will not let the laptop into ${id}: it must be a folder's copy, built for testing.`);
 
   const videos: PlanVideo[] = labels.map((label) => {
-    const bytes = new Uint8Array(readFileSync(videoOf(label)));
+    const copy = copies.get(label);
+    if (copy === undefined) throw new Error(`No phone copy of ${label}.`);
+    const bytes = new Uint8Array(readFileSync(copy));
     const frames = lists.get(label);
     if (frames === undefined) throw new Error(`No frame list for ${label}.`);
     return { label, sha256: sha256(bytes), frames };
@@ -234,7 +275,7 @@ async function onThePhone(): Promise<void> {
     };
     for (const v of videos) {
       console.log(`Sending ${v.label} to the phone.`);
-      send(`${ON_PHONE}/videos/${v.label}.mp4`, new Uint8Array(readFileSync(videoOf(v.label))), `The video ${v.label}`);
+      send(`${ON_PHONE}/videos/${v.label}.mp4`, new Uint8Array(readFileSync(copies.get(v.label) ?? "")), `The video ${v.label}`);
     }
     for (const m of models) {
       console.log(`Sending the ${m.size} model to the phone.`);
@@ -265,6 +306,10 @@ async function onThePhone(): Promise<void> {
 }
 
 // Every refusal on the phone is thrown, never an exit: the finally above must delete what was sent.
+if (values["laptop-only"]) {
+  console.log(`The laptop's side is ready in ${HERE}: the models, the laptop's runs and the frame lists. The phone was not touched.`);
+  process.exit(0);
+}
 if (!values["compare-only"]) {
   try {
     await onThePhone();
