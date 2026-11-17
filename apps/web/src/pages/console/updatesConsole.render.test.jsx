@@ -318,7 +318,7 @@ describe('pinning and removing', () => {
     open();
     await waitFor(() => expect(cards()).toHaveLength(2));
     fireEvent.click(within(cards()[1]).getByRole('button', { name: 'Remove post' }));
-    fireEvent.click(within(cards()[1]).getByRole('group').querySelector('.c-btn-danger'));
+    fireEvent.click(within(cards()[1]).getByRole('group').querySelector('.c-btn-ds'));
     await waitFor(() => expect(svc.remove).toHaveBeenCalledTimes(1));
     expect(svc.remove).toHaveBeenCalledWith('g1', 'b');
     expect((await screen.findByRole('status')).textContent).toBe('Post removed. Your members no longer see it.');
@@ -338,7 +338,7 @@ describe('pinning and removing', () => {
     const words = () => cards().map((card) => ['Newest', 'Middle', 'Older', 'Oldest'].find((w) => card.textContent.includes(w)));
 
     fireEvent.click(within(cards()[2]).getByRole('button', { name: 'Remove post' }));
-    fireEvent.click(within(cards()[2]).getByRole('group').querySelector('.c-btn-danger'));
+    fireEvent.click(within(cards()[2]).getByRole('group').querySelector('.c-btn-ds'));
     await waitFor(() => expect(cards()).toHaveLength(3));
     expect(svc.remove).toHaveBeenCalledWith('g1', 'c');
     expect(words()).toEqual(['Newest', 'Middle', 'Oldest']);

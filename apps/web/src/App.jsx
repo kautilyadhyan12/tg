@@ -75,6 +75,10 @@ import FrameGuard from './components/common/FrameGuard';
 // Loaded only when /admin is opened: its addresses are not in the bundle every visitor gets.
 const Admin = lazy(() => import('./pages/admin/Admin'));
 
+// The second look's building blocks on one page (V1-b): a development build only, so a
+// production build has neither the page nor its address.
+const ConsoleKit = import.meta.env.DEV ? lazy(() => import('./dev/ConsoleKit')) : null;
+
 export default function App() {
   return (
     <BrowserRouter>
@@ -429,6 +433,9 @@ export default function App() {
             {/* KD'S ADMIN PAGE (14a-i): its own door, never a gym's. It signs in by itself (a fresh
                 code, then his password), so no gym or member gate stands in front of it. */}
             <Route path="/admin" element={<Suspense fallback={null}><Admin /></Suspense>} />
+            {ConsoleKit !== null ? (
+              <Route path="/console-kit" element={<Suspense fallback={null}><ConsoleKit /></Suspense>} />
+            ) : null}
 
             {/* ── Fallback ──────────────────────────────────────────────── */}
             <Route path="/"  element={<Navigate to="/login" replace />} />
