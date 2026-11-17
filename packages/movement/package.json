@@ -14,7 +14,8 @@
     "lint": "eslint src test scripts",
     "test": "vitest run",
     "measure-points": "tsx scripts/measure-points.ts",
-    "body-check": "tsx scripts/body-check.ts"
+    "body-check": "tsx scripts/body-check.ts",
+    "measure-check": "tsx scripts/measure-check.ts"
   },
   "devDependencies": {
     "@app/config": "workspace:*",

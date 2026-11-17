@@ -9,7 +9,9 @@ person counts by eye, are not in these files (jobs 52d and 52a).
 
 `corepack pnpm --filter @app/movement body-check` runs the possible-body check and the steady
 points on all of them (50c-ii), sets the fitted numbers from them and draws every refused frame
-into `measured/<label>/body-check/`.
+into `measured/<label>/body-check/`. `corepack pnpm --filter @app/movement measure-check` takes
+the body measures of each, flat and in 3D (50c-iii), says which reading is the steadier and draws
+eight frames a video with their numbers into `measured/<label>/measure-check/`.
 
 | File | What it shows | Frames | People the model found |
 |---|---|---|---|

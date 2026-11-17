@@ -795,7 +795,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
     - 50c. **The body's picture** (§12.2, §12.7; split 2026-11-16 in three). The cross-check of 2026-11-02 was closed unmerged (PR #434); the proof table is 52a's.
         - 50c-i. [x] **The frame and the small files** — merged 2026-11-16 (PR #564).
         - 50c-ii. [x] **Is this body possible, and steady points** — merged 2026-11-17 (PR #569).
-        - 50c-iii. [ ] **The body measures**, each taken flat or in 3D by which is steadier on real videos (§12.2 stage 4).
+        - 50c-iii. [x] **The body measures** — merged 2026-11-17 (PR #573).
 51. [ ] **The phone test** (after 50c; it needs Kd's phone): which pose model and library, the speed, heat and battery, 3D points and several people at speed, the same numbers as the laptop, and the phone testing itself on the videos (§12.5). Second on purpose: what it finds can change the design before the matcher is built.
 52. **The movement engine** (§12; it replaces "the engine's missing parts").
     - 52a. [ ] **The movement matcher and the proof table** (§12.3, §12.5): a movement as data, numbers set from all the people but one and tested on the one left out, every other movement's video counting 0, each video replayed the ways the world changes it; the squat movement made fresh as the first proof. It needs 3 to 5 squat videos of different people from Kd.
