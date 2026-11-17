@@ -10,13 +10,15 @@
 // stop is never counted. The place the person stopped is the middle of those points.
 //
 // Moving again: GO_POINTS points in a row farther from that place than the phone can wander while
-// standing (GO_M, or twice how sure the point is, whichever is more). A phone lying still wanders a few
-// metres and its speed reading jumps about, so neither alone starts the clock: the first rule, 5 m twice
-// or a speed over 1 m/s, said "Run resumed" and "Auto-paused" again and again to a person standing
-// (testers on Google Play, 2026-11-17). The clock starts again from the last point within STILL_M of that
-// place, so the steps that took the person away are counted: on a real 51-minute hike with stops this kept
-// 42 m more than the first rule (5 m from the stop). A point less sure of where it is than WORST_ACCURACY_M is not
-// judged at all: under trees the signal wanders as far as a walk.
+// standing (GO_M, or how sure the point is, whichever is more). A phone lying still wanders a few metres
+// and its speed reading jumps about, so neither alone starts the clock: the first rule, 5 m twice or a
+// speed over 1 m/s, said "Run resumed" and "Auto-paused" again and again to a person standing (testers on
+// Google Play, 2026-11-17). Twice how sure the point is held a walker paused for up to 40 m under a weak
+// signal (Kd's click-through, 2026-11-17). The clock starts again from the last point within STILL_M of
+// that place, so the steps that took the person away are counted, but never from more than BACK_MOST_MS
+// before the first far point: a phone drifting off while the person stood would otherwise date it back
+// minutes and count them as running (round one, H1). A point less sure of where it is than
+// WORST_ACCURACY_M is not judged at all: under trees the signal wanders as far as a walk.
 import { STILL_M, STILL_MS } from "@app/shared";
 
 // Standing is the shared maths' own test, so the clock and the saved moving time agree.
@@ -25,6 +27,7 @@ export const GO_M = 10;
 export const GO_MPS = 1.0;
 export const GO_POINTS = 3;
 export const WORST_ACCURACY_M = 20;
+export const BACK_MOST_MS = 30_000;
 
 export interface Fix {
   /** Milliseconds since the run started. */
@@ -44,11 +47,12 @@ export interface AutoPauseState {
   anchor: Fix | null;
   /** While paused: when the last point within STILL_M of where the person stopped came. */
   nearAt: number | null;
-  /** While paused: the points in a row that lay far from where the person stopped. */
+  /** While paused: the points in a row that lay far from where the person stopped, and when the first came. */
   goCount: number;
+  farAt: number | null;
 }
 
-export const AUTO_START: AutoPauseState = { paused: false, recent: [], anchor: null, nearAt: null, goCount: 0 };
+export const AUTO_START: AutoPauseState = { paused: false, recent: [], anchor: null, nearAt: null, goCount: 0, farAt: null };
 
 export type AutoPauseChange = { kind: "pause"; at: number } | { kind: "resume"; at: number } | null;
 
@@ -64,7 +68,7 @@ const fast = (fix: Fix): boolean => fix.speed !== null && fix.speed >= GO_MPS;
 
 /** How far from where the person stopped this point must lie to count as moving: past what a phone
  *  this sure of itself wanders while it lies still. */
-export const goMetres = (fix: Fix): number => Math.max(GO_M, 2 * (fix.accuracyM ?? 0));
+export const goMetres = (fix: Fix): number => Math.max(GO_M, fix.accuracyM ?? 0);
 
 /** The middle of the still points: one point's wander moves it least. */
 function middle(points: readonly Fix[], first: Fix): Fix {
@@ -86,18 +90,20 @@ export function nextAutoPause(state: AutoPauseState, fix: Fix): { state: AutoPau
     const still = recent.every((p) => metresApart(first, p) <= STILL_M);
     if (!still) return { state: { ...state, recent }, change: null };
     return {
-      state: { paused: true, recent: [], anchor: middle(recent, first), nearAt: fix.at, goCount: 0 },
+      state: { paused: true, recent: [], anchor: middle(recent, first), nearAt: fix.at, goCount: 0, farAt: null },
       change: { kind: "pause", at: first.at },
     };
   }
   const anchor = state.anchor ?? { ...fix, speed: null };
   const apart = metresApart(anchor, fix);
   const go = goMetres(fix);
-  if (apart <= STILL_M) return { state: { ...state, anchor, nearAt: fix.at, goCount: 0 }, change: null };
-  if (apart <= go) return { state: { ...state, anchor, goCount: 0 }, change: null };
+  if (apart <= STILL_M) return { state: { ...state, anchor, nearAt: fix.at, goCount: 0, farAt: null }, change: null };
+  if (apart <= go) return { state: { ...state, anchor, goCount: 0, farAt: null }, change: null };
   const goCount = state.goCount + 1;
+  const farAt = state.goCount === 0 || state.farAt === null ? fix.at : state.farAt;
   if (goCount >= GO_POINTS) {
-    return { state: { paused: false, recent: [fix], anchor: null, nearAt: null, goCount: 0 }, change: { kind: "resume", at: state.nearAt ?? fix.at } };
+    const at = Math.max(state.nearAt ?? fix.at, farAt - BACK_MOST_MS);
+    return { state: { ...AUTO_START, recent: [fix] }, change: { kind: "resume", at } };
   }
-  return { state: { ...state, anchor, goCount }, change: null };
+  return { state: { ...state, anchor, goCount, farAt }, change: null };
 }

@@ -216,6 +216,8 @@ const realRun = (name: string): RunPoint[] =>
 // Testers on Google Play, 2026-11-17: "when a run is started the dot in map starts moving on own and
 // without running starts making route". Standing, the route holds still.
 describe("standing, the route holds still", () => {
+  // Where the line lies (round one of 37g, L4, 15 minutes, 1 m of wander, 5 m sure): at 0.25 m/s a walk keeps
+  // 221 of 225 m, at 0.2 m/s 53 of 180 m, at 0.15 m/s none. That slow is standing, as its time already was.
   it("the worst thing: a slow walk is never held still, at 0.5 m a second, with or without a stop on the way", () => {
     const slow = track(steady(600, 0.5), { wobble: phoneError(1), acc: () => 5 });
     const sums = runSums(slow.points, [], 600_000, 70);

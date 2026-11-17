@@ -85,8 +85,23 @@ describe("Auto-pause", () => {
     });
 
   it("a phone lying still, wandering 6 m and its speed jumping to 1.5 m a second, never starts the clock", () => {
-    const wander = around(22, 300, (i) => [6 * Math.sin(i * 0.9), 6 * Math.cos(i * 1.3)], 5, (i) => [0, 0.4, 1.5, 0.2, 1.1][i % 5] ?? 0);
+    // Six speed readings over 1 m/s in a row among them: the phone's speed alone never starts it (round one).
+    const speed = (i: number) => (i >= 100 && i < 106 ? 1.4 : ([0, 0.4, 1.5, 0.2, 1.1][i % 5] ?? 0));
+    const wander = around(22, 300, (i) => [6 * Math.sin(i * 0.9), 6 * Math.cos(i * 1.3)], 5, speed);
     expect(changes([...stopped, ...wander])).toEqual([{ kind: "pause", at: 9000 }]);
+  });
+
+  it("three single 15 m jumps of the signal, each followed by points 5 m off, never start the clock: far means in a row", () => {
+    const off = (n: number) => Array.from({ length: n }, (): [number, number] => [5, 0]);
+    const offsets: [number, number][] = [...off(5), [15, 0], ...off(5), [15, 0], ...off(5), [15, 0], ...off(5)];
+    expect(changes([...stopped, ...around(22, offsets.length, (i) => offsets[i] ?? [0, 0])])).toEqual([{ kind: "pause", at: 9000 }]);
+  });
+
+  it("a phone drifting 5 m off for three minutes, then a walk away: the clock starts no more than 30 s before the first far point (round one, H1)", () => {
+    const drift = around(22, 180, () => [5, 0]);
+    // From 202 s at 1.2 m a second: the first point past 10 m is at 206 s.
+    const walk = around(202, 20, (i) => [5 + 1.2 * (i + 1), 0]);
+    expect(changes([...stopped, ...drift, ...walk])).toEqual([{ kind: "pause", at: 9000 }, { kind: "resume", at: 176_000 }]);
   });
 
   it("the signal thrown 30 m off for two points and back never starts the clock", () => {
@@ -94,11 +109,11 @@ describe("Auto-pause", () => {
     expect(changes([...stopped, ...jump])).toEqual([{ kind: "pause", at: 9000 }]);
   });
 
-  it("a point the phone is only 15 m sure of must lie 30 m from the stop", () => {
-    expect([goMetres({ at: 0, lat: 0, lng: 0, accuracyM: 15, speed: null }), goMetres({ at: 0, lat: 0, lng: 0, accuracyM: 5, speed: null }), goMetres({ at: 0, lat: 0, lng: 0, accuracyM: null, speed: null })]).toEqual([30, 10, 10]);
-    const unsure = around(22, 10, () => [20, 0], 15);
+  it("a point the phone is only 15 m sure of must lie 15 m from the stop", () => {
+    expect([goMetres({ at: 0, lat: 0, lng: 0, accuracyM: 15, speed: null }), goMetres({ at: 0, lat: 0, lng: 0, accuracyM: 5, speed: null }), goMetres({ at: 0, lat: 0, lng: 0, accuracyM: null, speed: null })]).toEqual([15, 10, 10]);
+    const unsure = around(22, 10, () => [14, 0], 15);
     expect(changes([...stopped, ...unsure])).toEqual([{ kind: "pause", at: 9000 }]);
-    const sure = around(32, 3, () => [20, 0], 5);
+    const sure = around(32, 3, () => [14, 0], 5);
     expect(changes([...stopped, ...unsure, ...sure])).toEqual([{ kind: "pause", at: 9000 }, { kind: "resume", at: 21_000 }]);
   });
 

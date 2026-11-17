@@ -7,7 +7,7 @@ import { resetMapSource } from "../../src/screens/running/mapSource";
 import { RUN_BAR_ROOM } from "../../src/screens/running/RunLayer";
 import { MAP_CREDIT_PAGE, MAP_WAIT_MS } from "../../src/screens/running/RunMap";
 import { unitMarks } from "../../src/screens/running/routeShape";
-import { closedPauses, keepRunUnits, phoneRunFiles, resetRecorder, runNow, takeLocations } from "../../src/screens/running/recorder";
+import { closedPauses, finishRun, keepRunUnits, pauseRun, phoneRunFiles, resetRecorder, runNow, startRun, takeLocations } from "../../src/screens/running/recorder";
 import { spokenTime } from "../../src/screens/running/runVoice";
 import { readRunFile } from "../../src/screens/running/runQueue";
 import { clock, distance, runName } from "../../src/screens/running/runWords";
@@ -47,6 +47,24 @@ const maplibre = jest.requireMock<{ maps: DrawnMap[] }>("@maplibre/maplibre-reac
 /** What Android hands over while its location stops, set by a test (test/screens/setup.js). */
 const stopping = jest.requireMock<{ state: { whileStopping: (() => Promise<void>) | null } }>("expo-location").state;
 /** The map on screen with this test id, the newest drawn. */
+/** How long the route line drawn on a map is, in metres, over all its pieces. */
+function trailMetres(map: DrawnMap): number {
+  const trail = map.sources["run-trail"];
+  const features: unknown = typeof trail === "object" && trail !== null ? Reflect.get(trail, "features") : null;
+  if (!Array.isArray(features)) return Infinity;
+  let total = 0;
+  for (const feature of features) {
+    const geometry: unknown = typeof feature === "object" && feature !== null ? Reflect.get(feature, "geometry") : null;
+    const coordinates: unknown = typeof geometry === "object" && geometry !== null ? Reflect.get(geometry, "coordinates") : null;
+    if (!Array.isArray(coordinates)) continue;
+    for (let i = 1; i < coordinates.length; i++) {
+      const a: unknown = coordinates[i - 1];
+      const b: unknown = coordinates[i];
+      if (Array.isArray(a) && Array.isArray(b)) total += geodesicMetres(Number(a[1]), Number(a[0]), Number(b[1]), Number(b[0]));
+    }
+  }
+  return total;
+}
 const drawnMap = (testID: string): DrawnMap => {
   const map = maplibre.maps.filter((m) => !m.gone && m.props.testID === testID).at(-1);
   if (map === undefined) throw new Error(`no ${testID} on screen`);
@@ -430,6 +448,35 @@ describe("Auto-pause turned off during a run (Kd's click-through, 2026-11-05)", 
 });
 
 describe("a run stays inside what the server takes (round one of 37a, H1)", () => {
+  it("Finish stops the phone's location even when the run cannot be written (round one, L1)", async () => {
+    let full = false;
+    resetRecorder({ read: () => Promise.resolve(null), write: () => (full ? Promise.reject(new Error("no room")) : Promise.resolve()), remove: () => undefined });
+    await act(() => startRun(RAVI.id, "5b1d2c3b-4a5e-4f60-8a7b-9c0d1e2f3a4b", true, Date.now()));
+    expect(location.running).toBe(true);
+    full = true;
+    // Nothing is drawn here: Finish is awaited itself.
+    await expect(finishRun()).rejects.toThrow("no room");
+    expect(location.running).toBe(false);
+    expect(runNow()?.phase).toBe("finished");
+  });
+
+  it("points taken before Finish that Android hands over after it are the run's, kept quietly (round one, L2)", async () => {
+    const t0 = Date.now();
+    await act(() => startRun(RAVI.id, "6c1d2c3b-4a5e-4f60-8a7b-9c0d1e2f3a4b", false, t0));
+    const at = (s: number) => ({ timestamp: t0 + s * 1000, coords: { latitude: 26.1445 + (s * 3) / 111_132, longitude: 91.7362, accuracy: 5, speed: 3 } });
+    await act(() => takeLocations({ locations: Array.from({ length: 58 }, (_, s) => at(s)) }, t0 + 57_000));
+    await act(() => pauseRun(t0 + 60_000));
+    await act(() => finishRun(t0 + 65_000));
+    const before = runNow()?.points.length ?? 0;
+    Object.assign(voice, { said: [] });
+    // A batch that came late: 58 and 59 s, before the pause; 62 s, inside it; 70 s, after Finish.
+    await act(() => takeLocations({ locations: [at(58), at(59), at(62), at(70)] }));
+    expect(runNow()?.points.slice(before).map((p) => p[0])).toEqual([58_000, 59_000]);
+    expect(runNow()?.phase).toBe("finished");
+    expect(runNow()?.pauses).toEqual([[60_000, 65_000]]);
+    expect(voice.said).toEqual([]);
+  });
+
   it("keeps no points while paused, so a run left paused never fills the phone", async () => {
     const s = runServer();
     await openRunning(s);
@@ -815,24 +862,56 @@ describe("the map under the run (37b-i)", () => {
     expect(s.requests.filter((r) => r.path !== PATH && (r.body ?? "").includes(lat))).toEqual([]);
   });
 
-  it("standing after Go, the distance stays 0.00 and the dot stays where the person stands (testers on Google Play, 2026-11-17)", async () => {
+  it("standing after Go, the distance stays 0.00 and no route is drawn (testers on Google Play, 2026-11-17)", async () => {
     const s = runServer();
     await openRunning(s);
     await startRunning();
     // A real run's two minutes standing at its start, as the phone recorded them; the runner leaves at 122 s.
     const standing = (realRuns().get("iphone") ?? []).filter(([t]) => t <= 121_000);
     await feedReal(standing);
-    const first = standing[0];
-    if (first === undefined) throw new Error("no points");
-    const front = () => drawnMap("live-map-view").markers.at(-1);
+    const last = standing[standing.length - 1];
+    if (last === undefined) throw new Error("no points");
     await waitFor(
       () => {
         expect(screen.getByText("0.00 km")).toBeTruthy();
-        const dot = front();
-        expect(dot === undefined ? Infinity : geodesicMetres(first[1], first[2], dot[1], dot[0])).toBeLessThan(0.5);
+        // The two minutes' wander drew 13 m of line before; a step of a metre or two at most now.
+        expect(trailMetres(drawnMap("live-map-view"))).toBeLessThan(3);
+        // The dot is where the phone last said the person is.
+        const dot = drawnMap("live-map-view").markers.at(-1);
+        expect(dot === undefined ? Infinity : geodesicMetres(last[1], last[2], dot[1], dot[0])).toBeLessThan(0.5);
       },
       { timeout: 5000 },
     );
+  });
+
+  it("the dot is where the person is, Auto-paused or not: it walks off with them before the clock starts again (Kd's click-through, 2026-11-17)", async () => {
+    const s = runServer();
+    await openRunning(s);
+    await startRunning();
+    await feed(0, 60, 3);
+    const run = runNow();
+    if (run === null) throw new Error("no run");
+    const stillAt = 26.1445 + (59 * 3) / 111_132;
+    await act(() =>
+      takeLocations({ locations: Array.from({ length: 20 }, (_, i) => ({ timestamp: run.startedAt + (60 + i) * 1000, coords: { latitude: stillAt, longitude: 91.7362, accuracy: 5, speed: 0 } })) }),
+    );
+    expect(await screen.findByText("Auto-paused")).toBeTruthy();
+    const dotFrom = (point: RunPoint | undefined) => {
+      const dot = drawnMap("live-map-view").markers.at(-1);
+      return point === undefined || dot === undefined ? Infinity : geodesicMetres(point[1], point[2], dot[1], dot[0]);
+    };
+    // Eight steps away at a walk, 8.4 m: still under the 10 m that starts the clock, and the dot is with them.
+    const off = await feed(80, 8, 1.2, stillAt - (80 * 1.2) / 111_132);
+    expect(runNow()?.phase).toBe("paused");
+    await waitFor(() => {
+      expect(dotFrom(off.at(-1))).toBeLessThan(0.5);
+    });
+    // On: the clock starts again, and the dot is still with them.
+    const on = await feed(88, 10, 1.2, stillAt - (80 * 1.2) / 111_132);
+    await waitFor(() => {
+      expect(runNow()?.phase).toBe("running");
+      expect(dotFrom(on.at(-1))).toBeLessThan(0.5);
+    });
   });
 
   it("follows the front of the run, stops when the person moves the map, and Follow me brings it back", async () => {
