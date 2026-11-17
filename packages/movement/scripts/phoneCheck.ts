@@ -469,9 +469,14 @@ export interface Sums {
 function sourceRefusals(laptop: BodyPoints, run: PhoneRun, sums: Sums): string[] {
   const refused: string[] = [];
   const { header } = run;
-  // A file of 51a's first runs names no plan: they were the only runs of their kind, and every later run deletes a
-  // kind's files before it sends anything.
-  if (header.plan !== null && header.plan !== sums.plan) refused.push("the file was made for another plan than this run's: an older run of the test");
+  // A file of 51a's first runs names no plan: they were the only runs of their kind, kept no plan ("none"), and every
+  // later run deletes a kind's files before it sends anything. Where this kind kept a plan, a file naming none was
+  // made by a copy of the app built before files named their plan, which may lack what this run tests (the re-check).
+  if (header.plan === null && sums.plan !== "none") {
+    refused.push("the file names no plan, and this run kept one: a copy of the app built before files named their plan");
+  } else if (header.plan !== null && header.plan !== sums.plan) {
+    refused.push("the file was made for another plan than this run's: an older run of the test");
+  }
   if (header.video.sha256 !== sums.video) refused.push("the file was made from another video, or other pictures of it, than this run's");
   if (header.model.sha256 !== sums.model) refused.push("the file was made with another model file than this run's");
   const lp = laptop.header.picture;

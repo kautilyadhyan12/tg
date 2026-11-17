@@ -8,7 +8,8 @@
 // back, deletes everything it put there, then compares. --laptop-only makes the laptop's side ready and stops before the
 // phone is touched; --compare-only compares the files already taken back. --people asks the model for fewer people than
 // the laptop's six (the laptop then measures the same way); --pictures laptop hands the phone the laptop's own decoded
-// pictures instead of the video, so what still differs is the model's part alone. Each kind of run keeps its own files.
+// pictures instead of the video, so what still differs is the model's part alone. Each kind of run keeps its own files,
+// and a run on the phone first clears all of its kind's earlier files, every video's, not only those it sends.
 // Everything it writes is in measured/phone-test/, which git ignores; the videos never leave Kd's folder but for the
 // phone's copy of the app, and are deleted there when the test ends.
 import { spawnSync } from "node:child_process";
@@ -335,7 +336,9 @@ async function onThePhone(): Promise<void> {
   const runs: PlanRun[] = models.flatMap((model) => chips.map((delegate) => ({ model, delegate })));
   // This kind's old files go before anything is sent: a run the phone gives no file for this time must never be
   // reported from the last time (round one, H2).
-  for (const name of runFiles(readdirSync(PHONE_OUT))) rmSync(join(PHONE_OUT, name));
+  const cleared = runFiles(readdirSync(PHONE_OUT));
+  for (const name of cleared) rmSync(join(PHONE_OUT, name));
+  if (cleared.length > 0) console.log(`Cleared ${String(cleared.length)} files of earlier ${variant} runs, every video's, from ${PHONE_OUT}.`);
   writeFileSync(PLAN, JSON.stringify(makePlan(videos, runs, people)));
 
   adb(["shell", "am", "force-stop", id]);

@@ -253,6 +253,12 @@ describe("the worst thing: a phone that reads the body differently is never call
     const first = phoneRunOf(squat, (f) => f, { plan: null });
     expect(comparePhone(squat, first, { plan: "none" }).verdict).toBe("same");
     expect(comparePhone(squat, first, { plan: "none", video: "5".repeat(64) }).verdict).toBe("not comparable");
+    // Where the run kept a plan, a file naming none came from a copy of the app built before files named it.
+    const stale = comparePhone(squat, first);
+    expect(stale.verdict).toBe("not comparable");
+    expect(reasonsOf(stale)).toContain("built before files named their plan");
+    // And a file naming a plan where the kind kept none cannot be told from another run's.
+    expect(comparePhone(squat, phoneRunOf(squat), { plan: "none" }).verdict).toBe("not comparable");
   });
 });
 
