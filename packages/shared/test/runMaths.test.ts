@@ -204,6 +204,78 @@ describe("moving time", () => {
   });
 });
 
+/** A real recording's points, by file: Kd's phone indoors, or the public runs of real-runs.json. */
+const pointsFile = z.object({ points: z.array(z.tuple([z.number(), z.number(), z.number(), z.number().nullable()])) });
+const realRunsFile = z.object({ runs: z.record(z.string(), z.object({ points: z.array(z.tuple([z.number(), z.number(), z.number()])) })) });
+const indoorWalk = (): RunPoint[] => pointsFile.parse(JSON.parse(readFileSync(new URL("./fixtures/indoor-walk.json", import.meta.url), "utf8"))).points;
+const realRun = (name: string): RunPoint[] =>
+  (realRunsFile.parse(JSON.parse(readFileSync(new URL("../../../apps/mobile/test/fixtures/real-runs.json", import.meta.url), "utf8"))).runs[name]?.points ?? []).map(
+    ([t, lat, lng]): RunPoint => [t, lat, lng, null],
+  );
+
+// Testers on Google Play, 2026-11-17: "when a run is started the dot in map starts moving on own and
+// without running starts making route". Standing, the route holds still.
+describe("standing, the route holds still", () => {
+  it("the worst thing: a slow walk is never held still, at 0.5 m a second, with or without a stop on the way", () => {
+    const slow = track(steady(600, 0.5), { wobble: phoneError(1), acc: () => 5 });
+    const sums = runSums(slow.points, [], 600_000, 70);
+    expect(Math.abs(sums.distanceM - slow.trueM) / slow.trueM).toBeLessThan(0.02);
+    expect(sums.movingS).toBe(600);
+    // A minute at a crossing on the way: every metre walked either side of it still counts.
+    const crossing = track([...steady(300, 0.5), ...steady(60, 0), ...steady(300, 0.5)], { wobble: phoneError(1), acc: () => 5 });
+    const across = runSums(crossing.points, [], 660_000, 70);
+    expect(Math.abs(across.distanceM - crossing.trueM) / crossing.trueM).toBeLessThan(0.02);
+  });
+
+  it("Kd's phone lying still for six minutes, as it recorded it: no metres, and the route one point", () => {
+    const still = indoorWalk()
+      .filter((p) => p[0] >= 240_000)
+      .map(([t, lat, lng, acc]): RunPoint => [t - 240_000, lat, lng, acc]);
+    const last = still[still.length - 1]?.[0] ?? 0;
+    const sums = runSums(still, [], last, 70);
+    expect(sums.distanceM).toBe(0);
+    expect(sums.track).toHaveLength(1);
+  });
+
+  it("while the person stands, the live route's end stays where they stood, once 30 s of points have come", () => {
+    const still = indoorWalk()
+      .filter((p) => p[0] >= 240_000)
+      .map(([t, lat, lng, acc]): RunPoint => [t - 240_000, lat, lng, acc]);
+    const first = still[0];
+    if (first === undefined) throw new Error("no points");
+    for (let k = 1; k <= still.length; k++) {
+      const at = still[k - 1]?.[0] ?? 0;
+      if (at < 30_000) continue;
+      const sums = runSums(still.slice(0, k), [], at, 70);
+      const end = sums.track[sums.track.length - 1];
+      expect(sums.distanceM).toBe(0);
+      expect(end === undefined ? Infinity : geodesicMetres(first[1], first[2], end[0], end[1])).toBeLessThan(0.5);
+    }
+  });
+
+  it("a real run's two minutes standing at its start add only the step off the spot (25 m before)", () => {
+    const start = realRun("iphone").filter((p) => p[0] <= 121_000);
+    const sums = runSums(start, [], 121_000, 70);
+    expect(sums.distanceM).toBeLessThanOrEqual(3);
+    expect(sums.track.length).toBeLessThanOrEqual(2);
+  });
+
+  it("a phone lying still for ten minutes, 5 m of wander, adds nothing", () => {
+    const { points } = track(steady(600, 0), { wobble: phoneError(5), acc: () => 8 });
+    expect(runSums(points, [], 600_000, 70).distanceM).toBeLessThanOrEqual(3);
+  });
+
+  it("a minute at a light, the phone wandering 6 m, adds no metres to the running either side", () => {
+    // The same running with no stop, and with a minute standing in the middle while the signal wanders.
+    const wander = (i: number): [number, number] => (i >= 300 && i < 360 ? phoneError(6)(i) : phoneError(1)(i));
+    const stop = track([...steady(300, 3), ...steady(60, 0), ...steady(300, 3)], { wobble: wander, acc: () => 5 });
+    const none = track(steady(600, 3), { wobble: phoneError(1), acc: () => 5 });
+    const withStop = runSums(stop.points, [], 660_000, 70).distanceM;
+    const without = runSums(none.points, [], 600_000, 70).distanceM;
+    expect(Math.abs(withStop - without)).toBeLessThanOrEqual(3);
+  });
+});
+
 describe("a stretch faster than anybody has run", () => {
   it("is left out, with its distance and time, and the rest counted", () => {
     const run = track([...steady(600, 3), ...steady(300, 15), ...steady(600, 3)]); // 54 km/h for five minutes
