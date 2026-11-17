@@ -990,7 +990,11 @@ d("an Indian gym pays through Razorpay (real Postgres, fake Razorpay)", () => {
         return real(id);
       };
       try {
-        await Promise.all([runAt(a.end, -2 * HOUR_MS), runAt(a.end, -2 * HOUR_MS), runAt(a.end, -HOUR_MS)]);
+        await Promise.all([runAt(a.end, -2 * HOUR_MS), runAt(a.end, -2 * HOUR_MS)]);
+        // An hour later, as a real run would be: the cancel is sent, so it is not sent again. Run
+        // together with the two above, it saw their claim as an hour old with no answer written,
+        // and sent it again on purpose (4b-vi-b), which failed this test now and then.
+        await runAt(a.end, -HOUR_MS);
       } finally {
         razorpay.cancelSubscriptionAtCycleEnd = real;
       }

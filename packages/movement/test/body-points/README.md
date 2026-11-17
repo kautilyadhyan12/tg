@@ -7,6 +7,10 @@ at 30 frames a second, asked for up to six people: every person in every frame, 
 `decodeBodyPoints` (`scripts/bodyPoints.ts`). Which person is the one exercising, and what a
 person counts by eye, are not in these files (jobs 52d and 52a).
 
+`corepack pnpm --filter @app/movement body-check` runs the possible-body check and the steady
+points on all of them (50c-ii), sets the fitted numbers from them and draws every refused frame
+into `measured/<label>/body-check/`.
+
 | File | What it shows | Frames | People the model found |
 |---|---|---|---|
 | `squat_reference` | a squat, side on | 327 | one in every frame |

@@ -13,7 +13,8 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint src test scripts",
     "test": "vitest run",
-    "measure-points": "tsx scripts/measure-points.ts"
+    "measure-points": "tsx scripts/measure-points.ts",
+    "body-check": "tsx scripts/body-check.ts"
   },
   "devDependencies": {
     "@app/config": "workspace:*",

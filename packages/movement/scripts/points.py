@@ -2,7 +2,8 @@
 
   measure  a video to the body points of every person the pose model finds, every
            number as the model gave it (measure-points rounds them, once).
-  draw     the pictures: each person the file holds, drawn on the video's own frame.
+  draw     the pictures: each person the file holds, drawn on the video's own frame;
+           for body-check, the points the possible-body check refused in red.
 
 Laptop only: it needs mediapipe and cv2. Start it through measure-points, which checks
 the output folder first.
@@ -12,6 +13,7 @@ import json
 import math
 import os
 import sys
+import textwrap
 
 import cv2
 
@@ -28,6 +30,8 @@ BONES = [(11, 12), (11, 13), (13, 15), (12, 14), (14, 16), (11, 23), (12, 24), (
          (24, 26), (26, 28), (28, 30), (30, 32), (28, 32)]
 # One colour for each place in a frame's list (blue, green, red, in cv2's order).
 COLOURS = [(0, 230, 120), (0, 150, 255), (255, 220, 0), (255, 0, 255), (0, 230, 230), (255, 255, 255)]
+# A point the possible-body check refused for a broken bone, a jump or a swap.
+REFUSED = (40, 40, 255)
 
 
 def picture_shape(cap, img):
@@ -156,17 +160,25 @@ def draw_frame(img, people, lines):
     for n, person in enumerate(people):
         colour = COLOURS[n % len(COLOURS)]
         pts = [(int(p[0] * w), int(p[1] * h), p[3]) for p in person["points"]]
+        # body-check's: for each point, null or why it was refused; only these are drawn red.
+        refused = [r in ("bone", "jump", "swap") for r in person.get("refused") or [None] * len(pts)]
         for a, b in BONES:
             seen = pts[a][2] >= SURE_ENOUGH_TO_DRAW and pts[b][2] >= SURE_ENOUGH_TO_DRAW
-            cv2.line(img, pts[a][:2], pts[b][:2], colour if seen else (120, 120, 120), 3 if seen else 1, cv2.LINE_AA)
-        for x, y, vis in pts[11:]:
+            line = REFUSED if refused[a] or refused[b] else colour if seen else (120, 120, 120)
+            cv2.line(img, pts[a][:2], pts[b][:2], line, 3 if seen else 1, cv2.LINE_AA)
+        for i, (x, y, vis) in enumerate(pts):
+            if i < 11 and not refused[i]:
+                continue
+            if refused[i]:
+                cv2.circle(img, (x, y), 8, REFUSED, 2, cv2.LINE_AA)
             cv2.circle(img, (x, y), 4, colour if vis >= SURE_ENOUGH_TO_DRAW else (120, 120, 120), -1, cv2.LINE_AA)
         sx = (pts[11][0] + pts[12][0]) // 2
         sy = min(pts[11][1], pts[12][1]) - 12
         cv2.putText(img, str(n + 1), (sx, sy), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 0), 5, cv2.LINE_AA)
         cv2.putText(img, str(n + 1), (sx, sy), cv2.FONT_HERSHEY_SIMPLEX, 1.0, colour, 2, cv2.LINE_AA)
     font, size, tall = cv2.FONT_HERSHEY_SIMPLEX, 0.5, 20
-    wide = max(cv2.getTextSize(t, font, size, 1)[0][0] for t in lines) + 16
+    lines = [part for text in lines for part in textwrap.wrap(text, width=max(20, (w - 16) // 9))]
+    wide = min(w, max(cv2.getTextSize(t, font, size, 1)[0][0] for t in lines) + 16)
     panel = img[0:tall * len(lines) + 10, 0:wide]
     panel[:] = (panel * 0.25).astype(panel.dtype)
     for n, text in enumerate(lines):
@@ -215,7 +227,7 @@ def draw(a):
             os.remove(old_path)
     drawn, names = [], []
     for n, m in enumerate(sorted(look["frames"], key=lambda x: x["index"])):
-        lines = [f"{m['t'] / 1000:.2f} s  frame {m['index'] + 1}", m["why"], f"people in the file: {len(m['people'])}"]
+        lines = m.get("lines") or [f"{m['t'] / 1000:.2f} s  frame {m['index'] + 1}", m["why"], f"people in the file: {len(m['people'])}"]
         img = draw_frame(pictures[m["index"]].copy(), m["people"], lines)
         word = "".join(c if c.isalnum() else "_" for c in m["why"])[:28].strip("_")
         name = f"{n + 1:02d}_{word}.jpg"
