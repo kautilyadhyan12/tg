@@ -8,7 +8,10 @@
 //     chip, and are reported reading by reading, never judged (measured 2026-11-17: the decoder alone moves the main
 //     chip 1 to 6.5 cm);
 //   - the same, when it read the laptop's own decoded pictures and lies within a tenth of the model's own shake from
-//     the laptop's (SAME_SHARE_OF_SHAKE); otherwise it differs, with the numbers.
+//     the laptop's in 99 of 100 big joints, and no joint in any frame further than the bars for one lone point
+//     (SAME_SHARE_OF_SHAKE, SAME_LARGEST_*); otherwise it differs, with the numbers.
+// A file is refused whole unless its plan, its video and its model are this run's (`Sums`): a folder's old file is
+// never read as a new one.
 // Whether a chip that differs counts the same is not this file's to say: from job 52a, the proof table's.
 import { KP, type MovementFrame, type PhoneHeat, type PhoneTestDelegate, type SeenPerson } from "@app/shared";
 import { MAIN_JOINTS, MEASURE_LIST, type CheckedBody, type MeasureName, type MeasuredBody, type SteadyBody, type Unit } from "../src/index.js";
@@ -270,19 +273,31 @@ export function measureGaps(laptop: readonly MeasuredBody[], phone: readonly Mea
  *  over all 76 readings is ruled by those no rule should use (the far side, 3D ankles and elbows). */
 export const KEY_READINGS: readonly MeasureName[] = ["left knee", "right knee", "left hip", "right hip", "trunk lean", "left elbow", "right elbow"];
 
-/** A run gives the laptop's numbers when, in 99 of 100 big joints the model is sure of in both, it lies less than a
- *  tenth of the model's own frame-to-frame shake from the laptop's (on the picture and in 3D, the shake of the laptop's
- *  own run of that video), and gives a reading the laptop does not, or the other way round, in at most 1 of 1,000. A
- *  tenth of the shake is lost in the shake. Two processors round their last digits apart, so 0.0 is not the bar:
- *  measured 2026-11-17 on the laptop's own pictures of the chair squat, the phone's main chip lay 0.15 to 0.18 mm off in
- *  99 of 100 in 3D (0.02 mm in the middle) and differed in 0 to 1 of 12,544 readings. */
+/** A run gives the laptop's numbers when, among the big joints the model is sure of in both:
+ *  - in 99 of 100 it lies less than a tenth of the model's own frame-to-frame shake from the laptop's, on the picture
+ *    and in 3D (the shake of the laptop's own run of that video): a tenth of the shake is lost in the shake;
+ *  - no joint in any frame lies further than the model's own shake in 3D, or than four times it on the picture, so a
+ *    point thrown far off once in a while is never hidden in the 1 of 100 (round one, H1: a knee 20 cm off in every
+ *    80th frame passed the 99th alone);
+ *  - it gives a reading the laptop does not, or the other way round, in at most 1 of 1,000.
+ *  Two processors round their last digits apart, so 0.0 is not the bar. Measured 2026-11-17 and 18 on the laptop's own
+ *  pictures of the chair squat: the phone's main chip lay 0.15 to 0.18 mm off in 99 of 100 in 3D (0.02 mm in the
+ *  middle), its largest 3D gap 0.03 to 0.05 of the shake; on the picture lone joints in single frames reached 1.9 times
+ *  the shake (one hip in 2,121; the 3D of that joint stayed put), the graphics chip's largest 7.7 to 12.9 times; it
+ *  differed in 0 to 1 of 17,024 readings. The picture's bar is twice the main chip's largest, set from this one video:
+ *  job 51b's clean runs on four videos check it. */
 export const SAME_SHARE_OF_SHAKE = 0.1;
+export const SAME_LARGEST_WORLD = 1;
+export const SAME_LARGEST_FLAT = 4;
 export const SAME_DIFFER = 1 / 1000;
 
 export interface Closeness {
   /** In 99 of 100 big joints sure in both, how far apart: on the picture in the body's size, in 3D in metres. */
   readonly flat99: number;
   readonly world99: number;
+  /** The largest gap of any of those joints in any frame, in the same units. */
+  readonly flatMost: number;
+  readonly worldMost: number;
   /** The laptop run's own frame-to-frame shake of a used big joint, the middle, in the same units. */
   readonly flatShake: number;
   readonly worldShake: number;
@@ -340,7 +355,16 @@ function closenessOf(checked: readonly CheckedBody[], other: readonly (SeenPerso
       if (wa !== undefined && wb !== undefined) world.push(Math.hypot(wa[0] - wb[0], wa[1] - wb[1], wa[2] - wb[2]));
     }
   });
-  return { flat99: quantile(flat, 0.99), world99: quantile(world, 0.99), flatShake: shake.flat, worldShake: shake.world, differ };
+  const most = (values: readonly number[]): number => (values.length === 0 ? Number.NaN : Math.max(...values));
+  return {
+    flat99: quantile(flat, 0.99),
+    world99: quantile(world, 0.99),
+    flatMost: most(flat),
+    worldMost: most(world),
+    flatShake: shake.flat,
+    worldShake: shake.world,
+    differ,
+  };
 }
 
 /** The frames of one video as two runs gave them: the laptop's, and the phone's (or another model's, or one chip's
@@ -397,6 +421,12 @@ export function sameRefusals(c: Closeness): string[] {
   if (!(c.world99 <= bar * c.worldShake)) {
     out.push(`in 3D its big joints lie ${(1000 * c.world99).toFixed(2)} mm from the laptop's in 99 of 100, more than a tenth of the model's own shake (${(1000 * c.worldShake).toFixed(2)} mm)`);
   }
+  if (!(c.worldMost <= SAME_LARGEST_WORLD * c.worldShake)) {
+    out.push(`in 3D a big joint lies ${(1000 * c.worldMost).toFixed(2)} mm from the laptop's, further than the model's own shake (${(1000 * c.worldShake).toFixed(2)} mm)`);
+  }
+  if (!(c.flatMost <= SAME_LARGEST_FLAT * c.flatShake)) {
+    out.push(`on the picture a big joint lies ${c.flatMost.toFixed(4)} of the body's size from the laptop's, further than four times the model's own shake (${c.flatShake.toFixed(4)})`);
+  }
   if (!(c.differ <= SAME_DIFFER)) out.push(`${(1000 * c.differ).toFixed(1)} in 1,000 of its readings are given by one and not the other`);
   return out;
 }
@@ -426,10 +456,24 @@ export interface PhoneComparison {
   readonly heat: { readonly before: PhoneHeat; readonly after: PhoneHeat };
 }
 
-/** Why the phone run did not read the laptop's pictures with the laptop's settings: empty when it did. */
-function sourceRefusals(laptop: BodyPoints, run: PhoneRun): string[] {
+/** What this run of the test sent the phone, by check sum: the plan, the video (or the laptop's pictures of it) and
+ *  the model. A file naming other ones was made by another run of the test, or for another video or model. */
+export interface Sums {
+  readonly plan: string;
+  readonly video: string;
+  readonly model: string;
+}
+
+/** Why the phone run is not this run's, or did not read the laptop's pictures with the laptop's settings: empty when
+ *  it is and did. */
+function sourceRefusals(laptop: BodyPoints, run: PhoneRun, sums: Sums): string[] {
   const refused: string[] = [];
   const { header } = run;
+  // A file of 51a's first runs names no plan: they were the only runs of their kind, and every later run deletes a
+  // kind's files before it sends anything.
+  if (header.plan !== null && header.plan !== sums.plan) refused.push("the file was made for another plan than this run's: an older run of the test");
+  if (header.video.sha256 !== sums.video) refused.push("the file was made from another video, or other pictures of it, than this run's");
+  if (header.model.sha256 !== sums.model) refused.push("the file was made with another model file than this run's");
   const lp = laptop.header.picture;
   const pp = header.picture;
   if (lp.width !== pp.width || lp.height !== pp.height) {
@@ -443,7 +487,9 @@ function sourceRefusals(laptop: BodyPoints, run: PhoneRun): string[] {
   }
   const sameFrames = run.frames.length === laptop.frames.length && run.frames.every((f, i) => Math.abs(f.t - (laptop.frames[i]?.t ?? Number.NaN)) < 0.05);
   if (!sameFrames) refused.push(`the phone read ${String(run.frames.length)} frames at other times than the laptop's ${String(laptop.frames.length)}`);
-  // The phone's own clock for each picture: a decoder that numbers the video's frames differently plays them at other times.
+  // The phone's own clock for each picture: a decoder that numbers the video's frames differently plays them at other
+  // times. The laptop's own pictures carry no clock of their own: the phone writes the laptop's time back, so this
+  // check holds by itself for them.
   const halfFrame = 500 / laptop.header.videoFps;
   const off = run.frames.find((f) => Math.abs(f.at - f.t) > halfFrame);
   if (off !== undefined) refused.push(`the phone plays frame ${String(off.i + 1)} at ${off.at.toFixed(1)} ms, the laptop at ${off.t.toFixed(1)} ms`);
@@ -451,9 +497,9 @@ function sourceRefusals(laptop: BodyPoints, run: PhoneRun): string[] {
 }
 
 /** How a phone run stands against the laptop's run of the same model on the same video. */
-export function comparePhone(laptop: BodyPoints, run: PhoneRun): PhoneComparison {
+export function comparePhone(laptop: BodyPoints, run: PhoneRun, sums: Sums): PhoneComparison {
   const { header } = run;
-  const source = sourceRefusals(laptop, run);
+  const source = sourceRefusals(laptop, run, sums);
   const frames = source.length === 0 ? compareFrames(laptop.frames, phoneFrames(run)) : null;
   const wrong = frames === null ? source : comparableRefusals(frames);
   const differences = frames === null ? [] : sameRefusals(frames.closeness);

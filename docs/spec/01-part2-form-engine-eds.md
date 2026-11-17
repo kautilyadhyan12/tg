@@ -1669,8 +1669,10 @@ in it used, when it read other pictures or ran other settings, or reads its pers
 (a picture late or early, mirrored, the sides swapped, no 3D); **compared only** when the phone
 decoded the video itself, which judges its video decoder as well as its chip; **the same** when,
 on the laptop's own pictures, it lies within a tenth of the model's own shake from the laptop in
-99 of 100 big joints and gives a reading the laptop does not in at most 1 of 1,000; otherwise it
-**differs**. Whether a chip that differs counts the same is the proof table's question (from
+99 of 100 big joints, no joint in any frame further than the shake in 3D or four times it on the
+picture, and gives a reading the laptop does not in at most 1 of 1,000; otherwise it
+**differs**. A file naming another plan, video or model than the run's is refused, and each kind
+of run clears its old files before it sends anything. Whether a chip that differs counts the same is the proof table's question (from
 52a: the laptop's count, reason for each rep not counted and spoken line), never this test's.
 The library sends Google usage reports by itself (never a picture or a point); a copy's
 manifest takes away the transport's only sender. Measured on Kd's phone (motorola moto g35 5G,
@@ -1679,8 +1681,10 @@ Android 15), 66 runs:
   more than one person, the phone found as many in 16 to 58 frames of 100.
 - **The main chip gives the laptop's numbers**: on the laptop's own pictures of the chair squat,
   all three sizes, 0.15 to 0.18 mm in 99 of 100 big joints in 3D (0.02 mm in the middle, where
-  the model itself shakes 9 to 11 mm a frame), and 0 to 1 of 12,544 readings given by one only.
-  Not bit for bit (two processors round their last digits apart), the same in use. The
+  the model itself shakes 9 to 11 mm a frame), its largest 3D gap 0.03 to 0.05 of the shake, and
+  0 to 1 of 17,024 readings given by one only. Not bit for bit (two processors round their last
+  digits apart): on the picture lone joints in single frames reach 1.9 times the shake (one hip
+  in 2,121, its 3D unmoved). The same in use. The
   **graphics chip differs**: 49 to 58 mm in 99 of 100 there; phone against phone on the same
   pictures, asked for one person, its big joints lie 0.9 to 2.2 cm from the main chip's in 95
   of 100 on the three standing videos and 2.9 to 5.1 cm on the floor video, the flat near-side
@@ -1694,7 +1698,7 @@ Android 15), 66 runs:
   cores, which may be one (job 51b counts them first), on a still screen with no camera.
   Heavy cannot run live on this phone on either chip.
 - **Asked for one person, the model shakes 2 to 5 times less** than asked for six (on the laptop,
-  a used big joint's middle frame-to-frame shake in 3D: 0.9 to 3.3 mm against 4.9 to 10.3 mm on
+  a used big joint's middle frame-to-frame shake in 3D: 0.9 to 4.4 mm against 4.9 to 11.2 mm on
   the standing videos, 8.6 to 13.1 against 18.0 to 30.6 mm on the floor), and one against six
   moves big joints 5 to 12 cm in 95 of 100. Every kept file and every number 50c fitted was made
   asked for six.

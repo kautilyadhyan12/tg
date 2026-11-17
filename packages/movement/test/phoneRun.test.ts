@@ -2,7 +2,7 @@
 // milliseconds the laptop's points.py gave it, and a file from the phone is believed only whole and well formed.
 import { describe, expect, it } from "vitest";
 import { BodyPointsError } from "../scripts/bodyPoints.js";
-import { MODELS, SETTINGS, makePlan, modelUrl, phoneFrames, readPhoneFailure, readPhoneRun } from "../scripts/phoneRun.js";
+import { MODELS, SETTINGS, makePlan, modelUrl, phoneFrames, readPhoneFailure, readPhoneRun, runFiles } from "../scripts/phoneRun.js";
 
 const person = { points: Array.from({ length: 33 }, () => [0.5, 0.5, 0.1, 0.9, 0.95]), world: Array.from({ length: 33 }, () => [0, 0, 0]) };
 const heat = { thermal: 1, batteryC: 31.5 };
@@ -85,9 +85,29 @@ describe("a file from the phone", () => {
     expect(() => readPhoneRun(fileOf({ ...header, delegate: "npu" }, frame(0, 0), end(1)))).toThrow(/line 1/);
   });
 
+  it("is known by its name, and nothing else in a folder or the phone's list is taken for one", () => {
+    const names = [
+      "squat_reference.pose_landmarker_full.gpu.jsonl",
+      "squat_reference.pose_landmarker_lite.cpu.failed.json",
+      "squat_reference.pose_landmarker_full.gpu.jsonl.part",
+      "../plan.json",
+      "squat_reference.pose_landmarker_huge.cpu.jsonl",
+      "a b.pose_landmarker_full.cpu.jsonl",
+      "notes.txt",
+    ];
+    expect(runFiles(names)).toEqual(["squat_reference.pose_landmarker_full.gpu.jsonl", "squat_reference.pose_landmarker_lite.cpu.failed.json"]);
+  });
+
+  it("names the plan it was made for, or null for 51a's first files", () => {
+    expect(readPhoneRun(fileOf({ ...header, plan: "e".repeat(64) }, frame(0, 0), end(1))).header.plan).toBe("e".repeat(64));
+    expect(readPhoneRun(fileOf(header, frame(0, 0), end(1))).header.plan).toBeNull();
+    expect(() => readPhoneRun(fileOf({ ...header, plan: "" }, frame(0, 0), end(1)))).toThrow(/line 1/);
+  });
+
   it("a note of a run that could not be made is read with its reason", () => {
     const note = { kind: "failed", label: "squat_reference", model: "pose_landmarker_full", delegate: "gpu", reason: "The model did not start on the graphics chip." };
-    expect(readPhoneFailure(JSON.stringify(note))).toEqual(note);
+    expect(readPhoneFailure(JSON.stringify(note))).toEqual({ ...note, plan: null });
+    expect(readPhoneFailure(JSON.stringify({ ...note, plan: "f".repeat(64) })).plan).toBe("f".repeat(64));
     expect(() => readPhoneFailure("{")).toThrow(BodyPointsError);
   });
 });

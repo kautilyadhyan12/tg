@@ -20,7 +20,21 @@ import { PHONE_TEST_DELEGATES, phoneProgressSchema, videoFramesSchema, type Move
 import { decodeBodyPoints, type BodyPoints } from "./bodyPoints.js";
 import { KD_VIDEOS, assertFolderStaysOutOfGit } from "./outFolder.js";
 import { WARM_UP, compareFrames, comparePhone, gapWords, keyGaps, shakeOf, summaries, type FrameComparison, type PhoneComparison } from "./phoneCheck.js";
-import { MODELS, SETTINGS, makePlan, modelUrl, phoneFrames, readPhoneFailure, readPhoneRun, runName, type PhoneRun, type PlanRun, type PlanVideo, type PoseModel } from "./phoneRun.js";
+import {
+  MODELS,
+  SETTINGS,
+  makePlan,
+  modelUrl,
+  phoneFrames,
+  readPhoneFailure,
+  readPhoneRun,
+  runFiles,
+  runName,
+  type PhoneRun,
+  type PlanRun,
+  type PlanVideo,
+  type PoseModel,
+} from "./phoneRun.js";
 
 const REPO = resolve(import.meta.dirname, "../../..");
 const KEPT = join(import.meta.dirname, "../test/body-points");
@@ -29,12 +43,14 @@ const MEASURE_POINTS = join(import.meta.dirname, "measure-points.ts");
 const MOBILE = join(REPO, "apps", "mobile");
 const HERE = join(REPO, "measured", "phone-test");
 const ON_PHONE = "files/phone-test";
-/** Where adb puts a file on its way into the app's own files: the shell's folder, which no app can read. */
+/** Where adb puts a file on its way into the app's own files: the shell's folder. An app that knows the path can read
+ *  a file there (the app's own run-as user reads it so, which is how the copy works), so only what may be read goes
+ *  this way: Kd's public reference videos, their pictures and Google's models, each removed as soon as it is copied;
+ *  never a member's anything. */
 const STAGING = "/data/local/tmp/kwazo-phone-test";
 const ACTIVITY = "expo.modules.phonetest.PhoneTestActivity";
 /** The phone is given this long without a word before the laptop stops waiting. */
 const STILL_FOR_MS = 10 * 60 * 1000;
-const PHONE_FILE = /^[A-Za-z0-9_-]{1,80}\.pose_landmarker_(lite|full|heavy)\.(cpu|gpu)\.(jsonl|failed\.json)$/;
 
 function fail(message: string): never {
   console.error(message);
@@ -236,13 +252,22 @@ for (const label of labels) {
   });
   lists.set(label, framesOf(label, runs));
 }
+/** What the phone gets for each video, made and checked here; compared alone, the ones already made. */
 const copies = new Map<string, string>();
-if (!values["compare-only"]) {
-  for (const label of labels) {
-    const list = lists.get(label);
-    if (list !== undefined) copies.set(label, pictures === "laptop" ? laptopPicturesOf(label, list) : phoneCopyOf(label, list));
-  }
+for (const label of labels) {
+  const list = lists.get(label);
+  if (list === undefined) continue;
+  if (values["compare-only"]) copies.set(label, pictures === "laptop" ? join(HERE, "pictures", label) : join(HERE, "videos", `${label}.mp4`));
+  else copies.set(label, pictures === "laptop" ? laptopPicturesOf(label, list) : phoneCopyOf(label, list));
 }
+/** The sum the phone checks for a video, and writes back into each of its files. */
+function videoSum(label: string): string {
+  const copy = copies.get(label);
+  if (copy === undefined || !existsSync(copy)) fail(`No phone copy of ${label} at ${copy ?? "its place"}: run the test without --compare-only.`);
+  return sha256Of(pictures === "laptop" ? pictureFiles(copy) : [copy]);
+}
+/** This kind of run's plan, kept beside its files: what every file it gives back must name. */
+const PLAN = join(HERE, `plan-${variant}.json`);
 
 // ── 3. The phone ─────────────────────────────────────────────────────────────────
 /** One adb command. It throws, never exits, so the test's own clean-up always runs. */
@@ -303,15 +328,15 @@ async function onThePhone(): Promise<void> {
   if (!inApp("true").ok) fail(`The phone will not let the laptop into ${id}: it must be a folder's copy, built for testing.`);
 
   const videos: PlanVideo[] = labels.map((label) => {
-    const copy = copies.get(label);
-    if (copy === undefined) throw new Error(`No phone copy of ${label}.`);
     const frames = lists.get(label);
     if (frames === undefined) throw new Error(`No frame list for ${label}.`);
-    return { label, sha256: sha256Of(pictures === "laptop" ? pictureFiles(copy) : [copy]), frames, pictures };
+    return { label, sha256: videoSum(label), frames, pictures };
   });
   const runs: PlanRun[] = models.flatMap((model) => chips.map((delegate) => ({ model, delegate })));
-  const plan = JSON.stringify(makePlan(videos, runs, people));
-  writeFileSync(join(HERE, "plan.json"), plan);
+  // This kind's old files go before anything is sent: a run the phone gives no file for this time must never be
+  // reported from the last time (round one, H2).
+  for (const name of runFiles(readdirSync(PHONE_OUT))) rmSync(join(PHONE_OUT, name));
+  writeFileSync(PLAN, JSON.stringify(makePlan(videos, runs, people)));
 
   adb(["shell", "am", "force-stop", id]);
   try {
@@ -339,7 +364,7 @@ async function onThePhone(): Promise<void> {
       console.log(`Sending the ${m.size} model to the phone.`);
       send(modelPaths.get(m.name) ?? "", `${ON_PHONE}/models/${m.name}.task`, `The ${m.size} model`);
     }
-    send(join(HERE, "plan.json"), `${ON_PHONE}/plan.json`, "The plan");
+    send(PLAN, `${ON_PHONE}/plan.json`, "The plan");
 
     const opened = adb(["shell", "am", "start", "-W", "-n", `${id}/${ACTIVITY}`]);
     if (!opened.ok || /Error|Exception/i.test(opened.text)) throw new Error(`The phone test did not open on the phone:\n${opened.text}`);
@@ -348,7 +373,7 @@ async function onThePhone(): Promise<void> {
     const progress = await finished(id);
     if (progress.state === "failed") console.log(`The phone stopped: ${progress.reason ?? "it gave no reason"}`);
 
-    const names = inApp(`ls ${ON_PHONE}/out`).text.split(/\s+/).filter((n) => PHONE_FILE.test(n));
+    const names = runFiles(inApp(`ls ${ON_PHONE}/out`).text.split(/\s+/));
     for (const name of names) {
       const file = adb(["exec-out", "run-as", id, "cat", `${ON_PHONE}/out/${name}`]);
       if (!file.ok) throw new Error(`${name} could not be taken from the phone.`);
@@ -388,6 +413,9 @@ const ms = (v: number): string => (Number.isFinite(v) ? `${v.toFixed(0)} ms` : "
 const chipWord = (d: PhoneTestDelegate): string => (d === "gpu" ? "graphics" : "main");
 const sizeOf = (name: string): string => MODELS.find((m) => m.name === name)?.size ?? name;
 
+/** The plan this kind of run was made from; a kind whose plan was never kept (51a's first runs) has none, and only
+ *  its files that name no plan are read. */
+const planSum = existsSync(PLAN) ? sha256Of([PLAN]) : "none";
 const results: PhoneComparison[] = [];
 const failed: { label: string; model: string; delegate: PhoneTestDelegate; reason: string }[] = [];
 const detectTimes = new Map<string, number[]>();
@@ -401,7 +429,8 @@ for (const label of labels) {
       const failedPath = join(PHONE_OUT, `${name}.failed.json`);
       if (existsSync(failedPath)) {
         const f = readPhoneFailure(readFileSync(failedPath, "utf8"));
-        failed.push({ label, model: f.model, delegate: f.delegate, reason: f.reason });
+        const older = f.plan !== null && f.plan !== planSum;
+        failed.push({ label, model: f.model, delegate: f.delegate, reason: older ? "an older run's note: the file was made for another plan" : f.reason });
         continue;
       }
       if (!existsSync(runPath)) {
@@ -411,7 +440,7 @@ for (const label of labels) {
       const run = readPhoneRun(readFileSync(runPath, "utf8"));
       phoneRuns.set(name, run);
       const ref = laptop.get(`${label}|${m.name}`) ?? fail(`No laptop run of ${label} with ${m.name}.`);
-      results.push(comparePhone(ref, run));
+      results.push(comparePhone(ref, run, { plan: planSum, video: videoSum(label), model: m.sha256 }));
       const key = `${m.name}|${delegate}`;
       detectTimes.set(key, [...(detectTimes.get(key) ?? []), ...run.frames.slice(WARM_UP).map((f) => f.detectMs)]);
       phoneName = `${run.header.phone.maker} ${run.header.phone.model}, Android ${run.header.phone.android}, ${run.header.library}`;

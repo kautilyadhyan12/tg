@@ -110,6 +110,9 @@ export const phoneRunHeaderSchema = z
     kind: z.literal("phone-run"),
     version: z.literal(1),
     label,
+    /** The plan the run was made for, by its check sum, so a folder's older file is never read as a new one. Null in
+     *  51a's first files, made before it was written (2026-11-17). */
+    plan: sha256.nullable().default(null),
     /** The video file as the phone holds it, and how many frames the phone itself counts in it. */
     video: z.object({ sha256, frames: count }).strict(),
     /** The pictures' shape, turned as a person sees them. */
@@ -168,6 +171,7 @@ export const phoneRunFailedSchema = z
   .object({
     kind: z.literal("failed"),
     label,
+    plan: sha256.nullable().default(null),
     model: plainName,
     delegate: z.enum(PHONE_TEST_DELEGATES),
     reason: z.string().max(400),

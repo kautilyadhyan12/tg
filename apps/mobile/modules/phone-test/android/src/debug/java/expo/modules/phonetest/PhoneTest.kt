@@ -86,6 +86,8 @@ internal class PhoneTest private constructor(private val context: Context) {
   private val out = File(root, "out")
   private var runsDone = 0
   private var runsAll = 0
+  /** The plan's own check sum, written into every file, so the laptop never reads an older run's file as this one's. */
+  private var planSum = ""
 
   fun run() {
     try {
@@ -94,6 +96,7 @@ internal class PhoneTest private constructor(private val context: Context) {
       out.deleteRecursively()
       check(out.mkdirs()) { "The phone could not make the test's folder." }
       status = "Phone test\n\nChecking the files from the laptop."
+      planSum = sha256(listOf(File(root, "plan.json")))
       val plan = readPlan()
       for (video in plan.videos) check(sha256(filesOf(video)) == video.sha256) { "The video ${video.label} did not arrive whole." }
       for (model in plan.runs.map { it.model }.distinct()) check(sha256(listOf(model.file)) == model.sha256) { "The model ${model.name} did not arrive whole." }
@@ -323,6 +326,7 @@ internal class PhoneTest private constructor(private val context: Context) {
       .put("kind", "phone-run")
       .put("version", 1)
       .put("label", video.label)
+      .put("plan", planSum)
       .put("video", JSONObject().put("sha256", video.sha256).put("frames", count))
       .put("picture", JSONObject().put("width", picture.width).put("height", picture.height))
       .put("pictures", if (video.fromLaptop) "laptop" else "video")
@@ -405,6 +409,7 @@ internal class PhoneTest private constructor(private val context: Context) {
     val json = JSONObject()
       .put("kind", "failed")
       .put("label", video.label)
+      .put("plan", planSum)
       .put("model", each.model.name)
       .put("delegate", each.delegate)
       .put("reason", reason)

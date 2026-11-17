@@ -129,3 +129,13 @@ export function phoneFrames(run: PhoneRun): MovementFrame[] {
 export function runName(label: string, model: string, delegate: PhoneTestDelegate): string {
   return `${label}.${model}.${delegate}`;
 }
+
+/** A run's file or a note of a run that could not be made, as the phone names them: plain characters only, so a name
+ *  taken from the phone can go into an adb command or a path. */
+export const RUN_FILE = /^[A-Za-z0-9_-]{1,80}\.pose_landmarker_(lite|full|heavy)\.(cpu|gpu)\.(jsonl|failed\.json)$/;
+
+/** Of these names, the phone's run files: what is taken back from the phone, and what a kind of run clears from its
+ *  own folder before it sends anything. */
+export function runFiles(names: readonly string[]): string[] {
+  return names.filter((n) => RUN_FILE.test(n));
+}

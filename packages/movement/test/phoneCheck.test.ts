@@ -15,14 +15,17 @@ import {
   KEY_READINGS,
   MIRROR,
   SAME_DIFFER,
+  SAME_LARGEST_FLAT,
+  SAME_LARGEST_WORLD,
   SAME_SHARE_OF_SHAKE,
-  comparePhone,
+  comparePhone as compareWith,
   keyGaps,
   mirrored,
   shakeOf,
   summaries,
   swapped,
   type PhoneComparison,
+  type Sums,
 } from "../scripts/phoneCheck.js";
 import type { PhoneRun } from "../scripts/phoneRun.js";
 import { copy, numbers } from "./helpers/body.js";
@@ -31,6 +34,13 @@ const KEPT = join(import.meta.dirname, "body-points");
 const kept = (label: string): BodyPoints => decodeBodyPoints(new Uint8Array(readFileSync(join(KEPT, `${label}.bodypoints`))));
 const squat = kept("squat_reference");
 const chair = kept("chair_squat_reference");
+
+/** The plan a test's phone run was made for. */
+const PLAN = "3".repeat(64);
+/** This run's own sums, as the run's own header names them unless `sums` says otherwise. */
+function comparePhone(laptop: BodyPoints, run: PhoneRun, sums: Partial<Sums> = {}): PhoneComparison {
+  return compareWith(laptop, run, { plan: PLAN, video: run.header.video.sha256, model: run.header.model.sha256, ...sums });
+}
 
 /** A phone run that read the laptop's own pictures and gives back exactly the laptop's frames, changed by `edit`. */
 function phoneRunOf(laptop: BodyPoints, edit: (frames: MovementFrame[]) => MovementFrame[] = (f) => f, change: Partial<PhoneRun["header"]> = {}): PhoneRun {
@@ -48,6 +58,7 @@ function phoneRunOf(laptop: BodyPoints, edit: (frames: MovementFrame[]) => Movem
       kind: "phone-run",
       version: 1,
       label: laptop.header.label,
+      plan: PLAN,
       video: { sha256: "0".repeat(64), frames: frames.length },
       picture: laptop.header.picture,
       pictures: "laptop",
@@ -62,6 +73,16 @@ function phoneRunOf(laptop: BodyPoints, edit: (frames: MovementFrame[]) => Movem
     frames,
     end: { kind: "end", frames: frames.length, leftOut: 0, wallMs: 1000, heat },
   };
+}
+
+/** A person with one point moved by `picture` of the picture to the right and `world` metres in 3D. */
+function moveJoint(person: SeenPerson, j: number, picture: number, world: number): SeenPerson {
+  const p = copy(person);
+  const pt = p.points[j];
+  const w = p.world?.[j];
+  if (pt !== undefined) p.points[j] = [pt[0] + picture, pt[1], pt[2], pt[3], pt[4]];
+  if (w !== undefined && p.world !== null) p.world[j] = [w[0] + world, w[1], w[2]];
+  return p;
 }
 
 const onEveryone = (edit: (p: SeenPerson) => SeenPerson) => (frames: MovementFrame[]): MovementFrame[] => frames.map((f) => ({ ...f, people: f.people.map(edit) }));
@@ -137,13 +158,7 @@ describe("the worst thing: a phone that reads the body differently is never call
   });
 
   it("a knee read 4 cm off in 3D and on the picture, and nothing else, differs, and is not read as a wrong way", () => {
-    const knee = onEveryone((p) => {
-      const pk = p.points[KP.left_knee];
-      const wk = p.world?.[KP.left_knee];
-      if (pk !== undefined) p.points[KP.left_knee] = [pk[0] + 0.02, pk[1], pk[2], pk[3], pk[4]];
-      if (wk !== undefined && p.world !== null) p.world[KP.left_knee] = [wk[0] + 0.04, wk[1], wk[2]];
-      return p;
-    });
+    const knee = onEveryone((p) => moveJoint(p, KP.left_knee, 0.02, 0.04));
     const c = comparePhone(squat, phoneRunOf(squat, knee));
     expect(c.verdict).toBe("differs");
     expect(reasonsOf(c)).toMatch(/in 3D its big joints lie .* mm from the laptop's in 99 of 100/);
@@ -176,6 +191,69 @@ describe("the worst thing: a phone that reads the body differently is never call
     const one = phoneRunOf(squat, (f) => f, { model: { ...squat.header.model, people: 1, sha256: "1".repeat(64) } });
     expect(reasonsOf(comparePhone(squat, one))).toContain("other settings");
   });
+
+  it("a knee thrown 20 cm off in 3D and a tenth of the picture in every 80th frame, or every 40th, differs (round one, H1)", () => {
+    for (const every of [80, 40]) {
+      const thrown = (frames: MovementFrame[]): MovementFrame[] =>
+        frames.map((f, i) => {
+          if (i % every !== 0) return f;
+          return { ...f, people: f.people.map((person) => moveJoint(person, KP.left_knee, 0.1, 0.2)) };
+        });
+      const c = comparePhone(squat, phoneRunOf(squat, thrown));
+      expect(c.verdict).toBe("differs");
+      expect(reasonsOf(c)).toContain("in 3D a big joint lies");
+    }
+  });
+
+  it("a knee thrown a tenth of the picture off in every 80th frame, its 3D left as it was, differs", () => {
+    const thrown = (frames: MovementFrame[]): MovementFrame[] =>
+      frames.map((f, i) => (i % 80 === 0 ? { ...f, people: f.people.map((person) => moveJoint(person, KP.left_knee, 0.1, 0)) } : f));
+    const c = comparePhone(squat, phoneRunOf(squat, thrown));
+    expect(c.verdict).toBe("differs");
+    expect(reasonsOf(c)).toContain("further than four times the model's own shake");
+  });
+
+  it("every big joint off by half the model's own shake in 3D in every 30th frame differs, though no lone point is far", () => {
+    const half = shakeOf(squat.frames).world / 2;
+    const off = (frames: MovementFrame[]): MovementFrame[] =>
+      frames.map((f, i) => (i % 30 === 0 ? { ...f, people: f.people.map((person) => ({ ...person, world: person.world?.map(([x, y, z]) => [x + half, y, z]) ?? null })) } : f));
+    const c = comparePhone(squat, phoneRunOf(squat, off));
+    expect(c.verdict).toBe("differs");
+    expect(reasonsOf(c)).toMatch(/in 3D its big joints lie .* in 99 of 100/);
+    expect(reasonsOf(c)).not.toContain("a big joint lies");
+  });
+
+  it("the person dropped from every 100th frame differs by the readings one gives and the other does not", () => {
+    const dropped = (frames: MovementFrame[]): MovementFrame[] => frames.map((f, i) => (i % 100 === 50 ? { ...f, people: [] } : f));
+    const c = comparePhone(squat, phoneRunOf(squat, dropped));
+    expect(c.verdict).toBe("differs");
+    expect(c.reasons).toHaveLength(1);
+    expect(reasonsOf(c)).toContain("given by one and not the other");
+  });
+
+  it("3D points missing in some frames, not all, is not comparable, and says how many", () => {
+    const some = (frames: MovementFrame[]): MovementFrame[] =>
+      frames.map((f, i) => (i % 10 === 0 ? { ...f, people: f.people.map((person) => ({ ...person, world: null })) } : f));
+    const c = comparePhone(squat, phoneRunOf(squat, some));
+    expect(c.verdict).toBe("not comparable");
+    expect(reasonsOf(c)).toMatch(/no 3D points in \d+ of \d+ frames/);
+  });
+
+  it("a file made for another plan, from another video or with another model file, is not this run's (round one, H2)", () => {
+    const run = phoneRunOf(squat);
+    expect(reasonsOf(comparePhone(squat, run, { plan: "4".repeat(64) }))).toContain("another plan");
+    expect(reasonsOf(comparePhone(squat, run, { video: "5".repeat(64) }))).toContain("another video");
+    expect(reasonsOf(comparePhone(squat, run, { model: "6".repeat(64) }))).toContain("another model file");
+    for (const sums of [{ plan: "4".repeat(64) }, { video: "5".repeat(64) }, { model: "6".repeat(64) }]) {
+      expect(comparePhone(squat, run, sums).verdict).toBe("not comparable");
+    }
+  });
+
+  it("a file of 51a's first runs, which names no plan, is still judged by its video and its model", () => {
+    const first = phoneRunOf(squat, (f) => f, { plan: null });
+    expect(comparePhone(squat, first, { plan: "none" }).verdict).toBe("same");
+    expect(comparePhone(squat, first, { plan: "none", video: "5".repeat(64) }).verdict).toBe("not comparable");
+  });
 });
 
 describe("what a phone may differ by and still give the laptop's numbers", () => {
@@ -197,8 +275,10 @@ describe("what a phone may differ by and still give the laptop's numbers", () =>
     expect(c.frames?.mostOther).toBe(2);
   });
 
-  it("the bar is a tenth of the video's own shake, and at most 1 reading in 1,000 given by one only", () => {
+  it("the bar: a tenth of the video's own shake in 99 of 100, no lone joint past the shake in 3D or four times it on the picture, 1 reading in 1,000", () => {
     expect(SAME_SHARE_OF_SHAKE).toBe(0.1);
+    expect(SAME_LARGEST_WORLD).toBe(1);
+    expect(SAME_LARGEST_FLAT).toBe(4);
     expect(SAME_DIFFER).toBe(0.001);
     // The squat video's own shake in 3D is millimetres, so the bar is a fraction of one.
     const shake = shakeOf(squat.frames).world;
