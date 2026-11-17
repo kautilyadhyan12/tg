@@ -26,6 +26,7 @@
 // (job 52d): this check follows whatever person it is given, and starts again with a person
 // gone for longer than it remembers bones, or a clock that went back.
 import type { Down, SeenPerson } from "@app/shared";
+import { Memory } from "./memory.js";
 import { BONES, LIMB_PAIRS, PARENT, POINTS, TRUNK, TRUNK_SIDES } from "./points.js";
 import { bodySize } from "./size.js";
 
@@ -110,38 +111,6 @@ export interface CheckedBody {
   readonly size: number | null;
   /** For each of the 33 points: null when it may be used, otherwise why not. */
   readonly refused: readonly (Refusal | null)[];
-}
-
-interface Timed {
-  readonly t: number;
-  readonly v: number;
-}
-
-/** Numbers remembered for a while: the trunk's length, the body's size. */
-class Memory {
-  private items: Timed[] = [];
-
-  add(t: number, v: number): void {
-    this.items.push({ t, v });
-  }
-  /** Forgets what is older than `before`. */
-  forget(before: number): void {
-    let drop = 0;
-    while (drop < this.items.length && (this.items[drop]?.t ?? before) < before) drop++;
-    if (drop > 0) this.items = this.items.slice(drop);
-  }
-  /** How long ago the oldest number remembered was seen. */
-  span(t: number): number {
-    const first = this.items[0];
-    return first === undefined ? 0 : t - first.t;
-  }
-  median(): number | null {
-    if (this.items.length === 0) return null;
-    const sorted = this.items.map((x) => x.v).sort((a, b) => a - b);
-    const mid = sorted.length >> 1;
-    const hi = sorted[mid] ?? 0;
-    return sorted.length % 2 === 1 ? hi : ((sorted[mid - 1] ?? hi) + hi) / 2;
-  }
 }
 
 type BoneState = "unjudged" | "learning" | "holds" | "broken";
