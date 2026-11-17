@@ -194,9 +194,19 @@ describe("the worst thing: a beginner told to keep running when the plan says wa
     }
     const run = runNow();
     if (run === null) throw new Error("no run going");
-    const first = voice.ahead.find((l) => l.text === "Now run for 1 minute.");
-    if (first === undefined) throw new Error("the run was not handed over");
-    expect(Math.abs(movingMsOf(run, run.startedAt + (s - 1) * 1000) + first.inMs - 300_000)).toBeLessThan(1500);
+    const moving = movingMsOf(run, run.startedAt + (s - 1) * 1000);
+    // The run begins at 300 s of the run's own time: handed over to be said then, or, where the clock reaches
+    // it at the Resume itself (the Resume is dated back to the last step near where the person stood), begun
+    // there and said with Run resumed.
+    if (run.guide?.at.index === 0) {
+      const first = voice.ahead.find((l) => l.text === "Now run for 1 minute.");
+      if (first === undefined) throw new Error("the run was not handed over");
+      expect(Math.abs(moving + first.inMs - 300_000)).toBeLessThan(1500);
+    } else {
+      expect(run.guide?.at.index).toBe(1);
+      expect(Math.abs((run.guide?.at.fromMs ?? Infinity) - 300_000)).toBeLessThan(1500);
+      expect(voice.said.slice(-2)).toEqual(["Run resumed.", expect.stringMatching(/^Now run\. /)]);
+    }
   });
 
   it("the voice switched off mid-run: nothing is left to be said ahead", async () => {
