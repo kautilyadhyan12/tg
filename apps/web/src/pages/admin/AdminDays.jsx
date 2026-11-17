@@ -3,7 +3,7 @@ import { ChevronDown, X } from 'lucide-react';
 import { adminService, isDoorShut } from '../../api/adminApi';
 import { errorText } from '../../api/orgsApi';
 import DatePick from '../../components/console/DatePick';
-import { costWords, dayTotalsWords, dayWords, minutesWords, myZone, todayIn, usedGroups, usedWords, zoneWords } from './adminView';
+import { ADMIN_TABLE, costWords, dayTotalsWords, dayWords, minutesWords, myZone, todayIn, usedGroups, usedWords, zoneWords } from './adminView';
 
 // EACH PERSON'S DAYS (ROADMAP Stage 2 item 14a-ii; Kd, 2026-11-08): time in the app, meal scans,
 // route plans and what they cost, day by day for one person, and any day for everyone. Each day is
@@ -65,13 +65,14 @@ function Problem({ text, onRetry }) {
 }
 
 /** What one person used on one day, feature by feature, under the row that was pressed (14a-iii). Its
- *  table scrolls sideways on a phone: the box stays at the left, no wider than the screen less `inset`
- *  (the page's edges and the boxes around it), so its features stack there instead of running off it. */
+ *  table scrolls sideways on a narrow screen: the box stays at the left, no wider than the card the
+ *  table sits in (`ADMIN_TABLE`) less `inset`, the boxes between them, so its features stack there
+ *  instead of running off it. */
 function DayUse({ title, numbers, onClose, inset }) {
   return (
     <section
       aria-label={title}
-      style={{ position: 'sticky', left: 0, boxSizing: 'border-box', maxWidth: `calc(100vw - ${String(inset)}px)`, padding: '12px 16px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}
+      style={{ position: 'sticky', left: 0, boxSizing: 'border-box', maxWidth: `calc(100cqw - ${String(inset)}px)`, padding: '12px 16px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
         <h4 className="c-s15 c-w6" style={{ margin: 0 }}>
@@ -84,7 +85,7 @@ function DayUse({ title, numbers, onClose, inset }) {
           Close
         </button>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 10 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(210px, 100%), 1fr))', gap: 10 }}>
         {usedGroups(numbers).map((g) => (
           <div key={g.feature} className="c-card" style={{ padding: 12 }}>
             <h5 className="c-s14 c-w6" style={{ margin: '0 0 6px' }}>
@@ -153,7 +154,12 @@ export function PersonDays({ person, onShut, onClose }) {
   const [openDay, setOpenDay] = useState(null);
 
   return (
-    <section aria-label={`${name}'s days`} style={{ padding: '4px 16px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+    // At the left of the people's table and no wider than its card: on a phone, somebody who scrolled the
+    // table across to press Days still sees their days.
+    <section
+      aria-label={`${name}'s days`}
+      style={{ position: 'sticky', left: 0, boxSizing: 'border-box', maxWidth: '100cqw', padding: '4px 16px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}
+    >
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
         <h3 className="c-s15 c-w6" style={{ margin: 0 }}>
           {name}&apos;s days
@@ -201,7 +207,7 @@ export function PersonDays({ person, onShut, onClose }) {
                     {open ? (
                       <tr>
                         <td colSpan={6} style={{ background: 'var(--card)' }}>
-                          <DayUse title={`${name}, ${when}`} numbers={d} inset={50} onClose={() => setOpenDay(null)} />
+                          <DayUse title={`${name}, ${when}`} numbers={d} inset={34} onClose={() => setOpenDay(null)} />
                         </td>
                       </tr>
                     ) : null}
@@ -276,7 +282,7 @@ export function ByDay({ onShut }) {
       ) : null}
       {first.data === null && first.loading ? <p className="c-hint">Loading…</p> : null}
       {people.length > 0 ? (
-        <div className="c-card" style={{ overflowX: 'auto' }}>
+        <div className="c-card" style={ADMIN_TABLE}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr className="c-th" style={{ textAlign: 'left' }}>
@@ -311,7 +317,7 @@ export function ByDay({ onShut }) {
                     {open ? (
                       <tr>
                         <td colSpan={7} style={{ background: 'var(--raise)' }}>
-                          <DayUse title={`${name}, ${dayWords(first.data.day, today)}`} numbers={p} inset={32} onClose={() => setOpened(null)} />
+                          <DayUse title={`${name}, ${dayWords(first.data.day, today)}`} numbers={p} inset={0} onClose={() => setOpened(null)} />
                         </td>
                       </tr>
                     ) : null}

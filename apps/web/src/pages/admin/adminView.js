@@ -164,6 +164,10 @@ export function dayTotalsWords(totals) {
 
 // ── What each person used on a day (14a-iii) ─────────────────────────────────
 
+/** The card a list's table scrolls in: what a day's box and a person's days measure their width by
+ *  (`100cqw`), so on a phone they stay on screen while the table scrolls across. */
+export const ADMIN_TABLE = { overflowX: 'auto', containerType: 'inline-size' };
+
 /** A day's box, feature by feature as the phone's tabs name them: each line a label and its count.
  *  Meal scans and route plans are what their limit counts; the rest is what they saved. */
 export function usedGroups(numbers) {
