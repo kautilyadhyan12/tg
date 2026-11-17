@@ -16,20 +16,11 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { PHONE_TEST_DELEGATES, phoneProgressSchema, videoFramesSchema, type PhoneProgress, type PhoneTestDelegate, type VideoFrames } from "@app/shared";
+import { PHONE_TEST_DELEGATES, phoneProgressSchema, videoFramesSchema, type MovementFrame, type PhoneProgress, type PhoneTestDelegate, type VideoFrames } from "@app/shared";
 import { decodeBodyPoints, type BodyPoints } from "./bodyPoints.js";
 import { KD_VIDEOS, assertFolderStaysOutOfGit } from "./outFolder.js";
-import {
-  FAST_ENOUGH_MS,
-  WARM_UP,
-  compareFrames,
-  comparePhone,
-  gapWords,
-  pick,
-  summaries,
-  type PhoneComparison,
-} from "./phoneCheck.js";
-import { MODELS, SETTINGS, makePlan, modelUrl, readPhoneFailure, readPhoneRun, runName, type PlanRun, type PlanVideo, type PoseModel } from "./phoneRun.js";
+import { WARM_UP, compareFrames, comparePhone, gapWords, keyGaps, shakeOf, summaries, type FrameComparison, type PhoneComparison } from "./phoneCheck.js";
+import { MODELS, SETTINGS, makePlan, modelUrl, phoneFrames, readPhoneFailure, readPhoneRun, runName, type PhoneRun, type PlanRun, type PlanVideo, type PoseModel } from "./phoneRun.js";
 
 const REPO = resolve(import.meta.dirname, "../../..");
 const KEPT = join(import.meta.dirname, "../test/body-points");
@@ -128,12 +119,20 @@ function videoOf(label: string): string {
   return found ?? fail(`No video named ${label}.mp4 in ${folder}.`);
 }
 
-/** The laptop's run of a video with a model, asking for as many people as the phone is asked for: the kept heavy file
- *  for six, otherwise measured here. */
+/** Where the laptop's run of a video with a model, asking for `n` people, is kept: the kept heavy file for six,
+ *  otherwise in measured/phone-test/laptop/. */
+function laptopFolder(label: string, m: PoseModel, n: number): string {
+  return n === SETTINGS.people ? join(HERE, "laptop", m.name, label) : join(HERE, "laptop", m.name, `people-${String(n)}`, label);
+}
+function laptopPath(label: string, m: PoseModel, n: number): string {
+  return m.size === "heavy" && n === SETTINGS.people ? join(KEPT, `${label}.bodypoints`) : join(laptopFolder(label, m, n), `${label}.bodypoints`);
+}
+
+/** The laptop's run of a video with a model, asking for as many people as the phone is asked for; made here when
+ *  missing. */
 function laptopRun(label: string, m: PoseModel): BodyPoints {
-  const kept = join(KEPT, `${label}.bodypoints`);
-  const folder = people === SETTINGS.people ? join(HERE, "laptop", m.name, label) : join(HERE, "laptop", m.name, `people-${String(people)}`, label);
-  const path = m.size === "heavy" && people === SETTINGS.people ? kept : join(folder, `${label}.bodypoints`);
+  const folder = laptopFolder(label, m, people);
+  const path = laptopPath(label, m, people);
   if (!existsSync(path)) {
     if (values["compare-only"]) fail(`No laptop run of ${label} with the ${m.size} model at ${path}.`);
     console.log(`Measuring ${label} with the ${m.size} model on the laptop.`);
@@ -392,6 +391,7 @@ const sizeOf = (name: string): string => MODELS.find((m) => m.name === name)?.si
 const results: PhoneComparison[] = [];
 const failed: { label: string; model: string; delegate: PhoneTestDelegate; reason: string }[] = [];
 const detectTimes = new Map<string, number[]>();
+const phoneRuns = new Map<string, PhoneRun>();
 let phoneName = "";
 for (const label of labels) {
   for (const m of models) {
@@ -409,6 +409,7 @@ for (const label of labels) {
         continue;
       }
       const run = readPhoneRun(readFileSync(runPath, "utf8"));
+      phoneRuns.set(name, run);
       const ref = laptop.get(`${label}|${m.name}`) ?? fail(`No laptop run of ${label} with ${m.name}.`);
       results.push(comparePhone(ref, run));
       const key = `${m.name}|${delegate}`;
@@ -421,32 +422,36 @@ if (results.length === 0 && failed.length === 0) fail("No phone files to compare
 
 say(`The phone: ${phoneName || "no run finished"}. The model asked for up to ${String(people)} ${people === 1 ? "person" : "people"}; ${pictures === "laptop" ? "the laptop's own decoded pictures" : "the phone decoding the videos itself"}.`);
 say("");
-say("Is each run the laptop's? Each video against the laptop's run of the same model, judged by the laptop at half the frames a second.");
-say(`   ${pad("model", 7)}${pad("chip", 10)}${pad("same", 9)}${pad("reading p50", 13)}${pad("p95", 9)}${pad("start", 9)}warmest`);
+say(
+  pictures === "laptop"
+    ? "Is each run the laptop's numbers? The same: within a tenth of the model's own shake in 99 of 100 big joints, and readings given by one only in at most 1 of 1,000."
+    : "The phone decoded the videos itself, so no run is judged here: its numbers hold its video decoder as well as its chip. Only --pictures laptop tests a chip.",
+);
+say(`   ${pad("model", 7)}${pad("chip", 10)}${pad("same", 7)}${pad("differs", 9)}${pad("compared", 10)}${pad("refused", 9)}${pad("reading p50", 13)}${pad("p95", 9)}${pad("start", 9)}warmest`);
 const rows = summaries(results, failed, detectTimes);
 for (const r of rows) {
   say(
-    `   ${pad(sizeOf(r.model), 7)}${pad(chipWord(r.delegate), 10)}${pad(`${String(r.same)} of ${String(r.videos)}`, 9)}${pad(ms(r.detect.median), 13)}${pad(ms(r.detect.p95), 9)}${pad(ms(r.create), 9)}${String(r.warmest)}`,
+    `   ${pad(sizeOf(r.model), 7)}${pad(chipWord(r.delegate), 10)}${pad(String(r.same), 7)}${pad(String(r.differs), 9)}${pad(String(r.comparedOnly), 10)}${pad(String(r.notComparable + r.failed), 9)}${pad(ms(r.detect.median), 13)}${pad(ms(r.detect.p95), 9)}${pad(ms(r.create), 9)}${String(r.warmest)}`,
   );
 }
-say("   reading: the pose model's time for one picture, after its first ten. start: before its first picture. warmest: Android's thermal status, 0 none to 6.");
+say("   refused: not comparable (other pictures, a wrong way of reading the person, no 3D) or no run. reading: the pose model's time for one");
+say("   picture, after its first ten; the main chip on the library's own number of cores. start: before its first picture. warmest: Android's thermal status, 0 none to 6.");
 
+const cm = (v: number): string => `${(100 * v).toFixed(1)} cm`;
+const keyLines = (f: FrameComparison): string[] => keyGaps(f.gaps).map((g) => gapWords(g));
 for (const r of results) {
   const f = r.frames;
   say("");
-  say(`${r.label}, ${sizeOf(r.model)} model, ${chipWord(r.delegate)} chip: ${r.refused.length === 0 ? "the same as the laptop" : "NOT the laptop's"}`);
-  for (const why of r.refused) say(`   - ${why}`);
+  say(`${r.label}, ${sizeOf(r.model)} model, ${chipWord(r.delegate)} chip: ${r.verdict.toUpperCase()}`);
+  for (const why of r.reasons) say(`   - ${why}`);
   if (f !== null) {
-    say(`   points apart (big joints, 95 in 100): ${f.points.flat.p95.toFixed(3)} of a trunk on the picture, ${(100 * f.points.world.p95).toFixed(1)} cm in 3D`);
-    say(
-      `   measures apart (95 in 100): ${f.measures.apart.angle.toFixed(2)}°, ${f.measures.apart.length.toFixed(3)} of a length; at half the frames a second ${f.yardstick.apart.angle.toFixed(2)}°, ${f.yardstick.apart.length.toFixed(3)}`,
-    );
+    const c = f.closeness;
+    say(`   big joints apart: on the picture ${f.points.flat.p95.toFixed(3)} of a trunk in 95 of 100; in 3D ${cm(f.points.world.p95)} in 95 of 100, ${(1000 * c.world99).toFixed(2)} mm in 99 (the model's own shake ${(1000 * c.worldShake).toFixed(2)} mm)`);
     if (f.fit !== null) {
       say(`   fit where the body moves most (${String(f.fit.frames)} frames, in trunks): as it is ${f.fit.asIs.toFixed(4)}, a picture late ${f.fit.late.toFixed(4)}, early ${f.fit.early.toFixed(4)}, mirrored ${f.fit.mirrored.toFixed(4)}, swapped ${f.fit.swapped.toFixed(4)}`);
     }
     if (f.several > 0) say(`   where the laptop found more than one person (${String(f.several)} frames), the phone found as many in ${String(f.severalSame)}; most people in a frame: laptop ${String(f.mostLaptop)}, phone ${String(f.mostOther)}`);
-    const worst = [...f.gaps].sort((a, b) => b.p95 - a.p95).slice(0, 3);
-    for (const g of worst) say(`   ${gapWords(g)}`);
+    for (const line of keyLines(f)) say(`   ${line}`);
   }
   say(`   reading ${ms(r.speed.detect.median)} (p95 ${ms(r.speed.detect.p95)}), one person ${ms(r.speed.one)}, more ${ms(r.speed.several)}; decoding ${ms(r.speed.decode)}; start ${ms(r.speed.create)}; thermal ${String(r.heat.before.thermal)} to ${String(r.heat.after.thermal)}, battery ${String(r.heat.before.batteryC ?? "-")} to ${String(r.heat.after.batteryC ?? "-")} °C`);
 }
@@ -455,30 +460,66 @@ for (const f of failed) {
   say(`${f.label}, ${sizeOf(f.model)} model, ${chipWord(f.delegate)} chip: NO RUN. ${f.reason}`);
 }
 
-// The smaller models against the heavy one, both on the laptop: what a smaller model would cost in the numbers.
+/** One block of a comparison of two runs that are not the laptop against the phone, reading by reading. */
+function sayAgainst(title: string, pairs: readonly { what: string; a: readonly MovementFrame[]; b: readonly MovementFrame[] }[]): void {
+  if (pairs.length === 0) return;
+  say("");
+  say(title);
+  for (const { what, a, b } of pairs) {
+    const c = compareFrames(a, b);
+    say(`   ${what}: big joints in 3D ${cm(c.points.world.p95)} apart in 95 of 100`);
+    for (const line of keyLines(c)) say(`      ${line}`);
+  }
+}
+
+// The chips against each other: both phone runs decoded the same way, so what differs is the chip alone.
+sayAgainst(
+  "The graphics chip against the main chip, the same model and the same pictures (lean: the middle of graphics less main; spread: 95 in 100):",
+  labels.flatMap((label) =>
+    models.flatMap((m) => {
+      const cpu = phoneRuns.get(runName(label, m.name, "cpu"));
+      const gpu = phoneRuns.get(runName(label, m.name, "gpu"));
+      return cpu === undefined || gpu === undefined ? [] : [{ what: `${label}, ${m.size}`, a: phoneFrames(cpu), b: phoneFrames(gpu) }];
+    }),
+  ),
+);
+
+// The smaller models against the heavy one, both on the laptop: what a smaller model would move, reading by reading.
 const heavy = MODELS.find((m) => m.size === "heavy");
 if (heavy !== undefined && models.includes(heavy)) {
-  say("");
-  say("The smaller models against the heavy one, both on the laptop (measures apart in 95 of 100; read by one only):");
-  for (const m of models.filter((x) => x !== heavy)) {
-    for (const label of labels) {
-      const a = laptop.get(`${label}|${heavy.name}`);
-      const b = laptop.get(`${label}|${m.name}`);
-      if (a === undefined || b === undefined) continue;
-      const c = compareFrames(a.frames, b.frames);
-      const differ = c.measures.compared === 0 ? 0 : (100 * c.measures.differ) / c.measures.compared;
-      say(`   ${pad(m.size, 6)}${pad(label, 42)}${c.measures.apart.angle.toFixed(2)}°, ${c.measures.apart.length.toFixed(3)} of a length; ${differ.toFixed(1)} in 100`);
-    }
+  sayAgainst(
+    "The smaller models against the heavy one, both on the laptop (lean: the smaller less heavy):",
+    models
+      .filter((m) => m !== heavy)
+      .flatMap((m) =>
+        labels.flatMap((label) => {
+          const a = laptop.get(`${label}|${heavy.name}`);
+          const b = laptop.get(`${label}|${m.name}`);
+          return a === undefined || b === undefined ? [] : [{ what: `${label}, ${m.size}`, a: a.frames, b: b.frames }];
+        }),
+      ),
+  );
+}
+
+// Asked for fewer people than six against six, both on the laptop: the setting's own part, and each run's shake.
+if (people !== SETTINGS.people) {
+  const pairs = labels.flatMap((label) =>
+    models.flatMap((m) => {
+      const six = existsSync(laptopPath(label, m, SETTINGS.people)) ? decodeBodyPoints(new Uint8Array(readFileSync(laptopPath(label, m, SETTINGS.people)))) : undefined;
+      const fewer = laptop.get(`${label}|${m.name}`);
+      return six === undefined || fewer === undefined ? [] : [{ what: `${label}, ${m.size}`, a: six.frames, b: fewer.frames }];
+    }),
+  );
+  sayAgainst(`Asked for ${String(people)} against ${String(SETTINGS.people)}, the same model on the laptop (lean: ${String(people)} less ${String(SETTINGS.people)}):`, pairs);
+  if (pairs.length > 0) {
+    say("");
+    say("The model's own shake in 3D, the middle frame-to-frame of a used big joint, on the laptop:");
+    for (const { what, a, b } of pairs) say(`   ${pad(what, 50)}asked for ${String(SETTINGS.people)}: ${(1000 * shakeOf(a).world).toFixed(1)} mm; for ${String(people)}: ${(1000 * shakeOf(b).world).toFixed(1)} mm`);
   }
 }
 
 say("");
-const chosen = pick(rows);
-say(
-  chosen === null
-    ? `Pick so far: none. No model is the laptop's on every video and reads a picture in ${String(FAST_ENOUGH_MS)} ms or less in 95 of 100.`
-    : `Pick so far: the ${sizeOf(chosen.model)} model on the ${chipWord(chosen.delegate)} chip, the biggest that is the laptop's on every video and reads a picture in ${String(FAST_ENOUGH_MS)} ms or less in 95 of 100 (20 a second, spec Part 6 §3.2). Job 51b tries it on the live camera for 20 minutes.`,
-);
+say("51a picks nothing: its main chip ran on the library's own number of cores, and nothing ran on the live camera. Job 51b picks (ROADMAP).");
 writeFileSync(join(HERE, `report-${variant}.txt`), `${lines.join("\n")}\n`);
 writeFileSync(join(HERE, `report-${variant}.json`), JSON.stringify({ rows, results, failed }, (_, v: unknown) => (typeof v === "number" && !Number.isFinite(v) ? null : v), 1));
 console.log(`\nTook ${((Date.now() - started) / 1000).toFixed(0)} s. The report: ${join(HERE, `report-${variant}.txt`)}`);

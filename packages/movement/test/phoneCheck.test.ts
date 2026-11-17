@@ -1,15 +1,29 @@
-// The phone test's judgement (ROADMAP 51a). The worst thing it could do is call a phone that reads the video
-// differently "the same as the laptop": every exercise is set from the laptop's numbers, so every count on a member's
+// The phone test's judgement (ROADMAP 51a). The worst thing it could do is call a phone that reads the body
+// differently "the laptop's numbers": every exercise is set from the laptop's numbers, so every count on a member's
 // phone would be off by that much. Each phone run here is made from a real kept video, wrong in one way a real phone
 // can be (its decoder turns or mirrors the picture, numbers its frames one out, names the sides the other way round,
-// gives no 3D, reads the knee a little differently), and each must be refused; the laptop's own run, and one moved
-// by less than the model's own shake, must pass.
+// gives no 3D, reads the knee a little off, or shakes as much as the model itself does), and none may be called the
+// same; a run that decoded the video itself is never judged at all. The laptop's own run given back, and one moved by
+// far less than the model's own shake, are the same.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { KP, type MovementFrame, type PhoneRunFrame, type SeenPerson } from "@app/shared";
 import { decodeBodyPoints, type BodyPoints } from "../scripts/bodyPoints.js";
-import { FIT_MARGIN, MIRROR, comparePhone, mirrored, pick, swapped, type PhoneComparison, type RunSummary } from "../scripts/phoneCheck.js";
+import {
+  FIT_MARGIN,
+  KEY_READINGS,
+  MIRROR,
+  SAME_DIFFER,
+  SAME_SHARE_OF_SHAKE,
+  comparePhone,
+  keyGaps,
+  mirrored,
+  shakeOf,
+  summaries,
+  swapped,
+  type PhoneComparison,
+} from "../scripts/phoneCheck.js";
 import type { PhoneRun } from "../scripts/phoneRun.js";
 import { copy, numbers } from "./helpers/body.js";
 
@@ -18,7 +32,7 @@ const kept = (label: string): BodyPoints => decodeBodyPoints(new Uint8Array(read
 const squat = kept("squat_reference");
 const chair = kept("chair_squat_reference");
 
-/** A phone run that gives back exactly the laptop's frames, changed by `edit`. */
+/** A phone run that read the laptop's own pictures and gives back exactly the laptop's frames, changed by `edit`. */
 function phoneRunOf(laptop: BodyPoints, edit: (frames: MovementFrame[]) => MovementFrame[] = (f) => f, change: Partial<PhoneRun["header"]> = {}): PhoneRun {
   const frames: PhoneRunFrame[] = edit(laptop.frames.map((f) => ({ ...f, people: f.people.map(copy) }))).map((f, i) => ({
     i,
@@ -36,7 +50,7 @@ function phoneRunOf(laptop: BodyPoints, edit: (frames: MovementFrame[]) => Movem
       label: laptop.header.label,
       video: { sha256: "0".repeat(64), frames: frames.length },
       picture: laptop.header.picture,
-      pictures: "video",
+      pictures: "laptop",
       model: { ...laptop.header.model, sha256: "1".repeat(64) },
       delegate: "cpu",
       phone: { maker: "test", model: "test", android: "15", sdk: 35, abi: "arm64-v8a" },
@@ -51,54 +65,78 @@ function phoneRunOf(laptop: BodyPoints, edit: (frames: MovementFrame[]) => Movem
 }
 
 const onEveryone = (edit: (p: SeenPerson) => SeenPerson) => (frames: MovementFrame[]): MovementFrame[] => frames.map((f) => ({ ...f, people: f.people.map(edit) }));
-const refusedFor = (c: PhoneComparison): string => c.refused.join(" | ");
+const reasonsOf = (c: PhoneComparison): string => c.reasons.join(" | ");
 
-describe("the worst thing: a phone that reads the video differently is never the laptop's", () => {
-  it("the laptop's own frames, given back by the phone, are the same", () => {
+/** Every point moved at random by up to `picture` of the picture and `world` metres in 3D. */
+function shaken(picture: number, world: number, seed: number) {
+  const next = numbers(seed);
+  const by = (size: number): number => (next() - 0.5) * 2 * size;
+  return onEveryone((p) => ({
+    points: p.points.map(([x, y, z, v, s]) => [x + by(picture), y + by(picture), z, v, s]),
+    world: p.world?.map(([x, y, z]) => [x + by(world), y + by(world), z + by(world)]) ?? null,
+  }));
+}
+
+describe("the worst thing: a phone that reads the body differently is never called the laptop's numbers", () => {
+  it("the laptop's own frames, given back from the laptop's own pictures, are the same", () => {
     const c = comparePhone(squat, phoneRunOf(squat));
-    expect(c.refused).toEqual([]);
-    expect(c.frames?.measures.apart.angle).toBe(0);
+    expect(c.verdict).toBe("same");
+    expect(c.reasons).toEqual([]);
+    expect(c.frames?.closeness.world99).toBe(0);
   });
 
-  it("a mirrored picture is refused, and named", () => {
+  it("a run that decoded the video itself is only compared, never judged, even with the laptop's very numbers", () => {
+    const c = comparePhone(squat, phoneRunOf(squat, (f) => f, { pictures: "video" }));
+    expect(c.verdict).toBe("compared only");
+    expect(reasonsOf(c)).toContain("video decoder");
+  });
+
+  it("a mirrored picture is not comparable, and named", () => {
     const c = comparePhone(squat, phoneRunOf(squat, onEveryone(mirrored)));
-    expect(refusedFor(c)).toContain("mirrored");
+    expect(c.verdict).toBe("not comparable");
+    expect(reasonsOf(c)).toContain("mirrored");
   });
 
-  it("a picture turned on its side is refused by its shape", () => {
+  it("a picture turned on its side is not comparable, by its shape", () => {
     const { width, height } = squat.header.picture;
     const turned = onEveryone((p) => ({ ...p, points: p.points.map(([x, y, z, v, s]) => [1 - y, x, z, v, s]) }));
     const c = comparePhone(squat, phoneRunOf(squat, turned, { picture: { width: height, height: width } }));
-    expect(refusedFor(c)).toContain("turned or cut");
+    expect(c.verdict).toBe("not comparable");
+    expect(reasonsOf(c)).toContain("turned or cut");
     expect(c.frames).toBeNull();
   });
 
-  it("frames numbered one out, the phone a picture late, are refused, and named", () => {
+  it("frames numbered one out, the phone a picture late, are not comparable, and named", () => {
     const late = (frames: MovementFrame[]): MovementFrame[] => frames.map((f, i) => ({ ...f, people: (frames[Math.max(0, i - 1)] ?? f).people }));
-    expect(refusedFor(comparePhone(squat, phoneRunOf(squat, late)))).toContain("one picture late");
+    const c = comparePhone(squat, phoneRunOf(squat, late));
+    expect(c.verdict).toBe("not comparable");
+    expect(reasonsOf(c)).toContain("one picture late");
   });
 
-  it("the phone a picture early is refused, and named", () => {
+  it("the phone a picture early is not comparable, and named", () => {
     const early = (frames: MovementFrame[]): MovementFrame[] => frames.map((f, i) => ({ ...f, people: (frames[Math.min(frames.length - 1, i + 1)] ?? f).people }));
-    expect(refusedFor(comparePhone(squat, phoneRunOf(squat, early)))).toContain("one picture early");
+    expect(reasonsOf(comparePhone(squat, phoneRunOf(squat, early)))).toContain("one picture early");
   });
 
-  it("left and right named the other way round is refused, and named", () => {
-    expect(refusedFor(comparePhone(squat, phoneRunOf(squat, onEveryone(swapped))))).toContain("left and right swapped");
+  it("left and right named the other way round is not comparable, and named", () => {
+    const c = comparePhone(squat, phoneRunOf(squat, onEveryone(swapped)));
+    expect(c.verdict).toBe("not comparable");
+    expect(reasonsOf(c)).toContain("left and right swapped");
   });
 
-  it("no 3D points is refused", () => {
-    const flat = onEveryone((p) => ({ ...p, world: null }));
-    expect(refusedFor(comparePhone(squat, phoneRunOf(squat, flat)))).toContain("no 3D points");
+  it("no 3D points is not comparable", () => {
+    const c = comparePhone(squat, phoneRunOf(squat, onEveryone((p) => ({ ...p, world: null }))));
+    expect(c.verdict).toBe("not comparable");
+    expect(reasonsOf(c)).toContain("no 3D points");
   });
 
-  it("another video's body is refused", () => {
+  it("another video's body is never the same", () => {
     const other = (frames: MovementFrame[]): MovementFrame[] =>
       frames.map((f, i) => ({ ...f, people: (chair.frames[i % chair.frames.length]?.people ?? []).map(copy) }));
-    expect(comparePhone(squat, phoneRunOf(squat, other)).refused.length).toBeGreaterThan(0);
+    expect(comparePhone(squat, phoneRunOf(squat, other)).verdict).not.toBe("same");
   });
 
-  it("a knee read 4 cm off in 3D and on the picture, and nothing else, is refused by the measures", () => {
+  it("a knee read 4 cm off in 3D and on the picture, and nothing else, differs, and is not read as a wrong way", () => {
     const knee = onEveryone((p) => {
       const pk = p.points[KP.left_knee];
       const wk = p.world?.[KP.left_knee];
@@ -107,44 +145,46 @@ describe("the worst thing: a phone that reads the video differently is never the
       return p;
     });
     const c = comparePhone(squat, phoneRunOf(squat, knee));
-    expect(refusedFor(c)).toMatch(/angles lie .* from the laptop's/);
-    // Not read as one of the four wrong ways: the knee alone moved.
-    expect(refusedFor(c)).not.toMatch(/late|early|mirrored|swapped/);
+    expect(c.verdict).toBe("differs");
+    expect(reasonsOf(c)).toMatch(/in 3D its big joints lie .* mm from the laptop's in 99 of 100/);
+    expect(reasonsOf(c)).not.toMatch(/late|early|mirrored|swapped/);
   });
 
-  it("frames at other times are refused before any number is compared", () => {
+  it("every point shaken as much as the model itself shakes (0.0009 of the picture, 1.5 mm in 3D, 50c-i) differs", () => {
+    const c = comparePhone(squat, phoneRunOf(squat, shaken(0.0009, 0.0015, 51)));
+    expect(c.verdict).toBe("differs");
+  });
+
+  it("frames at other times are not comparable before any number is compared", () => {
     const run = phoneRunOf(squat);
-    const shifted: PhoneRun = { ...run, frames: run.frames.map((f) => ({ ...f, t: f.t + 33.3 })) };
-    const c = comparePhone(squat, shifted);
-    expect(refusedFor(c)).toContain("at other times");
+    const c = comparePhone(squat, { ...run, frames: run.frames.map((f) => ({ ...f, t: f.t + 33.3 })) });
+    expect(c.verdict).toBe("not comparable");
+    expect(reasonsOf(c)).toContain("at other times");
     expect(c.frames).toBeNull();
   });
 
-  it("a phone that plays the video's frames at other times than the laptop is refused", () => {
+  it("a phone that plays the video's frames at other times than the laptop is not comparable", () => {
     const run = phoneRunOf(squat);
-    const played: PhoneRun = { ...run, frames: run.frames.map((f) => ({ ...f, at: f.at + 33.4 })) };
-    expect(refusedFor(comparePhone(squat, played))).toContain("the phone plays frame 1");
+    const c = comparePhone(squat, { ...run, frames: run.frames.map((f) => ({ ...f, at: f.at + 33.4 })) });
+    expect(c.verdict).toBe("not comparable");
+    expect(reasonsOf(c)).toContain("the phone plays frame 1");
   });
 
-  it("a run of another model is never compared as the same", () => {
-    const run = phoneRunOf(squat, (f) => f, { model: { ...squat.header.model, file: "pose_landmarker_lite", sha256: "2".repeat(64) } });
-    expect(refusedFor(comparePhone(squat, run))).toContain("the phone's the pose_landmarker_lite's");
+  it("a run of another model, or asked for another number of people, is not comparable", () => {
+    const lite = phoneRunOf(squat, (f) => f, { model: { ...squat.header.model, file: "pose_landmarker_lite", sha256: "2".repeat(64) } });
+    expect(reasonsOf(comparePhone(squat, lite))).toContain("the phone's the pose_landmarker_lite's");
+    const one = phoneRunOf(squat, (f) => f, { model: { ...squat.header.model, people: 1, sha256: "1".repeat(64) } });
+    expect(reasonsOf(comparePhone(squat, one))).toContain("other settings");
   });
 });
 
-describe("what a real phone may differ by, and still be the laptop's", () => {
-  it("every point moved by less than the model's own shake (0.0009 of the picture, 1.5 mm in 3D) is the same", () => {
-    const next = numbers(51);
-    const shake = (): number => (next() - 0.5) * 0.0006;
-    const jitter = onEveryone((p) => ({
-      points: p.points.map(([x, y, z, v, s]) => [x + shake(), y + shake(), z, v, s]),
-      world: p.world?.map(([x, y, z]) => [x + shake(), y + shake(), z + shake()]) ?? null,
-    }));
-    const c = comparePhone(squat, phoneRunOf(squat, jitter));
-    expect(c.refused).toEqual([]);
+describe("what a phone may differ by and still give the laptop's numbers", () => {
+  it("every point moved by a hundredth of the model's own shake is the same", () => {
+    const c = comparePhone(squat, phoneRunOf(squat, shaken(0.000009, 0.000015, 52)));
+    expect(c.verdict).toBe("same");
   });
 
-  it("the person found twice, the copy a little off, is still matched to the right one", () => {
+  it("the person found twice, the copy a third of the picture away, is still matched to the right one", () => {
     const twice = (frames: MovementFrame[]): MovementFrame[] =>
       frames.map((f) => {
         const p = f.people[0];
@@ -153,8 +193,17 @@ describe("what a real phone may differ by, and still be the laptop's", () => {
         return { ...f, people: [ghost, p] };
       });
     const c = comparePhone(squat, phoneRunOf(squat, twice));
-    expect(c.refused).toEqual([]);
+    expect(c.verdict).toBe("same");
     expect(c.frames?.mostOther).toBe(2);
+  });
+
+  it("the bar is a tenth of the video's own shake, and at most 1 reading in 1,000 given by one only", () => {
+    expect(SAME_SHARE_OF_SHAKE).toBe(0.1);
+    expect(SAME_DIFFER).toBe(0.001);
+    // The squat video's own shake in 3D is millimetres, so the bar is a fraction of one.
+    const shake = shakeOf(squat.frames).world;
+    expect(shake).toBeGreaterThan(0.001);
+    expect(shake).toBeLessThan(0.02);
   });
 
   it("the mirror's twin of every point is its own twin's", () => {
@@ -165,34 +214,23 @@ describe("what a real phone may differ by, and still be the laptop's", () => {
   });
 });
 
-describe("the pick so far", () => {
-  const row = (model: string, delegate: "cpu" | "gpu", same: number, p95: number): RunSummary => ({
-    model,
-    delegate,
-    videos: 6,
-    same,
-    failed: 0,
-    detect: { median: p95 * 0.8, p95, count: 100 },
-    create: 300,
-    warmest: 0,
+describe("the report", () => {
+  it("writes out the knees, hips, trunk and elbows one by one, in that order, each reading the video gives", () => {
+    const c = comparePhone(squat, phoneRunOf(squat, shaken(0.0009, 0.0015, 53)));
+    const gaps = keyGaps(c.frames?.gaps ?? []);
+    const order = gaps.map((g) => KEY_READINGS.indexOf(g.name));
+    expect(order.every((k) => k >= 0)).toBe(true);
+    expect(order).toEqual([...order].sort((a, b) => a - b));
+    // Side on, the near side and the trunk are read both ways; the far side may not be read at all.
+    expect(gaps.filter((g) => g.name === "trunk lean").map((g) => g.reading)).toEqual(["flat", "3D"]);
+    expect(gaps.filter((g) => g.name.endsWith("knee")).length).toBeGreaterThanOrEqual(2);
   });
 
-  it("is the biggest model that is the laptop's on every video and fast enough, on its faster chip", () => {
-    const rows = [
-      row("pose_landmarker_heavy", "cpu", 6, 120),
-      row("pose_landmarker_heavy", "gpu", 5, 30),
-      row("pose_landmarker_full", "cpu", 6, 48),
-      row("pose_landmarker_full", "gpu", 6, 20),
-      row("pose_landmarker_lite", "gpu", 6, 10),
-    ];
-    expect(pick(rows)).toMatchObject({ model: "pose_landmarker_full", delegate: "gpu" });
-  });
-
-  it("is none when no model is both", () => {
-    expect(pick([row("pose_landmarker_heavy", "cpu", 6, 120), row("pose_landmarker_lite", "gpu", 5, 10)])).toBeNull();
-  });
-
-  it("never a model with a run the phone could not make", () => {
-    expect(pick([{ ...row("pose_landmarker_full", "gpu", 5, 20), failed: 1 }])).toBeNull();
+  it("counts each model and chip's runs by what they are", () => {
+    const same = comparePhone(squat, phoneRunOf(squat));
+    const video = comparePhone(squat, phoneRunOf(squat, (f) => f, { pictures: "video" }));
+    const late = comparePhone(squat, phoneRunOf(squat, onEveryone(mirrored)));
+    const [row] = summaries([same, video, late], [{ model: squat.header.model.file, delegate: "cpu" }], new Map());
+    expect(row).toMatchObject({ videos: 4, same: 1, differs: 0, comparedOnly: 1, notComparable: 1, failed: 1 });
   });
 });

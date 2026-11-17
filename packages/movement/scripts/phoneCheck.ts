@@ -1,20 +1,22 @@
-// Whether the phone's own pose model gives the laptop's numbers (ROADMAP Stage 5 item 51a; spec Part 2 §12.5). Every
-// rule an exercise gets is set from numbers the laptop measured; if the phone reads the same video differently, every
-// count on a member's phone is off by that much. So a phone run is called the same as the laptop's only when:
-//   - it read the laptop's very pictures: the same shape, the same frames at the same times;
-//   - the phone's person fits the laptop's best as it is, not one picture late or early, not mirrored, not with
-//     left and right swapped (judged where the body moves most, where each of those shows);
-//   - it gives 3D points;
-//   - its body measures, worked out by this engine, lie no further from the laptop's than the laptop's own lie from
-//     the same video at half the frames a second: a change every exercise's proof must already survive (§12.5,
-//     "fewer frames a second"). Measured on the very video, so the bar is the video's own, never a number typed here.
+// How a phone run stands against the laptop's run of the same video and model (ROADMAP Stage 5 item 51a; spec Part 2
+// §12.5). Every rule an exercise gets is set from numbers the laptop measured, so the worst thing this could do is call
+// a phone that reads the body differently "the laptop's numbers". A run is, in order:
+//   - not comparable, and nothing in it used, when it did not read the laptop's very pictures with the laptop's
+//     settings (the shape, the frames and their times, the model, how many people), or reads its person a wrong way:
+//     one picture late or early, mirrored, the sides swapped (judged where the body moves most), or with no 3D;
+//   - compared only, when the phone decoded the video itself: then its numbers judge its video decoder as well as its
+//     chip, and are reported reading by reading, never judged (measured 2026-11-17: the decoder alone moves the main
+//     chip 1 to 6.5 cm);
+//   - the same, when it read the laptop's own decoded pictures and lies within a tenth of the model's own shake from
+//     the laptop's (SAME_SHARE_OF_SHAKE); otherwise it differs, with the numbers.
+// Whether a chip that differs counts the same is not this file's to say: from job 52a, the proof table's.
 import { KP, type MovementFrame, type PhoneHeat, type PhoneTestDelegate, type SeenPerson } from "@app/shared";
-import { MAIN_JOINTS, MEASURE_LIST, type MeasureName, type MeasuredBody, type Unit } from "../src/index.js";
-import { halfRate, runChecks, runSteady } from "./bodyCheck.js";
+import { MAIN_JOINTS, MEASURE_LIST, type CheckedBody, type MeasureName, type MeasuredBody, type SteadyBody, type Unit } from "../src/index.js";
+import { runChecks, runSteady, steadinessOf } from "./bodyCheck.js";
 import type { BodyPoints } from "./bodyPoints.js";
 import { followOne } from "./follow.js";
 import { agreementOf, kindOf, runMeasures, type Agreement } from "./measureCheck.js";
-import { MODELS, phoneFrames, type PhoneRun } from "./phoneRun.js";
+import { phoneFrames, type PhoneRun } from "./phoneRun.js";
 
 /** Each point's twin on the other side of the body: a mirror, or a swap of left and right, exchanges them. */
 export const MIRROR: readonly number[] = [0, 4, 5, 6, 1, 2, 3, 8, 7, 10, 9, 12, 11, 14, 13, 16, 15, 18, 17, 20, 19, 22, 21, 24, 23, 26, 25, 28, 27, 30, 29, 32, 31];
@@ -264,9 +266,33 @@ export function measureGaps(laptop: readonly MeasuredBody[], phone: readonly Mea
 }
 
 // ── Two runs of one video, compared ────────────────────────────────────────────────
+/** The readings a squat-like movement rests on, written out one by one in the report, lean and spread apart: one number
+ *  over all 76 readings is ruled by those no rule should use (the far side, 3D ankles and elbows). */
+export const KEY_READINGS: readonly MeasureName[] = ["left knee", "right knee", "left hip", "right hip", "trunk lean", "left elbow", "right elbow"];
+
+/** A run gives the laptop's numbers when, in 99 of 100 big joints the model is sure of in both, it lies less than a
+ *  tenth of the model's own frame-to-frame shake from the laptop's (on the picture and in 3D, the shake of the laptop's
+ *  own run of that video), and gives a reading the laptop does not, or the other way round, in at most 1 of 1,000. A
+ *  tenth of the shake is lost in the shake. Two processors round their last digits apart, so 0.0 is not the bar:
+ *  measured 2026-11-17 on the laptop's own pictures of the chair squat, the phone's main chip lay 0.15 to 0.18 mm off in
+ *  99 of 100 in 3D (0.02 mm in the middle) and differed in 0 to 1 of 12,544 readings. */
+export const SAME_SHARE_OF_SHAKE = 0.1;
+export const SAME_DIFFER = 1 / 1000;
+
+export interface Closeness {
+  /** In 99 of 100 big joints sure in both, how far apart: on the picture in the body's size, in 3D in metres. */
+  readonly flat99: number;
+  readonly world99: number;
+  /** The laptop run's own frame-to-frame shake of a used big joint, the middle, in the same units. */
+  readonly flatShake: number;
+  readonly worldShake: number;
+  /** Readings given by one run and not the other, a share of all compared. */
+  readonly differ: number;
+}
+
 export interface FrameComparison {
   readonly frames: number;
-  /** Frames where the laptop follows somebody, and of those, where the phone has nobody. */
+  /** Frames where the laptop follows somebody, and of those, where the other has nobody. */
   readonly laptopFound: number;
   readonly missed: number;
   /** Frames where the laptop found more than one person, and of those, where the other found as many. */
@@ -279,22 +305,55 @@ export interface FrameComparison {
   readonly worldMissing: number;
   readonly fit: Fit | null;
   readonly points: { readonly flat: Spread; readonly world: Spread };
+  readonly closeness: Closeness;
   readonly measures: Agreement;
-  /** The laptop against itself at half the frames a second: the bar. */
-  readonly yardstick: Agreement;
   readonly gaps: readonly MeasureGap[];
 }
 
-/** The frames of one video as two runs gave them: the laptop's, and the phone's (or a smaller model's). */
+/** The steady points of the frames' one person, with the possible-body checks before them. */
+function steadyRun(frames: readonly MovementFrame[]): { checked: CheckedBody[]; steady: SteadyBody[] } {
+  const checked = runChecks(frames);
+  return { checked, steady: runSteady(checked) };
+}
+
+/** A video's own shake, as the model gave it: the middle frame-to-frame shake of a used big joint, on the picture in
+ *  the body's size and in 3D in metres (body-check's measure). */
+export function shakeOf(frames: readonly MovementFrame[]): { readonly flat: number; readonly world: number } {
+  const { checked, steady } = steadyRun(only(frames, followOne(frames)));
+  return { flat: steadinessOf(checked, steady, "flat").shakeRaw, world: steadinessOf(checked, steady, "world").shakeRaw };
+}
+
+function closenessOf(checked: readonly CheckedBody[], other: readonly (SeenPerson | null)[], differ: number, shake: { flat: number; world: number }): Closeness {
+  const flat: number[] = [];
+  const world: number[] = [];
+  checked.forEach((c, i) => {
+    const l = c.person;
+    const p = other[i];
+    if (l === null || p == null || c.size === null) return;
+    for (const j of MAIN_JOINTS) {
+      if (!sure(l, j) || !sure(p, j)) continue;
+      const a = at(l, j, c.aspect);
+      const b = at(p, j, c.aspect);
+      if (a !== null && b !== null) flat.push(Math.hypot(a[0] - b[0], a[1] - b[1]) / c.size);
+      const wa = l.world?.[j];
+      const wb = p.world?.[j];
+      if (wa !== undefined && wb !== undefined) world.push(Math.hypot(wa[0] - wb[0], wa[1] - wb[1], wa[2] - wb[2]));
+    }
+  });
+  return { flat99: quantile(flat, 0.99), world99: quantile(world, 0.99), flatShake: shake.flat, worldShake: shake.world, differ };
+}
+
+/** The frames of one video as two runs gave them: the laptop's, and the phone's (or another model's, or one chip's
+ *  against the other's). */
 export function compareFrames(laptop: readonly MovementFrame[], other: readonly MovementFrame[]): FrameComparison {
   const followed = followOne(laptop);
   const matched = matchPeople(followed, other);
   const aspect = laptop[0]?.aspect ?? 1;
-  const mine = only(laptop, followed);
-  const theirs = only(other, matched);
-  const laptopMeasured = measuredOf(mine);
-  const otherMeasured = measuredOf(theirs);
-  const half = measuredOf(halfRate(mine));
+  const mine = steadyRun(only(laptop, followed));
+  const laptopMeasured = runMeasures(mine.steady);
+  const otherMeasured = measuredOf(only(other, matched));
+  const measures = agreementOf(laptopMeasured, otherMeasured, 1);
+  const shake = { flat: steadinessOf(mine.checked, mine.steady, "flat").shakeRaw, world: steadinessOf(mine.checked, mine.steady, "world").shakeRaw };
   const several = laptop.flatMap((f, i) => (f.people.length > 1 ? [i] : []));
   return {
     frames: laptop.length,
@@ -311,47 +370,50 @@ export function compareFrames(laptop: readonly MovementFrame[], other: readonly 
     }).length,
     fit: fitOf(followed, matched, aspect),
     points: pointGaps(followed, matched, aspect),
-    measures: agreementOf(laptopMeasured, otherMeasured, 1),
-    yardstick: agreementOf(laptopMeasured, half, 2),
+    closeness: closenessOf(mine.checked, matched, measures.compared === 0 ? 1 : measures.differ / measures.compared, shake),
+    measures,
     gaps: measureGaps(laptopMeasured, otherMeasured),
   };
 }
 
-const share = (a: Agreement): number => (a.compared === 0 ? 0 : a.differ / a.compared);
-const pct = (v: number): string => `${(100 * v).toFixed(1)} in 100`;
-
-/** Why the other run's measures are not the laptop's, against the video's own bar; empty when they are. */
-export function measureRefusals(c: FrameComparison): string[] {
-  const out: string[] = [];
-  const { measures: m, yardstick: y } = c;
-  if (m.compared === 0) return ["no body measure could be compared"];
-  if (share(m) > share(y)) out.push(`${pct(share(m))} of its readings are given by one and not the other (half the frames a second: ${pct(share(y))})`);
-  for (const kind of ["angle", "length"] as const) {
-    const a = m.apart[kind];
-    const b = y.apart[kind];
-    const words = kind === "angle" ? (v: number) => `${v.toFixed(2)}°` : (v: number) => `${v.toFixed(3)} of a length`;
-    if (Number.isFinite(a) && Number.isFinite(b) && a > b) out.push(`its ${kind}s lie ${words(a)} from the laptop's in 95 of 100 (half the frames a second: ${words(b)})`);
-  }
-  return out;
-}
-
-/** Everything that keeps the other run from being the laptop's, in the frames alone. */
-export function frameRefusals(c: FrameComparison): string[] {
+/** Why the two runs cannot be compared at all: the other found nobody, gave no 3D, or fits the laptop's person
+ *  better read some wrong way. Empty when they can. */
+export function comparableRefusals(c: FrameComparison): string[] {
   const out: string[] = [];
   if (c.laptopFound > 0 && c.missed === c.laptopFound) out.push("it found nobody where the laptop found the person");
   if (c.world > 0 && c.worldMissing === c.world) out.push("it gives no 3D points");
   else if (c.worldMissing > 0) out.push(`it gives no 3D points in ${String(c.worldMissing)} of ${String(c.world)} frames`);
   if (c.fit !== null) out.push(...fitRefusals(c.fit));
-  out.push(...measureRefusals(c));
+  return out;
+}
+
+/** Why the other run's numbers are not the laptop's; empty when they are. */
+export function sameRefusals(c: Closeness): string[] {
+  const out: string[] = [];
+  const bar = SAME_SHARE_OF_SHAKE;
+  if (!(c.flat99 <= bar * c.flatShake)) {
+    out.push(`on the picture its big joints lie ${c.flat99.toFixed(4)} of the body's size from the laptop's in 99 of 100, more than a tenth of the model's own shake (${c.flatShake.toFixed(4)})`);
+  }
+  if (!(c.world99 <= bar * c.worldShake)) {
+    out.push(`in 3D its big joints lie ${(1000 * c.world99).toFixed(2)} mm from the laptop's in 99 of 100, more than a tenth of the model's own shake (${(1000 * c.worldShake).toFixed(2)} mm)`);
+  }
+  if (!(c.differ <= SAME_DIFFER)) out.push(`${(1000 * c.differ).toFixed(1)} in 1,000 of its readings are given by one and not the other`);
   return out;
 }
 
 // ── A phone run against the laptop's ───────────────────────────────────────────────
+/** same: the laptop's numbers. differs: comparable, and not the laptop's numbers. compared only: the phone decoded the
+ *  video itself, so its numbers judge its video decoder as well as its chip, and are reported, never judged.
+ *  not comparable: the run read other pictures, or reads its person some wrong way: nothing in it may be used. */
+export type Verdict = "same" | "differs" | "compared only" | "not comparable";
+
 export interface PhoneComparison {
   readonly label: string;
   readonly model: string;
   readonly delegate: PhoneTestDelegate;
-  readonly refused: readonly string[];
+  readonly pictures: "video" | "laptop";
+  readonly verdict: Verdict;
+  readonly reasons: readonly string[];
   readonly frames: FrameComparison | null;
   readonly speed: {
     readonly detect: Spread;
@@ -364,8 +426,8 @@ export interface PhoneComparison {
   readonly heat: { readonly before: PhoneHeat; readonly after: PhoneHeat };
 }
 
-/** Whether a phone run is the laptop's, and why not. `laptop` is the laptop's run of the same model on the same video. */
-export function comparePhone(laptop: BodyPoints, run: PhoneRun): PhoneComparison {
+/** Why the phone run did not read the laptop's pictures with the laptop's settings: empty when it did. */
+function sourceRefusals(laptop: BodyPoints, run: PhoneRun): string[] {
   const refused: string[] = [];
   const { header } = run;
   const lp = laptop.header.picture;
@@ -383,17 +445,38 @@ export function comparePhone(laptop: BodyPoints, run: PhoneRun): PhoneComparison
   if (!sameFrames) refused.push(`the phone read ${String(run.frames.length)} frames at other times than the laptop's ${String(laptop.frames.length)}`);
   // The phone's own clock for each picture: a decoder that numbers the video's frames differently plays them at other times.
   const halfFrame = 500 / laptop.header.videoFps;
-  const late = run.frames.findIndex((f) => Math.abs(f.at - f.t) > halfFrame);
-  const off = run.frames[late];
+  const off = run.frames.find((f) => Math.abs(f.at - f.t) > halfFrame);
   if (off !== undefined) refused.push(`the phone plays frame ${String(off.i + 1)} at ${off.at.toFixed(1)} ms, the laptop at ${off.t.toFixed(1)} ms`);
-  const frames = sameFrames && refused.length === 0 ? compareFrames(laptop.frames, phoneFrames(run)) : null;
-  if (frames !== null) refused.push(...frameRefusals(frames));
+  return refused;
+}
+
+/** How a phone run stands against the laptop's run of the same model on the same video. */
+export function comparePhone(laptop: BodyPoints, run: PhoneRun): PhoneComparison {
+  const { header } = run;
+  const source = sourceRefusals(laptop, run);
+  const frames = source.length === 0 ? compareFrames(laptop.frames, phoneFrames(run)) : null;
+  const wrong = frames === null ? source : comparableRefusals(frames);
+  const differences = frames === null ? [] : sameRefusals(frames.closeness);
+  let verdict: Verdict;
+  let reasons: string[];
+  if (wrong.length > 0) {
+    verdict = "not comparable";
+    reasons = wrong;
+  } else if (header.pictures === "video") {
+    verdict = "compared only";
+    reasons = ["the phone decoded the video itself: its numbers judge its video decoder as well as its chip"];
+  } else {
+    verdict = differences.length === 0 ? "same" : "differs";
+    reasons = differences;
+  }
   const timed = run.frames.slice(WARM_UP);
   return {
     label: header.label,
     model: header.model.file,
     delegate: header.delegate,
-    refused,
+    pictures: header.pictures,
+    verdict,
+    reasons,
     frames,
     speed: {
       detect: spreadOf(timed.map((f) => f.detectMs)),
@@ -406,12 +489,15 @@ export function comparePhone(laptop: BodyPoints, run: PhoneRun): PhoneComparison
   };
 }
 
-// ── All the runs: the table, and the pick ──────────────────────────────────────────
+// ── All the runs: the table ────────────────────────────────────────────────────────
 export interface RunSummary {
   readonly model: string;
   readonly delegate: PhoneTestDelegate;
   readonly videos: number;
   readonly same: number;
+  readonly differs: number;
+  readonly comparedOnly: number;
+  readonly notComparable: number;
   readonly failed: number;
   readonly detect: Spread;
   readonly create: number;
@@ -424,11 +510,15 @@ export function summaries(runs: readonly PhoneComparison[], failed: readonly { m
     const mine = runs.filter((r) => `${r.model}|${r.delegate}` === key);
     const lost = failed.filter((r) => `${r.model}|${r.delegate}` === key).length;
     const [model = "", delegate = "cpu"] = key.split("|");
+    const count = (v: Verdict): number => mine.filter((r) => r.verdict === v).length;
     return {
       model,
       delegate: delegate === "gpu" ? "gpu" : "cpu",
       videos: mine.length + lost,
-      same: mine.filter((r) => r.refused.length === 0).length,
+      same: count("same"),
+      differs: count("differs"),
+      comparedOnly: count("compared only"),
+      notComparable: count("not comparable"),
       failed: lost,
       detect: spreadOf(detectTimes.get(key) ?? []),
       create: median(mine.map((r) => r.speed.create)),
@@ -437,25 +527,15 @@ export function summaries(runs: readonly PhoneComparison[], failed: readonly { m
   });
 }
 
-/** 20 pictures a second (spec Part 6 §3.2's throughput bar): a reading in 50 ms or less, in 95 of 100. */
-export const FAST_ENOUGH_MS = 50;
-
-/** The pick so far: the biggest model that is the laptop's on every video and fast enough; between its two chips,
- *  the faster. Null when none is both. Job 51b tries it on the live camera for 20 minutes. */
-export function pick(rows: readonly RunSummary[]): RunSummary | null {
-  const order = [...MODELS].reverse().map((m) => m.name);
-  for (const name of order) {
-    const fit = rows
-      .filter((r) => r.model === name && r.failed === 0 && r.videos > 0 && r.same === r.videos && r.detect.p95 <= FAST_ENOUGH_MS)
-      .sort((a, b) => a.detect.p95 - b.detect.p95);
-    if (fit[0] !== undefined) return fit[0];
-  }
-  return null;
-}
-
-/** The words for a measure gap, for the table. */
+/** The words for a measure gap: its lean (the middle of the one less the other) and its spread (how far apart in 95 of
+ *  100). A lean moves a limit; a spread is mostly taken out by the steady points. */
 export function gapWords(g: MeasureGap): string {
   const unit = kindOf(g.unit) === "angle" ? "°" : "";
   const n = (v: number): string => (kindOf(g.unit) === "angle" ? v.toFixed(2) : v.toFixed(3));
-  return `${g.name} (${g.reading}): ${n(g.bias)}${unit} in the middle, ${n(g.p95)}${unit} apart in 95 of 100`;
+  return `${g.name} (${g.reading}): lean ${n(g.bias)}${unit}, spread ${n(g.p95)}${unit}`;
+}
+
+/** The key readings' gaps, both readings of each, in the list's order. */
+export function keyGaps(gaps: readonly MeasureGap[]): MeasureGap[] {
+  return KEY_READINGS.flatMap((name) => gaps.filter((g) => g.name === name));
 }

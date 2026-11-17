@@ -1658,35 +1658,51 @@ page lists every exercise with its real numbers. **The phone tests itself** (job
 exercise's videos are played through the phone's own pose model while it sits on the
 cable, and its counts must match the laptop's.
 
-**As built, the phone test (51a, 2026-11-17; `rulings/2026-11-17-51a.md`).** A folder's copy of
-the app holds a test screen, opened only from the laptop's cable, that plays the kept videos
-through Google's own Android library (MediaPipe Tasks `tasks-vision` 1.0.0, the laptop's own
-release line, from the app's own Android code in `apps/mobile/modules/phone-test`; the store's
-app holds none of it) on the very frames the laptop read. `corepack pnpm --filter
-@app/movement phone-test` sends the files, takes one file a run back, deletes everything on the
-phone and calls a run the laptop's only when it read the same pictures at the same times, its
-person fits as it is (not one picture late or early, mirrored or with the sides swapped), it
-gives 3D points, and its body measures lie no further from the laptop's than the laptop's own
-at half the frames a second. The library sends Google usage reports by itself (never a picture
-or a point); a copy's manifest takes away the transport's only sender. Measured on Kd's phone
-(motorola moto g35 5G, Android 15): **3D points, and up to four people, from every model on
-both chips**; where the laptop found more than one person, the phone found as many in 16 to 58
-frames of 100 (the bench videos' reflection, the man found twice). **One picture takes**, the
-middle, asked for one person / for six: lite 42 / 71 ms on the graphics chip and 69 / 128 ms on
-the main chip, full 54 / 83 and 100 / 151, heavy 137 / 167 and 278 / 335; in 95 of 100, from
-54 ms (lite, graphics, one person) to 781 ms (heavy, main, six). A model starts in 0.3 to 1.5 s;
-Android's thermal status stayed light (1) through all 66 runs. **Its numbers:** given the
-laptop's own decoded pictures (lossless, `--pictures laptop`), the main chip gives the laptop's
-numbers exactly, all three sizes (0.0 cm apart, measures 0.01°); the graphics chip lies 3.2 to
-3.7 cm from them in 95 of 100 and its measures 2.7° to 4.3°, 1.7 to 2.8 times the laptop's
-half-rate bar, with a lean on some measures (4.6° in the middle on full's worst). Decoding the
-video files itself the phone lies 1 to 6.5 cm from the laptop even on the main chip: that is
-the phone's video decoder, not its model, and a live camera's pictures are not decoded from a
-file. **The smaller models are not the heavy one:** on the laptop, lite and full read the four
-one-person videos 14° to 47° from heavy in 95 of 100 measures, so choosing one means measuring
-every kept video again with it and setting every fitted number again. No model met both bars
-(the laptop's numbers on every video, and a picture in 50 ms or less in 95 of 100, Part 6
-§3.2's 20 a second); job 51b tries the candidates live.
+**As built, the phone test (51a, 2026-11-17 and 18; `rulings/2026-11-17-51a.md`).** A folder's
+copy of the app holds a test screen, opened only from the laptop's cable, that plays the kept
+videos, or the laptop's own decoded pictures of them, through Google's own Android library
+(MediaPipe Tasks `tasks-vision` 1.0.0, the laptop's own release line, from the app's own Android
+code in `apps/mobile/modules/phone-test`; the store's app holds none of it) on the very frames
+the laptop read. `corepack pnpm --filter @app/movement phone-test` sends the files, takes one
+file a run back and deletes everything on the phone. A run is **not comparable**, and nothing
+in it used, when it read other pictures or ran other settings, or reads its person a wrong way
+(a picture late or early, mirrored, the sides swapped, no 3D); **compared only** when the phone
+decoded the video itself, which judges its video decoder as well as its chip; **the same** when,
+on the laptop's own pictures, it lies within a tenth of the model's own shake from the laptop in
+99 of 100 big joints and gives a reading the laptop does not in at most 1 of 1,000; otherwise it
+**differs**. Whether a chip that differs counts the same is the proof table's question (from
+52a: the laptop's count, reason for each rep not counted and spoken line), never this test's.
+The library sends Google usage reports by itself (never a picture or a point); a copy's
+manifest takes away the transport's only sender. Measured on Kd's phone (motorola moto g35 5G,
+Android 15), 66 runs:
+- **3D points, and up to four people, from every model on both chips**; where the laptop found
+  more than one person, the phone found as many in 16 to 58 frames of 100.
+- **The main chip gives the laptop's numbers**: on the laptop's own pictures of the chair squat,
+  all three sizes, 0.15 to 0.18 mm in 99 of 100 big joints in 3D (0.02 mm in the middle, where
+  the model itself shakes 9 to 11 mm a frame), and 0 to 1 of 12,544 readings given by one only.
+  Not bit for bit (two processors round their last digits apart), the same in use. The
+  **graphics chip differs**: 49 to 58 mm in 99 of 100 there; phone against phone on the same
+  pictures, asked for one person, its big joints lie 0.9 to 2.2 cm from the main chip's in 95
+  of 100 on the three standing videos and 2.9 to 5.1 cm on the floor video, the flat near-side
+  knee, hip and trunk lean spreading 0.5° to 1.1° with full and leaning 0.3° or less, but one
+  far knee in 3D leaning 3.6° (full, chair squat). Decoding the files itself, the phone lies 1
+  to 6.5 cm from the laptop even on the main chip: that is its video decoder, and a live
+  camera's pictures are not decoded from a file.
+- **One picture takes**, the middle, asked for one person / for six: lite 42 / 71 ms on the
+  graphics chip and 69 / 128 ms on the main chip, full 54 / 83 and 100 / 151, heavy 137 / 167 and
+  278 / 335; a model starts in 0.3 to 1.5 s. The main chip ran on the library's own number of
+  cores, which may be one (job 51b counts them first), on a still screen with no camera.
+  Heavy cannot run live on this phone on either chip.
+- **Asked for one person, the model shakes 2 to 5 times less** than asked for six (on the laptop,
+  a used big joint's middle frame-to-frame shake in 3D: 0.9 to 3.3 mm against 4.9 to 10.3 mm on
+  the standing videos, 8.6 to 13.1 against 18.0 to 30.6 mm on the floor), and one against six
+  moves big joints 5 to 12 cm in 95 of 100. Every kept file and every number 50c fitted was made
+  asked for six.
+- **The sizes read the body apart, most where a limb points at the camera**: full against heavy,
+  asked for one, the flat near-side knee, hip and trunk lean by 1.7° or less and spread 2.8° to
+  5.4°, the 3D elbow leaning 10° to 40°. Neither is known to be right there: heavy reads the
+  squat's straight arm 25° bent in 3D (§12.2).
+- 51a picks nothing; job 51b picks on the live selfie camera.
 
 An exercise that does not pass is published as "count by hand", never with a wrong camera
 count. Kd tries one exercise of each kind of movement on the phone, about a dozen, never
@@ -1771,9 +1787,9 @@ terminal (Kd, 2026-11-16).
 
 ### 12.9 Not measured yet
 
-Which model and chip hold a live selfie camera for 20 minutes, their heat and battery, and
-whether the main chip's lower rate or the graphics chip's coarser numbers cost more counts
-(jobs 51b and 52a; 51a measured the rest, §12.5) · whether
+How fast the main chip reads with more of its cores, which model and chip hold a live selfie
+camera for 20 minutes, their heat and battery, and whether the graphics chip's coarser numbers
+change a count (jobs 51b and 52a; 51a measured the rest, §12.5) · whether
 one long recording cuts cleanly into lines (job 53) · whether a video redrawn from another
 phone place is faithful (job 52a) · what the hips do in a real one-leg lift: on the drawn
 one they moved at most 0.026 of the trunk's length, while the smallest rise in a real rep
