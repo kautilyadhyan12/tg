@@ -63,6 +63,7 @@ export const runs = pgTable(
   (t) => [
     index("runs_user_started_idx").on(t.userId, t.startedAt.desc()),
     index("runs_created_idx").on(t.createdAt), // 0242: By day (14a-iii)
+    index("runs_user_created_idx").on(t.userId, t.createdAt), // 0242: a person's days
     check("runs_effort_check", sql`${t.effort} BETWEEN 1 AND 10`),
     check("runs_name_check", sql`char_length(${t.name}) BETWEEN 1 AND 60`),
     check("runs_note_check", sql`char_length(${t.note}) BETWEEN 1 AND 1000`),
