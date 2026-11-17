@@ -77,7 +77,7 @@ describe('every text colour is readable on every surface, in both looks', () => 
     return (hi + 0.05) / (lo + 0.05);
   };
   const menu = declarations('.t-dark');
-  const TEXT = ['--t1', '--t2', '--t3', '--link', '--good', '--warn', '--bad'];
+  const TEXT = ['--t1', '--t2', '--t3', '--link', '--good', '--warn', '--bad', '--info'];
   const SURFACE = ['--page', '--card', '--raise', '--sheet'];
   const PAIRS = [
     ['--good', '--good-bg'],
@@ -86,6 +86,9 @@ describe('every text colour is readable on every surface, in both looks', () => 
     ['--soft-t', '--soft'],
     ['--on-accent', '--accent'],
     ['--on-sel', '--sel'],
+    ['--info', '--info-bg'],
+    ['--on-bad', '--bad'],
+    ['--dis-t', '--dis-bg'],
   ];
 
   it.each(['.t-dark', '.t-light'])('%s', (look) => {
@@ -139,5 +142,61 @@ describe('the Review needed dot (5b-v-d-iv)', () => {
 
   it('keeps still for anyone who asks for less motion', () => {
     expect(declarations('.c-glow-dot', '(prefers-reduced-motion: reduce)').animation).toBe('none');
+  });
+});
+
+describe("the second look's building blocks (V1-b)", () => {
+  // The worst thing: a red button that takes something away looking like an everyday one.
+  it('a red button is red and outlined, unlike the outlined everyday one; solid red only in the question', () => {
+    const everyday = declarations('.c-btn-s');
+    const red = declarations('.c-btn-d');
+    expect(red.color).toBe('var(--bad)');
+    expect(red['border-color']).toBe('var(--bad-line)');
+    expect(red['border-color']).not.toBe(everyday['border-color']);
+    expect(declarations('.c-btn-ds')).toMatchObject({ background: 'var(--bad)', color: 'var(--on-bad)' });
+  });
+
+  it('a button not ready yet is grey, not faded', () => {
+    const d = declarations('.c-btn:disabled');
+    expect(d).toMatchObject({ background: 'var(--dis-bg)', color: 'var(--dis-t)' });
+    expect(d.opacity).toBeUndefined();
+  });
+
+  it('the text sizes are the board’s: title 32 on a computer, 28 on a phone, the number 40', () => {
+    expect(declarations('.c-h1')['font-size']).toBe('28px');
+    expect(declarations('.c-h1', COMPUTER)['font-size']).toBe('32px');
+    expect(declarations('.c-big')['font-size']).toBe('40px');
+    expect(declarations('.c-big', COMPUTER)['font-size']).toBeUndefined();
+    expect(declarations('.c-h2')['font-size']).toBe('18px');
+    expect(declarations('.c-field').gap).toBe('8px');
+  });
+
+  it('on a phone the panel fills the screen and the other boxes rise from the bottom', () => {
+    expect(declarations('.c-panel').width).toBe('100%');
+    for (const box of ['.c-pop', '.c-ask']) {
+      expect(declarations(box)).toMatchObject({ position: 'fixed', left: '0', right: '0', bottom: '0' });
+    }
+  });
+
+  it('every box fits the window, however short, and scrolls inside itself', () => {
+    for (const box of ['.c-pop', '.c-ask', '.c-panel']) {
+      expect(declarations(box)['overflow-y']).toBe('auto');
+    }
+    expect(declarations('.c-pop')['max-height']).toBe('calc(100dvh - 48px)');
+    expect(declarations('.c-ask', COMPUTER)['max-height']).toBe('calc(100dvh - 32px)');
+    expect(declarations('.c-ask', COMPUTER).width).toBe('min(520px, calc(100vw - 32px))');
+    expect(declarations('.c-pop', COMPUTER).width).toBe('min(380px, calc(100vw - 32px))');
+    expect(declarations('.c-panel', COMPUTER).width).toBe('min(600px, 100%)');
+  });
+
+  it("the panel's Save stays at its foot, above a phone's home bar", () => {
+    expect(declarations('.c-panel-f')).toMatchObject({ position: 'sticky', bottom: '0' });
+    expect(declarations('.c-panel-f')['padding-bottom']).toMatch(/safe-area-inset-bottom/);
+  });
+
+  it('the side list scrolls on its own row on a narrow screen, never the page, and is thumb-sized', () => {
+    expect(declarations('.c-snav')['overflow-x']).toBe('auto');
+    expect(declarations('.c-snav a')['min-height']).toBe('44px');
+    expect(declarations('.c-snav a', '(pointer: coarse)')['min-height']).toBe('44px');
   });
 });

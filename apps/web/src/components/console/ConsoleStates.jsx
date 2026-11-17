@@ -110,7 +110,7 @@ export function ConfirmInline({
       <div className="flex flex-col gap-3">
         <p className="c-s14 c-t1">{question}</p>
         <div className="flex flex-wrap items-center gap-2">
-          <button type="button" onClick={onConfirm} disabled={busy} className="c-btn c-btn-sm c-btn-danger">
+          <button type="button" onClick={onConfirm} disabled={busy} className="c-btn c-btn-sm c-btn-ds">
             {confirmLabel}
           </button>
           <button type="button" onClick={onCancel} disabled={busy} className="c-btn c-btn-sm c-btn-s">
