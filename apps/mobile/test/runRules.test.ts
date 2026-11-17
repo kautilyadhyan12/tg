@@ -98,7 +98,8 @@ describe("Auto-pause", () => {
   });
 
   it("a phone drifting 5 m off for three minutes, then a walk away: the clock starts no more than 30 s before the first far point (round one, H1)", () => {
-    const drift = around(22, 180, () => [5, 0]);
+    // One jump 15 m off early in the drift starts a far run that the next point ends: it never holds the limit back.
+    const drift = around(22, 180, (i) => (i === 10 ? [15, 0] : [5, 0]));
     // From 202 s at 1.2 m a second: the first point past 10 m is at 206 s.
     const walk = around(202, 20, (i) => [5 + 1.2 * (i + 1), 0]);
     expect(changes([...stopped, ...drift, ...walk])).toEqual([{ kind: "pause", at: 9000 }, { kind: "resume", at: 176_000 }]);
@@ -109,12 +110,18 @@ describe("Auto-pause", () => {
     expect(changes([...stopped, ...jump])).toEqual([{ kind: "pause", at: 9000 }]);
   });
 
-  it("a point the phone is only 15 m sure of must lie 15 m from the stop", () => {
-    expect([goMetres({ at: 0, lat: 0, lng: 0, accuracyM: 15, speed: null }), goMetres({ at: 0, lat: 0, lng: 0, accuracyM: 5, speed: null }), goMetres({ at: 0, lat: 0, lng: 0, accuracyM: null, speed: null })]).toEqual([15, 10, 10]);
-    const unsure = around(22, 10, () => [14, 0], 15);
+  it("a point must lie twice as far from the stop as the phone is unsure of it, 10 m at least and 20 m at most", () => {
+    const go = (accuracyM: number | null) => goMetres({ at: 0, lat: 0, lng: 0, accuracyM, speed: null });
+    expect([go(null), go(3), go(5), go(9), go(15), go(20)]).toEqual([10, 10, 10, 18, 20, 20]);
+    const unsure = around(22, 10, () => [19, 0], 15);
     expect(changes([...stopped, ...unsure])).toEqual([{ kind: "pause", at: 9000 }]);
-    const sure = around(32, 3, () => [14, 0], 5);
+    const sure = around(32, 3, () => [19, 0], 5);
     expect(changes([...stopped, ...unsure, ...sure])).toEqual([{ kind: "pause", at: 9000 }, { kind: "resume", at: 21_000 }]);
+  });
+
+  it("a phone sure to 9 m, drifting slowly up to 12 m off for five minutes, never starts the clock (round one's re-check, H2)", () => {
+    const drift = around(22, 300, (i) => [12 * Math.sin(i * 0.03), 4 * Math.cos(i * 0.05)], 9);
+    expect(changes([...stopped, ...drift])).toEqual([{ kind: "pause", at: 9000 }]);
   });
 
   it("a signal wandering under trees, as fast as a walk, never starts the clock or stops it", () => {
