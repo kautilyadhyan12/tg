@@ -91,6 +91,35 @@ describe("the worst thing: a real person who is not average is judged by their o
       expect(verdicts(runChecks(longer(small, ARMS, -0.05)))).toEqual(before);
     });
 
+    it(`${video.label}: a hand or a head moved in one piece, the model sure of it, is not used`, () => {
+      // A wrong place every frame for the whole piece: the bones inside it keep their length,
+      // so only the bone to the trunk can tell. The hand's elbow is hidden, the worst case.
+      const piece = (points: readonly number[], hide: number | null, seed: number): MovementFrame[] => {
+        const random = numbers(seed);
+        return editPeople(video.frames, (p, frame) => {
+          const first = p.points[points[0] ?? 0];
+          if (first === undefined) return p;
+          const [dx, dy] = [0.1 + random() * 0.8 - first[0], 0.1 + random() * 0.8 - first[1]];
+          const [wx, wy, wz] = [random() - 0.5, random() - 0.5, random() - 0.5];
+          for (const i of points) {
+            const q = p.points[i];
+            const w = p.world?.[i];
+            if (q !== undefined) p.points[i] = [q[0] + dx, q[1] + dy, q[2], 0.95, 0.95];
+            if (w !== undefined) p.world?.splice(i, 1, [w[0] + wx, w[1] + wy, w[2] + wz]);
+          }
+          const h = hide === null ? undefined : p.points[hide];
+          if (hide !== null && h !== undefined) p.points[hide] = [h[0], h[1], h[2], 0.2, h[4]];
+          void frame;
+          return p;
+        });
+      };
+      const hand = verdicts(runChecks(piece([KP.left_wrist, KP.left_pinky, KP.left_index, KP.left_thumb], KP.left_elbow, 3)));
+      expect(hand.filter((frame) => frame[KP.left_wrist] === null).length).toBe(0);
+      const face = [KP.nose, KP.left_eye_inner, KP.left_eye, KP.left_eye_outer, KP.right_eye_inner, KP.right_eye, KP.right_eye_outer, KP.left_ear, KP.right_ear, KP.mouth_left, KP.mouth_right];
+      const head = verdicts(runChecks(piece(face, null, 4)));
+      expect(head.filter((frame) => frame[KP.nose] === null).length / head.length).toBeLessThan(0.2);
+    });
+
     it(`${video.label}: one arm the model can only guess at does not take the rest of the body with it`, () => {
       // The worst guess: a new place every frame, anywhere on the picture, and the model sure of it.
       const random = numbers(11);
@@ -247,21 +276,53 @@ describe("each check alone", () => {
     expect(c?.refused[KP.right_shoulder]).toBe(null);
   });
 
-  it("checks a wrist whose elbow is hidden by the bones it has left: its hand", () => {
+  it("decides nothing with a wrist whose elbow is hidden, right or wrong: nothing ties it to the trunk", () => {
     const checked = run(
       feed(2, 30, (t, world, lay) => {
-        const w = world[KP.left_wrist];
-        if (t >= 1200 && w !== undefined) w[2] = (w[2] ?? 0) + 0.3;
         const p = lay(world);
         const e = p.points[KP.left_elbow];
         if (t >= 1000 && e !== undefined) p.points[KP.left_elbow] = [e[0], e[1], e[2], 0.2, e[4]];
         return p;
       }),
     );
-    expect(at(checked, 1100)?.refused[KP.left_wrist]).toBe(null);
-    const c = at(checked, 1250);
+    expect(at(checked, 900)?.refused[KP.left_wrist]).toBe(null);
+    const c = at(checked, 1100);
     expect(c?.refused[KP.left_elbow]).toBe("hidden");
-    expect(c?.refused[KP.left_wrist]).toBe("bone");
+    for (const i of [KP.left_wrist, KP.left_pinky, KP.left_thumb]) expect([i, c?.refused[i]]).toEqual([i, "unchecked"]);
+    expect(c?.refused[KP.left_shoulder]).toBe(null);
+  });
+
+  for (const held of [2000, 4000]) {
+    it(`keeps refusing an elbow the model holds 25 cm wrong for ${String(held / 1000)} s, and uses the right one at once`, () => {
+      const checked = run(
+        feed(3 + held / 1000, 30, (t, world, lay) => {
+          const e = world[KP.left_elbow];
+          if (t >= 2000 && t < 2000 + held && e !== undefined) e[0] = (e[0] ?? 0) + 0.25;
+          return lay(world);
+        }),
+      );
+      const wrong = checked.filter((c) => c.t >= 2000 && c.t < 2000 + held);
+      for (const c of wrong) expect([c.t, c.refused[KP.left_elbow], c.refused[KP.left_wrist]]).toEqual([c.t, "bone", "bone"]);
+      const right = at(checked, 2000 + held);
+      expect(right?.refused[KP.left_elbow]).toBe(null);
+      expect(right?.refused[KP.left_wrist]).toBe(null);
+    });
+  }
+
+  it("starts again with a person gone longer than bones are remembered, and with a clock that went back", () => {
+    const body = feed(1, 30)[0]?.person ?? null;
+    const check = new PossibleBody();
+    for (let t = 0; t <= 1000; t += 33) check.check(t, ASPECT, null, body);
+    expect(check.check(1033, ASPECT, null, body).refused.every((r) => r === null)).toBe(true);
+    // Gone for 3.5 s, then back: learned again for half a second.
+    for (let t = 1066; t < 4566; t += 33) check.check(t, ASPECT, null, null);
+    expect(check.check(4566, ASPECT, null, body).refused.every((r) => r === "settling")).toBe(true);
+    // A camera that starts its clock again at 0 is a new body, never minutes of nothing.
+    expect(check.check(0, ASPECT, null, body).refused.every((r) => r === "settling")).toBe(true);
+    for (let t = 33; t <= 600; t += 33) check.check(t, ASPECT, null, body);
+    expect(check.check(633, ASPECT, null, body).refused.every((r) => r === null)).toBe(true);
+    // The same time twice: that frame alone decides nothing.
+    expect(check.check(633, ASPECT, null, body).refused.every((r) => r === "time")).toBe(true);
   });
 
   // A person about 4 m away (a quarter of a picture height a metre), so that a move faster than
@@ -338,6 +399,30 @@ describe("each check alone", () => {
     );
     const swinging = checked.filter((c) => c.t >= 1000);
     for (const c of swinging) for (const i of LEFT_ARM) expect([c.t, i, c.refused[i]]).toEqual([c.t, i, null]);
+  });
+
+  it("tells left from right on a child's legs too, a share of their own trunk apart", () => {
+    // The standing body at two fifths of its size: knees 9 cm apart, a trunk of 18 cm.
+    const checked = run(
+      feed(3, 30, (t, world, lay) => {
+        for (const p of world) for (const k of [0, 1, 2]) p[k] = (p[k] ?? 0) * 0.4;
+        const person = lay(world);
+        if (t < 1500) return person;
+        const leftLeg = [KP.left_knee, KP.left_ankle, KP.left_heel, KP.left_foot_index];
+        const rightLeg = [KP.right_knee, KP.right_ankle, KP.right_heel, KP.right_foot_index];
+        leftLeg.forEach((l, n) => {
+          const r = rightLeg[n] ?? l;
+          const [pl, pr, wl, wr] = [person.points[l], person.points[r], person.world?.[l], person.world?.[r]];
+          if (pl === undefined || pr === undefined || wl === undefined || wr === undefined) return;
+          person.points[l] = pr;
+          person.points[r] = pl;
+          person.world?.splice(l, 1, wr);
+          person.world?.splice(r, 1, wl);
+        });
+        return person;
+      }),
+    );
+    expect(at(checked, 1500)?.refused[KP.left_knee]).toBe("swap");
   });
 
   it("refuses both legs when left and right swap, and uses them again once they have stayed so", () => {

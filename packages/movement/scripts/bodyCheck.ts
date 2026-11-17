@@ -50,9 +50,9 @@ export function runSteady(checked: readonly CheckedBody[], settings: SteadySetti
   return checked.map((c) => steady.next(c));
 }
 
-export const REASONS: readonly Refusal[] = ["time", "not-found", "no-3d", "hidden", "outside", "settling", "bone", "jump", "swap"];
+export const REASONS: readonly Refusal[] = ["time", "not-found", "no-3d", "hidden", "outside", "settling", "unchecked", "bone", "jump", "swap"];
 /** Refused before any check of a possible body could run. */
-const BEFORE_CHECKS: ReadonlySet<Refusal | null> = new Set<Refusal | null>(["time", "not-found", "no-3d", "hidden", "outside", "settling"]);
+const BEFORE_CHECKS: ReadonlySet<Refusal | null> = new Set<Refusal | null>(["time", "not-found", "no-3d", "hidden", "outside", "settling", "unchecked"]);
 
 export interface Count {
   /** The twelve big joints in every frame. */
@@ -64,7 +64,7 @@ export interface Count {
 }
 
 export function countOf(checked: readonly CheckedBody[]): Count {
-  const why: Record<Refusal, number> = { time: 0, "not-found": 0, "no-3d": 0, hidden: 0, outside: 0, settling: 0, bone: 0, jump: 0, swap: 0 };
+  const why: Record<Refusal, number> = { time: 0, "not-found": 0, "no-3d": 0, hidden: 0, outside: 0, settling: 0, unchecked: 0, bone: 0, jump: 0, swap: 0 };
   let judged = 0;
   let used = 0;
   for (const c of checked) {

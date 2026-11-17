@@ -59,7 +59,7 @@ describe("set from five people, tried on the sixth", () => {
   });
 
   it("a one-person video left out loses no more than 1 in 200 of its joints to a broken bone, but for the bicycle crunch", () => {
-    // Without the crunch, the other one-person videos set 0.15 and the crunch loses 6 in 100:
+    // Without the crunch, the other one-person videos set 0.15 and the crunch loses 11 in 100:
     // a new kind of movement (lying, hands behind the head) can need the limit set again.
     for (const f of folds) {
       const onePerson = ONE_PERSON.some((v) => v.label === f.heldOut);
@@ -75,12 +75,12 @@ describe("the same videos at half the frames a second", () => {
       const a = agreementOf(runSteady(runChecks(video.frames)), runSteady(runChecks(halfRate(video.frames))));
       expect(a.compared).toBeGreaterThan(0);
       if (video.onePerson) {
-        // Measured: 0 to 0.2 in 100, and a steady joint within 0.4 to 1.2 cm.
+        // Measured: 0 to 0.1 in 100, and a steady joint within 0.4 to 1.2 cm.
         expect(a.differ / a.compared).toBeLessThanOrEqual(0.005);
         expect(a.apart).toBeLessThan(0.015);
       } else {
         // The bench press videos: the model finds the man twice, so the follower can pick the
-        // other one at the other rate. Measured: 2.9 and 2.9 in 100.
+        // other one at the other rate. Measured: 3.4 and 2.8 in 100.
         expect(a.differ / a.compared).toBeLessThanOrEqual(0.05);
       }
     });

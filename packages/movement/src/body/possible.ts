@@ -2,15 +2,18 @@
 // of the 33 points is either used or refused with its reason, and a refused point decides
 // nothing later: no count, no word of advice.
 //
-// Every check compares the body with ITSELF a moment before, never with an average body, so
-// a child, a very tall man, somebody whose legs are long for their trunk or somebody with one
-// arm is judged by their own body:
+// Every check compares the body with ITSELF, never with an average body, so a child, a very
+// tall man, somebody whose legs are long for their trunk or somebody with one arm is judged by
+// their own body:
 //   - the model is sure of the point and it lies on the picture;
-//   - each point's bone towards the trunk keeps the length it has had over the last seconds
-//     (in 3D), and the point it hangs from is used: a wrong elbow takes its wrist and hand with
-//     it, a wrong wrist never takes the elbow. The trunk's corners and the nose, which hang from
-//     nothing, are checked by their own bones, and so is a point whose parent is hidden. The
-//     allowance is a
+//   - each point hangs from a parent on the way to the trunk (shoulder, elbow, wrist, fingers;
+//     hip, knee, ankle, foot; the shoulders, nose, face) and is used only while the bone to its
+//     parent keeps the length it has held, and the parent is used. So a wrong elbow takes its
+//     wrist and hand with it, a wrong wrist never takes the elbow, and a hand, foot or head
+//     moved in one piece cannot vouch for itself. A point whose parent is hidden cannot be
+//     checked and decides nothing. The trunk's corners are checked by the trunk's own bones;
+//   - a bone's own length is learned from the frames in which it held, and kept while the
+//     person stays in view, so a wrong pose held for seconds stays refused. The allowance is a
 //     share of the same body's trunk, not of the bone: on Kd's videos the model's error does not
 //     grow with a bone's length (the bicycle crunch's short upper arms wander most, the squat's
 //     long thighs least), so a person with long legs gets the same allowance as anybody of
@@ -20,14 +23,15 @@
 //   - left and right have not swapped.
 // A point that jumped is used again only once it has stayed at its new place for a moment,
 // and every wait is a time, never a number of frames. Which person this is, is decided before
-// (job 52d): this check follows whatever person it is given.
+// (job 52d): this check follows whatever person it is given, and starts again with a person
+// gone for longer than it remembers bones, or a clock that went back.
 import type { Down, SeenPerson } from "@app/shared";
-import { BONES, LIMB_PAIRS, PARENT, POINTS, TRUNK_SIDES } from "./points.js";
+import { BONES, LIMB_PAIRS, PARENT, POINTS, TRUNK, TRUNK_SIDES } from "./points.js";
 import { bodySize } from "./size.js";
 
 /** Why a point is not used. */
 export type Refusal =
-  /** the frame's time is not after the frame before it */
+  /** the frame has the same time as the frame before it */
   | "time"
   /** nobody was found in this frame */
   | "not-found"
@@ -39,7 +43,9 @@ export type Refusal =
   | "outside"
   /** the body is still being learned: its bones and size are not known yet */
   | "settling"
-  /** a bone through the point changed length */
+  /** what the point hangs from cannot be seen or is not used, so it cannot be checked */
+  | "unchecked"
+  /** the bone to its parent changed length, or its parent was refused for one */
   | "bone"
   /** the point moved faster than a body can, and has not stayed at its new place long enough */
   | "jump"
@@ -49,10 +55,11 @@ export type Refusal =
 export interface Limits {
   /** Below this visibility or presence (the model's own 0 to 1) a point is not used. */
   readonly sure: number;
-  /** A bone breaks when it differs from its own recent length by more than this share of the
-   *  same body's trunk (shoulder to hip, in 3D). */
+  /** A bone breaks when it differs from its own length by more than this share of the same
+   *  body's trunk (shoulder to hip, in 3D). */
   readonly bone: number;
-  /** How long a bone's lengths and the trunk's are remembered, ms. */
+  /** How long a bone's held lengths and the trunk's are remembered, ms; a person gone longer is
+   *  a new body. */
   readonly boneMemory: number;
   /** How long a bone, and the body, must have been seen before they are judged, ms. */
   readonly learn: number;
@@ -62,7 +69,8 @@ export interface Limits {
   readonly settle: number;
   /** How long the body's size on the picture is remembered, ms. */
   readonly sizeMemory: number;
-  /** Left and right are told apart only when their points lie at least this far apart, metres. */
+  /** Left and right are told apart only when their points lie at least this share of the
+   *  trunk apart. */
   readonly swapApart: number;
 }
 
@@ -74,10 +82,11 @@ export interface Limits {
  * is a kick's foot, measured at 12 to 18 m/s in martial arts studies (a punch's fist 6 to 11),
  * so nothing real is refused below 20; on Kd's four one-person videos no sure point moved faster
  * than 10. `settle`: at the slowest rate the engine takes, 8 frames a second, a fifth of a
- * second is two more looks at the new place. `swapApart`: ten times the shake of a well-seen
- * joint on Kd's videos (about 1 cm from one frame to the next). The memories are the same for
- * every body: 3 s holds a rep's worth of the model's own wobble and was measured against 2 s
- * and 5 s; half a second of learning; one second of size.
+ * second is two more looks at the new place. `swapApart`: a fifth of the trunk, about 10 cm for
+ * a grown man, ten times the shake of a well-seen joint on Kd's videos (about 1 cm from one
+ * frame to the next). The memories are the same for every body: 3 s holds a rep's worth of the
+ * model's own wobble and was measured against 2 s and 5 s; half a second of learning; one
+ * second of size.
  */
 export const LIMITS: Limits = {
   sure: 0.5,
@@ -87,7 +96,7 @@ export const LIMITS: Limits = {
   speed: 20,
   settle: 200,
   sizeMemory: 1000,
-  swapApart: 0.1,
+  swapApart: 0.2,
 };
 
 /** One frame of one person after the check. */
@@ -108,7 +117,7 @@ interface Timed {
   readonly v: number;
 }
 
-/** Numbers remembered for a while: a bone's length, the body's size. */
+/** Numbers remembered for a while: the trunk's length, the body's size. */
 class Memory {
   private items: Timed[] = [];
 
@@ -135,6 +144,30 @@ class Memory {
   }
 }
 
+type BoneState = "unjudged" | "learning" | "holds" | "broken";
+
+/** One bone's own length. Learned over its first `learn` ms; after that a length is kept only
+ *  when it held, so a wrong length can never become the bone's own. When no held length is
+ *  left in the memory, the last one known stays. */
+class BoneLength {
+  private readonly held = new Memory();
+  private known: number | null = null;
+
+  judge(t: number, now: number, allowance: number | null, limits: Limits): BoneState {
+    this.held.forget(t - limits.boneMemory);
+    const learned = this.known !== null || this.held.span(t) >= limits.learn;
+    const own = learned ? (this.held.median() ?? this.known) : null;
+    if (own === null || allowance === null) {
+      this.held.add(t, now);
+      return "learning";
+    }
+    this.known = own;
+    if (Math.abs(now - own) > allowance) return "broken";
+    this.held.add(t, now);
+    return "holds";
+  }
+}
+
 /** A point's place on the picture, in picture heights (so x is in true proportion), and when. */
 interface Place {
   readonly x: number;
@@ -152,30 +185,24 @@ interface PointState {
   candidate: Candidate | null;
 }
 
-type BoneState = "unjudged" | "learning" | "holds" | "broken";
-
 /** For each point, the bone to its parent (its index in BONES), or -1. */
 const PARENT_BONE: readonly number[] = PARENT.map((parent, child) =>
   BONES.findIndex(([a, b]) => (a === parent && b === child) || (a === child && b === parent)),
 );
-/** For each point, the bones that check it when it has no parent or its parent cannot be seen.
- *  A point that hangs from a parent: every other bone through it. One that hangs from nothing:
- *  every bone through it but those to its own children (a wrong elbow says nothing about the
- *  shoulder), or all of them if that leaves none, as for the nose. */
-const OWN_BONES: readonly (readonly number[])[] = Array.from({ length: POINTS }, (_, i) => {
-  const through = BONES.flatMap(([a, b], n) => (a === i || b === i ? [n] : []));
-  if ((PARENT[i] ?? -1) >= 0) return through.filter((n) => n !== PARENT_BONE[i]);
-  const notToChildren = through.filter((n) => {
-    const [a, b] = BONES[n] ?? [i, i];
-    return PARENT[a === i ? b : a] !== i;
-  });
-  return notToChildren.length > 0 ? notToChildren : through;
-});
-/** Parents before their children, so a child can ask whether its parent was refused. */
+/** For each point that hangs from nothing, the bones that check it: a trunk corner, the trunk's
+ *  bones to the other corners (any one that holds will do: a wrong hip must not take the
+ *  shoulders with it); the nose, its bones to the shoulders (every shoulder seen and used must
+ *  hold: the head hangs from both). Empty for the others. */
+const ROOT_BONES: readonly (readonly number[])[] = Array.from({ length: POINTS }, (_, i) =>
+  (PARENT[i] ?? -1) >= 0 ? [] : BONES.flatMap(([a, b], n) => ((a === i && TRUNK.includes(b)) || (b === i && TRUNK.includes(a)) ? [n] : [])),
+);
+/** Parents before their children, so a child can ask whether its parent was refused; the
+ *  shoulders before the nose, which hangs from them. */
 const CHECK_ORDER: readonly number[] = (() => {
   const depth = (i: number): number => {
     const parent = PARENT[i] ?? -1;
-    return parent < 0 ? 0 : 1 + depth(parent);
+    if (parent < 0) return TRUNK.includes(i) ? 0 : 1;
+    return 1 + depth(parent);
   };
   return Array.from({ length: POINTS }, (_, i) => i).sort((a, b) => depth(a) - depth(b) || a - b);
 })();
@@ -191,13 +218,30 @@ function length3d(world: readonly (readonly number[])[], a: number, b: number): 
   return Math.hypot((p[0] ?? 0) - (q[0] ?? 0), (p[1] ?? 0) - (q[1] ?? 0), (p[2] ?? 0) - (q[2] ?? 0));
 }
 
+/** Everything the check remembers about one body. */
+interface BodyState {
+  readonly sizes: Memory;
+  readonly trunk: Memory;
+  readonly bones: BoneLength[];
+  readonly points: PointState[];
+  /** When the person was last found. */
+  seen: number | null;
+}
+
+function freshBody(): BodyState {
+  return {
+    sizes: new Memory(),
+    trunk: new Memory(),
+    bones: BONES.map(() => new BoneLength()),
+    points: Array.from({ length: POINTS }, () => ({ anchor: null, candidate: null })),
+    seen: null,
+  };
+}
+
 export class PossibleBody {
   private readonly limits: Limits;
   private lastT: number | null = null;
-  private readonly sizes = new Memory();
-  private readonly trunk = new Memory();
-  private readonly bones: Memory[] = BONES.map(() => new Memory());
-  private readonly points: PointState[] = Array.from({ length: POINTS }, () => ({ anchor: null, candidate: null }));
+  private body: BodyState = freshBody();
 
   constructor(limits: Limits = LIMITS) {
     this.limits = limits;
@@ -206,16 +250,19 @@ export class PossibleBody {
   /** One frame of the person followed, or null when nobody was found. */
   check(t: number, aspect: number, down: Down | null, person: SeenPerson | null): CheckedBody {
     const all = (why: Refusal): Refusal[] => new Array<Refusal>(POINTS).fill(why);
-    if (this.lastT !== null && !(t > this.lastT)) {
-      return { t, aspect, down, person, size: null, refused: all("time") };
+    if (this.lastT !== null && t === this.lastT) return { t, aspect, down, person, size: null, refused: all("time") };
+    const { limits } = this;
+    // A clock that went back, or a person gone longer than bones are remembered: a new body.
+    if ((this.lastT !== null && t < this.lastT) || (person !== null && this.body.seen !== null && t - this.body.seen > limits.boneMemory)) {
+      this.body = freshBody();
     }
     this.lastT = t;
-    const { limits } = this;
-    this.sizes.forget(t - limits.sizeMemory);
-    this.trunk.forget(t - limits.boneMemory);
-    for (const memory of this.bones) memory.forget(t - limits.boneMemory);
+    const body = this.body;
+    body.sizes.forget(t - limits.sizeMemory);
+    body.trunk.forget(t - limits.boneMemory);
 
-    if (person === null) return { t, aspect, down, person, size: this.sizes.median(), refused: all("not-found") };
+    if (person === null) return { t, aspect, down, person, size: body.sizes.median(), refused: all("not-found") };
+    body.seen = t;
     const world = person.world;
     if (world === null) return { t, aspect, down, person, size: null, refused: all("no-3d") };
 
@@ -231,46 +278,58 @@ export class PossibleBody {
 
     // 2. The body's size on the picture, and its own unit of length: its trunk.
     const fitted = bodySize(person, aspect, sure);
-    if (fitted !== null) this.sizes.add(t, fitted);
-    const size = this.sizes.median();
+    if (fitted !== null) body.sizes.add(t, fitted);
+    const size = body.sizes.median();
     const sides = TRUNK_SIDES.map(([a, b]) => length3d(world, a, b));
     const trunkNow = ((sides[0] ?? Number.NaN) + (sides[1] ?? Number.NaN)) / 2;
-    if (Number.isFinite(trunkNow) && trunkNow > 0) this.trunk.add(t, trunkNow);
-    const unit = this.trunk.span(t) >= limits.learn ? this.trunk.median() : null;
+    if (Number.isFinite(trunkNow) && trunkNow > 0) body.trunk.add(t, trunkNow);
+    const unit = body.trunk.span(t) >= limits.learn ? body.trunk.median() : null;
 
-    // 3. Bones keep their length.
+    // 3. Bones keep their own length.
     const bones: BoneState[] = BONES.map(() => "unjudged");
     BONES.forEach(([a, b], n) => {
-      const memory = this.bones[n];
-      if (memory === undefined || !sure[a] || !sure[b]) return;
+      const length = body.bones[n];
+      if (length === undefined || !sure[a] || !sure[b]) return;
       const now = length3d(world, a, b);
-      if (!Number.isFinite(now)) return;
-      const own = memory.span(t) >= limits.learn ? memory.median() : null;
-      bones[n] = own === null || unit === null ? "learning" : Math.abs(now - own) > limits.bone * unit ? "broken" : "holds";
-      memory.add(t, now);
+      if (Number.isFinite(now)) bones[n] = length.judge(t, now, unit === null ? null : limits.bone * unit, limits);
     });
-    const boneWhy = (i: number): "bone" | "settling" | null => {
+    const boneWhy = (i: number): "bone" | "settling" | "unchecked" | null => {
       const parent = PARENT[i] ?? -1;
+      if (parent < 0 && TRUNK.includes(i)) {
+        const own = (ROOT_BONES[i] ?? []).map((n) => bones[n] ?? "unjudged");
+        if (own.includes("holds")) return null;
+        if (own.includes("learning")) return "settling";
+        return own.includes("broken") ? "bone" : "unchecked";
+      }
+      if (parent < 0) {
+        // The nose: every bone to a shoulder that is used must hold, and there must be one.
+        const ties = (ROOT_BONES[i] ?? []).flatMap((n) => {
+          const [a, b] = BONES[n] ?? [i, i];
+          return refused[a === i ? b : a] === null ? [bones[n] ?? "unjudged"] : [];
+        });
+        if (ties.includes("broken")) return "bone";
+        if (ties.includes("learning")) return "settling";
+        return ties.includes("holds") ? null : "unchecked";
+      }
       const viaParent = bones[PARENT_BONE[i] ?? -1] ?? "unjudged";
       if (viaParent === "broken") return "bone";
       if (viaParent === "learning") return "settling";
-      if (viaParent === "holds") return refused[parent] === "bone" ? "bone" : null;
-      const own = (OWN_BONES[i] ?? []).map((n) => bones[n] ?? "unjudged");
-      const holding = own.includes("holds");
-      if (!holding && own.includes("learning")) return "settling";
-      return !holding && own.includes("broken") ? "bone" : null;
+      if (viaParent === "unjudged") return "unchecked";
+      const parentWhy = refused[parent] ?? null;
+      if (parentWhy === null) return null;
+      return parentWhy === "bone" || parentWhy === "settling" ? parentWhy : "unchecked";
     };
 
     // 4. Left and right have not swapped.
     const place = (i: number): Place => ({ x: (person.points[i]?.[0] ?? 0) * aspect, y: person.points[i]?.[1] ?? 0, t });
     const swapped = new Set<number>();
-    if (size !== null) {
+    if (size !== null && unit !== null) {
       for (const pair of LIMB_PAIRS) {
-        if (this.limbSwapped(pair, sure, place, size)) for (const i of [...pair.left, ...pair.right]) swapped.add(i);
+        if (this.limbSwapped(pair, sure, place, size, unit)) for (const i of [...pair.left, ...pair.right]) swapped.add(i);
       }
     }
 
-    // 5. Each sure point, parents first: settling, jumped or swapped, a broken bone, or used.
+    // 5. Each sure point, parents first: settling, jumped or swapped, its bones, or used.
     for (const i of CHECK_ORDER) {
       if (!sure[i]) continue;
       if (unit === null || size === null) {
@@ -281,7 +340,7 @@ export class PossibleBody {
       const moved = this.jumped(i, here, swapped.has(i), size);
       const why: Refusal | null = moved ?? boneWhy(i);
       refused[i] = why;
-      const state = this.points[i];
+      const state = body.points[i];
       if (why === null && state !== undefined) {
         state.anchor = here;
         state.candidate = null;
@@ -298,7 +357,7 @@ export class PossibleBody {
   /** "jump" or "swap" while the point is away from where it was last used and has not yet
    *  stayed at its new place for `settle`; null otherwise. */
   private jumped(i: number, here: Place, swappedNow: boolean, size: number): "jump" | "swap" | null {
-    const state = this.points[i];
+    const state = this.body.points[i];
     if (state === undefined) return null;
     const { speed, settle } = this.limits;
     // Still where it jumped to: it is used once it has stayed there long enough. This comes
@@ -318,12 +377,15 @@ export class PossibleBody {
   }
 
   /** True when the left limb now lies where the right one last was and the right where the
-   *  left was: each side is explained at least twice as well by a swap as by staying. */
+   *  left was: each side is explained at least twice as well by a swap as by staying. Only
+   *  places used within `settle` count: over a longer time two limbs that really cross, as in
+   *  a bicycle crunch, can each end where the other was. */
   private limbSwapped(
     pair: (typeof LIMB_PAIRS)[number],
     sure: readonly boolean[],
     place: (i: number) => Place,
     size: number,
+    unit: number,
   ): boolean {
     let keepLeft = 0;
     let swapLeft = 0;
@@ -334,10 +396,11 @@ export class PossibleBody {
     pair.left.forEach((l, k) => {
       const r = pair.right[k];
       if (r === undefined || !sure[l] || !sure[r]) return;
-      const leftWas = this.points[l]?.anchor ?? null;
-      const rightWas = this.points[r]?.anchor ?? null;
+      const leftWas = this.body.points[l]?.anchor ?? null;
+      const rightWas = this.body.points[r]?.anchor ?? null;
       if (leftWas === null || rightWas === null) return;
       const left = place(l);
+      if (left.t - leftWas.t > this.limits.settle || left.t - rightWas.t > this.limits.settle) return;
       const right = place(r);
       keepLeft += apart(left, leftWas);
       swapLeft += apart(left, rightWas);
@@ -346,7 +409,7 @@ export class PossibleBody {
       between += apart(leftWas, rightWas);
       count++;
     });
-    if (count === 0 || between / count / size <= this.limits.swapApart) return false;
+    if (count === 0 || between / count / size <= this.limits.swapApart * unit) return false;
     return swapLeft < keepLeft / 2 && swapRight < keepRight / 2;
   }
 }

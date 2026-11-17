@@ -28,8 +28,8 @@ export interface SteadySettings {
 
 /** Set by `body-check` from Kd's six reference videos (`scripts/bodyCheck.ts` says the rule):
  *  the steadiest settings that keep a moving joint, on average, within 1 cm more than the
- *  model's own shake already puts it. On a joint at rest they take out two thirds to nine
- *  tenths of the shake. */
+ *  model's own shake already puts it. On his four one-person videos they take out 42 to 84 in
+ *  100 of the shake of a used big joint (the middle shake, moving or not). */
 export const STEADY: SteadySettings = {
   flat: { minCutoff: 0.5, beta: 10 },
   world: { minCutoff: 0.05, beta: 10 },

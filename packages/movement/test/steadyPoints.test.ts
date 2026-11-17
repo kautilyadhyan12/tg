@@ -75,17 +75,28 @@ describe("steady points", () => {
     expect(out[n]?.points[KP.left_wrist]?.y).toBe(frames[n]?.person?.points[KP.left_wrist]?.[1]);
   });
 
-  it("are the same at half the frames a second, to within a millimetre on a still body", () => {
-    const frames = feed(4, 30);
+  it("are the same at half the frames a second, to within a centimetre on a moving hand", () => {
+    // The hand slides 19 cm in 0.6 s and back, as a hand does. Measured: 0.58 cm apart at most;
+    // a filter that counted frames instead of reading their times: 2.5 cm.
+    const frames = feed(4, 30, (t, world, lay) => {
+      const p = lay(world);
+      const along = Math.min(Math.max(t - 1500, 0), 1200) / 600;
+      const shift = (((0.6 / Math.PI) * (1 - Math.cos(Math.PI * along))) * SIZE) / 2;
+      for (const i of [KP.left_wrist, KP.left_pinky, KP.left_index, KP.left_thumb]) {
+        const q = p.points[i];
+        if (q !== undefined) p.points[i] = [q[0] + shift / ASPECT, q[1], q[2], q[3], q[4]];
+      }
+      return p;
+    });
     const full = steady(frames);
     const half = steady(frames.filter((_, n) => n % 2 === 0));
-    for (const h of half.filter((s) => s.t >= 1500)) {
+    for (const h of half.filter((s) => s.t >= 1000)) {
       const f = full.find((s) => Math.abs(s.t - h.t) < 1);
       for (const j of MAIN_JOINTS) {
         const a = f?.points[j];
         const b = h.points[j];
         if (a === null || a === undefined || b === null || b === undefined) continue;
-        expect(metres(a.x - b.x, a.y - b.y)).toBeLessThan(0.001);
+        expect([h.t, j, metres(a.x - b.x, a.y - b.y) < 0.01]).toEqual([h.t, j, true]);
       }
     }
   });

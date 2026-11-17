@@ -109,6 +109,9 @@ export const BONES: readonly (readonly [number, number])[] = [
   [KP.nose, KP.mouth_left],
   [KP.nose, KP.mouth_right],
   [KP.mouth_left, KP.mouth_right],
+  // the head to the trunk: a head moved as one piece keeps its face's bones, never these
+  [KP.nose, KP.left_shoulder],
+  [KP.nose, KP.right_shoulder],
 ];
 
 /** A left limb and its right twin, point for point: what a swap of left and right exchanges. */
@@ -123,9 +126,14 @@ export const LIMB_PAIRS: readonly { readonly left: readonly number[]; readonly r
   },
 ];
 
+/** The trunk's four corners: shoulders and hips. */
+export const TRUNK: readonly number[] = [KP.left_shoulder, KP.right_shoulder, KP.left_hip, KP.right_hip];
+
 /** Each point's parent: the point next to it on the way to the trunk. A point is checked
- *  through the bone to its parent, so a wrong elbow cannot vouch for a wrong wrist. The
- *  trunk's four corners and the nose have none (-1): they are checked by their own bones. */
+ *  through the bone to its parent, and used only while its parent is, so a wrong elbow cannot
+ *  vouch for a wrong wrist, nor a hand moved in one piece for itself. The trunk's four corners
+ *  and the nose have none (-1): the corners are checked by the trunk's bones, the nose by its
+ *  bones to the shoulders. */
 export const PARENT: readonly number[] = (() => {
   const parent = new Array<number>(POINTS).fill(-1);
   const set = (child: number, of: number): void => {
