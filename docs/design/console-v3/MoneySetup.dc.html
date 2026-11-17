@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Payments overview before Square is connected</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./kit3.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0;background:#0A0908}
+</style>
+</helmet>
+<div class="app t-dark {{look}}" style="min-height: 100%">
+<div class="shell">
+
+<nav class="rail" aria-label="Menu">
+<a href="#" class="gym"><span class="logo"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18zM6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2M10 6h4M10 10h4M10 14h4M10 18h4"></path></svg></span><span class="col grow"><span class="w6 ell">Core Pilates</span><span class="s12 t3">Austin · Pilates studio</span></span><svg class="ic ic-s t3" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 15l5 5 5-5M7 9l5-5 5 5"></path></svg></a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3h5a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM15 3h5a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM15 12h5a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1zM4 16h5a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1z"></path></svg>Overview<span class="n n-warn">1</span></a>
+<div class="grp">Today<svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 2h6a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1zM16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2M9 14l2 2 4-4"></path></svg>Attendance</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 7.5V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3.5M16 2v4M8 2v4M3 10h5M10 16a6 6 0 1 0 12 0a6 6 0 1 0-12 0M16 14v2.2l1.5 1.3"></path></svg>Classes</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 6.5l11 11M21 21l-1-1M3 3l1 1M18 22l4-4M2 6l4-4M3 10l7-7M14 21l7-7"></path></svg>Personal training</a>
+<div class="grp">People<svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M5 7a4 4 0 1 0 8 0a4 4 0 1 0-8 0M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"></path></svg>Clients &amp; staff</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 7a4 4 0 1 0 8 0a4 4 0 1 0-8 0M10.3 15H7a4 4 0 0 0-4 4v2M14 17a3 3 0 1 0 6 0a3 3 0 1 0-6 0M21 21l-1.9-1.9"></path></svg>Leads</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 17l-8.5-8.5-5 5L2 7M16 17h6v-6"></path></svg>At risk</a>
+<div class="grp">Money<svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div>
+<a href="#" class="ni ni-on"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6a2 2 0 0 1 2-2h12v4M3 6v12a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2H5a2 2 0 0 1-2-2zM17 14h.01"></path></svg>Payments overview<span class="tag tag-o end" style="height: 20px; padding: 0 8px; font-size: 11px">Set up</span></a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4zM3 6h18M16 10a4 4 0 0 1-8 0"></path></svg>Sell</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12.6 2.6A2 2 0 0 0 11.2 2H4a2 2 0 0 0-2 2v7.2a2 2 0 0 0 .6 1.4l8.7 8.7a2.4 2.4 0 0 0 3.4 0l6.6-6.6a2.4 2.4 0 0 0 0-3.4zM7 7.5h.01"></path></svg>Memberships</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2zM2 10h20"></path></svg>Failed payments</a>
+<div class="grp">Community<svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l18-5v12L3 14zM11.6 16.8a3 3 0 1 1-5.8-1.6"></path></svg>Updates</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM16 2v4M8 2v4M3 10h18"></path></svg>Events</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 2h6a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1zM16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2M12 11h4M12 16h4M8 11h.01M8 16h.01"></path></svg>Fitness plans</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M8.2 10.2L5 3h14l-3.2 7.2M6 15a6 6 0 1 0 12 0a6 6 0 1 0-12 0"></path></svg>Challenges</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6M18 9h1.5a2.5 2.5 0 0 0 0-5H18M4 22h16M10 14.7V17c0 .6-.5 1-1 1.2-1.2.5-2 2-2 3.8M14 14.7V17c0 .6.5 1 1 1.2 1.2.5 2 2 2 3.8M18 2H6v7a6 6 0 0 0 12 0z"></path></svg>Leaderboard</a>
+<div class="grp">Manage<svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3v18h18M8 17V9M13 17V5M18 17v-3"></path></svg>Reports</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M2 14h4M10 8h4M18 16h4"></path></svg>Settings</a>
+<a href="#" class="me"><span class="av">LO</span><span class="col grow"><span class="w6 s13 ell">Lena Ortiz</span><span class="s12 t3">Owner</span></span><svg class="ic ic-s t3" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 15l5 5 5-5M7 9l5-5 5 5"></path></svg></a>
+</nav>
+
+<div class="work">
+<header class="top">
+<button type="button" class="find"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11a7 7 0 1 0 14 0a7 7 0 1 0-14 0M21 21l-4.3-4.3"></path></svg><span class="grow ell">Search clients, pages or actions</span><span class="kbd">Ctrl K</span></button>
+<span class="grow"></span>
+<button type="button" class="btn btn-soft"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>New</button>
+<button type="button" class="ibtn" aria-label="1 item needs attention"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 0 0 3.4 0"></path></svg><span class="pip">1</span></button>
+</header>
+
+<main class="page">
+
+<div class="between wrap">
+<div class="col g6"><span class="eyebrow">Money</span><h1 class="h1">Payments overview</h1><span class="t2">Revenue, outstanding payments and payment settings for Core Pilates.</span></div>
+<div class="hrow g10 wrap"><button type="button" class="btn btn-s">Record a payment</button><button type="button" class="btn btn-s"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>New sale</button></div>
+</div>
+
+<div class="box pad col g20" style="border-color: var(--o-line)">
+<div class="hrow g16 wrap" style="align-items: flex-start">
+<span class="tile ti-o" style="width: 48px; height: 48px; border-radius: 14px"><svg class="ic ic-l" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2zM2 10h20"></path></svg></span>
+<div class="col g6 grow" style="min-width: 260px"><span class="eyebrow">Payment setup · step 1 of 3</span><h2 class="h1" style="font-size: 22px; line-height: 28px">Connect Square to take card payments</h2><p class="t2" style="max-width: 640px">Card payments on a Terminal, cards on file, autopay and payments in the member app run through your Square account. Connecting takes a few minutes.</p></div>
+<button type="button" class="btn btn-main btn-lg">Connect Square</button>
+</div>
+<div class="grid3">
+<div class="inset col g4" style="box-shadow: inset 0 0 0 1px var(--o-line)"><span class="hrow g8"><span class="tag tag-o">1</span><span class="w6">Connect Square</span></span><span class="s13 t2">Sign in to Square and choose your location.</span></div>
+<div class="inset col g4"><span class="hrow g8"><span class="tag tag-plain">2</span><span class="w6">Pair a Terminal</span><span class="s12 t3">Optional</span></span><span class="s13 t2">Take card payments at the front desk.</span></div>
+<div class="inset col g4"><span class="hrow g8"><span class="tag tag-plain">3</span><span class="w6">Request cards on file</span></span><span class="s13 t2">Ask clients to add a card for autopay.</span></div>
+</div>
+<div class="hrow g10 wrap s13"><span class="dot dot-good"></span><span class="t2"><span class="t1 w6">Available now, without Square:</span> record cash, bank transfers and card payments taken on your own card machine, sell products, and set prices, discounts and tax.</span></div>
+<span class="s12 t3">Only the owner can connect Square. Other staff see "Ask the owner to connect Square" here, without the button.</span>
+</div>
+
+<div class="grid4">
+<div class="box pad col g10"><div class="hrow g10"><span class="tile ti-g"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6a2 2 0 0 1 2-2h12v4M3 6v12a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2H5a2 2 0 0 1-2-2zM17 14h.01"></path></svg></span><span class="s13 t2">Revenue today</span></div><span class="big">$370</span><span class="s12 t3">4 payments, recorded manually</span></div>
+<div class="box pad col g10"><div class="hrow g10"><span class="tile ti-w"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 18 0a9 9 0 1 0-18 0M12 7v5l3 2"></path></svg></span><span class="s13 t2">Payment due</span></div><span class="big c-warn">1</span><span class="s12 t3">client · <a href="#" class="c-o w6">View</a></span></div>
+<div class="box pad col g10"><div class="hrow g10"><span class="tile ti-n"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2zM2 10h20"></path></svg></span><span class="s13 t2">Failed payments</span></div><span class="big t3">—</span><span class="s12 t3">Available after Square is connected</span></div>
+<div class="box pad col g10"><div class="hrow g10"><span class="tile ti-n"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2zM2 10h20"></path></svg></span><span class="s13 t2">Cards on file</span></div><span class="big t3">—</span><span class="s12 t3">Available after Square is connected</span></div>
+</div>
+
+<div class="col g4" style="padding-top: 8px"><h2 class="h2">All payment pages and settings</h2><span class="s13 t3">Each line opens that page or setting.</span></div>
+
+<div class="grid3" style="align-items: start">
+
+<div class="box">
+<div class="bh"><h2 class="h3">Daily</h2></div>
+<a href="#" class="row"><span class="col grow"><span class="w6">Sell</span><span class="s12 t3">Point of sale · 2 sales today</span></span><svg class="ic ic-s t3" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg></a>
+<a href="#" class="row"><span class="col grow"><span class="w6">Payment due</span><span class="s12 c-warn">1 client</span></span><span class="s12 t3">in Clients</span><svg class="ic ic-s t3" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg></a>
+<div class="row"><span class="col grow"><span class="w6 t2">Failed payments, refunds and chargebacks</span><span class="s12 t3">After Square is connected</span></span></div>
+</div>
+
+<div class="box">
+<div class="bh"><h2 class="h3">Products and pricing</h2></div>
+<a href="#" class="row"><span class="col grow"><span class="w6">Memberships</span><span class="s12 t3">3 on your price list</span></span><svg class="ic ic-s t3" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg></a>
+<a href="#" class="row"><span class="col grow"><span class="w6">Products</span><span class="s12 t3">None yet</span></span><span class="s12 t3">in Sell</span><svg class="ic ic-s t3" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg></a>
+<a href="#" class="row"><span class="col grow"><span class="w6">Discounts, tax and billing rules</span><span class="s12 t3">Sales tax 8.25% · Grace period: none</span></span><span class="s12 t3">in Memberships</span><svg class="ic ic-s t3" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg></a>
+</div>
+
+<div class="box">
+<div class="bh"><h2 class="h3">Setup and reports</h2></div>
+<div class="row"><span class="col grow"><span class="w6">Card payments with Square</span><span class="s12 c-warn">Not connected</span></span><button type="button" class="btn btn-p btn-sm">Connect Square</button></div>
+<div class="row"><span class="col grow"><span class="w6 t2">Square Terminals</span><span class="s12 t3">Connect Square first</span></span></div>
+<a href="#" class="row"><span class="col grow"><span class="w6">Revenue report</span><span class="s12 t3">Monthly figures</span></span><span class="s12 t3">in Reports</span><svg class="ic ic-s t3" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg></a>
+<a href="#" class="row"><span class="col grow"><span class="w6">Your KWAZO plan</span><span class="s12 t3">Free trial · ends 30 Nov</span></span><span class="s12 t3">on Overview</span><svg class="ic ic-s t3" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg></a>
+</div>
+
+</div>
+
+</main>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"look":{"editor":"enum","options":["Dark","Light"],"default":"Dark"},"$preview":{"width":1440,"height":1240}}'>
+class Component extends DCLogic {
+renderVals() {
+return { look: (this.props.look ?? 'Dark') === 'Light' ? 't-light' : '' };
+}
+}
+</script>
+</body>
+</html>

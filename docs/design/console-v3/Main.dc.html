@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>The third look: rules, building blocks and word list</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./kit3.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0;background:#0A0908}
+</style>
+</helmet>
+<div class="app t-dark {{look}}" style="min-height: 100%">
+<div class="col g24" style="max-width: 1440px; margin: 0 auto; padding: 48px 48px 64px">
+
+<div class="col g8">
+<span class="eyebrow">KWAZO console · the third look</span>
+<h1 class="h1" style="font-size: 36px; line-height: 42px">One family with the member app, laid out like a CRM</h1>
+<p class="s15 t2" style="max-width: 760px">Eight rules every console page follows, the building blocks pages are made from, and the word list. Each board has a Dark and Light switch in its Tweaks.</p>
+</div>
+
+<div class="grid4">
+<div class="box pad col g10"><span class="tile ti-o w7">1</span><h2 class="h2">One family with the member app</h2><p class="s13 t2">Inter, soft glass boxes and round buttons. Flat colour: no gradients and no glow.</p></div>
+<div class="box pad col g10"><span class="tile ti-o w7">2</span><h2 class="h2">A bar across the top of every page</h2><p class="s13 t2">Search, New and notifications. The same on every page.</p></div>
+<div class="box pad col g10"><span class="tile ti-o w7">3</span><h2 class="h2">The menu shows what needs attention</h2><p class="s13 t2">A count beside a page only when something is waiting. Groups can be collapsed.</p></div>
+<div class="box pad col g10"><span class="tile ti-o w7">4</span><h2 class="h2">Every page opens the same way</h2><p class="s13 t2">A small label, the page title, one primary button on the right, then tabs.</p></div>
+<div class="box pad col g10"><span class="tile ti-o w7">5</span><h2 class="h2">Quiet for normal, colour for exceptions</h2><p class="s13 t2">"Active · Paid" in plain text. A tag only for payment due, overdue, frozen or ended.</p></div>
+<div class="box pad col g10"><span class="tile ti-o w7">6</span><h2 class="h2">Standard words, for every fitness business</h2><p class="s13 t2">Terms a CRM and fitness software already use. Members or clients, trainers, coaches or instructors follow the kind of business.</p></div>
+<div class="box pad col g10"><span class="tile ti-o w7">7</span><h2 class="h2">Payments have one home, and setup comes first</h2><p class="s13 t2">Payments overview links every payment page and setting. Until Square is connected, Connect Square leads the page.</p></div>
+<div class="box pad col g10"><span class="tile ti-o w7">8</span><h2 class="h2">It looks new and works the same</h2><p class="s13 t2">Every button, field, message and permission stays. Nothing is removed.</p></div>
+</div>
+
+<div class="split" style="grid-template-columns: minmax(0,1fr) minmax(0,1fr)">
+
+<div class="box">
+<div class="bh"><h2 class="h2">Buttons</h2><span class="s12 t3">Round ends, flat colour</span></div>
+<div class="col g16" style="padding: 0 20px 20px">
+<div class="hrow g10 wrap"><button type="button" class="btn btn-main">Add member</button><span class="s13 t3">Primary. One per page, top right.</span></div>
+<div class="hrow g10 wrap"><button type="button" class="btn btn-p btn-sm">Record payment</button><span class="s13 t3">Primary inside a box. One per box.</span></div>
+<div class="hrow g10 wrap"><button type="button" class="btn btn-soft">Invite to app</button><span class="s13 t3">Secondary.</span></div>
+<div class="hrow g10 wrap"><button type="button" class="btn btn-s">Edit</button><button type="button" class="btn btn-q">Export CSV</button><span class="s13 t3">Everything else: outlined, or text only.</span></div>
+<div class="hrow g10 wrap"><button type="button" class="btn btn-d">Cancel membership</button><span class="s13 t3">Destructive. Set apart, and always confirms.</span></div>
+</div>
+</div>
+
+<div class="box">
+<div class="bh"><h2 class="h2">Status</h2><span class="s12 t3">Plain text when normal</span></div>
+<div class="col g16" style="padding: 0 20px 20px">
+<div class="hrow g10 wrap"><span class="s13 t2">Active · Paid</span><span class="s13 t3">Not in the app</span><span class="hrow g6 s13"><span class="dot dot-good"></span>In the app</span></div>
+<div class="hrow g8 wrap"><span class="tag tag-warn">Payment due</span><span class="tag tag-bad">Overdue</span><span class="tag tag-plain">Frozen</span><span class="tag tag-plain">Ended</span><span class="tag tag-good">Paid</span><span class="tag tag-o">New</span></div>
+<div class="strip strip-warn"><div class="col grow"><span class="w6">$25.00 due</span><span class="s13 c-warn">Due 9 Nov 2026</span></div><button type="button" class="btn btn-p btn-sm">Record payment</button></div>
+<div class="strip strip-o"><div class="col grow"><span class="w6">Connect Square to take card payments</span><span class="s13 t2">Setup comes first on a page that needs it.</span></div><button type="button" class="btn btn-p btn-sm">Connect Square</button></div>
+<div class="strip strip-good"><span class="w6 c-good">Paid until 27 Oct. Nothing due.</span></div>
+</div>
+</div>
+
+<div class="box">
+<div class="bh"><h2 class="h2">Tabs, filters and the menu</h2></div>
+<div class="col g16" style="padding: 0 20px 20px">
+<div class="tabs"><span class="tab tab-on">Your list <span class="n">26</span></span><span class="tab">In the app <span class="n">12</span></span><span class="tab">Staff <span class="n">2</span></span></div>
+<div class="hrow g8 wrap"><span class="chip chip-on">Everyone 26</span><span class="chip"><span class="dot dot-warn"></span>Payment due 6</span><span class="chip">Not in the app 14</span><span class="chip">No membership 3</span></div>
+<div class="col g4" style="max-width: 236px">
+<span class="ni ni-on">Overview<span class="n n-bad">6</span></span>
+<span class="ni">Leads<span class="n">5</span></span>
+<span class="ni">At risk<span class="n n-warn">2</span></span>
+<span class="ni">Payments overview<span class="tag tag-o end" style="height: 20px; padding: 0 8px; font-size: 11px">Set up</span></span>
+</div>
+</div>
+</div>
+
+<div class="box">
+<div class="bh"><h2 class="h2">Fields and figures</h2></div>
+<div class="col g16" style="padding: 0 20px 20px">
+<div class="grid2">
+<div class="field"><label class="label" for="m-name">Full name</label><div class="input" id="m-name">Sam Rivera</div></div>
+<div class="field"><label class="label" for="m-email">Email</label><div class="input input-on" id="m-email">sam.rivera@gmail.com</div></div>
+</div>
+<div class="grid2">
+<div class="inset col g6"><div class="hrow g10"><span class="tile ti-g"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6a2 2 0 0 1 2-2h12v4M3 6v12a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2H5a2 2 0 0 1-2-2zM17 14h.01"></path></svg></span><span class="s13 t2">Revenue today</span></div><span class="big">$1,240</span><span class="s12 t3">9 payments</span></div>
+<div class="inset col g6"><div class="hrow g10"><span class="tile ti-w"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 18 0a9 9 0 1 0-18 0M12 7v5l3 2"></path></svg></span><span class="s13 t2">Payment due</span></div><span class="big c-warn">6</span><span class="s12 t3">members</span></div>
+</div>
+</div>
+</div>
+
+</div>
+
+<div class="box">
+<div class="bh"><h2 class="h2">Type, colour and the word list</h2><span class="s12 t3">One font, Inter. Six sizes. Three greys.</span></div>
+<div class="grid3" style="padding: 0 20px 20px; gap: 24px">
+<div class="col g10">
+<span class="eyebrow">Label 11</span>
+<span class="h1">Page title 28</span>
+<span class="h2">Box title 17</span>
+<span>Body 14</span>
+<span class="s13 t2">Secondary 13</span>
+<span class="s12 t3">Caption 12</span>
+<span class="big">32</span>
+</div>
+<div class="col g10">
+<div class="hrow g10"><span class="tile" style="background: var(--o)"></span><span class="col"><span class="w6">Orange</span><span class="s12 t3">Primary actions and the current page</span></span></div>
+<div class="hrow g10"><span class="tile ti-g"></span><span class="col"><span class="w6">Green</span><span class="s12 t3">Paid, done, in the app</span></span></div>
+<div class="hrow g10"><span class="tile ti-w"></span><span class="col"><span class="w6">Gold</span><span class="s12 t3">Needs attention</span></span></div>
+<div class="hrow g10"><span class="tile ti-r"></span><span class="col"><span class="w6">Red</span><span class="s12 t3">Overdue, failed, destructive</span></span></div>
+<div class="hrow g10"><span class="tile ti-b"></span><span class="col"><span class="w6">Blue</span><span class="s12 t3">Charts and figures, never a button</span></span></div>
+<p class="s12 t3">Every text colour is 4.5 to 1 or more on its ground in both looks. No gradients anywhere.</p>
+</div>
+<div class="col g6 s13">
+<span class="w6">Words that change</span>
+<div class="kv" style="grid-template-columns: minmax(0,1fr) minmax(0,1fr); padding: 3px 0"><span class="t3">Start here</span><span>Getting started</span></div>
+<div class="kv" style="grid-template-columns: minmax(0,1fr) minmax(0,1fr); padding: 3px 0"><span class="t3">Check someone in</span><span>Check in</span></div>
+<div class="kv" style="grid-template-columns: minmax(0,1fr) minmax(0,1fr); padding: 3px 0"><span class="t3">Taken today</span><span>Revenue today</span></div>
+<div class="kv" style="grid-template-columns: minmax(0,1fr) minmax(0,1fr); padding: 3px 0"><span class="t3">Who came today</span><span>Today's check-ins</span></div>
+<div class="kv" style="grid-template-columns: minmax(0,1fr) minmax(0,1fr); padding: 3px 0"><span class="t3">Who's turning up</span><span>Attendance</span></div>
+<div class="kv" style="grid-template-columns: minmax(0,1fr) minmax(0,1fr); padding: 3px 0"><span class="t3">On a roll</span><span>Streaks</span></div>
+<div class="kv" style="grid-template-columns: minmax(0,1fr) minmax(0,1fr); padding: 3px 0"><span class="t3">Left to pay · Was due</span><span>Due · Due date</span></div>
+<div class="kv" style="grid-template-columns: minmax(0,1fr) minmax(0,1fr); padding: 3px 0"><span class="t3">Who pays</span><span>Payer</span></div>
+<div class="kv" style="grid-template-columns: minmax(0,1fr) minmax(0,1fr); padding: 3px 0"><span class="t3">Bought at the desk</span><span>Purchases</span></div>
+<div class="kv" style="grid-template-columns: minmax(0,1fr) minmax(0,1fr); padding: 3px 0"><span class="t3">Download</span><span>Export</span></div>
+<div class="kv" style="grid-template-columns: minmax(0,1fr) minmax(0,1fr); padding: 3px 0"><span class="t3">Type card instead</span><span>Enter card manually</span></div>
+<div class="kv" style="grid-template-columns: minmax(0,1fr) minmax(0,1fr); padding: 3px 0"><span class="t3">Pause automatic payments</span><span>Pause autopay</span></div>
+<div class="kv" style="grid-template-columns: minmax(0,1fr) minmax(0,1fr); padding: 3px 0"><span class="t3">See · Open</span><span>View</span></div>
+<span class="w6" style="padding-top: 8px">By kind of business</span>
+<span class="t2">Gym, CrossFit box, yoga studio: members. Boutique studio, Pilates studio, personal trainer: clients. Staff are trainers, coaches or instructors.</span>
+</div>
+</div>
+</div>
+
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"look":{"editor":"enum","options":["Dark","Light"],"default":"Dark"},"$preview":{"width":1440,"height":1760}}'>
+class Component extends DCLogic {
+renderVals() {
+return { look: (this.props.look ?? 'Dark') === 'Light' ? 't-light' : '' };
+}
+}
+</script>
+</body>
+</html>
