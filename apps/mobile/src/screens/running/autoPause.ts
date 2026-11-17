@@ -7,17 +7,23 @@
 //
 // Stopped: every point of the last STILL_MS lies within STILL_M of the first of them, and the
 // phone does not report a speed of GO_MPS or more. The run pauses from that first point, so the
-// stop is never counted. Moving again: GO_POINTS points in a row more than GO_M from where the
-// person stopped, or the phone's speed over GO_MPS that many times; the clock starts again from
-// the first of them. A point less sure of where it is than WORST_ACCURACY_M is not judged at all:
-// under trees the signal wanders as far as a walk.
+// stop is never counted. The place the person stopped is the middle of those points.
+//
+// Moving again: GO_POINTS points in a row farther from that place than the phone can wander while
+// standing (GO_M, or twice how sure the point is, whichever is more). A phone lying still wanders a few
+// metres and its speed reading jumps about, so neither alone starts the clock: the first rule, 5 m twice
+// or a speed over 1 m/s, said "Run resumed" and "Auto-paused" again and again to a person standing
+// (testers on Google Play, 2026-11-17). The clock starts again from the last point within STILL_M of that
+// place, so the steps that took the person away are counted: on a real 51-minute hike with stops this kept
+// 42 m more than the first rule (5 m from the stop). A point less sure of where it is than WORST_ACCURACY_M is not
+// judged at all: under trees the signal wanders as far as a walk.
 import { STILL_M, STILL_MS } from "@app/shared";
 
 // Standing is the shared maths' own test, so the clock and the saved moving time agree.
 export { STILL_M, STILL_MS };
-export const GO_M = 5;
+export const GO_M = 10;
 export const GO_MPS = 1.0;
-export const GO_POINTS = 2;
+export const GO_POINTS = 3;
 export const WORST_ACCURACY_M = 20;
 
 export interface Fix {
@@ -34,14 +40,15 @@ export interface AutoPauseState {
   paused: boolean;
   /** The sure points of the last STILL_MS and a little more, oldest first, while running. */
   recent: Fix[];
-  /** Where the person stopped, while paused. */
+  /** Where the person stopped (the middle of the still points), while paused. */
   anchor: Fix | null;
-  /** The points in a row that showed movement, while paused, and when the first of them came. */
-  goSince: number | null;
+  /** While paused: when the last point within STILL_M of where the person stopped came. */
+  nearAt: number | null;
+  /** While paused: the points in a row that lay far from where the person stopped. */
   goCount: number;
 }
 
-export const AUTO_START: AutoPauseState = { paused: false, recent: [], anchor: null, goSince: null, goCount: 0 };
+export const AUTO_START: AutoPauseState = { paused: false, recent: [], anchor: null, nearAt: null, goCount: 0 };
 
 export type AutoPauseChange = { kind: "pause"; at: number } | { kind: "resume"; at: number } | null;
 
@@ -55,6 +62,18 @@ export function metresApart(a: Fix, b: Fix): number {
 const sure = (fix: Fix): boolean => fix.accuracyM === null || fix.accuracyM <= WORST_ACCURACY_M;
 const fast = (fix: Fix): boolean => fix.speed !== null && fix.speed >= GO_MPS;
 
+/** How far from where the person stopped this point must lie to count as moving: past what a phone
+ *  this sure of itself wanders while it lies still. */
+export const goMetres = (fix: Fix): number => Math.max(GO_M, 2 * (fix.accuracyM ?? 0));
+
+/** The middle of the still points: one point's wander moves it least. */
+function middle(points: readonly Fix[], first: Fix): Fix {
+  const n = points.length;
+  const lat = points.reduce((t, p) => t + p.lat, 0) / n;
+  const lng = points.reduce((t, p) => t + p.lng, 0) / n;
+  return { at: first.at, lat, lng, accuracyM: first.accuracyM, speed: null };
+}
+
 export function nextAutoPause(state: AutoPauseState, fix: Fix): { state: AutoPauseState; change: AutoPauseChange } {
   if (!sure(fix)) return { state, change: null };
   if (!state.paused) {
@@ -66,15 +85,19 @@ export function nextAutoPause(state: AutoPauseState, fix: Fix): { state: AutoPau
     if (first === undefined || fix.at - first.at < STILL_MS) return { state: { ...state, recent }, change: null };
     const still = recent.every((p) => metresApart(first, p) <= STILL_M);
     if (!still) return { state: { ...state, recent }, change: null };
-    return { state: { paused: true, recent: [], anchor: first, goSince: null, goCount: 0 }, change: { kind: "pause", at: first.at } };
+    return {
+      state: { paused: true, recent: [], anchor: middle(recent, first), nearAt: fix.at, goCount: 0 },
+      change: { kind: "pause", at: first.at },
+    };
   }
-  const anchor = state.anchor ?? fix;
-  const moved = fast(fix) || metresApart(anchor, fix) > GO_M;
-  if (!moved) return { state: { ...state, anchor, goSince: null, goCount: 0 }, change: null };
-  const goSince = state.goSince ?? fix.at;
+  const anchor = state.anchor ?? { ...fix, speed: null };
+  const apart = metresApart(anchor, fix);
+  const go = goMetres(fix);
+  if (apart <= STILL_M) return { state: { ...state, anchor, nearAt: fix.at, goCount: 0 }, change: null };
+  if (apart <= go) return { state: { ...state, anchor, goCount: 0 }, change: null };
   const goCount = state.goCount + 1;
   if (goCount >= GO_POINTS) {
-    return { state: { paused: false, recent: [fix], anchor: null, goSince: null, goCount: 0 }, change: { kind: "resume", at: goSince } };
+    return { state: { paused: false, recent: [fix], anchor: null, nearAt: null, goCount: 0 }, change: { kind: "resume", at: state.nearAt ?? fix.at } };
   }
-  return { state: { ...state, anchor, goSince, goCount }, change: null };
+  return { state: { ...state, anchor, goCount }, change: null };
 }

@@ -5,7 +5,9 @@
 // the last case.
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { AUTO_START, nextAutoPause, type AutoPauseChange, type Fix } from "../src/screens/running/autoPause";
+import { runSums, type RunPause, type RunPoint } from "@app/shared";
+import { AUTO_START, goMetres, nextAutoPause, type AutoPauseChange, type Fix } from "../src/screens/running/autoPause";
+import { realRuns } from "./realRuns";
 import { fitPath, heading, unitMarks } from "../src/screens/running/routeShape";
 import { clock, distance, leftOutLine, pace, runName, runWhen, splitLabel } from "../src/screens/running/runWords";
 
@@ -61,11 +63,43 @@ describe("Auto-pause", () => {
     ["walking while Android says 0 for its speed never pauses", points(0, at(1.2, 120), "zero"), []],
     ["running while Android says 0 never pauses", points(0, at(3, 120), "zero"), []],
     ["a shuffle at 0.2 m a second is standing: it pauses", points(0, [...at(3, 10), ...at(0.2, 20)]), [{ kind: "pause", at: 9000 }]],
-    ["running on starts the clock from the first step", points(0, [...at(3, 10), ...at(0, 10), ...at(3, 5)]), [{ kind: "pause", at: 9000 }, { kind: "resume", at: 20_000 }]],
-    ["running on, Android saying 0, starts it once 5 m from the stop", points(0, [...at(3, 10), ...at(0, 10), ...at(3, 5)], "zero"), [{ kind: "pause", at: 9000 }, { kind: "resume", at: 21_000 }]],
+    // Moving again: three points 10 m or more from the stop; the clock starts from the last step within 3 m of it.
+    ["running on starts the clock from the last step near the stop", points(0, [...at(3, 10), ...at(0, 10), ...at(2.8, 8)]), [{ kind: "pause", at: 9000 }, { kind: "resume", at: 20_000 }]],
+    ["running on, Android saying 0, starts it all the same", points(0, [...at(3, 10), ...at(0, 10), ...at(2.8, 8)], "zero"), [{ kind: "pause", at: 9000 }, { kind: "resume", at: 20_000 }]],
     ["one stride and a stop stays paused", points(0, [...at(3, 10), ...at(0, 10), 3, ...at(0, 10)], "zero"), [{ kind: "pause", at: 9000 }]],
+    // The first rule started the clock 5 m from the stop: this walk's first 4 m were never counted.
+    ["a slow walk of 0.7 m a second away from a stop starts the clock, from its last step within 3 m", points(0, [...at(3, 10), ...at(0, 10), ...at(0.7, 30)]), [{ kind: "pause", at: 9000 }, { kind: "resume", at: 23_000 }]],
   ])("%s", (_, fixes, expected) => {
     expect(changes(fixes)).toEqual(expected);
+  });
+
+  // Testers on Google Play, 2026-11-17: "even after finishing a run the voice keep saying run resumed auto
+  // pause". A phone lying still wanders a few metres and its speed reading jumps about.
+  const stopped = points(0, [...at(3, 10), ...at(0, 12)]);
+  const stopAt = stopped[stopped.length - 1];
+  /** Points from `fromS`, each `off(i)` metres north and east of where the person stopped. */
+  const around = (fromS: number, n: number, off: (i: number) => [number, number], accuracyM = 5, speed: (i: number) => number | null = () => 0): Fix[] =>
+    Array.from({ length: n }, (_, i) => {
+      const [north, east] = off(i);
+      return { at: (fromS + i) * 1000, lat: (stopAt?.lat ?? 0) + north / 111_132, lng: (stopAt?.lng ?? 0) + east / 99_950, accuracyM, speed: speed(i) };
+    });
+
+  it("a phone lying still, wandering 6 m and its speed jumping to 1.5 m a second, never starts the clock", () => {
+    const wander = around(22, 300, (i) => [6 * Math.sin(i * 0.9), 6 * Math.cos(i * 1.3)], 5, (i) => [0, 0.4, 1.5, 0.2, 1.1][i % 5] ?? 0);
+    expect(changes([...stopped, ...wander])).toEqual([{ kind: "pause", at: 9000 }]);
+  });
+
+  it("the signal thrown 30 m off for two points and back never starts the clock", () => {
+    const jump = [...around(22, 10, () => [0, 0]), ...around(32, 2, () => [30, 0]), ...around(34, 20, () => [0, 0])];
+    expect(changes([...stopped, ...jump])).toEqual([{ kind: "pause", at: 9000 }]);
+  });
+
+  it("a point the phone is only 15 m sure of must lie 30 m from the stop", () => {
+    expect([goMetres({ at: 0, lat: 0, lng: 0, accuracyM: 15, speed: null }), goMetres({ at: 0, lat: 0, lng: 0, accuracyM: 5, speed: null }), goMetres({ at: 0, lat: 0, lng: 0, accuracyM: null, speed: null })]).toEqual([30, 10, 10]);
+    const unsure = around(22, 10, () => [20, 0], 15);
+    expect(changes([...stopped, ...unsure])).toEqual([{ kind: "pause", at: 9000 }]);
+    const sure = around(32, 3, () => [20, 0], 5);
+    expect(changes([...stopped, ...unsure, ...sure])).toEqual([{ kind: "pause", at: 9000 }, { kind: "resume", at: 21_000 }]);
   });
 
   it("a signal wandering under trees, as fast as a walk, never starts the clock or stops it", () => {
@@ -75,16 +109,47 @@ describe("Auto-pause", () => {
     expect(changes(wander, false)).toEqual([]);
   });
 
-  it("Kd's walk inside his house: the six still minutes stay paused, without pausing again and again", () => {
+  it("Kd's walk inside his house: the six still minutes stay paused, and Auto-paused is said once", () => {
     const walk = JSON.parse(readFileSync(new URL("./fixtures/indoor-walk.json", import.meta.url), "utf8")) as { points: [number, number, number, number][] };
     // The phone kept no speed: Android's 0, as it reported it on the walk.
     const seen = changes(walk.points.map(([t, lat, lng, acc]) => ({ at: t, lat, lng, accuracyM: acc, speed: 0 })));
-    const pauses = seen.filter((c) => c?.kind === "pause");
-    expect(pauses.length).toBeLessThanOrEqual(3);
     const last = seen[seen.length - 1];
     expect(last?.kind).toBe("pause");
     expect(last?.at ?? Infinity).toBeLessThan(4 * 60_000); // from before the still minutes began
     expect(seen[0]?.at ?? Infinity).toBeGreaterThan(8000); // never in the first eight seconds
+    // The first rule said Auto-paused, Run resumed, Auto-paused, Run resumed, Auto-paused in two minutes,
+    // in a house whose whole walk lay in a 10 x 12 m box (the shared maths counts it as standing too).
+    expect(seen).toHaveLength(1);
+  });
+
+  it("a real run's two minutes standing at its start: Auto-paused once, Run resumed only when the runner sets off", () => {
+    const run = (realRuns().get("iphone") ?? []).map(([at, lat, lng]): Fix => ({ at, lat, lng, accuracyM: null, speed: null }));
+    // The GPX's own points leave the spot from 122 s, at a run: until then, nothing but Auto-paused.
+    expect(changes(run.filter((f) => f.at < 122_000)).map((c) => c?.kind)).toEqual(["pause"]);
+    expect(changes(run).slice(0, 2).map((c) => c?.kind)).toEqual(["pause", "resume"]);
+  });
+
+  it("a real 51-minute hike with its stops keeps 95% of its metres with Auto-pause on (the first rule kept 93.6%)", () => {
+    const hike = (JSON.parse(readFileSync(new URL("./fixtures/real-hike.json", import.meta.url), "utf8")) as { points: [number, number, number][] }).points;
+    const points = hike.map(([t, lat, lng]): RunPoint => [t, lat, lng, null]);
+    let state = AUTO_START;
+    const pauses: [number, number][] = [];
+    let from: number | null = null;
+    for (const [at, lat, lng] of hike) {
+      const next = nextAutoPause(state, { at, lat, lng, accuracyM: null, speed: null });
+      state = next.state;
+      if (next.change?.kind === "pause") from = next.change.at;
+      if (next.change?.kind === "resume" && from !== null) {
+        pauses.push([from, next.change.at]);
+        from = null;
+      }
+    }
+    const end = points[points.length - 1]?.[0] ?? 0;
+    const closed: RunPause[] = from === null ? pauses : [...pauses, [from, end]];
+    const on = runSums(points, closed, end, 70).distanceM;
+    const off = runSums(points, [], end, 70).distanceM;
+    expect(off).toBeGreaterThan(2600);
+    expect(on / off).toBeGreaterThanOrEqual(0.95);
   });
 });
 

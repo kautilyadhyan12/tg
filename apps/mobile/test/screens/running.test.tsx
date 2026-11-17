@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
 import { AppState, Linking } from "react-native";
 import type { StyleSpecification } from "@maplibre/maplibre-react-native";
-import { HEIGHT_MAP_CREDITS, OPENFREEMAP, RUN_MAX_POINTS, runSums, saveRunRequestSchema, type MapSource, type RunClimb, type RunPoint, type RunRecords, type SaveRunRequest } from "@app/shared";
+import { HEIGHT_MAP_CREDITS, OPENFREEMAP, RUN_MAX_POINTS, geodesicMetres, runSums, saveRunRequestSchema, type MapSource, type RunClimb, type RunPoint, type RunRecords, type SaveRunRequest } from "@app/shared";
 import { App } from "../../src/App";
 import { resetMapSource } from "../../src/screens/running/mapSource";
 import { RUN_BAR_ROOM } from "../../src/screens/running/RunLayer";
@@ -44,6 +44,8 @@ type DrawnMap = {
   gone: boolean;
 };
 const maplibre = jest.requireMock<{ maps: DrawnMap[] }>("@maplibre/maplibre-react-native");
+/** What Android hands over while its location stops, set by a test (test/screens/setup.js). */
+const stopping = jest.requireMock<{ state: { whileStopping: (() => Promise<void>) | null } }>("expo-location").state;
 /** The map on screen with this test id, the newest drawn. */
 const drawnMap = (testID: string): DrawnMap => {
   const map = maplibre.maps.filter((m) => !m.gone && m.props.testID === testID).at(-1);
@@ -63,6 +65,7 @@ beforeEach(async () => {
     return { remove: () => undefined };
   });
   Object.assign(location, { services: true, granted: true, canAskAgain: true, accuracy: "fine", asked: 0, started: [], running: false, acceptsTurnOn: true });
+  stopping.whileStopping = null;
   for (const name of ["run-now.json", "run-now-0.json", "run-now-1.json", "run-settings.json", "run-map.json"]) phoneRunFiles.remove(name);
   resetRecorder();
   resetMapSource();
@@ -339,6 +342,37 @@ describe("Auto-pause", () => {
     expect(screen.queryByText("Auto-paused")).toBeNull();
     expect(clock(0)).toBe("0:00");
   });
+
+  it("the worst thing: a walker who waits at a crossing and walks on slowly keeps every metre", async () => {
+    const s = runServer();
+    await openRunning(s);
+    await startRunning();
+    const fed = await feed(0, 120, 1);
+    const run = runNow();
+    if (run === null) throw new Error("no run");
+    // Forty seconds at the crossing, the phone wandering a metre, then on at 0.6 m a second for two minutes.
+    const stopLat = 26.1445 + 119 / 111_132;
+    const waiting = Array.from({ length: 40 }, (_, i) => ({
+      timestamp: run.startedAt + (120 + i) * 1000,
+      coords: { latitude: stopLat + Math.sin(i * 0.9) / 111_132, longitude: 91.7362 + Math.cos(i * 1.3) / 99_950, accuracy: 5, speed: 0 },
+    }));
+    await act(() => takeLocations({ locations: waiting }));
+    expect(await screen.findByText("Auto-paused")).toBeTruthy();
+    fed.push(...waiting.map((l): RunPoint => [l.timestamp - run.startedAt, l.coords.latitude, l.coords.longitude, 5]));
+    fed.push(...(await feed(160, 120, 0.6, stopLat - (160 * 0.6) / 111_132)));
+    await waitFor(() => {
+      expect(runNow()?.phase).toBe("running");
+    });
+    const now = runNow();
+    if (now === null) throw new Error("no run");
+    const end = 279_000;
+    const kept = runSums(now.points, closedPauses(now, end), end, 0).distanceM;
+    const walked = runSums(fed, [], end, 0).distanceM;
+    expect(walked).toBeGreaterThan(185);
+    // Auto-pause leaves out the wait, never the steps either side of it: the clock starts again from the last
+    // point within 3 m of where the person stood, so at most those 3 m and the phone's metre of wander go.
+    expect(kept).toBeGreaterThanOrEqual(walked - 4);
+  });
 });
 
 describe("Auto-pause turned off during a run (Kd's click-through, 2026-11-05)", () => {
@@ -522,6 +556,37 @@ describe("the voice, through the whole app", () => {
     await waitFor(() => {
       expect(voice.quieted).toBeGreaterThan(0);
     });
+  });
+
+  it("says nothing after Finish, though Android hands over the last steps while its location stops (testers on Google Play, 2026-11-17)", async () => {
+    const s = runServer();
+    await openRunning(s);
+    await startRunning();
+    await feed(0, 60, 3);
+    const run = runNow();
+    if (run === null) throw new Error("no run");
+    const stillAt = 26.1445 + (59 * 3) / 111_132;
+    await act(() =>
+      takeLocations({ locations: Array.from({ length: 20 }, (_, i) => ({ timestamp: run.startedAt + (60 + i) * 1000, coords: { latitude: stillAt, longitude: 91.7362, accuracy: 5, speed: 0 } })) }),
+    );
+    expect(await screen.findByText("Auto-paused")).toBeTruthy();
+    const before = voice.said.length;
+    const points = runNow()?.points.length ?? 0;
+    // The person walks off as they press Finish: those steps reach the app while Android stops, inside
+    // the press itself, as Android's own task hands them over.
+    const walkingOff = Array.from({ length: 30 }, (_, i) => ({
+      timestamp: run.startedAt + (80 + i) * 1000,
+      coords: { latitude: stillAt + (i * 3) / 111_132, longitude: 91.7362, accuracy: 5, speed: 3 },
+    }));
+    stopping.whileStopping = () => takeLocations({ locations: walkingOff });
+    await fireEvent.press(await screen.findByRole("button", { name: "Finish" }));
+    await waitFor(() => {
+      expect(stopping.whileStopping).toBeNull();
+    });
+    expect(runNow()?.phase).toBe("finished");
+    expect(voice.said.slice(before)).toEqual([]);
+    expect(runNow()?.points.length).toBe(points);
+    expect(runNow()?.pauses).toHaveLength(1);
   });
 
   it("Voice off says nothing, stops what it was saying, and stays off for the next run", async () => {
@@ -748,6 +813,26 @@ describe("the map under the run (37b-i)", () => {
     expect(asked.every((r) => r.method === "GET" && r.search === "" && r.body === undefined)).toBe(true);
     const lat = (points[100]?.[1] ?? 0).toFixed(5);
     expect(s.requests.filter((r) => r.path !== PATH && (r.body ?? "").includes(lat))).toEqual([]);
+  });
+
+  it("standing after Go, the distance stays 0.00 and the dot stays where the person stands (testers on Google Play, 2026-11-17)", async () => {
+    const s = runServer();
+    await openRunning(s);
+    await startRunning();
+    // A real run's two minutes standing at its start, as the phone recorded them; the runner leaves at 122 s.
+    const standing = (realRuns().get("iphone") ?? []).filter(([t]) => t <= 121_000);
+    await feedReal(standing);
+    const first = standing[0];
+    if (first === undefined) throw new Error("no points");
+    const front = () => drawnMap("live-map-view").markers.at(-1);
+    await waitFor(
+      () => {
+        expect(screen.getByText("0.00 km")).toBeTruthy();
+        const dot = front();
+        expect(dot === undefined ? Infinity : geodesicMetres(first[1], first[2], dot[1], dot[0])).toBeLessThan(0.5);
+      },
+      { timeout: 5000 },
+    );
   });
 
   it("follows the front of the run, stops when the person moves the map, and Follow me brings it back", async () => {

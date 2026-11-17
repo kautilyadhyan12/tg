@@ -106,8 +106,9 @@ let heartUnwritten = 0;
 let writtenAt = 0;
 /** The monitor kept connected while a run is going (37f-i). */
 let heartHeld: (() => void) | null = null;
-/** The last points taken while paused, and how many are kept. */
-const PAUSED_TAIL = 4;
+/** The last points taken while paused, and how many are kept: Auto-pause starts the clock again from the
+ *  last point near where the person stopped, which a slow walk leaves well over a minute behind at worst. */
+const PAUSED_TAIL = 120;
 let pausedTail: RunPoint[] = [];
 /** Raised at each Start and each Save or Discard: points handed over while one of those happened
  *  belong to no run, and never bring a saved or thrown-away run back. */
@@ -776,21 +777,27 @@ async function stopLocations(): Promise<void> {
 export async function finishRun(now: number = Date.now()): Promise<LiveRun | null> {
   const run = current;
   if (run === null) return null;
-  quietVoice();
-  await stopLocations();
   if (run.phase === "finished") {
+    quietVoice();
     releaseMonitor();
+    await stopLocations();
     return run;
   }
+  // Finished before anything is waited for: points Android hands over while its location stops are not
+  // the run's, so they never pause it, start it again or have anything said after Finish (testers on
+  // Google Play, 2026-11-17: the voice went on after the run).
   takeHeart(run);
-  releaseMonitor();
   // Never past a day: the most the server takes.
   const end = Math.min(RUN_MAX_ELAPSED_MS, Math.max(now - run.startedAt, run.points[run.points.length - 1]?.[0] ?? 0));
   closePause(run, end);
-  current = { ...run, phase: "finished", finishedMs: end };
-  await keep(current);
+  const done: LiveRun = { ...run, phase: "finished", finishedMs: end };
+  current = done;
+  quietVoice();
+  releaseMonitor();
   tell();
-  return current;
+  await keep(done);
+  await stopLocations();
+  return done;
 }
 
 /** Saved, or thrown away: nothing of it is left on the phone but what the outbox keeps. */
