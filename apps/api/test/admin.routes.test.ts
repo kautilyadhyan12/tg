@@ -969,6 +969,23 @@ d("the admin page (real Postgres)", () => {
   const saveBody = (p: Person, at: Date, kg = 77.7) =>
     sql`INSERT INTO body_measurements (user_id, measured_at, weight_kg, created_at) VALUES (${p.userId}, ${at}, ${kg}, ${at})`;
 
+  /** Every page of a day's list, and each page's whole answer: other test files' people share the
+   *  database, so somebody this file made can be past the first 50 (GitHub's run, 2026-11-17). */
+  const everyoneOn = async (day: string, query = "zone=Europe/London") => {
+    const people: DayPage["people"] = [];
+    const bodies: string[] = [];
+    let from: number | null = 0;
+    while (from !== null) {
+      const res = await asAdmin({ url: `/v1/admin/days/${day}?${query}${from === 0 ? "" : `&from=${String(from)}`}` });
+      expect(res.statusCode, res.body).toBe(200);
+      const page = res.json<DayPage>();
+      people.push(...page.people);
+      bodies.push(res.body);
+      from = page.next;
+    }
+    return { people, bodies };
+  };
+
   it("WORST THING (14a-iii): what each person saved is counted on their own row, under their own name, and never what it was", { timeout: 90_000 }, async () => {
     await redis.del(`rl:admin_read:id:${admin.userId}`);
     const ria = await session(`${PREFIX}use-ria@example.com`, "A14i Use Ria");
@@ -999,16 +1016,16 @@ d("the admin page (real Postgres)", () => {
     expect(riaDays.json<Days>().days[0]).toEqual({ day: riaToday, minutes: 12, mealScans: 3, routePlans: 0, costMicro: 0, used: riaUsed });
     const benDays = await asAdmin({ url: `/v1/admin/people/${ben.userId}/days?zone=Europe/London` });
     expect(benDays.json<Days>().days[0]).toEqual({ day: benToday, minutes: 5, mealScans: 0, routePlans: 0, costMicro: 0, used: benUsed });
-    const riaDay = await asAdmin({ url: `/v1/admin/days/${riaToday}?zone=Europe/London` });
-    expect(riaDay.json<DayPage>().people.find((p) => p.id === ria.userId)).toEqual({
+    const riaDay = await everyoneOn(riaToday);
+    expect(riaDay.people.find((p) => p.id === ria.userId)).toEqual({
       id: ria.userId, name: "A14i Use Ria", email: `${PREFIX}use-ria@example.com`, minutes: 12, mealScans: 3, routePlans: 0, costMicro: 0, used: riaUsed,
     });
-    const benDay = await asAdmin({ url: `/v1/admin/days/${benToday}?zone=Europe/London` });
-    expect(benDay.json<DayPage>().people.find((p) => p.id === ben.userId)).toEqual({
+    const benDay = await everyoneOn(benToday);
+    expect(benDay.people.find((p) => p.id === ben.userId)).toEqual({
       id: ben.userId, name: "A14i Use Ben", email: `${PREFIX}use-ben@example.com`, minutes: 5, mealScans: 0, routePlans: 0, costMicro: 0, used: benUsed,
     });
     // What it was is never in any answer: no meal, food or run name, no route, no weight.
-    for (const body of [riaDays.body, benDays.body, riaDay.body, benDay.body]) {
+    for (const body of [riaDays.body, benDays.body, ...riaDay.bodies, ...benDay.bodies]) {
       for (const secret of ["secret", "77.7"]) expect(body).not.toContain(secret);
     }
   });
@@ -1047,7 +1064,7 @@ d("the admin page (real Postgres)", () => {
     expect(on(addDays(today, -3))?.used).toEqual(NONE);
     // By day reads each of her days the same.
     for (const day of [today, yesterday, before]) {
-      expect((await dayPage(day)).people.find((p) => p.id === cat.userId)?.used).toEqual(on(day)?.used);
+      expect((await everyoneOn(day)).people.find((p) => p.id === cat.userId)?.used).toEqual(on(day)?.used);
     }
   });
 
@@ -1059,7 +1076,7 @@ d("the admin page (real Postgres)", () => {
     const at = await instant(day, "00:30", "Europe/London");
     await saveWorkout(dee, at);
     await saveBody({ userId: gone, access: "" }, at);
-    const page = await dayPage(day);
+    const page = await everyoneOn(day);
     expect(page.people.find((p) => p.id === dee.userId)).toEqual({
       id: dee.userId, name: "A14i Use Dee", email: `${PREFIX}use-dee@example.com`, minutes: null, mealScans: 0, routePlans: 0, costMicro: 0,
       used: { ...NONE, workoutsSaved: 1 },
@@ -1067,8 +1084,8 @@ d("the admin page (real Postgres)", () => {
     expect(page.people.find((p) => p.id === gone)).toBeUndefined();
     expect(page.people.find((p) => p.id === idle.userId)).toBeUndefined();
     // Read in Los Angeles, 00:30 in London is the day before.
-    expect((await dayPage(addDays(day, -1), "zone=America/Los_Angeles")).people.find((p) => p.id === dee.userId)?.used.workoutsSaved).toBe(1);
-    expect((await dayPage(day, "zone=America/Los_Angeles")).people.find((p) => p.id === dee.userId)).toBeUndefined();
+    expect((await everyoneOn(addDays(day, -1), "zone=America/Los_Angeles")).people.find((p) => p.id === dee.userId)?.used.workoutsSaved).toBe(1);
+    expect((await everyoneOn(day, "zone=America/Los_Angeles")).people.find((p) => p.id === dee.userId)).toBeUndefined();
     await sql`DELETE FROM body_measurements WHERE user_id = ${gone}`;
   });
 });
