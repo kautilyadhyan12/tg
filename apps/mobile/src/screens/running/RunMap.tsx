@@ -52,6 +52,9 @@ export function useMapScheme(where: readonly [number, number] | null): MapScheme
 interface RunMapProps {
   track: readonly (readonly [number, number])[];
   starts: readonly number[];
+  /** Where the person is now, on a run going on: the dot, which a pause or a stop never holds back. The
+   *  route's end where not given. */
+  here?: readonly [number, number] | null;
   units: Units;
   mode: RunMapMode;
   scheme: MapScheme;
@@ -67,13 +70,13 @@ interface RunMapProps {
   testID?: string;
 }
 
-export function RunMap({ track, starts, units, mode, scheme, source, under = 0, over = 0, onOpen, onDrawn, testID }: RunMapProps) {
+export function RunMap({ track, starts, here = null, units, mode, scheme, source, under = 0, over = 0, onOpen, onDrawn, testID }: RunMapProps) {
   const style = useMemo(() => baseMapStyle(source, scheme), [source, scheme]);
   const trail = useMemo(() => trailShapes(track, starts), [track, starts]);
   const stones = useMemo(() => (mode === "live" ? null : stoneShapes(track, starts, units)), [mode, track, starts, units]);
   const ends = useMemo(() => endShapes(track, mode !== "live"), [track, mode]);
   const bounds = useMemo(() => runBounds(track), [track]);
-  const front = track[track.length - 1];
+  const front = here ?? track[track.length - 1];
   const bearing = mode === "live" ? frontBearing(track, starts) : null;
   const [following, setFollowing] = useState(true);
   // The map's credit shows when it opens, then folds into (i) after CREDIT_SHOWN_MS or at the first

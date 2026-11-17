@@ -434,6 +434,7 @@ export const phoneLocationsSchema = z.object({
     }),
   ),
 });
+export type PhoneLocations = z.infer<typeof phoneLocationsSchema>;
 
 /** A saved run the server refused, kept whole on the phone: the person may send it again or
  *  remove it, and nothing they ran is ever thrown away by the app (round one of 37a, H1). */

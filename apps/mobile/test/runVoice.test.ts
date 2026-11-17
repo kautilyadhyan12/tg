@@ -83,11 +83,19 @@ describe("the worst thing: a wrong number said out loud", () => {
       else expect([all, all.slice(0, -1)]).toContainEqual(said);
       expect(said.length).toBeGreaterThan(3);
       const unit = units === "imperial" ? "mile" : "kilometre";
+      // The kilometre or mile's own time is the summary's to the second, but where the two lie either side of
+      // a half second: the points after the line still move the smoothed route by thousandths of a second
+      // (the iPhone 4S's second mile: 470.504 s when said, 470.499 s in the summary). At most once a run.
+      let halfSecond = 0;
       for (const { line, mark } of lines) {
         const n = mark.count;
         expect(mark.units).toBe(units);
-        // The kilometre or mile's own time is the summary's, to the second, and is what is said.
-        if (n > 1) expect(line).toContain(`Last ${unit} ${spokenTime(summaryLast(final, units, n))}.`);
+        if (n > 1) {
+          const shown = summaryLast(final, units, n);
+          expect(Math.abs(mark.lastS - shown)).toBeLessThanOrEqual(1);
+          if (mark.lastS !== shown) halfSecond += 1;
+          expect(line).toContain(`Last ${unit} ${spokenTime(mark.lastS)}.`);
+        }
         // The time said lies between the clock at the points either side of the mark (a second for
         // rounding each way), and the average pace said is that time over the marks.
         const [before, after] = clockAroundMark(points, per, n);
@@ -96,6 +104,7 @@ describe("the worst thing: a wrong number said out loud", () => {
         expect(line.startsWith(`${String(n)} ${unit}${n === 1 ? "" : "s"}. Time ${spokenTime(mark.timeS)}.`)).toBe(true);
         expect(line).toContain(`Average pace ${spokenTime(Math.round(mark.timeS / n))} per ${unit}.`);
       }
+      expect(halfSecond).toBeLessThanOrEqual(1);
       // Never the other unit's word.
       for (const { line } of lines) expect(line).not.toMatch(units === "imperial" ? /kilometre/ : /mile/);
     },

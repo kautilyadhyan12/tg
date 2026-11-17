@@ -3,8 +3,9 @@
 // Pure: no clock, no randomness; the same points always give the same numbers.
 
 /** Raised whenever a rule below changes, and kept with each saved run. 2 (37c-iii): standing is judged on the
- *  smoothed path over 40 s, so a phone's wander and drift while standing no longer hide the stop. */
-export const RUN_CALC_VERSION = 2;
+ *  smoothed path over 40 s, so a phone's wander and drift while standing no longer hide the stop. 3: standing,
+ *  the route holds still, so the wander adds no metres and draws no line (testers on Google Play, 2026-11-17). */
+export const RUN_CALC_VERSION = 3;
 
 /** A point: milliseconds since the run started, latitude, longitude, and how sure the phone was of
  *  it in metres (Android's horizontal accuracy; null when the phone did not say). */
@@ -687,6 +688,15 @@ function standingSpans(path: Fix[]): [number, number][] {
   return spans;
 }
 
+/** Whether `from`..`to` lies wholly inside one standing span (in time order). */
+function standingThrough(spans: readonly [number, number][], from: number, to: number): boolean {
+  for (const [a, b] of spans) {
+    if (a > from) return false;
+    if (to <= b) return true;
+  }
+  return false;
+}
+
 /** How much of `from`..`to` lies inside the standing spans (in time order). */
 function standingWithin(spans: readonly [number, number][], from: number, to: number): number {
   let total = 0;
@@ -758,6 +768,9 @@ export function runSums(points: readonly RunPoint[], pauses: readonly RunPause[]
       for (let i = 1; i < path.length; i++) {
         const fix = path[i];
         if (fix === undefined) continue;
+        // Standing, the route holds still: the phone's wander adds no metres and draws no line, and the
+        // step out of the stop is measured from where the person stood.
+        if (standingThrough(still, last.at, fix.at)) continue;
         const m = geodesicMetres(last.lat, last.lng, fix.lat, fix.lng);
         if (m < MIN_STEP_M && i < path.length - 1) continue;
         steps.push({ m, s: (fix.at - last.at - standingWithin(still, last.at, fix.at)) / 1000 });
