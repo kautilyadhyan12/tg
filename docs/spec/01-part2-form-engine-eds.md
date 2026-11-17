@@ -1738,7 +1738,7 @@ tests, so GitHub refuses a faulty file.
 | Each side | whether a set is done for each side |
 | Starting numbers | the sets and target offered when it is added to a workout; the person changes them |
 | Energy (MET) | the file names a code of the 2024 Adult Compendium of Physical Activities; the MET is read from the Compendium table, copied from the Compendium's own pages, and is never typed in an exercise's file (60a) |
-| About, steps, mistakes | in proper wording, each from a named proper source (§11.3 step 5); text is kept by language, English first |
+| About, steps, mistakes, cautions | in proper wording, each from a named proper source (§11.3 step 5); a caution is its own fact, never a step, and as strong as its source says it (60a); text is kept by language, English first |
 | Clip, still picture | empty until job 62 |
 | Status | live · retired. Before launch a file may simply be deleted (Kd, 2026-11-17: no real members yet); after it, an exercise is retired |
 
