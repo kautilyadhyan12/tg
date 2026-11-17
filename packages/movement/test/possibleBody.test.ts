@@ -329,6 +329,23 @@ describe("each check alone", () => {
     for (const c of checked.filter((x) => x.t >= 1450)) expect([c.t, ...elbowAndWrist(c)]).toEqual([c.t, null, null]);
   });
 
+  it("never lets a few wrong peeks add up: an elbow hidden after 3 s, peeking out wrong twice, is right again at 8 s", () => {
+    // Right for 3 s, then hidden, out for two frames 25 cm wrong at 4.0 s and again at 7.5 s.
+    const peek = (t: number): boolean => (t >= 4000 && t < 4060) || (t >= 7500 && t < 7560);
+    const checked = run(
+      feed(10, 30, (t, world, lay) => {
+        const e = world[KP.left_elbow];
+        if (peek(t) && e !== undefined) e[0] = (e[0] ?? 0) + 0.25;
+        const p = lay(world);
+        const q = p.points[KP.left_elbow];
+        if (t >= 3000 && t < 8000 && !peek(t) && q !== undefined) p.points[KP.left_elbow] = [q[0], q[1], q[2], 0.2, q[4]];
+        return p;
+      }),
+    );
+    for (const c of checked.filter((x) => peek(x.t))) expect([c.t, ...elbowAndWrist(c)]).toEqual([c.t, "bone", "bone"]);
+    for (const c of checked.filter((x) => x.t >= 8000)) expect([c.t, ...elbowAndWrist(c)]).toEqual([c.t, null, null]);
+  });
+
   it("lets a wrong length in once it has stayed 3 s, the most a length must wait (a known limit), and the right one back 3 s after it returns", () => {
     // 4 s of the right elbow, then 4 s wrong, then right again.
     const checked = elbowOut(13, (t) => t >= 4000 && t < 8000);

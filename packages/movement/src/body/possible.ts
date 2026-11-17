@@ -146,51 +146,66 @@ class Memory {
 
 type BoneState = "unjudged" | "learning" | "holds" | "broken";
 
-/** One bone's own length. Learned over its first `learn` ms; after that a length joins it only
- *  when it held. A new length can still become the bone's own, since lengths alone cannot say
- *  which of two steady lengths is true, but only by staying steady for as long as the old one
- *  had held: at least `learn`, at most `boneMemory`. So a wrong first look, contradicted at once,
- *  is soon replaced by the true length, and a length seen holding for seconds needs seconds. */
+/** One bone's own length. Learned over its first `learn` ms of being seen; after that a length
+ *  joins it only when it held. A new length can still become the bone's own, since lengths alone
+ *  cannot say which of two steady lengths is true, but only by being seen steady for as long as
+ *  the old one had been seen holding: at least `learn`, at most `boneMemory`. So a wrong first
+ *  look, contradicted at once, is soon replaced by the true length, and a length seen holding for
+ *  seconds needs seconds. Only time the bone is seen counts: each look is worth its own frame's
+ *  time, so the same seeing counts the same at any frame rate; a gap of more than `settle` adds
+ *  nothing more, and drops a new length altogether, so a few lone looks never add up. */
 class BoneLength {
   private held = new Memory();
   /** A run of broken lengths that agree with each other: a length that may be the bone's own. */
   private rival = new Memory();
   private known: number | null = null;
-  /** When the length known began to be seen, and when it last held. */
-  private since = 0;
-  private lastHeld = 0;
+  /** When the bone was last judged. */
+  private lastSeen: number | null = null;
+  /** How long, in time seen: learning; the length known holding (learning included); the rival. */
+  private learnedFor = 0;
+  private heldFor = 0;
+  private rivalFor = 0;
 
-  judge(t: number, now: number, allowance: number | null, limits: Limits): BoneState {
+  /** `frame`: the time since the frame before, seen or not. */
+  judge(t: number, now: number, allowance: number | null, limits: Limits, frame: number): BoneState {
     this.held.forget(t - limits.boneMemory);
+    const gap = this.lastSeen === null ? Number.POSITIVE_INFINITY : t - this.lastSeen;
+    this.lastSeen = t;
+    const step = Math.min(limits.settle, gap <= limits.settle ? gap : frame);
     if (this.known === null) {
-      if (allowance === null || this.held.span(t) < limits.learn) {
+      this.learnedFor += step;
+      if (allowance === null || this.learnedFor < limits.learn) {
         this.held.add(t, now);
         return "learning";
       }
-      this.known = this.held.median();
-      this.since = t - this.held.span(t);
-      this.lastHeld = t;
+      this.known = this.held.median() ?? now;
+      this.heldFor = this.learnedFor;
     }
     if (allowance === null) return "learning";
-    const own = this.held.median() ?? this.known ?? now;
+    const own = this.held.median() ?? this.known;
     if (Math.abs(now - own) <= allowance) {
       this.held.add(t, now);
       this.known = own;
-      this.lastHeld = t;
+      this.heldFor += step;
       this.rival = new Memory();
+      this.rivalFor = 0;
       return "holds";
     }
     const rivalLength = this.rival.median();
-    if (rivalLength !== null && Math.abs(now - rivalLength) > allowance) this.rival = new Memory();
+    if (rivalLength === null || gap > limits.settle || Math.abs(now - rivalLength) > allowance) {
+      this.rival = new Memory();
+      this.rivalFor = 0;
+    } else {
+      this.rivalFor += step;
+    }
     this.rival.add(t, now);
-    const support = Math.min(limits.boneMemory, Math.max(limits.learn, this.lastHeld - this.since));
-    if (this.rival.span(t) < support) return "broken";
-    // The new length has stayed as long as the old one held: it is the bone's own now.
-    this.since = t - this.rival.span(t);
+    if (this.rivalFor < Math.min(limits.boneMemory, Math.max(limits.learn, this.heldFor))) return "broken";
+    // The new length has been seen as long as the old one held: it is the bone's own now.
     this.held = this.rival;
+    this.known = this.held.median() ?? now;
+    this.heldFor = this.rivalFor;
     this.rival = new Memory();
-    this.known = this.held.median();
-    this.lastHeld = t;
+    this.rivalFor = 0;
     return "holds";
   }
 }
@@ -279,6 +294,7 @@ export class PossibleBody {
     const all = (why: Refusal): Refusal[] => new Array<Refusal>(POINTS).fill(why);
     if (this.lastT !== null && t === this.lastT) return { t, aspect, down, person, size: null, refused: all("time") };
     const { limits } = this;
+    const frame = this.lastT !== null && t > this.lastT ? t - this.lastT : 0;
     // A clock that went back, or a person gone longer than bones are remembered: a new body.
     if ((this.lastT !== null && t < this.lastT) || (person !== null && this.body.seen !== null && t - this.body.seen > limits.boneMemory)) {
       this.body = freshBody();
@@ -318,7 +334,7 @@ export class PossibleBody {
       const length = body.bones[n];
       if (length === undefined || !sure[a] || !sure[b]) return;
       const now = length3d(world, a, b);
-      if (Number.isFinite(now)) bones[n] = length.judge(t, now, unit === null ? null : limits.bone * unit, limits);
+      if (Number.isFinite(now)) bones[n] = length.judge(t, now, unit === null ? null : limits.bone * unit, limits, frame);
     });
     const boneWhy = (i: number): "bone" | "settling" | "unchecked" | null => {
       const parent = PARENT[i] ?? -1;

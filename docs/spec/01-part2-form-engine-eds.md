@@ -1522,9 +1522,10 @@ bone to its parent keeps its own length within 0.25 of the same body's trunk and
 used: a wrong elbow takes its forearm and hand with it, a wrong wrist never takes the elbow, and
 a hand, foot or head moved in one piece cannot vouch for itself. The trunk's corners are checked
 by the trunk's bones. A bone learns its length from frames in which it held; a new steady length
-replaces it only after lasting as long as the old one had held, at least half a second and at
-most 3 s, so a wrong first look is soon replaced and a wrong pose is refused for up to 3 s (held
-longer, it gets in: a known limit). A person gone longer than 3 s, or a clock that went back, is
+replaces it only after being seen as long as the old one had been seen holding, at least half a
+second and at most 3 s, counting only time the bone is seen (a few lone looks never add up), so a
+wrong first look is soon replaced and a wrong pose is refused for up to 3 s (held longer, it gets
+in: a known limit). A person gone longer than 3 s, or a clock that went back, is
 a new body. The allowance is a share of the trunk,
 not of the bone: on Kd's videos the model's error does not grow with a bone's length. A point
 faster than 20 m/s across the picture has jumped (a kick's foot, the fastest part of a person, is
