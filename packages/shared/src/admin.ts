@@ -123,6 +123,7 @@ export const adminDayUsedSchema = z
     mealsByHand: z.number().int().nonnegative(),
     runsSaved: z.number().int().nonnegative(),
     workoutsSaved: z.number().int().nonnegative(),
+    /** Saved on Progress: a weight typed in Get started or Settings is not one. */
     bodyMeasurements: z.number().int().nonnegative(),
   })
   .strict();

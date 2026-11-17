@@ -958,16 +958,18 @@ d("the admin page (real Postgres)", () => {
   const saveMeal = (p: Person, origin: "photo" | "manual", at: Date, name = "A14iii meal", legacy: string | null = null) =>
     sql`INSERT INTO meal_logs (user_id, taken_at, meal_name, items, kcal_point, kcal_low, kcal_high, confirmed, origin, portion_source, nutrition_sources, calc_version, legacy_mongo_id, created_at)
         VALUES (${p.userId}, ${at}, ${name}, '[]'::jsonb, 500, 450, 550, true, ${origin}, 'default', '{curated}', 1, ${legacy}, ${at})`;
-  const saveLabel = (p: Person, at: Date, name = "A14iii pack") =>
-    sql`INSERT INTO member_label_foods (id, user_id, name, unit, kcal, protein_g, carbs_g, fat_g, created_at, updated_at)
-        VALUES (gen_random_uuid(), ${p.userId}, ${name}, 'g', 400, 10, 60, 12, ${at}, ${at})`;
+  const saveLabel = (p: Person, at: Date, name = "A14iii pack", removedAt: Date | null = null) =>
+    sql`INSERT INTO member_label_foods (id, user_id, name, unit, kcal, protein_g, carbs_g, fat_g, created_at, updated_at, removed_at)
+        VALUES (gen_random_uuid(), ${p.userId}, ${name}, 'g', 400, 10, 60, 12, ${at}, ${at}, ${removedAt})`;
   const saveRun = (p: Person, at: Date, name = "A14iii run", legacy: string | null = null) =>
     sql`INSERT INTO runs (id, user_id, started_at, duration_s, distance_m, polyline, name, legacy_mongo_id, created_at)
         VALUES (gen_random_uuid(), ${p.userId}, ${at}, 1800, 5123, 'a14iii_secret_polyline', ${name}, ${legacy}, ${at})`;
-  const saveWorkout = (p: Person, at: Date) =>
-    sql`INSERT INTO workouts (id, user_id, started_at, platform, engine_version, created_at) VALUES (gen_random_uuid(), ${p.userId}, ${at}, 'android', 'test', ${at})`;
-  const saveBody = (p: Person, at: Date, kg = 77.7) =>
-    sql`INSERT INTO body_measurements (user_id, measured_at, weight_kg, created_at) VALUES (${p.userId}, ${at}, ${kg}, ${at})`;
+  /** `legacy-py` is how the old app's import marks its workouts (tools/migrate-mongo/collections/workouts.ts). */
+  const saveWorkout = (p: Person, at: Date, engineVersion = "test") =>
+    sql`INSERT INTO workouts (id, user_id, started_at, platform, engine_version, created_at) VALUES (gen_random_uuid(), ${p.userId}, ${at}, 'android', ${engineVersion}, ${at})`;
+  /** `self_reported` is a weight typed in Get started or Settings (`recordTypedWeight`), not a Progress save. */
+  const saveBody = (p: Person, at: Date, kg = 77.7, source: "manual" | "self_reported" = "manual", legacy: string | null = null) =>
+    sql`INSERT INTO body_measurements (user_id, measured_at, weight_kg, source, legacy_mongo_id, created_at) VALUES (${p.userId}, ${at}, ${kg}, ${source}, ${legacy}, ${at})`;
 
   /** Every page of a day's list, and each page's whole answer: other test files' people share the
    *  database, so somebody this file made can be past the first 50 (GitHub's run, 2026-11-17). */
@@ -1002,14 +1004,17 @@ d("the admin page (real Postgres)", () => {
     await saveMeal(ria, "photo", now, "Ria's secret curry");
     await saveMeal(ria, "manual", now, "Ria's secret toast");
     await saveLabel(ria, now, "Ria's secret biscuits");
+    await saveLabel(ria, now, "Ria's secret crackers");
     await saveRun(ria, now, "Ria's secret street");
     await saveBody(ria, now, 77.7);
+    // Her weight typed again in Settings that day: not a Progress save.
+    await saveBody(ria, now, 77.7, "self_reported");
     await saveWorkout(ben, now);
     await saveRun(ben, now, "Ben's secret park");
     await saveRun(ben, now, "Ben's secret park");
     await saveMeal(ben, "manual", now, "Ben's secret oats");
 
-    const riaUsed = { mealPhotosSaved: 2, packLabelsSaved: 1, mealsByHand: 1, runsSaved: 1, workoutsSaved: 0, bodyMeasurements: 1 };
+    const riaUsed = { mealPhotosSaved: 2, packLabelsSaved: 2, mealsByHand: 1, runsSaved: 1, workoutsSaved: 0, bodyMeasurements: 1 };
     const benUsed = { mealPhotosSaved: 0, packLabelsSaved: 0, mealsByHand: 1, runsSaved: 2, workoutsSaved: 1, bodyMeasurements: 0 };
     const riaDays = await asAdmin({ url: `/v1/admin/people/${ria.userId}/days?zone=Europe/London` });
     expect(riaDays.json<Days>()).toMatchObject({ person: { id: ria.userId, name: "A14i Use Ria" } });
@@ -1055,6 +1060,11 @@ d("the admin page (real Postgres)", () => {
     // Brought over from the old app today: not saved in this one.
     await saveMeal(cat, "manual", new Date(), "A14iii legacy", `a14iii-legacy-meal-${cat.userId}`);
     await saveRun(cat, new Date(), "A14iii legacy", `a14iii-legacy-run-${cat.userId}`);
+    await saveWorkout(cat, new Date(), "legacy-py");
+    await saveBody(cat, new Date(), 61, "manual", `a14iii-legacy-body-${cat.userId}`);
+    // Her weight typed in Get started, and a pack's label saved then removed: neither is counted.
+    await saveBody(cat, new Date(), 61, "self_reported");
+    await saveLabel(cat, new Date(), "A14iii removed pack", new Date());
 
     const days = (await daysOf(cat)).days;
     const on = (day: string) => days.find((d) => d.day === day);

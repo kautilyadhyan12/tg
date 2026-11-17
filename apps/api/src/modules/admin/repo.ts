@@ -158,7 +158,10 @@ export async function auditDoor(sql: Sql, userId: string, action: "admin.door_op
 // their limit counted (metered_uses), its cost what the ledger paid for them (api_cost_events). What
 // they saved (14a-iii) is on the day it reached the server, each kind from its own table: a meal from
 // a photo's scan or by hand (meal_logs.origin), a pack's label, a run, a workout, a body measurement.
-// Rows brought over from the old app (legacy_mongo_id) were not saved in this one, and are not counted.
+// What is counted is what they still keep: a deleted meal, run or measurement is gone, and a label
+// removed is too. A weight typed in Get started or Settings ('self_reported') is not a Progress save,
+// and rows brought over from the old app (legacy_mongo_id, a workout's 'legacy-py') were not saved in
+// this one: neither is counted.
 
 /** Saved that day, by kind (14a-iii). */
 export interface SavedCounts {
@@ -182,16 +185,16 @@ function savedBetween(sql: SqlOrTx, lo: PendingQuery<Row[]>, hi: PendingQuery<Ro
     WHERE ml.created_at >= ${lo} AND ml.created_at < ${hi} AND ml.legacy_mongo_id IS NULL ${theirs(sql`ml.user_id`)}
     UNION ALL
     SELECT f.user_id, 'label', f.created_at FROM member_label_foods f
-    WHERE f.created_at >= ${lo} AND f.created_at < ${hi} ${theirs(sql`f.user_id`)}
+    WHERE f.created_at >= ${lo} AND f.created_at < ${hi} AND f.removed_at IS NULL ${theirs(sql`f.user_id`)}
     UNION ALL
     SELECT r.user_id, 'run', r.created_at FROM runs r
     WHERE r.created_at >= ${lo} AND r.created_at < ${hi} AND r.legacy_mongo_id IS NULL ${theirs(sql`r.user_id`)}
     UNION ALL
     SELECT w.user_id, 'workout', w.created_at FROM workouts w
-    WHERE w.created_at >= ${lo} AND w.created_at < ${hi} ${theirs(sql`w.user_id`)}
+    WHERE w.created_at >= ${lo} AND w.created_at < ${hi} AND w.engine_version <> 'legacy-py' ${theirs(sql`w.user_id`)}
     UNION ALL
     SELECT bm.user_id, 'body', bm.created_at FROM body_measurements bm
-    WHERE bm.created_at >= ${lo} AND bm.created_at < ${hi} AND bm.legacy_mongo_id IS NULL ${theirs(sql`bm.user_id`)}`;
+    WHERE bm.created_at >= ${lo} AND bm.created_at < ${hi} AND bm.source = 'manual' AND bm.legacy_mongo_id IS NULL ${theirs(sql`bm.user_id`)}`;
 }
 
 /** The counts of `savedBetween`'s rows, read as `s`, by kind. */

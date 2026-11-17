@@ -70,7 +70,7 @@ const benDays = {
   zoneFromPhone: true,
   today,
   days: [
-    { day: today, minutes: 34, mealScans: 3, routePlans: 0, costMicro: 528, used: { ...NONE, mealPhotosSaved: 2, mealsByHand: 1, runsSaved: 1 } },
+    { day: today, minutes: 34, mealScans: 3, routePlans: 0, costMicro: 528, used: { ...NONE, mealPhotosSaved: 2, mealsByHand: 1, runsSaved: 1, bodyMeasurements: 1 } },
     { day: dayBefore(1), minutes: 0, mealScans: 0, routePlans: 1, costMicro: 0, used: NONE },
     { day: dayBefore(2), minutes: null, mealScans: 1, routePlans: 0, costMicro: 176, used: NONE },
   ],
@@ -98,7 +98,7 @@ describe("each person's days (14a-ii)", () => {
     const table = await within(section).findByRole('table', {}, SLOW);
     const rows = rowTexts(table);
     expect(rows.map((r) => r.slice(1))).toEqual([
-      ['34 min', '3', '0', '$0.0005', 'Food, Running'],
+      ['34 min', '3', '0', '$0.0005', 'Food, Running, Progress'],
       ['0 min', '0', '1', '$0', 'Running'],
       ['Not recorded', '1', '0', '$0.0002', 'Food'],
     ]);
@@ -146,7 +146,7 @@ describe("each person's days (14a-ii)", () => {
 
   it("By day (14a-iii): a name opens what they used that day under their row, feature by feature; one at a time; Close", async () => {
     const totals = { people: 2, minutes: 41, mealScans: 3, routePlans: 1, costMicro: 0 };
-    const ashaDay = { id: 'a1', name: 'Asha', email: 'asha@gmail.com', minutes: 34, mealScans: 3, routePlans: 1, costMicro: 0, used: { mealPhotosSaved: 2, packLabelsSaved: 1, mealsByHand: 4, runsSaved: 1, workoutsSaved: 0, bodyMeasurements: 1 } };
+    const ashaDay = { id: 'a1', name: 'Asha', email: 'asha@gmail.com', minutes: 34, mealScans: 3, routePlans: 1, costMicro: 0, used: { mealPhotosSaved: 2, packLabelsSaved: 1, mealsByHand: 4, runsSaved: 1, workoutsSaved: 0, bodyMeasurements: 3 } };
     const deeDay = { id: 'd1', name: 'Dee', email: 'dee@gmail.com', minutes: null, mealScans: 0, routePlans: 0, costMicro: 0, used: { ...NONE, workoutsSaved: 1 } };
     vi.mocked(adminService.day).mockResolvedValue({ day: today, totals, people: [ashaDay, deeDay], next: null });
     draw();
@@ -171,7 +171,7 @@ describe("each person's days (14a-ii)", () => {
       ['Runs saved', '1'],
       ['Route plans', '1'],
       ['Workouts saved', '0'],
-      ['Body measurements saved', '1'],
+      ['Body measurements saved', '3'],
     ]);
     expect(within(box).getAllByRole('heading').map((h) => h.textContent)).toEqual(['Asha, Today', 'Food', 'Running', 'Workout', 'Progress']);
     // Another name: hers closes, his opens, with his own numbers.
@@ -195,7 +195,7 @@ describe("each person's days (14a-ii)", () => {
     const box = within(section).getByRole('region', { name: 'Ben, Today' });
     expect(day.closest('tr').nextElementSibling.contains(box)).toBe(true);
     expect(within(box).getByText('Time in the app: 34 min')).toBeTruthy();
-    expect(within(box).getAllByRole('term').map((t) => t.nextElementSibling.textContent)).toEqual(['3', '2', '0', '1', '1', '0', '0', '0']);
+    expect(within(box).getAllByRole('term').map((t) => t.nextElementSibling.textContent)).toEqual(['3', '2', '0', '1', '1', '0', '0', '1']);
     fireEvent.click(within(section).getByRole('button', { name: 'Ben, Yesterday' }));
     expect(within(section).queryByRole('region', { name: 'Ben, Today' })).toBeNull();
     expect(within(within(section).getByRole('region', { name: 'Ben, Yesterday' })).getByText('Time in the app: 0 min')).toBeTruthy();

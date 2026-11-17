@@ -32,11 +32,11 @@ const NONE = { mealPhotosSaved: 0, packLabelsSaved: 0, mealsByHand: 0, runsSaved
 const dayOf = (over = {}, used = {}) => ({ minutes: 10, mealScans: 0, routePlans: 0, costMicro: 0, ...over, used: { ...NONE, ...used } });
 
 describe('what each person used on a day (14a-iii)', () => {
-  it('names each feature they used, in the tabs\' order, and None when they used none', () => {
+  it('names each feature they used, in the tabs\' order, and Nothing saved when there is none', () => {
     const cases = [
-      [dayOf(), 'None'],
-      [dayOf({ minutes: null }), 'None'],
-      [dayOf({ costMicro: 900 }), 'None'],
+      [dayOf(), 'Nothing saved'],
+      [dayOf({ minutes: null }), 'Nothing saved'],
+      [dayOf({ costMicro: 900 }), 'Nothing saved'],
       [dayOf({ mealScans: 1 }), 'Food'],
       [dayOf({}, { mealPhotosSaved: 1 }), 'Food'],
       [dayOf({}, { packLabelsSaved: 1 }), 'Food'],

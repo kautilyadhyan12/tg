@@ -188,10 +188,11 @@ export function usedGroups(numbers) {
   ];
 }
 
-/** "Food, Running": the features they used that day, or "None". */
+/** "Food, Running": the features they used that day, or "Nothing saved" (not "None": time in the app
+ *  beside it may have gone on what is not counted, such as the Gym tab). */
 export function usedWords(numbers) {
   const used = usedGroups(numbers)
     .filter((g) => g.lines.some(([, n]) => n > 0))
     .map((g) => g.feature);
-  return used.length === 0 ? 'None' : used.join(', ');
+  return used.length === 0 ? 'Nothing saved' : used.join(', ');
 }
