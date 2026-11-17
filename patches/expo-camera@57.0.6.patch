@@ -1,0 +1,73 @@
+diff --git a/android/src/main/java/expo/modules/camera/CameraViewModule.kt b/android/src/main/java/expo/modules/camera/CameraViewModule.kt
+index 21382f8..cbfa277 100644
+--- a/android/src/main/java/expo/modules/camera/CameraViewModule.kt
++++ b/android/src/main/java/expo/modules/camera/CameraViewModule.kt
+@@ -402,6 +402,10 @@ class CameraViewModule : Module() {
+         }
+       }
+ 
++      Prop("responsiveOrientationWhenOrientationLocked") { view, responsive: Boolean? ->
++        view.responsiveOrientationWhenOrientationLocked = responsive ?: false
++      }
++
+       Prop("mirror") { view, mirror: Boolean? ->
+         mirror?.let {
+           if (view.mirror != it) {
+diff --git a/android/src/main/java/expo/modules/camera/ExpoCameraView.kt b/android/src/main/java/expo/modules/camera/ExpoCameraView.kt
+index 999a22c..79723eb 100644
+--- a/android/src/main/java/expo/modules/camera/ExpoCameraView.kt
++++ b/android/src/main/java/expo/modules/camera/ExpoCameraView.kt
+@@ -105,7 +105,7 @@ class ExpoCameraView(
+   private val orientationEventListener by lazy {
+     object : OrientationEventListener(appContext.throwingActivity) {
+       override fun onOrientationChanged(orientation: Int) {
+-        if (orientation == ORIENTATION_UNKNOWN) {
++        if (orientation == ORIENTATION_UNKNOWN || !responsiveOrientationWhenOrientationLocked) {
+           return
+         }
+ 
+@@ -216,6 +216,28 @@ class ExpoCameraView(
+       shouldCreateCamera = true
+     }
+ 
++  // KWAZO's patch (patches/expo-camera@57.0.6.patch): the iPhone's own setting, which Android
++  // lacked. Off, a photo is the picture the screen shows while the app stands upright; on, it
++  // turns with the phone, as Android always did. Held flat over a plate, the tilt sensor cannot
++  // tell which way is up, and the photo came out on its side.
++  var responsiveOrientationWhenOrientationLocked: Boolean = false
++    set(value) {
++      field = value
++      keepScreenTurn()
++    }
++
++  // With the setting off, the screen's own turn, set again on every new camera and every photo:
++  // CameraX starts a new camera at its largest display's turn, which on a folding phone may not
++  // be the screen the app is on.
++  private fun keepScreenTurn() {
++    if (responsiveOrientationWhenOrientationLocked) {
++      return
++    }
++    val upright = previewView.display?.rotation ?: Surface.ROTATION_0
++    imageAnalysisUseCase?.targetRotation = upright
++    imageCaptureUseCase?.targetRotation = upright
++  }
++
+   var mute: Boolean = false
+   var animateShutter: Boolean = true
+   var enableTorch: Boolean by Delegates.observable(false) { _, _, newValue ->
+@@ -279,6 +301,7 @@ class ExpoCameraView(
+   }
+ 
+   fun takePicture(options: PictureOptions, promise: Promise, cacheDirectory: File, runtimeContext: RuntimeContext) {
++    keepScreenTurn()
+     val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+     val volume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
+     val hasShutterSound = options.shutterSound
+@@ -515,6 +538,7 @@ class ExpoCameraView(
+ 
+     val videoCapture = createVideoCapture()
+     imageAnalysisUseCase = createImageAnalyzer()
++    keepScreenTurn()
+ 
+     val useCases = UseCaseGroup.Builder().apply {
+       addUseCase(preview)
