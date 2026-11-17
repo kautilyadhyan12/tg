@@ -56,7 +56,10 @@ becoming a worklet-compat question. Moving the engine into the worklet
 profiling ever shows bridge pressure — not the default.** The engine's
 purity (Part 2 invariants) is what makes this a config choice instead of a
 rewrite.
-2. **Pose-provider candidate order ratified** (§3.2):
+2. **AMENDED 2026-11-17 (Stage 5 item 51a, `rulings/2026-11-17-51a.md`):** Google's MediaPipe
+Tasks for Android is called from the app's own Android code, with no wrapper package between;
+what it measured on Kd's phone is in Part 2 §12.5, "As built, the phone test".
+**Pose-provider candidate order ratified** (§3.2):
 `react-native-mediapipe` (MediaPipe Tasks wrapper — full 33-landmark
 parity with web) first, `react-native-fast-tflite` second, own native
 module last. The 17-keypoint MoveNet path is **rejected up front**: it
