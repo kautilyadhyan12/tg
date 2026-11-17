@@ -1511,6 +1511,26 @@ enough: **each exercise fixes where the phone stands, so that its movement runs 
 picture** (§11.8 step 4's reference picture), and job 50c measures every body measure both
 ways on real videos and keeps the steadier.
 
+**As built, stages 2 and 3 (50c-ii, 2026-11-17).** `PossibleBody` (`packages/movement/src/body`)
+takes one person a frame and says, for each of the 33 points, used or refused and why: nobody
+found, no 3D points, hidden (the model gives it less than an even chance of being seen), off the
+picture, settling (the body's first half second, or a bone not yet known), a broken bone, a jump,
+a swap. Every check compares the body with itself: a point's bone towards the trunk (shoulder to
+elbow to wrist to fingers, hip to knee to ankle to foot, nose to face) keeps its own length of
+the last 3 s within 0.25 of the same body's trunk, so a wrong elbow takes its forearm and hand
+with it and a wrong wrist never takes the elbow; the trunk's corners and a point whose parent is
+hidden are checked by their other bones. The allowance is a share of the trunk, not of the bone:
+on Kd's videos the model's error does not grow with a bone's length. A point faster than 20 m/s
+across the picture has jumped (a kick's foot, the fastest part of a person, is measured at 12 to
+18 m/s); left and right have swapped when each side lies where the other was; either is used
+again only after it stays at its new place for 0.2 s. `SteadyPoints` is the one-euro filter on
+the used points, on the frames' times: on a joint at rest it takes out half to nine tenths of the
+shake, and it trails a hand moving at 1 m/s by 2.3 cm at most. `body-check` sets the fitted
+numbers from Kd's six videos, each from five people and tried on the sixth, and draws every
+refused frame. What it cannot catch: a slow wrong pose the model is sure of (the squat video's
+lifted ankle at 2.8 to 3.8 s passes in all 30 frames; job 52a's two signs); at 8 frames a second
+only a move of more than 2.5 m is a jump; the follower used until job 52d may follow a reflection.
+
 ### 12.3 A movement, and an exercise on top of it
 
 Many exercises are one movement with other equipment (a squat with a barbell, with a

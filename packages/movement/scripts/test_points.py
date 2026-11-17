@@ -153,6 +153,24 @@ class Pictures(unittest.TestCase):
         with open(os.path.join(self.out, pt.MARKER), encoding="utf-8") as f:
             self.assertEqual(len(json.load(f)["pictures"]), 4)
 
+    def test_body_check_draws_its_refused_points_red_with_its_own_lines(self):
+        img = np.full((800, 450, 3), 90, np.uint8)
+        body = self.look["frames"][0]["people"][0]["points"]
+        refused = [None] * 33
+        refused[15] = "jump"
+        refused[3] = "hidden"
+        red = np.all(pt.draw_frame(img.copy(), [{"points": body, "refused": refused}], ["0.03 s"]) == pt.REFUSED, axis=2)
+        plain = np.all(pt.draw_frame(img.copy(), [{"points": body}], ["0.03 s"]) == pt.REFUSED, axis=2)
+        self.assertGreater(int(red.sum()), 0)
+        self.assertEqual(int(plain.sum()), 0)
+        self.write(pt.MARKER, json.dumps({"source": "s", "pictures": []}))
+        self.look["frames"][0].update({"why": "jump", "lines": ["0.00 s  frame 1", "jump: left wrist"],
+                                       "people": [{"points": body, "refused": refused}]})
+        self.write("look.json", json.dumps(self.look))
+        r = self.draw()
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("01_jump.jpg", os.listdir(self.out))
+
     def test_a_folder_the_tool_did_not_make_is_refused(self):
         self.assertNotEqual(self.draw().returncode, 0)
         self.assertNotIn("all.jpg", os.listdir(self.out))
