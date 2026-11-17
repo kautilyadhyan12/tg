@@ -35,6 +35,8 @@ const MEASURE_POINTS = join(import.meta.dirname, "measure-points.ts");
 const MOBILE = join(REPO, "apps", "mobile");
 const HERE = join(REPO, "measured", "phone-test");
 const ON_PHONE = "files/phone-test";
+/** Where adb puts a file on its way into the app's own files: the shell's folder, which no app can read. */
+const STAGING = "/data/local/tmp/kwazo-phone-test";
 const ACTIVITY = "expo.modules.phonetest.PhoneTestActivity";
 /** The phone is given this long without a word before the laptop stops waiting. */
 const STILL_FOR_MS = 10 * 60 * 1000;
@@ -198,9 +200,10 @@ if (!values["compare-only"]) {
 }
 
 // ── 3. The phone ─────────────────────────────────────────────────────────────────
-function adb(args: string[], input?: Uint8Array): { ok: boolean; out: Buffer; text: string } {
-  const r = spawnSync("adb", args, { ...(input === undefined ? {} : { input }), maxBuffer: 1 << 30 });
-  if (r.error) fail(`adb did not start: ${r.error.message}`);
+/** One adb command. It throws, never exits, so the test's own clean-up always runs. */
+function adb(args: string[]): { ok: boolean; out: Buffer; text: string } {
+  const r = spawnSync("adb", args, { maxBuffer: 1 << 30 });
+  if (r.error) throw new Error(`adb did not run: ${r.error.message}`);
   const out = r.stdout;
   return { ok: r.status === 0, out, text: `${out.toString("utf8")}${r.stderr.toString("utf8")}`.trim() };
 }
@@ -251,7 +254,7 @@ async function onThePhone(): Promise<void> {
   if (!adb(["shell", "pm", "list", "packages", id]).text.split(/\s+/).includes(`package:${id}`)) {
     fail(`This folder's copy (${id}) is not on the phone. Run: corepack pnpm --filter mobile phone`);
   }
-  const inApp = (command: string, input?: Uint8Array) => adb(["shell", "-T", `run-as ${id} ${command}`], input);
+  const inApp = (command: string) => adb(["shell", `run-as ${id} ${command}`]);
   if (!inApp("true").ok) fail(`The phone will not let the laptop into ${id}: it must be a folder's copy, built for testing.`);
 
   const videos: PlanVideo[] = labels.map((label) => {
@@ -270,18 +273,27 @@ async function onThePhone(): Promise<void> {
   try {
     inApp(`rm -rf ${ON_PHONE}`);
     if (!inApp(`mkdir -p ${ON_PHONE}/videos ${ON_PHONE}/models`).ok) throw new Error("The phone would not make the test's folder.");
-    const send = (path: string, bytes: Uint8Array, what: string): void => {
-      if (!inApp(`sh -c 'cat > ${path}'`, bytes).ok) throw new Error(`${what} did not reach the phone.`);
+    // Into the shell's own folder first, then copied into the app's by the app's own user: Windows' adb changes the
+    // bytes of a file piped through the phone's shell (measured 2026-11-17: a 495 KB video came out another file).
+    const send = (local: string, path: string, what: string): void => {
+      const name = basename(path);
+      if (!adb(["push", local, `${STAGING}/${name}`]).ok) throw new Error(`${what} did not reach the phone.`);
+      if (!inApp(`cp ${STAGING}/${name} ${path}`).ok) throw new Error(`${what} could not go into the app's own files.`);
+      adb(["shell", `rm -f ${STAGING}/${name}`]);
+      const sum = inApp(`sha256sum ${path}`).text.split(/\s+/)[0];
+      if (sum !== sha256(new Uint8Array(readFileSync(local)))) throw new Error(`${what} did not arrive whole.`);
     };
+    adb(["shell", `rm -rf ${STAGING}`]);
+    if (!adb(["shell", `mkdir -p ${STAGING}`]).ok) throw new Error("The phone would not make the laptop's folder.");
     for (const v of videos) {
       console.log(`Sending ${v.label} to the phone.`);
-      send(`${ON_PHONE}/videos/${v.label}.mp4`, new Uint8Array(readFileSync(copies.get(v.label) ?? "")), `The video ${v.label}`);
+      send(copies.get(v.label) ?? "", `${ON_PHONE}/videos/${v.label}.mp4`, `The video ${v.label}`);
     }
     for (const m of models) {
       console.log(`Sending the ${m.size} model to the phone.`);
-      send(`${ON_PHONE}/models/${m.name}.task`, new Uint8Array(readFileSync(modelPaths.get(m.name) ?? "")), `The ${m.size} model`);
+      send(modelPaths.get(m.name) ?? "", `${ON_PHONE}/models/${m.name}.task`, `The ${m.size} model`);
     }
-    send(`${ON_PHONE}/plan.json`, new TextEncoder().encode(plan), "The plan");
+    send(join(HERE, "plan.json"), `${ON_PHONE}/plan.json`, "The plan");
 
     const opened = adb(["shell", "am", "start", "-W", "-n", `${id}/${ACTIVITY}`]);
     if (!opened.ok || /Error|Exception/i.test(opened.text)) throw new Error(`The phone test did not open on the phone:\n${opened.text}`);
@@ -299,9 +311,10 @@ async function onThePhone(): Promise<void> {
     console.log(`Took ${String(names.length)} files back from the phone.`);
   } finally {
     inApp(`rm -rf ${ON_PHONE}`);
+    adb(["shell", `rm -rf ${STAGING}`]);
     adb(["shell", "am", "force-stop", id]);
-    const left = inApp("ls files").text.split(/\s+/);
-    console.log(left.includes("phone-test") ? "THE TEST'S FILES ARE STILL ON THE PHONE." : "The phone holds none of the test's files now.");
+    const left = inApp("ls files").text.split(/\s+/).includes("phone-test") || adb(["shell", `ls -d ${STAGING}`]).ok;
+    console.log(left ? "THE TEST'S FILES ARE STILL ON THE PHONE." : "The phone holds none of the test's files now.");
   }
 }
 
