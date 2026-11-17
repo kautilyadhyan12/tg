@@ -3,9 +3,22 @@
 // reading is the steadier; the squat agrees with Kd's own measuring of it; the same video at half
 // the frames a second gets the same answers.
 import { describe, expect, it } from "vitest";
-import { MEASURE_LIST, type MeasureName } from "../src/index.js";
+import { MEASURE_LIMITS, MEASURE_LIST, type MeasureName } from "../src/index.js";
 import { halfRate, runChecks, runSteady, type Video } from "../scripts/bodyCheck.js";
-import { agreementOf, framesToDraw, kindOf, runMeasures, runOf, steadierOf, summaryOf } from "../scripts/measureCheck.js";
+import {
+  agreementOf,
+  chooseAngleLimit,
+  chooseLengthLimit,
+  chooseSizeChange,
+  framesToDraw,
+  kindOf,
+  leaveOneOut,
+  runMeasures,
+  runOf,
+  sizeSwings,
+  steadierOf,
+  summaryOf,
+} from "../scripts/measureCheck.js";
 import { VIDEOS } from "./helpers/body.js";
 
 function video(label: string): Video {
@@ -35,6 +48,27 @@ describe("the worst thing: the lying man's trunk, seen from the head end of the 
   });
 });
 
+describe("the engine's three fitted numbers are the ones their rules set from Kd's videos", () => {
+  it("the angle limit, the length limit and the size change", () => {
+    expect(chooseAngleLimit(VIDEOS)).toBe(MEASURE_LIMITS.angle);
+    expect(chooseLengthLimit(VIDEOS)).toBe(MEASURE_LIMITS.length);
+    expect(chooseSizeChange(VIDEOS)).toBe(MEASURE_LIMITS.sizeChange);
+  });
+
+  it("the angle limit set from three people: on the fourth, at least 90 in 100 of its flat angles given", () => {
+    const folds = leaveOneOut(VIDEOS);
+    expect(folds.length).toBe(4);
+    // Measured: three folds set 25°, without the squat 20°; given 90 to 100 in 100 (the chair
+    // squat's 90: her folded arms, which point at the camera).
+    expect(folds.filter((f) => f.angle === MEASURE_LIMITS.angle).length).toBeGreaterThanOrEqual(3);
+    for (const f of folds) expect([f.heldOut, f.kept >= 0.9]).toEqual([f.heldOut, true]);
+  });
+
+  it("no one-person video changes its size on the picture by the size change while the person stays in place", () => {
+    for (const s of sizeSwings(VIDEOS)) expect([s.label, s.swing < MEASURE_LIMITS.sizeChange]).toEqual([s.label, true]);
+  });
+});
+
 describe("side on, the near side is read on the flat picture, and flat is the steadier", () => {
   const cases: readonly { label: string; near: readonly MeasureName[] }[] = [
     { label: "squat_reference", near: ["left knee", "left hip", "left thigh lean", "left shin lean", "trunk lean", "hips height", "left ankle height"] },
@@ -52,6 +86,22 @@ describe("side on, the near side is read on the flat picture, and flat is the st
       for (const name of near.slice(0, 2)) expect([name, steadierOf(summaryOf(measured, name, unitOf(name)))]).toEqual([name, "flat"]);
     });
   }
+});
+
+describe("what the side view cannot see is not read on the flat picture", () => {
+  it("the squat's feet apart, across her body: never given flat, though the picture shows half of it at the bottom", () => {
+    const s = summaryOf(runOf(video("squat_reference")).measured, "feet apart", "trunks");
+    // Measured: read in 3D in 73 frames; at the bottom the picture shows 0.51 of the line between
+    // the feet and reads them 0.49 of a trunk apart, against 0.76 in 3D.
+    expect(s.world).toBeGreaterThan(50);
+    expect(s.flat).toBe(0);
+  });
+
+  it("the chair squat's folded arm, pointing at the camera: its elbow refused in half the frames", () => {
+    const s = summaryOf(runOf(video("chair_squat_reference")).measured, "right elbow", "degrees");
+    // Measured: given flat in 100 of 209 frames (flat 22° against 49° in 3D before this rule).
+    expect(s.flat / s.world).toBeLessThan(0.6);
+  });
 });
 
 describe("the squat against Kd's own measuring of it", () => {

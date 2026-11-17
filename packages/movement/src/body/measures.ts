@@ -15,12 +15,17 @@
 // any part it measures shows on the picture (its length on the picture against its length in 3D,
 // which the model gives well even where it places the part wrongly in depth), parts laid end to
 // end included (the trunk's two sides can each show well and together point at the camera); for
-// a lean or a height, the share of "down" the picture shows; for a height, the body's line from
-// its foot to its hips too. A part lying across the picture shows about all of it; one pointing
-// at the camera, little. Below half, the flat reading is not given: the picture's own shake could
-// turn the part any way. How much more a movement needs is the movement's own number (job 52a),
-// since a flat reading measures only what lies across the picture: from the side, a knee's bend
-// forward and back, never its sway towards the camera. Nothing here names an exercise.
+// a lean or a height, the share of "down" the picture shows; for a height, the body's lines from
+// its foot to its hips and on to the points; for a width, the line between the two points and the
+// body's own line across. A part lying across the picture shows about all of it; one pointing at
+// the camera, little. Below half, the flat reading is not given: the picture's own shake could
+// turn the part any way. Above half, a share cannot tell a part lying across from one turned a
+// little (two parts each shown 0.94 of themselves can bend 40° towards the camera and look
+// straight), so each reading also says the most the flattening may have moved it (`off`): the
+// smaller of what the showing allows (`turn`) and how far it lies from the 3D reading. A flat
+// reading whose `off` is over the limit is not given: either the 3D reading is wrong by more than
+// it ever is where the parts lie across, or the flat one is. How sure a movement needs a reading
+// is its own number (job 52a). Nothing here names an exercise.
 //
 // The conventions, every angle in degrees:
 //   - a joint: the angle between its two parts, 180 straight (elbow: shoulder-elbow-wrist;
@@ -47,6 +52,15 @@ export interface MeasureLimits {
   /** A flat reading is not given when a part it measures, or "down", shows on the picture at
    *  less than this share of its own length. */
   readonly shown: number;
+  /** A flat angle is not given when the flattening may have moved it more than this, degrees
+   *  (`Reading.off`). */
+  readonly angle: number;
+  /** A flat height or width is not given when the flattening may have moved it more than this,
+   *  in its own unit (legs or trunks). */
+  readonly length: number;
+  /** The floor is set afresh when the body's size on the picture has changed by more than this
+   *  share since it was set: the body moved nearer the phone or further from it. */
+  readonly sizeChange: number;
   /** How long the body's own lengths are remembered, ms. */
   readonly lengthMemory: number;
   /** The floor moves up only once both feet have been seen above it this long, ms. */
@@ -58,12 +72,19 @@ export interface MeasureLimits {
 /**
  * Where each number comes from. `shown`: a part shown at half its length turns twice as far on
  * the picture for the same shake as one lying across it, and further without limit as it points
- * at the camera. The memories: lengths over 3 s, as the possible-body check remembers bones; the
+ * at the camera. `angle`, `length` and `sizeChange`: set by `measure-check` from Kd's one-person
+ * videos (`scripts/measureCheck.ts` says the rules): where the picture shows the parts and lines
+ * lying across it, the flat and 3D readings differ by up to these in 95 frames of 100 (the 3D
+ * points' own error; side on, the squat's arms 25° and its hip about 9°); the body's size on the
+ * picture changes by up to about a tenth while a person stays in place. The memories: lengths over 3 s, as the possible-body check remembers bones; the
  * floor rises only after a second, longer than a body stays in the air in a jump of 1.1 m
  * (2·√(2·1.1/9.81) = 0.95 s); a floor with no foot seen for 3 s is forgotten.
  */
 export const MEASURE_LIMITS: MeasureLimits = {
   shown: 0.5,
+  angle: 25,
+  length: 0.15,
+  sizeChange: 0.15,
   lengthMemory: 3000,
   floorRise: 1000,
   floorMemory: 3000,
@@ -78,6 +99,14 @@ export interface Reading {
   /** How much of it the flat picture shows, about 1 when it lies across the picture (a little
    *  more when the picture and the 3D points differ on a length); null when it cannot be told. */
   readonly shown: number | null;
+  /** In its own unit: the most the picture's showing allows the flattening to have moved the flat
+   *  reading. For an angle, each part's turn out of the picture, and "down"'s, added up; for a
+   *  height or a width, as much as it would be short by if it were shown at `shown` (against the
+   *  body's typical share). Null when it cannot be told. */
+  readonly turn: number | null;
+  /** In its own unit: the most the flattening may have moved the flat reading, the smaller of
+   *  `turn` and how far it lies from the 3D reading. Null when it cannot be told. */
+  readonly off: number | null;
 }
 
 // ── Geometry ───────────────────────────────────────────────────────────────────────────
@@ -100,6 +129,8 @@ function between(u: Vec, v: Vec): number | null {
 /** The points a body stands on, and its hips. */
 const FOOT_POINTS: readonly number[] = [KP.left_heel, KP.left_foot_index, KP.right_heel, KP.right_foot_index];
 const HIPS: readonly number[] = [KP.left_hip, KP.right_hip];
+/** A line shorter than this share of the trunk has no direction worth judging. */
+const LINE_LEAST = 0.1;
 
 /** A part of the body by its two ends, the same key whichever end comes first. */
 const partKey = (a: number, b: number): number => Math.min(a, b) * 64 + Math.max(a, b);
@@ -109,9 +140,13 @@ const partKey = (a: number, b: number): number => Math.min(a, b) * 64 + Math.max
 // the 3D points, in metres, placed where the picture has the body so its floor stays put.
 
 class Space {
-  /** The least share of its own length that a part read since this was last set to 1 shows on
-   *  the picture; only the flat picture keeps it. */
+  /** The least share of its own length that a part or line read since `reset` shows on the
+   *  picture; only the flat picture keeps it. */
   shown = 1;
+  /** The most, in degrees, that the parts and "down" read since `reset` may each be turned out
+   *  of the picture, added up: by the triangle rule on a sphere, the most that flattening can
+   *  move an angle between them. Only the flat picture keeps it. */
+  tilt = 0;
 
   constructor(
     private readonly points: readonly (Vec | null)[],
@@ -123,14 +158,21 @@ class Space {
     /** The body's own lengths, metres. */
     readonly leg: number | null,
     readonly trunk: number | null,
-    /** For the flat picture: each part's own length in 3D, metres; this frame's 3D points; and
-     *  how much of "down" the picture shows. */
+    /** For the flat picture: each part's own length in 3D, metres; this frame's 3D points; how
+     *  much of "down" the picture shows; and the share the picture shows of the body's parts in
+     *  the middle this frame (the picture's and the 3D points' small difference of scale). */
     private readonly truth: {
       readonly length: (key: number) => number | null;
       readonly world: readonly (Vec | null)[];
       readonly downShown: number;
+      readonly typical: number;
     } | null = null,
   ) {}
+
+  reset(): void {
+    this.shown = 1;
+    this.tilt = 0;
+  }
 
   point(i: number): Vec | null {
     return this.points[i] ?? null;
@@ -138,18 +180,54 @@ class Space {
 
   /** From one used point to another: a part whose direction is measured. */
   part(from: number, to: number): Vec | null {
-    const a = this.point(from);
-    const b = this.point(to);
-    if (a === null || b === null) return null;
-    const v = minus(b, a);
-    if (this.truth !== null) {
-      // A bone's own length, steadier than one frame's; any other line's, this frame's.
-      const ta = this.truth.world[from] ?? null;
-      const tb = this.truth.world[to] ?? null;
-      const whole = this.truth.length(partKey(from, to)) ?? (ta === null || tb === null ? null : size(minus(tb, ta)));
-      this.see(whole === null || !(whole > 0) ? 0 : size(v) / this.perMetre / whole);
-    }
+    const v = this.vector(from, to);
+    if (v !== null) this.noteLine(from, to, v, true);
     return v;
+  }
+
+  /** The parts from each `from` to its `to` that are used, laid end to end. What the picture
+   *  shows of the whole is noted too, since two parts it shows well can together point at the
+   *  camera; the whole's turn out of the picture is what moves its direction. Null when none is
+   *  used. */
+  sum(pairs: readonly (readonly [number, number])[]): Vec | null {
+    let total: Vec = [0, 0, 0];
+    let whole: Vec = [0, 0, 0];
+    const used: (readonly [number, number, Vec])[] = [];
+    for (const [from, to] of pairs) {
+      const v = this.vector(from, to);
+      if (v === null) continue;
+      total = [total[0] + v[0], total[1] + v[1], total[2] + v[2]];
+      const a = this.truth?.world[from] ?? null;
+      const b = this.truth?.world[to] ?? null;
+      if (a !== null && b !== null) whole = [whole[0] + b[0] - a[0], whole[1] + b[1] - a[1], whole[2] + b[2] - a[2]];
+      used.push([from, to, v]);
+    }
+    const [one] = used;
+    if (one === undefined) return null;
+    if (used.length === 1) {
+      this.noteLine(one[0], one[1], one[2], true);
+    } else {
+      for (const [from, to, v] of used) this.noteLine(from, to, v, false);
+      if (this.truth !== null) this.note(size(whole) > 0 ? size(total) / this.perMetre / size(whole) : 0, true);
+    }
+    return total;
+  }
+
+  /** Notes how much of the body's own line from `from` to `to` the picture shows, nothing when
+   *  it cannot be seen. A line's direction is not measured, so its turn is not added. */
+  facing(from: number, to: number): void {
+    if (this.truth === null) return;
+    const v = this.vector(from, to);
+    if (v === null) this.note(0, false);
+    else this.noteLine(from, to, v, false);
+  }
+
+  /** Whether the 3D points put `a` and `b` at least `least` metres apart this frame; only the
+   *  flat picture can say. */
+  apartIn3D(a: number, b: number, least: number): boolean {
+    const p = this.truth?.world[a] ?? null;
+    const q = this.truth?.world[b] ?? null;
+    return p !== null && q !== null && size(minus(p, q)) >= least;
   }
 
   /** The lowest used heel or toes in this frame, along "down"; null when no foot is seen. */
@@ -168,40 +246,37 @@ class Space {
     return lowest;
   }
 
-  /** The parts from each `from` to its `to` that are used, laid end to end: what the picture
-   *  shows of the whole is noted too, since two parts it shows well can together point at the
-   *  camera. Null when none is used. */
-  sum(pairs: readonly (readonly [number, number])[]): Vec | null {
-    let total: Vec = [0, 0, 0];
-    let whole: Vec = [0, 0, 0];
-    let used = 0;
-    for (const [from, to] of pairs) {
-      const v = this.part(from, to);
-      if (v === null) continue;
-      total = [total[0] + v[0], total[1] + v[1], total[2] + v[2]];
-      const a = this.truth?.world[from] ?? null;
-      const b = this.truth?.world[to] ?? null;
-      if (a !== null && b !== null) whole = [whole[0] + b[0] - a[0], whole[1] + b[1] - a[1], whole[2] + b[2] - a[2]];
-      used++;
-    }
-    if (used === 0) return null;
-    if (this.truth !== null && used > 1) this.see(size(whole) > 0 ? size(total) / this.perMetre / size(whole) : 0);
-    return total;
-  }
-
-  /** Notes how much of the body's own line from `from` to `to` the picture shows, nothing when
-   *  it cannot be seen. */
-  facing(from: number, to: number): void {
-    if (this.truth !== null && this.part(from, to) === null) this.see(0);
-  }
-
   down(): Vec | null {
-    if (this.truth !== null) this.see(this.truth.downShown);
+    if (this.truth !== null) {
+      // "down" comes from the phone's own sensor, not from a length: its turn is exact.
+      this.shown = Math.min(this.shown, this.truth.downShown);
+      this.tilt += Math.acos(Math.min(1, Math.max(0, this.truth.downShown))) * DEG;
+    }
     return this.downward;
   }
 
-  private see(share: number): void {
+  private vector(from: number, to: number): Vec | null {
+    const a = this.point(from);
+    const b = this.point(to);
+    return a === null || b === null ? null : minus(b, a);
+  }
+
+  /** A bone's own length is steadier than one frame's; any other line's is this frame's. */
+  private noteLine(from: number, to: number, v: Vec, turn: boolean): void {
+    if (this.truth === null) return;
+    const ta = this.truth.world[from] ?? null;
+    const tb = this.truth.world[to] ?? null;
+    const whole = this.truth.length(partKey(from, to)) ?? (ta === null || tb === null ? null : size(minus(tb, ta)));
+    this.note(whole === null || !(whole > 0) ? 0 : size(v) / this.perMetre / whole, turn);
+  }
+
+  /** Notes a share the picture shows; with `turn`, also how far the part may be turned out of
+   *  the picture: its share against the body's typical share this frame. */
+  private note(share: number, turn: boolean): void {
     this.shown = Math.min(this.shown, share);
+    if (turn && this.truth !== null && this.truth.typical > 0) {
+      this.tilt += Math.acos(Math.min(1, Math.max(0, share / this.truth.typical))) * DEG;
+    }
   }
 }
 
@@ -279,9 +354,10 @@ const trunkLean: Of = (s) => {
 };
 
 /** How high the middle of the used `points` is above the floor, in legs. Read only while a foot
- *  is in view, and on the flat picture only as much as the picture shows the body's own line from
- *  that foot to its hips: a foot far behind the hips, as from the head end of a bench, is not at
- *  the hips' distance from the phone, so the picture's one size does not hold between them. */
+ *  is in view, and on the flat picture only as much as the picture shows the body's own lines
+ *  from that foot to its hips and from its hips to the points: a foot far behind the hips, as
+ *  from the head end of a bench, or a hand reaching to the phone, is not at the hips' distance
+ *  from the phone, so the picture's one size does not hold between them. */
 const height =
   (points: readonly number[]): Of =>
   (s) => {
@@ -290,7 +366,10 @@ const height =
     if (d === null || foot === null || s.floor === null || s.leg === null) return null;
     const hips = HIPS.filter((h) => s.point(h) !== null);
     if (hips.length === 0) s.facing(foot, KP.left_hip);
-    for (const h of hips) s.part(foot, h);
+    for (const h of hips) {
+      s.facing(foot, h);
+      for (const i of points) if (!HIPS.includes(i) && s.point(i) !== null) s.facing(h, i);
+    }
     const along = points.flatMap((i) => {
       const p = s.point(i);
       return p === null ? [] : [dot(p, d)];
@@ -300,7 +379,12 @@ const height =
     return (s.floor - middle) / s.perMetre / s.leg;
   };
 
-/** How far apart two points are, in trunks, as much as the body's line `across` shows. */
+/** How far apart two points are, in trunks. On the flat picture only as much as the picture
+ *  shows the body's own line from left to right `across`, the line between the two points (once
+ *  the 3D points put them more than a tenth of a trunk apart, about 5 cm, five times a joint's
+ *  shake: nearer, its direction is the shake's), and the lines from the hips to them (a foot far
+ *  nearer the phone than the hips is not at their distance, so the picture's one size does not
+ *  hold). */
 const apart =
   (a: number, b: number, across: readonly [number, number]): Of =>
   (s) => {
@@ -308,6 +392,12 @@ const apart =
     const q = s.point(b);
     if (p === null || q === null || s.trunk === null) return null;
     s.facing(across[0], across[1]);
+    if (s.apartIn3D(a, b, LINE_LEAST * s.trunk)) s.facing(a, b);
+    for (const h of HIPS) {
+      if (s.point(h) === null) continue;
+      s.facing(h, a);
+      s.facing(h, b);
+    }
     return size(minus(p, q)) / s.perMetre / s.trunk;
   };
 
@@ -410,19 +500,25 @@ const FEET: readonly (readonly number[])[] = [
  *  stands on it. */
 class Floor {
   private level: number | null = null;
+  /** The body's size on the picture when the floor was last set. */
+  private size: number | null = null;
   private footSeen: number | null = null;
   private aboveSince: number | null = null;
   private aboveLevel = Number.NEGATIVE_INFINITY;
 
   reset(): void {
     this.level = null;
+    this.size = null;
     this.footSeen = null;
     this.aboveSince = null;
   }
 
-  /** `feet`: for each foot, its lowest used point along "down", or null when not seen. */
-  next(t: number, feet: readonly (number | null)[], limits: MeasureLimits): number | null {
+  /** `feet`: for each foot, its lowest used point along "down", or null when not seen; `size`:
+   *  the body's size on the picture now. A body that moved nearer the phone or further from it
+   *  stands on another line of the picture: the floor is set afresh from the feet seen. */
+  next(t: number, feet: readonly (number | null)[], size: number, limits: MeasureLimits): number | null {
     if (this.footSeen !== null && t - this.footSeen > limits.floorMemory) this.reset();
+    if (this.size !== null && Math.abs(size / this.size - 1) > limits.sizeChange) this.reset();
     const seen = feet.filter((f): f is number => f !== null);
     if (seen.length === 0) {
       this.aboveSince = null;
@@ -431,8 +527,7 @@ class Floor {
     this.footSeen = t;
     const lowest = Math.max(...seen);
     if (this.level === null || lowest >= this.level) {
-      this.level = lowest;
-      this.aboveSince = null;
+      this.set(lowest, size);
     } else if (seen.length < FEET.length) {
       this.aboveSince = null;
     } else if (this.aboveSince === null) {
@@ -440,12 +535,15 @@ class Floor {
       this.aboveLevel = lowest;
     } else {
       this.aboveLevel = Math.max(this.aboveLevel, lowest);
-      if (t - this.aboveSince >= limits.floorRise) {
-        this.level = this.aboveLevel;
-        this.aboveSince = null;
-      }
+      if (t - this.aboveSince >= limits.floorRise) this.set(this.aboveLevel, size);
     }
     return this.level;
+  }
+
+  private set(level: number, size: number): void {
+    this.level = level;
+    this.size = size;
+    this.aboveSince = null;
   }
 }
 
@@ -519,12 +617,18 @@ export class BodyMeasures {
     const offset = flat === null || perMetre === null ? null : placement(flat, world, perMetre);
     const placed: (Vec | null)[] = offset === null ? world : world.map((w) => (w === null ? null : [w[0] + offset[0], w[1] + offset[1], w[2]]));
 
+    const typical = flat === null || perMetre === null ? 1 : typicalShare(flat, perMetre, length);
     const flatSpace =
       flat === null || perMetre === null
         ? null
-        : new Space(flat, flatDown, this.flatFloor.next(t, lowestFeet(flat, flatDown), limits), perMetre, leg, trunk, { length, world, downShown });
+        : new Space(flat, flatDown, this.flatFloor.next(t, lowestFeet(flat, flatDown), perMetre, limits), perMetre, leg, trunk, {
+            length,
+            world,
+            downShown,
+            typical,
+          });
     // Without the body placed on the picture the 3D points have no floor: their heights wait.
-    const worldFloor = offset === null ? null : this.worldFloor.next(t, lowestFeet(placed, down), limits);
+    const worldFloor = offset === null || perMetre === null ? null : this.worldFloor.next(t, lowestFeet(placed, down), perMetre, limits);
     const worldSpace = new Space(placed, down, worldFloor, 1, leg, trunk);
 
     const readings = new Map<MeasureName, Reading>();
@@ -532,18 +636,44 @@ export class BodyMeasures {
       const inWorld = finite(m.of(worldSpace));
       let onPicture: number | null = null;
       let shown: number | null = null;
+      let turn: number | null = null;
+      let off: number | null = null;
       if (flatSpace !== null) {
-        flatSpace.shown = 1;
+        flatSpace.reset();
         const read = finite(m.of(flatSpace));
         if (read !== null) {
           shown = flatSpace.shown;
-          if (shown >= limits.shown) onPicture = read;
+          const angle = m.unit === "degrees";
+          turn = angle ? flatSpace.tilt : shortBy(read, shown / typical);
+          if (inWorld !== null) off = Math.min(turn, Math.abs(read - inWorld));
+          if (shown >= limits.shown && off !== null && off <= (angle ? limits.angle : limits.length)) onPicture = read;
         }
       }
-      readings.set(m.name, { flat: onPicture, world: inWorld, shown });
+      readings.set(m.name, { flat: onPicture, world: inWorld, shown, turn, off });
     }
     return { t, leg, trunk, readings };
   }
+}
+
+/** How much a length read at `share` of itself is short of the whole: nothing when shown whole. */
+function shortBy(read: number, share: number): number {
+  return share >= 1 ? 0 : share > 0 ? Math.abs(read) * (1 / share - 1) : Number.POSITIVE_INFINITY;
+}
+
+/** The share of its own length that the picture shows of the body's parts, in the middle this
+ *  frame: about 1, a little off where the picture's size and the 3D points' differ. A part's
+ *  share is judged against this, so that difference is not taken for a turn. 1 with fewer than
+ *  three parts seen. */
+function typicalShare(flat: readonly (Vec | null)[], perMetre: number, length: (key: number) => number | null): number {
+  const shares = PARTS.flatMap(([a, b]) => {
+    const p = flat[a] ?? null;
+    const q = flat[b] ?? null;
+    const whole = length(partKey(a, b));
+    return p === null || q === null || whole === null || !(whole > 0) ? [] : [size(minus(p, q)) / perMetre / whole];
+  }).sort((x, y) => x - y);
+  if (shares.length < 3) return 1;
+  const mid = shares.length >> 1;
+  return shares.length % 2 === 1 ? (shares[mid] ?? 1) : ((shares[mid - 1] ?? 1) + (shares[mid] ?? 1)) / 2;
 }
 
 function finite(v: number | null): number | null {

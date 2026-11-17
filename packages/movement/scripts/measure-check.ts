@@ -10,10 +10,22 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { MEASURE_LIST, type Unit } from "../src/index.js";
+import { MEASURE_LIMITS, MEASURE_LIST, type Unit } from "../src/index.js";
 import { decodeBodyPoints } from "./bodyPoints.js";
 import { halfRate, runChecks, runSteady, videoOf, type Video } from "./bodyCheck.js";
-import { agreementOf, framesToDraw, runMeasures, runOf, steadierOf, summariesOf } from "./measureCheck.js";
+import {
+  agreementOf,
+  chooseAngleLimit,
+  chooseLengthLimit,
+  chooseSizeChange,
+  framesToDraw,
+  leaveOneOut,
+  runMeasures,
+  runOf,
+  sizeSwings,
+  steadierOf,
+  summariesOf,
+} from "./measureCheck.js";
 import { KD_VIDEOS, prepareOutFolder } from "./outFolder.js";
 
 const REPO = resolve(import.meta.dirname, "../../..");
@@ -61,6 +73,20 @@ const videos: Video[] = loaded.map((l) => l.video);
 const pad = (s: string, n: number): string => s.padEnd(n);
 const pct = (n: number, of: number): string => (of === 0 ? "-" : `${((100 * n) / of).toFixed(0)}%`);
 const num = (v: number, unit: Unit): string => (Number.isFinite(v) ? v.toFixed(unit === "degrees" ? 2 : 3) : "-");
+
+// 0. The two fitted numbers.
+const angle = chooseAngleLimit(videos);
+const length = chooseLengthLimit(videos);
+const sizeChange = chooseSizeChange(videos);
+console.log(`Angle limit from the one-person videos: ${String(angle)}° (the engine holds ${String(MEASURE_LIMITS.angle)}°).`);
+for (const f of leaveOneOut(videos)) {
+  console.log(`   without ${pad(f.heldOut, 32)}${String(f.angle)}°; on it, ${pct(f.kept, 1)} of the flat angles the picture shows are given`);
+}
+console.log(`Length limit from the one-person videos: ${String(length)} of a leg or trunk (the engine holds ${String(MEASURE_LIMITS.length)}).`);
+console.log(`Size change that sets the floor afresh: ${String(sizeChange)} (the engine holds ${String(MEASURE_LIMITS.sizeChange)}).`);
+for (const s of sizeSwings(videos)) console.log(`   ${pad(s.label, 40)}its size changes by ${pct(s.swing, 1)} while the person stays in place`);
+if (angle !== MEASURE_LIMITS.angle || length !== MEASURE_LIMITS.length || sizeChange !== MEASURE_LIMITS.sizeChange) console.log("THE ENGINE'S NUMBERS ARE NOT THE ONES THESE VIDEOS SET.");
+console.log("");
 
 // 1. Each video, each measure.
 for (const v of videos) {

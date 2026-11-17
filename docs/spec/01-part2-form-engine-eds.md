@@ -1555,30 +1555,47 @@ read flat in every frame it is read in 3D, and the flat reading shakes less for 
 squat's knee 0.22° against 0.40° in 3D); side on, the 3D arms read 15° to 25° away from the flat
 picture where the arm lies across it (the squat's straight arms 25° more bent); from the head end
 of the bench, the lying man's trunk is refused flat in 319 of 321 frames (the two given read 110°
-and 111°, lying) and read lying in 3D in all 321. **How sure** is a share (`shown`): how much of
-each part it measures the flat picture shows, its length on the picture against its own length in
-3D (the model gives lengths well even where it puts a part wrongly in depth: judged by the 3D
-directions instead, the squat's elbow and hip were refused flat in every frame), parts laid end to
-end included, and for a lean or a height how much of "down" the picture shows. Below half, the
-flat reading is not given: the picture's own shake could turn the part any way. Half is a floor
-against shake, never a judgement: a flat reading is the picture's view of what lies across it, so
-**each movement names the share it needs, set from its own videos** (52a). From the feet of the
-bench the trunk shows 0.61 of itself and reads 14.5° flat (53° in 3D, the video's "down" taken as
-upright) where lying is 90°. **Heights** stand on a remembered floor, where the lowest heel or
-toes have been: it drops at once to a lower foot and rises only once both feet have been seen above
-it for a second, longer than a body stays up in a jump of 1.1 m (0.95 s), so one foot lifted while
-the other is hidden leaves the hips at standing height. A height is read only while a foot is in
-view, and flat only as much as the picture shows the line from that foot to the hips. Checked from
-outside the code: on the squat, every number of Kd's own `analyze_squat.py` (2026-09-28, measured
-its own way) is met within 3° (each rep's deepest knee within 0.6°, the hips' drop within 0.03 of
-a leg). The same videos at half the frames a second: 0 to 1 in 100 readings differ on the
-one-person videos, and 95 in 100 lie within 0.9° to 2.8°. About 110 microseconds a frame on the
-laptop (the phone's number is job 51's). What it cannot do yet: heights for a body lying with its
-feet in the air (the floor is the feet; job 52c's floor work); a floor first seen under a lifted
-foot while the other is hidden; from the head end of the bench, the hips' height is read flat in
-12 frames, one of them wrong (0.30 of a leg below the floor, the stand-in follower's or a wrong
-foot's; 52d), and in 3D mostly at 1.1 to 1.5 legs where a bench is about half; a reference video's "down" is taken as upright, so a camera looking down at a bench gives its
-3D leans no true "down" (the phone gives its own).
+and 111°, lying) and read lying in 3D in all 321. **How sure.** `shown` is how much of each part
+it measures the flat picture shows, its length on the picture against its own length in 3D (the
+model gives lengths well even where it puts a part wrongly in depth: judged by the 3D directions
+instead, the squat's elbow and hip were refused flat in every frame), parts laid end to end
+included, how much of "down" the picture shows for a lean or a height, the lines from the foot to
+the hips and on to the points for a height, and the line between the two points for a width.
+Below half, the flat reading is not given: the picture's own shake could turn the part any way.
+Above half a share cannot tell a part lying across the picture from one turned a little: two
+parts each shown 0.94 of themselves can bend 40° towards the camera and look straight (round
+one). So each reading also says the most the flattening may have moved it, `off`: the smaller of
+what the showing allows (`turn`: each part's turn out of the picture, from its share against the
+body's typical share that frame, added up; for a length, how short it would be at its share) and
+how far it lies from the 3D reading. A flat reading whose `off` is over the limit is not given:
+**25° for an angle, 0.15 of a leg or trunk for a height or width**, each the difference between
+the flat and 3D readings not passed in 95 frames of 100 where the picture shows the parts lying
+across it (the 3D points' own error, side on: the squat's arms 25°, its hip about 9°), set by
+`measure-check` from Kd's one-person videos (from three of them and tried on the fourth: three
+folds set 25°, one 20°; on the one left out 90 to 100 in 100 of its flat angles are given). A squat
+filmed from the front, whose knee bends towards the camera and looks straight, is refused once the
+bend passes 25° (a knee bent to 120° is never read straight); the chair squat's folded arm, which
+points at the camera, gives its elbow in 100 of 209 frames; the squat's feet apart, across her
+body, is never given flat. From the feet of the bench the trunk is given flat in 208 of 596 frames,
+83° in the middle where lying is 90° (59° in 3D, the video's "down" taken as upright). How sure a
+movement needs a reading is its own number, set from its own videos (52a). **Heights** stand on a
+remembered floor, where the lowest heel or toes have been: it drops at once to a lower foot and
+rises only once both feet have been seen above it for a second, longer than a body stays up in a
+jump of 1.1 m (0.95 s), so one foot lifted while the other is hidden leaves the hips at standing
+height; it is set afresh when the body's size on the picture changes by more than 0.15 (the person
+stepped nearer the phone or further; while a person stays in place it changes by 4 to 11 in 100 on
+Kd's videos). A height is read only while a foot is in view. Checked from outside the code: on the
+squat, every number of Kd's own `analyze_squat.py` (2026-09-28, measured its own way) is met within
+3° (each rep's deepest knee within 0.6°, the hips' drop within 0.03 of a leg). The same videos at
+half the frames a second: 0 to 1 in 100 readings differ on the one-person videos, and 95 in 100 lie
+within 0.9° to 2.7°. About 130 microseconds a frame on the laptop (the phone's number is job 51's).
+What it cannot do yet: heights for a body lying with its feet in the air (the floor is the feet;
+job 52c's floor work); a floor first seen, or set afresh, under a lifted foot while the other is
+hidden; from the head end of the bench, where the legs are seen in 6 frames of 100 and the
+stand-in follower changes bodies (his size on the picture jumps up to threefold within 3 s), the
+hips' height is read flat in 11 frames, 5 of them below the floor, with the 3D reading agreeing:
+the leg points themselves are wrong (52d); a reference video's "down" is taken as upright, so a
+camera looking down at a bench gives its 3D leans no true "down" (the phone gives its own).
 
 ### 12.3 A movement, and an exercise on top of it
 

@@ -3,7 +3,7 @@
 // changed in one way only (the phone tilted, the picture's shape, nearer, smaller, a foot lifted).
 import { describe, expect, it } from "vitest";
 import { KP, type Down } from "@app/shared";
-import { BodyMeasures, MEASURE_LIST, type MeasureName, type MeasuredBody, type SteadyBody } from "../src/index.js";
+import { BodyMeasures, MEASURE_LIMITS, MEASURE_LIST, type MeasureName, type MeasuredBody, type Reading, type SteadyBody } from "../src/index.js";
 
 type P = [number, number, number];
 
@@ -64,6 +64,42 @@ function lyingHeadToCamera(): P[] {
   return body;
 }
 
+/** Facing the phone, standing tall, arms hanging; each thigh turned `thigh`° towards the phone and
+ *  each shin `shin`° away from it, so the knee bends in a plane that points at the camera (a
+ *  squat filmed from the front). With `split` metres, the left leg reaches that far forward and
+ *  the right that far back, both straight (a split stance filmed from the front). */
+function facing(thigh = 0, shin = thigh, split = 0): P[] {
+  const body: P[] = Array.from({ length: 33 }, (): P => [0, -0.65, -0.08]);
+  const rad = (d: number): number => (d * Math.PI) / 180;
+  const both = (left: number, right: number, x: number, y: number, z: number): void => {
+    body[left] = [x, y, z];
+    body[right] = [-x, y, z];
+  };
+  both(KP.left_shoulder, KP.right_shoulder, 0.18, -0.5, 0);
+  both(KP.left_elbow, KP.right_elbow, 0.2, -0.22, 0);
+  both(KP.left_wrist, KP.right_wrist, 0.21, 0.04, 0);
+  both(KP.left_pinky, KP.right_pinky, 0.22, 0.1, 0.01);
+  both(KP.left_index, KP.right_index, 0.21, 0.11, -0.01);
+  both(KP.left_thumb, KP.right_thumb, 0.19, 0.08, -0.02);
+  both(KP.left_hip, KP.right_hip, 0.1, 0, 0);
+  for (const [side, x, reach] of [
+    ["left", 0.1, -split],
+    ["right", -0.1, split],
+  ] as const) {
+    const knee: P = split === 0 ? [x, 0.42 * Math.cos(rad(thigh)), -0.42 * Math.sin(rad(thigh))] : [x, Math.sqrt(0.42 ** 2 - (reach / 2) ** 2), reach / 2];
+    const ankle: P = split === 0 ? [x, knee[1] + 0.42 * Math.cos(rad(shin)), knee[2] + 0.42 * Math.sin(rad(shin))] : [x, 2 * knee[1], reach];
+    const k = side === "left" ? KP.left_knee : KP.right_knee;
+    const a = side === "left" ? KP.left_ankle : KP.right_ankle;
+    const h = side === "left" ? KP.left_heel : KP.right_heel;
+    const f = side === "left" ? KP.left_foot_index : KP.right_foot_index;
+    body[k] = knee;
+    body[a] = ankle;
+    body[h] = [x, ankle[1] + 0.06, ankle[2] + 0.05];
+    body[f] = [x, ankle[1] + 0.06, ankle[2] - 0.13];
+  }
+  return body;
+}
+
 interface Look {
   readonly aspect?: number;
   /** Picture heights a metre. */
@@ -95,7 +131,7 @@ function once(world: readonly P[], look: Look = {}): MeasuredBody {
   if (last === undefined) throw new Error("no frame");
   return last;
 }
-function read(body: MeasuredBody, name: MeasureName): { flat: number | null; world: number | null; shown: number | null } {
+function read(body: MeasuredBody, name: MeasureName): Reading {
   const r = body.readings.get(name);
   if (r === undefined) throw new Error(`no ${name}`);
   return r;
@@ -131,6 +167,72 @@ describe("the worst thing: a part pointing at the camera is never read on the fl
     expect(read(m, "left elbow").flat).toBeNull();
     expect(read(m, "left elbow").world).toBeCloseTo(90, 6);
     expect(read(m, "right elbow").flat).toBeCloseTo(90, 6);
+  });
+});
+
+describe("the worst thing: a flat reading is never given further from the truth than its limit", () => {
+  // Bodies made by hand: their 3D points are the truth, and the picture is drawn from them.
+  const within = (m: MeasuredBody): void => {
+    for (const { name, unit } of MEASURE_LIST) {
+      const r = read(m, name);
+      if (r.flat === null) continue;
+      const limit = unit === "degrees" ? MEASURE_LIMITS.angle : MEASURE_LIMITS.length;
+      expect([name, Math.abs(r.flat - (r.world ?? Number.NaN)) <= limit + 1e-9]).toEqual([name, true]);
+    }
+  };
+
+  it("a squat filmed from the front: the knee bends towards the camera and looks straight on the picture", () => {
+    for (const turn of [5, 10, 12, 13, 15, 20, 30, 45]) {
+      const m = once(facing(turn));
+      const knee = read(m, "left knee");
+      expect(knee.world).toBeCloseTo(180 - 2 * turn, 6);
+      // Flat it reads 180°, straight, whatever the bend: refused once that is more than the limit.
+      if (2 * turn > MEASURE_LIMITS.angle) expect([turn, knee.flat]).toEqual([turn, null]);
+      else expect([turn, knee.flat]).toEqual([turn, expect.closeTo(180, 6)]);
+      within(m);
+    }
+  });
+
+  it("a knee bent to 120° from the front is never read straight, though each part shows 0.87 of itself", () => {
+    const knee = read(once(facing(30)), "left knee");
+    expect(knee.flat).toBeNull();
+    expect(knee.shown).toBeCloseTo(Math.cos(Math.PI / 6), 6);
+    expect(knee.off).toBeCloseTo(60, 6);
+  });
+
+  it("a split stance filmed from the front: the feet far apart front to back are not read as close together", () => {
+    const m = once(facing(0, 0, 0.35));
+    const feet = read(m, "feet apart");
+    const trunk = Math.hypot(0.08, 0.5);
+    expect(feet.world).toBeCloseTo(Math.hypot(0.2, 0.7) / trunk, 6);
+    expect(feet.flat).toBeNull();
+    within(m);
+  });
+
+  it("a shorter split: the line between the feet shows 0.55 of itself, above half, and is still refused", () => {
+    const m = once(facing(0, 0, 0.15));
+    const feet = read(m, "feet apart");
+    const trunk = Math.hypot(0.08, 0.5);
+    // Flat the feet are 0.2 m apart, in 3D 0.36 m: given, it would be 0.32 of a trunk short.
+    expect(feet.shown).toBeCloseTo(0.2 / Math.hypot(0.2, 0.3), 6);
+    expect(feet.world).toBeCloseTo(Math.hypot(0.2, 0.3) / trunk, 6);
+    expect(feet.flat).toBeNull();
+    within(m);
+  });
+
+  it("stepping back from the phone with the far foot hidden: the floor moves with the body", () => {
+    const far = [KP.right_knee, KP.right_ankle, KP.right_heel, KP.right_foot_index];
+    // From 1 s the body is a fifth smaller on the picture and its feet higher, as when it steps back.
+    const run = measure(
+      Array.from({ length: 91 }, (_, n) => {
+        const t = Math.round((n * 1000) / 30);
+        return frame(t, standingSide(), t < 1000 ? { hidden: far } : { hidden: far, size: 0.36, at: [0.75, 0.74 / 0.36 - 0.9] });
+      }),
+    );
+    for (const m of run) {
+      expect([m.t, read(m, "hips height").flat]).toEqual([m.t, expect.closeTo(0.9 / 0.84, 6)]);
+      expect([m.t, read(m, "hips height").world]).toEqual([m.t, expect.closeTo(0.9 / 0.84, 6)]);
+    }
   });
 });
 
@@ -256,15 +358,15 @@ describe("what decides nothing", () => {
   it("with no foot ever seen there is no floor, so no height; the rest is read", () => {
     const feet = [KP.left_heel, KP.right_heel, KP.left_foot_index, KP.right_foot_index];
     const m = once(seated(), { hidden: feet });
-    expect(read(m, "hips height")).toEqual({ flat: null, world: null, shown: null });
+    expect(read(m, "hips height")).toEqual({ flat: null, world: null, shown: null, turn: null, off: null });
     expect(read(m, "left knee").flat).toBeCloseTo(90, 6);
     expect(read(m, "hands apart").world).toBeCloseTo(0.4, 6);
   });
 
   it("without down, no lean and no height; the joints are read", () => {
     const m = once(seated(), { down: null });
-    expect(read(m, "trunk lean")).toEqual({ flat: null, world: null, shown: null });
-    expect(read(m, "hips height")).toEqual({ flat: null, world: null, shown: null });
+    expect(read(m, "trunk lean")).toEqual({ flat: null, world: null, shown: null, turn: null, off: null });
+    expect(read(m, "hips height")).toEqual({ flat: null, world: null, shown: null, turn: null, off: null });
     expect(read(m, "left knee").world).toBeCloseTo(90, 6);
   });
 
@@ -329,10 +431,19 @@ describe("the floor stays where the feet stood", () => {
   });
 
   it("a clock that goes back forgets the floor and the lengths", () => {
-    const m = new BodyMeasures();
-    m.next(frame(5000, standingSide()));
-    const back = m.next(frame(1000, standingSide(), { hidden: [KP.left_heel, KP.right_heel, KP.left_foot_index, KP.right_foot_index] }));
-    expect(read(back, "hips height").flat).toBeNull();
+    // The same body 10 cm higher on the picture after the clock goes back: a floor kept from
+    // before would put the hips 10 cm higher above it.
+    const floor = new BodyMeasures();
+    floor.next(frame(5000, standingSide()));
+    const back = floor.next(frame(1000, standingSide(), { at: [0.6, 0.8] }));
+    expect(read(back, "hips height").flat).toBeCloseTo(0.9 / 0.84, 6);
+    expect(read(back, "hips height").world).toBeCloseTo(0.9 / 0.84, 6);
+    // A child's body after it: lengths kept from before would be the middle of both.
+    const lengths = new BodyMeasures();
+    lengths.next(frame(5000, standingSide()));
+    const child = lengths.next(frame(1000, standingSide().map((p): P => [p[0] * 0.6, p[1] * 0.6, p[2] * 0.6])));
+    expect(child.leg).toBeCloseTo(0.84 * 0.6, 9);
+    expect(child.trunk).toBeCloseTo(0.5 * 0.6, 9);
   });
 
   it("no height while no foot is in view; no foot seen for longer than 3 s forgets the floor", () => {
