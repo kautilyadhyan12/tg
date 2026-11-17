@@ -118,6 +118,9 @@ interface Look {
   readonly hidden?: readonly number[];
   /** Where the body's middle is on the picture, metres from the picture's top left. */
   readonly at?: readonly [number, number];
+  /** Points drawn this many metres higher on the picture than their 3D place, as a phone above
+   *  them draws what is further away (perspective). */
+  readonly raise?: { readonly points: readonly number[]; readonly metres: number };
 }
 
 /** One frame: the 3D points drawn on the picture as they lie, depth dropped. */
@@ -126,7 +129,8 @@ function frame(t: number, world: readonly P[], look: Look = {}): SteadyBody {
   const size = look.size ?? 0.45;
   const [ax, ay] = look.at ?? [0.6, 0.9];
   const hidden = new Set(look.hidden ?? []);
-  const points = world.map((w, i) => (hidden.has(i) ? null : { x: (size * (ax + w[0])) / aspect, y: size * (ay + w[1]), world: w }));
+  const up = (i: number): number => (look.raise?.points.includes(i) === true ? look.raise.metres : 0);
+  const points = world.map((w, i) => (hidden.has(i) ? null : { x: (size * (ax + w[0])) / aspect, y: size * (ay + w[1] - up(i)), world: w }));
   return { t, aspect, down: look.down === undefined ? [0, 1, 0] : look.down, size, points, refused: points.map((p) => (p === null ? "hidden" : null)) };
 }
 
@@ -256,6 +260,28 @@ describe("the worst thing: a flat reading is never given further from the truth 
         expect([after, m.t, read(m, "left ankle height").flat]).toEqual([after, m.t, expect.closeTo(0.06 / 0.84, 6)]);
         expect([after, m.t, read(m, "hips height").world]).toEqual([after, m.t, expect.closeTo(0.9 / 0.84, 6)]);
       }
+    }
+  });
+
+  it("stepping back with only the foot that was higher on the picture left in view: the floor still moves", () => {
+    // Both feet stand on the floor; the near one is drawn 2 cm higher on the picture, as a phone
+    // above them can draw one foot of two. Then the far leg is hidden and the body steps back 13 in
+    // 100. The near foot was never the lowest on the picture, yet it stood on the floor.
+    const far = [KP.right_knee, KP.right_ankle, KP.right_heel, KP.right_foot_index];
+    const near = [KP.left_ankle, KP.left_heel, KP.left_foot_index];
+    const run = measure(
+      Array.from({ length: 121 }, (_, n) => {
+        const t = Math.round((n * 1000) / 30);
+        const size = t < 1000 ? 0.45 : 0.39;
+        return frame(t, standingSide(), { hidden: t < 1000 ? [] : far, size, at: [0.6, 0.45 / size - 0.1], raise: { points: near, metres: 0.02 } });
+      }),
+    );
+    const settled = run.filter((m) => m.t >= 1000 + MEASURE_LIMITS.floorRise + 100);
+    expect(settled.length).toBeGreaterThan(20);
+    for (const m of settled) {
+      // Stood on the near foot, 2 cm above the true floor: within the tolerance a lift is judged by.
+      expect([m.t, Math.abs((read(m, "hips height").flat ?? Number.NaN) - 0.9 / 0.84) <= MEASURE_LIMITS.footLift]).toEqual([m.t, true]);
+      expect([m.t, Math.abs((read(m, "left ankle height").flat ?? Number.NaN) - 0.06 / 0.84) <= MEASURE_LIMITS.footLift]).toEqual([m.t, true]);
     }
   });
 });

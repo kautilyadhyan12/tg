@@ -545,7 +545,7 @@ class Floor {
     const lowest = Math.max(...seen.map((k) => feet[k] ?? Number.NEGATIVE_INFINITY));
     if (this.level === null || lowest >= this.level) {
       this.set(lowest, size);
-      for (const k of seen) if ((feet[k] ?? Number.NEGATIVE_INFINITY) >= lowest) this.standing[k] = drops[k] ?? null;
+      this.stand(seen, feet, drops, lift);
       return this.level;
     }
     const moved =
@@ -564,7 +564,7 @@ class Floor {
       this.risingTo = Math.max(this.risingTo, lowest);
       if (t - this.risingSince >= limits.floorRise) {
         this.set(this.risingTo, size);
-        for (const k of seen) this.standing[k] = drops[k] ?? null;
+        this.stand(seen, feet, drops, lift);
       }
     }
     return this.level;
@@ -574,6 +574,19 @@ class Floor {
     this.level = level;
     this.size = size;
     this.risingSince = null;
+  }
+
+  /** Keeps how far below the hips each foot on the floor is: the lowest foot on the picture, and
+   *  every other foot seen whose drop in 3D is within `lift` of its. Two feet on the floor drop
+   *  alike in 3D wherever they lie on the picture: side on, the far foot is higher on it. */
+  private stand(seen: readonly number[], feet: readonly (number | null)[], drops: readonly (number | null)[], lift: number | null): void {
+    let ref = seen[0] ?? -1;
+    for (const k of seen) if ((feet[k] ?? Number.NEGATIVE_INFINITY) > (feet[ref] ?? Number.NEGATIVE_INFINITY)) ref = k;
+    const deepest = drops[ref] ?? null;
+    for (const k of seen) {
+      const drop = drops[k] ?? null;
+      if (k === ref || (drop !== null && deepest !== null && lift !== null && drop >= deepest - lift)) this.standing[k] = drop;
+    }
   }
 }
 
