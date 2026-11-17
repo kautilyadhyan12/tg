@@ -298,7 +298,7 @@ jest.mock("expo-secure-store", () => {
 // reads what was asked of it; the points themselves are handed in by the test, as Android hands them
 // to the run's task.
 jest.mock("expo-location", () => {
-  const state = { services: true, granted: true, canAskAgain: true, accuracy: "fine", asked: 0, started: [], running: false, watching: 0, acceptsTurnOn: true };
+  const state = { services: true, granted: true, canAskAgain: true, accuracy: "fine", asked: 0, started: [], running: false, watching: 0, acceptsTurnOn: true, whileStopping: null };
   const answer = () => ({ granted: state.granted, canAskAgain: state.canAskAgain, status: state.granted ? "granted" : "denied", android: { accuracy: state.granted ? state.accuracy : "none" } });
   return {
     state,
@@ -322,8 +322,15 @@ jest.mock("expo-location", () => {
       return Promise.resolve();
     },
     hasStartedLocationUpdatesAsync: () => Promise.resolve(state.running),
+    // `whileStopping`: what Android hands over while its location stops, as it can (a test sets it, once).
     stopLocationUpdatesAsync: () => {
-      state.running = false;
+      const meanwhile = state.whileStopping;
+      state.whileStopping = null;
+      const stop = () => {
+        state.running = false;
+      };
+      if (typeof meanwhile === "function") return meanwhile().then(stop);
+      stop();
       return Promise.resolve();
     },
     watchPositionAsync: () => {

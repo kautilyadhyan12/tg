@@ -74,16 +74,21 @@ describe("the worst thing: a pace never run, shown as the person's", () => {
 
   // A phone standing still mostly drifts: its error moves slowly over tens of seconds (the re-check of H3). In a
   // run at 3 m/s (5:33 a kilometre), what is left of such a stop is a dip, never a crawl.
+  // The edges of a stop the maths cannot confirm as standing count as moving, so they make the dip. Since the
+  // route holds still while standing (RUN_CALC_VERSION 3), the drift's metres inside the stop no longer hide
+  // part of it: over 200 seeds of this phone, the lowest point at 5 m of drift and 8 m sure went from 1.27 to
+  // 1.16 m/s (seed 11: from over 1.7 to 1.61), at 3 m of drift from 1.79 to 1.54 (5 m sure) and from 1.62 to
+  // 1.56 (10 m sure). Still a dip, never a crawl.
   it.each([
-    [1, 3, 5, 11],
-    [1, 3, 5, 99],
-    [1, 5, 8, 11],
-    [2, 3, 10, 99],
-  ])("a stop of three minutes on a drifting phone (%d m of wander, %d m of drift, %d m sure, seed %d) is found and never drawn as a crawl", (jitter, drift, accuracy, seed) => {
+    [1, 3, 5, 11, 1.7],
+    [1, 3, 5, 99, 1.7],
+    [1, 5, 8, 11, 1.5],
+    [2, 3, 10, 99, 1.7],
+  ])("a stop of three minutes on a drifting phone (%d m of wander, %d m of drift, %d m sure, seed %d) is found and never drawn as a crawl", (jitter, drift, accuracy, seed, floor) => {
     const speeds = [...steady(400, 3), ...steady(180, 0), ...steady(400, 3)];
     const sums = runSums(wandering(speeds, jitter, accuracy, drift, seed), [], speeds.length * 1000, 70);
     expect(sums.stillS).toBeGreaterThan(110);
-    expect(Math.min(...sums.paceLine.map(mps))).toBeGreaterThan(1.7);
+    expect(Math.min(...sums.paceLine.map(mps))).toBeGreaterThan(floor);
   });
 
   // Less sure than 10 m, standing and small laps cannot be told apart (measured: the third re-check of H3), so

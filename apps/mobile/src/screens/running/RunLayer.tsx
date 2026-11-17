@@ -428,7 +428,9 @@ function Live({ run, units, kg, onHide }: { run: LiveRun; units: Units; kg: numb
   const [panel, setPanel] = useState(0);
   const source = useMapSource(session);
   const lastPoint = run.points[run.points.length - 1];
-  const here: [number, number] | null = lastPoint === undefined ? null : [lastPoint[1], lastPoint[2]];
+  // The dot is where the phone last said the person is, which a pause or a stop never holds back; the
+  // route ends where the run last counted a point.
+  const here: readonly [number, number] | null = run.here ?? (lastPoint === undefined ? null : [lastPoint[1], lastPoint[2]]);
   const scheme = useMapScheme(here);
   const track = sums !== null && sums.track.length > 0 ? sums.track : here === null ? [] : [here];
   const press = (work: () => Promise<unknown>) => () => {
@@ -504,7 +506,7 @@ function Live({ run, units, kg, onHide }: { run: LiveRun; units: Units; kg: numb
       <View style={styles.mapPage}>
         {track.length === 0 ? null : (
           <View style={StyleSheet.absoluteFill}>
-            <RunMap track={track} starts={sums?.trackStarts ?? [0]} units={units} mode="live" scheme={scheme} source={source} under={panel} over={insets.top + 64} testID="live-map" />
+            <RunMap track={track} starts={sums?.trackStarts ?? [0]} here={here} units={units} mode="live" scheme={scheme} source={source} under={panel} over={insets.top + 64} testID="live-map" />
           </View>
         )}
         {isPaused ? <View style={styles.pausedBar} /> : null}

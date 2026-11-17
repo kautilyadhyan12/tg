@@ -8,6 +8,7 @@ import * as Location from "expo-location";
 import * as TaskManager from "expo-task-manager";
 import { File, Paths } from "expo-file-system";
 import {
+  GPS_WORST_ACCURACY_M,
   RUN_MAX_ELAPSED_MS,
   RUN_MAX_PAUSES,
   RUN_MAX_POINTS,
@@ -17,6 +18,7 @@ import {
   keptRunStateSchema,
   phoneLocationsSchema,
   runSums,
+  type PhoneLocations,
   type KeptRunChoices,
   type KeptRunGuide,
   type MapColours,
@@ -55,6 +57,10 @@ export interface LiveRun {
   finishedMs: number | null;
   /** The last point's time on the phone's clock and how sure it was, for the GPS light. */
   lastFix: { at: number; accuracyM: number | null } | null;
+  /** Where the phone last said the person is, sure to GPS_WORST_ACCURACY_M or better, paused or not: the
+   *  map's dot. The route ends where the run last counted a point, which a pause or a stop holds back
+   *  (Kd's click-through, 2026-11-17: the dot sat where he had stopped while he walked on). */
+  here: readonly [number, number] | null;
   /** Today's planned run, step by step (37d-ii); null for a run that is not the plan's. */
   guide: KeptRunGuide | null;
   /** The heart rate from the person's monitor (37f-i), [ms into the run, bpm], while it runs. */
@@ -106,8 +112,9 @@ let heartUnwritten = 0;
 let writtenAt = 0;
 /** The monitor kept connected while a run is going (37f-i). */
 let heartHeld: (() => void) | null = null;
-/** The last points taken while paused, and how many are kept. */
-const PAUSED_TAIL = 4;
+/** The last points taken while paused, and how many are kept: Auto-pause starts the clock again from the
+ *  last point near where the person stopped, which a slow walk leaves well over a minute behind at worst. */
+const PAUSED_TAIL = 120;
 let pausedTail: RunPoint[] = [];
 /** Raised at each Start and each Save or Discard: points handed over while one of those happened
  *  belong to no run, and never bring a saved or thrown-away run back. */
@@ -476,6 +483,7 @@ export async function loadRun(): Promise<LiveRun | null> {
       points,
       finishedMs: state.finishedMs,
       lastFix: last === undefined ? null : { at: state.startedAt + last[0], accuracyM: last[3] },
+      here: last === undefined ? null : [last[1], last[2]],
       guide: state.guide,
       heart,
     };
@@ -515,7 +523,11 @@ export async function takeLocations(data: unknown, now: number = Date.now()): Pr
   if (!parsed.success) return;
   const mine = generation;
   const run = current ?? (await loadRun());
-  if (run === null || run.phase === "finished" || mine !== generation) return;
+  if (run === null || mine !== generation) return;
+  if (run.phase === "finished") {
+    await takeLate(run, parsed.data.locations, mine);
+    return;
+  }
   const was = run.phase;
   let full = false;
   for (const location of parsed.data.locations) {
@@ -530,6 +542,7 @@ export async function takeLocations(data: unknown, now: number = Date.now()): Pr
     const accuracyM = location.coords.accuracy ?? null;
     const point: RunPoint = [at, location.coords.latitude, location.coords.longitude, accuracyM === null ? null : Math.round(accuracyM * 10) / 10];
     run.lastFix = { at: location.timestamp, accuracyM };
+    if (accuracyM === null || accuracyM <= GPS_WORST_ACCURACY_M) run.here = [point[1], point[2]];
     // Past the most pauses a run may hold, Auto-pause pauses no more, but still starts one it holds.
     if (run.autoPause && (run.pauses.length < RUN_MAX_PAUSES || run.phase === "paused")) {
       const next = nextAutoPause(auto, { at, lat: point[1], lng: point[2], accuracyM, speed: location.coords.speed ?? null });
@@ -603,6 +616,28 @@ export async function takeLocations(data: unknown, now: number = Date.now()): Pr
   tell();
 }
 
+/** Points Android hands over after Finish that were taken before it, outside a pause (a batch comes late
+ *  with the screen off): the run's, kept quietly, with no Auto-pause and nothing said (round one, L2). */
+async function takeLate(run: LiveRun, locations: PhoneLocations["locations"], mine: number): Promise<void> {
+  const end = run.finishedMs;
+  if (end === null) return;
+  let added = 0;
+  for (const location of locations) {
+    const at = location.timestamp - run.startedAt;
+    const lastAt = run.points[run.points.length - 1]?.[0] ?? -1;
+    const inPause = run.pauses.some(([from, to]) => at >= from && at <= (to ?? end));
+    if (at <= lastAt || at > end || inPause || run.points.length >= RUN_MAX_POINTS) continue;
+    const accuracyM = location.coords.accuracy ?? null;
+    run.points.push([at, location.coords.latitude, location.coords.longitude, accuracyM === null ? null : Math.round(accuracyM * 10) / 10]);
+    added += 1;
+  }
+  if (added === 0 || mine !== generation || current?.runId !== run.runId) return;
+  unwritten += added;
+  current = { ...run };
+  await keep(current);
+  tell();
+}
+
 /** The end of the last closed pause: a new one never starts inside it. */
 const lastOpenEnd = (run: LiveRun): number => run.pauses[run.pauses.length - 1]?.[1] ?? 0;
 
@@ -650,6 +685,7 @@ export async function startRun(userId: string, runId: string, autoPause: boolean
     points: [],
     finishedMs: null,
     lastFix: null,
+    here: null,
     guide,
     heart: [],
   };
@@ -776,21 +812,31 @@ async function stopLocations(): Promise<void> {
 export async function finishRun(now: number = Date.now()): Promise<LiveRun | null> {
   const run = current;
   if (run === null) return null;
-  quietVoice();
-  await stopLocations();
   if (run.phase === "finished") {
+    quietVoice();
     releaseMonitor();
+    await stopLocations();
     return run;
   }
+  // Finished before anything is waited for: points Android hands over while its location stops are not
+  // the run's, so they never pause it, start it again or have anything said after Finish (testers on
+  // Google Play, 2026-11-17: the voice went on after the run).
   takeHeart(run);
-  releaseMonitor();
   // Never past a day: the most the server takes.
   const end = Math.min(RUN_MAX_ELAPSED_MS, Math.max(now - run.startedAt, run.points[run.points.length - 1]?.[0] ?? 0));
   closePause(run, end);
-  current = { ...run, phase: "finished", finishedMs: end };
-  await keep(current);
+  const done: LiveRun = { ...run, phase: "finished", finishedMs: end };
+  current = done;
+  quietVoice();
+  releaseMonitor();
   tell();
-  return current;
+  // The location stops even if the run cannot be written (round one, L1).
+  try {
+    await keep(done);
+  } finally {
+    await stopLocations();
+  }
+  return done;
 }
 
 /** Saved, or thrown away: nothing of it is left on the phone but what the outbox keeps. */
