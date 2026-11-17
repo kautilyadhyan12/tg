@@ -482,7 +482,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
      - V0-c. [x] **Settings and the new pages** · merged 2026-11-16 · PR #565
    - V1. **The building blocks and the menu** (this folder), in two (2026-11-16): every screen shape, phones, folding phones, tablets and laptops (Kd, `rulings/2026-11-16-v1-a.md`).
      - V1-a. [x] **The menu in five groups and More on a phone** · merged 2026-11-17 · PR #566
-     - V1-b. [ ] **The building blocks**: the text sizes, gaps, buttons and tags, the four ways a box opens, and the side list (`Main`, `Anatomy`, `kit.css`).
+     - V1-b. [x] **The building blocks** · merged 2026-11-18 · PR #576
    - V2a. [ ] **A member's page, a whole page** (web folder 1; the `Person*` pages and `PhonePerson`).
    - V2b. [ ] **A member's page: its boxes** (web folder 1): Add member, edit, add a membership, record a payment, a quick look, freeze, cancel, money back, receipt, remove, merge (`Person*`, `AddMember`, `PhoneRecordPayment`, `PhoneForm`).
    - V3a. [ ] **Members: Your list** (web folder 1): the one-press picks, the list, people ticked and the bar, Send message, Tags, Remove, Filter from the right (`MembersNew*`).
@@ -497,6 +497,12 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
    - V9b. [ ] **Challenges and the Leaderboard** (web folder 2; `Challenge*`, `Leaderboard*`).
    - V10. [ ] **Reports** (web folder 2): the side list, the figures, Download payments (`Reports*`).
    - V11. [ ] **Settings** (web folder 2): the side list with each section's state, the ten sections (`Settings*`).
+   - **The third look (Kd, 2026-11-18; `rulings/2026-11-18-console-look-3.md`; spec Part 3 §17.11; the boards in `docs/design/console-v3`, whose README names each board's job).** It replaces the second look's layout and colours: one family with the member app, laid out like a CRM, flat colour, standard words, for every fitness business; nothing is taken away. These five jobs come before V2a, in this order, one terminal each; V2a to V11 above then build each page in the third look, from its `console-v3` board where it has one, and change that page's words to the word list.
+   - V1-c. [ ] **The third look's blocks and the bar across the top** (after V1-b merges): `console.css` takes `kit3.css` (Inter, flat colour, round buttons, the quiet status), V1-b's boxes restyled, the top bar with New, the menu's foot as the person's name, folding groups, 36 px lines with a mouse (`Main`, `Overview`, `Phone`). A screen job, Opus high.
+   - V1-d. [ ] **Counts in the menu, and the bell**: one route for what waits, a count beside a page, "Needs attention" from any page (`Overview`). Its plan names its size and its cost at 20 businesses of 200.
+   - V1-e. [ ] **Search**: people, pages, actions and settings from the bar and Ctrl K, one list of places with the words people use (`Search`). Its plan names its size.
+   - V1-f. [ ] **Payments overview**: the new page under Money, a line to every payment page and setting, Connect Square first until it is connected (`Money`, `MoneySetup`).
+   - V0-d. [ ] **The boards not drawn yet, in the third look**: Sell, Memberships, Attendance, Classes, Leads, Reports, Settings and the four ways a box opens, from `kit3.css`, every button of the real page kept. No code; in parts if it is too big for one terminal.
 23. **A gym finds its way** (Kd, RULINGS 2026-10-07: the console read as "a maze"). Each page was clear alone and the fault was between pages. Four jobs in this order, built in Folder A before 17e-ii.
    - 23a. **One answer for membership**, split 2026-10-07 in two (the list's read and Add member's form are more than one terminal):
      - 23a-i. [x] **The Members list shows what each person holds** — merged 2026-10-07 (PR #187).

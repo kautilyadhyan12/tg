@@ -84,6 +84,13 @@
   --warn-bg: #33290F;
   --bad: #FF7B6E;
   --bad-bg: #3A1714;
+  --bad-line: #6B2A24;
+  --on-bad: #1A0503;
+  --info: #8FB8FF;
+  --info-bg: #14203A;
+  /* A button not ready yet. The board's #7A736B measured 3.43:1 on it; this shade 5.27. */
+  --dis-bg: #24211E;
+  --dis-t: #9A938A;
   --sel: #F4F1EC;
   --on-sel: #0C0B0A;
   --shadow: none;
@@ -127,6 +134,13 @@
   --warn-bg: #FDF1D6;
   --bad: #C23A2E;
   --bad-bg: #FCE9E6;
+  --bad-line: #F0B8B1;
+  --on-bad: #FFFFFF;
+  --info: #1F5BB8;
+  --info-bg: #E6EEFB;
+  /* The board's #8E867D measured 2.94:1 on it; this shade 4.78. */
+  --dis-bg: #ECE8E2;
+  --dis-t: #6B645C;
   --sel: #1B1815;
   --on-sel: #FFFFFF;
   --shadow: 0 1px 2px rgba(28, 24, 20, 0.05);
@@ -551,9 +565,10 @@
   letter-spacing: -0.01em;
   color: var(--t1);
 }
+/* The number that matters: 40 on every screen (the second look's rule 10). */
 .c-big {
-  font-size: 44px;
-  line-height: 48px;
+  font-size: 40px;
+  line-height: 44px;
   font-weight: 700;
   font-stretch: 108%;
   letter-spacing: -0.02em;
@@ -561,12 +576,8 @@
 }
 @media (min-width: 768px) {
   .c-h1 {
-    font-size: 34px;
+    font-size: 32px;
     line-height: 40px;
-  }
-  .c-big {
-    font-size: 48px;
-    line-height: 52px;
   }
 }
 .c-big-sm {
@@ -665,8 +676,13 @@
   font-weight: 600;
   white-space: nowrap;
 }
+/* Not ready yet: grey, with the reason said beside it. */
 .c-btn:disabled {
-  opacity: 0.5;
+  background: var(--dis-bg);
+  border-color: transparent;
+  color: var(--dis-t);
+  box-shadow: none;
+  cursor: not-allowed;
 }
 .c-btn-p { background: var(--accent); color: var(--on-accent); }
 .c-btn-s { border-color: var(--ctl-line); }
@@ -688,6 +704,13 @@
 }
 .c-btn-link { color: var(--link); }
 .c-btn-quiet { color: var(--t2); font-weight: 500; }
+.c-btn-link:disabled,
+.c-btn-quiet:disabled { background: transparent; }
+/* Red takes something away: outlined, kept apart from the everyday buttons and asking first.
+   Solid red only inside the question that asks. */
+.c-btn-d { border-color: var(--bad-line); color: var(--bad); }
+.c-btn-ds { background: var(--bad); color: var(--on-bad); }
+.c-btn-w { width: 100%; }
 
 .c-icon-btn {
   display: inline-flex;
@@ -735,12 +758,13 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 26px;
-  padding: 0 10px;
+  height: 24px;
+  padding: 0 9px;
   box-sizing: border-box;
   border-radius: 999px;
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 12.5px;
+  line-height: 1;
+  font-weight: 650;
   white-space: nowrap;
 }
 .c-tag-good { background: var(--good-bg); color: var(--good); }
@@ -748,6 +772,8 @@
 .c-tag-bad { background: var(--bad-bg); color: var(--bad); }
 .c-tag-plain { background: var(--raise); color: var(--t2); }
 .c-tag-soft { background: var(--soft); color: var(--soft-t); }
+.c-tag-info { background: var(--info-bg); color: var(--info); }
+.c-tag-line { border: 1px solid var(--ctl-line); color: var(--t2); }
 
 /* A time or small fact in a grey box. */
 .c-tc {
@@ -770,10 +796,12 @@
   font-weight: 600;
 }
 
+/* 8 between a label and its box (rule 3). */
 .c-field {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
+  min-width: 0;
 }
 .c-label {
   font-size: 14px;
@@ -1329,3 +1357,297 @@
   font-weight: 700;
 }
 
+/* ── The second look's building blocks (V1-b; the Main board, spec Part 3 §17.10) ── */
+
+/* Gaps that group: 8 a label and its box, 12 buttons side by side, 20 one field and the next,
+   24 inside and between boxes, 32 between groups, 48 between sections. */
+.c-stack { display: flex; flex-direction: column; gap: 24px; min-width: 0; }
+.c-stack-xs { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.c-stack-s { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.c-stack-m { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+.c-stack-l { display: flex; flex-direction: column; gap: 32px; min-width: 0; }
+.c-stack-xl { display: flex; flex-direction: column; gap: 48px; min-width: 0; }
+.c-flow { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; min-width: 0; }
+.c-flow-s { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
+.c-flow-l { display: flex; flex-wrap: wrap; align-items: center; gap: 24px; min-width: 0; }
+
+/* A form: 32 between groups of fields, 20 between fields, two fields side by side where they fit. */
+.c-form { display: flex; flex-direction: column; gap: 32px; }
+.c-fgroup { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+.c-fgroup + .c-fgroup { border-top: 1px solid var(--line); padding-top: 28px; }
+.c-frow { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; }
+@media (min-width: 560px) {
+  .c-frow { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+}
+.c-err { font-size: 13px; line-height: 18px; color: var(--bad); }
+.c-input-err { border-color: var(--bad); }
+
+/* The "look at this" box in its other colours. */
+.c-callout-bad { background: var(--bad-bg); }
+.c-callout-info { background: var(--info-bg); }
+.c-callout-good { background: var(--good-bg); }
+.c-callout-plain { background: var(--raise); }
+
+/* Where a box opens: four kinds, the same on every page; nothing opens inside a list and
+   pushes it down. Each floats over the page, in the page's own look. */
+.c-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: var(--scrim);
+}
+
+/* 1. Under its button: one to three questions. On a phone it rises from the bottom. */
+.c-pop {
+  position: fixed;
+  z-index: 61;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  box-sizing: border-box;
+  padding: 20px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--sheet);
+  color: var(--t1);
+  border: 1px solid var(--card-line);
+  box-shadow: var(--pop);
+  left: 0;
+  right: 0;
+  bottom: 0;
+  max-height: calc(100dvh - 48px);
+  border-radius: 22px 22px 0 0;
+  padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+}
+.c-grab {
+  flex: none;
+  align-self: center;
+  width: 40px;
+  height: 5px;
+  margin: -8px 0 -4px;
+  border-radius: 999px;
+  background: var(--ctl-line);
+}
+@media (min-width: 768px) {
+  .c-pop {
+    right: auto;
+    bottom: auto;
+    width: min(380px, calc(100vw - 32px));
+    border-radius: 16px;
+    padding-bottom: 20px;
+  }
+  .c-pop .c-grab { display: none; }
+  .c-pop-scrim { background: transparent; }
+}
+
+/* 2. From the right: a form of four fields or more. The panel scrolls as one page and only
+   its foot, with Save, stays; the whole screen on a phone. */
+.c-panel {
+  position: fixed;
+  z-index: 61;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--sheet);
+  color: var(--t1);
+  box-shadow: var(--pop);
+}
+.c-panel-h {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 20px 16px 4px;
+}
+.c-panel-b {
+  flex: 1 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: 20px 16px 32px;
+}
+.c-panel-f {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid var(--line);
+  background: var(--sheet);
+}
+@media (min-width: 768px) {
+  .c-panel { width: min(600px, 100%); border-left: 1px solid var(--card-line); }
+  .c-panel-h { padding: 28px 28px 4px; }
+  .c-panel-b { padding: 24px 28px 32px; }
+  .c-panel-f { padding: 16px 28px; }
+}
+
+/* 3. In the middle: a question before a change to people or money, naming who changes.
+   From the bottom on a phone, its buttons one under another, the answer last. */
+.c-ask {
+  position: fixed;
+  z-index: 61;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  box-sizing: border-box;
+  max-height: calc(100dvh - 48px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 20px 16px;
+  padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+  border-radius: 22px 22px 0 0;
+  border: 1px solid var(--card-line);
+  background: var(--sheet);
+  color: var(--t1);
+  box-shadow: var(--pop);
+}
+.c-ask-a {
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 12px;
+}
+.c-ask-a .c-btn { width: 100%; }
+@media (min-width: 768px) {
+  .c-ask {
+    left: 50%;
+    right: auto;
+    top: 50%;
+    bottom: auto;
+    width: min(520px, calc(100vw - 32px));
+    max-height: calc(100dvh - 32px);
+    transform: translate(-50%, -50%);
+    padding: 28px;
+    border-radius: 20px;
+  }
+  .c-ask .c-grab { display: none; }
+  .c-ask-a { flex-direction: row; flex-wrap: wrap; justify-content: flex-end; }
+  .c-ask-a .c-btn { width: auto; }
+}
+
+/* 4. A page of its own: a big setup in numbered parts, and a summary that fills in beside
+   them on a wide screen, under them otherwise. */
+.c-steps {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 32px;
+  align-items: start;
+}
+.c-part { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+.c-part-h { display: flex; align-items: center; gap: 12px; }
+.c-part-n {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: var(--soft);
+  color: var(--soft-t);
+  font-size: 13px;
+  font-weight: 700;
+}
+.c-sum { margin: 0; display: flex; flex-direction: column; gap: 14px; }
+.c-sum dt { font-size: 13px; line-height: 18px; color: var(--t3); }
+.c-sum dd { margin: 2px 0 0; font-size: 14px; line-height: 20px; font-weight: 600; color: var(--t1); overflow-wrap: anywhere; }
+.c-sum dd.c-sum-none { font-weight: 450; color: var(--t3); }
+@media (min-width: 1200px) {
+  .c-steps { grid-template-columns: minmax(0, 1fr) 320px; }
+  .c-steps-sum { position: sticky; top: 24px; }
+}
+
+/* The side list for a long page: down the side on a wide screen, a row across the top
+   otherwise, which scrolls on its own and never the page. */
+.c-side {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+.c-snav-wrap { min-width: 0; }
+.c-snav {
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.c-snav-t { display: none; }
+.c-snav a,
+.c-snav button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+  min-height: 44px;
+  padding: 0 14px;
+  box-sizing: border-box;
+  border: 1px solid var(--ctl-line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--t2);
+  font-size: 14px;
+  font-weight: 550;
+  white-space: nowrap;
+  text-decoration: none;
+}
+.c-snav svg { width: 18px; height: 18px; flex: none; color: var(--t3); }
+.c-snav [aria-current='true'] {
+  background: var(--sel);
+  border-color: var(--sel);
+  color: var(--on-sel);
+  font-weight: 650;
+}
+.c-snav [aria-current='true'] svg { color: var(--on-sel); }
+@media (min-width: 1024px) {
+  .c-side { grid-template-columns: 232px minmax(0, 1fr); gap: 40px; }
+  .c-snav-wrap { position: sticky; top: 24px; display: flex; flex-direction: column; }
+  .c-snav { flex-direction: column; gap: 2px; overflow: visible; }
+  .c-snav-t {
+    display: block;
+    padding: 0 12px 10px;
+    font-size: 12px;
+    line-height: 16px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--t3);
+  }
+  .c-snav a,
+  .c-snav button {
+    width: 100%;
+    min-height: 40px;
+    padding: 0 12px;
+    border: 0;
+    border-radius: 10px;
+    font-size: 14.5px;
+    text-align: left;
+    white-space: normal;
+  }
+  .c-snav [aria-current='true'] {
+    background: var(--raise);
+    color: var(--t1);
+    box-shadow: inset 3px 0 0 var(--accent);
+  }
+  .c-snav [aria-current='true'] svg { color: var(--accent); }
+}
+@media (pointer: coarse) {
+  .c-snav a,
+  .c-snav button { min-height: 44px; }
+}
