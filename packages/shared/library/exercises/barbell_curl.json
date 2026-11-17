@@ -1,0 +1,68 @@
+{
+  "id": "barbell_curl",
+  "status": "live",
+  "kind": "strength",
+  "level": "intermediate",
+  "muscles": {
+    "main": [
+      "biceps"
+    ],
+    "also": [
+      "forearms"
+    ]
+  },
+  "equipment": [
+    "barbell"
+  ],
+  "set": {
+    "measuredIn": "reps",
+    "weight": "usually",
+    "eachSide": false,
+    "start": {
+      "sets": 3,
+      "reps": 10
+    }
+  },
+  "energy": {
+    "compendium": "02054"
+  },
+  "text": {
+    "en": {
+      "name": "Barbell Curl",
+      "otherNames": [
+        "Barbell biceps curl",
+        "Standing barbell curl"
+      ],
+      "about": "A standing arm exercise: you curl a barbell from your thighs to your shoulders, bending only at the elbows. It builds the biceps.",
+      "steps": [
+        "Stand tall holding a barbell with your palms facing forward and your hands about shoulder-width apart.",
+        "Let the bar hang at your thighs with your wrists, elbows and shoulders in line.",
+        "Keeping your elbows at your sides, bend them to curl the bar up toward your shoulders.",
+        "Keep your chest and upper body still, so that only your forearms move.",
+        "Lower the bar slowly and under control until your arms are straight again."
+      ],
+      "mistakes": [
+        {
+          "id": "body_swings",
+          "says": "Body swings to lift the bar. Keep your chest still and lift with your arms alone; choose a lighter weight if you need to."
+        },
+        {
+          "id": "elbows_drift",
+          "says": "Elbows drift forward or out. Keep them close to your sides through the whole rep."
+        },
+        {
+          "id": "bar_drops",
+          "says": "Bar drops quickly. Lower it slowly and under control."
+        }
+      ]
+    }
+  },
+  "sources": [
+    {
+      "name": "American Council on Exercise (ACE), Exercise Library: Bicep Curl",
+      "url": "https://www.acefitness.org/resources/everyone/exercise-library/70/bicep-curl/"
+    }
+  ],
+  "clip": null,
+  "picture": null
+}

@@ -24,7 +24,7 @@
       ]
     },
     "test": {
-      "inputs": ["src/**", "test/**", "tools/**", "scripts/**", "assets/**", "app.config.ts", "copies.json", "vitest.config.{ts,js}", "jest.config.js", "tsconfig.json", "package.json"],
+      "inputs": ["src/**", "test/**", "library/**", "tools/**", "scripts/**", "assets/**", "app.config.ts", "copies.json", "vitest.config.{ts,js}", "jest.config.js", "tsconfig.json", "package.json"],
       "dependsOn": ["^typecheck"]
     },
     "build": {

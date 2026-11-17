@@ -1,4 +1,5 @@
 import base from "@app/config/eslint-base";
+import exerciseLibrary from "@app/config/eslint-exercise-library";
 import reactHooks from "eslint-plugin-react-hooks";
 import tseslint from "typescript-eslint";
 
@@ -35,4 +36,7 @@ export default [
       "@typescript-eslint/no-require-imports": "off",
     },
   },
+  // The phone never uses the old exercise code (spec Part 2 §13.1). Goals still reads the old
+  // list until job 63 moves its exercise picker to the Exercise Library.
+  { files: ["src/**", "test/**"], ignores: ["src/screens/Goals.tsx"], ...exerciseLibrary },
 ];

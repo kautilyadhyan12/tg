@@ -1719,25 +1719,28 @@ Everything a member can do today (§13.8).
 
 ### 13.2 An exercise's file (the Library's part)
 
-One file for each exercise, named by its id word, in a place neither app owns (job 60's
-plan names it). The tools find the files by reading the folder: there is no hand-kept list.
+One file for each exercise, named by its id word, in `packages/shared/library/exercises/`
+(job 60a), with the Compendium table beside it (`packages/shared/library/compendium.json`).
+The tools find the files by reading the folder: there is no hand-kept list. The word lists
+and the file's rules are `packages/shared/src/library/`; its check runs in that package's
+tests, so GitHub refuses a faulty file.
 
 | Fact | Rule |
 |---|---|
 | Id word | lower case, never changed, never used again for another exercise; an exercise that continues from the old 58 keeps its row and id |
 | Name, other names | the other names are for search ("press-up" finds Push-up) |
-| Kind | a fixed list, settled in job 60 from the old web's 11 categories and the public list's 7 |
+| Kind | one of: strength · cardio · plyometrics · stretching · mobility · yoga · Pilates (60a, from the old web's 11 categories and the public list's 7: body areas are the muscle filter, "bodyweight" the equipment filter, HIIT and endurance are cardio, powerlifting, Olympic lifting and strongman are strength; "Rehabilitation" is dropped, a health claim for a fitness app) |
 | Muscles | main and also-worked, from ONE fixed list: abdominals, abductors, adductors, biceps, calves, chest, forearms, glutes, hamstrings, hip flexors, lats, lower back, middle back, neck, quadriceps, shoulders, traps, triceps |
-| Equipment | from one fixed list (barbell, dumbbell, kettlebell, cable machine, machine, resistance band, pull-up bar, bench, chair, step, jump rope, exercise ball, mat and the rest job 60 settles); empty means none |
+| Equipment | from one fixed list (60a): barbell, dumbbell, kettlebell, EZ curl bar, weight plate, cable machine, machine, Smith machine, resistance band, pull-up bar, dip bars, gymnastic rings, suspension trainer, bench, box, step, chair, jump rope, medicine ball, exercise ball, foam roller, mat, treadmill, rowing machine, exercise bike; empty means none, and a wall or the floor is not equipment |
 | Level | beginner · intermediate · advanced |
 | A set is measured in | reps or time. This is what a set's target is, said once; it replaces every family-code rule |
 | Weight | a set never takes one · may · usually does |
 | Each side | whether a set is done for each side |
 | Starting numbers | the sets and target offered when it is added to a workout; the person changes them |
-| Energy (MET) | with the Compendium of Physical Activities entry it came from |
+| Energy (MET) | the file names a code of the 2024 Adult Compendium of Physical Activities; the MET is read from the Compendium table, copied from the Compendium's own pages, and is never typed in an exercise's file (60a) |
 | About, steps, mistakes | in proper wording, each from a named proper source (§11.3 step 5); text is kept by language, English first |
 | Clip, still picture | empty until job 62 |
-| Status | live · retired |
+| Status | live · retired. Before launch a file may simply be deleted (Kd, 2026-11-17: no real members yet); after it, an exercise is retired |
 
 An exercise's page is written and checked for this file (job 65); the old text is never
 copied across in bulk. A draft may start from the public-domain list free-exercise-db (the
@@ -1777,8 +1780,10 @@ otherwise, that plan says so and this section is amended.
 - **Publishing is a part of its own**, run when the server is deployed and by the local
   seed. It reads every exercise file and refuses the whole publish, naming the file and the
   fact, for: a word outside a fixed list, a missing fact, two exercises sharing a name or
-  other name, a file that was published and is now gone (retire it instead), a number
-  outside its limits. The same check runs on GitHub, so a faulty file never merges.
+  other name, a number outside its limits, a Compendium code the table does not hold, a
+  misspelt fact. The same check runs on GitHub, so a faulty file never merges (60a). A
+  deleted file is not refused (Kd, 2026-11-17); 60b keeps the row of an exercise whose file
+  is gone, hidden, while saved sets still name it.
 - It writes each exercise's row (its id, status and the facts the server reckons with) and,
   only when the content changed, one new numbered copy of the whole list for each of beta
   and live. A published copy is never changed; going back is pointing at the copy before.
@@ -1851,7 +1856,8 @@ otherwise, that plan says so and this section is amended.
 
 | Job | What it builds | Waits for |
 |---|---|---|
-| 60 | The exercise list, made fresh, on the server: the file, publishing, the download, the lint rule | nothing |
+| 60a | One file for each exercise, the word lists, the check that refuses a faulty file, the lint rule | nothing |
+| 60b | The list on the server: publishing, its rows, one download for the phone | 60a |
 | 61 | What a workout keeps: the save, saved workouts, records, history | 60 |
 | 63 | The Exercise Library on the phone | 60 |
 | 64a | Build a workout, do it by hand or by timer, the summary, history | 61, 63 |
