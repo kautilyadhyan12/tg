@@ -963,17 +963,23 @@ describe("a photo as the screen showed it, with no box over the camera (33c, tes
     expect(screen.getByTestId("camera-view").props.responsiveOrientationWhenOrientationLocked).toBe(false);
   });
 
-  it("no box is drawn over the camera, for a meal or a label: the whole photo is read", async () => {
+  it("no box is drawn over the camera, for a meal or a label: the whole photo is read; the barcode reader keeps its box", async () => {
     await openFood({ meals: [], scans: [() => lost()] });
     await fireEvent.press(await screen.findByRole("button", { name: "Scan food" }));
     expect(await screen.findByRole("button", { name: "Take photo" })).toBeTruthy();
+    // Nothing is drawn between the camera and the switch at the foot but the Close and torch buttons.
+    expect(screen.queryByTestId("barcode-box")).toBeNull();
     expect(screen.queryByTestId("plate-corners")).toBeNull();
-    expect(screen.queryAllByTestId("plate-corner")).toHaveLength(0);
     await fireEvent.press(screen.getByRole("radio", { name: "Label" }));
+    expect(screen.queryByTestId("barcode-box")).toBeNull();
     expect(screen.queryByTestId("plate-corners")).toBeNull();
+    await fireEvent.press(screen.getByRole("radio", { name: "Barcode" }));
+    expect(screen.getByTestId("barcode-box")).toBeTruthy();
     await fireEvent.press(screen.getByRole("radio", { name: "Meal" }));
+    expect(screen.queryByTestId("barcode-box")).toBeNull();
     await fireEvent.press(screen.getByRole("button", { name: "Take photo" }));
     expect(await screen.findByText("No connection. Try again.")).toBeTruthy();
+    expect(screen.queryByTestId("barcode-box")).toBeNull();
     expect(screen.queryByTestId("plate-corners")).toBeNull();
   });
 });

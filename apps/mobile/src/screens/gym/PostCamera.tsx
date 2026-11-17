@@ -55,8 +55,9 @@ function Lens({ onPhoto, onClose }: { onPhoto: (uri: string) => void; onClose: (
           key={facing}
           style={StyleSheet.absoluteFill}
           facing={facing}
-          // A post's photo turns with the phone, so one taken sideways is a wide photo, as before
-          // (the meal camera keeps the picture the screen shows: patches/expo-camera@57.0.6.patch).
+          // A post's photo turns with the phone, so one taken sideways is a wide photo: as Android always
+          // did, and now on an iPhone too, whose own default kept the screen's picture (the meal camera
+          // keeps the screen's picture on both: patches/expo-camera@57.0.6.patch).
           responsiveOrientationWhenOrientationLocked
           onCameraReady={() => {
             setReady(true);

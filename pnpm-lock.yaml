@@ -8,7 +8,7 @@ packageExtensionsChecksum: 22dba9088aced43b63b8597d9c408dfd
 
 patchedDependencies:
   expo-camera@57.0.6:
-    hash: 7zuy4yibvuyjsl5v5archvibae
+    hash: 6wcej35vmbgz425ocdxslglkvu
     path: patches/expo-camera@57.0.6.patch
 
 importers:
@@ -153,7 +153,7 @@ importers:
         version: 57.0.2(expo@57.0.25)(react-native@0.86.3(@babel/core@7.29.7)(@react-native/jest-preset@0.86.3(@babel/core@7.29.7)(react@19.2.3))(@types/react@19.2.2)(react@19.2.3))
       expo-camera:
         specifier: 57.0.6
-        version: 57.0.6(patch_hash=7zuy4yibvuyjsl5v5archvibae)(@types/emscripten@1.41.6)(expo@57.0.25)(react-native@0.86.3(@babel/core@7.29.7)(@react-native/jest-preset@0.86.3(@babel/core@7.29.7)(react@19.2.3))(@types/react@19.2.2)(react@19.2.3))(react@19.2.3)
+        version: 57.0.6(patch_hash=6wcej35vmbgz425ocdxslglkvu)(@types/emscripten@1.41.6)(expo@57.0.25)(react-native@0.86.3(@babel/core@7.29.7)(@react-native/jest-preset@0.86.3(@babel/core@7.29.7)(react@19.2.3))(@types/react@19.2.2)(react@19.2.3))(react@19.2.3)
       expo-constants:
         specifier: 57.0.22
         version: 57.0.22(expo@57.0.25)(react-native@0.86.3(@babel/core@7.29.7)(@react-native/jest-preset@0.86.3(@babel/core@7.29.7)(react@19.2.3))(@types/react@19.2.2)(react@19.2.3))
@@ -11102,7 +11102,7 @@ snapshots:
       expo: 57.0.25(@babel/core@7.29.7)(@expo/dom-webview@57.0.1)(react-dom@19.2.7(react@19.2.3))(react-native-webview@13.16.1(react-native@0.86.3(@babel/core@7.29.7)(@react-native/jest-preset@0.86.3(@babel/core@7.29.7)(react@19.2.3))(@types/react@19.2.2)(react@19.2.3))(react@19.2.3))(react-native@0.86.3(@babel/core@7.29.7)(@react-native/jest-preset@0.86.3(@babel/core@7.29.7)(react@19.2.3))(@types/react@19.2.2)(react@19.2.3))(react@19.2.3)(typescript@5.9.3)
       react-native: 0.86.3(@babel/core@7.29.7)(@react-native/jest-preset@0.86.3(@babel/core@7.29.7)(react@19.2.3))(@types/react@19.2.2)(react@19.2.3)
 
-  expo-camera@57.0.6(patch_hash=7zuy4yibvuyjsl5v5archvibae)(@types/emscripten@1.41.6)(expo@57.0.25)(react-native@0.86.3(@babel/core@7.29.7)(@react-native/jest-preset@0.86.3(@babel/core@7.29.7)(react@19.2.3))(@types/react@19.2.2)(react@19.2.3))(react@19.2.3):
+  expo-camera@57.0.6(patch_hash=6wcej35vmbgz425ocdxslglkvu)(@types/emscripten@1.41.6)(expo@57.0.25)(react-native@0.86.3(@babel/core@7.29.7)(@react-native/jest-preset@0.86.3(@babel/core@7.29.7)(react@19.2.3))(@types/react@19.2.2)(react@19.2.3))(react@19.2.3):
     dependencies:
       barcode-detector: 3.2.2(@types/emscripten@1.41.6)
       expo: 57.0.25(@babel/core@7.29.7)(@expo/dom-webview@57.0.1)(react-dom@19.2.7(react@19.2.3))(react-native-webview@13.16.1(react-native@0.86.3(@babel/core@7.29.7)(@react-native/jest-preset@0.86.3(@babel/core@7.29.7)(react@19.2.3))(@types/react@19.2.2)(react@19.2.3))(react@19.2.3))(react-native@0.86.3(@babel/core@7.29.7)(@react-native/jest-preset@0.86.3(@babel/core@7.29.7)(react@19.2.3))(@types/react@19.2.2)(react@19.2.3))(react@19.2.3)(typescript@5.9.3)

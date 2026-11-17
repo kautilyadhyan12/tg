@@ -546,7 +546,7 @@ function Camera({
         </View>
       ) : null}
       {scanning && allowed ? (
-        <View style={styles.guideWrap} pointerEvents="none">
+        <View style={styles.guideWrap} pointerEvents="none" testID="barcode-box">
           <View style={styles.guide} />
           {look.kind === "looking" ? <ActivityIndicator size="large" color={colours.orange} /> : null}
         </View>
