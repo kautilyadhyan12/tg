@@ -5,38 +5,9 @@ import { Icon, type IconName } from "../../look/Icon";
 import { useLoop, useMotion } from "../../look/Motion";
 import { fonts, Txt } from "../../look/Txt";
 
-// Scan food as Kd's drawing 2 has it (32c-iii): orange corners on the plate, Meal, Barcode and Label
-// in one switch at the foot, and a warm light that sweeps the photo while it is read.
-
-/** The frame's shape, across to down, and how much of the free width it takes. */
-const FRAME_SHAPE = 0.9;
-const FRAME_WIDTH = 0.82;
-const FRAME_GAP = 12;
-
-/** Four orange corners where the plate goes, in the free space between the buttons at the top
- *  (`top`) and the words at the foot (`bottom`): never over either, on a short or folded phone too. */
-export function PlateCorners({ top, bottom }: { top: number; bottom: number }) {
-  const [room, setRoom] = useState<{ width: number; height: number } | null>(null);
-  const across = room === null ? 0 : Math.max(0, Math.min(room.width * FRAME_WIDTH, (room.height - FRAME_GAP * 2) * FRAME_SHAPE));
-  // Too little room for four corners apart: none, never four run together into one shape.
-  const drawn = across / FRAME_SHAPE >= CORNER * 2 && across >= CORNER * 2;
-  return (
-    <View
-      style={[styles.cornersWrap, { top, bottom }]}
-      pointerEvents="none"
-      testID="plate-room"
-      onLayout={(e) => { setRoom({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height }); }}
-    >
-      <View style={[styles.corners, { width: across, height: across / FRAME_SHAPE }]} testID="plate-corners">
-        {drawn
-          ? [styles.topLeft, styles.topRight, styles.bottomLeft, styles.bottomRight].map((place, i) => (
-              <View key={String(i)} style={[styles.corner, place]} testID="plate-corner" />
-            ))
-          : null}
-      </View>
-    </View>
-  );
-}
+// Scan food as Kd's drawing 2 has it (32c-iii): Meal, Barcode and Label in one switch at the foot,
+// and a warm light that sweeps the photo while it is read. The orange corners over the camera went in
+// 33c: testers took them for the edge of the photo, though the whole photo is read.
 
 export interface ModeChoice<T extends string> {
   value: T;
@@ -150,18 +121,8 @@ export function ReadingLight({ words, food }: { words: string; food: boolean }) 
   );
 }
 
-const CORNER = 46;
-const CORNER_LINE = 4;
-
 const styles = StyleSheet.create({
   pressed: { opacity: 0.85 },
-  cornersWrap: { position: "absolute", left: 0, right: 0, alignItems: "center", justifyContent: "center" },
-  corners: {},
-  corner: { position: "absolute", width: CORNER, height: CORNER, borderColor: colours.orange },
-  topLeft: { top: 0, left: 0, borderTopWidth: CORNER_LINE, borderLeftWidth: CORNER_LINE, borderTopLeftRadius: 18 },
-  topRight: { top: 0, right: 0, borderTopWidth: CORNER_LINE, borderRightWidth: CORNER_LINE, borderTopRightRadius: 18 },
-  bottomLeft: { bottom: 0, left: 0, borderBottomWidth: CORNER_LINE, borderLeftWidth: CORNER_LINE, borderBottomLeftRadius: 18 },
-  bottomRight: { bottom: 0, right: 0, borderBottomWidth: CORNER_LINE, borderRightWidth: CORNER_LINE, borderBottomRightRadius: 18 },
   switch: {
     alignSelf: "center",
     width: "100%",

@@ -732,6 +732,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
         - 33b-iii-b. [x] **Scan a barcode on the phone** — merged 2026-10-31 (PR #414).
         - 33b-iii-c. [x] **Read a label with Luna** — merged 2026-11-01 (PR #418).
         - 33b-iii-d. [x] **The food search and the meal scan read our copy** — merged 2026-11-01 (PR #424).
+    - 33c. [x] **A meal photo as the screen showed it, and no box over the camera** · merged 2026-11-17 · PR #572
 34. **More food** (split 2026-10-13: the parts on the server need no phone).
     - 34a. [x] **Ten more figures kept with every food in a meal** — merged 2026-10-13 (PR #245).
     - 34b. [x] **The ten figures on the Food screen** — merged 2026-11-01 (PR #429).
