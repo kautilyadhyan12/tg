@@ -228,13 +228,14 @@ export interface Agreement {
   readonly apart: Readonly<Record<Kind, number>>;
 }
 
-/** `half` must be the run of every second frame of the frames `full` ran on. */
-export function agreementOf(full: readonly MeasuredBody[], half: readonly MeasuredBody[]): Agreement {
+/** `half` must be the run of every second frame of the frames `full` ran on; with `step` 1, of the same frames
+ *  (the phone test's, ROADMAP 51a). */
+export function agreementOf(full: readonly MeasuredBody[], half: readonly MeasuredBody[], step = 2): Agreement {
   let compared = 0;
   let differ = 0;
   const apart: Record<Kind, number[]> = { angle: [], length: [] };
   half.forEach((h, n) => {
-    const f = full[n * 2];
+    const f = full[n * step];
     if (f === undefined) return;
     for (const { name, unit } of MEASURE_LIST) {
       const a = f.readings.get(name);

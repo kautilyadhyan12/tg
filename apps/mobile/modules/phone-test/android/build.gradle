@@ -1,0 +1,24 @@
+// The phone test (ROADMAP Stage 5 item 51a): this app's own Android code, linked by Expo from apps/mobile/modules
+// as the heart rate's is. A folder's copy is a debug build and holds all of it; the store's app is a release build
+// and holds none of it: the test, its screen and Google's pose library are only in src/debug and debugImplementation.
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'expo.modules.phonetest'
+version = '1.0.0'
+
+android {
+  namespace "expo.modules.phonetest"
+  defaultConfig {
+    versionCode 1
+    versionName "1.0.0"
+  }
+}
+
+dependencies {
+  // Google's pose library for Android, of the laptop's own release line (mediapipe 1.0.1 in Python), pinned.
+  // The test's LIBRARY line (PhoneTest.kt) names the same version; apps/mobile/test/phoneTest.test.ts holds both.
+  debugImplementation "com.google.mediapipe:tasks-vision:1.0.0"
+}

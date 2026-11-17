@@ -797,7 +797,9 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
         - 50c-i. [x] **The frame and the small files** — merged 2026-11-16 (PR #564).
         - 50c-ii. [x] **Is this body possible, and steady points** — merged 2026-11-17 (PR #569).
         - 50c-iii. [x] **The body measures** — merged 2026-11-17 (PR #573).
-51. [ ] **The phone test** (after 50c; it needs Kd's phone): which pose model and library, the speed, heat and battery, 3D points and several people at speed, the same numbers as the laptop, and the phone testing itself on the videos (§12.5). Second on purpose: what it finds can change the design before the matcher is built.
+51. **The phone test** (after 50c; it needs Kd's phone; split 2026-11-17 in two, the videos first): which pose model and library, the speed, heat and battery, 3D points and several people at speed, the same numbers as the laptop, and the phone testing itself on the videos (§12.5). Second on purpose: what it finds can change the design before the matcher is built.
+    - 51a. [ ] **The phone plays the videos**: Kd's six reference videos through the phone's own pose model, three sizes, with and without the graphics chip; each one's time a picture, 3D points and people found, and its body points and measures against the laptop's; nothing sent to Google.
+    - 51b. [ ] **The live camera for 20 minutes** (after 51a): the one or two best of 51a on the selfie camera, speed, heat, battery and memory; the model is picked.
 52. **The movement engine** (§12; it replaces "the engine's missing parts").
     - 52a. [ ] **The movement matcher and the proof table** (§12.3, §12.5): a movement as data, numbers set from all the people but one and tested on the one left out, every other movement's video counting 0, each video replayed the ways the world changes it; the squat movement made fresh as the first proof. It needs 3 to 5 squat videos of different people from Kd.
     - 52b. [ ] **The form judge, the reason for a rep not counted, and the summary** (§12.1, §2.4).

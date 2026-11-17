@@ -1,7 +1,8 @@
-"""The Python half of measure-points.ts. Two jobs, and no measuring of its own:
+"""The Python half of measure-points.ts. Three jobs, and no measuring of its own:
 
   measure  a video to the body points of every person the pose model finds, every
            number as the model gave it (measure-points rounds them, once).
+  frames   which frames measure keeps, by their number in the video, for the phone test.
   draw     the pictures: each person the file holds, drawn on the video's own frame;
            for body-check, the points the possible-body check refused in red.
 
@@ -49,16 +50,25 @@ def sampled_frames(cap, fps):
     clock so uneven timing stays true. For each moment a `1/fps` apart it keeps the video
     frame nearest to it, so the gaps stay even. The draw step finds its frames by this
     same order."""
+    for _, t, img in numbered_frames(cap, fps):
+        yield t, img
+
+
+def numbered_frames(cap, fps):
+    """sampled_frames with each kept frame's number in the video, counted from 0 in the
+    order it plays: the phone test (ROADMAP 51a) asks the phone for these same frames."""
     video_fps = cap.get(cv2.CAP_PROP_FPS) or fps
     step = 1000.0 / fps
     half_frame = 500.0 / max(video_fps, fps)
     due = 0.0
     first = None
     last = -1.0
+    number = -1
     while True:
         ok, img = cap.read()
         if not ok:
             return
+        number += 1
         at = cap.get(cv2.CAP_PROP_POS_MSEC)
         if first is None:
             first = at
@@ -68,7 +78,7 @@ def sampled_frames(cap, fps):
             continue
         due = (math.floor((raw + half_frame) / step) + 1) * step
         last = t
-        yield t, img
+        yield number, t, img
 
 
 def sure(value, what):
@@ -150,6 +160,35 @@ def measure(a):
             f.write(json.dumps(frame, allow_nan=False) + "\n")
     if left_out:
         print(f"{left_out} people were left out of their frames: the model gave a broken number for them.")
+
+
+def frames(a):
+    """The frames measure keeps, each with its number in the video and its time, the
+    picture's shape and how many frames the video has: what the phone test hands the
+    phone, so that it reads the very pictures the laptop read. No model runs here."""
+    cap = cv2.VideoCapture(a.video)
+    if not cap.isOpened():
+        sys.exit(f"Cannot read the video {os.path.basename(a.video)}.")
+    video_fps = cap.get(cv2.CAP_PROP_FPS)
+    if not video_fps or video_fps <= 0:
+        sys.exit("The video does not say its frames a second.")
+    fps = min(a.fps, video_fps)
+    kept, size = [], None
+    for number, t, img in numbered_frames(cap, fps):
+        size = size or picture_shape(cap, img)
+        kept.append([number, t])
+    cap.release()
+    if size is None:
+        sys.exit("The video has no frames.")
+    # Every frame, kept or not, read once more from the start: the phone's own count is checked against it.
+    cap = cv2.VideoCapture(a.video)
+    read = 0
+    while cap.grab():
+        read += 1
+    cap.release()
+    with open(a.out, "w", encoding="utf-8", newline="\n") as out:
+        json.dump({"picture": {"width": size[0], "height": size[1]}, "videoFps": round(video_fps, 3), "fps": round(fps, 3),
+                   "read": read, "frames": kept}, out)
 
 
 def draw_frame(img, people, lines):
@@ -252,6 +291,10 @@ def main():
     m.add_argument("--people", type=int, required=True)
     m.add_argument("--model", required=True)
     m.add_argument("--tool-version", type=int, required=True)
+    f = sub.add_parser("frames")
+    f.add_argument("--video", required=True)
+    f.add_argument("--fps", type=float, required=True)
+    f.add_argument("--out", required=True)
     d = sub.add_parser("draw")
     d.add_argument("--look", required=True)
     d.add_argument("--video", required=True)
@@ -260,6 +303,8 @@ def main():
     a = p.parse_args()
     if a.job == "measure":
         measure(a)
+    elif a.job == "frames":
+        frames(a)
     else:
         draw(a)
 
