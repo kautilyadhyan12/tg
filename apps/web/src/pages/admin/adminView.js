@@ -161,3 +161,33 @@ export function dayTotalsWords(totals) {
     `cost ${costWords(totals.costMicro)}`,
   ].join(' · ');
 }
+
+// ── What each person used on a day (14a-iii) ─────────────────────────────────
+
+/** A day's box, feature by feature as the phone's tabs name them: each line a label and its count.
+ *  Meal scans and route plans are what their limit counts; the rest is what they saved. */
+export function usedGroups(numbers) {
+  const u = numbers.used;
+  return [
+    {
+      feature: 'Food',
+      lines: [
+        ['Meal scans', numbers.mealScans],
+        ['Meals saved from a photo', u.mealPhotosSaved],
+        ['Pack labels saved', u.packLabelsSaved],
+        ['Meals added by hand', u.mealsByHand],
+      ],
+    },
+    { feature: 'Running', lines: [['Runs saved', u.runsSaved], ['Route plans', numbers.routePlans]] },
+    { feature: 'Workout', lines: [['Workouts saved', u.workoutsSaved]] },
+    { feature: 'Progress', lines: [['Body measurements saved', u.bodyMeasurements]] },
+  ];
+}
+
+/** "Food, Running": the features they used that day, or "None". */
+export function usedWords(numbers) {
+  const used = usedGroups(numbers)
+    .filter((g) => g.lines.some(([, n]) => n > 0))
+    .map((g) => g.feature);
+  return used.length === 0 ? 'None' : used.join(', ');
+}

@@ -63,15 +63,16 @@ const dayBefore = (n) => {
   const [y, m, d] = today.split('-').map(Number);
   return new Date(Date.UTC(y, m - 1, d - n)).toISOString().slice(0, 10);
 };
+const NONE = { mealPhotosSaved: 0, packLabelsSaved: 0, mealsByHand: 0, runsSaved: 0, workoutsSaved: 0, bodyMeasurements: 0 };
 const benDays = {
   person: { id: 'b1', name: 'Ben', email: 'ben@gmail.com' },
   zone: 'Asia/Kolkata',
   zoneFromPhone: true,
   today,
   days: [
-    { day: today, minutes: 34, mealScans: 3, routePlans: 0, costMicro: 528 },
-    { day: dayBefore(1), minutes: 0, mealScans: 0, routePlans: 1, costMicro: 0 },
-    { day: dayBefore(2), minutes: null, mealScans: 1, routePlans: 0, costMicro: 176 },
+    { day: today, minutes: 34, mealScans: 3, routePlans: 0, costMicro: 528, used: { ...NONE, mealPhotosSaved: 2, mealsByHand: 1, runsSaved: 1 } },
+    { day: dayBefore(1), minutes: 0, mealScans: 0, routePlans: 1, costMicro: 0, used: NONE },
+    { day: dayBefore(2), minutes: null, mealScans: 1, routePlans: 0, costMicro: 176, used: NONE },
   ],
   next: dayBefore(2),
 };
@@ -85,7 +86,7 @@ describe("each person's days (14a-ii)", () => {
   it("Days opens under that person's row: each day's time in the app, scans, route plans and cost; Earlier days; Close", async () => {
     vi.mocked(adminService.personDays)
       .mockResolvedValueOnce(benDays)
-      .mockResolvedValueOnce({ ...benDays, days: [{ day: dayBefore(3), minutes: null, mealScans: 0, routePlans: 0, costMicro: 0 }], next: null });
+      .mockResolvedValueOnce({ ...benDays, days: [{ day: dayBefore(3), minutes: null, mealScans: 0, routePlans: 0, costMicro: 0, used: NONE }], next: null });
     draw();
     const button = await daysButton('Ben');
     fireEvent.click(button);
@@ -97,9 +98,9 @@ describe("each person's days (14a-ii)", () => {
     const table = await within(section).findByRole('table', {}, SLOW);
     const rows = rowTexts(table);
     expect(rows.map((r) => r.slice(1))).toEqual([
-      ['34 min', '3', '0', '$0.0005'],
-      ['0 min', '0', '1', '$0'],
-      ['Not recorded', '1', '0', '$0.0002'],
+      ['34 min', '3', '0', '$0.0005', 'Food, Running'],
+      ['0 min', '0', '1', '$0', 'Running'],
+      ['Not recorded', '1', '0', '$0.0002', 'Food'],
     ]);
     expect(rows.map((r) => r[0]).slice(0, 2)).toEqual(['Today', 'Yesterday']);
     expect(screen.queryByRole('region', { name: "Asha's days" })).toBeNull();
@@ -122,7 +123,7 @@ describe("each person's days (14a-ii)", () => {
 
 
   it('By day: the day picked, its totals in one line, everyone who used the app, most time first; Show more', async () => {
-    const row = (id, name, minutes) => ({ id, name, email: `${name.toLowerCase()}@gmail.com`, minutes, mealScans: 1, routePlans: 0, costMicro: 176 });
+    const row = (id, name, minutes) => ({ id, name, email: `${name.toLowerCase()}@gmail.com`, minutes, mealScans: 1, routePlans: 0, costMicro: 176, used: NONE });
     const totals = { people: 3, minutes: 95, mealScans: 3, routePlans: 0, costMicro: 528 };
     vi.mocked(adminService.day)
       .mockResolvedValueOnce({ day: today, totals, people: [row('a1', 'Asha', 60), row('b1', 'Ben', 35)], next: 2 })
@@ -136,11 +137,68 @@ describe("each person's days (14a-ii)", () => {
     expect(rowTexts(table).map((r) => r[0])).toEqual(['Asha', 'Ben']);
     fireEvent.click(screen.getByRole('button', { name: 'Show more' }));
     await waitFor(() => expect(rowTexts(table)).toHaveLength(3));
-    expect(rowTexts(table)[2]).toEqual(['Chen', 'chen@gmail.com', 'Not recorded', '1', '0', '$0.0002']);
+    expect(rowTexts(table)[2]).toEqual(['Chen', 'chen@gmail.com', 'Not recorded', '1', '0', '$0.0002', 'Food']);
     expect(adminService.day).toHaveBeenLastCalledWith(today, { zone: myZone(), from: 2 });
     expect(screen.queryByRole('button', { name: 'Show more' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'People' }));
     expect(await screen.findByText('People using the app')).toBeTruthy();
+  });
+
+  it("By day (14a-iii): a name opens what they used that day under their row, feature by feature; one at a time; Close", async () => {
+    const totals = { people: 2, minutes: 41, mealScans: 3, routePlans: 1, costMicro: 0 };
+    const ashaDay = { id: 'a1', name: 'Asha', email: 'asha@gmail.com', minutes: 34, mealScans: 3, routePlans: 1, costMicro: 0, used: { mealPhotosSaved: 2, packLabelsSaved: 1, mealsByHand: 4, runsSaved: 1, workoutsSaved: 0, bodyMeasurements: 1 } };
+    const deeDay = { id: 'd1', name: 'Dee', email: 'dee@gmail.com', minutes: null, mealScans: 0, routePlans: 0, costMicro: 0, used: { ...NONE, workoutsSaved: 1 } };
+    vi.mocked(adminService.day).mockResolvedValue({ day: today, totals, people: [ashaDay, deeDay], next: null });
+    draw();
+    fireEvent.click(await screen.findByRole('button', { name: 'By day' }, SLOW));
+    await screen.findByTestId('day-totals', {}, SLOW);
+    const table = screen.getByRole('table');
+    expect(rowTexts(table).map((r) => r[6])).toEqual(['Food, Running, Progress', 'Workout']);
+    const name = screen.getByRole('button', { name: 'Asha, Today' });
+    expect(name.getAttribute('aria-expanded')).toBe('false');
+    fireEvent.click(name);
+    const box = screen.getByRole('region', { name: 'Asha, Today' });
+    expect(name.getAttribute('aria-expanded')).toBe('true');
+    // Under her own row.
+    expect(name.closest('tr').nextElementSibling.contains(box)).toBe(true);
+    expect(within(box).getByText('Time in the app: 34 min')).toBeTruthy();
+    const lines = within(box).getAllByRole('term').map((t) => [t.textContent, t.nextElementSibling.textContent]);
+    expect(lines).toEqual([
+      ['Meal scans', '3'],
+      ['Meals saved from a photo', '2'],
+      ['Pack labels saved', '1'],
+      ['Meals added by hand', '4'],
+      ['Runs saved', '1'],
+      ['Route plans', '1'],
+      ['Workouts saved', '0'],
+      ['Body measurements saved', '1'],
+    ]);
+    expect(within(box).getAllByRole('heading').map((h) => h.textContent)).toEqual(['Asha, Today', 'Food', 'Running', 'Workout', 'Progress']);
+    // Another name: hers closes, his opens, with his own numbers.
+    fireEvent.click(screen.getByRole('button', { name: 'Dee, Today' }));
+    expect(screen.queryByRole('region', { name: 'Asha, Today' })).toBeNull();
+    const deeBox = screen.getByRole('region', { name: 'Dee, Today' });
+    expect(within(deeBox).getByText('Time in the app: Not recorded')).toBeTruthy();
+    expect(within(deeBox).getAllByRole('term').map((t) => t.nextElementSibling.textContent)).toEqual(['0', '0', '0', '0', '0', '0', '1', '0']);
+    fireEvent.click(within(deeBox).getByRole('button', { name: 'Close' }));
+    expect(screen.queryByRole('region', { name: 'Dee, Today' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Dee, Today' }).getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it("a person's days (14a-iii): a day opens what they used on it, under that day", async () => {
+    vi.mocked(adminService.personDays).mockResolvedValue(benDays);
+    draw();
+    fireEvent.click(await daysButton('Ben'));
+    const section = await screen.findByRole('region', { name: "Ben's days" }, SLOW);
+    const day = await within(section).findByRole('button', { name: 'Ben, Today' }, SLOW);
+    fireEvent.click(day);
+    const box = within(section).getByRole('region', { name: 'Ben, Today' });
+    expect(day.closest('tr').nextElementSibling.contains(box)).toBe(true);
+    expect(within(box).getByText('Time in the app: 34 min')).toBeTruthy();
+    expect(within(box).getAllByRole('term').map((t) => t.nextElementSibling.textContent)).toEqual(['3', '2', '0', '1', '1', '0', '0', '0']);
+    fireEvent.click(within(section).getByRole('button', { name: 'Ben, Yesterday' }));
+    expect(within(section).queryByRole('region', { name: 'Ben, Today' })).toBeNull();
+    expect(within(within(section).getByRole('region', { name: 'Ben, Yesterday' })).getByText('Time in the app: 0 min')).toBeTruthy();
   });
 
   it('a day nobody used the app says so', async () => {
@@ -162,7 +220,7 @@ describe("each person's days (14a-ii)", () => {
   });
 
   it('coming back to the window reads the open days again; earlier days opened stay unless the first page now ends elsewhere', async () => {
-    const earlierPage = { ...benDays, days: [{ day: dayBefore(3), minutes: null, mealScans: 0, routePlans: 0, costMicro: 0 }], next: null };
+    const earlierPage = { ...benDays, days: [{ day: dayBefore(3), minutes: null, mealScans: 0, routePlans: 0, costMicro: 0, used: NONE }], next: null };
     vi.mocked(adminService.personDays).mockImplementation(async (_id, { before = null }) => (before === null ? benDays : earlierPage));
     draw();
     fireEvent.click(await daysButton('Ben'));
@@ -195,7 +253,7 @@ describe("each person's days (14a-ii)", () => {
   });
 
   it('By day: somebody who moved up between two pages is not lost: the page says the list changed, and Read again', async () => {
-    const row = (id, name, minutes) => ({ id, name, email: `${name.toLowerCase()}@gmail.com`, minutes, mealScans: 0, routePlans: 0, costMicro: 0 });
+    const row = (id, name, minutes) => ({ id, name, email: `${name.toLowerCase()}@gmail.com`, minutes, mealScans: 0, routePlans: 0, costMicro: 0, used: NONE });
     const totals = { people: 3, minutes: 100, mealScans: 0, routePlans: 0, costMicro: 0 };
     vi.mocked(adminService.day)
       .mockResolvedValueOnce({ day: today, totals, people: [row('a1', 'Asha', 60), row('b1', 'Ben', 30)], next: 2 })

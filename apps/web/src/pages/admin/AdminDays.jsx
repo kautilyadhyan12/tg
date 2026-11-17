@@ -1,13 +1,14 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { X } from 'lucide-react';
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
+import { ChevronDown, X } from 'lucide-react';
 import { adminService, isDoorShut } from '../../api/adminApi';
 import { errorText } from '../../api/orgsApi';
 import DatePick from '../../components/console/DatePick';
-import { costWords, dayTotalsWords, dayWords, minutesWords, myZone, todayIn, zoneWords } from './adminView';
+import { costWords, dayTotalsWords, dayWords, minutesWords, myZone, todayIn, usedGroups, usedWords, zoneWords } from './adminView';
 
 // EACH PERSON'S DAYS (ROADMAP Stage 2 item 14a-ii; Kd, 2026-11-08): time in the app, meal scans,
 // route plans and what they cost, day by day for one person, and any day for everyone. Each day is
-// the person's own, in their phone's time zone. Read again when Kd comes back to the window, as the
+// the person's own, in their phone's time zone. Pressing a day, or a name on By day, opens what they
+// used that day by feature, under it (14a-iii; Kd, 2026-11-17): counts only, never what it was. Read again when Kd comes back to the window, as the
 // phone keeps sending (CLAUDE.md §4, "Pages stay current by themselves").
 
 /** Reads `load`, and again when the window is back in front. While it reads again, the last
@@ -63,6 +64,57 @@ function Problem({ text, onRetry }) {
   );
 }
 
+/** What one person used on one day, feature by feature, under the row that was pressed (14a-iii). */
+function DayUse({ title, numbers, onClose }) {
+  return (
+    <section aria-label={title} style={{ padding: '12px 16px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <h4 className="c-s15 c-w6" style={{ margin: 0 }}>
+          {title}
+        </h4>
+        <span className="c-s14">Time in the app: {minutesWords(numbers.minutes)}</span>
+        <span style={{ flexGrow: 1 }} />
+        <button type="button" className="c-btn c-btn-quiet c-btn-sm" onClick={onClose}>
+          <X size={16} aria-hidden="true" />
+          Close
+        </button>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 10 }}>
+        {usedGroups(numbers).map((g) => (
+          <div key={g.feature} className="c-card" style={{ padding: 12 }}>
+            <h5 className="c-s14 c-w6" style={{ margin: '0 0 6px' }}>
+              {g.feature}
+            </h5>
+            <dl style={{ margin: 0, display: 'grid', gridTemplateColumns: '1fr auto', gap: '4px 12px' }}>
+              {g.lines.map(([label, n]) => (
+                <Fragment key={label}>
+                  <dt className="c-s14 c-t2">{label}</dt>
+                  <dd className="c-s14 c-w6" style={{ margin: 0 }}>
+                    {n}
+                  </dd>
+                </Fragment>
+              ))}
+            </dl>
+          </div>
+        ))}
+      </div>
+      <p className="c-hint" style={{ margin: 0 }}>
+        Meal scans counts every scan made, saved or not, as their limit does. A meal, run, workout or measurement counts on the day it was saved.
+      </p>
+    </section>
+  );
+}
+
+/** A name or a day that opens its box under its row. */
+function Opens({ open, label, onToggle, children }) {
+  return (
+    <button type="button" className="c-btn c-btn-link" aria-expanded={open} aria-label={label} onClick={onToggle} style={{ gap: 4, whiteSpace: 'nowrap' }}>
+      {children}
+      <ChevronDown size={16} aria-hidden="true" style={open ? { transform: 'rotate(180deg)' } : undefined} />
+    </button>
+  );
+}
+
 /** One person's days, under their row on the people list. */
 export function PersonDays({ person, onShut, onClose }) {
   const zone = myZone();
@@ -93,6 +145,7 @@ export function PersonDays({ person, onShut, onClose }) {
   };
   const name = person.name || person.email || 'This person';
   const days = first.data === null ? [] : [...first.data.days, ...earlier.days];
+  const [openDay, setOpenDay] = useState(null);
 
   return (
     <section aria-label={`${name}'s days`} style={{ padding: '4px 16px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -119,18 +172,37 @@ export function PersonDays({ person, onShut, onClose }) {
                 <th style={head}>Meal scans</th>
                 <th style={head}>Route plans</th>
                 <th style={head}>Cost</th>
+                <th style={head}>Features used</th>
               </tr>
             </thead>
             <tbody>
-              {days.map((d) => (
-                <tr key={d.day} className="c-s14" style={{ borderTop: '1px solid var(--line)' }}>
-                  <td className="c-w6" style={cell}>{dayWords(d.day, first.data.today)}</td>
-                  <td style={cell}>{minutesWords(d.minutes)}</td>
-                  <td style={cell}>{d.mealScans}</td>
-                  <td style={cell}>{d.routePlans}</td>
-                  <td style={cell}>{costWords(d.costMicro)}</td>
-                </tr>
-              ))}
+              {days.map((d) => {
+                const when = dayWords(d.day, first.data.today);
+                const open = openDay === d.day;
+                return (
+                  <Fragment key={d.day}>
+                    <tr className="c-s14" style={{ borderTop: '1px solid var(--line)' }}>
+                      <td className="c-w6" style={{ padding: '4px 8px' }}>
+                        <Opens open={open} label={`${name}, ${when}`} onToggle={() => setOpenDay(open ? null : d.day)}>
+                          {when}
+                        </Opens>
+                      </td>
+                      <td style={cell}>{minutesWords(d.minutes)}</td>
+                      <td style={cell}>{d.mealScans}</td>
+                      <td style={cell}>{d.routePlans}</td>
+                      <td style={cell}>{costWords(d.costMicro)}</td>
+                      <td style={cell}>{usedWords(d)}</td>
+                    </tr>
+                    {open ? (
+                      <tr>
+                        <td colSpan={6} style={{ background: 'var(--card)' }}>
+                          <DayUse title={`${name}, ${when}`} numbers={d} onClose={() => setOpenDay(null)} />
+                        </td>
+                      </tr>
+                    ) : null}
+                  </Fragment>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -151,6 +223,7 @@ export function ByDay({ onShut }) {
   const zone = myZone();
   const today = todayIn(zone);
   const [day, setDay] = useState(today);
+  const [opened, setOpened] = useState(null);
   const load = useCallback(() => adminService.day(day, { zone }), [day, zone]);
   const first = useRead(load, onShut);
   // Read again, the first page's order may change: the pages after it start again.
@@ -183,12 +256,12 @@ export function ByDay({ onShut }) {
           By day
         </h2>
         <p className="c-hint" style={{ margin: '4px 0 0' }}>
-          Everyone who used the app on one day, most time in the app first. Each day is the person&apos;s own, in their phone&apos;s time zone, or in yours until their phone has sent one.
+          Everyone who used the app on one day, most time in the app first. Each day is the person&apos;s own, in their phone&apos;s time zone, or in yours until their phone has sent one. Press a name to see what they used that day.
         </p>
       </div>
       <div className="c-field" style={{ maxWidth: 260 }}>
         <span className="c-label">Day</span>
-        <DatePick label="Day" value={day} max={today} today={today} onChange={(d) => setDay(d)} newLook />
+        <DatePick label="Day" value={day} max={today} today={today} onChange={(d) => { setDay(d); setOpened(null); }} newLook />
       </div>
       {first.error ? <Problem text={first.error} onRetry={first.reload} /> : null}
       {first.data !== null ? (
@@ -207,20 +280,39 @@ export function ByDay({ onShut }) {
                 <th style={head}>Time in the app</th>
                 <th style={head}>Meal scans</th>
                 <th style={head}>Route plans</th>
-                <th style={{ padding: '10px 16px 10px 8px' }}>Cost</th>
+                <th style={head}>Cost</th>
+                <th style={{ padding: '10px 16px 10px 8px' }}>Features used</th>
               </tr>
             </thead>
             <tbody>
-              {people.map((p) => (
-                <tr key={p.id} className="c-s14" style={{ borderTop: '1px solid var(--line)' }}>
-                  <td className="c-w6" style={{ padding: '10px 8px 10px 16px' }}>{p.name}</td>
-                  <td style={head}>{p.email ?? 'No email'}</td>
-                  <td style={cell}>{minutesWords(p.minutes)}</td>
-                  <td style={cell}>{p.mealScans}</td>
-                  <td style={cell}>{p.routePlans}</td>
-                  <td style={{ ...cell, paddingRight: 16 }}>{costWords(p.costMicro)}</td>
-                </tr>
-              ))}
+              {people.map((p) => {
+                const name = p.name || p.email || 'This person';
+                const open = opened === p.id;
+                return (
+                  <Fragment key={p.id}>
+                    <tr className="c-s14" style={{ borderTop: '1px solid var(--line)' }}>
+                      <td className="c-w6" style={{ padding: '4px 8px 4px 16px' }}>
+                        <Opens open={open} label={`${name}, ${dayWords(first.data.day, today)}`} onToggle={() => setOpened(open ? null : p.id)}>
+                          {p.name}
+                        </Opens>
+                      </td>
+                      <td style={head}>{p.email ?? 'No email'}</td>
+                      <td style={cell}>{minutesWords(p.minutes)}</td>
+                      <td style={cell}>{p.mealScans}</td>
+                      <td style={cell}>{p.routePlans}</td>
+                      <td style={cell}>{costWords(p.costMicro)}</td>
+                      <td style={{ ...cell, paddingRight: 16 }}>{usedWords(p)}</td>
+                    </tr>
+                    {open ? (
+                      <tr>
+                        <td colSpan={7} style={{ background: 'var(--raise)' }}>
+                          <DayUse title={`${name}, ${dayWords(first.data.day, today)}`} numbers={p} onClose={() => setOpened(null)} />
+                        </td>
+                      </tr>
+                    ) : null}
+                  </Fragment>
+                );
+              })}
             </tbody>
           </table>
         </div>

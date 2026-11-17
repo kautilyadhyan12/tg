@@ -11,6 +11,8 @@ import {
   openUntilWords,
   planWords,
   todayIn,
+  usedGroups,
+  usedWords,
   zoneName,
   zoneWords,
 } from './adminView';
@@ -24,6 +26,40 @@ const person = (name, over = {}) => ({
   mealScans: { window: 'month', limit: 3, yours: false },
   routePlans: { window: 'month', limit: 2, yours: false },
   ...over,
+});
+
+const NONE = { mealPhotosSaved: 0, packLabelsSaved: 0, mealsByHand: 0, runsSaved: 0, workoutsSaved: 0, bodyMeasurements: 0 };
+const dayOf = (over = {}, used = {}) => ({ minutes: 10, mealScans: 0, routePlans: 0, costMicro: 0, ...over, used: { ...NONE, ...used } });
+
+describe('what each person used on a day (14a-iii)', () => {
+  it('names each feature they used, in the tabs\' order, and None when they used none', () => {
+    const cases = [
+      [dayOf(), 'None'],
+      [dayOf({ minutes: null }), 'None'],
+      [dayOf({ costMicro: 900 }), 'None'],
+      [dayOf({ mealScans: 1 }), 'Food'],
+      [dayOf({}, { mealPhotosSaved: 1 }), 'Food'],
+      [dayOf({}, { packLabelsSaved: 1 }), 'Food'],
+      [dayOf({}, { mealsByHand: 1 }), 'Food'],
+      [dayOf({ routePlans: 1 }), 'Running'],
+      [dayOf({}, { runsSaved: 2 }), 'Running'],
+      [dayOf({}, { workoutsSaved: 1 }), 'Workout'],
+      [dayOf({}, { bodyMeasurements: 1 }), 'Progress'],
+      [dayOf({}, { bodyMeasurements: 1, runsSaved: 1 }), 'Running, Progress'],
+      [dayOf({ mealScans: 2, routePlans: 1 }, { workoutsSaved: 1, bodyMeasurements: 1 }), 'Food, Running, Workout, Progress'],
+    ];
+    for (const [day, words] of cases) expect(usedWords(day)).toBe(words);
+  });
+
+  it('the box: each line its own count, a scan made apart from a meal saved from one', () => {
+    const groups = usedGroups(dayOf({ mealScans: 3, routePlans: 4 }, { mealPhotosSaved: 2, packLabelsSaved: 5, mealsByHand: 6, runsSaved: 7, workoutsSaved: 8, bodyMeasurements: 9 }));
+    expect(groups).toEqual([
+      { feature: 'Food', lines: [['Meal scans', 3], ['Meals saved from a photo', 2], ['Pack labels saved', 5], ['Meals added by hand', 6]] },
+      { feature: 'Running', lines: [['Runs saved', 7], ['Route plans', 4]] },
+      { feature: 'Workout', lines: [['Workouts saved', 8]] },
+      { feature: 'Progress', lines: [['Body measurements saved', 9]] },
+    ]);
+  });
 });
 
 describe('the admin page words', () => {
