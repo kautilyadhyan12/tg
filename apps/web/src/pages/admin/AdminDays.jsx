@@ -64,10 +64,15 @@ function Problem({ text, onRetry }) {
   );
 }
 
-/** What one person used on one day, feature by feature, under the row that was pressed (14a-iii). */
-function DayUse({ title, numbers, onClose }) {
+/** What one person used on one day, feature by feature, under the row that was pressed (14a-iii). Its
+ *  table scrolls sideways on a phone: the box stays at the left, no wider than the screen less `inset`
+ *  (the page's edges and the boxes around it), so its features stack there instead of running off it. */
+function DayUse({ title, numbers, onClose, inset }) {
   return (
-    <section aria-label={title} style={{ padding: '12px 16px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+    <section
+      aria-label={title}
+      style={{ position: 'sticky', left: 0, boxSizing: 'border-box', maxWidth: `calc(100vw - ${String(inset)}px)`, padding: '12px 16px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}
+    >
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
         <h4 className="c-s15 c-w6" style={{ margin: 0 }}>
           {title}
@@ -196,7 +201,7 @@ export function PersonDays({ person, onShut, onClose }) {
                     {open ? (
                       <tr>
                         <td colSpan={6} style={{ background: 'var(--card)' }}>
-                          <DayUse title={`${name}, ${when}`} numbers={d} onClose={() => setOpenDay(null)} />
+                          <DayUse title={`${name}, ${when}`} numbers={d} inset={50} onClose={() => setOpenDay(null)} />
                         </td>
                       </tr>
                     ) : null}
@@ -306,7 +311,7 @@ export function ByDay({ onShut }) {
                     {open ? (
                       <tr>
                         <td colSpan={7} style={{ background: 'var(--raise)' }}>
-                          <DayUse title={`${name}, ${dayWords(first.data.day, today)}`} numbers={p} onClose={() => setOpened(null)} />
+                          <DayUse title={`${name}, ${dayWords(first.data.day, today)}`} numbers={p} inset={32} onClose={() => setOpened(null)} />
                         </td>
                       </tr>
                     ) : null}
