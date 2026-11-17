@@ -126,6 +126,9 @@ d("the admin page (real Postgres)", () => {
     await sql`DELETE FROM gym_staff WHERE gym_id IN (SELECT id FROM gyms WHERE slug = 'a14i-gym')`;
     await sql`DELETE FROM gyms WHERE slug = 'a14i-gym'`;
     await sql`DELETE FROM refresh_tokens WHERE user_id IN (${mine})`;
+    await sql`DELETE FROM meal_logs WHERE user_id IN (${mine})`;
+    await sql`DELETE FROM runs WHERE user_id IN (${mine})`;
+    await sql`DELETE FROM workouts WHERE user_id IN (${mine})`;
     await sql`DELETE FROM api_cost_events WHERE user_id IN (${mine})`;
     await sql`DELETE FROM sign_in_codes WHERE email LIKE ${`${PREFIX}%`}`;
     await sql`DELETE FROM users WHERE email LIKE ${`${PREFIX}%`} OR email LIKE ${`${BULK}%`}`;
@@ -546,7 +549,9 @@ d("the admin page (real Postgres)", () => {
     access: "",
   });
   const sendMinutes = (p: Person, body: unknown) => call(must(app), { method: "POST", url: "/v1/me/app-minutes", access: p.access, body });
-  type Numbers = { minutes: number | null; mealScans: number; routePlans: number; costMicro: number };
+  type Used = { mealPhotosSaved: number; packLabelsSaved: number; mealsByHand: number; runsSaved: number; workoutsSaved: number; bodyMeasurements: number };
+  type Numbers = { minutes: number | null; mealScans: number; routePlans: number; costMicro: number; used: Used };
+  const NONE = { mealPhotosSaved: 0, packLabelsSaved: 0, mealsByHand: 0, runsSaved: 0, workoutsSaved: 0, bodyMeasurements: 0 };
   type Days = { person: { id: string; name: string }; zone: string; zoneFromPhone: boolean; today: string; days: (Numbers & { day: string })[]; next: string | null };
   type DayPage = { day: string; totals: { people: number; minutes: number; mealScans: number; routePlans: number; costMicro: number }; people: (Numbers & { id: string; name: string })[]; next: number | null };
   const daysOf = async (p: Person, query = "zone=Europe/London") => (await asAdmin({ url: `/v1/admin/people/${p.userId}/days?${query}` })).json<Days>();
@@ -575,15 +580,15 @@ d("the admin page (real Postgres)", () => {
 
     const riaDays = await daysOf(ria);
     expect(riaDays).toMatchObject({ person: { id: ria.userId, name: "A14i Ria" }, zone: "Asia/Kolkata", zoneFromPhone: true, today: riaToday });
-    expect(riaDays.days[0]).toEqual({ day: riaToday, minutes: 34, mealScans: 3, routePlans: 0, costMicro: 226 });
+    expect(riaDays.days[0]).toEqual({ day: riaToday, minutes: 34, mealScans: 3, routePlans: 0, costMicro: 226, used: NONE });
     const benDays = await daysOf(ben);
     expect(benDays).toMatchObject({ person: { id: ben.userId, name: "A14i Ben" }, zone: "America/Los_Angeles", today: benToday });
-    expect(benDays.days[0]).toEqual({ day: benToday, minutes: 7, mealScans: 0, routePlans: 1, costMicro: 0 });
+    expect(benDays.days[0]).toEqual({ day: benToday, minutes: 7, mealScans: 0, routePlans: 1, costMicro: 0, used: NONE });
 
     const riaRow = (await dayPage(riaToday)).people.find((p) => p.id === ria.userId);
-    expect(riaRow).toEqual({ id: ria.userId, name: "A14i Ria", email: `${PREFIX}days-ria@example.com`, minutes: 34, mealScans: 3, routePlans: 0, costMicro: 226 });
+    expect(riaRow).toEqual({ id: ria.userId, name: "A14i Ria", email: `${PREFIX}days-ria@example.com`, minutes: 34, mealScans: 3, routePlans: 0, costMicro: 226, used: NONE });
     const benRow = (await dayPage(benToday)).people.find((p) => p.id === ben.userId);
-    expect(benRow).toEqual({ id: ben.userId, name: "A14i Ben", email: `${PREFIX}days-ben@example.com`, minutes: 7, mealScans: 0, routePlans: 1, costMicro: 0 });
+    expect(benRow).toEqual({ id: ben.userId, name: "A14i Ben", email: `${PREFIX}days-ben@example.com`, minutes: 7, mealScans: 0, routePlans: 1, costMicro: 0, used: NONE });
     // Nobody else's row took any of it.
     expect(await sql`SELECT user_id, minutes FROM app_minutes WHERE user_id IN (${ria.userId}, ${ben.userId}) ORDER BY minutes`).toEqual([
       { user_id: ben.userId, minutes: 7 },
@@ -944,5 +949,153 @@ d("the admin page (real Postgres)", () => {
     expect(await sql`SELECT 1 FROM admin_passwords WHERE user_id = ${owner.userId}`).toHaveLength(1);
     expect(await sql`SELECT 1 FROM audit_log WHERE action = 'admin.door_password_made' AND actor_user_id = ${owner.userId}`).toHaveLength(1);
     await sql`DELETE FROM admin_passwords WHERE user_id = ${owner.userId}`;
+  });
+
+  // ── 14a-iii: what each person used on a day ────────────────────────────────
+  // THE WORST THING (14a-iii's plan, Kd's go 2026-11-17): one person's day shown under another
+  // person's name, or what somebody ate, weighed or where they ran shown at all.
+  /** What a person saved, as the phone's own routes write it, at `at` (the server's time it arrived). */
+  const saveMeal = (p: Person, origin: "photo" | "manual", at: Date, name = "A14iii meal", legacy: string | null = null) =>
+    sql`INSERT INTO meal_logs (user_id, taken_at, meal_name, items, kcal_point, kcal_low, kcal_high, confirmed, origin, portion_source, nutrition_sources, calc_version, legacy_mongo_id, created_at)
+        VALUES (${p.userId}, ${at}, ${name}, '[]'::jsonb, 500, 450, 550, true, ${origin}, 'default', '{curated}', 1, ${legacy}, ${at})`;
+  const saveLabel = (p: Person, at: Date, name = "A14iii pack", removedAt: Date | null = null) =>
+    sql`INSERT INTO member_label_foods (id, user_id, name, unit, kcal, protein_g, carbs_g, fat_g, created_at, updated_at, removed_at)
+        VALUES (gen_random_uuid(), ${p.userId}, ${name}, 'g', 400, 10, 60, 12, ${at}, ${at}, ${removedAt})`;
+  const saveRun = (p: Person, at: Date, name = "A14iii run", legacy: string | null = null) =>
+    sql`INSERT INTO runs (id, user_id, started_at, duration_s, distance_m, polyline, name, legacy_mongo_id, created_at)
+        VALUES (gen_random_uuid(), ${p.userId}, ${at}, 1800, 5123, 'a14iii_secret_polyline', ${name}, ${legacy}, ${at})`;
+  /** `legacy-py` is how the old app's import marks its workouts (tools/migrate-mongo/collections/workouts.ts). */
+  const saveWorkout = (p: Person, at: Date, engineVersion = "test") =>
+    sql`INSERT INTO workouts (id, user_id, started_at, platform, engine_version, created_at) VALUES (gen_random_uuid(), ${p.userId}, ${at}, 'android', ${engineVersion}, ${at})`;
+  /** `self_reported` is a weight typed in Get started or Settings (`recordTypedWeight`), not a Progress save. */
+  const saveBody = (p: Person, at: Date, kg = 77.7, source: "manual" | "self_reported" = "manual", legacy: string | null = null) =>
+    sql`INSERT INTO body_measurements (user_id, measured_at, weight_kg, source, legacy_mongo_id, created_at) VALUES (${p.userId}, ${at}, ${kg}, ${source}, ${legacy}, ${at})`;
+
+  /** Every page of a day's list, and each page's whole answer: other test files' people share the
+   *  database, so somebody this file made can be past the first 50 (GitHub's run, 2026-11-17). */
+  const everyoneOn = async (day: string, query = "zone=Europe/London") => {
+    const people: DayPage["people"] = [];
+    const bodies: string[] = [];
+    let from: number | null = 0;
+    while (from !== null) {
+      const res = await asAdmin({ url: `/v1/admin/days/${day}?${query}${from === 0 ? "" : `&from=${String(from)}`}` });
+      expect(res.statusCode, res.body).toBe(200);
+      const page = res.json<DayPage>();
+      people.push(...page.people);
+      bodies.push(res.body);
+      from = page.next;
+    }
+    return { people, bodies };
+  };
+
+  it("WORST THING (14a-iii): what each person saved is counted on their own row, under their own name, and never what it was", { timeout: 90_000 }, async () => {
+    await redis.del(`rl:admin_read:id:${admin.userId}`);
+    const ria = await session(`${PREFIX}use-ria@example.com`, "A14i Use Ria");
+    const ben = await session(`${PREFIX}use-ben@example.com`, "A14i Use Ben");
+    const riaToday = todayIn("Asia/Kolkata");
+    const benToday = todayIn("America/Los_Angeles");
+    expect((await sendMinutes(ria, { days: [{ day: riaToday, minutes: 12, zone: "Asia/Kolkata" }] })).statusCode).toBe(200);
+    expect((await sendMinutes(ben, { days: [{ day: benToday, minutes: 5, zone: "America/Los_Angeles" }] })).statusCode).toBe(200);
+    const now = new Date();
+    await use(ria, "meal_scan", now);
+    await use(ria, "meal_scan", now);
+    await use(ria, "meal_scan", now);
+    await saveMeal(ria, "photo", now, "Ria's secret curry");
+    await saveMeal(ria, "photo", now, "Ria's secret curry");
+    await saveMeal(ria, "manual", now, "Ria's secret toast");
+    await saveLabel(ria, now, "Ria's secret biscuits");
+    await saveLabel(ria, now, "Ria's secret crackers");
+    await saveRun(ria, now, "Ria's secret street");
+    await saveBody(ria, now, 77.7);
+    // Her weight typed again in Settings that day: not a Progress save.
+    await saveBody(ria, now, 77.7, "self_reported");
+    await saveWorkout(ben, now);
+    await saveRun(ben, now, "Ben's secret park");
+    await saveRun(ben, now, "Ben's secret park");
+    await saveMeal(ben, "manual", now, "Ben's secret oats");
+
+    const riaUsed = { mealPhotosSaved: 2, packLabelsSaved: 2, mealsByHand: 1, runsSaved: 1, workoutsSaved: 0, bodyMeasurements: 1 };
+    const benUsed = { mealPhotosSaved: 0, packLabelsSaved: 0, mealsByHand: 1, runsSaved: 2, workoutsSaved: 1, bodyMeasurements: 0 };
+    const riaDays = await asAdmin({ url: `/v1/admin/people/${ria.userId}/days?zone=Europe/London` });
+    expect(riaDays.json<Days>()).toMatchObject({ person: { id: ria.userId, name: "A14i Use Ria" } });
+    expect(riaDays.json<Days>().days[0]).toEqual({ day: riaToday, minutes: 12, mealScans: 3, routePlans: 0, costMicro: 0, used: riaUsed });
+    const benDays = await asAdmin({ url: `/v1/admin/people/${ben.userId}/days?zone=Europe/London` });
+    expect(benDays.json<Days>().days[0]).toEqual({ day: benToday, minutes: 5, mealScans: 0, routePlans: 0, costMicro: 0, used: benUsed });
+    const riaDay = await everyoneOn(riaToday);
+    expect(riaDay.people.find((p) => p.id === ria.userId)).toEqual({
+      id: ria.userId, name: "A14i Use Ria", email: `${PREFIX}use-ria@example.com`, minutes: 12, mealScans: 3, routePlans: 0, costMicro: 0, used: riaUsed,
+    });
+    const benDay = await everyoneOn(benToday);
+    expect(benDay.people.find((p) => p.id === ben.userId)).toEqual({
+      id: ben.userId, name: "A14i Use Ben", email: `${PREFIX}use-ben@example.com`, minutes: 5, mealScans: 0, routePlans: 0, costMicro: 0, used: benUsed,
+    });
+    // What it was is never in any answer: no meal, food or run name, no route, no weight.
+    for (const body of [riaDays.body, benDays.body, ...riaDay.bodies, ...benDay.bodies]) {
+      for (const secret of ["secret", "77.7"]) expect(body).not.toContain(secret);
+    }
+  });
+
+  it("a meal scan counts as saved only once its meal is; by hand is apart; each on the day it was saved, in their own zone; the old app's rows are not counted", { timeout: 90_000 }, async () => {
+    await redis.del(`rl:admin_read:id:${admin.userId}`);
+    const cat = await session(`${PREFIX}use-cat@example.com`, "A14i Use Cat");
+    const today = todayIn("Asia/Kolkata");
+    const yesterday = addDays(today, -1);
+    const before = addDays(today, -2);
+    await sql`UPDATE users SET created_at = now() - interval '5 days' WHERE id = ${cat.userId}`;
+    expect((await sendMinutes(cat, { days: [{ day: today, minutes: 3, zone: "Asia/Kolkata" }] })).statusCode).toBe(200);
+    // A scan made today and never saved: made, not saved.
+    await use(cat, "meal_scan", new Date());
+    // Saved ten minutes into her yesterday in India (still the day before in UTC), and ten minutes before it ended.
+    await saveMeal(cat, "photo", await instant(yesterday, "00:10", "Asia/Kolkata"));
+    await saveRun(cat, await instant(yesterday, "23:50", "Asia/Kolkata"));
+    await saveMeal(cat, "manual", await instant(before, "23:50", "Asia/Kolkata"));
+    // A meal of yesterday's, added today by hand through the phone's own route: today's, the day it was saved.
+    const added = await call(must(app), {
+      method: "POST",
+      url: "/v1/nutrition/meals",
+      access: cat.access,
+      body: { mealName: "Lunch dal and rice", takenAt: (await instant(yesterday, "13:00", "Asia/Kolkata")).toISOString(), items: [{ canonical: "dal_lentil_curry", grams: 150 }] },
+    });
+    expect(added.statusCode, added.body).toBe(201);
+    // Brought over from the old app today: not saved in this one.
+    await saveMeal(cat, "manual", new Date(), "A14iii legacy", `a14iii-legacy-meal-${cat.userId}`);
+    await saveRun(cat, new Date(), "A14iii legacy", `a14iii-legacy-run-${cat.userId}`);
+    await saveWorkout(cat, new Date(), "legacy-py");
+    await saveBody(cat, new Date(), 61, "manual", `a14iii-legacy-body-${cat.userId}`);
+    // Her weight typed in Get started, and a pack's label saved then removed: neither is counted.
+    await saveBody(cat, new Date(), 61, "self_reported");
+    await saveLabel(cat, new Date(), "A14iii removed pack", new Date());
+
+    const days = (await daysOf(cat)).days;
+    const on = (day: string) => days.find((d) => d.day === day);
+    expect(on(today)).toMatchObject({ mealScans: 1, used: { ...NONE, mealsByHand: 1 } });
+    expect(on(yesterday)).toMatchObject({ mealScans: 0, used: { ...NONE, mealPhotosSaved: 1, runsSaved: 1 } });
+    expect(on(before)).toMatchObject({ used: { ...NONE, mealsByHand: 1 } });
+    expect(on(addDays(today, -3))?.used).toEqual(NONE);
+    // By day reads each of her days the same.
+    for (const day of [today, yesterday, before]) {
+      expect((await everyoneOn(day)).people.find((p) => p.id === cat.userId)?.used).toEqual(on(day)?.used);
+    }
+  });
+
+  it("By day lists somebody who only saved something, with no time in the app and no scan; a deleted account, or one that did nothing, is not listed", { timeout: 60_000 }, async () => {
+    await redis.del(`rl:admin_read:id:${admin.userId}`);
+    const dee = await session(`${PREFIX}use-dee@example.com`, "A14i Use Dee");
+    const idle = await session(`${PREFIX}use-idle@example.com`, "A14i Use Idle");
+    const day = todayIn("Europe/London");
+    const at = await instant(day, "00:30", "Europe/London");
+    await saveWorkout(dee, at);
+    await saveBody({ userId: gone, access: "" }, at);
+    const page = await everyoneOn(day);
+    expect(page.people.find((p) => p.id === dee.userId)).toEqual({
+      id: dee.userId, name: "A14i Use Dee", email: `${PREFIX}use-dee@example.com`, minutes: null, mealScans: 0, routePlans: 0, costMicro: 0,
+      used: { ...NONE, workoutsSaved: 1 },
+    });
+    expect(page.people.find((p) => p.id === gone)).toBeUndefined();
+    expect(page.people.find((p) => p.id === idle.userId)).toBeUndefined();
+    // Read in Los Angeles, 00:30 in London is the day before.
+    expect((await everyoneOn(addDays(day, -1), "zone=America/Los_Angeles")).people.find((p) => p.id === dee.userId)?.used.workoutsSaved).toBe(1);
+    expect((await everyoneOn(day, "zone=America/Los_Angeles")).people.find((p) => p.id === dee.userId)).toBeUndefined();
+    await sql`DELETE FROM body_measurements WHERE user_id = ${gone}`;
   });
 });

@@ -41,6 +41,8 @@ export const workouts = pgTable(
   (t) => [
     check("workouts_platform_check", sql`${t.platform} IN ('web','android','ios')`),
     index("workouts_user_started_idx").on(t.userId, t.startedAt.desc()), // history screens, member drawer
+    index("workouts_created_idx").on(t.createdAt), // 0242: By day (14a-iii)
+    index("workouts_user_created_idx").on(t.userId, t.createdAt), // 0242: a person's days
   ],
 );
 

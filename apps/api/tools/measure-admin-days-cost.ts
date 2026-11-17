@@ -1,7 +1,9 @@
 // What each person's days cost at full size (ROADMAP Stage 2 item 14a-ii; CLAUDE.md §4 "Cost at full
 // size"): 10,000 more people, each with 40 days of time in the app; 4,000 of them (20 gyms of 200)
-// with 3 meal scans a day and their cost, 500 with a route plan a day. All taken out again at the
-// end, whatever happens.
+// with 3 meal scans a day and their cost, 500 with a route plan a day. What they saved (14a-iii): the
+// 4,000 save 2 meals from a photo and 1 by hand a day and a pack's label a week, the 500 a run a day,
+// 1,000 a workout every other day, 2,000 a body measurement a week. All taken out again at the end,
+// whatever happens.
 //
 //   DATABASE_URL=postgres://… corepack pnpm --filter api exec tsx tools/measure-admin-days-cost.ts
 //
@@ -33,6 +35,9 @@ const median = (xs: number[]): string => {
 const cleanUp = async (): Promise<void> => {
   const mine = sql`SELECT id FROM users WHERE email LIKE 'measure-days-%@gmail.com'`;
   await sql`DELETE FROM api_cost_events WHERE user_id IN (${mine})`;
+  await sql`DELETE FROM meal_logs WHERE user_id IN (${mine})`;
+  await sql`DELETE FROM runs WHERE user_id IN (${mine})`;
+  await sql`DELETE FROM workouts WHERE user_id IN (${mine})`;
   await sql`DELETE FROM users WHERE email LIKE 'measure-days-%@gmail.com'`;
 };
 
@@ -63,12 +68,42 @@ try {
     SELECT now() - make_interval(days => d, hours => k), p.id, 'meal_scan', 'measure', 1000, 'tokens', 176
     FROM unnest(${people.slice(0, SCANNERS)}::uuid[]) AS p(id), generate_series(0, ${DAYS - 1}) AS d, generate_series(1, 4) AS k
     ORDER BY 1`;
+  // What they saved (14a-iii), on the day it reached the server.
+  await sql`
+    INSERT INTO meal_logs (user_id, taken_at, meal_name, items, kcal_point, kcal_low, kcal_high, confirmed, origin, portion_source, nutrition_sources, calc_version, created_at)
+    SELECT p.id, now() - make_interval(days => d, hours => k * 3), 'Measure meal', '[]'::jsonb, 500, 450, 550, true,
+           CASE WHEN k = 3 THEN 'manual' ELSE 'photo' END, 'default', '{curated}', 1, now() - make_interval(days => d, hours => k * 3)
+    FROM unnest(${people.slice(0, SCANNERS)}::uuid[]) AS p(id), generate_series(0, ${DAYS - 1}) AS d, generate_series(1, 3) AS k
+    ORDER BY 13`;
+  await sql`
+    INSERT INTO member_label_foods (id, user_id, name, unit, kcal, protein_g, carbs_g, fat_g, created_at, updated_at)
+    SELECT gen_random_uuid(), p.id, 'Measure pack', 'g', 400, 10, 60, 12, now() - make_interval(days => d, hours => 2), now() - make_interval(days => d, hours => 2)
+    FROM unnest(${people.slice(0, SCANNERS)}::uuid[]) AS p(id), generate_series(0, ${DAYS - 1}, 7) AS d
+    ORDER BY 9`;
+  await sql`
+    INSERT INTO runs (id, user_id, started_at, duration_s, distance_m, created_at)
+    SELECT gen_random_uuid(), p.id, now() - make_interval(days => d, hours => 2), 1800, 5000, now() - make_interval(days => d, hours => 1)
+    FROM unnest(${people.slice(SCANNERS, SCANNERS + RUNNERS)}::uuid[]) AS p(id), generate_series(0, ${DAYS - 1}) AS d
+    ORDER BY 6`;
+  await sql`
+    INSERT INTO workouts (id, user_id, started_at, platform, engine_version, created_at)
+    SELECT gen_random_uuid(), p.id, now() - make_interval(days => d, hours => 5), 'android', 'measure', now() - make_interval(days => d, hours => 4)
+    FROM unnest(${people.slice(SCANNERS + RUNNERS, SCANNERS + RUNNERS + 1000)}::uuid[]) AS p(id), generate_series(0, ${DAYS - 1}, 2) AS d
+    ORDER BY 6`;
+  await sql`
+    INSERT INTO body_measurements (user_id, measured_at, weight_kg, created_at)
+    SELECT p.id, now() - make_interval(days => d, hours => 6), 70, now() - make_interval(days => d, hours => 6)
+    FROM unnest(${people.slice(0, 2000)}::uuid[]) AS p(id), generate_series(0, ${DAYS - 1}, 7) AS d
+    ORDER BY 4`;
+  for (const table of ["meal_logs", "member_label_foods", "runs", "workouts", "body_measurements"]) await sql.unsafe(`ANALYZE ${table}`);
   await sql`ANALYZE app_minutes`;
   await sql`ANALYZE metered_uses`;
   await sql`ANALYZE api_cost_events`;
-  const counts = await sql<{ minutes: number; uses: number; costs: number }[]>`
+  const counts = await sql<{ minutes: number; uses: number; costs: number; meals: number; labels: number; runs: number; workouts: number; body: number }[]>`
     SELECT (SELECT count(*)::int FROM app_minutes) AS minutes, (SELECT count(*)::int FROM metered_uses) AS uses,
-           (SELECT count(*)::int FROM api_cost_events) AS costs`;
+           (SELECT count(*)::int FROM api_cost_events) AS costs, (SELECT count(*)::int FROM meal_logs) AS meals,
+           (SELECT count(*)::int FROM member_label_foods) AS labels, (SELECT count(*)::int FROM runs) AS runs,
+           (SELECT count(*)::int FROM workouts) AS workouts, (SELECT count(*)::int FROM body_measurements) AS body`;
   console.log(`made in ${((performance.now() - started) / 1000).toFixed(0)} s; rows in this database: ${JSON.stringify(counts[0])}`);
 
   const deps = { sql, redis: createMemoryRedis() };
@@ -91,6 +126,14 @@ try {
         await tx`SET LOCAL jit = off`;
         return await tx.unsafe<{ "QUERY PLAN": string }[]>(`EXPLAIN (ANALYZE, BUFFERS) ${q.query}`, q.params as never[]);
       });
+      console.log(plan.map((r) => r["QUERY PLAN"]).join("\n"));
+    }
+    // And one person's 30 days, which 14a-iii added what they saved to.
+    seen.length = 0;
+    await personDays(deps, { userId: heavy, zone, dayZone: null, before: null, now: new Date() });
+    const p = seen.find((x) => x.query.includes("generate_series(0,"));
+    if (p !== undefined) {
+      const plan = await sql.unsafe<{ "QUERY PLAN": string }[]>(`EXPLAIN (ANALYZE, BUFFERS) ${p.query}`, p.params as never[]);
       console.log(plan.map((r) => r["QUERY PLAN"]).join("\n"));
     }
   }

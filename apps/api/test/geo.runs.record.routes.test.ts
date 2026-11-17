@@ -160,6 +160,9 @@ d("record a run (real Postgres)", () => {
       };
       walk(join(__dirname, "..", "src"));
       expect(readers.sort()).toEqual([
+        // The admin page (14a-iii) counts each person's saved runs for the app's owner: a count, never a
+        // route, a place or a gym.
+        "modules/admin/repo.ts",
         "modules/gamification/repo.ts",
         "modules/geo/repo.ts",
         "modules/privacy/exportRepo.ts",

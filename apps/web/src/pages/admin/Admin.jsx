@@ -7,7 +7,7 @@ import { useAuth } from '../../context/AuthContext';
 import { consoleLook } from '../console/consoleMenu';
 import { CodeStep, PasswordStep } from './AdminDoor';
 import { ByDay, PersonDays } from './AdminDays';
-import { FEATURES, allowanceWords, confirmWords, dateTimeWords, dateWords, doneWords, openUntilWords, planWords } from './adminView';
+import { ADMIN_TABLE, FEATURES, allowanceWords, confirmWords, dateTimeWords, dateWords, doneWords, openUntilWords, planWords } from './adminView';
 import '../../components/console/console.css';
 
 // THE ADMIN PAGE (ROADMAP Stage 2 item 14a-i; Kd, 2026-11-07 and 2026-11-08): Kd's own, on
@@ -208,7 +208,7 @@ function People({ onShut }) {
               </div>
             ) : null}
 
-            <div className="c-card" style={{ overflowX: 'auto', position: 'relative' }}>
+            <div className="c-card" style={{ ...ADMIN_TABLE, position: 'relative' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr className="c-th" style={{ textAlign: 'left' }}>
