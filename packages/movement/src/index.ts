@@ -8,3 +8,13 @@ export { BONES, LIMB_PAIRS, MAIN_JOINTS, PARENT, POINTS, POINT_NAMES, TRUNK, TRU
 export { bodySize } from "./body/size.js";
 export { LIMITS, PossibleBody, type CheckedBody, type Limits, type Refusal } from "./body/possible.js";
 export { STEADY, SteadyPoints, type SteadyBody, type SteadyPoint, type SteadySettings, type Smoothing } from "./body/steady.js";
+export {
+  BodyMeasures,
+  MEASURE_LIMITS,
+  MEASURE_LIST,
+  type MeasureLimits,
+  type MeasureName,
+  type MeasuredBody,
+  type Reading,
+  type Unit,
+} from "./body/measures.js";

@@ -1542,6 +1542,44 @@ right distance from the shoulders (a head moved at random is used in 13 to 16 in
 follow a reflection. What it costs: a point whose parent is hidden decides nothing, 0 to 5 in 100
 of the big joints on the one-person videos (most, the far ankle while the far knee is hidden).
 
+**As built, stage 4 (50c-iii, 2026-11-17).** `BodyMeasures` (`packages/movement/src/body`) takes
+the steady points of each frame and gives one fixed list of 38 measures, the same for every
+exercise: ten joint angles (elbows, shoulders, hips, knees, ankles), nine leans against "down"
+(the trunk from upright; upper arms, forearms, thighs and shins from hanging), six heights above
+the floor in the body's own legs (hips, shoulders, wrists, ankles), two widths in its own trunks
+(hands apart, feet apart), and eleven left-against-right differences. **Both readings are kept,
+never one chosen here:** each measure is read on the flat picture and from the 3D points, and
+each movement uses the one that is steadier from its own phone place (job 52a), since neither is
+always the better. Measured on Kd's six videos with `measure-check`: side on, the near side is
+read flat in every frame it is read in 3D, and the flat reading shakes less for most measures (the
+squat's knee 0.22° against 0.40° in 3D); side on, the 3D arms read 15° to 25° away from the flat
+picture where the arm lies across it (the squat's straight arms 25° more bent); from the head end
+of the bench, the lying man's trunk is refused flat in 319 of 321 frames (the two given read 110°
+and 111°, lying) and read lying in 3D in all 321. **How sure** is a share (`shown`): how much of
+each part it measures the flat picture shows, its length on the picture against its own length in
+3D (the model gives lengths well even where it puts a part wrongly in depth: judged by the 3D
+directions instead, the squat's elbow and hip were refused flat in every frame), parts laid end to
+end included, and for a lean or a height how much of "down" the picture shows. Below half, the
+flat reading is not given: the picture's own shake could turn the part any way. Half is a floor
+against shake, never a judgement: a flat reading is the picture's view of what lies across it, so
+**each movement names the share it needs, set from its own videos** (52a). From the feet of the
+bench the trunk shows 0.61 of itself and reads 14.5° flat (53° in 3D, the video's "down" taken as
+upright) where lying is 90°. **Heights** stand on a remembered floor, where the lowest heel or
+toes have been: it drops at once to a lower foot and rises only once both feet have been seen above
+it for a second, longer than a body stays up in a jump of 1.1 m (0.95 s), so one foot lifted while
+the other is hidden leaves the hips at standing height. A height is read only while a foot is in
+view, and flat only as much as the picture shows the line from that foot to the hips. Checked from
+outside the code: on the squat, every number of Kd's own `analyze_squat.py` (2026-09-28, measured
+its own way) is met within 3° (each rep's deepest knee within 0.6°, the hips' drop within 0.03 of
+a leg). The same videos at half the frames a second: 0 to 1 in 100 readings differ on the
+one-person videos, and 95 in 100 lie within 0.9° to 2.8°. About 110 microseconds a frame on the
+laptop (the phone's number is job 51's). What it cannot do yet: heights for a body lying with its
+feet in the air (the floor is the feet; job 52c's floor work); a floor first seen under a lifted
+foot while the other is hidden; from the head end of the bench, the hips' height is read flat in
+12 frames, one of them wrong (0.30 of a leg below the floor, the stand-in follower's or a wrong
+foot's; 52d), and in 3D mostly at 1.1 to 1.5 legs where a bench is about half; a reference video's "down" is taken as upright, so a camera looking down at a bench gives its
+3D leans no true "down" (the phone gives its own).
+
 ### 12.3 A movement, and an exercise on top of it
 
 Many exercises are one movement with other equipment (a squat with a barbell, with a
@@ -1666,7 +1704,7 @@ they are kept once there are that many is job 52a's or 54's question.
 
 | Job | What it builds |
 |---|---|
-| 50c | The body's picture: the frame's new inputs, compact files, "is this body possible", steady points, the body measures (flat or 3D, whichever is steadier) |
+| 50c | The body's picture: the frame's new inputs, compact files, "is this body possible", steady points, the body measures (each read flat and in 3D, with how much of it the picture shows) |
 | 51 | The phone test: model and library, speed, heat and battery, 3D points, several people; the phone testing itself on the videos |
 | 52a | The movement matcher and the proof table, with the squat movement made fresh as the first proof |
 | 52b | The form judge, the reason for a rep not counted, the summary |
