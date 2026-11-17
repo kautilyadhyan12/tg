@@ -1,16 +1,19 @@
 // The phone test (ROADMAP Stage 5 item 51a): Kd's reference videos through the phone's own pose model, three sizes,
 // on the main chip and the graphics chip, each against the laptop's run of the same model on the same video.
 //   corepack pnpm --filter @app/movement phone-test [--laptop-only | --compare-only] [--models lite,full,heavy] [--chips cpu,gpu]
-//                                                   [--labels a,b] [--videos <folder>] [--python <command>]
+//                                                   [--labels a,b] [--people 1 to 6] [--pictures video|laptop]
+//                                                   [--videos <folder>] [--python <command>]
 // It needs this folder's copy of the app on the phone on the USB cable (corepack pnpm --filter mobile phone), puts the
 // videos, the models and a plan in that copy's own files, opens its phone-test screen, waits, takes one file a run
 // back, deletes everything it put there, then compares. --laptop-only makes the laptop's side ready and stops before the
-// phone is touched; --compare-only compares the files already taken back.
+// phone is touched; --compare-only compares the files already taken back. --people asks the model for fewer people than
+// the laptop's six (the laptop then measures the same way); --pictures laptop hands the phone the laptop's own decoded
+// pictures instead of the video, so what still differs is the model's part alone. Each kind of run keeps its own files.
 // Everything it writes is in measured/phone-test/, which git ignores; the videos never leave Kd's folder but for the
 // phone's copy of the app, and are deleted there when the test ends.
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { PHONE_TEST_DELEGATES, phoneProgressSchema, videoFramesSchema, type PhoneProgress, type PhoneTestDelegate, type VideoFrames } from "@app/shared";
@@ -26,7 +29,7 @@ import {
   summaries,
   type PhoneComparison,
 } from "./phoneCheck.js";
-import { MODELS, makePlan, modelUrl, readPhoneFailure, readPhoneRun, runName, type PlanRun, type PlanVideo, type PoseModel } from "./phoneRun.js";
+import { MODELS, SETTINGS, makePlan, modelUrl, readPhoneFailure, readPhoneRun, runName, type PlanRun, type PlanVideo, type PoseModel } from "./phoneRun.js";
 
 const REPO = resolve(import.meta.dirname, "../../..");
 const KEPT = join(import.meta.dirname, "../test/body-points");
@@ -58,12 +61,14 @@ const { values } = (() => {
         models: { type: "string", default: MODELS.map((m) => m.size).join(",") },
         chips: { type: "string", default: PHONE_TEST_DELEGATES.join(",") },
         labels: { type: "string" },
+        people: { type: "string", default: String(SETTINGS.people) },
+        pictures: { type: "string", default: "video" },
         videos: { type: "string", default: KD_VIDEOS },
         python: { type: "string", default: "python" },
       },
     });
   } catch (err) {
-    fail(`${messageOf(err)}\nUsage: phone-test [--laptop-only | --compare-only] [--models lite,full,heavy] [--chips cpu,gpu] [--labels a,b] [--videos <folder>]`);
+    fail(`${messageOf(err)}\nUsage: phone-test [--laptop-only | --compare-only] [--models lite,full,heavy] [--chips cpu,gpu] [--labels a,b] [--people 1 to 6] [--pictures video|laptop] [--videos <folder>]`);
   }
 })();
 
@@ -78,13 +83,20 @@ const keptLabels = readdirSync(KEPT)
   .sort();
 const labels = values.labels === undefined ? keptLabels : listed(values.labels);
 for (const l of labels) if (!keptLabels.includes(l)) fail(`${l} is not a kept video: ${keptLabels.join(", ")}.`);
+const people = Number(values.people);
+if (!Number.isInteger(people) || people < 1 || people > SETTINGS.people) fail(`--people is a whole number from 1 to ${String(SETTINGS.people)}.`);
+const pictures = values.pictures === "laptop" ? "laptop" : values.pictures === "video" ? "video" : fail("--pictures is video or laptop.");
+/** The kind of run: its files and its report are its own. */
+const variant = `people-${String(people)}${pictures === "laptop" ? "-laptop-pictures" : ""}`;
+const PHONE_OUT = join(HERE, "phone", variant);
 
 try {
   assertFolderStaysOutOfGit(HERE);
 } catch (err) {
   fail(messageOf(err));
 }
-for (const folder of ["models", "laptop", "frames", "videos", "phone"]) mkdirSync(join(HERE, folder), { recursive: true });
+for (const folder of ["models", "laptop", "frames", "videos", "pictures"]) mkdirSync(join(HERE, folder), { recursive: true });
+mkdirSync(PHONE_OUT, { recursive: true });
 const started = Date.now();
 const sha256 = (bytes: Uint8Array): string => createHash("sha256").update(bytes).digest("hex");
 
@@ -116,14 +128,17 @@ function videoOf(label: string): string {
   return found ?? fail(`No video named ${label}.mp4 in ${folder}.`);
 }
 
+/** The laptop's run of a video with a model, asking for as many people as the phone is asked for: the kept heavy file
+ *  for six, otherwise measured here. */
 function laptopRun(label: string, m: PoseModel): BodyPoints {
   const kept = join(KEPT, `${label}.bodypoints`);
-  const folder = join(HERE, "laptop", m.name, label);
-  const path = m.size === "heavy" ? kept : join(folder, `${label}.bodypoints`);
+  const folder = people === SETTINGS.people ? join(HERE, "laptop", m.name, label) : join(HERE, "laptop", m.name, `people-${String(people)}`, label);
+  const path = m.size === "heavy" && people === SETTINGS.people ? kept : join(folder, `${label}.bodypoints`);
   if (!existsSync(path)) {
     if (values["compare-only"]) fail(`No laptop run of ${label} with the ${m.size} model at ${path}.`);
     console.log(`Measuring ${label} with the ${m.size} model on the laptop.`);
-    const r = spawnSync(process.execPath, ["--import", "tsx", MEASURE_POINTS, videoOf(label), "--model", modelPaths.get(m.name) ?? "", "--label", label, "--out", folder], {
+    const args = [MEASURE_POINTS, videoOf(label), "--model", modelPaths.get(m.name) ?? "", "--label", label, "--people", String(people), "--out", folder];
+    const r = spawnSync(process.execPath, ["--import", "tsx", ...args], {
       cwd: join(import.meta.dirname, ".."),
       stdio: "inherit",
     });
@@ -131,6 +146,7 @@ function laptopRun(label: string, m: PoseModel): BodyPoints {
   }
   const run = decodeBodyPoints(new Uint8Array(readFileSync(path)));
   if (run.header.model.file !== m.name) fail(`${path} was made with the ${run.header.model.file} model, not the ${m.name}.`);
+  if (run.header.model.people !== people) fail(`${path} asked the model for ${String(run.header.model.people)} people, not ${String(people)}.`);
   return run;
 }
 
@@ -181,6 +197,36 @@ function phoneCopyOf(label: string, list: VideoFrames): string {
   return copyPath;
 }
 
+/** The laptop's own decoded pictures of a video, one PNG a kept frame (points.py frames --pictures), in a folder of
+ *  their own; made once, and used only while points.py lists the same frames for them. */
+function laptopPicturesOf(label: string, list: VideoFrames): string {
+  const folder = join(HERE, "pictures", label);
+  const listPath = join(HERE, "frames", `${label}.pictures.json`);
+  if (!existsSync(folder) || readdirSync(folder).length !== list.frames.length) {
+    rmSync(folder, { recursive: true, force: true });
+    mkdirSync(folder, { recursive: true });
+    const r = spawnSync(values.python, [POINTS_PY, "frames", "--video", videoOf(label), "--fps", String(list.fps), "--out", listPath, "--pictures", folder], { stdio: "inherit" });
+    if (r.status !== 0) fail(`The laptop could not write the pictures of ${label}.`);
+    const written = videoFramesSchema.safeParse(JSON.parse(readFileSync(listPath, "utf8")));
+    if (!written.success || JSON.stringify(written.data) !== JSON.stringify(list)) fail(`The laptop's pictures of ${label} are not at the frames it measured.`);
+  }
+  return folder;
+}
+
+/** The laptop's pictures in the order the phone reads them, by their names. */
+const pictureFiles = (folder: string): string[] =>
+  readdirSync(folder)
+    .filter((f) => /^\d{5}\.png$/.test(f))
+    .sort()
+    .map((f) => join(folder, f));
+
+/** One check sum over files one after another, as the phone makes it. */
+function sha256Of(files: readonly string[]): string {
+  const hash = createHash("sha256");
+  for (const f of files) hash.update(new Uint8Array(readFileSync(f)));
+  return hash.digest("hex");
+}
+
 const laptop = new Map<string, BodyPoints>();
 const lists = new Map<string, VideoFrames>();
 for (const label of labels) {
@@ -195,7 +241,7 @@ const copies = new Map<string, string>();
 if (!values["compare-only"]) {
   for (const label of labels) {
     const list = lists.get(label);
-    if (list !== undefined) copies.set(label, phoneCopyOf(label, list));
+    if (list !== undefined) copies.set(label, pictures === "laptop" ? laptopPicturesOf(label, list) : phoneCopyOf(label, list));
   }
 }
 
@@ -260,13 +306,12 @@ async function onThePhone(): Promise<void> {
   const videos: PlanVideo[] = labels.map((label) => {
     const copy = copies.get(label);
     if (copy === undefined) throw new Error(`No phone copy of ${label}.`);
-    const bytes = new Uint8Array(readFileSync(copy));
     const frames = lists.get(label);
     if (frames === undefined) throw new Error(`No frame list for ${label}.`);
-    return { label, sha256: sha256(bytes), frames };
+    return { label, sha256: sha256Of(pictures === "laptop" ? pictureFiles(copy) : [copy]), frames, pictures };
   });
   const runs: PlanRun[] = models.flatMap((model) => chips.map((delegate) => ({ model, delegate })));
-  const plan = JSON.stringify(makePlan(videos, runs));
+  const plan = JSON.stringify(makePlan(videos, runs, people));
   writeFileSync(join(HERE, "plan.json"), plan);
 
   adb(["shell", "am", "force-stop", id]);
@@ -275,19 +320,21 @@ async function onThePhone(): Promise<void> {
     if (!inApp(`mkdir -p ${ON_PHONE}/videos ${ON_PHONE}/models`).ok) throw new Error("The phone would not make the test's folder.");
     // Into the shell's own folder first, then copied into the app's by the app's own user: Windows' adb changes the
     // bytes of a file piped through the phone's shell (measured 2026-11-17: a 495 KB video came out another file).
-    const send = (local: string, path: string, what: string): void => {
+    // A folder (the laptop's pictures) goes whole and is checked as one sum over its pictures in order.
+    const send = (local: string, path: string, what: string, folder = false): void => {
       const name = basename(path);
       if (!adb(["push", local, `${STAGING}/${name}`]).ok) throw new Error(`${what} did not reach the phone.`);
-      if (!inApp(`cp ${STAGING}/${name} ${path}`).ok) throw new Error(`${what} could not go into the app's own files.`);
-      adb(["shell", `rm -f ${STAGING}/${name}`]);
-      const sum = inApp(`sha256sum ${path}`).text.split(/\s+/)[0];
-      if (sum !== sha256(new Uint8Array(readFileSync(local)))) throw new Error(`${what} did not arrive whole.`);
+      if (!inApp(`cp ${folder ? "-r " : ""}${STAGING}/${name} ${path}`).ok) throw new Error(`${what} could not go into the app's own files.`);
+      adb(["shell", `rm -rf ${STAGING}/${name}`]);
+      const sum = (folder ? inApp(`sh -c 'cat ${path}/*.png | sha256sum'`) : inApp(`sha256sum ${path}`)).text.split(/\s+/)[0];
+      if (sum !== sha256Of(folder ? pictureFiles(local) : [local])) throw new Error(`${what} did not arrive whole.`);
     };
     adb(["shell", `rm -rf ${STAGING}`]);
     if (!adb(["shell", `mkdir -p ${STAGING}`]).ok) throw new Error("The phone would not make the laptop's folder.");
     for (const v of videos) {
       console.log(`Sending ${v.label} to the phone.`);
-      send(copies.get(v.label) ?? "", `${ON_PHONE}/videos/${v.label}.mp4`, `The video ${v.label}`);
+      if (pictures === "laptop") send(copies.get(v.label) ?? "", `${ON_PHONE}/videos/${v.label}`, `The laptop's pictures of ${v.label}`, true);
+      else send(copies.get(v.label) ?? "", `${ON_PHONE}/videos/${v.label}.mp4`, `The video ${v.label}`);
     }
     for (const m of models) {
       console.log(`Sending the ${m.size} model to the phone.`);
@@ -306,7 +353,7 @@ async function onThePhone(): Promise<void> {
     for (const name of names) {
       const file = adb(["exec-out", "run-as", id, "cat", `${ON_PHONE}/out/${name}`]);
       if (!file.ok) throw new Error(`${name} could not be taken from the phone.`);
-      writeFileSync(join(HERE, "phone", name), file.out);
+      writeFileSync(join(PHONE_OUT, name), file.out);
     }
     console.log(`Took ${String(names.length)} files back from the phone.`);
   } finally {
@@ -350,8 +397,8 @@ for (const label of labels) {
   for (const m of models) {
     for (const delegate of chips) {
       const name = runName(label, m.name, delegate);
-      const runPath = join(HERE, "phone", `${name}.jsonl`);
-      const failedPath = join(HERE, "phone", `${name}.failed.json`);
+      const runPath = join(PHONE_OUT, `${name}.jsonl`);
+      const failedPath = join(PHONE_OUT, `${name}.failed.json`);
       if (existsSync(failedPath)) {
         const f = readPhoneFailure(readFileSync(failedPath, "utf8"));
         failed.push({ label, model: f.model, delegate: f.delegate, reason: f.reason });
@@ -372,7 +419,7 @@ for (const label of labels) {
 }
 if (results.length === 0 && failed.length === 0) fail("No phone files to compare. Run the test without --compare-only first.");
 
-say(`The phone: ${phoneName || "no run finished"}.`);
+say(`The phone: ${phoneName || "no run finished"}. The model asked for up to ${String(people)} ${people === 1 ? "person" : "people"}; ${pictures === "laptop" ? "the laptop's own decoded pictures" : "the phone decoding the videos itself"}.`);
 say("");
 say("Is each run the laptop's? Each video against the laptop's run of the same model, judged by the laptop at half the frames a second.");
 say(`   ${pad("model", 7)}${pad("chip", 10)}${pad("same", 9)}${pad("reading p50", 13)}${pad("p95", 9)}${pad("start", 9)}warmest`);
@@ -432,6 +479,6 @@ say(
     ? `Pick so far: none. No model is the laptop's on every video and reads a picture in ${String(FAST_ENOUGH_MS)} ms or less in 95 of 100.`
     : `Pick so far: the ${sizeOf(chosen.model)} model on the ${chipWord(chosen.delegate)} chip, the biggest that is the laptop's on every video and reads a picture in ${String(FAST_ENOUGH_MS)} ms or less in 95 of 100 (20 a second, spec Part 6 §3.2). Job 51b tries it on the live camera for 20 minutes.`,
 );
-writeFileSync(join(HERE, "report.txt"), `${lines.join("\n")}\n`);
-writeFileSync(join(HERE, "report.json"), JSON.stringify({ rows, results, failed }, (_, v: unknown) => (typeof v === "number" && !Number.isFinite(v) ? null : v), 1));
-console.log(`\nTook ${((Date.now() - started) / 1000).toFixed(0)} s. The report: ${join(HERE, "report.txt")}`);
+writeFileSync(join(HERE, `report-${variant}.txt`), `${lines.join("\n")}\n`);
+writeFileSync(join(HERE, `report-${variant}.json`), JSON.stringify({ rows, results, failed }, (_, v: unknown) => (typeof v === "number" && !Number.isFinite(v) ? null : v), 1));
+console.log(`\nTook ${((Date.now() - started) / 1000).toFixed(0)} s. The report: ${join(HERE, `report-${variant}.txt`)}`);

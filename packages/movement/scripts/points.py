@@ -165,7 +165,11 @@ def measure(a):
 def frames(a):
     """The frames measure keeps, each with its number in the video and its time, the
     picture's shape and how many frames the video has: what the phone test hands the
-    phone, so that it reads the very pictures the laptop read. No model runs here."""
+    phone, so that it reads the very pictures the laptop read. No model runs here. With
+    --pictures, each kept picture is also written there as the laptop decoded it, losslessly
+    (a PNG named by its place in the list), so the phone can read the laptop's own pixels."""
+    if a.pictures and (not os.path.isdir(a.pictures) or os.listdir(a.pictures)):
+        sys.exit(f"{a.pictures} must be an empty folder.")
     cap = cv2.VideoCapture(a.video)
     if not cap.isOpened():
         sys.exit(f"Cannot read the video {os.path.basename(a.video)}.")
@@ -176,6 +180,8 @@ def frames(a):
     kept, size = [], None
     for number, t, img in numbered_frames(cap, fps):
         size = size or picture_shape(cap, img)
+        if a.pictures and not cv2.imwrite(os.path.join(a.pictures, f"{len(kept):05d}.png"), img):
+            sys.exit(f"Could not write a picture into {a.pictures}.")
         kept.append([number, t])
     cap.release()
     if size is None:
@@ -295,6 +301,7 @@ def main():
     f.add_argument("--video", required=True)
     f.add_argument("--fps", type=float, required=True)
     f.add_argument("--out", required=True)
+    f.add_argument("--pictures")
     d = sub.add_parser("draw")
     d.add_argument("--look", required=True)
     d.add_argument("--video", required=True)

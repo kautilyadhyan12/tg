@@ -26,7 +26,7 @@ const fileOf = (...lines: unknown[]): string => `${lines.map((l) => JSON.stringi
 describe("the plan the phone reads", () => {
   it("gives each frame its number in the video, its time and the whole milliseconds points.py gives the model", () => {
     const plan = makePlan(
-      [{ label: "squat_reference", sha256: "c".repeat(64), frames: { picture: { width: 1080, height: 1920 }, videoFps: 60, fps: 30, read: 120, frames: [[0, 0], [2, 33.3], [4, 66.7], [6, 99.9]] } }],
+      [{ label: "squat_reference", sha256: "c".repeat(64), pictures: "video", frames: { picture: { width: 1080, height: 1920 }, videoFps: 60, fps: 30, read: 120, frames: [[0, 0], [2, 33.3], [4, 66.7], [6, 99.9]] } }],
       [{ model: MODELS[0], delegate: "cpu" }, { model: MODELS[0], delegate: "gpu" }],
     );
     expect(plan).toMatchObject({
@@ -35,8 +35,14 @@ describe("the plan the phone reads", () => {
       minDetection: 0.5,
       models: [{ name: "pose_landmarker_lite", sha256: MODELS[0].sha256 }],
       runs: [{ model: "pose_landmarker_lite", delegate: "cpu" }, { model: "pose_landmarker_lite", delegate: "gpu" }],
-      videos: [{ label: "squat_reference", frames: [[0, 0, 0], [2, 33.3, 33], [4, 66.7, 66], [6, 99.9, 99]] }],
+      videos: [{ label: "squat_reference", pictures: "video", frames: [[0, 0, 0], [2, 33.3, 33], [4, 66.7, 66], [6, 99.9, 99]] }],
     });
+  });
+
+  it("asks for as many people as the run is for, and may hand over the laptop's own pictures", () => {
+    const frames = { picture: { width: 720, height: 1280 }, videoFps: 30, fps: 30, read: 2, frames: [[0, 0], [1, 33.3]] as [number, number][] };
+    const plan = makePlan([{ label: "chair_squat_reference", sha256: "d".repeat(64), pictures: "laptop", frames }], [{ model: MODELS[2], delegate: "gpu" }], 1);
+    expect(plan).toMatchObject({ people: 1, minDetection: 0.5, videos: [{ pictures: "laptop" }] });
   });
 
   it("fetches a fixed version of each model, never Google's latest", () => {
@@ -64,6 +70,14 @@ describe("a file from the phone", () => {
     const wrong = { ...frame(1, 33.3), people: [{ ...person, points: [[0.5, 0.5, 0.1, 1.2, 0.9], ...person.points.slice(1)] }] };
     expect(() => readPhoneRun(fileOf(header, frame(0, 0), wrong, end(2)))).toThrow(/line 3 of the phone's file/);
     expect(() => readPhoneRun(fileOf(header, { ...frame(0, 0), note: "x" }, end(1)))).toThrow(/line 2/);
+  });
+
+  it("that does not say where its pictures came from is the video decoder's; any other source is refused", () => {
+    const { pictures, ...older } = { ...header, pictures: "video" };
+    expect(pictures).toBe("video");
+    expect(readPhoneRun(fileOf(older, frame(0, 0), end(1))).header.pictures).toBe("video");
+    expect(readPhoneRun(fileOf({ ...header, pictures: "laptop" }, frame(0, 0), end(1))).header.pictures).toBe("laptop");
+    expect(() => readPhoneRun(fileOf({ ...header, pictures: "camera" }, frame(0, 0), end(1)))).toThrow(/line 1/);
   });
 
   it("whose phone names itself with a path, or another chip, is refused", () => {

@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.media.MediaExtractor
 import android.media.MediaFormat
 import android.media.MediaMetadataRetriever
@@ -27,6 +28,7 @@ import java.io.Writer
 import java.nio.ByteBuffer
 import java.nio.channels.FileChannel
 import java.security.MessageDigest
+import java.util.Locale
 import java.util.Optional
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.concurrent.thread
@@ -46,7 +48,8 @@ private val PLAIN = Regex("^[A-Za-z0-9_-]{1,80}$")
 private val HEX = Regex("^[0-9a-f]{64}$")
 
 private class Frame(val i: Int, val t: Double, val ts: Long)
-private class Video(val label: String, val file: File, val sha256: String, val frames: List<Frame>)
+/** A video, or (fromLaptop) the folder of the laptop's own decoded pictures of it. */
+private class Video(val label: String, val file: File, val sha256: String, val frames: List<Frame>, val fromLaptop: Boolean)
 private class Model(val name: String, val file: File, val sha256: String)
 private class Run(val model: Model, val delegate: String)
 private class Plan(
@@ -92,8 +95,8 @@ internal class PhoneTest private constructor(private val context: Context) {
       check(out.mkdirs()) { "The phone could not make the test's folder." }
       status = "Phone test\n\nChecking the files from the laptop."
       val plan = readPlan()
-      for (video in plan.videos) check(sha256(video.file) == video.sha256) { "The video ${video.label} did not arrive whole." }
-      for (model in plan.runs.map { it.model }.distinct()) check(sha256(model.file) == model.sha256) { "The model ${model.name} did not arrive whole." }
+      for (video in plan.videos) check(sha256(filesOf(video)) == video.sha256) { "The video ${video.label} did not arrive whole." }
+      for (model in plan.runs.map { it.model }.distinct()) check(sha256(listOf(model.file)) == model.sha256) { "The model ${model.name} did not arrive whole." }
       runsAll = plan.videos.size * plan.runs.size
       for ((v, video) in plan.videos.withIndex()) {
         for (each in plan.runs) {
@@ -133,7 +136,13 @@ internal class PhoneTest private constructor(private val context: Context) {
       }
       check(frames.isNotEmpty()) { "The plan gives no frames for $label." }
       check(frames.zipWithNext().all { (a, b) -> b.i > a.i && b.ts > a.ts }) { "The plan's frames for $label are not in order." }
-      Video(label, File(root, "videos/$label.mp4"), hex(v.getString("sha256")), frames)
+      val fromLaptop = when (v.optString("pictures", "video")) {
+        "video" -> false
+        "laptop" -> true
+        else -> error("The plan names pictures this test does not know.")
+      }
+      val file = if (fromLaptop) File(root, "videos/$label") else File(root, "videos/$label.mp4")
+      Video(label, file, hex(v.getString("sha256")), frames, fromLaptop)
     }
     check(videos.isNotEmpty() && runs.isNotEmpty()) { "The plan holds nothing to run." }
     return Plan(
@@ -163,7 +172,8 @@ internal class PhoneTest private constructor(private val context: Context) {
     val name = "${video.label}.${each.model.name}.${each.delegate}"
     val chip = if (each.delegate == "gpu") "the graphics chip" else "the main chip"
     val size = each.model.name.removePrefix("pose_landmarker_")
-    val heading = "Phone test\n\nVideo $v of $videos: ${video.label.removeSuffix("_reference").replace('_', ' ')}\nThe $size model, on $chip"
+    val whose = if (video.fromLaptop) ", the laptop's pictures" else ""
+    val heading = "Phone test\n\nVideo $v of $videos: ${video.label.removeSuffix("_reference").replace('_', ' ')}$whose\nThe $size model, on $chip"
     status = "$heading\n\nStarting the model."
     val wall = SystemClock.elapsedRealtimeNanos()
     val heatBefore = heat()
@@ -175,61 +185,35 @@ internal class PhoneTest private constructor(private val context: Context) {
     }
     val createMs = since(wall)
     try {
-      val times = playTimes(video.file)
-      val retriever = MediaMetadataRetriever()
-      try {
-        retriever.setDataSource(video.file.path)
-        val count = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_FRAME_COUNT)?.toIntOrNull()
-          ?: error("The phone cannot count the frames of ${video.label}.")
-        val last = video.frames.last().i
-        check(last < count && last < times.size) { "The phone counts $count frames in ${video.label}; the laptop kept frame ${last + 1}." }
-        val wanted = video.frames.associateBy { it.i }
-        val params = MediaMetadataRetriever.BitmapParams().apply { preferredConfig = Bitmap.Config.ARGB_8888 }
-        val part = File(out, "$name.jsonl.part")
-        var leftOut = 0
-        var done = 0
-        part.bufferedWriter().use { w ->
-          var start = 0
-          while (start <= last) {
-            val wantedHere = minOf(BATCH, last - start + 1)
-            val decodeStarted = SystemClock.elapsedRealtimeNanos()
-            val pictures = retriever.getFramesAtIndex(start, wantedHere, params)
-            check(pictures.size == wantedHere) { "The phone gave ${pictures.size} of $wantedHere frames of ${video.label}." }
-            val decodeMs = since(decodeStarted) / wantedHere
-            for ((k, picture) in pictures.withIndex()) {
-              val frame = wanted[start + k]
-              if (frame == null) {
-                picture.recycle()
-                continue
-              }
-              if (done == 0) w.write(header(plan, video, each, picture, count, createMs, heatBefore) + "\n")
-              val image = BitmapImageBuilder(picture).build()
-              val detectStarted = SystemClock.elapsedRealtimeNanos()
-              val result = landmarker.detectForVideo(image, frame.ts)
-              val detectMs = since(detectStarted)
-              image.close()
-              leftOut += writeFrame(w, frame, times[frame.i], decodeMs, detectMs, result)
-              done++
-              if (done % 10 == 0 || done == video.frames.size) {
-                progress("running", done, video.frames.size, null)
-                status = "$heading\n\nPicture $done of ${video.frames.size}\n\nKeep the phone on its cable."
-              }
-            }
-            start += wantedHere
+      val part = File(out, "$name.jsonl.part")
+      var leftOut = 0
+      var done = 0
+      part.bufferedWriter().use { w ->
+        pictures(video) { frame, picture, at, decodeMs, count ->
+          if (done == 0) w.write(header(plan, video, each, picture, count, createMs, heatBefore) + "\n")
+          val image = BitmapImageBuilder(picture).build()
+          val detectStarted = SystemClock.elapsedRealtimeNanos()
+          val result = landmarker.detectForVideo(image, frame.ts)
+          val detectMs = since(detectStarted)
+          // Closing the image recycles its picture.
+          image.close()
+          leftOut += writeFrame(w, frame, at, decodeMs, detectMs, result)
+          done++
+          if (done % 10 == 0 || done == video.frames.size) {
+            progress("running", done, video.frames.size, null)
+            status = "$heading\n\nPicture $done of ${video.frames.size}\n\nKeep the phone on its cable."
           }
-          check(done == video.frames.size) { "The phone read $done of the ${video.frames.size} frames of ${video.label}." }
-          val end = JSONObject()
-            .put("kind", "end")
-            .put("frames", done)
-            .put("leftOut", leftOut)
-            .put("wallMs", since(wall))
-            .put("heat", heat())
-          w.write(end.toString() + "\n")
         }
-        check(part.renameTo(File(out, "$name.jsonl"))) { "The phone could not keep the run's file." }
-      } finally {
-        retriever.release()
+        check(done == video.frames.size) { "The phone read $done of the ${video.frames.size} frames of ${video.label}." }
+        val end = JSONObject()
+          .put("kind", "end")
+          .put("frames", done)
+          .put("leftOut", leftOut)
+          .put("wallMs", since(wall))
+          .put("heat", heat())
+        w.write(end.toString() + "\n")
       }
+      check(part.renameTo(File(out, "$name.jsonl"))) { "The phone could not keep the run's file." }
     } catch (e: Throwable) {
       failed(name, video, each, words(e))
     } finally {
@@ -237,7 +221,61 @@ internal class PhoneTest private constructor(private val context: Context) {
     }
   }
 
-  /** The laptop's settings (points.py): the video's own frames in order, up to six people, the same three limits. */
+  /** Every frame the plan names, in order: its picture, its time on the phone's own clock, how long the picture took
+   *  to make, and how many frames the source holds. */
+  private fun pictures(video: Video, each: (Frame, Bitmap, Double, Double, Int) -> Unit) {
+    if (video.fromLaptop) laptopPictures(video, each) else videoPictures(video, each)
+  }
+
+  /** The phone's own video decoder, the video's frames by their number in it. */
+  private fun videoPictures(video: Video, each: (Frame, Bitmap, Double, Double, Int) -> Unit) {
+    val times = playTimes(video.file)
+    val retriever = MediaMetadataRetriever()
+    try {
+      retriever.setDataSource(video.file.path)
+      val count = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_FRAME_COUNT)?.toIntOrNull()
+        ?: error("The phone cannot count the frames of ${video.label}.")
+      val last = video.frames.last().i
+      check(last < count && last < times.size) { "The phone counts $count frames in ${video.label}; the laptop kept frame ${last + 1}." }
+      val wanted = video.frames.associateBy { it.i }
+      val params = MediaMetadataRetriever.BitmapParams().apply { preferredConfig = Bitmap.Config.ARGB_8888 }
+      var start = 0
+      while (start <= last) {
+        val wantedHere = minOf(BATCH, last - start + 1)
+        val decodeStarted = SystemClock.elapsedRealtimeNanos()
+        val batch = retriever.getFramesAtIndex(start, wantedHere, params)
+        check(batch.size == wantedHere) { "The phone gave ${batch.size} of $wantedHere frames of ${video.label}." }
+        val decodeMs = since(decodeStarted) / wantedHere
+        for ((k, picture) in batch.withIndex()) {
+          val frame = wanted[start + k]
+          if (frame == null) picture.recycle() else each(frame, picture, times[frame.i], decodeMs, count)
+        }
+        start += wantedHere
+      }
+    } finally {
+      retriever.release()
+    }
+  }
+
+  /** The laptop's own decoded pictures (points.py frames --pictures), one PNG a kept frame, read exactly as written:
+   *  with them, what still differs from the laptop is the model's part alone. */
+  private fun laptopPictures(video: Video, each: (Frame, Bitmap, Double, Double, Int) -> Unit) {
+    val options = BitmapFactory.Options().apply { inPreferredConfig = Bitmap.Config.ARGB_8888 }
+    for ((k, frame) in video.frames.withIndex()) {
+      val started = SystemClock.elapsedRealtimeNanos()
+      val picture = BitmapFactory.decodeFile(pictureFile(video, k).path, options)
+        ?: error("The laptop's picture ${k + 1} of ${video.label} cannot be read.")
+      each(frame, picture, frame.t, since(started), video.frames.size)
+    }
+  }
+
+  private fun pictureFile(video: Video, k: Int): File = File(video.file, String.format(Locale.ROOT, "%05d.png", k))
+
+  /** The files a video came in, in order: the video, or the laptop's pictures. */
+  private fun filesOf(video: Video): List<File> =
+    if (video.fromLaptop) video.frames.indices.map { pictureFile(video, it) } else listOf(video.file)
+
+  /** The laptop's settings (points.py): the video's own frames in order, as many people as the plan asks, the same three limits. */
   private fun options(plan: Plan, each: Run): PoseLandmarker.PoseLandmarkerOptions {
     val model: ByteBuffer = FileInputStream(each.model.file).channel.use { it.map(FileChannel.MapMode.READ_ONLY, 0, it.size()) }
     val base = BaseOptions.builder()
@@ -287,6 +325,7 @@ internal class PhoneTest private constructor(private val context: Context) {
       .put("label", video.label)
       .put("video", JSONObject().put("sha256", video.sha256).put("frames", count))
       .put("picture", JSONObject().put("width", picture.width).put("height", picture.height))
+      .put("pictures", if (video.fromLaptop) "laptop" else "video")
       .put(
         "model",
         JSONObject()
@@ -397,14 +436,17 @@ internal class PhoneTest private constructor(private val context: Context) {
     return JSONObject().put("thermal", thermal).put("batteryC", celsius)
   }
 
-  private fun sha256(file: File): String {
+  /** One check sum over the files one after another, as the laptop makes it. */
+  private fun sha256(files: List<File>): String {
     val digest = MessageDigest.getInstance("SHA-256")
-    FileInputStream(file).use { input ->
-      val buffer = ByteArray(1 shl 16)
-      while (true) {
-        val n = input.read(buffer)
-        if (n < 0) break
-        digest.update(buffer, 0, n)
+    val buffer = ByteArray(1 shl 16)
+    for (file in files) {
+      FileInputStream(file).use { input ->
+        while (true) {
+          val n = input.read(buffer)
+          if (n < 0) break
+          digest.update(buffer, 0, n)
+        }
       }
     }
     return digest.digest().joinToString("") { "%02x".format(it.toInt() and 0xff) }

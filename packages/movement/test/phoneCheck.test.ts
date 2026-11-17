@@ -36,6 +36,7 @@ function phoneRunOf(laptop: BodyPoints, edit: (frames: MovementFrame[]) => Movem
       label: laptop.header.label,
       video: { sha256: "0".repeat(64), frames: frames.length },
       picture: laptop.header.picture,
+      pictures: "video",
       model: { ...laptop.header.model, sha256: "1".repeat(64) },
       delegate: "cpu",
       phone: { maker: "test", model: "test", android: "15", sdk: 35, abi: "arm64-v8a" },

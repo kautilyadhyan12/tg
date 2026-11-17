@@ -41,8 +41,11 @@ export const SETTINGS = { people: MAX_PEOPLE, minDetection: 0.5, minPresence: 0.
 
 export interface PlanVideo {
   readonly label: string;
+  /** Of the video file, or of the laptop's pictures one after another. */
   readonly sha256: string;
   readonly frames: VideoFrames;
+  /** The phone decodes the video itself, or reads the laptop's own decoded pictures (points.py frames --pictures). */
+  readonly pictures: "video" | "laptop";
 }
 
 export interface PlanRun {
@@ -51,17 +54,20 @@ export interface PlanRun {
 }
 
 /** The plan the phone reads: each frame by its number in the video, its time and the whole milliseconds the laptop
- *  gave the model for it (points.py's `int(t)`). The phone runs every run on every video, videos in order. */
-export function makePlan(videos: readonly PlanVideo[], runs: readonly PlanRun[]): unknown {
+ *  gave the model for it (points.py's `int(t)`). The phone runs every run on every video, videos in order, asking the
+ *  model for up to `people` people. */
+export function makePlan(videos: readonly PlanVideo[], runs: readonly PlanRun[], people: number = SETTINGS.people): unknown {
   const models = [...new Set(runs.map((r) => r.model))];
   return {
     version: 1,
     ...SETTINGS,
+    people,
     models: models.map((m) => ({ name: m.name, sha256: m.sha256 })),
     runs: runs.map((r) => ({ model: r.model.name, delegate: r.delegate })),
     videos: videos.map((v) => ({
       label: v.label,
       sha256: v.sha256,
+      pictures: v.pictures,
       frames: v.frames.frames.map(([i, t]) => [i, t, Math.trunc(t)]),
     })),
   };

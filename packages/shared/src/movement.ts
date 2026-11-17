@@ -112,8 +112,11 @@ export const phoneRunHeaderSchema = z
     label,
     /** The video file as the phone holds it, and how many frames the phone itself counts in it. */
     video: z.object({ sha256, frames: count }).strict(),
-    /** The pictures as the phone's own decoder gave them, turned as a person sees them. */
+    /** The pictures' shape, turned as a person sees them. */
     picture: z.object({ width: pixels, height: pixels }).strict(),
+    /** Where the pictures came from: the phone's own video decoder, or the laptop's decoded pictures, sent as
+     *  they are (to tell the decoder's part from the model's). A file that does not say is the decoder's. */
+    pictures: z.enum(["video", "laptop"]).default("video"),
     model: z
       .object({
         file: plainName,

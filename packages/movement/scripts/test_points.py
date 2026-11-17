@@ -112,6 +112,31 @@ class Sampling(unittest.TestCase):
         self.assertEqual(got["picture"], {"width": 320, "height": 180})
         self.assertEqual((got["videoFps"], got["fps"]), (60, 30))
 
+    def test_frames_writes_each_kept_picture_exactly_as_decoded(self):
+        make_video(self.path, fps=60, grey=lambda i: (2 * i) % 255)
+        out = os.path.join(self.dir.name, "frames.json")
+        pictures = os.path.join(self.dir.name, "pictures")
+        os.mkdir(pictures)
+        subprocess.run([sys.executable, pt.__file__, "frames", "--video", self.path, "--fps", "30", "--out", out,
+                        "--pictures", pictures], check=True)
+        cap = cv2.VideoCapture(self.path)
+        decoded = [img for _, _, img in pt.numbered_frames(cap, 30)]
+        cap.release()
+        names = sorted(os.listdir(pictures))
+        self.assertEqual(names, [f"{n:05d}.png" for n in range(60)])
+        for name, img in zip(names, decoded):
+            self.assertTrue(np.array_equal(cv2.imread(os.path.join(pictures, name)), img), name)
+
+    def test_frames_refuses_a_folder_already_holding_files(self):
+        make_video(self.path)
+        pictures = os.path.join(self.dir.name, "pictures")
+        os.mkdir(pictures)
+        open(os.path.join(pictures, "other.txt"), "w").close()
+        r = subprocess.run([sys.executable, pt.__file__, "frames", "--video", self.path, "--fps", "30",
+                            "--out", os.path.join(self.dir.name, "f.json"), "--pictures", pictures], capture_output=True, text=True)
+        self.assertNotEqual(r.returncode, 0)
+        self.assertEqual(os.listdir(pictures), ["other.txt"])
+
     def test_a_video_stored_sideways_has_the_shape_a_person_sees(self):
         make_video(self.path, extra=["-c", "copy", "-metadata:s:v", "rotate=90"])
         cap = cv2.VideoCapture(self.path)
