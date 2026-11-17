@@ -6,11 +6,11 @@
 //
 // The two rules, in words Kd can read, both over the one-person videos (the others' stand-in
 // follower can pick a reflection, job 52d):
-//   - the angle and length limits: where the picture shows the parts lie across it (turned out of
-//     it by 10° at most, added up; a height or width shown at cos 10° of itself or more), the flat
-//     and the 3D readings still differ, by the 3D points' own error; each limit is the difference
-//     not passed in 95 frames of 100, to the nearest 5° or 0.05 of a length. A flat reading
-//     further from the 3D one than that, whose showing allows that much flattening, is not given;
+//   - the angle and length limits: where the picture shows every part it measures at cos 10° of
+//     its length or more (each turned out of the picture by 10° at most, as far as lengths can
+//     tell), the flat and the 3D readings still differ, by the 3D points' own error; each limit is
+//     the difference not passed in 95 frames of 100, raised to the next 5° or 0.05 of a length. A flat
+//     reading further from the 3D one than that is not given;
 //   - the size change: the most the body's size on the picture changes on a video where the person
 //     stays in place (its 1st to its 99th hundredth), raised to the next 5 in 100. A bigger change
 //     is the body moving nearer or further, and the floor is set afresh.
@@ -61,8 +61,9 @@ function quantile(values: readonly number[], q: number): number {
 }
 
 // ── The two fitted numbers ─────────────────────────────────────────────────────────
-/** Parts turned out of the picture by at most this, added up, lie across it. */
+/** Parts turned out of the picture by at most this lie across it, degrees. */
 export const ACROSS = 10;
+const SHOWN_ACROSS = Math.cos((ACROSS * Math.PI) / 180);
 export const ANGLE_STEP = 5;
 export const LENGTH_STEP = 0.05;
 export const SIZE_STEP = 0.05;
@@ -79,9 +80,6 @@ function measuredUnlimited(video: Video): MeasuredBody[] {
   return fresh;
 }
 
-/** A height or width shown at this share of itself or more lies across the picture. */
-const LENGTH_ACROSS = 1 / Math.cos((ACROSS * Math.PI) / 180) - 1;
-
 /** |flat − 3D| of every reading of one kind whose parts lie across the picture, on the one-person
  *  videos. */
 export function acrossDifferences(videos: readonly Video[], kind: Kind): number[] {
@@ -91,15 +89,15 @@ export function acrossDifferences(videos: readonly Video[], kind: Kind): number[
       measuredUnlimited(v).flatMap((body) =>
         MEASURE_LIST.flatMap(({ name, unit }) => {
           const r = body.readings.get(name);
-          if (kindOf(unit) !== kind || r === undefined || r.flat === null || r.world === null || r.turn === null) return [];
-          const across = kind === "angle" ? r.turn <= ACROSS : r.turn <= Math.abs(r.flat) * LENGTH_ACROSS + 1e-12;
-          return across ? [Math.abs(r.flat - r.world)] : [];
+          if (kindOf(unit) !== kind || r === undefined || r.flat === null || r.world === null || r.shown === null) return [];
+          return r.shown >= SHOWN_ACROSS ? [Math.abs(r.flat - r.world)] : [];
         }),
       ),
     );
 }
 
-const toStep = (v: number, step: number): number => Math.round(Math.max(step, Math.round(v / step) * step) * 1e6) / 1e6;
+/** Raised to the next step, so the limit is never below the difference it stands for. */
+const toStep = (v: number, step: number): number => Math.round(Math.max(step, Math.ceil(v / step - 1e-9) * step) * 1e6) / 1e6;
 
 export function chooseAngleLimit(videos: readonly Video[]): number {
   return toStep(quantile(acrossDifferences(videos, "angle"), 0.95), ANGLE_STEP);

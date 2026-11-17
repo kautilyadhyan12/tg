@@ -64,11 +64,12 @@ function lyingHeadToCamera(): P[] {
   return body;
 }
 
-/** Facing the phone, standing tall, arms hanging; each thigh turned `thigh`° towards the phone and
- *  each shin `shin`° away from it, so the knee bends in a plane that points at the camera (a
- *  squat filmed from the front). With `split` metres, the left leg reaches that far forward and
- *  the right that far back, both straight (a split stance filmed from the front). */
-function facing(thigh = 0, shin = thigh, split = 0): P[] {
+/** Facing the phone, standing tall, arms hanging (or with `reach`, held straight out towards the
+ *  phone, as in a bodyweight squat); each thigh turned `thigh`° towards the phone and each shin
+ *  `shin`° away from it, so the knee bends in a plane that points at the camera (a squat filmed
+ *  from the front). With `split` metres, the left leg reaches that far forward and the right that
+ *  far back, both straight (a split stance filmed from the front). */
+function facing(thigh = 0, shin = thigh, split = 0, reach = false): P[] {
   const body: P[] = Array.from({ length: 33 }, (): P => [0, -0.65, -0.08]);
   const rad = (d: number): number => (d * Math.PI) / 180;
   const both = (left: number, right: number, x: number, y: number, z: number): void => {
@@ -76,11 +77,19 @@ function facing(thigh = 0, shin = thigh, split = 0): P[] {
     body[right] = [-x, y, z];
   };
   both(KP.left_shoulder, KP.right_shoulder, 0.18, -0.5, 0);
-  both(KP.left_elbow, KP.right_elbow, 0.2, -0.22, 0);
-  both(KP.left_wrist, KP.right_wrist, 0.21, 0.04, 0);
-  both(KP.left_pinky, KP.right_pinky, 0.22, 0.1, 0.01);
-  both(KP.left_index, KP.right_index, 0.21, 0.11, -0.01);
-  both(KP.left_thumb, KP.right_thumb, 0.19, 0.08, -0.02);
+  if (reach) {
+    both(KP.left_elbow, KP.right_elbow, 0.18, -0.5, -0.28);
+    both(KP.left_wrist, KP.right_wrist, 0.18, -0.5, -0.53);
+    both(KP.left_pinky, KP.right_pinky, 0.2, -0.49, -0.6);
+    both(KP.left_index, KP.right_index, 0.18, -0.5, -0.62);
+    both(KP.left_thumb, KP.right_thumb, 0.15, -0.52, -0.58);
+  } else {
+    both(KP.left_elbow, KP.right_elbow, 0.2, -0.22, 0);
+    both(KP.left_wrist, KP.right_wrist, 0.21, 0.04, 0);
+    both(KP.left_pinky, KP.right_pinky, 0.22, 0.1, 0.01);
+    both(KP.left_index, KP.right_index, 0.21, 0.11, -0.01);
+    both(KP.left_thumb, KP.right_thumb, 0.19, 0.08, -0.02);
+  }
   both(KP.left_hip, KP.right_hip, 0.1, 0, 0);
   for (const [side, x, reach] of [
     ["left", 0.1, -split],
@@ -182,14 +191,20 @@ describe("the worst thing: a flat reading is never given further from the truth 
   };
 
   it("a squat filmed from the front: the knee bends towards the camera and looks straight on the picture", () => {
-    for (const turn of [5, 10, 12, 13, 15, 20, 30, 45]) {
-      const m = once(facing(turn));
-      const knee = read(m, "left knee");
-      expect(knee.world).toBeCloseTo(180 - 2 * turn, 6);
-      // Flat it reads 180°, straight, whatever the bend: refused once that is more than the limit.
-      if (2 * turn > MEASURE_LIMITS.angle) expect([turn, knee.flat]).toEqual([turn, null]);
-      else expect([turn, knee.flat]).toEqual([turn, expect.closeTo(180, 6)]);
-      within(m);
+    // With the arms hanging and with them reaching to the phone: most of the body then points at
+    // the camera, which must not make the bent legs look as if they lay across the picture.
+    for (const reach of [false, true]) {
+      for (const turn of [5, 10, 12, 13, 15, 20, 30, 45]) {
+        const m = once(facing(turn, turn, 0, reach));
+        const knee = read(m, "left knee");
+        const thigh = read(m, "left thigh lean");
+        expect(knee.world).toBeCloseTo(180 - 2 * turn, 6);
+        // Flat it reads 180°, straight, whatever the bend: refused once that is more than the limit.
+        if (2 * turn > MEASURE_LIMITS.angle) expect([reach, turn, knee.flat]).toEqual([reach, turn, null]);
+        else expect([reach, turn, knee.flat]).toEqual([reach, turn, expect.closeTo(180, 6)]);
+        if (turn > MEASURE_LIMITS.angle) expect([reach, turn, thigh.flat]).toEqual([reach, turn, null]);
+        within(m);
+      }
     }
   });
 
@@ -222,16 +237,25 @@ describe("the worst thing: a flat reading is never given further from the truth 
 
   it("stepping back from the phone with the far foot hidden: the floor moves with the body", () => {
     const far = [KP.right_knee, KP.right_ankle, KP.right_heel, KP.right_foot_index];
-    // From 1 s the body is a fifth smaller on the picture and its feet higher, as when it steps back.
-    const run = measure(
-      Array.from({ length: 91 }, (_, n) => {
-        const t = Math.round((n * 1000) / 30);
-        return frame(t, standingSide(), t < 1000 ? { hidden: far } : { hidden: far, size: 0.36, at: [0.75, 0.74 / 0.36 - 0.9] });
-      }),
-    );
-    for (const m of run) {
-      expect([m.t, read(m, "hips height").flat]).toEqual([m.t, expect.closeTo(0.9 / 0.84, 6)]);
-      expect([m.t, read(m, "hips height").world]).toEqual([m.t, expect.closeTo(0.9 / 0.84, 6)]);
+    // From 1 s the body is 7, 10, 13 or 20 in 100 smaller on the picture, as from a phone about
+    // 0.8 m up, whose line of sight runs 10 cm below the hips: that line stays put on the picture
+    // and the feet rise towards it. Below the size change, the floor follows the foot a second
+    // later, since the foot is as far below the hips as before (the legs did not move); above it,
+    // at once.
+    for (const after of [0.42, 0.405, 0.39, 0.36]) {
+      const run = measure(
+        Array.from({ length: 121 }, (_, n) => {
+          const t = Math.round((n * 1000) / 30);
+          const size = t < 1000 ? 0.45 : after;
+          return frame(t, standingSide(), { hidden: far, size, at: [0.6, 0.45 / size - 0.1] });
+        }),
+      );
+      const settled = after < 0.45 * (1 - MEASURE_LIMITS.sizeChange) ? 1000 : 1000 + MEASURE_LIMITS.floorRise + 100;
+      for (const m of run.filter((x) => x.t < 1000 || x.t >= settled)) {
+        expect([after, m.t, read(m, "hips height").flat]).toEqual([after, m.t, expect.closeTo(0.9 / 0.84, 6)]);
+        expect([after, m.t, read(m, "left ankle height").flat]).toEqual([after, m.t, expect.closeTo(0.06 / 0.84, 6)]);
+        expect([after, m.t, read(m, "hips height").world]).toEqual([after, m.t, expect.closeTo(0.9 / 0.84, 6)]);
+      }
     }
   });
 });
@@ -358,15 +382,15 @@ describe("what decides nothing", () => {
   it("with no foot ever seen there is no floor, so no height; the rest is read", () => {
     const feet = [KP.left_heel, KP.right_heel, KP.left_foot_index, KP.right_foot_index];
     const m = once(seated(), { hidden: feet });
-    expect(read(m, "hips height")).toEqual({ flat: null, world: null, shown: null, turn: null, off: null });
+    expect(read(m, "hips height")).toEqual({ flat: null, world: null, shown: null, off: null });
     expect(read(m, "left knee").flat).toBeCloseTo(90, 6);
     expect(read(m, "hands apart").world).toBeCloseTo(0.4, 6);
   });
 
   it("without down, no lean and no height; the joints are read", () => {
     const m = once(seated(), { down: null });
-    expect(read(m, "trunk lean")).toEqual({ flat: null, world: null, shown: null, turn: null, off: null });
-    expect(read(m, "hips height")).toEqual({ flat: null, world: null, shown: null, turn: null, off: null });
+    expect(read(m, "trunk lean")).toEqual({ flat: null, world: null, shown: null, off: null });
+    expect(read(m, "hips height")).toEqual({ flat: null, world: null, shown: null, off: null });
     expect(read(m, "left knee").world).toBeCloseTo(90, 6);
   });
 
