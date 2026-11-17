@@ -1521,9 +1521,11 @@ wrist, fingers; hip, knee, ankle, foot; both shoulders, nose, face) and is used 
 bone to its parent keeps its own length within 0.25 of the same body's trunk and the parent is
 used: a wrong elbow takes its forearm and hand with it, a wrong wrist never takes the elbow, and
 a hand, foot or head moved in one piece cannot vouch for itself. The trunk's corners are checked
-by the trunk's bones. A bone learns its length only from frames in which it held, and keeps it
-while the person stays in view, so a wrong pose held for seconds stays refused; a person gone
-longer than 3 s, or a clock that went back, is a new body. The allowance is a share of the trunk,
+by the trunk's bones. A bone learns its length from frames in which it held; a new steady length
+replaces it only after lasting as long as the old one had held, at least half a second and at
+most 3 s, so a wrong first look is soon replaced and a wrong pose is refused for up to 3 s (held
+longer, it gets in: a known limit). A person gone longer than 3 s, or a clock that went back, is
+a new body. The allowance is a share of the trunk,
 not of the bone: on Kd's videos the model's error does not grow with a bone's length. A point
 faster than 20 m/s across the picture has jumped (a kick's foot, the fastest part of a person, is
 measured at 12 to 18 m/s); left and right have swapped when each side lies where the other was a
@@ -1536,7 +1538,7 @@ refused frame. What it cannot catch: a slow wrong pose the model is sure of (the
 lifted ankle at 2.8 to 3.8 s passes in all 30 frames; job 52a's two signs); a wrong head at a
 right distance from the shoulders (a head moved at random is used in 13 to 16 in 100 frames); at
 8 frames a second only a move of more than 2.5 m is a jump; the follower used until job 52d may
-follow a reflection. What it costs: a point whose parent is hidden decides nothing, 2 to 5 in 100
+follow a reflection. What it costs: a point whose parent is hidden decides nothing, 0 to 5 in 100
 of the big joints on the one-person videos (most, the far ankle while the far knee is hidden).
 
 ### 12.3 A movement, and an exercise on top of it

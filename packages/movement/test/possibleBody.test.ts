@@ -91,6 +91,19 @@ describe("the worst thing: a real person who is not average is judged by their o
       expect(verdicts(runChecks(longer(small, ARMS, -0.05)))).toEqual(before);
     });
 
+    it(`${video.label}: a wrong first look at an arm does not keep the real arm out`, () => {
+      // The model puts the left elbow 25 cm out in 3D for the first 0.7 s only.
+      const firstLook = editPeople(video.frames, (p, frame) => {
+        const w = p.world?.[KP.left_elbow];
+        if (frame.t < 700 && w !== undefined) p.world?.splice(KP.left_elbow, 1, [w[0] + 0.25, w[1], w[2]]);
+        return p;
+      });
+      const after = verdicts(runChecks(firstLook));
+      const usedOwn = own.flatMap((frame, f) => ((video.frames[f]?.t ?? 0) >= 1500 && frame[KP.left_elbow] === null ? [f] : []));
+      const usedNow = usedOwn.filter((f) => after[f]?.[KP.left_elbow] === null);
+      expect(usedNow.length).toBe(usedOwn.length);
+    });
+
     it(`${video.label}: a hand or a head moved in one piece, the model sure of it, is not used`, () => {
       // A wrong place every frame for the whole piece: the bones inside it keep their length,
       // so only the bone to the trunk can tell. The hand's elbow is hidden, the worst case.
@@ -292,22 +305,38 @@ describe("each check alone", () => {
     expect(c?.refused[KP.left_shoulder]).toBe(null);
   });
 
-  for (const held of [2000, 4000]) {
-    it(`keeps refusing an elbow the model holds 25 cm wrong for ${String(held / 1000)} s, and uses the right one at once`, () => {
-      const checked = run(
-        feed(3 + held / 1000, 30, (t, world, lay) => {
-          const e = world[KP.left_elbow];
-          if (t >= 2000 && t < 2000 + held && e !== undefined) e[0] = (e[0] ?? 0) + 0.25;
-          return lay(world);
-        }),
-      );
-      const wrong = checked.filter((c) => c.t >= 2000 && c.t < 2000 + held);
-      for (const c of wrong) expect([c.t, c.refused[KP.left_elbow], c.refused[KP.left_wrist]]).toEqual([c.t, "bone", "bone"]);
-      const right = at(checked, 2000 + held);
-      expect(right?.refused[KP.left_elbow]).toBe(null);
-      expect(right?.refused[KP.left_wrist]).toBe(null);
-    });
-  }
+  /** The standing body with the left elbow 25 cm out, in 3D and on the picture, while `wrong(t)`. */
+  const elbowOut = (seconds: number, wrong: (t: number) => boolean): CheckedBody[] =>
+    run(
+      feed(seconds, 30, (t, world, lay) => {
+        const e = world[KP.left_elbow];
+        if (wrong(t) && e !== undefined) e[0] = (e[0] ?? 0) + 0.25;
+        return lay(world);
+      }),
+    );
+  const elbowAndWrist = (c: CheckedBody | undefined): [Refusal | null | undefined, Refusal | null | undefined] => [c?.refused[KP.left_elbow], c?.refused[KP.left_wrist]];
+
+  it("keeps refusing an elbow held 25 cm wrong for 2 s after 2 s of the right one, and uses the right one at once", () => {
+    const checked = elbowOut(5, (t) => t >= 2000 && t < 4000);
+    for (const c of checked.filter((x) => x.t >= 2000 && x.t < 4000)) expect([c.t, ...elbowAndWrist(c)]).toEqual([c.t, "bone", "bone"]);
+    expect(elbowAndWrist(at(checked, 4000))).toEqual([null, null]);
+  });
+
+  it("does not keep a wrong first look: an elbow wrong for its first 0.7 s is used once the right one has lasted as long", () => {
+    // The wrong length was learned and held for 0.7 s; the right one replaces it after 0.7 s more.
+    const checked = elbowOut(10, (t) => t < 700);
+    for (const c of checked.filter((x) => x.t >= 700 && x.t < 1350)) expect([c.t, ...elbowAndWrist(c)]).toEqual([c.t, "bone", "bone"]);
+    for (const c of checked.filter((x) => x.t >= 1450)) expect([c.t, ...elbowAndWrist(c)]).toEqual([c.t, null, null]);
+  });
+
+  it("lets a wrong length in once it has stayed 3 s, the most a length must wait (a known limit), and the right one back 3 s after it returns", () => {
+    // 4 s of the right elbow, then 4 s wrong, then right again.
+    const checked = elbowOut(13, (t) => t >= 4000 && t < 8000);
+    for (const c of checked.filter((x) => x.t >= 4000 && x.t < 6950)) expect([c.t, ...elbowAndWrist(c)]).toEqual([c.t, "bone", "bone"]);
+    for (const c of checked.filter((x) => x.t >= 7050 && x.t < 8000)) expect([c.t, ...elbowAndWrist(c)]).toEqual([c.t, null, null]);
+    for (const c of checked.filter((x) => x.t >= 8000 && x.t < 10950)) expect([c.t, ...elbowAndWrist(c)]).toEqual([c.t, "bone", "bone"]);
+    for (const c of checked.filter((x) => x.t >= 11050)) expect([c.t, ...elbowAndWrist(c)]).toEqual([c.t, null, null]);
+  });
 
   it("starts again with a person gone longer than bones are remembered, and with a clock that went back", () => {
     const body = feed(1, 30)[0]?.person ?? null;

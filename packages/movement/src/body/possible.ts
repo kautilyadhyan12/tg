@@ -146,24 +146,51 @@ class Memory {
 
 type BoneState = "unjudged" | "learning" | "holds" | "broken";
 
-/** One bone's own length. Learned over its first `learn` ms; after that a length is kept only
- *  when it held, so a wrong length can never become the bone's own. When no held length is
- *  left in the memory, the last one known stays. */
+/** One bone's own length. Learned over its first `learn` ms; after that a length joins it only
+ *  when it held. A new length can still become the bone's own, since lengths alone cannot say
+ *  which of two steady lengths is true, but only by staying steady for as long as the old one
+ *  had held: at least `learn`, at most `boneMemory`. So a wrong first look, contradicted at once,
+ *  is soon replaced by the true length, and a length seen holding for seconds needs seconds. */
 class BoneLength {
-  private readonly held = new Memory();
+  private held = new Memory();
+  /** A run of broken lengths that agree with each other: a length that may be the bone's own. */
+  private rival = new Memory();
   private known: number | null = null;
+  /** When the length known began to be seen, and when it last held. */
+  private since = 0;
+  private lastHeld = 0;
 
   judge(t: number, now: number, allowance: number | null, limits: Limits): BoneState {
     this.held.forget(t - limits.boneMemory);
-    const learned = this.known !== null || this.held.span(t) >= limits.learn;
-    const own = learned ? (this.held.median() ?? this.known) : null;
-    if (own === null || allowance === null) {
-      this.held.add(t, now);
-      return "learning";
+    if (this.known === null) {
+      if (allowance === null || this.held.span(t) < limits.learn) {
+        this.held.add(t, now);
+        return "learning";
+      }
+      this.known = this.held.median();
+      this.since = t - this.held.span(t);
+      this.lastHeld = t;
     }
-    this.known = own;
-    if (Math.abs(now - own) > allowance) return "broken";
-    this.held.add(t, now);
+    if (allowance === null) return "learning";
+    const own = this.held.median() ?? this.known ?? now;
+    if (Math.abs(now - own) <= allowance) {
+      this.held.add(t, now);
+      this.known = own;
+      this.lastHeld = t;
+      this.rival = new Memory();
+      return "holds";
+    }
+    const rivalLength = this.rival.median();
+    if (rivalLength !== null && Math.abs(now - rivalLength) > allowance) this.rival = new Memory();
+    this.rival.add(t, now);
+    const support = Math.min(limits.boneMemory, Math.max(limits.learn, this.lastHeld - this.since));
+    if (this.rival.span(t) < support) return "broken";
+    // The new length has stayed as long as the old one held: it is the bone's own now.
+    this.since = t - this.rival.span(t);
+    this.held = this.rival;
+    this.rival = new Memory();
+    this.known = this.held.median();
+    this.lastHeld = t;
     return "holds";
   }
 }
