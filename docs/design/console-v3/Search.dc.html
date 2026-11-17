@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Search: people, pages and things to do</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./kit3.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0;background:#0A0908}
+</style>
+</helmet>
+<div class="app t-dark {{look}}" style="min-height: 100%">
+<div class="wash"></div>
+<header class="top" style="position: relative">
+<button type="button" class="find input-on"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11a7 7 0 1 0 14 0a7 7 0 1 0-14 0M21 21l-4.3-4.3"></path></svg><span class="grow ell">Search members, pages or actions</span><span class="kbd">Ctrl K</span></button>
+<span class="grow"></span>
+<span class="s13 t3">Opens from this box on every page, from Ctrl K, and from the search button on a phone.</span>
+</header>
+
+<div class="hrow g24 wrap" style="position: relative; align-items: flex-start; padding: 28px 32px 48px">
+
+<div class="col g10" style="flex: 3 1 560px; min-width: 0">
+<span class="eyebrow">A topic: money</span>
+<div class="pal">
+<div class="pal-in"><svg class="ic ic-l t3" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11a7 7 0 1 0 14 0a7 7 0 1 0-14 0M21 21l-4.3-4.3"></path></svg><span class="grow w5">money</span><span class="kbd">Esc</span></div>
+
+<div class="pal-g">Pages</div>
+<a href="#" class="pal-r pal-on"><span class="tile ti-g" style="width: 32px; height: 32px"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6a2 2 0 0 1 2-2h12v4M3 6v12a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2H5a2 2 0 0 1-2-2zM17 14h.01"></path></svg></span><span class="col grow"><span class="w6">Payments overview</span><span class="s12 t3">Money · revenue, outstanding payments and settings</span></span><span class="kbd">Enter</span></a>
+<a href="#" class="pal-r"><span class="tile ti-n" style="width: 32px; height: 32px"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4zM3 6h18M16 10a4 4 0 0 1-8 0"></path></svg></span><span class="col grow"><span class="w6">Sell</span><span class="s12 t3">Money · point of sale</span></span></a>
+<a href="#" class="pal-r"><span class="tile ti-n" style="width: 32px; height: 32px"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12.6 2.6A2 2 0 0 0 11.2 2H4a2 2 0 0 0-2 2v7.2a2 2 0 0 0 .6 1.4l8.7 8.7a2.4 2.4 0 0 0 3.4 0l6.6-6.6a2.4 2.4 0 0 0 0-3.4zM7 7.5h.01"></path></svg></span><span class="col grow"><span class="w6">Memberships</span><span class="s12 t3">Money · price list</span></span></a>
+<a href="#" class="pal-r"><span class="tile ti-n" style="width: 32px; height: 32px"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2zM2 10h20"></path></svg></span><span class="col grow"><span class="w6">Failed payments</span><span class="s12 t3">Money · declined card payments</span></span><span class="n n-bad" style="margin-left: 0">3</span></a>
+<a href="#" class="pal-r"><span class="tile ti-n" style="width: 32px; height: 32px"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3v18h18M8 17V9M13 17V5M18 17v-3"></path></svg></span><span class="col grow"><span class="w6">Reports · Money</span><span class="s12 t3">Manage · revenue report</span></span></a>
+
+<div class="pal-g">Actions</div>
+<a href="#" class="pal-r"><span class="tile ti-o" style="width: 32px; height: 32px"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></span><span class="col grow"><span class="w6">New sale</span><span class="s12 t3">Opens point of sale</span></span></a>
+<a href="#" class="pal-r"><span class="tile ti-o" style="width: 32px; height: 32px"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></span><span class="col grow"><span class="w6">Record a payment</span><span class="s12 t3">Select a member, then record the payment</span></span></a>
+<a href="#" class="pal-r"><span class="tile ti-o" style="width: 32px; height: 32px"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5M4 21h16"></path></svg></span><span class="col grow"><span class="w6">Export payments</span><span class="s12 t3">Reports · Money</span></span></a>
+
+<div class="pal-g">Settings</div>
+<a href="#" class="pal-r"><span class="tile ti-n" style="width: 32px; height: 32px"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M2 14h4M10 8h4M18 16h4"></path></svg></span><span class="col grow"><span class="w6">Card payments with Square</span><span class="s12 t3">Settings · Payments</span></span><span class="s12 c-good w6">Connected</span></a>
+<a href="#" class="pal-r"><span class="tile ti-n" style="width: 32px; height: 32px"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 5L5 19M6.5 4a2.5 2.5 0 1 0 0 5a2.5 2.5 0 1 0 0-5M17.5 15a2.5 2.5 0 1 0 0 5a2.5 2.5 0 1 0 0-5"></path></svg></span><span class="col grow"><span class="w6">Tax</span><span class="s12 t3">Memberships · Tax</span></span></a>
+<a href="#" class="pal-r"><span class="tile ti-n" style="width: 32px; height: 32px"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12.6 2.6A2 2 0 0 0 11.2 2H4a2 2 0 0 0-2 2v7.2a2 2 0 0 0 .6 1.4l8.7 8.7a2.4 2.4 0 0 0 3.4 0l6.6-6.6a2.4 2.4 0 0 0 0-3.4zM7 7.5h.01"></path></svg></span><span class="col grow"><span class="w6">Discounts</span><span class="s12 t3">Memberships · Discounts</span></span></a>
+<a href="#" class="pal-r"><span class="tile ti-n" style="width: 32px; height: 32px"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18zM6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2M10 6h4M10 10h4M10 14h4M10 18h4"></path></svg></span><span class="col grow"><span class="w6">Your KWAZO plan</span><span class="s12 t3">Overview · Plan</span></span><span class="s12 t3">Free trial</span></a>
+
+<div class="pal-f"><span><span class="kbd" style="margin-left: 0">↑</span> <span class="kbd" style="margin-left: 0">↓</span> to navigate</span><span><span class="kbd" style="margin-left: 0">Enter</span> to select</span><span><span class="kbd" style="margin-left: 0">Esc</span> to close</span><span class="end">Results match your permissions</span></div>
+</div>
+</div>
+
+<div class="col g24" style="flex: 2 1 380px; min-width: 0">
+
+<div class="col g10">
+<span class="eyebrow">A name: sam</span>
+<div class="pal">
+<div class="pal-in"><svg class="ic ic-l t3" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11a7 7 0 1 0 14 0a7 7 0 1 0-14 0M21 21l-4.3-4.3"></path></svg><span class="grow w5">sam</span><span class="kbd">Esc</span></div>
+<div class="pal-g">People</div>
+<a href="#" class="pal-r pal-on"><span class="av">SR</span><span class="col grow"><span class="w6">Sam Rivera</span><span class="s12 t3">Member 195 · Gold Weekly</span></span><span class="tag tag-warn">Payment due</span></a>
+<a href="#" class="pal-r"><span class="av">ST</span><span class="col grow"><span class="w6">Sara Thomas</span><span class="s12 t3">Member 41 · Gold Monthly</span></span><span class="s12 t3">Active · Paid</span></a>
+<a href="#" class="pal-r"><span class="av">SK</span><span class="col grow"><span class="w6">Samir Khan</span><span class="s12 t3">Lead · added 12 Nov</span></span><span class="tag tag-o">New</span></a>
+<a href="#" class="pal-r"><span class="av">SA</span><span class="col grow"><span class="w6">Samira Ali</span><span class="s12 t3">Staff · Front desk</span></span></a>
+<div class="pal-f"><span><span class="kbd" style="margin-left: 0">Enter</span> to open their profile</span></div>
+</div>
+</div>
+
+<div class="col g10">
+<span class="eyebrow">Before you type</span>
+<div class="pal">
+<div class="pal-in"><svg class="ic ic-l t3" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11a7 7 0 1 0 14 0a7 7 0 1 0-14 0M21 21l-4.3-4.3"></path></svg><span class="grow t3">Search members, pages or actions</span></div>
+<div class="pal-g">Recent</div>
+<a href="#" class="pal-r"><span class="av">SR</span><span class="col grow"><span class="w6">Sam Rivera</span><span class="s12 t3">Member 195</span></span></a>
+<a href="#" class="pal-r"><span class="tile ti-n" style="width: 32px; height: 32px"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2zM2 10h20"></path></svg></span><span class="col grow"><span class="w6">Failed payments</span><span class="s12 t3">Money</span></span></a>
+<div class="pal-g">Quick actions</div>
+<a href="#" class="pal-r"><span class="tile ti-o" style="width: 32px; height: 32px"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 2h6a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1zM16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2M9 14l2 2 4-4"></path></svg></span><span class="col grow"><span class="w6">Check in a member</span><span class="s12 t3">Attendance</span></span></a>
+<a href="#" class="pal-r"><span class="tile ti-o" style="width: 32px; height: 32px"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></span><span class="col grow"><span class="w6">Add member</span><span class="s12 t3">Members &amp; staff</span></span></a>
+<a href="#" class="pal-r" style="margin-bottom: 10px"><span class="tile ti-o" style="width: 32px; height: 32px"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4zM3 6h18M16 10a4 4 0 0 1-8 0"></path></svg></span><span class="col grow"><span class="w6">New sale</span><span class="s12 t3">Point of sale</span></span></a>
+</div>
+</div>
+
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"look":{"editor":"enum","options":["Dark","Light"],"default":"Dark"},"$preview":{"width":1440,"height":1060}}'>
+class Component extends DCLogic {
+renderVals() {
+return { look: (this.props.look ?? 'Dark') === 'Light' ? 't-light' : '' };
+}
+}
+</script>
+</body>
+</html>

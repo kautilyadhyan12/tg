@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>The console on a phone</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./kit3.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0;background:#0A0908}
+</style>
+</helmet>
+<div class="app t-dark {{look}}" style="width: 390px; min-height: 1500px; display: flex; flex-direction: column">
+<div class="wash" style="height: 320px"></div>
+
+<header class="ph-top" style="position: relative">
+<a href="#" class="hrow g10 grow" style="min-height: 44px"><span class="logo"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18zM6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2M10 6h4M10 10h4M10 14h4M10 18h4"></path></svg></span><span class="w6 ell">Iron House</span><svg class="ic ic-s t3" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 15l5 5 5-5M7 9l5-5 5 5"></path></svg></a>
+<button type="button" class="ibtn" style="width: 44px; height: 44px" aria-label="Search"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11a7 7 0 1 0 14 0a7 7 0 1 0-14 0M21 21l-4.3-4.3"></path></svg></button>
+<button type="button" class="ibtn" style="width: 44px; height: 44px" aria-label="6 items need attention"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 0 0 3.4 0"></path></svg><span class="pip">6</span></button>
+</header>
+
+<main class="ph-main grow" style="position: relative">
+
+<div class="col g6"><span class="eyebrow">Overview · Mon 16 Nov</span><h1 class="h1">Good morning, Dana</h1></div>
+
+<button type="button" class="btn btn-main btn-lg btn-w"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 2h6a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1zM16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2M9 14l2 2 4-4"></path></svg>Check in</button>
+
+<div class="grid2" style="gap: 10px">
+<div class="box col g6" style="padding: 14px"><div class="hrow g8"><span class="tile ti-o" style="width: 30px; height: 30px; border-radius: 10px"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 2h6a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1zM16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2M9 14l2 2 4-4"></path></svg></span><span class="s12 t2">Check-ins today</span></div><span class="big" style="font-size: 26px; line-height: 30px">5</span><span class="s12 t3">58 visits last week</span></div>
+<div class="box col g6" style="padding: 14px"><div class="hrow g8"><span class="tile ti-g" style="width: 30px; height: 30px; border-radius: 10px"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6a2 2 0 0 1 2-2h12v4M3 6v12a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2H5a2 2 0 0 1-2-2zM17 14h.01"></path></svg></span><span class="s12 t2">Revenue today</span></div><span class="big" style="font-size: 26px; line-height: 30px">$1,240</span><span class="s12 t3">9 payments</span></div>
+<div class="box col g6" style="padding: 14px"><div class="hrow g8"><span class="tile ti-w" style="width: 30px; height: 30px; border-radius: 10px"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 18 0a9 9 0 1 0-18 0M12 7v5l3 2"></path></svg></span><span class="s12 t2">Payment due</span></div><span class="big c-warn" style="font-size: 26px; line-height: 30px">6</span><span class="s12 t3">members · View</span></div>
+<div class="box col g6" style="padding: 14px"><div class="hrow g8"><span class="tile ti-b" style="width: 30px; height: 30px; border-radius: 10px"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 2h8a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zM11 18h2"></path></svg></span><span class="s12 t2">Members in the app</span></div><span class="big" style="font-size: 26px; line-height: 30px">12 <span class="t3" style="font-size: 14px; letter-spacing: 0">of 26</span></span><span class="s12 t3">Invite 14 more</span></div>
+</div>
+
+<div class="box">
+<div class="bh" style="padding: 16px 16px 12px"><h2 class="h2">Needs attention</h2><span class="s12 t3">6 items</span></div>
+<a href="#" class="row" style="padding: 12px 16px"><span class="dot dot-bad"></span><span class="col grow"><span class="w6">2 chargebacks need a response</span><span class="s12 t3">Respond in Square by 20 Nov</span></span><span class="w6">$90.00</span><svg class="ic ic-s t3" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg></a>
+<a href="#" class="row" style="padding: 12px 16px"><span class="dot dot-bad"></span><span class="col grow"><span class="w6">3 failed card payments</span><span class="s12 t3">Declined, still outstanding</span></span><span class="w6">$60.00</span><svg class="ic ic-s t3" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg></a>
+<a href="#" class="row" style="padding: 12px 16px"><span class="dot dot-warn"></span><span class="col grow"><span class="w6">6 members with a payment due</span><span class="s12 t3">Plus 1 past member</span></span><svg class="ic ic-s t3" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg></a>
+<a href="#" class="row" style="padding: 12px 16px"><span class="dot dot-warn"></span><span class="col grow"><span class="w6">2 refunds to review</span><span class="s12 t3">No money moves until you confirm</span></span><span class="w6">$13.00</span><svg class="ic ic-s t3" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg></a>
+<a href="#" class="row" style="padding: 12px 16px"><span class="dot dot-warn"></span><span class="col grow"><span class="w6">1 app payment to review</span><span class="s12 t3">Charged in the app but not applied</span></span><span class="w6">$90.00</span><svg class="ic ic-s t3" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg></a>
+<a href="#" class="row" style="padding: 12px 16px"><span class="dot"></span><span class="col grow"><span class="w6">2 cancellations in the app</span><span class="s12 t3">Last 30 days</span></span><svg class="ic ic-s t3" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg></a>
+</div>
+
+<div class="box">
+<div class="bh" style="padding: 16px 16px 12px"><h2 class="h2">Today's check-ins</h2><span class="s12 t3">5 members</span></div>
+<div class="row" style="padding: 10px 16px"><span class="av">SR</span><span class="grow w5 ell">Sam Rivera</span><span class="s13 t3">06:42</span></div>
+<div class="row" style="padding: 10px 16px"><span class="av">AC</span><span class="grow w5 ell">Ava Chen</span><span class="s13 t3">07:05</span></div>
+<div class="row" style="padding: 10px 16px"><span class="av">JL</span><span class="grow w5 ell">Jordan Lee</span><span class="s13 t3">07:31</span></div>
+<div class="row" style="padding: 10px 16px"><span class="av">PN</span><span class="grow w5 ell">Priya Nair</span><span class="s13 t3">09:12</span></div>
+<div class="row" style="padding: 10px 16px"><span class="av">MH</span><span class="grow w5 ell">Marcus Hill</span><span class="s13 t3">11:19</span></div>
+<a href="#" class="row c-o w6 s13" style="padding: 14px 16px">View all check-ins</a>
+</div>
+
+</main>
+
+<nav class="ph-tabs" aria-label="Pages" style="position: relative">
+<a href="#" class="ph-tab ph-tab-on"><span><svg class="ic ic-l" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3h5a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM15 3h5a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM15 12h5a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1zM4 16h5a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1z"></path></svg></span>Overview</a>
+<a href="#" class="ph-tab"><span><svg class="ic ic-l" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M5 7a4 4 0 1 0 8 0a4 4 0 1 0-8 0M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"></path></svg></span>Members</a>
+<a href="#" class="ph-tab"><span><svg class="ic ic-l" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 2h6a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1zM16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2M9 14l2 2 4-4"></path></svg></span>Attendance</a>
+<a href="#" class="ph-tab"><span><svg class="ic ic-l" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 7.5V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3.5M16 2v4M8 2v4M3 10h5M10 16a6 6 0 1 0 12 0a6 6 0 1 0-12 0M16 14v2.2l1.5 1.3"></path></svg></span>Classes</a>
+<a href="#" class="ph-tab"><span><svg class="ic ic-l" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h.01M12 12h.01M19 12h.01"></path></svg></span>More</a>
+</nav>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"look":{"editor":"enum","options":["Dark","Light"],"default":"Dark"},"$preview":{"width":390,"height":1500}}'>
+class Component extends DCLogic {
+renderVals() {
+return { look: (this.props.look ?? 'Dark') === 'Light' ? 't-light' : '' };
+}
+}
+</script>
+</body>
+</html>

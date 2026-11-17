@@ -267,7 +267,11 @@ broken it. Every job that adds or changes something a person DOES follows all si
 §17: colours by name from `apps/web/src/components/console/console.css`, never written
 into a page; its `c-` building blocks; Archivo; both looks. A new console page, or a new
 box on a page already restyled, is built in the new look. A restyle (ROADMAP R2–R8) keeps
-every button, field, message and permission its page has.
+every button, field, message and permission its page has. Since 2026-11-18 the look is
+the third look (§17.11, `docs/design/console-v3`, `rulings/2026-11-18-console-look-3.md`): Inter
+in place of Archivo, flat colour with no gradient or glow, the words of its word list, the
+setup a feature needs shown first on that feature's own page, and "business" or the kind's own
+word, never only "gym".
 
 **The phone app (Kd, RULINGS 2026-10-12; spec Part 6 §16).** A member feature is built
 for the phone, never the browser. Every screen rule above holds there, with "a gym" read
