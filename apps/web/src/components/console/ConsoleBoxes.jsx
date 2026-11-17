@@ -2,7 +2,7 @@ import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { ConfirmInline } from './ConsoleStates';
-import { placeUnder } from './consoleBoxesView';
+import { fitsUnder, placeUnder } from './consoleBoxesView';
 
 /* The four ways a box opens in the second look (spec Part 3 §17.10; the Main board): under
    its button, from the right, in the middle, and a page of its own (StepsPage). Each one
@@ -109,6 +109,7 @@ function CloseButton({ onClick, label = 'Close' }) {
 export function OpenUnder({ anchorRef, label, onClose, children }) {
   const boxRef = useRef(null);
   const [place, setPlace] = useState(null);
+  const moved = useRef(false);
   const { ready, draw } = useLookHost();
   useBoxKeys(boxRef, onClose, ready);
   useStillPage(!isComputer());
@@ -120,7 +121,16 @@ export function OpenUnder({ anchorRef, label, onClose, children }) {
       setPlace(null);
       return;
     }
-    setPlace(placeUnder(anchor.getBoundingClientRect(), box.scrollHeight, { width: window.innerWidth, height: window.innerHeight }));
+    const view = { width: window.innerWidth, height: window.innerHeight };
+    let at = anchor.getBoundingClientRect();
+    // A short window (a phone sideways, a laptop zoomed in): when the box fits neither under
+    // nor over its button, the page moves the button up once, so the box opens whole.
+    if (!moved.current && !fitsUnder(at, box.scrollHeight, view) && typeof anchor.scrollIntoView === 'function') {
+      moved.current = true;
+      anchor.scrollIntoView({ block: 'start', behavior: 'instant' });
+      at = anchor.getBoundingClientRect();
+    }
+    setPlace(placeUnder(at, box.scrollHeight, view));
   }, [anchorRef]);
 
   useLayoutEffect(() => {

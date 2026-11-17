@@ -15,3 +15,8 @@ export function placeUnder(anchor, boxHeight, view) {
   }
   return { left, width, top: anchor.bottom + GAP, maxHeight: Math.max(below, 120) };
 }
+
+/** Whether the box fits whole under its button or over it, as the window stands. */
+export function fitsUnder(anchor, boxHeight, view) {
+  return boxHeight <= view.height - anchor.bottom - GAP - EDGE || boxHeight <= anchor.top - GAP - EDGE;
+}

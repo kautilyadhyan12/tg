@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { OpenUnder, Question, SidePanel, StepsPage } from './ConsoleBoxes';
-import { placeUnder } from './consoleBoxesView';
+import { fitsUnder, placeUnder } from './consoleBoxesView';
 import SideList from './SideList';
 
 afterEach(cleanup);
@@ -212,6 +212,15 @@ describe('where the box under a button goes, on every width (a table)', () => {
     expect(got.left + got.width).toBeLessThanOrEqual(view.width - 16);
     expect(got.top).toBeGreaterThanOrEqual(16);
   });
+});
+
+it.each([
+  ['room under it', { top: 100, bottom: 140 }, 300, { width: 1366, height: 768 }, true],
+  ['room over it', { top: 600, bottom: 640 }, 300, { width: 1366, height: 768 }, true],
+  ['a phone sideways, the button half way down: neither', { top: 160, bottom: 200 }, 298, { width: 844, height: 390 }, false],
+  ['the same phone once the button is at the top', { top: 0, bottom: 40 }, 298, { width: 844, height: 390 }, true],
+])('a box fits whole: %s', (_name, anchor, height, view, want) => {
+  expect(fitsUnder(anchor, height, view)).toBe(want);
 });
 
 describe('a page of its own', () => {
