@@ -1,0 +1,77 @@
+{
+  "id": "plank",
+  "status": "live",
+  "kind": "strength",
+  "level": "intermediate",
+  "muscles": {
+    "main": [
+      "abdominals"
+    ],
+    "also": [
+      "lower_back"
+    ]
+  },
+  "equipment": [],
+  "set": {
+    "measuredIn": "time",
+    "weight": "never",
+    "eachSide": false,
+    "start": {
+      "sets": 3,
+      "seconds": 30
+    }
+  },
+  "energy": {
+    "compendium": "02024"
+  },
+  "text": {
+    "en": {
+      "name": "Plank",
+      "otherNames": [
+        "Front plank",
+        "Forearm plank"
+      ],
+      "about": "A position held on your forearms and toes. It trains your abdominals and back to keep your body still and straight.",
+      "steps": [
+        "Lie face down with your elbows under your shoulders and your forearms and palms flat on the floor.",
+        "Straighten your legs, rest on your toes and brace your abdominals so that your whole body is firm.",
+        "Lift your body off the floor until it forms a straight line from your head to your heels.",
+        "Keep your shoulders over your elbows, keep breathing, and hold the position for the set time.",
+        "Lower your body to the floor slowly, keeping it firm, then relax."
+      ],
+      "mistakes": [
+        {
+          "id": "low_back_sags",
+          "says": "Lower back sags toward the floor. Brace your abdominals and keep your hips in line with your shoulders and heels."
+        },
+        {
+          "id": "hips_too_high",
+          "says": "Hips rise too high. Lower them until your body forms a straight line."
+        },
+        {
+          "id": "knees_bend",
+          "says": "Knees bend. Keep your legs straight and firm."
+        },
+        {
+          "id": "shoulders_shrug",
+          "says": "Shoulders shrug toward your ears or move past your elbows. Keep them down and stacked over your elbows."
+        },
+        {
+          "id": "breath_held",
+          "says": "Breath is held. Keep breathing steadily for the whole hold."
+        }
+      ],
+      "cautions": [
+        "If you feel pain in your lower back, stop at once and see a doctor."
+      ]
+    }
+  },
+  "sources": [
+    {
+      "name": "American Council on Exercise (ACE), Exercise Library: Front Plank",
+      "url": "https://www.acefitness.org/resources/everyone/exercise-library/32/front-plank/"
+    }
+  ],
+  "clip": null,
+  "picture": null
+}

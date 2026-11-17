@@ -807,7 +807,9 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
 
 **Exercise folder 2 — `D:\Projects\ai-home-gym-ex2`: the Exercise Library and the Workout section** (spec Part 2 §13, which wins over §11 where they differ and never over §12). **Re-planned 2026-11-16** (Kd; `rulings/2026-11-16-exercise-library.md`): made fresh; new code never uses the old exercise code, which only the web's old pages keep; nothing a member can do today is lost (§13.8). Built in this order: 60, 61, 63, 64a, 62, 64b, with 65 alongside from 60.
 
-60. [ ] **The exercise list, made fresh, on the server** (§13.2 to §13.4): one file for each exercise with fixed word lists, publishing that refuses a faulty file, and one download for the phone, so a new exercise needs no new app version. The camera's facts are read from exercise folder 1's data. It needs no phone.
+60. **The exercise list, made fresh** (§13.2 to §13.4). It needs no phone.
+    - 60a. [x] **One file for each exercise, and the check** — merged 2026-11-17 (PR #571).
+    - 60b. [ ] **The list on the server** (after 60a): publishing writes the rows and a numbered copy, one download for the phone with folder 1's camera data, its size at 200 measured; a deleted file's row hidden while saved sets name it.
 61. [ ] **What a workout keeps** (§13.5; after 60): weight for each set, reps or time, the workout's name, how each set was counted, saved workouts, records for each exercise, history; an unknown exercise refuses the save instead of dropping a set.
 62. [ ] **The clip line** (after 60): the generated clip made small, its still picture, and where clips are kept (Stage 4 item 4). Checking a clip against its exercise's rules waits for exercise folder 1's 52a and 52b.
 63. [ ] **The Exercise Library on the phone** (§13.6; after 60): the list kept on the phone, search, filters by muscle, equipment, level and how it is counted, and an exercise's page.
