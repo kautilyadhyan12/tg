@@ -1,0 +1,21 @@
+{
+  "v": 3,
+  "createdOnFiles": { "v": 1, "at": "2026-11-18T00:10:00Z" },
+  "title": "KWAZO console, the third look",
+  "launch": { "view": "canvas" },
+  "pages": [],
+  "boards": {
+    "Main.dc.html": { "x": 0, "y": 0, "w": 1440, "h": 1760, "title": "Start here: the rules, the building blocks and the word list", "expand": "fill" },
+    "Overview.dc.html": { "x": 1520, "y": 0, "w": 1440, "h": 1760, "title": "Overview, with the bar across the top", "expand": "fill" },
+    "OverviewLight.dc.html": { "x": 3040, "y": 0, "w": 1440, "h": 1760, "title": "Overview in the light look", "expand": "fill" },
+    "Search.dc.html": { "x": 0, "y": 1880, "w": 1440, "h": 1060, "title": "Search: people, pages and actions", "expand": "fill" },
+    "Money.dc.html": { "x": 1520, "y": 1880, "w": 1440, "h": 1520, "title": "Payments overview: every payment page and setting in one place", "expand": "fill" },
+    "Members.dc.html": { "x": 3040, "y": 1880, "w": 1440, "h": 1200, "title": "Members & staff", "expand": "fill" },
+    "Person.dc.html": { "x": 0, "y": 3520, "w": 1440, "h": 1560, "title": "A member's page", "expand": "fill" },
+    "Phone.dc.html": { "x": 1520, "y": 3520, "w": 390, "h": 1500, "title": "The console on a phone" },
+    "MoneySetup.dc.html": { "x": 1990, "y": 3520, "w": 1440, "h": 1240, "title": "Payments overview before Square is connected", "expand": "fill" }
+  },
+  "order": ["Main.dc.html", "Overview.dc.html", "OverviewLight.dc.html", "Search.dc.html", "Money.dc.html", "Members.dc.html", "Person.dc.html", "Phone.dc.html", "MoneySetup.dc.html"],
+  "notes": {},
+  "designSystems": []
+}
