@@ -50,6 +50,7 @@ export const mealLogs = pgTable(
   },
   (t) => [
     index("meal_logs_user_taken_idx").on(t.userId, t.takenAt.desc()),
+    index("meal_logs_created_idx").on(t.createdAt), // 0242: the admin page's By day (14a-iii)
     check("meal_logs_origin_check", sql`${t.origin} IN ('photo','manual')`),
     check("meal_logs_meal_type_check", sql`${t.mealType} IN ('breakfast','lunch','dinner','snack')`),
   ],
@@ -130,6 +131,7 @@ export const bodyMeasurements = pgTable(
   },
   (t) => [
     index("body_measurements_user_measured_idx").on(t.userId, t.measuredAt.desc()),
+    index("body_measurements_created_idx").on(t.createdAt), // 0242: By day (14a-iii)
     check("body_measurements_source_check", sql`${t.source} IN ('manual','self_reported')`),
   ],
 );
@@ -158,6 +160,7 @@ export const memberLabelFoods = pgTable(
   },
   (t) => [
     index("member_label_foods_user_idx").on(t.userId),
+    index("member_label_foods_created_idx").on(t.createdAt), // 0242: By day (14a-iii)
     uniqueIndex("member_label_foods_user_code_idx").on(t.userId, t.code).where(sql`${t.code} IS NOT NULL AND ${t.removedAt} IS NULL`),
     check("member_label_foods_unit_check", sql`${t.unit} IN ('g','ml')`),
     check("member_label_foods_kcal_check", sql`${t.kcal} >= 0 AND ${t.kcal} <= 1000`),

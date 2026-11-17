@@ -1688,6 +1688,13 @@
       "when": 1790985600241,
       "tag": "0241_card_pass_once",
       "breakpoints": true
+    },
+    {
+      "idx": 241,
+      "version": "7",
+      "when": 1790985600242,
+      "tag": "0242_admin_day_use",
+      "breakpoints": true
     }
   ]
 }

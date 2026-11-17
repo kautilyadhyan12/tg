@@ -1,6 +1,7 @@
 // The admin page (ROADMAP Stage 2 item 14a-i; Kd, 2026-11-07 and 2026-11-08): Kd's own page, on
 // the website only, listing the people who use the app and setting one person's meal scans or route
-// plans a day. Only what running the app needs: never a health answer, a weight, a photo or a run.
+// plans a day. Only what running the app needs: never a health answer, a weight, a photo or a run
+// (14a-iii counts what a person saved, never what it was).
 import { z } from "zod";
 import { meteredWindowSchema } from "./entitlements.js";
 import { timeZoneNameSchema } from "./appMinutes.js";
@@ -109,6 +110,24 @@ export const adminPersonDaysQuerySchema = z
   .strict();
 export type AdminPersonDaysQuery = z.infer<typeof adminPersonDaysQuerySchema>;
 
+/** What the person saved in the app that day, by feature (14a-iii; Kd, 2026-11-17), on the day it was
+ *  saved: counts only, never what they ate, what they weighed or where they ran. A meal scan counts here
+ *  once its meal is saved; `mealScans` beside it is every scan made, saved or not, as the limit counts. */
+export const adminDayUsedSchema = z
+  .object({
+    /** Meals saved from a meal photo's scan. */
+    mealPhotosSaved: z.number().int().nonnegative(),
+    /** Foods saved from a pack's label. */
+    packLabelsSaved: z.number().int().nonnegative(),
+    /** Meals saved without a photo: typed, picked from a list, a saved pack or their plan. */
+    mealsByHand: z.number().int().nonnegative(),
+    runsSaved: z.number().int().nonnegative(),
+    workoutsSaved: z.number().int().nonnegative(),
+    bodyMeasurements: z.number().int().nonnegative(),
+  })
+  .strict();
+export type AdminDayUsed = z.infer<typeof adminDayUsedSchema>;
+
 export const adminDayNumbersSchema = z
   .object({
     /** Null: their phone had not counted time in the app yet on that day. */
@@ -116,6 +135,7 @@ export const adminDayNumbersSchema = z
     mealScans: z.number().int().nonnegative(),
     routePlans: z.number().int().nonnegative(),
     costMicro: z.number().int().nonnegative(),
+    used: adminDayUsedSchema,
   })
   .strict();
 export type AdminDayNumbers = z.infer<typeof adminDayNumbersSchema>;
@@ -156,7 +176,7 @@ export type AdminDayPerson = z.infer<typeof adminDayPersonSchema>;
 export const adminDayResponseSchema = z
   .object({
     day: calendarDaySchema,
-    /** Everyone who used the app that day: time in the app, a scan, a route plan or a cost. */
+    /** Everyone who used the app that day: time in the app, a scan, a route plan, a cost or anything saved. */
     totals: z
       .object({
         people: z.number().int().nonnegative(),
