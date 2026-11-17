@@ -34,7 +34,7 @@
         "Bodyweight squat",
         "Air squat"
       ],
-      "about": "A standing lower-body exercise: you bend at the hips and knees to lower your body, then stand back up. It builds strength in the thighs and glutes and is the base of every loaded squat.",
+      "about": "A standing lower-body exercise: you bend at the hips and knees to lower your body, then stand back up. It builds strength in the thighs and glutes.",
       "steps": [
         "Stand with your feet slightly wider than hip-width apart, toes turned slightly out and arms at your sides.",
         "Draw your shoulder blades down and back, brace your abdominals and keep your chest up.",
@@ -60,7 +60,8 @@
           "id": "feet_move",
           "says": "Feet shift or turn during the set. Keep both feet planted in one place."
         }
-      ]
+      ],
+      "cautions": []
     }
   },
   "sources": [

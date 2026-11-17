@@ -33,7 +33,13 @@ export default {
       "error",
       {
         paths: [{ name: "@app/shared", importNames: OLD_EXERCISE_NAMES, message }],
-        patterns: [{ group: ["**/exerciseCatalog", "**/exerciseCatalog.js", "**/exerciseContent", "**/exerciseContent.js", "**/catalog", "**/catalog.js"], message }],
+        // The old files by their own paths: exerciseCatalog and exerciseContent anywhere, and the
+        // old catalog.ts only as reached from inside packages/shared, so that a new file of the
+        // Library's may itself be called catalog.
+        patterns: [
+          { regex: String.raw`(^|/)(exerciseCatalog|exerciseContent)(\.js)?$`, message },
+          { regex: String.raw`^(\.\./)+(src/)?catalog(\.js)?$`, message },
+        ],
       },
     ],
   },

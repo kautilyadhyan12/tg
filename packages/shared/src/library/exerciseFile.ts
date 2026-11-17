@@ -44,6 +44,8 @@ const exerciseTextSchema = z
     about: sentence(400).pipe(z.string().min(20)),
     steps: z.array(sentence(220)).min(3).max(10),
     mistakes: z.array(mistakeSchema).min(2).max(10),
+    /** Safety lines, as strong as the source says them; never softened (CLAUDE.md §4). */
+    cautions: z.array(sentence(200)).max(4),
   })
   .strict();
 
@@ -112,7 +114,7 @@ const metSchema = z
   .refine((met) => Math.abs(met * 10 - Math.round(met * 10)) < 1e-9, { message: "a MET has at most one decimal" });
 
 /** The rows of the 2024 Adult Compendium of Physical Activities the Library uses, copied from
- *  its own pages: the code, the MET and the activity's words exactly. */
+ *  its own pages: the code, the MET and the activity's words exactly, its double spaces included. */
 export const compendiumTableSchema = z
   .object({
     edition: z.literal("2024 Adult Compendium of Physical Activities"),

@@ -10,7 +10,10 @@ const LIBRARY = new URL("../library/", import.meta.url);
 const EXERCISES = new URL("exercises/", LIBRARY);
 
 function readLibrary() {
-  const exerciseFiles = readdirSync(EXERCISES).map((name) => ({ name, text: readFileSync(new URL(name, EXERCISES), "utf8") }));
+  const exerciseFiles = readdirSync(EXERCISES, { withFileTypes: true }).map((entry) => ({
+    name: entry.name,
+    text: entry.isFile() ? readFileSync(new URL(entry.name, EXERCISES), "utf8") : "",
+  }));
   const compendium = { name: "compendium.json", text: readFileSync(new URL("compendium.json", LIBRARY), "utf8") };
   return { exerciseFiles, compendium };
 }

@@ -44,7 +44,7 @@
       "mistakes": [
         {
           "id": "body_swings",
-          "says": "Body swings to lift the bar. Keep your chest still and lift with your arms alone; choose a lighter weight if you need to."
+          "says": "Body swings to lift the bar. Keep your chest still and lift with your arms alone."
         },
         {
           "id": "elbows_drift",
@@ -54,7 +54,8 @@
           "id": "bar_drops",
           "says": "Bar drops quickly. Lower it slowly and under control."
         }
-      ]
+      ],
+      "cautions": []
     }
   },
   "sources": [

@@ -37,8 +37,7 @@
         "Straighten your legs, rest on your toes and brace your abdominals so that your whole body is firm.",
         "Lift your body off the floor until it forms a straight line from your head to your heels.",
         "Keep your shoulders over your elbows, keep breathing, and hold the position for the set time.",
-        "Lower your body to the floor slowly, keeping it firm, then relax.",
-        "Stop the hold if you feel pain in your lower back."
+        "Lower your body to the floor slowly, keeping it firm, then relax."
       ],
       "mistakes": [
         {
@@ -61,6 +60,9 @@
           "id": "breath_held",
           "says": "Breath is held. Keep breathing steadily for the whole hold."
         }
+      ],
+      "cautions": [
+        "If you feel pain in your lower back, stop at once and see a doctor."
       ]
     }
   },

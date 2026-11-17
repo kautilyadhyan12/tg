@@ -36,6 +36,7 @@ function squat(): Record<string, unknown> {
           { id: "heels_lift", says: "Heels lift. Keep them down." },
           { id: "knees_cave_in", says: "Knees fall in. Keep them over your toes." },
         ],
+        cautions: [],
       },
     },
     sources: [{ name: "American Council on Exercise, Bodyweight Squat", url: "https://www.acefitness.org/x/" }],
@@ -59,6 +60,7 @@ function plank(): Record<string, unknown> {
         { id: "hips_sag", says: "Hips sag. Brace your abdominals." },
         { id: "hips_high", says: "Hips rise. Lower them." },
       ],
+      cautions: ["If your lower back hurts, stop at once."],
     },
   };
   return p;
@@ -115,12 +117,17 @@ describe("the calorie number cannot be typed wrong (the worst thing: ten times t
       { code: "02056", met: 3.0, words: "Body weight resistance exercises", page: PAGE },
       { code: "02056", met: 6.5, words: "Body weight resistance exercises, high intensity", page: PAGE },
     ]);
-    expect(faultsOf([file(squat())], dup)).toContainEqual({ file: "compendium.json", at: "rows.1.code", problem: "02056 is in the table twice" });
+    const checked = checkLibrary({ exerciseFiles: [file(squat())], compendium: dup });
+    expect(checked.faults).toContainEqual({ file: "compendium.json", at: "rows.1.code", problem: "02056 is in the table twice" });
+    expect(checked.exercises).toEqual([]);
   });
 
-  it("the real limits still let the Compendium's own highest exercise numbers through", () => {
-    const real = table([{ code: "15550", met: 12.3, words: "Rope jumping, fast pace, 120-160 skips/min", page: PAGE }, { code: "02056", met: 3.0, words: "Body weight", page: PAGE }]);
-    expect(faultsOf([file(squat())], real)).toEqual([]);
+  it("the limits are 1.0 to 23.0: both ends pass, and just past either is refused", () => {
+    const rows = (met: number) => table([{ code: "15550", met, words: "Running", page: PAGE }, { code: "02056", met: 3.0, words: "Body weight", page: PAGE }]);
+    expect(faultsOf([file(squat())], rows(23))).toEqual([]);
+    expect(faultsOf([file(squat())], rows(1))).toEqual([]);
+    expect(faultsOf([file(squat())], rows(23.1)).map((f) => f.at)).toEqual(["rows.0.met"]);
+    expect(faultsOf([file(squat())], rows(12.3))).toEqual([]);
   });
 });
 
@@ -176,7 +183,7 @@ describe("a word outside a fixed list is refused, with the words it may be", () 
 });
 
 describe("a missing fact, or a misspelt one, is refused", () => {
-  it.each(["kind", "level", "equipment", "status", "energy", "sources", "clip", "set.eachSide", "text.en.steps", "text.en.mistakes"])("missing %s", (at) => {
+  it.each(["kind", "level", "equipment", "status", "energy", "sources", "clip", "set.eachSide", "text.en.steps", "text.en.mistakes", "text.en.cautions"])("missing %s", (at) => {
     const faults = faultsOf([file(changed(at, undefined))]);
     expect(faults.map((f) => f.at)).toContain(at);
   });
@@ -267,6 +274,7 @@ describe("the rest of one file's rules", () => {
     ["text.en.about", "Short.", "text.en.about"],
     ["text.en.name", "squat", "text.en.name"],
     ["text.en.name", " Squat", "text.en.name"],
+    ["text.en.cautions", ["stop if it hurts"], "text.en.cautions.0"],
   ])("words that are not whole sentences, or are too few: %s", (at, value, faultAt) => {
     expect(faultsOf([file(changed(at, value))]).map((f) => f.at)).toContain(faultAt);
   });
@@ -288,6 +296,7 @@ describe("the rest of one file's rules", () => {
   it("a broken Compendium table is named, and every exercise is held back until it is fixed", () => {
     const checked = checkLibrary({ exerciseFiles: [file(squat())], compendium: { name: "compendium.json", text: "[" } });
     expect(checked.faults.map((f) => f.file)).toEqual(["compendium.json"]);
+    expect(checked.exercises).toEqual([]);
   });
 
   it("only files with no fault are handed on, and every fault in every file is listed", () => {

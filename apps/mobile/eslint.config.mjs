@@ -38,5 +38,5 @@ export default [
   },
   // The phone never uses the old exercise code (spec Part 2 §13.1). Goals still reads the old
   // list until job 63 moves its exercise picker to the Exercise Library.
-  { files: ["src/**", "test/**"], ignores: ["src/screens/Goals.tsx"], ...exerciseLibrary },
+  { files: ["**/*.{ts,tsx}"], ignores: ["src/screens/Goals.tsx"], ...exerciseLibrary },
 ];
