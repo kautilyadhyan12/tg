@@ -1,0 +1,75 @@
+{
+  "id": "squat",
+  "status": "live",
+  "kind": "strength",
+  "level": "beginner",
+  "muscles": {
+    "main": [
+      "quadriceps",
+      "glutes"
+    ],
+    "also": [
+      "hamstrings",
+      "calves",
+      "abdominals"
+    ]
+  },
+  "equipment": [],
+  "set": {
+    "measuredIn": "reps",
+    "weight": "never",
+    "eachSide": false,
+    "start": {
+      "sets": 3,
+      "reps": 12
+    }
+  },
+  "energy": {
+    "compendium": "02056"
+  },
+  "text": {
+    "en": {
+      "name": "Squat",
+      "otherNames": [
+        "Bodyweight squat",
+        "Air squat"
+      ],
+      "about": "A standing lower-body exercise: you bend at the hips and knees to lower your body, then stand back up. It builds strength in the thighs and glutes.",
+      "steps": [
+        "Stand with your feet slightly wider than hip-width apart, toes turned slightly out and arms at your sides.",
+        "Draw your shoulder blades down and back, brace your abdominals and keep your chest up.",
+        "Push your hips back and down, bending your hips and knees together, with your weight balanced over the middle of your feet.",
+        "Keep your back flat and your knees in line with your second toes as you lower.",
+        "Lower until your thighs are about parallel to the floor, or until your heels start to lift or your back starts to round.",
+        "Breathe out and push through your feet to straighten your hips and knees together, back to standing."
+      ],
+      "mistakes": [
+        {
+          "id": "heels_lift",
+          "says": "Heels lift off the floor. Keep your whole foot down and lower only as far as your heels stay flat."
+        },
+        {
+          "id": "knees_cave_in",
+          "says": "Knees fall inward. Keep each knee in line with your second toe."
+        },
+        {
+          "id": "back_rounds",
+          "says": "Back rounds at the bottom. Keep your chest up and stop before your lower back starts to round."
+        },
+        {
+          "id": "feet_move",
+          "says": "Feet shift or turn during the set. Keep both feet planted in one place."
+        }
+      ],
+      "cautions": []
+    }
+  },
+  "sources": [
+    {
+      "name": "American Council on Exercise (ACE), Exercise Library: Bodyweight Squat",
+      "url": "https://www.acefitness.org/resources/everyone/exercise-library/135/bodyweight-squat/"
+    }
+  ],
+  "clip": null,
+  "picture": null
+}
