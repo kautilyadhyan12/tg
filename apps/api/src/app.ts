@@ -38,6 +38,7 @@ import { registerPushRoutes } from "./modules/push/routes.js";
 import { registerReminderRoutes } from "./modules/reminders/routes.js";
 import { registerExerciseRoutes } from "./modules/exercises/routes.js";
 import { registerLibraryRoutes } from "./modules/library/routes.js";
+import { registerTrainingRoutes } from "./modules/training/routes.js";
 import { registerGamificationRoutes } from "./modules/gamification/routes.js";
 import { registerGoalRoutes } from "./modules/goals/routes.js";
 import { GoalsError } from "./modules/goals/service.js";
@@ -104,6 +105,8 @@ export interface BuildAppOverrides {
   orgs?: OrgRouteOverrides;
   /** goals: the day a goal's period is counted around. The plan and the streak read the real clock. */
   goals?: { now?: () => Date };
+  /** training: the server's clock a saved workout's end is held against. */
+  training?: { now?: () => Date };
   /** reminders: the moment a saved reminder's "today" is read from. */
   reminders?: { now?: () => Date };
   /** Tests read what Sentry would be sent through a transport that records it;
@@ -405,6 +408,7 @@ export async function buildApp(
   registerReminderRoutes(app, { sql, redis, ...(overrides.reminders?.now === undefined ? {} : { now: overrides.reminders.now }) });
   registerExerciseRoutes(app, { sql });
   registerLibraryRoutes(app, { sql });
+  registerTrainingRoutes(app, { sql, redis, news, ...(overrides.training?.now === undefined ? {} : { now: overrides.training.now }) });
   registerGamificationRoutes(app, { sql });
   registerGoalRoutes(app, { sql, ...(overrides.goals?.now === undefined ? {} : { now: overrides.goals.now }) });
   registerEntitlementRoutes(app, { sql, redis });

@@ -15,6 +15,7 @@ export * from "./library/words.js";
 export * from "./library/exerciseFile.js";
 export * from "./library/check.js";
 export * from "./library/download.js";
+export * from "./library/workoutSave.js";
 export * from "./workouts.js";
 export * from "./progress.js";
 export * from "./gamification.js";

@@ -437,6 +437,7 @@ export async function getFamilyDistribution(
     SELECT e.family, count(*) AS n
     FROM workout_sets s JOIN exercises e ON e.id = s.exercise_id
     WHERE s.user_id = ${userId} AND (${since === null} OR s.started_at >= ${since})
+      AND e.family IS NOT NULL -- a set of an exercise only the Library has (job 61a) has no old family
     GROUP BY e.family ORDER BY n DESC, e.family ASC`;
   return rows.map((r) => ({ family: r.family, sets: Number(r.n) }));
 }
