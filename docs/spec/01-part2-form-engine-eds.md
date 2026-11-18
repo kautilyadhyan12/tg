@@ -2095,7 +2095,9 @@ shapes in `packages/shared/src/library/workoutHistory.ts`), each the person's ow
   `GET /v1/training/workouts/:id` (set by set, with its new records) · `GET /v1/training/exercises/:exercise/records`.
   Somebody else's workout, a broken id and an exercise the server never had are 404; a bad month or day 400;
   120 reads a minute for the person, never by address.
-- **A day** is the day in the zone the workout was done in, or in the person's own zone for one kept without one.
+- **A day** is the day in the zone the workout was done in, or in the person's own zone for one kept without one. The person's
+  own zone is read by its name, once, for the plan's days too; one kept as an offset ("+05:30", which Postgres
+  reads with the opposite sign) is UTC, in the old history's reads as well.
 - **Free plan:** the month, the day and the records read back the old history's days (`historyGate`, the same
   rule) and say so in `limitedToDays`. A workout's own page opens whatever its age, as the old one does, and its
   "New record" is told against everything before it: told against only part of the past, it could call a set a
