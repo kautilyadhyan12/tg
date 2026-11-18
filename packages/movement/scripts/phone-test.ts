@@ -449,7 +449,7 @@ for (const label of labels) {
       if (existsSync(failedPath)) {
         const f = readPhoneFailure(readFileSync(failedPath, "utf8"));
         const older = f.plan !== null && f.plan !== planSum;
-        failed.push({ label, model: f.model, delegate: f.delegate, threads: f.threads, reason: older ? "an older run's note: the file was made for another plan" : f.reason });
+        failed.push({ label, model: m.name, delegate, threads: cores, reason: older ? "an older run's note: the file was made for another plan" : f.reason });
         continue;
       }
       if (!existsSync(runPath)) {
@@ -460,7 +460,7 @@ for (const label of labels) {
       const ref = laptop.get(`${label}|${m.name}`) ?? fail(`No laptop run of ${label} with ${m.name}.`);
       const judged = comparePhone(ref, run, { plan: planSum, video: videoSum(label), model: m.sha256, delegate, threads: cores });
       results.push(judged);
-      // A refused file is set against nothing: it was not read on what its name says (round one, H1).
+      // A refused file is set against nothing: it was not read on what its name says.
       if (judged.verdict !== "not comparable") phoneRuns.set(name, run);
       phoneName = `${run.header.phone.maker} ${run.header.phone.model}, Android ${run.header.phone.android}, ${run.header.library}`;
     }

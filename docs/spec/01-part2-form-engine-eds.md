@@ -1724,7 +1724,7 @@ pictures of the four one-person videos:
 - **They make it faster** (the middle / 95 in 100 of a reading, over the four videos): full 103 / 123 ms
   on its own, 68 / 83 on 2 cores (1.54 to 1.66 busy), **52 / 68 on 4** (2.25 to 2.68 busy); lite 80 / 98,
   54 / 70, 44 / 59; the graphics chip full 69 / 77, lite 51 / 57. Full on 4 cores is faster than full on
-  the graphics chip in the middle on the three 1080 by 1920 videos (49 to 56 ms against 68 to 72), not on
+  the graphics chip in the middle on the three 1080-wide videos (49 to 56 ms against 68 to 72), not on
   the 720 by 1280 chair squat (47 against 46); lite on the graphics chip is the faster in 95 of 100 (57
   against 59) and on the chair squat (33 against 40). 51a read the graphics chip faster (full 54, lite 42
   ms, the phone decoding the videos itself, thermal status 1); here it read the laptop's pictures, at

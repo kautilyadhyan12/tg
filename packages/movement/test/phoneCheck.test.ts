@@ -130,7 +130,7 @@ describe("the worst thing (51b): a run on other cores than the ones asked for is
     expect(reasonsOf(four)).toContain("this run asked for the library's own number of cores");
   });
 
-  it("a file that says 4 cores but kept one busy, the setting not taken, is not comparable, even with the laptop's very numbers (round one, H2)", () => {
+  it("a file that says 4 cores but kept one busy, the setting not taken, is not comparable, even with the laptop's very numbers", () => {
     // The file says back the plan's number: only the cores it kept busy show the phone took them.
     const said = comparePhone(squat, phoneRunOf(squat, (f) => f, { threads: 4 }), { threads: 4 });
     expect(said.verdict).toBe("not comparable");
@@ -174,7 +174,7 @@ describe("the worst thing (51b): a run on other cores than the ones asked for is
     ]);
   });
 
-  it("a 2-core file handed in as the 4-core run is refused in the 4-core row, and gives that row no speed, no cores busy and no warmth (round one, H1)", () => {
+  it("a 2-core file handed in as the 4-core run is refused in the 4-core row, and gives that row no speed, no cores busy and no warmth", () => {
     const slow = (run: PhoneRun): PhoneRun => ({ ...run, frames: run.frames.map((f) => ({ ...f, detectMs: 900, cpuMs: 900 * 1.64 })), end: { ...run.end, heat: { thermal: 5, batteryC: 45 } } });
     const handedIn = comparePhone(squat, slow(onCores(squat, 2)), { threads: 4 });
     expect(handedIn.verdict).toBe("not comparable");

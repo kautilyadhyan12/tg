@@ -441,7 +441,7 @@ export interface PhoneComparison {
   readonly label: string;
   readonly model: string;
   /** The chip and cores the run ASKED for (null, the library's own), whatever the file says: a refused file is
-   *  counted in the row of the run it was handed in as, never in a row of its own (round one, H1). */
+   *  counted in the row of the run it was handed in as, never in a row of its own. */
   readonly delegate: PhoneTestDelegate;
   readonly threads: number | null;
   readonly pictures: "video" | "laptop";
@@ -476,7 +476,7 @@ export interface Sums {
 
 /** A run asked for 2 or more cores took them only if it kept more than this many busy. Measured 2026-11-18 on Kd's
  *  phone (51b-i, 40 runs): 1.03 to 1.05 on the library's own and on 1 core, 1.54 to 1.66 on 2, 2.25 to 2.68 on 4. The
- *  file says back the plan's number of cores, so only this shows the phone took them (round one, H2). */
+ *  file says back the plan's number of cores, so only this shows the phone took them. */
 export const CORES_TAKEN = 1.3;
 
 const coresWords = (n: number | null): string => (n === null ? "the library's own number of cores" : `${String(n)} ${n === 1 ? "core" : "cores"}`);
@@ -589,7 +589,7 @@ export interface RunSummary {
 export const runKey = (r: { model: string; delegate: PhoneTestDelegate; threads: number | null }): string => `${r.model}|${r.delegate}|${r.threads === null ? "own" : String(r.threads)}`;
 
 /** One row a kind of run asked for. Its speed, cores busy and warmth come from its comparable runs only: a refused
- *  file's numbers were not measured on what the row names (round one, H1). */
+ *  file's numbers were not measured on what the row names. */
 export function summaries(runs: readonly PhoneComparison[], failed: readonly { model: string; delegate: PhoneTestDelegate; threads: number | null }[]): RunSummary[] {
   const kinds = new Map([...runs, ...failed].map((r) => [runKey(r), { model: r.model, delegate: r.delegate, threads: r.threads }] as const));
   return [...kinds].map(([key, kind]) => {
