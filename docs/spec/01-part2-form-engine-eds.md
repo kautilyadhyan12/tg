@@ -1763,28 +1763,37 @@ is ever written: a run writes, each second, the camera's pictures, the model's a
 wait from a picture to its answer and the app's time on the cores; each minute, heat, battery and memory. Each set-up
 of the ladder runs 20 minutes off the charger, cooling between runs (at least 10 minutes, until the phone is no warmer
 than at the first run's start, at most 30); a run the cable goes into is dropped and made again. `phoneLive.ts` judges
-each run: **not fair** when it is not that step's run, is short of 20 minutes, had a second on the charger, saw the body
-in fewer than 80 in 100 answers in any minute, or kept 1.3 cores or fewer busy when asked for 4; or, having fallen short,
-when the model was waiting for the camera (it answered 95 in 100 of the camera's pictures), the battery saver was on,
-the battery fell to 15%, or it started warmer than the first run; **holds** when, fair, every minute answers 15 times a
-second or more; otherwise it **falls short**. The pick is the first step that holds, every step above it having fallen
+each run: **not fair** when it is not that step's run (its plan, step, camera, model, people, chip, cores or picture
+size), is short of 20 minutes by its count or by its real length, had the charger in at any moment, saw the body in fewer
+than 80 in 100 answers in any minute, or kept 2.7 cores or fewer busy when asked for 4 (the app's own camera, turning and
+drawing kept 1.65 busy with the model on the graphics chip, so one core more; 51b-i's 1.3 was set with no camera); or,
+having fallen short, when the model was waiting for the camera (it answered 95 in 100 of the camera's pictures), the
+battery saver was on, the battery fell to 15%, it started above Android's thermal status "light" (the first run
+included, so a test started on a hot phone is never stepped past), or it started warmer than the first run; **holds**
+when, fair, every minute answers 15 times a second or more, over each second's real length; otherwise it **falls
+short**. A step with a note of a failed start is not fair, a still body is read only as the look the plan asked for, and
+files kept beside another plan are refused. The pick is the first step that holds, every step above it having fallen
 short in a fair run: a step not run fairly is run again, never stepped past. Measured on Kd's phone (moto g35 5G), the
 phone facing the laptop's screen, the second try (the first ran its first run on the charger and was stopped):
 - **Full on the main chip on 4 cores held** (3.82 cores busy): 24.6 to 25.3 answers a second in its first four minutes,
   then, the phone warm, 17.4 to 20.0 in every minute after (its slowest second 8); the wait from a picture to its answer
   74 ms in the middle, 94 to 96 once warm; the body found in 89 to 94 in 100 answers; 7% of the battery in 20 minutes
   (69% to 62%), the battery 32.8 to 37.8 °C, Android's thermal status 1 at the start and 2 after; the app 242 to 343 MB,
-  no growth, 712 to 1,041 MB of the phone left free. **It is the pick.** Its margin over 15 is about a fifth, before the
-  camera screen adds the engine, the voice and its own drawing: job 53 measures it again on the real screen.
+  no growth, 712 to 1,041 MB of the phone left free. **It is the pick.** Its margin over 15 is about a sixth in its
+  slowest minute (17.4) and a fifth to a quarter in the other warm minutes (18.2 to 18.8), before the camera screen adds
+  the engine, the voice and its own drawing: job 53 measures it again on the real screen.
 - **Full on the graphics chip** answered 27.1 to 28.1 a second on 1.65 cores, cooler (31.8 to 33.3 °C, thermal 1 until
   minute 15), 6% of the battery; **not fair**: the camera saw the body in only 57 to 77 in 100 of its answers. **Lite on
   the main chip on 4 cores** answered 18.1 to 29.8 a second on 3.30 cores, 8% of the battery; **not fair** the same way
   (62 to 81 in 100 in its first ten minutes, 94 to 96 after). Why the body was lost in those two runs and not in the first
   is not known; neither changes the pick, since both stand below it.
-- **A still body, from the laptop's screen** (not a person in the room), full on the main chip on 4 cores: the back
-  camera 20 to 24 answers a second, its used big joints shaking 1.4 mm in 3D in the middle (2.7 mm on the first try); the
-  selfie camera 24 to 26 a second, 2.1 mm (both tries). The selfie camera is not steadier than the back one here; how
-  either reads a person 2 to 3 m away is job 53's.
+- **A still body, from the laptop's screen** (not a person in the room), full on the main chip on 4 cores, on the
+  cable: the back camera 24.3 answers a second, its used big joints shaking 1.4 mm in 3D in the middle; the selfie camera
+  25.7 a second, 2.1 mm. (The first try's report gave 2.7 mm and 2.1 mm; its files were not kept.) The selfie camera is
+  not steadier than the back one here; how either reads a person 2 to 3 m away is job 53's.
+- **The selfie camera's picture is mirrored before the model reads it**, as Google's own Android sample does, so the
+  model's left is the person's right. It changes neither speed nor shake; the form rules compare left against right, so
+  job 53 decides knowingly how the camera screen hands the picture over.
 - Nothing chosen is Android's alone: the same model and the library's own settings exist on an iPhone, which gets its own
   test (§12.5, 51a).
 

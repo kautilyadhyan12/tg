@@ -243,6 +243,9 @@ export const phoneLiveHeaderSchema = z
   })
   .strict();
 
+/** Answers to the camera's pictures of one second that may land in the next. */
+export const PHONE_LIVE_LATE_ANSWERS = 5;
+
 /** One second of a 20-minute run, counted from the model's first answer. */
 export const phoneLiveSecondSchema = z
   .object({
@@ -261,7 +264,10 @@ export const phoneLiveSecondSchema = z
     cpuMs: milliseconds,
     plugged: z.boolean(),
   })
-  .strict();
+  .strict()
+  // Answers that found a body are some of the answers; answers are to the camera's pictures, give or take a few that
+  // land in the next second (at most 2 in the 3,600 seconds of 2026-11-18).
+  .refine((s) => s.found <= s.read && s.read <= s.camera + PHONE_LIVE_LATE_ANSWERS, { message: "a second's counts do not add up" });
 
 /** The phone at the end of each minute of a 20-minute run. */
 export const phoneLiveMinuteSchema = z

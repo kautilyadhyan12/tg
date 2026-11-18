@@ -63,17 +63,21 @@ describe("the store's app holds none of the phone test (51a)", () => {
     expect(manifest).not.toContain("uses-permission");
   });
 
-  it("the live screen's camera library is the app's own, in the debug build alone (51b-ii)", () => {
+  it("the live screen's camera and screen libraries are the app's own, in the debug build alone (51b-ii)", () => {
     const camera = text(join(mobile, "node_modules", "expo-camera", "android", "build.gradle"));
     const version = /def camerax_version = "([0-9.]+)"/.exec(camera)?.[1];
     expect(version).toBeDefined();
+    // The app's own activity library comes with the photo picker (expo-image-picker's activity-ktx).
+    const picker = text(join(mobile, "node_modules", "expo-image-picker", "android", "build.gradle"));
+    const activity = /androidx\.activity:activity-ktx:([0-9.]+)"/.exec(picker)?.[1];
+    expect(activity).toBeDefined();
     const lines = gradle.split("\n").filter((l) => /androidx\.(camera|activity)/.test(l)).map((l) => l.trim());
     expect(lines).toEqual([
       `debugImplementation "androidx.camera:camera-core:${String(version)}"`,
       `debugImplementation "androidx.camera:camera-camera2:${String(version)}"`,
       `debugImplementation "androidx.camera:camera-lifecycle:${String(version)}"`,
       `debugImplementation "androidx.camera:camera-view:${String(version)}"`,
-      'debugImplementation "androidx.activity:activity:1.11.0"',
+      `debugImplementation "androidx.activity:activity:${String(activity)}"`,
     ]);
     expect(gradle.split("\n").filter((l) => /^\s*implementation /.test(l))).toEqual([]);
   });
@@ -87,7 +91,23 @@ describe("the store's app holds none of the phone test (51a)", () => {
     expect(kotlin).toContain('check(json.getInt("version") == LIVE_PLAN_VERSION)');
     expect(kotlin).toContain('check(it == 1) { "The live test asks for one person." }');
     // Text only: no picture is turned into a file. The camera's pictures go to the model and nowhere else.
-    expect(kotlin).not.toMatch(/\.compress\(|FileOutputStream|\.jpe?g|\.png|MediaStore/);
+    expect(kotlin).not.toMatch(/\.compress\(|FileOutputStream|\.jpe?g|\.png|MediaStore|copyPixelsToBuffer|writeBytes|outputStream\(/);
+    // And every write in the file is one of its known text lines (round one): a header, second, minute, end or a
+    // picture's points through the run's writer, a failed run's note, or where the test is.
+    const writes = kotlin.split("\n").filter((l) => /\.(write|writeText|append)\(|bufferedWriter\(/.test(l) && !/b\.append\(|StringBuilder|people\.append/.test(l)).map((l) => l.trim());
+    expect(writes).toEqual([
+      "part.bufferedWriter().use { w ->",
+      'w.write(header(plan, "still", k, still.camera, still.setup, created) + "\\n")',
+      'w.write(end(plan.stillSeconds, SystemClock.elapsedRealtime() - started, null) + "\\n")',
+      "part.bufferedWriter().use { w ->",
+      'w.write(head + "\\n")',
+      'w.write(second(s, wall, one, cpu - lastCpu, charging) + "\\n")',
+      'if (s % 60 == 0) w.write(minute(s / 60) + "\\n")',
+      'w.write(end(s, SystemClock.elapsedRealtime() - started, stopped) + "\\n")',
+      'w.write("{\\"kind\\":\\"frame\\",\\"t\\":$t,\\"people\\":[$people]}\\n")',
+      'File(out, "$name.failed.json").writeText(json.toString())',
+      "part.writeText(json.toString())",
+    ]);
     expect(kotlin).toContain("PhoneTestCores.onCores(options, it)");
   });
 

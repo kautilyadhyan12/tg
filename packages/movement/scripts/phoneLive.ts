@@ -28,7 +28,8 @@ import {
   type PhoneTestDelegate,
 } from "@app/shared";
 import { BodyPointsError } from "./bodyPoints.js";
-import { CORES_TAKEN, shakeOf } from "./phoneCheck.js";
+import { createHash } from "node:crypto";
+import { shakeOf } from "./phoneCheck.js";
 import { MODELS, SETTINGS, type PoseModel } from "./phoneRun.js";
 
 /** The numbers of the live test. Each says where it came from. */
@@ -48,6 +49,17 @@ export const LIVE = {
   /** Started this many °C warmer than the first run, or at a higher thermal status: a fall short may be the heat
    *  left over. */
   warmerC: 2,
+  /** Android's thermal status "light" (1): a run that fell short having started above it, the first run included,
+   *  may have been slowed by heat left over (round one, H1: a test started on a phone still hot). The three real
+   *  starts of 2026-11-18 were all at 1. */
+  coolThermal: 1,
+  /** Asked for 4 cores on the main chip, a live run keeps more than this busy, or the cores were not taken. The app's
+   *  own work (the camera, turning each picture, the drawing) kept 1.65 cores busy with the model on the graphics chip
+   *  (2026-11-18), so one core more is 2.7; the two real 4-core runs kept 3.82 and 3.30 (round one, H2: 51b-i's 1.3 was
+   *  set with no camera). */
+  coresTaken: 2.7,
+  /** A run's seconds, and its end line, must add up to its minutes within this share (round one, L1). */
+  wallShare: 0.01,
   /** At or under this charge Android may slow the phone. */
   lowBattery: 15,
   /** A still body's time, and the share of it the model must have answered with a body for its shake to be read. */
@@ -261,16 +273,21 @@ function wrongRun(h: PhoneLiveHeader, step: LiveStep, index: number, plan: strin
   if (h.model.file !== step.model.name || h.model.sha256 !== step.model.sha256) wrong.push(`it ran ${h.model.file}, not ${step.model.name}`);
   if (h.model.people !== 1) wrong.push(`it asked for ${String(h.model.people)} people, not one`);
   if (h.delegate !== step.delegate || h.threads !== step.threads) wrong.push(`it ran on ${h.delegate} with ${String(h.threads ?? "its own")} cores, not as asked`);
+  if (h.picture.width !== LIVE.picture.width || h.picture.height !== LIVE.picture.height) {
+    wrong.push(`its pictures were ${String(h.picture.width)} by ${String(h.picture.height)}, not ${String(LIVE.picture.width)} by ${String(LIVE.picture.height)}`);
+  }
   return wrong;
 }
 
 /**
  * One run of the ladder, judged. `firstStart` is how warm the phone was when the plan's first 20-minute run started;
  * null when that is not known. A run is:
- * - **not fair** when it is not this step's run, stopped early, ran fewer than the plan's minutes, was on the charger in
- *   any second, saw the body in fewer than `LIVE.found` of its answers in any minute, or kept 1.3 cores or fewer busy
- *   when asked for 2 or more; or when it fell short in a minute where the model was waiting for the camera, under the
- *   battery saver or at `LIVE.lowBattery`% or less, or having started warmer than the first run;
+ * - **not fair** when it is not this step's run (its plan, step, camera, model, people, chip, cores or picture size),
+ *   stopped early, ran fewer than the plan's minutes by its count or by its real length, was on the charger in any
+ *   second, saw the body in fewer than `LIVE.found` of its answers in any minute, or kept `LIVE.coresTaken` cores or
+ *   fewer busy when asked for 2 or more; or when it fell short in a minute where the model was waiting for the camera,
+ *   under the battery saver or at `LIVE.lowBattery`% or less, having started above thermal status "light", or warmer
+ *   than the first run;
  * - **holds** when, fair, every minute's answers reach `LIVE.rate` a second;
  * - **falls short** otherwise.
  */
@@ -296,12 +313,19 @@ export function judgeLive(run: LiveRun | null, step: LiveStep, index: number, pl
   const unfair: string[] = wrongRun(header, step, index, plan);
   if (end.stopped !== null) unfair.push(`it stopped after ${String(seconds.length)} seconds: ${end.stopped}`);
   if (seconds.length < LIVE.minutes * 60) unfair.push(`it ran ${fixed(seconds.length / 60)} of ${String(LIVE.minutes)} minutes`);
+  else {
+    // Counted by its real length, never by its number of lines.
+    const due = LIVE.minutes * 60_000;
+    if (Math.abs(wall - due) > due * LIVE.wallShare || Math.abs(end.wallMs - wall) > due * LIVE.wallShare) {
+      unfair.push(`its seconds last ${fixed(wall / 60_000)} minutes and its end says ${fixed(end.wallMs / 60_000)}, not ${String(LIVE.minutes)}`);
+    }
+  }
   const charging = minutes.find((m) => m.charging);
   if (charging !== undefined) unfair.push(`the phone was on the charger in minute ${String(charging.m)}`);
   else if (charges.some((b) => b.plugged)) unfair.push("the phone was on the charger");
   const unseen = minutes.find((m) => m.found < LIVE.found);
   if (unseen !== undefined) unfair.push(`the camera saw the body in ${share(unseen.found)} of minute ${String(unseen.m)}'s answers`);
-  if (step.delegate === "cpu" && step.threads !== null && step.threads >= 2 && (coresBusy === null || coresBusy <= CORES_TAKEN)) {
+  if (step.delegate === "cpu" && step.threads !== null && step.threads >= 2 && (coresBusy === null || coresBusy <= LIVE.coresTaken)) {
     unfair.push(`asked for ${String(step.threads)} cores, it kept ${coresBusy === null ? "an unknown number" : fixed(coresBusy)} busy`);
   }
   if (unfair.length > 0) return { ...facts, verdict: "not fair", reasons: unfair };
@@ -314,7 +338,9 @@ export function judgeLive(run: LiveRun | null, step: LiveStep, index: number, pl
   if (waited !== undefined) unfair.push(`in minute ${String(waited.m)} the camera gave only ${fixed(waited.cameraRate)} pictures a second and the model read ${share(waited.keptUp)} of them`);
   if (charges.some((b) => b.saver)) unfair.push("the battery saver was on");
   if (percents.some((p) => p <= LIVE.lowBattery)) unfair.push(`the battery fell to ${String(Math.min(...percents))}%`);
-  if (firstStart === null) unfair.push("how warm the phone was at the first run's start is not known");
+  if (header.heat.thermal < 0 || header.heat.thermal > LIVE.coolThermal) {
+    unfair.push(`it started at Android's thermal status ${String(header.heat.thermal)}, above "light"`);
+  } else if (firstStart === null) unfair.push("how warm the phone was at the first run's start is not known");
   else if (warmerThan(header.heat, firstStart)) unfair.push("it started warmer than the first run");
   if (unfair.length > 0) return { ...facts, verdict: "not fair", reasons: unfair };
 
@@ -348,8 +374,9 @@ export function pickLive(judged: readonly LiveJudgement[], steps: number = LADDE
 export interface StillShake {
   readonly camera: PhoneLiveCamera;
   readonly answers: number;
-  /** Answers that found the body. */
+  /** Answers that found the body, and answers a second over the still body's real length. */
   readonly found: number;
+  readonly rate: number;
   /** The used big joints' middle frame-to-frame shake: on the picture in the body's size, in 3D in mm (body-check's
    *  measure, the engine's own). Null when the body was found in fewer than half its answers. */
   readonly flat: number | null;
@@ -368,8 +395,61 @@ export function liveFrames(run: LiveRun): MovementFrame[] {
 
 export function stillShake(run: LiveRun): StillShake {
   const found = run.frames.filter((f) => f.people.length > 0).length;
-  const base = { camera: run.header.camera, answers: run.frames.length, found };
+  const base = { camera: run.header.camera, answers: run.frames.length, found, rate: run.end.wallMs > 0 ? run.frames.length / (run.end.wallMs / 1000) : 0 };
   if (run.header.part !== "still" || found < run.frames.length / 2 || found < 10) return { ...base, flat: null, worldMm: null };
   const shake = shakeOf(liveFrames(run));
   return { ...base, flat: shake.flat, worldMm: shake.world * 1000 };
+}
+
+/** What a still body's file must say for it to be the plan's look through this camera (round one, L3). */
+function wrongStill(h: PhoneLiveHeader, camera: PhoneLiveCamera, index: number, step: LiveStep, plan: string): string[] {
+  const wrong: string[] = [];
+  if (h.plan !== plan) wrong.push("it was made for another plan");
+  if (h.part !== "still" || h.step !== index) wrong.push(`it is not still body ${String(index + 1)} of the plan`);
+  if (h.camera !== camera) wrong.push(`it read the ${h.camera} camera, not the ${camera}`);
+  if (h.model.file !== step.model.name || h.model.sha256 !== step.model.sha256 || h.model.people !== 1) wrong.push(`it ran ${h.model.file} for ${String(h.model.people)}, not as asked`);
+  if (h.delegate !== step.delegate || h.threads !== step.threads) wrong.push("it ran on another chip or cores than asked");
+  return wrong;
+}
+
+// ── Everything the phone gave back, judged ───────────────────────────────────────
+/** One step's files as taken back: its run, and the phone's note when it could not start. */
+export interface StepFiles {
+  readonly run: LiveRun | null;
+  readonly failed: string | null;
+}
+
+export interface LiveReport {
+  readonly plan: string;
+  readonly judged: readonly LiveJudgement[];
+  readonly pick: LivePick;
+  /** For each look of the plan's still body, its shake, or why it gives none. */
+  readonly stills: readonly (StillShake | string)[];
+}
+
+/**
+ * The report from the files: the plan as kept beside them (refused unless it is today's plan, so runs made under other
+ * limits are never judged by these; round one, L4), each step judged against the first run's start, a step with a
+ * note of a failed start not fair whatever else it holds (L6), each still body checked against the plan (L3).
+ */
+export function judgeFiles(planText: string, live: readonly StepFiles[], still: readonly StepFiles[], ladder: readonly LiveStep[] = LADDER, looks: readonly PhoneLiveCamera[] = STILL): LiveReport {
+  if (planText !== JSON.stringify(makeLivePlan(ladder, looks))) throw new BodyPointsError("the plan kept beside the files is not this test's plan: they were made under other limits");
+  const plan = createHash("sha256").update(planText).digest("hex");
+  const firstStart = live[0]?.run?.header.heat ?? null;
+  const judged = ladder.map((step, k): LiveJudgement => {
+    const files = live[k] ?? { run: null, failed: null };
+    const j = judgeLive(files.run, step, k, plan, firstStart);
+    if (files.failed === null) return j;
+    const reasons = [`it could not start: ${files.failed}`, ...(files.run === null ? [] : j.reasons)];
+    return { ...j, verdict: "not fair", reasons };
+  });
+  const first = ladder[0];
+  const stills = looks.map((camera, k): StillShake | string => {
+    const files = still[k] ?? { run: null, failed: null };
+    if (files.failed !== null) return `the ${camera} camera could not start: ${files.failed}`;
+    if (files.run === null) return `the ${camera} camera: the phone gave no file`;
+    const wrong = first === undefined ? ["the ladder is empty"] : wrongStill(files.run.header, camera, k, first, plan);
+    return wrong.length > 0 ? `the ${camera} camera's file is not the plan's: ${wrong.join("; ")}` : stillShake(files.run);
+  });
+  return { plan, judged, pick: pickLive(judged, ladder.length), stills };
 }

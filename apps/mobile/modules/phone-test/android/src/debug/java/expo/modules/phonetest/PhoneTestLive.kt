@@ -133,12 +133,14 @@ internal class PhoneTestLive private constructor(private val screen: PhoneTestLi
   private val lock = Any()
   private var tally = Tally()
   private val arrivals = HashMap<Long, Long>()
-  private var lastTimestamp = 0L
+  @Volatile private var lastTimestamp = 0L
   @Volatile private var lastPicture = 0L
   @Volatile private var modelError: String? = null
   @Volatile private var frames: Writer? = null
   @Volatile private var framesStart = -1L
-  private var mirror = true
+  @Volatile private var mirror = true
+  /** How warm the phone was when the newest run's clock started, kept for a run that is dropped. */
+  @Volatile private var lastStartHeat: JSONObject? = null
 
   fun run() {
     try {
@@ -184,10 +186,13 @@ internal class PhoneTestLive private constructor(private val screen: PhoneTestLi
         while (true) {
           try {
             val heat = liveOne(plan, k, setup)
-            if (k == 0) firstHeat = heat
+            if (k == 0 && firstHeat == null) firstHeat = heat
             break
           } catch (e: Plugged) {
+            // The dropped run's start stays the mark, and the phone cools before it is made again (round one, H1).
+            if (k == 0 && firstHeat == null) firstHeat = lastStartHeat
             offTheCable(plan)
+            cool(plan, firstHeat)
           }
         }
       }
@@ -258,22 +263,29 @@ internal class PhoneTestLive private constructor(private val screen: PhoneTestLi
     val cool = json.getJSONObject("cool")
     return LivePlan(
       json.getInt("people").also { check(it == 1) { "The live test asks for one person." } },
-      json.getDouble("minDetection").toFloat(),
-      json.getDouble("minPresence").toFloat(),
-      json.getDouble("minTracking").toFloat(),
-      picture.getInt("width"),
-      picture.getInt("height"),
+      share(json, "minDetection"),
+      share(json, "minPresence"),
+      share(json, "minTracking"),
+      picture.getInt("width").also { check(it in 64..4096) { "The plan's picture is not a size this test takes." } },
+      picture.getInt("height").also { check(it in 64..4096) { "The plan's picture is not a size this test takes." } },
       still,
       live,
       json.getInt("stillSeconds").also { check(it in 1..60) { "The still body's time is not one this test takes." } },
       json.getInt("minutes").also { check(it in 1..60) { "The run's minutes are not ones this test takes." } },
       json.getInt("settleSeconds").also { check(it in 0..600) { "The wait before a run is not one this test takes." } },
-      cool.getInt("least"),
+      cool.getInt("least").also { check(it in 0..60) { "The cooling's minutes are not ones this test takes." } },
       cool.getInt("most").also { check(it in cool.getInt("least")..60) { "The cooling's minutes are not ones this test takes." } },
     )
   }
 
   private fun JSONArray.objects(): List<JSONObject> = (0 until length()).map { getJSONObject(it) }
+
+  /** One of the model's three limits: a share between 0 and 1. */
+  private fun share(json: JSONObject, name: String): Float {
+    val value = json.getDouble(name)
+    check(value in 0.0..1.0) { "The plan's $name is not a share." }
+    return value.toFloat()
+  }
 
   // ── A still body: its points, ten seconds ────────────────────────────────────────
   private fun stillOne(plan: LivePlan, k: Int, still: StillStep, hint: String) {
@@ -328,6 +340,7 @@ internal class PhoneTestLive private constructor(private val screen: PhoneTestLi
         part.bufferedWriter().use { w ->
           val head = header(plan, "live", k, "selfie", setup, created)
           startHeat = JSONObject(head).getJSONObject("heat")
+          lastStartHeat = startHeat
           w.write(head + "\n")
           synchronized(lock) { tally = Tally() }
           val started = SystemClock.elapsedRealtime()
@@ -389,8 +402,8 @@ internal class PhoneTestLive private constructor(private val screen: PhoneTestLi
   }
 
   // ── The camera and the model ─────────────────────────────────────────────────────
-  private var createMs = 0.0
-  private var cameraThread: ExecutorService? = null
+  @Volatile private var createMs = 0.0
+  @Volatile private var cameraThread: ExecutorService? = null
 
   /** The model in its live mode, and the camera given to it and to the screen. */
   private fun open(plan: LivePlan, setup: LiveSetup, camera: String): PoseLandmarker {
@@ -497,13 +510,18 @@ internal class PhoneTestLive private constructor(private val screen: PhoneTestLi
       arrivals.remove(result.timestampMs())?.let { tally.waits.add(now - it) }
     }
     frames?.let { w ->
-      synchronized(w) {
-        if (frames === w) {
-          if (framesStart < 0) framesStart = result.timestampMs()
-          val t = (result.timestampMs() - framesStart).toDouble()
-          val people = if (points == null) "" else person(result) ?: ""
-          w.write("{\"kind\":\"frame\",\"t\":$t,\"people\":[$people]}\n")
+      // A write that fails here, on the model's thread, stops the still body as the model's own failure would.
+      try {
+        synchronized(w) {
+          if (frames === w) {
+            if (framesStart < 0) framesStart = result.timestampMs()
+            val t = (result.timestampMs() - framesStart).toDouble()
+            val people = if (points == null) "" else person(result) ?: ""
+            w.write("{\"kind\":\"frame\",\"t\":$t,\"people\":[$people]}\n")
+          }
         }
+      } catch (e: Throwable) {
+        modelError = "The still body's file could not be written: ${words(e)}"
       }
     }
     screen.skeleton.show(points?.flatMap { listOf(it.x(), it.y()) }?.toFloatArray(), image.width, image.height)
