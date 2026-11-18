@@ -14,8 +14,6 @@ import {
 } from "@app/shared";
 import { z } from "zod";
 import type { RedisLike } from "../../redis.js";
-import { safeTimeZone } from "../gamification/streak.js";
-import { getUserSyncContext } from "../users/service.js";
 import { historyGate } from "../workouts/service.js";
 import * as repo from "./historyRepo.js";
 import { exerciseRecords, newRecordsIn, unitAndDone, type LiftedWorkout, type SetFact } from "./records.js";
@@ -25,19 +23,15 @@ export interface HistoryDeps {
   redis: RedisLike;
 }
 
-async function personZone(sql: Sql, userId: string): Promise<string> {
-  return safeTimeZone((await getUserSyncContext(sql, userId)).timezone);
-}
-
 export async function historyMonth(deps: HistoryDeps, userId: string, month: string): Promise<HistoryMonth> {
-  const [gate, zone] = await Promise.all([historyGate(deps, userId), personZone(deps.sql, userId)]);
-  const days = await repo.monthDays(deps.sql, userId, month, zone, gate.floor);
+  const gate = await historyGate(deps, userId);
+  const days = await repo.monthDays(deps.sql, userId, month, gate.timeZone, gate.floor);
   return { month, days: days.map((d) => ({ day: d.day, workouts: d.n })), limitedToDays: gate.limitedToDays };
 }
 
 export async function historyDay(deps: HistoryDeps, userId: string, day: string): Promise<HistoryDay> {
-  const [gate, zone] = await Promise.all([historyGate(deps, userId), personZone(deps.sql, userId)]);
-  const rows = await repo.dayWorkouts(deps.sql, userId, day, zone, gate.floor, HISTORY_DAY_WORKOUTS_MOST);
+  const gate = await historyGate(deps, userId);
+  const rows = await repo.dayWorkouts(deps.sql, userId, day, gate.timeZone, gate.floor, HISTORY_DAY_WORKOUTS_MOST);
   return {
     day,
     workouts: rows.map((r) => ({
