@@ -302,12 +302,6 @@ export default function ConsoleLayout({ children }) {
       </aside>
 
       <main className="c-main">
-        {/* The bar across the top, on a computer: New, for whoever may add something. */}
-        {menu && showNew ? (
-          <div className="c-pagebar" data-testid="console-bar">
-            <NewButton offer={offer} />
-          </div>
-        ) : null}
 
         {/* ── The top bar, on a phone. With a gym it holds the gym's name, and Sign out is
                under More; without one (your organisations, create) Sign out is here. ── */}
@@ -342,9 +336,17 @@ export default function ConsoleLayout({ children }) {
           )}
         </header>
 
-        {/* Part 3 §4.2's banner, above every screen. Keyed on the gym because this shell is
-            not remounted between gyms, and a dismissal must not outlive the gym it was for. */}
+        {/* Part 3 §4.2's banner, at the very top of every screen, above the bar with New (Kd,
+            V1-c's click-through). Keyed on the gym because this shell is not remounted between
+            gyms, and a dismissal must not outlive the gym it was for. */}
         <ConsoleBanner key={org?.id ?? 'no-gym'} org={org} />
+
+        {/* The bar across the top, on a computer: New, for whoever may add something. */}
+        {menu && showNew ? (
+          <div className="c-pagebar" data-testid="console-bar">
+            <NewButton offer={offer} />
+          </div>
+        ) : null}
 
         {/* Keyed on the slug so every screen starts fresh on another gym, and never shows
             the last gym's answers under the new gym's name (Kd, 2026-08-28). `screen:` keeps

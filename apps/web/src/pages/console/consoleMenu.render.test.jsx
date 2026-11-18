@@ -267,6 +267,8 @@ describe('New, in the bar across the top (spec Part 3 §17.11)', () => {
   it("an owner: New lists what they may add, each opening that page's own box", async () => {
     await openMore('owner', [...ROLE_PRIVILEGES.owner]);
     const bar = screen.getByTestId('console-bar');
+    // The business's notice (here the trial's) is at the very top, above the bar (Kd, V1-c).
+    expect(screen.getByRole('status').compareDocumentPosition(bar) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     const button = within(bar).getByRole('button', { name: 'New' });
     expect(button.getAttribute('aria-expanded')).toBe('false');
     fireEvent.click(button);
