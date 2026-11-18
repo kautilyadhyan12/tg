@@ -4,8 +4,8 @@
 // half the frames a second, and picks frames worth a picture. Which reading a movement uses, and
 // how sure it needs it, is the movement's (job 52a).
 //
-// The two rules, in words Kd can read, both over the one-person videos (the others' stand-in
-// follower can pick a reflection, job 52d):
+// The two rules, in words Kd can read, both over the videos that set numbers (keptVideos.ts,
+// bodyCheck.ts `videoOf`):
 //   - the angle and length limits: where the picture shows every part it measures at cos 10° of
 //     its length or more (each turned out of the picture by 10° at most, as far as lengths can
 //     tell), the flat and the 3D readings still differ, by the 3D points' own error; each limit is
@@ -80,11 +80,11 @@ function measuredUnlimited(video: Video): MeasuredBody[] {
   return fresh;
 }
 
-/** |flat − 3D| of every reading of one kind whose parts lie across the picture, on the one-person
- *  videos. */
+/** |flat − 3D| of every reading of one kind whose parts lie across the picture, on the videos that
+ *  set numbers. */
 export function acrossDifferences(videos: readonly Video[], kind: Kind): number[] {
   return videos
-    .filter((v) => v.onePerson)
+    .filter((v) => v.sets)
     .flatMap((v) =>
       measuredUnlimited(v).flatMap((body) =>
         MEASURE_LIST.flatMap(({ name, unit }) => {
@@ -107,10 +107,10 @@ export function chooseLengthLimit(videos: readonly Video[]): number {
   return toStep(quantile(acrossDifferences(videos, "length"), 0.95), LENGTH_STEP);
 }
 
-/** The most the body's size on the picture changes on each one-person video, 1st to 99th hundredth. */
+/** The most the body's size on the picture changes on each video that sets numbers, 1st to 99th hundredth. */
 export function sizeSwings(videos: readonly Video[]): { readonly label: string; readonly swing: number }[] {
   return videos
-    .filter((v) => v.onePerson)
+    .filter((v) => v.sets)
     .map((v) => {
       const sizes = runOf(v).steady.flatMap((s) => (s.size === null ? [] : [s.size]));
       return { label: v.label, swing: quantile(sizes, 0.99) / quantile(sizes, 0.01) - 1 };
@@ -131,7 +131,7 @@ export interface AngleFold {
 
 export function leaveOneOut(videos: readonly Video[]): AngleFold[] {
   return videos
-    .filter((v) => v.onePerson)
+    .filter((v) => v.sets)
     .map((heldOut) => {
       const angle = chooseAngleLimit(videos.filter((v) => v !== heldOut));
       let shown = 0;

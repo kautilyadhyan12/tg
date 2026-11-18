@@ -813,7 +813,9 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
     - 52a. [ ] **The movement matcher and the proof table** (§12.3, §12.5): a movement as data, numbers set from all the people but one and tested on the one left out, every other movement's video counting 0, each video replayed the ways the world changes it, among them each reading leaned and shaken by the largest gap measured on a chip the app allows (51b), which decides whether a graphics chip counts the same; the phone's own runs judged by the laptop's count, reasons and lines, never by its numbers; the squat movement made fresh as the first proof. It needs 3 to 5 squat videos of different people from Kd.
     - 52b. [ ] **The form judge, the reason for a rep not counted, and the summary** (§12.1, §2.4).
     - 52c. [ ] **The other kinds of counting**: one side at a time, holds, fast rhythm, timed only, jumps, floor work.
-    - 52d. [ ] **One person locked on**: a busy gym, a passer-by, a mirror (§11.8).
+    - 52d. [ ] **One person locked on**: a busy gym, a passer-by, a mirror (§11.8). Since 51c the phone asks the model for one
+      person, so the model itself picks the body: the job is to notice when the body followed has changed (51c's plain sign,
+      `bodyChanges`, misses a body of the same size in the same place) and to pause, never count, until it is the person again.
 53. [ ] **The camera screen**: its look as pictures first, then the reference picture, the live skeleton, the count, the reason a rep did not count, "Count this set myself" and Follow-along; the coach's shared lines and the tool that cuts and checks them (§12.6).
 54. [ ] **Exercises, movement by movement** (§12.4), towards about 200, with no fixed first list: Kd names one and gives its videos and research file; an exercise that does not pass the proof is published as "count by hand".
 55. Folded into 54 on 2026-11-16.

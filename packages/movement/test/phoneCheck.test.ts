@@ -294,8 +294,10 @@ describe("the worst thing: a phone that reads the body differently is never call
   it("a run of another model, or asked for another number of people, is not comparable", () => {
     const lite = phoneRunOf(squat, (f) => f, { model: { ...squat.header.model, file: "pose_landmarker_lite", sha256: "2".repeat(64) } });
     expect(reasonsOf(comparePhone(squat, lite))).toContain("the phone's the pose_landmarker_lite's");
-    const one = phoneRunOf(squat, (f) => f, { model: { ...squat.header.model, people: 1, sha256: "1".repeat(64) } });
-    expect(reasonsOf(comparePhone(squat, one))).toContain("other settings");
+    // The kept files are asked for one person (51c): a phone run asked for six is another setting.
+    expect(squat.header.model.people).toBe(1);
+    const six = phoneRunOf(squat, (f) => f, { model: { ...squat.header.model, people: 6, sha256: "1".repeat(64) } });
+    expect(reasonsOf(comparePhone(squat, six))).toContain("other settings");
   });
 
   it("a knee thrown 20 cm off in 3D and a tenth of the picture in every 80th frame, or every 40th, differs (round one, H1)", () => {

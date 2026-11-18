@@ -21,6 +21,7 @@ import { basename, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { PHONE_TEST_DELEGATES, PHONE_TEST_MAX_THREADS, phoneProgressSchema, videoFramesSchema, type MovementFrame, type PhoneProgress, type PhoneTestDelegate, type VideoFrames } from "@app/shared";
 import { decodeBodyPoints, type BodyPoints } from "./bodyPoints.js";
+import { KEPT_MODEL } from "./keptVideos.js";
 import { KD_VIDEOS, assertFolderStaysOutOfGit } from "./outFolder.js";
 import { adb, appIdOf, fetchModel } from "./phoneAdb.js";
 import { compareFrames, comparePhone, gapWords, keyGaps, shakeOf, summaries, type FrameComparison, type PhoneComparison } from "./phoneCheck.js";
@@ -132,7 +133,7 @@ async function modelFile(m: PoseModel): Promise<string> {
 const modelPaths = new Map<string, string>();
 for (const m of models) modelPaths.set(m.name, await modelFile(m));
 
-// ── 2. The laptop's runs: the kept heavy files, and the smaller models measured here ─
+// ── 2. The laptop's runs: the kept files, and the other models measured here ─
 function videoOf(label: string): string {
   const folder = values.videos;
   const found = existsSync(folder)
@@ -144,13 +145,13 @@ function videoOf(label: string): string {
   return found ?? fail(`No video named ${label}.mp4 in ${folder}.`);
 }
 
-/** Where the laptop's run of a video with a model, asking for `n` people, is kept: the kept heavy file for six,
- *  otherwise in measured/phone-test/laptop/. */
+/** Where the laptop's run of a video with a model, asking for `n` people, is kept: the kept file for the phone's own
+ *  model asked for one (51c, keptVideos.ts), otherwise in measured/phone-test/laptop/. */
 function laptopFolder(label: string, m: PoseModel, n: number): string {
   return n === SETTINGS.people ? join(HERE, "laptop", m.name, label) : join(HERE, "laptop", m.name, `people-${String(n)}`, label);
 }
 function laptopPath(label: string, m: PoseModel, n: number): string {
-  return m.size === "heavy" && n === SETTINGS.people ? join(KEPT, `${label}.bodypoints`) : join(laptopFolder(label, m, n), `${label}.bodypoints`);
+  return m.name === KEPT_MODEL.file && n === KEPT_MODEL.people ? join(KEPT, `${label}.bodypoints`) : join(laptopFolder(label, m, n), `${label}.bodypoints`);
 }
 
 /** The laptop's run of a video with a model, asking for as many people as the phone is asked for; made here when

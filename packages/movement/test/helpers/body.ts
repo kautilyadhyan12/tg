@@ -16,7 +16,14 @@ export const VIDEOS: readonly Video[] = readdirSync(KEPT)
     const kept = decodeBodyPoints(new Uint8Array(readFileSync(join(KEPT, f))));
     return videoOf(kept.header.label, kept.frames);
   });
-export const ONE_PERSON: readonly Video[] = VIDEOS.filter((v) => v.onePerson);
+/** A file of test/outside: kept only as a case from outside the kept videos, never setting a number. */
+export function outsideVideo(file: string): Video {
+  const kept = decodeBodyPoints(new Uint8Array(readFileSync(join(import.meta.dirname, "../outside", file))));
+  return videoOf(`${kept.header.label} (outside)`, kept.frames);
+}
+
+/** The kept videos that set the fitted numbers (scripts/keptVideos.ts, `videoOf`). */
+export const SET_FROM: readonly Video[] = VIDEOS.filter((v) => v.sets);
 
 /** Every person in every frame changed by `edit`, which gets copies it may change. */
 export function editPeople(frames: readonly MovementFrame[], edit: (person: SeenPerson, frame: MovementFrame, index: number) => SeenPerson): MovementFrame[] {

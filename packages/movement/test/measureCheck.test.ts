@@ -19,7 +19,7 @@ import {
   steadierOf,
   summaryOf,
 } from "../scripts/measureCheck.js";
-import { VIDEOS } from "./helpers/body.js";
+import { VIDEOS, outsideVideo } from "./helpers/body.js";
 
 function video(label: string): Video {
   const v = VIDEOS.find((x) => x.label === label);
@@ -27,7 +27,6 @@ function video(label: string): Video {
   return v;
 }
 const unitOf = (name: MeasureName) => MEASURE_LIST.find((m) => m.name === name)?.unit ?? "degrees";
-const reading = (label: string, i: number, name: MeasureName) => runOf(video(label)).measured[i]?.readings.get(name) ?? null;
 
 describe("the worst thing: the lying man's trunk, seen from the head end of the bench", () => {
   // On this clip the trunk points at the camera: read flat it is anything from 44° to 178°.
@@ -89,13 +88,16 @@ describe("side on, the near side is read on the flat picture, and flat is the st
 });
 
 describe("what the side view cannot see is not read on the flat picture", () => {
-  it("the squat's feet apart, across her body: never given flat, though the picture shows half of it at the bottom", () => {
+  it("the squat's feet apart, across her body: never given flat", () => {
     const s = summaryOf(runOf(video("squat_reference")).measured, "feet apart", "trunks");
-    // Measured: read in 3D in 73 frames; at the bottom the picture shows 0.51 of the line between
-    // the feet and reads them 0.49 of a trunk apart, against 0.76 in 3D.
-    expect(s.world).toBeGreaterThan(50);
+    // Measured (51c): the phone's model marks her far knee hidden in every frame, so her far foot hangs from nothing and
+    // the width is read in no frame, not even in 3D. On the six-person heavy file it was read in 3D in 73 frames, and
+    // flat in none (the picture showed 0.51 of the line between the feet at the bottom, reading 0.49 of a trunk against
+    // 0.76 in 3D). The general guarantee, every flat reading within its limit of its 3D one, is the next test.
+    expect(s.world).toBe(0);
     expect(s.flat).toBe(0);
   });
+
 
   it("on every video, no flat reading is given further from its 3D one than the limit", () => {
     // The guarantee, on real points. Measured, as an example of a reading at the edge: the chair
@@ -126,23 +128,30 @@ describe("the squat against Kd's own measuring of it", () => {
     { from: 82, to: 122, knee: 175.7, hip: 179.5 },
     { from: 193, to: 255, knee: 175.2, hip: 177.6 },
   ];
-  const label = "squat_reference";
-  const along = (from: number, to: number, name: MeasureName, which: "flat" | "world"): { i: number; v: number }[] =>
+  // His measuring read the heavy model's points (his profile says so), so the way this engine measures is checked on
+  // the heavy model's own file of the same video (test/outside), and the phone's model is told apart below.
+  const HEAVY = outsideVideo("squat_reference.heavy.bodypoints");
+  const PHONE = video("squat_reference");
+  const readingOf = (v: Video, i: number, name: MeasureName) => runOf(v).measured[i]?.readings.get(name) ?? null;
+  const alongOf = (v: Video, from: number, to: number, name: MeasureName, which: "flat" | "world"): { i: number; v: number }[] =>
     Array.from({ length: to - from + 1 }, (_, k) => from + k).flatMap((i) => {
-      const v = reading(label, i, name)?.[which] ?? null;
-      return v === null ? [] : [{ i, v }];
+      const x = readingOf(v, i, name)?.[which] ?? null;
+      return x === null ? [] : [{ i, v: x }];
     });
+  const along = (from: number, to: number, name: MeasureName, which: "flat" | "world") => alongOf(HEAVY, from, to, name, which);
 
-  it("each rep's bottom, at its deepest knee: within 3° of his, and the hips' drop within 0.05 of a leg", () => {
+  it("each rep's bottom, at its deepest knee: within 3° of his (the 3D knee 3.5°), and the hips' drop within 0.05 of a leg", () => {
     for (const rep of KD) {
       const knee = along(rep.from, rep.to, "left knee", "flat");
       const bottom = knee.reduce((a, b) => (b.v < a.v ? b : a));
-      const at = (name: MeasureName, which: "flat" | "world" = "flat"): number => reading(label, bottom.i, name)?.[which] ?? Number.NaN;
+      const at = (name: MeasureName, which: "flat" | "world" = "flat"): number => readingOf(HEAVY, bottom.i, name)?.[which] ?? Number.NaN;
       expect(Math.abs(bottom.v - rep.knee)).toBeLessThanOrEqual(3);
       expect(Math.abs(at("left hip") - rep.hip)).toBeLessThanOrEqual(3);
       expect(Math.abs(at("trunk lean") - rep.trunk)).toBeLessThanOrEqual(3);
       expect(Math.abs(at("left shin lean") - rep.shin)).toBeLessThanOrEqual(3);
-      expect(Math.abs(at("left knee", "world") - rep.knee3d)).toBeLessThanOrEqual(3);
+      // The 3D knee: steadied in 3D more loosely since 51c (+20 Hz a metre a second, set by its rule), it reaches a little
+      // deeper at each bottom than his median filter does. Measured: 3.0°, 3.2° and 2.1° below his (2.5°, 2.6°, 1.9° at +10).
+      expect(Math.abs(at("left knee", "world") - rep.knee3d)).toBeLessThanOrEqual(3.5);
       const hips = along(rep.from, rep.to, "hips height", "flat").map((x) => x.v);
       expect(Math.abs(Math.max(...hips) - Math.min(...hips) - rep.drop)).toBeLessThanOrEqual(0.05);
     }
@@ -153,6 +162,23 @@ describe("the squat against Kd's own measuring of it", () => {
       expect(Math.abs(Math.max(...along(top.from, top.to, "left knee", "flat").map((x) => x.v)) - top.knee)).toBeLessThanOrEqual(3);
       expect(Math.abs(Math.max(...along(top.from, top.to, "left hip", "flat").map((x) => x.v)) - top.hip)).toBeLessThanOrEqual(3);
     }
+  });
+
+  it("the phone's model on the same video: each rep's deepest knee and hip, and the standing knee and hip, within 5° of his", () => {
+    // Not a check of the measuring (that is the heavy file's, above): how far the phone's own model, asked for one
+    // person, reads this body from the heavy one. Measured (51c): the deepest knee 2.8°, 0.2° and 0.3° from his, the hip
+    // 3.0°, 0.9° and 1.5°; standing, the knee 4.3° and 4.8°, the hip 0.5° and 2.3°.
+    const gaps: number[] = [];
+    for (const rep of KD) {
+      const knee = alongOf(PHONE, rep.from, rep.to, "left knee", "flat");
+      const bottom = knee.reduce((a, b) => (b.v < a.v ? b : a));
+      gaps.push(Math.abs(bottom.v - rep.knee), Math.abs((readingOf(PHONE, bottom.i, "left hip")?.flat ?? Number.NaN) - rep.hip));
+    }
+    for (const top of TOPS) {
+      gaps.push(Math.abs(Math.max(...alongOf(PHONE, top.from, top.to, "left knee", "flat").map((x) => x.v)) - top.knee));
+      gaps.push(Math.abs(Math.max(...alongOf(PHONE, top.from, top.to, "left hip", "flat").map((x) => x.v)) - top.hip));
+    }
+    for (const g of gaps) expect(g).toBeLessThanOrEqual(5);
   });
 });
 
@@ -173,17 +199,13 @@ describe("every video", () => {
     it(`${v.label}: at half the frames a second, nearly every reading is the same`, () => {
       const a = agreementOf(runOf(v).measured, runMeasures(runSteady(runChecks(halfRate(v.frames)))));
       expect(a.compared).toBeGreaterThan(0);
-      if (v.onePerson) {
-        // Measured: 0 to 1 in 100 read by one run and not the other; 95 in 100 within 0.9° to
-        // 2.8°, and within 0.02 to 0.05 of a length.
-        expect(a.differ / a.compared).toBeLessThanOrEqual(0.015);
-        expect(a.apart.angle).toBeLessThan(3.5);
-        if (Number.isFinite(a.apart.length)) expect(a.apart.length).toBeLessThan(0.06);
-      } else {
-        // The bench press videos: the stand-in follower can pick the man's reflection or his
-        // second finding at the other rate (job 52d). Measured: 4 and 6 in 100.
-        expect(a.differ / a.compared).toBeLessThanOrEqual(0.08);
-      }
+      // Measured (51c): 0 to 1 in 100 read by one run and not the other; 95 in 100 within 0.5° to 2.1°, and within
+      // 0.01 to 0.04 of a length, the bench press videos included now that the model follows one body (on the
+      // six-person files the stand-in follower picked his reflection or his second finding at the other rate: 4 and 6
+      // in 100).
+      expect(a.differ / a.compared).toBeLessThanOrEqual(0.015);
+      expect(a.apart.angle).toBeLessThan(3.5);
+      if (Number.isFinite(a.apart.length)) expect(a.apart.length).toBeLessThan(0.06);
     });
   }
 });

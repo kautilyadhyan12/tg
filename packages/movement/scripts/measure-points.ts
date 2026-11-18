@@ -1,25 +1,31 @@
 // One command for every video: a video in; its body points, kept small, and pictures a
 // terminal can look at out (spec Part 2 §12.7).
 //   corepack pnpm --filter @app/movement measure-points "<video>" [--label name] [--keep]
-// Options: --fps <8 to 40, default 30> --people <1 to 6, default 6> --out <folder>
-//          --model <.task file> --python <command>
+// Options: --fps <8 to 40, default 30> --people <1 to 6, default 1> --out <folder>
+//          --model <.task file, default the phone's own: Google's full model> --python <command>
 // --keep also puts the small file in test/body-points/, where the tests read it; a file
-// already kept there under the same name is replaced only with --replace.
+// already kept there under the same name is replaced only with --replace. Only a run of the
+// phone's own model asked for one person is kept (ROADMAP 51c, keptVideos.ts).
 // Runs on the laptop only: it needs Python with mediapipe and cv2.
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { extname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { MAX_FPS, MAX_PEOPLE, MIN_FPS } from "@app/shared";
 import { beyondHalfStep, decodeBodyPoints, encodeBodyPoints, largestChanges } from "./bodyPoints.js";
 import { TOOL_VERSION, framesToLook, labelFor, readMeasurement, summaryLines } from "./measurePoints.js";
+import { KEPT_MODEL } from "./keptVideos.js";
 import { checkOutFolder, prepareOutFolder } from "./outFolder.js";
+import { MODELS } from "./phoneRun.js";
 
 const REPO = resolve(import.meta.dirname, "../../..");
 const POINTS_PY = join(import.meta.dirname, "points.py");
 const KEPT = join(import.meta.dirname, "../test/body-points");
-// Item 51 picks the model the phone runs; until then, Kd's strong one.
-const DEFAULT_MODEL = "D:\\vidoe referene\\tools\\pose_landmarker_heavy.task";
+// The phone's own model (51b-ii), as the phone test fetched and checked it.
+const PHONE_MODEL = MODELS.find((m) => m.name === KEPT_MODEL.file);
+if (PHONE_MODEL === undefined) throw new Error(`${KEPT_MODEL.file} is not one of the pinned models.`);
+const DEFAULT_MODEL = join(REPO, "measured", "phone-test", "models", `${PHONE_MODEL.name}.task`);
 
 // pnpm runs this from the package's folder; a path means what it meant where it was typed.
 const typedFrom = process.env["INIT_CWD"] ?? process.cwd();
@@ -48,7 +54,7 @@ function parse() {
     options: {
       label: { type: "string" },
       fps: { type: "string", default: "30" },
-      people: { type: "string", default: String(MAX_PEOPLE) },
+      people: { type: "string", default: String(KEPT_MODEL.people) },
       keep: { type: "boolean", default: false },
       replace: { type: "boolean", default: false },
       out: { type: "string" },
@@ -92,7 +98,16 @@ try {
 } catch (err) {
   fail(messageOf(err));
 }
-if (!existsSync(model)) fail(`No pose model at ${model}. Give one with --model.`);
+if (!existsSync(model)) {
+  fail(`No pose model at ${model}. Give one with --model${values.model === DEFAULT_MODEL ? ", or let the phone test fetch the phone's own (phone-test --laptop-only)" : ""}.`);
+}
+// The kept files are all one model and one person asked, the phone's own: the tests set every number from them.
+if (values.keep) {
+  const sum = createHash("sha256").update(new Uint8Array(readFileSync(model))).digest("hex");
+  if (sum !== PHONE_MODEL.sha256 || people !== KEPT_MODEL.people) {
+    fail(`Only the phone's own model (Google's ${PHONE_MODEL.size} model, as pinned) asked for ${String(KEPT_MODEL.people)} person is kept for the tests. Measure without --keep.`);
+  }
+}
 try {
   prepareOutFolder(out, input);
 } catch (err) {

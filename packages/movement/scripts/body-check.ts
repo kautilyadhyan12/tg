@@ -79,11 +79,11 @@ const steadyWords = (s: Steadiness): string => `shake ${cm(s.shakeRaw)} -> ${cm(
 
 // 1. Each video, with the engine's own limits.
 console.log("The twelve big joints in every frame: how many were used, and why the rest were not.");
-console.log(`${pad("video", 40)}${pad("one person", 11)}${pad("used", 8)}${REASONS.map((r) => pad(r, 10)).join("")}`);
+console.log(`${pad("video", 40)}${pad("sets", 6)}${pad("used", 8)}${REASONS.map((r) => pad(r, 10)).join("")}`);
 for (const v of videos) {
   const c = countOf(runChecks(v.frames));
   console.log(
-    `${pad(v.label, 40)}${pad(v.onePerson ? "yes" : "no", 11)}${pad(pct(c.used, c.pointFrames), 8)}${REASONS.map((r) => pad(pct(c.why[r], c.pointFrames), 10)).join("")}`,
+    `${pad(v.label, 40)}${pad(v.sets ? "yes" : "no", 6)}${pad(pct(c.used, c.pointFrames), 8)}${REASONS.map((r) => pad(pct(c.why[r], c.pointFrames), 10)).join("")}`,
   );
 }
 

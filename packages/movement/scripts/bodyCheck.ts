@@ -3,14 +3,14 @@
 // rule from some people and tries it on another, and picks the frames worth a picture.
 //
 // The two rules, in words Kd can read:
-//   - the bone limit is the smallest, in steps of 0.05 of the trunk, at which no one-person
-//     video loses more than 1 in 200 of its sure joints to it;
+//   - the bone limit is the smallest, in steps of 0.05 of the trunk, at which no video that
+//     sets numbers loses more than 1 in 200 of its sure joints to it;
 //   - the steady settings are the steadiest that keep a joint moving faster than half a metre
 //     a second, on average, no more than 1 cm further from where the model puts it than the
-//     model's own shake already does, on every one-person video.
-// "One-person video": the model found nobody else in any frame. On the others the stand-in
-// follower (follow.ts) cannot yet keep the man apart from his reflection (job 52d), so they
-// are tried, never used to set a number.
+//     model's own shake already does, on every video that sets numbers.
+// "Sets numbers": written so in keptVideos.ts after its pictures were looked at, one body in
+// every frame, and no sign that the body followed changed (follow.ts). Every other video is
+// tried, never used to set a number.
 import type { MovementFrame, SeenPerson } from "@app/shared";
 import {
   LIMITS,
@@ -26,17 +26,32 @@ import {
   type SteadyBody,
   type SteadySettings,
 } from "../src/index.js";
-import { followOne } from "./follow.js";
+import { bodyChanges, followOne } from "./follow.js";
+import { KEPT_VIDEOS } from "./keptVideos.js";
 
 export interface Video {
   readonly label: string;
   readonly frames: readonly MovementFrame[];
-  /** Nobody but the one person in any frame. */
-  readonly onePerson: boolean;
+  /** It may set a fitted number: see `videoOf`. */
+  readonly sets: boolean;
+  /** Why it sets numbers, or why not, in a line. */
+  readonly why: string;
 }
 
-export function videoOf(label: string, frames: readonly MovementFrame[]): Video {
-  return { label, frames, onePerson: frames.every((f) => f.people.length <= 1) };
+/** A video sets numbers only when ALL hold: keptVideos.ts says its pictures were looked at and the person followed
+ *  throughout; the model found nobody else in any frame; and the plain sign finds no change of the body followed.
+ *  One body in every frame alone is never enough: asked for one person, the model gives one body whoever it is. */
+export function videoOf(label: string, frames: readonly MovementFrame[], kept: Readonly<Record<string, { readonly sets: boolean; readonly seen: string }>> = KEPT_VIDEOS): Video {
+  const seen = Object.hasOwn(kept, label) ? kept[label] : undefined;
+  if (seen === undefined) return { label, frames, sets: false, why: "nobody has looked at its pictures yet" };
+  if (!seen.sets) return { label, frames, sets: false, why: seen.seen };
+  if (frames.some((f) => f.people.length > 1)) return { label, frames, sets: false, why: "the model found more than one person in it" };
+  const changed = bodyChanges(frames);
+  const first = changed[0];
+  if (first !== undefined) {
+    return { label, frames, sets: false, why: `the body followed changes ${String(changed.length)} times, first at ${(first.t / 1000).toFixed(2)} s` };
+  }
+  return { label, frames, sets: true, why: seen.seen };
 }
 
 export function runChecks(frames: readonly MovementFrame[], limits: Limits = LIMITS): CheckedBody[] {
@@ -100,7 +115,7 @@ export function boneLoss(checked: readonly CheckedBody[]): number {
 }
 
 export function chooseBone(videos: readonly Video[]): number {
-  const own = videos.filter((v) => v.onePerson);
+  const own = videos.filter((v) => v.sets);
   const last = BONE_STEPS[BONE_STEPS.length - 1] ?? LIMITS.bone;
   return BONE_STEPS.find((step) => own.every((v) => boneLoss(checksAt(v, step)) <= BONE_LOSS)) ?? last;
 }
@@ -180,7 +195,7 @@ export function steadinessOf(checked: readonly CheckedBody[], steady: readonly S
 
 export interface SteadyChoice {
   readonly smoothing: Smoothing;
-  /** Each one-person video's steadiness at that setting, in the order given. */
+  /** Each setting video's steadiness at that setting, in the order given. */
   readonly each: readonly { readonly label: string; readonly steadiness: Steadiness }[];
 }
 
@@ -196,7 +211,7 @@ function steadinessAt(video: Video, bone: number, which: "flat" | "world", smoot
 }
 
 export function chooseSteady(videos: readonly Video[], which: "flat" | "world", bone: number = LIMITS.bone): SteadyChoice {
-  const own = videos.filter((v) => v.onePerson);
+  const own = videos.filter((v) => v.sets);
   let best: SteadyChoice | null = null;
   let bestShake = Number.POSITIVE_INFINITY;
   for (const minCutoff of CUTOFFS) {

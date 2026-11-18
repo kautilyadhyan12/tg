@@ -173,6 +173,7 @@ describe("the command refuses before any model runs, and makes no folder", () =>
     [["--model", join(REPO, "no-such-model.task")], /No pose model/],
     [["--replace"], /--replace only goes with --keep/],
     [["--keep", "--label", "squat_reference"], /already kept for the tests.*--replace/],
+    [["--keep", "--label", "not_kept_yet", "--model", join(REPO, "packages/movement/package.json")], /Only the phone's own model/],
   ])("%s", (args, why) => {
     expect(existsSync(itsFolder)).toBe(false);
     const r = runCommand([video, ...args]);

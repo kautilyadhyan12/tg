@@ -78,11 +78,12 @@ export interface Limits {
 /**
  * Where each number comes from. `sure`: the model's own sureness is a chance from 0 to 1, and
  * a point it gives less than an even chance of being seen is not used. `bone`: set by
- * `body-check` from Kd's six reference videos, each limit set from five people and tried on the
- * sixth (`scripts/bodyCheck.ts` says the rule). `speed`: the fastest a part of a person moves
+ * `body-check` from Kd's reference videos, as the phone's own model reads them asked for one
+ * person (51c), each limit set from five people and tried on the sixth (`scripts/bodyCheck.ts`
+ * says the rule; the videos that may set it are in `scripts/keptVideos.ts`). `speed`: the fastest a part of a person moves
  * is a kick's foot, measured at 12 to 18 m/s in martial arts studies (a punch's fist 6 to 11),
- * so nothing real is refused below 20; on Kd's four one-person videos no sure point moved faster
- * than 10. `settle`: at the slowest rate the engine takes, 8 frames a second, a fifth of a
+ * so nothing real is refused below 20; on the four of Kd's videos that set numbers no sure point moved
+ * faster than 10. `settle`: at the slowest rate the engine takes, 8 frames a second, a fifth of a
  * second is two more looks at the new place. `swapApart`: a fifth of the trunk, about 10 cm for
  * a grown man, ten times the shake of a well-seen joint on Kd's videos (about 1 cm from one
  * frame to the next). The memories are the same for every body: 3 s holds a rep's worth of the
@@ -91,7 +92,7 @@ export interface Limits {
  */
 export const LIMITS: Limits = {
   sure: 0.5,
-  bone: 0.25,
+  bone: 0.3,
   boneMemory: 3000,
   learn: 500,
   speed: 20,
