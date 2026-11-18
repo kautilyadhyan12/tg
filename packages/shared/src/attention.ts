@@ -12,7 +12,7 @@ const currencySchema = z.string().regex(/^[A-Z]{3}$/);
 export const attentionSchema = z
   .object({
     /** Overview's Chargebacks box: those to answer, and the lost ones whose charges are stopped. */
-    chargebacks: z.object({ count: countSchema }).strict().nullable(),
+    chargebacks: z.object({ count: countSchema, lostCount: countSchema }).strict().nullable(),
     /** The Failed payments page: declined card payments still outstanding, by currency. */
     failedPayments: z
       .object({ count: countSchema, totals: z.array(z.object({ currency: currencySchema, minor: countSchema }).strict()) })

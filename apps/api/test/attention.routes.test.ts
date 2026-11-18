@@ -246,7 +246,7 @@ d("What waits: the menu's counts and the bell, whose, to whom, and each its own 
       expect(mine.newLeads).toEqual({ count: 2 });
       expect(mine.atRisk).toEqual({ count: 1 });
       expect(mine.paymentDue).toEqual({ count: 2, past: 0 });
-      expect(mine).toMatchObject({ chargebacks: { count: 0 }, failedPayments: { count: 0, totals: [] }, refunds: { count: 0 }, appPayments: { count: 0, more: false }, appCancels: { count: 0 }, reported: { posts: 0, comments: 0 } });
+      expect(mine).toMatchObject({ chargebacks: { count: 0, lostCount: 0 }, failedPayments: { count: 0, totals: [] }, refunds: { count: 0 }, appPayments: { count: 0, more: false }, appCancels: { count: 0 }, reported: { posts: 0, comments: 0 } });
       const theirs = await read(next);
       expect(theirs.newLeads).toEqual({ count: 1 });
       // No check-in yet, and nobody billed: never a nought.
@@ -306,7 +306,7 @@ d("What waits: the menu's counts and the bell, whose, to whom, and each its own 
       expect(mine.newLeads?.count).toBe(((await get("/leads")) as { counts: { new: number } }).counts.new);
       expect(mine.atRisk?.count).toBe(atRiskResponseSchema.parse(await get("/at-risk")).total);
       expect(mine.paymentDue).toEqual(gymWeekResponseSchema.parse(await get("/week")).week.paymentDue);
-      expect(mine.chargebacks?.count).toBe(((await get("/chargebacks?from=0")) as { count: number }).count);
+      expect(mine.chargebacks).toEqual((({ count, lostCount }: { count: number; lostCount: number }) => ({ count, lostCount }))((await get("/chargebacks?from=0")) as { count: number; lostCount: number }));
       expect(mine.refunds?.count).toBe(((await get("/refunds-to-review?from=0")) as { count: number }).count);
       expect(mine.failedPayments).toEqual((({ count, totals }: { count: number; totals: unknown[] }) => ({ count, totals }))((await get("/failed-payments/summary")) as { count: number; totals: unknown[] }));
       expect(mine.appPayments).toEqual((({ rows, more }: { rows: unknown[]; more: boolean }) => ({ count: rows.length, more }))((await get("/app-payment-checks")) as { rows: unknown[]; more: boolean }));

@@ -7,14 +7,17 @@ import { useConsoleSignOut } from './consoleSignOut';
 import { MENU_GROUPS, consoleMenu, menuGroups } from './consoleMenu';
 import { roleLabel, viewerPrivileges } from './consoleView';
 import { initialsOf } from './memberListPeople';
+import { useAttention } from './useAttention';
+import MenuCount from '../../components/console/MenuCount';
 
-function Row({ to, icon: Icon, label }) {
+function Row({ to, icon: Icon, label, count }) {
   return (
     <Link to={to} className="c-more-row">
       <Icon size={20} className="c-t2" />
       <span className="c-s15 c-w5" style={{ flexGrow: 1, minWidth: 0 }}>
         {label}
       </span>
+      {count !== undefined ? <MenuCount count={count} /> : null}
       <ChevronRight size={18} className="c-t3" />
     </Link>
   );
@@ -47,6 +50,8 @@ export default function More() {
   const { signingOut, signOut } = useConsoleSignOut();
 
   const menu = consoleMenu(orgSlug, viewerPrivileges(org), org?.orgType);
+  // What waits on each page (V1-d), read once by the console's shell.
+  const { counts } = useAttention();
   const name = user?.displayName || user?.email || '';
   const about = org ? [roleLabel(org.staffRole, org.orgType, org.coOwner), org.name].filter(Boolean).join(' · ') : '';
 
@@ -74,7 +79,7 @@ export default function More() {
             </h2>
             <div className="c-card c-more-list">
               {group.rows.map((row) => (
-                <Row key={row.key} to={row.to} icon={row.icon} label={row.label} />
+                <Row key={row.key} to={row.to} icon={row.icon} label={row.label} count={counts[row.key]} />
               ))}
             </div>
           </section>

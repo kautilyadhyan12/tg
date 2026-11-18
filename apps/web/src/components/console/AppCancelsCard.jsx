@@ -106,7 +106,7 @@ export default function AppCancelsCard({ org, orgSlug, privileges, readOnly }) {
 
   return (
     <ConsoleCard>
-      <section data-testid="app-cancels" aria-label={APP_CANCELS_WORDS.title} className="flex flex-col gap-1">
+      <section id="app-cancels" data-testid="app-cancels" aria-label={APP_CANCELS_WORDS.title} className="flex flex-col gap-1">
         <div className="text-xs uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.35)' }}>
           {APP_CANCELS_WORDS.title}
         </div>

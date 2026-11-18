@@ -190,7 +190,7 @@ export default function RefundsToReviewCard({ org, orgSlug, privileges, readOnly
 
   return (
     <ConsoleCard>
-      <section data-testid="refunds-to-review" aria-label="Refunds to review" className="flex flex-col gap-1">
+      <section id="refunds-to-review" data-testid="refunds-to-review" aria-label="Refunds to review" className="flex flex-col gap-1">
         <div className="text-xs uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.35)' }}>
           Refunds to review
         </div>

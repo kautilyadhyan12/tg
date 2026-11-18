@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
 import { orgWords } from '@app/shared';
 import { NavLink, Link, useLocation, useParams } from 'react-router-dom';
-import { Building2, ChevronDown, ChevronsUpDown, Ellipsis, LogOut, Plus, UserRound } from 'lucide-react';
+import { Bell, Building2, ChevronDown, ChevronsUpDown, CircleCheck, Ellipsis, LogOut, Plus, UserRound } from 'lucide-react';
 import ConsoleBanner from './ConsoleBanner';
 import PlanModal from './PlanModal';
 import SizeDecisionPrompt from './SizeDecisionPrompt';
@@ -13,6 +13,9 @@ import { useConsoleOrg } from '../../pages/console/useConsoleOrg';
 import { useConsoleSignOut } from '../../pages/console/consoleSignOut';
 import { consoleLook, consoleMenu, menuGroups, moreIsCurrent, readFolded, writeFolded } from '../../pages/console/consoleMenu';
 import { newMenu } from '../../pages/console/consoleNew';
+import { attentionLines, bellLabel, countText, menuCounts, moreCount, seesAnyPart } from '../../pages/console/attentionView';
+import { AttentionContext, useAttentionRead } from '../../pages/console/useAttention';
+import MenuCount from './MenuCount';
 import { initialsOf } from '../../pages/console/memberListPeople';
 import { orgTypeLabel, roleLabel, viewerPrivileges } from '../../pages/console/consoleView';
 import './console.css';
@@ -175,6 +178,73 @@ function YouMenu({ name, role, accountTo, onAccount, withOrganisations, signOut,
   );
 }
 
+/** The bell, in the bar across the top and the phone's top bar (spec Part 3 §17.11): its count
+ *  is the number of kinds of thing waiting, and it opens "Needs attention" under itself, the
+ *  same lines from any page, each opening the place it is dealt with. Opening it reads again. */
+function BellButton({ lines, onOpen }) {
+  const [open, setOpen] = useState(false);
+  const anchor = useRef(null);
+  const close = () => setOpen(false);
+  return (
+    <>
+      <button
+        ref={anchor}
+        type="button"
+        className="c-bell"
+        aria-label={bellLabel(lines)}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        data-testid="console-bell"
+        onClick={() => {
+          if (!open) onOpen();
+          setOpen((was) => !was);
+        }}
+      >
+        <Bell size={20} aria-hidden="true" />
+        {lines.length > 0 ? (
+          <span className="c-bell-pip" aria-hidden="true">
+            {countText(lines.length)}
+          </span>
+        ) : null}
+      </button>
+      {open ? (
+        <OpenUnder anchorRef={anchor} label="Needs attention" onClose={close}>
+          <div className="c-attn" data-testid="needs-attention">
+            <div className="c-attn-head">
+              <h2 className="c-s17 c-w6 c-t1">Needs attention</h2>
+              {lines.length > 0 ? <span className="c-s12 c-t3">{lines.length === 1 ? '1 item' : `${String(lines.length)} items`}</span> : null}
+            </div>
+            {lines.length === 0 ? (
+              <p className="c-attn-none c-s14 c-w6">
+                <CircleCheck size={18} aria-hidden="true" />
+                Nothing needs attention
+              </p>
+            ) : (
+              lines.map((line) => (
+                <div key={line.key} className="c-attn-row" data-testid="attention-line">
+                  <span className={`c-attn-dot${line.tone === 'plain' ? '' : ` c-attn-dot-${line.tone}`}`} aria-hidden="true" />
+                  <span className="c-attn-text">
+                    <span className="c-s14 c-w6 c-t1">{line.title}</span>
+                    {line.note !== null ? <span className="c-s13 c-t3">{line.note}</span> : null}
+                  </span>
+                  <span className="c-attn-end">
+                    {line.money !== null ? <span className="c-s14 c-w6 c-t1">{line.money}</span> : null}
+                    {line.to !== null ? (
+                      <Link to={line.to} className="c-btn c-btn-sm" onClick={close} aria-label={`${line.button}: ${line.title}`}>
+                        {line.button}
+                      </Link>
+                    ) : null}
+                  </span>
+                </div>
+              ))
+            )}
+          </div>
+        </OpenUnder>
+      ) : null}
+    </>
+  );
+}
+
 /** New, in the bar across the top (spec Part 3 §17.11): what this person may add, each line
  *  opening that page's own box. While the business can change nothing it says why instead. */
 function NewButton({ offer }) {
@@ -239,6 +309,14 @@ export default function ConsoleLayout({ children }) {
   const signOutWords = signingOut ? 'Signing out…' : 'Sign out';
   const offer = orgSlug ? newMenu(orgSlug, viewerPrivileges(org), org) : { items: [], note: null };
   const showNew = offer.items.length > 0 || offer.note !== null;
+  // What waits (V1-d): one read for the menu's counts, the bell and More.
+  const { attention, reload: reloadAttention } = useAttentionRead(org?.id ?? null, menu !== null && org != null);
+  const lines = attentionLines(attention, orgSlug, viewerPrivileges(org), org?.orgType);
+  const counts = menuCounts(lines);
+  const showBell = menu !== null && seesAnyPart(attention);
+  /** A page's mark in the menu: its count where something waits, else Members' Review needed dot. */
+  const mark = (page) => (counts[page.key] !== undefined ? <MenuCount count={counts[page.key]} /> : reviewDot(page));
+  const underMore = menu ? moreCount(menu.more, counts) : null;
 
   // The groups this person folded on this device, kept as they left them. The page they are on
   // is never folded away: arriving on it shows its group open for this visit only, and the
@@ -287,14 +365,14 @@ export default function ConsoleLayout({ children }) {
         {menu ? (
           <nav ref={navRef} aria-label="Console" className="c-rail-nav">
             {/* Overview on top, then the five groups (spec Part 3 §17.10 rule 7). */}
-            <RailLink page={menu.pages[0]} dot={reviewDot(menu.pages[0])} />
+            <RailLink page={menu.pages[0]} dot={mark(menu.pages[0])} />
             {menuGroups(menu.pages).map((group) => (
               <RailGroup
                 key={group.key}
                 group={group}
                 folded={isFolded(group.key)}
                 onToggle={() => toggleGroup(group.key)}
-                dot={reviewDot}
+                dot={mark}
               />
             ))}
           </nav>
@@ -326,13 +404,16 @@ export default function ConsoleLayout({ children }) {
           {menu ? (
             <>
               <GymSwitcher org={org} fallback={consoleName} compact />
-              {name ? (
-                <Link to={menu.moreTo} className="c-topbar-me" aria-label={`${name}: your account and Sign out, under More`}>
-                  <span className="c-rail-av" aria-hidden="true">
-                    {initialsOf(name)}
-                  </span>
-                </Link>
-              ) : null}
+              <span className="c-topbar-end">
+                {showBell ? <BellButton lines={lines} onOpen={reloadAttention} /> : null}
+                {name ? (
+                  <Link to={menu.moreTo} className="c-topbar-me" aria-label={`${name}: your account and Sign out, under More`}>
+                    <span className="c-rail-av" aria-hidden="true">
+                      {initialsOf(name)}
+                    </span>
+                  </Link>
+                ) : null}
+              </span>
             </>
           ) : (
             <>
@@ -359,9 +440,10 @@ export default function ConsoleLayout({ children }) {
         <ConsoleBanner key={org?.id ?? 'no-gym'} org={org} />
 
         {/* The bar across the top, on a computer: New, for whoever may add something. */}
-        {menu && showNew ? (
+        {menu && (showNew || showBell) ? (
           <div className="c-pagebar" data-testid="console-bar">
-            <NewButton offer={offer} />
+            {showNew ? <NewButton offer={offer} /> : null}
+            {showBell ? <BellButton lines={lines} onOpen={reloadAttention} /> : null}
           </div>
         ) : null}
 
@@ -369,7 +451,9 @@ export default function ConsoleLayout({ children }) {
             the last gym's answers under the new gym's name (Kd, 2026-08-28). `screen:` keeps
             the key apart from the banner's `no-gym`. `gymSwitch.render.test.jsx` checks
             every console route is drawn inside this shell. */}
-        <Fragment key={`screen:${orgSlug ?? 'no-gym'}`}>{children}</Fragment>
+        <AttentionContext.Provider value={{ attention, counts, reload: reloadAttention }}>
+          <Fragment key={`screen:${orgSlug ?? 'no-gym'}`}>{children}</Fragment>
+        </AttentionContext.Provider>
       </main>
 
       {/* The prompt an owner cannot skip (Kd, :22215, :22697), drawn from the shell so no
@@ -398,7 +482,7 @@ export default function ConsoleLayout({ children }) {
               >
                 <span className="c-tab-icon">
                   <Icon size={22} />
-                  {reviewDot(page)}
+                  {mark(page)}
                 </span>
                 <span>{page.tabLabel ?? page.label}</span>
               </NavLink>
@@ -409,7 +493,10 @@ export default function ConsoleLayout({ children }) {
             className={`c-tab${moreOn ? ' c-tab-on' : ''}`}
             aria-current={moreOn ? 'page' : undefined}
           >
-            <Ellipsis size={22} />
+            <span className="c-tab-icon">
+              <Ellipsis size={22} />
+              {underMore !== null ? <MenuCount count={underMore} /> : null}
+            </span>
             <span>More</span>
           </Link>
         </nav>

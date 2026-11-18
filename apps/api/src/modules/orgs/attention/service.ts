@@ -52,7 +52,7 @@ export async function getAttention(deps: AttentionDeps, gymId: string, userId: s
   const members = may("members.confirm");
 
   const [chargebacks, failedPayments, paymentDue, refunds, appPayments, appCancels, newLeads, atRisk, reported] = await Promise.all([
-    may("billing.members") ? chargebacksToAnswer(deps.sql, gymId, members, now, 0, 1).then(({ count }) => ({ count })) : null,
+    may("billing.members") ? chargebacksToAnswer(deps.sql, gymId, members, now, 0, 1).then(({ count, lostCount }) => ({ count, lostCount })) : null,
     may("members.confirm", "billing.members") ? failedTotals(deps.sql, gymId) : null,
     members
       ? deps.sql.begin("isolation level repeatable read read only", async (tx) => {

@@ -1786,3 +1786,132 @@
   .c-snav a,
   .c-snav button { min-height: 44px; }
 }
+
+/* What waits (V1-d; spec Part 3 §17.11, the Overview board). A count beside a page in the menu
+   only when something waits there: red where money went wrong, gold to review, plain otherwise.
+   Each pair is one the contrast test already measures. */
+.c-count {
+  margin-left: auto;
+  flex: none;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  box-sizing: border-box;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 20px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  background: var(--raise);
+  color: var(--t1);
+}
+.c-count-bad { background: var(--bad-bg); color: var(--bad); }
+.c-count-warn { background: var(--warn-bg); color: var(--warn); }
+/* A folded group's heading carries the count of the page inside it, beside the name. */
+.c-rail-grp-name .c-count { margin-left: 0; }
+/* On a phone's tab, over the icon's corner. */
+.c-tab-icon .c-count {
+  position: absolute;
+  top: -6px;
+  right: -2px;
+  margin: 0;
+}
+
+/* The bell: round, 44 px to touch, its count over its corner in red. */
+.c-bell {
+  position: relative;
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--t2);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.c-bell:hover { color: var(--t1); }
+.c-bell:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.c-topbar .c-bell { border-color: var(--rail-line); background: transparent; color: var(--rail-t2); }
+.c-bell-pip {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  box-sizing: border-box;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  background: var(--bad);
+  color: var(--on-bad);
+}
+/* The phone's top bar: the bell and your initials together on the right. */
+.c-topbar-end {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+
+/* "Needs attention", opened under the bell. Each line: its dot, what waits and why, its money,
+   and its button. The words wrap; nothing is cut off, at any width or text size. */
+.c-attn {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  width: 100%;
+}
+.c-attn-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 8px;
+}
+.c-attn-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+  border-top: 1px solid var(--line);
+  min-width: 0;
+}
+.c-attn-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--t3);
+}
+.c-attn-dot-bad { background: var(--bad); }
+.c-attn-dot-warn { background: var(--warn); }
+.c-attn-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1 1 180px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.c-attn-end {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+  margin-left: auto;
+}
+.c-attn-none {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--good);
+}
