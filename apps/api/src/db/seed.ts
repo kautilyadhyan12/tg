@@ -16,6 +16,8 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { bundleSha256 } from "../modules/exercises/bundle.js";
 import { ACHIEVEMENTS } from "../modules/gamification/badges.js";
+import { readLibraryFolder } from "../modules/library/folder.js";
+import { publishLibrary } from "../modules/library/publish.js";
 import {
   achievements,
   definitionBundles,
@@ -225,6 +227,9 @@ export async function seed(databaseUrl: string): Promise<void> {
   const db = drizzle(client);
   try {
     await seedAll(db);
+    // The Exercise Library after the old rows, so an exercise that continues from the old 58 keeps
+    // its row (spec Part 2 §13.4, job 60b). A faulty exercise file stops the seed here, naming it.
+    await client.begin((tx) => publishLibrary(tx, readLibraryFolder()));
   } finally {
     await client.end({ timeout: 5 });
   }

@@ -1936,6 +1936,36 @@ otherwise, that plan says so and this section is amended.
   measured in job 60 and written here.
 - The old routes are left exactly as they are, with nothing added.
 
+**As built in 60b (2026-11-18).** Publishing is `apps/api/src/modules/library/publish.ts`, run by
+the seed after the old rows. The download is `GET /v1/library` (`libraryDownloadSchema` in
+`packages/shared`): the fingerprint, the copy's number and the list; a signed-out caller gets 401.
+- **Rows.** `library_exercises` holds one row for each published exercise: its status, its MET read
+  from the Compendium table, its code, reps or time, weight, each side, and its whole entry. An
+  exercise that continues from the old 58 (squat, plank) keeps its `exercises` row and id; the old
+  58 rows and their own MET are not changed (squat 6.0 there, 3.0 in the Library). Any other gets a
+  new `exercises` row with none of the old camera facts, 'hidden' to the old routes (migration
+  0243). New code reckons with the Library's MET. The old save route counts a set of such an
+  exercise as unknown, as it does any name it does not know.
+- **A deleted file.** Its Library row stays, 'hidden', while a saved set names it, and the download
+  carries its last entry so that history names it; once no set names it, the row goes. Its
+  `exercises` row stays, so its id word is never given to another exercise. "Named" means a saved
+  set today; job 61 adds its saved workouts to that check.
+- **Copies.** `library_copies` holds each copy's exact text, so the fingerprint is the text's
+  sha256. A copy is added for each of live and beta only when the text changed; beta is the
+  `beta_definitions` flag's list, and while beta has no copy a tester gets live. There is no going
+  back to an older copy (Kd, 2026-11-18: no real members yet): a mistake is fixed in the file and
+  published again. One publish runs at a time; a second waits and then finds nothing changed.
+- **Measured at 200 exercises** (2026-11-18, `apps/api/tools/measure-library.ts`, local database,
+  five runs, medians): publishing a new list of 200, 101.5 ms in all, of which 21.7 ms holds its
+  process; it runs in the seed's own process at a deploy, never in the api. The download is
+  343.5 KB as the api sends it. Compressed, the real list is 606 bytes an exercise (1,730 as sent),
+  so about 120 KB at most for 200 different exercises (the 7.2 KB the tool prints is of copies of
+  three files and too low). A download's own work in the api: 5.6 ms the first time a copy is read
+  (its fingerprint and its check), then 0.3 ms from memory.
+- **For job 63:** the phone reads `libraryDownloadSchema`, which refuses a word it does not know;
+  principle 7 asks the phone to show such a word plainly and go on, so the phone's own reading of an
+  entry is looser than the server's.
+
 ### 13.5 What a workout keeps (job 61)
 
 - **The save** is one whole workout under the id the phone made. Sent twice it is one
@@ -2038,7 +2068,7 @@ a workout that survives a dead phone; a summary set by set.
 
 ### 13.9 Not measured yet
 
-The download's size and the publish time at 200 exercises (job 60) · many saves arriving at
+The download's size and the publish time at 200 exercises (measured in 60b, §13.4) · many saves arriving at
 once (job 61; CLAUDE.md §4, "Cost at full size") · where clips are kept and what that
 costs each month (job 62, with Stage 4 item 4) · how long Kd's hand time for 200 generated
 clips is (job 62 says it before the first one).
