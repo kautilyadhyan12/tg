@@ -103,12 +103,13 @@ export function CheckSomeoneIn({ gymId, words, keepsList, timezone, clearSignal,
   const asked = useRef(0);
   const input = useRef(null);
   // New, in the bar across the top, opens here (`#check-in`): the box in view, ready to type.
-  const { hash } = useLocation();
+  // Each press is a new visit (`key`), so pressing it again on the same address works too.
+  const { hash, key: visit } = useLocation();
   useEffect(() => {
     if (hash !== '#check-in') return;
     input.current?.scrollIntoView?.({ block: 'center' });
     input.current?.focus();
-  }, [hash]);
+  }, [hash, visit]);
 
   useEffect(() => {
     const query = typed.trim();

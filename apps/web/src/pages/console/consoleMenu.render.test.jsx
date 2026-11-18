@@ -314,8 +314,8 @@ describe("the menu's groups fold, and stay as you left them on this device", () 
   const railLink = (name) => within(screen.getByTestId('console-rail')).queryByRole('link', { name });
 
   /** The console at `path`, inside the shell, as a computer opens it. */
-  async function openAt(path) {
-    orgService.getMine.mockResolvedValue({ data: { orgs: [gym('owner', [...ROLE_PRIVILEGES.owner])] } });
+  async function openAt(path, extra = {}) {
+    orgService.getMine.mockResolvedValue({ data: { orgs: [{ ...gym('owner', [...ROLE_PRIVILEGES.owner]), ...extra }] } });
     render(
       <MemoryRouter initialEntries={[path]}>
         <Routes>
@@ -348,12 +348,47 @@ describe("the menu's groups fold, and stay as you left them on this device", () 
     expect(railLink('Updates')).toBeNull();
   });
 
-  it('the page you are on is never folded away: opening it opens its group', async () => {
+  it('the page you are on is never folded away: its group shows open for this visit, and the device keeps your choice', async () => {
     window.localStorage.setItem('kwazo.console.folded', JSON.stringify(['money', 'today']));
     await openAt(`${BASE}/sell`);
     expect(heading('Money').getAttribute('aria-expanded')).toBe('true');
     expect(railLink('Sell').className).toContain('c-nav-on');
     expect(heading('Today').getAttribute('aria-expanded')).toBe('false');
+    expect(JSON.parse(window.localStorage.getItem('kwazo.console.folded'))).toEqual(['money', 'today']);
+    // Pressed, it folds again at once, and stays folded as kept.
+    fireEvent.click(heading('Money'));
+    expect(heading('Money').getAttribute('aria-expanded')).toBe('false');
+    expect(JSON.parse(window.localStorage.getItem('kwazo.console.folded'))).toEqual(['money', 'today']);
+  });
+
+  it('a group open for the page you are on, folded by you there, is kept folded', async () => {
+    await openAt(`${BASE}/sell`);
+    fireEvent.click(heading('Money'));
+    expect(heading('Money').getAttribute('aria-expanded')).toBe('false');
+    expect(JSON.parse(window.localStorage.getItem('kwazo.console.folded'))).toEqual(['money']);
+  });
+
+  it('nothing waiting is folded out of sight: Review needed moves to the heading of its folded group', async () => {
+    await openAt(`${BASE}/more`, { membersNeedReview: 2 });
+    const people = within(screen.getByTestId('console-rail')).getByRole('group', { name: /^People/ });
+    expect(within(people).getAllByTestId('review-dot')).toHaveLength(1);
+    fireEvent.click(heading(/^People/));
+    expect(railLink(/^Members & staff/)).toBeNull();
+    const dots = within(screen.getByTestId('console-rail')).getAllByTestId('review-dot').filter((d) => d.closest('[hidden]') === null);
+    expect(dots).toHaveLength(1);
+    expect(heading(/^People/).contains(dots[0])).toBe(true);
+    expect(heading(/^People/).textContent).toContain('2 members need review');
+  });
+
+  it('on Your account, your name is the lit line of the menu', async () => {
+    await openAt(`${BASE}/account`);
+    const me = screen.getByTestId('console-rail').querySelector('.c-rail-me');
+    expect(me.getAttribute('aria-current')).toBe('page');
+    expect(me.className).toContain('c-rail-me-on');
+    cleanup();
+    resetConsoleOrgs();
+    await openAt(`${BASE}/more`);
+    expect(screen.getByTestId('console-rail').querySelector('.c-rail-me').getAttribute('aria-current')).toBeNull();
   });
 
   it('a browser that keeps nothing (a private window) shows the whole menu and still folds', async () => {

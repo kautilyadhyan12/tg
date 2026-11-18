@@ -55,12 +55,13 @@ function Composer({ gymId, gymName, words, onPosted }) {
   const writeRef = useRef(null);
   const chars = charsLine(body);
   // New, in the bar across the top, opens here (`#write`): the box in view, ready to type.
-  const { hash } = useLocation();
+  // Each press is a new visit (`key`), so pressing it again on the same address works too.
+  const { hash, key: visit } = useLocation();
   useEffect(() => {
     if (hash !== '#write') return;
     writeRef.current?.scrollIntoView?.({ block: 'center' });
     writeRef.current?.focus();
-  }, [hash]);
+  }, [hash, visit]);
 
   const pick = async (files) => {
     setPreparing(true);

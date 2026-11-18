@@ -268,6 +268,12 @@
 .c-rail-grp-btn:hover {
   color: var(--rail-t1);
 }
+/* A folded group's name, and beside it the dot of a page inside it that waits. */
+.c-rail-grp-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
 .c-rail-grp-btn svg {
   flex: none;
   transition: transform 0.15s ease;
@@ -310,6 +316,12 @@
 .c-rail-me:hover,
 .c-rail-me[aria-expanded='true'] {
   background: var(--rail-hover);
+}
+/* On Your account, your name is the lit line, as that page's own line was. */
+.c-rail-me-on,
+.c-rail-me-on:hover {
+  background: var(--rail-on);
+  box-shadow: inset 0 0 0 1px var(--rail-on-line);
 }
 .c-rail-me > svg {
   flex: none;

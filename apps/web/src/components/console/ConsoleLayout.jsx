@@ -85,9 +85,11 @@ function deviceStore() {
 }
 
 /** One of the menu's five groups. Pressing its heading folds it; a folded group keeps its
- *  heading, so it is one press from open again. */
+ *  heading, so it is one press from open again, and a dot of a page inside it (Review needed
+ *  on Members) moves to the heading, so nothing waiting is folded out of sight. */
 function RailGroup({ group, folded, onToggle, dot }) {
   const listId = `rail-list-${group.key}`;
+  const waiting = folded ? (group.pages.map((page) => dot(page)).find((d) => d !== null) ?? null) : null;
   return (
     <div role="group" aria-labelledby={`rail-grp-${group.key}`} className="c-rail-group">
       <p className="c-rail-grp">
@@ -99,7 +101,10 @@ function RailGroup({ group, folded, onToggle, dot }) {
           aria-controls={listId}
           onClick={onToggle}
         >
-          <span>{group.label}</span>
+          <span className="c-rail-grp-name">
+            {group.label}
+            {waiting}
+          </span>
           <ChevronDown size={14} aria-hidden="true" />
         </button>
       </p>
@@ -114,7 +119,7 @@ function RailGroup({ group, folded, onToggle, dot }) {
 
 /** You, at the foot of the menu: your name and role. Pressing it opens Your account and Your
  *  organisations (on a business's pages) and Sign out. */
-function YouMenu({ name, role, accountTo, withOrganisations, signOut, signingOut }) {
+function YouMenu({ name, role, accountTo, onAccount, withOrganisations, signOut, signingOut }) {
   const [open, setOpen] = useState(false);
   const anchor = useRef(null);
   const close = () => setOpen(false);
@@ -123,7 +128,8 @@ function YouMenu({ name, role, accountTo, withOrganisations, signOut, signingOut
       <button
         ref={anchor}
         type="button"
-        className="c-rail-me"
+        className={`c-rail-me${onAccount ? ' c-rail-me-on' : ''}`}
+        aria-current={onAccount ? 'page' : undefined}
         aria-haspopup="dialog"
         aria-expanded={open}
         onClick={() => setOpen((was) => !was)}
@@ -234,16 +240,26 @@ export default function ConsoleLayout({ children }) {
   const offer = orgSlug ? newMenu(orgSlug, viewerPrivileges(org), org) : { items: [], note: null };
   const showNew = offer.items.length > 0 || offer.note !== null;
 
-  // The groups this person folded on this device. The page they are on is never folded away:
-  // arriving on it opens its group again.
+  // The groups this person folded on this device, kept as they left them. The page they are on
+  // is never folded away: arriving on it shows its group open for this visit only, and the
+  // device keeps their choice.
   const [folded, setFolded] = useState(() => readFolded(deviceStore()));
-  const toggleGroup = (key) => setFolded((was) => (was.includes(key) ? was.filter((k) => k !== key) : [...was, key]));
   const currentGroup = menu?.pages.find((p) => pathname === p.to || (!p.end && pathname.startsWith(`${p.to}/`)))?.group ?? null;
+  const [openNow, setOpenNow] = useState(null);
   const [groupSeen, setGroupSeen] = useState(null);
   if (currentGroup !== groupSeen) {
     setGroupSeen(currentGroup);
-    if (currentGroup !== null && folded.includes(currentGroup)) setFolded(folded.filter((k) => k !== currentGroup));
+    setOpenNow(currentGroup);
   }
+  const isFolded = (key) => folded.includes(key) && openNow !== key;
+  const toggleGroup = (key) => {
+    if (isFolded(key)) setFolded((was) => was.filter((k) => k !== key));
+    else if (folded.includes(key)) setOpenNow(null);
+    else {
+      setFolded((was) => [...was, key]);
+      if (openNow === key) setOpenNow(null);
+    }
+  };
   useEffect(() => {
     writeFolded(deviceStore(), folded);
   }, [folded]);
@@ -276,7 +292,7 @@ export default function ConsoleLayout({ children }) {
               <RailGroup
                 key={group.key}
                 group={group}
-                folded={folded.includes(group.key)}
+                folded={isFolded(group.key)}
                 onToggle={() => toggleGroup(group.key)}
                 dot={reviewDot}
               />
@@ -294,6 +310,7 @@ export default function ConsoleLayout({ children }) {
             name={name}
             role={role}
             accountTo={menu ? `/console/${orgSlug}/account` : null}
+            onAccount={menu !== null && pathname === `/console/${orgSlug}/account`}
             withOrganisations={menu !== null}
             signOut={signOut}
             signingOut={signingOut}

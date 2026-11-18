@@ -518,7 +518,7 @@ export default function Classes() {
   const [openingSeen, setOpeningSeen] = useState(null);
   if (org && opening !== openingSeen) {
     setOpeningSeen(opening);
-    if (opening === 'add' && canManageSchedule(viewerPrivileges(org)) && !consoleIsReadOnly(org)) {
+    if (opening === 'add' && !adding && canManageSchedule(viewerPrivileges(org)) && !consoleIsReadOnly(org)) {
       setAdding(true);
       setAddDraft(emptyClassDraft());
     }

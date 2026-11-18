@@ -10,15 +10,16 @@ import { canSell } from './sellView';
 import { canCheckPeopleIn } from './checkinLogView';
 import { canManagePosts } from '../../components/gym/postsView';
 import { readOnlyNote } from './billingView';
+import { keepsMemberList } from './consoleView';
 
 const SLUG = 'iron-house';
 const GYM = { orgType: 'gym', consoleReadOnly: false };
 
-/** What each page shows its own add button to: Members' and Leads' `?open=add` need the
- *  list kept (`members.confirm`); Sell, Classes, Attendance and Updates their page's rule. */
+/** What each page shows its own add button to, the rule the page itself imports: Members' and
+ *  Leads' `?open=add` need the list kept; Sell, Classes, Attendance and Updates their own. */
 const PAGE_SHOWS = {
-  addMember: (p) => p.includes('members.confirm'),
-  addLead: (p) => p.includes('members.confirm'),
+  addMember: keepsMemberList,
+  addLead: keepsMemberList,
   newSale: canSell,
   addClass: canManageSchedule,
   checkIn: canCheckPeopleIn,
@@ -63,6 +64,8 @@ describe('the worst thing: New offers only what this person may do', () => {
   it('a business that can change nothing until it has a plan offers nothing, and says why', () => {
     const lapsed = { orgType: 'pilates_studio', consoleReadOnly: true };
     expect(newMenu(SLUG, [...ROLE_PRIVILEGES.owner], lapsed)).toEqual({ items: [], note: readOnlyNote('pilates_studio') });
+    // Somebody who may add nothing anyway gets no New there either: no button only to say no.
+    expect(newMenu(SLUG, [...ROLE_PRIVILEGES.trainer], lapsed)).toEqual({ items: [], note: null });
   });
 });
 

@@ -5,7 +5,7 @@
 // checked in, and a slow answer to an older search never replaces a newer one.
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, cleanup, fireEvent, act } from '@testing-library/react';
-import { MemoryRouter, Routes, Route } from 'react-router-dom';
+import { Link, MemoryRouter, Routes, Route } from 'react-router-dom';
 
 const api = {
   getMine: vi.fn(),
@@ -853,15 +853,27 @@ describe('the day list counts somebody without the app', () => {
 
 // V1-c: New, in the bar across the top, opens Attendance on this box, ready to type.
 describe('opened from New (`#check-in`)', () => {
-  it('puts the keys in the search box', async () => {
+  it('puts the keys in the search box, and again when New is pressed again on the same address', async () => {
     render(
       <MemoryRouter initialEntries={['/console/iron-house/attendance#check-in']}>
         <Routes>
-          <Route path="/console/:orgSlug/attendance" element={<Attendance />} />
+          <Route
+            path="/console/:orgSlug/attendance"
+            element={
+              <>
+                <Attendance />
+                <Link to="/console/iron-house/attendance#check-in">New, Check in again</Link>
+              </>
+            }
+          />
         </Routes>
       </MemoryRouter>,
     );
     const box = await screen.findByLabelText('Find someone to check in');
+    await waitFor(() => expect(document.activeElement).toBe(box));
+    box.blur();
+    expect(document.activeElement).not.toBe(box);
+    fireEvent.click(screen.getByRole('link', { name: 'New, Check in again' }));
     await waitFor(() => expect(document.activeElement).toBe(box));
   });
 

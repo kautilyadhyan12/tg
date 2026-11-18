@@ -5,7 +5,7 @@
 // that says it goes for everyone — so the press is checked against the post it was made on.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { Link, MemoryRouter, Route, Routes } from 'react-router-dom';
 
 const svc = {
   list: vi.fn(),
@@ -755,16 +755,28 @@ describe('a person’s posts, opened from a name', () => {
 
 // V1-c: New, in the bar across the top, opens Updates on Write a post, ready to type.
 describe('opened from New (`#write`)', () => {
-  it('puts the keys in Write a post', async () => {
+  it('puts the keys in Write a post, and again when New is pressed again on the same address', async () => {
     orgApi.getMine.mockResolvedValue({ data: { orgs: [ORG], formerOrgs: [] } });
     render(
       <MemoryRouter initialEntries={['/console/iron-house/updates#write']}>
         <Routes>
-          <Route path="/console/:orgSlug/updates" element={<Updates />} />
+          <Route
+            path="/console/:orgSlug/updates"
+            element={
+              <>
+                <Updates />
+                <Link to="/console/iron-house/updates#write">New, New post again</Link>
+              </>
+            }
+          />
         </Routes>
       </MemoryRouter>,
     );
     await screen.findByTestId('composer');
-    await waitFor(() => expect(document.activeElement).toBe(within(screen.getByTestId('composer')).getByRole('textbox')));
+    const write = within(screen.getByTestId('composer')).getByRole('textbox');
+    await waitFor(() => expect(document.activeElement).toBe(write));
+    write.blur();
+    fireEvent.click(screen.getByRole('link', { name: 'New, New post again' }));
+    await waitFor(() => expect(document.activeElement).toBe(write));
   });
 });
