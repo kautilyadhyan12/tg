@@ -342,19 +342,21 @@ d("saving a workout from the phone (real Postgres)", () => {
       await holder`SELECT pg_advisory_xact_lock(hashtext('library:publish'))`;
       const pid = (await holder<{ pid: number }[]>`SELECT pg_backend_pid() AS pid`)[0]?.pid ?? 0;
       let done = false;
+      // Read through a function: TypeScript cannot see the callback set it, and would call the flag always false.
+      const isDone = (): boolean => done;
       const pending = save(await person(), workout()).finally(() => {
         done = true;
       });
       try {
         let waiting = 0;
-        for (let i = 0; i < 100 && waiting === 0 && !done; i++) {
+        for (let i = 0; i < 100 && waiting === 0 && !isDone(); i++) {
           waiting = (await sql<{ n: number }[]>`
             SELECT count(*)::int AS n FROM pg_stat_activity
             WHERE wait_event_type = 'Lock' AND wait_event = 'advisory' AND ${pid} = ANY(pg_blocking_pids(pid))`)[0]?.n ?? 0;
-          if (waiting === 0 && !done) await new Promise((r) => setTimeout(r, 100));
+          if (waiting === 0 && !isDone()) await new Promise((r) => setTimeout(r, 100));
         }
         expect(waiting).toBe(1);
-        expect(done).toBe(false);
+        expect(isDone()).toBe(false);
       } finally {
         await holder`COMMIT`;
         holder.release();

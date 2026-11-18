@@ -1954,9 +1954,10 @@ the seed after the old rows. The download is `GET /v1/library` (`libraryDownload
   still name it. Otherwise it is 'removed': out of the download, its entry kept. Every publish asks
   again about every gone row, so a set that arrives later brings it back as 'hidden'. Its
   `exercises` row stays, so its id word is never given to another exercise. "Named" means a saved
-  set today; job 61 adds its saved workouts to that check, counts a 'removed' exercise as unknown,
-  and takes the publish lock shared while it saves, so no set lands between a publish's question
-  and its answer.
+  set today; job 61 adds its saved workouts to that check and takes the publish lock shared while it
+  saves, so no set lands between a publish's question and its answer. A save that names a 'removed'
+  exercise is kept (61a, round one): the phone did that workout before the file was deleted, and the
+  next publish finds the set and brings the exercise back as 'hidden'.
 - **Copies.** `library_copies` holds each copy's exact text, so the fingerprint is the text's
   sha256. A copy is added for each of live and beta only when the text changed; beta is the
   `beta_definitions` flag's list, the one rule the old definitions use too, and while beta has no
@@ -2009,8 +2010,8 @@ the seed after the old rows. The download is `GET /v1/library` (`libraryDownload
 
 **As built in 61a (2026-11-18).** The save is `POST /v1/workouts` (`workoutSaveSchema` in
 `packages/shared`, `apps/api/src/modules/training/`); its Idempotency-Key is the workout's id.
-- **Answers:** 201 saved · 200 saved already · 400 a broken phone, naming its fields and never its
-  values · 404 somebody else's id · 422 `unknown_exercise` with the id words · 429 past ten a minute
+- **Answers:** 201 saved · 200 saved already · 400 a broken phone (a NUL character included), naming
+  its fields and never its values · 404 somebody else's id · 422 `unknown_exercise` with the id words · 429 past ten a minute
   for the person (never counted by address).
 - **Kept** (migration 0244, new columns on `workouts` and `workout_sets`, empty on every old row): the
   name, end, time zone, what it was started from, the effort stars, the heart rate's average and
@@ -2018,10 +2019,16 @@ the seed after the old rows. The download is `GET /v1/library` (`libraryDownload
   after it and how it was counted. Reps done stay in `reps` and time done in `hold_ms`; a set by hand
   or timer is `log_only`; `engine_version` is the app's version, as the old route's means. Counted by
   camera is refused until job 64b adds it with the set's summary.
-- **Known exercise:** a Library row that is live, retired or hidden; a removed one is unknown. The save
-  holds the publish lock shared, so no set lands between a publish's question and its answer. An id
-  already the person's is answered "duplicate" before the exercises are asked about, so a saved workout
-  sent again is never refused later.
+- **Known exercise:** any exercise with a Library row, a removed one included (the next publish brings
+  it back as 'hidden'); only an id word the Library never had is refused. The save holds the publish
+  lock shared, so no set lands between a publish's question and its answer. Once its fields pass the
+  shared schema, an id already the person's is answered "duplicate" before anything else is asked (its
+  time zone, its end, its exercises), so a saved workout sent again is never refused later.
+- **A set is kept in its own unit and weight**, as the phone's list had them, whatever the Library
+  says when it arrives: refusing it would leave a finished workout that can never be saved after a
+  Library edit. Job 61b's records read each set by its own unit.
+- **Time zone:** kept by its own name in the server's time zone list ("asia/kolkata" is kept as Asia/
+  Calcutta); an offset such as +05:30 is refused, since Postgres reads it with the opposite sign.
 - **Limits:** 200 sets; 1,000 reps; four hours a set; 1,000 kg; an hour's rest; 12 hours a workout; its
   sets and rests within its length, with a second a set of slack; a time done no more than a second
   past its set; an end no more than five minutes past the server's clock. The phone measures the
