@@ -173,6 +173,19 @@ describe('the list keeps every control', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 
+  it("the bell's New leads opens the list already on New (`?status=new`); a word that is no status is All", async () => {
+    draw('/console/iron-house/leads?status=new');
+    await screen.findAllByTestId('lead-row');
+    expect(api.getLeads).toHaveBeenLastCalledWith('g1', 'status=new');
+    expect(button('New 1').getAttribute('aria-pressed')).toBe('true');
+    cleanup();
+    api.getLeads.mockClear();
+    draw('/console/iron-house/leads?status=everyone');
+    await screen.findAllByTestId('lead-row');
+    expect(api.getLeads).toHaveBeenLastCalledWith('g1', '');
+    expect(button('All 2').getAttribute('aria-pressed')).toBe('true');
+  });
+
   it('a search says how many match; a status chip asks the server for that status', async () => {
     draw();
     await screen.findAllByTestId('lead-row');

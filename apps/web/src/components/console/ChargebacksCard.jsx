@@ -102,7 +102,7 @@ export default function ChargebacksCard({ org, orgSlug, privileges, readOnly }) 
 
   return (
     <ConsoleCard>
-      <section data-testid="chargebacks" aria-label="Chargebacks" className="flex flex-col gap-1">
+      <section id="chargebacks" data-testid="chargebacks" aria-label="Chargebacks" className="flex flex-col gap-1">
         <div className="text-xs uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.35)' }}>
           Chargebacks
         </div>

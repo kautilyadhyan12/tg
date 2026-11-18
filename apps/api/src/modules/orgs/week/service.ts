@@ -6,12 +6,13 @@
 //   at risk        At risk      `members.read`
 //   visits         Attendance   `attendance.read`
 //   payment due    Members      `members.confirm`
-import type { Sql } from "postgres";
+import type { Sql, TransactionSql } from "postgres";
 import { HELD_PAYMENT_WORDS, gymWeekCanCompare, gymWeekResponseSchema, gymWeekWindow, heldListWords, type GymWeek, type GymWeekResponse, type OrgPrivilege } from "@app/shared";
 import { dayInTz } from "../../gamification/streak.js";
 import { countAtRisk } from "../atRisk/service.js";
 import { pastOwing } from "../memberships/billsSql.js";
 import { heldAndOverIn } from "../memberships/over.js";
+import type { HeldShown } from "../memberships/onList.js";
 import { requireStaff } from "../service.js";
 import * as repo from "./repo.js";
 
@@ -29,6 +30,21 @@ export interface WeekReader {
 export async function requireWeekReader(deps: WeekDeps, userId: string, gymId: string): Promise<WeekReader> {
   const { org, privileges } = await requireStaff(deps, gymId, userId);
   return { timezone: org.timezone, privileges };
+}
+
+/** Today's "Payment due": `count`, the people the Members list reads as "Payment due";
+ *  `past`, the past members who still owe. Null where the app cannot say: the gym bills
+ *  nobody here, or its own list names people the app does not bill with a payment word.
+ *  Overview's box and the bell (`attention/service.ts`) both read it here. */
+export async function paymentDueIn(tx: TransactionSql, gymId: string, today: string, held: Map<string, HeldShown>): Promise<{ count: number; past: number } | null> {
+  const answered = [...held.values()].filter(({ shown }) => heldListWords(shown).payment === HELD_PAYMENT_WORDS.due).length;
+  const own = await repo.readPaymentDue(tx, gymId, [...held.keys()]);
+  // The past members who still owe: the Members list's Past members chip.
+  const past = (await pastOwing(tx, gymId, today)).length;
+  const count = answered + own.ownWord;
+  // Somebody owing is always said. "Nobody" is said only where the app knows: the
+  // gym bills here, and its own list gives nobody it does not bill a payment word.
+  return count + past > 0 || (own.anyBill && own.otherWords === 0) ? { count, past } : null;
 }
 
 /** The box, for a gym whose reader has been checked. */
@@ -51,16 +67,7 @@ export async function getWeek(deps: WeekDeps, gymId: string, reader: WeekReader)
         // new members (Reports' rule for its first month).
         if (members !== null && members.firstListedOn < window.from) week.members = { joined: members.joined, left: members.left };
       }
-      if (may("members.confirm")) {
-        const answered = [...held.values()].filter(({ shown }) => heldListWords(shown).payment === HELD_PAYMENT_WORDS.due).length;
-        const own = await repo.readPaymentDue(tx, gymId, [...held.keys()]);
-        // The past members who still owe: the Members list's Past members chip.
-        const past = (await pastOwing(tx, gymId, today)).length;
-        const count = answered + own.ownWord;
-        // Somebody owing is always said. "Nobody" is said only where the app knows: the
-        // gym bills here, and its own list gives nobody it does not bill a payment word.
-        if (count + past > 0 || (own.anyBill && own.otherWords === 0)) week.paymentDue = { count, past };
-      }
+      if (may("members.confirm")) week.paymentDue = await paymentDueIn(tx, gymId, today, held);
     });
   }
 

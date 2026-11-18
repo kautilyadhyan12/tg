@@ -15,7 +15,7 @@ export const FAILED_NO_SQUARE = "Cards on file are charged through Square. Conne
 export const FAILED_NO_SQUARE_STAFF = 'Cards on file are charged through Square. The owner can connect Square in Settings.';
 
 /** "$75.00", or "$75.00 + £20.00" where a gym's bills are in more than one currency. */
-function totalWords(totals) {
+export function totalWords(totals) {
   return totals.map((t) => formatMinor(t.minor, t.currency)).join(' + ');
 }
 

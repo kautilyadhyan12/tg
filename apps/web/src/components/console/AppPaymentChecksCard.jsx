@@ -107,7 +107,7 @@ export default function AppPaymentChecksCard({ org, privileges, readOnly }) {
 
   return (
     <ConsoleCard>
-      <section data-testid="app-payment-checks" aria-label={APP_PAYMENT_CHECKS_WORDS.title} className="flex flex-col gap-1">
+      <section id="app-payment-checks" data-testid="app-payment-checks" aria-label={APP_PAYMENT_CHECKS_WORDS.title} className="flex flex-col gap-1">
         <div className="text-xs uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.35)' }}>
           {APP_PAYMENT_CHECKS_WORDS.title}
         </div>

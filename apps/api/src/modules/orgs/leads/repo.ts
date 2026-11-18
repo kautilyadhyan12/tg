@@ -116,6 +116,12 @@ export async function countPageNewLeads(tx: TransactionSql, gymId: string): Prom
   return rows[0]?.n ?? 0;
 }
 
+/** The leads whose status is New, as the Leads page's New count reads them (`leadCounts`). */
+export async function countNewLeads(sql: SqlOrTx, gymId: string): Promise<number> {
+  const rows = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM gym_leads WHERE gym_id = ${gymId} AND status = 'new'`;
+  return rows[0]?.n ?? 0;
+}
+
 /** Another lead of this gym with this email or phone. */
 export async function leadHolding(
   sql: SqlOrTx,

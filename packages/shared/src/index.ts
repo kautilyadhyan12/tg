@@ -108,6 +108,7 @@ export * from "./referrals.js";
 export * from "./friendGift.js";
 export * from "./memberGift.js";
 export * from "./gymWeek.js";
+export * from "./attention.js";
 export * from "./gymMessageSettings.js";
 export * from "./gymContact.js";
 export * from "./gymInboxWords.js";
