@@ -90,6 +90,8 @@ export const DASHBOARD_READS = {
   /** The Recommended box's gyms and the plans they gave (31g). */
   gymPlans: MY_GYM_MEAL_PLANS_PATH,
 } as const;
+/** The top picture's shape: 700 wide, 900 tall. */
+const TOP_TALL = 900 / 700;
 /** Your Rank's: which gym. The Gym tab reads the same. */
 const PLACES_READ = "/v1/orgs/mine";
 
@@ -153,14 +155,16 @@ export function DashboardScreen() {
     <Page
       top={
         <PictureTop
-          picture="cave"
-          // The picture's own shape, so none of it is cut; its fire is not dimmed.
-          tall={1}
+          picture="studio"
+          // The picture's own shape, so none of it is cut; its light is not dimmed.
+          tall={TOP_TALL}
           fade="light"
           above={
             <View style={styles.hello}>
-              <Txt kind="small">{greetingAt(now.getHours())}</Txt>
-              <Txt kind="h1" numberOfLines={1} style={styles.name}>
+              <Txt kind="small" colour="text" style={styles.onPicture}>
+                {greetingAt(now.getHours())}
+              </Txt>
+              <Txt kind="h1" numberOfLines={1} style={[styles.name, styles.onPicture]}>
                 {state.kind === "in" ? state.user.displayName : ""}
               </Txt>
             </View>
@@ -723,6 +727,8 @@ const styles = StyleSheet.create({
   semibold: { fontFamily: fonts.semibold },
   hello: { alignItems: "flex-start" },
   name: { alignSelf: "stretch" },
+  // The greeting lies on a bright picture.
+  onPicture: { textShadowColor: colours.wordShadow, textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 8 },
   // A little lower than the picture's own foot, on the ground under the figures (Kd).
   footDrop: { transform: [{ translateY: 12 }] },
   // A title too long for its box goes onto a second line, never past the box's edge (an opened folding phone).

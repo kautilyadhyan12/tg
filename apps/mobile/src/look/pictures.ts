@@ -1,6 +1,7 @@
 // The member web's own pictures, made small (spec Part 6 §16.3a): 900 pixels on the
 // long side, WebP. Made by docs/design/phone/compact.py; never the web's full-size files.
-// `cave` is Kd's "prehistoric-cave-brightened" (2026-10-28), its fire made to glow, for the Dashboard's top.
+// `cave` is Kd's "prehistoric-cave-brightened" (2026-10-28), its fire made to glow: a person's page in a gym.
+// `studio` is Kd's "Painterly multi-level fitness studio" (2026-11-19), whole, for the Dashboard's top.
 // `motivation` is Kd's "Glowing spear ring and lone warrior" (2026-10-28), darkened for the clock.
 // `goals` and `goalsbox` are Kd's own drawing (2026-10-27), made dark by reviews/pics31b.py.
 // `signin` is Kd's "Neon Fitness Crew Sticker Poster" (12e, 2026-11-08), made tall for a phone by ChatGPT; its plain
@@ -69,6 +70,7 @@ import setup from "../../assets/pictures/setup.webp";
 import signin from "../../assets/pictures/signin.webp";
 import squat from "../../assets/pictures/squat.webp";
 import steps from "../../assets/pictures/steps.webp";
+import studio from "../../assets/pictures/studio.webp";
 import texcarbs from "../../assets/pictures/texcarbs.webp";
 import texfat from "../../assets/pictures/texfat.webp";
 import texprotein from "../../assets/pictures/texprotein.webp";
@@ -133,6 +135,7 @@ export const pictures = {
   signin,
   squat,
   steps,
+  studio,
   texcarbs,
   texfat,
   texprotein,
