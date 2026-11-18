@@ -54,6 +54,7 @@ import {
   type MemberListEntriesPage,
   type MemberListEntriesQuery,
   type MemberListFilter,
+  type ConsoleSearchMember,
   type MemberListGuard,
   type MemberListHandEdits,
   type MemberListImportNumbers,
@@ -1811,6 +1812,62 @@ export async function readEntries(
       staff: seesStaff ? (staffByRecord.get(entry.entryId) ?? null) : null,
     })),
     cursor: last === undefined ? null : encodeEntryCursor({ name: last.fullName, id: last.entryId }),
+  };
+}
+
+/** THE CONSOLE'S SEARCH (V1-e-ii): the first `max` people the Members list's own search finds
+ *  for `typed`, current and past members alike, each with the words its row says. The caller
+ *  has already checked `members.confirm` and spent its limit; `seesBills` is its
+ *  `billing.members`, as the list's own Overdue is. One more is read than is shown, to say
+ *  whether there are more. */
+export async function searchEntries(
+  deps: MemberListDeps,
+  userId: string,
+  gymId: string,
+  timezone: string,
+  typed: string,
+  max: number,
+  seesBills: boolean,
+): Promise<{ people: ConsoleSearchMember[]; more: boolean }> {
+  const { input } = await entriesFilter(deps, gymId, { query: typed, records: "all" }, userId);
+  const page = await repo.entriesPage(deps.sql, { ...input, cursor: null, limit: max + 1 });
+  const shown = page.entries.slice(0, max);
+  const today = dayInTz(deps.now(), timezone);
+  const [held, pastBills, overdueAfterDays] = await Promise.all([
+    heldWithOwedOf(
+      deps.sql,
+      gymId,
+      today,
+      shown.flatMap((entry) => (entry.formerAt === null ? [entry.entryId] : [])),
+    ),
+    listBillFacts(
+      deps.sql,
+      gymId,
+      today,
+      shown.flatMap((entry) => (entry.formerAt === null ? [] : [entry.entryId])),
+    ),
+    seesBills ? overdueDaysOf(deps.sql, gymId) : null,
+  ]);
+  return {
+    people: shown.map((entry) => {
+      const owedSince = (entry.formerAt === null ? held.owedSince : pastBills.owedSince).get(entry.entryId) ?? null;
+      const shownHeld = held.held.get(entry.entryId)?.shown ?? null;
+      return {
+        entryId: entry.entryId,
+        fullName: entry.fullName,
+        email: entry.email,
+        phone: entry.phone,
+        memberNumber: entry.memberNumber,
+        status: entry.status,
+        membershipType: entry.membershipType,
+        paymentStatus: entry.paymentStatus,
+        held: shownHeld,
+        owedSince: entry.formerAt === null ? null : owedSince,
+        overdue: rowSaysOverdue({ shown: shownHeld, former: entry.formerAt !== null, owedSince, today, overdueAfterDays }),
+        formerAt: entry.formerAt?.toISOString() ?? null,
+      };
+    }),
+    more: page.entries.length > max,
   };
 }
 

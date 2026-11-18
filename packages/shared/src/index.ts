@@ -143,3 +143,4 @@ export * from "./appMinutes.js";
 export * from "./admin.js";
 export * from "./legal.js";
 export * from "./deleteAccountPage.js";
+export * from "./consoleSearch.js";
