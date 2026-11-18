@@ -809,7 +809,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
     - 51a. [x] **The phone plays the videos** — merged 2026-11-18 (PR #578).
     - 51b. **The main chip with more cores, then the live camera for 20 minutes** (after 51a, in the order of the advice of 2026-11-18, `handoff/2026-11-17-51a.md`; split 2026-11-18 in two, since the live runs' candidates come from the first):
         - 51b-i. [x] **The main chip on more cores, on the cable** — merged 2026-11-18 (PR #581).
-        - 51b-ii. [ ] **The selfie camera for 20 minutes** (after 51b-i): asked for one person, the three candidates 51b-i found (full on the main chip on 4 cores, full on the graphics chip, lite on the main chip on 4 cores), speed, heat, battery and memory, off the cable; the model and chip picked by the ladder in the handoff; nothing chosen that only Android can do (an iPhone gets its own exact test).
+        - 51b-ii. [x] **The selfie camera for 20 minutes** — merged 2026-11-18 (PR #585).
     - 51c. [ ] **The kept videos measured again with the chosen model, asked for one person** (after 51b, before 52a; no phone): the six kept files made again, and 50c's fitted numbers (the bones, the steady points, the agreement limits, the floor) set again from them; asked for one person the library follows whichever body it finds first, so the two bench videos (a reflection, the man found twice) are looked at, drawn, before any number is set from them.
 52. **The movement engine** (§12; it replaces "the engine's missing parts").
     - 52a. [ ] **The movement matcher and the proof table** (§12.3, §12.5): a movement as data, numbers set from all the people but one and tested on the one left out, every other movement's video counting 0, each video replayed the ways the world changes it, among them each reading leaned and shaken by the largest gap measured on a chip the app allows (51b), which decides whether a graphics chip counts the same; the phone's own runs judged by the laptop's count, reasons and lines, never by its numbers; the squat movement made fresh as the first proof. It needs 3 to 5 squat videos of different people from Kd.
@@ -827,7 +827,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
     - 60b. [x] **The list on the server** — merged 2026-11-18 (PR #579).
 61. **What a workout keeps** (§13.5; after 60). Split by its terminal into three, each a terminal of its own.
     - 61a. [x] **Saving a whole workout from the phone** — merged 2026-11-18 (PR #582).
-    - 61b. [ ] **History and records for each exercise** (after 61a): a month, a day's workouts, one workout set by set; heaviest, most reps, best estimated one-rep max, longest hold, most lifted, and "New record".
+    - 61b. [x] **History and records for each exercise** — merged 2026-11-18 (PR #586).
     - 61c. [ ] **Saved workouts** (after 61a): one shape for a planned workout; list, save and delete, with a limit for each person; a saved workout names its exercises, so a publish keeps them.
 62. [ ] **The clip line** (after 60): the generated clip made small, its still picture, and where clips are kept (Stage 4 item 4). Checking a clip against its exercise's rules waits for exercise folder 1's 52a and 52b.
 63. [ ] **The Exercise Library on the phone** (§13.6; after 60): the list kept on the phone, search, filters by muscle, equipment, level and how it is counted, and an exercise's page.

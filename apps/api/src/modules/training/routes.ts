@@ -1,4 +1,5 @@
-// POST /v1/workouts: one whole workout from the phone (spec Part 2 §13.5, job 61a). Route order:
+// POST /v1/workouts: one whole workout from the phone (spec Part 2 §13.5, job 61a); and the reads of a
+// person's history and records (job 61b), further down. Save route order:
 // authenticate → the person's own rate limit → parse → handler. Its id is its Idempotency-Key, as a
 // run's is. The old save route, POST /v1/workouts/sync, stays as it is for the web's old pages.
 //
@@ -6,7 +7,16 @@
 // somebody else's id · 422 an exercise the Library does not know, with their id words.
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { Sql } from "postgres";
-import { WORKOUT_SAVE_LIMITS, workoutSaveSchema, type WorkoutSaveRefusal } from "@app/shared";
+import {
+  WORKOUT_SAVE_LIMITS,
+  exerciseIdSchema,
+  historyDaySchema,
+  historyMonthQuerySchema,
+  workoutSaveSchema,
+  type WorkoutSaveRefusal,
+} from "@app/shared";
+import { z } from "zod";
+import { historyDay, historyMonth, historyWorkout, recordsOf } from "./history.js";
 import type { RedisLike } from "../../redis.js";
 import { createDualRateLimit } from "../auth/rateLimit.js";
 import { tellMembersLeaderboards, type LiveNewsSender } from "../live/news.js";
@@ -68,4 +78,52 @@ export function registerTrainingRoutes(
       }
     },
   );
+
+  // ── history and records (job 61b): reads of the person's own workouts. Route order: authenticate →
+  // the person's own read limit → parse → handler. A workout that is not theirs is the same 404 as one
+  // that does not exist, and so is an exercise the server never had.
+  const readLimit = createDualRateLimit({
+    name: "training_read",
+    max: 120,
+    ipMax: null,
+    windowMs: 60 * 1000,
+    identifier: (req) => req.authUser?.id ?? null,
+    redis: deps.redis,
+  });
+  const readDeps = { sql: deps.sql, redis: deps.redis };
+  const owner = (req: FastifyRequest): string => {
+    const userId = req.authUser?.id;
+    if (userId === undefined) throw new Error("authenticate did not run");
+    return userId;
+  };
+  const notFound = (req: FastifyRequest, reply: FastifyReply, what: string) =>
+    reply.status(404).send({ error: "not_found", message: `${what} not found`, requestId: req.id });
+  const issues = (e: z.ZodError) => e.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ");
+
+  app.get("/v1/training/month", { onRequest: [app.authenticate, readLimit] }, async (req, reply) => {
+    const parsed = historyMonthQuerySchema.safeParse(req.query);
+    if (!parsed.success) return validationError(req, reply, issues(parsed.error));
+    return reply.status(200).send(await historyMonth(readDeps, owner(req), parsed.data.month));
+  });
+
+  app.get<{ Params: { day: string } }>("/v1/training/days/:day", { onRequest: [app.authenticate, readLimit] }, async (req, reply) => {
+    const parsed = historyDaySchema.safeParse(req.params.day);
+    if (!parsed.success) return validationError(req, reply, `day: ${issues(parsed.error)}`);
+    return reply.status(200).send(await historyDay(readDeps, owner(req), parsed.data));
+  });
+
+  app.get<{ Params: { id: string } }>("/v1/training/workouts/:id", { onRequest: [app.authenticate, readLimit] }, async (req, reply) => {
+    // A broken id reads as absent: the same 404 as somebody else's.
+    const parsed = z.uuid().safeParse(req.params.id);
+    if (!parsed.success) return notFound(req, reply, "workout");
+    const found = await historyWorkout(readDeps, owner(req), parsed.data);
+    return found === null ? notFound(req, reply, "workout") : reply.status(200).send(found);
+  });
+
+  app.get<{ Params: { exercise: string } }>("/v1/training/exercises/:exercise/records", { onRequest: [app.authenticate, readLimit] }, async (req, reply) => {
+    const parsed = exerciseIdSchema.safeParse(req.params.exercise);
+    if (!parsed.success) return notFound(req, reply, "exercise");
+    const found = await recordsOf(readDeps, owner(req), parsed.data);
+    return found === null ? notFound(req, reply, "exercise") : reply.status(200).send(found);
+  });
 }

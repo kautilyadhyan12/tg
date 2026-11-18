@@ -49,13 +49,13 @@ private const val BATCH = 8
 /** The plan this copy reads: version 2 names each run's cores (51b). */
 private const val PLAN_VERSION = 2
 private const val MAX_THREADS = 8
-private val PLAIN = Regex("^[A-Za-z0-9_-]{1,80}$")
-private val HEX = Regex("^[0-9a-f]{64}$")
+internal val PLAIN = Regex("^[A-Za-z0-9_-]{1,80}$")
+internal val HEX = Regex("^[0-9a-f]{64}$")
 
 private class Frame(val i: Int, val t: Double, val ts: Long)
 /** A video, or (fromLaptop) the folder of the laptop's own decoded pictures of it. */
 private class Video(val label: String, val file: File, val sha256: String, val frames: List<Frame>, val fromLaptop: Boolean)
-private class Model(val name: String, val file: File, val sha256: String)
+internal class Model(val name: String, val file: File, val sha256: String)
 /** threads: the main chip's cores, or null for the library's own number. */
 private class Run(val model: Model, val delegate: String, val threads: Int?)
 private class Plan(
@@ -367,7 +367,7 @@ internal class PhoneTest private constructor(private val context: Context) {
           .put("model", phoneWords(Build.MODEL))
           .put("android", phoneWords(Build.VERSION.RELEASE))
           .put("sdk", Build.VERSION.SDK_INT)
-          .put("abi", Build.SUPPORTED_ABIS.firstOrNull()?.takeIf { PLAIN.matches(it) } ?: "unknown"),
+          .put("abi", phoneAbi()),
       )
       .put("library", LIBRARY)
       .put("createMs", createMs)
@@ -451,43 +451,47 @@ internal class PhoneTest private constructor(private val context: Context) {
     check(part.renameTo(File(root, "progress.json"))) { "The phone could not write where the test is." }
   }
 
-  /** Android's thermal status and the battery's temperature. */
-  private fun heat(): JSONObject {
-    val power = context.getSystemService(Context.POWER_SERVICE) as PowerManager
-    val thermal = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) power.currentThermalStatus else -1
-    val battery = context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
-    val tenths = battery?.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, Int.MIN_VALUE) ?: Int.MIN_VALUE
-    val celsius: Any = if (tenths == Int.MIN_VALUE) JSONObject.NULL else tenths / 10.0
-    return JSONObject().put("thermal", thermal).put("batteryC", celsius)
-  }
-
-  /** One check sum over the files one after another, as the laptop makes it. */
-  private fun sha256(files: List<File>): String {
-    val digest = MessageDigest.getInstance("SHA-256")
-    val buffer = ByteArray(1 shl 16)
-    for (file in files) {
-      FileInputStream(file).use { input ->
-        while (true) {
-          val n = input.read(buffer)
-          if (n < 0) break
-          digest.update(buffer, 0, n)
-        }
-      }
-    }
-    return digest.digest().joinToString("") { "%02x".format(it.toInt() and 0xff) }
-  }
+  private fun heat(): JSONObject = phoneHeat(context)
 
   private fun since(started: Long): Double = (SystemClock.elapsedRealtimeNanos() - started) / 1_000_000.0
 }
 
+/** Android's thermal status and the battery's temperature. */
+internal fun phoneHeat(context: Context): JSONObject {
+  val power = context.getSystemService(Context.POWER_SERVICE) as PowerManager
+  val thermal = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) power.currentThermalStatus else -1
+  val battery = context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+  val tenths = battery?.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, Int.MIN_VALUE) ?: Int.MIN_VALUE
+  val celsius: Any = if (tenths == Int.MIN_VALUE) JSONObject.NULL else tenths / 10.0
+  return JSONObject().put("thermal", thermal).put("batteryC", celsius)
+}
+
+/** One check sum over the files one after another, as the laptop makes it. */
+internal fun sha256(files: List<File>): String {
+  val digest = MessageDigest.getInstance("SHA-256")
+  val buffer = ByteArray(1 shl 16)
+  for (file in files) {
+    FileInputStream(file).use { input ->
+      while (true) {
+        val n = input.read(buffer)
+        if (n < 0) break
+        digest.update(buffer, 0, n)
+      }
+    }
+  }
+  return digest.digest().joinToString("") { "%02x".format(it.toInt() and 0xff) }
+}
+
+internal fun phoneAbi(): String = Build.SUPPORTED_ABIS.firstOrNull()?.takeIf { PLAIN.matches(it) } ?: "unknown"
+
 /** A phone's own name in plain characters only, as the laptop reads it. */
-private fun phoneWords(text: String?): String {
+internal fun phoneWords(text: String?): String {
   val plain = (text ?: "").replace(Regex("[^A-Za-z0-9 _.,:()+/-]"), "_").take(80)
   return plain.ifBlank { "unknown" }
 }
 
 /** What went wrong, in one plain line the laptop can show. */
-private fun words(e: Throwable): String {
+internal fun words(e: Throwable): String {
   val said = e.message?.takeIf { it.isNotBlank() } ?: e.javaClass.simpleName
   return said.replace(Regex("[^\\x20-\\x7E]"), " ").take(300)
 }

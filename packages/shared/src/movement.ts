@@ -200,6 +200,128 @@ export const phoneProgressSchema = z
   })
   .strict();
 
+// ── The live camera (ROADMAP Stage 5 item 51b-ii) ────────────────────────────────────
+// The same copy's live screen (`PhoneTestLive.kt`) reads the phone's own camera, as the camera screen will, and writes
+// one file a run: a header line, then, for a 20-minute run, one line a second and one a minute, or, for a still body's
+// ten seconds, one line a picture with its points; then an end line. No picture is ever written.
+
+export const PHONE_LIVE_CAMERAS = ["selfie", "back"] as const;
+const percent = z.number().int().min(0).max(100);
+
+/** The battery as Android gives it: its charge left (null when it cannot say), whether a charger is in, and whether
+ *  the battery saver is on (it slows the phone). */
+export const phoneBatterySchema = z.object({ percent: percent.nullable(), plugged: z.boolean(), saver: z.boolean() }).strict();
+
+export const phoneLiveHeaderSchema = z
+  .object({
+    kind: z.literal("phone-live"),
+    version: z.literal(1),
+    plan: sha256,
+    /** A still body's ten seconds, or a 20-minute run; and its place in the plan's list of that part, from 0. */
+    part: z.enum(["still", "live"]),
+    step: z.number().int().nonnegative().max(20),
+    camera: z.enum(PHONE_LIVE_CAMERAS),
+    /** The pictures the model is given, turned upright as a person sees them. */
+    picture: z.object({ width: pixels, height: pixels }).strict(),
+    model: z
+      .object({
+        file: plainName,
+        sha256,
+        people: z.number().int().min(1).max(MAX_PEOPLE),
+        minDetection: share,
+        minPresence: share,
+        minTracking: share,
+      })
+      .strict(),
+    delegate: z.enum(PHONE_TEST_DELEGATES),
+    threads,
+    phone: z.object({ maker: phoneWords, model: phoneWords, android: phoneWords, sdk: z.number().int().min(1).max(1000), abi: plainName }).strict(),
+    library: phoneWords,
+    createMs: milliseconds,
+    heat: phoneHeatSchema,
+    battery: phoneBatterySchema,
+  })
+  .strict();
+
+/** Answers to the camera's pictures of one second that may land in the next. */
+export const PHONE_LIVE_LATE_ANSWERS = 5;
+
+/** One second of a 20-minute run, counted from the model's first answer. */
+export const phoneLiveSecondSchema = z
+  .object({
+    kind: z.literal("second"),
+    s: count,
+    /** The second's real length. */
+    wallMs: milliseconds,
+    /** Pictures the camera gave, answers the model gave (it drops a picture while it is busy, as the library's live
+     *  mode does), and of those, answers that found a person. */
+    camera: count,
+    read: count,
+    found: count,
+    /** From a picture's arrival to the model's answer for it, the middle and the longest; null with no answer. */
+    waitMs: z.object({ middle: milliseconds, most: milliseconds }).strict().nullable(),
+    /** The whole app's time on the cores in that second: the camera, the drawing and the model. */
+    cpuMs: milliseconds,
+    plugged: z.boolean(),
+  })
+  .strict()
+  // Answers that found a body are some of the answers; answers are to the camera's pictures, give or take a few that
+  // land in the next second (at most 2 in the 3,600 seconds of 2026-11-18).
+  .refine((s) => s.found <= s.read && s.read <= s.camera + PHONE_LIVE_LATE_ANSWERS, { message: "a second's counts do not add up" });
+
+/** The phone at the end of each minute of a 20-minute run. */
+export const phoneLiveMinuteSchema = z
+  .object({
+    kind: z.literal("minute"),
+    m: z.number().int().min(1).max(60),
+    heat: phoneHeatSchema,
+    battery: phoneBatterySchema,
+    /** The battery's charge left in µAh, finer than its percent, when the phone can say. */
+    chargeUah: z.number().int().nonnegative().max(100_000_000).nullable(),
+    /** The app's own memory, the phone's free memory, and whether Android says memory is low. */
+    memory: z.object({ appMb: z.number().nonnegative().max(65_536), freeMb: z.number().nonnegative().max(65_536), low: z.boolean() }).strict(),
+  })
+  .strict();
+
+/** One answer of a still body's ten seconds: the points, as the phone test's frames hold them. */
+export const phoneLiveFrameSchema = z
+  .object({
+    kind: z.literal("frame"),
+    /** From the first answer, in milliseconds. */
+    t: z.number().nonnegative().max(3_600_000),
+    people: z.array(seenPersonSchema).max(MAX_PEOPLE),
+  })
+  .strict();
+
+export const phoneLiveEndSchema = z
+  .object({
+    kind: z.literal("end"),
+    seconds: count,
+    wallMs: milliseconds,
+    heat: phoneHeatSchema,
+    battery: phoneBatterySchema,
+    /** Why the run stopped before its time, in the phone's words; null when it ran its whole time. */
+    stopped: z.string().max(400).nullable(),
+  })
+  .strict();
+
+/** A run that could not start (the camera or the model), and why. */
+export const phoneLiveFailedSchema = z
+  .object({ kind: z.literal("failed"), plan: sha256, part: z.enum(["still", "live"]), step: z.number().int().nonnegative().max(20), reason: z.string().max(400) })
+  .strict();
+
+/** Where the live test is, read by the laptop while the phone is on its cable. */
+export const phoneLiveProgressSchema = z
+  .object({
+    stage: z.enum(["starting", "still", "turn", "unplug", "settle", "running", "cooling", "done", "failed"]),
+    step: count,
+    steps: count,
+    second: count,
+    seconds: count,
+    reason: z.string().max(400).nullable(),
+  })
+  .strict();
+
 /** What the laptop's points.py says of a video before the phone test: each frame its measuring keeps, by its
  *  number in the video and its time, the picture's shape, and how many frames the video holds in all. */
 export const videoFramesSchema = z
@@ -220,6 +342,15 @@ export type PhoneRunEnd = z.infer<typeof phoneRunEndSchema>;
 export type PhoneRunFailed = z.infer<typeof phoneRunFailedSchema>;
 export type PhoneProgress = z.infer<typeof phoneProgressSchema>;
 export type PhoneTestDelegate = (typeof PHONE_TEST_DELEGATES)[number];
+export type PhoneLiveCamera = (typeof PHONE_LIVE_CAMERAS)[number];
+export type PhoneBattery = z.infer<typeof phoneBatterySchema>;
+export type PhoneLiveHeader = z.infer<typeof phoneLiveHeaderSchema>;
+export type PhoneLiveSecond = z.infer<typeof phoneLiveSecondSchema>;
+export type PhoneLiveMinute = z.infer<typeof phoneLiveMinuteSchema>;
+export type PhoneLiveFrame = z.infer<typeof phoneLiveFrameSchema>;
+export type PhoneLiveEnd = z.infer<typeof phoneLiveEndSchema>;
+export type PhoneLiveFailed = z.infer<typeof phoneLiveFailedSchema>;
+export type PhoneLiveProgress = z.infer<typeof phoneLiveProgressSchema>;
 
 export type SeenPoint = z.infer<typeof seenPointSchema>;
 export type WorldPoint = z.infer<typeof worldPointSchema>;
