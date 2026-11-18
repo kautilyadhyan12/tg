@@ -1853,6 +1853,80 @@
   background: var(--bad);
   color: var(--on-bad);
 }
+/* Search (V1-e-i): the box at the left of the bar on a computer opens it; what was typed and
+   the results open under it, in groups. The line the arrows are on is lit. */
+.c-findbar {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  width: min(380px, 100%);
+  min-height: 44px;
+  margin-right: auto;
+  padding: 0 8px 0 14px;
+  box-sizing: border-box;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--input);
+  color: var(--t3);
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+.c-findbar:hover { color: var(--t2); }
+.c-findbar:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.c-findbar > svg { flex: none; }
+.c-findbar-words {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.c-findbar-keys {
+  flex: none;
+  padding: 2px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font: inherit;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--t3);
+}
+.c-find {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+.c-find-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.c-find-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0 -8px;
+}
+.c-find-group > .c-eyebrow { padding: 0 12px 4px; }
+.c-find-row {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  min-height: 44px;
+  padding: 6px 12px;
+  box-sizing: border-box;
+  border-radius: 10px;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+.c-find-on { background: var(--raise); }
+.c-find-foot { margin: 0; }
+@media (hover: none) {
+  .c-find-foot { display: none; }
+}
+
 /* The phone's top bar: the bell and your initials together on the right. */
 .c-topbar-end {
   display: flex;

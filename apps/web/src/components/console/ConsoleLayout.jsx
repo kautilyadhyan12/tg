@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { orgWords } from '@app/shared';
 import { NavLink, Link, useLocation, useParams } from 'react-router-dom';
 import { Bell, Building2, ChevronDown, ChevronsUpDown, CircleCheck, Ellipsis, LogOut, Plus, UserRound } from 'lucide-react';
@@ -16,6 +16,8 @@ import { newMenu } from '../../pages/console/consoleNew';
 import { attentionLines, bellLabel, countText, menuCounts, moreCount, seesAnyPart } from '../../pages/console/attentionView';
 import { AttentionContext, useAttentionRead } from '../../pages/console/useAttention';
 import MenuCount from './MenuCount';
+import { SearchBar, SearchBox, SearchIcon } from './ConsoleSearch';
+import { opensSearch, searchCatalogue, searchKeysLabel, searchPlaceholder } from '../../pages/console/searchPlaces';
 import { initialsOf } from '../../pages/console/memberListPeople';
 import { orgTypeLabel, roleLabel, viewerPrivileges } from '../../pages/console/consoleView';
 import './console.css';
@@ -318,6 +320,32 @@ export default function ConsoleLayout({ children }) {
   const mark = (page) => (counts[page.key] !== undefined ? <MenuCount count={counts[page.key]} /> : reviewDot(page));
   const underMore = menu ? moreCount(menu.more, counts) : null;
 
+  // Search (V1-e-i): from the bar, the phone's search button, or Ctrl K / ⌘K on any page.
+  const catalogue = useMemo(() => (orgSlug ? searchCatalogue(orgSlug, viewerPrivileges(org), org) : []), [orgSlug, org]);
+  // The button search opened under while it is open, else null.
+  const [searchFrom, setSearchFrom] = useState(null);
+  const barSearch = useRef(null);
+  const phoneSearch = useRef(null);
+  const canSearch = menu !== null;
+  useEffect(() => {
+    if (!canSearch) return undefined;
+    const onKey = (event) => {
+      if (!opensSearch(event)) return;
+      event.preventDefault();
+      // The search box that is on screen: the bar's on a computer, the top bar's on a phone.
+      setSearchFrom(barSearch.current?.offsetParent != null ? barSearch : phoneSearch);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [canSearch]);
+  // Another page (Back, a link) closes it.
+  const [searchPath, setSearchPath] = useState(pathname);
+  if (pathname !== searchPath) {
+    setSearchPath(pathname);
+    setSearchFrom(null);
+  }
+  const placeholder = searchPlaceholder();
+
   // The groups this person folded on this device, kept as they left them. The page they are on
   // is never folded away: arriving on it shows its group open for this visit only, and the
   // device keeps their choice.
@@ -405,6 +433,7 @@ export default function ConsoleLayout({ children }) {
             <>
               <GymSwitcher org={org} fallback={consoleName} compact />
               <span className="c-topbar-end">
+                <SearchIcon buttonRef={phoneSearch} onOpen={() => setSearchFrom(phoneSearch)} />
                 {showBell ? <BellButton lines={lines} onOpen={reloadAttention} /> : null}
                 {name ? (
                   <Link to={menu.moreTo} className="c-topbar-me" aria-label={`${name}: your account and Sign out, under More`}>
@@ -439,12 +468,18 @@ export default function ConsoleLayout({ children }) {
             gyms, and a dismissal must not outlive the gym it was for. */}
         <ConsoleBanner key={org?.id ?? 'no-gym'} org={org} />
 
-        {/* The bar across the top, on a computer: New, for whoever may add something. */}
-        {menu && (showNew || showBell) ? (
+        {/* The bar across the top, on a computer: Search for everybody, New for whoever may add
+            something, and the bell. */}
+        {menu ? (
           <div className="c-pagebar" data-testid="console-bar">
+            <SearchBar buttonRef={barSearch} placeholder={placeholder} keys={searchKeysLabel(typeof navigator === 'undefined' ? '' : navigator.platform)} onOpen={() => setSearchFrom(barSearch)} />
             {showNew ? <NewButton offer={offer} /> : null}
             {showBell ? <BellButton lines={lines} onOpen={reloadAttention} /> : null}
           </div>
+        ) : null}
+
+        {searchFrom !== null && canSearch ? (
+          <SearchBox key={orgSlug} anchorRef={searchFrom} orgSlug={orgSlug} catalogue={catalogue} placeholder={placeholder} onClose={() => setSearchFrom(null)} />
         ) : null}
 
         {/* Keyed on the slug so every screen starts fresh on another gym, and never shows

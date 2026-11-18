@@ -70,6 +70,9 @@ const PLACES = {
   membershipDiscounts: { path: '/memberships#discounts', may: canManageMemberships },
   // The Bills box on Memberships, where the grace period before a bill reads Overdue is set.
   membershipBills: { path: '/memberships#bills', may: canManageMemberships },
+  // The Tax box on Memberships (18b-v), and Settings' signed forms of deleted members (18u-iii).
+  membershipTax: { path: '/memberships#tax', may: canManageMemberships },
+  deletedForms: { path: `/settings#${SETTINGS_SECTION.deletedForms}`, may: canManageOrg },
   sell: { path: '/sell', may: canOpenSell },
   failedPayments: { path: '/failed-payments', may: canSeeFailedPayments },
   members: { path: '/members', may: onStaff },
