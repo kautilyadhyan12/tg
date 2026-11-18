@@ -501,7 +501,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
    - V1-c. [x] **The third look's blocks and the bar across the top** · merged 2026-11-18 · PR #580
    - V1-d. [x] **Counts in the menu, and the bell** · merged 2026-11-18 · PR #583
    - V1-e. **Search**, in two (2026-11-18): people, pages, actions and settings from the bar and Ctrl K (`Search`).
-     - V1-e-i. [ ] **Pages, actions and settings**: one list of places with the words people use, Recent and Quick actions. A screen job.
+     - V1-e-i. [x] **Pages, actions and settings** · merged 2026-11-18 · PR #584
      - V1-e-ii. [ ] **People**: members or clients, leads and staff, from the lists' own search with the business in the `WHERE`. Risky: its route, stranger test and cost at full size.
    - V1-f. [ ] **Payments overview**: the new page under Money, a line to every payment page and setting, Connect Square first until it is connected (`Money`, `MoneySetup`).
    - V0-d. [ ] **The boards not drawn yet, in the third look**: Sell, Memberships, Attendance, Classes, Leads, Reports, Settings and the four ways a box opens, from `kit3.css`, every button of the real page kept. No code; in parts if it is too big for one terminal.
