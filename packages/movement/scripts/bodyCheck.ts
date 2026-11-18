@@ -11,6 +11,7 @@
 // "Sets numbers": written so in keptVideos.ts after its pictures were looked at, one body in
 // every frame, and no sign that the body followed changed (follow.ts). Every other video is
 // tried, never used to set a number.
+import { createHash } from "node:crypto";
 import type { MovementFrame, SeenPerson } from "@app/shared";
 import {
   LIMITS,
@@ -19,6 +20,7 @@ import {
   PossibleBody,
   STEADY,
   SteadyPoints,
+  bodySize,
   type CheckedBody,
   type Limits,
   type Refusal,
@@ -26,8 +28,9 @@ import {
   type SteadyBody,
   type SteadySettings,
 } from "../src/index.js";
+import { decodeBodyPoints, type BodyPoints } from "./bodyPoints.js";
 import { bodyChanges, followOne } from "./follow.js";
-import { KEPT_VIDEOS } from "./keptVideos.js";
+import { KEPT_MODEL, KEPT_VIDEOS, type KeptVideo } from "./keptVideos.js";
 
 export interface Video {
   readonly label: string;
@@ -38,19 +41,43 @@ export interface Video {
   readonly why: string;
 }
 
-/** A video sets numbers only when ALL hold: keptVideos.ts says its pictures were looked at and the person followed
- *  throughout; the model found nobody else in any frame; and the plain sign finds no change of the body followed.
- *  One body in every frame alone is never enough: asked for one person, the model gives one body whoever it is. */
-export function videoOf(label: string, frames: readonly MovementFrame[], kept: Readonly<Record<string, { readonly sets: boolean; readonly seen: string }>> = KEPT_VIDEOS): Video {
+/** A body-points file as read from the disk, with the check number of its bytes. */
+export interface KeptFile {
+  readonly header: BodyPoints["header"];
+  readonly frames: readonly MovementFrame[];
+  readonly sha256: string;
+}
+
+export function readKept(bytes: Uint8Array): KeptFile {
+  const { header, frames } = decodeBodyPoints(bytes);
+  return { header, frames, sha256: createHash("sha256").update(bytes).digest("hex") };
+}
+
+/** A video sets numbers only when ALL hold: keptVideos.ts says its pictures were looked at, and names this very file
+ *  by its check number; it is the phone's own model asked for one person at 30 frames a second; every frame holds one
+ *  body whose size can be read; and the plain sign finds no change of the body followed. One body in every frame alone
+ *  is never enough: asked for one person, the model gives one body whoever it is. */
+export function videoOf(file: KeptFile, kept: Readonly<Record<string, KeptVideo>> = KEPT_VIDEOS): Video {
+  const { header, frames } = file;
+  const label = header.label;
+  const no = (why: string): Video => ({ label, frames, sets: false, why });
   const seen = Object.hasOwn(kept, label) ? kept[label] : undefined;
-  if (seen === undefined) return { label, frames, sets: false, why: "nobody has looked at its pictures yet" };
-  if (!seen.sets) return { label, frames, sets: false, why: seen.seen };
-  if (frames.some((f) => f.people.length > 1)) return { label, frames, sets: false, why: "the model found more than one person in it" };
+  if (seen === undefined) return no("nobody has looked at its pictures yet");
+  if (!seen.sets) return no(seen.seen);
+  if (seen.sha256 !== file.sha256) return no("measured again since its pictures were looked at, or another file under its name");
+  if (header.model.file !== KEPT_MODEL.file || header.model.people !== KEPT_MODEL.people || header.fps !== KEPT_MODEL.fps) {
+    return no(`not the phone's own model asked for ${String(KEPT_MODEL.people)} person at ${String(KEPT_MODEL.fps)} frames a second`);
+  }
+  const notOne = frames.findIndex((f) => f.people.length !== 1);
+  if (notOne >= 0) return no(`frame ${String(notOne + 1)} holds ${String(frames[notOne]?.people.length ?? 0)} people, not one`);
+  const unread = frames.findIndex((f) => {
+    const p = f.people[0];
+    return p === undefined || bodySize(p, f.aspect, p.points.map((q) => q[3] >= LIMITS.sure)) === null;
+  });
+  if (unread >= 0) return no(`the body's size cannot be read in frame ${String(unread + 1)}`);
   const changed = bodyChanges(frames);
   const first = changed[0];
-  if (first !== undefined) {
-    return { label, frames, sets: false, why: `the body followed changes ${String(changed.length)} times, first at ${(first.t / 1000).toFixed(2)} s` };
-  }
+  if (first !== undefined) return no(`the body followed changes ${String(changed.length)} times, first at ${(first.t / 1000).toFixed(2)} s`);
   return { label, frames, sets: true, why: seen.seen };
 }
 
@@ -98,13 +125,22 @@ export const BONE_STEPS: readonly number[] = Array.from({ length: 10 }, (_, i) =
 export const BONE_LOSS = 1 / 200;
 
 /** Runs are cached: the leave-one-out folds ask for the same ones again. */
-const runs = new Map<string, CheckedBody[]>();
+/** Each kept by the video's own frames, never its name: two files can share a name (round one). */
+const runs = new WeakMap<readonly MovementFrame[], Map<string, CheckedBody[]>>();
+function runsOf<T>(store: WeakMap<readonly MovementFrame[], Map<string, T>>, frames: readonly MovementFrame[]): Map<string, T> {
+  const known = store.get(frames);
+  if (known !== undefined) return known;
+  const fresh = new Map<string, T>();
+  store.set(frames, fresh);
+  return fresh;
+}
 export function checksAt(video: Video, bone: number): CheckedBody[] {
-  const key = `${video.label}|${String(bone)}`;
-  const known = runs.get(key);
+  const key = String(bone);
+  const own = runsOf(runs, video.frames);
+  const known = own.get(key);
   if (known !== undefined) return known;
   const fresh = runChecks(video.frames, { ...LIMITS, bone });
-  runs.set(key, fresh);
+  own.set(key, fresh);
   return fresh;
 }
 
@@ -199,14 +235,15 @@ export interface SteadyChoice {
   readonly each: readonly { readonly label: string; readonly steadiness: Steadiness }[];
 }
 
-const steadyRuns = new Map<string, Steadiness>();
+const steadyRuns = new WeakMap<readonly MovementFrame[], Map<string, Steadiness>>();
 function steadinessAt(video: Video, bone: number, which: "flat" | "world", smoothing: Smoothing): Steadiness {
-  const key = `${video.label}|${String(bone)}|${which}|${String(smoothing.minCutoff)}|${String(smoothing.beta)}`;
-  const known = steadyRuns.get(key);
+  const key = `${String(bone)}|${which}|${String(smoothing.minCutoff)}|${String(smoothing.beta)}`;
+  const own = runsOf(steadyRuns, video.frames);
+  const known = own.get(key);
   if (known !== undefined) return known;
   const checked = checksAt(video, bone);
   const fresh = steadinessOf(checked, runSteady(checked, { ...STEADY, [which]: smoothing }), which);
-  steadyRuns.set(key, fresh);
+  own.set(key, fresh);
   return fresh;
 }
 
@@ -231,7 +268,7 @@ export function chooseSteady(videos: readonly Video[], which: "flat" | "world", 
   return best ?? { smoothing: { minCutoff: CUTOFFS[CUTOFFS.length - 1] ?? 5, beta: BETAS[BETAS.length - 1] ?? 50 }, each: [] };
 }
 
-// ── Five people set it, the sixth tries it ─────────────────────────────────────────
+// ── All the people but one set it, the one left out tries it ─────────────────────────────────────────
 export interface Fold {
   readonly heldOut: string;
   readonly bone: number;
@@ -242,8 +279,9 @@ export interface Fold {
   readonly heldOutWorld: Steadiness;
 }
 
+/** One fold for each video that sets numbers (round one, L2: a held-out video that sets nothing cannot disagree). */
 export function leaveOneOut(videos: readonly Video[]): Fold[] {
-  return videos.map((heldOut) => {
+  return videos.filter((v) => v.sets).map((heldOut) => {
     const rest = videos.filter((v) => v !== heldOut);
     const bone = chooseBone(rest);
     const flat = chooseSteady(rest, "flat", bone).smoothing;

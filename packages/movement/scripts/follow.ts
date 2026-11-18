@@ -68,18 +68,17 @@ export interface BodyChange {
   readonly size: number;
 }
 
-/** Each frame where the body followed is not the body of the frame before, by the plain sign: its middle moving faster
- *  than a sprinter, or its size jumping. Frames where the body's size cannot be read are passed over, and so is a gap
- *  with nobody followed. */
+/** Each frame where the body followed is not the body last seen, by the plain sign: its middle moving faster than a
+ *  jump's take-off, or its size jumping. A frame with nobody followed, or whose body's size cannot be read, is a gap:
+ *  the body after it is judged against the body before it, its speed over the whole time between (round one, H1:
+ *  losing the body and finding another is how the model, asked for one person, changes bodies). After a long gap a
+ *  body that came nearer or went further is told as a change: the sign never vouches for what it did not see. */
 export function bodyChanges(frames: readonly MovementFrame[], followed: readonly (SeenPerson | null)[] = followOne(frames)): BodyChange[] {
   const changes: BodyChange[] = [];
   let last: { t: number; middle: [number, number]; size: number } | null = null;
   frames.forEach((frame, index) => {
     const person = followed[index] ?? null;
-    if (person === null) {
-      last = null;
-      return;
-    }
+    if (person === null) return;
     const size = bodySize(person, frame.aspect, person.points.map((p) => p[3] >= SURE));
     if (size === null) return;
     const middle = trunkCentre(person, frame.aspect);

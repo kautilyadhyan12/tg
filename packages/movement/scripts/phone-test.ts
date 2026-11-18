@@ -158,7 +158,9 @@ function laptopPath(label: string, m: PoseModel, n: number): string {
  *  missing. */
 function laptopRun(label: string, m: PoseModel): BodyPoints {
   const folder = laptopFolder(label, m, people);
-  const path = laptopPath(label, m, people);
+  // The kept file when there is one; otherwise the laptop's own run, made here when missing (round one, L3).
+  const kept = laptopPath(label, m, people);
+  const path = existsSync(kept) ? kept : join(folder, `${label}.bodypoints`);
   if (!existsSync(path)) {
     if (values["compare-only"]) fail(`No laptop run of ${label} with the ${m.size} model at ${path}.`);
     console.log(`Measuring ${label} with the ${m.size} model on the laptop.`);

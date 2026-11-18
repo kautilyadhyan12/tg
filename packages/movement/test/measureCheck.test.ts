@@ -91,11 +91,15 @@ describe("what the side view cannot see is not read on the flat picture", () => 
   it("the squat's feet apart, across her body: never given flat", () => {
     const s = summaryOf(runOf(video("squat_reference")).measured, "feet apart", "trunks");
     // Measured (51c): the phone's model marks her far knee hidden in every frame, so her far foot hangs from nothing and
-    // the width is read in no frame, not even in 3D. On the six-person heavy file it was read in 3D in 73 frames, and
+    // the width is read in no frame, not even in 3D. On the six-person heavy file it is read in 3D in 73 frames, and
     // flat in none (the picture showed 0.51 of the line between the feet at the bottom, reading 0.49 of a trunk against
-    // 0.76 in 3D). The general guarantee, every flat reading within its limit of its 3D one, is the next test.
+    // 0.76 in 3D at 50c's settings).
     expect(s.world).toBe(0);
     expect(s.flat).toBe(0);
+    // The real case is the heavy model's file of the same video, which reads it in 3D (round one, T4).
+    const heavy = summaryOf(runOf(outsideVideo("squat_reference.heavy.bodypoints")).measured, "feet apart", "trunks");
+    expect(heavy.world).toBeGreaterThan(50);
+    expect(heavy.flat).toBe(0);
   });
 
 

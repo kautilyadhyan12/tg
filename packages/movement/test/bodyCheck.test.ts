@@ -49,17 +49,20 @@ describe("the engine's limits are the ones their rules set from Kd's videos", ()
   });
 });
 
-describe("set from five people, tried on the sixth", () => {
+describe("set from all the videos that set numbers but one, tried on the one left out", () => {
   const folds = leaveOneOut(VIDEOS);
 
-  it("the sets of five people set the same limits as all six: five of six for the bone and the picture, four for 3D", () => {
-    // Measured (51c): the bone 5 of 6 (without the crunch 0.2); the picture 6 of 6; 3D 4 of 6 (without the curl 2 Hz
-    // +10, without the chair squat 0.25 Hz +10). Before 51c, on the six-person files, all three were 5 of 6.
-    const same = folds.filter((f) => f.bone === LIMITS.bone).length;
-    expect(same).toBeGreaterThanOrEqual(5);
-    expect(folds.filter((f) => f.flat.minCutoff === STEADY.flat.minCutoff && f.flat.beta === STEADY.flat.beta).length).toBeGreaterThanOrEqual(5);
-    expect(folds.filter((f) => f.world.minCutoff === STEADY.world.minCutoff && f.world.beta === STEADY.world.beta).length).toBeGreaterThanOrEqual(4);
+  it("set from three of the four videos that set numbers: the bone 3 of 4 folds, the picture 4 of 4, 3D 2 of 4", () => {
+    // Measured (51c): the bone, without the crunch 0.2; 3D, without the curl 2 Hz +10 and without the chair squat
+    // 0.25 Hz +10, which leaves her moving joints 1.14 cm further off than the model's own shake (0.61 to 1.75 cm),
+    // over the rule's 1 cm: the 3D setting rests on the four videos together. Before 51c, on the six-person files,
+    // the folds were counted over six videos, two of which set nothing.
+    expect(folds.length).toBe(4);
+    expect(folds.filter((f) => f.bone === LIMITS.bone).length).toBeGreaterThanOrEqual(3);
+    expect(folds.filter((f) => f.flat.minCutoff === STEADY.flat.minCutoff && f.flat.beta === STEADY.flat.beta).length).toBe(4);
+    expect(folds.filter((f) => f.world.minCutoff === STEADY.world.minCutoff && f.world.beta === STEADY.world.beta).length).toBeGreaterThanOrEqual(2);
   });
+
 
 
   it("a video that sets numbers, left out, loses no more than 1 in 200 of its joints to a broken bone, but for the bicycle crunch", () => {

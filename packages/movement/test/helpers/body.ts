@@ -4,8 +4,7 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import type { MovementFrame, SeenPerson } from "@app/shared";
-import { decodeBodyPoints } from "../../scripts/bodyPoints.js";
-import { videoOf, type Video } from "../../scripts/bodyCheck.js";
+import { readKept, videoOf, type Video } from "../../scripts/bodyCheck.js";
 
 const KEPT = join(import.meta.dirname, "../body-points");
 
@@ -13,13 +12,11 @@ export const VIDEOS: readonly Video[] = readdirSync(KEPT)
   .filter((f) => f.endsWith(".bodypoints"))
   .sort()
   .map((f) => {
-    const kept = decodeBodyPoints(new Uint8Array(readFileSync(join(KEPT, f))));
-    return videoOf(kept.header.label, kept.frames);
+    return videoOf(readKept(new Uint8Array(readFileSync(join(KEPT, f)))));
   });
 /** A file of test/outside: kept only as a case from outside the kept videos, never setting a number. */
 export function outsideVideo(file: string): Video {
-  const kept = decodeBodyPoints(new Uint8Array(readFileSync(join(import.meta.dirname, "../outside", file))));
-  return videoOf(`${kept.header.label} (outside)`, kept.frames);
+  return videoOf(readKept(new Uint8Array(readFileSync(join(import.meta.dirname, "../outside", file)))));
 }
 
 /** The kept videos that set the fitted numbers (scripts/keptVideos.ts, `videoOf`). */

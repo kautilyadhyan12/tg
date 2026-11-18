@@ -11,7 +11,6 @@ import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { LIMITS, STEADY, type Smoothing } from "../src/index.js";
-import { decodeBodyPoints } from "./bodyPoints.js";
 import {
   REASONS,
   agreementOf,
@@ -23,6 +22,7 @@ import {
   leaveOneOut,
   runChecks,
   runSteady,
+  readKept,
   videoOf,
   type Steadiness,
   type Video,
@@ -66,8 +66,8 @@ if (files.length === 0) fail("No body-points files to check.");
 const started = Date.now();
 const loaded = files.map((path) => {
   if (!existsSync(path)) fail(`No file at ${path}.`);
-  const kept = decodeBodyPoints(new Uint8Array(readFileSync(path)));
-  return { video: videoOf(kept.header.label, kept.frames), fps: kept.header.fps };
+  const kept = readKept(new Uint8Array(readFileSync(path)));
+  return { video: videoOf(kept), fps: kept.header.fps };
 });
 const videos: Video[] = loaded.map((l) => l.video);
 
@@ -111,9 +111,9 @@ const same =
   world.smoothing.beta === STEADY.world.beta;
 if (!same) console.log("THE ENGINE'S LIMITS ARE NOT THE ONES THESE VIDEOS SET.");
 
-// 3. Set from five, tried on the sixth.
+// 3. Set from all but one, tried on the one left out.
 console.log("");
-console.log("Each limit set from five people and tried on the sixth:");
+console.log("Each limit set from all the videos that set numbers but one, and tried on the one left out:");
 for (const f of leaveOneOut(videos)) {
   console.log(`   without ${f.heldOut}: bone ${String(f.bone)}, refuses ${pct(f.heldOutBoneLoss, 1)} of its judged joints for a bone`);
   console.log(`      picture: ${smoothingWords(f.flat)}: ${steadyWords(f.heldOutFlat)}`);

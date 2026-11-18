@@ -79,7 +79,7 @@ export interface Limits {
  * Where each number comes from. `sure`: the model's own sureness is a chance from 0 to 1, and
  * a point it gives less than an even chance of being seen is not used. `bone`: set by
  * `body-check` from Kd's reference videos, as the phone's own model reads them asked for one
- * person (51c), each limit set from five people and tried on the sixth (`scripts/bodyCheck.ts`
+ * person (51c), each limit set from all of them but one and tried on the one left out (`scripts/bodyCheck.ts`
  * says the rule; the videos that may set it are in `scripts/keptVideos.ts`). `speed`: the fastest a part of a person moves
  * is a kick's foot, measured at 12 to 18 m/s in martial arts studies (a punch's fist 6 to 11),
  * so nothing real is refused below 20; on the four of Kd's videos that set numbers no sure point moved

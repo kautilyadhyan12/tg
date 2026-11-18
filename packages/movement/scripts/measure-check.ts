@@ -11,8 +11,7 @@ import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { MEASURE_LIMITS, MEASURE_LIST, type Unit } from "../src/index.js";
-import { decodeBodyPoints } from "./bodyPoints.js";
-import { halfRate, runChecks, runSteady, videoOf, type Video } from "./bodyCheck.js";
+import { halfRate, readKept, runChecks, runSteady, videoOf, type Video } from "./bodyCheck.js";
 import {
   agreementOf,
   chooseAngleLimit,
@@ -65,8 +64,8 @@ if (files.length === 0) fail("No body-points files to check.");
 const started = Date.now();
 const loaded = files.map((path) => {
   if (!existsSync(path)) fail(`No file at ${path}.`);
-  const kept = decodeBodyPoints(new Uint8Array(readFileSync(path)));
-  return { video: videoOf(kept.header.label, kept.frames), fps: kept.header.fps };
+  const kept = readKept(new Uint8Array(readFileSync(path)));
+  return { video: videoOf(kept), fps: kept.header.fps };
 });
 const videos: Video[] = loaded.map((l) => l.video);
 

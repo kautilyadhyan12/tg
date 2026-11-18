@@ -14,6 +14,7 @@
 //   - the size change: the most the body's size on the picture changes on a video where the person
 //     stays in place (its 1st to its 99th hundredth), raised to the next 5 in 100. A bigger change
 //     is the body moving nearer or further, and the floor is set afresh.
+import type { MovementFrame } from "@app/shared";
 import {
   BodyMeasures,
   MEASURE_LIMITS,
@@ -42,15 +43,15 @@ export interface Run {
 }
 
 /** Runs are cached: the tests ask for the same ones again. */
-const runs = new Map<string, Run>();
+/** Kept by the video's own frames, never its name: two files can share a name (round one). */
+const runs = new WeakMap<readonly MovementFrame[], Run>();
 export function runOf(video: Video): Run {
-  const key = `${video.label}|${String(video.frames.length)}`;
-  const known = runs.get(key);
+  const known = runs.get(video.frames);
   if (known !== undefined) return known;
   const checked = runChecks(video.frames);
   const steady = runSteady(checked);
   const fresh = { checked, steady, measured: runMeasures(steady) };
-  runs.set(key, fresh);
+  runs.set(video.frames, fresh);
   return fresh;
 }
 
@@ -70,13 +71,12 @@ export const SIZE_STEP = 0.05;
 
 /** Every flat reading the picture shows, whatever its distance from the 3D one. */
 const NO_ANGLE_LIMIT: MeasureLimits = { ...MEASURE_LIMITS, angle: Number.POSITIVE_INFINITY, length: Number.POSITIVE_INFINITY };
-const unlimited = new Map<string, MeasuredBody[]>();
+const unlimited = new WeakMap<readonly MovementFrame[], MeasuredBody[]>();
 function measuredUnlimited(video: Video): MeasuredBody[] {
-  const key = `${video.label}|${String(video.frames.length)}`;
-  const known = unlimited.get(key);
+  const known = unlimited.get(video.frames);
   if (known !== undefined) return known;
   const fresh = runMeasures(runOf(video).steady, NO_ANGLE_LIMIT);
-  unlimited.set(key, fresh);
+  unlimited.set(video.frames, fresh);
   return fresh;
 }
 
