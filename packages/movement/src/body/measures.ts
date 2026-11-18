@@ -73,8 +73,8 @@ export interface MeasureLimits {
 /**
  * Where each number comes from. `shown`: a part shown at half its length turns twice as far on
  * the picture for the same shake as one lying across it, and further without limit as it points
- * at the camera. `angle`, `length` and `sizeChange`: set by `measure-check` from Kd's one-person
- * videos (`scripts/measureCheck.ts` says the rules): where the picture shows the parts and lines
+ * at the camera. `angle`, `length` and `sizeChange`: set by `measure-check` from Kd's videos that
+ * set numbers (`scripts/measureCheck.ts` says the rules): where the picture shows the parts and lines
  * lying across it, the flat and 3D readings differ by up to these in 95 frames of 100 (the 3D
  * points' own error; side on, the squat's arms 25° and its hip about 9°); the body's size on the
  * picture changes by up to about a tenth while a person stays in place. `footLift`: a twentieth
