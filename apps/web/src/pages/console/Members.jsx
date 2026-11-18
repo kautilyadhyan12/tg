@@ -494,11 +494,20 @@ export default function Members() {
 
   // Overview's Last 7 days box opens the list showing who has a payment due, or the past
   // members who still owe, and Membership agreements who has one to sign (`?show=`), once.
-  const [startShow, setStartShow] = useState(() => {
-    const show = searchParams.get('show');
-    return show === PAYMENT_DUE_SHOW || show === PAST_PAYMENT_DUE_SHOW || show === AGREEMENT_NOT_SIGNED_SHOW || show === NO_CARD_SHOW ? show : null;
-  });
+  const knownShow = (show) => (show === PAYMENT_DUE_SHOW || show === PAST_PAYMENT_DUE_SHOW || show === AGREEMENT_NOT_SIGNED_SHOW || show === NO_CARD_SHOW ? show : null);
+  const [startShow, setStartShow] = useState(() => knownShow(searchParams.get('show')));
   const showing = searchParams.get('show');
+  // A `?show=` that arrives while Members is already open (search, the bell) opens the list
+  // again showing them: the list takes its filter only when it is first drawn.
+  const [showSeen, setShowSeen] = useState(showing);
+  const [showRound, setShowRound] = useState(0);
+  if (showing !== showSeen) {
+    setShowSeen(showing);
+    if (knownShow(showing) !== null) {
+      setStartShow(knownShow(showing));
+      setShowRound((n) => n + 1);
+    }
+  }
   useEffect(() => {
     if (showing === null) return;
     setSearchParams(
@@ -705,6 +714,7 @@ export default function Members() {
 
       {tab === 'list' ? (
         <MemberListPanel
+          key={`list-${String(showRound)}`}
           gymId={gymId}
           gym={org}
           words={words}
