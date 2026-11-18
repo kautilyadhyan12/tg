@@ -175,7 +175,9 @@ d("A renewal reminder's card and its minimum term (real Postgres)", { timeout: T
     for (const entryId of [ben, cal]) {
       const text = await textOf(entryId);
       expect(text).toContain("The payment is due that day.");
-      expect(text).not.toContain("4242");
+      // The card's own sentence, never its bare digits: the gym's name is made from the clock, and
+      // one name (Card Gym 17949924242391) held 4242.
+      expect(text).not.toMatch(/ending in \d{4}|Visa/);
     }
   });
 });
