@@ -1269,6 +1269,12 @@ d("A chargeback (real Postgres)", { timeout: T }, () => {
       expect(await rowsOf(dee.squarePaymentId)).toEqual([]);
       const list = await onOverview(old);
       expect(list).toMatchObject({ needsReconnect: true, canReconnect: true });
+      // The bell (V1-d) says so too, never "Nothing needs attention"; a manager reads it with no button.
+      const bell = await expectAttentionMatchesPages((path) => send("GET", path, old.owner.cookies), old.id, ["chargebacks"]);
+      expect(bell.chargebacks).toMatchObject({ needsReconnect: true, canReconnect: true });
+      const boss = await signedIn("Old Manager");
+      await sql`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${old.id}, ${boss.userId}, 'manager', ${null})`;
+      expect((await expectAttentionMatchesPages((path) => send("GET", path, boss.cookies), old.id, ["chargebacks"])).chargebacks).toMatchObject({ needsReconnect: true, canReconnect: false });
       const res = await send("GET", `/v1/orgs/${old.id}/payments`, old.owner.cookies);
       const box = gymPaymentsResponseSchema.parse(JSON.parse(res.body)).payments;
       expect(box.needsAllow).toBe(true);

@@ -169,12 +169,21 @@ describe('the counts and the bell', () => {
     await waitFor(() => expect(countBeside('Leads')).toBe('4'));
     expect(attentionService.get.mock.calls.length).toBe(first + 1);
     clock.mockRestore();
-    // A change accepted anywhere: one read once its writes have landed.
-    attentionService.get.mockResolvedValue({ ...BUSY, newLeads: { count: 0 } });
+    // Check-ins alone, with the last read under 30 s old: not read again.
     vi.useFakeTimers();
+    const quiet = attentionService.get.mock.calls.length;
     act(() => {
-      for (const l of changes) l();
-      for (const l of changes) l();
+      for (const l of changes) l('visit');
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(500);
+    });
+    expect(attentionService.get.mock.calls.length).toBe(quiet);
+    // A change accepted anywhere, even with a check-in straight after it: one read once its writes have landed.
+    attentionService.get.mockResolvedValue({ ...BUSY, newLeads: { count: 0 } });
+    act(() => {
+      for (const l of changes) l('change');
+      for (const l of changes) l('visit');
     });
     const before = attentionService.get.mock.calls.length;
     await act(async () => {

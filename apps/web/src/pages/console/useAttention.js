@@ -61,9 +61,17 @@ export function useAttentionRead(gymId, active) {
   useEffect(() => {
     if (!on) return undefined;
     let timer = null;
+    // A change among the writes of one moment always reads again; only visits alone wait 30 s.
+    let changed = false;
     const stop = onConsoleChange((kind) => {
+      if (kind !== 'visit') changed = true;
       clearTimeout(timer);
-      timer = setTimeout(kind === 'visit' ? ifOld : reload, AFTER_CHANGE_MS);
+      timer = setTimeout(() => {
+        const any = changed;
+        changed = false;
+        if (any) reload();
+        else ifOld();
+      }, AFTER_CHANGE_MS);
     });
     return () => {
       clearTimeout(timer);
