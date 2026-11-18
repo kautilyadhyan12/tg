@@ -227,11 +227,18 @@ export async function seed(databaseUrl: string): Promise<void> {
   const db = drizzle(client);
   try {
     await seedAll(db);
-    // The Exercise Library after the old rows, so an exercise that continues from the old 58 keeps
-    // its row (spec Part 2 §13.4, job 60b). A faulty exercise file stops the seed here, naming it.
-    await client.begin((tx) => publishLibrary(tx, readLibraryFolder()));
   } finally {
     await client.end({ timeout: 5 });
+  }
+  // The Exercise Library after the old rows, so an exercise that continues from the old 58 keeps
+  // its row (spec Part 2 §13.4, job 60b). A faulty exercise file stops the seed here, naming it.
+  // On a client of its own: drizzle() switches off the driver's JSON handling on the client it is
+  // given (it sends JSON itself), and the Library's repo uses the driver's, as every repo does.
+  const plain = postgres(databaseUrl, { prepare: false, max: 1 });
+  try {
+    await plain.begin((tx) => publishLibrary(tx, readLibraryFolder()));
+  } finally {
+    await plain.end({ timeout: 5 });
   }
 }
 
