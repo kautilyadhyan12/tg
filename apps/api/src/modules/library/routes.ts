@@ -7,15 +7,23 @@
 // checked: a download costs two small reads and no parsing.
 import type { FastifyInstance } from "fastify";
 import type { Sql } from "postgres";
-import { libraryListSchema } from "@app/shared";
 import { channelFor } from "./channel.js";
-import { sha256 } from "./canonical.js";
 import * as repo from "./repo.js";
 
 /** The copies kept in memory: the newest of each channel and the one before, a little over. */
 const KEPT_COPIES = 4;
 
 const etagOf = (fingerprint: string): string => `"${fingerprint}"`;
+
+/** Whether an If-None-Match header names this ETag. Compared weakly, as RFC 9110 §13.1.2 says: a
+ *  `W/` before a tag is ignored (a proxy that compresses may weaken it), and `*` matches any copy. */
+export function holdsCopy(ifNoneMatch: string | undefined, etag: string): boolean {
+  if (ifNoneMatch === undefined) return false;
+  return ifNoneMatch
+    .split(",")
+    .map((tag) => tag.trim().replace(/^W\//, ""))
+    .some((tag) => tag === "*" || tag === etag);
+}
 
 export function registerLibraryRoutes(app: FastifyInstance, deps: { sql: Sql }): void {
   const kept = new Map<number, string>();
@@ -24,36 +32,24 @@ export function registerLibraryRoutes(app: FastifyInstance, deps: { sql: Sql }):
   async function copyText(version: number): Promise<string> {
     const held = kept.get(version);
     if (held !== undefined) return held;
-    const copy = await repo.copyBody(deps.sql, version);
-    if (copy === null) throw new Error(`library copy ${String(version)} is gone`);
-    // The stored text is checked once, before it reaches any phone: its fingerprint and its shape.
-    if (sha256(copy.body) !== copy.sha256) throw new Error(`library copy ${String(version)} does not match its fingerprint`);
-    libraryListSchema.parse(JSON.parse(copy.body));
-    kept.set(version, copy.body);
-    while (kept.size > KEPT_COPIES) {
-      const oldest = Math.min(...kept.keys());
-      kept.delete(oldest);
-    }
-    return copy.body;
+    const body = await repo.checkedCopyText(deps.sql, version);
+    kept.set(version, body);
+    while (kept.size > KEPT_COPIES) kept.delete(Math.min(...kept.keys()));
+    return body;
   }
 
   app.get("/v1/library", { preHandler: [app.authenticate] }, async (req, reply) => {
     const userId = req.authUser?.id;
     if (userId === undefined) throw new Error("authenticate preHandler did not run");
 
-    const channel = channelFor(await repo.betaFlagRules(deps.sql), userId);
-    // A tester on beta is given live while beta has no copy.
-    const newest = (await repo.newestCopy(deps.sql, channel)) ?? (channel === "beta" ? await repo.newestCopy(deps.sql, "live") : null);
+    const newest = await repo.newestCopyFor(deps.sql, channelFor(await repo.betaFlagRules(deps.sql), userId));
     if (newest === null) {
       return reply.status(404).send({ error: "not_found", message: "the Exercise Library has not been published", requestId: req.id });
     }
 
     const etag = etagOf(newest.sha256);
     void reply.header("etag", etag).header("cache-control", "private, no-cache");
-    const held = req.headers["if-none-match"];
-    if (held !== undefined && held.split(",").map((v) => v.trim()).includes(etag)) {
-      return reply.status(304).send();
-    }
+    if (holdsCopy(req.headers["if-none-match"], etag)) return reply.status(304).send();
     const body = await copyText(newest.version);
     return reply
       .status(200)

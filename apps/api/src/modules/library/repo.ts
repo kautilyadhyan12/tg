@@ -3,7 +3,8 @@
 // `exercises`. The Library is one list for the whole app, not a business's or a person's: no row
 // has an owner, so no owner goes in a WHERE.
 import type { Sql, TransactionSql } from "postgres";
-import type { LibraryEntry } from "@app/shared";
+import { libraryListSchema, type LibraryEntry } from "@app/shared";
+import { sha256 } from "./canonical.js";
 import type { PublishedRow } from "./plan.js";
 
 export type Channel = "live" | "beta";
@@ -14,11 +15,13 @@ export async function lockPublishing(tx: TransactionSql): Promise<void> {
   await tx`SELECT pg_advisory_xact_lock(hashtext('library:publish'))`;
 }
 
+/** Every Library row, removed ones included. `old` is one of the old 58: its `exercises` row has the
+ *  old facts, so the old save route can still name it. */
 export async function publishedRows(tx: TransactionSql): Promise<PublishedRow[]> {
-  const rows = await tx<{ exercise_id: string; slug: string; status: string; entry: unknown }[]>`
-    SELECT l.exercise_id, e.slug, l.status, l.entry
+  const rows = await tx<{ exercise_id: string; slug: string; status: string; old: boolean; entry: unknown }[]>`
+    SELECT l.exercise_id, e.slug, l.status, e.family IS NOT NULL AS old, l.entry
     FROM library_exercises l JOIN exercises e ON e.id = l.exercise_id`;
-  return rows.map((r) => ({ exerciseId: r.exercise_id, slug: r.slug, status: r.status, entry: r.entry }));
+  return rows.map((r) => ({ exerciseId: r.exercise_id, slug: r.slug, status: r.status, old: r.old, entry: r.entry }));
 }
 
 /** Of these exercises, the ones a saved set names: one index lookup for each (workout_sets'
@@ -77,9 +80,12 @@ export async function writeRows(tx: TransactionSql, rows: readonly { exerciseId:
     WHERE e.id = x.id AND e.family IS NULL AND e.met <> x.met`;
 }
 
-export async function removeRows(tx: TransactionSql, exerciseIds: readonly string[]): Promise<void> {
+/** Marks rows removed: out of the download, their entry kept. A Library row is never deleted. */
+export async function markRemoved(tx: TransactionSql, exerciseIds: readonly string[]): Promise<void> {
   if (exerciseIds.length === 0) return;
-  await tx`DELETE FROM library_exercises WHERE exercise_id = ANY(${[...exerciseIds]}::uuid[])`;
+  await tx`
+    UPDATE library_exercises SET status = 'removed', updated_at = now()
+    WHERE exercise_id = ANY(${[...exerciseIds]}::uuid[]) AND status <> 'removed'`;
 }
 
 export interface CopyHead {
@@ -103,15 +109,27 @@ export async function addCopy(tx: TransactionSql, channel: Channel, sha256: stri
   return row.version;
 }
 
-export async function copyBody(sql: Sql, version: number): Promise<{ sha256: string; body: string } | null> {
+/** The newest copy a person on this channel downloads: a tester on beta is given live while beta
+ *  has no copy. */
+export async function newestCopyFor(sql: Sql | TransactionSql, channel: Channel): Promise<CopyHead | null> {
+  return (await newestCopy(sql, channel)) ?? (channel === "beta" ? await newestCopy(sql, "live") : null);
+}
+
+/** One copy's text, checked before it reaches any phone: it must match its fingerprint and read as a
+ *  list. A copy that does not is a fault of the server's own data, so this throws (a 500). */
+export async function checkedCopyText(sql: Sql | TransactionSql, version: number): Promise<string> {
   const rows = await sql<{ sha256: string; body: string }[]>`
     SELECT sha256, body FROM library_copies WHERE version = ${version}`;
-  return rows[0] ?? null;
+  const copy = rows[0];
+  if (copy === undefined) throw new Error(`library copy ${String(version)} is gone`);
+  if (sha256(copy.body) !== copy.sha256) throw new Error(`library copy ${String(version)} does not match its fingerprint`);
+  libraryListSchema.parse(JSON.parse(copy.body));
+  return copy.body;
 }
 
 /** The rules of the one flag that puts a person on beta (Part 2 §9.3): the same flag as the old
  *  definitions' beta, so a tester is on beta for both. */
-export async function betaFlagRules(sql: Sql): Promise<unknown> {
+export async function betaFlagRules(sql: Sql | TransactionSql): Promise<unknown> {
   const rows = await sql<{ rules: unknown }[]>`SELECT rules FROM feature_flags WHERE key = 'beta_definitions'`;
   return rows[0]?.rules ?? null;
 }

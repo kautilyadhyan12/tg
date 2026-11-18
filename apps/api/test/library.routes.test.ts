@@ -5,7 +5,7 @@
 //
 // Every publish that changes the Library runs in a transaction that is rolled back: the seed of every
 // other test file publishes the real folder, and the publish lock keeps them waiting meanwhile.
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres, { type Sql, type TransactionSql } from "postgres";
 import { z } from "zod";
@@ -17,6 +17,8 @@ import type { EmailSender } from "../src/modules/auth/email.js";
 import { channelFor } from "../src/modules/library/channel.js";
 import { readLibraryFolder } from "../src/modules/library/folder.js";
 import { LibraryRefused, publishLibrary } from "../src/modules/library/publish.js";
+import { checkedCopyText, newestCopyFor } from "../src/modules/library/repo.js";
+import { holdsCopy } from "../src/modules/library/routes.js";
 
 const url = process.env["DATABASE_URL"];
 const d = describe.skipIf(url === undefined || url === "");
@@ -86,6 +88,21 @@ d("the Exercise Library on the server (real Postgres)", () => {
              (SELECT count(*)::int FROM library_exercises) AS rows,
              (SELECT count(*)::int FROM exercises) AS exercises`)[0];
 
+  /** A saved set naming this exercise, by a person made for it; returns the workout's id. */
+  const saveSet = async (tx: TransactionSql, exerciseId: string, who: string): Promise<string> => {
+    const user = (await tx<{ id: string }[]>`INSERT INTO users (email, display_name) VALUES (${`library-${who}@example.com`}, 'Library Set') RETURNING id`)[0]?.id ?? "";
+    const workout = (await tx<{ id: string }[]>`
+      INSERT INTO workouts (id, user_id, started_at, platform, engine_version) VALUES (gen_random_uuid(), ${user}, now(), 'android', '1') RETURNING id`)[0]?.id ?? "";
+    await tx`
+      INSERT INTO workout_sets (workout_id, user_id, exercise_id, started_at, set_index, mode, reps, duration_ms)
+      VALUES (${workout}, ${user}, ${exerciseId}, now(), 0, 'log_only', 10, 30000)`;
+    return workout;
+  };
+  const idOf = async (tx: TransactionSql, slug: string): Promise<string> =>
+    (await tx<{ id: string }[]>`SELECT id FROM exercises WHERE slug = ${slug}`)[0]?.id ?? "";
+  const statusOf = async (tx: TransactionSql, exerciseId: string): Promise<string | undefined> =>
+    (await tx<{ status: string }[]>`SELECT status FROM library_exercises WHERE exercise_id = ${exerciseId}`)[0]?.status;
+
   const makeUser = async (name: string): Promise<{ cookies: Cookies; id: string }> => {
     const email = `library-${name}@example.com`;
     const inject = (path: string, body: unknown) =>
@@ -124,14 +141,9 @@ d("the Exercise Library on the server (real Postgres)", () => {
     it("an exercise whose file is deleted while a saved set names it stays in the download, hidden, with its name", async () => {
       await rolledBack(async (tx) => {
         await publishLibrary(tx, withExtra(real, "zz_library_lift", "Library Test Lift"));
-        const lift = (await tx<{ id: string }[]>`SELECT id FROM exercises WHERE slug = 'zz_library_lift'`)[0]?.id;
-        expect(lift).toBeDefined();
-        const user = (await tx<{ id: string }[]>`INSERT INTO users (email, display_name) VALUES ('library-set@example.com', 'Library Set') RETURNING id`)[0]?.id;
-        const workout = (await tx<{ id: string }[]>`
-          INSERT INTO workouts (id, user_id, started_at, platform, engine_version) VALUES (gen_random_uuid(), ${user ?? ""}, now(), 'android', '1') RETURNING id`)[0]?.id;
-        await tx`
-          INSERT INTO workout_sets (workout_id, user_id, exercise_id, started_at, set_index, mode, reps, duration_ms)
-          VALUES (${workout ?? ""}, ${user ?? ""}, ${lift ?? ""}, now(), 0, 'log_only', 10, 30000)`;
+        const lift = await idOf(tx, "zz_library_lift");
+        expect(lift).not.toBe("");
+        const workout = await saveSet(tx, lift, "set");
 
         // The file is deleted; the set still names the exercise.
         const outcome = await publishLibrary(tx, real);
@@ -139,13 +151,56 @@ d("the Exercise Library on the server (real Postgres)", () => {
         const kept = (await listIn(tx)).exercises.find((e) => e.id === "zz_library_lift");
         expect(kept?.status).toBe("hidden");
         expect(kept?.text.en.name).toBe("Library Test Lift");
-        expect((await tx<{ status: string }[]>`SELECT status FROM library_exercises WHERE exercise_id = ${lift ?? ""}`)[0]?.status).toBe("hidden");
+        expect(await statusOf(tx, lift)).toBe("hidden");
 
-        // Once no set names it, its Library row goes; its exercises row stays, so its id is never reused.
-        await tx`DELETE FROM workouts WHERE id = ${workout ?? ""}`;
+        // Once no set names it, it is marked removed and leaves the download; both its rows stay.
+        await tx`DELETE FROM workouts WHERE id = ${workout}`;
         expect(await publishLibrary(tx, real)).toMatchObject({ hidden: 0, removed: 1 });
         expect((await listIn(tx)).exercises.map((e) => e.id)).not.toContain("zz_library_lift");
-        expect(await tx`SELECT 1 FROM exercises WHERE id = ${lift ?? ""}`).toHaveLength(1);
+        expect(await statusOf(tx, lift)).toBe("removed");
+        expect(await tx`SELECT 1 FROM exercises WHERE id = ${lift}`).toHaveLength(1);
+      });
+    });
+
+    it("a set that arrives after its exercise was removed brings it back to the download, hidden, with its name (round one's High)", async () => {
+      await rolledBack(async (tx) => {
+        await publishLibrary(tx, withExtra(real, "zz_library_late", "Library Late Lift"));
+        const late = await idOf(tx, "zz_library_late");
+        expect(await publishLibrary(tx, real)).toMatchObject({ removed: 1 });
+        expect(await statusOf(tx, late)).toBe("removed");
+
+        // An offline phone sends its workout after the publish.
+        await saveSet(tx, late, "late");
+        expect(await publishLibrary(tx, real)).toMatchObject({ hidden: 1, removed: 0 });
+        const back = (await listIn(tx)).exercises.find((e) => e.id === "zz_library_late");
+        expect(back?.status).toBe("hidden");
+        expect(back?.text.en.name).toBe("Library Late Lift");
+      });
+    });
+
+    it("one of the old 58 whose file is deleted stays in the download, hidden, though no set names it", async () => {
+      await rolledBack(async (tx) => {
+        await tx`DELETE FROM workout_sets WHERE exercise_id = ${await idOf(tx, "squat")}`;
+        const noSquat = { ...real, exerciseFiles: real.exerciseFiles.filter((f) => f.name !== "squat.json") };
+        expect(await publishLibrary(tx, noSquat)).toMatchObject({ hidden: 1, removed: 0 });
+        expect((await listIn(tx)).exercises.find((e) => e.id === "squat")?.status).toBe("hidden");
+      });
+    });
+
+    it("a stored entry that no longer reads as an exercise refuses the publish and changes nothing", async () => {
+      await rolledBack(async (tx) => {
+        await publishLibrary(tx, withExtra(real, "zz_library_broken", "Library Broken Lift"));
+        const broken = await idOf(tx, "zz_library_broken");
+        await saveSet(tx, broken, "broken");
+        await tx`UPDATE library_exercises SET entry = '{"id": "zz_library_broken"}'::jsonb WHERE exercise_id = ${broken}`;
+        const before = await counts(tx);
+        const refused = await publishLibrary(tx, real).then(
+          () => null,
+          (err: unknown) => err,
+        );
+        expect(refused).toBeInstanceOf(LibraryRefused);
+        expect(String(refused)).toContain("library_exercises (zz_library_broken)");
+        expect(await counts(tx)).toEqual(before);
       });
     });
   });
@@ -183,6 +238,24 @@ d("the Exercise Library on the server (real Postgres)", () => {
       });
     });
 
+    it("a Library-only exercise's MET in the old table follows its Compendium code; an old row's never does", async () => {
+      await rolledBack(async (tx) => {
+        const recode = (input: LibraryInput, file: string, code: string): LibraryInput => ({
+          ...input,
+          exerciseFiles: input.exerciseFiles.map((f) => (f.name === file ? { ...f, text: f.text.replace(/"compendium": "\d{5}"/, `"compendium": "${code}"`) } : f)),
+        });
+        // The squat's code (MET 3.0) to the barbell curl (3.5), the curl's (3.5) to the plank (old MET 3.0).
+        await publishLibrary(tx, recode(recode(real, "barbell_curl.json", "02056"), "plank.json", "02054"));
+        const met = await tx<{ slug: string; met: string; library: string }[]>`
+          SELECT e.slug, e.met::text AS met, l.met::text AS library FROM exercises e JOIN library_exercises l ON l.exercise_id = e.id
+          WHERE e.slug IN ('barbell_curl', 'plank') ORDER BY e.slug`;
+        expect(met).toEqual([
+          { slug: "barbell_curl", met: "3.0", library: "3.0" },
+          { slug: "plank", met: "3.0", library: "3.5" },
+        ]);
+      });
+    });
+
     it("a faulty file refuses the whole publish, naming the file and the fact, and changes nothing", async () => {
       const broken = { ...real, exerciseFiles: real.exerciseFiles.map((f) => (f.name === "squat.json" ? { ...f, text: f.text.replace('"kind": "strength"', '"kind": "Strength"') } : f)) };
       await rolledBack(async (tx) => {
@@ -197,7 +270,10 @@ d("the Exercise Library on the server (real Postgres)", () => {
       });
     });
 
-    it("two publishes at once: the second waits for the first, then finds nothing changed", async () => {
+    it("two publishes at once: the second waits for the first, reads what it wrote, and adds nothing", async () => {
+      // The first publishes a change and commits; the second, waiting meanwhile, publishes the same
+      // change and must find it already there. The real folder is published again at the end.
+      const changed = { ...real, exerciseFiles: real.exerciseFiles.map((f) => (f.name === "plank.json" ? { ...f, text: f.text.replace('"level": "intermediate"', '"level": "advanced"') } : f)) };
       let release = (): void => undefined;
       const gate = new Promise<void>((r) => {
         release = r;
@@ -206,27 +282,28 @@ d("the Exercise Library on the server (real Postgres)", () => {
       const locked = new Promise<void>((r) => {
         markLocked = r;
       });
-      const first = sql
-        .begin(async (tx) => {
-          await publishLibrary(tx, real);
+      try {
+        const first = sql.begin(async (tx) => {
+          const outcome = await publishLibrary(tx, changed);
           markLocked();
           await gate;
-          throw new RolledBack();
-        })
-        .catch((err: unknown) => {
-          if (!(err instanceof RolledBack)) throw err;
+          return outcome;
         });
-      await locked;
-      let secondDone = false;
-      const second = sql.begin((tx) => publishLibrary(tx, real)).then((o) => {
-        secondDone = true;
-        return o;
-      });
-      await new Promise((r) => setTimeout(r, 400));
-      expect(secondDone).toBe(false);
-      release();
-      await first;
-      expect(await second).toMatchObject({ written: 0, copies: [] });
+        await locked;
+        let secondDone = false;
+        const second = sql.begin((tx) => publishLibrary(tx, changed)).then((o) => {
+          secondDone = true;
+          return o;
+        });
+        await new Promise((r) => setTimeout(r, 400));
+        expect(secondDone).toBe(false);
+        release();
+        expect((await first).copies).toHaveLength(2);
+        expect(await second).toMatchObject({ written: 0, copies: [] });
+      } finally {
+        release();
+        await sql.begin((tx) => publishLibrary(tx, real));
+      }
     });
 
     it("the old exercise list does not show the new exercise, and its old rows read as before", async () => {
@@ -291,11 +368,52 @@ d("the Exercise Library on the server (real Postgres)", () => {
       expect(older.statusCode).toBe(200);
     });
 
+    it("a tester on beta gets beta's newest copy, and live's while beta has none", async () => {
+      await rolledBack(async (tx) => {
+        const live = await newestCopyFor(tx, "live");
+        const beta = (await tx<{ version: number }[]>`
+          INSERT INTO library_copies (channel, sha256, body) VALUES ('beta', ${"b".repeat(64)}, '{}') RETURNING version`)[0]?.version;
+        expect((await newestCopyFor(tx, "beta"))?.version).toBe(beta);
+        expect((await newestCopyFor(tx, "live"))?.version).toBe(live?.version);
+        await tx`DELETE FROM library_copies WHERE channel = 'beta'`;
+        expect(await newestCopyFor(tx, "beta")).toEqual(live);
+      });
+    });
+
+    it("a copy whose text does not match its fingerprint, or does not read as a list, never reaches a phone", async () => {
+      await rolledBack(async (tx) => {
+        const good = await newestCopyFor(tx, "live");
+        expect(JSON.parse(await checkedCopyText(tx, good?.version ?? 0))).toHaveProperty("exercises");
+        const add = async (sha: string, body: string) =>
+          (await tx<{ version: number }[]>`INSERT INTO library_copies (channel, sha256, body) VALUES ('live', ${sha}, ${body}) RETURNING version`)[0]?.version ?? 0;
+        const tampered = await add("c".repeat(64), '{"camera":[],"exercises":[]}');
+        await expect(checkedCopyText(tx, tampered)).rejects.toThrow("does not match its fingerprint");
+        const body = '{"exercises":"not a list"}';
+        const misshapen = await add(createHash("sha256").update(body).digest("hex"), body);
+        await expect(checkedCopyText(tx, misshapen)).rejects.toThrow();
+      });
+    });
+
     it("nobody signed in gets nothing", async () => {
       const res = await get({});
       expect(res.statusCode).toBe(401);
       expect(res.body).not.toContain("squat");
     });
+  });
+});
+
+describe("a phone's tag, compared weakly (RFC 9110 §13.1.2)", () => {
+  const etag = `"${"a".repeat(64)}"`;
+  it.each([
+    { name: "no header", header: undefined, holds: false },
+    { name: "the same tag", header: etag, holds: true },
+    { name: "the same tag, weakened by a proxy", header: `W/${etag}`, holds: true },
+    { name: "any copy", header: "*", holds: true },
+    { name: "among others", header: `"old", ${etag}`, holds: true },
+    { name: "another tag", header: `"${"b".repeat(64)}"`, holds: false },
+    { name: "the tag without its quotes", header: "a".repeat(64), holds: false },
+  ])("$name: $holds", ({ header, holds }) => {
+    expect(holdsCopy(header, etag)).toBe(holds);
   });
 });
 

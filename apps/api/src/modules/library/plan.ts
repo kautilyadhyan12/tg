@@ -1,17 +1,22 @@
 // What one publish does to the Library's rows (spec Part 2 §13.4, job 60b). Pure: the checked files
-// and the rows already published in; the download's list, the rows to write and the rows to remove
-// out. The rule it holds: an exercise whose file is gone stays in the list, hidden, while a saved set
-// names it, so a member's history never shows a set with no exercise. Once nothing names it, its
-// Library row goes; its row in `exercises` stays, so its id word is never given to another exercise.
+// and the rows already published in; the download's list, the rows to write and the rows to mark
+// removed out. The rule it holds: a member's history never shows a set with no exercise.
+// - A Library row is never deleted: it is the one place a gone exercise's name is kept.
+// - An exercise whose file is gone is 'hidden' (in the download, so history names it) while a saved
+//   set names it, and always for one of the old 58, which the old save route can still name.
+// - Otherwise it is 'removed': out of the download, its entry kept. Every publish asks again about
+//   every gone row, so a set that arrives later (an offline phone) brings it back as 'hidden'.
 import type { CompendiumTable, ExerciseFile, LibraryEntry } from "@app/shared";
 import { canonicalJson } from "./canonical.js";
 
-/** A row already published: its exercise, its id word, its status, and the entry it was published
- *  with, as stored. A stored entry is not trusted: it is checked again as part of the new list. */
+/** A row already published: its exercise, its id word, its status, whether it is one of the old 58
+ *  (its `exercises` row has the old facts), and the entry it was last published with, as stored. A
+ *  stored entry is not trusted: it is checked again as part of the new list. */
 export interface PublishedRow {
   exerciseId: string;
   slug: string;
   status: string;
+  old: boolean;
   entry: unknown;
 }
 
@@ -19,14 +24,14 @@ export interface PublishPlan {
   /** The download's exercises, by id word: every file's, and every hidden one's. Unchecked: the
    *  hidden ones are stored entries. */
   list: { id: string; entry: unknown }[];
-  /** The rows to write: new, changed, or newly hidden. An unchanged row is not written. `exerciseId`
-   *  is null for an exercise the Library has not published before. */
+  /** The rows to write with their entry from the list: new, changed, or newly hidden. An unchanged
+   *  row is not written. `exerciseId` is null for an exercise the Library has not published before. */
   write: { slug: string; exerciseId: string | null }[];
-  /** Rows whose file is gone and that no saved set names, by exercise id. */
-  remove: string[];
+  /** Rows newly marked removed, by exercise id: file gone, nothing names them, not one of the old 58. */
+  markRemoved: string[];
 }
 
-/** The rows whose file is gone: only these are asked whether a saved set names them. */
+/** The rows whose file is gone, whatever their status: every publish asks about all of them. */
 export function rowsWithoutFile(files: readonly ExerciseFile[], rows: readonly PublishedRow[]): PublishedRow[] {
   const ids = new Set(files.map((f) => f.id));
   return rows.filter((r) => !ids.has(r.slug));
@@ -55,7 +60,7 @@ export function planPublish(input: {
   named: ReadonlySet<string>;
 }): PublishPlan {
   const bySlug = new Map(input.rows.map((r) => [r.slug, r]));
-  const plan: PublishPlan = { list: [], write: [], remove: [] };
+  const plan: PublishPlan = { list: [], write: [], markRemoved: [] };
 
   for (const file of input.files) {
     const entry = entryOf(file, input.compendium);
@@ -67,8 +72,8 @@ export function planPublish(input: {
   }
 
   for (const row of rowsWithoutFile(input.files, input.rows)) {
-    if (!input.named.has(row.exerciseId)) {
-      plan.remove.push(row.exerciseId);
+    if (!row.old && !input.named.has(row.exerciseId)) {
+      if (row.status !== "removed") plan.markRemoved.push(row.exerciseId);
       continue;
     }
     const entry = hiddenEntry(row.entry);
@@ -79,6 +84,6 @@ export function planPublish(input: {
   }
 
   plan.list.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
-  plan.remove.sort();
+  plan.markRemoved.sort();
   return plan;
 }

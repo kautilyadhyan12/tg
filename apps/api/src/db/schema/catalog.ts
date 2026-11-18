@@ -90,10 +90,12 @@ export const definitionBundles = pgTable(
 // The Exercise Library on the server (spec Part 2 §13.4, job 60b; migration 0243). Written only by
 // publishing (`modules/library/publish.ts`), from the exercise files in packages/shared/library.
 
-/** One row for each exercise the Library has published: the facts the server reckons with, and the
- *  exercise's whole entry as the phone's download carries it. 'hidden' is an exercise whose file is
- *  gone while saved sets still name it: kept in the download so that history can name it, never
- *  shown in the Library. */
+/** One row for each exercise the Library has ever published, never deleted: the facts the server
+ *  reckons with, and the exercise's whole entry as the phone's download carries it. 'hidden' is an
+ *  exercise whose file is gone while a saved set names it (or one of the old 58, which the old save
+ *  route can still name): in the download so that history names it, never shown in the Library.
+ *  'removed' is one whose file is gone and that nothing names: out of the download, its entry kept,
+ *  so a set that arrives later brings it back as 'hidden' at the next publish. */
 export const libraryExercises = pgTable(
   "library_exercises",
   {
@@ -110,7 +112,7 @@ export const libraryExercises = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    check("library_exercises_status_check", sql`${t.status} IN ('live','retired','hidden')`),
+    check("library_exercises_status_check", sql`${t.status} IN ('live','retired','hidden','removed')`),
     check("library_exercises_met_check", sql`${t.met} BETWEEN 1 AND 23`),
     check("library_exercises_compendium_check", sql`${t.compendium} ~ '^[0-9]{5}$'`),
     check("library_exercises_measured_in_check", sql`${t.measuredIn} IN ('reps','time')`),

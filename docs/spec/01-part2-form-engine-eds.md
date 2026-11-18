@@ -1929,12 +1929,14 @@ otherwise, that plan says so and this section is amended.
   is gone, hidden, while saved sets still name it.
 - It writes each exercise's row (its id, status and the facts the server reckons with) and,
   only when the content changed, one new numbered copy of the whole list for each of beta
-  and live. A published copy is never changed; going back is pointing at the copy before.
+  and live. A published copy is never changed. There is no going back to an older copy (Kd,
+  2026-11-18; "As built in 60b" below).
 - **One download** for a signed-in phone: the whole list, the retired ones marked so that
   history can name them, and folder 1's camera data. It carries its own fingerprint, and a
   phone that already holds it is answered "not changed". Its size at 200 exercises is
   measured in job 60 and written here.
-- The old routes are left exactly as they are, with nothing added.
+- The old routes are left as they are, with nothing added, but for one clause in the old save
+  route ("As built in 60b" below).
 
 **As built in 60b (2026-11-18).** Publishing is `apps/api/src/modules/library/publish.ts`, run by
 the seed after the old rows. The download is `GET /v1/library` (`libraryDownloadSchema` in
@@ -1946,13 +1948,19 @@ the seed after the old rows. The download is `GET /v1/library` (`libraryDownload
   new `exercises` row with none of the old camera facts, 'hidden' to the old routes (migration
   0243). New code reckons with the Library's MET. The old save route counts a set of such an
   exercise as unknown, as it does any name it does not know.
-- **A deleted file.** Its Library row stays, 'hidden', while a saved set names it, and the download
-  carries its last entry so that history names it; once no set names it, the row goes. Its
+- **A deleted file.** A Library row is never deleted: it is the one place a gone exercise's name
+  is kept. While a saved set names it, it is 'hidden' and the download carries its last entry so
+  that history names it; one of the old 58 is always 'hidden', because the old save route can
+  still name it. Otherwise it is 'removed': out of the download, its entry kept. Every publish asks
+  again about every gone row, so a set that arrives later brings it back as 'hidden'. Its
   `exercises` row stays, so its id word is never given to another exercise. "Named" means a saved
-  set today; job 61 adds its saved workouts to that check.
+  set today; job 61 adds its saved workouts to that check, counts a 'removed' exercise as unknown,
+  and takes the publish lock shared while it saves, so no set lands between a publish's question
+  and its answer.
 - **Copies.** `library_copies` holds each copy's exact text, so the fingerprint is the text's
   sha256. A copy is added for each of live and beta only when the text changed; beta is the
-  `beta_definitions` flag's list, and while beta has no copy a tester gets live. There is no going
+  `beta_definitions` flag's list, the one rule the old definitions use too, and while beta has no
+  copy a tester gets live. A phone's tag is compared weakly (RFC 9110 §13.1.2). There is no going
   back to an older copy (Kd, 2026-11-18: no real members yet): a mistake is fixed in the file and
   published again. One publish runs at a time; a second waits and then finds nothing changed.
 - **Measured at 200 exercises** (2026-11-18, `apps/api/tools/measure-library.ts`, local database,

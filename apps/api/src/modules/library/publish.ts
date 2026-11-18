@@ -21,7 +21,7 @@ export interface PublishOutcome {
   live: number;
   retired: number;
   hidden: number;
-  /** Rows written (new, changed or newly hidden), and rows removed. */
+  /** Rows written (new, changed or newly hidden), and rows newly marked removed. */
   written: number;
   removed: number;
   /** The new copies, one for each channel whose content changed; empty when nothing changed. */
@@ -73,7 +73,7 @@ export async function publishLibrary(tx: TransactionSql, input: LibraryInput): P
       return { exerciseId, entry: entryOf(w.slug) };
     }),
   );
-  await repo.removeRows(tx, plan.remove);
+  await repo.markRemoved(tx, plan.markRemoved);
 
   const list: LibraryList = { exercises: plan.list.map((l) => entryOf(l.id)), camera: [] };
   const body = copyText(list);
@@ -90,7 +90,7 @@ export async function publishLibrary(tx: TransactionSql, input: LibraryInput): P
     retired: count("retired"),
     hidden: count("hidden"),
     written: plan.write.length,
-    removed: plan.remove.length,
+    removed: plan.markRemoved.length,
     copies,
     fingerprint,
   };

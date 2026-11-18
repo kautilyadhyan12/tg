@@ -6,6 +6,7 @@
 // access or 500 a read path.
 import type { Sql } from "postgres";
 import { z } from "zod";
+import { channelFor } from "../library/channel.js";
 import * as repo from "./repo.js";
 import {
   bundleResponseSchema,
@@ -40,7 +41,6 @@ export async function getCatalogPage(
   });
 }
 
-const betaRulesSchema = z.object({ userIds: z.array(z.uuid()) });
 const manifestSchema = z.record(z.string(), z.number().int().positive());
 
 /** §9.3: beta channel only for allowlisted users; anything else — flag
@@ -48,10 +48,8 @@ const manifestSchema = z.record(z.string(), z.number().int().positive());
  *  swap: beta bundles must be authored as supersets of live (DECISIONS
  *  2026-07-11, T3 finding 3; enforced by P4 publishing tooling). */
 export async function resolveChannel(deps: ExercisesDeps, userId: string): Promise<"live" | "beta"> {
-  const rules = await repo.getFlagRules(deps.sql, "beta_definitions");
-  const parsed = betaRulesSchema.safeParse(rules);
-  if (!parsed.success) return "live";
-  return parsed.data.userIds.includes(userId) ? "beta" : "live";
+  // One rule for both lists (job 60b): a tester is on beta for the old definitions and the Library.
+  return channelFor(await repo.getFlagRules(deps.sql, "beta_definitions"), userId);
 }
 
 export type BundleResult =

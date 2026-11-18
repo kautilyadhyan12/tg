@@ -20,7 +20,7 @@ CREATE TABLE "library_exercises" (
 	"each_side" boolean NOT NULL,
 	"entry" jsonb NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "library_exercises_status_check" CHECK ("library_exercises"."status" IN ('live','retired','hidden')),
+	CONSTRAINT "library_exercises_status_check" CHECK ("library_exercises"."status" IN ('live','retired','hidden','removed')),
 	CONSTRAINT "library_exercises_met_check" CHECK ("library_exercises"."met" BETWEEN 1 AND 23),
 	CONSTRAINT "library_exercises_compendium_check" CHECK ("library_exercises"."compendium" ~ '^[0-9]{5}$'),
 	CONSTRAINT "library_exercises_measured_in_check" CHECK ("library_exercises"."measured_in" IN ('reps','time')),
