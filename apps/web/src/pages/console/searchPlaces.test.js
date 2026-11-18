@@ -64,6 +64,8 @@ describe('the worst thing: nothing this person cannot open', () => {
       for (const line of searchCatalogue(SLUG, privileges, org())) {
         const path = line.to.split(/[?#]/)[0];
         if (!inMenu(path)) throw new Error(`${line.key} opens ${line.to}, not in the menu of ${privileges.join(',')}`);
+        // Members showing who has a payment due or no card: the list's bills, `billing.members`.
+        if (line.to.includes('?show=') && !privileges.includes('billing.members')) throw new Error(`${line.key} shown without billing.members`);
         if (line.kind === 'setting') {
           const tail = line.to.slice(`/console/${SLUG}`.length).replace(/^\//, '');
           const need = SETTING_NEEDS[tail];
@@ -126,6 +128,12 @@ describe('what people type finds the place', () => {
     ['staff', 'page', 'Staff'],
     ['team', 'page', 'Staff'],
     ['subscription', 'setting', 'Your KWAZO plan'],
+    ['overdue', 'page', 'Payment due'],
+    ['owe', 'page', 'Payment due'],
+    ['card on file', 'page', 'No card on file'],
+    ['inventory', 'page', 'Products'],
+    ['stock', 'page', 'Products'],
+    ['cash', 'action', 'Record a payment'],
     ['sett', 'page', 'Settings'],
     ['MEMBERSHIPS', 'page', 'Memberships'],
   ])('"%s" finds %s %s', (typed, group, title) => {
@@ -151,10 +159,33 @@ describe('what people type finds the place', () => {
     expect(found(owner, 'sell')[0].lines[0].title).toBe('Sell');
   });
 
-  it('groups come Pages, Actions, Settings, each at most eight', () => {
+  it('groups come Pages, Actions, Settings, every match shown', () => {
     const groups = found(owner, 'money');
     expect(groups.map((g) => g.label)).toEqual(['Pages', 'Actions', 'Settings']);
-    for (const g of groups) expect(g.lines.length).toBeLessThanOrEqual(8);
+  });
+
+  // Kd at the click-through: "money" must bring every money feature, none cut off. The list is
+  // the console's money places as its pages and menu name them, written out here by hand.
+  it('"money" finds every money feature an owner has', () => {
+    const groups = found(owner, 'money');
+    expect(inGroup(groups, 'page')).toEqual(expect.arrayContaining(['Sell', 'Memberships', 'Failed payments', 'Reports', 'Payment due', 'No card on file', 'Products']));
+    expect(inGroup(groups, 'action')).toEqual(expect.arrayContaining(['New sale', 'Record a payment']));
+    expect(inGroup(groups, 'setting')).toEqual(expect.arrayContaining(['Payments', 'Tax', 'Discounts', 'Bills', 'Your KWAZO plan']));
+  });
+
+  it('what waits in the bell is found too, and money that waits by "money"', () => {
+    const waiting = [
+      { key: 'chargebacks', title: '1 chargeback', note: "A cardholder's bank disputed a payment", to: '/console/iron-house#chargebacks' },
+      { key: 'refunds', title: '2 refunds to review', note: null, to: '/console/iron-house#refunds-to-review' },
+      { key: 'reconnect', title: 'Reconnect Square', note: 'The owner needs to reconnect Square', to: null },
+    ];
+    const lines = searchCatalogue(SLUG, owner, org(), waiting);
+    const groups = searchResults(lines, 'money');
+    expect(groups[0].label).toBe('Needs attention');
+    expect(titles(groups[0].lines)).toEqual(['1 chargeback', '2 refunds to review']);
+    expect(inGroup(searchResults(lines, 'dispute'), 'attention')).toEqual(['1 chargeback']);
+    // A line with no place to open (only the owner may reconnect) is not offered.
+    expect(titles(lines)).not.toContain('Reconnect Square');
   });
 
   it("a studio's words: clients, instructors", () => {

@@ -12,13 +12,11 @@ import { memberContactTitle } from './memberContactView';
 
 /** The groups results come in, in their order. */
 export const SEARCH_GROUPS = [
+  { key: 'attention', label: 'Needs attention' },
   { key: 'page', label: 'Pages' },
   { key: 'action', label: 'Actions' },
   { key: 'setting', label: 'Settings' },
 ];
-
-/** At most this many lines a group, so a short word never fills the box. */
-export const PER_GROUP = 8;
 
 const MONEY = ['money', 'payments', 'billing', 'revenue', 'sales', 'card', 'refund', 'tax'];
 
@@ -63,7 +61,15 @@ const NEW_WORDS = {
 /** Actions that are not on New. */
 const MORE_ACTIONS = [
   { key: 'importMembers', place: 'importMembers', title: (w) => `Import ${w.people}`, where: (w, members) => members, words: ['upload', 'file', 'csv', 'spreadsheet', 'excel', 'move from'] },
+  { key: 'recordPayment', place: 'paymentDue', title: () => 'Record a payment', where: () => 'Payment due · select a member', words: ['take payment', 'cash', 'bank transfer', 'paid', 'record', ...MONEY] },
   { key: 'inviteStaff', place: 'inviteStaff', title: () => 'Invite staff', where: () => 'Staff', words: ['add staff', 'team', 'employee', 'coach', 'trainer', 'front desk'] },
+];
+
+/** Lists and boxes inside a page, opened as their own place. */
+const PAGE_PARTS = [
+  { key: 'paymentDue', place: 'paymentDue', title: () => 'Payment due', where: (w, members) => members, words: ['overdue', 'outstanding', 'owe', 'unpaid', 'due', 'arrears', ...MONEY] },
+  { key: 'noCardOnFile', place: 'noCardOnFile', title: () => 'No card on file', where: (w, members) => members, words: ['card on file', 'cards on file', 'request cards', 'autopay', 'saved card', ...MONEY] },
+  { key: 'products', place: 'products', title: () => 'Products', where: () => 'Sell', words: ['stock', 'inventory', 'shop', 'retail', 'items', 'merchandise', ...MONEY] },
 ];
 
 /** Settings sections and the boxes set once on other pages, by their own titles. */
@@ -86,8 +92,23 @@ const SETTINGS = [
   { place: 'membershipTax', title: () => 'Tax', where: () => 'Memberships', words: ['vat', 'gst', 'sales tax', 'tax rate', 'money'] },
   { place: 'membershipDiscounts', title: () => 'Discounts', where: () => 'Memberships', words: ['promo', 'promo code', 'coupon', 'code', 'offer', 'money'] },
   { place: 'membershipBills', title: () => 'Bills', where: () => 'Memberships', words: ['invoice', 'invoices', 'grace period', 'overdue', 'due', 'money', 'billing'] },
-  { place: 'plan', title: () => 'Your KWAZO plan', where: () => 'Overview', words: ['subscription', 'kwazo', 'upgrade', 'trial', 'billing', 'pay us'] },
+  { place: 'plan', title: () => 'Your KWAZO plan', where: () => 'Overview', words: ['subscription', 'kwazo', 'upgrade', 'trial', 'billing', 'pay us', 'money', 'invoice'] },
 ];
+
+/** What waits, from the bell's own lines (V1-d): the words each kind is found by. */
+const ATTENTION_WORDS = {
+  reconnect: ['square', 'chargebacks', 'reconnect', ...MONEY],
+  chargebacks: ['chargeback', 'chargebacks', 'dispute', 'disputed', ...MONEY],
+  'failed-payments': ['declined', 'failed', ...MONEY],
+  'payment-due': ['overdue', 'outstanding', 'due', 'unpaid', ...MONEY],
+  refunds: ['refunds to review', 'refund', 'refunds', ...MONEY],
+  'app-payments': ['app payments', 'paid in the app', ...MONEY],
+  'app-cancels': ['cancelled', 'cancel', 'cancellations', 'membership', ...MONEY],
+  'at-risk': ['churn', 'inactive', 'absent'],
+  reported: ['reported', 'post', 'comment', 'moderation'],
+  'new-leads': ['leads', 'enquiries', 'prospects'],
+};
+const NEEDS = ['needs attention', 'attention', 'alerts', 'waiting', 'to do'];
 
 /** The lines before anything is typed under Quick actions, by their key. */
 const QUICK = ['checkIn', 'addMember', 'newSale'];
@@ -96,8 +117,9 @@ const groupLabel = (key) => MENU_GROUPS.find((g) => g.key === key)?.label ?? nul
 
 /** EVERY PLACE THIS PERSON MAY OPEN, as search lines `{ key, kind, title, where, words, to }`.
  *  Nothing with no address, nothing their role cannot open, and no action while the business
- *  can change nothing (§4.2), as New. */
-export function searchCatalogue(orgSlug, privileges, org) {
+ *  can change nothing (§4.2), as New. `waiting`: the bell's lines (`attentionLines`), each
+ *  already only what this person may open. */
+export function searchCatalogue(orgSlug, privileges, org, waiting = []) {
   if (typeof orgSlug !== 'string' || orgSlug === '') return [];
   const orgType = org?.orgType;
   const w = orgWords(orgType);
@@ -105,6 +127,10 @@ export function searchCatalogue(orgSlug, privileges, org) {
   const membersName = menu.pages.find((p) => p.key === 'members')?.label ?? w.peopleCap;
   const lines = [];
 
+  for (const line of Array.isArray(waiting) ? waiting : []) {
+    if (typeof line?.to !== 'string' || line.to === '') continue;
+    lines.push({ key: `attention:${line.key}`, kind: 'attention', title: line.title, where: line.note ?? 'Needs attention', words: [...(ATTENTION_WORDS[line.key] ?? []), ...NEEDS], to: line.to });
+  }
   for (const page of menu.pages) {
     const about = PAGE_WORDS[page.key];
     const group = groupLabel(page.group);
@@ -122,6 +148,12 @@ export function searchCatalogue(orgSlug, privileges, org) {
     if (!canOpenPlace(privileges, tab.place)) continue;
     const to = placeTo(orgSlug, tab.place);
     if (to !== null) lines.push({ key: `page:${tab.key}`, kind: 'page', title: tab.title(w), where: tab.where(w, membersName), words: tab.words, to });
+  }
+
+  for (const part of PAGE_PARTS) {
+    if (!canOpenPlace(privileges, part.place)) continue;
+    const to = placeTo(orgSlug, part.place);
+    if (to !== null) lines.push({ key: `page:${part.key}`, kind: 'page', title: part.title(w), where: part.where(w, membersName), words: part.words, to });
   }
 
   if (!consoleIsReadOnly(org)) {
@@ -179,8 +211,8 @@ function score(line, asked) {
   return total;
 }
 
-/** The results for what was typed, each group's best first, at most PER_GROUP a group; a group
- *  with none is left out. The group holding the best line comes first ("tax" opens on the Tax
+/** The results for what was typed, each group's best first, every match shown; a group with
+ *  none is left out. The group holding the best line comes first ("tax" opens on the Tax
  *  setting, "check in" on the action), and otherwise SEARCH_GROUPS' order. Nothing typed is no
  *  groups. */
 export function searchResults(catalogue, typed) {
@@ -189,7 +221,7 @@ export function searchResults(catalogue, typed) {
   const scored = catalogue.map((line, at) => ({ line, at, s: score(line, asked) })).filter((x) => x.s > 0);
   return SEARCH_GROUPS.map((g, order) => {
     const mine = scored.filter((x) => x.line.kind === g.key).sort((a, b) => b.s - a.s || a.at - b.at);
-    return { ...g, order, best: mine[0]?.s ?? 0, lines: mine.slice(0, PER_GROUP).map((x) => x.line) };
+    return { ...g, order, best: mine[0]?.s ?? 0, lines: mine.map((x) => x.line) };
   })
     .filter((g) => g.lines.length > 0)
     .sort((a, b) => b.best - a.best || a.order - b.order)

@@ -1,7 +1,7 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { orgWords } from '@app/shared';
 import { NavLink, Link, useLocation, useParams } from 'react-router-dom';
-import { Bell, Building2, ChevronDown, ChevronsUpDown, CircleCheck, Ellipsis, LogOut, Plus, UserRound } from 'lucide-react';
+import { Bell, Search, Building2, ChevronDown, ChevronsUpDown, CircleCheck, Ellipsis, LogOut, Plus, UserRound } from 'lucide-react';
 import ConsoleBanner from './ConsoleBanner';
 import PlanModal from './PlanModal';
 import SizeDecisionPrompt from './SizeDecisionPrompt';
@@ -16,7 +16,7 @@ import { newMenu } from '../../pages/console/consoleNew';
 import { attentionLines, bellLabel, countText, menuCounts, moreCount, seesAnyPart } from '../../pages/console/attentionView';
 import { AttentionContext, useAttentionRead } from '../../pages/console/useAttention';
 import MenuCount from './MenuCount';
-import { SearchBar, SearchBox, SearchIcon } from './ConsoleSearch';
+import SearchField from './ConsoleSearch';
 import { opensSearch, searchCatalogue, searchKeysLabel, searchPlaceholder } from '../../pages/console/searchPlaces';
 import { initialsOf } from '../../pages/console/memberListPeople';
 import { orgTypeLabel, roleLabel, viewerPrivileges } from '../../pages/console/consoleView';
@@ -320,31 +320,31 @@ export default function ConsoleLayout({ children }) {
   const mark = (page) => (counts[page.key] !== undefined ? <MenuCount count={counts[page.key]} /> : reviewDot(page));
   const underMore = menu ? moreCount(menu.more, counts) : null;
 
-  // Search (V1-e-i): from the bar, the phone's search button, or Ctrl K / ⌘K on any page.
-  const catalogue = useMemo(() => (orgSlug ? searchCatalogue(orgSlug, viewerPrivileges(org), org) : []), [orgSlug, org]);
-  // The button search opened under while it is open, else null.
-  const [searchFrom, setSearchFrom] = useState(null);
-  const barSearch = useRef(null);
-  const phoneSearch = useRef(null);
+  // Search (V1-e-i): the box in the bar, typed in where it is; on a phone the top bar's search
+  // button turns the top bar into that box; Ctrl K / ⌘K puts the cursor in whichever is on screen.
+  // What waits (the bell's lines) is found too.
+  const catalogue = orgSlug ? searchCatalogue(orgSlug, viewerPrivileges(org), org, lines) : [];
+  const [phoneSearch, setPhoneSearch] = useState(false);
+  const barInput = useRef(null);
   const canSearch = menu !== null;
   useEffect(() => {
     if (!canSearch) return undefined;
     const onKey = (event) => {
       if (!opensSearch(event)) return;
       event.preventDefault();
-      // The search box that is on screen: the bar's on a computer, the top bar's on a phone.
-      setSearchFrom(barSearch.current?.offsetParent != null ? barSearch : phoneSearch);
+      if (barInput.current !== null && barInput.current.offsetParent !== null) barInput.current.focus();
+      else setPhoneSearch(true);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [canSearch]);
-  // Another page (Back, a link) closes it.
+  // Another page (Back, a link) closes the phone's search.
   const [searchPath, setSearchPath] = useState(pathname);
   if (pathname !== searchPath) {
     setSearchPath(pathname);
-    setSearchFrom(null);
+    setPhoneSearch(false);
   }
-  const placeholder = searchPlaceholder();
+  const placeholder = searchPlaceholder(org?.orgType);
 
   // The groups this person folded on this device, kept as they left them. The page they are on
   // is never folded away: arriving on it shows its group open for this visit only, and the
@@ -429,11 +429,15 @@ export default function ConsoleLayout({ children }) {
         {/* ── The top bar, on a phone. With a gym it holds the gym's name, and Sign out is
                under More; without one (your organisations, create) Sign out is here. ── */}
         <header className="c-topbar" data-testid="console-topbar">
-          {menu ? (
+          {menu && phoneSearch ? (
+            <SearchField key={`phone:${pathname}`} phone orgSlug={orgSlug} catalogue={catalogue} placeholder={placeholder} onLeave={() => setPhoneSearch(false)} />
+          ) : menu ? (
             <>
               <GymSwitcher org={org} fallback={consoleName} compact />
               <span className="c-topbar-end">
-                <SearchIcon buttonRef={phoneSearch} onOpen={() => setSearchFrom(phoneSearch)} />
+                <button type="button" className="c-bell" aria-label="Search" onClick={() => setPhoneSearch(true)} data-testid="console-search-phone">
+                  <Search size={20} aria-hidden="true" />
+                </button>
                 {showBell ? <BellButton lines={lines} onOpen={reloadAttention} /> : null}
                 {name ? (
                   <Link to={menu.moreTo} className="c-topbar-me" aria-label={`${name}: your account and Sign out, under More`}>
@@ -472,14 +476,10 @@ export default function ConsoleLayout({ children }) {
             something, and the bell. */}
         {menu ? (
           <div className="c-pagebar" data-testid="console-bar">
-            <SearchBar buttonRef={barSearch} placeholder={placeholder} keys={searchKeysLabel(typeof navigator === 'undefined' ? '' : navigator.platform)} onOpen={() => setSearchFrom(barSearch)} />
+            <SearchField key={`bar:${pathname}`} inputRef={barInput} orgSlug={orgSlug} catalogue={catalogue} placeholder={placeholder} keys={searchKeysLabel(typeof navigator === 'undefined' ? '' : navigator.platform)} />
             {showNew ? <NewButton offer={offer} /> : null}
             {showBell ? <BellButton lines={lines} onOpen={reloadAttention} /> : null}
           </div>
-        ) : null}
-
-        {searchFrom !== null && canSearch ? (
-          <SearchBox key={orgSlug} anchorRef={searchFrom} orgSlug={orgSlug} catalogue={catalogue} placeholder={placeholder} onClose={() => setSearchFrom(null)} />
         ) : null}
 
         {/* Keyed on the slug so every screen starts fresh on another gym, and never shows

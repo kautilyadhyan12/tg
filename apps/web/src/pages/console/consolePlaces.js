@@ -73,6 +73,11 @@ const PLACES = {
   // The Tax box on Memberships (18b-v), and Settings' signed forms of deleted members (18u-iii).
   membershipTax: { path: '/memberships#tax', may: canManageMemberships },
   deletedForms: { path: `/settings#${SETTINGS_SECTION.deletedForms}`, may: canManageOrg },
+  // Search's money lines (V1-e-i): Sell's Products box, and Members showing who has a payment
+  // due or no card on file (the list's own filters, for staff who keep its bills).
+  products: { path: '/sell#products', may: canOpenSell },
+  paymentDue: { path: '/members?show=payment-due', may: (privileges) => has(privileges, 'billing.members') },
+  noCardOnFile: { path: '/members?show=no-card', may: (privileges) => has(privileges, 'billing.members') },
   sell: { path: '/sell', may: canOpenSell },
   failedPayments: { path: '/failed-payments', may: canSeeFailedPayments },
   members: { path: '/members', may: onStaff },
