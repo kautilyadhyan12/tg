@@ -729,8 +729,8 @@ const styles = StyleSheet.create({
   name: { alignSelf: "stretch" },
   // The greeting lies on a bright picture.
   onPicture: { textShadowColor: colours.wordShadow, textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 8 },
-  // A little lower than the picture's own foot, on the ground under the figures (Kd).
-  footDrop: { transform: [{ translateY: 12 }] },
+  // Up off the picture's foot, on the floor beside the figures' shoes (Kd, 2026-11-19).
+  footDrop: { transform: [{ translateY: -24 }] },
   // A title too long for its box goes onto a second line, never past the box's edge (an opened folding phone).
   boxTitle: { flexShrink: 1, fontSize: 14, lineHeight: 18, color: colours.textSoft },
   centre: { textAlign: "center" },
