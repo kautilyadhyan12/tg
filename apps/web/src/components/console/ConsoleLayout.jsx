@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
 import { orgWords } from '@app/shared';
 import { NavLink, Link, useLocation, useParams } from 'react-router-dom';
-import { Bell, Building2, ChevronDown, ChevronsUpDown, CircleCheck, Ellipsis, LogOut, Plus, UserRound } from 'lucide-react';
+import { Bell, Search, Building2, ChevronDown, ChevronsUpDown, CircleCheck, Ellipsis, LogOut, Plus, UserRound } from 'lucide-react';
 import ConsoleBanner from './ConsoleBanner';
 import PlanModal from './PlanModal';
 import SizeDecisionPrompt from './SizeDecisionPrompt';
@@ -16,6 +16,8 @@ import { newMenu } from '../../pages/console/consoleNew';
 import { attentionLines, bellLabel, countText, menuCounts, moreCount, seesAnyPart } from '../../pages/console/attentionView';
 import { AttentionContext, useAttentionRead } from '../../pages/console/useAttention';
 import MenuCount from './MenuCount';
+import SearchField from './ConsoleSearch';
+import { opensSearch, searchCatalogue, searchKeysLabel, searchPlaceholder } from '../../pages/console/searchPlaces';
 import { initialsOf } from '../../pages/console/memberListPeople';
 import { orgTypeLabel, roleLabel, viewerPrivileges } from '../../pages/console/consoleView';
 import './console.css';
@@ -289,7 +291,7 @@ function NewButton({ offer }) {
 
 export default function ConsoleLayout({ children }) {
   const { orgSlug } = useParams();
-  const { pathname, search } = useLocation();
+  const { pathname, search, key: visit } = useLocation();
   const { user } = useAuth();
   // Nothing is asked on `/console` and `/console/new`, which have no gym. A failed read is
   // the screen's to show; here it only means no role yet.
@@ -317,6 +319,35 @@ export default function ConsoleLayout({ children }) {
   /** A page's mark in the menu: its count where something waits, else Members' Review needed dot. */
   const mark = (page) => (counts[page.key] !== undefined ? <MenuCount count={counts[page.key]} /> : reviewDot(page));
   const underMore = menu ? moreCount(menu.more, counts) : null;
+
+  // Search (V1-e-i): the box in the bar, typed in where it is; on a phone the top bar's search
+  // button turns the top bar into that box; Ctrl K / ⌘K puts the cursor in whichever is on screen.
+  // What waits (the bell's lines) is found too.
+  const catalogue = orgSlug ? searchCatalogue(orgSlug, viewerPrivileges(org), org, lines) : [];
+  const [phoneSearch, setPhoneSearch] = useState(false);
+  const barInput = useRef(null);
+  const canSearch = menu !== null;
+  useEffect(() => {
+    if (!canSearch) return undefined;
+    const onKey = (event) => {
+      if (!opensSearch(event)) return;
+      // A box open over the page (Add member, Record payment) or under a button keeps the keys:
+      // nothing reaches past it. A confirmation written into the page itself does not.
+      if (document.querySelector('[role="dialog"][aria-modal="true"], .c-pop') !== null) return;
+      event.preventDefault();
+      if (barInput.current !== null && barInput.current.offsetParent !== null) barInput.current.focus();
+      else setPhoneSearch(true);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [canSearch]);
+  // Another place (Back, a link, only a #section changing) closes the phone's search.
+  const [searchVisit, setSearchVisit] = useState(visit);
+  if (visit !== searchVisit) {
+    setSearchVisit(visit);
+    setPhoneSearch(false);
+  }
+  const placeholder = searchPlaceholder(org?.orgType);
 
   // The groups this person folded on this device, kept as they left them. The page they are on
   // is never folded away: arriving on it shows its group open for this visit only, and the
@@ -401,10 +432,15 @@ export default function ConsoleLayout({ children }) {
         {/* ── The top bar, on a phone. With a gym it holds the gym's name, and Sign out is
                under More; without one (your organisations, create) Sign out is here. ── */}
         <header className="c-topbar" data-testid="console-topbar">
-          {menu ? (
+          {menu && phoneSearch ? (
+            <SearchField key={`phone:${visit}`} phone orgSlug={orgSlug} catalogue={catalogue} placeholder={placeholder} onLeave={() => setPhoneSearch(false)} />
+          ) : menu ? (
             <>
               <GymSwitcher org={org} fallback={consoleName} compact />
               <span className="c-topbar-end">
+                <button type="button" className="c-bell" aria-label="Search" onClick={() => setPhoneSearch(true)} data-testid="console-search-phone">
+                  <Search size={20} aria-hidden="true" />
+                </button>
                 {showBell ? <BellButton lines={lines} onOpen={reloadAttention} /> : null}
                 {name ? (
                   <Link to={menu.moreTo} className="c-topbar-me" aria-label={`${name}: your account and Sign out, under More`}>
@@ -439,9 +475,11 @@ export default function ConsoleLayout({ children }) {
             gyms, and a dismissal must not outlive the gym it was for. */}
         <ConsoleBanner key={org?.id ?? 'no-gym'} org={org} />
 
-        {/* The bar across the top, on a computer: New, for whoever may add something. */}
-        {menu && (showNew || showBell) ? (
+        {/* The bar across the top, on a computer: Search for everybody, New for whoever may add
+            something, and the bell. */}
+        {menu ? (
           <div className="c-pagebar" data-testid="console-bar">
+            <SearchField key={`bar:${visit}`} inputRef={barInput} orgSlug={orgSlug} catalogue={catalogue} placeholder={placeholder} keys={searchKeysLabel(typeof navigator === 'undefined' ? '' : navigator.platform)} />
             {showNew ? <NewButton offer={offer} /> : null}
             {showBell ? <BellButton lines={lines} onOpen={reloadAttention} /> : null}
           </div>

@@ -500,7 +500,9 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
    - **The third look (Kd, 2026-11-18; `rulings/2026-11-18-console-look-3.md`; spec Part 3 §17.11; the boards in `docs/design/console-v3`, whose README names each board's job).** It replaces the second look's layout and colours: one family with the member app, laid out like a CRM, flat colour, standard words, for every fitness business; nothing is taken away. These five jobs come before V2a, in this order, one terminal each; V2a to V11 above then build each page in the third look, from its `console-v3` board where it has one, and change that page's words to the word list.
    - V1-c. [x] **The third look's blocks and the bar across the top** · merged 2026-11-18 · PR #580
    - V1-d. [x] **Counts in the menu, and the bell** · merged 2026-11-18 · PR #583
-   - V1-e. [ ] **Search**: people, pages, actions and settings from the bar and Ctrl K, one list of places with the words people use (`Search`). Its plan names its size.
+   - V1-e. **Search**, in two (2026-11-18): people, pages, actions and settings from the bar and Ctrl K (`Search`).
+     - V1-e-i. [x] **Pages, actions and settings** · merged 2026-11-18 · PR #584
+     - V1-e-ii. [ ] **People**: members or clients, leads and staff, from the lists' own search with the business in the `WHERE`. Risky: its route, stranger test and cost at full size.
    - V1-f. [ ] **Payments overview**: the new page under Money, a line to every payment page and setting, Connect Square first until it is connected (`Money`, `MoneySetup`).
    - V0-d. [ ] **The boards not drawn yet, in the third look**: Sell, Memberships, Attendance, Classes, Leads, Reports, Settings and the four ways a box opens, from `kit3.css`, every button of the real page kept. No code; in parts if it is too big for one terminal.
 23. **A gym finds its way** (Kd, RULINGS 2026-10-07: the console read as "a maze"). Each page was clear alone and the fault was between pages. Four jobs in this order, built in Folder A before 17e-ii.
@@ -827,7 +829,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
     - 60b. [x] **The list on the server** — merged 2026-11-18 (PR #579).
 61. **What a workout keeps** (§13.5; after 60). Split by its terminal into three, each a terminal of its own.
     - 61a. [x] **Saving a whole workout from the phone** — merged 2026-11-18 (PR #582).
-    - 61b. [ ] **History and records for each exercise** (after 61a): a month, a day's workouts, one workout set by set; heaviest, most reps, best estimated one-rep max, longest hold, most lifted, and "New record".
+    - 61b. [x] **History and records for each exercise** — merged 2026-11-18 (PR #586).
     - 61c. [ ] **Saved workouts** (after 61a): one shape for a planned workout; list, save and delete, with a limit for each person; a saved workout names its exercises, so a publish keeps them.
 62. [ ] **The clip line** (after 60): the generated clip made small, its still picture, and where clips are kept (Stage 4 item 4). Checking a clip against its exercise's rules waits for exercise folder 1's 52a and 52b.
 63. [ ] **The Exercise Library on the phone** (§13.6; after 60): the list kept on the phone, search, filters by muscle, equipment, level and how it is counted, and an exercise's page.

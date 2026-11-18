@@ -1853,6 +1853,134 @@
   background: var(--bad);
   color: var(--on-bad);
 }
+/* Search (V1-e-i): the box at the left of the bar on a computer is typed in where it is, and the
+   results drop down under it, in groups. On a phone the search button turns the top bar into the
+   same box, and the results fill the screen under it. The line the arrows are on is lit. */
+.c-findbar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: min(480px, 100%);
+  min-height: 44px;
+  margin-right: auto;
+  padding: 0 8px 0 14px;
+  box-sizing: border-box;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--input);
+  color: var(--t3);
+}
+.c-findbar:hover { border-color: var(--raise-line); }
+.c-findbar-open,
+.c-findbar:focus-within { border-color: var(--accent); }
+.c-findbar-icon { flex: none; }
+.c-findbar-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--t1);
+  font: inherit;
+  font-size: 14px;
+}
+.c-findbar-input::placeholder { color: var(--t3); }
+.c-findbar-keys {
+  flex: none;
+  padding: 2px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font: inherit;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--t3);
+}
+.c-findbar-close {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  margin-right: -6px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--t2);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.c-find-drop {
+  position: absolute;
+  z-index: 62;
+  top: calc(100% + 8px);
+  left: 0;
+  width: 100%;
+  min-width: min(380px, calc(100vw - 32px));
+  max-height: min(70vh, 640px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px 16px;
+  box-sizing: border-box;
+  background: var(--sheet);
+  border: 1px solid var(--raise-line);
+  border-radius: 18px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
+}
+/* The phone: the box fills the top bar; the results fill the screen under it, over the tabs. */
+.c-findbar-phone {
+  width: 100%;
+  margin-right: 0;
+  background: var(--input);
+}
+.c-findbar-phone .c-find-drop {
+  position: fixed;
+  top: 60px;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: auto;
+  min-width: 0;
+  max-height: none;
+  border-radius: 0;
+  border-width: 1px 0 0;
+  box-shadow: none;
+}
+.c-find-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.c-find-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0 -8px;
+}
+.c-find-group > .c-eyebrow { margin: 0; padding: 4px 12px; }
+.c-find-row {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  min-height: 44px;
+  padding: 6px 12px;
+  box-sizing: border-box;
+  border-radius: 10px;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+.c-find-on { background: var(--raise); }
+.c-find-foot { margin: 0; }
+@media (hover: none) {
+  .c-find-foot { display: none; }
+}
+
 /* The phone's top bar: the bell and your initials together on the right. */
 .c-topbar-end {
   display: flex;

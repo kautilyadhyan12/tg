@@ -288,7 +288,8 @@ describe('New, in the bar across the top (spec Part 3 §17.11)', () => {
 
   it('a trainer, who may add nothing, has no New at all', async () => {
     await openMore('trainer', [...ROLE_PRIVILEGES.trainer]);
-    expect(screen.queryByTestId('console-bar')).toBeNull();
+    // The bar holds Search for everybody (V1-e-i), and no New for them.
+    expect(within(screen.getByTestId('console-bar')).getByTestId('console-search')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'New' })).toBeNull();
   });
 
