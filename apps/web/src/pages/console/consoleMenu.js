@@ -110,3 +110,26 @@ export function consoleLook(search, isDev) {
   if (!isDev) return 'dark';
   return new URLSearchParams(search).get('look') === 'light' ? 'light' : 'dark';
 }
+
+/** WHICH OF THE MENU'S GROUPS THIS PERSON FOLDED, on this device (spec Part 3 §17.11): kept in
+ *  the browser, and nothing is folded until they fold it. A browser that keeps nothing (a private
+ *  window, storage blocked) keeps the menu open. */
+export const FOLDED_KEY = 'kwazo.console.folded';
+
+export function readFolded(storage) {
+  try {
+    const kept = JSON.parse(storage?.getItem(FOLDED_KEY) ?? '[]');
+    const known = new Set(MENU_GROUPS.map((g) => g.key));
+    return Array.isArray(kept) ? kept.filter((k) => typeof k === 'string' && known.has(k)) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function writeFolded(storage, keys) {
+  try {
+    storage?.setItem(FOLDED_KEY, JSON.stringify(keys));
+  } catch {
+    // Not kept: the menu still folds until the page is opened again.
+  }
+}

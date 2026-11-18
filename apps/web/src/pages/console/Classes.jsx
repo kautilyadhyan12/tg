@@ -512,6 +512,29 @@ export default function Classes() {
     };
   }, [gymId]);
 
+  // New, in the bar across the top, opens Add class here (`?open=add`), once each time it is
+  // pressed, then the address drops it.
+  const opening = searchParams.get('open');
+  const [openingSeen, setOpeningSeen] = useState(null);
+  if (org && opening !== openingSeen) {
+    setOpeningSeen(opening);
+    if (opening === 'add' && canManageSchedule(viewerPrivileges(org)) && !consoleIsReadOnly(org)) {
+      setAdding(true);
+      setAddDraft(emptyClassDraft());
+    }
+  }
+  useEffect(() => {
+    if (opening === null || !org) return;
+    setSearchParams(
+      (was) => {
+        const params = new URLSearchParams(was);
+        params.delete('open');
+        return params;
+      },
+      { replace: true },
+    );
+  }, [opening, org, setSearchParams]);
+
   if (orgLoading) {
     return (
       <div className="c-page">

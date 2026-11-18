@@ -5,8 +5,10 @@ import { canManageSchedule } from './classesView';
 import { canManageMemberships } from './membershipTypesView';
 import { canManageBilling } from './billingView';
 import { canReadAttendance } from './attendanceView';
-import { canOpenSell } from './sellView';
+import { canOpenSell, canSell } from './sellView';
 import { canSeeFailedPayments } from './failedPaymentsAccess';
+import { canCheckPeopleIn } from './checkinLogView';
+import { canManagePosts } from '../../components/gym/postsView';
 
 // WHERE EACH PLACE IN THE CONSOLE IS, AND WHO MAY OPEN IT (ROADMAP 23d). A sentence that
 // sends somebody to another page carries a button that opens that exact place, with its
@@ -84,6 +86,12 @@ const PLACES = {
   leads: { path: '/leads', may: (privileges) => has(privileges, 'members.confirm') },
   addLead: { path: '/leads?open=add', may: (privileges) => has(privileges, 'members.confirm') },
   plan: { path: `#${PLAN_SECTION}`, may: canManageBilling },
+  // What New, in the bar across the top, opens (spec Part 3 §17.11). Each is the page's own
+  // box, for whoever the page shows it to.
+  newSale: { path: '/sell', may: canSell },
+  addClass: { path: '/classes?open=add', may: canManageSchedule },
+  checkIn: { path: '/attendance#check-in', may: canCheckPeopleIn },
+  newPost: { path: '/updates#write', may: canManagePosts },
 };
 
 /** Whether somebody holding these permissions can open the place. An unknown place, or
