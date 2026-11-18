@@ -2007,6 +2007,36 @@ the seed after the old rows. The download is `GET /v1/library` (`libraryDownload
   engine's so none of them changes. Every new column or table joins the privacy download
   and delete lists and the policy's words in the same pull request.
 
+**As built in 61a (2026-11-18).** The save is `POST /v1/workouts` (`workoutSaveSchema` in
+`packages/shared`, `apps/api/src/modules/training/`); its Idempotency-Key is the workout's id.
+- **Answers:** 201 saved · 200 saved already · 400 a broken phone, naming its fields and never its
+  values · 404 somebody else's id · 422 `unknown_exercise` with the id words · 429 past ten a minute
+  for the person (never counted by address).
+- **Kept** (migration 0244, new columns on `workouts` and `workout_sets`, empty on every old row): the
+  name, end, time zone, what it was started from, the effort stars, the heart rate's average and
+  highest (the readings are not kept, as a run's); for a set its unit, target, weight in grams, rest
+  after it and how it was counted. Reps done stay in `reps` and time done in `hold_ms`; a set by hand
+  or timer is `log_only`; `engine_version` is the app's version, as the old route's means. Counted by
+  camera is refused until job 64b adds it with the set's summary.
+- **Known exercise:** a Library row that is live, retired or hidden; a removed one is unknown. The save
+  holds the publish lock shared, so no set lands between a publish's question and its answer. An id
+  already the person's is answered "duplicate" before the exercises are asked about, so a saved workout
+  sent again is never refused later.
+- **Limits:** 200 sets; 1,000 reps; four hours a set; 1,000 kg; an hour's rest; 12 hours a workout; its
+  sets and rests within its length, with a second a set of slack; a time done no more than a second
+  past its set; an end no more than five minutes past the server's clock. The phone measures the
+  length with its steady clock.
+- **Calories:** version 4 (`training/calories.ts`): a set's time at its exercise's Library MET, a set
+  with nothing done and every rest at REST_MET 1.8, a pause at nothing, all spent against the
+  workout's length in the order of the sets. XP and the streak are worked out again from history after
+  the commit, as for the old route, so a second send gives nothing twice.
+- **Old readers:** the old exercise mix (`/v1/progress/distribution`) leaves out an exercise with no old
+  family; the history, a workout's page and its summary read a new workout unchanged.
+- **Measured** (2026-11-18, `apps/api/tools/measure-workout-save.ts`, local database, the api's pool of
+  10): a usual save (20 sets, an hour of heart rate, 51 KB) holds the server 7.2 ms, the biggest (200
+  sets, 12 hours of heart rate, 652 KB) 46.3 ms; 199 people saving at the same instant took 3.0 s in
+  all, 2.5 s each (median), and the server answered nobody for at most 15.8 ms at a time.
+
 ### 13.6 The phone (jobs 63 and 64)
 
 - **The list is kept on the phone** and searched there, so search answers at once and works
@@ -2077,7 +2107,7 @@ a workout that survives a dead phone; a summary set by set.
 ### 13.9 Not measured yet
 
 The download's size and the publish time at 200 exercises (measured in 60b, §13.4) · many saves arriving at
-once (job 61; CLAUDE.md §4, "Cost at full size") · where clips are kept and what that
+once (measured in 61a, §13.5) · where clips are kept and what that
 costs each month (job 62, with Stage 4 item 4) · how long Kd's hand time for 200 generated
 clips is (job 62 says it before the first one).
 
