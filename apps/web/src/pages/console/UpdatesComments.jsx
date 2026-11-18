@@ -574,7 +574,7 @@ export function ReportedComments({ gymId, gymName, reported, words, readOnly, re
   const waiting = reportedCommentsMore(reported);
   if (!shown && notice === null && actionError === null) return null;
   return (
-    <section ref={place} className="flex flex-col gap-3" aria-label="Reported comments" data-testid="reported-comments">
+    <section ref={place} id="reported-comments" className="flex flex-col gap-3" aria-label="Reported comments" data-testid="reported-comments">
       {shown ? (
         <div className="flex flex-col gap-1">
           <h2 className="c-s15 c-w6 c-t1">{reportedCommentsTitle(reported.total)}</h2>

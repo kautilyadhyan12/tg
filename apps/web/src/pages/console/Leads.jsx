@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { ChevronRight, FileUp, Globe, Loader2, Search, Trash2, UserPlus } from 'lucide-react';
-import { LEAD_EMAIL_SETTINGS_WORDS, LEAD_FILE_WORDS, LEAD_LIST_WORDS, LEAD_QUERY_MAX_CHARS, LEADS_TICKED_MAX } from '@app/shared';
+import { LEAD_EMAIL_SETTINGS_WORDS, LEAD_FILE_WORDS, LEAD_LIST_WORDS, LEAD_QUERY_MAX_CHARS, LEAD_STATUSES, LEADS_TICKED_MAX } from '@app/shared';
 import { orgService, errorStatus, errorText } from '../../api/orgsApi';
 import { ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
 import ScrollJump from '../../components/console/ScrollJump';
@@ -61,7 +61,9 @@ export default function Leads() {
   const readOnly = consoleIsReadOnly(org);
   const mayKeep = keepsMemberList(viewerPrivileges(org));
 
-  const [filters, setFilters] = useState({ status: 'all', query: '', due: false, problem: false });
+  // The bell opens Leads already showing New (`?status=new`, V1-d); any other word is All.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [filters, setFilters] = useState(() => ({ status: LEAD_STATUSES.includes(searchParams.get('status')) ? searchParams.get('status') : 'all', query: '', due: false, problem: false }));
   const [typed, setTyped] = useState('');
   const [page, setPage] = useState({ loading: true, error: null, refused: false, leads: [], total: 0, cursor: null, counts: null });
   const [loadingMore, setLoadingMore] = useState(false);
@@ -84,7 +86,6 @@ export default function Leads() {
   const [deleteFor, setDeleteFor] = useState(null);
 
   // A button on another page opens Add lead here (`?open=add`), once.
-  const [searchParams, setSearchParams] = useSearchParams();
   const opening = searchParams.get('open');
   useEffect(() => {
     if (opening === null || !org) return;

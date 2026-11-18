@@ -25,6 +25,7 @@ import { createMemoryRedis } from "../src/redis.js";
 import { openDueBills } from "../src/modules/orgs/memberships/billsRepo.js";
 import type { CancelLetter } from "../src/modules/orgs/myMembership/cancelEmail.js";
 import { proveAddress } from "./proveAddress.js";
+import { expectAttentionMatchesPages } from "./attentionMatches.js";
 
 const url = process.env["DATABASE_URL"];
 const d = describe.skipIf(url === undefined || url === "");
@@ -404,6 +405,8 @@ it("round one: a frozen one held by a notice is the front desk's; a gift comes o
     const overview = appCancelsResponseSchema.parse(JSON.parse((await inject("GET", `/v1/orgs/${gym.id}/app-cancels`, gym.owner.cookies)).body));
     expect(overview).toMatchObject({ count: 1, letsEveryoneIn: true, rows: [{ entryId: dev.entryId, name: "Dev Cancel", membershipName: "Gold", on: "2026-11-10", endsOn: "2026-12-03", when: "period_end", reason: "cost" }] });
     expect([403, 404]).toContain((await inject("GET", `/v1/orgs/${gym.id}/app-cancels`, priya.cookies)).statusCode);
+    // The bell (V1-d): the one cancellation, as Overview's box counts it.
+    expect((await expectAttentionMatchesPages((path) => inject("GET", path, gym.owner.cookies), gym.id, ["appCancels"])).appCancels).toEqual({ count: 1 });
     expect(await sql`SELECT 1 FROM audit_log WHERE gym_id = ${gym.id} AND action = 'org.held_membership_cancelled'`).toHaveLength(0);
     expect(await sql`SELECT 1 FROM audit_log WHERE gym_id = ${gym.id} AND action = 'org.held_membership_cancelled_in_app'`).toHaveLength(1);
   });
