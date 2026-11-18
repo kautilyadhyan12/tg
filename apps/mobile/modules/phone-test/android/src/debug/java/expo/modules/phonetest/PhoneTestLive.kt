@@ -64,6 +64,7 @@ private const val SEEN_FOR_S = 3
 private const val CAMERA_QUIET_MS = 10_000L
 /** How long the phone waits for a body, for its cable to come out, or for its turn. */
 private const val WAIT_MS = 30 * 60 * 1000L
+private const val UNPLUG = "Unplug the phone's cable and leave it facing the laptop's screen.\n\nThe test starts by itself."
 private const val LOOKING = "Looking for the person on the laptop's screen."
 private const val POINT_BACK = "Point the phone's back camera at the laptop's screen and keep it still.\n\nIt starts by itself when it sees the person."
 private const val TURN_ROUND = "Turn the phone round, so this screen faces the laptop's screen.\n\nIt beeps twice when it is done: then unplug its cable."
@@ -169,20 +170,26 @@ internal class PhoneTestLive private constructor(private val screen: PhoneTestLi
         stillOne(plan, k, still, hint)
       }
 
-      say("unplug", 0, 0, "Unplug the phone's cable and leave it facing the laptop's screen.\n\nThe test starts by itself.")
+      say("unplug", 0, 0, UNPLUG)
       // The laptop says when its screen plays the videos, so the cable never comes out before they show.
       runCatching { waitFor(120_000L, "") { File(root, "laptop-ready").exists() } }
-      beep(2)
-      waitFor(WAIT_MS, "The cable was not unplugged within 30 minutes.") { !battery().getBoolean("plugged") }
-      say("settle", 0, plan.settleSeconds, "Unplugged. Starting in ${plan.settleSeconds} seconds.\n\nLeave the phone facing the laptop's screen.")
-      pause(plan.settleSeconds * 1000L)
+      offTheCable(plan)
 
       var firstHeat: JSONObject? = null
       for ((k, setup) in plan.live.withIndex()) {
         step = plan.still.size + k + 1
         if (k > 0) cool(plan, firstHeat)
-        val heat = liveOne(plan, k, setup)
-        if (k == 0) firstHeat = heat
+        // A run the cable went into cannot count: it is dropped, and run again from its first second once the cable
+        // is out (51b-ii's first try ran its first run on the charger).
+        while (true) {
+          try {
+            val heat = liveOne(plan, k, setup)
+            if (k == 0) firstHeat = heat
+            break
+          } catch (e: Plugged) {
+            offTheCable(plan)
+          }
+        }
       }
       say("done", 0, 0, "Live camera test done.\n\nPlug the phone into the laptop again.")
       // Three beeps, then again each minute, until somebody plugs it in (at most 30 minutes).
@@ -198,6 +205,28 @@ internal class PhoneTestLive private constructor(private val screen: PhoneTestLi
       cameras?.let { p -> runCatching { onMain { p.unbindAll() } } }
     }
   }
+
+  /** Beeps twice and waits until the cable is out, then for the plan's settling time with the cable out the whole
+   *  time: a cable that goes back in starts it again. */
+  private fun offTheCable(plan: LivePlan) {
+    while (true) {
+      say("unplug", 0, 0, UNPLUG)
+      beep(2)
+      waitFor(WAIT_MS, "The cable was not unplugged within 30 minutes.") { !plugged() }
+      say("settle", 0, plan.settleSeconds, "Unplugged. Starting in ${plan.settleSeconds} seconds.\n\nLeave the phone facing the laptop's screen.")
+      var back = false
+      for (s in 0 until plan.settleSeconds) {
+        pause(1000)
+        if (plugged()) {
+          back = true
+          break
+        }
+      }
+      if (!back) return
+    }
+  }
+
+  private fun plugged(): Boolean = battery().getBoolean("plugged")
 
   // ── The plan ─────────────────────────────────────────────────────────────────────
   private fun readPlan(): LivePlan {
@@ -314,7 +343,9 @@ internal class PhoneTestLive private constructor(private val screen: PhoneTestLi
             val cpu = Process.getElapsedCpuTime()
             val one = synchronized(lock) { tally.also { tally = Tally() } }
             val wall = now - lastAt
-            w.write(second(s, wall, one, cpu - lastCpu) + "\n")
+            val charging = plugged()
+            w.write(second(s, wall, one, cpu - lastCpu, charging) + "\n")
+            if (charging) throw Plugged()
             lastAt = now
             lastCpu = cpu
             s++
@@ -333,6 +364,10 @@ internal class PhoneTestLive private constructor(private val screen: PhoneTestLi
       check(part.renameTo(File(out, "$name.jsonl"))) { "The phone could not keep the run's file." }
     } catch (e: Throwable) {
       if (e is Stop) throw e
+      if (e is Plugged) {
+        part.delete()
+        throw e
+      }
       failed(name, "live", k, words(e))
     }
     return startHeat
@@ -566,7 +601,7 @@ internal class PhoneTestLive private constructor(private val screen: PhoneTestLi
       .toString()
   }
 
-  private fun second(s: Int, wallMs: Long, one: Tally, cpuMs: Long): String {
+  private fun second(s: Int, wallMs: Long, one: Tally, cpuMs: Long, plugged: Boolean): String {
     val waits = one.waits.sorted()
     val wait = if (waits.isEmpty()) JSONObject.NULL else JSONObject().put("middle", waits[(waits.size - 1) / 2]).put("most", waits.last())
     return JSONObject()
@@ -578,7 +613,7 @@ internal class PhoneTestLive private constructor(private val screen: PhoneTestLi
       .put("found", one.found)
       .put("waitMs", wait)
       .put("cpuMs", cpuMs)
-      .put("plugged", battery().getBoolean("plugged"))
+      .put("plugged", plugged)
       .toString()
   }
 
@@ -707,3 +742,6 @@ internal class PhoneTestLive private constructor(private val screen: PhoneTestLi
 
 /** The whole test stops: the screen was closed. */
 private class Stop(message: String) : RuntimeException(message)
+
+/** The cable went in during a run: the run is dropped and made again. */
+private class Plugged : RuntimeException("The cable went in.")

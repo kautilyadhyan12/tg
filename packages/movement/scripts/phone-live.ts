@@ -241,7 +241,7 @@ async function onThePhone(): Promise<void> {
         const now = `${progress.stage} ${String(progress.step)} ${String(Math.floor(progress.second / 60))}`;
         if (now !== said) {
           said = now;
-          console.log(`   Back on the cable while it is still ${progress.stage === "cooling" ? "cooling" : "running"} (step ${String(progress.step)} of ${String(progress.steps)}): UNPLUG IT AGAIN until it beeps three times. A run with a minute on the charger does not count.`);
+          console.log(`   Back on the cable before the end (step ${String(progress.step)} of ${String(progress.steps)}, ${progress.stage}): UNPLUG IT AGAIN. A run the cable goes into is dropped and started again once it is out.`);
         }
       }
     }
