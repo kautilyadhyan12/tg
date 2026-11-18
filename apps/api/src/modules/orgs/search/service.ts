@@ -40,7 +40,7 @@ export async function searchPeople(
   const today = dayInTz(deps.now(), org.timezone);
 
   const [members, leads, staff] = await Promise.all([
-    seesList ? searchEntries(deps, userId, gymId, org.timezone, typed, max, privileges.includes("billing.members")) : null,
+    seesList ? searchEntries(deps, gymId, org.timezone, typed, max, privileges.includes("billing.members")) : null,
     seesList
       ? leadsRepo
           .leadsPage(deps.sql, {

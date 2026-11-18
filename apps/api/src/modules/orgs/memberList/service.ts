@@ -1822,14 +1822,34 @@ export async function readEntries(
  *  whether there are more. */
 export async function searchEntries(
   deps: MemberListDeps,
-  userId: string,
   gymId: string,
   timezone: string,
   typed: string,
   max: number,
   seesBills: boolean,
 ): Promise<{ people: ConsoleSearchMember[]; more: boolean }> {
-  const { input } = await entriesFilter(deps, gymId, { query: typed, records: "all" }, userId);
+  // The list's own statement with no filter but the words. Who of them is in the app is not
+  // read: it only narrows the In the app filter, which search never asks, and reading it is
+  // every app member of the business on each search (measured: 90 to 130 ms of answering
+  // nobody at 10,000).
+  const input: repo.EntriesFilterInput = {
+    gymId,
+    inAppEntryIds: [],
+    statuses: null,
+    membershipTypes: null,
+    paymentStatuses: null,
+    held: null,
+    records: "all",
+    filter: "all",
+    invitation: null,
+    appIds: null,
+    tagIds: null,
+    overIds: null,
+    like: `%${escapeLike(typed.trim())}%`,
+    waiverNotSigned: null,
+    agreementNotSigned: null,
+    noCardIds: null,
+  };
   const page = await repo.entriesPage(deps.sql, { ...input, cursor: null, limit: max + 1 });
   const shown = page.entries.slice(0, max);
   const today = dayInTz(deps.now(), timezone);
