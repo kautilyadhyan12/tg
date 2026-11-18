@@ -22,12 +22,12 @@ import { parseArgs } from "node:util";
 import { PHONE_TEST_DELEGATES, PHONE_TEST_MAX_THREADS, phoneProgressSchema, videoFramesSchema, type MovementFrame, type PhoneProgress, type PhoneTestDelegate, type VideoFrames } from "@app/shared";
 import { decodeBodyPoints, type BodyPoints } from "./bodyPoints.js";
 import { KD_VIDEOS, assertFolderStaysOutOfGit } from "./outFolder.js";
+import { adb, appIdOf, fetchModel } from "./phoneAdb.js";
 import { compareFrames, comparePhone, gapWords, keyGaps, shakeOf, summaries, type FrameComparison, type PhoneComparison } from "./phoneCheck.js";
 import {
   MODELS,
   SETTINGS,
   makePlan,
-  modelUrl,
   planRuns,
   phoneFrames,
   readPhoneFailure,
@@ -120,20 +120,14 @@ try {
 for (const folder of ["models", "laptop", "frames", "videos", "pictures"]) mkdirSync(join(HERE, folder), { recursive: true });
 mkdirSync(PHONE_OUT, { recursive: true });
 const started = Date.now();
-const sha256 = (bytes: Uint8Array): string => createHash("sha256").update(bytes).digest("hex");
 
 // ── 1. The models, each checked against its pinned file check ───────────────────
 async function modelFile(m: PoseModel): Promise<string> {
-  const path = join(HERE, "models", `${m.name}.task`);
-  if (!existsSync(path)) {
-    console.log(`Fetching Google's ${m.size} pose model.`);
-    const reply = await fetch(modelUrl(m));
-    if (!reply.ok) fail(`Google's ${m.size} pose model did not come: ${String(reply.status)}.`);
-    writeFileSync(path, new Uint8Array(await reply.arrayBuffer()));
+  try {
+    return await fetchModel(m, join(HERE, "models"));
+  } catch (err) {
+    fail(messageOf(err));
   }
-  const bytes = new Uint8Array(readFileSync(path));
-  if (bytes.length !== m.bytes || sha256(bytes) !== m.sha256) fail(`${path} is not Google's ${m.size} pose model as pinned. Delete it to fetch it again.`);
-  return path;
 }
 const modelPaths = new Map<string, string>();
 for (const m of models) modelPaths.set(m.name, await modelFile(m));
@@ -285,20 +279,13 @@ function videoSum(label: string): string {
 const PLAN = join(HERE, `plan-${variant}.json`);
 
 // ── 3. The phone ─────────────────────────────────────────────────────────────────
-/** One adb command. It throws, never exits, so the test's own clean-up always runs. */
-function adb(args: string[]): { ok: boolean; out: Buffer; text: string } {
-  const r = spawnSync("adb", args, { maxBuffer: 1 << 30 });
-  if (r.error) throw new Error(`adb did not run: ${r.error.message}`);
-  const out = r.stdout;
-  return { ok: r.status === 0, out, text: `${out.toString("utf8")}${r.stderr.toString("utf8")}`.trim() };
-}
-
-/** This folder's copy of the app, as app.config.ts names it (`apps/mobile/.copy`). */
+/** This folder's copy of the app. adb (phoneAdb.ts) throws, never exits, so the test's own clean-up always runs. */
 function appId(): string {
-  const r = spawnSync("corepack pnpm exec expo config --json --type public", { cwd: MOBILE, shell: true, encoding: "utf8", maxBuffer: 1 << 26 });
-  const text = r.stdout;
-  const id = /"package"\s*:\s*"(com\.aihomegym\.dev\.[a-z0-9]+)"/.exec(text)?.[1];
-  return r.status === 0 && id !== undefined ? id : fail(`The app's settings did not name a folder's copy:\n${r.stderr.trim()}`);
+  try {
+    return appIdOf(MOBILE);
+  } catch (err) {
+    fail(messageOf(err));
+  }
 }
 
 /** The phone's own word on where the test is, or null before it has written one. */
