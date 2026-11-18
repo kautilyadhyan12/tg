@@ -16,6 +16,8 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { bundleSha256 } from "../modules/exercises/bundle.js";
 import { ACHIEVEMENTS } from "../modules/gamification/badges.js";
+import { readLibraryFolder } from "../modules/library/folder.js";
+import { publishLibrary } from "../modules/library/publish.js";
 import {
   achievements,
   definitionBundles,
@@ -227,6 +229,16 @@ export async function seed(databaseUrl: string): Promise<void> {
     await seedAll(db);
   } finally {
     await client.end({ timeout: 5 });
+  }
+  // The Exercise Library after the old rows, so an exercise that continues from the old 58 keeps
+  // its row (spec Part 2 §13.4, job 60b). A faulty exercise file stops the seed here, naming it.
+  // On a client of its own: drizzle() switches off the driver's JSON handling on the client it is
+  // given (it sends JSON itself), and the Library's repo uses the driver's, as every repo does.
+  const plain = postgres(databaseUrl, { prepare: false, max: 1 });
+  try {
+    await plain.begin((tx) => publishLibrary(tx, readLibraryFolder()));
+  } finally {
+    await plain.end({ timeout: 5 });
   }
 }
 

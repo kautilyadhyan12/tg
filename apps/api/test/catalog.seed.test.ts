@@ -36,9 +36,11 @@ d("exercise catalog seed (real Postgres)", () => {
     // seed carries.
     await seed(url ?? "");
     await seed(url ?? "");
+    // The old 58 rows. A row the Exercise Library made for an exercise that is not one of them has
+    // no family and is never 'live' to the old routes (0243, job 60b); library.routes.test.ts reads those.
     rows = await sql<Row[]>`
       SELECT slug, name_key, family, tier, tracking, status, met::text AS met
-      FROM exercises ORDER BY slug`;
+      FROM exercises WHERE family IS NOT NULL ORDER BY slug`;
     // 120 s for the same reason exercises.routes.test.ts:106 uses it: the
     // DB-gated suites share one Neon branch through one pooler, and TWO full
     // seed runs sit well past vitest's 10 s hook default (vitest.config.ts).
