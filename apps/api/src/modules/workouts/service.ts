@@ -129,7 +129,7 @@ export interface ReadDeps {
  *  its own idea of the plan. The days are whole days in the person's own zone,
  *  today and the days before it (35c-i): a box saying "90 days" never counts
  *  the evening of a 91st, as a floor of 90×24 hours back from now did. */
-async function historyGate(
+export async function historyGate(
   deps: ReadDeps,
   userId: string,
 ): Promise<{ floor: Date | null; limitedToDays: number | null }> {
