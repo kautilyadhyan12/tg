@@ -126,6 +126,12 @@ export function viewerPrivileges(org) {
   return ROLE_PRIVILEGES[org?.staffRole] ?? [];
 }
 
+/** Whether this person keeps the business's own list (`members.confirm`): Members' list and
+ *  its Add and Import, and Leads. */
+export function keepsMemberList(privileges) {
+  return Array.isArray(privileges) && privileges.includes('members.confirm');
+}
+
 /** WHO MAY SEE A REMOVE CONTROL ON THE ROSTER.
  *
  *  Part 3 §4.3's member table ends with the rule verbatim: *"Trainer role:

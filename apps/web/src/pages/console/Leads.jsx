@@ -11,7 +11,7 @@ import LeadSheet from './LeadSheet';
 import LeadsDelete from './LeadsDelete';
 import { Tick } from './MemberListPanel';
 import { useConsoleOrg } from './useConsoleOrg';
-import { orgWords, viewerPrivileges } from './consoleView';
+import { keepsMemberList, orgWords, viewerPrivileges } from './consoleView';
 import { consoleIsReadOnly, readOnlyNote } from './billingView';
 import {
   DUE_CHIP_LABEL,
@@ -59,7 +59,7 @@ export default function Leads() {
   const gymId = org?.id ?? null;
   const words = orgWords(org?.orgType);
   const readOnly = consoleIsReadOnly(org);
-  const mayKeep = viewerPrivileges(org).includes('members.confirm');
+  const mayKeep = keepsMemberList(viewerPrivileges(org));
 
   const [filters, setFilters] = useState({ status: 'all', query: '', due: false, problem: false });
   const [typed, setTyped] = useState('');
