@@ -24,6 +24,8 @@ export interface CheckedLibrary {
   faults: LibraryFault[];
   /** The exercises whose files have no fault, by id, in id order. */
   exercises: ExerciseFile[];
+  /** The Compendium table, or null when it has a fault. */
+  compendium: CompendiumTable | null;
 }
 
 /** One line for a fault, as a terminal or GitHub prints it. */
@@ -113,7 +115,7 @@ export function checkLibrary(input: LibraryInput): CheckedLibrary {
 
   good.sort((a, b) => (a.id < b.id ? -1 : 1));
   // A broken Compendium table holds every exercise back: none has a known energy.
-  return { faults, exercises: table === null ? [] : good };
+  return { faults, exercises: table === null ? [] : good, compendium: table };
 }
 
 function readTable(file: { name: string; text: string }, faults: LibraryFault[]): CompendiumTable | null {

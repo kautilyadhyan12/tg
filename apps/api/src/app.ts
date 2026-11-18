@@ -37,6 +37,7 @@ import { registerPrivacyRoutes } from "./modules/privacy/routes.js";
 import { registerPushRoutes } from "./modules/push/routes.js";
 import { registerReminderRoutes } from "./modules/reminders/routes.js";
 import { registerExerciseRoutes } from "./modules/exercises/routes.js";
+import { registerLibraryRoutes } from "./modules/library/routes.js";
 import { registerGamificationRoutes } from "./modules/gamification/routes.js";
 import { registerGoalRoutes } from "./modules/goals/routes.js";
 import { GoalsError } from "./modules/goals/service.js";
@@ -403,6 +404,7 @@ export async function buildApp(
   registerPushRoutes(app, { sql, redis });
   registerReminderRoutes(app, { sql, redis, ...(overrides.reminders?.now === undefined ? {} : { now: overrides.reminders.now }) });
   registerExerciseRoutes(app, { sql });
+  registerLibraryRoutes(app, { sql });
   registerGamificationRoutes(app, { sql });
   registerGoalRoutes(app, { sql, ...(overrides.goals?.now === undefined ? {} : { now: overrides.goals.now }) });
   registerEntitlementRoutes(app, { sql, redis });
