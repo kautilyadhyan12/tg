@@ -152,13 +152,23 @@ describe('the counts and the bell', () => {
     expect(within(screen.getByRole('dialog', { name: 'Needs attention' })).getByText('Nothing needs attention')).toBeTruthy();
   });
 
-  it('read again on another page and after staff change something; another business never shows', async () => {
+  it('read again on another page once 30 seconds old, and at once after staff change something; another business never shows', async () => {
     attentionService.get.mockResolvedValue(BUSY);
     await open(`${BASE}/members`);
     await waitFor(() => expect(countBeside('Leads')).toBe('5'));
     attentionService.get.mockResolvedValue({ ...BUSY, newLeads: { count: 4 } });
+    // Another page within 30 seconds of the last read: not read again.
+    const first = attentionService.get.mock.calls.length;
     fireEvent.click(rail().getByRole('link', { name: /^Attendance/ }));
+    await act(async () => undefined);
+    expect(attentionService.get.mock.calls.length).toBe(first);
+    // Another page once it is 30 seconds old: read again.
+    const later = Date.now() + 31_000;
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(later);
+    fireEvent.click(rail().getByRole('link', { name: /^Classes/ }));
     await waitFor(() => expect(countBeside('Leads')).toBe('4'));
+    expect(attentionService.get.mock.calls.length).toBe(first + 1);
+    clock.mockRestore();
     // A change accepted anywhere: one read once its writes have landed.
     attentionService.get.mockResolvedValue({ ...BUSY, newLeads: { count: 0 } });
     vi.useFakeTimers();
