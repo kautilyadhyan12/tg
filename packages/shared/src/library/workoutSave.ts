@@ -30,6 +30,14 @@ export const WORKOUT_SAVE_LIMITS = {
 
 const L = WORKOUT_SAVE_LIMITS;
 
+/** Words with no NUL character in them: Postgres refuses one in text, and a save it refuses would be
+ *  a 500, which a phone sends again for ever. Refused here instead, as a broken phone. */
+const words = (most: number) =>
+  z
+    .string()
+    .max(most)
+    .refine((s) => !s.includes("\u0000"), { message: "a NUL character" });
+
 export const setCountedSchema = z.enum(["hand", "timer"]);
 export type SetCounted = z.infer<typeof setCountedSchema>;
 
@@ -52,8 +60,10 @@ export const savedSetSchema = z
   })
   .strict()
   .superRefine((s, ctx) => {
-    if (s.measuredIn === "reps" && (s.target > L.repsMost || s.done > L.repsMost)) {
-      ctx.addIssue({ code: "custom", message: `reps above ${String(L.repsMost)}`, path: ["done"] });
+    if (s.measuredIn === "reps") {
+      for (const field of ["target", "done"] as const) {
+        if (s[field] > L.repsMost) ctx.addIssue({ code: "custom", message: `reps above ${String(L.repsMost)}`, path: [field] });
+      }
     }
     // A set's time cannot be more than the set lasted (a second of rounding allowed).
     if (s.measuredIn === "time" && s.done * 1000 > s.durationMs + 1000) {
@@ -71,11 +81,11 @@ export const workoutSaveSchema = z
   .object({
     workoutId: z.uuid(),
     /** The workout's name; null for one with none. */
-    name: z.string().trim().min(1).max(L.nameMost).nullable(),
+    name: words(L.nameMost).trim().min(1).nullable(),
     startedAt: instantSchema,
     endedAt: instantSchema,
     /** The person's time zone during it (an IANA name), checked by the server. */
-    timeZone: z.string().min(1).max(64),
+    timeZone: words(64).min(1),
     /** What it was started from: the person's saved workout, the app's plan, the gym's plan, or nothing. */
     startedFrom: z.enum(["saved", "app_plan", "gym_plan", "none"]),
     /** The effort stars, 1 to 5; null when none was given. */
@@ -83,7 +93,7 @@ export const workoutSaveSchema = z
     heart: workoutHeartSchema,
     platform: z.enum(["android", "ios"]),
     /** The app's own version, as the phone reports it. */
-    appVersion: z.string().min(1).max(40),
+    appVersion: words(40).min(1),
     sets: z.array(savedSetSchema).min(1).max(L.setsMost),
   })
   .strict()

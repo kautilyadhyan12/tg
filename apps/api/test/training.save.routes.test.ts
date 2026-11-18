@@ -101,11 +101,11 @@ d("saving a workout from the phone (real Postgres)", () => {
     return { cookies: cookieMap(login), id };
   };
 
-  const save = (who: Person | null, body: { workoutId: string } & Record<string, unknown>, key: string = body.workoutId) =>
+  const save = (who: Person | null, body: { workoutId: string } & Record<string, unknown>, key: string = body.workoutId, address: string = nextIp()) =>
     api().inject({
       method: "POST",
       url: "/v1/workouts",
-      remoteAddress: nextIp(),
+      remoteAddress: address,
       headers: { "content-type": "application/json", "idempotency-key": key },
       ...(who === null ? {} : { cookies: who.cookies }),
       payload: JSON.stringify(body),
@@ -195,7 +195,7 @@ d("saving a workout from the phone (real Postgres)", () => {
         // 3.0×70×40/3600 + 1.8×70×60/3600 + 3.5×70×30/3600 + 1.8×70×90/3600 + 2.8×70×30.5/3600 = 11.29
         kcal_point: 11,
         kcal_calc_version: 4,
-        time_zone: "Asia/Kolkata",
+        time_zone: expect.stringMatching(/^Asia\/(Kolkata|Calcutta)$/) as unknown,
         started_from: "none",
         effort: 4,
         heart_avg: null,
@@ -305,10 +305,14 @@ d("saving a workout from the phone (real Postgres)", () => {
       expect(res.json()).toMatchObject({ exercises: [old] });
     });
 
-    it("an exercise removed from the Library is not known", async () => {
-      // A row of its own, removed, with no file and no set naming it: every publish leaves such a row
-      // as it is (`planPublish`), so the other test files' seeds never meet it. It is never made
-      // anything but removed here, or a publish would put it in a copy.
+    it("a workout naming an exercise removed from the Library since is saved, with that exercise", async () => {
+      // A row of its own, removed, with no file. While a set names it, the next publish would bring it
+      // back as 'hidden' and into a copy (60b's own test proves that half), so this test holds the
+      // publish lock shared from the save until its rows are gone: no other test file's seed can
+      // publish meanwhile. A shared hold does not stop the save, which takes it shared too.
+      const holder = await sql.reserve();
+      await holder`BEGIN`;
+      await holder`SELECT pg_advisory_xact_lock_shared(hashtext('library:publish'))`;
       const slug = `training_removed_${randomUUID().slice(0, 8)}`;
       const [row] = await sql<{ id: string }[]>`
         INSERT INTO exercises (slug, name_key, family, tier, tracking, status, met) VALUES (${slug}, NULL, NULL, NULL, NULL, 'hidden', 3.0) RETURNING id`;
@@ -319,13 +323,43 @@ d("saving a workout from the phone (real Postgres)", () => {
         INSERT INTO library_exercises (exercise_id, status, met, compendium, measured_in, weight, each_side, entry)
         VALUES (${exerciseId}, 'removed', 3.0, '02056', 'reps', 'never', false, ${sql.json(JSON.parse(JSON.stringify({ ...squat, id: slug })) as Record<string, string>)})`;
       try {
-        const res = await save(await person(), workout({ sets: [set({ exercise: slug })] }));
-        expect(res.statusCode).toBe(422);
-        expect(res.json()).toMatchObject({ exercises: [slug] });
+        const body = workout({ sets: [set({ exercise: slug })] });
+        expect((await save(await person(), body)).statusCode).toBe(201);
+        expect((await kept(body.workoutId)).sets.map((s) => s["slug"])).toEqual([slug]);
       } finally {
+        await sql`DELETE FROM workouts WHERE id IN (SELECT workout_id FROM workout_sets WHERE exercise_id = ${exerciseId})`;
         await sql`DELETE FROM library_exercises WHERE exercise_id = ${exerciseId}`;
         await sql`DELETE FROM exercises WHERE id = ${exerciseId}`;
+        await holder`COMMIT`;
+        holder.release();
       }
+    });
+
+    it("a save waits while the Library is being published, and is saved when the publish ends", async () => {
+      // The publish's own lock, held as a publish holds it, in a transaction that is then ended.
+      const holder = await sql.reserve();
+      await holder`BEGIN`;
+      await holder`SELECT pg_advisory_xact_lock(hashtext('library:publish'))`;
+      const pid = (await holder<{ pid: number }[]>`SELECT pg_backend_pid() AS pid`)[0]?.pid ?? 0;
+      let done = false;
+      const pending = save(await person(), workout()).finally(() => {
+        done = true;
+      });
+      try {
+        let waiting = 0;
+        for (let i = 0; i < 100 && waiting === 0 && !done; i++) {
+          waiting = (await sql<{ n: number }[]>`
+            SELECT count(*)::int AS n FROM pg_stat_activity
+            WHERE wait_event_type = 'Lock' AND wait_event = 'advisory' AND ${pid} = ANY(pg_blocking_pids(pid))`)[0]?.n ?? 0;
+          if (waiting === 0 && !done) await new Promise((r) => setTimeout(r, 100));
+        }
+        expect(waiting).toBe(1);
+        expect(done).toBe(false);
+      } finally {
+        await holder`COMMIT`;
+        holder.release();
+      }
+      expect((await pending).statusCode).toBe(201);
     });
   });
 
@@ -355,19 +389,46 @@ d("saving a workout from the phone (real Postgres)", () => {
       expect((await save(a, workout(ahead(4 * 60_000)))).statusCode).toBe(201);
     });
 
-    it("a time zone that is not one is refused", async () => {
+    it("a time zone that is not one, or an offset, is refused; one in other letters is kept by its own name", async () => {
       const a = await person();
-      const res = await save(a, workout({ timeZone: "Mars/Olympus" }));
-      expect(res.statusCode).toBe(400);
-      expect(res.json()).toMatchObject({ message: "timeZone: not a time zone" });
+      for (const timeZone of ["Mars/Olympus", "+05:30", "+0530"]) {
+        const res = await save(a, workout({ timeZone }));
+        expect(res.statusCode).toBe(400);
+        expect(res.json()).toMatchObject({ message: "timeZone: not a time zone" });
+      }
+      const body = workout({ timeZone: "asia/kolkata" });
+      expect((await save(a, body)).statusCode).toBe(201);
+      const kept = (await sql<{ time_zone: string }[]>`SELECT time_zone FROM workouts WHERE id = ${body.workoutId}`)[0]?.time_zone ?? "";
+      // Node 24's time zone list spells it Asia/Calcutta, a newer one may say Asia/Kolkata; Postgres
+      // knows both names as one zone, and the day below is the proof that matters.
+      expect(["Asia/Calcutta", "Asia/Kolkata"]).toContain(kept);
+      expect((await sql<{ day: string }[]>`SELECT (timestamptz '2026-11-18T20:00:00Z' AT TIME ZONE ${kept})::date::text AS day`)[0]?.day).toBe("2026-11-19");
     });
 
-    it("ten saves a minute for a person, the eleventh refused, and another person still saves", async () => {
+    it("a workout already saved is answered 'duplicate' before its fields are checked again", async () => {
+      const a = await person();
+      const body = workout();
+      expect((await save(a, body)).statusCode).toBe(201);
+      const again = await save(a, { ...body, timeZone: "Mars/Olympus" });
+      expect(again.statusCode).toBe(200);
+      expect(again.json()).toMatchObject({ status: "duplicate" });
+    });
+
+    it("ten saves a minute for a person, never by address: the eleventh refused, and another person at the same address still saves", async () => {
       const [a, b] = [await person(), await person()];
+      const address = "10.61.250.7";
       // Ten bodies that are each refused, so nothing is written: each still counts.
-      for (let i = 0; i < 10; i++) expect((await save(a, workout({ timeZone: "Mars/Olympus" }))).statusCode).toBe(400);
-      expect((await save(a, workout())).statusCode).toBe(429);
-      expect((await save(b, workout())).statusCode).toBe(201);
+      for (let i = 0; i < 10; i++) expect((await save(a, workout({ timeZone: "Mars/Olympus" }), undefined, address)).statusCode).toBe(400);
+      expect((await save(a, workout(), undefined, address)).statusCode).toBe(429);
+      for (let i = 0; i < 10; i++) expect((await save(b, workout(), undefined, address)).statusCode).toBe(201);
+    });
+
+    it("a set is kept in its own unit and weight, as the phone's list had them, whatever the Library says now", async () => {
+      // Refusing it would leave a finished workout that can never be saved, after a Library edit.
+      const a = await person();
+      const body = workout({ sets: [set({ exercise: "plank", measuredIn: "reps", target: 10, done: 10, weightGrams: 10_000 })] });
+      expect((await save(a, body)).statusCode).toBe(201);
+      expect((await kept(body.workoutId)).sets[0]).toMatchObject({ slug: "plank", measured_in: "reps", reps: 10, hold_ms: null, weight_grams: 10_000 });
     });
   });
 
@@ -388,7 +449,9 @@ d("saving a workout from the phone (real Postgres)", () => {
         ["barbell_curl", "log_only"],
         ["plank", "log_only"],
       ]);
-      expect((await get(`/v1/workouts/${body.workoutId}/summary`)).statusCode).toBe(200);
+      const summary = await get(`/v1/workouts/${body.workoutId}/summary`);
+      expect(summary.statusCode).toBe(200);
+      expect(summary.json()).toMatchObject({ workoutId: body.workoutId, exercisesCount: 3, caloriesBurned: 11, activeSeconds: 100, durationSeconds: 1800, formAccuracy: null });
 
       // The curl is only the Library's and has no old family: the old mix leaves it out, never "null".
       const mix = await get("/v1/progress/distribution?period=all");

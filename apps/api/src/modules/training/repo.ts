@@ -30,13 +30,15 @@ export interface KnownExercise {
   met: number;
 }
 
-/** The exercises the Library knows, of these id words: live, retired or hidden. A removed one is
- *  out of the Library and is not known (60b). */
+/** The exercises the Library knows, of these id words: every one it has a row for, a removed one
+ *  included. A phone that did a workout before the exercise's file was deleted still saves it, and the
+ *  next publish finds the set and brings the exercise back as 'hidden' (`library/plan.ts`), so
+ *  history names it. Only an id word the Library never had is unknown. */
 export async function knownExercises(tx: TransactionSql, slugs: readonly string[]): Promise<Map<string, KnownExercise>> {
   const rows = await tx<{ slug: string; exercise_id: string; met: string }[]>`
     SELECT e.slug, l.exercise_id, l.met
     FROM library_exercises l JOIN exercises e ON e.id = l.exercise_id
-    WHERE e.slug = ANY(${[...slugs]}::text[]) AND l.status <> 'removed'`;
+    WHERE e.slug = ANY(${[...slugs]}::text[])`;
   return new Map(rows.map((r) => [r.slug, { exerciseId: r.exercise_id, met: Number(r.met) }]));
 }
 

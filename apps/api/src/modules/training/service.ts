@@ -1,7 +1,8 @@
-// Saving one whole workout from the phone (spec Part 2 §13.5, job 61a). In one transaction: an id
-// already the person's is answered "duplicate" before anything else is asked, so a workout saved
-// once and sent again is never refused later; somebody else's id is not found; an exercise the
-// Library does not know refuses the whole save; then the workout and all its sets are written
+// Saving one whole workout from the phone (spec Part 2 §13.5, job 61a). Once its fields have passed
+// the shared schema, in one transaction: an id already the person's is answered "duplicate" before
+// anything else is asked, so a workout saved once and sent again is never refused later; somebody
+// else's id is not found; then its time zone and end are checked; an exercise the Library never had
+// refuses the whole save; then the workout and all its sets are written
 // together, and only by the request that made the workout. The server works out the calories, the
 // heart rate's average and highest, and (after the commit) the streak and XP from history, which is
 // what makes a second send give nothing twice.
@@ -39,19 +40,20 @@ export interface SaveDeps {
   now: () => Date;
 }
 
-function isTimeZone(tz: string): boolean {
+/** The time zone's own name as the server's time zone list spells it ("asia/kolkata" is
+ *  "Asia/Calcutta"), or null for one that is not a named zone. An offset such as "+05:30" is refused:
+ *  Postgres reads it with the opposite sign, so a day worked out from it would be the wrong day. */
+export function namedTimeZone(tz: string): string | null {
+  let name: string;
   try {
-    new Intl.DateTimeFormat("en-CA", { timeZone: tz });
-    return true;
+    name = new Intl.DateTimeFormat("en", { timeZone: tz }).resolvedOptions().timeZone;
   } catch {
-    return false;
+    return null;
   }
+  return name === "UTC" || Intl.supportedValuesOf("timeZone").includes(name) ? name : null;
 }
 
 export async function saveWorkout(deps: SaveDeps, userId: string, input: WorkoutSave): Promise<{ status: "created" | "duplicate" }> {
-  if (!isTimeZone(input.timeZone)) throw new RefusedSaveError("time_zone");
-  if (Date.parse(input.endedAt) > deps.now().getTime() + FUTURE_SLACK_MS) throw new RefusedSaveError("in_the_future");
-
   const ctx = await getUserSyncContext(deps.sql, userId);
   const sets = [...input.sets].sort((a, b) => a.position - b.position);
   const lengthMs = Date.parse(input.endedAt) - Date.parse(input.startedAt);
@@ -61,6 +63,9 @@ export async function saveWorkout(deps: SaveDeps, userId: string, input: Workout
     const owner = await repo.workoutOwner(tx, input.workoutId, userId);
     if (owner === "theirs") throw new repo.ForeignWorkoutError();
     if (owner === "mine") return "duplicate" as const;
+    const timeZone = namedTimeZone(input.timeZone);
+    if (timeZone === null) throw new RefusedSaveError("time_zone");
+    if (Date.parse(input.endedAt) > deps.now().getTime() + FUTURE_SLACK_MS) throw new RefusedSaveError("in_the_future");
 
     await repo.holdLibrary(tx);
     const known = await repo.knownExercises(tx, [...new Set(sets.map((s) => s.exercise))]);
@@ -89,7 +94,7 @@ export async function saveWorkout(deps: SaveDeps, userId: string, input: Workout
       ),
       kcalCalcVersion: KCAL_CALC_VERSION_SAVE,
       name: input.name,
-      timeZone: input.timeZone,
+      timeZone,
       startedFrom: input.startedFrom,
       effort: input.effort,
       heartAvg: heart?.avg ?? null,
