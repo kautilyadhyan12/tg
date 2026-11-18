@@ -21,4 +21,12 @@ dependencies {
   // Google's pose library for Android, of the laptop's own release line (mediapipe 1.0.1 in Python), pinned.
   // The test's LIBRARY line (PhoneTest.kt) names the same version; apps/mobile/test/phoneTest.test.ts holds both.
   debugImplementation "com.google.mediapipe:tasks-vision:1.0.0"
+  // The live camera test (51b-ii): Android's camera library and the screen it binds to, the very versions the app
+  // already holds for the meal photo (expo-camera's camerax_version; apps/mobile/test/phoneTest.test.ts holds them
+  // equal), so a folder's copy adds no package.
+  debugImplementation "androidx.camera:camera-core:1.6.0"
+  debugImplementation "androidx.camera:camera-camera2:1.6.0"
+  debugImplementation "androidx.camera:camera-lifecycle:1.6.0"
+  debugImplementation "androidx.camera:camera-view:1.6.0"
+  debugImplementation "androidx.activity:activity:1.11.0"
 }

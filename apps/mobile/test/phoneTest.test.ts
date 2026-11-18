@@ -50,14 +50,45 @@ describe("the store's app holds none of the phone test (51a)", () => {
     expect(text(join(MODULE, "src", "main", "AndroidManifest.xml"))).not.toMatch(/activity|mediapipe/i);
   });
 
-  it("the test's screen opens only from the laptop's cable", () => {
+  it("the test's screens open only from the laptop's cable (51a, 51b-ii)", () => {
     const manifest = text(join(MODULE, "src", "debug", "AndroidManifest.xml"));
     const activities = manifest.match(/<activity[\s\S]*?\/>/g) ?? [];
-    expect(activities).toHaveLength(1);
-    expect(activities[0]).toContain('android:name="expo.modules.phonetest.PhoneTestActivity"');
-    // Exported for `adb shell am start`, behind a permission Android gives the shell and no installed app.
-    expect(activities[0]).toContain('android:exported="true"');
-    expect(activities[0]).toContain('android:permission="android.permission.DUMP"');
+    expect(activities.map((a) => /android:name="([^"]+)"/.exec(a)?.[1])).toEqual(["expo.modules.phonetest.PhoneTestActivity", "expo.modules.phonetest.PhoneTestLiveActivity"]);
+    for (const activity of activities) {
+      // Exported for `adb shell am start`, behind a permission Android gives the shell and no installed app.
+      expect(activity).toContain('android:exported="true"');
+      expect(activity).toContain('android:permission="android.permission.DUMP"');
+    }
+    // The live screen asks for no permission of its own: the laptop grants the camera the app already declares.
+    expect(manifest).not.toContain("uses-permission");
+  });
+
+  it("the live screen's camera library is the app's own, in the debug build alone (51b-ii)", () => {
+    const camera = text(join(mobile, "node_modules", "expo-camera", "android", "build.gradle"));
+    const version = /def camerax_version = "([0-9.]+)"/.exec(camera)?.[1];
+    expect(version).toBeDefined();
+    const lines = gradle.split("\n").filter((l) => /androidx\.(camera|activity)/.test(l)).map((l) => l.trim());
+    expect(lines).toEqual([
+      `debugImplementation "androidx.camera:camera-core:${String(version)}"`,
+      `debugImplementation "androidx.camera:camera-camera2:${String(version)}"`,
+      `debugImplementation "androidx.camera:camera-lifecycle:${String(version)}"`,
+      `debugImplementation "androidx.camera:camera-view:${String(version)}"`,
+      'debugImplementation "androidx.activity:activity:1.11.0"',
+    ]);
+    expect(gradle.split("\n").filter((l) => /^\s*implementation /.test(l))).toEqual([]);
+  });
+
+  it("the live screen reads the laptop's live plan, asks for one person, and writes no picture (51b-ii)", () => {
+    const kotlin = text(join(MODULE, "src", "debug", "java", "expo", "modules", "phonetest", "PhoneTestLive.kt"));
+    const laptop = text(join(mobile, "..", "..", "packages", "movement", "scripts", "phoneLive.ts"));
+    const version = /private const val LIVE_PLAN_VERSION = (\d+)/.exec(kotlin)?.[1];
+    expect(version).toBeDefined();
+    expect(laptop).toMatch(new RegExp(`return \\{\\n    version: ${String(version)},\\n    people: 1,`));
+    expect(kotlin).toContain('check(json.getInt("version") == LIVE_PLAN_VERSION)');
+    expect(kotlin).toContain('check(it == 1) { "The live test asks for one person." }');
+    // Text only: no picture is turned into a file. The camera's pictures go to the model and nowhere else.
+    expect(kotlin).not.toMatch(/\.compress\(|FileOutputStream|\.jpe?g|\.png|MediaStore/);
+    expect(kotlin).toContain("PhoneTestCores.onCores(options, it)");
   });
 
   it("the test names the library version the app is built with", () => {

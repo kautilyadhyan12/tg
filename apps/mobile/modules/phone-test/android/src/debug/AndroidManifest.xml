@@ -1,7 +1,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
   <application>
-    <!-- The phone test's screen (51a), opened from the laptop over the USB cable (`adb shell am start`). Android
-         gives DUMP to that shell and to no app a person installs, so nothing on the phone but the laptop opens it. -->
+    <!-- The phone test's screens (51a, 51b-ii), opened from the laptop over the USB cable (`adb shell am start`).
+         Android gives DUMP to that shell and to no app a person installs, so nothing on the phone but the laptop opens
+         them. The live screen uses the camera permission the app already asks for (the meal photo's); the laptop
+         grants it to a folder's copy before it opens the screen. -->
     <activity
       android:name="expo.modules.phonetest.PhoneTestActivity"
       android:exported="true"
@@ -9,5 +11,12 @@
       android:screenOrientation="portrait"
       android:theme="@android:style/Theme.DeviceDefault.NoActionBar"
       android:label="Phone test" />
+    <activity
+      android:name="expo.modules.phonetest.PhoneTestLiveActivity"
+      android:exported="true"
+      android:permission="android.permission.DUMP"
+      android:screenOrientation="portrait"
+      android:theme="@android:style/Theme.DeviceDefault.NoActionBar"
+      android:label="Live camera test" />
   </application>
 </manifest>
