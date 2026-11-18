@@ -5,6 +5,7 @@
 import type { Sql, TransactionSql } from "postgres";
 import { libraryListSchema, type LibraryEntry } from "@app/shared";
 import { sha256 } from "./canonical.js";
+import { channelFor } from "./channel.js";
 import type { PublishedRow } from "./plan.js";
 
 export type Channel = "live" | "beta";
@@ -113,6 +114,11 @@ export async function addCopy(tx: TransactionSql, channel: Channel, sha256: stri
  *  has no copy. */
 export async function newestCopyFor(sql: Sql | TransactionSql, channel: Channel): Promise<CopyHead | null> {
   return (await newestCopy(sql, channel)) ?? (channel === "beta" ? await newestCopy(sql, "live") : null);
+}
+
+/** The copy this person downloads: their channel from the beta flag, then that channel's newest. */
+export async function copyFor(sql: Sql | TransactionSql, userId: string): Promise<CopyHead | null> {
+  return newestCopyFor(sql, channelFor(await betaFlagRules(sql), userId));
 }
 
 /** One copy's text, checked before it reaches any phone: it must match its fingerprint and read as a

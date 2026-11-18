@@ -17,7 +17,7 @@ import type { EmailSender } from "../src/modules/auth/email.js";
 import { channelFor } from "../src/modules/library/channel.js";
 import { readLibraryFolder } from "../src/modules/library/folder.js";
 import { LibraryRefused, publishLibrary } from "../src/modules/library/publish.js";
-import { checkedCopyText, newestCopyFor } from "../src/modules/library/repo.js";
+import { checkedCopyText, copyFor, newestCopyFor } from "../src/modules/library/repo.js";
 import { holdsCopy } from "../src/modules/library/routes.js";
 
 const url = process.env["DATABASE_URL"];
@@ -270,10 +270,10 @@ d("the Exercise Library on the server (real Postgres)", () => {
       });
     });
 
-    it("two publishes at once: the second waits for the first, reads what it wrote, and adds nothing", async () => {
-      // The first publishes a change and commits; the second, waiting meanwhile, publishes the same
-      // change and must find it already there. The real folder is published again at the end.
-      const changed = { ...real, exerciseFiles: real.exerciseFiles.map((f) => (f.name === "plank.json" ? { ...f, text: f.text.replace('"level": "intermediate"', '"level": "advanced"') } : f)) };
+    it("two publishes at once: the second waits until the first is done", async () => {
+      // Nothing is committed: the seed of every other test file publishes the real folder, and a
+      // committed change here could meet one. That the second waits is the rule; with "run again
+      // with nothing changed, it writes nothing" above, it is why two publishes never add two copies.
       let release = (): void => undefined;
       const gate = new Promise<void>((r) => {
         release = r;
@@ -282,28 +282,27 @@ d("the Exercise Library on the server (real Postgres)", () => {
       const locked = new Promise<void>((r) => {
         markLocked = r;
       });
-      try {
-        const first = sql.begin(async (tx) => {
-          const outcome = await publishLibrary(tx, changed);
+      const first = sql
+        .begin(async (tx) => {
+          await publishLibrary(tx, real);
           markLocked();
           await gate;
-          return outcome;
+          throw new RolledBack();
+        })
+        .catch((err: unknown) => {
+          if (!(err instanceof RolledBack)) throw err;
         });
-        await locked;
-        let secondDone = false;
-        const second = sql.begin((tx) => publishLibrary(tx, changed)).then((o) => {
-          secondDone = true;
-          return o;
-        });
-        await new Promise((r) => setTimeout(r, 400));
-        expect(secondDone).toBe(false);
-        release();
-        expect((await first).copies).toHaveLength(2);
-        expect(await second).toMatchObject({ written: 0, copies: [] });
-      } finally {
-        release();
-        await sql.begin((tx) => publishLibrary(tx, real));
-      }
+      await locked;
+      let secondDone = false;
+      const second = sql.begin((tx) => publishLibrary(tx, real)).then((o) => {
+        secondDone = true;
+        return o;
+      });
+      await new Promise((r) => setTimeout(r, 400));
+      expect(secondDone).toBe(false);
+      release();
+      await first;
+      expect(await second).toMatchObject({ written: 0, copies: [] });
     });
 
     it("the old exercise list does not show the new exercise, and its old rows read as before", async () => {
@@ -366,6 +365,19 @@ d("the Exercise Library on the server (real Postgres)", () => {
       expect(same.body).toBe("");
       const older = await get(me.cookies, { "if-none-match": `"${"0".repeat(64)}"` });
       expect(older.statusCode).toBe(200);
+    });
+
+    it("the download's choice: a person the beta flag lists gets beta's copy, everyone else live's", async () => {
+      const me = await makeUser("beta");
+      const other = await makeUser("not-beta");
+      await rolledBack(async (tx) => {
+        // In the transaction only: the old exercise test sets this flag for its own people meanwhile.
+        await tx`UPDATE feature_flags SET rules = ${tx.json({ userIds: [me.id] })} WHERE key = 'beta_definitions'`;
+        const beta = (await tx<{ version: number }[]>`
+          INSERT INTO library_copies (channel, sha256, body) VALUES ('beta', ${"d".repeat(64)}, '{}') RETURNING version`)[0]?.version;
+        expect((await copyFor(tx, me.id))?.version).toBe(beta);
+        expect((await copyFor(tx, other.id))?.version).toBe((await newestCopyFor(tx, "live"))?.version);
+      });
     });
 
     it("a tester on beta gets beta's newest copy, and live's while beta has none", async () => {

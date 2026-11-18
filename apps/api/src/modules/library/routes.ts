@@ -7,7 +7,6 @@
 // checked: a download costs two small reads and no parsing.
 import type { FastifyInstance } from "fastify";
 import type { Sql } from "postgres";
-import { channelFor } from "./channel.js";
 import * as repo from "./repo.js";
 
 /** The copies kept in memory: the newest of each channel and the one before, a little over. */
@@ -42,7 +41,7 @@ export function registerLibraryRoutes(app: FastifyInstance, deps: { sql: Sql }):
     const userId = req.authUser?.id;
     if (userId === undefined) throw new Error("authenticate preHandler did not run");
 
-    const newest = await repo.newestCopyFor(deps.sql, channelFor(await repo.betaFlagRules(deps.sql), userId));
+    const newest = await repo.copyFor(deps.sql, userId);
     if (newest === null) {
       return reply.status(404).send({ error: "not_found", message: "the Exercise Library has not been published", requestId: req.id });
     }
