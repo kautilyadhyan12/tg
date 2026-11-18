@@ -1,4 +1,4 @@
-// How a phone run stands against the laptop's run of the same video and model (ROADMAP Stage 5 item 51a; spec Part 2
+// How a phone run stands against the laptop's run of the same video and model (ROADMAP Stage 5 items 51a and 51b; spec Part 2
 // §12.5). Every rule an exercise gets is set from numbers the laptop measured, so the worst thing this could do is call
 // a phone that reads the body differently "the laptop's numbers". A run is, in order:
 //   - not comparable, and nothing in it used, when it did not read the laptop's very pictures with the laptop's
@@ -10,8 +10,8 @@
 //   - the same, when it read the laptop's own decoded pictures and lies within a tenth of the model's own shake from
 //     the laptop's in 99 of 100 big joints, and no joint in any frame further than the bars for one lone point
 //     (SAME_SHARE_OF_SHAKE, SAME_LARGEST_*); otherwise it differs, with the numbers.
-// A file is refused whole unless its plan, its video and its model are this run's (`Sums`): a folder's old file is
-// never read as a new one.
+// A file is refused whole unless its plan, its video, its model and its cores are this run's (`Sums`): a folder's old
+// file is never read as a new one, and a run on other cores is never judged as the one asked for (51b).
 // Whether a chip that differs counts the same is not this file's to say: from job 52a, the proof table's.
 import { KP, type MovementFrame, type PhoneHeat, type PhoneTestDelegate, type SeenPerson } from "@app/shared";
 import { MAIN_JOINTS, MEASURE_LIST, type CheckedBody, type MeasureName, type MeasuredBody, type SteadyBody, type Unit } from "../src/index.js";
@@ -19,7 +19,7 @@ import { runChecks, runSteady, steadinessOf } from "./bodyCheck.js";
 import type { BodyPoints } from "./bodyPoints.js";
 import { followOne } from "./follow.js";
 import { agreementOf, kindOf, runMeasures, type Agreement } from "./measureCheck.js";
-import { phoneFrames, type PhoneRun } from "./phoneRun.js";
+import { coresBusy, phoneFrames, type PhoneRun } from "./phoneRun.js";
 
 /** Each point's twin on the other side of the body: a mirror, or a swap of left and right, exchanges them. */
 export const MIRROR: readonly number[] = [0, 4, 5, 6, 1, 2, 3, 8, 7, 10, 9, 12, 11, 14, 13, 16, 15, 18, 17, 20, 19, 22, 21, 24, 23, 26, 25, 28, 27, 30, 29, 32, 31];
@@ -440,7 +440,10 @@ export type Verdict = "same" | "differs" | "compared only" | "not comparable";
 export interface PhoneComparison {
   readonly label: string;
   readonly model: string;
+  /** The chip and cores the run ASKED for (null, the library's own), whatever the file says: a refused file is
+   *  counted in the row of the run it was handed in as, never in a row of its own. */
   readonly delegate: PhoneTestDelegate;
+  readonly threads: number | null;
   readonly pictures: "video" | "laptop";
   readonly verdict: Verdict;
   readonly reasons: readonly string[];
@@ -452,6 +455,10 @@ export interface PhoneComparison {
     readonly several: number;
     readonly decode: number;
     readonly create: number;
+    /** How many cores the reading kept busy, or null when the file does not say. */
+    readonly busy: number | null;
+    /** Each reading's time after the first ten, for the table's row. */
+    readonly readings: readonly number[];
   };
   readonly heat: { readonly before: PhoneHeat; readonly after: PhoneHeat };
 }
@@ -462,7 +469,17 @@ export interface Sums {
   readonly plan: string;
   readonly video: string;
   readonly model: string;
+  /** The chip and the main chip's cores this run asked for; null, the library's own number. */
+  readonly delegate: PhoneTestDelegate;
+  readonly threads: number | null;
 }
+
+/** A run asked for 2 or more cores took them only if it kept more than this many busy. Measured 2026-11-18 on Kd's
+ *  phone (51b-i, 40 runs): 1.03 to 1.05 on the library's own and on 1 core, 1.54 to 1.66 on 2, 2.25 to 2.68 on 4. The
+ *  file says back the plan's number of cores, so only this shows the phone took them. */
+export const CORES_TAKEN = 1.3;
+
+const coresWords = (n: number | null): string => (n === null ? "the library's own number of cores" : `${String(n)} ${n === 1 ? "core" : "cores"}`);
 
 /** Why the phone run is not this run's, or did not read the laptop's pictures with the laptop's settings: empty when
  *  it is and did. */
@@ -479,6 +496,13 @@ function sourceRefusals(laptop: BodyPoints, run: PhoneRun, sums: Sums): string[]
   }
   if (header.video.sha256 !== sums.video) refused.push("the file was made from another video, or other pictures of it, than this run's");
   if (header.model.sha256 !== sums.model) refused.push("the file was made with another model file than this run's");
+  if (header.delegate !== sums.delegate) refused.push(`the file was read on the ${header.delegate === "gpu" ? "graphics" : "main"} chip, this run asked for the ${sums.delegate === "gpu" ? "graphics" : "main"} chip`);
+  if (header.threads !== sums.threads) refused.push(`the file was read on ${coresWords(header.threads)}, this run asked for ${coresWords(sums.threads)}`);
+  if (sums.threads !== null && sums.threads >= 2) {
+    const busy = coresBusy(run, WARM_UP);
+    if (busy === null) refused.push(`this run asked for ${coresWords(sums.threads)} and the file does not say how many it kept busy`);
+    else if (busy <= CORES_TAKEN) refused.push(`this run asked for ${coresWords(sums.threads)} and the phone kept ${busy.toFixed(2)} busy: the setting was not taken`);
+  }
   const lp = laptop.header.picture;
   const pp = header.picture;
   if (lp.width !== pp.width || lp.height !== pp.height) {
@@ -524,7 +548,8 @@ export function comparePhone(laptop: BodyPoints, run: PhoneRun, sums: Sums): Pho
   return {
     label: header.label,
     model: header.model.file,
-    delegate: header.delegate,
+    delegate: sums.delegate,
+    threads: sums.threads,
     pictures: header.pictures,
     verdict,
     reasons,
@@ -535,6 +560,8 @@ export function comparePhone(laptop: BodyPoints, run: PhoneRun, sums: Sums): Pho
       several: median(timed.filter((f) => f.people.length > 1).map((f) => f.detectMs)),
       decode: median(run.frames.map((f) => f.decodeMs)),
       create: header.createMs,
+      busy: coresBusy(run, WARM_UP),
+      readings: timed.map((f) => f.detectMs),
     },
     heat: { before: header.heat, after: run.end.heat },
   };
@@ -544,6 +571,7 @@ export function comparePhone(laptop: BodyPoints, run: PhoneRun, sums: Sums): Pho
 export interface RunSummary {
   readonly model: string;
   readonly delegate: PhoneTestDelegate;
+  readonly threads: number | null;
   readonly videos: number;
   readonly same: number;
   readonly differs: number;
@@ -553,27 +581,35 @@ export interface RunSummary {
   readonly detect: Spread;
   readonly create: number;
   readonly warmest: number;
+  /** The middle of its runs' cores busy, or null when no file says. */
+  readonly busy: number | null;
 }
 
-export function summaries(runs: readonly PhoneComparison[], failed: readonly { model: string; delegate: PhoneTestDelegate }[], detectTimes: ReadonlyMap<string, readonly number[]>): RunSummary[] {
-  const keys = [...new Set([...runs, ...failed].map((r) => `${r.model}|${r.delegate}`))];
-  return keys.map((key) => {
-    const mine = runs.filter((r) => `${r.model}|${r.delegate}` === key);
-    const lost = failed.filter((r) => `${r.model}|${r.delegate}` === key).length;
-    const [model = "", delegate = "cpu"] = key.split("|");
+/** One kind of run in the table: a model on a chip, and on the main chip its cores. */
+export const runKey = (r: { model: string; delegate: PhoneTestDelegate; threads: number | null }): string => `${r.model}|${r.delegate}|${r.threads === null ? "own" : String(r.threads)}`;
+
+/** One row a kind of run asked for. Its speed, cores busy and warmth come from its comparable runs only: a refused
+ *  file's numbers were not measured on what the row names. */
+export function summaries(runs: readonly PhoneComparison[], failed: readonly { model: string; delegate: PhoneTestDelegate; threads: number | null }[]): RunSummary[] {
+  const kinds = new Map([...runs, ...failed].map((r) => [runKey(r), { model: r.model, delegate: r.delegate, threads: r.threads }] as const));
+  return [...kinds].map(([key, kind]) => {
+    const mine = runs.filter((r) => runKey(r) === key);
+    const usable = mine.filter((r) => r.verdict !== "not comparable");
+    const lost = failed.filter((r) => runKey(r) === key).length;
     const count = (v: Verdict): number => mine.filter((r) => r.verdict === v).length;
+    const busy = usable.flatMap((r) => (r.speed.busy === null ? [] : [r.speed.busy]));
     return {
-      model,
-      delegate: delegate === "gpu" ? "gpu" : "cpu",
+      ...kind,
       videos: mine.length + lost,
       same: count("same"),
       differs: count("differs"),
       comparedOnly: count("compared only"),
       notComparable: count("not comparable"),
       failed: lost,
-      detect: spreadOf(detectTimes.get(key) ?? []),
-      create: median(mine.map((r) => r.speed.create)),
-      warmest: Math.max(-1, ...mine.map((r) => r.heat.after.thermal)),
+      detect: spreadOf(usable.flatMap((r) => r.speed.readings)),
+      create: median(usable.map((r) => r.speed.create)),
+      warmest: Math.max(-1, ...usable.map((r) => r.heat.after.thermal)),
+      busy: busy.length === 0 ? null : median(busy),
     };
   });
 }

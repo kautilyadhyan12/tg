@@ -1,16 +1,18 @@
-// The phone test's judgement (ROADMAP 51a). The worst thing it could do is call a phone that reads the body
+// The phone test's judgement (ROADMAP 51a and 51b). The worst thing it could do is call a phone that reads the body
 // differently "the laptop's numbers": every exercise is set from the laptop's numbers, so every count on a member's
 // phone would be off by that much. Each phone run here is made from a real kept video, wrong in one way a real phone
 // can be (its decoder turns or mirrors the picture, numbers its frames one out, names the sides the other way round,
 // gives no 3D, reads the knee a little off, or shakes as much as the model itself does), and none may be called the
 // same; a run that decoded the video itself is never judged at all. The laptop's own run given back, and one moved by
-// far less than the model's own shake, are the same.
+// far less than the model's own shake, are the same. A run on the main chip with more cores (51b) is judged as the run
+// it names only when it names the very cores the run asked for.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { KP, type MovementFrame, type PhoneRunFrame, type SeenPerson } from "@app/shared";
 import { decodeBodyPoints, type BodyPoints } from "../scripts/bodyPoints.js";
 import {
+  CORES_TAKEN,
   FIT_MARGIN,
   KEY_READINGS,
   MIRROR,
@@ -39,7 +41,7 @@ const chair = kept("chair_squat_reference");
 const PLAN = "3".repeat(64);
 /** This run's own sums, as the run's own header names them unless `sums` says otherwise. */
 function comparePhone(laptop: BodyPoints, run: PhoneRun, sums: Partial<Sums> = {}): PhoneComparison {
-  return compareWith(laptop, run, { plan: PLAN, video: run.header.video.sha256, model: run.header.model.sha256, ...sums });
+  return compareWith(laptop, run, { plan: PLAN, video: run.header.video.sha256, model: run.header.model.sha256, delegate: run.header.delegate, threads: run.header.threads, ...sums });
 }
 
 /** A phone run that read the laptop's own pictures and gives back exactly the laptop's frames, changed by `edit`. */
@@ -50,6 +52,7 @@ function phoneRunOf(laptop: BodyPoints, edit: (frames: MovementFrame[]) => Movem
     at: laptop.frames[i]?.t ?? f.t,
     decodeMs: 12,
     detectMs: 40 + (i % 7),
+    cpuMs: 40 + (i % 7),
     people: f.people,
   }));
   const heat = { thermal: 0, batteryC: 30 };
@@ -64,6 +67,7 @@ function phoneRunOf(laptop: BodyPoints, edit: (frames: MovementFrame[]) => Movem
       pictures: "laptop",
       model: { ...laptop.header.model, sha256: "1".repeat(64) },
       delegate: "cpu",
+      threads: null,
       phone: { maker: "test", model: "test", android: "15", sdk: 35, abi: "arm64-v8a" },
       library: "tasks-vision 1.0.0",
       createMs: 300,
@@ -97,6 +101,108 @@ function shaken(picture: number, world: number, seed: number) {
     world: p.world?.map(([x, y, z]) => [x + by(world), y + by(world), z + by(world)]) ?? null,
   }));
 }
+
+/** A run that kept `k` cores busy while the model read: the app's time on the cores `k` times the reading's. */
+const busyAs = (run: PhoneRun, k: number): PhoneRun => ({ ...run, frames: run.frames.map((f) => ({ ...f, cpuMs: f.detectMs * k })) });
+/** A run on `n` cores, as Kd's phone gave them (51b-i): 1.64 busy on 2, 2.54 on 4. */
+const onCores = (laptop: BodyPoints, n: number, edit: (frames: MovementFrame[]) => MovementFrame[] = (f) => f): PhoneRun =>
+  busyAs(phoneRunOf(laptop, edit, { threads: n }), n === 2 ? 1.64 : 2.54);
+
+describe("the worst thing (51b): a run on other cores than the ones asked for is never judged as the one asked for", () => {
+  it("a file read on 4 cores, where the run asked for 4, is judged, and with the laptop's very numbers is the same", () => {
+    const c = comparePhone(squat, onCores(squat, 4), { threads: 4 });
+    expect(c.verdict).toBe("same");
+    expect(c.threads).toBe(4);
+  });
+
+  it("a file naming the library's own cores, where the run asked for 4 (a copy built before 51b), is not comparable, even with the laptop's very numbers", () => {
+    const c = comparePhone(squat, busyAs(phoneRunOf(squat), 2.54), { threads: 4 });
+    expect(c.verdict).toBe("not comparable");
+    expect(reasonsOf(c)).toContain("read on the library's own number of cores, this run asked for 4 cores");
+  });
+
+  it("a file read on 2 cores where the run asked for 4, or on 4 where it asked for the library's own, is not comparable", () => {
+    const two = comparePhone(squat, onCores(squat, 2), { threads: 4 });
+    expect(two.verdict).toBe("not comparable");
+    expect(reasonsOf(two)).toContain("read on 2 cores, this run asked for 4 cores");
+    const four = comparePhone(squat, onCores(squat, 4), { threads: null });
+    expect(four.verdict).toBe("not comparable");
+    expect(reasonsOf(four)).toContain("this run asked for the library's own number of cores");
+  });
+
+  it("a file that says 4 cores but kept one busy, the setting not taken, is not comparable, even with the laptop's very numbers", () => {
+    // The file says back the plan's number: only the cores it kept busy show the phone took them.
+    const said = comparePhone(squat, phoneRunOf(squat, (f) => f, { threads: 4 }), { threads: 4 });
+    expect(said.verdict).toBe("not comparable");
+    expect(reasonsOf(said)).toContain("this run asked for 4 cores and the phone kept 1.00 busy: the setting was not taken");
+    expect(CORES_TAKEN).toBe(1.3);
+    // Just past the bar is judged; at it, refused. 2 cores kept 1.54 busy at the least on Kd's phone.
+    expect(comparePhone(squat, busyAs(phoneRunOf(squat, (f) => f, { threads: 2 }), 1.31), { threads: 2 }).verdict).toBe("same");
+    expect(comparePhone(squat, busyAs(phoneRunOf(squat, (f) => f, { threads: 2 }), 1.3), { threads: 2 }).verdict).toBe("not comparable");
+    // A file that does not say how busy it kept is not believed either.
+    const silent = phoneRunOf(squat, (f) => f, { threads: 4 });
+    const none = comparePhone(squat, { ...silent, frames: silent.frames.map((f) => ({ ...f, cpuMs: null })) }, { threads: 4 });
+    expect(none.verdict).toBe("not comparable");
+    expect(reasonsOf(none)).toContain("does not say how many it kept busy");
+    // One core asked is the library's own speed: nothing to see, nothing refused.
+    expect(comparePhone(squat, phoneRunOf(squat, (f) => f, { threads: 1 }), { threads: 1 }).verdict).toBe("same");
+  });
+
+  it("a file from the other chip than the run asked for is not comparable", () => {
+    const gpu = comparePhone(squat, phoneRunOf(squat, (f) => f, { delegate: "gpu" }), { delegate: "cpu" });
+    expect(gpu.verdict).toBe("not comparable");
+    expect(reasonsOf(gpu)).toContain("read on the graphics chip, this run asked for the main chip");
+  });
+
+  it("a run on 4 cores whose knee reads 4 cm off differs: the cores asked for are no pass by themselves", () => {
+    const off = (frames: MovementFrame[]) => onEveryone((p) => moveJoint(p, KP.left_knee, 0.02, 0.04))(frames);
+    const c = comparePhone(squat, onCores(squat, 4, off), { threads: 4 });
+    expect(c.verdict).toBe("differs");
+  });
+
+  it("each kind of run is a row of its own: the library's own cores, 2, 4 and the graphics chip are never added together", () => {
+    const own = comparePhone(squat, phoneRunOf(squat));
+    const two = comparePhone(squat, onCores(squat, 2), { threads: 2 });
+    const four = comparePhone(squat, onCores(squat, 4), { threads: 4 });
+    const gpu = comparePhone(squat, phoneRunOf(squat, (f) => f, { delegate: "gpu" }));
+    const rows = summaries([own, two, four, gpu], [{ model: squat.header.model.file, delegate: "cpu", threads: 4 }]);
+    expect(rows.map((r) => [r.delegate, r.threads, r.videos])).toEqual([
+      ["cpu", null, 1],
+      ["cpu", 2, 1],
+      ["cpu", 4, 2],
+      ["gpu", null, 1],
+    ]);
+  });
+
+  it("a 2-core file handed in as the 4-core run is refused in the 4-core row, and gives that row no speed, no cores busy and no warmth", () => {
+    const slow = (run: PhoneRun): PhoneRun => ({ ...run, frames: run.frames.map((f) => ({ ...f, detectMs: 900, cpuMs: 900 * 1.64 })), end: { ...run.end, heat: { thermal: 5, batteryC: 45 } } });
+    const handedIn = comparePhone(squat, slow(onCores(squat, 2)), { threads: 4 });
+    expect(handedIn.verdict).toBe("not comparable");
+    expect([handedIn.delegate, handedIn.threads]).toEqual(["cpu", 4]);
+    const four = comparePhone(squat, onCores(squat, 4), { threads: 4 });
+    const rows = summaries([four, handedIn], []);
+    expect(rows).toHaveLength(1);
+    const [row] = rows;
+    expect(row).toMatchObject({ threads: 4, videos: 2, same: 1, notComparable: 1, warmest: 0 });
+    expect(row?.detect.count).toBe(four.speed.readings.length);
+    expect(row?.detect.p95).toBeLessThan(100);
+    expect(row?.busy).toBeCloseTo(2.54, 6);
+    // Refused alone, the row has no speed at all, never the refused file's.
+    const [alone] = summaries([handedIn], []);
+    expect(alone?.detect.count).toBe(0);
+    expect(alone?.busy).toBeNull();
+  });
+
+  it("says how many cores a run kept busy, from the app's time on the cores over the reading's time, after the first ten pictures", () => {
+    const one = comparePhone(squat, phoneRunOf(squat));
+    expect(one.speed.busy).toBeCloseTo(1, 6);
+    const busy = (run: PhoneRun, k: number): PhoneRun => ({ ...run, frames: run.frames.map((f, i) => ({ ...f, cpuMs: i < 10 ? 1000 : f.detectMs * k })) });
+    expect(comparePhone(squat, busy(phoneRunOf(squat, (f) => f, { threads: 4 }), 3.5), { threads: 4 }).speed.busy).toBeCloseTo(3.5, 6);
+    // 51a's files do not say.
+    const older = phoneRunOf(squat);
+    expect(comparePhone(squat, { ...older, frames: older.frames.map((f) => ({ ...f, cpuMs: null })) }).speed.busy).toBeNull();
+  });
+});
 
 describe("the worst thing: a phone that reads the body differently is never called the laptop's numbers", () => {
   it("the laptop's own frames, given back from the laptop's own pictures, are the same", () => {
@@ -316,7 +422,7 @@ describe("the report", () => {
     const same = comparePhone(squat, phoneRunOf(squat));
     const video = comparePhone(squat, phoneRunOf(squat, (f) => f, { pictures: "video" }));
     const late = comparePhone(squat, phoneRunOf(squat, onEveryone(mirrored)));
-    const [row] = summaries([same, video, late], [{ model: squat.header.model.file, delegate: "cpu" }], new Map());
+    const [row] = summaries([same, video, late], [{ model: squat.header.model.file, delegate: "cpu", threads: null }]);
     expect(row).toMatchObject({ videos: 4, same: 1, differs: 0, comparedOnly: 1, notComparable: 1, failed: 1 });
   });
 });

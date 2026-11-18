@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useLocation, useParams } from 'react-router-dom';
 import { ImagePlus, UserCheck, X } from 'lucide-react';
 import { postPhotoUrl, staffCommentsService, staffPostsService } from '../../api/postsApi';
 import { errorStatus, errorText } from '../../api/orgsApi';
@@ -52,7 +52,16 @@ function Composer({ gymId, gymName, words, onPosted }) {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState(null);
   const pickerRef = useRef(null);
+  const writeRef = useRef(null);
   const chars = charsLine(body);
+  // New, in the bar across the top, opens here (`#write`): the box in view, ready to type.
+  // Each press is a new visit (`key`), so pressing it again on the same address works too.
+  const { hash, key: visit } = useLocation();
+  useEffect(() => {
+    if (hash !== '#write') return;
+    writeRef.current?.scrollIntoView?.({ block: 'center' });
+    writeRef.current?.focus();
+  }, [hash, visit]);
 
   const pick = async (files) => {
     setPreparing(true);
@@ -107,6 +116,7 @@ function Composer({ gymId, gymName, words, onPosted }) {
       <label className="c-field">
         <span className="c-label">Write a post</span>
         <textarea
+          ref={writeRef}
           className="c-area"
           rows={4}
           value={body}

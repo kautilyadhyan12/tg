@@ -152,25 +152,32 @@ afterEach(() => {
 });
 
 describe('the gym console', () => {
-  // On a gym's pages Sign out is in the computer's menu and, on a phone, under More (R1,
-  // spec Part 3 §17.5); where there is no gym yet (your organisations, create) the phone's
-  // top bar carries it. jsdom applies no CSS, so the menu and the phone's bars are all in
-  // the tree here, and each control is found by where it lives.
+  // On a gym's pages Sign out is under your name at the foot of the computer's menu (V1-c,
+  // spec Part 3 §17.11) and, on a phone, under More (R1, §17.5); where there is no gym yet
+  // (your organisations, create) the phone's top bar carries it too. jsdom applies no CSS, so
+  // the menu and the phone's bars are all in the tree here, and each control is found by
+  // where it lives.
   const openMoreOnAPhone = async () => {
     fireEvent.click(within(screen.getByTestId('console-tabbar')).getByRole('link', { name: 'More' }));
     return within(await screen.findByTestId('console-more-you')).getByRole('button', { name: /sign out/i });
   };
+  const signOutUnderYourName = () => {
+    const rail = screen.getByTestId('console-rail');
+    expect(within(rail).queryByRole('button', { name: /sign out/i })).toBeNull();
+    fireEvent.click(rail.querySelector('.c-rail-me'));
+    const box = screen.getAllByRole('dialog').find((d) => d.querySelector('.c-menu-list') !== null);
+    return within(box).getByRole('button', { name: /sign out/i });
+  };
 
-  it('offers Sign out in the computer menu, and under More on a phone', async () => {
+  it('offers Sign out under your name in the computer menu, and under More on a phone', async () => {
     drawConsole();
-    const inMenu = within(screen.getByTestId('console-rail')).getAllByRole('button', { name: /sign out/i });
-    expect(inMenu).toHaveLength(1);
+    expect(signOutUnderYourName()).toBeTruthy();
     expect(await openMoreOnAPhone()).toBeTruthy();
   });
 
-  it('offers Sign out in the menu and the phone’s top bar where there is no gym', () => {
+  it('offers Sign out under your name in the menu and in the phone’s top bar where there is no gym', () => {
     drawConsole('/console');
-    expect(within(screen.getByTestId('console-rail')).getByRole('button', { name: /sign out/i })).toBeTruthy();
+    expect(signOutUnderYourName()).toBeTruthy();
     expect(within(screen.getByTestId('console-topbar')).getByRole('button', { name: /sign out/i })).toBeTruthy();
   });
 
@@ -189,7 +196,7 @@ describe('the gym console', () => {
   });
 
   it.each([
-    ['the computer menu', '/console/iron-house', async () => within(screen.getByTestId('console-rail')).getByRole('button', { name: /sign out/i })],
+    ['your name in the computer menu', '/console/iron-house', async () => signOutUnderYourName()],
     ['More, on a phone', '/console/iron-house', openMoreOnAPhone],
     ['the phone’s top bar, with no gym', '/console', async () => within(screen.getByTestId('console-topbar')).getByRole('button', { name: /sign out/i })],
   ])('ends the session and returns to the login page from %s', async (_where, path, find) => {
