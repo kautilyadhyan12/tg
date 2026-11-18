@@ -76,7 +76,6 @@ describe('every text colour is readable on every surface, in both looks', () => 
     const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
     return (hi + 0.05) / (lo + 0.05);
   };
-  const menu = declarations('.t-dark');
   const TEXT = ['--t1', '--t2', '--t3', '--link', '--good', '--warn', '--bad', '--info'];
   const SURFACE = ['--page', '--card', '--raise', '--sheet'];
   const PAIRS = [
@@ -109,10 +108,32 @@ describe('every text colour is readable on every surface, in both looks', () => 
     for (const [fg, bg] of PAIRS) check(fg, bg);
     expect(Object.keys(own).length).toBeGreaterThan(30);
     expect(failing).toEqual([]);
+    // The menu takes the look too (spec §17.11: light in the light look).
     for (const fg of ['--rail-t1', '--rail-t2', '--rail-t3', '--rail-tab']) {
-      expect(ratio(menu[fg], menu['--rail-bg'])).toBeGreaterThanOrEqual(4.5);
+      expect(ratio(own[fg], own['--rail-bg']), fg).toBeGreaterThanOrEqual(4.5);
+      expect(ratio(own[fg], own['--rail-hover']), `${fg} on hover`).toBeGreaterThanOrEqual(4.5);
     }
-    expect(ratio(menu['--rail-on-t'], menu['--rail-on'])).toBeGreaterThanOrEqual(4.5);
+    expect(ratio(own['--rail-on-t'], own['--rail-on'])).toBeGreaterThanOrEqual(4.5);
+    expect(ratio(own['--rail-on-gym'], own['--rail-gym'])).toBeGreaterThanOrEqual(4.5);
+    // A field's edge is a thing to see, not words: 3 to 1 on the page and in a box.
+    expect(ratio(own['--input-line'], own['--page'])).toBeGreaterThanOrEqual(3);
+    expect(ratio(own['--input-line'], own['--card'])).toBeGreaterThanOrEqual(3);
+  });
+
+  it('the light look has a light menu, the dark look a dark one', () => {
+    const railOf = (look) => {
+      let found = null;
+      root.walkRules((rule) => {
+        if (rule.parent.type === 'root' && rule.selectors.length === 1 && rule.selectors[0] === look) {
+          rule.walkDecls('--rail-bg', (d) => {
+            found = d.value;
+          });
+        }
+      });
+      return found;
+    };
+    expect(luminance(railOf('.t-light'))).toBeGreaterThan(0.9);
+    expect(luminance(railOf('.t-dark'))).toBeLessThan(0.01);
   });
 });
 
@@ -132,16 +153,12 @@ describe('big enough for a thumb (rule 8)', () => {
 });
 
 describe('the Review needed dot (5b-v-d-iv)', () => {
-  it("is drawn in the looks' named amber, the menu's own on the menu, and glows", () => {
+  it("is drawn in the looks' named amber, the menu's own on the menu, and keeps still", () => {
     expect(declarations('.c-glow-dot').color).toBe('var(--warn)');
     expect(declarations('.c-glow-dot').background).toBe('currentColor');
     expect(declarations('.c-rail .c-glow-dot').color).toBe('var(--rail-warn)');
     expect(declarations('.c-tabbar .c-glow-dot').color).toBe('var(--rail-warn)');
-    expect(declarations('.c-glow-dot').animation).toMatch(/^c-glow /);
-  });
-
-  it('keeps still for anyone who asks for less motion', () => {
-    expect(declarations('.c-glow-dot', '(prefers-reduced-motion: reduce)').animation).toBe('none');
+    expect(declarations('.c-glow-dot').animation).toBeUndefined();
   });
 });
 
@@ -162,12 +179,13 @@ describe("the second look's building blocks (V1-b)", () => {
     expect(d.opacity).toBeUndefined();
   });
 
-  it('the text sizes are the board’s: title 32 on a computer, 28 on a phone, the number 40', () => {
+  it("the text sizes are the third look's: title 28 and the figure 32 on every screen, a box's title 17, the label 11", () => {
     expect(declarations('.c-h1')['font-size']).toBe('28px');
-    expect(declarations('.c-h1', COMPUTER)['font-size']).toBe('32px');
-    expect(declarations('.c-big')['font-size']).toBe('40px');
+    expect(declarations('.c-h1', COMPUTER)['font-size']).toBeUndefined();
+    expect(declarations('.c-big')['font-size']).toBe('32px');
     expect(declarations('.c-big', COMPUTER)['font-size']).toBeUndefined();
-    expect(declarations('.c-h2')['font-size']).toBe('18px');
+    expect(declarations('.c-h2')['font-size']).toBe('17px');
+    expect(declarations('.c-eyebrow')).toMatchObject({ 'font-size': '11px', 'text-transform': 'uppercase', color: 'var(--link)' });
     expect(declarations('.c-field').gap).toBe('8px');
   });
 
@@ -198,5 +216,50 @@ describe("the second look's building blocks (V1-b)", () => {
     expect(declarations('.c-snav')['overflow-x']).toBe('auto');
     expect(declarations('.c-snav a')['min-height']).toBe('44px');
     expect(declarations('.c-snav a', '(pointer: coarse)')['min-height']).toBe('44px');
+  });
+});
+
+// The third look (V1-c; spec Part 3 §17.11): one family with the member app, flat colour.
+describe('the third look', () => {
+  const MOUSE = '(hover: hover) and (pointer: fine)';
+
+  it('is flat: no gradient, no glow, no moving light anywhere in the console', () => {
+    const found = [];
+    root.walkDecls((d) => {
+      if (/gradient|drop-shadow/.test(d.value) || d.prop === 'animation' || d.prop === 'filter') found.push(`${d.prop}: ${d.value}`);
+    });
+    root.walkAtRules('keyframes', (at) => found.push(`@keyframes ${at.params}`));
+    expect(found).toEqual([]);
+  });
+
+  it('is drawn in Inter', () => {
+    expect(declarations('.c-console')['font-family']).toMatch(/^'Inter'/);
+  });
+
+  it('every button has round ends, the small ones too', () => {
+    expect(declarations('.c-btn')['border-radius']).toBe('999px');
+    for (const size of ['.c-btn-sm', '.c-btn-xs', '.c-btn-lg']) expect(declarations(size)['border-radius'], size).toBeUndefined();
+    expect(declarations('.c-icon-btn')['border-radius']).toBe('999px');
+  });
+
+  it('a menu line is 36 px with a mouse and 44 on touch or when the screen cannot tell', () => {
+    expect(declarations('.c-nav').height).toBe('44px');
+    expect(declarations('.c-nav', MOUSE).height).toBe('36px');
+    expect(declarations('.c-rail-grp-btn')['min-height']).toBe('44px');
+    expect(declarations('.c-rail-grp-btn', MOUSE)['min-height']).toBe('32px');
+    expect(declarations('.c-utab').height).toBe('44px');
+    expect(declarations('.c-utab', MOUSE).height).toBe('34px');
+    expect(declarations('.c-menu-row')['min-height']).toBe('44px');
+    expect(declarations('.c-rail-me')['min-height']).toBe('52px');
+  });
+
+  it('a folded group hides its pages, and only its pages', () => {
+    expect(declarations('.c-rail-list[hidden]').display).toBe('none');
+    expect(declarations('.c-rail-group[hidden]').display).toBeUndefined();
+  });
+
+  it('the bar across the top shows from 768 px only: a phone has its own top bar', () => {
+    expect(declarations('.c-pagebar').display).toBe('none');
+    expect(declarations('.c-pagebar', COMPUTER).display).toBe('flex');
   });
 });

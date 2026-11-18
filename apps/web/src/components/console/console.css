@@ -1,11 +1,11 @@
-/* The gym console's look (spec Part 3 §17). Both looks use the same names: a page is drawn
-   once and `.t-dark` or `.t-light` on the console's root decides the colours. The menu is
-   dark in both. Classes carry a `c-` prefix because the member pages already use `.card`,
+/* The console's look (spec Part 3 §17; the third look, §17.11). Both looks use the same names:
+   a page is drawn once and `.t-dark` or `.t-light` on the console's root decides the colours.
+   Classes carry a `c-` prefix because the member pages already use `.card`,
    `.btn` and `.label` for other things. */
 
-/* Archivo, kept in the app (SIL Open Font License, assets/fonts/archivo/OFL.txt). The files
-   and character ranges are the ones Google Fonts serves; the width axis is what titles and
-   big numbers use (font-stretch 108%). */
+/* Archivo, the second look's font (SIL Open Font License, assets/fonts/archivo/OFL.txt). The
+   console is drawn in Inter (index.css) since the third look; the browser fetches Archivo only
+   for a page that still names it. */
 /* vietnamese */
 @font-face {
   font-family: 'Archivo';
@@ -38,65 +38,69 @@
 }
 
 /* ── Colours ────────────────────────────────────────────────────────────── */
-
-/* The menu, the same in both looks. */
-.t-dark,
-.t-light {
-  --rail-bg: #0F0E0C;
-  --rail-line: #1F1C19;
-  --rail-t1: #F4F1EC;
-  --rail-t2: #B8B0A6;
-  --rail-t3: #8B847B;
-  --rail-tab: #9A9288;
-  --rail-card: #171513;
-  --rail-card-line: #26231F;
-  --rail-on: #2A1A0C;
-  --rail-on-t: #FF9F45;
-  --rail-seg: #2C2824;
-  --rail-gym: #2E1D0E;
-  --rail-warn: #F2C35B;
-  --rail-hover: #1A1815;
-  --rail-grp: #C7884F;
-}
+/* The third look (spec Part 3 §17.11; docs/design/console-v3/kit3.css). The board writes the
+   dark look's boxes and words as white at a strength; here each is the solid colour it makes
+   on the ground it sits on, so consoleCss.test.js can measure it. Flat colour only: no
+   gradient, no glow, no haze. In the light look the menu is light too. */
 
 .t-dark {
-  --page: #0C0B0A;
-  --grp: #C7884F;
-  --card: #151311;
-  --card-line: #25221E;
-  --line: #25221E;
-  --raise: #1D1A17;
-  --raise-line: #2E2A26;
-  --ctl-line: #3A3530;
-  --input: #0F0E0C;
-  --input-line: #6B645C;
-  --t1: #F4F1EC;
-  --t2: #B8B0A6;
-  --t3: #8B847B;
-  --link: #FF9F45;
+  --rail-bg: #0D0C0B;
+  --rail-line: #1E1D1C;
+  --rail-t1: #F3F3F3;
+  --rail-t2: #BDBDBC;
+  --rail-t3: #9C9B9B;
+  --rail-tab: #9C9B9B;
+  --rail-card: #151514;
+  --rail-card-line: #1E1D1C;
+  --rail-on: #2A1B0D;
+  --rail-on-line: #58320F;
+  --rail-on-t: #FFA552;
+  --rail-seg: #252524;
+  --rail-gym: #FF8A1F;
+  --rail-on-gym: #1B1005;
+  --rail-warn: #FFD66B;
+  --rail-hover: #191817;
+  --rail-grp: #9C9B9B;
+
+  --page: #0A0908;
+  --grp: #9C9B9B;
+  --card: #131211;
+  --card-line: #1E1D1C;
+  --line: #1E1D1C;
+  --raise: #242322;
+  --raise-line: #2C2B2B;
+  --ctl-line: #2C2B2B;
+  --input: #0F0E0D;
+  /* An input's edge stays 3 to 1 on the page (the board's 16 % white is 1.5). */
+  --input-line: #6B6865;
+  --t1: #F3F3F3;
+  --t2: #BDBDBC;
+  --t3: #9C9B9B;
+  --link: #FFA552;
   --accent: #FF8A1F;
-  --on-accent: #140C04;
-  --soft: #2A1A0C;
-  --soft-t: #FF9F45;
-  --good: #46D993;
-  --good-bg: #10291C;
-  --warn: #F2C35B;
-  --warn-bg: #33290F;
-  --bad: #FF7B6E;
-  --bad-bg: #3A1714;
-  --bad-line: #6B2A24;
-  --on-bad: #1A0503;
-  --info: #8FB8FF;
-  --info-bg: #14203A;
-  /* A button not ready yet. The board's #7A736B measured 3.43:1 on it; this shade 5.27. */
-  --dis-bg: #24211E;
-  --dis-t: #9A938A;
-  --sel: #F4F1EC;
-  --on-sel: #0C0B0A;
+  --on-accent: #1B1005;
+  --soft: #27180B;
+  --soft-line: #58320F;
+  --soft-t: #FFA552;
+  --good: #4ADE80;
+  --good-bg: #152B1C;
+  --warn: #FFD66B;
+  --warn-bg: #322B1D;
+  --bad: #F87171;
+  --bad-bg: #321918;
+  --bad-line: #5C1E1E;
+  --on-bad: #1B0A08;
+  --info: #7DB5FF;
+  --info-bg: #1F2A36;
+  /* A button not ready yet. The second look's board measured 3.43:1; this shade passes. */
+  --dis-bg: #242322;
+  --dis-t: #9C9B9B;
+  --sel: #F3F3F3;
+  --on-sel: #0A0908;
   --shadow: none;
-  --pop: 0 24px 64px rgba(0, 0, 0, 0.6);
-  --scrim: rgba(0, 0, 0, 0.62);
-  --sheet: #171513;
+  --pop: 0 30px 80px rgba(0, 0, 0, 0.72);
+  --scrim: rgba(5, 4, 3, 0.72);
+  --sheet: #151311;
   --cl-orange: #FF8A1F;
   --cl-blue: #4C8DFF;
   --cl-green: #34C77B;
@@ -108,44 +112,63 @@
 }
 
 .t-light {
-  --page: #F5F3EF;
-  --grp: #8F5420;
+  --rail-bg: #FFFFFF;
+  --rail-line: #EBEAE9;
+  --rail-t1: #191613;
+  --rail-t2: #544D46;
+  --rail-t3: #6B645C;
+  --rail-tab: #6B645C;
+  --rail-card: #FFFFFF;
+  --rail-card-line: #EBEAE9;
+  --rail-on: #FFEBD6;
+  --rail-on-line: #F3C596;
+  --rail-on-t: #9A4508;
+  --rail-seg: #EFEFEE;
+  --rail-gym: #FF8A1F;
+  --rail-on-gym: #1B1005;
+  --rail-warn: #7A5600;
+  --rail-hover: #F4F3F3;
+  --rail-grp: #6B645C;
+
+  --page: #F6F4F1;
+  --grp: #6B645C;
   --card: #FFFFFF;
-  --card-line: #E4DED6;
-  --line: #ECE7E0;
-  --raise: #F3F0EB;
-  --raise-line: #E1DBD2;
-  --ctl-line: #D6CFC5;
+  --card-line: #EBEAE9;
+  --line: #EBEAE9;
+  --raise: #F1EEE9;
+  --raise-line: #D7D5D4;
+  --ctl-line: #D7D5D4;
   --input: #FFFFFF;
+  /* An input's edge stays 3 to 1 on the page (the board's is 1.4). */
   --input-line: #948C83;
-  --t1: #1B1815;
-  --t2: #57504A;
-  --t3: #736C64;
-  /* The drawing's #B45309 measured 4.42:1 on --raise; this shade passes 4.5 on every
-     surface (spec Part 3 §17.3). */
-  --link: #A84D08;
+  --t1: #191613;
+  --t2: #544D46;
+  --t3: #6B645C;
+  --link: #9A4508;
   --accent: #FF8A1F;
-  --on-accent: #140C04;
-  --soft: #FFE9D2;
+  --on-accent: #1B1005;
+  --soft: #FFEBD6;
+  --soft-line: #F3C596;
   --soft-t: #9A4508;
   --good: #177A48;
   --good-bg: #E3F4EA;
   --warn: #7A5600;
-  --warn-bg: #FDF1D6;
+  --warn-bg: #FBEFCB;
   --bad: #C23A2E;
+  /* The board's #FBE6E3 measured 4.45:1 under red words; this shade passes. */
   --bad-bg: #FCE9E6;
   --bad-line: #F0B8B1;
   --on-bad: #FFFFFF;
   --info: #1F5BB8;
-  --info-bg: #E6EEFB;
-  /* The board's #8E867D measured 2.94:1 on it; this shade 4.78. */
+  --info-bg: #E4EDFB;
+  /* The second look's board measured 2.94:1; this shade passes. */
   --dis-bg: #ECE8E2;
   --dis-t: #6B645C;
-  --sel: #1B1815;
+  --sel: #191613;
   --on-sel: #FFFFFF;
-  --shadow: 0 1px 2px rgba(28, 24, 20, 0.05);
-  --pop: 0 24px 64px rgba(28, 24, 20, 0.2);
-  --scrim: rgba(20, 18, 16, 0.45);
+  --shadow: 0 1px 2px rgba(30, 22, 14, 0.04), 0 10px 28px rgba(30, 22, 14, 0.05);
+  --pop: 0 30px 80px rgba(30, 22, 14, 0.26);
+  --scrim: rgba(25, 20, 15, 0.42);
   --sheet: #FFFFFF;
   --cl-orange: #E8700A;
   --cl-blue: #2F6FD6;
@@ -163,7 +186,9 @@
   min-height: 100vh;
   background: var(--page);
   color: var(--t1);
-  font-family: 'Archivo', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  letter-spacing: -0.006em;
 }
 
 .c-main {
@@ -184,7 +209,7 @@
 }
 
 /* The pages, in five groups (spec Part 3 §17.10 rule 7). The list scrolls on its own, so the
-   foot under it (Your organisations, Your account, you and Sign out) stays on screen. */
+   foot under it, your name, stays on screen. */
 .c-rail-nav {
   flex: 1 1 auto;
   min-height: 0;
@@ -203,18 +228,58 @@
   flex-direction: column;
   gap: 2px;
 }
-/* A group's heading reads as a heading, never as one more page: small capitals, spaced,
-   in copper, apart from the white page names and the orange page you are on, under a line that closes the group above. */
+.c-rail-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.c-rail-list[hidden] {
+  display: none;
+}
+/* A group's heading reads as a heading, never as one more page: small capitals, spaced, grey,
+   apart from the page names and the orange page you are on. Pressing it folds the group. */
 .c-rail-grp {
-  margin: 10px 0 0;
-  padding: 14px 12px 6px;
-  border-top: 1px solid var(--rail-line);
+  margin: 12px 0 2px;
   font-size: 11px;
-  line-height: 16px;
+  line-height: 14px;
   font-weight: 700;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--rail-grp);
+}
+.c-rail-grp-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  padding: 0 10px;
+  box-sizing: border-box;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  text-align: left;
+}
+.c-rail-grp-btn:hover {
+  color: var(--rail-t1);
+}
+/* A folded group's name, and beside it the dot of a page inside it that waits. */
+.c-rail-grp-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.c-rail-grp-btn svg {
+  flex: none;
+  transition: transform 0.15s ease;
+}
+.c-rail-grp-btn[aria-expanded='false'] svg {
+  transform: rotate(-90deg);
 }
 
 .c-rail-fill {
@@ -226,17 +291,41 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding-top: 12px;
+  padding-top: 10px;
   border-top: 1px solid var(--rail-line);
 }
 
-/* You: your initials, your name and role, and Sign out beside them. */
+/* You: your initials, your name and role. Pressing it opens Your account, Your organisations
+   and Sign out. */
 .c-rail-me {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 8px 0 0 12px;
+  width: 100%;
   min-width: 0;
+  min-height: 52px;
+  padding: 8px;
+  box-sizing: border-box;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--rail-t1);
+  font: inherit;
+  text-align: left;
+}
+.c-rail-me:hover,
+.c-rail-me[aria-expanded='true'] {
+  background: var(--rail-hover);
+}
+/* On Your account, your name is the lit line, as that page's own line was. */
+.c-rail-me-on,
+.c-rail-me-on:hover {
+  background: var(--rail-on);
+  box-shadow: inset 0 0 0 1px var(--rail-on-line);
+}
+.c-rail-me > svg {
+  flex: none;
+  color: var(--rail-t3);
 }
 .c-rail-av {
   width: 32px;
@@ -258,42 +347,56 @@
   flex-grow: 1;
   min-width: 0;
 }
-.c-rail-out {
-  width: 36px;
-  height: 36px;
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--rail-t3);
+/* A short list in a box under a button: what your name opens, and New. Each line a link or a button. */
+.c-menu-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0 -8px;
 }
-.c-rail-out:hover {
-  background: var(--rail-hover);
-  color: var(--rail-t1);
-}
-.c-rail-out:disabled {
-  opacity: 0.5;
-}
-
-.c-nav {
+.c-menu-row {
   display: flex;
   align-items: center;
   gap: 12px;
   width: 100%;
-  min-width: 0;
-  flex-shrink: 0;
-  height: 44px;
+  min-height: 44px;
   padding: 0 12px;
   box-sizing: border-box;
   border: 0;
   border-radius: 10px;
   background: transparent;
+  color: var(--t1);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  text-align: left;
+}
+.c-menu-row:hover {
+  background: var(--raise);
+}
+.c-menu-row svg {
+  flex: none;
+  color: var(--t2);
+}
+.c-menu-row:disabled {
+  color: var(--dis-t);
+}
+
+.c-nav {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+  flex-shrink: 0;
+  height: 44px;
+  padding: 0 10px;
+  box-sizing: border-box;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
   color: var(--rail-t2);
-  font-size: 14.5px;
+  font-size: 14px;
   font-weight: 500;
   text-align: left;
 }
@@ -312,14 +415,15 @@
   background: var(--rail-on);
   color: var(--rail-on-t);
   font-weight: 600;
+  box-shadow: inset 0 0 0 1px var(--rail-on-line);
 }
 
 .c-switcher {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 10px 12px;
-  border-radius: 12px;
+  gap: 10px;
+  padding: 8px;
+  border-radius: 14px;
   background: var(--rail-card);
   border: 1px solid var(--rail-card-line);
   color: var(--rail-t1);
@@ -335,11 +439,11 @@
 }
 
 .c-gymicon {
-  width: 36px;
-  height: 36px;
+  width: 34px;
+  height: 34px;
   border-radius: 10px;
   background: var(--rail-gym);
-  color: var(--rail-on-t);
+  color: var(--rail-on-gym);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -412,6 +516,10 @@
   color: var(--rail-on-t);
   font-weight: 600;
 }
+.c-tab-on .c-tab-icon {
+  background: var(--rail-on);
+  box-shadow: inset 0 0 0 1px var(--rail-on-line);
+}
 
 @media (min-width: 768px) {
   .c-rail {
@@ -425,7 +533,7 @@
     display: flex;
     flex-direction: column;
     gap: 12px;
-    padding: 16px 12px 12px;
+    padding: 14px 12px 12px;
     overflow: hidden;
     background: var(--rail-bg);
     border-right: 1px solid var(--rail-line);
@@ -438,6 +546,25 @@
   .c-topbar,
   .c-tabbar {
     display: none;
+  }
+}
+
+/* The bar across the top of every page on a computer (spec Part 3 §17.11, the Overview board):
+   New, on the right. Search and the bell join it in their own jobs. On a phone the top bar
+   above holds the business's name instead. */
+.c-pagebar {
+  display: none;
+}
+@media (min-width: 768px) {
+  .c-pagebar {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 12px;
+    min-height: 64px;
+    padding: 10px 32px;
+    box-sizing: border-box;
+    border-bottom: 1px solid var(--line);
   }
 }
 
@@ -469,21 +596,22 @@
   }
 }
 
-/* The narrowest screens (a folding phone's cover screen, 280 px): five tab names still fit,
-   in Archivo's narrower letters. */
+/* The narrowest screens (a folding phone's cover screen, 280 px): five tab names still fit. */
 @media (max-width: 339px) {
   .c-tab {
     font-size: 11px;
-    font-stretch: 85%;
-    letter-spacing: -0.01em;
+    letter-spacing: -0.02em;
   }
 }
 
-/* A touch screen (a tablet, an opened folding phone): Sign out 44 px, as every menu line is. */
-@media (pointer: coarse) {
-  .c-rail-out {
-    width: 44px;
-    height: 44px;
+/* A mouse (spec §17.11): a menu line is 36 px and a group's heading 32. A touch screen, or one
+   that cannot tell, keeps 44. */
+@media (hover: hover) and (pointer: fine) {
+  .c-nav {
+    height: 36px;
+  }
+  .c-rail-grp-btn {
+    min-height: 32px;
   }
 }
 
@@ -556,50 +684,43 @@
 
 /* The titles carry their own colour and spacing: index.css gives every h1–h6 white text
    and tighter letters, which would vanish on the light look's pale page. */
+/* Six sizes (spec §17.11): label 11, caption 12, second words 13, words 14, box title 17,
+   page title 28, and 32 for the figure that matters. */
 .c-h1 {
   margin: 0;
   font-size: 28px;
   line-height: 34px;
   font-weight: 700;
-  font-stretch: 108%;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.025em;
   color: var(--t1);
 }
-/* The number that matters: 40 on every screen (the second look's rule 10). */
+/* The number that matters: 32 on every screen. */
 .c-big {
-  font-size: 40px;
-  line-height: 44px;
+  font-size: 32px;
+  line-height: 36px;
   font-weight: 700;
-  font-stretch: 108%;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.03em;
   font-variant-numeric: tabular-nums;
 }
-@media (min-width: 768px) {
-  .c-h1 {
-    font-size: 32px;
-    line-height: 40px;
-  }
-}
 .c-big-sm {
-  font-size: 40px;
-  line-height: 44px;
+  font-size: 32px;
+  line-height: 36px;
   font-weight: 700;
-  font-stretch: 108%;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.03em;
   font-variant-numeric: tabular-nums;
 }
 .c-h2 {
   margin: 0;
-  font-size: 18px;
-  line-height: 24px;
-  font-weight: 600;
-  letter-spacing: normal;
+  font-size: 17px;
+  line-height: 22px;
+  font-weight: 650;
+  letter-spacing: -0.012em;
   color: var(--t1);
 }
 .c-h3 {
   margin: 0;
   font-size: 15px;
-  line-height: 22px;
+  line-height: 20px;
   font-weight: 600;
   letter-spacing: normal;
   color: var(--t1);
@@ -610,11 +731,14 @@
   line-height: 22px;
   color: var(--t2);
 }
+/* The small label above a page's title: small capitals, orange. */
 .c-eyebrow {
-  font-size: 14px;
-  line-height: 20px;
-  font-weight: 500;
-  color: var(--t3);
+  font-size: 11px;
+  line-height: 14px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--link);
 }
 .c-t1 { color: var(--t1); }
 .c-t2 { color: var(--t2); }
@@ -640,7 +764,7 @@
 .c-card {
   background: var(--card);
   border: 1px solid var(--card-line);
-  border-radius: 16px;
+  border-radius: 18px;
   box-shadow: var(--shadow);
 }
 
@@ -659,17 +783,17 @@
 }
 
 /* Orange means "press here": one `c-btn-p` a box at most; `c-btn-soft` is the second
-   action; `c-btn-s` is outlined. */
+   action; `c-btn-s` is outlined. Round ends, flat colour. */
 .c-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
   height: 40px;
-  padding: 0 16px;
+  padding: 0 18px;
   box-sizing: border-box;
   border: 1px solid transparent;
-  border-radius: 10px;
+  border-radius: 999px;
   background: transparent;
   color: var(--t1);
   font-size: 14px;
@@ -685,14 +809,14 @@
   cursor: not-allowed;
 }
 .c-btn-p { background: var(--accent); color: var(--on-accent); }
-.c-btn-s { border-color: var(--ctl-line); }
-.c-btn-soft { background: var(--soft); color: var(--soft-t); }
+.c-btn-s { background: var(--card); border-color: var(--ctl-line); }
+.c-btn-soft { background: var(--soft); border-color: var(--soft-line); color: var(--soft-t); }
 .c-btn-danger { background: var(--bad-bg); color: var(--bad); }
 .c-btn-ghost { color: var(--t2); }
-.c-btn-lg { height: 44px; font-size: 15px; }
-.c-btn-sm { height: 32px; padding: 0 12px; font-size: 13px; border-radius: 8px; }
+.c-btn-lg { height: 48px; padding: 0 24px; font-size: 15px; }
+.c-btn-sm { height: 32px; padding: 0 13px; font-size: 13px; }
 /* The smallest: a row of actions under one name in a list (still 44 px tall on a phone). */
-.c-btn-xs { height: 28px; padding: 0 9px; font-size: 12px; border-radius: 7px; }
+.c-btn-xs { height: 28px; padding: 0 10px; font-size: 12px; }
 /* An action written as a word, with no box: a time slot's Edit and Cancel, Add time slot.
    `c-btn-link` is orange text, `c-btn-quiet` grey; still 44 px tall on a phone. */
 .c-btn-link,
@@ -721,7 +845,7 @@
   padding: 0;
   flex-shrink: 0;
   border: 0;
-  border-radius: 10px;
+  border-radius: 999px;
   background: transparent;
   color: var(--t2);
 }
@@ -759,12 +883,12 @@
   align-items: center;
   gap: 6px;
   height: 24px;
-  padding: 0 9px;
+  padding: 0 10px;
   box-sizing: border-box;
   border-radius: 999px;
-  font-size: 12.5px;
+  font-size: 12px;
   line-height: 1;
-  font-weight: 650;
+  font-weight: 600;
   white-space: nowrap;
 }
 .c-tag-good { background: var(--good-bg); color: var(--good); }
@@ -821,10 +945,17 @@
   padding: 0 14px;
   box-sizing: border-box;
   border: 1px solid var(--input-line);
-  border-radius: 10px;
+  border-radius: 12px;
   background: var(--input);
   color: var(--t1);
   font-size: 15px;
+}
+/* The field being typed in: an orange edge and a pale ring, flat. */
+.c-input:focus-visible,
+.c-area:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--soft);
 }
 .c-sel {
   display: flex;
@@ -845,7 +976,7 @@
   padding: 10px 14px;
   box-sizing: border-box;
   border: 1px solid var(--input-line);
-  border-radius: 10px;
+  border-radius: 12px;
   background: var(--input);
   color: var(--t1);
   font-size: 15px;
@@ -911,30 +1042,44 @@
   left: 21px;
 }
 
-/* Tabs across the top of a page (Members: Your list · Using the app). */
+/* Tabs across the top of a page (Members: Your list · In the app): round, in one pill that
+   scrolls on its own when it is wider than the screen. */
 .c-utabs {
-  display: flex;
-  gap: 28px;
-  border-bottom: 1px solid var(--line);
+  display: inline-flex;
+  align-self: flex-start;
+  gap: 4px;
+  max-width: 100%;
+  padding: 4px;
+  box-sizing: border-box;
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--card);
 }
 .c-utab {
   height: 44px;
-  display: flex;
+  flex: none;
+  display: inline-flex;
   align-items: center;
-  padding: 0;
+  gap: 8px;
+  padding: 0 14px;
   box-sizing: border-box;
-  margin-bottom: -1px;
   border: 0;
-  border-bottom: 2px solid transparent;
+  border-radius: 999px;
   background: transparent;
   color: var(--t2);
-  font-size: 15px;
-  font-weight: 500;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
 }
 .c-utab-on {
+  background: var(--raise);
   color: var(--t1);
-  font-weight: 600;
-  border-bottom-color: var(--accent);
+}
+@media (hover: hover) and (pointer: fine) {
+  .c-utab {
+    height: 34px;
+  }
 }
 
 .c-th {
@@ -1141,8 +1286,8 @@
   color: var(--t1);
 }
 
-/* Review needed (5b-v-d-iv): an amber dot that glows while anybody is left to review, on
-   Members in the menu and on the page's sign. Still for anyone who asks for less motion. */
+/* Review needed (5b-v-d-iv): an amber dot while anybody is left to review, on Members in the
+   menu and on the page's sign. Still: the third look has no glow. */
 .c-glow-dot {
   display: inline-block;
   flex: none;
@@ -1151,7 +1296,6 @@
   border-radius: 50%;
   color: var(--warn);
   background: currentColor;
-  animation: c-glow 1.8s ease-in-out infinite;
 }
 .c-rail .c-glow-dot,
 .c-tabbar .c-glow-dot {
@@ -1163,25 +1307,16 @@
 .c-tab-icon {
   position: relative;
   display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 28px;
+  border-radius: 999px;
 }
 .c-tab-icon .c-glow-dot {
   position: absolute;
-  top: -1px;
-  right: -3px;
-}
-@keyframes c-glow {
-  0%,
-  100% {
-    box-shadow: 0 0 0 0 transparent;
-  }
-  50% {
-    box-shadow: 0 0 6px 2px currentColor;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .c-glow-dot {
-    animation: none;
-  }
+  top: 2px;
+  right: 8px;
 }
 
 /* The banner above every page (Part 3 §4.2): a problem, a deadline or a wall, news. */
@@ -1286,7 +1421,6 @@
 .c-flame-on {
   color: var(--accent);
   fill: var(--accent);
-  filter: drop-shadow(0 0 4px var(--accent));
 }
 .c-flame-open { opacity: 0.5; }
 .c-flame-head { width: 16px; text-align: center; font-size: 10px; line-height: 18px; }
@@ -1410,7 +1544,7 @@
   overscroll-behavior: contain;
   background: var(--sheet);
   color: var(--t1);
-  border: 1px solid var(--card-line);
+  border: 1px solid var(--raise-line);
   box-shadow: var(--pop);
   left: 0;
   right: 0;
@@ -1433,7 +1567,7 @@
     right: auto;
     bottom: auto;
     width: min(380px, calc(100vw - 32px));
-    border-radius: 16px;
+    border-radius: 20px;
     padding-bottom: 20px;
   }
   .c-pop .c-grab { display: none; }
@@ -1484,7 +1618,7 @@
   background: var(--sheet);
 }
 @media (min-width: 768px) {
-  .c-panel { width: min(600px, 100%); border-left: 1px solid var(--card-line); }
+  .c-panel { width: min(600px, 100%); border-left: 1px solid var(--raise-line); }
   .c-panel-h { padding: 28px 28px 4px; }
   .c-panel-b { padding: 24px 28px 32px; }
   .c-panel-f { padding: 16px 28px; }
@@ -1508,7 +1642,7 @@
   padding: 20px 16px;
   padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
   border-radius: 22px 22px 0 0;
-  border: 1px solid var(--card-line);
+  border: 1px solid var(--raise-line);
   background: var(--sheet);
   color: var(--t1);
   box-shadow: var(--pop);
@@ -1556,6 +1690,7 @@
   border-radius: 999px;
   background: var(--soft);
   color: var(--soft-t);
+  box-shadow: inset 0 0 0 1px var(--soft-line);
   font-size: 13px;
   font-weight: 700;
 }

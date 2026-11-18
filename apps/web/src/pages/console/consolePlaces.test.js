@@ -44,6 +44,10 @@ const PLACES = {
   leads: '/console/iron-house/leads',
   addLead: '/console/iron-house/leads?open=add',
   plan: '/console/iron-house#plan',
+  newSale: '/console/iron-house/sell',
+  addClass: '/console/iron-house/classes?open=add',
+  checkIn: '/console/iron-house/attendance#check-in',
+  newPost: '/console/iron-house/updates#write',
 };
 
 /** The one permission each place needs; null: anybody on the staff. */
@@ -75,6 +79,10 @@ const NEEDS = {
   leads: 'members.confirm',
   addLead: 'members.confirm',
   plan: 'billing.manage',
+  newSale: 'billing.members',
+  addClass: 'schedule.manage',
+  checkIn: 'attendance.mark',
+  newPost: 'posts.manage',
 };
 
 const EVERY = ['org.manage', 'staff.manage', 'memberships.manage', 'schedule.manage', 'members.read', 'members.confirm', 'billing.manage', 'attendance.read'];

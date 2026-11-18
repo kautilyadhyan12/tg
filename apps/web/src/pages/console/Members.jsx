@@ -21,6 +21,7 @@ import {
   staffRemoveView,
   staffTag,
   viewerPrivileges,
+  keepsMemberList,
   groupLabelText,
   memberCountLabel,
   offListView,
@@ -323,7 +324,7 @@ export default function Members() {
   // §4.3's "Remove hidden" for a trainer, off the org row the screen already has.
   const canRemove = canRemoveMembers(viewerPrivileges(org));
   // The gym's own list is `members.confirm`'s.
-  const canSeeList = viewerPrivileges(org).includes('members.confirm');
+  const canSeeList = keepsMemberList(viewerPrivileges(org));
   // Which tab, kept in the address so a reload stays on it.
   const [searchParams, setSearchParams] = useSearchParams();
   // Removing staff or the owner from the app, and the Staff tab, are the owner's (4a-ii).
