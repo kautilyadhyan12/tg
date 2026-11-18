@@ -3,7 +3,11 @@
 // lands on and the tick that page itself asks for, for every mix of the ticks.
 import { describe, expect, it } from 'vitest';
 import { ORG_PRIVILEGES, ROLE_PRIVILEGES } from '@app/shared';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { consoleMenu } from './consoleMenu';
+import { PLAN_SECTION, SETTINGS_SECTION } from './consolePlaces';
 import { RECENT_KEY, RECENT_MAX, opensSearch, plain, readRecent, searchCatalogue, searchKeysLabel, searchResults, searchStart, writeRecent } from './searchPlaces';
 
 const SLUG = 'iron-house';
@@ -166,6 +170,23 @@ describe('what people type finds the place', () => {
 
   // Kd at the click-through: "money" must bring every money feature, none cut off. The list is
   // the console's money places as its pages and menu name them, written out here by hand.
+  // V1-e-i's review: a hand-written list cannot see a money place it never had. Every line that
+  // opens a page of the menu's Money group, Settings' Payments or Country, the plan, or the
+  // member list's money filters is a money place, and "money" must find each one.
+  it('"money" finds every line that opens a money place, whatever its words', () => {
+    const lines = searchCatalogue(SLUG, owner, org());
+    const moneyPages = consoleMenu(SLUG, owner, 'gym').pages.filter((p) => p.group === 'money').map((p) => p.to);
+    const isMoney = (to) =>
+      moneyPages.some((p) => to === p || to.startsWith(`${p}#`) || to.startsWith(`${p}?`) || to.startsWith(`${p}/`)) ||
+      /settings#(payments|country)$/.test(to) ||
+      to.endsWith('#plan') ||
+      /members\?show=(payment-due|no-card)$/.test(to);
+    const money = lines.filter((l) => isMoney(l.to));
+    expect(money.length).toBeGreaterThan(10);
+    const shown = searchResults(lines, 'money').flatMap((g) => g.lines.map((l) => l.key));
+    expect(money.map((l) => l.key).filter((k) => !shown.includes(k))).toEqual([]);
+  });
+
   it('"money" finds every money feature an owner has', () => {
     const groups = found(owner, 'money');
     expect(inGroup(groups, 'page')).toEqual(expect.arrayContaining(['Sell', 'Memberships', 'Failed payments', 'Reports', 'Payment due', 'No card on file', 'Products']));
@@ -198,6 +219,29 @@ describe('what people type finds the place', () => {
 
   it('accents and capitals are ignored', () => {
     expect(plain('  Café  RÈGLES ')).toBe('cafe regles');
+  });
+});
+
+// V1-e-i's review: a test that only checks the address stays green when the page has no
+// such section. Every `#` a search line opens names an element the console really draws.
+describe('every #section search opens is on its page', () => {
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const read = (dir) =>
+    fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+      const at = path.join(dir, e.name);
+      if (e.isDirectory()) return read(at);
+      return /\.jsx?$/.test(e.name) && !/\.test\./.test(e.name) ? [fs.readFileSync(at, 'utf8')] : [];
+    });
+  const source = [...read(here), ...read(path.join(here, '../../components'))].join('\n');
+  const drawn = (id) =>
+    source.includes(`id="${id}"`) ||
+    source.includes(`hash !== '#${id}'`) ||
+    (id === PLAN_SECTION && source.includes('id={PLAN_SECTION}')) ||
+    Object.entries(SETTINGS_SECTION).some(([k, v]) => v === id && source.includes(`id={SETTINGS_SECTION.${k}}`));
+
+  it.each(searchCatalogue(SLUG, ROLE_PRIVILEGES.owner, org()).filter((l) => l.to.includes('#')).map((l) => [l.title, l.to]))('%s (%s)', (_, to) => {
+    const id = to.slice(to.indexOf('#') + 1);
+    expect(drawn(id), `#${id} is drawn by no page`).toBe(true);
   });
 });
 

@@ -1,8 +1,8 @@
 // Members opened from Overview's Last 7 days box (ROADMAP 20d-ii): "See who" beside
 // Payment due lands on the list already showing them, and the address stops asking.
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor, cleanup, within } from '@testing-library/react';
-import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
+import { fireEvent, render, screen, waitFor, cleanup, within } from '@testing-library/react';
+import { Link, MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 
 vi.mock('../../api/orgsApi', async (importOriginal) => {
   const actual = await importOriginal();
@@ -47,7 +47,14 @@ const ORG = {
 
 function Address() {
   const { pathname, search } = useLocation();
-  return <output data-testid="address">{pathname + search}</output>;
+  return (
+    <>
+      <output data-testid="address">{pathname + search}</output>
+      {/* What search and the bell press while Members is already open (V1-e-i's review). */}
+      <Link to="/console/iron-house/members?show=payment-due">Search: Payment due</Link>
+      <Link to="/console/iron-house/members?show=no-card">Search: No card on file</Link>
+    </>
+  );
 }
 const draw = (path) =>
   render(
@@ -111,5 +118,19 @@ describe("Members opened from Overview's Payment due row", () => {
     await waitFor(() => expect(orgService.getMemberListEntries).toHaveBeenLastCalledWith(GYM, ''));
     await waitFor(() => expect(address()).toBe('/console/iron-house/members?look=light'));
     expect(screen.queryByTestId('showing')).toBeNull();
+  });
+});
+
+describe('Members already open, then a ?show= arrives (search, the bell)', () => {
+  it('Payment due, then No card on file, each opens the list showing them, though Members never closed', async () => {
+    draw('/console/iron-house/members');
+    await waitFor(() => expect(orgService.getMemberListEntries).toHaveBeenLastCalledWith(GYM, ''));
+    fireEvent.click(screen.getByRole('link', { name: 'Search: Payment due' }));
+    await waitFor(() => expect(orgService.getMemberListEntries).toHaveBeenLastCalledWith(GYM, 'paymentStatus=Payment+due'));
+    expect(within(await screen.findByTestId('showing')).getByRole('button', { name: 'Stop showing only Payment due' })).toBeTruthy();
+    await waitFor(() => expect(address()).toBe('/console/iron-house/members'));
+    fireEvent.click(screen.getByRole('link', { name: 'Search: No card on file' }));
+    await waitFor(() => expect(orgService.getMemberListEntries).toHaveBeenLastCalledWith(GYM, 'card=none'));
+    await waitFor(() => expect(address()).toBe('/console/iron-house/members'));
   });
 });

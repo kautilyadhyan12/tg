@@ -291,7 +291,7 @@ function NewButton({ offer }) {
 
 export default function ConsoleLayout({ children }) {
   const { orgSlug } = useParams();
-  const { pathname, search } = useLocation();
+  const { pathname, search, key: visit } = useLocation();
   const { user } = useAuth();
   // Nothing is asked on `/console` and `/console/new`, which have no gym. A failed read is
   // the screen's to show; here it only means no role yet.
@@ -331,6 +331,8 @@ export default function ConsoleLayout({ children }) {
     if (!canSearch) return undefined;
     const onKey = (event) => {
       if (!opensSearch(event)) return;
+      // A box open on the page (Add member, Record payment) keeps the keys: nothing reaches past it.
+      if (document.querySelector('[role="dialog"]') !== null) return;
       event.preventDefault();
       if (barInput.current !== null && barInput.current.offsetParent !== null) barInput.current.focus();
       else setPhoneSearch(true);
@@ -338,10 +340,10 @@ export default function ConsoleLayout({ children }) {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [canSearch]);
-  // Another page (Back, a link) closes the phone's search.
-  const [searchPath, setSearchPath] = useState(pathname);
-  if (pathname !== searchPath) {
-    setSearchPath(pathname);
+  // Another place (Back, a link, only a #section changing) closes the phone's search.
+  const [searchVisit, setSearchVisit] = useState(visit);
+  if (visit !== searchVisit) {
+    setSearchVisit(visit);
     setPhoneSearch(false);
   }
   const placeholder = searchPlaceholder(org?.orgType);
@@ -430,7 +432,7 @@ export default function ConsoleLayout({ children }) {
                under More; without one (your organisations, create) Sign out is here. ── */}
         <header className="c-topbar" data-testid="console-topbar">
           {menu && phoneSearch ? (
-            <SearchField key={`phone:${pathname}`} phone orgSlug={orgSlug} catalogue={catalogue} placeholder={placeholder} onLeave={() => setPhoneSearch(false)} />
+            <SearchField key={`phone:${visit}`} phone orgSlug={orgSlug} catalogue={catalogue} placeholder={placeholder} onLeave={() => setPhoneSearch(false)} />
           ) : menu ? (
             <>
               <GymSwitcher org={org} fallback={consoleName} compact />
@@ -476,7 +478,7 @@ export default function ConsoleLayout({ children }) {
             something, and the bell. */}
         {menu ? (
           <div className="c-pagebar" data-testid="console-bar">
-            <SearchField key={`bar:${pathname}`} inputRef={barInput} orgSlug={orgSlug} catalogue={catalogue} placeholder={placeholder} keys={searchKeysLabel(typeof navigator === 'undefined' ? '' : navigator.platform)} />
+            <SearchField key={`bar:${visit}`} inputRef={barInput} orgSlug={orgSlug} catalogue={catalogue} placeholder={placeholder} keys={searchKeysLabel(typeof navigator === 'undefined' ? '' : navigator.platform)} />
             {showNew ? <NewButton offer={offer} /> : null}
             {showBell ? <BellButton lines={lines} onOpen={reloadAttention} /> : null}
           </div>

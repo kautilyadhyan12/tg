@@ -75,7 +75,7 @@ const PAGE_PARTS = [
 /** Settings sections and the boxes set once on other pages, by their own titles. */
 const SETTINGS = [
   { place: 'gymDetails', title: (w) => `${w.itCap} details`, where: () => 'Settings', words: ['name', 'business', 'profile', 'logo', 'details', 'kind of business'] },
-  { place: 'country', title: () => 'Country', where: (w) => `Settings · ${w.itCap} details`, words: ['currency', 'region', 'tax', 'location'] },
+  { place: 'country', title: () => 'Country', where: (w) => `Settings · ${w.itCap} details`, words: ['currency', 'region', 'tax', 'location', 'money', 'prices'] },
   { place: 'postalAddress', title: () => 'Postal address', where: (w) => `Settings · ${w.itCap} details`, words: ['address', 'location', 'street'] },
   { place: 'payments', title: () => 'Payments', where: () => 'Settings', words: ['square', 'connect', 'card reader', 'terminal', 'payouts', 'stripe', 'razorpay', ...MONEY] },
   { place: 'openingHours', title: () => "When we're open", where: () => 'Settings', words: ['hours', 'opening hours', 'opening times', 'closed', 'holidays'] },

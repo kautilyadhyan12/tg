@@ -94,7 +94,10 @@ export default function SearchField({ orgSlug, catalogue, placeholder, keys = nu
       event.preventDefault();
       if (lines.length === 0) return;
       const step = event.key === 'ArrowDown' ? 1 : -1;
-      setActive((at + step + lines.length) % lines.length);
+      const next = (at + step + lines.length) % lines.length;
+      setActive(next);
+      // The lit line stays in view when the results scroll (a short window, a long list).
+      document.getElementById(optionId(next))?.scrollIntoView?.({ block: 'nearest' });
     } else if (event.key === 'Enter' && at >= 0) {
       event.preventDefault();
       const line = lines[at];
@@ -110,10 +113,18 @@ export default function SearchField({ orgSlug, catalogue, placeholder, keys = nu
       ref={wrap}
       className={`c-findbar${phone ? ' c-findbar-phone' : ''}${open ? ' c-findbar-open' : ''}`}
       data-testid={phone ? 'console-search-phone-box' : 'console-search'}
+      onBlur={(event) => {
+        // Tab, or anything else that moves the cursor out of the box and its results, closes them.
+        if (open && !(event.relatedTarget instanceof Node && wrap.current?.contains(event.relatedTarget))) close();
+      }}
       onMouseDown={(event) => {
         if (event.target === wrap.current || event.target.closest?.('.c-findbar-icon')) {
           event.preventDefault();
           input.current?.focus();
+        } else if (event.target.closest?.('.c-find-drop')) {
+          // A press on the results keeps the cursor in the box, so the box is not closed by
+          // losing it before the press lands (Safari never moves the cursor onto a link).
+          event.preventDefault();
         }
       }}
     >

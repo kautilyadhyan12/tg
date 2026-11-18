@@ -206,6 +206,69 @@ describe('opening and using it', () => {
     expect(top.getByTestId('console-search-phone')).toBeTruthy();
   });
 
+  // V1-e-i's review: the lit line could go out of view in a short window.
+  it('the arrows bring the lit line into view', async () => {
+    const seen = [];
+    const was = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = function scrollIntoView() {
+      seen.push(this.firstChild?.textContent);
+    };
+    try {
+      await open();
+      startSearch();
+      typeIn('money');
+      fireEvent.keyDown(barInput(), { key: 'ArrowDown' });
+      fireEvent.keyDown(barInput(), { key: 'ArrowDown' });
+      const lit = document.getElementById(barInput().getAttribute('aria-activedescendant')).firstChild.textContent;
+      expect(seen.at(-1)).toBe(lit);
+    } finally {
+      Element.prototype.scrollIntoView = was;
+    }
+  });
+
+  it('Tab out of the box closes the results; a press on a result does not', async () => {
+    await open();
+    startSearch();
+    typeIn('money');
+    fireEvent.blur(barInput(), { relatedTarget: screen.getAllByTestId('search-line')[0] });
+    expect(screen.getByTestId('search-box')).toBeTruthy();
+    fireEvent.blur(barInput(), { relatedTarget: screen.getByRole('button', { name: 'Go back' }) });
+    expect(screen.queryByTestId('search-box')).toBeNull();
+  });
+
+  it('Ctrl K does not reach past a box open on the page', async () => {
+    await open();
+    const box = document.createElement('div');
+    box.setAttribute('role', 'dialog');
+    document.body.appendChild(box);
+    try {
+      fireEvent.keyDown(window, { key: 'k', ctrlKey: true });
+      expect(screen.queryByTestId('search-box')).toBeNull();
+      expect(document.activeElement?.getAttribute('data-testid')).not.toBe('search-input');
+    } finally {
+      box.remove();
+    }
+  });
+
+  it("the phone's search closes when only the #section changes", async () => {
+    await open();
+    const top = within(screen.getByTestId('console-topbar'));
+    const go = async (word, to) => {
+      fireEvent.click(screen.getByTestId('console-search-phone'));
+      fireEvent.change(top.getByTestId('search-input'), { target: { value: word } });
+      fireEvent.click(top.getAllByTestId('search-line')[0]);
+      await waitFor(() => expect(where()).toBe(to));
+    };
+    await go('settings', '/console/iron-house/settings');
+    await go('opening hours', '/console/iron-house/settings#opening-hours');
+    fireEvent.click(screen.getByTestId('console-search-phone'));
+    expect(top.getByTestId('search-input')).toBeTruthy();
+    // Back moves only the #section: the page is the same, and the search still closes.
+    fireEvent.click(screen.getByRole('button', { name: 'Go back' }));
+    await waitFor(() => expect(where()).toBe('/console/iron-house/settings'));
+    expect(top.queryByTestId('search-input')).toBeNull();
+  });
+
   it("a studio's lines use its own words", async () => {
     await open(ROLE_PRIVILEGES.owner, 'owner', 'studio');
     startSearch();
