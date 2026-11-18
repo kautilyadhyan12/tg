@@ -1695,7 +1695,7 @@ Android 15), 66 runs:
 - **One picture takes**, the middle, asked for one person / for six: lite 42 / 71 ms on the
   graphics chip and 69 / 128 ms on the main chip, full 54 / 83 and 100 / 151, heavy 137 / 167 and
   278 / 335; a model starts in 0.3 to 1.5 s. The main chip ran on the library's own number of
-  cores, which may be one (job 51b counts them first), on a still screen with no camera.
+  cores, which is one (51b-i measured it), on a still screen with no camera.
   Heavy cannot run live on this phone on either chip.
 - **Asked for one person, the model shakes 2 to 5 times less** than asked for six (on the laptop,
   a used big joint's middle frame-to-frame shake in 3D: 0.9 to 4.4 mm against 4.9 to 11.2 mm on
@@ -1707,6 +1707,49 @@ Android 15), 66 runs:
   5.4°, the 3D elbow leaning 10° to 40°. Neither is known to be right there: heavy reads the
   squat's straight arm 25° bent in 3D (§12.2).
 - 51a picks nothing; job 51b picks on the live selfie camera.
+
+**As built, the main chip on more cores (51b-i, 2026-11-18).** The library's Android door has no
+cores setting; its own settings have one (XNNPACK's number of threads), reached from the app's own
+debug code (`PhoneTestCores.java`, in the library's package, which only replaces the chip's part of
+the settings and refuses anything but the main chip). A run names its cores in its file; a file on
+other cores than the run asked for is never judged as it, nor one asked for 2 or more cores that kept
+1.3 or fewer busy (the file says back the plan's number; only the cores busy show the phone took them).
+Each picture's reading also writes the app's time on the cores, so a run says how many it kept busy.
+Measured on Kd's phone (a Unisoc UMS9620, eight cores: four at 2.2 GHz, four at 2.0;
+`measured/phone-test/phone-facts-51b-i.txt`), 40 runs, asked for one person, on the laptop's own
+pictures of the four one-person videos:
+- **The library's own number is one core** (1.03 to 1.05 busy), and its numbers are XNNPACK's on one core.
+- **More cores change nothing in the numbers**: on 1, 2 and 4 cores every point of every picture is
+  the library's own, digit for digit, on all four videos with both models (33,495 points a model).
+- **They make it faster** (the middle / 95 in 100 of a reading, over the four videos): full 103 / 123 ms
+  on its own, 68 / 83 on 2 cores (1.54 to 1.66 busy), **52 / 68 on 4** (2.25 to 2.68 busy); lite 80 / 98,
+  54 / 70, 44 / 59; the graphics chip full 69 / 77, lite 51 / 57. Full on 4 cores is faster than full on
+  the graphics chip in the middle on the three 1080-wide videos (49 to 56 ms against 68 to 72), not on
+  the 720 by 1280 chair squat (47 against 46); lite on the graphics chip is the faster in 95 of 100 (57
+  against 59) and on the chair squat (33 against 40). 51a read the graphics chip faster (full 54, lite 42
+  ms, the phone decoding the videos itself, thermal status 1); here it read the laptop's pictures, at
+  thermal 1 on the squat and 2 after, and the squat's full run was 72 ms at 1: why is not known. Which
+  is faster live is 51b-ii's. Seen from outside (`top -H`) during a 4-core run: three helper threads of
+  the library at about 27% each beside the test's own. Android's thermal status reached 2 ("moderate"),
+  on the charging cable.
+- **Asked for one person, no chip gives the laptop's numbers, the main chip included**: the library
+  looks for the body where its last points were, so the last digits two processors round apart are
+  carried from picture to picture and grow (the squat's hip 0.01 mm apart in the first picture, up to
+  7 mm later). That the main chip is the laptop's model holds asked for six (51a), where it looks afresh
+  in every picture. So the laptop's numbers are judged on a phone by the count and the reasons (52a),
+  never by its points. How far apart, big joints in 3D in 95 of 100 (standing videos / floor video), and
+  the flat knees, hips and trunk lean, the largest lean and spread:
+
+  | | full model | lite model |
+  |---|---|---|
+  | the phone's main chip against the laptop | 1.3 to 1.4 cm / 4.0 cm; lean 0.3° or less; spread 0.4° to 1.3° standing, 3.9° on the floor | 1.8 to 2.2 cm / 4.4 cm; lean up to 1.3° (the squat's right hip and knee); spread up to 10.3° standing (the squat's right knee; 5.6° otherwise), 4.0° on the floor |
+  | the graphics chip against the main chip | 1.4 to 1.8 cm / 3.9 cm; lean 0.4° or less; spread 0.4° to 1.7° standing, 2.9° on the floor; the largest in any picture 5.6 cm standing, 50.4 cm on the floor | 1.9 to 2.1 cm / 4.6 cm; lean 0.4° or less; spread up to 4.6° standing, 3.9° on the floor; the largest in any picture 8.2 cm standing, 14.1 cm on the floor |
+
+  The graphics chip is about as far from the main chip as the main chip is from the laptop (full: 1.4 to
+  1.8 cm against 1.3 to 1.4); lite is up to twice as far as full, so 52a's "largest gap on a chip the app
+  allows" is lite's numbers wherever lite is allowed.
+- 51b-i picks nothing; the live runs are 51b-ii's: full on the main chip on 4 cores, full on the
+  graphics chip, lite on the main chip on 4 cores.
 
 An exercise that does not pass is published as "count by hand", never with a wrong camera
 count. Kd tries one exercise of each kind of movement on the phone, about a dozen, never
@@ -1791,9 +1834,8 @@ terminal (Kd, 2026-11-16).
 
 ### 12.9 Not measured yet
 
-How fast the main chip reads with more of its cores, which model and chip hold a live selfie
-camera for 20 minutes, their heat and battery, and whether the graphics chip's coarser numbers
-change a count (jobs 51b and 52a; 51a measured the rest, §12.5) · whether
+Which model and chip hold a live selfie camera for 20 minutes, their heat and battery, and whether the phone's numbers, a centimetre or so from the laptop's
+asked for one person on either chip, change a count (jobs 51b-ii and 52a; 51a and 51b-i measured the rest, §12.5) · whether
 one long recording cuts cleanly into lines (job 53) · whether a video redrawn from another
 phone place is faithful (job 52a) · what the hips do in a real one-leg lift: on the drawn
 one they moved at most 0.026 of the trunk's length, while the smallest rise in a real rep

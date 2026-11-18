@@ -11,6 +11,7 @@ import android.media.MediaMetadataRetriever
 import android.os.BatteryManager
 import android.os.Build
 import android.os.PowerManager
+import android.os.Process
 import android.os.SystemClock
 import com.google.mediapipe.framework.image.BitmapImageBuilder
 import com.google.mediapipe.tasks.components.containers.Landmark
@@ -20,6 +21,7 @@ import com.google.mediapipe.tasks.core.Delegate
 import com.google.mediapipe.tasks.vision.core.RunningMode
 import com.google.mediapipe.tasks.vision.poselandmarker.PoseLandmarker
 import com.google.mediapipe.tasks.vision.poselandmarker.PoseLandmarkerResult
+import com.google.mediapipe.tasks.vision.poselandmarker.PhoneTestCores
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -33,7 +35,7 @@ import java.util.Optional
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.concurrent.thread
 
-// The phone test (ROADMAP Stage 5 item 51a): Kd's reference videos through the phone's own pose model, so the laptop
+// The phone test (ROADMAP Stage 5 items 51a and 51b): Kd's reference videos through the phone's own pose model, so the laptop
 // can see whether the phone gives the numbers every exercise is set from. The laptop's half is
 // packages/movement/scripts/phone-test.ts: it puts the videos, the models and a plan in this app's own files, opens
 // PhoneTestActivity, takes back one file a run and deletes everything. What each file holds is read there through
@@ -44,6 +46,9 @@ import kotlin.concurrent.thread
 internal const val LIBRARY = "tasks-vision 1.0.0"
 private const val POINTS = 33
 private const val BATCH = 8
+/** The plan this copy reads: version 2 names each run's cores (51b). */
+private const val PLAN_VERSION = 2
+private const val MAX_THREADS = 8
 private val PLAIN = Regex("^[A-Za-z0-9_-]{1,80}$")
 private val HEX = Regex("^[0-9a-f]{64}$")
 
@@ -51,7 +56,8 @@ private class Frame(val i: Int, val t: Double, val ts: Long)
 /** A video, or (fromLaptop) the folder of the laptop's own decoded pictures of it. */
 private class Video(val label: String, val file: File, val sha256: String, val frames: List<Frame>, val fromLaptop: Boolean)
 private class Model(val name: String, val file: File, val sha256: String)
-private class Run(val model: Model, val delegate: String)
+/** threads: the main chip's cores, or null for the library's own number. */
+private class Run(val model: Model, val delegate: String, val threads: Int?)
 private class Plan(
   val videos: List<Video>,
   val runs: List<Run>,
@@ -119,7 +125,7 @@ internal class PhoneTest private constructor(private val context: Context) {
   // ── The plan ─────────────────────────────────────────────────────────────────────
   private fun readPlan(): Plan {
     val json = JSONObject(File(root, "plan.json").readText())
-    check(json.getInt("version") == 1) { "The laptop's plan is not one this copy of the app reads: build the app again." }
+    check(json.getInt("version") == PLAN_VERSION) { "The laptop's plan is not one this copy of the app reads: build the app again." }
     val models = json.getJSONArray("models").objects().map { m ->
       val name = plain(m.getString("name"))
       Model(name, File(root, "models/$name.task"), hex(m.getString("sha256")))
@@ -128,7 +134,10 @@ internal class PhoneTest private constructor(private val context: Context) {
       val model = models[r.getString("model")] ?: error("The plan runs a model it does not send.")
       val delegate = r.getString("delegate")
       check(delegate == "cpu" || delegate == "gpu") { "The plan names a chip this test does not know." }
-      Run(model, delegate)
+      check(r.has("threads")) { "The plan does not say each run's cores." }
+      val threads = if (r.isNull("threads")) null else r.getInt("threads")
+      check(threads == null || (delegate == "cpu" && threads in 1..MAX_THREADS)) { "The plan sets cores the main chip cannot take." }
+      Run(model, delegate, threads)
     }
     val videos = json.getJSONArray("videos").objects().map { v ->
       val label = plain(v.getString("label"))
@@ -172,8 +181,12 @@ internal class PhoneTest private constructor(private val context: Context) {
 
   // ── One run: one video, one model, one chip ──────────────────────────────────────
   private fun runOne(plan: Plan, video: Video, each: Run, v: Int, videos: Int) {
-    val name = "${video.label}.${each.model.name}.${each.delegate}"
-    val chip = if (each.delegate == "gpu") "the graphics chip" else "the main chip"
+    val name = "${video.label}.${each.model.name}.${each.delegate}" + (each.threads?.let { ".t$it" } ?: "")
+    val chip = when {
+      each.delegate == "gpu" -> "the graphics chip"
+      each.threads == null -> "the main chip"
+      else -> "the main chip, ${each.threads} ${if (each.threads == 1) "core" else "cores"}"
+    }
     val size = each.model.name.removePrefix("pose_landmarker_")
     val whose = if (video.fromLaptop) ", the laptop's pictures" else ""
     val heading = "Phone test\n\nVideo $v of $videos: ${video.label.removeSuffix("_reference").replace('_', ' ')}$whose\nThe $size model, on $chip"
@@ -195,12 +208,15 @@ internal class PhoneTest private constructor(private val context: Context) {
         pictures(video) { frame, picture, at, decodeMs, count ->
           if (done == 0) w.write(header(plan, video, each, picture, count, createMs, heatBefore) + "\n")
           val image = BitmapImageBuilder(picture).build()
+          val cpuStarted = Process.getElapsedCpuTime()
           val detectStarted = SystemClock.elapsedRealtimeNanos()
           val result = landmarker.detectForVideo(image, frame.ts)
           val detectMs = since(detectStarted)
+          // The whole app's time on the cores while the model read: over detectMs, how many cores it kept busy.
+          val cpuMs = (Process.getElapsedCpuTime() - cpuStarted).toDouble()
           // Closing the image recycles its picture.
           image.close()
-          leftOut += writeFrame(w, frame, at, decodeMs, detectMs, result)
+          leftOut += writeFrame(w, frame, at, decodeMs, detectMs, cpuMs, result)
           done++
           if (done % 10 == 0 || done == video.frames.size) {
             progress("running", done, video.frames.size, null)
@@ -278,14 +294,15 @@ internal class PhoneTest private constructor(private val context: Context) {
   private fun filesOf(video: Video): List<File> =
     if (video.fromLaptop) video.frames.indices.map { pictureFile(video, it) } else listOf(video.file)
 
-  /** The laptop's settings (points.py): the video's own frames in order, as many people as the plan asks, the same three limits. */
+  /** The laptop's settings (points.py): the video's own frames in order, as many people as the plan asks, the same three
+   *  limits; on the main chip, the plan's cores where it sets them (PhoneTestCores). */
   private fun options(plan: Plan, each: Run): PoseLandmarker.PoseLandmarkerOptions {
     val model: ByteBuffer = FileInputStream(each.model.file).channel.use { it.map(FileChannel.MapMode.READ_ONLY, 0, it.size()) }
     val base = BaseOptions.builder()
       .setModelAssetBuffer(model)
       .setDelegate(if (each.delegate == "gpu") Delegate.GPU else Delegate.CPU)
       .build()
-    return PoseLandmarker.PoseLandmarkerOptions.builder()
+    val options = PoseLandmarker.PoseLandmarkerOptions.builder()
       .setBaseOptions(base)
       .setRunningMode(RunningMode.VIDEO)
       .setNumPoses(plan.people)
@@ -294,6 +311,7 @@ internal class PhoneTest private constructor(private val context: Context) {
       .setMinTrackingConfidence(plan.minTracking)
       .setOutputSegmentationMasks(false)
       .build()
+    return each.threads?.let { PhoneTestCores.onCores(options, it) } ?: options
   }
 
   /** Each frame's time as the phone plays the video, from its first frame, in the order it plays. */
@@ -341,6 +359,7 @@ internal class PhoneTest private constructor(private val context: Context) {
           .put("minTracking", plan.minTracking.toDouble()),
       )
       .put("delegate", each.delegate)
+      .put("threads", each.threads ?: JSONObject.NULL)
       .put(
         "phone",
         JSONObject()
@@ -356,7 +375,7 @@ internal class PhoneTest private constructor(private val context: Context) {
       .toString()
 
   /** One frame's line; returns how many people were left out for a broken number. */
-  private fun writeFrame(w: Writer, frame: Frame, at: Double, decodeMs: Double, detectMs: Double, result: PoseLandmarkerResult): Int {
+  private fun writeFrame(w: Writer, frame: Frame, at: Double, decodeMs: Double, detectMs: Double, cpuMs: Double, result: PoseLandmarkerResult): Int {
     val people = StringBuilder()
     var leftOut = 0
     val world = result.worldLandmarks()
@@ -369,7 +388,7 @@ internal class PhoneTest private constructor(private val context: Context) {
       if (people.isNotEmpty()) people.append(',')
       people.append(person)
     }
-    w.write("{\"i\":${frame.i},\"t\":${frame.t},\"at\":$at,\"decodeMs\":$decodeMs,\"detectMs\":$detectMs,\"people\":[$people]}\n")
+    w.write("{\"i\":${frame.i},\"t\":${frame.t},\"at\":$at,\"decodeMs\":$decodeMs,\"detectMs\":$detectMs,\"cpuMs\":$cpuMs,\"people\":[$people]}\n")
     return leftOut
   }
 
@@ -412,6 +431,7 @@ internal class PhoneTest private constructor(private val context: Context) {
       .put("plan", planSum)
       .put("model", each.model.name)
       .put("delegate", each.delegate)
+      .put("threads", each.threads ?: JSONObject.NULL)
       .put("reason", reason)
     File(out, "$name.jsonl.part").delete()
     File(out, "$name.failed.json").writeText(json.toString())
