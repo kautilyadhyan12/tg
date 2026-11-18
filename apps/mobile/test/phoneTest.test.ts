@@ -66,6 +66,22 @@ describe("the store's app holds none of the phone test (51a)", () => {
     expect(version).toBeDefined();
     expect(kotlin).toContain(`internal const val LIBRARY = "tasks-vision ${String(version)}"`);
   });
+
+  it("the main chip's cores are set in the debug build alone, on the main chip alone, and the phone reads the laptop's plan (51b)", () => {
+    const cores = join(MODULE, "src", "debug", "java", "com", "google", "mediapipe", "tasks", "vision", "poselandmarker", "PhoneTestCores.java");
+    const java = text(cores);
+    // Only the chip's part of the library's settings is replaced, and anything but the main chip is refused.
+    expect(java).toContain("if (!base.getAcceleration().hasTflite()) throw");
+    expect(java.match(/setAcceleration\(/g)).toHaveLength(1);
+    expect(java).toContain("setNumThreads(threads)");
+    // The plan's version is the same number on both sides: a copy built before 51b refuses a plan that names cores.
+    const kotlin = text(join(MODULE, "src", "debug", "java", "expo", "modules", "phonetest", "PhoneTest.kt"));
+    const laptop = text(join(mobile, "..", "..", "packages", "movement", "scripts", "phoneRun.ts"));
+    const phoneVersion = /private const val PLAN_VERSION = (\d+)/.exec(kotlin)?.[1];
+    expect(phoneVersion).toBeDefined();
+    expect(laptop).toContain(`version: ${String(phoneVersion)},`);
+    expect(kotlin).toContain("PhoneTestCores.onCores(options, it)");
+  });
 });
 
 describe("a copy that holds the pose library sends Google nothing (51a)", () => {

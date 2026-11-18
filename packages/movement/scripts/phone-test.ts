@@ -1,14 +1,16 @@
-// The phone test (ROADMAP Stage 5 item 51a): Kd's reference videos through the phone's own pose model, three sizes,
-// on the main chip and the graphics chip, each against the laptop's run of the same model on the same video.
+// The phone test (ROADMAP Stage 5 items 51a and 51b): Kd's reference videos through the phone's own pose model, three
+// sizes, on the main chip and the graphics chip, each against the laptop's run of the same model on the same video.
 //   corepack pnpm --filter @app/movement phone-test [--laptop-only | --compare-only] [--models lite,full,heavy] [--chips cpu,gpu]
-//                                                   [--labels a,b] [--people 1 to 6] [--pictures video|laptop]
-//                                                   [--videos <folder>] [--python <command>]
+//                                                   [--threads own,1 to 8] [--labels a,b] [--people 1 to 6]
+//                                                   [--pictures video|laptop] [--videos <folder>] [--python <command>]
 // It needs this folder's copy of the app on the phone on the USB cable (corepack pnpm --filter mobile phone), puts the
 // videos, the models and a plan in that copy's own files, opens its phone-test screen, waits, takes one file a run
 // back, deletes everything it put there, then compares. --laptop-only makes the laptop's side ready and stops before the
 // phone is touched; --compare-only compares the files already taken back. --people asks the model for fewer people than
 // the laptop's six (the laptop then measures the same way); --pictures laptop hands the phone the laptop's own decoded
-// pictures instead of the video, so what still differs is the model's part alone. Each kind of run keeps its own files,
+// pictures instead of the video, so what still differs is the model's part alone. --threads runs the main chip once for
+// each number of cores it names ("own", the library's own number, as every 51a run was; 51b): the graphics chip runs
+// once whatever it says. Each kind of run keeps its own files,
 // and a run on the phone first clears all of its kind's earlier files, every video's, not only those it sends.
 // Everything it writes is in measured/phone-test/, which git ignores; the videos never leave Kd's folder but for the
 // phone's copy of the app, and are deleted there when the test ends.
@@ -17,15 +19,16 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { PHONE_TEST_DELEGATES, phoneProgressSchema, videoFramesSchema, type MovementFrame, type PhoneProgress, type PhoneTestDelegate, type VideoFrames } from "@app/shared";
+import { PHONE_TEST_DELEGATES, PHONE_TEST_MAX_THREADS, phoneProgressSchema, videoFramesSchema, type MovementFrame, type PhoneProgress, type PhoneTestDelegate, type VideoFrames } from "@app/shared";
 import { decodeBodyPoints, type BodyPoints } from "./bodyPoints.js";
 import { KD_VIDEOS, assertFolderStaysOutOfGit } from "./outFolder.js";
-import { WARM_UP, compareFrames, comparePhone, gapWords, keyGaps, shakeOf, summaries, type FrameComparison, type PhoneComparison } from "./phoneCheck.js";
+import { WARM_UP, compareFrames, comparePhone, gapWords, keyGaps, runKey, shakeOf, summaries, type FrameComparison, type PhoneComparison } from "./phoneCheck.js";
 import {
   MODELS,
   SETTINGS,
   makePlan,
   modelUrl,
+  planRuns,
   phoneFrames,
   readPhoneFailure,
   readPhoneRun,
@@ -68,6 +71,7 @@ const { values } = (() => {
         "compare-only": { type: "boolean", default: false },
         models: { type: "string", default: MODELS.map((m) => m.size).join(",") },
         chips: { type: "string", default: PHONE_TEST_DELEGATES.join(",") },
+        threads: { type: "string", default: "own" },
         labels: { type: "string" },
         people: { type: "string", default: String(SETTINGS.people) },
         pictures: { type: "string", default: "video" },
@@ -76,14 +80,24 @@ const { values } = (() => {
       },
     });
   } catch (err) {
-    fail(`${messageOf(err)}\nUsage: phone-test [--laptop-only | --compare-only] [--models lite,full,heavy] [--chips cpu,gpu] [--labels a,b] [--people 1 to 6] [--pictures video|laptop] [--videos <folder>]`);
+    fail(`${messageOf(err)}\nUsage: phone-test [--laptop-only | --compare-only] [--models lite,full,heavy] [--chips cpu,gpu] [--threads own,1 to 8] [--labels a,b] [--people 1 to 6] [--pictures video|laptop] [--videos <folder>]`);
   }
 })();
 
 const listed = (text: string): string[] => text.split(",").map((s) => s.trim()).filter((s) => s !== "");
 const models: PoseModel[] = listed(values.models).map((size) => MODELS.find((m) => m.size === size) ?? fail(`--models takes lite, full and heavy, not "${size}".`));
 const chips: PhoneTestDelegate[] = listed(values.chips).map((c) => PHONE_TEST_DELEGATES.find((d) => d === c) ?? fail(`--chips takes cpu and gpu, not "${c}".`));
-if (models.length === 0 || chips.length === 0) fail("Give at least one model and one chip.");
+const threads: (number | null)[] = [
+  ...new Set(
+    listed(values.threads).map((t) => {
+      if (t === "own") return null;
+      const n = Number(t);
+      return Number.isInteger(n) && n >= 1 && n <= PHONE_TEST_MAX_THREADS ? n : fail(`--threads takes own and 1 to ${String(PHONE_TEST_MAX_THREADS)}, not "${t}".`);
+    }),
+  ),
+];
+if (models.length === 0 || chips.length === 0 || threads.length === 0) fail("Give at least one model, one chip and one number of cores.");
+const runs: PlanRun[] = planRuns(models, chips, threads);
 if (values["laptop-only"] && values["compare-only"]) fail("--laptop-only and --compare-only do not go together.");
 const keptLabels = readdirSync(KEPT)
   .filter((f) => f.endsWith(".bodypoints"))
@@ -333,7 +347,6 @@ async function onThePhone(): Promise<void> {
     if (frames === undefined) throw new Error(`No frame list for ${label}.`);
     return { label, sha256: videoSum(label), frames, pictures };
   });
-  const runs: PlanRun[] = models.flatMap((model) => chips.map((delegate) => ({ model, delegate })));
   // This kind's old files go before anything is sent: a run the phone gives no file for this time must never be
   // reported from the last time (round one, H2).
   const cleared = runFiles(readdirSync(PHONE_OUT));
@@ -414,37 +427,41 @@ const say = (line = ""): void => {
 const pad = (s: string, n: number): string => s.padEnd(n);
 const ms = (v: number): string => (Number.isFinite(v) ? `${v.toFixed(0)} ms` : "-");
 const chipWord = (d: PhoneTestDelegate): string => (d === "gpu" ? "graphics" : "main");
+const coresWord = (d: PhoneTestDelegate, n: number | null): string => (d === "gpu" ? "-" : n === null ? "own" : String(n));
+const busyWord = (v: number | null): string => (v === null ? "-" : v.toFixed(2));
+const runWords = (r: { model: string; delegate: PhoneTestDelegate; threads: number | null }): string =>
+  `${sizeOf(r.model)} model, ${chipWord(r.delegate)} chip${r.delegate === "cpu" ? (r.threads === null ? ", the library's own cores" : `, ${String(r.threads)} ${r.threads === 1 ? "core" : "cores"}`) : ""}`;
 const sizeOf = (name: string): string => MODELS.find((m) => m.name === name)?.size ?? name;
 
 /** The plan this kind of run was made from; a kind whose plan was never kept (51a's first runs) has none, and only
  *  its files that name no plan are read. */
 const planSum = existsSync(PLAN) ? sha256Of([PLAN]) : "none";
 const results: PhoneComparison[] = [];
-const failed: { label: string; model: string; delegate: PhoneTestDelegate; reason: string }[] = [];
+const failed: { label: string; model: string; delegate: PhoneTestDelegate; threads: number | null; reason: string }[] = [];
 const detectTimes = new Map<string, number[]>();
 const phoneRuns = new Map<string, PhoneRun>();
 let phoneName = "";
 for (const label of labels) {
   for (const m of models) {
-    for (const delegate of chips) {
-      const name = runName(label, m.name, delegate);
+    for (const { delegate, threads: cores } of runs.filter((r) => r.model === m)) {
+      const name = runName(label, m.name, delegate, cores);
       const runPath = join(PHONE_OUT, `${name}.jsonl`);
       const failedPath = join(PHONE_OUT, `${name}.failed.json`);
       if (existsSync(failedPath)) {
         const f = readPhoneFailure(readFileSync(failedPath, "utf8"));
         const older = f.plan !== null && f.plan !== planSum;
-        failed.push({ label, model: f.model, delegate: f.delegate, reason: older ? "an older run's note: the file was made for another plan" : f.reason });
+        failed.push({ label, model: f.model, delegate: f.delegate, threads: f.threads, reason: older ? "an older run's note: the file was made for another plan" : f.reason });
         continue;
       }
       if (!existsSync(runPath)) {
-        failed.push({ label, model: m.name, delegate, reason: "the phone gave no file for it" });
+        failed.push({ label, model: m.name, delegate, threads: cores, reason: "the phone gave no file for it" });
         continue;
       }
       const run = readPhoneRun(readFileSync(runPath, "utf8"));
       phoneRuns.set(name, run);
       const ref = laptop.get(`${label}|${m.name}`) ?? fail(`No laptop run of ${label} with ${m.name}.`);
-      results.push(comparePhone(ref, run, { plan: planSum, video: videoSum(label), model: m.sha256 }));
-      const key = `${m.name}|${delegate}`;
+      results.push(comparePhone(ref, run, { plan: planSum, video: videoSum(label), model: m.sha256, threads: cores }));
+      const key = runKey({ model: m.name, delegate, threads: cores });
       detectTimes.set(key, [...(detectTimes.get(key) ?? []), ...run.frames.slice(WARM_UP).map((f) => f.detectMs)]);
       phoneName = `${run.header.phone.maker} ${run.header.phone.model}, Android ${run.header.phone.android}, ${run.header.library}`;
     }
@@ -459,22 +476,24 @@ say(
     ? "Is each run the laptop's numbers? The same: within a tenth of the model's own shake in 99 of 100 big joints, and readings given by one only in at most 1 of 1,000."
     : "The phone decoded the videos itself, so no run is judged here: its numbers hold its video decoder as well as its chip. Only --pictures laptop tests a chip.",
 );
-say(`   ${pad("model", 7)}${pad("chip", 10)}${pad("same", 7)}${pad("differs", 9)}${pad("compared", 10)}${pad("refused", 9)}${pad("reading p50", 13)}${pad("p95", 9)}${pad("start", 9)}warmest`);
+say(`   ${pad("model", 7)}${pad("chip", 10)}${pad("cores", 7)}${pad("busy", 7)}${pad("same", 7)}${pad("differs", 9)}${pad("compared", 10)}${pad("refused", 9)}${pad("reading p50", 13)}${pad("p95", 9)}${pad("start", 9)}warmest`);
 const rows = summaries(results, failed, detectTimes);
 for (const r of rows) {
   say(
-    `   ${pad(sizeOf(r.model), 7)}${pad(chipWord(r.delegate), 10)}${pad(String(r.same), 7)}${pad(String(r.differs), 9)}${pad(String(r.comparedOnly), 10)}${pad(String(r.notComparable + r.failed), 9)}${pad(ms(r.detect.median), 13)}${pad(ms(r.detect.p95), 9)}${pad(ms(r.create), 9)}${String(r.warmest)}`,
+    `   ${pad(sizeOf(r.model), 7)}${pad(chipWord(r.delegate), 10)}${pad(coresWord(r.delegate, r.threads), 7)}${pad(busyWord(r.busy), 7)}${pad(String(r.same), 7)}${pad(String(r.differs), 9)}${pad(String(r.comparedOnly), 10)}${pad(String(r.notComparable + r.failed), 9)}${pad(ms(r.detect.median), 13)}${pad(ms(r.detect.p95), 9)}${pad(ms(r.create), 9)}${String(r.warmest)}`,
   );
 }
-say("   refused: not comparable (other pictures, a wrong way of reading the person, no 3D) or no run. reading: the pose model's time for one");
-say("   picture, after its first ten; the main chip on the library's own number of cores. start: before its first picture. warmest: Android's thermal status, 0 none to 6.");
+say("   cores: the main chip's, as asked (own: the library's own number). busy: how many cores the app kept busy while the model read, the");
+say("   middle of the runs (Android's count of the app's time on the cores, over the reading's time). refused: not comparable (other");
+say("   pictures, a wrong way of reading the person, no 3D, other cores) or no run. reading: the pose model's time for one picture, after");
+say("   its first ten. start: before its first picture. warmest: Android's thermal status, 0 none to 6.");
 
 const cm = (v: number): string => `${(100 * v).toFixed(1)} cm`;
 const keyLines = (f: FrameComparison): string[] => keyGaps(f.gaps).map((g) => gapWords(g));
 for (const r of results) {
   const f = r.frames;
   say("");
-  say(`${r.label}, ${sizeOf(r.model)} model, ${chipWord(r.delegate)} chip: ${r.verdict.toUpperCase()}`);
+  say(`${r.label}, ${runWords(r)}: ${r.verdict.toUpperCase()}`);
   for (const why of r.reasons) say(`   - ${why}`);
   if (f !== null) {
     const c = f.closeness;
@@ -485,11 +504,11 @@ for (const r of results) {
     if (f.several > 0) say(`   where the laptop found more than one person (${String(f.several)} frames), the phone found as many in ${String(f.severalSame)}; most people in a frame: laptop ${String(f.mostLaptop)}, phone ${String(f.mostOther)}`);
     for (const line of keyLines(f)) say(`   ${line}`);
   }
-  say(`   reading ${ms(r.speed.detect.median)} (p95 ${ms(r.speed.detect.p95)}), one person ${ms(r.speed.one)}, more ${ms(r.speed.several)}; decoding ${ms(r.speed.decode)}; start ${ms(r.speed.create)}; thermal ${String(r.heat.before.thermal)} to ${String(r.heat.after.thermal)}, battery ${String(r.heat.before.batteryC ?? "-")} to ${String(r.heat.after.batteryC ?? "-")} °C`);
+  say(`   reading ${ms(r.speed.detect.median)} (p95 ${ms(r.speed.detect.p95)}), one person ${ms(r.speed.one)}, more ${ms(r.speed.several)}; cores busy ${busyWord(r.speed.busy)}; decoding ${ms(r.speed.decode)}; start ${ms(r.speed.create)}; thermal ${String(r.heat.before.thermal)} to ${String(r.heat.after.thermal)}, battery ${String(r.heat.before.batteryC ?? "-")} to ${String(r.heat.after.batteryC ?? "-")} °C`);
 }
 for (const f of failed) {
   say("");
-  say(`${f.label}, ${sizeOf(f.model)} model, ${chipWord(f.delegate)} chip: NO RUN. ${f.reason}`);
+  say(`${f.label}, ${runWords(f)}: NO RUN. ${f.reason}`);
 }
 
 /** One block of a comparison of two runs that are not the laptop against the phone, reading by reading. */
@@ -504,14 +523,16 @@ function sayAgainst(title: string, pairs: readonly { what: string; a: readonly M
   }
 }
 
-// The chips against each other: both phone runs decoded the same way, so what differs is the chip alone.
+// Each run against the main chip on the library's own cores, the same model and the same pictures, on the phone: what
+// differs is the chip, or the cores, alone.
 sayAgainst(
-  "The graphics chip against the main chip, the same model and the same pictures (lean: the middle of graphics less main; spread: 95 in 100):",
+  "Each run against the main chip on the library's own cores, the same model and the same pictures (lean: the middle of the run less the main chip's own; spread: 95 in 100):",
   labels.flatMap((label) =>
-    models.flatMap((m) => {
-      const cpu = phoneRuns.get(runName(label, m.name, "cpu"));
-      const gpu = phoneRuns.get(runName(label, m.name, "gpu"));
-      return cpu === undefined || gpu === undefined ? [] : [{ what: `${label}, ${m.size}`, a: phoneFrames(cpu), b: phoneFrames(gpu) }];
+    runs.flatMap(({ model: m, delegate, threads: cores }) => {
+      if (delegate === "cpu" && cores === null) return [];
+      const own = phoneRuns.get(runName(label, m.name, "cpu"));
+      const other = phoneRuns.get(runName(label, m.name, delegate, cores));
+      return own === undefined || other === undefined ? [] : [{ what: `${label}, ${runWords({ model: m.name, delegate, threads: cores })}`, a: phoneFrames(own), b: phoneFrames(other) }];
     }),
   ),
 );
@@ -551,7 +572,7 @@ if (people !== SETTINGS.people) {
 }
 
 say("");
-say("51a picks nothing: its main chip ran on the library's own number of cores, and nothing ran on the live camera. Job 51b picks (ROADMAP).");
+say("This test picks nothing: nothing here ran on the live camera. Job 51b-ii picks, on the selfie camera (ROADMAP).");
 writeFileSync(join(HERE, `report-${variant}.txt`), `${lines.join("\n")}\n`);
 writeFileSync(join(HERE, `report-${variant}.json`), JSON.stringify({ rows, results, failed }, (_, v: unknown) => (typeof v === "number" && !Number.isFinite(v) ? null : v), 1));
 console.log(`\nTook ${((Date.now() - started) / 1000).toFixed(0)} s. The report: ${join(HERE, `report-${variant}.txt`)}`);

@@ -86,13 +86,18 @@ export const bodyPointsHeaderSchema = z
   })
   .strict();
 
-// ── The phone test (ROADMAP Stage 5 item 51a) ─────────────────────────────────────
+// ── The phone test (ROADMAP Stage 5 items 51a and 51b) ───────────────────────────────
 // A folder's copy of the app plays a reference video through the phone's own pose model
 // (`apps/mobile/modules/phone-test`) and writes one file a run: a header line, one line a
 // frame, an end line. The laptop reads each line through these before it believes a number.
 // Every text the phone writes is plain characters only, so a file can never carry a path.
 
 export const PHONE_TEST_DELEGATES = ["cpu", "gpu"] as const;
+/** The most cores the main chip may be told to read with (51b): the phone has eight. */
+export const PHONE_TEST_MAX_THREADS = 8;
+/** How many cores the main chip was told to read with, or null for the library's own number (every 51a run, and
+ *  every graphics-chip run). */
+const threads = z.number().int().min(1).max(PHONE_TEST_MAX_THREADS).nullable().default(null);
 const sha256 = z.string().regex(/^[0-9a-f]{64}$/);
 const milliseconds = z.number().nonnegative().max(3_600_000);
 const phoneWords = z.string().regex(/^[A-Za-z0-9 _.,:()+/-]{1,80}$/);
@@ -131,6 +136,7 @@ export const phoneRunHeaderSchema = z
       })
       .strict(),
     delegate: z.enum(PHONE_TEST_DELEGATES),
+    threads,
     phone: z.object({ maker: phoneWords, model: phoneWords, android: phoneWords, sdk: z.number().int().min(1).max(1000), abi: plainName }).strict(),
     /** The pose library and its version, as the app was built with it. */
     library: phoneWords,
@@ -151,6 +157,9 @@ export const phoneRunFrameSchema = z
     /** Turning the video into this picture, and the pose model's reading of it. */
     decodeMs: milliseconds,
     detectMs: milliseconds,
+    /** The whole app's time on the phone's cores during that reading (Android's own count for the app, in whole
+     *  milliseconds): over detectMs, how many cores the reading kept busy. Null in 51a's files. */
+    cpuMs: milliseconds.nullable().default(null),
     people: z.array(seenPersonSchema).max(MAX_PEOPLE),
   })
   .strict();
@@ -174,6 +183,7 @@ export const phoneRunFailedSchema = z
     plan: sha256.nullable().default(null),
     model: plainName,
     delegate: z.enum(PHONE_TEST_DELEGATES),
+    threads,
     reason: z.string().max(400),
   })
   .strict();

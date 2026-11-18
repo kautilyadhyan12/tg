@@ -2,7 +2,7 @@
 // milliseconds the laptop's points.py gave it, and a file from the phone is believed only whole and well formed.
 import { describe, expect, it } from "vitest";
 import { BodyPointsError } from "../scripts/bodyPoints.js";
-import { MODELS, SETTINGS, makePlan, modelUrl, phoneFrames, readPhoneFailure, readPhoneRun, runFiles } from "../scripts/phoneRun.js";
+import { MODELS, SETTINGS, coresBusy, makePlan, modelUrl, phoneFrames, planRuns, readPhoneFailure, readPhoneRun, runFiles, runName } from "../scripts/phoneRun.js";
 
 const person = { points: Array.from({ length: 33 }, () => [0.5, 0.5, 0.1, 0.9, 0.95]), world: Array.from({ length: 33 }, () => [0, 0, 0]) };
 const heat = { thermal: 1, batteryC: 31.5 };
@@ -27,22 +27,31 @@ describe("the plan the phone reads", () => {
   it("gives each frame its number in the video, its time and the whole milliseconds points.py gives the model", () => {
     const plan = makePlan(
       [{ label: "squat_reference", sha256: "c".repeat(64), pictures: "video", frames: { picture: { width: 1080, height: 1920 }, videoFps: 60, fps: 30, read: 120, frames: [[0, 0], [2, 33.3], [4, 66.7], [6, 99.9]] } }],
-      [{ model: MODELS[0], delegate: "cpu" }, { model: MODELS[0], delegate: "gpu" }],
+      [{ model: MODELS[0], delegate: "cpu", threads: null }, { model: MODELS[0], delegate: "gpu", threads: null }],
     );
     expect(plan).toMatchObject({
-      version: 1,
+      version: 2,
       people: 6,
       minDetection: 0.5,
       models: [{ name: "pose_landmarker_lite", sha256: MODELS[0].sha256 }],
-      runs: [{ model: "pose_landmarker_lite", delegate: "cpu" }, { model: "pose_landmarker_lite", delegate: "gpu" }],
+      runs: [{ model: "pose_landmarker_lite", delegate: "cpu", threads: null }, { model: "pose_landmarker_lite", delegate: "gpu", threads: null }],
       videos: [{ label: "squat_reference", pictures: "video", frames: [[0, 0, 0], [2, 33.3, 33], [4, 66.7, 66], [6, 99.9, 99]] }],
     });
   });
 
   it("asks for as many people as the run is for, and may hand over the laptop's own pictures", () => {
     const frames = { picture: { width: 720, height: 1280 }, videoFps: 30, fps: 30, read: 2, frames: [[0, 0], [1, 33.3]] as [number, number][] };
-    const plan = makePlan([{ label: "chair_squat_reference", sha256: "d".repeat(64), pictures: "laptop", frames }], [{ model: MODELS[2], delegate: "gpu" }], 1);
+    const plan = makePlan([{ label: "chair_squat_reference", sha256: "d".repeat(64), pictures: "laptop", frames }], [{ model: MODELS[2], delegate: "gpu", threads: null }], 1);
     expect(plan).toMatchObject({ people: 1, minDetection: 0.5, videos: [{ pictures: "laptop" }] });
+  });
+
+  it("runs the main chip once for each number of cores, the graphics chip once, and names each run's cores (51b)", () => {
+    const runs = planRuns([MODELS[1]], ["cpu", "gpu"], [null, 2, 4]);
+    expect(runs.map((r) => [r.delegate, r.threads])).toEqual([["cpu", null], ["cpu", 2], ["cpu", 4], ["gpu", null]]);
+    const frames = { picture: { width: 720, height: 1280 }, videoFps: 30, fps: 30, read: 1, frames: [[0, 0]] as [number, number][] };
+    const plan = makePlan([{ label: "chair_squat_reference", sha256: "d".repeat(64), pictures: "laptop", frames }], runs, 1);
+    expect(plan).toMatchObject({ version: 2, runs: [{ delegate: "cpu", threads: null }, { delegate: "cpu", threads: 2 }, { delegate: "cpu", threads: 4 }, { delegate: "gpu", threads: null }] });
+    for (const wrong of [0, 9, 2.5]) expect(() => planRuns([MODELS[1]], ["cpu"], [wrong])).toThrow(/1 to 8 cores/);
   });
 
   it("fetches a fixed version of each model, never Google's latest", () => {
@@ -96,6 +105,25 @@ describe("a file from the phone", () => {
       "notes.txt",
     ];
     expect(runFiles(names)).toEqual(["squat_reference.pose_landmarker_full.gpu.jsonl", "squat_reference.pose_landmarker_lite.cpu.failed.json"]);
+    // 51b: a main-chip run's cores are in its name; the graphics chip takes none, and nine cores are no name.
+    const cores = ["squat_reference.pose_landmarker_full.cpu.t4.jsonl", "squat_reference.pose_landmarker_full.cpu.t2.failed.json", "squat_reference.pose_landmarker_full.gpu.t4.jsonl", "squat_reference.pose_landmarker_full.cpu.t9.jsonl", "squat_reference.pose_landmarker_full.cpu.t.jsonl"];
+    expect(runFiles(cores)).toEqual(cores.slice(0, 2));
+    expect(runName("squat_reference", "pose_landmarker_full", "cpu", 4)).toBe("squat_reference.pose_landmarker_full.cpu.t4");
+    expect(runName("squat_reference", "pose_landmarker_full", "cpu", null)).toBe("squat_reference.pose_landmarker_full.cpu");
+  });
+
+  it("names its cores, or the library's own when it does not say (51a's), and anything but 1 to 8 is refused (51b)", () => {
+    expect(readPhoneRun(fileOf(header, frame(0, 0), end(1))).header.threads).toBeNull();
+    expect(readPhoneRun(fileOf({ ...header, delegate: "cpu", threads: 4 }, frame(0, 0), end(1))).header.threads).toBe(4);
+    for (const wrong of [0, 9, 2.5, "4"]) expect(() => readPhoneRun(fileOf({ ...header, threads: wrong }, frame(0, 0), end(1)))).toThrow(/line 1/);
+  });
+
+  it("says how many cores it kept busy after its first pictures, or nothing when a frame does not say (51b)", () => {
+    const busy = (cpuMs: number | null) => ({ ...frame(1, 33.3), detectMs: 40, cpuMs });
+    const run = readPhoneRun(fileOf(header, { ...frame(0, 0), cpuMs: 900 }, busy(140), busy(100), end(3)));
+    expect(coresBusy(run, 1)).toBeCloseTo(3, 6);
+    expect(coresBusy(readPhoneRun(fileOf(header, frame(0, 0), busy(null), end(2))), 1)).toBeNull();
+    expect(() => readPhoneRun(fileOf(header, { ...frame(0, 0), cpuMs: -1 }, end(1)))).toThrow(/line 2/);
   });
 
   it("names the plan it was made for, or null for 51a's first files", () => {
@@ -106,7 +134,7 @@ describe("a file from the phone", () => {
 
   it("a note of a run that could not be made is read with its reason", () => {
     const note = { kind: "failed", label: "squat_reference", model: "pose_landmarker_full", delegate: "gpu", reason: "The model did not start on the graphics chip." };
-    expect(readPhoneFailure(JSON.stringify(note))).toEqual({ ...note, plan: null });
+    expect(readPhoneFailure(JSON.stringify(note))).toEqual({ ...note, plan: null, threads: null });
     expect(readPhoneFailure(JSON.stringify({ ...note, plan: "f".repeat(64) })).plan).toBe("f".repeat(64));
     expect(() => readPhoneFailure("{")).toThrow(BodyPointsError);
   });
