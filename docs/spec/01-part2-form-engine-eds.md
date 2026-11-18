@@ -2088,6 +2088,29 @@ the seed after the old rows. The download is `GET /v1/library` (`libraryDownload
   sets, 12 hours of heart rate, 652 KB) 46.3 ms; 199 people saving at the same instant took 3.0 s in
   all, 2.5 s each (median), and the server answered nobody for at most 15.8 ms at a time.
 
+**As built in 61b (2026-11-18).** Four reads beside the save (`apps/api/src/modules/training/history.ts`,
+shapes in `packages/shared/src/library/workoutHistory.ts`), each the person's own:
+- **Routes:** `GET /v1/training/month?month=YYYY-MM` (the days and how many workouts on each) ·
+  `GET /v1/training/days/:day` (that day's workouts in the order they started, the first 100, with `total`) ·
+  `GET /v1/training/workouts/:id` (set by set, with its new records) · `GET /v1/training/exercises/:exercise/records`.
+  Somebody else's workout, a broken id and an exercise the server never had are 404; a bad month or day 400;
+  120 reads a minute for the person, never by address.
+- **A day** is the day in the zone the workout was done in, or in the person's own zone for one kept without one.
+- **Free plan:** the month, the day and the records read back the old history's days (`historyGate`, the same
+  rule) and say so in `limitedToDays`. A workout's own page opens whatever its age, as the old one does, and its
+  "New record" is told against everything before it: told against only part of the past, it could call a set a
+  record that is not one.
+- **The rule** (`training/records.ts`, pure, table-tested): a set with nothing done is no record; a set is read in
+  its own unit (an old set with a hold is in time); heaviest, most reps, best estimated one-rep max (Epley, sets of
+  1 to 10 reps with a weight), most lifted in one workout (reps sets), longest hold and heaviest in time; a tie
+  keeps the first time it was reached; "New record" needs something of that kind before it to beat, so the first
+  time is not a record. An exercise the Library never had is named null; the phone shows its id word.
+- **Measured** (2026-11-18, `apps/api/tools/measure-training-history.ts`, local database, 846,622 sets in the
+  table): for a person of 1,560 workouts and 46,800 sets, the server answered nobody for at most 4.9 ms on a
+  month, 2.7 ms on a day, 16.7 ms on their newest workout with its new records against five years, 16.4 ms on an
+  exercise's records over five years. The database sends only the first set of each way a set was done, and each
+  workout's lifted total: reading every set held the server 75.6 ms.
+
 ### 13.6 The phone (jobs 63 and 64)
 
 - **The list is kept on the phone** and searched there, so search answers at once and works
@@ -2158,7 +2181,7 @@ a workout that survives a dead phone; a summary set by set.
 ### 13.9 Not measured yet
 
 The download's size and the publish time at 200 exercises (measured in 60b, §13.4) · many saves arriving at
-once (measured in 61a, §13.5) · where clips are kept and what that
+once (measured in 61a, §13.5) · history and records for five years (measured in 61b, §13.5) · where clips are kept and what that
 costs each month (job 62, with Stage 4 item 4) · how long Kd's hand time for 200 generated
 clips is (job 62 says it before the first one).
 
