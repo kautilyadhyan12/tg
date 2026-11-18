@@ -196,7 +196,10 @@ function collect(id: string): void {
   // Taken back only when the laptop wrote, before giving it, that the copy did not have it: unknown is left as it is.
   const state: unknown = existsSync(STATE) ? JSON.parse(readFileSync(STATE, "utf8")) : null;
   const hadCamera = !(typeof state === "object" && state !== null && "hadCamera" in state && state.hadCamera === false);
-  const names = liveFiles(inApp(id, `ls ${ON_PHONE}/out`).text.split(/\s+/));
+  const listed = inApp(id, `ls ${ON_PHONE}/out`);
+  // A list that cannot be read while the folder is there is a blip of adb's: the phone keeps its results (re-check, N2).
+  if (!listed.ok && inApp(id, `test -d ${ON_PHONE}/out`).ok) throw new Error("The phone's results could not be listed: the phone keeps them. Run phone-live --collect again.");
+  const names = listed.ok ? liveFiles(listed.text.split(/\s+/)) : [];
   for (const name of names) {
     const file = adb(["exec-out", "run-as", id, "cat", `${ON_PHONE}/out/${name}`]);
     const onPhone = inApp(id, `sha256sum ${ON_PHONE}/out/${name}`).text.split(/\s+/)[0];

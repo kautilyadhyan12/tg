@@ -53,6 +53,9 @@ export const LIVE = {
    *  may have been slowed by heat left over (round one, H1: a test started on a phone still hot). The three real
    *  starts of 2026-11-18 were all at 1. */
   coolThermal: 1,
+  /** ...or with the battery above this, for a phone whose thermal status lags (re-check, N1; the terminal's own line:
+   *  the three real starts were 33.1 to 34.0 °C, and Kd's phone reached status 2 at 33 °C). */
+  coolBatteryC: 40,
   /** Asked for 4 cores on the main chip, a live run keeps more than this busy, or the cores were not taken. The app's
    *  own work (the camera, turning each picture, the drawing) kept 1.65 cores busy with the model on the graphics chip
    *  (2026-11-18), so one core more is 2.7; the two real 4-core runs kept 3.82 and 3.30 (round one, H2: 51b-i's 1.3 was
@@ -73,6 +76,9 @@ export const LIVE = {
   picture: { width: 480, height: 640 },
 } as const;
 
+/** The main chip's cores the live test asks for, the number `LIVE.coresTaken` is measured for. */
+export const LIVE_CORES = 4;
+
 /** One set-up the phone is tried with. */
 export interface LiveStep {
   readonly model: PoseModel;
@@ -87,9 +93,9 @@ const model = (size: "lite" | "full"): PoseModel => MODELS.find((m) => m.size ==
  *  chip on 4 cores, full on the graphics chip, lite on the main chip on 4 cores. Its fourth step, lite on the graphics
  *  chip, is tried only if none of these holds. */
 export const LADDER: readonly LiveStep[] = [
-  { model: model("full"), delegate: "cpu", threads: 4 },
+  { model: model("full"), delegate: "cpu", threads: LIVE_CORES },
   { model: model("full"), delegate: "gpu", threads: null },
-  { model: model("lite"), delegate: "cpu", threads: 4 },
+  { model: model("lite"), delegate: "cpu", threads: LIVE_CORES },
 ];
 
 export const stepWords = (s: LiveStep): string =>
@@ -325,7 +331,9 @@ export function judgeLive(run: LiveRun | null, step: LiveStep, index: number, pl
   else if (charges.some((b) => b.plugged)) unfair.push("the phone was on the charger");
   const unseen = minutes.find((m) => m.found < LIVE.found);
   if (unseen !== undefined) unfair.push(`the camera saw the body in ${share(unseen.found)} of minute ${String(unseen.m)}'s answers`);
-  if (step.delegate === "cpu" && step.threads !== null && step.threads >= 2 && (coresBusy === null || coresBusy <= LIVE.coresTaken)) {
+  // The bar is measured for 4 cores only; another number has none, so its run is never judged (re-check, N4).
+  if (step.delegate === "cpu" && step.threads !== null && step.threads !== LIVE_CORES) unfair.push(`no live bar is measured for ${String(step.threads)} cores`);
+  else if (step.delegate === "cpu" && step.threads !== null && (coresBusy === null || coresBusy <= LIVE.coresTaken)) {
     unfair.push(`asked for ${String(step.threads)} cores, it kept ${coresBusy === null ? "an unknown number" : fixed(coresBusy)} busy`);
   }
   if (unfair.length > 0) return { ...facts, verdict: "not fair", reasons: unfair };
@@ -340,6 +348,8 @@ export function judgeLive(run: LiveRun | null, step: LiveStep, index: number, pl
   if (percents.some((p) => p <= LIVE.lowBattery)) unfair.push(`the battery fell to ${String(Math.min(...percents))}%`);
   if (header.heat.thermal < 0 || header.heat.thermal > LIVE.coolThermal) {
     unfair.push(`it started at Android's thermal status ${String(header.heat.thermal)}, above "light"`);
+  } else if (header.heat.batteryC !== null && header.heat.batteryC > LIVE.coolBatteryC) {
+    unfair.push(`it started with the battery at ${String(header.heat.batteryC)} °C, above ${String(LIVE.coolBatteryC)}`);
   } else if (firstStart === null) unfair.push("how warm the phone was at the first run's start is not known");
   else if (warmerThan(header.heat, firstStart)) unfair.push("it started warmer than the first run");
   if (unfair.length > 0) return { ...facts, verdict: "not fair", reasons: unfair };

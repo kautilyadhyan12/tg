@@ -1766,9 +1766,10 @@ than at the first run's start, at most 30); a run the cable goes into is dropped
 each run: **not fair** when it is not that step's run (its plan, step, camera, model, people, chip, cores or picture
 size), is short of 20 minutes by its count or by its real length, had the charger in at any moment, saw the body in fewer
 than 80 in 100 answers in any minute, or kept 2.7 cores or fewer busy when asked for 4 (the app's own camera, turning and
-drawing kept 1.65 busy with the model on the graphics chip, so one core more; 51b-i's 1.3 was set with no camera); or,
-having fallen short, when the model was waiting for the camera (it answered 95 in 100 of the camera's pictures), the
-battery saver was on, the battery fell to 15%, it started above Android's thermal status "light" (the first run
+drawing kept 1.65 busy with the model on the graphics chip, so one core more; 51b-i's 1.3 was set with no camera; a
+main-chip step asked for another number of cores has no bar and is never judged); or, having fallen short, when the
+model was waiting for the camera (it answered 95 in 100 of the camera's pictures), the battery saver was on, the
+battery fell to 15%, it started above Android's thermal status "light" or with the battery above 40 °C (the first run
 included, so a test started on a hot phone is never stepped past), or it started warmer than the first run; **holds**
 when, fair, every minute answers 15 times a second or more, over each second's real length; otherwise it **falls
 short**. A step with a note of a failed start is not fair, a still body is read only as the look the plan asked for, and

@@ -158,6 +158,8 @@ describe("one 20-minute run, judged: every class of case", () => {
     ["slow, the start's thermal status unknown", { read: () => 9, heat: { thermal: -1, batteryC: 30 } }, COOL, "not fair", ['it started at Android\'s thermal status -1, above "light"']],
     ["slow, the start's battery heat unknown", { read: () => 9, heat: { thermal: 1, batteryC: null } }, COOL, "not fair", ["it started warmer than the first run"]],
     ["slow, the first run's battery heat unknown", { read: () => 9 }, { thermal: 1, batteryC: null }, "not fair", ["it started warmer than the first run"]],
+    ["slow, started at status 1 with the battery at 45 °C (re-check, N1)", { read: () => 12, heat: { thermal: 1, batteryC: 45 } }, { thermal: 1, batteryC: 45 }, "not fair", ["it started with the battery at 45 °C, above 40"]],
+    ["slow, started at status 1 with the battery at 40 °C", { read: () => 12, heat: { thermal: 1, batteryC: 40 } }, { thermal: 1, batteryC: 40 }, "falls short", ["minute 1 gave 12.0 answers a second, under 15"]],
     ["holding, started warmer", { heat: { thermal: 3, batteryC: 38 } }, COOL, "holds", []],
     ["slow, the first run's start unknown", { read: () => 9 }, null, "not fair", ["how warm the phone was at the first run's start is not known"]],
   ];
@@ -182,6 +184,15 @@ describe("one 20-minute run, judged: every class of case", () => {
       const j = judged({ header, read: () => 30 });
       expect(j.verdict).toBe("not fair");
       expect(j.reasons).toContain(reason);
+    }
+  });
+
+  it("never judges a main-chip step asked for cores no live bar is measured for (re-check, N4)", () => {
+    const full = ladderStep(0);
+    for (const threads of [2, 3, 8]) {
+      const step: LiveStep = { ...full, threads };
+      const j = judgeLive(readLiveRun(liveFile({ as: step, cpuMs: 3800 })), step, 0, PLAN, COOL);
+      expect(j).toMatchObject({ verdict: "not fair", reasons: [`no live bar is measured for ${String(threads)} cores`] });
     }
   });
 
