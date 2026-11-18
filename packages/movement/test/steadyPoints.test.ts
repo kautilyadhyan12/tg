@@ -30,7 +30,9 @@ describe("steady points", () => {
     for (const j of joints) {
       const rawX = raw.map((f) => (f.person?.points[j]?.[0] ?? 0) * ASPECT);
       const steadyX = out.map((s) => (s.points[j]?.x ?? 0) * ASPECT);
-      expect(spread(steadyX)).toBeLessThan(spread(rawX) / 3);
+      // At rest the filter is a plain smoothing at the picture's 2 Hz (set in 51c; 0.5 Hz before): at 30 frames a second
+      // it keeps a shake that changes every frame at 0.42 of itself, sqrt(a / (2 - a)) with a = 0.295.
+      expect(spread(steadyX)).toBeLessThan(spread(rawX) / 2);
     }
   });
 

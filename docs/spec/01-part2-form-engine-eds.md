@@ -1518,7 +1518,7 @@ picture, settling (the body's first half second, or a bone not yet known), unche
 hangs from cannot be seen or is not used), a broken bone, a jump, a swap. Every check compares
 the body with itself. Each point hangs from a parent on the way to the trunk (shoulder, elbow,
 wrist, fingers; hip, knee, ankle, foot; both shoulders, nose, face) and is used only while the
-bone to its parent keeps its own length within 0.25 of the same body's trunk and the parent is
+bone to its parent keeps its own length within 0.3 of the same body's trunk (0.25 until 51c) and the parent is
 used: a wrong elbow takes its forearm and hand with it, a wrong wrist never takes the elbow, and
 a hand, foot or head moved in one piece cannot vouch for itself. The trunk's corners are checked
 by the trunk's bones. A bone learns its length from frames in which it held; a new steady length
@@ -1532,15 +1532,15 @@ faster than 20 m/s across the picture has jumped (a kick's foot, the fastest par
 measured at 12 to 18 m/s); left and right have swapped when each side lies where the other was a
 moment before, the two at least a fifth of the trunk apart; either is used again only after it
 stays at its new place for 0.2 s. `SteadyPoints` is the one-euro filter on the used points, on
-the frames' times: on Kd's one-person videos it takes out 42 to 84 in 100 of a used big joint's
-shake, and it trails a hand moving at 1 m/s by 2.3 cm at most. `body-check` sets the fitted
-numbers from Kd's six videos, each from five people and tried on the sixth, and draws every
+the frames' times: on Kd's videos that set numbers it takes out 21 to 54 in 100 of a used big joint's
+shake on the picture and 32 to 73 in 3D (51c; 42 to 84 before), and it trails a hand moving at 1 m/s by 2.3 cm at most. `body-check` sets the fitted
+numbers from Kd's videos that set numbers, each from all of them but one and tried on the one left out, and draws every
 refused frame. What it cannot catch: a slow wrong pose the model is sure of (the squat video's
 lifted ankle at 2.8 to 3.8 s passes in all 30 frames; job 52a's two signs); a wrong head at a
-right distance from the shoulders (a head moved at random is used in 13 to 16 in 100 frames); at
+right distance from the shoulders (a head moved at random is used in 16 to 22 in 100 frames since 51c, 12 to 14 at 0.25; no measure reads the head); at
 8 frames a second only a move of more than 2.5 m is a jump; the follower used until job 52d may
-follow a reflection. What it costs: a point whose parent is hidden decides nothing, 0 to 5 in 100
-of the big joints on the one-person videos (most, the far ankle while the far knee is hidden).
+follow a reflection (since 51c the model itself follows one body; see "As built, measured again"). What it costs: a point whose parent is hidden decides nothing, 0 to 6 in 100
+of the big joints on the videos that set numbers (most, the far ankle while the far knee is hidden).
 
 **As built, stage 4 (50c-iii, 2026-11-17).** `BodyMeasures` (`packages/movement/src/body`) takes
 the steady points of each frame and gives one fixed list of 38 measures, the same for every
@@ -1567,7 +1567,7 @@ steadily longer or shorter on the picture than in 3D, each by its own amount (th
 only while it agrees with its 3D reading (`off`, the difference): **within 30° for an angle, 0.15 of
 a leg or trunk for a height or width**, each the difference not passed in 95 frames of 100 where
 the picture shows every part at cos 10° of its length or more (the 3D points' own error: measured
-25.9° and 0.124), raised to the next 5° or 0.05, set by `measure-check` from Kd's one-person videos
+25.9° and 0.124), raised to the next 5° or 0.05, set by `measure-check` from Kd's videos that set numbers
 (from three of them and tried on the fourth: three folds set 30°, one 25°; on the one left out 93
 to 99 in 100 of its flat angles are given). A height is compared above the foot seen in that frame,
 in both readings, since the 3D floor is placed by the picture and remembered. What it gives,
@@ -1589,9 +1589,9 @@ lifted while the other is hidden leaves the hips at standing height, and a step 
 moves the floor a second later, at once when the body's size on the picture changes by more than
 0.15 (while a person stays in place it changes by 4 to 11 in 100 on Kd's videos). A height is read
 only while a foot is in view. Checked from outside the code: on the squat, every number of Kd's own
-`analyze_squat.py` (2026-09-28, measured its own way) is met within 3° (each rep's deepest knee
+`analyze_squat.py` (2026-09-28, measured its own way on the heavy model's points, and checked on the heavy model's own file since 51c) is met within 3°, the 3D knee within 3.5° since 51c (each rep's deepest knee
 within 0.6°, the hips' drop within 0.03 of a leg). The same videos at half the frames a second: 0
-to 1 in 100 readings differ on the one-person videos, and 95 in 100 lie within 0.9° to 2.7°. About
+to 1 in 100 readings differ on the videos that set numbers, and 95 in 100 lie within 0.9° to 2.7°. About
 105 microseconds a frame on the laptop (the phone's number is job 51's). What it cannot do yet:
 heights for a body lying with its feet in the air (the floor is the feet; job 52c's floor work); a
 floor first seen, or set afresh, under a lifted foot while the other is hidden; for a second after
@@ -1701,7 +1701,7 @@ Android 15), 66 runs:
   a used big joint's middle frame-to-frame shake in 3D: 0.9 to 4.4 mm against 4.9 to 11.2 mm on
   the standing videos, 8.6 to 13.1 against 18.0 to 30.6 mm on the floor), and one against six
   moves big joints 5 to 12 cm in 95 of 100. Every kept file and every number 50c fitted was made
-  asked for six.
+  asked for six, until 51c measured them again asked for one.
 - **The sizes read the body apart, most where a limb points at the camera**: full against heavy,
   asked for one, the flat near-side knee, hip and trunk lean by 1.7° or less and spread 2.8° to
   5.4°, the 3D elbow leaning 10° to 40°. Neither is known to be right there: heavy reads the
@@ -1798,6 +1798,44 @@ phone facing the laptop's screen, the second try (the first ran its first run on
 - Nothing chosen is Android's alone: the same model and the library's own settings exist on an iPhone, which gets its own
   test (§12.5, 51a).
 
+**As built, the kept videos measured again (51c, 2026-11-18; `rulings/2026-11-18-51c.md`).** Every kept file is now
+what the phone runs reads: Google's full model, asked for one person, at 30 frames a second
+(`scripts/keptVideos.ts` names the model; `measure-points` makes that by default and `--keep` refuses any other). Asked
+for one, the model gives one body in every frame whoever it is, so **which videos may set a fitted number is written,
+never inferred**: a video sets numbers only when a terminal has drawn it (16 frames spread over the whole video) and
+seen the person exercising in each frame drawn (`KEPT_VIDEOS`, with what the pictures showed), that look names the very
+file by its SHA-256 (a file measured again sets nothing until it is looked at again), the file is the phone's model
+asked for one person at 30 frames a second, every frame holds one body whose size can be read, and **the plain sign of a
+changed body** finds none: the body's middle moving faster than a jump's take-off (5 m/s; for a jump of 1.1 m,
+√(2 · 9.81 · 1.1) = 4.6) or its size on the picture jumping by more than 1.25 times from one frame to the next
+(`bodyChanges`, `scripts/follow.ts`; across a frame with nobody, the body after is judged against the body before). Measured: on the six new files the middle moves at most 1.5 m/s and the size at most
+1.12 times, and the sign finds nothing; on the old six-person bench files, with the stand-in follower, it finds 80
+changes each (up to 27.6 m/s and 4.5 times); a woman put in the squatting woman's place 0.38 m off is found (11.3 m/s);
+another body of the same size in the same place is not (job 52d). A video nobody has looked at sets nothing.
+- **The two bench videos follow the right man** in every one of 16 frames drawn each (never the reflection), and still
+  set no number: filmed from the ends of the bench, the model marks the head-end man's knees and feet hidden in 98 frames
+  of 100 and puts the barbell man's knees off the picture in 64 and his feet below it in all. They try the refusals.
+- **The numbers set again by their rules**: the bone allowance 0.3 of the trunk (was 0.25); steady on the picture 2 Hz at
+  rest +10 Hz a m/s (was 0.5 +10), in 3D 0.05 Hz +20 (was 0.05 +10); the angle limit 30°, the length limit 0.15 and the
+  floor's size change 0.15 unchanged. Set from three of the four and tried on the fourth: the bone 3 of 4 folds, the picture
+  4 of 4, 3D 2 of 4 (without the chair squat the other three set 0.25 Hz +10, which leaves her moving joints 1.14 cm
+  further off than the model's own shake, over the rule's 1 cm: the 3D setting rests on the four together). **The bicycle crunch sets the bone allowance**: twisting, his far leg straightens and its 3D length
+  changes, so at 0.25 his real left knee and foot are refused in 16 frames from 0.6 to 1.5 s (1.1 in 100 of his sure
+  joints, above the rule's 1 in 200); without him the others set 0.2. The price: a head moved at random is used in 16 to
+  22 frames of 100 (12 to 14 at 0.25); no measure reads the head.
+- **Found**: at 0.57 s of the crunch the phone's model swaps his legs for two frames (his left knee thrown 16.6 m/s and
+  back at 13; a knee in a crunch moves 0.4 to 3): the check refuses both legs as swapped until 1.1 s. Drawn 1.3 times
+  bigger the same throw passes the jump limit, is refused as a jump, the swap is not seen and his wrong right leg is used
+  for a few frames (a known limit, 52a). From the side, the phone's model marks the squatting woman's far knee hidden in
+  every frame, so her feet apart is read in no frame (the heavy model read it in 3D in 73).
+- **Against Kd's own squat measuring** (made on the heavy model): the engine's measuring, on the heavy model's own file
+  (`test/outside`), within 3° and the 3D knee within 3.5° (its looser 3D steadying reaches 2.1° to 3.2° deeper at the
+  bottom than his median filter); the phone's model on the same video, from his numbers: the deepest knee 0.2° to 2.8°,
+  the hip 0.9° to 3.0°, standing, the knee 4.3° and 4.8°, the hip 0.5° and 2.3°.
+- **The body's half-rate and steadiness**: at half the frames a second, 0 to 0.7 in 100 of big joints answered
+  differently (the bench videos now 0.2 and 0.4, from 3.2 and 3.3); readings 0 to 1 in 100, 95 in 100 within 0.5° to
+  2.1°.
+
 An exercise that does not pass is published as "count by hand", never with a wrong camera
 count. Kd tries one exercise of each kind of movement on the phone, about a dozen, never
 each one. After launch the server sees, for each exercise, how often members changed the
@@ -1849,7 +1887,7 @@ shape, which way is down (a unit vector in the picture's own frame; a reference 
 with 33 picture points `[x, y, depth, visibility, presence]` and 33 3D points in metres (or
 none). `corepack pnpm --filter @app/movement measure-points "<video>" --keep` turns a video
 into a `.bodypoints` file (`scripts/bodyPoints.ts` says its bytes) at 30 frames a second,
-asking the model for six people. Each number is rounded once: 1/100,000 of the picture,
+asking the model for six people (since 51c: the phone's own full model, asked for one). Each number is rounded once: 1/100,000 of the picture,
 1/10,000 for depth and both kinds of sureness, 0.01 mm in 3D, a tenth of a millisecond;
 the file says its own rounding and is read by it, so a later change of the steps cannot
 read a kept file wrong.
@@ -1857,7 +1895,8 @@ On four of Kd's videos the model's own frame-to-frame shake was at least 0.0009 
 picture, 0.019 of depth and 1.5 mm in 3D, and the rounding moved no joint angle of a
 well-seen joint by more than 0.03°. A damaged file (a check number, a format number, every
 length) is refused whole. Measured on his six reference videos: 2,054 frames, 2,406 people
-across them, 1.2 MB kept against 13.6 MB as the model gave them; 502 bytes for each person
+across them, 1.2 MB kept against 13.6 MB as the model gave them (since 51c, asked for one person: 2,048
+people, 0.85 MB kept); 502 bytes for each person
 in a frame against 2,525 a frame in the old trace files; about 14 KB a second of video for
 one person, so 200 exercises with four 15-second videos each would be about 160 MB. Where
 they are kept once there are that many is job 52a's or 54's question.

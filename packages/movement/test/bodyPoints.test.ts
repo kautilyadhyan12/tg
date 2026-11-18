@@ -184,18 +184,19 @@ describe("a body-points file holds what the camera saw (the worst thing first)",
   });
 
   it("holds the very numbers the model gave for Kd's videos, to half a step", () => {
-    // From measured/<label>/measured.jsonl of the run that made the kept files (2026-11-16):
-    // the numbers as the pose model gave them, before any rounding.
+    // From measured/full-1/<label>/measured.jsonl of the run that made the kept files (51c, 2026-11-18, the phone's
+    // own model asked for one person): the numbers as the pose model gave them, before any rounding. The barbell's
+    // frame 26 holds a toe the model puts far below the picture (y 1.91), which the file must keep.
     const squat = stored.find(([n]) => n === "squat_reference.bodypoints")?.[2] ?? fail();
     const barbell = stored.find(([n]) => n === "barbell_bench_press_reference.bodypoints")?.[2] ?? fail();
     const given: [MovementFrame | undefined, number, number, readonly number[], readonly number[] | null][] = [
-      [squat.frames[0], 0, 23, [0.7045101523399353, 0.5152546763420105, -0.2592650353908539, 0.99973064661026, 0.999924898147583], [0.00281211594119668, 0.01140730082988739, -0.07762414962053299]],
-      [squat.frames[47], 0, 23, [0.8241519331932068, 0.6378673911094666, -0.181899294257164, 0.9999508857727051, 0.9999847412109375], [0.019282236695289612, 0.027079610154032707, -0.08675768226385117]],
-      [squat.frames[326], 0, 28, [0.6345750689506531, 0.7869077920913696, 0.6728648543357849, 0.1461600363254547, 0.9997286200523376], null],
-      [barbell.frames[68], 3, 0, [0.47326207160949707, 0.49221256375312805, 0.2440442591905594, 0.9999743700027466, 1.0], [-0.0037622731178998947, -0.2772924602031708, 0.08072585612535477]],
-      [barbell.frames[26], 0, 31, [0.4049806296825409, 2.0269296169281006, 0.42722243070602417, 0.0005582713056355715, 0.0018798349192366004], null],
+      [squat.frames[0], 0, 23, [0.7061347961425781, 0.5104802846908569, -0.2277398705482483, 0.9997678399085999, 0.9998887777328491], [0.02326108328998089, 0.0026043385732918978, -0.09680294245481491]],
+      [squat.frames[47], 0, 23, [0.8324503302574158, 0.6302899718284607, -0.19275298714637756, 0.9996963143348694, 0.9996377229690552], [0.04220177233219147, 0.01055277232080698, -0.09162917733192444]],
+      [squat.frames[326], 0, 28, [0.6424024701118469, 0.7937430143356323, 0.8667728304862976, 0.529636561870575, 0.9997428059577942], [-0.0180460587143898, 0.7023293375968933, 0.3464413285255432]],
+      [barbell.frames[68], 0, 0, [0.4684143662452698, 0.4793667197227478, 0.008395322598516941, 0.9987148642539978, 0.9999743700027466], [-0.03528421372175217, -0.5161171555519104, 0.0025103134103119373]],
+      [barbell.frames[26], 0, 31, [0.44548356533050537, 1.9073872566223145, -0.08519705384969711, 0.013651258312165737, 0.01010054163634777], [0.017027337104082108, 0.6820109486579895, -0.09951289743185043]],
     ];
-    expect([squat.frames[47]?.t, squat.frames[326]?.t, barbell.frames[68]?.t, barbell.frames[68]?.people.length]).toEqual([1566.7, 10866.7, 2266.7, 4]);
+    expect([squat.frames[47]?.t, squat.frames[326]?.t, barbell.frames[68]?.t, barbell.frames[68]?.people.length, barbell.frames[26]?.t]).toEqual([1566.7, 10866.7, 2266.7, 1, 866.7]);
     const kinds = ["picture", "picture", "depth", "sure", "sure"] as const;
     for (const [frame, person, point, picture, world] of given) {
       const seen = frame?.people[person];
