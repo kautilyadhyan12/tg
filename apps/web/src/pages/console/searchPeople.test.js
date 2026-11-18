@@ -71,6 +71,10 @@ describe('the words', () => {
     expect(initials('王芳')).toBe('王');
     expect(initials('  Cher ')).toBe('C');
     expect(initials('')).toBe('?');
+    // Names with numbers, as test lists and second records are written.
+    expect(initials('Lena Noshow 09521')).toBe('LN');
+    expect(initials('Priya Sharma 2')).toBe('PS');
+    expect(initials('12345')).toBe('1');
   });
 
   it('a member: their number and membership, and their state as their row says it', () => {

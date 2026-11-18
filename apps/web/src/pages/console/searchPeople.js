@@ -25,9 +25,12 @@ export function searchPlaceholder(orgType, findsPeople = false) {
   return findsPeople ? `Search ${orgWords(orgType).people}, pages or actions` : 'Search pages or actions';
 }
 
-/** "SR" from "Sam Rivera"; the first letter alone from one word; "?" from none. */
+/** "SR" from "Sam Rivera"; the first letter alone from one word; "?" from none. A word that
+ *  starts with no letter ("Sam Rivera 2") is passed over where another word has one. */
 export function initials(name) {
-  const words = String(name ?? '').trim().split(/\s+/).filter(Boolean);
+  const all = String(name ?? '').trim().split(/\s+/).filter(Boolean);
+  const lettered = all.filter((w) => /^\p{L}/u.test(w));
+  const words = lettered.length > 0 ? lettered : all;
   if (words.length === 0) return '?';
   const first = Array.from(words[0])[0] ?? '';
   const last = words.length > 1 ? (Array.from(words[words.length - 1])[0] ?? '') : '';
