@@ -115,6 +115,9 @@ export default function SearchField({ orgSlug, catalogue, placeholder, keys = nu
       data-testid={phone ? 'console-search-phone-box' : 'console-search'}
       onBlur={(event) => {
         // Tab, or anything else that moves the cursor out of the box and its results, closes them.
+        // Not on a phone: an iPhone's Done leaves the box only to put the keyboard away, and the
+        // phone's box has its own close button.
+        if (phone) return;
         if (open && !(event.relatedTarget instanceof Node && wrap.current?.contains(event.relatedTarget))) close();
       }}
       onMouseDown={(event) => {

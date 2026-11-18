@@ -331,8 +331,9 @@ export default function ConsoleLayout({ children }) {
     if (!canSearch) return undefined;
     const onKey = (event) => {
       if (!opensSearch(event)) return;
-      // A box open on the page (Add member, Record payment) keeps the keys: nothing reaches past it.
-      if (document.querySelector('[role="dialog"]') !== null) return;
+      // A box open over the page (Add member, Record payment) or under a button keeps the keys:
+      // nothing reaches past it. A confirmation written into the page itself does not.
+      if (document.querySelector('[role="dialog"][aria-modal="true"], .c-pop') !== null) return;
       event.preventDefault();
       if (barInput.current !== null && barInput.current.offsetParent !== null) barInput.current.focus();
       else setPhoneSearch(true);

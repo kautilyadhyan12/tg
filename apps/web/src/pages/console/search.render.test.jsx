@@ -236,18 +236,43 @@ describe('opening and using it', () => {
     expect(screen.queryByTestId('search-box')).toBeNull();
   });
 
-  it('Ctrl K does not reach past a box open on the page', async () => {
+  it('Ctrl K does not reach past a box open over the page or under a button', async () => {
     await open();
-    const box = document.createElement('div');
-    box.setAttribute('role', 'dialog');
-    document.body.appendChild(box);
+    for (const make of [(el) => el.setAttribute('aria-modal', 'true'), (el) => el.classList.add('c-pop')]) {
+      const box = document.createElement('div');
+      box.setAttribute('role', 'dialog');
+      make(box);
+      document.body.appendChild(box);
+      try {
+        fireEvent.keyDown(window, { key: 'k', ctrlKey: true });
+        expect(screen.queryByTestId('search-box')).toBeNull();
+        expect(document.activeElement?.getAttribute('data-testid')).not.toBe('search-input');
+      } finally {
+        box.remove();
+      }
+    }
+  });
+
+  it('a confirmation written into the page (no aria-modal) does not stop Ctrl K', async () => {
+    await open();
+    const inline = document.createElement('div');
+    inline.setAttribute('role', 'dialog');
+    document.body.appendChild(inline);
     try {
       fireEvent.keyDown(window, { key: 'k', ctrlKey: true });
-      expect(screen.queryByTestId('search-box')).toBeNull();
-      expect(document.activeElement?.getAttribute('data-testid')).not.toBe('search-input');
+      await waitFor(() => expect(document.activeElement?.getAttribute('data-testid')).toBe('search-input'));
     } finally {
-      box.remove();
+      inline.remove();
     }
+  });
+
+  it("an iPhone's Done (the cursor leaving to nowhere) keeps the phone's search and its results", async () => {
+    await open();
+    fireEvent.click(screen.getByTestId('console-search-phone'));
+    const top = within(screen.getByTestId('console-topbar'));
+    fireEvent.change(top.getByTestId('search-input'), { target: { value: 'money' } });
+    fireEvent.blur(top.getByTestId('search-input'), { relatedTarget: null });
+    expect(top.getByTestId('search-box')).toBeTruthy();
   });
 
   it("the phone's search closes when only the #section changes", async () => {
