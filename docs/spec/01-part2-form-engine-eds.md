@@ -2023,12 +2023,14 @@ the seed after the old rows. The download is `GET /v1/library` (`libraryDownload
   it back as 'hidden'); only an id word the Library never had is refused. The save holds the publish
   lock shared, so no set lands between a publish's question and its answer. Once its fields pass the
   shared schema, an id already the person's is answered "duplicate" before anything else is asked (its
-  time zone, its end, its exercises), so a saved workout sent again is never refused later.
+  end, its exercises), so a saved workout sent again is never refused later.
 - **A set is kept in its own unit and weight**, as the phone's list had them, whatever the Library
   says when it arrives: refusing it would leave a finished workout that can never be saved after a
   Library edit. Job 61b's records read each set by its own unit.
-- **Time zone:** kept by its own name in the server's time zone list ("asia/kolkata" is kept as Asia/
-  Calcutta); an offset such as +05:30 is refused, since Postgres reads it with the opposite sign.
+- **Time zone:** kept by its own name as the server spells it ("asia/kolkata" is kept as Asia/Calcutta,
+  Etc/GMT-3 as itself). One the server cannot use (not a zone, or an offset such as +05:30, which
+  Postgres reads with the opposite sign) is kept as none and never refuses the workout; a day is then
+  worked out in the person's own zone.
 - **Limits:** 200 sets; 1,000 reps; four hours a set; 1,000 kg; an hour's rest; 12 hours a workout; its
   sets and rests within its length, with a second a set of slack; a time done no more than a second
   past its set; an end no more than five minutes past the server's clock. The phone measures the

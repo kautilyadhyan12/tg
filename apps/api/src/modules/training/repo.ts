@@ -55,7 +55,8 @@ export interface WorkoutRow {
   kcalPoint: number;
   kcalCalcVersion: number;
   name: string | null;
-  timeZone: string;
+  /** Null for a zone the server cannot use (`namedTimeZone`). */
+  timeZone: string | null;
   startedFrom: string;
   effort: number | null;
   heartAvg: number | null;

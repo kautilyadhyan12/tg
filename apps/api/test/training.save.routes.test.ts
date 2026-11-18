@@ -391,27 +391,33 @@ d("saving a workout from the phone (real Postgres)", () => {
       expect((await save(a, workout(ahead(4 * 60_000)))).statusCode).toBe(201);
     });
 
-    it("a time zone that is not one, or an offset, is refused; one in other letters is kept by its own name", async () => {
+    it("a time zone is kept by its own name, and one the server cannot use never refuses the workout", async () => {
       const a = await person();
-      for (const timeZone of ["Mars/Olympus", "+05:30", "+0530"]) {
-        const res = await save(a, workout({ timeZone }));
-        expect(res.statusCode).toBe(400);
-        expect(res.json()).toMatchObject({ message: "timeZone: not a time zone" });
-      }
-      const body = workout({ timeZone: "asia/kolkata" });
-      expect((await save(a, body)).statusCode).toBe(201);
-      const kept = (await sql<{ time_zone: string }[]>`SELECT time_zone FROM workouts WHERE id = ${body.workoutId}`)[0]?.time_zone ?? "";
-      // Node 24's time zone list spells it Asia/Calcutta, a newer one may say Asia/Kolkata; Postgres
-      // knows both names as one zone, and the day below is the proof that matters.
-      expect(["Asia/Calcutta", "Asia/Kolkata"]).toContain(kept);
-      expect((await sql<{ day: string }[]>`SELECT (timestamptz '2026-11-18T20:00:00Z' AT TIME ZONE ${kept})::date::text AS day`)[0]?.day).toBe("2026-11-19");
+      const zoneOf = async (timeZone: string): Promise<string | null> => {
+        const body = workout({ timeZone });
+        expect((await save(a, body)).statusCode).toBe(201);
+        return (await sql<{ time_zone: string | null }[]>`SELECT time_zone FROM workouts WHERE id = ${body.workoutId}`)[0]?.time_zone ?? null;
+      };
+      // Not a zone, and offsets, which Postgres reads with the opposite sign: kept with no zone.
+      for (const timeZone of ["Mars/Olympus", "+05:30", "+0530"]) expect(await zoneOf(timeZone)).toBeNull();
+      // Node 24 spells it Asia/Calcutta, a newer one may say Asia/Kolkata; Postgres knows both as one zone.
+      const kolkata = (await zoneOf("asia/kolkata")) ?? "";
+      expect(["Asia/Calcutta", "Asia/Kolkata"]).toContain(kolkata);
+      // A zone some phones are set to, which the server's list of zones leaves out.
+      const plusThree = (await zoneOf("Etc/GMT-3")) ?? "";
+      expect(plusThree).toBe("Etc/GMT-3");
+      const dayIn = async (zone: string) =>
+        (await sql<{ day: string }[]>`SELECT (timestamptz '2026-11-18T22:00:00Z' AT TIME ZONE ${zone})::text AS day`)[0]?.day;
+      expect(await dayIn(kolkata)).toBe("2026-11-19 03:30:00");
+      expect(await dayIn(plusThree)).toBe("2026-11-19 01:00:00");
     });
 
     it("a workout already saved is answered 'duplicate' before its fields are checked again", async () => {
       const a = await person();
       const body = workout();
       expect((await save(a, body)).statusCode).toBe(201);
-      const again = await save(a, { ...body, timeZone: "Mars/Olympus" });
+      // An end past the server's clock is refused for a new workout (below), never for one already saved.
+      const again = await save(a, { ...body, startedAt: new Date(NOW.getTime() + 3_600_000).toISOString(), endedAt: new Date(NOW.getTime() + 2 * 3_600_000).toISOString() });
       expect(again.statusCode).toBe(200);
       expect(again.json()).toMatchObject({ status: "duplicate" });
     });
@@ -420,7 +426,7 @@ d("saving a workout from the phone (real Postgres)", () => {
       const [a, b] = [await person(), await person()];
       const address = "10.61.250.7";
       // Ten bodies that are each refused, so nothing is written: each still counts.
-      for (let i = 0; i < 10; i++) expect((await save(a, workout({ timeZone: "Mars/Olympus" }), undefined, address)).statusCode).toBe(400);
+      for (let i = 0; i < 10; i++) expect((await save(a, workout({ effort: 6 }), undefined, address)).statusCode).toBe(400);
       expect((await save(a, workout(), undefined, address)).statusCode).toBe(429);
       for (let i = 0; i < 10; i++) expect((await save(b, workout(), undefined, address)).statusCode).toBe(201);
     });

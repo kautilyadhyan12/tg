@@ -1,7 +1,8 @@
 // Saving one whole workout from the phone (spec Part 2 §13.5, job 61a). Once its fields have passed
 // the shared schema, in one transaction: an id already the person's is answered "duplicate" before
 // anything else is asked, so a workout saved once and sent again is never refused later; somebody
-// else's id is not found; then its time zone and end are checked; an exercise the Library never had
+// else's id is not found; then its end is checked (a time zone the server cannot use is kept as
+// none, never refused); an exercise the Library never had
 // refuses the whole save; then the workout and all its sets are written
 // together, and only by the request that made the workout. The server works out the calories, the
 // heart rate's average and highest, and (after the commit) the streak and XP from history, which is
@@ -23,10 +24,9 @@ export class UnknownExercisesError extends Error {
   }
 }
 
-/** A save the server refuses for its own facts: a time zone that is not one, or a workout that has
- *  not happened yet (400). */
+/** A save the server refuses for its own facts: a workout that has not ended yet (400). */
 export class RefusedSaveError extends Error {
-  constructor(readonly problem: "time_zone" | "in_the_future") {
+  constructor(readonly problem: "in_the_future") {
     super(problem);
     this.name = "RefusedSaveError";
   }
@@ -40,9 +40,10 @@ export interface SaveDeps {
   now: () => Date;
 }
 
-/** The time zone's own name as the server's time zone list spells it ("asia/kolkata" is
- *  "Asia/Calcutta"), or null for one that is not a named zone. An offset such as "+05:30" is refused:
- *  Postgres reads it with the opposite sign, so a day worked out from it would be the wrong day. */
+/** The time zone's own name as the server spells it ("asia/kolkata" is "Asia/Calcutta"; "Etc/GMT-3"
+ *  stays itself), or null for one the server cannot use: not a zone, or an offset such as "+05:30",
+ *  which Postgres reads with the opposite sign. A null zone never refuses a workout: it is kept
+ *  without one, and a day is then worked out in the person's own zone. */
 export function namedTimeZone(tz: string): string | null {
   let name: string;
   try {
@@ -50,7 +51,7 @@ export function namedTimeZone(tz: string): string | null {
   } catch {
     return null;
   }
-  return name === "UTC" || Intl.supportedValuesOf("timeZone").includes(name) ? name : null;
+  return /^[+-]/.test(name) ? null : name;
 }
 
 export async function saveWorkout(deps: SaveDeps, userId: string, input: WorkoutSave): Promise<{ status: "created" | "duplicate" }> {
@@ -63,8 +64,6 @@ export async function saveWorkout(deps: SaveDeps, userId: string, input: Workout
     const owner = await repo.workoutOwner(tx, input.workoutId, userId);
     if (owner === "theirs") throw new repo.ForeignWorkoutError();
     if (owner === "mine") return "duplicate" as const;
-    const timeZone = namedTimeZone(input.timeZone);
-    if (timeZone === null) throw new RefusedSaveError("time_zone");
     if (Date.parse(input.endedAt) > deps.now().getTime() + FUTURE_SLACK_MS) throw new RefusedSaveError("in_the_future");
 
     await repo.holdLibrary(tx);
@@ -94,7 +93,7 @@ export async function saveWorkout(deps: SaveDeps, userId: string, input: Workout
       ),
       kcalCalcVersion: KCAL_CALC_VERSION_SAVE,
       name: input.name,
-      timeZone,
+      timeZone: namedTimeZone(input.timeZone),
       startedFrom: input.startedFrom,
       effort: input.effort,
       heartAvg: heart?.avg ?? null,

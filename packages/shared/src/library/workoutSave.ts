@@ -32,11 +32,8 @@ const L = WORKOUT_SAVE_LIMITS;
 
 /** Words with no NUL character in them: Postgres refuses one in text, and a save it refuses would be
  *  a 500, which a phone sends again for ever. Refused here instead, as a broken phone. */
-const words = (most: number) =>
-  z
-    .string()
-    .max(most)
-    .refine((s) => !s.includes("\u0000"), { message: "a NUL character" });
+const noNul = (s: string): boolean => !s.includes("\u0000");
+const NUL = { message: "a NUL character" };
 
 export const setCountedSchema = z.enum(["hand", "timer"]);
 export type SetCounted = z.infer<typeof setCountedSchema>;
@@ -81,11 +78,11 @@ export const workoutSaveSchema = z
   .object({
     workoutId: z.uuid(),
     /** The workout's name; null for one with none. */
-    name: words(L.nameMost).trim().min(1).nullable(),
+    name: z.string().trim().min(1).max(L.nameMost).refine(noNul, NUL).nullable(),
     startedAt: instantSchema,
     endedAt: instantSchema,
-    /** The person's time zone during it (an IANA name), checked by the server. */
-    timeZone: words(64).min(1),
+    /** The person's time zone during it, as the phone names it. One the server cannot use is kept as none. */
+    timeZone: z.string().min(1).max(64).refine(noNul, NUL),
     /** What it was started from: the person's saved workout, the app's plan, the gym's plan, or nothing. */
     startedFrom: z.enum(["saved", "app_plan", "gym_plan", "none"]),
     /** The effort stars, 1 to 5; null when none was given. */
@@ -93,7 +90,7 @@ export const workoutSaveSchema = z
     heart: workoutHeartSchema,
     platform: z.enum(["android", "ios"]),
     /** The app's own version, as the phone reports it. */
-    appVersion: words(40).min(1),
+    appVersion: z.string().min(1).max(40).refine(noNul, NUL),
     sets: z.array(savedSetSchema).min(1).max(L.setsMost),
   })
   .strict()

@@ -62,7 +62,7 @@ export function registerTrainingRoutes(
           return reply.status(422).send(refusal);
         }
         if (err instanceof RefusedSaveError) {
-          return validationError(req, reply, err.problem === "time_zone" ? "timeZone: not a time zone" : "endedAt: the workout has not ended yet");
+          return validationError(req, reply, "endedAt: the workout has not ended yet");
         }
         throw err;
       }

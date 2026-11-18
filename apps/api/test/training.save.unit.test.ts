@@ -50,6 +50,7 @@ describe("what a phone may report in a saved workout", () => {
     ["a name of spaces", workout({ name: "   " }), "name"],
     ["a name of 60", workout({ name: "x".repeat(60) }), "ok"],
     ["a name of 61", workout({ name: "x".repeat(61) }), "name"],
+    ["a name with 60 spaces after it, trimmed first", workout({ name: `Leg day${" ".repeat(60)}` }), "ok"],
     ["a field the server does not know", workout({ calories: 900 }), ""],
     ["no sets", workout({ sets: [] }), "sets"],
     ["200 sets", workout({ endedAt: at(12 * 3_600_000), sets: Array.from({ length: 200 }, (_, i) => set({ position: i, durationMs: 1000, restSeconds: null })) }), "ok"],
