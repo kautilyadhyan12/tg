@@ -26,6 +26,27 @@ export interface SetFact {
   weightGrams: number | null;
 }
 
+/** What one workout lifted of one exercise: the weight times the reps of its sets in reps. */
+export interface LiftedWorkout {
+  workoutId: string;
+  startedAt: string;
+  exercise: string;
+  grams: number;
+}
+
+/** What each workout lifted, worked out from all of its sets. */
+export function liftedOf(sets: readonly SetFact[]): LiftedWorkout[] {
+  const sums = new Map<string, LiftedWorkout>();
+  for (const s of sets) {
+    if (s.measuredIn !== "reps" || s.weightGrams === null || s.done <= 0) continue;
+    const key = `${s.workoutId}|${s.exercise}`;
+    const sum = sums.get(key) ?? { workoutId: s.workoutId, startedAt: s.startedAt, exercise: s.exercise, grams: 0 };
+    sum.grams += s.weightGrams * s.done;
+    sums.set(key, sum);
+  }
+  return [...sums.values()];
+}
+
 /** Epley's estimate (1985) is not used past 10 reps, where it strays most (LeSuer et al., 1997). */
 export const EPLEY_REPS_MOST = 10;
 
@@ -43,26 +64,29 @@ export function unitAndDone(measuredIn: string | null, reps: number, holdMs: num
   return { measuredIn: unit, done: unit === "time" ? Math.floor((holdMs ?? 0) / 1000) : reps };
 }
 
+const byId = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
+
 /** Earliest first: by the workout's start, then the workout's id, then the set's place. */
-function inOrder(sets: readonly SetFact[]): SetFact[] {
-  return [...sets].sort(
-    (a, b) => Date.parse(a.startedAt) - Date.parse(b.startedAt) || (a.workoutId < b.workoutId ? -1 : a.workoutId > b.workoutId ? 1 : 0) || a.position - b.position,
-  );
+function inOrder<T extends { startedAt: string; workoutId: string; position?: number }>(rows: readonly T[]): T[] {
+  return rows
+    .map((r) => ({ r, at: Date.parse(r.startedAt) }))
+    .sort((a, b) => a.at - b.at || byId(a.r.workoutId, b.r.workoutId) || (a.r.position ?? 0) - (b.r.position ?? 0))
+    .map((x) => x.r);
 }
 
 const asRecord = (s: SetFact): RecordSet => ({ workoutId: s.workoutId, startedAt: s.startedAt, position: s.position, done: s.done, weightGrams: s.weightGrams });
 
 type Records = Omit<ExerciseRecords, "exercise" | "limitedToDays">;
 
-/** The records of ONE exercise's sets. */
-export function exerciseRecords(sets: readonly SetFact[]): Records {
+/** The records of ONE exercise. `sets` may be all its sets, or only the first of each set done the same
+ *  way (`historyRepo.ts` recordCandidates): the records of a set come out the same. `lifted` is what each
+ *  workout lifted of it, worked out from all of its sets. */
+export function exerciseRecords(sets: readonly SetFact[], lifted: readonly LiftedWorkout[] = liftedOf(sets)): Records {
   let heaviest: SetFact | null = null;
   let mostReps: SetFact | null = null;
   let best1rm: { set: SetFact; estimate: number } | null = null;
   let longestHold: SetFact | null = null;
   let heaviestHold: SetFact | null = null;
-  const lifted = new Map<string, { workoutId: string; startedAt: string; grams: number }>();
-
   for (const s of inOrder(sets)) {
     if (s.done <= 0) continue;
     if (s.measuredIn === "reps") {
@@ -70,20 +94,16 @@ export function exerciseRecords(sets: readonly SetFact[]): Records {
       if (mostReps === null || s.done > mostReps.done) mostReps = s;
       const estimate = estimatedOneRepMaxGrams(s.weightGrams, s.done);
       if (estimate !== null && (best1rm === null || estimate > best1rm.estimate)) best1rm = { set: s, estimate };
-      if (s.weightGrams !== null) {
-        const sum = lifted.get(s.workoutId) ?? { workoutId: s.workoutId, startedAt: s.startedAt, grams: 0 };
-        sum.grams += s.weightGrams * s.done;
-        lifted.set(s.workoutId, sum);
-      }
     } else {
       if (longestHold === null || s.done > longestHold.done) longestHold = s;
       if (s.weightGrams !== null && (heaviestHold === null || s.weightGrams > (heaviestHold.weightGrams ?? 0))) heaviestHold = s;
     }
   }
 
-  // The map keeps the order workouts were first met in, earliest first, so a tie keeps the first.
   let mostLifted: { workoutId: string; startedAt: string; grams: number } | null = null;
-  for (const w of lifted.values()) if (mostLifted === null || w.grams > mostLifted.grams) mostLifted = w;
+  for (const w of inOrder(lifted)) {
+    if (w.grams > 0 && (mostLifted === null || w.grams > mostLifted.grams)) mostLifted = { workoutId: w.workoutId, startedAt: w.startedAt, grams: w.grams };
+  }
 
   return {
     reps: {
@@ -119,16 +139,17 @@ function told(r: Records): Told[] {
   ];
 }
 
-/** The new records of one workout: `workout` is its sets, `before` every set of the same exercises the
- *  person did in workouts before it. In the order the workout first did each exercise. */
-export function newRecordsIn(workout: readonly SetFact[], before: readonly SetFact[]): NewRecord[] {
+/** The new records of one workout: `workout` is all its sets; `before` the sets of the same exercises the
+ *  person did in workouts before it (all of them, or the first of each done the same way), and
+ *  `beforeLifted` what each of those workouts lifted. In the order the workout first did each exercise. */
+export function newRecordsIn(workout: readonly SetFact[], before: readonly SetFact[], beforeLifted: readonly LiftedWorkout[] = liftedOf(before)): NewRecord[] {
   const exercises: string[] = [];
   for (const s of [...workout].sort((a, b) => a.position - b.position)) if (!exercises.includes(s.exercise)) exercises.push(s.exercise);
 
   const out: NewRecord[] = [];
   for (const exercise of exercises) {
     const now = told(exerciseRecords(workout.filter((s) => s.exercise === exercise)));
-    const then = told(exerciseRecords(before.filter((s) => s.exercise === exercise)));
+    const then = told(exerciseRecords(before.filter((s) => s.exercise === exercise), beforeLifted.filter((l) => l.exercise === exercise)));
     now.forEach((n, i) => {
       const t = then[i]?.value ?? null;
       if (n.value !== null && t !== null && n.value > t) out.push({ exercise, measuredIn: n.measuredIn, kind: n.kind, position: n.position });

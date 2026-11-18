@@ -118,24 +118,66 @@ export async function workoutSets(sql: Sql, userId: string, workoutId: string): 
     ORDER BY s.set_index`;
 }
 
-/** Every set of these exercises the person did in workouts that started before this one (by start,
- *  then id), or, with `before` null, since `floor`. */
-export async function exerciseSets(
-  sql: Sql,
-  userId: string,
-  exerciseIds: readonly string[],
-  window: { before: { startedAt: Date; workoutId: string } | null; floor: Date | null },
-): Promise<SetRow[]> {
-  const { before, floor } = window;
-  return sql<SetRow[]>`
-    SELECT ${setColumns(sql)}
+export interface Window {
+  /** Only workouts that started before this one (by start, then id); null for no such bound. */
+  before: { startedAt: Date; workoutId: string } | null;
+  /** Only workouts from this instant on (a free plan's days); null for all. */
+  floor: Date | null;
+}
+
+/** A set as the records read it. */
+export interface FactRow {
+  workout_id: string;
+  started_at: Date;
+  slug: string;
+  set_index: number;
+  measured_in: string | null;
+  reps: number;
+  hold_ms: number | null;
+  weight_grams: number | null;
+}
+
+const inWindow = (sql: Sql, userId: string, exerciseIds: readonly string[], { before, floor }: Window) => sql`
+  s.user_id = ${userId} AND s.exercise_id = ANY(${[...exerciseIds]}::uuid[])
+  AND (${before === null} OR (w.started_at, w.id) < (${before?.startedAt ?? null}::timestamptz, ${before?.workoutId ?? null}::uuid))
+  AND (${floor === null} OR w.started_at >= ${floor})`;
+
+/** The sets of these exercises that can hold a record of a set: of each set that was done the same way
+ *  (the same exercise, unit, reps, time and weight), only the first. Every record of a set is the first
+ *  set with the best value, and a value is worked out from those columns alone, so the first of each is
+ *  enough, whatever the record (`records.ts`). Five years of one exercise is then a few hundred rows,
+ *  not thousands. */
+export async function recordCandidates(sql: Sql, userId: string, exerciseIds: readonly string[], window: Window): Promise<FactRow[]> {
+  return sql<FactRow[]>`
+    SELECT DISTINCT ON (s.exercise_id, s.measured_in, s.reps, s.hold_ms, s.weight_grams)
+           s.workout_id, w.started_at, e.slug, s.set_index, s.measured_in, s.reps, s.hold_ms, s.weight_grams
     FROM workout_sets s
       JOIN workouts w ON w.id = s.workout_id AND w.user_id = ${userId}
       JOIN exercises e ON e.id = s.exercise_id
-      LEFT JOIN library_exercises l ON l.exercise_id = e.id
-    WHERE s.user_id = ${userId} AND s.exercise_id = ANY(${[...exerciseIds]}::uuid[])
-      AND (${before === null} OR (w.started_at, w.id) < (${before?.startedAt ?? null}::timestamptz, ${before?.workoutId ?? null}::uuid))
-      AND (${floor === null} OR w.started_at >= ${floor})`;
+    WHERE ${inWindow(sql, userId, exerciseIds, window)}
+    ORDER BY s.exercise_id, s.measured_in, s.reps, s.hold_ms, s.weight_grams, w.started_at, w.id, s.set_index`;
+}
+
+/** What each workout lifted of each exercise: the weight times the reps of its sets with a weight and
+ *  reps done, kept apart by how each set's unit is kept, so `records.ts` decides which are in reps. */
+export interface LiftedRow {
+  workout_id: string;
+  started_at: Date;
+  slug: string;
+  measured_in: string | null;
+  held: boolean;
+  grams: number;
+}
+
+export async function liftedByWorkout(sql: Sql, userId: string, exerciseIds: readonly string[], window: Window): Promise<LiftedRow[]> {
+  return sql<LiftedRow[]>`
+    SELECT s.workout_id, w.started_at, e.slug, s.measured_in, s.hold_ms IS NOT NULL AS held,
+           sum(s.weight_grams::bigint * s.reps)::float8 AS grams
+    FROM workout_sets s
+      JOIN workouts w ON w.id = s.workout_id AND w.user_id = ${userId}
+      JOIN exercises e ON e.id = s.exercise_id
+    WHERE ${inWindow(sql, userId, exerciseIds, window)} AND s.weight_grams IS NOT NULL AND s.reps > 0
+    GROUP BY s.workout_id, w.started_at, w.id, e.slug, s.measured_in, s.hold_ms IS NOT NULL`;
 }
 
 /** The exercise's own id, or null for an id word the server never had. */

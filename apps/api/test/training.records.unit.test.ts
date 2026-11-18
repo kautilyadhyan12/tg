@@ -2,7 +2,7 @@
 // what ties, what a unit keeps apart, and when a workout's set is a "New record". The first block is the
 // job's worst thing for a person: being told "New record" for a set that is not one.
 import { describe, expect, it } from "vitest";
-import { estimatedOneRepMaxGrams, exerciseRecords, newRecordsIn, unitAndDone, type SetFact } from "../src/modules/training/records.js";
+import { estimatedOneRepMaxGrams, exerciseRecords, liftedOf, newRecordsIn, unitAndDone, type SetFact } from "../src/modules/training/records.js";
 
 const W1 = "00000000-0000-4000-8000-000000000001";
 const W2 = "00000000-0000-4000-8000-000000000002";
@@ -185,5 +185,60 @@ describe("the estimate and the unit", () => {
     ["minutes", 8, null, { measuredIn: "reps", done: 8 }], // a word it does not know
   ] as const)("kept as %s, %s reps, %s ms", (unit, reps, holdMs, want) => {
     expect(unitAndDone(unit, reps, holdMs)).toEqual(want);
+  });
+});
+
+describe("the first of each set done the same way gives the same records as every set", () => {
+  // A fixed, made-up history: 300 sets over 40 workouts, with repeats, ties and both units.
+  let seed = 7;
+  const next = (n: number) => {
+    seed = (seed * 1_103_515_245 + 12_345) % 2_147_483_648;
+    return seed % n;
+  };
+  const all: SetFact[] = Array.from({ length: 300 }, (_, i) => {
+    const w = i % 40;
+    const time = next(4) === 0;
+    return s({
+      workoutId: `00000000-0000-4000-8000-${String(w).padStart(12, "0")}`,
+      startedAt: new Date(Date.UTC(2026, 0, 1 + Math.floor(w / 2))).toISOString(),
+      position: Math.floor(i / 40),
+      measuredIn: time ? "time" : "reps",
+      done: time ? 20 + next(5) * 10 : next(13),
+      weightGrams: next(3) === 0 ? null : 20_000 + next(4) * 5_000,
+    });
+  });
+  // What the database's DISTINCT ON keeps: the earliest set of each way it was done.
+  const firstOfEach = (sets: readonly SetFact[]) => {
+    const seen = new Map<string, SetFact>();
+    const ordered = [...sets].sort((a, b) => Date.parse(a.startedAt) - Date.parse(b.startedAt) || (a.workoutId < b.workoutId ? -1 : a.workoutId > b.workoutId ? 1 : 0) || a.position - b.position);
+    for (const x of ordered) {
+      const key = `${x.exercise}|${x.measuredIn}|${String(x.done)}|${String(x.weightGrams)}`;
+      if (!seen.has(key)) seen.set(key, x);
+    }
+    return [...seen.values()];
+  };
+
+  it("the records", () => {
+    const few = firstOfEach(all);
+    expect(few.length).toBeLessThan(all.length / 3);
+    expect(exerciseRecords(few, liftedOf(all))).toEqual(exerciseRecords(all));
+  });
+
+  it("the new records of the last workout", () => {
+    // A later workout that beats one record and only ties two: the past's heaviest weight and longest
+    // hold again, and one rep more than its most.
+    const before = all;
+    const past = exerciseRecords(before);
+    const [heaviest, mostReps, longest] = [past.reps.heaviest?.weightGrams, past.reps.mostReps?.done, past.time.longestHold?.done];
+    if (heaviest === undefined || heaviest === null || mostReps === undefined || longest === undefined) throw new Error("the made-up history has no records");
+    const later = { workoutId: W3.replace("3", "9"), startedAt: "2026-03-01T08:00:00.000Z" };
+    const last = [
+      s({ ...later, position: 0, done: 1, weightGrams: heaviest }),
+      s({ ...later, position: 1, done: mostReps + 1, weightGrams: null }),
+      s({ ...later, position: 2, measuredIn: "time", done: longest, weightGrams: null }),
+    ];
+    const told = newRecordsIn(last, before);
+    expect(told.map((r) => `${r.measuredIn} ${r.kind}`)).toEqual(["reps most_reps"]);
+    expect(newRecordsIn(last, firstOfEach(before), liftedOf(before))).toEqual(told);
   });
 });

@@ -17,6 +17,7 @@ import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { seed } from "../src/db/seed.js";
 import type { EmailSender } from "../src/modules/auth/email.js";
+import { exerciseRecords, newRecordsIn, unitAndDone, type SetFact } from "../src/modules/training/records.js";
 
 const url = process.env["DATABASE_URL"];
 const d = describe.skipIf(url === undefined || url === "");
@@ -270,6 +271,34 @@ d("history and records for each exercise (real Postgres)", () => {
       await save(a, two);
       const told = await Promise.all([one, two].map(async (w) => historyWorkoutSchema.parse((await get(a, `/v1/training/workouts/${w.workoutId}`)).json()).newRecords));
       expect(told).toEqual([[], []]);
+    });
+  });
+
+  describe("the database sends only what can be a record, and the records come out the same", () => {
+    it("an exercise's records, and a workout's new records, equal the rule read over every set", async () => {
+      const a = await person();
+      // Five workouts of the same few sets again and again, ties included, and a plank in time.
+      const ids: string[] = [];
+      for (let w = 0; w < 5; w++) {
+        const sets = [0, 1, 2, 3, 4].map((i) => set({ position: i, done: 5 + ((w + i) % 3), weightGrams: 60_000 + ((w * i) % 3) * 5_000, durationMs: 20_000, restSeconds: 30 }));
+        // The last workout's first set is heavier than anything before it, so it holds a record.
+        if (w === 4) sets[0] = set({ position: 0, done: 5, weightGrams: 80_000, durationMs: 20_000, restSeconds: 30 });
+        sets.push(set({ position: 5, exercise: "plank", measuredIn: "time", target: 60, done: 40 + (w % 2) * 20, weightGrams: null, durationMs: 60_000, restSeconds: null, counted: "timer" }));
+        ids.push(await save(a, workout(daysAgo(20 - w), sets)));
+      }
+      const rows = await sql<{ workout_id: string; started_at: Date; slug: string; set_index: number; measured_in: string | null; reps: number; hold_ms: number | null; weight_grams: number | null }[]>`
+        SELECT s.workout_id, w.started_at, e.slug, s.set_index, s.measured_in, s.reps, s.hold_ms, s.weight_grams
+        FROM workout_sets s JOIN workouts w ON w.id = s.workout_id JOIN exercises e ON e.id = s.exercise_id WHERE s.user_id = ${a.id}`;
+      const every: SetFact[] = rows.map((r) => ({ workoutId: r.workout_id, startedAt: r.started_at.toISOString(), exercise: r.slug, position: r.set_index, ...unitAndDone(r.measured_in, r.reps, r.hold_ms), weightGrams: r.weight_grams }));
+
+      for (const exercise of ["squat", "plank"]) {
+        const got = exerciseRecordsSchema.parse((await get(a, `/v1/training/exercises/${exercise}/records`)).json());
+        expect(got).toEqual({ exercise, ...exerciseRecords(every.filter((x) => x.exercise === exercise)), limitedToDays: 90 });
+      }
+      const last = ids[4] ?? "";
+      const seen = historyWorkoutSchema.parse((await get(a, `/v1/training/workouts/${last}`)).json());
+      expect(seen.newRecords).toContainEqual({ exercise: "squat", measuredIn: "reps", kind: "heaviest", position: 0 });
+      expect(seen.newRecords).toEqual(newRecordsIn(every.filter((x) => x.workoutId === last), every.filter((x) => x.workoutId !== last)));
     });
   });
 

@@ -18,7 +18,7 @@ import { safeTimeZone } from "../gamification/streak.js";
 import { getUserSyncContext } from "../users/service.js";
 import { historyGate } from "../workouts/service.js";
 import * as repo from "./historyRepo.js";
-import { exerciseRecords, newRecordsIn, unitAndDone, type SetFact } from "./records.js";
+import { exerciseRecords, newRecordsIn, unitAndDone, type LiftedWorkout, type SetFact } from "./records.js";
 
 export interface HistoryDeps {
   sql: Sql;
@@ -55,7 +55,7 @@ export async function historyDay(deps: HistoryDeps, userId: string, day: string)
   };
 }
 
-const fact = (r: repo.SetRow): SetFact => ({
+const fact = (r: repo.FactRow): SetFact => ({
   workoutId: r.workout_id,
   startedAt: r.started_at.toISOString(),
   exercise: r.slug,
@@ -63,6 +63,26 @@ const fact = (r: repo.SetRow): SetFact => ({
   ...unitAndDone(r.measured_in, r.reps, r.hold_ms),
   weightGrams: r.weight_grams,
 });
+
+/** What each workout lifted, of the sets in reps: a group's unit is decided by the same rule as a set's. */
+function lifted(rows: readonly repo.LiftedRow[]): LiftedWorkout[] {
+  const sums = new Map<string, LiftedWorkout>();
+  for (const r of rows) {
+    if (unitAndDone(r.measured_in, 0, r.held ? 0 : null).measuredIn !== "reps") continue;
+    const key = `${r.workout_id}|${r.slug}`;
+    const sum = sums.get(key);
+    if (sum === undefined) sums.set(key, { workoutId: r.workout_id, startedAt: r.started_at.toISOString(), exercise: r.slug, grams: r.grams });
+    else sum.grams += r.grams;
+  }
+  return [...sums.values()];
+}
+
+/** The sets a record can be made of, and what each workout lifted, in one window. */
+async function pastOf(sql: Sql, userId: string, exerciseIds: readonly string[], window: repo.Window): Promise<{ sets: SetFact[]; lifted: LiftedWorkout[] }> {
+  if (exerciseIds.length === 0) return { sets: [], lifted: [] };
+  const [sets, sums] = await Promise.all([repo.recordCandidates(sql, userId, exerciseIds, window), repo.liftedByWorkout(sql, userId, exerciseIds, window)]);
+  return { sets: sets.map(fact), lifted: lifted(sums) };
+}
 
 /** How a set was counted. A set saved by the old route keeps only its mode: the engine's was the camera's,
  *  a typed one was by hand; one with neither is unknown. */
@@ -81,7 +101,7 @@ export async function historyWorkout(deps: HistoryDeps, userId: string, workoutI
   if (w === null) return null;
   const sets = await repo.workoutSets(deps.sql, userId, workoutId);
   const exerciseIds = [...new Set(sets.map((s) => s.exercise_id))];
-  const before = exerciseIds.length === 0 ? [] : await repo.exerciseSets(deps.sql, userId, exerciseIds, { before: { startedAt: w.started_at, workoutId: w.id }, floor: null });
+  const before = await pastOf(deps.sql, userId, exerciseIds, { before: { startedAt: w.started_at, workoutId: w.id }, floor: null });
   return {
     workoutId: w.id,
     name: w.name,
@@ -111,7 +131,7 @@ export async function historyWorkout(deps: HistoryDeps, userId: string, workoutI
         counted: countedOf(s),
       };
     }),
-    newRecords: newRecordsIn(sets.map(fact), before.map(fact)),
+    newRecords: newRecordsIn(sets.map(fact), before.sets, before.lifted),
   };
 }
 
@@ -120,6 +140,6 @@ export async function recordsOf(deps: HistoryDeps, userId: string, exercise: str
   const exerciseId = await repo.exerciseIdOf(deps.sql, exercise);
   if (exerciseId === null) return null;
   const gate = await historyGate(deps, userId);
-  const sets = await repo.exerciseSets(deps.sql, userId, [exerciseId], { before: null, floor: gate.floor });
-  return { exercise, ...exerciseRecords(sets.map(fact)), limitedToDays: gate.limitedToDays };
+  const past = await pastOf(deps.sql, userId, [exerciseId], { before: null, floor: gate.floor });
+  return { exercise, ...exerciseRecords(past.sets, past.lifted), limitedToDays: gate.limitedToDays };
 }
