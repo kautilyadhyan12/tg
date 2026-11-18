@@ -1695,6 +1695,13 @@
       "when": 1790985600242,
       "tag": "0242_admin_day_use",
       "breakpoints": true
+    },
+    {
+      "idx": 242,
+      "version": "7",
+      "when": 1790985600243,
+      "tag": "0243_exercise_library",
+      "breakpoints": true
     }
   ]
 }

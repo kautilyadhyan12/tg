@@ -107,7 +107,7 @@ export type ExerciseFile = z.infer<typeof exerciseFileSchema>;
 
 /** A MET is a whole number of tenths from 1.0 (sitting still) to 23.0 (the Compendium's fastest
  *  running), so 80 typed for 8.0, or 0.8, is refused. */
-const metSchema = z
+export const metSchema = z
   .number()
   .min(1)
   .max(23)
