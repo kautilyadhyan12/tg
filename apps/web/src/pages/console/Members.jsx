@@ -541,6 +541,28 @@ export default function Members() {
     return undefined;
   }, [personParam, canSeeList, setSearchParams]);
 
+  // Search's "See all in Members" (`?search=`) fills the list's box, and a staff member picked
+  // in search (`?staff=`) opens their panel on the Staff tab, once each.
+  const searchParam = searchParams.get('search');
+  const staffParam = searchParams.get('staff');
+  const [startSearch, setStartSearch] = useState(null);
+  const [startStaff, setStartStaff] = useState(null);
+  useEffect(() => {
+    if ((searchParam === null && staffParam === null) || !org) return undefined;
+    setSearchParams(
+      (was) => {
+        const params = new URLSearchParams(was);
+        params.delete('search');
+        params.delete('staff');
+        return params;
+      },
+      { replace: true },
+    );
+    if (searchParam !== null && canSeeList) setStartSearch(searchParam.slice(0, 120));
+    if (staffParam !== null && managesStaff && /^[0-9a-f-]{36}$/i.test(staffParam)) setStartStaff(staffParam);
+    return undefined;
+  }, [searchParam, staffParam, org, canSeeList, managesStaff, setSearchParams]);
+
   // Overview's Start here list opens Import, Add or Invite staff here (`?open=`), once.
   const opening = searchParams.get('open');
   useEffect(() => {
@@ -727,6 +749,8 @@ export default function Members() {
           onStartTaken={() => setStartShow(null)}
           startPerson={startPerson}
           onStartPersonTaken={() => setStartPerson(null)}
+          startSearch={startSearch}
+          onStartSearchTaken={() => setStartSearch(null)}
           emptyExtra={
             <AlreadyInApp
               items={state.items}
@@ -758,6 +782,8 @@ export default function Members() {
           onSeeActivity={(userId) => showTab('activity', { worker: userId })}
           onOpenActivity={() => showTab('activity', {})}
           handingOver={searchParams.get('handOver') === '1'}
+          startOpen={startStaff}
+          onStartOpenTaken={() => setStartStaff(null)}
         />
       ) : null}
 

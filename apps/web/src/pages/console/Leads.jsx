@@ -100,6 +100,25 @@ export default function Leads() {
     if (opening === 'add' && mayKeep && !readOnly) setOpenId(null);
   }, [opening, org, mayKeep, readOnly, setSearchParams]);
 
+  // A lead picked in search (`?lead=`) opens their page, and "See all in Leads" (`?search=`)
+  // fills the search box, once each.
+  const leadParam = searchParams.get('lead');
+  const searchParam = searchParams.get('search');
+  useEffect(() => {
+    if ((leadParam === null && searchParam === null) || !org) return;
+    setSearchParams(
+      (was) => {
+        const params = new URLSearchParams(was);
+        params.delete('lead');
+        params.delete('search');
+        return params;
+      },
+      { replace: true },
+    );
+    if (leadParam !== null && mayKeep && /^[0-9a-f-]{36}$/i.test(leadParam)) setOpenId(leadParam);
+    if (searchParam !== null) setTyped(searchParam.slice(0, 120));
+  }, [leadParam, searchParam, org, mayKeep, setSearchParams]);
+
   useEffect(() => {
     const timer = setTimeout(() => setFilters((f) => (f.query === typed ? f : { ...f, query: typed })), 300);
     return () => clearTimeout(timer);

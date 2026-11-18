@@ -2,12 +2,16 @@ import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Search, X } from 'lucide-react';
 import { readRecent, searchResults, searchStart, writeRecent } from '../../pages/console/searchPlaces';
+import { asksForPeople, peopleGroup } from '../../pages/console/searchPeople';
+import { gymToday } from '../../pages/console/memberListPeople';
+import { errorText, orgService } from '../../api/orgsApi';
 
 // SEARCH (spec Part 3 §17.11, the Search board). The box in the bar across the top IS the
 // search: click it and type, and the results drop down under it. Ctrl K (⌘K on a Mac) puts the
 // cursor in it. On a phone the search button turns the top bar into the same box. ↑ ↓ move,
 // Enter opens, Esc or a press outside closes; each line opens its place as the page's own
-// buttons do.
+// buttons do. `people`: where this person may find people (V1-e-ii), the business and its
+// words; null where they may not, and nothing is asked.
 
 function deviceStore() {
   try {
@@ -19,7 +23,7 @@ function deviceStore() {
 
 /** The box and its results. `phone`: drawn in the phone's top bar, open from the start, with a
  *  close button; `onLeave` is told when it closes. `inputRef`: so Ctrl K can reach the box. */
-export default function SearchField({ orgSlug, catalogue, placeholder, keys = null, phone = false, inputRef = null, onLeave = null }) {
+export default function SearchField({ orgSlug, catalogue, placeholder, people = null, keys = null, phone = false, inputRef = null, onLeave = null }) {
   const navigate = useNavigate();
   const listId = useId();
   const ownInput = useRef(null);
@@ -30,8 +34,37 @@ export default function SearchField({ orgSlug, catalogue, placeholder, keys = nu
   const [active, setActive] = useState(0);
   const [dropTop, setDropTop] = useState(null);
   const [room, setRoom] = useState(null);
+  /** What the server found, and for which words: a late answer for older words is not shown. */
+  const [found, setFound] = useState({ for: '', people: null, error: null });
 
-  const groups = !open ? [] : typed.trim() === '' ? searchStart(catalogue, readRecent(deviceStore(), orgSlug)) : searchResults(catalogue, typed);
+  const gymId = people?.gymId ?? null;
+  const asked = typed.trim();
+  // People are asked for after a pause in typing, never for every key.
+  useEffect(() => {
+    if (gymId === null || !open || !asksForPeople(asked)) return undefined;
+    let live = true;
+    const timer = setTimeout(() => {
+      Promise.resolve()
+        .then(() => orgService.searchPeople(gymId, asked))
+        .then(
+          (res) => live && setFound({ for: asked, people: res.data, error: null }),
+          (err) => live && setFound({ for: asked, people: null, error: errorText(err, "We couldn't search your people. Try again.") }),
+        );
+    }, 250);
+    return () => {
+      live = false;
+      clearTimeout(timer);
+    };
+  }, [gymId, asked, open]);
+  const answer = people !== null && open && asksForPeople(asked) && found.for === asked ? found : null;
+  const peopleLines =
+    answer === null || answer.people === null
+      ? null
+      : peopleGroup(answer.people, { orgSlug, orgType: people.orgType, privileges: people.privileges, typed: asked, membersName: people.membersName, today: gymToday(people.timezone) });
+
+  const placeGroups = !open ? [] : typed.trim() === '' ? searchStart(catalogue, readRecent(deviceStore(), orgSlug)) : searchResults(catalogue, typed);
+  // People first, as the board draws them: a name typed is most often somebody to open.
+  const groups = peopleLines !== null ? [peopleLines, ...placeGroups] : placeGroups;
   const lines = groups.flatMap((g) => g.lines);
   const at = lines.length === 0 ? -1 : Math.min(active, lines.length - 1);
   const optionId = (i) => `${listId}-${String(i)}`;
@@ -46,7 +79,8 @@ export default function SearchField({ orgSlug, catalogue, placeholder, keys = nu
     onLeave?.();
   };
   const choose = (line) => {
-    writeRecent(deviceStore(), orgSlug, line.key);
+    // Recent keeps places only, never a person (V1-e-i's ruling: never a name on the device).
+    if (line.kind !== 'person') writeRecent(deviceStore(), orgSlug, line.key);
     close();
   };
 
@@ -187,15 +221,37 @@ export default function SearchField({ orgSlug, catalogue, placeholder, keys = nu
                       onClick={() => choose(line)}
                       data-testid="search-line"
                     >
-                      <span className="c-s14 c-w6 c-t1">{line.title}</span>
-                      {line.where !== '' ? <span className="c-s13 c-t3">{line.where}</span> : null}
+                      {line.kind === 'person' ? (
+                        <span className="c-find-person">
+                          {line.initials !== null ? (
+                            <span className="c-avatar c-find-av" aria-hidden="true">
+                              {line.initials}
+                            </span>
+                          ) : null}
+                          <span className="c-find-text">
+                            <span className="c-s14 c-w6 c-t1">{line.title}</span>
+                            {line.where !== '' ? <span className="c-s13 c-t3">{line.where}</span> : null}
+                          </span>
+                          {line.tag !== null ? <span className={`c-tag ${line.tag.tone}`}>{line.tag.text}</span> : null}
+                        </span>
+                      ) : (
+                        <>
+                          <span className="c-s14 c-w6 c-t1">{line.title}</span>
+                          {line.where !== '' ? <span className="c-s13 c-t3">{line.where}</span> : null}
+                        </>
+                      )}
                     </Link>
                   );
                 })}
               </div>
             ))}
           </div>
-          {typed.trim() !== '' && lines.length === 0 ? (
+          {answer !== null && answer.error !== null ? (
+            <p className="c-s14 c-t2 m-0" role="status">
+              {answer.error}
+            </p>
+          ) : null}
+          {typed.trim() !== '' && lines.length === 0 && (answer === null || answer.error === null) ? (
             <p className="c-s14 c-t2 m-0" role="status">
               Nothing matches &ldquo;{typed.trim()}&rdquo;. Try another word, such as payments or classes.
             </p>

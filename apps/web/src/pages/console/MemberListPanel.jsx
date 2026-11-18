@@ -420,6 +420,8 @@ export default function MemberListPanel({
   onStartTaken = () => undefined,
   startPerson = null,
   onStartPersonTaken = () => undefined,
+  startSearch = null,
+  onStartSearchTaken = () => undefined,
 }) {
   const [list, setList] = useState(null);
   const [listError, setListError] = useState(null);
@@ -434,6 +436,12 @@ export default function MemberListPanel({
     onStartTaken();
   }, [onStartTaken]);
   const [typed, setTyped] = useState('');
+  // "See all in Members" from search (`?search=`): the same words in this list's box, once.
+  useEffect(() => {
+    if (startSearch === null) return;
+    setTyped(startSearch);
+    onStartSearchTaken();
+  }, [startSearch, onStartSearchTaken]);
   const [page, setPage] = useState({ loading: true, error: null, entries: [], total: 0, cursor: null });
   const [loadingMore, setLoadingMore] = useState(false);
   const [tick, setTick] = useState(0);

@@ -9,6 +9,7 @@
 // an Idempotency-Key. Creating a gym has no key, so a dropped connection leaves
 // the owner to press the button again — a visible duplicate beats a silent one.
 import {
+  consoleSearchResponseSchema,
   acceptInvitationResponseSchema,
   deletedFormResponseSchema,
   deletedFormsResponseSchema,
@@ -1272,6 +1273,11 @@ export const orgService = {
       'who this stops',
       authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/checkin-rules/preview`, { params: { who: rules.who, overdue: rules.overdue, waiver: rules.waiver } }),
     ),
+
+  /** GET …/search/people — members and leads for whoever may open Members, staff for whoever
+   *  may open the Staff tab (V1-e-ii); a kind this person may not open comes back null. */
+  searchPeople: (gymId, query) =>
+    readThrough(consoleSearchResponseSchema, 'that search', authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/search/people`, { params: { query } })),
 
   // STAFF CHECK-IN AND THE LIVE LOG (Attendance; ROADMAP 16b-ii). The search and the
   // check-in need `attendance.mark`; the log needs `attendance.read` and has its own

@@ -1,7 +1,8 @@
 // SEARCH, drawn in the console's shell (V1-e-i). The worst thing on the screen: a line for a
 // place this person cannot open. Then: the box in the bar is typed in where it is (Kd's
 // click-through: never a button that opens a second box), Ctrl K reaches it, the arrows and Enter
-// open a line, Esc, a press outside and Back close it, and Recent remembers.
+// open a line, Esc, a press outside and Back close it, and Recent remembers. People (V1-e-ii):
+// asked of the server only for whoever may open Members or Staff, drawn first, never kept in Recent.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
@@ -9,7 +10,7 @@ import { ROLE_PRIVILEGES } from '@app/shared';
 
 vi.mock('../../api/orgsApi', async (importOriginal) => {
   const actual = await importOriginal();
-  return { ...actual, orgService: { getMine: vi.fn() } };
+  return { ...actual, orgService: { getMine: vi.fn(), searchPeople: vi.fn() } };
 });
 vi.mock('../../api/attentionApi', () => ({
   attentionService: { get: vi.fn() },
@@ -72,8 +73,30 @@ const typeIn = (text) => fireEvent.change(barInput(), { target: { value: text } 
 const lineTitles = () => screen.queryAllByTestId('search-line').map((el) => el.firstChild.textContent);
 const where = () => screen.getByTestId('where').textContent;
 
+const NOBODY = { members: { people: [], more: false }, leads: { people: [], more: false }, staff: { people: [], more: false } };
+const SAM = {
+  entryId: '22222222-2222-4222-8222-222222222222',
+  fullName: 'Sam Rivera',
+  email: 'sam@example.com',
+  phone: null,
+  memberNumber: '195',
+  status: 'Active',
+  membershipType: 'Gold Weekly',
+  paymentStatus: 'Paid',
+  held: null,
+  owedSince: null,
+  overdue: false,
+  formerAt: null,
+};
+const results = () => screen.queryByRole('listbox', { name: 'Results' });
+const peopleGroup = () => within(screen.getByRole('listbox', { name: 'Results' })).getByRole('group', { name: 'People' });
+const findPeople = async () => within(await screen.findByRole('listbox', { name: 'Results' })).findByRole('group', { name: 'People' });
+const personTitles = () => within(peopleGroup()).queryAllByTestId('search-line').map((el) => el.querySelector('.c-w6')?.textContent);
+
 beforeEach(() => {
   resetConsoleOrgs();
+  orgService.searchPeople.mockReset();
+  orgService.searchPeople.mockResolvedValue({ data: NOBODY });
   attentionService.get.mockReset();
   attentionService.get.mockResolvedValue(NONE);
   window.localStorage.clear();
@@ -107,7 +130,7 @@ describe('opening and using it', () => {
     expect(within(screen.getByTestId('console-bar')).queryByRole('button', { name: /search/i })).toBeNull();
     const input = barInput();
     expect(input.tagName).toBe('INPUT');
-    expect(input.getAttribute('placeholder')).toBe('Search pages or actions');
+    expect(input.getAttribute('placeholder')).toBe('Search members, pages or actions');
     expect(field.textContent).toContain('Ctrl K');
     // Typing straight into it, with nothing pressed first, shows results under it, in the bar.
     typeIn('money');
@@ -298,5 +321,86 @@ describe('opening and using it', () => {
     await open(ROLE_PRIVILEGES.owner, 'owner', 'studio');
     startSearch();
     expect(lineTitles()).toContain('Add client');
+  });
+});
+
+describe('people (V1-e-ii)', () => {
+  it('the worst thing: a trainer, who may not open Members or Staff, never asks the server for people', async () => {
+    await open(ROLE_PRIVILEGES.trainer, 'trainer');
+    expect(barInput().getAttribute('placeholder')).toBe('Search pages or actions');
+    startSearch();
+    typeIn('sam rivera');
+    await new Promise((r) => setTimeout(r, 400));
+    expect(orgService.searchPeople).not.toHaveBeenCalled();
+    expect(results()?.querySelector('[aria-label="People"]') ?? null).toBeNull();
+  });
+
+  it('a name typed brings the People group first, after a pause, for this business', async () => {
+    orgService.searchPeople.mockResolvedValue({ data: { ...NOBODY, members: { people: [SAM], more: false } } });
+    await open();
+    startSearch();
+    typeIn('s');
+    typeIn('sa');
+    typeIn('sam');
+    await waitFor(() => expect(peopleGroup()).toBeTruthy());
+    // One question for the words as they stood after the pause, never one a key.
+    expect(orgService.searchPeople).toHaveBeenCalledTimes(1);
+    expect(orgService.searchPeople).toHaveBeenCalledWith('11111111-1111-4111-8111-111111111111', 'sam');
+    expect(personTitles()).toEqual(['Sam Rivera']);
+    const groups = within(screen.getByRole('listbox', { name: 'Results' })).getAllByRole('group');
+    expect(groups[0]?.getAttribute('aria-label')).toBe('People');
+    const row = within(peopleGroup()).getByTestId('search-line');
+    expect(row.textContent).toContain('Member 195 · Gold Weekly');
+    expect(row.textContent).toContain('Active');
+  });
+
+  it('one letter asks nothing', async () => {
+    await open();
+    startSearch();
+    typeIn('s');
+    await new Promise((r) => setTimeout(r, 400));
+    expect(orgService.searchPeople).not.toHaveBeenCalled();
+  });
+
+  it('pressing a person opens their page, and Recent keeps no person', async () => {
+    orgService.searchPeople.mockResolvedValue({ data: { ...NOBODY, members: { people: [SAM], more: false } } });
+    await open();
+    startSearch();
+    typeIn('sam');
+    const row = await within(await findPeople()).findByTestId('search-line');
+    fireEvent.click(row);
+    expect(where()).toBe('/console/iron-house/members?person=22222222-2222-4222-8222-222222222222');
+    expect(window.localStorage.getItem(RECENT_KEY) ?? '').not.toContain('22222222');
+    expect(window.localStorage.getItem(RECENT_KEY) ?? '').not.toContain('Sam');
+  });
+
+  it('a late answer for older words is not shown under newer ones', async () => {
+    let answerOld;
+    orgService.searchPeople.mockImplementation((_gym, typed) =>
+      typed === 'sam' ? new Promise((resolve) => (answerOld = resolve)) : Promise.resolve({ data: NOBODY }),
+    );
+    await open();
+    startSearch();
+    typeIn('sam');
+    await waitFor(() => expect(orgService.searchPeople).toHaveBeenCalledWith(expect.any(String), 'sam'));
+    typeIn('tax');
+    await waitFor(() => expect(orgService.searchPeople).toHaveBeenCalledWith(expect.any(String), 'tax'));
+    answerOld({ data: { ...NOBODY, members: { people: [SAM], more: false } } });
+    await new Promise((r) => setTimeout(r, 50));
+    expect(results()?.querySelector('[aria-label="People"]') ?? null).toBeNull();
+  });
+
+  it('a search that fails says so in a sentence, and the pages still show', async () => {
+    orgService.searchPeople.mockRejectedValue(new Error('offline'));
+    await open();
+    startSearch();
+    typeIn('tax');
+    await waitFor(() => expect(box().getByRole('status').textContent).not.toBe(''));
+    expect(lineTitles()).toContain('Tax');
+  });
+
+  it("a studio's box says clients", async () => {
+    await open(ROLE_PRIVILEGES.owner, 'owner', 'studio');
+    expect(barInput().getAttribute('placeholder')).toBe('Search clients, pages or actions');
   });
 });
