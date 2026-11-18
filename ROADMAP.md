@@ -824,7 +824,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
     - 60a. [x] **One file for each exercise, and the check** — merged 2026-11-17 (PR #571).
     - 60b. [x] **The list on the server** — merged 2026-11-18 (PR #579).
 61. **What a workout keeps** (§13.5; after 60). Split by its terminal into three, each a terminal of its own.
-    - 61a. [ ] **Saving a whole workout from the phone** (after 60b): one save under the phone's id, sent twice is one; each set's target, done, weight, rest and how it was counted; an unknown exercise refuses the save; one calorie formula.
+    - 61a. [x] **Saving a whole workout from the phone** — merged 2026-11-18 (PR #582).
     - 61b. [ ] **History and records for each exercise** (after 61a): a month, a day's workouts, one workout set by set; heaviest, most reps, best estimated one-rep max, longest hold, most lifted, and "New record".
     - 61c. [ ] **Saved workouts** (after 61a): one shape for a planned workout; list, save and delete, with a limit for each person; a saved workout names its exercises, so a publish keeps them.
 62. [ ] **The clip line** (after 60): the generated clip made small, its still picture, and where clips are kept (Stage 4 item 4). Checking a clip against its exercise's rules waits for exercise folder 1's 52a and 52b.
