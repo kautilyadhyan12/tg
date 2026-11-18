@@ -33,15 +33,32 @@ export function attentionLines(attention, orgSlug, privileges, orgType) {
   const lines = [];
   const a = attention;
 
+  // Square connected before the app could read chargebacks: none show until the owner reconnects,
+  // so the bell says so, as Overview's Chargebacks box does, and never "Nothing needs attention".
+  if (a.chargebacks !== null && a.chargebacks.needsReconnect) {
+    const to = a.chargebacks.canReconnect ? placeFor(orgSlug, privileges, 'payments') : null;
+    lines.push({
+      key: 'reconnect',
+      count: 1,
+      tone: 'bad',
+      title: 'Reconnect Square',
+      note: to !== null ? "Chargebacks can't show until you reconnect" : 'The owner needs to reconnect Square before chargebacks can show',
+      money: null,
+      button: 'Reconnect',
+      to,
+    });
+  }
   if (a.chargebacks !== null && a.chargebacks.count > 0) {
+    // Lost ones only: the dispute is over and the money went back (Overview's own words).
+    const lostOnly = a.chargebacks.lostCount >= a.chargebacks.count;
     lines.push({
       key: 'chargebacks',
       count: a.chargebacks.count,
       tone: 'bad',
       title: chargebacksHeadline(a.chargebacks.count, a.chargebacks.lostCount),
-      note: `A ${words.person}'s bank is disputing a payment`,
+      note: lostOnly ? 'The money went back to the cardholder' : "A cardholder's bank disputed a payment",
       money: null,
-      button: 'Respond',
+      button: lostOnly ? 'View' : 'Respond',
       to: `${base}#${OVERVIEW_BOX.chargebacks}`,
     });
   }

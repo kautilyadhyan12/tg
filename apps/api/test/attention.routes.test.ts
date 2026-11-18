@@ -12,6 +12,7 @@ import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { createMemoryRedis } from "../src/redis.js";
 import { proveAddress } from "./proveAddress.js";
+import { expectAttentionMatchesPages } from "./attentionMatches.js";
 
 const url = process.env["DATABASE_URL"];
 const d = describe.skipIf(url === undefined || url === "");
@@ -92,11 +93,11 @@ d("What waits: the menu's counts and the bell, whose, to whom, and each its own 
     await sql`DELETE FROM plans WHERE code = ${LIVE_PLAN}`;
   };
 
-  const inject = (method: "GET" | "POST", path: string, cookies: Cookies, payload?: unknown) =>
+  const inject = (method: "GET" | "POST", path: string, cookies: Cookies, payload?: unknown, remoteAddress: string = nextIp()) =>
     api().inject({
       method,
       url: path,
-      remoteAddress: nextIp(),
+      remoteAddress,
       cookies,
       ...(payload === undefined ? {} : { headers: { "content-type": "application/json" }, payload: JSON.stringify(payload) }),
     });
@@ -246,7 +247,7 @@ d("What waits: the menu's counts and the bell, whose, to whom, and each its own 
       expect(mine.newLeads).toEqual({ count: 2 });
       expect(mine.atRisk).toEqual({ count: 1 });
       expect(mine.paymentDue).toEqual({ count: 2, past: 0 });
-      expect(mine).toMatchObject({ chargebacks: { count: 0, lostCount: 0 }, failedPayments: { count: 0, totals: [] }, refunds: { count: 0 }, appPayments: { count: 0, more: false }, appCancels: { count: 0 }, reported: { posts: 0, comments: 0 } });
+      expect(mine).toMatchObject({ chargebacks: { count: 0, lostCount: 0, needsReconnect: false, canReconnect: true }, failedPayments: { count: 0, totals: [] }, refunds: { count: 0 }, appPayments: { count: 0, more: false }, appCancels: { count: 0 }, reported: { posts: 0, comments: 0 } });
       const theirs = await read(next);
       expect(theirs.newLeads).toEqual({ count: 1 });
       // No check-in yet, and nobody billed: never a nought.
@@ -306,18 +307,30 @@ d("What waits: the menu's counts and the bell, whose, to whom, and each its own 
       expect(mine.newLeads?.count).toBe(((await get("/leads")) as { counts: { new: number } }).counts.new);
       expect(mine.atRisk?.count).toBe(atRiskResponseSchema.parse(await get("/at-risk")).total);
       expect(mine.paymentDue).toEqual(gymWeekResponseSchema.parse(await get("/week")).week.paymentDue);
-      expect(mine.chargebacks).toEqual((({ count, lostCount }: { count: number; lostCount: number }) => ({ count, lostCount }))((await get("/chargebacks?from=0")) as { count: number; lostCount: number }));
-      expect(mine.refunds?.count).toBe(((await get("/refunds-to-review?from=0")) as { count: number }).count);
-      expect(mine.failedPayments).toEqual((({ count, totals }: { count: number; totals: unknown[] }) => ({ count, totals }))((await get("/failed-payments/summary")) as { count: number; totals: unknown[] }));
-      expect(mine.appPayments).toEqual((({ rows, more }: { rows: unknown[]; more: boolean }) => ({ count: rows.length, more }))((await get("/app-payment-checks")) as { rows: unknown[]; more: boolean }));
-      expect(mine.appCancels?.count).toBe(((await get("/app-cancels")) as { count: number }).count);
-      expect(mine.reported).toEqual({
-        posts: ((await get("/posts/reported")) as { total: number }).total,
-        comments: ((await get("/post-comments/reported")) as { total: number }).total,
-      });
+      await expectAttentionMatchesPages((path) => inject("GET", path, gym.owner.cookies), gym.id, ["chargebacks", "refunds", "failedPayments", "appPayments", "appCancels", "reported"]);
       // A lead moved on from New leaves the count.
       await sql`UPDATE gym_leads SET status = 'contacted' WHERE gym_id = ${gym.id} AND full_name = 'Leo Lead'`;
       expect((await read(gym)).newLeads).toEqual({ count: 1 });
+    },
+    T,
+  );
+  it(
+    "staff of two businesses at one front-desk address: one business using up its share never stops the other",
+    async () => {
+      const one = await makeGym("Attn Shared One");
+      const two = await makeGym("Attn Shared Two");
+      const desk = "10.96.0.1";
+      const at = (gym: Gym) => inject("GET", attentionUrl(gym), gym.owner.cookies, undefined, desk);
+      expect((await at(one)).statusCode).toBe(200);
+      expect((await at(two)).statusCode).toBe(200);
+      // The first business's share of that address, used up (9,000 an hour), counted in up front.
+      await redis.setex(`rl:orgs_attention:ip:${one.id}:${desk}`, 3600, "9000");
+      expect((await at(one)).statusCode).toBe(429);
+      expect((await at(two)).statusCode).toBe(200);
+      // A stranger asking about the first business at that address is refused before any count of it.
+      const stranger = await signedIn("Attn Shared Stranger");
+      expect((await inject("GET", attentionUrl(two), stranger.cookies, undefined, desk)).statusCode).toBe(404);
+      expect((await at(two)).statusCode).toBe(200);
     },
     T,
   );

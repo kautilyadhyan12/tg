@@ -28,7 +28,7 @@ const READS = {
 } as const;
 
 const MEMBERS = "members.confirm";
-const READ_SCOPE = "DISPUTES_READ";
+export const READ_SCOPE = "DISPUTES_READ";
 
 /** Square's record of one chargeback, on a payment this gym holds. `wait`: ask again, as Square gave no answer about the payment. */
 export async function takeInDispute(deps: PaymentsDeps, square: SquareSettings, conn: { gymId: string; accountId: string }, token: string, dispute: SquareDispute): Promise<"done" | "wait"> {

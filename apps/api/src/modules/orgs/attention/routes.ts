@@ -8,10 +8,11 @@ import type { Sql } from "postgres";
 import type { RedisLike } from "../../../redis.js";
 import { createDualRateLimit } from "../../auth/rateLimit.js";
 import { orgParamsSchema } from "../schemas.js";
+import type { SquareEnvironment } from "../payments/square.js";
 import * as service from "./service.js";
 
-export function registerAttentionRoutes(app: FastifyInstance, deps: { sql: Sql; redis: RedisLike; now: () => Date }): void {
-  const attentionDeps: service.AttentionDeps = { sql: deps.sql, now: deps.now };
+export function registerAttentionRoutes(app: FastifyInstance, deps: { sql: Sql; redis: RedisLike; now: () => Date; squareEnvironment: SquareEnvironment | null }): void {
+  const attentionDeps: service.AttentionDeps = { sql: deps.sql, now: deps.now, squareEnvironment: deps.squareEnvironment };
 
   /** Read as staff move between pages and come back to the window. Keyed on the person; a
    *  business's staff share one address, so the address ceiling is ten times one person's

@@ -26,11 +26,16 @@ import { refundsToReview } from "../payments/refundsToReviewRepo.js";
 import { countReported } from "../posts/repo.js";
 import { reportedComments } from "../posts/commentsRepo.js";
 import { requireStaff } from "../service.js";
+import { READ_SCOPE } from "../payments/chargebacks.js";
+import { readConnection, readGym } from "../payments/repo.js";
+import type { SquareEnvironment } from "../payments/square.js";
 import { paymentDueIn } from "../week/service.js";
 
 export interface AttentionDeps {
   sql: Sql;
   now: () => Date;
+  /** This server's Square environment, or null where Square is not set up here. */
+  squareEnvironment: SquareEnvironment | null;
 }
 
 export interface AttentionReader {
@@ -44,6 +49,17 @@ export async function requireAttentionReader(deps: AttentionDeps, userId: string
   return { timezone: org.timezone, privileges };
 }
 
+/** Overview's Chargebacks box, as `readChargebacks` reads it: its counts, and whether Square must be
+ *  reconnected before chargebacks can be seen at all. */
+async function readChargebacksPart(deps: AttentionDeps, gymId: string, userId: string, members: boolean, now: Date) {
+  const [{ count, lostCount }, row, gym] = await Promise.all([
+    chargebacksToAnswer(deps.sql, gymId, members, now, 0, 1),
+    deps.squareEnvironment === null ? null : readConnection(deps.sql, gymId, deps.squareEnvironment),
+    readGym(deps.sql, gymId),
+  ]);
+  return { count, lostCount, needsReconnect: row?.state === "connected" && !row.scopes.includes(READ_SCOPE), canReconnect: gym?.ownerUserId === userId };
+}
+
 /** The counts, for a business whose reader has been checked. */
 export async function getAttention(deps: AttentionDeps, gymId: string, userId: string, reader: AttentionReader): Promise<AttentionResponse> {
   const now = deps.now();
@@ -52,7 +68,7 @@ export async function getAttention(deps: AttentionDeps, gymId: string, userId: s
   const members = may("members.confirm");
 
   const [chargebacks, failedPayments, paymentDue, refunds, appPayments, appCancels, newLeads, atRisk, reported] = await Promise.all([
-    may("billing.members") ? chargebacksToAnswer(deps.sql, gymId, members, now, 0, 1).then(({ count, lostCount }) => ({ count, lostCount })) : null,
+    may("billing.members") ? readChargebacksPart(deps, gymId, userId, members, now) : null,
     may("members.confirm", "billing.members") ? failedTotals(deps.sql, gymId) : null,
     members
       ? deps.sql.begin("isolation level repeatable read read only", async (tx) => {

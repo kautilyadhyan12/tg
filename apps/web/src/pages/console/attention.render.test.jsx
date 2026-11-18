@@ -47,7 +47,7 @@ const gym = (staffRole, privileges) => ({
 });
 const NONE = { chargebacks: null, failedPayments: null, paymentDue: null, refunds: null, appPayments: null, appCancels: null, newLeads: null, atRisk: null, reported: null };
 const BUSY = {
-  chargebacks: { count: 0, lostCount: 0 },
+  chargebacks: { count: 0, lostCount: 0, needsReconnect: false, canReconnect: true },
   failedPayments: { count: 3, totals: [{ currency: 'USD', minor: 6000 }] },
   paymentDue: { count: 6, past: 1 },
   refunds: { count: 0 },

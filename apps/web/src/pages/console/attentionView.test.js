@@ -9,7 +9,7 @@ import { attentionLines, bellLabel, countText, menuCounts, moreCount, seesAnyPar
 
 const NONE = { chargebacks: null, failedPayments: null, paymentDue: null, refunds: null, appPayments: null, appCancels: null, newLeads: null, atRisk: null, reported: null };
 const ZERO = {
-  chargebacks: { count: 0, lostCount: 0 },
+  chargebacks: { count: 0, lostCount: 0, needsReconnect: false, canReconnect: true },
   failedPayments: { count: 0, totals: [] },
   paymentDue: { count: 0, past: 0 },
   refunds: { count: 0 },
@@ -39,9 +39,9 @@ describe('the bell: a line only for what the server sent and what waits', () => 
 
   it('every kind, at one and at many: its words, its colour, its money and its place', () => {
     const table = [
-      [{ chargebacks: { count: 1, lostCount: 0 } }, { key: 'chargebacks', tone: 'bad', count: 1, title: '1 chargeback needs a response', button: 'Respond', to: '/console/iron-house#chargebacks' }],
-      [{ chargebacks: { count: 3, lostCount: 1 } }, { title: '3 chargebacks need attention', count: 3 }],
-      [{ chargebacks: { count: 2, lostCount: 2 } }, { title: '2 lost chargebacks have automatic payments paused' }],
+      [{ chargebacks: { count: 1, lostCount: 0, needsReconnect: false, canReconnect: true } }, { key: 'chargebacks', tone: 'bad', count: 1, title: '1 chargeback needs a response', note: "A cardholder's bank disputed a payment", button: 'Respond', to: '/console/iron-house#chargebacks' }],
+      [{ chargebacks: { count: 3, lostCount: 1, needsReconnect: false, canReconnect: true } }, { title: '3 chargebacks need attention', count: 3, note: "A cardholder's bank disputed a payment", button: 'Respond' }],
+      [{ chargebacks: { count: 2, lostCount: 2, needsReconnect: false, canReconnect: true } }, { title: '2 lost chargebacks have automatic payments paused', note: 'The money went back to the cardholder', button: 'View' }],
       [{ failedPayments: { count: 1, totals: [{ currency: 'USD', minor: 2000 }] } }, { key: 'failed-payments', tone: 'bad', title: '1 failed card payment', note: 'Declined, still outstanding', money: '$20.00', to: '/console/iron-house/failed-payments' }],
       [{ failedPayments: { count: 3, totals: [{ currency: 'USD', minor: 6000 }, { currency: 'CAD', minor: 1500 }] } }, { title: '3 failed card payments', count: 3 }],
       [{ paymentDue: { count: 6, past: 1 } }, { key: 'payment-due', tone: 'warn', count: 7, title: '6 members with a payment due', note: 'Plus 1 past member', to: '/console/iron-house/members?show=payment-due' }],
@@ -64,7 +64,6 @@ describe('the bell: a line only for what the server sent and what waits', () => 
   it("a studio's words: clients, never members", () => {
     expect(only({ paymentDue: { count: 2, past: 1 } }, 'studio')).toMatchObject({ title: '2 clients with a payment due', note: 'Plus 1 past client' });
     expect(only({ atRisk: { count: 1 } }, 'studio').title).toBe('1 client at risk');
-    expect(only({ chargebacks: { count: 1, lostCount: 0 } }, 'studio').note).toBe("A client's bank is disputing a payment");
   });
 
   it('most urgent first: red, then gold, then plain', () => {
@@ -88,6 +87,24 @@ describe('the bell: a line only for what the server sent and what waits', () => 
   it("a line whose page this person cannot open has no button (the server would not send it; the screen holds the same rule)", () => {
     const got = lines({ failedPayments: { count: 1, totals: [] } }, ['members.read']);
     expect(got[0].to).toBeNull();
+  });
+});
+
+describe('a Square connection that must be reconnected', () => {
+  const lost = (canReconnect, count = 0) => ({ chargebacks: { count, lostCount: 0, needsReconnect: true, canReconnect } });
+  it('THE WORST THING: never "Nothing needs attention" while Overview says to reconnect; a red line first', () => {
+    const got = lines(lost(true));
+    expect(got).toHaveLength(1);
+    expect(got[0]).toMatchObject({ key: 'reconnect', tone: 'bad', title: 'Reconnect Square', button: 'Reconnect', to: '/console/iron-house/settings#payments' });
+    expect(menuCounts(got).overview).toEqual({ count: 1, tone: 'bad' });
+  });
+  it('the owner gets the button; anybody else reads who can, with none', () => {
+    expect(lines(lost(false))[0]).toMatchObject({ note: 'The owner needs to reconnect Square before chargebacks can show', to: null });
+    // An owner whose ticks were taken down cannot open Settings: no button either.
+    expect(lines(lost(true), ['billing.members'])[0].to).toBeNull();
+  });
+  it('with chargebacks still counted, both lines, reconnect first', () => {
+    expect(lines(lost(true, 2)).map((l) => l.key)).toEqual(['reconnect', 'chargebacks']);
   });
 });
 

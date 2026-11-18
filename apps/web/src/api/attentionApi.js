@@ -18,17 +18,27 @@ export const attentionService = {
 
 // Staff changed something in a business (a refund reviewed, a lead moved on, a post kept): the
 // counts are read again, so the menu and the bell never go on showing what was just dealt
-// with. Any write under `/v1/orgs/` that the server accepted is heard; reads are not.
+// with. Any write under `/v1/orgs/` that the server accepted is heard; reads are not, nor the
+// previews that are sent as a POST and change nothing. A check-in is a 'visit': the desk makes
+// many, so the counts take them as they take a move to another page.
 const changeListeners = new Set();
 const WRITES = new Set(['post', 'put', 'patch', 'delete']);
+
+/** What an accepted request means for the counts: 'change', 'visit', or null for nothing. */
+export function changeOf(method, url) {
+  const m = String(method ?? '').toLowerCase();
+  const path = String(url ?? '').split('?')[0];
+  if (!WRITES.has(m) || !path.startsWith('/v1/orgs/') || /preview$/.test(path)) return null;
+  return /\/attendance\/(check-in|visits)(\/|$)/.test(path) ? 'visit' : 'change';
+}
+
 authApi.interceptors?.response?.use?.((response) => {
-  const method = String(response?.config?.method ?? '').toLowerCase();
-  const url = String(response?.config?.url ?? '');
-  if (WRITES.has(method) && url.startsWith('/v1/orgs/')) for (const listener of changeListeners) listener();
+  const kind = changeOf(response?.config?.method, response?.config?.url);
+  if (kind !== null) for (const listener of changeListeners) listener(kind);
   return response;
 });
 
-/** Hear each accepted change; returns the way to stop. */
+/** Hear each accepted change ('change' or 'visit'); returns the way to stop. */
 export function onConsoleChange(listener) {
   changeListeners.add(listener);
   return () => changeListeners.delete(listener);

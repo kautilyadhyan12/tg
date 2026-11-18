@@ -288,7 +288,7 @@ export function registerOrgRoutes(
   registerPaymentsDownloadRoutes(app, { sql: deps.sql, redis: deps.redis, now: overrides.now ?? (() => new Date()) });
   registerWeekRoutes(app, { sql: deps.sql, redis: deps.redis, now: overrides.now ?? (() => new Date()) });
   // The menu's counts and the bell's "Needs attention" (V1-d).
-  registerAttentionRoutes(app, { sql: deps.sql, redis: deps.redis, now: overrides.now ?? (() => new Date()) });
+  registerAttentionRoutes(app, { sql: deps.sql, redis: deps.redis, now: overrides.now ?? (() => new Date()), squareEnvironment: squareSettings(deps.config)?.environment ?? null });
 
   // A real owner creates a gym once, so 5 an hour per account is far past anybody honest;
   // 20 an hour per address leaves room for a few owners on one connection (2g). Without

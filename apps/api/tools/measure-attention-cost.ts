@@ -183,7 +183,7 @@ try {
   for (let i = 0; i < OTHER_GYMS; i++) others.push(await makeGym(OTHER_PEOPLE));
   for (const table of ["gym_member_list_entries", "gym_attendance", "gym_members", "gym_nudges", "gym_held_memberships", "gym_membership_types", "gym_leads", "users"]) await sql`ANALYZE ${sql(table)}`;
 
-  const deps: AttentionDeps = { sql, now: () => now };
+  const deps: AttentionDeps = { sql, now: () => now, squareEnvironment: null };
   // The owner: every part.
   const reader: AttentionReader = { timezone: "Europe/London", privileges: ORG_PRIVILEGES.filter((t) => !WITHOUT.includes(t)) };
   const read = async (gym: Made): Promise<string> => {

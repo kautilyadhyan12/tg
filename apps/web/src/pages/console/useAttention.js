@@ -61,19 +61,21 @@ export function useAttentionRead(gymId, active) {
   useEffect(() => {
     if (!on) return undefined;
     let timer = null;
-    const stop = onConsoleChange(() => {
+    const stop = onConsoleChange((kind) => {
       clearTimeout(timer);
-      timer = setTimeout(reload, AFTER_CHANGE_MS);
+      timer = setTimeout(kind === 'visit' ? ifOld : reload, AFTER_CHANGE_MS);
     });
     return () => {
       clearTimeout(timer);
       stop();
     };
-  }, [on, reload]);
+  }, [on, reload, ifOld]);
   useLiveNews(
     gymId,
     (message) => {
       if (message.what === 'memberships' || message.what === 'people') reload();
+      // A check-in moves somebody off At risk; a busy desk is held to one read every 30 s.
+      else if (message.what === 'visits') ifOld();
     },
     on,
   );

@@ -29,6 +29,7 @@ import { processSquareWork } from "../src/modules/orgs/payments/work.js";
 import { account, fakeSquare, type Account, type CardBehaviour } from "./fakeSquareTerminal.js";
 import { recordingHub } from "./liveNewsRecorder.js";
 import { proveAddress } from "./proveAddress.js";
+import { expectAttentionMatchesPages } from "./attentionMatches.js";
 
 const url = process.env["DATABASE_URL"];
 const d = describe.skipIf(url === undefined || url === "");
@@ -488,6 +489,12 @@ d("Failed payments, and Try again (real Postgres)", { timeout: T }, () => {
     expect(first.next).toBe(25);
     const second = await list(gym, gym.owner.cookies, 25);
     expect(second.payments.length).toBe(2);
+    // The bell (V1-d): the owner's failed payments are the summary's, 27 with money; the desk's and
+    // the trainer's, refused there, are left out of the bell too.
+    const asks = (who: { cookies: Cookies }) => (path: string) => send("GET", path, who.cookies);
+    expect((await expectAttentionMatchesPages(asks(gym.owner), gym.id, ["failedPayments"])).failedPayments?.count).toBe(27);
+    expect((await expectAttentionMatchesPages(asks(desk), gym.id, ["failedPayments"])).failedPayments).toBeNull();
+    expect((await expectAttentionMatchesPages(asks(trainer), gym.id, ["failedPayments"])).failedPayments).toBeNull();
     expect(second.next).toBeNull();
     expect(new Set([...first.payments, ...second.payments].map((p) => p.billId)).size).toBe(27);
   });
