@@ -440,8 +440,9 @@ export type Verdict = "same" | "differs" | "compared only" | "not comparable";
 export interface PhoneComparison {
   readonly label: string;
   readonly model: string;
+  /** The chip and cores the run ASKED for (null, the library's own), whatever the file says: a refused file is
+   *  counted in the row of the run it was handed in as, never in a row of its own (round one, H1). */
   readonly delegate: PhoneTestDelegate;
-  /** The main chip's cores as the file names them; null, the library's own number. */
   readonly threads: number | null;
   readonly pictures: "video" | "laptop";
   readonly verdict: Verdict;
@@ -456,6 +457,8 @@ export interface PhoneComparison {
     readonly create: number;
     /** How many cores the reading kept busy, or null when the file does not say. */
     readonly busy: number | null;
+    /** Each reading's time after the first ten, for the table's row. */
+    readonly readings: readonly number[];
   };
   readonly heat: { readonly before: PhoneHeat; readonly after: PhoneHeat };
 }
@@ -466,9 +469,15 @@ export interface Sums {
   readonly plan: string;
   readonly video: string;
   readonly model: string;
-  /** The main chip's cores this run asked for; null, the library's own number. */
+  /** The chip and the main chip's cores this run asked for; null, the library's own number. */
+  readonly delegate: PhoneTestDelegate;
   readonly threads: number | null;
 }
+
+/** A run asked for 2 or more cores took them only if it kept more than this many busy. Measured 2026-11-18 on Kd's
+ *  phone (51b-i, 40 runs): 1.03 to 1.05 on the library's own and on 1 core, 1.54 to 1.66 on 2, 2.25 to 2.68 on 4. The
+ *  file says back the plan's number of cores, so only this shows the phone took them (round one, H2). */
+export const CORES_TAKEN = 1.3;
 
 const coresWords = (n: number | null): string => (n === null ? "the library's own number of cores" : `${String(n)} ${n === 1 ? "core" : "cores"}`);
 
@@ -487,7 +496,13 @@ function sourceRefusals(laptop: BodyPoints, run: PhoneRun, sums: Sums): string[]
   }
   if (header.video.sha256 !== sums.video) refused.push("the file was made from another video, or other pictures of it, than this run's");
   if (header.model.sha256 !== sums.model) refused.push("the file was made with another model file than this run's");
+  if (header.delegate !== sums.delegate) refused.push(`the file was read on the ${header.delegate === "gpu" ? "graphics" : "main"} chip, this run asked for the ${sums.delegate === "gpu" ? "graphics" : "main"} chip`);
   if (header.threads !== sums.threads) refused.push(`the file was read on ${coresWords(header.threads)}, this run asked for ${coresWords(sums.threads)}`);
+  if (sums.threads !== null && sums.threads >= 2) {
+    const busy = coresBusy(run, WARM_UP);
+    if (busy === null) refused.push(`this run asked for ${coresWords(sums.threads)} and the file does not say how many it kept busy`);
+    else if (busy <= CORES_TAKEN) refused.push(`this run asked for ${coresWords(sums.threads)} and the phone kept ${busy.toFixed(2)} busy: the setting was not taken`);
+  }
   const lp = laptop.header.picture;
   const pp = header.picture;
   if (lp.width !== pp.width || lp.height !== pp.height) {
@@ -533,8 +548,8 @@ export function comparePhone(laptop: BodyPoints, run: PhoneRun, sums: Sums): Pho
   return {
     label: header.label,
     model: header.model.file,
-    delegate: header.delegate,
-    threads: header.threads,
+    delegate: sums.delegate,
+    threads: sums.threads,
     pictures: header.pictures,
     verdict,
     reasons,
@@ -546,6 +561,7 @@ export function comparePhone(laptop: BodyPoints, run: PhoneRun, sums: Sums): Pho
       decode: median(run.frames.map((f) => f.decodeMs)),
       create: header.createMs,
       busy: coresBusy(run, WARM_UP),
+      readings: timed.map((f) => f.detectMs),
     },
     heat: { before: header.heat, after: run.end.heat },
   };
@@ -572,13 +588,16 @@ export interface RunSummary {
 /** One kind of run in the table: a model on a chip, and on the main chip its cores. */
 export const runKey = (r: { model: string; delegate: PhoneTestDelegate; threads: number | null }): string => `${r.model}|${r.delegate}|${r.threads === null ? "own" : String(r.threads)}`;
 
-export function summaries(runs: readonly PhoneComparison[], failed: readonly { model: string; delegate: PhoneTestDelegate; threads: number | null }[], detectTimes: ReadonlyMap<string, readonly number[]>): RunSummary[] {
+/** One row a kind of run asked for. Its speed, cores busy and warmth come from its comparable runs only: a refused
+ *  file's numbers were not measured on what the row names (round one, H1). */
+export function summaries(runs: readonly PhoneComparison[], failed: readonly { model: string; delegate: PhoneTestDelegate; threads: number | null }[]): RunSummary[] {
   const kinds = new Map([...runs, ...failed].map((r) => [runKey(r), { model: r.model, delegate: r.delegate, threads: r.threads }] as const));
   return [...kinds].map(([key, kind]) => {
     const mine = runs.filter((r) => runKey(r) === key);
+    const usable = mine.filter((r) => r.verdict !== "not comparable");
     const lost = failed.filter((r) => runKey(r) === key).length;
     const count = (v: Verdict): number => mine.filter((r) => r.verdict === v).length;
-    const busy = mine.flatMap((r) => (r.speed.busy === null ? [] : [r.speed.busy]));
+    const busy = usable.flatMap((r) => (r.speed.busy === null ? [] : [r.speed.busy]));
     return {
       ...kind,
       videos: mine.length + lost,
@@ -587,9 +606,9 @@ export function summaries(runs: readonly PhoneComparison[], failed: readonly { m
       comparedOnly: count("compared only"),
       notComparable: count("not comparable"),
       failed: lost,
-      detect: spreadOf(detectTimes.get(key) ?? []),
-      create: median(mine.map((r) => r.speed.create)),
-      warmest: Math.max(-1, ...mine.map((r) => r.heat.after.thermal)),
+      detect: spreadOf(usable.flatMap((r) => r.speed.readings)),
+      create: median(usable.map((r) => r.speed.create)),
+      warmest: Math.max(-1, ...usable.map((r) => r.heat.after.thermal)),
       busy: busy.length === 0 ? null : median(busy),
     };
   });

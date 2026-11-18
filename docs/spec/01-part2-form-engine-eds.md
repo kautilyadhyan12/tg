@@ -1712,30 +1712,42 @@ Android 15), 66 runs:
 cores setting; its own settings have one (XNNPACK's number of threads), reached from the app's own
 debug code (`PhoneTestCores.java`, in the library's package, which only replaces the chip's part of
 the settings and refuses anything but the main chip). A run names its cores in its file; a file on
-other cores than the run asked for is never judged as it. Each picture's reading also writes the
-app's time on the cores, so a run says how many it kept busy. Measured on Kd's phone (a Unisoc
-UMS9620, eight cores: four at 2.2 GHz, four at 2.0), 40 runs, asked for one person, on the laptop's
-own pictures of the four one-person videos:
-- **The library's own number is one core** (1.04 busy), and its numbers are XNNPACK's on one core.
+other cores than the run asked for is never judged as it, nor one asked for 2 or more cores that kept
+1.3 or fewer busy (the file says back the plan's number; only the cores busy show the phone took them).
+Each picture's reading also writes the app's time on the cores, so a run says how many it kept busy.
+Measured on Kd's phone (a Unisoc UMS9620, eight cores: four at 2.2 GHz, four at 2.0;
+`measured/phone-test/phone-facts-51b-i.txt`), 40 runs, asked for one person, on the laptop's own
+pictures of the four one-person videos:
+- **The library's own number is one core** (1.03 to 1.05 busy), and its numbers are XNNPACK's on one core.
 - **More cores change nothing in the numbers**: on 1, 2 and 4 cores every point of every picture is
   the library's own, digit for digit, on all four videos with both models (33,495 points a model).
-- **They make it faster** (the middle / 95 in 100 of a reading): full 103 / 123 ms on its own, 68 / 83
-  on 2 cores (1.64 busy), **52 / 68 on 4** (2.54 busy); lite 80 / 98, 54 / 70, 44 / 59; the graphics
-  chip full 69 / 77, lite 51 / 57. On 4 cores the main chip is faster than the graphics chip. Seen from
-  outside (`top -H`) during a 4-core run: three helper threads of the library at about 27% each beside
-  the test's own. Android's thermal status reached 2 ("moderate"), on the charging cable.
+- **They make it faster** (the middle / 95 in 100 of a reading, over the four videos): full 103 / 123 ms
+  on its own, 68 / 83 on 2 cores (1.54 to 1.66 busy), **52 / 68 on 4** (2.25 to 2.68 busy); lite 80 / 98,
+  54 / 70, 44 / 59; the graphics chip full 69 / 77, lite 51 / 57. Full on 4 cores is faster than full on
+  the graphics chip in the middle on the three 1080 by 1920 videos (49 to 56 ms against 68 to 72), not on
+  the 720 by 1280 chair squat (47 against 46); lite on the graphics chip is the faster in 95 of 100 (57
+  against 59) and on the chair squat (33 against 40). 51a read the graphics chip faster (full 54, lite 42
+  ms, the phone decoding the videos itself, thermal status 1); here it read the laptop's pictures, at
+  thermal 1 on the squat and 2 after, and the squat's full run was 72 ms at 1: why is not known. Which
+  is faster live is 51b-ii's. Seen from outside (`top -H`) during a 4-core run: three helper threads of
+  the library at about 27% each beside the test's own. Android's thermal status reached 2 ("moderate"),
+  on the charging cable.
 - **Asked for one person, no chip gives the laptop's numbers, the main chip included**: the library
   looks for the body where its last points were, so the last digits two processors round apart are
   carried from picture to picture and grow (the squat's hip 0.01 mm apart in the first picture, up to
-  7 mm later). The main chip lies 1.3 to 1.4 cm from the laptop in 95 of 100 big joints on the three
-  standing videos and 4.0 cm on the floor video; the flat knees, hips and trunk lean by 0.3° or less and
-  spread 0.4° to 1.3° standing, up to 3.9° on the floor. That the main chip is the laptop's model holds
-  asked for six (51a), where it looks afresh in every picture. So the laptop's numbers are judged on a
-  phone by the count and the reasons (52a), never by its points.
-- **The graphics chip against the main chip, the same pictures**: 1.4 to 1.8 cm in 95 of 100 standing,
-  3.9 cm on the floor; the flat knees, hips and trunk lean by 0.4° or less and spread 0.4° to 1.7°
-  standing, up to 2.9° on the floor: no further from it than the laptop is. Its largest lone gaps are
-  bigger (up to 16 cm standing, 53 cm on the floor, in single pictures).
+  7 mm later). That the main chip is the laptop's model holds asked for six (51a), where it looks afresh
+  in every picture. So the laptop's numbers are judged on a phone by the count and the reasons (52a),
+  never by its points. How far apart, big joints in 3D in 95 of 100 (standing videos / floor video), and
+  the flat knees, hips and trunk lean, the largest lean and spread:
+
+  | | full model | lite model |
+  |---|---|---|
+  | the phone's main chip against the laptop | 1.3 to 1.4 cm / 4.0 cm; lean 0.3° or less; spread 0.4° to 1.3° standing, 3.9° on the floor | 1.8 to 2.2 cm / 4.4 cm; lean up to 1.3° (the squat's right hip and knee); spread up to 10.3° standing (the squat's right knee; 5.6° otherwise), 4.0° on the floor |
+  | the graphics chip against the main chip | 1.4 to 1.8 cm / 3.9 cm; lean 0.4° or less; spread 0.4° to 1.7° standing, 2.9° on the floor; the largest in any picture 5.6 cm standing, 50.4 cm on the floor | 1.9 to 2.1 cm / 4.6 cm; lean 0.4° or less; spread up to 4.6° standing, 3.9° on the floor; the largest in any picture 8.2 cm standing, 14.1 cm on the floor |
+
+  The graphics chip is about as far from the main chip as the main chip is from the laptop (full: 1.4 to
+  1.8 cm against 1.3 to 1.4); lite is up to twice as far as full, so 52a's "largest gap on a chip the app
+  allows" is lite's numbers wherever lite is allowed.
 - 51b-i picks nothing; the live runs are 51b-ii's: full on the main chip on 4 cores, full on the
   graphics chip, lite on the main chip on 4 cores.
 

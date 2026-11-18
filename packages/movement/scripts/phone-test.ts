@@ -22,7 +22,7 @@ import { parseArgs } from "node:util";
 import { PHONE_TEST_DELEGATES, PHONE_TEST_MAX_THREADS, phoneProgressSchema, videoFramesSchema, type MovementFrame, type PhoneProgress, type PhoneTestDelegate, type VideoFrames } from "@app/shared";
 import { decodeBodyPoints, type BodyPoints } from "./bodyPoints.js";
 import { KD_VIDEOS, assertFolderStaysOutOfGit } from "./outFolder.js";
-import { WARM_UP, compareFrames, comparePhone, gapWords, keyGaps, runKey, shakeOf, summaries, type FrameComparison, type PhoneComparison } from "./phoneCheck.js";
+import { compareFrames, comparePhone, gapWords, keyGaps, shakeOf, summaries, type FrameComparison, type PhoneComparison } from "./phoneCheck.js";
 import {
   MODELS,
   SETTINGS,
@@ -438,7 +438,6 @@ const sizeOf = (name: string): string => MODELS.find((m) => m.name === name)?.si
 const planSum = existsSync(PLAN) ? sha256Of([PLAN]) : "none";
 const results: PhoneComparison[] = [];
 const failed: { label: string; model: string; delegate: PhoneTestDelegate; threads: number | null; reason: string }[] = [];
-const detectTimes = new Map<string, number[]>();
 const phoneRuns = new Map<string, PhoneRun>();
 let phoneName = "";
 for (const label of labels) {
@@ -458,11 +457,11 @@ for (const label of labels) {
         continue;
       }
       const run = readPhoneRun(readFileSync(runPath, "utf8"));
-      phoneRuns.set(name, run);
       const ref = laptop.get(`${label}|${m.name}`) ?? fail(`No laptop run of ${label} with ${m.name}.`);
-      results.push(comparePhone(ref, run, { plan: planSum, video: videoSum(label), model: m.sha256, threads: cores }));
-      const key = runKey({ model: m.name, delegate, threads: cores });
-      detectTimes.set(key, [...(detectTimes.get(key) ?? []), ...run.frames.slice(WARM_UP).map((f) => f.detectMs)]);
+      const judged = comparePhone(ref, run, { plan: planSum, video: videoSum(label), model: m.sha256, delegate, threads: cores });
+      results.push(judged);
+      // A refused file is set against nothing: it was not read on what its name says (round one, H1).
+      if (judged.verdict !== "not comparable") phoneRuns.set(name, run);
       phoneName = `${run.header.phone.maker} ${run.header.phone.model}, Android ${run.header.phone.android}, ${run.header.library}`;
     }
   }
@@ -479,12 +478,12 @@ say(
 // Measured 2026-11-18 (51b-i): asked for one person, the library looks for the body where its last points were, so
 // two processors' last-digit rounding is carried from picture to picture and grows (the squat's hip 0.01 mm apart in
 // the first picture, up to 7 mm later); asked for six it looks afresh in every picture and stays the laptop's (51a).
-if (pictures === "laptop" && people === 1) {
-  say("Asked for one person, the model looks for the body where its last points were, so the last digits two processors round apart");
-  say("are carried from picture to picture and grow: no chip can be the laptop's numbers here. Ask for six to test that; here, read the gaps.");
+if (pictures === "laptop" && people === 1 && results.length > 0 && results.every((r) => r.verdict !== "same")) {
+  say("No run here is the laptop's numbers. Asked for one person, the model looks for the body where its last points were, so the last");
+  say("digits two processors round apart can be carried from picture to picture and grow. Ask for six to test the chip itself.");
 }
 say(`   ${pad("model", 7)}${pad("chip", 10)}${pad("cores", 7)}${pad("busy", 7)}${pad("same", 7)}${pad("differs", 9)}${pad("compared", 10)}${pad("refused", 9)}${pad("reading p50", 13)}${pad("p95", 9)}${pad("start", 9)}warmest`);
-const rows = summaries(results, failed, detectTimes);
+const rows = summaries(results, failed);
 for (const r of rows) {
   say(
     `   ${pad(sizeOf(r.model), 7)}${pad(chipWord(r.delegate), 10)}${pad(coresWord(r.delegate, r.threads), 7)}${pad(busyWord(r.busy), 7)}${pad(String(r.same), 7)}${pad(String(r.differs), 9)}${pad(String(r.comparedOnly), 10)}${pad(String(r.notComparable + r.failed), 9)}${pad(ms(r.detect.median), 13)}${pad(ms(r.detect.p95), 9)}${pad(ms(r.create), 9)}${String(r.warmest)}`,
@@ -525,7 +524,7 @@ function sayAgainst(title: string, pairs: readonly { what: string; a: readonly M
   say(title);
   for (const { what, a, b } of pairs) {
     const c = compareFrames(a, b);
-    say(`   ${what}: big joints in 3D ${cm(c.points.world.p95)} apart in 95 of 100`);
+    say(`   ${what}: big joints in 3D ${cm(c.points.world.p95)} apart in 95 of 100, the largest in any frame ${cm(c.closeness.worldMost)}`);
     for (const line of keyLines(c)) say(`      ${line}`);
   }
 }
