@@ -716,6 +716,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
     - 31f. [x] **Suggested or My plan in Recommended For You** — merged 2026-11-03 (PR #458).
     - 31g. [x] **The gym’s meal plan on the phone** — merged 2026-11-08 (PR #500).
     - 31h. [x] **Zero, never a dash, where nothing is recorded yet** · merged 2026-11-08 · PR #503
+    - 31i. [ ] **The Dashboard’s top picture: Kd’s studio painting in place of the cave** (Kd, 2026-11-19; `handoff/2026-11-19-31i.md`).
 32. **Food** (split 2026-10-13: the server part needs no phone).
     - 32a. [x] **A meal sent twice from the phone is saved once** — merged 2026-10-13 (PR #238).
     - 32b. **The Food screen** (split 2026-10-28: logging first).
