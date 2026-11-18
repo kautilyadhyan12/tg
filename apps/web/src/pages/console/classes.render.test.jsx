@@ -1330,3 +1330,30 @@ describe('an online time slot', () => {
     expect(screen.queryByRole('button', { name: /^Change link/ })).toBeNull();
   });
 });
+
+// V1-c: New, in the bar across the top, opens Add class here.
+describe('opened from New (`?open=add`)', () => {
+  const drawAt = (path) =>
+    render(
+      <MemoryRouter initialEntries={[path]}>
+        <Routes>
+          <Route path="/console/:orgSlug/classes" element={<Classes />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+  it('opens the New class form, once the timetable is read', async () => {
+    drawAt('/console/iron-house/classes?open=add');
+    expect(await screen.findByText('New class')).toBeTruthy();
+    expect(screen.getByPlaceholderText('Sunrise Yoga')).toBeTruthy();
+  });
+
+  it('a lapsed gym is not given the form, whatever the address says', async () => {
+    api.getMine.mockResolvedValue({
+      data: { orgs: [{ ...ORG, consoleReadOnly: true, subscription: null }], formerOrgs: [] },
+    });
+    drawAt('/console/iron-house/classes?open=add');
+    await screen.findByText('Sunrise Yoga');
+    expect(screen.queryByText('New class')).toBeNull();
+  });
+});

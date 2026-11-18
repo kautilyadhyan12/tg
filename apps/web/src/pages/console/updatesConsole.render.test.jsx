@@ -752,3 +752,19 @@ describe('a person’s posts, opened from a name', () => {
     expect(within(box.getAllByTestId('post')[0]).queryAllByRole('button').map((b) => b.textContent.trim())).toEqual(['Comments']);
   });
 });
+
+// V1-c: New, in the bar across the top, opens Updates on Write a post, ready to type.
+describe('opened from New (`#write`)', () => {
+  it('puts the keys in Write a post', async () => {
+    orgApi.getMine.mockResolvedValue({ data: { orgs: [ORG], formerOrgs: [] } });
+    render(
+      <MemoryRouter initialEntries={['/console/iron-house/updates#write']}>
+        <Routes>
+          <Route path="/console/:orgSlug/updates" element={<Updates />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    await screen.findByTestId('composer');
+    await waitFor(() => expect(document.activeElement).toBe(within(screen.getByTestId('composer')).getByRole('textbox')));
+  });
+});
