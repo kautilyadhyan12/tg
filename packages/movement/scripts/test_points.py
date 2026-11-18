@@ -17,11 +17,11 @@ import points as pt  # noqa: E402
 MODEL = r"D:\vidoe referene\tools\pose_landmarker_heavy.task"
 
 
-def make_video(path, fps=30, seconds=2, size=(320, 180), extra=()):
+def make_video(path, fps=30, seconds=2, size=(320, 180), extra=(), grey=lambda i: i % 255):
     raw = path + ".raw.mp4"
     w = cv2.VideoWriter(raw, cv2.VideoWriter_fourcc(*"mp4v"), fps, size)
     for i in range(int(fps * seconds)):
-        w.write(np.full((size[1], size[0], 3), i % 255, np.uint8))
+        w.write(np.full((size[1], size[0], 3), grey(i), np.uint8))
     w.release()
     subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", raw, *extra, path], check=True)
     os.remove(raw)
@@ -75,6 +75,67 @@ class Sampling(unittest.TestCase):
     def test_sampling_gives_the_same_frames_twice(self):
         make_video(self.path, fps=24)
         self.assertEqual(self.times(30), self.times(30))
+
+    def plain_reads(self):
+        """Every picture of the video, in the order a plain read gives them."""
+        cap = cv2.VideoCapture(self.path)
+        greys = []
+        while True:
+            ok, img = cap.read()
+            if not ok:
+                break
+            greys.append(float(img.mean()))
+        cap.release()
+        return greys
+
+    def test_each_kept_frame_is_numbered_as_the_video_plays_it(self):
+        # Each frame its own grey, two steps apart: a number one frame out names another picture.
+        make_video(self.path, fps=60, grey=lambda i: (2 * i) % 255)
+        greys = self.plain_reads()
+        self.assertTrue(all(a != b for a, b in zip(greys, greys[1:])))
+        cap = cv2.VideoCapture(self.path)
+        kept = [(n, float(img.mean())) for n, _, img in pt.numbered_frames(cap, 30)]
+        cap.release()
+        self.assertEqual(len(kept), 60)
+        self.assertEqual([greys[n] for n, _ in kept], [grey for _, grey in kept])
+
+    def test_frames_lists_what_measure_keeps_and_counts_every_frame(self):
+        make_video(self.path, fps=60)
+        out = os.path.join(self.dir.name, "frames.json")
+        subprocess.run([sys.executable, pt.__file__, "frames", "--video", self.path, "--fps", "30", "--out", out], check=True)
+        with open(out, encoding="utf-8") as f:
+            got = json.load(f)
+        self.assertEqual([t for _, t in got["frames"]], self.times(30))
+        numbers = [n for n, _ in got["frames"]]
+        self.assertTrue(all(b - a == 2 for a, b in zip(numbers, numbers[1:])), numbers)
+        self.assertEqual(got["read"], len(self.plain_reads()))
+        self.assertEqual(got["picture"], {"width": 320, "height": 180})
+        self.assertEqual((got["videoFps"], got["fps"]), (60, 30))
+
+    def test_frames_writes_each_kept_picture_exactly_as_decoded(self):
+        make_video(self.path, fps=60, grey=lambda i: (2 * i) % 255)
+        out = os.path.join(self.dir.name, "frames.json")
+        pictures = os.path.join(self.dir.name, "pictures")
+        os.mkdir(pictures)
+        subprocess.run([sys.executable, pt.__file__, "frames", "--video", self.path, "--fps", "30", "--out", out,
+                        "--pictures", pictures], check=True)
+        cap = cv2.VideoCapture(self.path)
+        decoded = [img for _, _, img in pt.numbered_frames(cap, 30)]
+        cap.release()
+        names = sorted(os.listdir(pictures))
+        self.assertEqual(names, [f"{n:05d}.png" for n in range(60)])
+        for name, img in zip(names, decoded):
+            self.assertTrue(np.array_equal(cv2.imread(os.path.join(pictures, name)), img), name)
+
+    def test_frames_refuses_a_folder_already_holding_files(self):
+        make_video(self.path)
+        pictures = os.path.join(self.dir.name, "pictures")
+        os.mkdir(pictures)
+        open(os.path.join(pictures, "other.txt"), "w").close()
+        r = subprocess.run([sys.executable, pt.__file__, "frames", "--video", self.path, "--fps", "30",
+                            "--out", os.path.join(self.dir.name, "f.json"), "--pictures", pictures], capture_output=True, text=True)
+        self.assertNotEqual(r.returncode, 0)
+        self.assertEqual(os.listdir(pictures), ["other.txt"])
 
     def test_a_video_stored_sideways_has_the_shape_a_person_sees(self):
         make_video(self.path, extra=["-c", "copy", "-metadata:s:v", "rotate=90"])

@@ -15,7 +15,8 @@
     "test": "vitest run",
     "measure-points": "tsx scripts/measure-points.ts",
     "body-check": "tsx scripts/body-check.ts",
-    "measure-check": "tsx scripts/measure-check.ts"
+    "measure-check": "tsx scripts/measure-check.ts",
+    "phone-test": "tsx scripts/phone-test.ts"
   },
   "devDependencies": {
     "@app/config": "workspace:*",

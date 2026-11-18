@@ -86,6 +86,131 @@ export const bodyPointsHeaderSchema = z
   })
   .strict();
 
+// ── The phone test (ROADMAP Stage 5 item 51a) ─────────────────────────────────────
+// A folder's copy of the app plays a reference video through the phone's own pose model
+// (`apps/mobile/modules/phone-test`) and writes one file a run: a header line, one line a
+// frame, an end line. The laptop reads each line through these before it believes a number.
+// Every text the phone writes is plain characters only, so a file can never carry a path.
+
+export const PHONE_TEST_DELEGATES = ["cpu", "gpu"] as const;
+const sha256 = z.string().regex(/^[0-9a-f]{64}$/);
+const milliseconds = z.number().nonnegative().max(3_600_000);
+const phoneWords = z.string().regex(/^[A-Za-z0-9 _.,:()+/-]{1,80}$/);
+const label = z.string().regex(/^[A-Za-z0-9_-]{1,80}$/);
+const count = z.number().int().nonnegative().max(1_000_000);
+
+/** How warm the phone is: Android's own thermal status (0 none to 6 shut down; -1 when the
+ *  phone cannot say) and the battery's temperature in °C, or null when it gives none. */
+export const phoneHeatSchema = z
+  .object({ thermal: z.number().int().min(-1).max(6), batteryC: z.number().min(-40).max(100).nullable() })
+  .strict();
+
+export const phoneRunHeaderSchema = z
+  .object({
+    kind: z.literal("phone-run"),
+    version: z.literal(1),
+    label,
+    /** The plan the run was made for, by its check sum, so a folder's older file is never read as a new one. Null in
+     *  51a's first files, made before it was written (2026-11-17). */
+    plan: sha256.nullable().default(null),
+    /** The video file as the phone holds it, and how many frames the phone itself counts in it. */
+    video: z.object({ sha256, frames: count }).strict(),
+    /** The pictures' shape, turned as a person sees them. */
+    picture: z.object({ width: pixels, height: pixels }).strict(),
+    /** Where the pictures came from: the phone's own video decoder, or the laptop's decoded pictures, sent as
+     *  they are (to tell the decoder's part from the model's). A file that does not say is the decoder's. */
+    pictures: z.enum(["video", "laptop"]).default("video"),
+    model: z
+      .object({
+        file: plainName,
+        sha256,
+        people: z.number().int().min(1).max(MAX_PEOPLE),
+        minDetection: share,
+        minPresence: share,
+        minTracking: share,
+      })
+      .strict(),
+    delegate: z.enum(PHONE_TEST_DELEGATES),
+    phone: z.object({ maker: phoneWords, model: phoneWords, android: phoneWords, sdk: z.number().int().min(1).max(1000), abi: plainName }).strict(),
+    /** The pose library and its version, as the app was built with it. */
+    library: phoneWords,
+    /** How long the model took to start, before its first picture. */
+    createMs: milliseconds,
+    heat: phoneHeatSchema,
+  })
+  .strict();
+
+export const phoneRunFrameSchema = z
+  .object({
+    /** The frame's number in the video, counted from 0 in the order it plays. */
+    i: count,
+    /** The laptop's time for that frame, as the plan gave it; the model was given its whole milliseconds. */
+    t: z.number().nonnegative(),
+    /** The phone's own time for that frame, from the video's first frame. */
+    at: z.number().nonnegative(),
+    /** Turning the video into this picture, and the pose model's reading of it. */
+    decodeMs: milliseconds,
+    detectMs: milliseconds,
+    people: z.array(seenPersonSchema).max(MAX_PEOPLE),
+  })
+  .strict();
+
+export const phoneRunEndSchema = z
+  .object({
+    kind: z.literal("end"),
+    frames: count,
+    /** People the model gave with a broken number, left out of their frames as the laptop does. */
+    leftOut: count,
+    wallMs: milliseconds,
+    heat: phoneHeatSchema,
+  })
+  .strict();
+
+/** A run that could not be made, and why, in the phone's words. */
+export const phoneRunFailedSchema = z
+  .object({
+    kind: z.literal("failed"),
+    label,
+    plan: sha256.nullable().default(null),
+    model: plainName,
+    delegate: z.enum(PHONE_TEST_DELEGATES),
+    reason: z.string().max(400),
+  })
+  .strict();
+
+/** The phone's own word on where the test is, read by the laptop while it waits. */
+export const phoneProgressSchema = z
+  .object({
+    state: z.enum(["running", "done", "failed"]),
+    run: count,
+    runs: count,
+    frame: count,
+    frames: count,
+    reason: z.string().max(400).nullable(),
+  })
+  .strict();
+
+/** What the laptop's points.py says of a video before the phone test: each frame its measuring keeps, by its
+ *  number in the video and its time, the picture's shape, and how many frames the video holds in all. */
+export const videoFramesSchema = z
+  .object({
+    picture: z.object({ width: pixels, height: pixels }).strict(),
+    videoFps: z.number().positive().max(1000),
+    fps: z.number().min(MIN_FPS).max(MAX_FPS),
+    read: count,
+    frames: z.array(z.tuple([count, z.number().nonnegative()])).min(1),
+  })
+  .strict();
+
+export type VideoFrames = z.infer<typeof videoFramesSchema>;
+export type PhoneHeat = z.infer<typeof phoneHeatSchema>;
+export type PhoneRunHeader = z.infer<typeof phoneRunHeaderSchema>;
+export type PhoneRunFrame = z.infer<typeof phoneRunFrameSchema>;
+export type PhoneRunEnd = z.infer<typeof phoneRunEndSchema>;
+export type PhoneRunFailed = z.infer<typeof phoneRunFailedSchema>;
+export type PhoneProgress = z.infer<typeof phoneProgressSchema>;
+export type PhoneTestDelegate = (typeof PHONE_TEST_DELEGATES)[number];
+
 export type SeenPoint = z.infer<typeof seenPointSchema>;
 export type WorldPoint = z.infer<typeof worldPointSchema>;
 export type SeenPerson = z.infer<typeof seenPersonSchema>;
