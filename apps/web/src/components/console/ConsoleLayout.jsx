@@ -230,7 +230,7 @@ function BellButton({ lines, onOpen }) {
                   <span className="c-attn-end">
                     {line.money !== null ? <span className="c-s14 c-w6 c-t1">{line.money}</span> : null}
                     {line.to !== null ? (
-                      <Link to={line.to} className="c-btn c-btn-sm" onClick={close} aria-label={`${line.button}: ${line.title}`}>
+                      <Link to={line.to} className="c-btn c-btn-s c-btn-sm" onClick={close} aria-label={`${line.button}: ${line.title}`}>
                         {line.button}
                       </Link>
                     ) : null}

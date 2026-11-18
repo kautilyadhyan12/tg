@@ -1915,3 +1915,8 @@
   gap: 8px;
   color: var(--good);
 }
+/* Its buttons: 36 px with a mouse, 44 to touch. */
+.c-attn-end .c-btn { height: 36px; }
+@media (pointer: coarse), (max-width: 767px) {
+  .c-attn-end .c-btn { height: 44px; }
+}
