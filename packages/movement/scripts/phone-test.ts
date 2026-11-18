@@ -476,6 +476,13 @@ say(
     ? "Is each run the laptop's numbers? The same: within a tenth of the model's own shake in 99 of 100 big joints, and readings given by one only in at most 1 of 1,000."
     : "The phone decoded the videos itself, so no run is judged here: its numbers hold its video decoder as well as its chip. Only --pictures laptop tests a chip.",
 );
+// Measured 2026-11-18 (51b-i): asked for one person, the library looks for the body where its last points were, so
+// two processors' last-digit rounding is carried from picture to picture and grows (the squat's hip 0.01 mm apart in
+// the first picture, up to 7 mm later); asked for six it looks afresh in every picture and stays the laptop's (51a).
+if (pictures === "laptop" && people === 1) {
+  say("Asked for one person, the model looks for the body where its last points were, so the last digits two processors round apart");
+  say("are carried from picture to picture and grow: no chip can be the laptop's numbers here. Ask for six to test that; here, read the gaps.");
+}
 say(`   ${pad("model", 7)}${pad("chip", 10)}${pad("cores", 7)}${pad("busy", 7)}${pad("same", 7)}${pad("differs", 9)}${pad("compared", 10)}${pad("refused", 9)}${pad("reading p50", 13)}${pad("p95", 9)}${pad("start", 9)}warmest`);
 const rows = summaries(results, failed, detectTimes);
 for (const r of rows) {
