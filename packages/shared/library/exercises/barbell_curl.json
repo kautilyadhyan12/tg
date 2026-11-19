@@ -8,8 +8,11 @@
       "biceps"
     ],
     "also": [
-      "forearms"
-    ]
+      "brachialis",
+      "brachioradialis",
+      "forearm_flexors"
+    ],
+    "steady": []
   },
   "equipment": [
     "barbell"
@@ -62,6 +65,10 @@
     {
       "name": "American Council on Exercise (ACE), Exercise Library: Bicep Curl",
       "url": "https://www.acefitness.org/resources/everyone/exercise-library/70/bicep-curl/"
+    },
+    {
+      "name": "National Academy of Sports Medicine (NASM), Exercise Library: Barbell Bicep Curl (muscles worked)",
+      "url": "https://www.nasm.org/resource-center/exercise-library/barbell-bicep-curl"
     }
   ],
   "clip": null,

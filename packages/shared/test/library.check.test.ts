@@ -22,7 +22,7 @@ function squat(): Record<string, unknown> {
     status: "live",
     kind: "strength",
     level: "beginner",
-    muscles: { main: ["quadriceps", "glutes"], also: ["hamstrings"] },
+    muscles: { main: ["rectus_femoris", "vastus_lateralis", "vastus_medialis"], also: ["glute_max"], steady: ["lower_back"] },
     equipment: [],
     set: { measuredIn: "reps", weight: "never", eachSide: false, start: { sets: 3, reps: 12 } },
     energy: { compendium: "02056" },
@@ -162,11 +162,20 @@ describe("a word outside a fixed list is refused, with the words it may be", () 
     ["equipment.0", "cable"],
     ["equipment.0", "dumbell"],
     ["muscles.main.0", "Abs"],
-    ["muscles.main.0", "abs"],
     ["muscles.main.0", "Spinal Erectors"],
     ["muscles.main.0", "Obliques"],
     ["muscles.main.0", "Rotator Cuff"],
+    // The old list's broad words, now named by the muscle itself.
+    ["muscles.main.0", "quadriceps"],
+    ["muscles.main.0", "glutes"],
+    ["muscles.main.0", "abdominals"],
+    ["muscles.main.0", "shoulders"],
+    ["muscles.main.0", "middle_back"],
     ["muscles.also.0", "Quadriceps"],
+    ["muscles.also.0", "hamstrings"],
+    ["muscles.steady.0", "core"],
+    ["muscles.steady.0", "Shoulder Stabilizers"],
+    ["muscles.steady.0", "gluteus_medius"],
     ["status", "hidden"],
     ["set.weight", "optional"],
   ])("%s: %s", (at, word) => {
@@ -252,9 +261,16 @@ describe("the rest of one file's rules", () => {
     expect(faultsOf([file(changed("id", id), "x.json")]).map((f) => f.at)).toContain("id");
   });
 
-  it("a muscle named twice, or as main and also-worked, is refused", () => {
-    expect(faultsOf([file(changed("muscles", { main: ["glutes", "glutes"], also: [] }))]).map((f) => f.at)).toEqual(["muscles.main.1"]);
-    expect(faultsOf([file(changed("muscles", { main: ["glutes"], also: ["glutes"] }))]).map((f) => f.at)).toEqual(["muscles.also.0"]);
+  it("a muscle named twice, or in two rows, is refused", () => {
+    const at = (muscles: unknown) => faultsOf([file(changed("muscles", muscles))]).map((f) => f.at);
+    expect(at({ main: ["glute_max", "glute_max"], also: [], steady: [] })).toEqual(["muscles.main.1"]);
+    expect(at({ main: ["glute_max"], also: ["glute_max"], steady: [] })).toEqual(["muscles.also.0"]);
+    expect(at({ main: ["glute_max"], also: [], steady: ["glute_max"] })).toEqual(["muscles.steady.0"]);
+    expect(at({ main: ["abs"], also: ["obliques"], steady: ["obliques"] })).toEqual(["muscles.steady.0"]);
+  });
+
+  it("a file without its row of steadying muscles is refused: an empty row is written, never left out", () => {
+    expect(faultsOf([file(changed("muscles", { main: ["abs"], also: [] }))]).map((f) => f.at)).toEqual(["muscles.steady"]);
   });
 
   it("equipment named twice is refused", () => {

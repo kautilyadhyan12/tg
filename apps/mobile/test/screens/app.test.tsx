@@ -50,7 +50,7 @@ describe("the five tabs", () => {
   });
 
   it.each([
-    ["Workout", ["Your workouts"]],
+    ["Workout", ["Exercise Library"]],
     ["Food", ["Fuel Your Training", "Today’s Macros"]],
     ["Gym", ["Where you train", "You haven’t joined a gym or studio yet."]],
     ["Me", ["ravi@example.com", "Settings"]],
@@ -80,10 +80,12 @@ describe("the five tabs", () => {
       await open(tab.name);
       // What is not built yet says so in two words: the tab's own row.
       // Gym, for somebody in no gym yet, has nothing to come: it says how an invitation reaches them.
-      // Food has nothing to come since its photo log was built (33b-i); Me since Achievements was (35c-iii).
-      const first = tab.name === "Gym" ? "Check for an invitation" : tab.name === "Food" ? "Scan food" : tab.name === "Me" ? "Achievements" : "Coming soon";
+      // Food has nothing to come since its photo log was built (33b-i); Me since Achievements was (35c-iii);
+      // Workout since its Exercise Library was (63a).
+      const first =
+        tab.name === "Gym" ? "Check for an invitation" : tab.name === "Food" ? "Scan food" : tab.name === "Me" ? "Achievements" : tab.name === "Workout" ? "Exercise Library" : "Coming soon";
       expect(await screen.findAllByText(first)).toBeTruthy();
-      expect(screen.queryAllByText("Coming soon")).toHaveLength(tab.name === "Me" || tab.name === "Gym" || tab.name === "Food" ? 0 : 1);
+      expect(screen.queryAllByText("Coming soon")).toHaveLength(tab.name === "Dashboard" ? 1 : 0);
       // The Dashboard's calendar shows this week's dates and its clock the phone's time; Food's plates of the
       // week (32c-i) this week's dates too, and its month; their numbers did not load here, so none shows.
       const dates =

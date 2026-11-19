@@ -92,6 +92,10 @@ DATABASE_URL="postgres://kwazo:${PW}@localhost:15432/kwazo" corepack pnpm run mi
 DATABASE_URL="postgres://kwazo:${PW}@localhost:15432/kwazo" corepack pnpm run seed
 ```
 
+The seed also publishes the Exercise Library (`packages/shared/library/`). After an update that changes an
+exercise's file or the Library's word lists, run it as soon as the new api is up: until then phones are served
+the copy published before (63a: a copy is served as it was made, so this is a delay, never a refusal).
+
 `DATABASE_URL` goes on the same line every time: drizzle-kit otherwise reads `apps/api/.env`, which
 is Kd's Neon data. Every statement crosses India to Sydney, so the first full migration took
 minutes. Then the USDA table, `RUNBOOK/load-usda-food-table.md`, against the same tunnel address.

@@ -16,6 +16,7 @@ export * from "./library/words.js";
 export * from "./library/exerciseFile.js";
 export * from "./library/check.js";
 export * from "./library/download.js";
+export * from "./library/phoneLibrary.js";
 export * from "./library/workoutSave.js";
 export * from "./library/workoutHistory.js";
 export * from "./library/plannedWorkout.js";

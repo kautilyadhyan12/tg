@@ -89,7 +89,15 @@ export const exerciseFileSchema = z
     status: z.enum(EXERCISE_STATUSES),
     kind: z.enum(EXERCISE_KINDS),
     level: z.enum(EXERCISE_LEVELS),
-    muscles: z.object({ main: z.array(muscleSchema).min(1).max(4), also: z.array(muscleSchema).max(8) }).strict(),
+    /** Three rows, each from the file's source (§13.2): main (primary), also worked (other movers),
+     *  keeps you steady (stabilisers). A muscle is named once in all three. */
+    muscles: z
+      .object({
+        main: z.array(muscleSchema).min(1).max(6),
+        also: z.array(muscleSchema).max(10),
+        steady: z.array(muscleSchema).max(10),
+      })
+      .strict(),
     /** Empty means no equipment. */
     equipment: z.array(z.enum(EXERCISE_EQUIPMENT)).max(4),
     set: setSchema,
