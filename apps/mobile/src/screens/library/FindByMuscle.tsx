@@ -1,7 +1,7 @@
 import type { PhoneLibraryEntry } from "@app/shared";
 import { useMemo, useRef, useState } from "react";
 import { Animated, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
-import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import { Gesture, GestureDetector, GestureHandlerRootView } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Button } from "../../look/Button";
 import { Segments } from "../../look/Choice";
@@ -14,6 +14,9 @@ import { pickedShapes, NO_FILTERS, roleOf, valuesOf } from "../../library/filter
 import { DOUBLE_TAP_ZOOM, fitFigure, settle, toDrawing, WHOLE, zoomAbout, type View as Zoom } from "../../library/stage";
 import { levelWord, muscleFamily, muscleTitle, targetLine } from "../../library/words";
 import { MuscleFigure } from "./MuscleFigure";
+
+/** How far a finger may move, in points, and still be a tap. */
+const TAP_STILL = 10;
 
 const SIDES = [
   { value: "front", label: "Front" },
@@ -64,7 +67,8 @@ export function FindByMuscle({
 
   return (
     <Modal visible={open} animationType="slide" statusBarTranslucent navigationBarTranslucent onRequestClose={onClose}>
-      <View style={[styles.page, { paddingTop: insets.top + 8 }]} accessibilityViewIsModal>
+      {/* A window of its own on Android: its gestures need their own root there. */}
+      <GestureHandlerRootView style={[styles.page, { paddingTop: insets.top + 8 }]} accessibilityViewIsModal>
         <View style={styles.bar}>
           <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={onClose} style={styles.close}>
             <Icon name="x" size={20} />
@@ -90,7 +94,8 @@ export function FindByMuscle({
             setSeen(true);
           }}
         />
-        <View style={[styles.panel, { paddingBottom: insets.bottom + 16, maxHeight: Math.round(screen * 0.42) }]}>
+        {/* Tall enough for a muscle, its count and a row from the start, so the body keeps its size when one is picked. */}
+        <View style={[styles.panel, { paddingBottom: insets.bottom + 16, minHeight: Math.round(screen * 0.3), maxHeight: Math.round(screen * 0.42) }]}>
           <View style={styles.grab} />
           {picked === null ? (
             <>
@@ -145,7 +150,7 @@ export function FindByMuscle({
             </ScrollView>
           )}
         </View>
-      </View>
+      </GestureHandlerRootView>
     </Modal>
   );
 }
@@ -223,6 +228,7 @@ function Body({
     const doubleTap = Gesture.Tap()
       .withTestId("muscle-double-tap")
       .numberOfTaps(2)
+      .maxDistance(TAP_STILL)
       .onEnd((e, done) => {
         if (!done) return;
         told.current.onZoom();
@@ -231,6 +237,8 @@ function Body({
       });
     const tap = Gesture.Tap()
       .withTestId("muscle-tap")
+      // A finger that moves is moving the body, never picking a muscle.
+      .maxDistance(TAP_STILL)
       .onEnd((e, done) => {
         if (!done) return;
         const at = toDrawing(now.current, e.x, e.y, box.current.width, box.current.height);
@@ -292,7 +300,7 @@ const styles = StyleSheet.create({
   fill: { width: "100%", height: "100%" },
   fit: { position: "absolute", top: 10, right: 12 },
   hint: { position: "absolute", bottom: 12, alignSelf: "center", paddingHorizontal: 14, paddingVertical: 8, borderRadius: sizes.round, borderWidth: 1, borderColor: colours.line, backgroundColor: colours.overPicture },
-  panel: { gap: 8, paddingTop: 12, paddingHorizontal: sizes.edge + 2, borderTopLeftRadius: 24, borderTopRightRadius: 24, borderTopWidth: 1, borderColor: colours.line, backgroundColor: colours.box, minHeight: 170 },
+  panel: { gap: 8, paddingTop: 12, paddingHorizontal: sizes.edge + 2, borderTopLeftRadius: 24, borderTopRightRadius: 24, borderTopWidth: 1, borderColor: colours.line, backgroundColor: colours.box },
   grab: { width: 40, height: 4, borderRadius: 4, alignSelf: "center", backgroundColor: colours.lineStrong, marginBottom: 4 },
   found: { gap: 8, paddingBottom: 4 },
   row: { flexDirection: "row", alignItems: "center", gap: 12, minHeight: sizes.press + 12, paddingVertical: 10, paddingHorizontal: 12, borderRadius: 16, borderWidth: 1, borderColor: colours.line, backgroundColor: colours.raised },
