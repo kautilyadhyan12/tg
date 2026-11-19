@@ -262,12 +262,17 @@ describe("Filters and Find by muscle (63b)", () => {
   it("a tap picks the exact muscle and the same tap lets it go; its exercises show at once, and Show in Library keeps it", async () => {
     await openLibrary(libraryServer({ gender: "male" }).ask);
     await fromCard();
-    expect(screen.getByText("Tap a muscle")).toBeTruthy();
+    // No panel until a muscle is picked: a line over the body says what to do (Kd at the click-through).
+    expect(screen.getByText("Pinch to zoom · tap a muscle")).toBeTruthy();
+    expect(screen.queryByTestId("muscle-panel")).toBeNull();
     await tapMuscle("male-front", "biceps");
+    expect(screen.getByTestId("muscle-panel")).toBeTruthy();
+    expect(screen.queryByText("Pinch to zoom · tap a muscle")).toBeNull();
     expect(await screen.findByRole("button", { name: "Barbell Curl, Primary · Intermediate · 3 × 10 reps" })).toBeTruthy();
     expect(screen.getByText("1 exercise")).toBeTruthy();
     await tapMuscle("male-front", "biceps");
-    expect(await screen.findByText("Tap a muscle")).toBeTruthy();
+    expect(await screen.findByText("Tap a muscle to see its exercises")).toBeTruthy();
+    expect(screen.queryByTestId("muscle-panel")).toBeNull();
     // Not the whole thigh: the vastus lateralis alone, under its group's name.
     await tapMuscle("male-front", "vastus_lateralis");
     expect(await screen.findByText("Vastus lateralis")).toBeTruthy();
@@ -304,7 +309,8 @@ describe("Filters and Find by muscle (63b)", () => {
     expect(within(screen.getByTestId("muscle-gesture-root")).getByTestId("muscle-stage")).toBeTruthy();
     await tapMuscle("male-front", "abs", "muscle-double-tap");
     expect(await screen.findByRole("button", { name: "Fit body" })).toBeTruthy();
-    expect(screen.getByText("Tap a muscle")).toBeTruthy();
+    expect(screen.getByText("Tap a muscle to see its exercises")).toBeTruthy();
+    expect(screen.queryByTestId("muscle-panel")).toBeNull();
     await fireEvent.press(screen.getByRole("button", { name: "Fit body" }));
     await waitFor(() => { expect(screen.queryByRole("button", { name: "Fit body" })).toBeNull(); });
   });

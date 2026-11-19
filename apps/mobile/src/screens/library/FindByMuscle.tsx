@@ -1,6 +1,6 @@
 import type { PhoneLibraryEntry } from "@app/shared";
 import { useMemo, useRef, useState } from "react";
-import { Animated, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
+import { Animated, LayoutAnimation, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
 import { Gesture, GestureDetector, GestureHandlerRootView } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Button } from "../../look/Button";
@@ -68,7 +68,11 @@ export function FindByMuscle({
   return (
     <Modal visible={open} animationType="slide" statusBarTranslucent navigationBarTranslucent onRequestClose={onClose}>
       {/* A window of its own on Android: its gestures need their own root there. */}
-      <GestureHandlerRootView testID="muscle-gesture-root" style={[styles.page, { paddingTop: insets.top + 8 }]} accessibilityViewIsModal>
+      <GestureHandlerRootView
+        testID="muscle-gesture-root"
+        style={[styles.page, { paddingTop: insets.top + 8, paddingBottom: picked === null ? insets.bottom : 0 }]}
+        accessibilityViewIsModal
+      >
         <View style={styles.bar}>
           <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={onClose} style={styles.close}>
             <Icon name="x" size={20} />
@@ -85,24 +89,22 @@ export function FindByMuscle({
           sex={sex}
           side={side}
           picked={picked}
-          hint={!seen}
+          hint={picked !== null ? null : seen ? "Tap a muscle to see its exercises" : "Pinch to zoom · tap a muscle"}
           onTap={(m) => {
             setSeen(true);
+            // The panel rises when a muscle is picked and goes when it is let go (Kd: no empty box under the body).
+            if (picked === null || picked === m) LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
             setPicked((now) => (now === m ? null : m));
           }}
           onZoom={() => {
             setSeen(true);
           }}
         />
-        {/* Tall enough for a muscle, its count and a row from the start, so the body keeps its size when one is picked. */}
-        <View style={[styles.panel, { paddingBottom: insets.bottom + 16, minHeight: Math.round(screen * 0.3), maxHeight: Math.round(screen * 0.42) }]}>
-          <View style={styles.grab} />
-          {picked === null ? (
-            <>
-              <Txt kind="h2">Tap a muscle</Txt>
-              <Txt>Its exercises show here.</Txt>
-            </>
-          ) : (
+        {/* Only for a picked muscle; tall enough for its name, count and a row, so the body keeps one size from one muscle
+            to the next. */}
+        {picked === null ? null : (
+          <View testID="muscle-panel" style={[styles.panel, { paddingBottom: insets.bottom + 16, minHeight: Math.round(screen * 0.3), maxHeight: Math.round(screen * 0.42) }]}>
+            <View style={styles.grab} />
             <ScrollView contentContainerStyle={styles.found} showsVerticalScrollIndicator={false}>
               {family === null ? null : <Txt kind="eyebrow">{family}</Txt>}
               <Txt kind="h2">{muscleTitle(picked)}</Txt>
@@ -148,8 +150,8 @@ export function FindByMuscle({
                 />
               )}
             </ScrollView>
-          )}
-        </View>
+          </View>
+        )}
       </GestureHandlerRootView>
     </Modal>
   );
@@ -168,7 +170,8 @@ function Body({
   sex: Sex;
   side: Side;
   picked: string | null;
-  hint: boolean;
+  /** The line over the body's foot, or null while a muscle is picked. */
+  hint: string | null;
   onTap: (muscle: string) => void;
   onZoom: () => void;
 }) {
@@ -279,13 +282,13 @@ function Body({
           onPress={whole}
         />
       ) : null}
-      {hint ? (
+      {hint === null ? null : (
         <View style={styles.hint} pointerEvents="none">
           <Txt kind="small" colour="textSoft">
-            Pinch to zoom · tap a muscle
+            {hint}
           </Txt>
         </View>
-      ) : null}
+      )}
     </View>
   );
 }
