@@ -71,17 +71,16 @@ export function checkLibrary(input: LibraryInput): CheckedLibrary {
 
     if (file.name !== `${ex.id}.json`) fault("id", `the id is "${ex.id}", so the file is named ${ex.id}.json`);
 
-    const main = new Set<string>();
-    ex.muscles.main.forEach((m, i) => {
-      if (main.has(m)) fault(`muscles.main.${String(i)}`, `"${m}" is named twice`);
-      main.add(m);
-    });
-    const also = new Set<string>();
-    ex.muscles.also.forEach((m, i) => {
-      if (main.has(m)) fault(`muscles.also.${String(i)}`, `"${m}" is a main muscle already`);
-      else if (also.has(m)) fault(`muscles.also.${String(i)}`, `"${m}" is named twice`);
-      also.add(m);
-    });
+    // A muscle is named once in all three rows: twice in one row, or in two rows, is refused.
+    const named = new Map<string, string>();
+    for (const row of ["main", "also", "steady"] as const) {
+      ex.muscles[row].forEach((m, i) => {
+        const before = named.get(m);
+        if (before === row) fault(`muscles.${row}.${String(i)}`, `"${m}" is named twice`);
+        else if (before !== undefined) fault(`muscles.${row}.${String(i)}`, `"${m}" is in muscles.${before} already`);
+        else named.set(m, row);
+      });
+    }
     const kit = new Set<string>();
     ex.equipment.forEach((e, i) => {
       if (kit.has(e)) fault(`equipment.${String(i)}`, `"${e}" is named twice`);

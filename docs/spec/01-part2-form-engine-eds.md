@@ -2089,7 +2089,7 @@ tests, so GitHub refuses a faulty file.
 | Id word | lower case, never changed, never used again for another exercise; an exercise that continues from the old 58 keeps its row and id |
 | Name, other names | the other names are for search ("press-up" finds Push-up) |
 | Kind | one of: strength · cardio · plyometrics · stretching · mobility · yoga · Pilates (60a, from the old web's 11 categories and the public list's 7: body areas are the muscle filter, "bodyweight" the equipment filter, HIIT and endurance are cardio, powerlifting, Olympic lifting and strongman are strength; "Rehabilitation" is dropped, a health claim for a fitness app) |
-| Muscles | main and also-worked, from ONE fixed list: abdominals, abductors, adductors, biceps, calves, chest, forearms, glutes, hamstrings, hip flexors, lats, lower back, middle back, neck, quadriceps, shoulders, traps, triceps |
+| Muscles | three rows, each from the file's named source: main (what it calls primary), also worked (its other movers), keeps you steady (what it calls stabilisers). ONE fixed list of specific muscles (63a, Kd 2026-11-19: *"accurate specific"*): every muscle seen on the body's surface, each a shape of the phone's figures (front, side and rear deltoid; upper and lower chest; the three visible quadriceps heads; the two hamstrings; gastrocnemius and soleus; and so on), and the deep ones a source names (rotator cuff, transverse abdominis), which light the shape over them. `packages/shared/src/library/words.ts` holds the list and each muscle's plain name and anatomical name |
 | Equipment | from one fixed list (60a): barbell, dumbbell, kettlebell, EZ curl bar, weight plate, cable machine, machine, Smith machine, resistance band, pull-up bar, dip bars, gymnastic rings, suspension trainer, bench, box, step, chair, jump rope, medicine ball, exercise ball, foam roller, mat, treadmill, rowing machine, exercise bike; empty means none, and a wall or the floor is not equipment |
 | Level | beginner · intermediate · advanced |
 | A set is measured in | reps or time. This is what a set's target is, said once; it replaces every family-code rule |
@@ -2345,6 +2345,42 @@ items 36 and 24b take as it is):
 - **Goals' exercise picker** reads this list (names, and "measured in reps") from job 63.
 - Sound in a workout uses one player, shared with job 53; whichever job comes first asks
   Kd for the package.
+
+**As built in 63a (2026-11-19).** Workout → Exercises is the Library (`apps/mobile/src/screens/library/`, rules in
+`apps/mobile/src/library/`), drawn from Kd's approved drawing of that day.
+- **The figures** are Kd's own four line drawings (male and female, front and back, made in ChatGPT), each half mirrored
+  onto the other and every closed shape named as a muscle by `apps/mobile/tools/figures/trace.py`, which writes
+  `src/library/figures.ts`. A test holds them to the word list: every muscle is drawn or lights a drawn one, and the male
+  and female figures show the same muscles. The figure is the person's own, from their setup answer, with no switch (Kd,
+  2026-11-19: a man never sees the female figure, a woman never the male one); "other", "prefer not to say" or none show
+  the male figure.
+- **The list kept on the phone:** the newest download in one file for everybody (`library.json`), shown at once; each open
+  asks `GET /v1/library` with its fingerprint (If-None-Match) and 304 keeps it. With no copy and no internet the page says
+  "Couldn't load the exercises" with Try again. The phone reads the download through `readPhoneLibrary`
+  (`packages/shared`): any short word is taken, one exercise that cannot be read is left out, and one whose cautions cannot
+  be read is left out, never shown without them. Only live exercises are listed.
+- **Search** (`search.ts`, table-tested): the name (whole, its start, every word starting a word of it, then held in it with
+  spaces and marks aside), then another name, then the muscles it works (main and also, never the steadying row), its
+  equipment or kind; A to Z within each. A search made of a muscle's plain name ("biceps") reads plain names only, so the
+  hamstring's "biceps femoris" does not answer it.
+- **A card:** a picture (the app's own of that exercise, else of its kind, until job 62) shown whole in its own colours
+  inside the card's top, never cut and never faded (Kd), a small figure lit, the level as plates, the main muscles' plain
+  names, the starting target and the intensity as flames: the Compendium's own bands on the MET, light under 3.0,
+  moderate to 5.9, vigorous from 6.0. Kinds offered are only those the Library holds.
+- **The page:** the facts strip (sets × reps or time, level, intensity, equipment; none shown as the dumbbell struck
+  through), every caution above the tabs (one alert each), then Muscles (front and back lit, a line naming the first main
+  muscle, the three rows in gym terms: Primary, Secondary, Stabilisers), Instructions (one step a card, swiped, then
+  About) and Mistakes (a mistake's first sentence as what goes wrong, the rest as the fix), then ⓘ Sources, which opens
+  the list from the bottom. How it is counted reads "Manual tracking" for every exercise until exercise folder 1's 52a
+  publishes camera data and its shape.
+- **Round one (2026-11-19):** a copy is served by its frame and fingerprint, never checked again against today's word
+  lists (`libraryCopyFrameSchema`), and a publish carries on a stored entry of an exercise whose file is gone in the words
+  it was written under (`storedLibraryEntrySchema`), so a list may change without refusing what was published before. No
+  figure is drawn until the person's setup answer is known; the answer the server last gave is kept on the phone for that
+  person (`figure-<id>.txt`) and the kept Library is one file a person (`library-<id>.json`), both removed with the
+  account. A Library not yet published (404) reads "Exercises aren't available yet". Search takes the muscle words people
+  type ("quads", "core").
+- **Not in 63a:** the filter button and "Find by muscle" (63b); records, calories a minute and Add to workout (63c).
 
 ### 13.7 The jobs (ROADMAP Stage 5, exercise folder 2; ROADMAP wins where they differ)
 

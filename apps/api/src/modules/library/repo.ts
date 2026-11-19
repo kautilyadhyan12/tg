@@ -3,7 +3,7 @@
 // `exercises`. The Library is one list for the whole app, not a business's or a person's: no row
 // has an owner, so no owner goes in a WHERE.
 import type { Sql, TransactionSql } from "postgres";
-import { libraryListSchema, type LibraryEntry } from "@app/shared";
+import { libraryCopyFrameSchema, type StoredLibraryEntry } from "@app/shared";
 import { sha256 } from "./canonical.js";
 import { channelFor } from "./channel.js";
 import type { PublishedRow } from "./plan.js";
@@ -55,7 +55,7 @@ export async function exerciseRowsFor(
 
 /** Writes each row's facts and entry in one statement. The MET on a row the Library made in
  *  `exercises` follows it; the old 58 rows' own MET is never changed (the old pages reckon with it). */
-export async function writeRows(tx: TransactionSql, rows: readonly { exerciseId: string; entry: LibraryEntry }[]): Promise<void> {
+export async function writeRows(tx: TransactionSql, rows: readonly { exerciseId: string; entry: StoredLibraryEntry }[]): Promise<void> {
   if (rows.length === 0) return;
   const values = rows.map((r) => ({
     exercise_id: r.exerciseId,
@@ -122,15 +122,17 @@ export async function copyFor(sql: Sql | TransactionSql, userId: string): Promis
   return newestCopyFor(sql, channelFor(await betaFlagRules(sql), userId));
 }
 
-/** One copy's text, checked before it reaches any phone: it must match its fingerprint and read as a
- *  list. A copy that does not is a fault of the server's own data, so this throws (a 500). */
+/** One copy's text, checked before it reaches any phone: it must match its fingerprint and read as a list of
+ *  entries. Its entries were checked when it was published; they are not checked again against today's word
+ *  lists, which may have changed since (63a, round one), and the phone reads each entry on its own. A copy that
+ *  does not hold is a fault of the server's own data, so this throws (a 500). */
 export async function checkedCopyText(sql: Sql | TransactionSql, version: number): Promise<string> {
   const rows = await sql<{ sha256: string; body: string }[]>`
     SELECT sha256, body FROM library_copies WHERE version = ${version}`;
   const copy = rows[0];
   if (copy === undefined) throw new Error(`library copy ${String(version)} is gone`);
   if (sha256(copy.body) !== copy.sha256) throw new Error(`library copy ${String(version)} does not match its fingerprint`);
-  libraryListSchema.parse(JSON.parse(copy.body));
+  libraryCopyFrameSchema.parse(JSON.parse(copy.body));
   return copy.body;
 }
 
