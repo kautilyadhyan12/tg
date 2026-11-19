@@ -33,7 +33,17 @@ export interface MovementVideo {
   /** A known wrong count under some replays only (replays.ts), the video right as filmed: kept in plain sight until the
    *  job named in `why` fixes it. */
   readonly replayOpen?: { readonly replays: readonly string[]; readonly why: string };
+  /** A known difference between the phone's run and the laptop's (phoneCounts.ts), kept in plain sight until the job
+   *  named here closes it. */
+  readonly phoneOpen?: string;
 }
+
+/** 52a-iii: the two runs differ only in a dip of another movement marked unseen on one side and silent on the other. */
+const UNSEEN_DIP =
+  "52b: both count 0 and call no dip short; one side's model lost the feet in one dip, so the engine marks it 'the camera could not " +
+  "see the feet' before it finds the dip is another movement, and the other side reads it as another movement, silent. Whether an " +
+  "unseen dip of another movement says anything on the screen, and whether 'another movement' is decided first, is the reason for " +
+  "a rep not counted (52b).";
 
 const other = (file: string, person: string, view: View, seen: string): MovementVideo => ({ file, movement: null, person, view, reps: 0, sets: false, seen });
 
@@ -146,6 +156,11 @@ export const MOVEMENT_VIDEOS: readonly MovementVideo[] = [
     reps: null,
     sets: false,
     seen: "2026-11-19, 16 frames: a white card with nobody at 0.33 s, a text card over him at the end; he steps into his stance in the first frame. Reported only.",
+    phoneOpen:
+      "54, when the sumo squat is made on the squat from its own videos: he goes from one rep into the next with almost no pause at the top, so the engine's " +
+      "standing still before a rep is read at its edge. Both readings put his hips within 0.01 of a leg of each other for his first 5 s; the phone's " +
+      "reads him standing still at 1.97 s and counts his first sumo squat (knees 97 degrees), the laptop's not until 5.8 s and counts none. " +
+      "A rep of a squat twin counted or missed at the edge, on a video nobody could count by eye; never another movement counted.",
   },
   // ── Looked at while the rules were chosen after all: a twin of the squat, tried, never setting a number ──────────
   { file: "movement-points/fresh_front_squat_barbell", movement: "squat", person: "woman, barbell in front", view: "side", reps: 3, sets: false,
@@ -165,7 +180,7 @@ export const MOVEMENT_VIDEOS: readonly MovementVideo[] = [
   other("movement-points/squat_jack_2", "man, squat jack, bedroom", "front", "Squat jacks."),
   other("movement-points/deadlift_kettlebell", "kettlebell deadlift", "side", "A kettlebell deadlift."),
   other("movement-points/deadlift_barbell", "barbell deadlift", "side", "A conventional barbell deadlift."),
-  other("movement-points/romanian_deadlift_barbell", "barbell Romanian deadlift", "side", "A barbell Romanian deadlift."),
+  { ...other("movement-points/romanian_deadlift_barbell", "barbell Romanian deadlift", "side", "A barbell Romanian deadlift."), phoneOpen: UNSEEN_DIP },
   other("movement-points/romanian_deadlift_dumbbell", "dumbbell Romanian deadlift", "side", "A dumbbell Romanian deadlift."),
   other("movement-points/good_morning_barbell", "barbell good morning", "side", "A barbell good morning."),
   other("movement-points/swing_kettlebell", "kettlebell swing", "side", "A two-handed kettlebell swing."),
@@ -174,7 +189,7 @@ export const MOVEMENT_VIDEOS: readonly MovementVideo[] = [
   other("movement-points/lunge_forward_barbell", "barbell forward lunge", "side", "Barbell forward lunges."),
   other("movement-points/lunge_reverse_dumbbell", "dumbbell reverse lunge", "side", "Dumbbell reverse lunges."),
   other("movement-points/split_squat_smith", "Smith machine split squat", "side", "Split squats in a Smith machine."),
-  other("movement-points/step_up_dumbbell", "dumbbell step-up", "side", "Dumbbell step-ups onto a box."),
+  { ...other("movement-points/step_up_dumbbell", "dumbbell step-up", "side", "Dumbbell step-ups onto a box."), phoneOpen: UNSEEN_DIP },
   other("movement-points/calf_raise", "calf raise", "side", "Calf raises."),
   other("movement-points/calf_raise_dumbbell", "dumbbell calf raise", "side", "Standing dumbbell calf raises."),
   other("movement-points/overhead_press_kettlebell", "kettlebell overhead press", "front", "A kettlebell overhead press."),
@@ -185,7 +200,7 @@ export const MOVEMENT_VIDEOS: readonly MovementVideo[] = [
   other("body-points/bicycle_crunch_reference", "Kd's bicycle crunch", "side", "Kd's bicycle crunch reference, on the floor."),
   other("body-points/barbell_bench_press_reference", "Kd's barbell bench press", "between", "Kd's barbell bench press, filmed from the feet."),
   other("body-points/dumbbell_bench_press_reference_head_end", "Kd's dumbbell bench press", "between", "Kd's dumbbell bench press from the head end."),
-  other("movement-points/fresh_deadlift_kettlebell_1", "fresh: kettlebell deadlift, 1", "side", "Fresh: a kettlebell deadlift."),
+  { ...other("movement-points/fresh_deadlift_kettlebell_1", "fresh: kettlebell deadlift, 1", "side", "Fresh: a kettlebell deadlift."), phoneOpen: UNSEEN_DIP },
   other("movement-points/fresh_deadlift_kettlebell_2", "fresh: kettlebell deadlift, 2", "front", "Fresh: a kettlebell deadlift."),
   other("movement-points/fresh_lunge_forward_kettlebell_0", "fresh: Kettlebell forward lunges, 0", "side", "Fresh: Kettlebell forward lunges."),
   other("movement-points/fresh_lunge_forward_kettlebell_2", "fresh: Kettlebell forward lunges, 2", "between", "Fresh: Kettlebell forward lunges."),

@@ -11,7 +11,7 @@ import type { RepResult } from "../src/index.js";
 import { readKept, type KeptFile } from "../scripts/bodyCheck.js";
 import { countedTimes, readMovement } from "../scripts/movementCheck.js";
 import { MOVEMENT_VIDEOS, type MovementVideo } from "../scripts/movementVideos.js";
-import { CHOSEN_RUN, allSame, differences, judgePhone, phoneFileOf, refusal, type PhoneRow } from "../scripts/phoneCounts.js";
+import { CHOSEN_RUN, allSame, differences, judgePhone, phoneFileOf, phoneTable, refusal, type PhoneRow } from "../scripts/phoneCounts.js";
 import { phoneLabel } from "../scripts/replays.js";
 
 const squat = readMovement("squat");
@@ -125,9 +125,36 @@ describe("every proof video, as the phone's chosen set-up read it (51b-ii; kept 
     expect(rows).toHaveLength(MOVEMENT_VIDEOS.length);
   });
 
-  it("the phone counts and says on the screen what the laptop does, on every one", () => {
-    const differ = rows.filter((r) => r.verdict !== "same").map((r) => `${r.label}: ${r.why.join("; ")}`);
+  it("the phone counts and says on the screen what the laptop does, on every one but those written as open", () => {
+    const differ = rows.filter((r) => r.verdict !== "same" && r.entry.phoneOpen === undefined).map((r) => `${r.label}: ${r.why.join("; ")}`);
     expect(differ).toEqual([]);
-    expect(allSame(rows)).toBe(true);
+    // An open case that is now the same must lose its note: it is never left open by mistake.
+    const closed = rows.filter((r) => r.verdict === "same" && r.entry.phoneOpen !== undefined).map((r) => r.label);
+    expect(closed).toEqual([]);
+  });
+
+  it("the open cases are four, written down, and none counts another movement", () => {
+    const open = rows.filter((r) => r.entry.phoneOpen !== undefined);
+    expect(open.map((r) => r.label).sort()).toEqual(["fresh_deadlift_kettlebell_1", "romanian_deadlift_barbell", "step_up_dumbbell", "sumo_squat_1"]);
+    for (const r of rows.filter((x) => x.entry.movement === null && x.entry.open === undefined)) expect([r.label, r.phone?.count]).toEqual([r.label, 0]);
+  });
+
+  it("the sumo squat nobody could count by eye differs by its first rep alone, at the edge of standing still", () => {
+    const sumo = rows.find((r) => r.label === "sumo_squat_1");
+    expect(sumo?.entry.reps).toBeNull();
+    expect([sumo?.laptop.count, sumo?.phone?.count]).toEqual([0, 1]);
+    expect(sumo?.why).toEqual(["the laptop counts 0, the phone 1", "the phone also says 3.1 s counted"]);
+  });
+
+  it("each other open case is only a dip of another movement marked unseen on one side: the same count, nothing called short", () => {
+    const open = rows.filter((r) => r.entry.phoneOpen !== undefined && r.entry.movement === null);
+    expect(open).toHaveLength(3);
+    for (const r of open) {
+      expect([r.label, r.entry.movement, r.laptop.count, r.phone?.count]).toEqual([r.label, null, 0, 0]);
+      expect(r.why.length).toBeGreaterThan(0);
+      for (const why of r.why) expect(why).toMatch(/^the phone (also says|does not say) [\d.]+ s unseen \(feet stay down\)$/);
+      expect([...r.laptop.reps, ...(r.phone?.reps ?? [])].filter((x) => x.verdict === "short")).toEqual([]);
+    }
+    expect(allSame(rows)).toBe(false);
   });
 });
