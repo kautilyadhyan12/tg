@@ -814,7 +814,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
     - 51c. [x] **The kept videos measured again with the phone's model** — merged 2026-11-18 (PR #587).
 52. **The movement engine** (§12; it replaces "the engine's missing parts").
     - 52a. **The movement matcher and the proof table** (§12.3, §12.5; split 2026-11-19 in three, `handoff/2026-11-19-52a-i.md` keeps its line as first written).
-        - 52a-i. [ ] **The squat counted from its whole movement, from the side, the front and between**: the movement as data, the matcher, numbers set from eight people and tried on each left out, every other movement 0.
+        - 52a-i. [x] **The squat counted from its whole movement** — merged 2026-11-19 (PR #592).
         - 52a-ii. [ ] **Each video replayed the ways the world changes it** (nearer, farther, tilted, fewer frames a second, shaky points, a passer-by, a phone lower or higher redrawn from the 3D points, each reading leaned and shaken by the largest gap on a chip the app allows, 51b), and 51c's leg swap hidden behind a jump.
         - 52a-iii. [ ] **The phone's own runs judged by the laptop's count, reasons and lines** (51a's videos through the phone), never by its numbers.
     - 52b. [ ] **The form judge, the reason for a rep not counted, and the summary** (§12.1, §2.4). It sets the squat's depth from its form standard (Kd's research file) and closes 52a-i's open case: a kettlebell push press's dip counts as a squat (first test: it counts 0).
