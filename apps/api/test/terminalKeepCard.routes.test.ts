@@ -5,6 +5,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
 import {
+  cardAgreementWords,
   heldMembershipsResponseSchema,
   squareConnectResponseSchema,
   squareFinishResponseSchema,
@@ -277,7 +278,7 @@ d("The card kept from a Terminal payment: only with their I agree, on their reco
     expect(checkoutsOn(desk.deviceId)).toEqual([]);
     const words = square.agreement(desk.deviceId).words;
     expect(words).toContain("Gold Monthly: $49.99 every month. Renews until you cancel.");
-    expect(words).toContain(`I agree that ${gym.name} may save this card`);
+    expect(words).toContain(cardAgreementWords(gym.name));
     const declined = await answersAndPays(gym, tara, first.payment.id, desk.deviceId, false);
     expect(declined.payment).toMatchObject({ outcome: "paid", card: { step: "declined" } });
     expect(await cardsOf(gym.id)).toEqual([]);
@@ -347,7 +348,7 @@ d("The card kept from a Terminal payment: only with their I agree, on their reco
     for (const line of ["Early cancellation fee: $99.00.", "Notice to cancel: 30 days."]) expect(words).toContain(line);
     // Added today: its cooling-off period is open, with its last day (round one, H2).
     expect(words).toMatch(/\nCooling-off period: until \d{1,2} [A-Z][a-z]{2} \d{4}, to cancel with a full refund\.\n/);
-    expect(words).toContain(`I agree that ${gym.name} may save this card`);
+    expect(words).toContain(cardAgreementWords(gym.name));
 
     // Added five days ago, its three days are over: the Terminal says nothing of one.
     clock = new Date(now.getTime() - 5 * 24 * 60 * 60_000);
