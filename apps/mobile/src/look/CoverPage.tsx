@@ -16,6 +16,8 @@ interface CoverPageProps {
   children: ReactNode;
   /** Held at the bottom while the page scrolls: the page's one action. */
   foot?: ReactNode;
+  /** Words on the bar's right, across from the ✕, such as Find exercises' Clear all. */
+  action?: ReactNode;
   /** The page's own picture across its top, the title over it and the ✕ on it, in place of the bar. */
   picture?: PictureName;
   /** The picture's height for the phone's width: a band, unless its figures need more. */
@@ -32,7 +34,7 @@ interface CoverPageProps {
 const NEAR_END = 600;
 
 /** A page that opens over the tab for one task, closed by its ✕, its action held at the bottom. */
-export function CoverPage({ open, title, onClose, children, foot, picture, tall = 0.62, hero, onNearEnd, onSeenHeight }: CoverPageProps) {
+export function CoverPage({ open, title, onClose, children, foot, action, picture, tall = 0.62, hero, onNearEnd, onSeenHeight }: CoverPageProps) {
   const insets = useSafeAreaInsets();
   const top = hero !== undefined || picture !== undefined;
   return (
@@ -40,13 +42,15 @@ export function CoverPage({ open, title, onClose, children, foot, picture, tall 
       <KeyboardAvoidingView accessibilityViewIsModal behavior="padding" style={styles.page}>
         {!top ? (
           <View style={[styles.bar, { paddingTop: insets.top + 8 }]}>
-            <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={onClose} style={styles.close}>
-              <Icon name="x" size={20} />
-            </Pressable>
+            <View style={action === undefined ? null : styles.side}>
+              <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={onClose} style={styles.close}>
+                <Icon name="x" size={20} />
+              </Pressable>
+            </View>
             <Txt kind="h3" numberOfLines={1} style={styles.title}>
               {title}
             </Txt>
-            <View style={styles.close} />
+            {action === undefined ? <View style={styles.close} /> : <View style={[styles.side, styles.sideEnd]}>{action}</View>}
           </View>
         ) : null}
         <ScrollView
@@ -94,6 +98,9 @@ const styles = StyleSheet.create({
   bar: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 8, paddingBottom: 8 },
   close: { width: sizes.press, height: sizes.press, alignItems: "center", justifyContent: "center", borderRadius: sizes.round },
   title: { flex: 1, textAlign: "center" },
+  // With words across from the ✕, both sides are one width, so the title stays in the middle.
+  side: { width: 92 },
+  sideEnd: { alignItems: "flex-end" },
   body: { paddingHorizontal: sizes.edge, paddingTop: 8, paddingBottom: 24, gap: 24 },
   underPicture: { paddingTop: 0, gap: 16 },
   bleed: { marginHorizontal: -sizes.edge },

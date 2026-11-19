@@ -1,7 +1,6 @@
 import type { PhoneLibraryEntry } from "@app/shared";
 import { useState } from "react";
 import { Pressable, ScrollView, StyleSheet, View, useWindowDimensions, type NativeScrollEvent, type NativeSyntheticEvent } from "react-native";
-import Svg, { Circle, Line } from "react-native-svg";
 import { Segments } from "../../look/Choice";
 import { colours, shadows, sizes, stageGlow } from "../../look/colours";
 import { CoverPage } from "../../look/CoverPage";
@@ -9,7 +8,7 @@ import { Icon } from "../../look/Icon";
 import { PictureTop } from "../../look/PictureTop";
 import { Sheet } from "../../look/Sheet";
 import { fonts, Txt } from "../../look/Txt";
-import { centreOf, DEEP_UNDER, FIGURE_BOX, figureName, litMuscles, sideFor, type Sex, type Side } from "../../library/figure";
+import { DEEP_UNDER, litMuscles, sideFor, type Sex, type Side } from "../../library/figure";
 import { exercisePicture } from "../../library/pictures";
 import {
   COUNTED_WORDS,
@@ -27,7 +26,7 @@ import {
   targetLine,
 } from "../../library/words";
 import { Flames, KitMark, Plates } from "./Marks";
-import { MuscleFigure } from "./MuscleFigure";
+import { MuscleFigure, MuscleLeader } from "./MuscleFigure";
 
 type Tab = "muscles" | "howto" | "mistakes";
 const TABS = [
@@ -194,7 +193,7 @@ function Muscles({ entry, sex }: { entry: PhoneLibraryEntry; sex: Sex | null }) 
               <View key={side} style={styles.figureCol}>
                 <View style={{ width: figure }}>
                   <MuscleFigure sex={sex} side={side} lit={lit} width={figure} />
-                  {labelled !== undefined && side === labelSide ? <Leader sex={sex} side={side} muscle={labelled} width={figure} /> : null}
+                  {labelled !== undefined && side === labelSide ? <MuscleLeader sex={sex} side={side} muscle={DEEP_UNDER[labelled] ?? labelled} name={muscleLabel(labelled).name} width={figure} /> : null}
                 </View>
                 <Txt kind="tiny">{side === "front" ? "FRONT" : "BACK"}</Txt>
               </View>
@@ -212,30 +211,6 @@ function Muscles({ entry, sex }: { entry: PhoneLibraryEntry; sex: Sex | null }) 
             </View>
           </View>
         ))}
-      </View>
-    </>
-  );
-}
-
-/** A line from the first main muscle to its name, in the space beside the figure's head. */
-function Leader({ sex, side, muscle, width }: { sex: Sex; side: Side; muscle: string; width: number }) {
-  const at = centreOf(figureName(sex, side), DEEP_UNDER[muscle] ?? muscle);
-  if (at === null) return null;
-  const scale = width / FIGURE_BOX.width;
-  const x1 = (at.x - FIGURE_BOX.x) * scale;
-  const y1 = (at.y - FIGURE_BOX.y) * scale;
-  const x2 = width * 0.74;
-  const y2 = width * 0.12;
-  return (
-    <>
-      <Svg style={StyleSheet.absoluteFill} width={width} height={(width * FIGURE_BOX.height) / FIGURE_BOX.width} accessible={false}>
-        <Line x1={x1} y1={y1} x2={x2} y2={y2} stroke={colours.orangeLight} strokeWidth={1.5} />
-        <Circle cx={x1} cy={y1} r={4} fill={colours.orangeLight} />
-      </Svg>
-      <View style={[styles.label, { left: x2 - 4, top: y2 - 13 }]}>
-        <Txt kind="tiny" colour="onOrange" style={styles.labelWords} numberOfLines={1}>
-          {muscleLabel(muscle).name}
-        </Txt>
       </View>
     </>
   );
@@ -343,8 +318,6 @@ const styles = StyleSheet.create({
   sources: { gap: 10 },
   figures: { flexDirection: "row", justifyContent: "center", gap: 26, paddingTop: 22 },
   figureCol: { alignItems: "center", gap: 8 },
-  label: { position: "absolute", paddingHorizontal: 10, minHeight: 26, justifyContent: "center", borderRadius: sizes.round, backgroundColor: colours.orange },
-  labelWords: { fontFamily: fonts.bold },
   legend: { gap: 12, paddingVertical: 14, paddingHorizontal: 16, borderRadius: 20, borderWidth: 1, borderColor: colours.line, backgroundColor: colours.box },
   legendRow: { flexDirection: "row", gap: 12, alignItems: "flex-start" },
   swatch: { width: 14, height: 14, borderRadius: 4, marginTop: 2 },

@@ -38,6 +38,23 @@ export function muscleLine(muscles: readonly string[]): string {
   return [...groups].map(([name, details]) => (details.length === 0 ? name : `${name} (${details.join(", ")})`)).join(" · ");
 }
 
+/** One exact muscle by its own name, as Find by muscle names the one tapped: "Vastus lateralis", "Front deltoid",
+ *  "Brachialis". Where the anatomical words are only a part's ("long head"), the muscle's name leads ("Triceps long
+ *  head"); the biceps is "Biceps", the name a gym uses. */
+export function muscleTitle(muscle: string): string {
+  const { name, detail } = muscleLabel(muscle);
+  if (detail === null || muscle === "biceps") return name;
+  if (detail.endsWith(" head")) return `${name} ${detail}`;
+  return detail.charAt(0).toUpperCase() + detail.slice(1);
+}
+
+/** The group the exact muscle belongs to, said above its name ("Quadriceps" over "Vastus lateralis"); null where the
+ *  name is already the group's. */
+export function muscleFamily(muscle: string): string | null {
+  const { name, detail } = muscleLabel(muscle);
+  return detail === null || muscle === "biceps" ? null : name;
+}
+
 /** The plain names alone, for a card: "Quadriceps · Glutes". */
 export function muscleNames(muscles: readonly string[]): string {
   return [...new Set(muscles.map((m) => muscleLabel(m).name))].join(" · ");
@@ -91,6 +108,7 @@ export const COUNTED_WORDS: Readonly<Record<CountedBy, string>> = {
   hand: "Manual tracking",
 };
 export const COUNTED_TODAY: CountedBy = "hand";
+export const countedWord = (counted: string): string => (has(COUNTED_WORDS, counted) ? COUNTED_WORDS[counted] : plainWord(counted));
 
 /** A mistake's words as what goes wrong (its first sentence) and how to put it right (the rest). A sentence ends
  *  at a full stop followed by a space and a capital letter, so "e.g. " or "approx. " inside one never cuts it. */
