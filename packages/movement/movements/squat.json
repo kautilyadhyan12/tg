@@ -40,7 +40,7 @@
       },
       "atLeast": 0.16,
       "seen": "always",
-      "from": "Set by movement-check from 8 people's videos (scripts/movementVideos.ts), as filmed and as each replay that sets numbers (scripts/replays.ts), 239 reps: a quarter of the way back towards standing from the shallowest rep (0.22; standing 0)."
+      "from": "Set by movement-check from 8 people's videos (scripts/movementVideos.ts), as filmed and as each replay that sets numbers (scripts/replays.ts), 198 reps: a quarter of the way back towards standing from the shallowest rep (0.22; standing 0)."
     },
     {
       "name": "knees bent",
@@ -55,7 +55,7 @@
       },
       "atMost": 125,
       "seen": "always",
-      "from": "Set by movement-check from 8 people's videos (scripts/movementVideos.ts), as filmed and as each replay that sets numbers (scripts/replays.ts), 239 reps: a quarter of the way back towards standing from the shallowest rep (107.36; standing 174.93)."
+      "from": "Set by movement-check from 8 people's videos (scripts/movementVideos.ts), as filmed and as each replay that sets numbers (scripts/replays.ts), 198 reps: a quarter of the way back towards standing from the shallowest rep (107.36; standing 175.13)."
     },
     {
       "name": "hips and knees together",
@@ -74,7 +74,7 @@
       },
       "atMost": 34,
       "seen": "always",
-      "from": "Set by movement-check from 8 people's videos (scripts/movementVideos.ts), as filmed and as each replay that sets numbers (scripts/replays.ts), 239 reps: beyond the furthest rep by half its distance from the middle rep (24.13; standing 4.34)."
+      "from": "Set by movement-check from 8 people's videos (scripts/movementVideos.ts), as filmed and as each replay that sets numbers (scripts/replays.ts), 198 reps: beyond the furthest rep by half its distance from the middle rep (24.13; standing 4.34)."
     },
     {
       "name": "chest up",
@@ -88,7 +88,7 @@
       },
       "atMost": 56,
       "seen": "always",
-      "from": "Set by movement-check from 8 people's videos (scripts/movementVideos.ts), as filmed and as each replay that sets numbers (scripts/replays.ts), 239 reps: beyond the furthest rep by half its distance from the middle rep (43.22; standing 2.34)."
+      "from": "Set by movement-check from 8 people's videos (scripts/movementVideos.ts), as filmed and as each replay that sets numbers (scripts/replays.ts), 198 reps: beyond the furthest rep by half its distance from the middle rep (43.22; standing 2.41)."
     },
     {
       "name": "feet stay down",
@@ -98,9 +98,9 @@
         "kind": "lift",
         "points": "feet"
       },
-      "atMost": 0.03,
+      "atMost": 0.04,
       "seen": "always",
-      "from": "Set by movement-check from 8 people's videos (scripts/movementVideos.ts), as filmed and as each replay that sets numbers (scripts/replays.ts), 239 reps: beyond the furthest rep by half its distance from the middle rep (0.02; standing 0)."
+      "from": "Set by movement-check from 8 people's videos (scripts/movementVideos.ts), as filmed and as each replay that sets numbers (scripts/replays.ts), 198 reps: beyond the furthest rep by half its distance from the middle rep (0.03; standing 0)."
     },
     {
       "name": "feet stay in place",
@@ -112,7 +112,7 @@
       },
       "atMost": 0.1,
       "seen": "always",
-      "from": "Set by movement-check from 8 people's videos (scripts/movementVideos.ts), as filmed and as each replay that sets numbers (scripts/replays.ts), 239 reps: beyond the furthest rep by half its distance from the middle rep (0.07; standing 0)."
+      "from": "Set by movement-check from 8 people's videos (scripts/movementVideos.ts), as filmed and as each replay that sets numbers (scripts/replays.ts), 198 reps: beyond the furthest rep by half its distance from the middle rep (0.07; standing 0)."
     },
     {
       "name": "stance holds",
@@ -126,7 +126,7 @@
       },
       "atMost": 0.24,
       "seen": "when-seen",
-      "from": "Set by movement-check from 8 people's videos (scripts/movementVideos.ts), as filmed and as each replay that sets numbers (scripts/replays.ts), 147 reps: beyond the furthest rep by half its distance from the middle rep (0.19; standing 0)."
+      "from": "Set by movement-check from 8 people's videos (scripts/movementVideos.ts), as filmed and as each replay that sets numbers (scripts/replays.ts), 122 reps: beyond the furthest rep by half its distance from the middle rep (0.19; standing 0)."
     },
     {
       "name": "hips alike",
@@ -138,7 +138,7 @@
       },
       "atMost": 42,
       "seen": "when-seen",
-      "from": "Set by movement-check from 8 people's videos (scripts/movementVideos.ts), as filmed and as each replay that sets numbers (scripts/replays.ts), 207 reps: beyond the furthest rep by half its distance from the middle rep (31; standing 3.41)."
+      "from": "Set by movement-check from 8 people's videos (scripts/movementVideos.ts), as filmed and as each replay that sets numbers (scripts/replays.ts), 172 reps: beyond the furthest rep by half its distance from the middle rep (31; standing 3.41)."
     }
   ]
 }

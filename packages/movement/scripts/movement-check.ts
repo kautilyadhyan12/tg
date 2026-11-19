@@ -64,16 +64,17 @@ if (values.replays) {
     const others = rows.filter((r) => r.replay === replay && r.entry.movement === null);
     const counted = own.reduce((n, r) => n + r.count, 0);
     const eye = own.reduce((n, r) => n + r.most, 0);
-    const wrong = [...own, ...others].filter((r) => !holds(r));
+    const untried = [...own, ...others].filter((r) => !r.tried);
+    const wrong = [...own, ...others].filter((r) => r.tried && !holds(r));
     const open = wrong.filter(openRow);
     const falseOnes = others.filter((r) => r.count > 0);
     const verdict = wrong.length === 0 ? "right" : !replay.hold ? "differs" : wrong.length === open.length ? "OPEN" : "WRONG";
     console.log(
-      `  ${pad(replay.name, 24)} ${replay.hold ? "held " : "shown"} ${name} reps ${pad(`${String(counted)} of ${String(eye)}`, 9)} other movements counted ${String(falseOnes.reduce((n, r) => n + r.count, 0))}  ${verdict}  ${replay.words}`,
+      `  ${pad(replay.name, 24)} ${replay.hold ? "held " : "shown"} ${name} reps ${pad(`${String(counted)} of ${String(eye)}`, 9)} other movements counted ${String(falseOnes.reduce((n, r) => n + r.count, 0))}  ${verdict}  ${replay.words}${untried.length === 0 ? "" : ` (it changed nothing in ${String(untried.length)} videos, not counted as tried)`}`,
     );
     for (const r of wrong) {
       const why = r.reps.filter((x) => x.verdict !== "counted" && (x.readings["depth"] ?? 0) > 0.1).map((x) => `${x.verdict}${x.rule === null ? "" : `: ${x.rule}`}`);
-      console.log(`      ${pad(r.label, 36)} must ${r.least === r.most ? String(r.most) : `${String(r.least)} to ${String(r.most)}`}, counted ${String(r.count)}${openRow(r) ? " (open)" : ""}  ${why.join("; ")}`);
+      console.log(`      ${pad(r.label, 36)} must ${r.least === r.most ? String(r.most) : `${String(r.least)} to ${String(r.most)}`}, counted ${String(r.count)}${r.leftOut === null ? "" : `, left out ${String(r.leftOut)}`}${openRow(r) ? " (open)" : ""}  ${why.join("; ")}`);
     }
   }
   for (const r of rows.filter((x) => x.entry.replayOpen !== undefined && x.replay === replays[0])) {

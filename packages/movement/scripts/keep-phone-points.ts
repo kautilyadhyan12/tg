@@ -10,7 +10,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { encodeBodyPoints, decodeBodyPoints } from "./bodyPoints.js";
 import { phoneFrames, readPhoneRun } from "./phoneRun.js";
-import { PHONE_GAPS } from "./replays.js";
+import { PHONE_GAPS, phoneLabel } from "./replays.js";
 
 const ROOT = join(import.meta.dirname, "../../..");
 const RUNS = join(ROOT, "measured/phone-test/phone/people-1-laptop-pictures");
@@ -28,7 +28,14 @@ for (const gap of PHONE_GAPS) {
     if (frames.length !== kept.frames.length || frames.some((f, k) => Math.abs(f.t - (kept.frames[k]?.t ?? Number.NaN)) > 0.5)) {
       throw new Error(`${label}.${gap.run}: its frames are not the kept file's`);
     }
-    const header = { ...kept.header, source: "phone" as const, model: { ...kept.header.model, file: run.header.model.file }, madeWith: { tool: "keep-phone-points" as const, version: 1 } };
+    // A name of its own, never the laptop file's: only the check number would tell them apart.
+    const header = {
+      ...kept.header,
+      label: phoneLabel(label, gap.run),
+      source: "phone" as const,
+      model: { ...kept.header.model, file: run.header.model.file },
+      madeWith: { tool: "keep-phone-points" as const, version: 1 },
+    };
     const out = join(TEST, "phone-points", `${label}.${gap.run}.bodypoints`);
     const bytes = encodeBodyPoints(header, frames);
     writeFileSync(out, bytes);

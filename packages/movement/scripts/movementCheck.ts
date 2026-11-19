@@ -285,6 +285,10 @@ export interface ReplayRow {
   readonly least: number;
   readonly most: number;
   readonly count: number;
+  /** For a video that sets numbers, its count under the replay with its person left out of the numbers; else null. */
+  readonly leftOut: number | null;
+  /** The replay changed this video (`Replay.tried`); a row it did not change proves nothing. */
+  readonly tried: boolean;
   readonly reps: readonly RepResult[];
 }
 
@@ -302,21 +306,42 @@ export function countedTimes(movement: Movement, video: Video): { start: number;
     .map((r) => ({ start: r.start - LEAD_IN, end: r.end - LEAD_IN }));
 }
 
-/** One video under one replay. */
-export function replayed(movement: Movement, v: ProofVideo, replay: Replay): ReplayRow {
+/** One video under one replay; `leftOutOf`, for a video that sets numbers, the movement with its person left out. */
+export function replayed(movement: Movement, v: ProofVideo, replay: Replay, leftOutOf: Movement | null = null): ReplayRow {
   const frames = replay.edit(v.video.frames, seedOf(v.video.label, replay.name), countedTimes(movement, v.video));
-  const run = runMovement(movement, { ...v.video, frames });
+  const edited = { ...v.video, frames };
+  const run = runMovement(movement, edited);
   const mine = v.entry.movement === movement.name;
   const eye = mine ? (v.entry.reps ?? 0) : 0;
-  return { replay, label: v.video.label, entry: v.entry, least: Math.max(0, eye - (mine ? (replay.hides ?? 0) : 0)), most: eye, count: run.count, reps: run.reps };
+  return {
+    replay,
+    label: v.video.label,
+    entry: v.entry,
+    least: Math.max(0, eye - (mine ? (replay.hides ?? 0) : 0)),
+    most: eye,
+    count: run.count,
+    leftOut: leftOutOf === null ? null : runMovement(leftOutOf, edited).count,
+    tried: replay.tried?.(v.video.frames) ?? true,
+    reps: run.reps,
+  };
 }
 
-/** Every judged video (a count by eye, no open case) under every replay given. */
+/** Every judged video (a count by eye, no open case) under every replay given; each video that sets numbers also with
+ *  its person left out of the numbers, so a replay is never judged only by numbers set from the replay itself. */
 export function replayTable(movement: Movement, videos: readonly ProofVideo[] = proofVideos(), replays: readonly Replay[] = REPLAYS): ReplayRow[] {
   const judged = videos.filter((v) => v.entry.reps !== null && v.entry.open === undefined && (v.entry.movement === movement.name || v.entry.movement === null));
-  return replays.flatMap((replay) => judged.map((v) => replayed(movement, v, replay)));
+  const setting = proofVideos().filter((v) => v.entry.movement === movement.name && v.video.sets);
+  const folds = new Map<string, Movement>();
+  const foldOf = (person: string): Movement => {
+    const known = folds.get(person);
+    if (known !== undefined) return known;
+    const m = withNumbers(movement, fit(movement, setting.filter((v) => v.entry.person !== person)));
+    folds.set(person, m);
+    return m;
+  };
+  return replays.flatMap((replay) => judged.map((v) => replayed(movement, v, replay, v.video.sets && v.entry.movement === movement.name ? foldOf(v.entry.person) : null)));
 }
 
-export const holds = (r: ReplayRow): boolean => r.count >= r.least && r.count <= r.most;
+export const holds = (r: ReplayRow): boolean => r.count >= r.least && r.count <= r.most && (r.leftOut === null || (r.leftOut >= r.least && r.leftOut <= r.most));
 /** A row the video's own entry names as a known wrong count under this replay (`replayOpen`). */
 export const openRow = (r: ReplayRow): boolean => r.entry.replayOpen?.replays.includes(r.replay.name) === true;

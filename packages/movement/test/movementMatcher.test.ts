@@ -6,12 +6,12 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { movementSchema, type MovementFrame } from "@app/shared";
-import { LOWEST_JUMP, MATCH_LIMITS, MovementMatcher, checkMovement, hopTime, parseMovement } from "../src/index.js";
+import { MovementMatcher, PROMISED_JUMP, checkMovement, hopTime, parseMovement } from "../src/index.js";
 import { runChecks, runSteady, type Video } from "../scripts/bodyCheck.js";
 import { runMeasures } from "../scripts/measureCheck.js";
 import { LEAD_IN, MOVEMENTS, fit, proofTable, proofVideos, readMovement, runMovement, withLeadIn, withNumbers } from "../scripts/movementCheck.js";
 import { copy, editPeople } from "./helpers/body.js";
-import { FEET, hoppedAt, sizeOf } from "./helpers/hops.js";
+import { FEET, hoppedAt, sizeOf, trueHop } from "./helpers/hops.js";
 
 const SQUAT = readMovement("squat");
 const VIDEOS = proofVideos();
@@ -96,9 +96,13 @@ describe("the worst thing: no other movement is ever counted as a squat", () => 
     expect(run.count).toBe(0);
   });
 
-  it("the limit, written: leaving the floor is told from about 2 cm (the squat's number since 52a-ii-a), always under the 5 cm hop refused above", () => {
+  it("the limit, written: the feet's number is under the smallest jump never counted (8 cm, movementHops.test.ts), and a break hides no jump of 10 cm", () => {
     const lift = SQUAT.rules.find((r) => r.name === "feet stay down")?.atMost ?? 1;
-    expect(lift).toBeLessThan(0.05);
+    expect(lift).toBeLessThan(0.08);
+    expect(PROMISED_JUMP).toBe(0.1);
+    // A break of hopTime(promise less the number) holds the top of a hop that far up: a 10 cm jump seen at its edges no
+    // higher than the number would be let through there, so nothing of 10 cm fits.
+    expect(hopTime(PROMISED_JUMP - lift)).toBeLessThan(hopTime(PROMISED_JUMP));
   });
 
   it.each([
@@ -230,16 +234,16 @@ describe("the camera must see enough, or nothing is decided", () => {
     expect(judged?.rule).toMatch(/hips and knees together|chest up/);
   });
 
-  it("a break in the feet's readings decides nothing only once it is longer than a hop of the squat's number takes in the air", () => {
+  it("a break in the feet's readings decides nothing only once it could hold the top of a 10 cm jump", () => {
     const lift = SQUAT.rules.find((r) => r.name === "feet stay down")?.atMost ?? 0;
-    // 2·√(2h/g): 2 cm, 128 ms; 4 cm, 181 ms.
+    // 2·√(2h/g) of the promise less the number: 4 cm, 221 ms.
+    expect(hopTime(0.06)).toBeGreaterThan(220);
+    expect(hopTime(0.06)).toBeLessThan(222);
     expect(hopTime(lift)).toBeCloseTo(2000 * Math.sqrt((2 * lift) / 9.81), 6);
-    expect(hopTime(0.04)).toBeGreaterThan(180);
-    expect(hopTime(0.04)).toBeLessThan(181);
     const video = videoOf("squat_reference");
     const reps = repTimes(video);
     expect(reps.length).toBe(3);
-    // The feet hidden around each of the first two reps' tops, no hop, in pictures that came: a short break keeps the
+    // The feet hidden after each of the first two reps' tops, no hop, in pictures that came: a short break keeps the
     // count, a long one leaves those reps unseen.
     const hiddenFor = (ms: number): Video =>
       edited(
@@ -249,42 +253,44 @@ describe("the camera must see enough, or nothing is decided", () => {
         ),
       );
     expect(runMovement(SQUAT, hiddenFor(60)).count).toBe(3);
-    // Four pictures hidden: a break of 167 ms, longer than a 2 cm hop's 128 ms and shorter than the 221 ms allowed when
-    // no picture came at all; pictures came, so it is the model losing the feet.
-    const long = runMovement(SQUAT, hiddenFor(120));
+    // Seven pictures hidden: a break of 267 ms.
+    const long = runMovement(SQUAT, hiddenFor(220));
     expect(long.count).toBe(1);
     expect(long.reps.filter((r) => r.verdict === "unseen").map((r) => r.rule)).toEqual(["feet stay down", "feet stay down"]);
   });
 
-  it("pictures the phone did not send leave a break that decides nothing only past half the lowest real jump's time in the air", () => {
-    // 6 cm, 221 ms: Kd's squat jumps lift the ankles 12 to 34 cm.
-    expect(LOWEST_JUMP).toBe(0.12);
-    expect(MATCH_LIMITS.unsent).toBeCloseTo(hopTime(0.06), 6);
+  it("pictures the phone did not send leave a break judged as any other: the body may be in the air then too", () => {
     const video = videoOf("squat_reference");
     const reps = repTimes(video);
-    // No picture at all for a while at each of the first two reps' tops: the phone was busy.
+    // No picture at all for a while after each of the first two reps' tops: the phone was busy.
     const unsentFor = (ms: number): Video => edited(video, video.frames.filter((f) => !reps.slice(0, 2).some((r) => f.t >= r.end && f.t < r.end + ms)));
-    expect(runMovement(SQUAT, unsentFor(150)).count).toBe(3);
-    const long = runMovement(SQUAT, unsentFor(300));
+    expect(runMovement(SQUAT, unsentFor(100)).count).toBe(3);
+    const long = runMovement(SQUAT, unsentFor(240));
     expect(long.count).toBe(1);
     expect(long.reps.filter((r) => r.verdict === "unseen").map((r) => r.rule)).toEqual(["feet stay down", "feet stay down"]);
   });
 
-  it("a toe the model slides down the picture at the bottom is on the floor once back where it stood, while the heel comes up (52a-ii-a)", () => {
-    // As on the fresh barbell front squat: at the bottom the toe points go 0.02 of the picture (about 5 cm for her) down
-    // the picture; once back up the heels rise 3 cm for 0.4 s, the toes where they stood.
+  it("a rep is not judged while its feet are hidden at the moment it would be: it waits, and a jump hidden then is seen", () => {
+    // The feet hidden from 0.35 s to 0.45 s after each of the first two reps is back, across the moment the rep would
+    // be judged (0.4 s), with a 10 cm jump taking off at 0.3 s: counted, the rep would hide the jump's top.
+    const video = videoOf("prisoner_squat_3");
+    const run = runMovement(SQUAT, trueHop(video, 0.1, 300, Object.fromEntries(FEET.map((k) => [k, [50, 150] as const]))));
+    // Her fifth rep's jump would take off after the video ends: only that rep is never jumped.
+    expect(run.reps.filter((r) => r.verdict === "counted").map((r) => Math.round((r.start - LEAD_IN) / 100) / 10)).toEqual([Math.round((repTimes(video)[4]?.start ?? 0) / 100) / 10]);
+  });
+
+  it("a toe the model slides down the picture at the bottom is not a foot off the floor while its heel stays down", () => {
+    // As on the fresh barbell front squat: at the bottom the toe points go 0.02 of the picture (about 4 cm for her) down
+    // the picture, and back up to where they were as she stands: the toes rose from their lowest, the heels did not.
     const video = videoOf("squat_reference");
     const reps = repTimes(video);
-    const size = sizeOf(video);
     const TOES = [31, 32];
-    const HEELS = [29, 30];
     const frames = editPeople(video.frames, (p, f) => {
-      const r = reps.find((x) => f.t >= x.start && f.t <= x.end + 400);
+      const r = reps.find((x) => f.t >= x.start && f.t <= x.end);
       if (r === undefined) return p;
       const bottom = (r.start + r.end) / 2;
-      const slide = f.t <= r.end ? 0.02 * Math.max(0, 1 - Math.abs(f.t - bottom) / ((r.end - r.start) / 2)) : 0;
-      const heel = f.t > r.end ? 0.03 * size : 0;
-      return { ...p, points: p.points.map(([x, y, z, v, pr], i) => [x, TOES.includes(i) ? y + slide : HEELS.includes(i) ? y - heel : y, z, v, pr]) };
+      const slide = 0.02 * Math.max(0, 1 - Math.abs(f.t - bottom) / ((r.end - r.start) / 2));
+      return { ...p, points: p.points.map(([x, y, z, v, pr], i) => [x, TOES.includes(i) ? y + slide : y, z, v, pr]) };
     });
     expect(runMovement(SQUAT, edited(video, frames)).count).toBe(3);
   });

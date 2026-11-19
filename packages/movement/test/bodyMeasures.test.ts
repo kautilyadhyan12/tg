@@ -130,7 +130,12 @@ function frame(t: number, world: readonly P[], look: Look = {}): SteadyBody {
   const [ax, ay] = look.at ?? [0.6, 0.9];
   const hidden = new Set(look.hidden ?? []);
   const up = (i: number): number => (look.raise?.points.includes(i) === true ? look.raise.metres : 0);
-  const points = world.map((w, i) => (hidden.has(i) ? null : { x: (size * (ax + w[0])) / aspect, y: size * (ay + w[1] - up(i)), world: w }));
+  const points = world.map((w, i) => {
+    if (hidden.has(i)) return null;
+    const x = (size * (ax + w[0])) / aspect;
+    const y = size * (ay + w[1] - up(i));
+    return { x, y, world: w, raw: { x, y } };
+  });
   return { t, aspect, down: look.down === undefined ? [0, 1, 0] : look.down, size, points, refused: points.map((p) => (p === null ? "hidden" : null)) };
 }
 

@@ -22,7 +22,7 @@ export {
   MATCH_LIMITS,
   MovementMatcher,
   checkMovement,
-  LOWEST_JUMP,
+  PROMISED_JUMP,
   hopTime,
   type MatchFrame,
   type MatchLimits,

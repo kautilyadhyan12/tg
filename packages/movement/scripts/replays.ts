@@ -18,9 +18,11 @@
 //     up or down in 95 of 100, the heel and toes of a foot mostly together. A drift drawn by hand, each point on its
 //     own, was harsher than the phone (heel against toes 1.4 cm against 0.75 to 1.1) and would have widened the feet's
 //     rule for nothing. The graphics chip's gap and the small model's are shown, never held: the app uses neither;
-//   - a passer-by: somebody walks between the phone and the person in 0.8 s, hiding a fifth of the picture's width as
-//     they pass: once while the person stands between reps, and once at the bottom of a rep, where that rep is not
-//     seen and must decide nothing.
+//   - a passer-by: somebody walks across between the phone and the person, about 1 m from the phone, in 0.8 s,
+//     hiding every point under their body (nearly half the picture's width) as they pass, the person wholly hidden for
+//     a moment: once while the person stands between reps (or in a video's middle), and once at the bottom of a rep
+//     (or where the hips are lowest), where that rep is not seen and must decide nothing. The model following the
+//     passer-by instead of the person is 52d's.
 // A phone lower, higher or turned, redrawn from the 3D points, is 52a-ii-b's: drawn back from the phone's own place the
 // 3D points land 5 to 11 cm from the picture's own joints, so a redraw is not yet faithful (spec §12.5).
 import { readFileSync } from "node:fs";
@@ -41,6 +43,9 @@ export interface Replay {
   readonly edit: (frames: Frames, seed: number, reps: readonly { readonly start: number; readonly end: number }[]) => MovementFrame[];
   /** For a replay that hides a rep: how many reps it may take away (each one hidden, never counted). */
   readonly hides?: number;
+  /** Whether the replay changed this video at all; a row it did not change proves nothing (nearer, for a body that
+   *  already fills the picture). */
+  readonly tried?: (frames: Frames) => boolean;
   /** It changes only how the camera reads a body, the same body doing the same reps: the movement's numbers are set from
    *  the videos as filmed and as each such replay (movementCheck.ts `fit`), so a rule leaves room for what a phone
    *  adds. A passer-by hides the person and sets nothing. */
@@ -233,6 +238,11 @@ export const PHONE_GAPS = [
   { name: "small model's gap", run: "pose_landmarker_lite.cpu.t4", videos: ["squat_reference", "chair_squat_reference"] },
 ] as const;
 
+/** The phone file's own label: the video's, then the phone and the run, letters, digits and underscores. */
+export function phoneLabel(video: string, run: string): string {
+  return `${video}_phone_${run.replace(/[^A-Za-z0-9]/g, "_")}`;
+}
+
 type Offset = { readonly picture: readonly [number, number]; readonly world: readonly [number, number, number] } | null;
 
 const TEST = join(import.meta.dirname, "../test");
@@ -296,7 +306,7 @@ export function chipsGap(run: string) {
 
 /** Somebody walking across between the phone and the person in `ms`, hiding every point within `width` (a share of the
  *  picture's width) of them, centred on `at`. */
-export function passerBy(at: (reps: readonly { readonly start: number; readonly end: number }[], frames: Frames) => number | null, ms = 800, width = 0.2) {
+export function passerBy(at: (reps: readonly { readonly start: number; readonly end: number }[], frames: Frames) => number | null, ms = 800, width = 0.45) {
   return (frames: Frames, _seed: number, reps: readonly { readonly start: number; readonly end: number }[]): MovementFrame[] => {
     const middle = at(reps, frames);
     if (middle === null) return [...frames];
@@ -310,22 +320,36 @@ export function passerBy(at: (reps: readonly { readonly start: number; readonly 
   };
 }
 
-/** The middle of the longest stand between two counted reps, or before the first. */
+/** The middle of the longest stand between two counted reps, or before the first; with no rep counted (another
+ *  movement), the video's middle. */
 function betweenReps(reps: readonly { readonly start: number; readonly end: number }[], frames: Frames): number | null {
   const first = frames[0]?.t ?? 0;
+  if (reps.length === 0) return (first + (frames[frames.length - 1]?.t ?? first)) / 2;
   const spans = reps.map((r, k) => [k === 0 ? first : (reps[k - 1]?.end ?? first), r.start] as const);
   const best = spans.reduce<readonly [number, number] | null>((a, s) => (a === null || s[1] - s[0] > a[1] - a[0] ? s : a), null);
   return best === null ? null : (best[0] + best[1]) / 2;
 }
 
-/** The middle of the first counted rep, its bottom. */
-function atBottom(reps: readonly { readonly start: number; readonly end: number }[]): number | null {
+/** The middle of the first counted rep, its bottom; with no rep counted (another movement), where the hips are lowest
+ *  on the picture. */
+function atBottom(reps: readonly { readonly start: number; readonly end: number }[], frames: Frames): number | null {
   const r = reps[0];
-  return r === undefined ? null : (r.start + r.end) / 2;
+  if (r !== undefined) return (r.start + r.end) / 2;
+  let lowest: { t: number; y: number } | null = null;
+  for (const f of frames) {
+    const p = f.people[0];
+    if (p === undefined) continue;
+    const y = ((p.points[23]?.[1] ?? 0) + (p.points[24]?.[1] ?? 0)) / 2;
+    if (lowest === null || y > lowest.y) lowest = { t: f.t, y };
+  }
+  return lowest?.t ?? null;
 }
 
+/** Nearer changes a video only where its body has room to grow: at least 1.05 times. */
+const NEARER_TRIED = 1.05;
+
 export const REPLAYS: readonly Replay[] = [
-  { name: "nearer", words: "nearer the phone, up to 1.3 times bigger, the whole body in the picture", hold: true, edit: nearer(1.3), fits: true },
+  { name: "nearer", words: "nearer the phone, up to 1.3 times bigger, the whole body in the picture", hold: true, edit: nearer(1.3), fits: true, tried: (f) => nearestFactor(f, 1.3) >= NEARER_TRIED },
   { name: "farther", words: "farther from the phone, 0.6 times as big", hold: true, edit: farther(0.6), fits: true },
   { name: "tilted left", words: "the phone leaning 15 degrees one way", hold: true, edit: tilted(15), fits: true },
   { name: "tilted right", words: "the phone leaning 15 degrees the other way", hold: true, edit: tilted(-15), fits: true },
@@ -334,7 +358,7 @@ export const REPLAYS: readonly Replay[] = [
   { name: "uneven", words: "each picture 1 to 4 camera pictures after the last, as the phone's live mode drops them", hold: true, edit: uneven(4), fits: true },
   { name: "shaky", words: "every point shaken 1 cm afresh in every picture", hold: true, edit: shaken(0.01), fits: true },
   { name: "chip's gap", words: "every point moved by the gap the phone's chosen set-up reads from the laptop", hold: true, edit: chipsGap("pose_landmarker_full.cpu.t4"), fits: true },
-  { name: "passer-by", words: "somebody walks past in front while the person stands between reps", hold: true, edit: passerBy(betweenReps), fits: false },
+  { name: "passer-by", words: "somebody walks past in front between reps (with no pause between them, the rep they cover is not seen)", hold: true, edit: passerBy(betweenReps), hides: 1, fits: false },
   { name: "passer-by at the bottom", words: "somebody walks past in front at the bottom of a rep: that rep is not seen", hold: true, edit: passerBy(atBottom), hides: 1, fits: false },
   { name: "graphics chip's gap", words: "every point moved by the graphics chip's gap (the app does not use it)", hold: false, edit: chipsGap("pose_landmarker_full.gpu"), fits: false },
   { name: "small model's gap", words: "every point moved by the small model's gap on the main chip (the app does not use it)", hold: false, edit: chipsGap("pose_landmarker_lite.cpu.t4"), fits: false },
