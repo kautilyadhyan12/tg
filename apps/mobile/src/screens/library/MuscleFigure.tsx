@@ -27,7 +27,7 @@ export function MuscleFigure({
   const height = Math.round((width * FIGURE_BOX.height) / FIGURE_BOX.width);
   const mains = parts.filter((p) => p.m !== "" && lit.get(p.m) === "main");
   return (
-    <Svg width={width} height={height} viewBox={BOX} accessible={false}>
+    <Svg testID={`figure-${sex}-${side}`} width={width} height={height} viewBox={BOX} accessible={false}>
       <Defs>
         <LinearGradient id={`${id}main`} x1="0" y1="0" x2="0" y2="1">
           <Stop offset="0" stopColor={colours.orangeLight} />

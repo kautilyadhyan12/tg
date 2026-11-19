@@ -2311,9 +2311,9 @@ items 36 and 24b take as it is):
 - **The figures** are Kd's own four line drawings (male and female, front and back, made in ChatGPT), each half mirrored
   onto the other and every closed shape named as a muscle by `apps/mobile/tools/figures/trace.py`, which writes
   `src/library/figures.ts`. A test holds them to the word list: every muscle is drawn or lights a drawn one, and the male
-  and female figures show the same muscles. The figure is the person's setup answer, male or female; "other", "prefer not
-  to say" or none start on Male; the Male · Female switch on the page is always there and its pick is kept on the phone for
-  that person (`figure-<id>.txt`, removed with the account).
+  and female figures show the same muscles. The figure is the person's own, from their setup answer, with no switch (Kd,
+  2026-11-19: a man never sees the female figure, a woman never the male one); "other", "prefer not to say" or none show
+  the male figure.
 - **The list kept on the phone:** the newest download in one file for everybody (`library.json`), shown at once; each open
   asks `GET /v1/library` with its fingerprint (If-None-Match) and 304 keeps it. With no copy and no internet the page says
   "Couldn't load the exercises" with Try again. The phone reads the download through `readPhoneLibrary`
@@ -2323,13 +2323,16 @@ items 36 and 24b take as it is):
   spaces and marks aside), then another name, then the muscles it works (main and also, never the steadying row), its
   equipment or kind; A to Z within each. A search made of a muscle's plain name ("biceps") reads plain names only, so the
   hamstring's "biceps femoris" does not answer it.
-- **A card:** a picture (the app's own of that exercise, else of its kind, until job 62), a small figure lit, the level as
-  plates, the main muscles' plain names, the starting target and the effort as flames: the Compendium's own bands on the
-  MET, light under 3.0, moderate to 5.9, vigorous from 6.0. Kinds offered are only those the Library holds.
-- **The page:** the facts strip, every caution above the tabs (one alert each), then Muscles (front and back lit, a line
-  naming the first main muscle, the three rows in words), How to (one step a card, swiped, Back and Next, then About) and
-  Mistakes (a mistake's first sentence as what goes wrong, the rest as the fix), then its sources. How it is counted reads
-  "Count by hand or timer" for every exercise until exercise folder 1's 52a publishes camera data and its shape.
+- **A card:** a picture (the app's own of that exercise, else of its kind, until job 62) shown whole in its own colours
+  inside the card's top, never cut and never faded (Kd), a small figure lit, the level as plates, the main muscles' plain
+  names, the starting target and the intensity as flames: the Compendium's own bands on the MET, light under 3.0,
+  moderate to 5.9, vigorous from 6.0. Kinds offered are only those the Library holds.
+- **The page:** the facts strip (sets × reps or time, level, intensity, equipment; none shown as the dumbbell struck
+  through), every caution above the tabs (one alert each), then Muscles (front and back lit, a line naming the first main
+  muscle, the three rows in gym terms: Primary, Secondary, Stabilisers), Instructions (one step a card, swiped, then
+  About) and Mistakes (a mistake's first sentence as what goes wrong, the rest as the fix), then ⓘ Sources, which opens
+  the list from the bottom. How it is counted reads "Manual tracking" for every exercise until exercise folder 1's 52a
+  publishes camera data and its shape.
 - **Not in 63a:** the filter button and "Find by muscle" (63b); records, calories a minute and Add to workout (63c).
 
 ### 13.7 The jobs (ROADMAP Stage 5, exercise folder 2; ROADMAP wins where they differ)

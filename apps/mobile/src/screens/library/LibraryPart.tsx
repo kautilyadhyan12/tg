@@ -27,7 +27,7 @@ const NOTHING_LIT: ReadonlyMap<string, Lit> = new Map<string, Lit>();
  *  Workout · Running, under the picture. */
 export function LibraryPart({ parts, file }: { parts: ReactNode; file?: LibraryFile }) {
   const { state, again } = useLibrary(file);
-  const { sex, pick } = useFigureSex();
+  const sex = useFigureSex();
   const [search, setSearch] = useState("");
   const [kind, setKind] = useState<string>(ALL);
   const [open, setOpen] = useState<string | null>(null);
@@ -119,7 +119,6 @@ export function LibraryPart({ parts, file }: { parts: ReactNode; file?: LibraryF
         <ExercisePage
           entry={opened}
           sex={sex}
-          onPickSex={pick}
           onClose={() => {
             setOpen(null);
           }}

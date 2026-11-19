@@ -1,5 +1,6 @@
 import { useId } from "react";
-import Svg, { Circle, Defs, LinearGradient, Path, Stop } from "react-native-svg";
+import { StyleSheet, View } from "react-native";
+import Svg, { Defs, LinearGradient, Path, Stop } from "react-native-svg";
 import { colours } from "../../look/colours";
 import { Icon } from "../../look/Icon";
 
@@ -48,14 +49,19 @@ export function Flames({ lit, size = 13 }: { lit: 0 | 1 | 2 | 3; size?: number }
   );
 }
 
-/** What an exercise needs, drawn: a person for none, a barbell, or the dumbbell sign for anything else. */
+/** What an exercise needs, drawn: the dumbbell sign struck through for none (as gym apps mark "no equipment"),
+ *  a barbell, or the dumbbell sign for anything else. */
 export function KitMark({ item, size = 1 }: { item: string | undefined; size?: number }) {
   if (item === undefined) {
+    const side = Math.round(26 * size);
     return (
-      <Svg width={44 * size} height={28 * size} viewBox="0 0 44 28" accessible={false}>
-        <Circle cx={22} cy={6} r={3} fill="none" stroke={colours.orange} strokeWidth={2} />
-        <Path d="M22 10v8M14 13l8-2 8 2M22 18l-5 8M22 18l5 8" fill="none" stroke={colours.orange} strokeWidth={2} strokeLinecap="round" />
-      </Svg>
+      <View style={{ width: side, height: side }}>
+        <Icon name="dumbbell" size={side} colour="orange" />
+        <Svg style={StyleSheet.absoluteFill} width={side} height={side} viewBox="0 0 24 24" accessible={false}>
+          <Path d="M4 20 20 4" stroke={colours.page} strokeWidth={4.5} strokeLinecap="round" />
+          <Path d="M4 20 20 4" stroke={colours.orange} strokeWidth={2} strokeLinecap="round" />
+        </Svg>
+      </View>
     );
   }
   if (item === "barbell" || item === "ez_curl_bar" || item === "smith_machine") {

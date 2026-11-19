@@ -1,14 +1,13 @@
 import type { PhoneLibraryEntry } from "@app/shared";
-import { useRef, useState } from "react";
-import { ScrollView, StyleSheet, View, useWindowDimensions, type NativeScrollEvent, type NativeSyntheticEvent } from "react-native";
+import { useState } from "react";
+import { Pressable, ScrollView, StyleSheet, View, useWindowDimensions, type NativeScrollEvent, type NativeSyntheticEvent } from "react-native";
 import Svg, { Circle, Line } from "react-native-svg";
-import { Button } from "../../look/Button";
 import { Segments } from "../../look/Choice";
-import { Chip } from "../../look/Chip";
 import { colours, shadows, sizes, stageGlow } from "../../look/colours";
 import { CoverPage } from "../../look/CoverPage";
 import { Icon } from "../../look/Icon";
 import { PictureTop } from "../../look/PictureTop";
+import { Sheet } from "../../look/Sheet";
 import { fonts, Txt } from "../../look/Txt";
 import { centreOf, DEEP_UNDER, FIGURE_BOX, figureName, litMuscles, sideFor, type Sex, type Side } from "../../library/figure";
 import { exercisePicture } from "../../library/pictures";
@@ -32,12 +31,8 @@ import { MuscleFigure } from "./MuscleFigure";
 type Tab = "muscles" | "howto" | "mistakes";
 const TABS = [
   { value: "muscles", label: "Muscles" },
-  { value: "howto", label: "How to" },
+  { value: "howto", label: "Instructions" },
   { value: "mistakes", label: "Mistakes" },
-] as const;
-const SEXES = [
-  { value: "male", label: "Male" },
-  { value: "female", label: "Female" },
 ] as const;
 
 /** An exercise's page, opened over the Library (63a, as drawn): its picture, one strip of facts, its cautions
@@ -45,18 +40,17 @@ const SEXES = [
 export function ExercisePage({
   entry,
   sex,
-  onPickSex,
   onClose,
 }: {
   entry: PhoneLibraryEntry;
   sex: Sex;
-  onPickSex: (sex: Sex) => void;
   onClose: () => void;
 }) {
   const [tab, setTab] = useState<Tab>("muscles");
+  const [sourcesOpen, setSourcesOpen] = useState(false);
   const en = entry.text.en;
   const counted = COUNTED_WORDS[COUNTED_TODAY];
-  const sources = entry.sources.map((s) => s.name).join(" · ");
+
   const hero = (
     <PictureTop
       picture={exercisePicture(entry.id, entry.kind)}
@@ -92,8 +86,36 @@ export function ExercisePage({
         </View>
       ))}
       <Segments options={TABS} selected={tab} onPick={setTab} />
-      {tab === "muscles" ? <Muscles entry={entry} sex={sex} onPickSex={onPickSex} /> : tab === "howto" ? <HowTo entry={entry} /> : <Mistakes entry={entry} />}
-      {sources === "" ? null : <Txt kind="tiny">{`Sources: ${sources}`}</Txt>}
+      {tab === "muscles" ? <Muscles entry={entry} sex={sex} /> : tab === "howto" ? <HowTo entry={entry} /> : <Mistakes entry={entry} />}
+      {entry.sources.length === 0 ? null : (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Sources"
+          onPress={() => {
+            setSourcesOpen(true);
+          }}
+          style={styles.sourcesLink}
+          hitSlop={8}
+        >
+          <Icon name="info" size={16} colour="textFaint" />
+          <Txt kind="tiny">Sources</Txt>
+        </Pressable>
+      )}
+      <Sheet
+        open={sourcesOpen}
+        title="Sources"
+        onClose={() => {
+          setSourcesOpen(false);
+        }}
+      >
+        <View style={styles.sources}>
+          {entry.sources.map((s) => (
+            <Txt key={s.name} kind="small">
+              {s.name}
+            </Txt>
+          ))}
+        </View>
+      </Sheet>
     </CoverPage>
   );
 }
@@ -112,7 +134,7 @@ function Strip({ entry }: { entry: PhoneLibraryEntry }) {
             {target.replace(" × ", "×").replace(" reps", "").replace(" s", "s").replace(" min", "m")}
           </Txt>
           <Txt kind="tiny" numberOfLines={1} fit>
-            {entry.set.measuredIn === "reps" ? "Reps to start" : "To start"}
+            {entry.set.measuredIn === "reps" ? "Sets × reps" : "Sets × time"}
           </Txt>
         </View>
       )}
@@ -147,27 +169,22 @@ function Strip({ entry }: { entry: PhoneLibraryEntry }) {
   );
 }
 
-function Muscles({ entry, sex, onPickSex }: { entry: PhoneLibraryEntry; sex: Sex; onPickSex: (sex: Sex) => void }) {
+function Muscles({ entry, sex }: { entry: PhoneLibraryEntry; sex: Sex }) {
   const { width } = useWindowDimensions();
   const lit = litMuscles(entry.muscles);
   const figure = Math.min(150, Math.floor((width - sizes.edge * 2 - 32 - 26) / 2));
   const labelled = entry.muscles.main[0];
   const labelSide: Side = sideFor(entry.muscles.main);
   const rows = [
-    { key: "main", title: "Main", swatch: styles.swMain, words: entry.muscles.main },
-    { key: "also", title: "Also works", swatch: styles.swAlso, words: entry.muscles.also },
-    { key: "steady", title: "Keeps you steady", swatch: styles.swSteady, words: entry.muscles.steady },
+    { key: "main", title: "Primary", swatch: styles.swMain, words: entry.muscles.main },
+    { key: "also", title: "Secondary", swatch: styles.swAlso, words: entry.muscles.also },
+    { key: "steady", title: "Stabilisers", swatch: styles.swSteady, words: entry.muscles.steady },
   ].filter((r) => r.words.length > 0);
   return (
     <>
       <View style={styles.stage}>
         <View style={styles.stageHead}>
           <Txt kind="eyebrow">Muscles worked</Txt>
-          <View style={styles.sexes}>
-            {SEXES.map((s) => (
-              <Chip key={s.value} label={s.label} small on={sex === s.value} onPress={() => { onPickSex(s.value); }} />
-            ))}
-          </View>
         </View>
         <View style={styles.figures}>
           {(["front", "back"] as const).map((side) => (
@@ -226,19 +243,12 @@ function HowTo({ entry }: { entry: PhoneLibraryEntry }) {
   const card = width - sizes.edge * 2 - 44;
   const step = card + 12;
   const [at, setAt] = useState(0);
-  const scroller = useRef<ScrollView>(null);
-  const go = (i: number) => {
-    const next = Math.max(0, Math.min(steps.length - 1, i));
-    setAt(next);
-    scroller.current?.scrollTo({ x: next * step, animated: true });
-  };
   const landed = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     setAt(Math.max(0, Math.min(steps.length - 1, Math.round(e.nativeEvent.contentOffset.x / step))));
   };
   return (
     <>
       <ScrollView
-        ref={scroller}
         horizontal
         showsHorizontalScrollIndicator={false}
         snapToInterval={step}
@@ -262,10 +272,6 @@ function HowTo({ entry }: { entry: PhoneLibraryEntry }) {
           </View>
         ))}
       </ScrollView>
-      <View style={styles.stepButtons}>
-        <Button label="Back" kind="plain" small disabled={at === 0} onPress={() => { go(at - 1); }} />
-        <Button label="Next" kind="plain" small disabled={at === steps.length - 1} onPress={() => { go(at + 1); }} />
-      </View>
       <View style={styles.about}>
         <Txt kind="eyebrow">About</Txt>
         <Txt>{entry.text.en.about}</Txt>
@@ -331,7 +337,8 @@ const styles = StyleSheet.create({
   caution: { flexDirection: "row", gap: 10, alignItems: "flex-start", paddingVertical: 11, paddingHorizontal: 14, borderRadius: 14, borderWidth: 1, borderColor: colours.badLine, backgroundColor: colours.badFill },
   stage: { borderRadius: 24, borderWidth: 1, borderColor: colours.line, backgroundColor: colours.box, experimental_backgroundImage: stageGlow, paddingBottom: 10 },
   stageHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8, paddingHorizontal: 14, paddingTop: 12 },
-  sexes: { flexDirection: "row", gap: 6 },
+  sourcesLink: { flexDirection: "row", alignItems: "center", gap: 6, alignSelf: "flex-start", minHeight: sizes.press },
+  sources: { gap: 10 },
   figures: { flexDirection: "row", justifyContent: "center", gap: 26, paddingTop: 22 },
   figureCol: { alignItems: "center", gap: 8 },
   label: { position: "absolute", paddingHorizontal: 10, minHeight: 26, justifyContent: "center", borderRadius: sizes.round, backgroundColor: colours.orange },
@@ -351,7 +358,6 @@ const styles = StyleSheet.create({
   dots: { flexDirection: "row", gap: 6, marginTop: "auto", paddingTop: 10 },
   dot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colours.lineStrong },
   dotOn: { width: 22, backgroundColor: colours.orange },
-  stepButtons: { flexDirection: "row", justifyContent: "space-between" },
   about: { gap: 6, paddingVertical: 14, paddingHorizontal: 16, borderRadius: 18, borderWidth: 1, borderColor: colours.line, backgroundColor: colours.box },
   mistakes: { gap: 10 },
   mistake: { borderRadius: 18, borderWidth: 1, borderColor: colours.line, overflow: "hidden" },

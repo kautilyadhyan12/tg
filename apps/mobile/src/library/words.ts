@@ -58,7 +58,7 @@ export function effortOf(met: number | null): Effort | null {
 }
 
 export const EFFORT_FLAMES: Readonly<Record<Effort, 1 | 2 | 3>> = { light: 1, moderate: 2, vigorous: 3 };
-export const EFFORT_WORDS: Readonly<Record<Effort, string>> = { light: "Light effort", moderate: "Moderate effort", vigorous: "Vigorous effort" };
+export const EFFORT_WORDS: Readonly<Record<Effort, string>> = { light: "Light intensity", moderate: "Moderate intensity", vigorous: "Vigorous intensity" };
 
 /** A set's starting target: "3 × 12 reps", "3 × 30 s"; null when the phone cannot say it. */
 export function targetLine(entry: PhoneLibraryEntry, short = true): string | null {
@@ -86,8 +86,8 @@ export function equipmentLine(entry: PhoneLibraryEntry): string {
  *  replaces COUNTED_TODAY with the reading. */
 export type CountedBy = "camera_coaches" | "camera_counts" | "hand";
 export const COUNTED_WORDS: Readonly<Record<CountedBy, string>> = {
-  camera_coaches: "The camera counts and coaches",
-  camera_counts: "The camera counts",
-  hand: "Count by hand or timer",
+  camera_coaches: "Camera counts and coaches",
+  camera_counts: "Camera counts",
+  hand: "Manual tracking",
 };
 export const COUNTED_TODAY: CountedBy = "hand";

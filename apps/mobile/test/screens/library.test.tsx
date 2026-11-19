@@ -76,10 +76,10 @@ beforeEach(() => {
 });
 
 describe("an exercise's page never hides its caution", () => {
-  it("the plank's caution is shown above the tabs, on Muscles, How to and Mistakes alike", async () => {
+  it("the plank's caution is shown above the tabs, on Muscles, Instructions and Mistakes alike", async () => {
     await openLibrary(libraryServer().ask);
     await openExercise(/^Plank,/);
-    for (const tab of ["Muscles", "How to", "Mistakes"]) {
+    for (const tab of ["Muscles", "Instructions", "Mistakes"]) {
       await fireEvent.press(screen.getByRole("button", { name: tab }));
       const alert = await screen.findByRole("alert");
       expect(alert.props.accessibilityLabel).toBe(`Caution: ${PLANK_CAUTION}`);
@@ -103,9 +103,9 @@ describe("the Library", () => {
     expect(screen.getByText("3 exercises · A to Z")).toBeTruthy();
     const cards = screen.getAllByRole("button", { name: /^(Barbell Curl|Plank|Squat),/ }).map((c) => String(c.props.accessibilityLabel));
     expect(cards).toEqual([
-      "Barbell Curl, Intermediate, Biceps, 3 × 10 reps, Moderate effort",
-      "Plank, Intermediate, Abs · Deep core, 3 × 30 s, Light effort",
-      "Squat, Beginner, Quadriceps · Glutes, 3 × 12 reps, Moderate effort",
+      "Barbell Curl, Intermediate, Biceps, 3 × 10 reps, Moderate intensity",
+      "Plank, Intermediate, Abs · Transverse abdominis, 3 × 30 s, Light intensity",
+      "Squat, Beginner, Quadriceps · Glutes, 3 × 12 reps, Moderate intensity",
     ]);
     expect(server.libraryAsks).toEqual([undefined]);
   });
@@ -176,47 +176,45 @@ describe("the Library", () => {
 });
 
 describe("an exercise's page", () => {
-  it("Muscles names its three rows from its file; How to steps through; Mistakes pairs each fault with its fix", async () => {
+  it("Muscles names its three rows from its file; Instructions swipe; Mistakes pairs each fault with its fix; Sources open from ⓘ", async () => {
     await openLibrary(libraryServer().ask);
     await openExercise(/^Squat,/);
     expect(await screen.findByText("Quadriceps (rectus femoris, vastus lateralis, vastus medialis) · Glutes (gluteus maximus)")).toBeTruthy();
-    expect(screen.getByText("Hamstrings (biceps femoris, semitendinosus and semimembranosus) · Inner thighs (adductors, adductor magnus)")).toBeTruthy();
-    expect(screen.getByText("Glutes (gluteus medius) · Abs (rectus abdominis) · Deep core (transverse abdominis) · Obliques · Lower back (erector spinae)")).toBeTruthy();
-    expect(screen.getByText("Count by hand or timer")).toBeTruthy();
+    expect(screen.getByText("Hamstrings (biceps femoris, semitendinosus and semimembranosus) · Adductors · Adductor magnus")).toBeTruthy();
+    expect(screen.getByText("Glutes (gluteus medius) · Abs (rectus abdominis) · Transverse abdominis · Obliques · Lower back (erector spinae)")).toBeTruthy();
+    for (const row of ["Primary", "Secondary", "Stabilisers"]) expect(screen.getByText(row)).toBeTruthy();
+    expect(screen.getByText("Manual tracking")).toBeTruthy();
     expect(screen.getByLabelText("To start, 3 sets of 12 reps")).toBeTruthy();
     expect(screen.getByLabelText("No equipment")).toBeTruthy();
 
-    await fireEvent.press(screen.getByRole("button", { name: "How to" }));
+    await fireEvent.press(screen.getByRole("button", { name: "Instructions" }));
     expect(await screen.findByLabelText(/^Step 1 of 6\. Stand with your feet/)).toBeTruthy();
-    const back = () => screen.getByRole("button", { name: "Back" }).props.accessibilityState as { disabled: boolean };
-    expect(back().disabled).toBe(true);
-    await fireEvent.press(screen.getByRole("button", { name: "Next" }));
-    expect(back().disabled).toBe(false);
+    expect(screen.getByLabelText(/^Step 2 of 6\./)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Next" })).toBeNull();
 
     await fireEvent.press(screen.getByRole("button", { name: "Mistakes" }));
     expect(await screen.findByText("Heels lift off the floor.")).toBeTruthy();
     expect(screen.getByText("Keep your whole foot down and lower only as far as your heels stay flat.")).toBeTruthy();
+
+    expect(screen.queryByText(/National Academy of Sports Medicine/)).toBeNull();
+    await fireEvent.press(screen.getByRole("button", { name: "Sources" }));
+    expect(await screen.findByText("National Academy of Sports Medicine (NASM), Exercise Library: Prisoner Squat (muscles worked)")).toBeTruthy();
   });
 
-  it("the figure is the person's own from setup, and a picked one is kept for next time", async () => {
-    const server = libraryServer({ gender: "female" });
-    await openLibrary(server.ask);
+  it.each([
+    ["female", "female"],
+    ["male", "male"],
+    ["other", "male"],
+    ["prefer_not_to_say", "male"],
+    [null, "male"],
+  ] as const)("setup's answer %s shows the %s figures only, with no switch", async (gender, figure) => {
+    await openLibrary(libraryServer({ gender }).ask);
     await openExercise(/^Plank,/);
-    await waitFor(() => { expect(screen.getByRole("radio", { name: "Female" }).props.accessibilityState).toEqual({ selected: true }); });
-    await fireEvent.press(screen.getByRole("radio", { name: "Male" }));
-    expect(screen.getByRole("radio", { name: "Male" }).props.accessibilityState).toEqual({ selected: true });
-    await screen.unmount();
-    await openLibrary(server.ask);
-    await settle(300);
-    await openExercise(/^Plank,/);
-    await settle(300);
-    expect(screen.getByRole("radio", { name: "Male" }).props.accessibilityState).toEqual({ selected: true });
-  });
-
-  it("somebody who answered neither starts on Male, with the switch there", async () => {
-    await openLibrary(libraryServer({ gender: "prefer_not_to_say" }).ask);
-    await openExercise(/^Plank,/);
-    expect(await screen.findByRole("radio", { name: "Female" })).toBeTruthy();
-    expect(screen.getByRole("radio", { name: "Male" }).props.accessibilityState).toEqual({ selected: true });
+    await waitFor(() => { expect(screen.getAllByTestId(`figure-${figure}-front`).length).toBeGreaterThan(0); });
+    const other = figure === "female" ? "male" : "female";
+    expect(screen.queryAllByTestId(`figure-${other}-front`)).toHaveLength(0);
+    expect(screen.queryAllByTestId(`figure-${other}-back`)).toHaveLength(0);
+    expect(screen.queryByRole("radio", { name: "Male" })).toBeNull();
+    expect(screen.queryByRole("radio", { name: "Female" })).toBeNull();
   });
 });

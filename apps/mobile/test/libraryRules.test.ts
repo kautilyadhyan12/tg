@@ -106,7 +106,8 @@ describe("effort: the Compendium's own bands", () => {
 describe("the words an exercise is shown with", () => {
   it.each([
     [["rectus_femoris", "vastus_lateralis", "vastus_medialis", "glute_max"], "Quadriceps (rectus femoris, vastus lateralis, vastus medialis) · Glutes (gluteus maximus)"],
-    [["abs", "transverse_abdominis"], "Abs (rectus abdominis) · Deep core (transverse abdominis)"],
+    [["abs", "transverse_abdominis"], "Abs (rectus abdominis) · Transverse abdominis"],
+    [["adductors", "adductor_magnus", "tibialis"], "Adductors · Adductor magnus · Tibialis anterior"],
     [["rotator_cuff"], "Rotator cuff"],
     [["obliques", "lower_back", "serratus"], "Obliques · Lower back (erector spinae) · Serratus anterior"],
     [["gluteus_minimus"], "Gluteus minimus"],
