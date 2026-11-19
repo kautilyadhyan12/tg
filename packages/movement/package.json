@@ -13,6 +13,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint src test scripts",
     "test": "vitest run",
+    "test:proof": "vitest run --config vitest.proof.config.ts",
     "measure-points": "tsx scripts/measure-points.ts",
     "body-check": "tsx scripts/body-check.ts",
     "measure-check": "tsx scripts/measure-check.ts",
