@@ -44,6 +44,7 @@ body{margin:0;background:#0A0908}
 .frame{width:390px;max-width:100%;border:1px solid var(--line2);border-radius:28px;overflow:hidden;background:var(--page);display:flex;flex-direction:column;position:relative}
 .bsheet{background:var(--solid);border-top:1px solid var(--line2);border-radius:22px 22px 0 0;box-shadow:var(--pop);display:flex;flex-direction:column}
 .grab{width:40px;height:5px;border-radius:999px;background:var(--line2);margin:10px auto 4px}
+.savebar{position:sticky;bottom:12px;z-index:2;display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 16px;background:var(--solid);border:1px solid var(--line2);border-radius:18px}
 .footbar{position:sticky;bottom:0;padding:12px 16px 16px;border-top:1px solid var(--line);background:var(--solid);display:flex;flex-direction:column;gap:8px}
 @media (max-width:1180px){.side{grid-template-columns:minmax(0,1fr)}.side > .under{display:none}.side > .sheet{border-left:0}}
 @media (max-width:900px){.step{grid-template-columns:minmax(0,1fr)}.frames{padding:16px;gap:24px}}
@@ -130,7 +131,7 @@ body{margin:0;background:#0A0908}
 <div class="field"><span class="label">Tax</span><span class="t3">Tick each tax charged on this membership. Leave all unticked for no tax.</span>
 <div class="hrow g10"><span class="check check-on"></span><span>Sales tax 8.25%</span></div><div class="hrow g10"><span class="check"></span><span>City fitness tax 2%</span></div></div>
 </section>
-<div class="hrow g10 wrap"><button type="button" class="btn btn-main btn-lg">Save changes</button><button type="button" class="btn btn-q">Cancel</button></div>
+<div class="savebar"><button type="button" class="btn btn-main btn-lg">Save changes</button><button type="button" class="btn btn-q">Cancel</button><span class="t3 grow" style="min-width: 200px">You have changes that aren't saved.</span></div>
 
 <section class="box pad col g12" aria-label="After Save changes">
 <h2 class="h2">After Save changes, on each person's page and their bill</h2>
@@ -155,7 +156,7 @@ body{margin:0;background:#0A0908}
 </div>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"look":{"editor":"enum","options":["Dark","Light"],"default":"Dark"},"$preview":{"width":1440,"height":1920}}'>
+<script type="text/x-dc" data-dc-script data-props='{"look":{"editor":"enum","options":["Dark","Light"],"default":"Dark"},"$preview":{"width":1440,"height":1940}}'>
 class Component extends DCLogic {
 renderVals() {
 return { look: (this.props.look ?? 'Dark') === 'Light' ? 't-light' : '' };

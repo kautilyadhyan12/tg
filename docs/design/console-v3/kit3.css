@@ -175,3 +175,5 @@
 .strip > .grow,.strip > .col.grow{min-width:min(100%,200px)}
 /* The narrowest folding-phone cover (280 px): the five tab names at 11 px, set closer, so none runs into the next. */
 @media (max-width:300px){.ph-tabs{padding-left:0;padding-right:0}.ph-tab{font-size:11px;letter-spacing:-.03em;min-width:0}.ph-tab > span{width:40px}}
+/* The tab that is open is marked in orange, as the menu marks the page that is open. */
+.tab-on{background:var(--o-fill);color:var(--o-t);box-shadow:inset 0 0 0 1px var(--o-line)}

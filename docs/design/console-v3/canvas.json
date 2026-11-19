@@ -15,7 +15,7 @@
     "Phone.dc.html": {"x": 1520, "y": 3520, "w": 390, "h": 1500, "title": "The console on a phone"},
     "MoneySetup.dc.html": {"x": 1990, "y": 3520, "w": 1440, "h": 1240, "title": "Payments overview before Square is connected", "expand": "fill"},
     "Boxes.dc.html": {"x": 0, "y": 5200, "w": 1440, "h": 2720, "title": "Where a box opens: under its button, from the right, in the middle, a page of its own", "expand": "fill"},
-    "Sell.dc.html": {"x": 1520, "y": 5200, "w": 1440, "h": 2240, "title": "Sell: the register", "expand": "fill"},
+    "Sell.dc.html": {"x": 1520, "y": 5200, "w": 1440, "h": 1760, "title": "Sell: the register", "expand": "fill"},
     "SellSale.dc.html": {"x": 3040, "y": 5200, "w": 1440, "h": 2300, "title": "Sell: the Terminal, Sale recorded, Void sale and Refund sale", "expand": "fill"},
     "SellDay.dc.html": {"x": 0, "y": 8040, "w": 1440, "h": 1360, "title": "Sell: another day, refunds and chargebacks", "expand": "fill"},
     "SellProducts.dc.html": {"x": 1520, "y": 8040, "w": 1440, "h": 1580, "title": "Sell: products, and Add a product from the right", "expand": "fill"},
@@ -24,7 +24,7 @@
     "Memberships.dc.html": {"x": 1520, "y": 9740, "w": 1440, "h": 2660, "title": "Memberships: the price list, your member list and billing rules", "expand": "fill"},
     "MembershipsGive.dc.html": {"x": 3040, "y": 9740, "w": 1440, "h": 1600, "title": "Memberships: give it to the people on your list", "expand": "fill"},
     "MembershipAdd.dc.html": {"x": 0, "y": 12520, "w": 1440, "h": 3500, "title": "Add a membership type, a page of its own", "expand": "fill"},
-    "MembershipRaise.dc.html": {"x": 1520, "y": 12520, "w": 1440, "h": 1920, "title": "A higher price for members already on it", "expand": "fill"},
+    "MembershipRaise.dc.html": {"x": 1520, "y": 12520, "w": 1440, "h": 1940, "title": "A higher price for members already on it", "expand": "fill"},
     "PhoneSell.dc.html": {"x": 3040, "y": 12520, "w": 1800, "h": 1320, "title": "Sell on a phone", "expand": "fill"},
     "PhoneMemberships.dc.html": {"x": 3040, "y": 13960, "w": 1800, "h": 1320, "title": "Memberships on a phone", "expand": "fill"}
   },

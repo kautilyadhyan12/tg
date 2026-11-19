@@ -30,7 +30,7 @@ permission a page has stays.
 | `Person` | A member's page in three columns, the next step under the name | V2a |
 | `Phone` | The console on a phone: the top bar, Overview, the five tabs | V1-c (the bar), V5 (the page) |
 | `Boxes` | Where a box opens: under its button, from the right, in the middle, a page of its own; each on a computer and on a phone | every V job (V0-d-i) |
-| `Sell` | Sell: the register, Revenue today, Sell a membership, Today's sales | V4a (V0-d-i) |
+| `Sell` | Sell: the register as a till, products on the left and the sale on the right with the payment method, total and Take payment always on screen; Revenue today, Sell a membership, Today's sales | V4a (V0-d-i) |
 | `SellSale` | Sell: Card on Terminal waiting and each way it ends, Sale recorded, a sale's ⋯, Void sale in the middle, Refund sale under the sale, a Terminal not ready | V4a (V0-d-i) |
 | `SellDay` | Sell: another day, its calendar, refunds noted, chargebacks | V4a (V0-d-i) |
 | `SellProducts` | Sell: Products, Add a product from the right, archived, what stands in the way | V4a (V0-d-i) |
@@ -58,12 +58,17 @@ permission a page has stays.
   type reads **Edit**, as on `Person`; "See another day's sales" reads **View another day**; "Taken today"
   reads **Revenue today**; "Bills" reads **Billing rules**, as Payments overview names it, and keeps its
   place under the price list, where Payments overview's line opens it.
+- **Easy to find one's way (Kd's question at the board review, 2026-11-19):** the open tab is orange, as the
+  menu marks the open page; on Sell the sale panel is one screen tall beside the products, its lines scroll
+  inside it and the payment method, total and Take payment stay at its foot (on 1366×768 Take payment is on
+  the first screen); on a page of its own (`MembershipAdd`, `MembershipRaise`) the save bar stays pinned to
+  the foot of the screen.
 - **On a phone**, a row's buttons that do not fit go into its ⋯, which opens from the bottom with every
   one of them (`PhoneSell`); nothing is dropped.
 - `kit3.css` gained, for every board: the 2026-11-19 sizes and colours (no words under 14 px, every word
   colour 7 to 1, the values `console.css` already measures); buttons, tabs and fields 44 px tall on a
   touch screen; long button words wrap on a narrow phone; Ctrl K only where there is a keyboard; the
-  phone's tab names fit a 280 px cover.
+  phone's tab names fit a 280 px cover; the open tab in orange.
 
 ## What a builder must know
 
