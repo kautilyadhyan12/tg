@@ -11,26 +11,29 @@ import { Page } from "../../look/Page";
 import { PictureTop } from "../../look/PictureTop";
 import { fonts, Txt } from "../../look/Txt";
 import type { Lit, Sex } from "../../library/figure";
-import { applyFilters, FILTER_GROUPS, muscleGroup, NO_FILTERS, pickedCount, pickedShapes, toggle, type Filters } from "../../library/filters";
+import { applyFilters, drawnMuscle, FILTER_GROUPS, NO_FILTERS, pickedCount, pickedShapes, toggle, type Filters } from "../../library/filters";
 import { searchExercises } from "../../library/search";
 import { offered, type LibraryFile } from "../../library/store";
 import { kindWord } from "../../library/words";
 import { ExerciseCard } from "./ExerciseCard";
 import { ExercisePage } from "./ExercisePage";
-import { choiceWord, FindExercises, Tag } from "./FindExercises";
+import { choiceWord, FiltersPage, Tag } from "./Filters";
+import { FindByMuscle } from "./FindByMuscle";
 import { MuscleFigure } from "./MuscleFigure";
 import { useFigureSex, useLibrary } from "./useLibrary";
 
 const NOTHING_LIT: ReadonlyMap<string, Lit> = new Map<string, Lit>();
 
 /** Workout → Exercises (ROADMAP Stage 5 63a, spec Part 2 §13.6): the Exercise Library kept on the phone,
- *  searched there, narrowed by Find exercises (63b) or a kind, each exercise's page opened over the tab. The kind
- *  chips and Find exercises' Kind are one choice. `parts`: Exercises · My Workout · Running, under the picture. */
+ *  searched there, narrowed by Filters or Find by muscle (63b) or a kind, each exercise's page opened over the tab
+ *  (or over the body). The kind chips and Filters' Kind are one choice. `parts`: Exercises · My Workout · Running,
+ *  under the picture. */
 export function LibraryPart({ parts, file }: { parts: ReactNode; file?: LibraryFile }) {
   const { state, again } = useLibrary(file);
   const sex = useFigureSex();
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState<Filters>(NO_FILTERS);
+  const [filtering, setFiltering] = useState(false);
   const [finding, setFinding] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
 
@@ -41,7 +44,7 @@ export function LibraryPart({ parts, file }: { parts: ReactNode; file?: LibraryF
     const known: string[] = EXERCISE_KINDS.filter((k) => present.has(k));
     return [...known, ...[...present].filter((k) => !known.includes(k)).sort()];
   }, [live]);
-  // What search alone shows: Find exercises counts within it, so its numbers are the list's.
+  // What search alone shows: Filters counts within it, so its numbers are the list's.
   const searched = useMemo(() => searchExercises(live, search), [live, search]);
   const shown = useMemo(() => {
     const kept = new Set(applyFilters(searched, filters));
@@ -94,8 +97,8 @@ export function LibraryPart({ parts, file }: { parts: ReactNode; file?: LibraryF
             </View>
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={picked === 0 ? "Find exercises" : `Find exercises, ${String(picked)} ${picked === 1 ? "filter" : "filters"} on`}
-              onPress={() => { setFinding(true); }}
+              accessibilityLabel={picked === 0 ? "Filters" : `Filters, ${String(picked)} on`}
+              onPress={() => { setFiltering(true); }}
               style={({ pressed }) => [styles.filter, picked === 0 ? null : styles.filterOn, pressed ? styles.pressed : null]}
             >
               <Icon name="sliders" size={20} colour={picked === 0 ? "text" : "orange"} />
@@ -108,7 +111,7 @@ export function LibraryPart({ parts, file }: { parts: ReactNode; file?: LibraryF
               )}
             </Pressable>
           </View>
-          {searching || tags.length > 0 || sex === null ? null : <FindByMuscle sex={sex} library={live} onOpen={() => { setFinding(true); }} />}
+          {searching || tags.length > 0 || sex === null ? null : <MuscleCard sex={sex} library={live} onOpen={() => { setFinding(true); }} />}
           {tags.length === 0 ? null : (
             <View style={styles.tags}>
               {tags.map((t) => (
@@ -156,19 +159,36 @@ export function LibraryPart({ parts, file }: { parts: ReactNode; file?: LibraryF
           )}
         </>
       )}
-      <FindExercises
-        open={finding}
+      <FiltersPage
+        open={filtering}
         list={searched}
         applied={filters}
         sex={sex}
         onShow={(next) => {
           setFilters(next);
-          setFinding(false);
+          setFiltering(false);
         }}
         onClose={() => {
-          setFinding(false);
+          setFiltering(false);
         }}
       />
+      {sex === null ? null : (
+        <FindByMuscle
+          open={finding}
+          sex={sex}
+          list={applyFilters(searched, { ...filters, muscle: [] })}
+          first={null}
+          act="Show in Library"
+          onAct={(m) => {
+            setFilters((f) => ({ ...f, muscle: [m] }));
+            setFinding(false);
+          }}
+          onOpen={setOpen}
+          onClose={() => {
+            setFinding(false);
+          }}
+        />
+      )}
       {opened === null || library === null ? null : (
         <ExercisePage
           entry={opened}
@@ -182,10 +202,10 @@ export function LibraryPart({ parts, file }: { parts: ReactNode; file?: LibraryF
   );
 }
 
-/** The card that opens Find exercises at the body (as drawn): the person's own figure, front and back, lit where
+/** The card that opens Find by muscle (as drawn): the person's own figure, front and back, lit where
  *  the Library's exercises work most. */
-function FindByMuscle({ sex, library, onOpen }: { sex: Sex; library: readonly PhoneLibraryEntry[]; onOpen: () => void }) {
-  const lit = useMemo(() => pickedShapes({ ...NO_FILTERS, muscle: [...new Set(library.flatMap((e) => e.muscles.main).map(muscleGroup))] }), [library]);
+function MuscleCard({ sex, library, onOpen }: { sex: Sex; library: readonly PhoneLibraryEntry[]; onOpen: () => void }) {
+  const lit = useMemo(() => pickedShapes({ ...NO_FILTERS, muscle: [...new Set(library.flatMap((e) => e.muscles.main).map(drawnMuscle))] }), [library]);
   return (
     <Pressable accessibilityRole="button" accessibilityLabel="Find by muscle. Tap a muscle on the body." onPress={onOpen} style={({ pressed }) => [styles.muscleCard, pressed ? styles.pressed : null]}>
       <View style={[styles.grow, styles.muscleWords]}>

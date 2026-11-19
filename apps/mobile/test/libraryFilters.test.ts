@@ -8,14 +8,13 @@ import {
   applyFilters,
   choicesOf,
   countWith,
-  emptyShapes,
   FILTER_GROUPS,
-  muscleGroup,
+  drawnMuscle,
   NO_EQUIPMENT,
   NO_FILTERS,
   pickedCount,
   pickedShapes,
-  shapesOf,
+  roleOf,
   toggle,
   valuesOf,
   type Filters,
@@ -55,12 +54,12 @@ describe("a choice's count is what the list then shows (the worst thing: a false
   // States: nothing picked, one choice, two in one group, choices in two groups, and one that leaves nothing.
   const states: Filters[] = [
     NO_FILTERS,
-    { ...NO_FILTERS, muscle: ["Quadriceps"] },
-    { ...NO_FILTERS, muscle: ["Quadriceps", "Biceps"] },
+    { ...NO_FILTERS, muscle: ["vastus_lateralis"] },
+    { ...NO_FILTERS, muscle: ["vastus_lateralis", "biceps"] },
     { ...NO_FILTERS, equipment: [NO_EQUIPMENT], level: ["beginner"] },
-    { ...NO_FILTERS, kind: ["strength"], muscle: ["Chest"], level: ["advanced"] },
+    { ...NO_FILTERS, kind: ["strength"], muscle: ["upper_chest"], level: ["advanced"] },
     { ...NO_FILTERS, kind: ["mobility"], equipment: ["barbell"] },
-    { ...NO_FILTERS, counted: ["hand"], muscle: ["Abs"] },
+    { ...NO_FILTERS, counted: ["hand"], muscle: ["abs"] },
   ];
   it.each(states.map((s, i) => [i, s] as const))("state %i: every choice of every group", (_i, state) => {
     for (const group of FILTER_GROUPS) {
@@ -96,10 +95,12 @@ describe("the rule, case by case", () => {
     ["choices in two groups mean both", { ...NO_FILTERS, level: ["beginner"], equipment: [NO_EQUIPMENT] }, ["dead_bug", "squat"]],
     ["No equipment is only the exercises that need none", { ...NO_FILTERS, equipment: [NO_EQUIPMENT] }, ["dead_bug", "plank", "squat"]],
     ["an exercise with two pieces is found by either", { ...NO_FILTERS, equipment: ["bench"] }, ["db_bench"]],
-    ["a muscle finds the exercises that work it, main or also", { ...NO_FILTERS, muscle: ["Triceps"] }, ["db_bench"]],
-    ["any quadriceps shape picks the group", { ...NO_FILTERS, muscle: ["Quadriceps"] }, ["goblet_squat", "squat"]],
-    ["a muscle only steadying does not count: a bench press is not an Abs exercise", { ...NO_FILTERS, muscle: ["Abs"] }, ["cat_cow", "dead_bug", "plank"]],
-    ["a deep muscle counts under the drawn one over it", { ...NO_FILTERS, muscle: ["Abs"], kind: ["pilates"] }, ["dead_bug"]],
+    ["a muscle finds the exercises that work it, main or also", { ...NO_FILTERS, muscle: ["triceps_long"] }, ["db_bench"]],
+    ["the exact muscle tapped, never its whole group: the vastus medialis", { ...NO_FILTERS, muscle: ["vastus_medialis"] }, ["squat"]],
+    ["the vastus lateralis is worked by both squats", { ...NO_FILTERS, muscle: ["vastus_lateralis"] }, ["goblet_squat", "squat"]],
+    ["the other triceps head is not the long head", { ...NO_FILTERS, muscle: ["triceps_lateral"] }, []],
+    ["a muscle only steadying does not count: a bench press is not an abs exercise", { ...NO_FILTERS, muscle: ["abs"] }, ["cat_cow", "dead_bug", "plank"]],
+    ["a deep muscle counts under the drawn one over it", { ...NO_FILTERS, muscle: ["abs"], kind: ["pilates"] }, ["dead_bug"]],
     ["a word this phone does not know is still a choice", { ...NO_FILTERS, kind: ["conditioning"] }, ["sled_push"]],
     ["a choice that leaves nothing shows nothing", { ...NO_FILTERS, kind: ["mobility"], equipment: ["barbell"] }, []],
     ["every one is counted by hand today", { ...NO_FILTERS, counted: ["hand"] }, LIST.map((e) => e.id).sort()],
@@ -113,33 +114,28 @@ describe("the rule, case by case", () => {
     expect(choicesOf(LIST, "level")).toEqual(["beginner", "intermediate", "advanced", "elite"]);
     expect(choicesOf(LIST, "kind")).toEqual(["strength", "mobility", "pilates", "conditioning"]);
     expect(choicesOf(LIST, "counted")).toEqual(["hand"]);
-    expect(choicesOf(REAL, "muscle")).toEqual(expect.arrayContaining(["Abs", "Biceps", "Quadriceps", "Glutes"]));
+    expect(choicesOf(REAL, "muscle")).toEqual(expect.arrayContaining(["abs", "biceps", "vastus_lateralis", "glute_max"]));
+    expect(choicesOf(REAL, "muscle")).not.toContain("transverse_abdominis");
   });
 
-  it("a muscle is picked by its plain name and lights every shape of it", () => {
-    expect(muscleGroup("vastus_medialis")).toBe("Quadriceps");
-    expect(muscleGroup("transverse_abdominis")).toBe("Abs");
-    expect(muscleGroup("rotator_cuff")).toBe("Infraspinatus");
-    expect(shapesOf("Quadriceps").sort()).toEqual(["rectus_femoris", "vastus_lateralis", "vastus_medialis"]);
-    expect(shapesOf("Biceps")).toEqual(["biceps"]);
+  it("a muscle is picked as itself; a deep one as the drawn muscle over it", () => {
+    expect(drawnMuscle("vastus_medialis")).toBe("vastus_medialis");
+    expect(drawnMuscle("transverse_abdominis")).toBe("abs");
+    expect(drawnMuscle("rotator_cuff")).toBe("infraspinatus");
+    expect([...pickedShapes({ ...NO_FILTERS, muscle: ["vastus_lateralis"] }).entries()]).toEqual([["vastus_lateralis", "main"]]);
   });
 
-  it("the figure lights the picked muscles and dims, unpressed, those that would show nothing", () => {
-    const picked: Filters = { ...NO_FILTERS, muscle: ["Quadriceps"] };
-    expect([...pickedShapes(picked).entries()].sort()).toEqual([["rectus_femoris", "main"], ["vastus_lateralis", "main"], ["vastus_medialis", "main"]]);
-    const off = emptyShapes(REAL, NO_FILTERS);
-    expect(off.has("biceps")).toBe(false);
-    expect(off.has("upper_chest")).toBe(true);
-    // Picked, it is never dimmed, so it can be let go; with a level that leaves no biceps exercise, the biceps dims.
-    expect(emptyShapes(REAL, picked).has("vastus_medialis")).toBe(false);
-    expect(emptyShapes(REAL, { ...NO_FILTERS, level: ["beginner"] }).has("biceps")).toBe(true);
+  it("an exercise says whether it works the muscle mainly or also", () => {
+    expect(roleOf(real("squat"), "vastus_lateralis")).toBe("Primary");
+    expect(roleOf(real("squat"), "biceps_femoris")).toBe("Secondary");
+    expect(roleOf(real("plank"), "abs")).toBe("Primary");
   });
 
   it("toggle picks and lets go; the badge counts every choice", () => {
     const once = toggle(NO_FILTERS, "level", "beginner");
     expect(once.level).toEqual(["beginner"]);
     expect(toggle(once, "level", "beginner").level).toEqual([]);
-    expect(pickedCount(toggle(toggle(once, "muscle", "Abs"), "equipment", NO_EQUIPMENT))).toBe(3);
+    expect(pickedCount(toggle(toggle(once, "muscle", "abs"), "equipment", NO_EQUIPMENT))).toBe(3);
     expect(pickedCount(NO_FILTERS)).toBe(0);
   });
 });

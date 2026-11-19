@@ -10,22 +10,19 @@ const BOX = `${String(FIGURE_BOX.x)} ${String(FIGURE_BOX.y)} ${String(FIGURE_BOX
 
 /** One of Kd's body figures, its muscles lit for an exercise: a main muscle glows orange, one also worked is
  *  warm, one that keeps the body steady is outlined, the rest are stone. `off`: muscles drawn darker (no
- *  exercise trains them yet). `onTap`: each muscle not `off` is pressed by its shape (Find exercises, 63b). Width
- *  sets the size; the height keeps the drawing's shape. */
+ *  exercise trains them yet). Width sets the size; the height keeps the drawing's shape. */
 export function MuscleFigure({
   sex,
   side,
   lit,
   width,
   off,
-  onTap,
 }: {
   sex: Sex;
   side: Side;
   lit: ReadonlyMap<string, Lit>;
   width: number;
   off?: ReadonlySet<string>;
-  onTap?: (muscle: string) => void;
 }) {
   const id = useId().replace(/[^a-zA-Z0-9]/g, "");
   const parts = FIGURES[figureName(sex, side)];
@@ -52,77 +49,43 @@ export function MuscleFigure({
       {parts.map((p, i) => {
         const state = p.m === "" ? undefined : lit.get(p.m);
         if (p.m === "") return <Path key={i} d={p.d} fill={colours.figureBare} />;
-        const muscle = p.m;
-        const tap = onTap === undefined || off?.has(muscle) === true ? {} : { testID: `muscle-${muscle}`, onPress: () => { onTap(muscle); } };
-        if (state === "main") return <Path key={i} d={p.d} fill={`url(#${id}main)`} {...tap} />;
-        if (state === "also") return <Path key={i} d={p.d} fill={colours.muscleAlso} {...tap} />;
+        if (state === "main") return <Path key={i} d={p.d} fill={`url(#${id}main)`} />;
+        if (state === "also") return <Path key={i} d={p.d} fill={colours.muscleAlso} />;
         if (state === "steady") {
-          return <Path key={i} d={p.d} fill={colours.muscleSteady} stroke={colours.orangeLight} strokeWidth={4} strokeDasharray="9 7" {...tap} />;
+          return <Path key={i} d={p.d} fill={colours.muscleSteady} stroke={colours.orangeLight} strokeWidth={4} strokeDasharray="9 7" />;
         }
-        return <Path key={i} d={p.d} fill={off?.has(muscle) === true ? colours.muscleOff : `url(#${id}idle)`} {...tap} />;
+        return <Path key={i} d={p.d} fill={off?.has(p.m) === true ? colours.muscleOff : `url(#${id}idle)`} />;
       })}
     </Svg>
   );
 }
 
-/** A line from a drawn muscle to its name, in the space beside the figure's head (`from`: where the name starts,
- *  as a share of the width); `note` in a second pill beside the name (Find exercises: "1 exercise"). Nothing when
- *  this side does not show the muscle. */
-export function MuscleLeader({
-  sex,
-  side,
-  muscle,
-  name,
-  note,
-  width,
-  from = 0.74,
-  room,
-}: {
-  sex: Sex;
-  side: Side;
-  muscle: string;
-  name: string;
-  note?: string;
-  width: number;
-  from?: number;
-  /** How wide the label may grow from where it starts; its words shrink to fit. */
-  room?: number;
-}) {
+/** A line from a drawn muscle to its name, in the space beside the figure's head. Nothing when this side does not
+ *  show the muscle. */
+export function MuscleLeader({ sex, side, muscle, name, width }: { sex: Sex; side: Side; muscle: string; name: string; width: number }) {
   const at = centreOf(figureName(sex, side), muscle);
   if (at === null) return null;
   const scale = width / FIGURE_BOX.width;
   const x1 = (at.x - FIGURE_BOX.x) * scale;
   const y1 = (at.y - FIGURE_BOX.y) * scale;
-  const x2 = width * from;
+  const x2 = width * 0.74;
   const y2 = width * 0.12;
   return (
     <>
-      {/* Over the figure but never in the way of a tap: a muscle under the line is still pressed. */}
-      <Svg testID="muscle-leader" pointerEvents="none" style={StyleSheet.absoluteFill} width={width} height={(width * FIGURE_BOX.height) / FIGURE_BOX.width} accessible={false}>
+      <Svg pointerEvents="none" style={StyleSheet.absoluteFill} width={width} height={(width * FIGURE_BOX.height) / FIGURE_BOX.width} accessible={false}>
         <Line x1={x1} y1={y1} x2={x2} y2={y2} stroke={colours.orangeLight} strokeWidth={1.5} />
         <Circle cx={x1} cy={y1} r={4} fill={colours.orangeLight} />
       </Svg>
-      <View pointerEvents="none" style={[styles.label, { left: x2 - 4, top: y2 - 13 }, room === undefined ? null : { maxWidth: room }]}>
-        <View style={styles.name}>
-          <Txt kind="tiny" colour="onOrange" style={styles.words} numberOfLines={1} fit>
-            {name}
-          </Txt>
-        </View>
-        {note === undefined ? null : (
-          <View style={styles.note}>
-            <Txt kind="tiny" colour="text" numberOfLines={1} fit>
-              {note}
-            </Txt>
-          </View>
-        )}
+      <View pointerEvents="none" style={[styles.label, { left: x2 - 4, top: y2 - 13 }]}>
+        <Txt kind="tiny" colour="onOrange" style={styles.words} numberOfLines={1}>
+          {name}
+        </Txt>
       </View>
     </>
   );
 }
 
 const styles = StyleSheet.create({
-  label: { position: "absolute", flexDirection: "row", alignItems: "center" },
-  name: { flexShrink: 1, paddingHorizontal: 10, minHeight: 26, justifyContent: "center", borderRadius: sizes.round, backgroundColor: colours.orange },
-  note: { flexShrink: 1, marginLeft: 4, paddingHorizontal: 10, minHeight: 26, justifyContent: "center", borderRadius: sizes.round, borderWidth: 1, borderColor: colours.lineStrong, backgroundColor: colours.raised },
+  label: { position: "absolute", paddingHorizontal: 10, minHeight: 26, justifyContent: "center", borderRadius: sizes.round, backgroundColor: colours.orange },
   words: { fontFamily: fonts.bold },
 });

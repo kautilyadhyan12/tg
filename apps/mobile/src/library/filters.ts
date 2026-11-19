@@ -2,8 +2,8 @@
 // and kind, each choice with its count. Pure, and tested as a table: a choice's count is always exactly what the
 // list then shows.
 import { EXERCISE_EQUIPMENT, EXERCISE_KINDS, EXERCISE_LEVELS, type PhoneLibraryEntry } from "@app/shared";
-import { DEEP_UNDER, DRAWN_MUSCLES, type Lit } from "./figure";
-import { COUNTED_TODAY, muscleLabel, type CountedBy } from "./words";
+import { DEEP_UNDER, type Lit } from "./figure";
+import { COUNTED_TODAY, type CountedBy } from "./words";
 
 /** The five groups of choices. Two choices in one group mean either; choices in different groups mean both. */
 export type FilterGroup = "muscle" | "equipment" | "level" | "counted" | "kind";
@@ -15,33 +15,21 @@ export const FILTER_GROUPS: readonly FilterGroup[] = ["muscle", "equipment", "le
 /** The equipment choice for an exercise that needs none. Never a word of the list: a word is at least one letter. */
 export const NO_EQUIPMENT = "";
 
-/** The muscle a person taps, by its plain name: any shape of the quadriceps picks "Quadriceps", and lights all of
- *  them. A deep muscle belongs to the drawn one over it (the deep core to "Abs"). */
-export function muscleGroup(muscle: string): string {
-  return muscleLabel(DEEP_UNDER[muscle] ?? muscle).name;
+/** The muscle a person taps is that exact muscle (Kd at 63b's click-through: *"taping a muscle selcts whole area"*):
+ *  the vastus lateralis, not the whole quadriceps. A deep muscle belongs to the drawn one over it (the deep core to
+ *  the abs), since it cannot be tapped itself. */
+export function drawnMuscle(muscle: string): string {
+  return DEEP_UNDER[muscle] ?? muscle;
 }
 
-/** The drawn shapes a muscle group lights on the figure. */
-export function shapesOf(group: string): string[] {
-  return [...DRAWN_MUSCLES].filter((m) => muscleGroup(m) === group);
-}
-
-/** The picked muscle groups' shapes, lit on the figure. */
+/** The picked muscles, lit on the figure. */
 export function pickedShapes(filters: Filters): Map<string, Lit> {
-  const lit = new Map<string, Lit>();
-  for (const g of filters.muscle) for (const s of shapesOf(g)) lit.set(s, "main");
-  return lit;
+  return new Map(filters.muscle.map((m): [string, Lit] => [m, "main"]));
 }
 
-/** The drawn shapes to dim, and not to press: their muscle would show nothing with the other choices kept. A picked
- *  one is never dimmed, so it can be let go. */
-export function emptyShapes(list: readonly PhoneLibraryEntry[], filters: Filters): Set<string> {
-  const off = new Set<string>();
-  for (const s of DRAWN_MUSCLES) {
-    const g = muscleGroup(s);
-    if (!filters.muscle.includes(g) && countWith(list, filters, "muscle", g) === 0) off.add(s);
-  }
-  return off;
+/** Whether an exercise lists a muscle as one it mainly works ("Primary") or also works ("Secondary"). */
+export function roleOf(entry: PhoneLibraryEntry, muscle: string): "Primary" | "Secondary" {
+  return entry.muscles.main.some((m) => drawnMuscle(m) === muscle) ? "Primary" : "Secondary";
 }
 
 /** How an exercise is counted (§13.3). Until exercise folder 1's 52a publishes camera data, every one by hand. */
@@ -55,7 +43,7 @@ export function countedBy(entry: PhoneLibraryEntry): CountedBy {
 export function valuesOf(entry: PhoneLibraryEntry, group: FilterGroup): string[] {
   switch (group) {
     case "muscle":
-      return [...new Set([...entry.muscles.main, ...entry.muscles.also].map(muscleGroup))];
+      return [...new Set([...entry.muscles.main, ...entry.muscles.also].map(drawnMuscle))];
     case "equipment":
       return entry.equipment.length === 0 ? [NO_EQUIPMENT] : [...entry.equipment];
     case "level":
@@ -88,7 +76,7 @@ export function countWith(list: readonly PhoneLibraryEntry[], filters: Filters, 
 }
 
 /** The choices a group offers: only the values the Library holds, in the word list's order, then any word this
- *  phone does not know, A to Z. No equipment comes first. Muscles by name, A to Z. */
+ *  phone does not know, A to Z. No equipment comes first. Muscles by their words, A to Z. */
 export function choicesOf(list: readonly PhoneLibraryEntry[], group: FilterGroup): string[] {
   const present = new Set(list.flatMap((e) => valuesOf(e, group)));
   const order: readonly string[] =
