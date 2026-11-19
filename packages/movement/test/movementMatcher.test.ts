@@ -249,7 +249,9 @@ describe("the camera must see enough, or nothing is decided", () => {
         ),
       );
     expect(runMovement(SQUAT, hiddenFor(60)).count).toBe(3);
-    const long = runMovement(SQUAT, hiddenFor(200));
+    // Four pictures hidden: a break of 167 ms, longer than a 2 cm hop's 128 ms and shorter than the 221 ms allowed when
+    // no picture came at all; pictures came, so it is the model losing the feet.
+    const long = runMovement(SQUAT, hiddenFor(120));
     expect(long.count).toBe(1);
     expect(long.reps.filter((r) => r.verdict === "unseen").map((r) => r.rule)).toEqual(["feet stay down", "feet stay down"]);
   });
