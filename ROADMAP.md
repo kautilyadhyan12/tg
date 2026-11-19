@@ -837,7 +837,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
     - 61c. [x] **Saved workouts** — merged 2026-11-19 (PR #591).
 62. [ ] **The clip line** (after 60): the generated clip made small, its still picture, and where clips are kept (Stage 4 item 4). Checking a clip against its exercise's rules waits for exercise folder 1's 52a and 52b.
 63. **The Exercise Library on the phone** (§13.6; after 60). Split 2026-11-19 by its terminal, after Kd's drawings, in three.
-    - 63a. [ ] **The Library and an exercise's page**: Kd's four body figures, the muscles made specific (three rows from a named source), the list kept on the phone, search, kinds, the page in three tabs.
+    - 63a. [x] **The Library and an exercise's page** — merged 2026-11-19 (PR #596).
     - 63b. [ ] **Find exercises** (after 63a): the body you tap, equipment, level, how it is counted and kind, each with its count.
     - 63c. [ ] **Your records and Add to workout on the page** (after 63a): records, calories a minute for the person's weight, Add to workout with My Workout's count, Goals' exercise picker on this list.
 64. **Build a workout, do it, and after it** (Stage 1's 6c; §13.6, §11.8's steps).
