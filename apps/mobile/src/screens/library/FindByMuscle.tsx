@@ -68,7 +68,7 @@ export function FindByMuscle({
   return (
     <Modal visible={open} animationType="slide" statusBarTranslucent navigationBarTranslucent onRequestClose={onClose}>
       {/* A window of its own on Android: its gestures need their own root there. */}
-      <GestureHandlerRootView style={[styles.page, { paddingTop: insets.top + 8 }]} accessibilityViewIsModal>
+      <GestureHandlerRootView testID="muscle-gesture-root" style={[styles.page, { paddingTop: insets.top + 8 }]} accessibilityViewIsModal>
         <View style={styles.bar}>
           <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={onClose} style={styles.close}>
             <Icon name="x" size={20} />

@@ -300,6 +300,8 @@ describe("Filters and Find by muscle (63b)", () => {
   it("a double tap zooms without picking, and Fit body puts it back", async () => {
     await openLibrary(libraryServer({ gender: "male" }).ask);
     await fromCard();
+    // A window of its own on Android: without its own gesture root the screen fails there (found on the phone).
+    expect(within(screen.getByTestId("muscle-gesture-root")).getByTestId("muscle-stage")).toBeTruthy();
     await tapMuscle("male-front", "abs", "muscle-double-tap");
     expect(await screen.findByRole("button", { name: "Fit body" })).toBeTruthy();
     expect(screen.getByText("Tap a muscle")).toBeTruthy();
