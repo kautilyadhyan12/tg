@@ -18,3 +18,14 @@ export {
   type Reading,
   type Unit,
 } from "./body/measures.js";
+export {
+  MATCH_LIMITS,
+  MovementMatcher,
+  checkMovement,
+  type MatchFrame,
+  type MatchLimits,
+  type MatchState,
+  type RepResult,
+  type Verdict,
+} from "./movement/matcher.js";
+export { parseMovement } from "./movement/load.js";
