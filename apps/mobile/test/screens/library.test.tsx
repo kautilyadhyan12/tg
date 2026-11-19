@@ -9,7 +9,7 @@ import { App } from "../../src/App";
 import { Gesture, State } from "react-native-gesture-handler";
 import { fireGestureHandler, getByGestureTestId } from "react-native-gesture-handler/jest-utils";
 import { FIGURES, type FigureName } from "../../src/library/figures";
-import { toStage, WHOLE } from "../../src/library/stage";
+import { DOUBLE_TAP_ZOOM, toStage, WHOLE, zoomAbout, type View as Zoom } from "../../src/library/stage";
 import { LIBRARY_PATH } from "../../src/library/store";
 import type { Ask } from "../../src/session/calls";
 import { fakeServer, kept, lost, memoryStore, refusal, tokens, type Reply } from "../kit";
@@ -217,12 +217,16 @@ describe("Filters and Find by muscle (63b)", () => {
     await fireEvent.press(await screen.findByRole("button", { name: "Find by muscle. Tap a muscle on the body." }));
     await layOut();
   };
-  /** A finger's tap on the stage, inside a muscle's shape on the person's figure. */
-  const tapMuscle = (figure: FigureName, muscle: string, id = "muscle-tap") => {
+  /** Where a muscle's shape shows on the stage, with the body as `view` zooms it. */
+  const onStage = (figure: FigureName, muscle: string, view: Zoom = WHOLE) => {
     const part = FIGURES[figure].find((p) => p.m === muscle);
     if (part === undefined) throw new Error(`${figure} has no ${muscle}`);
     const [dx, dy] = insideOf(part.d);
-    const at = toStage(WHOLE, dx, dy, STAGE.width, STAGE.height);
+    return toStage(view, dx, dy, STAGE.width, STAGE.height);
+  };
+  /** A finger's tap on the stage, inside a muscle's shape on the person's figure. */
+  const tapMuscle = (figure: FigureName, muscle: string, id = "muscle-tap", view: Zoom = WHOLE) => {
+    const at = onStage(figure, muscle, view);
     return act(() => {
       fireGestureHandler<ReturnType<typeof Gesture.Tap>>(getByGestureTestId(id), [
         { state: State.BEGAN, x: at.x, y: at.y },
@@ -307,10 +311,22 @@ describe("Filters and Find by muscle (63b)", () => {
     await fromCard();
     // A window of its own on Android: without its own gesture root the screen fails there (found on the phone).
     expect(within(screen.getByTestId("muscle-gesture-root")).getByTestId("muscle-stage")).toBeTruthy();
+    // A single tap waits until a double tap has failed, and neither is a tap once the finger moves (round one's T1, T2).
+    const tap = getByGestureTestId("muscle-tap");
+    const doubleTap = getByGestureTestId("muscle-double-tap");
+    expect(tap.config.requireToFail ?? []).toContain(doubleTap.handlerTag);
+    expect(tap.config).toMatchObject({ maxDist: 10 });
+    expect(doubleTap.config).toMatchObject({ maxDist: 10 });
     await tapMuscle("male-front", "abs", "muscle-double-tap");
     expect(await screen.findByRole("button", { name: "Fit body" })).toBeTruthy();
     expect(screen.getByText("Tap a muscle to see its exercises")).toBeTruthy();
     expect(screen.queryByTestId("muscle-panel")).toBeNull();
+    // Zoomed, a tap is read where the muscle now shows (round one's T3).
+    const at = onStage("male-front", "abs");
+    const zoomed = zoomAbout(WHOLE, DOUBLE_TAP_ZOOM, at.x, at.y, STAGE.width, STAGE.height);
+    await tapMuscle("male-front", "obliques", "muscle-tap", zoomed);
+    expect(await screen.findByText("Obliques")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Plank, Secondary · Intermediate · 3 × 30 s" })).toBeTruthy();
     await fireEvent.press(screen.getByRole("button", { name: "Fit body" }));
     await waitFor(() => { expect(screen.queryByRole("button", { name: "Fit body" })).toBeNull(); });
   });
@@ -343,6 +359,30 @@ describe("Filters and Find by muscle (63b)", () => {
     await fireEvent.press(screen.getByRole("button", { name: "Close" }));
     await waitFor(() => { expect(listed()).toEqual(["Barbell Curl", "Plank", "Squat"]); });
     expect(screen.getByRole("button", { name: "Filters" })).toBeTruthy();
+  });
+
+  it("a choice a search has hidden still shows, lit, to be let go; the Library says the filters hide the match, not the word", async () => {
+    await openLibrary(libraryServer({ gender: "male" }).ask);
+    await openFilters();
+    await fireEvent.press(screen.getByRole("checkbox", { name: "Barbell, 1 exercise" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Show 1 exercise" }));
+    await fireEvent.changeText(await screen.findByPlaceholderText("Search exercises"), "plank");
+    // The Plank matches "plank": it is Barbell that hides it.
+    expect(await screen.findByText("No exercises match these filters")).toBeTruthy();
+    expect(screen.queryByText("No exercises match “plank”")).toBeNull();
+    await openFilters();
+    const barbell = screen.getByRole("checkbox", { name: "Barbell, 0 exercises" });
+    expect(barbell.props.accessibilityState).toMatchObject({ checked: true, disabled: false });
+    await fireEvent.press(barbell);
+    expect(await screen.findByRole("button", { name: "Show 1 exercise" })).toBeTruthy();
+  });
+
+  it("a lit kind chip on the Library lets its kind go", async () => {
+    await openLibrary(libraryServer({ gender: "male" }).ask);
+    await fireEvent.press(await screen.findByRole("radio", { name: "Strength" }));
+    expect(screen.getByRole("radio", { name: "Strength" }).props.accessibilityState).toMatchObject({ selected: true });
+    await fireEvent.press(screen.getByRole("radio", { name: "Strength" }));
+    expect(screen.getByRole("radio", { name: "All" }).props.accessibilityState).toMatchObject({ selected: true });
   });
 
   it("its numbers count within the search, and the kind chips and its Kind are one choice", async () => {

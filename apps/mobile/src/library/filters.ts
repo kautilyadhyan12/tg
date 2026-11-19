@@ -69,16 +69,17 @@ export function applyFilters(list: readonly PhoneLibraryEntry[], filters: Filter
   return list.filter((e) => passes(e, filters));
 }
 
-/** How many exercises the list would show with this choice picked as well: every other group's choices kept, and
- *  this group's other choices set aside, as a filter count is in any shop's. */
+/** The exercises that have this choice, with every other group's choices kept and this group's other choices set
+ *  aside, as a filter count is in any shop's. With no other choice on in its group, it is the list the choice gives. */
 export function countWith(list: readonly PhoneLibraryEntry[], filters: Filters, group: FilterGroup, value: string): number {
   return list.filter((e) => passes(e, filters, group) && valuesOf(e, group).includes(value)).length;
 }
 
-/** The choices a group offers: only the values the Library holds, in the word list's order, then any word this
- *  phone does not know, A to Z. No equipment comes first. Muscles by their words, A to Z. */
-export function choicesOf(list: readonly PhoneLibraryEntry[], group: FilterGroup): string[] {
-  const present = new Set(list.flatMap((e) => valuesOf(e, group)));
+/** The choices a group offers: the values the Library holds, and every choice already on (`picked`) even where the
+ *  list no longer holds it (a search took it away), so it is seen and can be let go. In the word list's order, then any
+ *  word this phone does not know, A to Z. No equipment comes first. Muscles by their words, A to Z. */
+export function choicesOf(list: readonly PhoneLibraryEntry[], group: FilterGroup, picked: readonly string[] = []): string[] {
+  const present = new Set([...list.flatMap((e) => valuesOf(e, group)), ...picked]);
   const order: readonly string[] =
     group === "equipment" ? [NO_EQUIPMENT, ...EXERCISE_EQUIPMENT] : group === "level" ? EXERCISE_LEVELS : group === "kind" ? EXERCISE_KINDS : group === "counted" ? ["camera_coaches", "camera_counts", "hand"] : [];
   const known = order.filter((v) => present.has(v));

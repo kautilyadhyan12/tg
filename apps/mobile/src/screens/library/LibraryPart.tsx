@@ -124,7 +124,15 @@ export function LibraryPart({ parts, file }: { parts: ReactNode; file?: LibraryF
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.kinds} style={styles.kindsRow}>
               <Chip label="All" on={filters.kind.length === 0} onPress={() => { setFilters((f) => ({ ...f, kind: [] })); }} />
               {kinds.map((k) => (
-                <Chip key={k} label={kindWord(k)} on={filters.kind.includes(k)} onPress={() => { setFilters((f) => ({ ...f, kind: [k] })); }} />
+                <Chip
+                  key={k}
+                  label={kindWord(k)}
+                  on={filters.kind.includes(k)}
+                  onPress={() => {
+                    // A lit kind is let go; another is picked alone, as one chip of a row.
+                    setFilters((f) => ({ ...f, kind: f.kind.includes(k) ? f.kind.filter((x) => x !== k) : [k] }));
+                  }}
+                />
               ))}
             </ScrollView>
           )}
@@ -136,7 +144,9 @@ export function LibraryPart({ parts, file }: { parts: ReactNode; file?: LibraryF
                 </View>
               )}
               <Txt kind="h3" style={styles.centre}>
-                {searching ? `No exercises match “${search.trim()}”` : picked > 0 ? "No exercises match these filters" : "No exercises here yet"}
+                {/* The search's own word only when the search finds nothing; where it finds something the filters hide, it is
+                    the filters that leave nothing. */}
+                {searching && searched.length === 0 ? `No exercises match “${search.trim()}”` : picked > 0 ? "No exercises match these filters" : "No exercises here yet"}
               </Txt>
               <Txt kind="small" style={styles.centre}>
                 Try another word, or clear your search and filters.

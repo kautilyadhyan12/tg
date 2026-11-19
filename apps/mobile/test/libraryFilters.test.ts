@@ -53,6 +53,8 @@ const LIST: PhoneLibraryEntry[] = [
 describe("a choice's count is what the list then shows (the worst thing: a false count)", () => {
   // States: nothing picked, one choice, two in one group, choices in two groups, and one that leaves nothing.
   const states: Filters[] = [
+    // A choice still on that the list no longer holds (round one's H1: a search took it away).
+    { ...NO_FILTERS, equipment: ["sled"], kind: ["yoga"] },
     NO_FILTERS,
     { ...NO_FILTERS, muscle: ["vastus_lateralis"] },
     { ...NO_FILTERS, muscle: ["vastus_lateralis", "biceps"] },
@@ -63,7 +65,7 @@ describe("a choice's count is what the list then shows (the worst thing: a false
   ];
   it.each(states.map((s, i) => [i, s] as const))("state %i: every choice of every group", (_i, state) => {
     for (const group of FILTER_GROUPS) {
-      for (const value of choicesOf(LIST, group)) {
+      for (const value of choicesOf(LIST, group, state[group])) {
         const said = countWith(LIST, state, group, value);
         // What the list shows once this choice is the group's only one.
         const only: Filters = { ...state, [group]: [value] };
@@ -107,6 +109,13 @@ describe("the rule, case by case", () => {
     ["no camera choice finds anything today", { ...NO_FILTERS, counted: ["camera_counts"] }, []],
   ])("%s", (_name, filters, expected) => {
     expect(ids(filters)).toEqual(expected);
+  });
+
+  it("a choice that is on is always offered, even when the list no longer holds it, so it can be seen and let go", () => {
+    const plankOnly = [real("plank")];
+    expect(choicesOf(plankOnly, "equipment", ["barbell"])).toEqual([NO_EQUIPMENT, "barbell"]);
+    expect(choicesOf(plankOnly, "kind", ["mobility"])).toEqual(["strength", "mobility"]);
+    expect(countWith(plankOnly, { ...NO_FILTERS, equipment: ["barbell"] }, "equipment", "barbell")).toBe(0);
   });
 
   it("the choices offered are only what the Library holds, in the lists' order, unknown words after", () => {

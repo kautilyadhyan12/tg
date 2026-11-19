@@ -119,7 +119,7 @@ export function FiltersPage({
         <View key={group} style={styles.group}>
           <Txt kind="eyebrow">{title}</Txt>
           <View style={styles.chips}>
-            {choicesOf(list, group).map((v) => {
+            {choicesOf(list, group, draft[group]).map((v) => {
               const on = draft[group].includes(v);
               const n = countWith(list, draft, group, v);
               const word = choiceWord(group, v);

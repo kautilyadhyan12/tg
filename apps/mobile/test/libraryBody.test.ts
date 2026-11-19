@@ -85,6 +85,19 @@ describe("the zoom", () => {
     expect(DOUBLE_TAP_ZOOM).toBeLessThanOrEqual(MOST_ZOOM);
   });
 
+  it("zoom is about the stage's middle: at twice the size its corner shows the point a quarter of the way in", () => {
+    const twice = { scale: 2, x: 0, y: 0 };
+    expect(toDrawing(twice, W / 2, H / 2, W, H)).toEqual(toDrawing(WHOLE, W / 2, H / 2, W, H));
+    const corner = toDrawing(twice, 0, 0, W, H);
+    const quarter = toDrawing(WHOLE, W / 4, H / 4, W, H);
+    expect(corner.x).toBeCloseTo(quarter.x, 6);
+    expect(corner.y).toBeCloseTo(quarter.y, 6);
+    // Moved right by 40, the same stage point shows a drawing point 20 stage points further left.
+    const moved = toDrawing({ scale: 2, x: 40, y: 0 }, W / 2, H / 2, W, H);
+    const left = toDrawing(WHOLE, W / 2 - 20, H / 2, W, H);
+    expect(moved.x).toBeCloseTo(left.x, 6);
+  });
+
   it("a tap is read at the right point of the drawing, zoomed or not", () => {
     for (const view of [WHOLE, zoomAbout(WHOLE, 2.5, 90, 300, W, H), { scale: 3.2, x: -100, y: 140 }]) {
       const stage = toStage(view, 430, 600, W, H);
