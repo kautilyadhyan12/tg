@@ -223,6 +223,33 @@ describe('Payments overview says Set up until Square is connected (V1-f)', () =>
     expect(more.getByRole('link', { name: /^Payments overview/ }).querySelector('[data-testid="setup-tag"]')).not.toBeNull();
   });
 
+  it('read again when staff come back to the window, once 30 s have passed: Square connected elsewhere (round one, L3)', async () => {
+    attentionService.get.mockResolvedValue(NONE);
+    orgService.getGymPayments.mockResolvedValue(squareAnswer(null));
+    await open(`${BASE}/members`);
+    await waitFor(() => expect(setupBeside()).not.toBeNull());
+    expect(orgService.getGymPayments).toHaveBeenCalledTimes(1);
+    // Straight back: not read again.
+    act(() => {
+      window.dispatchEvent(new Event('focus'));
+    });
+    await act(async () => undefined);
+    expect(orgService.getGymPayments).toHaveBeenCalledTimes(1);
+    // Back 31 s later, after the owner connected Square on another computer.
+    orgService.getGymPayments.mockResolvedValue(squareAnswer({ state: 'connected' }));
+    const now = Date.now();
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(now + 31_000);
+    try {
+      act(() => {
+        window.dispatchEvent(new Event('focus'));
+      });
+      await waitFor(() => expect(setupBeside()).toBeNull());
+      expect(orgService.getGymPayments).toHaveBeenCalledTimes(2);
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
   it('a trainer has no Payments overview line, and nothing is asked', async () => {
     attentionService.get.mockResolvedValue(NONE);
     await open(`${BASE}/members`, ROLE_PRIVILEGES.trainer, 'trainer');

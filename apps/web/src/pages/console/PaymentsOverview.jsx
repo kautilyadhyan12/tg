@@ -129,9 +129,11 @@ function AttentionRow({ line }) {
       </span>
       <span className="c-attn-end">
         {line.money !== null ? <span className="c-s15 c-w6 c-t1 c-num">{line.money}</span> : null}
-        <Link to={line.to} className="c-btn c-btn-s c-btn-sm">
-          {line.button}
-        </Link>
+        {line.to !== null ? (
+          <Link to={line.to} className="c-btn c-btn-s c-btn-sm">
+            {line.button}
+          </Link>
+        ) : null}
       </span>
     </div>
   );

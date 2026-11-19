@@ -2139,7 +2139,7 @@
   min-width: 0;
 }
 .c-pay-track { height: 6px; }
-.c-pay-fill { background: var(--info); }
+.c-pay-fill { background: var(--info); min-width: 4px; }
 .c-pay-groups {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

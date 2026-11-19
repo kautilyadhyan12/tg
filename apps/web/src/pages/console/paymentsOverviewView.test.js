@@ -74,6 +74,9 @@ function attention(ticks, parts = {}) {
   };
 }
 
+/** An attention answer holding every part, whoever asks. */
+const FULL = attention([...ORG_PRIVILEGES]);
+
 const SQUARE_CONNECTED = { state: 'connected', businessName: 'Iron House LLC', locationName: 'Austin', locations: [], connectedAt: '2026-10-01T10:00:00Z', removedAt: null };
 function payments({ square = SQUARE_CONNECTED, country = 'US', owner = true, availability = 'square', terminals = 2, squareReady = true } = {}) {
   const on = square?.state === 'connected';
@@ -139,6 +142,19 @@ describe('the worst thing: nobody is shown money, or a line, their role does not
       if (opens !== shown.lines.length > 0) throw new Error(`page for [${ticks.join(', ')}]: ${String(opens)}`);
       if (consoleMenu(SLUG, ticks, 'gym').pages.some((p) => p.key === 'payments') !== opens) throw new Error(`menu for [${ticks.join(', ')}]`);
       if (opens) pages += 1;
+      // The view's own guards, given an answer holding every part, as no server would send it (round one, T1 and T2).
+      const full = { register: register(ticks), attention: FULL, payments: payments(), bills: { overdueAfterDays: 0 } };
+      const fullTiles = overviewTiles({ orgSlug: SLUG, ...full, privileges: ticks, orgType: 'gym' });
+      const fullKeys = fullTiles.map((t) => t.key);
+      const wantTiles = { revenue: money, 'payment-due': money, failed: NEEDS.failed(ticks), review: money };
+      for (const [k, want] of Object.entries(wantTiles)) {
+        if (fullKeys.includes(k) !== want) throw new Error(`tile ${k} for [${ticks.join(', ')}] given everything: shown ${String(fullKeys.includes(k))}`);
+      }
+      const fullLines = paymentLines({ orgSlug: SLUG, privileges: ticks, org: ORG, membersName: 'Members', ...full }).flatMap((g) => g.lines);
+      for (const [key, needs] of Object.entries(NEEDS)) {
+        if (fullLines.some((l) => l.key === key) !== needs(ticks)) throw new Error(`${key} for [${ticks.join(', ')}] given everything`);
+      }
+      if (!money && /[$]/.test(JSON.stringify([fullTiles, fullLines]))) throw new Error(`an amount for [${ticks.join(', ')}] given everything`);
     }
     expect(pages).toBeGreaterThan(0);
   }, 120_000);
@@ -190,7 +206,7 @@ describe('each figure is its own page’s figure', () => {
         [
           ['Card payments with Square', 'Connected', 'in Settings'],
           ['Square Terminals', '2 paired', 'in Settings'],
-          ['Request cards on file', 'Members with no card on file', 'in Members'],
+          ['Request cards on file', null, 'in Members'],
           ['Revenue report', 'Monthly figures', 'in Reports'],
           ['Export payments', 'CSV', 'in Reports'],
           ['Your KWAZO plan', null, 'on Overview'],
@@ -225,7 +241,7 @@ describe('each figure is its own page’s figure', () => {
   it('only past members owe: Payment due opens Past members, as the bell does', () => {
     const shown = page(owner, { attention: attention(owner, { paymentDue: { count: 0, past: 2 } }) });
     expect(line(shown, 'payment-due')).toMatchObject({ state: { text: '2 past members' }, to: `/console/${SLUG}/members?show=past-payment-due` });
-    expect(shown.tiles.find((t) => t.key === 'payment-due')).toMatchObject({ figure: '0', to: `/console/${SLUG}/members?show=past-payment-due` });
+    expect(shown.tiles.find((t) => t.key === 'payment-due')).toMatchObject({ figure: '2', note: 'past members', tone: 'warn', to: `/console/${SLUG}/members?show=past-payment-due` });
   });
 
   it('nothing waiting reads as nothing, never as a missing figure', () => {
@@ -259,11 +275,18 @@ describe('each figure is its own page’s figure', () => {
     expect(line(page(owner, { attention: attention(owner, { chargebacks: { count: 3, lostCount: 1 } }) }), 'chargebacks').state.text).toBe('2 need a response');
   });
 
+  it('a lost chargeback is not counted To review: nothing is left to respond to (round one, L2)', () => {
+    const lost = attention(owner, { refunds: { count: 0 }, appPayments: { count: 0 }, chargebacks: { count: 2, lostCount: 2 } });
+    expect(page(owner, { attention: lost }).tiles.find((t) => t.key === 'review')).toMatchObject({ figure: '0', note: 'Nothing to review' });
+    const some = attention(owner, { refunds: { count: 1 }, appPayments: { count: 0 }, chargebacks: { count: 3, lostCount: 1 } });
+    expect(page(owner, { attention: some }).tiles.find((t) => t.key === 'review')).toMatchObject({ figure: '3', note: '1 refund · 2 chargebacks' });
+  });
+
   it('a studio says clients', () => {
     const groups = paymentLines({ orgSlug: SLUG, privileges: owner, org: { ...ORG, orgType: 'studio' }, membersName: 'Clients & staff', register: register(owner), attention: attention(owner), payments: payments(), bills: { overdueAfterDays: 3 } });
     const lines = groups.flatMap((g) => g.lines);
     expect(lines.find((l) => l.key === 'payment-due')).toMatchObject({ state: { text: '6 clients' }, where: 'in Clients & staff' });
-    expect(lines.find((l) => l.key === 'cards').state.text).toBe('Clients with no card on file');
+    expect(lines.find((l) => l.key === 'cards')).toMatchObject({ state: null, where: 'in Clients & staff' });
     expect(lines.find((l) => l.key === 'bills').state.text).toBe('Grace period: 3 days');
   });
 
@@ -282,16 +305,18 @@ describe('each figure is its own page’s figure', () => {
 describe('how today was paid', () => {
   it('each way that took money, the most first, named as every row names it', () => {
     expect(revenueByMethod(register([...ROLE_PRIVILEGES.owner]), [...ROLE_PRIVILEGES.owner])).toEqual([
-      { key: 'terminal', label: 'Card on Terminal', money: '$780.00', share: 63 },
+      { key: 'terminal', label: 'Card on Terminal', money: '$780.00', share: 62.9 },
       { key: 'cash', label: 'Cash', money: '$310.00', share: 25 },
-      { key: 'card_at_desk', label: 'Card at the desk', money: '$90.00', share: 7 },
-      { key: 'bank_transfer', label: 'Bank transfer', money: '$60.00', share: 5 },
+      { key: 'card_at_desk', label: 'Card at the desk', money: '$90.00', share: 7.3 },
+      { key: 'bank_transfer', label: 'Bank transfer', money: '$60.00', share: 4.8 },
     ]);
   });
   it('nothing taken is an empty list, and a sliver still shows', () => {
     const owner = [...ROLE_PRIVILEGES.owner];
     expect(revenueByMethod(register(owner, { totalMinor: 0, terminal: 0, cash: 0, card_at_desk: 0, bank_transfer: 0 }), owner)).toEqual([]);
-    expect(revenueByMethod(register(owner, { terminal: 1000000, cash: 100, card_at_desk: 0, bank_transfer: 0 }), owner)[1].share).toBe(2);
+    // A sliver keeps its line; the bar's smallest width is the stylesheet's, and the shares add up to the day.
+    const sliver = revenueByMethod(register(owner, { terminal: 1000000, cash: 100, card_at_desk: 0, bank_transfer: 0 }), owner);
+    expect(sliver.map((w) => [w.key, w.share])).toEqual([['terminal', 100], ['cash', 0]]);
   });
 });
 
@@ -349,6 +374,18 @@ describe('before Square is connected, the setup comes first', () => {
     expect(page(owner, { payments: india }).tiles.map((t) => t.key)).not.toContain('cards');
   });
 
+  it.each([
+    ['India', { availability: 'india_soon', country: 'IN' }],
+    ['Brazil', { availability: 'not_available', country: 'BR' }],
+  ])('%s: nothing promises "after Square is connected", where it cannot be (round one, H2)', (_, where) => {
+    const calm = attention(owner, { failedPayments: { count: 0, totals: [] }, chargebacks: { count: 0 } });
+    const shown = page(owner, { payments: notConnected(where), attention: calm });
+    expect(JSON.stringify(shown)).not.toMatch(/after Square is connected/i);
+    expect(shown.tiles.find((t) => t.key === 'failed')).toMatchObject({ figure: '0', note: 'None outstanding' });
+    expect(shown.lines.find((l) => l.key === 'chargebacks').state.text).toBe('None');
+    expect(shown.lines.map((l) => l.key)).not.toContain('cards');
+  });
+
   it('no country yet: Set your country for the owner, who can for anybody else', () => {
     const none = notConnected({ availability: 'no_country', country: null });
     expect(setupBox(none, ORG, owner).press).toEqual({ kind: 'place', to: `/console/${SLUG}/settings#country`, words: 'Set your country' });
@@ -386,7 +423,8 @@ describe('the rest', () => {
   it('Needs attention keeps the bell’s money lines only, in its order', () => {
     const lines = ['reconnect', 'chargebacks', 'failed-payments', 'payment-due', 'refunds', 'app-payments', 'at-risk', 'reported', 'app-cancels', 'new-leads'].map((key) => ({ key, to: '/x' }));
     expect(moneyAttention(lines).map((l) => l.key)).toEqual(['reconnect', 'chargebacks', 'failed-payments', 'payment-due', 'refunds', 'app-payments']);
-    expect(moneyAttention([{ key: 'reconnect', to: null }])).toEqual([]);
+    // Reconnect Square for staff who cannot: kept, with nowhere to go, as the bell keeps it (round one, H1).
+    expect(moneyAttention([{ key: 'reconnect', to: null }])).toEqual([{ key: 'reconnect', to: null }]);
   });
 
   it('the plan as Overview says it', () => {

@@ -38,6 +38,12 @@ const connected = (payments) => squareSetup(payments)?.step === 'done';
 /** Terminals are offered where Square sells them (`SQUARE_TERMINAL_COUNTRIES`). */
 const terminalsHere = (payments) => typeof payments?.country === 'string' && SQUARE_TERMINAL_COUNTRIES.includes(payments.country);
 const AFTER_SQUARE = 'After Square is connected';
+/** Square can be connected here and is not yet: what needs it says so. Never in a country Square does
+ *  not serve, where nothing can be connected. */
+const awaitsSquare = (payments) => {
+  const setup = squareSetup(payments);
+  return setup !== null && setup.step !== 'done' && setup.step !== 'elsewhere';
+};
 
 /** THE BOX THAT LEADS THE PAGE BEFORE SQUARE IS CONNECTED: its heading, what it is for, its steps,
  *  its button for whoever may press it, and who can for anybody else. Null when nothing is to set
@@ -113,18 +119,21 @@ export function overviewTiles({ orgSlug, register, attention, payments, privileg
   }
   const due = attention?.paymentDue ?? null;
   if (due !== null && canOpenPlace(privileges, 'paymentDue')) {
+    // Only past members owe: their count, as the line below and the bell say it.
+    const pastOnly = due.count === 0 && due.past > 0;
+    const shown = pastOnly ? due.past : due.count;
     tiles.push({
       key: 'payment-due',
-      tone: due.count > 0 ? 'warn' : 'plain',
+      tone: shown > 0 ? 'warn' : 'plain',
       title: 'Payment due',
-      figure: n(due.count),
-      note: due.count === 1 ? words.person : words.people,
+      figure: n(shown),
+      note: pastOnly ? (due.past === 1 ? `past ${words.person}` : `past ${words.people}`) : due.count === 1 ? words.person : words.people,
       to: paymentDueTo(orgSlug, attention, privileges),
     });
   }
   const failed = attention?.failedPayments ?? null;
   if (failed !== null && canOpenPlace(privileges, 'failedPayments')) {
-    const waiting = squareSetup(payments) !== null && !connected(payments) && failed.count === 0;
+    const waiting = awaitsSquare(payments) && failed.count === 0;
     tiles.push({
       key: 'failed',
       tone: waiting ? 'off' : failed.count > 0 ? 'bad' : 'plain',
@@ -134,7 +143,7 @@ export function overviewTiles({ orgSlug, register, attention, payments, privileg
       to: null,
     });
   }
-  if (squareSetup(payments) !== null && !connected(payments) && squareSetup(payments)?.step !== 'elsewhere' && canOpenPlace(privileges, 'askCards')) {
+  if (awaitsSquare(payments) && canOpenPlace(privileges, 'askCards')) {
     tiles.push({ key: 'cards', tone: 'off', title: 'Cards on file', figure: '—', note: 'Available after Square is connected', to: null });
   } else {
     const review = toReview(attention, privileges);
@@ -147,13 +156,14 @@ export function overviewTiles({ orgSlug, register, attention, payments, privileg
 function toReview(attention, privileges) {
   const parts = [];
   let total = 0;
-  const add = (part, place, one, many) => {
+  const add = (part, place, one, many, count = part?.count ?? 0) => {
     if (part == null || !canOpenPlace(privileges, place)) return;
-    total += part.count;
-    if (part.count > 0) parts.push(plural(part.count, one, many));
+    total += count;
+    if (count > 0) parts.push(plural(count, one, many));
   };
   add(attention?.refunds, 'refundsToReview', 'refund', 'refunds');
-  add(attention?.chargebacks, 'chargebacks', 'chargeback', 'chargebacks');
+  // A lost chargeback is over: the money went back, and nothing is left to respond to.
+  add(attention?.chargebacks, 'chargebacks', 'chargeback', 'chargebacks', Math.max(0, (attention?.chargebacks?.count ?? 0) - (attention?.chargebacks?.lostCount ?? 0)));
   add(attention?.appPayments, 'appPaymentChecks', 'app payment', 'app payments');
   const seen = ['refunds', 'chargebacks', 'appPayments'].some((k) => attention?.[k] != null);
   if (!seen || !canOpenPlace(privileges, 'refundsToReview')) return null;
@@ -168,10 +178,12 @@ function paymentDueTo(orgSlug, attention, privileges) {
   return due.count === 0 && due.past > 0 ? to.replace(/show=[^&]*/, `show=${PAST_PAYMENT_DUE_SHOW}`) : to;
 }
 
-/** The bell's lines that are about money, in the bell's own order and words. */
+/** The bell's lines that are about money, in the bell's own order and words. A line with nowhere to
+ *  go for this person (Reconnect Square, for staff who are not the owner) stays, without a button,
+ *  as the bell keeps it: never "Nothing needs attention" over it. */
 const MONEY_KINDS = ['reconnect', 'chargebacks', 'failed-payments', 'payment-due', 'refunds', 'app-payments'];
 export function moneyAttention(lines) {
-  return (Array.isArray(lines) ? lines : []).filter((line) => MONEY_KINDS.includes(line.key) && typeof line.to === 'string');
+  return (Array.isArray(lines) ? lines : []).filter((line) => MONEY_KINDS.includes(line.key));
 }
 
 /** HOW TODAY'S REVENUE WAS PAID, as Sell adds it up: each way that took money, the most first,
@@ -189,7 +201,7 @@ export function revenueByMethod(register, privileges) {
     key: w.method,
     label: MEMBER_PAYMENT_METHOD_WORDS[w.method],
     money: formatMinor(w.minor, currency),
-    share: sum === 0 ? 0 : Math.max(2, Math.round((w.minor / sum) * 100)),
+    share: sum === 0 ? 0 : Math.round((w.minor / sum) * 1000) / 10,
   }));
 }
 
@@ -256,7 +268,7 @@ export function paymentLines({ orgSlug, privileges, org, membersName, register, 
       ? null
       : failed.count > 0
         ? { text: `${n(failed.count)} outstanding${failed.totals.length > 0 ? ` · ${totalWords(failed.totals)}` : ''}`, tone: 'bad' }
-        : quiet(!square && !unread ? AFTER_SQUARE : 'None outstanding'),
+        : quiet(awaitsSquare(payments) ? AFTER_SQUARE : 'None outstanding'),
   );
   const due = attention?.paymentDue ?? null;
   const dueTo = paymentDueTo(orgSlug, attention, privileges);
@@ -283,7 +295,7 @@ export function paymentLines({ orgSlug, privileges, org, membersName, register, 
         ? { text: 'Reconnect Square to see them', tone: 'bad' }
         : chargebacks.count > 0
           ? { text: chargebacks.lostCount >= chargebacks.count ? plural(chargebacks.count, 'lost', 'lost') : `${n(chargebacks.count - chargebacks.lostCount)} need a response`, tone: 'bad' }
-          : quiet(!square && !unread ? AFTER_SQUARE : 'None'),
+          : quiet(awaitsSquare(payments) ? AFTER_SQUARE : 'None'),
     chargebacks === null ? null : chargebacks.needsReconnect || chargebacks.count > 0,
   );
   const app = attention?.appPayments ?? null;
@@ -316,9 +328,9 @@ export function paymentLines({ orgSlug, privileges, org, membersName, register, 
     }
   }
   // No count of who has no card: the Members list's whole read is what gives it, and at a list of
-  // 10,000 that keeps the server busy 0.8 s on each visit. The line opens that list.
-  const cardsState = unread ? null : quiet(square ? `${words.peopleCap} with no card on file` : AFTER_SQUARE);
-  add('setup', 'cards', 'askCards', 'Request cards on file', cardsState, `in ${membersName}`);
+  // 10,000 that keeps the server busy 0.8 s on each visit. The line opens that list. Where Square is
+  // not offered, no card can be kept, and there is no line.
+  if (squareSetup(payments)?.step !== 'elsewhere') add('setup', 'cards', 'askCards', 'Request cards on file', awaitsSquare(payments) ? quiet(AFTER_SQUARE) : null, `in ${membersName}`);
   add('setup', 'revenue-report', 'revenueReport', 'Revenue report', quiet('Monthly figures'), 'in Reports');
   add('setup', 'export', 'exportPayments', 'Export payments', quiet('CSV'), 'in Reports');
   add('setup', 'plan', 'plan', 'Your KWAZO plan', planState(org), 'on Overview');

@@ -139,7 +139,7 @@ describe('connected to Square', () => {
     const attention = screen.getAllByTestId('pay-attention-line').map((l) => l.textContent);
     expect(attention).toEqual([expect.stringContaining('3 failed card payments'), expect.stringContaining('6 members with a payment due'), expect.stringContaining('2 refunds to review')]);
     expect(screen.getAllByTestId('pay-method').map((m) => m.textContent)).toEqual(['Cash$300.00', 'Bank transfer$70.00']);
-    await waitFor(() => expect(within(screen.getByTestId('pay-line-cards')).getByText('Members with no card on file')).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId('pay-line-cards').getAttribute('href')).toBe('/console/iron-house/members?show=no-card'));
     expect(orgApi.getMemberList).not.toHaveBeenCalled();
     expect(within(screen.getByTestId('pay-line-square')).getByText('Connected')).toBeTruthy();
     expect(screen.queryByTestId('payment-setup')).toBeNull();
@@ -157,6 +157,17 @@ describe('connected to Square', () => {
     const calm = { ...ATTENTION, failedPayments: { count: 0, totals: [] }, paymentDue: { count: 0, past: 0 }, refunds: { count: 0 } };
     open(ORG, calm);
     expect(await screen.findByTestId('pay-attention-none')).toBeTruthy();
+  });
+
+  it('a manager while Square needs reconnecting: the bell’s line, with no button, never "Nothing needs attention" (round one, H1)', async () => {
+    const reconnect = { ...ATTENTION, chargebacks: { count: 0, lostCount: 0, needsReconnect: true, canReconnect: false }, failedPayments: { count: 0, totals: [] }, paymentDue: { count: 0, past: 0 }, refunds: { count: 0 } };
+    orgApi.getGymPayments.mockResolvedValue(payments(CONNECTED, false));
+    open({ ...ORG, staffRole: 'manager', privileges: [...ROLE_PRIVILEGES.manager] }, reconnect);
+    const line = await screen.findByTestId('pay-attention-line');
+    expect(line.textContent).toContain('Reconnect Square');
+    expect(line.textContent).toContain('The owner needs to reconnect Square before chargebacks can show');
+    expect(within(line).queryByRole('link')).toBeNull();
+    expect(screen.queryByTestId('pay-attention-none')).toBeNull();
   });
 
   it('a read that fails says so once, and Try again reads again', async () => {
