@@ -9,18 +9,61 @@ import { movementSchema, type MovementFrame } from "@app/shared";
 import { MovementMatcher, checkMovement, parseMovement } from "../src/index.js";
 import { runChecks, runSteady, type Video } from "../scripts/bodyCheck.js";
 import { runMeasures } from "../scripts/measureCheck.js";
-import { LEAD_IN, MOVEMENTS, fit, proofTable, proofVideos, readMovement, runMovement } from "../scripts/movementCheck.js";
+import { LEAD_IN, MOVEMENTS, fit, proofTable, proofVideos, readMovement, runMovement, withLeadIn, withNumbers } from "../scripts/movementCheck.js";
 import { copy, editPeople } from "./helpers/body.js";
 
 const SQUAT = readMovement("squat");
 const VIDEOS = proofVideos();
 const TABLE = proofTable(SQUAT, VIDEOS);
+const row = (label: string) => {
+  const r = TABLE.rows.find((x) => x.label === label);
+  if (r === undefined) throw new Error(`no video ${label}`);
+  return r;
+};
 const videoOf = (label: string): Video => {
   const v = VIDEOS.find((x) => x.video.label === label);
   if (v === undefined) throw new Error(`no video ${label}`);
   return v.video;
 };
 const edited = (video: Video, frames: readonly MovementFrame[]): Video => ({ ...video, frames });
+/** The ankles, heels and toes. */
+const FEET: readonly number[] = [27, 28, 29, 30, 31, 32];
+
+/** Kd's reference squat with a hop of `height` (picture heights; 0.06 is about 15 cm for her) in the 0.4 s after each
+ *  rep comes back up, the points `hidden` (the model not sure of them) while in the air. */
+function hopped(height: number, hidden: readonly number[] = []): Video {
+  const video = videoOf("squat_reference");
+  const reps = repTimes(video);
+  const share = (t: number): number | null => {
+    for (const r of reps) {
+      const s = (t - r.end) / 400;
+      if (s >= 0 && s <= 1) return s;
+    }
+    return null;
+  };
+  const frames = editPeople(video.frames, (p, f) => {
+    const s = share(f.t);
+    if (s === null) return p;
+    const up = height * 4 * s * (1 - s);
+    return { ...p, points: p.points.map(([x, y, z, v, pr], i) => [x, y - up, z, hidden.includes(i) && s > 0.1 && s < 0.9 ? 0.1 : v, pr]) };
+  });
+  return edited(video, frames);
+}
+
+/** A video's frames at about `fps` a second: the frame nearest each step. */
+function slower(video: Video, fps: number): Video {
+  const step = 1000 / fps;
+  const out: MovementFrame[] = [];
+  let next = video.frames[0]?.t ?? 0;
+  for (const f of video.frames) {
+    if (f.t + 1e-6 >= next) {
+      out.push(f);
+      next += step;
+    }
+  }
+  return edited(video, out);
+}
+
 /** The squat's counted reps in a video, their times in the video's own clock (the run holds a lead-in first). */
 const repTimes = (video: Video) =>
   runMovement(SQUAT, video)
@@ -41,7 +84,7 @@ describe("the worst thing: no other movement is ever counted as a squat", () => 
 
   it("the one open case stays in the table in plain sight, its wrong count written: a kettlebell push press's dip", () => {
     const open = others.filter((r) => r.entry.open !== undefined);
-    expect(open.map((r) => [r.label, r.count])).toEqual([["fresh_push_press_kettlebell", 2]]);
+    expect(open.map((r) => [r.label, r.count])).toEqual([["fresh_push_press_kettlebell", 3]]);
     expect(open[0]?.entry.open).toMatch(/^52b: /);
   });
 
@@ -50,22 +93,29 @@ describe("the worst thing: no other movement is ever counted as a squat", () => 
     expect(TABLE.worstOther).toBe(0);
   });
 
-  it("a real squat turned into a jump at the top of each rep counts 0: the feet left the floor", () => {
-    const video = videoOf("squat_reference");
-    const reps = repTimes(video);
-    expect(reps.length).toBe(3);
-    // A hop of about 15 cm (0.06 of the picture's height for her) in the 0.4 s after each rep comes back up.
-    const hop = (t: number): number => {
-      for (const r of reps) {
-        const s = (t - r.end) / 400;
-        if (s >= 0 && s <= 1) return 0.06 * 4 * s * (1 - s);
-      }
-      return 0;
-    };
-    const frames = editPeople(video.frames, (p, f) => ({ ...p, points: p.points.map(([x, y, z, v, pr]) => [x, y - hop(f.t), z, v, pr]) }));
-    const run = runMovement(SQUAT, edited(video, frames));
-    expect(run.count).toBe(0);
-    expect(run.reps.filter((r) => r.verdict === "other").map((r) => r.rule)).toContain("feet stay down");
+  // Her first two reps come back up with room for a hop before the video ends; the third comes back up in the last
+  // picture held after it, which no edit reaches, and stays the one counted.
+  it.each([0.06, 0.04])("a real squat turned into a hop of %s of the picture's height (about 15 and 10 cm for her) at the top counts only the rep not hopped", (height) => {
+    const run = runMovement(SQUAT, hopped(height));
+    expect(run.count).toBe(1);
+    expect(run.reps.slice(0, 2).map((r) => [r.verdict, r.rule])).toEqual([["other", "feet stay down"], ["other", "feet stay down"]]);
+  });
+
+  // The edge lies about 7 cm: of her two hops of 0.03 (about 7.5 cm), one is refused and one is not.
+  it("the limit, written: a hop of 0.02 of the picture's height (about 5 cm) reads a lift under the number and is not seen", () => {
+    const lift = SQUAT.rules.find((r) => r.name === "feet stay down")?.atMost ?? 0;
+    const run = runMovement(SQUAT, hopped(0.02));
+    expect(run.reps.slice(0, 2).every((r) => (r.readings["feet stay down"] ?? 0) <= lift)).toBe(true);
+  });
+
+  it.each([
+    ["the feet hidden while in the air", FEET],
+    ["the heels and toes hidden while in the air", [29, 30, 31, 32]],
+    ["the whole body hidden while in the air", Array.from({ length: 33 }, (_, i) => i)],
+  ] as const)("a jump at the top of a rep with %s is never counted: what decides it was not seen", (_name, hidden) => {
+    const run = runMovement(SQUAT, hopped(0.06, hidden));
+    expect(run.count).toBe(1);
+    expect(run.reps.slice(0, 2).every((r) => r.verdict === "unseen" || r.verdict === "other")).toBe(true);
   });
 
   it("a real squat whose feet move out wide at the bottom, and back, counts 0 from the front: the stance changed", () => {
@@ -92,7 +142,19 @@ describe("the worst thing: no other movement is ever counted as a squat", () => 
         points: q.points.map(([x, y, z, v, pr], i) => [LEFT_LEG.includes(i) ? x + dx : RIGHT_LEG.includes(i) ? x - dx : x, y, z, v, pr]),
       };
     });
-    expect(runMovement(SQUAT, edited(video, frames)).count).toBe(0);
+    const run = runMovement(SQUAT, edited(video, frames));
+    expect(run.count).toBe(0);
+    // Every rep as deep as a squat is refused because the feet moved; a dip that never tried may be refused sooner.
+    const depth = SQUAT.rules.find((r) => r.name === "depth")?.atLeast ?? 0;
+    const deep = run.reps.filter((r) => (r.readings["depth"] ?? 0) >= depth);
+    expect(deep.length).toBe(3);
+    expect(deep.map((r) => [r.verdict, r.rule])).toEqual(deep.map(() => ["other", "feet stay in place"]));
+  });
+
+  it("no other movement is given a word: no rep of theirs is called short, but the open case's", () => {
+    for (const r of others.filter((x) => x.entry.open === undefined)) {
+      expect([r.label, r.reps.filter((x) => x.verdict === "short").length]).toEqual([r.label, 0]);
+    }
   });
 });
 
@@ -109,19 +171,29 @@ describe("the squat's own videos count what a person counts by eye", () => {
   });
 
   it.each(TABLE.rows.filter((r) => r.entry.movement === "squat" && !r.sets && r.entry.reps !== null).map((r) => [r.label, r] as const))(
-    "%s, a twin of the squat that sets no number, counts what a person counts",
+    "%s, a twin of the squat that sets no number, counts what a person counts, with every set of numbers",
     (_label, r) => {
       expect(r.count).toBe(r.entry.reps);
+      const video = videoOf(r.label);
+      for (const fold of TABLE.folds) expect([fold.person, runMovement(withNumbers(SQUAT, fold.fitted), video).count]).toEqual([fold.person, r.entry.reps]);
     },
   );
 
-  it("no rep of a squat video is called another movement or short, except the dips between reps that are not reps", () => {
+  it.each([7.5, 8, 10])("at %s frames a second, the slowest the phone gives, each person counts the same", (fps) => {
+    for (const label of ["squat_reference", "prisoner_squat_1", "prisoner_squat_3", "sumo_squat_2b"]) {
+      expect([label, runMovement(SQUAT, slower(videoOf(label), fps)).count]).toEqual([label, row(label).entry.reps]);
+    }
+  });
+
+  it("no rep of a squat video is called short or unseen; what is not counted is a small dip, silent, never as deep as a rep", () => {
+    const depth = SQUAT.rules.find((x) => x.name === "depth")?.atLeast ?? 0;
     for (const r of own) {
-      const counted = r.reps.filter((x) => x.verdict === "counted").length;
-      expect(counted).toBe(r.entry.reps);
-      // Whatever else it found are small dips: none went as deep as the squat's own depth.
-      const depth = SQUAT.rules.find((x) => x.name === "depth")?.atLeast ?? 0;
-      for (const x of r.reps.filter((y) => y.verdict !== "counted")) expect(x.readings["depth"] ?? 0).toBeLessThan(depth);
+      expect(r.reps.filter((x) => x.verdict === "counted").length).toBe(r.entry.reps);
+      for (const x of r.reps.filter((y) => y.verdict !== "counted")) {
+        expect([r.label, x.verdict]).toEqual([r.label, "other"]);
+        expect(x.readings["depth"]).not.toBeNull();
+        expect(x.readings["depth"] ?? depth).toBeLessThan(depth);
+      }
     }
   });
 
@@ -163,6 +235,35 @@ describe("the camera must see enough, or nothing is decided", () => {
     expect(run.count).toBe(2);
     const judged = run.reps.find((r) => r.verdict === "unseen");
     expect(judged?.rule).toMatch(/hips and knees together|chest up/);
+  });
+
+  it("one frame arriving twice with the same time decides nothing and keeps the count", () => {
+    const video = videoOf("squat_reference");
+    const second = repTimes(video)[1];
+    const at = video.frames.findIndex((f) => second !== undefined && f.t >= second.end + 400);
+    const twice = video.frames[at];
+    expect(twice).toBeDefined();
+    const frames = twice === undefined ? video.frames : [...video.frames.slice(0, at + 1), twice, ...video.frames.slice(at + 1)];
+    expect(runMovement(SQUAT, edited(video, frames)).count).toBe(3);
+  });
+
+  it("a set ended less than a moment after a rep came back up does not count it: a jump from its top could not show yet", () => {
+    // Played as the proof plays it, its first picture held a second, so the first rep is seen from standing.
+    const video = withLeadIn(videoOf("squat_reference"));
+    const first = runMovement(SQUAT, videoOf("squat_reference")).reps.find((r) => r.verdict === "counted");
+    expect(first).toBeDefined();
+    const steady = runSteady(runChecks(video.frames));
+    const measured = runMeasures(steady);
+    for (const [after, counted] of [[100, 0], [500, 1]] as const) {
+      const m = new MovementMatcher(SQUAT);
+      let count = 0;
+      steady.forEach((b, i) => {
+        const x = measured[i];
+        if (x !== undefined && first !== undefined && b.t <= first.end + after) count = m.next(b, x).count;
+      });
+      count = m.finish()?.count ?? count;
+      expect([after, count]).toEqual([after, counted]);
+    }
   });
 
   it("frames with nobody in them count nothing and leave the matcher waiting", () => {

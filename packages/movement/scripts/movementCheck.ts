@@ -5,16 +5,18 @@
 //
 // The rules that set the numbers, in words Kd can read. First every dip of the people the numbers are set from is found
 // and read with no bound at all (only the drop that starts one, half of `MEASURING_DEPTH`), and of each video's dips
-// the deepest, as many as a person counted by eye, are its reps; then, for each rule:
+// the deepest, as many as a person counted by eye, are its reps (those the camera could not judge then left out, never
+// replaced by a smaller dip); then, for each rule:
 //   - a "count" rule (how far the rep goes) is placed a quarter of the way back towards standing from the shallowest
 //     rep any of those people did: counting is a little forgiving (§12.1, principle 4);
 //   - a "match" rule (what kind of movement) is placed beyond the furthest rep any of those people did, by half of how
 //     far that rep lay from the middle rep: a body never seen is given room, and every other movement is still far
 //     outside;
 // "standing" is the rule's own reading while the person stood ready (0 for a drop).
-// Each video is played with its first picture held for a second before it: the engine learns a body in its first half
-// second, and a live set starts with the person already in view (they walked back from the phone). A video that
-// starts low gets no rep for that first rise, held or not. At its end the set is finished: a rep already back up counts.
+// Each video is played with its first picture held for a second before it, and its last picture for a second after it:
+// the engine learns a body in its first half second, a live set starts with the person already in view (they walked
+// back from the phone), and they are still in view after their last rep. A video that starts low gets no rep for that
+// first rise, held or not; one that ends mid-air ends with the feet up. Then the set is finished.
 // Each number is rounded the forgiving way, to a whole degree, a hundredth of a leg or a metre, or a twentieth of a
 // second. A person's videos are left out together: the numbers are set from all the people but one and tried on that
 // one, in turn.
@@ -35,7 +37,7 @@ export const MEASURING_DEPTH = 0.15;
 export const COUNT_SHARE = 0.75;
 /** A match rule is placed beyond the furthest rep by this share of its distance from the middle rep. */
 export const MATCH_SHARE = 0.5;
-/** Each video's first picture is held this long before it, ms. */
+/** Each video's first picture is held this long before it, and its last this long after it, ms. */
 export const LEAD_IN = 1000;
 
 export function readMovement(name: string): Movement {
@@ -63,7 +65,7 @@ export interface Run {
   readonly reps: readonly RepResult[];
 }
 
-/** The video with its first picture held for `LEAD_IN` before it, every time carried on. */
+/** The video with its first picture held for `LEAD_IN` before it and its last for as long after, every time carried on. */
 const held = new WeakMap<readonly MovementFrame[], Video>();
 export function withLeadIn(video: Video): Video {
   const known = held.get(video.frames);
@@ -74,7 +76,10 @@ export function withLeadIn(video: Video): Video {
   const step = second.t - first.t;
   const n = Math.round(LEAD_IN / step);
   const lead = Array.from({ length: n }, (_, k): MovementFrame => ({ ...first, t: first.t + k * step }));
-  const frames = [...lead, ...video.frames.map((f) => ({ ...f, t: f.t + n * step }))];
+  const body = video.frames.map((f) => ({ ...f, t: f.t + n * step }));
+  const end = body[body.length - 1];
+  const tail = end === undefined ? [] : Array.from({ length: n }, (_, k): MovementFrame => ({ ...end, t: end.t + (k + 1) * step }));
+  const frames = [...lead, ...body, ...tail];
   const out = { ...video, frames };
   held.set(video.frames, out);
   return out;
@@ -126,9 +131,11 @@ export function repsOf(movement: Movement, videos: readonly ProofVideo[]): RepRe
   const depthRule = movement.rules.find((r) => r.read.kind === "drop" && r.role === "count");
   const depthOf = (r: RepResult): number => (depthRule === undefined ? 0 : (r.readings[depthRule.name] ?? 0));
   return videos.flatMap((v) => {
-    const dips = runMovement(measuring, v.video).reps.filter((r) => r.verdict !== "unseen");
+    // The deepest dips first, as many as were counted, and only then those the camera could not judge left out: a rep
+    // that could not be judged is never replaced by a smaller dip.
+    const dips = runMovement(measuring, v.video).reps;
     const deepest = [...dips].sort((a, b) => depthOf(b) - depthOf(a)).slice(0, v.entry.reps ?? 0);
-    return dips.filter((r) => deepest.includes(r));
+    return dips.filter((r) => deepest.includes(r) && r.verdict !== "unseen");
   });
 }
 

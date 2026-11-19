@@ -35,9 +35,12 @@ export const movementReadSchema = z.discriminatedUnion("kind", [
   /** The most any of these measures moved from its own value while the person stood ready, either way, on the
    *  picture: read only where the picture shows it. */
   z.object({ kind: z.literal("change"), measures }).strict(),
-  /** The furthest the feet moved on the picture during the rep, from where they were as it began, metres. */
+  /** The most the feet (heels and toes) rose on the picture, along "down", from where they were at the top before,
+   *  metres against the body's size while standing: a hop, whatever the body's size reading does meanwhile. */
+  z.object({ kind: z.literal("lift"), points: z.literal("feet") }).strict(),
+  /** The furthest the feet moved on the picture during the rep, from where they were at the top before, metres. */
   z.object({ kind: z.literal("travel"), points: z.literal("feet") }).strict(),
-  /** How long the rep took, from leaving standing to back at it, seconds. */
+  /** How long the rep took, from passing half its depth on the way down to back up, seconds. Read over the rep. */
   z.object({ kind: z.literal("time") }).strict(),
 ]);
 
@@ -46,8 +49,12 @@ const from = z.string().min(1).max(400);
 
 export const movementRuleSchema = z
   .object({
-    /** A short name, the same in the proof table and in a rep's reason. */
-    name: z.string().min(1).max(60),
+    /** A short name, the same in the proof table and in a rep's reason: letters, digits and spaces only (a name like
+     *  "__proto__" would be read from every object, and the rule would never fail). */
+    name: z
+      .string()
+      .max(60)
+      .regex(/^[A-Za-z0-9][A-Za-z0-9 ]*$/),
     role: z.enum(["count", "match"]),
     /** Read at the bottom of the rep (the middle of the frames nearest the deepest), or over the whole rep, its
      *  worst frame (the rep includes a moment after it, so a jump from the top is seen). */
@@ -61,7 +68,8 @@ export const movementRuleSchema = z
     from,
   })
   .strict()
-  .refine((r) => (r.atLeast === undefined) !== (r.atMost === undefined), { message: "a rule has exactly one bound" });
+  .refine((r) => (r.atLeast === undefined) !== (r.atMost === undefined), { message: "a rule has exactly one bound" })
+  .refine((r) => r.read.kind !== "time" || r.at === "rep", { message: "a rep's time is read over the rep" });
 
 /** One condition of standing ready, before a rep may begin. */
 export const movementReadySchema = z
@@ -89,8 +97,11 @@ export const movementSchema = z
   })
   .strict()
   .refine((m) => new Set(m.rules.map((r) => r.name)).size === m.rules.length, { message: "every rule has its own name" })
-  .refine((m) => m.rules.some((r) => r.read.kind === "drop" && r.role === "count" && r.atLeast !== undefined), {
-    message: "a rep movement has a count rule on how far the drive goes",
+  .refine((m) => m.rules.filter((r) => r.read.kind === "drop" && r.role === "count").length === 1, {
+    message: "a rep movement has exactly one count rule on how far the drive goes",
+  })
+  .refine((m) => m.rules.every((r) => r.read.kind !== "drop" || r.role !== "count" || (r.atLeast !== undefined && r.atLeast > 0)), {
+    message: "how far the drive must go to count is a number above 0, at least",
   });
 
 export type MovementRead = z.infer<typeof movementReadSchema>;
