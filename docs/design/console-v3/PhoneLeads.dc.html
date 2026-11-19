@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Leads and At risk on a phone</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./kit3.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0;background:#0A0908}
+.cap{display:flex;align-items:center;gap:10px;font-weight:600;color:var(--t2)}
+.num{width:26px;height:26px;border-radius:999px;background:var(--o-fill);color:var(--o-t);box-shadow:inset 0 0 0 1px var(--o-line);display:grid;place-items:center;font-size:13px;font-weight:700;flex:none}
+.stage{background:var(--scrim);border-radius:18px;padding:32px 16px;display:flex;justify-content:center}
+.dlg{background:var(--solid);border:1px solid var(--line2);border-radius:20px;box-shadow:var(--pop);width:100%;max-width:500px;min-width:0}
+.side{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,440px);border:1px solid var(--line);border-radius:18px;overflow:hidden}
+.side > .under{padding:20px;opacity:.6;overflow:hidden;min-width:0}
+.side > .sheet{background:var(--solid);border-left:1px solid var(--line2);display:flex;flex-direction:column;min-width:0}
+.sheet-h{display:flex;align-items:center;gap:12px;padding:18px 20px;border-bottom:1px solid var(--line)}
+.sheet-b{padding:20px;display:flex;flex-direction:column;gap:18px}
+.sheet-f{margin-top:auto;display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:14px 20px;border-top:1px solid var(--line)}
+.opt{display:flex;gap:12px;align-items:flex-start;padding:14px 16px;border-radius:14px;border:1px solid var(--line2)}
+.opt-on{border-color:var(--o);background:var(--o-fill)}
+.radio{width:18px;height:18px;border-radius:999px;border:1.5px solid var(--line2);flex:none;margin-top:1px}
+.radio-on{border:5px solid var(--o)}
+.check-on{background:var(--o);border-color:var(--o);position:relative}
+.check-on::after{content:"";position:absolute;left:5px;top:1px;width:5px;height:10px;border:solid var(--on-o);border-width:0 2px 2px 0;transform:rotate(45deg)}
+.sw{width:40px;height:24px;border-radius:999px;background:var(--bar);position:relative;flex:none}
+.sw::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:999px;background:var(--t3)}
+.sw-on{background:var(--o)}.sw-on::after{left:19px;background:var(--on-o)}
+.step{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,340px);gap:20px;align-items:start}
+.menu{background:var(--solid);border:1px solid var(--line2);border-radius:16px;box-shadow:var(--pop);padding:6px;min-width:0;max-width:320px}
+.mi{display:flex;gap:12px;align-items:flex-start;padding:10px 12px;border-radius:10px}
+.ptile{display:flex;flex-direction:column;gap:4px;padding:14px;border-radius:14px;border:1px solid var(--line2);min-width:0}
+.ptile-on{border-color:var(--o);background:var(--o-fill)}
+.pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.qty{display:inline-flex;align-items:center;border:1px solid var(--line2);border-radius:999px;height:40px}
+.qty > button{width:40px;height:40px;display:grid;place-items:center;color:var(--t2)}
+.money{font-weight:600;white-space:nowrap}
+.frames{display:flex;flex-wrap:wrap;gap:40px;padding:40px;align-items:flex-start}
+.frame{width:390px;max-width:100%;border:1px solid var(--line2);border-radius:28px;overflow:hidden;background:var(--page);display:flex;flex-direction:column;position:relative}
+.bsheet{background:var(--solid);border-top:1px solid var(--line2);border-radius:22px 22px 0 0;box-shadow:var(--pop);display:flex;flex-direction:column}
+.grab{width:40px;height:5px;border-radius:999px;background:var(--line2);margin:10px auto 4px}
+.savebar{position:sticky;bottom:12px;z-index:2;display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 16px;background:var(--solid);border:1px solid var(--line2);border-radius:18px}
+.footbar{position:sticky;bottom:0;padding:12px 16px 16px;border-top:1px solid var(--line);background:var(--solid);display:flex;flex-direction:column;gap:8px}
+@media (max-width:1180px){.side{grid-template-columns:minmax(0,1fr)}.side > .under{display:none}.side > .sheet{border-left:0}}
+@media (max-width:900px){.step{grid-template-columns:minmax(0,1fr)}.frames{padding:16px;gap:24px}}
+@media (pointer:coarse){.qty,.qty > button{height:44px}.qty > button{width:44px}}
+.col > span{overflow-wrap:anywhere}.ch{display:flex;gap:8px;flex-wrap:wrap}.selfoot{position:sticky;bottom:0;display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 16px;background:var(--solid);border-top:1px solid var(--o-line)}
+</style>
+</helmet>
+<div class="app t-dark {{look}}" style="min-height: 100%">
+<div class="frames">
+
+<div class="frame" aria-label="Leads">
+<header class="ph-top"><a href="#" class="hrow g10 grow" style="min-height: 44px"><span class="logo"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18zM6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2M10 6h4M10 10h4M10 14h4M10 18h4"></path></svg></span><span class="w6">Iron House</span></a><button type="button" class="ibtn" aria-label="Search"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 4a7 7 0 1 0 0 14a7 7 0 1 0 0-14M21 21l-4.3-4.3"></path></svg></button><button type="button" class="ibtn" aria-label="6 items need attention"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 0 0 3.4 0"></path></svg><span class="pip">6</span></button></header>
+<main class="ph-main">
+<div class="col g4"><span class="eyebrow">People</span><h1 class="h1">Leads</h1><span class="t2">People interested in joining Iron House</span></div>
+<button type="button" class="btn btn-main btn-w"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 3a4 4 0 1 0 0 8a4 4 0 1 0 0-8M19 8v6M22 11h-6"></path></svg>Add lead</button>
+<div class="hrow g8 wrap"><button type="button" class="btn btn-s btn-sm"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"></path></svg>Your gym page</button><button type="button" class="btn btn-s btn-sm"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M12 18v-6M9 15l3-3 3 3"></path></svg>Import leads</button></div>
+<div class="input" style="border-radius: 999px"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 4a7 7 0 1 0 0 14a7 7 0 1 0 0-14M21 21l-4.3-4.3"></path></svg><span class="t3 grow">Search</span></div>
+<div class="ch" role="group" aria-label="Status"><span class="chip chip-on">All 1,240</span><span class="chip">New 812</span><span class="chip">Contacted 230</span><span class="chip">On trial 41</span><span class="chip">Joined 96</span><span class="chip">Lost 61</span><span class="chip">Email due 18</span></div>
+<section class="box col" aria-label="Leads">
+<div class="row" style="padding-left: 14px; padding-right: 10px"><span class="check check-on"></span><span class="col grow" style="min-width: 0"><span class="w6">Kavya Rao</span><span class="t3">Website · Added today</span><span class="hrow g6 wrap"><span class="t2">New</span><span class="tag tag-warn">Email due</span></span></span><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg></div>
+<div class="row" style="padding-left: 14px; padding-right: 10px"><span class="check check-on"></span><span class="col grow" style="min-width: 0"><span class="w6">Harsh Vora</span><span class="t3">A friend · Added today</span><span class="t2">New</span></span><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg></div>
+<div class="row" style="padding-left: 14px; padding-right: 10px"><span class="check"></span><span class="col grow" style="min-width: 0"><span class="w6">Simran Kaur</span><span class="t3">Social media · Added yesterday</span><span class="hrow g6 wrap"><span class="t2">Contacted</span><span class="tag tag-bad">Email bounces</span></span></span><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg></div>
+<div class="row"><button type="button" class="btn btn-s btn-w">Load more</button></div>
+</section>
+</main>
+<div class="selfoot" role="region" aria-label="Leads selected"><span class="check" aria-label="Select every lead shown"></span><span class="w6 grow">2 selected</span><button type="button" class="btn btn-d btn-sm">Delete</button><button type="button" class="btn btn-q btn-sm">Clear</button></div>
+<nav class="ph-tabs" aria-label="Pages"><a href="#" class="ph-tab"><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"></path></svg></span>Overview</a><a href="#" class="ph-tab"><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 3a4 4 0 1 0 0 8a4 4 0 1 0 0-8M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"></path></svg></span>Members</a><a href="#" class="ph-tab"><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6L9 17l-5-5"></path></svg></span>Attendance</a><a href="#" class="ph-tab"><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM16 2v4M8 2v4M3 10h18"></path></svg></span>Classes</a><a href="#" class="ph-tab ph-tab-on"><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h.01M12 12h.01M19 12h.01"></path></svg></span>More</a></nav>
+</div>
+
+<div class="frame" aria-label="A lead, as a full page">
+<header class="ph-top"><button type="button" class="ibtn" aria-label="Close"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"></path></svg></button><span class="col grow" style="min-width: 0"><span class="w6">Kavya Rao</span><span class="t3">Added today · Website</span></span></header>
+<main class="ph-main">
+<div class="field"><span class="label">Status</span><div class="ch"><span class="chip chip-on">New</span><span class="chip">Contacted</span><span class="chip">On trial</span><span class="chip">Lost</span><span class="chip">Joined</span></div></div>
+<section class="inset col g10" aria-label="Follow-up emails"><span class="w6">Email 1 of 3 is due today</span><a href="#" class="btn btn-p btn-w"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM22 6l-10 7L2 6"></path></svg>Email Kavya</a><button type="button" class="btn btn-s btn-w">Mark email 1 as sent</button><span class="t3">Opens your own email with the message written. Send it from there, then mark it as sent.</span></section>
+<div class="field"><span class="label">Name</span><div class="input"><span class="grow">Kavya Rao</span></div></div>
+<div class="field"><span class="label">Email</span><div class="input"><span class="grow">kavya.rao@gmail.com</span></div></div>
+<div class="field"><span class="label">Phone</span><div class="input input-on"><span class="grow">(512) 555-0148</span></div></div>
+<div class="field"><span class="label">Heard of you from</span><div class="ch"><span class="chip">Walked in</span><span class="chip chip-on">Website</span><span class="chip">Social media</span><span class="chip">A friend</span><span class="chip">Other</span></div></div>
+<div class="opt opt-on"><span class="check check-on"></span><span class="col g4 grow"><span class="w6">Happy to hear from us by email</span><span class="t3">Tick only if they said yes. They're due 3 follow-up emails over a week.</span></span></div>
+<button type="button" class="btn btn-soft btn-w"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 3a4 4 0 1 0 0 8a4 4 0 1 0 0-8M17 11l2 2 4-4"></path></svg>Joined · add to your members</button>
+<button type="button" class="btn btn-d btn-w">Delete lead</button>
+</main>
+<div class="footbar"><span class="t3">You have changes that aren't saved.</span><button type="button" class="btn btn-main btn-lg btn-w">Save</button><button type="button" class="btn btn-q">Cancel</button></div>
+</div>
+
+<div class="frame" aria-label="At risk">
+<header class="ph-top"><a href="#" class="hrow g10 grow" style="min-height: 44px"><span class="logo"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18zM6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2M10 6h4M10 10h4M10 14h4M10 18h4"></path></svg></span><span class="w6">Iron House</span></a><button type="button" class="ibtn" aria-label="Search"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 4a7 7 0 1 0 0 14a7 7 0 1 0 0-14M21 21l-4.3-4.3"></path></svg></button><button type="button" class="ibtn" aria-label="6 items need attention"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 0 0 3.4 0"></path></svg><span class="pip">6</span></button></header>
+<main class="ph-main">
+<div class="col g4"><span class="eyebrow">People</span><h1 class="h1">At risk</h1><span class="t2">Members who used to come and have stopped: they have not come in for 14 days or more, after coming in at least 2 of their last 4 weeks.</span></div>
+<section class="box col" aria-label="Who has stopped coming">
+<div class="bh"><h2 class="h2">6 members have stopped coming.</h2></div>
+<div class="row wrap" style="align-items: flex-start"><span class="col g4 grow" style="min-width: 0"><a href="#" class="w6 c-o">Sam Rivera</a><span class="t2">Last came in 1 Nov, 19 days ago</span><span class="t3">Came in 4 of their last 4 weeks</span></span><button type="button" class="btn btn-s btn-w"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>Send a message</button></div>
+<div class="row wrap" style="align-items: flex-start"><span class="col g4 grow" style="min-width: 0"><a href="#" class="w6 c-o">Dev Malhotra</a><span class="t2">Last came in 3 Nov, 17 days ago</span><span class="t2">Not in the app, so Dev can't be messaged here. Their phone and email are on their page.</span></span><button type="button" class="btn btn-s btn-w">Open their page</button></div>
+</section>
+<section class="box pad col g12" aria-label="Who is listed"><h2 class="h2">Who is listed</h2><div class="field"><span class="label">Not come in for</span><div class="input"><span class="grow">14 days</span><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div></div><div class="field"><span class="label">After coming in at least</span><div class="input"><span class="grow">2 of their last 4 weeks</span><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div></div><button type="button" class="btn btn-p btn-w">Save</button></section>
+</main>
+<nav class="ph-tabs" aria-label="Pages"><a href="#" class="ph-tab"><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"></path></svg></span>Overview</a><a href="#" class="ph-tab"><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 3a4 4 0 1 0 0 8a4 4 0 1 0 0-8M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"></path></svg></span>Members</a><a href="#" class="ph-tab"><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6L9 17l-5-5"></path></svg></span>Attendance</a><a href="#" class="ph-tab"><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM16 2v4M8 2v4M3 10h18"></path></svg></span>Classes</a><a href="#" class="ph-tab ph-tab-on"><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h.01M12 12h.01M19 12h.01"></path></svg></span>More</a></nav>
+</div>
+
+<section class="box pad col g10" style="width: 390px; max-width: 100%" aria-label="Notes for the builder">
+<h2 class="h2">Notes for the builder</h2>
+<span class="t3">Leads and At risk are under More on a phone. A lead, Add lead, Your gym page and Import leads open as full pages, with their main button at the foot. Delete leads asks from the bottom, naming who goes. The selected bar sits at the foot of the screen with the tick box for the page shown.</span>
+</section>
+
+</div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"look":{"editor":"enum","options":["Dark","Light"],"default":"Dark"},"$preview":{"width":1800,"height":1280}}'>
+class Component extends DCLogic {
+renderVals() {
+return { look: (this.props.look ?? 'Dark') === 'Light' ? 't-light' : '' };
+}
+}
+</script>
+</body>
+</html>

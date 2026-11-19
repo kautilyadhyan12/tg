@@ -26,9 +26,18 @@
     "MembershipAdd.dc.html": {"x": 0, "y": 12520, "w": 1440, "h": 3500, "title": "Add a membership type, a page of its own", "expand": "fill"},
     "MembershipRaise.dc.html": {"x": 1520, "y": 12520, "w": 1440, "h": 1940, "title": "A higher price for members already on it", "expand": "fill"},
     "PhoneSell.dc.html": {"x": 3040, "y": 12520, "w": 1800, "h": 1320, "title": "Sell on a phone", "expand": "fill"},
-    "PhoneMemberships.dc.html": {"x": 3040, "y": 13960, "w": 1800, "h": 1320, "title": "Memberships on a phone", "expand": "fill"}
+    "PhoneMemberships.dc.html": {"x": 3040, "y": 13960, "w": 1800, "h": 1320, "title": "Memberships on a phone", "expand": "fill"},
+    "Attendance.dc.html": {"x": 0, "y": 16140, "w": 1440, "h": 3340, "title": "Attendance: Check in, today's check-ins and check-in history", "expand": "fill"},
+    "Desk.dc.html": {"x": 1520, "y": 16140, "w": 1800, "h": 3340, "title": "The front desk: every answer, on a tablet and a phone"},
+    "PhoneAttendance.dc.html": {"x": 3400, "y": 16140, "w": 1800, "h": 1220, "title": "Attendance on a phone"},
+    "Leads.dc.html": {"x": 0, "y": 19600, "w": 1440, "h": 2580, "title": "Leads: the list, the selected bar and Delete", "expand": "fill"},
+    "LeadPanel.dc.html": {"x": 1520, "y": 19600, "w": 1440, "h": 3790, "title": "A lead, from the right", "expand": "fill"},
+    "LeadImport.dc.html": {"x": 3040, "y": 19600, "w": 1440, "h": 2160, "title": "Import leads, in the middle", "expand": "fill"},
+    "GymPage.dc.html": {"x": 0, "y": 23520, "w": 1440, "h": 2900, "title": "Your gym page, from the right", "expand": "fill"},
+    "AtRisk.dc.html": {"x": 1520, "y": 23520, "w": 1440, "h": 2640, "title": "At risk: who has stopped coming", "expand": "fill"},
+    "PhoneLeads.dc.html": {"x": 3040, "y": 23520, "w": 1800, "h": 1280, "title": "Leads and At risk on a phone"}
   },
-  "order": ["Main.dc.html", "Overview.dc.html", "OverviewLight.dc.html", "Search.dc.html", "Money.dc.html", "Members.dc.html", "Person.dc.html", "Phone.dc.html", "MoneySetup.dc.html", "Boxes.dc.html", "Sell.dc.html", "SellSale.dc.html", "SellDay.dc.html", "SellProducts.dc.html", "SellTax.dc.html", "Discounts.dc.html", "Memberships.dc.html", "MembershipsGive.dc.html", "MembershipAdd.dc.html", "MembershipRaise.dc.html", "PhoneSell.dc.html", "PhoneMemberships.dc.html"],
+  "order": ["Main.dc.html", "Overview.dc.html", "OverviewLight.dc.html", "Search.dc.html", "Money.dc.html", "Members.dc.html", "Person.dc.html", "Phone.dc.html", "MoneySetup.dc.html", "Boxes.dc.html", "Sell.dc.html", "SellSale.dc.html", "SellDay.dc.html", "SellProducts.dc.html", "SellTax.dc.html", "Discounts.dc.html", "Memberships.dc.html", "MembershipsGive.dc.html", "MembershipAdd.dc.html", "MembershipRaise.dc.html", "PhoneSell.dc.html", "PhoneMemberships.dc.html", "Attendance.dc.html", "Desk.dc.html", "PhoneAttendance.dc.html", "Leads.dc.html", "LeadPanel.dc.html", "LeadImport.dc.html", "GymPage.dc.html", "AtRisk.dc.html", "PhoneLeads.dc.html"],
   "notes": {},
   "designSystems": []
 }
