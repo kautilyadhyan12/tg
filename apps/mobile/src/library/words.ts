@@ -91,6 +91,7 @@ export const COUNTED_WORDS: Readonly<Record<CountedBy, string>> = {
   hand: "Manual tracking",
 };
 export const COUNTED_TODAY: CountedBy = "hand";
+export const countedWord = (counted: string): string => (has(COUNTED_WORDS, counted) ? COUNTED_WORDS[counted] : plainWord(counted));
 
 /** A mistake's words as what goes wrong (its first sentence) and how to put it right (the rest). A sentence ends
  *  at a full stop followed by a space and a capital letter, so "e.g. " or "approx. " inside one never cuts it. */

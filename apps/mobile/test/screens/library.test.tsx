@@ -177,6 +177,95 @@ describe("the Library", () => {
   });
 });
 
+describe("Find exercises (63b)", () => {
+  const listed = () => screen.queryAllByRole("button", { name: /^(Barbell Curl|Plank|Squat),/ }).map((c) => String(c.props.accessibilityLabel).split(",")[0]);
+  const openFind = async () => {
+    await fireEvent.press(await screen.findByRole("button", { name: /^Find exercises/ }));
+    return screen.findByText("Find exercises");
+  };
+
+  it("each choice says how many it shows, and Show opens exactly that many: the worst thing is a false count", async () => {
+    await openLibrary(libraryServer({ gender: "male" }).ask);
+    await openFind();
+    expect(screen.getByRole("checkbox", { name: "Beginner, 1 exercise" })).toBeTruthy();
+    expect(screen.getByRole("checkbox", { name: "Intermediate, 2 exercises" })).toBeTruthy();
+    expect(screen.getByRole("checkbox", { name: "No equipment, 2 exercises" })).toBeTruthy();
+    expect(screen.getByRole("checkbox", { name: "Barbell, 1 exercise" })).toBeTruthy();
+    expect(screen.getByRole("checkbox", { name: "Manual tracking, 3 exercises" })).toBeTruthy();
+    expect(screen.getByRole("checkbox", { name: "Strength, 3 exercises" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Show 3 exercises" })).toBeTruthy();
+
+    await fireEvent.press(screen.getByRole("checkbox", { name: "Intermediate, 2 exercises" }));
+    // The other groups count within it: of the two intermediate exercises, one needs a barbell, one nothing.
+    expect(await screen.findByRole("checkbox", { name: "Barbell, 1 exercise" })).toBeTruthy();
+    expect(screen.getByRole("checkbox", { name: "No equipment, 1 exercise" })).toBeTruthy();
+    await fireEvent.press(screen.getByRole("checkbox", { name: "No equipment, 1 exercise" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Show 1 exercise" }));
+    await waitFor(() => { expect(listed()).toEqual(["Plank"]); });
+    expect(screen.getByText("1 exercise · A to Z")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Find exercises, 2 filters on" })).toBeTruthy();
+    // Each choice is a tag on the Library; letting one go widens the list again.
+    await fireEvent.press(screen.getByRole("button", { name: "Remove No equipment" }));
+    await waitFor(() => { expect(listed()).toEqual(["Barbell Curl", "Plank"]); });
+    await fireEvent.press(screen.getByRole("button", { name: "Clear all" }));
+    await waitFor(() => { expect(listed()).toEqual(["Barbell Curl", "Plank", "Squat"]); });
+  });
+
+  it("a muscle tapped on the person's own figure lights, says its count, and finds the exercises that work it", async () => {
+    await openLibrary(libraryServer({ gender: "female" }).ask);
+    await openFind();
+    await waitFor(() => { expect(screen.getAllByTestId("figure-female-front").length).toBeGreaterThan(0); });
+    expect(screen.queryAllByTestId("figure-male-front")).toHaveLength(0);
+    // A muscle none of the three works cannot be pressed.
+    expect(screen.queryAllByTestId("muscle-upper_chest")).toHaveLength(0);
+    const [biceps] = screen.getAllByTestId("muscle-biceps");
+    if (biceps === undefined) throw new Error("no biceps to tap");
+    await fireEvent.press(biceps);
+    expect(await screen.findByText("1 exercise")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Remove Biceps" })).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "Show 1 exercise" }));
+    await waitFor(() => { expect(listed()).toEqual(["Barbell Curl"]); });
+    expect(screen.getByRole("button", { name: "Remove Biceps" })).toBeTruthy();
+  });
+
+  it("the ✕ leaves the Library as it was; Clear all empties the choices", async () => {
+    await openLibrary(libraryServer({ gender: "male" }).ask);
+    await openFind();
+    await fireEvent.press(screen.getByRole("checkbox", { name: "Beginner, 1 exercise" }));
+    expect(await screen.findByRole("button", { name: "Show 1 exercise" })).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "Clear all" }));
+    expect(await screen.findByRole("button", { name: "Show 3 exercises" })).toBeTruthy();
+    await fireEvent.press(screen.getByRole("checkbox", { name: "Beginner, 1 exercise" }));
+    await fireEvent.press(screen.getByRole("button", { name: "Close" }));
+    await waitFor(() => { expect(listed()).toEqual(["Barbell Curl", "Plank", "Squat"]); });
+    expect(screen.getByRole("button", { name: "Find exercises" })).toBeTruthy();
+  });
+
+  it("its numbers count within the search, and the kind chips and its Kind are one choice", async () => {
+    await openLibrary(libraryServer({ gender: "male" }).ask);
+    await fireEvent.changeText(await screen.findByPlaceholderText("Search exercises"), "plank");
+    await openFind();
+    expect(screen.getByRole("button", { name: "Show 1 exercise" })).toBeTruthy();
+    expect(screen.getByRole("checkbox", { name: "Intermediate, 1 exercise" })).toBeTruthy();
+    expect(screen.queryByRole("checkbox", { name: /^Beginner/ })).toBeNull();
+    await fireEvent.press(screen.getByRole("button", { name: "Close" }));
+    await fireEvent.changeText(screen.getByPlaceholderText("Search exercises"), "");
+    await fireEvent.press(await screen.findByRole("radio", { name: "Strength" }));
+    await openFind();
+    expect(screen.getByRole("checkbox", { name: "Strength, 3 exercises" }).props.accessibilityState).toMatchObject({ checked: true });
+  });
+
+  it("the Find by muscle card opens it, and is not shown while searching", async () => {
+    await openLibrary(libraryServer({ gender: "male" }).ask);
+    expect(await screen.findByRole("button", { name: "Find by muscle. Tap a muscle on the body." })).toBeTruthy();
+    await fireEvent.changeText(screen.getByPlaceholderText("Search exercises"), "squat");
+    await waitFor(() => { expect(screen.queryByRole("button", { name: /^Find by muscle/ })).toBeNull(); });
+    await fireEvent.changeText(screen.getByPlaceholderText("Search exercises"), "");
+    await fireEvent.press(await screen.findByRole("button", { name: "Find by muscle. Tap a muscle on the body." }));
+    expect(await screen.findByText("Tap a muscle")).toBeTruthy();
+  });
+});
+
 describe("an exercise's page", () => {
   it("Muscles names its three rows from its file; Instructions swipe; Mistakes pairs each fault with its fix; Sources open from ⓘ", async () => {
     await openLibrary(libraryServer().ask);
