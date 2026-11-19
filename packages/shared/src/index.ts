@@ -3,6 +3,7 @@ export * from "./auth.js";
 export * from "./time.js";
 export * from "./pose.js";
 export * from "./movement.js";
+export * from "./movementDefinition.js";
 export * from "./events.js";
 export * from "./session.js";
 export * from "./sync.js";

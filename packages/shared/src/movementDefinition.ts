@@ -1,0 +1,99 @@
+// A movement as data (spec Part 2 §12.3): what the body does in one kind of rep, built and proven once, on which
+// exercises sit (a squat with a barbell, with a kettlebell, to a chair). The engine reads it and never names a
+// movement or an exercise. One file each in packages/movement/movements; the phone will download them with the
+// exercises (§13.3), so a file is parsed here before the engine trusts it.
+//
+// Every rule reads the body in the person's own terms: how far the hips went down from where THIS person stands, how
+// far a foot rose above where it stood, a joint's angle. Two roles:
+//   - "count": how far the rep went. A rep that matched the movement but fell short of it is not counted, and says
+//     why ("go lower");
+//   - "match": what kind of movement it was. A rep that breaks one is another movement (a jump, a lunge, a deadlift):
+//     no count and no word (Kd, 2026-11-16: "count only what matches").
+import { z } from "zod";
+
+export const MOVEMENT_FORMAT = 1;
+
+/** A measure's name, one of the engine's fixed list (packages/movement `MEASURE_LIST`); the engine refuses any other. */
+const measureName = z.string().min(1).max(60);
+const measures = z.array(measureName).min(1).max(4);
+
+/** What a rule reads. */
+export const movementReadSchema = z.discriminatedUnion("kind", [
+  /** How far the drive measure went from the person's own standing value, in its unit. */
+  z.object({ kind: z.literal("drop") }).strict(),
+  /** The mean of the measures read (on the picture where the picture gives it, else in 3D). */
+  z.object({ kind: z.literal("value"), measures }).strict(),
+  /** Pair by pair, `from` less `less` (the first of each with the first of the other), the mean of the pairs read. */
+  z
+    .object({ kind: z.literal("gap"), from: measures, less: measures })
+    .strict()
+    .refine((g) => g.from.length === g.less.length, { message: "a gap pairs its measures one to one" }),
+  /** How far from nothing a left-against-right measure lies, either way. */
+  z.object({ kind: z.literal("apart"), measure: measureName }).strict(),
+  /** The most any of these heights rose above its own value while the person stood ready, on the picture. */
+  z.object({ kind: z.literal("rise"), measures }).strict(),
+  /** The most any of these measures moved from its own value while the person stood ready, either way, on the
+   *  picture: read only where the picture shows it. */
+  z.object({ kind: z.literal("change"), measures }).strict(),
+  /** The furthest the feet moved on the picture during the rep, from where they were as it began, metres. */
+  z.object({ kind: z.literal("travel"), points: z.literal("feet") }).strict(),
+  /** How long the rep took, from leaving standing to back at it, seconds. */
+  z.object({ kind: z.literal("time") }).strict(),
+]);
+
+/** Where a number came from, in a line: which videos and which rule, or which source. */
+const from = z.string().min(1).max(400);
+
+export const movementRuleSchema = z
+  .object({
+    /** A short name, the same in the proof table and in a rep's reason. */
+    name: z.string().min(1).max(60),
+    role: z.enum(["count", "match"]),
+    /** Read at the bottom of the rep (the middle of the frames nearest the deepest), or over the whole rep, its
+     *  worst frame (the rep includes a moment after it, so a jump from the top is seen). */
+    at: z.enum(["bottom", "rep"]),
+    read: movementReadSchema,
+    atLeast: z.number().optional(),
+    atMost: z.number().optional(),
+    /** "always": the camera must see it, or the rep decides nothing. "when-seen": checked where the camera can see it
+     *  from where the phone stands, and marked "the camera cannot see this from here" where it cannot. */
+    seen: z.enum(["always", "when-seen"]),
+    from,
+  })
+  .strict()
+  .refine((r) => (r.atLeast === undefined) !== (r.atMost === undefined), { message: "a rule has exactly one bound" });
+
+/** One condition of standing ready, before a rep may begin. */
+export const movementReadySchema = z
+  .object({
+    read: movementReadSchema,
+    atLeast: z.number().optional(),
+    atMost: z.number().optional(),
+    from,
+  })
+  .strict()
+  .refine((r) => r.read.kind === "value" || r.read.kind === "gap" || r.read.kind === "apart", { message: "standing ready reads a body measure" })
+  .refine((r) => (r.atLeast === undefined) !== (r.atMost === undefined), { message: "a condition has exactly one bound" });
+
+export const movementSchema = z
+  .object({
+    format: z.literal(MOVEMENT_FORMAT),
+    name: z.string().min(1).max(60),
+    counting: z.literal("rep"),
+    /** Where the phone stands, in a line for the person. */
+    phone: z.string().min(1).max(400),
+    /** The measure whose fall from standing is the rep, read on the picture. */
+    drive: z.object({ measure: measureName, toward: z.literal("lower") }).strict(),
+    ready: z.array(movementReadySchema).min(1).max(8),
+    rules: z.array(movementRuleSchema).min(1).max(24),
+  })
+  .strict()
+  .refine((m) => new Set(m.rules.map((r) => r.name)).size === m.rules.length, { message: "every rule has its own name" })
+  .refine((m) => m.rules.some((r) => r.read.kind === "drop" && r.role === "count" && r.atLeast !== undefined), {
+    message: "a rep movement has a count rule on how far the drive goes",
+  });
+
+export type MovementRead = z.infer<typeof movementReadSchema>;
+export type MovementRule = z.infer<typeof movementRuleSchema>;
+export type MovementReady = z.infer<typeof movementReadySchema>;
+export type Movement = z.infer<typeof movementSchema>;
