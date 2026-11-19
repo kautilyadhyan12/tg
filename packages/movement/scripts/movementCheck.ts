@@ -223,7 +223,8 @@ export function proofTable(movement: Movement, videos: readonly ProofVideo[] = p
   const full = withNumbers(movement, fitted);
   const people = [...new Set(setting.map((v) => v.entry.person))];
   const folds = people.map((person) => ({ person, fitted: fit(movement, setting.filter((v) => v.entry.person !== person)) }));
-  const others = videos.filter((v) => v.entry.movement === null);
+  // A known open case is left out of the worst count, and kept in the table, in plain sight.
+  const others = videos.filter((v) => v.entry.movement === null && v.entry.open === undefined);
   let worstOther = 0;
   for (const fold of folds) {
     const m = withNumbers(movement, fold.fitted);

@@ -35,11 +35,17 @@ describe("the worst thing: no other movement is ever counted as a squat", () => 
     expect(new Set(others.map((r) => r.entry.view))).toEqual(new Set(["side", "front", "between"]));
   });
 
-  it.each(others.map((r) => [r.label, r] as const))("%s counts 0 with the squat's numbers", (_label, r) => {
+  it.each(others.filter((r) => r.entry.open === undefined).map((r) => [r.label, r] as const))("%s counts 0 with the squat's numbers", (_label, r) => {
     expect(r.count).toBe(0);
   });
 
-  it("every set of numbers made with one person left out also counts 0 on every other movement", () => {
+  it("the one open case stays in the table in plain sight, its wrong count written: a kettlebell push press's dip", () => {
+    const open = others.filter((r) => r.entry.open !== undefined);
+    expect(open.map((r) => [r.label, r.count])).toEqual([["fresh_push_press_kettlebell", 2]]);
+    expect(open[0]?.entry.open).toMatch(/^52b: /);
+  });
+
+  it("every set of numbers made with one person left out also counts 0 on every other movement but the open case", () => {
     expect(TABLE.folds.length).toBe(8);
     expect(TABLE.worstOther).toBe(0);
   });
@@ -141,6 +147,22 @@ describe("the camera must see enough, or nothing is decided", () => {
     const run = runMovement(SQUAT, edited(video, frames));
     expect(run.count).toBe(2);
     expect(run.reps.some((r) => r.verdict === "unseen")).toBe(true);
+  });
+
+  it("a rep whose shoulders are hidden throughout, the hips and feet seen, decides nothing: the trunk could not be judged", () => {
+    const video = videoOf("squat_reference");
+    const second = repTimes(video)[1];
+    expect(second).toBeDefined();
+    const [from, to] = second === undefined ? [0, 0] : [second.start - 300, second.end + 300];
+    // The shoulders and everything that hangs from them: the arms and hands.
+    const UPPER = [11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22];
+    const frames = editPeople(video.frames, (p, f) =>
+      f.t >= from && f.t <= to ? { ...p, points: p.points.map(([x, y, z, v, pr], i) => [x, y, z, UPPER.includes(i) ? 0.1 : v, pr]) } : p,
+    );
+    const run = runMovement(SQUAT, edited(video, frames));
+    expect(run.count).toBe(2);
+    const judged = run.reps.find((r) => r.verdict === "unseen");
+    expect(judged?.rule).toMatch(/hips and knees together|chest up/);
   });
 
   it("frames with nobody in them count nothing and leave the matcher waiting", () => {

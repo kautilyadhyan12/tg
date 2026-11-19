@@ -99,7 +99,9 @@ export interface MatchFrame {
 }
 
 const KNOWN: ReadonlySet<string> = new Set(MEASURE_LIST.map((m) => m.name));
-const FEET: readonly number[] = [KP.left_ankle, KP.right_ankle];
+/** Where the feet touch the floor: heels and toes. Not the ankles: in a deep squat the pose model's ankle point slides
+ *  forward with the shin while the foot stays flat (on Kd's fresh barbell back squat, 8 to 12 cm). */
+const FEET: readonly number[] = [KP.left_heel, KP.left_foot_index, KP.right_heel, KP.right_foot_index];
 
 function namesOf(read: MovementRead): string[] {
   switch (read.kind) {

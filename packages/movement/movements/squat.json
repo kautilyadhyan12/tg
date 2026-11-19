@@ -113,9 +113,9 @@
         "kind": "travel",
         "points": "feet"
       },
-      "atMost": 0.08,
+      "atMost": 0.1,
       "seen": "always",
-      "from": "Set by movement-check from 8 people's videos (scripts/movementVideos.ts), 24 reps: beyond the furthest rep by half its distance from the middle rep (0.06; standing 0)."
+      "from": "Set by movement-check from 8 people's videos (scripts/movementVideos.ts), 24 reps: beyond the furthest rep by half its distance from the middle rep (0.07; standing 0)."
     },
     {
       "name": "stance holds",

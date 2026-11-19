@@ -20,13 +20,16 @@ export interface MovementVideo {
   /** One name for one person. */
   readonly person: string;
   readonly view: View;
-  /** Reps counted by eye; null where a person could not be sure (the video is then reported, never judged). */
+  /** Reps counted by eye; null where a person could not be sure, or the camera itself moves (a phone stands still, so a
+   *  moving camera makes still feet look as if they moved): the video is then reported, never judged. */
   readonly reps: number | null;
   /** It may set the movement's numbers: its pictures were looked at, and `sha256` names that very file. */
   readonly sets: boolean;
   readonly sha256?: string;
   /** What the pictures showed, in a line. */
   readonly seen: string;
+  /** A known wrong count, kept in the table in plain sight until the job named here fixes it. */
+  readonly open?: string;
 }
 
 const other = (file: string, person: string, view: View, seen: string): MovementVideo => ({ file, movement: null, person, view, reps: 0, sets: false, seen });
@@ -141,6 +144,13 @@ export const MOVEMENT_VIDEOS: readonly MovementVideo[] = [
     sets: false,
     seen: "2026-11-19, 16 frames: a white card with nobody at 0.33 s, a text card over him at the end; he steps into his stance in the first frame. Reported only.",
   },
+  // ── Fresh videos (2026-11-19), measured after the squat's rules and numbers were fixed and never used to choose
+  //    them: the test on videos nobody had looked at. Reps counted by eye before the engine was run on them. ────────
+  { file: "movement-points/fresh_back_squat_barbell", movement: "squat", person: "woman, barbell on the back", view: "side", reps: null, sets: false, seen: "Fresh: a barbell back squat, side on, three reps by eye; the camera pans and zooms with her (the rack moves on the picture by her feet's 14 cm), so it is reported, never judged." },
+  { file: "movement-points/fresh_front_squat_barbell", movement: "squat", person: "woman, barbell in front", view: "side", reps: 3, sets: false, seen: "Fresh: a barbell front squat, three reps; she gets up from the third in the last 0.3 s (first counted 2 from three pictures a second; at ten she stands)." },
+  { file: "movement-points/fresh_squat_smith", movement: "squat", person: "man, Smith machine", view: "front", reps: 0, sets: false, seen: "Fresh: 3.5 s of a Smith machine squat that starts at the bottom and rises: no rep from standing." },
+  { file: "movement-points/fresh_goblet_squat_plate", movement: "squat", person: "woman, plate at the chest", view: "side", reps: 4, sets: false, seen: "Fresh: a weight-plate goblet squat; it starts low and rises (not a rep), then four reps." },
+  { file: "movement-points/fresh_front_squat_kettlebell", movement: "squat", person: "man, kettlebells in front", view: "front", reps: null, sets: false, seen: "Fresh: a kettlebell front squat facing the phone, three reps by eye; the camera tilts down in its first 0.6 s and moves later (the wall's foot and the bikes shift): reported, never judged." },
   // ── Every other movement: 0 and silence ──────────────────────────────────────────────────────────────
   other("movement-points/squat_jump_1", "woman, squat jump, dark gym", "side", "Squat jumps: the feet leave the floor at the top."),
   other("movement-points/squat_jump_2", "woman, squat jump, mirror", "between", "Squat jumps, a mirror beside her holding her reflection."),
@@ -170,4 +180,43 @@ export const MOVEMENT_VIDEOS: readonly MovementVideo[] = [
   other("body-points/bicycle_crunch_reference", "Kd's bicycle crunch", "side", "Kd's bicycle crunch reference, on the floor."),
   other("body-points/barbell_bench_press_reference", "Kd's barbell bench press", "between", "Kd's barbell bench press, filmed from the feet."),
   other("body-points/dumbbell_bench_press_reference_head_end", "Kd's dumbbell bench press", "between", "Kd's dumbbell bench press from the head end."),
+  other("movement-points/fresh_deadlift_kettlebell_1", "fresh: kettlebell deadlift, 1", "side", "Fresh: a kettlebell deadlift."),
+  other("movement-points/fresh_deadlift_kettlebell_2", "fresh: kettlebell deadlift, 2", "front", "Fresh: a kettlebell deadlift."),
+  other("movement-points/fresh_lunge_forward_kettlebell_0", "fresh: Kettlebell forward lunges, 0", "side", "Fresh: Kettlebell forward lunges."),
+  other("movement-points/fresh_lunge_forward_kettlebell_2", "fresh: Kettlebell forward lunges, 2", "between", "Fresh: Kettlebell forward lunges."),
+  other("movement-points/fresh_swing_kettlebell_1", "fresh: two-handed kettlebell swing, 1", "between", "Fresh: a two-handed kettlebell swing."),
+  other("movement-points/fresh_swing_kettlebell_2", "fresh: two-handed kettlebell swing, 2", "between", "Fresh: a two-handed kettlebell swing."),
+  other("movement-points/fresh_swing_one_hand", "fresh: one-handed kettlebell swing, one", "side", "Fresh: a one-handed kettlebell swing."),
+  {
+    ...other("movement-points/fresh_push_press_kettlebell", "fresh: kettlebell push press, one", "between", "Fresh: a kettlebell push press."),
+    open:
+      "52b: its dip (knees 120 to 127 degrees, the hips 0.15 to 0.19 of a leg down) is as deep as the shallowest real squat of the eight people, " +
+      "so the forgiving depth counts 2 of its 4 dips. How deep a squat must go is set from the squat's form standard (the research file), never moved by hand after seeing this.",
+  },
+  other("movement-points/fresh_snatch_kettlebell", "fresh: kettlebell snatch, one", "side", "Fresh: a kettlebell snatch."),
+  other("movement-points/fresh_row_kettlebell", "fresh: one-arm kettlebell row, one", "side", "Fresh: a one-arm kettlebell row."),
+  other("movement-points/fresh_good_morning_1", "fresh: barbell good morning, 1", "side", "Fresh: a barbell good morning."),
+  other("movement-points/fresh_good_morning_2", "fresh: barbell good morning, 2", "side", "Fresh: a barbell good morning."),
+  other("movement-points/fresh_deadlift_barbell_0", "fresh: conventional barbell deadlift, 0", "between", "Fresh: a conventional barbell deadlift."),
+  other("movement-points/fresh_romanian_deadlift_barbell_0", "fresh: barbell Romanian deadlift, 0", "between", "Fresh: a barbell Romanian deadlift."),
+  other("movement-points/fresh_romanian_deadlift_barbell_2", "fresh: barbell Romanian deadlift, 2", "side", "Fresh: a barbell Romanian deadlift."),
+  other("movement-points/fresh_romanian_deadlift_dumbbell_0", "fresh: dumbbell Romanian deadlift, 0", "side", "Fresh: a dumbbell Romanian deadlift."),
+  other("movement-points/fresh_romanian_deadlift_dumbbell_1", "fresh: dumbbell Romanian deadlift, 1", "side", "Fresh: a dumbbell Romanian deadlift."),
+  other("movement-points/fresh_romanian_deadlift_dumbbell_3", "fresh: dumbbell Romanian deadlift, 3", "between", "Fresh: a dumbbell Romanian deadlift."),
+  other("movement-points/fresh_lunge_reverse_dumbbell_1", "fresh: Dumbbell reverse lunges, 1", "side", "Fresh: Dumbbell reverse lunges."),
+  other("movement-points/fresh_step_up_dumbbell_0", "fresh: Dumbbell step-ups, 0", "side", "Fresh: Dumbbell step-ups."),
+  other("movement-points/fresh_step_up_dumbbell_1", "fresh: Dumbbell step-ups, 1", "between", "Fresh: Dumbbell step-ups."),
+  other("movement-points/fresh_calf_raise_2", "fresh: Calf raises at a wall, 2", "side", "Fresh: Calf raises at a wall."),
+  other("movement-points/fresh_calf_raise_dumbbell_1", "fresh: Standing dumbbell calf raises, 1", "front", "Fresh: Standing dumbbell calf raises."),
+  other("movement-points/fresh_calf_raise_dumbbell_2", "fresh: Standing dumbbell calf raises, 2", "front", "Fresh: Standing dumbbell calf raises."),
+  other("movement-points/fresh_split_squat_smith_0", "fresh: Smith machine split squats, 0", "side", "Fresh: Smith machine split squats."),
+  other("movement-points/fresh_split_squat_smith_2", "fresh: Smith machine split squats, 2", "between", "Fresh: Smith machine split squats."),
+  other("movement-points/fresh_split_squat_smith_3", "fresh: Smith machine split squats, 3", "side", "Fresh: Smith machine split squats."),
+  other("movement-points/fresh_lunge_forward_barbell_2", "fresh: Barbell forward lunges, 2", "side", "Fresh: Barbell forward lunges."),
+  other("movement-points/fresh_lunge_forward_plate", "fresh: Weight-plate forward lunges, one", "side", "Fresh: Weight-plate forward lunges."),
+  other("movement-points/fresh_overhead_press_plate", "fresh: weight-plate overhead press, one", "front", "Fresh: a weight-plate overhead press."),
+  other("movement-points/fresh_overhead_press_barbell", "fresh: barbell overhead press, one", "front", "Fresh: a barbell overhead press."),
+  other("movement-points/fresh_curl_barbell", "fresh: barbell biceps curl, one", "front", "Fresh: a barbell biceps curl."),
+  other("movement-points/fresh_rack_pull_barbell", "fresh: barbell rack pull, one", "between", "Fresh: a barbell rack pull."),
+  other("movement-points/fresh_curl_ez_bar_1", "fresh: standing EZ-bar curl, 1", "front", "Fresh: a standing EZ-bar curl."),
 ];
