@@ -4,8 +4,8 @@
 // half the frames a second, and picks frames worth a picture. Which reading a movement uses, and
 // how sure it needs it, is the movement's (job 52a).
 //
-// The two rules, in words Kd can read, both over the one-person videos (the others' stand-in
-// follower can pick a reflection, job 52d):
+// The two rules, in words Kd can read, both over the videos that set numbers (keptVideos.ts,
+// bodyCheck.ts `videoOf`):
 //   - the angle and length limits: where the picture shows every part it measures at cos 10° of
 //     its length or more (each turned out of the picture by 10° at most, as far as lengths can
 //     tell), the flat and the 3D readings still differ, by the 3D points' own error; each limit is
@@ -14,6 +14,7 @@
 //   - the size change: the most the body's size on the picture changes on a video where the person
 //     stays in place (its 1st to its 99th hundredth), raised to the next 5 in 100. A bigger change
 //     is the body moving nearer or further, and the floor is set afresh.
+import type { MovementFrame } from "@app/shared";
 import {
   BodyMeasures,
   MEASURE_LIMITS,
@@ -42,15 +43,15 @@ export interface Run {
 }
 
 /** Runs are cached: the tests ask for the same ones again. */
-const runs = new Map<string, Run>();
+/** Kept by the video's own frames, never its name: two files can share a name (round one). */
+const runs = new WeakMap<readonly MovementFrame[], Run>();
 export function runOf(video: Video): Run {
-  const key = `${video.label}|${String(video.frames.length)}`;
-  const known = runs.get(key);
+  const known = runs.get(video.frames);
   if (known !== undefined) return known;
   const checked = runChecks(video.frames);
   const steady = runSteady(checked);
   const fresh = { checked, steady, measured: runMeasures(steady) };
-  runs.set(key, fresh);
+  runs.set(video.frames, fresh);
   return fresh;
 }
 
@@ -70,21 +71,20 @@ export const SIZE_STEP = 0.05;
 
 /** Every flat reading the picture shows, whatever its distance from the 3D one. */
 const NO_ANGLE_LIMIT: MeasureLimits = { ...MEASURE_LIMITS, angle: Number.POSITIVE_INFINITY, length: Number.POSITIVE_INFINITY };
-const unlimited = new Map<string, MeasuredBody[]>();
+const unlimited = new WeakMap<readonly MovementFrame[], MeasuredBody[]>();
 function measuredUnlimited(video: Video): MeasuredBody[] {
-  const key = `${video.label}|${String(video.frames.length)}`;
-  const known = unlimited.get(key);
+  const known = unlimited.get(video.frames);
   if (known !== undefined) return known;
   const fresh = runMeasures(runOf(video).steady, NO_ANGLE_LIMIT);
-  unlimited.set(key, fresh);
+  unlimited.set(video.frames, fresh);
   return fresh;
 }
 
-/** |flat − 3D| of every reading of one kind whose parts lie across the picture, on the one-person
- *  videos. */
+/** |flat − 3D| of every reading of one kind whose parts lie across the picture, on the videos that
+ *  set numbers. */
 export function acrossDifferences(videos: readonly Video[], kind: Kind): number[] {
   return videos
-    .filter((v) => v.onePerson)
+    .filter((v) => v.sets)
     .flatMap((v) =>
       measuredUnlimited(v).flatMap((body) =>
         MEASURE_LIST.flatMap(({ name, unit }) => {
@@ -107,10 +107,10 @@ export function chooseLengthLimit(videos: readonly Video[]): number {
   return toStep(quantile(acrossDifferences(videos, "length"), 0.95), LENGTH_STEP);
 }
 
-/** The most the body's size on the picture changes on each one-person video, 1st to 99th hundredth. */
+/** The most the body's size on the picture changes on each video that sets numbers, 1st to 99th hundredth. */
 export function sizeSwings(videos: readonly Video[]): { readonly label: string; readonly swing: number }[] {
   return videos
-    .filter((v) => v.onePerson)
+    .filter((v) => v.sets)
     .map((v) => {
       const sizes = runOf(v).steady.flatMap((s) => (s.size === null ? [] : [s.size]));
       return { label: v.label, swing: quantile(sizes, 0.99) / quantile(sizes, 0.01) - 1 };
@@ -131,7 +131,7 @@ export interface AngleFold {
 
 export function leaveOneOut(videos: readonly Video[]): AngleFold[] {
   return videos
-    .filter((v) => v.onePerson)
+    .filter((v) => v.sets)
     .map((heldOut) => {
       const angle = chooseAngleLimit(videos.filter((v) => v !== heldOut));
       let shown = 0;

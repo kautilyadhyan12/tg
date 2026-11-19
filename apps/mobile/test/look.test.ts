@@ -86,7 +86,7 @@ describe("the icons and the pictures are the design's", () => {
     // nor Progress's chalk drawings from Kd's posters (35c-i), nor Achievements' goddess and painted posters (35c-iii),
     // nor Running's track photo and Greek runner, from his posters (37a), nor Invite a friend's high five, from his poster (20a),
     // nor Your runs' two runners (37c-i), nor sign-in's tall poster (12e), nor Food's bowl, meals and plate (32c-i).
-    const drawn = [...Object.keys(JSON.parse(read(join(design, "images.json"))) as Record<string, string>), "anatomy", "balance", "cave", "egyptpush", "etch", "foodbowl", "foodfloat", "goals", "goalsbox", "goddess", "greekrun", "greekyoga", "highfive", "mealbreakfast", "mealdinner", "meallunch", "mealsnack", "motivation", "plank", "pushup", "rope", "runner", "runners", "setup", "signin", "steps", "texcarbs", "texfat", "texprotein", "track", "vikingbell"].sort();
+    const drawn = [...Object.keys(JSON.parse(read(join(design, "images.json"))) as Record<string, string>), "anatomy", "balance", "cave", "egyptpush", "etch", "foodbowl", "foodfloat", "goals", "goalsbox", "goddess", "greekrun", "greekyoga", "highfive", "mealbreakfast", "mealdinner", "meallunch", "mealsnack", "motivation", "plank", "pushup", "rope", "runner", "runners", "setup", "signin", "steps", "studio", "texcarbs", "texfat", "texprotein", "track", "vikingbell"].sort();
     const folder = join(here, "assets", "pictures");
     const shipped = readdirSync(folder).sort();
     expect(shipped).toEqual(drawn.map((name) => `${name}.webp`));

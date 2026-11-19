@@ -20,7 +20,8 @@ import {
 import { BodyPointsError } from "./bodyPoints.js";
 
 /** Google's three sizes of the pose model, each pinned by its own file check (fetched 2026-11-17). The heavy one is
- *  byte for byte the one in Kd's folder (`D:\vidoe referene\tools`), which made every kept body-points file. */
+ *  byte for byte the one in Kd's folder (`D:\vidoe referene\tools`); since 51c every kept body-points file
+ *  is the full one's, asked for one person, as the phone runs it (keptVideos.ts). */
 export const MODELS = [
   { size: "lite", name: "pose_landmarker_lite", bytes: 5_777_746, sha256: "59929e1d1ee95287735ddd833b19cf4ac46d29bc7afddbbf6753c459690d574a" },
   { size: "full", name: "pose_landmarker_full", bytes: 9_398_198, sha256: "5134a3aad27a58b93da0088d431f366da362b44e3ccfbe3462b3827a839011b1" },
