@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Memberships</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./kit3.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0;background:#0A0908}
+.cap{display:flex;align-items:center;gap:10px;font-weight:600;color:var(--t2)}
+.num{width:26px;height:26px;border-radius:999px;background:var(--o-fill);color:var(--o-t);box-shadow:inset 0 0 0 1px var(--o-line);display:grid;place-items:center;font-size:13px;font-weight:700;flex:none}
+.stage{background:var(--scrim);border-radius:18px;padding:32px 16px;display:flex;justify-content:center}
+.dlg{background:var(--solid);border:1px solid var(--line2);border-radius:20px;box-shadow:var(--pop);width:100%;max-width:500px;min-width:0}
+.side{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,440px);border:1px solid var(--line);border-radius:18px;overflow:hidden}
+.side > .under{padding:20px;opacity:.6;overflow:hidden;min-width:0}
+.side > .sheet{background:var(--solid);border-left:1px solid var(--line2);display:flex;flex-direction:column;min-width:0}
+.sheet-h{display:flex;align-items:center;gap:12px;padding:18px 20px;border-bottom:1px solid var(--line)}
+.sheet-b{padding:20px;display:flex;flex-direction:column;gap:18px}
+.sheet-f{margin-top:auto;display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:14px 20px;border-top:1px solid var(--line)}
+.opt{display:flex;gap:12px;align-items:flex-start;padding:14px 16px;border-radius:14px;border:1px solid var(--line2)}
+.opt-on{border-color:var(--o);background:var(--o-fill)}
+.radio{width:18px;height:18px;border-radius:999px;border:1.5px solid var(--line2);flex:none;margin-top:1px}
+.radio-on{border:5px solid var(--o)}
+.check-on{background:var(--o);border-color:var(--o);position:relative}
+.check-on::after{content:"";position:absolute;left:5px;top:1px;width:5px;height:10px;border:solid var(--on-o);border-width:0 2px 2px 0;transform:rotate(45deg)}
+.sw{width:40px;height:24px;border-radius:999px;background:var(--bar);position:relative;flex:none}
+.sw::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:999px;background:var(--t3)}
+.sw-on{background:var(--o)}.sw-on::after{left:19px;background:var(--on-o)}
+.step{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,340px);gap:20px;align-items:start}
+.menu{background:var(--solid);border:1px solid var(--line2);border-radius:16px;box-shadow:var(--pop);padding:6px;min-width:0;max-width:320px}
+.mi{display:flex;gap:12px;align-items:flex-start;padding:10px 12px;border-radius:10px}
+.ptile{display:flex;flex-direction:column;gap:4px;padding:14px;border-radius:14px;border:1px solid var(--line2);min-width:0}
+.ptile-on{border-color:var(--o);background:var(--o-fill)}
+.pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.qty{display:inline-flex;align-items:center;border:1px solid var(--line2);border-radius:999px;height:40px}
+.qty > button{width:40px;height:40px;display:grid;place-items:center;color:var(--t2)}
+.money{font-weight:600;white-space:nowrap}
+.frames{display:flex;flex-wrap:wrap;gap:40px;padding:40px;align-items:flex-start}
+.frame{width:390px;max-width:100%;border:1px solid var(--line2);border-radius:28px;overflow:hidden;background:var(--page);display:flex;flex-direction:column;position:relative}
+.bsheet{background:var(--solid);border-top:1px solid var(--line2);border-radius:22px 22px 0 0;box-shadow:var(--pop);display:flex;flex-direction:column}
+.grab{width:40px;height:5px;border-radius:999px;background:var(--line2);margin:10px auto 4px}
+.savebar{position:sticky;bottom:12px;z-index:2;display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 16px;background:var(--solid);border:1px solid var(--line2);border-radius:18px}
+.footbar{position:sticky;bottom:0;padding:12px 16px 16px;border-top:1px solid var(--line);background:var(--solid);display:flex;flex-direction:column;gap:8px}
+@media (max-width:1180px){.side{grid-template-columns:minmax(0,1fr)}.side > .under{display:none}.side > .sheet{border-left:0}}
+@media (max-width:900px){.step{grid-template-columns:minmax(0,1fr)}.frames{padding:16px;gap:24px}}
+@media (pointer:coarse){.qty,.qty > button{height:44px}.qty > button{width:44px}}
+
+</style>
+</helmet>
+<div class="app t-dark {{look}}" style="min-height: 100%">
+<div class="shell">
+
+<nav class="rail" aria-label="Menu">
+<a href="#" class="gym"><span class="logo"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18zM6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2M10 6h4M10 10h4M10 14h4M10 18h4"></path></svg></span><span class="col grow"><span class="w6 ell">Iron House</span><span class="s12 t3">Austin · Gym</span></span><svg class="ic ic-s t3" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 15l5 5 5-5M7 9l5-5 5 5"></path></svg></a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3h5a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM15 3h5a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM15 12h5a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1zM4 16h5a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1z"></path></svg>Overview<span class="n n-bad">6</span></a>
+<div class="grp">Today<svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 2h6a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1zM16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2M9 14l2 2 4-4"></path></svg>Attendance</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 7.5V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3.5M16 2v4M8 2v4M3 10h5M10 16a6 6 0 1 0 12 0a6 6 0 1 0-12 0M16 14v2.2l1.5 1.3"></path></svg>Classes</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 6.5l11 11M21 21l-1-1M3 3l1 1M18 22l4-4M2 6l4-4M3 10l7-7M14 21l7-7"></path></svg>Personal training</a>
+<div class="grp">People<svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M5 7a4 4 0 1 0 8 0a4 4 0 1 0-8 0M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"></path></svg>Members &amp; staff</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 7a4 4 0 1 0 8 0a4 4 0 1 0-8 0M10.3 15H7a4 4 0 0 0-4 4v2M14 17a3 3 0 1 0 6 0a3 3 0 1 0-6 0M21 21l-1.9-1.9"></path></svg>Leads<span class="n">5</span></a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 17l-8.5-8.5-5 5L2 7M16 17h6v-6"></path></svg>At risk<span class="n n-warn">2</span></a>
+<div class="grp">Money<svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6a2 2 0 0 1 2-2h12v4M3 6v12a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2H5a2 2 0 0 1-2-2zM17 14h.01"></path></svg>Payments overview</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4zM3 6h18M16 10a4 4 0 0 1-8 0"></path></svg>Sell</a>
+<a href="#" class="ni ni-on"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12.6 2.6A2 2 0 0 0 11.2 2H4a2 2 0 0 0-2 2v7.2a2 2 0 0 0 .6 1.4l8.7 8.7a2.4 2.4 0 0 0 3.4 0l6.6-6.6a2.4 2.4 0 0 0 0-3.4zM7 7.5h.01"></path></svg>Memberships</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2zM2 10h20"></path></svg>Failed payments<span class="n n-bad">3</span></a>
+<div class="grp">Community<svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l18-5v12L3 14zM11.6 16.8a3 3 0 1 1-5.8-1.6"></path></svg>Updates<span class="n n-warn">1</span></a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM16 2v4M8 2v4M3 10h18"></path></svg>Events</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 2h6a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1zM16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2M12 11h4M12 16h4M8 11h.01M8 16h.01"></path></svg>Fitness plans</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M8.2 10.2L5 3h14l-3.2 7.2M6 15a6 6 0 1 0 12 0a6 6 0 1 0-12 0"></path></svg>Challenges</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6M18 9h1.5a2.5 2.5 0 0 0 0-5H18M4 22h16M10 14.7V17c0 .6-.5 1-1 1.2-1.2.5-2 2-2 3.8M14 14.7V17c0 .6.5 1 1 1.2 1.2.5 2 2 2 3.8M18 2H6v7a6 6 0 0 0 12 0z"></path></svg>Leaderboard</a>
+<div class="grp">Manage<svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3v18h18M8 17V9M13 17V5M18 17v-3"></path></svg>Reports</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M2 14h4M10 8h4M18 16h4"></path></svg>Settings</a>
+<a href="#" class="me"><span class="av">DB</span><span class="col grow"><span class="w6 s13 ell">Dana Brooks</span><span class="s12 t3">Owner</span></span><svg class="ic ic-s t3" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 15l5 5 5-5M7 9l5-5 5 5"></path></svg></a>
+</nav>
+
+<div class="work">
+<header class="top" style="position: relative">
+<button type="button" class="find"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11a7 7 0 1 0 14 0a7 7 0 1 0-14 0M21 21l-4.3-4.3"></path></svg><span class="grow ell">Search members, pages or actions</span><span class="kbd">Ctrl K</span></button>
+<span class="grow"></span>
+<button type="button" class="btn btn-soft"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>New</button>
+<button type="button" class="ibtn" aria-label="6 items need attention"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 0 0 3.4 0"></path></svg><span class="pip">6</span></button>
+</header>
+
+<main class="page" style="position: relative">
+<div class="between wrap">
+<div class="col g6" style="flex: 1 1 360px; min-width: 0"><span class="eyebrow">Money</span><h1 class="h1">Memberships</h1><span class="t2">Your own list of what you sell. You name each one, set its price, and choose how it is paid and what it includes. New prices are in USD.</span></div>
+<div class="hrow g10 wrap"><button type="button" class="btn btn-main"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>Add a membership type</button></div>
+</div>
+<div class="tabs" role="tablist"><span class="tab tab-on">Price list<span class="n">6</span></span><span class="tab">Discounts</span><span class="tab">Tax</span></div>
+
+<section class="box" aria-label="What you sell">
+<div class="bh"><h2 class="h2">What you sell</h2><span class="t3">6 membership types</span></div>
+
+<div class="row wrap" style="align-items: flex-start"><span class="tile ti-o"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M17 1l4 4-4 4M3 11V9a4 4 0 0 1 4-4h14M7 23l-4-4 4-4M21 13v2a4 4 0 0 1-4 4H3"></path></svg></span><div class="col g4 grow" style="min-width: 220px"><span class="hrow g8 wrap"><span class="w6">Gold Monthly</span><span class="t3">Recurring · Sold in the app</span></span><span class="t3">Plus Sales tax 8.25% on each payment · Unlimited classes</span>
+<span class="t2">On your member list 12 people have Gold Monthly. 3 of them have never had it here.</span></div><div class="col g8" style="align-items: flex-end"><span class="h3">$50.00 every month</span><div class="hrow g8 wrap"><button type="button" class="btn btn-soft btn-sm">See who can get it</button><button type="button" class="btn btn-s btn-sm">Open agreement</button><button type="button" class="btn btn-s btn-sm">Edit</button><button type="button" class="btn btn-q btn-sm">Archive</button></div></div></div>
+
+<div class="row wrap" style="align-items: flex-start"><span class="tile ti-o"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M17 1l4 4-4 4M3 11V9a4 4 0 0 1 4-4h14M7 23l-4-4 4-4M21 13v2a4 4 0 0 1-4 4H3"></path></svg></span><div class="col g4 grow" style="min-width: 220px"><span class="hrow g8 wrap"><span class="w6">Gold 12</span><span class="t3">Recurring</span></span><span class="t3">Unlimited classes · Minimum term: 12 months, then renews until cancelled · Early cancellation fee: $99.00</span></div><div class="col g8" style="align-items: flex-end"><span class="h3">$45.00 every month</span><div class="hrow g8 wrap"><button type="button" class="btn btn-s btn-sm">Edit</button><button type="button" class="btn btn-q btn-sm">Archive</button></div></div></div>
+
+<div class="row wrap" style="align-items: flex-start"><span class="tile ti-o"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M17 1l4 4-4 4M3 11V9a4 4 0 0 1 4-4h14M7 23l-4-4 4-4M21 13v2a4 4 0 0 1-4 4H3"></path></svg></span><div class="col g4 grow" style="min-width: 220px"><span class="hrow g8 wrap"><span class="w6">Gold Weekly</span><span class="t3">Recurring</span></span><span class="t3">Unlimited classes · Notice to cancel: 30 days · Cooling-off period: 3 days</span>
+<span class="t2">On your member list this is “Gold Wk” · 6 people. They have never had it.</span></div><div class="col g8" style="align-items: flex-end"><span class="h3">$25.00 every week</span><div class="hrow g8 wrap"><button type="button" class="btn btn-p btn-sm">Give it to them</button><button type="button" class="btn btn-q btn-sm">Stop counting it</button><button type="button" class="btn btn-s btn-sm">Edit</button><button type="button" class="btn btn-q btn-sm">Archive</button></div></div></div>
+
+<div class="row wrap" style="align-items: flex-start"><span class="tile ti-o"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M17 1l4 4-4 4M3 11V9a4 4 0 0 1 4-4h14M7 23l-4-4 4-4M21 13v2a4 4 0 0 1-4 4H3"></path></svg></span><div class="col g4 grow" style="min-width: 220px"><span class="hrow g8 wrap"><span class="w6">Off-peak Monthly</span><span class="t3">Recurring · Sold in the app</span></span><span class="t3">Joining fee $20.00, on the first bill · Classes before 4 pm</span>
+<span class="t2">On your member list 8 people have Off-peak Monthly. 2 people's Off-peak Monthly have ended on your member list. You can renew them.</span></div><div class="col g8" style="align-items: flex-end"><span class="h3">$25.00 every month</span><div class="hrow g8 wrap"><button type="button" class="btn btn-soft btn-sm">Renew memberships</button><button type="button" class="btn btn-s btn-sm">Edit</button><button type="button" class="btn btn-q btn-sm">Archive</button></div></div></div>
+
+<div class="row wrap" style="align-items: flex-start"><span class="tile ti-b"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0L2 12V2h10l8.6 8.6a2 2 0 0 1 0 2.8zM7 7h.01"></path></svg></span><div class="col g4 grow" style="min-width: 220px"><span class="hrow g8 wrap"><span class="w6">10-class pack</span><span class="t3">Class pack · Sold in the app</span></span><span class="t3">Any class</span></div><div class="col g8" style="align-items: flex-end"><span class="h3">$90.00</span><span class="t3">10 classes, used within 60 days</span><div class="hrow g8 wrap"><button type="button" class="btn btn-s btn-sm">Edit</button><button type="button" class="btn btn-q btn-sm">Archive</button></div></div></div>
+
+<div class="row wrap" style="align-items: flex-start"><span class="tile ti-p"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20M12 6v6l4 2"></path></svg></span><div class="col g4 grow" style="min-width: 220px"><span class="hrow g8 wrap"><span class="w6">Day pass</span><span class="t3">Day pass</span></span><span class="t3">Plus Sales tax 8.25%</span></div><div class="col g8" style="align-items: flex-end"><span class="h3">$15.00</span><span class="t3">1 visit, on the day</span><div class="hrow g8 wrap"><button type="button" class="btn btn-s btn-sm">Edit</button><button type="button" class="btn btn-q btn-sm">Archive</button></div></div></div>
+
+<div class="row"><button type="button" class="btn btn-q btn-sm">Show archived (1)</button></div>
+<div class="row wrap"><div class="col grow" style="min-width: 160px"><span class="w6 t2">Summer 2025</span><span class="t3">Archived · Recurring · $30.00 every month</span></div><button type="button" class="btn btn-s btn-sm">Put back</button></div>
+<div class="row between wrap"><span class="t3">Showing the newest 20 of 24.</span><button type="button" class="btn btn-q btn-sm">Hide archived</button></div>
+</section>
+
+<section class="box" aria-label="On your member list, not set up yet">
+<div class="bh"><div class="col g4"><h2 class="h2">On your member list, not set up yet</h2><span class="t3">Your member list says people have these memberships, but they have no price here yet. Set each one up once, and the people who have it get it, with the renewal or end date from your list.</span></div></div>
+<div class="row wrap"><div class="col grow" style="min-width: 200px"><span class="w6">Student Monthly</span><span class="t3">From your member list · 3 people</span></div><button type="button" class="btn btn-soft btn-sm">Set up</button></div>
+<div class="col g12" style="padding: 0 20px 20px">
+<div class="cap"><span class="num">1</span>Set up opens under the name</div>
+<div class="inset col g12">
+<span class="w6">What is “Student Monthly” here?</span>
+<div class="opt opt-on"><span class="radio radio-on"></span><span class="col g8 grow"><span class="w6">One of the memberships above</span><span class="input"><span class="grow t3">Choose one</span><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></span></span></div>
+<div class="opt"><span class="radio"></span><span class="w6">Add “Student Monthly” as a membership type</span></div>
+<div class="hrow g8 wrap"><button type="button" class="btn btn-p btn-sm">Count “Student Monthly” as Gold Monthly</button><button type="button" class="btn btn-q btn-sm">Cancel</button></div>
+</div>
+</div>
+<div class="row wrap"><div class="col grow" style="min-width: 200px"><span class="w6">Summer</span><span class="t2">You set this up as Summer 2025, which is now archived. Put Summer 2025 back, or set “Summer” up again.</span></div><button type="button" class="btn btn-soft btn-sm">Set up again</button></div>
+<div class="col g12" style="padding: 0 20px 20px"><div class="strip strip-warn"><span class="grow">Set “Summer” up again? It will no longer count as Summer 2025, which is archived. Nobody's membership changes.</span><button type="button" class="btn btn-s btn-sm">Set it up again</button><button type="button" class="btn btn-q btn-sm">Cancel</button></div></div>
+</section>
+
+<section class="box" aria-label="Billing rules" id="bills">
+<div class="bh"><div class="col g4"><h2 class="h2">Billing rules</h2><span class="t3">A membership with a price gets a bill for each period, by itself. You record what a person paid on their page, under Memberships.</span></div></div>
+<div class="col g16" style="padding: 0 20px 20px">
+<div class="grid2" style="gap: 16px">
+<div class="field"><span class="label">Grace period before an unpaid bill reads Overdue</span><div class="input"><span class="grow">None</span><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div><span class="t3">A bill due on 1 March reads Overdue from 2 March if it isn't paid.</span></div>
+<div class="field"><span class="label">Billing day for new memberships</span><div class="input"><span class="grow">The day each membership starts</span><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div><span class="t3">Each membership is billed on the day of the month it started. The list: the day each membership starts, then the 1st to the 28th.</span></div>
+<div class="field"><span class="label">Freeze fee, each month</span><div class="input"><span>$</span><span class="grow">0.00</span></div><span class="t3">Charged each month a membership is frozen: the first on the day it is frozen, then on that day each month until it is unfrozen. 0 means no fee.</span></div>
+<div class="opt"><span class="sw sw-on"></span><span class="col g4 grow"><span class="w6">Email a reminder before a saved card expires</span><span class="t3">Emailed in the month a card expires: on the 1st, or on the day you turn this on or the card is saved, up to the 25th. It goes to whoever pays with it for a membership that renews, and asks them to give you their new card at the front desk.</span></span></div>
+</div>
+<div class="hrow g10 wrap"><button type="button" class="btn btn-p">Save</button><span class="t3">Nothing changed yet.</span></div>
+</div>
+</section>
+
+<div class="grid2" style="gap: 20px">
+<section class="box pad col g12">
+<h2 class="h2">When something stands in the way</h2>
+<div class="strip strip-o"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20M12 16v-4M12 8h.01"></path></svg><span class="grow">Set your country in Business details before adding a membership type. Prices are in your country's own money.</span><button type="button" class="btn btn-p btn-sm">Set your country</button></div>
+<div class="inset col g4"><span class="w6">Nothing for sale yet</span><span class="t3">said beside What you sell before the first membership type</span></div>
+<div class="strip"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 3a4 4 0 1 0 0 8a4 4 0 1 0 0-8"></path></svg><span class="grow">Your role doesn't allow you to see or change memberships and prices. Ask the owner if you need to.</span></div>
+</section>
+<section class="box pad col g12">
+<h2 class="h2">Notes for the builder</h2>
+<span class="t3">"Bills" is named Billing rules here, as Payments overview names it, and keeps its place under the price list (Payments overview's line opens it there). The kind (Recurring, Class pack) and "Sold in the app" are plain words: nothing here needs attention. Give it to them, Renew memberships and See who can get it open the box on the board MembershipsGive. Edit opens the page of its own on MembershipAdd.</span>
+</section>
+</div>
+
+</main>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"look":{"editor":"enum","options":["Dark","Light"],"default":"Dark"},"$preview":{"width":1440,"height":2660}}'>
+class Component extends DCLogic {
+renderVals() {
+return { look: (this.props.look ?? 'Dark') === 'Light' ? 't-light' : '' };
+}
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Memberships on a phone</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./kit3.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0;background:#0A0908}
+.cap{display:flex;align-items:center;gap:10px;font-weight:600;color:var(--t2)}
+.num{width:26px;height:26px;border-radius:999px;background:var(--o-fill);color:var(--o-t);box-shadow:inset 0 0 0 1px var(--o-line);display:grid;place-items:center;font-size:13px;font-weight:700;flex:none}
+.stage{background:var(--scrim);border-radius:18px;padding:32px 16px;display:flex;justify-content:center}
+.dlg{background:var(--solid);border:1px solid var(--line2);border-radius:20px;box-shadow:var(--pop);width:100%;max-width:500px;min-width:0}
+.side{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,440px);border:1px solid var(--line);border-radius:18px;overflow:hidden}
+.side > .under{padding:20px;opacity:.6;overflow:hidden;min-width:0}
+.side > .sheet{background:var(--solid);border-left:1px solid var(--line2);display:flex;flex-direction:column;min-width:0}
+.sheet-h{display:flex;align-items:center;gap:12px;padding:18px 20px;border-bottom:1px solid var(--line)}
+.sheet-b{padding:20px;display:flex;flex-direction:column;gap:18px}
+.sheet-f{margin-top:auto;display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:14px 20px;border-top:1px solid var(--line)}
+.opt{display:flex;gap:12px;align-items:flex-start;padding:14px 16px;border-radius:14px;border:1px solid var(--line2)}
+.opt-on{border-color:var(--o);background:var(--o-fill)}
+.radio{width:18px;height:18px;border-radius:999px;border:1.5px solid var(--line2);flex:none;margin-top:1px}
+.radio-on{border:5px solid var(--o)}
+.check-on{background:var(--o);border-color:var(--o);position:relative}
+.check-on::after{content:"";position:absolute;left:5px;top:1px;width:5px;height:10px;border:solid var(--on-o);border-width:0 2px 2px 0;transform:rotate(45deg)}
+.sw{width:40px;height:24px;border-radius:999px;background:var(--bar);position:relative;flex:none}
+.sw::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:999px;background:var(--t3)}
+.sw-on{background:var(--o)}.sw-on::after{left:19px;background:var(--on-o)}
+.step{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,340px);gap:20px;align-items:start}
+.menu{background:var(--solid);border:1px solid var(--line2);border-radius:16px;box-shadow:var(--pop);padding:6px;min-width:0;max-width:320px}
+.mi{display:flex;gap:12px;align-items:flex-start;padding:10px 12px;border-radius:10px}
+.ptile{display:flex;flex-direction:column;gap:4px;padding:14px;border-radius:14px;border:1px solid var(--line2);min-width:0}
+.ptile-on{border-color:var(--o);background:var(--o-fill)}
+.pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.qty{display:inline-flex;align-items:center;border:1px solid var(--line2);border-radius:999px;height:40px}
+.qty > button{width:40px;height:40px;display:grid;place-items:center;color:var(--t2)}
+.money{font-weight:600;white-space:nowrap}
+.frames{display:flex;flex-wrap:wrap;gap:40px;padding:40px;align-items:flex-start}
+.frame{width:390px;max-width:100%;border:1px solid var(--line2);border-radius:28px;overflow:hidden;background:var(--page);display:flex;flex-direction:column;position:relative}
+.bsheet{background:var(--solid);border-top:1px solid var(--line2);border-radius:22px 22px 0 0;box-shadow:var(--pop);display:flex;flex-direction:column}
+.grab{width:40px;height:5px;border-radius:999px;background:var(--line2);margin:10px auto 4px}
+.savebar{position:sticky;bottom:12px;z-index:2;display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 16px;background:var(--solid);border:1px solid var(--line2);border-radius:18px}
+.footbar{position:sticky;bottom:0;padding:12px 16px 16px;border-top:1px solid var(--line);background:var(--solid);display:flex;flex-direction:column;gap:8px}
+@media (max-width:1180px){.side{grid-template-columns:minmax(0,1fr)}.side > .under{display:none}.side > .sheet{border-left:0}}
+@media (max-width:900px){.step{grid-template-columns:minmax(0,1fr)}.frames{padding:16px;gap:24px}}
+@media (pointer:coarse){.qty,.qty > button{height:44px}.qty > button{width:44px}}
+
+</style>
+</helmet>
+<div class="app t-dark {{look}}" style="min-height: 100%">
+<div class="frames">
+
+<div class="frame" aria-label="The price list">
+<header class="ph-top"><a href="#" class="hrow g10 grow" style="min-height: 44px"><span class="logo"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18zM6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2M10 6h4M10 10h4M10 14h4M10 18h4"></path></svg></span><span class="w6 ell">Iron House</span></a><button type="button" class="ibtn" aria-label="Search"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 4a7 7 0 1 0 0 14a7 7 0 1 0 0-14M21 21l-4.3-4.3"></path></svg></button><button type="button" class="ibtn" aria-label="6 items need attention"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 0 0 3.4 0"></path></svg><span class="pip">6</span></button></header>
+<main class="ph-main">
+<div class="col g4"><span class="eyebrow">Money</span><h1 class="h1">Memberships</h1><span class="t2">Your own list of what you sell. New prices are in USD.</span></div>
+<button type="button" class="btn btn-main btn-lg btn-w"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>Add a membership type</button>
+<div class="tabs"><span class="tab tab-on">Price list<span class="n">6</span></span><span class="tab">Discounts</span><span class="tab">Tax</span></div>
+<div class="box">
+<div class="row col" style="align-items: stretch; gap: 8px; padding: 14px 16px; border-top: 0"><div class="between"><span class="w6">Gold Monthly</span><span class="money">$50.00 / month</span></div><span class="t3">Recurring · Sold in the app · Plus Sales tax 8.25%</span><span class="t2">On your member list 12 people have Gold Monthly. 3 of them have never had it here.</span><div class="hrow g8 wrap"><button type="button" class="btn btn-soft btn-sm">See who can get it</button><button type="button" class="btn btn-s btn-sm">Edit</button><button type="button" class="btn btn-q btn-sm">Archive</button><button type="button" class="btn btn-q btn-sm">Open agreement</button></div></div>
+<div class="row col" style="align-items: stretch; gap: 8px; padding: 14px 16px"><div class="between"><span class="w6">Gold 12</span><span class="money">$45.00 / month</span></div><span class="t3">Recurring · Minimum term: 12 months, then renews until cancelled</span><div class="hrow g8 wrap"><button type="button" class="btn btn-s btn-sm">Edit</button><button type="button" class="btn btn-q btn-sm">Archive</button></div></div>
+<div class="row col" style="align-items: stretch; gap: 8px; padding: 14px 16px"><div class="between"><span class="w6">10-class pack</span><span class="money">$90.00</span></div><span class="t3">Class pack · 10 classes, used within 60 days</span><div class="hrow g8 wrap"><button type="button" class="btn btn-s btn-sm">Edit</button><button type="button" class="btn btn-q btn-sm">Archive</button></div></div>
+<div class="row" style="padding: 10px 16px"><button type="button" class="btn btn-q btn-sm">Show archived (1)</button></div>
+</div>
+<div class="box pad col g8"><span class="h3">On your member list, not set up yet</span><div class="between"><span class="col"><span class="w6">Student Monthly</span><span class="t3">3 people</span></span><button type="button" class="btn btn-soft btn-sm">Set up</button></div></div>
+<div class="box pad col g8"><span class="h3">Billing rules</span><span class="t3">Grace period: none · Billed on the day each membership starts · Freeze fee $0.00 · Card expiry reminder on</span><button type="button" class="btn btn-s btn-w">Edit billing rules</button></div>
+</main>
+<nav class="ph-tabs" aria-label="Pages"><a href="#" class="ph-tab"><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"></path></svg></span>Overview</a><a href="#" class="ph-tab"><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 3a4 4 0 1 0 0 8a4 4 0 1 0 0-8M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"></path></svg></span>Members</a><a href="#" class="ph-tab"><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6L9 17l-5-5"></path></svg></span>Attendance</a><a href="#" class="ph-tab"><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM16 2v4M8 2v4M3 10h18"></path></svg></span>Classes</a><a href="#" class="ph-tab ph-tab-on"><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h.01M12 12h.01M19 12h.01"></path></svg></span>More</a></nav>
+</div>
+
+<div class="frame" aria-label="Add a membership type, a full page">
+<header class="ph-top" style="border-bottom: 1px solid var(--line)"><a href="#" class="ibtn" aria-label="Back to Memberships"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"></path></svg></a><span class="h3 grow">Add a membership type</span></header>
+<main class="ph-main" style="padding-top: 16px">
+<div class="box pad col g12"><span class="hrow g10"><span class="num">1</span><span class="h3">Name it</span></span><div class="field"><span class="label">Name</span><div class="input input-on"><span class="grow">Gold 12</span></div></div><div class="field"><span class="label">Description (optional)</span><div class="input"><span class="grow t3">For example: All classes and open gym</span></div></div></div>
+<div class="box pad col g10"><span class="hrow g10"><span class="num">2</span><span class="h3">How is it paid?</span></span>
+<div class="opt opt-on"><span class="radio radio-on"></span><span class="col"><span class="w6">Recurring</span><span class="t3">Charged every week, month or year until it is cancelled.</span></span></div>
+<div class="opt"><span class="radio"></span><span class="w6">One-time payment</span></div><div class="opt"><span class="radio"></span><span class="w6">Class pack</span></div><div class="opt"><span class="radio"></span><span class="w6">Day pass</span></div><div class="opt"><span class="radio"></span><span class="w6">Trial</span></div></div>
+<div class="box pad col g10"><span class="hrow g10"><span class="num">3</span><span class="h3">Price and payment</span></span><div class="field"><span class="label">Price (USD)</span><div class="input"><span>$</span><span class="grow">45.00</span></div></div><span class="t3">Then 4 What it includes and 5 In the app, as on a computer.</span></div>
+<div class="box pad col g8"><span class="eyebrow">You're adding</span><span class="h3">Gold 12</span><span class="t2">Recurring · $45.00 every month · plus Sales tax 8.25%</span></div>
+</main>
+<div class="footbar"><button type="button" class="btn btn-main btn-lg btn-w">Add membership type</button></div>
+</div>
+
+<div class="frame" aria-label="Add a discount, a full page">
+<header class="ph-top" style="border-bottom: 1px solid var(--line)"><button type="button" class="ibtn" aria-label="Close"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"></path></svg></button><span class="h3 grow">Add a discount</span></header>
+<main class="ph-main" style="padding-top: 16px">
+<div class="field"><span class="label">Discount name</span><div class="input input-on"><span class="grow">Summer sale</span></div><span class="t3">Staff see this name when they sell, and it is kept on the sale.</span></div>
+<div class="field"><span class="label">Discount type</span><div class="hrow g8 wrap"><span class="chip chip-on">Percentage off</span><span class="chip">Fixed amount off</span></div></div>
+<div class="field"><span class="label">Percentage off</span><div class="input"><span class="grow">20</span><span class="t3">%</span></div></div>
+<div class="field"><span class="label">Promo code (optional)</span><div class="input"><span class="grow">SUMMER20</span></div></div>
+<div class="field"><span class="label">Applies to</span><div class="hrow g10"><span class="check"></span>Products</div><div class="hrow g10"><span class="check check-on"></span>Memberships</div></div>
+<div class="field"><span class="label">On a membership that renews</span><div class="hrow g8 wrap"><span class="chip chip-on">First payment only</span><span class="chip">Every payment</span></div></div>
+<span class="t3">Then the dates, the usage limit, one use per member and the app, as on a computer.</span>
+</main>
+<div class="footbar"><span class="t3">You have changes that aren't saved.</span><button type="button" class="btn btn-main btn-lg btn-w">Add discount</button></div>
+</div>
+
+<div class="frame" aria-label="Give it to them from the bottom" style="background: var(--scrim)">
+<div style="flex: 1; min-height: 300px"></div>
+<div class="bsheet"><div class="grab"></div>
+<div class="col g10" style="padding: 8px 16px 0">
+<span class="h2">Give Gold Weekly to the people with “Gold Wk” on your member list?</span>
+<span class="h3">Who gets it</span>
+<span class="w6">4 people to renew</span><span class="t3">Their renewal date in your list is still to come. Each keeps that date, and shows as paid until then.</span>
+<div class="hrow g10" style="min-height: 44px"><span class="check check-on"></span><span class="grow">Sam Rivera</span><span class="t3">Renews 2 Dec</span></div>
+<div class="hrow g10" style="min-height: 44px"><span class="check check-on"></span><span class="grow">Ava Chen</span><span class="t3">Renews 9 Dec</span></div>
+<a href="#" class="c-o w6">and 2 more · See all</a>
+<span class="h3">Who doesn't</span><span class="t2">1 person already has Gold Weekly, or had it before.</span>
+<span class="t3">No money is taken and nobody is emailed.</span>
+</div>
+<div class="footbar" style="border-top: 0"><button type="button" class="btn btn-main btn-lg btn-w">Give Gold Weekly to 4 people</button><button type="button" class="btn btn-s btn-lg btn-w">Cancel</button></div>
+</div>
+</div>
+
+</div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"look":{"editor":"enum","options":["Dark","Light"],"default":"Dark"},"$preview":{"width":1800,"height":1320}}'>
+class Component extends DCLogic {
+renderVals() {
+return { look: (this.props.look ?? 'Dark') === 'Light' ? 't-light' : '' };
+}
+}
+</script>
+</body>
+</html>

@@ -29,6 +29,46 @@ permission a page has stays.
 | `Members` | Members & staff: Your list | V3a |
 | `Person` | A member's page in three columns, the next step under the name | V2a |
 | `Phone` | The console on a phone: the top bar, Overview, the five tabs | V1-c (the bar), V5 (the page) |
+| `Boxes` | Where a box opens: under its button, from the right, in the middle, a page of its own; each on a computer and on a phone | every V job (V0-d-i) |
+| `Sell` | Sell: the register as a till, products on the left and the sale on the right with the payment method, total and Take payment always on screen; Revenue today, Sell a membership, Today's sales | V4a (V0-d-i) |
+| `SellSale` | Sell: Card on Terminal waiting and each way it ends, Sale recorded, a sale's ⋯, Void sale in the middle, Refund sale under the sale, a Terminal not ready | V4a (V0-d-i) |
+| `SellDay` | Sell: another day, its calendar, refunds noted, chargebacks | V4a (V0-d-i) |
+| `SellProducts` | Sell: Products, Add a product from the right, archived, what stands in the way | V4a (V0-d-i) |
+| `SellTax` | Tax rates, Add a tax rate under its button, Choose products, Remove, how the tax is charged (Sell's Tax tab and Memberships' Tax tab) | V4a, V4b (V0-d-i) |
+| `Discounts` | Discounts, Add a discount from the right, Archive, Put back (Memberships' Discounts tab; Sell's draws the same for products) | V4b, V4a (V0-d-i) |
+| `Memberships` | Memberships: the price list, On your member list not set up yet, Billing rules | V4b (V0-d-i) |
+| `MembershipsGive` | Give it to them, Renew memberships and Stop counting it: who gets it and who doesn't | V4b (V0-d-i) |
+| `MembershipAdd` | Add (and Change) a membership type, a page of its own in five numbered parts with "You're adding" | V4b (V0-d-i) |
+| `MembershipRaise` | A higher price for members already on it: keep or move them, the notice, who pays the new price | V4b (V0-d-i) |
+| `PhoneSell` | Sell on a phone: the register with Take payment at the foot, today's sales, a sale's ⋯ and Void sale from the bottom | V4a (V0-d-i) |
+| `PhoneMemberships` | Memberships on a phone: the price list, Add a membership type and Add a discount as full pages, Give it to them from the bottom | V4b (V0-d-i) |
+
+## Drawn in V0-d-i (2026-11-19)
+
+- **Every button, field and message of the real Sell and Memberships pages is on these boards**: 267 of
+  267, read from the code (`Sell.jsx`, `SaleRefunds.jsx`, `TerminalPayBox.jsx`, `SellProducts.jsx`,
+  `TaxRates.jsx`, `SellDiscounts.jsx`, `MembershipTypesPanel.jsx`, `MembershipFromList.jsx`,
+  `BillSettingsCard.jsx` and their views). The words are the code's own; only the word list changes them.
+- **Each board was looked at in headless Edge at V1-a's 24 screen shapes in both looks**, from a
+  280 px folding-phone cover to a 2560 px monitor, the opened folding phones and both screens of a dual
+  phone among them: nothing wider than the window, no words under 14 px outside the allowed small kinds,
+  no words over each other. The nine boards above were drawn before that check; V5 finds the Overview
+  board's chart labels at 11 px and one button too wide for a phone, and `Phone` is drawn at a fixed 390 px.
+- **Word changes** beyond the list on `Main`: "Change" on a product, tax rate, discount or membership
+  type reads **Edit**, as on `Person`; "See another day's sales" reads **View another day**; "Taken today"
+  reads **Revenue today**; "Bills" reads **Billing rules**, as Payments overview names it, and keeps its
+  place under the price list, where Payments overview's line opens it.
+- **Easy to find one's way (Kd's question at the board review, 2026-11-19):** the open tab is orange, as the
+  menu marks the open page; on Sell the sale panel is one screen tall beside the products, its lines scroll
+  inside it and the payment method, total and Take payment stay at its foot (on 1366×768 Take payment is on
+  the first screen); on a page of its own (`MembershipAdd`, `MembershipRaise`) the save bar stays pinned to
+  the foot of the screen.
+- **On a phone**, a row's buttons that do not fit go into its ⋯, which opens from the bottom with every
+  one of them (`PhoneSell`); nothing is dropped.
+- `kit3.css` gained, for every board: the 2026-11-19 sizes and colours (no words under 14 px, every word
+  colour 7 to 1, the values `console.css` already measures); buttons, tabs and fields 44 px tall on a
+  touch screen; long button words wrap on a narrow phone; Ctrl K only where there is a keyboard; the
+  phone's tab names fit a 280 px cover; the open tab in orange.
 
 ## What a builder must know
 
