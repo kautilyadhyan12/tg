@@ -67,8 +67,9 @@ const pixels = z.number().int().positive().max(20000);
 export const bodyPointsHeaderSchema = z
   .object({
     label: z.string().regex(/^[A-Za-z0-9_-]{1,80}$/),
-    /** A reference video measured on the laptop. The phone's own recordings come with job 51. */
-    source: z.literal("video"),
+    /** A reference video measured on the laptop, or the phone's own model run on the laptop's pictures of one
+     *  (`phone`, 52a-ii-a: what the phone's chip reads apart from the laptop). */
+    source: z.enum(["video", "phone"]),
     picture: z.object({ width: pixels, height: pixels }).strict(),
     /** The video's own frames a second, and the rate the measurement took. */
     videoFps: z.number().positive().max(1000),
@@ -82,9 +83,12 @@ export const bodyPointsHeaderSchema = z
         minTracking: share,
       })
       .strict(),
-    madeWith: z.object({ tool: z.literal("measure-points"), version: z.number().int().positive() }).strict(),
+    madeWith: z.object({ tool: z.enum(["measure-points", "keep-phone-points"]), version: z.number().int().positive() }).strict(),
   })
-  .strict();
+  .strict()
+  // A video is measured by measure-points; the phone's reading is kept only by keep-phone-points: a file that says
+  // one and was made by the other is not a body-points file.
+  .refine((h) => (h.source === "phone") === (h.madeWith.tool === "keep-phone-points"), { message: "the source and the tool that made the file disagree" });
 
 // ── The phone test (ROADMAP Stage 5 items 51a and 51b) ───────────────────────────────
 // A folder's copy of the app plays a reference video through the phone's own pose model

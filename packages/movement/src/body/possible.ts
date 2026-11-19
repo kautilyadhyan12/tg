@@ -373,9 +373,18 @@ export class PossibleBody {
     const state = this.body.points[i];
     if (state === undefined) return null;
     const { speed, settle } = this.limits;
-    // Still where it jumped to: it is used once it has stayed there long enough. This comes
-    // first, since from where it was last used a jump looks slower with every frame that passes.
     const before = state.candidate;
+    // Back where it was last used, nearer there than where it went, and moving as a body can: the
+    // throw was the model's, and the point is used again at once (52a-ii: the bicycle crunch's
+    // legs, thrown onto each other for one frame, are true again the next).
+    const anchor = state.anchor;
+    if (before !== null && anchor !== null && !swappedNow && apart(here, anchor) < apart(here, before) && this.speed(anchor, here, size) <= speed) {
+      state.candidate = null;
+      return null;
+    }
+    // Still where it jumped to: it is used once it has stayed there long enough. This comes
+    // before the plain move, since from where it was last used a jump looks slower with every
+    // frame that passes.
     if (before !== null && this.speed(before, here, size) <= speed) {
       state.candidate = { ...here, since: before.since, why: before.why };
       return here.t - before.since >= settle ? null : before.why;
@@ -390,9 +399,14 @@ export class PossibleBody {
   }
 
   /** True when the left limb now lies where the right one last was and the right where the
-   *  left was: each side is explained at least twice as well by a swap as by staying. Only
-   *  places used within `settle` count: over a longer time two limbs that really cross, as in
-   *  a bicycle crunch, can each end where the other was. */
+   *  left was: each side lies nearer the other's last place than its own, and the two together
+   *  are explained at least twice as well by a swap as by staying. Together, not each: the
+   *  model may throw one limb onto the other and the other only half way (the bicycle crunch at
+   *  0.57 s: the left knee onto the right's place, the right knee 0.65 of its own distance from
+   *  the left's). One limb moved while the other stays is never a swap: the one that stays is
+   *  the limbs' whole distance from the other's last place. Only places used within `settle`
+   *  count: over a longer time two limbs that really cross, as in a bicycle crunch, can each end
+   *  where the other was. */
   private limbSwapped(
     pair: (typeof LIMB_PAIRS)[number],
     sure: readonly boolean[],
@@ -423,6 +437,6 @@ export class PossibleBody {
       count++;
     });
     if (count === 0 || between / count / size <= this.limits.swapApart * unit) return false;
-    return swapLeft < keepLeft / 2 && swapRight < keepRight / 2;
+    return swapLeft < keepLeft && swapRight < keepRight && swapLeft + swapRight < (keepLeft + keepRight) / 2;
   }
 }

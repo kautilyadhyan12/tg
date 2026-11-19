@@ -3,8 +3,10 @@
 // against the engine's count, each person's count with their own videos left out of the numbers, and every other
 // movement's count, which must be 0.
 //
-// The rules that set the numbers, in words Kd can read. First every dip of the people the numbers are set from is found
-// and read with no bound at all (only the drop that starts one, half of `MEASURING_DEPTH`), and of each video's dips
+// The rules that set the numbers, in words Kd can read. First every dip of the people the numbers are set from is found,
+// in each of their videos as filmed and as each replay that changes only how the camera reads a body (replays.ts
+// `fits`: nearer, farther, tilted, fewer or uneven pictures, shaky points, the chip's gap; 52a-ii-a), and read with no
+// bound at all (only the drop that starts one, half of `MEASURING_DEPTH`), and of each video's dips
 // the deepest, as many as a person counted by eye, are its reps (those the camera could not judge then left out, never
 // replaced by a smaller dip); then, for each rule:
 //   - a "count" rule (how far the rep goes) is placed a quarter of the way back towards standing from the shallowest
@@ -28,6 +30,7 @@ import { MovementMatcher, parseMovement, type RepResult } from "../src/index.js"
 import { readKept, videoOf, type Video } from "./bodyCheck.js";
 import { runOf } from "./measureCheck.js";
 import { MOVEMENT_VIDEOS, type MovementVideo } from "./movementVideos.js";
+import { REPLAYS, type Replay } from "./replays.js";
 
 const TEST = join(import.meta.dirname, "../test");
 export const MOVEMENTS = join(import.meta.dirname, "../movements");
@@ -127,6 +130,31 @@ export interface RuleSeen {
 /** The reps a person counted in the videos given, read by every rule: in each video, of the dips the measuring run
  *  found, the deepest, as many as were counted by eye (a smaller dip is a sway, not a rep). Dips the camera could not
  *  judge are left out. */
+const measured = new WeakMap<readonly MovementFrame[], Map<string, readonly RepResult[]>>();
+/** Every dip of a video under the measuring movement, run once for each video and movement. */
+function dipsOf(measuring: Movement, video: Video): readonly RepResult[] {
+  const key = JSON.stringify(measuring);
+  const own = measured.get(video.frames) ?? new Map<string, readonly RepResult[]>();
+  measured.set(video.frames, own);
+  const known = own.get(key);
+  if (known !== undefined) return known;
+  const fresh = runMovement(measuring, video).reps;
+  own.set(key, fresh);
+  return fresh;
+}
+
+const replayedOnce = new WeakMap<readonly MovementFrame[], readonly ProofVideo[]>();
+/** The video as each replay that sets numbers would have it (replays.ts `fits`), each made once. */
+export function asReplayed(v: ProofVideo, replays: readonly Replay[] = REPLAYS): readonly ProofVideo[] {
+  const known = replayedOnce.get(v.video.frames);
+  if (known !== undefined && replays === REPLAYS) return known;
+  const made = replays
+    .filter((r) => r.fits)
+    .map((r): ProofVideo => ({ entry: v.entry, video: { ...v.video, label: `${v.video.label}, ${r.name}`, frames: r.edit(v.video.frames, seedOf(v.video.label, r.name), []) } }));
+  if (replays === REPLAYS) replayedOnce.set(v.video.frames, made);
+  return made;
+}
+
 export function repsOf(movement: Movement, videos: readonly ProofVideo[]): RepResult[] {
   const measuring = measuringMovement(movement);
   const depthRule = movement.rules.find((r) => r.read.kind === "drop" && r.role === "count");
@@ -134,7 +162,7 @@ export function repsOf(movement: Movement, videos: readonly ProofVideo[]): RepRe
   return videos.flatMap((v) => {
     // The deepest dips first, as many as were counted, and only then those the camera could not judge left out: a rep
     // that could not be judged is never replaced by a smaller dip.
-    const dips = runMovement(measuring, v.video).reps;
+    const dips = dipsOf(measuring, v.video);
     const deepest = [...dips].sort((a, b) => depthOf(b) - depthOf(a)).slice(0, v.entry.reps ?? 0);
     return dips.filter((r) => deepest.includes(r) && r.verdict !== "unseen");
   });
@@ -173,9 +201,10 @@ export interface Fitted {
   readonly reps: number;
 }
 
-/** Sets every rule's number from the reps of the videos given, by the two rules above. */
+/** Sets every rule's number from the reps of the videos given, as filmed and as each replay that sets numbers, by the
+ *  two rules above. */
 export function fit(movement: Movement, videos: readonly ProofVideo[]): Fitted[] {
-  const reps = repsOf(movement, videos);
+  const reps = repsOf(movement, videos.flatMap((v) => [v, ...asReplayed(v)]));
   return movement.rules.map((rule) => {
     const values = reps.flatMap((r) => {
       const v = r.readings[rule.name] ?? null;
@@ -246,3 +275,73 @@ export function proofTable(movement: Movement, videos: readonly ProofVideo[] = p
   });
   return { rows, fitted, folds, worstOther };
 }
+
+// ── Each video replayed the ways the world changes it (52a-ii-a; replays.ts says each) ──────────────────────────────
+export interface ReplayRow {
+  readonly replay: Replay;
+  readonly label: string;
+  readonly entry: MovementVideo;
+  /** What it must count: the reps by eye (the fewest, for a replay that hides reps), or 0 for another movement. */
+  readonly least: number;
+  readonly most: number;
+  readonly count: number;
+  /** For a video that sets numbers, its count under the replay with its person left out of the numbers; else null. */
+  readonly leftOut: number | null;
+  /** The replay changed this video (`Replay.tried`); a row it did not change proves nothing. */
+  readonly tried: boolean;
+  readonly reps: readonly RepResult[];
+}
+
+/** The same seed for the same video and replay, every run. */
+function seedOf(label: string, replay: string): number {
+  let h = 2166136261;
+  for (const ch of `${label}|${replay}`) h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
+  return h >>> 0;
+}
+
+/** The reps the movement counted on the video as it is, in the video's own clock (a run holds a lead-in first). */
+export function countedTimes(movement: Movement, video: Video): { start: number; end: number }[] {
+  return runMovement(movement, video)
+    .reps.filter((r) => r.verdict === "counted")
+    .map((r) => ({ start: r.start - LEAD_IN, end: r.end - LEAD_IN }));
+}
+
+/** One video under one replay; `leftOutOf`, for a video that sets numbers, the movement with its person left out. */
+export function replayed(movement: Movement, v: ProofVideo, replay: Replay, leftOutOf: Movement | null = null): ReplayRow {
+  const frames = replay.edit(v.video.frames, seedOf(v.video.label, replay.name), countedTimes(movement, v.video));
+  const edited = { ...v.video, frames };
+  const run = runMovement(movement, edited);
+  const mine = v.entry.movement === movement.name;
+  const eye = mine ? (v.entry.reps ?? 0) : 0;
+  return {
+    replay,
+    label: v.video.label,
+    entry: v.entry,
+    least: Math.max(0, eye - (mine ? (replay.hides ?? 0) : 0)),
+    most: eye,
+    count: run.count,
+    leftOut: leftOutOf === null ? null : runMovement(leftOutOf, edited).count,
+    tried: replay.tried?.(v.video.frames) ?? true,
+    reps: run.reps,
+  };
+}
+
+/** Every judged video (a count by eye, no open case) under every replay given; each video that sets numbers also with
+ *  its person left out of the numbers, so a replay is never judged only by numbers set from the replay itself. */
+export function replayTable(movement: Movement, videos: readonly ProofVideo[] = proofVideos(), replays: readonly Replay[] = REPLAYS): ReplayRow[] {
+  const judged = videos.filter((v) => v.entry.reps !== null && v.entry.open === undefined && (v.entry.movement === movement.name || v.entry.movement === null));
+  const setting = proofVideos().filter((v) => v.entry.movement === movement.name && v.video.sets);
+  const folds = new Map<string, Movement>();
+  const foldOf = (person: string): Movement => {
+    const known = folds.get(person);
+    if (known !== undefined) return known;
+    const m = withNumbers(movement, fit(movement, setting.filter((v) => v.entry.person !== person)));
+    folds.set(person, m);
+    return m;
+  };
+  return replays.flatMap((replay) => judged.map((v) => replayed(movement, v, replay, v.video.sets && v.entry.movement === movement.name ? foldOf(v.entry.person) : null)));
+}
+
+export const holds = (r: ReplayRow): boolean => r.count >= r.least && r.count <= r.most && (r.leftOut === null || (r.leftOut >= r.least && r.leftOut <= r.most));
+/** A row the video's own entry names as a known wrong count under this replay (`replayOpen`). */
+export const openRow = (r: ReplayRow): boolean => r.entry.replayOpen?.replays.includes(r.replay.name) === true;

@@ -65,6 +65,7 @@ export function videoOf(file: KeptFile, kept: Readonly<Record<string, KeptVideo>
   if (seen === undefined) return no("nobody has looked at its pictures yet");
   if (!seen.sets) return no(seen.seen);
   if (seen.sha256 !== file.sha256) return no("measured again since its pictures were looked at, or another file under its name");
+  if (header.source !== "video") return no("the phone's reading of a video, kept for its gap from the laptop, never to set a number");
   if (header.model.file !== KEPT_MODEL.file || header.model.people !== KEPT_MODEL.people || header.fps !== KEPT_MODEL.fps) {
     return no(`not the phone's own model asked for ${String(KEPT_MODEL.people)} person at ${String(KEPT_MODEL.fps)} frames a second`);
   }

@@ -1,15 +1,16 @@
 // The proof table of a movement (spec Part 2 §12.5; ROADMAP 52a), on the laptop or on GitHub:
-//   corepack pnpm --filter @app/movement movement-check [squat] [--write]
+//   corepack pnpm --filter @app/movement movement-check [squat] [--write] [--replays]
 // It sets the movement's numbers from the videos that may set them (movementCheck.ts says the rules), prints every
 // video's reps by eye against the engine's count, each person's count with their own videos left out of the numbers,
 // and the most any set of numbers counted on another movement's video. --write puts the numbers, and where each came
-// from, into movements/<name>.json; without it the file is only compared.
+// from, into movements/<name>.json; without it the file is only compared. --replays also plays every judged video again
+// the ways the world changes it (replays.ts) and prints, for each replay, what was counted against what must be.
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
-import { MOVEMENTS, proofTable, readMovement, withNumbers, type Fitted } from "./movementCheck.js";
+import { MOVEMENTS, holds, openRow, proofTable, readMovement, replayTable, withNumbers, type Fitted } from "./movementCheck.js";
 
-const { values, positionals } = parseArgs({ allowPositionals: true, options: { write: { type: "boolean", default: false } } });
+const { values, positionals } = parseArgs({ allowPositionals: true, options: { write: { type: "boolean", default: false }, replays: { type: "boolean", default: false } } });
 const name = positionals[0] ?? "squat";
 const movement = readMovement(name);
 const { rows, fitted, folds, worstOther } = proofTable(movement);
@@ -46,10 +47,37 @@ if (values.write) {
   const words = (f: Fitted): string => {
     const rule = movement.rules.find((r) => r.name === f.rule);
     const how = rule?.role === "count" ? "a quarter of the way back towards standing from the shallowest rep" : "beyond the furthest rep by half its distance from the middle rep";
-    return `Set by movement-check from ${String(people.length)} people's videos (scripts/movementVideos.ts), ${String(f.reps)} reps: ${how} (${num(Math.round(f.from * 100) / 100)}; standing ${num(Math.round(f.standing * 100) / 100)}).`;
+    return `Set by movement-check from ${String(people.length)} people's videos (scripts/movementVideos.ts), as filmed and as each replay that sets numbers (scripts/replays.ts), ${String(f.reps)} reps: ${how} (${num(Math.round(f.from * 100) / 100)}; standing ${num(Math.round(f.standing * 100) / 100)}).`;
   };
   const out = withNumbers(movement, fitted);
   const json = { ...out, rules: out.rules.map((r) => ({ ...r, from: words(fitted.find((f) => f.rule === r.name) ?? { rule: r.name, bound: 0, from: 0, standing: 0, reps: 0 }) })) };
   writeFileSync(join(MOVEMENTS, `${name}.json`), `${JSON.stringify(json, null, 2)}\n`);
   console.log(`Written: packages/movement/movements/${name}.json`);
+}
+
+if (values.replays) {
+  const rows = replayTable(movement);
+  const replays = [...new Set(rows.map((r) => r.replay))];
+  console.log(`\nEach judged video played again the ways the world changes it (scripts/replays.ts)`);
+  for (const replay of replays) {
+    const own = rows.filter((r) => r.replay === replay && r.entry.movement === name);
+    const others = rows.filter((r) => r.replay === replay && r.entry.movement === null);
+    const counted = own.reduce((n, r) => n + r.count, 0);
+    const eye = own.reduce((n, r) => n + r.most, 0);
+    const untried = [...own, ...others].filter((r) => !r.tried);
+    const wrong = [...own, ...others].filter((r) => r.tried && !holds(r));
+    const open = wrong.filter(openRow);
+    const falseOnes = others.filter((r) => r.count > 0);
+    const verdict = wrong.length === 0 ? "right" : !replay.hold ? "differs" : wrong.length === open.length ? "OPEN" : "WRONG";
+    console.log(
+      `  ${pad(replay.name, 24)} ${replay.hold ? "held " : "shown"} ${name} reps ${pad(`${String(counted)} of ${String(eye)}`, 9)} other movements counted ${String(falseOnes.reduce((n, r) => n + r.count, 0))}  ${verdict}  ${replay.words}${untried.length === 0 ? "" : ` (it changed nothing in ${String(untried.length)} videos, not counted as tried)`}`,
+    );
+    for (const r of wrong) {
+      const why = r.reps.filter((x) => x.verdict !== "counted" && (x.readings["depth"] ?? 0) > 0.1).map((x) => `${x.verdict}${x.rule === null ? "" : `: ${x.rule}`}`);
+      console.log(`      ${pad(r.label, 36)} must ${r.least === r.most ? String(r.most) : `${String(r.least)} to ${String(r.most)}`}, counted ${String(r.count)}${r.leftOut === null ? "" : `, left out ${String(r.leftOut)}`}${openRow(r) ? " (open)" : ""}  ${why.join("; ")}`);
+    }
+  }
+  for (const r of rows.filter((x) => x.entry.replayOpen !== undefined && x.replay === replays[0])) {
+    console.log(`\nOpen under ${r.entry.replayOpen?.replays.join(", ") ?? ""}: ${r.label}: ${r.entry.replayOpen?.why ?? ""}`);
+  }
 }
