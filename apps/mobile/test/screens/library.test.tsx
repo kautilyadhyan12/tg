@@ -13,7 +13,7 @@ import { fakeServer, kept, memoryStore, tokens, type Reply } from "../kit";
 const extra = { copyName: "Exercise 2", apiUrl: "http://localhost:3000" };
 const FOLDER = `${__dirname}/../../../../packages/shared/library/exercises/`;
 const METS: Record<string, number> = { squat: 3, plank: 2.8, barbell_curl: 3.5 };
-const PLANK_CAUTION = "If you feel pain in your lower back, stop at once and see a doctor.";
+const PLANK_CAUTION = "If you feel pain in your lower back, stop at once and see a qualified healthcare professional.";
 
 function download(more: Record<string, unknown>[] = [], fingerprint = "a".repeat(64)) {
   const exercises = readdirSync(FOLDER).map((name) => {

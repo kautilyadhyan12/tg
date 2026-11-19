@@ -37,7 +37,7 @@ function withText(entry: Record<string, unknown>, change: (en: Record<string, un
 describe("an exercise is never shown without its cautions", () => {
   it("the plank's caution is read exactly as its file says it", () => {
     const read = readPhoneLibrary(download([plank()]));
-    expect(read?.exercises[0]?.text.en.cautions).toEqual(["If you feel pain in your lower back, stop at once and see a doctor."]);
+    expect(read?.exercises[0]?.text.en.cautions).toEqual(["If you feel pain in your lower back, stop at once and see a qualified healthcare professional."]);
   });
 
   it.each([
