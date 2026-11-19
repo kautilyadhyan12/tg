@@ -1836,6 +1836,53 @@ another body of the same size in the same place is not (job 52d). A video nobody
   differently (the bench videos now 0.2 and 0.4, from 3.2 and 3.3); readings 0 to 1 in 100, 95 in 100 within 0.5° to
   2.1°.
 
+**As built, the movement matcher and the squat (52a-i, 2026-11-19; `rulings/2026-11-19-52a-i.md`).** A movement is
+a file (`packages/movement/movements/squat.json`, checked by `movementSchema` in `@app/shared` and by `checkMovement`
+before it is trusted: rule names of letters, digits and spaces, one depth rule above 0, the drive and a rise on a height,
+"apart" on a left-against-right measure, a rep's time over the rep). It names the drive (the measure whose fall is the
+rep: for the squat, the hips' height, read on the picture only, since from the front the 3D heights drift by up to a
+third of a leg while a person stands still), what standing tall is (knees within 20° of straight, the trunk within 20° of
+upright, not fitted), and its rules, each read in the person's own terms. **Two roles:** a "count" rule says how far a
+rep went (depth, knees bent): a rep that fell short, having gone at least three quarters of the way on every count rule,
+is not counted and says why; a "match" rule says what kind of movement it was (hips and knees bending together, chest up,
+feet stay down, feet stay in place, stance holds, hips alike): a rep that breaks one, or a dip that never tried, is
+another movement, with no count and no word. A rule the camera must see is unseen, and the rep decides nothing, when its
+readings break off anywhere in the rep or the 0.3 s after it for longer than 0.1 s or one and a half frame steps; one
+marked "when seen" (stance holds, hips alike) is checked only where the phone's place shows it. A left-against-right
+reading counts only when the picture and the 3D points both see the sides differ (a man's leg pointing at the camera read
+173° on the picture and 137° in 3D). The feet are read on the picture against the body's size while standing (from the
+front the size read from the thighs lags about a second behind a squat, and still feet and hips seemed to move): heels
+and toes for where they stand, from the top of the rep before; for leaving the floor, each foot's rise above the lowest
+place it reached in the same rep (never from the top before: in reps with no pause a hop's feet are already leaving the
+floor as the rep before comes back up), its heel and toes both, and both feet where both are seen (side on, the far foot
+wanders 4 to 5 cm at the bottom of a real squat), a point back from hiding starting afresh. Standing is the highest still
+standing remembered; a
+lower one is taken only once held for a second, so a slow descent never becomes the new standing; a repeated frame
+decides nothing; at the end of a set a rep counts only once back up for 0.3 s (on Kd's four squat-jump videos the feet
+leave the floor from 0.17 s before to 0.2 s after the hips are three quarters up, in 18 take-offs of 19). `MovementMatcher`
+(`packages/movement/src/movement`) is pure, about 22 microseconds a frame in the middle and 60 at most on the laptop (measured after round one).
+**The numbers** are set by `movement-check` from eight people (Kd's folder `D:\exercise video collection`, 2026-11-19,
+and his reference squat), from the reps counted by eye (the deepest dips of each video, as many as were counted): a count
+rule a quarter of the way back towards standing from the shallowest rep; a match rule beyond the furthest rep by half its
+distance from the middle rep; each person left out in turn. **Measured:** the eight people (2 side on, 4 from the front,
+2 in between; 24 reps) count what was counted by eye with the squat's numbers and with themselves left out, and the same
+at 7.5, 8 and 10 frames a second; the chair squat (2) and the kettlebell goblet squat (2) count right with every set of
+numbers; 28 videos of other movements (jumps, squat jacks, lunges, split squats, step-ups, deadlifts, Romanian deadlifts,
+swings, good mornings, rows, calf raises, presses, curls, a crunch, two bench presses) count 0 with every set of numbers
+and are given no word; a real squat turned by hand into a hop of 5 to 15 cm at the top, or with the feet carried out
+wide, counts 0, and so does the hop with the feet or the whole body hidden in the air, and hops of 10 and 12 cm starting
+0.2 s before each rep is back in five reps with no pause. The limit: leaving the floor is told from about 3 cm. **Then fresh**, 39 videos never looked at while
+the rules were first chosen: 33 of 34 other movements count 0; **a kettlebell push press counts 3 of its 4 dips** (knees
+120° to 127°, the hips 0.15 to 0.19 of a leg down, as deep as the shallowest squat of the eight): open, for 52b, where the
+squat's depth is set from its form standard; of three squat variants on a still camera, the plate goblet squat (4) and a
+Smith machine clip that starts low (0) count right, and **the barbell front squat counts 2 of 3** since round one's
+re-check (her third rep, rising in the video's last 0.3 s, reads both feet 3.1 cm up, over the 3 cm number: open, a missed
+rep, for 52a-ii); two whose camera pans or tilts are reported, never judged
+(a moving camera makes still feet look as if they moved). Each video is played with its first and last pictures held
+for a second (a live set starts and ends with the person in view; the engine learns a body in its first half second).
+The 72 files take 7.7 MB in git (§12.7: where 200 exercises' files live is job 54's). The squat is not passing until the
+two open cases are closed; nobody uses it before job 53.
+
 An exercise that does not pass is published as "count by hand", never with a wrong camera
 count. Kd tries one exercise of each kind of movement on the phone, about a dozen, never
 each one. After launch the server sees, for each exercise, how often members changed the
