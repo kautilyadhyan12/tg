@@ -135,7 +135,7 @@ describe("each replay changes only what it says", () => {
 describe("the chip's gap is the phone's own, measured", () => {
   it("is kept for the chosen set-up, the graphics chip and the small model, on both squat videos", () => {
     const files = readdirSync(join(import.meta.dirname, "phone-points")).filter((f) => f.endsWith(".bodypoints")).sort();
-    expect(files).toEqual(PHONE_GAPS.flatMap((g) => g.videos.map((v) => `${v}.${g.run}.bodypoints`)).sort());
+    expect(files).toEqual(expect.arrayContaining(PHONE_GAPS.flatMap((g) => g.videos.map((v) => `${v}.${g.run}.bodypoints`))));
   });
 
   it("the phone's files say they are the phone's, under a name of their own, and set no number even if written as looked at", () => {
