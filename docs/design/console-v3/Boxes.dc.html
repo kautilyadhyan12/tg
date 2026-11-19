@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Where a box opens</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./kit3.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0;background:#0A0908}
+.cap{display:flex;align-items:center;gap:10px;font-weight:600;color:var(--t2)}
+.num{width:26px;height:26px;border-radius:999px;background:var(--o-fill);color:var(--o-t);box-shadow:inset 0 0 0 1px var(--o-line);display:grid;place-items:center;font-size:13px;font-weight:700;flex:none}
+.stage{background:var(--scrim);border-radius:18px;padding:32px 16px;display:flex;justify-content:center}
+.dlg{background:var(--solid);border:1px solid var(--line2);border-radius:20px;box-shadow:var(--pop);width:100%;max-width:500px;min-width:0}
+.side{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,440px);border:1px solid var(--line);border-radius:18px;overflow:hidden}
+.side > .under{padding:20px;opacity:.6;overflow:hidden;min-width:0}
+.side > .sheet{background:var(--solid);border-left:1px solid var(--line2);display:flex;flex-direction:column;min-width:0}
+.sheet-h{display:flex;align-items:center;gap:12px;padding:18px 20px;border-bottom:1px solid var(--line)}
+.sheet-b{padding:20px;display:flex;flex-direction:column;gap:18px}
+.sheet-f{margin-top:auto;display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:14px 20px;border-top:1px solid var(--line)}
+.opt{display:flex;gap:12px;align-items:flex-start;padding:14px 16px;border-radius:14px;border:1px solid var(--line2)}
+.opt-on{border-color:var(--o);background:var(--o-fill)}
+.radio{width:18px;height:18px;border-radius:999px;border:1.5px solid var(--line2);flex:none;margin-top:1px}
+.radio-on{border:5px solid var(--o)}
+.check-on{background:var(--o);border-color:var(--o);position:relative}
+.check-on::after{content:"";position:absolute;left:5px;top:1px;width:5px;height:10px;border:solid var(--on-o);border-width:0 2px 2px 0;transform:rotate(45deg)}
+.sw{width:40px;height:24px;border-radius:999px;background:var(--bar);position:relative;flex:none}
+.sw::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:999px;background:var(--t3)}
+.sw-on{background:var(--o)}.sw-on::after{left:19px;background:var(--on-o)}
+.step{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,340px);gap:20px;align-items:start}
+.menu{background:var(--solid);border:1px solid var(--line2);border-radius:16px;box-shadow:var(--pop);padding:6px;min-width:0;max-width:320px}
+.mi{display:flex;gap:12px;align-items:flex-start;padding:10px 12px;border-radius:10px}
+.ptile{display:flex;flex-direction:column;gap:4px;padding:14px;border-radius:14px;border:1px solid var(--line2);min-width:0}
+.ptile-on{border-color:var(--o);background:var(--o-fill)}
+.pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.qty{display:inline-flex;align-items:center;border:1px solid var(--line2);border-radius:999px;height:40px}
+.qty > button{width:40px;height:40px;display:grid;place-items:center;color:var(--t2)}
+.money{font-weight:600;white-space:nowrap}
+.frames{display:flex;flex-wrap:wrap;gap:40px;padding:40px;align-items:flex-start}
+.frame{width:390px;max-width:100%;border:1px solid var(--line2);border-radius:28px;overflow:hidden;background:var(--page);display:flex;flex-direction:column;position:relative}
+.bsheet{background:var(--solid);border-top:1px solid var(--line2);border-radius:22px 22px 0 0;box-shadow:var(--pop);display:flex;flex-direction:column}
+.grab{width:40px;height:5px;border-radius:999px;background:var(--line2);margin:10px auto 4px}
+.footbar{position:sticky;bottom:0;padding:12px 16px 16px;border-top:1px solid var(--line);background:var(--solid);display:flex;flex-direction:column;gap:8px}
+@media (max-width:1180px){.side{grid-template-columns:minmax(0,1fr)}.side > .under{display:none}.side > .sheet{border-left:0}}
+@media (max-width:900px){.step{grid-template-columns:minmax(0,1fr)}.frames{padding:16px;gap:24px}}
+@media (pointer:coarse){.qty,.qty > button{height:44px}.qty > button{width:44px}}
+.kind{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.2fr) minmax(0,360px);gap:24px;align-items:start}.mini{border:1px solid var(--line2);border-radius:22px;overflow:hidden;background:var(--page);max-width:360px;width:100%;display:flex;flex-direction:column;min-height:420px}.mini-top{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--line)}.mini-b{padding:16px;display:flex;flex-direction:column;gap:12px;flex:1}.dim{opacity:.6}.st2{grid-template-columns:minmax(0,1fr) minmax(0,220px)}@media (max-width:1100px){.kind{grid-template-columns:minmax(0,1fr)}}@media (max-width:600px){.st2{grid-template-columns:minmax(0,1fr)}}
+</style>
+</helmet>
+<div class="app t-dark {{look}}" style="min-height: 100%">
+<main class="page" style="max-width: 1440px; margin: 0 auto">
+<div class="col g6"><span class="eyebrow">KWAZO console · the third look</span><h1 class="h1">Where a box opens</h1><span class="t2">Four ways, chosen by what the box asks. The same on every page, so staff always know where to look. On a phone each takes the phone's own shape.</span></div>
+
+<div class="grid4">
+<div class="box pad col g8"><span class="tile ti-o"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3h18v6H3zM5 12h14v9H5z"></path></svg></span><span class="h3">1 · Under its button</span><span class="t2">One to three questions, or a short answer to a press.</span></div>
+<div class="box pad col g8"><span class="tile ti-b"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3h18v18H3zM15 3v18"></path></svg></span><span class="h3">2 · From the right</span><span class="t2">A form of four fields or more. It scrolls as one page; Save stays at its foot.</span></div>
+<div class="box pad col g8"><span class="tile ti-w"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3h18v18H3zM7 8h10v8H7z"></path></svg></span><span class="h3">3 · In the middle</span><span class="t2">A question before a change to people or money. It names who changes and who doesn't.</span></div>
+<div class="box pad col g8"><span class="tile ti-p"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2h9l5 5v15H6zM14 2v6h6M9 13h6M9 17h6"></path></svg></span><span class="h3">4 · A page of its own</span><span class="t2">A big setup, in numbered parts with a summary that fills in.</span></div>
+</div>
+
+<section class="box pad col g20">
+<div class="col g4"><span class="eyebrow">1</span><h2 class="h2">Under its button</h2><span class="t2">The box opens right under what was pressed, pushing the page down. What happened is said in that same place, in one sentence, when it is done. Examples: Add a tax rate, Refund sale, Set up, Remove a tax rate, Archive a discount.</span></div>
+<div class="kind">
+<div class="col g10"><span class="label">Rules</span>
+<span class="t2">· Opens under the row or button pressed, never somewhere else on the page.</span>
+<span class="t2">· One main button and Cancel at its foot.</span>
+<span class="t2">· A question about one thing (Remove, Archive) sits here as a sentence with its button.</span>
+<span class="t2">· When it is done, the box closes and its sentence stays: "Sale voided: …", "Saved."</span></div>
+<div class="box"><div class="row wrap" style="border-top: 0"><div class="col grow" style="min-width: 160px"><span class="w6">City fitness tax 2%</span><span class="t3">Not charged on anything yet.</span></div><button type="button" class="btn btn-s btn-sm">Edit</button><button type="button" class="btn btn-q btn-sm c-bad">Remove</button></div>
+<div style="padding: 0 20px 20px"><div class="strip strip-bad"><span class="grow">Remove City fitness tax 2%? Nothing charges it now. Sales and bills already made keep it.</span><button type="button" class="btn btn-d btn-sm">Remove</button><button type="button" class="btn btn-s btn-sm">Cancel</button></div></div></div>
+<div class="mini"><div class="mini-top"><span class="w6 grow">Tax</span></div><div class="mini-b"><div class="box"><div class="row" style="border-top: 0"><span class="col grow"><span class="w6">City fitness tax 2%</span><span class="t3">Not charged yet</span></span></div><div style="padding: 0 16px 16px" class="col g10"><span class="t2">Remove City fitness tax 2%? Nothing charges it now. Sales and bills already made keep it.</span><button type="button" class="btn btn-d btn-w">Remove</button><button type="button" class="btn btn-s btn-w">Cancel</button></div></div><span class="t3">On a phone: the same place; its buttons full width and 44 px tall.</span></div></div>
+</div>
+</section>
+
+<section class="box pad col g20">
+<div class="col g4"><span class="eyebrow">2</span><h2 class="h2">From the right</h2><span class="t2">A panel slides in from the right and the page stays behind it. Examples: Add a product, Add a discount, a lead, Invite staff. On a phone it is a full page, with Save at its foot.</span></div>
+<div class="kind">
+<div class="col g10"><span class="label">Rules</span>
+<span class="t2">· Title and a close X at the top; Save and Cancel always at the foot.</span>
+<span class="t2">· The panel scrolls as one page.</span>
+<span class="t2">· While something is changed: "You have changes that aren't saved." beside Save.</span>
+<span class="t2">· A refusal is said beside Save, with what was typed kept.</span></div>
+<div class="side" style="grid-template-columns: minmax(0,.8fr) minmax(0,1.2fr)"><div class="under col g10"><div class="box pad col g8"><span class="w6">Products</span><span class="t3">Water bottle</span><span class="t3">Day pass</span><span class="t3">Gloves</span></div></div>
+<aside class="sheet"><div class="sheet-h"><span class="h2 grow">Add a product</span><button type="button" class="ibtn" aria-label="Close"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"></path></svg></button></div>
+<div class="sheet-b"><div class="field"><span class="label">Product name</span><div class="input input-on"><span class="grow">Water 500 ml</span></div></div><div class="field"><span class="label">Price in USD</span><div class="input"><span>$</span><span class="grow">2.00</span></div></div></div>
+<div class="sheet-f"><button type="button" class="btn btn-p">Add product</button><button type="button" class="btn btn-q">Cancel</button><span class="t3">You have changes that aren't saved.</span></div></aside></div>
+<div class="mini"><div class="mini-top"><button type="button" class="ibtn" aria-label="Close"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"></path></svg></button><span class="h3 grow">Add a product</span></div><div class="mini-b"><div class="field"><span class="label">Product name</span><div class="input input-on"><span class="grow">Water 500 ml</span></div></div><div class="field"><span class="label">Price in USD</span><div class="input"><span>$</span><span class="grow">2.00</span></div></div></div><div class="footbar"><span class="t3">You have changes that aren't saved.</span><button type="button" class="btn btn-main btn-w">Add product</button></div></div>
+</div>
+</section>
+
+<section class="box pad col g20">
+<div class="col g4"><span class="eyebrow">3</span><h2 class="h2">In the middle</h2><span class="t2">The page darkens and the question sits in the middle. It names who will change and who won't, with the reason in one line each: a few names, then "and N more", See all. Examples: Void sale, Give a membership to the people on your list, Remove members, Send a message. On a phone it rises from the bottom.</span></div>
+<div class="kind">
+<div class="col g10"><span class="label">Rules</span>
+<span class="t2">· The title is the question, ending in "?".</span>
+<span class="t2">· Who changes, ticked; who doesn't, with why. Nobody who was not ticked changes.</span>
+<span class="t2">· The main button says what it does and to how many: "Give Gold Weekly to 5 people". A destructive one is red and outlined.</span>
+<span class="t2">· Cancel or the X closes it with nothing changed.</span></div>
+<div class="stage"><div class="dlg"><div class="sheet-h"><span class="h2 grow">Void this sale?</span><button type="button" class="ibtn" aria-label="Close"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"></path></svg></button></div><div class="sheet-b"><span>2 × Water bottle, 1 × Shaker, $15.60. It will no longer count in today's total, and it stays in the list crossed out.</span><div class="field"><span class="label">Why are you voiding it?</span><div class="input"><span class="grow t3">Choose one</span><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div></div></div><div class="sheet-f"><button type="button" class="btn btn-d">Void sale</button><button type="button" class="btn btn-s">Keep it</button></div></div></div>
+<div class="mini" style="background: var(--scrim)"><div class="mini-b dim"></div><div class="bsheet"><div class="grab"></div><div class="col g12" style="padding: 8px 16px 0"><span class="h2">Void this sale?</span><span class="t2">2 × Water bottle, 1 × Shaker, $15.60. It will no longer count in today's total.</span><div class="field"><span class="label">Why are you voiding it?</span><div class="input"><span class="grow t3">Choose one</span><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div></div></div><div class="footbar" style="border-top: 0"><button type="button" class="btn btn-d btn-w">Void sale</button><button type="button" class="btn btn-s btn-w">Keep it</button></div></div></div>
+</div>
+</section>
+
+<section class="box pad col g20">
+<div class="col g4"><span class="eyebrow">4</span><h2 class="h2">A page of its own</h2><span class="t2">A big setup leaves the list for a page with a back link, numbered parts, and a summary on the right that fills in as it is typed. Examples: Add a membership type, a challenge, a new business. On a phone the summary comes last and the main button stays at the foot.</span></div>
+<div class="kind">
+<div class="col g10"><span class="label">Rules</span>
+<span class="t2">· "← Memberships" at the top goes back with nothing saved.</span>
+<span class="t2">· Parts are numbered 1, 2, 3, each a box with its title.</span>
+<span class="t2">· The summary says how it will read to a member: "You're adding".</span>
+<span class="t2">· A refusal: "Not saved yet. Fix what is marked in red above.", beside the button.</span></div>
+<div class="step st2"><div class="col g12"><div class="box pad col g10"><span class="hrow g10"><span class="num">1</span><span class="h3">Name it</span></span><div class="input"><span class="grow">Gold 12</span></div></div><div class="box pad col g10"><span class="hrow g10"><span class="num">2</span><span class="h3">How is it paid?</span></span><div class="opt opt-on"><span class="radio radio-on"></span><span class="w6">Recurring</span></div></div><button type="button" class="btn btn-main" style="align-self: flex-start">Add membership type</button></div>
+<div class="box pad col g8"><span class="eyebrow">You're adding</span><span class="h3">Gold 12</span><span class="t2">Recurring</span><span class="t2">$45.00 every month</span></div></div>
+<div class="mini"><div class="mini-top"><a href="#" class="ibtn" aria-label="Back to Memberships"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"></path></svg></a><span class="h3 grow">Add a membership type</span></div><div class="mini-b"><div class="box pad col g10"><span class="hrow g10"><span class="num">1</span><span class="h3">Name it</span></span><div class="input"><span class="grow">Gold 12</span></div></div><div class="box pad col g10"><span class="hrow g10"><span class="num">2</span><span class="h3">How is it paid?</span></span><div class="opt opt-on"><span class="radio radio-on"></span><span class="w6">Recurring</span></div></div></div><div class="footbar"><button type="button" class="btn btn-main btn-w">Add membership type</button></div></div>
+</div>
+</section>
+</main>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"look":{"editor":"enum","options":["Dark","Light"],"default":"Dark"},"$preview":{"width":1440,"height":2720}}'>
+class Component extends DCLogic {
+renderVals() {
+return { look: (this.props.look ?? 'Dark') === 'Light' ? 't-light' : '' };
+}
+}
+</script>
+</body>
+</html>
