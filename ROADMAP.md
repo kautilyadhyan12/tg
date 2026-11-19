@@ -503,7 +503,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
    - V1-e. **Search**, in two (2026-11-18): people, pages, actions and settings from the bar and Ctrl K (`Search`).
      - V1-e-i. [x] **Pages, actions and settings** · merged 2026-11-18 · PR #584
      - V1-e-ii. [x] **People** · merged 2026-11-19 · PR #589
-   - V1-f. [ ] **Payments overview**: the new page under Money, a line to every payment page and setting, Connect Square first until it is connected (`Money`, `MoneySetup`).
+   - V1-f. [x] **Payments overview** · merged 2026-11-19 · PR #594
    - V0-d. [ ] **The boards not drawn yet, in the third look**: Sell, Memberships, Attendance, Classes, Leads, Reports, Settings and the four ways a box opens, from `kit3.css`, every button of the real page kept. No code; in parts if it is too big for one terminal.
 23. **A gym finds its way** (Kd, RULINGS 2026-10-07: the console read as "a maze"). Each page was clear alone and the fault was between pages. Four jobs in this order, built in Folder A before 17e-ii.
    - 23a. **One answer for membership**, split 2026-10-07 in two (the list's read and Add member's form are more than one terminal):
@@ -815,7 +815,9 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
 52. **The movement engine** (§12; it replaces "the engine's missing parts").
     - 52a. **The movement matcher and the proof table** (§12.3, §12.5; split 2026-11-19 in three, `handoff/2026-11-19-52a-i.md` keeps its line as first written).
         - 52a-i. [x] **The squat counted from its whole movement** — merged 2026-11-19 (PR #592).
-        - 52a-ii. [ ] **Each video replayed the ways the world changes it** (nearer, farther, tilted, fewer frames a second, shaky points, a passer-by, a phone lower or higher redrawn from the 3D points, each reading leaned and shaken by the largest gap on a chip the app allows, 51b), and 51c's leg swap hidden behind a jump.
+        - 52a-ii. **Each video replayed the ways the world changes it** (split 2026-11-19 in two, `handoff/2026-11-19-52a-ii-a.md` keeps its line as first written):
+            - 52a-ii-a. [x] **Nearer, farther, tilted, fewer and uneven pictures, shaky points, the phone's own chip gap, a passer-by** — merged 2026-11-19 (PR #595).
+            - 52a-ii-b. [ ] **A phone lower or higher, redrawn from the 3D points** (drawn back from the phone's own place the big joints land 2 to 4 cm off in the middle, 5 to 11 cm in 95 of 100): Kd's squat videos filmed by a phone on the floor.
         - 52a-iii. [ ] **The phone's own runs judged by the laptop's count, reasons and lines** (51a's videos through the phone), never by its numbers.
     - 52b. [ ] **The form judge, the reason for a rep not counted, and the summary** (§12.1, §2.4). It sets the squat's depth from its form standard (Kd's research file) and closes 52a-i's open case: a kettlebell push press's dip counts as a squat (first test: it counts 0).
     - 52c. [ ] **The other kinds of counting**: one side at a time, holds, fast rhythm, timed only, jumps, floor work.

@@ -34,11 +34,13 @@ export function changeOf(method, url) {
 
 authApi.interceptors?.response?.use?.((response) => {
   const kind = changeOf(response?.config?.method, response?.config?.url);
-  if (kind !== null) for (const listener of changeListeners) listener(kind);
+  // The address too, without its query: the menu's Set up tag hears only Square's own writes (V1-f).
+  const path = String(response?.config?.url ?? '').split('?')[0];
+  if (kind !== null) for (const listener of changeListeners) listener(kind, path);
   return response;
 });
 
-/** Hear each accepted change ('change' or 'visit'); returns the way to stop. */
+/** Hear each accepted change ('change' or 'visit', and its address); returns the way to stop. */
 export function onConsoleChange(listener) {
   changeListeners.add(listener);
   return () => changeListeners.delete(listener);

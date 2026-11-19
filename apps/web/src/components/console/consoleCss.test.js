@@ -66,7 +66,10 @@ describe('the banner above every page reads in both looks', () => {
 });
 
 describe('every text colour is readable on every surface, in both looks', () => {
-  // WCAG 2's contrast ratio; 4.5:1 is the bar for ordinary text.
+  // WCAG 2's contrast ratio. Every word is 7:1 or more on what it sits on (WCAG's AAA bar), so
+  // nobody leans in to read it (Kd, 2026-11-19, V1-f's click-through); a disabled control's
+  // words, which nobody needs to read to act, keep the ordinary 4.5:1.
+  const BAR = 7;
   const channel = (c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
   const luminance = (hex) => {
     const [r, g, b] = [1, 3, 5].map((i) => channel(parseInt(hex.slice(i, i + 2), 16) / 255));
@@ -102,7 +105,7 @@ describe('every text colour is readable on every surface, in both looks', () => 
     });
     const failing = [];
     const check = (fg, bg) => {
-      if (ratio(own[fg], own[bg]) < 4.5) failing.push(`${fg} on ${bg}: ${ratio(own[fg], own[bg]).toFixed(2)}`);
+      if (ratio(own[fg], own[bg]) < (fg === '--dis-t' ? 4.5 : BAR)) failing.push(`${fg} on ${bg}: ${ratio(own[fg], own[bg]).toFixed(2)}`);
     };
     for (const fg of TEXT) for (const bg of SURFACE) check(fg, bg);
     for (const [fg, bg] of PAIRS) check(fg, bg);
@@ -110,11 +113,11 @@ describe('every text colour is readable on every surface, in both looks', () => 
     expect(failing).toEqual([]);
     // The menu takes the look too (spec §17.11: light in the light look).
     for (const fg of ['--rail-t1', '--rail-t2', '--rail-t3', '--rail-tab']) {
-      expect(ratio(own[fg], own['--rail-bg']), fg).toBeGreaterThanOrEqual(4.5);
-      expect(ratio(own[fg], own['--rail-hover']), `${fg} on hover`).toBeGreaterThanOrEqual(4.5);
+      expect(ratio(own[fg], own['--rail-bg']), fg).toBeGreaterThanOrEqual(BAR);
+      expect(ratio(own[fg], own['--rail-hover']), `${fg} on hover`).toBeGreaterThanOrEqual(BAR);
     }
-    expect(ratio(own['--rail-on-t'], own['--rail-on'])).toBeGreaterThanOrEqual(4.5);
-    expect(ratio(own['--rail-on-gym'], own['--rail-gym'])).toBeGreaterThanOrEqual(4.5);
+    expect(ratio(own['--rail-on-t'], own['--rail-on'])).toBeGreaterThanOrEqual(BAR);
+    expect(ratio(own['--rail-on-gym'], own['--rail-gym'])).toBeGreaterThanOrEqual(BAR);
     // A field's edge is a thing to see, not words: 3 to 1 on the page and in a box.
     expect(ratio(own['--input-line'], own['--page'])).toBeGreaterThanOrEqual(3);
     expect(ratio(own['--input-line'], own['--card'])).toBeGreaterThanOrEqual(3);
@@ -179,13 +182,13 @@ describe("the second look's building blocks (V1-b)", () => {
     expect(d.opacity).toBeUndefined();
   });
 
-  it("the text sizes are the third look's: title 28 and the figure 32 on every screen, a box's title 17, the label 11", () => {
+  it("the text sizes are the third look's: title 28 and the figure 32 on every screen, a box's title 17, the label 12 (Kd, 2026-11-19: nothing smaller)", () => {
     expect(declarations('.c-h1')['font-size']).toBe('28px');
     expect(declarations('.c-h1', COMPUTER)['font-size']).toBeUndefined();
     expect(declarations('.c-big')['font-size']).toBe('32px');
     expect(declarations('.c-big', COMPUTER)['font-size']).toBeUndefined();
     expect(declarations('.c-h2')['font-size']).toBe('17px');
-    expect(declarations('.c-eyebrow')).toMatchObject({ 'font-size': '11px', 'text-transform': 'uppercase', color: 'var(--link)' });
+    expect(declarations('.c-eyebrow')).toMatchObject({ 'font-size': '12px', 'text-transform': 'uppercase', color: 'var(--link)' });
     expect(declarations('.c-field').gap).toBe('8px');
   });
 
@@ -261,5 +264,56 @@ describe('the third look', () => {
   it('the bar across the top shows from 768 px only: a phone has its own top bar', () => {
     expect(declarations('.c-pagebar').display).toBe('none');
     expect(declarations('.c-pagebar', COMPUTER).display).toBe('flex');
+  });
+});
+
+describe('read without leaning in (Kd, 2026-11-19, V1-f): no words under 14 px', () => {
+  // Only these are smaller, never under 12 px: a label in small capitals, the number in a count or
+  // a tag's word, initials, the names under the phone's tab icons, and Ctrl K. `.c-s12` and
+  // `.c-s13` stay for pages not yet redesigned (V2a to V11 each move theirs to 14), and the
+  // Leaderboard's day letters until V9b.
+  const SMALLER = {
+    '.c-rail-grp': 12, // the menu's group names, small capitals
+    '.c-more-grp': 12,
+    '.c-eyebrow': 12,
+    '.c-th': 12,
+    '.c-snav-t': 12,
+    '.c-count': 12,
+    '.c-bell-pip': 12,
+    '.c-part-n': 12,
+    '.c-tag': 12,
+    '.c-setup-tag': 12,
+    '.c-rail-av': 12,
+    '.c-find-av': 12,
+    '.c-tab': 11, // five tab names on a folding phone's 280 px cover
+    '.c-findbar-keys': 12,
+    '.c-s12': 12,
+    '.c-s13': 13,
+    '.c-flame-head': 10,
+  };
+  it('every font size in the stylesheet is 14 px or more, but the named few', () => {
+    const under = [];
+    root.walkDecls('font-size', (d) => {
+      const px = /^(\d+(?:\.\d+)?)px$/.exec(d.value);
+      if (px === null || Number(px[1]) >= 14) return;
+      const allowed = d.parent.selectors.every((s) => Object.hasOwn(SMALLER, s) && Number(px[1]) >= SMALLER[s]);
+      if (!allowed) under.push(`${d.parent.selector}: ${d.value}`);
+    });
+    expect(under).toEqual([]);
+  });
+
+  // The pages already in the third look use no size under 14 for words. Each redesign job adds its
+  // own files here.
+  const REDESIGNED = [
+    '../../pages/console/PaymentsOverview.jsx',
+    './ConsoleLayout.jsx',
+    './ConsoleSearch.jsx',
+    '../../pages/console/More.jsx',
+    './MenuCount.jsx',
+    './SetupTag.jsx',
+  ];
+  it.each(REDESIGNED)('%s has no 12 or 13 px words', (file) => {
+    const text = readFileSync(fileURLToPath(new URL(file, import.meta.url)), 'utf8');
+    expect(text.match(/\bc-s1[23]\b|fontSize: '?1[0-3](px)?'?\b/g) ?? []).toEqual([]);
   });
 });

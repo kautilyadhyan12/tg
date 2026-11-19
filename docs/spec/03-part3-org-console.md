@@ -7473,16 +7473,20 @@ one stands; anything it does not mention stays as §17 says.
   6 standard words, for every fitness business · 7 payments have one home, and setup comes
   first · 8 it looks new and works the same.
 - **Words and colours.** One font, Inter, already kept in the app (§17.9); Archivo stays only
-  on a page not yet restyled. Six sizes and nothing between them: label 11 (small capitals,
-  orange), caption 12, second words 13, words 14, box title 17, page title 28, and 32 for the
-  figure that matters. Three greys. A box has corners of 18 px and a button has round ends. On
+  on a page not yet restyled. Sizes, AMENDED 2026-11-19 (Kd, V1-f's click-through: *"should not
+  be reqquring magnifying glass to see"*; CLAUDE.md §4 "Read without leaning in"): label 12
+  (small capitals, orange), every other word 14 or more (a note, a second line, a hint, a
+  button), a line's title 15, box title 17, page title 28, and 32 for the figure that matters;
+  only a count, a tag, initials, Ctrl K and the phone's tab names are 12 (11 on a 280 px cover).
+  The boards' 11, 12 and 13 give way to these. Three greys, each 7 to 1 or more. A box has corners of 18 px and a button has round ends. On
   the dark look a box is a little lighter than the page with a soft edge; on the light look it
   is white with a soft shadow, and the menu is light too (this replaces "the menu stays dark in
   both", §17.2 rule 11). Orange is a primary action and the page you are on; green is paid,
   done, in the app; gold needs attention; red is overdue, failed or a change that asks first;
   blue is for charts and figures and never a button. `kit3.css` is where the values start;
   `console.css` takes them by name, and `consoleCss.test.js` measures every text colour on the
-  ground it lands on, mixed, at 4.5 to 1 or more in both looks.
+  ground it lands on, mixed, at 7 to 1 or more in both looks (4.5 until 2026-11-19; a disabled
+  control's words keep 4.5).
 - **Buttons.** A page has one primary button, top right (`btn-main`). A box has one at most
   (`btn-p`). A second important action is pale orange; the rest are outlined or plain words.
   Red is set apart and always asks first (§17.10's rule 5 stays).

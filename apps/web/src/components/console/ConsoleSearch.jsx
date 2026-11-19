@@ -236,15 +236,15 @@ export default function SearchField({ orgSlug, catalogue, placeholder, people = 
                             </span>
                           ) : null}
                           <span className="c-find-text">
-                            <span className="c-s14 c-w6 c-t1">{line.title}</span>
-                            {line.where !== '' ? <span className="c-s13 c-t3">{line.where}</span> : null}
+                            <span className="c-s15 c-w6 c-t1">{line.title}</span>
+                            {line.where !== '' ? <span className="c-s14 c-t3">{line.where}</span> : null}
                           </span>
                           {line.tag !== null ? <span className={`c-tag ${line.tag.tone}`}>{line.tag.text}</span> : null}
                         </span>
                       ) : (
                         <>
-                          <span className="c-s14 c-w6 c-t1">{line.title}</span>
-                          {line.where !== '' ? <span className="c-s13 c-t3">{line.where}</span> : null}
+                          <span className="c-s15 c-w6 c-t1">{line.title}</span>
+                          {line.where !== '' ? <span className="c-s14 c-t3">{line.where}</span> : null}
                         </>
                       )}
                     </Link>
@@ -263,7 +263,7 @@ export default function SearchField({ orgSlug, catalogue, placeholder, people = 
               Nothing matches &ldquo;{typed.trim()}&rdquo;. Try another word, such as payments or classes.
             </p>
           ) : null}
-          <p className="c-find-foot c-s12 c-t3">↑ ↓ to move · Enter to open · Esc to close</p>
+          <p className="c-find-foot c-s14 c-t3">↑ ↓ to move · Enter to open · Esc to close</p>
         </div>
       ) : null}
     </div>

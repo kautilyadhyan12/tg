@@ -12,6 +12,7 @@ import { canSeeAtRisk } from './atRiskView';
 import { canOpenSell } from './sellView';
 import { canSeeFailedPayments } from './failedPaymentsAccess';
 import { canManagePlans } from './mealPlansView';
+import { canOpenPaymentsOverview } from './consolePlaces';
 
 /** Settings holds sections gated on two permissions (the gym's details: `org.manage`;
  *  Booking rules: `schedule.manage`), so its page is drawn for whoever holds either.
@@ -64,8 +65,10 @@ export function consoleMenu(orgSlug, privileges, orgType) {
     has('members.confirm') && { key: 'leads', to: `${base}/leads`, end: false, label: 'Leads', phone: 'more', group: 'people' },
     // Who has stopped coming (20d-i).
     canSeeAtRisk(privileges) && { key: 'at-risk', to: `${base}/at-risk`, end: false, label: 'At risk', phone: 'more', group: 'people' },
-    // Money: the desk's register (18b-i), what the gym sells (23c-i), and card payments
-    // declined and still owed (18d-iii-ii-b).
+    // Money: Payments overview first, a line to every payment page and setting (V1-f), the
+    // desk's register (18b-i), what the gym sells (23c-i), and card payments declined and
+    // still owed (18d-iii-ii-b).
+    canOpenPaymentsOverview(privileges) && { key: 'payments', to: `${base}/payments`, end: false, label: 'Payments overview', phone: 'more', group: 'money' },
     canOpenSell(privileges) && { key: 'sell', to: `${base}/sell`, end: false, label: 'Sell', phone: 'more', group: 'money' },
     canManageMemberships(privileges) && { key: 'memberships', to: `${base}/memberships`, end: false, label: 'Memberships', phone: 'more', group: 'money' },
     canSeeFailedPayments(privileges) && { key: 'failed-payments', to: `${base}/failed-payments`, end: false, label: 'Failed payments', phone: 'more', group: 'money' },

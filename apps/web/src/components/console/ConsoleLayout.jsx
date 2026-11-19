@@ -16,6 +16,8 @@ import { newMenu } from '../../pages/console/consoleNew';
 import { attentionLines, bellLabel, countText, menuCounts, moreCount, seesAnyPart } from '../../pages/console/attentionView';
 import { AttentionContext, useAttentionRead } from '../../pages/console/useAttention';
 import MenuCount from './MenuCount';
+import SetupTag from './SetupTag';
+import { usePaymentSetup } from '../../pages/console/usePaymentSetup';
 import SearchField from './ConsoleSearch';
 import { opensSearch, searchCatalogue, searchKeysLabel } from '../../pages/console/searchPlaces';
 import { searchFindsPeople, searchPlaceholder } from '../../pages/console/searchPeople';
@@ -49,7 +51,7 @@ function GymSwitcher({ org, fallback, compact }) {
       <span className="c-switcher-text">
         <span className={`${compact ? 'c-s16' : 'c-s15'} c-w6 c-ell`}>{title}</span>
         {!compact && place ? (
-          <span className="c-s13 c-ell" style={{ color: 'var(--rail-t3)' }}>
+          <span className="c-s14 c-ell" style={{ color: 'var(--rail-t3)' }}>
             {place}
           </span>
         ) : null}
@@ -148,7 +150,7 @@ function YouMenu({ name, role, accountTo, onAccount, withOrganisations, signOut,
             {name || 'Your account'}
           </span>
           {role ? (
-            <span className="c-s12 c-ell" style={{ color: 'var(--rail-t3)' }}>
+            <span className="c-s14 c-ell" style={{ color: 'var(--rail-t3)' }}>
               {role}
             </span>
           ) : null}
@@ -215,7 +217,7 @@ function BellButton({ lines, onOpen }) {
           <div className="c-attn" data-testid="needs-attention">
             <div className="c-attn-head">
               <h2 className="c-s17 c-w6 c-t1">Needs attention</h2>
-              {lines.length > 0 ? <span className="c-s12 c-t3">{lines.length === 1 ? '1 item' : `${String(lines.length)} items`}</span> : null}
+              {lines.length > 0 ? <span className="c-s14 c-t3">{lines.length === 1 ? '1 item' : `${String(lines.length)} items`}</span> : null}
             </div>
             {lines.length === 0 ? (
               <p className="c-attn-none c-s14 c-w6">
@@ -227,11 +229,11 @@ function BellButton({ lines, onOpen }) {
                 <div key={line.key} className="c-attn-row" data-testid="attention-line">
                   <span className={`c-attn-dot${line.tone === 'plain' ? '' : ` c-attn-dot-${line.tone}`}`} aria-hidden="true" />
                   <span className="c-attn-text">
-                    <span className="c-s14 c-w6 c-t1">{line.title}</span>
-                    {line.note !== null ? <span className="c-s13 c-t3">{line.note}</span> : null}
+                    <span className="c-s15 c-w6 c-t1">{line.title}</span>
+                    {line.note !== null ? <span className="c-s14 c-t3">{line.note}</span> : null}
                   </span>
                   <span className="c-attn-end">
-                    {line.money !== null ? <span className="c-s14 c-w6 c-t1">{line.money}</span> : null}
+                    {line.money !== null ? <span className="c-s15 c-w6 c-t1">{line.money}</span> : null}
                     {line.to !== null ? (
                       <Link to={line.to} className="c-btn c-btn-s c-btn-sm" onClick={close} aria-label={`${line.button}: ${line.title}`}>
                         {line.button}
@@ -317,8 +319,15 @@ export default function ConsoleLayout({ children }) {
   const lines = attentionLines(attention, orgSlug, viewerPrivileges(org), org?.orgType);
   const counts = menuCounts(lines);
   const showBell = menu !== null && seesAnyPart(attention);
-  /** A page's mark in the menu: its count where something waits, else Members' Review needed dot. */
-  const mark = (page) => (counts[page.key] !== undefined ? <MenuCount count={counts[page.key]} /> : reviewDot(page));
+  // Payments overview says "Set up" until a payment provider is connected (V1-f).
+  const paymentSetup = usePaymentSetup(org?.id ?? null, menu !== null && menu.pages.some((p) => p.key === 'payments'));
+  /** A page's mark in the menu: its count where something waits, else Payments overview's Set up,
+   *  else Members' Review needed dot. */
+  const mark = (page) => {
+    if (counts[page.key] !== undefined) return <MenuCount count={counts[page.key]} />;
+    if (page.key === 'payments' && paymentSetup) return <SetupTag />;
+    return reviewDot(page);
+  };
   const underMore = menu ? moreCount(menu.more, counts) : null;
 
   // Search (V1-e-i): the box in the bar, typed in where it is; on a phone the top bar's search
@@ -492,7 +501,7 @@ export default function ConsoleLayout({ children }) {
             the last gym's answers under the new gym's name (Kd, 2026-08-28). `screen:` keeps
             the key apart from the banner's `no-gym`. `gymSwitch.render.test.jsx` checks
             every console route is drawn inside this shell. */}
-        <AttentionContext.Provider value={{ attention, counts, reload: reloadAttention }}>
+        <AttentionContext.Provider value={{ attention, counts, reload: reloadAttention, paymentSetup }}>
           <Fragment key={`screen:${orgSlug ?? 'no-gym'}`}>{children}</Fragment>
         </AttentionContext.Provider>
       </main>

@@ -29,6 +29,7 @@ const PAGE_WORDS = {
   members: { note: (w) => `Your list and the ${w.people} in the app`, words: ['members', 'clients', 'customers', 'people', 'contacts', 'list', 'past members', 'in the app', 'roster'] },
   leads: { note: () => 'Enquiries and trials', words: ['prospects', 'enquiries', 'inquiries', 'trial', 'sign ups', 'crm', 'pipeline'] },
   'at-risk': { note: (w) => `${w.peopleCap} who have stopped coming`, words: ['churn', 'retention', 'inactive', 'absent', 'lapsed'] },
+  payments: { note: () => 'Revenue, outstanding payments and payment settings', words: ['payments overview', 'money overview', 'finance', 'finances', 'square', 'outstanding', 'set up', ...MONEY] },
   sell: { note: () => 'Point of sale', words: ['pos', 'point of sale', 'till', 'register', 'checkout', 'shop', 'products', 'receipt', ...MONEY] },
   memberships: { note: () => 'Price list', words: ['prices', 'pricing', 'packages', 'plans', 'class packs', 'products', 'discounts', ...MONEY] },
   'failed-payments': { note: () => 'Declined card payments', words: ['declined', 'failed', 'retry', 'unpaid', 'outstanding', ...MONEY] },
