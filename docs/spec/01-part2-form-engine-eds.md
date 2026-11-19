@@ -2382,6 +2382,19 @@ items 36 and 24b take as it is):
   type ("quads", "core").
 - **Not in 63a:** the filter button and "Find by muscle" (63b); records, calories a minute and Add to workout (63c).
 
+**As built in 63b (2026-11-19).** The filter button beside search, and the Find by muscle card (the person's own figure,
+front and back; hidden while searching or while a filter other than the kind is on), open **Find exercises**
+(`FindExercises.tsx`, its rule `src/library/filters.ts`, table-tested). The person's own figure, Front or Back: a tapped
+shape picks its muscle by plain name (any quadriceps shape picks Quadriceps and lights all three; a deep muscle belongs to
+the drawn one over it), named with its count; a muscle no exercise here works is dimmed and not pressed. Then Equipment
+(No equipment first), Level, How it is counted and Kind, only the values the Library holds, each with its count. Two
+choices in one group mean either, choices in different groups mean both, and a choice's count is the list it then gives
+with every other group's choices kept. The counts are taken within the search, so "Show 2 exercises" opens exactly two.
+Muscles are those an exercise works (main and also), never the steadying row. Changes show on the Library only by Show;
+the ✕ leaves it as it was. On the Library each choice is a tag with ×, and Clear all; the kind chips and Kind are one
+choice. With no setup answer yet, muscles are offered as words in place of the figure. Not yet: picking a muscle with a
+screen reader on the figure (the four other groups work).
+
 ### 13.7 The jobs (ROADMAP Stage 5, exercise folder 2; ROADMAP wins where they differ)
 
 | Job | What it builds | Waits for |

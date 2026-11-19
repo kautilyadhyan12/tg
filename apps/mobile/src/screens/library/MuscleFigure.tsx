@@ -65,15 +65,35 @@ export function MuscleFigure({
   );
 }
 
-/** A line from a drawn muscle to its name, in the space beside the figure's head; `note` in a second pill beside
- *  the name (Find exercises: "1 exercise"). Nothing when this side does not show the muscle. */
-export function MuscleLeader({ sex, side, muscle, name, note, width }: { sex: Sex; side: Side; muscle: string; name: string; note?: string; width: number }) {
+/** A line from a drawn muscle to its name, in the space beside the figure's head (`from`: where the name starts,
+ *  as a share of the width); `note` in a second pill beside the name (Find exercises: "1 exercise"). Nothing when
+ *  this side does not show the muscle. */
+export function MuscleLeader({
+  sex,
+  side,
+  muscle,
+  name,
+  note,
+  width,
+  from = 0.74,
+  room,
+}: {
+  sex: Sex;
+  side: Side;
+  muscle: string;
+  name: string;
+  note?: string;
+  width: number;
+  from?: number;
+  /** How wide the label may grow from where it starts; its words shrink to fit. */
+  room?: number;
+}) {
   const at = centreOf(figureName(sex, side), muscle);
   if (at === null) return null;
   const scale = width / FIGURE_BOX.width;
   const x1 = (at.x - FIGURE_BOX.x) * scale;
   const y1 = (at.y - FIGURE_BOX.y) * scale;
-  const x2 = width * 0.74;
+  const x2 = width * from;
   const y2 = width * 0.12;
   return (
     <>
@@ -81,15 +101,15 @@ export function MuscleLeader({ sex, side, muscle, name, note, width }: { sex: Se
         <Line x1={x1} y1={y1} x2={x2} y2={y2} stroke={colours.orangeLight} strokeWidth={1.5} />
         <Circle cx={x1} cy={y1} r={4} fill={colours.orangeLight} />
       </Svg>
-      <View style={[styles.label, { left: x2 - 4, top: y2 - 13 }]}>
+      <View style={[styles.label, { left: x2 - 4, top: y2 - 13 }, room === undefined ? null : { maxWidth: room }]}>
         <View style={styles.name}>
-          <Txt kind="tiny" colour="onOrange" style={styles.words} numberOfLines={1}>
+          <Txt kind="tiny" colour="onOrange" style={styles.words} numberOfLines={1} fit>
             {name}
           </Txt>
         </View>
         {note === undefined ? null : (
           <View style={styles.note}>
-            <Txt kind="tiny" colour="text" numberOfLines={1}>
+            <Txt kind="tiny" colour="text" numberOfLines={1} fit>
               {note}
             </Txt>
           </View>
@@ -101,7 +121,7 @@ export function MuscleLeader({ sex, side, muscle, name, note, width }: { sex: Se
 
 const styles = StyleSheet.create({
   label: { position: "absolute", flexDirection: "row", alignItems: "center" },
-  name: { paddingHorizontal: 10, minHeight: 26, justifyContent: "center", borderRadius: sizes.round, backgroundColor: colours.orange },
-  note: { marginLeft: -6, paddingLeft: 12, paddingRight: 10, minHeight: 26, justifyContent: "center", borderTopRightRadius: sizes.round, borderBottomRightRadius: sizes.round, borderWidth: 1, borderColor: colours.lineStrong, backgroundColor: colours.raised, zIndex: -1 },
+  name: { flexShrink: 1, paddingHorizontal: 10, minHeight: 26, justifyContent: "center", borderRadius: sizes.round, backgroundColor: colours.orange },
+  note: { flexShrink: 1, marginLeft: 4, paddingHorizontal: 10, minHeight: 26, justifyContent: "center", borderRadius: sizes.round, borderWidth: 1, borderColor: colours.lineStrong, backgroundColor: colours.raised },
   words: { fontFamily: fonts.bold },
 });

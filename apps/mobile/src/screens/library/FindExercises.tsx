@@ -107,6 +107,7 @@ export function FindExercises({
         <Button
           label={shown === 0 ? "No exercises match" : `Show ${exercisesWord(shown)}`}
           raised
+          wide
           disabled={shown === 0}
           onPress={() => {
             onShow(draft);
@@ -191,7 +192,7 @@ function Body({
         <View style={{ width: figure }}>
           <MuscleFigure sex={sex} side={side} lit={lit} off={off} width={figure} onTap={onTap} />
           {last === null || shape === undefined ? null : (
-            <MuscleLeader sex={sex} side={side} muscle={shape} name={last} note={exercisesWord(countWith(list, draft, "muscle", last))} width={figure} />
+            <MuscleLeader sex={sex} side={side} muscle={shape} name={last} note={exercisesWord(countWith(list, draft, "muscle", last))} width={figure} from={0.56} room={figure * 0.44 + (width - sizes.edge * 2 - figure) / 2 - 12} />
           )}
         </View>
       </View>
@@ -226,6 +227,7 @@ function Tiles({
   onPick: (group: FilterGroup, value: string) => void;
   art: (value: string) => ReactNode;
 }) {
+  const half = useHalf();
   return (
     <View style={styles.tiles}>
       {choicesOf(list, group).map((v) => {
@@ -243,7 +245,7 @@ function Tiles({
             onPress={() => {
               onPick(group, v);
             }}
-            style={({ pressed }) => [styles.tile, on ? styles.tileOn : null, n === 0 && !on ? styles.tileNone : null, pressed ? styles.pressed : null]}
+            style={({ pressed }) => [styles.tile, half, on ? styles.tileOn : null, n === 0 && !on ? styles.tileNone : null, pressed ? styles.pressed : null]}
           >
             {shownArt === null ? null : <View style={styles.art}>{shownArt}</View>}
             <Txt kind="strong" numberOfLines={2} style={styles.tileWord}>
@@ -263,6 +265,7 @@ function Tiles({
 
 /** The kinds as pictures, each with its count. */
 function Kinds({ list, draft, onPick }: { list: readonly PhoneLibraryEntry[]; draft: Filters; onPick: (group: FilterGroup, value: string) => void }) {
+  const half = useHalf();
   return (
     <View style={styles.tiles}>
       {choicesOf(list, "kind").map((k) => {
@@ -279,7 +282,7 @@ function Kinds({ list, draft, onPick }: { list: readonly PhoneLibraryEntry[]; dr
             onPress={() => {
               onPick("kind", k);
             }}
-            style={({ pressed }) => [styles.kind, on ? styles.tileOn : null, n === 0 && !on ? styles.tileNone : null, pressed ? styles.pressed : null]}
+            style={({ pressed }) => [styles.kind, half, on ? styles.tileOn : null, n === 0 && !on ? styles.tileNone : null, pressed ? styles.pressed : null]}
           >
             <Image source={pictures[exercisePicture("", k)]} resizeMode="cover" style={styles.kindPicture} accessible={false} />
             <View style={styles.kindShade} />
@@ -297,6 +300,13 @@ function Kinds({ list, draft, onPick }: { list: readonly PhoneLibraryEntry[]; dr
     </View>
   );
 }
+
+/** Two choices a row, as drawn: a lone one keeps its half. */
+function useHalf() {
+  const { width } = useWindowDimensions();
+  return { width: Math.floor((width - sizes.edge * 2 - GAP) / 2) };
+}
+const GAP = 10;
 
 /** A picked choice with its ✕, on this page and on the Library. */
 export function Tag({ label, onRemove }: { label: string; onRemove: () => void }) {
@@ -320,8 +330,8 @@ const styles = StyleSheet.create({
   tag: { flexDirection: "row", alignItems: "center", gap: 6, minHeight: 36, paddingHorizontal: 14, borderRadius: sizes.round, borderWidth: 1, borderColor: colours.orangeLine, backgroundColor: colours.orangeFill },
   tagWord: { fontFamily: fonts.semibold },
   section: { gap: 10 },
-  tiles: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
-  tile: { flexBasis: "47%", flexGrow: 1, minHeight: 92, gap: 8, alignItems: "center", justifyContent: "center", paddingVertical: 14, paddingHorizontal: 12, borderRadius: sizes.boxRadius, borderWidth: 1, borderColor: colours.line, backgroundColor: colours.box },
+  tiles: { flexDirection: "row", flexWrap: "wrap", gap: GAP },
+  tile: { minHeight: 92, gap: 8, alignItems: "center", justifyContent: "center", paddingVertical: 14, paddingHorizontal: 12, borderRadius: sizes.boxRadius, borderWidth: 1, borderColor: colours.line, backgroundColor: colours.box },
   tileOn: { borderColor: colours.orange, backgroundColor: colours.orangeFill },
   tileNone: { opacity: 0.45 },
   tileWord: { textAlign: "center" },
@@ -329,8 +339,9 @@ const styles = StyleSheet.create({
   count: { position: "absolute", top: 8, right: 8, minWidth: 22, minHeight: 22, paddingHorizontal: 6, alignItems: "center", justifyContent: "center", borderRadius: sizes.round, backgroundColor: colours.fill },
   countOn: { backgroundColor: colours.orange },
   countWord: { fontFamily: fonts.bold },
-  kind: { flexBasis: "47%", flexGrow: 1, minHeight: 96, justifyContent: "flex-end", padding: 12, borderRadius: sizes.boxRadius, borderWidth: 1, borderColor: colours.line, backgroundColor: colours.box, overflow: "hidden" },
-  kindPicture: { position: "absolute", top: 0, left: 0, width: "100%", height: "100%" },
-  kindShade: { position: "absolute", top: 0, left: 0, width: "100%", height: "100%", backgroundColor: colours.scrim },
+  kind: { minHeight: 96, justifyContent: "flex-end", padding: 12, borderRadius: sizes.boxRadius, borderWidth: 1, borderColor: colours.line, backgroundColor: colours.box, overflow: "hidden" },
+  // Held by all four edges: a share of the height means nothing in a box that only has a least height.
+  kindPicture: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, width: undefined, height: undefined },
+  kindShade: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: colours.scrim },
   kindWord: { color: colours.text },
 });
