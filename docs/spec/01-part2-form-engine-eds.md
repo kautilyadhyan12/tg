@@ -2395,11 +2395,14 @@ row (Primary or Secondary, level, starting target) that opens its page over the 
 exercises for this muscle yet." Show in Library puts it on the Library as a tag. **Filters** (`Filters.tsx`; from the
 filter button): Muscle as one row that opens the same body ("Use this muscle"; its rows there are lines, not buttons), then
 Equipment (No equipment first), Level, How it is counted and Kind as chips, only the values the Library holds, each with
-its count. Two choices in one group mean either, choices in different groups mean both, and a choice's count is the list
-it then gives with every other group's choices kept (`src/library/filters.ts`, table-tested). The counts are taken within
-the search, so "Show 2 exercises" opens exactly two. Muscles are those an exercise works (main and also), never the
+its count; a choice already on is always shown, lit, even where the search has taken its exercises away (its count 0),
+so it can be let go. Two choices in one group mean either, choices in different groups mean both, and a choice's count is
+the exercises that have it with every other group's choices kept (`src/library/filters.ts`, table-tested). The counts are
+taken within the search, so "Show 2 exercises" opens exactly two. Muscles are those an exercise works (main and also), never the
 steadying row. Changes show on the Library only by Show; the ✕ leaves it as it was. On the Library each choice is a tag
-with ×, and Clear all; the kind chips and Kind are one choice. The body screen is a window of its own on Android, so it
+with ×, and Clear all; the kind chips and Kind are one choice (a chip picks its kind alone, and a lit chip lets it go).
+Where the search finds exercises that the filters hide, the Library says "No exercises match these filters", never that
+nothing matches the word. The body screen is a window of its own on Android, so it
 has its own gesture root. Until the setup answer is known there is no figure, so no Muscle row. Not yet: picking a muscle
 with a screen reader.
 
