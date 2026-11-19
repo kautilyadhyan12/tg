@@ -51,7 +51,7 @@ function GymSwitcher({ org, fallback, compact }) {
       <span className="c-switcher-text">
         <span className={`${compact ? 'c-s16' : 'c-s15'} c-w6 c-ell`}>{title}</span>
         {!compact && place ? (
-          <span className="c-s13 c-ell" style={{ color: 'var(--rail-t3)' }}>
+          <span className="c-s14 c-ell" style={{ color: 'var(--rail-t3)' }}>
             {place}
           </span>
         ) : null}
@@ -150,7 +150,7 @@ function YouMenu({ name, role, accountTo, onAccount, withOrganisations, signOut,
             {name || 'Your account'}
           </span>
           {role ? (
-            <span className="c-s12 c-ell" style={{ color: 'var(--rail-t3)' }}>
+            <span className="c-s14 c-ell" style={{ color: 'var(--rail-t3)' }}>
               {role}
             </span>
           ) : null}
@@ -217,7 +217,7 @@ function BellButton({ lines, onOpen }) {
           <div className="c-attn" data-testid="needs-attention">
             <div className="c-attn-head">
               <h2 className="c-s17 c-w6 c-t1">Needs attention</h2>
-              {lines.length > 0 ? <span className="c-s12 c-t3">{lines.length === 1 ? '1 item' : `${String(lines.length)} items`}</span> : null}
+              {lines.length > 0 ? <span className="c-s14 c-t3">{lines.length === 1 ? '1 item' : `${String(lines.length)} items`}</span> : null}
             </div>
             {lines.length === 0 ? (
               <p className="c-attn-none c-s14 c-w6">
@@ -229,11 +229,11 @@ function BellButton({ lines, onOpen }) {
                 <div key={line.key} className="c-attn-row" data-testid="attention-line">
                   <span className={`c-attn-dot${line.tone === 'plain' ? '' : ` c-attn-dot-${line.tone}`}`} aria-hidden="true" />
                   <span className="c-attn-text">
-                    <span className="c-s14 c-w6 c-t1">{line.title}</span>
-                    {line.note !== null ? <span className="c-s13 c-t3">{line.note}</span> : null}
+                    <span className="c-s15 c-w6 c-t1">{line.title}</span>
+                    {line.note !== null ? <span className="c-s14 c-t3">{line.note}</span> : null}
                   </span>
                   <span className="c-attn-end">
-                    {line.money !== null ? <span className="c-s14 c-w6 c-t1">{line.money}</span> : null}
+                    {line.money !== null ? <span className="c-s15 c-w6 c-t1">{line.money}</span> : null}
                     {line.to !== null ? (
                       <Link to={line.to} className="c-btn c-btn-s c-btn-sm" onClick={close} aria-label={`${line.button}: ${line.title}`}>
                         {line.button}

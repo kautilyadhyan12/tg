@@ -37,10 +37,10 @@ function Tile({ tile }) {
         <span className={`c-pay-ic ${TONE_CLASS[tile.tone] ?? TONE_CLASS.plain}`} aria-hidden="true">
           <Icon size={18} />
         </span>
-        <span className="c-s13 c-t2">{tile.title}</span>
+        <span className="c-s14 c-t2">{tile.title}</span>
       </span>
       <span className={`c-big ${FIGURE_CLASS[tile.tone] ?? 'c-t1'}`}>{tile.figure}</span>
-      <span className="c-s12 c-t3">
+      <span className="c-s14 c-t3">
         {tile.note}
         {tile.to !== null ? (
           <>
@@ -90,16 +90,16 @@ function SetupBox({ box, readOnly, orgType, busy, error, onConnect }) {
             <li key={step.title} className={`c-pay-step${i === 0 ? ' c-pay-step-on' : ''}`}>
               <span className="flex flex-wrap items-center gap-2">
                 <span className={`c-tag ${i === 0 ? 'c-tag-soft' : 'c-tag-plain'}`}>{i + 1}</span>
-                <span className="c-s14 c-w6 c-t1">{step.title}</span>
-                {step.optional ? <span className="c-s12 c-t3">Optional</span> : null}
+                <span className="c-s15 c-w6 c-t1">{step.title}</span>
+                {step.optional ? <span className="c-s14 c-t3">Optional</span> : null}
               </span>
-              <span className="c-s13 c-t2">{step.text}</span>
+              <span className="c-s14 c-t2">{step.text}</span>
             </li>
           ))}
         </ol>
       ) : null}
       {box.without !== null ? (
-        <p className="flex items-start gap-2.5 c-s13 c-t2">
+        <p className="flex items-start gap-2.5 c-s14 c-t2">
           <span className="c-attn-dot c-pay-dot-good" style={{ marginTop: 5 }} aria-hidden="true" />
           <span>
             <span className="c-t1 c-w6">Available now, without Square: </span>
@@ -124,11 +124,11 @@ function AttentionRow({ line }) {
     <div className="c-attn-row" data-testid="pay-attention-line">
       <span className={`c-attn-dot${line.tone === 'plain' ? '' : ` c-attn-dot-${line.tone}`}`} aria-hidden="true" />
       <span className="c-attn-text">
-        <span className="c-s14 c-w6 c-t1">{line.title}</span>
-        {line.note !== null ? <span className="c-s13 c-t3">{line.note}</span> : null}
+        <span className="c-s15 c-w6 c-t1">{line.title}</span>
+        {line.note !== null ? <span className="c-s14 c-t3">{line.note}</span> : null}
       </span>
       <span className="c-attn-end">
-        {line.money !== null ? <span className="c-s14 c-w6 c-t1 c-num">{line.money}</span> : null}
+        {line.money !== null ? <span className="c-s15 c-w6 c-t1 c-num">{line.money}</span> : null}
         <Link to={line.to} className="c-btn c-btn-s c-btn-sm">
           {line.button}
         </Link>
@@ -144,8 +144,8 @@ function PlaceRow({ line }) {
     return (
       <div className="c-row c-pay-row" data-testid={`pay-line-${line.key}`}>
         <span className="flex flex-col min-w-0" style={{ flexGrow: 1 }}>
-          <span className="c-s14 c-w6 c-t1">{line.title}</span>
-          {line.state !== null ? <span className={`c-s12 ${STATE_CLASS[line.state.tone] ?? 'c-t3'}`}>{line.state.text}</span> : null}
+          <span className="c-s15 c-w6 c-t1">{line.title}</span>
+          {line.state !== null ? <span className={`c-s14 ${STATE_CLASS[line.state.tone] ?? 'c-t3'}`}>{line.state.text}</span> : null}
         </span>
       </div>
     );
@@ -153,10 +153,10 @@ function PlaceRow({ line }) {
   return (
     <Link to={line.to} className="c-row c-pay-row" data-testid={`pay-line-${line.key}`}>
       <span className="flex flex-col min-w-0" style={{ flexGrow: 1 }}>
-        <span className="c-s14 c-w6 c-t1">{line.title}</span>
-        {line.state !== null ? <span className={`c-s12 ${STATE_CLASS[line.state.tone] ?? 'c-t3'}`}>{line.state.text}</span> : null}
+        <span className="c-s15 c-w6 c-t1">{line.title}</span>
+        {line.state !== null ? <span className={`c-s14 ${STATE_CLASS[line.state.tone] ?? 'c-t3'}`}>{line.state.text}</span> : null}
       </span>
-      {line.where !== null ? <span className="c-s12 c-t3 c-pay-where">{line.where}</span> : null}
+      {line.where !== null ? <span className="c-s14 c-t3 c-pay-where">{line.where}</span> : null}
       <ChevronRight size={16} className="c-t3" aria-hidden="true" style={{ flex: 'none' }} />
     </Link>
   );
@@ -318,7 +318,7 @@ export default function PaymentsOverview({ openSquare = goTo }) {
             <section className="c-card c-pay-box" aria-label="Needs attention" data-testid="pay-attention">
               <div className="c-attn-head">
                 <h2 className="c-h2">Needs attention</h2>
-                {moneyLines.length > 0 ? <span className="c-s12 c-t3">{moneyLines.length === 1 ? '1 item' : `${String(moneyLines.length)} items`} · by urgency</span> : null}
+                {moneyLines.length > 0 ? <span className="c-s14 c-t3">{moneyLines.length === 1 ? '1 item' : `${String(moneyLines.length)} items`} · by urgency</span> : null}
               </div>
               {moneyLines.length === 0 ? (
                 <p className="c-attn-none c-s14 c-w6" data-testid="pay-attention-none">
@@ -334,7 +334,7 @@ export default function PaymentsOverview({ openSquare = goTo }) {
             <section className="c-card c-pay-box" aria-label="Revenue by payment method" data-testid="pay-methods">
               <div className="c-attn-head">
                 <h2 className="c-h2">Revenue by payment method</h2>
-                <span className="c-s12 c-t3">Today</span>
+                <span className="c-s14 c-t3">Today</span>
               </div>
               <div className="flex flex-col gap-4 pt-1">
                 {ways.length === 0 ? <p className="c-s14 c-t2">Nothing taken yet today.</p> : null}
@@ -342,7 +342,7 @@ export default function PaymentsOverview({ openSquare = goTo }) {
                   <div key={way.key} className="flex flex-col gap-1.5" data-testid="pay-method">
                     <span className="flex items-baseline justify-between gap-3">
                       <span className="c-s14 c-t2">{way.label}</span>
-                      <span className="c-s14 c-w6 c-t1 c-num">{way.money}</span>
+                      <span className="c-s15 c-w6 c-t1 c-num">{way.money}</span>
                     </span>
                     <span className="c-bar c-pay-track" aria-hidden="true">
                       <span className="c-bar-fill c-pay-fill" style={{ width: `${String(way.share)}%` }} />
@@ -360,7 +360,7 @@ export default function PaymentsOverview({ openSquare = goTo }) {
         <section className="flex flex-col gap-4" aria-label="All payment pages and settings">
           <div className="flex flex-col gap-1">
             <h2 className="c-h2">All payment pages and settings</h2>
-            <p className="c-s13 c-t3">Each line opens that page or setting.</p>
+            <p className="c-s14 c-t3">Each line opens that page or setting.</p>
           </div>
           <div className="c-pay-groups">
             {groups.map((group) => (

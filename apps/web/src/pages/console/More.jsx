@@ -67,7 +67,7 @@ export default function More() {
           </span>
           <span style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
             <span className="c-s15 c-w6 c-ell">{name}</span>
-            {about ? <span className="c-s13 c-t2">{about}</span> : null}
+            {about ? <span className="c-s14 c-t2">{about}</span> : null}
           </span>
         </div>
       ) : null}
