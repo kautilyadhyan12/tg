@@ -25,6 +25,7 @@ const { attentionService } = await import('../../api/attentionApi');
 const { resetConsoleOrgs } = await import('./consoleOrgs');
 const { RECENT_KEY } = await import('./searchPlaces');
 const ConsoleLayout = (await import('../../components/console/ConsoleLayout')).default;
+const SearchField = (await import('../../components/console/ConsoleSearch')).default;
 
 const gym = (staffRole, privileges, orgType = 'gym') => ({
   id: '11111111-1111-4111-8111-111111111111',
@@ -405,6 +406,26 @@ describe('people (V1-e-ii)', () => {
     startSearch();
     typeIn('sam');
     await waitFor(() => expect(box().getByRole('status').textContent).toBe("You've searched a lot in the last hour. Try again in a few minutes."));
+  });
+
+  it("switching business never shows the last business's people under the new one (round one, L3)", async () => {
+    orgService.searchPeople.mockImplementation((gymId) =>
+      gymId === 'gym-a' ? Promise.resolve({ data: { ...NOBODY, members: { people: [SAM], more: false, morePast: false } } }) : new Promise(() => {}),
+    );
+    const field = (gymId) => (
+      <MemoryRouter>
+        <SearchField orgSlug="iron-house" catalogue={[]} placeholder="Search" people={{ gymId, orgType: 'gym', timezone: null, privileges: ROLE_PRIVILEGES.owner, membersName: 'Members & staff' }} />
+      </MemoryRouter>
+    );
+    const { rerender } = render(field('gym-a'));
+    const input = screen.getByTestId('search-input');
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: 'sam' } });
+    await findPeople();
+    // The same words, another business, its answer not back yet: nobody from the first is shown.
+    rerender(field('gym-b'));
+    await waitFor(() => expect(orgService.searchPeople).toHaveBeenCalledWith('gym-b', 'sam'));
+    expect(results()?.querySelector('[aria-label="People"]') ?? null).toBeNull();
   });
 
   it("a studio's box says clients", async () => {
