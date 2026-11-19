@@ -1883,6 +1883,35 @@ for a second (a live set starts and ends with the person in view; the engine lea
 The 72 files take 7.7 MB in git (§12.7: where 200 exercises' files live is job 54's). The squat is not passing until the
 two open cases are closed; nobody uses it before job 53.
 
+**As built, the replays (52a-ii-a, 2026-11-19; `rulings/2026-11-19-52a-ii-a.md`).** `scripts/replays.ts` plays each judged
+video again: **nearer** (up to 1.3 times bigger, the whole body kept in the picture), **farther** (0.6), **tilted** 15° each
+way ("down" as the phone's sensor gives it), **15 and 8 pictures a second**, **uneven** (each picture 1 to 4 camera pictures
+after the last, as live mode drops them), **shaky** (every point 1 cm afresh, 95 in 100), **the chip's gap** (every point
+moved by the very gap the chosen set-up, full on the main chip on 4 cores, read from the laptop on the same pictures of the
+squat and the chair squat, 51b-i; kept as body points in `test/phone-points`: the foot points 0.7 to 1.1 cm up or down in 95
+of 100, heel and toes mostly together; a drift drawn by hand, each point alone, was harsher than the phone), and **a
+passer-by** hiding a fifth of the picture's width for 0.8 s, between reps and at a rep's bottom. `movement-check --replays`
+prints the table. **The numbers are set from the eight people as filmed and as each replay that changes only how the camera
+reads a body** (all but the passer-by; 239 reps): set from the videos alone, "feet stay down" came to 2 cm and two fresh
+videos lost reps as filmed. Measured: under each of the 11 held replays every other movement (61 videos) counts 0 and is
+given no word, every person counts right with themselves left out, and the 13 squat videos with a count by eye count 35 of
+35, but the passer-by at a bottom (29: each rep it hid decides nothing) and **one open row**: the fresh plate goblet squat at
+8 pictures a second counts 3 of 4 (her feet, or the camera, sit 1 to 1.5 cm higher after her second rep and stay; 52c tells
+a foot that moved from one that left the floor). Shown, never held: the graphics chip's gap 35 of 35; the small model's 19 of
+35, and one kettlebell swing counts 1; 3 pictures in 10 dropped at random 33 of 35. **What changed in the matcher:** a foot
+point's rise is measured from where it was when the rep began (the hips half way down), never from its lowest place in the
+rep (the model slides a toe point 7 cm down the picture at the bottom of a fresh barbell front squat, which counted 2 of 3
+and now counts 3), never below 0, and only in frames with the hips above the line where a rep starts (side on, a deep
+squat's near heel and toes read 2 cm up at the bottom); the break that leaves "feet stay down" unseen is the time in the air
+of a hop as high as its number (3 cm, 156 ms) where pictures came without the feet, and of a hop half the lowest real jump
+(Kd's four squat-jump videos: the ankles 12 to 34 cm up; 6 cm, 221 ms) where no picture came at all. The numbers: depth 0.16,
+knees 125°, hips and knees together 34°, chest 56°, feet down 3 cm, in place 0.10, stance 0.24, hips alike 42°. **The body
+check:** the crunch's legs thrown onto each other at 0.57 s (the left onto the right's place, the right only part way) were
+used at his own size and drawn 1.3 times bigger; a swap is now each side nearer the other's last place and the two together
+twice as well explained, and a point back near its last used place is used again at once: refused at 0.57 s at both sizes,
+used at 0.60 s, and every verdict the same at 1.3 times. The replays take about 15 s each over the 75 videos on the laptop;
+on GitHub they run in three test files side by side.
+
 An exercise that does not pass is published as "count by hand", never with a wrong camera
 count. Kd tries one exercise of each kind of movement on the phone, about a dozen, never
 each one. After launch the server sees, for each exercise, how often members changed the
@@ -1967,11 +1996,11 @@ terminal (Kd, 2026-11-16).
 
 ### 12.9 Not measured yet
 
-Whether the phone's numbers, a centimetre or so from the laptop's asked for one person, change a count (job 52a; 51a,
+Whether the phone's numbers, a centimetre or so from the laptop's asked for one person, change a count on the phone's own runs (job 52a-iii; the chip's measured gap carried onto every squat video changes none, 52a-ii-a; 51a,
 51b-i and 51b-ii measured the rest, §12.5) · whether full on the main chip still holds 15 a second with the camera
 screen's engine, voice and drawing, and how the selfie camera reads a person in the room (job 53) · whether
 one long recording cuts cleanly into lines (job 53) · whether a video redrawn from another
-phone place is faithful (job 52a) · what the hips do in a real one-leg lift: on the drawn
+phone place is faithful (job 52a-ii-b: drawn back from its own place, a redraw puts the big joints 2 to 4 cm off in the middle, 5 to 11 cm in 95 of 100) · what the hips do in a real one-leg lift: on the drawn
 one they moved at most 0.026 of the trunk's length, while the smallest rise in a real rep
 on twelve squat-family videos was 0.110 of the leg's length, under the old rules (job 52a
 measures both again with the new engine).
