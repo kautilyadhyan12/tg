@@ -47,9 +47,9 @@
   --rail-bg: #0D0C0B;
   --rail-line: #1E1D1C;
   --rail-t1: #F3F3F3;
-  --rail-t2: #BDBDBC;
-  --rail-t3: #9C9B9B;
-  --rail-tab: #9C9B9B;
+  --rail-t2: #CCCCCB;
+  --rail-t3: #AFAEAE;
+  --rail-tab: #AFAEAE;
   --rail-card: #151514;
   --rail-card-line: #1E1D1C;
   --rail-on: #2A1B0D;
@@ -60,7 +60,7 @@
   --rail-on-gym: #1B1005;
   --rail-warn: #FFD66B;
   --rail-hover: #191817;
-  --rail-grp: #9C9B9B;
+  --rail-grp: #AFAEAE;
 
   --page: #0A0908;
   --grp: #9C9B9B;
@@ -74,8 +74,8 @@
   /* An input's edge stays 3 to 1 on the page (the board's 16 % white is 1.5). */
   --input-line: #6B6865;
   --t1: #F3F3F3;
-  --t2: #BDBDBC;
-  --t3: #9C9B9B;
+  --t2: #CCCCCB;
+  --t3: #AFAEAE;
   --link: #FFA552;
   --accent: #FF8A1F;
   --on-accent: #1B1005;
@@ -86,11 +86,11 @@
   --good-bg: #152B1C;
   --warn: #FFD66B;
   --warn-bg: #322B1D;
-  --bad: #F87171;
+  --bad: #FA9090;
   --bad-bg: #321918;
   --bad-line: #5C1E1E;
   --on-bad: #1B0A08;
-  --info: #7DB5FF;
+  --info: #82B8FF;
   --info-bg: #1F2A36;
   /* A button not ready yet. The second look's board measured 3.43:1; this shade passes. */
   --dis-bg: #242322;
@@ -115,20 +115,20 @@
   --rail-bg: #FFFFFF;
   --rail-line: #EBEAE9;
   --rail-t1: #191613;
-  --rail-t2: #544D46;
-  --rail-t3: #6B645C;
-  --rail-tab: #6B645C;
+  --rail-t2: #3F3A35;
+  --rail-t3: #534E48;
+  --rail-tab: #534E48;
   --rail-card: #FFFFFF;
   --rail-card-line: #EBEAE9;
   --rail-on: #FFEBD6;
   --rail-on-line: #F3C596;
-  --rail-on-t: #9A4508;
+  --rail-on-t: #813A07;
   --rail-seg: #EFEFEE;
   --rail-gym: #FF8A1F;
   --rail-on-gym: #1B1005;
   --rail-warn: #7A5600;
   --rail-hover: #F4F3F3;
-  --rail-grp: #6B645C;
+  --rail-grp: #534E48;
 
   --page: #F6F4F1;
   --grp: #6B645C;
@@ -142,24 +142,24 @@
   /* An input's edge stays 3 to 1 on the page (the board's is 1.4). */
   --input-line: #948C83;
   --t1: #191613;
-  --t2: #544D46;
-  --t3: #6B645C;
-  --link: #9A4508;
+  --t2: #3F3A35;
+  --t3: #534E48;
+  --link: #813A07;
   --accent: #FF8A1F;
   --on-accent: #1B1005;
   --soft: #FFEBD6;
   --soft-line: #F3C596;
-  --soft-t: #9A4508;
-  --good: #177A48;
+  --soft-t: #813A07;
+  --good: #115A35;
   --good-bg: #E3F4EA;
-  --warn: #7A5600;
+  --warn: #684900;
   --warn-bg: #FBEFCB;
-  --bad: #C23A2E;
+  --bad: #8E2A22;
   /* The board's #FBE6E3 measured 4.45:1 under red words; this shade passes. */
   --bad-bg: #FCE9E6;
   --bad-line: #F0B8B1;
   --on-bad: #FFFFFF;
-  --info: #1F5BB8;
+  --info: #194B97;
   --info-bg: #E4EDFB;
   /* The second look's board measured 2.94:1; this shade passes. */
   --dis-bg: #ECE8E2;
@@ -240,8 +240,8 @@
    apart from the page names and the orange page you are on. Pressing it folds the group. */
 .c-rail-grp {
   margin: 12px 0 2px;
-  font-size: 11px;
-  line-height: 14px;
+  font-size: 12px;
+  line-height: 16px;
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -733,8 +733,8 @@
 }
 /* The small label above a page's title: small capitals, orange. */
 .c-eyebrow {
-  font-size: 11px;
-  line-height: 14px;
+  font-size: 12px;
+  line-height: 16px;
   font-weight: 700;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -814,9 +814,9 @@
 .c-btn-danger { background: var(--bad-bg); color: var(--bad); }
 .c-btn-ghost { color: var(--t2); }
 .c-btn-lg { height: 48px; padding: 0 24px; font-size: 15px; }
-.c-btn-sm { height: 32px; padding: 0 13px; font-size: 13px; }
+.c-btn-sm { height: 32px; padding: 0 13px; font-size: 14px; }
 /* The smallest: a row of actions under one name in a list (still 44 px tall on a phone). */
-.c-btn-xs { height: 28px; padding: 0 10px; font-size: 12px; }
+.c-btn-xs { height: 28px; padding: 0 10px; font-size: 14px; }
 /* An action written as a word, with no box: a time slot's Edit and Cancel, Add time slot.
    `c-btn-link` is orange text, `c-btn-quiet` grey; still 44 px tall on a phone. */
 .c-btn-link,
@@ -905,7 +905,7 @@
   border-radius: 6px;
   background: var(--raise);
   color: var(--t2);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 18px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -934,7 +934,7 @@
   color: var(--t1);
 }
 .c-hint {
-  font-size: 13px;
+  font-size: 14px;
   line-height: 18px;
   color: var(--t3);
 }
@@ -1068,7 +1068,7 @@
   border-radius: 999px;
   background: transparent;
   color: var(--t2);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   white-space: nowrap;
 }
@@ -1357,7 +1357,7 @@
   border-radius: 7px;
   background: transparent;
   color: var(--rail-t3);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
 }
 .c-seg button[aria-checked='true'] {
@@ -1513,7 +1513,7 @@
 @media (min-width: 560px) {
   .c-frow { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
 }
-.c-err { font-size: 13px; line-height: 18px; color: var(--bad); }
+.c-err { font-size: 14px; line-height: 20px; color: var(--bad); }
 .c-input-err { border-color: var(--bad); }
 
 /* The "look at this" box in its other colours. */
@@ -1695,7 +1695,7 @@
   font-weight: 700;
 }
 .c-sum { margin: 0; display: flex; flex-direction: column; gap: 14px; }
-.c-sum dt { font-size: 13px; line-height: 18px; color: var(--t3); }
+.c-sum dt { font-size: 14px; line-height: 20px; color: var(--t3); }
 .c-sum dd { margin: 2px 0 0; font-size: 14px; line-height: 20px; font-weight: 600; color: var(--t1); overflow-wrap: anywhere; }
 .c-sum dd.c-sum-none { font-weight: 450; color: var(--t3); }
 @media (min-width: 1200px) {
@@ -1798,7 +1798,7 @@
   padding: 0 6px;
   box-sizing: border-box;
   border-radius: 999px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   line-height: 20px;
   text-align: center;
@@ -1810,6 +1810,20 @@
 .c-count-warn { background: var(--warn-bg); color: var(--warn); }
 /* A folded group's heading carries the count of the page inside it, beside the name. */
 .c-rail-grp-name .c-count { margin-left: 0; }
+/* Payments overview's Set up (V1-f), where a count would sit. */
+.c-setup-tag { margin-left: auto; flex: none; height: 20px; padding: 0 8px; font-size: 12px; }
+.c-rail-grp-name .c-setup-tag { margin-left: 0; }
+/* In the menu the name stays whole: Set up takes a line of its own under it. */
+.c-nav:has(> .c-setup-tag) {
+  flex-wrap: wrap;
+  row-gap: 4px;
+  height: auto;
+  min-height: 44px;
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+.c-nav:has(> .c-setup-tag) > .c-ell { flex: 1 0 calc(100% - 28px); }
+.c-nav > .c-setup-tag { margin-left: 28px; }
 /* On a phone's tab, over the icon's corner. */
 .c-tab-icon .c-count {
   position: absolute;
@@ -1845,7 +1859,7 @@
   padding: 0 5px;
   box-sizing: border-box;
   border-radius: 999px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   line-height: 18px;
   text-align: center;
@@ -2067,4 +2081,123 @@
 .c-attn-end .c-btn { height: 36px; }
 @media (pointer: coarse), (max-width: 767px) {
   .c-attn-end .c-btn { height: 44px; }
+}
+
+/* Payments overview (V1-f; spec Part 3 §17.11, the boards `Money` and `MoneySetup`): its title with
+   its two buttons, four figures, Needs attention beside how today was paid, then every payment page
+   and setting in three boxes. A phone holds one of each a row. */
+.c-pay-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+}
+.c-pay-tiles {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+.c-pay-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 20px;
+  min-width: 0;
+}
+.c-pay-ic {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+}
+.c-pay-ic-l {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+}
+.c-pay-ic-good { background: var(--good-bg); color: var(--good); }
+.c-pay-ic-warn { background: var(--warn-bg); color: var(--warn); }
+.c-pay-ic-bad { background: var(--bad-bg); color: var(--bad); }
+.c-pay-ic-info { background: var(--info-bg); color: var(--info); }
+.c-pay-ic-off { background: var(--raise); color: var(--t2); }
+.c-pay-ic-accent { background: var(--soft); color: var(--soft-t); }
+.c-pay-good { color: var(--good); }
+.c-pay-warn { color: var(--warn); }
+.c-pay-bad { color: var(--bad); }
+.c-pay-dot-good { background: var(--good); }
+.c-pay-split {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+.c-pay-box {
+  padding: 18px 20px 20px;
+  min-width: 0;
+}
+.c-pay-track { height: 6px; }
+.c-pay-fill { background: var(--info); min-width: 4px; }
+.c-pay-groups {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+.c-pay-row {
+  gap: 10px;
+  padding: 12px 16px;
+  text-decoration: none;
+}
+.c-pay-row:hover { background: var(--raise); }
+.c-pay-row:focus-visible {
+  outline: 2px solid var(--link);
+  outline-offset: -2px;
+}
+.c-pay-where {
+  flex: none;
+  white-space: nowrap;
+}
+.c-pay-setup {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 20px;
+  border-color: var(--soft-line);
+}
+.c-pay-steps {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.c-pay-step {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: var(--raise);
+}
+.c-pay-step-on { box-shadow: inset 0 0 0 1px var(--soft-line); }
+@media (max-width: 1439px) {
+  .c-pay-groups { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+/* Its buttons: 44 px to touch, on a tablet too. */
+@media (pointer: coarse) {
+  .c-pay-head .c-btn,
+  .c-pay-box .c-btn { height: 44px; }
+}
+@media (max-width: 1023px) {
+  .c-pay-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .c-pay-split,
+  .c-pay-groups { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 479px) {
+  .c-pay-tiles { grid-template-columns: minmax(0, 1fr); }
+  .c-pay-where { display: none; }
 }

@@ -10,7 +10,7 @@ import { ROLE_PRIVILEGES } from '@app/shared';
 
 vi.mock('../../api/orgsApi', async (importOriginal) => {
   const actual = await importOriginal();
-  return { ...actual, orgService: { getMine: vi.fn() } };
+  return { ...actual, orgService: { getMine: vi.fn(), getGymPayments: vi.fn() } };
 });
 const changes = new Set();
 vi.mock('../../api/attentionApi', () => ({
@@ -77,6 +77,12 @@ async function open(path, privileges = ROLE_PRIVILEGES.owner, staffRole = 'owner
 }
 const rail = () => within(screen.getByTestId('console-rail'));
 const bar = () => within(screen.getByTestId('console-bar'));
+/** Settings' Payments answer, which V1-f's Set up tag reads. */
+const squareAnswer = (square, extra = {}) => ({
+  data: { payments: { availability: 'square', country: 'US', canConnect: true, squareReady: true, square, terminals: null, needsAllow: false, allowFor: [], ...extra } },
+});
+const setupBeside = () => rail().getByRole('link', { name: /^Payments overview/ }).querySelector('[data-testid="setup-tag"]');
+
 const countBeside = (name) => {
   const link = rail().getByRole('link', { name: new RegExp(`^${name}\\b`) });
   return link.querySelector('[data-testid="menu-count"]')?.textContent ?? null;
@@ -86,6 +92,8 @@ beforeEach(() => {
   resetConsoleOrgs();
   changes.clear();
   attentionService.get.mockReset();
+  orgService.getGymPayments.mockReset();
+  orgService.getGymPayments.mockResolvedValue(squareAnswer({ state: 'connected' }));
 });
 afterEach(() => cleanup());
 
@@ -202,5 +210,81 @@ describe('the counts and the bell', () => {
     await waitFor(() => expect(more.getByRole('link', { name: /^Leads/ }).querySelector('[data-testid="menu-count"]')?.textContent).toBe('5'));
     expect(more.getByRole('link', { name: /^Failed payments/ }).querySelector('[data-testid="menu-count"]').textContent).toBe('3');
     expect(more.getByRole('link', { name: /^Sell/ }).querySelector('[data-testid="menu-count"]')).toBeNull();
+  });
+});
+
+describe('Payments overview says Set up until Square is connected (V1-f)', () => {
+  it('not connected: the tag beside it in the menu and on More', async () => {
+    attentionService.get.mockResolvedValue(NONE);
+    orgService.getGymPayments.mockResolvedValue(squareAnswer(null));
+    await open(`${BASE}/more`);
+    await waitFor(() => expect(setupBeside()).not.toBeNull());
+    const more = within(screen.getByTestId('console-more'));
+    expect(more.getByRole('link', { name: /^Payments overview/ }).querySelector('[data-testid="setup-tag"]')).not.toBeNull();
+  });
+
+  it('read again when staff come back to the window, once 30 s have passed: Square connected elsewhere (round one, L3)', async () => {
+    attentionService.get.mockResolvedValue(NONE);
+    orgService.getGymPayments.mockResolvedValue(squareAnswer(null));
+    await open(`${BASE}/members`);
+    await waitFor(() => expect(setupBeside()).not.toBeNull());
+    expect(orgService.getGymPayments).toHaveBeenCalledTimes(1);
+    // Straight back: not read again.
+    act(() => {
+      window.dispatchEvent(new Event('focus'));
+    });
+    await act(async () => undefined);
+    expect(orgService.getGymPayments).toHaveBeenCalledTimes(1);
+    // Back 31 s later, after the owner connected Square on another computer.
+    orgService.getGymPayments.mockResolvedValue(squareAnswer({ state: 'connected' }));
+    const now = Date.now();
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(now + 31_000);
+    try {
+      act(() => {
+        window.dispatchEvent(new Event('focus'));
+      });
+      await waitFor(() => expect(setupBeside()).toBeNull());
+      expect(orgService.getGymPayments).toHaveBeenCalledTimes(2);
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
+  it('a trainer has no Payments overview line, and nothing is asked', async () => {
+    attentionService.get.mockResolvedValue(NONE);
+    await open(`${BASE}/members`, ROLE_PRIVILEGES.trainer, 'trainer');
+    await screen.findByTestId('console-rail');
+    expect(rail().queryByRole('link', { name: /^Payments overview/ })).toBeNull();
+    expect(orgService.getGymPayments).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['connected', squareAnswer({ state: 'connected' })],
+    ['India', squareAnswer(null, { availability: 'india_soon', country: 'IN' })],
+    ['a server with no Square', squareAnswer(null, { squareReady: false })],
+  ])('%s: no tag', async (_, answer) => {
+    attentionService.get.mockResolvedValue(NONE);
+    orgService.getGymPayments.mockResolvedValue(answer);
+    await open(`${BASE}/members`);
+    await waitFor(() => expect(orgService.getGymPayments).toHaveBeenCalled());
+    await act(async () => undefined);
+    expect(setupBeside()).toBeNull();
+  });
+
+  it('read again after a write to Square here, and not after any other change', async () => {
+    attentionService.get.mockResolvedValue(NONE);
+    await open(`${BASE}/members`);
+    await waitFor(() => expect(orgService.getGymPayments).toHaveBeenCalledTimes(1));
+    orgService.getGymPayments.mockResolvedValue(squareAnswer({ state: 'removed' }));
+    act(() => {
+      for (const listener of changes) listener('change', '/v1/orgs/g1/register/sales');
+    });
+    await act(async () => undefined);
+    expect(orgService.getGymPayments).toHaveBeenCalledTimes(1);
+    act(() => {
+      for (const listener of changes) listener('change', '/v1/orgs/g1/payments/square');
+    });
+    await waitFor(() => expect(setupBeside()).not.toBeNull());
+    expect(orgService.getGymPayments).toHaveBeenCalledTimes(2);
   });
 });

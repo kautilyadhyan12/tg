@@ -9,15 +9,16 @@ import { roleLabel, viewerPrivileges } from './consoleView';
 import { initialsOf } from './memberListPeople';
 import { useAttention } from './useAttention';
 import MenuCount from '../../components/console/MenuCount';
+import SetupTag from '../../components/console/SetupTag';
 
-function Row({ to, icon: Icon, label, count }) {
+function Row({ to, icon: Icon, label, count, setup = false }) {
   return (
     <Link to={to} className="c-more-row">
       <Icon size={20} className="c-t2" />
       <span className="c-s15 c-w5" style={{ flexGrow: 1, minWidth: 0 }}>
         {label}
       </span>
-      {count !== undefined ? <MenuCount count={count} /> : null}
+      {count !== undefined ? <MenuCount count={count} /> : setup ? <SetupTag /> : null}
       <ChevronRight size={18} className="c-t3" />
     </Link>
   );
@@ -51,7 +52,7 @@ export default function More() {
 
   const menu = consoleMenu(orgSlug, viewerPrivileges(org), org?.orgType);
   // What waits on each page (V1-d), read once by the console's shell.
-  const { counts } = useAttention();
+  const { counts, paymentSetup } = useAttention();
   const name = user?.displayName || user?.email || '';
   const about = org ? [roleLabel(org.staffRole, org.orgType, org.coOwner), org.name].filter(Boolean).join(' · ') : '';
 
@@ -66,7 +67,7 @@ export default function More() {
           </span>
           <span style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
             <span className="c-s15 c-w6 c-ell">{name}</span>
-            {about ? <span className="c-s13 c-t2">{about}</span> : null}
+            {about ? <span className="c-s14 c-t2">{about}</span> : null}
           </span>
         </div>
       ) : null}
@@ -79,7 +80,7 @@ export default function More() {
             </h2>
             <div className="c-card c-more-list">
               {group.rows.map((row) => (
-                <Row key={row.key} to={row.to} icon={row.icon} label={row.label} count={counts[row.key]} />
+                <Row key={row.key} to={row.to} icon={row.icon} label={row.label} count={counts[row.key]} setup={row.key === 'payments' && paymentSetup} />
               ))}
             </div>
           </section>

@@ -65,6 +65,7 @@ import ConsoleMealPlans from './pages/console/MealPlans';
 import ConsoleReports  from './pages/console/Reports';
 import ConsoleAtRisk   from './pages/console/AtRisk';
 import ConsoleFailedPayments from './pages/console/FailedPayments';
+import ConsolePaymentsOverview from './pages/console/PaymentsOverview';
 import ConsoleSell     from './pages/console/Sell';
 import ConsoleSettings from './pages/console/Settings';
 import SquareReturn from './pages/console/SquareReturn';
@@ -387,6 +388,13 @@ export default function App() {
             <Route path="/console/:orgSlug/at-risk" element={
               <ProtectedRoute requireOnboarding={false} requireSignUpNote={false} requireInvitations={false}>
                 <ConsoleLayout><ConsoleAtRisk /></ConsoleLayout>
+              </ProtectedRoute>
+            } />
+            {/* PAYMENTS OVERVIEW (V1-f): a line to every payment page and setting. The nav draws it for
+                whoever may open one of them; each route it reads is the enforcement. */}
+            <Route path="/console/:orgSlug/payments" element={
+              <ProtectedRoute requireOnboarding={false} requireSignUpNote={false} requireInvitations={false}>
+                <ConsoleLayout><ConsolePaymentsOverview /></ConsoleLayout>
               </ProtectedRoute>
             } />
             {/* FAILED PAYMENTS (18d-iii-ii-b): card payments declined and still owed. The nav draws
