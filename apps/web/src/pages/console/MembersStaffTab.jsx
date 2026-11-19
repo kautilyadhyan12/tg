@@ -120,7 +120,7 @@ function InvitedList({ invites, gym, orgType, viewerIsOwner, busyId, readOnly, n
 
 // `inviting`: whether the Invite staff form is open. The Members page keeps it, because
 // an address can ask for the form (Overview's Start here list); `onInviting` sets it.
-export default function MembersStaffTab({ gymId, gym = null, orgType, words, readOnly = false, inviting = false, onInviting = () => undefined, onChanged, onSeeActivity = null, onOpenActivity = null, handingOver = false }) {
+export default function MembersStaffTab({ gymId, gym = null, orgType, words, readOnly = false, inviting = false, onInviting = () => undefined, onChanged, onSeeActivity = null, onOpenActivity = null, handingOver = false, startOpen = null, onStartOpenTaken = () => undefined }) {
   // `paidPlan`: the gym's plan stops a hand-over for now, `paidPlanNote` says why (4b-ii);
   // `planStops`: a Paddle plan that stops renewing on a hand-over, and until when (4b-iii-a).
   const [staff, setStaff] = useState({ loading: true, error: null, list: [], paidPlan: false, paidPlanNote: null, planStops: null, squareConnected: false });
@@ -130,6 +130,17 @@ export default function MembersStaffTab({ gymId, gym = null, orgType, words, rea
   // The gym's own roles (RULINGS 2026-10-01), offered beside Manager and Trainer.
   const [roles, setRoles] = useState([]);
   const [openId, setOpenId] = useState(null);
+  // A staff member picked in search (`?staff=` on Members): their panel opens, once.
+  const [startSeen, setStartSeen] = useState(null);
+  if (startOpen !== null && startOpen !== startSeen) {
+    setStartSeen(startOpen);
+    setOpenId(startOpen);
+  }
+  useEffect(() => {
+    if (startOpen === null) return;
+    onInviting(false);
+    onStartOpenTaken();
+  }, [startOpen, onStartOpenTaken, onInviting]);
   const [busyId, setBusyId] = useState(null);
   // What the last change did; what Send again or Cancel did to one invitation (`id`), said
   // in its own row; and a refusal inside whichever panel is open, with where (`at`).

@@ -17,7 +17,8 @@ import { attentionLines, bellLabel, countText, menuCounts, moreCount, seesAnyPar
 import { AttentionContext, useAttentionRead } from '../../pages/console/useAttention';
 import MenuCount from './MenuCount';
 import SearchField from './ConsoleSearch';
-import { opensSearch, searchCatalogue, searchKeysLabel, searchPlaceholder } from '../../pages/console/searchPlaces';
+import { opensSearch, searchCatalogue, searchKeysLabel } from '../../pages/console/searchPlaces';
+import { searchFindsPeople, searchPlaceholder } from '../../pages/console/searchPeople';
 import { initialsOf } from '../../pages/console/memberListPeople';
 import { orgTypeLabel, roleLabel, viewerPrivileges } from '../../pages/console/consoleView';
 import './console.css';
@@ -347,7 +348,9 @@ export default function ConsoleLayout({ children }) {
     setSearchVisit(visit);
     setPhoneSearch(false);
   }
-  const placeholder = searchPlaceholder(org?.orgType);
+  const findsPeople = searchFindsPeople(viewerPrivileges(org));
+  const placeholder = searchPlaceholder(org?.orgType, findsPeople);
+  const people = findsPeople && org?.id ? { gymId: org.id, orgType: org.orgType, timezone: org.timezone ?? null, privileges: viewerPrivileges(org), membersName: menu?.pages.find((p) => p.key === 'members')?.label ?? orgWords(org.orgType).peopleCap } : null;
 
   // The groups this person folded on this device, kept as they left them. The page they are on
   // is never folded away: arriving on it shows its group open for this visit only, and the
@@ -433,7 +436,7 @@ export default function ConsoleLayout({ children }) {
                under More; without one (your organisations, create) Sign out is here. ── */}
         <header className="c-topbar" data-testid="console-topbar">
           {menu && phoneSearch ? (
-            <SearchField key={`phone:${visit}`} phone orgSlug={orgSlug} catalogue={catalogue} placeholder={placeholder} onLeave={() => setPhoneSearch(false)} />
+            <SearchField key={`phone:${visit}`} phone orgSlug={orgSlug} people={people} catalogue={catalogue} placeholder={placeholder} onLeave={() => setPhoneSearch(false)} />
           ) : menu ? (
             <>
               <GymSwitcher org={org} fallback={consoleName} compact />
@@ -479,7 +482,7 @@ export default function ConsoleLayout({ children }) {
             something, and the bell. */}
         {menu ? (
           <div className="c-pagebar" data-testid="console-bar">
-            <SearchField key={`bar:${visit}`} inputRef={barInput} orgSlug={orgSlug} catalogue={catalogue} placeholder={placeholder} keys={searchKeysLabel(typeof navigator === 'undefined' ? '' : navigator.platform)} />
+            <SearchField key={`bar:${visit}`} inputRef={barInput} orgSlug={orgSlug} people={people} catalogue={catalogue} placeholder={placeholder} keys={searchKeysLabel(typeof navigator === 'undefined' ? '' : navigator.platform)} />
             {showNew ? <NewButton offer={offer} /> : null}
             {showBell ? <BellButton lines={lines} onOpen={reloadAttention} /> : null}
           </div>
