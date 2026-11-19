@@ -399,7 +399,7 @@ describe('people (V1-e-ii)', () => {
     expect(lineTitles()).toContain('Tax');
   });
 
-  it('over the hour's searches, it says so in plain words (round one, L2)', async () => {
+  it("over the hour's searches, it says so in plain words (round one, L2)", async () => {
     orgService.searchPeople.mockRejectedValue({ response: { status: 429, data: { error: 'rate_limited', message: 'Too many attempts. Please try again later.' } } });
     await open();
     startSearch();
