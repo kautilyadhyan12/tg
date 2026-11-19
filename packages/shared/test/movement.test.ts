@@ -111,6 +111,9 @@ describe("a body-points file's header", () => {
     }
     expect(bodyPointsHeaderSchema.safeParse({ ...header, model: { ...header.model, file: "C:/models/heavy" } }).success).toBe(false);
     expect(bodyPointsHeaderSchema.safeParse({ ...header, video: "squat.mp4" }).success).toBe(false);
+    expect(bodyPointsHeaderSchema.safeParse({ ...header, source: "phone", madeWith: { tool: "keep-phone-points", version: 1 } }).success).toBe(true);
+    expect(bodyPointsHeaderSchema.safeParse({ ...header, source: "phone" }).success).toBe(false);
+    expect(bodyPointsHeaderSchema.safeParse({ ...header, madeWith: { tool: "keep-phone-points", version: 1 } }).success).toBe(false);
     expect(bodyPointsHeaderSchema.safeParse({ ...header, model: { ...header.model, people: MAX_PEOPLE + 1 } }).success).toBe(false);
   });
 });

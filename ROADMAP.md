@@ -818,7 +818,9 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
 52. **The movement engine** (§12; it replaces "the engine's missing parts").
     - 52a. **The movement matcher and the proof table** (§12.3, §12.5; split 2026-11-19 in three, `handoff/2026-11-19-52a-i.md` keeps its line as first written).
         - 52a-i. [x] **The squat counted from its whole movement** — merged 2026-11-19 (PR #592).
-        - 52a-ii. [ ] **Each video replayed the ways the world changes it** (nearer, farther, tilted, fewer frames a second, shaky points, a passer-by, a phone lower or higher redrawn from the 3D points, each reading leaned and shaken by the largest gap on a chip the app allows, 51b), and 51c's leg swap hidden behind a jump.
+        - 52a-ii. **Each video replayed the ways the world changes it** (split 2026-11-19 in two, `handoff/2026-11-19-52a-ii-a.md` keeps its line as first written):
+            - 52a-ii-a. [x] **Nearer, farther, tilted, fewer and uneven pictures, shaky points, the phone's own chip gap, a passer-by** — merged 2026-11-19 (PR #595).
+            - 52a-ii-b. [ ] **A phone lower or higher, redrawn from the 3D points** (drawn back from the phone's own place the big joints land 2 to 4 cm off in the middle, 5 to 11 cm in 95 of 100): Kd's squat videos filmed by a phone on the floor.
         - 52a-iii. [ ] **The phone's own runs judged by the laptop's count, reasons and lines** (51a's videos through the phone), never by its numbers.
     - 52b. [ ] **The form judge, the reason for a rep not counted, and the summary** (§12.1, §2.4). It sets the squat's depth from its form standard (Kd's research file) and closes 52a-i's open case: a kettlebell push press's dip counts as a squat (first test: it counts 0).
     - 52c. [ ] **The other kinds of counting**: one side at a time, holds, fast rhythm, timed only, jumps, floor work.
@@ -839,7 +841,10 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
     - 61b. [x] **History and records for each exercise** — merged 2026-11-18 (PR #586).
     - 61c. [x] **Saved workouts** — merged 2026-11-19 (PR #591).
 62. [ ] **The clip line** (after 60): the generated clip made small, its still picture, and where clips are kept (Stage 4 item 4). Checking a clip against its exercise's rules waits for exercise folder 1's 52a and 52b.
-63. [ ] **The Exercise Library on the phone** (§13.6; after 60): the list kept on the phone, search, filters by muscle, equipment, level and how it is counted, and an exercise's page.
+63. **The Exercise Library on the phone** (§13.6; after 60). Split 2026-11-19 by its terminal, after Kd's drawings, in three.
+    - 63a. [x] **The Library and an exercise's page** — merged 2026-11-19 (PR #596).
+    - 63b. [ ] **Find exercises** (after 63a): the body you tap, equipment, level, how it is counted and kind, each with its count.
+    - 63c. [ ] **Your records and Add to workout on the page** (after 63a): records, calories a minute for the person's weight, Add to workout with My Workout's count, Goals' exercise picker on this list.
 64. **Build a workout, do it, and after it** (Stage 1's 6c; §13.6, §11.8's steps).
     - 64a. [ ] **By hand and by timer** (after 61 and 63): sets, reps or time, weight, rest; one screen for the workout, kept on the phone at every step; the summary set by set; history. The heart rate from the monitor connected in 37f-i, shown during it and kept with it (Kd, 2026-11-12).
     - 64b. [ ] **With the camera** (after 64a and item 53's screen): Camera or Count myself, picked every time.

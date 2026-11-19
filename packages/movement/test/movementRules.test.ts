@@ -85,10 +85,12 @@ function run(change?: Change, fast = false) {
       }),
     );
     const points: (SteadyPoint | null)[] = Array.from({ length: 33 }, (_, i) => {
-      if (!FEET.includes(i)) return { x: 0.5, y: 0.5, world: [0, 0, 0] };
+      if (!FEET.includes(i)) return { x: 0.5, y: 0.5, world: [0, 0, 0], raw: { x: 0.5, y: 0.5 } };
       const side = i === KP.left_heel || i === KP.left_foot_index ? 0.05 : -0.05;
       const toe = i === KP.left_foot_index || i === KP.right_foot_index ? 0.03 : 0;
-      return { x: (0.5 + side + toe + b.feetX) / ASPECT, y: 0.9 + b.feetY, world: [0, 0, 0] };
+      const x = (0.5 + side + toe + b.feetX) / ASPECT;
+      const y = 0.9 + b.feetY;
+      return { x, y, world: [0, 0, 0], raw: { x, y } };
     });
     const body: SteadyBody = { t, aspect: ASPECT, down: [0, 1, 0], size: SIZE, points, refused: points.map(() => null) };
     const measured: MeasuredBody = { t, leg: 0.9, trunk: 0.5, readings };

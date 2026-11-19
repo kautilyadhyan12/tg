@@ -103,6 +103,10 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm lint
       - run: pnpm test
+      # After every package's tests, never beside them: each file holds every kept video and its runs (up to 2.7 GB),
+      # and beside the other packages it starved the machine and their timed tests (52a-ii-a's merge, 2026-11-19).
+      - name: the movement proof (Part 2 §12.5)
+        run: pnpm --filter @app/movement test:proof
       - name: golden traces (Part 2 §7.6)
         run: pnpm --filter @app/engine test:traces
       - name: definition linter (Part 2 §9.2)

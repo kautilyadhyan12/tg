@@ -17,6 +17,7 @@ import { ProgressPage } from "./progress/ProgressPage";
 import { AchievementsPage } from "./achievements/AchievementsPage";
 import { ThisCopy } from "./ThisCopy";
 import { Soon } from "./Soon";
+import { LibraryPart } from "./library/LibraryPart";
 
 // Each tab's page as the look draws it (docs/design/phone/pages). Its own picture runs edge to
 // edge from the top and into the page, never a box of its own, with the page's first words over it.
@@ -40,8 +41,8 @@ export function openRunning(): void {
 }
 
 /** Exercises, My Workout and Running across the picture's top, as drawn (docs/design/phone/pages/Workout):
- *  it opens on Exercises, where the Dashboard's Browse Exercises points. Running is 37a's; the other two come
- *  with exercise folder 2's jobs. */
+ *  it opens on Exercises (the Exercise Library, 63a), where the Dashboard's Browse Exercises points. Running is
+ *  37a's; My Workout comes with exercise folder 2's job 64a. */
 export function WorkoutScreen() {
   const { state } = useSession();
   const units = (state.kind === "in" ? accountUnits(state.user.units) : null) ?? "metric";
@@ -62,10 +63,12 @@ export function WorkoutScreen() {
   // The three lie just under the picture, never over it (Kd, 37a's click-through: over it they cut it).
   return part === "running" ? (
     <RunningTab units={units} parts={parts} />
+  ) : part === "exercises" ? (
+    <LibraryPart parts={parts} />
   ) : (
     <Page top={<PictureTop picture="exhero" tall={0.62} eyebrow="Exercise Library" title="Exercises" />}>
       {parts}
-      <Soon icon="dumbbell" title={part === "mine" ? "My Workout" : "Your workouts"} />
+      <Soon icon="dumbbell" title="My Workout" />
     </Page>
   );
 }

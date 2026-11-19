@@ -4,7 +4,7 @@
 // exercise's row and, only when the content changed, one new numbered copy of the whole list for each
 // of live and beta. A copy is never changed.
 import type { TransactionSql } from "postgres";
-import { checkLibrary, faultLine, libraryEntrySchema, type LibraryEntry, type LibraryFault, type LibraryInput, type LibraryList } from "@app/shared";
+import { checkLibrary, faultLine, libraryEntrySchema, storedLibraryEntrySchema, type LibraryFault, type LibraryInput, type PublishedList, type StoredLibraryEntry } from "@app/shared";
 import { canonicalJson, sha256 } from "./canonical.js";
 import { planPublish, rowsWithoutFile } from "./plan.js";
 import * as repo from "./repo.js";
@@ -32,7 +32,7 @@ export interface PublishOutcome {
 const CHANNELS: readonly repo.Channel[] = ["live", "beta"];
 
 /** The text of a copy, the fingerprint's text and the download's. */
-export function copyText(list: LibraryList): string {
+export function copyText(list: PublishedList): string {
   return canonicalJson(list);
 }
 
@@ -46,16 +46,19 @@ export async function publishLibrary(tx: TransactionSql, input: LibraryInput): P
   const plan = planPublish({ files: checked.exercises, compendium: checked.compendium, rows, named });
 
   // Every entry is checked before anything is written, the hidden ones' stored entries included: a
-  // stored entry that no longer reads as an entry refuses the publish instead of reaching a phone.
-  const entries = new Map<string, LibraryEntry>();
+  // stored entry that no longer reads as an entry refuses the publish instead of reaching a phone. A file's
+  // entry is checked with today's word lists; a stored entry (its file gone) with the words it was written
+  // under, since a list may have changed since (63a, round one).
+  const fromFiles = new Set(checked.exercises.map((e) => e.id));
+  const entries = new Map<string, StoredLibraryEntry>();
   const faults: LibraryFault[] = [];
   for (const { id, entry } of plan.list) {
-    const parsed = libraryEntrySchema.safeParse(entry);
+    const parsed = fromFiles.has(id) ? libraryEntrySchema.safeParse(entry) : storedLibraryEntrySchema.safeParse(entry);
     if (parsed.success) entries.set(id, parsed.data);
     else faults.push({ file: `library_exercises (${id})`, at: "", problem: `its stored entry no longer reads as an exercise: ${parsed.error.issues.map((i) => i.path.join(".") || i.message).join(", ")}` });
   }
   if (faults.length > 0) throw new LibraryRefused(faults);
-  const entryOf = (slug: string): LibraryEntry => {
+  const entryOf = (slug: string): StoredLibraryEntry => {
     const e = entries.get(slug);
     if (e === undefined) throw new Error(`publish: ${slug} is written but not in the list`);
     return e;
@@ -75,7 +78,7 @@ export async function publishLibrary(tx: TransactionSql, input: LibraryInput): P
   );
   await repo.markRemoved(tx, plan.markRemoved);
 
-  const list: LibraryList = { exercises: plan.list.map((l) => entryOf(l.id)), camera: [] };
+  const list: PublishedList = { exercises: plan.list.map((l) => entryOf(l.id)), camera: [] };
   const body = copyText(list);
   const fingerprint = sha256(body);
   const copies: PublishOutcome["copies"] = [];
@@ -84,7 +87,7 @@ export async function publishLibrary(tx: TransactionSql, input: LibraryInput): P
     if (newest?.sha256 !== fingerprint) copies.push({ channel, version: await repo.addCopy(tx, channel, fingerprint, body) });
   }
 
-  const count = (s: LibraryEntry["status"]) => list.exercises.filter((e) => e.status === s).length;
+  const count = (s: StoredLibraryEntry["status"]) => list.exercises.filter((e) => e.status === s).length;
   return {
     live: count("live"),
     retired: count("retired"),

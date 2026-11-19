@@ -284,6 +284,7 @@ export function privacyPolicy(facts: LegalFacts = LEGAL_FACTS): LegalDocument {
             "Preferred number of meals per day.",
             "Training pace, daily activity level, session length, preferred workout time, and push-up and plank results.",
           ),
+          p("Your answer about your sex also chooses whether the Exercise Library shows a male or a female body figure. The figure it chose is kept on your device, so that it shows without an internet connection, and it is removed from your device when you delete your account."),
           h3("3.4. Health-Related Screening Information"),
           p("KWAZO collects a limited health-related screening response through a yes-or-no question concerning whether you have a medical condition, physical injury, or pregnancy requiring special care, and whether a qualified professional has provided clearance."),
           p("KWAZO does not request or collect the name or details of any particular medical condition through this screening question."),

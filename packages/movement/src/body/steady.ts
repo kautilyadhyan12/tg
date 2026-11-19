@@ -43,6 +43,9 @@ export interface SteadyPoint {
   readonly y: number;
   /** Metres, centred between the hips. */
   readonly world: WorldPoint;
+  /** The point on the picture as the model gave it, unsteadied, shares of its width and height: steadying trails a fast
+   *  part (a hand at 1 m/s by up to 2.3 cm), and a hop's feet are in the air for 0.2 s (52a-ii-a). */
+  readonly raw: { readonly x: number; readonly y: number };
 }
 
 export interface SteadyBody {
@@ -129,7 +132,7 @@ export class SteadyPoints {
       }
       const [x = 0, y = 0] = flat.next(t, [seen[0] * aspect, seen[1]], size);
       const [wx = 0, wy = 0, wz = 0] = world.next(t, seen3d, 1);
-      points.push({ x: x / aspect, y, world: [wx, wy, wz] });
+      points.push({ x: x / aspect, y, world: [wx, wy, wz], raw: { x: seen[0], y: seen[1] } });
     }
     return { t, aspect, down, size, points, refused };
   }
