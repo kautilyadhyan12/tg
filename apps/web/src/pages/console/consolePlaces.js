@@ -5,8 +5,11 @@ import { canManageSchedule } from './classesView';
 import { canManageMemberships } from './membershipTypesView';
 import { canManageBilling } from './billingView';
 import { canReadAttendance } from './attendanceView';
-import { canOpenSell } from './sellView';
+import { canOpenSell, canSell } from './sellView';
 import { canSeeFailedPayments } from './failedPaymentsAccess';
+import { canCheckPeopleIn } from './checkinLogView';
+import { canManagePosts } from '../../components/gym/postsView';
+import { canReadReports } from './reportsView';
 
 // WHERE EACH PLACE IN THE CONSOLE IS, AND WHO MAY OPEN IT (ROADMAP 23d). A sentence that
 // sends somebody to another page carries a button that opens that exact place, with its
@@ -68,6 +71,14 @@ const PLACES = {
   membershipDiscounts: { path: '/memberships#discounts', may: canManageMemberships },
   // The Bills box on Memberships, where the grace period before a bill reads Overdue is set.
   membershipBills: { path: '/memberships#bills', may: canManageMemberships },
+  // The Tax box on Memberships (18b-v), and Settings' signed forms of deleted members (18u-iii).
+  membershipTax: { path: '/memberships#tax', may: canManageMemberships },
+  deletedForms: { path: `/settings#${SETTINGS_SECTION.deletedForms}`, may: canManageOrg },
+  // Search's money lines (V1-e-i): Sell's Products box, and Members showing who has a payment
+  // due or no card on file (the list's own filters, for staff who keep its bills).
+  products: { path: '/sell#products', may: canOpenSell },
+  paymentDue: { path: '/members?show=payment-due', may: (privileges) => has(privileges, 'billing.members') },
+  noCardOnFile: { path: '/members?show=no-card', may: (privileges) => has(privileges, 'billing.members') },
   sell: { path: '/sell', may: canOpenSell },
   failedPayments: { path: '/failed-payments', may: canSeeFailedPayments },
   members: { path: '/members', may: onStaff },
@@ -84,7 +95,50 @@ const PLACES = {
   leads: { path: '/leads', may: (privileges) => has(privileges, 'members.confirm') },
   addLead: { path: '/leads?open=add', may: (privileges) => has(privileges, 'members.confirm') },
   plan: { path: `#${PLAN_SECTION}`, may: canManageBilling },
+  // What New, in the bar across the top, opens (spec Part 3 §17.11). Each is the page's own
+  // box, for whoever the page shows it to.
+  newSale: { path: '/sell', may: canSell },
+  addClass: { path: '/classes?open=add', may: canManageSchedule },
+  checkIn: { path: '/attendance#check-in', may: canCheckPeopleIn },
+  newPost: { path: '/updates#write', may: canManagePosts },
+  // Payments overview (V1-f; spec Part 3 §17.11): Money's first page, and each place it has a
+  // line to that no line above holds. Overview's boxes are found by their ids (`OVERVIEW_BOX`).
+  paymentsOverview: { path: '/payments', may: canOpenPaymentsOverview },
+  refundsToReview: { path: '#refunds-to-review', may: (privileges) => has(privileges, 'billing.members') },
+  chargebacks: { path: '#chargebacks', may: (privileges) => has(privileges, 'billing.members') },
+  appPaymentChecks: { path: '#app-payment-checks', may: (privileges) => has(privileges, 'billing.members') && has(privileges, 'members.confirm') },
+  // Request cards on file (18d-vii): Members showing who has no card, as its own button opens it.
+  askCards: { path: '/members?show=no-card', may: (privileges) => has(privileges, 'billing.members') && has(privileges, 'members.confirm') },
+  takings: { path: '/sell#takings', may: canSell },
+  // Reports' money figures, for whoever Reports shows them to (`canReadMoney`).
+  revenueReport: { path: '/reports#money', may: (privileges) => canReadReports(privileges) && has(privileges, 'billing.members') },
+  exportPayments: { path: '/reports#export-payments', may: (privileges) => canReadReports(privileges) && has(privileges, 'billing.members') },
 };
+
+/** The places Payments overview has a line to (V1-f). Its page, and its line in the menu, are
+ *  for whoever may open at least one of them. */
+export const PAYMENTS_OVERVIEW_PLACES = [
+  'sell',
+  'failedPayments',
+  'paymentDue',
+  'refundsToReview',
+  'chargebacks',
+  'appPaymentChecks',
+  'memberships',
+  'products',
+  'membershipDiscounts',
+  'membershipTax',
+  'membershipBills',
+  'payments',
+  'askCards',
+  'revenueReport',
+  'exportPayments',
+  'plan',
+];
+
+export function canOpenPaymentsOverview(privileges) {
+  return PAYMENTS_OVERVIEW_PLACES.some((place) => canOpenPlace(privileges, place));
+}
 
 /** Whether somebody holding these permissions can open the place. An unknown place, or
  *  no permissions at all, is a no. */

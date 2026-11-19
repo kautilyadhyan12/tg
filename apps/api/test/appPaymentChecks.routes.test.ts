@@ -32,6 +32,7 @@ import { processSquareWork } from "../src/modules/orgs/payments/work.js";
 import { account, fakeSquare, type Account } from "./fakeSquareTerminal.js";
 import { recordingHub } from "./liveNewsRecorder.js";
 import { proveAddress } from "./proveAddress.js";
+import { expectAttentionMatchesPages } from "./attentionMatches.js";
 
 const url = process.env["DATABASE_URL"];
 const d = describe.skipIf(url === undefined || url === "");
@@ -528,6 +529,12 @@ d("App payments to review on Overview: every one the person's page says, and onl
 
     expect((await checks(gym)).rows.map((r) => r.name)).toEqual(["Kim Vale"]);
     expect((await checks(gym, manager)).rows.map((r) => r.name)).toEqual(["Kim Vale"]);
+    // The bell (V1-d): one app payment to review for the owner and the manager, as the list says; none
+    // for the desk or the trainer, whom the list refuses; and next door's bell has none of it.
+    const asks = (who: { cookies: Cookies }) => (path: string) => send("GET", path, who.cookies);
+    for (const who of [gym.owner, manager]) expect((await expectAttentionMatchesPages(asks(who), gym.id, ["appPayments", "refunds"])).appPayments).toEqual({ count: 1, more: false });
+    for (const who of [desk, trainer]) expect((await expectAttentionMatchesPages(asks(who), gym.id, ["appPayments"])).appPayments).toBeNull();
+    expect((await expectAttentionMatchesPages(asks(other.owner), other.id, ["appPayments"])).appPayments).toEqual({ count: 0, more: false });
     for (const [who, status] of [
       [trainer, 403],
       [desk, 403],

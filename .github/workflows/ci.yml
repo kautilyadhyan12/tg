@@ -118,9 +118,9 @@ jobs:
         with:
           fetch-depth: 1
       # Must print nothing (CLAUDE.md Appendix). grep exits 1 on no match = pass.
-      - name: grep packages/engine/src for banned tokens
+      - name: grep packages/engine/src and packages/movement/src for banned tokens
         run: |
-          if grep -rnE 'Date\.now|new Date\(|Math\.random|performance\.now|setTimeout|setInterval|process\.env|window\.|document\.|navigator\.|localStorage|fetch\(|console\.|toLocale|Intl\.' packages/engine/src; then
+          if grep -rnE 'Date\.now|new Date\(|Math\.random|performance\.now|setTimeout|setInterval|process\.env|window\.|document\.|navigator\.|localStorage|fetch\(|console\.|toLocale|Intl\.' packages/engine/src packages/movement/src; then
             echo '::error::Engine purity violation (R5.1/I1): banned token(s) found above.'
             exit 1
           fi

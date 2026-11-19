@@ -5,6 +5,7 @@ import {
   ADMIN_DAY_PEOPLE_PAGE,
   ADMIN_DAYS_PAGE,
   type AdminDayResponse,
+  type AdminDayUsed,
   type AdminPeopleQuery,
   type AdminPeopleResponse,
   type AdminPerson,
@@ -75,6 +76,18 @@ function micro(text: string): number {
   return n;
 }
 
+/** What a row says was saved, in the page's words (14a-iii). */
+function usedOf(row: repo.SavedCounts): AdminDayUsed {
+  return {
+    mealPhotosSaved: row.photo,
+    packLabelsSaved: row.label,
+    mealsByHand: row.hand,
+    runsSaved: row.run,
+    workoutsSaved: row.workout,
+    bodyMeasurements: row.body,
+  };
+}
+
 /** One person's days, ADMIN_DAYS_PAGE at a time (ROADMAP Stage 2 item 14a-ii); null when they are
  *  not a person using the app. */
 export async function personDays(
@@ -85,7 +98,7 @@ export async function personDays(
   const first = rows[0];
   if (first === undefined) return null;
   const days = rows.flatMap((r) =>
-    r.day === null ? [] : [{ day: r.day, minutes: r.minutes, mealScans: r.meal, routePlans: r.route, costMicro: micro(r.cost) }],
+    r.day === null ? [] : [{ day: r.day, minutes: r.minutes, mealScans: r.meal, routePlans: r.route, costMicro: micro(r.cost), used: usedOf(r) }],
   );
   const earliest = days[days.length - 1];
   return {
@@ -109,6 +122,7 @@ export async function dayPeople(deps: AdminDeps, input: { day: string; zone: str
     mealScans: r.meal,
     routePlans: r.route,
     costMicro: micro(r.cost),
+    used: usedOf(r),
   }));
   const shown = input.from + people.length;
   return {

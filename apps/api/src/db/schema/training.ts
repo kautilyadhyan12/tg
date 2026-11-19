@@ -7,6 +7,7 @@ import {
   integer,
   jsonb,
   pgTable,
+  primaryKey,
   smallint,
   text,
   timestamp,
@@ -36,11 +37,28 @@ export const workouts = pgTable(
     kcalPoint: integer("kcal_point"),
     kcalCalcVersion: smallint("kcal_calc_version"), // computed server-side at sync (2B §2.2)
     qualityFlags: text("quality_flags").array().notNull().default(sql`'{}'`),
+    // 0244 (job 61a, spec Part 2 §13.5): what a workout saved from the phone keeps. Empty on every
+    // workout the old save route wrote.
+    name: text("name"),
+    timeZone: text("time_zone"),
+    startedFrom: text("started_from"),
+    effort: smallint("effort"),
+    heartAvg: smallint("heart_avg"),
+    heartMax: smallint("heart_max"),
     createdAt: createdAt(),
   },
   (t) => [
     check("workouts_platform_check", sql`${t.platform} IN ('web','android','ios')`),
+    check("workouts_name_check", sql`${t.name} IS NULL OR char_length(${t.name}) BETWEEN 1 AND 60`),
+    check("workouts_started_from_check", sql`${t.startedFrom} IN ('saved','app_plan','gym_plan','none')`),
+    check("workouts_effort_check", sql`${t.effort} BETWEEN 1 AND 5`),
+    check(
+      "workouts_heart_check",
+      sql`(${t.heartAvg} IS NULL AND ${t.heartMax} IS NULL) OR (${t.heartAvg} BETWEEN 30 AND 240 AND ${t.heartMax} BETWEEN 30 AND 240 AND ${t.heartAvg} <= ${t.heartMax})`,
+    ),
     index("workouts_user_started_idx").on(t.userId, t.startedAt.desc()), // history screens, member drawer
+    index("workouts_created_idx").on(t.createdAt), // 0242: By day (14a-iii)
+    index("workouts_user_created_idx").on(t.userId, t.createdAt), // 0242: a person's days
   ],
 );
 
@@ -90,9 +108,21 @@ export const workoutSets = pgTable(
     // CHECK below is what keeps them mandatory for engine sets.
     engineVersion: text("engine_version"),
     definitionVersion: integer("definition_version"),
+    // 0244 (job 61a): how the set was counted, its unit and target, the weight and the rest after it.
+    // Done reps stay in `reps` and time done in `hold_ms`, so the old readers read a new set unchanged.
+    counted: text("counted"),
+    measuredIn: text("measured_in"),
+    target: integer("target"),
+    weightGrams: integer("weight_grams"),
+    restSeconds: integer("rest_seconds"),
     createdAt: createdAt(),
   },
   (t) => [
+    check("workout_sets_counted_check", sql`${t.counted} IN ('camera','hand','timer')`),
+    check("workout_sets_measured_in_check", sql`${t.measuredIn} IN ('reps','time')`),
+    check("workout_sets_target_check", sql`${t.target} > 0`),
+    check("workout_sets_weight_grams_check", sql`${t.weightGrams} BETWEEN 1 AND 1000000`),
+    check("workout_sets_rest_seconds_check", sql`${t.restSeconds} BETWEEN 0 AND 3600`),
     // Part 4 §3.5 sync contract: sets are "keyed (workout_id, set_index)" and
     // upserted — ON CONFLICT requires this uniqueness (migration 0002).
     uniqueIndex("workout_sets_workout_set_uq").on(t.workoutId, t.setIndex),
@@ -159,4 +189,67 @@ export const workoutTemplates = pgTable(
     legacyMongoId: text("legacy_mongo_id").unique(),
     createdAt: createdAt(),
   },
+);
+
+// 0245 (job 61c, spec Part 2 §13.5): a person's saved workouts, in the one shape of a planned workout.
+// Made fresh: the old `workout_templates` above is left as it is (no route reads it).
+export const savedWorkouts = pgTable(
+  "saved_workouts",
+  {
+    id: uuid("id").primaryKey(), // the phone's own id: a save sent twice is one
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    // When the person last changed it on the phone: an older change keeps nothing.
+    editedAt: timestamp("edited_at", { withTimezone: true }).notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    check("saved_workouts_name_check", sql`char_length(${t.name}) BETWEEN 1 AND 60`),
+    index("saved_workouts_user_edited_idx").on(t.userId, t.editedAt.desc()),
+  ],
+);
+
+/** Its sets, exercise by exercise. No user_id of its own: owned through its saved workout, and collected
+ *  with it by the cascade (privacy/tables.ts, as workout_sets is). */
+export const savedWorkoutSets = pgTable(
+  "saved_workout_sets",
+  {
+    savedWorkoutId: uuid("saved_workout_id")
+      .notNull()
+      .references(() => savedWorkouts.id, { onDelete: "cascade" }),
+    exercisePlace: smallint("exercise_place").notNull(),
+    setPlace: smallint("set_place").notNull(),
+    exerciseId: uuid("exercise_id")
+      .notNull()
+      .references(() => exercises.id),
+    measuredIn: text("measured_in").notNull(),
+    target: integer("target").notNull(),
+    weightGrams: integer("weight_grams"),
+    restSeconds: integer("rest_seconds"),
+  },
+  (t) => [
+    primaryKey({ columns: [t.savedWorkoutId, t.exercisePlace, t.setPlace] }),
+    check("saved_workout_sets_places_check", sql`${t.exercisePlace} BETWEEN 0 AND 49 AND ${t.setPlace} BETWEEN 0 AND 199`),
+    check("saved_workout_sets_measured_in_check", sql`${t.measuredIn} IN ('reps','time')`),
+    check("saved_workout_sets_target_check", sql`${t.target} BETWEEN 1 AND 14400`),
+    check("saved_workout_sets_weight_grams_check", sql`${t.weightGrams} BETWEEN 1 AND 1000000`),
+    check("saved_workout_sets_rest_seconds_check", sql`${t.restSeconds} BETWEEN 0 AND 3600`),
+    index("saved_workout_sets_exercise_idx").on(t.exerciseId), // a publish asks whether a saved workout names an exercise
+  ],
+);
+
+/** A deleted saved workout's id, kept with its owner, as `meal_removed_ids` is: a late save of it keeps nothing. */
+export const savedWorkoutRemovedIds = pgTable(
+  "saved_workout_removed_ids",
+  {
+    id: uuid("id").primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    removedAt: timestamp("removed_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("saved_workout_removed_ids_user_idx").on(t.userId)],
 );

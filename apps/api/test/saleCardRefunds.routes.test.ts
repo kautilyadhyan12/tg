@@ -189,13 +189,14 @@ d("Refund to card at Sell (real Postgres)", { timeout: T }, () => {
     gyms.push(gym);
     return gym;
   };
-  const page = async (gym: Gym, by: Person = gym.owner): Promise<SellPageResponse> => {
-    const res = await send("GET", `/v1/orgs/${gym.id}/register`, by.cookies);
+  /** Sell's list, for the gym's today, or for `day` (YYYY-MM-DD at the gym). */
+  const page = async (gym: Gym, by: Person = gym.owner, day?: string): Promise<SellPageResponse> => {
+    const res = await send("GET", `/v1/orgs/${gym.id}/register${day === undefined ? "" : `?day=${day}`}`, by.cookies);
     expect(res.statusCode, res.body).toBe(200);
     return sellPageResponseSchema.parse(JSON.parse(res.body));
   };
-  const line = async (b: Basket, id: string): Promise<GymSale> => {
-    const found = (await page(b.gym)).sales.find((s) => s.id === id);
+  const line = async (b: Basket, id: string, day?: string): Promise<GymSale> => {
+    const found = (await page(b.gym, b.gym.owner, day)).sales.find((s) => s.id === id);
     if (found === undefined) throw new Error("the sale is not on Sell's list");
     return found;
   };
@@ -894,6 +895,9 @@ d("Refund to card at Sell (real Postgres)", { timeout: T }, () => {
         clock = noon;
       });
       clock = new Date(Math.max(clock.getTime(), Date.now()));
+      // The day the sales are made, at the gym: the clock moves on below, and at the gym's midnight its today
+      // is the next day, without these sales (master's run at 00:00:52 in Chicago, 2026-11-19).
+      const saleDay = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Chicago" }).format(clock);
       const basket = await sold(gym);
       const other = await sold(gym);
       const theirs = await sold(nextDoor);
@@ -905,10 +909,10 @@ d("Refund to card at Sell (real Postgres)", { timeout: T }, () => {
       await keepSquareEvent(sql, { eventId, payload: { type: "dispute.created", accountId: gym.acct.merchantId, disputeId: made.id } });
       await processSquareWork(workDeps(), [eventId], gyms.map((g) => g.id));
 
-      const lines = [await line(basket, basket.water), await line(basket, basket.towel)];
+      const lines = [await line(basket, basket.water, saleDay), await line(basket, basket.towel, saleDay)];
       expect(lines.flatMap((l) => l.chargebacks).map((c) => c.reason)).toEqual(["NOT_RECEIVED"]);
       expect(lines.find((l) => l.lineNo === 1)?.chargebacks).toHaveLength(1);
-      for (const l of [await line(other, other.water), await line(other, other.towel), await line(theirs, theirs.water), await line(theirs, theirs.towel)]) expect(l.chargebacks).toEqual([]);
+      for (const l of [await line(other, other.water, saleDay), await line(other, other.towel, saleDay), await line(theirs, theirs.water, saleDay), await line(theirs, theirs.towel, saleDay)]) expect(l.chargebacks).toEqual([]);
 
       const res = await send("GET", `/v1/orgs/${gym.id}/chargebacks`, gym.owner.cookies);
       const rows = chargebacksResponseSchema.parse(JSON.parse(res.body)).rows.filter((r) => r.id === lines.find((l) => l.lineNo === 1)?.chargebacks[0]?.id);

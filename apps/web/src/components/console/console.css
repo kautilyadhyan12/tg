@@ -1,11 +1,11 @@
-/* The gym console's look (spec Part 3 §17). Both looks use the same names: a page is drawn
-   once and `.t-dark` or `.t-light` on the console's root decides the colours. The menu is
-   dark in both. Classes carry a `c-` prefix because the member pages already use `.card`,
+/* The console's look (spec Part 3 §17; the third look, §17.11). Both looks use the same names:
+   a page is drawn once and `.t-dark` or `.t-light` on the console's root decides the colours.
+   Classes carry a `c-` prefix because the member pages already use `.card`,
    `.btn` and `.label` for other things. */
 
-/* Archivo, kept in the app (SIL Open Font License, assets/fonts/archivo/OFL.txt). The files
-   and character ranges are the ones Google Fonts serves; the width axis is what titles and
-   big numbers use (font-stretch 108%). */
+/* Archivo, the second look's font (SIL Open Font License, assets/fonts/archivo/OFL.txt). The
+   console is drawn in Inter (index.css) since the third look; the browser fetches Archivo only
+   for a page that still names it. */
 /* vietnamese */
 @font-face {
   font-family: 'Archivo';
@@ -38,55 +38,69 @@
 }
 
 /* ── Colours ────────────────────────────────────────────────────────────── */
-
-/* The menu, the same in both looks. */
-.t-dark,
-.t-light {
-  --rail-bg: #0F0E0C;
-  --rail-line: #1F1C19;
-  --rail-t1: #F4F1EC;
-  --rail-t2: #B8B0A6;
-  --rail-t3: #8B847B;
-  --rail-tab: #9A9288;
-  --rail-card: #171513;
-  --rail-card-line: #26231F;
-  --rail-on: #2A1A0C;
-  --rail-on-t: #FF9F45;
-  --rail-seg: #2C2824;
-  --rail-gym: #2E1D0E;
-  --rail-warn: #F2C35B;
-}
+/* The third look (spec Part 3 §17.11; docs/design/console-v3/kit3.css). The board writes the
+   dark look's boxes and words as white at a strength; here each is the solid colour it makes
+   on the ground it sits on, so consoleCss.test.js can measure it. Flat colour only: no
+   gradient, no glow, no haze. In the light look the menu is light too. */
 
 .t-dark {
-  --page: #0C0B0A;
-  --card: #151311;
-  --card-line: #25221E;
-  --line: #25221E;
-  --raise: #1D1A17;
-  --raise-line: #2E2A26;
-  --ctl-line: #3A3530;
-  --input: #0F0E0C;
-  --input-line: #6B645C;
-  --t1: #F4F1EC;
-  --t2: #B8B0A6;
-  --t3: #8B847B;
-  --link: #FF9F45;
+  --rail-bg: #0D0C0B;
+  --rail-line: #1E1D1C;
+  --rail-t1: #F3F3F3;
+  --rail-t2: #CCCCCB;
+  --rail-t3: #AFAEAE;
+  --rail-tab: #AFAEAE;
+  --rail-card: #151514;
+  --rail-card-line: #1E1D1C;
+  --rail-on: #2A1B0D;
+  --rail-on-line: #58320F;
+  --rail-on-t: #FFA552;
+  --rail-seg: #252524;
+  --rail-gym: #FF8A1F;
+  --rail-on-gym: #1B1005;
+  --rail-warn: #FFD66B;
+  --rail-hover: #191817;
+  --rail-grp: #AFAEAE;
+
+  --page: #0A0908;
+  --grp: #9C9B9B;
+  --card: #131211;
+  --card-line: #1E1D1C;
+  --line: #1E1D1C;
+  --raise: #242322;
+  --raise-line: #2C2B2B;
+  --ctl-line: #2C2B2B;
+  --input: #0F0E0D;
+  /* An input's edge stays 3 to 1 on the page (the board's 16 % white is 1.5). */
+  --input-line: #6B6865;
+  --t1: #F3F3F3;
+  --t2: #CCCCCB;
+  --t3: #AFAEAE;
+  --link: #FFA552;
   --accent: #FF8A1F;
-  --on-accent: #140C04;
-  --soft: #2A1A0C;
-  --soft-t: #FF9F45;
-  --good: #46D993;
-  --good-bg: #10291C;
-  --warn: #F2C35B;
-  --warn-bg: #33290F;
-  --bad: #FF7B6E;
-  --bad-bg: #3A1714;
-  --sel: #F4F1EC;
-  --on-sel: #0C0B0A;
+  --on-accent: #1B1005;
+  --soft: #27180B;
+  --soft-line: #58320F;
+  --soft-t: #FFA552;
+  --good: #4ADE80;
+  --good-bg: #152B1C;
+  --warn: #FFD66B;
+  --warn-bg: #322B1D;
+  --bad: #FA9090;
+  --bad-bg: #321918;
+  --bad-line: #5C1E1E;
+  --on-bad: #1B0A08;
+  --info: #82B8FF;
+  --info-bg: #1F2A36;
+  /* A button not ready yet. The second look's board measured 3.43:1; this shade passes. */
+  --dis-bg: #242322;
+  --dis-t: #9C9B9B;
+  --sel: #F3F3F3;
+  --on-sel: #0A0908;
   --shadow: none;
-  --pop: 0 24px 64px rgba(0, 0, 0, 0.6);
-  --scrim: rgba(0, 0, 0, 0.62);
-  --sheet: #171513;
+  --pop: 0 30px 80px rgba(0, 0, 0, 0.72);
+  --scrim: rgba(5, 4, 3, 0.72);
+  --sheet: #151311;
   --cl-orange: #FF8A1F;
   --cl-blue: #4C8DFF;
   --cl-green: #34C77B;
@@ -98,36 +112,63 @@
 }
 
 .t-light {
-  --page: #F5F3EF;
+  --rail-bg: #FFFFFF;
+  --rail-line: #EBEAE9;
+  --rail-t1: #191613;
+  --rail-t2: #3F3A35;
+  --rail-t3: #534E48;
+  --rail-tab: #534E48;
+  --rail-card: #FFFFFF;
+  --rail-card-line: #EBEAE9;
+  --rail-on: #FFEBD6;
+  --rail-on-line: #F3C596;
+  --rail-on-t: #813A07;
+  --rail-seg: #EFEFEE;
+  --rail-gym: #FF8A1F;
+  --rail-on-gym: #1B1005;
+  --rail-warn: #7A5600;
+  --rail-hover: #F4F3F3;
+  --rail-grp: #534E48;
+
+  --page: #F6F4F1;
+  --grp: #6B645C;
   --card: #FFFFFF;
-  --card-line: #E4DED6;
-  --line: #ECE7E0;
-  --raise: #F3F0EB;
-  --raise-line: #E1DBD2;
-  --ctl-line: #D6CFC5;
+  --card-line: #EBEAE9;
+  --line: #EBEAE9;
+  --raise: #F1EEE9;
+  --raise-line: #D7D5D4;
+  --ctl-line: #D7D5D4;
   --input: #FFFFFF;
+  /* An input's edge stays 3 to 1 on the page (the board's is 1.4). */
   --input-line: #948C83;
-  --t1: #1B1815;
-  --t2: #57504A;
-  --t3: #736C64;
-  /* The drawing's #B45309 measured 4.42:1 on --raise; this shade passes 4.5 on every
-     surface (spec Part 3 §17.3). */
-  --link: #A84D08;
+  --t1: #191613;
+  --t2: #3F3A35;
+  --t3: #534E48;
+  --link: #813A07;
   --accent: #FF8A1F;
-  --on-accent: #140C04;
-  --soft: #FFE9D2;
-  --soft-t: #9A4508;
-  --good: #177A48;
+  --on-accent: #1B1005;
+  --soft: #FFEBD6;
+  --soft-line: #F3C596;
+  --soft-t: #813A07;
+  --good: #115A35;
   --good-bg: #E3F4EA;
-  --warn: #7A5600;
-  --warn-bg: #FDF1D6;
-  --bad: #C23A2E;
+  --warn: #684900;
+  --warn-bg: #FBEFCB;
+  --bad: #8E2A22;
+  /* The board's #FBE6E3 measured 4.45:1 under red words; this shade passes. */
   --bad-bg: #FCE9E6;
-  --sel: #1B1815;
+  --bad-line: #F0B8B1;
+  --on-bad: #FFFFFF;
+  --info: #194B97;
+  --info-bg: #E4EDFB;
+  /* The second look's board measured 2.94:1; this shade passes. */
+  --dis-bg: #ECE8E2;
+  --dis-t: #6B645C;
+  --sel: #191613;
   --on-sel: #FFFFFF;
-  --shadow: 0 1px 2px rgba(28, 24, 20, 0.05);
-  --pop: 0 24px 64px rgba(28, 24, 20, 0.2);
-  --scrim: rgba(20, 18, 16, 0.45);
+  --shadow: 0 1px 2px rgba(30, 22, 14, 0.04), 0 10px 28px rgba(30, 22, 14, 0.05);
+  --pop: 0 30px 80px rgba(30, 22, 14, 0.26);
+  --scrim: rgba(25, 20, 15, 0.42);
   --sheet: #FFFFFF;
   --cl-orange: #E8700A;
   --cl-blue: #2F6FD6;
@@ -145,7 +186,9 @@
   min-height: 100vh;
   background: var(--page);
   color: var(--t1);
-  font-family: 'Archivo', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  letter-spacing: -0.006em;
 }
 
 .c-main {
@@ -165,10 +208,78 @@
   color: var(--rail-t2);
 }
 
+/* The pages, in five groups (spec Part 3 §17.10 rule 7). The list scrolls on its own, so the
+   foot under it, your name, stays on screen. */
 .c-rail-nav {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--rail-card-line) transparent;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
+  margin: 0 -6px;
+  padding: 0 6px;
+}
+.c-rail-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.c-rail-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.c-rail-list[hidden] {
+  display: none;
+}
+/* A group's heading reads as a heading, never as one more page: small capitals, spaced, grey,
+   apart from the page names and the orange page you are on. Pressing it folds the group. */
+.c-rail-grp {
+  margin: 12px 0 2px;
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--rail-grp);
+}
+.c-rail-grp-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  padding: 0 10px;
+  box-sizing: border-box;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  text-align: left;
+}
+.c-rail-grp-btn:hover {
+  color: var(--rail-t1);
+}
+/* A folded group's name, and beside it the dot of a page inside it that waits. */
+.c-rail-grp-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.c-rail-grp-btn svg {
+  flex: none;
+  transition: transform 0.15s ease;
+}
+.c-rail-grp-btn[aria-expanded='false'] svg {
+  transform: rotate(-90deg);
 }
 
 .c-rail-fill {
@@ -176,38 +287,124 @@
 }
 
 .c-rail-foot {
+  flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding-top: 16px;
+  gap: 2px;
+  padding-top: 10px;
   border-top: 1px solid var(--rail-line);
 }
 
+/* You: your initials, your name and role. Pressing it opens Your account, Your organisations
+   and Sign out. */
+.c-rail-me {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+  min-height: 52px;
+  padding: 8px;
+  box-sizing: border-box;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--rail-t1);
+  font: inherit;
+  text-align: left;
+}
+.c-rail-me:hover,
+.c-rail-me[aria-expanded='true'] {
+  background: var(--rail-hover);
+}
+/* On Your account, your name is the lit line, as that page's own line was. */
+.c-rail-me-on,
+.c-rail-me-on:hover {
+  background: var(--rail-on);
+  box-shadow: inset 0 0 0 1px var(--rail-on-line);
+}
+.c-rail-me > svg {
+  flex: none;
+  color: var(--rail-t3);
+}
+.c-rail-av {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--rail-seg);
+  color: var(--rail-t1);
+  font-size: 12px;
+  font-weight: 700;
+}
 .c-rail-you {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: 0 12px;
+  flex-grow: 1;
   min-width: 0;
 }
-
-.c-nav {
+/* A short list in a box under a button: what your name opens, and New. Each line a link or a button. */
+.c-menu-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0 -8px;
+}
+.c-menu-row {
   display: flex;
   align-items: center;
   gap: 12px;
   width: 100%;
-  height: 44px;
+  min-height: 44px;
   padding: 0 12px;
   box-sizing: border-box;
   border: 0;
   border-radius: 10px;
   background: transparent;
-  color: var(--rail-t2);
-  font-size: 15px;
+  color: var(--t1);
+  font: inherit;
+  font-size: 14px;
   font-weight: 500;
   text-align: left;
 }
+.c-menu-row:hover {
+  background: var(--raise);
+}
+.c-menu-row svg {
+  flex: none;
+  color: var(--t2);
+}
+.c-menu-row:disabled {
+  color: var(--dis-t);
+}
+
+.c-nav {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+  flex-shrink: 0;
+  height: 44px;
+  padding: 0 10px;
+  box-sizing: border-box;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--rail-t2);
+  font-size: 14px;
+  font-weight: 500;
+  text-align: left;
+}
+.c-nav svg {
+  flex-shrink: 0;
+}
 .c-nav:hover {
+  background: var(--rail-hover);
   color: var(--rail-t1);
 }
 .c-nav:disabled {
@@ -218,14 +415,15 @@
   background: var(--rail-on);
   color: var(--rail-on-t);
   font-weight: 600;
+  box-shadow: inset 0 0 0 1px var(--rail-on-line);
 }
 
 .c-switcher {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 10px 12px;
-  border-radius: 12px;
+  gap: 10px;
+  padding: 8px;
+  border-radius: 14px;
   background: var(--rail-card);
   border: 1px solid var(--rail-card-line);
   color: var(--rail-t1);
@@ -241,11 +439,11 @@
 }
 
 .c-gymicon {
-  width: 36px;
-  height: 36px;
+  width: 34px;
+  height: 34px;
   border-radius: 10px;
   background: var(--rail-gym);
-  color: var(--rail-on-t);
+  color: var(--rail-on-gym);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -273,6 +471,15 @@
   min-height: 44px;
   min-width: 0;
   color: var(--rail-t1);
+}
+/* Your initials on the right of the phone's top bar: they open More. */
+.c-topbar-me {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  flex-shrink: 0;
 }
 .c-topbar-gym .c-gymicon {
   width: 32px;
@@ -309,6 +516,10 @@
   color: var(--rail-on-t);
   font-weight: 600;
 }
+.c-tab-on .c-tab-icon {
+  background: var(--rail-on);
+  box-shadow: inset 0 0 0 1px var(--rail-on-line);
+}
 
 @media (min-width: 768px) {
   .c-rail {
@@ -321,9 +532,9 @@
     box-sizing: border-box;
     display: flex;
     flex-direction: column;
-    gap: 24px;
-    padding: 20px 16px;
-    overflow-y: auto;
+    gap: 12px;
+    padding: 14px 12px 12px;
+    overflow: hidden;
     background: var(--rail-bg);
     border-right: 1px solid var(--rail-line);
     color: var(--rail-t1);
@@ -336,6 +547,117 @@
   .c-tabbar {
     display: none;
   }
+}
+
+/* The bar across the top of every page on a computer (spec Part 3 §17.11, the Overview board):
+   New, on the right. Search and the bell join it in their own jobs. On a phone the top bar
+   above holds the business's name instead. */
+.c-pagebar {
+  display: none;
+}
+@media (min-width: 768px) {
+  .c-pagebar {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 12px;
+    min-height: 64px;
+    padding: 10px 32px;
+    box-sizing: border-box;
+    border-bottom: 1px solid var(--line);
+  }
+}
+
+/* A window under 600 px tall (a phone turned sideways, a laptop zoomed in, a short screen):
+   the list would show only a few lines above the foot, so the whole menu scrolls as one, and
+   you and Sign out stay at the bottom edge over it. */
+@media (min-width: 768px) and (max-height: 599px) {
+  .c-rail {
+    overflow-y: auto;
+    gap: 2px;
+    padding-bottom: 0;
+  }
+  .c-rail-nav {
+    flex: none;
+    overflow: visible;
+    margin: 10px -6px;
+  }
+  .c-rail-foot {
+    display: contents;
+  }
+  .c-rail-me {
+    position: sticky;
+    bottom: 0;
+    z-index: 1;
+    margin-top: 10px;
+    padding: 10px 0 12px 12px;
+    border-top: 1px solid var(--rail-line);
+    background: var(--rail-bg);
+  }
+}
+
+/* The narrowest screens (a folding phone's cover screen, 280 px): five tab names still fit. */
+@media (max-width: 339px) {
+  .c-tab {
+    font-size: 11px;
+    letter-spacing: -0.02em;
+  }
+}
+
+/* A mouse (spec §17.11): a menu line is 36 px and a group's heading 32. A touch screen, or one
+   that cannot tell, keeps 44. */
+@media (hover: hover) and (pointer: fine) {
+  .c-nav {
+    height: 36px;
+  }
+  .c-rail-grp-btn {
+    min-height: 32px;
+  }
+}
+
+/* More, on a phone: you, then the menu's groups, each a box of rows, then Sign out. */
+.c-more-me {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px;
+  min-width: 0;
+}
+.c-more-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.c-more-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.c-more-grp {
+  margin: 0;
+  padding-left: 4px;
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--grp);
+}
+.c-more-list {
+  padding: 0 16px;
+  overflow: hidden;
+}
+.c-more-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 52px;
+  padding: 14px 0;
+  box-sizing: border-box;
+  color: var(--t1);
+}
+.c-more-row + .c-more-row {
+  border-top: 1px solid var(--line);
 }
 
 /* ── A page: 16 px at the sides on a phone, 48 on a computer; 20 and 24 between boxes ── */
@@ -362,53 +684,43 @@
 
 /* The titles carry their own colour and spacing: index.css gives every h1–h6 white text
    and tighter letters, which would vanish on the light look's pale page. */
+/* Six sizes (spec §17.11): label 11, caption 12, second words 13, words 14, box title 17,
+   page title 28, and 32 for the figure that matters. */
 .c-h1 {
   margin: 0;
   font-size: 28px;
   line-height: 34px;
   font-weight: 700;
-  font-stretch: 108%;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.025em;
   color: var(--t1);
 }
+/* The number that matters: 32 on every screen. */
 .c-big {
-  font-size: 44px;
-  line-height: 48px;
+  font-size: 32px;
+  line-height: 36px;
   font-weight: 700;
-  font-stretch: 108%;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.03em;
   font-variant-numeric: tabular-nums;
 }
-@media (min-width: 768px) {
-  .c-h1 {
-    font-size: 34px;
-    line-height: 40px;
-  }
-  .c-big {
-    font-size: 48px;
-    line-height: 52px;
-  }
-}
 .c-big-sm {
-  font-size: 40px;
-  line-height: 44px;
+  font-size: 32px;
+  line-height: 36px;
   font-weight: 700;
-  font-stretch: 108%;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.03em;
   font-variant-numeric: tabular-nums;
 }
 .c-h2 {
   margin: 0;
-  font-size: 18px;
-  line-height: 24px;
-  font-weight: 600;
-  letter-spacing: normal;
+  font-size: 17px;
+  line-height: 22px;
+  font-weight: 650;
+  letter-spacing: -0.012em;
   color: var(--t1);
 }
 .c-h3 {
   margin: 0;
   font-size: 15px;
-  line-height: 22px;
+  line-height: 20px;
   font-weight: 600;
   letter-spacing: normal;
   color: var(--t1);
@@ -419,11 +731,14 @@
   line-height: 22px;
   color: var(--t2);
 }
+/* The small label above a page's title: small capitals, orange. */
 .c-eyebrow {
-  font-size: 14px;
-  line-height: 20px;
-  font-weight: 500;
-  color: var(--t3);
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--link);
 }
 .c-t1 { color: var(--t1); }
 .c-t2 { color: var(--t2); }
@@ -449,7 +764,7 @@
 .c-card {
   background: var(--card);
   border: 1px solid var(--card-line);
-  border-radius: 16px;
+  border-radius: 18px;
   box-shadow: var(--shadow);
 }
 
@@ -468,35 +783,40 @@
 }
 
 /* Orange means "press here": one `c-btn-p` a box at most; `c-btn-soft` is the second
-   action; `c-btn-s` is outlined. */
+   action; `c-btn-s` is outlined. Round ends, flat colour. */
 .c-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
   height: 40px;
-  padding: 0 16px;
+  padding: 0 18px;
   box-sizing: border-box;
   border: 1px solid transparent;
-  border-radius: 10px;
+  border-radius: 999px;
   background: transparent;
   color: var(--t1);
   font-size: 14px;
   font-weight: 600;
   white-space: nowrap;
 }
+/* Not ready yet: grey, with the reason said beside it. */
 .c-btn:disabled {
-  opacity: 0.5;
+  background: var(--dis-bg);
+  border-color: transparent;
+  color: var(--dis-t);
+  box-shadow: none;
+  cursor: not-allowed;
 }
 .c-btn-p { background: var(--accent); color: var(--on-accent); }
-.c-btn-s { border-color: var(--ctl-line); }
-.c-btn-soft { background: var(--soft); color: var(--soft-t); }
+.c-btn-s { background: var(--card); border-color: var(--ctl-line); }
+.c-btn-soft { background: var(--soft); border-color: var(--soft-line); color: var(--soft-t); }
 .c-btn-danger { background: var(--bad-bg); color: var(--bad); }
 .c-btn-ghost { color: var(--t2); }
-.c-btn-lg { height: 44px; font-size: 15px; }
-.c-btn-sm { height: 32px; padding: 0 12px; font-size: 13px; border-radius: 8px; }
+.c-btn-lg { height: 48px; padding: 0 24px; font-size: 15px; }
+.c-btn-sm { height: 32px; padding: 0 13px; font-size: 14px; }
 /* The smallest: a row of actions under one name in a list (still 44 px tall on a phone). */
-.c-btn-xs { height: 28px; padding: 0 9px; font-size: 12px; border-radius: 7px; }
+.c-btn-xs { height: 28px; padding: 0 10px; font-size: 14px; }
 /* An action written as a word, with no box: a time slot's Edit and Cancel, Add time slot.
    `c-btn-link` is orange text, `c-btn-quiet` grey; still 44 px tall on a phone. */
 .c-btn-link,
@@ -508,6 +828,13 @@
 }
 .c-btn-link { color: var(--link); }
 .c-btn-quiet { color: var(--t2); font-weight: 500; }
+.c-btn-link:disabled,
+.c-btn-quiet:disabled { background: transparent; }
+/* Red takes something away: outlined, kept apart from the everyday buttons and asking first.
+   Solid red only inside the question that asks. */
+.c-btn-d { border-color: var(--bad-line); color: var(--bad); }
+.c-btn-ds { background: var(--bad); color: var(--on-bad); }
+.c-btn-w { width: 100%; }
 
 .c-icon-btn {
   display: inline-flex;
@@ -518,7 +845,7 @@
   padding: 0;
   flex-shrink: 0;
   border: 0;
-  border-radius: 10px;
+  border-radius: 999px;
   background: transparent;
   color: var(--t2);
 }
@@ -555,11 +882,12 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 26px;
+  height: 24px;
   padding: 0 10px;
   box-sizing: border-box;
   border-radius: 999px;
-  font-size: 13px;
+  font-size: 12px;
+  line-height: 1;
   font-weight: 600;
   white-space: nowrap;
 }
@@ -568,6 +896,8 @@
 .c-tag-bad { background: var(--bad-bg); color: var(--bad); }
 .c-tag-plain { background: var(--raise); color: var(--t2); }
 .c-tag-soft { background: var(--soft); color: var(--soft-t); }
+.c-tag-info { background: var(--info-bg); color: var(--info); }
+.c-tag-line { border: 1px solid var(--ctl-line); color: var(--t2); }
 
 /* A time or small fact in a grey box. */
 .c-tc {
@@ -575,7 +905,7 @@
   border-radius: 6px;
   background: var(--raise);
   color: var(--t2);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 18px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -590,10 +920,12 @@
   font-weight: 600;
 }
 
+/* 8 between a label and its box (rule 3). */
 .c-field {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
+  min-width: 0;
 }
 .c-label {
   font-size: 14px;
@@ -602,7 +934,7 @@
   color: var(--t1);
 }
 .c-hint {
-  font-size: 13px;
+  font-size: 14px;
   line-height: 18px;
   color: var(--t3);
 }
@@ -613,10 +945,17 @@
   padding: 0 14px;
   box-sizing: border-box;
   border: 1px solid var(--input-line);
-  border-radius: 10px;
+  border-radius: 12px;
   background: var(--input);
   color: var(--t1);
   font-size: 15px;
+}
+/* The field being typed in: an orange edge and a pale ring, flat. */
+.c-input:focus-visible,
+.c-area:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--soft);
 }
 .c-sel {
   display: flex;
@@ -637,7 +976,7 @@
   padding: 10px 14px;
   box-sizing: border-box;
   border: 1px solid var(--input-line);
-  border-radius: 10px;
+  border-radius: 12px;
   background: var(--input);
   color: var(--t1);
   font-size: 15px;
@@ -703,30 +1042,44 @@
   left: 21px;
 }
 
-/* Tabs across the top of a page (Members: Your list · Using the app). */
+/* Tabs across the top of a page (Members: Your list · In the app): round, in one pill that
+   scrolls on its own when it is wider than the screen. */
 .c-utabs {
-  display: flex;
-  gap: 28px;
-  border-bottom: 1px solid var(--line);
+  display: inline-flex;
+  align-self: flex-start;
+  gap: 4px;
+  max-width: 100%;
+  padding: 4px;
+  box-sizing: border-box;
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--card);
 }
 .c-utab {
   height: 44px;
-  display: flex;
+  flex: none;
+  display: inline-flex;
   align-items: center;
-  padding: 0;
+  gap: 8px;
+  padding: 0 14px;
   box-sizing: border-box;
-  margin-bottom: -1px;
   border: 0;
-  border-bottom: 2px solid transparent;
+  border-radius: 999px;
   background: transparent;
   color: var(--t2);
-  font-size: 15px;
-  font-weight: 500;
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
 }
 .c-utab-on {
+  background: var(--raise);
   color: var(--t1);
-  font-weight: 600;
-  border-bottom-color: var(--accent);
+}
+@media (hover: hover) and (pointer: fine) {
+  .c-utab {
+    height: 34px;
+  }
 }
 
 .c-th {
@@ -933,8 +1286,8 @@
   color: var(--t1);
 }
 
-/* Review needed (5b-v-d-iv): an amber dot that glows while anybody is left to review, on
-   Members in the menu and on the page's sign. Still for anyone who asks for less motion. */
+/* Review needed (5b-v-d-iv): an amber dot while anybody is left to review, on Members in the
+   menu and on the page's sign. Still: the third look has no glow. */
 .c-glow-dot {
   display: inline-block;
   flex: none;
@@ -943,7 +1296,6 @@
   border-radius: 50%;
   color: var(--warn);
   background: currentColor;
-  animation: c-glow 1.8s ease-in-out infinite;
 }
 .c-rail .c-glow-dot,
 .c-tabbar .c-glow-dot {
@@ -955,25 +1307,16 @@
 .c-tab-icon {
   position: relative;
   display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 28px;
+  border-radius: 999px;
 }
 .c-tab-icon .c-glow-dot {
   position: absolute;
-  top: -1px;
-  right: -3px;
-}
-@keyframes c-glow {
-  0%,
-  100% {
-    box-shadow: 0 0 0 0 transparent;
-  }
-  50% {
-    box-shadow: 0 0 6px 2px currentColor;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .c-glow-dot {
-    animation: none;
-  }
+  top: 2px;
+  right: 8px;
 }
 
 /* The banner above every page (Part 3 §4.2): a problem, a deadline or a wall, news. */
@@ -1014,7 +1357,7 @@
   border-radius: 7px;
   background: transparent;
   color: var(--rail-t3);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
 }
 .c-seg button[aria-checked='true'] {
@@ -1078,7 +1421,6 @@
 .c-flame-on {
   color: var(--accent);
   fill: var(--accent);
-  filter: drop-shadow(0 0 4px var(--accent));
 }
 .c-flame-open { opacity: 0.5; }
 .c-flame-head { width: 16px; text-align: center; font-size: 10px; line-height: 18px; }
@@ -1149,3 +1491,713 @@
   font-weight: 700;
 }
 
+/* ── The second look's building blocks (V1-b; the Main board, spec Part 3 §17.10) ── */
+
+/* Gaps that group: 8 a label and its box, 12 buttons side by side, 20 one field and the next,
+   24 inside and between boxes, 32 between groups, 48 between sections. */
+.c-stack { display: flex; flex-direction: column; gap: 24px; min-width: 0; }
+.c-stack-xs { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.c-stack-s { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.c-stack-m { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+.c-stack-l { display: flex; flex-direction: column; gap: 32px; min-width: 0; }
+.c-stack-xl { display: flex; flex-direction: column; gap: 48px; min-width: 0; }
+.c-flow { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; min-width: 0; }
+.c-flow-s { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
+.c-flow-l { display: flex; flex-wrap: wrap; align-items: center; gap: 24px; min-width: 0; }
+
+/* A form: 32 between groups of fields, 20 between fields, two fields side by side where they fit. */
+.c-form { display: flex; flex-direction: column; gap: 32px; }
+.c-fgroup { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+.c-fgroup + .c-fgroup { border-top: 1px solid var(--line); padding-top: 28px; }
+.c-frow { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; }
+@media (min-width: 560px) {
+  .c-frow { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+}
+.c-err { font-size: 14px; line-height: 20px; color: var(--bad); }
+.c-input-err { border-color: var(--bad); }
+
+/* The "look at this" box in its other colours. */
+.c-callout-bad { background: var(--bad-bg); }
+.c-callout-info { background: var(--info-bg); }
+.c-callout-good { background: var(--good-bg); }
+.c-callout-plain { background: var(--raise); }
+
+/* Where a box opens: four kinds, the same on every page; nothing opens inside a list and
+   pushes it down. Each floats over the page, in the page's own look. */
+.c-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: var(--scrim);
+}
+
+/* 1. Under its button: one to three questions. On a phone it rises from the bottom. */
+.c-pop {
+  position: fixed;
+  z-index: 61;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  box-sizing: border-box;
+  padding: 20px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--sheet);
+  color: var(--t1);
+  border: 1px solid var(--raise-line);
+  box-shadow: var(--pop);
+  left: 0;
+  right: 0;
+  bottom: 0;
+  max-height: calc(100dvh - 48px);
+  border-radius: 22px 22px 0 0;
+  padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+}
+.c-grab {
+  flex: none;
+  align-self: center;
+  width: 40px;
+  height: 5px;
+  margin: -8px 0 -4px;
+  border-radius: 999px;
+  background: var(--ctl-line);
+}
+@media (min-width: 768px) {
+  .c-pop {
+    right: auto;
+    bottom: auto;
+    width: min(380px, calc(100vw - 32px));
+    border-radius: 20px;
+    padding-bottom: 20px;
+  }
+  .c-pop .c-grab { display: none; }
+  .c-pop-scrim { background: transparent; }
+}
+
+/* 2. From the right: a form of four fields or more. The panel scrolls as one page and only
+   its foot, with Save, stays; the whole screen on a phone. */
+.c-panel {
+  position: fixed;
+  z-index: 61;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--sheet);
+  color: var(--t1);
+  box-shadow: var(--pop);
+}
+.c-panel-h {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 20px 16px 4px;
+}
+.c-panel-b {
+  flex: 1 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: 20px 16px 32px;
+}
+.c-panel-f {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid var(--line);
+  background: var(--sheet);
+}
+@media (min-width: 768px) {
+  .c-panel { width: min(600px, 100%); border-left: 1px solid var(--raise-line); }
+  .c-panel-h { padding: 28px 28px 4px; }
+  .c-panel-b { padding: 24px 28px 32px; }
+  .c-panel-f { padding: 16px 28px; }
+}
+
+/* 3. In the middle: a question before a change to people or money, naming who changes.
+   From the bottom on a phone, its buttons one under another, the answer last. */
+.c-ask {
+  position: fixed;
+  z-index: 61;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  box-sizing: border-box;
+  max-height: calc(100dvh - 48px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 20px 16px;
+  padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+  border-radius: 22px 22px 0 0;
+  border: 1px solid var(--raise-line);
+  background: var(--sheet);
+  color: var(--t1);
+  box-shadow: var(--pop);
+}
+.c-ask-a {
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 12px;
+}
+.c-ask-a .c-btn { width: 100%; }
+@media (min-width: 768px) {
+  .c-ask {
+    left: 50%;
+    right: auto;
+    top: 50%;
+    bottom: auto;
+    width: min(520px, calc(100vw - 32px));
+    max-height: calc(100dvh - 32px);
+    transform: translate(-50%, -50%);
+    padding: 28px;
+    border-radius: 20px;
+  }
+  .c-ask .c-grab { display: none; }
+  .c-ask-a { flex-direction: row; flex-wrap: wrap; justify-content: flex-end; }
+  .c-ask-a .c-btn { width: auto; }
+}
+
+/* 4. A page of its own: a big setup in numbered parts, and a summary that fills in beside
+   them on a wide screen, under them otherwise. */
+.c-steps {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 32px;
+  align-items: start;
+}
+.c-part { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+.c-part-h { display: flex; align-items: center; gap: 12px; }
+.c-part-n {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: var(--soft);
+  color: var(--soft-t);
+  box-shadow: inset 0 0 0 1px var(--soft-line);
+  font-size: 13px;
+  font-weight: 700;
+}
+.c-sum { margin: 0; display: flex; flex-direction: column; gap: 14px; }
+.c-sum dt { font-size: 14px; line-height: 20px; color: var(--t3); }
+.c-sum dd { margin: 2px 0 0; font-size: 14px; line-height: 20px; font-weight: 600; color: var(--t1); overflow-wrap: anywhere; }
+.c-sum dd.c-sum-none { font-weight: 450; color: var(--t3); }
+@media (min-width: 1200px) {
+  .c-steps { grid-template-columns: minmax(0, 1fr) 320px; }
+  .c-steps-sum { position: sticky; top: 24px; }
+}
+
+/* The side list for a long page: down the side on a wide screen, a row across the top
+   otherwise, which scrolls on its own and never the page. */
+.c-side {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+.c-snav-wrap { min-width: 0; }
+.c-snav {
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.c-snav-t { display: none; }
+.c-snav a,
+.c-snav button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+  min-height: 44px;
+  padding: 0 14px;
+  box-sizing: border-box;
+  border: 1px solid var(--ctl-line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--t2);
+  font-size: 14px;
+  font-weight: 550;
+  white-space: nowrap;
+  text-decoration: none;
+}
+.c-snav svg { width: 18px; height: 18px; flex: none; color: var(--t3); }
+.c-snav [aria-current='true'] {
+  background: var(--sel);
+  border-color: var(--sel);
+  color: var(--on-sel);
+  font-weight: 650;
+}
+.c-snav [aria-current='true'] svg { color: var(--on-sel); }
+@media (min-width: 1024px) {
+  .c-side { grid-template-columns: 232px minmax(0, 1fr); gap: 40px; }
+  .c-snav-wrap { position: sticky; top: 24px; display: flex; flex-direction: column; }
+  .c-snav { flex-direction: column; gap: 2px; overflow: visible; }
+  .c-snav-t {
+    display: block;
+    padding: 0 12px 10px;
+    font-size: 12px;
+    line-height: 16px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--t3);
+  }
+  .c-snav a,
+  .c-snav button {
+    width: 100%;
+    min-height: 40px;
+    padding: 0 12px;
+    border: 0;
+    border-radius: 10px;
+    font-size: 14.5px;
+    text-align: left;
+    white-space: normal;
+  }
+  .c-snav [aria-current='true'] {
+    background: var(--raise);
+    color: var(--t1);
+    box-shadow: inset 3px 0 0 var(--accent);
+  }
+  .c-snav [aria-current='true'] svg { color: var(--accent); }
+}
+@media (pointer: coarse) {
+  .c-snav a,
+  .c-snav button { min-height: 44px; }
+}
+
+/* What waits (V1-d; spec Part 3 §17.11, the Overview board). A count beside a page in the menu
+   only when something waits there: red where money went wrong, gold to review, plain otherwise.
+   Each pair is one the contrast test already measures. */
+.c-count {
+  margin-left: auto;
+  flex: none;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  box-sizing: border-box;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 20px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  background: var(--raise);
+  color: var(--t1);
+}
+.c-count-bad { background: var(--bad-bg); color: var(--bad); }
+.c-count-warn { background: var(--warn-bg); color: var(--warn); }
+/* A folded group's heading carries the count of the page inside it, beside the name. */
+.c-rail-grp-name .c-count { margin-left: 0; }
+/* Payments overview's Set up (V1-f), where a count would sit. */
+.c-setup-tag { margin-left: auto; flex: none; height: 20px; padding: 0 8px; font-size: 12px; }
+.c-rail-grp-name .c-setup-tag { margin-left: 0; }
+/* In the menu the name stays whole: Set up takes a line of its own under it. */
+.c-nav:has(> .c-setup-tag) {
+  flex-wrap: wrap;
+  row-gap: 4px;
+  height: auto;
+  min-height: 44px;
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+.c-nav:has(> .c-setup-tag) > .c-ell { flex: 1 0 calc(100% - 28px); }
+.c-nav > .c-setup-tag { margin-left: 28px; }
+/* On a phone's tab, over the icon's corner. */
+.c-tab-icon .c-count {
+  position: absolute;
+  top: -6px;
+  right: -2px;
+  margin: 0;
+}
+
+/* The bell: round, 44 px to touch, its count over its corner in red. */
+.c-bell {
+  position: relative;
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--t2);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.c-bell:hover { color: var(--t1); }
+.c-bell:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.c-topbar .c-bell { border-color: var(--rail-line); background: transparent; color: var(--rail-t2); }
+.c-bell-pip {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  box-sizing: border-box;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  background: var(--bad);
+  color: var(--on-bad);
+}
+/* Search (V1-e-i): the box at the left of the bar on a computer is typed in where it is, and the
+   results drop down under it, in groups. On a phone the search button turns the top bar into the
+   same box, and the results fill the screen under it. The line the arrows are on is lit. */
+.c-findbar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: min(480px, 100%);
+  min-height: 44px;
+  margin-right: auto;
+  padding: 0 8px 0 14px;
+  box-sizing: border-box;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--input);
+  color: var(--t3);
+}
+.c-findbar:hover { border-color: var(--raise-line); }
+.c-findbar-open,
+.c-findbar:focus-within { border-color: var(--accent); }
+.c-findbar-icon { flex: none; }
+.c-findbar-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--t1);
+  font: inherit;
+  font-size: 14px;
+}
+.c-findbar-input::placeholder { color: var(--t3); }
+.c-findbar-keys {
+  flex: none;
+  padding: 2px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font: inherit;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--t3);
+}
+.c-findbar-close {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  margin-right: -6px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--t2);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.c-find-drop {
+  position: absolute;
+  z-index: 62;
+  top: calc(100% + 8px);
+  left: 0;
+  width: 100%;
+  min-width: min(380px, calc(100vw - 32px));
+  max-height: min(70vh, 640px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px 16px;
+  box-sizing: border-box;
+  background: var(--sheet);
+  border: 1px solid var(--raise-line);
+  border-radius: 18px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
+}
+/* The phone: the box fills the top bar; the results fill the screen under it, over the tabs. */
+.c-findbar-phone {
+  width: 100%;
+  margin-right: 0;
+  background: var(--input);
+}
+.c-findbar-phone .c-find-drop {
+  position: fixed;
+  top: 60px;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: auto;
+  min-width: 0;
+  max-height: none;
+  border-radius: 0;
+  border-width: 1px 0 0;
+  box-shadow: none;
+}
+.c-find-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.c-find-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0 -8px;
+}
+.c-find-group > .c-eyebrow { margin: 0; padding: 4px 12px; }
+.c-find-row {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  min-height: 44px;
+  padding: 6px 12px;
+  box-sizing: border-box;
+  border-radius: 10px;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+.c-find-on { background: var(--raise); }
+/* A person found (V1-e-ii): their initials, their name and one line, and their state on the right. */
+.c-find-person {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.c-find-av {
+  width: 32px;
+  height: 32px;
+  font-size: 12px;
+}
+.c-find-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.c-find-person > .c-tag { flex: none; }
+.c-find-foot { margin: 0; }
+@media (hover: none) {
+  .c-find-foot { display: none; }
+}
+
+/* The phone's top bar: the bell and your initials together on the right. */
+.c-topbar-end {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+
+/* "Needs attention", opened under the bell. Each line: its dot, what waits and why, its money,
+   and its button. The words wrap; nothing is cut off, at any width or text size. */
+.c-attn {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  width: 100%;
+}
+.c-attn-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 8px;
+}
+.c-attn-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+  border-top: 1px solid var(--line);
+  min-width: 0;
+}
+.c-attn-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--t3);
+}
+.c-attn-dot-bad { background: var(--bad); }
+.c-attn-dot-warn { background: var(--warn); }
+.c-attn-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1 1 180px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.c-attn-end {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+  margin-left: auto;
+}
+.c-attn-none {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--good);
+}
+/* Its buttons: 36 px with a mouse, 44 to touch. */
+.c-attn-end .c-btn { height: 36px; }
+@media (pointer: coarse), (max-width: 767px) {
+  .c-attn-end .c-btn { height: 44px; }
+}
+
+/* Payments overview (V1-f; spec Part 3 §17.11, the boards `Money` and `MoneySetup`): its title with
+   its two buttons, four figures, Needs attention beside how today was paid, then every payment page
+   and setting in three boxes. A phone holds one of each a row. */
+.c-pay-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+}
+.c-pay-tiles {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+.c-pay-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 20px;
+  min-width: 0;
+}
+.c-pay-ic {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+}
+.c-pay-ic-l {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+}
+.c-pay-ic-good { background: var(--good-bg); color: var(--good); }
+.c-pay-ic-warn { background: var(--warn-bg); color: var(--warn); }
+.c-pay-ic-bad { background: var(--bad-bg); color: var(--bad); }
+.c-pay-ic-info { background: var(--info-bg); color: var(--info); }
+.c-pay-ic-off { background: var(--raise); color: var(--t2); }
+.c-pay-ic-accent { background: var(--soft); color: var(--soft-t); }
+.c-pay-good { color: var(--good); }
+.c-pay-warn { color: var(--warn); }
+.c-pay-bad { color: var(--bad); }
+.c-pay-dot-good { background: var(--good); }
+.c-pay-split {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+.c-pay-box {
+  padding: 18px 20px 20px;
+  min-width: 0;
+}
+.c-pay-track { height: 6px; }
+.c-pay-fill { background: var(--info); min-width: 4px; }
+.c-pay-groups {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+.c-pay-row {
+  gap: 10px;
+  padding: 12px 16px;
+  text-decoration: none;
+}
+.c-pay-row:hover { background: var(--raise); }
+.c-pay-row:focus-visible {
+  outline: 2px solid var(--link);
+  outline-offset: -2px;
+}
+.c-pay-where {
+  flex: none;
+  white-space: nowrap;
+}
+.c-pay-setup {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 20px;
+  border-color: var(--soft-line);
+}
+.c-pay-steps {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.c-pay-step {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: var(--raise);
+}
+.c-pay-step-on { box-shadow: inset 0 0 0 1px var(--soft-line); }
+@media (max-width: 1439px) {
+  .c-pay-groups { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+/* Its buttons: 44 px to touch, on a tablet too. */
+@media (pointer: coarse) {
+  .c-pay-head .c-btn,
+  .c-pay-box .c-btn { height: 44px; }
+}
+@media (max-width: 1023px) {
+  .c-pay-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .c-pay-split,
+  .c-pay-groups { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 479px) {
+  .c-pay-tiles { grid-template-columns: minmax(0, 1fr); }
+  .c-pay-where { display: none; }
+}

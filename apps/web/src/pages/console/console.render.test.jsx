@@ -591,7 +591,9 @@ describe('Create a gym', () => {
     fireEvent.click(screen.getByRole('radio', { name: /^Yes/ }));
     fireEvent.click(screen.getByText('Create'));
 
-    expect(await screen.findByText('The console of the new gym')).toBeTruthy();
+    // The new gym's whole console draws after Create: on GitHub's machines that has taken from
+    // 1.7 s to past the 1 s wait's end, so it waits up to 5 s.
+    expect(await screen.findByText('The console of the new gym', {}, { timeout: 5000 })).toBeTruthy();
     expect(screen.queryByText(/is ready/)).toBeNull();
     expect(screen.queryByText('Go to your console')).toBeNull();
   });
@@ -695,7 +697,8 @@ describe('The gym', () => {
     drawOverview();
     // Scoped to the HERO card: since the management panel landed the code also
     // appears in the list below, and an unscoped query would pass on either.
-    expect(within(await screen.findByTestId('join-code-card')).getByText('K7QM2X')).toBeTruthy();
+    // The whole console draws after Create: on GitHub's machines it has run past the 1 s wait.
+    expect(within(await screen.findByTestId('join-code-card', {}, { timeout: 5000 })).getByText('K7QM2X')).toBeTruthy();
     expect(orgService.getCodes).toHaveBeenCalledWith(ORG.id);
     expect(screen.getByText(/Give this code to your members/i)).toBeTruthy();
   });

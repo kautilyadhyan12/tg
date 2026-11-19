@@ -79,7 +79,7 @@ import { canReadLabel, labelCostWords, scansLeftWords, typedFromDraft } from "./
 import { PackWords } from "./PackWords";
 import { Credits, SourceLine } from "./SourceLine";
 import { Kcal, MealCards } from "./MealNumbers";
-import { ModeSwitch, PlateCorners, ReadingLight, type ModeChoice } from "./ScanLook";
+import { ModeSwitch, ReadingLight, type ModeChoice } from "./ScanLook";
 
 // Log a meal from a photo (ROADMAP Stage 5 33b-i). The live camera opens at once, as food apps open
 // it; a photo taken before is picked from the gallery in the corner. The photo is made small and
@@ -402,9 +402,6 @@ function Camera({
   const [ready, setReady] = useState(false);
   const [taking, setTaking] = useState(false);
   const [failed, setFailed] = useState<string | null>(null);
-  // How tall the words and buttons at the foot are: the plate's corners stay above them.
-  const [footTall, setFootTall] = useState(0);
-
 
   // How many photo scans are left, each time the camera opens; never a reason to hold anything up.
   useEffect(() => {
@@ -502,6 +499,10 @@ function Camera({
           ref={camera}
           style={StyleSheet.absoluteFill}
           facing="back"
+          // The photo is the picture the screen shows: held flat over a plate, the tilt sensor cannot
+          // tell which way is up and turned it on its side (testers on Google Play; the patch that
+          // gives Android this setting is patches/expo-camera@57.0.6.patch).
+          responsiveOrientationWhenOrientationLocked={false}
           enableTorch={torch}
           {...(scanning ? { barcodeScannerSettings: { barcodeTypes: [...PACK_CODES] }, onBarcodeScanned: scanned } : {})}
           onCameraReady={() => { setReady(true); }}
@@ -544,15 +545,13 @@ function Camera({
           <Round icon="zap" say={torch ? "Turn torch off" : "Turn torch on"} on={torch} onPress={() => { setTorch((t) => !t); }} />
         </View>
       ) : null}
-      {/* The plate's corners, while nothing is said over them. */}
-      {!scanning && allowed && words === null ? <PlateCorners top={insets.top + 12 + sizes.press + 12} bottom={footTall} /> : null}
       {scanning && allowed ? (
-        <View style={styles.guideWrap} pointerEvents="none">
+        <View style={styles.guideWrap} pointerEvents="none" testID="barcode-box">
           <View style={styles.guide} />
           {look.kind === "looking" ? <ActivityIndicator size="large" color={colours.orange} /> : null}
         </View>
       ) : null}
-      <View style={[styles.footBar, { paddingBottom: insets.bottom + 28 }]} testID="camera-foot" onLayout={(e) => { setFootTall(e.nativeEvent.layout.height); }}>
+      <View style={[styles.footBar, { paddingBottom: insets.bottom + 28 }]}>
         {words === null ? null : (
           <View style={styles.notice} accessibilityLiveRegion="polite">
             <Txt kind="small" colour="text" style={styles.centre}>

@@ -23,6 +23,7 @@ import { getEntitlements } from "../entitlements/service.js";
 import type { RedisLike } from "../../redis.js";
 import { z } from "zod";
 import { getUserSyncContext } from "../users/service.js";
+import { namedTimeZone } from "../training/service.js";
 import { getAfterWorkoutIdeas } from "../nutrition/service.js";
 import { runDays, runTotals } from "../geo/service.js";
 import {
@@ -129,14 +130,14 @@ export interface ReadDeps {
  *  its own idea of the plan. The days are whole days in the person's own zone,
  *  today and the days before it (35c-i): a box saying "90 days" never counts
  *  the evening of a 91st, as a floor of 90×24 hours back from now did. */
-async function historyGate(
+export async function historyGate(
   deps: ReadDeps,
   userId: string,
-): Promise<{ floor: Date | null; limitedToDays: number | null }> {
-  const { entitlements } = await getEntitlements(deps, userId);
+): Promise<{ floor: Date | null; limitedToDays: number | null; timeZone: string }> {
+  const [{ entitlements }, timeZone] = await Promise.all([getEntitlements(deps, userId), userTz(deps.sql, userId)]);
   const days = entitlements.history_days;
-  if (days === -1) return { floor: null, limitedToDays: null };
-  return { floor: await daysSince(deps.sql, days, await userTz(deps.sql, userId)), limitedToDays: days };
+  if (days === -1) return { floor: null, limitedToDays: null, timeZone };
+  return { floor: await daysSince(deps.sql, days, timeZone), limitedToDays: days, timeZone };
 }
 
 /** Later of the requested window and the plan floor. */
@@ -391,9 +392,11 @@ async function calendarSince(sql: Sql, period: ProgressPeriod, timeZone: string)
   return days === null ? null : daysSince(sql, days, timeZone);
 }
 
+/** The person's own zone by its name, or UTC. An offset such as "+05:30" is UTC too: Postgres reads
+ *  one with the opposite sign, so a day would land west of where it is (`namedTimeZone`). */
 async function userTz(sql: Sql, userId: string): Promise<string> {
   const ctx = await getUserSyncContext(sql, userId);
-  return safeTimeZone(ctx.timezone);
+  return namedTimeZone(safeTimeZone(ctx.timezone)) ?? "UTC";
 }
 
 export async function progressOverview(

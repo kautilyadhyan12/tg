@@ -38,14 +38,17 @@ export interface ExerciseRef {
   met: number; // Part 4 §3.4; the 2B §2.2 calorie input
 }
 
-/** slug -> {id, met} for every distinct slug in the payload. */
+/** slug -> {id, met} for every distinct slug in the payload. Only the old exercises: a row the
+ *  Exercise Library made for an exercise that is not one of the old 58 has no family (0243, job 60b),
+ *  so this old route counts its sets as unknown, as it does any slug it does not know, and the old
+ *  pages that group sets by family never meet one. */
 export async function getExerciseIdsBySlug(
   sql: Sql,
   slugs: readonly string[],
 ): Promise<ReadonlyMap<string, ExerciseRef>> {
   if (slugs.length === 0) return new Map();
   const rows = await sql<{ id: string; slug: string; met: string }[]>`
-    SELECT id, slug, met FROM exercises WHERE slug = ANY(${[...slugs]})`;
+    SELECT id, slug, met FROM exercises WHERE slug = ANY(${[...slugs]}) AND family IS NOT NULL`;
   return new Map(rows.map((r) => [r.slug, { id: r.id, met: Number(r.met) }]));
 }
 
@@ -434,6 +437,7 @@ export async function getFamilyDistribution(
     SELECT e.family, count(*) AS n
     FROM workout_sets s JOIN exercises e ON e.id = s.exercise_id
     WHERE s.user_id = ${userId} AND (${since === null} OR s.started_at >= ${since})
+      AND e.family IS NOT NULL -- a set of an exercise only the Library has (job 61a) has no old family
     GROUP BY e.family ORDER BY n DESC, e.family ASC`;
   return rows.map((r) => ({ family: r.family, sets: Number(r.n) }));
 }

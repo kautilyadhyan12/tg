@@ -1,0 +1,179 @@
+{
+  "edition": "2024 Adult Compendium of Physical Activities",
+  "rows": [
+    {
+      "code": "02020",
+      "met": 7.5,
+      "words": "Calisthenics (e.g., pushups, sit ups, pull-ups, jumping jacks, burpees, battling ropes), vigorous effort",
+      "page": "https://pacompendium.com/conditioning-exercise/"
+    },
+    {
+      "code": "02022",
+      "met": 3.8,
+      "words": "Calisthenics (e.g., pushups, sit ups, pull-ups, lunges), moderate effort",
+      "page": "https://pacompendium.com/conditioning-exercise/"
+    },
+    {
+      "code": "02024",
+      "met": 2.8,
+      "words": "Calisthenics (e.g., curl ups, abdominal crunches, plank),  light effort",
+      "page": "https://pacompendium.com/conditioning-exercise/"
+    },
+    {
+      "code": "02030",
+      "met": 3.5,
+      "words": "Calisthenics, light or moderate effort, general (e.g., back exercises), going up & down from floor (Taylor Code 150)",
+      "page": "https://pacompendium.com/conditioning-exercise/"
+    },
+    {
+      "code": "02032",
+      "met": 6,
+      "words": "Circuit training, body weight exercises",
+      "page": "https://pacompendium.com/conditioning-exercise/"
+    },
+    {
+      "code": "02034",
+      "met": 3.5,
+      "words": "Circuit training, light effort",
+      "page": "https://pacompendium.com/conditioning-exercise/"
+    },
+    {
+      "code": "02035",
+      "met": 5,
+      "words": "Circuit training, moderate effort",
+      "page": "https://pacompendium.com/conditioning-exercise/"
+    },
+    {
+      "code": "02040",
+      "met": 7.5,
+      "words": "Circuit training, including kettlebells, some aerobic movement with minimal rest, general, vigorous intensity",
+      "page": "https://pacompendium.com/conditioning-exercise/"
+    },
+    {
+      "code": "02050",
+      "met": 6,
+      "words": "Resistance (weight lifting – free weight, nautilus or universal-type), power lifting or body building, vigorous effort (Taylor Code 210)",
+      "page": "https://pacompendium.com/conditioning-exercise/"
+    },
+    {
+      "code": "02052",
+      "met": 5,
+      "words": "Resistance (weight) training, squats, deadlift, slow or explosive effort",
+      "page": "https://pacompendium.com/conditioning-exercise/"
+    },
+    {
+      "code": "02054",
+      "met": 3.5,
+      "words": "Resistance (weight) training, multiple exercises, 8-15 reps at varied resistance",
+      "page": "https://pacompendium.com/conditioning-exercise/"
+    },
+    {
+      "code": "02055",
+      "met": 5.8,
+      "words": "Resistance Training, circuit, reciprocal supersets, peripheral heart action training",
+      "page": "https://pacompendium.com/conditioning-exercise/"
+    },
+    {
+      "code": "02056",
+      "met": 3,
+      "words": "Body weight resistance exercises (e.g., squat, lunge, push-up, crunch), general",
+      "page": "https://pacompendium.com/conditioning-exercise/"
+    },
+    {
+      "code": "02057",
+      "met": 6.5,
+      "words": "Body weight resistance exercises (e.g., squat, lunge, push-up, crunch), high intensity",
+      "page": "https://pacompendium.com/conditioning-exercise/"
+    },
+    {
+      "code": "02058",
+      "met": 9.8,
+      "words": "Kettlebell swings",
+      "page": "https://pacompendium.com/conditioning-exercise/"
+    },
+    {
+      "code": "02068",
+      "met": 11,
+      "words": "Rope skipping exercise, general",
+      "page": "https://pacompendium.com/conditioning-exercise/"
+    },
+    {
+      "code": "02101",
+      "met": 2.3,
+      "words": "Stretching, mild",
+      "page": "https://pacompendium.com/conditioning-exercise/"
+    },
+    {
+      "code": "02103",
+      "met": 1.8,
+      "words": "Pilates, traditional, mat",
+      "page": "https://pacompendium.com/conditioning-exercise/"
+    },
+    {
+      "code": "02105",
+      "met": 2.8,
+      "words": "Pilates, general",
+      "page": "https://pacompendium.com/conditioning-exercise/"
+    },
+    {
+      "code": "02150",
+      "met": 2.3,
+      "words": "Yoga, Hatha",
+      "page": "https://pacompendium.com/conditioning-exercise/"
+    },
+    {
+      "code": "02155",
+      "met": 3,
+      "words": "Yoga, Hot",
+      "page": "https://pacompendium.com/conditioning-exercise/"
+    },
+    {
+      "code": "02160",
+      "met": 4,
+      "words": "Yoga, Power",
+      "page": "https://pacompendium.com/conditioning-exercise/"
+    },
+    {
+      "code": "02175",
+      "met": 2.3,
+      "words": "Yoga, General",
+      "page": "https://pacompendium.com/conditioning-exercise/"
+    },
+    {
+      "code": "02180",
+      "met": 3.5,
+      "words": "Yoga, Surya Namaskar",
+      "page": "https://pacompendium.com/conditioning-exercise/"
+    },
+    {
+      "code": "02185",
+      "met": 2.7,
+      "words": "Yoga, Vinyasa",
+      "page": "https://pacompendium.com/conditioning-exercise/"
+    },
+    {
+      "code": "15550",
+      "met": 12.3,
+      "words": "Rope jumping, fast pace, 120-160 skips/min",
+      "page": "https://pacompendium.com/sports/"
+    },
+    {
+      "code": "15551",
+      "met": 11.8,
+      "words": "Rope jumping, moderate pace, general, 100 to 120 skips/min, 2 foot skip, plain bounce",
+      "page": "https://pacompendium.com/sports/"
+    },
+    {
+      "code": "15552",
+      "met": 8.3,
+      "words": "Rope jumping, slow pace, < 100 skips/min, 2 foot skip, rhythm bounce",
+      "page": "https://pacompendium.com/sports/"
+    },
+    {
+      "code": "15554",
+      "met": 10,
+      "words": "Rope jumping, double under or more",
+      "page": "https://pacompendium.com/sports/"
+    }
+  ]
+}

@@ -7,6 +7,7 @@ import { ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleS
 import { useConsoleOrg } from './useConsoleOrg';
 import { orgWords, viewerPrivileges } from './consoleView';
 import { placeFor } from './consolePlaces';
+import { useSectionLink } from './useSectionLink';
 import { canManageStaff } from './staffView';
 import { LeadBars, MembersTrend, MonthBars, StayBar } from './ReportCharts';
 import { DayLine, HourGrid } from './ReportAttendanceCharts';
@@ -581,6 +582,8 @@ function MoneyAsked({ org, orgSlug, period }) {
     load();
   }, [load]);
   const mine = state.gymId === gymId && state.period === period ? state : { gymId, error: null, report: null };
+  // Payments overview's Revenue report and Export payments open here (V1-f).
+  useSectionLink(mine.report !== null);
   if (mine.report === null) {
     return (
       <section className="flex flex-col gap-4" aria-label="Money">
@@ -591,12 +594,16 @@ function MoneyAsked({ org, orgSlug, period }) {
   }
   const missing = moneyMissing(mine.report, words);
   return (
-    <section className="flex flex-col gap-4" aria-label="Money">
+    <section id="money" className="flex flex-col gap-4" aria-label="Money">
       <div className="flex flex-col gap-1">
         <h2 className="c-h2">Money</h2>
         {missing === null ? <p className="c-s14 c-t2">{moneyLine(mine.report)}</p> : null}
       </div>
-      {missing === null ? <PaymentsDownload key={`${gymId} ${period}`} gymId={gymId} period={mine.report.period} today={mine.report.today} /> : null}
+      {missing === null ? (
+        <div id="export-payments">
+          <PaymentsDownload key={`${gymId} ${period}`} gymId={gymId} period={mine.report.period} today={mine.report.today} />
+        </div>
+      ) : null}
       {missing !== null ? (
         <Missing line={missing.line} to={placeFor(orgSlug, viewerPrivileges(org), missing.place)} button={missing.button} ask={missing.ask} />
       ) : (

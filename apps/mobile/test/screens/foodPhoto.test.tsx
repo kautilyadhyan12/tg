@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { Linking, StyleSheet } from "react-native";
+import { Linking } from "react-native";
 import { setMotionAllowed } from "../../src/look/Motion";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
 import type { Meal, MealPhotoAnalysis, NutritionTargetsResponse } from "@app/shared";
@@ -950,30 +950,52 @@ describe("32c-iii's worst thing: drawn again, Scan food loses no warning and sav
   });
 });
 
+describe("a photo as the screen showed it, with no box over the camera (33c, testers on Google Play)", () => {
+  it("the worst thing: the meal camera never turns a photo by the phone's tilt, for a meal, a label or a barcode", async () => {
+    await openFood({ meals: [], scans: [] });
+    await fireEvent.press(await screen.findByRole("button", { name: "Scan food" }));
+    // The app stands upright, so the photo is the picture the screen showed; held flat, the tilt
+    // sensor cannot tell which way is up and turned the photo on its side.
+    expect((await screen.findByTestId("camera-view")).props.responsiveOrientationWhenOrientationLocked).toBe(false);
+    await fireEvent.press(screen.getByRole("radio", { name: "Label" }));
+    expect(screen.getByTestId("camera-view").props.responsiveOrientationWhenOrientationLocked).toBe(false);
+    await fireEvent.press(screen.getByRole("radio", { name: "Barcode" }));
+    expect(screen.getByTestId("camera-view").props.responsiveOrientationWhenOrientationLocked).toBe(false);
+  });
+
+  it("no box is drawn over the camera, for a meal or a label: the whole photo is read; the barcode reader keeps its box", async () => {
+    await openFood({ meals: [], scans: [() => lost()] });
+    await fireEvent.press(await screen.findByRole("button", { name: "Scan food" }));
+    expect(await screen.findByRole("button", { name: "Take photo" })).toBeTruthy();
+    // Nothing is drawn between the camera and the switch at the foot but the Close and torch buttons.
+    expect(screen.queryByTestId("barcode-box")).toBeNull();
+    expect(screen.queryByTestId("plate-corners")).toBeNull();
+    await fireEvent.press(screen.getByRole("radio", { name: "Label" }));
+    expect(screen.queryByTestId("barcode-box")).toBeNull();
+    expect(screen.queryByTestId("plate-corners")).toBeNull();
+    await fireEvent.press(screen.getByRole("radio", { name: "Barcode" }));
+    expect(screen.getByTestId("barcode-box")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("radio", { name: "Meal" }));
+    expect(screen.queryByTestId("barcode-box")).toBeNull();
+    await fireEvent.press(screen.getByRole("button", { name: "Take photo" }));
+    expect(await screen.findByText("No connection. Try again.")).toBeTruthy();
+    expect(screen.queryByTestId("barcode-box")).toBeNull();
+    expect(screen.queryByTestId("plate-corners")).toBeNull();
+  });
+});
+
 describe("the camera and the reading as drawn (32c-iii)", () => {
-  it("Meal, Barcode and Label are one switch; the plate's corners show for a photo, never over the barcode reader", async () => {
+  it("Meal, Barcode and Label are one switch", async () => {
     const phone: Phone = { meals: [], scans: [] };
     await openFood(phone);
     await fireEvent.press(await screen.findByRole("button", { name: "Scan food" }));
-    expect(await screen.findByTestId("plate-corners")).toBeTruthy();
     expect(screen.getByRole("radio", { name: "Meal" }).props.accessibilityState).toMatchObject({ selected: true });
     expect(screen.getByText(/^Photos aren’t kept on our servers\./)).toBeTruthy();
     await fireEvent.press(screen.getByRole("radio", { name: "Barcode" }));
     expect(screen.getByRole("radio", { name: "Barcode" }).props.accessibilityState).toMatchObject({ selected: true });
     expect(screen.getByRole("radio", { name: "Meal" }).props.accessibilityState).toMatchObject({ selected: false });
-    expect(screen.queryByTestId("plate-corners")).toBeNull();
     await fireEvent.press(screen.getByRole("radio", { name: "Label" }));
-    expect(screen.getByTestId("plate-corners")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Take photo" })).toBeTruthy();
-  });
-
-  it("a notice over the camera puts the plate's corners away, so its words are never drawn over them (Kd's phone, 32c-iii)", async () => {
-    await openFood({ meals: [], scans: [() => lost()] });
-    await fireEvent.press(await screen.findByRole("button", { name: "Scan food" }));
-    expect(await screen.findByTestId("plate-corners")).toBeTruthy();
-    await fireEvent.press(screen.getByRole("button", { name: "Take photo" }));
-    expect(await screen.findByText("No connection. Try again.")).toBeTruthy();
-    expect(screen.queryByTestId("plate-corners")).toBeNull();
   });
 
   it("while the photo is read, it says so under the turning arc, with Close, the circles on the food and no moving light where motion is off", async () => {
@@ -1006,31 +1028,5 @@ describe("the camera and the reading as drawn (32c-iii)", () => {
     } finally {
       setMotionAllowed(false);
     }
-  });
-
-  it("the plate's corners sit between the buttons at the top and the words at the foot, and none are drawn where four would run together (round one, T2 and L2)", async () => {
-    await openFood({ meals: [], scans: [] });
-    await fireEvent.press(await screen.findByRole("button", { name: "Scan food" }));
-    await screen.findByTestId("plate-room");
-    await act(async () => {
-      await fireEvent(screen.getByTestId("camera-foot"), "layout", { nativeEvent: { layout: { x: 0, y: 1500, width: 400, height: 420 } } });
-      await Promise.resolve();
-    });
-    const room = screen.getByTestId("plate-room");
-    const placed = StyleSheet.flatten(room.props.style as Parameters<typeof StyleSheet.flatten>[0]) as { top?: number; bottom?: number };
-    expect(placed.bottom).toBe(420);
-    expect(placed.top ?? 0).toBeGreaterThanOrEqual(56);
-    // Room for a frame: four corners.
-    await act(async () => {
-      await fireEvent(room, "layout", { nativeEvent: { layout: { x: 0, y: 0, width: 400, height: 500 } } });
-      await Promise.resolve();
-    });
-    expect(screen.getAllByTestId("plate-corner")).toHaveLength(4);
-    // A sliver of room: none, never four run together.
-    await act(async () => {
-      await fireEvent(room, "layout", { nativeEvent: { layout: { x: 0, y: 0, width: 400, height: 80 } } });
-      await Promise.resolve();
-    });
-    expect(screen.queryAllByTestId("plate-corner")).toHaveLength(0);
   });
 });

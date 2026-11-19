@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Overview, with the bar across the top</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./kit3.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0;background:#0A0908}
+</style>
+</helmet>
+<div class="app t-dark {{look}}" style="min-height: 100%">
+<div class="shell">
+
+<nav class="rail" aria-label="Menu">
+<a href="#" class="gym"><span class="logo"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18zM6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2M10 6h4M10 10h4M10 14h4M10 18h4"></path></svg></span><span class="col grow"><span class="w6 ell">Iron House</span><span class="s12 t3">Austin · Gym</span></span><svg class="ic ic-s t3" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 15l5 5 5-5M7 9l5-5 5 5"></path></svg></a>
+<a href="#" class="ni ni-on"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3h5a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM15 3h5a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM15 12h5a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1zM4 16h5a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1z"></path></svg>Overview<span class="n n-bad">6</span></a>
+<div class="grp">Today<svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 2h6a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1zM16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2M9 14l2 2 4-4"></path></svg>Attendance</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 7.5V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3.5M16 2v4M8 2v4M3 10h5M10 16a6 6 0 1 0 12 0a6 6 0 1 0-12 0M16 14v2.2l1.5 1.3"></path></svg>Classes</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 6.5l11 11M21 21l-1-1M3 3l1 1M18 22l4-4M2 6l4-4M3 10l7-7M14 21l7-7"></path></svg>Personal training</a>
+<div class="grp">People<svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M5 7a4 4 0 1 0 8 0a4 4 0 1 0-8 0M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"></path></svg>Members &amp; staff</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 7a4 4 0 1 0 8 0a4 4 0 1 0-8 0M10.3 15H7a4 4 0 0 0-4 4v2M14 17a3 3 0 1 0 6 0a3 3 0 1 0-6 0M21 21l-1.9-1.9"></path></svg>Leads<span class="n">5</span></a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 17l-8.5-8.5-5 5L2 7M16 17h6v-6"></path></svg>At risk<span class="n n-warn">2</span></a>
+<div class="grp">Money<svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6a2 2 0 0 1 2-2h12v4M3 6v12a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2H5a2 2 0 0 1-2-2zM17 14h.01"></path></svg>Payments overview</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4zM3 6h18M16 10a4 4 0 0 1-8 0"></path></svg>Sell</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12.6 2.6A2 2 0 0 0 11.2 2H4a2 2 0 0 0-2 2v7.2a2 2 0 0 0 .6 1.4l8.7 8.7a2.4 2.4 0 0 0 3.4 0l6.6-6.6a2.4 2.4 0 0 0 0-3.4zM7 7.5h.01"></path></svg>Memberships</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2zM2 10h20"></path></svg>Failed payments<span class="n n-bad">3</span></a>
+<div class="grp">Community<svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l18-5v12L3 14zM11.6 16.8a3 3 0 1 1-5.8-1.6"></path></svg>Updates<span class="n n-warn">1</span></a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM16 2v4M8 2v4M3 10h18"></path></svg>Events</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 2h6a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1zM16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2M12 11h4M12 16h4M8 11h.01M8 16h.01"></path></svg>Fitness plans</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M8.2 10.2L5 3h14l-3.2 7.2M6 15a6 6 0 1 0 12 0a6 6 0 1 0-12 0"></path></svg>Challenges</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6M18 9h1.5a2.5 2.5 0 0 0 0-5H18M4 22h16M10 14.7V17c0 .6-.5 1-1 1.2-1.2.5-2 2-2 3.8M14 14.7V17c0 .6.5 1 1 1.2 1.2.5 2 2 2 3.8M18 2H6v7a6 6 0 0 0 12 0z"></path></svg>Leaderboard</a>
+<div class="grp">Manage<svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3v18h18M8 17V9M13 17V5M18 17v-3"></path></svg>Reports</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M2 14h4M10 8h4M18 16h4"></path></svg>Settings</a>
+<a href="#" class="me"><span class="av">DB</span><span class="col grow"><span class="w6 s13 ell">Dana Brooks</span><span class="s12 t3">Owner</span></span><svg class="ic ic-s t3" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 15l5 5 5-5M7 9l5-5 5 5"></path></svg></a>
+</nav>
+
+<div class="work">
+<div class="wash"></div>
+<header class="top" style="position: relative">
+<button type="button" class="find"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11a7 7 0 1 0 14 0a7 7 0 1 0-14 0M21 21l-4.3-4.3"></path></svg><span class="grow ell">Search members, pages or actions</span><span class="kbd">Ctrl K</span></button>
+<span class="grow"></span>
+<button type="button" class="btn btn-soft"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>New</button>
+<button type="button" class="ibtn" aria-label="6 items need attention"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 0 0 3.4 0"></path></svg><span class="pip">6</span></button>
+</header>
+
+<main class="page" style="position: relative">
+
+<div class="between wrap">
+<div class="col g6"><span class="eyebrow">Overview · Monday 16 November</span><h1 class="h1">Good morning, Dana</h1><span class="t2">Iron House · Austin</span></div>
+<button type="button" class="btn btn-main btn-lg"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 2h6a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1zM16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2M9 14l2 2 4-4"></path></svg>Check in</button>
+</div>
+
+<div class="box hrow g16 wrap" style="padding: 14px 20px">
+<span class="ring" style="background: conic-gradient(var(--good) 75%, var(--bar) 0)"><span>6/8</span></span>
+<div class="col grow" style="min-width: 240px"><span class="s12 t3">Getting started · 6 of 8 complete</span><span class="w6">Next: Front desk check-in</span><span class="s13 t2">Add a tablet or computer at the front desk so members can scan in.</span></div>
+<button type="button" class="btn btn-soft btn-sm">Set up check-in</button>
+<button type="button" class="btn btn-s btn-sm">View all steps</button>
+<button type="button" class="btn btn-q btn-sm">Dismiss</button>
+</div>
+
+<div class="grid4">
+<div class="box pad col g10"><div class="hrow g10"><span class="tile ti-o"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 2h6a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1zM16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2M9 14l2 2 4-4"></path></svg></span><span class="s13 t2">Check-ins today</span></div><span class="big">5</span><span class="s12 t3">58 visits last week</span></div>
+<div class="box pad col g10"><div class="hrow g10"><span class="tile ti-g"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6a2 2 0 0 1 2-2h12v4M3 6v12a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2H5a2 2 0 0 1-2-2zM17 14h.01"></path></svg></span><span class="s13 t2">Revenue today</span></div><span class="big">$1,240</span><span class="s12 t3">9 payments</span></div>
+<div class="box pad col g10"><div class="hrow g10"><span class="tile ti-w"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 18 0a9 9 0 1 0-18 0M12 7v5l3 2"></path></svg></span><span class="s13 t2">Payment due</span></div><span class="big c-warn">6</span><span class="s12 t3">members · <a href="#" class="c-o w6">View</a></span></div>
+<div class="box pad col g10"><div class="hrow g10"><span class="tile ti-b"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 2h8a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zM11 18h2"></path></svg></span><span class="s13 t2">Members in the app</span></div><span class="big">12 <span class="t3" style="font-size: 16px; letter-spacing: 0">of 26</span></span><span class="s12 t3"><a href="#" class="c-o w6">Invite 14 more</a></span></div>
+</div>
+
+<div class="split">
+<div class="box">
+<div class="bh"><h2 class="h2">Needs attention</h2><span class="s12 t3">6 items · by urgency</span></div>
+<div class="row"><span class="dot dot-bad"></span><div class="col grow"><span class="w6">2 chargebacks need a response</span><span class="s13 t3">Respond in Square by 20 Nov</span></div><span class="w6">$90.00</span><button type="button" class="btn btn-p btn-sm">Respond</button></div>
+<div class="row"><span class="dot dot-bad"></span><div class="col grow"><span class="w6">3 failed card payments</span><span class="s13 t3">Declined, still outstanding</span></div><span class="w6">$60.00</span><button type="button" class="btn btn-s btn-sm">View</button></div>
+<div class="row"><span class="dot dot-warn"></span><div class="col grow"><span class="w6">6 members with a payment due</span><span class="s13 t3">Plus 1 past member</span></div><button type="button" class="btn btn-soft btn-sm">View members</button></div>
+<div class="row"><span class="dot dot-warn"></span><div class="col grow"><span class="w6">2 refunds to review</span><span class="s13 t3">No money moves until you confirm a refund</span></div><span class="w6">$13.00</span><button type="button" class="btn btn-s btn-sm">Review</button></div>
+<div class="row"><span class="dot dot-warn"></span><div class="col grow"><span class="w6">1 app payment to review</span><span class="s13 t3">Charged in the app but not applied</span></div><span class="w6">$90.00</span><button type="button" class="btn btn-s btn-sm">Review</button></div>
+<div class="row"><span class="dot"></span><div class="col grow"><span class="w6">2 cancellations in the app</span><span class="s13 t3">Last 30 days</span></div><button type="button" class="btn btn-s btn-sm">View</button></div>
+</div>
+<div class="box">
+<div class="bh"><h2 class="h2">Today's check-ins</h2><span class="s12 t3">5 members</span></div>
+<div class="row"><span class="av">SR</span><span class="grow w5 ell">Sam Rivera</span><span class="s13 t3">06:42</span></div>
+<div class="row"><span class="av">AC</span><span class="grow w5 ell">Ava Chen</span><span class="s13 t3">07:05</span></div>
+<div class="row"><span class="av">JL</span><span class="grow w5 ell">Jordan Lee</span><span class="s13 t3">07:31</span></div>
+<div class="row"><span class="av">PN</span><span class="grow w5 ell">Priya Nair</span><span class="s13 t3">09:12</span></div>
+<div class="row"><span class="av">MH</span><span class="grow w5 ell">Marcus Hill</span><span class="s13 t3">11:19</span></div>
+<div class="row"><a href="#" class="c-o w6 s13">View all check-ins</a></div>
+</div>
+</div>
+
+<div class="split">
+<div class="box">
+<div class="bh"><div class="col g4"><h2 class="h2">Attendance</h2><span class="s13 t3">Visits and unique members · last 8 weeks</span></div><a href="#" class="c-o w6 s13">View attendance</a></div>
+<div class="hrow g16 s12 t2" style="padding: 0 20px 8px"><span class="hrow g6"><span style="width: 10px; height: 10px; border-radius: 3px; background: var(--bar); display: block"></span>Visits</span><span class="hrow g6"><span style="width: 14px; height: 2px; background: var(--blue); display: block"></span>Unique members</span><span class="hrow g6"><span style="width: 10px; height: 10px; border-radius: 3px; background: var(--o); display: block"></span>Best week</span></div>
+<div style="position: relative; padding: 0 20px 18px">
+<div style="display: grid; grid-template-columns: repeat(8, minmax(0,1fr)); align-items: end; height: 200px; border-bottom: 1px solid var(--line)">
+<div class="col g4" style="align-items: center"><span class="s11 t3">41</span><div style="width: 36px; height: 123px; border-radius: 9px 9px 2px 2px; background: var(--bar)"></div></div>
+<div class="col g4" style="align-items: center"><span class="s11 t3">46</span><div style="width: 36px; height: 138px; border-radius: 9px 9px 2px 2px; background: var(--bar)"></div></div>
+<div class="col g4" style="align-items: center"><span class="s11 t3">39</span><div style="width: 36px; height: 117px; border-radius: 9px 9px 2px 2px; background: var(--bar)"></div></div>
+<div class="col g4" style="align-items: center"><span class="s11 t3">52</span><div style="width: 36px; height: 156px; border-radius: 9px 9px 2px 2px; background: var(--bar)"></div></div>
+<div class="col g4" style="align-items: center"><span class="s11 t3">49</span><div style="width: 36px; height: 147px; border-radius: 9px 9px 2px 2px; background: var(--bar)"></div></div>
+<div class="col g4" style="align-items: center"><span class="s11 t3">55</span><div style="width: 36px; height: 165px; border-radius: 9px 9px 2px 2px; background: var(--bar)"></div></div>
+<div class="col g4" style="align-items: center"><span class="s11 w7 c-o">58</span><div style="width: 36px; height: 174px; border-radius: 9px 9px 2px 2px; background: var(--o)"></div></div>
+<div class="col g4" style="align-items: center"><span class="s11 t3">5</span><div style="width: 36px; height: 15px; border-radius: 6px 6px 2px 2px; background: var(--o-fill); border: 1px dashed var(--o-line)"></div></div>
+</div>
+<svg viewBox="0 0 800 200" preserveAspectRatio="none" aria-hidden="true" style="position: absolute; left: 20px; top: 0; width: calc(100% - 40px); height: 200px; pointer-events: none"><polyline points="50,158 150,155 250,161 350,149 450,152 550,146 650,143 750,185" fill="none" stroke="var(--blue)" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round"></polyline></svg>
+<div class="s11 t3" style="display: grid; grid-template-columns: repeat(8, minmax(0,1fr)); text-align: center; padding-top: 8px"><span>28 Sep</span><span>5 Oct</span><span>12 Oct</span><span>19 Oct</span><span>26 Oct</span><span>2 Nov</span><span>9 Nov</span><span class="t1 w6">This week</span></div>
+</div>
+</div>
+<div class="col g20">
+<div class="box pad col g8"><h2 class="h2">Streaks</h2><p class="s13 t2">No members on a streak of 2 weeks or more.</p></div>
+<div class="box pad col g10" style="border-color: var(--o-line)">
+<div class="between"><div class="col"><span class="s12 t3">Plan</span><h2 class="h2">Free trial</h2></div><span class="tag tag-o">Ends 30 Nov</span></div>
+<div class="track"><div class="fill" style="width: 26%"></div></div>
+<span class="s12 t3">26 of 100 members</span>
+<p class="s13 t2">Your free trial runs until 30 Nov. Choose a plan to raise your member limit: you pay today and the new limit applies at once.</p>
+<button type="button" class="btn btn-p btn-w">Choose a plan</button>
+</div>
+</div>
+</div>
+
+<div class="split">
+<div class="box">
+<div class="bh"><div class="col g4"><h2 class="h2">Last 7 days</h2><span class="s13 t3">9 Nov to 15 Nov</span></div></div>
+<div class="row"><span class="w6" style="width: 120px">Members</span><span class="grow t2">3 joined · 1 left</span><button type="button" class="btn btn-s btn-sm">View report</button></div>
+<div class="row"><span class="w6" style="width: 120px">At risk</span><span class="grow t2">2 members at risk</span><button type="button" class="btn btn-s btn-sm">View</button></div>
+<div class="row"><span class="w6" style="width: 120px">Visits</span><span class="grow t2"><span class="t1 w6">58 visits</span> · 55 in the 7 days before</span><button type="button" class="btn btn-s btn-sm">View</button></div>
+<div class="row"><span class="w6" style="width: 120px">Payment due</span><span class="grow t2"><span class="c-warn w6">6 members</span> with a payment due · plus 1 past member</span><button type="button" class="btn btn-soft btn-sm">View members</button><button type="button" class="btn btn-q btn-sm">View past members</button></div>
+</div>
+<div class="box pad col g4">
+<h2 class="h2" style="padding-bottom: 6px">Details</h2>
+<div class="kv"><span class="t3">Currency</span><span class="w5">USD</span></div>
+<div class="kv"><span class="t3">Time zone</span><span class="w5">America/Chicago</span></div>
+<div class="kv"><span class="t3">Your role</span><span class="w5">Owner</span></div>
+</div>
+</div>
+
+</main>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"look":{"editor":"enum","options":["Dark","Light"],"default":"Dark"},"$preview":{"width":1440,"height":1760}}'>
+class Component extends DCLogic {
+renderVals() {
+return { look: (this.props.look ?? 'Dark') === 'Light' ? 't-light' : '' };
+}
+}
+</script>
+</body>
+</html>

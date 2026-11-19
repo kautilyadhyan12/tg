@@ -48,6 +48,7 @@ import { registerClassBookingRoutes } from "./classes/bookingsRoutes.js";
 import { registerMembershipRoutes } from "./memberships/routes.js";
 import { registerPtRoutes } from "./pt/routes.js";
 import { registerLeadRoutes } from "./leads/routes.js";
+import { registerSearchRoutes } from "./search/routes.js";
 import { registerLeaderboardRoutes } from "./leaderboard/routes.js";
 import { registerGymPageRoutes } from "./gymPage/routes.js";
 import { registerPostCommentRoutes } from "./posts/commentRoutes.js";
@@ -78,6 +79,7 @@ import { registerPayerRoutes } from "./payers/routes.js";
 import { registerMyMembershipRoutes } from "./myMembership/routes.js";
 import { registerPaymentsDownloadRoutes } from "./paymentsDownload/routes.js";
 import { registerWeekRoutes } from "./week/routes.js";
+import { registerAttentionRoutes } from "./attention/routes.js";
 import { registerCoOwnerRoutes } from "./coOwners/routes.js";
 import type { BillingDeps } from "../billing/service.js";
 import type { CoOwnerEmailSender } from "./coOwners/email.js";
@@ -209,6 +211,15 @@ export function registerOrgRoutes(
   // What the gym sells: its membership types (Part 3 §13.1).
   registerMembershipRoutes(app, { sql: deps.sql, redis: deps.redis, news: deps.news, emailKey: deps.invites?.hmacKey ?? null, ...(overrides.now === undefined ? {} : { now: overrides.now }) });
 
+  // People in the console's search (V1-e-ii): the member list's and the leads' own search.
+  registerSearchRoutes(app, {
+    sql: deps.sql,
+    redis: deps.redis,
+    log: app.log,
+    now: overrides.now ?? (() => new Date()),
+    invites: deps.invites,
+  });
+
   // A gym's leads (Part 3 §16.3), and its own page whose form makes them (20c-iv-a).
   registerLeadRoutes(app, { sql: deps.sql, redis: deps.redis, invites: deps.invites });
   registerGymPageRoutes(app, {
@@ -286,6 +297,8 @@ export function registerOrgRoutes(
   });
   registerPaymentsDownloadRoutes(app, { sql: deps.sql, redis: deps.redis, now: overrides.now ?? (() => new Date()) });
   registerWeekRoutes(app, { sql: deps.sql, redis: deps.redis, now: overrides.now ?? (() => new Date()) });
+  // The menu's counts and the bell's "Needs attention" (V1-d).
+  registerAttentionRoutes(app, { sql: deps.sql, redis: deps.redis, now: overrides.now ?? (() => new Date()), squareEnvironment: squareSettings(deps.config)?.environment ?? null });
 
   // A real owner creates a gym once, so 5 an hour per account is far past anybody honest;
   // 20 an hour per address leaves room for a few owners on one connection (2g). Without

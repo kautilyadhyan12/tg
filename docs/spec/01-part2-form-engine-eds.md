@@ -1511,6 +1511,97 @@ enough: **each exercise fixes where the phone stands, so that its movement runs 
 picture** (§11.8 step 4's reference picture), and job 50c measures every body measure both
 ways on real videos and keeps the steadier.
 
+**As built, stages 2 and 3 (50c-ii, 2026-11-17).** `PossibleBody` (`packages/movement/src/body`)
+takes one person a frame and says, for each of the 33 points, used or refused and why: nobody
+found, no 3D points, hidden (the model gives it less than an even chance of being seen), off the
+picture, settling (the body's first half second, or a bone not yet known), unchecked (what it
+hangs from cannot be seen or is not used), a broken bone, a jump, a swap. Every check compares
+the body with itself. Each point hangs from a parent on the way to the trunk (shoulder, elbow,
+wrist, fingers; hip, knee, ankle, foot; both shoulders, nose, face) and is used only while the
+bone to its parent keeps its own length within 0.3 of the same body's trunk (0.25 until 51c) and the parent is
+used: a wrong elbow takes its forearm and hand with it, a wrong wrist never takes the elbow, and
+a hand, foot or head moved in one piece cannot vouch for itself. The trunk's corners are checked
+by the trunk's bones. A bone learns its length from frames in which it held; a new steady length
+replaces it only after being seen as long as the old one had been seen holding, at least half a
+second and at most 3 s, counting only time the bone is seen (a few lone looks never add up), so a
+wrong first look is soon replaced and a wrong pose is refused for up to 3 s (held longer, it gets
+in: a known limit). A person gone longer than 3 s, or a clock that went back, is
+a new body. The allowance is a share of the trunk,
+not of the bone: on Kd's videos the model's error does not grow with a bone's length. A point
+faster than 20 m/s across the picture has jumped (a kick's foot, the fastest part of a person, is
+measured at 12 to 18 m/s); left and right have swapped when each side lies where the other was a
+moment before, the two at least a fifth of the trunk apart; either is used again only after it
+stays at its new place for 0.2 s. `SteadyPoints` is the one-euro filter on the used points, on
+the frames' times: on Kd's videos that set numbers it takes out 21 to 54 in 100 of a used big joint's
+shake on the picture and 32 to 73 in 3D (51c; 42 to 84 before), and it trails a hand moving at 1 m/s by 2.3 cm at most. `body-check` sets the fitted
+numbers from Kd's videos that set numbers, each from all of them but one and tried on the one left out, and draws every
+refused frame. What it cannot catch: a slow wrong pose the model is sure of (the squat video's
+lifted ankle at 2.8 to 3.8 s passes in all 30 frames; job 52a's two signs); a wrong head at a
+right distance from the shoulders (a head moved at random is used in 16 to 22 in 100 frames since 51c, 12 to 14 at 0.25; no measure reads the head); at
+8 frames a second only a move of more than 2.5 m is a jump; the follower used until job 52d may
+follow a reflection (since 51c the model itself follows one body; see "As built, measured again"). What it costs: a point whose parent is hidden decides nothing, 0 to 6 in 100
+of the big joints on the videos that set numbers (most, the far ankle while the far knee is hidden).
+
+**As built, stage 4 (50c-iii, 2026-11-17).** `BodyMeasures` (`packages/movement/src/body`) takes
+the steady points of each frame and gives one fixed list of 38 measures, the same for every
+exercise: ten joint angles (elbows, shoulders, hips, knees, ankles), nine leans against "down"
+(the trunk from upright; upper arms, forearms, thighs and shins from hanging), six heights above
+the floor in the body's own legs (hips, shoulders, wrists, ankles), two widths in its own trunks
+(hands apart, feet apart), and eleven left-against-right differences. **Both readings are kept,
+never one chosen here:** each measure is read on the flat picture and from the 3D points, and
+each movement uses the one that is steadier from its own phone place (job 52a), since neither is
+always the better. Measured on Kd's six videos with `measure-check`: side on, the near side is
+read flat in every frame it is read in 3D, and the flat reading shakes less for most measures (the
+squat's knee 0.22° against 0.40° in 3D); side on, the 3D arms read 15° to 25° away from the flat
+picture where the arm lies across it (the squat's straight arms 25° more bent); from the head end
+of the bench, the lying man's trunk is refused flat in 319 of 321 frames (the two given read 110°
+and 111°, lying) and read lying in 3D in all 321. **How sure.** `shown` is how much of each part
+it measures the flat picture shows, its length on the picture against its own length in 3D, parts
+laid end to end included, how much of "down" the picture shows for a lean or a height, the lines
+from the foot to the hips and on to the points for a height, and the line between the two points
+for a width. Below half, the flat reading is not given: the picture's own shake could turn the part
+any way. Above half a share proves nothing (round one and its re-check): two parts each shown 0.94
+of themselves can bend 40° towards the camera and look straight, and side on a limb bone reads
+steadily longer or shorter on the picture than in 3D, each by its own amount (the curl's upper arm
+1.38 of itself, the squat's far shin 0.81), so a length can hide a turn. So a flat reading is given
+only while it agrees with its 3D reading (`off`, the difference): **within 30° for an angle, 0.15 of
+a leg or trunk for a height or width**, each the difference not passed in 95 frames of 100 where
+the picture shows every part at cos 10° of its length or more (the 3D points' own error: measured
+25.9° and 0.124), raised to the next 5° or 0.05, set by `measure-check` from Kd's videos that set numbers
+(from three of them and tried on the fourth: three folds set 30°, one 25°; on the one left out 93
+to 99 in 100 of its flat angles are given). A height is compared above the foot seen in that frame,
+in both readings, since the 3D floor is placed by the picture and remembered. What it gives,
+measured: a squat filmed from the front, whose knee bends towards the camera and looks straight, is
+refused once the bend passes 30°, with the arms hanging or reaching to the phone (a knee bent to
+120° is never read straight); side on, the squat's and chair squat's near leg, trunk and heights
+are given flat in every frame, the curl's elbow in 145 of 159 (where its 3D arm is more than 30°
+off, two models that disagree decide nothing); a flat angle at the edge is given up to 30° off (the
+chair squat's folded arm, pointing at the camera, 24° flat and 49° in 3D in the middle); the
+squat's feet apart, across her body, never; from the feet of the bench the trunk in 221 of 596
+frames, 82° in the middle where lying is 90° (59° in 3D, the video's "down" taken as upright). How
+sure a movement needs a reading is its own number, set from its own videos (52a). **Heights**
+stand on a remembered floor, where the lowest heel or toes have been: it drops at once to a lower
+foot, and rises to the feet only after they have been seen above it for a second, longer than a
+body stays up in a jump of 1.1 m (0.95 s), and only when they show the body moved: both feet seen
+above it, or one foot as far below the hips in 3D as when it last stood on the floor, within 0.05 of
+a leg (a standing foot's drop shakes by 0.042 in 95 frames of 100 on the squat video). So one foot
+lifted while the other is hidden leaves the hips at standing height, and a step back from the phone
+moves the floor a second later, at once when the body's size on the picture changes by more than
+0.15 (while a person stays in place it changes by 4 to 11 in 100 on Kd's videos). A height is read
+only while a foot is in view. Checked from outside the code: on the squat, every number of Kd's own
+`analyze_squat.py` (2026-09-28, measured its own way on the heavy model's points, and checked on the heavy model's own file since 51c) is met within 3°, the 3D knee within 3.5° since 51c (each rep's deepest knee
+within 0.6°, the hips' drop within 0.03 of a leg). The same videos at half the frames a second: 0
+to 1 in 100 readings differ on the videos that set numbers, and 95 in 100 lie within 0.9° to 2.7°. About
+105 microseconds a frame on the laptop (the phone's number is job 51's). What it cannot do yet:
+heights for a body lying with its feet in the air (the floor is the feet; job 52c's floor work); a
+floor first seen, or set afresh, under a lifted foot while the other is hidden; for a second after
+a step, heights stand on the old floor; from the head end of the bench, where the legs are seen in
+6 frames of 100 and the stand-in follower changes bodies (his size on the picture jumps up to
+threefold within 3 s), the hips' height is read flat in 8 frames, 4 of them below the floor, with
+the 3D reading agreeing: the leg points themselves are wrong (52d); a reference video's "down" is
+taken as upright, so a camera looking down at a bench gives its 3D leans no true "down" (the phone
+gives its own).
+
 ### 12.3 A movement, and an exercise on top of it
 
 Many exercises are one movement with other equipment (a squat with a barbell, with a
@@ -1567,6 +1658,271 @@ page lists every exercise with its real numbers. **The phone tests itself** (job
 exercise's videos are played through the phone's own pose model while it sits on the
 cable, and its counts must match the laptop's.
 
+**As built, the phone test (51a, 2026-11-17 and 18; `rulings/2026-11-17-51a.md`).** A folder's
+copy of the app holds a test screen, opened only from the laptop's cable, that plays the kept
+videos, or the laptop's own decoded pictures of them, through Google's own Android library
+(MediaPipe Tasks `tasks-vision` 1.0.0, the laptop's own release line, from the app's own Android
+code in `apps/mobile/modules/phone-test`; the store's app holds none of it) on the very frames
+the laptop read. `corepack pnpm --filter @app/movement phone-test` sends the files, takes one
+file a run back and deletes everything on the phone. A run is **not comparable**, and nothing
+in it used, when it read other pictures or ran other settings, or reads its person a wrong way
+(a picture late or early, mirrored, the sides swapped, no 3D); **compared only** when the phone
+decoded the video itself, which judges its video decoder as well as its chip; **the same** when,
+on the laptop's own pictures, it lies within a tenth of the model's own shake from the laptop in
+99 of 100 big joints, no joint in any frame further than the shake in 3D or four times it on the
+picture, and gives a reading the laptop does not in at most 1 of 1,000; otherwise it
+**differs**. A file naming another plan, video or model than the run's is refused, and each kind
+of run clears its old files before it sends anything. Whether a chip that differs counts the same is the proof table's question (from
+52a: the laptop's count, reason for each rep not counted and spoken line), never this test's.
+The library sends Google usage reports by itself (never a picture or a point); a copy's
+manifest takes away the transport's only sender. Measured on Kd's phone (motorola moto g35 5G,
+Android 15), 66 runs:
+- **3D points, and up to four people, from every model on both chips**; where the laptop found
+  more than one person, the phone found as many in 16 to 58 frames of 100.
+- **The main chip gives the laptop's numbers**: on the laptop's own pictures of the chair squat,
+  all three sizes, 0.15 to 0.18 mm in 99 of 100 big joints in 3D (0.02 mm in the middle, where
+  the model itself shakes 9 to 11 mm a frame), its largest 3D gap 0.03 to 0.05 of the shake, and
+  0 to 1 of 17,024 readings given by one only. Not bit for bit (two processors round their last
+  digits apart): on the picture lone joints in single frames reach 1.9 times the shake (one hip
+  in 2,121, its 3D unmoved). The same in use. The
+  **graphics chip differs**: 49 to 58 mm in 99 of 100 there; phone against phone on the same
+  pictures, asked for one person, its big joints lie 0.9 to 2.2 cm from the main chip's in 95
+  of 100 on the three standing videos and 2.9 to 5.1 cm on the floor video, the flat near-side
+  knee, hip and trunk lean spreading 0.5° to 1.1° with full and leaning 0.3° or less, but one
+  far knee in 3D leaning 3.6° (full, chair squat). Decoding the files itself, the phone lies 1
+  to 6.5 cm from the laptop even on the main chip: that is its video decoder, and a live
+  camera's pictures are not decoded from a file.
+- **One picture takes**, the middle, asked for one person / for six: lite 42 / 71 ms on the
+  graphics chip and 69 / 128 ms on the main chip, full 54 / 83 and 100 / 151, heavy 137 / 167 and
+  278 / 335; a model starts in 0.3 to 1.5 s. The main chip ran on the library's own number of
+  cores, which is one (51b-i measured it), on a still screen with no camera.
+  Heavy cannot run live on this phone on either chip.
+- **Asked for one person, the model shakes 2 to 5 times less** than asked for six (on the laptop,
+  a used big joint's middle frame-to-frame shake in 3D: 0.9 to 4.4 mm against 4.9 to 11.2 mm on
+  the standing videos, 8.6 to 13.1 against 18.0 to 30.6 mm on the floor), and one against six
+  moves big joints 5 to 12 cm in 95 of 100. Every kept file and every number 50c fitted was made
+  asked for six, until 51c measured them again asked for one.
+- **The sizes read the body apart, most where a limb points at the camera**: full against heavy,
+  asked for one, the flat near-side knee, hip and trunk lean by 1.7° or less and spread 2.8° to
+  5.4°, the 3D elbow leaning 10° to 40°. Neither is known to be right there: heavy reads the
+  squat's straight arm 25° bent in 3D (§12.2).
+- 51a picks nothing; job 51b picks on the live selfie camera.
+
+**As built, the main chip on more cores (51b-i, 2026-11-18).** The library's Android door has no
+cores setting; its own settings have one (XNNPACK's number of threads), reached from the app's own
+debug code (`PhoneTestCores.java`, in the library's package, which only replaces the chip's part of
+the settings and refuses anything but the main chip). A run names its cores in its file; a file on
+other cores than the run asked for is never judged as it, nor one asked for 2 or more cores that kept
+1.3 or fewer busy (the file says back the plan's number; only the cores busy show the phone took them).
+Each picture's reading also writes the app's time on the cores, so a run says how many it kept busy.
+Measured on Kd's phone (a Unisoc UMS9620, eight cores: four at 2.2 GHz, four at 2.0;
+`measured/phone-test/phone-facts-51b-i.txt`), 40 runs, asked for one person, on the laptop's own
+pictures of the four one-person videos:
+- **The library's own number is one core** (1.03 to 1.05 busy), and its numbers are XNNPACK's on one core.
+- **More cores change nothing in the numbers**: on 1, 2 and 4 cores every point of every picture is
+  the library's own, digit for digit, on all four videos with both models (33,495 points a model).
+- **They make it faster** (the middle / 95 in 100 of a reading, over the four videos): full 103 / 123 ms
+  on its own, 68 / 83 on 2 cores (1.54 to 1.66 busy), **52 / 68 on 4** (2.25 to 2.68 busy); lite 80 / 98,
+  54 / 70, 44 / 59; the graphics chip full 69 / 77, lite 51 / 57. Full on 4 cores is faster than full on
+  the graphics chip in the middle on the three 1080-wide videos (49 to 56 ms against 68 to 72), not on
+  the 720 by 1280 chair squat (47 against 46); lite on the graphics chip is the faster in 95 of 100 (57
+  against 59) and on the chair squat (33 against 40). 51a read the graphics chip faster (full 54, lite 42
+  ms, the phone decoding the videos itself, thermal status 1); here it read the laptop's pictures, at
+  thermal 1 on the squat and 2 after, and the squat's full run was 72 ms at 1: why is not known. Which
+  is faster live is 51b-ii's. Seen from outside (`top -H`) during a 4-core run: three helper threads of
+  the library at about 27% each beside the test's own. Android's thermal status reached 2 ("moderate"),
+  on the charging cable.
+- **Asked for one person, no chip gives the laptop's numbers, the main chip included**: the library
+  looks for the body where its last points were, so the last digits two processors round apart are
+  carried from picture to picture and grow (the squat's hip 0.01 mm apart in the first picture, up to
+  7 mm later). That the main chip is the laptop's model holds asked for six (51a), where it looks afresh
+  in every picture. So the laptop's numbers are judged on a phone by the count and the reasons (52a),
+  never by its points. How far apart, big joints in 3D in 95 of 100 (standing videos / floor video), and
+  the flat knees, hips and trunk lean, the largest lean and spread:
+
+  | | full model | lite model |
+  |---|---|---|
+  | the phone's main chip against the laptop | 1.3 to 1.4 cm / 4.0 cm; lean 0.3° or less; spread 0.4° to 1.3° standing, 3.9° on the floor | 1.8 to 2.2 cm / 4.4 cm; lean up to 1.3° (the squat's right hip and knee); spread up to 10.3° standing (the squat's right knee; 5.6° otherwise), 4.0° on the floor |
+  | the graphics chip against the main chip | 1.4 to 1.8 cm / 3.9 cm; lean 0.4° or less; spread 0.4° to 1.7° standing, 2.9° on the floor; the largest in any picture 5.6 cm standing, 50.4 cm on the floor | 1.9 to 2.1 cm / 4.6 cm; lean 0.4° or less; spread up to 4.6° standing, 3.9° on the floor; the largest in any picture 8.2 cm standing, 14.1 cm on the floor |
+
+  The graphics chip is about as far from the main chip as the main chip is from the laptop (full: 1.4 to
+  1.8 cm against 1.3 to 1.4); lite is up to twice as far as full, so 52a's "largest gap on a chip the app
+  allows" is lite's numbers wherever lite is allowed.
+- 51b-i picks nothing; the live runs are 51b-ii's: full on the main chip on 4 cores, full on the
+  graphics chip, lite on the main chip on 4 cores.
+
+**As built, the live camera (51b-ii, 2026-11-18).** A folder's copy holds a second test screen, opened only from
+the laptop's cable (`PhoneTestLive.kt`), that runs the phone's own camera as the camera screen will: CameraX's newest
+picture at 480 by 640, turned upright and mirrored for the selfie camera as Google's own Android sample does, the
+library's live mode (it drops a picture while it is busy), asked for one person, the camera and the skeleton drawn.
+`corepack pnpm --filter @app/movement phone-live` sends the plan and the models, lets the copy use the camera (and
+takes it back after, when the copy did not have it), shows one still picture of a person and then Kd's four one-person
+videos full screen on the laptop for the phone's camera, keeps the laptop awake, waits for the phone to come back to
+the cable, takes its files back and deletes everything it sent. Nobody exercises and nobody is filmed, and no picture
+is ever written: a run writes, each second, the camera's pictures, the model's answers, those that found the body, the
+wait from a picture to its answer and the app's time on the cores; each minute, heat, battery and memory. Each set-up
+of the ladder runs 20 minutes off the charger, cooling between runs (at least 10 minutes, until the phone is no warmer
+than at the first run's start, at most 30); a run the cable goes into is dropped and made again. `phoneLive.ts` judges
+each run: **not fair** when it is not that step's run (its plan, step, camera, model, people, chip, cores or picture
+size), is short of 20 minutes by its count or by its real length, had the charger in at any moment, saw the body in fewer
+than 80 in 100 answers in any minute, or kept 2.7 cores or fewer busy when asked for 4 (the app's own camera, turning and
+drawing kept 1.65 busy with the model on the graphics chip, so one core more; 51b-i's 1.3 was set with no camera; a
+main-chip step asked for another number of cores has no bar and is never judged); or, having fallen short, when the
+model was waiting for the camera (it answered 95 in 100 of the camera's pictures), the battery saver was on, the
+battery fell to 15%, it started above Android's thermal status "light" or with the battery above 40 °C (the first run
+included, so a test started on a hot phone is never stepped past), or it started warmer than the first run; **holds**
+when, fair, every minute answers 15 times a second or more, over each second's real length; otherwise it **falls
+short**. A step with a note of a failed start is not fair, a still body is read only as the look the plan asked for, and
+files kept beside another plan are refused. The pick is the first step that holds, every step above it having fallen
+short in a fair run: a step not run fairly is run again, never stepped past. Measured on Kd's phone (moto g35 5G), the
+phone facing the laptop's screen, the second try (the first ran its first run on the charger and was stopped):
+- **Full on the main chip on 4 cores held** (3.82 cores busy): 24.6 to 25.3 answers a second in its first four minutes,
+  then, the phone warm, 17.4 to 20.0 in every minute after (its slowest second 8); the wait from a picture to its answer
+  74 ms in the middle, 94 to 96 once warm; the body found in 89 to 94 in 100 answers; 7% of the battery in 20 minutes
+  (69% to 62%), the battery 32.8 to 37.8 °C, Android's thermal status 1 at the start and 2 after; the app 242 to 343 MB,
+  no growth, 712 to 1,041 MB of the phone left free. **It is the pick.** Its margin over 15 is about a sixth in its
+  slowest minute (17.4) and a fifth to a quarter in the other warm minutes (18.2 to 18.8), before the camera screen adds
+  the engine, the voice and its own drawing: job 53 measures it again on the real screen.
+- **Full on the graphics chip** answered 27.1 to 28.1 a second on 1.65 cores, cooler (31.8 to 33.3 °C, thermal 1 until
+  minute 15), 6% of the battery; **not fair**: the camera saw the body in only 57 to 77 in 100 of its answers. **Lite on
+  the main chip on 4 cores** answered 18.1 to 29.8 a second on 3.30 cores, 8% of the battery; **not fair** the same way
+  (62 to 81 in 100 in its first ten minutes, 94 to 96 after). Why the body was lost in those two runs and not in the first
+  is not known; neither changes the pick, since both stand below it.
+- **A still body, from the laptop's screen** (not a person in the room), full on the main chip on 4 cores, on the
+  cable: the back camera 24.3 answers a second, its used big joints shaking 1.4 mm in 3D in the middle; the selfie camera
+  25.7 a second, 2.1 mm. (The first try's report gave 2.7 mm and 2.1 mm; its files were not kept.) The selfie camera is
+  not steadier than the back one here; how either reads a person 2 to 3 m away is job 53's.
+- **The selfie camera's picture is mirrored before the model reads it**, as Google's own Android sample does, so the
+  model's left is the person's right. It changes neither speed nor shake; the form rules compare left against right, so
+  job 53 decides knowingly how the camera screen hands the picture over.
+- Nothing chosen is Android's alone: the same model and the library's own settings exist on an iPhone, which gets its own
+  test (§12.5, 51a).
+
+**As built, the kept videos measured again (51c, 2026-11-18; `rulings/2026-11-18-51c.md`).** Every kept file is now
+what the phone runs reads: Google's full model, asked for one person, at 30 frames a second
+(`scripts/keptVideos.ts` names the model; `measure-points` makes that by default and `--keep` refuses any other). Asked
+for one, the model gives one body in every frame whoever it is, so **which videos may set a fitted number is written,
+never inferred**: a video sets numbers only when a terminal has drawn it (16 frames spread over the whole video) and
+seen the person exercising in each frame drawn (`KEPT_VIDEOS`, with what the pictures showed), that look names the very
+file by its SHA-256 (a file measured again sets nothing until it is looked at again), the file is the phone's model
+asked for one person at 30 frames a second, every frame holds one body whose size can be read, and **the plain sign of a
+changed body** finds none: the body's middle moving faster than a jump's take-off (5 m/s; for a jump of 1.1 m,
+√(2 · 9.81 · 1.1) = 4.6) or its size on the picture jumping by more than 1.25 times from one frame to the next
+(`bodyChanges`, `scripts/follow.ts`; across a frame with nobody, the body after is judged against the body before). Measured: on the six new files the middle moves at most 1.5 m/s and the size at most
+1.12 times, and the sign finds nothing; on the old six-person bench files, with the stand-in follower, it finds 80
+changes each (up to 27.6 m/s and 4.5 times); a woman put in the squatting woman's place 0.38 m off is found (11.3 m/s);
+another body of the same size in the same place is not (job 52d). A video nobody has looked at sets nothing.
+- **The two bench videos follow the right man** in every one of 16 frames drawn each (never the reflection), and still
+  set no number: filmed from the ends of the bench, the model marks the head-end man's knees and feet hidden in 98 frames
+  of 100 and puts the barbell man's knees off the picture in 64 and his feet below it in all. They try the refusals.
+- **The numbers set again by their rules**: the bone allowance 0.3 of the trunk (was 0.25); steady on the picture 2 Hz at
+  rest +10 Hz a m/s (was 0.5 +10), in 3D 0.05 Hz +20 (was 0.05 +10); the angle limit 30°, the length limit 0.15 and the
+  floor's size change 0.15 unchanged. Set from three of the four and tried on the fourth: the bone 3 of 4 folds, the picture
+  4 of 4, 3D 2 of 4 (without the chair squat the other three set 0.25 Hz +10, which leaves her moving joints 1.14 cm
+  further off than the model's own shake, over the rule's 1 cm: the 3D setting rests on the four together). **The bicycle crunch sets the bone allowance**: twisting, his far leg straightens and its 3D length
+  changes, so at 0.25 his real left knee and foot are refused in 16 frames from 0.6 to 1.5 s (1.1 in 100 of his sure
+  joints, above the rule's 1 in 200); without him the others set 0.2. The price: a head moved at random is used in 16 to
+  22 frames of 100 (12 to 14 at 0.25); no measure reads the head.
+- **Found**: at 0.57 s of the crunch the phone's model swaps his legs for two frames (his left knee thrown 16.6 m/s and
+  back at 13; a knee in a crunch moves 0.4 to 3): the check refuses both legs as swapped until 1.1 s. Drawn 1.3 times
+  bigger the same throw passes the jump limit, is refused as a jump, the swap is not seen and his wrong right leg is used
+  for a few frames (a known limit, 52a). From the side, the phone's model marks the squatting woman's far knee hidden in
+  every frame, so her feet apart is read in no frame (the heavy model read it in 3D in 73).
+- **Against Kd's own squat measuring** (made on the heavy model): the engine's measuring, on the heavy model's own file
+  (`test/outside`), within 3° and the 3D knee within 3.5° (its looser 3D steadying reaches 2.1° to 3.2° deeper at the
+  bottom than his median filter); the phone's model on the same video, from his numbers: the deepest knee 0.2° to 2.8°,
+  the hip 0.9° to 3.0°, standing, the knee 4.3° and 4.8°, the hip 0.5° and 2.3°.
+- **The body's half-rate and steadiness**: at half the frames a second, 0 to 0.7 in 100 of big joints answered
+  differently (the bench videos now 0.2 and 0.4, from 3.2 and 3.3); readings 0 to 1 in 100, 95 in 100 within 0.5° to
+  2.1°.
+
+**As built, the movement matcher and the squat (52a-i, 2026-11-19; `rulings/2026-11-19-52a-i.md`).** A movement is
+a file (`packages/movement/movements/squat.json`, checked by `movementSchema` in `@app/shared` and by `checkMovement`
+before it is trusted: rule names of letters, digits and spaces, one depth rule above 0, the drive and a rise on a height,
+"apart" on a left-against-right measure, a rep's time over the rep). It names the drive (the measure whose fall is the
+rep: for the squat, the hips' height, read on the picture only, since from the front the 3D heights drift by up to a
+third of a leg while a person stands still), what standing tall is (knees within 20° of straight, the trunk within 20° of
+upright, not fitted), and its rules, each read in the person's own terms. **Two roles:** a "count" rule says how far a
+rep went (depth, knees bent): a rep that fell short, having gone at least three quarters of the way on every count rule,
+is not counted and says why; a "match" rule says what kind of movement it was (hips and knees bending together, chest up,
+feet stay down, feet stay in place, stance holds, hips alike): a rep that breaks one, or a dip that never tried, is
+another movement, with no count and no word. A rule the camera must see is unseen, and the rep decides nothing, when its
+readings break off anywhere in the rep or the 0.3 s after it for longer than 0.1 s or one and a half frame steps; one
+marked "when seen" (stance holds, hips alike) is checked only where the phone's place shows it. A left-against-right
+reading counts only when the picture and the 3D points both see the sides differ (a man's leg pointing at the camera read
+173° on the picture and 137° in 3D). The feet are read on the picture against the body's size while standing (from the
+front the size read from the thighs lags about a second behind a squat, and still feet and hips seemed to move): heels
+and toes for where they stand, from the top of the rep before; for leaving the floor, each foot's rise above the lowest
+place it reached in the same rep (never from the top before: in reps with no pause a hop's feet are already leaving the
+floor as the rep before comes back up), its heel and toes both, and both feet where both are seen (side on, the far foot
+wanders 4 to 5 cm at the bottom of a real squat), a point back from hiding starting afresh. Standing is the highest still
+standing remembered; a
+lower one is taken only once held for a second, so a slow descent never becomes the new standing; a repeated frame
+decides nothing; at the end of a set a rep counts only once back up for 0.3 s (on Kd's four squat-jump videos the feet
+leave the floor from 0.17 s before to 0.2 s after the hips are three quarters up, in 18 take-offs of 19). `MovementMatcher`
+(`packages/movement/src/movement`) is pure, about 22 microseconds a frame in the middle and 60 at most on the laptop (measured after round one).
+**The numbers** are set by `movement-check` from eight people (Kd's folder `D:\exercise video collection`, 2026-11-19,
+and his reference squat), from the reps counted by eye (the deepest dips of each video, as many as were counted): a count
+rule a quarter of the way back towards standing from the shallowest rep; a match rule beyond the furthest rep by half its
+distance from the middle rep; each person left out in turn. **Measured:** the eight people (2 side on, 4 from the front,
+2 in between; 24 reps) count what was counted by eye with the squat's numbers and with themselves left out, and the same
+at 7.5, 8 and 10 frames a second; the chair squat (2) and the kettlebell goblet squat (2) count right with every set of
+numbers; 28 videos of other movements (jumps, squat jacks, lunges, split squats, step-ups, deadlifts, Romanian deadlifts,
+swings, good mornings, rows, calf raises, presses, curls, a crunch, two bench presses) count 0 with every set of numbers
+and are given no word; a real squat turned by hand into a hop of 5 to 15 cm at the top, or with the feet carried out
+wide, counts 0, and so does the hop with the feet or the whole body hidden in the air, and hops of 10 and 12 cm starting
+0.2 s before each rep is back in five reps with no pause. The limit: leaving the floor is told from about 3 cm. **Then fresh**, 39 videos never looked at while
+the rules were first chosen: 33 of 34 other movements count 0; **a kettlebell push press counts 3 of its 4 dips** (knees
+120° to 127°, the hips 0.15 to 0.19 of a leg down, as deep as the shallowest squat of the eight): open, for 52b, where the
+squat's depth is set from its form standard; of three squat variants on a still camera, the plate goblet squat (4) and a
+Smith machine clip that starts low (0) count right, and **the barbell front squat counts 2 of 3** since round one's
+re-check (her third rep, rising in the video's last 0.3 s, reads both feet 3.1 cm up, over the 3 cm number: open, a missed
+rep, for 52a-ii); two whose camera pans or tilts are reported, never judged
+(a moving camera makes still feet look as if they moved). Each video is played with its first and last pictures held
+for a second (a live set starts and ends with the person in view; the engine learns a body in its first half second).
+The 72 files take 7.7 MB in git (§12.7: where 200 exercises' files live is job 54's). The squat is not passing until the
+two open cases are closed; nobody uses it before job 53.
+
+**As built, the replays (52a-ii-a, 2026-11-19; `rulings/2026-11-19-52a-ii-a.md`).** `scripts/replays.ts` plays each judged
+video again: **nearer** (up to 1.3 times bigger, the whole body kept in the picture; a video whose body cannot grow 1.05
+times is not counted as tried), **farther** (0.6), **tilted** 15° each way ("down" as the phone's sensor gives it), **15 and
+8 pictures a second**, **uneven** (each picture 1 to 4 camera pictures after the last, as live mode drops them), **shaky**
+(every point 1 cm afresh, 95 in 100), **the chip's gap** (every point moved by the very gap the chosen set-up, full on the
+main chip on 4 cores, read from the laptop on the same pictures of the squat and the chair squat, 51b-i; kept as body points
+in `test/phone-points` under labels of their own: the foot points 0.7 to 1.1 cm up or down in 95 of 100, heel and toes mostly
+together; a drift drawn by hand, each point alone, was harsher than the phone), and **a passer-by** about 1 m from the phone
+hiding everything under them (0.45 of the picture's width) for 0.8 s, between reps and at a rep's bottom (with no rep, the
+video's middle and where the hips are lowest), taking at most the one rep it covers. `movement-check --replays` prints the
+table. **The numbers are set from the eight people as filmed and as each replay that changes only how the camera reads a
+body** (all but the passer-by): set from the videos alone, two fresh videos lost reps as filmed. Measured: under each of the
+11 held replays every other movement (61 videos) counts 0 and is given no word; the 13 squat videos with a count by eye
+count 35 of 35, every person also with themselves left out of the numbers, but where a passer-by covers a rep (the one
+between reps 34, the one at a bottom 23: each rep it hid decides nothing). Shown, never held: the graphics chip's gap 35 of
+35; the small model's 9 of 35, and one kettlebell swing counts 1; 3 pictures in 10 dropped at random 33 of 35.
+**Jumps, true to gravity** (in the air 2·√(2h/g), the whole body carried up; `test/movementHops*.test.ts`), on three squat
+videos (side on; in between with no pause between reps; from the front), taking off from 0.2 s before to 0.2 s after a rep
+is back up, as filmed, at 15 and 8 pictures a second and with pictures skipped unevenly: **no jump of 8 cm or more is
+counted** (Kd's four squat-jump videos lift the ankles 12 to 34 cm); jumps of 10 and 15 cm with the feet hidden or the
+pictures missing for 130 to 240 ms round their top, or one foot lost at take-off and the other in the air, are never counted;
+a jump from the bottom is refused from 8 cm where both feet are seen. **Known limits, in plain sight:** smaller hops (4 to
+6 cm) may count, the feet's own wobble at this camera being up to 4 cm; side on, with only the near foot seen, a jump from
+the bottom counts up to 10 cm and is refused from 12 (the model slides that foot 2.6 to 4.4 cm up the picture at the bottom
+itself): a squat done with a hop, never a squat jump. **What changed in the matcher:** the feet are read as the model gave
+them (steadying trails a fast foot); a foot point's rise is from where it rests, its lowest place on the picture over the
+whole rep, worked out when the rep is judged (the way up and the 0.4 s after hold the floor before a take-off and after a
+landing), never below 0; a foot is up only when its heel and toes are, the body only when both feet are where both are read,
+and at the bottom only with both feet read; a foot point hidden longer than a break reads nothing for the rest of the rep;
+a rep whose feet are hidden at the moment it would be judged waits for them, and one that ends hidden decides nothing; the
+break that leaves "feet stay down" unseen, pictures in it or none, is the longest that hides no 10 cm jump
+(`PROMISED_JUMP`, with a centimetre of room; 2·√(2(0.10 − 0.04 − 0.01)/g), 202 ms); the moment after a rep is 0.4 s (the measured take-offs reach 0.2 s, and a
+12 cm jump then rises past twice the feet's number); once back up, a rep is no longer dropped for the hips being unread. The
+fresh barbell front squat counts 3 of 3 (was 2; looked at for this, so no longer a fresh test). The numbers: depth 0.16, knees
+125°, hips and knees together 34°, chest 56°, feet down 4 cm, in place 0.10, stance 0.24, hips alike 42°. **The body check:**
+the crunch's legs thrown onto each other at 0.57 s (the left onto the right's place, the right only part way) were used at his
+own size and drawn 1.3 times bigger; a swap is now each side nearer the other's last place and the two together twice as
+well explained, and a point back near its last used place is used again at once: refused at 0.57 s at both sizes, used at
+0.60 s, and every verdict the same at 1.3 times. On the laptop the replay and jump test files take 30 to 75 s each.
+
 An exercise that does not pass is published as "count by hand", never with a wrong camera
 count. Kd tries one exercise of each kind of movement on the phone, about a dozen, never
 each one. After launch the server sees, for each exercise, how often members changed the
@@ -1611,11 +1967,32 @@ The body points of four of Kd's videos take 1.7 MB as stored today (measured 202
 so 200 exercises with several videos each would be hundreds of MB. Job 50c makes a compact
 file for them. A video never goes to git (§11.7).
 
+**As built (50c-i, 2026-11-16).** The engine made fresh lives in `packages/movement`, beside
+the old one. Its frame is `movementFrameSchema` in `@app/shared`: the time, the picture's
+shape, which way is down (a unit vector in the picture's own frame; a reference video is
+`[0, 1, 0]`), and every person the model found, up to six, in no particular order, each
+with 33 picture points `[x, y, depth, visibility, presence]` and 33 3D points in metres (or
+none). `corepack pnpm --filter @app/movement measure-points "<video>" --keep` turns a video
+into a `.bodypoints` file (`scripts/bodyPoints.ts` says its bytes) at 30 frames a second,
+asking the model for six people (since 51c: the phone's own full model, asked for one). Each number is rounded once: 1/100,000 of the picture,
+1/10,000 for depth and both kinds of sureness, 0.01 mm in 3D, a tenth of a millisecond;
+the file says its own rounding and is read by it, so a later change of the steps cannot
+read a kept file wrong.
+On four of Kd's videos the model's own frame-to-frame shake was at least 0.0009 of the
+picture, 0.019 of depth and 1.5 mm in 3D, and the rounding moved no joint angle of a
+well-seen joint by more than 0.03°. A damaged file (a check number, a format number, every
+length) is refused whole. Measured on his six reference videos: 2,054 frames, 2,406 people
+across them, 1.2 MB kept against 13.6 MB as the model gave them (since 51c, asked for one person: 2,048
+people, 0.85 MB kept); 502 bytes for each person
+in a frame against 2,525 a frame in the old trace files; about 14 KB a second of video for
+one person, so 200 exercises with four 15-second videos each would be about 160 MB. Where
+they are kept once there are that many is job 52a's or 54's question.
+
 ### 12.8 The jobs (ROADMAP Stage 5, exercise folder 1; ROADMAP wins where they differ)
 
 | Job | What it builds |
 |---|---|
-| 50c | The body's picture: the frame's new inputs, compact files, "is this body possible", steady points, the body measures (flat or 3D, whichever is steadier) |
+| 50c | The body's picture: the frame's new inputs, compact files, "is this body possible", steady points, the body measures (each read flat and in 3D, with how much of it the picture shows) |
 | 51 | The phone test: model and library, speed, heat and battery, 3D points, several people; the phone testing itself on the videos |
 | 52a | The movement matcher and the proof table, with the squat movement made fresh as the first proof |
 | 52b | The form judge, the reason for a rep not counted, the summary |
@@ -1630,9 +2007,11 @@ terminal (Kd, 2026-11-16).
 
 ### 12.9 Not measured yet
 
-Whether the phone's library gives 3D points and several people at speed (job 51) · whether
+Whether the phone's numbers, a centimetre or so from the laptop's asked for one person, change a count on the phone's own runs (job 52a-iii; the chip's measured gap carried onto every squat video changes none, 52a-ii-a; 51a,
+51b-i and 51b-ii measured the rest, §12.5) · whether full on the main chip still holds 15 a second with the camera
+screen's engine, voice and drawing, and how the selfie camera reads a person in the room (job 53) · whether
 one long recording cuts cleanly into lines (job 53) · whether a video redrawn from another
-phone place is faithful (job 52a) · what the hips do in a real one-leg lift: on the drawn
+phone place is faithful (job 52a-ii-b: drawn back from its own place, a redraw puts the big joints 2 to 4 cm off in the middle, 5 to 11 cm in 95 of 100) · what the hips do in a real one-leg lift: on the drawn
 one they moved at most 0.026 of the trunk's length, while the smallest rise in a real rep
 on twelve squat-family videos was 0.110 of the leg's length, under the old rules (job 52a
 measures both again with the new engine).
@@ -1699,25 +2078,28 @@ Everything a member can do today (§13.8).
 
 ### 13.2 An exercise's file (the Library's part)
 
-One file for each exercise, named by its id word, in a place neither app owns (job 60's
-plan names it). The tools find the files by reading the folder: there is no hand-kept list.
+One file for each exercise, named by its id word, in `packages/shared/library/exercises/`
+(job 60a), with the Compendium table beside it (`packages/shared/library/compendium.json`).
+The tools find the files by reading the folder: there is no hand-kept list. The word lists
+and the file's rules are `packages/shared/src/library/`; its check runs in that package's
+tests, so GitHub refuses a faulty file.
 
 | Fact | Rule |
 |---|---|
 | Id word | lower case, never changed, never used again for another exercise; an exercise that continues from the old 58 keeps its row and id |
 | Name, other names | the other names are for search ("press-up" finds Push-up) |
-| Kind | a fixed list, settled in job 60 from the old web's 11 categories and the public list's 7 |
+| Kind | one of: strength · cardio · plyometrics · stretching · mobility · yoga · Pilates (60a, from the old web's 11 categories and the public list's 7: body areas are the muscle filter, "bodyweight" the equipment filter, HIIT and endurance are cardio, powerlifting, Olympic lifting and strongman are strength; "Rehabilitation" is dropped, a health claim for a fitness app) |
 | Muscles | main and also-worked, from ONE fixed list: abdominals, abductors, adductors, biceps, calves, chest, forearms, glutes, hamstrings, hip flexors, lats, lower back, middle back, neck, quadriceps, shoulders, traps, triceps |
-| Equipment | from one fixed list (barbell, dumbbell, kettlebell, cable machine, machine, resistance band, pull-up bar, bench, chair, step, jump rope, exercise ball, mat and the rest job 60 settles); empty means none |
+| Equipment | from one fixed list (60a): barbell, dumbbell, kettlebell, EZ curl bar, weight plate, cable machine, machine, Smith machine, resistance band, pull-up bar, dip bars, gymnastic rings, suspension trainer, bench, box, step, chair, jump rope, medicine ball, exercise ball, foam roller, mat, treadmill, rowing machine, exercise bike; empty means none, and a wall or the floor is not equipment |
 | Level | beginner · intermediate · advanced |
 | A set is measured in | reps or time. This is what a set's target is, said once; it replaces every family-code rule |
 | Weight | a set never takes one · may · usually does |
 | Each side | whether a set is done for each side |
 | Starting numbers | the sets and target offered when it is added to a workout; the person changes them |
-| Energy (MET) | with the Compendium of Physical Activities entry it came from |
-| About, steps, mistakes | in proper wording, each from a named proper source (§11.3 step 5); text is kept by language, English first |
+| Energy (MET) | the file names a code of the 2024 Adult Compendium of Physical Activities; the MET is read from the Compendium table, copied from the Compendium's own pages, and is never typed in an exercise's file (60a) |
+| About, steps, mistakes, cautions | in proper wording, each from a named proper source (§11.3 step 5); a caution is its own fact, never a step, and as strong as its source says it (60a); text is kept by language, English first |
 | Clip, still picture | empty until job 62 |
-| Status | live · retired |
+| Status | live · retired. Before launch a file may simply be deleted (Kd, 2026-11-17: no real members yet); after it, an exercise is retired |
 
 An exercise's page is written and checked for this file (job 65); the old text is never
 copied across in bulk. A draft may start from the public-domain list free-exercise-db (the
@@ -1757,16 +2139,57 @@ otherwise, that plan says so and this section is amended.
 - **Publishing is a part of its own**, run when the server is deployed and by the local
   seed. It reads every exercise file and refuses the whole publish, naming the file and the
   fact, for: a word outside a fixed list, a missing fact, two exercises sharing a name or
-  other name, a file that was published and is now gone (retire it instead), a number
-  outside its limits. The same check runs on GitHub, so a faulty file never merges.
+  other name, a number outside its limits, a Compendium code the table does not hold, a
+  misspelt fact. The same check runs on GitHub, so a faulty file never merges (60a). A
+  deleted file is not refused (Kd, 2026-11-17); 60b keeps the row of an exercise whose file
+  is gone, hidden, while saved sets still name it.
 - It writes each exercise's row (its id, status and the facts the server reckons with) and,
   only when the content changed, one new numbered copy of the whole list for each of beta
-  and live. A published copy is never changed; going back is pointing at the copy before.
+  and live. A published copy is never changed. There is no going back to an older copy (Kd,
+  2026-11-18; "As built in 60b" below).
 - **One download** for a signed-in phone: the whole list, the retired ones marked so that
   history can name them, and folder 1's camera data. It carries its own fingerprint, and a
   phone that already holds it is answered "not changed". Its size at 200 exercises is
   measured in job 60 and written here.
-- The old routes are left exactly as they are, with nothing added.
+- The old routes are left as they are, with nothing added, but for one clause in the old save
+  route ("As built in 60b" below).
+
+**As built in 60b (2026-11-18).** Publishing is `apps/api/src/modules/library/publish.ts`, run by
+the seed after the old rows. The download is `GET /v1/library` (`libraryDownloadSchema` in
+`packages/shared`): the fingerprint, the copy's number and the list; a signed-out caller gets 401.
+- **Rows.** `library_exercises` holds one row for each published exercise: its status, its MET read
+  from the Compendium table, its code, reps or time, weight, each side, and its whole entry. An
+  exercise that continues from the old 58 (squat, plank) keeps its `exercises` row and id; the old
+  58 rows and their own MET are not changed (squat 6.0 there, 3.0 in the Library). Any other gets a
+  new `exercises` row with none of the old camera facts, 'hidden' to the old routes (migration
+  0243). New code reckons with the Library's MET. The old save route counts a set of such an
+  exercise as unknown, as it does any name it does not know.
+- **A deleted file.** A Library row is never deleted: it is the one place a gone exercise's name
+  is kept. While a saved set names it, it is 'hidden' and the download carries its last entry so
+  that history names it; one of the old 58 is always 'hidden', because the old save route can
+  still name it. Otherwise it is 'removed': out of the download, its entry kept. Every publish asks
+  again about every gone row, so a set that arrives later brings it back as 'hidden'. Its
+  `exercises` row stays, so its id word is never given to another exercise. "Named" means a saved
+  set today; job 61 adds its saved workouts to that check and takes the publish lock shared while it
+  saves, so no set lands between a publish's question and its answer. A save that names a 'removed'
+  exercise is kept (61a, round one): the phone did that workout before the file was deleted, and the
+  next publish finds the set and brings the exercise back as 'hidden'.
+- **Copies.** `library_copies` holds each copy's exact text, so the fingerprint is the text's
+  sha256. A copy is added for each of live and beta only when the text changed; beta is the
+  `beta_definitions` flag's list, the one rule the old definitions use too, and while beta has no
+  copy a tester gets live. A phone's tag is compared weakly (RFC 9110 §13.1.2). There is no going
+  back to an older copy (Kd, 2026-11-18: no real members yet): a mistake is fixed in the file and
+  published again. One publish runs at a time; a second waits and then finds nothing changed.
+- **Measured at 200 exercises** (2026-11-18, `apps/api/tools/measure-library.ts`, local database,
+  five runs, medians): publishing a new list of 200, 101.5 ms in all, of which 21.7 ms holds its
+  process; it runs in the seed's own process at a deploy, never in the api. The download is
+  343.5 KB as the api sends it. Compressed, the real list is 606 bytes an exercise (1,730 as sent),
+  so about 120 KB at most for 200 different exercises (the 7.2 KB the tool prints is of copies of
+  three files and too low). A download's own work in the api: 5.6 ms the first time a copy is read
+  (its fingerprint and its check), then 0.3 ms from memory.
+- **For job 63:** the phone reads `libraryDownloadSchema`, which refuses a word it does not know;
+  principle 7 asks the phone to show such a word plainly and go on, so the phone's own reading of an
+  entry is looser than the server's.
 
 ### 13.5 What a workout keeps (job 61)
 
@@ -1801,6 +2224,102 @@ otherwise, that plan says so and this section is amended.
   engine's so none of them changes. Every new column or table joins the privacy download
   and delete lists and the policy's words in the same pull request.
 
+**As built in 61a (2026-11-18).** The save is `POST /v1/workouts` (`workoutSaveSchema` in
+`packages/shared`, `apps/api/src/modules/training/`); its Idempotency-Key is the workout's id.
+- **Answers:** 201 saved · 200 saved already · 400 a broken phone (a NUL character included), naming
+  its fields and never its values · 404 somebody else's id · 422 `unknown_exercise` with the id words · 429 past ten a minute
+  for the person (never counted by address).
+- **Kept** (migration 0244, new columns on `workouts` and `workout_sets`, empty on every old row): the
+  name, end, time zone, what it was started from, the effort stars, the heart rate's average and
+  highest (the readings are not kept, as a run's); for a set its unit, target, weight in grams, rest
+  after it and how it was counted. Reps done stay in `reps` and time done in `hold_ms`; a set by hand
+  or timer is `log_only`; `engine_version` is the app's version, as the old route's means. Counted by
+  camera is refused until job 64b adds it with the set's summary.
+- **Known exercise:** any exercise with a Library row, a removed one included (the next publish brings
+  it back as 'hidden'); only an id word the Library never had is refused. The save holds the publish
+  lock shared, so no set lands between a publish's question and its answer. Once its fields pass the
+  shared schema, an id already the person's is answered "duplicate" before anything else is asked (its
+  end, its exercises), so a saved workout sent again is never refused later.
+- **A set is kept in its own unit and weight**, as the phone's list had them, whatever the Library
+  says when it arrives: refusing it would leave a finished workout that can never be saved after a
+  Library edit. Job 61b's records read each set by its own unit.
+- **Time zone:** kept by its own name as the server spells it ("asia/kolkata" is kept as Asia/Calcutta,
+  Etc/GMT-3 as itself). One the server cannot use (not a zone, or an offset such as +05:30, which
+  Postgres reads with the opposite sign) is kept as none and never refuses the workout; a day is then
+  worked out in the person's own zone.
+- **Limits:** 200 sets; 1,000 reps; four hours a set; 1,000 kg; an hour's rest; 12 hours a workout; its
+  sets and rests within its length, with a second a set of slack; a time done no more than a second
+  past its set; an end no more than five minutes past the server's clock. The phone measures the
+  length with its steady clock.
+- **Calories:** version 4 (`training/calories.ts`): a set's time at its exercise's Library MET, a set
+  with nothing done and every rest at REST_MET 1.8, a pause at nothing, all spent against the
+  workout's length in the order of the sets. XP and the streak are worked out again from history after
+  the commit, as for the old route, so a second send gives nothing twice.
+- **Old readers:** the old exercise mix (`/v1/progress/distribution`) leaves out an exercise with no old
+  family; the history, a workout's page and its summary read a new workout unchanged.
+- **Measured** (2026-11-18, `apps/api/tools/measure-workout-save.ts`, local database, the api's pool of
+  10): a usual save (20 sets, an hour of heart rate, 51 KB) holds the server 7.2 ms, the biggest (200
+  sets, 12 hours of heart rate, 652 KB) 46.3 ms; 199 people saving at the same instant took 3.0 s in
+  all, 2.5 s each (median), and the server answered nobody for at most 15.8 ms at a time.
+
+**As built in 61b (2026-11-18).** Four reads beside the save (`apps/api/src/modules/training/history.ts`,
+shapes in `packages/shared/src/library/workoutHistory.ts`), each the person's own:
+- **Routes:** `GET /v1/training/month?month=YYYY-MM` (the days and how many workouts on each) ·
+  `GET /v1/training/days/:day` (that day's workouts in the order they started, the first 100, with `total`) ·
+  `GET /v1/training/workouts/:id` (set by set, with its new records) · `GET /v1/training/exercises/:exercise/records`.
+  Somebody else's workout, a broken id and an exercise the server never had are 404; a bad month or day 400;
+  120 reads a minute for the person, never by address.
+- **A day** is the day in the zone the workout was done in, or in the person's own zone for one kept without one. The person's
+  own zone is read by its name, once, for the plan's days too; one kept as an offset ("+05:30", which Postgres
+  reads with the opposite sign) is UTC, in the old history's reads as well.
+- **Free plan:** the month, the day and the records read back the old history's days (`historyGate`, the same
+  rule) and say so in `limitedToDays`. A workout's own page opens whatever its age, as the old one does, and its
+  "New record" is told against everything before it: told against only part of the past, it could call a set a
+  record that is not one.
+- **The rule** (`training/records.ts`, pure, table-tested): a set with nothing done is no record; a set is read in
+  its own unit (an old set with a hold is in time); heaviest, most reps, best estimated one-rep max (Epley, sets of
+  1 to 10 reps with a weight), most lifted in one workout (reps sets), longest hold and heaviest in time; a tie
+  keeps the first time it was reached; "New record" needs something of that kind before it to beat, so the first
+  time is not a record. An exercise the Library never had is named null; the phone shows its id word.
+- **Measured** (2026-11-18, `apps/api/tools/measure-training-history.ts`, local database, 846,622 sets in the
+  table): for a person of 1,560 workouts and 46,800 sets, the server answered nobody for at most 4.9 ms on a
+  month, 2.7 ms on a day, 16.7 ms on their newest workout with its new records against five years, 16.4 ms on an
+  exercise's records over five years. The database sends only the first set of each way a set was done, and each
+  workout's lifted total: reading every set held the server 75.6 ms.
+
+**As built in 61c (2026-11-19).** A person's saved workouts (`apps/api/src/modules/training/saved.ts` and
+`savedRepo.ts`; the shape is `plannedWorkoutSchema` in `packages/shared/src/library/plannedWorkout.ts`, which
+items 36 and 24b take as it is):
+- **The shape:** a name (1 to 60 characters) and 1 to 50 exercises in order, each with its unit (reps or time, as
+  the phone's list had it) and 1 or more sets of a target, a weight in grams (or none) and the rest after it (or
+  none); 200 sets at most in all. The same exercise may come twice.
+- **Routes:** `GET /v1/training/saved` (the list, the most recently changed first: each one's exercises' id words
+  in order, each once, and its number of sets; with `most`) · `GET /v1/training/saved/:id` (one, whole) ·
+  `PUT /v1/training/saved/:id` (save, or save a change, under the phone's own id) · `DELETE /v1/training/saved/:id`.
+  Somebody else's saved workout is 404 to all four; a broken id is 404 to a read or a delete and 400 to a save.
+  Saves and deletes 30 a minute for the person, reads within the 120 of the history; never by address.
+- **A save** answers 201 created, or 200 `updated`, `unchanged` (the server holds this change or a newer one, by
+  the phone's `editedAt`, so a late send never undoes a newer change) or `removed` (the person deleted it; nothing
+  is kept and the phone forgets it), with the `editedAt` the server holds (one finer than a millisecond is
+  refused, as a broken phone, so what is kept is what reads back): an
+  "unchanged" whose `editedAt` differs from the phone's tells it to read the saved workout again. A save and a
+  delete of one id take a lock on the id, whoever sends them, so an id has one owner. 422 `unknown_exercise` as for a workout; 409 `saved_workouts_full` past
+  **50 for each person, on every plan** (Kd, 2026-11-19), counted under the person's own lock so two at the same
+  instant cannot both pass; 400 for an `editedAt` more than five minutes past the server's clock. It holds the
+  publish lock shared, as a workout's save does.
+- **A delete** answers 204, sent twice too, and for an id the server does not hold yet: the id is kept with its
+  owner (`saved_workout_removed_ids`, as `meal_removed_ids`), so a save of it still on its way keeps nothing. A
+  person's newest 1,000 are kept and the oldest go, so deletes cannot add rows for ever.
+- **Kept** (migration 0245): `saved_workouts`, `saved_workout_sets` (no user_id of its own, collected with its
+  saved workout by the cascade) and `saved_workout_removed_ids`, all three in the privacy download and delete
+  lists and the policy's words. The old `workout_templates` is left as it is. A publish asks of saved workouts
+  too: an exercise one names stays 'hidden' while its file is gone.
+- **Measured** (2026-11-19, `apps/api/tools/measure-saved-workouts.ts`, local database, 209,750 saved sets in the
+  table, the api's pool of 10): for a person at the limit (50 of 200 sets), the server answered nobody for at
+  most 7.0 ms on the list (8 KB), 6.3 ms on one (13 KB), 5.4 ms on a new one, 5.9 ms on a change and 2.2 ms on a
+  delete; 200 people saving 200 sets at the same instant took 0.9 s in all and the server answered nobody for at
+  most 23.7 ms. The publish's question was measured over this folder's 3 Library rows only (2.6 ms).
+
 ### 13.6 The phone (jobs 63 and 64)
 
 - **The list is kept on the phone** and searched there, so search answers at once and works
@@ -1831,7 +2350,8 @@ otherwise, that plan says so and this section is amended.
 
 | Job | What it builds | Waits for |
 |---|---|---|
-| 60 | The exercise list, made fresh, on the server: the file, publishing, the download, the lint rule | nothing |
+| 60a | One file for each exercise, the word lists, the check that refuses a faulty file, the lint rule | nothing |
+| 60b | The list on the server: publishing, its rows, one download for the phone | 60a |
 | 61 | What a workout keeps: the save, saved workouts, records, history | 60 |
 | 63 | The Exercise Library on the phone | 60 |
 | 64a | Build a workout, do it by hand or by timer, the summary, history | 61, 63 |
@@ -1869,8 +2389,8 @@ a workout that survives a dead phone; a summary set by set.
 
 ### 13.9 Not measured yet
 
-The download's size and the publish time at 200 exercises (job 60) · many saves arriving at
-once (job 61; CLAUDE.md §4, "Cost at full size") · where clips are kept and what that
+The download's size and the publish time at 200 exercises (measured in 60b, §13.4) · many saves arriving at
+once (measured in 61a, §13.5) · history and records for five years (measured in 61b, §13.5) · where clips are kept and what that
 costs each month (job 62, with Stage 4 item 4) · how long Kd's hand time for 200 generated
 clips is (job 62 says it before the first one).
 

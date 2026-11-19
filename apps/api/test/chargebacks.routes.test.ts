@@ -31,6 +31,7 @@ import { keepSquareEvent } from "../src/modules/webhooks/repo.js";
 import { account, fakeSquare, type Account } from "./fakeSquareTerminal.js";
 import { recordingHub } from "./liveNewsRecorder.js";
 import { proveAddress } from "./proveAddress.js";
+import { expectAttentionMatchesPages } from "./attentionMatches.js";
 
 const url = process.env["DATABASE_URL"];
 const d = describe.skipIf(url === undefined || url === "");
@@ -1268,6 +1269,12 @@ d("A chargeback (real Postgres)", { timeout: T }, () => {
       expect(await rowsOf(dee.squarePaymentId)).toEqual([]);
       const list = await onOverview(old);
       expect(list).toMatchObject({ needsReconnect: true, canReconnect: true });
+      // The bell (V1-d) says so too, never "Nothing needs attention"; a manager reads it with no button.
+      const bell = await expectAttentionMatchesPages((path) => send("GET", path, old.owner.cookies), old.id, ["chargebacks"]);
+      expect(bell.chargebacks).toMatchObject({ needsReconnect: true, canReconnect: true });
+      const boss = await signedIn("Old Manager");
+      await sql`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${old.id}, ${boss.userId}, 'manager', ${null})`;
+      expect((await expectAttentionMatchesPages((path) => send("GET", path, boss.cookies), old.id, ["chargebacks"])).chargebacks).toMatchObject({ needsReconnect: true, canReconnect: false });
       const res = await send("GET", `/v1/orgs/${old.id}/payments`, old.owner.cookies);
       const box = gymPaymentsResponseSchema.parse(JSON.parse(res.body)).payments;
       expect(box.needsAllow).toBe(true);
@@ -1318,6 +1325,13 @@ d("A chargeback (real Postgres)", { timeout: T }, () => {
       const trainer = await signedIn("Trainer");
       await sql`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${gym.id}, ${trainer.userId}, 'trainer', ${["members.read", "members.confirm"]})`;
       expect((await send("GET", `/v1/orgs/${gym.id}/chargebacks`, trainer.cookies)).statusCode).toBe(403);
+      // The bell (V1-d): its chargebacks and refunds are the page's own, for each of them, with one waiting.
+      const asks = (who: { cookies: Cookies }) => (path: string) => send("GET", path, who.cookies);
+      const forOwner = await expectAttentionMatchesPages(asks(gym.owner), gym.id, ["chargebacks", "refunds"]);
+      expect(forOwner.chargebacks?.count).toBeGreaterThan(0);
+      const forDesk = await expectAttentionMatchesPages(asks(desk), gym.id, ["chargebacks", "refunds"]);
+      expect(forDesk.chargebacks).not.toBeNull();
+      expect((await expectAttentionMatchesPages(asks(trainer), gym.id, ["chargebacks", "refunds"])).chargebacks).toBeNull();
       const page = await held(gym, trainer, yan.entryId);
       expect(JSON.stringify(page)).not.toContain("EVIDENCE_REQUIRED");
     });

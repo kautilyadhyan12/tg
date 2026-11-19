@@ -15,6 +15,7 @@ import { loadConfig } from "../src/config.js";
 import { createDiskPhotoStore } from "../src/modules/orgs/gymPage/photoStore.js";
 import { createMemoryRedis } from "../src/redis.js";
 import { proveAddress } from "./proveAddress.js";
+import { expectAttentionMatchesPages } from "./attentionMatches.js";
 
 const url = process.env["DATABASE_URL"];
 const d = describe.skipIf(url === undefined || url === "");
@@ -182,6 +183,9 @@ d("comments in the console (real Postgres)", () => {
       expect(list.items[0]?.reports).toBe(1);
       expect(list.items[0]?.reasons.unkind).toBe(1);
       expect(list.items[0]?.notes).toEqual(["This upset me"]);
+      // The bell (V1-d): one reported comment here, as the list says, and none next door.
+      expect((await expectAttentionMatchesPages((path) => inject("GET", path, gym.owner.cookies), gym.id, ["reported"])).reported).toEqual({ posts: 0, comments: 1 });
+      expect((await expectAttentionMatchesPages((path) => inject("GET", path, other.owner.cookies), other.id, ["reported"])).reported).toEqual({ posts: 0, comments: 0 });
       const answers = [
         JSON.stringify(list),
         (await inject("GET", `${onPost(gym.id, post.id)}/staff`, gym.owner.cookies)).body,

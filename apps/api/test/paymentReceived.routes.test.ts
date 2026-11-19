@@ -99,12 +99,24 @@ const gold = {
   classTypeIds: null,
 };
 
+/** The gym is in Chicago, and a day pass bought for today cannot open its page after 23:50 there:
+ *  the line's last day ends 5 minutes before midnight (LINE_END_MARGIN_MINUTES) and a page needs
+ *  5 minutes (MIN_OPEN_MS). With the real clock the purchases failed every night from 05:50 to
+ *  06:00 UTC, so the test's clock keeps out of the last half hour of Chicago's day. */
+function awayFromMidnight(real: Date = new Date()): Date {
+  const [hour = 0, minute = 0] = new Intl.DateTimeFormat("en-GB", { timeZone: "America/Chicago", hour: "2-digit", minute: "2-digit", hourCycle: "h23" })
+    .format(real)
+    .split(":")
+    .map(Number);
+  return hour * 60 + minute >= 23 * 60 + 30 ? new Date(real.getTime() - 45 * 60_000) : real;
+}
+
 d("Payment received, told to the phone (real Postgres)", { timeout: T }, () => {
   const sql = postgres(url ?? "", { prepare: false, max: 6 });
   const square = fakeSquare();
   const hub = recordingHub();
   const redis = createMemoryRedis();
-  let clock = new Date();
+  let clock = awayFromMidnight();
   let app: App | undefined;
   const api = (): App => {
     if (app === undefined) throw new Error("beforeAll did not build the app");
@@ -286,7 +298,7 @@ d("Payment received, told to the phone (real Postgres)", { timeout: T }, () => {
   }, T);
 
   it("the worst thing: told only once Square took exactly what was asked and it is on the bill, and only to the person who paid", async () => {
-    clock = new Date();
+    clock = awayFromMidnight();
     fresh();
     const gym = await makeGym("Pay Received Worst");
     const tara = await phoneOf("Tara Singh");
@@ -361,7 +373,7 @@ d("Payment received, told to the phone (real Postgres)", { timeout: T }, () => {
   });
 
   it("the member's own phone saw it paid: no notification, whether it asked first or the worker did", async () => {
-    clock = new Date();
+    clock = awayFromMidnight();
     fresh();
     const gym = await makeGym("Pay Received Seen");
     const leo = await phoneOf("Leo Park");
@@ -387,7 +399,7 @@ d("Payment received, told to the phone (real Postgres)", { timeout: T }, () => {
   });
 
   it("staff's Close payment page finds it paid: the member is told", async () => {
-    clock = new Date();
+    clock = awayFromMidnight();
     fresh();
     const gym = await makeGym("Pay Received Staff");
     const noor = await phoneOf("Noor Ali");
@@ -402,7 +414,7 @@ d("Payment received, told to the phone (real Postgres)", { timeout: T }, () => {
   });
 
   it("a line bought and given while the member was away: told, with where the pass is", async () => {
-    clock = new Date();
+    clock = awayFromMidnight();
     fresh();
     const gym = await makeGym("Pay Received Buy");
     const add = await request("POST", `/v1/orgs/${gym.id}/membership-types`, {
@@ -433,7 +445,7 @@ d("Payment received, told to the phone (real Postgres)", { timeout: T }, () => {
   });
 
   it("Payments switched off in Settings, or no phone signed in: nothing, and switched on again tells nothing old (19d)", async () => {
-    clock = new Date();
+    clock = awayFromMidnight();
     fresh();
     const gym = await makeGym("Pay Received Off");
     const kai = await phoneOf("Kai Moss");
@@ -464,7 +476,7 @@ d("Payment received, told to the phone (real Postgres)", { timeout: T }, () => {
   });
 
   it("two runs at once send it once; Firebase not answering keeps it for the next run", async () => {
-    clock = new Date();
+    clock = awayFromMidnight();
     fresh();
     const gym = await makeGym("Pay Received Twice");
     const ivy = await phoneOf("Ivy Ross");
@@ -525,7 +537,7 @@ d("Payment received, told to the phone (real Postgres)", { timeout: T }, () => {
   };
 
   it("owed for longer than a notification is told for: nothing is sent, and it is owed no more", async () => {
-    clock = new Date();
+    clock = awayFromMidnight();
     fresh();
     const gym = await makeGym("Pay Received Late");
     const max = await phoneOf("Max Reed");
@@ -542,7 +554,7 @@ d("Payment received, told to the phone (real Postgres)", { timeout: T }, () => {
   });
 
   it("a line bought: the member's own phone reading it paid owes nothing; staff's Close on a purchase found paid tells them", async () => {
-    clock = new Date();
+    clock = awayFromMidnight();
     fresh();
     const gym = await makeGym("Pay Received Buy Seen");
     const ola = await phoneOf("Ola Bern");
@@ -571,7 +583,7 @@ d("Payment received, told to the phone (real Postgres)", { timeout: T }, () => {
   });
 
   it("a fee paid while the member was away: told what it was for", async () => {
-    clock = new Date();
+    clock = awayFromMidnight();
     fresh();
     const gym = await makeGym("Pay Received Fee");
     await sql`UPDATE gyms SET class_no_show_fee_minor = 1000 WHERE id = ${gym.id}`;

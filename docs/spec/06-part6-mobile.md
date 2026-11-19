@@ -56,7 +56,10 @@ becoming a worklet-compat question. Moving the engine into the worklet
 profiling ever shows bridge pressure — not the default.** The engine's
 purity (Part 2 invariants) is what makes this a config choice instead of a
 rewrite.
-2. **Pose-provider candidate order ratified** (§3.2):
+2. **AMENDED 2026-11-17 (Stage 5 item 51a, `rulings/2026-11-17-51a.md`):** Google's MediaPipe
+Tasks for Android is called from the app's own Android code, with no wrapper package between;
+what it measured on Kd's phone is in Part 2 §12.5, "As built, the phone test".
+**Pose-provider candidate order ratified** (§3.2):
 `react-native-mediapipe` (MediaPipe Tasks wrapper — full 33-landmark
 parity with web) first, `react-native-fast-tflite` second, own native
 module last. The 17-keypoint MoveNet path is **rejected up front**: it
@@ -549,7 +552,7 @@ the profile photo. Settings → Notifications saves nothing, and says so.
 renaming and deleting a saved dish.
 
 **No server at all for:** a profile photo · saved workouts (the table `workout_templates`
-has no routes) · the badge list, a global board · predictions (built in 35a) and weekly challenges (built in 35b) ·
+has no routes; made fresh in 61c, `/v1/training/saved`, Part 2 §13.5) · the badge list, a global board · predictions (built in 35a) and weekly challenges (built in 35b) ·
 recommendations · notification preferences · recording a run.
 
 **Sign-in on the server:** `authenticate` already takes `Authorization: Bearer` as well

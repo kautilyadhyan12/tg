@@ -161,3 +161,38 @@ export function dayTotalsWords(totals) {
     `cost ${costWords(totals.costMicro)}`,
   ].join(' · ');
 }
+
+// ── What each person used on a day (14a-iii) ─────────────────────────────────
+
+/** The card a list's table scrolls in: what a day's box and a person's days measure their width by
+ *  (`100cqw`), so on a phone they stay on screen while the table scrolls across. */
+export const ADMIN_TABLE = { overflowX: 'auto', containerType: 'inline-size' };
+
+/** A day's box, feature by feature as the phone's tabs name them: each line a label and its count.
+ *  Meal scans and route plans are what their limit counts; the rest is what they saved. */
+export function usedGroups(numbers) {
+  const u = numbers.used;
+  return [
+    {
+      feature: 'Food',
+      lines: [
+        ['Meal scans', numbers.mealScans],
+        ['Meals saved from a photo', u.mealPhotosSaved],
+        ['Pack labels saved', u.packLabelsSaved],
+        ['Meals added by hand', u.mealsByHand],
+      ],
+    },
+    { feature: 'Running', lines: [['Runs saved', u.runsSaved], ['Route plans', numbers.routePlans]] },
+    { feature: 'Workout', lines: [['Workouts saved', u.workoutsSaved]] },
+    { feature: 'Progress', lines: [['Body measurements saved', u.bodyMeasurements]] },
+  ];
+}
+
+/** "Food, Running": the features they used that day, or "Nothing saved" (not "None": time in the app
+ *  beside it may have gone on what is not counted, such as the Gym tab). */
+export function usedWords(numbers) {
+  const used = usedGroups(numbers)
+    .filter((g) => g.lines.some(([, n]) => n > 0))
+    .map((g) => g.feature);
+  return used.length === 0 ? 'Nothing saved' : used.join(', ');
+}

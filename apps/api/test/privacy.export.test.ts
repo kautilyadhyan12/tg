@@ -183,6 +183,12 @@ d("DPDP data export (real Postgres)", () => {
               VALUES (${wId}, ${userId}, ${exerciseId}, now(), 0, 60000, '1.0.0', 1)`;
     await sql`INSERT INTO workout_templates (user_id, name, items)
               VALUES (${userId}, ${`Template ${label}`}, ${sql.json([])})`;
+    // A saved workout with one set, and a deleted one's id (61c).
+    const savedId = randomUUID();
+    await sql`INSERT INTO saved_workouts (id, user_id, name, edited_at) VALUES (${savedId}, ${userId}, ${`Saved ${label}`}, now())`;
+    await sql`INSERT INTO saved_workout_sets (saved_workout_id, exercise_place, set_place, exercise_id, measured_in, target)
+              VALUES (${savedId}, 0, 0, ${exerciseId}, 'reps', 12)`;
+    await sql`INSERT INTO saved_workout_removed_ids (id, user_id) VALUES (gen_random_uuid(), ${userId})`;
     // legacy_mongo_id is set on a NON-users table on purpose: the strip must
     // apply everywhere, which is the contradiction T3 F5 found.
     await sql`INSERT INTO body_measurements (user_id, measured_at, weight_kg, legacy_mongo_id)

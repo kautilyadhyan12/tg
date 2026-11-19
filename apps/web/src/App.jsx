@@ -65,6 +65,7 @@ import ConsoleMealPlans from './pages/console/MealPlans';
 import ConsoleReports  from './pages/console/Reports';
 import ConsoleAtRisk   from './pages/console/AtRisk';
 import ConsoleFailedPayments from './pages/console/FailedPayments';
+import ConsolePaymentsOverview from './pages/console/PaymentsOverview';
 import ConsoleSell     from './pages/console/Sell';
 import ConsoleSettings from './pages/console/Settings';
 import SquareReturn from './pages/console/SquareReturn';
@@ -74,6 +75,10 @@ import FrameGuard from './components/common/FrameGuard';
 // Kd's own admin page (ROADMAP Stage 2 item 14a-i): only his account; the server says "not found" to anybody else.
 // Loaded only when /admin is opened: its addresses are not in the bundle every visitor gets.
 const Admin = lazy(() => import('./pages/admin/Admin'));
+
+// The second look's building blocks on one page (V1-b): a development build only, so a
+// production build has neither the page nor its address.
+const ConsoleKit = import.meta.env.DEV ? lazy(() => import('./dev/ConsoleKit')) : null;
 
 export default function App() {
   return (
@@ -385,6 +390,13 @@ export default function App() {
                 <ConsoleLayout><ConsoleAtRisk /></ConsoleLayout>
               </ProtectedRoute>
             } />
+            {/* PAYMENTS OVERVIEW (V1-f): a line to every payment page and setting. The nav draws it for
+                whoever may open one of them; each route it reads is the enforcement. */}
+            <Route path="/console/:orgSlug/payments" element={
+              <ProtectedRoute requireOnboarding={false} requireSignUpNote={false} requireInvitations={false}>
+                <ConsoleLayout><ConsolePaymentsOverview /></ConsoleLayout>
+              </ProtectedRoute>
+            } />
             {/* FAILED PAYMENTS (18d-iii-ii-b): card payments declined and still owed. The nav draws
                 it for `members.read` with `billing.members`; the server is the enforcement. */}
             <Route path="/console/:orgSlug/failed-payments" element={
@@ -429,6 +441,9 @@ export default function App() {
             {/* KD'S ADMIN PAGE (14a-i): its own door, never a gym's. It signs in by itself (a fresh
                 code, then his password), so no gym or member gate stands in front of it. */}
             <Route path="/admin" element={<Suspense fallback={null}><Admin /></Suspense>} />
+            {ConsoleKit !== null ? (
+              <Route path="/console-kit" element={<Suspense fallback={null}><ConsoleKit /></Suspense>} />
+            ) : null}
 
             {/* ── Fallback ──────────────────────────────────────────────── */}
             <Route path="/"  element={<Navigate to="/login" replace />} />

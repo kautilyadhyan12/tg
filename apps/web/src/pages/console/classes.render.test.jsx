@@ -6,7 +6,7 @@
 // a calendar that nobody typed.
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, cleanup, fireEvent, within } from '@testing-library/react';
-import { MemoryRouter, Routes, Route } from 'react-router-dom';
+import { Link, MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
 
 const api = {
   getMine: vi.fn(),
@@ -1328,5 +1328,69 @@ describe('an online time slot', () => {
     drawScreen();
     expect(await screen.findByText('Online class · link added')).toBeTruthy();
     expect(screen.queryByRole('button', { name: /^Change link/ })).toBeNull();
+  });
+});
+
+// V1-c: New, in the bar across the top, opens Add class here.
+describe('opened from New (`?open=add`)', () => {
+  /** Where the address is now, as the page left it. */
+  function Address() {
+    const { search } = useLocation();
+    return <output data-testid="address">{search}</output>;
+  }
+  const drawAt = (path) =>
+    render(
+      <MemoryRouter initialEntries={[path]}>
+        <Routes>
+          <Route
+            path="/console/:orgSlug/classes"
+            element={
+              <>
+                <Classes />
+                <Address />
+                {/* New pressed again, as the bar across the top would. */}
+                <Link to="/console/iron-house/classes?open=add">New, Add class again</Link>
+              </>
+            }
+          />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+  it('opens the New class form once the timetable is read, and the address forgets it, so a reload does not open it again', async () => {
+    drawAt('/console/iron-house/classes?open=add');
+    expect(await screen.findByText('New class')).toBeTruthy();
+    expect(screen.getByPlaceholderText('Sunrise Yoga')).toBeTruthy();
+    await waitFor(() => expect(screen.getByTestId('address').textContent).toBe(''));
+  });
+
+  it('pressed again while the form is being filled in, keeps what was typed', async () => {
+    drawAt('/console/iron-house/classes?open=add');
+    await screen.findByText('New class');
+    fireEvent.change(screen.getByPlaceholderText('Sunrise Yoga'), { target: { value: 'Spin' } });
+    fireEvent.click(screen.getByRole('link', { name: 'New, Add class again' }));
+    await waitFor(() => expect(screen.getByTestId('address').textContent).toBe(''));
+    expect(screen.getByPlaceholderText('Sunrise Yoga').value).toBe('Spin');
+  });
+
+  // What these two prove is the page as a whole: the form is drawn only for staff who may
+  // change the timetable of a business that may change things, whatever the address says.
+  it('a lapsed gym is not given the form, whatever the address says', async () => {
+    api.getMine.mockResolvedValue({
+      data: { orgs: [{ ...ORG, consoleReadOnly: true, subscription: null }], formerOrgs: [] },
+    });
+    drawAt('/console/iron-house/classes?open=add');
+    await screen.findByText('Sunrise Yoga');
+    expect(screen.queryByText('New class')).toBeNull();
+  });
+
+  it('staff who may not change the timetable are not given the form, whatever the address says', async () => {
+    api.getMine.mockResolvedValue({
+      data: { orgs: [{ ...ORG, staffRole: 'manager', privileges: ['members.read', 'attendance.read'] }], formerOrgs: [] },
+    });
+    drawAt('/console/iron-house/classes?open=add');
+    await waitFor(() => expect(screen.getByTestId('address').textContent).toBe(''));
+    expect(screen.queryByText('New class')).toBeNull();
+    expect(screen.queryByPlaceholderText('Sunrise Yoga')).toBeNull();
   });
 });

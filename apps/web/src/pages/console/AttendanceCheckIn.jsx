@@ -13,6 +13,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { CHECKIN_LOG_LIMIT, VISIT_ADD_DAYS_BACK } from '@app/shared';
 import { Check, Loader2, Search } from 'lucide-react';
+import { useLocation } from 'react-router-dom';
 import { orgService, errorText, isRetryable } from '../../api/orgsApi';
 import { ConsoleCard, ConsoleFailed, ConsoleLoading, ConsoleSection } from '../../components/console/ConsoleStates';
 import { visitTimeLabel } from '../../components/gym/attendanceView';
@@ -101,6 +102,14 @@ export function CheckSomeoneIn({ gymId, words, keepsList, timezone, clearSignal,
   const answer = said !== null && said.under === clearSignal ? said : null;
   const asked = useRef(0);
   const input = useRef(null);
+  // New, in the bar across the top, opens here (`#check-in`): the box in view, ready to type.
+  // Each press is a new visit (`key`), so pressing it again on the same address works too.
+  const { hash, key: visit } = useLocation();
+  useEffect(() => {
+    if (hash !== '#check-in') return;
+    input.current?.scrollIntoView?.({ block: 'center' });
+    input.current?.focus();
+  }, [hash, visit]);
 
   useEffect(() => {
     const query = typed.trim();

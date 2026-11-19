@@ -5,7 +5,7 @@
 // that says it goes for everyone — so the press is checked against the post it was made on.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { Link, MemoryRouter, Route, Routes } from 'react-router-dom';
 
 const svc = {
   list: vi.fn(),
@@ -318,7 +318,7 @@ describe('pinning and removing', () => {
     open();
     await waitFor(() => expect(cards()).toHaveLength(2));
     fireEvent.click(within(cards()[1]).getByRole('button', { name: 'Remove post' }));
-    fireEvent.click(within(cards()[1]).getByRole('group').querySelector('.c-btn-danger'));
+    fireEvent.click(within(cards()[1]).getByRole('group').querySelector('.c-btn-ds'));
     await waitFor(() => expect(svc.remove).toHaveBeenCalledTimes(1));
     expect(svc.remove).toHaveBeenCalledWith('g1', 'b');
     expect((await screen.findByRole('status')).textContent).toBe('Post removed. Your members no longer see it.');
@@ -338,7 +338,7 @@ describe('pinning and removing', () => {
     const words = () => cards().map((card) => ['Newest', 'Middle', 'Older', 'Oldest'].find((w) => card.textContent.includes(w)));
 
     fireEvent.click(within(cards()[2]).getByRole('button', { name: 'Remove post' }));
-    fireEvent.click(within(cards()[2]).getByRole('group').querySelector('.c-btn-danger'));
+    fireEvent.click(within(cards()[2]).getByRole('group').querySelector('.c-btn-ds'));
     await waitFor(() => expect(cards()).toHaveLength(3));
     expect(svc.remove).toHaveBeenCalledWith('g1', 'c');
     expect(words()).toEqual(['Newest', 'Middle', 'Oldest']);
@@ -750,5 +750,33 @@ describe('a person’s posts, opened from a name', () => {
     const box = await openWendy();
     await waitFor(() => expect(box.getAllByTestId('post')).toHaveLength(1));
     expect(within(box.getAllByTestId('post')[0]).queryAllByRole('button').map((b) => b.textContent.trim())).toEqual(['Comments']);
+  });
+});
+
+// V1-c: New, in the bar across the top, opens Updates on Write a post, ready to type.
+describe('opened from New (`#write`)', () => {
+  it('puts the keys in Write a post, and again when New is pressed again on the same address', async () => {
+    orgApi.getMine.mockResolvedValue({ data: { orgs: [ORG], formerOrgs: [] } });
+    render(
+      <MemoryRouter initialEntries={['/console/iron-house/updates#write']}>
+        <Routes>
+          <Route
+            path="/console/:orgSlug/updates"
+            element={
+              <>
+                <Updates />
+                <Link to="/console/iron-house/updates#write">New, New post again</Link>
+              </>
+            }
+          />
+        </Routes>
+      </MemoryRouter>,
+    );
+    await screen.findByTestId('composer');
+    const write = within(screen.getByTestId('composer')).getByRole('textbox');
+    await waitFor(() => expect(document.activeElement).toBe(write));
+    write.blur();
+    fireEvent.click(screen.getByRole('link', { name: 'New, New post again' }));
+    await waitFor(() => expect(document.activeElement).toBe(write));
   });
 });

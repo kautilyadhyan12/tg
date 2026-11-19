@@ -33,6 +33,7 @@ import { keepSquareEvent } from "../src/modules/webhooks/repo.js";
 import { account, fakeSquare, type Account, type Behaviour } from "./fakeSquareTerminal.js";
 import { recordingHub } from "./liveNewsRecorder.js";
 import { proveAddress } from "./proveAddress.js";
+import { expectAttentionMatchesPages } from "./attentionMatches.js";
 
 const url = process.env["DATABASE_URL"];
 const d = describe.skipIf(url === undefined || url === "");
@@ -1995,6 +1996,14 @@ d("Refund to card (real Postgres)", { timeout: T }, () => {
       const trainer = await signedIn("Review Trainer");
       await sql`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${mine.id}, ${trainer.userId}, 'trainer', ${[...ROLE_PRIVILEGES.trainer]})`;
       expect((await send("GET", `/v1/orgs/${mine.id}/refunds-to-review`, trainer.cookies)).statusCode).toBe(403);
+      // The bell (V1-d) counts as the list does for each of them, the owner with this fee waiting;
+      // the desk as its own list counts; the trainer, refused the list, has none.
+      const asks = (who: Person) => (path: string) => send("GET", path, who.cookies);
+      const forOwner = await expectAttentionMatchesPages(asks(mine.owner), mine.id, ["refunds", "chargebacks"]);
+      const forDesk = await expectAttentionMatchesPages(asks(desk), mine.id, ["refunds", "chargebacks"]);
+      expect(forOwner.refunds?.count).toBeGreaterThan(0);
+      expect(forDesk.refunds).not.toBeNull();
+      expect((await expectAttentionMatchesPages(asks(trainer), mine.id, ["refunds"])).refunds).toBeNull();
     });
 
     it("a press still waiting on Square: the fee is not listed, and neither decision goes through", async () => {

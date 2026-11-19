@@ -9,6 +9,7 @@ import { useConsoleOrg } from './useConsoleOrg';
 import { canRemoveMembers, orgWords, viewerPrivileges } from './consoleView';
 import { consoleIsReadOnly, readOnlyNote } from './billingView';
 import { placeFor } from './consolePlaces';
+import { useSectionLink } from './useSectionLink';
 import MemberListPerson from './MemberListPerson';
 import { Refusal } from './MemberListTags';
 import SellDiscounts from './SellDiscounts';
@@ -886,7 +887,7 @@ function Takings({ gymId, org, page, locked, canOpenPeople, onOpenPerson, onPage
   }, [refundRow]);
 
   return (
-    <section className="c-card" aria-label={onToday ? "Today's takings" : 'Takings on another day'}>
+    <section id="takings" className="c-card" aria-label={onToday ? "Today's takings" : 'Takings on another day'}>
       <div className="flex flex-col gap-1 p-4 md:p-5">
         <h2 className="c-h2">{shownPage === null ? '…' : takingsHeading(shownPage)}</h2>
         {/* The calendar opens in place, pushing the list down: this card clips what sticks out. */}
@@ -1077,6 +1078,8 @@ export default function Sell() {
   const may = canOpenSell(viewerPrivileges(org));
   // Each answer carries the gym it was asked for, so another gym's sales are never drawn.
   const [state, setState] = useState({ gymId: null, error: null, refused: false, page: null });
+  // Search's Products line opens Sell at its Products box ("/sell#products").
+  useSectionLink(state.page !== null);
   const [addAsk, setAddAsk] = useState(0);
   const [personId, setPersonId] = useState(null);
   /** Their page opens with Add membership open: it was opened to sell one. */

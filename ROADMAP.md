@@ -208,6 +208,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
     - 14a. **The admin page's base** (split 2026-11-08 in two; Kd: no tester plan, he sets each person's own numbers; `rulings/2026-11-08-14a-i.md` keeps the line as first written).
       - 14a-i. [x] **The people and their numbers, at their own door** — merged 2026-11-08 (PR #501).
       - 14a-ii. [x] **Each person's days** — merged 2026-11-08 (PR #504); the two extra passes over all of 14a done, merged 2026-11-08 (PR #506).
+      - 14a-iii. [x] **What each person used on a day** — merged 2026-11-17 (PR #575).
     - 14b. [ ] **The "have a look" warnings** (Stage 3 item 2e-ii), newest first, and Kd clears one (Kd, 2026-10-17); read in the worker or from a cache, never inside a request (about 150 ms of the server's own time a read at 20,000 gyms; 2h, security L5). Last, as before.
 15. [ ] **Gym management features** (Kd, RULINGS 2026-09-19: *"it will be a management app but the management feature we will built later"*). What a gym runs its members with: plans, fees, start, renewal and expiry dates, payments and who has paid, reminders. The member list (items 3 and 5) is its first piece and already serves a gym with no other software; this line adds the rest. Not planned yet: a Fable planning chat first, which also settles with Kd where it sits in the order and how it meets Stage 3 item 3 (the gym marks a member paid) and Stage 2 items 8 and 9 (classes; the gym's own prices). The upload then learns those columns (spec Part 3 §9.11). **2026-09-21: the upload learns them NOW** — the file's membership type, dates and payment-status word are kept by 3a-v (Part 2 of the re-plan, spec §11); what is left of this line — plans as things a gym sells, taking payments, reminders — is planned in Parts 4, 5 and 7.
 
@@ -479,7 +480,9 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
      - V0-a. [x] **A member's page and its boxes** · merged 2026-11-16 · PR #559
      - V0-b. [x] **Money pages and Overview** · merged 2026-11-16 · PR #561
      - V0-c. [x] **Settings and the new pages** · merged 2026-11-16 · PR #565
-   - V1. [ ] **The building blocks and the menu** (web folder 1): the text sizes, gaps, buttons and tags, the four ways a box opens, the side list, and the menu in five groups with More on a phone (`Main`, `kit.css`, `PhoneMore`).
+   - V1. **The building blocks and the menu** (this folder), in two (2026-11-16): every screen shape, phones, folding phones, tablets and laptops (Kd, `rulings/2026-11-16-v1-a.md`).
+     - V1-a. [x] **The menu in five groups and More on a phone** · merged 2026-11-17 · PR #566
+     - V1-b. [x] **The building blocks** · merged 2026-11-18 · PR #576
    - V2a. [ ] **A member's page, a whole page** (web folder 1; the `Person*` pages and `PhonePerson`).
    - V2b. [ ] **A member's page: its boxes** (web folder 1): Add member, edit, add a membership, record a payment, a quick look, freeze, cancel, money back, receipt, remove, merge (`Person*`, `AddMember`, `PhoneRecordPayment`, `PhoneForm`).
    - V3a. [ ] **Members: Your list** (web folder 1): the one-press picks, the list, people ticked and the bar, Send message, Tags, Remove, Filter from the right (`MembersNew*`).
@@ -494,6 +497,14 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
    - V9b. [ ] **Challenges and the Leaderboard** (web folder 2; `Challenge*`, `Leaderboard*`).
    - V10. [ ] **Reports** (web folder 2): the side list, the figures, Download payments (`Reports*`).
    - V11. [ ] **Settings** (web folder 2): the side list with each section's state, the ten sections (`Settings*`).
+   - **The third look (Kd, 2026-11-18; `rulings/2026-11-18-console-look-3.md`; spec Part 3 §17.11; the boards in `docs/design/console-v3`, whose README names each board's job).** It replaces the second look's layout and colours: one family with the member app, laid out like a CRM, flat colour, standard words, for every fitness business; nothing is taken away. These five jobs come before V2a, in this order, one terminal each; V2a to V11 above then build each page in the third look, from its `console-v3` board where it has one, and change that page's words to the word list.
+   - V1-c. [x] **The third look's blocks and the bar across the top** · merged 2026-11-18 · PR #580
+   - V1-d. [x] **Counts in the menu, and the bell** · merged 2026-11-18 · PR #583
+   - V1-e. **Search**, in two (2026-11-18): people, pages, actions and settings from the bar and Ctrl K (`Search`).
+     - V1-e-i. [x] **Pages, actions and settings** · merged 2026-11-18 · PR #584
+     - V1-e-ii. [x] **People** · merged 2026-11-19 · PR #589
+   - V1-f. [x] **Payments overview** · merged 2026-11-19 · PR #594
+   - V0-d. [ ] **The boards not drawn yet, in the third look**: Sell, Memberships, Attendance, Classes, Leads, Reports, Settings and the four ways a box opens, from `kit3.css`, every button of the real page kept. No code; in parts if it is too big for one terminal.
 23. **A gym finds its way** (Kd, RULINGS 2026-10-07: the console read as "a maze"). Each page was clear alone and the fault was between pages. Four jobs in this order, built in Folder A before 17e-ii.
    - 23a. **One answer for membership**, split 2026-10-07 in two (the list's read and Add member's form are more than one terminal):
      - 23a-i. [x] **The Members list shows what each person holds** — merged 2026-10-07 (PR #187).
@@ -705,6 +716,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
     - 31f. [x] **Suggested or My plan in Recommended For You** — merged 2026-11-03 (PR #458).
     - 31g. [x] **The gym’s meal plan on the phone** — merged 2026-11-08 (PR #500).
     - 31h. [x] **Zero, never a dash, where nothing is recorded yet** · merged 2026-11-08 · PR #503
+    - 31i. [x] **The Dashboard’s top picture: Kd’s studio painting in place of the cave** · merged 2026-11-19 · PR #590
 32. **Food** (split 2026-10-13: the server part needs no phone).
     - 32a. [x] **A meal sent twice from the phone is saved once** — merged 2026-10-13 (PR #238).
     - 32b. **The Food screen** (split 2026-10-28: logging first).
@@ -730,6 +742,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
         - 33b-iii-b. [x] **Scan a barcode on the phone** — merged 2026-10-31 (PR #414).
         - 33b-iii-c. [x] **Read a label with Luna** — merged 2026-11-01 (PR #418).
         - 33b-iii-d. [x] **The food search and the meal scan read our copy** — merged 2026-11-01 (PR #424).
+    - 33c. [x] **A meal photo as the screen showed it, and no box over the camera** · merged 2026-11-17 · PR #572
 34. **More food** (split 2026-10-13: the parts on the server need no phone).
     - 34a. [x] **Ten more figures kept with every food in a meal** — merged 2026-10-13 (PR #245).
     - 34b. [x] **The ten figures on the Food screen** — merged 2026-11-01 (PR #429).
@@ -779,6 +792,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
       - 37f-ii. **The heart rate chart and zones, the voice, and pairing a watch** (split 2026-11-13 in two, Kd's "go": the chart and zones first).
         - 37f-ii-a. [x] **The heart rate chart and your five heart rate zones** · merged 2026-11-13 · PR #539
         - 37f-ii-b. [x] **The voice saying your heart rate, and a watch kept connected by pairing it** · merged 2026-11-13 · PR #542
+    - 37g. [x] **A run stands still when the runner does** · merged 2026-11-17 · PR #568
 38. [ ] **The global board** (its reminders moved to item 19e on 2026-11-05): last, as Kd ruled on 2026-11-01 (`rulings/2026-11-01-17c-ii-a.md`): Active days and Running, the server's checks, a stranger's profile, and follow requests for somebody who chose Hide me, seen from outside their gym; Follow with Followers and Following counts everywhere, gyms included (`rulings/2026-11-01-17c-ii-b.md`). It waits for items 18, 37, 53 and 64.
 40. [ ] **Workouts and runs from your watch** (Kd, 2026-11-12, `rulings/2026-11-12-37f-i.md`), after 37f: Android's Health Connect and a file upload (GPX, TCX, FIT) first, then Garmin's and Polar's own connections (Kd applies to Garmin's); Apple Health with the iPhone version. Workouts and runs with their heart rate, calories and distance, and weight from a smart scale; never sleep or heart rate variability.
 39. [ ] **Share with your photo** (Kd, 2026-10-18; spec Part 2 §11.8): after a workout, a meal photo or a run, the person takes or picks a photo and the stats are drawn on it, made on the phone and sent through the phone's own share menu. A run's map drawn on it hides its start and end near the person's home, as Strava's does (37a's plan, 2026-11-05). Built once for all three, after items 33 and 37 and exercise folder 2's 64; it brings Part 7 §5's share cards forward from After launch.
@@ -788,21 +802,41 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
 50. **The measuring line on the laptop.** It needs no phone.
     - 50a. [x] **True proportions** — merged 2026-10-31 (PR #413).
     - 50b. [x] **A video to body points** — merged 2026-11-01 (PR #426).
-    - 50c. [ ] **The body's picture** (§12.2, §12.7): a frame's new inputs (3D points, which way is down, several people), compact body-point files, "is this body possible", steady points, and one set of body measures, each taken flat or in 3D by which is steadier on real videos. The cross-check of 2026-11-02 was closed unmerged (PR #434); the proof table is 52a's.
-51. [ ] **The phone test** (after 50c; it needs Kd's phone): which pose model and library, the speed, heat and battery, 3D points and several people at speed, the same numbers as the laptop, and the phone testing itself on the videos (§12.5). Second on purpose: what it finds can change the design before the matcher is built.
+    - 50c. **The body's picture** (§12.2, §12.7; split 2026-11-16 in three). The cross-check of 2026-11-02 was closed unmerged (PR #434); the proof table is 52a's.
+        - 50c-i. [x] **The frame and the small files** — merged 2026-11-16 (PR #564).
+        - 50c-ii. [x] **Is this body possible, and steady points** — merged 2026-11-17 (PR #569).
+        - 50c-iii. [x] **The body measures** — merged 2026-11-17 (PR #573).
+51. **The phone test** (after 50c; it needs Kd's phone; split 2026-11-17 in two, the videos first): which pose model and library, the speed, heat and battery, 3D points and several people at speed, the same numbers as the laptop, and the phone testing itself on the videos (§12.5). Second on purpose: what it finds can change the design before the matcher is built.
+    - 51a. [x] **The phone plays the videos** — merged 2026-11-18 (PR #578).
+    - 51b. **The main chip with more cores, then the live camera for 20 minutes** (after 51a, in the order of the advice of 2026-11-18, `handoff/2026-11-17-51a.md`; split 2026-11-18 in two, since the live runs' candidates come from the first):
+        - 51b-i. [x] **The main chip on more cores, on the cable** — merged 2026-11-18 (PR #581).
+        - 51b-ii. [x] **The selfie camera for 20 minutes** — merged 2026-11-18 (PR #585).
+    - 51c. [x] **The kept videos measured again with the phone's model** — merged 2026-11-18 (PR #587).
 52. **The movement engine** (§12; it replaces "the engine's missing parts").
-    - 52a. [ ] **The movement matcher and the proof table** (§12.3, §12.5): a movement as data, numbers set from all the people but one and tested on the one left out, every other movement's video counting 0, each video replayed the ways the world changes it; the squat movement made fresh as the first proof. It needs 3 to 5 squat videos of different people from Kd.
-    - 52b. [ ] **The form judge, the reason for a rep not counted, and the summary** (§12.1, §2.4).
+    - 52a. **The movement matcher and the proof table** (§12.3, §12.5; split 2026-11-19 in three, `handoff/2026-11-19-52a-i.md` keeps its line as first written).
+        - 52a-i. [x] **The squat counted from its whole movement** — merged 2026-11-19 (PR #592).
+        - 52a-ii. **Each video replayed the ways the world changes it** (split 2026-11-19 in two, `handoff/2026-11-19-52a-ii-a.md` keeps its line as first written):
+            - 52a-ii-a. [x] **Nearer, farther, tilted, fewer and uneven pictures, shaky points, the phone's own chip gap, a passer-by** — merged 2026-11-19 (PR #595).
+            - 52a-ii-b. [ ] **A phone lower or higher, redrawn from the 3D points** (drawn back from the phone's own place the big joints land 2 to 4 cm off in the middle, 5 to 11 cm in 95 of 100): Kd's squat videos filmed by a phone on the floor.
+        - 52a-iii. [ ] **The phone's own runs judged by the laptop's count, reasons and lines** (51a's videos through the phone), never by its numbers.
+    - 52b. [ ] **The form judge, the reason for a rep not counted, and the summary** (§12.1, §2.4). It sets the squat's depth from its form standard (Kd's research file) and closes 52a-i's open case: a kettlebell push press's dip counts as a squat (first test: it counts 0).
     - 52c. [ ] **The other kinds of counting**: one side at a time, holds, fast rhythm, timed only, jumps, floor work.
-    - 52d. [ ] **One person locked on**: a busy gym, a passer-by, a mirror (§11.8).
+    - 52d. [ ] **One person locked on**: a busy gym, a passer-by, a mirror (§11.8). Since 51c the phone asks the model for one
+      person, so the model itself picks the body: the job is to notice when the body followed has changed (51c's plain sign,
+      `bodyChanges`, misses a body of the same size in the same place) and to pause, never count, until it is the person again.
 53. [ ] **The camera screen**: its look as pictures first, then the reference picture, the live skeleton, the count, the reason a rep did not count, "Count this set myself" and Follow-along; the coach's shared lines and the tool that cuts and checks them (§12.6).
 54. [ ] **Exercises, movement by movement** (§12.4), towards about 200, with no fixed first list: Kd names one and gives its videos and research file; an exercise that does not pass the proof is published as "count by hand".
 55. Folded into 54 on 2026-11-16.
 
 **Exercise folder 2 — `D:\Projects\ai-home-gym-ex2`: the Exercise Library and the Workout section** (spec Part 2 §13, which wins over §11 where they differ and never over §12). **Re-planned 2026-11-16** (Kd; `rulings/2026-11-16-exercise-library.md`): made fresh; new code never uses the old exercise code, which only the web's old pages keep; nothing a member can do today is lost (§13.8). Built in this order: 60, 61, 63, 64a, 62, 64b, with 65 alongside from 60.
 
-60. [ ] **The exercise list, made fresh, on the server** (§13.2 to §13.4): one file for each exercise with fixed word lists, publishing that refuses a faulty file, and one download for the phone, so a new exercise needs no new app version. The camera's facts are read from exercise folder 1's data. It needs no phone.
-61. [ ] **What a workout keeps** (§13.5; after 60): weight for each set, reps or time, the workout's name, how each set was counted, saved workouts, records for each exercise, history; an unknown exercise refuses the save instead of dropping a set.
+60. **The exercise list, made fresh** (§13.2 to §13.4). It needs no phone.
+    - 60a. [x] **One file for each exercise, and the check** — merged 2026-11-17 (PR #571).
+    - 60b. [x] **The list on the server** — merged 2026-11-18 (PR #579).
+61. **What a workout keeps** (§13.5; after 60). Split by its terminal into three, each a terminal of its own.
+    - 61a. [x] **Saving a whole workout from the phone** — merged 2026-11-18 (PR #582).
+    - 61b. [x] **History and records for each exercise** — merged 2026-11-18 (PR #586).
+    - 61c. [x] **Saved workouts** — merged 2026-11-19 (PR #591).
 62. [ ] **The clip line** (after 60): the generated clip made small, its still picture, and where clips are kept (Stage 4 item 4). Checking a clip against its exercise's rules waits for exercise folder 1's 52a and 52b.
 63. [ ] **The Exercise Library on the phone** (§13.6; after 60): the list kept on the phone, search, filters by muscle, equipment, level and how it is counted, and an exercise's page.
 64. **Build a workout, do it, and after it** (Stage 1's 6c; §13.6, §11.8's steps).

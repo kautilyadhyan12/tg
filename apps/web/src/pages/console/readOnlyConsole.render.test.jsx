@@ -1070,9 +1070,10 @@ describe('every Settings panel that greys a control explains itself, in its own 
     // body, so counting those headings counts the SECTIONS — and only those. A
     // greying panel drawn as a plain `ConsoleCard` carries no heading and is
     // invisible here; the docstring above says so and says why.
+    // The shell's own folding buttons (the menu's groups, your name, New) are not the page's.
     const headings = screen
       .getAllByRole('button')
-      .filter((el) => el.getAttribute('aria-expanded') !== null);
+      .filter((el) => el.getAttribute('aria-expanded') !== null && el.closest('[data-testid="console-rail"], [data-testid="console-bar"]') === null);
     expect(headings).toHaveLength(GREYING_SECTIONS.length + READING_SECTIONS.length);
     for (const name of READING_SECTIONS) expect(headings.some((h) => h.textContent.toLowerCase().startsWith(name))).toBe(true);
   });

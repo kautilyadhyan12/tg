@@ -1,4 +1,5 @@
 import base from "@app/config/eslint-base";
+import exerciseLibrary from "@app/config/eslint-exercise-library";
 
 export default [
   ...base,
@@ -14,4 +15,6 @@ export default [
     // tsx on Node 22 (its own comment says why).
     ignores: ["tools/**/*.mjs", "src/modules/orgs/memberList/parseWorker.boot.mjs"],
   },
+  // The server's Exercise Library module (job 60b on) never uses the old exercise code (spec Part 2 §13.1).
+  { files: ["src/modules/library/**", "test/library.*"], ...exerciseLibrary },
 ];

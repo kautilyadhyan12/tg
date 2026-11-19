@@ -276,7 +276,9 @@ describe('the forced trial prompt', () => {
     const last = reachable[reachable.length - 1];
     // The shell's own controls are in the document — this is the escape route
     // being closed, not an absence of anywhere to escape to.
-    expect(screen.getAllByRole('link', { name: 'Your organisations' }).length).toBeGreaterThan(1);
+    const rail = screen.getByTestId('console-rail');
+    expect(within(rail).getAllByRole('link', { name: /Switch to another organisation/ }).length).toBeGreaterThan(0);
+    expect(rail.querySelector('button.c-rail-me')).not.toBeNull();
 
     // Tab off the LAST control wraps to the FIRST instead of leaving for the rail.
     last.focus();

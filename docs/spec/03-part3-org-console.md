@@ -7186,6 +7186,7 @@ R1–R8: R1 the menu, the font and the colours; then one page per job.
   `<!--RAIL:members-->` for the menu with Members lit (`none`: no gym, so "Gym console"
   where the gym's name goes and no pages) and `<!--TABBAR:members-->` for the phone's
   tabs; the light look of a page is the same file with `t-dark` changed to `t-light`.
+- **The third look's boards (2026-11-18): `docs/design/console-v3/` (§17.11). Where a page has a board there, it stands over both older ones.**
 - **The second look's boards (2026-10-18): `docs/design/console-v2/` (§17.10). Where a page has both, the new board stands.**
 - Pictures of all 56 drawings, dark and light: `D:\Projects\ai-home-gym-design\2-all-pages\`
   on Kd's computer. The design canvas: https://claude.ai/artifact/1Rioe5nc9f132HarZ6x69y
@@ -7447,6 +7448,148 @@ section and §17.2–§17.8 differ, this one stands; anything it does not mentio
 - **A phone.** Each V job draws its pages on a phone too: the `Phone*` and `MembersNewPhone`
   boards show Overview, a member's page, Record a payment, Add member, Attendance, Sell,
   Classes, Members and More; other pages follow the same rules.
+
+### 17.11 The third look (Kd, 2026-11-18)
+
+Kd, 2026-11-17 and 2026-11-18 (the web folder, a planning terminal): the second look was
+reviewed with nothing built, and he judged it hard to find one's way in and not good-looking
+enough beside the member app (*"THE STRUCTURE LAY OUT ETC NEEDS TO BE BETTER AND MODERN AND
+LIKE TRADTIONAL CRMS , USER EXPERIENCE IS UTMOST PRORITY"*). Nine boards were drawn and
+approved (*"LOOKS GOOD"*) after his corrections: flat colour, standard words, Connect Square
+shown first, every fitness business (`rulings/2026-11-18-console-look-3.md`). Built as ROADMAP
+item 22's V1-c to V1-f, V0-d, then V2a to V11. Where this section and §17.2–§17.10 differ, this
+one stands; anything it does not mention stays as §17 says.
+
+- **The boards.** `docs/design/console-v3/`: one `Name.dc.html` a screen, `kit3.css` the colours
+  and building blocks, `canvas.json` each board's title and size, and a README naming each
+  board's job. The canvas: https://claude.ai/artifact/FC7WVSbtkJvrEw5ttTZfUi. Where a page has a
+  board there, it stands over its second-look board. A page with no board there yet keeps its
+  second-look board's layout and takes the third look's colours, blocks and words, until V0-d
+  draws it. Nobody has looked at the boards drawn: the builder's own walk is the check.
+- **Eight rules** (`Main`): 1 one family with the member app: Inter, soft glass boxes, round
+  buttons, flat colour with no gradient, no glow and no haze · 2 a bar across the top of every
+  page: Search, New and the bell · 3 the menu shows what needs attention: a count beside a page
+  only when something waits · 4 every page opens the same way: a small label, the page title,
+  one primary button on the right, then round tabs · 5 quiet for normal, colour for exceptions ·
+  6 standard words, for every fitness business · 7 payments have one home, and setup comes
+  first · 8 it looks new and works the same.
+- **Words and colours.** One font, Inter, already kept in the app (§17.9); Archivo stays only
+  on a page not yet restyled. Sizes, AMENDED 2026-11-19 (Kd, V1-f's click-through: *"should not
+  be reqquring magnifying glass to see"*; CLAUDE.md §4 "Read without leaning in"): label 12
+  (small capitals, orange), every other word 14 or more (a note, a second line, a hint, a
+  button), a line's title 15, box title 17, page title 28, and 32 for the figure that matters;
+  only a count, a tag, initials, Ctrl K and the phone's tab names are 12 (11 on a 280 px cover).
+  The boards' 11, 12 and 13 give way to these. Three greys, each 7 to 1 or more. A box has corners of 18 px and a button has round ends. On
+  the dark look a box is a little lighter than the page with a soft edge; on the light look it
+  is white with a soft shadow, and the menu is light too (this replaces "the menu stays dark in
+  both", §17.2 rule 11). Orange is a primary action and the page you are on; green is paid,
+  done, in the app; gold needs attention; red is overdue, failed or a change that asks first;
+  blue is for charts and figures and never a button. `kit3.css` is where the values start;
+  `console.css` takes them by name, and `consoleCss.test.js` measures every text colour on the
+  ground it lands on, mixed, at 7 to 1 or more in both looks (4.5 until 2026-11-19; a disabled
+  control's words keep 4.5).
+- **Buttons.** A page has one primary button, top right (`btn-main`). A box has one at most
+  (`btn-p`). A second important action is pale orange; the rest are outlined or plain words.
+  Red is set apart and always asks first (§17.10's rule 5 stays).
+- **A status.** The normal state is plain words ("Active · Paid", "Not in the app"). A tag is
+  for the exception only: payment due, overdue, frozen, ended, new. Somebody in the app has a
+  green dot.
+- **The bar across the top** (`Overview`), on every page at 768 px and wider: **Search**,
+  **New**, and a **bell** with a count. On a phone the top bar holds the business's name, a
+  search button and the bell, and the five tabs stay as V1-a built them (`Phone`).
+  - **New** lists what this person may add, each opening the place it already has
+    (`consolePlaces.js`): Add member, Add lead, New sale, Add class, Check in, a post. It makes
+    nothing itself.
+  - **The bell** opens "Needs attention", the same list Overview shows, from any page.
+- **The menu.** V1-a's five groups stay. Added: a count beside a page only when something
+  waits (new leads, members at risk, failed payments, a reported post; Overview's is the number
+  of kinds waiting) · a group folds when its heading is pressed and stays as that person left
+  it on that device; nothing is ever folded for them · a line is 36 px tall with a mouse and
+  44 on touch · the foot is the person's name, which opens Your account, Your organisations,
+  the Light · Dark · Auto switch once it is on (§17.7), and Sign out · **Payments overview** is
+  the first line under Money, with a "Set up" tag until a payment provider is connected. The
+  counts come from one route (V1-d), whose plan names its size and measures its cost at 20
+  businesses of 200 (CLAUDE.md §4); the menu reads it again as "Pages stay current by
+  themselves" says, never on a timer at scale.
+- **Search** (`Search`, V1-e) opens from the bar, from Ctrl K (⌘K on a Mac) and from the
+  phone's search button. Results come in groups: **People** (members or clients, leads, staff),
+  **Pages**, **Actions**, **Settings**. Before anything is typed: **Recent** and **Quick
+  actions**. Enter opens the result; an action opens its place with its box open, as a
+  `PlaceLink` does. One list holds every place with the words people use for it, built on
+  `consolePlaces.js`: every page, tab and Settings section and each box that list can open,
+  each with its name and other words (money: payments, billing, revenue, sales, card, refund,
+  tax). It shows only what this person may open, by the menu's own rules, and people come from
+  the lists' own search with the business in the `WHERE`. Its plan names its size; a new route
+  ships with its stranger test and its cost at full size.
+- **Overview** (`Overview`, V5): a small label with the day, a greeting as the title, and
+  **Check in** as the primary button for whoever may. **Needs attention** is one line for each
+  kind of thing with its count, its money and its button: chargebacks, failed payments,
+  payment due, refunds to review, app payments to review, cancelled in the app. A line opens in
+  place to the box Overview has for it today, so every sentence and button of that box is kept;
+  with nothing waiting it reads "Nothing needs attention" in green. Four boxes answer four
+  different questions: Check-ins today · Revenue today (the Sell page's own figure, for whoever
+  may open Sell) · Payment due · Members in the app. Getting started, Attendance, Today's
+  check-ins, Streaks, Plan, Last 7 days and Details stay.
+- **Payments overview** (`Money`, `MoneySetup`, V1-f): a new page that gathers; nothing moves
+  to it. Today's revenue and how it was paid, what needs attention, and one line for every
+  payment page and setting under Daily · Products and pricing · Setup and reports. A line opens
+  its exact place (`consolePlaces.js`), says its state ("3 outstanding", "Connected") and says
+  where it lives ("in Settings", "in Reports"). A line is drawn for whoever may open its place,
+  and the page for whoever has one line. Each figure is read from the route its own page reads.
+  **Before a payment provider is connected**, Connect Square leads the page with its three
+  steps (connect, pair a Terminal, request cards on file) and a line saying what already works
+  without it: recording cash, bank transfers and payments taken on the business's own card
+  machine. Whoever may not connect it reads who can, with no button. The same rule holds for
+  any feature that needs setup: the setup is shown first, on the feature's own page.
+- **A member's page** (`Person`, V2a): three columns at 1280 px and wider (who they are · what
+  they have · who pays and their card), two below that, one on a phone. Under the name, one
+  strip for the next step, the first of these that applies: a payment overdue or due, with
+  Record payment · no membership, with Add membership · an agreement or waiver not signed,
+  with its button · not in the app, with Invite to app · otherwise "Nothing due" in green. The
+  strip's button is the page's own and opens the same box; the button also stays where it is.
+  Notes sit in the first column, under Contact details.
+- **The word list** (`Main`). The console says what business and fitness software already
+  says. Each V job changes its own page's words, the server's sentences among them, and the
+  tests that read them; nothing changes what a button does.
+
+  | Was | Is |
+  |---|---|
+  | Start here · done | Getting started · complete |
+  | Check someone in | Check in |
+  | Needs you | Needs attention |
+  | Taken today | Revenue today |
+  | Who came today | Today's check-ins |
+  | Who's turning up · different people | Attendance · unique members |
+  | On a roll | Streaks |
+  | left to pay · was due | due · due date |
+  | owed | outstanding |
+  | Who pays · Choose who pays | Payer · Change payer |
+  | Bought at the desk | Purchases |
+  | Download | Export |
+  | Type card instead | Enter card manually |
+  | Pause automatic payments | Pause autopay |
+  | Give a meal plan | Assign meal plan |
+  | Ask members to add their card | Request cards on file |
+  | See · Open (a page) | View |
+  | Quick picks | Quick filters |
+
+  Kept as they are: Payment due, Overdue, Active, Paid, Frozen, Ended, Your list, In the app,
+  Staff, Past members, Card on file, and every page's name in the menu.
+- **Every fitness business.** The product is "KWAZO console", never "gym console". Every word
+  naming the business, its people or its staff comes from `orgWords` (§17.10 rule 13): a search
+  box in a studio reads "Search clients, pages or actions". A sentence the console writes
+  itself says "business" where it cannot name the kind.
+- **Fewer words at first glance.** A sentence that tells staff what to do stays in view. A
+  sentence that explains how a figure is worked out sits one press away, word for word as it
+  is today. Empty figures with the same reason share one line. A warning about people or
+  money is never folded.
+- **What does not change** (§17.10 rule 14, amended). Every button and what it does, every
+  field, message and question, who can see and do what, and every rule and number the app
+  works out stay. Nothing is taken away. What the app already knows may be shown in a new place
+  where it helps (a count in the menu, the strip under a name, a line on Payments overview),
+  and three things are new: search, the counts' route, and Payments overview.
+- **A phone and every screen shape.** Each job draws its pages on a phone too and walks them
+  at the shapes of `rulings/2026-11-16-v1-a.md`.
 
 ## 18. Members, redesigned (5b-v)
 

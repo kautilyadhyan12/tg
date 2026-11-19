@@ -1,0 +1,144 @@
+{
+  "format": 1,
+  "name": "squat",
+  "counting": "rep",
+  "phone": "On the floor or a low stand, 2 to 3 metres away, the whole body in the picture: side-on, from the front, or in between.",
+  "drive": {
+    "measure": "hips height",
+    "toward": "lower"
+  },
+  "ready": [
+    {
+      "read": {
+        "kind": "value",
+        "measures": [
+          "left knee",
+          "right knee"
+        ]
+      },
+      "atLeast": 160,
+      "from": "Standing tall: the knees within 20 degrees of straight (the usual definition; not fitted)."
+    },
+    {
+      "read": {
+        "kind": "value",
+        "measures": [
+          "trunk lean"
+        ]
+      },
+      "atMost": 20,
+      "from": "Standing tall: the trunk within 20 degrees of upright (the usual definition; not fitted)."
+    }
+  ],
+  "rules": [
+    {
+      "name": "depth",
+      "role": "count",
+      "at": "bottom",
+      "read": {
+        "kind": "drop"
+      },
+      "atLeast": 0.16,
+      "seen": "always",
+      "from": "Set by movement-check from 8 people's videos (scripts/movementVideos.ts), as filmed and as each replay that sets numbers (scripts/replays.ts), 198 reps: a quarter of the way back towards standing from the shallowest rep (0.22; standing 0)."
+    },
+    {
+      "name": "knees bent",
+      "role": "count",
+      "at": "bottom",
+      "read": {
+        "kind": "value",
+        "measures": [
+          "left knee",
+          "right knee"
+        ]
+      },
+      "atMost": 125,
+      "seen": "always",
+      "from": "Set by movement-check from 8 people's videos (scripts/movementVideos.ts), as filmed and as each replay that sets numbers (scripts/replays.ts), 198 reps: a quarter of the way back towards standing from the shallowest rep (107.36; standing 175.13)."
+    },
+    {
+      "name": "hips and knees together",
+      "role": "match",
+      "at": "bottom",
+      "read": {
+        "kind": "gap",
+        "from": [
+          "left knee",
+          "right knee"
+        ],
+        "less": [
+          "left hip",
+          "right hip"
+        ]
+      },
+      "atMost": 34,
+      "seen": "always",
+      "from": "Set by movement-check from 8 people's videos (scripts/movementVideos.ts), as filmed and as each replay that sets numbers (scripts/replays.ts), 198 reps: beyond the furthest rep by half its distance from the middle rep (24.13; standing 4.34)."
+    },
+    {
+      "name": "chest up",
+      "role": "match",
+      "at": "bottom",
+      "read": {
+        "kind": "value",
+        "measures": [
+          "trunk lean"
+        ]
+      },
+      "atMost": 56,
+      "seen": "always",
+      "from": "Set by movement-check from 8 people's videos (scripts/movementVideos.ts), as filmed and as each replay that sets numbers (scripts/replays.ts), 198 reps: beyond the furthest rep by half its distance from the middle rep (43.22; standing 2.41)."
+    },
+    {
+      "name": "feet stay down",
+      "role": "match",
+      "at": "rep",
+      "read": {
+        "kind": "lift",
+        "points": "feet"
+      },
+      "atMost": 0.04,
+      "seen": "always",
+      "from": "Set by movement-check from 8 people's videos (scripts/movementVideos.ts), as filmed and as each replay that sets numbers (scripts/replays.ts), 198 reps: beyond the furthest rep by half its distance from the middle rep (0.03; standing 0)."
+    },
+    {
+      "name": "feet stay in place",
+      "role": "match",
+      "at": "rep",
+      "read": {
+        "kind": "travel",
+        "points": "feet"
+      },
+      "atMost": 0.1,
+      "seen": "always",
+      "from": "Set by movement-check from 8 people's videos (scripts/movementVideos.ts), as filmed and as each replay that sets numbers (scripts/replays.ts), 198 reps: beyond the furthest rep by half its distance from the middle rep (0.07; standing 0)."
+    },
+    {
+      "name": "stance holds",
+      "role": "match",
+      "at": "rep",
+      "read": {
+        "kind": "change",
+        "measures": [
+          "feet apart"
+        ]
+      },
+      "atMost": 0.24,
+      "seen": "when-seen",
+      "from": "Set by movement-check from 8 people's videos (scripts/movementVideos.ts), as filmed and as each replay that sets numbers (scripts/replays.ts), 122 reps: beyond the furthest rep by half its distance from the middle rep (0.19; standing 0)."
+    },
+    {
+      "name": "hips alike",
+      "role": "match",
+      "at": "bottom",
+      "read": {
+        "kind": "apart",
+        "measure": "hips, left against right"
+      },
+      "atMost": 42,
+      "seen": "when-seen",
+      "from": "Set by movement-check from 8 people's videos (scripts/movementVideos.ts), as filmed and as each replay that sets numbers (scripts/replays.ts), 172 reps: beyond the furthest rep by half its distance from the middle rep (31; standing 3.41)."
+    }
+  ]
+}

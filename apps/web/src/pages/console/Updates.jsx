@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useLocation, useParams } from 'react-router-dom';
 import { ImagePlus, UserCheck, X } from 'lucide-react';
 import { postPhotoUrl, staffCommentsService, staffPostsService } from '../../api/postsApi';
 import { errorStatus, errorText } from '../../api/orgsApi';
@@ -31,6 +31,7 @@ import { PersonPostsBox } from './PersonPosts';
 import PostCard from './UpdatesPostCard';
 import { ReportedComments } from './UpdatesComments';
 import { useConsoleOrg } from './useConsoleOrg';
+import { useSectionLink } from './useSectionLink';
 import { orgWords, viewerPrivileges } from './consoleView';
 import { canManageChallenges } from './challengesView';
 import { consoleIsReadOnly, readOnlyNote } from './billingView';
@@ -52,7 +53,16 @@ function Composer({ gymId, gymName, words, onPosted }) {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState(null);
   const pickerRef = useRef(null);
+  const writeRef = useRef(null);
   const chars = charsLine(body);
+  // New, in the bar across the top, opens here (`#write`): the box in view, ready to type.
+  // Each press is a new visit (`key`), so pressing it again on the same address works too.
+  const { hash, key: visit } = useLocation();
+  useEffect(() => {
+    if (hash !== '#write') return;
+    writeRef.current?.scrollIntoView?.({ block: 'center' });
+    writeRef.current?.focus();
+  }, [hash, visit]);
 
   const pick = async (files) => {
     setPreparing(true);
@@ -107,6 +117,7 @@ function Composer({ gymId, gymName, words, onPosted }) {
       <label className="c-field">
         <span className="c-label">Write a post</span>
         <textarea
+          ref={writeRef}
           className="c-area"
           rows={4}
           value={body}
@@ -196,6 +207,8 @@ export default function Updates() {
   const [state, setState] = useState({ loading: true, error: null, refused: false, feed: null });
   /** The reported posts and comments and the people stopped from posting; null until read. */
   const [side, setSide] = useState({ reported: null, reportedComments: null, stopped: null });
+  // The bell opens Updates at the reported posts or comments (V1-d) once they are read.
+  useSectionLink(side.reported !== null || side.reportedComments !== null);
   /** Goes up when any comments open on the page should be read again. */
   const [commentsRefresh, setCommentsRefresh] = useState(0);
   const [switching, setSwitching] = useState(false);
@@ -492,7 +505,7 @@ export default function Updates() {
           ) : null}
 
           {reported !== null && reported.items.length > 0 ? (
-            <section className="flex flex-col gap-3" aria-label="Reported posts" data-testid="reported">
+            <section id="reported" className="flex flex-col gap-3" aria-label="Reported posts" data-testid="reported">
               <div className="flex flex-col gap-1">
                 <h2 className="c-s15 c-w6 c-t1">{reportedTitle(reported.total)}</h2>
                 <p className="c-s13 c-t2">{reportedHelp(words)}</p>

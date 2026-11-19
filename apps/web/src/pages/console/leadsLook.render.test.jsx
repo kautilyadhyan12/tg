@@ -162,6 +162,28 @@ describe('the list keeps every control', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 
+  it('a lead picked in search ("?lead=") opens their page once, and the address is left clean', async () => {
+    draw(`/console/iron-house/leads?lead=${ARJUN}`);
+    await within(await screen.findByRole('dialog')).findByText('Arjun Shah');
+    expect(api.getLead).toHaveBeenCalledWith('g1', ARJUN);
+    await waitFor(() => expect(screen.getByTestId('address').textContent).toBe('/console/iron-house/leads'));
+  });
+
+  it('"?lead=" opens nothing for a role without the tick', async () => {
+    useOrg(NO_TICK);
+    draw(`/console/iron-house/leads?lead=${ARJUN}`);
+    await waitFor(() => expect(screen.getByTestId('address').textContent).toBe('/console/iron-house/leads'));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(api.getLead).not.toHaveBeenCalled();
+  });
+
+  it('"See all in Leads" from search ("?search=") fills the search box and asks the list for it', async () => {
+    draw('/console/iron-house/leads?search=arjun');
+    await waitFor(() => expect(screen.getByRole('searchbox', { name: 'Search your leads' }).value).toBe('arjun'));
+    await waitFor(() => expect(api.getLeads).toHaveBeenLastCalledWith('g1', 'q=arjun'));
+    await waitFor(() => expect(screen.getByTestId('address').textContent).toBe('/console/iron-house/leads'));
+  });
+
   it.each([
     ['a lapsed gym', LAPSED],
     ['a role without the tick', NO_TICK],
@@ -171,6 +193,19 @@ describe('the list keeps every control', () => {
     await screen.findAllByTestId('lead-row');
     await waitFor(() => expect(screen.getByTestId('address').textContent).toBe('/console/iron-house/leads'));
     expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it("the bell's New leads opens the list already on New (`?status=new`); a word that is no status is All", async () => {
+    draw('/console/iron-house/leads?status=new');
+    await screen.findAllByTestId('lead-row');
+    expect(api.getLeads).toHaveBeenLastCalledWith('g1', 'status=new');
+    expect(button('New 1').getAttribute('aria-pressed')).toBe('true');
+    cleanup();
+    api.getLeads.mockClear();
+    draw('/console/iron-house/leads?status=everyone');
+    await screen.findAllByTestId('lead-row');
+    expect(api.getLeads).toHaveBeenLastCalledWith('g1', '');
+    expect(button('All 2').getAttribute('aria-pressed')).toBe('true');
   });
 
   it('a search says how many match; a status chip asks the server for that status', async () => {
