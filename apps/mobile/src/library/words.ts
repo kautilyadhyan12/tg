@@ -91,3 +91,11 @@ export const COUNTED_WORDS: Readonly<Record<CountedBy, string>> = {
   hand: "Manual tracking",
 };
 export const COUNTED_TODAY: CountedBy = "hand";
+
+/** A mistake's words as what goes wrong (its first sentence) and how to put it right (the rest). A sentence ends
+ *  at a full stop followed by a space and a capital letter, so "e.g. " or "approx. " inside one never cuts it. */
+export function splitMistake(says: string): { wrong: string; fix: string | null } {
+  const end = /\. (?=[A-Z])/.exec(says);
+  if (end === null) return { wrong: says, fix: null };
+  return { wrong: says.slice(0, end.index + 1), fix: says.slice(end.index + 2) };
+}

@@ -4,11 +4,11 @@
 import { readdirSync, readFileSync } from "node:fs";
 import type { OnboardingAnswers } from "@app/shared";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
-import { File, Paths } from "expo-file-system";
+import { Paths } from "expo-file-system";
 import { App } from "../../src/App";
 import { LIBRARY_PATH } from "../../src/library/store";
 import type { Ask } from "../../src/session/calls";
-import { fakeServer, kept, memoryStore, tokens, type Reply } from "../kit";
+import { fakeServer, kept, lost, memoryStore, never, refusal, tokens, type Reply } from "../kit";
 
 const extra = { copyName: "Exercise 2", apiUrl: "http://localhost:3000" };
 const FOLDER = `${__dirname}/../../../../packages/shared/library/exercises/`;
@@ -31,11 +31,11 @@ const ANSWERS: OnboardingAnswers = {
 
 /** The server: the Library answered as the api does (304 to the copy's own fingerprint), setup's answers with
  *  `gender`. `library` may change between calls (no internet, then back). */
-function libraryServer(opts: { library?: () => Reply; gender?: OnboardingAnswers["gender"] } = {}) {
+function libraryServer(opts: { library?: () => Reply; gender?: OnboardingAnswers["gender"]; onboarding?: () => Reply | Promise<Reply> } = {}) {
   let library = opts.library ?? ((): Reply => ({ status: 200, body: download() }));
   const server = fakeServer({
     "/v1/auth/refresh": () => ({ status: 200, body: { tokens: tokens(2) } }),
-    "/v1/users/me/onboarding": () => ({ status: 200, body: { answers: { ...ANSWERS, gender: opts.gender ?? null }, plan: null, missing: ["goal"] } }),
+    "/v1/users/me/onboarding": opts.onboarding ?? (() => ({ status: 200, body: { answers: { ...ANSWERS, gender: opts.gender ?? null }, plan: null, missing: ["goal"] } })),
   });
   const libraryAsks: (string | undefined)[] = [];
   const ask: Ask = async (url, init) => {
@@ -68,11 +68,7 @@ const openExercise = async (name: RegExp) => {
 
 beforeEach(() => {
   // The phone's files outlive a test in the stand-in: each test starts on a phone that never opened the Library.
-  for (const name of ["library.json", "library.json.next"]) {
-    const f = new File(Paths.document, name);
-    if (f.exists) f.delete();
-  }
-  for (const one of Paths.document.list()) if (one.name.startsWith("figure-")) one.delete();
+  for (const one of Paths.document.list()) if (one.name.startsWith("library-") || one.name.startsWith("figure-")) one.delete();
 });
 
 describe("an exercise's page never hides its caution", () => {
@@ -134,6 +130,12 @@ describe("the Library", () => {
     await fireEvent.press(screen.getByRole("radio", { name: "Mobility" }));
     expect(await screen.findByText("1 exercise · A to Z")).toBeTruthy();
     expect(screen.getByRole("button", { name: /^Cat-Cow,/ })).toBeTruthy();
+  });
+
+  it("with no Library published yet it says so, never that the connection failed", async () => {
+    await openLibrary(libraryServer({ library: () => refusal(404, "no_library", "No Library yet.") }).ask);
+    expect(await screen.findByText("Exercises aren’t available yet")).toBeTruthy();
+    expect(screen.queryByText("Check your connection.")).toBeNull();
   });
 
   it("with no internet on the very first open it says so, and Try again loads it", async () => {
@@ -216,5 +218,27 @@ describe("an exercise's page", () => {
     expect(screen.queryAllByTestId(`figure-${other}-back`)).toHaveLength(0);
     expect(screen.queryByRole("radio", { name: "Male" })).toBeNull();
     expect(screen.queryByRole("radio", { name: "Female" })).toBeNull();
+  });
+
+  it("until the setup answer is known no figure is drawn, on the cards or the page: never the other one first", async () => {
+    await openLibrary(libraryServer({ gender: "female", onboarding: never }).ask);
+    expect(await screen.findByText("3 Exercises")).toBeTruthy();
+    const anyFigure = () => ["male", "female"].flatMap((x) => ["front", "back"].flatMap((y) => screen.queryAllByTestId(`figure-${x}-${y}`)));
+    expect(anyFigure()).toHaveLength(0);
+    await openExercise(/^Plank,/);
+    await settle(300);
+    expect(anyFigure()).toHaveLength(0);
+    // The muscles are still named in words.
+    expect(screen.getByText("Abs (rectus abdominis) · Transverse abdominis")).toBeTruthy();
+  });
+
+  it("once known, the person's own figure is kept: with no answer from the server it is still hers", async () => {
+    const server = libraryServer({ gender: "female" });
+    await openLibrary(server.ask);
+    await waitFor(() => { expect(screen.getAllByTestId("figure-female-front").length).toBeGreaterThan(0); });
+    await screen.unmount();
+    await openLibrary(libraryServer({ onboarding: lost }).ask);
+    await waitFor(() => { expect(screen.getAllByTestId("figure-female-front").length).toBeGreaterThan(0); });
+    expect(screen.queryAllByTestId("figure-male-front")).toHaveLength(0);
   });
 });

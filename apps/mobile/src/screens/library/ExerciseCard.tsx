@@ -12,7 +12,7 @@ import { MuscleFigure } from "./MuscleFigure";
 
 /** One exercise in the Library's list, as drawn (63a): its picture with a small body lit where it works, its
  *  name, level as plates, main muscles, the starting target and the effort as flames. */
-export function ExerciseCard({ entry, sex, onOpen }: { entry: PhoneLibraryEntry; sex: Sex; onOpen: () => void }) {
+export function ExerciseCard({ entry, sex, onOpen }: { entry: PhoneLibraryEntry; sex: Sex | null; onOpen: () => void }) {
   const en = entry.text.en;
   const effort = effortOf(entry.met);
   const target = targetLine(entry);
@@ -23,9 +23,12 @@ export function ExerciseCard({ entry, sex, onOpen }: { entry: PhoneLibraryEntry;
     <Pressable accessibilityRole="button" accessibilityLabel={say} onPress={onOpen} style={({ pressed }) => [styles.card, pressed ? styles.pressed : null]}>
       <View style={styles.top}>
         <Image source={pictures[exercisePicture(entry.id, entry.kind)]} resizeMode="contain" style={styles.photo} accessible={false} />
-        <View style={styles.mini}>
-          <MuscleFigure sex={sex} side={sideFor(entry.muscles.main)} lit={litMuscles(entry.muscles)} width={36} />
-        </View>
+        {/* The person's own figure only: none until their setup answer is known, never the other one. */}
+        {sex === null ? null : (
+          <View style={styles.mini}>
+            <MuscleFigure sex={sex} side={sideFor(entry.muscles.main)} lit={litMuscles(entry.muscles)} width={36} />
+          </View>
+        )}
         <Txt kind="tiny" colour="text" style={styles.kind}>
           {kindWord(entry.kind)}
         </Txt>

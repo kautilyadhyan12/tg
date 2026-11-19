@@ -10,7 +10,7 @@ import { Icon } from "../../look/Icon";
 import { Page } from "../../look/Page";
 import { PictureTop } from "../../look/PictureTop";
 import { Txt } from "../../look/Txt";
-import type { Lit } from "../../library/figure";
+import type { Lit, Sex } from "../../library/figure";
 import { searchExercises } from "../../library/search";
 import { offered, type LibraryFile } from "../../library/store";
 import { kindWord } from "../../library/words";
@@ -59,13 +59,13 @@ export function LibraryPart({ parts, file }: { parts: ReactNode; file?: LibraryF
   return (
     <Page top={top}>
       {parts}
-      {state.kind === "failed" ? (
+      {state.kind === "failed" || state.kind === "none" ? (
         <Card style={styles.middle}>
           <View style={styles.badge}>
-            <Icon name="wifioff" size={24} colour="orange" />
+            <Icon name={state.kind === "none" ? "dumbbell" : "wifioff"} size={24} colour="orange" />
           </View>
-          <Txt kind="h3">Couldn’t load the exercises</Txt>
-          <Txt kind="small">Check your connection.</Txt>
+          <Txt kind="h3">{state.kind === "none" ? "Exercises aren’t available yet" : "Couldn’t load the exercises"}</Txt>
+          {state.kind === "none" ? null : <Txt kind="small">Check your connection.</Txt>}
           <Button label="Try again" kind="plain" small style={styles.self} onPress={again} />
         </Card>
       ) : state.kind === "loading" ? (
@@ -85,9 +85,11 @@ export function LibraryPart({ parts, file }: { parts: ReactNode; file?: LibraryF
           )}
           {shown.length === 0 ? (
             <View style={styles.none}>
-              <View style={styles.faint}>
-                <MuscleFigure sex={sex} side="front" lit={NOTHING_LIT} width={64} />
-              </View>
+              {sex === null ? null : (
+                <View style={styles.faint}>
+                  <MuscleFigure sex={sex} side="front" lit={NOTHING_LIT} width={64} />
+                </View>
+              )}
               <Txt kind="h3" style={styles.centre}>
                 {searching ? `No exercises match “${search.trim()}”` : "No exercises here yet"}
               </Txt>
@@ -129,7 +131,7 @@ export function LibraryPart({ parts, file }: { parts: ReactNode; file?: LibraryF
 }
 
 /** Two cards a row; an odd last one keeps its half. */
-function Grid({ entries, sex, onOpen }: { entries: readonly PhoneLibraryEntry[]; sex: "male" | "female"; onOpen: (id: string) => void }) {
+function Grid({ entries, sex, onOpen }: { entries: readonly PhoneLibraryEntry[]; sex: Sex | null; onOpen: (id: string) => void }) {
   const rows: PhoneLibraryEntry[][] = [];
   for (let i = 0; i < entries.length; i += 2) rows.push(entries.slice(i, i + 2));
   return (

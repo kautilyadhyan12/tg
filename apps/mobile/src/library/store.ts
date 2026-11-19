@@ -28,7 +28,9 @@ export type LibraryState =
   | { kind: "loading" }
   | { kind: "ready"; library: PhoneLibrary; fresh: boolean }
   /** No copy on the phone, and none from the server: no internet on the very first open. */
-  | { kind: "failed" };
+  | { kind: "failed" }
+  /** The server has no Library published yet (404), and the phone holds none. */
+  | { kind: "none" };
 
 /** The kept copy, or null when there is none or it cannot be read. */
 export async function readKept(file: LibraryFile): Promise<PhoneLibrary | null> {
@@ -59,7 +61,8 @@ export async function refreshLibrary(ask: Ask, file: LibraryFile, kept: PhoneLib
       return { kind: "ready", library, fresh: true };
     }
   }
-  return kept === null ? { kind: "failed" } : { kind: "ready", library: kept, fresh: false };
+  if (kept !== null) return { kind: "ready", library: kept, fresh: false };
+  return answer.kind === "refused" && answer.status === 404 ? { kind: "none" } : { kind: "failed" };
 }
 
 /** The exercises the Library offers: live ones. Retired and hidden ones stay in the copy for history. */

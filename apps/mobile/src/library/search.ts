@@ -15,6 +15,26 @@ export function normalise(text: string): string {
 
 const squash = (s: string): string => s.replace(/ /g, "");
 
+/** What people type for a muscle, beside its name (L6 of 63a's round one): each alias is searched as the words
+ *  it stands for. */
+const MUSCLE_ALIASES: Readonly<Record<string, string>> = {
+  quads: "quadriceps",
+  quad: "quadriceps",
+  pecs: "chest",
+  pec: "chest",
+  delts: "shoulders",
+  delt: "shoulders",
+  hams: "hamstrings",
+  hammies: "hamstrings",
+  bis: "biceps",
+  tris: "triceps",
+  calf: "calves",
+  glute: "glutes",
+  lat: "lats",
+  trap: "traps",
+  core: "abs",
+};
+
 /** The words of the muscles' plain names ("biceps", "quadriceps", "glutes"). A search made only of these
  *  is read against plain names alone: "biceps" is the arm's, never the hamstring's anatomical "biceps femoris"
  *  (which a search for "biceps femoris" or "femoris" still finds). */
@@ -41,7 +61,7 @@ export function searchExercises(list: readonly PhoneLibraryEntry[], search: stri
   const query = normalise(search);
   const byName = (a: PhoneLibraryEntry, b: PhoneLibraryEntry) => a.text.en.name.localeCompare(b.text.en.name, "en");
   if (query === "") return [...list].sort(byName);
-  const words = query.split(" ");
+  const words = query.split(" ").map((w) => MUSCLE_ALIASES[w] ?? w);
   const plainMuscle = words.every((w) => PLAIN_MUSCLE_WORDS.some((p) => p.startsWith(w)));
   const ranked: { entry: PhoneLibraryEntry; tier: number }[] = [];
   for (const entry of list) {

@@ -23,6 +23,7 @@ import {
   levelWord,
   muscleLabel,
   muscleLine,
+  splitMistake,
   targetLine,
 } from "../../library/words";
 import { Flames, KitMark, Plates } from "./Marks";
@@ -43,7 +44,7 @@ export function ExercisePage({
   onClose,
 }: {
   entry: PhoneLibraryEntry;
-  sex: Sex;
+  sex: Sex | null;
   onClose: () => void;
 }) {
   const [tab, setTab] = useState<Tab>("muscles");
@@ -77,8 +78,8 @@ export function ExercisePage({
   return (
     <CoverPage open title={en.name} onClose={onClose} hero={hero}>
       <Strip entry={entry} />
-      {en.cautions.map((c) => (
-        <View key={c} style={styles.caution} accessible accessibilityRole="alert" accessibilityLabel={`Caution: ${c}`}>
+      {en.cautions.map((c, i) => (
+        <View key={`${String(i)}-${c}`} style={styles.caution} accessible accessibilityRole="alert" accessibilityLabel={`Caution: ${c}`}>
           <Icon name="warn" size={16} colour="badText" />
           <Txt kind="small" colour="text" style={styles.grow}>
             {c}
@@ -169,7 +170,7 @@ function Strip({ entry }: { entry: PhoneLibraryEntry }) {
   );
 }
 
-function Muscles({ entry, sex }: { entry: PhoneLibraryEntry; sex: Sex }) {
+function Muscles({ entry, sex }: { entry: PhoneLibraryEntry; sex: Sex | null }) {
   const { width } = useWindowDimensions();
   const lit = litMuscles(entry.muscles);
   const figure = Math.min(150, Math.floor((width - sizes.edge * 2 - 32 - 26) / 2));
@@ -182,22 +183,25 @@ function Muscles({ entry, sex }: { entry: PhoneLibraryEntry; sex: Sex }) {
   ].filter((r) => r.words.length > 0);
   return (
     <>
-      <View style={styles.stage}>
-        <View style={styles.stageHead}>
-          <Txt kind="eyebrow">Muscles worked</Txt>
-        </View>
-        <View style={styles.figures}>
-          {(["front", "back"] as const).map((side) => (
-            <View key={side} style={styles.figureCol}>
-              <View style={{ width: figure }}>
-                <MuscleFigure sex={sex} side={side} lit={lit} width={figure} />
-                {labelled !== undefined && side === labelSide ? <Leader sex={sex} side={side} muscle={labelled} width={figure} /> : null}
+      {/* The person's own figure only: none until their setup answer is known, never the other one. */}
+      {sex === null ? null : (
+        <View style={styles.stage}>
+          <View style={styles.stageHead}>
+            <Txt kind="eyebrow">Muscles worked</Txt>
+          </View>
+          <View style={styles.figures}>
+            {(["front", "back"] as const).map((side) => (
+              <View key={side} style={styles.figureCol}>
+                <View style={{ width: figure }}>
+                  <MuscleFigure sex={sex} side={side} lit={lit} width={figure} />
+                  {labelled !== undefined && side === labelSide ? <Leader sex={sex} side={side} muscle={labelled} width={figure} /> : null}
+                </View>
+                <Txt kind="tiny">{side === "front" ? "FRONT" : "BACK"}</Txt>
               </View>
-              <Txt kind="tiny">{side === "front" ? "FRONT" : "BACK"}</Txt>
-            </View>
-          ))}
+            ))}
+          </View>
         </View>
-      </View>
+      )}
       <View style={styles.legend}>
         {rows.map((r) => (
           <View key={r.key} style={styles.legendRow}>
@@ -285,9 +289,7 @@ function Mistakes({ entry }: { entry: PhoneLibraryEntry }) {
   return (
     <View style={styles.mistakes}>
       {entry.text.en.mistakes.map((m) => {
-        const cut = m.says.indexOf(". ");
-        const wrong = cut === -1 ? m.says : m.says.slice(0, cut + 1);
-        const fix = cut === -1 ? null : m.says.slice(cut + 2);
+        const { wrong, fix } = splitMistake(m.says);
         return (
           <View key={m.id} style={styles.mistake}>
             <View style={styles.wrong}>

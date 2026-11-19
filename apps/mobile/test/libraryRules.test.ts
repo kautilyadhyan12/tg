@@ -7,7 +7,7 @@ import { DEEP_UNDER, DRAWN_MUSCLES, litMuscles, sideFor } from "../src/library/f
 import { FIGURES } from "../src/library/figures";
 import { normalise, searchExercises } from "../src/library/search";
 import { LIBRARY_PATH, offered, readKept, refreshLibrary, type LibraryFile } from "../src/library/store";
-import { effortOf, equipmentLine, muscleLine, muscleNames, plainWord, targetLine } from "../src/library/words";
+import { effortOf, equipmentLine, muscleLine, muscleNames, plainWord, splitMistake, targetLine } from "../src/library/words";
 import type { Answer, Request, Shape } from "../src/session/calls";
 
 const FOLDER = new URL("../../../packages/shared/library/exercises/", import.meta.url);
@@ -65,7 +65,6 @@ describe("search: name matches first, then other names, then muscles, equipment 
     ["femoris", ["squat"]],
     ["hamstrings", ["squat"]],
     ["brachialis", ["barbell_curl"]],
-    ["quads", []],
     ["quadriceps", ["squat"]],
     ["vastus", ["squat"]],
     ["barbell", ["barbell_curl"]],
@@ -73,6 +72,12 @@ describe("search: name matches first, then other names, then muscles, equipment 
     ["abs", ["ab_wheel", "hollow_hold", "incline_push_up", "plank", "push_up", "pushup_plus"]],
     ["strength", ["ab_wheel", "barbell_curl", "hollow_hold", "incline_push_up", "plank", "push_up", "pushup_plus", "squat"]],
     ["burpee", []],
+    // What people type for a muscle (L6): searched as the words it stands for.
+    ["quads", ["squat"]],
+    ["core", ["ab_wheel", "hollow_hold", "incline_push_up", "plank", "push_up", "pushup_plus"]],
+    ["bis", ["barbell_curl"]],
+    ["hams", ["squat"]],
+    ["pecs", []],
     ["éxercise", []],
     ["!!!", ["ab_wheel", "barbell_curl", "hollow_hold", "incline_push_up", "plank", "push_up", "pushup_plus", "squat"]],
   ])("%j → %j", (q, want) => {
@@ -133,6 +138,18 @@ describe("the words an exercise is shown with", () => {
   it("a word the phone does not know is shown plainly", () => {
     expect(plainWord("gluteus_minimus")).toBe("Gluteus minimus");
     expect(plainWord("_")).toBe("_");
+  });
+});
+
+describe("a mistake as what goes wrong and how to put it right", () => {
+  it.each([
+    ["Heels lift off the floor. Keep your whole foot down.", "Heels lift off the floor.", "Keep your whole foot down."],
+    ["Hips sag, e.g. toward the floor. Brace your abdominals.", "Hips sag, e.g. toward the floor.", "Brace your abdominals."],
+    ["Feet approx. 10 cm too wide. Bring them in.", "Feet approx. 10 cm too wide.", "Bring them in."],
+    ["Knees bend.", "Knees bend.", null],
+    ["Breath is held. Keep breathing. Count each breath.", "Breath is held.", "Keep breathing. Count each breath."],
+  ])("%j", (says, wrong, fix) => {
+    expect(splitMistake(says)).toEqual({ wrong, fix });
   });
 });
 
@@ -235,6 +252,14 @@ describe("the copy kept on the phone", () => {
     const kept = realLibrary();
     expect(await refreshLibrary(server({ status: "none" }).ask, memory(), kept)).toEqual({ kind: "ready", library: kept, fresh: false });
     expect(await refreshLibrary(server({ status: "none" }).ask, memory(), null)).toEqual({ kind: "failed" });
+  });
+
+  it("no Library published yet (404) and none kept: the phone says so, and never that the connection failed", async () => {
+    const refused = <T>(): Promise<Answer<T>> =>
+      Promise.resolve({ kind: "refused", status: 404, error: "no_library", message: "No Library yet.", retryAfterSeconds: null, robotCheckKey: null, body: null });
+    expect(await refreshLibrary(refused, memory(), null)).toEqual({ kind: "none" });
+    const kept = realLibrary();
+    expect(await refreshLibrary(refused, memory(), kept)).toEqual({ kind: "ready", library: kept, fresh: false });
   });
 
   it("a reply that is not a Library is never kept", async () => {

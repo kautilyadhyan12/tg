@@ -4,17 +4,24 @@
 // rest reads the real files as the server publishes them, and words no list has heard of yet.
 import { readdirSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { checkLibrary } from "../src/library/check.js";
+import { libraryDownloadSchema, libraryEntrySchema } from "../src/library/download.js";
 import { readPhoneLibrary } from "../src/library/phoneLibrary.js";
 
-const EXERCISES = new URL("../library/exercises/", import.meta.url);
-const METS: Record<string, number> = { squat: 3, plank: 2.8, barbell_curl: 3.5 };
+const LIBRARY = new URL("../library/", import.meta.url);
+const EXERCISES = new URL("exercises/", LIBRARY);
 
-/** The download the server sends: each real file with its status and its MET. */
+/** The entries the server publishes, made as publishing makes them: the real folder through the check, each
+ *  checked file given its status and the MET read from the Compendium table, through the server's own entry
+ *  schema. A change to the server's entry that the phone cannot read fails here. */
 function realEntries(): Record<string, unknown>[] {
-  return readdirSync(EXERCISES).map((name) => {
-    const file = JSON.parse(readFileSync(new URL(name, EXERCISES), "utf8")) as Record<string, unknown>;
-    return { ...file, status: "live", met: METS[String(file.id)] ?? 3 };
+  const checked = checkLibrary({
+    exerciseFiles: readdirSync(EXERCISES).map((name) => ({ name, text: readFileSync(new URL(name, EXERCISES), "utf8") })),
+    compendium: { name: "compendium.json", text: readFileSync(new URL("compendium.json", LIBRARY), "utf8") },
   });
+  if (checked.faults.length > 0 || checked.compendium === null) throw new Error("the real folder has a fault");
+  const mets = new Map(checked.compendium.rows.map((r) => [r.code, r.met]));
+  return checked.exercises.map((e) => libraryEntrySchema.parse({ ...e, status: e.status, met: mets.get(e.energy.compendium) }) as unknown as Record<string, unknown>);
 }
 
 function download(exercises: unknown[]): unknown {
@@ -55,6 +62,8 @@ describe("an exercise is never shown without its cautions", () => {
 
 describe("the real Library, as the server sends it", () => {
   it("every exercise is read, with all three rows of its muscles", () => {
+    // The whole reply as the server's own reply schema has it.
+    expect(libraryDownloadSchema.safeParse(download(realEntries())).success).toBe(true);
     const read = readPhoneLibrary(download(realEntries()));
     expect(read?.unread).toBe(0);
     expect(read?.exercises.map((e) => e.id).sort()).toEqual(["barbell_curl", "plank", "squat"]);
