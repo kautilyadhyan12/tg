@@ -22,7 +22,7 @@ export function ExerciseCard({ entry, sex, onOpen }: { entry: PhoneLibraryEntry;
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={say} onPress={onOpen} style={({ pressed }) => [styles.card, pressed ? styles.pressed : null]}>
       <View style={styles.top}>
-        <Image source={pictures[exercisePicture(entry.id, entry.kind)]} resizeMode="cover" style={StyleSheet.absoluteFill} accessible={false} />
+        <Image source={pictures[exercisePicture(entry.id, entry.kind)]} resizeMode="cover" style={styles.photo} accessible={false} />
         <View style={[StyleSheet.absoluteFill, styles.shade]} />
         <View style={styles.mini}>
           <MuscleFigure sex={sex} side={sideFor(entry.muscles.main)} lit={litMuscles(entry.muscles)} width={36} />
@@ -63,7 +63,9 @@ export function ExerciseCard({ entry, sex, onOpen }: { entry: PhoneLibraryEntry;
 const styles = StyleSheet.create({
   card: { flex: 1, borderRadius: sizes.boxRadius, borderWidth: 1, borderColor: colours.line, backgroundColor: colours.box, overflow: "hidden" },
   pressed: { opacity: 0.85 },
-  top: { height: 124 },
+  // An absolute Image keeps its own height on Android: it is given the box's whole size, and the box clips it.
+  top: { height: 124, overflow: "hidden" },
+  photo: { position: "absolute", top: 0, left: 0, width: "100%", height: "100%" },
   shade: { experimental_backgroundImage: artShade },
   mini: { position: "absolute", right: 6, top: 6, paddingVertical: 5, paddingHorizontal: 6, borderRadius: 12, borderWidth: 1, borderColor: colours.lineStrong, backgroundColor: colours.overPicture },
   kind: { position: "absolute", left: 10, bottom: 8 },

@@ -111,21 +111,28 @@ function Strip({ entry }: { entry: PhoneLibraryEntry }) {
           <Txt style={styles.factBig} numberOfLines={1} fit>
             {target.replace(" × ", "×").replace(" reps", "").replace(" s", "s").replace(" min", "m")}
           </Txt>
-          <Txt kind="tiny">{entry.set.measuredIn === "reps" ? "Reps to start" : "To start"}</Txt>
+          <Txt kind="tiny" numberOfLines={1} fit>
+            {entry.set.measuredIn === "reps" ? "Reps to start" : "To start"}
+          </Txt>
         </View>
       )}
       <View style={[styles.fact, styles.factLine]} accessible accessibilityLabel={`Level, ${level}`}>
         <View style={styles.factArt}>
           <Plates lit={levelPlates(entry.level)} scale={1.25} />
         </View>
-        <Txt kind="tiny">{level}</Txt>
+        {/* One word: it grows smaller on a narrow phone, never broken in two ("Intermediat / e"). */}
+        <Txt kind="tiny" numberOfLines={1} fit>
+          {level}
+        </Txt>
       </View>
       {effort === null ? null : (
         <View style={[styles.fact, styles.factLine]} accessible accessibilityLabel={EFFORT_WORDS[effort]}>
           <View style={styles.factArt}>
             <Flames lit={EFFORT_FLAMES[effort]} size={17} />
           </View>
-          <Txt kind="tiny">{EFFORT_WORDS[effort]}</Txt>
+          <Txt kind="tiny" numberOfLines={2} style={styles.centre}>
+            {EFFORT_WORDS[effort]}
+          </Txt>
         </View>
       )}
       <View style={[styles.fact, styles.factLine]} accessible accessibilityLabel={kit}>
@@ -256,8 +263,8 @@ function HowTo({ entry }: { entry: PhoneLibraryEntry }) {
         ))}
       </ScrollView>
       <View style={styles.stepButtons}>
-        <Button label="Back" kind="plain" small icon="back" disabled={at === 0} onPress={() => { go(at - 1); }} />
-        <Button label="Next" kind="plain" small icon="go" disabled={at === steps.length - 1} onPress={() => { go(at + 1); }} />
+        <Button label="Back" kind="plain" small disabled={at === 0} onPress={() => { go(at - 1); }} />
+        <Button label="Next" kind="plain" small disabled={at === steps.length - 1} onPress={() => { go(at + 1); }} />
       </View>
       <View style={styles.about}>
         <Txt kind="eyebrow">About</Txt>

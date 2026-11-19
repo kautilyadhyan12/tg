@@ -66,7 +66,7 @@ export function LibraryPart({ parts, file }: { parts: ReactNode; file?: LibraryF
           </View>
           <Txt kind="h3">Couldn’t load the exercises</Txt>
           <Txt kind="small">Check your connection.</Txt>
-          <Button label="Try again" kind="plain" small onPress={again} />
+          <Button label="Try again" kind="plain" small style={styles.self} onPress={again} />
         </Card>
       ) : state.kind === "loading" ? (
         <Txt kind="small" style={styles.centre}>
@@ -98,6 +98,7 @@ export function LibraryPart({ parts, file }: { parts: ReactNode; file?: LibraryF
                 label="Clear search and filters"
                 kind="plain"
                 small
+                style={styles.self}
                 onPress={() => {
                   setSearch("");
                   setKind(ALL);
@@ -155,6 +156,7 @@ const styles = StyleSheet.create({
   none: { alignItems: "center", gap: 10, paddingTop: 24, paddingHorizontal: 8 },
   faint: { opacity: 0.6 },
   centre: { textAlign: "center" },
+  self: { alignSelf: "center" },
   middle: { alignItems: "center", gap: 10 },
   badge: { width: 52, height: 52, borderRadius: 16, alignItems: "center", justifyContent: "center", backgroundColor: colours.orangeFill, borderWidth: 1, borderColor: colours.orangeLine },
 });
