@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Add a membership type</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./kit3.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0;background:#0A0908}
+.cap{display:flex;align-items:center;gap:10px;font-weight:600;color:var(--t2)}
+.num{width:26px;height:26px;border-radius:999px;background:var(--o-fill);color:var(--o-t);box-shadow:inset 0 0 0 1px var(--o-line);display:grid;place-items:center;font-size:13px;font-weight:700;flex:none}
+.stage{background:var(--scrim);border-radius:18px;padding:32px 16px;display:flex;justify-content:center}
+.dlg{background:var(--solid);border:1px solid var(--line2);border-radius:20px;box-shadow:var(--pop);width:100%;max-width:500px;min-width:0}
+.side{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,440px);border:1px solid var(--line);border-radius:18px;overflow:hidden}
+.side > .under{padding:20px;opacity:.6;overflow:hidden;min-width:0}
+.side > .sheet{background:var(--solid);border-left:1px solid var(--line2);display:flex;flex-direction:column;min-width:0}
+.sheet-h{display:flex;align-items:center;gap:12px;padding:18px 20px;border-bottom:1px solid var(--line)}
+.sheet-b{padding:20px;display:flex;flex-direction:column;gap:18px}
+.sheet-f{margin-top:auto;display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:14px 20px;border-top:1px solid var(--line)}
+.opt{display:flex;gap:12px;align-items:flex-start;padding:14px 16px;border-radius:14px;border:1px solid var(--line2)}
+.opt-on{border-color:var(--o);background:var(--o-fill)}
+.radio{width:18px;height:18px;border-radius:999px;border:1.5px solid var(--line2);flex:none;margin-top:1px}
+.radio-on{border:5px solid var(--o)}
+.check-on{background:var(--o);border-color:var(--o);position:relative}
+.check-on::after{content:"";position:absolute;left:5px;top:1px;width:5px;height:10px;border:solid var(--on-o);border-width:0 2px 2px 0;transform:rotate(45deg)}
+.sw{width:40px;height:24px;border-radius:999px;background:var(--bar);position:relative;flex:none}
+.sw::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:999px;background:var(--t3)}
+.sw-on{background:var(--o)}.sw-on::after{left:19px;background:var(--on-o)}
+.step{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,340px);gap:20px;align-items:start}
+.menu{background:var(--solid);border:1px solid var(--line2);border-radius:16px;box-shadow:var(--pop);padding:6px;min-width:0;max-width:320px}
+.mi{display:flex;gap:12px;align-items:flex-start;padding:10px 12px;border-radius:10px}
+.ptile{display:flex;flex-direction:column;gap:4px;padding:14px;border-radius:14px;border:1px solid var(--line2);min-width:0}
+.ptile-on{border-color:var(--o);background:var(--o-fill)}
+.pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.qty{display:inline-flex;align-items:center;border:1px solid var(--line2);border-radius:999px;height:40px}
+.qty > button{width:40px;height:40px;display:grid;place-items:center;color:var(--t2)}
+.money{font-weight:600;white-space:nowrap}
+.frames{display:flex;flex-wrap:wrap;gap:40px;padding:40px;align-items:flex-start}
+.frame{width:390px;max-width:100%;border:1px solid var(--line2);border-radius:28px;overflow:hidden;background:var(--page);display:flex;flex-direction:column;position:relative}
+.bsheet{background:var(--solid);border-top:1px solid var(--line2);border-radius:22px 22px 0 0;box-shadow:var(--pop);display:flex;flex-direction:column}
+.grab{width:40px;height:5px;border-radius:999px;background:var(--line2);margin:10px auto 4px}
+.savebar{position:sticky;bottom:12px;z-index:2;display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 16px;background:var(--solid);border:1px solid var(--line2);border-radius:18px}
+.footbar{position:sticky;bottom:0;padding:12px 16px 16px;border-top:1px solid var(--line);background:var(--solid);display:flex;flex-direction:column;gap:8px}
+@media (max-width:1180px){.side{grid-template-columns:minmax(0,1fr)}.side > .under{display:none}.side > .sheet{border-left:0}}
+@media (max-width:900px){.step{grid-template-columns:minmax(0,1fr)}.frames{padding:16px;gap:24px}}
+@media (pointer:coarse){.qty,.qty > button{height:44px}.qty > button{width:44px}}
+.part{display:flex;flex-direction:column;gap:16px}.part-h{display:flex;align-items:center;gap:12px}.sum{position:sticky;top:20px}.kinds{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px}.pair{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,200px),1fr));gap:16px}
+</style>
+</helmet>
+<div class="app t-dark {{look}}" style="min-height: 100%">
+<div class="shell">
+
+<nav class="rail" aria-label="Menu">
+<a href="#" class="gym"><span class="logo"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18zM6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2M10 6h4M10 10h4M10 14h4M10 18h4"></path></svg></span><span class="col grow"><span class="w6 ell">Iron House</span><span class="s12 t3">Austin · Gym</span></span><svg class="ic ic-s t3" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 15l5 5 5-5M7 9l5-5 5 5"></path></svg></a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3h5a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM15 3h5a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM15 12h5a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1zM4 16h5a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1z"></path></svg>Overview<span class="n n-bad">6</span></a>
+<div class="grp">Today<svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 2h6a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1zM16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2M9 14l2 2 4-4"></path></svg>Attendance</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 7.5V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3.5M16 2v4M8 2v4M3 10h5M10 16a6 6 0 1 0 12 0a6 6 0 1 0-12 0M16 14v2.2l1.5 1.3"></path></svg>Classes</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 6.5l11 11M21 21l-1-1M3 3l1 1M18 22l4-4M2 6l4-4M3 10l7-7M14 21l7-7"></path></svg>Personal training</a>
+<div class="grp">People<svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M5 7a4 4 0 1 0 8 0a4 4 0 1 0-8 0M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"></path></svg>Members &amp; staff</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 7a4 4 0 1 0 8 0a4 4 0 1 0-8 0M10.3 15H7a4 4 0 0 0-4 4v2M14 17a3 3 0 1 0 6 0a3 3 0 1 0-6 0M21 21l-1.9-1.9"></path></svg>Leads<span class="n">5</span></a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 17l-8.5-8.5-5 5L2 7M16 17h6v-6"></path></svg>At risk<span class="n n-warn">2</span></a>
+<div class="grp">Money<svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6a2 2 0 0 1 2-2h12v4M3 6v12a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2H5a2 2 0 0 1-2-2zM17 14h.01"></path></svg>Payments overview</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4zM3 6h18M16 10a4 4 0 0 1-8 0"></path></svg>Sell</a>
+<a href="#" class="ni ni-on"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12.6 2.6A2 2 0 0 0 11.2 2H4a2 2 0 0 0-2 2v7.2a2 2 0 0 0 .6 1.4l8.7 8.7a2.4 2.4 0 0 0 3.4 0l6.6-6.6a2.4 2.4 0 0 0 0-3.4zM7 7.5h.01"></path></svg>Memberships</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2zM2 10h20"></path></svg>Failed payments<span class="n n-bad">3</span></a>
+<div class="grp">Community<svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l18-5v12L3 14zM11.6 16.8a3 3 0 1 1-5.8-1.6"></path></svg>Updates<span class="n n-warn">1</span></a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM16 2v4M8 2v4M3 10h18"></path></svg>Events</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 2h6a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1zM16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2M12 11h4M12 16h4M8 11h.01M8 16h.01"></path></svg>Fitness plans</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M8.2 10.2L5 3h14l-3.2 7.2M6 15a6 6 0 1 0 12 0a6 6 0 1 0-12 0"></path></svg>Challenges</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6M18 9h1.5a2.5 2.5 0 0 0 0-5H18M4 22h16M10 14.7V17c0 .6-.5 1-1 1.2-1.2.5-2 2-2 3.8M14 14.7V17c0 .6.5 1 1 1.2 1.2.5 2 2 2 3.8M18 2H6v7a6 6 0 0 0 12 0z"></path></svg>Leaderboard</a>
+<div class="grp">Manage<svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3v18h18M8 17V9M13 17V5M18 17v-3"></path></svg>Reports</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M2 14h4M10 8h4M18 16h4"></path></svg>Settings</a>
+<a href="#" class="me"><span class="av">DB</span><span class="col grow"><span class="w6 s13 ell">Dana Brooks</span><span class="s12 t3">Owner</span></span><svg class="ic ic-s t3" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 15l5 5 5-5M7 9l5-5 5 5"></path></svg></a>
+</nav>
+
+<div class="work">
+<header class="top" style="position: relative">
+<button type="button" class="find"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11a7 7 0 1 0 14 0a7 7 0 1 0-14 0M21 21l-4.3-4.3"></path></svg><span class="grow ell">Search members, pages or actions</span><span class="kbd">Ctrl K</span></button>
+<span class="grow"></span>
+<button type="button" class="btn btn-soft"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>New</button>
+<button type="button" class="ibtn" aria-label="6 items need attention"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 0 0 3.4 0"></path></svg><span class="pip">6</span></button>
+</header>
+
+<main class="page" style="position: relative">
+<div class="hrow g8 wrap"><a href="#" class="btn btn-q btn-sm" style="padding-left: 0"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"></path></svg>Memberships</a></div>
+<div class="between wrap">
+<div class="col g6" style="flex: 1 1 360px; min-width: 0"><span class="eyebrow">Price list</span><h1 class="h1">Add a membership type</h1><span class="t2">Give it your name and price, then say how it is paid and what it includes.</span></div>
+</div>
+
+<div class="step">
+<div class="col g20">
+
+<section class="box pad part">
+<div class="part-h"><span class="num">1</span><h2 class="h2">Name it</h2></div>
+<div class="field"><span class="label">Name</span><div class="input input-on"><span class="grow">Gold 12</span></div><span class="t3">For example: Gold Monthly</span></div>
+<div class="field"><span class="label">Description (optional)</span><div class="input"><span class="grow t3">For example: All classes and open gym</span></div></div>
+</section>
+
+<section class="box pad part">
+<div class="part-h"><span class="num">2</span><h2 class="h2">How is it paid?</h2></div>
+<div class="kinds">
+<div class="opt opt-on"><span class="radio radio-on"></span><span class="col"><span class="w6">Recurring</span><span class="t3">Charged every week, month or year until it is cancelled.</span></span></div>
+<div class="opt"><span class="radio"></span><span class="col"><span class="w6">One-time payment</span><span class="t3">Paid once. Lasts a set time, then ends.</span></span></div>
+<div class="opt"><span class="radio"></span><span class="col"><span class="w6">Class pack</span><span class="t3">Paid once. A number of classes to use within a set time.</span></span></div>
+<div class="opt"><span class="radio"></span><span class="col"><span class="w6">Day pass</span><span class="t3">Paid once. One visit, on the day.</span></span></div>
+<div class="opt"><span class="radio"></span><span class="col"><span class="w6">Trial</span><span class="t3">A short first membership, free or paid.</span></span></div>
+</div>
+<div class="strip strip-warn"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20M12 16v-4M12 8h.01"></path></svg><span class="grow">How it is paid can't be changed once it is saved. To sell it another way later, archive this one and add a new one.</span></div>
+</section>
+
+<section class="box pad part">
+<div class="part-h"><span class="num">3</span><h2 class="h2">Price and payment</h2></div>
+<div class="pair">
+<div class="field"><span class="label">Price (USD)</span><div class="input"><span>$</span><span class="grow">45.00</span></div><span class="t3">Type 0 for free.</span></div>
+<div class="field"><span class="label">Joining fee (USD)</span><div class="input"><span>$</span><span class="grow t3">For example: 20.00</span></div><span class="t3">Charged once, on the first bill. Leave it empty for none.</span></div>
+</div>
+<div class="field"><span class="label">Tax</span><span class="t3">Tick each tax charged on this membership. Leave all unticked for no tax.</span>
+<div class="hrow g10"><span class="check check-on"></span><span>Sales tax 8.25%</span></div>
+<div class="hrow g10"><span class="check"></span><span>City fitness tax 2%</span></div>
+<span class="t3">Members who already hold it keep the taxes they were sold with.</span>
+<button type="button" class="btn btn-q btn-sm" style="align-self: flex-start; padding-left: 0"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>Add a tax rate</button></div>
+<div class="field"><span class="label">Charged every</span><div class="hrow g10 wrap"><div class="input" style="width: 96px"><span class="grow">1</span></div><div class="input" style="flex: 1 1 160px"><span class="grow">month</span><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div></div><span class="t3">A one-time payment asks How long it lasts; a class pack asks Classes in the pack and Days to use them in.</span></div>
+
+<div class="field"><span class="label">Minimum term</span>
+<div class="hrow g8 wrap"><span class="chip">No minimum term</span><span class="chip chip-on">A minimum term</span></div>
+<div class="pair">
+<div class="field"><span class="label">How many payments the minimum term runs for</span><div class="input"><span class="grow">12</span><span class="t3">payments</span></div></div>
+<div class="field"><span class="label">After the minimum term</span><div class="input"><span class="grow">it renews until they cancel</span><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div><span class="t3">or: it ends</span></div>
+</div>
+<span class="t2">They stay at least 12 months. After that, it renews until they cancel.</span><span class="t3">Members who already hold it keep the minimum term they joined on.</span></div>
+
+<div class="field"><span class="label">Early cancellation fee (USD)</span><div class="input"><span>$</span><span class="grow">99.00</span></div><span class="t3">Added once to the bills of a member you cancel early, inside the minimum term. Members you release for a reason, such as moving away, pay none. Leave it empty for none. Members who already hold it keep the fee they joined on.</span></div>
+<div class="pair">
+<div class="field"><span class="label">Notice to cancel</span><div class="input"><span class="grow">30</span><span class="t3">days</span></div><span class="t3">Leave empty for no notice: members can stop at the end of what they have paid.</span></div>
+<div class="field"><span class="label">Cooling-off period</span><div class="input"><span class="grow">3</span><span class="t3">days</span></div><span class="t3">Days after they sign in which members can cancel with a full refund. Weekends count. Leave empty for none.</span></div>
+</div>
+
+<div class="pair">
+<div class="field"><span class="label">Reminder before every renewal</span><div class="input"><span class="grow">7 days before</span><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div><span class="t3">Emailed to whoever pays, with the amount and how to cancel. It covers everybody already on this membership.</span></div>
+<div class="field"><span class="label">Reminder before the minimum term ends</span><div class="input"><span class="grow">30 days before</span><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div><span class="t3">Emailed to whoever pays, with what happens after the minimum term and how to cancel. It covers everybody already on this membership.</span></div>
+</div>
+<div class="inset col g8" aria-label="Who gets the reminder">
+<span class="w6">On a membership people already hold, the box under the reminder names who gets it</span>
+<span class="t2">Will be emailed (38): Sam Rivera, Ava Chen, Jordan Lee <a href="#" class="c-o w6">and 35 more · See all</a></span>
+<span class="t2">Already emailed (2): Kim Park, Ray Moreno</span>
+<span class="t2">Not emailed while frozen (1): Dee Walker</span>
+<span class="t2">Not emailed: no email address on the record of whoever pays (1): Lee Tran</span>
+<span class="t3">Every other reason the server gives keeps its own line: Being sent · their email address could not be delivered to · the email could not be delivered · their membership will not renew · their minimum term is over · whoever pays for them is a past member. If the list can't load: "We couldn't load who gets the reminder. You can still save."</span>
+</div>
+</section>
+
+<section class="box pad part">
+<div class="part-h"><span class="num">4</span><h2 class="h2">What it includes</h2></div>
+<div class="field"><span class="label">Classes</span><div class="hrow g8 wrap"><span class="chip chip-on">Unlimited classes</span><span class="chip">A limit on classes</span><span class="chip">No classes, gym only</span></div><span class="t3">A limit asks How many classes, a week or a month. A studio reads "No classes, open studio only".</span></div>
+<div class="field"><span class="label">Which classes</span><div class="hrow g8 wrap"><span class="chip chip-on">Every class</span><span class="chip">Only the classes I tick</span></div></div>
+<div class="opt"><span class="check check-on"></span><span class="col g10 grow"><span class="col"><span class="w6">Includes personal training</span><span class="t3">Sessions with a trainer can be booked on this membership.</span></span>
+<span class="field"><span class="label">Personal training sessions</span><span class="hrow g8 wrap"><span class="chip chip-on">No limit</span><span class="chip">A limit on sessions</span></span></span></span></div>
+</section>
+
+<section class="box pad part">
+<div class="part-h"><span class="num">5</span><h2 class="h2">In the app</h2></div>
+<div class="opt"><span class="sw sw-on"></span><span class="col grow"><span class="w6">Sell in the app</span><span class="t3">Members can buy it in the app with a card they save there. It renews on that card.</span></span></div>
+<div class="strip strip-o"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20M12 16v-4M12 8h.01"></path></svg><span class="grow">Connect Square to sell in the app.</span><button type="button" class="btn btn-p btn-sm">Connect Square</button></div>
+<div class="strip"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20M12 16v-4M12 8h.01"></path></svg><span class="grow">Choose your Square location to sell in the app.</span><button type="button" class="btn btn-s btn-sm">Choose location</button></div>
+<span class="t3">Staff who are not the owner read "Only the owner can connect Square." or "Only the owner can choose the Square location." in place of the button.</span>
+</section>
+
+<span class="t3">Changing one: "Change membership type", "Make it your own: give it your name and price, then say how it is paid and what it includes.", and Save changes.</span>
+<div class="savebar"><button type="button" class="btn btn-main btn-lg">Add membership type</button><button type="button" class="btn btn-q">Cancel</button><span class="c-bad grow" style="min-width: 200px"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 9v4M12 17h.01M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path></svg> Not saved yet. Fix what is marked in red above.</span></div>
+</div>
+
+<aside class="box pad col g12 sum" aria-label="You're adding">
+<span class="eyebrow">You're adding</span>
+<span class="h2">Gold 12</span>
+<span class="t2">Recurring · Sold in the app</span>
+<div class="col g8" style="border-top: 1px solid var(--line); padding-top: 12px">
+<span>$45.00 every month · plus Sales tax 8.25%</span>
+<span>Unlimited classes</span><span>Every class</span>
+<span>Minimum term: 12 months, then renews until cancelled</span>
+<span>Early cancellation fee: $99.00</span>
+<span>Notice to cancel: 30 days</span>
+<span>Cooling-off period: 3 days</span>
+<span>Renewal reminder: 7 days before every renewal</span>
+<span>Minimum term reminder: 30 days before it ends</span>
+<span>Personal training</span>
+</div>
+<span class="t3">This is how it reads when you give it to a member and in their app.</span>
+</aside>
+</div>
+
+</main>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"look":{"editor":"enum","options":["Dark","Light"],"default":"Dark"},"$preview":{"width":1440,"height":3500}}'>
+class Component extends DCLogic {
+renderVals() {
+return { look: (this.props.look ?? 'Dark') === 'Light' ? 't-light' : '' };
+}
+}
+</script>
+</body>
+</html>
