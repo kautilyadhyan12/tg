@@ -5,7 +5,7 @@
 // judged and never lets the table pass.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import type { MovementFrame } from "@app/shared";
 import type { RepResult } from "../src/index.js";
 import { readKept, type KeptFile } from "../scripts/bodyCheck.js";
@@ -110,5 +110,24 @@ describe("only the phone's own reading of the kept file's very frames, from the 
     expect(refusal(kept, asPhone(kept, late))).toMatch(/frame 41/);
     expect(refusedAs(asPhone(kept, kept.frames.slice(1))).verdict).toBe("refused");
     expect(refusal(kept, { ...asPhone(kept), header: { ...asPhone(kept).header, model: { ...kept.header.model, people: 6 } } })).toMatch(/one person/);
+  });
+});
+
+describe("every proof video, as the phone's chosen set-up read it (51b-ii; kept in test/phone-points)", () => {
+  let rows: PhoneRow[] = [];
+  beforeAll(() => {
+    rows = phoneTable(squat);
+  }, 300_000);
+
+  it("every proof video has the phone's run, and none is refused", () => {
+    const missing = rows.filter((r) => r.verdict === "no run" || r.verdict === "refused").map((r) => `${r.label}: ${r.why.join("; ")}`);
+    expect(missing).toEqual([]);
+    expect(rows).toHaveLength(MOVEMENT_VIDEOS.length);
+  });
+
+  it("the phone counts and says on the screen what the laptop does, on every one", () => {
+    const differ = rows.filter((r) => r.verdict !== "same").map((r) => `${r.label}: ${r.why.join("; ")}`);
+    expect(differ).toEqual([]);
+    expect(allSame(rows)).toBe(true);
   });
 });

@@ -262,11 +262,19 @@ const pictureFiles = (folder: string): string[] =>
     .sort()
     .map((f) => join(folder, f));
 
-/** One check sum over files one after another, as the phone makes it. */
+/** One check sum over files one after another, as the phone makes it. Worked out once a run for the same files (a
+ *  video's pictures are read from the disk for the plan, after the push and for the comparison: 2.7 GB a batch, 52a-iii),
+ *  since nothing writes them while a run lasts. */
+const sums = new Map<string, string>();
 function sha256Of(files: readonly string[]): string {
+  const key = files.join("\n");
+  const known = sums.get(key);
+  if (known !== undefined) return known;
   const hash = createHash("sha256");
   for (const f of files) hash.update(new Uint8Array(readFileSync(f)));
-  return hash.digest("hex");
+  const sum = hash.digest("hex");
+  sums.set(key, sum);
+  return sum;
 }
 
 const laptop = new Map<string, BodyPoints>();
