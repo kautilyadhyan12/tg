@@ -14,7 +14,7 @@ import { attentionLines } from './attentionView';
 import { rememberSquarePress } from './paymentsView';
 import { useAttention } from './useAttention';
 import { useCameBack } from './useCameBack';
-import { moneyAttention, overviewIntro, overviewTiles, paymentLines, readsCardCount, revenueByMethod, setupBox } from './paymentsOverviewView';
+import { moneyAttention, overviewIntro, overviewTiles, paymentLines, revenueByMethod, setupBox } from './paymentsOverviewView';
 
 // PAYMENTS OVERVIEW (ROADMAP V1-f; spec Part 3 §17.11): Money's first page. It gathers and moves
 // nothing: every figure is read from the route its own page reads, and every line opens that page
@@ -137,8 +137,19 @@ function AttentionRow({ line }) {
   );
 }
 
-/** One payment page or setting: its state, where it lives, and the press that opens it. */
+/** One payment page or setting: its state, where it lives, and the press that opens it. A line
+ *  with nowhere to open (an Overview box with nothing waiting) only says its state. */
 function PlaceRow({ line }) {
+  if (line.to === null) {
+    return (
+      <div className="c-row c-pay-row" data-testid={`pay-line-${line.key}`}>
+        <span className="flex flex-col min-w-0" style={{ flexGrow: 1 }}>
+          <span className="c-s14 c-w6 c-t1">{line.title}</span>
+          {line.state !== null ? <span className={`c-s12 ${STATE_CLASS[line.state.tone] ?? 'c-t3'}`}>{line.state.text}</span> : null}
+        </span>
+      </div>
+    );
+  }
   return (
     <Link to={line.to} className="c-row c-pay-row" data-testid={`pay-line-${line.key}`}>
       <span className="flex flex-col min-w-0" style={{ flexGrow: 1 }}>
@@ -151,34 +162,23 @@ function PlaceRow({ line }) {
   );
 }
 
-const EMPTY = { gymId: null, register: null, payments: null, bills: null, noCard: null, failed: false };
+const EMPTY = { gymId: null, register: null, payments: null, bills: null, failed: false };
 
 /** Each figure from its own page's route. One that fails leaves its line without a figure, and the
- *  page says so once at the top. The Members list is asked for its No card on file count only for
- *  staff its button is for, at a business connected to Square. */
-async function readFigures(gymId, readsSell, readsBills, privileges) {
+ *  page says so once at the top. The Members list is not read here: its whole read, for one count,
+ *  keeps the server busy 0.8 s at a list of 10,000 (`measure-members-held-cost.ts`). */
+async function readFigures(gymId, readsSell, readsBills) {
   const [register, payments, bills] = await Promise.allSettled([
     readsSell ? registerService.get(gymId) : Promise.resolve(null),
     orgService.getGymPayments(gymId).then((res) => res.data.payments),
     readsBills ? orgService.getBillSettings(gymId).then((res) => res.data) : Promise.resolve(null),
   ]);
-  const paid = payments.status === 'fulfilled' ? payments.value : null;
-  let noCard = null;
-  let cardsFailed = false;
-  if (readsCardCount(paid, privileges)) {
-    try {
-      noCard = (await orgService.getMemberList(gymId)).data.list.noCard ?? null;
-    } catch {
-      cardsFailed = true;
-    }
-  }
   return {
     gymId,
     register: register.status === 'fulfilled' ? register.value : null,
-    payments: paid,
+    payments: payments.status === 'fulfilled' ? payments.value : null,
     bills: bills.status === 'fulfilled' ? bills.value : null,
-    noCard,
-    failed: [register, payments, bills].some((r) => r.status === 'rejected') || cardsFailed,
+    failed: [register, payments, bills].some((r) => r.status === 'rejected'),
   };
 }
 
@@ -194,20 +194,19 @@ export default function PaymentsOverview({ openSquare = goTo }) {
 
   const readsSell = canOpenPlace(privileges, 'sell');
   const readsBills = canOpenPlace(privileges, 'membershipBills');
-  const privilegeKey = privileges.join(' ');
 
   // Each figure from its own page's route, read again on Try again and when staff come back.
   const [asked, setAsked] = useState(0);
   useEffect(() => {
     if (gymId === null || !may) return undefined;
     let live = true;
-    readFigures(gymId, readsSell, readsBills, privilegeKey.split(' ')).then((next) => {
+    readFigures(gymId, readsSell, readsBills).then((next) => {
       if (live) setState(next);
     });
     return () => {
       live = false;
     };
-  }, [gymId, may, readsSell, readsBills, privilegeKey, asked]);
+  }, [gymId, may, readsSell, readsBills, asked]);
   const load = () => setAsked((n) => n + 1);
   useCameBack(may, load);
 
@@ -285,7 +284,7 @@ export default function PaymentsOverview({ openSquare = goTo }) {
   }
 
   const mine = state.gymId === gymId ? state : { ...EMPTY, gymId };
-  const facts = { register: mine.register, attention, payments: mine.payments, bills: mine.bills, noCard: mine.noCard };
+  const facts = { register: mine.register, attention, payments: mine.payments, bills: mine.bills };
   const box = setupBox(mine.payments, org, privileges);
   const tiles = overviewTiles({ orgSlug, ...facts, privileges, orgType: org.orgType });
   const moneyLines = moneyAttention(attentionLines(attention, orgSlug, privileges, org.orgType));

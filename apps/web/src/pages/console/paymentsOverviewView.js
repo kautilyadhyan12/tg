@@ -222,7 +222,7 @@ export function planState(org) {
 
 /** EVERY PAYMENT PAGE AND SETTING THIS PERSON MAY OPEN, by group: each line's title, its state
  *  where its own page's figure was read, where it lives, and its address. */
-export function paymentLines({ orgSlug, privileges, org, membersName, register, attention, payments, bills, noCard }) {
+export function paymentLines({ orgSlug, privileges, org, membersName, register, attention, payments, bills }) {
   const words = orgWords(org?.orgType);
   const square = connected(payments);
   const unread = payments == null;
@@ -232,6 +232,13 @@ export function paymentLines({ orgSlug, privileges, org, membersName, register, 
     const address = to ?? placeFor(orgSlug, privileges, place);
     if (address === null) return;
     lines.push({ group, key, title, state, where, to: address });
+  };
+  // Overview's Refunds to review, App payments to review and Chargebacks boxes are drawn only while
+  // something waits: with nothing waiting the line says so and opens nothing.
+  const box = (group, key, place, title, state, waiting) => {
+    if (placeFor(orgSlug, privileges, place) === null) return;
+    if (waiting === false) lines.push({ group, key, title, state, where: null, to: null });
+    else add(group, key, place, title, state, 'on Overview');
   };
 
   // Daily.
@@ -260,9 +267,9 @@ export function paymentLines({ orgSlug, privileges, org, membersName, register, 
     dueTo,
   );
   const refunds = attention?.refunds ?? null;
-  add('daily', 'refunds', 'refundsToReview', 'Refunds to review', refunds === null ? null : refunds.count > 0 ? { text: `${n(refunds.count)} pending`, tone: 'warn' } : quiet('None pending'), 'on Overview');
+  box('daily', 'refunds', 'refundsToReview', 'Refunds to review', refunds === null ? null : refunds.count > 0 ? { text: `${n(refunds.count)} pending`, tone: 'warn' } : quiet('None pending'), refunds === null ? null : refunds.count > 0);
   const chargebacks = attention?.chargebacks ?? null;
-  add(
+  box(
     'daily',
     'chargebacks',
     'chargebacks',
@@ -274,10 +281,10 @@ export function paymentLines({ orgSlug, privileges, org, membersName, register, 
         : chargebacks.count > 0
           ? { text: chargebacks.lostCount >= chargebacks.count ? plural(chargebacks.count, 'lost', 'lost') : `${n(chargebacks.count - chargebacks.lostCount)} need a response`, tone: 'bad' }
           : quiet(!square && !unread ? AFTER_SQUARE : 'None'),
-    'on Overview',
+    chargebacks === null ? null : chargebacks.needsReconnect || chargebacks.count > 0,
   );
   const app = attention?.appPayments ?? null;
-  add('daily', 'app-payments', 'appPaymentChecks', 'App payments to review', app === null ? null : app.count > 0 ? { text: `${n(app.count)} to review`, tone: 'warn' } : quiet('None'), 'on Overview');
+  box('daily', 'app-payments', 'appPaymentChecks', 'App payments to review', app === null ? null : app.count > 0 ? { text: `${n(app.count)} to review`, tone: 'warn' } : quiet('None'), app === null ? null : app.count > 0);
 
   // Products and pricing: what Sell's own read says about the price list.
   const reads = sellReads && register.canManage === true;
@@ -305,7 +312,9 @@ export function paymentLines({ orgSlug, privileges, org, membersName, register, 
       add('setup', 'terminals', 'payments', 'Square Terminals', square ? quiet(paired === 0 ? 'None paired' : `${n(paired)} paired`) : quiet('Connect Square first'), 'in Settings');
     }
   }
-  const cardsState = typeof noCard === 'number' ? quiet(noCard === 0 ? `Every ${words.person} has a card` : `${plural(noCard, words.person, words.people)} without a card`) : !square && !unread ? quiet(AFTER_SQUARE) : null;
+  // No count of who has no card: the Members list's whole read is what gives it, and at a list of
+  // 10,000 that keeps the server busy 0.8 s on each visit. The line opens that list.
+  const cardsState = unread ? null : quiet(square ? `${words.peopleCap} with no card on file` : AFTER_SQUARE);
   add('setup', 'cards', 'askCards', 'Request cards on file', cardsState, `in ${membersName}`);
   add('setup', 'revenue-report', 'revenueReport', 'Revenue report', quiet('Monthly figures'), 'in Reports');
   add('setup', 'export', 'exportPayments', 'Export payments', quiet('CSV'), 'in Reports');
@@ -318,10 +327,4 @@ export function paymentLines({ orgSlug, privileges, org, membersName, register, 
 export function overviewIntro(org) {
   const name = typeof org?.name === 'string' && org.name !== '' ? org.name : `your ${orgWords(org?.orgType).it}`;
   return `Revenue, outstanding payments and payment settings for ${name}.`;
-}
-
-/** Whether to ask the Members list for its "No card on file" count: only for staff its own
- *  button is for, at a business connected to Square. */
-export function readsCardCount(payments, privileges) {
-  return connected(payments) && canOpenPlace(privileges, 'askCards');
 }

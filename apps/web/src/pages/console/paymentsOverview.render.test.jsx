@@ -139,7 +139,8 @@ describe('connected to Square', () => {
     const attention = screen.getAllByTestId('pay-attention-line').map((l) => l.textContent);
     expect(attention).toEqual([expect.stringContaining('3 failed card payments'), expect.stringContaining('6 members with a payment due'), expect.stringContaining('2 refunds to review')]);
     expect(screen.getAllByTestId('pay-method').map((m) => m.textContent)).toEqual(['Cash$300.00', 'Bank transfer$70.00']);
-    await waitFor(() => expect(within(screen.getByTestId('pay-line-cards')).getByText('14 members without a card')).toBeTruthy());
+    await waitFor(() => expect(within(screen.getByTestId('pay-line-cards')).getByText('Members with no card on file')).toBeTruthy());
+    expect(orgApi.getMemberList).not.toHaveBeenCalled();
     expect(within(screen.getByTestId('pay-line-square')).getByText('Connected')).toBeTruthy();
     expect(screen.queryByTestId('payment-setup')).toBeNull();
     fireEvent.click(screen.getByTestId('pay-line-square'));

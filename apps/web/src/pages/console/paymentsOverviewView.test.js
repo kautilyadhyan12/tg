@@ -90,7 +90,7 @@ function payments({ square = SQUARE_CONNECTED, country = 'US', owner = true, ava
 }
 
 function page(ticks, extra = {}) {
-  const facts = { register: register(ticks), attention: attention(ticks), payments: payments(), bills: has(ticks, 'members.read') ? { overdueAfterDays: 0 } : null, noCard: 14, ...extra };
+  const facts = { register: register(ticks), attention: attention(ticks), payments: payments(), bills: has(ticks, 'members.read') ? { overdueAfterDays: 0 } : null, ...extra };
   const tiles = overviewTiles({ orgSlug: SLUG, ...facts, privileges: ticks, orgType: 'gym' });
   const groups = paymentLines({ orgSlug: SLUG, privileges: ticks, org: ORG, membersName: 'Members', ...facts });
   return { tiles, groups, lines: groups.flatMap((g) => g.lines), methods: revenueByMethod(facts.register, ticks) };
@@ -126,7 +126,7 @@ describe('the worst thing: nobody is shown money, or a line, their role does not
         if (keys.includes(key) !== needs(ticks)) throw new Error(`${key} for [${ticks.join(', ')}]: shown ${String(keys.includes(key))}`);
       }
       for (const line of shown.lines) {
-        if (!line.to.startsWith(`/console/${SLUG}`)) throw new Error(`${line.key} opens ${line.to}`);
+        if (line.to !== null && !line.to.startsWith(`/console/${SLUG}`)) throw new Error(`${line.key} opens ${line.to}`);
       }
       const money = has(ticks, 'billing.members');
       const tiles = shown.tiles.map((t) => t.key);
@@ -190,7 +190,7 @@ describe('each figure is its own page’s figure', () => {
         [
           ['Card payments with Square', 'Connected', 'in Settings'],
           ['Square Terminals', '2 paired', 'in Settings'],
-          ['Request cards on file', '14 members without a card', 'in Members'],
+          ['Request cards on file', 'Members with no card on file', 'in Members'],
           ['Revenue report', 'Monthly figures', 'in Reports'],
           ['Export payments', 'CSV', 'in Reports'],
           ['Your KWAZO plan', null, 'on Overview'],
@@ -230,20 +230,21 @@ describe('each figure is its own page’s figure', () => {
 
   it('nothing waiting reads as nothing, never as a missing figure', () => {
     const calm = attention(owner, { chargebacks: { count: 0 }, failedPayments: { count: 0, totals: [] }, paymentDue: { count: 0, past: 0 }, refunds: { count: 0 }, appPayments: { count: 0 } });
-    const shown = page(owner, { attention: calm, noCard: 0 });
-    expect(['failed', 'payment-due', 'refunds', 'chargebacks', 'app-payments', 'cards'].map((k) => line(shown, k).state.text)).toEqual([
-      'None outstanding',
-      'No payments due',
-      'None pending',
-      'None',
-      'None',
-      'Every member has a card',
-    ]);
+    const shown = page(owner, { attention: calm });
+    expect(['failed', 'payment-due', 'refunds', 'chargebacks', 'app-payments'].map((k) => line(shown, k).state.text)).toEqual(['None outstanding', 'No payments due', 'None pending', 'None', 'None']);
     expect(shown.tiles.find((t) => t.key === 'review')).toMatchObject({ figure: '0', note: 'Nothing to review' });
+    // Overview draws those boxes only while something waits: nothing to open, and no "on Overview".
+    for (const k of ['refunds', 'chargebacks', 'app-payments']) expect(line(shown, k)).toMatchObject({ to: null, where: null });
+    expect(line(shown, 'failed').to).toBe(`/console/${SLUG}/failed-payments`);
+  });
+
+  it('chargebacks waiting on a reconnect still open Overview, where its box says so', () => {
+    const shown = page(owner, { attention: attention(owner, { chargebacks: { count: 0, needsReconnect: true } }) });
+    expect(line(shown, 'chargebacks')).toMatchObject({ to: `/console/${SLUG}#chargebacks`, where: 'on Overview' });
   });
 
   it('a figure not read yet is left out, never a nought', () => {
-    const shown = page(owner, { register: null, attention: null, payments: null, bills: null, noCard: null });
+    const shown = page(owner, { register: null, attention: null, payments: null, bills: null });
     expect(shown.tiles).toEqual([]);
     expect(shown.methods).toBeNull();
     for (const l of shown.lines) {
@@ -259,10 +260,10 @@ describe('each figure is its own page’s figure', () => {
   });
 
   it('a studio says clients', () => {
-    const groups = paymentLines({ orgSlug: SLUG, privileges: owner, org: { ...ORG, orgType: 'studio' }, membersName: 'Clients & staff', register: register(owner), attention: attention(owner), payments: payments(), bills: { overdueAfterDays: 3 }, noCard: 1 });
+    const groups = paymentLines({ orgSlug: SLUG, privileges: owner, org: { ...ORG, orgType: 'studio' }, membersName: 'Clients & staff', register: register(owner), attention: attention(owner), payments: payments(), bills: { overdueAfterDays: 3 } });
     const lines = groups.flatMap((g) => g.lines);
     expect(lines.find((l) => l.key === 'payment-due')).toMatchObject({ state: { text: '6 clients' }, where: 'in Clients & staff' });
-    expect(lines.find((l) => l.key === 'cards').state.text).toBe('1 client without a card');
+    expect(lines.find((l) => l.key === 'cards').state.text).toBe('Clients with no card on file');
     expect(lines.find((l) => l.key === 'bills').state.text).toBe('Grace period: 3 days');
   });
 
@@ -363,7 +364,7 @@ describe('before Square is connected, the setup comes first', () => {
   });
 
   it('what needs Square says so, in place of a figure', () => {
-    const shown = page(owner, { payments: notConnected(), attention: attention(owner, { failedPayments: { count: 0, totals: [] }, chargebacks: { count: 0 } }), noCard: null });
+    const shown = page(owner, { payments: notConnected(), attention: attention(owner, { failedPayments: { count: 0, totals: [] }, chargebacks: { count: 0 } }) });
     expect(shown.tiles.map((t) => [t.title, t.figure, t.note])).toEqual([
       ['Revenue today', '$1,240.00', '15 payments'],
       ['Payment due', '6', 'members'],
