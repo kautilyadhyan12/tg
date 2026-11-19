@@ -21,6 +21,7 @@ import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { seed } from "../src/db/seed.js";
 import type { EmailSender } from "../src/modules/auth/email.js";
+import { REMOVED_IDS_KEPT_MOST } from "../src/modules/training/savedRepo.js";
 
 const url = process.env["DATABASE_URL"];
 const d = describe.skipIf(url === undefined || url === "");
@@ -191,6 +192,29 @@ d("saved workouts (real Postgres)", () => {
     });
   });
 
+  describe("the worst thing, at the same instant: a save and somebody else's delete of one id", () => {
+    it("one of them owns the id, never both, and an owner can always delete their own (round one's High)", async () => {
+      for (let round = 0; round < 20; round++) {
+        const [a, b] = [await person(), await person()];
+        const id = randomUUID();
+        const [saved, removed] = await Promise.all([put(a, id), remove(b, id)]);
+        const owners = {
+          saved: (await sql<{ user_id: string }[]>`SELECT user_id FROM saved_workouts WHERE id = ${id}`).map((r) => r.user_id),
+          removed: (await sql<{ user_id: string }[]>`SELECT user_id FROM saved_workout_removed_ids WHERE id = ${id}`).map((r) => r.user_id),
+        };
+        if (saved.statusCode === 201) {
+          // A's: B's delete was not theirs to make, and A can still delete it.
+          expect({ b: removed.statusCode, owners }).toEqual({ b: 404, owners: { saved: [a.id], removed: [] } });
+          expect((await remove(a, id)).statusCode).toBe(204);
+          expect((await kept(id)).row).toEqual([]);
+        } else {
+          // B's: their delete came first and keeps the id; A's save is not found and keeps nothing.
+          expect({ a: saved.statusCode, b: removed.statusCode, owners }).toEqual({ a: 404, b: 204, owners: { saved: [], removed: [b.id] } });
+        }
+      }
+    });
+  });
+
   describe("saving, reading back and listing", () => {
     it("a new saved workout is 201 and reads back exactly as sent, in its order, repeats included", async () => {
       const a = await person();
@@ -198,7 +222,7 @@ d("saved workouts (real Postgres)", () => {
       const sent = body();
       const res = await put(a, id, sent);
       expect(res.statusCode).toBe(201);
-      expect(savedWorkoutWrittenSchema.parse(res.json())).toEqual({ id, status: "created" });
+      expect(savedWorkoutWrittenSchema.parse(res.json())).toEqual({ id, status: "created", editedAt: sent.editedAt });
 
       const back = await read(a, id);
       expect(back.statusCode).toBe(200);
@@ -228,7 +252,7 @@ d("saved workouts (real Postgres)", () => {
       expect((await put(a, id, sent)).statusCode).toBe(201);
       const again = await put(a, id, sent);
       expect(again.statusCode).toBe(200);
-      expect(again.json()).toEqual({ id, status: "unchanged" });
+      expect(again.json()).toEqual({ id, status: "unchanged", editedAt: sent.editedAt });
       expect(await countOf(a)).toBe(1);
       expect((await kept(id)).sets).toHaveLength(7);
     });
@@ -240,14 +264,30 @@ d("saved workouts (real Postgres)", () => {
       const changed = body({ name: "Arms", editedAt: edited(10), exercises: [exercises()[1]] });
       const res = await put(a, id, changed);
       expect(res.statusCode).toBe(200);
-      expect(res.json()).toEqual({ id, status: "updated" });
+      expect(res.json()).toEqual({ id, status: "updated", editedAt: changed.editedAt });
       expect(savedWorkoutSchema.parse((await read(a, id)).json())).toEqual({ id, name: "Arms", editedAt: changed.editedAt, exercises: changed.exercises });
 
-      // The phone's earlier send, held up on the way.
+      // The phone's earlier send, held up on the way: the answer names the newer change the server holds,
+      // so the phone knows to read it again.
       const late = await put(a, id, body({ name: "Leg day", editedAt: edited(20) }));
-      expect(late.json()).toEqual({ id, status: "unchanged" });
+      expect(late.json()).toEqual({ id, status: "unchanged", editedAt: changed.editedAt });
       expect((await kept(id)).row[0]?.["name"]).toBe("Arms");
       expect((await kept(id)).sets.map((s) => s["slug"])).toEqual(["barbell_curl", "barbell_curl"]);
+    });
+  });
+
+  describe("a change's time is kept to the millisecond", () => {
+    it("an editedAt with microseconds and an offset reads back to the millisecond, and a change sent with that read-back is saved", async () => {
+      const a = await person();
+      const id = randomUUID();
+      const first = await put(a, id, body({ editedAt: "2026-11-19T15:20:00.123456+05:30" }));
+      expect(first.json()).toEqual({ id, status: "created", editedAt: "2026-11-19T09:50:00.123Z" });
+      expect(savedWorkoutSchema.parse((await read(a, id)).json()).editedAt).toBe("2026-11-19T09:50:00.123Z");
+      // The same instant again, as the phone read it back: the same change, unchanged.
+      expect((await put(a, id, body({ editedAt: "2026-11-19T09:50:00.123Z" }))).json()).toMatchObject({ status: "unchanged" });
+      // A millisecond later is a newer change.
+      expect((await put(a, id, body({ name: "Micro", editedAt: "2026-11-19T09:50:00.124Z" }))).json()).toMatchObject({ status: "updated" });
+      expect((await kept(id)).row[0]?.["name"]).toBe("Micro");
     });
   });
 
@@ -264,15 +304,32 @@ d("saved workouts (real Postgres)", () => {
 
       const late = await put(a, id, body({ editedAt: edited(1) }));
       expect(late.statusCode).toBe(200);
-      expect(late.json()).toEqual({ id, status: "removed" });
+      expect(late.json()).toEqual({ id, status: "removed", editedAt: null });
       expect(await countOf(a)).toBe(0);
+    });
+
+    it("a person's newest 1,000 deleted ids are kept, and the oldest go", async () => {
+      const a = await person();
+      await sql`
+        INSERT INTO saved_workout_removed_ids (id, user_id, removed_at)
+        SELECT gen_random_uuid(), ${a.id}, now() - make_interval(mins => g) FROM generate_series(1, ${REMOVED_IDS_KEPT_MOST}) g`;
+      const oldest = (await sql<{ id: string }[]>`SELECT id FROM saved_workout_removed_ids WHERE user_id = ${a.id} ORDER BY removed_at LIMIT 1`)[0]?.id;
+      const id = randomUUID();
+      expect((await remove(a, id)).statusCode).toBe(204);
+      const ids = (await sql<{ id: string }[]>`SELECT id FROM saved_workout_removed_ids WHERE user_id = ${a.id}`).map((r) => r.id);
+      expect(ids).toHaveLength(REMOVED_IDS_KEPT_MOST);
+      expect(ids).toContain(id);
+      expect(ids).not.toContain(oldest);
+      // Sent twice it is still one delete, and the count holds.
+      expect((await remove(a, id)).statusCode).toBe(204);
+      expect(await sql`SELECT 1 FROM saved_workout_removed_ids WHERE user_id = ${a.id}`).toHaveLength(REMOVED_IDS_KEPT_MOST);
     });
 
     it("a delete that arrives before its save: the save that follows keeps nothing", async () => {
       const a = await person();
       const id = randomUUID();
       expect((await remove(a, id)).statusCode).toBe(204);
-      expect((await put(a, id)).json()).toEqual({ id, status: "removed" });
+      expect((await put(a, id)).json()).toEqual({ id, status: "removed", editedAt: null });
       expect(await countOf(a)).toBe(0);
     });
   });
@@ -311,7 +368,7 @@ d("saved workouts (real Postgres)", () => {
       expect(savedWorkoutsFullSchema.parse(refused.json())).toMatchObject({ error: "saved_workouts_full", most: 50 });
       expect(await kept(over)).toEqual({ row: [], sets: [] });
 
-      expect((await put(a, fiftieth, body({ name: "Changed", editedAt: edited(1) }))).json()).toEqual({ id: fiftieth, status: "updated" });
+      expect((await put(a, fiftieth, body({ name: "Changed", editedAt: edited(1) }))).json()).toEqual({ id: fiftieth, status: "updated", editedAt: edited(1) });
       expect((await remove(a, fiftieth)).statusCode).toBe(204);
       expect((await put(a, over)).statusCode).toBe(201);
       expect(await countOf(a)).toBe(50);

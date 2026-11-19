@@ -77,10 +77,13 @@ export const savedWorkoutWriteSchema = z
 export type SavedWorkoutWrite = z.infer<typeof savedWorkoutWriteSchema>;
 
 /** The answer to a save: 201 created; 200 updated, unchanged (the server holds this change or a newer
- *  one), or removed (the person deleted it: nothing is kept, and the phone forgets it). */
+ *  one), or removed (the person deleted it: nothing is kept, and the phone forgets it). `editedAt` is the
+ *  time of the change the server holds, to the millisecond (null once removed): when it differs from the
+ *  phone's, the server holds a newer change, and the phone reads the saved workout again. */
 export const savedWorkoutWrittenSchema = z.object({
   id: z.uuid(),
   status: z.enum(["created", "updated", "unchanged", "removed"]),
+  editedAt: z.string().nullable(),
 });
 export type SavedWorkoutWritten = z.infer<typeof savedWorkoutWrittenSchema>;
 

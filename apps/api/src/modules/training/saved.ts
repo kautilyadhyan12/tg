@@ -40,17 +40,24 @@ export interface SavedDeps {
   now: () => Date;
 }
 
-export type SavedStatus = "created" | "updated" | "unchanged" | "removed";
+/** What a save did, and the time of the change the server now holds (null once removed): for
+ *  "unchanged" it may be a newer change than the one sent, which the phone then reads again. */
+export interface SavedWritten {
+  status: "created" | "updated" | "unchanged" | "removed";
+  editedAt: string | null;
+}
 
-export async function writeSaved(deps: SavedDeps, userId: string, id: string, input: SavedWorkoutWrite): Promise<SavedStatus> {
+export async function writeSaved(deps: SavedDeps, userId: string, id: string, input: SavedWorkoutWrite): Promise<SavedWritten> {
   if (Date.parse(input.editedAt) > deps.now().getTime() + FUTURE_SLACK_MS) throw new FutureEditError();
-  return await deps.sql.begin(async (tx) => {
+  return await deps.sql.begin(async (tx): Promise<SavedWritten> => {
+    // Locks in one order for every request: the Library (shared), the id, the person.
     await holdLibrary(tx);
+    await repo.lockId(tx, id);
     await repo.lockPerson(tx, userId);
     const state = await repo.savedState(tx, id, userId, input.editedAt);
     if (state.kind === "theirs") throw new ForeignSavedError();
-    if (state.kind === "removed") return "removed" as const;
-    if (state.kind === "mine" && state.sameOrNewer) return "unchanged" as const;
+    if (state.kind === "removed") return { status: "removed", editedAt: null };
+    if (state.kind === "mine" && state.sameOrNewer) return { status: "unchanged", editedAt: state.editedAt.toISOString() };
 
     const slugs = [...new Set(input.exercises.map((e) => e.exercise))];
     const known = await knownExercises(tx, slugs);
@@ -71,15 +78,17 @@ export async function writeSaved(deps: SavedDeps, userId: string, id: string, in
     });
 
     if (state.kind === "mine") {
-      if (!(await repo.updateSaved(tx, id, userId, input.name, input.editedAt))) throw new ForeignSavedError();
+      const kept = await repo.updateSaved(tx, id, userId, input.name, input.editedAt);
+      if (kept === null) throw new ForeignSavedError();
       await repo.replaceSets(tx, id, userId, sets);
-      return "updated" as const;
+      return { status: "updated", editedAt: kept.toISOString() };
     }
     if ((await repo.countOf(tx, userId)) >= PLANNED_WORKOUT_LIMITS.savedMost) throw new SavedFullError();
-    // Under the person's own lock, an id taken in between is somebody else's.
-    if (!(await repo.insertSaved(tx, id, userId, input.name, input.editedAt))) throw new ForeignSavedError();
+    // Under the id's lock nobody else can take it in between; this is a second guard.
+    const made = await repo.insertSaved(tx, id, userId, input.name, input.editedAt);
+    if (made === null) throw new ForeignSavedError();
     await repo.replaceSets(tx, id, userId, sets);
-    return "created" as const;
+    return { status: "created", editedAt: made.toISOString() };
   });
 }
 
@@ -87,6 +96,7 @@ export async function writeSaved(deps: SavedDeps, userId: string, id: string, in
  *  not hold yet, it is still one delete: the id is kept, so a save of it on its way keeps nothing. */
 export async function deleteSaved(deps: SavedDeps, userId: string, id: string): Promise<boolean> {
   return await deps.sql.begin(async (tx) => {
+    await repo.lockId(tx, id);
     await repo.lockPerson(tx, userId);
     return await repo.removeSaved(tx, id, userId);
   });

@@ -163,8 +163,8 @@ export function registerTrainingRoutes(
     const parsed = savedWorkoutWriteSchema.safeParse(req.body);
     if (!parsed.success) return validationError(req, reply, issues(parsed.error));
     try {
-      const status = await writeSaved(savedDeps, owner(req), id.data, parsed.data);
-      return await reply.status(status === "created" ? 201 : 200).send({ id: id.data, status });
+      const written = await writeSaved(savedDeps, owner(req), id.data, parsed.data);
+      return await reply.status(written.status === "created" ? 201 : 200).send({ id: id.data, ...written });
     } catch (err) {
       if (err instanceof ForeignSavedError) return notFound(req, reply, "saved workout");
       if (err instanceof UnknownExercisesError) {

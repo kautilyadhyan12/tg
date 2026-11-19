@@ -3,6 +3,22 @@
 // WHERE, and its sets are written and read only through a saved workout of that owner.
 import type { Sql, TransactionSql } from "postgres";
 
+/** How many ids of deleted saved workouts are kept for one person; past it the oldest go. A delete is
+ *  answered for an id the server never held too (a save of it may be on its way), so without a bound one
+ *  account could add rows for ever. */
+export const REMOVED_IDS_KEPT_MOST = 1000;
+
+/** One saved workout id is saved or deleted by one request at a time, whoever sends it, so a save and
+ *  somebody else's delete of one id can never both pass their check (as `lockRunId` for a run). Taken
+ *  before the person's own lock, by every request, so the two are always taken in one order. */
+export async function lockId(tx: TransactionSql, id: string): Promise<void> {
+  await tx`SELECT pg_advisory_xact_lock(hashtext(${`saved_workout:${id}`}))`;
+}
+
+/** The phone's instant to the millisecond, as it is kept and read back (`toISOString`): a finer one kept
+ *  as sent would read back older than it is. */
+const toMs = (tx: TransactionSql, instant: string) => tx`date_trunc('milliseconds', ${instant}::timestamptz)`;
+
 /** One person's saved workouts are changed one request at a time, so two new ones sent at the same
  *  instant cannot both pass the limit. The two-number key is a space of its own, apart from the
  *  Library's one-number lock. */
@@ -14,17 +30,17 @@ export type SavedState =
   | { kind: "none" }
   | { kind: "theirs" }
   | { kind: "removed" }
-  /** `sameOrNewer`: the server holds this change already, or a newer one. */
-  | { kind: "mine"; sameOrNewer: boolean };
+  /** `sameOrNewer`: the server holds this change already, or a newer one, made at `editedAt`. */
+  | { kind: "mine"; sameOrNewer: boolean; editedAt: Date };
 
 /** Whose saved workout this id is, and whether the change sent is older than the one kept. A row of the
  *  person's own is locked until the transaction ends. */
 export async function savedState(tx: TransactionSql, id: string, userId: string, editedAt: string): Promise<SavedState> {
-  const rows = await tx<{ mine: boolean; same_or_newer: boolean }[]>`
-    SELECT user_id = ${userId} AS mine, edited_at >= ${editedAt}::timestamptz AS same_or_newer
+  const rows = await tx<{ mine: boolean; same_or_newer: boolean; edited_at: Date }[]>`
+    SELECT user_id = ${userId} AS mine, edited_at >= ${toMs(tx, editedAt)} AS same_or_newer, edited_at
     FROM saved_workouts WHERE id = ${id} FOR UPDATE`;
   const row = rows[0];
-  if (row !== undefined) return row.mine ? { kind: "mine", sameOrNewer: row.same_or_newer } : { kind: "theirs" };
+  if (row !== undefined) return row.mine ? { kind: "mine", sameOrNewer: row.same_or_newer, editedAt: row.edited_at } : { kind: "theirs" };
   const removed = await tx<{ mine: boolean }[]>`SELECT user_id = ${userId} AS mine FROM saved_workout_removed_ids WHERE id = ${id}`;
   const r = removed[0];
   return r === undefined ? { kind: "none" } : r.mine ? { kind: "removed" } : { kind: "theirs" };
@@ -35,20 +51,21 @@ export async function countOf(tx: TransactionSql, userId: string): Promise<numbe
   return rows[0]?.n ?? 0;
 }
 
-/** Makes the saved workout unless its id is taken; true when this request made it. */
-export async function insertSaved(tx: TransactionSql, id: string, userId: string, name: string, editedAt: string): Promise<boolean> {
-  const made = await tx`
-    INSERT INTO saved_workouts (id, user_id, name, edited_at) VALUES (${id}, ${userId}, ${name}, ${editedAt})
-    ON CONFLICT (id) DO NOTHING`;
-  return made.count === 1;
+/** Makes the saved workout unless its id is taken: its change's time as kept, or null when this request
+ *  did not make it. */
+export async function insertSaved(tx: TransactionSql, id: string, userId: string, name: string, editedAt: string): Promise<Date | null> {
+  const made = await tx<{ edited_at: Date }[]>`
+    INSERT INTO saved_workouts (id, user_id, name, edited_at) VALUES (${id}, ${userId}, ${name}, ${toMs(tx, editedAt)})
+    ON CONFLICT (id) DO NOTHING RETURNING edited_at`;
+  return made[0]?.edited_at ?? null;
 }
 
-/** Saves a change to the person's own saved workout; true when it was theirs. */
-export async function updateSaved(tx: TransactionSql, id: string, userId: string, name: string, editedAt: string): Promise<boolean> {
-  const changed = await tx`
-    UPDATE saved_workouts SET name = ${name}, edited_at = ${editedAt}, updated_at = now()
-    WHERE id = ${id} AND user_id = ${userId}`;
-  return changed.count === 1;
+/** Saves a change to the person's own saved workout: its change's time as kept, or null when it was not theirs. */
+export async function updateSaved(tx: TransactionSql, id: string, userId: string, name: string, editedAt: string): Promise<Date | null> {
+  const changed = await tx<{ edited_at: Date }[]>`
+    UPDATE saved_workouts SET name = ${name}, edited_at = ${toMs(tx, editedAt)}, updated_at = now()
+    WHERE id = ${id} AND user_id = ${userId} RETURNING edited_at`;
+  return changed[0]?.edited_at ?? null;
 }
 
 export interface SavedSetRow {
@@ -89,7 +106,8 @@ export async function replaceSets(tx: TransactionSql, id: string, userId: string
 
 /** Deletes the person's saved workout and keeps its id for them, so a save of it still on its way keeps
  *  nothing. An id that is no saved workout yet is kept too: a save the phone gave up on may arrive after
- *  the delete. False only for an id that is somebody else's. */
+ *  the delete. The person's newest `REMOVED_IDS_KEPT_MOST` are kept. False only for an id that is somebody
+ *  else's. Run under `lockId` and the person's lock. */
 export async function removeSaved(tx: TransactionSql, id: string, userId: string): Promise<boolean> {
   const theirs = await tx`
     SELECT 1 FROM saved_workouts WHERE id = ${id} AND user_id <> ${userId}
@@ -99,11 +117,12 @@ export async function removeSaved(tx: TransactionSql, id: string, userId: string
   const kept = await tx`
     INSERT INTO saved_workout_removed_ids (id, user_id) VALUES (${id}, ${userId})
     ON CONFLICT (id) DO NOTHING RETURNING id`;
-  // Another person's save or delete of this id landed in between: nothing of theirs was touched.
-  if (kept.length === 0) {
-    const mine = await tx`SELECT 1 FROM saved_workout_removed_ids WHERE id = ${id} AND user_id = ${userId}`;
-    return mine.length > 0;
-  }
+  // Already kept: the same person's delete sent twice (`lockId` holds off anybody else's).
+  if (kept.length === 0) return true;
+  await tx`
+    DELETE FROM saved_workout_removed_ids WHERE id IN (
+      SELECT id FROM saved_workout_removed_ids WHERE user_id = ${userId}
+      ORDER BY removed_at DESC, id OFFSET ${REMOVED_IDS_KEPT_MOST})`;
   return true;
 }
 

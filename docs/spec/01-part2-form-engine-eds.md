@@ -2213,12 +2213,15 @@ items 36 and 24b take as it is):
   Saves and deletes 30 a minute for the person, reads within the 120 of the history; never by address.
 - **A save** answers 201 created, or 200 `updated`, `unchanged` (the server holds this change or a newer one, by
   the phone's `editedAt`, so a late send never undoes a newer change) or `removed` (the person deleted it; nothing
-  is kept and the phone forgets it). 422 `unknown_exercise` as for a workout; 409 `saved_workouts_full` past
+  is kept and the phone forgets it), with the `editedAt` the server holds, kept to the millisecond: an
+  "unchanged" whose `editedAt` differs from the phone's tells it to read the saved workout again. A save and a
+  delete of one id take a lock on the id, whoever sends them, so an id has one owner. 422 `unknown_exercise` as for a workout; 409 `saved_workouts_full` past
   **50 for each person, on every plan** (Kd, 2026-11-19), counted under the person's own lock so two at the same
   instant cannot both pass; 400 for an `editedAt` more than five minutes past the server's clock. It holds the
   publish lock shared, as a workout's save does.
 - **A delete** answers 204, sent twice too, and for an id the server does not hold yet: the id is kept with its
-  owner (`saved_workout_removed_ids`, as `meal_removed_ids`), so a save of it still on its way keeps nothing.
+  owner (`saved_workout_removed_ids`, as `meal_removed_ids`), so a save of it still on its way keeps nothing. A
+  person's newest 1,000 are kept and the oldest go, so deletes cannot add rows for ever.
 - **Kept** (migration 0245): `saved_workouts`, `saved_workout_sets` (no user_id of its own, collected with its
   saved workout by the cascade) and `saved_workout_removed_ids`, all three in the privacy download and delete
   lists and the policy's words. The old `workout_templates` is left as it is. A publish asks of saved workouts
