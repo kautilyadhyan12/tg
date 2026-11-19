@@ -18,9 +18,13 @@ import { KP } from "@app/shared";
 import { MEASURE_LIST, type MeasureName, type MeasuredBody, type Reading } from "../body/measures.js";
 import type { SteadyBody } from "../body/steady.js";
 
-/** A jump this high or higher is never let through, however its feet are hidden or its pictures missing (52a-ii-a):
- *  under Kd's lowest real squat jump (12 cm; his four squat-jump videos lift the ankles 12 to 34 cm). */
+/** A jump this high or higher from the top of a rep is never let through, however its feet are hidden or its pictures
+ *  missing (52a-ii-a): under Kd's lowest real squat jump (12 cm; his four squat-jump videos lift the ankles 12 to 34
+ *  cm). From the bottom it is refused only where both feet are seen (`liftOf`). */
 export const PROMISED_JUMP = 0.1;
+/** The break leaves this much room under the promise, metres: a jump read a little low at its edges (3.9 cm against a
+ *  4 cm number, on a 10 cm jump with pictures missing for 170 ms) is still not hidden. */
+const ROOM = 0.01;
 
 /** Metres a second squared. */
 const GRAVITY = 9.81;
@@ -53,7 +57,7 @@ export interface MatchLimits {
    *  or the moment after, for longer than this, ms, or than one and a half of the rep's own frame steps, whichever
    *  is longer: a jump whose feet are hidden in the air is never let through. For a movement whose feet must stay
    *  down, the break is the longest that hides no jump of `PROMISED_JUMP` (`hopTime` of the promise less the feet's
-   *  number, never under this). A break with no picture in it at all (the phone busy) is judged the same way: the
+   *  number and a centimetre of room, never under this). A break with no picture in it at all (the phone busy) is judged the same way: the
    *  body may be in the air then too. */
   readonly gap: number;
   /** A standing lower than the highest remembered (`anchor`), by more than `still`, is taken only once held
@@ -307,7 +311,7 @@ export class MovementMatcher {
     this.depth = depthRule.atLeast;
     this.watched = [...new Set(movement.rules.flatMap((r) => (r.read.kind === "rise" || r.read.kind === "change" ? r.read.measures : [])))];
     const lift = movement.rules.find((r) => r.read.kind === "lift" && r.atMost !== undefined)?.atMost;
-    this.gap = lift === undefined ? limits.gap : Math.max(limits.gap, hopTime(PROMISED_JUMP - lift));
+    this.gap = lift === undefined ? limits.gap : Math.max(limits.gap, hopTime(PROMISED_JUMP - lift - ROOM));
   }
 
   next(body: SteadyBody, measured: MeasuredBody): MatchFrame {

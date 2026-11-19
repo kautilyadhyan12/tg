@@ -96,13 +96,11 @@ describe("the worst thing: no other movement is ever counted as a squat", () => 
     expect(run.count).toBe(0);
   });
 
-  it("the limit, written: the feet's number is under the smallest jump never counted (8 cm, movementHops.test.ts), and a break hides no jump of 10 cm", () => {
+  it("the limit, written: the feet's number is under the smallest jump never counted (8 cm, movementHops.test.ts)", () => {
     const lift = SQUAT.rules.find((r) => r.name === "feet stay down")?.atMost ?? 1;
     expect(lift).toBeLessThan(0.08);
     expect(PROMISED_JUMP).toBe(0.1);
-    // A break of hopTime(promise less the number) holds the top of a hop that far up: a 10 cm jump seen at its edges no
-    // higher than the number would be let through there, so nothing of 10 cm fits.
-    expect(hopTime(PROMISED_JUMP - lift)).toBeLessThan(hopTime(PROMISED_JUMP));
+    // That no break hides a 10 cm jump is shown by running the jumps: movementHopsHidden.test.ts.
   });
 
   it.each([
@@ -236,9 +234,9 @@ describe("the camera must see enough, or nothing is decided", () => {
 
   it("a break in the feet's readings decides nothing only once it could hold the top of a 10 cm jump", () => {
     const lift = SQUAT.rules.find((r) => r.name === "feet stay down")?.atMost ?? 0;
-    // 2·√(2h/g) of the promise less the number: 4 cm, 221 ms.
-    expect(hopTime(0.06)).toBeGreaterThan(220);
-    expect(hopTime(0.06)).toBeLessThan(222);
+    // 2·√(2h/g) of the promise less the number and a centimetre of room: 5 cm, 202 ms.
+    expect(hopTime(0.05)).toBeGreaterThan(201);
+    expect(hopTime(0.05)).toBeLessThan(203);
     expect(hopTime(lift)).toBeCloseTo(2000 * Math.sqrt((2 * lift) / 9.81), 6);
     const video = videoOf("squat_reference");
     const reps = repTimes(video);

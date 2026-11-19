@@ -1914,7 +1914,7 @@ landing), never below 0; a foot is up only when its heel and toes are, the body 
 and at the bottom only with both feet read; a foot point hidden longer than a break reads nothing for the rest of the rep;
 a rep whose feet are hidden at the moment it would be judged waits for them, and one that ends hidden decides nothing; the
 break that leaves "feet stay down" unseen, pictures in it or none, is the longest that hides no 10 cm jump
-(`PROMISED_JUMP`; 2·√(2(0.10 − 0.04)/g), 221 ms); the moment after a rep is 0.4 s (the measured take-offs reach 0.2 s, and a
+(`PROMISED_JUMP`, with a centimetre of room; 2·√(2(0.10 − 0.04 − 0.01)/g), 202 ms); the moment after a rep is 0.4 s (the measured take-offs reach 0.2 s, and a
 12 cm jump then rises past twice the feet's number); once back up, a rep is no longer dropped for the hips being unread. The
 fresh barbell front squat counts 3 of 3 (was 2; looked at for this, so no longer a fresh test). The numbers: depth 0.16, knees
 125°, hips and knees together 34°, chest 56°, feet down 4 cm, in place 0.10, stance 0.24, hips alike 42°. **The body check:**
