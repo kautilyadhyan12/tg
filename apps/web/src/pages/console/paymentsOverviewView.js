@@ -124,7 +124,7 @@ export function overviewTiles({ orgSlug, register, attention, payments, privileg
   }
   const failed = attention?.failedPayments ?? null;
   if (failed !== null && canOpenPlace(privileges, 'failedPayments')) {
-    const waiting = !connected(payments) && failed.count === 0 && payments != null;
+    const waiting = squareSetup(payments) !== null && !connected(payments) && failed.count === 0;
     tiles.push({
       key: 'failed',
       tone: waiting ? 'off' : failed.count > 0 ? 'bad' : 'plain',
@@ -134,7 +134,7 @@ export function overviewTiles({ orgSlug, register, attention, payments, privileg
       to: null,
     });
   }
-  if (payments != null && !connected(payments) && squareSetup(payments)?.step !== 'elsewhere' && canOpenPlace(privileges, 'askCards')) {
+  if (squareSetup(payments) !== null && !connected(payments) && squareSetup(payments)?.step !== 'elsewhere' && canOpenPlace(privileges, 'askCards')) {
     tiles.push({ key: 'cards', tone: 'off', title: 'Cards on file', figure: '—', note: 'Available after Square is connected', to: null });
   } else {
     const review = toReview(attention, privileges);
@@ -208,13 +208,15 @@ export function graceWords(days) {
   return days === 0 ? 'Grace period: none' : `Grace period: ${plural(days, 'day', 'days')}`;
 }
 
-/** The KWAZO plan, as its own box on Overview says it, in a few words. */
-export function planState(org) {
+/** The KWAZO plan, as its own box on Overview says it, in a few words. A trial past its end date
+ *  says it ended, as the banner over every page does. */
+export function planState(org, now = Date.now()) {
   const sub = org?.subscription ?? null;
   if (sub === null) return null;
   if (isTrialing(org) && !isSubscribed(org)) {
     const ends = trialEndDateLabel(sub.trialEndsAt);
-    return quiet(ends === null ? 'Free trial' : `Free trial · ends ${ends}`);
+    if (ends === null) return quiet('Free trial');
+    return new Date(sub.trialEndsAt).getTime() <= now ? { text: `Free trial · ended ${ends}`, tone: 'warn' } : quiet(`Free trial · ends ${ends}`);
   }
   if (sub.status === 'past_due') return { text: 'Payment due', tone: 'warn' };
   return isSubscribed(org) || sub.status === 'active' ? quiet(planHeadline(sub, org?.orgType)) : null;
@@ -225,7 +227,8 @@ export function planState(org) {
 export function paymentLines({ orgSlug, privileges, org, membersName, register, attention, payments, bills }) {
   const words = orgWords(org?.orgType);
   const square = connected(payments);
-  const unread = payments == null;
+  // Unread, or a server with no Square at all: nothing is said about Square.
+  const unread = squareSetup(payments) === null;
   const sellReads = register != null;
   const lines = [];
   const add = (group, key, place, title, state, where = null, to = null) => {

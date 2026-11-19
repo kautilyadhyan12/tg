@@ -2176,6 +2176,11 @@
 @media (max-width: 1279px) {
   .c-pay-groups { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+/* Its buttons: 44 px to touch, on a tablet too. */
+@media (pointer: coarse) {
+  .c-pay-head .c-btn,
+  .c-pay-box .c-btn { height: 44px; }
+}
 @media (max-width: 1023px) {
   .c-pay-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .c-pay-split,

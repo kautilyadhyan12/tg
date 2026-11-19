@@ -363,6 +363,12 @@ describe('before Square is connected, the setup comes first', () => {
     }
   });
 
+  it('a server with no Square says nothing about Square: never "Not connected"', () => {
+    const shown = page(owner, { payments: payments({ square: null, squareReady: false }), attention: attention(owner, { failedPayments: { count: 0, totals: [] }, chargebacks: { count: 0 } }) });
+    expect(JSON.stringify(shown)).not.toMatch(/Not connected|After Square|Available after|Connect Square/);
+    expect(shown.lines.map((l) => l.key)).not.toContain('square');
+  });
+
   it('what needs Square says so, in place of a figure', () => {
     const shown = page(owner, { payments: notConnected(), attention: attention(owner, { failedPayments: { count: 0, totals: [] }, chargebacks: { count: 0 } }) });
     expect(shown.tiles.map((t) => [t.title, t.figure, t.note])).toEqual([
@@ -385,7 +391,8 @@ describe('the rest', () => {
 
   it('the plan as Overview says it', () => {
     const trial = { ...ORG, subscription: { status: 'trialing', trialEndsAt: '2026-11-30T12:00:00Z', subscribed: false } };
-    expect(planState(trial).text).toMatch(/^Free trial · ends /);
+    expect(planState(trial, Date.parse('2026-11-19T12:00:00Z')).text).toMatch(/^Free trial · ends /);
+    expect(planState(trial, Date.parse('2026-12-01T12:00:00Z'))).toMatchObject({ text: expect.stringMatching(/^Free trial · ended /), tone: 'warn' });
     expect(planState({ ...ORG, subscription: { status: 'past_due', subscribed: true } })).toEqual({ text: 'Payment due', tone: 'warn' });
     expect(planState(ORG)).toBeNull();
   });
