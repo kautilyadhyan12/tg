@@ -18,6 +18,18 @@ import { KP } from "@app/shared";
 import { MEASURE_LIST, type MeasureName, type MeasuredBody, type Reading } from "../body/measures.js";
 import type { SteadyBody } from "../body/steady.js";
 
+/** Metres a second squared. */
+const GRAVITY = 9.81;
+/** The time in the air of a hop `metres` high, ms: up and down, 2·√(2h/g). A break in the readings no longer than this
+ *  can hide only a hop lower than `metres` from take-off to landing. */
+export function hopTime(metres: number): number {
+  return 2000 * Math.sqrt((2 * Math.max(0, metres)) / GRAVITY);
+}
+
+/** The lowest real jump on Kd's four squat-jump videos (2026-11-19, 52a-ii-a): the ankles 12 to 34 cm above the floor at
+ *  each jump's top, up 300 to 700 ms, in 24 jumps. */
+export const LOWEST_JUMP = 0.12;
+
 /** The matcher's own waits and shares, the same for every movement. */
 export interface MatchLimits {
   /** Standing ready: the drive stays within this of itself for `stillFor`, in its unit (legs for a height). */
@@ -38,8 +50,14 @@ export interface MatchLimits {
   readonly longest: number;
   /** A rule over the whole rep that the camera must see is unseen when its readings break off, anywhere in the rep
    *  or the moment after, for longer than this, ms, or than one and a half of the rep's own frame steps, whichever
-   *  is longer: a jump whose feet are hidden in the air is never let through. */
+   *  is longer: a jump whose feet are hidden in the air is never let through. For a movement whose feet must stay
+   *  down, the break is instead the time in the air of a hop as high as its number (`hopTime`): a break no longer
+   *  than that can hide only a hop the rule would let through anyway. */
   readonly gap: number;
+  /** A break in a rule's readings made only of pictures the phone did not send (no picture came, rather than one that
+   *  came without the part) decides nothing up to this, ms. The phone drops pictures while it is busy, whatever the
+   *  body does; the model losing the feet in the air is what `gap` is for. */
+  readonly unsent: number;
   /** A standing lower than the highest remembered (`anchor`), by more than `still`, is taken only once held
    *  for this long, ms: a slow descent shakes no more than standing does, and must never become the new standing,
    *  whether at once or in small steps. */
@@ -61,7 +79,9 @@ export interface MatchLimits {
  * (2026-11-19), the feet are 0.05 of a leg up from 167 ms before to 200 ms after the hips are three quarters back up, in
  * 18 take-offs of 19 (the 19th, 433 ms, is the video with a mirror); 0.3 s covers every one but that. `bottomBand`: a
  * tenth of the deepest. `lost`: half a second. `longest`: 15 s, longer than any held rep a movement of this kind has.
- * `gap`: 0.1 s, three frames at 30 a second. `lower`: a second, longer than any
+ * `gap`: 0.1 s, three frames at 30 a second, for a movement with no "feet stay down" (with one, the break is the hop's
+ * own time in the air). `unsent`: the time in the air of a hop half as high as the lowest real jump (6 cm, 221 ms): no
+ * jump that is another movement fits in it; a phone that skips 4 camera pictures leaves 133 ms (52a-ii-a). `lower`: a second, longer than any
  * pause at the bottom of a rep on Kd's videos. `tried`: three quarters of the way: advice is strict (§12.1), so a dip in doubt is silent (a
  * barbell good morning's knees went exactly half way).
  */
@@ -75,6 +95,7 @@ export const MATCH_LIMITS: MatchLimits = {
   lost: 500,
   longest: 15000,
   gap: 100,
+  unsent: hopTime(LOWEST_JUMP / 2),
   lower: 1000,
   tried: 0.75,
 };
@@ -116,6 +137,8 @@ export interface MatchFrame {
 }
 
 const KNOWN: ReadonlySet<string> = new Set(MEASURE_LIST.map((m) => m.name));
+
+
 /** Where the feet touch the floor: heels and toes. Not the ankles: in a deep squat the pose model's ankle point slides
  *  forward with the shin while the foot stays flat (on Kd's fresh barbell back squat, 8 to 12 cm). */
 const FEET: readonly number[] = [KP.left_heel, KP.left_foot_index, KP.right_heel, KP.right_foot_index];
@@ -214,11 +237,14 @@ interface Rep {
   lastSeen: number;
   /** When the drive came back; null while still down. */
   back: number | null;
-  /** For each foot point, the lowest it has been on the picture during this rep, along "down" (picture heights), since
-   *  it was last hidden for longer than a gap (`gap`, or 1.5 frame steps): a point that comes back from a long hide is
-   *  the model's new guess (side on, the far foot comes back 4 to 7 cm higher on the picture), never a foot that rose;
-   *  a flicker of a frame or two keeps it, or a hop whose feet flicker in the air would be measured from the air. */
-  low: (number | null)[];
+  /** For each foot point, where it was on the picture, along "down" (picture heights), when the rep began, or when it
+   *  was first seen in it: the hips are half way down there, and a body is on the floor (a hop at the top of the rep
+   *  before has landed; at the bottom, where the model slides a toe point down the picture as the shin tilts, 7 cm on a
+   *  fresh barbell front squat, the rep has not yet reached). Taken afresh after a hide longer than a gap (`gap`, or 1.5
+   *  frame steps): a point back from a long hide is the model's new guess (side on, the far foot comes back 4 to 7 cm
+   *  higher on the picture), never a foot that rose; a flicker of a frame or two keeps it, or a hop whose feet flicker
+   *  in the air would be measured from the air. */
+  from: (number | null)[];
   /** For each foot point, when it was last seen in this rep, ms. */
   seenAt: (number | null)[];
 }
@@ -237,6 +263,8 @@ interface Recent {
 export class MovementMatcher {
   private readonly depth: number;
   private readonly watched: readonly string[];
+  /** The longest break in a must-see rule's readings that decides nothing, ms (`MatchLimits.gap`). */
+  private readonly gap: number;
   private recent: Recent[] = [];
   /** The highest standing since the stream began, or since a lower one was held for `lower`: standing never creeps
    *  below it. */
@@ -262,6 +290,8 @@ export class MovementMatcher {
     if (depthRule?.atLeast === undefined || !(depthRule.atLeast > 0)) throw new Error(`${movement.name} has no depth to count a rep by.`);
     this.depth = depthRule.atLeast;
     this.watched = [...new Set(movement.rules.flatMap((r) => (r.read.kind === "rise" || r.read.kind === "change" ? r.read.measures : [])))];
+    const lift = movement.rules.find((r) => r.read.kind === "lift" && r.atMost !== undefined)?.atMost;
+    this.gap = lift === undefined ? limits.gap : hopTime(lift);
   }
 
   next(body: SteadyBody, measured: MeasuredBody): MatchFrame {
@@ -327,7 +357,7 @@ export class MovementMatcher {
         // The next rep began before this one's moment after: judge this one on what it had, and start the next.
         judged = this.judge(rep);
         const origin = this.originOf(rep.standing);
-        const next: Rep = { start: t, standing: origin, samples: [], lastSeen: t, back: null, low: [], seenAt: [] };
+        const next: Rep = { start: t, standing: origin, samples: [], lastSeen: t, back: null, from: [], seenAt: [] };
         next.samples.push({ t, drop, reads: this.readAll(measured, next, feet, heights) });
         this.rep = next;
         return this.frame(t, drop, judged);
@@ -356,7 +386,7 @@ export class MovementMatcher {
     const standing = this.standing;
     if (standing !== null && drive !== null && standing.drive - drive >= L.startShare * this.depth) {
       const origin = this.originOf(standing);
-      const fresh: Rep = { start: t, standing: origin, samples: [], lastSeen: t, back: null, low: [], seenAt: [] };
+      const fresh: Rep = { start: t, standing: origin, samples: [], lastSeen: t, back: null, from: [], seenAt: [] };
       fresh.samples.push({ t, drop: standing.drive - drive, reads: this.readAll(measured, fresh, feet, heights) });
       this.rep = fresh;
       return this.frame(t, standing.drive - drive, judged);
@@ -477,10 +507,12 @@ export class MovementMatcher {
     return reads;
   }
 
-  /** How far the body's feet are above the lowest place each reached during this same rep, along "down", metres
-   *  against the body's size while standing: for each foot the lesser of its heel and toes, and the lesser of the two
-   *  feet where both are seen. Never from the top of the rep before: in reps with no pause between them, a hop's feet
-   *  are already leaving the floor as the rep before comes back up, while at the bottom of a rep they are on the floor. */
+  /** How far the body's feet are above where each was when this rep began (`Rep.from`), along "down", metres against
+   *  the body's size while standing, never below 0: for each foot the lesser of its heel and toes, and the lesser of the
+   *  two feet where both are seen. Never from the top of the rep before (in reps with no pause between them, a hop's feet
+   *  are already leaving the floor as the rep before comes back up), never from where the person stood before the set
+   *  (a step nearer the phone puts the feet lower on the picture for good), and since 52a-ii-a never from the lowest
+   *  place in the rep (the bottom, where the model slides the foot points). */
   private liftOf(rep: Rep, t: number, feet: readonly ({ readonly x: number; readonly y: number } | null)[]): number | null {
     const d = this.flatDown;
     const size = rep.standing.size;
@@ -488,17 +520,21 @@ export class MovementMatcher {
     // The rep's frame step from its last ten frames: the same cost on every frame, however long the rep.
     const times = rep.samples.slice(-10).map((s) => s.t);
     const steps = times.slice(1).map((x, k) => x - (times[k] ?? x));
-    const longest = Math.max(this.limits.gap, 1.5 * (median(steps) ?? 0));
-    // Each foot point's rise above its own lowest place in this rep, forgotten only after a hide longer than a gap.
+    const longest = Math.max(this.gap, 1.5 * (median(steps) ?? 0));
+    // Each foot point's rise above where it was when the rep began, taken afresh only after a hide longer than a gap.
     const rise = feet.map((p, k) => {
       if (p === null) return null;
       const seen = rep.seenAt[k] ?? null;
-      if (seen !== null && t - seen > longest) rep.low[k] = null;
+      // Hidden in a picture that came, or no picture for longer than `unsent`: the model's new guess.
+      const previous = rep.samples[rep.samples.length - 1]?.t ?? null;
+      const hidden = seen !== null && previous !== null && previous > seen;
+      if (seen !== null && t - seen > (hidden ? longest : Math.max(longest, this.limits.unsent))) rep.from[k] = null;
       rep.seenAt[k] = t;
       const along = p.x * d[0] + p.y * d[1];
-      const low = Math.max(rep.low[k] ?? Number.NEGATIVE_INFINITY, along);
-      rep.low[k] = low;
-      return (low - along) / size;
+      const from = rep.from[k] ?? along;
+      rep.from[k] = from;
+      // A point lower on the picture than where it began has not risen at all: 0, never below.
+      return Math.max(0, (from - along) / size);
     });
     // A foot has left the floor only when its heel AND its toes rose: in a squat one end may slide on the picture as
     // the shin tilts or the ankle bends; in a hop the whole foot goes up. And the body has left the floor only when
@@ -594,22 +630,36 @@ export class MovementMatcher {
     }
     const read = samples.flatMap((s) => {
       const v = s.reads[rule.name] ?? null;
-      return v === null ? [] : [{ t: s.t, v }];
+      return v === null ? [] : [{ t: s.t, v, drop: s.drop }];
     });
     if (read.length === 0) return null;
     if (rule.seen === "always" && this.brokenOff(read.map((r) => r.t), rep)) return null;
-    const values = read.map((r) => r.v);
+    // Leaving the floor is judged where a body can leave it: with the hips above the line where a rep starts (the way
+    // back up and the moment after, where every take-off of Kd's four squat-jump videos lies). At the bottom the model
+    // moves the foot points as the shins tilt (side on, the green-mat man's near heel and toes 2 cm up the picture while
+    // his far foot is hidden), and the lowest place is still taken from the whole rep.
+    const line = L.startShare * this.depth;
+    const judged = rule.read.kind === "lift" ? read.filter((r) => r.drop === null || r.drop < line) : read;
+    if (judged.length === 0) return null;
+    const values = judged.map((r) => r.v);
     return rule.atLeast !== undefined ? Math.min(...values) : Math.max(...values);
   }
 
   /** Whether readings at these times break off anywhere from the rep's start to its last frame (the moment after
-   *  included) for longer than `gap`, or one and a half of the rep's own frame steps. */
+   *  included) for longer than `gap`, or one and a half of the rep's own frame steps; a break with no picture in it at
+   *  all, the phone busy, only for longer than `unsent`. */
   private brokenOff(times: readonly number[], rep: Rep): boolean {
     const all = rep.samples.map((s) => s.t);
     const steps = all.slice(1).map((t, k) => t - (all[k] ?? t));
-    const longest = Math.max(this.limits.gap, 1.5 * (median(steps) ?? 0));
+    const longest = Math.max(this.gap, 1.5 * (median(steps) ?? 0));
+    const unsent = Math.max(longest, this.limits.unsent);
     const marks = [rep.start, ...times, all[all.length - 1] ?? rep.start];
-    return marks.slice(1).some((t, k) => t - (marks[k] ?? t) > longest);
+    return marks.slice(1).some((t, k) => {
+      const from = marks[k] ?? t;
+      if (t - from <= longest) return false;
+      // A picture came in the break and did not see it: the model lost it.
+      return all.some((x) => x > from && x < t) || t - from > unsent;
+    });
   }
 
   private judge(rep: Rep): RepResult {

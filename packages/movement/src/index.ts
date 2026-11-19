@@ -22,6 +22,8 @@ export {
   MATCH_LIMITS,
   MovementMatcher,
   checkMovement,
+  LOWEST_JUMP,
+  hopTime,
   type MatchFrame,
   type MatchLimits,
   type MatchState,

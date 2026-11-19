@@ -67,8 +67,9 @@ const pixels = z.number().int().positive().max(20000);
 export const bodyPointsHeaderSchema = z
   .object({
     label: z.string().regex(/^[A-Za-z0-9_-]{1,80}$/),
-    /** A reference video measured on the laptop. The phone's own recordings come with job 51. */
-    source: z.literal("video"),
+    /** A reference video measured on the laptop, or the phone's own model run on the laptop's pictures of one
+     *  (`phone`, 52a-ii-a: what the phone's chip reads apart from the laptop). */
+    source: z.enum(["video", "phone"]),
     picture: z.object({ width: pixels, height: pixels }).strict(),
     /** The video's own frames a second, and the rate the measurement took. */
     videoFps: z.number().positive().max(1000),
@@ -82,7 +83,7 @@ export const bodyPointsHeaderSchema = z
         minTracking: share,
       })
       .strict(),
-    madeWith: z.object({ tool: z.literal("measure-points"), version: z.number().int().positive() }).strict(),
+    madeWith: z.object({ tool: z.enum(["measure-points", "keep-phone-points"]), version: z.number().int().positive() }).strict(),
   })
   .strict();
 

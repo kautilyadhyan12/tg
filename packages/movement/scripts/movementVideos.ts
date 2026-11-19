@@ -30,6 +30,9 @@ export interface MovementVideo {
   readonly seen: string;
   /** A known wrong count, kept in the table in plain sight until the job named here fixes it. */
   readonly open?: string;
+  /** A known wrong count under some replays only (replays.ts), the video right as filmed: kept in plain sight until the
+   *  job named in `why` fixes it. */
+  readonly replayOpen?: { readonly replays: readonly string[]; readonly why: string };
 }
 
 const other = (file: string, person: string, view: View, seen: string): MovementVideo => ({ file, movement: null, person, view, reps: 0, sets: false, seen });
@@ -147,10 +150,15 @@ export const MOVEMENT_VIDEOS: readonly MovementVideo[] = [
   // ── Fresh videos (2026-11-19), measured after the squat's rules and numbers were fixed and never used to choose
   //    them: the test on videos nobody had looked at. Reps counted by eye before the engine was run on them. ────────
   { file: "movement-points/fresh_back_squat_barbell", movement: "squat", person: "woman, barbell on the back", view: "side", reps: null, sets: false, seen: "Fresh: a barbell back squat, side on, three reps by eye; the camera pans and zooms with her (the rack moves on the picture by her feet's 14 cm), so it is reported, never judged." },
-  { file: "movement-points/fresh_front_squat_barbell", movement: "squat", person: "woman, barbell in front", view: "side", reps: 3, sets: false, seen: "Fresh: a barbell front squat, three reps; she gets up from the third in the last 0.3 s (first counted 2 from three pictures a second; at ten she stands).",
-    open: "52a-ii: since round one's re-check (both feet must rise to leave the floor), her third rep, rising in the video's last 0.3 s, reads both feet 3.1 cm up, over the 3 cm number set from the eight people: counted 2. A missed rep, never a false one; not moved by hand after seeing it." },
+  { file: "movement-points/fresh_front_squat_barbell", movement: "squat", person: "woman, barbell in front", view: "side", reps: 3, sets: false, seen: "Fresh: a barbell front squat, three reps; she gets up from the third in the last 0.3 s (first counted 2 from three pictures a second; at ten she stands). " +
+    "No longer fresh since 52a-ii-a: her third rep was counted 2 of 3 until that job looked at her feet (the model slides her toe point 7 cm down the picture at the bottom, and her heel comes up 3 cm as she stands tall); a point now leaves the floor only above where it stood still too." },
   { file: "movement-points/fresh_squat_smith", movement: "squat", person: "man, Smith machine", view: "front", reps: 0, sets: false, seen: "Fresh: 3.5 s of a Smith machine squat that starts at the bottom and rises: no rep from standing." },
-  { file: "movement-points/fresh_goblet_squat_plate", movement: "squat", person: "woman, plate at the chest", view: "side", reps: 4, sets: false, seen: "Fresh: a weight-plate goblet squat; it starts low and rises (not a rep), then four reps." },
+  { file: "movement-points/fresh_goblet_squat_plate", movement: "squat", person: "woman, plate at the chest", view: "side", reps: 4, sets: false, seen: "Fresh: a weight-plate goblet squat; it starts low and rises (not a rep), then four reps.",
+    replayOpen: {
+      replays: ["8 a second"],
+      why: "52c: after her second rep both her feet, or the camera, sit 1 to 1.5 cm higher up the picture and stay there: that rep reads 2.5 cm as filmed (the eight people 1.4 at most), " +
+        "3.1 cm at 8 pictures a second (and with some patterns of skipped pictures, not the table's), over the 3 cm the eight people set, and is lost there. Telling a foot that moved and stayed from one that left the floor is the jumps' work; never moved by hand after seeing it.",
+    } },
   { file: "movement-points/fresh_front_squat_kettlebell", movement: "squat", person: "man, kettlebells in front", view: "front", reps: null, sets: false, seen: "Fresh: a kettlebell front squat facing the phone, three reps by eye; the camera tilts down in its first 0.6 s and moves later (the wall's foot and the bikes shift): reported, never judged." },
   // ── Every other movement: 0 and silence ──────────────────────────────────────────────────────────────
   other("movement-points/squat_jump_1", "woman, squat jump, dark gym", "side", "Squat jumps: the feet leave the floor at the top."),

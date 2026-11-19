@@ -9,7 +9,7 @@
 import { describe, expect, it } from "vitest";
 import { KP, type MovementFrame, type SeenPerson } from "@app/shared";
 import { BONES, LIMITS, MAIN_JOINTS, PARENT, PossibleBody, bodySize, type CheckedBody, type Refusal } from "../src/index.js";
-import { runChecks, type Video } from "../scripts/bodyCheck.js";
+import { runChecks } from "../scripts/bodyCheck.js";
 import { ASPECT, SET_FROM, SIZE, VIDEOS, editPeople, feed, numbers, type Feed } from "./helpers/body.js";
 
 const verdicts = (checked: readonly CheckedBody[]): (Refusal | null)[][] => checked.map((c) => [...c.refused]);
@@ -77,20 +77,21 @@ describe("the worst thing: a real person who is not average is judged by their o
     expect(SET_FROM.map((v) => v.label)).toEqual(["bicep_curl_reference", "bicycle_crunch_reference", "chair_squat_reference", "squat_reference"]);
   });
 
-  /** The bicycle crunch's one place where the phone's model swaps his legs for two frames (51c): at 0.57 s his left knee
-   *  is thrown 16.6 m/s and back at 13 (a knee in a crunch moves 0.4 to 3). The check refuses it as a swap; a body 1.3
-   *  times bigger moves it past the jump limit (20 m/s) instead, and the swap is then not seen, so his wrong right leg
-   *  is used for a few frames (a known limit, for 52a). Verdicts there may differ with the body's size; nowhere else. */
-  const LEG_SWAP: Readonly<Record<string, readonly [number, number]>> = { bicycle_crunch_reference: [550, 800] };
-  /** The verdicts of the frames outside the video's leg swap, if it has one. */
-  const outsideSwap = (video: Video, v: ReturnType<typeof verdicts>): ReturnType<typeof verdicts> => {
-    const span = Object.hasOwn(LEG_SWAP, video.label) ? LEG_SWAP[video.label] : undefined;
-    if (span === undefined) return v;
-    return v.filter((_, i) => {
-      const t = video.frames[i]?.t ?? 0;
-      return t < span[0] || t > span[1];
-    });
-  };
+  /** The bicycle crunch's one place where the phone's model throws his legs onto each other (51c): at 0.57 s his left
+   *  knee onto the right's place and the right knee only part of the way to the left's. Since 52a-ii-a the check refuses
+   *  that frame as a swap at any size, and takes the legs back the next frame, as they are true again. */
+  it("the crunch's legs thrown onto each other at 0.57 s are refused, at his size and drawn 1.3 times bigger, and used again at 0.60 s", () => {
+    const crunch = SET_FROM.find((v) => v.label === "bicycle_crunch_reference");
+    expect(crunch).toBeDefined();
+    if (crunch === undefined) return;
+    const LEGS_POINTS = [KP.left_knee, KP.right_knee, KP.left_ankle, KP.right_ankle];
+    for (const frames of [crunch.frames, scaled(crunch.frames, 0.8, 1.3)]) {
+      const checked = runChecks(frames);
+      const at = (t: number) => checked.find((c) => Math.abs(c.t - t) < 15);
+      expect(LEGS_POINTS.map((k) => at(567)?.refused[k])).toEqual(["swap", "swap", "swap", "swap"]);
+      expect(LEGS_POINTS.map((k) => at(600)?.refused[k])).toEqual([null, null, null, null]);
+    }
+  });
 
   for (const video of SET_FROM) {
     const own = verdicts(runChecks(video.frames));
@@ -98,15 +99,15 @@ describe("the worst thing: a real person who is not average is judged by their o
     it(`${video.label}: a child, a small adult far away, a tall man near: every verdict the same`, () => {
       expect(verdicts(runChecks(scaled(video.frames, 0.55, 0.55)))).toEqual(own);
       expect(verdicts(runChecks(scaled(video.frames, 0.5, 1)))).toEqual(own);
-      expect(outsideSwap(video, verdicts(runChecks(scaled(video.frames, 0.8, 1.3))))).toEqual(outsideSwap(video, own));
+      expect(verdicts(runChecks(scaled(video.frames, 0.8, 1.3)))).toEqual(own);
     });
 
     it(`${video.label}: legs 10 cm longer, or arms 5 cm shorter, for the same trunk: every verdict the same`, () => {
       // Made smaller first, so the longer legs stay on the picture.
       const small = scaled(video.frames, 0.6, 1);
       const before = verdicts(runChecks(small));
-      expect(outsideSwap(video, verdicts(runChecks(longer(small, LEGS, 0.1))))).toEqual(outsideSwap(video, before));
-      expect(outsideSwap(video, verdicts(runChecks(longer(small, ARMS, -0.05))))).toEqual(outsideSwap(video, before));
+      expect(verdicts(runChecks(longer(small, LEGS, 0.1)))).toEqual(before);
+      expect(verdicts(runChecks(longer(small, ARMS, -0.05)))).toEqual(before);
     });
 
     it(`${video.label}: a wrong first look at an arm does not keep the real arm out`, () => {
