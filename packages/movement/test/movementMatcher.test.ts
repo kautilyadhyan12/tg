@@ -43,7 +43,7 @@ function sizeOf(video: Video): number {
 
 /** A video with a hop of `height` picture heights lasting 0.4 s at each rep's top, starting `before` ms before the rep
  *  is back up (in reps with no pause between them, a hop's feet leave the floor before the hips are back). */
-function hoppedAt(label: string, height: number, before: number, hidden: readonly number[] = []): Video {
+function hoppedAt(label: string, height: number, before: number, hidden: readonly number[] = [], every = 1): Video {
   const video = videoOf(label);
   const reps = repTimes(video);
   const share = (t: number): number | null => {
@@ -53,11 +53,12 @@ function hoppedAt(label: string, height: number, before: number, hidden: readonl
     }
     return null;
   };
-  const frames = editPeople(video.frames, (p, f) => {
+  const frames = editPeople(video.frames, (p, f, index) => {
     const s = share(f.t);
     if (s === null) return p;
     const up = height * 4 * s * (1 - s);
-    return { ...p, points: p.points.map(([x, y, z, v, pr], i) => [x, y - up, z, hidden.includes(i) && s > 0.1 && s < 0.9 ? 0.1 : v, pr]) };
+    const hide = s > 0.1 && s < 0.9 && index % every === 0;
+    return { ...p, points: p.points.map(([x, y, z, v, pr], i) => [x, y - up, z, hidden.includes(i) && hide ? 0.1 : v, pr]) };
   });
   return edited(video, frames);
 }
@@ -114,6 +115,12 @@ describe("the worst thing: no other movement is ever counted as a squat", () => 
     const run = runMovement(SQUAT, hopped(height));
     expect(run.count).toBe(1);
     expect(run.reps.slice(0, 2).map((r) => [r.verdict, r.rule])).toEqual([["other", "feet stay down"], ["other", "feet stay down"]]);
+  });
+
+  it.each([0.08, 0.12])("a hop of %s m whose feet flicker out in every 3rd frame in the air counts 0: a flicker keeps the lowest place (the second re-check)", (metres) => {
+    const video = videoOf("prisoner_squat_3");
+    expect(runMovement(SQUAT, hoppedAt("prisoner_squat_3", metres * sizeOf(video), 200, FEET, 3)).count).toBe(0);
+    expect(runMovement(SQUAT, hoppedAt("prisoner_squat_3", metres * sizeOf(video), 0, FEET, 3)).count).toBe(0);
   });
 
   it.each([0.1, 0.12])("reps with no pause between them, a hop of %s m starting 0.2 s before each rep is back, count 0 (round one's re-check)", (metres) => {

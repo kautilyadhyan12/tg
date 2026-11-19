@@ -215,9 +215,12 @@ interface Rep {
   /** When the drive came back; null while still down. */
   back: number | null;
   /** For each foot point, the lowest it has been on the picture during this rep, along "down" (picture heights), since
-   *  it was last hidden: a point that comes back from hiding is the model's new guess (side on, the far foot comes back
-   *  4 to 7 cm higher on the picture), never a foot that rose. A foot hidden in the air is the gap rule's. */
+   *  it was last hidden for longer than a gap (`gap`, or 1.5 frame steps): a point that comes back from a long hide is
+   *  the model's new guess (side on, the far foot comes back 4 to 7 cm higher on the picture), never a foot that rose;
+   *  a flicker of a frame or two keeps it, or a hop whose feet flicker in the air would be measured from the air. */
   low: (number | null)[];
+  /** For each foot point, when it was last seen in this rep, ms. */
+  seenAt: (number | null)[];
 }
 
 /** One frame as the matcher keeps it for the still check. */
@@ -324,7 +327,7 @@ export class MovementMatcher {
         // The next rep began before this one's moment after: judge this one on what it had, and start the next.
         judged = this.judge(rep);
         const origin = this.originOf(rep.standing);
-        const next: Rep = { start: t, standing: origin, samples: [], lastSeen: t, back: null, low: [] };
+        const next: Rep = { start: t, standing: origin, samples: [], lastSeen: t, back: null, low: [], seenAt: [] };
         next.samples.push({ t, drop, reads: this.readAll(measured, next, feet, heights) });
         this.rep = next;
         return this.frame(t, drop, judged);
@@ -353,7 +356,7 @@ export class MovementMatcher {
     const standing = this.standing;
     if (standing !== null && drive !== null && standing.drive - drive >= L.startShare * this.depth) {
       const origin = this.originOf(standing);
-      const fresh: Rep = { start: t, standing: origin, samples: [], lastSeen: t, back: null, low: [] };
+      const fresh: Rep = { start: t, standing: origin, samples: [], lastSeen: t, back: null, low: [], seenAt: [] };
       fresh.samples.push({ t, drop: standing.drive - drive, reads: this.readAll(measured, fresh, feet, heights) });
       this.rep = fresh;
       return this.frame(t, standing.drive - drive, judged);
@@ -468,26 +471,29 @@ export class MovementMatcher {
     feet: readonly ({ readonly x: number; readonly y: number } | null)[],
     heights: ReadonlyMap<string, number>,
   ): Record<string, number | null> {
-    const lift = this.liftOf(rep, feet);
+    const lift = this.liftOf(rep, measured.t, feet);
     const reads: Record<string, number | null> = {};
     for (const rule of this.movement.rules) reads[rule.name] = rule.read.kind === "lift" ? lift : this.read(rule.read, measured, rep.standing, feet, heights);
     return reads;
   }
 
-  /** How far the toes are above the lowest place they have been during this same rep, along "down", metres against the
-   *  body's size while standing; the most of either toe. Never from the top of the rep before: in reps with no pause
-   *  between them, a hop's feet are already leaving the floor as the rep before comes back up, while at the bottom of
-   *  a rep the toes are on the floor. */
-  private liftOf(rep: Rep, feet: readonly ({ readonly x: number; readonly y: number } | null)[]): number | null {
+  /** How far the body's feet are above the lowest place each reached during this same rep, along "down", metres
+   *  against the body's size while standing: for each foot the lesser of its heel and toes, and the lesser of the two
+   *  feet where both are seen. Never from the top of the rep before: in reps with no pause between them, a hop's feet
+   *  are already leaving the floor as the rep before comes back up, while at the bottom of a rep they are on the floor. */
+  private liftOf(rep: Rep, t: number, feet: readonly ({ readonly x: number; readonly y: number } | null)[]): number | null {
     const d = this.flatDown;
     const size = rep.standing.size;
     if (d === null || !(size > 0)) return null;
-    // Each foot point's rise above its own lowest place in this rep.
+    const times = rep.samples.map((s) => s.t);
+    const steps = times.slice(1).map((x, k) => x - (times[k] ?? x));
+    const longest = Math.max(this.limits.gap, 1.5 * (median(steps) ?? 0));
+    // Each foot point's rise above its own lowest place in this rep, forgotten only after a hide longer than a gap.
     const rise = feet.map((p, k) => {
-      if (p === null) {
-        rep.low[k] = null;
-        return null;
-      }
+      if (p === null) return null;
+      const seen = rep.seenAt[k] ?? null;
+      if (seen !== null && t - seen > longest) rep.low[k] = null;
+      rep.seenAt[k] = t;
       const along = p.x * d[0] + p.y * d[1];
       const low = Math.max(rep.low[k] ?? Number.NEGATIVE_INFINITY, along);
       rep.low[k] = low;
