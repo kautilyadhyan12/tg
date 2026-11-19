@@ -16,7 +16,8 @@
 // Each video is played with its first picture held for a second before it, and its last picture for a second after it:
 // the engine learns a body in its first half second, a live set starts with the person already in view (they walked
 // back from the phone), and they are still in view after their last rep. A video that starts low gets no rep for that
-// first rise, held or not; one that ends mid-air ends with the feet up. Then the set is finished.
+// first rise, held or not; one that ends mid-air ends with the feet up. Then the set is finished. So the proof never
+// tries a set that ends within 0.3 s of a rep coming up: `finish()` is tested for that on its own.
 // Each number is rounded the forgiving way, to a whole degree, a hundredth of a leg or a metre, or a twentieth of a
 // second. A person's videos are left out together: the numbers are set from all the people but one and tried on that
 // one, in turn.

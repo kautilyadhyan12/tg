@@ -40,7 +40,7 @@ export interface MatchLimits {
    *  or the moment after, for longer than this, ms, or than one and a half of the rep's own frame steps, whichever
    *  is longer: a jump whose feet are hidden in the air is never let through. */
   readonly gap: number;
-  /** A standing lower than the highest remembered since the last rep, by more than `still`, is taken only once held
+  /** A standing lower than the highest remembered (`anchor`), by more than `still`, is taken only once held
    *  for this long, ms: a slow descent shakes no more than standing does, and must never become the new standing,
    *  whether at once or in small steps. */
   readonly lower: number;
@@ -55,8 +55,9 @@ export interface MatchLimits {
  * top (½·9.81·0.1² = 5 cm, about 0.06 of a leg). `stillFor`: 0.2 s of seen time, six frames at 30 a second; at the slowest
  * the engine takes, 8 a second, the frames spanning it are three (the window always keeps the newest frame older than
  * it, so a slow phone is never refused standing). `startShare` and `endShare`: halfway down starts a rep, so the shake of standing never does, and a
- * quarter of the way is back up (of a deep rep, a quarter of its own depth), so a person who stands a little less tall
- * after a rep is back. `after`: measured on Kd's four squat-jump videos
+ * quarter of the way is back up (of a deep rep, a quarter of its own depth), but never below the line where a rep starts:
+ * a person who stands up to 0.08 of a leg less tall after a rep is back; one who stays lower is not back until they stand
+ * up, so a rep is never judged half way up and another begun there. `after`: measured on Kd's four squat-jump videos
  * (2026-11-19), the feet are 0.05 of a leg up from 167 ms before to 200 ms after the hips are three quarters back up, in
  * 18 take-offs of 19 (the 19th, 433 ms, is the video with a mirror); 0.3 s covers every one but that. `bottomBand`: a
  * tenth of the deepest. `lost`: half a second. `longest`: 15 s, longer than any held rep a movement of this kind has.
@@ -118,9 +119,11 @@ const KNOWN: ReadonlySet<string> = new Set(MEASURE_LIST.map((m) => m.name));
 /** Where the feet touch the floor: heels and toes. Not the ankles: in a deep squat the pose model's ankle point slides
  *  forward with the shin while the foot stays flat (on Kd's fresh barbell back squat, 8 to 12 cm). */
 const FEET: readonly number[] = [KP.left_heel, KP.left_foot_index, KP.right_heel, KP.right_foot_index];
-/** What leaves the floor in a hop and never in a squat: the toes. A heel may rise a little in a real squat, and on the
- *  picture it slides as the shin tilts (a goblet squatter's heels 7 cm), so it says nothing of a hop. */
-const TOES: readonly number[] = [KP.left_foot_index, KP.right_foot_index];
+/** Each foot's heel and toes, as places in `FEET`. */
+const FOOT_ENDS: readonly (readonly [number, number])[] = [
+  [0, 1],
+  [2, 3],
+];
 
 function namesOf(read: MovementRead): string[] {
   switch (read.kind) {
@@ -211,6 +214,10 @@ interface Rep {
   lastSeen: number;
   /** When the drive came back; null while still down. */
   back: number | null;
+  /** For each foot point, the lowest it has been on the picture during this rep, along "down" (picture heights), since
+   *  it was last hidden: a point that comes back from hiding is the model's new guess (side on, the far foot comes back
+   *  4 to 7 cm higher on the picture), never a foot that rose. A foot hidden in the air is the gap rule's. */
+  low: (number | null)[];
 }
 
 /** One frame as the matcher keeps it for the still check. */
@@ -228,7 +235,8 @@ export class MovementMatcher {
   private readonly depth: number;
   private readonly watched: readonly string[];
   private recent: Recent[] = [];
-  /** The highest standing since the last rep (or a lower one held for `lower`): standing never creeps below it. */
+  /** The highest standing since the stream began, or since a lower one was held for `lower`: standing never creeps
+   *  below it. */
   private anchor: number | null = null;
   /** The drive and whether the person stood ready, over the last `lower` and the newest frame older than that. */
   private held: { readonly t: number; readonly drive: number | null; readonly ready: boolean }[] = [];
@@ -302,7 +310,7 @@ export class MovementMatcher {
     const rep = this.rep;
     if (rep !== null) {
       const drop = drive === null ? null : rep.standing.drive - drive;
-      rep.samples.push({ t, drop, reads: this.readAll(measured, rep.standing, feet, heights) });
+      rep.samples.push({ t, drop, reads: this.readAll(measured, rep, feet, heights) });
       if (drop !== null) rep.lastSeen = t;
       if (t - rep.start > L.longest || t - rep.lastSeen > L.lost) return this.end(t, this.judgeUnseen(rep, t));
       if (rep.back === null) {
@@ -316,7 +324,9 @@ export class MovementMatcher {
         // The next rep began before this one's moment after: judge this one on what it had, and start the next.
         judged = this.judge(rep);
         const origin = this.originOf(rep.standing);
-        this.rep = { start: t, standing: origin, samples: [{ t, drop, reads: this.readAll(measured, origin, feet, heights) }], lastSeen: t, back: null };
+        const next: Rep = { start: t, standing: origin, samples: [], lastSeen: t, back: null, low: [] };
+        next.samples.push({ t, drop, reads: this.readAll(measured, next, feet, heights) });
+        this.rep = next;
         return this.frame(t, drop, judged);
       } else if (t - rep.back >= L.after) {
         judged = this.judge(rep);
@@ -343,7 +353,9 @@ export class MovementMatcher {
     const standing = this.standing;
     if (standing !== null && drive !== null && standing.drive - drive >= L.startShare * this.depth) {
       const origin = this.originOf(standing);
-      this.rep = { start: t, standing: origin, samples: [{ t, drop: standing.drive - drive, reads: this.readAll(measured, origin, feet, heights) }], lastSeen: t, back: null };
+      const fresh: Rep = { start: t, standing: origin, samples: [], lastSeen: t, back: null, low: [] };
+      fresh.samples.push({ t, drop: standing.drive - drive, reads: this.readAll(measured, fresh, feet, heights) });
+      this.rep = fresh;
       return this.frame(t, standing.drive - drive, judged);
     }
     return this.frame(t, null, judged);
@@ -452,13 +464,46 @@ export class MovementMatcher {
 
   private readAll(
     measured: MeasuredBody,
-    standing: Standing,
+    rep: Rep,
     feet: readonly ({ readonly x: number; readonly y: number } | null)[],
     heights: ReadonlyMap<string, number>,
   ): Record<string, number | null> {
+    const lift = this.liftOf(rep, feet);
     const reads: Record<string, number | null> = {};
-    for (const rule of this.movement.rules) reads[rule.name] = this.read(rule.read, measured, standing, feet, heights);
+    for (const rule of this.movement.rules) reads[rule.name] = rule.read.kind === "lift" ? lift : this.read(rule.read, measured, rep.standing, feet, heights);
     return reads;
+  }
+
+  /** How far the toes are above the lowest place they have been during this same rep, along "down", metres against the
+   *  body's size while standing; the most of either toe. Never from the top of the rep before: in reps with no pause
+   *  between them, a hop's feet are already leaving the floor as the rep before comes back up, while at the bottom of
+   *  a rep the toes are on the floor. */
+  private liftOf(rep: Rep, feet: readonly ({ readonly x: number; readonly y: number } | null)[]): number | null {
+    const d = this.flatDown;
+    const size = rep.standing.size;
+    if (d === null || !(size > 0)) return null;
+    // Each foot point's rise above its own lowest place in this rep.
+    const rise = feet.map((p, k) => {
+      if (p === null) {
+        rep.low[k] = null;
+        return null;
+      }
+      const along = p.x * d[0] + p.y * d[1];
+      const low = Math.max(rep.low[k] ?? Number.NEGATIVE_INFINITY, along);
+      rep.low[k] = low;
+      return (low - along) / size;
+    });
+    // A foot has left the floor only when its heel AND its toes rose: in a squat one end may slide on the picture as
+    // the shin tilts or the ankle bends; in a hop the whole foot goes up. And the body has left the floor only when
+    // both feet did, the lesser of the two where both are seen: side on, the far foot, half hidden behind the near
+    // one, wanders 4 to 5 cm on the picture at the bottom of a real squat (Kd's side-on man) while the near one stays.
+    // One foot lifted alone (a step, a lunge) is the other rules' to refuse.
+    const lifted = FOOT_ENDS.flatMap(([heel, toes]) => {
+      const a = rise[heel] ?? null;
+      const b = rise[toes] ?? null;
+      return a === null || b === null ? [] : [Math.min(a, b)];
+    });
+    return lifted.length === 0 ? null : Math.min(...lifted);
   }
 
   private read(
@@ -510,17 +555,9 @@ export class MovementMatcher {
         });
         return moved.length === 0 ? null : Math.max(...moved);
       }
-      case "lift": {
-        if (standing === null || !(standing.size > 0)) return null;
-        const d = this.flatDown;
-        if (d === null) return null;
-        const lifted = feet.flatMap((p, k) => {
-          const then = standing.feet[k] ?? null;
-          if (!TOES.includes(FEET[k] ?? -1)) return [];
-          return p === null || then === null ? [] : [-((p.x - then.x) * d[0] + (p.y - then.y) * d[1]) / standing.size];
-        });
-        return lifted.length === 0 ? null : Math.max(...lifted);
-      }
+      case "lift":
+        // Read over a rep only (`liftOf`): while standing ready there is no rep to have a lowest place.
+        return null;
       case "travel": {
         if (standing === null) return null;
         if (!(standing.size > 0)) return null;

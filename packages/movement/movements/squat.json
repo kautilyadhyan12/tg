@@ -98,9 +98,9 @@
         "kind": "lift",
         "points": "feet"
       },
-      "atMost": 0.07,
+      "atMost": 0.03,
       "seen": "always",
-      "from": "Set by movement-check from 8 people's videos (scripts/movementVideos.ts), 24 reps: beyond the furthest rep by half its distance from the middle rep (0.05; standing 0)."
+      "from": "Set by movement-check from 8 people's videos (scripts/movementVideos.ts), 24 reps: beyond the furthest rep by half its distance from the middle rep (0.02; standing 0)."
     },
     {
       "name": "feet stay in place",

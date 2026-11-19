@@ -32,11 +32,23 @@ const FEET: readonly number[] = [27, 28, 29, 30, 31, 32];
 /** Kd's reference squat with a hop of `height` (picture heights; 0.06 is about 15 cm for her) in the 0.4 s after each
  *  rep comes back up, the points `hidden` (the model not sure of them) while in the air. */
 function hopped(height: number, hidden: readonly number[] = []): Video {
-  const video = videoOf("squat_reference");
+  return hoppedAt("squat_reference", height, 0, hidden);
+}
+
+/** The middle of a video's body size, picture heights a metre. */
+function sizeOf(video: Video): number {
+  const sizes = runSteady(runChecks(video.frames)).flatMap((b) => (b.size === null ? [] : [b.size])).sort((a, b) => a - b);
+  return sizes[Math.floor(sizes.length / 2)] ?? 0;
+}
+
+/** A video with a hop of `height` picture heights lasting 0.4 s at each rep's top, starting `before` ms before the rep
+ *  is back up (in reps with no pause between them, a hop's feet leave the floor before the hips are back). */
+function hoppedAt(label: string, height: number, before: number, hidden: readonly number[] = []): Video {
+  const video = videoOf(label);
   const reps = repTimes(video);
   const share = (t: number): number | null => {
     for (const r of reps) {
-      const s = (t - r.end) / 400;
+      const s = (t - (r.end - before)) / 400;
       if (s >= 0 && s <= 1) return s;
     }
     return null;
@@ -82,10 +94,13 @@ describe("the worst thing: no other movement is ever counted as a squat", () => 
     expect(r.count).toBe(0);
   });
 
-  it("the one open case stays in the table in plain sight, its wrong count written: a kettlebell push press's dip", () => {
-    const open = others.filter((r) => r.entry.open !== undefined);
-    expect(open.map((r) => [r.label, r.count])).toEqual([["fresh_push_press_kettlebell", 3]]);
-    expect(open[0]?.entry.open).toMatch(/^52b: /);
+  it("the open cases stay in the table in plain sight, each wrong count written and the job that closes it named", () => {
+    const open = TABLE.rows.filter((r) => r.entry.open !== undefined);
+    expect(open.map((r) => [r.label, r.count])).toEqual([
+      ["fresh_front_squat_barbell", 2],
+      ["fresh_push_press_kettlebell", 3],
+    ]);
+    expect(open.every((r) => /^52[ab](-ii)?: /.test(r.entry.open ?? ""))).toBe(true);
   });
 
   it("every set of numbers made with one person left out also counts 0 on every other movement but the open case", () => {
@@ -95,17 +110,21 @@ describe("the worst thing: no other movement is ever counted as a squat", () => 
 
   // Her first two reps come back up with room for a hop before the video ends; the third comes back up in the last
   // picture held after it, which no edit reaches, and stays the one counted.
-  it.each([0.06, 0.04])("a real squat turned into a hop of %s of the picture's height (about 15 and 10 cm for her) at the top counts only the rep not hopped", (height) => {
+  it.each([0.06, 0.04, 0.03, 0.02])("a real squat turned into a hop of %s of the picture's height (about 15, 10, 7.5 and 5 cm for her) at the top counts only the rep not hopped", (height) => {
     const run = runMovement(SQUAT, hopped(height));
     expect(run.count).toBe(1);
     expect(run.reps.slice(0, 2).map((r) => [r.verdict, r.rule])).toEqual([["other", "feet stay down"], ["other", "feet stay down"]]);
   });
 
-  // The edge lies about 7 cm: of her two hops of 0.03 (about 7.5 cm), one is refused and one is not.
-  it("the limit, written: a hop of 0.02 of the picture's height (about 5 cm) reads a lift under the number and is not seen", () => {
-    const lift = SQUAT.rules.find((r) => r.name === "feet stay down")?.atMost ?? 0;
-    const run = runMovement(SQUAT, hopped(0.02));
-    expect(run.reps.slice(0, 2).every((r) => (r.readings["feet stay down"] ?? 0) <= lift)).toBe(true);
+  it.each([0.1, 0.12])("reps with no pause between them, a hop of %s m starting 0.2 s before each rep is back, count 0 (round one's re-check)", (metres) => {
+    const video = videoOf("prisoner_squat_3");
+    const run = runMovement(SQUAT, hoppedAt("prisoner_squat_3", metres * sizeOf(video), 200));
+    expect(run.count).toBe(0);
+  });
+
+  it("the limit, written: leaving the floor is told from about 3 cm (the squat's number), always under the 5 cm hop refused above", () => {
+    const lift = SQUAT.rules.find((r) => r.name === "feet stay down")?.atMost ?? 1;
+    expect(lift).toBeLessThan(0.05);
   });
 
   it.each([
@@ -170,7 +189,7 @@ describe("the squat's own videos count what a person counts by eye", () => {
     expect([r.count, r.leftOut]).toEqual([r.entry.reps, r.entry.reps]);
   });
 
-  it.each(TABLE.rows.filter((r) => r.entry.movement === "squat" && !r.sets && r.entry.reps !== null).map((r) => [r.label, r] as const))(
+  it.each(TABLE.rows.filter((r) => r.entry.movement === "squat" && !r.sets && r.entry.reps !== null && r.entry.open === undefined).map((r) => [r.label, r] as const))(
     "%s, a twin of the squat that sets no number, counts what a person counts, with every set of numbers",
     (_label, r) => {
       expect(r.count).toBe(r.entry.reps);

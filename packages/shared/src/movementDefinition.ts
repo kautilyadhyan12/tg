@@ -35,8 +35,9 @@ export const movementReadSchema = z.discriminatedUnion("kind", [
   /** The most any of these measures moved from its own value while the person stood ready, either way, on the
    *  picture: read only where the picture shows it. */
   z.object({ kind: z.literal("change"), measures }).strict(),
-  /** The most the feet (heels and toes) rose on the picture, along "down", from where they were at the top before,
-   *  metres against the body's size while standing: a hop, whatever the body's size reading does meanwhile. */
+  /** How far the body's feet rose on the picture, along "down", above the lowest place each reached during the same
+   *  rep: a foot's heel and toes both, and both feet where both are seen (the lesser each time), metres against the
+   *  body's size while standing: a hop or a jump, whatever the body's size reading does meanwhile. */
   z.object({ kind: z.literal("lift"), points: z.literal("feet") }).strict(),
   /** The furthest the feet moved on the picture during the rep, from where they were at the top before, metres. */
   z.object({ kind: z.literal("travel"), points: z.literal("feet") }).strict(),
