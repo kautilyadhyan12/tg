@@ -16,6 +16,8 @@ import { newMenu } from '../../pages/console/consoleNew';
 import { attentionLines, bellLabel, countText, menuCounts, moreCount, seesAnyPart } from '../../pages/console/attentionView';
 import { AttentionContext, useAttentionRead } from '../../pages/console/useAttention';
 import MenuCount from './MenuCount';
+import SetupTag from './SetupTag';
+import { usePaymentSetup } from '../../pages/console/usePaymentSetup';
 import SearchField from './ConsoleSearch';
 import { opensSearch, searchCatalogue, searchKeysLabel } from '../../pages/console/searchPlaces';
 import { searchFindsPeople, searchPlaceholder } from '../../pages/console/searchPeople';
@@ -317,8 +319,15 @@ export default function ConsoleLayout({ children }) {
   const lines = attentionLines(attention, orgSlug, viewerPrivileges(org), org?.orgType);
   const counts = menuCounts(lines);
   const showBell = menu !== null && seesAnyPart(attention);
-  /** A page's mark in the menu: its count where something waits, else Members' Review needed dot. */
-  const mark = (page) => (counts[page.key] !== undefined ? <MenuCount count={counts[page.key]} /> : reviewDot(page));
+  // Payments overview says "Set up" until a payment provider is connected (V1-f).
+  const paymentSetup = usePaymentSetup(org?.id ?? null, menu !== null && menu.pages.some((p) => p.key === 'payments'));
+  /** A page's mark in the menu: its count where something waits, else Payments overview's Set up,
+   *  else Members' Review needed dot. */
+  const mark = (page) => {
+    if (counts[page.key] !== undefined) return <MenuCount count={counts[page.key]} />;
+    if (page.key === 'payments' && paymentSetup) return <SetupTag />;
+    return reviewDot(page);
+  };
   const underMore = menu ? moreCount(menu.more, counts) : null;
 
   // Search (V1-e-i): the box in the bar, typed in where it is; on a phone the top bar's search
@@ -492,7 +501,7 @@ export default function ConsoleLayout({ children }) {
             the last gym's answers under the new gym's name (Kd, 2026-08-28). `screen:` keeps
             the key apart from the banner's `no-gym`. `gymSwitch.render.test.jsx` checks
             every console route is drawn inside this shell. */}
-        <AttentionContext.Provider value={{ attention, counts, reload: reloadAttention }}>
+        <AttentionContext.Provider value={{ attention, counts, reload: reloadAttention, paymentSetup }}>
           <Fragment key={`screen:${orgSlug ?? 'no-gym'}`}>{children}</Fragment>
         </AttentionContext.Provider>
       </main>

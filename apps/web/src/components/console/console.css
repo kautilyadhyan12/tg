@@ -1810,6 +1810,9 @@
 .c-count-warn { background: var(--warn-bg); color: var(--warn); }
 /* A folded group's heading carries the count of the page inside it, beside the name. */
 .c-rail-grp-name .c-count { margin-left: 0; }
+/* Payments overview's Set up (V1-f), where a count would sit. */
+.c-setup-tag { margin-left: auto; flex: none; height: 20px; padding: 0 8px; font-size: 11px; }
+.c-rail-grp-name .c-setup-tag { margin-left: 0; }
 /* On a phone's tab, over the icon's corner. */
 .c-tab-icon .c-count {
   position: absolute;
@@ -2067,4 +2070,118 @@
 .c-attn-end .c-btn { height: 36px; }
 @media (pointer: coarse), (max-width: 767px) {
   .c-attn-end .c-btn { height: 44px; }
+}
+
+/* Payments overview (V1-f; spec Part 3 §17.11, the boards `Money` and `MoneySetup`): its title with
+   its two buttons, four figures, Needs attention beside how today was paid, then every payment page
+   and setting in three boxes. A phone holds one of each a row. */
+.c-pay-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+}
+.c-pay-tiles {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+.c-pay-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 20px;
+  min-width: 0;
+}
+.c-pay-ic {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+}
+.c-pay-ic-l {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+}
+.c-pay-ic-good { background: var(--good-bg); color: var(--good); }
+.c-pay-ic-warn { background: var(--warn-bg); color: var(--warn); }
+.c-pay-ic-bad { background: var(--bad-bg); color: var(--bad); }
+.c-pay-ic-info { background: var(--info-bg); color: var(--info); }
+.c-pay-ic-off { background: var(--raise); color: var(--t2); }
+.c-pay-ic-accent { background: var(--soft); color: var(--soft-t); }
+.c-pay-good { color: var(--good); }
+.c-pay-warn { color: var(--warn); }
+.c-pay-bad { color: var(--bad); }
+.c-pay-dot-good { background: var(--good); }
+.c-pay-split {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+.c-pay-box {
+  padding: 18px 20px 20px;
+  min-width: 0;
+}
+.c-pay-track { height: 6px; }
+.c-pay-fill { background: var(--info); }
+.c-pay-groups {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+.c-pay-row {
+  gap: 10px;
+  padding: 12px 16px;
+  text-decoration: none;
+}
+.c-pay-row:hover { background: var(--raise); }
+.c-pay-row:focus-visible {
+  outline: 2px solid var(--link);
+  outline-offset: -2px;
+}
+.c-pay-where {
+  flex: none;
+  white-space: nowrap;
+}
+.c-pay-setup {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 20px;
+  border-color: var(--soft-line);
+}
+.c-pay-steps {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.c-pay-step {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: var(--raise);
+}
+.c-pay-step-on { box-shadow: inset 0 0 0 1px var(--soft-line); }
+@media (max-width: 1279px) {
+  .c-pay-groups { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 1023px) {
+  .c-pay-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .c-pay-split,
+  .c-pay-groups { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 479px) {
+  .c-pay-tiles { grid-template-columns: minmax(0, 1fr); }
+  .c-pay-where { display: none; }
 }
