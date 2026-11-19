@@ -44,6 +44,7 @@ describe("search: name matches first, then other names, then muscles, equipment 
     named("incline_push_up", "Incline Push-up"),
     named("ab_wheel", "Ab Wheel Rollout"),
     named("hollow_hold", "Hollow Body Hold", ["Hollow hold"]),
+    named("calf_raise", "Calf Raise", [], { muscles: { main: ["calves"], also: ["soleus"], steady: [] } }),
     real("squat"),
     real("plank"),
     real("barbell_curl"),
@@ -51,7 +52,7 @@ describe("search: name matches first, then other names, then muscles, equipment 
   const ids = (q: string) => searchExercises(list, q).map((e) => e.id);
   it.each([
     // [what is typed, the order shown]
-    ["", ["ab_wheel", "barbell_curl", "hollow_hold", "incline_push_up", "plank", "push_up", "pushup_plus", "squat"]],
+    ["", ["ab_wheel", "barbell_curl", "calf_raise", "hollow_hold", "incline_push_up", "plank", "push_up", "pushup_plus", "squat"]],
     ["push-up", ["push_up", "pushup_plus", "incline_push_up"]],
     ["Push up", ["push_up", "pushup_plus", "incline_push_up"]],
     ["pushup", ["push_up", "pushup_plus", "incline_push_up"]],
@@ -70,7 +71,7 @@ describe("search: name matches first, then other names, then muscles, equipment 
     ["barbell", ["barbell_curl"]],
     ["glutes", ["squat"]],
     ["abs", ["ab_wheel", "hollow_hold", "incline_push_up", "plank", "push_up", "pushup_plus"]],
-    ["strength", ["ab_wheel", "barbell_curl", "hollow_hold", "incline_push_up", "plank", "push_up", "pushup_plus", "squat"]],
+    ["strength", ["ab_wheel", "barbell_curl", "calf_raise", "hollow_hold", "incline_push_up", "plank", "push_up", "pushup_plus", "squat"]],
     ["burpee", []],
     // What people type for a muscle (L6): searched as the words it stands for.
     ["quads", ["squat"]],
@@ -78,8 +79,12 @@ describe("search: name matches first, then other names, then muscles, equipment 
     ["bis", ["barbell_curl"]],
     ["hams", ["squat"]],
     ["pecs", []],
+    // An alias is matched as itself too (round one's re-check, N1): the word in a name still finds it.
+    ["raise calf", ["calf_raise"]],
+    ["calf", ["calf_raise"]],
+    ["calves", ["calf_raise"]],
     ["éxercise", []],
-    ["!!!", ["ab_wheel", "barbell_curl", "hollow_hold", "incline_push_up", "plank", "push_up", "pushup_plus", "squat"]],
+    ["!!!", ["ab_wheel", "barbell_curl", "calf_raise", "hollow_hold", "incline_push_up", "plank", "push_up", "pushup_plus", "squat"]],
   ])("%j → %j", (q, want) => {
     expect(ids(q)).toEqual(want);
   });

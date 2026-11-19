@@ -15,8 +15,8 @@ export function normalise(text: string): string {
 
 const squash = (s: string): string => s.replace(/ /g, "");
 
-/** What people type for a muscle, beside its name (L6 of 63a's round one): each alias is searched as the words
- *  it stands for. */
+/** What people type for a muscle, beside its name (L6 of 63a's round one): a word is matched as itself OR as the
+ *  muscle it stands for, never only the latter, so "raise calf" still finds a "Calf Raise". */
 const MUSCLE_ALIASES: Readonly<Record<string, string>> = {
   quads: "quadriceps",
   quad: "quadriceps",
@@ -61,8 +61,10 @@ export function searchExercises(list: readonly PhoneLibraryEntry[], search: stri
   const query = normalise(search);
   const byName = (a: PhoneLibraryEntry, b: PhoneLibraryEntry) => a.text.en.name.localeCompare(b.text.en.name, "en");
   if (query === "") return [...list].sort(byName);
-  const words = query.split(" ").map((w) => MUSCLE_ALIASES[w] ?? w);
-  const plainMuscle = words.every((w) => PLAIN_MUSCLE_WORDS.some((p) => p.startsWith(w)));
+  const words = query.split(" ");
+  // Each word as typed, and the muscle it stands for if it is one people type for a muscle.
+  const forms = words.map((w) => [w, ...(MUSCLE_ALIASES[w] === undefined ? [] : [MUSCLE_ALIASES[w]])]);
+  const plainMuscle = forms.every((f) => f.some((w) => PLAIN_MUSCLE_WORDS.some((p) => p.startsWith(w))));
   const ranked: { entry: PhoneLibraryEntry; tier: number }[] = [];
   for (const entry of list) {
     const own = nameTier(entry.text.en.name, query, words);
@@ -81,7 +83,7 @@ export function searchExercises(list: readonly PhoneLibraryEntry[], search: stri
         .map(normalise)
         .join(" ")
         .split(" ");
-      if (words.every((w) => about.some((a) => a.startsWith(w)))) tier = 8;
+      if (forms.every((f) => f.some((w) => about.some((a) => a.startsWith(w))))) tier = 8;
     }
     if (tier !== null) ranked.push({ entry, tier });
   }

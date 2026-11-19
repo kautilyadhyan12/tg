@@ -8,7 +8,7 @@ import { Paths } from "expo-file-system";
 import { App } from "../../src/App";
 import { LIBRARY_PATH } from "../../src/library/store";
 import type { Ask } from "../../src/session/calls";
-import { fakeServer, kept, lost, memoryStore, never, refusal, tokens, type Reply } from "../kit";
+import { fakeServer, kept, lost, memoryStore, refusal, tokens, type Reply } from "../kit";
 
 const extra = { copyName: "Exercise 2", apiUrl: "http://localhost:3000" };
 const FOLDER = `${__dirname}/../../../../packages/shared/library/exercises/`;
@@ -221,7 +221,10 @@ describe("an exercise's page", () => {
   });
 
   it("until the setup answer is known no figure is drawn, on the cards or the page: never the other one first", async () => {
-    await openLibrary(libraryServer({ gender: "female", onboarding: never }).ask);
+    // Setup's answer held back until the test has looked, then let go, so no request outlives the test.
+    let release: (reply: Reply) => void = () => undefined;
+    const held = () => new Promise<Reply>((resolve) => { release = resolve; });
+    await openLibrary(libraryServer({ gender: "female", onboarding: held }).ask);
     expect(await screen.findByText("3 Exercises")).toBeTruthy();
     const anyFigure = () => ["male", "female"].flatMap((x) => ["front", "back"].flatMap((y) => screen.queryAllByTestId(`figure-${x}-${y}`)));
     expect(anyFigure()).toHaveLength(0);
@@ -230,6 +233,8 @@ describe("an exercise's page", () => {
     expect(anyFigure()).toHaveLength(0);
     // The muscles are still named in words.
     expect(screen.getByText("Abs (rectus abdominis) · Transverse abdominis")).toBeTruthy();
+    release(refusal(500, "server_error", "Not now."));
+    await settle(50);
   });
 
   it("once known, the person's own figure is kept: with no answer from the server it is still hers", async () => {
