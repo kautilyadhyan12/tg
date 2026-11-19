@@ -552,7 +552,7 @@ the profile photo. Settings → Notifications saves nothing, and says so.
 renaming and deleting a saved dish.
 
 **No server at all for:** a profile photo · saved workouts (the table `workout_templates`
-has no routes) · the badge list, a global board · predictions (built in 35a) and weekly challenges (built in 35b) ·
+has no routes; made fresh in 61c, `/v1/training/saved`, Part 2 §13.5) · the badge list, a global board · predictions (built in 35a) and weekly challenges (built in 35b) ·
 recommendations · notification preferences · recording a run.
 
 **Sign-in on the server:** `authenticate` already takes `Authorization: Bearer` as well

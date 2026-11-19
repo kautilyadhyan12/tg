@@ -19,7 +19,7 @@ export const LEGAL_PATHS = {
 } as const;
 
 /** The day the words below last changed, `YYYY-MM-DD`. */
-export const LEGAL_UPDATED_ON = "2026-11-18";
+export const LEGAL_UPDATED_ON = "2026-11-19";
 
 /** Who runs KWAZO (Kd, 2026-11-08: his full name; a sole proprietorship, RULINGS 2026-09-15). */
 export const LEGAL_OWNER = "Kautilya Darshan Baruah";
@@ -296,6 +296,7 @@ export function privacyPolicy(facts: LegalFacts = LEGAL_FACTS): LegalDocument {
             "Exercise durations and recorded times.",
             "The name you give a workout, the weight used in each set and the rest taken between sets.",
             "The effort you give a workout.",
+            "Workouts you save to do again: their name, and each exercise with its sets, targets, weight and rest.",
             "Exercise form scores.",
             "Training streaks.",
             "Badges and achievements.",
