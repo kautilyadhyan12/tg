@@ -2333,6 +2333,13 @@ items 36 and 24b take as it is):
   About) and Mistakes (a mistake's first sentence as what goes wrong, the rest as the fix), then ⓘ Sources, which opens
   the list from the bottom. How it is counted reads "Manual tracking" for every exercise until exercise folder 1's 52a
   publishes camera data and its shape.
+- **Round one (2026-11-19):** a copy is served by its frame and fingerprint, never checked again against today's word
+  lists (`libraryCopyFrameSchema`), and a publish carries on a stored entry of an exercise whose file is gone in the words
+  it was written under (`storedLibraryEntrySchema`), so a list may change without refusing what was published before. No
+  figure is drawn until the person's setup answer is known; the answer the server last gave is kept on the phone for that
+  person (`figure-<id>.txt`) and the kept Library is one file a person (`library-<id>.json`), both removed with the
+  account. A Library not yet published (404) reads "Exercises aren't available yet". Search takes the muscle words people
+  type ("quads", "core").
 - **Not in 63a:** the filter button and "Find by muscle" (63b); records, calories a minute and Add to workout (63c).
 
 ### 13.7 The jobs (ROADMAP Stage 5, exercise folder 2; ROADMAP wins where they differ)
