@@ -162,6 +162,28 @@ d("the Exercise Library on the server (real Postgres)", () => {
       });
     });
 
+    it("an exercise whose file is deleted while only a SAVED WORKOUT names it stays in the download, hidden (61c)", async () => {
+      await rolledBack(async (tx) => {
+        await publishLibrary(tx, withExtra(real, "zz_library_planned", "Library Planned Lift"));
+        const lift = await idOf(tx, "zz_library_planned");
+        const user = (await tx<{ id: string }[]>`INSERT INTO users (email, display_name) VALUES ('library-planned@example.com', 'Library Plan') RETURNING id`)[0]?.id ?? "";
+        const saved = randomUUID();
+        await tx`INSERT INTO saved_workouts (id, user_id, name, edited_at) VALUES (${saved}, ${user}, 'Plan', now())`;
+        await tx`INSERT INTO saved_workout_sets (saved_workout_id, exercise_place, set_place, exercise_id, measured_in, target)
+                 VALUES (${saved}, 0, 0, ${lift}, 'reps', 10)`;
+
+        expect(await publishLibrary(tx, real)).toMatchObject({ hidden: 1, removed: 0 });
+        const kept = (await listIn(tx)).exercises.find((e) => e.id === "zz_library_planned");
+        expect(kept?.status).toBe("hidden");
+        expect(kept?.text.en.name).toBe("Library Planned Lift");
+
+        // Once the saved workout is deleted, it is removed.
+        await tx`DELETE FROM saved_workouts WHERE id = ${saved}`;
+        expect(await publishLibrary(tx, real)).toMatchObject({ hidden: 0, removed: 1 });
+        expect(await statusOf(tx, lift)).toBe("removed");
+      });
+    });
+
     it("a set that arrives after its exercise was removed brings it back to the download, hidden, with its name (round one's High)", async () => {
       await rolledBack(async (tx) => {
         await publishLibrary(tx, withExtra(real, "zz_library_late", "Library Late Lift"));

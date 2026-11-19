@@ -2200,6 +2200,39 @@ shapes in `packages/shared/src/library/workoutHistory.ts`), each the person's ow
   exercise's records over five years. The database sends only the first set of each way a set was done, and each
   workout's lifted total: reading every set held the server 75.6 ms.
 
+**As built in 61c (2026-11-19).** A person's saved workouts (`apps/api/src/modules/training/saved.ts` and
+`savedRepo.ts`; the shape is `plannedWorkoutSchema` in `packages/shared/src/library/plannedWorkout.ts`, which
+items 36 and 24b take as it is):
+- **The shape:** a name (1 to 60 characters) and 1 to 50 exercises in order, each with its unit (reps or time, as
+  the phone's list had it) and 1 or more sets of a target, a weight in grams (or none) and the rest after it (or
+  none); 200 sets at most in all. The same exercise may come twice.
+- **Routes:** `GET /v1/training/saved` (the list, the most recently changed first: each one's exercises' id words
+  in order, each once, and its number of sets; with `most`) · `GET /v1/training/saved/:id` (one, whole) ·
+  `PUT /v1/training/saved/:id` (save, or save a change, under the phone's own id) · `DELETE /v1/training/saved/:id`.
+  Somebody else's saved workout is 404 to all four; a broken id is 404 to a read or a delete and 400 to a save.
+  Saves and deletes 30 a minute for the person, reads within the 120 of the history; never by address.
+- **A save** answers 201 created, or 200 `updated`, `unchanged` (the server holds this change or a newer one, by
+  the phone's `editedAt`, so a late send never undoes a newer change) or `removed` (the person deleted it; nothing
+  is kept and the phone forgets it), with the `editedAt` the server holds (one finer than a millisecond is
+  refused, as a broken phone, so what is kept is what reads back): an
+  "unchanged" whose `editedAt` differs from the phone's tells it to read the saved workout again. A save and a
+  delete of one id take a lock on the id, whoever sends them, so an id has one owner. 422 `unknown_exercise` as for a workout; 409 `saved_workouts_full` past
+  **50 for each person, on every plan** (Kd, 2026-11-19), counted under the person's own lock so two at the same
+  instant cannot both pass; 400 for an `editedAt` more than five minutes past the server's clock. It holds the
+  publish lock shared, as a workout's save does.
+- **A delete** answers 204, sent twice too, and for an id the server does not hold yet: the id is kept with its
+  owner (`saved_workout_removed_ids`, as `meal_removed_ids`), so a save of it still on its way keeps nothing. A
+  person's newest 1,000 are kept and the oldest go, so deletes cannot add rows for ever.
+- **Kept** (migration 0245): `saved_workouts`, `saved_workout_sets` (no user_id of its own, collected with its
+  saved workout by the cascade) and `saved_workout_removed_ids`, all three in the privacy download and delete
+  lists and the policy's words. The old `workout_templates` is left as it is. A publish asks of saved workouts
+  too: an exercise one names stays 'hidden' while its file is gone.
+- **Measured** (2026-11-19, `apps/api/tools/measure-saved-workouts.ts`, local database, 209,750 saved sets in the
+  table, the api's pool of 10): for a person at the limit (50 of 200 sets), the server answered nobody for at
+  most 7.0 ms on the list (8 KB), 6.3 ms on one (13 KB), 5.4 ms on a new one, 5.9 ms on a change and 2.2 ms on a
+  delete; 200 people saving 200 sets at the same instant took 0.9 s in all and the server answered nobody for at
+  most 23.7 ms. The publish's question was measured over this folder's 3 Library rows only (2.6 ms).
+
 ### 13.6 The phone (jobs 63 and 64)
 
 - **The list is kept on the phone** and searched there, so search answers at once and works
