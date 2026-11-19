@@ -278,7 +278,10 @@ describe("a damaged file is refused whole, never read in part", () => {
   it("refuses a sound check number around a header that is not a body-points header", () => {
     const { header } = parts(file);
     expect(refuses(rebuilt(file, header.replace(/"label":"[^"]*"/, '"label":"D:/vidoe referene/squat"')))).toMatch(/not a body-points header/);
+    expect(refuses(rebuilt(file, header.replace('"source":"video"', '"source":"camera"')))).toMatch(/not a body-points header/);
+    // The phone's reading (52a-ii-a) only with the tool that keeps it: a video's file relabelled as the phone's is refused.
     expect(refuses(rebuilt(file, header.replace('"source":"video"', '"source":"phone"')))).toMatch(/not a body-points header/);
+    expect(refuses(rebuilt(file, header.replace('"tool":"measure-points"', '"tool":"keep-phone-points"')))).toMatch(/not a body-points header/);
     expect(refuses(rebuilt(file, "{not json"))).toMatch(/not readable/);
   });
 

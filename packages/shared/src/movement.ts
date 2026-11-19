@@ -85,7 +85,10 @@ export const bodyPointsHeaderSchema = z
       .strict(),
     madeWith: z.object({ tool: z.enum(["measure-points", "keep-phone-points"]), version: z.number().int().positive() }).strict(),
   })
-  .strict();
+  .strict()
+  // A video is measured by measure-points; the phone's reading is kept only by keep-phone-points: a file that says
+  // one and was made by the other is not a body-points file.
+  .refine((h) => (h.source === "phone") === (h.madeWith.tool === "keep-phone-points"), { message: "the source and the tool that made the file disagree" });
 
 // ── The phone test (ROADMAP Stage 5 items 51a and 51b) ───────────────────────────────
 // A folder's copy of the app plays a reference video through the phone's own pose model
