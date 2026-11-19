@@ -223,6 +223,12 @@ describe("Find exercises (63b)", () => {
     await fireEvent.press(biceps);
     expect(await screen.findByText("1 exercise")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Remove Biceps" })).toBeTruthy();
+    // The line and name lie over the figure but never take a tap (on the phone a second tap did nothing).
+    for (const layer of screen.getAllByTestId("muscle-leader")) expect(layer.props.pointerEvents).toBe("none");
+    await fireEvent.press(screen.getAllByTestId("muscle-biceps")[0] ?? biceps);
+    expect(await screen.findByRole("button", { name: "Show 3 exercises" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Remove Biceps" })).toBeNull();
+    await fireEvent.press(screen.getAllByTestId("muscle-biceps")[0] ?? biceps);
     await fireEvent.press(screen.getByRole("button", { name: "Show 1 exercise" }));
     await waitFor(() => { expect(listed()).toEqual(["Barbell Curl"]); });
     expect(screen.getByRole("button", { name: "Remove Biceps" })).toBeTruthy();

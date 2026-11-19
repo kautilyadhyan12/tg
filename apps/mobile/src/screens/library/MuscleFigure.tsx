@@ -97,11 +97,12 @@ export function MuscleLeader({
   const y2 = width * 0.12;
   return (
     <>
-      <Svg style={StyleSheet.absoluteFill} width={width} height={(width * FIGURE_BOX.height) / FIGURE_BOX.width} accessible={false}>
+      {/* Over the figure but never in the way of a tap: a muscle under the line is still pressed. */}
+      <Svg testID="muscle-leader" pointerEvents="none" style={StyleSheet.absoluteFill} width={width} height={(width * FIGURE_BOX.height) / FIGURE_BOX.width} accessible={false}>
         <Line x1={x1} y1={y1} x2={x2} y2={y2} stroke={colours.orangeLight} strokeWidth={1.5} />
         <Circle cx={x1} cy={y1} r={4} fill={colours.orangeLight} />
       </Svg>
-      <View style={[styles.label, { left: x2 - 4, top: y2 - 13 }, room === undefined ? null : { maxWidth: room }]}>
+      <View pointerEvents="none" style={[styles.label, { left: x2 - 4, top: y2 - 13 }, room === undefined ? null : { maxWidth: room }]}>
         <View style={styles.name}>
           <Txt kind="tiny" colour="onOrange" style={styles.words} numberOfLines={1} fit>
             {name}
