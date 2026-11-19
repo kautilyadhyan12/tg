@@ -3,6 +3,7 @@ import { canOpenPlace, placeTo } from './consolePlaces';
 import { pastSince, rowCells, shortWhen } from './memberListPeople';
 import { STATUS_TAG, statusWord } from './leadsView';
 import { staffRoleText } from './consoleView';
+import { PAST_SHOW } from './weekView';
 
 // PEOPLE IN SEARCH (spec Part 3 §17.11, V1-e-ii): the People group's lines, from what the server
 // found. A member's line says what their row on Members says; a lead's and a staff member's what
@@ -80,14 +81,17 @@ export function leadLine(lead, orgSlug, today = null) {
   };
 }
 
-/** A staff member's line: "Staff · Front desk". */
-export function staffLine(person, orgSlug, orgType) {
+/** A staff member's line: "Staff · Front desk", with their email when it is what was typed and
+ *  their name is not. */
+export function staffLine(person, orgSlug, orgType, typed = '') {
   const w = orgWords(orgType);
+  const asked = String(typed ?? '').trim().toLowerCase();
+  const byEmail = asked !== '' && !person.displayName.toLowerCase().includes(asked) && typeof person.email === 'string' && person.email.toLowerCase().includes(asked);
   return {
     key: `person:staff:${person.userId}`,
     kind: 'person',
     title: person.displayName,
-    where: `Staff · ${staffRoleText(person.role, person.roleName ?? null, w, person.coOwner === true)}`,
+    where: [`Staff · ${staffRoleText(person.role, person.roleName ?? null, w, person.coOwner === true)}`, byEmail ? person.email : null].filter(Boolean).join(' · '),
     initials: initials(person.displayName),
     tag: null,
     to: withQuery(placeTo(orgSlug, 'staff'), { staff: person.userId }),
@@ -95,13 +99,15 @@ export function staffLine(person, orgSlug, orgType) {
 }
 
 /** "See all in Members" where there are more than were shown: the list opens with the same
- *  words in its search box. */
-function moreLine(kind, title, to, typed) {
-  return { key: `person:more:${kind}`, kind: 'person', title, where: `Opens the list with “${typed}” in its search`, initials: null, tag: null, to: withQuery(to, { search: typed }) };
+ *  words in its search box. `extra`: more of the address (`show=past` for past members). */
+function moreLine(kind, title, to, typed, extra = {}) {
+  return { key: `person:more:${kind}`, kind: 'person', title, where: `Opens the list with “${typed}” in its search`, initials: null, tag: null, to: withQuery(to, { ...extra, search: typed }) };
 }
 
-/** The People group for what the server found, or null where it found nobody. Members, then
- *  leads, then staff, each with its "See all" line where there are more. */
+/** The People group for what the server found, or null where it found nobody. Members (current,
+ *  then past), then leads, then staff, each with its "See all" line where there are more: current
+ *  members open Members as it opens, past members open its Past members, so the list shows the
+ *  people search did. */
 export function peopleGroup(found, { orgSlug, orgType, privileges, typed, membersName, today = null }) {
   if (found === null || found === undefined) return null;
   const asked = String(typed ?? '').trim();
@@ -109,7 +115,7 @@ export function peopleGroup(found, { orgSlug, orgType, privileges, typed, member
   const kinds = [
     { list: found.members, line: (p) => memberLine(p, orgSlug, orgType, today), more: () => moreLine('members', `See all in ${membersName}`, placeTo(orgSlug, 'members'), asked) },
     { list: found.leads, line: (p) => leadLine(p, orgSlug, today), more: () => moreLine('leads', 'See all in Leads', placeTo(orgSlug, 'leads'), asked) },
-    { list: found.staff, line: (p) => staffLine(p, orgSlug, orgType), more: null },
+    { list: found.staff, line: (p) => staffLine(p, orgSlug, orgType, asked), more: null },
   ];
   for (const kind of kinds) {
     if (kind.list === null || kind.list === undefined) continue;
@@ -120,6 +126,10 @@ export function peopleGroup(found, { orgSlug, orgType, privileges, typed, member
     if (kind.list.more && kind.more !== null) {
       const more = kind.more();
       if (more.to !== null) lines.push(more);
+    }
+    if (kind.list === found.members && kind.list.morePast === true) {
+      const past = moreLine('past', `See all past ${orgWords(orgType).people}`, placeTo(orgSlug, 'members'), asked, { show: PAST_SHOW });
+      if (past.to !== null) lines.push(past);
     }
   }
   // Staff are shown only to whoever may open the Staff tab, whatever came back.

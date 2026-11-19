@@ -65,7 +65,7 @@ export async function searchPeople(
           const wanted = folded(typed);
           const hits = rows.filter((r) => folded(r.displayName).includes(wanted) || (r.email !== null && folded(r.email).includes(wanted)));
           return {
-            people: hits.slice(0, max).map((r) => ({ userId: r.userId, displayName: r.displayName, role: r.role, roleName: r.roleName, coOwner: r.coOwner })),
+            people: hits.slice(0, max).map((r) => ({ userId: r.userId, displayName: r.displayName, email: r.email, role: r.role, roleName: r.roleName, coOwner: r.coOwner })),
             more: hits.length > max,
           };
         })

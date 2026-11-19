@@ -73,7 +73,7 @@ const typeIn = (text) => fireEvent.change(barInput(), { target: { value: text } 
 const lineTitles = () => screen.queryAllByTestId('search-line').map((el) => el.firstChild.textContent);
 const where = () => screen.getByTestId('where').textContent;
 
-const NOBODY = { members: { people: [], more: false }, leads: { people: [], more: false }, staff: { people: [], more: false } };
+const NOBODY = { members: { people: [], more: false, morePast: false }, leads: { people: [], more: false }, staff: { people: [], more: false } };
 const SAM = {
   entryId: '22222222-2222-4222-8222-222222222222',
   fullName: 'Sam Rivera',
@@ -336,7 +336,7 @@ describe('people (V1-e-ii)', () => {
   });
 
   it('a name typed brings the People group first, after a pause, for this business', async () => {
-    orgService.searchPeople.mockResolvedValue({ data: { ...NOBODY, members: { people: [SAM], more: false } } });
+    orgService.searchPeople.mockResolvedValue({ data: { ...NOBODY, members: { people: [SAM], more: false, morePast: false } } });
     await open();
     startSearch();
     typeIn('s');
@@ -397,6 +397,14 @@ describe('people (V1-e-ii)', () => {
     typeIn('tax');
     await waitFor(() => expect(box().getByRole('status').textContent).not.toBe(''));
     expect(lineTitles()).toContain('Tax');
+  });
+
+  it('over the hour's searches, it says so in plain words (round one, L2)', async () => {
+    orgService.searchPeople.mockRejectedValue({ response: { status: 429, data: { error: 'rate_limited', message: 'Too many attempts. Please try again later.' } } });
+    await open();
+    startSearch();
+    typeIn('sam');
+    await waitFor(() => expect(box().getByRole('status').textContent).toBe("You've searched a lot in the last hour. Try again in a few minutes."));
   });
 
   it("a studio's box says clients", async () => {

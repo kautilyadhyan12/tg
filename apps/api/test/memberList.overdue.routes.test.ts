@@ -297,6 +297,34 @@ d("the Members list says Overdue (real Postgres)", { timeout: T }, () => {
     expect(csvPayment(await exportOf(gym, desk, [ana]), "Ana Lopez")).toBe("Payment due");
   });
 
+  it("the console's search (V1-e-ii) says what each row on Members says, to each of these staff, current and past", async () => {
+    const gym = await makeGym("Search Says Gym");
+    const ana = await record(gym, "Ana Search");
+    await owes(gym, await hold(gym, ana), "2026-10-01");
+    const tom = await record(gym, "Tom Search");
+    await owes(gym, await hold(gym, tom), "2026-10-06");
+    const ben = await record(gym, "Ben Search");
+    await owes(gym, await hold(gym, ben), "2026-10-01");
+    await sql`UPDATE gym_held_memberships SET status = 'cancelled', cancelled_on = '2026-10-05' WHERE entry_id = ${ben}`;
+    await sql`UPDATE gym_member_list_entries SET former_at = now() WHERE id = ${ben}`;
+    const desk = await staffWith(gym, "Desk Only", ["members.confirm"]);
+    const till = await staffWith(gym, "Takes Payments", ["members.confirm", "billing.members"]);
+    const FIELDS = ["entryId", "fullName", "email", "phone", "memberNumber", "status", "membershipType", "paymentStatus", "held", "owedSince", "overdue", "formerAt"] as const;
+    const pick = (row: Record<string, unknown>) => Object.fromEntries(FIELDS.map((k) => [k, row[k]]));
+    for (const who of [gym.owner, desk, till]) {
+      const found = ok(await inject("GET", `/v1/orgs/${gym.id}/search/people?query=search`, who.cookies)) as { members: { people: Record<string, unknown>[] } };
+      const rows = async (records: "current" | "former") =>
+        (ok(await inject("GET", `/v1/orgs/${gym.id}/member-list/entries?records=${records}&query=search`, who.cookies)) as { page: { entries: Record<string, unknown>[] } }).page.entries;
+      const listed = [...(await rows("current")), ...(await rows("former"))];
+      expect(found.members.people.map(pick)).toEqual(listed.map(pick));
+    }
+    // And the rows themselves: Overdue only for whoever reads bills; the past member's day owed.
+    const seen = async (who: Person) =>
+      (ok(await inject("GET", `/v1/orgs/${gym.id}/search/people?query=search`, who.cookies)) as { members: { people: { fullName: string; overdue: boolean; owedSince: string | null }[] } }).members.people.map((p) => [p.fullName, p.overdue, p.owedSince]);
+    expect(await seen(till)).toEqual([["Ana Search", true, null], ["Tom Search", false, null], ["Ben Search", true, "2026-10-01"]]);
+    expect(await seen(desk)).toEqual([["Ana Search", false, null], ["Tom Search", false, null], ["Ben Search", false, "2026-10-01"]]);
+  });
+
   it("another gym's owner reads none of it", async () => {
     const gym = await makeGym("Home Gym");
     const other = await makeGym("Other Gym");

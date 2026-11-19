@@ -1816,7 +1816,8 @@ export async function readEntries(
 }
 
 /** THE CONSOLE'S SEARCH (V1-e-ii): the first `max` people the Members list's own search finds
- *  for `typed`, current and past members alike, each with the words its row says. The caller
+ *  for `typed`, current members first and then past members, each read as its own list reads them
+ *  (Members' Current and Past members), each with the words its row says. The caller
  *  has already checked `members.confirm` and spent its limit; `seesBills` is its
  *  `billing.members`, as the list's own Overdue is. One more is read than is shown, to say
  *  whether there are more. */
@@ -1827,7 +1828,7 @@ export async function searchEntries(
   typed: string,
   max: number,
   seesBills: boolean,
-): Promise<{ people: ConsoleSearchMember[]; more: boolean }> {
+): Promise<{ people: ConsoleSearchMember[]; more: boolean; morePast: boolean }> {
   // The list's own statement with no filter but the words. Who of them is in the app is not
   // read: it only narrows the In the app filter, which search never asks, and reading it is
   // every app member of the business on each search (measured: 90 to 130 ms of answering
@@ -1839,7 +1840,7 @@ export async function searchEntries(
     membershipTypes: null,
     paymentStatuses: null,
     held: null,
-    records: "all",
+    records: "current",
     filter: "all",
     invitation: null,
     appIds: null,
@@ -1850,8 +1851,13 @@ export async function searchEntries(
     agreementNotSigned: null,
     noCardIds: null,
   };
-  const page = await repo.entriesPage(deps.sql, { ...input, cursor: null, limit: max + 1 });
-  const shown = page.entries.slice(0, max);
+  const [current, past] = await Promise.all([
+    repo.entriesPage(deps.sql, { ...input, cursor: null, limit: max + 1 }),
+    repo.entriesPage(deps.sql, { ...input, records: "former", cursor: null, limit: max + 1 }),
+  ]);
+  const currentShown = current.entries.slice(0, max);
+  const pastShown = past.entries.slice(0, max - currentShown.length);
+  const shown = [...currentShown, ...pastShown];
   const today = dayInTz(deps.now(), timezone);
   const [held, pastBills, overdueAfterDays] = await Promise.all([
     heldWithOwedOf(
@@ -1887,7 +1893,8 @@ export async function searchEntries(
         formerAt: entry.formerAt?.toISOString() ?? null,
       };
     }),
-    more: page.entries.length > max,
+    more: current.entries.length > currentShown.length,
+    morePast: past.entries.length > pastShown.length,
   };
 }
 

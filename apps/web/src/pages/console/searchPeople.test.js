@@ -21,9 +21,9 @@ const member = (over = {}) => ({
   ...over,
 });
 const lead = { id: '33333333-3333-4333-8333-333333333333', fullName: 'Samir Khan', email: 'samir@example.com', status: 'new', createdAt: '2026-11-12T10:00:00.000Z' };
-const staff = { userId: '44444444-4444-4444-8444-444444444444', displayName: 'Samira Ali', role: 'manager', roleName: 'Front desk', coOwner: false };
+const staff = { userId: '44444444-4444-4444-8444-444444444444', displayName: 'Samira Ali', email: 'desk@ironhouse.com', role: 'manager', roleName: 'Front desk', coOwner: false };
 const found = (over = {}) => ({
-  members: { people: [member()], more: false },
+  members: { people: [member()], more: false, morePast: false },
   leads: { people: [lead], more: false },
   staff: { people: [staff], more: false },
   ...over,
@@ -110,12 +110,24 @@ describe('the words', () => {
     });
     expect(staffLine(staff, SLUG, 'gym')).toMatchObject({ where: 'Staff · Front desk', tag: null, to: `/console/${SLUG}/members?view=staff&staff=44444444-4444-4444-8444-444444444444` });
     expect(staffLine({ ...staff, role: 'owner', roleName: null, coOwner: true }, SLUG, 'gym').where).toBe('Staff · Co-owner');
+    // Found by their email, the line says it; found by their name, it does not.
+    expect(staffLine(staff, SLUG, 'gym', 'DESK@').where).toBe('Staff · Front desk · desk@ironhouse.com');
+    expect(staffLine(staff, SLUG, 'gym', 'samira').where).toBe('Staff · Front desk');
   });
 
   it('more than were shown: "See all" opens the list with the same words in its box', () => {
-    const group = peopleGroup(found({ members: { people: [member()], more: true }, leads: { people: [lead], more: true } }), opts(ROLE_PRIVILEGES.owner, 'sam r'));
+    const group = peopleGroup(found({ members: { people: [member()], more: true, morePast: false }, leads: { people: [lead], more: true } }), opts(ROLE_PRIVILEGES.owner, 'sam r'));
     expect(group?.lines.map((l) => l.title)).toEqual(['Sam Rivera', 'See all in Members', 'Samir Khan', 'See all in Leads', 'Samira Ali']);
     expect(group?.lines.find((l) => l.title === 'See all in Members')?.to).toBe(`/console/${SLUG}/members?search=sam+r`);
     expect(group?.lines.find((l) => l.title === 'See all in Leads')?.to).toBe(`/console/${SLUG}/leads?search=sam+r`);
+  });
+
+  it('past members not shown open Past members, so the list shows the people search did (round one, H1)', () => {
+    const past = member({ formerAt: '2026-09-03T12:00:00.000Z' });
+    const group = peopleGroup(found({ members: { people: [past], more: false, morePast: true }, leads: null, staff: null }), opts(ROLE_PRIVILEGES.owner, 'smith'));
+    expect(group?.lines.map((l) => l.title)).toEqual(['Sam Rivera', 'See all past members']);
+    expect(group?.lines[1]?.to).toBe(`/console/${SLUG}/members?show=past&search=smith`);
+    const both = peopleGroup(found({ members: { people: [member()], more: true, morePast: true }, leads: null, staff: null }), { ...opts(ROLE_PRIVILEGES.owner, 'smith'), orgType: 'studio' });
+    expect(both?.lines.map((l) => l.title)).toEqual(['Sam Rivera', 'See all in Members', 'See all past clients']);
   });
 });

@@ -135,6 +135,16 @@ d("people in the console's search (real Postgres)", () => {
     return JSON.parse(res.body) as ConsoleSearchResponse;
   };
   const memberNames = (found: ConsoleSearchResponse) => (found.members?.people ?? []).map((p) => p.fullName);
+  /** What Members shows for these words: its Current list, then its Past members, five in all. */
+  const listIds = async (gymId: string, typed: string, cookies: Record<string, string>): Promise<string[]> => {
+    const page = async (records: "current" | "former") => {
+      const res = await get(`/v1/orgs/${gymId}/member-list/entries?records=${records}&query=${encodeURIComponent(typed)}`, cookies);
+      expect(res.statusCode).toBe(200);
+      return (JSON.parse(res.body) as { page: MemberListEntriesPage }).page.entries.map((e) => e.entryId);
+    };
+    const current = (await page("current")).slice(0, 5);
+    return [...current, ...(await page("former")).slice(0, 5 - current.length)];
+  };
 
   beforeAll(async () => {
     await cleanup();
@@ -181,6 +191,8 @@ d("people in the console's search (real Postgres)", () => {
       const mine = await addEntry(org.org.id, owner.cookies, { fullName: "Sam Rivera", email: "sam.rivera@example.com" });
       const mineLead = await addLead(org.org.id, owner.cookies, { fullName: "Samir Khan", email: "samir.khan@example.com" });
       const theirs = await addEntry(rivalOrg.org.id, rival.cookies, { fullName: "Sam Rivers", email: "sam.rivers@example.com" });
+      // A rival's staff member who matches too: a staff read without the business would show them.
+      const rivalStaff = await makeStaff(rivalOrg, rival.cookies, "worst-rival-staff", "manager", "Samuel Rival");
       const theirLead = await addLead(rivalOrg.org.id, rival.cookies, { fullName: "Samantha Rival", email: "samantha@example.com" });
 
       // The positive control: the owner finds this business's member, lead and staff, and
@@ -191,6 +203,8 @@ d("people in the console's search (real Postgres)", () => {
       expect(seen.staff?.people.map((p) => p.displayName)).toEqual(["Sami Front Desk"]);
       const rivalSeen = await search(rivalOrg.org.id, "sam", rival.cookies);
       expect(rivalSeen.members?.people.map((p) => p.entryId)).toEqual([theirs]);
+      expect(rivalSeen.staff?.people.map((p) => p.userId)).toEqual([rivalStaff.userId]);
+      expect(seen.staff?.people.map((p) => p.userId)).not.toContain(rivalStaff.userId);
       expect(rivalSeen.leads?.people.map((p) => p.id)).toEqual([theirLead]);
 
       const outsiders = [
@@ -267,11 +281,10 @@ d("people in the console's search (real Postgres)", () => {
       for (const { typed, names } of cases) {
         const found = await search(gym, typed, owner.cookies);
         expect({ typed, names: memberNames(found) }).toEqual({ typed, names });
-        // ONE ANSWER: the Members list's own search finds the same people, in the same order.
-        const listed = await get(`/v1/orgs/${gym}/member-list/entries?records=all&query=${encodeURIComponent(typed)}`, owner.cookies);
-        expect(listed.statusCode).toBe(200);
-        const page = (JSON.parse(listed.body) as { page: MemberListEntriesPage }).page;
-        expect({ typed, ids: found.members?.people.map((p) => p.entryId) }).toEqual({ typed, ids: page.entries.slice(0, 5).map((e) => e.entryId) });
+        // ONE ANSWER: Members as it opens (Current), then its Past members, find the same people in
+        // the same order.
+        const ids = await listIds(gym, typed, owner.cookies);
+        expect({ typed, ids: found.members?.people.map((p) => p.entryId) }).toEqual({ typed, ids });
       }
       // The two of one name are told apart by their email.
       expect((await search(gym, "priya", owner.cookies)).members?.people.map((p) => p.email).sort()).toEqual(["priya.s.2@example.com", "priya.sharma@example.com"]);
@@ -281,12 +294,21 @@ d("people in the console's search (real Postgres)", () => {
       await sql`UPDATE gym_member_list_entries SET former_at = now() WHERE gym_id = ${gym} AND id = ${jose}`;
       const past = await search(gym, "josé", owner.cookies);
       expect(past.members?.people.map((p) => ({ id: p.entryId, past: p.formerAt !== null }))).toEqual([{ id: jose, past: true }]);
+      expect(past.members).toMatchObject({ more: false, morePast: false });
+      // Current members come before past ones, and each "more" belongs to the list that holds them.
+      const kais: string[] = [];
+      for (let n = 1; n <= 6; n += 1) kais.push(await addEntry(gym, owner.cookies, { fullName: `Kai Tong ${String(n)}`, email: `kai-${String(n)}@example.com` }));
+      await sql`UPDATE gym_member_list_entries SET former_at = now() WHERE gym_id = ${gym} AND id = ANY(${kais.slice(0, 4)}::uuid[])`;
+      const mixed = await search(gym, "kai tong", owner.cookies);
+      expect(mixed.members?.people.map((p) => p.formerAt !== null)).toEqual([false, false, true, true, true]);
+      expect(mixed.members).toMatchObject({ more: false, morePast: true });
+      expect(mixed.members?.people.map((p) => p.entryId)).toEqual(await listIds(gym, "kai tong", owner.cookies));
 
       // Six of one name: five are shown, and "more" says there are others.
       for (let n = 1; n <= 4; n += 1) await addEntry(gym, owner.cookies, { fullName: `Priya Sharma ${String(n)}`, email: `priya-${String(n)}@example.com` });
       const many = await search(gym, "priya", owner.cookies);
       expect(many.members?.people).toHaveLength(5);
-      expect(many.members?.more).toBe(true);
+      expect(many.members).toMatchObject({ more: true, morePast: false });
       expect((await search(gym, "siobhán", owner.cookies)).members?.more).toBe(false);
     },
     TIMEOUT_MS,
@@ -311,7 +333,7 @@ d("people in the console's search (real Postgres)", () => {
       expect((await search(gym, "ngozi", owner.cookies)).leads?.people[0]).toMatchObject({ fullName: "Ngozi Okafor", status: "new" });
 
       expect((await search(gym, "zoë", owner.cookies)).staff?.people).toEqual([
-        { userId: desk.userId, displayName: "Zoë Lambert", role: "manager", roleName: "Front desk", coOwner: false },
+        { userId: desk.userId, displayName: "Zoë Lambert", email: desk.email, role: "manager", roleName: "Front desk", coOwner: false },
       ]);
       expect((await search(gym, "LAMBERT", owner.cookies)).staff?.people.map((p) => p.userId)).toEqual([desk.userId]);
       expect((await search(gym, "lead-desk@", owner.cookies)).staff?.people.map((p) => p.userId)).toEqual([desk.userId]);
@@ -363,6 +385,11 @@ d("people in the console's search (real Postgres)", () => {
       expect(refused.statusCode).toBe(429);
       // The colleague at the same address searches on.
       expect((await get(searchUrl(gym, "sam"), manager.cookies, desk)).statusCode).toBe(200);
+      // A desk that has spent its address's hour refuses a fresh colleague there, and not elsewhere.
+      const busy = "10.64.0.2";
+      await limits.setex(`rl:console_search_people:ip:${busy}`, 3600, "4000");
+      expect((await get(searchUrl(gym, "sam"), manager.cookies, busy)).statusCode).toBe(429);
+      expect((await get(searchUrl(gym, "sam"), manager.cookies, "10.64.0.3")).statusCode).toBe(200);
       // Staff with no list to search spend nothing.
       const trainer = await makeStaff(org, owner.cookies, "limit-trainer", "trainer");
       await limits.setex(`rl:console_search_people:id:${trainer.userId}`, 3600, "1200");

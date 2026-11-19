@@ -38,7 +38,9 @@ export type ConsoleSearchMember = z.infer<typeof consoleSearchMemberSchema>;
 export const consoleSearchLeadSchema = leadSchema.pick({ id: true, fullName: true, email: true, status: true, createdAt: true }).strict();
 export type ConsoleSearchLead = z.infer<typeof consoleSearchLeadSchema>;
 
-export const consoleSearchStaffSchema = orgStaffSchema.pick({ userId: true, displayName: true, role: true, roleName: true, coOwner: true }).strict();
+/** A staff member found, with their email: the Staff tab shows it to the same people, and it says
+ *  why somebody found by their email is in the results. */
+export const consoleSearchStaffSchema = orgStaffSchema.pick({ userId: true, displayName: true, email: true, role: true, roleName: true, coOwner: true }).strict();
 export type ConsoleSearchStaff = z.infer<typeof consoleSearchStaffSchema>;
 
 const found = <T extends z.ZodType>(person: T) =>
@@ -48,7 +50,12 @@ const found = <T extends z.ZodType>(person: T) =>
  *  group for it, and the server read nothing of it. */
 export const consoleSearchResponseSchema = z
   .object({
-    members: found(consoleSearchMemberSchema),
+    /** Current members first, then past members, five in all. `more`: current members not shown;
+     *  `morePast`: past members not shown. Each opens its own list, so the list says what search did. */
+    members: z
+      .object({ people: z.array(consoleSearchMemberSchema).max(CONSOLE_SEARCH_PEOPLE_MAX), more: z.boolean(), morePast: z.boolean() })
+      .strict()
+      .nullable(),
     leads: found(consoleSearchLeadSchema),
     staff: found(consoleSearchStaffSchema),
   })

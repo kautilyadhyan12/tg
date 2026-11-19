@@ -13,6 +13,12 @@ import { errorText, orgService } from '../../api/orgsApi';
 // buttons do. `people`: where this person may find people (V1-e-ii), the business and its
 // words; null where they may not, and nothing is asked.
 
+/** Why people could not be searched, in a sentence: over the hour's searches, or the usual words. */
+function searchRefusal(err) {
+  if (err?.response?.status === 429) return "You've searched a lot in the last hour. Try again in a few minutes.";
+  return errorText(err, "We couldn't search your people. Try again.");
+}
+
 function deviceStore() {
   try {
     return window.localStorage;
@@ -35,7 +41,7 @@ export default function SearchField({ orgSlug, catalogue, placeholder, people = 
   const [dropTop, setDropTop] = useState(null);
   const [room, setRoom] = useState(null);
   /** What the server found, and for which words: a late answer for older words is not shown. */
-  const [found, setFound] = useState({ for: '', people: null, error: null });
+  const [found, setFound] = useState({ for: '', gymId: null, people: null, error: null });
 
   const gymId = people?.gymId ?? null;
   const asked = typed.trim();
@@ -47,8 +53,8 @@ export default function SearchField({ orgSlug, catalogue, placeholder, people = 
       Promise.resolve()
         .then(() => orgService.searchPeople(gymId, asked))
         .then(
-          (res) => live && setFound({ for: asked, people: res.data, error: null }),
-          (err) => live && setFound({ for: asked, people: null, error: errorText(err, "We couldn't search your people. Try again.") }),
+          (res) => live && setFound({ for: asked, gymId, people: res.data, error: null }),
+          (err) => live && setFound({ for: asked, gymId, people: null, error: searchRefusal(err) }),
         );
     }, 250);
     return () => {
@@ -56,7 +62,8 @@ export default function SearchField({ orgSlug, catalogue, placeholder, people = 
       clearTimeout(timer);
     };
   }, [gymId, asked, open]);
-  const answer = people !== null && open && asksForPeople(asked) && found.for === asked ? found : null;
+  // An answer is for the words AND the business it was asked for: switching business never shows the last one's people.
+  const answer = people !== null && open && asksForPeople(asked) && found.for === asked && found.gymId === gymId ? found : null;
   const peopleLines =
     answer === null || answer.people === null
       ? null
