@@ -54,6 +54,7 @@ import {
   type MemberListEntriesPage,
   type MemberListEntriesQuery,
   type MemberListFilter,
+  type ConsoleSearchMember,
   type MemberListGuard,
   type MemberListHandEdits,
   type MemberListImportNumbers,
@@ -1811,6 +1812,89 @@ export async function readEntries(
       staff: seesStaff ? (staffByRecord.get(entry.entryId) ?? null) : null,
     })),
     cursor: last === undefined ? null : encodeEntryCursor({ name: last.fullName, id: last.entryId }),
+  };
+}
+
+/** THE CONSOLE'S SEARCH (V1-e-ii): the first `max` people the Members list's own search finds
+ *  for `typed`, current members first and then past members, each read as its own list reads them
+ *  (Members' Current and Past members), each with the words its row says. The caller
+ *  has already checked `members.confirm` and spent its limit; `seesBills` is its
+ *  `billing.members`, as the list's own Overdue is. One more is read than is shown, to say
+ *  whether there are more. */
+export async function searchEntries(
+  deps: MemberListDeps,
+  gymId: string,
+  timezone: string,
+  typed: string,
+  max: number,
+  seesBills: boolean,
+): Promise<{ people: ConsoleSearchMember[]; more: boolean; morePast: boolean }> {
+  // The list's own statement with no filter but the words. Who of them is in the app is not
+  // read: it only narrows the In the app filter, which search never asks, and reading it is
+  // every app member of the business on each search (measured: 90 to 130 ms of answering
+  // nobody at 10,000).
+  const input: repo.EntriesFilterInput = {
+    gymId,
+    inAppEntryIds: [],
+    statuses: null,
+    membershipTypes: null,
+    paymentStatuses: null,
+    held: null,
+    records: "current",
+    filter: "all",
+    invitation: null,
+    appIds: null,
+    tagIds: null,
+    overIds: null,
+    like: `%${escapeLike(typed.trim())}%`,
+    waiverNotSigned: null,
+    agreementNotSigned: null,
+    noCardIds: null,
+  };
+  const [current, past] = await Promise.all([
+    repo.entriesPage(deps.sql, { ...input, cursor: null, limit: max + 1 }),
+    repo.entriesPage(deps.sql, { ...input, records: "former", cursor: null, limit: max + 1 }),
+  ]);
+  const currentShown = current.entries.slice(0, max);
+  const pastShown = past.entries.slice(0, max - currentShown.length);
+  const shown = [...currentShown, ...pastShown];
+  const today = dayInTz(deps.now(), timezone);
+  const [held, pastBills, overdueAfterDays] = await Promise.all([
+    heldWithOwedOf(
+      deps.sql,
+      gymId,
+      today,
+      shown.flatMap((entry) => (entry.formerAt === null ? [entry.entryId] : [])),
+    ),
+    listBillFacts(
+      deps.sql,
+      gymId,
+      today,
+      shown.flatMap((entry) => (entry.formerAt === null ? [] : [entry.entryId])),
+    ),
+    seesBills ? overdueDaysOf(deps.sql, gymId) : null,
+  ]);
+  return {
+    people: shown.map((entry) => {
+      const owedSince = (entry.formerAt === null ? held.owedSince : pastBills.owedSince).get(entry.entryId) ?? null;
+      const shownHeld = held.held.get(entry.entryId)?.shown ?? null;
+      return {
+        entryId: entry.entryId,
+        fullName: entry.fullName,
+        email: entry.email,
+        phone: entry.phone,
+        memberNumber: entry.memberNumber,
+        status: entry.status,
+        membershipType: entry.membershipType,
+        paymentStatus: entry.paymentStatus,
+        held: shownHeld,
+        owedSince: entry.formerAt === null ? null : owedSince,
+        overdue: rowSaysOverdue({ shown: shownHeld, former: entry.formerAt !== null, owedSince, today, overdueAfterDays }),
+        formerAt: entry.formerAt?.toISOString() ?? null,
+      };
+    }),
+    more: current.entries.length > currentShown.length,
+    morePast: past.entries.length > pastShown.length,
   };
 }
 

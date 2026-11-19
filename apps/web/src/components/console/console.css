@@ -1976,6 +1976,26 @@
   overflow-wrap: anywhere;
 }
 .c-find-on { background: var(--raise); }
+/* A person found (V1-e-ii): their initials, their name and one line, and their state on the right. */
+.c-find-person {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.c-find-av {
+  width: 32px;
+  height: 32px;
+  font-size: 12px;
+}
+.c-find-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.c-find-person > .c-tag { flex: none; }
 .c-find-foot { margin: 0; }
 @media (hover: none) {
   .c-find-foot { display: none; }
