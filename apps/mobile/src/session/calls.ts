@@ -59,6 +59,9 @@ export interface Request {
   waitMs?: number;
   /** Sent as its Idempotency-Key: the server saves a thing sent twice once (a run, 37a). */
   key?: string;
+  /** Sent as If-None-Match: the copy the phone holds. The server's 304 "not changed" is read as null
+   *  through the request's shape, so only a shape that takes null asks with one (the Library, 63a). */
+  etag?: string;
 }
 
 /** One request, its reply read through its shape. A reply that comes after `waitMs` is dropped. */
@@ -82,16 +85,18 @@ export async function call<T>(server: Server, request: Request, shape: Shape<T>,
           ...(withBody ? { "content-type": "application/json" } : {}),
           ...(request.token === undefined ? {} : { authorization: `Bearer ${request.token}` }),
           ...(request.key === undefined ? {} : { "idempotency-key": request.key }),
+          ...(request.etag === undefined ? {} : { "if-none-match": request.etag }),
         },
         ...(withBody ? { body: JSON.stringify(request.body ?? {}) } : {}),
       }),
       late,
     ]);
     if (reply === LATE) return { kind: "no_answer" };
-    // 204 has no body: its shape is read against null.
-    const raw = reply.status === 204 ? null : await Promise.race([reply.json(), late]);
+    // 204 has no body, nor has 304 (not changed, asked for with `etag`): its shape is read against null.
+    const notChanged = reply.status === 304 && request.etag !== undefined;
+    const raw = reply.status === 204 || notChanged ? null : await Promise.race([reply.json(), late]);
     if (raw === LATE) return { kind: "no_answer" };
-    if (reply.ok) {
+    if (reply.ok || notChanged) {
       const parsed = shape.safeParse(raw);
       return parsed.success ? { kind: "ok", data: parsed.data } : { kind: "no_answer" };
     }
