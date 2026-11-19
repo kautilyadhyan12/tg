@@ -69,16 +69,20 @@ const setsWithinLimit = (w: { exercises: readonly PlannedExercise[] }, ctx: z.Re
 export const plannedWorkoutSchema = z.object(plannedFields).strict().superRefine(setsWithinLimit);
 export type PlannedWorkout = z.infer<typeof plannedWorkoutSchema>;
 
+/** No finer than a millisecond, as a phone's clock gives it: a finer one would be kept finer than it reads
+ *  back, so the phone's own copy would never match the server's. */
+const toTheMillisecond = (s: string): boolean => !/\.\d{4,}/.test(s);
+
 /** The body of PUT /v1/training/saved/:id. */
 export const savedWorkoutWriteSchema = z
-  .object({ ...plannedFields, editedAt: instantSchema })
+  .object({ ...plannedFields, editedAt: instantSchema.refine(toTheMillisecond, { message: "to the millisecond at most" }) })
   .strict()
   .superRefine(setsWithinLimit);
 export type SavedWorkoutWrite = z.infer<typeof savedWorkoutWriteSchema>;
 
 /** The answer to a save: 201 created; 200 updated, unchanged (the server holds this change or a newer
  *  one), or removed (the person deleted it: nothing is kept, and the phone forgets it). `editedAt` is the
- *  time of the change the server holds, to the millisecond (null once removed): when it differs from the
+ *  time of the change the server holds (null once removed): when it differs from the
  *  phone's, the server holds a newer change, and the phone reads the saved workout again. */
 export const savedWorkoutWrittenSchema = z.object({
   id: z.uuid(),

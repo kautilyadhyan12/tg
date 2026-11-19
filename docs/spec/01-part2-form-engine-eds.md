@@ -2213,7 +2213,8 @@ items 36 and 24b take as it is):
   Saves and deletes 30 a minute for the person, reads within the 120 of the history; never by address.
 - **A save** answers 201 created, or 200 `updated`, `unchanged` (the server holds this change or a newer one, by
   the phone's `editedAt`, so a late send never undoes a newer change) or `removed` (the person deleted it; nothing
-  is kept and the phone forgets it), with the `editedAt` the server holds, kept to the millisecond: an
+  is kept and the phone forgets it), with the `editedAt` the server holds (one finer than a millisecond is
+  refused, as a broken phone, so what is kept is what reads back): an
   "unchanged" whose `editedAt` differs from the phone's tells it to read the saved workout again. A save and a
   delete of one id take a lock on the id, whoever sends them, so an id has one owner. 422 `unknown_exercise` as for a workout; 409 `saved_workouts_full` past
   **50 for each person, on every plan** (Kd, 2026-11-19), counted under the person's own lock so two at the same

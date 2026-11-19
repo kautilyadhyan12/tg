@@ -15,10 +15,6 @@ export async function lockId(tx: TransactionSql, id: string): Promise<void> {
   await tx`SELECT pg_advisory_xact_lock(hashtext(${`saved_workout:${id}`}))`;
 }
 
-/** The phone's instant to the millisecond, as it is kept and read back (`toISOString`): a finer one kept
- *  as sent would read back older than it is. */
-const toMs = (tx: TransactionSql, instant: string) => tx`date_trunc('milliseconds', ${instant}::timestamptz)`;
-
 /** One person's saved workouts are changed one request at a time, so two new ones sent at the same
  *  instant cannot both pass the limit. The two-number key is a space of its own, apart from the
  *  Library's one-number lock. */
@@ -37,7 +33,7 @@ export type SavedState =
  *  person's own is locked until the transaction ends. */
 export async function savedState(tx: TransactionSql, id: string, userId: string, editedAt: string): Promise<SavedState> {
   const rows = await tx<{ mine: boolean; same_or_newer: boolean; edited_at: Date }[]>`
-    SELECT user_id = ${userId} AS mine, edited_at >= ${toMs(tx, editedAt)} AS same_or_newer, edited_at
+    SELECT user_id = ${userId} AS mine, edited_at >= ${editedAt}::timestamptz AS same_or_newer, edited_at
     FROM saved_workouts WHERE id = ${id} FOR UPDATE`;
   const row = rows[0];
   if (row !== undefined) return row.mine ? { kind: "mine", sameOrNewer: row.same_or_newer, editedAt: row.edited_at } : { kind: "theirs" };
@@ -55,7 +51,7 @@ export async function countOf(tx: TransactionSql, userId: string): Promise<numbe
  *  did not make it. */
 export async function insertSaved(tx: TransactionSql, id: string, userId: string, name: string, editedAt: string): Promise<Date | null> {
   const made = await tx<{ edited_at: Date }[]>`
-    INSERT INTO saved_workouts (id, user_id, name, edited_at) VALUES (${id}, ${userId}, ${name}, ${toMs(tx, editedAt)})
+    INSERT INTO saved_workouts (id, user_id, name, edited_at) VALUES (${id}, ${userId}, ${name}, ${editedAt})
     ON CONFLICT (id) DO NOTHING RETURNING edited_at`;
   return made[0]?.edited_at ?? null;
 }
@@ -63,7 +59,7 @@ export async function insertSaved(tx: TransactionSql, id: string, userId: string
 /** Saves a change to the person's own saved workout: its change's time as kept, or null when it was not theirs. */
 export async function updateSaved(tx: TransactionSql, id: string, userId: string, name: string, editedAt: string): Promise<Date | null> {
   const changed = await tx<{ edited_at: Date }[]>`
-    UPDATE saved_workouts SET name = ${name}, edited_at = ${toMs(tx, editedAt)}, updated_at = now()
+    UPDATE saved_workouts SET name = ${name}, edited_at = ${editedAt}, updated_at = now()
     WHERE id = ${id} AND user_id = ${userId} RETURNING edited_at`;
   return changed[0]?.edited_at ?? null;
 }

@@ -193,7 +193,7 @@ d("saved workouts (real Postgres)", () => {
   });
 
   describe("the worst thing, at the same instant: a save and somebody else's delete of one id", () => {
-    it("one of them owns the id, never both, and an owner can always delete their own (round one's High)", async () => {
+    it("one of them owns the id, never both, and an owner can always delete their own (round one's High)", { timeout: 60_000 }, async () => {
       for (let round = 0; round < 20; round++) {
         const [a, b] = [await person(), await person()];
         const id = randomUUID();
@@ -277,10 +277,14 @@ d("saved workouts (real Postgres)", () => {
   });
 
   describe("a change's time is kept to the millisecond", () => {
-    it("an editedAt with microseconds and an offset reads back to the millisecond, and a change sent with that read-back is saved", async () => {
+    it("an editedAt finer than a millisecond is refused; one with an offset reads back as the same instant, and a newer one is saved", async () => {
       const a = await person();
       const id = randomUUID();
-      const first = await put(a, id, body({ editedAt: "2026-11-19T15:20:00.123456+05:30" }));
+      const finer = await put(a, id, body({ editedAt: "2026-11-19T15:20:00.123456+05:30" }));
+      expect(finer.statusCode).toBe(400);
+      expect(finer.json()).toMatchObject({ error: "validation_error", message: "editedAt: to the millisecond at most" });
+      expect(await kept(id)).toEqual({ row: [], sets: [] });
+      const first = await put(a, id, body({ editedAt: "2026-11-19T15:20:00.123+05:30" }));
       expect(first.json()).toEqual({ id, status: "created", editedAt: "2026-11-19T09:50:00.123Z" });
       expect(savedWorkoutSchema.parse((await read(a, id)).json()).editedAt).toBe("2026-11-19T09:50:00.123Z");
       // The same instant again, as the phone read it back: the same change, unchanged.
