@@ -75,3 +75,39 @@ export function centreOf(name: FigureName, muscle: string): { x: number; y: numb
   }
   return n === 0 ? null : { x: sx / n, y: sy / n };
 }
+
+/** Each shape's outline as points, once per figure: every shape is a run of straight lines ("M x y x y … Z"). */
+const OUTLINES = new Map<FigureName, { m: string; points: number[] }[]>();
+function outlines(name: FigureName): { m: string; points: number[] }[] {
+  const known = OUTLINES.get(name);
+  if (known !== undefined) return known;
+  const made = FIGURES[name].map((p) => ({ m: p.m, points: (p.d.match(/-?\d+(?:\.\d+)?/g) ?? []).map(Number) }));
+  OUTLINES.set(name, made);
+  return made;
+}
+
+/** Whether a point lies inside an outline (the even-odd rule: a line from it crosses the outline an odd number of
+ *  times). */
+function inside(points: readonly number[], x: number, y: number): boolean {
+  let hit = false;
+  const n = Math.floor(points.length / 2);
+  for (let i = 0, j = n - 1; i < n; j = i++) {
+    const xi = points[i * 2] ?? 0;
+    const yi = points[i * 2 + 1] ?? 0;
+    const xj = points[j * 2] ?? 0;
+    const yj = points[j * 2 + 1] ?? 0;
+    if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) hit = !hit;
+  }
+  return hit;
+}
+
+/** The muscle drawn at a point of the figure, in the drawing's own pixels; null for no muscle there (the head, a
+ *  hand, a knee, or beside the body). The shape drawn last is the one on top. */
+export function muscleAt(name: FigureName, x: number, y: number): string | null {
+  const shapes = outlines(name);
+  for (let i = shapes.length - 1; i >= 0; i--) {
+    const s = shapes[i];
+    if (s !== undefined && inside(s.points, x, y)) return s.m === "" ? null : s.m;
+  }
+  return null;
+}

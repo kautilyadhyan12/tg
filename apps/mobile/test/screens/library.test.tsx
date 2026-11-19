@@ -6,6 +6,10 @@ import type { OnboardingAnswers } from "@app/shared";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
 import { Paths } from "expo-file-system";
 import { App } from "../../src/App";
+import { Gesture, State } from "react-native-gesture-handler";
+import { fireGestureHandler, getByGestureTestId } from "react-native-gesture-handler/jest-utils";
+import { FIGURES, type FigureName } from "../../src/library/figures";
+import { DOUBLE_TAP_ZOOM, toStage, WHOLE, zoomAbout, type View as Zoom } from "../../src/library/stage";
 import { LIBRARY_PATH } from "../../src/library/store";
 import type { Ask } from "../../src/session/calls";
 import { fakeServer, kept, lost, memoryStore, refusal, tokens, type Reply } from "../kit";
@@ -49,6 +53,27 @@ function libraryServer(opts: { library?: () => Reply; gender?: OnboardingAnswers
     return { ok: reply.status < 300, status: reply.status, json: () => Promise.resolve(reply.body) };
   };
   return { ask, libraryAsks, set: (next: () => Reply) => { library = next; } };
+}
+
+/** A point inside a shape: the middle of the widest run across it, on the row through its middle. */
+function insideOf(d: string): [number, number] {
+  const p = (d.match(/-?\d+/g) ?? []).map(Number);
+  const ys = p.filter((_, i) => i % 2 === 1);
+  const y = (Math.min(...ys) + Math.max(...ys)) / 2 + 0.5;
+  const xs: number[] = [];
+  const n = p.length / 2;
+  for (let i = 0, j = n - 1; i < n; j = i++) {
+    const [xi, yi, xj, yj] = [p[i * 2] ?? 0, p[i * 2 + 1] ?? 0, p[j * 2] ?? 0, p[j * 2 + 1] ?? 0];
+    if (yi > y !== yj > y) xs.push(((xj - xi) * (y - yi)) / (yj - yi) + xi);
+  }
+  xs.sort((a, b) => a - b);
+  let best: [number, number, number] = [0, y, -1];
+  for (let i = 0; i + 1 < xs.length; i += 2) {
+    const a = xs[i] ?? 0;
+    const b = xs[i + 1] ?? 0;
+    if (b - a > best[2]) best = [(a + b) / 2, y, b - a];
+  }
+  return [best[0], best[1]];
 }
 
 const noInternet = (): Reply => {
@@ -174,6 +199,211 @@ describe("the Library", () => {
     expect(screen.queryByRole("button", { name: /^Old Crunch,/ })).toBeNull();
     expect(screen.getByRole("button", { name: /^Copenhagen Plank, Elite,/ })).toBeTruthy();
     expect(screen.getByRole("radio", { name: "Calisthenics" })).toBeTruthy();
+  });
+});
+
+describe("Filters and Find by muscle (63b)", () => {
+  const listed = () => screen.queryAllByRole("button", { name: /^(Barbell Curl|Plank|Squat),/ }).map((c) => String(c.props.accessibilityLabel).split(",")[0]);
+  const openFilters = async () => {
+    await fireEvent.press(await screen.findByRole("button", { name: /^Filters/ }));
+    return screen.findByText("Filters");
+  };
+  const STAGE = { width: 360, height: 560 };
+  /** Gives the body a size, as the phone does when it lays the screen out. */
+  const layOut = async () => {
+    await fireEvent(await screen.findByTestId("muscle-stage"), "layout", { nativeEvent: { layout: { x: 0, y: 0, ...STAGE } } });
+  };
+  const fromCard = async () => {
+    await fireEvent.press(await screen.findByRole("button", { name: "Find by muscle. Tap a muscle on the body." }));
+    await layOut();
+  };
+  /** Where a muscle's shape shows on the stage, with the body as `view` zooms it. */
+  const onStage = (figure: FigureName, muscle: string, view: Zoom = WHOLE) => {
+    const part = FIGURES[figure].find((p) => p.m === muscle);
+    if (part === undefined) throw new Error(`${figure} has no ${muscle}`);
+    const [dx, dy] = insideOf(part.d);
+    return toStage(view, dx, dy, STAGE.width, STAGE.height);
+  };
+  /** A finger's tap on the stage, inside a muscle's shape on the person's figure. */
+  const tapMuscle = (figure: FigureName, muscle: string, id = "muscle-tap", view: Zoom = WHOLE) => {
+    const at = onStage(figure, muscle, view);
+    return act(() => {
+      fireGestureHandler<ReturnType<typeof Gesture.Tap>>(getByGestureTestId(id), [
+        { state: State.BEGAN, x: at.x, y: at.y },
+        { state: State.ACTIVE, x: at.x, y: at.y },
+        { state: State.END, x: at.x, y: at.y },
+      ]);
+    });
+  };
+
+  it("each choice says how many it shows, and Show opens exactly that many: the worst thing is a false count", async () => {
+    await openLibrary(libraryServer({ gender: "male" }).ask);
+    await openFilters();
+    expect(screen.getByRole("checkbox", { name: "Beginner, 1 exercise" })).toBeTruthy();
+    expect(screen.getByRole("checkbox", { name: "Intermediate, 2 exercises" })).toBeTruthy();
+    expect(screen.getByRole("checkbox", { name: "No equipment, 2 exercises" })).toBeTruthy();
+    expect(screen.getByRole("checkbox", { name: "Barbell, 1 exercise" })).toBeTruthy();
+    expect(screen.getByRole("checkbox", { name: "Manual tracking, 3 exercises" })).toBeTruthy();
+    expect(screen.getByRole("checkbox", { name: "Strength, 3 exercises" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Show 3 exercises" })).toBeTruthy();
+
+    await fireEvent.press(screen.getByRole("checkbox", { name: "Intermediate, 2 exercises" }));
+    // The other groups count within it: of the two intermediate exercises, one needs a barbell, one nothing.
+    expect(await screen.findByRole("checkbox", { name: "Barbell, 1 exercise" })).toBeTruthy();
+    expect(screen.getByRole("checkbox", { name: "No equipment, 1 exercise" })).toBeTruthy();
+    await fireEvent.press(screen.getByRole("checkbox", { name: "No equipment, 1 exercise" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Show 1 exercise" }));
+    await waitFor(() => { expect(listed()).toEqual(["Plank"]); });
+    expect(screen.getByText("1 exercise · A to Z")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Filters, 2 on" })).toBeTruthy();
+    // Each choice is a tag on the Library; letting one go widens the list again.
+    await fireEvent.press(screen.getByRole("button", { name: "Remove No equipment" }));
+    await waitFor(() => { expect(listed()).toEqual(["Barbell Curl", "Plank"]); });
+    await fireEvent.press(screen.getByRole("button", { name: "Clear all" }));
+    await waitFor(() => { expect(listed()).toEqual(["Barbell Curl", "Plank", "Squat"]); });
+  });
+
+  it("a tap picks the exact muscle and the same tap lets it go; its exercises show at once, and Show in Library keeps it", async () => {
+    await openLibrary(libraryServer({ gender: "male" }).ask);
+    await fromCard();
+    // No panel until a muscle is picked: a line over the body says what to do (Kd at the click-through).
+    expect(screen.getByText("Pinch to zoom · tap a muscle")).toBeTruthy();
+    expect(screen.queryByTestId("muscle-panel")).toBeNull();
+    await tapMuscle("male-front", "biceps");
+    expect(screen.getByTestId("muscle-panel")).toBeTruthy();
+    expect(screen.queryByText("Pinch to zoom · tap a muscle")).toBeNull();
+    expect(await screen.findByRole("button", { name: "Barbell Curl, Primary · Intermediate · 3 × 10 reps" })).toBeTruthy();
+    expect(screen.getByText("1 exercise")).toBeTruthy();
+    await tapMuscle("male-front", "biceps");
+    expect(await screen.findByText("Tap a muscle to see its exercises")).toBeTruthy();
+    expect(screen.queryByTestId("muscle-panel")).toBeNull();
+    // Not the whole thigh: the vastus lateralis alone, under its group's name.
+    await tapMuscle("male-front", "vastus_lateralis");
+    expect(await screen.findByText("Vastus lateralis")).toBeTruthy();
+    expect(screen.getByText("Quadriceps")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Squat, Primary · Beginner · 3 × 12 reps" })).toBeTruthy();
+    // A muscle no exercise works yet can still be tapped, and says so.
+    await tapMuscle("male-front", "upper_chest");
+    expect(await screen.findByText("No exercises for this muscle yet.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Show in Library" })).toBeNull();
+    await tapMuscle("male-front", "vastus_lateralis");
+    await fireEvent.press(await screen.findByRole("button", { name: "Show in Library" }));
+    await waitFor(() => { expect(listed()).toEqual(["Squat"]); });
+    expect(screen.getByRole("button", { name: "Remove Vastus lateralis" })).toBeTruthy();
+  });
+
+  it("the person's own figure only; the back has its own muscles; an exercise opens over the body", async () => {
+    await openLibrary(libraryServer({ gender: "female" }).ask);
+    await fromCard();
+    expect(screen.getAllByTestId("figure-female-front").length).toBeGreaterThan(0);
+    expect(screen.queryAllByTestId("figure-male-front")).toHaveLength(0);
+    await fireEvent.press(screen.getByRole("button", { name: "Back" }));
+    await layOut();
+    await tapMuscle("female-back", "biceps_femoris");
+    expect(await screen.findByText("Biceps femoris")).toBeTruthy();
+    expect(screen.getByText("Hamstrings")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "Squat, Secondary · Beginner · 3 × 12 reps" }));
+    expect(await screen.findByLabelText("To start, 3 sets of 12 reps")).toBeTruthy();
+  });
+
+  it("a double tap zooms without picking, and Fit body puts it back", async () => {
+    await openLibrary(libraryServer({ gender: "male" }).ask);
+    await fromCard();
+    // A window of its own on Android: without its own gesture root the screen fails there (found on the phone).
+    expect(within(screen.getByTestId("muscle-gesture-root")).getByTestId("muscle-stage")).toBeTruthy();
+    // A single tap waits until a double tap has failed, and neither is a tap once the finger moves (round one's T1, T2).
+    const tap = getByGestureTestId("muscle-tap");
+    const doubleTap = getByGestureTestId("muscle-double-tap");
+    expect(tap.config.requireToFail ?? []).toContain(doubleTap.handlerTag);
+    expect(tap.config).toMatchObject({ maxDist: 10 });
+    expect(doubleTap.config).toMatchObject({ maxDist: 10 });
+    await tapMuscle("male-front", "abs", "muscle-double-tap");
+    expect(await screen.findByRole("button", { name: "Fit body" })).toBeTruthy();
+    expect(screen.getByText("Tap a muscle to see its exercises")).toBeTruthy();
+    expect(screen.queryByTestId("muscle-panel")).toBeNull();
+    // Zoomed, a tap is read where the muscle now shows (round one's T3).
+    const at = onStage("male-front", "abs");
+    const zoomed = zoomAbout(WHOLE, DOUBLE_TAP_ZOOM, at.x, at.y, STAGE.width, STAGE.height);
+    await tapMuscle("male-front", "obliques", "muscle-tap", zoomed);
+    expect(await screen.findByText("Obliques")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Plank, Secondary · Intermediate · 3 × 30 s" })).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "Fit body" }));
+    await waitFor(() => { expect(screen.queryByRole("button", { name: "Fit body" })).toBeNull(); });
+  });
+
+  it("Filters' Muscle opens the body; the muscle picked there is counted with the rest", async () => {
+    await openLibrary(libraryServer({ gender: "male" }).ask);
+    await openFilters();
+    await fireEvent.press(screen.getByRole("button", { name: "Muscle, any. Choose on the body." }));
+    await layOut();
+    await tapMuscle("male-front", "biceps");
+    // Choosing for Filters: the exercises are listed, not opened.
+    expect(await screen.findByLabelText("Barbell Curl, Primary · Intermediate · 3 × 10 reps")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "Use this muscle" }));
+    expect(await screen.findByRole("button", { name: "Muscle, Biceps. Change on the body." })).toBeTruthy();
+    expect(screen.getByRole("checkbox", { name: "Barbell, 1 exercise" })).toBeTruthy();
+    expect(screen.getByRole("checkbox", { name: "No equipment, 0 exercises" })).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "Show 1 exercise" }));
+    await waitFor(() => { expect(listed()).toEqual(["Barbell Curl"]); });
+    expect(screen.getByRole("button", { name: "Remove Biceps" })).toBeTruthy();
+  });
+
+  it("the ✕ leaves the Library as it was; Clear all empties the choices", async () => {
+    await openLibrary(libraryServer({ gender: "male" }).ask);
+    await openFilters();
+    await fireEvent.press(screen.getByRole("checkbox", { name: "Beginner, 1 exercise" }));
+    expect(await screen.findByRole("button", { name: "Show 1 exercise" })).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "Clear all" }));
+    expect(await screen.findByRole("button", { name: "Show 3 exercises" })).toBeTruthy();
+    await fireEvent.press(screen.getByRole("checkbox", { name: "Beginner, 1 exercise" }));
+    await fireEvent.press(screen.getByRole("button", { name: "Close" }));
+    await waitFor(() => { expect(listed()).toEqual(["Barbell Curl", "Plank", "Squat"]); });
+    expect(screen.getByRole("button", { name: "Filters" })).toBeTruthy();
+  });
+
+  it("a choice a search has hidden still shows, lit, to be let go; the Library says the filters hide the match, not the word", async () => {
+    await openLibrary(libraryServer({ gender: "male" }).ask);
+    await openFilters();
+    await fireEvent.press(screen.getByRole("checkbox", { name: "Barbell, 1 exercise" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Show 1 exercise" }));
+    await fireEvent.changeText(await screen.findByPlaceholderText("Search exercises"), "plank");
+    // The Plank matches "plank": it is Barbell that hides it.
+    expect(await screen.findByText("No exercises match these filters")).toBeTruthy();
+    expect(screen.queryByText("No exercises match “plank”")).toBeNull();
+    await openFilters();
+    const barbell = screen.getByRole("checkbox", { name: "Barbell, 0 exercises" });
+    expect(barbell.props.accessibilityState).toMatchObject({ checked: true, disabled: false });
+    await fireEvent.press(barbell);
+    expect(await screen.findByRole("button", { name: "Show 1 exercise" })).toBeTruthy();
+  });
+
+  it("a lit kind chip on the Library lets its kind go", async () => {
+    await openLibrary(libraryServer({ gender: "male" }).ask);
+    await fireEvent.press(await screen.findByRole("radio", { name: "Strength" }));
+    expect(screen.getByRole("radio", { name: "Strength" }).props.accessibilityState).toMatchObject({ selected: true });
+    await fireEvent.press(screen.getByRole("radio", { name: "Strength" }));
+    expect(screen.getByRole("radio", { name: "All" }).props.accessibilityState).toMatchObject({ selected: true });
+  });
+
+  it("its numbers count within the search, and the kind chips and its Kind are one choice", async () => {
+    await openLibrary(libraryServer({ gender: "male" }).ask);
+    await fireEvent.changeText(await screen.findByPlaceholderText("Search exercises"), "plank");
+    await openFilters();
+    expect(screen.getByRole("button", { name: "Show 1 exercise" })).toBeTruthy();
+    expect(screen.getByRole("checkbox", { name: "Intermediate, 1 exercise" })).toBeTruthy();
+    expect(screen.queryByRole("checkbox", { name: /^Beginner/ })).toBeNull();
+    await fireEvent.press(screen.getByRole("button", { name: "Close" }));
+    await fireEvent.changeText(screen.getByPlaceholderText("Search exercises"), "");
+    await fireEvent.press(await screen.findByRole("radio", { name: "Strength" }));
+    await openFilters();
+    expect(screen.getByRole("checkbox", { name: "Strength, 3 exercises" }).props.accessibilityState).toMatchObject({ checked: true });
+  });
+
+  it("the Find by muscle card is not shown while searching", async () => {
+    await openLibrary(libraryServer({ gender: "male" }).ask);
+    expect(await screen.findByRole("button", { name: "Find by muscle. Tap a muscle on the body." })).toBeTruthy();
+    await fireEvent.changeText(screen.getByPlaceholderText("Search exercises"), "squat");
+    await waitFor(() => { expect(screen.queryByRole("button", { name: /^Find by muscle/ })).toBeNull(); });
   });
 });
 
