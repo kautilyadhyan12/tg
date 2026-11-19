@@ -72,6 +72,10 @@ export const DIRECT_DELETE_TABLES = [
   // meal_removed_ids' footing: their own record, deleted and exported.
   "body_measurement_removed_ids",
   "workout_templates",
+  // A person's saved workouts, and the ids of the ones they deleted (migration 0245, ROADMAP Stage 5
+  // 61c), on meal_removed_ids' footing: their own, deleted and exported. Their sets go by cascade, below.
+  "saved_workouts",
+  "saved_workout_removed_ids",
   "workouts", // §5.2 "workouts(+sets CASCADE)" — sets go by cascade, see below
   "user_achievements",
   "streaks",
@@ -179,10 +183,12 @@ export const DIRECT_DELETE_TABLES = [
  *  denormalised one, which is exactly why deleting by it is a bug — F6).
  *  Verified against the migrations 2026-07-22 / probed 2026-07-23:
  *    meal_log_corrections.meal_log_id -> meal_logs      ON DELETE cascade
- *    workout_sets.workout_id          -> workouts        ON DELETE cascade */
+ *    workout_sets.workout_id          -> workouts        ON DELETE cascade
+ *    saved_workout_sets.saved_workout_id -> saved_workouts ON DELETE cascade (0245, no user_id at all) */
 export const CASCADE_COLLECTED_TABLES = [
   "meal_log_corrections",
   "workout_sets",
+  "saved_workout_sets",
 ] as const;
 
 /** Deleted by the person's EMAIL ADDRESS, not their id — tables with no

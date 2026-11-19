@@ -12,6 +12,8 @@ export const PAST_PAYMENT_DUE_SHOW = 'past-payment-due';
 export const AGREEMENT_NOT_SIGNED_SHOW = 'agreement-not-signed';
 /** Members opened showing who pays for a membership that renews and has no card on file (18d-vii). */
 export const NO_CARD_SHOW = 'no-card';
+/** Members opened on past members (search's "See all past members", V1-e-ii). */
+export const PAST_SHOW = 'past';
 
 const n = (count) => count.toLocaleString('en');
 

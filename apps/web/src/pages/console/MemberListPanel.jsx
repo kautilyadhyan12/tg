@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AGREEMENT_NOT_SIGNED_SHOW, NO_CARD_SHOW, PAST_PAYMENT_DUE_SHOW, PAYMENT_DUE_SHOW } from './weekView';
+import { AGREEMENT_NOT_SIGNED_SHOW, NO_CARD_SHOW, PAST_PAYMENT_DUE_SHOW, PAST_SHOW, PAYMENT_DUE_SHOW } from './weekView';
 import { Link, useParams } from 'react-router-dom';
 import { AlertTriangle, Check, ChevronRight, CreditCard, Download, ListChecks, Loader2, Mail, MessageSquare, Minus, Search, SlidersHorizontal, Tag, Trash2, Upload, UserMinus, UserPlus, Utensils, X } from 'lucide-react';
 import { HELD_PAYMENT_WORDS, MEMBER_APP_FILTER_WORDS, MEMBER_LIST_QUERY_MAX_CHARS, MEMBER_LIST_TICKED_MAX } from '@app/shared';
@@ -398,6 +398,7 @@ function startFilters(show) {
   if (show === PAST_PAYMENT_DUE_SHOW) return { ...EMPTY_FILTERS, records: 'former', paymentStatus: [HELD_PAYMENT_WORDS.due] };
   if (show === AGREEMENT_NOT_SIGNED_SHOW) return { ...EMPTY_FILTERS, agreementNotSigned: true };
   if (show === NO_CARD_SHOW) return { ...EMPTY_FILTERS, noCard: true };
+  if (show === PAST_SHOW) return { ...EMPTY_FILTERS, records: 'former' };
   return EMPTY_FILTERS;
 }
 
@@ -420,6 +421,8 @@ export default function MemberListPanel({
   onStartTaken = () => undefined,
   startPerson = null,
   onStartPersonTaken = () => undefined,
+  startSearch = null,
+  onStartSearchTaken = () => undefined,
 }) {
   const [list, setList] = useState(null);
   const [listError, setListError] = useState(null);
@@ -434,6 +437,12 @@ export default function MemberListPanel({
     onStartTaken();
   }, [onStartTaken]);
   const [typed, setTyped] = useState('');
+  // "See all in Members" from search (`?search=`): the same words in this list's box, once.
+  useEffect(() => {
+    if (startSearch === null) return;
+    setTyped(startSearch);
+    onStartSearchTaken();
+  }, [startSearch, onStartSearchTaken]);
   const [page, setPage] = useState({ loading: true, error: null, entries: [], total: 0, cursor: null });
   const [loadingMore, setLoadingMore] = useState(false);
   const [tick, setTick] = useState(0);

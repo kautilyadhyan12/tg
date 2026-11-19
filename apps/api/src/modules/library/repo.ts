@@ -25,13 +25,14 @@ export async function publishedRows(tx: TransactionSql): Promise<PublishedRow[]>
   return rows.map((r) => ({ exerciseId: r.exercise_id, slug: r.slug, status: r.status, old: r.old, entry: r.entry }));
 }
 
-/** Of these exercises, the ones a saved set names: one index lookup for each (workout_sets'
- *  exercise index), never a read of every set. */
+/** Of these exercises, the ones a saved set or a saved workout names (job 61c): index lookups for each
+ *  (workout_sets' and saved_workout_sets' exercise indexes), never a read of every set. */
 export async function namedBySavedSets(tx: TransactionSql, exerciseIds: readonly string[]): Promise<Set<string>> {
   if (exerciseIds.length === 0) return new Set();
   const rows = await tx<{ id: string }[]>`
     SELECT x.id FROM unnest(${[...exerciseIds]}::uuid[]) AS x(id)
-    WHERE EXISTS (SELECT 1 FROM workout_sets s WHERE s.exercise_id = x.id)`;
+    WHERE EXISTS (SELECT 1 FROM workout_sets s WHERE s.exercise_id = x.id)
+       OR EXISTS (SELECT 1 FROM saved_workout_sets p WHERE p.exercise_id = x.id)`;
   return new Set(rows.map((r) => r.id));
 }
 

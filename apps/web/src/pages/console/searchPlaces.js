@@ -8,7 +8,7 @@ import { memberContactTitle } from './memberContactView';
 // SEARCH, IN THE BAR ACROSS THE TOP (spec Part 3 §17.11, V1-e-i): every page, tab, action and
 // Settings section, each with the words people type for it. A page comes from the menu itself
 // and every other line from `consolePlaces.js`, so search offers only what this person's menu
-// and buttons already would. People join it in V1-e-ii.
+// and buttons already would. People come from the server (`searchPeople.js`, V1-e-ii).
 
 /** The groups results come in, in their order. */
 export const SEARCH_GROUPS = [
@@ -265,12 +265,6 @@ export function writeRecent(storage, orgSlug, key) {
   } catch {
     // Not kept: search still works, with no Recent.
   }
-}
-
-/** The words in the search box, by the business's own word for its people once people join
- *  search; until then, what it finds. */
-export function searchPlaceholder() {
-  return 'Search pages or actions';
 }
 
 /** The keys that open search: Ctrl K, or ⌘K on a Mac. */

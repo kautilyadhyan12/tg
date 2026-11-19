@@ -134,7 +134,7 @@ d("DPDP Day-14 purge (real Postgres)", () => {
   async function makeUser(
     email: string,
     deletedDaysAgo: number | null,
-  ): Promise<{ userId: string; mealCorrectionId: string }> {
+  ): Promise<{ userId: string; mealCorrectionId: string; savedWorkoutId: string }> {
     const deletedAt = deletedDaysAgo === null ? null : new Date(Date.now() - deletedDaysAgo * DAY_MS);
     const status = deletedDaysAgo === null ? "active" : "deleted";
     const rows = await sql<{ id: string }[]>`
@@ -230,6 +230,12 @@ d("DPDP Day-14 purge (real Postgres)", () => {
               VALUES (${workoutId}, ${userId}, ${exerciseId}, now(), 0, 60000, '1.0.0', 1)`;
     await sql`INSERT INTO workout_templates (user_id, name, items)
               VALUES (${userId}, 'Fixture template', ${sql.json([])})`;
+    // A saved workout with one set, and a deleted one's id (61c). Its set has no user_id: checked by its parent's id.
+    const savedWorkoutId = randomUUID();
+    await sql`INSERT INTO saved_workouts (id, user_id, name, edited_at) VALUES (${savedWorkoutId}, ${userId}, 'Fixture saved', now())`;
+    await sql`INSERT INTO saved_workout_sets (saved_workout_id, exercise_place, set_place, exercise_id, measured_in, target)
+              VALUES (${savedWorkoutId}, 0, 0, ${exerciseId}, 'reps', 12)`;
+    await sql`INSERT INTO saved_workout_removed_ids (id, user_id) VALUES (gen_random_uuid(), ${userId})`;
     await sql`INSERT INTO body_measurements (user_id, measured_at, weight_kg)
               VALUES (${userId}, now(), 72.50)`;
     const meal = await sql<{ id: string }[]>`
@@ -280,6 +286,7 @@ d("DPDP Day-14 purge (real Postgres)", () => {
     return {
       userId,
       mealCorrectionId: corr[0]?.id ?? "",
+      savedWorkoutId,
     };
   }
 
@@ -441,6 +448,9 @@ d("DPDP Day-14 purge (real Postgres)", () => {
     const corr = await sql<{ n: number }[]>`
       SELECT count(*)::int AS n FROM meal_log_corrections WHERE id = ${u.mealCorrectionId}`;
     expect({ corrections: corr[0]?.n }).toEqual({ corrections: 0 });
+    const savedSets = await sql<{ n: number }[]>`
+      SELECT count(*)::int AS n FROM saved_workout_sets WHERE saved_workout_id = ${u.savedWorkoutId}`;
+    expect({ savedSets: savedSets[0]?.n }).toEqual({ savedSets: 0 });
 
     // Guard: the assertion above must cover the whole compliance list.
     expect(PII_TABLES.length).toBe(DIRECT_DELETE_TABLES.length + CASCADE_COLLECTED_TABLES.length);
@@ -527,6 +537,9 @@ d("DPDP Day-14 purge (real Postgres)", () => {
     const corr = await sql<{ n: number }[]>`
       SELECT count(*)::int AS n FROM meal_log_corrections WHERE id = ${bystander.mealCorrectionId}`;
     expect(corr[0]?.n).toBe(1);
+    const savedSets = await sql<{ n: number }[]>`
+      SELECT count(*)::int AS n FROM saved_workout_sets WHERE saved_workout_id = ${bystander.savedWorkoutId}`;
+    expect(savedSets[0]?.n).toBe(1);
     const still = (
       await sql<{ email: string | null }[]>`SELECT email FROM users WHERE id = ${bystander.userId}`
     )[0];

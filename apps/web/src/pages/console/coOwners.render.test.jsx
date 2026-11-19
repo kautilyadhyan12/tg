@@ -350,3 +350,30 @@ describe("the person asked, on Overview", () => {
     expect(box.getByRole('button', { name: 'Accept' })).toBeTruthy();
   });
 });
+
+describe('opened from search (V1-e-ii)', () => {
+  const draw = (address) =>
+    render(
+      <MemoryRouter initialEntries={[address]}>
+        <Routes>
+          <Route path="/console/:orgSlug/members" element={<Members />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+  const ZOE_ID = '44444444-4444-4444-8444-444444444444';
+
+  it('a staff member picked in search ("?staff=") opens their panel on the Staff tab', async () => {
+    const ZOE = person({ userId: ZOE_ID, displayName: 'Zoë Lambert', role: 'manager' });
+    orgService.getStaff.mockResolvedValue({ data: { staff: staffAs('u1', [OWNER, ZOE]) } });
+    draw(`/console/iron-house/members?view=staff&staff=${ZOE_ID}`);
+    expect(await screen.findByRole('dialog', { name: 'Zoë Lambert' })).toBeTruthy();
+  });
+
+  it('"See all in Members" ("?search=") fills the list\'s search box and asks the list for it', async () => {
+    orgService.getMemberList.mockResolvedValue({
+      data: { list: { hasList: true, version: 1, lastConfirmedAt: '2026-11-01T09:00:00.000Z', counts: { entries: 1, inApp: 0, canBeInvited: 0, noEmail: 0, former: 0 }, statuses: [], membershipTypes: [], paymentStatuses: [], fields: [], appWords: [] } },
+    });
+    draw('/console/iron-house/members?search=sam');
+    await waitFor(() => expect(orgService.getMemberListEntries).toHaveBeenLastCalledWith(ORG.id, expect.stringContaining('query=sam')));
+  });
+});
