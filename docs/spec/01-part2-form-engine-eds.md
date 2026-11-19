@@ -1860,7 +1860,7 @@ standing remembered; a
 lower one is taken only once held for a second, so a slow descent never becomes the new standing; a repeated frame
 decides nothing; at the end of a set a rep counts only once back up for 0.3 s (on Kd's four squat-jump videos the feet
 leave the floor from 0.17 s before to 0.2 s after the hips are three quarters up, in 18 take-offs of 19). `MovementMatcher`
-(`packages/movement/src/movement`) is pure, about 12 microseconds a frame in the middle and 41 at most on the laptop.
+(`packages/movement/src/movement`) is pure, about 22 microseconds a frame in the middle and 60 at most on the laptop (measured after round one).
 **The numbers** are set by `movement-check` from eight people (Kd's folder `D:\exercise video collection`, 2026-11-19,
 and his reference squat), from the reps counted by eye (the deepest dips of each video, as many as were counted): a count
 rule a quarter of the way back towards standing from the shallowest rep; a match rule beyond the furthest rep by half its

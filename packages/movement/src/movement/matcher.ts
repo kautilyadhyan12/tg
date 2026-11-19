@@ -485,7 +485,8 @@ export class MovementMatcher {
     const d = this.flatDown;
     const size = rep.standing.size;
     if (d === null || !(size > 0)) return null;
-    const times = rep.samples.map((s) => s.t);
+    // The rep's frame step from its last ten frames: the same cost on every frame, however long the rep.
+    const times = rep.samples.slice(-10).map((s) => s.t);
     const steps = times.slice(1).map((x, k) => x - (times[k] ?? x));
     const longest = Math.max(this.limits.gap, 1.5 * (median(steps) ?? 0));
     // Each foot point's rise above its own lowest place in this rep, forgotten only after a hide longer than a gap.
