@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Leads: your gym page</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./kit3.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0;background:#0A0908}
+.cap{display:flex;align-items:center;gap:10px;font-weight:600;color:var(--t2)}
+.num{width:26px;height:26px;border-radius:999px;background:var(--o-fill);color:var(--o-t);box-shadow:inset 0 0 0 1px var(--o-line);display:grid;place-items:center;font-size:13px;font-weight:700;flex:none}
+.stage{background:var(--scrim);border-radius:18px;padding:32px 16px;display:flex;justify-content:center}
+.dlg{background:var(--solid);border:1px solid var(--line2);border-radius:20px;box-shadow:var(--pop);width:100%;max-width:500px;min-width:0}
+.side{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,440px);border:1px solid var(--line);border-radius:18px;overflow:hidden}
+.side > .under{padding:20px;opacity:.6;overflow:hidden;min-width:0}
+.side > .sheet{background:var(--solid);border-left:1px solid var(--line2);display:flex;flex-direction:column;min-width:0}
+.sheet-h{display:flex;align-items:center;gap:12px;padding:18px 20px;border-bottom:1px solid var(--line)}
+.sheet-b{padding:20px;display:flex;flex-direction:column;gap:18px}
+.sheet-f{margin-top:auto;display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:14px 20px;border-top:1px solid var(--line)}
+.opt{display:flex;gap:12px;align-items:flex-start;padding:14px 16px;border-radius:14px;border:1px solid var(--line2)}
+.opt-on{border-color:var(--o);background:var(--o-fill)}
+.radio{width:18px;height:18px;border-radius:999px;border:1.5px solid var(--line2);flex:none;margin-top:1px}
+.radio-on{border:5px solid var(--o)}
+.check-on{background:var(--o);border-color:var(--o);position:relative}
+.check-on::after{content:"";position:absolute;left:5px;top:1px;width:5px;height:10px;border:solid var(--on-o);border-width:0 2px 2px 0;transform:rotate(45deg)}
+.sw{width:40px;height:24px;border-radius:999px;background:var(--bar);position:relative;flex:none}
+.sw::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:999px;background:var(--t3)}
+.sw-on{background:var(--o)}.sw-on::after{left:19px;background:var(--on-o)}
+.step{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,340px);gap:20px;align-items:start}
+.menu{background:var(--solid);border:1px solid var(--line2);border-radius:16px;box-shadow:var(--pop);padding:6px;min-width:0;max-width:320px}
+.mi{display:flex;gap:12px;align-items:flex-start;padding:10px 12px;border-radius:10px}
+.ptile{display:flex;flex-direction:column;gap:4px;padding:14px;border-radius:14px;border:1px solid var(--line2);min-width:0}
+.ptile-on{border-color:var(--o);background:var(--o-fill)}
+.pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.qty{display:inline-flex;align-items:center;border:1px solid var(--line2);border-radius:999px;height:40px}
+.qty > button{width:40px;height:40px;display:grid;place-items:center;color:var(--t2)}
+.money{font-weight:600;white-space:nowrap}
+.frames{display:flex;flex-wrap:wrap;gap:40px;padding:40px;align-items:flex-start}
+.frame{width:390px;max-width:100%;border:1px solid var(--line2);border-radius:28px;overflow:hidden;background:var(--page);display:flex;flex-direction:column;position:relative}
+.bsheet{background:var(--solid);border-top:1px solid var(--line2);border-radius:22px 22px 0 0;box-shadow:var(--pop);display:flex;flex-direction:column}
+.grab{width:40px;height:5px;border-radius:999px;background:var(--line2);margin:10px auto 4px}
+.savebar{position:sticky;bottom:12px;z-index:2;display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 16px;background:var(--solid);border:1px solid var(--line2);border-radius:18px}
+.footbar{position:sticky;bottom:0;padding:12px 16px 16px;border-top:1px solid var(--line);background:var(--solid);display:flex;flex-direction:column;gap:8px}
+@media (max-width:1180px){.side{grid-template-columns:minmax(0,1fr)}.side > .under{display:none}.side > .sheet{border-left:0}}
+@media (max-width:900px){.step{grid-template-columns:minmax(0,1fr)}.frames{padding:16px;gap:24px}}
+@media (pointer:coarse){.qty,.qty > button{height:44px}.qty > button{width:44px}}
+.ticks{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,190px),1fr));gap:8px}.tk{display:flex;align-items:center;gap:10px;min-height:40px;padding:6px 12px;border-radius:12px;border:1px solid var(--line2)}.tk-on{border-color:var(--o-line);background:var(--o-fill)}.photos{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,150px),1fr));gap:10px}.ph{display:flex;flex-direction:column;gap:8px}.pic{aspect-ratio:4/3;border-radius:14px;background:var(--box2);border:1px solid var(--line2);display:grid;place-items:center;color:var(--t3);position:relative}.pic .tag{position:absolute;left:8px;top:8px}.code{font-family:ui-monospace,Consolas,monospace;font-size:14px;line-height:20px;white-space:pre-wrap;word-break:break-all;padding:12px 14px;border-radius:12px;background:var(--field);border:1px solid var(--field-line);color:var(--t2)}.side > .sheet{max-width:none}.side{grid-template-columns:minmax(0,1fr) minmax(0,560px)}@media (max-width:1180px){.side{grid-template-columns:minmax(0,1fr)}}.col > span{overflow-wrap:anywhere}
+</style>
+</helmet>
+<div class="app t-dark {{look}}" style="min-height: 100%">
+<div class="shell">
+
+<nav class="rail" aria-label="Menu">
+<a href="#" class="gym"><span class="logo"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18zM6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2M10 6h4M10 10h4M10 14h4M10 18h4"></path></svg></span><span class="col grow"><span class="w6 ell">Iron House</span><span class="s12 t3">Austin · Gym</span></span><svg class="ic ic-s t3" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 15l5 5 5-5M7 9l5-5 5 5"></path></svg></a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3h5a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM15 3h5a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM15 12h5a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1zM4 16h5a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1z"></path></svg>Overview<span class="n n-bad">6</span></a>
+<div class="grp">Today<svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 2h6a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1zM16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2M9 14l2 2 4-4"></path></svg>Attendance</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 7.5V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3.5M16 2v4M8 2v4M3 10h5M10 16a6 6 0 1 0 12 0a6 6 0 1 0-12 0M16 14v2.2l1.5 1.3"></path></svg>Classes</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 6.5l11 11M21 21l-1-1M3 3l1 1M18 22l4-4M2 6l4-4M3 10l7-7M14 21l7-7"></path></svg>Personal training</a>
+<div class="grp">People<svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M5 7a4 4 0 1 0 8 0a4 4 0 1 0-8 0M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"></path></svg>Members &amp; staff</a>
+<a href="#" class="ni ni-on"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 7a4 4 0 1 0 8 0a4 4 0 1 0-8 0M10.3 15H7a4 4 0 0 0-4 4v2M14 17a3 3 0 1 0 6 0a3 3 0 1 0-6 0M21 21l-1.9-1.9"></path></svg>Leads<span class="n">5</span></a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 17l-8.5-8.5-5 5L2 7M16 17h6v-6"></path></svg>At risk<span class="n n-warn">2</span></a>
+<div class="grp">Money<svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6a2 2 0 0 1 2-2h12v4M3 6v12a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2H5a2 2 0 0 1-2-2zM17 14h.01"></path></svg>Payments overview</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4zM3 6h18M16 10a4 4 0 0 1-8 0"></path></svg>Sell</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12.6 2.6A2 2 0 0 0 11.2 2H4a2 2 0 0 0-2 2v7.2a2 2 0 0 0 .6 1.4l8.7 8.7a2.4 2.4 0 0 0 3.4 0l6.6-6.6a2.4 2.4 0 0 0 0-3.4zM7 7.5h.01"></path></svg>Memberships</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2zM2 10h20"></path></svg>Failed payments<span class="n n-bad">3</span></a>
+<div class="grp">Community<svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l18-5v12L3 14zM11.6 16.8a3 3 0 1 1-5.8-1.6"></path></svg>Updates<span class="n n-warn">1</span></a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM16 2v4M8 2v4M3 10h18"></path></svg>Events</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 2h6a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1zM16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2M12 11h4M12 16h4M8 11h.01M8 16h.01"></path></svg>Fitness plans</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M8.2 10.2L5 3h14l-3.2 7.2M6 15a6 6 0 1 0 12 0a6 6 0 1 0-12 0"></path></svg>Challenges</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6M18 9h1.5a2.5 2.5 0 0 0 0-5H18M4 22h16M10 14.7V17c0 .6-.5 1-1 1.2-1.2.5-2 2-2 3.8M14 14.7V17c0 .6.5 1 1 1.2 1.2.5 2 2 2 3.8M18 2H6v7a6 6 0 0 0 12 0z"></path></svg>Leaderboard</a>
+<div class="grp">Manage<svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3v18h18M8 17V9M13 17V5M18 17v-3"></path></svg>Reports</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M2 14h4M10 8h4M18 16h4"></path></svg>Settings</a>
+<a href="#" class="me"><span class="av">DB</span><span class="col grow"><span class="w6 s13 ell">Dana Brooks</span><span class="s12 t3">Owner</span></span><svg class="ic ic-s t3" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 15l5 5 5-5M7 9l5-5 5 5"></path></svg></a>
+</nav>
+
+<div class="work">
+<header class="top" style="position: relative">
+<button type="button" class="find"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11a7 7 0 1 0 14 0a7 7 0 1 0-14 0M21 21l-4.3-4.3"></path></svg><span class="grow ell">Search members, pages or actions</span><span class="kbd">Ctrl K</span></button>
+<span class="grow"></span>
+<button type="button" class="btn btn-soft"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>New</button>
+<button type="button" class="ibtn" aria-label="6 items need attention"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 0 0 3.4 0"></path></svg><span class="pip">6</span></button>
+</header>
+
+<main class="page" style="position: relative">
+<div class="between wrap">
+<div class="col g6" style="flex: 1 1 360px; min-width: 0"><span class="eyebrow">People</span><h1 class="h1">Leads</h1><span class="t2">Your gym page opens from the right, over the leads.</span></div>
+</div>
+
+<div class="side">
+<div class="under col g10">
+<div class="hrow g8 wrap"><span class="btn btn-s"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"></path></svg>Your gym page</span><span class="btn btn-s"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M12 18v-6M9 15l3-3 3 3"></path></svg>Import leads</span></div>
+<div class="row" style="padding-left: 0"><span class="col grow"><span class="w6">Kavya Rao</span><span class="t3">Website · Today</span></span></div>
+<div class="row" style="padding-left: 0"><span class="col grow"><span class="w6">Harsh Vora</span><span class="t3">A friend · Today</span></span></div>
+</div>
+<aside class="sheet" aria-label="Your gym page">
+<div class="sheet-h"><div class="col grow" style="min-width: 0"><h2 class="h2">Your gym page</h2><span class="t3">A page anyone can open from your link. People who send its form are added to your leads.</span></div><button type="button" class="ibtn" aria-label="Close"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"></path></svg></button></div>
+<div class="sheet-b">
+<div class="opt opt-on"><span class="check check-on"></span><span class="col g4 grow"><span class="w6">Show my page</span><span class="t3">Anyone with the link can see it and send you a message.</span></span></div>
+
+<div class="field"><span class="label">Link to your page</span><div class="hrow g8 wrap"><div class="input grow" style="min-width: 200px"><span class="grow">kwazo.app/gyms/iron-house</span></div><button type="button" class="btn btn-s btn-sm"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 9h13v13H9zM5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>Copy link</button><a href="#" class="btn btn-q btn-sm"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 3h6v6M10 14L21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path></svg>Open</a></div><span class="t3">Put it in your Instagram bio, a WhatsApp message or on your website.</span></div>
+
+<div class="field"><span class="label">About us</span><div class="input" style="min-height: 112px; align-items: flex-start; padding-top: 12px"><span class="grow">Strength and conditioning in East Austin. Coached classes every morning and evening, a full free-weights floor, and personal training.</span></div><span class="t3">139 of 1,000 characters</span></div>
+
+<div class="field"><span class="label">Photos</span><span class="t3">Show people your gym: the floor, the equipment, the changing rooms. The main photo is the big one at the top of your page. Tap a photo to see it full size.</span>
+<div class="photos">
+<div class="ph"><div class="pic" aria-label="Photo 1 of 3, the main photo"><span class="tag tag-o">Main photo</span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3h18v18H3zM8.5 7a1.5 1.5 0 1 0 0 3a1.5 1.5 0 1 0 0-3M21 15l-5-5L5 21"></path></svg></div><button type="button" class="btn btn-q btn-sm"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"></path></svg>Remove</button></div>
+<div class="ph"><div class="pic" aria-label="Photo 2 of 3"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3h18v18H3zM8.5 7a1.5 1.5 0 1 0 0 3a1.5 1.5 0 1 0 0-3M21 15l-5-5L5 21"></path></svg></div><div class="hrow g4 wrap"><button type="button" class="btn btn-q btn-sm">Make main photo</button><button type="button" class="btn btn-q btn-sm"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"></path></svg>Remove</button></div></div>
+<div class="ph"><div class="pic" aria-label="Photo 3 of 3"><span class="tag tag-plain">Not saved</span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3h18v18H3zM8.5 7a1.5 1.5 0 1 0 0 3a1.5 1.5 0 1 0 0-3M21 15l-5-5L5 21"></path></svg></div><div class="hrow g4 wrap"><button type="button" class="btn btn-q btn-sm">Make main photo</button><button type="button" class="btn btn-q btn-sm"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"></path></svg>Remove</button></div></div>
+</div>
+<div class="hrow g10 wrap"><button type="button" class="btn btn-s btn-sm"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3h18v18H3zM8.5 7a1.5 1.5 0 1 0 0 3a1.5 1.5 0 1 0 0-3M21 15l-5-5L5 21"></path></svg>Add photos</button><span class="t3">3 of 10 photos</span></div></div>
+
+<div class="field"><span class="label">Facilities</span>
+<div class="ticks" role="group" aria-label="Facilities">
+<span class="tk tk-on"><span class="check check-on"></span>Free weights</span><span class="tk tk-on"><span class="check check-on"></span>Weight machines</span><span class="tk tk-on"><span class="check check-on"></span>Cardio machines</span><span class="tk"><span class="check"></span>Functional training area</span><span class="tk tk-on"><span class="check check-on"></span>Group classes</span><span class="tk tk-on"><span class="check check-on"></span>Personal training</span><span class="tk"><span class="check"></span>Studio for yoga or pilates</span><span class="tk"><span class="check"></span>Swimming pool</span><span class="tk"><span class="check"></span>Sauna or steam room</span><span class="tk tk-on"><span class="check check-on"></span>Changing rooms</span><span class="tk tk-on"><span class="check check-on"></span>Showers</span><span class="tk tk-on"><span class="check check-on"></span>Lockers</span><span class="tk"><span class="check"></span>Towels</span><span class="tk tk-on"><span class="check check-on"></span>Drinking water</span><span class="tk tk-on"><span class="check check-on"></span>Air conditioning</span><span class="tk tk-on"><span class="check check-on"></span>Wi-Fi</span><span class="tk tk-on"><span class="check check-on"></span>Parking</span><span class="tk"><span class="check"></span>Women-only area</span><span class="tk"><span class="check"></span>Wheelchair access</span><span class="tk"><span class="check"></span>Childcare</span><span class="tk"><span class="check"></span>Café or juice bar</span><span class="tk tk-on"><span class="check check-on"></span>Turf track</span>
+</div>
+<div class="hrow g8 wrap"><div class="input grow" style="min-width: 200px"><span class="t3 grow">Add a facility, e.g. Boxing ring</span></div><button type="button" class="btn btn-s"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>Add</button></div></div>
+
+<div class="field"><span class="label">Opening hours</span><span class="t3">Your page also shows your opening hours, and on a day you close, that day's closure note.</span><a href="#" class="btn btn-s btn-sm" style="align-self: flex-start"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20M12 6v6l4 2"></path></svg>Change opening hours</a></div>
+
+<div class="field"><span class="label">Show the form on your own website</span><div class="code" aria-label="Code for your website">&lt;iframe src="https://kwazo.app/gyms/iron-house?embed=1" title="Get in touch with Iron House" width="100%" height="900" style="border:0;max-width:560px" loading="lazy"&gt;&lt;/iframe&gt;</div><button type="button" class="btn btn-s btn-sm" style="align-self: flex-start"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 9h13v13H9zM5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>Copy code</button><span class="t3">Paste it into your website where the form should appear. Website builders such as Wix, Squarespace and WordPress have an “Embed” or “HTML” block for this. The form works only while your page is on.</span></div>
+</div>
+<div class="sheet-f"><button type="button" class="btn btn-p">Save</button><button type="button" class="btn btn-q">Cancel</button><span class="t3">You have changes that aren't saved.</span></div>
+</aside>
+</div>
+
+<div class="grid2" style="gap: 20px">
+<section class="box pad col g12" aria-label="When something else happens">
+<h2 class="h2">When something else happens</h2>
+<div class="opt"><span class="check"></span><span class="col g4 grow"><span class="w6">Show my page</span><span class="t3">While it is off, the link shows "This page isn't available."</span></span></div>
+<div class="strip strip-good" role="status"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1M22 4L12 14l-3-3"></path></svg><span class="grow">Saved. Your page is on.</span></div>
+<div class="inset col g6"><span>Saved. Your page is off.</span><span class="t3">Copy link reads “Copied” for a moment after it is pressed.</span></div>
+<div class="field"><span class="label">About us, empty</span><div class="input" style="min-height: 72px; align-items: flex-start; padding-top: 12px"><span class="t3 grow">What your members like about you: the space, the coaches, the classes.</span></div></div>
+<div class="inset col g6"><span>No photos yet.</span><span class="t3">Add photos reads “Getting photos ready…” while they are made smaller; a photo that can't be used is said beside it.</span></div>
+<div class="strip strip-warn wrap"><span class="grow">Your changes to your page are not saved.</span><button type="button" class="btn btn-s btn-sm">Discard changes</button><button type="button" class="btn btn-q btn-sm">Keep editing</button></div>
+<div class="strip"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 3a4 4 0 1 0 0 8a4 4 0 1 0 0-8"></path></svg><span class="grow">Only the owner can change this page. You can copy its link.</span></div>
+</section>
+<section class="box pad col g12" aria-label="Notes for the builder">
+<h2 class="h2">Notes for the builder</h2>
+<span class="t3">A form of many fields, so it opens from the right (Boxes, way 2): it scrolls as one page and Save and Cancel stay at its foot. Pressing a photo opens it full size, as now. Change opening hours opens the exact place in Settings, and asks first while something is changed. Your own facilities (Turf track) are ticked, and unticking one takes it off. “Gym” follows the kind of business: “Your studio page”. On a phone the panel is a full page with Save at its foot.</span>
+</section>
+</div>
+
+</main>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"look":{"editor":"enum","options":["Dark","Light"],"default":"Dark"},"$preview":{"width":1440,"height":2900}}'>
+class Component extends DCLogic {
+renderVals() {
+return { look: (this.props.look ?? 'Dark') === 'Light' ? 't-light' : '' };
+}
+}
+</script>
+</body>
+</html>

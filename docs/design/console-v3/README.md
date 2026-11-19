@@ -42,6 +42,15 @@ permission a page has stays.
 | `MembershipRaise` | A higher price for members already on it: keep or move them, the notice, who pays the new price | V4b (V0-d-i) |
 | `PhoneSell` | Sell on a phone: the register with Take payment at the foot, today's sales, a sale's ⋯ and Void sale from the bottom | V4a (V0-d-i) |
 | `PhoneMemberships` | Memberships on a phone: the price list, Add a membership type and Add a discount as full pages, Give it to them from the bottom | V4b (V0-d-i) |
+| `Attendance` | Attendance: Check in, Today's check-ins with Remove under its row, Check-in history by day with a person's visits under their name, a visit added for an earlier day | V7 (V0-d-ii-a) |
+| `Desk` | The front desk: waiting, Checked in, see a member of staff, the camera, every other answer, opening a device's link, a browser somebody is signed in to, on a phone | V7 (V0-d-ii-a) |
+| `PhoneAttendance` | Attendance on a phone: Check in, Today's check-ins, Remove under its row, Check-in history | V7 (V0-d-ii-a) |
+| `Leads` | Leads: the list with its status picks, tick boxes and the selected bar, Select all, Delete in the middle | V6 (V0-d-ii-a) |
+| `LeadPanel` | A lead from the right: status, messages from your page, follow-up emails, details, Joined and choosing a record, Add lead, Delete lead | V6 (V0-d-ii-a) |
+| `LeadImport` | Import leads in the middle: choosing a file, who will be added and who won't, your columns | V6 (V0-d-ii-a) |
+| `GymPage` | Your gym page from the right: the link, about us, photos, facilities, opening hours, the form for your own website | V6 (V0-d-ii-a) |
+| `AtRisk` | At risk: who has stopped coming, a message under the name, Who is listed, before there are 14 days of check-ins | V6 (V0-d-ii-a) |
+| `PhoneLeads` | Leads and At risk on a phone: the list with the selected bar at the foot, a lead as a full page, At risk | V6 (V0-d-ii-a) |
 
 ## Drawn in V0-d-i (2026-11-19)
 
@@ -69,6 +78,23 @@ permission a page has stays.
   colour 7 to 1, the values `console.css` already measures); buttons, tabs and fields 44 px tall on a
   touch screen; long button words wrap on a narrow phone; Ctrl K only where there is a keyboard; the
   phone's tab names fit a 280 px cover; the open tab in orange.
+
+## Drawn in V0-d-ii-a (2026-11-20)
+
+- **Every button, field and message of the real Attendance, front desk, Leads and At risk pages is on these
+  boards**: 361 of 361, read from the code (`Attendance.jsx`, `AttendanceCheckIn.jsx`, `CheckinDesk.jsx`,
+  `DeskCamera.jsx`, `deskView.js`, `Leads.jsx`, `LeadsDelete.jsx`, `LeadSheet.jsx`, `LeadFileImport.jsx`,
+  `GymPageSheet.jsx`, `AtRisk.jsx`, their views and the words in `packages/shared`). Settings' front desk
+  sections (Check-in devices, Who can check in, Waiver) are drawn with Settings in V0-d-iii; the desk waiver a
+  member signs is on their page (V2b).
+- **Looked at in the same 24 screen shapes in both looks** as V0-d-i's boards.
+- **Word changes** beyond the list on `Main`: "Who came" reads **Check-in history**; "See all 42" reads **View
+  all 42**. "Check someone in" reads Check in and "Checked in today" reads Today's check-ins, as the list says.
+- **Where each box opens** (`Boxes`): Remove a check-in, Add visit, Delete lead, Joined and a message to a member
+  who stopped coming open under what was pressed; a lead and Your gym page from the right; Delete leads and
+  Import leads in the middle, naming who changes.
+- **The front desk** is a page of its own with no menu, drawn at a tablet's size and on a phone; its answers
+  are said in words and colour, never colour alone.
 
 ## What a builder must know
 
