@@ -5,6 +5,9 @@
 //
 // Answers: 201 saved · 200 saved already · 400 a broken phone (its fields, never its values) · 404
 // somebody else's id · 422 an exercise the Library does not know, with their id words.
+//
+// Saved workouts (job 61c), at the end: list, read one, save or save a change (PUT, under the phone's
+// own id), delete. Somebody else's saved workout is 404 to every one of them.
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { Sql } from "postgres";
 import {
@@ -12,7 +15,10 @@ import {
   exerciseIdSchema,
   historyDaySchema,
   historyMonthQuerySchema,
+  PLANNED_WORKOUT_LIMITS,
+  savedWorkoutWriteSchema,
   workoutSaveSchema,
+  type SavedWorkoutsFull,
   type WorkoutSaveRefusal,
 } from "@app/shared";
 import { z } from "zod";
@@ -22,6 +28,7 @@ import { createDualRateLimit } from "../auth/rateLimit.js";
 import { tellMembersLeaderboards, type LiveNewsSender } from "../live/news.js";
 import { LIST_ITEMS_MOST } from "../../listLimit.js";
 import { ForeignWorkoutError, RefusedSaveError, UnknownExercisesError, saveWorkout } from "./service.js";
+import { ForeignSavedError, FutureEditError, SavedFullError, deleteSaved, listSaved, readSaved, writeSaved } from "./saved.js";
 
 /** Twelve hours of heart rate at one a second, as text, is about 0.6 MB. */
 const BODY_MOST_BYTES = 1024 * 1024;
@@ -125,5 +132,57 @@ export function registerTrainingRoutes(
     if (!parsed.success) return notFound(req, reply, "exercise");
     const found = await recordsOf(readDeps, owner(req), parsed.data);
     return found === null ? notFound(req, reply, "exercise") : reply.status(200).send(found);
+  });
+
+  // ── saved workouts (job 61c). Route order: authenticate → the person's own limit → parse → handler.
+  // A save or a delete is safe to send twice: the id is the phone's own.
+  const savedWriteLimit = createDualRateLimit({
+    name: "saved_workout_write",
+    max: 30,
+    ipMax: null,
+    windowMs: 60 * 1000,
+    identifier: (req) => req.authUser?.id ?? null,
+    redis: deps.redis,
+  });
+  const savedDeps = { sql: deps.sql, now };
+
+  app.get("/v1/training/saved", { onRequest: [app.authenticate, readLimit] }, async (req, reply) => {
+    return reply.status(200).send(await listSaved(savedDeps, owner(req)));
+  });
+
+  app.get<{ Params: { id: string } }>("/v1/training/saved/:id", { onRequest: [app.authenticate, readLimit] }, async (req, reply) => {
+    const parsed = z.uuid().safeParse(req.params.id);
+    if (!parsed.success) return notFound(req, reply, "saved workout");
+    const found = await readSaved(savedDeps, owner(req), parsed.data);
+    return found === null ? notFound(req, reply, "saved workout") : reply.status(200).send(found);
+  });
+
+  app.put<{ Params: { id: string } }>("/v1/training/saved/:id", { onRequest: [app.authenticate, savedWriteLimit] }, async (req, reply) => {
+    const id = z.uuid().safeParse(req.params.id);
+    if (!id.success) return validationError(req, reply, "id: a saved workout's id is a UUID");
+    const parsed = savedWorkoutWriteSchema.safeParse(req.body);
+    if (!parsed.success) return validationError(req, reply, issues(parsed.error));
+    try {
+      const status = await writeSaved(savedDeps, owner(req), id.data, parsed.data);
+      return await reply.status(status === "created" ? 201 : 200).send({ id: id.data, status });
+    } catch (err) {
+      if (err instanceof ForeignSavedError) return notFound(req, reply, "saved workout");
+      if (err instanceof UnknownExercisesError) {
+        const refusal: WorkoutSaveRefusal = { error: "unknown_exercise", exercises: [...err.exercises], requestId: req.id };
+        return reply.status(422).send(refusal);
+      }
+      if (err instanceof SavedFullError) {
+        const full: SavedWorkoutsFull = { error: "saved_workouts_full", most: PLANNED_WORKOUT_LIMITS.savedMost, requestId: req.id };
+        return reply.status(409).send(full);
+      }
+      if (err instanceof FutureEditError) return validationError(req, reply, "editedAt: later than the server's clock");
+      throw err;
+    }
+  });
+
+  app.delete<{ Params: { id: string } }>("/v1/training/saved/:id", { onRequest: [app.authenticate, savedWriteLimit] }, async (req, reply) => {
+    const id = z.uuid().safeParse(req.params.id);
+    if (!id.success) return notFound(req, reply, "saved workout");
+    return (await deleteSaved(savedDeps, owner(req), id.data)) ? reply.status(204).send() : notFound(req, reply, "saved workout");
   });
 }

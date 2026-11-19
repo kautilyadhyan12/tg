@@ -94,6 +94,19 @@ export const EXPORT_READERS: Record<ExportedTable, (sql: Sql, userId: string) =>
   workout_templates: (sql, u) =>
     sql<Row[]>`SELECT * FROM workout_templates WHERE user_id = ${u} ORDER BY created_at, id`,
 
+  saved_workouts: (sql, u) =>
+    sql<Row[]>`SELECT * FROM saved_workouts WHERE user_id = ${u} ORDER BY created_at, id`,
+
+  // No user_id — owned through its saved workout (0245).
+  saved_workout_sets: (sql, u) => sql<Row[]>`
+    SELECT s.* FROM saved_workout_sets s
+    JOIN saved_workouts w ON w.id = s.saved_workout_id
+    WHERE w.user_id = ${u}
+    ORDER BY w.created_at, s.saved_workout_id, s.exercise_place, s.set_place`,
+
+  saved_workout_removed_ids: (sql, u) =>
+    sql<Row[]>`SELECT * FROM saved_workout_removed_ids WHERE user_id = ${u} ORDER BY removed_at, id`,
+
   workouts: (sql, u) =>
     sql<Row[]>`SELECT * FROM workouts WHERE user_id = ${u} ORDER BY started_at, id`,
 
