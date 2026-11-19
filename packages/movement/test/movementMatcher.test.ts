@@ -270,6 +270,16 @@ describe("the camera must see enough, or nothing is decided", () => {
     expect(long.reps.filter((r) => r.verdict === "unseen").map((r) => r.rule)).toEqual(["feet stay down", "feet stay down"]);
   });
 
+  it("a real rep whose feet flicker out at the moment it would be judged waits for them and counts", () => {
+    // The feet hidden from 0.38 s to 0.43 s after each of the first two reps is back, across the 0.4 s it is judged at.
+    const video = videoOf("squat_reference");
+    const reps = repTimes(video);
+    const frames = editPeople(video.frames, (p, f) =>
+      reps.slice(0, 2).some((r) => f.t >= r.end + 380 && f.t < r.end + 430) ? { ...p, points: p.points.map(([x, y, z, v, pr], i) => [x, y, z, FEET.includes(i) ? 0.1 : v, pr]) } : p,
+    );
+    expect(runMovement(SQUAT, edited(video, frames)).count).toBe(3);
+  });
+
   it("a rep is not judged while its feet are hidden at the moment it would be: it waits, and a jump hidden then is seen", () => {
     // The feet hidden from 0.35 s to 0.45 s after each of the first two reps is back, across the moment the rep would
     // be judged (0.4 s), with a 10 cm jump taking off at 0.3 s: counted, the rep would hide the jump's top.

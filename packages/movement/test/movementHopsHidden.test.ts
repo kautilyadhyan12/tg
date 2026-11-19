@@ -33,7 +33,8 @@ describe("the worst thing: a jump the camera does not see whole is never counted
       const top = hopTime(metres) / 2;
       for (const offset of [-100, 0, 122, 200]) {
         const most = unhopped(video, metres, offset);
-        for (const hole of [130, 150, 180]) {
+        // 240 ms hides all but the first and last 23 ms of a 10 cm jump (3 cm up; the pictures nearest it, up to 6 cm).
+        for (const hole of [130, 150, 180, 240]) {
           const span = [top - hole / 2, top + hole / 2] as const;
           const hidden = runMovement(SQUAT, trueHop(video, metres, offset, over(FEET, span))).count;
           const missing = runMovement(SQUAT, trueHop(video, metres, offset, {}, span)).count;
