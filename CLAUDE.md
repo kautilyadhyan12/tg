@@ -273,6 +273,21 @@ in place of Archivo, flat colour with no gradient or glow, the words of its word
 setup a feature needs shown first on that feature's own page, and "business" or the kind's own
 word, never only "gym".
 
+**Read without leaning in (Kd, 2026-11-19, `rulings/2026-11-19-v1-f.md`).** Kd at V1-f's
+click-through, on his own laptop at 1366×768: *"the fonts are too small i am not seeing clearly as
+a human ... fonts and its colours needs to be distingusihble and should not be reqquring magnifying
+glass to see ... it applies to all redesiggn"*. Every console page and every board drawn for one:
+- No words under 14 px: a line under a title, a note, where a thing lives, a button's words, a
+  field's hint. A line's title is 15. Smaller only for a label in small capitals, a count's number,
+  a tag, initials, Ctrl K and the phone's tab names, and never under 12 (11 for tab names on a
+  280 px cover).
+- Every word colour, the faintest grey and red, green and orange included, is 7 to 1 or more on
+  what it sits on, in both looks; a disabled control keeps 4.5. `consoleCss.test.js` measures both.
+- Order comes from size and weight, never from fading words until they are hard to read.
+- Before Kd is asked, the builder looks at a picture of the page at 1366×768, his screen.
+- `.c-s12` and `.c-s13` stay only on pages not yet redesigned: each redesign job (V0-d, V2a to V11)
+  moves its page's words to 14 and adds its files to the test's list of redesigned files.
+
 **The phone app (Kd, RULINGS 2026-10-12; spec Part 6 §16).** A member feature is built
 for the phone, never the browser. Every screen rule above holds there, with "a gym" read
 as "a member" and "the real browser" as "the real phone": the terminal walks the whole

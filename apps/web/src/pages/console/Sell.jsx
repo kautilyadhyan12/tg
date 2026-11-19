@@ -887,7 +887,7 @@ function Takings({ gymId, org, page, locked, canOpenPeople, onOpenPerson, onPage
   }, [refundRow]);
 
   return (
-    <section className="c-card" aria-label={onToday ? "Today's takings" : 'Takings on another day'}>
+    <section id="takings" className="c-card" aria-label={onToday ? "Today's takings" : 'Takings on another day'}>
       <div className="flex flex-col gap-1 p-4 md:p-5">
         <h2 className="c-h2">{shownPage === null ? '…' : takingsHeading(shownPage)}</h2>
         {/* The calendar opens in place, pushing the list down: this card clips what sticks out. */}

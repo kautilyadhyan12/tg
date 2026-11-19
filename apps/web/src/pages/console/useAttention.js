@@ -16,7 +16,7 @@ const AFTER_CHANGE_MS = 400;
 /** How old the last read must be before a move to another page or a return reads again. */
 export const SOON_MS = 30_000;
 
-export const AttentionContext = createContext({ attention: null, counts: {}, reload: () => undefined });
+export const AttentionContext = createContext({ attention: null, counts: {}, reload: () => undefined, paymentSetup: false });
 
 /** The shell's one read. `attention` is null until it answers, and for another business's. */
 export function useAttentionRead(gymId, active) {

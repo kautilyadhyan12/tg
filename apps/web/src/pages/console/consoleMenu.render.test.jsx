@@ -45,6 +45,9 @@ function openableToday(privileges) {
     ...(has('billing.members') || has('memberships.manage') ? [`${BASE}/sell`] : []),
     // Failed payments (18d-iii-ii-b): its own page, for whoever reads people and records payments.
     ...(has('members.read') && has('billing.members') ? [`${BASE}/failed-payments`] : []),
+    // Payments overview (V1-f): for whoever may open one of its lines: Sell, the payment lists
+    // and Reports' money (`billing.members`), the price list, Settings' Payments, or the plan.
+    ...(has('billing.members') || has('memberships.manage') || has('org.manage') || has('billing.manage') ? [`${BASE}/payments`] : []),
     ...(has('members.confirm') ? [`${BASE}/leads`] : []),
     ...(has('attendance.read') ? [`${BASE}/attendance`] : []),
     // At risk (20d-i): its own page, for whoever may see the gym's people.
@@ -200,7 +203,7 @@ describe('the menu in five groups (spec Part 3 §17.10 rule 7)', () => {
     expect(railGroups()).toEqual([
       ['Today', ['Attendance', 'Classes', 'Personal training']],
       ['People', ['Members & staff', 'Leads', 'At risk']],
-      ['Money', ['Sell', 'Memberships', 'Failed payments']],
+      ['Money', ['Payments overview', 'Sell', 'Memberships', 'Failed payments']],
       ['Community', ['Updates', 'Events', 'Fitness plans', 'Challenges', 'Leaderboard']],
       ['Manage', ['Reports', 'Settings']],
     ]);
