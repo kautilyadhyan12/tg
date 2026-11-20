@@ -48,9 +48,21 @@
     "PTBook.dc.html": {"x": 3040, "y": 33460, "w": 1440, "h": 2560, "title": "Personal training: book, cancel and mark a session", "expand": "fill"},
     "PTHours.dc.html": {"x": 0, "y": 36640, "w": 1440, "h": 2460, "title": "Personal training: a trainer's hours, from the right", "expand": "fill"},
     "PTTimeOff.dc.html": {"x": 1520, "y": 36640, "w": 1440, "h": 2220, "title": "Personal training: time off, from the right", "expand": "fill"},
-    "PhonePT.dc.html": {"x": 3040, "y": 36640, "w": 1800, "h": 1160, "title": "Personal training on a phone"}
+    "PhonePT.dc.html": {"x": 3040, "y": 36640, "w": 1800, "h": 1160, "title": "Personal training on a phone"},
+    "Reports.dc.html": {"x": 0, "y": 39220, "w": 1440, "h": 3620, "title": "Reports: members, leads and attendance, with the side list", "expand": "fill"},
+    "ReportsMoney.dc.html": {"x": 1520, "y": 39220, "w": 1440, "h": 3700, "title": "Reports: classes, money, Export payments and staff activity", "expand": "fill"},
+    "ReportsStates.dc.html": {"x": 3040, "y": 39220, "w": 1440, "h": 3650, "title": "Reports: before there are figures, and every other state", "expand": "fill"},
+    "PhoneReports.dc.html": {"x": 0, "y": 43040, "w": 1800, "h": 1280, "title": "Reports on a phone"},
+    "Settings.dc.html": {"x": 1880, "y": 43040, "w": 1440, "h": 2050, "title": "Settings: the side list with each section's state, and Gym details", "expand": "fill"},
+    "SettingsPayments.dc.html": {"x": 3400, "y": 43040, "w": 1440, "h": 3250, "title": "Settings: Payments, connected and in its other states", "expand": "fill"},
+    "SettingsPaymentsBoxes.dc.html": {"x": 0, "y": 46410, "w": 1440, "h": 2130, "title": "Settings: Remove a Terminal, Pair a Terminal, Disconnect Square", "expand": "fill"},
+    "SettingsHours.dc.html": {"x": 1520, "y": 46410, "w": 1440, "h": 2380, "title": "Settings: When we're open, and Closed on a date", "expand": "fill"},
+    "SettingsReach.dc.html": {"x": 3040, "y": 46410, "w": 1440, "h": 1260, "title": "Settings: How members reach you", "expand": "fill"},
+    "SettingsMessages.dc.html": {"x": 0, "y": 48910, "w": 1440, "h": 3470, "title": "Settings: Automatic messages", "expand": "fill"},
+    "SettingsReferral.dc.html": {"x": 1520, "y": 48910, "w": 1440, "h": 2090, "title": "Settings: Refer a friend", "expand": "fill"},
+    "PhoneSettings.dc.html": {"x": 3040, "y": 48910, "w": 1800, "h": 1290, "title": "Settings on a phone"}
   },
-  "order": ["Main.dc.html", "Overview.dc.html", "OverviewLight.dc.html", "Search.dc.html", "Money.dc.html", "Members.dc.html", "Person.dc.html", "Phone.dc.html", "MoneySetup.dc.html", "Boxes.dc.html", "Sell.dc.html", "SellSale.dc.html", "SellDay.dc.html", "SellProducts.dc.html", "SellTax.dc.html", "Discounts.dc.html", "Memberships.dc.html", "MembershipsGive.dc.html", "MembershipAdd.dc.html", "MembershipRaise.dc.html", "PhoneSell.dc.html", "PhoneMemberships.dc.html", "Attendance.dc.html", "Desk.dc.html", "PhoneAttendance.dc.html", "Leads.dc.html", "LeadPanel.dc.html", "LeadImport.dc.html", "GymPage.dc.html", "AtRisk.dc.html", "PhoneLeads.dc.html", "Classes.dc.html", "ClassAdd.dc.html", "ClassesCalendar.dc.html", "PhoneClasses.dc.html", "ClassTimeSlot.dc.html", "ClassSlotEdit.dc.html", "ClassSession.dc.html", "ClassSessionEdit.dc.html", "PT.dc.html", "PTBook.dc.html", "PTHours.dc.html", "PTTimeOff.dc.html", "PhonePT.dc.html"],
+  "order": ["Main.dc.html", "Overview.dc.html", "OverviewLight.dc.html", "Search.dc.html", "Money.dc.html", "Members.dc.html", "Person.dc.html", "Phone.dc.html", "MoneySetup.dc.html", "Boxes.dc.html", "Sell.dc.html", "SellSale.dc.html", "SellDay.dc.html", "SellProducts.dc.html", "SellTax.dc.html", "Discounts.dc.html", "Memberships.dc.html", "MembershipsGive.dc.html", "MembershipAdd.dc.html", "MembershipRaise.dc.html", "PhoneSell.dc.html", "PhoneMemberships.dc.html", "Attendance.dc.html", "Desk.dc.html", "PhoneAttendance.dc.html", "Leads.dc.html", "LeadPanel.dc.html", "LeadImport.dc.html", "GymPage.dc.html", "AtRisk.dc.html", "PhoneLeads.dc.html", "Classes.dc.html", "ClassAdd.dc.html", "ClassesCalendar.dc.html", "PhoneClasses.dc.html", "ClassTimeSlot.dc.html", "ClassSlotEdit.dc.html", "ClassSession.dc.html", "ClassSessionEdit.dc.html", "PT.dc.html", "PTBook.dc.html", "PTHours.dc.html", "PTTimeOff.dc.html", "PhonePT.dc.html", "Reports.dc.html", "ReportsMoney.dc.html", "ReportsStates.dc.html", "PhoneReports.dc.html", "Settings.dc.html", "SettingsPayments.dc.html", "SettingsPaymentsBoxes.dc.html", "SettingsHours.dc.html", "SettingsReach.dc.html", "SettingsMessages.dc.html", "SettingsReferral.dc.html", "PhoneSettings.dc.html"],
   "notes": {},
   "designSystems": []
 }
