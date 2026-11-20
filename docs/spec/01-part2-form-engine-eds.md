@@ -2042,8 +2042,15 @@ count 35 of 35; every other movement counts 0 with every set of numbers and unde
 gravity of 8, 10 and 12 cm at five take-off times, seen six ways, on three squat videos of 52a (270): none counted, as before;
 on three of his floor sets (270): five counted, 8 cm and one 10 cm taking off 0.1 to 0.2 s before the rep is back up, seen at
 15 or 8 pictures a second or with pictures skipped, written in `movementHops.test.ts`; as filmed, none. Side on with one foot
-seen, a jump from the bottom is refused from 10 cm (12 before). The phone's kept runs: 75 of the 78 older proof videos the same
-(74 before), three open, each one dip of another movement marked unseen on one side only (52b). On the laptop the measures
+seen, a jump from the bottom is refused from 10 cm (12 before). **The phone's own reading** (his 14 videos read on Kd's phone
+in three batches, 29 minutes of the phone, kept in `test/phone-points`, 5.1 MB): 90 of the 99 proof sets the same as the
+laptop (the 78 older videos 75, 74 before). His squats on the phone: 19 of 22, one fewer in three sets, each written
+(`phoneOpen`): side on, the body check relearns his near knee's length after he walks back from the lens until 4.9 s (the
+laptop's 4.1 s), and his first squat at 5.0 s is never begun (53); half turned, a squat's feet read 4 cm up where the
+laptop's read 3 (52a-ii-b-ii); on the dull floor the phone's model puts his near foot 10 cm up for one picture as a squat
+begins (52a-ii-b-ii; letting a foot reading count only where a picture beside it agrees let 14 of 540 drawn jumps count, and
+was not kept). Six others are a dip of another movement marked unseen on one side or for another reason, no count on either
+(52b). On the laptop the measures
 take 148 to 203 microseconds a frame in the middle, the matcher 17 to 23. **Open, in plain sight, each with its job:** his
 first set, side on on the shiny floor, under 8 a second, uneven pictures, shake and the chip's gap, and with his own videos left
 out (52a-ii-b-ii), its foot points reading 3 to 4 cm up as filmed against a rule held at 4 by the jumps; his last raised pair

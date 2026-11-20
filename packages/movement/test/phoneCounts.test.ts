@@ -161,9 +161,19 @@ describe("every proof video, as the phone's chosen set-up read it (51b-ii; kept 
     expect(allSame(rows)).toBe(false);
   });
 
-  it("the open cases are three, and on the phone no other movement is counted", () => {
+  it("the open cases are nine, and on the phone no other movement is counted", () => {
     const open = rows.filter((r) => r.entry.phoneOpen !== undefined);
-    expect(open.map((r) => r.label).sort()).toEqual(["fresh_split_squat_smith_3", "romanian_deadlift_barbell", "step_up_dumbbell"]);
+    expect(open.map((r) => r.label).sort()).toEqual([
+      "floor_phone_test 0-12 s",
+      "floor_phone_test 13.9-21.1 s",
+      "fresh_split_squat_smith_3",
+      "romanian_deadlift_barbell",
+      "step_up_dumbbell",
+      "usual_v03",
+      "usual_v04 9.8-23.2 s",
+      "usual_v12",
+      "usual_v14",
+    ]);
     for (const r of rows.filter((x) => x.entry.movement === null && x.entry.open === undefined)) expect([r.label, r.phone?.count]).toEqual([r.label, 0]);
   });
 
@@ -173,8 +183,26 @@ describe("every proof video, as the phone's chosen set-up read it (51b-ii; kept 
     expect(sumo?.verdict).toBe("same");
   });
 
-  it("in each open case one side marks one dip unseen, and the other side says nothing there: no rep, or a silent one", () => {
+  it("a man's own squats from a phone on the floor: the phone counts 19 of his 22, each one missed written with its job", () => {
+    const own = rows.filter((r) => r.entry.person === "man, his own phone, on the floor and raised" && r.entry.movement === "squat" && r.entry.reps !== null);
+    expect(own.reduce((n, r) => n + r.laptop.count, 0)).toBe(22);
+    expect(own.reduce((n, r) => n + (r.phone?.count ?? 0), 0)).toBe(19);
+    for (const r of own.filter((x) => x.verdict !== "same")) {
+      expect([r.label, r.laptop.count - (r.phone?.count ?? 0), /^5(2a-ii-b-ii|3), /.test(r.entry.phoneOpen?.why ?? "")]).toEqual([r.label, 1, true]);
+    }
+  });
+
+  it("in every open case of another movement both sides count 0 and call nothing short", () => {
     const open = rows.filter((r) => r.entry.phoneOpen !== undefined && r.entry.movement === null);
+    expect(open).toHaveLength(6);
+    for (const r of open) {
+      expect([r.label, r.laptop.count, r.phone?.count]).toEqual([r.label, 0, 0]);
+      expect([...r.laptop.reps, ...(r.phone?.reps ?? [])].filter((x) => x.verdict === "short" || x.verdict === "counted")).toEqual([]);
+    }
+  });
+
+  it("in each of the three older open cases one side marks one dip unseen, and the other side says nothing there: no rep, or a silent one", () => {
+    const open = rows.filter((r) => ["romanian_deadlift_barbell", "step_up_dumbbell", "fresh_split_squat_smith_3"].includes(r.label));
     expect(open).toHaveLength(3);
     for (const r of open) {
       expect([r.label, r.laptop.count, r.phone?.count]).toEqual([r.label, 0, 0]);

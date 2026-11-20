@@ -163,6 +163,18 @@ export const MOVEMENT_VIDEOS: readonly MovementVideo[] = [
   //    pictures at 2 to 2.5 a second (exercise folder 1's reviews/floor-phone). Good-form squats: every one counts. ───
   { file: "movement-points/floor_phone_test", cut: [0, 12], movement: "squat", person: FLOOR_PERSON, view: "side", reps: 3, sets: false,
     seen: "2026-11-20 (52a-ii-b-i), 16 frames of the set drawn with the model's points: the one man, followed in each. The phone on a shiny floor, upright; sandals. From the first picture, at the phone with his hands on the floor, as he walks back from it, then three squats side on. Judged, never setting a number: the model finds nobody in some of its first frames.",
+    phoneOpen: {
+      why:
+        "53, where a live set begins with the person walking back from the phone: on the phone's reading the body check refuses his near " +
+        "knee as a broken bone until 4.9 s (the laptop's until 4.1 s), its length learned while he was at the lens; his first squat begins at " +
+        "5.0 s, before he was read standing still with his legs, and is never begun.",
+      differences: [
+        "the laptop counts 3, the phone 2",
+        "the laptop says 5.1 s counted, the phone 7.6 s counted",
+        "the laptop says 7.6 s counted, the phone 10.0 s counted",
+        "the phone does not say 10.0 s counted",
+      ],
+    },
     leftOutOpen: {
       count: 2,
       why:
@@ -177,13 +189,26 @@ export const MOVEMENT_VIDEOS: readonly MovementVideo[] = [
         "of shake, the chip's gap, or pictures skipped puts a rep over it, or leaves its feet unseen.",
     } },
   { file: "movement-points/floor_phone_test", cut: [13.9, 21.1], movement: "squat", person: FLOOR_PERSON, view: "between", reps: 3, sets: true, sha256: "023bdc68c259df01ea372e9cb1be961e3c56be8c7e3ca9fb0b8797511a0920a1",
-    seen: "2026-11-20 (52a-ii-b-i), 16 frames of the set drawn with the model's points: the one man, followed in each. The phone on a shiny floor: three squats half turned to it, the floor's reflection under his toes." },
+    seen: "2026-11-20 (52a-ii-b-i), 16 frames of the set drawn with the model's points: the one man, followed in each. The phone on a shiny floor: three squats half turned to it, the floor's reflection under his toes.",
+    phoneOpen: {
+      why:
+        "52a-ii-b-ii, the floor view: on the phone's reading his third squat's feet read about 4 cm off the floor (the laptop's 3), over the " +
+        "rule held at 4 by the jumps it must refuse.",
+      differences: ["the laptop counts 3, the phone 2", "the phone does not say 19.3 s counted"],
+    } },
   { file: "movement-points/floor_phone_test", cut: [22.3, 31.4], movement: "squat", person: FLOOR_PERSON, view: "front", reps: 3, sets: true, sha256: "023bdc68c259df01ea372e9cb1be961e3c56be8c7e3ca9fb0b8797511a0920a1",
     seen: "2026-11-20 (52a-ii-b-i), 16 frames of the set drawn with the model's points: the one man, followed in each. The phone on a shiny floor: three squats facing it." },
   { file: "movement-points/usual_v04", cut: [0, 9.2], movement: "squat", person: FLOOR_PERSON, view: "front", reps: null, sets: false,
     seen: "The phone on a dull floor: one deep squat held about 5 s facing the phone, hands to the floor (3.6 to 9.0 s). Reported, never judged: a hold is not a rep." },
   { file: "movement-points/usual_v04", cut: [9.8, 23.2], movement: "squat", person: FLOOR_PERSON, view: "side", reps: 3, sets: true, sha256: "490c374accbcd5e80d72c67af894dfbd4045fff42c1ce8f90becc99cfa65375f",
-    seen: "2026-11-20 (52a-ii-b-i), 16 frames of the set drawn with the model's points: the one man, followed in each. The phone on a dull floor: three squats side on; sandals." },
+    seen: "2026-11-20 (52a-ii-b-i), 16 frames of the set drawn with the model's points: the one man, followed in each. The phone on a dull floor: three squats side on; sandals.",
+    phoneOpen: {
+      why:
+        "52a-ii-b-ii, the floor view: in the first picture of his second squat the phone's model puts his near foot 10 cm up, in the next 2 cm " +
+        "(the laptop's stays down), a picture no real foot can be in, read as the feet leaving the floor (9 cm) and moving (10 cm). Letting a " +
+        "foot reading count only where a picture beside it agrees let 14 of 540 drawn jumps count, and was not kept.",
+      differences: ["the laptop counts 3, the phone 2", "the laptop says 15.6 s counted, the phone 19.7 s counted", "the phone does not say 19.7 s counted"],
+    } },
   { file: "movement-points/usual_v11", cut: [1.3, 7.4], movement: "squat", person: FLOOR_PERSON, view: "between", reps: 2, sets: true, sha256: "e9f6f3f98f7b27d7b5737c32734a3ad8025a0e88af06d0ca668c485f42e36707",
     seen: "2026-11-20 (52a-ii-b-i), 16 frames of the set drawn with the model's points: the one man, followed in each. The phone raised to about his knees or hips (not measured), upright; barefoot: two squats half turned." },
   { file: "movement-points/usual_v11", cut: [8.3, 14.2], movement: "squat", person: FLOOR_PERSON, view: "side", reps: 2, sets: true, sha256: "e9f6f3f98f7b27d7b5737c32734a3ad8025a0e88af06d0ca668c485f42e36707",
@@ -341,7 +366,7 @@ export const MOVEMENT_VIDEOS: readonly MovementVideo[] = [
   other("movement-points/fresh_curl_ez_bar_1", "fresh: standing EZ-bar curl, 1", "front", "Fresh: a standing EZ-bar curl."),
   // ── A phone on the floor or raised, the usual positions of other exercises (52a-ii-b-i): no squat in any ───────────
   floorOther("usual_v02", "front", "The phone on the floor, upright: he stands and turns round slowly."),
-  floorOther("usual_v03", "front", "The phone on the floor, on its long side: he stands and turns round."),
+  { ...floorOther("usual_v03", "front", "The phone on the floor, on its long side: he stands and turns round."), phoneOpen: { why: `52b: as he turns, one more dip on the phone, called unseen. ${UNSEEN_FIRST}`, differences: ["the phone also says 34.6 s unseen"] } },
   floorOther("usual_v05", "front", "The phone on the floor, upright: he sits cross-legged and turns round."),
   floorOther("usual_v06", "side", "The phone on the floor, on its long side: on all fours, he turns round."),
   floorOther("usual_v07", "side", "The phone on the floor, on its long side: he lies on the floor, raises a leg, sits up."),
@@ -357,7 +382,7 @@ export const MOVEMENT_VIDEOS: readonly MovementVideo[] = [
   },
   floorOther("usual_v09", "side", "The phone on the floor, upright: he stands at a chair, one leg lifted and bent."),
   floorOther("usual_v10", "side", "The phone on the floor, on its long side: he sits on a chair, gets up, sits (54)."),
-  floorOther("usual_v12", "between", "The phone raised, upright: he sits on a chair from the front and the side, stands, puts one knee on the chair."),
+  { ...floorOther("usual_v12", "between", "The phone raised, upright: he sits on a chair from the front and the side, stands, puts one knee on the chair."), phoneOpen: { why: `52b: one dip called unseen on the laptop only. ${UNSEEN_FIRST}`, differences: ["the phone does not say 47.2 s unseen"] } },
   floorOther("usual_v13", "side", "The phone raised, on its long side: he lies on a bed, raises a leg, sits up."),
-  floorOther("usual_v14", "front", "The phone raised, upright: he stands and turns round."),
+  { ...floorOther("usual_v14", "front", "The phone raised, upright: he stands and turns round."), phoneOpen: { why: `52b: as he turns, dips called unseen, for another reason or only on the phone. ${UNSEEN_FIRST}`, differences: ["the laptop says 6.7 s unseen, the phone 6.7 s unseen (feet stay down)", "the phone also says 19.3 s unseen"] } },
 ];
