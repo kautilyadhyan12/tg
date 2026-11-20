@@ -161,19 +161,19 @@ describe("every proof video, as the phone's chosen set-up read it (51b-ii; kept 
     expect(allSame(rows)).toBe(false);
   });
 
-  it("the open cases are four, and on the phone no other movement is counted", () => {
+  it("the open cases are three, and on the phone no other movement is counted", () => {
     const open = rows.filter((r) => r.entry.phoneOpen !== undefined);
-    expect(open.map((r) => r.label).sort()).toEqual(["fresh_deadlift_kettlebell_1", "romanian_deadlift_barbell", "step_up_dumbbell", "sumo_squat_1"]);
+    expect(open.map((r) => r.label).sort()).toEqual(["fresh_split_squat_smith_3", "romanian_deadlift_barbell", "step_up_dumbbell"]);
     for (const r of rows.filter((x) => x.entry.movement === null && x.entry.open === undefined)) expect([r.label, r.phone?.count]).toEqual([r.label, 0]);
   });
 
-  it("the sumo squat nobody could count by eye differs by its first rep alone", () => {
+  it("the sumo squat nobody could count by eye now counts the same on both", () => {
     const sumo = rows.find((r) => r.label === "sumo_squat_1");
     expect(sumo?.entry.reps).toBeNull();
-    expect([sumo?.laptop.count, sumo?.phone?.count]).toEqual([0, 1]);
+    expect(sumo?.verdict).toBe("same");
   });
 
-  it("in each other open case one side marks one dip unseen, and the other side says nothing there: no rep, or a silent one", () => {
+  it("in each open case one side marks one dip unseen, and the other side says nothing there: no rep, or a silent one", () => {
     const open = rows.filter((r) => r.entry.phoneOpen !== undefined && r.entry.movement === null);
     expect(open).toHaveLength(3);
     for (const r of open) {

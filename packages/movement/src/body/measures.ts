@@ -525,7 +525,11 @@ const FEET: readonly (readonly number[])[] = [
  *  when it shows that the body moved rather than a foot lifted: both feet seen above it, or each
  *  foot seen as far below the hips in 3D as when it last stood on the floor (a step back from the
  *  phone moves the whole body up the picture and leaves the legs as they were). One foot seen
- *  higher and nearer its hips is lifted, while the other, perhaps hidden, stands on the floor. */
+ *  higher and nearer its hips is lifted, while the other, perhaps hidden, stands on the floor. A
+ *  step down, or nearer the phone, moves the floor down at once when two signs agree that the whole
+ *  body went lower: each foot seen as far below the hips in 3D as when it last stood, and the
+ *  lowest foot as far below the hips in this space too (a foot point sliding down the picture
+ *  leaves the hips where they were; a body bending brings its hips nearer its feet in both). */
 class Floor {
   private level: number | null = null;
   /** The body's size on the picture when the feet last stood on the floor. */
@@ -533,6 +537,8 @@ class Floor {
   private footSeen: number | null = null;
   /** For each foot, how far below the hips it was in 3D, metres, when it last stood on the floor. */
   private standing: (number | null)[] = FEET.map(() => null);
+  /** How far the lowest foot lay below the hips in this space when the feet last stood on the floor. */
+  private span: number | null = null;
   /** Where the lowest foot stood, frame by frame, over the last `floorWindow`. */
   private readonly stood = new LongMemory();
 
@@ -541,13 +547,15 @@ class Floor {
     this.size = null;
     this.footSeen = null;
     this.standing = FEET.map(() => null);
+    this.span = null;
     this.stood.clear();
   }
 
   /** `feet`: for each foot, its lowest used point along "down", or null when not seen; `drops`:
    *  for each foot, how far below the hips it is in 3D now, metres, or null; `size`: the body's
-   *  size on the picture now; `unit`: this space's units in a metre; `lift`: the least shrinking of
-   *  a drop, metres, that is a foot lifted (null when the body's leg is not known yet). A body that
+   *  size on the picture now; `unit`: this space's units in a metre; `hips`: the middle of the used
+   *  hips along "down" in this space, or null; `lift`: the least shrinking of a drop, metres, that is
+   *  a foot lifted (null when the body's leg is not known yet). A body that
    *  moved nearer the phone or further from it by more than `sizeChange` stands on another line of
    *  the picture: the floor is set afresh from the feet seen. */
   next(
@@ -556,6 +564,7 @@ class Floor {
     drops: readonly (number | null)[],
     size: number,
     unit: number,
+    hips: number | null,
     lift: number | null,
     limits: MeasureLimits,
   ): number | null {
@@ -567,27 +576,35 @@ class Floor {
     this.footSeen = t;
     const lowest = Math.max(...seen.map((k) => feet[k] ?? Number.NEGATIVE_INFINITY));
     const band = lift === null ? 0 : lift * unit;
-    const onFloor = this.level === null || lowest >= this.level - band;
-    const moved =
-      seen.length === FEET.length ||
-      seen.every((k) => {
-        const now = drops[k] ?? null;
-        const then = this.standing[k] ?? null;
-        return lift !== null && now !== null && then !== null && now >= then - lift;
-      });
-    if (onFloor || moved) {
+    // How far under the floor the lowest foot is, along "down"; above it when below 0.
+    const under = this.level === null ? 0 : lowest - this.level;
+    // Each foot seen is as far below the hips in 3D as when it last stood on the floor: the body moved, not a foot.
+    const asStanding = seen.every((k) => {
+      const now = drops[k] ?? null;
+      const then = this.standing[k] ?? null;
+      return lift !== null && now !== null && then !== null && now >= then - lift;
+    });
+    const span = this.span;
+    const steppedDown = under > band && asStanding && hips !== null && span !== null && Math.abs(lowest - hips - span) <= band;
+    // On the floor, or under it (it then moves only once the feet have stood lower for most of the window, or at once
+    // after a step down); above it by more than a foot lifted, only when the body moved.
+    const onFloor = under >= -band;
+    if (steppedDown) this.stood.clear();
+    if (onFloor || seen.length === FEET.length || asStanding) {
       this.stood.add(t, lowest);
       this.size = size;
     }
     this.level = this.stood.median() ?? this.level;
-    if (onFloor) this.stand(seen, feet, drops, lift);
+    // Where the feet stand on the floor is learned only from feet on it, never from a foot under it.
+    if (Math.abs(under) <= band || steppedDown) this.stand(seen, feet, drops, lift, hips === null ? null : lowest - hips);
     return this.level;
   }
 
   /** Keeps how far below the hips each foot on the floor is: the lowest foot on the picture, and
    *  every other foot seen whose drop in 3D is within `lift` of its. Two feet on the floor drop
    *  alike in 3D wherever they lie on the picture: side on, the far foot is higher on it. */
-  private stand(seen: readonly number[], feet: readonly (number | null)[], drops: readonly (number | null)[], lift: number | null): void {
+  private stand(seen: readonly number[], feet: readonly (number | null)[], drops: readonly (number | null)[], lift: number | null, span: number | null): void {
+    if (span !== null) this.span = span;
     let ref = seen[0] ?? -1;
     for (const k of seen) if ((feet[k] ?? Number.NEGATIVE_INFINITY) > (feet[ref] ?? Number.NEGATIVE_INFINITY)) ref = k;
     const deepest = drops[ref] ?? null;
@@ -614,6 +631,16 @@ function footDrops(world: readonly (Vec | null)[], down: Vec | null): (number | 
     });
     return along.length === 0 ? null : Math.max(...along) - hip;
   });
+}
+
+/** The middle of the used hips along "down"; null when neither hip or "down" is known. */
+function hipsAlong(points: readonly (Vec | null)[], down: Vec | null): number | null {
+  if (down === null) return null;
+  const along = HIPS.flatMap((h) => {
+    const p = points[h] ?? null;
+    return p === null ? [] : [dot(p, down)];
+  });
+  return along.length === 0 ? null : along.reduce((a, b) => a + b, 0) / along.length;
 }
 
 function lowestFeet(points: readonly (Vec | null)[], down: Vec | null): (number | null)[] {
@@ -686,14 +713,14 @@ export class BodyMeasures {
     const flatSpace =
       flat === null || perMetre === null
         ? null
-        : new Space(flat, flatDown, this.flatFloor.next(t, lowestFeet(flat, flatDown), drops, perMetre, perMetre, lift, limits), perMetre, leg, trunk, {
+        : new Space(flat, flatDown, this.flatFloor.next(t, lowestFeet(flat, flatDown), drops, perMetre, perMetre, hipsAlong(flat, flatDown), lift, limits), perMetre, leg, trunk, {
             length,
             world,
             downShown,
           });
     // Without the body placed on the picture the 3D points have no floor: their heights wait.
     const worldFloor =
-      offset === null || perMetre === null ? null : this.worldFloor.next(t, lowestFeet(placed, down), drops, perMetre, 1, lift, limits);
+      offset === null || perMetre === null ? null : this.worldFloor.next(t, lowestFeet(placed, down), drops, perMetre, 1, hipsAlong(placed, down), lift, limits);
     const worldSpace = new Space(placed, down, worldFloor, 1, leg, trunk);
 
     const readings = new Map<MeasureName, Reading>();
