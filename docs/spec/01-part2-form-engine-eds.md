@@ -2010,6 +2010,47 @@ are used in 29 of 100 found pictures sitting cross-legged, 61 on all fours, 91 l
 floor count it". **Limits, in plain sight:** the floor is proven on one man in two rooms; the replay is an estimate; a floor
 phone in front of a live person is tried at job 53.
 
+**As built, the feet, the floor line and standing from a low phone (52a-ii-b-i, 2026-11-20; `rulings/2026-11-20-52a-ii-b-i.md`).**
+His 14 videos are kept as body points in `test/movement-points` (`floor_phone_test`, `usual_v02` to `usual_v14`; 5.3 MB) and
+each way he faced is a set of its own (`cut` in `scripts/movementVideos.ts`), the engine started afresh for it. Eight of his
+sets were drawn (16 pictures each, the one man followed in each) and set the squat's numbers with the eight people of 52a;
+the first set, from his first picture at the phone, finds nobody in some frames and is judged only. **The three readings,
+measured again and mended where they lie:** the body's own leg and trunk are the middle of every reading of them in the last
+minute, each side's reading in each frame one reading, the leg only while its knee is within 30° of straight (held over 3 s
+from both sides' middles his leg spread 37 in 100 on one video, as the far leg came and went, read short at the bottom; held
+so, 1 to 3 in 100 on his squat videos, 0 to 2 on the squat videos of 52a, the trunk at most 6); the floor is the middle of
+where the lowest foot stood over the last 2 s, a foot point under it moving it only once it has stood there for most of that,
+or at once after a step down, when the foot is as far below the hips as when it stood both in 3D and on the picture (the
+floor now lies at most 5.0 cm under the lowest foot point seen on his shiny floor, 3.0 cm on the dull one, from 8.0 and 4.9);
+a foot point rests where it was lowest in the rep, but never more than 1 cm (`FOOT_ROOM`) under where the foot stands, the
+lower of the moment before the rep and the middle of where it stood once back up. **And the feet's travel:** a foot moved as
+far as its heel and toes moved the same way (his shiny floor's toe point lay 9 cm down on the reflection while the heel point
+rose 5 cm); where the feet stand is the middle of the last moment before the rep, never the instant the rep before came back
+up (a squat jack's feet are still out then); a foot point that comes into view during a rep decides nothing (the far foot
+showed for a frame 29 cm from where it stood); in the moment after a rep only both feet moving together is a jump (he turned
+to the phone 0.4 s after his last squat). **Two rules made right in passing:** "knees and hips together" refuses the knees
+bending far more than the hips, as "hips and knees together" refuses the other way (a Smith machine split squat, its knees
+62° more bent than its hips, had been refused only by its foot points' noise); a match rule's room is half the furthest
+rep's distance from the middle of each person's own middle rep, each person counted once, and its number is rounded towards
+the reps (counted rep by rep, his sets, 42 in 100 of the reps, opened the room on the other side, and a kettlebell swing
+was counted with pictures skipped). "Feet stay down" is never above `LIFT_CEILING`, an 8 cm jump seen at 8 pictures a second
+less 2 cm (0.04): with his floor squats among the people the usual room put it at 6 cm, where 22 of 270 jumps drawn on the
+three squat videos of 52a-ii-a were counted. The numbers: depth 0.16, knees 125°, hips and knees together 34°, knees and hips
+together −57°, chest 52°, feet down 0.04, in place 0.07, stance 0.21, hips alike 41°. **Measured:** his squats count 9 of 9,
+3 of 3 and 10 of 10 by sets (3, 1 and 9 before), none called short; his eleven other videos count 0; the 13 squat videos of 52a
+count 35 of 35; every other movement counts 0 with every set of numbers and under every replay that must hold; jumps true to
+gravity of 8, 10 and 12 cm at five take-off times, seen six ways, on three squat videos of 52a (270): none counted, as before;
+on three of his floor sets (270): five counted, 8 cm and one 10 cm taking off 0.1 to 0.2 s before the rep is back up, seen at
+15 or 8 pictures a second or with pictures skipped, written in `movementHops.test.ts`; as filmed, none. Side on with one foot
+seen, a jump from the bottom is refused from 10 cm (12 before). The phone's kept runs: 75 of the 78 older proof videos the same
+(74 before), three open, each one dip of another movement marked unseen on one side only (52b). On the laptop the measures
+take 148 to 203 microseconds a frame in the middle, the matcher 17 to 23. **Open, in plain sight, each with its job:** his
+first set, side on on the shiny floor, under 8 a second, uneven pictures, shake and the chip's gap, and with his own videos left
+out (52a-ii-b-ii), its foot points reading 3 to 4 cm up as filmed against a rule held at 4 by the jumps; his last raised pair
+under shake and the chip's gap with his videos left out (52a-ii-b-ii); `prisoner_squat_2` with its person left out, and the
+plate goblet squat under uneven pictures, both at the line half the depth sets (52b-i); his sit-and-stand on a chair when a
+passer-by hides the sitting (54, the chair squat).
+
 An exercise that does not pass is published as "count by hand", never with a wrong camera
 count. Kd tries one exercise of each kind of movement on the phone, about a dozen, never
 each one. After launch the server sees, for each exercise, how often members changed the
