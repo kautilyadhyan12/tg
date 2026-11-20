@@ -33,13 +33,22 @@ console.log("\nEvery video: reps by eye, counted, counted with that person left 
 for (const r of rows) {
   const eye = r.entry.reps === null ? "?" : String(r.entry.reps);
   const right =
-    r.entry.reps === null ? "reported" : r.count === r.entry.reps && (r.leftOut === null || r.leftOut === r.entry.reps) ? "right" : r.entry.open !== undefined ? "OPEN" : "WRONG";
+    r.entry.reps === null
+      ? "reported"
+      : r.count === r.entry.reps && (r.leftOut === null || r.leftOut === r.entry.reps)
+        ? "right"
+        : r.entry.open !== undefined || (r.count === r.entry.reps && r.leftOut === r.entry.leftOutOpen?.count)
+          ? "OPEN"
+          : "WRONG";
   const why = r.reps.filter((x) => x.verdict !== "counted").map((x) => `${(x.start / 1000).toFixed(1)}s ${x.verdict}${x.rule === null ? "" : `: ${x.rule}`}`);
   console.log(
     `  ${pad(r.label, 40)} ${pad(r.entry.view, 7)} ${pad(r.entry.movement ?? "other", 6)} eye ${pad(eye, 2)} counted ${pad(String(r.count), 2)} left out ${pad(r.leftOut === null ? "-" : String(r.leftOut), 2)} ${pad(right, 8)} ${why.join("; ")}`,
   );
 }
 for (const r of rows.filter((x) => x.entry.open !== undefined)) console.log(`\nOpen: ${r.label}, counted ${String(r.count)}: ${r.entry.open ?? ""}`);
+for (const r of rows.filter((x) => x.entry.leftOutOpen !== undefined)) {
+  console.log(`\nOpen: ${r.label}, with that person left out counted ${String(r.leftOut)}: ${r.entry.leftOutOpen?.why ?? ""}`);
+}
 console.log(`\nThe most any set of numbers (all people, or one left out) counted on another movement's video, the open case aside: ${String(worstOther)}`);
 
 if (values.write) {

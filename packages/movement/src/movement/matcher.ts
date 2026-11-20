@@ -11,7 +11,8 @@
 //     measure whose fall is the rep) stayed still for a moment. Where they stood is remembered: the drive's value, each
 //     height a rule watches, where the feet were. That is the person's own body: a rep is measured from it;
 //   - in a rep: from the drive falling past half of the movement's depth, to it coming back within a quarter of it;
-//   - then a moment more, so a jump from the top is seen, and the rep is judged by every rule;
+//   - then a moment more, so a jump from the top is seen (only leaving the floor reads it), and the rep is judged by
+//     every rule;
 //   - a rep whose drive is not seen for longer than a moment, or that lasts longer than any rep, decides nothing.
 import type { Movement, MovementRead, MovementReady, MovementRule } from "@app/shared";
 import { KP } from "@app/shared";
@@ -138,6 +139,13 @@ export interface MatchFrame {
   readonly rep: RepResult | null;
 }
 
+/** Whether a rule reads a rep's moment after with every frame: leaving the floor, the feet lifted or a height risen above
+ *  standing. (The feet's travel reads it too, but only both feet together: `jointly`.) */
+const afterToo = (rule: MovementRule): boolean => rule.read.kind === "lift" || rule.read.kind === "rise";
+
+/** A point on the picture, picture heights; null when not seen. */
+type Spot = { readonly x: number; readonly y: number } | null;
+
 const KNOWN: ReadonlySet<string> = new Set(MEASURE_LIST.map((m) => m.name));
 
 /** Where the feet touch the floor: heels and toes. Not the ankles: in a deep squat the pose model's ankle point slides
@@ -155,6 +163,33 @@ function liftOfFrame(rise: readonly (number | null)[]): number | null {
     return a === null || b === null ? [] : [Math.min(a, b)];
   });
   return lifted.length === 0 ? null : Math.min(...lifted);
+}
+
+/** How far the feet moved from where they stood (`standing.feet`), metres against the body's size then: `any`, the most
+ *  of either foot; `together`, the lesser of the two, null unless both are read. A foot moved as far as its heel AND its
+ *  toes moved the same way: a step or a stance carried out wide carries the whole foot, while the model may slide one end
+ *  alone, or the two apart (on a shiny floor, a man's toe point lay 9 cm down the picture on the floor's reflection while
+ *  his heel point rose 5 cm). So each end's move is taken along the foot's mean move, and the lesser of the two, never
+ *  below 0. A foot with one end read decides nothing. */
+function feetMoved(feet: readonly Spot[], standing: { readonly size: number; readonly feet: readonly Spot[] }): { any: number | null; together: number | null } {
+  if (!(standing.size > 0)) return { any: null, together: null };
+  const moved = FOOT_ENDS.flatMap(([heel, toes]) => {
+    const a = feet[heel] ?? null;
+    const b = feet[toes] ?? null;
+    const a0 = standing.feet[heel] ?? null;
+    const b0 = standing.feet[toes] ?? null;
+    if (a === null || b === null || a0 === null || b0 === null) return [];
+    const ax = a.x - a0.x;
+    const ay = a.y - a0.y;
+    const bx = b.x - b0.x;
+    const by = b.y - b0.y;
+    const mx = (ax + bx) / 2;
+    const my = (ay + by) / 2;
+    const m = Math.hypot(mx, my);
+    if (!(m > 0)) return [0];
+    return [Math.max(0, Math.min(ax * mx + ay * my, bx * mx + by * my) / m) / standing.size];
+  });
+  return { any: moved.length === 0 ? null : Math.max(...moved), together: moved.length === FOOT_ENDS.length ? Math.min(...moved) : null };
 }
 
 /** Whether some foot has both its heel and toes read this frame. */
@@ -245,6 +280,9 @@ interface Sample {
   readonly t: number;
   readonly drop: number | null;
   readonly reads: Readonly<Record<string, number | null>>;
+  /** For each rule on the feet's travel, how far both feet moved together, the lesser of the two feet; null unless both
+   *  feet are read. */
+  readonly jointly: Readonly<Record<string, number | null>>;
   /** Each foot point along "down" on the picture as the model gave it (picture heights); null when not seen, or lost
    *  for the rest of the rep (`Rep.lost`). */
   readonly feet: readonly (number | null)[];
@@ -267,6 +305,10 @@ interface Rep {
    *  picture) and may come back in the air: it reads nothing, never 0, so the other foot is read alone or the rule is
    *  unseen. A flicker of a frame or two keeps it. */
   lost: boolean[];
+  /** For each foot point, seen in the rep's first frame: where the feet stand is read only from points seen since the
+   *  rep began, never from one that came into view later (side on, the far foot, hidden behind the near one, shows for a
+   *  frame or a few at the bottom, up to 29 cm from where it stood, on a man's own floor video). */
+  placed: boolean[];
 }
 
 /** One frame as the matcher keeps it for the still check. */
@@ -298,8 +340,13 @@ export class MovementMatcher {
   private lastDrive: number | null = null;
   /** "Down" as the picture shows it this frame, a unit vector; null when not known. */
   private flatDown: readonly [number, number] | null = null;
-  /** Where the feet were at the latest top: while standing ready, or as the last rep came back up. */
-  private topFeet: readonly ({ readonly x: number; readonly y: number } | null)[] = [];
+  /** The feet at the top between reps (not in a rep, or in a rep's moment after), frame by frame, over the last
+   *  `stillFor` and the newest frame older than that: a rep's feet are measured from where they stood in the last moment
+   *  before it began. Never from the instant the rep before came back up: a squat jack's feet are still out then and
+   *  jump in after it, and a person may set a foot again between reps (a man's own squats, the toes 5 cm along). */
+  private tops: { readonly t: number; readonly feet: readonly Spot[] }[] = [];
+  /** For each foot point, where it was last seen at a top. */
+  private lastTop: Spot[] = [];
 
   constructor(
     private readonly movement: Movement,
@@ -366,6 +413,7 @@ export class MovementMatcher {
       if (this.rep !== null && this.rep.back === null) return this.end(t, this.judgeUnseen(this.rep, t));
     }
 
+    if (this.rep === null || this.rep.back !== null) this.atTop(t, feet);
     let judged: RepResult | null = null;
     const rep = this.rep;
     if (rep !== null) {
@@ -378,13 +426,12 @@ export class MovementMatcher {
         // starts, so a rep is never judged half way up and another begun there.
         if (drop !== null && drop <= Math.min(L.startShare * this.depth, L.endShare * Math.max(this.depth, this.deepest(rep)))) {
           rep.back = t;
-          this.topFeet = this.topFeet.length === 0 ? feet : feet.map((p, k) => p ?? this.topFeet[k] ?? null);
         }
       } else if (drop !== null && drop >= L.startShare * this.depth) {
         // The next rep began before this one's moment after: judge this one on what it had, and start the next.
         judged = this.judge(rep);
         const origin = this.originOf(rep.standing);
-        const next: Rep = { start: t, standing: origin, samples: [], lastSeen: t, back: null, seenAt: [], lost: [] };
+        const next: Rep = { start: t, standing: origin, samples: [], lastSeen: t, back: null, seenAt: [], lost: [], placed: [] };
         next.samples.push(this.sampleOf(t, drop, measured, next, feet, raw, heights));
         this.rep = next;
         return this.frame(t, drop, judged);
@@ -406,14 +453,11 @@ export class MovementMatcher {
       else if (!this.heldLow()) still = null;
     }
     if (still !== null) this.anchor = still.drive;
-    if (still !== null) {
-      this.standing = still;
-      this.topFeet = still.feet;
-    }
+    if (still !== null) this.standing = still;
     const standing = this.standing;
     if (standing !== null && drive !== null && standing.drive - drive >= L.startShare * this.depth) {
       const origin = this.originOf(standing);
-      const fresh: Rep = { start: t, standing: origin, samples: [], lastSeen: t, back: null, seenAt: [], lost: [] };
+      const fresh: Rep = { start: t, standing: origin, samples: [], lastSeen: t, back: null, seenAt: [], lost: [], placed: [] };
       fresh.samples.push(this.sampleOf(t, standing.drive - drive, measured, fresh, feet, raw, heights));
       this.rep = fresh;
       return this.frame(t, standing.drive - drive, judged);
@@ -422,7 +466,31 @@ export class MovementMatcher {
   }
 
   private originOf(standing: Standing): Standing {
-    return { ...standing, feet: standing.feet.map((then, k) => this.topFeet[k] ?? then) };
+    const top = this.topFeet();
+    return { ...standing, feet: standing.feet.map((then, k) => top[k] ?? then) };
+  }
+
+  private atTop(t: number, feet: readonly Spot[]): void {
+    this.tops.push({ t, feet });
+    const inside = this.tops.filter((x) => t - x.t <= this.limits.stillFor);
+    const edge = this.tops.filter((x) => t - x.t > this.limits.stillFor).pop();
+    this.tops = edge === undefined ? inside : [edge, ...inside];
+    feet.forEach((p, k) => {
+      if (p !== null) this.lastTop[k] = p;
+    });
+  }
+
+  /** Where each foot point stood at the latest top: the middle of the last moment there, or where it was last seen at one. */
+  private topFeet(): Spot[] {
+    return FEET.map((_, k) => {
+      const seen = this.tops.flatMap((x) => {
+        const p = x.feet[k] ?? null;
+        return p === null ? [] : [p];
+      });
+      const x = median(seen.map((p) => p.x));
+      const y = median(seen.map((p) => p.y));
+      return x === null || y === null ? (this.lastTop[k] ?? null) : { x, y };
+    });
   }
 
   /** The set has ended: a rep back up for the whole moment after is judged now; one still down, or back up too
@@ -448,7 +516,8 @@ export class MovementMatcher {
   /** A clock that went back is a new stream of frames: nothing of the old one is carried, its count included. */
   private reset(): void {
     this.count = 0;
-    this.topFeet = [];
+    this.tops = [];
+    this.lastTop = [];
     this.anchor = null;
     this.recent = [];
     this.held = [];
@@ -533,12 +602,17 @@ export class MovementMatcher {
     heights: ReadonlyMap<string, number>,
   ): Sample {
     const along = this.feetOf(rep, t, raw);
+    if (rep.samples.length === 0) rep.placed = raw.map((p) => p !== null);
+    // Where the feet stand: only the points seen since the rep began, none lost to a hide longer than a break.
+    const placed = feet.map((p, k) => (rep.placed[k] === true && along[k] !== null ? p : null));
     const reads: Record<string, number | null> = {};
+    const jointly: Record<string, number | null> = {};
     for (const rule of this.movement.rules) {
       // Leaving the floor is worked out when the rep is judged (`liftOf`); a frame says only whether the feet were read.
-      reads[rule.name] = rule.read.kind === "lift" ? (bothEnds(along) ? 0 : null) : this.read(rule.read, measured, rep.standing, feet, heights);
+      reads[rule.name] = rule.read.kind === "lift" ? (bothEnds(along) ? 0 : null) : this.read(rule.read, measured, rep.standing, placed, heights);
+      if (rule.read.kind === "travel") jointly[rule.name] = feetMoved(placed, rep.standing).together;
     }
-    return { t, drop, reads, feet: along };
+    return { t, drop, reads, jointly, feet: along };
   }
 
   /** The longest break in a rep's readings that decides nothing: `gap`, or one and a half of the rep's own frame step
@@ -580,13 +654,14 @@ export class MovementMatcher {
   private liftOf(rep: Rep): number | null {
     const size = rep.standing.size;
     if (!(size > 0)) return null;
-    const rest = FEET.map((_, k) => {
-      const values = rep.samples.flatMap((s) => {
-        const v = s.feet[k] ?? null;
-        return v === null ? [] : [v];
-      });
-      return values.length === 0 ? null : Math.max(...values);
-    });
+    const rest = FEET.map((_, k) =>
+      median(
+        rep.samples.flatMap((s) => {
+          const v = s.feet[k] ?? null;
+          return v === null ? [] : [v];
+        }),
+      ),
+    );
     let most: number | null = null;
     for (const s of rep.samples) {
       const rise = s.feet.map((v, k) => {
@@ -610,7 +685,7 @@ export class MovementMatcher {
     if (last === undefined) return false;
     const longest = this.longestBreak(rep);
     return this.movement.rules.some((r) => {
-      if (r.seen !== "always" || r.at === "bottom" || r.read.kind === "time" || (last.reads[r.name] ?? null) !== null) return false;
+      if (r.seen !== "always" || !afterToo(r) || (last.reads[r.name] ?? null) !== null) return false;
       const seenAt = [...rep.samples].reverse().find((x) => (x.reads[r.name] ?? null) !== null)?.t ?? rep.start;
       return last.t - seenAt <= longest;
     });
@@ -668,23 +743,25 @@ export class MovementMatcher {
       case "lift":
         // Read over a rep only (`liftOf`): while standing ready there is no rep's way down to rise from.
         return null;
-      case "travel": {
-        if (standing === null) return null;
-        if (!(standing.size > 0)) return null;
-        const moved = feet.flatMap((p, k) => {
-          const then = standing.feet[k] ?? null;
-          return p === null || then === null ? [] : [Math.hypot(p.x - then.x, p.y - then.y) / standing.size];
-        });
-        return moved.length === 0 ? null : Math.max(...moved);
-      }
+      case "travel":
+        return standing === null ? null : feetMoved(feet, standing).any;
       case "time":
         return null;
     }
   }
 
+  /** The frames a rule reads: the rep from its start to where it came back up. Only leaving the floor (the feet lifted,
+   *  a height risen above standing) reads the moment after as well, where a jump from the top shows: a person may turn
+   *  or step towards the phone as soon as the last rep is back up (a man's own floor video: he turned to the phone 0.4 s
+   *  after his last squat, his foot 9 cm round), and that rep was done. */
+  private samplesFor(rule: MovementRule, rep: Rep): Sample[] {
+    const back = rep.back;
+    return afterToo(rule) || back === null ? rep.samples : rep.samples.filter((s) => s.t <= back);
+  }
+
   private statOf(rule: MovementRule, rep: Rep): number | null {
     const L = this.limits;
-    const samples = rep.samples;
+    const samples = this.samplesFor(rule, rep);
     if (rule.read.kind === "time") return ((rep.back ?? samples[samples.length - 1]?.t ?? rep.start) - rep.start) / 1000;
     if (rule.at === "bottom") {
       const deepest = Math.max(...samples.map((s) => s.drop ?? Number.NEGATIVE_INFINITY));
@@ -700,19 +777,28 @@ export class MovementMatcher {
       return v === null ? [] : [{ t: s.t, v }];
     });
     if (read.length === 0) return null;
-    if (rule.seen === "always" && this.brokenOff(read.map((r) => r.t), rep)) return null;
+    if (rule.seen === "always" && this.brokenOff(read.map((r) => r.t), samples, rep)) return null;
     // The rep's newest frame without a reading: the part may be hidden in the air, so nothing is decided (a set that
     // ends, or a next rep that begins, while the feet are hidden).
     if (rule.seen === "always" && (samples[samples.length - 1]?.reads[rule.name] ?? null) === null) return null;
     if (rule.read.kind === "lift") return this.liftOf(rep);
     const values = read.map((r) => r.v);
+    // In the moment after, the feet's travel is a jump only when both feet moved: one foot stepping or turning as the
+    // person goes to the phone after their last rep is not a jump, and that rep was done (`samplesFor`).
+    const back = rep.back;
+    if (rule.read.kind === "travel" && back !== null) {
+      for (const s of rep.samples) {
+        const v = s.jointly[rule.name] ?? null;
+        if (s.t > back && v !== null) values.push(v);
+      }
+    }
     return rule.atLeast !== undefined ? Math.min(...values) : Math.max(...values);
   }
 
-  /** Whether readings at these times break off anywhere from the rep's start to its last frame (the moment after
-   *  included) for longer than a break may be (`longestBreak`), pictures in it or none. */
-  private brokenOff(times: readonly number[], rep: Rep): boolean {
-    const all = rep.samples.map((s) => s.t);
+  /** Whether readings at these times break off anywhere from the rep's start to the last of the frames the rule reads
+   *  (`samplesFor`) for longer than a break may be (`longestBreak`), pictures in it or none. */
+  private brokenOff(times: readonly number[], samples: readonly Sample[], rep: Rep): boolean {
+    const all = samples.map((s) => s.t);
     const longest = this.longestBreak(rep);
     const marks = [rep.start, ...times, all[all.length - 1] ?? rep.start];
     return marks.slice(1).some((t, k) => t - (marks[k] ?? t) > longest);

@@ -29,7 +29,7 @@ import type { Movement, MovementFrame, MovementRule } from "@app/shared";
 import { MovementMatcher, parseMovement, type RepResult } from "../src/index.js";
 import { readKept, videoOf, type Video } from "./bodyCheck.js";
 import { runOf } from "./measureCheck.js";
-import { MOVEMENT_VIDEOS, type MovementVideo } from "./movementVideos.js";
+import { MOVEMENT_VIDEOS, framesOf, labelOf, type MovementVideo } from "./movementVideos.js";
 import { REPLAYS, type Replay } from "./replays.js";
 
 const TEST = join(import.meta.dirname, "../test");
@@ -57,10 +57,11 @@ export interface ProofVideo {
  *  every frame holds one body whose size can be read, and the plain sign of a changed body finds nothing. */
 export function proofVideos(entries: readonly MovementVideo[] = MOVEMENT_VIDEOS): ProofVideo[] {
   return entries.map((entry) => {
-    const file = readKept(new Uint8Array(readFileSync(join(TEST, `${entry.file}.bodypoints`))));
+    const whole = readKept(new Uint8Array(readFileSync(join(TEST, `${entry.file}.bodypoints`))));
+    const file = { ...whole, frames: framesOf(entry, whole.frames) };
     const label = file.header.label;
     const seen = entry.sets && entry.sha256 !== undefined ? { [label]: { sets: true, sha256: entry.sha256, seen: entry.seen } } : {};
-    return { entry, video: videoOf(file, seen) };
+    return { entry, video: { ...videoOf(file, seen), label: labelOf(entry, label) } };
   });
 }
 

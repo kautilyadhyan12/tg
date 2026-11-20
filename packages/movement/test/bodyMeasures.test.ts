@@ -259,7 +259,7 @@ describe("the worst thing: a flat reading is never given further from the truth 
           return frame(t, standingSide(), { hidden: far, size, at: [0.6, 0.45 / size - 0.1] });
         }),
       );
-      const settled = after < 0.45 * (1 - MEASURE_LIMITS.sizeChange) ? 1000 : 1000 + MEASURE_LIMITS.floorRise + 100;
+      const settled = after < 0.45 * (1 - MEASURE_LIMITS.sizeChange) ? 1000 : 1000 + MEASURE_LIMITS.floorWindow / 2 + 100;
       for (const m of run.filter((x) => x.t < 1000 || x.t >= settled)) {
         expect([after, m.t, read(m, "hips height").flat]).toEqual([after, m.t, expect.closeTo(0.9 / 0.84, 6)]);
         expect([after, m.t, read(m, "left ankle height").flat]).toEqual([after, m.t, expect.closeTo(0.06 / 0.84, 6)]);
@@ -281,7 +281,7 @@ describe("the worst thing: a flat reading is never given further from the truth 
         return frame(t, standingSide(), { hidden: t < 1000 ? [] : far, size, at: [0.6, 0.45 / size - 0.1], raise: { points: near, metres: 0.02 } });
       }),
     );
-    const settled = run.filter((m) => m.t >= 1000 + MEASURE_LIMITS.floorRise + 100);
+    const settled = run.filter((m) => m.t >= 1000 + MEASURE_LIMITS.floorWindow / 2 + 100);
     expect(settled.length).toBeGreaterThan(20);
     for (const m of settled) {
       // Stood on the near foot, 2 cm above the true floor: within the tolerance a lift is judged by.

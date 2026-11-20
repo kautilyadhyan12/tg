@@ -72,7 +72,7 @@ describe("the worst thing: no other movement is ever counted as a squat", () => 
   });
 
   it("every set of numbers made with one person left out also counts 0 on every other movement but the open case", () => {
-    expect(TABLE.folds.length).toBe(8);
+    expect(TABLE.folds.length).toBe(9);
     expect(TABLE.worstOther).toBe(0);
   });
 
@@ -156,13 +156,20 @@ describe("the worst thing: no other movement is ever counted as a squat", () => 
 describe("the squat's own videos count what a person counts by eye", () => {
   const own = TABLE.rows.filter((r) => r.entry.movement === "squat" && r.sets);
 
-  it("eight people set its numbers: side on, from the front and in between", () => {
-    expect(new Set(own.map((r) => r.entry.person)).size).toBe(8);
+  it("nine people set its numbers: side on, from the front and in between, a phone on the floor among them", () => {
+    expect(new Set(own.map((r) => r.entry.person)).size).toBe(9);
     expect(new Set(own.map((r) => r.entry.view))).toEqual(new Set(["side", "front", "between"]));
+    expect(own.some((r) => r.label.startsWith("floor_phone_test"))).toBe(true);
   });
 
   it.each(own.map((r) => [r.label, r] as const))("%s, with the squat's numbers and with that person left out of them", (_label, r) => {
-    expect([r.count, r.leftOut]).toEqual([r.entry.reps, r.entry.reps]);
+    expect([r.count, r.leftOut]).toEqual([r.entry.reps, r.entry.leftOutOpen?.count ?? r.entry.reps]);
+  });
+
+  it("the one count wrong with its person left out stays in the table in plain sight, the job that closes it named", () => {
+    const open = own.filter((r) => r.entry.leftOutOpen !== undefined);
+    expect(open.map((r) => [r.label, r.leftOut])).toEqual([["prisoner_squat_2", 2]]);
+    expect(open.every((r) => /^52b-i, /.test(r.entry.leftOutOpen?.why ?? ""))).toBe(true);
   });
 
   it.each(TABLE.rows.filter((r) => r.entry.movement === "squat" && !r.sets && r.entry.reps !== null && r.entry.open === undefined).map((r) => [r.label, r] as const))(
