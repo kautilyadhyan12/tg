@@ -6,6 +6,7 @@
 import type { Sql } from "postgres";
 import {
   HISTORY_DAY_WORKOUTS_MOST,
+  RECENT_WORKOUTS_MOST,
   type ExerciseRecords,
   type HistoryDay,
   type HistoryMonth,
@@ -16,7 +17,7 @@ import { z } from "zod";
 import type { RedisLike } from "../../redis.js";
 import { historyGate } from "../workouts/service.js";
 import * as repo from "./historyRepo.js";
-import { exerciseRecords, newRecordsIn, unitAndDone, type LiftedWorkout, type SetFact } from "./records.js";
+import { exerciseRecords, newRecordsIn, recentBests, unitAndDone, type LiftedWorkout, type SetFact } from "./records.js";
 
 export interface HistoryDeps {
   sql: Sql;
@@ -129,11 +130,15 @@ export async function historyWorkout(deps: HistoryDeps, userId: string, workoutI
   };
 }
 
-/** The records of one exercise, or null for an id word the server never had. */
+/** The records of one exercise, with the person's latest workouts of it, or null for an id word the server
+ *  never had. */
 export async function recordsOf(deps: HistoryDeps, userId: string, exercise: string): Promise<ExerciseRecords | null> {
   const exerciseId = await repo.exerciseIdOf(deps.sql, exercise);
   if (exerciseId === null) return null;
   const gate = await historyGate(deps, userId);
-  const past = await pastOf(deps.sql, userId, [exerciseId], { before: null, floor: gate.floor });
-  return { exercise, ...exerciseRecords(past.sets, past.lifted), limitedToDays: gate.limitedToDays };
+  const [past, recent] = await Promise.all([
+    pastOf(deps.sql, userId, [exerciseId], { before: null, floor: gate.floor }),
+    repo.recentSets(deps.sql, userId, exerciseId, gate.floor, RECENT_WORKOUTS_MOST),
+  ]);
+  return { exercise, ...exerciseRecords(past.sets, past.lifted), recent: recentBests(recent.map(fact)), limitedToDays: gate.limitedToDays };
 }

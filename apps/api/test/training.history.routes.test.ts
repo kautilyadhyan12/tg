@@ -17,7 +17,7 @@ import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { seed } from "../src/db/seed.js";
 import type { EmailSender } from "../src/modules/auth/email.js";
-import { exerciseRecords, newRecordsIn, unitAndDone, type SetFact } from "../src/modules/training/records.js";
+import { exerciseRecords, newRecordsIn, recentBests, unitAndDone, type SetFact } from "../src/modules/training/records.js";
 
 const url = process.env["DATABASE_URL"];
 const d = describe.skipIf(url === undefined || url === "");
@@ -188,6 +188,8 @@ d("history and records for each exercise (real Postgres)", () => {
       const records = exerciseRecordsSchema.parse((await get(a, "/v1/training/exercises/squat/records")).json());
       expect(records.reps.heaviest?.weightGrams).toBe(60_000);
       expect(records.reps.mostReps?.done).toBe(5);
+      // The last times (63c) hold A's one workout only, never B's heavier one.
+      expect(records.recent.map((w) => w.reps.heaviestGrams)).toEqual([60_000]);
     });
 
     it("'New record' is told against the person's own past only, never somebody else's", async () => {
@@ -214,6 +216,9 @@ d("history and records for each exercise (real Postgres)", () => {
       expect(seen.sets.map((s) => s.weightGrams)).toEqual([50_000]);
       const bRecords = exerciseRecordsSchema.parse((await get(b, "/v1/training/exercises/squat/records")).json());
       expect(bRecords.reps.heaviest).toBeNull();
+      expect(bRecords.recent).toEqual([]);
+      const aRecords = exerciseRecordsSchema.parse((await get(a, "/v1/training/exercises/squat/records")).json());
+      expect(aRecords.recent.map((w) => w.reps.heaviestGrams)).toEqual([50_000]);
     });
   });
 
@@ -304,7 +309,9 @@ d("history and records for each exercise (real Postgres)", () => {
 
       for (const exercise of ["squat", "plank"]) {
         const got = exerciseRecordsSchema.parse((await get(a, `/v1/training/exercises/${exercise}/records`)).json());
-        expect(got).toEqual({ exercise, ...exerciseRecords(every.filter((x) => x.exercise === exercise)), limitedToDays: 90 });
+        const its = every.filter((x) => x.exercise === exercise);
+        const bests = recentBests(its).slice(-7);
+        expect(got).toEqual({ exercise, ...exerciseRecords(its), recent: bests, limitedToDays: 90 });
       }
       // The old sets hold records: the first 95-second plank, and the nine squats.
       const plank = exerciseRecordsSchema.parse((await get(a, "/v1/training/exercises/plank/records")).json());
@@ -315,6 +322,21 @@ d("history and records for each exercise (real Postgres)", () => {
       const seen = historyWorkoutSchema.parse((await get(a, `/v1/training/workouts/${last}`)).json());
       expect(seen.newRecords).toContainEqual({ exercise: "squat", measuredIn: "reps", kind: "heaviest", position: 0 });
       expect(seen.newRecords).toEqual(newRecordsIn(every.filter((x) => x.workoutId === last), every.filter((x) => x.workoutId !== last)));
+    });
+  });
+
+  describe("the last times (63c)", () => {
+    it("the latest seven workouts of the exercise in which something was done, the earliest first", async () => {
+      const a = await person();
+      const ids: string[] = [];
+      for (let w = 0; w < 9; w++) ids.push(await save(a, workout(daysAgo(30 - w), [set({ weightGrams: 40_000 + w * 2_500 })])));
+      // The newest workout did squats of nothing, and a plank: it is no time of the squat's.
+      await save(a, workout(daysAgo(5), [set({ done: 0 }), set({ position: 1, exercise: "plank", measuredIn: "time", target: 60, done: 50, weightGrams: null, durationMs: 50_000, counted: "timer" })]));
+      const got = exerciseRecordsSchema.parse((await get(a, "/v1/training/exercises/squat/records")).json());
+      expect(got.recent.map((w) => w.workoutId)).toEqual(ids.slice(2));
+      expect(got.recent.map((w) => w.reps.heaviestGrams)).toEqual([45_000, 47_500, 50_000, 52_500, 55_000, 57_500, 60_000]);
+      const plank = exerciseRecordsSchema.parse((await get(a, "/v1/training/exercises/plank/records")).json());
+      expect(plank.recent).toMatchObject([{ time: { longestHold: 50, heaviestGrams: null }, reps: { heaviestGrams: null, mostReps: null } }]);
     });
   });
 
@@ -358,7 +380,7 @@ d("history and records for each exercise (real Postgres)", () => {
       const day = historyDayOutSchema.parse((await get(a, `/v1/training/days/${daysAgo(200).toISOString().slice(0, 10)}`)).json());
       expect(day).toMatchObject({ workouts: [], total: 0, limitedToDays: 90 });
       const records = exerciseRecordsSchema.parse((await get(a, "/v1/training/exercises/plank/records")).json());
-      expect(records).toMatchObject({ limitedToDays: 90, time: { longestHold: null } });
+      expect(records).toMatchObject({ limitedToDays: 90, time: { longestHold: null }, recent: [] });
       expect((await get(a, `/v1/training/workouts/${long}`)).statusCode).toBe(200);
     });
 
