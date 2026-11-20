@@ -597,8 +597,9 @@ export class MovementMatcher {
     const last = frames[frames.length - 1];
     if (first === undefined || last === undefined || last.t - first.t < L.stillFor) return null;
     // Standing ready is taken only while the feet stand on the floor line: walking back from the phone, the floor follows
-    // the feet up the picture over a second, and a standing taken meanwhile read his hips 0.12 to 0.19 of a leg too high,
-    // so he was never back up between two squats (52a-ii-b-i, round one).
+    // the feet up the picture until they stand still, and a standing taken meanwhile read his hips 0.12 to 0.19 of a leg
+    // too high, so he was never back up between two squats (52a-ii-b-i, round one; without this line his walk-back set
+    // done 1.5 or 2 times as slowly lost a squat).
     if (!frames.every((f) => f.ready && f.drive !== null && f.size !== null && f.measured.onFloor)) return null;
     const drives = frames.map((f) => f.drive ?? 0);
     if (Math.max(...drives) - Math.min(...drives) > L.still) return null;

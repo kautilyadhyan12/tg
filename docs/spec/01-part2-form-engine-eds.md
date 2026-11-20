@@ -2021,14 +2021,20 @@ from both sides' middles his leg spread 37 in 100 on one video, as the far leg c
 so, 1 to 3 in 100 on his squat videos, 0 to 2 on the squat videos of 52a, the trunk at most 6); the floor is the middle of
 where the lowest foot stood over the last 2 s, a foot point under it moving it only once it has stood there for most of that,
 or at once after a step down, when the foot is as far below the hips as when it stood both in 3D and on the picture (the
-floor now lies at most 5.0 cm under the lowest foot point seen on his shiny floor, 3.0 cm on the dull one, from 8.0 and 4.9);
+floor lay at most 5.0 cm under the lowest foot point seen on his shiny floor, 3.0 cm on the dull one, from 8.0 and 4.9,
+before round one), or at once to where the lowest foot has stood still for 0.3 s, above or below it, with every knee seen
+within 30° of straight (round one: walking back from the phone, the floor had followed his feet up the picture over a second);
 a foot point rests where it was lowest in the rep, but never more than 1 cm (`FOOT_ROOM`) under where the foot stands, the
 lower of the moment before the rep and the middle of where it stood once back up. **And the feet's travel:** a foot moved as
 far as its heel and toes moved the same way (his shiny floor's toe point lay 9 cm down on the reflection while the heel point
 rose 5 cm); where the feet stand is the middle of the last moment before the rep, never the instant the rep before came back
 up (a squat jack's feet are still out then); a foot point that comes into view during a rep decides nothing (the far foot
 showed for a frame 29 cm from where it stood); in the moment after a rep only both feet moving together is a jump (he turned
-to the phone 0.4 s after his last squat). **Two rules made right in passing:** "knees and hips together" refuses the knees
+to the phone 0.4 s after his last squat); a next rep begun before a rep's moment after is over starts only once the hips are
+past the line a rep starts at by the shake of standing (a person back up to just that line began a "next rep" one picture
+later, and a 20 cm jump in the moment after was never judged); standing ready is taken only while the lowest foot stands on
+the floor line (walking back, a standing taken while the floor caught up read his hips 0.12 to 0.19 of a leg too high, and
+two squats were one). **Two rules made right in passing:** "knees and hips together" refuses the knees
 bending far more than the hips, as "hips and knees together" refuses the other way (a Smith machine split squat, its knees
 62° more bent than its hips, had been refused only by its foot points' noise); a match rule's room is half the furthest
 rep's distance from the middle of each person's own middle rep, each person counted once, and its number is rounded towards
@@ -2040,23 +2046,35 @@ together −57°, chest 52°, feet down 0.04, in place 0.07, stance 0.21, hips a
 3 of 3 and 10 of 10 by sets (3, 1 and 9 before), none called short; his eleven other videos count 0; the 13 squat videos of 52a
 count 35 of 35; every other movement counts 0 with every set of numbers and under every replay that must hold; jumps true to
 gravity of 8, 10 and 12 cm at five take-off times, seen six ways, on three squat videos of 52a (270): none counted, as before;
-on three of his floor sets (270): five counted, 8 cm and one 10 cm taking off 0.1 to 0.2 s before the rep is back up, seen at
-15 or 8 pictures a second or with pictures skipped, written in `movementHops.test.ts`; as filmed, none. Side on with one foot
-seen, a jump from the bottom is refused from 10 cm (12 before). **The phone's own reading** (his 14 videos read on Kd's phone
-in three batches, 29 minutes of the phone, kept in `test/phone-points`, 5.1 MB): 90 of the 99 proof sets the same as the
-laptop (the 78 older videos 75, 74 before). His squats on the phone: 19 of 22, one fewer in three sets, each written
+on all nine of his sets, floor and raised (810): 55 counted, 37 of 8 cm, 14 of 10 and 4 of 12, most taking off 0.1 to 0.2 s
+before the rep is back up, six of them as filmed, each written in `movementHops.test.ts`; of 15 and 20 cm on his nine sets
+(540), none. Side on with one foot seen, a jump from the bottom is refused from 10 cm (12 before). His two sets that begin at
+the phone, begun at every picture of his walk back (40 starts to 1.3 s, 106 to 3.5 s), count every squat
+(`movementWalkBack.test.ts`). Three replays change the pace, on the squat's own videos only (the reps in three quarters of
+the time, 1.5 and twice as slowly; another movement slowed is no movement a body makes, its jumps floating): every set holds
+but five rows, written below. **The phone's own reading** (his 14 videos read on Kd's phone
+in three batches, 29 minutes of the phone, kept in `test/phone-points`, 5.1 MB): 91 of the 99 proof sets the same as the
+laptop (the 78 older videos 76, 74 before the job). His squats on the phone: 19 of 22, one fewer in three sets, each written
 (`phoneOpen`): side on, the body check relearns his near knee's length after he walks back from the lens until 4.9 s (the
 laptop's 4.1 s), and his first squat at 5.0 s is never begun (53); half turned, a squat's feet read 4 cm up where the
 laptop's read 3 (52a-ii-b-ii); on the dull floor the phone's model puts his near foot 10 cm up for one picture as a squat
 begins (52a-ii-b-ii; letting a foot reading count only where a picture beside it agrees let 14 of 540 drawn jumps count, and
-was not kept). Six others are a dip of another movement marked unseen on one side or for another reason, no count on either
-(52b). On the laptop the measures
-take 148 to 203 microseconds a frame in the middle, the matcher 17 to 23. **Open, in plain sight, each with its job:** his
-first set, side on on the shiny floor, under 8 a second, uneven pictures, shake and the chip's gap, and with his own videos left
-out (52a-ii-b-ii), its foot points reading 3 to 4 cm up as filmed against a rule held at 4 by the jumps; his last raised pair
-under shake and the chip's gap with his videos left out (52a-ii-b-ii); `prisoner_squat_2` with its person left out, and the
-plate goblet squat under uneven pictures, both at the line half the depth sets (52b-i); his sit-and-stand on a chair when a
-passer-by hides the sitting (54, the chair squat).
+was not kept). Five others are a dip of another movement marked unseen on one side or for another reason, no count on either
+(52b). On the laptop, before round one, the measures
+take 148 to 203 microseconds a frame in the middle, the matcher 17 to 23. **Open, in plain sight, each with its job:** the 55
+jumps above (52a-ii-b-ii); his first set, side on on the shiny floor, under 8 a second, uneven pictures, shake, the chip's gap
+and the reps done faster, and with his own videos left out (52a-ii-b-ii), its foot points reading 3 to 4 cm up as filmed
+against a rule held at 4 by the jumps; his half-turned floor set done 1.5 or 2 times as slowly, its third squat's feet over
+the 4 cm (52a-ii-b-ii); his last raised pair under shake, the chip's gap and 1.5 times as slowly with his videos left out
+(52a-ii-b-ii); `prisoner_squat_2` with its person left out, and twice as slowly so, and the plate goblet squat under uneven
+pictures, both at the line half the depth sets (52b-i); his sit-and-stand on a chair when a passer-by hides the sitting (54,
+the chair squat); with the camera left on across his turns his three videos count 8 of 9, 3 of 3 and 8 of 10, the standing
+of one way of facing kept after a turn (52d); a body new within 3 s keeps the one before's leg and trunk for up to a minute
+(52d). Tried in round one and not kept, for 52a-ii-b-ii: reading a foot's rise only from the foot points seen since the rep
+began, wherever any is, with the floor moved by feet above it only once they stand still, brought the drawn jumps counted on
+his nine sets to 24 of 1,080, two as filmed (53 with the floor change alone); but on its own it made the eight
+people's readings set "feet stay down" at 3 cm without him, and four of his sets miscounted with him left out under 13
+replays.
 
 An exercise that does not pass is published as "count by hand", never with a wrong camera
 count. Kd tries one exercise of each kind of movement on the phone, about a dozen, never
