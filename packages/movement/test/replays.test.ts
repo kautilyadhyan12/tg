@@ -1,11 +1,12 @@
 // The replays themselves (scripts/replays.ts): each changes only what it says, the same way every time for the same
 // seed, and the chip's gap is the phone's own measured gap, not one drawn by hand.
 import { readFileSync, readdirSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { MovementFrame } from "@app/shared";
 import { bodySize } from "../src/index.js";
 import { readKept, videoOf } from "../scripts/bodyCheck.js";
+import { MOVEMENT_VIDEOS } from "../scripts/movementVideos.js";
 import { PHONE_GAPS, everyNth, farther, nearer, nearestFactor, numbers, passerBy, phoneGap, phoneLabel, shaken, tilted, uneven } from "../scripts/replays.js";
 import { VIDEOS } from "./helpers/body.js";
 
@@ -135,7 +136,10 @@ describe("each replay changes only what it says", () => {
 describe("the chip's gap is the phone's own, measured", () => {
   it("is kept for the chosen set-up, the graphics chip and the small model, on both squat videos", () => {
     const files = readdirSync(join(import.meta.dirname, "phone-points")).filter((f) => f.endsWith(".bodypoints")).sort();
-    expect(files).toEqual(PHONE_GAPS.flatMap((g) => g.videos.map((v) => `${v}.${g.run}.bodypoints`)).sort());
+    // Exactly the replays' set-ups and one chosen set-up run for each proof video (52a-iii): a run left over from a renamed
+    // or removed video, or another set-up's run of a proof video, is a fault.
+    const proof = MOVEMENT_VIDEOS.map((v) => `${basename(v.file)}.${PHONE_GAPS[0].run}.bodypoints`);
+    expect(files).toEqual([...new Set([...PHONE_GAPS.flatMap((g) => g.videos.map((v) => `${v}.${g.run}.bodypoints`)), ...proof])].sort());
   });
 
   it("the phone's files say they are the phone's, under a name of their own, and set no number even if written as looked at", () => {

@@ -1923,6 +1923,36 @@ own size and drawn 1.3 times bigger; a swap is now each side nearer the other's 
 well explained, and a point back near its last used place is used again at once: refused at 0.57 s at both sizes, used at
 0.60 s, and every verdict the same at 1.3 times. On the laptop the replay and jump test files take 30 to 75 s each.
 
+**As built, the phone's own runs judged (52a-iii, 2026-11-20; `rulings/2026-11-20-52a-iii.md`).** The chosen set-up (full model,
+main chip, 4 cores, asked for one person) read the laptop's own pictures of all 78 proof videos on Kd's phone (`phone-test
+--pictures laptop --people 1 --models full --chips cpu --threads 4`, nine batches named by `--kind`, 19,793 pictures for the 74
+not run before; 55 minutes of the phone, about 9 pictures a second with the pictures' decoding). `keep-phone-points` keeps each
+run as body points in `test/phone-points` (76 new files, 8.0 MB), so GitHub judges them again whenever the engine changes, with
+no phone. `phoneCounts.ts` plays each video through the movement twice, from the laptop's kept file and from the phone's, and
+calls the phone **the same** only when a person would be told the same: the count, and every rep that says something (counted;
+short, with its rule; unseen) in the same order, verdict, rule and place; a dip read as another movement says nothing and is not
+compared. A phone file is judged only when it is the phone's reading, from the chosen set-up, under the kept file's phone label,
+of the kept file's very frames; anything else is refused, and a video with no phone run never passes (`phone-counts` prints the
+table). The coach's lines are compared once 52b and 53 make them. **Measured:** 74 of 78 the same: the 13 squat videos with a
+count by eye count 35 of 35 on the phone as on the laptop, every other movement counts 0 on both, the push press's open case
+counts 3 on both. **Open, in plain sight** (`phoneOpen`, each with the judge's exact words for it: any other difference fails
+the table). On three other movements both count 0 and call nothing short, but one side marks one dip "the camera could not see
+the feet" (its feet's rule reads nothing) where the other says nothing: on a barbell Romanian deadlift and a dumbbell step-up
+the laptop finds no dip at all and the phone finds one (the deadlift's in its last five frames as he leaves the picture, its hips
+and knees 54° apart where the rule is 34°; the step-up's as he steps onto the box, the knees straight at 174°, a dip that never
+tried, the foot points seen as well as the laptop's); on a kettlebell deadlift the laptop marks its dip so (hips and knees 79°
+apart) and the phone reads a shorter dip there as another movement, silent. Each dip's seen readings already make it another
+movement or a dip that never tried: whether such a dip is called unseen at all, and whether an unseen dip says anything on the
+screen, is the reason for a rep not counted (52b). On `sumo_squat_1`, reported and never judged (a card hides him at 0.33 s), he
+goes from rep to rep with almost no pause at the top: the hips' height above the floor lies within 0.01 of a leg on both
+readings in 144 of 148 frames of his first 5 s (0.017 at most); the phone's reads him standing still at 1.97 s and counts one
+sumo squat (2.1 to 3.0 s), the laptop's not until 5.8 s and counts none: a squat twin's rep at the edge of standing still, for
+54, never another movement counted. Every time here is the video's own. **Kept only as the phone's reading of those very
+pictures** (`phoneKeep.ts`, after round one): the pinned model asked for one person with the laptop's settings, the set-up its
+name says, the laptop's pictures at the kept file's size, the plan its folder kept and the pictures that plan gave; and
+`test/phone-points/manifest.json` names, for each file, the kept file it was read against, so a proof video measured again is
+refused, never judged against a phone run of its old pictures.
+
 An exercise that does not pass is published as "count by hand", never with a wrong camera
 count. Kd tries one exercise of each kind of movement on the phone, about a dozen, never
 each one. After launch the server sees, for each exercise, how often members changed the
@@ -2007,8 +2037,8 @@ terminal (Kd, 2026-11-16).
 
 ### 12.9 Not measured yet
 
-Whether the phone's numbers, a centimetre or so from the laptop's asked for one person, change a count on the phone's own runs (job 52a-iii; the chip's measured gap carried onto every squat video changes none, 52a-ii-a; 51a,
-51b-i and 51b-ii measured the rest, §12.5) · whether full on the main chip still holds 15 a second with the camera
+How the phone counts what its own live camera sees, rather than the laptop's pictures of a video (job 53; on the laptop's
+pictures of all 78 proof videos it counts and speaks as the laptop on 74, the other four open in §12.5, 52a-iii) · whether full on the main chip still holds 15 a second with the camera
 screen's engine, voice and drawing, and how the selfie camera reads a person in the room (job 53) · whether
 one long recording cuts cleanly into lines (job 53) · whether a video redrawn from another
 phone place is faithful (job 52a-ii-b: drawn back from its own place, a redraw puts the big joints 2 to 4 cm off in the middle, 5 to 11 cm in 95 of 100) · what the hips do in a real one-leg lift: on the drawn
