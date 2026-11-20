@@ -685,18 +685,15 @@ describe("setting up My Workout's sets (64a-i)", () => {
     await add(/^Barbell Curl,/);
     await openMine();
     await fireEvent.press(await row("Barbell Curl"));
+    // The weight is a weight plate with its number, the same for every exercise (Kd's click-through).
     expect(screen.getByLabelText("Weight, none")).toBeTruthy();
-    expect(screen.getByLabelText("An empty 20 kilogram bar")).toBeTruthy();
+    expect(screen.getByTestId("weight-plate")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Less weight" }).props.accessibilityState).toMatchObject({ disabled: true });
-    // + from none is the empty bar, then 2.5 kg a press: 35 kg is a 5 and a 2.5 a side.
+    // + from none is the empty 20 kg bar for a barbell exercise, then 2.5 kg a press.
     await fireEvent.press(screen.getByRole("button", { name: "More weight" }));
-    await fireEvent.press(screen.getByRole("button", { name: "More weight" }));
-    // 22.5 kg, the walk's fault: the 1.25 change plate a side draws it.
-    expect(screen.getByLabelText("A bar loaded with 1.25 kilogram plates a side")).toBeTruthy();
-    for (let i = 0; i < 5; i++) await fireEvent.press(screen.getByRole("button", { name: "More weight" }));
+    expect(screen.getByLabelText("Weight, 20 kg")).toBeTruthy();
+    for (let i = 0; i < 6; i++) await fireEvent.press(screen.getByRole("button", { name: "More weight" }));
     expect(screen.getByLabelText("Weight, 35 kg")).toBeTruthy();
-    expect(screen.getByLabelText("A bar loaded with 5, 2.5 kilogram plates a side")).toBeTruthy();
-    // A barbell's weight is set on the bar only, never on the timer a second time.
     expect(screen.getAllByRole("button", { name: "More weight" })).toHaveLength(1);
     await fireEvent.press(screen.getByRole("button", { name: "More sets" }));
     expect(screen.getByLabelText("Sets, 4")).toBeTruthy();
@@ -715,7 +712,7 @@ describe("setting up My Workout's sets (64a-i)", () => {
     await fireEvent.press(await row("Barbell Curl"));
     expect(screen.getByLabelText("Reps, 10 reps")).toBeTruthy();
     expect(screen.getByLabelText("Weight, 35 kg")).toBeTruthy();
-    expect(screen.getByLabelText("A bar loaded with 5, 2.5 kilogram plates a side")).toBeTruthy();
+    expect(screen.getByTestId("weight-plate")).toBeTruthy();
     expect(screen.queryByText(/varies/)).toBeNull();
     // A press on Every set makes every set that number, and each line says so.
     await fireEvent.press(screen.getByRole("button", { name: "More reps" }));
@@ -725,14 +722,18 @@ describe("setting up My Workout's sets (64a-i)", () => {
     expect(await screen.findByText("4 × 11 reps · 35 to 40 kg · rest 1:00")).toBeTruthy();
   });
 
-  it("a timed exercise is set in time, with no weight; the rest too", async () => {
+  it("a timed exercise is set in time; its weight starts at none and can be added (a weighted plank); the rest too", async () => {
     await openLibrary(libraryServer().ask);
     await add(/^Plank,/);
     await openMine();
     await fireEvent.press(await row("Plank"));
     expect(screen.getByLabelText("Time, 00:30")).toBeTruthy();
     expect(screen.queryByLabelText(/^Reps/)).toBeNull();
-    expect(screen.queryByRole("button", { name: "More weight" })).toBeNull();
+    expect(screen.getByLabelText("Weight, none")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "More weight" }));
+    expect(screen.getByLabelText("Weight, 2.5 kg")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "Less weight" }));
+    expect(screen.getByLabelText("Weight, none")).toBeTruthy();
     await fireEvent.press(screen.getByRole("button", { name: "More time" }));
     await fireEvent.press(screen.getByRole("button", { name: "Less rest" }));
     expect(screen.getByLabelText("Time, 00:35")).toBeTruthy();

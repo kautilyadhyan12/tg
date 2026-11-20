@@ -1,28 +1,20 @@
 import type { PhoneLibraryEntry } from "@app/shared";
 import { useState } from "react";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
+import Svg, { Circle } from "react-native-svg";
 import { Button } from "../../look/Button";
 import { colours, sizes, type ColourName } from "../../look/colours";
 import { Sheet } from "../../look/Sheet";
 import { fonts, Txt } from "../../look/Txt";
 import type { Plan } from "../../library/myWorkout";
 import { weightParts, type Units } from "../../library/records";
-import {
-  barPlates,
-  canStep,
-  changed,
-  clockDigits,
-  restWords,
-  targetWords,
-  weightDigits,
-  weightWayOf,
-  type Field,
-} from "../../library/workoutSetup";
-import { Led, LOADED_BAR_HEIGHT, LoadedBar } from "./Records";
+import { canStep, changed, clockDigits, restWords, targetWords, type Field } from "../../library/workoutSetup";
+import { Led } from "./Records";
 
 // Setting up one exercise of My Workout (ROADMAP Stage 5 64a-i, Kd's drawing of 2026-11-20): the box from the bottom.
-// The weight of a barbell exercise is the loaded bar, as on Your records; sets, reps or time, any other weight and the
-// rest are lit on the gym's LED wall timer, each in its own colour. Under them the sets, always shown: "Every set" at
+// The weight is a weight plate with its number, the same for every exercise (Kd's click-through: "a symbol that can go
+// with any exercises ... not a barbell"); sets, reps or time and the rest are lit on the gym's LED wall timer, each in
+// its own colour. Under them the sets, always shown: "Every set" at
 // the top, then each set; the line picked is what the controls change, and they always show its real numbers
 // (Kd's click-through, 2026-11-20). Each press is kept at once; Done closes it.
 
@@ -38,7 +30,6 @@ interface Props {
 export function SetUpSheet({ entry, plan, units, onChange, onAbout, onClose }: Props) {
   const [which, setWhich] = useState<number | null>(null);
   const one = which !== null && which < plan.sets.length ? which : null;
-  const way = weightWayOf(entry, units);
   const barbell = entry.equipment.includes("barbell");
   const shown = plan.sets[one ?? 0];
   const name = entry.text.en.name;
@@ -63,7 +54,7 @@ export function SetUpSheet({ entry, plan, units, onChange, onAbout, onClose }: P
     >
       <ScrollView style={styles.scroll} contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
         {one === null ? null : <Txt kind="small" colour="orange">{`Set ${String(one + 1)} only`}</Txt>}
-        {way === "bar" ? <BarBox entry={entry} grams={shown.weightGrams} units={units} press={press} can={can} /> : null}
+        <WeightBox grams={shown.weightGrams} units={units} press={press} can={can} />
         <View style={styles.wall}>
           <Dial label="Sets" say="sets" field="sets" digits={String(plan.sets.length)} colour="ledAmber" unit={null} press={press} can={can} first />
           {time ? (
@@ -71,18 +62,6 @@ export function SetUpSheet({ entry, plan, units, onChange, onAbout, onClose }: P
           ) : (
             <Dial label="Reps" say="reps" field="target" digits={String(shown.target)} colour="ledRed" unit="reps" press={press} can={can} />
           )}
-          {way === "number" ? (
-            <Dial
-              label="Weight"
-              say="weight"
-              field="weight"
-              digits={weightDigits(shown.weightGrams, units)[0]}
-              colour="ledBlue"
-              unit={weightDigits(shown.weightGrams, units)[1]}
-              press={press}
-              can={can}
-            />
-          ) : null}
           <Dial label="Rest" say="rest" field="rest" digits={clockDigits(shown.restSeconds ?? 0)} colour="ledGreen" unit={null} press={press} can={can} />
         </View>
         <View style={styles.list}>
@@ -182,27 +161,37 @@ function Dial({ label, say, field, digits, colour, unit, press, can, first = fal
   );
 }
 
-/** A barbell's weight: the number between − and +, and the bar loaded with it in the standard plates. `grams` is
- *  the picked set's, or the first set's for every set; the bar's place is kept where no bar can be drawn. */
-function BarBox({ entry, grams, units, press, can }: { entry: PhoneLibraryEntry; grams: number | null; units: Units; press: Press; can: Can }) {
-  const plates = barPlates(entry, units, grams);
-  const words = grams === null ? "None" : weightParts(grams, units).join(" ");
+const PLATE = 84;
+
+/** The weight of the picked set (or the first, for every set): a weight plate with its number on it, between − and +,
+ *  the same for every exercise; with none, the plate is faint and reads "None". It is always the same size, so the box
+ *  never moves under a finger pressing + or −. */
+function WeightBox({ grams, units, press, can }: { grams: number | null; units: Units; press: Press; can: Can }) {
+  const [n, unit] = grams === null ? ["None", ""] : weightParts(grams, units);
   return (
-    <View style={styles.barBox}>
-      <View style={styles.barHead}>
-        <Round field="weight" by={-1} say="weight" press={press} can={can} />
-        <View style={styles.barWords} accessible accessibilityLabel={`Weight, ${words === "None" ? "none" : words}`}>
-          <Txt kind="tiny" style={styles.label}>
-            WEIGHT
+    <View style={styles.weightBox}>
+      <Round field="weight" by={-1} say="weight" press={press} can={can} />
+      <View style={styles.weightMiddle} accessible accessibilityLabel={grams === null ? "Weight, none" : `Weight, ${n} ${unit}`}>
+        <Txt kind="tiny" style={styles.label}>
+          WEIGHT
+        </Txt>
+        <View style={[styles.plate, grams === null ? styles.plateNone : null]} testID="weight-plate">
+          <Svg width={PLATE} height={PLATE} style={StyleSheet.absoluteFill} accessible={false}>
+            <Circle cx={PLATE / 2} cy={PLATE / 2} r={PLATE / 2 - 1} fill={colours.weightPlate} stroke={colours.weightPlateRim} strokeWidth={2} />
+            <Circle cx={PLATE / 2} cy={PLATE / 2} r={PLATE / 2 - 9} fill="none" stroke={colours.weightPlateGroove} strokeWidth={2} />
+            <Circle cx={PLATE / 2} cy={PLATE / 2} r={5} fill={colours.timerFace} stroke={colours.weightPlateGroove} strokeWidth={1.5} />
+          </Svg>
+          <Txt kind={grams === null ? "strong" : "big"} colour={grams === null ? "textSoft" : "text"} numberOfLines={1} fit style={styles.plateNumber}>
+            {n}
           </Txt>
-          <Txt kind={grams === null ? "strong" : "big"} colour={grams === null ? "textSoft" : "text"}>
-            {words}
-          </Txt>
+          {grams === null ? null : (
+            <Txt kind="tiny" colour="textSoft" style={styles.plateUnit}>
+              {unit}
+            </Txt>
+          )}
         </View>
-        <Round field="weight" by={1} say="weight" press={press} can={can} />
       </View>
-      {/* The bar's place is kept when no bar can be drawn, so the box never moves under a finger pressing + or −. */}
-      {plates === null ? <View style={styles.barRoom} testID="bar-room" /> : <LoadedBar side={plates} extra={[]} />}
+      <Round field="weight" by={1} say="weight" press={press} can={can} />
     </View>
   );
 }
@@ -231,10 +220,12 @@ const styles = StyleSheet.create({
   },
   roundPressed: { backgroundColor: colours.box },
   roundMark: { lineHeight: 26 },
-  barBox: { gap: 4, paddingTop: 12, paddingBottom: 8, paddingHorizontal: 12, borderRadius: 18, borderWidth: 1, borderColor: colours.line, backgroundColor: colours.raised },
-  barHead: { flexDirection: "row", alignItems: "center", gap: 8 },
-  barRoom: { height: LOADED_BAR_HEIGHT },
-  barWords: { flex: 1, alignItems: "center", gap: 2 },
+  weightBox: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 12, paddingHorizontal: 12, borderRadius: 18, borderWidth: 1, borderColor: colours.line, backgroundColor: colours.raised },
+  weightMiddle: { flex: 1, alignItems: "center", gap: 6 },
+  plate: { width: PLATE, height: PLATE, alignItems: "center", justifyContent: "center" },
+  plateNone: { opacity: 0.55 },
+  plateNumber: { maxWidth: PLATE - 22, marginTop: -6, textAlign: "center" },
+  plateUnit: { position: "absolute", bottom: 14 },
   list: { borderRadius: 16, borderWidth: 1, borderColor: colours.timerEdge, backgroundColor: colours.timerFace, overflow: "hidden" },
   setLine: { flexDirection: "row", alignItems: "center", gap: 10, minHeight: sizes.press, paddingVertical: 8, paddingHorizontal: 12, borderLeftWidth: 3, borderLeftColor: "transparent" },
   setSplit: { borderTopWidth: 1, borderTopColor: colours.timerSplit },

@@ -25,7 +25,6 @@ import {
   TIME_LEAST,
   TIME_MOST,
   weightDigits,
-  weightWayOf,
 } from "../src/library/workoutSetup";
 
 const FOLDER = new URL("../../../packages/shared/library/exercises/", import.meta.url);
@@ -67,21 +66,6 @@ describe("the Library's starting numbers", () => {
     expect(planOf({ id: "barbell_curl", plan: mine }, curl)).toBe(mine);
     expect(planOf({ id: "barbell_curl", plan: null }, curl)).toEqual(startPlan(curl));
     expect(planOf({ id: "gone", plan: null }, null)).toBeNull();
-  });
-});
-
-describe("what a weight is set with", () => {
-  it.each<[string, PhoneLibraryEntry, "metric" | "imperial", string]>([
-    ["a barbell in kilograms: the loaded bar", curl, "metric", "bar"],
-    ["a barbell in pounds: the number (the bar is drawn in kilograms only)", curl, "imperial", "number"],
-    ["no weight ever (Squat, Plank)", squat, "metric", "none"],
-    ["no weight ever, in pounds", plank, "imperial", "none"],
-    ["weight optional, no barbell", real("squat", { set: { measuredIn: "reps", weight: "may", eachSide: false, start: { sets: 3, reps: 12 } } }), "metric", "number"],
-    // A word a later Library may add, which this phone has never heard: the weight is offered, never hidden.
-    ["a weight word the phone does not know", real("squat", { set: { measuredIn: "reps", weight: "sometimes", eachSide: false, start: { sets: 3, reps: 12 } } }), "metric", "number"],
-    ["no weight word at all", real("squat", { set: { measuredIn: "reps", start: { sets: 3, reps: 12 } } }), "metric", "number"],
-  ])("%s", (_, entry, units, want) => {
-    expect(weightWayOf(entry, units)).toBe(want);
   });
 });
 

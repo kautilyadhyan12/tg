@@ -161,6 +161,10 @@ export const colours = {
   plateYellow: "#F2C230",
   plateGreen: "#2FA052",
   plateWhite: "#EDEDED",
+  /** My Workout's weight plate (64a-i): cast iron, its lit rim and its groove. */
+  weightPlate: "#2A2725",
+  weightPlateRim: "rgba(255,255,255,0.22)",
+  weightPlateGroove: "rgba(0,0,0,0.55)",
   /** The gym's 1.25 kg change plate, chrome (64a-i). */
   plateChrome: "#A9A6A1",
   plateSide: "rgba(0,0,0,0.38)",

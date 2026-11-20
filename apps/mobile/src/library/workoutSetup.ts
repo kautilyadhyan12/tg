@@ -39,15 +39,6 @@ export function planOf(item: Item, entry: PhoneLibraryEntry | null): Plan | null
   return item.plan ?? (entry === null ? null : startPlan(entry));
 }
 
-/** What a set's weight is set with. "bar": a barbell in kilograms, drawn as the loaded bar (from the empty 20 kg bar).
- *  "number": any other weight, in the person's units. "none": the exercise never takes one. */
-export type WeightWay = "bar" | "number" | "none";
-
-export function weightWayOf(entry: PhoneLibraryEntry, units: Units): WeightWay {
-  if (entry.set.weight === "never") return "none";
-  return units === "metric" && entry.equipment.includes("barbell") ? "bar" : "number";
-}
-
 export type Field = "sets" | "target" | "weight" | "rest";
 
 /** One step of a time: 5 s under a minute, 15 s to five minutes, 30 s past it, so the next of every step comes back. */
