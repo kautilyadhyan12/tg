@@ -21,8 +21,8 @@
 // back from the phone), and they are still in view after their last rep. A video that starts low gets no rep for that
 // first rise, held or not; one that ends mid-air ends with the feet up. Then the set is finished. So the proof never
 // tries a set that ends within 0.3 s of a rep coming up: `finish()` is tested for that on its own.
-// Each number is rounded the forgiving way, to a whole degree, a hundredth of a leg or a metre, or a twentieth of a
-// second. A person's videos are left out together: the numbers are set from all the people but one and tried on that
+// Each number is rounded to a whole degree, a hundredth of a leg or a metre, or a twentieth of a second: a count rule
+// the forgiving way, a match rule towards the reps. A person's videos are left out together: the numbers are set from all the people but one and tried on that
 // one, in turn.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -245,7 +245,10 @@ export function fit(movement: Movement, videos: readonly ProofVideo[]): Fitted[]
       return mine.length === 0 ? [] : [middle(mine)];
     });
     const raw = rule.role === "count" ? standing + COUNT_SHARE * (extreme - standing) : extreme + MATCH_SHARE * (extreme - middle(own));
-    const bound = rounded(raw, step(rule), !atLeast);
+    // A count rule is rounded the forgiving way (counting is a little forgiving, §12.1); a match rule towards the reps, its
+    // room already given (what kind of movement it was is strict): rounded outward, a kettlebell swing read 34.07 with
+    // pictures skipped where "hips and knees together" was 34.24, and was counted (52a-ii-b-i).
+    const bound = rounded(raw, step(rule), rule.role === "count" ? !atLeast : atLeast);
     return { rule: rule.name, bound: rule.read.kind === "lift" ? Math.min(bound, rounded(LIFT_CEILING, step(rule), false)) : bound, from: extreme, standing, reps: values.length };
   });
 }

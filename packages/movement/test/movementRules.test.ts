@@ -121,6 +121,7 @@ describe("each rule of the squat refuses on its own, by its own name", () => {
     ["a dip that bent the knees but barely went down", (_t, p, b) => (b.hips = 1.15 - bound("depth") * 0.6 * p), ["other", "depth"]],
     // What kind: no count, no word.
     ["the hips bend far more than the knees (a deadlift)", (_t, p, b) => (b.hipAngle = 168 - (85 + bound("hips and knees together") + 15) * p), ["other", "hips and knees together"]],
+    ["the knees bend far more than the hips (a split squat's front leg)", (_t, p, b) => (b.hipAngle = b.knee - (bound("knees and hips together") - 10) * p), ["other", "knees and hips together"]],
     ["the chest drops", (_t, p, b) => (b.trunk = 3 + (bound("chest up") + 15) * p), ["other", "chest up"]],
     ["the feet leave the floor at the top (a jump)", (t, _p, b) => (b.feetY = t > 3550 && t < 3800 ? -(bound("feet stay down") + 0.05) * SIZE : 0), ["other", "feet stay down"]],
     ["a foot steps out at the bottom", (_t, p, b) => (b.feetX = p > 0.5 ? (bound("feet stay in place") + 0.05) * SIZE : 0), ["other", "feet stay in place"]],

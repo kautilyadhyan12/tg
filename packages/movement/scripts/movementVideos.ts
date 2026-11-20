@@ -163,6 +163,12 @@ export const MOVEMENT_VIDEOS: readonly MovementVideo[] = [
   //    pictures at 2 to 2.5 a second (exercise folder 1's reviews/floor-phone). Good-form squats: every one counts. ───
   { file: "movement-points/floor_phone_test", cut: [0, 12], movement: "squat", person: FLOOR_PERSON, view: "side", reps: 3, sets: false,
     seen: "2026-11-20 (52a-ii-b-i), 16 frames of the set drawn with the model's points: the one man, followed in each. The phone on a shiny floor, upright; sandals. From the first picture, at the phone with his hands on the floor, as he walks back from it, then three squats side on. Judged, never setting a number: the model finds nobody in some of its first frames.",
+    leftOutOpen: {
+      count: 2,
+      why:
+        "52a-ii-b-ii, the floor view: with his own videos left out, the numbers come from the eight people filmed from about hip height, and " +
+        "\"feet stay in place\" is 5 cm; side on, on the shiny floor, the slide of his foot points reads 5 to 6 cm on one of his proper squats.",
+    },
     replayOpen: {
       replays: ["8 a second", "uneven", "shaky", "chip's gap"],
       why:
@@ -187,7 +193,13 @@ export const MOVEMENT_VIDEOS: readonly MovementVideo[] = [
   { file: "movement-points/usual_v11", cut: [22, 29.5], movement: "squat", person: FLOOR_PERSON, view: "between", reps: 2, sets: true, sha256: "e9f6f3f98f7b27d7b5737c32734a3ad8025a0e88af06d0ca668c485f42e36707",
     seen: "2026-11-20 (52a-ii-b-i), 16 frames of the set drawn with the model's points: the one man, followed in each. The phone raised: two squats half turned the other way." },
   { file: "movement-points/usual_v11", cut: [30, 39], movement: "squat", person: FLOOR_PERSON, view: "between", reps: 2, sets: true, sha256: "e9f6f3f98f7b27d7b5737c32734a3ad8025a0e88af06d0ca668c485f42e36707",
-    seen: "2026-11-20 (52a-ii-b-i), 16 frames of the set drawn with the model's points: the one man, followed in each. The phone raised: two squats half turned." },
+    seen: "2026-11-20 (52a-ii-b-i), 16 frames of the set drawn with the model's points: the one man, followed in each. The phone raised: two squats half turned.",
+    replayOpen: {
+      replays: ["shaky", "chip's gap"],
+      why:
+        "52a-ii-b-ii, the floor view: right with every person's numbers under both; with his own videos left out, the numbers come from the " +
+        "eight people filmed from about hip height, and a centimetre of shake or the chip's gap puts one of these two squats over them.",
+    } },
   // ── Twins of the squat, tried and never setting a number: a count here is expected, not a fault ─────────
   {
     file: "body-points/chair_squat_reference",
@@ -333,7 +345,16 @@ export const MOVEMENT_VIDEOS: readonly MovementVideo[] = [
   floorOther("usual_v05", "front", "The phone on the floor, upright: he sits cross-legged and turns round."),
   floorOther("usual_v06", "side", "The phone on the floor, on its long side: on all fours, he turns round."),
   floorOther("usual_v07", "side", "The phone on the floor, on its long side: he lies on the floor, raises a leg, sits up."),
-  floorOther("usual_v08", "side", "The phone on the floor, upright; barefoot: he sits on a chair side on, gets up, sits (a chair squat's movement: 54)."),
+  {
+    ...floorOther("usual_v08", "side", "The phone on the floor, upright; barefoot: he sits on a chair side on, gets up, sits (a chair squat's movement: 54)."),
+    replayOpen: {
+      replays: ["passer-by at the bottom"],
+      why:
+        "54, where the chair squat is made on the squat: sitting down on a chair and getting up is a chair squat's movement, which this list " +
+        "counts as a twin of the squat (chair_squat_reference). As filmed he sits for several seconds each time and nothing is counted; with " +
+        "somebody walking past while he sits, the sitting is hidden and one sit-and-stand counts as a squat.",
+    },
+  },
   floorOther("usual_v09", "side", "The phone on the floor, upright: he stands at a chair, one leg lifted and bent."),
   floorOther("usual_v10", "side", "The phone on the floor, on its long side: he sits on a chair, gets up, sits (54)."),
   floorOther("usual_v12", "between", "The phone raised, upright: he sits on a chair from the front and the side, stands, puts one knee on the chair."),

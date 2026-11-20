@@ -107,14 +107,14 @@ describe("a jump from the bottom of a rep", () => {
     }
   });
 
-  it("the known limit, in plain sight: side on, with only the near foot seen, a jump from the bottom counts up to 10 cm and is refused from 12", () => {
+  it("the known limit, in plain sight: side on, with only the near foot seen, a jump from the bottom counts up to 8 cm and is refused from 10", () => {
     // At the bottom the model slides that foot 2.6 to 4.4 cm up the picture itself (the green-mat man), so one foot
-    // decides nothing there; a hop from the bottom is a squat done with a hop, never a squat jump (refused above). Since
-    // 52a-ii-b-i a 10 cm one counts at two of her three reps, an 8 cm one at all three.
+    // decides nothing there; a hop from the bottom is a squat done with a hop, never a squat jump (refused above). Until
+    // 52a-ii-b-i a 10 cm one counted too.
     const video = videoOf("squat_reference");
     for (const offset of [-150, -50, 50]) {
       expect([offset, runMovement(SQUAT, trueHop(video, 0.08, offset, {}, null, "bottom")).count]).toEqual([offset, 3]);
-      expect([offset, runMovement(SQUAT, trueHop(video, 0.1, offset, {}, null, "bottom")).count]).toEqual([offset, 2]);
+      expect([offset, runMovement(SQUAT, trueHop(video, 0.1, offset, {}, null, "bottom")).count]).toEqual([offset, 0]);
       expect([offset, runMovement(SQUAT, trueHop(video, 0.12, offset, {}, null, "bottom")).count]).toEqual([offset, 0]);
     }
   });

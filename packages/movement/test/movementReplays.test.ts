@@ -76,7 +76,9 @@ describe("each squat video counts what a person counts by eye, however the world
       "floor_phone_test 0-12 s: uneven",
       "fresh_goblet_squat_plate: uneven",
       "floor_phone_test 0-12 s: shaky",
+      "usual_v11 30-39 s: shaky",
       "floor_phone_test 0-12 s: chip's gap",
+      "usual_v11 30-39 s: chip's gap",
     ]);
     expect(ROWS.filter(openRow).every((r) => /^52(a-ii-b-ii|b-i), /.test(r.entry.replayOpen?.why ?? ""))).toBe(true);
   });

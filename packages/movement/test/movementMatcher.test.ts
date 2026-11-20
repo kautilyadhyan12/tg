@@ -166,10 +166,11 @@ describe("the squat's own videos count what a person counts by eye", () => {
     expect([r.count, r.leftOut]).toEqual([r.entry.reps, r.entry.leftOutOpen?.count ?? r.entry.reps]);
   });
 
-  it("the one count wrong with its person left out stays in the table in plain sight, the job that closes it named", () => {
-    const open = own.filter((r) => r.entry.leftOutOpen !== undefined);
-    expect(open.map((r) => [r.label, r.leftOut])).toEqual([["prisoner_squat_2", 2]]);
-    expect(open.every((r) => /^52b-i, /.test(r.entry.leftOutOpen?.why ?? ""))).toBe(true);
+  it("the counts wrong with their person left out stay in the table in plain sight, the job that closes each named", () => {
+    const open = TABLE.rows.filter((r) => r.entry.leftOutOpen !== undefined);
+    expect(open.map((r) => r.label)).toEqual(["prisoner_squat_2", "floor_phone_test 0-12 s"]);
+    expect(own.filter((r) => r.entry.leftOutOpen !== undefined).map((r) => [r.label, r.leftOut])).toEqual([["prisoner_squat_2", 2]]);
+    expect(open.every((r) => /^52(b-i|a-ii-b-ii), /.test(r.entry.leftOutOpen?.why ?? ""))).toBe(true);
   });
 
   it.each(TABLE.rows.filter((r) => r.entry.movement === "squat" && !r.sets && r.entry.reps !== null && r.entry.open === undefined).map((r) => [r.label, r] as const))(
@@ -177,7 +178,11 @@ describe("the squat's own videos count what a person counts by eye", () => {
     (_label, r) => {
       expect(r.count).toBe(r.entry.reps);
       const video = videoOf(r.label);
-      for (const fold of TABLE.folds) expect([fold.person, runMovement(withNumbers(SQUAT, fold.fitted), video).count]).toEqual([fold.person, r.entry.reps]);
+      // With its own person left out of the numbers, a known wrong count is written on the video (`leftOutOpen`).
+      for (const fold of TABLE.folds) {
+        const reps = fold.person === r.entry.person ? (r.entry.leftOutOpen?.count ?? r.entry.reps) : r.entry.reps;
+        expect([fold.person, runMovement(withNumbers(SQUAT, fold.fitted), video).count]).toEqual([fold.person, reps]);
+      }
     },
   );
 
