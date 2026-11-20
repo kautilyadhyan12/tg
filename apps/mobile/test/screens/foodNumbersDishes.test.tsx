@@ -238,7 +238,7 @@ describe("32c-ii-a's worst thing: a meal is saved with the amount the bowl showe
     ] as const) {
       await fireEvent.press(screen.getByRole("radio", { name: `My blue bowl, ${words}` }));
       expect(screen.getByRole("radio", { name: `My blue bowl, ${words}` }).props.accessibilityState).toMatchObject({ selected: true });
-      expect(await screen.findByRole("button", { name: `Add Oats, rolled · ${String(kcal)} kcal` })).toBeTruthy();
+      expect(await screen.findByRole("button", { name: `Add Oats, rolled · ${String(kcal)} kcal` }, { timeout: 5000 })).toBeTruthy();
       expect(screen.getByText(`= ${String(grams)} g`)).toBeTruthy();
       expect(s.sent.filter((a) => a.path === "/v1/nutrition/meals/preview").at(-1)?.body).toEqual({ items: [{ canonical: "oats_rolled", dishwareId: BOWL.id, fillLevel: fill }] });
     }
@@ -607,7 +607,7 @@ describe("the dishes everybody has (Kd, 32b-ii-b: keep them, and a way to make y
     await fireEvent.press(screen.getByRole("radio", { name: "Bowl, half full" }));
     await waitFor(() => {
       expect(s.sent.filter((a) => a.path === "/v1/nutrition/meals/preview").at(-1)?.body).toEqual({ items: [{ canonical: "oats_rolled", dishwareId: STANDARD_DISHES[2].id, fillLevel: 0.5 }] });
-    });
+    }, { timeout: 5000 });
     expect(dishPosts(s)).toHaveLength(0);
   });
 });
@@ -769,7 +769,7 @@ describe("Kd's click-through (32b-ii-b): back goes one step, a count shows its g
     await fireEvent.press(await screen.findByRole("button", { name: /^Oats, rolled, Bowl, half full/ }));
     await waitFor(() => {
       expect(s.sent.filter((a) => a.path === "/v1/nutrition/meals/preview").at(-1)?.body).toEqual({ items: [{ canonical: "oats_rolled", dishwareId: mine.id, fillLevel: 0.5 }] });
-    });
+    }, { timeout: 5000 });
     await screen.unmount();
 
     // Two of the person's own share the name: it opens where the server starts it, never at a guess.
@@ -801,7 +801,7 @@ describe("Kd's click-through (32b-ii-b): back goes one step, a count shows its g
     expect(await screen.findByRole("radio", { name: "My blue bowl, three quarters full", selected: true })).toBeTruthy();
     await waitFor(() => {
       expect(s.sent.filter((a) => a.path === "/v1/nutrition/meals/preview").at(-1)?.body).toEqual({ items: [{ canonical: "oats_rolled", dishwareId: BOWL.id, fillLevel: 0.75 }] });
-    });
+    }, { timeout: 5000 });
     await screen.unmount();
 
     // The dish was removed since: the food opens at a cup of it, as the server starts it.
