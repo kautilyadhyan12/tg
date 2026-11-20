@@ -2,7 +2,7 @@
 // sizes, on the main chip and the graphics chip, each against the laptop's run of the same model on the same video.
 //   corepack pnpm --filter @app/movement phone-test [--laptop-only | --compare-only] [--models lite,full,heavy] [--chips cpu,gpu]
 //                                                   [--threads own,1 to 8] [--labels a,b] [--people 1 to 6]
-//                                                   [--pictures video|laptop] [--videos <folder>] [--python <command>]
+//                                                   [--pictures video|laptop] [--kind <word>] [--videos <folder>] [--python <command>]
 // It needs this folder's copy of the app on the phone on the USB cable (corepack pnpm --filter mobile phone), puts the
 // videos, the models and a plan in that copy's own files, opens its phone-test screen, waits, takes one file a run
 // back, deletes everything it put there, then compares. --laptop-only makes the laptop's side ready and stops before the
@@ -10,7 +10,8 @@
 // the laptop's six (the laptop then measures the same way); --pictures laptop hands the phone the laptop's own decoded
 // pictures instead of the video, so what still differs is the model's part alone. --threads runs the main chip once for
 // each number of cores it names ("own", the library's own number, as every 51a run was; 51b): the graphics chip runs
-// once whatever it says. Each kind of run keeps its own files,
+// once whatever it says. --kind names a kind of run of its own (52a-iii sends the proof videos a few at a time, each
+// batch its own kind, so one batch never clears another's files). Each kind of run keeps its own files,
 // and a run on the phone first clears all of its kind's earlier files, every video's, not only those it sends.
 // Everything it writes is in measured/phone-test/, which git ignores; the videos never leave Kd's folder but for the
 // phone's copy of the app, and are deleted there when the test ends.
@@ -19,7 +20,7 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { PHONE_TEST_DELEGATES, PHONE_TEST_MAX_THREADS, phoneProgressSchema, videoFramesSchema, type MovementFrame, type PhoneProgress, type PhoneTestDelegate, type VideoFrames } from "@app/shared";
+import { PHONE_TEST_DELEGATES, PHONE_TEST_MAX_THREADS, measurePointsRecordSchema, phoneProgressSchema, videoFramesSchema, type MovementFrame, type PhoneProgress, type PhoneTestDelegate, type VideoFrames } from "@app/shared";
 import { decodeBodyPoints, type BodyPoints } from "./bodyPoints.js";
 import { KEPT_MODEL } from "./keptVideos.js";
 import { KD_VIDEOS, assertFolderStaysOutOfGit } from "./outFolder.js";
@@ -42,7 +43,9 @@ import {
 } from "./phoneRun.js";
 
 const REPO = resolve(import.meta.dirname, "../../..");
-const KEPT = join(import.meta.dirname, "../test/body-points");
+const TEST = join(import.meta.dirname, "../test");
+/** The kept files, the reference videos' and the movements' proof videos' (52a), by label. */
+const KEPT_FOLDERS = ["body-points", "movement-points"].map((d) => join(TEST, d));
 const POINTS_PY = join(import.meta.dirname, "points.py");
 const MEASURE_POINTS = join(import.meta.dirname, "measure-points.ts");
 const MOBILE = join(REPO, "apps", "mobile");
@@ -76,12 +79,13 @@ const { values } = (() => {
         labels: { type: "string" },
         people: { type: "string", default: String(SETTINGS.people) },
         pictures: { type: "string", default: "video" },
+        kind: { type: "string" },
         videos: { type: "string", default: KD_VIDEOS },
         python: { type: "string", default: "python" },
       },
     });
   } catch (err) {
-    fail(`${messageOf(err)}\nUsage: phone-test [--laptop-only | --compare-only] [--models lite,full,heavy] [--chips cpu,gpu] [--threads own,1 to 8] [--labels a,b] [--people 1 to 6] [--pictures video|laptop] [--videos <folder>]`);
+    fail(`${messageOf(err)}\nUsage: phone-test [--laptop-only | --compare-only] [--models lite,full,heavy] [--chips cpu,gpu] [--threads own,1 to 8] [--labels a,b] [--people 1 to 6] [--pictures video|laptop] [--kind <word>] [--videos <folder>]`);
   }
 })();
 
@@ -100,17 +104,18 @@ const threads: (number | null)[] = [
 if (models.length === 0 || chips.length === 0 || threads.length === 0) fail("Give at least one model, one chip and one number of cores.");
 const runs: PlanRun[] = planRuns(models, chips, threads);
 if (values["laptop-only"] && values["compare-only"]) fail("--laptop-only and --compare-only do not go together.");
-const keptLabels = readdirSync(KEPT)
-  .filter((f) => f.endsWith(".bodypoints"))
-  .map((f) => basename(f, ".bodypoints"))
-  .sort();
+const keptPaths = new Map(
+  KEPT_FOLDERS.flatMap((d) => (existsSync(d) ? readdirSync(d) : []).filter((f) => f.endsWith(".bodypoints")).map((f): [string, string] => [basename(f, ".bodypoints"), join(d, f)])),
+);
+const keptLabels = [...keptPaths.keys()].sort();
 const labels = values.labels === undefined ? keptLabels : listed(values.labels);
 for (const l of labels) if (!keptLabels.includes(l)) fail(`${l} is not a kept video: ${keptLabels.join(", ")}.`);
 const people = Number(values.people);
 if (!Number.isInteger(people) || people < 1 || people > SETTINGS.people) fail(`--people is a whole number from 1 to ${String(SETTINGS.people)}.`);
 const pictures = values.pictures === "laptop" ? "laptop" : values.pictures === "video" ? "video" : fail("--pictures is video or laptop.");
 /** The kind of run: its files and its report are its own. */
-const variant = `people-${String(people)}${pictures === "laptop" ? "-laptop-pictures" : ""}`;
+const kind = values.kind === undefined ? "" : /^[a-z0-9-]{1,30}$/.test(values.kind) ? `-${values.kind}` : fail("--kind is a short word of small letters, digits and dashes.");
+const variant = `people-${String(people)}${pictures === "laptop" ? "-laptop-pictures" : ""}${kind}`;
 const PHONE_OUT = join(HERE, "phone", variant);
 
 try {
@@ -135,6 +140,15 @@ for (const m of models) modelPaths.set(m.name, await modelFile(m));
 
 // ── 2. The laptop's runs: the kept files, and the other models measured here ─
 function videoOf(label: string): string {
+  // The very file the laptop measured, where measure-points wrote it down (a proof video is named by Kd's own folder, or
+  // was cut from one); otherwise a video named by its label in Kd's reference folder.
+  const record = join(REPO, "measured", label, ".measure-points.json");
+  if (existsSync(record)) {
+    const written = measurePointsRecordSchema.safeParse(JSON.parse(readFileSync(record, "utf8")));
+    if (!written.success) fail(`${record} is not what measure-points writes: ${written.error.message}`);
+    if (existsSync(written.data.source)) return written.data.source;
+    fail(`${label} was measured from ${written.data.source}, which is not on the laptop now.`);
+  }
   const folder = values.videos;
   const found = existsSync(folder)
     ? readdirSync(folder, { withFileTypes: true })
@@ -151,7 +165,8 @@ function laptopFolder(label: string, m: PoseModel, n: number): string {
   return n === SETTINGS.people ? join(HERE, "laptop", m.name, label) : join(HERE, "laptop", m.name, `people-${String(n)}`, label);
 }
 function laptopPath(label: string, m: PoseModel, n: number): string {
-  return m.name === KEPT_MODEL.file && n === KEPT_MODEL.people ? join(KEPT, `${label}.bodypoints`) : join(laptopFolder(label, m, n), `${label}.bodypoints`);
+  const kept = keptPaths.get(label);
+  return m.name === KEPT_MODEL.file && n === KEPT_MODEL.people && kept !== undefined ? kept : join(laptopFolder(label, m, n), `${label}.bodypoints`);
 }
 
 /** The laptop's run of a video with a model, asking for as many people as the phone is asked for; made here when
@@ -247,11 +262,19 @@ const pictureFiles = (folder: string): string[] =>
     .sort()
     .map((f) => join(folder, f));
 
-/** One check sum over files one after another, as the phone makes it. */
+/** One check sum over files one after another, as the phone makes it. Worked out once a run for the same files (a
+ *  video's pictures are read from the disk for the plan, after the push and for the comparison: 2.7 GB a batch, 52a-iii),
+ *  since nothing writes them while a run lasts. */
+const sums = new Map<string, string>();
 function sha256Of(files: readonly string[]): string {
+  const key = files.join("\n");
+  const known = sums.get(key);
+  if (known !== undefined) return known;
   const hash = createHash("sha256");
   for (const f of files) hash.update(new Uint8Array(readFileSync(f)));
-  return hash.digest("hex");
+  const sum = hash.digest("hex");
+  sums.set(key, sum);
+  return sum;
 }
 
 const laptop = new Map<string, BodyPoints>();
