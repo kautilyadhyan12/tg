@@ -27,6 +27,19 @@ export const PROMISED_JUMP = 0.1;
  *  4 cm number, on a 10 cm jump with pictures missing for 170 ms) is still not hidden. */
 const ROOM = 0.01;
 
+/** Metres: how far under where a foot stands one of its points may lie and still be where it rests (`liftOf`). Near the
+ *  floor the pose model slides a foot point down the picture while the foot stays (on a man's own videos with the phone
+ *  on the floor, the heel and toes 4 to 5 cm on the way down and up of a squat, a toe 9 cm on a shiny floor's
+ *  reflection); taken as the foot's resting place, the foot then read as lifted while he stood. A centimetre is the
+ *  most measured on the drawn hops that keeps every real squat counted and every hop of 52a-ii-a refused. */
+export const FOOT_ROOM = 0.01;
+
+/** The smallest jump never counted as a squat, metres (52a-ii-a; movementHops.test.ts): under Kd's lowest real squat
+ *  jump, 12 cm. */
+export const NEVER_JUMP = 0.08;
+/** The fewest pictures a second the engine takes (`MatchLimits.stillFor`). */
+export const SLOWEST_RATE = 8;
+
 /** Metres a second squared. */
 const GRAVITY = 9.81;
 /** The time in the air of a hop `metres` high, ms: up and down, 2·√(2h/g). A break this long holds the top `metres` of
@@ -309,6 +322,9 @@ interface Rep {
    *  rep began, never from one that came into view later (side on, the far foot, hidden behind the near one, shows for a
    *  frame or a few at the bottom, up to 29 cm from where it stood, on a man's own floor video). */
   placed: boolean[];
+  /** For each foot point, where it stood along "down" on the picture (as the model gave it) in the last moment before
+   *  the rep began, the middle of that moment; null when not seen then. */
+  before: readonly (number | null)[];
 }
 
 /** One frame as the matcher keeps it for the still check. */
@@ -344,7 +360,7 @@ export class MovementMatcher {
    *  `stillFor` and the newest frame older than that: a rep's feet are measured from where they stood in the last moment
    *  before it began. Never from the instant the rep before came back up: a squat jack's feet are still out then and
    *  jump in after it, and a person may set a foot again between reps (a man's own squats, the toes 5 cm along). */
-  private tops: { readonly t: number; readonly feet: readonly Spot[] }[] = [];
+  private tops: { readonly t: number; readonly feet: readonly Spot[]; readonly along: readonly (number | null)[] }[] = [];
   /** For each foot point, where it was last seen at a top. */
   private lastTop: Spot[] = [];
 
@@ -413,7 +429,7 @@ export class MovementMatcher {
       if (this.rep !== null && this.rep.back === null) return this.end(t, this.judgeUnseen(this.rep, t));
     }
 
-    if (this.rep === null || this.rep.back !== null) this.atTop(t, feet);
+    if (this.rep === null || this.rep.back !== null) this.atTop(t, feet, this.alongDown(raw));
     let judged: RepResult | null = null;
     const rep = this.rep;
     if (rep !== null) {
@@ -431,7 +447,7 @@ export class MovementMatcher {
         // The next rep began before this one's moment after: judge this one on what it had, and start the next.
         judged = this.judge(rep);
         const origin = this.originOf(rep.standing);
-        const next: Rep = { start: t, standing: origin, samples: [], lastSeen: t, back: null, seenAt: [], lost: [], placed: [] };
+        const next: Rep = { start: t, standing: origin, samples: [], lastSeen: t, back: null, seenAt: [], lost: [], placed: [], before: this.topRest() };
         next.samples.push(this.sampleOf(t, drop, measured, next, feet, raw, heights));
         this.rep = next;
         return this.frame(t, drop, judged);
@@ -457,7 +473,7 @@ export class MovementMatcher {
     const standing = this.standing;
     if (standing !== null && drive !== null && standing.drive - drive >= L.startShare * this.depth) {
       const origin = this.originOf(standing);
-      const fresh: Rep = { start: t, standing: origin, samples: [], lastSeen: t, back: null, seenAt: [], lost: [], placed: [] };
+      const fresh: Rep = { start: t, standing: origin, samples: [], lastSeen: t, back: null, seenAt: [], lost: [], placed: [], before: this.topRest() };
       fresh.samples.push(this.sampleOf(t, standing.drive - drive, measured, fresh, feet, raw, heights));
       this.rep = fresh;
       return this.frame(t, standing.drive - drive, judged);
@@ -470,14 +486,33 @@ export class MovementMatcher {
     return { ...standing, feet: standing.feet.map((then, k) => top[k] ?? then) };
   }
 
-  private atTop(t: number, feet: readonly Spot[]): void {
-    this.tops.push({ t, feet });
+  private atTop(t: number, feet: readonly Spot[], along: readonly (number | null)[]): void {
+    this.tops.push({ t, feet, along });
     const inside = this.tops.filter((x) => t - x.t <= this.limits.stillFor);
     const edge = this.tops.filter((x) => t - x.t > this.limits.stillFor).pop();
     this.tops = edge === undefined ? inside : [edge, ...inside];
     feet.forEach((p, k) => {
       if (p !== null) this.lastTop[k] = p;
     });
+  }
+
+  /** Each foot point along "down" on the picture, as the model gave it; null when not seen or "down" is not known. */
+  private alongDown(raw: readonly Spot[]): (number | null)[] {
+    const d = this.flatDown;
+    return raw.map((p) => (p === null || d === null ? null : p.x * d[0] + p.y * d[1]));
+  }
+
+  /** Where each foot point stood along "down" at the latest top, as the model gave it: the middle of the last moment
+   *  there; null where it was not seen then. */
+  private topRest(): (number | null)[] {
+    return FEET.map((_, k) =>
+      median(
+        this.tops.flatMap((x) => {
+          const v = x.along[k] ?? null;
+          return v === null ? [] : [v];
+        }),
+      ),
+    );
   }
 
   /** Where each foot point stood at the latest top: the middle of the last moment there, or where it was last seen at one. */
@@ -642,26 +677,34 @@ export class MovementMatcher {
   }
 
   /** How far the body's feet rose above where they rest, the most in the rep, metres against the body's size while
-   *  standing. Where each foot point rests: the lowest it was on the picture in the shallow part of the rep (the hips
-   *  above the movement's depth), on the way down, on the way up and in the moment after, worked out once the rep is
-   *  over. Never the bottom, where the model slides the foot points as the shins tilt (a toe 7 cm down the picture on a
-   *  fresh barbell front squat); never the top of the rep before (in reps with no pause, a hop there is already in the
-   *  air); never where the person stood before the set (a step nearer the phone puts the feet lower for good). The way
-   *  up and the moment after hold the floor before a take-off and after a landing, whenever the hop was; a foot that
-   *  moved and stayed is measured from where it now stands. Every frame is judged, the bottom too, there with both feet
-   *  read: a hop from the bottom is a hop. For each foot the lesser of its heel and toes, and the lesser of the two feet where both are read.
-   *  Null when no frame read both ends of a foot against a resting place. */
+   *  standing. Where each foot point rests: the lowest it was on the picture over the rep and the moment after, worked
+   *  out once the rep is over, but never more than `FOOT_ROOM` under where the foot stands (52a-ii-b-i): the lower of
+   *  where it stood in the moment before the rep and the middle of where it stood once back up. The lowest alone holds
+   *  the floor before a take-off and after a landing, whenever the hop was, and a foot that moved and stayed is measured
+   *  from where it now stands; but from a phone on the floor the model slides foot points down the picture while the
+   *  feet stay, and a foot point under where the foot stands is refused. Not the middle of the rep: at the bottom the
+   *  toe points ride higher on the picture, and an 8 cm hop seen at 8 pictures a second then read under 4 cm. Every
+   *  frame is judged, the bottom too, there with both feet read: a hop from the bottom is a hop. For each foot the
+   *  lesser of its heel and toes, and the lesser of the two feet where both are read. Null when no frame read both ends
+   *  of a foot against a resting place. */
   private liftOf(rep: Rep): number | null {
     const size = rep.standing.size;
     if (!(size > 0)) return null;
-    const rest = FEET.map((_, k) =>
-      median(
-        rep.samples.flatMap((s) => {
-          const v = s.feet[k] ?? null;
-          return v === null ? [] : [v];
-        }),
-      ),
-    );
+    const back = rep.back ?? Number.POSITIVE_INFINITY;
+    const rest = FEET.map((_, k) => {
+      const seen = rep.samples.flatMap((s) => {
+        const v = s.feet[k] ?? null;
+        return v === null ? [] : [{ t: s.t, v }];
+      });
+      if (seen.length === 0) return null;
+      const lowest = Math.max(...seen.map((x) => x.v));
+      // Never lower than a little under where the foot stands: the lower of where it stood in the moment before the rep
+      // and the middle of where it stood once back up (a foot that moved during the rep stands there now).
+      const after = median(seen.filter((x) => x.t >= back).map((x) => x.v));
+      const before = rep.before[k] ?? null;
+      const stands = after === null ? before : before === null ? after : Math.max(after, before);
+      return stands === null ? lowest : Math.min(lowest, stands + FOOT_ROOM * size);
+    });
     let most: number | null = null;
     for (const s of rep.samples) {
       const rise = s.feet.map((v, k) => {

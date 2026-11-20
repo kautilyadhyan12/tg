@@ -8,7 +8,7 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
-import { MOVEMENTS, holds, openRow, proofTable, readMovement, replayTable, withNumbers, type Fitted } from "./movementCheck.js";
+import { LIFT_CEILING, MOVEMENTS, holds, openRow, proofTable, readMovement, replayTable, withNumbers, type Fitted } from "./movementCheck.js";
 
 const { values, positionals } = parseArgs({ allowPositionals: true, options: { write: { type: "boolean", default: false }, replays: { type: "boolean", default: false } } });
 const name = positionals[0] ?? "squat";
@@ -56,7 +56,8 @@ if (values.write) {
   const words = (f: Fitted): string => {
     const rule = movement.rules.find((r) => r.name === f.rule);
     const how = rule?.role === "count" ? "a quarter of the way back towards standing from the shallowest rep" : "beyond the furthest rep by half its distance from the middle rep";
-    return `Set by movement-check from ${String(people.length)} people's videos (scripts/movementVideos.ts), as filmed and as each replay that sets numbers (scripts/replays.ts), ${String(f.reps)} reps: ${how} (${num(Math.round(f.from * 100) / 100)}; standing ${num(Math.round(f.standing * 100) / 100)}).`;
+    const ceiling = rule?.read.kind === "lift" ? `, and no higher than an 8 cm jump seen at 8 pictures a second less 2 cm (LIFT_CEILING in scripts/movementCheck.ts, ${LIFT_CEILING.toFixed(3)})` : "";
+    return `Set by movement-check from ${String(people.length)} people's videos (scripts/movementVideos.ts), as filmed and as each replay that sets numbers (scripts/replays.ts), ${String(f.reps)} reps: ${how} (${num(Math.round(f.from * 100) / 100)}; standing ${num(Math.round(f.standing * 100) / 100)})${ceiling}.`;
   };
   const out = withNumbers(movement, fitted);
   const json = { ...out, rules: out.rules.map((r) => ({ ...r, from: words(fitted.find((f) => f.rule === r.name) ?? { rule: r.name, bound: 0, from: 0, standing: 0, reps: 0 }) })) };

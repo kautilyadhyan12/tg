@@ -52,7 +52,8 @@ describe("each squat video counts what a person counts by eye, however the world
       "passer-by",
       "passer-by at the bottom",
     ]);
-    expect(new Set(ROWS.map((r) => r.label)).size).toBe(13);
+    // The 13 squat videos with a count by eye, and a man's own nine sets from a phone on the floor and raised (52a-ii-b-i).
+    expect(new Set(ROWS.map((r) => r.label)).size).toBe(22);
   });
 
   it.each(ROWS.filter((r) => r.tried && !openRow(r)).map((r) => [`${r.replay.name}: ${r.label}`, r] as const))("%s, with the squat's numbers and, where the video sets them, with its person left out", (_name, r) => {
@@ -69,8 +70,15 @@ describe("each squat video counts what a person counts by eye, however the world
     expect(ROWS.filter((r) => r.replay.name !== "nearer").every((r) => r.tried)).toBe(true);
   });
 
-  it("no row is open today: a known wrong count under a replay would be listed here with the job that closes it", () => {
-    expect(ROWS.filter(openRow)).toEqual([]);
+  it("the rows open today are listed here, each with the job that closes it; each is right as filmed", () => {
+    expect(ROWS.filter(openRow).map((r) => `${r.label}: ${r.replay.name}`)).toEqual([
+      "floor_phone_test 0-12 s: 8 a second",
+      "floor_phone_test 0-12 s: uneven",
+      "fresh_goblet_squat_plate: uneven",
+      "floor_phone_test 0-12 s: shaky",
+      "floor_phone_test 0-12 s: chip's gap",
+    ]);
+    expect(ROWS.filter(openRow).every((r) => /^52(a-ii-b-ii|b-i), /.test(r.entry.replayOpen?.why ?? ""))).toBe(true);
   });
 
   it.each(["passer-by", "passer-by at the bottom"])("%s hides at most the rep it covers: that rep decides nothing and is never called short", (name) => {

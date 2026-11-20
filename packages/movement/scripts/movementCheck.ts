@@ -12,8 +12,9 @@
 //   - a "count" rule (how far the rep goes) is placed a quarter of the way back towards standing from the shallowest
 //     rep any of those people did: counting is a little forgiving (§12.1, principle 4);
 //   - a "match" rule (what kind of movement) is placed beyond the furthest rep any of those people did, by half of how
-//     far that rep lay from the middle rep: a body never seen is given room, and every other movement is still far
-//     outside;
+//     far that rep lay from the middle rep (the middle of each person's own middle rep, each person counted once): a body
+//     never seen is given room, and every other movement is still far outside; the feet leaving the floor never above
+//     `LIFT_CEILING`;
 // "standing" is the rule's own reading while the person stood ready (0 for a drop).
 // Each video is played with its first picture held for a second before it, and its last picture for a second after it:
 // the engine learns a body in its first half second, a live set starts with the person already in view (they walked
@@ -26,7 +27,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Movement, MovementFrame, MovementRule } from "@app/shared";
-import { MovementMatcher, parseMovement, type RepResult } from "../src/index.js";
+import { FOOT_ROOM, MovementMatcher, NEVER_JUMP, SLOWEST_RATE, parseMovement, type RepResult } from "../src/index.js";
 import { readKept, videoOf, type Video } from "./bodyCheck.js";
 import { runOf } from "./measureCheck.js";
 import { MOVEMENT_VIDEOS, framesOf, labelOf, type MovementVideo } from "./movementVideos.js";
@@ -41,6 +42,13 @@ export const MEASURING_DEPTH = 0.15;
 export const COUNT_SHARE = 0.75;
 /** A match rule is placed beyond the furthest rep by this share of its distance from the middle rep. */
 export const MATCH_SHARE = 0.5;
+/** The most a rule on the feet leaving the floor may be, metres (52a-ii-b-i): the smallest jump never counted, seen at the
+ *  slowest the engine takes (its highest picture at most half a picture's time from its top: 1.9 cm lower at 8 a second),
+ *  less the room a foot point is given under where the foot stands and a centimetre more. With a phone on the floor the
+ *  feet of real squats read up to 3.9 cm lifted under the replays, so the usual room beyond the furthest rep would put it
+ *  at 6 cm, where 22 of 270 jumps drawn on the three squat videos of 52a-ii-a were counted (none at 4). */
+export const LIFT_CEILING = NEVER_JUMP - 0.5 * 9.81 * (0.5 / SLOWEST_RATE) ** 2 - FOOT_ROOM - 0.01;
+
 /** Each video's first picture is held this long before it, and its last this long after it, ms. */
 export const LEAD_IN = 1000;
 
@@ -206,6 +214,13 @@ export interface Fitted {
  *  two rules above. */
 export function fit(movement: Movement, videos: readonly ProofVideo[]): Fitted[] {
   const reps = repsOf(movement, videos.flatMap((v) => [v, ...asReplayed(v)]));
+  // Each person's own reps, for the middle rep: each person counts once there, as each is left out once (52a-ii-b-i).
+  const people = [...new Set(videos.map((v) => v.entry.person))].map((person) =>
+    repsOf(
+      movement,
+      videos.filter((v) => v.entry.person === person).flatMap((v) => [v, ...asReplayed(v)]),
+    ),
+  );
   return movement.rules.map((rule) => {
     const values = reps.flatMap((r) => {
       const v = r.readings[rule.name] ?? null;
@@ -219,8 +234,19 @@ export function fit(movement: Movement, videos: readonly ProofVideo[]): Fitted[]
     const atLeast = rule.atLeast !== undefined;
     // The rep furthest the way the rule refuses: for a count rule the shallowest, for a match rule the furthest out.
     const extreme = atLeast ? Math.min(...values) : Math.max(...values);
-    const raw = rule.role === "count" ? standing + COUNT_SHARE * (extreme - standing) : extreme + MATCH_SHARE * (extreme - middle(values));
-    return { rule: rule.name, bound: rounded(raw, step(rule), !atLeast), from: extreme, standing, reps: values.length };
+    // The middle rep: the middle of the people's own middles. Counted rep by rep, one person's many sets would move it: a
+    // man's own floor squats, 42 in 100 of the reps, open the hips more than the knees, and the room they gave on the
+    // other side let a kettlebell swing through.
+    const own = people.flatMap((personReps) => {
+      const mine = personReps.flatMap((r) => {
+        const v = r.readings[rule.name] ?? null;
+        return v === null ? [] : [v];
+      });
+      return mine.length === 0 ? [] : [middle(mine)];
+    });
+    const raw = rule.role === "count" ? standing + COUNT_SHARE * (extreme - standing) : extreme + MATCH_SHARE * (extreme - middle(own));
+    const bound = rounded(raw, step(rule), !atLeast);
+    return { rule: rule.name, bound: rule.read.kind === "lift" ? Math.min(bound, rounded(LIFT_CEILING, step(rule), false)) : bound, from: extreme, standing, reps: values.length };
   });
 }
 
@@ -343,6 +369,7 @@ export function replayTable(movement: Movement, videos: readonly ProofVideo[] = 
   return replays.flatMap((replay) => judged.map((v) => replayed(movement, v, replay, v.video.sets && v.entry.movement === movement.name ? foldOf(v.entry.person) : null)));
 }
 
-export const holds = (r: ReplayRow): boolean => r.count >= r.least && r.count <= r.most && (r.leftOut === null || (r.leftOut >= r.least && r.leftOut <= r.most));
+export const holds = (r: ReplayRow): boolean =>
+  r.count >= r.least && r.count <= r.most && (r.leftOut === null || (r.leftOut >= r.least && r.leftOut <= r.most) || r.leftOut === r.entry.leftOutOpen?.count);
 /** A row the video's own entry names as a known wrong count under this replay (`replayOpen`). */
 export const openRow = (r: ReplayRow): boolean => r.entry.replayOpen?.replays.includes(r.replay.name) === true;

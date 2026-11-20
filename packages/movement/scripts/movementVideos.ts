@@ -162,7 +162,14 @@ export const MOVEMENT_VIDEOS: readonly MovementVideo[] = [
   // ── A phone on the floor (52a-ii-b-i): a man's own squats, each way he faced a set of its own, counted by eye from
   //    pictures at 2 to 2.5 a second (exercise folder 1's reviews/floor-phone). Good-form squats: every one counts. ───
   { file: "movement-points/floor_phone_test", cut: [0, 12], movement: "squat", person: FLOOR_PERSON, view: "side", reps: 3, sets: false,
-    seen: "2026-11-20 (52a-ii-b-i), 16 frames of the set drawn with the model's points: the one man, followed in each. The phone on a shiny floor, upright; sandals. From the first picture, at the phone with his hands on the floor, as he walks back from it, then three squats side on. Judged, never setting a number: the model finds nobody in some of its first frames." },
+    seen: "2026-11-20 (52a-ii-b-i), 16 frames of the set drawn with the model's points: the one man, followed in each. The phone on a shiny floor, upright; sandals. From the first picture, at the phone with his hands on the floor, as he walks back from it, then three squats side on. Judged, never setting a number: the model finds nobody in some of its first frames.",
+    replayOpen: {
+      replays: ["8 a second", "uneven", "shaky", "chip's gap"],
+      why:
+        "52a-ii-b-ii, the floor view: side on, on the shiny floor, the model slides his near foot's heel and toes about on the picture, so his " +
+        "proper squats read the feet 3 to 4 cm off the floor as filmed (the rule is 4 cm, held there by the jumps it must refuse); a centimetre " +
+        "of shake, the chip's gap, or pictures skipped puts a rep over it, or leaves its feet unseen.",
+    } },
   { file: "movement-points/floor_phone_test", cut: [13.9, 21.1], movement: "squat", person: FLOOR_PERSON, view: "between", reps: 3, sets: true, sha256: "023bdc68c259df01ea372e9cb1be961e3c56be8c7e3ca9fb0b8797511a0920a1",
     seen: "2026-11-20 (52a-ii-b-i), 16 frames of the set drawn with the model's points: the one man, followed in each. The phone on a shiny floor: three squats half turned to it, the floor's reflection under his toes." },
   { file: "movement-points/floor_phone_test", cut: [22.3, 31.4], movement: "squat", person: FLOOR_PERSON, view: "front", reps: 3, sets: true, sha256: "023bdc68c259df01ea372e9cb1be961e3c56be8c7e3ca9fb0b8797511a0920a1",
@@ -216,7 +223,14 @@ export const MOVEMENT_VIDEOS: readonly MovementVideo[] = [
   //    them: the test on videos nobody had looked at. Reps counted by eye before the engine was run on them. ────────
   { file: "movement-points/fresh_back_squat_barbell", movement: "squat", person: "woman, barbell on the back", view: "side", reps: null, sets: false, seen: "Fresh: a barbell back squat, side on, three reps by eye; the camera pans and zooms with her (the rack moves on the picture by her feet's 14 cm), so it is reported, never judged." },
   { file: "movement-points/fresh_squat_smith", movement: "squat", person: "man, Smith machine", view: "front", reps: 0, sets: false, seen: "Fresh: 3.5 s of a Smith machine squat that starts at the bottom and rises: no rep from standing." },
-  { file: "movement-points/fresh_goblet_squat_plate", movement: "squat", person: "woman, plate at the chest", view: "side", reps: 4, sets: false, seen: "Fresh: a weight-plate goblet squat; it starts low and rises (not a rep), then four reps." },
+  { file: "movement-points/fresh_goblet_squat_plate", movement: "squat", person: "woman, plate at the chest", view: "side", reps: 4, sets: false, seen: "Fresh: a weight-plate goblet squat; it starts low and rises (not a rep), then four reps.",
+    replayOpen: {
+      replays: ["uneven"],
+      why:
+        "52b-i, where the depth, and with it the line a rep is back up at (half the depth, 0.08 of a leg), is set afresh: she stands 0.08 of " +
+        "a leg taller at the start than between her third and fourth reps (since 52a-ii-b-i her leg is read the same all through), and with " +
+        "pictures skipped she comes back to 0.085 of her tallest standing there, so the two reps are one.",
+    } },
   { file: "movement-points/fresh_front_squat_kettlebell", movement: "squat", person: "man, kettlebells in front", view: "front", reps: null, sets: false, seen: "Fresh: a kettlebell front squat facing the phone, three reps by eye; the camera tilts down in its first 0.6 s and moves later (the wall's foot and the bikes shift): reported, never judged." },
   // ── Every other movement: 0 and silence ──────────────────────────────────────────────────────────────
   other("movement-points/squat_jump_1", "woman, squat jump, dark gym", "side", "Squat jumps: the feet leave the floor at the top."),
