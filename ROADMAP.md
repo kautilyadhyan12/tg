@@ -506,9 +506,9 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
    - V1-f. [x] **Payments overview** · merged 2026-11-19 · PR #594
    - V0-d. **The boards not drawn yet, in the third look**, from `kit3.css`, every button of the real page kept, each looked at in the 24 screen shapes (Kd, 2026-11-19). No code. In three (2026-11-19):
      - V0-d-i. [x] **The four ways a box opens, Sell and Memberships** · merged 2026-11-19 · PR #597
-     - V0-d-ii. **Attendance, Classes and Leads**, in two (2026-11-20):
-       - V0-d-ii-a. [ ] **Attendance, the front desk, Leads and At risk**.
-       - V0-d-ii-b. [ ] **Classes and personal training**.
+     - V0-d-ii. [x] **Attendance, Classes and Leads**, in two (2026-11-20):
+       - V0-d-ii-a. [x] **Attendance, the front desk, Leads and At risk** · merged 2026-11-20 · PR #601
+       - V0-d-ii-b. [x] **Classes and personal training** · merged 2026-11-20 · PR #603
      - V0-d-iii. [ ] **Reports and Settings**, the ten sections.
 23. **A gym finds its way** (Kd, RULINGS 2026-10-07: the console read as "a maze"). Each page was clear alone and the fault was between pages. Four jobs in this order, built in Folder A before 17e-ii.
    - 23a. **One answer for membership**, split 2026-10-07 in two (the list's read and Add member's form are more than one terminal):
@@ -822,9 +822,14 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
         - 52a-i. [x] **The squat counted from its whole movement** — merged 2026-11-19 (PR #592).
         - 52a-ii. **Each video replayed the ways the world changes it** (split 2026-11-19 in two, `handoff/2026-11-19-52a-ii-a.md` keeps its line as first written):
             - 52a-ii-a. [x] **Nearer, farther, tilted, fewer and uneven pictures, shaky points, the phone's own chip gap, a passer-by** — merged 2026-11-19 (PR #595).
-            - 52a-ii-b. [ ] **A phone lower or higher, redrawn from the 3D points** (drawn back from the phone's own place the big joints land 2 to 4 cm off in the middle, 5 to 11 cm in 95 of 100): Kd's squat videos filmed by a phone on the floor.
-        - 52a-iii. [ ] **The phone's own runs judged by the laptop's count, reasons and lines** (51a's videos through the phone), never by its numbers.
-    - 52b. [ ] **The form judge, the reason for a rep not counted, and the summary** (§12.1, §2.4). It sets the squat's depth from its form standard (Kd's research file) and closes 52a-i's open case: a kettlebell push press's dip counts as a squat (first test: it counts 0).
+            - 52a-ii-b. **A phone on the floor** (re-planned 2026-11-20 on Kd's own floor videos and split in two, the real videos first: spec §12.5 "As measured and planned, a phone on the floor"; `handoff/2026-11-20-floor-phone-plan.md` keeps its line as first written):
+                - 52a-ii-b-i. [ ] **The feet, the floor line and standing read steadily from a low phone**, mended in the shared engine, never by loosening the squat's numbers. First test: Kd's two floor videos and his raised one count their squats, each way of facing as a set (today 3 of 9, 1 of 3 and 9 of 10); then no jump of 8 cm or more is counted, on his floor videos too. It needs nothing more from Kd.
+                - 52a-ii-b-ii. [ ] **The floor view for every other exercise** (after 52a-ii-b-i): each proof video replayed as a low phone sees it, from the 3D points and the foot wander measured on Kd's videos, kept only if it matches his real floor videos; and one table of what a floor phone sees of sitting, lying, all fours and a chair (his eleven other videos), for 52c and 54.
+        - 52a-iii. [x] **The phone's own runs judged by the laptop's count and reasons** — merged 2026-11-20 (PR #600).
+    - 52b. **The form judge, the reason for a rep not counted, and the summary** (§12.1, §2.4; split 2026-11-20 in three, `handoff/2026-11-20-floor-phone-plan.md` keeps its line as first written):
+        - 52b-i. [ ] **Why a rep did not count, and the squat's depth**: each rep not counted carries one short reason for the screen ("Go lower to count."); the depth is set from the squat's form standard (Kd's research file: thighs level with the floor, knees about 90°) with room measured from the videos, so a quarter squat stops counting; a dip that is plainly another movement says nothing, its feet hidden or not (52a-iii's three open cases). First test: the kettlebell push press counts 0 (today 3); then no rep that reaches the standard is told to go lower.
+        - 52b-ii. [ ] **The form check and each rep's score**: the squat's mistakes from the research file, each checked by the camera or marked "the camera cannot see this from here", judged only inside a counted rep; no advice on any good-form video, Kd's own floor videos among them.
+        - 52b-iii. [ ] **The set's summary** (§2.4), which the workout reads as it does today.
     - 52c. [ ] **The other kinds of counting**: one side at a time, holds, fast rhythm, timed only, jumps, floor work.
     - 52d. [ ] **One person locked on**: a busy gym, a passer-by, a mirror (§11.8). Since 51c the phone asks the model for one
       person, so the model itself picks the body: the job is to notice when the body followed has changed (51c's plain sign,

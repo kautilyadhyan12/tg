@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Personal training on a phone</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./kit3.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0;background:#0A0908}
+.cap{display:flex;align-items:center;gap:10px;font-weight:600;color:var(--t2)}
+.num{width:26px;height:26px;border-radius:999px;background:var(--o-fill);color:var(--o-t);box-shadow:inset 0 0 0 1px var(--o-line);display:grid;place-items:center;font-size:13px;font-weight:700;flex:none}
+.stage{background:var(--scrim);border-radius:18px;padding:32px 16px;display:flex;justify-content:center}
+.dlg{background:var(--solid);border:1px solid var(--line2);border-radius:20px;box-shadow:var(--pop);width:100%;max-width:500px;min-width:0}
+.side{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,440px);border:1px solid var(--line);border-radius:18px;overflow:hidden}
+.side > .under{padding:20px;opacity:.6;overflow:hidden;min-width:0}
+.side > .sheet{background:var(--solid);border-left:1px solid var(--line2);display:flex;flex-direction:column;min-width:0}
+.sheet-h{display:flex;align-items:center;gap:12px;padding:18px 20px;border-bottom:1px solid var(--line)}
+.sheet-b{padding:20px;display:flex;flex-direction:column;gap:18px}
+.sheet-f{margin-top:auto;display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:14px 20px;border-top:1px solid var(--line)}
+.opt{display:flex;gap:12px;align-items:flex-start;padding:14px 16px;border-radius:14px;border:1px solid var(--line2)}
+.opt-on{border-color:var(--o);background:var(--o-fill)}
+.radio{width:18px;height:18px;border-radius:999px;border:1.5px solid var(--line2);flex:none;margin-top:1px}
+.radio-on{border:5px solid var(--o)}
+.check-on{background:var(--o);border-color:var(--o);position:relative}
+.check-on::after{content:"";position:absolute;left:5px;top:1px;width:5px;height:10px;border:solid var(--on-o);border-width:0 2px 2px 0;transform:rotate(45deg)}
+.sw{width:40px;height:24px;border-radius:999px;background:var(--bar);position:relative;flex:none}
+.sw::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:999px;background:var(--t3)}
+.sw-on{background:var(--o)}.sw-on::after{left:19px;background:var(--on-o)}
+.step{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,340px);gap:20px;align-items:start}
+.menu{background:var(--solid);border:1px solid var(--line2);border-radius:16px;box-shadow:var(--pop);padding:6px;min-width:0;max-width:320px}
+.mi{display:flex;gap:12px;align-items:flex-start;padding:10px 12px;border-radius:10px}
+.ptile{display:flex;flex-direction:column;gap:4px;padding:14px;border-radius:14px;border:1px solid var(--line2);min-width:0}
+.ptile-on{border-color:var(--o);background:var(--o-fill)}
+.pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.qty{display:inline-flex;align-items:center;border:1px solid var(--line2);border-radius:999px;height:40px}
+.qty > button{width:40px;height:40px;display:grid;place-items:center;color:var(--t2)}
+.money{font-weight:600;white-space:nowrap}
+.frames{display:flex;flex-wrap:wrap;gap:40px;padding:40px;align-items:flex-start}
+.frame{width:390px;max-width:100%;border:1px solid var(--line2);border-radius:28px;overflow:hidden;background:var(--page);display:flex;flex-direction:column;position:relative}
+.bsheet{background:var(--solid);border-top:1px solid var(--line2);border-radius:22px 22px 0 0;box-shadow:var(--pop);display:flex;flex-direction:column}
+.grab{width:40px;height:5px;border-radius:999px;background:var(--line2);margin:10px auto 4px}
+.savebar{position:sticky;bottom:12px;z-index:2;display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 16px;background:var(--solid);border:1px solid var(--line2);border-radius:18px}
+.footbar{position:sticky;bottom:0;padding:12px 16px 16px;border-top:1px solid var(--line);background:var(--solid);display:flex;flex-direction:column;gap:8px}
+@media (max-width:1180px){.side{grid-template-columns:minmax(0,1fr)}.side > .under{display:none}.side > .sheet{border-left:0}}
+@media (max-width:900px){.step{grid-template-columns:minmax(0,1fr)}.frames{padding:16px;gap:24px}}
+@media (pointer:coarse){.qty,.qty > button{height:44px}.qty > button{width:44px}}
+.nw{white-space:nowrap}.col > span{overflow-wrap:anywhere}.ch{display:flex;gap:8px;flex-wrap:wrap}.trn{display:flex;flex-direction:column;gap:8px;padding:12px 0;border-top:1px solid var(--line)}.tabs7{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px}.dt{display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 0;border:1px solid var(--line2);border-radius:12px;background:var(--box);min-height:64px;justify-content:center;min-width:0}.dt-on{border-color:var(--o);background:var(--o-fill)}.dt .d{font-size:17px;font-weight:700}.dot6{width:6px;height:6px;border-radius:999px;background:var(--o)}.free{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.free .btn{width:100%;justify-content:center;white-space:normal;height:auto;min-height:40px;text-align:center}.pk{display:flex;align-items:center;gap:10px;min-height:52px;padding:6px 0;border-top:1px solid var(--line)}.lk{color:var(--o-t);font-weight:600}.warnline{color:var(--warn);font-weight:500}.tag-warn{color:var(--warn)}.dayh{display:flex;flex-direction:column;gap:8px;padding:10px 0;border-bottom:1px solid var(--line)}@media (max-width:300px){.free{grid-template-columns:minmax(0,1fr)}.ph-tab-on{font-weight:500}.dt .d{font-size:15px}}
+</style>
+</helmet>
+<div class="app t-dark {{look}}" style="min-height: 100%">
+<div class="frames">
+
+<div class="frame" aria-label="Personal training">
+<header class="ph-top"><a href="#" class="hrow g10 grow" style="min-height: 44px"><span class="logo"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18zM6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2M10 6h4M10 10h4M10 14h4M10 18h4"></path></svg></span><span class="w6">Iron House</span></a><button type="button" class="ibtn" aria-label="Search"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 4a7 7 0 1 0 0 14a7 7 0 1 0 0-14M21 21l-4.3-4.3"></path></svg></button><button type="button" class="ibtn" aria-label="6 items need attention"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 0 0 3.4 0"></path></svg><span class="pip">6</span></button></header>
+<main class="ph-main">
+<div class="col g4"><span class="eyebrow">Today</span><h1 class="h1">Personal training</h1><span class="t2">One-to-one sessions with a trainer. Set when each trainer is available, then book members into their available times.</span><a href="#" class="c-o w6" style="min-height: 44px; display: inline-flex; align-items: center">Change booking rules</a></div>
+<section class="box col" style="padding: 16px" aria-label="How to set up personal training">
+<div class="between"><h2 class="h2">How to set up personal training</h2></div><span class="t2 w6">1 of 4 done</span>
+<span class="w6" style="padding-top: 8px">2. Sell a membership or pack that includes personal training<span class="t3 w5"> · Not done yet</span></span>
+<a href="#" class="btn btn-main btn-w" style="margin-top: 8px">Open Memberships</a>
+</section>
+<section class="box col" style="padding: 4px 16px 16px" aria-label="Trainers">
+<div class="bh" style="padding-left: 0; padding-right: 0"><h2 class="h2">Trainers</h2></div>
+<div class="trn" style="border-top: 0"><span class="w6"><a href="#" class="lk">Kiran Das</a> <span class="t2 w5">· 60-minute sessions</span></span><span class="t3">Mon – Fri · 6:00 am – 11:00 am, 5:00 pm – 9:00 pm</span><span class="hrow g8 wrap"><span class="tag tag-o">Week shown below</span><button type="button" class="btn btn-s btn-sm">Edit hours</button><button type="button" class="btn btn-s btn-sm">Time off</button></span></div>
+<div class="trn"><span class="w6"><a href="#" class="lk">Dana Brooks (you)</a> <span class="t2 w5">· 45-minute sessions</span></span><span class="hrow g8 wrap"><button type="button" class="btn btn-s btn-sm">View week</button><button type="button" class="btn btn-s btn-sm">Edit hours</button><button type="button" class="btn btn-s btn-sm">Time off</button></span></div>
+<div class="field" style="padding-top: 10px; border-top: 1px solid var(--line)"><span class="label">Add a trainer</span><div class="input"><span class="grow ell">Choose a member of staff</span><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div><button type="button" class="btn btn-p btn-w">Set their hours</button><span class="t3">Only people on your staff are listed. <a href="#" class="c-o w6">Invite staff</a></span></div>
+</section>
+</main>
+<nav class="ph-tabs" aria-label="Pages"><a href="#" class="ph-tab"><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"></path></svg></span>Overview</a><a href="#" class="ph-tab"><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 3a4 4 0 1 0 0 8a4 4 0 1 0 0-8M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"></path></svg></span>Members</a><a href="#" class="ph-tab"><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6L9 17l-5-5"></path></svg></span>Attendance</a><a href="#" class="ph-tab"><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM16 2v4M8 2v4M3 10h18"></path></svg></span>Classes</a><a href="#" class="ph-tab ph-tab-on"><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h.01M12 12h.01M19 12h.01"></path></svg></span>More</a></nav>
+</div>
+
+<div class="frame" aria-label="A trainer's week">
+<header class="ph-top"><a href="#" class="hrow g10 grow" style="min-height: 44px"><span class="logo"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18zM6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2M10 6h4M10 10h4M10 14h4M10 18h4"></path></svg></span><span class="w6">Iron House</span></a><button type="button" class="ibtn" aria-label="Search"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 4a7 7 0 1 0 0 14a7 7 0 1 0 0-14M21 21l-4.3-4.3"></path></svg></button><button type="button" class="ibtn" aria-label="6 items need attention"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 0 0 3.4 0"></path></svg><span class="pip">6</span></button></header>
+<main class="ph-main">
+<h2 class="h2">Kiran Das · Mon 16 Nov – Sun 22 Nov</h2>
+<div class="input" aria-label="Go to a date"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM16 2v4M8 2v4M3 10h18"></path></svg><span class="grow">Fri 20 Nov 2026</span><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div>
+<div class="grid2" style="gap: 8px"><button type="button" class="btn btn-s"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"></path></svg>Previous week</button><button type="button" class="btn btn-s">Next week<svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg></button></div>
+<div class="tabs7" role="group" aria-label="Days of this week">
+<button type="button" class="dt" aria-label="Mon 16 Nov, 3 marked"><span class="t3">Mon</span><span class="d">16</span><span class="dot6"></span></button>
+<button type="button" class="dt" aria-label="Tue 17 Nov, 2 marked"><span class="t3">Tue</span><span class="d">17</span><span class="dot6"></span></button>
+<button type="button" class="dt" aria-label="Wed 18 Nov, 1 to mark"><span class="t3">Wed</span><span class="d">18</span><span class="dot6" style="background: var(--warn)"></span></button>
+<button type="button" class="dt"><span class="t3">Thu</span><span class="d">19</span></button>
+<button type="button" class="dt dt-on" aria-pressed="true"><span class="w6">Today</span><span class="d">20</span><span class="dot6"></span></button>
+<button type="button" class="dt"><span class="t3">Sat</span><span class="d">21</span><span class="dot6"></span></button>
+<button type="button" class="dt" aria-label="Sun 22 Nov, Time off"><span class="t3">Sun</span><span class="d">22</span><span class="dot6" style="background: var(--t3)"></span></button>
+</div>
+<section class="box col g12" style="padding: 16px">
+<h3 class="h3">Today · Fri 20 Nov</h3><span class="tag tag-warn" style="align-self: flex-start">Time off · 12:00 pm – 2:00 pm</span>
+<span class="label">Booked</span>
+<div class="col g4"><span class="w6">5:00 pm – 6:00 pm · <a href="#" class="lk">Leela Menon</a></span><span class="t3">Gold Monthly + PT</span><button type="button" class="btn btn-s btn-sm" style="align-self: flex-start">Cancel</button></div>
+<span class="label">Available times. Press one to book it.</span>
+<div class="free"><button type="button" class="btn btn-s btn-sm"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg><span><span class="nw">8:00 am –</span> <span class="nw">9:00 am</span></span></button><button type="button" class="btn btn-p btn-sm"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg><span><span class="nw">9:00 am –</span> <span class="nw">10:00 am</span></span></button><button type="button" class="btn btn-s btn-sm"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg><span><span class="nw">6:00 pm –</span> <span class="nw">7:00 pm</span></span></button><button type="button" class="btn btn-s btn-sm"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg><span><span class="nw">7:00 pm –</span> <span class="nw">8:00 pm</span></span></button></div>
+</section>
+</main>
+<nav class="ph-tabs" aria-label="Pages"><a href="#" class="ph-tab"><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"></path></svg></span>Overview</a><a href="#" class="ph-tab"><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 3a4 4 0 1 0 0 8a4 4 0 1 0 0-8M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"></path></svg></span>Members</a><a href="#" class="ph-tab"><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6L9 17l-5-5"></path></svg></span>Attendance</a><a href="#" class="ph-tab"><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM16 2v4M8 2v4M3 10h18"></path></svg></span>Classes</a><a href="#" class="ph-tab ph-tab-on"><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h.01M12 12h.01M19 12h.01"></path></svg></span>More</a></nav>
+</div>
+
+<div class="frame" aria-label="Book a session, under the time">
+<header class="ph-top"><a href="#" class="hrow g10 grow" style="min-height: 44px"><span class="logo"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18zM6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2M10 6h4M10 10h4M10 14h4M10 18h4"></path></svg></span><span class="w6">Iron House</span></a><button type="button" class="ibtn" aria-label="Search"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 4a7 7 0 1 0 0 14a7 7 0 1 0 0-14M21 21l-4.3-4.3"></path></svg></button><button type="button" class="ibtn" aria-label="6 items need attention"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 0 0 3.4 0"></path></svg><span class="pip">6</span></button></header>
+<main class="ph-main">
+<span class="label">Available times. Press one to book it.</span>
+<div class="free"><button type="button" class="btn btn-s btn-sm"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg><span><span class="nw">8:00 am –</span> <span class="nw">9:00 am</span></span></button><button type="button" class="btn btn-p btn-sm"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg><span><span class="nw">9:00 am –</span> <span class="nw">10:00 am</span></span></button></div>
+<section class="inset col g10" aria-label="Book a session">
+<div class="between" style="gap: 8px; align-items: flex-start"><h3 class="h3">Book Kiran Das · Fri 20 Nov · 9:00 am – 10:00 am</h3><button type="button" class="ibtn" aria-label="Close"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"></path></svg></button></div>
+<div class="field"><span class="label">Who is it for?</span><div class="input input-on"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 4a7 7 0 1 0 0 14a7 7 0 1 0 0-14M21 21l-4.3-4.3"></path></svg><span class="grow">leela</span></div></div>
+<span class="label">Matching people</span>
+<button type="button" class="pk" aria-label="Pick Leela Menon"><span class="col grow" style="min-width: 0; text-align: left"><span class="w6">Leela Menon</span><span class="t3">Gold Monthly + PT · 3 of 4 sessions left that month</span></span><span class="btn btn-s btn-sm">Pick</span></button>
+</section>
+<section class="inset col g10" aria-label="Book a session">
+<span>Leela Menon will be booked with Kiran Das on Fri 20 Nov, 9:00 am – 10:00 am.</span>
+<span class="t2">It is booked on Gold Monthly + PT, which includes 4 a month: 3 of 4 sessions left that month, before this one. The app doesn't tell them yet. Let them know yourself.</span>
+<button type="button" class="btn btn-main btn-w">Book session</button><button type="button" class="btn btn-s btn-w">Pick someone else</button>
+</section>
+</main>
+</div>
+
+<div class="frame" aria-label="Hours, as a full page">
+<header class="ph-top"><button type="button" class="ibtn" aria-label="Close"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"></path></svg></button><span class="col grow" style="min-width: 0"><span class="w6">Hours for Kiran Das</span></span></header>
+<main class="ph-main">
+<div class="opt opt-on"><span class="sw sw-on"></span><span class="col g4 grow"><span class="w6">Takes personal training sessions</span></span></div>
+<div class="field"><span class="label">How long is one session? (minutes)</span><div class="ch"><span class="chip">30</span><span class="chip">45</span><span class="chip chip-on">60</span><span class="chip">90</span></div><span class="t3">Any length from 10 to 240 minutes, in steps of 5.</span></div>
+<div class="col g4"><span class="label">Hours they are available each week, on your gym's clock</span><span class="t3">A split day? Add a second set of hours, for example a morning and an evening.</span></div>
+<div class="dayh"><span class="w6">Monday</span><div class="grid2" style="gap: 8px"><div class="field"><span class="t3">From</span><div class="input"><span class="grow">6:00 AM</span></div></div><div class="field"><span class="t3">To</span><div class="input"><span class="grow">11:00 AM</span></div></div></div><span class="hrow g8 wrap"><button type="button" class="btn btn-q btn-sm">Remove</button><button type="button" class="btn btn-q btn-sm"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>Add more hours</button></span></div>
+<div class="dayh"><span class="w6">Sunday</span><span class="t3">Not training this day</span><button type="button" class="btn btn-s btn-sm" style="align-self: flex-start"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>Add hours</button></div>
+</main>
+<div class="footbar"><span class="t2">These hours make 54 sessions a week. Sessions already booked stay as they are.</span><button type="button" class="btn btn-main btn-lg btn-w">Save hours</button><button type="button" class="btn btn-q">Close</button></div>
+</div>
+
+</div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"look":{"editor":"enum","options":["Dark","Light"],"default":"Dark"},"$preview":{"width":1800,"height":1160}}'>
+class Component extends DCLogic {
+renderVals() {
+return { look: (this.props.look ?? 'Dark') === 'Light' ? 't-light' : '' };
+}
+}
+</script>
+</body>
+</html>

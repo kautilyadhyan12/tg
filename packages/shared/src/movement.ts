@@ -326,6 +326,25 @@ export const phoneLiveProgressSchema = z
   })
   .strict();
 
+// ── The phone's own runs judged (ROADMAP 52a-iii) ─────────────────────────────────────
+/** What measure-points writes beside a measurement (`measured/<label>/.measure-points.json`): the very video it measured. */
+export const measurePointsRecordSchema = z.object({ source: z.string().min(1).max(1000), pictures: z.array(z.string().max(200)).max(1000) });
+
+/** The part of the phone test's plan (`phoneRun.ts` `makePlan`) the laptop reads back: each video's label, the sum of
+ *  what the phone was given, and whether those were the laptop's own pictures. */
+export const phoneTestPlanSchema = z.object({
+  version: z.number().int().positive(),
+  videos: z.array(z.object({ label, sha256, pictures: z.enum(["video", "laptop"]) })).max(1000),
+});
+
+/** `test/phone-points/manifest.json`: for each phone file, the kept file it was read against and the sum of the laptop's
+ *  pictures the phone was given, so a proof video measured again is never judged against a phone run of the old pictures. */
+export const phonePointsManifestSchema = z
+  .object({
+    files: z.record(z.string().regex(/^[A-Za-z0-9_.-]{1,160}\.bodypoints$/), z.object({ kept: sha256, pictures: sha256 }).strict()),
+  })
+  .strict();
+
 /** What the laptop's points.py says of a video before the phone test: each frame its measuring keeps, by its
  *  number in the video and its time, the picture's shape, and how many frames the video holds in all. */
 export const videoFramesSchema = z
@@ -362,3 +381,4 @@ export type SeenPerson = z.infer<typeof seenPersonSchema>;
 export type Down = z.infer<typeof downSchema>;
 export type MovementFrame = z.infer<typeof movementFrameSchema>;
 export type BodyPointsHeader = z.infer<typeof bodyPointsHeaderSchema>;
+export type PhonePointsManifest = z.infer<typeof phonePointsManifestSchema>;

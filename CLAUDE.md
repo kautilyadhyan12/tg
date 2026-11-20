@@ -345,7 +345,10 @@ what stays still, the path, the speed, left against right, the person's own body
 from one angle alone, and every other movement gets no count and no word. An exercise is
 data, made on the line: Kd names it and gives 3 to 5 videos of different people and a
 research file; he never records himself and is never asked to. The videos are measured on
-his laptop and never go to git. ONE pose model, the one the phone runs, measures
+his laptop and never go to git. The phone standing on the floor is the first place a count
+must hold, since most members will stand it there, and a properly done rep the counter
+refuses is the counter's fault, never called the person's mistake (Kd, 2026-11-20,
+`rulings/2026-11-20-floor-phone-plan.md`). ONE pose model, the one the phone runs, measures
 everything, and the numbers that set a rule are the app's own engine's, set from all the
 people but one and tested on the one left out. Every common mistake, from proper sources,
 is either checked by the camera or marked "the camera cannot see this from here". An
