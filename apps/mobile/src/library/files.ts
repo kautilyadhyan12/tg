@@ -1,6 +1,7 @@
 import { File, Paths } from "expo-file-system";
 import { isForgotten } from "../session/personFiles";
 import type { Sex } from "./figure";
+import { myWorkoutFileName, type ListFile } from "./myWorkout";
 import type { LibraryFile } from "./store";
 
 /** The kept Library: one file for each person on this phone, since the server gives each person their own channel's
@@ -52,3 +53,25 @@ export const figureFile = {
     }
   },
 };
+
+/** A person's My Workout (63c), in a file that names them, so deleting the account removes it (`forgetPersonFiles`);
+ *  never written for an account already deleted. Written to a second file and moved over the first, as the Library. */
+export function myWorkoutFile(userId: string): ListFile {
+  const name = myWorkoutFileName(userId);
+  return {
+    read: async () => {
+      const file = new File(Paths.document, name);
+      if (file.exists) return await file.text();
+      const next = new File(Paths.document, `${name}.next`);
+      return next.exists ? await next.text() : null;
+    },
+    write: async (text) => {
+      if (isForgotten(userId)) return;
+      const next = new File(Paths.document, `${name}.next`);
+      if (next.exists) next.delete();
+      next.create();
+      next.write(text);
+      await next.move(new File(Paths.document, name), { overwrite: true });
+    },
+  };
+}

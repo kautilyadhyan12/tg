@@ -117,6 +117,19 @@ export const recordSetSchema = z.object({
 });
 export type RecordSet = z.infer<typeof recordSetSchema>;
 
+/** How many of the person's latest workouts of an exercise its records also give, one best each. */
+export const RECENT_WORKOUTS_MOST = 7;
+
+/** One of the person's latest workouts of an exercise, with its own best of each kind (null where it did
+ *  none of that kind): the screen draws the person's last times against their record. */
+export const recentWorkoutSchema = z.object({
+  workoutId: z.uuid(),
+  startedAt: z.string(),
+  reps: z.object({ heaviestGrams: z.number().int().nullable(), mostReps: z.number().int().nullable() }),
+  time: z.object({ longestHold: z.number().int().nullable(), heaviestGrams: z.number().int().nullable() }),
+});
+export type RecentWorkout = z.infer<typeof recentWorkoutSchema>;
+
 export const exerciseRecordsSchema = z.object({
   exercise: exerciseIdSchema,
   /** Sets measured in reps. */
@@ -131,6 +144,12 @@ export const exerciseRecordsSchema = z.object({
     longestHold: recordSetSchema.nullable(),
     heaviest: recordSetSchema.nullable(),
   }),
+  /** The person's latest workouts of it in which something was done, at most `RECENT_WORKOUTS_MOST`, the
+   *  earliest first; within a free plan's days, as the records are. */
+  recent: z.array(recentWorkoutSchema).max(RECENT_WORKOUTS_MOST),
+  /** The day of each workout this answer names, in the zone it was done in (the person's own zone for one kept
+   *  without one), as History tells a day. */
+  days: z.record(z.uuid(), historyDaySchema),
   limitedToDays: z.number().int().nullable(),
 });
 export type ExerciseRecords = z.infer<typeof exerciseRecordsSchema>;

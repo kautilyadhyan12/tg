@@ -144,6 +144,27 @@ export const colours = {
   muscleGlow: "rgba(255,138,31,0.28)",
   /** The stage the figures stand on: a warm pool of light on near-black. */
   stagePool: "rgba(255,138,31,0.15)",
+  /** An exercise's records (63c, Kd's drawing of 2026-11-20): the gym's LED wall timer, its lights each in their own
+   *  colour and the unlit ones faintly there; and the loaded bar, its plates in the standard colours (red 25, blue 20,
+   *  yellow 15, green 10, white 5; the change plates the same). */
+  ledRed: "#FF4B3E",
+  ledAmber: "#FFB020",
+  ledGreen: "#36D96A",
+  ledBlue: "#3FA9FF",
+  ledOff: "rgba(255,255,255,0.055)",
+  timerFace: "#060606",
+  timerEdge: "#262320",
+  timerSplit: "#1D1B19",
+  timerWords: "rgba(255,255,255,0.62)",
+  plateRed: "#D62E3A",
+  plateBlue: "#2364DB",
+  plateYellow: "#F2C230",
+  plateGreen: "#2FA052",
+  plateWhite: "#EDEDED",
+  plateSide: "rgba(0,0,0,0.38)",
+  barSteel: "#9C9A97",
+  barSleeve: "#C9C6C1",
+  barCollar: "#B4B1AC",
 } as const;
 
 export type ColourName = keyof typeof colours;

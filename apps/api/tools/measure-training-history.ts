@@ -5,7 +5,7 @@
 //   - beside them, the rest of the launch shape (20 gyms of 200): 3,999 people of 20 workouts of 10 sets,
 //     so the database chooses its way as it would with everybody's sets in the table.
 // For each read the heavy person makes (a month, a day, their newest workout with its new records against
-// everything before it, and one exercise's records), it measures the median time of a read and the
+// everything before it, and one exercise's records with its last seven times (63c)), it measures the median time of a read and the
 // longest the server's process went without answering anybody while it ran. Everybody it makes is
 // removed after. Run from apps/api:
 //   $env:DATABASE_URL='postgres://aihg:aihg@localhost:5433/aihg_ex2'; corepack pnpm exec tsx tools/measure-training-history.ts
@@ -14,7 +14,7 @@ import postgres from "postgres";
 import { createMemoryRedis } from "../src/redis.js";
 import { historyDay, historyMonth, historyWorkout, recordsOf } from "../src/modules/training/history.js";
 import * as repo from "../src/modules/training/historyRepo.js";
-import { exerciseRecords, unitAndDone } from "../src/modules/training/records.js";
+import { exerciseRecords, recentBests, unitAndDone } from "../src/modules/training/records.js";
 
 const RUNS = 7;
 const OTHERS = 3999;
@@ -109,9 +109,14 @@ async function main(): Promise<void> {
   if (squat === undefined) throw new Error("no squat");
   await measure("squat's records, all five years", async () => {
     const window = { before: null, floor: null };
-    const [rows, sums] = await Promise.all([repo.recordCandidates(sql, heavy.id, [squat.id], window), repo.liftedByWorkout(sql, heavy.id, [squat.id], window)]);
-    const facts = rows.map((r) => ({ workoutId: r.workout_id, startedAt: r.started_at.toISOString(), exercise: r.slug, position: r.set_index, ...unitAndDone(r.measured_in, r.reps, r.hold_ms), weightGrams: r.weight_grams }));
-    return exerciseRecords(facts, sums.map((s) => ({ workoutId: s.workout_id, startedAt: s.started_at.toISOString(), exercise: s.slug, grams: s.grams })));
+    const [rows, sums, latest] = await Promise.all([
+      repo.recordCandidates(sql, heavy.id, [squat.id], window),
+      repo.liftedByWorkout(sql, heavy.id, [squat.id], window),
+      repo.recentSets(sql, heavy.id, squat.id, null, 7),
+    ]);
+    const fact = (r: repo.FactRow) => ({ workoutId: r.workout_id, startedAt: r.started_at.toISOString(), exercise: r.slug, position: r.set_index, ...unitAndDone(r.measured_in, r.reps, r.hold_ms), weightGrams: r.weight_grams });
+    const records = exerciseRecords(rows.map(fact), sums.map((s) => ({ workoutId: s.workout_id, startedAt: s.started_at.toISOString(), exercise: s.slug, grams: s.grams })));
+    return { ...records, recent: recentBests(latest.map(fact)) };
   });
 
   const explain = await sql<{ "QUERY PLAN": string }[]>`

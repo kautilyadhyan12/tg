@@ -2493,6 +2493,29 @@ nothing matches the word. The body screen is a window of its own on Android, so 
 has its own gesture root. Until the setup answer is known there is no figure, so no Muscle row. Not yet: picking a muscle
 with a screen reader.
 
+**As built in 63c (2026-11-20, Kd's fifth drawing that day).** On an exercise's page, under the facts strip and its cautions:
+- **Calories a minute** for the person's newest weight, the one a saved workout's calories are reckoned at (`kcalPerMinute` in
+  `packages/shared`, held to the server's `kcalForSave` by a test): "About 5 kcal a minute for you, at 82 kg"; with no weight,
+  "About 4 kcal a minute at 70 kg" and Add your weight, which opens Progress on Body; closing it asks for the weight again. No
+  line until setup's answer is heard.
+- **Your records**, read from the server (`GET /v1/training/exercises/:exercise/records`, which since 63c also gives `recent`:
+  the person's latest seven workouts of the exercise in which something was done, each with its own best of each kind, by the
+  same rule as the records), drawn as the gym's own things (`screens/library/Records.tsx`, rules in `library/records.ts`,
+  table-tested). Heaviest as the loaded bar: a standard 20 kg bar with the standard plates a side (red 25, blue 20, yellow 15,
+  green 10, white 5, the change plates the same) that make the weight exactly, and the estimated one-rep max (Epley, named as
+  an estimate) as outlined plates beyond them, rounded down; drawn only for a barbell exercise in kilograms from 20 kg with every
+  plate on the sleeve, else the number alone, and the estimate's plates left off where they would not fit. Each day shown is the
+  workout's own (`days` in the answer, in the zone it was done in), as History tells it. No one-rep max is shown below the heaviest weight lifted. Most reps (red), best volume (amber, all sets of one
+  workout) and longest hold (green) on the LED wall timer; the last times as its bars, each lit as far as it came to the
+  record, the record's own workout in red with "PR". Which record leads: a time exercise its longest hold; one in reps its
+  heaviest where the person has lifted a weight in it, else most reps. None yet: one line ("Your best set shows here after
+  your first workout."), no box. A free plan's records say "From your last 90 days".
+- **Add to workout** held at the foot: added once, pressed again it comes out, with "N in My Workout" and Open.
+- **My Workout**, the Workout tab's second part, its count on its button: the exercises added, in that order, each opening its
+  page, each with its ✕; one no longer in the Library says so. Kept on the phone in a file of each person's own
+  (`my-workout-<id>.json`), removed with the account; at most 50. Start workout reads "Coming soon" until 64a.
+- **Not in 63c:** Goals' exercise picker on this list (its job is Kd's to place).
+
 ### 13.7 The jobs (ROADMAP Stage 5, exercise folder 2; ROADMAP wins where they differ)
 
 | Job | What it builds | Waits for |
