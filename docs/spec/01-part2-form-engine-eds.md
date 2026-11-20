@@ -1650,7 +1650,11 @@ For every exercise, on real videos:
 - each video is replayed the ways the world changes it (nearer, farther, the phone tilted,
   fewer frames a second, shaky points, a passer-by) and **as a phone lower, higher or
   turned would see it**, redrawn from the 3D points; the count must hold. The redraw is
-  kept only if, drawn from the phone's own place, it lands on the original points;
+  kept only if, drawn from the phone's own place, it lands on the original points. **Since
+  2026-11-20 the phone standing on the floor is the first place a count must hold** (Kd:
+  most members will stand it there), proven on real floor videos where there are any, and
+  the redraw is kept only if it also reads as those real videos do ("As measured and
+  planned, a phone on the floor", below);
 - §7.6's fuzz and speed gates.
 
 The table runs on GitHub for ALL exercises whenever an exercise or the engine changes. One
@@ -1953,6 +1957,59 @@ name says, the laptop's pictures at the kept file's size, the plan its folder ke
 `test/phone-points/manifest.json` names, for each file, the kept file it was read against, so a proof video measured again is
 refused, never judged against a phone run of its old pictures.
 
+**As measured and planned, a phone on the floor (2026-11-20; `rulings/2026-11-20-floor-phone-plan.md`; a planning terminal,
+no code).** Every squat video until that day was a web clip filmed from about hip height. Kd then filmed 14 of his own, never
+asked for (they stay on his laptop; measured with the laptop's line from even copies at 30 pictures a second; the body points
+in `measured/`, the tables, scripts and pictures in exercise folder 1's `reviews/floor-phone`, none of it in git): squats from
+a phone standing on the floor, on a shiny floor (side on, half turned and from the front, 3 each) and on a dull one (3 side on,
+after one deep squat held 5 s); 10 squats from a raised phone (its height not measured); and the usual positions of other
+exercises, from the floor and from the raised phone, upright and on its long side: standing and turning round, sitting cross-legged, on all fours,
+lying with a leg raised, sitting down on a chair and getting up, one leg lifted beside a chair. **Measured, with the engine as
+merged that day:** the body is found in 85 to 100 pictures of 100 in every video. The squat counts 0 of 9 on the shiny floor
+as filmed (each way of facing played as a set of its own: side on 0 of 3, half turned 0 of 3, from the front 3 of 3), 1 of 3 on
+the dull floor, and from the raised phone 6 of 10 as filmed and 9 of 10 by sets; on the eleven videos with no squat it counts
+0. With "feet stay down" and "feet stay in place" taken out, the shiny floor counts 9 of 9 by sets and the raised phone 10 of
+10, with the numbers set from the eight hip-height people: from the floor the knees, hips, chest and depth read right. Three
+readings are wrong, all near the floor:
+- **The foot points wander.** Side on, the near foot's heel and toes move together 4 to 5 cm down the picture on the way down
+  and on the way up; half turned on the shiny floor a toes' point lies up to 8.7 cm under the foot, on the floor's reflection
+  by the pictures. A foot's resting place is the lowest it was in the rep (`liftOf`), so "feet stay down" reads 6 to 8 cm on
+  properly done reps where its number is 4; "feet stay in place" reads 0.12 to 0.13 where its number is 0.10.
+- **The floor line follows them.** The remembered floor (`Floor`: the lowest heel or toes, taken at once, rising only after a
+  second) lies up to 7.6 cm under the lowest foot point seen in the same frame, so every height moves while the person stands.
+- **The body's own leg is not steady.** It is the middle of the last 3 s of the 3D points, and between its 2nd and 98th
+  hundredth it spreads 22 and 76 in 100 over the two floor videos (11 from the raised phone; 1 to 13 on the 21 hip-height
+  squat-family files). On the dull floor the hips' height while he stands reads 1.08 to 1.13 before a squat and 1.30 to 1.32
+  after it, where a rep begins at a drop of 0.08 and is back within 0.08: a rep opens while he stands, and two real squats are
+  one dip (15.7 to 23.5 s).
+
+Also seen, and not 52a-ii-b's: in one take he turns between the ways of facing, and the first rep after a turn is lost or
+merged (nobody turns in the middle of a set: 52d); sitting down on a chair and getting up, a chair squat's movement, is found
+as no dip at all, the phone upright or on its side (54); `measure-points` stops at its drawing step on a phone's own recording,
+whose frame times are uneven (52a-ii-b-i mends it).
+
+**Planned (ROADMAP 52a-ii-b, in two jobs).** *52a-ii-b-i, the feet, the floor line and standing read steadily from a low
+phone.* The cause is found first, each of the three readings measured again in the building terminal, and mended where it
+lies, in the body measures and the matcher that every exercise shares, never by loosening the squat's numbers until his videos
+pass. The rules of the mend: a resting place, a floor and a body's own length are the middle of what was seen over a time,
+never the one lowest or newest reading; a foot point under the floor is refused, never made the new floor (garbage decides
+nothing); a body's leg does not change within a set. The squat's numbers are then set again by `movement-check` from the
+readings as mended, his videos among the people (one person, both rooms left out together, unless Kd says they are two), and
+every number 50c fitted that the mend touches by its own tool. First tests, written first: his three squat videos count their
+squats, each way of facing as a set of its own (9, 3 and 10), the first set from the video's first picture, as he walks back
+from the phone; then every jump test of 52a-ii-a holds as it stands, and the same true-to-gravity jumps drawn on his floor
+videos are never counted from 8 cm; the 35 reps of the 13 squat videos, every other movement under the 11 replays and the
+phone's kept runs as before; his eleven other videos count 0. His squat videos are good-form videos: no advice is ever spoken
+on them (52b). His videos are kept as body points only, under labels that name nobody. *52a-ii-b-ii, the floor view for every
+other exercise.* Each proof video is replayed as a low phone would see it: the 3D points drawn from a lower place as a change
+added to the picture's own points, so that from the phone's own place the picture comes back exactly, and the foot wander
+measured on his floor videos, as the chip's gap was measured, never drawn by hand. It is kept only if a hip-height squat
+replayed so reads as his real floor squats do (he squats from the floor and from the raised phone); otherwise it is not used,
+and the table says so. With it, one table of what a floor phone sees of each kind of position (his eleven videos: the ankles
+are used in 29 of 100 found pictures sitting cross-legged, 61 on all fours, 91 lying), for 52c and for 54's "can a phone on the
+floor count it". **Limits, in plain sight:** the floor is proven on one man in two rooms; the replay is an estimate; a floor
+phone in front of a live person is tried at job 53.
+
 An exercise that does not pass is published as "count by hand", never with a wrong camera
 count. Kd tries one exercise of each kind of movement on the phone, about a dozen, never
 each one. After launch the server sees, for each exercise, how often members changed the
@@ -2041,7 +2098,7 @@ How the phone counts what its own live camera sees, rather than the laptop's pic
 pictures of all 78 proof videos it counts and speaks as the laptop on 74, the other four open in §12.5, 52a-iii) · whether full on the main chip still holds 15 a second with the camera
 screen's engine, voice and drawing, and how the selfie camera reads a person in the room (job 53) · whether
 one long recording cuts cleanly into lines (job 53) · whether a video redrawn from another
-phone place is faithful (job 52a-ii-b: drawn back from its own place, a redraw puts the big joints 2 to 4 cm off in the middle, 5 to 11 cm in 95 of 100) · what the hips do in a real one-leg lift: on the drawn
+phone place is faithful (job 52a-ii-b-ii: drawn back from its own place, a redraw puts the big joints 2 to 4 cm off in the middle, 5 to 11 cm in 95 of 100; it is checked against Kd's real floor videos) · a floor phone on anybody but the one man of 2026-11-20, and on a floor that is neither his shiny nor his dull one (job 53's live tries) · what the hips do in a real one-leg lift: on the drawn
 one they moved at most 0.026 of the trunk's length, while the smallest rise in a real rep
 on twelve squat-family videos was 0.110 of the leg's length, under the old rules (job 52a
 measures both again with the new engine).
