@@ -8,11 +8,9 @@ const REPLAYS = HELD.slice(7);
 const ROWS = rowsOf(REPLAYS, "other");
 
 describe("the worst thing: no other movement is counted as a squat however the world changes it (second half)", () => {
-  it("tries every other movement under each replay but the paces, which are the squat's own (a jump is never done slowly)", () => {
+  it("tries every other movement under each replay, the paces too", () => {
     expect(REPLAYS.map((r) => r.name)).toEqual(["shaky", "chip's gap", "passer-by", "passer-by at the bottom", "faster", "slower", "twice as slow"]);
-    expect(REPLAYS.filter((r) => r.ownOnly === true).map((r) => r.name)).toEqual(["faster", "slower", "twice as slow"]);
-    expect(ROWS.filter((r) => r.replay.ownOnly === true)).toEqual([]);
-    expect(ROWS.length).toBeGreaterThanOrEqual(30 * 4);
+    expect(ROWS.length).toBeGreaterThanOrEqual(30 * REPLAYS.length);
   });
 
   it("the passer-by acts on every other movement too: in each video it hides points it saw", () => {
@@ -34,7 +32,11 @@ describe("the worst thing: no other movement is counted as a squat however the w
 
   it("the rows open today are listed here, each with the job that closes it, and say nothing", () => {
     const open = ROWS.filter(openRow);
-    expect(open.map((r) => `${r.replay.name}: ${r.label}`)).toEqual(["passer-by at the bottom: usual_v08"]);
+    expect(open.map((r) => `${r.replay.name}: ${r.label}`)).toEqual([
+      "passer-by at the bottom: usual_v08",
+      "slower: squat_jack_2",
+      "twice as slow: squat_jack_2",
+    ]);
     for (const r of open) expect(r.reps.filter((x) => x.verdict === "short").length).toBe(0);
   });
 });

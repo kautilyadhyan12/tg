@@ -290,7 +290,16 @@ export const MOVEMENT_VIDEOS: readonly MovementVideo[] = [
   other("movement-points/squat_jump_3", "man, squat jump, white", "front", "Squat jumps, a title over the picture."),
   other("movement-points/squat_jump_4", "woman, squat jump, white", "between", "Squat jumps, text above her."),
   other("movement-points/squat_jack_1", "man, squat jack, turf", "front", "Squat jacks: low, the feet jumping out and in."),
-  other("movement-points/squat_jack_2", "man, squat jack, bedroom", "front", "Squat jacks."),
+  {
+    ...other("movement-points/squat_jack_2", "man, squat jack, bedroom", "front", "Squat jacks."),
+    replayOpen: {
+      replays: ["slower", "twice as slow"],
+      why:
+        "52b-i, where a dip that is plainly another movement says nothing: as filmed he never stands still between jacks long enough to be " +
+        "read standing, so no dip begins a rep; done 1.5 or 2 times as slowly he does, and two of his jacks read their feet 2 to 6 cm moved " +
+        "and 1 cm up, under the rules, while \"stance holds\" reads nothing on this video. Two are counted.",
+    },
+  },
   other("movement-points/deadlift_kettlebell", "kettlebell deadlift", "side", "A kettlebell deadlift."),
   other("movement-points/deadlift_barbell", "barbell deadlift", "side", "A conventional barbell deadlift."),
   {

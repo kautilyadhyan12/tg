@@ -2050,9 +2050,8 @@ on all nine of his sets, floor and raised (810): 55 counted, 37 of 8 cm, 14 of 1
 before the rep is back up, six of them as filmed, each written in `movementHops.test.ts`; of 15 and 20 cm on his nine sets
 (540), none. Side on with one foot seen, a jump from the bottom is refused from 10 cm (12 before). His two sets that begin at
 the phone, begun at every picture of his walk back (40 starts to 1.3 s, 106 to 3.5 s), count every squat
-(`movementWalkBack.test.ts`). Three replays change the pace, on the squat's own videos only (the reps in three quarters of
-the time, 1.5 and twice as slowly; another movement slowed is no movement a body makes, its jumps floating): every set holds
-but five rows, written below. **The phone's own reading** (his 14 videos read on Kd's phone
+(`movementWalkBack.test.ts`). Three replays change the pace (the reps in three quarters of the time, 1.5 and twice as
+slowly): every squat set holds but five rows, and every other movement counts 0 but a squat jack slowed, written below. **The phone's own reading** (his 14 videos read on Kd's phone
 in three batches, 29 minutes of the phone, kept in `test/phone-points`, 5.1 MB): 91 of the 99 proof sets the same as the
 laptop (the 78 older videos 76, 74 before the job). His squats on the phone: 19 of 22, one fewer in three sets, each written
 (`phoneOpen`): side on, the body check relearns his near knee's length after he walks back from the lens until 4.9 s (the
@@ -2064,8 +2063,10 @@ was not kept). Five others are a dip of another movement marked unseen on one si
 take 148 to 203 microseconds a frame in the middle, the matcher 17 to 23. **Open, in plain sight, each with its job:** the 55
 jumps above (52a-ii-b-ii); his first set, side on on the shiny floor, under 8 a second, uneven pictures, shake, the chip's gap
 and the reps done faster, and with his own videos left out (52a-ii-b-ii), its foot points reading 3 to 4 cm up as filmed
-against a rule held at 4 by the jumps; his half-turned floor set done 1.5 or 2 times as slowly, its third squat's feet over
-the 4 cm (52a-ii-b-ii); his last raised pair under shake, the chip's gap and 1.5 times as slowly with his videos left out
+against a rule held at 4 by the jumps; his half-turned floor set done 1.5, 2 or 3 times as slowly, its third squat's feet
+over the 4 cm, and his first raised pair done 3 times as slowly (not a replay: about nine seconds a squat), 1 of 2
+(52a-ii-b-ii); a squat jack done 1.5 or 2 times as slowly, counted twice: still long enough between jacks to be read
+standing, its feet under the rules and its stance read nowhere (52b-i); his last raised pair under shake, the chip's gap and 1.5 times as slowly with his videos left out
 (52a-ii-b-ii); `prisoner_squat_2` with its person left out, and twice as slowly so, and the plate goblet squat under uneven
 pictures, both at the line half the depth sets (52b-i); his sit-and-stand on a chair when a passer-by hides the sitting (54,
 the chair squat); with the camera left on across his turns his three videos count 8 of 9, 3 of 3 and 8 of 10, the standing

@@ -370,11 +370,7 @@ export function replayTable(movement: Movement, videos: readonly ProofVideo[] = 
     folds.set(person, m);
     return m;
   };
-  return replays.flatMap((replay) =>
-    judged
-      .filter((v) => replay.ownOnly !== true || v.entry.movement === movement.name)
-      .map((v) => replayed(movement, v, replay, v.video.sets && v.entry.movement === movement.name ? foldOf(v.entry.person) : null)),
-  );
+  return replays.flatMap((replay) => judged.map((v) => replayed(movement, v, replay, v.video.sets && v.entry.movement === movement.name ? foldOf(v.entry.person) : null)));
 }
 
 export const holds = (r: ReplayRow): boolean =>

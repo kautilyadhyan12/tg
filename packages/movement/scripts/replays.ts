@@ -50,9 +50,6 @@ export interface Replay {
    *  the videos as filmed and as each such replay (movementCheck.ts `fit`), so a rule leaves room for what a phone
    *  adds. A passer-by hides the person and sets nothing. */
   readonly fits: boolean;
-  /** Tried only on the movement's own videos: the same reps at another pace. Another movement stretched in time is no
-   *  movement a body makes: a squat jack's jumps would float, in the air longer than gravity allows. */
-  readonly ownOnly?: boolean;
 }
 
 /** A small deterministic stream of numbers in 0..1 (mulberry32). */
@@ -373,9 +370,9 @@ export const REPLAYS: readonly Replay[] = [
   { name: "chip's gap", words: "every point moved by the gap the phone's chosen set-up reads from the laptop", hold: true, edit: chipsGap("pose_landmarker_full.cpu.t4"), fits: true },
   { name: "passer-by", words: "somebody walks past in front between reps (with no pause between them, the rep they cover is not seen)", hold: true, edit: passerBy(betweenReps), hides: 1, fits: false },
   { name: "passer-by at the bottom", words: "somebody walks past in front at the bottom of a rep: that rep is not seen", hold: true, edit: passerBy(atBottom), hides: 1, fits: false },
-  { name: "faster", words: "the same reps done in three quarters of the time", hold: true, edit: tempo(0.75), fits: false, ownOnly: true },
-  { name: "slower", words: "the same reps done 1.5 times as slowly", hold: true, edit: tempo(1.5), fits: false, ownOnly: true },
-  { name: "twice as slow", words: "the same reps done twice as slowly", hold: true, edit: tempo(2), fits: false, ownOnly: true },
+  { name: "faster", words: "the same reps done in three quarters of the time", hold: true, edit: tempo(0.75), fits: false },
+  { name: "slower", words: "the same reps done 1.5 times as slowly", hold: true, edit: tempo(1.5), fits: false },
+  { name: "twice as slow", words: "the same reps done twice as slowly", hold: true, edit: tempo(2), fits: false },
   { name: "graphics chip's gap", words: "every point moved by the graphics chip's gap (the app does not use it)", hold: false, edit: chipsGap("pose_landmarker_full.gpu"), fits: false },
   { name: "small model's gap", words: "every point moved by the small model's gap on the main chip (the app does not use it)", hold: false, edit: chipsGap("pose_landmarker_lite.cpu.t4"), fits: false },
   { name: "3 in 10 dropped", words: "3 pictures in 10 dropped at random, not how the phone drops them", hold: false, edit: dropped(0.3), fits: false },

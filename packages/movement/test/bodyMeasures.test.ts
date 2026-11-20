@@ -486,6 +486,28 @@ describe("the floor stays where the feet stood", () => {
     expect(read(atTop, "hips height").world).toBeCloseTo((0.9 + up) / 0.84, 6);
   });
 
+  // Round one's re-check: the floor moves at once to feet that stand still 0.3 s with straight knees, and a long leg's
+  // jump keeps its feet within a foot lifted (a twentieth of the leg) of one height longest: 0.27 s with a 1.2 m leg.
+  it.each([0.84, 1.0, 1.2])("a jump of 10 to 60 cm with a %s m leg, seen 60 times a second: the floor stays where the feet stood, in every picture", (leg) => {
+    const k = leg / 0.84;
+    const body = standingSide().map((p): P => [p[0] * k, p[1] * k, p[2] * k]);
+    for (const metres of [0.1, 0.2, 0.3, 0.4, 0.5, 0.6]) {
+      const flight = 2 * Math.sqrt((2 * metres) / 9.81);
+      for (const phase of [0, 4, 8, 12]) {
+        const up = (t: number): number => {
+          const u = (t - 1000 - phase) / (flight * 1000);
+          return u > 0 && u < 1 ? metres * 4 * u * (1 - u) : 0;
+        };
+        const run = measure(Array.from({ length: 150 }, (_, n) => frame(Math.round((n * 1000) / 60), body, { at: [0.6, 0.7 - up(Math.round((n * 1000) / 60))] })));
+        for (const m of run.filter((x) => x.t >= 1000)) {
+          const hips = (0.9 * k + up(m.t)) / leg;
+          expect([metres, phase, m.t, read(m, "hips height").flat]).toEqual([metres, phase, m.t, expect.closeTo(hips, 6)]);
+          expect([metres, phase, m.t, read(m, "hips height").world]).toEqual([metres, phase, m.t, expect.closeTo(hips, 6)]);
+        }
+      }
+    }
+  });
+
   it("both feet seen higher for longer than a jump: the floor moves up to them", () => {
     const run = measure(rise(3));
     const later = run.find((m) => m.t >= 2200);

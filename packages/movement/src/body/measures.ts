@@ -70,8 +70,8 @@ export interface MeasureLimits {
   /** The floor is the middle of where the lowest foot stood over this long, ms: it moves to where the feet now stand
    *  only once they have stood there for more than half of it. */
   readonly floorWindow: number;
-  /** The floor moves at once to feet that have stood still off it this long, ms, as far below the hips in 3D as when
-   *  they stood (a step). */
+  /** The floor moves at once to feet that have stood still off it this long, ms, within a foot lifted of one height,
+   *  every knee seen straight (a step, or walking back from the phone). */
   readonly floorStill: number;
   /** A foot this share of a leg above the floor or less still stands on it; and one foot seen above the floor whose drop below the hips (3D) has shrunk by less than this
    *  share of a leg since it last stood on the floor was not lifted: the body moved. */
@@ -604,7 +604,9 @@ class Floor {
     const steppedDown = under > band && asStanding && hips !== null && span !== null && Math.abs(lowest - hips - span) <= band;
     // A step, or walking back from the phone and turning: the feet stand higher or lower on the picture, the legs straight.
     // Once they have stood still there, within a foot lifted, for `floorStill`, the floor is where they stand, at once: a
-    // body in the air is never that still (a jump's feet stay within 2 cm of its top for 0.12 s), and at the bottom of a
+    // body in the air is never that still (its feet stay within a foot lifted either side of one height at most
+    // (1 + √2)·√(2 · lift / g): 0.22 s with a 0.84 m leg, 0.24 s with 1.0 m, 0.27 s with 1.2 m, 0.30 s only with 1.5 m; a
+    // little longer where the picture shortens how far the body rises, a phone tilted up at it), and at the bottom of a
     // squat, or with a foot lifted, a knee is bent. (Not the foot's 3D drop: turning, a man stood with his knee at 170°
     // instead of 179°, his foot 5 cm nearer his hips in 3D.)
     const still = this.stillAbove;
