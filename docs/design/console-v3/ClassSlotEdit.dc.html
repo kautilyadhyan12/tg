@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Classes: edit a time slot, bulk edit, online</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./kit3.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0;background:#0A0908}
+.cap{display:flex;align-items:center;gap:10px;font-weight:600;color:var(--t2)}
+.num{width:26px;height:26px;border-radius:999px;background:var(--o-fill);color:var(--o-t);box-shadow:inset 0 0 0 1px var(--o-line);display:grid;place-items:center;font-size:13px;font-weight:700;flex:none}
+.stage{background:var(--scrim);border-radius:18px;padding:32px 16px;display:flex;justify-content:center}
+.dlg{background:var(--solid);border:1px solid var(--line2);border-radius:20px;box-shadow:var(--pop);width:100%;max-width:500px;min-width:0}
+.side{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,440px);border:1px solid var(--line);border-radius:18px;overflow:hidden}
+.side > .under{padding:20px;opacity:.6;overflow:hidden;min-width:0}
+.side > .sheet{background:var(--solid);border-left:1px solid var(--line2);display:flex;flex-direction:column;min-width:0}
+.sheet-h{display:flex;align-items:center;gap:12px;padding:18px 20px;border-bottom:1px solid var(--line)}
+.sheet-b{padding:20px;display:flex;flex-direction:column;gap:18px}
+.sheet-f{margin-top:auto;display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:14px 20px;border-top:1px solid var(--line)}
+.opt{display:flex;gap:12px;align-items:flex-start;padding:14px 16px;border-radius:14px;border:1px solid var(--line2)}
+.opt-on{border-color:var(--o);background:var(--o-fill)}
+.radio{width:18px;height:18px;border-radius:999px;border:1.5px solid var(--line2);flex:none;margin-top:1px}
+.radio-on{border:5px solid var(--o)}
+.check-on{background:var(--o);border-color:var(--o);position:relative}
+.check-on::after{content:"";position:absolute;left:5px;top:1px;width:5px;height:10px;border:solid var(--on-o);border-width:0 2px 2px 0;transform:rotate(45deg)}
+.sw{width:40px;height:24px;border-radius:999px;background:var(--bar);position:relative;flex:none}
+.sw::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:999px;background:var(--t3)}
+.sw-on{background:var(--o)}.sw-on::after{left:19px;background:var(--on-o)}
+.step{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,340px);gap:20px;align-items:start}
+.menu{background:var(--solid);border:1px solid var(--line2);border-radius:16px;box-shadow:var(--pop);padding:6px;min-width:0;max-width:320px}
+.mi{display:flex;gap:12px;align-items:flex-start;padding:10px 12px;border-radius:10px}
+.ptile{display:flex;flex-direction:column;gap:4px;padding:14px;border-radius:14px;border:1px solid var(--line2);min-width:0}
+.ptile-on{border-color:var(--o);background:var(--o-fill)}
+.pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.qty{display:inline-flex;align-items:center;border:1px solid var(--line2);border-radius:999px;height:40px}
+.qty > button{width:40px;height:40px;display:grid;place-items:center;color:var(--t2)}
+.money{font-weight:600;white-space:nowrap}
+.frames{display:flex;flex-wrap:wrap;gap:40px;padding:40px;align-items:flex-start}
+.frame{width:390px;max-width:100%;border:1px solid var(--line2);border-radius:28px;overflow:hidden;background:var(--page);display:flex;flex-direction:column;position:relative}
+.bsheet{background:var(--solid);border-top:1px solid var(--line2);border-radius:22px 22px 0 0;box-shadow:var(--pop);display:flex;flex-direction:column}
+.grab{width:40px;height:5px;border-radius:999px;background:var(--line2);margin:10px auto 4px}
+.savebar{position:sticky;bottom:12px;z-index:2;display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 16px;background:var(--solid);border:1px solid var(--line2);border-radius:18px}
+.footbar{position:sticky;bottom:0;padding:12px 16px 16px;border-top:1px solid var(--line);background:var(--solid);display:flex;flex-direction:column;gap:8px}
+@media (max-width:1180px){.side{grid-template-columns:minmax(0,1fr)}.side > .under{display:none}.side > .sheet{border-left:0}}
+@media (max-width:900px){.step{grid-template-columns:minmax(0,1fr)}.frames{padding:16px;gap:24px}}
+@media (pointer:coarse){.qty,.qty > button{height:44px}.qty > button{width:44px}}
+.side > .under{padding:20px}.ch{display:flex;gap:8px;flex-wrap:wrap}.tp{display:grid;grid-template-columns:repeat(3,minmax(0,110px));gap:10px}.tp .field{gap:4px}.slot{display:flex;flex-direction:column;gap:10px;padding:12px 14px;border:1px solid var(--line);border-radius:14px}.col > span{overflow-wrap:anywhere}.warnline{color:var(--warn);font-weight:500}.badline{color:var(--bad);font-weight:500}.ppl{display:flex;flex-direction:column;gap:8px}@media (max-width:420px){.tp{grid-template-columns:repeat(3,minmax(0,1fr))}}
+</style>
+</helmet>
+<div class="app t-dark {{look}}" style="min-height: 100%">
+<div class="shell">
+
+<nav class="rail" aria-label="Menu">
+<a href="#" class="gym"><span class="logo"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18zM6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2M10 6h4M10 10h4M10 14h4M10 18h4"></path></svg></span><span class="col grow"><span class="w6 ell">Iron House</span><span class="s12 t3">Austin · Gym</span></span><svg class="ic ic-s t3" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 15l5 5 5-5M7 9l5-5 5 5"></path></svg></a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3h5a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM15 3h5a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM15 12h5a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1zM4 16h5a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1z"></path></svg>Overview<span class="n n-bad">6</span></a>
+<div class="grp">Today<svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 2h6a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1zM16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2M9 14l2 2 4-4"></path></svg>Attendance</a>
+<a href="#" class="ni ni-on"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 7.5V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3.5M16 2v4M8 2v4M3 10h5M10 16a6 6 0 1 0 12 0a6 6 0 1 0-12 0M16 14v2.2l1.5 1.3"></path></svg>Classes</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 6.5l11 11M21 21l-1-1M3 3l1 1M18 22l4-4M2 6l4-4M3 10l7-7M14 21l7-7"></path></svg>Personal training</a>
+<div class="grp">People<svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M5 7a4 4 0 1 0 8 0a4 4 0 1 0-8 0M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"></path></svg>Members &amp; staff</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 7a4 4 0 1 0 8 0a4 4 0 1 0-8 0M10.3 15H7a4 4 0 0 0-4 4v2M14 17a3 3 0 1 0 6 0a3 3 0 1 0-6 0M21 21l-1.9-1.9"></path></svg>Leads<span class="n">5</span></a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 17l-8.5-8.5-5 5L2 7M16 17h6v-6"></path></svg>At risk<span class="n n-warn">2</span></a>
+<div class="grp">Money<svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6a2 2 0 0 1 2-2h12v4M3 6v12a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2H5a2 2 0 0 1-2-2zM17 14h.01"></path></svg>Payments overview</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4zM3 6h18M16 10a4 4 0 0 1-8 0"></path></svg>Sell</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12.6 2.6A2 2 0 0 0 11.2 2H4a2 2 0 0 0-2 2v7.2a2 2 0 0 0 .6 1.4l8.7 8.7a2.4 2.4 0 0 0 3.4 0l6.6-6.6a2.4 2.4 0 0 0 0-3.4zM7 7.5h.01"></path></svg>Memberships</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2zM2 10h20"></path></svg>Failed payments<span class="n n-bad">3</span></a>
+<div class="grp">Community<svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l18-5v12L3 14zM11.6 16.8a3 3 0 1 1-5.8-1.6"></path></svg>Updates<span class="n n-warn">1</span></a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM16 2v4M8 2v4M3 10h18"></path></svg>Events</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 2h6a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1zM16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2M12 11h4M12 16h4M8 11h.01M8 16h.01"></path></svg>Fitness plans</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M8.2 10.2L5 3h14l-3.2 7.2M6 15a6 6 0 1 0 12 0a6 6 0 1 0-12 0"></path></svg>Challenges</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6M18 9h1.5a2.5 2.5 0 0 0 0-5H18M4 22h16M10 14.7V17c0 .6-.5 1-1 1.2-1.2.5-2 2-2 3.8M14 14.7V17c0 .6.5 1 1 1.2 1.2.5 2 2 2 3.8M18 2H6v7a6 6 0 0 0 12 0z"></path></svg>Leaderboard</a>
+<div class="grp">Manage<svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3v18h18M8 17V9M13 17V5M18 17v-3"></path></svg>Reports</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M2 14h4M10 8h4M18 16h4"></path></svg>Settings</a>
+<a href="#" class="me"><span class="av">DB</span><span class="col grow"><span class="w6 s13 ell">Dana Brooks</span><span class="s12 t3">Owner</span></span><svg class="ic ic-s t3" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 15l5 5 5-5M7 9l5-5 5 5"></path></svg></a>
+</nav>
+
+<div class="work">
+<header class="top" style="position: relative">
+<button type="button" class="find"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11a7 7 0 1 0 14 0a7 7 0 1 0-14 0M21 21l-4.3-4.3"></path></svg><span class="grow ell">Search members, pages or actions</span><span class="kbd">Ctrl K</span></button>
+<span class="grow"></span>
+<button type="button" class="btn btn-soft"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>New</button>
+<button type="button" class="ibtn" aria-label="6 items need attention"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 0 0 3.4 0"></path></svg><span class="pip">6</span></button>
+</header>
+
+<main class="page" style="position: relative">
+<div class="between wrap">
+<div class="col g6" style="flex: 1 1 360px; min-width: 0"><span class="eyebrow">Today</span><h1 class="h1">Classes</h1><span class="t2">Changing a time slot from a date, several at once, and putting it online.</span></div>
+</div>
+
+<div class="cap"><span class="num">1</span>Edit on a time slot, from the right</div>
+<div class="side">
+<div class="under col g10">
+<div class="slot"><span class="w6">Mon, Wed &amp; Fri · 6:30 am–7:30 am</span><span class="t3">14 places · Kiran Das</span></div>
+<div class="slot"><span class="w6">Sat · 9:00 am–10:00 am</span><span class="t3">20 places · Dana Brooks</span></div>
+</div>
+<aside class="sheet" aria-label="Edit the Mon, Wed &amp; Fri 6:30 am time slot of Yoga Flow">
+<div class="sheet-h"><div class="col grow" style="min-width: 0"><h2 class="h2">Edit time slot</h2><span class="t3">Yoga Flow · Mon, Wed &amp; Fri 6:30 am</span></div><button type="button" class="ibtn" aria-label="Close"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"></path></svg></button></div>
+<div class="sheet-b">
+<div class="field"><span class="label">Days</span><div class="ch" role="group" aria-label="Days"><span class="chip chip-on">Mon</span><span class="chip">Tue</span><span class="chip chip-on">Wed</span><span class="chip">Thu</span><span class="chip chip-on">Fri</span><span class="chip">Sat</span><span class="chip">Sun</span></div></div>
+<div class="field"><span class="label">Start time</span>
+<div class="tp"><div class="field"><div class="input input-on"><span class="grow">7</span><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div><span class="t3">Hour</span></div><div class="field"><div class="input"><span class="grow">00</span><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div><span class="t3">Minute</span></div><div class="field"><div class="input"><span class="grow">AM</span><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div><span class="t3">AM or PM</span></div></div></div>
+<div class="grid2" style="gap: 16px">
+<div class="field"><span class="label">Length (minutes)</span><div class="input"><span class="grow">60</span></div></div>
+<div class="field"><span class="label">Coach (optional)</span><div class="input"><span class="grow">Kiran Das</span><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div></div>
+</div>
+<div class="field"><span class="label">Class size</span><div class="hrow g12 wrap"><div class="input" style="width: 120px"><span class="grow">14</span></div><span class="hrow g8"><span class="check"></span>No limit</span></div></div>
+<div class="field"><span class="label">Update from</span><div class="input"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM16 2v4M8 2v4M3 10h18"></path></svg><span class="grow">Mon 30 Nov 2026</span><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div><span class="t3">Classes before this date stay as they are.</span></div>
+<div class="cap"><span class="num">2</span>A move over classes changed on their own: the question stands where Save was</div>
+<div class="inset col g10" role="group"><span class="w6">2 classes from Mon 30 Nov on were changed or cancelled on their own. Move anyway?</span><div class="hrow g8 wrap"><button type="button" class="btn btn-p btn-sm">Move anyway</button><button type="button" class="btn btn-q btn-sm">Go back</button></div></div>
+</div>
+<div class="sheet-f"><button type="button" class="btn btn-p">Save</button><button type="button" class="btn btn-q">Close</button></div>
+</aside>
+</div>
+
+<div class="cap">With only the coach, length or size changed, the line under Update from reads: Classes before this date stay as they are, and any marked Changed on the Calendar keep their own.</div>
+
+<div class="cap"><span class="num">3</span>A move that ends people's bookings: in the middle, naming them</div>
+<div class="stage">
+<div class="dlg" role="dialog" aria-label="Bookings that will end">
+<div class="sheet-h"><div class="col grow" style="min-width: 0"><h2 class="h2">Move this time slot?</h2><span class="t3">Yoga Flow · from Mon 30 Nov</span></div><button type="button" class="ibtn" aria-label="Close"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"></path></svg></button></div>
+<div class="sheet-b">
+<span class="w6">9 bookings will end, across 6 classes</span>
+<span class="t2">Each is listed below; somebody booked on several of these classes is there once for each. A booking that used a class from a pack puts the class back on the pack.</span>
+<div class="ppl">
+<span class="col"><span>Maya Brooks</span><span class="t3">Yoga Flow · Mon 30 Nov · 6:30 am</span></span>
+<span class="col"><span>Leela Menon</span><span class="t3">Yoga Flow · Wed 2 Dec · 6:30 am</span></span>
+<span class="col"><span>Sam Rivera</span><span class="t3">Yoga Flow · Fri 4 Dec · 6:30 am · On the waitlist</span></span>
+</div>
+<span class="t2">and 6 more · <a href="#" class="c-o w6">View all</a></span>
+<span class="t2">Bookings for classes before Mon 30 Nov don't change.</span>
+<span class="warnline">The app doesn't tell them yet. Let them know yourself.</span>
+</div>
+<div class="sheet-f"><button type="button" class="btn btn-d">Move time slot and end 9 bookings</button><button type="button" class="btn btn-q">Go back</button></div>
+</div>
+</div>
+
+<div class="cap"><span class="num">4</span>Bulk edit, from the right: a class with two time slots or more</div>
+<div class="side">
+<div class="under col g10">
+<div class="slot"><span class="w6">Mon, Wed &amp; Fri · 6:30 am–7:30 am</span></div>
+<div class="slot"><span class="w6">Sat · 9:00 am–10:00 am</span></div>
+</div>
+<aside class="sheet" aria-label="Bulk edit the time slots of Yoga Flow">
+<div class="sheet-h"><div class="col grow" style="min-width: 0"><h2 class="h2">Bulk edit</h2><span class="t3">Yoga Flow</span></div><button type="button" class="ibtn" aria-label="Close"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"></path></svg></button></div>
+<div class="sheet-b">
+<div class="field"><span class="label">Time slots</span>
+<div class="opt opt-on"><span class="check check-on"></span><span class="col g4 grow"><span class="w6">Mon, Wed &amp; Fri · 6:30 am–7:30 am</span><span class="t2">14 places · Kiran Das</span><span class="t3">From 2 Nov 2026 · Next: Mon 23 Nov, Wed 25 Nov</span></span></div>
+<div class="opt opt-on"><span class="check check-on"></span><span class="col g4 grow"><span class="w6">Sat · 9:00 am–10:00 am</span><span class="t2">20 places · Dana Brooks</span><span class="t3">From 7 Nov 2026 · Next: Sat 21 Nov, Sat 28 Nov</span></span></div>
+</div>
+<div class="col g8"><span class="hrow g10"><span class="check"></span>Change length</span></div>
+<div class="col g8"><span class="hrow g10"><span class="check check-on"></span>Change coach</span><div class="field" style="padding-left: 28px"><span class="label">Coach (optional)</span><div class="input"><span class="grow">Dana Brooks</span><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div></div></div>
+<div class="col g8"><span class="hrow g10"><span class="check"></span>Change class size</span></div>
+<div class="field"><span class="label">Update from</span><div class="input"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM16 2v4M8 2v4M3 10h18"></path></svg><span class="grow">Mon 23 Nov 2026</span><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div><span class="t3">Classes before this date stay as they are, and any marked Changed on the Calendar keep their own.</span></div>
+</div>
+<div class="sheet-f"><button type="button" class="btn btn-p">Save</button><button type="button" class="btn btn-q">Close</button></div>
+</aside>
+</div>
+
+<section class="box" aria-label="Make it online">
+<div class="bh"><div class="col g4"><h2 class="h2"><span class="num" style="display: inline-grid; margin-right: 8px">5</span>Make it online, Add the link, Change link: under the time slot</h2><span class="t3">The same box opens under a class on the Calendar, for that one class.</span></div></div>
+<div class="col g12" style="padding: 0 20px 20px">
+<div class="slot"><span class="w6">Sun · 10:00 am–10:45 am</span><span class="t2">18 places</span>
+<div class="col g10" role="group" aria-label="Online class" style="max-width: 560px">
+<div class="opt opt-on"><span class="check check-on"></span><span class="col g4 grow"><span class="w6">Online class</span><span class="t3">People who are booked see the link in the app from 30 minutes before the class until it ends. No other member sees it.</span></span></div>
+<div class="field"><span class="label">Video link</span><div class="input input-on"><span class="grow">https://zoom.us/j/84213</span></div><span class="t3">Paste the link from Zoom, Google Meet or whatever you use. You can add it later.</span></div>
+<span class="t2">This changes every coming class of this time slot, except a class you gave a link of its own.</span>
+<span class="w6">3 bookings are held on the 8 coming classes this changes.</span>
+<span class="t3">The app doesn't tell people who are already booked yet. Tell them yourself if this changes for them.</span>
+<div class="hrow g8 wrap"><button type="button" class="btn btn-p btn-sm">Save</button><button type="button" class="btn btn-q btn-sm">Close</button></div>
+</div></div>
+<span class="label">What the box says in its other cases</span>
+<span class="t2">Nobody is booked on the 8 coming classes this changes yet. · This time slot has no coming classes to change.</span>
+<span class="t2">On one class: 12 people are booked on this class. · 1 person is booked on this class. · Nobody is booked on this class yet.</span>
+<span class="t2">This changes this class only. It then keeps its own link when the time slot’s link changes.</span>
+<span class="t2">This changes this class only. It already has a link of its own.</span>
+</div>
+</section>
+
+<section class="box" aria-label="What these forms say when something is wrong">
+<div class="bh"><h2 class="h2">What these forms say when something is wrong</h2></div>
+<div class="col g8" style="padding: 0 20px 20px">
+<span class="badline">Pick the date to update from.</span>
+<span class="badline">Pick a date from Mon 23 Nov 2026 to Sun 20 Dec 2026.</span>
+<span class="badline">A ticked time slot has no date left to change.</span>
+<span class="badline">Tick at least one time slot.</span>
+<span class="badline">Tick what to change.</span>
+<span class="badline">Pick at least one day of the week.</span>
+<span class="badline">Pick a start time.</span>
+<span class="t3">An ended time slot has no Edit: no date is left to change it from.</span>
+</div>
+</section>
+
+</main>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"look":{"editor":"enum","options":["Dark","Light"],"default":"Dark"},"$preview":{"width":1440,"height":3860}}'>
+class Component extends DCLogic {
+renderVals() {
+return { look: (this.props.look ?? 'Dark') === 'Light' ? 't-light' : '' };
+}
+}
+</script>
+</body>
+</html>

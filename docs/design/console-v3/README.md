@@ -51,6 +51,19 @@ permission a page has stays.
 | `GymPage` | Your gym page from the right: the link, about us, photos, facilities, opening hours, the form for your own website | V6 (V0-d-ii-a) |
 | `AtRisk` | At risk: who has stopped coming, a message under the name, Who is listed, before there are 14 days of check-ins | V6 (V0-d-ii-a) |
 | `PhoneLeads` | Leads and At risk on a phone: the list with the selected bar at the foot, a lead as a full page, At risk | V6 (V0-d-ii-a) |
+| `Classes` | Classes: the classes with their time slots, Edit class, Bulk edit, Archive and Cancel asking under what was pressed, Archived classes and Restore, every other state | V8 (V0-d-ii-b) |
+| `ClassAdd` | Add class and Edit class from the right, the coach list, a coach who has a session at that time (Save anyway), what the form refuses | V8 (V0-d-ii-b) |
+| `ClassTimeSlot` | A new time slot from the right: days, start time, dates with the date picker, length, coach, size, online and its link | V8 (V0-d-ii-b) |
+| `ClassSlotEdit` | Edit a time slot from a date, Move anyway, the bookings a move ends in the middle, Bulk edit from the right, Make it online under the time slot | V8 (V0-d-ii-b) |
+| `ClassesCalendar` | The Calendar: a week of day columns, the filters, Cancelled and Changed, its other states | V8 (V0-d-ii-b) |
+| `ClassSession` | A class on the Calendar from the right: who is booked, the waitlist, Cancelled late, Remove under the person; Came and No-show once it has started | V8 (V0-d-ii-b) |
+| `ClassSessionEdit` | A class on the Calendar: Edit (this class only, or this and future), Cancel class, the bookings it ends in the middle, Un-cancel | V8 (V0-d-ii-b) |
+| `PhoneClasses` | Classes on a phone: the list, the Calendar by day, a class as a full page, Cancel class from the bottom | V8 (V0-d-ii-b) |
+| `PT` | Personal training: How to set up, the trainers, Add a trainer, a trainer's week with its days, booked sessions and available times, every other state | V8 (V0-d-ii-b) |
+| `PTBook` | Book a session under the time pressed, Cancel under the session with each choice, Came or No-show and the fee lines | V8 (V0-d-ii-b) |
+| `PTHours` | A trainer's hours from the right, what the form refuses, and Your hours as a trainer who is not a manager sees them | V8 (V0-d-ii-b) |
+| `PTTimeOff` | Time off from the right: what is coming, Remove under it, Add time off, the sessions and classes it covers | V8 (V0-d-ii-b) |
+| `PhonePT` | Personal training on a phone: the trainers, a week, Book a session, hours as a full page | V8 (V0-d-ii-b) |
 
 ## Drawn in V0-d-i (2026-11-19)
 
@@ -95,6 +108,27 @@ permission a page has stays.
   Import leads in the middle, naming who changes.
 - **The front desk** is a page of its own with no menu, drawn at a tablet's size and on a phone; its answers
   are said in words and colour, never colour alone.
+
+## Drawn in V0-d-ii-b (2026-11-20)
+
+- **Every button, field and message of the real Classes, Calendar and Personal training pages is on these
+  boards**: 415 of 415, read from the code (`Classes.jsx`, `ClassFields.jsx`, `ClassOnline.jsx`, `ClassWeek.jsx`,
+  `PersonalTraining.jsx`, `ClassBookingsList.jsx`, `BookingsEndBox.jsx`, `TrainerSessionsBox.jsx`, `BookingRulesLine.jsx`,
+  `TimePick.jsx`, `DatePick.jsx` and their views). An icon button's spoken name counts as its words. The booking rules
+  themselves (when members can book, the waitlist, the fees, overdue payments) are drawn with Settings in V0-d-iii;
+  each page keeps its line and Change booking rules.
+- **Looked at in the same 24 screen shapes in both looks** as V0-d-i's boards.
+- **Word changes** beyond the list on `Main`: "See all" reads **View all**; "See week" reads **View week**. A gym's
+  trainers follow the kind of business, as `orgWords` already does (Trainers, Add a trainer).
+- **Where each box opens** (`Boxes`): Add class, Edit class, a new time slot, Edit on a time slot, Bulk edit, a
+  trainer's hours and their time off from the right, Save at the foot; a class pressed on the Calendar from the right
+  (today it opens under the week); Archive, Cancel time slot, Cancel class with nobody booked, Remove from class,
+  Make it online, Book a session, Cancel on a session and Remove time off under what was pressed; the bookings a
+  change would end in the middle, naming them (today in place), rising from the bottom on a phone.
+- **The Calendar** is drawn as the real page shows it: a column for each day, each class a card, stacked by day on a
+  phone. The second look's hour grid is not the page.
+- **On a phone** an available time and a long button wrap on two lines rather than run off a 280 px cover; the
+  week's days carry a dot for what is on them, and the day's own name says it.
 
 ## What a builder must know
 
