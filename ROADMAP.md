@@ -510,7 +510,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
        - V0-d-ii-a. [x] **Attendance, the front desk, Leads and At risk** · merged 2026-11-20 · PR #601
        - V0-d-ii-b. [x] **Classes and personal training** · merged 2026-11-20 · PR #603
      - V0-d-iii. **Reports and Settings**, in two (2026-11-20: Settings has 13 sections and Your account):
-       - V0-d-iii-a. [ ] **Reports, and Settings' side list with its first six sections**
+       - V0-d-iii-a. [x] **Reports, and Settings' side list with its first six sections** · merged 2026-11-20 · PR #606
        - V0-d-iii-b. [ ] **Settings' other seven sections and Your account**
 23. **A gym finds its way** (Kd, RULINGS 2026-10-07: the console read as "a maze"). Each page was clear alone and the fault was between pages. Four jobs in this order, built in Folder A before 17e-ii.
    - 23a. **One answer for membership**, split 2026-10-07 in two (the list's read and Add member's form are more than one terminal):
