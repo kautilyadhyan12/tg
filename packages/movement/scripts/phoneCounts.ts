@@ -22,7 +22,7 @@ import type { RepResult } from "../src/index.js";
 import { KEPT_MODEL } from "./keptVideos.js";
 import { readKept, type KeptFile, type Video } from "./bodyCheck.js";
 import { LEAD_IN, runMovement, type Run } from "./movementCheck.js";
-import { MOVEMENT_VIDEOS, type MovementVideo } from "./movementVideos.js";
+import { MOVEMENT_VIDEOS, framesOf, labelOf, type MovementVideo } from "./movementVideos.js";
 import { PHONE_GAPS, phoneLabel } from "./replays.js";
 
 const TEST = join(import.meta.dirname, "../test");
@@ -119,10 +119,14 @@ export function readManifest(): PhonePointsManifest {
 /** Every proof video, the laptop against the phone's kept run of it. */
 export function phoneTable(movement: Movement, entries: readonly MovementVideo[] = MOVEMENT_VIDEOS, run: string = CHOSEN_RUN): PhoneRow[] {
   const manifest = readManifest();
+  // A set of a video (`cut`) is the same stretch of both files: the phone writes the laptop's own frame times.
+  const cutOf = (entry: MovementVideo, file: KeptFile): KeptFile => ({ ...file, frames: framesOf(entry, file.frames) });
   return entries.map((entry) => {
     const kept = readFile(join(TEST, `${entry.file}.bodypoints`));
     const path = phoneFileOf(entry, run);
-    return judgePhone(movement, entry, kept, existsSync(path) ? readFile(path) : null, manifest.files[basename(path)]?.kept ?? null, run);
+    const phone = existsSync(path) ? cutOf(entry, readFile(path)) : null;
+    const row = judgePhone(movement, entry, cutOf(entry, kept), phone, manifest.files[basename(path)]?.kept ?? null, run);
+    return { ...row, label: labelOf(entry, row.label) };
   });
 }
 

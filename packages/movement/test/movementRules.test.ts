@@ -39,6 +39,8 @@ interface Body {
   feetY: number;
   /** Knees read at all. */
   kneesSeen: boolean;
+  /** For one foot point, how far it alone is moved on the picture (picture heights), or "hidden". */
+  each: Map<number, readonly [number, number] | "hidden">;
 }
 type Change = (t: number, p: number, b: Body) => void;
 
@@ -64,6 +66,7 @@ function run(change?: Change, fast = false) {
       feetX: 0,
       feetY: 0,
       kneesSeen: true,
+      each: new Map(),
     };
     change?.(t, p, b);
     const value = new Map<string, number | null>([
@@ -86,14 +89,16 @@ function run(change?: Change, fast = false) {
     );
     const points: (SteadyPoint | null)[] = Array.from({ length: 33 }, (_, i) => {
       if (!FEET.includes(i)) return { x: 0.5, y: 0.5, world: [0, 0, 0], raw: { x: 0.5, y: 0.5 } };
+      const alone = b.each.get(i);
+      if (alone === "hidden") return null;
       const side = i === KP.left_heel || i === KP.left_foot_index ? 0.05 : -0.05;
       const toe = i === KP.left_foot_index || i === KP.right_foot_index ? 0.03 : 0;
-      const x = (0.5 + side + toe + b.feetX) / ASPECT;
-      const y = 0.9 + b.feetY;
+      const x = (0.5 + side + toe + b.feetX + (alone?.[0] ?? 0)) / ASPECT;
+      const y = 0.9 + b.feetY + (alone?.[1] ?? 0);
       return { x, y, world: [0, 0, 0], raw: { x, y } };
     });
     const body: SteadyBody = { t, aspect: ASPECT, down: [0, 1, 0], size: SIZE, points, refused: points.map(() => null) };
-    const measured: MeasuredBody = { t, leg: 0.9, trunk: 0.5, readings };
+    const measured: MeasuredBody = { t, leg: 0.9, trunk: 0.5, onFloor: true, readings };
     const f = m.next(body, measured);
     if (f.rep !== null) reps.push(f.rep);
   }
@@ -116,6 +121,7 @@ describe("each rule of the squat refuses on its own, by its own name", () => {
     ["a dip that bent the knees but barely went down", (_t, p, b) => (b.hips = 1.15 - bound("depth") * 0.6 * p), ["other", "depth"]],
     // What kind: no count, no word.
     ["the hips bend far more than the knees (a deadlift)", (_t, p, b) => (b.hipAngle = 168 - (85 + bound("hips and knees together") + 15) * p), ["other", "hips and knees together"]],
+    ["the knees bend far more than the hips (a split squat's front leg)", (_t, p, b) => (b.hipAngle = b.knee - (bound("knees and hips together") - 10) * p), ["other", "knees and hips together"]],
     ["the chest drops", (_t, p, b) => (b.trunk = 3 + (bound("chest up") + 15) * p), ["other", "chest up"]],
     ["the feet leave the floor at the top (a jump)", (t, _p, b) => (b.feetY = t > 3550 && t < 3800 ? -(bound("feet stay down") + 0.05) * SIZE : 0), ["other", "feet stay down"]],
     ["a foot steps out at the bottom", (_t, p, b) => (b.feetX = p > 0.5 ? (bound("feet stay in place") + 0.05) * SIZE : 0), ["other", "feet stay in place"]],
@@ -131,6 +137,70 @@ describe("each rule of the squat refuses on its own, by its own name", () => {
 
   it.each(cases)("%s", (_name, change, verdict) => {
     expect(change === "fast" ? run(undefined, true) : run(change)).toEqual([verdict]);
+  });
+});
+
+// 52a-ii-b-i: the phone on the floor. Near the floor the model's foot points wander while the feet stay where they are; a
+// man's own squats, done properly, were refused for it. Each case is a properly done rep whose foot points do what his
+// did, which must count; and the movements the feet's rules are there for, which still must not.
+describe("the feet's rules read the feet, not the foot points' wander", () => {
+  const HEELS = [KP.left_heel, KP.right_heel];
+  const TOES = [KP.left_foot_index, KP.right_foot_index];
+  const LEFT = [KP.left_heel, KP.left_foot_index];
+  const RIGHT = [KP.right_heel, KP.right_foot_index];
+  const move = (b: Body, points: readonly number[], dx: number, dy: number): void => {
+    for (const i of points) b.each.set(i, [dx * SIZE, dy * SIZE]);
+  };
+
+  it("the heels and toes slide 5 cm down the picture together on the way down and up, the feet never moving: counted", () => {
+    // A foot point rests where it was lowest, but never more than FOOT_ROOM under where the foot stands (52a-ii-b-i's floor
+    // video: 4 to 5 cm).
+    expect(run((_t, p, b) => (b.feetY = p > 0.3 && p < 0.8 ? 0.05 * SIZE : 0))).toEqual([["counted", null]]);
+  });
+
+  it("the toe points slide 9 cm down and the heel points rise 5 cm at the bottom, as on a shiny floor's reflection: counted", () => {
+    expect(
+      run((_t, p, b) => {
+        if (p < 0.6) return;
+        move(b, TOES, 0, 0.09);
+        move(b, HEELS, 0, -0.05);
+      }),
+    ).toEqual([["counted", null]]);
+  });
+
+  it("the far foot, hidden as the rep begins, shows for a moment 29 cm from where it stood: it decides nothing; counted", () => {
+    expect(
+      run((t, _p, b) => {
+        if (t >= 1500 && t < 2300) for (const i of RIGHT) b.each.set(i, "hidden");
+        else if (t >= 2300 && t < 2500) move(b, RIGHT, 0.29, -0.1);
+      }),
+    ).toEqual([["counted", null]]);
+  });
+
+  it("one foot steps 15 cm in the moment after the rep is back up, as a person turns to the phone: the rep was done, counted", () => {
+    expect(
+      run((t, _p, b) => {
+        if (t > 3650) move(b, LEFT, 0.15, 0);
+      }),
+    ).toEqual([["counted", null]]);
+  });
+
+  it("both feet jump 12 cm apart in the moment after the rep is back up, as a squat jack lands wide: not this movement", () => {
+    expect(
+      run((t, _p, b) => {
+        if (t <= 3650) return;
+        move(b, LEFT, 0.12, 0);
+        move(b, RIGHT, -0.12, 0);
+      }),
+    ).toEqual([["other", "feet stay in place"]]);
+  });
+
+  it("one foot steps 12 cm during the rep: not this movement, as before", () => {
+    expect(
+      run((_t, p, b) => {
+        if (p > 0.5) move(b, LEFT, 0.12, 0);
+      }),
+    ).toEqual([["other", "feet stay in place"]]);
   });
 });
 

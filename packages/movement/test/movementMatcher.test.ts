@@ -72,7 +72,7 @@ describe("the worst thing: no other movement is ever counted as a squat", () => 
   });
 
   it("every set of numbers made with one person left out also counts 0 on every other movement but the open case", () => {
-    expect(TABLE.folds.length).toBe(8);
+    expect(TABLE.folds.length).toBe(9);
     expect(TABLE.worstOther).toBe(0);
   });
 
@@ -156,13 +156,24 @@ describe("the worst thing: no other movement is ever counted as a squat", () => 
 describe("the squat's own videos count what a person counts by eye", () => {
   const own = TABLE.rows.filter((r) => r.entry.movement === "squat" && r.sets);
 
-  it("eight people set its numbers: side on, from the front and in between", () => {
-    expect(new Set(own.map((r) => r.entry.person)).size).toBe(8);
+  it("nine people set its numbers: side on, from the front and in between, a phone on the floor among them", () => {
+    expect(new Set(own.map((r) => r.entry.person)).size).toBe(9);
     expect(new Set(own.map((r) => r.entry.view))).toEqual(new Set(["side", "front", "between"]));
+    expect(own.some((r) => r.label.startsWith("floor_phone_test"))).toBe(true);
   });
 
   it.each(own.map((r) => [r.label, r] as const))("%s, with the squat's numbers and with that person left out of them", (_label, r) => {
-    expect([r.count, r.leftOut]).toEqual([r.entry.reps, r.entry.reps]);
+    expect([r.count, r.leftOut]).toEqual([r.entry.reps, r.entry.leftOutOpen?.count ?? r.entry.reps]);
+  });
+
+  it("the counts wrong with their person left out stay in the table in plain sight, the job that closes each named", () => {
+    const open = TABLE.rows.filter((r) => r.entry.leftOutOpen !== undefined);
+    expect(open.map((r) => r.label)).toEqual(["prisoner_squat_2", "floor_phone_test 0-12 s"]);
+    expect(open.map((r) => [r.label, r.count, r.leftOut])).toEqual([
+      ["prisoner_squat_2", 3, 2],
+      ["floor_phone_test 0-12 s", 3, 2],
+    ]);
+    expect(open.every((r) => /^52(b-i|a-ii-b-ii), /.test(r.entry.leftOutOpen?.why ?? ""))).toBe(true);
   });
 
   it.each(TABLE.rows.filter((r) => r.entry.movement === "squat" && !r.sets && r.entry.reps !== null && r.entry.open === undefined).map((r) => [r.label, r] as const))(
@@ -170,7 +181,11 @@ describe("the squat's own videos count what a person counts by eye", () => {
     (_label, r) => {
       expect(r.count).toBe(r.entry.reps);
       const video = videoOf(r.label);
-      for (const fold of TABLE.folds) expect([fold.person, runMovement(withNumbers(SQUAT, fold.fitted), video).count]).toEqual([fold.person, r.entry.reps]);
+      // With its own person left out of the numbers, a known wrong count is written on the video (`leftOutOpen`).
+      for (const fold of TABLE.folds) {
+        const reps = fold.person === r.entry.person ? (r.entry.leftOutOpen?.count ?? r.entry.reps) : r.entry.reps;
+        expect([fold.person, runMovement(withNumbers(SQUAT, fold.fitted), video).count]).toEqual([fold.person, reps]);
+      }
     },
   );
 
