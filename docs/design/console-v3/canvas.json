@@ -35,9 +35,22 @@
     "LeadImport.dc.html": {"x": 3040, "y": 19600, "w": 1440, "h": 2160, "title": "Import leads, in the middle", "expand": "fill"},
     "GymPage.dc.html": {"x": 0, "y": 23520, "w": 1440, "h": 2900, "title": "Your gym page, from the right", "expand": "fill"},
     "AtRisk.dc.html": {"x": 1520, "y": 23520, "w": 1440, "h": 2640, "title": "At risk: who has stopped coming", "expand": "fill"},
-    "PhoneLeads.dc.html": {"x": 3040, "y": 23520, "w": 1800, "h": 1280, "title": "Leads and At risk on a phone"}
+    "PhoneLeads.dc.html": {"x": 3040, "y": 23520, "w": 1800, "h": 1280, "title": "Leads and At risk on a phone"},
+    "Classes.dc.html": {"x": 0, "y": 26560, "w": 1440, "h": 2160, "title": "Classes: the list of classes and their time slots", "expand": "fill"},
+    "ClassAdd.dc.html": {"x": 1520, "y": 26560, "w": 1440, "h": 2800, "title": "Classes: Add class and Edit class, from the right", "expand": "fill"},
+    "ClassesCalendar.dc.html": {"x": 3040, "y": 26560, "w": 1440, "h": 1120, "title": "Classes: the Calendar", "expand": "fill"},
+    "PhoneClasses.dc.html": {"x": 3040, "y": 27800, "w": 1800, "h": 1120, "title": "Classes on a phone"},
+    "ClassTimeSlot.dc.html": {"x": 0, "y": 29480, "w": 1440, "h": 1920, "title": "Classes: a new time slot, from the right", "expand": "fill"},
+    "ClassSlotEdit.dc.html": {"x": 1520, "y": 29480, "w": 1440, "h": 3860, "title": "Classes: edit a time slot, bulk edit and online", "expand": "fill"},
+    "ClassSession.dc.html": {"x": 3040, "y": 29480, "w": 1440, "h": 3140, "title": "A class on the Calendar: who is booked, came or no-show", "expand": "fill"},
+    "ClassSessionEdit.dc.html": {"x": 0, "y": 33460, "w": 1440, "h": 2660, "title": "A class on the Calendar: edit, cancel and un-cancel", "expand": "fill"},
+    "PT.dc.html": {"x": 1520, "y": 33460, "w": 1440, "h": 3060, "title": "Personal training: setup, trainers and a trainer's week", "expand": "fill"},
+    "PTBook.dc.html": {"x": 3040, "y": 33460, "w": 1440, "h": 2560, "title": "Personal training: book, cancel and mark a session", "expand": "fill"},
+    "PTHours.dc.html": {"x": 0, "y": 36640, "w": 1440, "h": 2460, "title": "Personal training: a trainer's hours, from the right", "expand": "fill"},
+    "PTTimeOff.dc.html": {"x": 1520, "y": 36640, "w": 1440, "h": 2220, "title": "Personal training: time off, from the right", "expand": "fill"},
+    "PhonePT.dc.html": {"x": 3040, "y": 36640, "w": 1800, "h": 1160, "title": "Personal training on a phone"}
   },
-  "order": ["Main.dc.html", "Overview.dc.html", "OverviewLight.dc.html", "Search.dc.html", "Money.dc.html", "Members.dc.html", "Person.dc.html", "Phone.dc.html", "MoneySetup.dc.html", "Boxes.dc.html", "Sell.dc.html", "SellSale.dc.html", "SellDay.dc.html", "SellProducts.dc.html", "SellTax.dc.html", "Discounts.dc.html", "Memberships.dc.html", "MembershipsGive.dc.html", "MembershipAdd.dc.html", "MembershipRaise.dc.html", "PhoneSell.dc.html", "PhoneMemberships.dc.html", "Attendance.dc.html", "Desk.dc.html", "PhoneAttendance.dc.html", "Leads.dc.html", "LeadPanel.dc.html", "LeadImport.dc.html", "GymPage.dc.html", "AtRisk.dc.html", "PhoneLeads.dc.html"],
+  "order": ["Main.dc.html", "Overview.dc.html", "OverviewLight.dc.html", "Search.dc.html", "Money.dc.html", "Members.dc.html", "Person.dc.html", "Phone.dc.html", "MoneySetup.dc.html", "Boxes.dc.html", "Sell.dc.html", "SellSale.dc.html", "SellDay.dc.html", "SellProducts.dc.html", "SellTax.dc.html", "Discounts.dc.html", "Memberships.dc.html", "MembershipsGive.dc.html", "MembershipAdd.dc.html", "MembershipRaise.dc.html", "PhoneSell.dc.html", "PhoneMemberships.dc.html", "Attendance.dc.html", "Desk.dc.html", "PhoneAttendance.dc.html", "Leads.dc.html", "LeadPanel.dc.html", "LeadImport.dc.html", "GymPage.dc.html", "AtRisk.dc.html", "PhoneLeads.dc.html", "Classes.dc.html", "ClassAdd.dc.html", "ClassesCalendar.dc.html", "PhoneClasses.dc.html", "ClassTimeSlot.dc.html", "ClassSlotEdit.dc.html", "ClassSession.dc.html", "ClassSessionEdit.dc.html", "PT.dc.html", "PTBook.dc.html", "PTHours.dc.html", "PTTimeOff.dc.html", "PhonePT.dc.html"],
   "notes": {},
   "designSystems": []
 }

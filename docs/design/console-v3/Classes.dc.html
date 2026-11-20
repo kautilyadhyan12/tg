@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Classes</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./kit3.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0;background:#0A0908}
+.cap{display:flex;align-items:center;gap:10px;font-weight:600;color:var(--t2)}
+.num{width:26px;height:26px;border-radius:999px;background:var(--o-fill);color:var(--o-t);box-shadow:inset 0 0 0 1px var(--o-line);display:grid;place-items:center;font-size:13px;font-weight:700;flex:none}
+.stage{background:var(--scrim);border-radius:18px;padding:32px 16px;display:flex;justify-content:center}
+.dlg{background:var(--solid);border:1px solid var(--line2);border-radius:20px;box-shadow:var(--pop);width:100%;max-width:500px;min-width:0}
+.side{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,440px);border:1px solid var(--line);border-radius:18px;overflow:hidden}
+.side > .under{padding:20px;opacity:.6;overflow:hidden;min-width:0}
+.side > .sheet{background:var(--solid);border-left:1px solid var(--line2);display:flex;flex-direction:column;min-width:0}
+.sheet-h{display:flex;align-items:center;gap:12px;padding:18px 20px;border-bottom:1px solid var(--line)}
+.sheet-b{padding:20px;display:flex;flex-direction:column;gap:18px}
+.sheet-f{margin-top:auto;display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:14px 20px;border-top:1px solid var(--line)}
+.opt{display:flex;gap:12px;align-items:flex-start;padding:14px 16px;border-radius:14px;border:1px solid var(--line2)}
+.opt-on{border-color:var(--o);background:var(--o-fill)}
+.radio{width:18px;height:18px;border-radius:999px;border:1.5px solid var(--line2);flex:none;margin-top:1px}
+.radio-on{border:5px solid var(--o)}
+.check-on{background:var(--o);border-color:var(--o);position:relative}
+.check-on::after{content:"";position:absolute;left:5px;top:1px;width:5px;height:10px;border:solid var(--on-o);border-width:0 2px 2px 0;transform:rotate(45deg)}
+.sw{width:40px;height:24px;border-radius:999px;background:var(--bar);position:relative;flex:none}
+.sw::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:999px;background:var(--t3)}
+.sw-on{background:var(--o)}.sw-on::after{left:19px;background:var(--on-o)}
+.step{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,340px);gap:20px;align-items:start}
+.menu{background:var(--solid);border:1px solid var(--line2);border-radius:16px;box-shadow:var(--pop);padding:6px;min-width:0;max-width:320px}
+.mi{display:flex;gap:12px;align-items:flex-start;padding:10px 12px;border-radius:10px}
+.ptile{display:flex;flex-direction:column;gap:4px;padding:14px;border-radius:14px;border:1px solid var(--line2);min-width:0}
+.ptile-on{border-color:var(--o);background:var(--o-fill)}
+.pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.qty{display:inline-flex;align-items:center;border:1px solid var(--line2);border-radius:999px;height:40px}
+.qty > button{width:40px;height:40px;display:grid;place-items:center;color:var(--t2)}
+.money{font-weight:600;white-space:nowrap}
+.frames{display:flex;flex-wrap:wrap;gap:40px;padding:40px;align-items:flex-start}
+.frame{width:390px;max-width:100%;border:1px solid var(--line2);border-radius:28px;overflow:hidden;background:var(--page);display:flex;flex-direction:column;position:relative}
+.bsheet{background:var(--solid);border-top:1px solid var(--line2);border-radius:22px 22px 0 0;box-shadow:var(--pop);display:flex;flex-direction:column}
+.grab{width:40px;height:5px;border-radius:999px;background:var(--line2);margin:10px auto 4px}
+.savebar{position:sticky;bottom:12px;z-index:2;display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 16px;background:var(--solid);border:1px solid var(--line2);border-radius:18px}
+.footbar{position:sticky;bottom:0;padding:12px 16px 16px;border-top:1px solid var(--line);background:var(--solid);display:flex;flex-direction:column;gap:8px}
+@media (max-width:1180px){.side{grid-template-columns:minmax(0,1fr)}.side > .under{display:none}.side > .sheet{border-left:0}}
+@media (max-width:900px){.step{grid-template-columns:minmax(0,1fr)}.frames{padding:16px;gap:24px}}
+@media (pointer:coarse){.qty,.qty > button{height:44px}.qty > button{width:44px}}
+.cls{position:relative;overflow:hidden;padding-left:5px}.cls::before{content:"";position:absolute;left:0;top:0;bottom:0;width:5px;background:var(--edge,var(--line2))}.slot{display:flex;flex-direction:column;gap:10px;padding:12px 14px;border:1px solid var(--line);border-radius:14px}.slot-top{display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap}.slot-acts{display:flex;gap:4px;flex-wrap:wrap;align-items:center}.two{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;align-items:start}.col > span{overflow-wrap:anywhere}.warnline{color:var(--warn);font-weight:500}@media (max-width:1280px){.two{grid-template-columns:minmax(0,1fr)}}
+</style>
+</helmet>
+<div class="app t-dark {{look}}" style="min-height: 100%">
+<div class="shell">
+
+<nav class="rail" aria-label="Menu">
+<a href="#" class="gym"><span class="logo"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18zM6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2M10 6h4M10 10h4M10 14h4M10 18h4"></path></svg></span><span class="col grow"><span class="w6 ell">Iron House</span><span class="s12 t3">Austin · Gym</span></span><svg class="ic ic-s t3" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 15l5 5 5-5M7 9l5-5 5 5"></path></svg></a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3h5a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM15 3h5a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM15 12h5a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1zM4 16h5a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1z"></path></svg>Overview<span class="n n-bad">6</span></a>
+<div class="grp">Today<svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 2h6a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1zM16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2M9 14l2 2 4-4"></path></svg>Attendance</a>
+<a href="#" class="ni ni-on"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 7.5V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3.5M16 2v4M8 2v4M3 10h5M10 16a6 6 0 1 0 12 0a6 6 0 1 0-12 0M16 14v2.2l1.5 1.3"></path></svg>Classes</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 6.5l11 11M21 21l-1-1M3 3l1 1M18 22l4-4M2 6l4-4M3 10l7-7M14 21l7-7"></path></svg>Personal training</a>
+<div class="grp">People<svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M5 7a4 4 0 1 0 8 0a4 4 0 1 0-8 0M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"></path></svg>Members &amp; staff</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 7a4 4 0 1 0 8 0a4 4 0 1 0-8 0M10.3 15H7a4 4 0 0 0-4 4v2M14 17a3 3 0 1 0 6 0a3 3 0 1 0-6 0M21 21l-1.9-1.9"></path></svg>Leads<span class="n">5</span></a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 17l-8.5-8.5-5 5L2 7M16 17h6v-6"></path></svg>At risk<span class="n n-warn">2</span></a>
+<div class="grp">Money<svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6a2 2 0 0 1 2-2h12v4M3 6v12a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2H5a2 2 0 0 1-2-2zM17 14h.01"></path></svg>Payments overview</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4zM3 6h18M16 10a4 4 0 0 1-8 0"></path></svg>Sell</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12.6 2.6A2 2 0 0 0 11.2 2H4a2 2 0 0 0-2 2v7.2a2 2 0 0 0 .6 1.4l8.7 8.7a2.4 2.4 0 0 0 3.4 0l6.6-6.6a2.4 2.4 0 0 0 0-3.4zM7 7.5h.01"></path></svg>Memberships</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2zM2 10h20"></path></svg>Failed payments<span class="n n-bad">3</span></a>
+<div class="grp">Community<svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l18-5v12L3 14zM11.6 16.8a3 3 0 1 1-5.8-1.6"></path></svg>Updates<span class="n n-warn">1</span></a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM16 2v4M8 2v4M3 10h18"></path></svg>Events</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 2h6a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1zM16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2M12 11h4M12 16h4M8 11h.01M8 16h.01"></path></svg>Fitness plans</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M8.2 10.2L5 3h14l-3.2 7.2M6 15a6 6 0 1 0 12 0a6 6 0 1 0-12 0"></path></svg>Challenges</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6M18 9h1.5a2.5 2.5 0 0 0 0-5H18M4 22h16M10 14.7V17c0 .6-.5 1-1 1.2-1.2.5-2 2-2 3.8M14 14.7V17c0 .6.5 1 1 1.2 1.2.5 2 2 2 3.8M18 2H6v7a6 6 0 0 0 12 0z"></path></svg>Leaderboard</a>
+<div class="grp">Manage<svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3v18h18M8 17V9M13 17V5M18 17v-3"></path></svg>Reports</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M2 14h4M10 8h4M18 16h4"></path></svg>Settings</a>
+<a href="#" class="me"><span class="av">DB</span><span class="col grow"><span class="w6 s13 ell">Dana Brooks</span><span class="s12 t3">Owner</span></span><svg class="ic ic-s t3" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 15l5 5 5-5M7 9l5-5 5 5"></path></svg></a>
+</nav>
+
+<div class="work">
+<header class="top" style="position: relative">
+<button type="button" class="find"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11a7 7 0 1 0 14 0a7 7 0 1 0-14 0M21 21l-4.3-4.3"></path></svg><span class="grow ell">Search members, pages or actions</span><span class="kbd">Ctrl K</span></button>
+<span class="grow"></span>
+<button type="button" class="btn btn-soft"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>New</button>
+<button type="button" class="ibtn" aria-label="6 items need attention"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 0 0 3.4 0"></path></svg><span class="pip">6</span></button>
+</header>
+
+<main class="page" style="position: relative">
+<div class="between wrap">
+<div class="col g6" style="flex: 1 1 360px; min-width: 0"><span class="eyebrow">Today</span><h1 class="h1">Classes</h1><span class="t2">Iron House · America/Chicago time</span><span class="hrow g10 wrap t2"><span>Members can book up to 7 days ahead and cancel for free until 2 hours before it starts. One-time fee for each late cancel $10.00 · no-show $10.00.</span><a href="#" class="c-o w6">Change booking rules</a></span></div>
+<button type="button" class="btn btn-p"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>Add class</button>
+</div>
+
+<div class="tabs" role="tablist" aria-label="How to show your classes"><button type="button" class="tab tab-on" role="tab">Classes <span class="n">5</span></button><button type="button" class="tab" role="tab">Calendar</button></div>
+
+<div class="two">
+<div class="col g20">
+
+<section class="box cls" style="--edge: var(--purple)" aria-label="Yoga Flow">
+<div class="bh wrap" style="align-items: flex-start"><div class="col g4" style="flex: 1 1 220px; min-width: 0"><h2 class="h2">Yoga Flow</h2><span class="t2">Slow flow for every level. Mats are provided.</span></div>
+<div class="hrow g6 wrap"><button type="button" class="btn btn-s btn-sm"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"></path></svg>Edit class</button><button type="button" class="btn btn-s btn-sm">Bulk edit</button><button type="button" class="btn btn-q btn-sm"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"></path></svg>Archive</button></div></div>
+<div class="col g10" style="padding: 0 20px 20px">
+<span class="label">Time slots</span>
+<div class="slot"><div class="slot-top"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20M12 6v6l4 2"></path></svg><span class="col g4 grow" style="min-width: 180px"><span class="w6">Mon, Wed &amp; Fri · <span style="white-space: nowrap">6:30 am–7:30 am</span></span><span class="t2">14 places · Kiran Das</span><span class="t3">From 2 Nov 2026 · Next: Mon 23 Nov, Wed 25 Nov</span></span>
+<span class="slot-acts"><button type="button" class="btn btn-q btn-sm">Make it online</button><button type="button" class="btn btn-q btn-sm">Edit</button><button type="button" class="btn btn-q btn-sm">Cancel</button></span></div></div>
+<div class="slot"><div class="slot-top"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20M12 6v6l4 2"></path></svg><span class="col g4 grow" style="min-width: 180px"><span class="w6">Sat · <span style="white-space: nowrap">9:00 am–10:00 am</span></span><span class="t2">20 places · Dana Brooks</span><span class="t3">From 7 Nov 2026 · Next: Sat 21 Nov, Sat 28 Nov</span></span>
+<span class="slot-acts"><button type="button" class="btn btn-q btn-sm">Make it online</button><button type="button" class="btn btn-q btn-sm">Edit</button><button type="button" class="btn btn-q btn-sm">Cancel</button></span></div></div>
+<div class="slot"><div class="slot-top"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20M12 6v6l4 2"></path></svg><span class="col g4 grow" style="min-width: 180px"><span class="w6">Tue &amp; Thu · <span style="white-space: nowrap">6:30 am–7:30 am</span></span><span class="t2">14 places · Kiran Das</span><span class="t3">Ended 30 Oct 2026</span></span>
+<span class="slot-acts"><button type="button" class="btn btn-q btn-sm">Make it online</button><button type="button" class="btn btn-q btn-sm">Cancel</button></span></div></div>
+<button type="button" class="btn btn-q btn-sm" style="align-self: flex-start"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>Add time slot</button>
+</div>
+</section>
+
+<section class="box cls" style="--edge: var(--blue)" aria-label="Spin">
+<div class="bh wrap" style="align-items: flex-start"><div class="col g4" style="flex: 1 1 220px; min-width: 0"><h2 class="h2">Spin</h2><span class="t2">45 minutes on the bike, with music.</span></div></div>
+<div class="col g10" style="padding: 0 20px 20px">
+<div class="cap"><span class="num">1</span>Archive asks under the class</div>
+<div class="inset col g10" role="group" aria-label="Archive Spin">
+<span class="w6">Archive Spin? Its time slots are cancelled and its upcoming classes come off the calendar. You can restore the class later and add its time slots again.</span>
+<div class="hrow g8 wrap"><button type="button" class="btn btn-d btn-sm">Archive</button><button type="button" class="btn btn-q btn-sm">Keep it</button></div>
+</div>
+<div class="cap">When people are booked, the box in the middle names them first: Archive class and end 9 bookings (drawn on ClassSessionEdit)</div>
+<span class="label">Time slots</span>
+<div class="slot"><div class="slot-top"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20M12 6v6l4 2"></path></svg><span class="col g4 grow" style="min-width: 180px"><span class="w6">Tue &amp; Thu · <span style="white-space: nowrap">6:30 pm–7:15 pm</span></span><span class="t2">18 places · Coach no longer available</span><span class="t2">Online class · link added</span><span class="t3">From 2 Nov 2026 · Next: Tue 24 Nov, Thu 26 Nov</span></span>
+<span class="slot-acts"><button type="button" class="btn btn-q btn-sm">Change link</button><button type="button" class="btn btn-q btn-sm">Edit</button><button type="button" class="btn btn-q btn-sm">Cancel</button></span></div></div>
+<div class="slot"><div class="slot-top"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20M12 6v6l4 2"></path></svg><span class="col g4 grow" style="min-width: 180px"><span class="w6">Sun · <span style="white-space: nowrap">10:00 am–10:45 am</span></span><span class="t2">18 places</span><span class="warnline">Online class · no link yet</span><span class="t3">22 Nov – 20 Dec 2026 · Next: Sun 22 Nov, Sun 29 Nov</span></span>
+<span class="slot-acts"><button type="button" class="btn btn-q btn-sm">Add the link</button><button type="button" class="btn btn-q btn-sm">Edit</button><button type="button" class="btn btn-q btn-sm">Cancel</button></span></div></div>
+<button type="button" class="btn btn-q btn-sm" style="align-self: flex-start"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>Add time slot</button>
+</div>
+</section>
+
+</div>
+<div class="col g20">
+
+<section class="box cls" style="--edge: var(--o)" aria-label="HIIT">
+<div class="bh wrap" style="align-items: flex-start"><div class="col g4" style="flex: 1 1 220px; min-width: 0"><h2 class="h2">HIIT</h2></div>
+<div class="hrow g6 wrap"><button type="button" class="btn btn-s btn-sm"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"></path></svg>Edit class</button><button type="button" class="btn btn-q btn-sm"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"></path></svg>Archive</button></div></div>
+<div class="col g10" style="padding: 0 20px 20px">
+<span class="label">Time slots</span>
+<div class="slot"><div class="slot-top"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20M12 6v6l4 2"></path></svg><span class="col g4 grow" style="min-width: 180px"><span class="w6">Every day · <span style="white-space: nowrap">6:00 pm–6:30 pm</span></span><span class="t2">No limit</span><span class="t3">From 2 Nov 2026 · Next: Fri 20 Nov, Sat 21 Nov</span></span>
+<span class="slot-acts"><button type="button" class="btn btn-q btn-sm">Make it online</button><button type="button" class="btn btn-q btn-sm">Edit</button><button type="button" class="btn btn-q btn-sm">Cancel</button></span></div></div>
+<div class="slot"><div class="slot-top"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20M12 6v6l4 2"></path></svg><span class="col g4 grow" style="min-width: 180px"><span class="w6">Mon, Wed &amp; Fri · <span style="white-space: nowrap">6:30 am–7:30 am</span></span><span class="t2">1 place · Kiran Das</span><span class="t3">From 9 Nov 2026 · Next: Fri 20 Nov, Mon 23 Nov</span></span></div>
+<div class="cap"><span class="num">2</span>Cancel asks under the time slot</div>
+<div class="inset col g10" role="group" aria-label="Cancel a time slot"><span class="w6">Cancel the Mon, Wed &amp; Fri 6:30 am time slot? Its upcoming classes come off the calendar.</span><div class="hrow g8 wrap"><button type="button" class="btn btn-d btn-sm">Cancel time slot</button><button type="button" class="btn btn-q btn-sm">Keep it</button></div></div>
+<div class="cap">While it goes, its button reads Cancelling…</div>
+</div>
+<button type="button" class="btn btn-q btn-sm" style="align-self: flex-start"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>Add time slot</button>
+</div>
+</section>
+
+<section class="box cls" style="--edge: var(--good)" aria-label="Open gym">
+<div class="bh wrap" style="align-items: flex-start"><div class="col g4" style="flex: 1 1 220px; min-width: 0"><span class="hrow g8 wrap"><h2 class="h2">Weekend floor</h2><span class="tag tag-plain">Open gym</span></span><span class="t2">The whole floor, no coach. Book a place.</span></div>
+<div class="hrow g6 wrap"><button type="button" class="btn btn-s btn-sm"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"></path></svg>Edit class</button><button type="button" class="btn btn-q btn-sm"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"></path></svg>Archive</button></div></div>
+<div class="col g10" style="padding: 0 20px 20px">
+<span class="label">Time slots</span>
+<span class="t3">No time slots yet.</span>
+<button type="button" class="btn btn-q btn-sm" style="align-self: flex-start"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>Add time slot</button>
+</div>
+</section>
+
+<section class="box" aria-label="Archived classes">
+<div class="bh"><h2 class="h2">Archived classes</h2><span class="tag tag-plain">63</span></div>
+<div class="col" style="padding: 0 0 8px">
+<span class="t3" style="padding: 0 20px 8px">Showing the 50 most recent of 63.</span>
+<div class="row"><span class="grow t2">Boxing basics</span><button type="button" class="btn btn-q btn-sm"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M17 1l4 4-4 4M3 11V9a4 4 0 0 1 4-4h14M7 23l-4-4 4-4M21 13v2a4 4 0 0 1-4 4H3"></path></svg>Restore</button></div>
+<div class="row"><span class="grow t2">Mobility 30</span><button type="button" class="btn btn-q btn-sm"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M17 1l4 4-4 4M3 11V9a4 4 0 0 1 4-4h14M7 23l-4-4 4-4M21 13v2a4 4 0 0 1-4 4H3"></path></svg>Restore</button></div>
+<div class="row"><span class="grow t2">Summer bootcamp</span><button type="button" class="btn btn-q btn-sm"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M17 1l4 4-4 4M3 11V9a4 4 0 0 1 4-4h14M7 23l-4-4 4-4M21 13v2a4 4 0 0 1-4 4H3"></path></svg>Restore</button></div>
+</div>
+</section>
+
+</div>
+</div>
+
+<section class="box" aria-label="Every other state of this page">
+<div class="bh"><div class="col g4"><h2 class="h2">Every other state of this page</h2><span class="t3">Each in the same place as on the real page: under the tabs, before the classes.</span></div></div>
+<div class="grid2" style="gap: 16px; padding: 0 20px 20px">
+<div class="inset col g6"><span class="w6">No classes yet.</span><span class="t3">A gym with no classes: Add class at the top right.</span></div>
+<div class="inset col g6"><span class="t2">Your role doesn't allow you to set the timetable.</span><span class="t3">Staff without the right to change classes: no tabs, no buttons.</span></div>
+<div class="inset col g6"><span class="t2">This gym needs a plan before anything here can be changed.</span><span class="t3">Everything shows; no button changes anything.</span></div>
+<div class="inset col g6"><span class="hrow g8 t2"><span class="dot"></span>Loading your timetable…</span><span class="hrow g8 t2"><span class="dot"></span>Loading your organisation…</span></div>
+<div class="strip" role="alert" style="border-color: var(--bad-line); background: var(--bad-fill)"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 9v4M12 17h.01M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path></svg><span class="grow">We couldn't load your timetable.</span><button type="button" class="btn btn-s btn-sm">Try again</button></div>
+<div class="strip" role="alert" style="border-color: var(--bad-line); background: var(--bad-fill)"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 9v4M12 17h.01M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path></svg><span class="grow">We couldn't save that.</span></div>
+<div class="inset col g8"><span class="t2">We couldn't find an organisation you run at this address.</span><a href="#" class="btn btn-s btn-sm" style="align-self: flex-start">Your organisations</a></div>
+</div>
+</section>
+
+</main>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"look":{"editor":"enum","options":["Dark","Light"],"default":"Dark"},"$preview":{"width":1440,"height":2160}}'>
+class Component extends DCLogic {
+renderVals() {
+return { look: (this.props.look ?? 'Dark') === 'Light' ? 't-light' : '' };
+}
+}
+</script>
+</body>
+</html>
