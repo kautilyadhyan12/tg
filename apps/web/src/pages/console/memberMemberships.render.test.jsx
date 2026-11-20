@@ -497,9 +497,10 @@ describe('what the box draws', () => {
 
     orgService.getHeldMemberships.mockResolvedValue(answer([held(1, GOLD, '2026-10-04', true)]));
     view.rerender(draw(BEA, 'Bea Hart', { readOnly: true }));
-    await waitFor(() => expect(screen.queryByTestId('held-past-note')).toBeNull());
+    // Bea's own read: the box is empty while it loads, so wait for her word, not for Ada's note to go.
+    await waitFor(() => expect(box().getByText('Active')).toBeTruthy());
+    expect(screen.queryByTestId('held-past-note')).toBeNull();
     expect(box().getByText('Gold Monthly')).toBeTruthy();
-    expect(box().getByText('Active')).toBeTruthy();
     // A gym with no plan changes nothing; it still reads a payment's receipt.
     expect(box().queryAllByRole('button').map((x) => x.textContent)).toEqual(['View receipt']);
   });
