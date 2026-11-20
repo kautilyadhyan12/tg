@@ -107,6 +107,18 @@ describe("the loaded bar holds exactly the weight it says, or is not drawn", () 
     expect(loadedBar(curl, "metric", 40_000, null)?.extra).toEqual([]);
   });
 
+  it("every 2.5 kg from the empty bar draws plates that add up to it, the 1.25 change plate included, until the sleeve is full", () => {
+    // Found on Kd's phone (64a-i): 22.5 kg needed a 1.25 kg plate a side, which the list did not have.
+    let kg = 20;
+    for (; kg <= 400; kg += 2.5) {
+      const bar = loadedBar(curl, "metric", kg * 1000, null);
+      if (bar === null) break;
+      expect(kgOf(bar.side), `${String(kg)} kg`).toBeCloseTo(kg, 6);
+    }
+    expect(kg).toBeGreaterThan(180);
+    expect(loadedBar(curl, "metric", 22_500, null)?.side).toEqual([1.25]);
+  });
+
   it("plates are largest first, and only the standard ones", () => {
     expect(platesFor(47.5)).toEqual([25, 20, 2.5]);
     expect(platesFor(3.75)).toEqual([2.5, 1.25]);

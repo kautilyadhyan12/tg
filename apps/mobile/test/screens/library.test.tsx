@@ -620,7 +620,9 @@ describe("your records, calories and My Workout on an exercise's page (63c)", ()
     await fireEvent.press(screen.getByRole("button", { name: "Add to workout" }));
     await fireEvent.press(await screen.findByRole("button", { name: "Open My Workout" }));
     expect(await screen.findByRole("button", { name: "My Workout, 1" })).toBeTruthy();
-    expect(screen.getByText(/^1 exercise · about 5 min/)).toBeTruthy();
+    // Curl 3 × (30 s + 60 s) less the last rest: 210 s, about 4 min. No weight given: the calories say at what weight.
+    expect(screen.getByText(/^1 exercise · about 4 min · about \d+ kcal at 70 kg$/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Add your weight" })).toBeTruthy();
     expect(screen.getByText("3 × 10 reps · rest 1:00")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Start workout" }).props.accessibilityState).toMatchObject({ disabled: true });
     await fireEvent.press(screen.getByRole("button", { name: "Remove Barbell Curl" }));
@@ -680,7 +682,7 @@ describe("setting up My Workout's sets (64a-i)", () => {
     expect(names()).toEqual(["Barbell Curl", "Squat", "Plank"]);
   });
 
-  it("a barbell's weight is the loaded bar; every set changes together, or one set alone", async () => {
+  it("the weight plate; every set changes together, or one set alone", async () => {
     await openLibrary(libraryServer().ask);
     await add(/^Barbell Curl,/);
     await openMine();
@@ -730,6 +732,9 @@ describe("setting up My Workout's sets (64a-i)", () => {
     await fireEvent.press(screen.getByRole("button", { name: "Type a weight" }));
     await fireEvent.changeText(screen.getByLabelText("Weight in kg"), "fifty");
     await fireEvent.press(screen.getByRole("button", { name: "Set weight" }));
+    expect(screen.getByText("Enter a weight such as 47.5.")).toBeTruthy();
+    await fireEvent.changeText(screen.getByLabelText("Weight in kg"), "5000");
+    await fireEvent.press(screen.getByRole("button", { name: "Set weight" }));
     expect(screen.getByText("Enter a weight up to 1,000 kg.")).toBeTruthy();
     await fireEvent.changeText(screen.getByLabelText("Weight in kg"), "12,5");
     await fireEvent(screen.getByLabelText("Weight in kg"), "submitEditing");
@@ -747,6 +752,51 @@ describe("setting up My Workout's sets (64a-i)", () => {
     await fireEvent.changeText(screen.getByLabelText("Weight in kg"), "");
     await fireEvent(screen.getByLabelText("Weight in kg"), "submitEditing");
     expect(screen.getByRole("button", { name: "Set 2: 30 s, rest 1:00" })).toBeTruthy();
+  });
+
+  it("a typed weight is kept when the person presses Done or ✕ with the keyboard still up (review H1)", async () => {
+    await openLibrary(libraryServer().ask);
+    await add(/^Plank,/);
+    await openMine();
+    await fireEvent.press(await row("Plank"));
+    await fireEvent.press(screen.getByRole("button", { name: "Type a weight" }));
+    await fireEvent.changeText(screen.getByLabelText("Weight in kg"), "50");
+    // Neither the keyboard's own key nor Set weight: the box's Done.
+    await fireEvent.press(screen.getByRole("button", { name: "Done" }));
+    expect(await screen.findByText("3 × 30 s · 50 kg · rest 1:00")).toBeTruthy();
+    // And by the ✕.
+    await fireEvent.press(await row("Plank"));
+    await fireEvent.press(screen.getByRole("button", { name: "Type a weight" }));
+    await fireEvent.changeText(screen.getByLabelText("Weight in kg"), "40");
+    await fireEvent.press(screen.getByRole("button", { name: "Close" }));
+    expect(await screen.findByText("3 × 30 s · 40 kg · rest 1:00")).toBeTruthy();
+    // Done with words that cannot be read keeps the box and says so; nothing is lost in silence.
+    await fireEvent.press(await row("Plank"));
+    await fireEvent.press(screen.getByRole("button", { name: "Type a weight" }));
+    await fireEvent.changeText(screen.getByLabelText("Weight in kg"), "fifty");
+    await fireEvent.press(screen.getByRole("button", { name: "Done" }));
+    expect(screen.getByText("Enter a weight such as 47.5.")).toBeTruthy();
+    expect(screen.getByLabelText("Weight in kg")).toBeTruthy();
+  });
+
+  it("typing, then picking another set or pressing + or −, keeps the typed weight on the set it was typed for (review L2)", async () => {
+    await openLibrary(libraryServer().ask);
+    await add(/^Plank,/);
+    await openMine();
+    await fireEvent.press(await row("Plank"));
+    await fireEvent.press(screen.getByRole("button", { name: "Set 1: 30 s, rest 1:00" }));
+    await fireEvent.press(screen.getByRole("button", { name: "Type a weight" }));
+    await fireEvent.changeText(screen.getByLabelText("Weight in kg"), "10");
+    // Another set picked while the keyboard is up: the 10 kg stays on set 1.
+    await fireEvent.press(screen.getByRole("button", { name: "Set 2: 30 s, rest 1:00" }));
+    expect(screen.getByRole("button", { name: "Set 1: 30 s, 10 kg, rest 1:00" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Set 2: 30 s, rest 1:00" })).toBeTruthy();
+    // On set 2, typing then + : the typed weight is kept and the press goes on from it.
+    await fireEvent.press(screen.getByRole("button", { name: "Type a weight" }));
+    await fireEvent.changeText(screen.getByLabelText("Weight in kg"), "20");
+    await fireEvent.press(screen.getByRole("button", { name: "More weight" }));
+    expect(screen.getByRole("button", { name: "Set 2: 30 s, 22.5 kg, rest 1:00" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Set 1: 30 s, 10 kg, rest 1:00" })).toBeTruthy();
   });
 
   it("a timed exercise is set in time; its weight starts at none and can be added (a weighted plank); the rest too", async () => {
@@ -774,9 +824,11 @@ describe("setting up My Workout's sets (64a-i)", () => {
     await add(/^Barbell Curl,/);
     await add(/^Plank,/);
     await openMine();
-    // Curl 3 × (30 s + 60 s) and Plank 3 × (30 s + 60 s): 9 minutes, at the person's 82 kg.
-    const kcal = Math.round((3.5 * 82 * 90 + 1.8 * 82 * 180 + 2.8 * 82 * 90 + 1.8 * 82 * 180) / 3600);
-    expect(await screen.findByText(`2 exercises · about 9 min · about ${String(kcal)} kcal`)).toBeTruthy();
+    // Curl 3 × (30 s + 60 s) and Plank 3 × (30 s + 60 s), less the last rest: 480 s, 8 minutes, at the person's 82 kg.
+    const kcal = Math.round((3.5 * 82 * 90 + 1.8 * 82 * 180 + 2.8 * 82 * 90 + 1.8 * 82 * 120) / 3600);
+    expect(await screen.findByText(`2 exercises · about 8 min · about ${String(kcal)} kcal`)).toBeTruthy();
+    // Their own weight: no "at 70 kg", no Add your weight.
+    expect(screen.queryByRole("button", { name: "Add your weight" })).toBeNull();
     await fireEvent.changeText(screen.getByLabelText("Workout name"), "Arms and core");
     expect(screen.getByLabelText("Workout name").props.value).toBe("Arms and core");
     await fireEvent.press(screen.getByRole("button", { name: "Reorder exercises" }));

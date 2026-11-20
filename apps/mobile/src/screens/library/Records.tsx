@@ -136,8 +136,6 @@ function box(x: number, y: number, w: number, h: number, r: number): string {
 
 const BAR_W = 300;
 const BAR_H = 82;
-/** How tall the loaded bar is drawn: a place kept for it stays this tall when no bar can be drawn. */
-export const LOADED_BAR_HEIGHT = BAR_H;
 
 /** A standard bar seen from the front: what was lifted as plates a side from each collar outwards, the estimate's
  *  extra as outlined plates beyond them. */
@@ -183,9 +181,9 @@ export function LoadedBar({ side, extra }: { side: readonly PlateKg[]; extra: re
   );
 }
 
-const DIGITS: Readonly<Record<string, string>> = { 0: "abcdef", 1: "bc", 2: "abdeg", 3: "abcdg", 4: "bcfg", 5: "acdfg", 6: "acdefg", 7: "abc", 8: "abcdefg", 9: "abcdfg", "-": "g" };
+const DIGITS: Readonly<Record<string, string>> = { 0: "abcdef", 1: "bc", 2: "abdeg", 3: "abcdg", 4: "bcfg", 5: "acdfg", 6: "acdefg", 7: "abc", 8: "abcdefg", 9: "abcdfg" };
 
-/** Digits as an LED wall timer lights them, seven segments each, the unlit ones faintly there. Digits, "-", ":" and ".". */
+/** Digits as an LED wall timer lights them, seven segments each, the unlit ones faintly there. Digits, ":" and ".". */
 export function Led({ text, colour, height }: { text: string; colour: ColourName; height: number }) {
   const w = height * 0.52;
   const t = Math.max(3, height * 0.12);

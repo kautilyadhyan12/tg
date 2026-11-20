@@ -15,9 +15,9 @@ import { Led } from "./Records";
 // Setting up one exercise of My Workout (ROADMAP Stage 5 64a-i, Kd's drawing of 2026-11-20): the box from the bottom.
 // The weight is a weight plate with its number, the same for every exercise (Kd's click-through: "a symbol that can go
 // with any exercises ... not a barbell"); sets, reps or time and the rest are lit on the gym's LED wall timer, each in
-// its own colour. Under them the sets, always shown: "Every set" at
-// the top, then each set; the line picked is what the controls change, and they always show its real numbers
-// (Kd's click-through, 2026-11-20). Each press is kept at once; Done closes it.
+// its own colour. Under them the sets, always shown: "Every set" at the top, then each set; the line picked is what
+// the controls change, and they always show its real numbers (Kd's click-through, 2026-11-20). Each press is kept at
+// once; Done closes it.
 
 interface Props {
   entry: PhoneLibraryEntry;
@@ -30,24 +30,65 @@ interface Props {
 
 export function SetUpSheet({ entry, plan, units, onChange, onAbout, onClose }: Props) {
   const [which, setWhich] = useState<number | null>(null);
+  // A weight being typed is kept here, not in the plate, so every way of leaving it keeps it (review H1, L2): Done,
+  // ✕, the background, Back, About, another set, + or −. Only Done and Set weight keep the box open where it cannot
+  // be read; the others leave it, as a person pressing them is done with it.
+  const [typing, setTyping] = useState<string | null>(null);
+  const [wrong, setWrong] = useState<"unread" | "heavy" | null>(null);
   const one = which !== null && which < plan.sets.length ? which : null;
   const barbell = entry.equipment.includes("barbell");
   const shown = plan.sets[one ?? 0];
   const name = entry.text.en.name;
   if (shown === undefined) return null;
-  const press = (field: Field, by: -1 | 1) => {
-    const next = changed(plan, field, by, field === "sets" ? null : one, units, barbell);
+  /** The plan with the weight being typed put on the set it was typed for; null where it cannot be read and the box
+   *  should stay to say so. */
+  const settled = (stayIfWrong: boolean): Plan | null => {
+    if (typing === null) return plan;
+    const read = typedWeight(typing, units);
+    if (read.kind !== "ok" && stayIfWrong) {
+      setWrong(read.kind);
+      return null;
+    }
+    setTyping(null);
+    setWrong(null);
+    return read.kind === "ok" ? withWeight(plan, read.grams, one) : plan;
+  };
+  const keep = (next: Plan) => {
     if (next !== plan) onChange(next);
   };
+  const press = (field: Field, by: -1 | 1) => {
+    const base = settled(false) ?? plan;
+    keep(changed(base, field, by, field === "sets" ? null : one, units, barbell));
+  };
   const can = (field: Field, by: -1 | 1) => canStep(plan, field, by, field === "sets" ? null : one, units, barbell);
+  const pick = (i: number | null) => {
+    const base = settled(false);
+    if (base !== null) keep(base);
+    setWhich(i);
+  };
+  const leave = (then: () => void) => {
+    const base = settled(false);
+    if (base !== null) keep(base);
+    then();
+  };
+  const finishTyping = () => {
+    const base = settled(true);
+    if (base !== null) keep(base);
+  };
   const time = plan.measuredIn === "time";
 
   return (
     <Sheet
       open
       title={name}
-      onClose={onClose}
+      onClose={() => {
+        leave(onClose);
+      }}
       onBack={() => {
+        if (typing !== null) {
+          leave(() => undefined);
+          return true;
+        }
         if (one === null) return false;
         setWhich(null);
         return true;
@@ -60,10 +101,17 @@ export function SetUpSheet({ entry, plan, units, onChange, onAbout, onClose }: P
           units={units}
           press={press}
           can={can}
-          onType={(grams) => {
-            const next = withWeight(plan, grams, one);
-            if (next !== plan) onChange(next);
+          typing={typing}
+          wrong={wrong}
+          onStart={() => {
+            setWrong(null);
+            setTyping(shown.weightGrams === null ? "" : weightParts(shown.weightGrams, units)[0]);
           }}
+          onTyped={(t) => {
+            setTyping(t);
+            setWrong(null);
+          }}
+          onFinish={finishTyping}
         />
         <View style={styles.wall}>
           <Dial label="Sets" say="sets" field="sets" digits={String(plan.sets.length)} colour="ledAmber" unit={null} press={press} can={can} first />
@@ -80,7 +128,7 @@ export function SetUpSheet({ entry, plan, units, onChange, onAbout, onClose }: P
             accessibilityLabel="Every set"
             accessibilityState={{ selected: one === null }}
             onPress={() => {
-              setWhich(null);
+              pick(null);
             }}
             style={[styles.setLine, one === null ? styles.setOn : null]}
           >
@@ -89,36 +137,54 @@ export function SetUpSheet({ entry, plan, units, onChange, onAbout, onClose }: P
             </Txt>
             <Txt kind="small" colour="timerWords">{`${String(plan.sets.length)} ${plan.sets.length === 1 ? "set" : "sets"}`}</Txt>
           </Pressable>
-              {plan.sets.map((s, i) => {
-                const on = one === i;
-                const weight = s.weightGrams === null ? null : weightParts(s.weightGrams, units).join(" ");
-                const said = [targetWords(plan, s), weight, restWords(s.restSeconds)].filter((x) => x !== null).join(", ");
-                return (
-                  <Pressable
-                    key={i}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Set ${String(i + 1)}: ${said}`}
-                    accessibilityState={{ selected: on }}
-                    onPress={() => {
-                      setWhich(i);
-                    }}
-                    style={[styles.setLine, styles.setSplit, on ? styles.setOn : null]}
-                  >
-                    <Txt kind="tiny" numberOfLines={1} style={styles.setNo}>{`SET ${String(i + 1)}`}</Txt>
-                    <View style={styles.setWords}>
-                      <Txt kind="strong" colour="ledRed" style={styles.digitsFont}>{targetWords(plan, s)}</Txt>
-                      {weight === null ? null : <Txt kind="strong" colour="ledBlue" style={styles.digitsFont}>{weight}</Txt>}
-                      <Txt kind="strong" colour="ledGreen" style={styles.digitsFont}>{restWords(s.restSeconds)}</Txt>
-                    </View>
-                  </Pressable>
-                );
-              })}
+          {plan.sets.map((s, i) => {
+            const on = one === i;
+            const weight = s.weightGrams === null ? null : weightParts(s.weightGrams, units).join(" ");
+            const said = [targetWords(plan, s), weight, restWords(s.restSeconds)].filter((x) => x !== null).join(", ");
+            return (
+              <Pressable
+                key={i}
+                accessibilityRole="button"
+                accessibilityLabel={`Set ${String(i + 1)}: ${said}`}
+                accessibilityState={{ selected: on }}
+                onPress={() => {
+                  pick(i);
+                }}
+                style={[styles.setLine, styles.setSplit, on ? styles.setOn : null]}
+              >
+                <Txt kind="tiny" numberOfLines={1} style={styles.setNo}>{`SET ${String(i + 1)}`}</Txt>
+                <View style={styles.setWords}>
+                  <Txt kind="strong" colour="ledRed" style={styles.digitsFont}>{targetWords(plan, s)}</Txt>
+                  {weight === null ? null : <Txt kind="strong" colour="ledBlue" style={styles.digitsFont}>{weight}</Txt>}
+                  <Txt kind="strong" colour="ledGreen" style={styles.digitsFont}>{restWords(s.restSeconds)}</Txt>
+                </View>
+              </Pressable>
+            );
+          })}
         </View>
       </ScrollView>
       {/* The foot stays whole under the sets, never half under the box's edge while they scroll. */}
       <View style={styles.foot}>
-        <Button label="About" kind="link" icon="info" say={`About ${name}`} onPress={onAbout} />
-        <Button label="Done" kind="plain" style={styles.done} onPress={onClose} />
+        <Button
+          label="About"
+          kind="link"
+          icon="info"
+          say={`About ${name}`}
+          onPress={() => {
+            leave(onAbout);
+          }}
+        />
+        <Button
+          label="Done"
+          kind="plain"
+          style={styles.done}
+          onPress={() => {
+            const base = settled(true);
+            if (base === null) return;
+            keep(base);
+            onClose();
+          }}
+        />
       </View>
     </Sheet>
   );
@@ -183,28 +249,22 @@ const MID = PLATE / 2;
  *  black one), with a soft orange glow, its steel hub, the number above the hub and the unit below, as a real plate
  *  is printed; black rubber reading "NONE" for no weight. It pops a little each time the weight changes, unless the
  *  phone asks for less motion. Always the same size, so the box never moves under a finger pressing + or −. */
-function WeightBox({ grams, units, press, can, onType }: { grams: number | null; units: Units; press: Press; can: Can; onType: (grams: number | null) => void }) {
+interface WeightBoxProps {
+  grams: number | null;
+  units: Units;
+  press: Press;
+  can: Can;
+  /** The words being typed on the plate, or null. */
+  typing: string | null;
+  wrong: "unread" | "heavy" | null;
+  onStart: () => void;
+  onTyped: (text: string) => void;
+  onFinish: () => void;
+}
+
+function WeightBox({ grams, units, press, can, typing, wrong, onStart, onTyped, onFinish }: WeightBoxProps) {
   const [n, unit] = grams === null ? ["None", ""] : weightParts(grams, units);
   const unitWord = units === "imperial" ? "lb" : "kg";
-  // Typing a weight: the plate holds a box to type in with the number keyboard; Done or leaving it keeps a weight
-  // that can be read, and says so in one line where it cannot.
-  const [typing, setTyping] = useState<string | null>(null);
-  const [wrong, setWrong] = useState(false);
-  const startTyping = () => {
-    setWrong(false);
-    setTyping(grams === null ? "" : n);
-  };
-  const finish = () => {
-    if (typing === null) return;
-    const read = typedWeight(typing, units);
-    if (read === null) {
-      setWrong(true);
-      return;
-    }
-    setTyping(null);
-    setWrong(false);
-    onType(read.grams);
-  };
   const motion = useMotion();
   const pop = useRef(new Animated.Value(1)).current;
   const first = useRef(true);
@@ -229,7 +289,7 @@ function WeightBox({ grams, units, press, can, onType }: { grams: number | null;
           accessibilityLabel={grams === null ? "Weight, none" : `Weight, ${n} ${unit}`}
           accessibilityHint="Type a weight"
           disabled={typing !== null}
-          onPress={startTyping}
+          onPress={onStart}
           style={styles.halo}
         >
           <Svg width={HALO} height={HALO} style={StyleSheet.absoluteFill} accessible={false}>
@@ -261,12 +321,8 @@ function WeightBox({ grams, units, press, can, onType }: { grams: number | null;
             ) : (
               <TextInput
                 value={typing}
-                onChangeText={(t) => {
-                  setTyping(t);
-                  setWrong(false);
-                }}
-                onSubmitEditing={finish}
-                onBlur={finish}
+                onChangeText={onTyped}
+                onSubmitEditing={onFinish}
                 keyboardType="decimal-pad"
                 returnKeyType="done"
                 autoFocus
@@ -285,13 +341,12 @@ function WeightBox({ grams, units, press, can, onType }: { grams: number | null;
             )}
           </Animated.View>
         </Pressable>
-        {wrong ? (
+        {wrong === null ? null : (
           <Txt kind="small" colour="badText" style={styles.centre}>
-            {units === "imperial" ? "Enter a weight up to 2,204 lb." : "Enter a weight up to 1,000 kg."}
+            {wrong === "heavy" ? (units === "imperial" ? "Enter a weight up to 2,204 lb." : "Enter a weight up to 1,000 kg.") : `Enter a weight such as ${units === "imperial" ? "135" : "47.5"}.`}
           </Txt>
-        ) : (
-          <Button label={typing === null ? "Type a weight" : "Set weight"} kind="link" icon={typing === null ? "pen" : "check"} style={styles.underPlate} onPress={typing === null ? startTyping : finish} />
         )}
+        <Button label={typing === null ? "Type a weight" : "Set weight"} kind="link" icon={typing === null ? "pen" : "check"} style={styles.underPlate} onPress={typing === null ? onStart : onFinish} />
       </View>
       <Round field="weight" by={1} say="weight" press={press} can={can} />
     </View>

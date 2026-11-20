@@ -1,13 +1,12 @@
 // Setting up an exercise's sets in My Workout (64a-i), as a table over every class of case. The faults this guards: a
 // press that leaves a set outside what a workout's save takes, a row that says other numbers than the sets hold, a
-// bar drawn with a weight it does not hold, and an estimate in calories at a weight that is not the person's.
+// typed weight read wrongly, and an estimate in calories at a weight that is not the person's.
 import { readdirSync, readFileSync } from "node:fs";
 import { KCAL_REST_MET, readPhoneLibrary, WORKOUT_SAVE_LIMITS, type PhoneLibraryEntry, type PlannedSet } from "@app/shared";
 import { describe, expect, it } from "vitest";
 import { SETS_MOST, type Item, type Plan } from "../src/library/myWorkout";
 import {
   BAR_LB,
-  barPlates,
   canStep,
   changed,
   clockDigits,
@@ -26,7 +25,6 @@ import {
   summaryLine,
   TIME_LEAST,
   TIME_MOST,
-  weightDigits,
 } from "../src/library/workoutSetup";
 
 const FOLDER = new URL("../../../packages/shared/library/exercises/", import.meta.url);
@@ -72,20 +70,24 @@ describe("the Library's starting numbers", () => {
 });
 
 describe("a weight typed by the person", () => {
-  it.each<[string, string, "metric" | "imperial", { grams: number | null } | null]>([
-    ["a whole number", "50", "metric", { grams: 50_000 }],
-    ["a half", "47.5", "metric", { grams: 47_500 }],
-    ["a comma for the point", "47,5", "metric", { grams: 47_500 }],
-    ["spaces round it", " 22.25 ", "metric", { grams: 22_250 }],
-    ["empty is no weight", "", "metric", { grams: null }],
-    ["0 is no weight", "0", "metric", { grams: null }],
-    ["in pounds", "135", "imperial", { grams: Math.round(135 * 453.59237) }],
-    ["the most a save allows", "1000", "metric", { grams: 1_000_000 }],
-    ["more than that", "1000.5", "metric", null],
-    ["words", "fifty", "metric", null],
-    ["a minus", "-5", "metric", null],
-    ["two points", "4.5.5", "metric", null],
-    ["three decimals", "4.125", "metric", null],
+  const ok = (grams: number | null) => ({ kind: "ok", grams });
+  it.each<[string, string, "metric" | "imperial", object]>([
+    ["a whole number", "50", "metric", ok(50_000)],
+    ["a half", "47.5", "metric", ok(47_500)],
+    ["a comma for the point", "47,5", "metric", ok(47_500)],
+    ["spaces round it", " 22.5 ", "metric", ok(22_500)],
+    ["empty is no weight", "", "metric", ok(null)],
+    ["0 is no weight", "0", "metric", ok(null)],
+    ["in pounds", "135", "imperial", ok(Math.round(135 * 453.59237))],
+    ["the most a save allows", "1000", "metric", ok(1_000_000)],
+    // The screen shows one decimal, so a typed weight has one at most: never "22.3 kg" for 22.25 (review L1).
+    ["two decimals", "22.25", "metric", { kind: "unread" }],
+    ["more than a save allows", "1000.5", "metric", { kind: "heavy" }],
+    ["far more", "99999", "metric", { kind: "heavy" }],
+    ["a thousands comma (read as a point, 1.000)", "1,000", "metric", { kind: "unread" }],
+    ["words", "fifty", "metric", { kind: "unread" }],
+    ["a minus", "-5", "metric", { kind: "unread" }],
+    ["two points", "4.5.5", "metric", { kind: "unread" }],
   ])("%s", (_, text, units, want) => {
     expect(typedWeight(text, units)).toEqual(want);
   });
@@ -206,6 +208,7 @@ describe("what a row says is what its sets hold", () => {
     ["no weight", reps(S(12), S(12), S(12)), "metric", false, "3 × 12 reps · rest 1:00"],
     ["reps that differ", reps(S(10, 20_000), S(10, 20_000), S(6, 25_000, 90)), "metric", false, "3 sets · 10, 10, 6 reps · 20 to 25 kg · rest varies"],
     ["a weight on some sets only", reps(S(10), S(10, 5_000)), "metric", false, "2 × 10 reps · 5 kg on some sets · rest 1:00"],
+    ["weights that differ, and a set with none (review L4)", reps(S(10), S(10, 20_000), S(10, 25_000)), "metric", false, "3 × 10 reps · 20 to 25 kg on some sets · rest 1:00"],
     ["one set, one rep", reps(S(1, null, 0)), "metric", false, "1 × 1 rep · no rest"],
     ["time", time(S(30, null, 45), S(30, null, 45)), "metric", false, "2 × 30 s · rest 0:45"],
     ["times that differ", time(S(30), S(75)), "metric", false, "2 sets · 30 s, 1:15 · rest 1:00"],
@@ -222,44 +225,6 @@ describe("what a row says is what its sets hold", () => {
 
   it("the timer's digits", () => {
     expect([clockDigits(30), clockDigits(75), clockDigits(3600), clockDigits(0)]).toEqual(["00:30", "01:15", "60:00", "00:00"]);
-    expect([weightDigits(null, "metric"), weightDigits(22_500, "metric"), weightDigits(Math.round(50 * 453.59237), "imperial")]).toEqual([["--", "none"], ["22.5", "kg"], ["50", "lb"]]);
-  });
-});
-
-describe("the bar is never drawn holding a weight it does not hold", () => {
-  it.each<[string, number | null, "metric" | "imperial", number[] | null]>([
-    ["none: the empty bar", null, "metric", []],
-    ["20 kg: the empty bar", 20_000, "metric", []],
-    ["35 kg: 5 and 2.5 a side", 35_000, "metric", [5, 2.5]],
-    ["100 kg: 25, 15 a side", 100_000, "metric", [25, 15]],
-    ["21 kg: a 0.5 kg change plate a side", 21_000, "metric", [0.5]],
-    ["22.5 kg, one press past the bar: a 1.25 kg plate a side", 22_500, "metric", [1.25]],
-    ["27.5 kg: 2.5 and 1.25 a side", 27_500, "metric", [2.5, 1.25]],
-    ["20.25 kg: no plates make it, so the number alone", 20_250, "metric", null],
-    ["more than the sleeve holds: the number alone", 400_000, "metric", null],
-    ["in pounds: the number alone", Math.round(135 * 453.59237), "imperial", null],
-  ])("%s", (_, grams, units, want) => {
-    const side = barPlates(curl, units, grams);
-    expect(side).toEqual(want);
-    if (side !== null && grams !== null) expect(20 + 2 * side.reduce((a, p) => a + p, 0)).toBe(grams / 1000);
-  });
-});
-
-describe("every press on the bar draws it (the walk on Kd's phone, 2026-11-20)", () => {
-  it("each 2.5 kg step from the empty bar draws plates that add up to it, until the sleeve is full", () => {
-    // On the phone, 22.5 kg drew no bar, the box grew shorter under the finger, and the next press closed it.
-    let grams: number | null = null;
-    let steps = 0;
-    for (;;) {
-      grams = stepWeight(grams, 1, "metric", true);
-      if (grams === null) throw new Error("a press up gave none");
-      const side = barPlates(curl, "metric", grams);
-      if (side === null) break;
-      expect(20 + 2 * side.reduce((a, p) => a + p, 0)).toBeCloseTo(grams / 1000, 6);
-      steps += 1;
-    }
-    // From 20 kg to past 180 kg, every step drawn.
-    expect(steps).toBeGreaterThan(64);
   });
 });
 
@@ -267,29 +232,40 @@ describe("about how long, and how many calories", () => {
   const entryOf = (id: string) => ({ barbell_curl: curl, squat, plank } as Record<string, PhoneLibraryEntry>)[id] ?? null;
   const items: Item[] = [{ id: "barbell_curl", plan: null }, { id: "plank", plan: time(S(30, null, 45)) }];
 
-  it("a rep is 3 s, a time its own seconds, every rest counted; calories as a saved workout reckons them", () => {
-    // Curl: 3 × (30 s + 60 s rest) = 270 s; plank: 30 s + 45 s = 75 s. 345 s is about 6 min.
-    const kcal = (3.5 * 82 * 90 + KCAL_REST_MET * 82 * 180 + 2.8 * 82 * 30 + KCAL_REST_MET * 82 * 45) / 3600;
-    expect(estimate(items, entryOf, 82)).toEqual({ minutes: 6, kcal: Math.round(kcal) });
+  it("a rep is 3 s, a time its own seconds, the rest after every set but the very last; calories as a saved workout reckons them", () => {
+    // Curl: 3 × (30 s + 60 s rest) = 270 s; plank: 30 s, its rest left out as nothing follows it (review L5). 300 s.
+    const kcal = (3.5 * 82 * 90 + KCAL_REST_MET * 82 * 180 + 2.8 * 82 * 30) / 3600;
+    expect(estimate(items, entryOf, 82)).toEqual({ minutes: 5, kcal: Math.round(kcal), assumedKg: null });
   });
 
-  it("no weight known: at 70 kg; the weight not heard yet: no calories at all", () => {
-    expect(estimate(items, entryOf, null).kcal).toBe(estimate(items, entryOf, 70).kcal);
-    expect(estimate(items, entryOf, undefined).kcal).toBeNull();
+  it("the last rest left out is the last exercise that can be read, not one the phone cannot", () => {
+    const withGone: Item[] = [...items, { id: "gone", plan: null }];
+    expect(estimate(withGone, entryOf, 82)).toEqual(estimate(items, entryOf, 82));
+  });
+
+  it("no weight given: at 70 kg, and said so (review H2); the weight not heard yet: no calories at all", () => {
+    const none = estimate(items, entryOf, null);
+    expect(none.kcal).toBe(estimate(items, entryOf, 70).kcal);
+    expect(none.assumedKg).toBe(70);
+    expect(summaryLine(2, none, "metric")).toBe(`2 exercises · about 5 min · about ${String(none.kcal)} kcal at 70 kg`);
+    expect(summaryLine(2, none, "imperial")).toBe(`2 exercises · about 5 min · about ${String(none.kcal)} kcal at 154.3 lb`);
+    expect(estimate(items, entryOf, 0).assumedKg).toBe(70);
+    expect(estimate(items, entryOf, undefined)).toMatchObject({ kcal: null, assumedKg: null });
   });
 
   it("each side counts twice; an exercise the phone cannot read is left out; a MET not known says no calories", () => {
     const sided = { ...squat, set: { ...squat.set, eachSide: true } };
-    const one: Item[] = [{ id: "squat", plan: reps(S(10, null, 0)) }];
-    expect(estimate(one, () => sided, 70).minutes).toBe(1);
+    const one: Item[] = [{ id: "squat", plan: reps(S(10, null, 0), S(10, null, 0)) }];
+    expect(estimate(one, () => sided, 70).minutes).toBe(2);
+    expect(estimate(one, () => squat, 70).minutes).toBe(1);
     expect(estimate([...one, { id: "gone", plan: null }], (id) => (id === "squat" ? squat : null), 70)).toEqual(estimate(one, () => squat, 70));
     expect(estimate(one, () => ({ ...squat, met: null }), 70).kcal).toBeNull();
   });
 
   it("the line under the name", () => {
-    expect(summaryLine(3, { minutes: 14, kcal: 95 })).toBe("3 exercises · about 14 min · about 95 kcal");
-    expect(summaryLine(1, { minutes: 6, kcal: null })).toBe("1 exercise · about 6 min");
-    expect(summaryLine(2, { minutes: 0, kcal: 0 })).toBe("2 exercises");
+    expect(summaryLine(3, { minutes: 14, kcal: 95, assumedKg: null }, "metric")).toBe("3 exercises · about 14 min · about 95 kcal");
+    expect(summaryLine(1, { minutes: 6, kcal: null, assumedKg: null }, "metric")).toBe("1 exercise · about 6 min");
+    expect(summaryLine(2, { minutes: 0, kcal: 0, assumedKg: null }, "metric")).toBe("2 exercises");
     expect([minutesWords(59), minutesWords(60), minutesWords(65)]).toEqual(["about 59 min", "about 1 h", "about 1 h 5 min"]);
   });
 });

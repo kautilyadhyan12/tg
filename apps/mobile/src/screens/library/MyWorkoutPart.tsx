@@ -16,6 +16,7 @@ import type { Units } from "../../library/records";
 import type { LibraryFile } from "../../library/store";
 import { estimate, planLine, planOf, summaryLine } from "../../library/workoutSetup";
 import { COMING_SOON } from "../Soon";
+import { ProgressPage } from "../progress/ProgressPage";
 import { ExercisePage } from "./ExercisePage";
 import { SetUpSheet } from "./SetUpSheet";
 import { useLibrary, useMyWorkout, useSetupFacts } from "./useLibrary";
@@ -31,6 +32,7 @@ export function MyWorkoutPart({ parts, units, onBrowse, file }: { parts: ReactNo
   const [setUp, setSetUp] = useState<string | null>(null);
   const [reorder, setReorder] = useState(false);
   const [asking, setAsking] = useState(false);
+  const [weighing, setWeighing] = useState(false);
   const library = state.kind === "ready" ? state.library : null;
   const entryOf = (id: string): PhoneLibraryEntry | null => library?.exercises.find((e) => e.id === id) ?? null;
   const liveOf = (id: string): PhoneLibraryEntry | null => {
@@ -67,7 +69,18 @@ export function MyWorkoutPart({ parts, units, onBrowse, file }: { parts: ReactNo
             />
             <Icon name="pen" size={16} colour="textSoft" />
           </View>
-          {count === 0 ? null : <Txt kind="body">{summaryLine(count, sum)}</Txt>}
+          {count === 0 ? null : <Txt kind="body">{summaryLine(count, sum, units)}</Txt>}
+          {count === 0 || sum.assumedKg === null || sum.kcal === null ? null : (
+            <Button
+              label="Add your weight"
+              kind="link"
+              small
+              style={styles.start2}
+              onPress={() => {
+                setWeighing(true);
+              }}
+            />
+          )}
         </View>
       }
     />
@@ -180,6 +193,14 @@ export function MyWorkoutPart({ parts, units, onBrowse, file }: { parts: ReactNo
           />
         </View>
       </Sheet>
+      <ProgressPage
+        open={weighing}
+        first="body"
+        onClose={() => {
+          setWeighing(false);
+          facts.again();
+        }}
+      />
       {opened === null ? null : (
         <ExercisePage
           entry={opened}
@@ -283,6 +304,7 @@ const styles = StyleSheet.create({
   thumbPicture: { width: "100%", height: "100%" },
   icon: { width: sizes.press, height: sizes.press, alignItems: "center", justifyContent: "center" },
   start: { gap: 6, marginTop: 6 },
+  start2: { alignSelf: "flex-start" },
   two: { flexDirection: "row", gap: 10 },
   half: { flex: 1 },
 });
