@@ -849,6 +849,27 @@ describe("setting up My Workout's sets (64a-i)", () => {
     expect(screen.getByRole("button", { name: "My Workout" })).toBeTruthy();
   });
 
+  it("Add your weight on My Workout, and back: the calories are at the person's own weight (re-check L8)", async () => {
+    // The weight is given in Progress: until then the server has none.
+    let weighed = false;
+    const answers = () => ({ status: 200, body: { answers: { ...ANSWERS, weightKg: weighed ? 82 : null }, plan: null, missing: ["goal"] } });
+    await openLibrary(libraryServer({ onboarding: answers }).ask);
+    await add(/^Barbell Curl,/);
+    await openMine();
+    expect(await screen.findByText(/^1 exercise · about 4 min · about \d+ kcal at 70 kg$/)).toBeTruthy();
+    const closes = screen.queryAllByRole("button", { name: "Close" });
+    await fireEvent.press(screen.getByRole("button", { name: "Add your weight" }));
+    expect(await screen.findByRole("button", { name: "Log measurements" })).toBeTruthy();
+    weighed = true;
+    const progressClose = screen.getAllByRole("button", { name: "Close" }).find((c) => !closes.includes(c));
+    if (progressClose === undefined) throw new Error("Progress has no Close");
+    await fireEvent.press(progressClose);
+    // Curl 3 × 10 at 82 kg: 90 s of work and 120 s of rest.
+    const kcal = Math.round((3.5 * 82 * 90 + 1.8 * 82 * 120) / 3600);
+    expect(await screen.findByText(`1 exercise · about 4 min · about ${String(kcal)} kcal`)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Add your weight" })).toBeNull();
+  });
+
   it("Add exercises goes back to the Library", async () => {
     await openLibrary(libraryServer().ask);
     await add(/^Squat,/);

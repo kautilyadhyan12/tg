@@ -86,7 +86,9 @@ export function SetUpSheet({ entry, plan, units, onChange, onAbout, onClose }: P
       }}
       onBack={() => {
         if (typing !== null) {
-          leave(() => undefined);
+          // Back keeps the box open, so words that cannot be read are said, as Done says them (re-check L7).
+          const base = settled(true);
+          if (base !== null) keep(base);
           return true;
         }
         if (one === null) return false;
