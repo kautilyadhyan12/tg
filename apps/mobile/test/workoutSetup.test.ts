@@ -15,6 +15,8 @@ import {
   minutesWords,
   planLine,
   planOf,
+  typedWeight,
+  withWeight,
   REST_MOST,
   REST_START,
   same,
@@ -66,6 +68,34 @@ describe("the Library's starting numbers", () => {
     expect(planOf({ id: "barbell_curl", plan: mine }, curl)).toBe(mine);
     expect(planOf({ id: "barbell_curl", plan: null }, curl)).toEqual(startPlan(curl));
     expect(planOf({ id: "gone", plan: null }, null)).toBeNull();
+  });
+});
+
+describe("a weight typed by the person", () => {
+  it.each<[string, string, "metric" | "imperial", { grams: number | null } | null]>([
+    ["a whole number", "50", "metric", { grams: 50_000 }],
+    ["a half", "47.5", "metric", { grams: 47_500 }],
+    ["a comma for the point", "47,5", "metric", { grams: 47_500 }],
+    ["spaces round it", " 22.25 ", "metric", { grams: 22_250 }],
+    ["empty is no weight", "", "metric", { grams: null }],
+    ["0 is no weight", "0", "metric", { grams: null }],
+    ["in pounds", "135", "imperial", { grams: Math.round(135 * 453.59237) }],
+    ["the most a save allows", "1000", "metric", { grams: 1_000_000 }],
+    ["more than that", "1000.5", "metric", null],
+    ["words", "fifty", "metric", null],
+    ["a minus", "-5", "metric", null],
+    ["two points", "4.5.5", "metric", null],
+    ["three decimals", "4.125", "metric", null],
+  ])("%s", (_, text, units, want) => {
+    expect(typedWeight(text, units)).toEqual(want);
+  });
+
+  it("goes to one set, or to every set; the same plan where nothing changes", () => {
+    const p = reps(S(10, 20_000), S(10, 25_000));
+    expect(withWeight(p, 47_500, null)).toEqual(reps(S(10, 47_500), S(10, 47_500)));
+    expect(withWeight(p, 47_500, 1)).toEqual(reps(S(10, 20_000), S(10, 47_500)));
+    expect(withWeight(p, null, 0)).toEqual(reps(S(10), S(10, 25_000)));
+    expect(withWeight(p, 20_000, 0)).toBe(p);
   });
 });
 

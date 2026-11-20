@@ -60,6 +60,25 @@ export function stepWeight(grams: number | null, by: -1 | 1, units: Units, barbe
   return Math.min(WEIGHT_MOST_GRAMS, Math.round(next * per));
 }
 
+/** A weight the person typed (Kd: "a manually writing weight with a option should also be there"), in their units:
+ *  "47.5", "47,5" and " 50 " are read; empty or 0 is no weight; anything else, or more than a save allows, is refused
+ *  (null) and the box says so. */
+export function typedWeight(text: string, units: Units): { grams: number | null } | null {
+  const t = text.trim().replace(",", ".");
+  if (t === "") return { grams: null };
+  if (!/^\d{1,4}(\.\d{1,2})?$/.test(t)) return null;
+  const value = Number(t);
+  if (value === 0) return { grams: null };
+  const grams = Math.round(value * (units === "imperial" ? GRAMS_PER_LB : 1000));
+  return grams < 1 || grams > WEIGHT_MOST_GRAMS ? null : { grams };
+}
+
+/** One weight given to one set (`which`) or to every set (`which` null). The same plan where nothing changed. */
+export function withWeight(plan: Plan, grams: number | null, which: number | null): Plan {
+  const sets = plan.sets.map((s, i) => ((which === null || i === which) && s.weightGrams !== grams ? { ...s, weightGrams: grams } : s));
+  return sets.some((s, i) => s !== plan.sets[i]) ? { ...plan, sets } : plan;
+}
+
 /** Whether a press can change anything: + at the most, or − at the least, does nothing. */
 export function canStep(plan: Plan, field: Field, by: -1 | 1, which: number | null, units: Units, barbell: boolean): boolean {
   return changed(plan, field, by, which, units, barbell) !== plan;

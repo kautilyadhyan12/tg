@@ -2533,7 +2533,9 @@ with a screen reader.
   bottom. The weight is a bumper plate in the app's orange (light running deep, as its main buttons, with a soft orange
   glow and a steel hub; the number above the hub, the unit below; a small pop when it changes; black rubber reading
   "NONE" for no weight; Kd turned down a red face and a black one: *"orange type vibe better"*), between − and +, the
-  same for every exercise and offered for every exercise, starting at "None" (Kd's click-through: *"weight needs to be a symbol tha can go with any
+  same for every exercise and offered for every exercise, starting at "None". Type a weight (under the plate, or a tap
+  on the plate) types it with the number keyboard (Kd: *"a manually writing weight with a option should also be
+  there"*): "47.5" and "47,5" are read, empty or 0 is no weight, past 1,000 kg is refused in one line (Kd's click-through: *"weight needs to be a symbol tha can go with any
   exercises for representing weight not a barbell"*); a barbell exercise's + from none gives the empty 20 kg bar. Sets
   (amber), reps or time (red) and the rest (green) on the LED wall timer, each with − and +. Under them the sets are always listed, "Every set" at the top: the
   line picked is what the controls change, and they always show its real numbers; a press on Every set gives every set

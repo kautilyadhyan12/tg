@@ -722,6 +722,33 @@ describe("setting up My Workout's sets (64a-i)", () => {
     expect(await screen.findByText("4 × 11 reps · 35 to 40 kg · rest 1:00")).toBeTruthy();
   });
 
+  it("a weight can be typed: on every set, or on the set picked; a weight that cannot be read is said", async () => {
+    await openLibrary(libraryServer().ask);
+    await add(/^Plank,/);
+    await openMine();
+    await fireEvent.press(await row("Plank"));
+    await fireEvent.press(screen.getByRole("button", { name: "Type a weight" }));
+    await fireEvent.changeText(screen.getByLabelText("Weight in kg"), "fifty");
+    await fireEvent.press(screen.getByRole("button", { name: "Set weight" }));
+    expect(screen.getByText("Enter a weight up to 1,000 kg.")).toBeTruthy();
+    await fireEvent.changeText(screen.getByLabelText("Weight in kg"), "12,5");
+    await fireEvent(screen.getByLabelText("Weight in kg"), "submitEditing");
+    expect(screen.getByLabelText("Weight, 12.5 kg")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Set 3: 30 s, 12.5 kg, rest 1:00" })).toBeTruthy();
+    // On one set: tap the plate itself to type.
+    await fireEvent.press(screen.getByRole("button", { name: "Set 2: 30 s, 12.5 kg, rest 1:00" }));
+    await fireEvent.press(screen.getByRole("button", { name: "Weight, 12.5 kg" }));
+    await fireEvent.changeText(screen.getByLabelText("Weight in kg"), "20");
+    await fireEvent(screen.getByLabelText("Weight in kg"), "submitEditing");
+    expect(screen.getByRole("button", { name: "Set 2: 30 s, 20 kg, rest 1:00" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Set 1: 30 s, 12.5 kg, rest 1:00" })).toBeTruthy();
+    // Emptied, it is no weight.
+    await fireEvent.press(screen.getByRole("button", { name: "Type a weight" }));
+    await fireEvent.changeText(screen.getByLabelText("Weight in kg"), "");
+    await fireEvent(screen.getByLabelText("Weight in kg"), "submitEditing");
+    expect(screen.getByRole("button", { name: "Set 2: 30 s, rest 1:00" })).toBeTruthy();
+  });
+
   it("a timed exercise is set in time; its weight starts at none and can be added (a weighted plank); the rest too", async () => {
     await openLibrary(libraryServer().ask);
     await add(/^Plank,/);

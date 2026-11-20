@@ -1,6 +1,6 @@
 import type { PhoneLibraryEntry } from "@app/shared";
 import { useEffect, useRef, useState } from "react";
-import { Animated, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { Animated, Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
 import Svg, { Circle, Defs, LinearGradient, Stop } from "react-native-svg";
 import { Button } from "../../look/Button";
 import { colours, sizes, type ColourName } from "../../look/colours";
@@ -9,7 +9,7 @@ import { Sheet } from "../../look/Sheet";
 import { fonts, Txt } from "../../look/Txt";
 import type { Plan } from "../../library/myWorkout";
 import { weightParts, type Units } from "../../library/records";
-import { canStep, changed, clockDigits, restWords, targetWords, type Field } from "../../library/workoutSetup";
+import { canStep, changed, clockDigits, restWords, targetWords, typedWeight, withWeight, type Field } from "../../library/workoutSetup";
 import { Led } from "./Records";
 
 // Setting up one exercise of My Workout (ROADMAP Stage 5 64a-i, Kd's drawing of 2026-11-20): the box from the bottom.
@@ -55,7 +55,16 @@ export function SetUpSheet({ entry, plan, units, onChange, onAbout, onClose }: P
     >
       <ScrollView style={styles.scroll} contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
         {one === null ? null : <Txt kind="small" colour="orange">{`Set ${String(one + 1)} only`}</Txt>}
-        <WeightBox grams={shown.weightGrams} units={units} press={press} can={can} />
+        <WeightBox
+          grams={shown.weightGrams}
+          units={units}
+          press={press}
+          can={can}
+          onType={(grams) => {
+            const next = withWeight(plan, grams, one);
+            if (next !== plan) onChange(next);
+          }}
+        />
         <View style={styles.wall}>
           <Dial label="Sets" say="sets" field="sets" digits={String(plan.sets.length)} colour="ledAmber" unit={null} press={press} can={can} first />
           {time ? (
@@ -171,8 +180,28 @@ const MID = PLATE / 2;
  *  black one), with a soft orange glow, its steel hub, the number above the hub and the unit below, as a real plate
  *  is printed; black rubber reading "NONE" for no weight. It pops a little each time the weight changes, unless the
  *  phone asks for less motion. Always the same size, so the box never moves under a finger pressing + or −. */
-function WeightBox({ grams, units, press, can }: { grams: number | null; units: Units; press: Press; can: Can }) {
+function WeightBox({ grams, units, press, can, onType }: { grams: number | null; units: Units; press: Press; can: Can; onType: (grams: number | null) => void }) {
   const [n, unit] = grams === null ? ["None", ""] : weightParts(grams, units);
+  const unitWord = units === "imperial" ? "lb" : "kg";
+  // Typing a weight: the plate holds a box to type in with the number keyboard; Done or leaving it keeps a weight
+  // that can be read, and says so in one line where it cannot.
+  const [typing, setTyping] = useState<string | null>(null);
+  const [wrong, setWrong] = useState(false);
+  const startTyping = () => {
+    setWrong(false);
+    setTyping(grams === null ? "" : n);
+  };
+  const finish = () => {
+    if (typing === null) return;
+    const read = typedWeight(typing, units);
+    if (read === null) {
+      setWrong(true);
+      return;
+    }
+    setTyping(null);
+    setWrong(false);
+    onType(read.grams);
+  };
   const motion = useMotion();
   const pop = useRef(new Animated.Value(1)).current;
   const first = useRef(true);
@@ -188,11 +217,18 @@ function WeightBox({ grams, units, press, can }: { grams: number | null; units: 
   return (
     <View style={styles.weightBox}>
       <Round field="weight" by={-1} say="weight" press={press} can={can} />
-      <View style={styles.weightMiddle} accessible accessibilityLabel={grams === null ? "Weight, none" : `Weight, ${n} ${unit}`}>
+      <View style={styles.weightMiddle}>
         <Txt kind="tiny" style={styles.label}>
           WEIGHT
         </Txt>
-        <View style={styles.halo}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={grams === null ? "Weight, none" : `Weight, ${n} ${unit}`}
+          accessibilityHint="Type a weight"
+          disabled={typing !== null}
+          onPress={startTyping}
+          style={styles.halo}
+        >
           <Svg width={HALO} height={HALO} style={StyleSheet.absoluteFill} accessible={false}>
             <Circle cx={HALO / 2} cy={HALO / 2} r={HALO / 2 - 2} fill={colours.orange} fillOpacity={grams === null ? 0 : 0.08} />
             <Circle cx={HALO / 2} cy={HALO / 2} r={HALO / 2 - 10} fill={colours.orange} fillOpacity={grams === null ? 0 : 0.12} />
@@ -215,16 +251,44 @@ function WeightBox({ grams, units, press, can }: { grams: number | null; units: 
               <Circle cx={MID} cy={MID} r={7.5} fill={colours.barCollar} />
               <Circle cx={MID} cy={MID} r={4.5} fill={colours.timerFace} />
             </Svg>
-            <Txt kind="big" colour={grams === null ? "textSoft" : "onOrange"} numberOfLines={1} fit style={[styles.plateNumber, grams === null ? styles.plateNoneWords : null]}>
-              {grams === null ? "NONE" : n}
-            </Txt>
-            {grams === null ? null : (
-              <Txt kind="tiny" colour="onOrange" style={styles.plateUnit}>
-                {unit.toUpperCase()}
+            {typing === null ? (
+              <Txt kind="big" colour={grams === null ? "textSoft" : "onOrange"} numberOfLines={1} fit style={[styles.plateNumber, grams === null ? styles.plateNoneWords : null]}>
+                {grams === null ? "NONE" : n}
+              </Txt>
+            ) : (
+              <TextInput
+                value={typing}
+                onChangeText={(t) => {
+                  setTyping(t);
+                  setWrong(false);
+                }}
+                onSubmitEditing={finish}
+                onBlur={finish}
+                keyboardType="decimal-pad"
+                returnKeyType="done"
+                autoFocus
+                selectTextOnFocus
+                maxLength={7}
+                placeholder="0"
+                placeholderTextColor={colours.textFaint}
+                accessibilityLabel={`Weight in ${unitWord}`}
+                style={styles.plateInput}
+              />
+            )}
+            {grams === null && typing === null ? null : (
+              <Txt kind="tiny" colour={grams === null && typing !== null ? "textSoft" : "onOrange"} style={styles.plateUnit}>
+                {unitWord.toUpperCase()}
               </Txt>
             )}
           </Animated.View>
-        </View>
+        </Pressable>
+        {wrong ? (
+          <Txt kind="small" colour="badText" style={styles.centre}>
+            {units === "imperial" ? "Enter a weight up to 2,204 lb." : "Enter a weight up to 1,000 kg."}
+          </Txt>
+        ) : (
+          <Button label={typing === null ? "Type a weight" : "Set weight"} kind="link" icon={typing === null ? "pen" : "check"} onPress={typing === null ? startTyping : finish} />
+        )}
       </View>
       <Round field="weight" by={1} say="weight" press={press} can={can} />
     </View>
@@ -261,6 +325,21 @@ const styles = StyleSheet.create({
   plate: { width: PLATE, height: PLATE },
   plateNumber: { position: "absolute", top: 13, left: 18, right: 18, textAlign: "center", fontFamily: fonts.bold, fontSize: 24, lineHeight: 28 },
   plateNoneWords: { fontSize: 15, letterSpacing: 1.5, top: 17 },
+  centre: { textAlign: "center" },
+  plateInput: {
+    position: "absolute",
+    top: 8,
+    left: 22,
+    right: 22,
+    padding: 0,
+    textAlign: "center",
+    fontFamily: fonts.bold,
+    fontSize: 24,
+    lineHeight: 30,
+    color: colours.onOrange,
+    borderBottomWidth: 2,
+    borderBottomColor: colours.onOrange,
+  },
   plateUnit: { position: "absolute", bottom: 20, left: 0, right: 0, textAlign: "center", fontFamily: fonts.bold, letterSpacing: 1.5 },
   list: { borderRadius: 16, borderWidth: 1, borderColor: colours.timerEdge, backgroundColor: colours.timerFace, overflow: "hidden" },
   setLine: { flexDirection: "row", alignItems: "center", gap: 10, minHeight: sizes.press, paddingVertical: 8, paddingHorizontal: 12, borderLeftWidth: 3, borderLeftColor: "transparent" },
