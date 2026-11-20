@@ -35,6 +35,7 @@ import { Txt } from "../look/Txt";
 import { usePhoneAllows } from "../notifications/Notifications";
 import { channelsOff } from "../notifications/phone";
 import { exportFileFor, forgetPersonFiles } from "../session/personFiles";
+import { forgetStores } from "../library/myWorkout";
 import { SIGNED_OUT_NOTES } from "../session/session";
 import { useSession } from "../session/SessionProvider";
 import { HideMe, useHideMe } from "./gym/hideMe";
@@ -952,6 +953,8 @@ function DeleteAsk({ open, places, onStale, onClose }: { open: boolean; places: 
     forgetPersonFiles(me.id);
     await session.accountDeleted(deletedNote(emailSent, new Date()));
     forgetPersonFiles(me.id);
+    // Their My Workout held in memory goes too, so a restored account starts from what its files hold (63c).
+    forgetStores(me.id);
   };
   return (
     <Sheet open={open} title="Delete account?" onClose={onClose}>

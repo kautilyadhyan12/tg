@@ -11,7 +11,7 @@
 // - On a tie the first time it was reached keeps the record.
 // - "New record" is a set (or, for most lifted, a workout) that beats everything the person did BEFORE
 //   that workout. With nothing of that kind before it, nothing is beaten: the first is not a record.
-import type { ExerciseRecords, NewRecord, RecordKind, RecordSet } from "@app/shared";
+import type { ExerciseRecords, NewRecord, RecentWorkout, RecordKind, RecordSet } from "@app/shared";
 
 /** One set, as the records read it. */
 export interface SetFact {
@@ -76,7 +76,7 @@ function inOrder<T extends { startedAt: string; workoutId: string; position?: nu
 
 const asRecord = (s: SetFact): RecordSet => ({ workoutId: s.workoutId, startedAt: s.startedAt, position: s.position, done: s.done, weightGrams: s.weightGrams });
 
-type Records = Omit<ExerciseRecords, "exercise" | "limitedToDays">;
+type Records = Omit<ExerciseRecords, "exercise" | "limitedToDays" | "recent" | "days">;
 
 /** The records of ONE exercise. `sets` may be all its sets, or only the first of each set done the same
  *  way (`historyRepo.ts` recordCandidates): the records of a set come out the same. `lifted` is what each
@@ -156,4 +156,31 @@ export function newRecordsIn(workout: readonly SetFact[], before: readonly SetFa
     });
   }
   return out;
+}
+
+/** Every workout the records and the latest workouts name, each once. */
+export function namedWorkouts(r: Records, recent: readonly RecentWorkout[]): string[] {
+  const sets = [r.reps.heaviest, r.reps.mostReps, r.reps.bestEstimated1rm, r.reps.mostLifted, r.time.longestHold, r.time.heaviest];
+  return [...new Set([...sets.flatMap((x) => (x === null ? [] : [x.workoutId])), ...recent.map((w) => w.workoutId)])];
+}
+
+/** Each workout's own best of each kind, by the same reading as the records (a set with nothing done
+ *  counts for nothing; a set in its own unit), the earliest workout first. A workout with nothing done is
+ *  left out. `sets` are those of ONE exercise. */
+export function recentBests(sets: readonly SetFact[]): RecentWorkout[] {
+  const out = new Map<string, RecentWorkout>();
+  const most = (a: number | null, b: number | null): number | null => (b === null ? a : a === null || b > a ? b : a);
+  for (const s of inOrder(sets)) {
+    if (s.done <= 0) continue;
+    const w = out.get(s.workoutId) ?? { workoutId: s.workoutId, startedAt: s.startedAt, reps: { heaviestGrams: null, mostReps: null }, time: { longestHold: null, heaviestGrams: null } };
+    if (s.measuredIn === "reps") {
+      w.reps.heaviestGrams = most(w.reps.heaviestGrams, s.weightGrams);
+      w.reps.mostReps = most(w.reps.mostReps, s.done);
+    } else {
+      w.time.longestHold = most(w.time.longestHold, s.done);
+      w.time.heaviestGrams = most(w.time.heaviestGrams, s.weightGrams);
+    }
+    out.set(s.workoutId, w);
+  }
+  return [...out.values()];
 }

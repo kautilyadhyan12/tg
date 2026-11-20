@@ -159,7 +159,8 @@ describe("Google Sheets, as Kd downloaded it", () => {
   });
 });
 
-describe("through the real worker, which is how the route reads a file", () => {
+// Each test here starts the real worker; on a loaded GitHub runner one took 5,018 ms against vitest's 5,000 default.
+describe("through the real worker, which is how the route reads a file", { timeout: 60_000 }, () => {
   const job = { country: "IN", mapping: null, remembered: null };
 
   it("gives exactly what understanding it here gives", async () => {

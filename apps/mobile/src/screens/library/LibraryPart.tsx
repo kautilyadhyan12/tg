@@ -20,7 +20,8 @@ import { ExercisePage } from "./ExercisePage";
 import { choiceWord, FiltersPage, Tag } from "./Filters";
 import { FindByMuscle } from "./FindByMuscle";
 import { MuscleFigure } from "./MuscleFigure";
-import { useFigureSex, useLibrary } from "./useLibrary";
+import type { Units } from "../../library/records";
+import { useLibrary, useSetupFacts } from "./useLibrary";
 
 const NOTHING_LIT: ReadonlyMap<string, Lit> = new Map<string, Lit>();
 
@@ -28,9 +29,10 @@ const NOTHING_LIT: ReadonlyMap<string, Lit> = new Map<string, Lit>();
  *  searched there, narrowed by Filters or Find by muscle (63b) or a kind, each exercise's page opened over the tab
  *  (or over the body). The kind chips and Filters' Kind are one choice. `parts`: Exercises · My Workout · Running,
  *  under the picture. */
-export function LibraryPart({ parts, file }: { parts: ReactNode; file?: LibraryFile }) {
+export function LibraryPart({ parts, units, onOpenMine, file }: { parts: ReactNode; units: Units; onOpenMine: () => void; file?: LibraryFile }) {
   const { state, again } = useLibrary(file);
-  const sex = useFigureSex();
+  const facts = useSetupFacts();
+  const sex = facts.sex;
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState<Filters>(NO_FILTERS);
   const [filtering, setFiltering] = useState(false);
@@ -203,6 +205,13 @@ export function LibraryPart({ parts, file }: { parts: ReactNode; file?: LibraryF
         <ExercisePage
           entry={opened}
           sex={sex}
+          units={units}
+          weightKg={facts.weightKg}
+          onWeighed={facts.again}
+          onOpenMine={() => {
+            setOpen(null);
+            onOpenMine();
+          }}
           onClose={() => {
             setOpen(null);
           }}

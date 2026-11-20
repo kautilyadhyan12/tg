@@ -2,7 +2,7 @@
 // what ties, what a unit keeps apart, and when a workout's set is a "New record". The first block is the
 // job's worst thing for a person: being told "New record" for a set that is not one.
 import { describe, expect, it } from "vitest";
-import { estimatedOneRepMaxGrams, exerciseRecords, liftedOf, newRecordsIn, unitAndDone, type SetFact } from "../src/modules/training/records.js";
+import { estimatedOneRepMaxGrams, exerciseRecords, liftedOf, newRecordsIn, recentBests, unitAndDone, type SetFact } from "../src/modules/training/records.js";
 
 const W1 = "00000000-0000-4000-8000-000000000001";
 const W2 = "00000000-0000-4000-8000-000000000002";
@@ -240,5 +240,44 @@ describe("the first of each set done the same way gives the same records as ever
     const told = newRecordsIn(last, before);
     expect(told.map((r) => `${r.measuredIn} ${r.kind}`)).toEqual(["reps most_reps"]);
     expect(newRecordsIn(last, firstOfEach(before), liftedOf(before))).toEqual(told);
+  });
+});
+
+describe("each of the latest workouts' own best (63c): the screen draws the last times against the record", () => {
+  it("every kind is that workout's own best, read as the records read a set; none for a kind not done", () => {
+    const got = recentBests([
+      s({ weightGrams: 50_000, done: 8 }),
+      s({ position: 1, weightGrams: 60_000, done: 5 }),
+      s({ position: 2, done: 12 }), // no weight: most reps only
+      s({ position: 3, measuredIn: "time", done: 40 }),
+      s({ position: 4, measuredIn: "time", done: 30, weightGrams: 16_000 }),
+    ]);
+    expect(got).toEqual([{ workoutId: W1, startedAt: DAY1, reps: { heaviestGrams: 60_000, mostReps: 12 }, time: { longestHold: 40, heaviestGrams: 16_000 } }]);
+  });
+
+  it("a set with nothing done counts for nothing, and a workout of only such sets is left out", () => {
+    const got = recentBests([
+      s({ weightGrams: 200_000, done: 0 }),
+      s({ workoutId: W2, startedAt: DAY2, measuredIn: "time", done: 0, weightGrams: 30_000 }),
+      s({ workoutId: W2, startedAt: DAY2, position: 1, done: 6, weightGrams: 40_000 }),
+    ]);
+    expect(got).toEqual([{ workoutId: W2, startedAt: DAY2, reps: { heaviestGrams: 40_000, mostReps: 6 }, time: { longestHold: null, heaviestGrams: null } }]);
+  });
+
+  it("the earliest workout first, whatever order the sets arrive in", () => {
+    const got = recentBests([s({ workoutId: W3, startedAt: DAY3 }), s({ workoutId: W1, startedAt: DAY1 }), s({ workoutId: W2, startedAt: DAY2 })]);
+    expect(got.map((w) => w.workoutId)).toEqual([W1, W2, W3]);
+  });
+
+  it("a workout's best never beats the record: the record is the best of the workouts' bests", () => {
+    const sets = [
+      s({ weightGrams: 50_000, done: 8 }),
+      s({ workoutId: W2, startedAt: DAY2, weightGrams: 70_000, done: 3 }),
+      s({ workoutId: W3, startedAt: DAY3, weightGrams: 65_000, done: 10 }),
+    ];
+    const bests = recentBests(sets);
+    const records = exerciseRecords(sets);
+    expect(Math.max(...bests.map((w) => w.reps.heaviestGrams ?? 0))).toBe(records.reps.heaviest?.weightGrams);
+    expect(Math.max(...bests.map((w) => w.reps.mostReps ?? 0))).toBe(records.reps.mostReps?.done);
   });
 });
