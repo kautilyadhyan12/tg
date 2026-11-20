@@ -17,7 +17,7 @@ import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { seed } from "../src/db/seed.js";
 import type { EmailSender } from "../src/modules/auth/email.js";
-import { exerciseRecords, newRecordsIn, recentBests, unitAndDone, type SetFact } from "../src/modules/training/records.js";
+import { exerciseRecords, namedWorkouts, newRecordsIn, recentBests, unitAndDone, type SetFact } from "../src/modules/training/records.js";
 
 const url = process.env["DATABASE_URL"];
 const d = describe.skipIf(url === undefined || url === "");
@@ -311,7 +311,9 @@ d("history and records for each exercise (real Postgres)", () => {
         const got = exerciseRecordsSchema.parse((await get(a, `/v1/training/exercises/${exercise}/records`)).json());
         const its = every.filter((x) => x.exercise === exercise);
         const bests = recentBests(its).slice(-7);
-        expect(got).toEqual({ exercise, ...exerciseRecords(its), recent: bests, limitedToDays: 90 });
+        const { days, ...rest } = got;
+        expect(rest).toEqual({ exercise, ...exerciseRecords(its), recent: bests, limitedToDays: 90 });
+        expect(Object.keys(days).sort()).toEqual(namedWorkouts(exerciseRecords(its), bests).sort());
       }
       // The old sets hold records: the first 95-second plank, and the nine squats.
       const plank = exerciseRecordsSchema.parse((await get(a, "/v1/training/exercises/plank/records")).json());
@@ -337,6 +339,20 @@ d("history and records for each exercise (real Postgres)", () => {
       expect(got.recent.map((w) => w.reps.heaviestGrams)).toEqual([45_000, 47_500, 50_000, 52_500, 55_000, 57_500, 60_000]);
       const plank = exerciseRecordsSchema.parse((await get(a, "/v1/training/exercises/plank/records")).json());
       expect(plank.recent).toMatchObject([{ time: { longestHold: 50, heaviestGrams: null }, reps: { heaviestGrams: null, mostReps: null } }]);
+    });
+  });
+
+  describe("the day of a record (63c)", () => {
+    it("is the day in the zone the workout was done in, as History tells it, never the server's", async () => {
+      const a = await person();
+      // 20:00 UTC is already the next day in Kolkata (01:30).
+      const when = new Date(daysAgo(3).getTime() + 20 * 3600_000);
+      const id = await save(a, workout(when, [set({ weightGrams: 70_000 })]));
+      const got = exerciseRecordsSchema.parse((await get(a, "/v1/training/exercises/squat/records")).json());
+      expect(got.days).toEqual({ [id]: dayIn(when, "Asia/Kolkata") });
+      expect(got.days[id]).not.toBe(when.toISOString().slice(0, 10));
+      const listed = historyDayOutSchema.parse((await get(a, `/v1/training/days/${dayIn(when, "Asia/Kolkata")}`)).json());
+      expect(listed.workouts.map((w) => w.workoutId)).toEqual([id]);
     });
   });
 

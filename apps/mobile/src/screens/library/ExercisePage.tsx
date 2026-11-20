@@ -48,6 +48,7 @@ export function ExercisePage({
   sex,
   units,
   weightKg,
+  onWeighed,
   onOpenMine,
   onClose,
 }: {
@@ -55,6 +56,8 @@ export function ExercisePage({
   sex: Sex | null;
   units: Units;
   weightKg: number | null | undefined;
+  /** Progress, opened from Add your weight, has closed: the weight may have changed. */
+  onWeighed: () => void;
   /** Opens My Workout, this page closed. */
   onOpenMine: () => void;
   onClose: () => void;
@@ -140,6 +143,7 @@ export function ExercisePage({
         first="body"
         onClose={() => {
           setWeighing(false);
+          onWeighed();
         }}
       />
     </CoverPage>

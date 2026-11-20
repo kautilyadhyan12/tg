@@ -147,6 +147,9 @@ export const exerciseRecordsSchema = z.object({
   /** The person's latest workouts of it in which something was done, at most `RECENT_WORKOUTS_MOST`, the
    *  earliest first; within a free plan's days, as the records are. */
   recent: z.array(recentWorkoutSchema).max(RECENT_WORKOUTS_MOST),
+  /** The day of each workout this answer names, in the zone it was done in (the person's own zone for one kept
+   *  without one), as History tells a day. */
+  days: z.record(z.uuid(), historyDaySchema),
   limitedToDays: z.number().int().nullable(),
 });
 export type ExerciseRecords = z.infer<typeof exerciseRecordsSchema>;

@@ -81,6 +81,7 @@ export function MyWorkoutPart({ parts, units, onBrowse, file }: { parts: ReactNo
           sex={facts.sex}
           units={units}
           weightKg={facts.weightKg}
+          onWeighed={facts.again}
           onOpenMine={() => {
             setOpen(null);
           }}

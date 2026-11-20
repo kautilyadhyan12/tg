@@ -47,14 +47,23 @@ export function useLibrary(file?: LibraryFile): { state: LibraryState; again: ()
 export interface SetupFacts {
   sex: Sex | null;
   weightKg: number | null | undefined;
+  /** Asks again, such as after the person added their weight. */
+  again: () => void;
 }
 
 export function useSetupFacts(): SetupFacts {
   const { session, state } = useSession();
   const me = state.kind === "in" ? state.user.id : null;
-  const [facts, setFacts] = useState<SetupFacts>({ sex: null, weightKg: undefined });
+  const [facts, setFacts] = useState<Omit<SetupFacts, "again">>({ sex: null, weightKg: undefined });
+  const [asked, setAsked] = useState(0);
+  const again = useCallback(() => {
+    setAsked((n) => n + 1);
+  }, []);
+  // A new person starts from nothing; asking again keeps what is shown until the answer comes.
   useEffect(() => {
     setFacts({ sex: null, weightKg: undefined });
+  }, [me]);
+  useEffect(() => {
     if (me === null) return;
     const alive = { now: true, heard: false };
     // Read through functions: the person may have left, or the server answered, during each wait.
@@ -75,8 +84,8 @@ export function useSetupFacts(): SetupFacts {
     return () => {
       alive.now = false;
     };
-  }, [me, session]);
-  return facts;
+  }, [me, session, asked]);
+  return useMemo(() => ({ ...facts, again }), [facts, again]);
 }
 
 /** The person's My Workout (63c): the same list on every page that shows it; null with nobody signed in. */

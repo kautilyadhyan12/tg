@@ -76,7 +76,7 @@ function inOrder<T extends { startedAt: string; workoutId: string; position?: nu
 
 const asRecord = (s: SetFact): RecordSet => ({ workoutId: s.workoutId, startedAt: s.startedAt, position: s.position, done: s.done, weightGrams: s.weightGrams });
 
-type Records = Omit<ExerciseRecords, "exercise" | "limitedToDays" | "recent">;
+type Records = Omit<ExerciseRecords, "exercise" | "limitedToDays" | "recent" | "days">;
 
 /** The records of ONE exercise. `sets` may be all its sets, or only the first of each set done the same
  *  way (`historyRepo.ts` recordCandidates): the records of a set come out the same. `lifted` is what each
@@ -156,6 +156,12 @@ export function newRecordsIn(workout: readonly SetFact[], before: readonly SetFa
     });
   }
   return out;
+}
+
+/** Every workout the records and the latest workouts name, each once. */
+export function namedWorkouts(r: Records, recent: readonly RecentWorkout[]): string[] {
+  const sets = [r.reps.heaviest, r.reps.mostReps, r.reps.bestEstimated1rm, r.reps.mostLifted, r.time.longestHold, r.time.heaviest];
+  return [...new Set([...sets.flatMap((x) => (x === null ? [] : [x.workoutId])), ...recent.map((w) => w.workoutId)])];
 }
 
 /** Each workout's own best of each kind, by the same reading as the records (a set with nothing done

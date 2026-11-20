@@ -202,6 +202,14 @@ export async function recentSets(sql: Sql, userId: string, exerciseId: string, f
       JOIN exercises e ON e.id = s.exercise_id`;
 }
 
+/** The day of each of the person's own workouts asked for, in the zone it was done in, or `fallbackZone`. */
+export async function workoutDaysOf(sql: Sql, userId: string, workoutIds: readonly string[], fallbackZone: string): Promise<{ id: string; day: string }[]> {
+  if (workoutIds.length === 0) return [];
+  return sql<{ id: string; day: string }[]>`
+    SELECT id, to_char((started_at AT TIME ZONE COALESCE(time_zone, ${fallbackZone}))::date, 'YYYY-MM-DD') AS day
+    FROM workouts WHERE user_id = ${userId} AND id = ANY(${[...workoutIds]}::uuid[])`;
+}
+
 /** The exercise's own id, or null for an id word the server never had. */
 export async function exerciseIdOf(sql: Sql, slug: string): Promise<string | null> {
   const rows = await sql<{ id: string }[]>`SELECT id FROM exercises WHERE slug = ${slug}`;

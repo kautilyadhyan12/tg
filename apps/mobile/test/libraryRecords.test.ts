@@ -17,6 +17,8 @@ import {
   platesFor,
   PLATES_KG,
   recordsPath,
+  SLEEVE_ROOM,
+  sleeveTaken,
   weightParts,
   wholeWeight,
 } from "../src/library/records";
@@ -38,11 +40,14 @@ const recent = (workout: number, over: { heaviestGrams?: number | null; mostReps
   reps: { heaviestGrams: over.heaviestGrams ?? null, mostReps: over.mostReps ?? null },
   time: { longestHold: over.longestHold ?? null, heaviestGrams: null },
 });
+/** The day the server tells for workout n: its own day, here the 1st to the 28th of November. */
+const DAY = (n: number) => `2026-11-${String(n).padStart(2, "0")}`;
 const records = (over: Partial<{ reps: Partial<ExerciseRecords["reps"]>; time: Partial<ExerciseRecords["time"]>; recent: RecentWorkout[] }> = {}): ExerciseRecords => ({
   exercise: "barbell_curl",
   reps: { heaviest: null, mostReps: null, bestEstimated1rm: null, mostLifted: null, ...over.reps },
   time: { longestHold: null, heaviest: null, ...over.time },
   recent: over.recent ?? [],
+  days: Object.fromEntries(Array.from({ length: 28 }, (_, i) => [W(i + 1), DAY(i + 1)])),
   limitedToDays: null,
 });
 
@@ -51,12 +56,29 @@ describe("the loaded bar holds exactly the weight it says, or is not drawn", () 
   const plank = real("plank");
   const kgOf = (side: readonly number[]) => BAR_KG + 2 * side.reduce((a, b) => a + b, 0);
 
-  it("every weight a bar can hold, from 20 to 300 kg by the half kilo a side: its plates add up to it exactly", () => {
-    for (let kg = 20; kg <= 300; kg += 1) {
+  it("every weight from 20 to 180 kg by the half kilo a side: its plates add up to it exactly", () => {
+    for (let kg = 20; kg <= 180; kg += 1) {
       const bar = loadedBar(curl, "metric", kg * 1000, null);
       expect(bar, `${String(kg)} kg`).not.toBeNull();
       expect(kgOf(bar?.side ?? [])).toBe(kg);
     }
+  });
+
+  it("every weight a set may hold, to 1,000 kg, with any estimate: a bar drawn holds every plate on its sleeve, or none is drawn", () => {
+    for (let kg = 20; kg <= 1000; kg += 0.5) {
+      for (const more of [0, 0.03, 0.1, 0.33]) {
+        const bar = loadedBar(curl, "metric", kg * 1000, Math.round(kg * (1 + more) * 1000));
+        if (bar === null) continue;
+        expect(kgOf(bar.side), `${String(kg)} kg`).toBe(kg);
+        expect(sleeveTaken(bar.side) + sleeveTaken(bar.extra), `${String(kg)} kg, +${String(more)}`).toBeLessThanOrEqual(SLEEVE_ROOM);
+      }
+    }
+  });
+
+  it("the review's cases: 183.5 kg does not fit, so no bar; 160 kg x 5 keeps its plates and leaves off the estimate's", () => {
+    expect(loadedBar(curl, "metric", 183_500, null)).toBeNull();
+    expect(loadedBar(curl, "metric", 160_000, 186_666)).toEqual({ side: [25, 25, 20], extra: [] });
+    expect(loadedBar(curl, "metric", 1_000_000, null)).toBeNull();
   });
 
   it("the drawing's own: 35 kg is a 5 and a 2.5 a side; 44 kg's estimate adds a 2.5 and a 2 beyond them", () => {
@@ -116,7 +138,7 @@ describe("the bars of the last times", () => {
     const bars = barsOf("heaviest", r);
     expect(bars.map((b) => b.lit)).toEqual([6, 7, BAR_LIGHTS]);
     expect(bars.map((b) => b.record)).toEqual([false, false, true]);
-    expect(bars.map((b) => b.day)).toEqual([dayWords(at(2)), dayWords(at(6)), dayWords(at(14))]);
+    expect(bars.map((b) => b.day)).toEqual(["2 Nov", "6 Nov", "14 Nov"]);
   });
 
   it("a record made before the last times marks none of them", () => {
@@ -169,6 +191,13 @@ describe("words and digits", () => {
     expect(clockWords(s)).toBe(clock);
     expect(holdWords(s)).toBe(words);
   });
+  it("a day is the server's own, never worked out on the phone: 2026-11-14 is 14 Nov whatever the phone's zone", () => {
+    expect(dayWords("2026-11-14")).toBe("14 Nov");
+    expect(dayWords("2026-01-02")).toBe("2 Jan");
+    expect(dayWords(undefined)).toBe("");
+    expect(dayWords("14 Nov")).toBe("");
+  });
+
   it("the records' address carries the exercise's id word, escaped", () => {
     expect(recordsPath("barbell_curl")).toBe("/v1/training/exercises/barbell_curl/records");
   });

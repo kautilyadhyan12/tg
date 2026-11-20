@@ -17,7 +17,7 @@ import { z } from "zod";
 import type { RedisLike } from "../../redis.js";
 import { historyGate } from "../workouts/service.js";
 import * as repo from "./historyRepo.js";
-import { exerciseRecords, newRecordsIn, recentBests, unitAndDone, type LiftedWorkout, type SetFact } from "./records.js";
+import { exerciseRecords, namedWorkouts, newRecordsIn, recentBests, unitAndDone, type LiftedWorkout, type SetFact } from "./records.js";
 
 export interface HistoryDeps {
   sql: Sql;
@@ -140,5 +140,8 @@ export async function recordsOf(deps: HistoryDeps, userId: string, exercise: str
     pastOf(deps.sql, userId, [exerciseId], { before: null, floor: gate.floor }),
     repo.recentSets(deps.sql, userId, exerciseId, gate.floor, RECENT_WORKOUTS_MOST),
   ]);
-  return { exercise, ...exerciseRecords(past.sets, past.lifted), recent: recentBests(recent.map(fact)), limitedToDays: gate.limitedToDays };
+  const records = exerciseRecords(past.sets, past.lifted);
+  const latest = recentBests(recent.map(fact));
+  const days = await repo.workoutDaysOf(deps.sql, userId, namedWorkouts(records, latest), gate.timeZone);
+  return { exercise, ...records, recent: latest, days: Object.fromEntries(days.map((d) => [d.id, d.day])), limitedToDays: gate.limitedToDays };
 }

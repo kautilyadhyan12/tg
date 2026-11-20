@@ -8,12 +8,15 @@ import {
   BAR_LIGHTS,
   barsOf,
   clockWords,
-  dayWords,
+  dayOf,
   holdWords,
   leadOf,
   loadedBar,
   oneRepMaxGrams,
+  PLATE_GAP,
+  PLATE_SIZE,
   recordsPath,
+  SLEEVE_ROOM,
   weightParts,
   wholeWeight,
   type Bar,
@@ -75,8 +78,8 @@ function Heaviest({ entry, r, units }: { entry: PhoneLibraryEntry; r: ExerciseRe
   return (
     <>
       <View style={styles.barWords}>
-        <View style={styles.grow} accessible accessibilityLabel={`Heaviest, ${weightParts(heaviest.weightGrams, units).join(" ")} for ${String(heaviest.done)} reps, ${dayWords(heaviest.startedAt)}`}>
-          <Txt kind="small">{`Heaviest · ${dayWords(heaviest.startedAt)}`}</Txt>
+        <View style={styles.grow} accessible accessibilityLabel={`Heaviest, ${weightParts(heaviest.weightGrams, units).join(" ")} for ${String(heaviest.done)} reps, ${dayOf(r, heaviest.workoutId)}`}>
+          <Txt kind="small">{`Heaviest · ${dayOf(r, heaviest.workoutId)}`}</Txt>
           <View style={styles.inline}>
             <Txt kind="big">{weightParts(heaviest.weightGrams, units).join(" ")}</Txt>
             <Txt kind="small">{` × ${String(heaviest.done)} ${heaviest.done === 1 ? "rep" : "reps"}`}</Txt>
@@ -110,17 +113,17 @@ function Heaviest({ entry, r, units }: { entry: PhoneLibraryEntry; r: ExerciseRe
   );
 }
 
-const PLATE: Readonly<Record<PlateKg, { colour: ColourName; height: number; thick: number }>> = {
-  25: { colour: "plateRed", height: 76, thick: 16 },
-  20: { colour: "plateBlue", height: 76, thick: 14 },
-  15: { colour: "plateYellow", height: 76, thick: 12 },
-  10: { colour: "plateGreen", height: 76, thick: 10 },
-  5: { colour: "plateWhite", height: 50, thick: 11 },
-  2.5: { colour: "plateRed", height: 42, thick: 10 },
-  2: { colour: "plateBlue", height: 38, thick: 9 },
-  1.5: { colour: "plateYellow", height: 34, thick: 8 },
-  1: { colour: "plateGreen", height: 30, thick: 7 },
-  0.5: { colour: "plateWhite", height: 26, thick: 6 },
+const PLATE_COLOUR: Readonly<Record<PlateKg, ColourName>> = {
+  25: "plateRed",
+  20: "plateBlue",
+  15: "plateYellow",
+  10: "plateGreen",
+  5: "plateWhite",
+  2.5: "plateRed",
+  2: "plateBlue",
+  1.5: "plateYellow",
+  1: "plateGreen",
+  0.5: "plateWhite",
 };
 
 /** A box with round corners as a path, as the Food tab's jars draw theirs. */
@@ -139,12 +142,12 @@ export function LoadedBar({ side, extra }: { side: readonly PlateKg[]; extra: re
   const mid = BAR_H / 2;
   const plates: { key: string; x: number; p: PlateKg; ghost: boolean; left: boolean }[] = [];
   for (const left of [true, false]) {
-    let x = left ? 77 : BAR_W - 77;
+    let x = left ? SLEEVE_ROOM : BAR_W - SLEEVE_ROOM;
     for (const [list, ghost] of [[side, false], [extra, true]] as const) {
       list.forEach((p, i) => {
-        const { thick } = PLATE[p];
+        const { thick } = PLATE_SIZE[p];
         plates.push({ key: `${left ? "l" : "r"}${ghost ? "g" : "s"}${String(i)}`, x: left ? x - thick : x, p, ghost, left });
-        x += (left ? -1 : 1) * (thick + 2);
+        x += (left ? -1 : 1) * (thick + PLATE_GAP);
       });
     }
   }
@@ -158,7 +161,8 @@ export function LoadedBar({ side, extra }: { side: readonly PlateKg[]; extra: re
         <Path d={box(78, mid - 10, 9, 20, 2.5)} fill={colours.barCollar} />
         <Path d={box(BAR_W - 87, mid - 10, 9, 20, 2.5)} fill={colours.barCollar} />
         {plates.map(({ key, x, p, ghost }) => {
-          const { colour, height, thick } = PLATE[p];
+          const { height, thick } = PLATE_SIZE[p];
+          const colour = PLATE_COLOUR[p];
           return ghost ? (
             <Path key={key} testID="plate-estimate" d={box(x + 1, mid - height / 2 + 1, thick - 2, height - 2, 2.5)} fill={colours[colour]} fillOpacity={0.14} stroke={colours[colour]} strokeWidth={2} strokeDasharray="4 3" />
           ) : (
@@ -168,7 +172,7 @@ export function LoadedBar({ side, extra }: { side: readonly PlateKg[]; extra: re
         {plates
           .filter((pl) => !pl.ghost)
           .map(({ key, x, p, left }) => {
-            const { height, thick } = PLATE[p];
+            const { height, thick } = PLATE_SIZE[p];
             return <Path key={`${key}e`} d={box(left ? x : x + thick - 2.5, mid - height / 2 + 3, 2.5, height - 6, 1)} fill={colours.plateSide} />;
           })}
       </Svg>
@@ -243,20 +247,20 @@ function cellsOf(r: ExerciseRecords, lead: Lead, units: Units): Cell[] {
   const most = r.reps.mostReps;
   if (most !== null && (lead === "heaviest" || lead === "mostReps")) {
     const at = most.weightGrams === null ? null : weightParts(most.weightGrams, units).join(" ");
-    cells.push({ label: "Most reps", digits: String(most.done), unit: lead === "mostReps" ? "reps" : null, under: at === null ? `in one set · ${dayWords(most.startedAt)}` : `at ${at} · ${dayWords(most.startedAt)}`, colour: "ledRed" });
+    cells.push({ label: "Most reps", digits: String(most.done), unit: lead === "mostReps" ? "reps" : null, under: at === null ? `in one set · ${dayOf(r, most.workoutId)}` : `at ${at} · ${dayOf(r, most.workoutId)}`, colour: "ledRed" });
   }
   const lifted = r.reps.mostLifted;
   if (lifted !== null && lead === "heaviest") {
     const [n, unit] = wholeWeight(lifted.grams, units);
-    cells.push({ label: "Best volume", digits: n, unit, under: `all sets · ${dayWords(lifted.startedAt)}`, colour: "ledAmber" });
+    cells.push({ label: "Best volume", digits: n, unit, under: `all sets · ${dayOf(r, lifted.workoutId)}`, colour: "ledAmber" });
   }
   const hold = r.time.longestHold;
   if (hold !== null && lead === "longestHold") {
-    cells.push({ label: "Longest hold", digits: clockWords(hold.done), unit: null, under: dayWords(hold.startedAt), colour: "ledGreen" });
+    cells.push({ label: "Longest hold", digits: clockWords(hold.done), unit: null, under: dayOf(r, hold.workoutId), colour: "ledGreen" });
     const held = r.time.heaviest;
     if (held !== null && held.weightGrams !== null) {
       const [n, unit] = weightParts(held.weightGrams, units);
-      cells.push({ label: "Heaviest held", digits: n, unit, under: dayWords(held.startedAt), colour: "ledAmber" });
+      cells.push({ label: "Heaviest held", digits: n, unit, under: dayOf(r, held.workoutId), colour: "ledAmber" });
     }
   }
   return cells;

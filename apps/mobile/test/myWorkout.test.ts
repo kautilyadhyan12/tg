@@ -88,3 +88,41 @@ describe("adding and removing", () => {
     expect(seen).toEqual([1, 0]);
   });
 });
+
+describe("the saved list is never written over (review L1)", () => {
+  it("a press made before the file was read is added to the saved list, never put in its place", async () => {
+    forgetStores();
+    const { files, fileFor } = phone();
+    files.set(myWorkoutFileName(A), JSON.stringify({ v: 1, ids: ["squat", "plank"] }));
+    const s = storeFor(A, fileFor(A));
+    s.add("barbell_curl");
+    s.remove("plank");
+    await s.ready;
+    await settle();
+    expect(s.list()).toEqual(["squat", "barbell_curl"]);
+    expect(readList(files.get(myWorkoutFileName(A)) ?? null)).toEqual(["squat", "barbell_curl"]);
+  });
+
+  it("a read that failed writes nothing, so the file keeps whatever list it held", async () => {
+    forgetStores();
+    let written = 0;
+    const s = storeFor(A, { read: () => Promise.reject(new Error("no disk")), write: () => { written += 1; return Promise.resolve(); } });
+    await s.ready;
+    s.add("plank");
+    await settle();
+    expect(s.list()).toEqual(["plank"]);
+    expect(written).toBe(0);
+  });
+
+  it("two people's stores alive at once stay apart", async () => {
+    forgetStores();
+    const { fileFor } = phone();
+    const a = storeFor(A, fileFor(A));
+    const b = storeFor(B, fileFor(B));
+    await Promise.all([a.ready, b.ready]);
+    a.add("squat");
+    b.add("plank");
+    expect([a.list(), b.list()]).toEqual([["squat"], ["plank"]]);
+    expect(storeFor(A, fileFor(B))).toBe(a);
+  });
+});

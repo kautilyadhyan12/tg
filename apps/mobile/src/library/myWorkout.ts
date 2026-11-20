@@ -56,40 +56,54 @@ export interface MyWorkoutStore {
   watch: (told: () => void) => () => void;
 }
 
+type Step = { add: string } | { remove: string };
+const take = (list: readonly string[], step: Step): readonly string[] => ("add" in step ? added(list, step.add) : removed(list, step.remove));
+
 function makeStore(file: ListFile): MyWorkoutStore {
   let list: readonly string[] = [];
-  let changedBeforeRead = false;
+  // Presses made before the file was read are kept as steps and made again on the list it held, so a press never
+  // writes over the saved list. A read that failed writes nothing for the rest of this run: the file may still hold it.
+  let read: "waiting" | "done" | "failed" = "waiting";
+  const early: Step[] = [];
   const watchers = new Set<() => void>();
   // Writes go one after another, so the file always ends as the newest list.
   let writing: Promise<void> = Promise.resolve();
   const tell = () => {
     for (const w of [...watchers]) w();
   };
-  const change = (next: readonly string[]) => {
+  const write = () => {
+    if (read !== "done") return;
+    const text = JSON.stringify({ v: 1, ids: list });
+    writing = writing.then(() => file.write(text)).catch(() => undefined);
+  };
+  const step = (s: Step) => {
+    // Before the read every step is kept, even one that changes nothing yet: removing a saved exercise.
+    if (read === "waiting") early.push(s);
+    const next = take(list, s);
     if (next === list) return;
     list = next;
-    changedBeforeRead = true;
-    const text = JSON.stringify({ v: 1, ids: next });
-    writing = writing.then(() => file.write(text)).catch(() => undefined);
+    write();
     tell();
   };
-  const ready = file
-    .read()
-    .catch(() => null)
-    .then((text) => {
-      // A press made before the phone answered is kept over what the file held.
-      if (changedBeforeRead) return;
-      list = readList(text);
+  const ready = file.read().then(
+    (text) => {
+      list = early.reduce(take, readList(text));
+      read = "done";
+      if (early.length > 0) write();
       tell();
-    });
+    },
+    () => {
+      read = "failed";
+    },
+  );
   return {
     ready,
     list: () => list,
     add: (id) => {
-      change(added(list, id));
+      step({ add: id });
     },
     remove: (id) => {
-      change(removed(list, id));
+      step({ remove: id });
     },
     watch: (told) => {
       watchers.add(told);

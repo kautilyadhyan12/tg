@@ -65,7 +65,7 @@ function libraryServer(
 
 /** An exercise's records as the server answers them for somebody who never did it (63c). */
 function noRecords(exercise: string) {
-  return { exercise, reps: { heaviest: null, mostReps: null, bestEstimated1rm: null, mostLifted: null }, time: { longestHold: null, heaviest: null }, recent: [], limitedToDays: null };
+  return { exercise, reps: { heaviest: null, mostReps: null, bestEstimated1rm: null, mostLifted: null }, time: { longestHold: null, heaviest: null }, recent: [], days: {}, limitedToDays: null };
 }
 
 const W = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
@@ -80,6 +80,8 @@ const CURL_RECORDS = {
   reps: { heaviest: done(14, 8, 35_000), mostReps: done(2, 15, 20_000), bestEstimated1rm: { ...done(14, 8, 35_000), estimateGrams: 44_333 }, mostLifted: { workoutId: W(14), startedAt: ON(14), grams: 880_000 } },
   time: { longestHold: null, heaviest: null },
   recent: [best(2, 25_000, 15), best(6, 30_000, 10), best(14, 35_000, 8)],
+  // The server's own day of each workout (in the zone it was done in), never the phone's.
+  days: { [W(2)]: "2026-11-02", [W(6)]: "2026-11-06", [W(14)]: "2026-11-14" },
   limitedToDays: null,
 };
 
@@ -576,6 +578,24 @@ describe("your records, calories and My Workout on an exercise's page (63c)", ()
     expect(await screen.findByText("About 4 kcal a minute at 70 kg")).toBeTruthy();
     await fireEvent.press(screen.getByRole("button", { name: "Add your weight" }));
     expect(await screen.findByRole("button", { name: "Log measurements" })).toBeTruthy();
+  });
+
+  it("after Add your weight, coming back from Progress, the page says the weight now known (review H2)", async () => {
+    let asked = 0;
+    const answers = () => ({ status: 200, body: { answers: { ...ANSWERS, weightKg: asked++ === 0 ? null : 82 }, plan: null, missing: ["goal"] } });
+    await openLibrary(libraryServer({ onboarding: answers }).ask);
+    await openExercise(/^Barbell Curl,/);
+    expect(await screen.findByText("About 4 kcal a minute at 70 kg")).toBeTruthy();
+    const pageCloses = screen.getAllByRole("button", { name: "Close" });
+    await fireEvent.press(screen.getByRole("button", { name: "Add your weight" }));
+    expect(await screen.findByRole("button", { name: "Log measurements" })).toBeTruthy();
+    // Progress's own ✕: the one that was not there before it opened over the exercise's page.
+    const progressClose = screen.getAllByRole("button", { name: "Close" }).find((c) => !pageCloses.includes(c));
+    if (progressClose === undefined) throw new Error("Progress has no Close");
+    await fireEvent.press(progressClose);
+    await waitFor(() => { expect(screen.queryByRole("button", { name: "Log measurements" })).toBeNull(); });
+    expect(await screen.findByText("About 5 kcal a minute for you, at 82 kg")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Add your weight" })).toBeNull();
   });
 
   it("no calories line until the weight is heard: never 'at 70 kg' of somebody whose weight is on its way", async () => {

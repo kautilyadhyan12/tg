@@ -207,6 +207,7 @@ export function LibraryPart({ parts, units, onOpenMine, file }: { parts: ReactNo
           sex={sex}
           units={units}
           weightKg={facts.weightKg}
+          onWeighed={facts.again}
           onOpenMine={() => {
             setOpen(null);
             onOpenMine();
