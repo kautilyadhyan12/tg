@@ -150,6 +150,8 @@ interface Segment<V> {
   value: V;
   label: string;
   say?: string;
+  /** A count beside the label, such as My Workout's exercises (63c); none at 0. */
+  count?: number;
 }
 
 /** One of a few, side by side in one track. */
@@ -170,16 +172,23 @@ export function Segments<V extends string | number>({
           <Pressable
             key={String(o.value)}
             accessibilityRole="button"
-            accessibilityLabel={o.say ?? o.label}
+            accessibilityLabel={`${o.say ?? o.label}${o.count === undefined || o.count === 0 ? "" : `, ${String(o.count)}`}`}
             accessibilityState={{ selected: on }}
             onPress={() => {
               onPick(o.value);
             }}
             style={({ pressed }) => [styles.segment, on ? styles.segmentOn : null, pressed ? styles.pressed : null]}
           >
-            <Txt numberOfLines={1} style={[styles.segmentLabel, on ? styles.segmentLabelOn : null]}>
-              {o.label}
-            </Txt>
+            <View style={styles.segmentInner}>
+              <Txt numberOfLines={1} style={[styles.segmentLabel, on ? styles.segmentLabelOn : null]}>
+                {o.label}
+              </Txt>
+              {o.count === undefined || o.count === 0 ? null : (
+                <View style={[styles.segmentCount, on ? styles.segmentCountOn : null]}>
+                  <Txt style={[styles.segmentCountWords, on ? styles.segmentCountWordsOn : null]}>{String(o.count)}</Txt>
+                </View>
+              )}
+            </View>
           </Pressable>
         );
       })}
@@ -237,4 +246,9 @@ const styles = StyleSheet.create({
   segmentOn: { backgroundColor: colours.orange, experimental_backgroundImage: orangeGradient },
   segmentLabel: { fontFamily: fonts.medium, fontSize: 14, lineHeight: 18, color: colours.textSoft },
   segmentLabelOn: { fontFamily: fonts.semibold, color: colours.onOrange },
+  segmentInner: { flexDirection: "row", alignItems: "center", gap: 5, flexShrink: 1 },
+  segmentCount: { minWidth: 18, height: 18, paddingHorizontal: 5, alignItems: "center", justifyContent: "center", borderRadius: sizes.round, backgroundColor: colours.orange },
+  segmentCountOn: { backgroundColor: colours.onOrange },
+  segmentCountWords: { fontFamily: fonts.bold, fontSize: 11, lineHeight: 14, color: colours.onOrange },
+  segmentCountWordsOn: { color: colours.orange },
 });

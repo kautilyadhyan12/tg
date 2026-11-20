@@ -1,8 +1,9 @@
 import { onboardingResponseSchema } from "@app/shared";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useSession } from "../../session/SessionProvider";
 import type { Sex } from "../../library/figure";
-import { figureFile, libraryFile } from "../../library/files";
+import { figureFile, libraryFile, myWorkoutFile } from "../../library/files";
+import { storeFor } from "../../library/myWorkout";
 import { readKept, refreshLibrary, type LibraryFile, type LibraryState } from "../../library/store";
 import { setupPath } from "../setup/useSetupAnswers";
 
@@ -37,16 +38,23 @@ export function useLibrary(file?: LibraryFile): { state: LibraryState; again: ()
   return { state, again };
 }
 
-/** Whose body the figures show: the person's own, from their setup answer (Kd: a man sees the male figure, a
- *  woman the female one, never the other). Null until it is known: no figure is drawn then, rather than a
- *  wrong one. The answer the server last gave is kept on the phone for that person, so it is known with no
- *  internet. "Other", "prefer not to say" or no answer show the male figure. */
-export function useFigureSex(): Sex | null {
+/** What the Library reads of the person's setup answers, asked once for both. `sex`: whose body the figures show, the
+ *  person's own (Kd: a man sees the male figure, a woman the female one, never the other); null until it is known, as
+ *  no figure is drawn rather than a wrong one. The answer the server last gave is kept on the phone for that person, so
+ *  it is known with no internet; "other", "prefer not to say" or no answer show the male figure. `weightKg`: their
+ *  newest weight, the one a saved workout's calories are reckoned at; null when they have none, and undefined until
+ *  the server has said, so a page never says "at 70 kg" of somebody whose weight it has not heard yet. */
+export interface SetupFacts {
+  sex: Sex | null;
+  weightKg: number | null | undefined;
+}
+
+export function useSetupFacts(): SetupFacts {
   const { session, state } = useSession();
   const me = state.kind === "in" ? state.user.id : null;
-  const [sex, setSex] = useState<Sex | null>(null);
+  const [facts, setFacts] = useState<SetupFacts>({ sex: null, weightKg: undefined });
   useEffect(() => {
-    setSex(null);
+    setFacts({ sex: null, weightKg: undefined });
     if (me === null) return;
     const alive = { now: true, heard: false };
     // Read through functions: the person may have left, or the server answered, during each wait.
@@ -54,19 +62,31 @@ export function useFigureSex(): Sex | null {
     const heard = () => alive.heard;
     void (async () => {
       const kept = await figureFile.read(me);
-      if (here() && !heard() && kept !== null) setSex(kept);
+      if (here() && !heard() && kept !== null) setFacts((f) => ({ ...f, sex: kept }));
     })();
     void (async () => {
       const answer = await session.signedIn({ method: "GET", path: setupPath() }, onboardingResponseSchema);
       if (!here() || answer.kind !== "ok") return;
-      const next: Sex = answer.data.answers.gender === "female" ? "female" : "male";
+      const sex: Sex = answer.data.answers.gender === "female" ? "female" : "male";
       alive.heard = true;
-      setSex(next);
-      figureFile.write(me, next);
+      setFacts({ sex, weightKg: answer.data.answers.weightKg });
+      figureFile.write(me, sex);
     })();
     return () => {
       alive.now = false;
     };
   }, [me, session]);
-  return sex;
+  return facts;
 }
+
+/** The person's My Workout (63c): the same list on every page that shows it; null with nobody signed in. */
+export function useMyWorkout(): { list: readonly string[]; add: (id: string) => void; remove: (id: string) => void } | null {
+  const { state } = useSession();
+  const me = state.kind === "in" ? state.user.id : null;
+  const store = useMemo(() => (me === null ? null : storeFor(me, myWorkoutFile(me))), [me]);
+  const subscribe = useCallback((told: () => void) => (store === null ? () => undefined : store.watch(told)), [store]);
+  const list = useSyncExternalStore(subscribe, () => store?.list() ?? NONE);
+  return store === null ? null : { list, add: store.add, remove: store.remove };
+}
+
+const NONE: readonly string[] = [];

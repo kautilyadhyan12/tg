@@ -10,14 +10,15 @@ import { Gesture, State } from "react-native-gesture-handler";
 import { fireGestureHandler, getByGestureTestId } from "react-native-gesture-handler/jest-utils";
 import { FIGURES, type FigureName } from "../../src/library/figures";
 import { DOUBLE_TAP_ZOOM, toStage, WHOLE, zoomAbout, type View as Zoom } from "../../src/library/stage";
+import { forgetStores } from "../../src/library/myWorkout";
 import { LIBRARY_PATH } from "../../src/library/store";
 import type { Ask } from "../../src/session/calls";
-import { fakeServer, kept, lost, memoryStore, refusal, tokens, type Reply } from "../kit";
+import { fakeServer, kept, lost, memoryStore, RAVI, refusal, tokens, type Reply } from "../kit";
 
 const extra = { copyName: "Exercise 2", apiUrl: "http://localhost:3000" };
 const FOLDER = `${__dirname}/../../../../packages/shared/library/exercises/`;
 const METS: Record<string, number> = { squat: 3, plank: 2.8, barbell_curl: 3.5 };
-const PLANK_CAUTION = "If you feel pain in your lower back, stop at once and see a qualified healthcare professional.";
+const PLANK_CAUTION = "If you feel pain in your lower back, stop at once and see a qualified professional.";
 
 function download(more: Record<string, unknown>[] = [], fingerprint = "a".repeat(64)) {
   const exercises = readdirSync(FOLDER).map((name) => {
@@ -35,11 +36,18 @@ const ANSWERS: OnboardingAnswers = {
 
 /** The server: the Library answered as the api does (304 to the copy's own fingerprint), setup's answers with
  *  `gender`. `library` may change between calls (no internet, then back). */
-function libraryServer(opts: { library?: () => Reply; gender?: OnboardingAnswers["gender"]; onboarding?: () => Reply | Promise<Reply> } = {}) {
+function libraryServer(
+  opts: { library?: () => Reply; gender?: OnboardingAnswers["gender"]; weightKg?: number | null; onboarding?: () => Reply | Promise<Reply>; records?: Record<string, () => Reply> } = {},
+) {
   let library = opts.library ?? ((): Reply => ({ status: 200, body: download() }));
+  const records = Object.fromEntries(
+    ["barbell_curl", "plank", "squat"].map((id) => [`/v1/training/exercises/${id}/records`, opts.records?.[id] ?? (() => ({ status: 200, body: noRecords(id) }))]),
+  );
   const server = fakeServer({
     "/v1/auth/refresh": () => ({ status: 200, body: { tokens: tokens(2) } }),
-    "/v1/users/me/onboarding": opts.onboarding ?? (() => ({ status: 200, body: { answers: { ...ANSWERS, gender: opts.gender ?? null }, plan: null, missing: ["goal"] } })),
+    "/v1/users/me/onboarding":
+      opts.onboarding ?? (() => ({ status: 200, body: { answers: { ...ANSWERS, gender: opts.gender ?? null, weightKg: opts.weightKg ?? null }, plan: null, missing: ["goal"] } })),
+    ...records,
   });
   const libraryAsks: (string | undefined)[] = [];
   const ask: Ask = async (url, init) => {
@@ -54,6 +62,26 @@ function libraryServer(opts: { library?: () => Reply; gender?: OnboardingAnswers
   };
   return { ask, libraryAsks, set: (next: () => Reply) => { library = next; } };
 }
+
+/** An exercise's records as the server answers them for somebody who never did it (63c). */
+function noRecords(exercise: string) {
+  return { exercise, reps: { heaviest: null, mostReps: null, bestEstimated1rm: null, mostLifted: null }, time: { longestHold: null, heaviest: null }, recent: [], limitedToDays: null };
+}
+
+const W = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+const ON = (day: number) => new Date(2026, 10, day, 18, 0).toISOString();
+const done = (workout: number, reps: number, grams: number | null) => ({ workoutId: W(workout), startedAt: ON(workout), position: 0, done: reps, weightGrams: grams });
+const best = (workout: number, heaviestGrams: number, mostReps: number) => ({ workoutId: W(workout), startedAt: ON(workout), reps: { heaviestGrams, mostReps }, time: { longestHold: null, heaviestGrams: null } });
+
+/** Barbell Curl as the drawing has it: 35 kg x 8 on 14 Nov, 15 reps at 20 kg on 2 Nov, an estimate of 44.3 kg,
+ *  880 kg in one workout, and the last three times. */
+const CURL_RECORDS = {
+  exercise: "barbell_curl",
+  reps: { heaviest: done(14, 8, 35_000), mostReps: done(2, 15, 20_000), bestEstimated1rm: { ...done(14, 8, 35_000), estimateGrams: 44_333 }, mostLifted: { workoutId: W(14), startedAt: ON(14), grams: 880_000 } },
+  time: { longestHold: null, heaviest: null },
+  recent: [best(2, 25_000, 15), best(6, 30_000, 10), best(14, 35_000, 8)],
+  limitedToDays: null,
+};
 
 /** A point inside a shape: the middle of the widest run across it, on the row through its middle. */
 function insideOf(d: string): [number, number] {
@@ -93,7 +121,8 @@ const openExercise = async (name: RegExp) => {
 
 beforeEach(() => {
   // The phone's files outlive a test in the stand-in: each test starts on a phone that never opened the Library.
-  for (const one of Paths.document.list()) if (one.name.startsWith("library-") || one.name.startsWith("figure-")) one.delete();
+  for (const one of Paths.document.list()) if (one.name.startsWith("library-") || one.name.startsWith("figure-") || one.name.startsWith("my-workout-")) one.delete();
+  forgetStores();
 });
 
 describe("an exercise's page never hides its caution", () => {
@@ -475,5 +504,116 @@ describe("an exercise's page", () => {
     await openLibrary(libraryServer({ onboarding: lost }).ask);
     await waitFor(() => { expect(screen.getAllByTestId("figure-female-front").length).toBeGreaterThan(0); });
     expect(screen.queryAllByTestId("figure-male-front")).toHaveLength(0);
+  });
+});
+
+describe("your records, calories and My Workout on an exercise's page (63c)", () => {
+  it("the worst thing: on one phone, each person sees only their own My Workout", async () => {
+    const SITA = { ...RAVI, id: "3d1f9b2a-8c4e-4f6a-9b7d-2e5c8a1f0d3b", email: "sita@example.com", displayName: "Sita" };
+    await openLibrary(libraryServer().ask);
+    await openExercise(/^Squat,/);
+    await fireEvent.press(await screen.findByRole("button", { name: "Add to workout" }));
+    expect(await screen.findByText("1 in My Workout")).toBeTruthy();
+    await screen.unmount();
+    // The app closed; Sita signs in on the same phone.
+    forgetStores();
+    await render(<App extra={extra} store={memoryStore(kept(1, SITA))} ask={libraryServer().ask} />);
+    await fireEvent.press(await screen.findByRole("tab", { name: "Workout" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "My Workout" }));
+    expect(await screen.findByText("No exercises yet")).toBeTruthy();
+    expect(screen.queryByText("Squat")).toBeNull();
+    await screen.unmount();
+    // Ravi again: his own list, read from his own file.
+    forgetStores();
+    await openLibrary(libraryServer().ask);
+    await fireEvent.press(await screen.findByRole("button", { name: "My Workout, 1" }));
+    expect(await screen.findByText("Squat")).toBeTruthy();
+  });
+
+  it("records as the loaded bar, the LED timer and the last times; the plates add up to the weight", async () => {
+    await openLibrary(libraryServer({ records: { barbell_curl: () => ({ status: 200, body: CURL_RECORDS }) } }).ask);
+    await openExercise(/^Barbell Curl,/);
+    expect(await screen.findByLabelText("Heaviest, 35 kg for 8 reps, 14 Nov")).toBeTruthy();
+    expect(screen.getByLabelText("One-rep max, an estimate, about 44.3 kg")).toBeTruthy();
+    // A 20 kg bar with a 5 and a 2.5 a side is 35 kg; the estimate's 2.5 and 2 a side lie beyond them.
+    expect(screen.getByLabelText("A bar loaded with 5, 2.5 kilogram plates a side")).toBeTruthy();
+    expect(screen.getAllByTestId("plate-lifted")).toHaveLength(4);
+    expect(screen.getAllByTestId("plate-estimate")).toHaveLength(4);
+    expect(screen.getByLabelText("Most reps, 15, at 20 kg · 2 Nov")).toBeTruthy();
+    expect(screen.getByLabelText("Best volume, 880 kg, all sets · 14 Nov")).toBeTruthy();
+    expect(screen.getByText("HEAVIEST SET · YOUR LAST 3 TIMES")).toBeTruthy();
+    expect(screen.getByLabelText("14 Nov, 35, your record")).toBeTruthy();
+    expect(screen.getByLabelText("6 Nov, 30")).toBeTruthy();
+  });
+
+  it("no records yet: one line, no box; records that cannot load say so, and Try again asks again", async () => {
+    let fail = true;
+    const server = libraryServer({ records: { squat: () => (fail ? refusal(500, "server_error", "Not now.") : { status: 200, body: noRecords("squat") }) } });
+    await openLibrary(server.ask);
+    await openExercise(/^Plank,/);
+    expect(await screen.findByText("Your best hold shows here after your first workout.")).toBeTruthy();
+    expect(screen.queryByTestId("records")).toBeNull();
+    await fireEvent.press(screen.getByRole("button", { name: "Close" }));
+    await openExercise(/^Squat,/);
+    expect(await screen.findByText("Your records couldn’t load.")).toBeTruthy();
+    fail = false;
+    await fireEvent.press(screen.getByRole("button", { name: "Load your records again" }));
+    expect(await screen.findByText("Your best set shows here after your first workout.")).toBeTruthy();
+  });
+
+  it("calories a minute for the person's weight; with none, at 70 kg with the button to add it", async () => {
+    await openLibrary(libraryServer({ weightKg: 82 }).ask);
+    await openExercise(/^Barbell Curl,/);
+    // MET 3.5 at 82 kg is 4.8 a minute.
+    expect(await screen.findByText("About 5 kcal a minute for you, at 82 kg")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Add your weight" })).toBeNull();
+    await screen.unmount();
+    forgetStores();
+    await openLibrary(libraryServer({ weightKg: null }).ask);
+    await openExercise(/^Barbell Curl,/);
+    expect(await screen.findByText("About 4 kcal a minute at 70 kg")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "Add your weight" }));
+    expect(await screen.findByRole("button", { name: "Log measurements" })).toBeTruthy();
+  });
+
+  it("no calories line until the weight is heard: never 'at 70 kg' of somebody whose weight is on its way", async () => {
+    let release: (reply: Reply) => void = () => undefined;
+    const held = () => new Promise<Reply>((resolve) => { release = resolve; });
+    await openLibrary(libraryServer({ onboarding: held }).ask);
+    await openExercise(/^Barbell Curl,/);
+    await settle(300);
+    expect(screen.queryByText(/kcal a minute/)).toBeNull();
+    release({ status: 200, body: { answers: { ...ANSWERS, weightKg: 82 }, plan: null, missing: ["goal"] } });
+    expect(await screen.findByText("About 5 kcal a minute for you, at 82 kg")).toBeTruthy();
+  });
+
+  it("Add to workout once, no repeats; Open shows My Workout with its count; ✕ removes; Browse exercises goes back", async () => {
+    await openLibrary(libraryServer().ask);
+    await openExercise(/^Barbell Curl,/);
+    await fireEvent.press(await screen.findByRole("button", { name: "Add to workout" }));
+    expect(await screen.findByText("1 in My Workout")).toBeTruthy();
+    // Pressed again it comes out, and in again.
+    await fireEvent.press(screen.getByRole("button", { name: "Added to workout. Press to take it out" }));
+    expect(screen.queryByText("1 in My Workout")).toBeNull();
+    await fireEvent.press(screen.getByRole("button", { name: "Add to workout" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Open My Workout" }));
+    expect(await screen.findByRole("button", { name: "My Workout, 1" })).toBeTruthy();
+    expect(screen.getByText("1 exercise")).toBeTruthy();
+    expect(screen.getByText("3 × 10 reps · Barbell")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Start workout" }).props.accessibilityState).toMatchObject({ disabled: true });
+    await fireEvent.press(screen.getByRole("button", { name: "Remove Barbell Curl" }));
+    expect(await screen.findByText("No exercises yet")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "Browse exercises" }));
+    expect(await screen.findByText("3 Exercises")).toBeTruthy();
+  });
+
+  it("an exercise opens its page from My Workout, already added", async () => {
+    await openLibrary(libraryServer().ask);
+    await openExercise(/^Plank,/);
+    await fireEvent.press(await screen.findByRole("button", { name: "Add to workout" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Open My Workout" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Plank. Open its page" }));
+    expect(await screen.findByRole("button", { name: "Added to workout. Press to take it out" })).toBeTruthy();
+    expect(screen.getByRole("alert").props.accessibilityLabel).toBe(`Caution: ${PLANK_CAUTION}`);
   });
 });

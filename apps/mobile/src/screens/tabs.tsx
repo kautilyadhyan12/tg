@@ -5,7 +5,6 @@ import { Avatar, Badge, Card, PictureCard } from "../look/Card";
 import { sizes } from "../look/colours";
 import { Icon } from "../look/Icon";
 import { Page } from "../look/Page";
-import { PictureTop } from "../look/PictureTop";
 import { Txt } from "../look/Txt";
 import { useSession } from "../session/SessionProvider";
 import { Segments } from "../look/Choice";
@@ -16,8 +15,9 @@ import { SignOutAsk } from "./SignOutAsk";
 import { ProgressPage } from "./progress/ProgressPage";
 import { AchievementsPage } from "./achievements/AchievementsPage";
 import { ThisCopy } from "./ThisCopy";
-import { Soon } from "./Soon";
 import { LibraryPart } from "./library/LibraryPart";
+import { MyWorkoutPart } from "./library/MyWorkoutPart";
+import { useMyWorkout } from "./library/useLibrary";
 
 // Each tab's page as the look draws it (docs/design/phone/pages). Its own picture runs edge to
 // edge from the top and into the page, never a box of its own, with the page's first words over it.
@@ -26,11 +26,6 @@ import { LibraryPart } from "./library/LibraryPart";
 
 type WorkoutPart = "exercises" | "mine" | "running";
 
-const WORKOUT_PARTS = [
-  { value: "exercises", label: "Exercises" },
-  { value: "mine", label: "My Workout" },
-  { value: "running", label: "Running" },
-] as const;
 
 // The streak reminder's tap opens Workout on Running (19e-ii): a run is what keeps a streak from the phone today.
 let runningAsked = false;
@@ -42,7 +37,7 @@ export function openRunning(): void {
 
 /** Exercises, My Workout and Running across the picture's top, as drawn (docs/design/phone/pages/Workout):
  *  it opens on Exercises (the Exercise Library, 63a), where the Dashboard's Browse Exercises points. Running is
- *  37a's; My Workout comes with exercise folder 2's job 64a. */
+ *  37a's; My Workout, with its count, is 63c's, and doing it comes with exercise folder 2's job 64a. */
 export function WorkoutScreen() {
   const { state } = useSession();
   const units = (state.kind === "in" ? accountUnits(state.user.units) : null) ?? "metric";
@@ -59,17 +54,20 @@ export function WorkoutScreen() {
       runningWatchers.delete(take);
     };
   }, []);
-  const parts = <Segments options={WORKOUT_PARTS} selected={part} onPick={setPart} />;
+  const mine = useMyWorkout();
+  const options = [
+    { value: "exercises", label: "Exercises" },
+    { value: "mine", label: "My Workout", count: mine?.list.length ?? 0 },
+    { value: "running", label: "Running" },
+  ] as const;
+  const parts = <Segments options={options} selected={part} onPick={setPart} />;
   // The three lie just under the picture, never over it (Kd, 37a's click-through: over it they cut it).
   return part === "running" ? (
     <RunningTab units={units} parts={parts} />
   ) : part === "exercises" ? (
-    <LibraryPart parts={parts} />
+    <LibraryPart parts={parts} units={units} onOpenMine={() => { setPart("mine"); }} />
   ) : (
-    <Page top={<PictureTop picture="exhero" tall={0.62} eyebrow="Exercise Library" title="Exercises" />}>
-      {parts}
-      <Soon icon="dumbbell" title="My Workout" />
-    </Page>
+    <MyWorkoutPart parts={parts} units={units} onBrowse={() => { setPart("exercises"); }} />
   );
 }
 
