@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Classes: a class on the Calendar</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./kit3.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0;background:#0A0908}
+.cap{display:flex;align-items:center;gap:10px;font-weight:600;color:var(--t2)}
+.num{width:26px;height:26px;border-radius:999px;background:var(--o-fill);color:var(--o-t);box-shadow:inset 0 0 0 1px var(--o-line);display:grid;place-items:center;font-size:13px;font-weight:700;flex:none}
+.stage{background:var(--scrim);border-radius:18px;padding:32px 16px;display:flex;justify-content:center}
+.dlg{background:var(--solid);border:1px solid var(--line2);border-radius:20px;box-shadow:var(--pop);width:100%;max-width:500px;min-width:0}
+.side{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,440px);border:1px solid var(--line);border-radius:18px;overflow:hidden}
+.side > .under{padding:20px;opacity:.6;overflow:hidden;min-width:0}
+.side > .sheet{background:var(--solid);border-left:1px solid var(--line2);display:flex;flex-direction:column;min-width:0}
+.sheet-h{display:flex;align-items:center;gap:12px;padding:18px 20px;border-bottom:1px solid var(--line)}
+.sheet-b{padding:20px;display:flex;flex-direction:column;gap:18px}
+.sheet-f{margin-top:auto;display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:14px 20px;border-top:1px solid var(--line)}
+.opt{display:flex;gap:12px;align-items:flex-start;padding:14px 16px;border-radius:14px;border:1px solid var(--line2)}
+.opt-on{border-color:var(--o);background:var(--o-fill)}
+.radio{width:18px;height:18px;border-radius:999px;border:1.5px solid var(--line2);flex:none;margin-top:1px}
+.radio-on{border:5px solid var(--o)}
+.check-on{background:var(--o);border-color:var(--o);position:relative}
+.check-on::after{content:"";position:absolute;left:5px;top:1px;width:5px;height:10px;border:solid var(--on-o);border-width:0 2px 2px 0;transform:rotate(45deg)}
+.sw{width:40px;height:24px;border-radius:999px;background:var(--bar);position:relative;flex:none}
+.sw::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:999px;background:var(--t3)}
+.sw-on{background:var(--o)}.sw-on::after{left:19px;background:var(--on-o)}
+.step{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,340px);gap:20px;align-items:start}
+.menu{background:var(--solid);border:1px solid var(--line2);border-radius:16px;box-shadow:var(--pop);padding:6px;min-width:0;max-width:320px}
+.mi{display:flex;gap:12px;align-items:flex-start;padding:10px 12px;border-radius:10px}
+.ptile{display:flex;flex-direction:column;gap:4px;padding:14px;border-radius:14px;border:1px solid var(--line2);min-width:0}
+.ptile-on{border-color:var(--o);background:var(--o-fill)}
+.pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.qty{display:inline-flex;align-items:center;border:1px solid var(--line2);border-radius:999px;height:40px}
+.qty > button{width:40px;height:40px;display:grid;place-items:center;color:var(--t2)}
+.money{font-weight:600;white-space:nowrap}
+.frames{display:flex;flex-wrap:wrap;gap:40px;padding:40px;align-items:flex-start}
+.frame{width:390px;max-width:100%;border:1px solid var(--line2);border-radius:28px;overflow:hidden;background:var(--page);display:flex;flex-direction:column;position:relative}
+.bsheet{background:var(--solid);border-top:1px solid var(--line2);border-radius:22px 22px 0 0;box-shadow:var(--pop);display:flex;flex-direction:column}
+.grab{width:40px;height:5px;border-radius:999px;background:var(--line2);margin:10px auto 4px}
+.savebar{position:sticky;bottom:12px;z-index:2;display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 16px;background:var(--solid);border:1px solid var(--line2);border-radius:18px}
+.footbar{position:sticky;bottom:0;padding:12px 16px 16px;border-top:1px solid var(--line);background:var(--solid);display:flex;flex-direction:column;gap:8px}
+@media (max-width:1180px){.side{grid-template-columns:minmax(0,1fr)}.side > .under{display:none}.side > .sheet{border-left:0}}
+@media (max-width:900px){.step{grid-template-columns:minmax(0,1fr)}.frames{padding:16px;gap:24px}}
+@media (pointer:coarse){.qty,.qty > button{height:44px}.qty > button{width:44px}}
+.side > .under{padding:20px}.cls-h{position:relative;padding-left:18px}.cls-h::before{content:"";position:absolute;left:0;top:2px;bottom:2px;width:4px;border-radius:4px;background:var(--edge,var(--line2))}.bk{display:flex;flex-direction:column;gap:6px;padding:10px 0;border-top:1px solid var(--line)}.bk-top{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.lk{color:var(--o-t);font-weight:600}.col > span,.bk span{overflow-wrap:anywhere}.warnline{color:var(--warn);font-weight:500}.badline{color:var(--bad);font-weight:500}.tag-warn{color:var(--warn)}
+</style>
+</helmet>
+<div class="app t-dark {{look}}" style="min-height: 100%">
+<div class="shell">
+
+<nav class="rail" aria-label="Menu">
+<a href="#" class="gym"><span class="logo"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18zM6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2M10 6h4M10 10h4M10 14h4M10 18h4"></path></svg></span><span class="col grow"><span class="w6 ell">Iron House</span><span class="s12 t3">Austin · Gym</span></span><svg class="ic ic-s t3" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 15l5 5 5-5M7 9l5-5 5 5"></path></svg></a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3h5a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM15 3h5a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM15 12h5a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1zM4 16h5a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1z"></path></svg>Overview<span class="n n-bad">6</span></a>
+<div class="grp">Today<svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 2h6a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1zM16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2M9 14l2 2 4-4"></path></svg>Attendance</a>
+<a href="#" class="ni ni-on"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 7.5V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3.5M16 2v4M8 2v4M3 10h5M10 16a6 6 0 1 0 12 0a6 6 0 1 0-12 0M16 14v2.2l1.5 1.3"></path></svg>Classes</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 6.5l11 11M21 21l-1-1M3 3l1 1M18 22l4-4M2 6l4-4M3 10l7-7M14 21l7-7"></path></svg>Personal training</a>
+<div class="grp">People<svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M5 7a4 4 0 1 0 8 0a4 4 0 1 0-8 0M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"></path></svg>Members &amp; staff</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 7a4 4 0 1 0 8 0a4 4 0 1 0-8 0M10.3 15H7a4 4 0 0 0-4 4v2M14 17a3 3 0 1 0 6 0a3 3 0 1 0-6 0M21 21l-1.9-1.9"></path></svg>Leads<span class="n">5</span></a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 17l-8.5-8.5-5 5L2 7M16 17h6v-6"></path></svg>At risk<span class="n n-warn">2</span></a>
+<div class="grp">Money<svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6a2 2 0 0 1 2-2h12v4M3 6v12a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2H5a2 2 0 0 1-2-2zM17 14h.01"></path></svg>Payments overview</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4zM3 6h18M16 10a4 4 0 0 1-8 0"></path></svg>Sell</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12.6 2.6A2 2 0 0 0 11.2 2H4a2 2 0 0 0-2 2v7.2a2 2 0 0 0 .6 1.4l8.7 8.7a2.4 2.4 0 0 0 3.4 0l6.6-6.6a2.4 2.4 0 0 0 0-3.4zM7 7.5h.01"></path></svg>Memberships</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2zM2 10h20"></path></svg>Failed payments<span class="n n-bad">3</span></a>
+<div class="grp">Community<svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l18-5v12L3 14zM11.6 16.8a3 3 0 1 1-5.8-1.6"></path></svg>Updates<span class="n n-warn">1</span></a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM16 2v4M8 2v4M3 10h18"></path></svg>Events</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 2h6a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1zM16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2M12 11h4M12 16h4M8 11h.01M8 16h.01"></path></svg>Fitness plans</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M8.2 10.2L5 3h14l-3.2 7.2M6 15a6 6 0 1 0 12 0a6 6 0 1 0-12 0"></path></svg>Challenges</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6M18 9h1.5a2.5 2.5 0 0 0 0-5H18M4 22h16M10 14.7V17c0 .6-.5 1-1 1.2-1.2.5-2 2-2 3.8M14 14.7V17c0 .6.5 1 1 1.2 1.2.5 2 2 2 3.8M18 2H6v7a6 6 0 0 0 12 0z"></path></svg>Leaderboard</a>
+<div class="grp">Manage<svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3v18h18M8 17V9M13 17V5M18 17v-3"></path></svg>Reports</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M2 14h4M10 8h4M18 16h4"></path></svg>Settings</a>
+<a href="#" class="me"><span class="av">DB</span><span class="col grow"><span class="w6 s13 ell">Dana Brooks</span><span class="s12 t3">Owner</span></span><svg class="ic ic-s t3" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 15l5 5 5-5M7 9l5-5 5 5"></path></svg></a>
+</nav>
+
+<div class="work">
+<header class="top" style="position: relative">
+<button type="button" class="find"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11a7 7 0 1 0 14 0a7 7 0 1 0-14 0M21 21l-4.3-4.3"></path></svg><span class="grow ell">Search members, pages or actions</span><span class="kbd">Ctrl K</span></button>
+<span class="grow"></span>
+<button type="button" class="btn btn-soft"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>New</button>
+<button type="button" class="ibtn" aria-label="6 items need attention"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 0 0 3.4 0"></path></svg><span class="pip">6</span></button>
+</header>
+
+<main class="page" style="position: relative">
+<div class="between wrap">
+<div class="col g6" style="flex: 1 1 360px; min-width: 0"><span class="eyebrow">Today</span><h1 class="h1">Classes</h1><span class="t2">A class pressed on the Calendar opens from the right, with who is booked on it.</span></div>
+</div>
+
+<div class="cap"><span class="num">1</span>A class that has not started: who is booked, the waitlist, Remove</div>
+<div class="side">
+<div class="under col g10">
+<span class="w6">16 – 22 Nov 2026</span>
+<div class="row" style="padding-left: 0"><span class="col grow"><span class="w6">Spin</span><span class="t3">Tue 24 Nov · 6:30 pm–7:15 pm</span></span></div>
+<div class="row" style="padding-left: 0"><span class="col grow"><span class="w6">HIIT</span><span class="t3">Tue 24 Nov · 6:00 pm–6:30 pm</span></span></div>
+</div>
+<aside class="sheet" aria-label="Spin on Tue 24 Nov">
+<div class="sheet-h" style="align-items: flex-start"><div class="col g4 grow cls-h" style="--edge: var(--blue); min-width: 0"><h2 class="h2">Spin</h2><span class="t2">Tue 24 Nov · 6:30 pm–7:15 pm</span><span class="t2">18 places · Dana Brooks</span><span class="t2">Online class · link added</span><a href="#" class="lk">https://zoom.us/j/84213</a></div><button type="button" class="ibtn" aria-label="Close this class"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"></path></svg></button></div>
+<div class="sheet-b" role="group" aria-label="Who is booked">
+<span class="label">Who is booked</span>
+<div class="col">
+<span class="w6">Booked · 12 of 18 places</span>
+<div class="bk"><div class="bk-top"><span class="col grow" style="min-width: 160px"><a href="#" class="lk">Sam Rivera</a><span class="t3">Gold Monthly</span></span><button type="button" class="btn btn-s btn-sm">Remove from class</button></div></div>
+<div class="bk"><div class="bk-top"><span class="col grow" style="min-width: 160px"><a href="#" class="lk">Maya Patel</a><span class="t3">10-class pack · 1 class used from this pack</span></span></div>
+<div class="inset col g8" role="group" aria-label="Remove Maya Patel from Spin?">
+<span class="w6">Remove Maya Patel from Spin?</span>
+<span class="t2">· Their place is cancelled. It is not counted as a late cancel.</span>
+<span class="t2">· The class goes back on their pack.</span>
+<span class="t2">· The free place goes to the waitlist, by your booking rules.</span>
+<span class="t2">· They stop seeing the link to this online class.</span>
+<span class="t2">· Nobody else in this class is changed.</span>
+<span class="t2">· The app doesn't tell them yet. Tell them yourself.</span>
+<div class="hrow g8 wrap"><button type="button" class="btn btn-d btn-sm">Yes, remove from class</button><button type="button" class="btn btn-q btn-sm">Keep them</button></div>
+</div></div>
+<div class="bk"><div class="bk-top"><span class="col grow" style="min-width: 160px"><a href="#" class="lk">Leela Menon</a><span class="t3">Gold Monthly</span></span><button type="button" class="btn btn-s btn-sm">Remove from class</button></div></div>
+<div class="bk"><div class="bk-top"><span class="col grow" style="min-width: 160px"><span>No name</span></span><button type="button" class="btn btn-s btn-sm">Remove from class</button></div></div>
+</div>
+<div class="col">
+<span class="w6">Waitlist · 2</span>
+<div class="bk"><div class="bk-top"><span class="t3">1.</span><span class="col grow" style="min-width: 140px"><a href="#" class="lk">Pooja Nair</a><span class="t3">Gold Monthly</span></span><button type="button" class="btn btn-s btn-sm">Remove from waitlist</button></div>
+<div class="inset col g8" role="group" aria-label="Remove from the waitlist"><span class="w6">Remove Pooja Nair from the waitlist of Spin?</span><span class="t2">· They leave the waitlist. Nobody else moves.</span><span class="t2">· Nobody else in this class is changed.</span><span class="t2">· The app doesn't tell them yet. Tell them yourself.</span><div class="hrow g8 wrap"><button type="button" class="btn btn-d btn-sm">Yes, remove from waitlist</button><button type="button" class="btn btn-q btn-sm">Keep them</button></div></div></div>
+<div class="bk"><div class="bk-top"><span class="t3">2.</span><span class="col grow" style="min-width: 140px"><a href="#" class="lk">Om Kulkarni</a><span class="t3">10-class pack</span></span><button type="button" class="btn btn-s btn-sm">Remove from waitlist</button></div></div>
+</div>
+<div class="col">
+<span class="w6">Cancelled late · 1</span>
+<div class="bk"><span class="col"><a href="#" class="lk">Ava Chen</a><span class="t3">Gold Monthly · Late cancel fee $10.00 · on their bills</span></span></div>
+</div>
+</div>
+<div class="sheet-f"><button type="button" class="btn btn-s">Edit</button><button type="button" class="btn btn-s">Change link</button><button type="button" class="btn btn-q">Cancel class</button></div>
+</aside>
+</div>
+
+<div class="cap">To a coach who is not a manager the list shows names only; where a pack may have paid, the Remove box reads: If a pack paid for this class, the class goes back on it.</div>
+
+<div class="cap"><span class="num">2</span>A class that has started: Came or No-show for each person</div>
+<div class="side">
+<div class="under col g10">
+<span class="w6">16 – 22 Nov 2026</span>
+<div class="row" style="padding-left: 0"><span class="col grow"><span class="w6">Yoga Flow</span><span class="t3">Fri 20 Nov · 6:30 am–7:30 am</span></span></div>
+</div>
+<aside class="sheet" aria-label="Yoga Flow on Fri 20 Nov">
+<div class="sheet-h" style="align-items: flex-start"><div class="col g4 grow cls-h" style="--edge: var(--purple); min-width: 0"><h2 class="h2">Yoga Flow</h2><span class="t2">Fri 20 Nov · 6:30 am–7:30 am</span><span class="t2">14 places · Kiran Das</span></div><button type="button" class="ibtn" aria-label="Close this class"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"></path></svg></button></div>
+<div class="sheet-b" role="group" aria-label="Who is booked">
+<span class="label">Who is booked</span>
+<div class="col">
+<span class="w6">Booked · 4 of 14 places</span>
+<span class="t3" style="padding: 4px 0 8px">Anyone who checks in from 1 hour before the class is marked Came. 15 minutes after it ends, everyone else is marked No-show, if check-in was in use at that time. You can change any of them here.</span>
+<div class="bk"><div class="bk-top"><span class="col grow" style="min-width: 150px"><a href="#" class="lk">Maya Brooks</a><span class="t3">Gold Monthly</span></span><span class="hrow g8 wrap" role="group" aria-label="Did Maya Brooks come?"><span class="tag tag-good">Came</span><button type="button" class="btn btn-s btn-sm">Change to no-show</button></span></div></div>
+<div class="bk"><div class="bk-top"><span class="col grow" style="min-width: 150px"><a href="#" class="lk">Priya Nair</a><span class="t3">Gold Monthly</span></span><span class="hrow g8 wrap" role="group" aria-label="Did Priya Nair come?"><span class="t2 w5">Not marked yet · No-show adds a one-time $10.00 fee</span><button type="button" class="btn btn-s btn-sm">Came</button><button type="button" class="btn btn-s btn-sm">No-show</button></span></div></div>
+<div class="bk"><div class="bk-top"><span class="col grow" style="min-width: 150px"><a href="#" class="lk">Marcus Hill</a><span class="t3">10-class pack · 1 class used from this pack · No-show fee $10.00 · on their bills</span></span><span class="hrow g8 wrap" role="group" aria-label="Did Marcus Hill come?"><span class="tag tag-warn">No-show</span><button type="button" class="btn btn-s btn-sm">Change to came</button></span></div><span class="t3">The class stays used on their pack.</span></div>
+<div class="bk"><div class="bk-top"><span class="col grow" style="min-width: 150px"><a href="#" class="lk">Sasha Novak</a><span class="t3">Gold Monthly · No-show fee $10.00 · paid before they were marked Came</span></span><span class="hrow g8 wrap"><span class="tag tag-good">Came</span><button type="button" class="btn btn-s btn-sm">Change to no-show</button></span></div></div>
+<span class="badline">We couldn't save that. Please try again.</span>
+</div>
+<span class="t3">This class has started, so its time, coach and places can't be changed.</span>
+</div>
+</aside>
+</div>
+
+<section class="box" aria-label="What the list says in its other cases">
+<div class="bh"><div class="col g4"><h2 class="h2">What the list says in its other cases</h2><span class="t3">Each where the list stands, under the class's name.</span></div></div>
+<div class="grid2" style="gap: 16px; padding: 0 20px 20px">
+<div class="inset col g6"><span class="hrow g8"><span class="col grow"><a href="#" class="lk">Leela Menon</a><span class="t3">Gold Monthly</span></span><span class="tag tag-good">Checked in</span></span><span class="t3">Before the class starts, somebody who checked in at the gym reads Checked in.</span></div>
+<div class="inset col g6"><span class="t2">Not marked yet · No-show may add a one-time $10.00 fee</span><span class="t3">What the class's coach reads: whose pack it would touch isn't theirs to read.</span><span class="t2">Not marked yet</span><span class="t3">Where the gym has no no-show fee.</span></div>
+<div class="inset col g6"><span class="t2">This is an online class, so the app marks nobody by itself. Mark each person Came or No-show here.</span></div>
+<div class="inset col g6"><span class="t3">A fee's other states, after its amount:</span><span class="t2">part refunded · refund pending · refunded · waived · paid</span><span class="t2">comes off once their payment page in the app closes, if nothing was paid</span><span class="t2">may have been paid in the app: check Square, then waive it on their page</span></div>
+<div class="inset col g6"><span class="t2">Nobody has booked this class yet.</span><span class="hrow g8 t2"><span class="dot"></span>Loading who is booked…</span></div>
+<div class="inset col g6"><span class="t2">Only this class's coach and staff who can change classes see who is booked.</span><span class="t2">We couldn't load who is booked.</span></div>
+<div class="inset col g6"><span class="badline">We couldn't remove them. Please try again.</span><span class="t3">Under the person, when a removal is refused.</span></div>
+<div class="inset col g6"><span class="t3">A name opens that person's page over the Calendar, for staff who may open it.</span></div>
+</div>
+</section>
+
+</main>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"look":{"editor":"enum","options":["Dark","Light"],"default":"Dark"},"$preview":{"width":1440,"height":3140}}'>
+class Component extends DCLogic {
+renderVals() {
+return { look: (this.props.look ?? 'Dark') === 'Light' ? 't-light' : '' };
+}
+}
+</script>
+</body>
+</html>
