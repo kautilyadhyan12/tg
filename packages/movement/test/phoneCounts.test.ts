@@ -80,6 +80,18 @@ describe("the worst thing: a phone that counts or speaks differently is never th
     expect(differences({ count: 0, reps: [] }, { count: 0, reps: [rep(0, 1000, "other", "chest up")] })).toEqual([]);
   });
 
+  it("an open case passes only while it differs exactly as written: one rep more, or the same again, is not as written", () => {
+    const written = { why: "a known case", differences: ["the laptop counts 3, the phone 2"] };
+    const first = countedTimes(squat, { label: kept.header.label, frames: kept.frames, sets: false, why: "" })[0];
+    if (first === undefined) throw new Error("no counted rep");
+    const dropped = judgePhone(squat, { ...entry, phoneOpen: written }, kept, asPhone(kept, withoutRep(kept.frames, first)), kept.sha256);
+    expect(dropped.why[0]).toBe("the laptop counts 3, the phone 2");
+    expect(asWritten({ ...dropped, why: ["the laptop counts 3, the phone 2"] })).toBe(true);
+    expect(asWritten({ ...dropped, why: ["the laptop counts 3, the phone 1"] })).toBe(false);
+    expect(asWritten({ ...dropped, why: [...written.differences, "the phone also says 9.0 s counted"] })).toBe(false);
+    expect(asWritten(judgePhone(squat, { ...entry, phoneOpen: written }, kept, asPhone(kept), kept.sha256))).toBe(false);
+  });
+
   it("no phone run is never the same, and the table does not hold while one video has none", () => {
     const none = judgePhone(squat, entry, kept, null, null);
     expect(none.verdict).toBe("no run");
