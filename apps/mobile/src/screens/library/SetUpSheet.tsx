@@ -114,9 +114,12 @@ export function SetUpSheet({ entry, plan, units, onChange, onAbout, onClose }: P
                 );
               })}
         </View>
-        <Button label={`About ${name}`} kind="link" onPress={onAbout} />
-        <Button label="Done" kind="plain" wide onPress={onClose} />
       </ScrollView>
+      {/* The foot stays whole under the sets, never half under the box's edge while they scroll. */}
+      <View style={styles.foot}>
+        <Button label="About" kind="link" icon="info" say={`About ${name}`} onPress={onAbout} />
+        <Button label="Done" kind="plain" style={styles.done} onPress={onClose} />
+      </View>
     </Sheet>
   );
 }
@@ -287,7 +290,7 @@ function WeightBox({ grams, units, press, can, onType }: { grams: number | null;
             {units === "imperial" ? "Enter a weight up to 2,204 lb." : "Enter a weight up to 1,000 kg."}
           </Txt>
         ) : (
-          <Button label={typing === null ? "Type a weight" : "Set weight"} kind="link" icon={typing === null ? "pen" : "check"} onPress={typing === null ? startTyping : finish} />
+          <Button label={typing === null ? "Type a weight" : "Set weight"} kind="link" icon={typing === null ? "pen" : "check"} style={styles.underPlate} onPress={typing === null ? startTyping : finish} />
         )}
       </View>
       <Round field="weight" by={1} say="weight" press={press} can={can} />
@@ -296,7 +299,7 @@ function WeightBox({ grams, units, press, can, onType }: { grams: number | null;
 }
 
 const styles = StyleSheet.create({
-  scroll: { flexGrow: 0 },
+  scroll: { flexGrow: 0, flexShrink: 1 },
   body: { gap: 12, paddingBottom: 4 },
   faint: { opacity: 0.3 },
   label: { fontFamily: fonts.bold, letterSpacing: 1.1, color: colours.timerWords },
@@ -326,6 +329,9 @@ const styles = StyleSheet.create({
   plateNumber: { position: "absolute", top: 13, left: 18, right: 18, textAlign: "center", fontFamily: fonts.bold, fontSize: 24, lineHeight: 28 },
   plateNoneWords: { fontSize: 15, letterSpacing: 1.5, top: 17 },
   centre: { textAlign: "center" },
+  underPlate: { alignSelf: "center" },
+  foot: { flexDirection: "row", alignItems: "center", gap: 12, marginTop: 10 },
+  done: { flex: 1 },
   plateInput: {
     position: "absolute",
     top: 8,
