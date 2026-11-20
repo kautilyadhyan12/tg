@@ -1,7 +1,7 @@
 import type { PhoneLibraryEntry } from "@app/shared";
 import { useEffect, useRef, useState } from "react";
 import { Animated, Pressable, ScrollView, StyleSheet, View } from "react-native";
-import Svg, { Circle } from "react-native-svg";
+import Svg, { Circle, Defs, LinearGradient, Stop } from "react-native-svg";
 import { Button } from "../../look/Button";
 import { colours, sizes, type ColourName } from "../../look/colours";
 import { useMotion } from "../../look/Motion";
@@ -9,7 +9,7 @@ import { Sheet } from "../../look/Sheet";
 import { fonts, Txt } from "../../look/Txt";
 import type { Plan } from "../../library/myWorkout";
 import { weightParts, type Units } from "../../library/records";
-import { canStep, changed, clockDigits, plateLook, restWords, targetWords, type Field } from "../../library/workoutSetup";
+import { canStep, changed, clockDigits, restWords, targetWords, type Field } from "../../library/workoutSetup";
 import { Led } from "./Records";
 
 // Setting up one exercise of My Workout (ROADMAP Stage 5 64a-i, Kd's drawing of 2026-11-20): the box from the bottom.
@@ -167,13 +167,12 @@ const HALO = 136;
 const MID = PLATE / 2;
 
 /** The weight of the picked set (or the first, for every set), the same for every exercise: a bumper plate in the
- *  standard colour of its weight (`plateLook`), lit from above, with its steel hub, the number on its rubber above the
- *  hub and the unit below, as a real plate is printed; black rubber reading "None" for no weight. It pops a little
- *  each time the weight changes, unless the phone asks for less motion. Always the same size, so the box never moves
- *  under a finger pressing + or −. */
+ *  app's own orange, light running deep as its main buttons (Kd: "orange type vibe better", after a red face and a
+ *  black one), with a soft orange glow, its steel hub, the number above the hub and the unit below, as a real plate
+ *  is printed; black rubber reading "NONE" for no weight. It pops a little each time the weight changes, unless the
+ *  phone asks for less motion. Always the same size, so the box never moves under a finger pressing + or −. */
 function WeightBox({ grams, units, press, can }: { grams: number | null; units: Units; press: Press; can: Can }) {
   const [n, unit] = grams === null ? ["None", ""] : weightParts(grams, units);
-  const { face, ink } = plateLook(grams, units);
   const motion = useMotion();
   const pop = useRef(new Animated.Value(1)).current;
   const first = useRef(true);
@@ -195,27 +194,32 @@ function WeightBox({ grams, units, press, can }: { grams: number | null; units: 
         </Txt>
         <View style={styles.halo}>
           <Svg width={HALO} height={HALO} style={StyleSheet.absoluteFill} accessible={false}>
-            <Circle cx={HALO / 2} cy={HALO / 2} r={HALO / 2 - 2} fill={colours[face]} fillOpacity={grams === null ? 0 : 0.1} />
-            <Circle cx={HALO / 2} cy={HALO / 2} r={HALO / 2 - 10} fill={colours[face]} fillOpacity={grams === null ? 0 : 0.14} />
+            <Circle cx={HALO / 2} cy={HALO / 2} r={HALO / 2 - 2} fill={colours.orange} fillOpacity={grams === null ? 0 : 0.08} />
+            <Circle cx={HALO / 2} cy={HALO / 2} r={HALO / 2 - 10} fill={colours.orange} fillOpacity={grams === null ? 0 : 0.12} />
           </Svg>
           <Animated.View style={[styles.plate, { transform: [{ scale: pop }] }]} testID="weight-plate">
             <Svg width={PLATE} height={PLATE} style={StyleSheet.absoluteFill} accessible={false}>
-              {/* The rubber, its lit top edge and its shaded foot. */}
-              <Circle cx={MID} cy={MID} r={MID - 1} fill={colours[face]} />
-              <Circle cx={MID} cy={MID + 3} r={MID - 4} fill="none" stroke={colours.plateSide} strokeWidth={5} strokeOpacity={0.55} />
-              <Circle cx={MID} cy={MID - 1} r={MID - 2.5} fill="none" stroke={colours.weightPlateRim} strokeWidth={2.5} strokeDasharray={`${String(Math.PI * (MID - 2.5))} 999`} strokeDashoffset={String(Math.PI * (MID - 2.5) * 1.5)} />
+              <Defs>
+                <LinearGradient id="plateFace" x1="0" y1="0" x2="0" y2="1">
+                  <Stop offset="0" stopColor={colours.orangeLight} />
+                  <Stop offset="1" stopColor={colours.orangeDeep} />
+                </LinearGradient>
+              </Defs>
+              {/* The rubber, lit from above; black for none. */}
+              <Circle cx={MID} cy={MID} r={MID - 1} fill={grams === null ? colours.weightPlate : "url(#plateFace)"} />
+              <Circle cx={MID} cy={MID} r={MID - 1} fill="none" stroke={colours.weightPlateRim} strokeWidth={1.5} />
               {/* The raised band a plate's lettering sits on. */}
               <Circle cx={MID} cy={MID} r={MID - 13} fill="none" stroke={colours.plateSide} strokeWidth={1.5} />
               {/* The steel hub and its hole. */}
-              <Circle cx={MID} cy={MID} r={15} fill={colours.barSleeve} stroke={colours.barCollar} strokeWidth={2} />
-              <Circle cx={MID} cy={MID} r={9.5} fill={colours.barCollar} />
-              <Circle cx={MID} cy={MID} r={6} fill={colours.timerFace} />
+              <Circle cx={MID} cy={MID} r={12} fill={colours.barSleeve} stroke={colours.barCollar} strokeWidth={2} />
+              <Circle cx={MID} cy={MID} r={7.5} fill={colours.barCollar} />
+              <Circle cx={MID} cy={MID} r={4.5} fill={colours.timerFace} />
             </Svg>
-            <Txt kind="big" colour={ink} numberOfLines={1} fit style={[styles.plateNumber, grams === null ? styles.plateNoneWords : null]}>
+            <Txt kind="big" colour={grams === null ? "textSoft" : "onOrange"} numberOfLines={1} fit style={[styles.plateNumber, grams === null ? styles.plateNoneWords : null]}>
               {grams === null ? "NONE" : n}
             </Txt>
             {grams === null ? null : (
-              <Txt kind="tiny" colour={ink} style={styles.plateUnit}>
+              <Txt kind="tiny" colour="onOrange" style={styles.plateUnit}>
                 {unit.toUpperCase()}
               </Txt>
             )}
@@ -255,8 +259,8 @@ const styles = StyleSheet.create({
   weightMiddle: { flex: 1, alignItems: "center", gap: 2 },
   halo: { width: HALO, height: HALO, alignItems: "center", justifyContent: "center" },
   plate: { width: PLATE, height: PLATE },
-  plateNumber: { position: "absolute", top: 17, left: 18, right: 18, textAlign: "center", fontFamily: fonts.bold, fontSize: 24, lineHeight: 28 },
-  plateNoneWords: { fontSize: 15, letterSpacing: 1.5, top: 22 },
+  plateNumber: { position: "absolute", top: 13, left: 18, right: 18, textAlign: "center", fontFamily: fonts.bold, fontSize: 24, lineHeight: 28 },
+  plateNoneWords: { fontSize: 15, letterSpacing: 1.5, top: 17 },
   plateUnit: { position: "absolute", bottom: 20, left: 0, right: 0, textAlign: "center", fontFamily: fonts.bold, letterSpacing: 1.5 },
   list: { borderRadius: 16, borderWidth: 1, borderColor: colours.timerEdge, backgroundColor: colours.timerFace, overflow: "hidden" },
   setLine: { flexDirection: "row", alignItems: "center", gap: 10, minHeight: sizes.press, paddingVertical: 8, paddingHorizontal: 12, borderLeftWidth: 3, borderLeftColor: "transparent" },

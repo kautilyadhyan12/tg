@@ -2530,8 +2530,10 @@ with a screen reader.
   its sets ("3 × 10 reps · 20 kg · rest 1:00", "4 sets · 10, 10, 10, 6 reps · 35 to 40 kg · rest 1:00"). Reorder puts
   up and down in place of ✕; Clear asks first and keeps the name; Add exercises opens the Library.
 - **Setting up one exercise** (`SetUpSheet.tsx`, rules `library/workoutSetup.ts`, table-tested): a box from the
-  bottom. The weight is a weight plate with its number on it, between − and +, the same for every exercise and offered
-  for every exercise, starting at "None" (Kd's click-through: *"weight needs to be a symbol tha can go with any
+  bottom. The weight is a bumper plate in the app's orange (light running deep, as its main buttons, with a soft orange
+  glow and a steel hub; the number above the hub, the unit below; a small pop when it changes; black rubber reading
+  "NONE" for no weight; Kd turned down a red face and a black one: *"orange type vibe better"*), between − and +, the
+  same for every exercise and offered for every exercise, starting at "None" (Kd's click-through: *"weight needs to be a symbol tha can go with any
   exercises for representing weight not a barbell"*); a barbell exercise's + from none gives the empty 20 kg bar. Sets
   (amber), reps or time (red) and the rest (green) on the LED wall timer, each with − and +. Under them the sets are always listed, "Every set" at the top: the
   line picked is what the controls change, and they always show its real numbers; a press on Every set gives every set
