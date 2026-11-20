@@ -5,6 +5,9 @@
 /** The weight a workout's calories are reckoned at when the person's own is not known. */
 export const KCAL_WEIGHT_UNKNOWN_KG = 70;
 
+/** The MET of a rest between sets, as the server reckons a saved workout's rests (64a-i's estimate uses it). */
+export const KCAL_REST_MET = 1.8;
+
 /** Whole calories a minute at the exercise's MET, and the weight they were reckoned at. */
 export function kcalPerMinute(met: number, weightKg: number | null): { kcal: number; weightKg: number; known: boolean } {
   const known = weightKg !== null && weightKg > 0;

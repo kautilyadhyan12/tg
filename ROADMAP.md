@@ -854,7 +854,13 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
     - 63c. [x] **Your records and Add to workout on the page** — merged 2026-11-20 (PR #605).
     - 63d. [ ] **Goals' exercise picker on the Library's list** (split from 63c, not built there; when, Kd's call): names and "measured in reps" from the Library, the goal check on the server reading the same list.
 64. **Build a workout, do it, and after it** (Stage 1's 6c; §13.6, §11.8's steps).
-    - 64a. [ ] **By hand and by timer** (after 61 and 63): sets, reps or time, weight, rest; one screen for the workout, kept on the phone at every step; the summary set by set; history. The heart rate from the monitor connected in 37f-i, shown during it and kept with it (Kd, 2026-11-12).
+    - 64a. **By hand and by timer** (after 61 and 63). Split 2026-11-20 by its terminal in six, each a terminal of its own.
+      - 64a-i. [ ] **Set up your workout**: each exercise's sets, reps or time, weight and rest in My Workout, its name, about how long and how many calories, Reorder, Clear.
+      - 64a-ii. [ ] **Do it**: Start workout opens one screen for the whole workout, the timer, rest, pause and stop, kept on the phone at every step, saved to the account.
+      - 64a-iii. [ ] **After it**: the summary set by set, calories, XP and level, streak, records, effort stars, meal ideas, stretches.
+      - 64a-iv. [ ] **Saved workouts**: save, list, load and delete (61c's routes), with a question first.
+      - 64a-v. [ ] **History**: the month, a day's workouts and one workout set by set (61b's routes).
+      - 64a-vi. [ ] **Heart rate and sounds**: the monitor of 37f-i during a workout and kept with it (Kd, 2026-11-12); the sounds at a rep, a set's end and the last 3 seconds.
     - 64b. [ ] **With the camera** (after 64a and item 53's screen): Camera or Count myself, picked every time.
 65. [ ] **Each exercise's Library page**, towards about 200 (§13.2; alongside, from 60): written and checked, never copied across from the old text; Kd's list of names. All camera rules are exercise folder 1's job 54.
 

@@ -151,7 +151,7 @@ export function LoadedBar({ side, extra }: { side: readonly PlateKg[]; extra: re
       });
     }
   }
-  const said = `A bar loaded with ${side.map(String).join(", ")} kilogram plates a side`;
+  const said = side.length === 0 ? "An empty 20 kilogram bar" : `A bar loaded with ${side.map(String).join(", ")} kilogram plates a side`;
   return (
     <View accessible accessibilityLabel={said} testID="loaded-bar">
       <Svg width="100%" height={BAR_H} viewBox={`0 0 ${String(BAR_W)} ${String(BAR_H)}`}>
@@ -180,9 +180,9 @@ export function LoadedBar({ side, extra }: { side: readonly PlateKg[]; extra: re
   );
 }
 
-const DIGITS: Readonly<Record<string, string>> = { 0: "abcdef", 1: "bc", 2: "abdeg", 3: "abcdg", 4: "bcfg", 5: "acdfg", 6: "acdefg", 7: "abc", 8: "abcdefg", 9: "abcdfg" };
+const DIGITS: Readonly<Record<string, string>> = { 0: "abcdef", 1: "bc", 2: "abdeg", 3: "abcdg", 4: "bcfg", 5: "acdfg", 6: "acdefg", 7: "abc", 8: "abcdefg", 9: "abcdfg", "-": "g" };
 
-/** Digits as an LED wall timer lights them, seven segments each, the unlit ones faintly there. Digits, ":" and ".". */
+/** Digits as an LED wall timer lights them, seven segments each, the unlit ones faintly there. Digits, "-", ":" and ".". */
 export function Led({ text, colour, height }: { text: string; colour: ColourName; height: number }) {
   const w = height * 0.52;
   const t = Math.max(3, height * 0.12);

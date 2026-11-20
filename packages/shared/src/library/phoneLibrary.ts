@@ -22,6 +22,11 @@ export const phoneLibraryEntrySchema = z.object({
   equipment: z.array(word).max(10),
   set: z.object({
     measuredIn: word,
+    /** Whether a set takes a weight ("never" · "may" · "usually"); a word the phone does not know is kept, and
+     *  only "never" leaves the weight out of setting up a set (64a-i). */
+    weight: word.optional().catch(undefined),
+    /** Whether a set is done for each side; one that cannot be read is "no". */
+    eachSide: z.boolean().catch(false).default(false),
     start: z.object({
       sets: z.number().int().min(1).max(50),
       reps: z.number().int().min(1).max(1000).optional(),

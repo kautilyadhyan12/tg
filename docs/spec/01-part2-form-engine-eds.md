@@ -2516,6 +2516,30 @@ with a screen reader.
   (`my-workout-<id>.json`), removed with the account; at most 50. Start workout reads "Coming soon" until 64a.
 - **Not in 63c:** Goals' exercise picker on this list (its job is Kd's to place).
 
+**As built in 64a-i (2026-11-20, Kd's drawing of that day).** My Workout is now set up before it is done:
+- **Kept on the phone** in the same file (`my-workout-<id>.json`, removed with the account), now `{ v: 2, name, items }`:
+  each exercise in order with its plan (its unit and its sets, each a target, a weight in grams or none, and the rest
+  after it), checked by `plannedExerciseSchema` and at most 10 sets. An exercise nobody has changed keeps no plan and
+  shows the Library's starting numbers (its sets of its reps or time, no weight, 60 s of rest). 63c's `{ v: 1, ids }`
+  is read as exercises on those numbers, so the update loses nobody's list; a plan that cannot be read leaves its
+  exercise on them.
+- **The page:** the workout's name over the picture (typed in place, 60 characters, "Name this workout" until named),
+  and under it "3 exercises · about 14 min · about 95 kcal": a rep at 3 s, a set "each side" twice, every rest counted,
+  calories as a saved workout's (MET × kg × hours, rests at 1.8, `KCAL_REST_MET` held to the server's by a test), at
+  70 kg where no weight is known, none until the weight is heard or where one exercise's MET is not known. Each row says
+  its sets ("3 × 10 reps · 20 kg · rest 1:00", "4 sets · 10, 10, 10, 6 reps · 35 to 40 kg · rest 1:00"). Reorder puts
+  up and down in place of ✕; Clear asks first and keeps the name; Add exercises opens the Library.
+- **Setting up one exercise** (`SetUpSheet.tsx`, rules `library/workoutSetup.ts`, table-tested): a box from the
+  bottom. A barbell's weight in kilograms is the loaded bar of 63c (from the empty 20 kg bar, 2.5 kg a press, the
+  number alone where plates cannot make it); sets (amber), reps or time (red), any other weight (blue) and the rest
+  (green) on the LED wall timer, each with − and +. Every set changes together, each by its own step; Change one set
+  lists the sets and changes the one tapped. Time goes 5 s a press under a minute, 15 s to five minutes, 30 s past it,
+  from 5 s to an hour; reps 1 to 1,000; rest 15 s a press, to 10 minutes; a weight 2.5 kg or 5 lb a press (a barbell
+  in pounds from 45 lb), up to 1,000 kg; sets 1 to 10, a new one a copy of the last. An exercise whose file says
+  "never" takes no weight; a weight word the phone does not know is offered. About opens the exercise's page.
+- **The phone's reading of an exercise** now keeps `set.weight` and `set.eachSide` (`phoneLibraryEntrySchema`).
+- **Not in 64a-i:** Start workout reads "Coming soon" until 64a-ii; saving it as a saved workout is 64a-iv.
+
 ### 13.7 The jobs (ROADMAP Stage 5, exercise folder 2; ROADMAP wins where they differ)
 
 | Job | What it builds | Waits for |
