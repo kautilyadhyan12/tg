@@ -1935,13 +1935,23 @@ compared. A phone file is judged only when it is the phone's reading, from the c
 of the kept file's very frames; anything else is refused, and a video with no phone run never passes (`phone-counts` prints the
 table). The coach's lines are compared once 52b and 53 make them. **Measured:** 74 of 78 the same: the 13 squat videos with a
 count by eye count 35 of 35 on the phone as on the laptop, every other movement counts 0 on both, the push press's open case
-counts 3 on both. **Open, in plain sight** (`phoneOpen`): on three other movements (a barbell Romanian deadlift, a dumbbell
-step-up, a kettlebell deadlift) both count 0 and call nothing short, but one side's model lost the feet in one dip, which the
-engine marks unseen before it finds the dip is another movement, while the other side reads it as another movement, silent:
-whether such a dip says anything on the screen, and which is decided first, is 52b's. On `sumo_squat_1`, reported and never
-judged (a card hides him at 0.33 s), he goes from rep to rep with almost no pause at the top: both readings put his hips within
-0.01 of a leg of each other for 5 s, the phone's reads him standing still at 1.97 s and counts one sumo squat, the laptop's not
-until 5.8 s and counts none: a squat twin's rep at the edge of standing still, for 54, never another movement counted.
+counts 3 on both. **Open, in plain sight** (`phoneOpen`, each with the judge's exact words for it: any other difference fails
+the table). On three other movements both count 0 and call nothing short, but one side marks one dip "the camera could not see
+the feet" (its feet's rule reads nothing) where the other says nothing: on a barbell Romanian deadlift and a dumbbell step-up
+the laptop finds no dip at all and the phone finds one (the deadlift's in its last five frames as he leaves the picture, its hips
+and knees 54° apart where the rule is 34°; the step-up's as he steps onto the box, the knees straight at 174°, a dip that never
+tried, the foot points seen as well as the laptop's); on a kettlebell deadlift the laptop marks its dip so (hips and knees 79°
+apart) and the phone reads a shorter dip there as another movement, silent. Each dip's seen readings already make it another
+movement or a dip that never tried: whether such a dip is called unseen at all, and whether an unseen dip says anything on the
+screen, is the reason for a rep not counted (52b). On `sumo_squat_1`, reported and never judged (a card hides him at 0.33 s), he
+goes from rep to rep with almost no pause at the top: the hips' height above the floor lies within 0.01 of a leg on both
+readings in 144 of 148 frames of his first 5 s (0.017 at most); the phone's reads him standing still at 1.97 s and counts one
+sumo squat (2.1 to 3.0 s), the laptop's not until 5.8 s and counts none: a squat twin's rep at the edge of standing still, for
+54, never another movement counted. Every time here is the video's own. **Kept only as the phone's reading of those very
+pictures** (`phoneKeep.ts`, after round one): the pinned model asked for one person with the laptop's settings, the set-up its
+name says, the laptop's pictures at the kept file's size, the plan its folder kept and the pictures that plan gave; and
+`test/phone-points/manifest.json` names, for each file, the kept file it was read against, so a proof video measured again is
+refused, never judged against a phone run of its old pictures.
 
 An exercise that does not pass is published as "count by hand", never with a wrong camera
 count. Kd tries one exercise of each kind of movement on the phone, about a dozen, never

@@ -20,7 +20,7 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { PHONE_TEST_DELEGATES, PHONE_TEST_MAX_THREADS, phoneProgressSchema, videoFramesSchema, type MovementFrame, type PhoneProgress, type PhoneTestDelegate, type VideoFrames } from "@app/shared";
+import { PHONE_TEST_DELEGATES, PHONE_TEST_MAX_THREADS, measurePointsRecordSchema, phoneProgressSchema, videoFramesSchema, type MovementFrame, type PhoneProgress, type PhoneTestDelegate, type VideoFrames } from "@app/shared";
 import { decodeBodyPoints, type BodyPoints } from "./bodyPoints.js";
 import { KEPT_MODEL } from "./keptVideos.js";
 import { KD_VIDEOS, assertFolderStaysOutOfGit } from "./outFolder.js";
@@ -144,10 +144,10 @@ function videoOf(label: string): string {
   // was cut from one); otherwise a video named by its label in Kd's reference folder.
   const record = join(REPO, "measured", label, ".measure-points.json");
   if (existsSync(record)) {
-    const written: unknown = JSON.parse(readFileSync(record, "utf8"));
-    const source = typeof written === "object" && written !== null && "source" in written ? written.source : undefined;
-    if (typeof source === "string" && existsSync(source)) return source;
-    fail(`${label} was measured from ${String(source)}, which is not on the laptop now.`);
+    const written = measurePointsRecordSchema.safeParse(JSON.parse(readFileSync(record, "utf8")));
+    if (!written.success) fail(`${record} is not what measure-points writes: ${written.error.message}`);
+    if (existsSync(written.data.source)) return written.data.source;
+    fail(`${label} was measured from ${written.data.source}, which is not on the laptop now.`);
   }
   const folder = values.videos;
   const found = existsSync(folder)

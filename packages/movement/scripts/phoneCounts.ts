@@ -17,11 +17,11 @@
 // table is all the same only when every video has a judged phone run and each is the same.
 import { existsSync, readFileSync } from "node:fs";
 import { basename, join } from "node:path";
-import type { Movement } from "@app/shared";
+import { phonePointsManifestSchema, type Movement, type PhonePointsManifest } from "@app/shared";
 import type { RepResult } from "../src/index.js";
 import { KEPT_MODEL } from "./keptVideos.js";
 import { readKept, type KeptFile, type Video } from "./bodyCheck.js";
-import { runMovement, type Run } from "./movementCheck.js";
+import { LEAD_IN, runMovement, type Run } from "./movementCheck.js";
 import { MOVEMENT_VIDEOS, type MovementVideo } from "./movementVideos.js";
 import { PHONE_GAPS, phoneLabel } from "./replays.js";
 
@@ -39,10 +39,13 @@ export function phoneFileOf(entry: MovementVideo, run: string = CHOSEN_RUN): str
 }
 
 /** Why a phone file cannot be judged against the kept file, or null when it can: it must be the phone's reading, from the
- *  chosen set-up, under the kept file's own phone label, of the very frames the kept file holds. */
-export function refusal(kept: KeptFile, phone: KeptFile, run: string = CHOSEN_RUN): string | null {
+ *  chosen set-up, under the kept file's own phone label, of the very frames the kept file holds, and read against this
+ *  very kept file (`madeFrom`: the kept file's check number the manifest wrote for it; null when none was written). */
+export function refusal(kept: KeptFile, phone: KeptFile, madeFrom: string | null, run: string = CHOSEN_RUN): string | null {
   const h = phone.header;
   if (h.source !== "phone") return "it is not the phone's reading";
+  if (madeFrom === null) return "the manifest names no kept file it was read against";
+  if (madeFrom !== kept.sha256) return "it was read against another kept file: the video was measured again since";
   if (h.label !== phoneLabel(kept.header.label, run)) return `it is labelled ${h.label}, not ${phoneLabel(kept.header.label, run)}: another video or another set-up`;
   if (h.model.file !== KEPT_MODEL.file || h.model.people !== KEPT_MODEL.people) return "it is not the phone's own model asked for one person";
   if (h.fps !== kept.header.fps || h.picture.width !== kept.header.picture.width || h.picture.height !== kept.header.picture.height) {
@@ -57,7 +60,8 @@ export function refusal(kept: KeptFile, phone: KeptFile, run: string = CHOSEN_RU
 /** What a rep says on the screen: every rep but another movement's dip, which says nothing. */
 export const says = (r: RepResult): boolean => r.verdict !== "other";
 
-const repWords = (r: RepResult): string => `${(r.start / 1000).toFixed(1)} s ${r.verdict}${r.rule === null ? "" : ` (${r.rule})`}`;
+/** A rep in words, at its time in the video (a run holds a lead-in first). */
+const repWords = (r: RepResult): string => `${((r.start - LEAD_IN) / 1000).toFixed(1)} s ${r.verdict}${r.rule === null ? "" : ` (${r.rule})`}`;
 const overlap = (a: RepResult, b: RepResult): boolean => a.start < b.end && b.start < a.end;
 
 /** What differs between the laptop's run and the phone's, in words; empty when a person would be told the same. */
@@ -93,11 +97,11 @@ export interface PhoneRow {
 const asVideo = (file: KeptFile): Video => ({ label: file.header.label, frames: file.frames, sets: false, why: "judged, never setting a number" });
 
 /** One proof video: the laptop's kept file against the phone's file (null: none was kept). */
-export function judgePhone(movement: Movement, entry: MovementVideo, kept: KeptFile, phone: KeptFile | null, run: string = CHOSEN_RUN): PhoneRow {
+export function judgePhone(movement: Movement, entry: MovementVideo, kept: KeptFile, phone: KeptFile | null, madeFrom: string | null, run: string = CHOSEN_RUN): PhoneRow {
   const laptop = runMovement(movement, asVideo(kept));
   const label = kept.header.label;
   if (phone === null) return { label, entry, verdict: "no run", why: ["the phone has not run this video"], laptop, phone: null };
-  const refused = refusal(kept, phone, run);
+  const refused = refusal(kept, phone, madeFrom, run);
   if (refused !== null) return { label, entry, verdict: "refused", why: [refused], laptop, phone: null };
   const phoneRun = runMovement(movement, asVideo(phone));
   const diff = differences(laptop, phoneRun);
@@ -106,14 +110,25 @@ export function judgePhone(movement: Movement, entry: MovementVideo, kept: KeptF
 
 const readFile = (path: string): KeptFile => readKept(new Uint8Array(readFileSync(path)));
 
+/** test/phone-points/manifest.json, read through its schema; empty when there is none. */
+export function readManifest(): PhonePointsManifest {
+  const path = join(TEST, "phone-points", "manifest.json");
+  return existsSync(path) ? phonePointsManifestSchema.parse(JSON.parse(readFileSync(path, "utf8"))) : { files: {} };
+}
+
 /** Every proof video, the laptop against the phone's kept run of it. */
 export function phoneTable(movement: Movement, entries: readonly MovementVideo[] = MOVEMENT_VIDEOS, run: string = CHOSEN_RUN): PhoneRow[] {
+  const manifest = readManifest();
   return entries.map((entry) => {
     const kept = readFile(join(TEST, `${entry.file}.bodypoints`));
     const path = phoneFileOf(entry, run);
-    return judgePhone(movement, entry, kept, existsSync(path) ? readFile(path) : null, run);
+    return judgePhone(movement, entry, kept, existsSync(path) ? readFile(path) : null, manifest.files[basename(path)]?.kept ?? null, run);
   });
 }
+
+/** A known open case that differs exactly as its note says, no more and no less. */
+export const asWritten = (r: PhoneRow): boolean =>
+  r.verdict === "differs" && r.entry.phoneOpen !== undefined && JSON.stringify(r.why) === JSON.stringify(r.entry.phoneOpen.differences);
 
 /** The table holds only when every video has a judged phone run and each is the same. */
 export const allSame = (rows: readonly PhoneRow[]): boolean => rows.length > 0 && rows.every((r) => r.verdict === "same");
