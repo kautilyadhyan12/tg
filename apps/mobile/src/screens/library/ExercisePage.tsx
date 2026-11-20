@@ -173,6 +173,7 @@ function AddToWorkout({ id, mine, onOpenMine }: { id: string; mine: { list: read
         label={added ? "Added to workout" : "Add to workout"}
         icon={added ? "check" : "plus"}
         kind={added ? "soft" : "main"}
+        wide
         say={added ? "Added to workout. Press to take it out" : "Add to workout"}
         onPress={() => {
           if (added) mine.remove(id);

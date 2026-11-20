@@ -598,7 +598,7 @@ describe("your records, calories and My Workout on an exercise's page (63c)", ()
     await fireEvent.press(screen.getByRole("button", { name: "Add to workout" }));
     await fireEvent.press(await screen.findByRole("button", { name: "Open My Workout" }));
     expect(await screen.findByRole("button", { name: "My Workout, 1" })).toBeTruthy();
-    expect(screen.getByText("1 exercise")).toBeTruthy();
+    expect(screen.getByText("1 Exercise")).toBeTruthy();
     expect(screen.getByText("3 × 10 reps · Barbell")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Start workout" }).props.accessibilityState).toMatchObject({ disabled: true });
     await fireEvent.press(screen.getByRole("button", { name: "Remove Barbell Curl" }));

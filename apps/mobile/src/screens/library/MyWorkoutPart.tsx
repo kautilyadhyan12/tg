@@ -35,7 +35,7 @@ export function MyWorkoutPart({ parts, units, onBrowse, file }: { parts: ReactNo
       eyebrow="My Workout"
       foot={
         <Txt kind="hero" numberOfLines={1}>
-          {list.length === 0 ? "My Workout" : `${String(list.length)} ${list.length === 1 ? "Exercise" : "Exercises"}`}
+          {`${String(list.length)} ${list.length === 1 ? "Exercise" : "Exercises"}`}
         </Txt>
       }
     />
@@ -52,7 +52,6 @@ export function MyWorkoutPart({ parts, units, onBrowse, file }: { parts: ReactNo
         </Card>
       ) : (
         <>
-          <Txt kind="small" colour="textFaint">{`${String(list.length)} ${list.length === 1 ? "exercise" : "exercises"}`}</Txt>
           <View style={styles.rows}>
             {list.map((id) => (
               <Row
@@ -69,7 +68,7 @@ export function MyWorkoutPart({ parts, units, onBrowse, file }: { parts: ReactNo
             ))}
           </View>
           <View style={styles.start}>
-            <Button label="Start workout" disabled onPress={() => undefined} />
+            <Button label="Start workout" wide disabled onPress={() => undefined} />
             <Txt kind="small" style={styles.centre}>
               {COMING_SOON}
             </Txt>
