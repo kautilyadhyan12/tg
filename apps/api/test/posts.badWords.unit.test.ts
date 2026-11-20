@@ -225,17 +225,28 @@ describe("the bad-words check", () => {
   });
 
   it("reads the longest post a member can send, in its worst shapes, without holding the server", () => {
-    const shapes = ["ki" + "l".repeat(1998), "fuck".repeat(500), "ⓕⓤⓒⓚ".repeat(500), "to" + "s".repeat(1998), "a b ".repeat(500), "Words of a post. ".repeat(118).slice(0, 2000)];
+    const ordinary = "Words of a post. ".repeat(118).slice(0, 2000);
+    const shapes = ["ki" + "l".repeat(1998), "fuck".repeat(500), "ⓕⓤⓒⓚ".repeat(500), "to" + "s".repeat(1998), "a b ".repeat(500)];
+    const time = (text: string): number => {
+      const started = performance.now();
+      badWordsIn(text);
+      return performance.now() - started;
+    };
     for (const shape of shapes) {
-      // The quickest of five, so a pause in the test runner is not read as the check's cost.
-      // Measured at 0.4 to 3 ms; a pattern that reads a run twice took 19 to 58 ms.
+      // Each worst shape is timed beside an ordinary post of the same length, run for run, and the quickest of seven
+      // of each is kept: a busy machine slows both alike, so only the shape's own cost is judged (on GitHub, under
+      // load, the quickest of the plain timing took 126 and 183 ms where this laptop takes 2 to 3). Measured here:
+      // an ordinary post 0.8 ms, the worst shapes 0.4 to 3 ms (at most about four times it); a pattern that reads a
+      // run twice took 19 to 58 ms, 25 to 70 times it. So a shape is too slow past 15 times the ordinary post, and
+      // never judged under 15 ms, where a timer's own noise lies.
       let quickest = Infinity;
-      for (let run = 0; run < 5; run++) {
-        const started = performance.now();
-        badWordsIn(shape);
-        quickest = Math.min(quickest, performance.now() - started);
+      let plainQuickest = Infinity;
+      for (let run = 0; run < 7; run++) {
+        plainQuickest = Math.min(plainQuickest, time(ordinary));
+        quickest = Math.min(quickest, time(shape));
       }
-      expect({ shape: shape.slice(0, 12), quick: quickest < 15 }).toEqual({ shape: shape.slice(0, 12), quick: true });
+      const quick = quickest < Math.max(15, 15 * plainQuickest);
+      expect({ shape: shape.slice(0, 12), quick }).toEqual({ shape: shape.slice(0, 12), quick: true });
     }
     expect(hasBadWords("fuck".repeat(500))).toBe(true);
     expect(hasBadWords("ki" + "l".repeat(1998))).toBe(false);
