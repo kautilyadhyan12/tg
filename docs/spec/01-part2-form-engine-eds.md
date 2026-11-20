@@ -2412,6 +2412,30 @@ items 36 and 24b take as it is):
   type ("quads", "core").
 - **Not in 63a:** the filter button and "Find by muscle" (63b); records, calories a minute and Add to workout (63c).
 
+**As built in 63b (2026-11-19, Kd's second drawing after his click-through).** Two screens, each from its own place on
+the Library. **Find by muscle** (`FindByMuscle.tsx`; from the card, which shows the person's own figure front and back and
+hides while searching or while a filter other than the kind is on): the person's own figure fills the screen, Front or
+Back; two fingers zoom it about the fingers (up to four times), one finger moves it while zoomed, a double tap zooms in
+where it lands and back out, and Fit body puts it back (`src/library/stage.ts`). Every muscle can be tapped: a tap is read
+against each shape's outline (`muscleAt` in `figure.ts`), never by the shape's own press, so a double tap or a moving
+finger picks nothing. One tap picks that exact muscle (the vastus lateralis, not the whole quadriceps; a deep muscle
+belongs to the drawn one over it) and the same tap lets it go. Underneath, at once: the group's name over the muscle's
+own (`muscleFamily`, `muscleTitle` in `words.ts`: "Quadriceps" over "Vastus lateralis"), how many exercises, and each as a
+row (Primary or Secondary, level, starting target) that opens its page over the body; a muscle no exercise works says "No
+exercises for this muscle yet." Show in Library puts it on the Library as a tag. **Filters** (`Filters.tsx`; from the
+filter button): Muscle as one row that opens the same body ("Use this muscle"; its rows there are lines, not buttons), then
+Equipment (No equipment first), Level, How it is counted and Kind as chips, only the values the Library holds, each with
+its count; a choice already on is always shown, lit, even where the search has taken its exercises away (its count 0),
+so it can be let go. Two choices in one group mean either, choices in different groups mean both, and a choice's count is
+the exercises that have it with every other group's choices kept (`src/library/filters.ts`, table-tested). The counts are
+taken within the search, so "Show 2 exercises" opens exactly two. Muscles are those an exercise works (main and also), never the
+steadying row. Changes show on the Library only by Show; the ✕ leaves it as it was. On the Library each choice is a tag
+with ×, and Clear all; the kind chips and Kind are one choice (a chip picks its kind alone, and a lit chip lets it go).
+Where the search finds exercises that the filters hide, the Library says "No exercises match these filters", never that
+nothing matches the word. The body screen is a window of its own on Android, so it
+has its own gesture root. Until the setup answer is known there is no figure, so no Muscle row. Not yet: picking a muscle
+with a screen reader.
+
 ### 13.7 The jobs (ROADMAP Stage 5, exercise folder 2; ROADMAP wins where they differ)
 
 | Job | What it builds | Waits for |

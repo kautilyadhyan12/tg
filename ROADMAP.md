@@ -504,7 +504,12 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
      - V1-e-i. [x] **Pages, actions and settings** · merged 2026-11-18 · PR #584
      - V1-e-ii. [x] **People** · merged 2026-11-19 · PR #589
    - V1-f. [x] **Payments overview** · merged 2026-11-19 · PR #594
-   - V0-d. [ ] **The boards not drawn yet, in the third look**: Sell, Memberships, Attendance, Classes, Leads, Reports, Settings and the four ways a box opens, from `kit3.css`, every button of the real page kept. No code; in parts if it is too big for one terminal.
+   - V0-d. **The boards not drawn yet, in the third look**, from `kit3.css`, every button of the real page kept, each looked at in the 24 screen shapes (Kd, 2026-11-19). No code. In three (2026-11-19):
+     - V0-d-i. [x] **The four ways a box opens, Sell and Memberships** · merged 2026-11-19 · PR #597
+     - V0-d-ii. **Attendance, Classes and Leads**, in two (2026-11-20):
+       - V0-d-ii-a. [ ] **Attendance, the front desk, Leads and At risk**.
+       - V0-d-ii-b. [ ] **Classes and personal training**.
+     - V0-d-iii. [ ] **Reports and Settings**, the ten sections.
 23. **A gym finds its way** (Kd, RULINGS 2026-10-07: the console read as "a maze"). Each page was clear alone and the fault was between pages. Four jobs in this order, built in Folder A before 17e-ii.
    - 23a. **One answer for membership**, split 2026-10-07 in two (the list's read and Add member's form are more than one terminal):
      - 23a-i. [x] **The Members list shows what each person holds** — merged 2026-10-07 (PR #187).
@@ -840,7 +845,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
 62. [ ] **The clip line** (after 60): the generated clip made small, its still picture, and where clips are kept (Stage 4 item 4). Checking a clip against its exercise's rules waits for exercise folder 1's 52a and 52b.
 63. **The Exercise Library on the phone** (§13.6; after 60). Split 2026-11-19 by its terminal, after Kd's drawings, in three.
     - 63a. [x] **The Library and an exercise's page** — merged 2026-11-19 (PR #596).
-    - 63b. [ ] **Find exercises** (after 63a): the body you tap, equipment, level, how it is counted and kind, each with its count.
+    - 63b. [x] **Find exercises** — merged 2026-11-20 (PR #599).
     - 63c. [ ] **Your records and Add to workout on the page** (after 63a): records, calories a minute for the person's weight, Add to workout with My Workout's count, Goals' exercise picker on this list.
 64. **Build a workout, do it, and after it** (Stage 1's 6c; §13.6, §11.8's steps).
     - 64a. [ ] **By hand and by timer** (after 61 and 63): sets, reps or time, weight, rest; one screen for the workout, kept on the phone at every step; the summary set by set; history. The heart rate from the monitor connected in 37f-i, shown during it and kept with it (Kd, 2026-11-12).

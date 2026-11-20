@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Sell</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./kit3.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0;background:#0A0908}
+.cap{display:flex;align-items:center;gap:10px;font-weight:600;color:var(--t2)}
+.num{width:26px;height:26px;border-radius:999px;background:var(--o-fill);color:var(--o-t);box-shadow:inset 0 0 0 1px var(--o-line);display:grid;place-items:center;font-size:13px;font-weight:700;flex:none}
+.stage{background:var(--scrim);border-radius:18px;padding:32px 16px;display:flex;justify-content:center}
+.dlg{background:var(--solid);border:1px solid var(--line2);border-radius:20px;box-shadow:var(--pop);width:100%;max-width:500px;min-width:0}
+.side{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,440px);border:1px solid var(--line);border-radius:18px;overflow:hidden}
+.side > .under{padding:20px;opacity:.6;overflow:hidden;min-width:0}
+.side > .sheet{background:var(--solid);border-left:1px solid var(--line2);display:flex;flex-direction:column;min-width:0}
+.sheet-h{display:flex;align-items:center;gap:12px;padding:18px 20px;border-bottom:1px solid var(--line)}
+.sheet-b{padding:20px;display:flex;flex-direction:column;gap:18px}
+.sheet-f{margin-top:auto;display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:14px 20px;border-top:1px solid var(--line)}
+.opt{display:flex;gap:12px;align-items:flex-start;padding:14px 16px;border-radius:14px;border:1px solid var(--line2)}
+.opt-on{border-color:var(--o);background:var(--o-fill)}
+.radio{width:18px;height:18px;border-radius:999px;border:1.5px solid var(--line2);flex:none;margin-top:1px}
+.radio-on{border:5px solid var(--o)}
+.check-on{background:var(--o);border-color:var(--o);position:relative}
+.check-on::after{content:"";position:absolute;left:5px;top:1px;width:5px;height:10px;border:solid var(--on-o);border-width:0 2px 2px 0;transform:rotate(45deg)}
+.sw{width:40px;height:24px;border-radius:999px;background:var(--bar);position:relative;flex:none}
+.sw::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:999px;background:var(--t3)}
+.sw-on{background:var(--o)}.sw-on::after{left:19px;background:var(--on-o)}
+.step{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,340px);gap:20px;align-items:start}
+.menu{background:var(--solid);border:1px solid var(--line2);border-radius:16px;box-shadow:var(--pop);padding:6px;min-width:0;max-width:320px}
+.mi{display:flex;gap:12px;align-items:flex-start;padding:10px 12px;border-radius:10px}
+.ptile{display:flex;flex-direction:column;gap:4px;padding:14px;border-radius:14px;border:1px solid var(--line2);min-width:0}
+.ptile-on{border-color:var(--o);background:var(--o-fill)}
+.pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.qty{display:inline-flex;align-items:center;border:1px solid var(--line2);border-radius:999px;height:40px}
+.qty > button{width:40px;height:40px;display:grid;place-items:center;color:var(--t2)}
+.money{font-weight:600;white-space:nowrap}
+.frames{display:flex;flex-wrap:wrap;gap:40px;padding:40px;align-items:flex-start}
+.frame{width:390px;max-width:100%;border:1px solid var(--line2);border-radius:28px;overflow:hidden;background:var(--page);display:flex;flex-direction:column;position:relative}
+.bsheet{background:var(--solid);border-top:1px solid var(--line2);border-radius:22px 22px 0 0;box-shadow:var(--pop);display:flex;flex-direction:column}
+.grab{width:40px;height:5px;border-radius:999px;background:var(--line2);margin:10px auto 4px}
+.savebar{position:sticky;bottom:12px;z-index:2;display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 16px;background:var(--solid);border:1px solid var(--line2);border-radius:18px}
+.footbar{position:sticky;bottom:0;padding:12px 16px 16px;border-top:1px solid var(--line);background:var(--solid);display:flex;flex-direction:column;gap:8px}
+@media (max-width:1180px){.side{grid-template-columns:minmax(0,1fr)}.side > .under{display:none}.side > .sheet{border-left:0}}
+@media (max-width:900px){.step{grid-template-columns:minmax(0,1fr)}.frames{padding:16px;gap:24px}}
+@media (pointer:coarse){.qty,.qty > button{height:44px}.qty > button{width:44px}}
+.till{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,420px);gap:20px;align-items:start}.left{display:flex;flex-direction:column;gap:20px;min-width:0}.sale{display:flex;flex-direction:column;position:sticky;top:12px;max-height:max(480px,calc(100vh - 104px));overflow:hidden}.sale-b{flex:1 1 auto;min-height:0;overflow-y:auto}.sale-f{flex:none;background:var(--solid);border-top:1px solid var(--line2);border-radius:0 0 18px 18px;padding:12px 20px 12px;display:flex;flex-direction:column;gap:6px}.sale-f .chip{justify-content:center}.line{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 0;border-top:1px solid var(--line)}@media (max-width:1100px){.till{grid-template-columns:minmax(0,1fr)}.sale{position:static;max-height:none}}
+</style>
+</helmet>
+<div class="app t-dark {{look}}" style="min-height: 100%">
+<div class="shell">
+
+<nav class="rail" aria-label="Menu">
+<a href="#" class="gym"><span class="logo"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18zM6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2M10 6h4M10 10h4M10 14h4M10 18h4"></path></svg></span><span class="col grow"><span class="w6 ell">Iron House</span><span class="s12 t3">Austin · Gym</span></span><svg class="ic ic-s t3" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 15l5 5 5-5M7 9l5-5 5 5"></path></svg></a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3h5a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM15 3h5a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM15 12h5a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1zM4 16h5a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1z"></path></svg>Overview<span class="n n-bad">6</span></a>
+<div class="grp">Today<svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 2h6a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1zM16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2M9 14l2 2 4-4"></path></svg>Attendance</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 7.5V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3.5M16 2v4M8 2v4M3 10h5M10 16a6 6 0 1 0 12 0a6 6 0 1 0-12 0M16 14v2.2l1.5 1.3"></path></svg>Classes</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 6.5l11 11M21 21l-1-1M3 3l1 1M18 22l4-4M2 6l4-4M3 10l7-7M14 21l7-7"></path></svg>Personal training</a>
+<div class="grp">People<svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M5 7a4 4 0 1 0 8 0a4 4 0 1 0-8 0M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"></path></svg>Members &amp; staff</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 7a4 4 0 1 0 8 0a4 4 0 1 0-8 0M10.3 15H7a4 4 0 0 0-4 4v2M14 17a3 3 0 1 0 6 0a3 3 0 1 0-6 0M21 21l-1.9-1.9"></path></svg>Leads<span class="n">5</span></a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 17l-8.5-8.5-5 5L2 7M16 17h6v-6"></path></svg>At risk<span class="n n-warn">2</span></a>
+<div class="grp">Money<svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6a2 2 0 0 1 2-2h12v4M3 6v12a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2H5a2 2 0 0 1-2-2zM17 14h.01"></path></svg>Payments overview</a>
+<a href="#" class="ni ni-on"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4zM3 6h18M16 10a4 4 0 0 1-8 0"></path></svg>Sell</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12.6 2.6A2 2 0 0 0 11.2 2H4a2 2 0 0 0-2 2v7.2a2 2 0 0 0 .6 1.4l8.7 8.7a2.4 2.4 0 0 0 3.4 0l6.6-6.6a2.4 2.4 0 0 0 0-3.4zM7 7.5h.01"></path></svg>Memberships</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2zM2 10h20"></path></svg>Failed payments<span class="n n-bad">3</span></a>
+<div class="grp">Community<svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l18-5v12L3 14zM11.6 16.8a3 3 0 1 1-5.8-1.6"></path></svg>Updates<span class="n n-warn">1</span></a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM16 2v4M8 2v4M3 10h18"></path></svg>Events</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 2h6a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1zM16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2M12 11h4M12 16h4M8 11h.01M8 16h.01"></path></svg>Fitness plans</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M8.2 10.2L5 3h14l-3.2 7.2M6 15a6 6 0 1 0 12 0a6 6 0 1 0-12 0"></path></svg>Challenges</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6M18 9h1.5a2.5 2.5 0 0 0 0-5H18M4 22h16M10 14.7V17c0 .6-.5 1-1 1.2-1.2.5-2 2-2 3.8M14 14.7V17c0 .6.5 1 1 1.2 1.2.5 2 2 2 3.8M18 2H6v7a6 6 0 0 0 12 0z"></path></svg>Leaderboard</a>
+<div class="grp">Manage<svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3v18h18M8 17V9M13 17V5M18 17v-3"></path></svg>Reports</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M2 14h4M10 8h4M18 16h4"></path></svg>Settings</a>
+<a href="#" class="me"><span class="av">DB</span><span class="col grow"><span class="w6 s13 ell">Dana Brooks</span><span class="s12 t3">Owner</span></span><svg class="ic ic-s t3" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 15l5 5 5-5M7 9l5-5 5 5"></path></svg></a>
+</nav>
+
+<div class="work">
+<header class="top" style="position: relative">
+<button type="button" class="find"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11a7 7 0 1 0 14 0a7 7 0 1 0-14 0M21 21l-4.3-4.3"></path></svg><span class="grow ell">Search members, pages or actions</span><span class="kbd">Ctrl K</span></button>
+<span class="grow"></span>
+<button type="button" class="btn btn-soft"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>New</button>
+<button type="button" class="ibtn" aria-label="6 items need attention"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 0 0 3.4 0"></path></svg><span class="pip">6</span></button>
+</header>
+
+<main class="page" style="position: relative">
+<div class="till">
+<div class="left">
+<div class="between wrap">
+<div class="col g6" style="flex: 1 1 360px; min-width: 0"><span class="eyebrow">Money</span><h1 class="h1">Sell</h1><span class="t2">Record what Iron House sells at the desk.</span></div>
+<div class="hrow g10 wrap"><button type="button" class="btn btn-s"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM16 2v4M8 2v4M3 10h18"></path></svg>View another day</button><button type="button" class="btn btn-s"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 3a4 4 0 1 0 0 8a4 4 0 1 0 0-8"></path></svg>Sell a membership</button></div>
+</div>
+
+<div class="tabs" role="tablist"><span class="tab tab-on">Register</span><span class="tab">Products<span class="n">6</span></span><span class="tab">Tax</span><span class="tab">Discounts</span></div>
+
+<section class="box" aria-label="Products">
+<div class="bh wrap"><div class="col g4" style="flex: 1 1 260px"><h2 class="h2">Products</h2><span class="t3">Press a product to add it to the sale.</span></div><a href="#" class="btn btn-q btn-sm"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>Add a product</a></div>
+<div class="col g16" style="padding: 0 20px 20px">
+<div class="input"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 4a7 7 0 1 0 0 14a7 7 0 1 0 0-14M21 21l-4.3-4.3"></path></svg><span class="t3 grow ell">Pick a product</span></div>
+<div class="pgrid">
+<button type="button" class="ptile ptile-on"><span class="w6 ell">Water bottle</span><span class="t2">$2.00 · 24 left</span><span class="tag tag-o" style="align-self: flex-start">2 in sale</span></button>
+<button type="button" class="ptile"><span class="w6 ell">Gym towel</span><span class="t2">$15.00</span></button>
+<button type="button" class="ptile"><span class="w6 ell">Protein bar</span><span class="t2">$4.00 · 50 left</span></button>
+<button type="button" class="ptile"><span class="w6 ell">Day pass</span><span class="t2">$100.00 · plus tax</span></button>
+<button type="button" class="ptile"><span class="w6 ell">Gloves</span><span class="t2">$65.00 · 3 left</span></button>
+<button type="button" class="ptile ptile-on"><span class="w6 ell">Shaker</span><span class="t2">$12.00</span><span class="tag tag-o" style="align-self: flex-start">1 in sale</span></button>
+</div>
+</div>
+</section>
+
+<div class="grid2" style="gap: 20px">
+<section class="box pad col g12" aria-label="Revenue today">
+<div class="between"><h2 class="h2">Revenue today</h2><span class="t3">Mon 16 Nov</span></div>
+<span class="big">$412.00</span><span class="t3">From 9 sales and 6 membership payments</span>
+<div class="col g10">
+<div class="col g6"><div class="between"><span class="t2">Card on Terminal</span><span class="money">$287.00</span></div><div class="track"><div class="fill" style="width: 70%"></div></div></div>
+<div class="col g6"><div class="between"><span class="t2">Cash</span><span class="money">$95.00</span></div><div class="track"><div class="fill" style="width: 23%"></div></div></div>
+<div class="col g6"><div class="between"><span class="t2">Card at the desk</span><span class="money">$30.00</span></div><div class="track"><div class="fill" style="width: 7%"></div></div></div>
+<div class="col g6"><div class="between"><span class="t2">Bank transfer</span><span class="money">$0.00</span></div><div class="track"><div class="fill" style="width: 0%"></div></div></div>
+</div>
+<span class="t3">Discounts took $6.00 off today's sales.</span>
+<button type="button" class="btn btn-s btn-sm" style="align-self: flex-start">View another day</button>
+</section>
+
+<section class="box pad col g12" aria-label="Sell a membership">
+<h2 class="h2">Sell a membership</h2>
+<span class="t2">Memberships are sold on the member's own page, where you pick the membership, a discount if there is one, and the payment method.</span>
+<div class="field"><span class="label">Who is it for?</span><div class="input"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 4a7 7 0 1 0 0 14a7 7 0 1 0 0-14M21 21l-4.3-4.3"></path></svg><span class="t3 grow ell">Find them by name or member number</span></div></div>
+<div class="inset hrow g12 wrap" style="padding: 10px 14px"><span class="av">SR</span><span class="col grow" style="min-width: 120px"><span class="w6">Sam Rivera</span><span class="t3">No. 1007</span></span><a href="#" class="c-o w6">Add a membership for Sam Rivera</a></div>
+</section>
+</div>
+
+<section class="box" aria-label="Today's sales">
+<div class="bh wrap"><div class="col g4"><h2 class="h2">Today's sales</h2><span class="t3">15 today · the newest first</span></div>
+<div class="hrow g8 wrap"><span class="chip chip-on">All · $412.00</span><span class="chip">Products · $167.00</span><span class="chip">Memberships · $245.00</span><span class="chip">Fees · $0.00</span></div></div>
+<div class="row wrap"><div class="col grow" style="min-width: 200px"><span class="w6">2 × Water bottle, 1 × Shaker</span><span class="t3">Maya Patel · Card on Terminal · 11:42 · by Dana Brooks</span></div><span class="money">$15.60</span><button type="button" class="btn btn-s btn-sm"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 2v20l3-2 3 2 3-2 3 2 3-2 3 2V2l-3 2-3-2-3 2-3-2-3 2zM8 8h8M8 12h8M8 16h5"></path></svg>Receipt</button><button type="button" class="ibtn" aria-label="More for this sale"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h.01M12 12h.01M19 12h.01"></path></svg></button></div>
+<div class="row wrap"><div class="col grow" style="min-width: 200px"><span class="w6">Gold Weekly (membership)</span><span class="t3">Sam Rivera · Card on Terminal · 11:18 · by Dana Brooks</span></div><span class="money">$25.00</span><a href="#" class="btn btn-q btn-sm">Open their page</a><button type="button" class="btn btn-s btn-sm"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 2v20l3-2 3 2 3-2 3 2 3-2 3 2V2l-3 2-3-2-3 2-3-2-3 2zM8 8h8M8 12h8M8 16h5"></path></svg>Receipt</button></div>
+<div class="row wrap"><div class="col grow" style="min-width: 200px"><span class="hrow g8 wrap"><span class="w6">1 × Gym towel</span><span class="tag tag-warn">Refund pending</span></span><span class="t3">Walk-in · Card on Terminal · 10:05 · by Dana Brooks</span></div><span class="money">$15.00</span><button type="button" class="btn btn-s btn-sm"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 2v20l3-2 3 2 3-2 3 2 3-2 3 2V2l-3 2-3-2-3 2-3-2-3 2zM8 8h8M8 12h8M8 16h5"></path></svg>Receipt</button><button type="button" class="ibtn" aria-label="More for this sale"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h.01M12 12h.01M19 12h.01"></path></svg></button></div>
+<div class="row wrap"><div class="col grow" style="min-width: 200px"><span class="hrow g8 wrap"><span class="w6 t3" style="text-decoration: line-through">1 × Protein bar</span><span class="tag tag-plain">Voided</span></span><span class="t3">Walk-in · Cash · 09:40 · by Dana Brooks</span></div><span class="money t3">$4.00</span><button type="button" class="btn btn-s btn-sm"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 2v20l3-2 3 2 3-2 3 2 3-2 3 2V2l-3 2-3-2-3 2-3-2-3 2zM8 8h8M8 12h8M8 16h5"></path></svg>Receipt</button></div>
+<div class="row wrap"><div class="col grow" style="min-width: 200px"><span class="w6">Off-peak Monthly (membership)</span><span class="t3">Ava Chen · Cash · 09:12 · by Dana Brooks</span></div><span class="money">$20.00</span><a href="#" class="btn btn-q btn-sm">Open their page</a><button type="button" class="btn btn-s btn-sm"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 2v20l3-2 3 2 3-2 3 2 3-2 3 2V2l-3 2-3-2-3 2-3-2-3 2zM8 8h8M8 12h8M8 16h5"></path></svg>Receipt</button></div>
+<div class="row wrap between"><span class="t3 grow" style="min-width: 220px">To void or refund a membership payment, or to void a fee, open the member's page.</span><button type="button" class="btn btn-q btn-sm">Show all 15</button></div>
+</section>
+</div>
+
+<section class="box sale" aria-label="New sale">
+<div class="sale-b">
+<div class="bh" style="padding-bottom: 6px"><h2 class="h2">New sale</h2></div>
+<div class="col" style="padding: 0 20px 12px">
+<div class="field" style="padding-bottom: 14px"><span class="label">Who is buying?</span><div class="hrow g8 wrap"><span class="chip">Walk-in (not on your list)</span><span class="chip chip-on">A member</span></div>
+<div class="inset hrow g10 wrap" style="padding: 8px 12px"><span class="av">MP</span><span class="col grow" style="min-width: 100px"><span class="w6">Maya Patel</span><span class="t3">No. 1042 · Past member</span></span><button type="button" class="btn btn-q btn-sm">Change</button></div></div>
+<span class="label" style="padding-bottom: 4px">In this sale</span>
+<div class="line"><span class="col grow" style="min-width: 120px"><span class="w6">Water bottle</span><span class="t3">$2.00 each · 24 left</span><button type="button" class="c-o w6" style="align-self: flex-start">Discount: Spring 10%</button></span><div class="qty"><button type="button" aria-label="One fewer"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"></path></svg></button><span class="w6" style="min-width: 24px; text-align: center">2</span><button type="button" aria-label="One more"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></button></div><span class="money" style="min-width: 52px; text-align: right">$3.60</span><button type="button" class="ibtn" aria-label="Remove Water bottle"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"></path></svg></button></div>
+<div class="line"><span class="col grow" style="min-width: 120px"><span class="w6">Shaker</span><span class="t3">No discount applies to this product today.</span></span><div class="qty"><button type="button" aria-label="One fewer"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"></path></svg></button><span class="w6" style="min-width: 24px; text-align: center">1</span><button type="button" aria-label="One more"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></button></div><span class="money" style="min-width: 52px; text-align: right">$12.00</span><button type="button" class="ibtn" aria-label="Remove Shaker"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"></path></svg></button></div>
+<div class="field" style="padding-top: 12px; border-top: 1px solid var(--line)"><span class="label">Promo code</span><div class="hrow g8"><div class="input grow"><span class="t3">SUMMER20</span></div><button type="button" class="btn btn-s">Apply</button></div><span class="t3">If the customer gives a code, type it here and press Apply.</span></div>
+<span class="t3" style="padding-top: 12px">With Card on Terminal: "The Terminal shows the total and the customer pays by card. The sale is recorded once they have paid."</span>
+<span class="t3" style="padding-top: 8px">With Cash, Card at the desk or Bank transfer this line reads: "This records the sale. Take the money yourself: the app does not charge anybody."</span>
+</div>
+</div>
+<div class="sale-f">
+<div class="field" style="gap: 6px"><span class="label">Payment method</span><div class="grid2" style="gap: 6px"><span class="chip chip-on"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 2h10a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zM9 6h6v4H9zM9 14h.01M12 14h.01M15 14h.01M9 17h.01M12 17h.01M15 17h.01"></path></svg>Card on Terminal</span><span class="chip"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1zM12 9a3 3 0 1 0 0 6a3 3 0 1 0 0-6M6 12h.01M18 12h.01"></path></svg>Cash</span><span class="chip"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5h18a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1zM2 10h20"></path></svg>Card at the desk</span><span class="chip"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 21h18M5 21V10M19 21V10M9 21V10M15 21V10M12 3l9 5H3z"></path></svg>Bank transfer</span></div>
+<div class="input"><span class="t3">Terminal</span><span class="grow">Front desk Terminal</span><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div></div>
+<div class="between" style="padding-top: 4px"><span class="h3">Total</span><span class="h2">$15.60</span></div>
+<span class="t3">Discount (Spring 10%) <span class="c-good">−$0.40</span> · Includes Sales tax 8.25% $1.18</span>
+<button type="button" class="btn btn-main btn-lg btn-w"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 2h10a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zM9 6h6v4H9zM9 14h.01M12 14h.01M15 14h.01M9 17h.01M12 17h.01M15 17h.01"></path></svg>Take payment on Terminal · $15.60</button>
+<button type="button" class="btn btn-q btn-sm" style="align-self: center">Record another way</button>
+</div>
+</section>
+</div>
+
+</main>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"look":{"editor":"enum","options":["Dark","Light"],"default":"Dark"},"$preview":{"width":1440,"height":1760}}'>
+class Component extends DCLogic {
+renderVals() {
+return { look: (this.props.look ?? 'Dark') === 'Light' ? 't-light' : '' };
+}
+}
+</script>
+</body>
+</html>

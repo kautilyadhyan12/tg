@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Leads: a lead</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./kit3.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0;background:#0A0908}
+.cap{display:flex;align-items:center;gap:10px;font-weight:600;color:var(--t2)}
+.num{width:26px;height:26px;border-radius:999px;background:var(--o-fill);color:var(--o-t);box-shadow:inset 0 0 0 1px var(--o-line);display:grid;place-items:center;font-size:13px;font-weight:700;flex:none}
+.stage{background:var(--scrim);border-radius:18px;padding:32px 16px;display:flex;justify-content:center}
+.dlg{background:var(--solid);border:1px solid var(--line2);border-radius:20px;box-shadow:var(--pop);width:100%;max-width:500px;min-width:0}
+.side{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,440px);border:1px solid var(--line);border-radius:18px;overflow:hidden}
+.side > .under{padding:20px;opacity:.6;overflow:hidden;min-width:0}
+.side > .sheet{background:var(--solid);border-left:1px solid var(--line2);display:flex;flex-direction:column;min-width:0}
+.sheet-h{display:flex;align-items:center;gap:12px;padding:18px 20px;border-bottom:1px solid var(--line)}
+.sheet-b{padding:20px;display:flex;flex-direction:column;gap:18px}
+.sheet-f{margin-top:auto;display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:14px 20px;border-top:1px solid var(--line)}
+.opt{display:flex;gap:12px;align-items:flex-start;padding:14px 16px;border-radius:14px;border:1px solid var(--line2)}
+.opt-on{border-color:var(--o);background:var(--o-fill)}
+.radio{width:18px;height:18px;border-radius:999px;border:1.5px solid var(--line2);flex:none;margin-top:1px}
+.radio-on{border:5px solid var(--o)}
+.check-on{background:var(--o);border-color:var(--o);position:relative}
+.check-on::after{content:"";position:absolute;left:5px;top:1px;width:5px;height:10px;border:solid var(--on-o);border-width:0 2px 2px 0;transform:rotate(45deg)}
+.sw{width:40px;height:24px;border-radius:999px;background:var(--bar);position:relative;flex:none}
+.sw::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:999px;background:var(--t3)}
+.sw-on{background:var(--o)}.sw-on::after{left:19px;background:var(--on-o)}
+.step{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,340px);gap:20px;align-items:start}
+.menu{background:var(--solid);border:1px solid var(--line2);border-radius:16px;box-shadow:var(--pop);padding:6px;min-width:0;max-width:320px}
+.mi{display:flex;gap:12px;align-items:flex-start;padding:10px 12px;border-radius:10px}
+.ptile{display:flex;flex-direction:column;gap:4px;padding:14px;border-radius:14px;border:1px solid var(--line2);min-width:0}
+.ptile-on{border-color:var(--o);background:var(--o-fill)}
+.pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.qty{display:inline-flex;align-items:center;border:1px solid var(--line2);border-radius:999px;height:40px}
+.qty > button{width:40px;height:40px;display:grid;place-items:center;color:var(--t2)}
+.money{font-weight:600;white-space:nowrap}
+.frames{display:flex;flex-wrap:wrap;gap:40px;padding:40px;align-items:flex-start}
+.frame{width:390px;max-width:100%;border:1px solid var(--line2);border-radius:28px;overflow:hidden;background:var(--page);display:flex;flex-direction:column;position:relative}
+.bsheet{background:var(--solid);border-top:1px solid var(--line2);border-radius:22px 22px 0 0;box-shadow:var(--pop);display:flex;flex-direction:column}
+.grab{width:40px;height:5px;border-radius:999px;background:var(--line2);margin:10px auto 4px}
+.savebar{position:sticky;bottom:12px;z-index:2;display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 16px;background:var(--solid);border:1px solid var(--line2);border-radius:18px}
+.footbar{position:sticky;bottom:0;padding:12px 16px 16px;border-top:1px solid var(--line);background:var(--solid);display:flex;flex-direction:column;gap:8px}
+@media (max-width:1180px){.side{grid-template-columns:minmax(0,1fr)}.side > .under{display:none}.side > .sheet{border-left:0}}
+@media (max-width:900px){.step{grid-template-columns:minmax(0,1fr)}.frames{padding:16px;gap:24px}}
+@media (pointer:coarse){.qty,.qty > button{height:44px}.qty > button{width:44px}}
+.side > .under{padding:20px}.ch{display:flex;gap:8px;flex-wrap:wrap}.msg{display:flex;flex-direction:column;gap:6px;padding:14px 16px;border-radius:14px;background:var(--box2)}.col > span{overflow-wrap:anywhere}.btn-soft{white-space:normal;height:auto;min-height:40px;padding-top:6px;padding-bottom:6px;text-align:center;max-width:100%}
+</style>
+</helmet>
+<div class="app t-dark {{look}}" style="min-height: 100%">
+<div class="shell">
+
+<nav class="rail" aria-label="Menu">
+<a href="#" class="gym"><span class="logo"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18zM6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2M10 6h4M10 10h4M10 14h4M10 18h4"></path></svg></span><span class="col grow"><span class="w6 ell">Iron House</span><span class="s12 t3">Austin · Gym</span></span><svg class="ic ic-s t3" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 15l5 5 5-5M7 9l5-5 5 5"></path></svg></a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3h5a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM15 3h5a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM15 12h5a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1zM4 16h5a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1z"></path></svg>Overview<span class="n n-bad">6</span></a>
+<div class="grp">Today<svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 2h6a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1zM16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2M9 14l2 2 4-4"></path></svg>Attendance</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 7.5V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3.5M16 2v4M8 2v4M3 10h5M10 16a6 6 0 1 0 12 0a6 6 0 1 0-12 0M16 14v2.2l1.5 1.3"></path></svg>Classes</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 6.5l11 11M21 21l-1-1M3 3l1 1M18 22l4-4M2 6l4-4M3 10l7-7M14 21l7-7"></path></svg>Personal training</a>
+<div class="grp">People<svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M5 7a4 4 0 1 0 8 0a4 4 0 1 0-8 0M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"></path></svg>Members &amp; staff</a>
+<a href="#" class="ni ni-on"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 7a4 4 0 1 0 8 0a4 4 0 1 0-8 0M10.3 15H7a4 4 0 0 0-4 4v2M14 17a3 3 0 1 0 6 0a3 3 0 1 0-6 0M21 21l-1.9-1.9"></path></svg>Leads<span class="n">5</span></a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 17l-8.5-8.5-5 5L2 7M16 17h6v-6"></path></svg>At risk<span class="n n-warn">2</span></a>
+<div class="grp">Money<svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6a2 2 0 0 1 2-2h12v4M3 6v12a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2H5a2 2 0 0 1-2-2zM17 14h.01"></path></svg>Payments overview</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4zM3 6h18M16 10a4 4 0 0 1-8 0"></path></svg>Sell</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12.6 2.6A2 2 0 0 0 11.2 2H4a2 2 0 0 0-2 2v7.2a2 2 0 0 0 .6 1.4l8.7 8.7a2.4 2.4 0 0 0 3.4 0l6.6-6.6a2.4 2.4 0 0 0 0-3.4zM7 7.5h.01"></path></svg>Memberships</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2zM2 10h20"></path></svg>Failed payments<span class="n n-bad">3</span></a>
+<div class="grp">Community<svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l18-5v12L3 14zM11.6 16.8a3 3 0 1 1-5.8-1.6"></path></svg>Updates<span class="n n-warn">1</span></a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM16 2v4M8 2v4M3 10h18"></path></svg>Events</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 2h6a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1zM16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2M12 11h4M12 16h4M8 11h.01M8 16h.01"></path></svg>Fitness plans</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M8.2 10.2L5 3h14l-3.2 7.2M6 15a6 6 0 1 0 12 0a6 6 0 1 0-12 0"></path></svg>Challenges</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6M18 9h1.5a2.5 2.5 0 0 0 0-5H18M4 22h16M10 14.7V17c0 .6-.5 1-1 1.2-1.2.5-2 2-2 3.8M14 14.7V17c0 .6.5 1 1 1.2 1.2.5 2 2 2 3.8M18 2H6v7a6 6 0 0 0 12 0z"></path></svg>Leaderboard</a>
+<div class="grp">Manage<svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3v18h18M8 17V9M13 17V5M18 17v-3"></path></svg>Reports</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M2 14h4M10 8h4M18 16h4"></path></svg>Settings</a>
+<a href="#" class="me"><span class="av">DB</span><span class="col grow"><span class="w6 s13 ell">Dana Brooks</span><span class="s12 t3">Owner</span></span><svg class="ic ic-s t3" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 15l5 5 5-5M7 9l5-5 5 5"></path></svg></a>
+</nav>
+
+<div class="work">
+<header class="top" style="position: relative">
+<button type="button" class="find"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11a7 7 0 1 0 14 0a7 7 0 1 0-14 0M21 21l-4.3-4.3"></path></svg><span class="grow ell">Search members, pages or actions</span><span class="kbd">Ctrl K</span></button>
+<span class="grow"></span>
+<button type="button" class="btn btn-soft"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>New</button>
+<button type="button" class="ibtn" aria-label="6 items need attention"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 0 0 3.4 0"></path></svg><span class="pip">6</span></button>
+</header>
+
+<main class="page" style="position: relative">
+<div class="between wrap">
+<div class="col g6" style="flex: 1 1 360px; min-width: 0"><span class="eyebrow">People</span><h1 class="h1">Leads</h1><span class="t2">A lead opens from the right, the list stays behind it.</span></div>
+</div>
+
+<div class="side">
+<div class="under col g10">
+<div class="input" style="border-radius: 999px"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 4a7 7 0 1 0 0 14a7 7 0 1 0 0-14M21 21l-4.3-4.3"></path></svg><span class="t3 grow">Search</span></div>
+<div class="row" style="padding-left: 0"><span class="col grow"><span class="w6">Kavya Rao</span><span class="t3">Website · Today</span></span><span class="tag tag-warn">Email due</span></div>
+<div class="row" style="padding-left: 0"><span class="col grow"><span class="w6">Harsh Vora</span><span class="t3">A friend · Today</span></span></div>
+<div class="row" style="padding-left: 0"><span class="col grow"><span class="w6">Simran Kaur</span><span class="t3">Social media · Yesterday</span></span></div>
+</div>
+<aside class="sheet" aria-label="Lead">
+<div class="sheet-h"><span class="av">KR</span><div class="col grow" style="min-width: 0"><h2 class="h2">Kavya Rao</h2><span class="t3">Added today · Website</span></div><button type="button" class="ibtn" aria-label="Close"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"></path></svg></button></div>
+<div class="sheet-b">
+<div class="field"><span class="label">Status</span><div class="ch" role="group" aria-label="Status"><span class="chip chip-on">New</span><span class="chip">Contacted</span><span class="chip">On trial</span><span class="chip">Lost</span><span class="chip">Joined</span></div></div>
+
+<section class="col g8" aria-label="Messages from your page"><span class="label">Messages from your page</span>
+<div class="msg"><span class="t3">Today, 8:14 am</span><span class="w6">Kavya Rao · kavya.rao@gmail.com · (512) 555-0148</span><span>Do you have a trial week? I can come in the mornings before work.</span><span class="t3">Heard of you from: Website</span><span class="t3">Happy to hear from you by email</span></div>
+</section>
+
+<section class="inset col g10" aria-label="Follow-up emails">
+<span class="w6">Email 1 of 3 is due today</span>
+<span class="t3">0 of 3 sent.</span>
+<div class="hrow g8 wrap"><a href="#" class="btn btn-p btn-sm"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM22 6l-10 7L2 6"></path></svg>Email Kavya</a><button type="button" class="btn btn-s btn-sm">Mark email 1 as sent</button></div>
+<span class="t3">Opens your own email with the message written. Send it from there, then mark it as sent.</span>
+</section>
+
+<div class="field"><span class="label">Name</span><div class="input"><span class="grow">Kavya Rao</span></div></div>
+<div class="field"><span class="label">Email</span><div class="input"><span class="grow">kavya.rao@gmail.com</span></div></div>
+<div class="field"><span class="label">Phone</span><div class="input input-on"><span class="grow">(512) 555-0148</span></div></div>
+<div class="field"><span class="label">Heard of you from</span><div class="ch" role="group" aria-label="Heard of you from"><span class="chip">Walked in</span><span class="chip chip-on">Website</span><span class="chip">Social media</span><span class="chip">A friend</span><span class="chip">Other</span></div></div>
+<div class="opt"><span class="check check-on"></span><span class="col g4 grow"><span class="w6">Happy to hear from us by email</span><span class="t3">Tick only if they said yes. They're due 3 follow-up emails over a week.</span></span></div>
+<div class="field"><span class="label">Notes</span><div class="input" style="min-height: 92px; align-items: flex-start; padding-top: 12px"><span class="grow">Wants a trial week. Call back Thursday morning.</span></div><button type="button" class="btn btn-s btn-sm" style="align-self: flex-start">Save notes</button></div>
+<div class="hrow g10 wrap"><button type="button" class="btn btn-soft"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 3a4 4 0 1 0 0 8a4 4 0 1 0 0-8M17 11l2 2 4-4"></path></svg>Joined · add to your members</button><span class="grow"></span><button type="button" class="btn btn-d btn-sm">Delete lead</button></div>
+</div>
+<div class="sheet-f"><button type="button" class="btn btn-p">Save</button><button type="button" class="btn btn-q">Cancel</button><span class="t3">You have changes that aren't saved.</span></div>
+</aside>
+</div>
+
+<div class="grid2" style="gap: 20px">
+<section class="box pad col g12" aria-label="Add lead">
+<h2 class="h2">Add lead: the same panel, empty</h2>
+<div class="field"><span class="label">Name</span><div class="input"><span class="t3 grow">Their name</span></div></div>
+<div class="field"><span class="label">Email</span><div class="input"><span class="t3 grow">name@gmail.com</span></div></div>
+<div class="field"><span class="label">Phone</span><div class="input"><span class="t3 grow">Optional</span></div></div>
+<div class="field"><span class="label">Heard of you from</span><div class="ch"><span class="chip chip-on">Walked in</span><span class="chip">Website</span><span class="chip">Social media</span><span class="chip">A friend</span><span class="chip">Other</span></div></div>
+<div class="opt" style="opacity: .7"><span class="check"></span><span class="col g4 grow"><span class="w6">Happy to hear from us by email</span><span class="t3">Add their email address to ask.</span></span></div>
+<div class="field"><span class="label">Notes</span><div class="input" style="min-height: 72px; align-items: flex-start; padding-top: 12px"><span class="t3 grow">What they asked about, when to call back</span></div></div>
+<div class="strip strip-bad" role="alert"><span class="grow">Add an email address or a phone number, so you can reach them.</span></div>
+<button type="button" class="btn btn-p" style="align-self: flex-start"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 3a4 4 0 1 0 0 8a4 4 0 1 0 0-8M19 8v6M22 11h-6"></path></svg>Add lead</button>
+<div class="inset col g6"><span class="label">Said beside Add lead when it can't be added</span><span>Add the person's name.</span><span>Add their email address first. The tick is their yes to being emailed at it.</span><span>This person is already one of your leads.</span><span>You have 10,000 leads, the most you can keep. Delete the ones you no longer need, then add this one.</span><span>The notes look like they hold a payment card number. We never store card details, so nothing was saved.</span><span>We couldn't add this lead. Please try again.</span></div>
+<div class="cap"><span class="num">1</span>Closing with something typed, under the close X</div>
+<div class="strip strip-warn wrap"><span class="grow">This lead is not added yet.</span><button type="button" class="btn btn-s btn-sm">Discard changes</button><button type="button" class="btn btn-q btn-sm">Keep editing</button></div>
+<div class="strip strip-warn wrap"><span class="grow">Your changes to Kavya Rao are not saved.</span><button type="button" class="btn btn-s btn-sm">Discard changes</button><button type="button" class="btn btn-q btn-sm">Keep editing</button></div>
+</section>
+
+<section class="box pad col g12" aria-label="Joined">
+<h2 class="h2">Joined, under the Status picks</h2>
+<div class="cap"><span class="num">2</span>Pressing Joined asks first</div>
+<div class="inset col g10"><span class="w6">Add Kavya Rao to your members?</span><div class="hrow g8 wrap"><button type="button" class="btn btn-p btn-sm">Add to members</button><button type="button" class="btn btn-q btn-sm">Keep as a lead</button></div></div>
+<div class="strip strip-warn"><span class="grow">Save or cancel your changes first.</span></div>
+<div class="cap"><span class="num">3</span>Somebody on the list already has the same email or phone</div>
+<div class="inset col g10">
+<span>Somebody on your list has the same email or phone. Choose the record that is this person, or add them as someone new.</span>
+<div class="row wrap" style="padding-left: 0; padding-right: 0"><span class="col grow" style="min-width: 160px"><span class="w6">Kavya Rao</span><span class="t3">kavya.rao@gmail.com</span></span><button type="button" class="btn btn-s btn-sm">This is them</button></div>
+<div class="row wrap" style="padding-left: 0; padding-right: 0"><span class="col grow" style="min-width: 160px"><span class="w6">K. Rao</span><span class="t3">(512) 555-0148 · Past member</span></span><button type="button" class="btn btn-s btn-sm">This is them · put back</button></div>
+<div class="hrow g8 wrap"><button type="button" class="btn btn-soft btn-sm">Add Kavya Rao as someone new</button><button type="button" class="btn btn-q btn-sm" aria-label="Cancel choosing a record">Cancel</button></div>
+<span class="t3">Or: Your list changed while you were choosing. Choose again. · Your list already has a record with exactly this name and contact. If it is this person, choose it. If not, change the lead's name, email or phone first.</span>
+</div>
+<div class="cap"><span class="num">4</span>Once they joined</div>
+<div class="strip strip-good" role="status"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1M22 4L12 14l-3-3"></path></svg><span class="grow">Kavya Rao is on your list of members now.</span></div>
+<div class="inset col g6"><span>On your list of members. <a href="#" class="c-o w6">Go to Members</a></span><span class="t3">Or: Their record was taken off your list of members. (with Put back on your list of members) · Their record has since been deleted from your list. · Kavya Rao was already on your list.</span></div>
+<button type="button" class="btn btn-soft" style="align-self: flex-start"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 3a4 4 0 1 0 0 8a4 4 0 1 0 0-8M17 11l2 2 4-4"></path></svg>Put back on your list of members</button>
+<div class="strip strip-bad" role="alert"><span class="grow">We couldn't mark them as joined. Please try again.</span></div>
+</section>
+
+<section class="box pad col g12" aria-label="Follow-up emails">
+<h2 class="h2">Follow-up emails, every way the box reads</h2>
+<div class="inset col g6"><span class="w6">Email 2 of 3 will be sent for you on Mon 23 Nov</span><span class="t3">1 of 3 sent, the last today.</span><span class="t3">Sent for you from 8 in the morning, by your clock. Replies go to your reply address.</span><a href="#" class="c-o w6">Change reply address</a></div>
+<div class="inset col g6"><span class="w6">Email 2 of 3 is waiting to be sent for you (due Thu 19 Nov)</span><span class="t3">We'll keep trying. If it can't go within a week, it comes back to you here.</span></div>
+<div class="inset col g6"><span class="w6">Not sent for you: Emails to this address bounce. Check the address with them.</span><span class="t3">Or: Our email service won't send to this address. Check the address with them.</span></div>
+<div class="inset col g6"><span class="w6">Follow-up emails stopped: the "Happy to hear from us" tick is off</span><span class="t3">Or: they're marked Joined.</span></div>
+<div class="inset col g6"><span class="w6">All 3 follow-up emails sent</span></div>
+<div class="strip strip-good" role="status"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1M22 4L12 14l-3-3"></path></svg><span class="grow">Email 1 marked as sent.</span></div>
+<div class="inset col g6"><span class="label">Said beside the box when it can't be marked</span><span>This lead isn't waiting for that follow-up email. It may have been marked already, or the lead changed.</span><span>This email is being sent for you, so there's nothing to mark.</span><span>We couldn't mark that as sent. Please try again.</span></div>
+</section>
+
+<section class="box pad col g12" aria-label="When something else happens">
+<h2 class="h2">When something else happens</h2>
+<div class="cap"><span class="num">5</span>Delete lead asks under its button</div>
+<div class="strip strip-warn wrap"><span class="grow">Delete Kavya Rao from your leads? Their name, contact and notes are removed. Your list of members is not changed.</span><button type="button" class="btn btn-d btn-sm">Delete lead</button><button type="button" class="btn btn-q btn-sm">Cancel</button></div>
+<span class="label">A lead a member invited</span>
+<div class="inset col g6"><span>Added today · Invited by Maya Brooks</span><span class="t3">Refer a friend: Maya Brooks invited them. Friend's gift (1 free week): filled in when they join.</span><a href="#" class="c-o w6">Find Maya Brooks in the app</a></div>
+<span class="label">Saved</span>
+<div class="strip strip-good" role="status"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1M22 4L12 14l-3-3"></path></svg><span class="grow">Notes saved.</span></div>
+<span class="label">Loading and failing</span>
+<div class="inset col g6"><span>Loading…</span><span class="t3">We couldn't load this lead. · We couldn't load their messages.</span></div>
+<div class="strip strip-bad col g4" style="align-items: flex-start" role="alert"><span>We couldn't save that. Please try again.</span><span class="t3">We couldn't delete this lead. Please try again. · Somebody changed this lead while you had it open. Look at it again, then make your change. · That lead could not be found.</span></div>
+<section class="col g6"><h3 class="h3">Notes for the builder</h3><span class="t3">The panel scrolls as one page; Save and Cancel stay at its foot (Boxes, way 2). Cancel and the line beside Save show only while something is changed. Save notes shows only while the notes differ. When the gym's account is read-only, Email Kavya, Mark as sent and Delete lead are switched off. On a phone the panel is a full page with Save at its foot (PhoneLeads).</span></section>
+</section>
+</div>
+
+</main>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"look":{"editor":"enum","options":["Dark","Light"],"default":"Dark"},"$preview":{"width":1440,"height":3790}}'>
+class Component extends DCLogic {
+renderVals() {
+return { look: (this.props.look ?? 'Dark') === 'Light' ? 't-light' : '' };
+}
+}
+</script>
+</body>
+</html>

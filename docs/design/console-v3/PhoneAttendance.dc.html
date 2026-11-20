@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Attendance on a phone</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./kit3.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0;background:#0A0908}
+.cap{display:flex;align-items:center;gap:10px;font-weight:600;color:var(--t2)}
+.num{width:26px;height:26px;border-radius:999px;background:var(--o-fill);color:var(--o-t);box-shadow:inset 0 0 0 1px var(--o-line);display:grid;place-items:center;font-size:13px;font-weight:700;flex:none}
+.stage{background:var(--scrim);border-radius:18px;padding:32px 16px;display:flex;justify-content:center}
+.dlg{background:var(--solid);border:1px solid var(--line2);border-radius:20px;box-shadow:var(--pop);width:100%;max-width:500px;min-width:0}
+.side{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,440px);border:1px solid var(--line);border-radius:18px;overflow:hidden}
+.side > .under{padding:20px;opacity:.6;overflow:hidden;min-width:0}
+.side > .sheet{background:var(--solid);border-left:1px solid var(--line2);display:flex;flex-direction:column;min-width:0}
+.sheet-h{display:flex;align-items:center;gap:12px;padding:18px 20px;border-bottom:1px solid var(--line)}
+.sheet-b{padding:20px;display:flex;flex-direction:column;gap:18px}
+.sheet-f{margin-top:auto;display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:14px 20px;border-top:1px solid var(--line)}
+.opt{display:flex;gap:12px;align-items:flex-start;padding:14px 16px;border-radius:14px;border:1px solid var(--line2)}
+.opt-on{border-color:var(--o);background:var(--o-fill)}
+.radio{width:18px;height:18px;border-radius:999px;border:1.5px solid var(--line2);flex:none;margin-top:1px}
+.radio-on{border:5px solid var(--o)}
+.check-on{background:var(--o);border-color:var(--o);position:relative}
+.check-on::after{content:"";position:absolute;left:5px;top:1px;width:5px;height:10px;border:solid var(--on-o);border-width:0 2px 2px 0;transform:rotate(45deg)}
+.sw{width:40px;height:24px;border-radius:999px;background:var(--bar);position:relative;flex:none}
+.sw::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:999px;background:var(--t3)}
+.sw-on{background:var(--o)}.sw-on::after{left:19px;background:var(--on-o)}
+.step{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,340px);gap:20px;align-items:start}
+.menu{background:var(--solid);border:1px solid var(--line2);border-radius:16px;box-shadow:var(--pop);padding:6px;min-width:0;max-width:320px}
+.mi{display:flex;gap:12px;align-items:flex-start;padding:10px 12px;border-radius:10px}
+.ptile{display:flex;flex-direction:column;gap:4px;padding:14px;border-radius:14px;border:1px solid var(--line2);min-width:0}
+.ptile-on{border-color:var(--o);background:var(--o-fill)}
+.pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.qty{display:inline-flex;align-items:center;border:1px solid var(--line2);border-radius:999px;height:40px}
+.qty > button{width:40px;height:40px;display:grid;place-items:center;color:var(--t2)}
+.money{font-weight:600;white-space:nowrap}
+.frames{display:flex;flex-wrap:wrap;gap:40px;padding:40px;align-items:flex-start}
+.frame{width:390px;max-width:100%;border:1px solid var(--line2);border-radius:28px;overflow:hidden;background:var(--page);display:flex;flex-direction:column;position:relative}
+.bsheet{background:var(--solid);border-top:1px solid var(--line2);border-radius:22px 22px 0 0;box-shadow:var(--pop);display:flex;flex-direction:column}
+.grab{width:40px;height:5px;border-radius:999px;background:var(--line2);margin:10px auto 4px}
+.savebar{position:sticky;bottom:12px;z-index:2;display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 16px;background:var(--solid);border:1px solid var(--line2);border-radius:18px}
+.footbar{position:sticky;bottom:0;padding:12px 16px 16px;border-top:1px solid var(--line);background:var(--solid);display:flex;flex-direction:column;gap:8px}
+@media (max-width:1180px){.side{grid-template-columns:minmax(0,1fr)}.side > .under{display:none}.side > .sheet{border-left:0}}
+@media (max-width:900px){.step{grid-template-columns:minmax(0,1fr)}.frames{padding:16px;gap:24px}}
+@media (pointer:coarse){.qty,.qty > button{height:44px}.qty > button{width:44px}}
+.col > span{overflow-wrap:anywhere}.tm{min-width:64px;font-weight:600}@media (max-width:300px){.ph-tab-on{font-weight:500}}
+</style>
+</helmet>
+<div class="app t-dark {{look}}" style="min-height: 100%">
+<div class="frames">
+
+<div class="frame" aria-label="Check in and today's check-ins">
+<header class="ph-top"><a href="#" class="hrow g10 grow" style="min-height: 44px"><span class="logo"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18zM6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2M10 6h4M10 10h4M10 14h4M10 18h4"></path></svg></span><span class="w6">Iron House</span></a><button type="button" class="ibtn" aria-label="Search"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 4a7 7 0 1 0 0 14a7 7 0 1 0 0-14M21 21l-4.3-4.3"></path></svg></button><button type="button" class="ibtn" aria-label="6 items need attention"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 0 0 3.4 0"></path></svg><span class="pip">6</span></button></header>
+<main class="ph-main">
+<div class="col g4"><span class="eyebrow">Today</span><h1 class="h1">Attendance</h1><span class="t2">Check people in, and see who came in, by day. Times are your gym's own.</span></div>
+<section class="box col" aria-label="Check in">
+<div class="bh"><div class="col g4"><h2 class="h2">Check in</h2><span class="t3">For a member without the app or without their pass. Find them, then press Check in.</span></div></div>
+<div class="col g12" style="padding: 0 16px 16px">
+<div class="input input-on"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 4a7 7 0 1 0 0 14a7 7 0 1 0 0-14M21 21l-4.3-4.3"></path></svg><span class="grow">sa</span></div>
+<div class="row wrap" style="padding-left: 0; padding-right: 0"><span class="col g4 grow" style="min-width: 150px"><span class="w6">Sam Rivera</span><span class="t3">No. 13 · sam.rivera@gmail.com</span><span class="hrow g8 wrap"><span class="t2">Active</span><span class="tag tag-warn">Payment due</span></span></span><button type="button" class="btn btn-p btn-sm"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6L9 17l-5-5"></path></svg>Check in</button></div>
+<div class="row wrap" style="padding-left: 0; padding-right: 0"><span class="col g4 grow" style="min-width: 150px"><span class="w6">Sarah Kim</span><span class="t3">No. 8 · sarah.kim@gmail.com</span><span class="t2">Active · Paid</span></span><button type="button" class="btn btn-p btn-sm"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6L9 17l-5-5"></path></svg>Check in</button></div>
+<div class="field"><span class="label">Day they came</span><div class="input"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM16 2v4M8 2v4M3 10h18"></path></svg><span class="grow">Today, Fri 20 Nov</span><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div><span class="t3">Today. Pick an earlier day, up to 62 days back, to add a visit they missed.</span></div>
+</div>
+</section>
+<section class="box col" aria-label="Today's check-ins">
+<div class="bh"><div class="col g4"><h2 class="h2">Today's check-ins</h2><span class="hrow g6 t3"><span class="dot dot-good"></span>Updates as people check in</span></div><span class="tag tag-plain">6</span></div>
+<div class="row" style="padding-left: 16px; padding-right: 8px"><span class="tm">9:12 am</span><span class="col grow" style="min-width: 0"><span class="w6">Maya Brooks</span><span class="t3">Checked in by Dana Brooks</span></span><button type="button" class="btn btn-q btn-sm">Remove</button></div>
+<div class="row" style="padding-left: 16px; padding-right: 8px"><span class="tm">8:40 am</span><span class="col grow" style="min-width: 0"><span class="w6">Leela Menon</span><span class="t3">Pass · Front desk</span></span><button type="button" class="btn btn-q btn-sm">Remove</button></div>
+<div class="row" style="padding-left: 16px; padding-right: 8px"><span class="tm">7:31 am</span><span class="col grow" style="min-width: 0"><span class="w6">Sam Rivera</span><span class="t3">Key tag · Front desk</span></span><button type="button" class="btn btn-q btn-sm">Remove</button></div>
+</section>
+</main>
+<nav class="ph-tabs" aria-label="Pages"><a href="#" class="ph-tab"><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"></path></svg></span>Overview</a><a href="#" class="ph-tab"><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 3a4 4 0 1 0 0 8a4 4 0 1 0 0-8M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"></path></svg></span>Members</a><a href="#" class="ph-tab ph-tab-on"><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6L9 17l-5-5"></path></svg></span>Attendance</a><a href="#" class="ph-tab"><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM16 2v4M8 2v4M3 10h18"></path></svg></span>Classes</a><a href="#" class="ph-tab"><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h.01M12 12h.01M19 12h.01"></path></svg></span>More</a></nav>
+</div>
+
+<div class="frame" aria-label="Remove a check-in">
+<header class="ph-top"><a href="#" class="hrow g10 grow" style="min-height: 44px"><span class="logo"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18zM6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2M10 6h4M10 10h4M10 14h4M10 18h4"></path></svg></span><span class="w6">Iron House</span></a><button type="button" class="ibtn" aria-label="Search"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 4a7 7 0 1 0 0 14a7 7 0 1 0 0-14M21 21l-4.3-4.3"></path></svg></button><button type="button" class="ibtn" aria-label="6 items need attention"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 0 0 3.4 0"></path></svg><span class="pip">6</span></button></header>
+<main class="ph-main">
+<section class="box col" aria-label="Today's check-ins">
+<div class="bh"><h2 class="h2">Today's check-ins</h2><span class="tag tag-plain">6</span></div>
+<div class="row" style="padding-left: 16px; padding-right: 8px"><span class="tm">9:12 am</span><span class="col grow" style="min-width: 0"><span class="w6">Maya Brooks</span><span class="t3">Checked in by Dana Brooks</span></span></div>
+<div class="col g10" style="padding: 0 16px 16px">
+<div class="inset col g10" role="group" aria-label="Remove Maya Brooks's check-in">
+<span class="w6">Remove Maya Brooks's 9:12 am check-in?</span>
+<span class="t2">Maya Brooks — this visit is removed. It no longer counts today, on the leaderboard or for their streak, unless they have another visit today.</span>
+<span class="t3">In their app, they still see it under “Didn't count”, with who removed it and today's date. Nobody else's visits change.</span>
+<button type="button" class="btn btn-d btn-w">Remove visit</button><button type="button" class="btn btn-q btn-w">Cancel</button>
+</div>
+</div>
+<div class="row" style="padding-left: 16px; padding-right: 8px"><span class="tm">8:40 am</span><span class="col grow" style="min-width: 0"><span class="w6">Leela Menon</span><span class="t3">Pass · Front desk</span></span><button type="button" class="btn btn-q btn-sm">Remove</button></div>
+</section>
+<span class="t3">The box opens under the row, as on a computer; on a phone its buttons are full width.</span>
+</main>
+<nav class="ph-tabs" aria-label="Pages"><a href="#" class="ph-tab"><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"></path></svg></span>Overview</a><a href="#" class="ph-tab"><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 3a4 4 0 1 0 0 8a4 4 0 1 0 0-8M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"></path></svg></span>Members</a><a href="#" class="ph-tab ph-tab-on"><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6L9 17l-5-5"></path></svg></span>Attendance</a><a href="#" class="ph-tab"><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM16 2v4M8 2v4M3 10h18"></path></svg></span>Classes</a><a href="#" class="ph-tab"><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h.01M12 12h.01M19 12h.01"></path></svg></span>More</a></nav>
+</div>
+
+<div class="frame" aria-label="Check-in history">
+<header class="ph-top"><a href="#" class="hrow g10 grow" style="min-height: 44px"><span class="logo"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18zM6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2M10 6h4M10 10h4M10 14h4M10 18h4"></path></svg></span><span class="w6">Iron House</span></a><button type="button" class="ibtn" aria-label="Search"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 4a7 7 0 1 0 0 14a7 7 0 1 0 0-14M21 21l-4.3-4.3"></path></svg></button><button type="button" class="ibtn" aria-label="6 items need attention"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 0 0 3.4 0"></path></svg><span class="pip">6</span></button></header>
+<main class="ph-main">
+<section class="box col" aria-label="Check-in history">
+<div class="bh"><div class="col g4"><h2 class="h2">Check-in history</h2><span class="t3">6 people · 7 visits</span></div></div>
+<div class="hrow g8" style="padding: 0 16px 12px"><button type="button" class="ibtn" aria-label="Previous day"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"></path></svg></button><div class="input grow" style="min-width: 0"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM16 2v4M8 2v4M3 10h18"></path></svg><span class="grow">Fri 20 Nov</span></div><button type="button" class="ibtn" aria-label="Next day"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg></button></div>
+<div style="padding: 0 16px 12px"><div class="input" style="border-radius: 999px"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 4a7 7 0 1 0 0 14a7 7 0 1 0 0-14M21 21l-4.3-4.3"></path></svg><span class="t3 grow">Search by name</span></div></div>
+<div class="row wrap"><span class="col grow" style="min-width: 0"><span class="w6">Leela Menon</span><span class="t3">visited 2 times</span></span><span class="hrow g6 wrap"><span class="tag tag-o">6:05 am</span><span class="tag tag-o">8:40 am</span></span></div>
+<div class="row wrap" style="background: var(--o-fill)"><span class="col grow" style="min-width: 0"><span class="w6">Sam Rivera</span><span class="t3">sam.rivera@gmail.com</span></span><span class="tag tag-o">7:31 am</span></div>
+<div class="inset col g8" style="margin: 0 16px 14px">
+<div class="between"><span class="w6">Sam Rivera — when they came</span><button type="button" class="ibtn" aria-label="Close"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"></path></svg></button></div>
+<div class="hrow g10 wrap"><span class="t2">Wed 18 Nov</span><span class="tag tag-o">7:40 am</span></div>
+<div class="hrow g10 wrap"><span class="t2">Sat 14 Nov</span><span class="tag tag-plain">5:50 am · outside hours</span></div>
+<span class="t3">Showing their most recent visits.</span>
+</div>
+<div class="row"><span class="col grow" style="min-width: 0"><span class="w6">Priya Nair</span><span class="t3">priya.nair@gmail.com</span></span><span class="tag tag-o">7:05 am</span></div>
+<div class="row"><button type="button" class="btn btn-s btn-w">Show more people</button></div>
+</section>
+</main>
+<nav class="ph-tabs" aria-label="Pages"><a href="#" class="ph-tab"><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"></path></svg></span>Overview</a><a href="#" class="ph-tab"><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 3a4 4 0 1 0 0 8a4 4 0 1 0 0-8M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"></path></svg></span>Members</a><a href="#" class="ph-tab ph-tab-on"><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6L9 17l-5-5"></path></svg></span>Attendance</a><a href="#" class="ph-tab"><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM16 2v4M8 2v4M3 10h18"></path></svg></span>Classes</a><a href="#" class="ph-tab"><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h.01M12 12h.01M19 12h.01"></path></svg></span>More</a></nav>
+</div>
+
+</div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"look":{"editor":"enum","options":["Dark","Light"],"default":"Dark"},"$preview":{"width":1800,"height":1220}}'>
+class Component extends DCLogic {
+renderVals() {
+return { look: (this.props.look ?? 'Dark') === 'Light' ? 't-light' : '' };
+}
+}
+</script>
+</body>
+</html>
