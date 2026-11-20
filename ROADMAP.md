@@ -853,7 +853,8 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
 63. **The Exercise Library on the phone** (§13.6; after 60). Split 2026-11-19 by its terminal, after Kd's drawings, in three.
     - 63a. [x] **The Library and an exercise's page** — merged 2026-11-19 (PR #596).
     - 63b. [x] **Find exercises** — merged 2026-11-20 (PR #599).
-    - 63c. [ ] **Your records and Add to workout on the page** (after 63a): records, calories a minute for the person's weight, Add to workout with My Workout's count, Goals' exercise picker on this list.
+    - 63c. [x] **Your records and Add to workout on the page** — merged 2026-11-20 (PR #605).
+    - 63d. [ ] **Goals' exercise picker on the Library's list** (split from 63c, not built there; when, Kd's call): names and "measured in reps" from the Library, the goal check on the server reading the same list.
 64. **Build a workout, do it, and after it** (Stage 1's 6c; §13.6, §11.8's steps).
     - 64a. [ ] **By hand and by timer** (after 61 and 63): sets, reps or time, weight, rest; one screen for the workout, kept on the phone at every step; the summary set by set; history. The heart rate from the monitor connected in 37f-i, shown during it and kept with it (Kd, 2026-11-12).
     - 64b. [ ] **With the camera** (after 64a and item 53's screen): Camera or Count myself, picked every time.

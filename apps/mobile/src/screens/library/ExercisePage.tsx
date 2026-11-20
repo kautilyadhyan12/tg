@@ -1,6 +1,7 @@
-import type { PhoneLibraryEntry } from "@app/shared";
+import { kcalPerMinute, type PhoneLibraryEntry } from "@app/shared";
 import { useState } from "react";
 import { Pressable, ScrollView, StyleSheet, View, useWindowDimensions, type NativeScrollEvent, type NativeSyntheticEvent } from "react-native";
+import { Button } from "../../look/Button";
 import { Segments } from "../../look/Choice";
 import { colours, shadows, sizes, stageGlow } from "../../look/colours";
 import { CoverPage } from "../../look/CoverPage";
@@ -10,6 +11,7 @@ import { Sheet } from "../../look/Sheet";
 import { fonts, Txt } from "../../look/Txt";
 import { DEEP_UNDER, litMuscles, sideFor, type Sex, type Side } from "../../library/figure";
 import { exercisePicture } from "../../library/pictures";
+import { weightWords, type Units } from "../../library/records";
 import {
   COUNTED_WORDS,
   EFFORT_FLAMES,
@@ -27,6 +29,9 @@ import {
 } from "../../library/words";
 import { Flames, KitMark, Plates } from "./Marks";
 import { MuscleFigure, MuscleLeader } from "./MuscleFigure";
+import { Records } from "./Records";
+import { ProgressPage } from "../progress/ProgressPage";
+import { useMyWorkout } from "./useLibrary";
 
 type Tab = "muscles" | "howto" | "mistakes";
 const TABS = [
@@ -36,18 +41,31 @@ const TABS = [
 ] as const;
 
 /** An exercise's page, opened over the Library (63a, as drawn): its picture, one strip of facts, its cautions
- *  always in sight above the tabs, then Muscles, How to and Mistakes. */
+ *  always in sight under it, calories a minute for the person and their records (63c), then Muscles, How to and
+ *  Mistakes; Add to workout held at the foot. `weightKg` is undefined until the server has said it. */
 export function ExercisePage({
   entry,
   sex,
+  units,
+  weightKg,
+  onWeighed,
+  onOpenMine,
   onClose,
 }: {
   entry: PhoneLibraryEntry;
   sex: Sex | null;
+  units: Units;
+  weightKg: number | null | undefined;
+  /** Progress, opened from Add your weight, has closed: the weight may have changed. */
+  onWeighed: () => void;
+  /** Opens My Workout, this page closed. */
+  onOpenMine: () => void;
   onClose: () => void;
 }) {
   const [tab, setTab] = useState<Tab>("muscles");
   const [sourcesOpen, setSourcesOpen] = useState(false);
+  const [weighing, setWeighing] = useState(false);
+  const mine = useMyWorkout();
   const en = entry.text.en;
   const counted = COUNTED_WORDS[COUNTED_TODAY];
 
@@ -75,7 +93,7 @@ export function ExercisePage({
     />
   );
   return (
-    <CoverPage open title={en.name} onClose={onClose} hero={hero}>
+    <CoverPage open title={en.name} onClose={onClose} hero={hero} foot={mine === null ? undefined : <AddToWorkout id={entry.id} mine={mine} onOpenMine={onOpenMine} />}>
       <Strip entry={entry} />
       {en.cautions.map((c, i) => (
         <View key={`${String(i)}-${c}`} style={styles.caution} accessible accessibilityRole="alert" accessibilityLabel={`Caution: ${c}`}>
@@ -85,6 +103,10 @@ export function ExercisePage({
           </Txt>
         </View>
       ))}
+      {entry.met === null || weightKg === undefined ? null : (
+        <KcalLine met={entry.met} weightKg={weightKg} units={units} onWeight={() => { setWeighing(true); }} />
+      )}
+      <Records entry={entry} units={units} />
       <Segments options={TABS} selected={tab} onPick={setTab} />
       {tab === "muscles" ? <Muscles entry={entry} sex={sex} /> : tab === "howto" ? <HowTo entry={entry} /> : <Mistakes entry={entry} />}
       {entry.sources.length === 0 ? null : (
@@ -116,7 +138,59 @@ export function ExercisePage({
           ))}
         </View>
       </Sheet>
+      <ProgressPage
+        open={weighing}
+        first="body"
+        onClose={() => {
+          setWeighing(false);
+          onWeighed();
+        }}
+      />
     </CoverPage>
+  );
+}
+
+/** Calories a minute for the person's own weight, reckoned as a saved workout's are; where their weight is not
+ *  known, at the weight the server uses then, with the button that opens the place to add it. */
+function KcalLine({ met, weightKg, units, onWeight }: { met: number; weightKg: number | null; units: Units; onWeight: () => void }) {
+  const k = kcalPerMinute(met, weightKg);
+  const at = weightWords(Math.round(k.weightKg * 1000), units);
+  return (
+    <View style={styles.kcal}>
+      <View style={styles.kcalMark}>
+        <Icon name="flame" size={16} colour="orange" />
+      </View>
+      <Txt kind="small" style={styles.grow}>
+        {k.known ? `About ${String(k.kcal)} kcal a minute for you, at ${at}` : `About ${String(k.kcal)} kcal a minute at ${at}`}
+      </Txt>
+      {k.known ? null : <Button label="Add your weight" kind="link" small onPress={onWeight} />}
+    </View>
+  );
+}
+
+/** The page's one action: added once, pressed again it comes out; how many My Workout holds, and the way there. */
+function AddToWorkout({ id, mine, onOpenMine }: { id: string; mine: { list: readonly string[]; add: (id: string) => void; remove: (id: string) => void }; onOpenMine: () => void }) {
+  const added = mine.list.includes(id);
+  return (
+    <View style={styles.foot}>
+      <Button
+        label={added ? "Added to workout" : "Add to workout"}
+        icon={added ? "check" : "plus"}
+        kind={added ? "soft" : "main"}
+        wide
+        say={added ? "Added to workout. Press to take it out" : "Add to workout"}
+        onPress={() => {
+          if (added) mine.remove(id);
+          else mine.add(id);
+        }}
+      />
+      {added ? (
+        <View style={styles.footLine}>
+          <Txt kind="small">{`${String(mine.list.length)} in My Workout`}</Txt>
+          <Button label="Open" kind="link" small say="Open My Workout" onPress={onOpenMine} />
+        </View>
+      ) : null}
+    </View>
   );
 }
 
@@ -295,6 +369,10 @@ function Mistakes({ entry }: { entry: PhoneLibraryEntry }) {
 const styles = StyleSheet.create({
   grow: { flex: 1 },
   centre: { textAlign: "center" },
+  kcal: { flexDirection: "row", alignItems: "center", gap: 10 },
+  kcalMark: { width: 34, height: 34, borderRadius: 12, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colours.orangeLine, backgroundColor: colours.orangeFill },
+  foot: { gap: 6 },
+  footLine: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 },
   tagRow: { alignItems: "flex-end" },
   tag: { flexDirection: "row", alignItems: "center", gap: 6, minHeight: 30, paddingHorizontal: 12, borderRadius: sizes.round, borderWidth: 1, borderColor: colours.lineStrong, backgroundColor: colours.overPicture },
   titles: { gap: 4, paddingBottom: 44 },

@@ -20,6 +20,7 @@ export * from "./library/phoneLibrary.js";
 export * from "./library/workoutSave.js";
 export * from "./library/workoutHistory.js";
 export * from "./library/plannedWorkout.js";
+export * from "./library/kcalPerMinute.js";
 export * from "./workouts.js";
 export * from "./progress.js";
 export * from "./gamification.js";

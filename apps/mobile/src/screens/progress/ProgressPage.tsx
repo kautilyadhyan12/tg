@@ -19,8 +19,12 @@ export { MEASUREMENTS_READ } from "./BodyTab";
 
 const TAB_PAGES: Record<TabKey, ComponentType> = { overview: Overview, trends: Trends, calendar: CalendarTab, body: BodyTab };
 
-export function ProgressPage({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const [tab, setTab] = useState<TabKey>("overview");
+/** `first`: the tab it opens on, such as Body from an exercise's Add your weight (63c). */
+export function ProgressPage({ open, onClose, first = "overview" }: { open: boolean; onClose: () => void; first?: TabKey }) {
+  const [tab, setTab] = useState<TabKey>(first);
+  useEffect(() => {
+    if (open) setTab(first);
+  }, [open, first]);
   const motion = useMotion();
   const shown = useRef(new Animated.Value(1)).current;
   // A tab picked fades in over a fifth of a second; its boxes were already drawn.
