@@ -19,7 +19,7 @@ import {
   weightWayOf,
   type Field,
 } from "../../library/workoutSetup";
-import { Led, LoadedBar } from "./Records";
+import { Led, LOADED_BAR_HEIGHT, LoadedBar } from "./Records";
 
 // Setting up one exercise of My Workout (ROADMAP Stage 5 64a-i, Kd's drawing of 2026-11-20): the box from the bottom.
 // The weight of a barbell exercise is the loaded bar, as on Your records; sets, reps or time, any other weight and the
@@ -66,7 +66,7 @@ export function SetUpSheet({ entry, plan, units, onChange, onAbout, onClose }: P
     >
       <ScrollView style={styles.scroll} contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
         <Txt kind="small">{one === null ? "Every set" : `Set ${String(one + 1)} only`}</Txt>
-        {way === "bar" ? <BarBox entry={entry} grams={varies("weight") ? undefined : shown.weightGrams} units={units} press={press} can={can} /> : null}
+        {way === "bar" ? <BarBox entry={entry} grams={varies("weight") ? undefined : shown.weightGrams} range={weightRange(plan, units)} units={units} press={press} can={can} /> : null}
         <View style={styles.wall}>
           <Dial label="Sets" say="sets" field="sets" digits={String(plan.sets.length)} colour="ledAmber" unit={null} press={press} can={can} first />
           {time ? (
@@ -106,7 +106,7 @@ export function SetUpSheet({ entry, plan, units, onChange, onAbout, onClose }: P
                     }}
                     style={[styles.setLine, i > 0 ? styles.setSplit : null, on ? styles.setOn : null]}
                   >
-                    <Txt kind="tiny" style={styles.setNo}>{`SET ${String(i + 1)}`}</Txt>
+                    <Txt kind="tiny" numberOfLines={1} style={styles.setNo}>{`SET ${String(i + 1)}`}</Txt>
                     <View style={styles.setWords}>
                       <Txt kind="strong" colour="ledRed" style={styles.digitsFont}>{targetWords(plan, s)}</Txt>
                       {weight === null ? null : <Txt kind="strong" colour="ledBlue" style={styles.digitsFont}>{weight}</Txt>}
@@ -138,6 +138,14 @@ export function SetUpSheet({ entry, plan, units, onChange, onAbout, onClose }: P
       </ScrollView>
     </Sheet>
   );
+}
+
+/** Weights that differ from set to set: "35 to 40 kg", or "varies" where some sets take none. */
+function weightRange(plan: Plan, units: Units): string {
+  const grams = plan.sets.map((s) => s.weightGrams);
+  const some = grams.filter((g): g is number => g !== null);
+  if (some.length === 0 || some.length < grams.length) return "varies";
+  return `${weightParts(Math.min(...some), units)[0]} to ${weightParts(Math.max(...some), units).join(" ")}`;
 }
 
 type Press = (field: Field, by: -1 | 1) => void;
@@ -192,9 +200,9 @@ function Dial({ label, say, field, digits, colour, unit, press, can, first = fal
 
 /** A barbell's weight: the number between − and +, and the bar loaded with it in the standard plates. `grams` is
  *  undefined where the sets differ: then no bar is drawn, since no one load is true of them all. */
-function BarBox({ entry, grams, units, press, can }: { entry: PhoneLibraryEntry; grams: number | null | undefined; units: Units; press: Press; can: Can }) {
+function BarBox({ entry, grams, range, units, press, can }: { entry: PhoneLibraryEntry; grams: number | null | undefined; range: string; units: Units; press: Press; can: Can }) {
   const plates = grams === undefined ? null : barPlates(entry, units, grams);
-  const words = grams === undefined ? "varies" : grams === null ? "None" : weightParts(grams, units).join(" ");
+  const words = grams === undefined ? range : grams === null ? "None" : weightParts(grams, units).join(" ");
   return (
     <View style={styles.barBox}>
       <View style={styles.barHead}>
@@ -209,7 +217,8 @@ function BarBox({ entry, grams, units, press, can }: { entry: PhoneLibraryEntry;
         </View>
         <Round field="weight" by={1} say="weight" press={press} can={can} />
       </View>
-      {plates === null ? null : <LoadedBar side={plates} extra={[]} />}
+      {/* The bar's place is kept when no bar can be drawn, so the box never moves under a finger pressing + or −. */}
+      {plates === null ? <View style={styles.barRoom} testID="bar-room" /> : <LoadedBar side={plates} extra={[]} />}
     </View>
   );
 }
@@ -240,11 +249,12 @@ const styles = StyleSheet.create({
   roundMark: { lineHeight: 26 },
   barBox: { gap: 4, paddingTop: 12, paddingBottom: 8, paddingHorizontal: 12, borderRadius: 18, borderWidth: 1, borderColor: colours.line, backgroundColor: colours.raised },
   barHead: { flexDirection: "row", alignItems: "center", gap: 8 },
+  barRoom: { height: LOADED_BAR_HEIGHT },
   barWords: { flex: 1, alignItems: "center", gap: 2 },
   list: { borderRadius: 16, borderWidth: 1, borderColor: colours.timerEdge, backgroundColor: colours.timerFace, overflow: "hidden" },
   setLine: { flexDirection: "row", alignItems: "center", gap: 10, minHeight: sizes.press, paddingVertical: 8, paddingHorizontal: 12, borderLeftWidth: 3, borderLeftColor: "transparent" },
   setSplit: { borderTopWidth: 1, borderTopColor: colours.timerSplit },
   setOn: { borderLeftColor: colours.orange, backgroundColor: colours.orangeFill },
-  setNo: { width: 46, fontFamily: fonts.bold, letterSpacing: 1, color: colours.timerWords },
+  setNo: { minWidth: 46, fontFamily: fonts.bold, letterSpacing: 1, color: colours.timerWords },
   setWords: { flex: 1, flexDirection: "row", flexWrap: "wrap", columnGap: 14 },
 });

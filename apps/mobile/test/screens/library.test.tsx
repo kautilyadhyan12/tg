@@ -690,7 +690,11 @@ describe("setting up My Workout's sets (64a-i)", () => {
     expect(screen.getByLabelText("An empty 20 kilogram bar")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Less weight" }).props.accessibilityState).toMatchObject({ disabled: true });
     // + from none is the empty bar, then 2.5 kg a press: 35 kg is a 5 and a 2.5 a side.
-    for (let i = 0; i < 7; i++) await fireEvent.press(screen.getByRole("button", { name: "More weight" }));
+    await fireEvent.press(screen.getByRole("button", { name: "More weight" }));
+    await fireEvent.press(screen.getByRole("button", { name: "More weight" }));
+    // 22.5 kg, the walk's fault: the 1.25 change plate a side draws it.
+    expect(screen.getByLabelText("A bar loaded with 1.25 kilogram plates a side")).toBeTruthy();
+    for (let i = 0; i < 5; i++) await fireEvent.press(screen.getByRole("button", { name: "More weight" }));
     expect(screen.getByLabelText("Weight, 35 kg")).toBeTruthy();
     expect(screen.getByLabelText("A bar loaded with 5, 2.5 kilogram plates a side")).toBeTruthy();
     // A barbell's weight is set on the bar only, never on the timer a second time.
@@ -709,7 +713,9 @@ describe("setting up My Workout's sets (64a-i)", () => {
     // Back to every set: the controls say the sets differ.
     await fireEvent.press(screen.getByRole("button", { name: "Change every set" }));
     expect(screen.getByLabelText("Reps, varies")).toBeTruthy();
-    expect(screen.getByLabelText("Weight, varies")).toBeTruthy();
+    expect(screen.getByLabelText("Weight, 35 to 40 kg")).toBeTruthy();
+    // No one load is true of every set, so no bar; its place is kept, so nothing under the finger moves.
+    expect(screen.getByTestId("bar-room")).toBeTruthy();
     await fireEvent.press(screen.getByRole("button", { name: "Done" }));
     expect(await screen.findByText("4 sets · 10, 10, 10, 6 reps · 35 to 40 kg · rest 1:00")).toBeTruthy();
   });

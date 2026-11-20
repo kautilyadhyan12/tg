@@ -213,6 +213,8 @@ describe("the bar is never drawn holding a weight it does not hold", () => {
     ["35 kg: 5 and 2.5 a side", 35_000, "metric", [5, 2.5]],
     ["100 kg: 25, 15 a side", 100_000, "metric", [25, 15]],
     ["21 kg: a 0.5 kg change plate a side", 21_000, "metric", [0.5]],
+    ["22.5 kg, one press past the bar: a 1.25 kg plate a side", 22_500, "metric", [1.25]],
+    ["27.5 kg: 2.5 and 1.25 a side", 27_500, "metric", [2.5, 1.25]],
     ["20.25 kg: no plates make it, so the number alone", 20_250, "metric", null],
     ["more than the sleeve holds: the number alone", 400_000, "metric", null],
     ["in pounds: the number alone", Math.round(135 * 453.59237), "imperial", null],
@@ -220,6 +222,24 @@ describe("the bar is never drawn holding a weight it does not hold", () => {
     const side = barPlates(curl, units, grams);
     expect(side).toEqual(want);
     if (side !== null && grams !== null) expect(20 + 2 * side.reduce((a, p) => a + p, 0)).toBe(grams / 1000);
+  });
+});
+
+describe("every press on the bar draws it (the walk on Kd's phone, 2026-11-20)", () => {
+  it("each 2.5 kg step from the empty bar draws plates that add up to it, until the sleeve is full", () => {
+    // On the phone, 22.5 kg drew no bar, the box grew shorter under the finger, and the next press closed it.
+    let grams: number | null = null;
+    let steps = 0;
+    for (;;) {
+      grams = stepWeight(grams, 1, "metric", true);
+      if (grams === null) throw new Error("a press up gave none");
+      const side = barPlates(curl, "metric", grams);
+      if (side === null) break;
+      expect(20 + 2 * side.reduce((a, p) => a + p, 0)).toBeCloseTo(grams / 1000, 6);
+      steps += 1;
+    }
+    // From 20 kg to past 180 kg, every step drawn.
+    expect(steps).toBeGreaterThan(64);
   });
 });
 

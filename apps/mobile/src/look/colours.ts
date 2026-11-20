@@ -161,6 +161,8 @@ export const colours = {
   plateYellow: "#F2C230",
   plateGreen: "#2FA052",
   plateWhite: "#EDEDED",
+  /** The gym's 1.25 kg change plate, chrome (64a-i). */
+  plateChrome: "#A9A6A1",
   plateSide: "rgba(0,0,0,0.38)",
   barSteel: "#9C9A97",
   barSleeve: "#C9C6C1",

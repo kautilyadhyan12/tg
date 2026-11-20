@@ -109,6 +109,7 @@ describe("the loaded bar holds exactly the weight it says, or is not drawn", () 
 
   it("plates are largest first, and only the standard ones", () => {
     expect(platesFor(47.5)).toEqual([25, 20, 2.5]);
+    expect(platesFor(3.75)).toEqual([2.5, 1.25]);
     expect(platesFor(0)).toEqual([]);
     expect(platesFor(0.3)).toBeNull();
     for (let half = 0; half <= 200; half++) for (const p of platesFor(half / 2) ?? []) expect(PLATES_KG).toContain(p);

@@ -122,6 +122,7 @@ const PLATE_COLOUR: Readonly<Record<PlateKg, ColourName>> = {
   2.5: "plateRed",
   2: "plateBlue",
   1.5: "plateYellow",
+  1.25: "plateChrome",
   1: "plateGreen",
   0.5: "plateWhite",
 };
@@ -135,6 +136,8 @@ function box(x: number, y: number, w: number, h: number, r: number): string {
 
 const BAR_W = 300;
 const BAR_H = 82;
+/** How tall the loaded bar is drawn: a place kept for it stays this tall when no bar can be drawn. */
+export const LOADED_BAR_HEIGHT = BAR_H;
 
 /** A standard bar seen from the front: what was lifted as plates a side from each collar outwards, the estimate's
  *  extra as outlined plates beyond them. */
