@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Settings' front desk sections and Your account on a phone</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./kit3.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0;background:#0A0908}
+.cap{display:flex;align-items:center;gap:10px;font-weight:600;color:var(--t2)}
+.num{width:26px;height:26px;border-radius:999px;background:var(--o-fill);color:var(--o-t);box-shadow:inset 0 0 0 1px var(--o-line);display:grid;place-items:center;font-size:13px;font-weight:700;flex:none}
+.stage{background:var(--scrim);border-radius:18px;padding:32px 16px;display:flex;justify-content:center}
+.dlg{background:var(--solid);border:1px solid var(--line2);border-radius:20px;box-shadow:var(--pop);width:100%;max-width:500px;min-width:0}
+.side{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,440px);border:1px solid var(--line);border-radius:18px;overflow:hidden}
+.side > .under{padding:20px;opacity:.6;overflow:hidden;min-width:0}
+.side > .sheet{background:var(--solid);border-left:1px solid var(--line2);display:flex;flex-direction:column;min-width:0}
+.sheet-h{display:flex;align-items:center;gap:12px;padding:18px 20px;border-bottom:1px solid var(--line)}
+.sheet-b{padding:20px;display:flex;flex-direction:column;gap:18px}
+.sheet-f{margin-top:auto;display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:14px 20px;border-top:1px solid var(--line)}
+.opt{display:flex;gap:12px;align-items:flex-start;padding:14px 16px;border-radius:14px;border:1px solid var(--line2)}
+.opt-on{border-color:var(--o);background:var(--o-fill)}
+.radio{width:18px;height:18px;border-radius:999px;border:1.5px solid var(--line2);flex:none;margin-top:1px}
+.radio-on{border:5px solid var(--o)}
+.check-on{background:var(--o);border-color:var(--o);position:relative}
+.check-on::after{content:"";position:absolute;left:5px;top:1px;width:5px;height:10px;border:solid var(--on-o);border-width:0 2px 2px 0;transform:rotate(45deg)}
+.sw{width:40px;height:24px;border-radius:999px;background:var(--bar);position:relative;flex:none}
+.sw::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:999px;background:var(--t3)}
+.sw-on{background:var(--o)}.sw-on::after{left:19px;background:var(--on-o)}
+.step{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,340px);gap:20px;align-items:start}
+.menu{background:var(--solid);border:1px solid var(--line2);border-radius:16px;box-shadow:var(--pop);padding:6px;min-width:0;max-width:320px}
+.mi{display:flex;gap:12px;align-items:flex-start;padding:10px 12px;border-radius:10px}
+.ptile{display:flex;flex-direction:column;gap:4px;padding:14px;border-radius:14px;border:1px solid var(--line2);min-width:0}
+.ptile-on{border-color:var(--o);background:var(--o-fill)}
+.pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.qty{display:inline-flex;align-items:center;border:1px solid var(--line2);border-radius:999px;height:40px}
+.qty > button{width:40px;height:40px;display:grid;place-items:center;color:var(--t2)}
+.money{font-weight:600;white-space:nowrap}
+.frames{display:flex;flex-wrap:wrap;gap:40px;padding:40px;align-items:flex-start}
+.frame{width:390px;max-width:100%;border:1px solid var(--line2);border-radius:28px;overflow:hidden;background:var(--page);display:flex;flex-direction:column;position:relative}
+.bsheet{background:var(--solid);border-top:1px solid var(--line2);border-radius:22px 22px 0 0;box-shadow:var(--pop);display:flex;flex-direction:column}
+.grab{width:40px;height:5px;border-radius:999px;background:var(--line2);margin:10px auto 4px}
+.savebar{position:sticky;bottom:12px;z-index:2;display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 16px;background:var(--solid);border:1px solid var(--line2);border-radius:18px}
+.footbar{position:sticky;bottom:0;padding:12px 16px 16px;border-top:1px solid var(--line);background:var(--solid);display:flex;flex-direction:column;gap:8px}
+@media (max-width:1180px){.side{grid-template-columns:minmax(0,1fr)}.side > .under{display:none}.side > .sheet{border-left:0}}
+@media (max-width:900px){.step{grid-template-columns:minmax(0,1fr)}.frames{padding:16px;gap:24px}}
+@media (pointer:coarse){.qty,.qty > button{height:44px}.qty > button{width:44px}}
+.slay{display:grid;grid-template-columns:280px minmax(0,1fr);gap:28px;align-items:start}.snav{position:sticky;top:16px;display:flex;flex-direction:column;gap:2px;min-width:0}.sgrp{font-size:12px;line-height:16px;letter-spacing:.12em;text-transform:uppercase;font-weight:700;color:var(--t3);padding:14px 12px 6px}.sgrp:first-child{padding-top:0}.sn{display:flex;flex-direction:column;gap:2px;padding:9px 12px;border-radius:12px;color:var(--t1);min-width:0}.sn-on{background:var(--o-fill);box-shadow:inset 0 0 0 1px var(--o-line)}.sn-on > .w6{color:var(--o-t)}.sback{display:none}.sec{display:flex;flex-direction:column;min-width:0}.sec-b{padding:0 20px 20px;display:flex;flex-direction:column;gap:18px}.sec-f{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:14px 20px;border-top:1px solid var(--line)}.hint{color:var(--t3)}.err{color:var(--bad)}@media (max-width:900px){.slay{grid-template-columns:minmax(0,1fr)}.slay > .snav{display:none}.sback{display:flex}}.col > span{overflow-wrap:anywhere}.frame .snav{position:static}.frame .sn{flex-direction:row;align-items:center;gap:10px;min-height:56px;border-top:1px solid var(--line);border-radius:0;padding:8px 4px}.frame .sn > .col{flex:1 1 0;min-width:0}.term{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 0;border-top:1px solid var(--line)}@media (max-width:300px){.ph-tab-on{font-weight:500}}.who{background:var(--box2);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:8px}.who ul{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:4px}.link{border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:10px;background:var(--o-fill);box-shadow:inset 0 0 0 1px var(--o-line)}
+</style>
+</helmet>
+<div class="app t-dark {{look}}" style="min-height: 100%">
+<div class="frames">
+
+<div class="frame" aria-label="Settings: Who can check in as a page of its own">
+<header class="ph-top"><a href="#" class="hrow g8 c-o w6 grow" style="min-height: 44px"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"></path></svg>Settings</a></header>
+<main class="ph-main">
+<div class="col g4"><h1 class="h1">Who can check in</h1><span class="t2">Only people with a current membership · overdue payments and waivers not signed sent to staff</span></div>
+<div class="col g10" role="radiogroup" aria-label="Who the front desk checks in">
+<span class="label">Who the front desk checks in</span>
+<div class="opt"><span class="radio"></span><span class="w6">Everyone on your list</span></div>
+<div class="opt opt-on"><span class="radio radio-on"></span><span class="col g4"><span class="w6">Only people with a current membership</span><span class="t2">A membership that is frozen, ended, cancelled or not started yet is not current.</span></span></div>
+</div>
+<div class="col g10" role="radiogroup" aria-label="Someone with an overdue payment">
+<span class="label">Someone with an overdue payment</span>
+<div class="opt"><span class="radio"></span><span class="w6">Check them in</span></div>
+<div class="opt opt-on"><span class="radio radio-on"></span><span class="w6">Send them to staff</span></div>
+</div>
+<div class="who"><span class="w6">Today 9 of the 214 people on your list would be sent to staff:</span><ul><li>Ben Okafor <span class="t3">· Payment overdue</span></li><li>Carla Diaz <span class="t3">· Membership frozen</span></li></ul><span class="hrow g10 wrap t2"><span>and 7 more</span><a href="#" class="c-o w6">View all</a></span></div>
+<span class="t3">The waiver's choice and every line stay as on a computer.</span>
+</main>
+<div class="footbar"><button type="button" class="btn btn-p btn-w">Save changes</button></div>
+</div>
+
+<div class="frame" aria-label="Settings: Waiver, Turn off from the bottom">
+<header class="ph-top"><a href="#" class="hrow g8 c-o w6 grow" style="min-height: 44px"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"></path></svg>Settings</a></header>
+<main class="ph-main" style="opacity: .55">
+<div class="col g4"><h1 class="h1">Waiver</h1><span class="t2">In use · signed by 198 of 214 people in the app</span></div>
+<div class="input" style="min-height: 160px; align-items: flex-start; padding-top: 12px"><span class="grow">I understand that training at Iron House carries a risk of injury…</span></div>
+<button type="button" class="btn btn-q btn-w">Turn off</button>
+</main>
+<div class="bsheet" role="dialog" aria-label="Turn off this waiver?">
+<span class="grab"></span>
+<div class="col g12" style="padding: 8px 16px 20px">
+<h2 class="h2">Turn off this waiver?</h2>
+<span class="t2">Members will not be asked to sign it, including members already in the app.</span>
+<span class="t3">Signed waivers are kept. You can turn it back on at any time.</span>
+<button type="button" class="btn btn-d btn-w">Turn off</button>
+<button type="button" class="btn btn-q btn-w">Cancel</button>
+</div>
+</div>
+</div>
+
+<div class="frame" aria-label="Settings: Check-in devices, a new link">
+<header class="ph-top"><a href="#" class="hrow g8 c-o w6 grow" style="min-height: 44px"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"></path></svg>Settings</a></header>
+<main class="ph-main">
+<div class="col g4"><h1 class="h1">Check-in devices</h1><span class="t2">2 devices · 1 on</span></div>
+<div class="link"><span class="w6">Open this link on Gym floor tablet</span><span class="t2">Open it on the tablet or computer itself, in a browser nobody is signed in to, and leave it there.</span><div class="input"><span class="grow ell">…/desk/setup/7hQ2-xk9P</span></div><button type="button" class="btn btn-s btn-w"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 9h13v13H9zM5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>Copy link</button><button type="button" class="btn btn-q btn-w">Done</button></div>
+<div class="term"><span class="col grow" style="min-width: 0"><span class="hrow g8 wrap"><span class="w6">Front desk</span><span class="tag tag-good">On</span></span><span class="t3">Checking people in. Last scan today, 11:20 am.</span></span><button type="button" class="ibtn" aria-label="More for Front desk"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h.01M12 12h.01M19 12h.01"></path></svg></button></div>
+<span class="t3">A device's New link and Switch off are in its ⋯, from the bottom; each still asks first.</span>
+</main>
+</div>
+
+<div class="frame" aria-label="Your account, from More">
+<header class="ph-top"><a href="#" class="hrow g8 c-o w6 grow" style="min-height: 44px"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"></path></svg>More</a></header>
+<main class="ph-main">
+<div class="col g4"><h1 class="h1">Your account</h1><span class="t2">Jordan Lee · jordan.lee@gmail.com</span></div>
+<div class="box pad col g12">
+<h2 class="h2">Delete account</h2>
+<span>We emailed a 6-digit code to jordan.lee@gmail.com.</span>
+<div class="field"><span class="label">6-digit code</span><div class="input"><span class="grow">482</span></div></div>
+<button type="button" class="btn btn-d btn-w"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"></path></svg>Delete my account</button>
+<button type="button" class="btn btn-q btn-w">Cancel</button>
+<a href="#" class="c-o w6" style="align-self: flex-start; min-height: 44px; display: inline-flex; align-items: center">Email me a new code</a>
+</div>
+</main>
+<nav class="ph-tabs" aria-label="Pages"><a href="#" class="ph-tab"><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"></path></svg></span>Overview</a><a href="#" class="ph-tab"><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 3a4 4 0 1 0 0 8a4 4 0 1 0 0-8M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"></path></svg></span>Members</a><a href="#" class="ph-tab"><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6L9 17l-5-5"></path></svg></span>Attendance</a><a href="#" class="ph-tab"><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM16 2v4M8 2v4M3 10h18"></path></svg></span>Classes</a><a href="#" class="ph-tab ph-tab-on"><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h.01M12 12h.01M19 12h.01"></path></svg></span>More</a></nav>
+</div>
+
+</div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"look":{"editor":"enum","options":["Dark","Light"],"default":"Dark"},"$preview":{"width":1800,"height":910}}'>
+class Component extends DCLogic {
+renderVals() {
+return { look: (this.props.look ?? 'Dark') === 'Light' ? 't-light' : '' };
+}
+}
+</script>
+</body>
+</html>
