@@ -74,8 +74,11 @@ export function canStep(plan: Plan, field: Field, by: -1 | 1, which: number | nu
   return changed(plan, field, by, which, units, barbell) !== plan;
 }
 
-/** A press of + (1) or − (-1) on one field, for every set (`which` null: each changes by its own step) or for one. Sets
- *  are added as a copy of the last and taken from the end. The plan given back is the same one where nothing changed. */
+/** A press of + (1) or − (-1) on one field, for one set (`which`) or for every set (`which` null). Every set takes the
+ *  first set's number after the press, so what the controls show (the first set's) is what every set then holds, and
+ *  sets that differed are made the same (Kd's click-through, 2026-11-20: with each moving by its own step the screen
+ *  showed "--" and a press seemed to do nothing). Sets are added as a copy of the last and taken from the end. The plan
+ *  given back is the same one where nothing changed. */
 export function changed(plan: Plan, field: Field, by: -1 | 1, which: number | null, units: Units, barbell: boolean): Plan {
   if (field === "sets") {
     if (by > 0) {
@@ -97,7 +100,18 @@ export function changed(plan: Plan, field: Field, by: -1 | 1, which: number | nu
     const rest = Math.min(REST_MOST, Math.max(0, now + by * REST_STEP));
     return rest === now ? s : { ...s, restSeconds: rest };
   };
-  const sets = plan.sets.map((s, i) => (which !== null && i !== which ? s : one(s)));
+  const first = plan.sets[0];
+  if (first === undefined) return plan;
+  let sets: PlannedSet[];
+  if (which !== null) {
+    sets = plan.sets.map((s, i) => (i === which ? one(s) : s));
+  } else {
+    const led = one(first);
+    sets = plan.sets.map((s) => {
+      const next: PlannedSet = field === "target" ? { ...s, target: led.target } : field === "weight" ? { ...s, weightGrams: led.weightGrams } : { ...s, restSeconds: led.restSeconds };
+      return next.target === s.target && next.weightGrams === s.weightGrams && next.restSeconds === s.restSeconds ? s : next;
+    });
+  }
   return sets.some((s, i) => s !== plan.sets[i]) ? { ...plan, sets } : plan;
 }
 

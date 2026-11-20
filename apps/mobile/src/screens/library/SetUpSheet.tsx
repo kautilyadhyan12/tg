@@ -13,7 +13,6 @@ import {
   changed,
   clockDigits,
   restWords,
-  same,
   targetWords,
   weightDigits,
   weightWayOf,
@@ -23,8 +22,9 @@ import { Led, LOADED_BAR_HEIGHT, LoadedBar } from "./Records";
 
 // Setting up one exercise of My Workout (ROADMAP Stage 5 64a-i, Kd's drawing of 2026-11-20): the box from the bottom.
 // The weight of a barbell exercise is the loaded bar, as on Your records; sets, reps or time, any other weight and the
-// rest are lit on the gym's LED wall timer, each in its own colour. Every set changes together, or one set alone
-// after Change one set. Each press is kept at once; Done closes it.
+// rest are lit on the gym's LED wall timer, each in its own colour. Under them the sets, always shown: "Every set" at
+// the top, then each set; the line picked is what the controls change, and they always show its real numbers
+// (Kd's click-through, 2026-11-20). Each press is kept at once; Done closes it.
 
 interface Props {
   entry: PhoneLibraryEntry;
@@ -37,14 +37,12 @@ interface Props {
 
 export function SetUpSheet({ entry, plan, units, onChange, onAbout, onClose }: Props) {
   const [which, setWhich] = useState<number | null>(null);
-  const [each, setEach] = useState(false);
   const one = which !== null && which < plan.sets.length ? which : null;
   const way = weightWayOf(entry, units);
   const barbell = entry.equipment.includes("barbell");
   const shown = plan.sets[one ?? 0];
   const name = entry.text.en.name;
   if (shown === undefined) return null;
-  const varies = (field: Exclude<Field, "sets">) => one === null && !same(plan, field);
   const press = (field: Field, by: -1 | 1) => {
     const next = changed(plan, field, by, field === "sets" ? null : one, units, barbell);
     if (next !== plan) onChange(next);
@@ -58,39 +56,50 @@ export function SetUpSheet({ entry, plan, units, onChange, onAbout, onClose }: P
       title={name}
       onClose={onClose}
       onBack={() => {
-        if (one === null && !each) return false;
+        if (one === null) return false;
         setWhich(null);
-        setEach(false);
         return true;
       }}
     >
       <ScrollView style={styles.scroll} contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
-        <Txt kind="small">{one === null ? "Every set" : `Set ${String(one + 1)} only`}</Txt>
-        {way === "bar" ? <BarBox entry={entry} grams={varies("weight") ? undefined : shown.weightGrams} range={weightRange(plan, units)} units={units} press={press} can={can} /> : null}
+        {one === null ? null : <Txt kind="small" colour="orange">{`Set ${String(one + 1)} only`}</Txt>}
+        {way === "bar" ? <BarBox entry={entry} grams={shown.weightGrams} units={units} press={press} can={can} /> : null}
         <View style={styles.wall}>
           <Dial label="Sets" say="sets" field="sets" digits={String(plan.sets.length)} colour="ledAmber" unit={null} press={press} can={can} first />
           {time ? (
-            <Dial label="Time" say="time" field="target" digits={varies("target") ? "--:--" : clockDigits(shown.target)} colour="ledRed" unit={varies("target") ? "varies" : null} press={press} can={can} />
+            <Dial label="Time" say="time" field="target" digits={clockDigits(shown.target)} colour="ledRed" unit={null} press={press} can={can} />
           ) : (
-            <Dial label="Reps" say="reps" field="target" digits={varies("target") ? "--" : String(shown.target)} colour="ledRed" unit={varies("target") ? "varies" : "reps"} press={press} can={can} />
+            <Dial label="Reps" say="reps" field="target" digits={String(shown.target)} colour="ledRed" unit="reps" press={press} can={can} />
           )}
           {way === "number" ? (
             <Dial
               label="Weight"
               say="weight"
               field="weight"
-              digits={varies("weight") ? "--" : weightDigits(shown.weightGrams, units)[0]}
+              digits={weightDigits(shown.weightGrams, units)[0]}
               colour="ledBlue"
-              unit={varies("weight") ? "varies" : weightDigits(shown.weightGrams, units)[1]}
+              unit={weightDigits(shown.weightGrams, units)[1]}
               press={press}
               can={can}
             />
           ) : null}
-          <Dial label="Rest" say="rest" field="rest" digits={varies("rest") ? "--:--" : clockDigits(shown.restSeconds ?? 0)} colour="ledGreen" unit={varies("rest") ? "varies" : null} press={press} can={can} />
+          <Dial label="Rest" say="rest" field="rest" digits={clockDigits(shown.restSeconds ?? 0)} colour="ledGreen" unit={null} press={press} can={can} />
         </View>
-        {each ? (
-          <>
-            <View style={styles.list}>
+        <View style={styles.list}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Every set"
+            accessibilityState={{ selected: one === null }}
+            onPress={() => {
+              setWhich(null);
+            }}
+            style={[styles.setLine, one === null ? styles.setOn : null]}
+          >
+            <Txt kind="strong" style={styles.everyWords}>
+              Every set
+            </Txt>
+            <Txt kind="small" colour="timerWords">{`${String(plan.sets.length)} ${plan.sets.length === 1 ? "set" : "sets"}`}</Txt>
+          </Pressable>
               {plan.sets.map((s, i) => {
                 const on = one === i;
                 const weight = s.weightGrams === null ? null : weightParts(s.weightGrams, units).join(" ");
@@ -104,7 +113,7 @@ export function SetUpSheet({ entry, plan, units, onChange, onAbout, onClose }: P
                     onPress={() => {
                       setWhich(i);
                     }}
-                    style={[styles.setLine, i > 0 ? styles.setSplit : null, on ? styles.setOn : null]}
+                    style={[styles.setLine, styles.setSplit, on ? styles.setOn : null]}
                   >
                     <Txt kind="tiny" numberOfLines={1} style={styles.setNo}>{`SET ${String(i + 1)}`}</Txt>
                     <View style={styles.setWords}>
@@ -115,37 +124,12 @@ export function SetUpSheet({ entry, plan, units, onChange, onAbout, onClose }: P
                   </Pressable>
                 );
               })}
-            </View>
-            <Button
-              label="Change every set"
-              kind="link"
-              onPress={() => {
-                setWhich(null);
-              }}
-            />
-          </>
-        ) : (
-          <Button
-            label="Change one set"
-            kind="link"
-            onPress={() => {
-              setEach(true);
-            }}
-          />
-        )}
+        </View>
         <Button label={`About ${name}`} kind="link" onPress={onAbout} />
         <Button label="Done" kind="plain" wide onPress={onClose} />
       </ScrollView>
     </Sheet>
   );
-}
-
-/** Weights that differ from set to set: "35 to 40 kg", or "varies" where some sets take none. */
-function weightRange(plan: Plan, units: Units): string {
-  const grams = plan.sets.map((s) => s.weightGrams);
-  const some = grams.filter((g): g is number => g !== null);
-  if (some.length === 0 || some.length < grams.length) return "varies";
-  return `${weightParts(Math.min(...some), units)[0]} to ${weightParts(Math.max(...some), units).join(" ")}`;
 }
 
 type Press = (field: Field, by: -1 | 1) => void;
@@ -199,10 +183,10 @@ function Dial({ label, say, field, digits, colour, unit, press, can, first = fal
 }
 
 /** A barbell's weight: the number between − and +, and the bar loaded with it in the standard plates. `grams` is
- *  undefined where the sets differ: then no bar is drawn, since no one load is true of them all. */
-function BarBox({ entry, grams, range, units, press, can }: { entry: PhoneLibraryEntry; grams: number | null | undefined; range: string; units: Units; press: Press; can: Can }) {
-  const plates = grams === undefined ? null : barPlates(entry, units, grams);
-  const words = grams === undefined ? range : grams === null ? "None" : weightParts(grams, units).join(" ");
+ *  the picked set's, or the first set's for every set; the bar's place is kept where no bar can be drawn. */
+function BarBox({ entry, grams, units, press, can }: { entry: PhoneLibraryEntry; grams: number | null; units: Units; press: Press; can: Can }) {
+  const plates = barPlates(entry, units, grams);
+  const words = grams === null ? "None" : weightParts(grams, units).join(" ");
   return (
     <View style={styles.barBox}>
       <View style={styles.barHead}>
@@ -211,7 +195,7 @@ function BarBox({ entry, grams, range, units, press, can }: { entry: PhoneLibrar
           <Txt kind="tiny" style={styles.label}>
             WEIGHT
           </Txt>
-          <Txt kind={grams === null || grams === undefined ? "strong" : "big"} colour={grams === null || grams === undefined ? "textSoft" : "text"}>
+          <Txt kind={grams === null ? "strong" : "big"} colour={grams === null ? "textSoft" : "text"}>
             {words}
           </Txt>
         </View>
@@ -256,5 +240,6 @@ const styles = StyleSheet.create({
   setSplit: { borderTopWidth: 1, borderTopColor: colours.timerSplit },
   setOn: { borderLeftColor: colours.orange, backgroundColor: colours.orangeFill },
   setNo: { minWidth: 46, fontFamily: fonts.bold, letterSpacing: 1, color: colours.timerWords },
+  everyWords: { flex: 1 },
   setWords: { flex: 1, flexDirection: "row", flexWrap: "wrap", columnGap: 14 },
 });

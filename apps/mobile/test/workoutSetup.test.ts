@@ -124,11 +124,17 @@ describe("one press of + or −", () => {
     expect(g).toBe(start);
   });
 
-  it("every set at once: each changes by its own step, so sets that differ keep their difference", () => {
-    const p = reps(S(10, 20_000), S(8, 25_000));
-    expect(changed(p, "target", 1, null, "metric", true)).toEqual(reps(S(11, 20_000), S(9, 25_000)));
-    expect(changed(p, "weight", 1, null, "metric", true)).toEqual(reps(S(10, 22_500), S(8, 27_500)));
+  it("every set at once: each takes the first set's number after the press, the field pressed only (Kd's click-through)", () => {
+    // What the controls show is the first set's, so that is what every set then holds: never "--" with a press unseen.
+    const p = reps(S(10, 20_000), S(8, 25_000, 90));
+    expect(changed(p, "target", 1, null, "metric", true)).toEqual(reps(S(11, 20_000), S(11, 25_000, 90)));
+    expect(changed(p, "weight", 1, null, "metric", true)).toEqual(reps(S(10, 22_500), S(8, 22_500, 90)));
     expect(changed(p, "rest", -1, null, "metric", true)).toEqual(reps(S(10, 20_000, 45), S(8, 25_000, 45)));
+    // At the first set's limit, a press still makes the others the same as it.
+    const low = reps(S(1), S(6));
+    expect(changed(low, "target", -1, null, "metric", false)).toEqual(reps(S(1), S(1)));
+    const even = reps(S(1), S(1));
+    expect(changed(even, "target", -1, null, "metric", false)).toBe(even);
   });
 
   it("one set alone: the others stay as they are", () => {
