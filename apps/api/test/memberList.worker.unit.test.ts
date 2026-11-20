@@ -6,7 +6,7 @@
 import fs from "node:fs";
 import { Worker } from "node:worker_threads";
 import { describe, expect, it, vi } from "vitest";
-import { MEMBER_LIST_MAX_DATA_ROWS } from "@app/shared";
+import { MEMBER_FILE_PARSE_TIMEOUT_MS, MEMBER_LIST_MAX_DATA_ROWS } from "@app/shared";
 import { openMemberFileContents } from "../src/modules/orgs/memberList/openFile.js";
 import { memberFilesOpen, parseMemberFile } from "../src/modules/orgs/memberList/parseMemberFile.js";
 import { buildZip, sharedStringBombParts, sharedStringsWorkbookParts, sheetXml, workbookParts } from "./memberList.zipKit.js";
@@ -158,7 +158,9 @@ describe("the worker", () => {
       const sheet = sheetXml([["Email"]]).replace("<sheetData>", `<sheetData>${inside}`);
       const t0 = performance.now();
       expect(await parseMemberFile(buildZip(workbookParts(sheet)))).toEqual({ ok: false, refusal: { code: "unsafe_archive" } });
-      expect(performance.now() - t0).toBeLessThan(5_000);
+      // Well inside the worker's own limit: refused by the check itself, never cut off at the limit (a loaded GitHub
+      // runner took 5,320 ms for one, against 5,000 here before).
+      expect(performance.now() - t0).toBeLessThan(MEMBER_FILE_PARSE_TIMEOUT_MS / 2);
     },
     WORKER_TEST_MS,
   );
