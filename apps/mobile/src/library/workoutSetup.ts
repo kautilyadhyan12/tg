@@ -41,6 +41,24 @@ export function planOf(item: Item, entry: PhoneLibraryEntry | null): Plan | null
 
 export type Field = "sets" | "target" | "weight" | "rest";
 
+/** The colour of the weight plate in My Workout's set-up (Kd: "make the weight attractive not dull"): a bumper plate
+ *  in the standard colours of the weight it stands for, so the colour itself says how heavy (red from 25 kg, blue from
+ *  20, yellow from 15, green from 10, white from 5, chrome under it; in pounds the same at 55, 45, 35, 25 and 10 lb),
+ *  and black rubber for none. `ink` is the colour its words take on it. */
+export type PlateFace = "plateRed" | "plateBlue" | "plateYellow" | "plateGreen" | "plateWhite" | "plateChrome" | "weightPlate";
+export type PlateInk = "onOrange" | "brandInk" | "textSoft";
+
+export function plateLook(grams: number | null, units: Units): { face: PlateFace; ink: PlateInk } {
+  if (grams === null) return { face: "weightPlate", ink: "textSoft" };
+  const n = units === "imperial" ? grams / GRAMS_PER_LB : grams / 1000;
+  const steps: readonly [number, PlateFace][] =
+    units === "imperial"
+      ? [[55, "plateRed"], [45, "plateBlue"], [35, "plateYellow"], [25, "plateGreen"], [10, "plateWhite"]]
+      : [[25, "plateRed"], [20, "plateBlue"], [15, "plateYellow"], [10, "plateGreen"], [5, "plateWhite"]];
+  const face = steps.find(([from]) => n >= from - 1e-9)?.[1] ?? "plateChrome";
+  return { face, ink: face === "plateYellow" || face === "plateWhite" || face === "plateChrome" ? "brandInk" : "onOrange" };
+}
+
 /** One step of a time: 5 s under a minute, 15 s to five minutes, 30 s past it, so the next of every step comes back. */
 export function stepTime(seconds: number, by: -1 | 1): number {
   const size = by > 0 ? (seconds < 60 ? 5 : seconds < 300 ? 15 : 30) : seconds <= 60 ? 5 : seconds <= 300 ? 15 : 30;

@@ -15,6 +15,7 @@ import {
   minutesWords,
   planLine,
   planOf,
+  plateLook,
   REST_MOST,
   REST_START,
   same,
@@ -66,6 +67,25 @@ describe("the Library's starting numbers", () => {
     expect(planOf({ id: "barbell_curl", plan: mine }, curl)).toBe(mine);
     expect(planOf({ id: "barbell_curl", plan: null }, curl)).toEqual(startPlan(curl));
     expect(planOf({ id: "gone", plan: null }, null)).toBeNull();
+  });
+});
+
+describe("the weight plate's colour is the standard colour of its weight", () => {
+  it.each<[string, number | null, "metric" | "imperial", string, string]>([
+    ["none: black rubber", null, "metric", "weightPlate", "textSoft"],
+    ["2.5 kg: chrome", 2_500, "metric", "plateChrome", "brandInk"],
+    ["5 kg: white", 5_000, "metric", "plateWhite", "brandInk"],
+    ["10 kg: green", 10_000, "metric", "plateGreen", "onOrange"],
+    ["15 kg: yellow", 15_000, "metric", "plateYellow", "brandInk"],
+    ["17.5 kg: still yellow", 17_500, "metric", "plateYellow", "brandInk"],
+    ["20 kg: blue", 20_000, "metric", "plateBlue", "onOrange"],
+    ["25 kg: red", 25_000, "metric", "plateRed", "onOrange"],
+    ["140 kg: red", 140_000, "metric", "plateRed", "onOrange"],
+    ["45 lb: blue", Math.round(45 * 453.59237), "imperial", "plateBlue", "onOrange"],
+    ["25 lb: green", Math.round(25 * 453.59237), "imperial", "plateGreen", "onOrange"],
+    ["5 lb: chrome", Math.round(5 * 453.59237), "imperial", "plateChrome", "brandInk"],
+  ])("%s", (_, grams, units, face, ink) => {
+    expect(plateLook(grams, units)).toEqual({ face, ink });
   });
 });
 
