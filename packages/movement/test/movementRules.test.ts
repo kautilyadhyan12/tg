@@ -98,7 +98,7 @@ function run(change?: Change, fast = false) {
       return { x, y, world: [0, 0, 0], raw: { x, y } };
     });
     const body: SteadyBody = { t, aspect: ASPECT, down: [0, 1, 0], size: SIZE, points, refused: points.map(() => null) };
-    const measured: MeasuredBody = { t, leg: 0.9, trunk: 0.5, readings };
+    const measured: MeasuredBody = { t, leg: 0.9, trunk: 0.5, onFloor: true, readings };
     const f = m.next(body, measured);
     if (f.rep !== null) reps.push(f.rep);
   }
@@ -153,7 +153,8 @@ describe("the feet's rules read the feet, not the foot points' wander", () => {
   };
 
   it("the heels and toes slide 5 cm down the picture together on the way down and up, the feet never moving: counted", () => {
-    // Where a foot rests is the middle of the rep, never its lowest reading (52a-ii-b-i's floor video: 4 to 5 cm).
+    // A foot point rests where it was lowest, but never more than FOOT_ROOM under where the foot stands (52a-ii-b-i's floor
+    // video: 4 to 5 cm).
     expect(run((_t, p, b) => (b.feetY = p > 0.3 && p < 0.8 ? 0.05 * SIZE : 0))).toEqual([["counted", null]]);
   });
 

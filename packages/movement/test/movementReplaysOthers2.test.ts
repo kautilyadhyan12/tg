@@ -4,13 +4,15 @@ import { describe, expect, it } from "vitest";
 import { openRow } from "../scripts/movementCheck.js";
 import { HELD, VIDEOS, rowsOf } from "./helpers/replays.js";
 
-const REPLAYS = HELD.slice(6);
+const REPLAYS = HELD.slice(7);
 const ROWS = rowsOf(REPLAYS, "other");
 
 describe("the worst thing: no other movement is counted as a squat however the world changes it (second half)", () => {
-  it("tries every other movement under each replay", () => {
-    expect(REPLAYS.map((r) => r.name)).toEqual(["uneven", "shaky", "chip's gap", "passer-by", "passer-by at the bottom"]);
-    expect(ROWS.length).toBeGreaterThanOrEqual(30 * REPLAYS.length);
+  it("tries every other movement under each replay but the paces, which are the squat's own (a jump is never done slowly)", () => {
+    expect(REPLAYS.map((r) => r.name)).toEqual(["shaky", "chip's gap", "passer-by", "passer-by at the bottom", "faster", "slower", "twice as slow"]);
+    expect(REPLAYS.filter((r) => r.ownOnly === true).map((r) => r.name)).toEqual(["faster", "slower", "twice as slow"]);
+    expect(ROWS.filter((r) => r.replay.ownOnly === true)).toEqual([]);
+    expect(ROWS.length).toBeGreaterThanOrEqual(30 * 4);
   });
 
   it("the passer-by acts on every other movement too: in each video it hides points it saw", () => {

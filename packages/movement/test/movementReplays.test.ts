@@ -51,6 +51,9 @@ describe("each squat video counts what a person counts by eye, however the world
       "chip's gap",
       "passer-by",
       "passer-by at the bottom",
+      "faster",
+      "slower",
+      "twice as slow",
     ]);
     // The 13 squat videos with a count by eye, and a man's own nine sets from a phone on the floor and raised (52a-ii-b-i).
     expect(new Set(ROWS.map((r) => r.label)).size).toBe(22);
@@ -79,6 +82,11 @@ describe("each squat video counts what a person counts by eye, however the world
       "usual_v11 30-39 s: shaky",
       "floor_phone_test 0-12 s: chip's gap",
       "usual_v11 30-39 s: chip's gap",
+      "floor_phone_test 0-12 s: faster",
+      "floor_phone_test 13.9-21.1 s: slower",
+      "usual_v11 30-39 s: slower",
+      "prisoner_squat_2: twice as slow",
+      "floor_phone_test 13.9-21.1 s: twice as slow",
     ]);
     expect(ROWS.filter(openRow).every((r) => /^52(a-ii-b-ii|b-i), /.test(r.entry.replayOpen?.why ?? ""))).toBe(true);
   });

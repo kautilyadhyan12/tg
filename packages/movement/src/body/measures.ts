@@ -70,6 +70,9 @@ export interface MeasureLimits {
   /** The floor is the middle of where the lowest foot stood over this long, ms: it moves to where the feet now stand
    *  only once they have stood there for more than half of it. */
   readonly floorWindow: number;
+  /** The floor moves at once to feet that have stood still off it this long, ms, as far below the hips in 3D as when
+   *  they stood (a step). */
+  readonly floorStill: number;
   /** A foot this share of a leg above the floor or less still stands on it; and one foot seen above the floor whose drop below the hips (3D) has shrunk by less than this
    *  share of a leg since it last stood on the floor was not lifted: the body moved. */
   readonly footLift: number;
@@ -111,6 +114,7 @@ export const MEASURE_LIMITS: MeasureLimits = {
   ownMemory: 60000,
   straightKnee: 30,
   floorWindow: 2000,
+  floorStill: 300,
   footLift: 0.05,
   floorMemory: 3000,
 };
@@ -500,9 +504,13 @@ export const MEASURE_LIST: readonly { readonly name: MeasureName; readonly unit:
 
 export interface MeasuredBody {
   readonly t: number;
-  /** The body's own lengths, metres, the middle of the last few seconds; null while unknown. */
+  /** The body's own lengths, metres, the middle of the last minute (the leg only while straight; `own`); null while unknown. */
   readonly leg: number | null;
   readonly trunk: number | null;
+  /** The feet stand on the floor line on the picture: the lowest foot seen lies within a foot lifted (`footLift`) of it.
+   *  False while the floor is still moving to where the feet now stand (a person walking back from the phone), with no
+   *  foot seen, or no floor yet: a standing taken then would put every height after it off. */
+  readonly onFloor: boolean;
   /** Every measure of the list, each read flat and in 3D. */
   readonly readings: ReadonlyMap<MeasureName, Reading>;
 }
@@ -541,6 +549,10 @@ class Floor {
   private span: number | null = null;
   /** Where the lowest foot stood, frame by frame, over the last `floorWindow`. */
   private readonly stood = new LongMemory();
+  /** The lowest foot seen in the last frame stood within a foot lifted of the floor. */
+  settled = false;
+  /** Since when the lowest foot has stood still off the floor line, and where; null while it has not. */
+  private stillAbove: { readonly since: number; readonly level: number } | null = null;
 
   reset(): void {
     this.level = null;
@@ -548,6 +560,7 @@ class Floor {
     this.footSeen = null;
     this.standing = FEET.map(() => null);
     this.span = null;
+    this.stillAbove = null;
     this.stood.clear();
   }
 
@@ -555,7 +568,8 @@ class Floor {
    *  for each foot, how far below the hips it is in 3D now, metres, or null; `size`: the body's
    *  size on the picture now; `unit`: this space's units in a metre; `hips`: the middle of the used
    *  hips along "down" in this space, or null; `lift`: the least shrinking of a drop, metres, that is
-   *  a foot lifted (null when the body's leg is not known yet). A body that
+   *  a foot lifted (null when the body's leg is not known yet); `tall`: every knee seen is within `straightKnee` of straight
+   *  in 3D, at least one seen. A body that
    *  moved nearer the phone or further from it by more than `sizeChange` stands on another line of
    *  the picture: the floor is set afresh from the feet seen. */
   next(
@@ -567,10 +581,12 @@ class Floor {
     hips: number | null,
     lift: number | null,
     limits: MeasureLimits,
+    tall = false,
   ): number | null {
     if (this.footSeen !== null && t - this.footSeen > limits.floorMemory) this.reset();
     if (this.size !== null && Math.abs(size / this.size - 1) > limits.sizeChange) this.reset();
     this.stood.forget(t - limits.floorWindow);
+    this.settled = false;
     const seen = feet.flatMap((f, k) => (f === null ? [] : [k]));
     if (seen.length === 0) return this.level;
     this.footSeen = t;
@@ -586,17 +602,34 @@ class Floor {
     });
     const span = this.span;
     const steppedDown = under > band && asStanding && hips !== null && span !== null && Math.abs(lowest - hips - span) <= band;
+    // A step, or walking back from the phone and turning: the feet stand higher or lower on the picture, the legs straight.
+    // Once they have stood still there, within a foot lifted, for `floorStill`, the floor is where they stand, at once: a
+    // body in the air is never that still (a jump's feet stay within 2 cm of its top for 0.12 s), and at the bottom of a
+    // squat, or with a foot lifted, a knee is bent. (Not the foot's 3D drop: turning, a man stood with his knee at 170°
+    // instead of 179°, his foot 5 cm nearer his hips in 3D.)
+    const still = this.stillAbove;
+    if (Math.abs(under) > band && tall) {
+      if (still === null || Math.abs(lowest - still.level) > band) this.stillAbove = { since: t, level: lowest };
+    } else {
+      this.stillAbove = null;
+    }
+    const steppedAside = this.stillAbove !== null && t - this.stillAbove.since >= limits.floorStill;
     // On the floor, or under it (it then moves only once the feet have stood lower for most of the window, or at once
     // after a step down); above it by more than a foot lifted, only when the body moved.
     const onFloor = under >= -band;
-    if (steppedDown) this.stood.clear();
+    if (steppedDown || steppedAside) {
+      this.stood.clear();
+      this.stillAbove = null;
+      this.level = lowest;
+    }
     if (onFloor || seen.length === FEET.length || asStanding) {
       this.stood.add(t, lowest);
       this.size = size;
     }
     this.level = this.stood.median() ?? this.level;
+    this.settled = this.level !== null && Math.abs(lowest - this.level) <= band;
     // Where the feet stand on the floor is learned only from feet on it, never from a foot under it.
-    if (Math.abs(under) <= band || steppedDown) this.stand(seen, feet, drops, lift, hips === null ? null : lowest - hips);
+    if (Math.abs(under) <= band || steppedDown || steppedAside) this.stand(seen, feet, drops, lift, hips === null ? null : lowest - hips);
     return this.level;
   }
 
@@ -709,18 +742,26 @@ export class BodyMeasures {
     const placed: (Vec | null)[] = offset === null ? world : world.map((w) => (w === null ? null : [w[0] + offset[0], w[1] + offset[1], w[2]]));
 
     const drops = footDrops(world, down);
+    const knees = SIDES.flatMap((side) => {
+      const hip = world[side.hip] ?? null;
+      const knee = world[side.knee] ?? null;
+      const ankle = world[side.ankle] ?? null;
+      const angle = hip === null || knee === null || ankle === null ? null : between(minus(hip, knee), minus(ankle, knee));
+      return angle === null ? [] : [angle];
+    });
+    const tall = knees.length > 0 && knees.every((a) => a >= 180 - limits.straightKnee);
     const lift = leg === null ? null : limits.footLift * leg;
     const flatSpace =
       flat === null || perMetre === null
         ? null
-        : new Space(flat, flatDown, this.flatFloor.next(t, lowestFeet(flat, flatDown), drops, perMetre, perMetre, hipsAlong(flat, flatDown), lift, limits), perMetre, leg, trunk, {
+        : new Space(flat, flatDown, this.flatFloor.next(t, lowestFeet(flat, flatDown), drops, perMetre, perMetre, hipsAlong(flat, flatDown), lift, limits, tall), perMetre, leg, trunk, {
             length,
             world,
             downShown,
           });
     // Without the body placed on the picture the 3D points have no floor: their heights wait.
     const worldFloor =
-      offset === null || perMetre === null ? null : this.worldFloor.next(t, lowestFeet(placed, down), drops, perMetre, 1, hipsAlong(placed, down), lift, limits);
+      offset === null || perMetre === null ? null : this.worldFloor.next(t, lowestFeet(placed, down), drops, perMetre, 1, hipsAlong(placed, down), lift, limits, tall);
     const worldSpace = new Space(placed, down, worldFloor, 1, leg, trunk);
 
     const readings = new Map<MeasureName, Reading>();
@@ -744,7 +785,7 @@ export class BodyMeasures {
       }
       readings.set(m.name, { flat: onPicture, world: inWorld, shown, off });
     }
-    return { t, leg, trunk, readings };
+    return { t, leg, trunk, onFloor: flatSpace !== null && this.flatFloor.settled, readings };
   }
 
   /** The body's own leg and trunk, metres: the middle of every reading of them in the last `ownMemory`, each side seen in

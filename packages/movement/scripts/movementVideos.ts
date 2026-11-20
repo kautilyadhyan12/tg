@@ -35,8 +35,9 @@ export interface MovementVideo {
   /** A known wrong count, kept in the table in plain sight until the job named here fixes it. */
   readonly open?: string;
   /** A known wrong count with this video's person left out of the numbers (`count`), the video right with every person's
-   *  numbers: kept in plain sight until the job named in `why` fixes it. */
-  readonly leftOutOpen?: { readonly count: number; readonly why: string };
+   *  numbers: kept in plain sight until the job named in `why` fixes it. `replays`: the replays under which the count with
+   *  the person left out is that same one (`holds` lets it through there only). */
+  readonly leftOutOpen?: { readonly count: number; readonly why: string; readonly replays?: readonly string[] };
   /** A known wrong count under some replays only (replays.ts), the video right as filmed: kept in plain sight until the
    *  job named in `why` fixes it. */
   readonly replayOpen?: { readonly replays: readonly string[]; readonly why: string };
@@ -113,10 +114,17 @@ export const MOVEMENT_VIDEOS: readonly MovementVideo[] = [
     seen: "2026-11-19, 16 frames: the one man, a little turned, in each; at the end he talks to the camera, arms down.",
     leftOutOpen: {
       count: 2,
+      replays: ["nearer", "farther", "tilted left", "tilted right", "15 a second", "uneven", "shaky", "passer-by", "slower"],
       why:
         "52b-i, where the squat's depth is set from its form standard: his first rep is the shallowest of the nine people (the hips 0.226 of a " +
         "leg down), and the depth set without him is a quarter of the way back from the next shallowest (0.307), 0.23. Since 52a-ii-b-i his " +
         "leg is read straight, 4 in 100 longer than the middle of the last 3 s of both legs it was, so his depth reads that much less.",
+    },
+    replayOpen: {
+      replays: ["twice as slow"],
+      why:
+        "52b-i, the same: done twice as slowly, with his own videos left out, two of his three reps read 0.207 and 0.209 of a leg deep " +
+        "against the 0.23 set without him.",
     },
   },
   {
@@ -182,11 +190,11 @@ export const MOVEMENT_VIDEOS: readonly MovementVideo[] = [
         "\"feet stay in place\" is 5 cm; side on, on the shiny floor, the slide of his foot points reads 5 to 6 cm on one of his proper squats.",
     },
     replayOpen: {
-      replays: ["8 a second", "uneven", "shaky", "chip's gap"],
+      replays: ["8 a second", "uneven", "shaky", "chip's gap", "faster"],
       why:
         "52a-ii-b-ii, the floor view: side on, on the shiny floor, the model slides his near foot's heel and toes about on the picture, so his " +
         "proper squats read the feet 3 to 4 cm off the floor as filmed (the rule is 4 cm, held there by the jumps it must refuse); a centimetre " +
-        "of shake, the chip's gap, or pictures skipped puts a rep over it, or leaves its feet unseen.",
+        "of shake, the chip's gap, pictures skipped or the same reps done faster put a rep over it, or leave its feet unseen.",
     } },
   { file: "movement-points/floor_phone_test", cut: [13.9, 21.1], movement: "squat", person: FLOOR_PERSON, view: "between", reps: 3, sets: true, sha256: "023bdc68c259df01ea372e9cb1be961e3c56be8c7e3ca9fb0b8797511a0920a1",
     seen: "2026-11-20 (52a-ii-b-i), 16 frames of the set drawn with the model's points: the one man, followed in each. The phone on a shiny floor: three squats half turned to it, the floor's reflection under his toes.",
@@ -195,6 +203,12 @@ export const MOVEMENT_VIDEOS: readonly MovementVideo[] = [
         "52a-ii-b-ii, the floor view: on the phone's reading his third squat's feet read about 4 cm off the floor (the laptop's 3), over the " +
         "rule held at 4 by the jumps it must refuse.",
       differences: ["the laptop counts 3, the phone 2", "the phone does not say 19.3 s counted"],
+    },
+    replayOpen: {
+      replays: ["slower", "twice as slow"],
+      why:
+        "52a-ii-b-ii, the floor view: the same reps done 1.5 or 2 times as slowly read the third squat's feet over the 4 cm rule, as the " +
+        "phone's reading does as filmed.",
     } },
   { file: "movement-points/floor_phone_test", cut: [22.3, 31.4], movement: "squat", person: FLOOR_PERSON, view: "front", reps: 3, sets: true, sha256: "023bdc68c259df01ea372e9cb1be961e3c56be8c7e3ca9fb0b8797511a0920a1",
     seen: "2026-11-20 (52a-ii-b-i), 16 frames of the set drawn with the model's points: the one man, followed in each. The phone on a shiny floor: three squats facing it." },
@@ -220,10 +234,11 @@ export const MOVEMENT_VIDEOS: readonly MovementVideo[] = [
   { file: "movement-points/usual_v11", cut: [30, 39], movement: "squat", person: FLOOR_PERSON, view: "between", reps: 2, sets: true, sha256: "e9f6f3f98f7b27d7b5737c32734a3ad8025a0e88af06d0ca668c485f42e36707",
     seen: "2026-11-20 (52a-ii-b-i), 16 frames of the set drawn with the model's points: the one man, followed in each. The phone raised: two squats half turned.",
     replayOpen: {
-      replays: ["shaky", "chip's gap"],
+      replays: ["shaky", "chip's gap", "slower"],
       why:
-        "52a-ii-b-ii, the floor view: right with every person's numbers under both; with his own videos left out, the numbers come from the " +
-        "eight people filmed from about hip height, and a centimetre of shake or the chip's gap puts one of these two squats over them.",
+        "52a-ii-b-ii, the floor view: right with every person's numbers under all three; with his own videos left out, the numbers come from " +
+        "the eight people filmed from about hip height, and a centimetre of shake, the chip's gap or the same reps done 1.5 times as slowly " +
+        "put one of these two squats over them.",
     } },
   // ── Twins of the squat, tried and never setting a number: a count here is expected, not a fault ─────────
   {
@@ -282,10 +297,10 @@ export const MOVEMENT_VIDEOS: readonly MovementVideo[] = [
     ...other("movement-points/romanian_deadlift_barbell", "barbell Romanian deadlift", "side", "A barbell Romanian deadlift."),
     phoneOpen: {
       why:
-        "52b: the laptop finds no dip here. The phone finds one in the video's last five frames (5.87 to 6.00 s), as he leaves the picture " +
+        "52b: the laptop finds no dip here. The phone finds one in the video's last frames (5.77 to 6.00 s), as he leaves the picture " +
         "(nobody is seen in the last frame by either), its hips and knees 54 degrees apart (another movement: the rule is 34) and its feet's rule " +
         "reading nothing, and marks it 'the camera could not see the feet'. " + UNSEEN_FIRST,
-      differences: ["the phone also says 5.9 s unseen (feet stay down)"],
+      differences: ["the phone also says 5.8 s unseen (feet stay down)"],
     },
   },
   other("movement-points/romanian_deadlift_dumbbell", "dumbbell Romanian deadlift", "side", "A dumbbell Romanian deadlift."),
@@ -296,15 +311,7 @@ export const MOVEMENT_VIDEOS: readonly MovementVideo[] = [
   other("movement-points/lunge_forward_barbell", "barbell forward lunge", "side", "Barbell forward lunges."),
   other("movement-points/lunge_reverse_dumbbell", "dumbbell reverse lunge", "side", "Dumbbell reverse lunges."),
   other("movement-points/split_squat_smith", "Smith machine split squat", "side", "Split squats in a Smith machine."),
-  {
-    ...other("movement-points/step_up_dumbbell", "dumbbell step-up", "side", "Dumbbell step-ups onto a box."),
-    phoneOpen: {
-      why:
-        "52b: since 52a-ii-b-i the sides have changed places. The laptop finds a dip from 2.90 to 4.13 s as he steps onto the box (the hips 0.10 " +
-        "of a leg nearer the floor it remembers, the knees 129 degrees) with its feet's rule reading nothing, and marks it 'the camera could not see the feet'; the phone finds no dip. " + UNSEEN_FIRST,
-      differences: ["the phone does not say 2.9 s unseen (feet stay down)"],
-    },
-  },
+  other("movement-points/step_up_dumbbell", "dumbbell step-up", "side", "Dumbbell step-ups onto a box."),
   other("movement-points/calf_raise", "calf raise", "side", "Calf raises."),
   other("movement-points/calf_raise_dumbbell", "dumbbell calf raise", "side", "Standing dumbbell calf raises."),
   other("movement-points/overhead_press_kettlebell", "kettlebell overhead press", "front", "A kettlebell overhead press."),
@@ -346,18 +353,16 @@ export const MOVEMENT_VIDEOS: readonly MovementVideo[] = [
   other("movement-points/fresh_calf_raise_dumbbell_2", "fresh: Standing dumbbell calf raises, 2", "front", "Fresh: Standing dumbbell calf raises."),
   other("movement-points/fresh_split_squat_smith_0", "fresh: Smith machine split squats, 0", "side", "Fresh: Smith machine split squats."),
   other("movement-points/fresh_split_squat_smith_2", "fresh: Smith machine split squats, 2", "between", "Fresh: Smith machine split squats."),
+  other("movement-points/fresh_split_squat_smith_3", "fresh: Smith machine split squats, 3", "side", "Fresh: Smith machine split squats."),
   {
-    ...other("movement-points/fresh_split_squat_smith_3", "fresh: Smith machine split squats, 3", "side", "Fresh: Smith machine split squats."),
+    ...other("movement-points/fresh_lunge_forward_barbell_2", "fresh: Barbell forward lunges, 2", "side", "Fresh: Barbell forward lunges."),
     phoneOpen: {
       why:
-        "52b: since 52a-ii-b-i. Inside its dip (1.70 to 5.60 s) the hips' height on the picture and in 3D disagree by more than 0.15 of a leg, " +
-        "so the height is not given, from 3.6 to 4.2 s on the phone and from 3.7 to 4.1 s on the laptop: the phone loses the dip for longer than " +
-        "half a second and marks it 'the camera could not see', the laptop reads it to its end as another movement (a foot 0.70 of the body's " +
-        "size from where it stood). " + UNSEEN_FIRST,
-      differences: ["the phone also says 1.7 s unseen"],
+        "52b: both sides read every lunge as another movement, its feet far from where they stood; at the last (9.40 to 10.80 s) the phone's " +
+        "feet break off as he steps and it marks the lunge 'the camera could not see' instead. " + UNSEEN_FIRST,
+      differences: ["the phone also says 9.4 s unseen (feet stay in place)"],
     },
   },
-  other("movement-points/fresh_lunge_forward_barbell_2", "fresh: Barbell forward lunges, 2", "side", "Fresh: Barbell forward lunges."),
   other("movement-points/fresh_lunge_forward_plate", "fresh: Weight-plate forward lunges, one", "side", "Fresh: Weight-plate forward lunges."),
   other("movement-points/fresh_overhead_press_plate", "fresh: weight-plate overhead press, one", "front", "Fresh: a weight-plate overhead press."),
   other("movement-points/fresh_overhead_press_barbell", "fresh: barbell overhead press, one", "front", "Fresh: a barbell overhead press."),

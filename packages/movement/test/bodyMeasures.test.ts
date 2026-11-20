@@ -469,12 +469,21 @@ describe("the floor stays where the feet stood", () => {
       return frame(t, standingSide(), { at: [0.6, 0.9 - up] });
     });
 
-  it("a jump: half a second in the air leaves the floor where it was", () => {
-    const run = measure(rise(0.5));
-    const inAir = run.find((m) => m.t >= 1400);
-    if (inAir === undefined) throw new Error("no frame");
-    expect(read(inAir, "hips height").flat).toBeCloseTo(0.9 / 0.84 + 0.3 / 0.84, 6);
-    expect(read(inAir, "hips height").world).toBeCloseTo(0.9 / 0.84 + 0.3 / 0.84, 6);
+  it("a jump true to gravity: half a second in the air leaves the floor where it was", () => {
+    // In the air 0.5 s, so 0.31 m at the top (g t² / 8); the feet never stand still up there.
+    const top = (9.81 * 0.5 ** 2) / 8;
+    const run = measure(
+      Array.from({ length: 121 }, (_, n) => {
+        const t = Math.round((n * 1000) / 30);
+        const u = (t - 1000) / 500;
+        return frame(t, standingSide(), { at: [0.6, 0.9 - (u > 0 && u < 1 ? top * 4 * u * (1 - u) : 0)] });
+      }),
+    );
+    const atTop = run.find((m) => m.t >= 1250);
+    if (atTop === undefined) throw new Error("no frame");
+    const up = top * 4 * ((atTop.t - 1000) / 500) * (1 - (atTop.t - 1000) / 500);
+    expect(read(atTop, "hips height").flat).toBeCloseTo((0.9 + up) / 0.84, 6);
+    expect(read(atTop, "hips height").world).toBeCloseTo((0.9 + up) / 0.84, 6);
   });
 
   it("both feet seen higher for longer than a jump: the floor moves up to them", () => {
@@ -533,10 +542,10 @@ describe("the floor stays where the feet stood", () => {
     }
   });
 
-  it("the foot points standing 6 cm lower for more than a second: the floor moves to them, once they stood there for most of 2 s", () => {
+  it("the foot points standing still 6 cm lower, the legs straight, for 0.3 s or more: a step, and the floor moves to them then", () => {
     const run = measure(sliding(6, 2900));
-    const before = run.filter((m) => m.t < 1000 + MEASURE_LIMITS.floorWindow / 2 - 100);
-    const after = run.filter((m) => m.t >= 1000 + MEASURE_LIMITS.floorWindow / 2 + 100);
+    const before = run.filter((m) => m.t < 1000 + MEASURE_LIMITS.floorStill);
+    const after = run.filter((m) => m.t >= 1000 + MEASURE_LIMITS.floorStill + 40);
     expect(after.length).toBeGreaterThan(20);
     for (const m of before) expect([m.t, read(m, "hips height").flat]).toEqual([m.t, expect.closeTo(0.9 / 0.84, 6)]);
     for (const m of after) expect([m.t, read(m, "hips height").flat]).toEqual([m.t, expect.closeTo(0.96 / 0.84, 6)]);
@@ -580,6 +589,17 @@ describe("the body's own leg and trunk do not change while it is followed (52a-i
 
   it("a body never seen with a straight knee takes the middle of every reading of its leg", () => {
     expect(once(seated()).leg).toBeCloseTo(0.84, 9);
+  });
+
+  it("the known limit, in plain sight (52d): a body new within 3 s keeps the one before's leg and trunk", () => {
+    // An adult seen for a second, then nobody for 1.9 s, then a child: the middle is still the adult's, until the child's
+    // readings are the most.
+    const m = new BodyMeasures();
+    for (let n = 0; n <= 30; n++) m.next(frame(Math.round((n * 1000) / 30), standingSide()));
+    m.next(frame(2000, standingSide(), { hidden: Array.from({ length: 33 }, (_, i) => i) }));
+    const child = m.next(frame(2900, standingSide().map((p): P => [p[0] * 0.6, p[1] * 0.6, p[2] * 0.6])));
+    expect(child.leg).toBeCloseTo(0.84, 9);
+    expect(child.trunk).toBeCloseTo(0.5, 9);
   });
 
   it("a body unseen for longer than 3 s is taken afresh: a child after an adult has the child's own leg and trunk", () => {

@@ -50,6 +50,9 @@ export interface Replay {
    *  the videos as filmed and as each such replay (movementCheck.ts `fit`), so a rule leaves room for what a phone
    *  adds. A passer-by hides the person and sets nothing. */
   readonly fits: boolean;
+  /** Tried only on the movement's own videos: the same reps at another pace. Another movement stretched in time is no
+   *  movement a body makes: a squat jack's jumps would float, in the air longer than gravity allows. */
+  readonly ownOnly?: boolean;
 }
 
 /** A small deterministic stream of numbers in 0..1 (mulberry32). */
@@ -345,6 +348,16 @@ function atBottom(reps: readonly { readonly start: number; readonly end: number 
   return lowest?.t ?? null;
 }
 
+/** The same person squatting `k` times as slowly (under 1, faster): every picture's time stretched about the first, the
+ *  pictures themselves as they were, so they come `k` times as far apart (at 1.5, 20 a second; at 2, 15). The model's
+ *  wander of the points is stretched with them: an estimate (52a-ii-b-i, round one). */
+export function tempo(k: number) {
+  return (frames: Frames): MovementFrame[] => {
+    const t0 = frames[0]?.t ?? 0;
+    return frames.map((f) => ({ ...f, t: Math.round((t0 + (f.t - t0) * k) * 10) / 10 }));
+  };
+}
+
 /** Nearer changes a video only where its body has room to grow: at least 1.05 times. */
 const NEARER_TRIED = 1.05;
 
@@ -360,6 +373,9 @@ export const REPLAYS: readonly Replay[] = [
   { name: "chip's gap", words: "every point moved by the gap the phone's chosen set-up reads from the laptop", hold: true, edit: chipsGap("pose_landmarker_full.cpu.t4"), fits: true },
   { name: "passer-by", words: "somebody walks past in front between reps (with no pause between them, the rep they cover is not seen)", hold: true, edit: passerBy(betweenReps), hides: 1, fits: false },
   { name: "passer-by at the bottom", words: "somebody walks past in front at the bottom of a rep: that rep is not seen", hold: true, edit: passerBy(atBottom), hides: 1, fits: false },
+  { name: "faster", words: "the same reps done in three quarters of the time", hold: true, edit: tempo(0.75), fits: false, ownOnly: true },
+  { name: "slower", words: "the same reps done 1.5 times as slowly", hold: true, edit: tempo(1.5), fits: false, ownOnly: true },
+  { name: "twice as slow", words: "the same reps done twice as slowly", hold: true, edit: tempo(2), fits: false, ownOnly: true },
   { name: "graphics chip's gap", words: "every point moved by the graphics chip's gap (the app does not use it)", hold: false, edit: chipsGap("pose_landmarker_full.gpu"), fits: false },
   { name: "small model's gap", words: "every point moved by the small model's gap on the main chip (the app does not use it)", hold: false, edit: chipsGap("pose_landmarker_lite.cpu.t4"), fits: false },
   { name: "3 in 10 dropped", words: "3 pictures in 10 dropped at random, not how the phone drops them", hold: false, edit: dropped(0.3), fits: false },

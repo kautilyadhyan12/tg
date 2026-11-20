@@ -161,14 +161,13 @@ describe("every proof video, as the phone's chosen set-up read it (51b-ii; kept 
     expect(allSame(rows)).toBe(false);
   });
 
-  it("the open cases are nine, and on the phone no other movement is counted", () => {
+  it("the open cases are eight, and on the phone no other movement is counted", () => {
     const open = rows.filter((r) => r.entry.phoneOpen !== undefined);
     expect(open.map((r) => r.label).sort()).toEqual([
       "floor_phone_test 0-12 s",
       "floor_phone_test 13.9-21.1 s",
-      "fresh_split_squat_smith_3",
+      "fresh_lunge_forward_barbell_2",
       "romanian_deadlift_barbell",
-      "step_up_dumbbell",
       "usual_v03",
       "usual_v04 9.8-23.2 s",
       "usual_v12",
@@ -194,16 +193,16 @@ describe("every proof video, as the phone's chosen set-up read it (51b-ii; kept 
 
   it("in every open case of another movement both sides count 0 and call nothing short", () => {
     const open = rows.filter((r) => r.entry.phoneOpen !== undefined && r.entry.movement === null);
-    expect(open).toHaveLength(6);
+    expect(open).toHaveLength(5);
     for (const r of open) {
       expect([r.label, r.laptop.count, r.phone?.count]).toEqual([r.label, 0, 0]);
       expect([...r.laptop.reps, ...(r.phone?.reps ?? [])].filter((x) => x.verdict === "short" || x.verdict === "counted")).toEqual([]);
     }
   });
 
-  it("in each of the three older open cases one side marks one dip unseen, and the other side says nothing there: no rep, or a silent one", () => {
-    const open = rows.filter((r) => ["romanian_deadlift_barbell", "step_up_dumbbell", "fresh_split_squat_smith_3"].includes(r.label));
-    expect(open).toHaveLength(3);
+  it("in the deadlift's and the lunge's open cases one side marks one dip unseen, and the other side says nothing there: no rep, or a silent one", () => {
+    const open = rows.filter((r) => ["romanian_deadlift_barbell", "fresh_lunge_forward_barbell_2"].includes(r.label));
+    expect(open).toHaveLength(2);
     for (const r of open) {
       expect([r.label, r.laptop.count, r.phone?.count]).toEqual([r.label, 0, 0]);
       const sides = [r.laptop.reps, r.phone?.reps ?? []];

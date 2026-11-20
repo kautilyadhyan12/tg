@@ -443,11 +443,15 @@ export class MovementMatcher {
         if (drop !== null && drop <= Math.min(L.startShare * this.depth, L.endShare * Math.max(this.depth, this.deepest(rep)))) {
           rep.back = t;
         }
-      } else if (drop !== null && drop >= L.startShare * this.depth) {
-        // The next rep began before this one's moment after: judge this one on what it had, and start the next.
+      } else if (drop !== null && drop >= L.startShare * this.depth + L.still) {
+        // The next rep began before this one's moment after: judge this one on what it had, and start the next. Only once
+        // the hips are clearly past the line a rep starts at, by the shake of standing: a person back up to just that line
+        // would otherwise begin a "next rep" one picture later, and a jump in the moment after would never be judged
+        // (round one: a 20 cm jump on a man's floor video was counted so).
         judged = this.judge(rep);
         const origin = this.originOf(rep.standing);
         const next: Rep = { start: t, standing: origin, samples: [], lastSeen: t, back: null, seenAt: [], lost: [], placed: [], before: this.topRest() };
+        this.tops = [];
         next.samples.push(this.sampleOf(t, drop, measured, next, feet, raw, heights));
         this.rep = next;
         return this.frame(t, drop, judged);
@@ -474,6 +478,8 @@ export class MovementMatcher {
     if (standing !== null && drive !== null && standing.drive - drive >= L.startShare * this.depth) {
       const origin = this.originOf(standing);
       const fresh: Rep = { start: t, standing: origin, samples: [], lastSeen: t, back: null, seenAt: [], lost: [], placed: [], before: this.topRest() };
+      // The next rep's moment before is its own: never a picture from before this one began (round one).
+      this.tops = [];
       fresh.samples.push(this.sampleOf(t, standing.drive - drive, measured, fresh, feet, raw, heights));
       this.rep = fresh;
       return this.frame(t, standing.drive - drive, judged);
@@ -590,7 +596,10 @@ export class MovementMatcher {
     const first = frames[0];
     const last = frames[frames.length - 1];
     if (first === undefined || last === undefined || last.t - first.t < L.stillFor) return null;
-    if (!frames.every((f) => f.ready && f.drive !== null && f.size !== null)) return null;
+    // Standing ready is taken only while the feet stand on the floor line: walking back from the phone, the floor follows
+    // the feet up the picture over a second, and a standing taken meanwhile read his hips 0.12 to 0.19 of a leg too high,
+    // so he was never back up between two squats (52a-ii-b-i, round one).
+    if (!frames.every((f) => f.ready && f.drive !== null && f.size !== null && f.measured.onFloor)) return null;
     const drives = frames.map((f) => f.drive ?? 0);
     if (Math.max(...drives) - Math.min(...drives) > L.still) return null;
     const heights = new Map<string, number>();

@@ -41,12 +41,15 @@ export class LongMemory {
     this.items.push({ t, v });
     this.sorted.splice(this.place(v), 0, v);
   }
-  /** Forgets what is older than `before`. */
-  forget(before: number): void {
+  /** Forgets what is older than `before`; how many numbers it forgot. */
+  forget(before: number): number {
+    let gone = 0;
     while (this.items.length > 0 && (this.items[0]?.t ?? before) < before) {
       const old = this.items.shift();
       if (old !== undefined) this.sorted.splice(this.place(old.v), 1);
+      gone++;
     }
+    return gone;
   }
   clear(): void {
     this.items = [];
@@ -55,6 +58,10 @@ export class LongMemory {
   /** When the newest number was seen; null when none is remembered. */
   newest(): number | null {
     return this.items[this.items.length - 1]?.t ?? null;
+  }
+  /** When the oldest number remembered was seen; null when none is. */
+  oldest(): number | null {
+    return this.items[0]?.t ?? null;
   }
   median(): number | null {
     const n = this.sorted.length;

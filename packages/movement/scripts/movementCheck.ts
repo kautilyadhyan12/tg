@@ -299,7 +299,8 @@ export function proofTable(movement: Movement, videos: readonly ProofVideo[] = p
   }
   const rows = videos.map((v): ProofRow => {
     const run = runMovement(full, v.video);
-    const fold = v.video.sets ? folds.find((f) => f.person === v.entry.person) : undefined;
+    // A row that sets numbers, or carries a known count with its person left out, is run with that person's fold too.
+    const fold = v.video.sets || v.entry.leftOutOpen !== undefined ? folds.find((f) => f.person === v.entry.person) : undefined;
     const leftOut = fold === undefined ? null : runMovement(withNumbers(movement, fold.fitted), v.video).count;
     return { label: v.video.label, entry: v.entry, sets: v.video.sets, count: run.count, leftOut, reps: run.reps };
   });
@@ -369,10 +370,18 @@ export function replayTable(movement: Movement, videos: readonly ProofVideo[] = 
     folds.set(person, m);
     return m;
   };
-  return replays.flatMap((replay) => judged.map((v) => replayed(movement, v, replay, v.video.sets && v.entry.movement === movement.name ? foldOf(v.entry.person) : null)));
+  return replays.flatMap((replay) =>
+    judged
+      .filter((v) => replay.ownOnly !== true || v.entry.movement === movement.name)
+      .map((v) => replayed(movement, v, replay, v.video.sets && v.entry.movement === movement.name ? foldOf(v.entry.person) : null)),
+  );
 }
 
 export const holds = (r: ReplayRow): boolean =>
-  r.count >= r.least && r.count <= r.most && (r.leftOut === null || (r.leftOut >= r.least && r.leftOut <= r.most) || r.leftOut === r.entry.leftOutOpen?.count);
+  r.count >= r.least &&
+  r.count <= r.most &&
+  (r.leftOut === null ||
+    (r.leftOut >= r.least && r.leftOut <= r.most) ||
+    (r.leftOut === r.entry.leftOutOpen?.count && r.entry.leftOutOpen.replays?.includes(r.replay.name) === true));
 /** A row the video's own entry names as a known wrong count under this replay (`replayOpen`). */
 export const openRow = (r: ReplayRow): boolean => r.entry.replayOpen?.replays.includes(r.replay.name) === true;

@@ -169,7 +169,10 @@ describe("the squat's own videos count what a person counts by eye", () => {
   it("the counts wrong with their person left out stay in the table in plain sight, the job that closes each named", () => {
     const open = TABLE.rows.filter((r) => r.entry.leftOutOpen !== undefined);
     expect(open.map((r) => r.label)).toEqual(["prisoner_squat_2", "floor_phone_test 0-12 s"]);
-    expect(own.filter((r) => r.entry.leftOutOpen !== undefined).map((r) => [r.label, r.leftOut])).toEqual([["prisoner_squat_2", 2]]);
+    expect(open.map((r) => [r.label, r.count, r.leftOut])).toEqual([
+      ["prisoner_squat_2", 3, 2],
+      ["floor_phone_test 0-12 s", 3, 2],
+    ]);
     expect(open.every((r) => /^52(b-i|a-ii-b-ii), /.test(r.entry.leftOutOpen?.why ?? ""))).toBe(true);
   });
 

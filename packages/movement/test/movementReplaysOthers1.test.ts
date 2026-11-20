@@ -6,12 +6,12 @@ import { describe, expect, it } from "vitest";
 import { openRow } from "../scripts/movementCheck.js";
 import { HELD, rowsOf } from "./helpers/replays.js";
 
-const REPLAYS = HELD.slice(0, 6);
+const REPLAYS = HELD.slice(0, 7);
 const ROWS = rowsOf(REPLAYS, "other");
 
 describe("the worst thing: no other movement is counted as a squat however the world changes it (first half)", () => {
   it("tries every other movement under each replay", () => {
-    expect(REPLAYS.map((r) => r.name)).toEqual(["nearer", "farther", "tilted left", "tilted right", "15 a second", "8 a second"]);
+    expect(REPLAYS.map((r) => r.name)).toEqual(["nearer", "farther", "tilted left", "tilted right", "15 a second", "8 a second", "uneven"]);
     expect(ROWS.length).toBeGreaterThanOrEqual(30 * REPLAYS.length);
   });
 
