@@ -2532,8 +2532,11 @@ with a screen reader.
 - **Setting up one exercise** (`SetUpSheet.tsx`, rules `library/workoutSetup.ts`, table-tested): a box from the
   bottom. A barbell's weight in kilograms is the loaded bar of 63c (from the empty 20 kg bar, 2.5 kg a press, the
   number alone where plates cannot make it); sets (amber), reps or time (red), any other weight (blue) and the rest
-  (green) on the LED wall timer, each with − and +. Every set changes together, each by its own step; Change one set
-  lists the sets and changes the one tapped. Time goes 5 s a press under a minute, 15 s to five minutes, 30 s past it,
+  (green) on the LED wall timer, each with − and +. Under them the sets are always listed, "Every set" at the top: the
+  line picked is what the controls change, and they always show its real numbers; a press on Every set gives every set
+  the first set's number after it (Kd's click-through: "--" and "varies" with presses that changed nothing he could
+  see). A barbell weight that no plates make keeps the bar's place, so the box never moves under a press; the chrome
+  1.25 kg change plate makes every 2.5 kg step drawable. Time goes 5 s a press under a minute, 15 s to five minutes, 30 s past it,
   from 5 s to an hour; reps 1 to 1,000; rest 15 s a press, to 10 minutes; a weight 2.5 kg or 5 lb a press (a barbell
   in pounds from 45 lb), up to 1,000 kg; sets 1 to 10, a new one a copy of the last. An exercise whose file says
   "never" takes no weight; a weight word the phone does not know is offered. About opens the exercise's page.
