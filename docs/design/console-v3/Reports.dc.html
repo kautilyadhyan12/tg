@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Reports</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./kit3.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0;background:#0A0908}
+.cap{display:flex;align-items:center;gap:10px;font-weight:600;color:var(--t2)}
+.num{width:26px;height:26px;border-radius:999px;background:var(--o-fill);color:var(--o-t);box-shadow:inset 0 0 0 1px var(--o-line);display:grid;place-items:center;font-size:13px;font-weight:700;flex:none}
+.stage{background:var(--scrim);border-radius:18px;padding:32px 16px;display:flex;justify-content:center}
+.dlg{background:var(--solid);border:1px solid var(--line2);border-radius:20px;box-shadow:var(--pop);width:100%;max-width:500px;min-width:0}
+.side{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,440px);border:1px solid var(--line);border-radius:18px;overflow:hidden}
+.side > .under{padding:20px;opacity:.6;overflow:hidden;min-width:0}
+.side > .sheet{background:var(--solid);border-left:1px solid var(--line2);display:flex;flex-direction:column;min-width:0}
+.sheet-h{display:flex;align-items:center;gap:12px;padding:18px 20px;border-bottom:1px solid var(--line)}
+.sheet-b{padding:20px;display:flex;flex-direction:column;gap:18px}
+.sheet-f{margin-top:auto;display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:14px 20px;border-top:1px solid var(--line)}
+.opt{display:flex;gap:12px;align-items:flex-start;padding:14px 16px;border-radius:14px;border:1px solid var(--line2)}
+.opt-on{border-color:var(--o);background:var(--o-fill)}
+.radio{width:18px;height:18px;border-radius:999px;border:1.5px solid var(--line2);flex:none;margin-top:1px}
+.radio-on{border:5px solid var(--o)}
+.check-on{background:var(--o);border-color:var(--o);position:relative}
+.check-on::after{content:"";position:absolute;left:5px;top:1px;width:5px;height:10px;border:solid var(--on-o);border-width:0 2px 2px 0;transform:rotate(45deg)}
+.sw{width:40px;height:24px;border-radius:999px;background:var(--bar);position:relative;flex:none}
+.sw::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:999px;background:var(--t3)}
+.sw-on{background:var(--o)}.sw-on::after{left:19px;background:var(--on-o)}
+.step{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,340px);gap:20px;align-items:start}
+.menu{background:var(--solid);border:1px solid var(--line2);border-radius:16px;box-shadow:var(--pop);padding:6px;min-width:0;max-width:320px}
+.mi{display:flex;gap:12px;align-items:flex-start;padding:10px 12px;border-radius:10px}
+.ptile{display:flex;flex-direction:column;gap:4px;padding:14px;border-radius:14px;border:1px solid var(--line2);min-width:0}
+.ptile-on{border-color:var(--o);background:var(--o-fill)}
+.pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.qty{display:inline-flex;align-items:center;border:1px solid var(--line2);border-radius:999px;height:40px}
+.qty > button{width:40px;height:40px;display:grid;place-items:center;color:var(--t2)}
+.money{font-weight:600;white-space:nowrap}
+.frames{display:flex;flex-wrap:wrap;gap:40px;padding:40px;align-items:flex-start}
+.frame{width:390px;max-width:100%;border:1px solid var(--line2);border-radius:28px;overflow:hidden;background:var(--page);display:flex;flex-direction:column;position:relative}
+.bsheet{background:var(--solid);border-top:1px solid var(--line2);border-radius:22px 22px 0 0;box-shadow:var(--pop);display:flex;flex-direction:column}
+.grab{width:40px;height:5px;border-radius:999px;background:var(--line2);margin:10px auto 4px}
+.savebar{position:sticky;bottom:12px;z-index:2;display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 16px;background:var(--solid);border:1px solid var(--line2);border-radius:18px}
+.footbar{position:sticky;bottom:0;padding:12px 16px 16px;border-top:1px solid var(--line);background:var(--solid);display:flex;flex-direction:column;gap:8px}
+@media (max-width:1180px){.side{grid-template-columns:minmax(0,1fr)}.side > .under{display:none}.side > .sheet{border-left:0}}
+@media (max-width:900px){.step{grid-template-columns:minmax(0,1fr)}.frames{padding:16px;gap:24px}}
+@media (pointer:coarse){.qty,.qty > button{height:44px}.qty > button{width:44px}}
+.rlay{display:grid;grid-template-columns:200px minmax(0,1fr);gap:28px;align-items:start}.toc{position:sticky;top:16px;display:flex;flex-direction:column;gap:2px}.toc > a{display:flex;align-items:center;min-height:40px;padding:0 12px;border-radius:10px;color:var(--t2);font-weight:500}.toc > a.on{background:var(--o-fill);color:var(--o-t);font-weight:600;box-shadow:inset 0 0 0 1px var(--o-line)}.toc-h{padding:0 12px 6px}.figs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}.wide{grid-column:span 2;grid-row:span 2}.fig{display:flex;flex-direction:column;gap:8px;padding:18px 20px}.fig-h{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:40px}.how{background:var(--box2);border-radius:12px;padding:12px 14px;color:var(--t2)}.bars{display:flex;align-items:flex-end;gap:8px;height:150px;padding:0 20px}.bars > span{flex:1 1 0;min-width:22px;border-radius:6px 6px 0 0;background:var(--blue)}.bars > span.o{background:var(--o)}.blab{display:flex;gap:8px;padding:6px 20px 14px}.blab > span{flex:1 1 0;min-width:22px;text-align:center;color:var(--t3)}.chart{min-width:560px}.tbl{min-width:520px}.tbl .tr{grid-template-columns:minmax(150px,1.6fr) repeat(4,minmax(80px,1fr))}.tbl .tr > :not(:first-child){text-align:right}.t3c .tr{grid-template-columns:minmax(150px,1.6fr) repeat(2,minmax(80px,1fr))}.lead{display:grid;grid-template-columns:minmax(110px,160px) minmax(0,1fr) auto;gap:12px;align-items:center;padding:10px 20px}.trend{height:120px;display:flex;align-items:flex-end;gap:4px}.trend > span{flex:1 1 0;background:var(--blue-fill);border-top:3px solid var(--blue);border-radius:4px 4px 0 0}.stay{display:flex;height:10px;border-radius:999px;overflow:hidden}.stay > span:first-child{background:var(--good)}.stay > span:last-child{background:var(--bad)}.heat{display:grid;grid-template-columns:52px repeat(9,minmax(44px,1fr));gap:4px;padding:0 20px 18px;min-width:560px}.heat > b{font-weight:500;color:var(--t3);display:flex;align-items:center}.heat > i{height:30px;border-radius:6px;background:var(--o);display:block}.l0{opacity:.08}.l1{opacity:.25}.l2{opacity:.45}.l3{opacity:.7}.l4{opacity:1}@media (max-width:1180px){.figs{grid-template-columns:repeat(2,minmax(0,1fr))}}@media (max-width:900px){.rlay{grid-template-columns:minmax(0,1fr)}.toc{position:static;flex-direction:row;overflow-x:auto;gap:4px;padding-bottom:4px}.toc > a{white-space:nowrap;flex:none}.toc-h{display:none}}@media (max-width:600px){.figs{grid-template-columns:minmax(0,1fr)}.wide{grid-column:auto;grid-row:auto}.lead{grid-template-columns:minmax(0,1fr) auto}.lead > .track{grid-column:1 / -1;grid-row:2}}
+</style>
+</helmet>
+<div class="app t-dark {{look}}" style="min-height: 100%">
+<div class="shell">
+
+<nav class="rail" aria-label="Menu">
+<a href="#" class="gym"><span class="logo"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18zM6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2M10 6h4M10 10h4M10 14h4M10 18h4"></path></svg></span><span class="col grow"><span class="w6 ell">Iron House</span><span class="s12 t3">Austin · Gym</span></span><svg class="ic ic-s t3" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 15l5 5 5-5M7 9l5-5 5 5"></path></svg></a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3h5a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM15 3h5a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM15 12h5a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1zM4 16h5a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1z"></path></svg>Overview<span class="n n-bad">6</span></a>
+<div class="grp">Today<svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 2h6a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1zM16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2M9 14l2 2 4-4"></path></svg>Attendance</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 7.5V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3.5M16 2v4M8 2v4M3 10h5M10 16a6 6 0 1 0 12 0a6 6 0 1 0-12 0M16 14v2.2l1.5 1.3"></path></svg>Classes</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 6.5l11 11M21 21l-1-1M3 3l1 1M18 22l4-4M2 6l4-4M3 10l7-7M14 21l7-7"></path></svg>Personal training</a>
+<div class="grp">People<svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M5 7a4 4 0 1 0 8 0a4 4 0 1 0-8 0M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"></path></svg>Members &amp; staff</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 7a4 4 0 1 0 8 0a4 4 0 1 0-8 0M10.3 15H7a4 4 0 0 0-4 4v2M14 17a3 3 0 1 0 6 0a3 3 0 1 0-6 0M21 21l-1.9-1.9"></path></svg>Leads<span class="n">5</span></a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 17l-8.5-8.5-5 5L2 7M16 17h6v-6"></path></svg>At risk<span class="n n-warn">2</span></a>
+<div class="grp">Money<svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6a2 2 0 0 1 2-2h12v4M3 6v12a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2H5a2 2 0 0 1-2-2zM17 14h.01"></path></svg>Payments overview</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4zM3 6h18M16 10a4 4 0 0 1-8 0"></path></svg>Sell</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12.6 2.6A2 2 0 0 0 11.2 2H4a2 2 0 0 0-2 2v7.2a2 2 0 0 0 .6 1.4l8.7 8.7a2.4 2.4 0 0 0 3.4 0l6.6-6.6a2.4 2.4 0 0 0 0-3.4zM7 7.5h.01"></path></svg>Memberships</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2zM2 10h20"></path></svg>Failed payments<span class="n n-bad">3</span></a>
+<div class="grp">Community<svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l18-5v12L3 14zM11.6 16.8a3 3 0 1 1-5.8-1.6"></path></svg>Updates<span class="n n-warn">1</span></a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM16 2v4M8 2v4M3 10h18"></path></svg>Events</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 2h6a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1zM16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2M12 11h4M12 16h4M8 11h.01M8 16h.01"></path></svg>Fitness plans</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M8.2 10.2L5 3h14l-3.2 7.2M6 15a6 6 0 1 0 12 0a6 6 0 1 0-12 0"></path></svg>Challenges</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6M18 9h1.5a2.5 2.5 0 0 0 0-5H18M4 22h16M10 14.7V17c0 .6-.5 1-1 1.2-1.2.5-2 2-2 3.8M14 14.7V17c0 .6.5 1 1 1.2 1.2.5 2 2 2 3.8M18 2H6v7a6 6 0 0 0 12 0z"></path></svg>Leaderboard</a>
+<div class="grp">Manage<svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div>
+<a href="#" class="ni ni-on"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3v18h18M8 17V9M13 17V5M18 17v-3"></path></svg>Reports</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M2 14h4M10 8h4M18 16h4"></path></svg>Settings</a>
+<a href="#" class="me"><span class="av">DB</span><span class="col grow"><span class="w6 s13 ell">Dana Brooks</span><span class="s12 t3">Owner</span></span><svg class="ic ic-s t3" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 15l5 5 5-5M7 9l5-5 5 5"></path></svg></a>
+</nav>
+
+<div class="work">
+<header class="top" style="position: relative">
+<button type="button" class="find"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11a7 7 0 1 0 14 0a7 7 0 1 0-14 0M21 21l-4.3-4.3"></path></svg><span class="grow ell">Search members, pages or actions</span><span class="kbd">Ctrl K</span></button>
+<span class="grow"></span>
+<button type="button" class="btn btn-soft"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>New</button>
+<button type="button" class="ibtn" aria-label="6 items need attention"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 0 0 3.4 0"></path></svg><span class="pip">6</span></button>
+</header>
+
+<main class="page" style="position: relative">
+<div class="between wrap">
+<div class="col g6" style="flex: 1 1 360px; min-width: 0"><span class="eyebrow">Manage</span><h1 class="h1">Reports</h1><span class="t2">Iron House</span></div>
+</div>
+
+<div class="col g10">
+<div class="hrow g8 wrap" role="radiogroup" aria-label="Period"><button type="button" class="chip">Last 4 weeks</button><button type="button" class="chip">Last 3 months</button><button type="button" class="chip chip-on">Last 12 months</button></div>
+<span class="t2">Showing 21 Nov 2025 to 20 Nov 2026. Members now, churn, retention, monthly recurring revenue, payment due and lifetime value are today's figures, so they stay the same whichever period you choose.</span>
+</div>
+
+<div class="rlay">
+<nav class="toc scroll" aria-label="On this page"><span class="eyebrow toc-h">On this page</span><a href="#" class="on">Members</a><a href="#">Leads</a><a href="#">Attendance</a><a href="#">Classes</a><a href="#">Money</a><a href="#">Staff activity</a></nav>
+
+<div class="col g24" style="min-width: 0">
+
+<section class="col g16" aria-label="Members">
+<div class="col g4"><h2 class="h2">Members</h2><span class="t2">These figures come from your member list and the memberships you give in the app. Someone was last added or removed on 19 Nov 2026.</span></div>
+<div class="figs">
+<section class="box fig wide" aria-label="Members now">
+<div class="fig-h"><span class="w6 t2">Members now</span><button type="button" class="ibtn" aria-label="How Members now is worked out" aria-expanded="true"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20M12 16v-4M12 8h.01"></path></svg></button></div>
+<span class="big">214</span>
+<span class="t3">A year earlier: 168 · up 46</span>
+<p class="how">Everyone on your member list today, except members whose membership has ended or been cancelled and who have no new one, unless your member list shows a later end date for them. A status from your own file, such as Expired, is not counted. Members you have removed are not counted.</p>
+<span class="t2">Members on your list, month by month</span>
+<div class="trend" aria-hidden="true"><span style="height: 52%"></span><span style="height: 55%"></span><span style="height: 57%"></span><span style="height: 60%"></span><span style="height: 62%"></span><span style="height: 66%"></span><span style="height: 70%"></span><span style="height: 72%"></span><span style="height: 76%"></span><span style="height: 80%"></span><span style="height: 84%"></span><span style="height: 88%"></span><span style="height: 90%"></span></div>
+<div class="between"><span class="t3">1 Dec 2025</span><span class="t3">Today, 20 Nov 2026</span></div>
+</section>
+<section class="box fig" aria-label="New members">
+<div class="fig-h"><span class="w6 t2">New members</span><button type="button" class="ibtn" aria-label="How New members is worked out"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20M12 16v-4M12 8h.01"></path></svg></button></div>
+<span class="big">71</span><span class="t3">A year earlier: 49 · up 22</span>
+</section>
+<section class="box fig" aria-label="Members who left">
+<div class="fig-h"><span class="w6 t2">Members who left</span><button type="button" class="ibtn" aria-label="How Members who left is worked out"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20M12 16v-4M12 8h.01"></path></svg></button></div>
+<span class="big">25</span><span class="t3">A year earlier: 21 · up 4</span>
+</section>
+<section class="box fig" aria-label="Retention">
+<div class="fig-h"><span class="w6 t2">Retention</span><button type="button" class="ibtn" aria-label="How Retention is worked out"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20M12 16v-4M12 8h.01"></path></svg></button></div>
+<span class="big">96.1%</span><span class="t3">a month, Aug to Oct</span>
+<div class="stay" aria-hidden="true"><span style="width: 96%"></span><span style="width: 4%"></span></div>
+<div class="between"><span class="t3">96% stayed</span><span class="t3">4% left</span></div>
+</section>
+<section class="box fig" aria-label="Churn">
+<div class="fig-h"><span class="w6 t2">Churn</span><button type="button" class="ibtn" aria-label="How Churn is worked out"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20M12 16v-4M12 8h.01"></path></svg></button></div>
+<span class="big">3.9%</span><span class="t3">a month, Aug to Oct</span>
+</section>
+<section class="box fig" aria-label="Average stay">
+<div class="fig-h"><span class="w6 t2">Average stay</span><button type="button" class="ibtn" aria-label="How Average stay is worked out"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20M12 16v-4M12 8h.01"></path></svg></button></div>
+<span class="big">14 months</span><span class="t3">25 left · 21 Nov 2025 to 20 Nov 2026</span>
+</section>
+</div>
+<p class="box pad t2">Left, churn, retention and average stay count members you remove from your list or mark as left in an import, and members whose membership given in the app ends or is cancelled. A status from your own file, such as Expired, is not counted. If you keep your list in other software, import it here each month to keep these true.</p>
+
+<section class="box" aria-label="Month by month">
+<div class="bh wrap"><h3 class="h3">Month by month</h3><button type="button" class="btn btn-s btn-sm"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"></path></svg>Export CSV</button></div>
+<div class="scroll"><div class="chart">
+<div class="bars" aria-hidden="true"><span style="height: 40%"></span><span class="o" style="height: 12%"></span><span style="height: 55%"></span><span class="o" style="height: 18%"></span><span style="height: 48%"></span><span class="o" style="height: 20%"></span><span style="height: 62%"></span><span class="o" style="height: 12%"></span><span style="height: 46%"></span><span class="o" style="height: 22%"></span><span style="height: 30%"></span><span class="o" style="height: 8%"></span></div>
+<div class="blab"><span>Jun</span><span>Jul</span><span>Aug</span><span>Sep</span><span>Oct</span><span>Nov</span></div>
+<div class="hrow g16 wrap" style="padding: 0 20px 14px"><span class="hrow g6 t2"><span class="dot" style="background: var(--blue)"></span>New</span><span class="hrow g6 t2"><span class="dot" style="background: var(--o)"></span>Left</span></div>
+</div></div>
+<div class="scroll"><div class="tbl">
+<div class="tr th"><span>Month</span><span>Members at start</span><span>New</span><span>Left</span><span>Churn</span></div>
+<div class="tr"><span class="w6">Nov 2026 (so far)</span><span>209</span><span>7</span><span>2</span><span>–</span></div>
+<div class="tr"><span class="w6">Oct 2026</span><span>203</span><span>9</span><span>3</span><span>1.5%</span></div>
+<div class="tr"><span class="w6">Sep 2026</span><span>198</span><span>8</span><span>3</span><span>1.5%</span></div>
+<div class="tr"><span class="w6">Aug 2026</span><span>195</span><span>6</span><span>3</span><span>1.5%</span></div>
+</div></div>
+<p class="t3" style="padding: 12px 20px 16px">Months are shown whole, so they include days before 21 Nov 2025.</p>
+</section>
+</section>
+
+<section class="col g16" aria-label="Leads">
+<div class="between"><h2 class="h2">Leads that became members</h2><button type="button" class="ibtn" aria-label="How leads that became members is worked out" aria-expanded="true"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20M12 16v-4M12 8h.01"></path></svg></button></div>
+<p class="how">Leads added from 21 Nov 2025 to today that are marked Joined, out of every lead added in those days, by where they heard of you. Leads you deleted are not counted.</p>
+<section class="box" aria-label="Leads by where they heard of you">
+<div class="bh wrap" style="align-items: flex-end"><div class="col g4"><span class="big">18%</span><span class="t3">22 joined · added 124 · 21 Nov 2025 to 20 Nov 2026</span></div><button type="button" class="btn btn-s btn-sm"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"></path></svg>Export CSV</button></div>
+<div class="lead"><span class="w6">Walked in</span><div class="track"><div class="fill" style="width: 29%"></div></div><span class="t2">9 of 31 leads</span></div>
+<div class="lead"><span class="w6">Website</span><div class="track"><div class="fill" style="width: 15%"></div></div><span class="t2">6 of 40 leads</span></div>
+<div class="lead"><span class="w6">Social media</span><div class="track"><div class="fill" style="width: 11%"></div></div><span class="t2">4 of 38 leads</span></div>
+<div class="lead" style="padding-bottom: 18px"><span class="w6">A friend</span><div class="track"><div class="fill" style="width: 20%"></div></div><span class="t2">3 of 15 leads</span></div>
+</section>
+</section>
+
+<section class="col g16" aria-label="Attendance">
+<div class="col g4"><h2 class="h2">Attendance</h2><span class="t2">These figures count every check-in on your Attendance page: at the front desk, by staff, and visits staff added later. The first was on 3 Feb 2026.</span></div>
+<div class="figs">
+<section class="box fig" aria-label="Visits">
+<div class="fig-h"><span class="w6 t2">Visits</span><button type="button" class="ibtn" aria-label="How Visits is worked out"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20M12 16v-4M12 8h.01"></path></svg></button></div>
+<span class="big">9,412</span><span class="t3">188 people · 3 Feb to 20 Nov 2026 · this week, so far: 412</span>
+</section>
+<section class="box fig" aria-label="Visits a member a week">
+<div class="fig-h"><span class="w6 t2">Visits a member a week</span><button type="button" class="ibtn" aria-label="How Visits a member a week is worked out"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20M12 16v-4M12 8h.01"></path></svg></button></div>
+<span class="big">2.3</span>
+</section>
+<section class="box fig" aria-label="Busiest time">
+<div class="fig-h"><span class="w6 t2">Busiest time</span><button type="button" class="ibtn" aria-label="How Busiest time is worked out" aria-expanded="true"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20M12 16v-4M12 8h.01"></path></svg></button></div>
+<span class="big">Mon 6 pm</span><span class="t3">412 visits · 21 Nov 2025 to 20 Nov 2026</span>
+<p class="how">Check-ins from 21 Nov 2025 to today, counted by weekday and hour on your clock.</p>
+</section>
+</div>
+
+<section class="box" aria-label="Visits day by day">
+<div class="bh wrap"><div class="col g4"><h3 class="h3">Visits day by day</h3><span class="t3">About 26 a day · most in one day: Mon 2 Nov, 61 visits</span></div><button type="button" class="btn btn-s btn-sm"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"></path></svg>Export CSV</button></div>
+<div class="scroll"><div class="chart">
+<div class="bars" aria-hidden="true"><span style="height: 52%"></span><span style="height: 58%"></span><span style="height: 61%"></span><span style="height: 57%"></span><span style="height: 63%"></span><span style="height: 66%"></span><span style="height: 70%"></span><span style="height: 68%"></span><span style="height: 74%"></span><span style="height: 80%"></span><span class="o" style="height: 41%"></span></div>
+<div class="blab"><span>Feb</span><span>Mar</span><span>Apr</span><span>May</span><span>Jun</span><span>Jul</span><span>Aug</span><span>Sep</span><span>Oct</span><span>Nov</span><span>Today</span></div>
+</div></div>
+</section>
+
+<section class="box" aria-label="Visits week by week">
+<div class="bh wrap"><h3 class="h3">Visits week by week</h3><button type="button" class="btn btn-s btn-sm"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"></path></svg>Export CSV</button></div>
+<div class="scroll"><div class="tbl t3c">
+<div class="tr th"><span>Week starting</span><span>Visits</span><span>People</span></div>
+<div class="tr"><span class="w6">16 Nov (so far)</span><span>412</span><span>131</span></div>
+<div class="tr"><span class="w6">9 Nov</span><span>588</span><span>164</span></div>
+<div class="tr"><span class="w6">2 Nov</span><span>602</span><span>170</span></div>
+<div class="tr"><span class="w6">26 Oct</span><span>571</span><span>161</span></div>
+</div></div>
+<div class="row"><button type="button" class="btn btn-s btn-sm" aria-expanded="false">Show all 52 weeks</button><span class="t3">Pressed, it reads Show the newest 12 weeks.</span></div>
+</section>
+
+<section class="box" aria-label="Busiest hours">
+<div class="bh wrap"><h3 class="h3">Busiest hours</h3><button type="button" class="btn btn-s btn-sm"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"></path></svg>Export CSV</button></div>
+<div class="scroll"><div class="heat" aria-hidden="true">
+<b></b><b>6 am</b><b>8 am</b><b>10 am</b><b>12 pm</b><b>2 pm</b><b>4 pm</b><b>6 pm</b><b>8 pm</b><b>10 pm</b>
+<b>Mon</b><i class="l3"></i><i class="l2"></i><i class="l1"></i><i class="l1"></i><i class="l0"></i><i class="l2"></i><i class="l4"></i><i class="l2"></i><i class="l0"></i>
+<b>Tue</b><i class="l3"></i><i class="l2"></i><i class="l1"></i><i class="l1"></i><i class="l0"></i><i class="l2"></i><i class="l3"></i><i class="l2"></i><i class="l0"></i>
+<b>Wed</b><i class="l2"></i><i class="l2"></i><i class="l1"></i><i class="l1"></i><i class="l1"></i><i class="l2"></i><i class="l3"></i><i class="l1"></i><i class="l0"></i>
+<b>Thu</b><i class="l3"></i><i class="l1"></i><i class="l1"></i><i class="l1"></i><i class="l0"></i><i class="l2"></i><i class="l3"></i><i class="l2"></i><i class="l0"></i>
+<b>Fri</b><i class="l2"></i><i class="l1"></i><i class="l1"></i><i class="l1"></i><i class="l0"></i><i class="l1"></i><i class="l2"></i><i class="l1"></i><i class="l0"></i>
+<b>Sat</b><i class="l1"></i><i class="l3"></i><i class="l3"></i><i class="l1"></i><i class="l0"></i><i class="l0"></i><i class="l1"></i><i class="l0"></i><i class="l0"></i>
+<b>Sun</b><i class="l0"></i><i class="l2"></i><i class="l2"></i><i class="l1"></i><i class="l0"></i><i class="l0"></i><i class="l0"></i><i class="l0"></i><i class="l0"></i>
+</div></div>
+<p class="t3" style="padding: 0 20px 16px">Check-ins from 21 Nov 2025 to today, counted by weekday and hour on your clock.</p>
+</section>
+</section>
+
+</div>
+</div>
+
+</main>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"look":{"editor":"enum","options":["Dark","Light"],"default":"Dark"},"$preview":{"width":1440,"height":3620}}'>
+class Component extends DCLogic {
+renderVals() {
+return { look: (this.props.look ?? 'Dark') === 'Light' ? 't-light' : '' };
+}
+}
+</script>
+</body>
+</html>

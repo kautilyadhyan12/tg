@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Reports on a phone</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./kit3.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0;background:#0A0908}
+.cap{display:flex;align-items:center;gap:10px;font-weight:600;color:var(--t2)}
+.num{width:26px;height:26px;border-radius:999px;background:var(--o-fill);color:var(--o-t);box-shadow:inset 0 0 0 1px var(--o-line);display:grid;place-items:center;font-size:13px;font-weight:700;flex:none}
+.stage{background:var(--scrim);border-radius:18px;padding:32px 16px;display:flex;justify-content:center}
+.dlg{background:var(--solid);border:1px solid var(--line2);border-radius:20px;box-shadow:var(--pop);width:100%;max-width:500px;min-width:0}
+.side{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,440px);border:1px solid var(--line);border-radius:18px;overflow:hidden}
+.side > .under{padding:20px;opacity:.6;overflow:hidden;min-width:0}
+.side > .sheet{background:var(--solid);border-left:1px solid var(--line2);display:flex;flex-direction:column;min-width:0}
+.sheet-h{display:flex;align-items:center;gap:12px;padding:18px 20px;border-bottom:1px solid var(--line)}
+.sheet-b{padding:20px;display:flex;flex-direction:column;gap:18px}
+.sheet-f{margin-top:auto;display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:14px 20px;border-top:1px solid var(--line)}
+.opt{display:flex;gap:12px;align-items:flex-start;padding:14px 16px;border-radius:14px;border:1px solid var(--line2)}
+.opt-on{border-color:var(--o);background:var(--o-fill)}
+.radio{width:18px;height:18px;border-radius:999px;border:1.5px solid var(--line2);flex:none;margin-top:1px}
+.radio-on{border:5px solid var(--o)}
+.check-on{background:var(--o);border-color:var(--o);position:relative}
+.check-on::after{content:"";position:absolute;left:5px;top:1px;width:5px;height:10px;border:solid var(--on-o);border-width:0 2px 2px 0;transform:rotate(45deg)}
+.sw{width:40px;height:24px;border-radius:999px;background:var(--bar);position:relative;flex:none}
+.sw::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:999px;background:var(--t3)}
+.sw-on{background:var(--o)}.sw-on::after{left:19px;background:var(--on-o)}
+.step{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,340px);gap:20px;align-items:start}
+.menu{background:var(--solid);border:1px solid var(--line2);border-radius:16px;box-shadow:var(--pop);padding:6px;min-width:0;max-width:320px}
+.mi{display:flex;gap:12px;align-items:flex-start;padding:10px 12px;border-radius:10px}
+.ptile{display:flex;flex-direction:column;gap:4px;padding:14px;border-radius:14px;border:1px solid var(--line2);min-width:0}
+.ptile-on{border-color:var(--o);background:var(--o-fill)}
+.pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.qty{display:inline-flex;align-items:center;border:1px solid var(--line2);border-radius:999px;height:40px}
+.qty > button{width:40px;height:40px;display:grid;place-items:center;color:var(--t2)}
+.money{font-weight:600;white-space:nowrap}
+.frames{display:flex;flex-wrap:wrap;gap:40px;padding:40px;align-items:flex-start}
+.frame{width:390px;max-width:100%;border:1px solid var(--line2);border-radius:28px;overflow:hidden;background:var(--page);display:flex;flex-direction:column;position:relative}
+.bsheet{background:var(--solid);border-top:1px solid var(--line2);border-radius:22px 22px 0 0;box-shadow:var(--pop);display:flex;flex-direction:column}
+.grab{width:40px;height:5px;border-radius:999px;background:var(--line2);margin:10px auto 4px}
+.savebar{position:sticky;bottom:12px;z-index:2;display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 16px;background:var(--solid);border:1px solid var(--line2);border-radius:18px}
+.footbar{position:sticky;bottom:0;padding:12px 16px 16px;border-top:1px solid var(--line);background:var(--solid);display:flex;flex-direction:column;gap:8px}
+@media (max-width:1180px){.side{grid-template-columns:minmax(0,1fr)}.side > .under{display:none}.side > .sheet{border-left:0}}
+@media (max-width:900px){.step{grid-template-columns:minmax(0,1fr)}.frames{padding:16px;gap:24px}}
+@media (pointer:coarse){.qty,.qty > button{height:44px}.qty > button{width:44px}}
+.rlay{display:grid;grid-template-columns:200px minmax(0,1fr);gap:28px;align-items:start}.toc{position:sticky;top:16px;display:flex;flex-direction:column;gap:2px}.toc > a{display:flex;align-items:center;min-height:40px;padding:0 12px;border-radius:10px;color:var(--t2);font-weight:500}.toc > a.on{background:var(--o-fill);color:var(--o-t);font-weight:600;box-shadow:inset 0 0 0 1px var(--o-line)}.toc-h{padding:0 12px 6px}.figs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}.wide{grid-column:span 2;grid-row:span 2}.fig{display:flex;flex-direction:column;gap:8px;padding:18px 20px}.fig-h{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:40px}.how{background:var(--box2);border-radius:12px;padding:12px 14px;color:var(--t2)}.bars{display:flex;align-items:flex-end;gap:8px;height:150px;padding:0 20px}.bars > span{flex:1 1 0;min-width:22px;border-radius:6px 6px 0 0;background:var(--blue)}.bars > span.o{background:var(--o)}.blab{display:flex;gap:8px;padding:6px 20px 14px}.blab > span{flex:1 1 0;min-width:22px;text-align:center;color:var(--t3)}.chart{min-width:560px}.tbl{min-width:520px}.tbl .tr{grid-template-columns:minmax(150px,1.6fr) repeat(4,minmax(80px,1fr))}.tbl .tr > :not(:first-child){text-align:right}.t3c .tr{grid-template-columns:minmax(150px,1.6fr) repeat(2,minmax(80px,1fr))}.lead{display:grid;grid-template-columns:minmax(110px,160px) minmax(0,1fr) auto;gap:12px;align-items:center;padding:10px 20px}.trend{height:120px;display:flex;align-items:flex-end;gap:4px}.trend > span{flex:1 1 0;background:var(--blue-fill);border-top:3px solid var(--blue);border-radius:4px 4px 0 0}.stay{display:flex;height:10px;border-radius:999px;overflow:hidden}.stay > span:first-child{background:var(--good)}.stay > span:last-child{background:var(--bad)}.heat{display:grid;grid-template-columns:52px repeat(9,minmax(44px,1fr));gap:4px;padding:0 20px 18px;min-width:560px}.heat > b{font-weight:500;color:var(--t3);display:flex;align-items:center}.heat > i{height:30px;border-radius:6px;background:var(--o);display:block}.l0{opacity:.08}.l1{opacity:.25}.l2{opacity:.45}.l3{opacity:.7}.l4{opacity:1}@media (max-width:1180px){.figs{grid-template-columns:repeat(2,minmax(0,1fr))}}@media (max-width:900px){.rlay{grid-template-columns:minmax(0,1fr)}.toc{position:static;flex-direction:row;overflow-x:auto;gap:4px;padding-bottom:4px}.toc > a{white-space:nowrap;flex:none}.toc-h{display:none}}@media (max-width:600px){.figs{grid-template-columns:minmax(0,1fr)}.wide{grid-column:auto;grid-row:auto}.lead{grid-template-columns:minmax(0,1fr) auto}.lead > .track{grid-column:1 / -1;grid-row:2}}.col > span{overflow-wrap:anywhere}.frame .toc{position:static;flex-direction:row;overflow-x:auto;gap:4px}.frame .toc > a{white-space:nowrap;flex:none}.frame .toc-h{display:none}@media (max-width:300px){.ph-tab-on{font-weight:500}}
+</style>
+</helmet>
+<div class="app t-dark {{look}}" style="min-height: 100%">
+<div class="frames">
+
+<div class="frame" aria-label="Reports: members">
+<header class="ph-top"><a href="#" class="hrow g10 grow" style="min-height: 44px"><span class="logo"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18zM6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2M10 6h4M10 10h4M10 14h4M10 18h4"></path></svg></span><span class="w6">Iron House</span></a><button type="button" class="ibtn" aria-label="Search"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 4a7 7 0 1 0 0 14a7 7 0 1 0 0-14M21 21l-4.3-4.3"></path></svg></button><button type="button" class="ibtn" aria-label="6 items need attention"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 0 0 3.4 0"></path></svg><span class="pip">6</span></button></header>
+<main class="ph-main">
+<div class="col g4"><span class="eyebrow">Manage</span><h1 class="h1">Reports</h1><span class="t2">Iron House</span></div>
+<div class="hrow g8 wrap" role="radiogroup" aria-label="Period"><button type="button" class="chip">Last 4 weeks</button><button type="button" class="chip">Last 3 months</button><button type="button" class="chip chip-on">Last 12 months</button></div>
+<nav class="toc scroll" aria-label="On this page"><a href="#" class="on">Members</a><a href="#">Leads</a><a href="#">Attendance</a><a href="#">Classes</a><a href="#">Money</a><a href="#">Staff activity</a></nav>
+<h2 class="h2">Members</h2>
+<section class="box fig" aria-label="Members now"><div class="fig-h"><span class="w6 t2">Members now</span><button type="button" class="ibtn" aria-label="How Members now is worked out"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20M12 16v-4M12 8h.01"></path></svg></button></div><span class="big">214</span><span class="t3">A year earlier: 168 · up 46</span>
+<div class="trend" style="height: 80px" aria-hidden="true"><span style="height: 52%"></span><span style="height: 57%"></span><span style="height: 62%"></span><span style="height: 70%"></span><span style="height: 76%"></span><span style="height: 84%"></span><span style="height: 90%"></span></div></section>
+<section class="box fig" aria-label="New members"><div class="fig-h"><span class="w6 t2">New members</span><button type="button" class="ibtn" aria-label="How New members is worked out"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20M12 16v-4M12 8h.01"></path></svg></button></div><span class="big">71</span><span class="t3">A year earlier: 49 · up 22</span></section>
+<section class="box" aria-label="Month by month">
+<div class="bh wrap"><h3 class="h3">Month by month</h3><button type="button" class="btn btn-s btn-sm"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"></path></svg>Export CSV</button></div>
+<div class="scroll"><div class="tbl">
+<div class="tr th"><span>Month</span><span>Members at start</span><span>New</span><span>Left</span><span>Churn</span></div>
+<div class="tr"><span class="w6">Nov 2026 (so far)</span><span>209</span><span>7</span><span>2</span><span>–</span></div>
+<div class="tr"><span class="w6">Oct 2026</span><span>203</span><span>9</span><span>3</span><span>1.5%</span></div>
+</div></div>
+<p class="t3" style="padding: 10px 16px 14px">A table wider than the phone scrolls sideways in its box.</p>
+</section>
+</main>
+<nav class="ph-tabs" aria-label="Pages"><a href="#" class="ph-tab"><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"></path></svg></span>Overview</a><a href="#" class="ph-tab"><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 3a4 4 0 1 0 0 8a4 4 0 1 0 0-8M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"></path></svg></span>Members</a><a href="#" class="ph-tab"><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6L9 17l-5-5"></path></svg></span>Attendance</a><a href="#" class="ph-tab"><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM16 2v4M8 2v4M3 10h18"></path></svg></span>Classes</a><a href="#" class="ph-tab ph-tab-on"><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h.01M12 12h.01M19 12h.01"></path></svg></span>More</a></nav>
+</div>
+
+<div class="frame" aria-label="Reports: money">
+<header class="ph-top"><a href="#" class="hrow g10 grow" style="min-height: 44px"><span class="logo"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18zM6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2M10 6h4M10 10h4M10 14h4M10 18h4"></path></svg></span><span class="w6">Iron House</span></a><button type="button" class="ibtn" aria-label="Search"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 4a7 7 0 1 0 0 14a7 7 0 1 0 0-14M21 21l-4.3-4.3"></path></svg></button><button type="button" class="ibtn" aria-label="6 items need attention"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 0 0 3.4 0"></path></svg><span class="pip">6</span></button></header>
+<main class="ph-main">
+<nav class="toc scroll" aria-label="On this page"><a href="#">Members</a><a href="#">Leads</a><a href="#">Attendance</a><a href="#">Classes</a><a href="#" class="on">Money</a><a href="#">Staff activity</a></nav>
+<div class="col g4"><h2 class="h2">Money</h2><span class="t2">These figures come from the payments and sales your staff record in the app. The first was recorded on 3 Feb 2026.</span></div>
+<section class="box pad col g12" aria-label="Export payments">
+<h3 class="h3">Export payments</h3>
+<span class="t2">An Excel file of every membership payment, refund and product sale on these days, with its receipt number, for your accountant.</span>
+<div class="hrow g8 wrap" role="radiogroup" aria-label="Quick choices"><button type="button" class="chip chip-on">This month</button><button type="button" class="chip">Last month</button><button type="button" class="chip">This year</button></div>
+<div class="field"><span class="label">From</span><div class="input"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM16 2v4M8 2v4M3 10h18"></path></svg><span class="grow">Sun 1 Nov 2026</span></div></div>
+<div class="field"><span class="label">To</span><div class="input"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM16 2v4M8 2v4M3 10h18"></path></svg><span class="grow">Fri 20 Nov 2026</span></div></div>
+<span class="t1">212 transactions · Memberships $13,480.00 · Product sales $730.00 · Collected $14,210.00</span>
+<div class="hrow g8 wrap"><button type="button" class="btn btn-p"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"></path></svg>Export</button><button type="button" class="btn btn-q">Cancel</button></div>
+</section>
+<section class="box fig" aria-label="Payment due"><div class="fig-h"><span class="w6 t2">Payment due</span><button type="button" class="ibtn" aria-label="How Payment due is worked out"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20M12 16v-4M12 8h.01"></path></svg></button></div><span class="big c-warn">$1,240.00</span><span class="t3">9 members · all of it overdue</span><div class="hrow g8 wrap"><a href="#" class="btn btn-s btn-sm">View who</a><a href="#" class="btn btn-s btn-sm">View past members</a></div></section>
+</main>
+<nav class="ph-tabs" aria-label="Pages"><a href="#" class="ph-tab"><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"></path></svg></span>Overview</a><a href="#" class="ph-tab"><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 3a4 4 0 1 0 0 8a4 4 0 1 0 0-8M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"></path></svg></span>Members</a><a href="#" class="ph-tab"><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6L9 17l-5-5"></path></svg></span>Attendance</a><a href="#" class="ph-tab"><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM16 2v4M8 2v4M3 10h18"></path></svg></span>Classes</a><a href="#" class="ph-tab ph-tab-on"><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h.01M12 12h.01M19 12h.01"></path></svg></span>More</a></nav>
+</div>
+
+<div class="frame" aria-label="Reports: how a figure is worked out, and staff activity">
+<header class="ph-top"><a href="#" class="hrow g10 grow" style="min-height: 44px"><span class="logo"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18zM6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2M10 6h4M10 10h4M10 14h4M10 18h4"></path></svg></span><span class="w6">Iron House</span></a><button type="button" class="ibtn" aria-label="Search"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 4a7 7 0 1 0 0 14a7 7 0 1 0 0-14M21 21l-4.3-4.3"></path></svg></button><button type="button" class="ibtn" aria-label="6 items need attention"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 0 0 3.4 0"></path></svg><span class="pip">6</span></button></header>
+<main class="ph-main">
+<nav class="toc scroll" aria-label="On this page"><a href="#">Members</a><a href="#">Leads</a><a href="#">Attendance</a><a href="#">Classes</a><a href="#">Money</a><a href="#" class="on">Staff activity</a></nav>
+<section class="box fig" aria-label="Lifetime value"><div class="fig-h"><span class="w6 t2">Lifetime value</span><button type="button" class="ibtn" aria-label="How Lifetime value is worked out" aria-expanded="true"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20M12 16v-4M12 8h.01"></path></svg></button></div><span class="big">$1,980.00</span><span class="t3">a member, Aug to Oct</span>
+<p class="how">What a member pays you before they leave, on average: the money collected in August, September and October, divided by the 8 members who left in those months.</p></section>
+<h2 class="h2">Staff activity</h2>
+<div class="box pad col g12"><span class="t2">Which worker did what in the console, and when.</span><a href="#" class="btn btn-s btn-w">View staff activity</a></div>
+</main>
+<nav class="ph-tabs" aria-label="Pages"><a href="#" class="ph-tab"><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"></path></svg></span>Overview</a><a href="#" class="ph-tab"><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 3a4 4 0 1 0 0 8a4 4 0 1 0 0-8M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"></path></svg></span>Members</a><a href="#" class="ph-tab"><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6L9 17l-5-5"></path></svg></span>Attendance</a><a href="#" class="ph-tab"><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM16 2v4M8 2v4M3 10h18"></path></svg></span>Classes</a><a href="#" class="ph-tab ph-tab-on"><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h.01M12 12h.01M19 12h.01"></path></svg></span>More</a></nav>
+</div>
+
+</div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"look":{"editor":"enum","options":["Dark","Light"],"default":"Dark"},"$preview":{"width":1800,"height":1280}}'>
+class Component extends DCLogic {
+renderVals() {
+return { look: (this.props.look ?? 'Dark') === 'Light' ? 't-light' : '' };
+}
+}
+</script>
+</body>
+</html>

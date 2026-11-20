@@ -64,6 +64,18 @@ permission a page has stays.
 | `PTHours` | A trainer's hours from the right, what the form refuses, and Your hours as a trainer who is not a manager sees them | V8 (V0-d-ii-b) |
 | `PTTimeOff` | Time off from the right: what is coming, Remove under it, Add time off, the sessions and classes it covers | V8 (V0-d-ii-b) |
 | `PhonePT` | Personal training on a phone: the trainers, a week, Book a session, hours as a full page | V8 (V0-d-ii-b) |
+| `Reports` | Reports: the side list On this page, the period, Members with each figure and how it is worked out, Month by month, Leads that became members, Attendance with Visits day by day, week by week and Busiest hours | V10 (V0-d-iii-a) |
+| `ReportsMoney` | Reports: Classes, Money with Export payments opened in its place, Monthly recurring revenue, Collected, Payment due, Lifetime value, the four money tables, Staff activity | V10 (V0-d-iii-a) |
+| `ReportsStates` | Reports before there are figures: each part's button to the exact place, who can for staff who may not, a figure without enough behind it, Export payments' other lines, a role without reports or money, loading and Try again | V10 (V0-d-iii-a) |
+| `PhoneReports` | Reports on a phone: On this page as a row that scrolls, figures stacked, tables scrolling in their box, Export payments | V10 (V0-d-iii-a) |
+| `Settings` | Settings: the side list with each section's state, Gym details with every message, India's mobile number, Leave this page? in the middle | V11 (V0-d-iii-a) |
+| `SettingsPayments` | Payments: connected to Square, Square Terminals, the paying-twice line, Ask members to add their card, Disconnect Square; what staff who are not the owner read; before connecting, choosing a location, other countries, after a disconnect | V11 (V0-d-iii-a) |
+| `SettingsPaymentsBoxes` | Remove a Terminal under its row, Pair a Square Terminal in the middle with each way it ends, Disconnect Square? under its button | V11 (V0-d-iii-a) |
+| `SettingsHours` | When we're open: the clock, Open 24 hours or Set opening times, a day's times, what the form refuses; Closed on a date and Undo | V11 (V0-d-iii-a) |
+| `SettingsReach` | How members reach you: phone number and email address | V11 (V0-d-iii-a) |
+| `SettingsMessages` | Automatic messages: the ten messages, each with its switch, number, words and own line; the button to the exact place where nobody would get one yet; Save pinned | V11 (V0-d-iii-a) |
+| `SettingsReferral` | Refer a friend: the switch, the gift for each side, its promo code, what members and their friend read | V11 (V0-d-iii-a) |
+| `PhoneSettings` | Settings on a phone: the list of sections first, each section a page of its own with Save at the foot, Disconnect Square from the bottom | V11 (V0-d-iii-a) |
 
 ## Drawn in V0-d-i (2026-11-19)
 
@@ -129,6 +141,31 @@ permission a page has stays.
   phone. The second look's hour grid is not the page.
 - **On a phone** an available time and a long button wrap on two lines rather than run off a 280 px cover; the
   week's days carry a dot for what is on them, and the day's own name says it.
+
+## Drawn in V0-d-iii-a (2026-11-20)
+
+- **Every button, field and message of the real Reports page and of Settings' first six sections is on these
+  boards**: 407 of 407, read from the code (`Reports.jsx`, `ReportCharts.jsx`, `ReportAttendanceCharts.jsx`,
+  `PaymentsDownload.jsx`, `Settings.jsx`, `GymDetailsPanel.jsx`, `PaymentsPanel.jsx`, `SquareTerminals.jsx`,
+  `PlaceLink.jsx`, `OpeningHoursPanel.jsx`, `TimePick.jsx`, `MemberContactPanel.jsx`, `MessageSettingsPanel.jsx`,
+  `ReferralPanel.jsx`, their views and the words in `packages/shared`). The other Settings sections (Booking rules,
+  Membership agreements, Signed forms of deleted members, Check-in devices, Who can check in, Waiver, Follow-up
+  emails to leads) and Your account are drawn in V0-d-iii-b; the side list already names them with their state.
+- **Looked at in the same 24 screen shapes in both looks** as V0-d-i's boards. The checker now also leaves out
+  words scrolled out of sight sideways inside a box (a wide table on a phone).
+- **Word changes** beyond the list on `Main`: "Download CSV" reads **Export CSV**, "Download payments" reads **Export
+  payments**, as Payments overview names it, and its button reads Export; "See who" and "See past members" read
+  **View who** and **View past members**; "See it in Discounts" reads **View it in Discounts**; "Open staff activity"
+  reads **View staff activity**; "Bills" reads **Billing rules** in Payment due's line and in Automatic messages
+  ("Open Billing rules"), as V0-d-i named it.
+- **Reports** keeps one long page, the figures in their order, with a side list, On this page, that jumps to each
+  part and marks where you are; on a phone it is a row that scrolls under the period. A wide table scrolls inside
+  its own box on a phone. Export payments opens in its own place, as today.
+- **Settings** is the side list and one section at a time (today it is one page of folding sections). The side list
+  says each section's state in a short line; on a phone the list is the first screen and a section is a page of its
+  own with Save at the foot. Each section keeps its own Save. Where a box opens (`Boxes`): Remove a Terminal and
+  Disconnect Square under what was pressed; Pair a Square Terminal and Leave this page? in the middle; Disconnect
+  Square from the bottom on a phone.
 
 ## What a builder must know
 

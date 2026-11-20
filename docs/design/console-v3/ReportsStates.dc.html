@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Reports — before there are figures, and every other state</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./kit3.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0;background:#0A0908}
+.cap{display:flex;align-items:center;gap:10px;font-weight:600;color:var(--t2)}
+.num{width:26px;height:26px;border-radius:999px;background:var(--o-fill);color:var(--o-t);box-shadow:inset 0 0 0 1px var(--o-line);display:grid;place-items:center;font-size:13px;font-weight:700;flex:none}
+.stage{background:var(--scrim);border-radius:18px;padding:32px 16px;display:flex;justify-content:center}
+.dlg{background:var(--solid);border:1px solid var(--line2);border-radius:20px;box-shadow:var(--pop);width:100%;max-width:500px;min-width:0}
+.side{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,440px);border:1px solid var(--line);border-radius:18px;overflow:hidden}
+.side > .under{padding:20px;opacity:.6;overflow:hidden;min-width:0}
+.side > .sheet{background:var(--solid);border-left:1px solid var(--line2);display:flex;flex-direction:column;min-width:0}
+.sheet-h{display:flex;align-items:center;gap:12px;padding:18px 20px;border-bottom:1px solid var(--line)}
+.sheet-b{padding:20px;display:flex;flex-direction:column;gap:18px}
+.sheet-f{margin-top:auto;display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:14px 20px;border-top:1px solid var(--line)}
+.opt{display:flex;gap:12px;align-items:flex-start;padding:14px 16px;border-radius:14px;border:1px solid var(--line2)}
+.opt-on{border-color:var(--o);background:var(--o-fill)}
+.radio{width:18px;height:18px;border-radius:999px;border:1.5px solid var(--line2);flex:none;margin-top:1px}
+.radio-on{border:5px solid var(--o)}
+.check-on{background:var(--o);border-color:var(--o);position:relative}
+.check-on::after{content:"";position:absolute;left:5px;top:1px;width:5px;height:10px;border:solid var(--on-o);border-width:0 2px 2px 0;transform:rotate(45deg)}
+.sw{width:40px;height:24px;border-radius:999px;background:var(--bar);position:relative;flex:none}
+.sw::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:999px;background:var(--t3)}
+.sw-on{background:var(--o)}.sw-on::after{left:19px;background:var(--on-o)}
+.step{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,340px);gap:20px;align-items:start}
+.menu{background:var(--solid);border:1px solid var(--line2);border-radius:16px;box-shadow:var(--pop);padding:6px;min-width:0;max-width:320px}
+.mi{display:flex;gap:12px;align-items:flex-start;padding:10px 12px;border-radius:10px}
+.ptile{display:flex;flex-direction:column;gap:4px;padding:14px;border-radius:14px;border:1px solid var(--line2);min-width:0}
+.ptile-on{border-color:var(--o);background:var(--o-fill)}
+.pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.qty{display:inline-flex;align-items:center;border:1px solid var(--line2);border-radius:999px;height:40px}
+.qty > button{width:40px;height:40px;display:grid;place-items:center;color:var(--t2)}
+.money{font-weight:600;white-space:nowrap}
+.frames{display:flex;flex-wrap:wrap;gap:40px;padding:40px;align-items:flex-start}
+.frame{width:390px;max-width:100%;border:1px solid var(--line2);border-radius:28px;overflow:hidden;background:var(--page);display:flex;flex-direction:column;position:relative}
+.bsheet{background:var(--solid);border-top:1px solid var(--line2);border-radius:22px 22px 0 0;box-shadow:var(--pop);display:flex;flex-direction:column}
+.grab{width:40px;height:5px;border-radius:999px;background:var(--line2);margin:10px auto 4px}
+.savebar{position:sticky;bottom:12px;z-index:2;display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 16px;background:var(--solid);border:1px solid var(--line2);border-radius:18px}
+.footbar{position:sticky;bottom:0;padding:12px 16px 16px;border-top:1px solid var(--line);background:var(--solid);display:flex;flex-direction:column;gap:8px}
+@media (max-width:1180px){.side{grid-template-columns:minmax(0,1fr)}.side > .under{display:none}.side > .sheet{border-left:0}}
+@media (max-width:900px){.step{grid-template-columns:minmax(0,1fr)}.frames{padding:16px;gap:24px}}
+@media (pointer:coarse){.qty,.qty > button{height:44px}.qty > button{width:44px}}
+.rlay{display:grid;grid-template-columns:200px minmax(0,1fr);gap:28px;align-items:start}.toc{position:sticky;top:16px;display:flex;flex-direction:column;gap:2px}.toc > a{display:flex;align-items:center;min-height:40px;padding:0 12px;border-radius:10px;color:var(--t2);font-weight:500}.toc > a.on{background:var(--o-fill);color:var(--o-t);font-weight:600;box-shadow:inset 0 0 0 1px var(--o-line)}.toc-h{padding:0 12px 6px}.figs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}.wide{grid-column:span 2;grid-row:span 2}.fig{display:flex;flex-direction:column;gap:8px;padding:18px 20px}.fig-h{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:40px}.how{background:var(--box2);border-radius:12px;padding:12px 14px;color:var(--t2)}.bars{display:flex;align-items:flex-end;gap:8px;height:150px;padding:0 20px}.bars > span{flex:1 1 0;min-width:22px;border-radius:6px 6px 0 0;background:var(--blue)}.bars > span.o{background:var(--o)}.blab{display:flex;gap:8px;padding:6px 20px 14px}.blab > span{flex:1 1 0;min-width:22px;text-align:center;color:var(--t3)}.chart{min-width:560px}.tbl{min-width:520px}.tbl .tr{grid-template-columns:minmax(150px,1.6fr) repeat(4,minmax(80px,1fr))}.tbl .tr > :not(:first-child){text-align:right}.t3c .tr{grid-template-columns:minmax(150px,1.6fr) repeat(2,minmax(80px,1fr))}.lead{display:grid;grid-template-columns:minmax(110px,160px) minmax(0,1fr) auto;gap:12px;align-items:center;padding:10px 20px}.trend{height:120px;display:flex;align-items:flex-end;gap:4px}.trend > span{flex:1 1 0;background:var(--blue-fill);border-top:3px solid var(--blue);border-radius:4px 4px 0 0}.stay{display:flex;height:10px;border-radius:999px;overflow:hidden}.stay > span:first-child{background:var(--good)}.stay > span:last-child{background:var(--bad)}.heat{display:grid;grid-template-columns:52px repeat(9,minmax(44px,1fr));gap:4px;padding:0 20px 18px;min-width:560px}.heat > b{font-weight:500;color:var(--t3);display:flex;align-items:center}.heat > i{height:30px;border-radius:6px;background:var(--o);display:block}.l0{opacity:.08}.l1{opacity:.25}.l2{opacity:.45}.l3{opacity:.7}.l4{opacity:1}@media (max-width:1180px){.figs{grid-template-columns:repeat(2,minmax(0,1fr))}}@media (max-width:900px){.rlay{grid-template-columns:minmax(0,1fr)}.toc{position:static;flex-direction:row;overflow-x:auto;gap:4px;padding-bottom:4px}.toc > a{white-space:nowrap;flex:none}.toc-h{display:none}}@media (max-width:600px){.figs{grid-template-columns:minmax(0,1fr)}.wide{grid-column:auto;grid-row:auto}.lead{grid-template-columns:minmax(0,1fr) auto}.lead > .track{grid-column:1 / -1;grid-row:2}}.miss{display:flex;flex-direction:column;gap:12px;padding:20px}.bad{color:var(--bad)}
+</style>
+</helmet>
+<div class="app t-dark {{look}}" style="min-height: 100%">
+<div class="shell">
+
+<nav class="rail" aria-label="Menu">
+<a href="#" class="gym"><span class="logo"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18zM6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2M10 6h4M10 10h4M10 14h4M10 18h4"></path></svg></span><span class="col grow"><span class="w6 ell">Iron House</span><span class="s12 t3">Austin · Gym</span></span><svg class="ic ic-s t3" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 15l5 5 5-5M7 9l5-5 5 5"></path></svg></a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3h5a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM15 3h5a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM15 12h5a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1zM4 16h5a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1z"></path></svg>Overview<span class="n n-bad">6</span></a>
+<div class="grp">Today<svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 2h6a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1zM16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2M9 14l2 2 4-4"></path></svg>Attendance</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 7.5V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3.5M16 2v4M8 2v4M3 10h5M10 16a6 6 0 1 0 12 0a6 6 0 1 0-12 0M16 14v2.2l1.5 1.3"></path></svg>Classes</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 6.5l11 11M21 21l-1-1M3 3l1 1M18 22l4-4M2 6l4-4M3 10l7-7M14 21l7-7"></path></svg>Personal training</a>
+<div class="grp">People<svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M5 7a4 4 0 1 0 8 0a4 4 0 1 0-8 0M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"></path></svg>Members &amp; staff</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 7a4 4 0 1 0 8 0a4 4 0 1 0-8 0M10.3 15H7a4 4 0 0 0-4 4v2M14 17a3 3 0 1 0 6 0a3 3 0 1 0-6 0M21 21l-1.9-1.9"></path></svg>Leads<span class="n">5</span></a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 17l-8.5-8.5-5 5L2 7M16 17h6v-6"></path></svg>At risk<span class="n n-warn">2</span></a>
+<div class="grp">Money<svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6a2 2 0 0 1 2-2h12v4M3 6v12a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2H5a2 2 0 0 1-2-2zM17 14h.01"></path></svg>Payments overview</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4zM3 6h18M16 10a4 4 0 0 1-8 0"></path></svg>Sell</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12.6 2.6A2 2 0 0 0 11.2 2H4a2 2 0 0 0-2 2v7.2a2 2 0 0 0 .6 1.4l8.7 8.7a2.4 2.4 0 0 0 3.4 0l6.6-6.6a2.4 2.4 0 0 0 0-3.4zM7 7.5h.01"></path></svg>Memberships</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2zM2 10h20"></path></svg>Failed payments<span class="n n-bad">3</span></a>
+<div class="grp">Community<svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l18-5v12L3 14zM11.6 16.8a3 3 0 1 1-5.8-1.6"></path></svg>Updates<span class="n n-warn">1</span></a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM16 2v4M8 2v4M3 10h18"></path></svg>Events</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 2h6a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1zM16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2M12 11h4M12 16h4M8 11h.01M8 16h.01"></path></svg>Fitness plans</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M8.2 10.2L5 3h14l-3.2 7.2M6 15a6 6 0 1 0 12 0a6 6 0 1 0-12 0"></path></svg>Challenges</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6M18 9h1.5a2.5 2.5 0 0 0 0-5H18M4 22h16M10 14.7V17c0 .6-.5 1-1 1.2-1.2.5-2 2-2 3.8M14 14.7V17c0 .6.5 1 1 1.2 1.2.5 2 2 2 3.8M18 2H6v7a6 6 0 0 0 12 0z"></path></svg>Leaderboard</a>
+<div class="grp">Manage<svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div>
+<a href="#" class="ni ni-on"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3v18h18M8 17V9M13 17V5M18 17v-3"></path></svg>Reports</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M2 14h4M10 8h4M18 16h4"></path></svg>Settings</a>
+<a href="#" class="me"><span class="av">DB</span><span class="col grow"><span class="w6 s13 ell">Dana Brooks</span><span class="s12 t3">Owner</span></span><svg class="ic ic-s t3" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 15l5 5 5-5M7 9l5-5 5 5"></path></svg></a>
+</nav>
+
+<div class="work">
+<header class="top" style="position: relative">
+<button type="button" class="find"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11a7 7 0 1 0 14 0a7 7 0 1 0-14 0M21 21l-4.3-4.3"></path></svg><span class="grow ell">Search members, pages or actions</span><span class="kbd">Ctrl K</span></button>
+<span class="grow"></span>
+<button type="button" class="btn btn-soft"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>New</button>
+<button type="button" class="ibtn" aria-label="6 items need attention"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 0 0 3.4 0"></path></svg><span class="pip">6</span></button>
+</header>
+
+<main class="page" style="position: relative">
+<div class="between wrap">
+<div class="col g6" style="flex: 1 1 360px; min-width: 0"><span class="eyebrow">Manage</span><h1 class="h1">Reports</h1><span class="t2">Core Pilates</span></div>
+</div>
+<div class="col g10">
+<div class="hrow g8 wrap" role="radiogroup" aria-label="Period"><button type="button" class="chip chip-on">Last 4 weeks</button><button type="button" class="chip">Last 3 months</button><button type="button" class="chip">Last 12 months</button></div>
+</div>
+
+<div class="rlay">
+<nav class="toc scroll" aria-label="On this page"><span class="eyebrow toc-h">On this page</span><a href="#" class="on">Members</a><a href="#">Leads</a><a href="#">Attendance</a><a href="#">Classes</a><a href="#">Money</a><a href="#">Staff activity</a></nav>
+
+<div class="col g24" style="min-width: 0">
+
+<div class="cap"><span class="num">1</span>A business opened today: each part says what starts its figures, with the button to the exact place</div>
+<section class="col g12" aria-label="Members"><h2 class="h2">Members</h2>
+<div class="box miss"><span class="s15 t2">Nobody is on your member list yet. These figures start when you add your members.</span><a href="#" class="btn btn-s" style="align-self: flex-start">Import your members</a></div></section>
+<section class="col g12" aria-label="Leads"><h2 class="h2">Leads that became members</h2>
+<div class="box miss"><span class="s15 t2">You haven't added any leads yet.</span><a href="#" class="btn btn-s" style="align-self: flex-start">Add a lead</a></div></section>
+<section class="col g12" aria-label="Attendance"><h2 class="h2">Attendance</h2>
+<div class="box miss"><span class="s15 t2">Nobody has checked in yet. These figures start when your members check in at your front desk, or staff check them in.</span><a href="#" class="btn btn-s" style="align-self: flex-start">Open Attendance</a></div></section>
+<section class="col g12" aria-label="Classes"><h2 class="h2">Classes</h2>
+<div class="box miss"><span class="s15 t2">You haven't set up any classes yet. These figures start when you run classes that people book.</span><a href="#" class="btn btn-s" style="align-self: flex-start">Set up classes</a></div></section>
+<section class="col g12" aria-label="Money"><h2 class="h2">Money</h2>
+<div class="box miss"><span class="s15 t2">No membership has been given and nothing has been sold in the app yet. Money figures start when you give memberships to your members and record their payments, or sell at the front desk.</span><a href="#" class="btn btn-s" style="align-self: flex-start">Set up memberships</a></div></section>
+
+<div class="cap"><span class="num">2</span>Staff who may not open that page read who can, in place of the button</div>
+<div class="box pad col g10">
+<span class="t2">Staff who can open Members can add them.</span>
+<span class="t2">Staff who keep the member list can add leads.</span>
+<span class="t2">Staff who can open Attendance can check members in.</span>
+<span class="t2">Staff who run the timetable can set them up.</span>
+<span class="t2">Staff who run the timetable can open the calendar.</span>
+<span class="t2">Staff who manage memberships can set them up.</span>
+<span class="t2">Staff who can open Members can record payments.</span>
+</div>
+
+<div class="cap"><span class="num">3</span>The first weeks: a figure without enough behind it says why, in its own box</div>
+<div class="figs">
+<section class="box fig" aria-label="New members"><div class="fig-h"><span class="w6 t2">New members</span><button type="button" class="ibtn" aria-label="How New members is worked out"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20M12 16v-4M12 8h.01"></path></svg></button></div><span class="t2">Your member list started this month, so new members are counted from next month.</span></section>
+<section class="box fig" aria-label="Members who left"><div class="fig-h"><span class="w6 t2">Members who left</span><button type="button" class="ibtn" aria-label="How Members who left is worked out"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20M12 16v-4M12 8h.01"></path></svg></button></div><span class="t2">Nobody has left yet: nobody has been removed from your member list, and no membership has ended or been cancelled.</span></section>
+<section class="box fig" aria-label="Churn"><div class="fig-h"><span class="w6 t2">Churn</span><button type="button" class="ibtn" aria-label="How Churn is worked out"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20M12 16v-4M12 8h.01"></path></svg></button></div><span class="t2">Not enough data yet. Churn compares 3 full months of your member list; you have none yet.</span></section>
+<section class="box fig" aria-label="Retention"><div class="fig-h"><span class="w6 t2">Retention</span><button type="button" class="ibtn" aria-label="How Retention is worked out"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20M12 16v-4M12 8h.01"></path></svg></button></div><span class="t2">Retention is the share of your members you keep each month. It shows once somebody has left, so the app knows you record who leaves.</span></section>
+<section class="box fig" aria-label="Average stay"><div class="fig-h"><span class="w6 t2">Average stay</span><button type="button" class="ibtn" aria-label="How Average stay is worked out"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20M12 16v-4M12 8h.01"></path></svg></button></div><span class="t2">Average stay is how long your members had been with you when they left. Nobody has left yet.</span></section>
+<section class="box fig" aria-label="Churn, nobody left"><div class="fig-h"><span class="w6 t2">Churn</span><button type="button" class="ibtn" aria-label="How Churn is worked out"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20M12 16v-4M12 8h.01"></path></svg></button></div><span class="t2">Churn is the share of your members who leave in a month. Nobody has left yet, so there is none to show.</span></section>
+<section class="box fig" aria-label="Visits a member a week"><div class="fig-h"><span class="w6 t2">Visits a member a week</span><button type="button" class="ibtn" aria-label="How Visits a member a week is worked out"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20M12 16v-4M12 8h.01"></path></svg></button></div><span class="t2">Not enough data yet. Visits a member are shared over 2 full weeks of check-ins or more, Monday to Sunday; you have none yet.</span></section>
+<section class="box fig" aria-label="Busiest time"><div class="fig-h"><span class="w6 t2">Busiest time</span><button type="button" class="ibtn" aria-label="How Busiest time is worked out"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20M12 16v-4M12 8h.01"></path></svg></button></div><span class="t2">Not enough data yet. The busiest time is picked once every weekday has been counted twice: 2 full weeks of check-ins; you have none yet.</span></section>
+<section class="box fig" aria-label="Lifetime value"><div class="fig-h"><span class="w6 t2">Lifetime value</span><button type="button" class="ibtn" aria-label="How Lifetime value is worked out"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20M12 16v-4M12 8h.01"></path></svg></button></div><span class="t2">Not enough data yet. Lifetime value needs 3 full months of payments recorded here and of your member list; you have 1.</span></section>
+<section class="box fig" aria-label="Monthly recurring revenue"><div class="fig-h"><span class="w6 t2">Monthly recurring revenue</span><button type="button" class="ibtn" aria-label="How Monthly recurring revenue is worked out"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20M12 16v-4M12 8h.01"></path></svg></button></div><span class="t2">No repeating membership is in use today.</span></section>
+<section class="box fig" aria-label="Payment due"><div class="fig-h"><span class="w6 t2">Payment due</span><button type="button" class="ibtn" aria-label="How Payment due is worked out"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20M12 16v-4M12 8h.01"></path></svg></button></div><span class="t2">No bill in the app is due.</span></section>
+<section class="box fig" aria-label="Lifetime value, nobody left"><div class="fig-h"><span class="w6 t2">Lifetime value</span><button type="button" class="ibtn" aria-label="How Lifetime value is worked out"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20M12 16v-4M12 8h.01"></path></svg></button></div><span class="t2">Lifetime value is what a member pays you before they leave. Nobody left in the months it is worked out over.</span></section>
+</div>
+<div class="box miss" aria-label="Leads, none joined"><span class="s15 t2">No lead has been marked Joined yet. Press Joined on a lead when they sign up.</span></div>
+<div class="box miss" aria-label="Classes, none lately"><span class="s15 t2">No class has started in the last 4 weeks, since 23 Oct 2026.</span><a href="#" class="btn btn-s" style="align-self: flex-start">Open the calendar</a></div>
+<div class="box miss" aria-label="Money, none recorded"><span class="s15 t2">No payment or sale is recorded in the app yet. If you take payments in other software, your money figures are there. To see them here, record each payment on the member's page.</span><a href="#" class="btn btn-s" style="align-self: flex-start">Open Members</a></div>
+
+<div class="cap"><span class="num">4</span>Export payments: while it counts, with nothing on those days, and when something fails</div>
+<div class="box pad col g10">
+<span class="t1">Counting the payments on these days…</span>
+<span class="t1">No payments, refunds or sales on these days. The file will have its headings only.</span>
+<span class="bad" role="alert">We couldn't count the payments on these days. Please try again.</span>
+<span class="bad" role="alert">We couldn't export the file. Please try again.</span>
+</div>
+
+<div class="cap"><span class="num">5</span>Somebody whose role does not include reports, or money</div>
+<div class="box miss"><span class="s15 t2">Your role doesn't allow you to see reports. Ask the owner if you need to.</span></div>
+<section class="col g12" aria-label="Money, not allowed"><h2 class="h2">Money</h2><div class="box miss"><span class="s15 t2">Your role doesn't allow you to see money figures. Ask the owner if you need to.</span></div></section>
+
+<div class="cap"><span class="num">6</span>Loading, and a read that failed: the other parts stay on the page</div>
+<div class="grid2" style="gap: 16px">
+<div class="box miss"><span class="hrow g10 t2"><span class="dot"></span>Loading your reports…</span><span class="hrow g10 t2"><span class="dot"></span>Loading your attendance figures…</span><span class="hrow g10 t2"><span class="dot"></span>Loading your money figures…</span><span class="hrow g10 t2"><span class="dot"></span>Loading your organisation…</span></div>
+<div class="col g12">
+<div class="strip strip-bad" role="alert"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 9v4M12 17h.01M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path></svg><span class="grow">We couldn't load your reports.</span><button type="button" class="btn btn-s btn-sm">Try again</button></div>
+<div class="strip strip-bad" role="alert"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 9v4M12 17h.01M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path></svg><span class="grow">We couldn't load your attendance figures.</span><button type="button" class="btn btn-s btn-sm">Try again</button></div>
+<div class="strip strip-bad" role="alert"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 9v4M12 17h.01M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path></svg><span class="grow">We couldn't load your money figures.</span><button type="button" class="btn btn-s btn-sm">Try again</button></div>
+</div>
+</div>
+<div class="box miss"><span class="s15 t2">We couldn't find an organisation you run at this address.</span><a href="#" class="c-o w6">Your organisations</a></div>
+
+</div>
+</div>
+
+</main>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"look":{"editor":"enum","options":["Dark","Light"],"default":"Dark"},"$preview":{"width":1440,"height":3650}}'>
+class Component extends DCLogic {
+renderVals() {
+return { look: (this.props.look ?? 'Dark') === 'Light' ? 't-light' : '' };
+}
+}
+</script>
+</body>
+</html>
