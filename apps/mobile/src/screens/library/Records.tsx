@@ -323,6 +323,11 @@ function Bars({ lead, bars, units }: { lead: Lead; bars: readonly Bar[]; units: 
           );
         })}
       </View>
+      {bars.some((b) => b.record) ? (
+        <Txt kind="tiny" colour="timerWords">
+          PR · your personal record
+        </Txt>
+      ) : null}
     </View>
   );
 }

@@ -543,6 +543,8 @@ describe("your records, calories and My Workout on an exercise's page (63c)", ()
     expect(screen.getByLabelText("Best volume, 880 kg, all sets · 14 Nov")).toBeTruthy();
     expect(screen.getByText("HEAVIEST SET · YOUR LAST 3 TIMES")).toBeTruthy();
     expect(screen.getByLabelText("14 Nov, 35, your record")).toBeTruthy();
+    // "PR" is said in words once, for somebody new to gyms (Kd asked what it meant).
+    expect(screen.getByText("PR · your personal record")).toBeTruthy();
     expect(screen.getByLabelText("6 Nov, 30")).toBeTruthy();
   });
 
