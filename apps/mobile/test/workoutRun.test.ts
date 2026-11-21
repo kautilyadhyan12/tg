@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { workoutRunSchema, workoutSaveSchema, type RunExercise, type WorkoutRun } from "@app/shared";
-import { AWAY_MOST_MS, leftOf, press, READY_MS, shownAt, startRun, toSave, type Press } from "../src/library/workoutRun";
+import { AWAY_MOST_MS, CLOCK_MOST_MS, firstSets, leftOf, press, READY_MS, setsInAll, shownAt, startRun, toSave, type Press } from "../src/library/workoutRun";
 
 // The workout's steps (64a-ii; spec Part 2 §13.6): the same presses in give the same workout out. Each row is a
 // workout, a list of presses each at a time in seconds from Start, and what the workout must then be.
@@ -86,6 +86,30 @@ describe("the workout's steps", () => {
   it("a timed set's target can be cut below the time held, and it ends at once", () => {
     const out = play([plank], [[10, { kind: "tick" }], [32, { kind: "target", by: -1 }], [33, { kind: "target", by: -1 }]]);
     expect(sets(out)).toEqual([["plank", 20, null, 23_000]]);
+  });
+});
+
+describe("a set or a rest left open (round one, H2)", () => {
+  it("a set by hand left open 13 hours with the app in front is kept as no longer than a save allows, and the workout is still saved", () => {
+    const out = play([curl], [[20, { kind: "main" }], [30, { kind: "main" }], [30 + 13 * 3600, { kind: "tick" }], [30 + 13 * 3600 + 1, { kind: "main" }]]);
+    if (out === "gone") throw new Error("gone");
+    expect(where(out)).toEqual(["done", 0, 1]);
+    const used = out.done.reduce((t, s) => t + s.durationMs + (s.restSeconds ?? 0) * 1000, 0);
+    expect(used).toBe(12 * 3_600_000);
+    expect(workoutSaveSchema.safeParse(toSave(out, "android", "x")).success).toBe(true);
+  });
+
+  it("a rest begun near the longest clock still makes a workout its file can hold", () => {
+    const out = play([curl], [[5, { kind: "pause" }], [5 + 48 * 3600, { kind: "resume" }], [5 + 48 * 3600 + 1, { kind: "tick" }], [CLOCK_MOST_MS / 1000 + 10, { kind: "main" }]]);
+    if (out === "gone") throw new Error("gone");
+    expect(workoutRunSchema.safeParse(out).success).toBe(true);
+  });
+
+  it("a workout of more than 200 sets does the first 200 (round one, L3)", () => {
+    const many = Array.from({ length: 25 }, (_, i): RunExercise => ({ ...curl, exercise: i % 2 === 0 ? "barbell_curl" : "squat", sets: Array.from({ length: 10 }, () => reps(10)) }));
+    expect(firstSets(many).reduce((n, e) => n + e.sets.length, 0)).toBe(200);
+    expect(firstSets(many)).toHaveLength(20);
+    expect(setsInAll(begin(many))).toBe(200);
   });
 });
 

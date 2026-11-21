@@ -2649,6 +2649,13 @@ with a screen reader.
   awake. Put away (the arrow, or Back), a bar over every tab says "Workout in progress" and opens it again, and My Workout says Open
   workout. Its last screen: Workout complete, its time, sets and exercises, and "Saved to your account", "Saving…", "Saved on this
   phone" (no answer), or "This workout couldn't be saved." (also on My Workout until OK).
+- **Round one (2026-11-21):** a workout ending more than five minutes past the server's clock (a phone whose clock runs fast)
+  is answered 400 `not_ended_yet` (`WORKOUT_NOT_ENDED`), its own word, and the phone sends it again later, never refusing it for
+  good; a set or a rest left open is kept as no longer than the 12 hours a save allows, so a workout is always one the server and
+  the phone's file take; a finished workout the waiting list could not keep (full, or its write failed) stays in the workout's own
+  file, is handed over again every 15 s and at each open, and Start workout waits for it ("Your last workout is still being kept on
+  this phone. Try again in a moment."); a workout of more than 200 sets does the first 200, and My Workout says so; "Saved on this
+  phone · It goes to your account as soon as it can."; the time shown is the time trained, every pause left out.
 - **Not in 64a-ii:** the summary (64a-iii), saved workouts (64a-iv), history (64a-v), heart rate and sounds (64a-vi), the camera (64b).
 
 ### 13.7 The jobs (ROADMAP Stage 5, exercise folder 2; ROADMAP wins where they differ)

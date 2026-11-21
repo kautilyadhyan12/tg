@@ -945,7 +945,7 @@ describe("doing a workout (64a-ii)", () => {
     await fireEvent.press(await screen.findByRole("button", { name: "Start workout" }));
     await fireEvent.press(await screen.findByRole("button", { name: "Set done · 2 reps" }));
     expect(await screen.findByText("Saved on this phone")).toBeTruthy();
-    expect(screen.getByText("It goes to your account when you're back online.")).toBeTruthy();
+    expect(screen.getByText("It goes to your account as soon as it can.")).toBeTruthy();
     const waiting = new File(Paths.document, `workouts-${RAVI.id}.json`);
     expect((JSON.parse(await waiting.text()) as { waiting: unknown[] }).waiting).toHaveLength(1);
   });
@@ -994,6 +994,10 @@ describe("doing a workout (64a-ii)", () => {
     await fireEvent.press(await screen.findByRole("button", { name: "Start workout" }));
     await fireEvent.press(await screen.findByRole("button", { name: "Pause workout" }));
     expect(await screen.findByLabelText("Paused")).toBeTruthy();
+    // Every clock stops (round one): the time shown stays where it was while seconds pass.
+    const shown = screen.getByText(/^\d\d:\d\d$/).props.children as string;
+    await settle(2200);
+    expect(screen.getByText(/^\d\d:\d\d$/).props.children).toBe(shown);
     expect(screen.getByRole("button", { name: "Resume" })).toBeTruthy();
     await fireEvent.press(screen.getByRole("button", { name: "Resume" }));
     expect(screen.queryByLabelText("Paused")).toBeNull();

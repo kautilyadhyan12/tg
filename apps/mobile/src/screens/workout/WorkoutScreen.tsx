@@ -27,6 +27,8 @@ import { clock, countdown, eyebrowWords, mainWords, nextWords, ringShare, setLin
 interface Props {
   run: WorkoutRun | null;
   finished: Finished | null;
+  /** The finished workout is kept in its own file alone, not yet in the waiting list's (round one, H3). */
+  keeping: boolean;
   waiting: WaitingView<WorkoutSave, RefusedWorkout>;
   units: Units;
   press: (p: Press) => void;
@@ -35,8 +37,8 @@ interface Props {
   onFinished: () => void;
 }
 
-export function WorkoutScreen({ run, finished, waiting, units, press, onPutAway, onDiscard, onFinished }: Props) {
-  if (run === null) return finished === null ? null : <Done finished={finished} waiting={waiting} onDone={onFinished} />;
+export function WorkoutScreen({ run, finished, keeping, waiting, units, press, onPutAway, onDiscard, onFinished }: Props) {
+  if (run === null) return finished === null ? null : <Done finished={finished} keeping={keeping} waiting={waiting} onDone={onFinished} />;
   return <Doing run={run} units={units} press={press} onPutAway={onPutAway} onDiscard={onDiscard} />;
 }
 
@@ -362,14 +364,17 @@ function TimerRing({ share, colour, children }: { share: number; colour: ColourN
 }
 
 /** The workout's last screen: it is complete, its time, sets and exercises, and whether it is saved. */
-function Done({ finished, waiting, onDone }: { finished: Finished; waiting: WaitingView<WorkoutSave, RefusedWorkout>; onDone: () => void }) {
+function Done({ finished, keeping, waiting, onDone }: { finished: Finished; keeping: boolean; waiting: WaitingView<WorkoutSave, RefusedWorkout>; onDone: () => void }) {
   const insets = useSafeAreaInsets();
   const id = finished.workoutId;
   const refused = waiting.refused.some((r) => r.workoutId === id);
   const waits = waiting.waiting.some((w) => w.workoutId === id);
   const saved = !refused && !waits && waiting.sent.includes(id);
-  const title = refused ? "This workout couldn't be saved." : saved ? "Saved to your account" : waits && waiting.held ? "Saved on this phone" : "Saving…";
-  const line = waits && waiting.held ? "It goes to your account when you're back online." : null;
+  // On the phone, waiting for the server or for room in the waiting list: never "online", as the reason may be another
+  // (round one, L2).
+  const onPhone = !refused && !saved && (keeping || (waits && waiting.held));
+  const title = refused ? "This workout couldn't be saved." : saved ? "Saved to your account" : onPhone ? "Saved on this phone" : "Saving…";
+  const line = onPhone ? "It goes to your account as soon as it can." : null;
   return (
     <View style={styles.page}>
       <ScrollView contentContainerStyle={styles.scroll} bounces={false}>

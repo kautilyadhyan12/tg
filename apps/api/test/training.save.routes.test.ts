@@ -387,7 +387,8 @@ d("saving a workout from the phone (real Postgres)", () => {
       const ahead = (ms: number) => ({ startedAt: new Date(NOW.getTime() + ms - 30 * 60_000).toISOString(), endedAt: new Date(NOW.getTime() + ms).toISOString() });
       const late = await save(a, workout(ahead(5 * 60_000 + 1000)));
       expect(late.statusCode).toBe(400);
-      expect(late.json()).toMatchObject({ message: "endedAt: the workout has not ended yet" });
+      // Its own word: the phone sends it again later, never refusing a workout for good over a fast clock (64a-ii, round one H1).
+      expect(late.json()).toMatchObject({ error: "not_ended_yet", message: "endedAt: the workout has not ended yet" });
       expect((await save(a, workout(ahead(4 * 60_000)))).statusCode).toBe(201);
     });
 

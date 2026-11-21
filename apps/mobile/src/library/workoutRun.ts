@@ -56,14 +56,15 @@ export interface Start {
 
 /** A new workout at its first set; null with no exercise to do. */
 export function startRun(s: Start): WorkoutRun | null {
-  if (s.exercises.length === 0) return null;
+  const exercises = firstSets(s.exercises);
+  if (exercises.length === 0) return null;
   const run: WorkoutRun = {
     v: 1,
     workoutId: s.workoutId,
     name: s.name,
     startedAt: new Date(s.now).toISOString(),
     timeZone: s.timeZone,
-    exercises: [...s.exercises],
+    exercises,
     ex: 0,
     set: 0,
     phase: "set",
@@ -78,6 +79,24 @@ export function startRun(s: Start): WorkoutRun | null {
   };
   return begin(run, false);
 }
+
+/** As many sets as one workout may save (200), the first ones in order; an exercise left with none is left out (round
+ *  one, L3). My Workout says so where it holds more. */
+export function firstSets(exercises: readonly RunExercise[]): RunExercise[] {
+  let left: number = L.setsMost;
+  const out: RunExercise[] = [];
+  for (const e of exercises) {
+    if (left <= 0) break;
+    const sets = e.sets.slice(0, left);
+    left -= sets.length;
+    if (sets.length > 0) out.push(sets.length === e.sets.length ? e : { ...e, sets });
+  }
+  return out;
+}
+
+/** What a save allows of a workout's sets and rests together, left after the sets done so far: a set or a rest left
+ *  open for longer is kept as no longer than that (round one, H2), so every workout stays one the server takes. */
+const timeLeftMs = (r: WorkoutRun): number => Math.max(0, L.lengthMostMs - r.done.reduce((t, s) => t + s.durationMs + (s.restSeconds ?? 0) * 1000, 0));
 
 const exerciseOf = (r: WorkoutRun): RunExercise => {
   const e = r.exercises[r.ex];
@@ -117,15 +136,17 @@ function begin(r: WorkoutRun, afterRest: boolean): WorkoutRun {
 /** The set being done is done, with `done` reps or seconds; then its rest, the next set, or the end. */
 function complete(r: WorkoutRun, done: number): WorkoutRun {
   const { exercise, target, weightGrams, restSeconds } = setOf(r);
+  const durationMs = Math.min(r.activeMs - r.phaseAt, timeLeftMs(r));
+  const most = exercise.measuredIn === "reps" ? L.repsMost : Math.min(L.secondsMost, Math.floor(durationMs / 1000));
   const set: SavedSet = {
     exercise: exercise.exercise,
     position: r.done.length,
     measuredIn: exercise.measuredIn,
     target,
-    done: Math.max(0, Math.min(exercise.measuredIn === "reps" ? L.repsMost : L.secondsMost, done)),
+    done: Math.max(0, Math.min(most, done)),
     weightGrams,
     restSeconds: null,
-    durationMs: r.activeMs - r.phaseAt,
+    durationMs,
     counted: exercise.measuredIn === "time" ? "timer" : "hand",
   };
   const ran: WorkoutRun = { ...r, done: [...r.done, set], count: 0 };
@@ -139,9 +160,9 @@ function complete(r: WorkoutRun, done: number): WorkoutRun {
 
 /** The rest is over: the rest taken is kept with the set before it, and the next set starts. */
 function endRest(r: WorkoutRun): WorkoutRun {
-  const taken = Math.floor((r.activeMs - r.phaseAt) / 1000);
+  const taken = Math.min(L.restSecondsMost, Math.floor((r.activeMs - r.phaseAt) / 1000), Math.floor(timeLeftMs(r) / 1000));
   const last = r.done[r.done.length - 1];
-  const done = last === undefined ? r.done : [...r.done.slice(0, -1), { ...last, restSeconds: taken > 0 ? Math.min(L.restSecondsMost, taken) : null }];
+  const done = last === undefined ? r.done : [...r.done.slice(0, -1), { ...last, restSeconds: taken > 0 ? taken : null }];
   return begin({ ...r, done }, true);
 }
 

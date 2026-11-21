@@ -78,7 +78,7 @@ describe("a finished workout is never lost, and reaches the server once", () => 
     const now = { t: T0 };
     let app = openApp(runFile, waitingFile, srv.send, now);
     await app.store.ready;
-    expect(app.store.start({ workoutId: ID, name: "Full body", now: now.t, timeZone: "Asia/Kolkata", exercises: [curl, plank] })).toBe(true);
+    expect(app.store.start({ workoutId: ID, name: "Full body", now: now.t, timeZone: "Asia/Kolkata", exercises: [curl, plank] })).toBe("started");
     await settle();
     // Each press, then the app closed and opened from the files alone: what it reads back is what was on the screen.
     const presses: [number, Parameters<RunStore["press"]>[0]][] = [
@@ -122,9 +122,11 @@ describe("a finished workout is never lost, and reaches the server once", () => 
     expect(srv.saved.size).toBe(1);
     expect(app.waiting.view().waiting).toEqual([]);
     expect(app.waiting.view().sent).toEqual([ID]);
-    // Sent again by anything, it is not sent: nothing waits.
+    // Sent again by anything, it is not sent: nothing waits (round one: counted before and after).
+    const calls = srv.calls.length;
     await app.waiting.send(true);
-    expect(srv.calls.filter((c) => c === ID).length).toBe(srv.calls.length);
+    await app.waiting.send();
+    expect(srv.calls.length).toBe(calls);
     const save = srv.saved.get(ID);
     expect(save?.sets.map((s) => [s.exercise, s.done, s.restSeconds])).toEqual([
       ["barbell_curl", 2, 20],
@@ -149,13 +151,14 @@ describe("a finished workout is never lost, and reaches the server once", () => 
     const srv = server();
     srv.answering = false;
     const now = { t: T0 + 60_000 };
-    // First open: handed over to the list, then the phone dies before its own file is emptied.
-    const first = openApp(runFile, file(), srv.send, now);
+    // First open: handed over to the list, which writes its own file; then the phone dies before the workout's own file
+    // is emptied (round one: the list's file as the first list wrote it).
+    const waitingFile = file();
+    const first = openApp(runFile, waitingFile, srv.send, now);
     await first.store.ready;
     await settle();
-    expect(first.waiting.view().waiting.length).toBe(1);
+    expect((JSON.parse(waitingFile.text ?? "{}") as { waiting: { workoutId: string }[] }).waiting.map((w) => w.workoutId)).toEqual([ID]);
     first.waiting.stop();
-    const waitingFile = file(JSON.stringify({ version: 1, waiting: [first.waiting.view().waiting[0]], refused: [] }));
     runFile.text = JSON.stringify(timed.run);
     // Opened again: the done workout is handed over again, and the list keeps it once.
     const second = openApp(runFile, waitingFile, srv.send, now);
@@ -183,6 +186,42 @@ describe("a finished workout is never lost, and reaches the server once", () => 
     // The list could not write: the workout's own file still holds it, done, for the next open.
     expect(readRun(runFile.text)?.phase).toBe("done");
   });
+
+  it("a finished workout the waiting list could not keep is never written over by the next Start workout (round one, H3)", async () => {
+    const run = startRun({ workoutId: ID, name: "Legs", now: T0, timeZone: "UTC", exercises: [{ ...curl, sets: [{ target: 1, weightGrams: null, restSeconds: null }] }] });
+    if (run === null) throw new Error("no run");
+    const runFile = file(JSON.stringify(run));
+    const disk = { full: true, text: null as string | null };
+    const flaky: TextStore = {
+      read: () => Promise.resolve(disk.text),
+      write: (t) => {
+        if (disk.full) return Promise.reject(new Error("disk full"));
+        disk.text = t;
+        return Promise.resolve();
+      },
+    };
+    const srv = server();
+    srv.answering = false;
+    const now = { t: T0 + 1000 };
+    const app = openApp(runFile, flaky, srv.send, now);
+    await app.store.ready;
+    app.store.press({ kind: "count", by: 1 }, now.t);
+    await settle();
+    expect(app.store.keeping()).toBe(ID);
+    // Start workout again: refused while the last one is kept in this file alone; the file still holds it.
+    const next = { workoutId: "22222222-2222-4222-8222-222222222222", name: "", now: now.t, timeZone: "UTC", exercises: [curl] };
+    expect(app.store.start(next)).toBe("busy");
+    expect(readRun(runFile.text)?.workoutId).toBe(ID);
+    // Room again: handed over, its file emptied, and the next workout may start, the first one kept once.
+    disk.full = false;
+    app.store.retry();
+    await settle();
+    expect(app.store.keeping()).toBeNull();
+    expect((JSON.parse(disk.text ?? "{}") as { waiting: { workoutId: string }[] }).waiting.map((w) => w.workoutId)).toEqual([ID]);
+    expect(app.store.start(next)).toBe("started");
+    await settle();
+    expect(readRun(runFile.text)?.workoutId).toBe(next.workoutId);
+  });
 });
 
 describe("what each answer from the server does", () => {
@@ -195,6 +234,7 @@ describe("what each answer from the server does", () => {
     ["too many at once (429)", refused(429), "later"],
     ["its own fault (500)", refused(500), "later"],
     ["a broken phone's workout (400)", refused(400), "refused"],
+    ["a workout ending past the server's clock: a phone whose clock runs fast (400 not_ended_yet)", { ...refused(400), error: "not_ended_yet" } as Answer<unknown>, "later"],
     ["an id it holds for somebody else (404)", refused(404), "refused"],
   ])("%s", (_name, answer, kind) => {
     const read = readAnswer(answer);

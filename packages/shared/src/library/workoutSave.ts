@@ -118,6 +118,11 @@ export type WorkoutSave = z.infer<typeof workoutSaveSchema>;
 export const workoutSavedSchema = z.object({ workoutId: z.uuid(), status: z.enum(["created", "duplicate"]) });
 export type WorkoutSaved = z.infer<typeof workoutSavedSchema>;
 
+/** The 400 for a workout that ends more than five minutes past the server's clock: a phone whose clock runs fast.
+ *  Its own word, so the phone keeps the workout and sends it again once the server's clock has passed its end,
+ *  never refusing it for good. */
+export const WORKOUT_NOT_ENDED = "not_ended_yet";
+
 /** The answer when the server does not know an exercise (422): their id words. The phone keeps the
  *  workout, reads the Library again and sends it again. */
 export const workoutSaveRefusalSchema = z.object({

@@ -28,14 +28,22 @@ export interface RunStore {
   /** The workout being done; null for none. */
   run: () => WorkoutRun | null;
   finished: () => Finished | null;
-  /** A new workout, written to the file before it is shown; false where one is already going on. */
-  start: (s: Start) => boolean;
+  /** A new workout, written to the file before it is shown. "busy": one is going on, or the last one finished is not
+   *  yet in the waiting list's file and holds this workout's own file, so a new one may not write over it (round one,
+   *  H3); "nothing": no set to do. */
+  start: (s: Start) => StartResult;
+  /** The id of a finished workout kept in this workout's own file alone, until the waiting list's file holds it. */
+  keeping: () => string | null;
+  /** Hands a finished workout over to the waiting list again, where it could not be the first time. */
+  retry: () => void;
   press: (p: Press, now: number) => void;
   /** Thrown away: the person said Discard. */
   discard: () => void;
   closeFinished: () => void;
   watch: (told: () => void) => () => void;
 }
+
+export type StartResult = "started" | "busy" | "nothing";
 
 export interface RunStoreSetup {
   file: TextStore;
@@ -49,6 +57,8 @@ const placeOf = (r: WorkoutRun): string => `${r.phase}/${String(r.ex)}/${String(
 
 export function createRunStore(setup: RunStoreSetup): RunStore {
   let run: WorkoutRun | null = null;
+  // A finished workout not yet in the waiting list's file: this workout's own file keeps it until then.
+  let pending: WorkoutRun | null = null;
   let finished: Finished | null = null;
   let read = false;
   let writtenAt = 0;
@@ -68,25 +78,33 @@ export function createRunStore(setup: RunStoreSetup): RunStore {
     void write(JSON.stringify(r));
   };
 
-  /** A workout done: kept in the waiting list, then its own file emptied, then sent. */
-  const handOver = async (done: WorkoutRun) => {
-    const save = toSave(done, setup.platform, setup.appVersion);
-    if (save === null) {
-      await write("");
-      return;
+  /** The finished workout handed over: kept in the waiting list, then this workout's own file emptied (only while no new
+   *  workout writes it, round one L1), then sent. Where the list could not keep it, this file still does, and no new
+   *  workout may start until it is handed over (`retry`, and the next open). */
+  let handing = false;
+  const handOver = async () => {
+    const done = pending;
+    if (done === null || handing) return;
+    handing = true;
+    try {
+      const save = toSave(done, setup.platform, setup.appVersion);
+      const kept = save === null ? true : await setup.waiting.add(save);
+      if (!kept) return;
+      if (pending?.workoutId === done.workoutId) pending = null;
+      if (run === null) await write("");
+      if (save !== null) void setup.waiting.send(true);
+    } finally {
+      handing = false;
+      tell();
     }
-    const kept = await setup.waiting.add(save);
-    // Not in the list's file: the workout's own file keeps it, and the next open hands it over again.
-    if (!kept) return;
-    await write("");
-    void setup.waiting.send(true);
   };
 
   const finish = (done: WorkoutRun) => {
     run = null;
+    pending = done;
     finished = { workoutId: done.workoutId, name: done.name, activeMs: done.activeMs, sets: done.done.length, exercises: new Set(done.done.map((s) => s.exercise)).size };
     keep(done);
-    void handOver(done);
+    void handOver();
   };
 
   const ready = setup.file
@@ -97,7 +115,8 @@ export function createRunStore(setup: RunStoreSetup): RunStore {
         const kept = readRun(text);
         if (kept === null || run !== null) return;
         if (kept.phase === "done") {
-          void handOver(kept);
+          pending = kept;
+          void handOver();
           return;
         }
         const back = pressRun(kept, { kind: "back" }, setup.clock());
@@ -118,14 +137,22 @@ export function createRunStore(setup: RunStoreSetup): RunStore {
     run: () => run,
     finished: () => finished,
     start: (s) => {
-      if (run !== null || !read) return false;
+      if (run !== null || !read) return "busy";
+      if (pending !== null) {
+        void handOver();
+        return "busy";
+      }
       const made = startRun(s);
-      if (made === null || setsInAll(made) === 0) return false;
+      if (made === null || setsInAll(made) === 0) return "nothing";
       run = made;
       finished = null;
       keep(made);
       tell();
-      return true;
+      return "started";
+    },
+    keeping: () => pending?.workoutId ?? null,
+    retry: () => {
+      void handOver();
     },
     press: (p, now) => {
       if (run === null) return;

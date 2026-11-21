@@ -1,4 +1,4 @@
-import { RUN_SETS_MOST, type PhoneLibraryEntry, type RunExercise } from "@app/shared";
+import { RUN_SETS_MOST, WORKOUT_SAVE_LIMITS, type PhoneLibraryEntry, type RunExercise } from "@app/shared";
 import { useState, type ReactNode } from "react";
 import { Image, Pressable, StyleSheet, TextInput, View } from "react-native";
 import { Button } from "../../look/Button";
@@ -35,6 +35,8 @@ export function MyWorkoutPart({ parts, units, onBrowse, file }: { parts: ReactNo
   const [reorder, setReorder] = useState(false);
   const [asking, setAsking] = useState(false);
   const [weighing, setWeighing] = useState(false);
+  // Start workout pressed while the last workout is still being kept on the phone (round one, H3).
+  const [busy, setBusy] = useState(false);
   const library = state.kind === "ready" ? state.library : null;
   const entryOf = (id: string): PhoneLibraryEntry | null => library?.exercises.find((e) => e.id === id) ?? null;
   const liveOf = (id: string): PhoneLibraryEntry | null => {
@@ -58,6 +60,7 @@ export function MyWorkoutPart({ parts, units, onBrowse, file }: { parts: ReactNo
     if (entry === null || plan === null) return [];
     return [{ exercise: entry.id, name: entry.text.en.name, kind: entry.kind, measuredIn: plan.measuredIn, barbell: entry.equipment.includes("barbell"), sets: plan.sets.slice(0, RUN_SETS_MOST) }];
   });
+  const setCount = toDo.reduce((n, e) => n + e.sets.length, 0);
 
   const top = (
     <PictureTop
@@ -166,6 +169,16 @@ export function MyWorkoutPart({ parts, units, onBrowse, file }: { parts: ReactNo
             </View>
           )}
           <View style={styles.start}>
+            {going === null && busy ? (
+              <Txt kind="small" colour="text" style={styles.centre}>
+                Your last workout is still being kept on this phone. Try again in a moment.
+              </Txt>
+            ) : null}
+            {going === null && setCount > RUN_SETS_LIMIT ? (
+              <Txt kind="small" style={styles.centre}>
+                {`One workout holds ${String(RUN_SETS_LIMIT)} sets. The first ${String(RUN_SETS_LIMIT)} are done.`}
+              </Txt>
+            ) : null}
             {going === null ? (
               <Button
                 label="Start workout"
@@ -173,7 +186,7 @@ export function MyWorkoutPart({ parts, units, onBrowse, file }: { parts: ReactNo
                 raised
                 disabled={layer === null || toDo.length === 0}
                 onPress={() => {
-                  layer?.start(mine?.workout.name ?? "", toDo);
+                  setBusy(layer?.start(mine?.workout.name ?? "", toDo) === "busy");
                 }}
               />
             ) : (
@@ -326,6 +339,9 @@ function Arrow({ name, say, disabled, onPress }: { name: "up" | "down"; say: str
     </Pressable>
   );
 }
+
+/** As many sets as one workout holds; past it, Start workout does the first ones (round one, L3). */
+const RUN_SETS_LIMIT = WORKOUT_SAVE_LIMITS.setsMost;
 
 const styles = StyleSheet.create({
   grow: { flex: 1 },

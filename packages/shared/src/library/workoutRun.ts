@@ -31,6 +31,8 @@ export const runExerciseSchema = z
 export type RunExercise = z.infer<typeof runExerciseSchema>;
 
 const ms = z.number().int().min(0).max(W.lengthMostMs * 4);
+/** When a rest or a get-ready ends: up to an hour's rest past the longest clock (round one, H2). */
+const endsMs = z.number().int().min(0).max(W.lengthMostMs * 4 + W.restSecondsMost * 1000 + 10_000);
 
 /** The workout in progress. Its clocks are milliseconds of the workout itself: `totalMs` everything since it
  *  started, `activeMs` the same less every pause, each moved on by the time that passed, never back. A phase
@@ -48,7 +50,7 @@ export const workoutRunSchema = z
     set: z.number().int().min(0).max(RUN_SETS_MOST - 1),
     phase: z.enum(["ready", "set", "rest", "done"]),
     phaseAt: ms,
-    phaseEndsAt: ms.nullable(),
+    phaseEndsAt: endsMs.nullable(),
     count: z.number().int().min(0).max(W.repsMost),
     paused: z.boolean(),
     totalMs: ms,

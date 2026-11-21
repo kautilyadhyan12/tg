@@ -1,4 +1,4 @@
-import { refusedWorkoutSchema, workoutRunSchema, workoutSavedSchema, workoutSaveSchema, type RefusedWorkout, type WorkoutRun, type WorkoutSave } from "@app/shared";
+import { WORKOUT_NOT_ENDED, refusedWorkoutSchema, workoutRunSchema, workoutSavedSchema, workoutSaveSchema, type RefusedWorkout, type WorkoutRun, type WorkoutSave } from "@app/shared";
 import type { Answer, Request, Shape } from "../session/calls";
 import { createWaitingList, type SendAnswer, type WaitingList } from "../session/waitingList";
 import type { TextStore } from "../screens/food/outbox";
@@ -14,14 +14,16 @@ export const WAITING_MOST = 100;
 
 type SignedIn = <T>(request: Omit<Request, "token">, shape: Shape<T>) => Promise<Answer<T>>;
 
-/** What became of one send. Not now: no answer, a sign-in being renewed, too many at once, the server's own fault, or
- *  an exercise it does not know yet (422: the phone keeps the workout and sends it again later, so nothing is
- *  dropped). Anything else it refuses, it will refuse again: a broken phone's workout, or an id it does not hold for
+/** What became of one send. Not now: no answer, a sign-in being renewed, too many at once, the server's own fault, an
+ *  exercise it does not know (422), or a workout ending past its clock, from a phone whose clock runs fast (400
+ *  `not_ended_yet`, round one H1): the phone keeps the workout and sends it again, at most every 5 minutes, so nothing
+ *  is dropped. Anything else it refuses, it will refuse again: a broken phone's workout, or an id it does not hold for
  *  this person. */
 export function readAnswer(answer: Answer<unknown>): SendAnswer {
   if (answer.kind === "ok") return { kind: "done" };
   if (answer.kind === "no_answer") return { kind: "later" };
   if (answer.status === 401 || answer.status === 422 || answer.status === 429 || answer.status >= 500) return { kind: "later" };
+  if (answer.status === 400 && answer.error === WORKOUT_NOT_ENDED) return { kind: "later" };
   // A shape the server would not read is the app's fault, never words for the person.
   return { kind: "refused", message: REFUSED_WORDS };
 }

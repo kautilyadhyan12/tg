@@ -12,7 +12,7 @@ import { workoutRunFile, workoutsWaitingFile } from "../../library/files";
 import type { Units } from "../../library/records";
 import { newWorkoutId } from "../../library/workoutId";
 import { setOf, shownAt, type Press } from "../../library/workoutRun";
-import { createRunStore, type Finished, type RunStore } from "../../library/workoutRunStore";
+import { createRunStore, type Finished, type RunStore, type StartResult } from "../../library/workoutRunStore";
 import { workoutSender, workoutWaiting, type WorkoutWaiting } from "../../library/workoutSaving";
 import type { WaitingView } from "../../session/waitingList";
 import { useSession } from "../../session/SessionProvider";
@@ -38,8 +38,8 @@ export interface WorkoutLayerValue {
   run: WorkoutRun | null;
   finished: Finished | null;
   waiting: WaitingView<WorkoutSave, RefusedWorkout>;
-  /** Starts a workout and opens its screen; false where one is going on already, or nothing can be done. */
-  start: (name: string, exercises: readonly RunExercise[]) => boolean;
+  /** Starts a workout and opens its screen: "busy" where one is going on, or the last one is still being kept. */
+  start: (name: string, exercises: readonly RunExercise[]) => StartResult;
   open: () => void;
   dismissRefused: (id: string) => void;
 }
@@ -73,11 +73,13 @@ export function WorkoutLayerProvider({ children, files = PHONE_FILES }: { childr
     setMade({ store, waiting });
     void waiting.start().then(() => waiting.send(true));
     const timer = setInterval(() => {
+      store.retry();
       if (waiting.view().waiting.length > 0 || waiting.view().unsaved) void waiting.send();
     }, SEND_AGAIN_MS);
     const heard = AppState.addEventListener("change", (next) => {
       if (next !== "active") return;
       store.press({ kind: "back" }, Date.now());
+      store.retry();
       void waiting.send(true);
     });
     return () => {
@@ -93,6 +95,7 @@ export function WorkoutLayerProvider({ children, files = PHONE_FILES }: { childr
   const subscribe = useCallback((told: () => void) => (store === null ? () => undefined : store.watch(told)), [store]);
   const kept = useSyncExternalStore(subscribe, () => store?.run() ?? null);
   const finished = useSyncExternalStore(subscribe, () => store?.finished() ?? null);
+  const keeping = useSyncExternalStore(subscribe, () => store?.keeping() ?? null);
   const listen = useCallback((told: () => void) => made?.waiting.subscribe(told) ?? (() => undefined), [made]);
   const waiting = useSyncExternalStore(listen, () => made?.waiting.view() ?? NONE_WAITING);
 
@@ -134,11 +137,11 @@ export function WorkoutLayerProvider({ children, files = PHONE_FILES }: { childr
       finished,
       waiting,
       start: (name, exercises) => {
-        if (store === null) return false;
+        if (store === null) return "busy";
         const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-        const ok = store.start({ workoutId: newWorkoutId(), name, now: Date.now(), timeZone: zone === "" ? "UTC" : zone, exercises });
-        if (ok) setShown(true);
-        return ok;
+        const result = store.start({ workoutId: newWorkoutId(), name, now: Date.now(), timeZone: zone === "" ? "UTC" : zone, exercises });
+        if (result === "started") setShown(true);
+        return result;
       },
       open: () => {
         setShown(true);
@@ -186,6 +189,7 @@ export function WorkoutLayerProvider({ children, files = PHONE_FILES }: { childr
           <WorkoutScreen
             run={run}
             finished={finished}
+            keeping={finished !== null && keeping === finished.workoutId}
             waiting={waiting}
             units={units}
             press={press}
