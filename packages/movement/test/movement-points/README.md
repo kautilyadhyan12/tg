@@ -14,3 +14,8 @@ Three files are cut from a video, never the video itself: `sumo_squat_2a` and `s
 `sumo squat2.mp4` before and after its cut at 12.2 s; `squat_normal_2` is `squat2.mp4` to 4.55 s, before it cuts from the
 man half way down to him standing. A file whose name starts `fresh_` was measured after the squat's rules and numbers were
 fixed, and was never used to choose them: it is the squat's test on videos nobody had looked at.
+
+`floor_phone_test` and `usual_v02` to `usual_v14` (52a-ii-b-i, 2026-11-20) are a man's own videos with his phone on the floor
+and raised, measured from even copies at 30 pictures a second (a phone's recording has uneven frame times): squats in three of
+them, played as sets by `cut`, the usual positions of other exercises in eleven. The videos stay on his laptop; exercise
+folder 1's `reviews/floor-phone/README.md` says what each shows.
