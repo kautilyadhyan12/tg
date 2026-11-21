@@ -29,7 +29,7 @@
 //     change added to the picture's own points, so that drawn from the phone's own place the picture comes back exactly.
 //     Shown, not held: it would be held once his own squats from a raised phone, redrawn so, read as his real floor
 //     squats do (floorView.ts `faithful`), and at none of his six leans do they yet; adding the foot wander measured on
-//     his own floor sets made it read further from them, not nearer (52a-ii-b-ii-b-i, below). Not tried on a video
+//     his own floor sets lost squats his real floor counts and still did not read as it (52a-ii-b-ii-b-i, below). Not tried on a video
 //     filmed from the floor. It sets no number: the squat's numbers stay as 52a-ii-b-i set them.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -611,21 +611,23 @@ export function floorCamera(frames: Frames, lens: number, lean: number, placed: 
 }
 
 // ── The pose model's own wander near the floor, measured on a man's own floor videos (52a-ii-b-ii-b-i) ─────────────
-// Tried, never used by the replay "on the floor": with it his raised squats, redrawn, read further from his real floor
-// squats than without it, at every lean and from every choice of his floor sets (floorView.ts `faithful`, its `wander`).
+// Tried, never used by the replay "on the floor": with it fewer of his raised squats, redrawn, count than without it,
+// where his real floor counts them all, and they still do not read as his real floor squats, at every lean and from
+// every choice of his floor sets (floorView.ts `faithful`, its `wander`).
 // Kept so that the trial can be made again when more floor videos come (job 53's live tries).
 /** One frame of a set's foot wander: each knee's bend in 3D (left, right; degrees, null unseen), and for each of the
  *  four foot points (left heel, right heel, left toes, right toes) how far the model put it on the picture from where
- *  that point lay while he stood tall in the same set, metres by his body's size then (across, down); null where the
- *  model was not sure of it. */
-interface WanderFrame {
+ *  that point lay while he stood tall just before that squat, metres by his body's size then (across, down); null
+ *  where the model was not sure of it. */
+export interface WanderFrame {
   readonly knees: readonly [number | null, number | null];
   readonly points: readonly (readonly [number, number] | null)[];
 }
 
-/** A set's wander is read from 1 s before the first squat the movement counts to 1 s after the last, so the walk back
- *  from the phone and the turn between sets are left out. */
-const AROUND_SQUATS = 1000;
+/** Each squat the movement counts is read on its own, from half a second before it to half a second after, against
+ *  where the feet stood in that half second before it: a person may step or turn between squats (on his dull floor he
+ *  turned to face the phone between his second and third, his heel 35 cm across), never during one. */
+const AROUND_SQUAT = 500;
 
 /** His squat sets, by label: those filmed from the floor and those from his raised phone (movementVideos.ts). */
 export function floorSquatSets(): { readonly floor: readonly string[]; readonly raised: readonly string[] } {
@@ -635,8 +637,8 @@ export function floorSquatSets(): { readonly floor: readonly string[]; readonly 
 }
 
 const wanders = new Map<string, readonly WanderFrame[]>();
-/** A set's foot wander, frame by frame, over its squats (`AROUND_SQUATS`). A planted foot does not move in a properly
- *  done squat, so every move of its points on the picture is the model's own. */
+/** A set's foot wander, frame by frame, over each of its squats (`AROUND_SQUAT`). A planted foot does not move in a
+ *  properly done squat, so every move of its points on the picture is the model's own. */
 export function wanderOf(label: string): readonly WanderFrame[] {
   const known = wanders.get(label);
   if (known !== undefined) return known;
@@ -645,12 +647,10 @@ export function wanderOf(label: string): readonly WanderFrame[] {
   const video = proofVideos([entry])[0]?.video;
   const frames = video?.frames ?? [];
   const reps = video === undefined ? [] : countedTimes(readMovement("squat"), video);
-  const first = reps[0]?.start;
-  const last = reps[reps.length - 1]?.end;
   const out: WanderFrame[] = [];
-  if (first !== undefined && last !== undefined) {
-    const inSet = frames.filter((f) => f.t >= first - AROUND_SQUATS && f.t <= last + AROUND_SQUATS);
-    const tall = inSet.filter((f) => (kneesOf(f.people[0]?.world ?? null) ?? 0) >= STRAIGHT);
+  for (const rep of reps) {
+    const inSet = frames.filter((f) => f.t >= rep.start - AROUND_SQUAT && f.t <= rep.end + AROUND_SQUAT);
+    const tall = inSet.filter((f) => f.t <= rep.start && (kneesOf(f.people[0]?.world ?? null) ?? 0) >= STRAIGHT);
     const size = q01(
       tall.flatMap((f) => {
         const p = f.people[0];
@@ -686,6 +686,17 @@ export function wanderOf(label: string): readonly WanderFrame[] {
   }
   wanders.set(label, out);
   return out;
+}
+
+/** How far the sets' foot points lie from where they stood, metres, across and down: the root mean square of every
+ *  point seen in every frame. */
+export function wanderSpread(labels: readonly string[]): readonly [number, number] {
+  const all = labels.flatMap((l) => wanderOf(l));
+  const of = (c: 0 | 1): number => {
+    const v = all.flatMap((w) => w.points.flatMap((q) => (q === null ? [] : [q[c]])));
+    return v.length === 0 ? 0 : Math.sqrt(v.reduce((s, x) => s + x * x, 0) / v.length);
+  };
+  return [of(0), of(1)];
 }
 
 /** The knee's bend in steps of 5 degrees, from straight: the wander is read in step with it. */
@@ -731,8 +742,8 @@ function profileAt(profile: Profile, j: number, knee: number): readonly [number,
 
 /** The wander a floor phone's model adds, in step with the knees: over the floor sets it is taken from, the middle of
  *  each foot point's wander at each step of its own knee's bend, less the middle of his raised sets' at the same bend,
- *  which the redraw already carries (carried on in time instead, as the chip's gap is, it put wander from the bottom of
- *  a squat on his standing feet). */
+ *  which the redraw already carries. Carried on in time instead, as the chip's gap is (tried once, on code not kept),
+ *  it put wander from the bottom of a squat on his standing feet. */
 export interface FloorWander {
   readonly from: readonly string[];
   readonly floor: Profile;
@@ -746,6 +757,8 @@ export function floorWander(only: readonly string[] | null = null): FloorWander 
   const known = floorWanders.get(key);
   if (known !== undefined) return known;
   const sets = floorSquatSets();
+  const unknown = (only ?? []).filter((l) => !sets.floor.includes(l));
+  if (unknown.length > 0) throw new Error(`not one of his floor sets: ${unknown.join(", ")}`);
   const from = only === null ? sets.floor : sets.floor.filter((l) => only.includes(l));
   const made = { from, floor: profileOf(from.flatMap((l) => wanderOf(l))), raised: profileOf(sets.raised.flatMap((l) => wanderOf(l))) };
   floorWanders.set(key, made);

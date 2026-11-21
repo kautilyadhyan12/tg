@@ -18,8 +18,8 @@
 //     it was tried at: the redraw took "knees bent" 4 of the 10 degrees towards his floor squats, short of half way, and
 //     "chest up" away from them. "Stance holds" and "hips alike" are read only where the phone's place shows them and are
 //     left out. `wander` (52a-ii-b-ii-b-i) adds the pose model's own foot wander measured on his floor sets (replays.ts
-//     `floorWander`): with it the redraw reads further from his floor, from all four sets, from each alone and from
-//     each three, so the replay itself never adds it;
+//     `floorWander`): with it the redraw loses squats his real floor counts and still does not read as his floor, from
+//     all four sets, from each alone and from each three, so the replay itself never adds it;
 //   - what a floor phone sees of sitting, lying, all fours and a chair: his eleven other videos as filmed, how often the
 //     body is found, how often each part is used, and how often the main measures are given (`positionsTable`), for the
 //     other kinds of counting (52c) and "can a phone on the floor count it" (54).

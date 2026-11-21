@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { readKept } from "./bodyCheck.js";
 import { faithful, phoneLean, positionsTable } from "./floorView.js";
 import { MOVEMENT_VIDEOS } from "./movementVideos.js";
-import { FLOOR_LEAN, FLOOR_LEANS, FLOOR_LEANS_MEASURED, LENS_MM, floorSquatSets } from "./replays.js";
+import { FLOOR_LEAN, FLOOR_LEANS, FLOOR_LEANS_MEASURED, LENS_MM, floorSquatSets, wanderSpread } from "./replays.js";
 
 const TEST = join(import.meta.dirname, "../test");
 const round = (v: number, d: number): string => (Number.isFinite(v) ? v.toFixed(d) : "-");
@@ -39,11 +39,14 @@ const tries: readonly (readonly [string, readonly string[] | null])[] = [
   ...floorSets.map((s): readonly [string, readonly string[]] => [`all but ${s}`, floorSets.filter((x) => x !== s)]),
   ...floorSets.map((s): readonly [string, readonly string[]] => [`${s} alone`, [s]]),
 ];
-console.log("\nWith the foot wander measured on his floor sets added (leaning back the replay's 14 degrees, and every lean from all four):");
+const cm = (v: number): string => (100 * v).toFixed(1);
+const floorSpread = wanderSpread(floorSets);
+const raisedSpread = wanderSpread(floorSquatSets().raised);
+console.log(`\nHis foot points' wander over his squats (root mean square, across and down): floor sets ${cm(floorSpread[0])} and ${cm(floorSpread[1])} cm, raised sets ${cm(raisedSpread[0])} and ${cm(raisedSpread[1])} cm`);
+console.log("With that wander added (leaning back the replay's 14 degrees, and every lean from all four); each reading short of his floor: redrawn | his raised sets | his floor sets, lowest to highest:");
 const say = (name: string, f: ReturnType<typeof faithful>): void => {
-  const place = f.rows.find((r) => r.reading === "feet stay in place");
-  const short = f.rows.filter((r) => r.judged && !r.within).map((r) => r.reading);
-  console.log(`  ${name}: ${f.passes ? "KEPT" : "NOT USED"}; ${String(f.redrawn.reduce((n, s) => n + s.count, 0))} of 10 counted; feet stay in place ${round(place?.redrawn ?? Number.NaN, 3)} (his floor ${round(place?.low ?? Number.NaN, 3)} to ${round(place?.high ?? Number.NaN, 3)}); short of his floor: ${short.join(", ") || "none"}`);
+  const short = f.rows.filter((r) => r.judged && !r.within).map((r) => `${r.reading} ${round(r.redrawn, 3)} | ${round(r.filmed, 3)} | ${round(r.low, 3)} to ${round(r.high, 3)}`);
+  console.log(`  ${name}: ${f.passes ? "KEPT" : "NOT USED"}; ${String(f.redrawn.reduce((n, s) => n + s.count, 0))} of 10 counted; ${short.join("; ") || "none short"}`);
 };
 for (const [name, from] of tries) say(name, faithful(FLOOR_LEAN, LENS_MM, undefined, from));
 for (const lean of FLOOR_LEANS_MEASURED) say(`all four, leaning back ${String(lean)}`, faithful(lean, LENS_MM, undefined, null));

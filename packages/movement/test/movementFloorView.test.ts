@@ -4,7 +4,8 @@
 // would go uncounted, or a jump be counted. So first: jumps seen through the redraw; then it is held as proof only if a
 // man's own squats from a raised phone, redrawn, read as his real floor squats do. As measured they do not yet, at any
 // of his six leans: the replay is shown, not held, and this file pins what each lean gives. 52a-ii-b-ii-b-i added the
-// pose model's own foot wander measured on his floor sets, and pins that it reads further from his floor, not nearer.
+// pose model's own foot wander measured on his floor sets, and pins that with it squats his real floor counts are lost
+// and the floor view still does not read as his floor.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -13,7 +14,7 @@ import { readKept } from "../scripts/bodyCheck.js";
 import { JUDGED, faithful, phoneLean, positionsTable } from "../scripts/floorView.js";
 import { countedTimes, holds, proofVideos, readMovement, replayTable, runMovement } from "../scripts/movementCheck.js";
 import { MOVEMENT_VIDEOS } from "../scripts/movementVideos.js";
-import { FLOOR_LEAN, FLOOR_LEANS_MEASURED, FLOOR_LENS, LENS_MM, REPLAYS, everyNth, floorSquatSets, onTheFloor } from "../scripts/replays.js";
+import { FLOOR_LEAN, FLOOR_LEANS_MEASURED, FLOOR_LENS, LENS_MM, REPLAYS, everyNth, floorSquatSets, floorWander, onTheFloor, wanderOf, wanderSpread } from "../scripts/replays.js";
 import { hopTime } from "../src/index.js";
 import { trueHop } from "./helpers/hops.js";
 import { VIDEOS } from "./helpers/replays.js";
@@ -62,10 +63,10 @@ describe("the worst thing: the floor view held as proof while it does not read a
   });
 
   it.each([
-    ["floor_phone_test 0-12 s", 8, ["feet stay in place", "hips, picture against 3D, standing"]],
-    ["floor_phone_test 13.9-21.1 s", 6, ["feet stay in place", "hips, picture against 3D, standing"]],
-    ["floor_phone_test 22.3-31.4 s", 8, ["feet stay in place"]],
-    ["usual_v04 9.8-23.2 s", 8, ["hips, picture against 3D", "hips, picture against 3D, standing"]],
+    ["floor_phone_test 0-12 s", 8, ["feet stay in place"]],
+    ["floor_phone_test 13.9-21.1 s", 7, ["feet stay down", "feet stay in place", "hips, picture against 3D, standing"]],
+    ["floor_phone_test 22.3-31.4 s", 9, ["feet stay down", "hips, picture against 3D, standing"]],
+    ["usual_v04 9.8-23.2 s", 7, ["feet stay down", "feet stay in place", "hips, picture against 3D", "hips, picture against 3D, standing"]],
   ] as const)("the wander measured without %s: %s of his 10 raised squats counted from the floor; short of his floor: %j; the floor view is not held", (left, counted, failing) => {
     const f = faithful(FLOOR_LEAN, LENS_MM, undefined, floorSets.filter((s) => s !== left));
     expect(f.redrawn.reduce((n, s) => n + s.count, 0)).toBe(counted);
@@ -152,38 +153,62 @@ describe("his raised squats, redrawn from the floor, do not yet read as his real
   });
 });
 
-describe("the pose model's own foot wander near the floor, measured on his floor sets and added, takes the floor view further from his floor, not nearer (52a-ii-b-ii-b-i)", () => {
-  // With all four floor sets' wander, at each of his six leans and the replay's: how many of his ten raised squats count,
-  // which judged readings fall short, and "feet stay in place" against his real floor sets' 0.014 to 0.036.
+describe("the pose model's own foot wander near the floor, measured on his floor sets and added, loses squats his real floor counts and does not read as his floor (52a-ii-b-ii-b-i)", () => {
+  const sets = floorSquatSets();
+
+  it("is the model's own: while his knees are straight around a squat, no floor set's foot point lies a step (10 cm) from where it stood before that squat", () => {
+    // A step or a turn is the person moving, never the model's wander (round one: on his dull floor he turned to face
+    // the phone between his second and third squats, his heel 35 cm across, and a reference taken over the whole set
+    // read that turn as wander).
+    for (const label of sets.floor) {
+      const far = wanderOf(label)
+        .filter((f) => f.knees.every((k) => k !== null && k >= 165))
+        .flatMap((f) => f.points.flatMap((q) => (q === null ? [] : [Math.hypot(q[0], q[1])])));
+      expect([label, far.length > 0, Math.max(...far) < 0.1]).toEqual([label, true, true]);
+    }
+  });
+
+  it("spreads further on his floor than from his raised phone: 3.2 and 3.9 cm across and down against 2.5 and 2.6", () => {
+    const cm = (v: readonly [number, number]): number[] => v.map((x) => Math.round(x * 1000) / 10);
+    expect([cm(wanderSpread(sets.floor)), cm(wanderSpread(sets.raised))]).toEqual([
+      [3.2, 3.9],
+      [2.5, 2.6],
+    ]);
+  });
+
+  it("names only his floor sets: a set it does not know is refused, never read as no wander", () => {
+    expect(() => floorWander(["no such set"])).toThrow("not one of his floor sets: no such set");
+  });
+
+  // With all four floor sets' wander, at each of his six leans and the replay's: how many of his ten raised squats count
+  // (without it 9 at 6.4 and 14.3 to 14.5, 10 at the others) and which judged readings fall short.
   it.each([
-    [6.4, 8, ["feet stay in place", "hips, picture against 3D", "hips, picture against 3D, standing"], 0.049],
-    [12.6, 6, ["feet stay in place"], 0.049],
-    [13.7, 6, ["feet stay in place"], 0.05],
-    [FLOOR_LEAN, 6, ["feet stay in place", "hips, picture against 3D, standing"], 0.05],
-    [14.3, 6, ["feet stay in place"], 0.05],
-    [14.4, 6, ["feet stay in place"], 0.05],
-    [14.5, 6, ["feet stay in place"], 0.05],
-  ] as const)("leaning back %s degrees with the floor's wander: %s of 10 counted; short of his floor: %j; feet stay in place %s", (lean, counted, failing, travel) => {
+    [6.4, 8, ["feet stay down", "hips, picture against 3D", "hips, picture against 3D, standing"]],
+    [12.6, 9, ["feet stay down"]],
+    [13.7, 8, ["feet stay down", "hips, picture against 3D, standing"]],
+    [FLOOR_LEAN, 8, ["feet stay down", "hips, picture against 3D, standing"]],
+    [14.3, 7, ["feet stay down", "hips, picture against 3D, standing"]],
+    [14.4, 7, ["feet stay down", "hips, picture against 3D, standing"]],
+    [14.5, 7, ["feet stay down", "hips, picture against 3D, standing"]],
+  ] as const)("leaning back %s degrees with the floor's wander: %s of 10 counted; short of his floor: %j", (lean, counted, failing) => {
     const f = faithful(lean, LENS_MM, undefined, null);
     expect(f.redrawn.reduce((n, s) => n + s.count, 0)).toBe(counted);
     expect(f.redrawn.every((s) => s.short === 0)).toBe(true);
     expect(f.rows.filter((r) => r.judged && !r.within).map((r) => r.reading)).toEqual(failing);
-    const place = f.rows.find((r) => r.reading === "feet stay in place");
-    const milli = (v: number | undefined): number => Math.round((v ?? 0) * 1000) / 1000;
-    expect([milli(place?.redrawn), milli(place?.high), place?.beyond.length]).toEqual([travel, 0.036, 3]);
     expect(f.passes).toBe(false);
   });
 
-  // Taken from one floor set alone: it depends on the set, the way he faced and the foot the phone saw. From his side-on
-  // set on the dull floor his raised side-on squats, redrawn, count 0 of 2.
+  // Taken from one floor set alone: it depends on the set. From his half-turned set every raised squat counts, yet both
+  // hips readings fall short; from his side-on set on the shiny floor 4 of 10 count.
   it.each([
-    ["floor_phone_test 0-12 s", 6],
-    ["floor_phone_test 13.9-21.1 s", 6],
-    ["floor_phone_test 22.3-31.4 s", 9],
-    ["usual_v04 9.8-23.2 s", 2],
-  ] as const)("the wander from %s alone: %s of 10 counted, and the floor view still does not read as his floor", (set, counted) => {
+    ["floor_phone_test 0-12 s", 4, ["feet stay down", "feet stay in place", "hips, picture against 3D, standing"]],
+    ["floor_phone_test 13.9-21.1 s", 10, ["hips, picture against 3D", "hips, picture against 3D, standing"]],
+    ["floor_phone_test 22.3-31.4 s", 7, ["feet stay down", "hips, picture against 3D, standing"]],
+    ["usual_v04 9.8-23.2 s", 7, ["feet stay down", "feet stay in place"]],
+  ] as const)("the wander from %s alone: %s of 10 counted; short of his floor: %j", (set, counted, failing) => {
     const f = faithful(FLOOR_LEAN, LENS_MM, undefined, [set]);
     expect(f.redrawn.reduce((n, s) => n + s.count, 0)).toBe(counted);
+    expect(f.rows.filter((r) => r.judged && !r.within).map((r) => r.reading)).toEqual(failing);
     expect(f.passes).toBe(false);
   });
 

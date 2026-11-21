@@ -2164,32 +2164,36 @@ tried at job 53.
 
 **As built, the floor's own foot wander (52a-ii-b-ii-b-i, 2026-11-21; `rulings/2026-11-21-52a-ii-b-ii-b-i.md`).** The floor
 view's gap to his floor was most likely the pose model's own wander near the floor, which the redraw does not draw. It is
-measured on his four floor sets (`wanderOf`, `floorWander` in `scripts/replays.ts`): from 1 s before the first squat the
-squat counts to 1 s after the last, each foot point's place on the picture against where it lay while he stood tall in
-that set, in his body's size then; a planted foot does not move in a properly done squat, so every move is the model's.
-His five raised sets are measured the same way, since the redraw already carries their wander. **Tried first, not kept:**
-carried on in time, as the chip's gap is, each axis scaled so that the raised wander and the added one together spread as
-his floor sets do (the floor's 8.1 cm across and 4.1 down, the raised 2.6 and 2.4, root mean square): at 14° his ten raised
-squats counted 4 of 10 and "feet stay in place" read 0.093 where his floor sets read 0.014 to 0.036, since a squat's
-bottom wander then lands on his standing feet. **Tried as built:** in step with each foot's own knee, the middle of each
-foot point's wander at each 5° of the knee's bend, his floor sets' less his raised sets' (`faithful(lean, …, wander)`,
-`floor-view` prints it, `movementFloorView.test.ts` pins it). **It reads further from his floor, not nearer**, every way:
+measured on his four floor sets (`wanderOf`, `floorWander` in `scripts/replays.ts`): each squat the squat counts on its
+own, from half a second before it to half a second after, each foot point's place on the picture against where it lay
+while he stood tall in the half second before that squat, in his body's size then. A planted foot does not move in a
+properly done squat, so every move is the model's; a person may step or turn between squats (round one found that, on
+his dull floor, he turns to face the phone between his second and third squats, his heel 35 cm across, which a place
+taken over the whole set had read as wander; that set's entry still says "three squats side on", for 52a-ii-b-ii-b-ii).
+While his knees are straight around a squat, no floor set's foot point lies 10 cm from where it stood (pinned). His five
+raised sets are measured the same way, since the redraw already carries their wander: over his squats the foot points
+spread 3.2 cm across and 3.9 down on his floor, 2.5 and 2.6 from his raised phone (root mean square, `floor-view` prints
+it). **Tried first, not kept** (measured once, on code not kept and before round one's mend, so no number is given): carried
+on in time, as the chip's gap is, it put the wander of a squat's bottom on his standing feet. **Tried as built:** in step
+with each foot's own knee, the middle of each foot point's wander at each 5° of the knee's bend, his floor sets' less his
+raised sets' (`faithful(lean, …, wander)`, `floor-view` prints it, `movementFloorView.test.ts` pins it). **It loses squats
+his real floor counts** (his four floor sets count 12 of 12) **and still does not read as his floor**, every way:
 
 | Wander taken from | His raised squats counted (of 10) | "Feet stay in place" (his floor 0.014 to 0.036) | Short of his floor on |
 |---|---|---|---|
-| none (as 52a-ii-b-ii-a left it), 14° | 10 | 0.024 | feet stay down; hips, picture against 3D, standing |
-| all four floor sets, 14° | 6 | 0.050 | feet stay in place; hips, picture against 3D, standing |
-| all four, at his six leans (6.4° to 14.5°) | 6 to 8 | 0.049 to 0.050 | feet stay in place, and at 6.4° both hips readings |
-| all but one, each in turn, 14° | 6 to 8 | 0.034 to 0.058 | in each fold one or two of feet stay in place and the hips readings |
-| one floor set alone, 14° | 2, 6, 6 and 9 | 0.027 to 0.112 | in each one or more |
+| none (as 52a-ii-b-ii-a left it), 14° | 10 | 0.024 | feet stay down (0.017; his floor 0.020 to 0.029); hips, picture against 3D, standing |
+| all four floor sets, 14° | 8 | 0.032 | feet stay down (0.016); hips, picture against 3D, standing |
+| all four, at his six leans (6.4° to 14.5°; without it 9 or 10) | 7 to 9 | 0.027 to 0.033 | feet stay down at every lean; the hips readings at all but 12.6° |
+| all but one, each in turn, 14° | 7 to 9 | 0.032 to 0.040 | in each fold one to four of the judged readings |
+| one floor set alone, 14° | 4, 10, 7 and 7 | 0.029 to 0.082 | in each two or three |
 
-The wander depends on the set: which way he faced, which foot the phone saw, the floor's shine. From his side-on set on the
-dull floor, his raised side-on squats, redrawn, count 0 of 2 and their feet read 11.2 cm moved; from his front-on set, 9 of
-10 count. With one floor set for each of two of his three ways of facing, a wander matched to the way a person faces
-could never be tried on a set it was not measured from. **So the floor view stays shown, never held, and the replay "on the
-floor" adds no wander.** Kept so that the trial can be made again when more floor videos exist (job 53's live tries).
-**Limits, in plain sight:** one man, four floor sets; a phone on the floor is proven only on his real floor videos
-(52a-ii-b-i) and, for the other exercises, waits for job 53's live tries and 54's own videos.
+The wander depends on the set: from his side-on set on the shiny floor 4 of his 10 raised squats count and their feet read
+8.2 cm moved; from his half-turned set all 10 count, yet both hips readings fall short. With one floor set for each of two
+of his three ways of facing, a wander matched to the way a person faces could never be tried on a set it was not measured
+from. **So the floor view stays shown, never held, and the replay "on the floor" adds no wander.** Kept so that the trial
+can be made again when more floor videos exist (job 53's live tries). **Limits, in plain sight:** one man, four floor sets;
+a phone on the floor is proven only on his real floor videos (52a-ii-b-i) and, for the other exercises, waits for job 53's
+live tries and 54's own videos.
 
 An exercise that does not pass is published as "count by hand", never with a wrong camera
 count. Kd tries one exercise of each kind of movement on the phone, about a dozen, never
@@ -2279,7 +2283,7 @@ How the phone counts what its own live camera sees, rather than the laptop's pic
 pictures of all 78 proof videos it counts and speaks as the laptop on 74, the other four open in §12.5, 52a-iii) · whether full on the main chip still holds 15 a second with the camera
 screen's engine, voice and drawing, and how the selfie camera reads a person in the room (job 53) · whether
 one long recording cuts cleanly into lines (job 53) · whether a video redrawn from another
-phone place is faithful (52a-ii-b-ii-a: drawn as a change added to the picture, it comes back exactly from its own place; his raised squats, redrawn from the floor, move every phone-changed reading towards his real floor squats but not yet far enough at any of his six leans, so it is shown, not held; the pose model's foot wander measured on his four floor sets and added made it read further from them, not nearer, 52a-ii-b-ii-b-i, so it stays shown until more floor videos exist) · the lens of a web clip (taken as 26 mm) and how high a phone's lens stands on the floor (taken as 15 cm) · a floor phone on anybody but the one man of 2026-11-20, and on a floor that is neither his shiny nor his dull one (job 53's live tries) · what the hips do in a real one-leg lift: on the drawn
+phone place is faithful (52a-ii-b-ii-a: drawn as a change added to the picture, it comes back exactly from its own place; his raised squats, redrawn from the floor, move every phone-changed reading towards his real floor squats but not yet far enough at any of his six leans, so it is shown, not held; the pose model's foot wander measured on his four floor sets and added lost squats his real floor counts and still did not read as it, 52a-ii-b-ii-b-i, so it stays shown until more floor videos exist) · the lens of a web clip (taken as 26 mm) and how high a phone's lens stands on the floor (taken as 15 cm) · a floor phone on anybody but the one man of 2026-11-20, and on a floor that is neither his shiny nor his dull one (job 53's live tries) · what the hips do in a real one-leg lift: on the drawn
 one they moved at most 0.026 of the trunk's length, while the smallest rise in a real rep
 on twelve squat-family videos was 0.110 of the leg's length, under the old rules (job 52a
 measures both again with the new engine).
