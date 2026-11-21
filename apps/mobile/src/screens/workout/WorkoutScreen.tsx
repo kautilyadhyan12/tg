@@ -284,9 +284,9 @@ function Round({ mark, say, disabled, onPress }: { mark: string; say: string; di
       accessibilityState={{ disabled }}
       disabled={disabled}
       onPress={onPress}
-      style={({ pressed }) => [styles.round, mark.length > 1 ? styles.roundWide : null, pressed ? styles.roundPressed : null, disabled ? styles.faint : null]}
+      style={({ pressed }) => [mark.length > 1 ? styles.roundWide : styles.round, pressed ? styles.roundPressed : null, disabled ? styles.faint : null]}
     >
-      <Txt kind={mark.length > 1 ? "strong" : "big"} style={styles.roundMark}>
+      <Txt kind={mark.length > 1 ? "strong" : "big"} numberOfLines={1} style={styles.roundMark}>
         {mark}
       </Txt>
     </Pressable>
@@ -313,7 +313,7 @@ const PLATE = 72;
 function Plate({ grams, units }: { grams: number | null; units: Units }) {
   const [n, unit] = grams === null ? ["NONE", ""] : weightParts(grams, units);
   return (
-    <View style={styles.plate} accessible accessibilityLabel={grams === null ? "Weight, none" : `Weight, ${n} ${unit}`}>
+    <View style={[styles.plate, grams === null ? null : styles.plateGlow]} accessible accessibilityLabel={grams === null ? "Weight, none" : `Weight, ${n} ${unit}`}>
       <PlateFace size={PLATE} none={grams === null} />
       <Txt kind="strong" colour={grams === null ? "textSoft" : "onOrange"} numberOfLines={1} fit style={[styles.plateNumber, grams === null ? styles.plateNone : null]}>
         {n}
@@ -437,13 +437,16 @@ const styles = StyleSheet.create({
   rowName: { width: 66 },
   rowValue: { flex: 1, flexDirection: "row", alignItems: "flex-end", justifyContent: "center", gap: 6 },
   round: { width: sizes.press, height: sizes.press, borderRadius: sizes.press / 2, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colours.lineStrong, backgroundColor: colours.raised },
-  roundWide: { width: 54, height: 54, borderRadius: 27 },
+  // −15 and +15: as wide and as tall as their words need, never cut at the largest text.
+  roundWide: { minWidth: 54, minHeight: 54, paddingHorizontal: 8, borderRadius: 27, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colours.lineStrong, backgroundColor: colours.raised },
   roundPressed: { backgroundColor: colours.box },
   roundMark: { lineHeight: 26 },
   ringRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 14, paddingTop: 12, paddingBottom: 10 },
   ring: { width: RING, height: RING },
   ringInside: { position: "absolute", top: 0, right: 0, bottom: 0, left: 0, alignItems: "center", justifyContent: "center", gap: 8 },
-  plate: { width: PLATE, height: PLATE, boxShadow: shadows.button, borderRadius: PLATE / 2 },
+  plate: { width: PLATE, height: PLATE, borderRadius: PLATE / 2 },
+  // Black rubber for no weight has no glow, as drawn.
+  plateGlow: { boxShadow: shadows.button },
   plateNumber: { position: "absolute", top: 8, left: 12, right: 12, textAlign: "center", fontFamily: fonts.bold, fontSize: 17, lineHeight: 20 },
   plateNone: { fontSize: 12, letterSpacing: 1.2, top: 11 },
   plateUnit: { position: "absolute", bottom: 12, left: 0, right: 0, textAlign: "center", fontFamily: fonts.bold, letterSpacing: 1.2 },
