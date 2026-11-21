@@ -63,7 +63,9 @@ const NONE_EFFORT: WaitingView<WaitingEffort, WaitingEffort> = { waiting: [], re
 /** The stars of a finished workout, on its last screen: what waits for the server, and a press. */
 export interface EffortHand {
   view: WaitingView<WaitingEffort, WaitingEffort>;
-  give: (workoutId: string, stars: number) => void;
+  /** "kept": the press is in the waiting list's file. "held": its file could not be written, so it waits in memory and is
+   *  written again. "lost": the list was full and it is nowhere. */
+  give: (workoutId: string, stars: number) => Promise<"kept" | "held" | "lost">;
 }
 
 export function WorkoutLayerProvider({ children, files = PHONE_FILES, onNewWorkout }: { children: ReactNode; files?: WorkoutFiles; onNewWorkout?: () => void }) {
@@ -82,7 +84,8 @@ export function WorkoutLayerProvider({ children, files = PHONE_FILES, onNewWorko
     // The stars wait while their workout is still on the phone, and go as soon as it is on the server.
     const effort = effortWaiting(
       files.effort(me),
-      effortSender((request, shape) => session.signedIn(request, shape), (id) => store.keeping() === id || waiting.view().waiting.some((w) => w.workoutId === id)),
+      effortSender((request, shape) => session.signedIn(request, shape)),
+      (id) => store.keeping() === id || waiting.view().waiting.some((w) => w.workoutId === id),
     );
     setMade({ store, waiting, effort });
     void waiting.start().then(() => waiting.send(true));
@@ -127,11 +130,15 @@ export function WorkoutLayerProvider({ children, files = PHONE_FILES, onNewWorko
   const effortHand = useMemo<EffortHand>(
     () => ({
       view: stars,
-      give: (workoutId, n) => {
+      give: async (workoutId, n) => {
         const list = made?.effort;
-        if (list === undefined) return;
+        if (list === undefined) return "lost";
         pressed.current += 1;
-        void list.add({ id: `${workoutId}.${String(Date.now())}.${String(pressed.current)}`, workoutId, effort: n }).then(() => list.send(true));
+        const id = `${workoutId}.${String(Date.now())}.${String(pressed.current)}`;
+        const kept = await list.add({ id, workoutId, effort: n });
+        void list.send(true);
+        if (kept) return "kept";
+        return list.view().waiting.some((e) => e.id === id) ? "held" : "lost";
       },
     }),
     [stars, made],

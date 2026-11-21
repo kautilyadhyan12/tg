@@ -297,6 +297,7 @@ export function privacyPolicy(facts: LegalFacts = LEGAL_FACTS): LegalDocument {
             "Exercise durations and recorded times.",
             "The name you give a workout, the weight used in each set and the rest taken between sets.",
             "The effort you give a workout.",
+            "The body weight a workout's calories were worked out at.",
             "Workouts you save to do again: their name, and each exercise with its sets, targets, weight and rest.",
             "Exercise form scores.",
             "Training streaks.",

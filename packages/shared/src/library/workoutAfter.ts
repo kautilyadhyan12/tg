@@ -31,21 +31,27 @@ export const workoutAfterSchema = z.object({
   workoutId: z.uuid(),
   /** The calories the save worked out; an estimate. */
   kcalPoint: z.number().int().nullable(),
-  /** The person's weight they are worked out at; null where none is given (the server then uses 70 kg). */
+  /** The body weight they were worked out at when the workout was saved; null where none was given (70 kg was used). */
   weightKg: z.number().nullable(),
   /** The stars as the server holds them; null for none. */
   effort: z.number().int().min(1).max(5).nullable(),
   xp: z.object({
-    /** What this workout earned: `forWorkout` and `forStreak` together. */
+    /** What this workout earned: `forWorkout`, `forStreak` and `forBadges` together. */
     earned: z.number().int(),
     forWorkout: z.number().int(),
     /** The day's first workout keeping the streak going; 0 otherwise. */
     forStreak: z.number().int(),
+    /** The badges this workout's save awarded. */
+    forBadges: z.number().int(),
     /** The person's level now. */
     view: xpViewSchema,
   }),
-  /** Days in a row with a workout or a gym visit, now. */
-  streak: z.number().int(),
+  streak: z.object({
+    /** Days in a row with a workout or a gym visit, now. */
+    days: z.number().int(),
+    /** Whether today, in the person's zone, is one of them: if not, training today keeps it. */
+    today: z.boolean(),
+  }),
   records: z.array(afterRecordSchema),
   food: z.object({
     ideas: z.array(afterIdeaSchema),

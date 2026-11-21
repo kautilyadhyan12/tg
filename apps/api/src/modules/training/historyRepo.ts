@@ -72,13 +72,18 @@ export interface WorkoutRow {
   platform: string;
   /** The camera's form score for the whole workout; null for one with no camera set. */
   avg_form_score: number | null;
+  /** The body weight its calories were worked out at, in grams; null where none was given (70 kg). */
+  kcal_weight_grams: number | null;
+  /** When the server saved it: the badges this save awarded are told from it. */
+  created_at: Date;
 }
 
 /** The person's own workout, or null for one that is not theirs or does not exist. */
 export async function ownWorkout(sql: Sql, userId: string, workoutId: string): Promise<WorkoutRow | null> {
   const rows = await sql<WorkoutRow[]>`
     SELECT id, name, started_at, ended_at, time_zone, started_from, effort, heart_avg, heart_max,
-           duration_ms, kcal_point, kcal_calc_version, platform, avg_form_score
+           duration_ms, kcal_point, kcal_calc_version, platform, avg_form_score,
+           kcal_weight_grams, created_at
     FROM workouts WHERE id = ${workoutId} AND user_id = ${userId}`;
   return rows[0] ?? null;
 }

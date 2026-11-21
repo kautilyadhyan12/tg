@@ -5,7 +5,9 @@
 // phone shows the time, the sets and the stretches from what it holds; the server works out what has value.
 import { FOOD_ALLERGY_CAUTION, type AfterRecord, type HistoryWorkout, type WorkoutAfter } from "@app/shared";
 import type { Sql } from "postgres";
-import { getMe as getGamificationMe, isContinuationDay, safeTimeZone } from "../gamification/service.js";
+import { badgeXpForCodes } from "../gamification/badges.js";
+import { listEarned } from "../gamification/repo.js";
+import { dayInTz, getMe as getGamificationMe, isContinuationDay, safeTimeZone } from "../gamification/service.js";
 import { XP_REWARDS, xpEarnedForWorkout } from "../gamification/xp.js";
 import { getAfterWorkoutIdeas } from "../nutrition/service.js";
 import { getUserSyncContext } from "../users/service.js";
@@ -19,7 +21,12 @@ import { setEffort } from "./repo.js";
 export interface SummaryDeps {
   sql: Sql;
   redis: RedisLike;
+  now?: () => Date;
 }
+
+/** Badges are awarded just after a save commits (`onWorkoutSynced`); one awarded within this long of the workout's own
+ *  save is this workout's. A badge a later read catches up on is the total's, not this workout's. */
+export const BADGES_OF_A_SAVE_MS = 60_000;
 
 /** What each new record was, from the set that made it (or, for most lifted, every set in reps of its exercise). */
 export function recordValues(w: Pick<HistoryWorkout, "sets" | "newRecords">): AfterRecord[] {
@@ -52,23 +59,29 @@ export async function workoutSummary(deps: SummaryDeps, userId: string, workoutI
   if (row === null || w === null) return null;
   const ctx = await getUserSyncContext(deps.sql, userId);
   const tz = safeTimeZone(ctx.timezone);
-  const [me, isContinuation, hasEarlierToday, food] = await Promise.all([
+  const [me, isContinuation, hasEarlierToday, food, earned] = await Promise.all([
     getGamificationMe({ sql: deps.sql }, userId, ctx.timezone),
     isContinuationDay({ sql: deps.sql }, userId, ctx.timezone, row.started_at),
     hasEarlierWorkoutOnDay(deps.sql, userId, row.id, row.started_at, tz),
     // The meal ideas follow the person's diet as it is now, as the old summary's do.
     getAfterWorkoutIdeas({ sql: deps.sql }, userId, { id: row.id, startedAt: row.started_at, kcalBurned: row.kcal_point }),
+    listEarned(deps.sql, userId),
   ]);
+  const saved = row.created_at.getTime();
+  const badges = earned.filter((b) => b.earnedAt.getTime() >= saved && b.earnedAt.getTime() < saved + BADGES_OF_A_SAVE_MS).map((b) => b.code);
+  const forBadges = badgeXpForCodes(badges);
+  const today = dayInTz((deps.now ?? (() => new Date()))(), tz);
   // One streak bonus a day, to the day's first workout, as the XP total counts it.
   const forWorkout = xpEarnedForWorkout({ avgFormScore: row.avg_form_score, isStreakContinuation: false });
   const forStreak = isContinuation && !hasEarlierToday ? XP_REWARDS.streak_day : 0;
   return {
     workoutId: row.id,
     kcalPoint: row.kcal_point,
-    weightKg: ctx.weightKg !== null && ctx.weightKg > 0 ? ctx.weightKg : null,
+    // The weight the save worked the calories out at, never today's: a weigh-in since would make the line false.
+    weightKg: row.kcal_weight_grams === null ? null : row.kcal_weight_grams / 1000,
     effort: row.effort,
-    xp: { earned: forWorkout + forStreak, forWorkout, forStreak, view: me.xp },
-    streak: me.streak.current,
+    xp: { earned: forWorkout + forStreak + forBadges, forWorkout, forStreak, forBadges, view: me.xp },
+    streak: { days: me.streak.current, today: me.streak.lastActivityDate === today },
     records: recordValues(w),
     food: {
       ideas: food.ideas.map(({ when, idea }) => ({ when, idea })),

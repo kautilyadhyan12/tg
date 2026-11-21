@@ -135,7 +135,7 @@ export function registerTrainingRoutes(
   app.get<{ Params: { id: string } }>("/v1/training/workouts/:id/summary", { onRequest: [app.authenticate, readLimit] }, async (req, reply) => {
     const parsed = z.uuid().safeParse(req.params.id);
     if (!parsed.success) return notFound(req, reply, "workout");
-    const found = await workoutSummary(readDeps, owner(req), parsed.data);
+    const found = await workoutSummary({ ...readDeps, now }, owner(req), parsed.data);
     return found === null ? notFound(req, reply, "workout") : reply.status(200).send(found);
   });
 

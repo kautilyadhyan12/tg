@@ -21,10 +21,15 @@ export function kcalLine(kcal: number, weightKg: number | null, units: Units): s
   return weightKg === null ? `About ${count(kcal)} kcal, at ${at}` : `About ${count(kcal)} kcal for you, at ${at}`;
 }
 
-/** Where the XP came from: "50 for the workout · 10 for your streak". */
-export function xpWhy(forWorkout: number, forStreak: number): string {
-  const workout = `${count(forWorkout)} for the workout`;
-  return forStreak > 0 ? `${workout} · ${count(forStreak)} for your streak` : workout;
+/** Where the XP came from: "50 for the workout · 10 for your streak · 150 for a new badge". */
+export function xpWhy(forWorkout: number, forStreak: number, forBadges: number): string {
+  return [
+    `${count(forWorkout)} for the workout`,
+    forStreak > 0 ? `${count(forStreak)} for your streak` : null,
+    forBadges > 0 ? `${count(forBadges)} for a new badge` : null,
+  ]
+    .filter((x) => x !== null)
+    .join(" · ");
 }
 
 /** "184/374 XP → Level 4". */
@@ -35,7 +40,9 @@ export const xpNext = (xp: Pick<XpView, "level" | "xpInLevel" | "xpForNext">): s
 export const xpShare = (xp: Pick<XpView, "progressPct">): number => Math.max(0, Math.min(1, xp.progressPct / 100));
 
 export const streakWords = (days: number): string => `${count(days)}-day streak`;
-export const streakNext = (days: number): string => `Train tomorrow to make it ${count(days + 1)}`;
+/** What keeps the streak going: tomorrow where today already counts; today where it does not yet (a workout read after
+ *  midnight, or one saved later from an earlier day), so nobody waits for tomorrow and loses it. */
+export const streakNext = (days: number, today: boolean): string => (today ? `Train tomorrow to make it ${count(days + 1)}` : "Train today to keep it");
 
 const KIND_WORDS: Readonly<Record<AfterRecord["kind"], string>> = {
   heaviest: "Heaviest",

@@ -21,6 +21,7 @@ import { useSession } from "../../session/SessionProvider";
 import { ideaAmountWords } from "../food/ideaRules";
 import { Led } from "../library/Records";
 import { ProgressPage } from "../progress/ProgressPage";
+import { useSetupFacts } from "../library/useLibrary";
 import {
   exerciseBlocks,
   ideaTotals,
@@ -128,8 +129,12 @@ export function Summary({ finished, keeping, waiting, effort, units, onDone, onN
   const [tab, setTab] = useState<Tab>("results");
   const [stars, setStars] = useState<number | null>(null);
   const [weighing, setWeighing] = useState(false);
+  const facts = useSetupFacts();
+  // A press counts as waiting from the moment it is made until the server has it (round one L2).
+  const [pressing, setPressing] = useState(0);
+  const [starsLost, setStarsLost] = useState(false);
   const shownStars = stars ?? known?.effort ?? null;
-  const starsWait = effort.view.waiting.some((e) => e.workoutId === id);
+  const starsWait = pressing > 0 || effort.view.waiting.some((e) => e.workoutId === id);
 
   const blocks = useMemo(() => exerciseBlocks(finished.done, finished.plan, known?.records ?? [], units), [finished, known, units]);
   const muscles = useMainMuscles(blocks.map((b) => b.exercise));
@@ -166,7 +171,11 @@ export function Summary({ finished, keeping, waiting, effort, units, onDone, onN
                 <Txt kind="small" style={styles.centre}>
                   {kcalLine(known.kcalPoint, known.weightKg, units)}
                 </Txt>
-                {known.weightKg === null ? (
+                {known.weightKg === null && typeof facts.weightKg === "number" ? (
+                  <Txt kind="small" style={styles.centre}>
+                    Your weight is saved. Your next workouts use it.
+                  </Txt>
+                ) : known.weightKg === null ? (
                   <Button
                     label="Add your weight"
                     kind="link"
@@ -191,7 +200,9 @@ export function Summary({ finished, keeping, waiting, effort, units, onDone, onN
 
           {tab === "results" ? (
             <View style={styles.part}>
-              {refused ? null : known === null ? (
+              {refused ? (
+                <Txt kind="body">This workout wasn't saved, so it earns no XP or records.</Txt>
+              ) : known === null ? (
                 <Waiting saving={!onPhone && after.kind !== "failed"} words={onPhone ? "Your XP and records show here once this workout reaches your account." : after.kind === "failed" ? "Couldn't load your XP and records." : "Adding up your XP and records…"} onAgain={after.kind === "failed" ? again : null} />
               ) : (
                 <>
@@ -243,7 +254,12 @@ export function Summary({ finished, keeping, waiting, effort, units, onDone, onN
                           accessibilityState={{ selected: shownStars === n }}
                           onPress={() => {
                             setStars(n);
-                            effort.give(id, n);
+                            setStarsLost(false);
+                            setPressing((p) => p + 1);
+                            void effort.give(id, n).then((kept) => {
+                              setPressing((p) => p - 1);
+                              if (kept === "lost") setStarsLost(true);
+                            });
                           }}
                           style={styles.star}
                         >
@@ -252,9 +268,15 @@ export function Summary({ finished, keeping, waiting, effort, units, onDone, onN
                       );
                     })}
                   </View>
-                  <Txt kind="small" colour={shownStars === null ? "textSoft" : "ledAmber"}>
-                    {starWords(shownStars, starsWait, onPhone && shownStars !== null)}
-                  </Txt>
+                  {starsLost ? (
+                    <Txt kind="small" colour="badText">
+                      These stars couldn't be saved. Try again later.
+                    </Txt>
+                  ) : (
+                    <Txt kind="small" colour={shownStars === null ? "textSoft" : "ledAmber"}>
+                      {starWords(shownStars, starsWait, onPhone && shownStars !== null)}
+                    </Txt>
+                  )}
                 </View>
               )}
             </View>
@@ -370,6 +392,7 @@ export function Summary({ finished, keeping, waiting, effort, units, onDone, onN
         first="body"
         onClose={() => {
           setWeighing(false);
+          facts.again();
         }}
       />
     </View>
@@ -411,7 +434,7 @@ function XpBox({ after }: { after: WorkoutAfter }) {
           </View>
           <View style={styles.grow}>
             <Txt kind="big" colour="ledAmber" style={styles.digits}>{`+${String(after.xp.earned)} XP`}</Txt>
-            <Txt kind="small">{xpWhy(after.xp.forWorkout, after.xp.forStreak)}</Txt>
+            <Txt kind="small">{xpWhy(after.xp.forWorkout, after.xp.forStreak, after.xp.forBadges)}</Txt>
           </View>
           <View style={styles.levelSide}>
             <Txt kind="eyebrow" colour="textSoft">
@@ -426,13 +449,13 @@ function XpBox({ after }: { after: WorkoutAfter }) {
         <Txt kind="small" style={styles.digits}>
           {xpNext(after.xp.view)}
         </Txt>
-        {after.streak > 0 ? (
+        {after.streak.days > 0 ? (
           <View style={[styles.row, styles.streak]}>
             <Icon name="flame" size={22} colour="orange" filled />
             {/* One under the other: side by side, a small phone cut the streak's own words. */}
             <View style={styles.grow}>
-              <Txt kind="strong">{streakWords(after.streak)}</Txt>
-              <Txt kind="small">{streakNext(after.streak)}</Txt>
+              <Txt kind="strong">{streakWords(after.streak.days)}</Txt>
+              <Txt kind="small">{streakNext(after.streak.days, after.streak.today)}</Txt>
             </View>
           </View>
         ) : null}

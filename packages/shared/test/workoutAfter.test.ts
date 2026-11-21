@@ -89,8 +89,8 @@ describe("workoutAfterSchema", () => {
       kcalPoint: null,
       weightKg: null,
       effort: null,
-      xp: { earned: 50, forWorkout: 50, forStreak: 0, view },
-      streak: 1,
+      xp: { earned: 50, forWorkout: 50, forStreak: 0, forBadges: 0, view },
+      streak: { days: 1, today: true },
       records: [],
       food: { ideas: [], caution: "Have a food allergy? Always check the label.", labelCaution: null },
     });

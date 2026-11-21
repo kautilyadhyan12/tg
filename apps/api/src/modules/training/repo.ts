@@ -61,6 +61,8 @@ export interface WorkoutRow {
   effort: number | null;
   heartAvg: number | null;
   heartMax: number | null;
+  /** The body weight `kcalPoint` was worked out at, in grams; null where the person had given none. */
+  kcalWeightGrams: number | null;
 }
 
 /** Inserts the workout unless its id is taken; true when this request made it. */
@@ -70,11 +72,11 @@ export async function insertWorkout(tx: TransactionSql, w: WorkoutRow): Promise<
     INSERT INTO workouts (id, user_id, started_at, ended_at, platform, engine_version, bundle_version,
                           sets_count, total_reps, avg_form_score, duration_ms, quality_flags,
                           kcal_point, kcal_calc_version, name, time_zone, started_from, effort,
-                          heart_avg, heart_max)
+                          heart_avg, heart_max, kcal_weight_grams)
     VALUES (${w.id}, ${w.userId}, ${w.startedAt}, ${w.endedAt}, ${w.platform}, ${w.appVersion}, NULL,
             ${w.setsCount}, ${w.totalReps}, NULL, ${w.durationMs}, '{}',
             ${w.kcalPoint}, ${w.kcalCalcVersion}, ${w.name}, ${w.timeZone}, ${w.startedFrom}, ${w.effort},
-            ${w.heartAvg}, ${w.heartMax})
+            ${w.heartAvg}, ${w.heartMax}, ${w.kcalWeightGrams})
     ON CONFLICT (id) DO NOTHING`;
   return inserted.count === 1;
 }

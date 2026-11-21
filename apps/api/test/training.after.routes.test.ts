@@ -181,15 +181,23 @@ d("after a workout: the summary and the effort stars (real Postgres)", () => {
   });
 
   describe("the summary", () => {
-    it("a first workout: 50 XP, no streak bonus, no records, and the calories the save worked out", async () => {
+    it("a first workout: 50 for it and 50 for the First workout badge it unlocked, adding up to the whole total", async () => {
       const a = await person();
       const id = await save(a, workout(daysAgo(1), [set(), set({ position: 1 })]));
       const got = await read(a, id);
       const kcal = (await sql<{ kcal_point: number }[]>`SELECT kcal_point FROM workouts WHERE id = ${id}`)[0]?.kcal_point;
       expect(got).toMatchObject({ workoutId: id, kcalPoint: kcal, weightKg: null, effort: null, records: [] });
-      expect(got.xp).toMatchObject({ earned: 50, forWorkout: 50, forStreak: 0 });
-      expect(got.xp.view.total).toBeGreaterThanOrEqual(50);
-      expect(got.streak).toBeGreaterThanOrEqual(1);
+      expect(got.xp).toMatchObject({ earned: 100, forWorkout: 50, forStreak: 0, forBadges: 50 });
+      // Nothing before it: what this workout earned is the whole total, so the screen's +XP and its level agree.
+      expect(got.xp.view.total).toBe(got.xp.earned);
+      // Done yesterday and read today: today does not count yet, so training today keeps the streak.
+      expect(got.streak).toEqual({ days: 1, today: false });
+    });
+
+    it("a workout done today counts today for the streak", async () => {
+      const a = await person();
+      const id = await save(a, workout(new Date(Date.now() - 40 * 60_000), [set()]));
+      expect((await read(a, id)).streak).toEqual({ days: 1, today: true });
     });
 
     it("the next day: 10 more for the streak, and each new record with what it was", async () => {
@@ -203,9 +211,11 @@ d("after a workout: the summary and the effort stars (real Postgres)", () => {
           set({ position: 2, exercise: "plank", measuredIn: "time", target: 60, done: 45, weightGrams: null, durationMs: 45_000 }),
         ]),
       );
+      const before = (await sql<{ total_xp: number }[]>`SELECT total_xp FROM user_xp WHERE user_id = ${a.id}`)[0]?.total_xp ?? 0;
       const got = await read(a, id);
-      expect(got.xp).toMatchObject({ earned: 60, forWorkout: 50, forStreak: 10 });
-      expect(got.streak).toBe(2);
+      expect(got.xp).toMatchObject({ earned: 60, forWorkout: 50, forStreak: 10, forBadges: 0 });
+      expect(got.streak).toEqual({ days: 2, today: false });
+      expect(before).toBeGreaterThan(0);
       const byKind = Object.fromEntries(got.records.map((r) => [`${r.exercise}:${r.kind}`, r]));
       expect(byKind["squat:heaviest"]).toMatchObject({ value: 110_000, position: 1, measuredIn: "reps" });
       expect(byKind["squat:most_reps"]).toMatchObject({ value: 8, position: 0 });
@@ -230,6 +240,20 @@ d("after a workout: the summary and the effort stars (real Postgres)", () => {
       await sql`INSERT INTO body_measurements (user_id, measured_at, weight_kg, source) VALUES (${a.id}, now(), 82, 'self_reported')`;
       const id = await save(a, workout(daysAgo(1), [set()]));
       expect((await read(a, id)).weightKg).toBe(82);
+    });
+
+    it("round one H1: a weight given after the save never stands beside calories worked out before it", async () => {
+      const a = await person();
+      const id = await save(a, workout(daysAgo(1), [set()]));
+      const first = await read(a, id);
+      expect(first.weightKg).toBeNull();
+      await sql`INSERT INTO body_measurements (user_id, measured_at, weight_kg, source) VALUES (${a.id}, now(), 120, 'self_reported')`;
+      const again = await read(a, id);
+      expect(again.weightKg).toBeNull();
+      expect(again.kcalPoint).toBe(first.kcalPoint);
+      // The next workout is worked out at the new weight, and says so.
+      const next = await save(a, workout(new Date(daysAgo(1).getTime() + 3_600_000), [set()]));
+      expect((await read(a, next)).weightKg).toBe(120);
     });
 
     it("a broken id is the same 404", async () => {
@@ -264,6 +288,17 @@ d("after a workout: the summary and the effort stars (real Postgres)", () => {
       const a = await person();
       expect((await stars(a, randomUUID(), { effort: 3 })).statusCode).toBe(404);
       expect((await stars(a, "nope", { effort: 3 })).statusCode).toBe(404);
+    });
+
+    it("thirty a minute for the person, from any address; somebody else is not held back", async () => {
+      const [a, b] = [await person(), await person()];
+      const id = await save(a, workout(daysAgo(1), [set()]));
+      const theirs = await save(b, workout(daysAgo(1), [set()]));
+      for (let i = 0; i < 30; i += 1) expect((await stars(a, id, { effort: (i % 5) + 1 })).statusCode).toBe(200);
+      const over = await stars(a, id, { effort: 1 });
+      expect(over.statusCode).toBe(429);
+      expect(await effortOf(id)).toBe(5);
+      expect((await stars(b, theirs, { effort: 2 })).statusCode).toBe(200);
     });
   });
 });

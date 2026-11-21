@@ -105,13 +105,17 @@ describe("the numbers' words", () => {
   });
 
   it("XP, the level and the streak", () => {
-    expect(xpWhy(50, 10)).toBe("50 for the workout · 10 for your streak");
-    expect(xpWhy(70, 0)).toBe("70 for the workout");
+    expect(xpWhy(50, 10, 0)).toBe("50 for the workout · 10 for your streak");
+    expect(xpWhy(70, 0, 0)).toBe("70 for the workout");
+    expect(xpWhy(50, 0, 50)).toBe("50 for the workout · 50 for a new badge");
+    expect(xpWhy(50, 10, 1_150)).toBe("50 for the workout · 10 for your streak · 1,150 for a new badge");
     expect(xpNext({ level: 3, xpInLevel: 184, xpForNext: 374 })).toBe("184/374 XP → Level 4");
     expect(xpNext({ level: 11, xpInLevel: 1_240, xpForNext: 1_500 })).toBe("1,240/1,500 XP → Level 12");
     expect(xpShare({ progressPct: 49.2 })).toBeCloseTo(0.492);
     expect([xpShare({ progressPct: -3 }), xpShare({ progressPct: 140 })]).toEqual([0, 1]);
-    expect([streakWords(5), streakNext(5)]).toEqual(["5-day streak", "Train tomorrow to make it 6"]);
+    expect([streakWords(5), streakNext(5, true)]).toEqual(["5-day streak", "Train tomorrow to make it 6"]);
+    // Round one L4: the streak's last day is yesterday (read after midnight, or saved later): today keeps it.
+    expect(streakNext(5, false)).toBe("Train today to keep it");
   });
 
   it("an idea's totals, and the water in the person's units", () => {
@@ -154,14 +158,12 @@ describe("the stars, kept until the server has them", () => {
     const store = file();
     const list = effortWaiting(
       store,
-      effortSender(
-        (request, shape) => {
-          sent.push({ path: request.path, body: request.body });
-          const read = shape.safeParse({ workoutId: ID, effort: 1 });
-          return Promise.resolve(read.success ? { kind: "ok", data: read.data } : { kind: "no_answer" });
-        },
-        () => workoutWaits,
-      ),
+      effortSender((request, shape) => {
+        sent.push({ path: request.path, body: request.body });
+        const read = shape.safeParse({ workoutId: ID, effort: 1 });
+        return Promise.resolve(read.success ? { kind: "ok", data: read.data } : { kind: "no_answer" });
+      }),
+      () => workoutWaits,
       () => 0,
     );
     await list.start();
@@ -180,19 +182,50 @@ describe("the stars, kept until the server has them", () => {
     expect(list.view().waiting).toHaveLength(0);
   });
 
+  it("round one L6: the stars of a workout still on its way never hold up another workout's, and keep their place", async () => {
+    const OTHER = "22222222-2222-4222-8222-222222222222";
+    const sent: unknown[] = [];
+    const onPhone = new Set([ID]);
+    const list = effortWaiting(
+      file(),
+      (e) => {
+        sent.push([e.workoutId, e.effort]);
+        return Promise.resolve({ kind: "done" });
+      },
+      (workoutId) => onPhone.has(workoutId),
+      () => 0,
+    );
+    await list.start();
+    await list.add({ id: `${ID}.1`, workoutId: ID, effort: 4 });
+    await list.add({ id: `${OTHER}.2`, workoutId: OTHER, effort: 2 });
+    await list.add({ id: `${ID}.3`, workoutId: ID, effort: 5 });
+    await list.send(true);
+    expect(sent).toEqual([[OTHER, 2]]);
+    expect(list.view().held).toBe(false);
+    expect(list.view().waiting.map((e) => e.effort)).toEqual([4, 5]);
+    onPhone.delete(ID);
+    await list.send(true);
+    expect(sent).toEqual([[OTHER, 2], [ID, 4], [ID, 5]]);
+  });
+
   it("the same press kept twice is sent once; a closed app sends what waited", async () => {
     const store = file();
-    const first = effortWaiting(store, () => Promise.resolve({ kind: "later" }), () => 0);
+    const first = effortWaiting(store, () => Promise.resolve({ kind: "later" }), () => false, () => 0);
     await first.start();
     const p: WaitingEffort = { id: `${ID}.9`, workoutId: ID, effort: 3 };
     await first.add(p);
     await first.add(p);
     first.stop();
     const sent: unknown[] = [];
-    const again = effortWaiting(store, (e) => {
-      sent.push(e.effort);
-      return Promise.resolve({ kind: "done" });
-    }, () => 0);
+    const again = effortWaiting(
+      store,
+      (e) => {
+        sent.push(e.effort);
+        return Promise.resolve({ kind: "done" });
+      },
+      () => false,
+      () => 0,
+    );
     await again.start();
     await again.send(true);
     expect(sent).toEqual([3]);

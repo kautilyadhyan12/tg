@@ -24,17 +24,15 @@ export function readEffortAnswer(answer: Answer<unknown>): SendAnswer {
   return { kind: "done" };
 }
 
-/** `waitsFor`: whether the workout itself is still on the phone, not yet on the server. */
-export function effortSender(signedIn: SignedIn, waitsFor: (workoutId: string) => boolean): (e: WaitingEffort) => Promise<SendAnswer> {
-  return async (e) => {
-    if (waitsFor(e.workoutId)) return { kind: "later" };
-    return readEffortAnswer(await signedIn({ method: "PUT", path: effortPath(e.workoutId), body: { effort: e.effort } }, workoutEffortGivenSchema));
-  };
+export function effortSender(signedIn: SignedIn): (e: WaitingEffort) => Promise<SendAnswer> {
+  return async (e) => readEffortAnswer(await signedIn({ method: "PUT", path: effortPath(e.workoutId), body: { effort: e.effort } }, workoutEffortGivenSchema));
 }
 
 export type EffortWaiting = WaitingList<WaitingEffort, WaitingEffort>;
 
-export function effortWaiting(store: TextStore, send: (e: WaitingEffort) => Promise<SendAnswer>, clock?: () => number): EffortWaiting {
+/** `waitsFor`: whether a workout itself is still on the phone, not yet on the server; its stars wait in place meanwhile,
+ *  and the stars of any other workout go. */
+export function effortWaiting(store: TextStore, send: (e: WaitingEffort) => Promise<SendAnswer>, waitsFor: (workoutId: string) => boolean, clock?: () => number): EffortWaiting {
   const read = (raw: unknown): WaitingEffort | null => {
     const ok = waitingEffortSchema.safeParse(raw);
     return ok.success ? ok.data : null;
@@ -48,6 +46,7 @@ export function effortWaiting(store: TextStore, send: (e: WaitingEffort) => Prom
     refusedOf: (e) => e,
     refusedIdOf: (e) => e.id,
     most: EFFORT_WAITING_MOST,
+    ready: (e) => !waitsFor(e.workoutId),
     ...(clock === undefined ? {} : { clock }),
   });
 }
