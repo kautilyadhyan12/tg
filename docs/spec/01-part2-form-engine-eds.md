@@ -2707,6 +2707,42 @@ with a screen reader.
 - **The phone's reading of an exercise** now keeps `set.weight` and `set.eachSide` (`phoneLibraryEntrySchema`).
 - **Not in 64a-i:** Start workout reads "Coming soon" until 64a-ii; saving it as a saved workout is 64a-iv.
 
+**As built in 64a-ii (2026-11-21, Kd's drawing of that day).** Start workout on My Workout does the workout:
+- **The steps** are one pure piece (`apps/mobile/src/library/workoutRun.ts`, table-tested): every press carries the phone's clock, and
+  the workout's own clocks (`totalMs`, and `activeMs` less every pause) move on by the time that passed, never back. A set by hand
+  counts reps (+, or a tap on the red number) and ends by itself at its target, or on Set done, which keeps the reps shown or the
+  target where none were counted; a set measured in time is a timer ending by itself at its target, Set done keeping the time held.
+  Then its rest, then the next set by itself; a timed set with no rest before it gets 10 s to get ready (Start now skips it). The
+  set's target and weight change right there; −15 and +15 change a rest, Skip rest ends it, and the set just done by hand can be
+  put right during it. Reset set, Skip exercise, Pause (every clock stops), End with a question: End and save keeps the sets done,
+  Discard workout keeps nothing (Kd: the browser's Stop lost the workout). Every phase that ended while the app was away ends at its
+  own time, in order; away more than 10 minutes, the workout comes back paused from when it was last seen.
+- **Kept on the phone** in a file of the person's own (`workout-now-<id>.json`, `workoutRunSchema` in `packages/shared`), written at
+  every press and every 15 s while the clocks run; removed with the account. It holds each exercise as it was at Start, so the
+  workout goes on with no internet and whatever the Library says meanwhile.
+- **Kept until saved, built once** (`apps/mobile/src/session/waitingList.ts`): the one shared piece; anything sent whole under its own
+  id is written to the person's file before it is sent, sent oldest first, and taken out only when the server answered. Saved ·
+  refused (words for the person) · not now (no answer, 401, 422, 429, 5xx), tried after 15 s, then twice as long each time up to 5
+  minutes, and at once when the app opens or comes back. A finished workout goes to it (`workouts-<id>.json`, at most 100), and only
+  once it is there is the workout's own file emptied; a phone that dies between the two hands it over again, kept once by its id.
+  Then `POST /v1/workouts` (61a) with the workout's id as its Idempotency-Key, made by `expo-crypto`. Its sets: by hand `hand`, a
+  timer `timer`; `startedFrom` "none" until 64a-iv; no heart rate until 64a-vi; at most 12 hours long, never shorter than its sets
+  and rests.
+- **The screen** (`apps/mobile/src/screens/workout/`): over every tab, as a run is; the exercise's picture with "Exercise 1 of 3 · Set 2
+  of 3" (in a rest, "Coming up next" and that set), the LED wall timer (reps red, target amber, the rest's ring green, get-ready
+  amber, PAUSED with a capital D), the set-up box's weight plate, Next up, one main button saying what it keeps. The screen stays
+  awake. Put away (the arrow, or Back), a bar over every tab says "Workout in progress" and opens it again, and My Workout says Open
+  workout. Its last screen: Workout complete, its time, sets and exercises, and "Saved to your account", "Saving…", "Saved on this
+  phone" (no answer), or "This workout couldn't be saved." (also on My Workout until OK).
+- **Round one (2026-11-21):** a workout ending more than five minutes past the server's clock (a phone whose clock runs fast)
+  is answered 400 `not_ended_yet` (`WORKOUT_NOT_ENDED`), its own word, and the phone sends it again later, never refusing it for
+  good; a set or a rest left open is kept as no longer than the 12 hours a save allows, so a workout is always one the server and
+  the phone's file take; a finished workout the waiting list could not keep (full, or its write failed) stays in the workout's own
+  file, is handed over again every 15 s and at each open, and Start workout waits for it ("Your last workout is still being kept on
+  this phone. Try again in a moment."); a workout of more than 200 sets does the first 200, and My Workout says so; "Saved on this
+  phone · It goes to your account as soon as it can."; the time shown is the time trained, every pause left out.
+- **Not in 64a-ii:** the summary (64a-iii), saved workouts (64a-iv), history (64a-v), heart rate and sounds (64a-vi), the camera (64b).
+
 ### 13.7 The jobs (ROADMAP Stage 5, exercise folder 2; ROADMAP wins where they differ)
 
 | Job | What it builds | Waits for |

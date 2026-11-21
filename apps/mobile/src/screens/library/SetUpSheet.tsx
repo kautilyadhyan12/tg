@@ -1,7 +1,7 @@
 import type { PhoneLibraryEntry } from "@app/shared";
 import { useEffect, useRef, useState } from "react";
 import { Animated, Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
-import Svg, { Circle, Defs, LinearGradient, Stop } from "react-native-svg";
+import Svg, { Circle } from "react-native-svg";
 import { Button } from "../../look/Button";
 import { colours, sizes, type ColourName } from "../../look/colours";
 import { useMotion } from "../../look/Motion";
@@ -11,6 +11,7 @@ import type { Plan } from "../../library/myWorkout";
 import { weightParts, type Units } from "../../library/records";
 import { canStep, changed, clockDigits, restWords, targetWords, typedWeight, withWeight, type Field } from "../../library/workoutSetup";
 import { Led } from "./Records";
+import { PlateFace } from "./WeightPlate";
 
 // Setting up one exercise of My Workout (ROADMAP Stage 5 64a-i, Kd's drawing of 2026-11-20): the box from the bottom.
 // The weight is a weight plate with its number, the same for every exercise (Kd's click-through: "a symbol that can go
@@ -244,7 +245,6 @@ function Dial({ label, say, field, digits, colour, unit, press, can, first = fal
 
 const PLATE = 112;
 const HALO = 136;
-const MID = PLATE / 2;
 
 /** The weight of the picked set (or the first, for every set), the same for every exercise: a bumper plate in the
  *  app's own orange, light running deep as its main buttons (Kd: "orange type vibe better", after a red face and a
@@ -299,23 +299,7 @@ function WeightBox({ grams, units, press, can, typing, wrong, onStart, onTyped, 
             <Circle cx={HALO / 2} cy={HALO / 2} r={HALO / 2 - 10} fill={colours.orange} fillOpacity={grams === null ? 0 : 0.12} />
           </Svg>
           <Animated.View style={[styles.plate, { transform: [{ scale: pop }] }]} testID="weight-plate">
-            <Svg width={PLATE} height={PLATE} style={StyleSheet.absoluteFill} accessible={false}>
-              <Defs>
-                <LinearGradient id="plateFace" x1="0" y1="0" x2="0" y2="1">
-                  <Stop offset="0" stopColor={colours.orangeLight} />
-                  <Stop offset="1" stopColor={colours.orangeDeep} />
-                </LinearGradient>
-              </Defs>
-              {/* The rubber, lit from above; black for none. */}
-              <Circle cx={MID} cy={MID} r={MID - 1} fill={grams === null ? colours.weightPlate : "url(#plateFace)"} />
-              <Circle cx={MID} cy={MID} r={MID - 1} fill="none" stroke={colours.weightPlateRim} strokeWidth={1.5} />
-              {/* The raised band a plate's lettering sits on. */}
-              <Circle cx={MID} cy={MID} r={MID - 13} fill="none" stroke={colours.plateSide} strokeWidth={1.5} />
-              {/* The steel hub and its hole. */}
-              <Circle cx={MID} cy={MID} r={12} fill={colours.barSleeve} stroke={colours.barCollar} strokeWidth={2} />
-              <Circle cx={MID} cy={MID} r={7.5} fill={colours.barCollar} />
-              <Circle cx={MID} cy={MID} r={4.5} fill={colours.timerFace} />
-            </Svg>
+            <PlateFace size={PLATE} none={grams === null} />
             {typing === null ? (
               <Txt kind="big" colour={grams === null ? "textSoft" : "onOrange"} numberOfLines={1} fit style={[styles.plateNumber, grams === null ? styles.plateNoneWords : null]}>
                 {grams === null ? "NONE" : n}
