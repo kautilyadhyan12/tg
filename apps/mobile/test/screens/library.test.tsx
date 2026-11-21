@@ -4,7 +4,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import type { OnboardingAnswers } from "@app/shared";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
-import { Paths } from "expo-file-system";
+import { File, Paths } from "expo-file-system";
 import { App } from "../../src/App";
 import { Gesture, State } from "react-native-gesture-handler";
 import { fireGestureHandler, getByGestureTestId } from "react-native-gesture-handler/jest-utils";
@@ -123,7 +123,7 @@ const openExercise = async (name: RegExp) => {
 
 beforeEach(() => {
   // The phone's files outlive a test in the stand-in: each test starts on a phone that never opened the Library.
-  for (const one of Paths.document.list()) if (one.name.startsWith("library-") || one.name.startsWith("figure-") || one.name.startsWith("my-workout-")) one.delete();
+  for (const one of Paths.document.list()) if (one.name.startsWith("library-") || one.name.startsWith("figure-") || one.name.startsWith("my-workout-") || one.name.startsWith("workout")) one.delete();
   forgetStores();
 });
 
@@ -620,22 +620,576 @@ describe("your records, calories and My Workout on an exercise's page (63c)", ()
     await fireEvent.press(screen.getByRole("button", { name: "Add to workout" }));
     await fireEvent.press(await screen.findByRole("button", { name: "Open My Workout" }));
     expect(await screen.findByRole("button", { name: "My Workout, 1" })).toBeTruthy();
-    expect(screen.getByText("1 Exercise")).toBeTruthy();
-    expect(screen.getByText("3 × 10 reps · Barbell")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Start workout" }).props.accessibilityState).toMatchObject({ disabled: true });
+    // Curl 3 × (30 s + 60 s) less the last rest: 210 s, about 4 min. No weight given: the calories say at what weight.
+    expect(screen.getByText(/^1 exercise · about 4 min · about \d+ kcal at 70 kg$/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Add your weight" })).toBeTruthy();
+    expect(screen.getByText("3 × 10 reps · rest 1:00")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Start workout" }).props.accessibilityState).toMatchObject({ disabled: false });
     await fireEvent.press(screen.getByRole("button", { name: "Remove Barbell Curl" }));
     expect(await screen.findByText("No exercises yet")).toBeTruthy();
     await fireEvent.press(screen.getByRole("button", { name: "Browse exercises" }));
     expect(await screen.findByText("3 Exercises")).toBeTruthy();
   });
 
-  it("an exercise opens its page from My Workout, already added", async () => {
+  it("an exercise opens its page from My Workout's set-up, already added", async () => {
     await openLibrary(libraryServer().ask);
     await openExercise(/^Plank,/);
     await fireEvent.press(await screen.findByRole("button", { name: "Add to workout" }));
     await fireEvent.press(await screen.findByRole("button", { name: "Open My Workout" }));
-    await fireEvent.press(await screen.findByRole("button", { name: "Plank. Open its page" }));
+    await fireEvent.press(await screen.findByRole("button", { name: /^Plank, .*Set up its sets$/ }));
+    await fireEvent.press(await screen.findByRole("button", { name: "About Plank" }));
     expect(await screen.findByRole("button", { name: "Added to workout. Press to take it out" })).toBeTruthy();
     expect(screen.getByRole("alert").props.accessibilityLabel).toBe(`Caution: ${PLANK_CAUTION}`);
+  });
+});
+
+describe("setting up My Workout's sets (64a-i)", () => {
+  const openMine = async () => {
+    await fireEvent.press(await screen.findByRole("button", { name: /^My Workout/ }));
+  };
+  const add = async (name: RegExp) => {
+    await openExercise(name);
+    await fireEvent.press(await screen.findByRole("button", { name: "Add to workout" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Close" }));
+  };
+  const row = (name: string) => screen.findByRole("button", { name: new RegExp(`^${name}, .*Set up its sets$`) });
+  const names = () => screen.getAllByRole("button", { name: /Set up its sets$/ }).map((b) => String(b.props.accessibilityLabel).split(",")[0]);
+  const keptFile = (ids: string[]) => {
+    const file = new File(Paths.document, `my-workout-${RAVI.id}.json`);
+    if (file.exists) file.delete();
+    file.create();
+    file.write(JSON.stringify({ v: 1, ids }));
+  };
+
+  it("the worst thing: the list the earlier version kept comes through the update whole, and what is set up is kept", async () => {
+    keptFile(["barbell_curl", "squat", "plank"]);
+    await openLibrary(libraryServer().ask);
+    await fireEvent.press(await screen.findByRole("button", { name: "My Workout, 3" }));
+    expect(await screen.findByText("3 × 10 reps · rest 1:00")).toBeTruthy();
+    expect(screen.getByText("3 × 12 reps · rest 1:00")).toBeTruthy();
+    expect(screen.getByText("3 × 30 s · rest 1:00")).toBeTruthy();
+    await fireEvent.press(await row("Squat"));
+    await fireEvent.press(screen.getByRole("button", { name: "More reps" }));
+    await fireEvent.press(screen.getByRole("button", { name: "Done" }));
+    expect(await screen.findByText("3 × 13 reps · rest 1:00")).toBeTruthy();
+    await settle(50);
+    await screen.unmount();
+    // The app closed and opened again: every exercise there, in its order, Squat as it was set up.
+    forgetStores();
+    await openLibrary(libraryServer().ask);
+    await fireEvent.press(await screen.findByRole("button", { name: "My Workout, 3" }));
+    expect(await screen.findByText("3 × 13 reps · rest 1:00")).toBeTruthy();
+    expect(names()).toEqual(["Barbell Curl", "Squat", "Plank"]);
+  });
+
+  it("the weight plate; every set changes together, or one set alone", async () => {
+    await openLibrary(libraryServer().ask);
+    await add(/^Barbell Curl,/);
+    await openMine();
+    await fireEvent.press(await row("Barbell Curl"));
+    // The weight is a weight plate with its number, the same for every exercise (Kd's click-through).
+    expect(screen.getByLabelText("Weight, none")).toBeTruthy();
+    expect(screen.getByTestId("weight-plate")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Less weight" }).props.accessibilityState).toMatchObject({ disabled: true });
+    // + from none is the empty 20 kg bar for a barbell exercise, then 2.5 kg a press.
+    await fireEvent.press(screen.getByRole("button", { name: "More weight" }));
+    expect(screen.getByLabelText("Weight, 20 kg")).toBeTruthy();
+    for (let i = 0; i < 6; i++) await fireEvent.press(screen.getByRole("button", { name: "More weight" }));
+    expect(screen.getByLabelText("Weight, 35 kg")).toBeTruthy();
+    expect(screen.getAllByRole("button", { name: "More weight" })).toHaveLength(1);
+    await fireEvent.press(screen.getByRole("button", { name: "More sets" }));
+    expect(screen.getByLabelText("Sets, 4")).toBeTruthy();
+    // The sets are always listed under the controls, Every set picked; the last set heavier and shorter.
+    expect(screen.getByRole("button", { name: "Every set" }).props.accessibilityState).toMatchObject({ selected: true });
+    await fireEvent.press(screen.getByRole("button", { name: "Set 4: 10 reps, 35 kg, rest 1:00" }));
+    expect(screen.getByText("Set 4 only")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "More weight" }));
+    await fireEvent.press(screen.getByRole("button", { name: "More weight" }));
+    for (let i = 0; i < 4; i++) await fireEvent.press(screen.getByRole("button", { name: "Fewer reps" }));
+    expect(screen.getByRole("button", { name: "Set 4: 6 reps, 40 kg, rest 1:00" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Set 1: 10 reps, 35 kg, rest 1:00" })).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "Done" }));
+    expect(await screen.findByText("4 sets · 10, 10, 10, 6 reps · 35 to 40 kg · rest 1:00")).toBeTruthy();
+    // Opened again: real numbers and the bar, never "--" (Kd's click-through). Every set shows the first set's.
+    await fireEvent.press(await row("Barbell Curl"));
+    expect(screen.getByLabelText("Reps, 10 reps")).toBeTruthy();
+    expect(screen.getByLabelText("Weight, 35 kg")).toBeTruthy();
+    expect(screen.getByTestId("weight-plate")).toBeTruthy();
+    expect(screen.queryByText(/varies/)).toBeNull();
+    // A press on Every set makes every set that number, and each line says so.
+    await fireEvent.press(screen.getByRole("button", { name: "More reps" }));
+    expect(screen.getByLabelText("Reps, 11 reps")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Set 4: 11 reps, 40 kg, rest 1:00" })).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "Done" }));
+    expect(await screen.findByText("4 × 11 reps · 35 to 40 kg · rest 1:00")).toBeTruthy();
+  });
+
+  it("a weight can be typed: on every set, or on the set picked; a weight that cannot be read is said", async () => {
+    await openLibrary(libraryServer().ask);
+    await add(/^Plank,/);
+    await openMine();
+    await fireEvent.press(await row("Plank"));
+    await fireEvent.press(screen.getByRole("button", { name: "Type a weight" }));
+    await fireEvent.changeText(screen.getByLabelText("Weight in kg"), "fifty");
+    await fireEvent.press(screen.getByRole("button", { name: "Set weight" }));
+    expect(screen.getByText("Enter a weight such as 47.5.")).toBeTruthy();
+    await fireEvent.changeText(screen.getByLabelText("Weight in kg"), "5000");
+    await fireEvent.press(screen.getByRole("button", { name: "Set weight" }));
+    expect(screen.getByText("Enter a weight up to 1,000 kg.")).toBeTruthy();
+    await fireEvent.changeText(screen.getByLabelText("Weight in kg"), "12,5");
+    await fireEvent(screen.getByLabelText("Weight in kg"), "submitEditing");
+    expect(screen.getByLabelText("Weight, 12.5 kg")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Set 3: 30 s, 12.5 kg, rest 1:00" })).toBeTruthy();
+    // On one set: tap the plate itself to type.
+    await fireEvent.press(screen.getByRole("button", { name: "Set 2: 30 s, 12.5 kg, rest 1:00" }));
+    await fireEvent.press(screen.getByRole("button", { name: "Weight, 12.5 kg" }));
+    await fireEvent.changeText(screen.getByLabelText("Weight in kg"), "20");
+    await fireEvent(screen.getByLabelText("Weight in kg"), "submitEditing");
+    expect(screen.getByRole("button", { name: "Set 2: 30 s, 20 kg, rest 1:00" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Set 1: 30 s, 12.5 kg, rest 1:00" })).toBeTruthy();
+    // Emptied, it is no weight.
+    await fireEvent.press(screen.getByRole("button", { name: "Type a weight" }));
+    await fireEvent.changeText(screen.getByLabelText("Weight in kg"), "");
+    await fireEvent(screen.getByLabelText("Weight in kg"), "submitEditing");
+    expect(screen.getByRole("button", { name: "Set 2: 30 s, rest 1:00" })).toBeTruthy();
+  });
+
+  it("a typed weight is kept when the person presses Done or ✕ with the keyboard still up (review H1)", async () => {
+    await openLibrary(libraryServer().ask);
+    await add(/^Plank,/);
+    await openMine();
+    await fireEvent.press(await row("Plank"));
+    await fireEvent.press(screen.getByRole("button", { name: "Type a weight" }));
+    await fireEvent.changeText(screen.getByLabelText("Weight in kg"), "50");
+    // Neither the keyboard's own key nor Set weight: the box's Done.
+    await fireEvent.press(screen.getByRole("button", { name: "Done" }));
+    expect(await screen.findByText("3 × 30 s · 50 kg · rest 1:00")).toBeTruthy();
+    // And by the ✕.
+    await fireEvent.press(await row("Plank"));
+    await fireEvent.press(screen.getByRole("button", { name: "Type a weight" }));
+    await fireEvent.changeText(screen.getByLabelText("Weight in kg"), "40");
+    await fireEvent.press(screen.getByRole("button", { name: "Close" }));
+    expect(await screen.findByText("3 × 30 s · 40 kg · rest 1:00")).toBeTruthy();
+    // Done with words that cannot be read keeps the box and says so; nothing is lost in silence.
+    await fireEvent.press(await row("Plank"));
+    await fireEvent.press(screen.getByRole("button", { name: "Type a weight" }));
+    await fireEvent.changeText(screen.getByLabelText("Weight in kg"), "fifty");
+    await fireEvent.press(screen.getByRole("button", { name: "Done" }));
+    expect(screen.getByText("Enter a weight such as 47.5.")).toBeTruthy();
+    expect(screen.getByLabelText("Weight in kg")).toBeTruthy();
+  });
+
+  it("typing, then picking another set or pressing + or −, keeps the typed weight on the set it was typed for (review L2)", async () => {
+    await openLibrary(libraryServer().ask);
+    await add(/^Plank,/);
+    await openMine();
+    await fireEvent.press(await row("Plank"));
+    await fireEvent.press(screen.getByRole("button", { name: "Set 1: 30 s, rest 1:00" }));
+    await fireEvent.press(screen.getByRole("button", { name: "Type a weight" }));
+    await fireEvent.changeText(screen.getByLabelText("Weight in kg"), "10");
+    // Another set picked while the keyboard is up: the 10 kg stays on set 1.
+    await fireEvent.press(screen.getByRole("button", { name: "Set 2: 30 s, rest 1:00" }));
+    expect(screen.getByRole("button", { name: "Set 1: 30 s, 10 kg, rest 1:00" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Set 2: 30 s, rest 1:00" })).toBeTruthy();
+    // On set 2, typing then + : the typed weight is kept and the press goes on from it.
+    await fireEvent.press(screen.getByRole("button", { name: "Type a weight" }));
+    await fireEvent.changeText(screen.getByLabelText("Weight in kg"), "20");
+    await fireEvent.press(screen.getByRole("button", { name: "More weight" }));
+    expect(screen.getByRole("button", { name: "Set 2: 30 s, 22.5 kg, rest 1:00" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Set 1: 30 s, 10 kg, rest 1:00" })).toBeTruthy();
+  });
+
+  it("a timed exercise is set in time; its weight starts at none and can be added (a weighted plank); the rest too", async () => {
+    await openLibrary(libraryServer().ask);
+    await add(/^Plank,/);
+    await openMine();
+    await fireEvent.press(await row("Plank"));
+    expect(screen.getByLabelText("Time, 00:30")).toBeTruthy();
+    expect(screen.queryByLabelText(/^Reps/)).toBeNull();
+    expect(screen.getByLabelText("Weight, none")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "More weight" }));
+    expect(screen.getByLabelText("Weight, 2.5 kg")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "Less weight" }));
+    expect(screen.getByLabelText("Weight, none")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "More time" }));
+    await fireEvent.press(screen.getByRole("button", { name: "Less rest" }));
+    expect(screen.getByLabelText("Time, 00:35")).toBeTruthy();
+    expect(screen.getByLabelText("Rest, 00:45")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "Close" }));
+    expect(await screen.findByText("3 × 35 s · rest 0:45")).toBeTruthy();
+  });
+
+  it("the workout's name, about how long and how many calories, Reorder, and Clear asking first", async () => {
+    await openLibrary(libraryServer({ weightKg: 82 }).ask);
+    await add(/^Barbell Curl,/);
+    await add(/^Plank,/);
+    await openMine();
+    // Curl 3 × (30 s + 60 s) and Plank 3 × (30 s + 60 s), less the last rest: 480 s, 8 minutes, at the person's 82 kg.
+    const kcal = Math.round((3.5 * 82 * 90 + 1.8 * 82 * 180 + 2.8 * 82 * 90 + 1.8 * 82 * 120) / 3600);
+    expect(await screen.findByText(`2 exercises · about 8 min · about ${String(kcal)} kcal`)).toBeTruthy();
+    // Their own weight: no "at 70 kg", no Add your weight.
+    expect(screen.queryByRole("button", { name: "Add your weight" })).toBeNull();
+    await fireEvent.changeText(screen.getByLabelText("Workout name"), "Arms and core");
+    expect(screen.getByLabelText("Workout name").props.value).toBe("Arms and core");
+    await fireEvent.press(screen.getByRole("button", { name: "Reorder exercises" }));
+    expect(screen.queryByRole("button", { name: "Remove Plank" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Move Barbell Curl up" }).props.accessibilityState).toMatchObject({ disabled: true });
+    await fireEvent.press(screen.getByRole("button", { name: "Move Plank up" }));
+    await fireEvent.press(screen.getByRole("button", { name: "Done reordering" }));
+    expect(names()).toEqual(["Plank", "Barbell Curl"]);
+    // Clear asks first: Keep it keeps everything.
+    await fireEvent.press(screen.getByRole("button", { name: "Clear this workout" }));
+    expect(await screen.findByText("All 2 exercises will be removed.")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "Keep it" }));
+    expect(names()).toEqual(["Plank", "Barbell Curl"]);
+    await fireEvent.press(screen.getByRole("button", { name: "Clear this workout" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Clear workout" }));
+    expect(await screen.findByText("No exercises yet")).toBeTruthy();
+    expect(screen.getByLabelText("Workout name").props.value).toBe("Arms and core");
+    expect(screen.getByRole("button", { name: "My Workout" })).toBeTruthy();
+  });
+
+  it("Add your weight on My Workout, and back: the calories are at the person's own weight (re-check L8)", async () => {
+    // The weight is given in Progress: until then the server has none.
+    let weighed = false;
+    const answers = () => ({ status: 200, body: { answers: { ...ANSWERS, weightKg: weighed ? 82 : null }, plan: null, missing: ["goal"] } });
+    await openLibrary(libraryServer({ onboarding: answers }).ask);
+    await add(/^Barbell Curl,/);
+    await openMine();
+    expect(await screen.findByText(/^1 exercise · about 4 min · about \d+ kcal at 70 kg$/)).toBeTruthy();
+    const closes = screen.queryAllByRole("button", { name: "Close" });
+    await fireEvent.press(screen.getByRole("button", { name: "Add your weight" }));
+    expect(await screen.findByRole("button", { name: "Log measurements" })).toBeTruthy();
+    weighed = true;
+    const progressClose = screen.getAllByRole("button", { name: "Close" }).find((c) => !closes.includes(c));
+    if (progressClose === undefined) throw new Error("Progress has no Close");
+    await fireEvent.press(progressClose);
+    // Curl 3 × 10 at 82 kg: 90 s of work and 120 s of rest.
+    const kcal = Math.round((3.5 * 82 * 90 + 1.8 * 82 * 120) / 3600);
+    expect(await screen.findByText(`1 exercise · about 4 min · about ${String(kcal)} kcal`)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Add your weight" })).toBeNull();
+  });
+
+  it("Add exercises goes back to the Library", async () => {
+    await openLibrary(libraryServer().ask);
+    await add(/^Squat,/);
+    await openMine();
+    await fireEvent.press(await screen.findByRole("button", { name: "Add exercises" }));
+    expect(await screen.findByText("3 Exercises")).toBeTruthy();
+  });
+});
+
+describe("doing a workout (64a-ii)", () => {
+  /** My Workout as the phone keeps it. */
+  const keptWorkout = (items: unknown[]) => {
+    const file = new File(Paths.document, `my-workout-${RAVI.id}.json`);
+    if (file.exists) file.delete();
+    file.create();
+    file.write(JSON.stringify({ v: 2, name: "Legs", items }));
+  };
+  /** Squat, one set of 2 reps with no rest after it; Plank, one set of 5 s. */
+  const SQUAT = { id: "squat", plan: { measuredIn: "reps", sets: [{ target: 2, weightGrams: null, restSeconds: null }] } };
+  const PLANK = { id: "plank", plan: { measuredIn: "time", sets: [{ target: 5, weightGrams: null, restSeconds: null }] } };
+  type Save = { key: string | undefined; body: { workoutId: string; sets: { exercise: string; done: number }[] } };
+  /** The server with the save route, each workout kept once by its id, as 61a's route does. */
+  function withSaves(answer: (workoutId: string) => Reply = (workoutId) => ({ status: 201, body: { workoutId, status: "created" } }), library = libraryServer()) {
+    const saves: Save[] = [];
+    const ask: Ask = async (url, init) => {
+      if (new URL(url).pathname !== "/v1/workouts" || init.method !== "POST") return library.ask(url, init);
+      const body = JSON.parse(init.body ?? "{}") as Save["body"];
+      const reply = answer(body.workoutId);
+      if (reply.status < 300) saves.push({ key: init.headers?.["idempotency-key"], body });
+      return { ok: reply.status < 300, status: reply.status, json: () => Promise.resolve(reply.body) };
+    };
+    return { ask, saves };
+  }
+  const openMine = async () => {
+    await fireEvent.press(await screen.findByRole("button", { name: /^My Workout/ }));
+  };
+
+  it("the worst thing: a workout done is saved to the account once, under its own id, and opening the app again sends nothing more", async () => {
+    keptWorkout([SQUAT]);
+    const server = withSaves();
+    await openLibrary(server.ask);
+    await openMine();
+    await fireEvent.press(await screen.findByRole("button", { name: "Start workout" }));
+    expect(await screen.findByText("Exercise 1 of 1 · Set 1 of 1")).toBeTruthy();
+    expect(screen.getByText("The last set of this workout")).toBeTruthy();
+    // + counts; at its target the set ends by itself, and with it the workout.
+    await fireEvent.press(screen.getByRole("button", { name: "One rep more" }));
+    expect(screen.getByRole("button", { name: "Set done · 1 rep" })).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "One rep more" }));
+    expect(await screen.findByText("Workout complete")).toBeTruthy();
+    expect(await screen.findByText("Saved to your account")).toBeTruthy();
+    expect(server.saves).toHaveLength(1);
+    const save = server.saves[0];
+    expect(save?.key).toBe(save?.body.workoutId);
+    expect(save?.body.sets.map((s) => [s.exercise, s.done])).toEqual([["squat", 2]]);
+    await fireEvent.press(screen.getByRole("button", { name: "Done" }));
+    expect(await screen.findByRole("button", { name: "Start workout" })).toBeTruthy();
+    await settle(50);
+    await screen.unmount();
+    forgetStores();
+    await openLibrary(server.ask);
+    await openMine();
+    await settle(100);
+    expect(server.saves).toHaveLength(1);
+  });
+
+  it("with no answer the workout is kept on the phone, and its screen says so", async () => {
+    keptWorkout([SQUAT]);
+    const server = withSaves(noInternet);
+    await openLibrary(server.ask);
+    await openMine();
+    await fireEvent.press(await screen.findByRole("button", { name: "Start workout" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Set done · 2 reps" }));
+    expect(await screen.findByText("Saved on this phone")).toBeTruthy();
+    expect(screen.getByText("It goes to your account as soon as it can.")).toBeTruthy();
+    const waiting = new File(Paths.document, `workouts-${RAVI.id}.json`);
+    expect((JSON.parse(await waiting.text()) as { waiting: unknown[] }).waiting).toHaveLength(1);
+  });
+
+  it("put away mid-workout: a bar over the tabs and Open workout on My Workout open it again where it was", async () => {
+    keptWorkout([SQUAT, PLANK]);
+    await openLibrary(withSaves().ask);
+    await openMine();
+    await fireEvent.press(await screen.findByRole("button", { name: "Start workout" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "One rep more" }));
+    expect(screen.getByText("Plank · 1 × 5 s")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "Put workout away" }));
+    expect(await screen.findByText(/^In progress · \d\d:\d\d$/)).toBeTruthy();
+    expect(screen.getByText("Workout in progress")).toBeTruthy();
+    // The bar on another tab too.
+    await fireEvent.press(screen.getByRole("tab", { name: "Dashboard" }));
+    expect(await screen.findByText("Workout in progress")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "Open workout" }));
+    expect(await screen.findByRole("button", { name: "Set done · 1 rep" })).toBeTruthy();
+  });
+
+  it("a timed set after no rest gets ready first; End asks first and keeps the sets done", async () => {
+    keptWorkout([SQUAT, PLANK]);
+    const server = withSaves();
+    await openLibrary(server.ask);
+    await openMine();
+    await fireEvent.press(await screen.findByRole("button", { name: "Start workout" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Set done · 2 reps" }));
+    expect(await screen.findByText("GET READY")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Start now" })).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "End workout" }));
+    expect(await screen.findByText("1 of 2 sets done. Those sets will be saved.")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "Keep going" }));
+    expect(screen.getByRole("button", { name: "Start now" })).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "End workout" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "End and save" }));
+    expect(await screen.findByText("Saved to your account")).toBeTruthy();
+    expect(server.saves.map((s) => s.body.sets.length)).toEqual([1]);
+  });
+
+  it("End with nothing done keeps nothing; Pause stops every clock", async () => {
+    keptWorkout([SQUAT]);
+    const server = withSaves();
+    await openLibrary(server.ask);
+    await openMine();
+    await fireEvent.press(await screen.findByRole("button", { name: "Start workout" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Pause workout" }));
+    expect(await screen.findByLabelText("Paused")).toBeTruthy();
+    // Every clock stops (round one): the time shown stays where it was while seconds pass.
+    const shown = screen.getByText(/^\d\d:\d\d$/).props.children as string;
+    await settle(2200);
+    expect(screen.getByText(/^\d\d:\d\d$/).props.children).toBe(shown);
+    expect(screen.getByRole("button", { name: "Resume" })).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "Resume" }));
+    expect(screen.queryByLabelText("Paused")).toBeNull();
+    await fireEvent.press(screen.getByRole("button", { name: "End workout" }));
+    expect(await screen.findByText("No sets done yet. Nothing will be saved.")).toBeTruthy();
+    const ends = screen.getAllByRole("button", { name: "End workout" });
+    const last = ends[ends.length - 1];
+    if (last === undefined) throw new Error("no End workout in the box");
+    await fireEvent.press(last);
+    expect(await screen.findByRole("button", { name: "Start workout" })).toBeTruthy();
+    await settle(50);
+    expect(server.saves).toHaveLength(0);
+  });
+
+  // ── after it (64a-iii): the workout's last screen.
+  const ALLERGY = "Have a food allergy? Always check the label.";
+  const LABELS = "Check labels too: some breads and cheeses contain animal ingredients.";
+  const yogurt = { canonical: "greek_yogurt_plain_nonfat", name: "Greek yogurt (plain, nonfat)", grams: 175, servings: 175, unit: "g", kcal: 103, proteinG: 17.9, carbsG: 6.4, fatG: 0.7 };
+  /** The server's summary of a workout, as 64a-iii's route answers it: 60 XP, a 5-day streak, the squat's most reps. */
+  const afterOf = (workoutId: string, over: Record<string, unknown> = {}) => ({
+    workoutId,
+    kcalPoint: 118,
+    weightKg: 82,
+    effort: null,
+    xp: { earned: 60, forWorkout: 50, forStreak: 10, forBadges: 0, view: { total: 532, level: 3, xpInLevel: 184, xpForNext: 374, progressPct: 49.2, nextLevelAt: 722 } },
+    streak: { days: 5, today: true },
+    records: [{ exercise: "squat", exerciseName: "Squat", measuredIn: "reps", kind: "most_reps", position: 0, value: 2 }],
+    food: { ideas: [{ when: "soon", idea: { kind: "light", items: [yogurt], totals: { kcal: 162, proteinG: 19.2, carbsG: 20.6, fatG: 1.1 } } }], caution: ALLERGY, labelCaution: LABELS },
+    ...over,
+  });
+  type Effort = { path: string; body: { effort: number } };
+  /** The server with the save, the summary and the stars' routes. */
+  function withAfter(
+    summary: (workoutId: string) => Reply = (workoutId) => ({ status: 200, body: afterOf(workoutId) }),
+    save: (workoutId: string) => Reply = (workoutId) => ({ status: 201, body: { workoutId, status: "created" } }),
+    extra: { hold?: Promise<void>; weightKg?: number } = {},
+  ) {
+    const efforts: Effort[] = [];
+    const saves = withSaves(save, libraryServer(extra.weightKg === undefined ? {} : { weightKg: extra.weightKg }));
+    const ask: Ask = async (url, init) => {
+      const path = new URL(url).pathname;
+      const summaryOf = /^\/v1\/training\/workouts\/([^/]+)\/summary$/.exec(path);
+      if (summaryOf?.[1] !== undefined && init.method === "GET") {
+        const reply = summary(summaryOf[1]);
+        return { ok: reply.status < 300, status: reply.status, json: () => Promise.resolve(reply.body) };
+      }
+      const effortOf = /^\/v1\/training\/workouts\/([^/]+)\/effort$/.exec(path);
+      if (effortOf?.[1] !== undefined && init.method === "PUT") {
+        const body = JSON.parse(init.body ?? "{}") as Effort["body"];
+        if (extra.hold !== undefined) await extra.hold;
+        efforts.push({ path, body });
+        return { ok: true, status: 200, json: () => Promise.resolve({ workoutId: effortOf[1], effort: body.effort }) };
+      }
+      return saves.ask(url, init);
+    };
+    return { ask, saves: saves.saves, efforts };
+  }
+  const finishSquat = async (ask: Ask) => {
+    keptWorkout([SQUAT]);
+    await openLibrary(ask);
+    await openMine();
+    await fireEvent.press(await screen.findByRole("button", { name: "Start workout" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Set done · 2 reps" }));
+    expect(await screen.findByText("Workout complete")).toBeTruthy();
+  };
+
+  it("after it, the worst thing: every meal idea shows the allergy warning (and a vegetarian's the label warning)", async () => {
+    await finishSquat(withAfter().ask);
+    await fireEvent.press(screen.getByRole("button", { name: "Recover" }));
+    expect(await screen.findByText("Within 30 minutes")).toBeTruthy();
+    expect(screen.getByText(/^Greek yogurt \(plain, nonfat\) +175 g$/)).toBeTruthy();
+    expect(screen.getByText("162 kcal · 19 g protein")).toBeTruthy();
+    expect(screen.getByText(ALLERGY)).toBeTruthy();
+    expect(screen.getByText(LABELS)).toBeTruthy();
+  });
+
+  it("after it, the worst thing: no meal idea is drawn without a warning beside it", async () => {
+    await finishSquat(withAfter((id) => ({ status: 200, body: afterOf(id, { food: { ideas: afterOf(id).food.ideas, caution: "", labelCaution: null } }) })).ask);
+    await fireEvent.press(screen.getByRole("button", { name: "Recover" }));
+    // A summary whose warning is empty is never read: the ideas wait as if the server had not answered.
+    expect(await screen.findByText("Couldn't load meal ideas.")).toBeTruthy();
+    expect(screen.queryByText(/^Greek yogurt/)).toBeNull();
+  });
+
+  it("after it: the time, calories and sets; XP, the level and the streak; a new record; every set done", async () => {
+    await finishSquat(withAfter().ask);
+    expect(await screen.findByText("+60 XP")).toBeTruthy();
+    expect(screen.getByText("50 for the workout · 10 for your streak")).toBeTruthy();
+    expect(screen.getByText("184/374 XP → Level 4")).toBeTruthy();
+    expect(screen.getByText("5-day streak")).toBeTruthy();
+    expect(screen.getByText("About 118 kcal for you, at 82 kg")).toBeTruthy();
+    expect(screen.getByLabelText("Kcal, about 118 calories")).toBeTruthy();
+    expect(screen.getByText("New records · 1")).toBeTruthy();
+    expect(screen.getByLabelText("New record, Most reps, Squat · set 1, 2 reps")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "Sets" }));
+    expect(await screen.findByText("1 exercise · 1 set")).toBeTruthy();
+    expect(screen.getByLabelText(/^Set 1, 2 reps .*a new record$/)).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "Recover" }));
+    expect(await screen.findByText("Hip flexor stretch")).toBeTruthy();
+    expect(screen.getByText("30 seconds each side")).toBeTruthy();
+    expect(screen.getByText("Drink about 500 ml of water in the next 30 minutes.")).toBeTruthy();
+  });
+
+  it("after it: the stars are saved to the workout, the last one pressed kept", async () => {
+    const server = withAfter();
+    await finishSquat(server.ask);
+    expect(await screen.findByText("Tap a star")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "4 of 5: Challenging" }));
+    await fireEvent.press(screen.getByRole("button", { name: "3 of 5: Just right" }));
+    expect(await screen.findByText("Just right · Saved")).toBeTruthy();
+    const id = server.saves[0]?.body.workoutId ?? "";
+    expect(server.efforts.map((e) => [e.path, e.body.effort])).toEqual([
+      [`/v1/training/workouts/${id}/effort`, 4],
+      [`/v1/training/workouts/${id}/effort`, 3],
+    ]);
+  });
+
+  it("after it with no internet: what the phone holds shows, the stars wait on the phone, the rest says when it comes", async () => {
+    const server = withAfter(undefined, noInternet);
+    await finishSquat(server.ask);
+    expect(await screen.findByText("Saved on this phone")).toBeTruthy();
+    expect(screen.getByText("Your XP and records show here once this workout reaches your account.")).toBeTruthy();
+    expect(screen.getByLabelText("Kcal, not yet known")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "3 of 5: Just right" }));
+    expect(await screen.findByText("Just right · Saved on this phone")).toBeTruthy();
+    await settle(50);
+    const stars = new File(Paths.document, `workout-effort-${RAVI.id}.json`);
+    expect((JSON.parse(await stars.text()) as { waiting: { effort: number }[] }).waiting.map((e) => e.effort)).toEqual([3]);
+    expect(server.efforts).toHaveLength(0);
+    await fireEvent.press(screen.getByRole("button", { name: "Sets" }));
+    expect(await screen.findByText("1 exercise · 1 set")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "Recover" }));
+    expect(await screen.findByText("Meal ideas show here once this workout reaches your account.")).toBeTruthy();
+    expect(screen.getByText("Hip flexor stretch")).toBeTruthy();
+  });
+
+  it("after it: a summary that cannot be read says so, and Try again reads it", async () => {
+    let fails = true;
+    await finishSquat(withAfter((id) => (fails ? { status: 500, body: { error: "internal" } } : { status: 200, body: afterOf(id) })).ask);
+    expect(await screen.findByText("Couldn't load your XP and records.")).toBeTruthy();
+    fails = false;
+    await fireEvent.press(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findByText("+60 XP")).toBeTruthy();
+  });
+
+  it("after it, a first workout: no records box and no streak line", async () => {
+    await finishSquat(withAfter((id) => ({ status: 200, body: afterOf(id, { records: [], streak: { days: 0, today: false }, xp: { ...afterOf(id).xp, earned: 50, forStreak: 0 } }) })).ask);
+    expect(await screen.findByText("+50 XP")).toBeTruthy();
+    expect(screen.getByText("50 for the workout")).toBeTruthy();
+    expect(screen.queryByText(/^New records/)).toBeNull();
+    expect(screen.queryByText(/-day streak$/)).toBeNull();
+  });
+
+  it("after it: New workout opens the Library", async () => {
+    await finishSquat(withAfter().ask);
+    await fireEvent.press(screen.getByRole("button", { name: "New workout" }));
+    expect(await screen.findByText("3 Exercises")).toBeTruthy();
+  });
+
+  it("after it, round one L2: the stars say Saved only once the server has them", async () => {
+    const gate: { open: () => void } = { open: () => undefined };
+    const hold = new Promise<void>((resolve) => {
+      gate.open = resolve;
+    });
+    const server = withAfter(undefined, undefined, { hold });
+    await finishSquat(server.ask);
+    expect(await screen.findByText("Tap a star")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "3 of 5: Just right" }));
+    expect(await screen.findByText("Just right")).toBeTruthy();
+    await settle(100);
+    expect(screen.queryByText("Just right · Saved")).toBeNull();
+    expect(server.efforts).toHaveLength(0);
+    gate.open();
+    expect(await screen.findByText("Just right · Saved")).toBeTruthy();
+    expect(server.efforts).toHaveLength(1);
+  });
+
+  it("after it, round one L1: a person who has given their weight is told their next workouts use it, never asked again", async () => {
+    await finishSquat(withAfter((id) => ({ status: 200, body: afterOf(id, { weightKg: null }) })).ask);
+    expect(await screen.findByText("About 118 kcal, at 70 kg")).toBeTruthy();
+    expect(screen.queryByText("Your weight is saved. Your next workouts use it.")).toBeNull();
+    await screen.unmount();
+    forgetStores();
+    await finishSquat(withAfter((id) => ({ status: 200, body: afterOf(id, { weightKg: null }) }), undefined, { weightKg: 82 }).ask);
+    expect(await screen.findByText("About 118 kcal, at 70 kg")).toBeTruthy();
+    expect(await screen.findByText("Your weight is saved. Your next workouts use it.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Add your weight" })).toBeNull();
+  });
+
+  it("after it, round one L5: a workout the server refused says on Results why it earns nothing", async () => {
+    await finishSquat(withAfter(undefined, () => ({ status: 400, body: { error: "validation_error", message: "x" } })).ask);
+    expect(await screen.findByText("This workout couldn't be saved.")).toBeTruthy();
+    expect(screen.getByText("This workout wasn't saved, so it earns no XP or records.")).toBeTruthy();
+    expect(screen.queryByText("How hard was it?")).toBeNull();
   });
 });

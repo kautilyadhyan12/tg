@@ -11,7 +11,9 @@ import {
   cardOnFileLine,
   cardOwnerOnlyLine,
   cardPaidByLine,
+  myCardStaysSchema,
   saveCardRequestSchema,
+  type MyCardStays,
 } from "../src/index.js";
 
 describe("a card's words", () => {
@@ -37,8 +39,30 @@ describe("a card's words", () => {
 
   it("the agreement is Kd's sentence, with the gym's own name", () => {
     expect(cardAgreementWords("Iron House")).toBe(
-      "I agree that Iron House may save this card and charge it for my membership and any fees when they are due. I can remove it at the front desk at any time.",
+      "I authorize Iron House to save this card and charge it for recurring membership payments, any late cancellation or no-show fees in its booking policy, and any other charges I separately approve. I can remove this card in the app if it isn’t linked to another member’s account and there are no upcoming or unpaid payments associated with it. I can also ask the front desk to remove it at any time.",
     );
+  });
+
+  it("the agreement names every reason the app keeps a card on file, so its promise to remove it in the app holds (20e)", () => {
+    // Each reason Remove card is refused in the app (`removalOf`), and the words that tell the person of it. A reason added
+    // to the app without the agreement naming it fails here.
+    const named: Record<MyCardStays, string> = {
+      pays_for: "if it isn’t linked to another member’s account",
+      renews: "no upcoming",
+      owed: "or unpaid payments",
+    };
+    expect(Object.keys(named).sort()).toEqual([...myCardStaysSchema.options].sort());
+    const words = cardAgreementWords("Iron House");
+    for (const reason of myCardStaysSchema.options) expect(words).toContain(named[reason]);
+    expect(words).toContain("I can also ask the front desk to remove it at any time.");
+  });
+
+  it("the agreement covers every fee staff can charge to a kept card that the person never presses yes to (round one's re-check, N1)", () => {
+    // A no-show fee is added when a coach marks No-show and staff can charge it to the card; booking shows it with no yes.
+    // "any" keeps it true for a business that charges neither.
+    const words = cardAgreementWords("Iron House");
+    expect(words).toContain("any late cancellation or no-show fees in its booking policy");
+    expect(words).not.toContain("my recurring membership payments");
   });
 
   it("the payer and owner lines name the people and the gym", () => {

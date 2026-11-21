@@ -1716,6 +1716,13 @@
       "when": 1790985600245,
       "tag": "0245_saved_workouts",
       "breakpoints": true
+    },
+    {
+      "idx": 245,
+      "version": "7",
+      "when": 1790985600246,
+      "tag": "0246_workout_kcal_weight",
+      "breakpoints": true
     }
   ]
 }

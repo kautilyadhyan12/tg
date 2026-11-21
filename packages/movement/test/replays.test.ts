@@ -7,8 +7,27 @@ import type { MovementFrame } from "@app/shared";
 import { bodySize } from "../src/index.js";
 import { readKept, videoOf } from "../scripts/bodyCheck.js";
 import { MOVEMENT_VIDEOS } from "../scripts/movementVideos.js";
-import { PHONE_GAPS, everyNth, farther, nearer, nearestFactor, numbers, passerBy, phoneGap, phoneLabel, shaken, tilted, uneven } from "../scripts/replays.js";
-import { VIDEOS } from "./helpers/body.js";
+import {
+  FLOOR_LEAN,
+  FLOOR_LENS,
+  PHONE_GAPS,
+  everyNth,
+  farther,
+  floorCamera,
+  focalOf,
+  nearer,
+  nearestFactor,
+  numbers,
+  onTheFloor,
+  passerBy,
+  phoneGap,
+  phoneLabel,
+  redraw,
+  shaken,
+  tilted,
+  uneven,
+} from "../scripts/replays.js";
+import { ASPECT, VIDEOS, standingWorld } from "./helpers/body.js";
 
 const squat = VIDEOS.find((v) => v.label === "squat_reference");
 if (squat === undefined) throw new Error("no squat video");
@@ -168,5 +187,72 @@ describe("the chip's gap is the phone's own, measured", () => {
     }));
     expect(quantile(feet, 0.95)).toBeGreaterThan(0.006);
     expect(quantile(feet, 0.95)).toBeLessThan(0.012);
+  });
+});
+
+describe("on the floor: the phone redrawn lower (52a-ii-b-ii)", () => {
+  it("drawn from the phone's own place, the picture, the 3D points and 'down' come back exactly", () => {
+    const out = redraw(FRAMES, { height: 1, from: [0, 0, 0], lean: 0, back: 0 });
+    expect(out.length).toBe(FRAMES.length);
+    let points = 0;
+    out.forEach((f, i) => {
+      const was = FRAMES[i];
+      expect(f.down).toEqual(was?.down);
+      f.people.forEach((p, n) => {
+        const o = was?.people[n];
+        p.points.forEach((q, k) => {
+          expect(q).toEqual(o?.points[k]);
+          points++;
+        });
+        expect(p.world).toEqual(o?.world);
+      });
+    });
+    expect(points).toBeGreaterThan(30 * 33);
+  });
+
+  // A body the phone saw exactly: its picture the true projection of its 3D points, the phone 0.95 m above the floor,
+  // level, the hips 2.5 m away. Redrawn from the floor, it lands where the floor phone, at the place the redraw chose,
+  // would see the same 3D points.
+  const focal = focalOf(ASPECT);
+  const height = 0.95;
+  const depth = 2.5;
+  const world = standingWorld();
+  // The toes are the lowest point, 0.9 m under the hips: the floor lies `height` under the phone.
+  const atCamera = world.map(([x = 0, y = 0, z = 0]) => [x, y + height - 0.9, z + depth]);
+  const picture = (q: readonly number[]): [number, number] => [(focal * (q[0] ?? 0)) / (q[2] ?? 1) / ASPECT + 0.5, (focal * (q[1] ?? 0)) / (q[2] ?? 1) + 0.5];
+  const exact: MovementFrame[] = Array.from({ length: 60 }, (_, n) => ({
+    t: Math.round((n * 1000 * 10) / 30) / 10,
+    aspect: ASPECT,
+    down: [0, 1, 0],
+    people: [{ points: atCamera.map((q) => [...picture(q), 0, 0.99, 0.99]), world: world.map(([x = 0, y = 0, z = 0]): [number, number, number] => [x, y, z]) }],
+  }));
+
+  it("finds the phone's height above the floor and puts the floor phone at the lens's height, leaning back as asked", () => {
+    const camera = floorCamera(exact, FLOOR_LENS, (FLOOR_LEAN * Math.PI) / 180);
+    expect(camera).not.toBeNull();
+    expect(Math.abs((camera?.height ?? 0) - height)).toBeLessThan(0.02);
+    expect(camera?.from[1]).toBeCloseTo((camera?.height ?? 0) - FLOOR_LENS, 9);
+    expect(camera?.lean).toBeCloseTo((-FLOOR_LEAN * Math.PI) / 180, 9);
+  });
+
+  it("a body the phone saw exactly is drawn within a centimetre of where the floor phone sees it", () => {
+    const camera = floorCamera(exact, FLOOR_LENS, (FLOOR_LEAN * Math.PI) / 180);
+    if (camera === null) throw new Error("no camera");
+    const c = Math.cos(camera.lean);
+    const s = Math.sin(camera.lean);
+    const out = onTheFloor(FLOOR_LENS, FLOOR_LEAN)(exact);
+    const misses = (out[30]?.people[0]?.points ?? []).map((q, i) => {
+      const at = atCamera[i] ?? [0, 0, 1];
+      const v = [(at[0] ?? 0) - camera.from[0], (at[1] ?? 0) - camera.from[1], (at[2] ?? 0) - camera.from[2]];
+      const want = picture([v[0] ?? 0, (v[1] ?? 0) * c - (v[2] ?? 0) * s, (v[1] ?? 0) * s + (v[2] ?? 0) * c]);
+      // Metres at the body: picture heights over the picture heights a metre is there.
+      return Math.hypot((q[0] - want[0]) * ASPECT, q[1] - want[1]) / (focal / depth);
+    });
+    expect(misses).toHaveLength(33);
+    expect(Math.max(...misses)).toBeLessThan(0.01);
+    // And the floor phone sees him from below: his feet nearer its middle line than his hips are to theirs before.
+    const feetBefore = exact[30]?.people[0]?.points[31]?.[1] ?? 0;
+    const feetAfter = out[30]?.people[0]?.points[31]?.[1] ?? 0;
+    expect(Math.abs(feetAfter - 0.5)).toBeLessThan(Math.abs(feetBefore - 0.5) + 0.2);
   });
 });

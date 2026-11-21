@@ -686,8 +686,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
       - 20i-ii. [x] **The bank's check on the phone** · merged 2026-11-14 · PR #545
     - 20j. [x] **A promo code on Buy** · merged 2026-11-13 · PR #543
     - 20k. [x] **Cancel and keep a membership on the phone** · merged 2026-11-13 · PR #540
-    - 20l. [ ] **Add card from the gym's request** (18d-vii's message, `rulings/2026-11-14-18d-vii.md`): the inbox message of kind `card_request`
-      has a button that opens Add card on My membership. Feature folder 1.
+    - 20l. [x] **Add card from the business's request** · merged 2026-11-21 · PR #567
 21. **Release** (split 2026-11-07, Kd: the release is prepared alongside the building, and Google's closed test starts as soon as the app can be installed from Google Play, without waiting for workouts or exercises; `rulings/2026-11-07-21-closed-test-early.md` keeps the line as first written and Google's rules as read that day).
     - 21a. **The server online, free for the test** (split 2026-11-08: the server first; on AWS's free plan in Sydney, Oracle having refused Kd's card; `handoff/2026-11-09-21a-i.md` keeps its line as first written).
       - 21a-i. [x] **The server at its own https address** · merged 2026-11-09 · PR #509
@@ -825,18 +824,22 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
         - 52a-ii. **Each video replayed the ways the world changes it** (split 2026-11-19 in two, `handoff/2026-11-19-52a-ii-a.md` keeps its line as first written):
             - 52a-ii-a. [x] **Nearer, farther, tilted, fewer and uneven pictures, shaky points, the phone's own chip gap, a passer-by** — merged 2026-11-19 (PR #595).
             - 52a-ii-b. **A phone on the floor** (re-planned 2026-11-20 on Kd's own floor videos and split in two, the real videos first: spec §12.5 "As measured and planned, a phone on the floor"; `handoff/2026-11-20-floor-phone-plan.md` keeps its line as first written):
-                - 52a-ii-b-i. [ ] **The feet, the floor line and standing read steadily from a low phone**, mended in the shared engine, never by loosening the squat's numbers. First test: Kd's two floor videos and his raised one count their squats, each way of facing as a set (today 3 of 9, 1 of 3 and 9 of 10); then no jump of 8 cm or more is counted, on his floor videos too. It needs nothing more from Kd.
-                - 52a-ii-b-ii. [ ] **The floor view for every other exercise** (after 52a-ii-b-i): each proof video replayed as a low phone sees it, from the 3D points and the foot wander measured on Kd's videos, kept only if it matches his real floor videos; and one table of what a floor phone sees of sitting, lying, all fours and a chair (his eleven other videos), for 52c and 54.
+                - 52a-ii-b-i. [x] **The feet, the floor line and standing read steadily from a low phone** — merged 2026-11-21 (PR #609).
+                - 52a-ii-b-ii. **The floor view for every other exercise** (split 2026-11-21 in two, the view first; `handoff/2026-11-21-52a-ii-b-ii-a.md` keeps its line as first written):
+                    - 52a-ii-b-ii-a. [x] **Every proof video seen by a phone on the floor, and what a floor phone sees of each position** — merged 2026-11-21 (PR #613).
+                    - 52a-ii-b-ii-b. **The floor mended** (split 2026-11-21 in two, the floor view first; `handoff/2026-11-21-52a-ii-b-ii-b-i.md` keeps its line as first written):
+                        - 52a-ii-b-ii-b-i. [x] **The floor's own foot wander, measured and tried on the floor view** — merged 2026-11-21 (PR #615).
+                        - 52a-ii-b-ii-b-ii. [ ] **The floor mended in the engine** (after -i): in the shared engine, never by loosening the squat's numbers, what 52a-ii-b-i left open on his real floor videos (his first set side on under five replays and left out, his half-turned set done slowly, his last raised pair, 55 of 810 drawn jumps, two squats the phone misses), and his dull-floor set's third squat, done facing the phone after a turn, cut as a set of its own. The floor view stays shown (52a-ii-b-ii-b-i): its misses are shown, never proof.
         - 52a-iii. [x] **The phone's own runs judged by the laptop's count and reasons** — merged 2026-11-20 (PR #600).
     - 52b. **The form judge, the reason for a rep not counted, and the summary** (§12.1, §2.4; split 2026-11-20 in three, `handoff/2026-11-20-floor-phone-plan.md` keeps its line as first written):
-        - 52b-i. [ ] **Why a rep did not count, and the squat's depth**: each rep not counted carries one short reason for the screen ("Go lower to count."); the depth is set from the squat's form standard (Kd's research file: thighs level with the floor, knees about 90°) with room measured from the videos, so a quarter squat stops counting; a dip that is plainly another movement says nothing, its feet hidden or not (52a-iii's three open cases). First test: the kettlebell push press counts 0 (today 3); then no rep that reaches the standard is told to go lower.
+        - 52b-i. [ ] **Why a rep did not count, and the squat's depth**: each rep not counted carries one short reason for the screen ("Go lower to count."); the depth is set from the squat's form standard (Kd's research file: thighs level with the floor, knees about 90°) with room measured from the videos, so a quarter squat stops counting; a dip that is plainly another movement says nothing, its feet hidden or not (52a-iii's three open cases); with it the line a rep is back up at moves (52a-ii-b-i's two open cases at that line). First test: the kettlebell push press counts 0 (today 3); then no rep that reaches the standard is told to go lower.
         - 52b-ii. [ ] **The form check and each rep's score**: the squat's mistakes from the research file, each checked by the camera or marked "the camera cannot see this from here", judged only inside a counted rep; no advice on any good-form video, Kd's own floor videos among them.
         - 52b-iii. [ ] **The set's summary** (§2.4), which the workout reads as it does today.
     - 52c. [ ] **The other kinds of counting**: one side at a time, holds, fast rhythm, timed only, jumps, floor work.
     - 52d. [ ] **One person locked on**: a busy gym, a passer-by, a mirror (§11.8). Since 51c the phone asks the model for one
       person, so the model itself picks the body: the job is to notice when the body followed has changed (51c's plain sign,
-      `bodyChanges`, misses a body of the same size in the same place) and to pause, never count, until it is the person again.
-53. [ ] **The camera screen**: its look as pictures first, then the reference picture, the live skeleton, the count, the reason a rep did not count, "Count this set myself" and Follow-along; the coach's shared lines and the tool that cuts and checks them (§12.6).
+      `bodyChanges`, misses a body of the same size in the same place) and to pause, never count, until it is the person again. Since 52a-ii-b-i: a body new within 3 s keeps the one before's leg and trunk for up to a minute; and a turn in a set, the camera left on, counts a man's own floor videos 8 of 9, 3 of 3 and 8 of 10.
+53. [ ] **The camera screen**: its look as pictures first, then the reference picture, the live skeleton, the count, the reason a rep did not count, "Count this set myself" and Follow-along; the coach's shared lines and the tool that cuts and checks them (§12.6). It tries a set begun just after walking back from the phone (on the phone a first squat 0.8 s after it was missed, 52a-ii-b-i).
 54. [ ] **Exercises, movement by movement** (§12.4), towards about 200, with no fixed first list: Kd names one and gives its videos and research file; an exercise that does not pass the proof is published as "count by hand".
 55. Folded into 54 on 2026-11-16.
 
@@ -856,7 +859,14 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
     - 63c. [x] **Your records and Add to workout on the page** — merged 2026-11-20 (PR #605).
     - 63d. [ ] **Goals' exercise picker on the Library's list** (split from 63c, not built there; when, Kd's call): names and "measured in reps" from the Library, the goal check on the server reading the same list.
 64. **Build a workout, do it, and after it** (Stage 1's 6c; §13.6, §11.8's steps).
-    - 64a. [ ] **By hand and by timer** (after 61 and 63): sets, reps or time, weight, rest; one screen for the workout, kept on the phone at every step; the summary set by set; history. The heart rate from the monitor connected in 37f-i, shown during it and kept with it (Kd, 2026-11-12).
+    - 64a. **By hand and by timer** (after 61 and 63). Split 2026-11-20 by its terminal in six, each a terminal of its own.
+      - 64a-i. [x] **Set up your workout** — merged 2026-11-21 (PR #610).
+      - 64a-ii. [x] **Do it** — merged 2026-11-21 (PR #614).
+      - 64a-iii. [x] **After it** — merged 2026-11-22 (PR #616).
+      - 64a-ii-b. [ ] **Time trained, never time paused** (Kd, 2026-11-21, next in this folder, before 64a-iv): a saved workout's length leaves its pauses out, so Hours Trained, the minutes challenge, goals and the gym's numbers count only time trained; 64a-ii's save sent the whole (a workout left paused for hours paid a "120 minutes" challenge's 200 XP).
+      - 64a-iv. [ ] **Saved workouts**: save, list, load and delete (61c's routes), with a question first.
+      - 64a-v. [ ] **History**: the month, a day's workouts and one workout set by set (61b's routes).
+      - 64a-vi. [ ] **Heart rate and sounds**: the monitor of 37f-i during a workout and kept with it (Kd, 2026-11-12); the sounds at a rep, a set's end and the last 3 seconds.
     - 64b. [ ] **With the camera** (after 64a and item 53's screen): Camera or Count myself, picked every time.
 65. [ ] **Each exercise's Library page**, towards about 200 (§13.2; alongside, from 60): written and checked, never copied across from the old text; Kd's list of names. All camera rules are exercise folder 1's job 54.
 

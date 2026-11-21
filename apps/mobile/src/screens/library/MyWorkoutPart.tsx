@@ -1,6 +1,6 @@
-import type { PhoneLibraryEntry } from "@app/shared";
+import { RUN_SETS_MOST, WORKOUT_SAVE_LIMITS, type PhoneLibraryEntry, type RunExercise } from "@app/shared";
 import { useState, type ReactNode } from "react";
-import { Image, Pressable, StyleSheet, View } from "react-native";
+import { Image, Pressable, StyleSheet, TextInput, View } from "react-native";
 import { Button } from "../../look/Button";
 import { Badge, Card } from "../../look/Card";
 import { colours, sizes } from "../../look/colours";
@@ -8,25 +8,59 @@ import { Icon } from "../../look/Icon";
 import { Page } from "../../look/Page";
 import { pictures } from "../../look/pictures";
 import { PictureTop } from "../../look/PictureTop";
-import { Txt } from "../../look/Txt";
+import { Sheet } from "../../look/Sheet";
+import { fonts, Txt } from "../../look/Txt";
+import { NAME_MOST, type Item } from "../../library/myWorkout";
 import { exercisePicture } from "../../library/pictures";
 import type { Units } from "../../library/records";
 import type { LibraryFile } from "../../library/store";
-import { equipmentLine, targetLine } from "../../library/words";
-import { COMING_SOON } from "../Soon";
+import { estimate, planLine, planOf, summaryLine } from "../../library/workoutSetup";
+import { clock } from "../workout/words";
+import { useWorkoutLayer } from "../workout/WorkoutLayer";
+import { ProgressPage } from "../progress/ProgressPage";
 import { ExercisePage } from "./ExercisePage";
+import { SetUpSheet } from "./SetUpSheet";
 import { useLibrary, useMyWorkout, useSetupFacts } from "./useLibrary";
 
-/** Workout → My Workout (ROADMAP Stage 5 63c, as drawn): the exercises the person added from the Library, in the
- *  order they added them, each opening its page, each with its ✕. Starting it comes with job 64a. */
+/** Workout → My Workout (ROADMAP Stage 5 63c, 64a-i, as drawn): the workout's name, about how long and how many
+ *  calories, and the exercises the person added from the Library, in their order, each with its sets in one line.
+ *  A row opens its sets to set up; Reorder moves them; Clear asks first. Start workout does it (64a-ii), and while it
+ *  goes on, Open workout opens it again. */
 export function MyWorkoutPart({ parts, units, onBrowse, file }: { parts: ReactNode; units: Units; onBrowse: () => void; file?: LibraryFile }) {
   const { state } = useLibrary(file);
   const facts = useSetupFacts();
   const mine = useMyWorkout();
-  const [open, setOpen] = useState<string | null>(null);
+  const [page, setPage] = useState<string | null>(null);
+  const [setUp, setSetUp] = useState<string | null>(null);
+  const [reorder, setReorder] = useState(false);
+  const [asking, setAsking] = useState(false);
+  const [weighing, setWeighing] = useState(false);
+  // Start workout pressed while the last workout is still being kept on the phone (round one, H3).
+  const [busy, setBusy] = useState(false);
   const library = state.kind === "ready" ? state.library : null;
-  const list = mine?.list ?? [];
-  const opened = library?.exercises.find((e) => e.id === open) ?? null;
+  const entryOf = (id: string): PhoneLibraryEntry | null => library?.exercises.find((e) => e.id === id) ?? null;
+  const liveOf = (id: string): PhoneLibraryEntry | null => {
+    const e = entryOf(id);
+    return e !== null && e.status === "live" ? e : null;
+  };
+  const items = mine?.workout.items ?? [];
+  const count = items.length;
+  const opened = page === null ? null : entryOf(page);
+  const settingUp = setUp === null ? null : liveOf(setUp);
+  const settingItem = items.find((i) => i.id === setUp) ?? null;
+  const settingPlan = settingItem === null ? null : planOf(settingItem, settingUp);
+  const sum = estimate(items, liveOf, facts.weightKg);
+  const layer = useWorkoutLayer();
+  const going = layer?.run ?? null;
+  const refused = layer?.waiting.refused ?? [];
+  // What Start workout does: each exercise the Library still offers, with its sets as set up.
+  const toDo: RunExercise[] = items.flatMap((item) => {
+    const entry = liveOf(item.id);
+    const plan = planOf(item, entry);
+    if (entry === null || plan === null) return [];
+    return [{ exercise: entry.id, name: entry.text.en.name, kind: entry.kind, measuredIn: plan.measuredIn, barbell: entry.equipment.includes("barbell"), sets: plan.sets.slice(0, RUN_SETS_MOST) }];
+  });
+  const setCount = toDo.reduce((n, e) => n + e.sets.length, 0);
 
   const top = (
     <PictureTop
@@ -34,16 +68,42 @@ export function MyWorkoutPart({ parts, units, onBrowse, file }: { parts: ReactNo
       tall={0.62}
       eyebrow="My Workout"
       foot={
-        <Txt kind="hero" numberOfLines={1}>
-          {`${String(list.length)} ${list.length === 1 ? "Exercise" : "Exercises"}`}
-        </Txt>
+        <View style={styles.foot}>
+          <View style={styles.nameRow}>
+            <TextInput
+              value={mine?.workout.name ?? ""}
+              onChangeText={(t) => {
+                mine?.rename(t);
+              }}
+              placeholder="Name this workout"
+              placeholderTextColor={colours.textFaint}
+              maxLength={NAME_MOST}
+              accessibilityLabel="Workout name"
+              returnKeyType="done"
+              style={styles.name}
+            />
+            <Icon name="pen" size={16} colour="textSoft" />
+          </View>
+          {count === 0 ? null : <Txt kind="body">{summaryLine(count, sum, units)}</Txt>}
+          {count === 0 || sum.assumedKg === null || sum.kcal === null ? null : (
+            <Button
+              label="Add your weight"
+              kind="link"
+              small
+              style={styles.start2}
+              onPress={() => {
+                setWeighing(true);
+              }}
+            />
+          )}
+        </View>
       }
     />
   );
   return (
     <Page top={top}>
       {parts}
-      {list.length === 0 ? (
+      {count === 0 ? (
         <Card style={styles.middle}>
           <Badge icon="dumbbell" />
           <Txt kind="h3">No exercises yet</Txt>
@@ -52,29 +112,149 @@ export function MyWorkoutPart({ parts, units, onBrowse, file }: { parts: ReactNo
         </Card>
       ) : (
         <>
+          <View style={styles.tools}>
+            <Button
+              label={reorder ? "Done" : "Reorder"}
+              kind="link"
+              say={reorder ? "Done reordering" : "Reorder exercises"}
+              onPress={() => {
+                setReorder((r) => !r);
+              }}
+            />
+            <Button
+              label="Clear"
+              kind="dangerLink"
+              say="Clear this workout"
+              onPress={() => {
+                setAsking(true);
+              }}
+            />
+          </View>
           <View style={styles.rows}>
-            {list.map((id) => (
+            {items.map((item, i) => (
               <Row
-                key={id}
-                id={id}
-                entry={library?.exercises.find((e) => e.id === id) ?? null}
+                key={item.id}
+                item={item}
+                entry={entryOf(item.id)}
+                units={units}
+                reorder={reorder}
+                first={i === 0}
+                last={i === count - 1}
                 onOpen={() => {
-                  setOpen(id);
+                  setSetUp(item.id);
                 }}
                 onRemove={() => {
-                  mine?.remove(id);
+                  mine?.remove(item.id);
+                }}
+                onMove={(by) => {
+                  mine?.move(item.id, by);
                 }}
               />
             ))}
           </View>
+          <Button label="Add exercises" kind="link" icon="plus" style={styles.self} onPress={onBrowse} />
+          {refused.length === 0 ? null : (
+            <View style={styles.refused}>
+              <Icon name="warn" size={18} colour="badText" />
+              <Txt kind="strong" colour="badText" style={styles.grow}>
+                {refused.length === 1 ? "A workout couldn't be saved." : `${String(refused.length)} workouts couldn't be saved.`}
+              </Txt>
+              <Button
+                label="OK"
+                kind="link"
+                onPress={() => {
+                  for (const r of refused) layer?.dismissRefused(r.workoutId);
+                }}
+              />
+            </View>
+          )}
           <View style={styles.start}>
-            <Button label="Start workout" wide disabled onPress={() => undefined} />
-            <Txt kind="small" style={styles.centre}>
-              {COMING_SOON}
-            </Txt>
+            {going === null && busy ? (
+              <Txt kind="small" colour="text" style={styles.centre}>
+                Your last workout is still being kept on this phone. Try again in a moment.
+              </Txt>
+            ) : null}
+            {going === null && setCount > RUN_SETS_LIMIT ? (
+              <Txt kind="small" style={styles.centre}>
+                {`One workout holds ${String(RUN_SETS_LIMIT)} sets. The first ${String(RUN_SETS_LIMIT)} are done.`}
+              </Txt>
+            ) : null}
+            {going === null ? (
+              <Button
+                label="Start workout"
+                wide
+                raised
+                disabled={layer === null || toDo.length === 0}
+                onPress={() => {
+                  setBusy(layer?.start(mine?.workout.name ?? "", toDo) === "busy");
+                }}
+              />
+            ) : (
+              <>
+                <Button label="Open workout" wide raised onPress={() => layer?.open()} />
+                <Txt kind="small" style={styles.centre}>
+                  {`${going.paused ? "Paused" : "In progress"} · ${clock(going.activeMs)}`}
+                </Txt>
+              </>
+            )}
           </View>
         </>
       )}
+      {settingUp === null || settingPlan === null || setUp === null ? null : (
+        <SetUpSheet
+          entry={settingUp}
+          plan={settingPlan}
+          units={units}
+          onChange={(plan) => {
+            mine?.plan(setUp, plan);
+          }}
+          onAbout={() => {
+            setSetUp(null);
+            setPage(setUp);
+          }}
+          onClose={() => {
+            setSetUp(null);
+          }}
+        />
+      )}
+      <Sheet
+        open={asking}
+        title="Clear this workout?"
+        onClose={() => {
+          setAsking(false);
+        }}
+      >
+        <Txt kind="body">{`All ${String(count)} ${count === 1 ? "exercise" : "exercises"} will be removed.`}</Txt>
+        <View style={styles.two}>
+          <Button
+            label="Keep it"
+            kind="plain"
+            style={styles.half}
+            onPress={() => {
+              setAsking(false);
+            }}
+          />
+          <Button
+            label="Clear workout"
+            kind="danger"
+            icon="trash"
+            style={styles.half}
+            onPress={() => {
+              mine?.clear();
+              setReorder(false);
+              setAsking(false);
+            }}
+          />
+        </View>
+      </Sheet>
+      <ProgressPage
+        open={weighing}
+        first="body"
+        onClose={() => {
+          setWeighing(false);
+          facts.again();
+        }}
+      />
       {opened === null ? null : (
         <ExercisePage
           entry={opened}
@@ -83,10 +263,10 @@ export function MyWorkoutPart({ parts, units, onBrowse, file }: { parts: ReactNo
           weightKg={facts.weightKg}
           onWeighed={facts.again}
           onOpenMine={() => {
-            setOpen(null);
+            setPage(null);
           }}
           onClose={() => {
-            setOpen(null);
+            setPage(null);
           }}
         />
       )}
@@ -94,17 +274,31 @@ export function MyWorkoutPart({ parts, units, onBrowse, file }: { parts: ReactNo
   );
 }
 
-/** One exercise: its picture, name and starting target; one no longer in the Library says so, and can still go. */
-function Row({ id, entry, onOpen, onRemove }: { id: string; entry: PhoneLibraryEntry | null; onOpen: () => void; onRemove: () => void }) {
-  const name = entry?.text.en.name ?? id;
+interface RowProps {
+  item: Item;
+  entry: PhoneLibraryEntry | null;
+  units: Units;
+  reorder: boolean;
+  first: boolean;
+  last: boolean;
+  onOpen: () => void;
+  onRemove: () => void;
+  onMove: (by: -1 | 1) => void;
+}
+
+/** One exercise: its picture, name and sets. A press sets up its sets; one no longer in the Library says so, and can
+ *  still go. Reordering, its ✕ gives way to up and down. */
+function Row({ item, entry, units, reorder, first, last, onOpen, onRemove, onMove }: RowProps) {
+  const name = entry?.text.en.name ?? item.id;
   const live = entry !== null && entry.status === "live";
-  const line = entry === null ? null : live ? [targetLine(entry), equipmentLine(entry)].filter((x) => x !== null).join(" · ") : null;
+  const plan = live ? planOf(item, entry) : null;
+  const line = plan === null || entry === null ? "No longer in the Library" : planLine(plan, units, entry.set.eachSide);
   return (
     <View style={styles.row}>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={live ? `${name}. Open its page` : name}
-        disabled={!live}
+        accessibilityLabel={live ? `${name}, ${line}. Set up its sets` : `${name}, ${line}`}
+        disabled={!live || reorder}
         onPress={onOpen}
         style={({ pressed }) => [styles.rowMain, pressed ? styles.pressed : null]}
       >
@@ -119,29 +313,56 @@ function Row({ id, entry, onOpen, onRemove }: { id: string; entry: PhoneLibraryE
           <Txt kind="strong" numberOfLines={1}>
             {name}
           </Txt>
-          <Txt kind="small" numberOfLines={1}>
-            {line ?? "No longer in the Library"}
+          <Txt kind="small" numberOfLines={2}>
+            {line}
           </Txt>
         </View>
       </Pressable>
-      <Pressable accessibilityRole="button" accessibilityLabel={`Remove ${name}`} onPress={onRemove} style={styles.remove} hitSlop={6}>
-        <Icon name="x" size={18} colour="textSoft" />
-      </Pressable>
+      {reorder ? (
+        <>
+          <Arrow name="up" say={`Move ${name} up`} disabled={first} onPress={() => { onMove(-1); }} />
+          <Arrow name="down" say={`Move ${name} down`} disabled={last} onPress={() => { onMove(1); }} />
+        </>
+      ) : (
+        <Pressable accessibilityRole="button" accessibilityLabel={`Remove ${name}`} onPress={onRemove} style={styles.icon} hitSlop={6}>
+          <Icon name="x" size={18} colour="textSoft" />
+        </Pressable>
+      )}
     </View>
   );
 }
 
+function Arrow({ name, say, disabled, onPress }: { name: "up" | "down"; say: string; disabled: boolean; onPress: () => void }) {
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel={say} accessibilityState={{ disabled }} disabled={disabled} onPress={onPress} style={[styles.icon, disabled ? styles.faint : null]}>
+      <Icon name={name} size={18} colour="textSoft" />
+    </Pressable>
+  );
+}
+
+/** As many sets as one workout holds; past it, Start workout does the first ones (round one, L3). */
+const RUN_SETS_LIMIT = WORKOUT_SAVE_LIMITS.setsMost;
+
 const styles = StyleSheet.create({
   grow: { flex: 1 },
   pressed: { opacity: 0.85 },
+  faint: { opacity: 0.25 },
   centre: { textAlign: "center" },
   self: { alignSelf: "center" },
   middle: { alignItems: "center", gap: 10 },
+  foot: { gap: 4 },
+  nameRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  name: { flex: 1, minHeight: sizes.press, padding: 0, fontFamily: fonts.bold, fontSize: 28, color: colours.text },
+  tools: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   rows: { gap: 8 },
   row: { flexDirection: "row", alignItems: "center", gap: 4, paddingVertical: 8, paddingLeft: 10, paddingRight: 4, borderRadius: 16, borderWidth: 1, borderColor: colours.line, backgroundColor: colours.raised },
   rowMain: { flex: 1, flexDirection: "row", alignItems: "center", gap: 12 },
   thumb: { width: 52, height: 52, borderRadius: 12, overflow: "hidden", alignItems: "center", justifyContent: "center", backgroundColor: colours.box },
   thumbPicture: { width: "100%", height: "100%" },
-  remove: { width: sizes.press, height: sizes.press, alignItems: "center", justifyContent: "center" },
+  icon: { width: sizes.press, height: sizes.press, alignItems: "center", justifyContent: "center" },
   start: { gap: 6, marginTop: 6 },
+  refused: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 4, paddingHorizontal: 12, borderRadius: 16, borderWidth: 1, borderColor: colours.badLine, backgroundColor: colours.badFill },
+  start2: { alignSelf: "flex-start" },
+  two: { flexDirection: "row", gap: 10 },
+  half: { flex: 1 },
 });

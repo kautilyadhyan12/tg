@@ -48,6 +48,10 @@
    "kept": "0c527a7e64f5a2ef6aafeeddf309e5270eaf6a586d05da1bebaed278c4271f89",
    "pictures": "4c781c1bf34e79e7fe35f0534dd0bc82c0b16649f8d534707f59ff3e6f1edc92"
   },
+  "floor_phone_test.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "023bdc68c259df01ea372e9cb1be961e3c56be8c7e3ca9fb0b8797511a0920a1",
+   "pictures": "c33cd905d4cac9186fed9f4d505c4e781063c548d4899854e5660e2cdf854153"
+  },
   "fresh_back_squat_barbell.pose_landmarker_full.cpu.t4.bodypoints": {
    "kept": "407fc6e79abd934fd1b58f72d228130480080153c2fbf57cb0fa1439e6fc3d53",
    "pictures": "5a6fef6920082b4275501540aae42d704844a6c476d34e601a7b9dea3a6e8953"
@@ -327,6 +331,58 @@
   "swing_kettlebell.pose_landmarker_full.cpu.t4.bodypoints": {
    "kept": "022272884c1bf5d0b7aaabeb62bd536086cdc31c4a88bdb015cb1a8621a62997",
    "pictures": "4d9a446a5b3c479188251626cebcdbf588326f7fa48b4cce50bc665fe9fefeb8"
+  },
+  "usual_v02.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "0a96518b257a0635ed223a9afc62b01a49cd6008b5ad9ac6066124ddadf83a7c",
+   "pictures": "ea23eb663484da1cf7e7c99f7802961bd72db08492ad17abb8e7b77bda0eddbf"
+  },
+  "usual_v03.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "0da6dd3d286d153e3e3102cbaa8c4e78027dbbc75afa68101307406ae234dba9",
+   "pictures": "d9cbd8f3a1eb8abcac6291c963118cbb5b90f6c2111c6cb91ae1db4b2d5da614"
+  },
+  "usual_v04.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "490c374accbcd5e80d72c67af894dfbd4045fff42c1ce8f90becc99cfa65375f",
+   "pictures": "7dfd43ace4b952993d0bec7f66d6961212db76b8f0032e50218d63eb4e2dadd5"
+  },
+  "usual_v05.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "5abb693f393c1dabab99213e95524023e614587ec9394978f9fde28c8f290821",
+   "pictures": "08330c60797db093f982bb52372b9be4d9043af41176db1c5235ef422d8c0936"
+  },
+  "usual_v06.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "9775742146d067fef6a96d746980ce854ec8b33f44c05025e2f202616587f025",
+   "pictures": "bb17fabd816078cc205f49e6d5165dacf4a843feecbd049c241ac6f591c9f810"
+  },
+  "usual_v07.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "7687aec7dc6fa1af2d6987af6e18e1a05ac490c95c06f533847ff729a7644ddb",
+   "pictures": "8a44b72ff410570b9b93720c4a95523582eebfb6258d819b9de8f7537c51baa1"
+  },
+  "usual_v08.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "e235fd83185dd49c71db45bdbdd46ff34f55441f995e41ad337421a9d849635a",
+   "pictures": "29198882c43c3da23ad7af3ad1adc0c23751a06600849af0c83b2357f9c26f78"
+  },
+  "usual_v09.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "b2f28b2c32760f9c7673fb795c73edf0ca468d79a65af6312d3ba5ceb5362f8f",
+   "pictures": "2c98b8f94cb6c13a7700456911854575c48da254ba8631f21f40247e3fb9ae6c"
+  },
+  "usual_v10.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "6e77f260510ed13c04bac8355fcd1816056a799ac820cb1cd714927707f30672",
+   "pictures": "2ab5939d68f6f3908dc6211c9177d99fa7e95e76c28049bcfdac0cd9cbfbb726"
+  },
+  "usual_v11.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "e9f6f3f98f7b27d7b5737c32734a3ad8025a0e88af06d0ca668c485f42e36707",
+   "pictures": "c73f8b4d2734ca6b95f4206fcf7e140506bf8e9277915820395d8fd0e286a03e"
+  },
+  "usual_v12.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "4335ac46dfd9fdd5bc4974fd07c2fcd7c3c112eb9229b45cfa22b28ef8cf9e88",
+   "pictures": "2da4df72240a83ab212eb72b83dd32d53acb53ab83efb711b0b97caf5886a110"
+  },
+  "usual_v13.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "21df34d3e1d5c9aa49584c1efb35e880f67d89e423837117e2bc0bb2589c4170",
+   "pictures": "6bf19fb8f9917e610cf647da8bf0ee6da6b9f40ac7f5b2f52d5d03e4fbc3c7e8"
+  },
+  "usual_v14.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "bba9d5397e481d21449cfcf71df38ee587c01a68cc4f9ba563b9d4ef5741e0a3",
+   "pictures": "98961855cc4fbe916388d39c20782479738941e94f23569a130afdf4dabed259"
   }
  }
 }

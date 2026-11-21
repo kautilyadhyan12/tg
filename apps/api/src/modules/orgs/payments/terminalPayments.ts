@@ -28,6 +28,7 @@ import {
   MEMBER_FEE_WORDS,
   TERMINAL_AGREEMENT,
   TERMINAL_KEEP_DISAGREE,
+  TERMINAL_KEEP_WORDS_MOST,
   TERMINAL_PAYMENT_WORDS,
   cardAgreementWords,
   formatMinor,
@@ -755,6 +756,8 @@ async function keepAsk(deps: PaymentsDeps, gymId: string, gym: repo.GymForPaymen
   if (membership === undefined) throw new OrgsError(404, "held_membership_not_found", "That membership was not found.");
   // Its terms too, as its agreement says them (Kd, 2026-11-04).
   const words = terminalKeepWords(renewingMembershipLine(membership, held.taxIncluded), cardAgreementWords(gym.name), membershipTermLines(membership));
+  // Words the agreement table cannot keep: refused here, never after Square has saved the card.
+  if (words.length > TERMINAL_KEEP_WORDS_MOST) throw new OrgsError(409, "keep_card_not_offered", TERMINAL_PAYMENT_WORDS.keep_card_not_offered);
   return { words, confirmKey: randomUUID(), cardKey: randomUUID() };
 }
 

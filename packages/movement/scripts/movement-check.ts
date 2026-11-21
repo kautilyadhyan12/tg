@@ -8,7 +8,7 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
-import { MOVEMENTS, holds, openRow, proofTable, readMovement, replayTable, withNumbers, type Fitted } from "./movementCheck.js";
+import { LIFT_CEILING, MOVEMENTS, holds, openRow, proofTable, readMovement, replayTable, withNumbers, type Fitted } from "./movementCheck.js";
 
 const { values, positionals } = parseArgs({ allowPositionals: true, options: { write: { type: "boolean", default: false }, replays: { type: "boolean", default: false } } });
 const name = positionals[0] ?? "squat";
@@ -33,13 +33,22 @@ console.log("\nEvery video: reps by eye, counted, counted with that person left 
 for (const r of rows) {
   const eye = r.entry.reps === null ? "?" : String(r.entry.reps);
   const right =
-    r.entry.reps === null ? "reported" : r.count === r.entry.reps && (r.leftOut === null || r.leftOut === r.entry.reps) ? "right" : r.entry.open !== undefined ? "OPEN" : "WRONG";
+    r.entry.reps === null
+      ? "reported"
+      : r.count === r.entry.reps && (r.leftOut === null || r.leftOut === r.entry.reps)
+        ? "right"
+        : r.entry.open !== undefined || (r.count === r.entry.reps && r.leftOut === r.entry.leftOutOpen?.count)
+          ? "OPEN"
+          : "WRONG";
   const why = r.reps.filter((x) => x.verdict !== "counted").map((x) => `${(x.start / 1000).toFixed(1)}s ${x.verdict}${x.rule === null ? "" : `: ${x.rule}`}`);
   console.log(
     `  ${pad(r.label, 40)} ${pad(r.entry.view, 7)} ${pad(r.entry.movement ?? "other", 6)} eye ${pad(eye, 2)} counted ${pad(String(r.count), 2)} left out ${pad(r.leftOut === null ? "-" : String(r.leftOut), 2)} ${pad(right, 8)} ${why.join("; ")}`,
   );
 }
 for (const r of rows.filter((x) => x.entry.open !== undefined)) console.log(`\nOpen: ${r.label}, counted ${String(r.count)}: ${r.entry.open ?? ""}`);
+for (const r of rows.filter((x) => x.entry.leftOutOpen !== undefined)) {
+  console.log(`\nOpen: ${r.label}, with that person left out counted ${String(r.leftOut)}: ${r.entry.leftOutOpen?.why ?? ""}`);
+}
 console.log(`\nThe most any set of numbers (all people, or one left out) counted on another movement's video, the open case aside: ${String(worstOther)}`);
 
 if (values.write) {
@@ -47,7 +56,8 @@ if (values.write) {
   const words = (f: Fitted): string => {
     const rule = movement.rules.find((r) => r.name === f.rule);
     const how = rule?.role === "count" ? "a quarter of the way back towards standing from the shallowest rep" : "beyond the furthest rep by half its distance from the middle rep";
-    return `Set by movement-check from ${String(people.length)} people's videos (scripts/movementVideos.ts), as filmed and as each replay that sets numbers (scripts/replays.ts), ${String(f.reps)} reps: ${how} (${num(Math.round(f.from * 100) / 100)}; standing ${num(Math.round(f.standing * 100) / 100)}).`;
+    const ceiling = rule?.read.kind === "lift" ? `, and no higher than an 8 cm jump seen at 8 pictures a second less 2 cm (LIFT_CEILING in scripts/movementCheck.ts, ${LIFT_CEILING.toFixed(3)})` : "";
+    return `Set by movement-check from ${String(people.length)} people's videos (scripts/movementVideos.ts), as filmed and as each replay that sets numbers (scripts/replays.ts), ${String(f.reps)} reps: ${how} (${num(Math.round(f.from * 100) / 100)}; standing ${num(Math.round(f.standing * 100) / 100)})${ceiling}.`;
   };
   const out = withNumbers(movement, fitted);
   const json = { ...out, rules: out.rules.map((r) => ({ ...r, from: words(fitted.find((f) => f.rule === r.name) ?? { rule: r.name, bound: 0, from: 0, standing: 0, reps: 0 }) })) };

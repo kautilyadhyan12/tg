@@ -28,11 +28,19 @@ type WorkoutPart = "exercises" | "mine" | "running";
 
 
 // The streak reminder's tap opens Workout on Running (19e-ii): a run is what keeps a streak from the phone today.
-let runningAsked = false;
-const runningWatchers = new Set<() => void>();
+/** The Workout tab's part asked for from outside it: Running from a notification or Progress, Exercises from the
+ *  workout's last screen (New workout, 64a-iii). The tab takes it when it next shows. */
+let partAsked: WorkoutPart | null = null;
+const partWatchers = new Set<() => void>();
+function askPart(part: WorkoutPart): void {
+  partAsked = part;
+  for (const watcher of partWatchers) watcher();
+}
 export function openRunning(): void {
-  runningAsked = true;
-  for (const watcher of runningWatchers) watcher();
+  askPart("running");
+}
+export function openExercises(): void {
+  askPart("exercises");
 }
 
 /** Exercises, My Workout and Running across the picture's top, as drawn (docs/design/phone/pages/Workout):
@@ -44,14 +52,14 @@ export function WorkoutScreen() {
   const [part, setPart] = useState<WorkoutPart>("exercises");
   useEffect(() => {
     const take = () => {
-      if (!runningAsked) return;
-      runningAsked = false;
-      setPart("running");
+      if (partAsked === null) return;
+      setPart(partAsked);
+      partAsked = null;
     };
     take();
-    runningWatchers.add(take);
+    partWatchers.add(take);
     return () => {
-      runningWatchers.delete(take);
+      partWatchers.delete(take);
     };
   }, []);
   const mine = useMyWorkout();

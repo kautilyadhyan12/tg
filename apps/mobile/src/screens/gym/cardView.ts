@@ -19,7 +19,7 @@ export function cardRefusalLine(code: string, serverWords: string, gymName: stri
     case "card_connection_refused":
     case "card_processing_off":
     case "card_not_taken":
-      return `${gymName} can’t save cards in the app right now. Ask at the front desk.`;
+      return cardsNotSavedLine(gymName);
     case "card_contact_refused":
       return "Square didn’t accept the email address or phone number the gym has for you. Ask at the front desk to check them.";
     case "card_customer_gone":
@@ -30,6 +30,22 @@ export function cardRefusalLine(code: string, serverWords: string, gymName: stri
     default:
       return serverWords;
   }
+}
+
+/** "Iron House can't save cards in the app right now. Ask at the front desk." */
+export const cardsNotSavedLine = (gymName: string): string => `${gymName} can’t save cards in the app right now. Ask at the front desk.`;
+
+/** Said in Card on file's place, opened from a card request, where the card could not be read. */
+export const CARD_NOT_READ = "Couldn’t load your card.";
+
+/** A place's card request opened My membership (20l): `add` opens Add card at once, where the box itself would offer it;
+ *  `box` leaves the box to say how things stand (a card on file, somebody else pays, or a record My membership already
+ *  explains); `off` says in the box's place that the place takes no cards in the app now. */
+export function askedCardStep(view: MyCardView): "add" | "box" | "off" {
+  const box = cardBox(view);
+  if (box?.kind === "none" && box.button === ADD_CARD) return "add";
+  if (box !== null || view.record !== "own") return "box";
+  return "off";
 }
 
 /** Said where the server gives no reason a card stays (an older server). */

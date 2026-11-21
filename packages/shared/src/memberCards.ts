@@ -52,9 +52,11 @@ export function cardExpiryWords(card: { expMonth: number; expYear: number }, tod
 }
 
 /** What the person ticks before their card is saved (Kd, 2026-10-20): it takes the place of
- *  Square's own signed form, and is kept word for word with the time and the screen. */
+ *  Square's own signed form, and is kept word for word with the time and the screen. Since 20l (Kd's own words, 2026-11-21) in a card
+ *  authorization's standard words, naming both ways to remove it: in the app while nothing can be charged to it (20e's
+ *  three reasons a card stays, `myCardStaysSchema`, each named), or at the front desk. */
 export function cardAgreementWords(gymName: string): string {
-  return `I agree that ${gymName} may save this card and charge it for my membership and any fees when they are due. I can remove it at the front desk at any time.`;
+  return `I authorize ${gymName} to save this card and charge it for recurring membership payments, any late cancellation or no-show fees in its booking policy, and any other charges I separately approve. I can remove this card in the app if it isn’t linked to another member’s account and there are no upcoming or unpaid payments associated with it. I can also ask the front desk to remove it at any time.`;
 }
 
 /** A full name as Square's given and family names: the last word is the family name, as gym

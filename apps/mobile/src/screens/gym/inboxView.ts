@@ -1,4 +1,4 @@
-import { inboxAge, reviewLinkSchema, unreadBadge, type GymInboxMessage } from "@app/shared";
+import { CARD_REQUEST_MESSAGE_KIND, inboxAge, reviewLinkSchema, unreadBadge, type GymInboxMessage } from "@app/shared";
 
 // A member's inbox from their place, as the phone draws it (spec Part 3 §16.1; ROADMAP Stage 5 item 18a). The words
 // are the browser's own, from @app/shared; this file only adds what the phone draws differently.
@@ -18,12 +18,14 @@ export interface InboxRow {
   isNew: boolean;
   /** The gym's review page, for Ask for a review; null for every other message. */
   link: string | null;
+  /** The place asked for a card (18d-vii): Add card under it opens My membership there, on Add card (20l). */
+  addCard: boolean;
 }
 
 /** One message as the list draws it. Only a plain https page is ever a button: the server's own rule, read again. */
 export function inboxRow(message: GymInboxMessage, nowMs: number): InboxRow {
   const link = message.kind === "review" && reviewLinkSchema.safeParse(message.link).success ? message.link : null;
-  return { id: message.id, body: message.body, when: inboxAge(message.sentAt, nowMs), isNew: !message.read, link };
+  return { id: message.id, body: message.body, when: inboxAge(message.sentAt, nowMs), isNew: !message.read, link, addCard: message.kind === CARD_REQUEST_MESSAGE_KIND };
 }
 
 /** The Inbox button's words: "Inbox", or "Inbox (3)" with new messages waiting. */

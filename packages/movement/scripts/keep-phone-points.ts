@@ -66,7 +66,8 @@ function keep(keptPath: string, label: string, run: string): void {
 mkdirSync(join(TEST, "phone-points"), { recursive: true });
 for (const gap of PHONE_GAPS) for (const label of gap.videos) keep(join(TEST, "body-points", `${label}.bodypoints`), label, gap.run);
 const missing: string[] = [];
-for (const entry of MOVEMENT_VIDEOS) {
+// A video of several sets (`cut`) is one file and one phone run.
+for (const entry of MOVEMENT_VIDEOS.filter((e, k, all) => all.findIndex((x) => x.file === e.file) === k)) {
   const label = basename(entry.file);
   if (runFile(label, CHOSEN) === null) missing.push(label);
   else keep(join(TEST, `${entry.file}.bodypoints`), label, CHOSEN);

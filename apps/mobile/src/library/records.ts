@@ -108,9 +108,9 @@ export function oneRepMaxGrams(r: ExerciseRecords): number | null {
 }
 
 /** The standard bar, and the standard plates largest first (red 25, blue 20, yellow 15, green 10, white 5, and the
- *  change plates in the same colours). */
+ *  change plates in the same colours, with the gym's chrome 1.25 that makes every 2.5 kg step: 64a-i). */
 export const BAR_KG = 20;
-export const PLATES_KG = [25, 20, 15, 10, 5, 2.5, 2, 1.5, 1, 0.5] as const;
+export const PLATES_KG = [25, 20, 15, 10, 5, 2.5, 2, 1.5, 1.25, 1, 0.5] as const;
 export type PlateKg = (typeof PLATES_KG)[number];
 
 /** Each plate as the bar draws it, in the drawing's units: its height and its thickness. */
@@ -123,6 +123,7 @@ export const PLATE_SIZE: Readonly<Record<PlateKg, { height: number; thick: numbe
   2.5: { height: 42, thick: 10 },
   2: { height: 38, thick: 9 },
   1.5: { height: 34, thick: 8 },
+  1.25: { height: 32, thick: 7 },
   1: { height: 30, thick: 7 },
   0.5: { height: 26, thick: 6 },
 };
@@ -135,16 +136,17 @@ export const sleeveTaken = (plates: readonly PlateKg[]): number => plates.reduce
 
 /** The plates that make up `kg` on one side, largest first; null where they cannot make it exactly. */
 export function platesFor(kg: number): PlateKg[] | null {
-  let half = Math.round(kg * 2);
-  if (half < 0 || Math.abs(kg * 2 - half) > 1e-6) return null;
+  // In quarter kilos, so the 1.25 is counted exactly.
+  let quarters = Math.round(kg * 4);
+  if (quarters < 0 || Math.abs(kg * 4 - quarters) > 1e-6) return null;
   const out: PlateKg[] = [];
   for (const p of PLATES_KG) {
-    while (half >= p * 2) {
+    while (quarters >= p * 4) {
       out.push(p);
-      half -= p * 2;
+      quarters -= p * 4;
     }
   }
-  return half === 0 ? out : null;
+  return quarters === 0 ? out : null;
 }
 
 /** The loaded bar of the heaviest set: a standard 20 kg bar, the plates a side that make the weight exactly, and the

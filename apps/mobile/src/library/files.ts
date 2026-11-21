@@ -3,6 +3,7 @@ import { isForgotten } from "../session/personFiles";
 import type { Sex } from "./figure";
 import { myWorkoutFileName, type ListFile } from "./myWorkout";
 import type { LibraryFile } from "./store";
+import type { TextStore } from "../screens/food/outbox";
 
 /** The kept Library: one file for each person on this phone, since the server gives each person their own channel's
  *  copy (beta or live), and it names them, so deleting the account removes it (`forgetPersonFiles`). Written to a
@@ -75,3 +76,35 @@ export function myWorkoutFile(userId: string): ListFile {
     },
   };
 }
+
+/** A file of a person's own in the app's documents folder, written to a second file and moved over the first, so a
+ *  phone that dies between the two still reads a whole copy; never written for an account already deleted, and
+ *  removed with the account (`forgetPersonFiles`), as its name names them. */
+function personFile(userId: string, name: string): TextStore {
+  if (userId === "") throw new Error("kept only for somebody signed in");
+  return {
+    read: async () => {
+      const file = new File(Paths.document, name);
+      if (file.exists) return await file.text();
+      const next = new File(Paths.document, `${name}.next`);
+      return next.exists ? await next.text() : null;
+    },
+    write: async (text) => {
+      if (isForgotten(userId)) return;
+      const next = new File(Paths.document, `${name}.next`);
+      if (next.exists) next.delete();
+      next.create();
+      next.write(text);
+      await next.move(new File(Paths.document, name), { overwrite: true });
+    },
+  };
+}
+
+/** The workout a person is doing (64a-ii), written at every step. */
+export const workoutRunFile = (userId: string): TextStore => personFile(userId, `workout-now-${userId}.json`);
+
+/** A person's finished workouts not yet on the server (64a-ii). */
+export const workoutsWaitingFile = (userId: string): TextStore => personFile(userId, `workouts-${userId}.json`);
+
+/** The effort stars a person gave their workouts, not yet on the server (64a-iii). */
+export const effortWaitingFile = (userId: string): TextStore => personFile(userId, `workout-effort-${userId}.json`);
