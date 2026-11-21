@@ -828,7 +828,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
                 - 52a-ii-b-ii. **The floor view for every other exercise** (split 2026-11-21 in two, the view first; `handoff/2026-11-21-52a-ii-b-ii-a.md` keeps its line as first written):
                     - 52a-ii-b-ii-a. [x] **Every proof video seen by a phone on the floor, and what a floor phone sees of each position** — merged 2026-11-21 (PR #613).
                     - 52a-ii-b-ii-b. **The floor mended** (split 2026-11-21 in two, the floor view first; `handoff/2026-11-21-52a-ii-b-ii-b-i.md` keeps its line as first written):
-                        - 52a-ii-b-ii-b-i. [ ] **The floor's own foot wander, measured and tried on the floor view**.
+                        - 52a-ii-b-ii-b-i. [x] **The floor's own foot wander, measured and tried on the floor view** — merged 2026-11-21 (PR #615).
                         - 52a-ii-b-ii-b-ii. [ ] **The floor mended in the engine** (after -i): in the shared engine, never by loosening the squat's numbers, what 52a-ii-b-i left open on his real floor videos (his first set side on under five replays and left out, his half-turned set done slowly, his last raised pair, 55 of 810 drawn jumps, two squats the phone misses), and his dull-floor set's third squat, done facing the phone after a turn, cut as a set of its own. The floor view stays shown (52a-ii-b-ii-b-i): its misses are shown, never proof.
         - 52a-iii. [x] **The phone's own runs judged by the laptop's count and reasons** — merged 2026-11-20 (PR #600).
     - 52b. **The form judge, the reason for a rep not counted, and the summary** (§12.1, §2.4; split 2026-11-20 in three, `handoff/2026-11-20-floor-phone-plan.md` keeps its line as first written):
