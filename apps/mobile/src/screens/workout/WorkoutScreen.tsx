@@ -57,7 +57,7 @@ function Doing({ run, units, press, onPutAway, onDiscard }: { run: WorkoutRun; u
   const top = (
     <View style={styles.topBar}>
       <Pressable accessibilityRole="button" accessibilityLabel="Put workout away" onPress={onPutAway} style={styles.topRound} hitSlop={4}>
-        <Icon name="down" size={22} colour="text" />
+        <Icon name="down" size={26} colour="text" />
       </Pressable>
       <View style={styles.topMiddle}>
         <Txt kind="strong" numberOfLines={1} style={styles.centre}>
@@ -73,10 +73,12 @@ function Doing({ run, units, press, onPutAway, onDiscard }: { run: WorkoutRun; u
         onPress={() => {
           press({ kind: run.paused ? "resume" : "pause" });
         }}
-        style={styles.topRound}
-        hitSlop={4}
+        style={styles.topPill}
       >
         <Icon name={run.paused ? "play" : "pause"} size={20} colour="text" filled />
+        <Txt kind="ticket" numberOfLines={1}>
+          {run.paused ? "Resume" : "Pause"}
+        </Txt>
       </Pressable>
       <Pressable
         accessibilityRole="button"
@@ -86,7 +88,7 @@ function Doing({ run, units, press, onPutAway, onDiscard }: { run: WorkoutRun; u
         }}
         style={styles.topEnd}
       >
-        <Txt kind="strong" colour="badText">
+        <Txt kind="ticket" colour="badText" numberOfLines={1}>
           End
         </Txt>
       </Pressable>
@@ -308,6 +310,8 @@ function Row({ label, less, more, onPress, disabled, children }: { label: string
 }
 
 const PLATE = 72;
+/** The top's buttons: taller than a press needs. */
+const TOP = 54;
 
 /** The set's weight as the set-up box's plate, smaller: its number above the hub, the unit below; "NONE" for none. */
 function Plate({ grams, units }: { grams: number | null; units: Units }) {
@@ -421,9 +425,11 @@ const styles = StyleSheet.create({
   pressed: { opacity: 0.85 },
   faint: { opacity: 0.35 },
   topBar: { flexDirection: "row", alignItems: "center", gap: 4, marginHorizontal: -10 },
-  topRound: { width: sizes.press, height: sizes.press, borderRadius: sizes.press / 2, alignItems: "center", justifyContent: "center", backgroundColor: colours.veil },
+  // Pause and End are pressed mid-set, from a step back: big enough to hit at a glance (Kd: "pause, end is too small").
+  topRound: { width: TOP, height: TOP, borderRadius: TOP / 2, alignItems: "center", justifyContent: "center", backgroundColor: colours.veil },
+  topPill: { flexDirection: "row", gap: 8, minHeight: TOP, paddingHorizontal: 16, borderRadius: TOP / 2, alignItems: "center", justifyContent: "center", backgroundColor: colours.veil },
   topMiddle: { flex: 1 },
-  topEnd: { minHeight: sizes.press, paddingHorizontal: 14, borderRadius: sizes.press / 2, alignItems: "center", justifyContent: "center", backgroundColor: colours.veil },
+  topEnd: { minHeight: TOP, paddingHorizontal: 18, borderRadius: TOP / 2, alignItems: "center", justifyContent: "center", backgroundColor: colours.veil },
   body: { paddingHorizontal: 16, paddingTop: 6, gap: 12 },
   wall: { paddingHorizontal: 14, paddingVertical: 4, borderRadius: 22, borderWidth: 1, borderColor: colours.timerEdge, backgroundColor: colours.timerFace },
   label: { fontFamily: fonts.bold, letterSpacing: 1.1, color: colours.timerWords },
