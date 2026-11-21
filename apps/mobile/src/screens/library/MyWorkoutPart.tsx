@@ -1,4 +1,4 @@
-import type { PhoneLibraryEntry } from "@app/shared";
+import { RUN_SETS_MOST, WORKOUT_SAVE_LIMITS, type PhoneLibraryEntry, type RunExercise } from "@app/shared";
 import { useState, type ReactNode } from "react";
 import { Image, Pressable, StyleSheet, TextInput, View } from "react-native";
 import { Button } from "../../look/Button";
@@ -15,7 +15,8 @@ import { exercisePicture } from "../../library/pictures";
 import type { Units } from "../../library/records";
 import type { LibraryFile } from "../../library/store";
 import { estimate, planLine, planOf, summaryLine } from "../../library/workoutSetup";
-import { COMING_SOON } from "../Soon";
+import { clock } from "../workout/words";
+import { useWorkoutLayer } from "../workout/WorkoutLayer";
 import { ProgressPage } from "../progress/ProgressPage";
 import { ExercisePage } from "./ExercisePage";
 import { SetUpSheet } from "./SetUpSheet";
@@ -23,7 +24,8 @@ import { useLibrary, useMyWorkout, useSetupFacts } from "./useLibrary";
 
 /** Workout → My Workout (ROADMAP Stage 5 63c, 64a-i, as drawn): the workout's name, about how long and how many
  *  calories, and the exercises the person added from the Library, in their order, each with its sets in one line.
- *  A row opens its sets to set up; Reorder moves them; Clear asks first. Starting it comes with job 64a-ii. */
+ *  A row opens its sets to set up; Reorder moves them; Clear asks first. Start workout does it (64a-ii), and while it
+ *  goes on, Open workout opens it again. */
 export function MyWorkoutPart({ parts, units, onBrowse, file }: { parts: ReactNode; units: Units; onBrowse: () => void; file?: LibraryFile }) {
   const { state } = useLibrary(file);
   const facts = useSetupFacts();
@@ -33,6 +35,8 @@ export function MyWorkoutPart({ parts, units, onBrowse, file }: { parts: ReactNo
   const [reorder, setReorder] = useState(false);
   const [asking, setAsking] = useState(false);
   const [weighing, setWeighing] = useState(false);
+  // Start workout pressed while the last workout is still being kept on the phone (round one, H3).
+  const [busy, setBusy] = useState(false);
   const library = state.kind === "ready" ? state.library : null;
   const entryOf = (id: string): PhoneLibraryEntry | null => library?.exercises.find((e) => e.id === id) ?? null;
   const liveOf = (id: string): PhoneLibraryEntry | null => {
@@ -46,6 +50,17 @@ export function MyWorkoutPart({ parts, units, onBrowse, file }: { parts: ReactNo
   const settingItem = items.find((i) => i.id === setUp) ?? null;
   const settingPlan = settingItem === null ? null : planOf(settingItem, settingUp);
   const sum = estimate(items, liveOf, facts.weightKg);
+  const layer = useWorkoutLayer();
+  const going = layer?.run ?? null;
+  const refused = layer?.waiting.refused ?? [];
+  // What Start workout does: each exercise the Library still offers, with its sets as set up.
+  const toDo: RunExercise[] = items.flatMap((item) => {
+    const entry = liveOf(item.id);
+    const plan = planOf(item, entry);
+    if (entry === null || plan === null) return [];
+    return [{ exercise: entry.id, name: entry.text.en.name, kind: entry.kind, measuredIn: plan.measuredIn, barbell: entry.equipment.includes("barbell"), sets: plan.sets.slice(0, RUN_SETS_MOST) }];
+  });
+  const setCount = toDo.reduce((n, e) => n + e.sets.length, 0);
 
   const top = (
     <PictureTop
@@ -138,11 +153,50 @@ export function MyWorkoutPart({ parts, units, onBrowse, file }: { parts: ReactNo
             ))}
           </View>
           <Button label="Add exercises" kind="link" icon="plus" style={styles.self} onPress={onBrowse} />
+          {refused.length === 0 ? null : (
+            <View style={styles.refused}>
+              <Icon name="warn" size={18} colour="badText" />
+              <Txt kind="strong" colour="badText" style={styles.grow}>
+                {refused.length === 1 ? "A workout couldn't be saved." : `${String(refused.length)} workouts couldn't be saved.`}
+              </Txt>
+              <Button
+                label="OK"
+                kind="link"
+                onPress={() => {
+                  for (const r of refused) layer?.dismissRefused(r.workoutId);
+                }}
+              />
+            </View>
+          )}
           <View style={styles.start}>
-            <Button label="Start workout" wide disabled onPress={() => undefined} />
-            <Txt kind="small" style={styles.centre}>
-              {COMING_SOON}
-            </Txt>
+            {going === null && busy ? (
+              <Txt kind="small" colour="text" style={styles.centre}>
+                Your last workout is still being kept on this phone. Try again in a moment.
+              </Txt>
+            ) : null}
+            {going === null && setCount > RUN_SETS_LIMIT ? (
+              <Txt kind="small" style={styles.centre}>
+                {`One workout holds ${String(RUN_SETS_LIMIT)} sets. The first ${String(RUN_SETS_LIMIT)} are done.`}
+              </Txt>
+            ) : null}
+            {going === null ? (
+              <Button
+                label="Start workout"
+                wide
+                raised
+                disabled={layer === null || toDo.length === 0}
+                onPress={() => {
+                  setBusy(layer?.start(mine?.workout.name ?? "", toDo) === "busy");
+                }}
+              />
+            ) : (
+              <>
+                <Button label="Open workout" wide raised onPress={() => layer?.open()} />
+                <Txt kind="small" style={styles.centre}>
+                  {`${going.paused ? "Paused" : "In progress"} · ${clock(going.activeMs)}`}
+                </Txt>
+              </>
+            )}
           </View>
         </>
       )}
@@ -286,6 +340,9 @@ function Arrow({ name, say, disabled, onPress }: { name: "up" | "down"; say: str
   );
 }
 
+/** As many sets as one workout holds; past it, Start workout does the first ones (round one, L3). */
+const RUN_SETS_LIMIT = WORKOUT_SAVE_LIMITS.setsMost;
+
 const styles = StyleSheet.create({
   grow: { flex: 1 },
   pressed: { opacity: 0.85 },
@@ -304,6 +361,7 @@ const styles = StyleSheet.create({
   thumbPicture: { width: "100%", height: "100%" },
   icon: { width: sizes.press, height: sizes.press, alignItems: "center", justifyContent: "center" },
   start: { gap: 6, marginTop: 6 },
+  refused: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 4, paddingHorizontal: 12, borderRadius: 16, borderWidth: 1, borderColor: colours.badLine, backgroundColor: colours.badFill },
   start2: { alignSelf: "flex-start" },
   two: { flexDirection: "row", gap: 10 },
   half: { flex: 1 },
