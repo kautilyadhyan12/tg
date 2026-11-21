@@ -187,7 +187,7 @@ describe("every proof video, as the phone's chosen set-up read it (51b-ii; kept 
     expect(own.reduce((n, r) => n + r.laptop.count, 0)).toBe(22);
     expect(own.reduce((n, r) => n + (r.phone?.count ?? 0), 0)).toBe(19);
     for (const r of own.filter((x) => x.verdict !== "same")) {
-      expect([r.label, r.laptop.count - (r.phone?.count ?? 0), /^5(2a-ii-b-ii-b|3), /.test(r.entry.phoneOpen?.why ?? "")]).toEqual([r.label, 1, true]);
+      expect([r.label, r.laptop.count - (r.phone?.count ?? 0), /^5(2a-ii-b-ii-b-ii|3), /.test(r.entry.phoneOpen?.why ?? "")]).toEqual([r.label, 1, true]);
     }
   });
 
