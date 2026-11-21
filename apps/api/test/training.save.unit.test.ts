@@ -3,8 +3,9 @@
 // time. No database.
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { kcalPerMinute, workoutSaveSchema, type SavedSet } from "@app/shared";
+import { KCAL_REST_MET, KCAL_WEIGHT_UNKNOWN_KG, kcalPerMinute, workoutSaveSchema, type SavedSet } from "@app/shared";
 import { kcalForSave, type KcalSet } from "../src/modules/training/calories.js";
+import { DEFAULT_WEIGHT_KG, REST_MET } from "../src/modules/workouts/calories.js";
 
 const set = (over: Partial<SavedSet> = {}): SavedSet => ({
   exercise: "squat",
@@ -144,5 +145,10 @@ describe("the phone's calories a minute (63c) are a saved workout's own", () => 
   it("a weight not known, or not above nothing, is reckoned at the same weight as the server's", () => {
     expect(kcalPerMinute(6, null)).toEqual({ kcal: minute(6, null), weightKg: 70, known: false });
     expect(kcalPerMinute(6, 0)).toMatchObject({ kcal: minute(6, 0), known: false });
+  });
+
+  it("My Workout's estimate (64a-i) rests at the server's rest MET and weight", () => {
+    expect(KCAL_REST_MET).toBe(REST_MET);
+    expect(KCAL_WEIGHT_UNKNOWN_KG).toBe(DEFAULT_WEIGHT_KG);
   });
 });

@@ -122,6 +122,7 @@ const PLATE_COLOUR: Readonly<Record<PlateKg, ColourName>> = {
   2.5: "plateRed",
   2: "plateBlue",
   1.5: "plateYellow",
+  1.25: "plateChrome",
   1: "plateGreen",
   0.5: "plateWhite",
 };
@@ -151,7 +152,7 @@ export function LoadedBar({ side, extra }: { side: readonly PlateKg[]; extra: re
       });
     }
   }
-  const said = `A bar loaded with ${side.map(String).join(", ")} kilogram plates a side`;
+  const said = side.length === 0 ? "An empty 20 kilogram bar" : `A bar loaded with ${side.map(String).join(", ")} kilogram plates a side`;
   return (
     <View accessible accessibilityLabel={said} testID="loaded-bar">
       <Svg width="100%" height={BAR_H} viewBox={`0 0 ${String(BAR_W)} ${String(BAR_H)}`}>

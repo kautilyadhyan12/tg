@@ -137,7 +137,7 @@ describe("the words an exercise is shown with", () => {
     expect(equipmentLine(real("plank"))).toBe("No equipment");
     expect(equipmentLine(real("barbell_curl"))).toBe("Barbell");
     expect(equipmentLine({ ...real("barbell_curl"), equipment: ["barbell", "bench"] })).toBe("Barbell +1");
-    expect(targetLine({ ...real("plank"), set: { measuredIn: "distance", start: { sets: 3 } } })).toBeNull();
+    expect(targetLine({ ...real("plank"), set: { measuredIn: "distance", eachSide: false, start: { sets: 3 } } })).toBeNull();
   });
 
   it("a word the phone does not know is shown plainly", () => {

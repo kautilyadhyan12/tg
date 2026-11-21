@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { useSession } from "../../session/SessionProvider";
 import type { Sex } from "../../library/figure";
 import { figureFile, libraryFile, myWorkoutFile } from "../../library/files";
-import { storeFor } from "../../library/myWorkout";
+import { EMPTY, storeFor, type MyWorkout, type MyWorkoutStore } from "../../library/myWorkout";
 import { readKept, refreshLibrary, type LibraryFile, type LibraryState } from "../../library/store";
 import { setupPath } from "../setup/useSetupAnswers";
 
@@ -88,14 +88,24 @@ export function useSetupFacts(): SetupFacts {
   return useMemo(() => ({ ...facts, again }), [facts, again]);
 }
 
-/** The person's My Workout (63c): the same list on every page that shows it; null with nobody signed in. */
-export function useMyWorkout(): { list: readonly string[]; add: (id: string) => void; remove: (id: string) => void } | null {
+/** The person's My Workout (63c, 64a-i): the same workout on every page that shows it; null with nobody signed in.
+ *  `list` is its exercises' ids, `workout` the whole of it, with its name and each exercise's sets. */
+export type MyWorkoutHook = Omit<MyWorkoutStore, "ready" | "workout" | "list" | "watch"> & { list: readonly string[]; workout: MyWorkout };
+
+export function useMyWorkout(): MyWorkoutHook | null {
   const { state } = useSession();
   const me = state.kind === "in" ? state.user.id : null;
   const store = useMemo(() => (me === null ? null : storeFor(me, myWorkoutFile(me))), [me]);
   const subscribe = useCallback((told: () => void) => (store === null ? () => undefined : store.watch(told)), [store]);
   const list = useSyncExternalStore(subscribe, () => store?.list() ?? NONE);
-  return store === null ? null : { list, add: store.add, remove: store.remove };
+  const workout = useSyncExternalStore(subscribe, () => store?.workout() ?? EMPTY);
+  return useMemo(
+    () =>
+      store === null
+        ? null
+        : { list, workout, add: store.add, remove: store.remove, move: store.move, plan: store.plan, rename: store.rename, clear: store.clear },
+    [store, list, workout],
+  );
 }
 
 const NONE: readonly string[] = [];

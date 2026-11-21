@@ -22,6 +22,11 @@ export const phoneLibraryEntrySchema = z.object({
   equipment: z.array(word).max(10),
   set: z.object({
     measuredIn: word,
+    /** Whether a set usually takes a weight ("never" · "may" · "usually"); a word the phone does not know is kept.
+     *  My Workout offers a weight on every exercise whatever it says (Kd, 64a-i's click-through). */
+    weight: word.optional().catch(undefined),
+    /** Whether a set is done for each side; one that cannot be read is "no". */
+    eachSide: z.boolean().catch(false).default(false),
     start: z.object({
       sets: z.number().int().min(1).max(50),
       reps: z.number().int().min(1).max(1000).optional(),

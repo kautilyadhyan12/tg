@@ -2583,6 +2583,45 @@ with a screen reader.
   (`my-workout-<id>.json`), removed with the account; at most 50. Start workout reads "Coming soon" until 64a.
 - **Not in 63c:** Goals' exercise picker on this list (its job is Kd's to place).
 
+**As built in 64a-i (2026-11-20, Kd's drawing of that day).** My Workout is now set up before it is done:
+- **Kept on the phone** in the same file (`my-workout-<id>.json`, removed with the account), now `{ v: 2, name, items }`:
+  each exercise in order with its plan (its unit and its sets, each a target, a weight in grams or none, and the rest
+  after it), checked by `plannedExerciseSchema` and at most 10 sets. An exercise nobody has changed keeps no plan and
+  shows the Library's starting numbers (its sets of its reps or time, no weight, 60 s of rest). 63c's `{ v: 1, ids }`
+  is read as exercises on those numbers, so the update loses nobody's list; a plan that cannot be read leaves its
+  exercise on them.
+- **The page:** the workout's name over the picture (typed in place, 60 characters, "Name this workout" until named),
+  and under it "3 exercises · about 14 min · about 95 kcal": a rep at 3 s, a set "each side" twice, the rest after
+  every set but the workout's very last, calories as a saved workout's (MET × kg × hours, rests at 1.8,
+  `KCAL_REST_MET` held to the server's by a test); where the person has given no weight, "about 95 kcal at 70 kg" with
+  Add your weight, as the exercise's page says it (round one, H2); none until the weight is heard or where one
+  exercise's MET is not known. Each row says its sets ("3 × 10 reps · 20 kg · rest 1:00", "4 sets · 10, 10, 10, 6
+  reps · 35 to 40 kg · rest 1:00", "on some sets" where a set has none). Reorder puts up and down in place of ✕; Clear
+  asks first and keeps the name; Add exercises opens the Library.
+- **Setting up one exercise** (`SetUpSheet.tsx`, rules `library/workoutSetup.ts`, table-tested): a box from the
+  bottom, About and Done at its foot.
+  - **The weight**, the same for every exercise and offered on every exercise from "None" (Kd's click-through: *"weight
+    needs to be a symbol tha can go with any exercises for representing weight not a barbell"*): a bumper plate in the
+    app's orange, light running deep as its main buttons, with a soft orange glow and a steel hub, the number above the
+    hub and the unit below, a small pop when it changes; black rubber reading "NONE" for no weight (Kd turned down a red
+    face and a black one: *"orange type vibe better"*). Always the same size, so the box never moves under a press.
+    − and + go 2.5 kg or 5 lb (a barbell exercise's + from none gives the empty 20 kg or 45 lb bar), up to 1,000 kg.
+  - **Type a weight**, under the plate or a tap on the plate (Kd: *"a manually writing weight with a option should also
+    be there"*), types it with the number keyboard, to one decimal: "47,5" is read, empty or 0 is no weight, words say
+    "Enter a weight such as 47.5." and past 1,000 kg "Enter a weight up to 1,000 kg.". What is typed is kept by every
+    way of leaving it (Done, ✕, the background, Back, About, another set, + or −); Done keeps the box open where it
+    cannot be read (round one, H1 and L2).
+  - **Sets** (amber), **reps or time** (red) and **rest** (green) on the LED wall timer, each with − and +. Time goes
+    5 s a press under a minute, 15 s to five minutes, 30 s past it, from 5 s to an hour; reps 1 to 1,000; rest 15 s a
+    press, to 10 minutes; sets 1 to 10, a new one a copy of the last.
+  - **The sets**, always listed under the controls, "Every set" at the top: the line picked is what the controls
+    change, and they always show its real numbers; a press on Every set gives every set the first set's number after
+    it (Kd's click-through: "--" and "varies" with presses that changed nothing he could see).
+  - **Your records** on the exercise's page keep 63c's loaded bar, with the chrome 1.25 kg change plate added so every
+    2.5 kg step is drawn there.
+- **The phone's reading of an exercise** now keeps `set.weight` and `set.eachSide` (`phoneLibraryEntrySchema`).
+- **Not in 64a-i:** Start workout reads "Coming soon" until 64a-ii; saving it as a saved workout is 64a-iv.
+
 ### 13.7 The jobs (ROADMAP Stage 5, exercise folder 2; ROADMAP wins where they differ)
 
 | Job | What it builds | Waits for |

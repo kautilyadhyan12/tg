@@ -303,7 +303,7 @@ export function privacyPolicy(facts: LegalFacts = LEGAL_FACTS): LegalDocument {
             "Badges and achievements.",
             "Participation in challenges.",
           ),
-          p("The exercises you add to My Workout are kept on your device, so that the list is there without an internet connection, and they are removed from your device when you delete your account."),
+          p("The exercises you add to My Workout, the name you give it and the sets, reps, times, weights and rests you set for each exercise are kept on your device, so that your workout is there without an internet connection, and they are removed from your device when you delete your account."),
           h3("3.6. Camera-Based Exercise Analysis"),
           p("Certain KWAZO features use your device's camera to analyze exercise movements and provide feedback."),
           p("Camera-based exercise analysis is performed locally on your device and operates only while you are actively using the relevant exercise functionality."),
