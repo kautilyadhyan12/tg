@@ -11,6 +11,7 @@ import {
   squareFinishResponseSchema,
   terminalPaymentResponseSchema,
   terminalPaymentsResponseSchema,
+  TERMINAL_KEEP_WORDS_MOST,
   type GymMembershipTypesResponse,
   type TerminalPaymentResponse,
 } from "@app/shared";
@@ -360,6 +361,40 @@ d("The card kept from a Terminal payment: only with their I agree, on their reco
     const laterWords = square.agreement(second.deviceId).words;
     expect(laterWords).toContain("Notice to cancel: 30 days.");
     expect(laterWords).not.toContain("Cooling-off period");
+  });
+
+  it("words too long to keep as the agreement (the longest names, every term, ten taxes): refused before the Terminal or Square hears of it", async () => {
+    clock = new Date();
+    const { gym, desk } = await setUp("Long");
+    // The longest names the app takes: a business of 120 letters, a membership of 80, ten taxes of 30.
+    const longName = `Keep Long ${"N".repeat(110)}`;
+    await sql`UPDATE gyms SET name = ${longName} WHERE id = ${gym.id}`;
+    const termed = { ...gold, name: "M".repeat(80), contractPeriods: 12, contractThen: "renews", leaveFeeMinor: 9900, noticeDays: 30, coolingOffDays: 3 };
+    const res = await send("POST", `/v1/orgs/${gym.id}/membership-types`, gym.owner.cookies, termed);
+    expect(res.statusCode, res.body).toBe(201);
+    const typeId = (JSON.parse(res.body) as GymMembershipTypesResponse).types.find((t) => t.name === termed.name)?.id ?? "";
+    const plain = await owing(gym, typeId, "Pat Plain");
+    const taxed = await owing(gym, typeId, "Tess Taxed");
+    for (let i = 1; i <= 10; i += 1) {
+      const [rate] = await sql<{ id: string }[]>`
+        INSERT INTO gym_tax_rates (gym_id, name, rate_pcm) VALUES (${gym.id}, ${`Tax ${String(i).padStart(2, "0")} ${"T".repeat(23)}`}, 1000) RETURNING id`;
+      if (rate === undefined) throw new Error("no tax rate");
+      await sql`INSERT INTO gym_held_membership_tax_rates (gym_id, held_membership_id, tax_rate_id, position) VALUES (${gym.id}, ${taxed.membershipId}, ${rate.id}, ${i})`;
+    }
+    const asked = square.actions.size;
+    const refused = await payPress(gym, gym.owner, taxed, desk.id, { keepCard: true });
+    expect(refused.statusCode, refused.body).toBe(409);
+    expect(errorOf(refused)).toBe("keep_card_not_offered");
+    expect(square.actions.size).toBe(asked);
+    expect(checkoutsOn(desk.deviceId)).toHaveLength(0);
+    expect(await agreementsOf(gym.id)).toHaveLength(0);
+
+    // The same names with no taxes fit: offered, and the Terminal shows every word, the whole agreement among them.
+    const started = await pay(gym, gym.owner, plain, desk.id, { keepCard: true });
+    expect(started.payment.card).toMatchObject({ step: "agreeing" });
+    const words = square.agreement(desk.deviceId).words;
+    expect(words.length).toBeLessThanOrEqual(TERMINAL_KEEP_WORDS_MOST);
+    expect(words).toContain(cardAgreementWords(longName));
   });
 
   it("never offered where it cannot be: somebody else pays, another gym", async () => {

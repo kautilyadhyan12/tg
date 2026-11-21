@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
-import { MEMBER_CARD_WORDS, myCardViewSchema, myMembershipResponseSchema } from "@app/shared";
+import { MEMBER_CARD_WORDS, cardAgreementWords, myCardViewSchema, myMembershipResponseSchema } from "@app/shared";
 import { App } from "../../src/App";
 import { NO_ANSWER } from "../../src/screens/SignIn";
 import type { Ask } from "../../src/session/calls";
@@ -54,7 +54,7 @@ const cardOf = (gym: string, over: Record<string, unknown> = {}) => ({
     paidBy: null,
     canSave: true,
     gymName: gym,
-    agreement: `I agree that ${gym} may save this card and charge it for my membership and any fees when they are due. I can remove it at the front desk at any time.`,
+    agreement: cardAgreementWords(gym),
     form: { environment: "sandbox", applicationId: "sandbox-sq0idb-AbCdEfGhIjKlMnOp", locationId: "LOCATION0001", contact: { givenName: "Tara", familyName: "Shah", email: "tara@gmail.com", countryCode: "US" } },
     ...over,
   }),

@@ -80,7 +80,7 @@ export function MembershipPage({ place, onClose, onBuy = null }: { place: Member
   return (
     <Modal visible={place !== null} animationType="slide" statusBarTranslucent navigationBarTranslucent onRequestClose={onClose}>
       <View testID="membership-page" accessibilityViewIsModal style={[styles.page, { paddingTop: insets.top }]}>
-        {place === null ? null : <MembershipBody key={place.id} place={place} onClose={onClose} onBuy={onBuy} bottom={insets.bottom} />}
+        {place === null ? null : <MembershipBody key={`${place.id}:${place.addCard === true ? "add-card" : ""}`} place={place} onClose={onClose} onBuy={onBuy} bottom={insets.bottom} />}
       </View>
     </Modal>
   );
@@ -279,6 +279,10 @@ function MembershipBody({ place, onClose, onBuy, bottom }: { place: MembershipPl
           pageTall.current.content = height;
           scrollToCard();
         }}
+        // A press of their own anywhere on the page: never scrolled for them after it (a reader's scroll starts with one too).
+        onTouchStart={() => {
+          scrollTarget.current = null;
+        }}
         onScrollBeginDrag={() => {
           scrollTarget.current = null;
         }}
@@ -375,6 +379,8 @@ function MembershipBody({ place, onClose, onBuy, bottom }: { place: MembershipPl
             againOnAddClose.current = false;
             scrollTarget.current = cardY.current;
             scrollToCard();
+            // Once, as it closes: what the page does after is the person's.
+            scrollTarget.current = null;
           }
         }}
       />

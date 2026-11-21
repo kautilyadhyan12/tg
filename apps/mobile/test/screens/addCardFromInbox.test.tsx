@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
 import { AppState, ScrollView } from "react-native";
-import { myCardViewSchema, myMembershipResponseSchema } from "@app/shared";
+import { cardAgreementWords, myCardViewSchema, myMembershipResponseSchema } from "@app/shared";
 import { App } from "../../src/App";
 import type { Ask } from "../../src/session/calls";
 import { fakeServer, kept, lost, memoryStore, tokens, type Reply, type Route } from "../kit";
@@ -86,7 +86,7 @@ const cardOf = (gym: string, location: string, over: Record<string, unknown> = {
     paidBy: null,
     canSave: true,
     gymName: gym,
-    agreement: `I agree that ${gym} may save this card and charge it for my membership and any fees when they are due. I can remove it at the front desk at any time.`,
+    agreement: cardAgreementWords(gym),
     form: {
       environment: "sandbox",
       applicationId: "sandbox-sq0idb-AbCdEfGhIjKlMnOp",
@@ -262,6 +262,24 @@ describe("where a card can't be added now, My membership opens and says why", ()
   });
 });
 
+describe("My membership already open at the same place", () => {
+  it("the Inbox opened over it, Add card pressed: Add card's page opens there all the same", async () => {
+    const server = fakeServer(twoPlaces());
+    await render(<App extra={extra} ask={server.ask} store={memoryStore(kept(1))} wait={noWait} />);
+    const tab = (await screen.findAllByRole("tab"))[3];
+    if (tab === undefined) throw new Error("no fourth tab");
+    await fireEvent.press(tab);
+    await fireEvent.press(await screen.findByLabelText("My membership at Iron House"));
+    await membership().findByText("No card on file");
+    expect(screen.queryByTestId("add-card")).toBeNull();
+    // As a tapped notification opens the Inbox over whatever is open.
+    await fireEvent.press(screen.getByLabelText(/^Inbox at Iron House/));
+    await pressAddCard(IRON);
+    expect(await screen.findByTestId("add-card")).toBeTruthy();
+    expect(screen.getByLabelText("Save this card for Iron House")).toBeTruthy();
+  });
+});
+
 describe("leaving Add card", () => {
   it("back from Add card: My membership says No card on file with Add card, and the page does not open again by itself", async () => {
     const listeners: ((state: string) => void)[] = [];
@@ -376,6 +394,39 @@ describe("the page is scrolled to Card on file", () => {
     await waitFor(() => {
       expect(screen.queryByTestId("add-card")).toBeNull();
     });
+    expect(spy).toHaveBeenCalledTimes(2);
+  });
+
+  it("a press of their own on the page, or a reader's scroll: never scrolled for them after it", async () => {
+    const spy = scrolls();
+    const server = fakeServer(twoPlaces());
+    await openInbox(server.ask, IRON);
+    await pressAddCard(IRON);
+    await screen.findByTestId("add-card");
+    const page = membership().getByTestId("membership-scroll");
+    await fireEvent(page, "layout", { nativeEvent: { layout: { x: 0, y: 0, width: 390, height: 700 } } });
+    await drawAt(1400);
+    await fireEvent(page, "touchStart");
+    await fireEvent(page, "contentSizeChange", 390, 2600);
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+
+  it("after Add card's page closes, the page grows (a receipt, a Cancel box): never scrolled back to the box", async () => {
+    const spy = scrolls();
+    const server = fakeServer(twoPlaces());
+    await openInbox(server.ask, IRON);
+    await pressAddCard(IRON);
+    await screen.findByTestId("add-card");
+    const page = membership().getByTestId("membership-scroll");
+    await fireEvent(page, "layout", { nativeEvent: { layout: { x: 0, y: 0, width: 390, height: 700 } } });
+    await drawAt(1400);
+    await backKey();
+    await waitFor(() => {
+      expect(screen.queryByTestId("add-card")).toBeNull();
+    });
+    expect(spy).toHaveBeenCalledTimes(2);
+    await fireEvent(page, "contentSizeChange", 390, 1800);
+    await fireEvent(page, "contentSizeChange", 390, 2600);
     expect(spy).toHaveBeenCalledTimes(2);
   });
 

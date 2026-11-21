@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MEMBER_CARD_WORDS, myCardViewSchema, type MyCardView } from "@app/shared";
+import { MEMBER_CARD_WORDS, cardAgreementWords, myCardViewSchema, type MyCardView } from "@app/shared";
 import { askedCardStep, cardBox, cardExpiryLine, cardsNotSavedLine, cardReadyToSave, cardRefusalLine, cardRemovedLine, cardSavedLine, removeCardLine, removeCardTitle, removeRefusalLine } from "../src/screens/gym/cardView";
 
 // Card on file on My membership (20d): what the box shows for every answer the server can send. Each answer is read
@@ -33,7 +33,7 @@ const view = (over: Record<string, unknown> = {}): MyCardView =>
     paidBy: null,
     canSave: true,
     gymName: "Iron House",
-    agreement: "I agree that Iron House may save this card and charge it for my membership and any fees when they are due. I can remove it at the front desk at any time.",
+    agreement: cardAgreementWords("Iron House"),
     form: FORM,
     ...over,
   });
