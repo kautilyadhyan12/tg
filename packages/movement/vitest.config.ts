@@ -10,6 +10,7 @@ export const PROOF_FILES = [
   "test/movementHops.test.ts",
   "test/movementHopsHidden.test.ts",
   "test/movementWalkBack.test.ts",
+  "test/movementFloorView.test.ts",
 ];
 
 export default defineConfig({

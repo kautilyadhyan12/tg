@@ -2077,6 +2077,70 @@ his nine sets to 24 of 1,080, two as filmed (53 with the floor change alone); bu
 people's readings set "feet stay down" at 3 cm without him, and four of his sets miscounted with him left out under 13
 replays.
 
+**As built, the floor view (52a-ii-b-ii-a, 2026-11-21; `rulings/2026-11-21-52a-ii-b-ii-a.md`).** `onTheFloor` in
+`scripts/replays.ts` redraws a video as a phone standing upright on the floor would see it, and the replay "on the floor"
+holds under the proof table with every other: not tried on a video filmed from the floor (`floor` in `movementVideos.ts`),
+setting no number (the squat's stay as 52a-ii-b-i set them). **How it draws.** Each frame's 3D points are laid where the
+picture has the body, as far from the phone as the body's size on the picture says through a phone's usual main lens (26 mm
+in 35 mm terms: fitted to each video from its own points, the best lens lay anywhere from 1 to 8 picture heights with almost
+the same fit, and on his floor video it put the phone 6 to 12 m from him where the 26 mm lens puts it 1.8 m). The phone is
+moved straight down to 15 cm above the floor (a phone 16 to 17 cm tall on its short end; not measured), leaned back 14°, and
+stepped back by quarter metres where the whole body would not be in the picture; each point is moved on the picture by how
+far its 3D place moves between the two phones, so that drawn from the phone's own place the picture, the 3D points and "down"
+come back exactly (tested point for point), and a body the phone saw exactly lands within 1 cm of where the floor phone sees
+it (tested). The 3D points and "down" turn with the phone, as the model and the sensor would give them. Three things the
+pose model's 3D points do not say, each found on a video and mended: they are centred between the hips, so the feet keep one
+distance from the phone and the hips move about them (laid on the hips instead, the squat videos' planted feet read 5 to
+27 cm lifted); a foot that stays where it stands on the picture keeps its 3D place, the model's own beyond 10 cm and in
+proportion between 5 and 10 (on a sumo squat the 3D points put one foot 30 cm forward and the other back on every rep, as if
+she twisted: redrawn, her planted foot points slid 7 to 10 cm up and down the picture; held, her feet read 0.6 to 1.1 cm
+moved); standing tall the hips are over the feet, and
+only bending knees move them back (turning between his sets, the 3D points put his feet 18 cm in front of his hips for half
+a second, and his standing read 8 cm taller than once he stood still). **How his phone stood** (`phoneLean`, from where his
+feet and his size lie on the picture in the pictures he stands tall in): leaning back 6.3° in his first floor video and 12.6
+to 14.5° in his five other upright ones, 1.6 to 1.8 m from him; 14 is their middle. **Kept because it reads as his floor
+does** (`faithful`; `floor-view` prints it): his ten squats from the raised phone, redrawn, count 10 of 10, none called short,
+and each reading only the phone changes is taken at least half way from his raised sets' reading towards the middle of his
+four real floor sets, never past the furthest of them: "feet stay down" 2.0 cm (raised as filmed 1.4; floor 2.0 to 2.9),
+"feet stay in place" 3.3 cm (2.4; 1.4 to 3.6), the picture's hips against the 3D hips in 95 of 100 pictures below standing
+0.090 of a leg (0.063; 0.061 to 0.103) and standing 0.087 (0.097; 0.052 to 0.141). Drawn leaning back 6.5°, the hips stand
+0.133 apart, past every floor set of his: not used. The readings of how he moved (depth, knees, chest) are shown only: his
+raised and floor squats are not the same squats (as filmed his raised ones bend the knees 62° in the middle, his floor sets
+43 to 53°). The check first written judged those too, and both leans failed it on the knees, which no phone can change; it was
+changed after that, and says so. From 12.5 to 14° all ten of his raised squats count from the floor; at 14.5°, 8, and at 15°,
+9 (tested, open for 52a-ii-b-ii-b). A real floor's reflection and the pose model's own wander near the floor are not drawn:
+the redraw carries the raised phone's own wander, and his feet then read as his floor's do, so a measured wander added on top
+would have counted it twice. **Measured under the floor view:** every other movement counts 0 and says nothing (64 videos
+tried); jumps true to gravity of 8, 10 and 12 cm at five take-off times on three squat videos, seen from the floor as filmed
+and at 8 pictures a second, are never counted; of the 18 squat sets tried, 14 count by eye, and four are open, each written
+with its cause in `movementVideos.ts`: `prisoner_squat_4` 1 of 2 (standing tall, her picture's hips 0.13 to 0.16 of a leg
+above her 3D ones, past the 0.15 the picture is trusted within; his real floor phone shows 0.05 to 0.14), his raised pairs
+at 22 and 30 s with his own videos left out ("feet stay in place" 5.8 and 6.2 cm where the eight hip-height people set 5),
+and the barbell front squat 1 of 3 (at the bottom of two squats the picture and her 3D points 0.22 apart: the redraw keeps a
+hip-height phone's 3D points, where a real floor phone's model reads its own). **What a floor phone sees** (`positionsTable`,
+his eleven other videos as filmed; of every 100 pictures the body is found in, a part used on one side / on both, and the
+hips' height and each knee given on the picture):
+
+| His video | Phone | Found | Hips | Knees | Ankles | Heels and toes | Hips height | Knees (left, right) |
+|---|---|---|---|---|---|---|---|---|
+| stands and turns round | floor, upright | 96 | 99/99 | 99/85 | 99/83 | 99/83 | 95 | 94, 88 |
+| stands and turns round | floor, long side | 90 | 98/98 | 93/89 | 92/88 | 91/88 | 90 | 91, 89 |
+| sits cross-legged, turns round | floor, upright | 99 | 98/98 | 84/56 | 29/20 | 29/20 | 23 | 16, 16 |
+| on all fours, turns round | floor, long side | 100 | 99/99 | 96/60 | 61/13 | 61/13 | 53 | 21, 25 |
+| lies, raises a leg, sits up | floor, long side | 100 | 99/99 | 96/32 | 91/25 | 91/24 | 91 | 24, 87 |
+| sits on a chair, gets up, sits | floor, upright | 93 | 98/98 | 97/21 | 93/18 | 93/18 | 89 | 38, 69 |
+| one leg lifted at a chair | floor, upright | 97 | 96/96 | 90/87 | 89/72 | 89/72 | 78 | 84, 73 |
+| sits on a chair, gets up, sits | floor, long side | 85 | 98/98 | 97/33 | 97/23 | 97/23 | 94 | 66, 52 |
+| sits on a chair, one knee on it | raised, upright | 98 | 99/99 | 99/81 | 98/50 | 97/49 | 94 | 54, 75 |
+| lies on a bed, raises a leg | raised, long side | 94 | 98/98 | 92/41 | 74/26 | 74/25 | 73 | 26, 73 |
+| stands and turns round | raised, upright | 96 | 98/98 | 98/86 | 94/81 | 92/79 | 85 | 89, 85 |
+
+From the floor, sitting cross-legged hides the feet in 71 found pictures of 100 and the hips' height in 77; on all fours,
+both ankles are seen in 13: what floor work can count from a floor phone is 52c's and 54's question, and this table their
+start. **Limits, in plain sight:** one man, one phone, two rooms; the lens and the lens's height are taken, not measured; the
+redraw keeps the hip-height phone's 3D points and its model's own errors; a real floor phone in front of a live person is
+tried at job 53.
+
 An exercise that does not pass is published as "count by hand", never with a wrong camera
 count. Kd tries one exercise of each kind of movement on the phone, about a dozen, never
 each one. After launch the server sees, for each exercise, how often members changed the
@@ -2165,7 +2229,7 @@ How the phone counts what its own live camera sees, rather than the laptop's pic
 pictures of all 78 proof videos it counts and speaks as the laptop on 74, the other four open in §12.5, 52a-iii) · whether full on the main chip still holds 15 a second with the camera
 screen's engine, voice and drawing, and how the selfie camera reads a person in the room (job 53) · whether
 one long recording cuts cleanly into lines (job 53) · whether a video redrawn from another
-phone place is faithful (job 52a-ii-b-ii: drawn back from its own place, a redraw puts the big joints 2 to 4 cm off in the middle, 5 to 11 cm in 95 of 100; it is checked against Kd's real floor videos) · a floor phone on anybody but the one man of 2026-11-20, and on a floor that is neither his shiny nor his dull one (job 53's live tries) · what the hips do in a real one-leg lift: on the drawn
+phone place is faithful beyond the one man it was checked on (52a-ii-b-ii-a: drawn as a change added to the picture, it comes back exactly from its own place, and it is kept because his raised squats, redrawn from the floor, read as his real floor squats do; drawn leaning back 6.5° they do not) · the lens of a web clip (taken as 26 mm) and how high a phone's lens stands on the floor (taken as 15 cm) · a floor phone on anybody but the one man of 2026-11-20, and on a floor that is neither his shiny nor his dull one (job 53's live tries) · what the hips do in a real one-leg lift: on the drawn
 one they moved at most 0.026 of the trunk's length, while the smallest rise in a real rep
 on twelve squat-family videos was 0.110 of the leg's length, under the old rules (job 52a
 measures both again with the new engine).

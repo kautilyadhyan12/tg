@@ -19,6 +19,8 @@ export interface MovementVideo {
    *  at 0. A person who turns to face the phone another way starts a new set (nobody turns in the middle of one), so each
    *  way of facing is played as a set of its own, the engine started afresh for it as a live set is. */
   readonly cut?: readonly [number, number];
+  /** Filmed with the phone standing on the floor (52a-ii-b-ii-a): the floor's replay is not tried on it. */
+  readonly floor?: boolean;
   /** The movement it shows; null for another movement. */
   readonly movement: string | null;
   /** One name for one person. */
@@ -69,7 +71,7 @@ export function labelOf(entry: MovementVideo, label: string): string {
 /** A man's own videos, filmed on 2026-11-20 with his phone on the floor and on a raised stand (52a-ii-b): one person,
  *  both rooms left out together. Kept as body points only, under labels that name nobody. */
 const FLOOR_PERSON = "man, his own phone, on the floor and raised";
-const floorOther = (label: string, view: View, seen: string): MovementVideo => other(`movement-points/${label}`, FLOOR_PERSON, view, seen);
+const floorOther = (label: string, view: View, seen: string): MovementVideo => ({ ...other(`movement-points/${label}`, FLOOR_PERSON, view, seen), ...(seen.startsWith("The phone on the floor") ? { floor: true } : {}) });
 
 export const MOVEMENT_VIDEOS: readonly MovementVideo[] = [
   // ── The squat: the eight people its numbers are set from ───────────────────────────────────────────────
@@ -146,6 +148,14 @@ export const MOVEMENT_VIDEOS: readonly MovementVideo[] = [
     sets: true,
     sha256: "f092fb73104f2b4e6dcc3dfb2e82238a2f35b6513f507ca0cc24f1e2ff9e891e",
     seen: "2026-11-19, 16 frames: the one woman, turned most of the way, in each. The video starts with her low, rising: not a rep.",
+    replayOpen: {
+      replays: ["on the floor"],
+      why:
+        "52a-ii-b-ii-b, the floor mended: seen from the floor phone, standing tall between her squats her hips read 0.13 to 0.16 of a leg " +
+        "higher on the picture than in 3D (a phone leaning back shows the legs larger than the trunk); past 0.15 the picture's height is not " +
+        "trusted, so she is not read standing before her second squat and it is never begun. A man's own floor phone reads him standing tall " +
+        "0.05 to 0.14 apart in 95 of 100 pictures: the line sits close to what a real floor phone shows.",
+    },
   },
   {
     file: "movement-points/sumo_squat_2a",
@@ -169,7 +179,7 @@ export const MOVEMENT_VIDEOS: readonly MovementVideo[] = [
   },
   // ── A phone on the floor (52a-ii-b-i): a man's own squats, each way he faced a set of its own, counted by eye from
   //    pictures at 2 to 2.5 a second (exercise folder 1's reviews/floor-phone). Good-form squats: every one counts. ───
-  { file: "movement-points/floor_phone_test", cut: [0, 12], movement: "squat", person: FLOOR_PERSON, view: "side", reps: 3, sets: false,
+  { file: "movement-points/floor_phone_test", cut: [0, 12], floor: true, movement: "squat", person: FLOOR_PERSON, view: "side", reps: 3, sets: false,
     seen: "2026-11-20 (52a-ii-b-i), 16 frames of the set drawn with the model's points: the one man, followed in each. The phone on a shiny floor, upright; sandals. From the first picture, at the phone with his hands on the floor, as he walks back from it, then three squats side on. Judged, never setting a number: the model finds nobody in some of its first frames.",
     phoneOpen: {
       why:
@@ -186,39 +196,39 @@ export const MOVEMENT_VIDEOS: readonly MovementVideo[] = [
     leftOutOpen: {
       count: 2,
       why:
-        "52a-ii-b-ii, the floor view: with his own videos left out, the numbers come from the eight people filmed from about hip height, and " +
+        "52a-ii-b-ii-b, the floor mended: with his own videos left out, the numbers come from the eight people filmed from about hip height, and " +
         "\"feet stay in place\" is 5 cm; side on, on the shiny floor, the slide of his foot points reads 5 to 6 cm on one of his proper squats.",
     },
     replayOpen: {
       replays: ["8 a second", "uneven", "shaky", "chip's gap", "faster"],
       why:
-        "52a-ii-b-ii, the floor view: side on, on the shiny floor, the model slides his near foot's heel and toes about on the picture, so his " +
+        "52a-ii-b-ii-b, the floor mended: side on, on the shiny floor, the model slides his near foot's heel and toes about on the picture, so his " +
         "proper squats read the feet 3 to 4 cm off the floor as filmed (the rule is 4 cm, held there by the jumps it must refuse); a centimetre " +
         "of shake, the chip's gap, pictures skipped or the same reps done faster put a rep over it, or leave its feet unseen.",
     } },
-  { file: "movement-points/floor_phone_test", cut: [13.9, 21.1], movement: "squat", person: FLOOR_PERSON, view: "between", reps: 3, sets: true, sha256: "023bdc68c259df01ea372e9cb1be961e3c56be8c7e3ca9fb0b8797511a0920a1",
+  { file: "movement-points/floor_phone_test", cut: [13.9, 21.1], floor: true, movement: "squat", person: FLOOR_PERSON, view: "between", reps: 3, sets: true, sha256: "023bdc68c259df01ea372e9cb1be961e3c56be8c7e3ca9fb0b8797511a0920a1",
     seen: "2026-11-20 (52a-ii-b-i), 16 frames of the set drawn with the model's points: the one man, followed in each. The phone on a shiny floor: three squats half turned to it, the floor's reflection under his toes.",
     phoneOpen: {
       why:
-        "52a-ii-b-ii, the floor view: on the phone's reading his third squat's feet read about 4 cm off the floor (the laptop's 3), over the " +
+        "52a-ii-b-ii-b, the floor mended: on the phone's reading his third squat's feet read about 4 cm off the floor (the laptop's 3), over the " +
         "rule held at 4 by the jumps it must refuse.",
       differences: ["the laptop counts 3, the phone 2", "the phone does not say 19.3 s counted"],
     },
     replayOpen: {
       replays: ["slower", "twice as slow"],
       why:
-        "52a-ii-b-ii, the floor view: the same reps done 1.5 or 2 times as slowly read the third squat's feet over the 4 cm rule, as the " +
+        "52a-ii-b-ii-b, the floor mended: the same reps done 1.5 or 2 times as slowly read the third squat's feet over the 4 cm rule, as the " +
         "phone's reading does as filmed.",
     } },
-  { file: "movement-points/floor_phone_test", cut: [22.3, 31.4], movement: "squat", person: FLOOR_PERSON, view: "front", reps: 3, sets: true, sha256: "023bdc68c259df01ea372e9cb1be961e3c56be8c7e3ca9fb0b8797511a0920a1",
+  { file: "movement-points/floor_phone_test", cut: [22.3, 31.4], floor: true, movement: "squat", person: FLOOR_PERSON, view: "front", reps: 3, sets: true, sha256: "023bdc68c259df01ea372e9cb1be961e3c56be8c7e3ca9fb0b8797511a0920a1",
     seen: "2026-11-20 (52a-ii-b-i), 16 frames of the set drawn with the model's points: the one man, followed in each. The phone on a shiny floor: three squats facing it." },
-  { file: "movement-points/usual_v04", cut: [0, 9.2], movement: "squat", person: FLOOR_PERSON, view: "front", reps: null, sets: false,
+  { file: "movement-points/usual_v04", cut: [0, 9.2], floor: true, movement: "squat", person: FLOOR_PERSON, view: "front", reps: null, sets: false,
     seen: "The phone on a dull floor: one deep squat held about 5 s facing the phone, hands to the floor (3.6 to 9.0 s). Reported, never judged: a hold is not a rep." },
-  { file: "movement-points/usual_v04", cut: [9.8, 23.2], movement: "squat", person: FLOOR_PERSON, view: "side", reps: 3, sets: true, sha256: "490c374accbcd5e80d72c67af894dfbd4045fff42c1ce8f90becc99cfa65375f",
+  { file: "movement-points/usual_v04", cut: [9.8, 23.2], floor: true, movement: "squat", person: FLOOR_PERSON, view: "side", reps: 3, sets: true, sha256: "490c374accbcd5e80d72c67af894dfbd4045fff42c1ce8f90becc99cfa65375f",
     seen: "2026-11-20 (52a-ii-b-i), 16 frames of the set drawn with the model's points: the one man, followed in each. The phone on a dull floor: three squats side on; sandals.",
     phoneOpen: {
       why:
-        "52a-ii-b-ii, the floor view: in the first picture of his second squat the phone's model puts his near foot 10 cm up, in the next 2 cm " +
+        "52a-ii-b-ii-b, the floor mended: in the first picture of his second squat the phone's model puts his near foot 10 cm up, in the next 2 cm " +
         "(the laptop's stays down), a picture no real foot can be in, read as the feet leaving the floor (9 cm) and moving (10 cm). Letting a " +
         "foot reading count only where a picture beside it agrees let 14 of 540 drawn jumps count, and was not kept.",
       differences: ["the laptop counts 3, the phone 2", "the laptop says 15.6 s counted, the phone 19.7 s counted", "the phone does not say 19.7 s counted"],
@@ -230,15 +240,22 @@ export const MOVEMENT_VIDEOS: readonly MovementVideo[] = [
   { file: "movement-points/usual_v11", cut: [15.3, 21.6], movement: "squat", person: FLOOR_PERSON, view: "front", reps: 2, sets: true, sha256: "e9f6f3f98f7b27d7b5737c32734a3ad8025a0e88af06d0ca668c485f42e36707",
     seen: "2026-11-20 (52a-ii-b-i), 16 frames of the set drawn with the model's points: the one man, followed in each. The phone raised: two squats facing it." },
   { file: "movement-points/usual_v11", cut: [22, 29.5], movement: "squat", person: FLOOR_PERSON, view: "between", reps: 2, sets: true, sha256: "e9f6f3f98f7b27d7b5737c32734a3ad8025a0e88af06d0ca668c485f42e36707",
-    seen: "2026-11-20 (52a-ii-b-i), 16 frames of the set drawn with the model's points: the one man, followed in each. The phone raised: two squats half turned the other way." },
+    seen: "2026-11-20 (52a-ii-b-i), 16 frames of the set drawn with the model's points: the one man, followed in each. The phone raised: two squats half turned the other way.",
+    replayOpen: {
+      replays: ["on the floor"],
+      why:
+        "52a-ii-b-ii-b, the floor mended: right with every person's numbers; with his own videos left out, \"feet stay in place\" is 5 cm, " +
+        "set from the eight people filmed from about hip height, and seen from the floor phone his second squat's feet read 5.8 cm moved " +
+        "(4.3 as filmed).",
+    } },
   { file: "movement-points/usual_v11", cut: [30, 39], movement: "squat", person: FLOOR_PERSON, view: "between", reps: 2, sets: true, sha256: "e9f6f3f98f7b27d7b5737c32734a3ad8025a0e88af06d0ca668c485f42e36707",
     seen: "2026-11-20 (52a-ii-b-i), 16 frames of the set drawn with the model's points: the one man, followed in each. The phone raised: two squats half turned.",
     replayOpen: {
-      replays: ["shaky", "chip's gap", "slower"],
+      replays: ["shaky", "chip's gap", "slower", "on the floor"],
       why:
-        "52a-ii-b-ii, the floor view: right with every person's numbers under all three; with his own videos left out, the numbers come from " +
-        "the eight people filmed from about hip height, and a centimetre of shake, the chip's gap or the same reps done 1.5 times as slowly " +
-        "put one of these two squats over them.",
+        "52a-ii-b-ii-b, the floor mended: right with every person's numbers under all four; with his own videos left out, the numbers come from " +
+        "the eight people filmed from about hip height, and a centimetre of shake, the chip's gap, the same reps done 1.5 times as slowly or " +
+        "the floor phone (his second squat's feet 6.2 cm moved, where \"feet stay in place\" is then 5) put one of these two squats over them.",
     } },
   // ── Twins of the squat, tried and never setting a number: a count here is expected, not a fault ─────────
   {
@@ -270,7 +287,16 @@ export const MOVEMENT_VIDEOS: readonly MovementVideo[] = [
   },
   // ── Looked at while the rules were chosen after all: a twin of the squat, tried, never setting a number ──────────
   { file: "movement-points/fresh_front_squat_barbell", movement: "squat", person: "woman, barbell in front", view: "side", reps: 3, sets: false,
-    seen: "A barbell front squat, three reps; she gets up from the third in the last 0.3 s. Looked at for the feet's rule (the model slides her toe point 7 cm down the picture at the bottom; her heel comes up 3 cm as she stands tall), so no longer a test on a video nobody had looked at." },
+    seen: "A barbell front squat, three reps; she gets up from the third in the last 0.3 s. Looked at for the feet's rule (the model slides her toe point 7 cm down the picture at the bottom; her heel comes up 3 cm as she stands tall), so no longer a test on a video nobody had looked at.",
+    replayOpen: {
+      replays: ["on the floor"],
+      why:
+        "52a-ii-b-ii-b, the floor mended: seen from the floor phone, at the bottom of her first and third squats the picture and her 3D " +
+        "points put her hips 0.22 of a leg apart (in 95 of 100 pictures below standing; 0.10 as filmed), more than the 0.15 a picture's " +
+        "height is trusted within, so those two decide nothing. The redraw keeps the 3D points a hip-height phone's model gave; on a real " +
+        "floor phone the model reads its own 3D from its own picture (a man's own floor squats: 0.06 to 0.10 apart). Whether the redraw or " +
+        "the engine is at fault is that job's first question.",
+    } },
   // ── Fresh videos (2026-11-19), measured after the squat's rules and numbers were fixed and never used to choose
   //    them: the test on videos nobody had looked at. Reps counted by eye before the engine was run on them. ────────
   { file: "movement-points/fresh_back_squat_barbell", movement: "squat", person: "woman, barbell on the back", view: "side", reps: null, sets: false, seen: "Fresh: a barbell back squat, side on, three reps by eye; the camera pans and zooms with her (the rack moves on the picture by her feet's 14 cm), so it is reported, never judged." },
