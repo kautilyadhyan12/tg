@@ -88,7 +88,9 @@ describe("each squat video counts what a person counts by eye, however the world
       "prisoner_squat_2: twice as slow",
       "floor_phone_test 13.9-21.1 s: twice as slow",
     ]);
-    expect(ROWS.filter(openRow).every((r) => /^52(a-ii-b-ii|b-i), /.test(r.entry.replayOpen?.why ?? ""))).toBe(true);
+    expect(ROWS.filter(openRow).every((r) => /^52(a-ii-b-ii-b|b-i), /.test(r.entry.replayOpen?.why ?? ""))).toBe(true);
+    // An open row only ever misses squats: never one more than by eye, with every person's numbers or with its own left out.
+    expect(ROWS.filter(openRow).filter((r) => r.count > r.most || (r.leftOut ?? 0) > r.most).map((r) => `${r.label}: ${r.replay.name}`)).toEqual([]);
   });
 
   it.each(["passer-by", "passer-by at the bottom"])("%s hides at most the rep it covers: that rep decides nothing and is never called short", (name) => {

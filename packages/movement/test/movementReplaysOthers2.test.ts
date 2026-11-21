@@ -38,5 +38,7 @@ describe("the worst thing: no other movement is counted as a squat however the w
       "twice as slow: squat_jack_2",
     ]);
     for (const r of open) expect(r.reps.filter((x) => x.verdict === "short").length).toBe(0);
+    // Each counts what its entry says it does, and no more: the sit-and-stand one rep, the slowed squat jack two.
+    expect(open.map((r) => r.count)).toEqual([1, 2, 2]);
   });
 });
