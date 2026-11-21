@@ -63,14 +63,15 @@ describe("the worst thing: the floor view held as proof while it does not read a
   });
 
   it.each([
-    ["floor_phone_test 0-12 s", 8, ["feet stay in place"]],
-    ["floor_phone_test 13.9-21.1 s", 7, ["feet stay down", "feet stay in place", "hips, picture against 3D, standing"]],
-    ["floor_phone_test 22.3-31.4 s", 9, ["feet stay down", "hips, picture against 3D, standing"]],
-    ["usual_v04 9.8-23.2 s", 7, ["feet stay down", "feet stay in place", "hips, picture against 3D", "hips, picture against 3D, standing"]],
-  ] as const)("the wander measured without %s: %s of his 10 raised squats counted from the floor; short of his floor: %j; the floor view is not held", (left, counted, failing) => {
+    ["floor_phone_test 0-12 s", 8, ["feet stay in place"], 0.038],
+    ["floor_phone_test 13.9-21.1 s", 7, ["feet stay down", "feet stay in place", "hips, picture against 3D, standing"], 0.04],
+    ["floor_phone_test 22.3-31.4 s", 9, ["feet stay down", "hips, picture against 3D, standing"], 0.032],
+    ["usual_v04 9.8-23.2 s", 7, ["feet stay down", "feet stay in place", "hips, picture against 3D", "hips, picture against 3D, standing"], 0.037],
+  ] as const)("the wander measured without %s: %s of his 10 raised squats counted from the floor; short of his floor: %j; feet stay in place %s; the floor view is not held", (left, counted, failing, travel) => {
     const f = faithful(FLOOR_LEAN, LENS_MM, undefined, floorSets.filter((s) => s !== left));
     expect(f.redrawn.reduce((n, s) => n + s.count, 0)).toBe(counted);
     expect(f.rows.filter((r) => r.judged && !r.within).map((r) => r.reading)).toEqual(failing);
+    expect(Math.round((f.rows.find((r) => r.reading === "feet stay in place")?.redrawn ?? 0) * 1000) / 1000).toBe(travel);
     expect(f.passes).toBe(false);
     expect(replay?.hold).toBe(false);
   });
@@ -183,32 +184,34 @@ describe("the pose model's own foot wander near the floor, measured on his floor
   // With all four floor sets' wander, at each of his six leans and the replay's: how many of his ten raised squats count
   // (without it 9 at 6.4 and 14.3 to 14.5, 10 at the others) and which judged readings fall short.
   it.each([
-    [6.4, 8, ["feet stay down", "hips, picture against 3D", "hips, picture against 3D, standing"]],
-    [12.6, 9, ["feet stay down"]],
-    [13.7, 8, ["feet stay down", "hips, picture against 3D, standing"]],
-    [FLOOR_LEAN, 8, ["feet stay down", "hips, picture against 3D, standing"]],
-    [14.3, 7, ["feet stay down", "hips, picture against 3D, standing"]],
-    [14.4, 7, ["feet stay down", "hips, picture against 3D, standing"]],
-    [14.5, 7, ["feet stay down", "hips, picture against 3D, standing"]],
-  ] as const)("leaning back %s degrees with the floor's wander: %s of 10 counted; short of his floor: %j", (lean, counted, failing) => {
+    [6.4, 8, ["feet stay down", "hips, picture against 3D", "hips, picture against 3D, standing"], 0.027],
+    [12.6, 9, ["feet stay down"], 0.033],
+    [13.7, 8, ["feet stay down", "hips, picture against 3D, standing"], 0.033],
+    [FLOOR_LEAN, 8, ["feet stay down", "hips, picture against 3D, standing"], 0.032],
+    [14.3, 7, ["feet stay down", "hips, picture against 3D, standing"], 0.033],
+    [14.4, 7, ["feet stay down", "hips, picture against 3D, standing"], 0.033],
+    [14.5, 7, ["feet stay down", "hips, picture against 3D, standing"], 0.033],
+  ] as const)("leaning back %s degrees with the floor's wander: %s of 10 counted; short of his floor: %j; feet stay in place %s", (lean, counted, failing, travel) => {
     const f = faithful(lean, LENS_MM, undefined, null);
     expect(f.redrawn.reduce((n, s) => n + s.count, 0)).toBe(counted);
     expect(f.redrawn.every((s) => s.short === 0)).toBe(true);
     expect(f.rows.filter((r) => r.judged && !r.within).map((r) => r.reading)).toEqual(failing);
+    expect(Math.round((f.rows.find((r) => r.reading === "feet stay in place")?.redrawn ?? 0) * 1000) / 1000).toBe(travel);
     expect(f.passes).toBe(false);
   });
 
   // Taken from one floor set alone: it depends on the set. From his half-turned set every raised squat counts, yet both
   // hips readings fall short; from his side-on set on the shiny floor 4 of 10 count.
   it.each([
-    ["floor_phone_test 0-12 s", 4, ["feet stay down", "feet stay in place", "hips, picture against 3D, standing"]],
-    ["floor_phone_test 13.9-21.1 s", 10, ["hips, picture against 3D", "hips, picture against 3D, standing"]],
-    ["floor_phone_test 22.3-31.4 s", 7, ["feet stay down", "hips, picture against 3D, standing"]],
-    ["usual_v04 9.8-23.2 s", 7, ["feet stay down", "feet stay in place"]],
-  ] as const)("the wander from %s alone: %s of 10 counted; short of his floor: %j", (set, counted, failing) => {
+    ["floor_phone_test 0-12 s", 4, ["feet stay down", "feet stay in place", "hips, picture against 3D, standing"], 0.082],
+    ["floor_phone_test 13.9-21.1 s", 10, ["hips, picture against 3D", "hips, picture against 3D, standing"], 0.029],
+    ["floor_phone_test 22.3-31.4 s", 7, ["feet stay down", "hips, picture against 3D, standing"], 0.029],
+    ["usual_v04 9.8-23.2 s", 7, ["feet stay down", "feet stay in place"], 0.04],
+  ] as const)("the wander from %s alone: %s of 10 counted; short of his floor: %j; feet stay in place %s", (set, counted, failing, travel) => {
     const f = faithful(FLOOR_LEAN, LENS_MM, undefined, [set]);
     expect(f.redrawn.reduce((n, s) => n + s.count, 0)).toBe(counted);
     expect(f.rows.filter((r) => r.judged && !r.within).map((r) => r.reading)).toEqual(failing);
+    expect(Math.round((f.rows.find((r) => r.reading === "feet stay in place")?.redrawn ?? 0) * 1000) / 1000).toBe(travel);
     expect(f.passes).toBe(false);
   });
 
