@@ -1,7 +1,7 @@
 // A phone standing on the floor, every proof video redrawn as it would see them (ROADMAP 52a-ii-b-ii-a; spec Part 2
 // §12.5 "As built, the floor view"). The worst thing this job could do to a person: a floor view that does not look as a
 // real floor phone looks would prove that an exercise counts from the floor when it does not, and a member's proper reps
-// would go uncounted, or a jump be counted. So first: the redraw never hides a jump; then it is held as proof only if a
+// would go uncounted, or a jump be counted. So first: jumps seen through the redraw; then it is held as proof only if a
 // man's own squats from a raised phone, redrawn, read as his real floor squats do. As measured they do not yet, at any
 // of his six leans: the replay is shown, not held, and this file pins what each lean gives.
 import { readFileSync } from "node:fs";
@@ -10,7 +10,7 @@ import { describe, expect, it } from "vitest";
 import type { Video } from "../scripts/bodyCheck.js";
 import { readKept } from "../scripts/bodyCheck.js";
 import { JUDGED, faithful, phoneLean, positionsTable } from "../scripts/floorView.js";
-import { countedTimes, proofVideos, readMovement, runMovement } from "../scripts/movementCheck.js";
+import { countedTimes, holds, proofVideos, readMovement, replayTable, runMovement } from "../scripts/movementCheck.js";
 import { MOVEMENT_VIDEOS } from "../scripts/movementVideos.js";
 import { FLOOR_LEAN, FLOOR_LEANS_MEASURED, FLOOR_LENS, REPLAYS, everyNth, onTheFloor } from "../scripts/replays.js";
 import { hopTime } from "../src/index.js";
@@ -48,7 +48,7 @@ function jumpsCounted(video: Video): string[] {
   );
 }
 
-describe("the worst thing: the floor redraw never hides a jump", () => {
+describe("the worst thing: a jump drawn on a squat video, seen through the floor redraw: what counts", () => {
   // The three squat videos of 52a-ii-a's jumps: side on, in between with no pause between reps, from the front.
   it.each(["squat_reference", "prisoner_squat_3", "sumo_squat_2a"])("%s: jumps of 8, 10 and 12 cm at five take-off times, seen from the floor as filmed and at 8 a second, count only reps they never reached", (label) => {
     expect(jumpsCounted(videoOf(label))).toEqual([]);
@@ -61,7 +61,7 @@ describe("the worst thing: the floor redraw never hides a jump", () => {
     }
   });
 
-  it("on his five raised sets, the jumps counted from the floor, in plain sight for 52a-ii-b-ii-b: 14 of 150 (from the raised phone itself 12 of 150, 52a-ii-b-i's open jumps)", () => {
+  it("on his five raised sets, 14 of 150 count from the floor, four of them cases the raised phone refuses (from the raised phone itself 12 of 150, 52a-ii-b-i's open jumps), in plain sight for 52a-ii-b-ii-b", () => {
     const raised = proofVideos(MOVEMENT_VIDEOS.filter((e) => e.file === "movement-points/usual_v11" && e.reps !== null));
     expect(raised.map((v) => [v.video.label, jumpsCounted(v.video)])).toEqual([
       ["usual_v11 1.3-7.4 s", ["0.08 | -200 | 8 a second | 1", "0.08 | -100 | as filmed | 1", "0.08 | -100 | 8 a second | 1", "0.1 | -100 | as filmed | 1"]],
@@ -122,6 +122,26 @@ describe("his raised squats, redrawn from the floor, do not yet read as his real
 
   it("every one of his six leans is tried", () => {
     expect(FLOOR_LEANS_MEASURED).toEqual([6.4, 12.6, 13.7, 14.3, 14.4, 14.5]);
+  });
+});
+
+describe("every proof video seen through the floor view, shown: the numbers the spec gives", () => {
+  const replay = REPLAYS.find((r) => r.name === "on the floor");
+  if (replay === undefined) throw new Error("no floor replay");
+
+  it("every other movement tried counts 0 and calls nothing short: 64 of its 72 videos, the 8 filmed from the floor not tried", () => {
+    const rows = replayTable(SQUAT, VIDEOS.filter((v) => v.entry.movement === null), [replay]);
+    expect([rows.length, rows.filter((r) => r.tried).length]).toEqual([72, 64]);
+    expect(rows.filter((r) => r.tried && (r.count > 0 || r.reps.some((x) => x.verdict === "short"))).map((r) => r.label)).toEqual([]);
+  });
+
+  it("of the 18 squat sets tried, 16 count by eye; the two that do not, as written in the spec", () => {
+    const rows = replayTable(SQUAT, VIDEOS.filter((v) => v.entry.movement === "squat"), [replay]).filter((r) => r.tried);
+    expect(rows).toHaveLength(18);
+    expect(rows.filter((r) => !holds(r)).map((r) => [r.label, r.count, r.leftOut])).toEqual([
+      ["usual_v11 22-29.5 s", 2, 1],
+      ["fresh_front_squat_barbell", 2, null],
+    ]);
   });
 });
 

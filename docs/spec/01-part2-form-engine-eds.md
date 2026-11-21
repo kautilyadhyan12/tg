@@ -2133,8 +2133,8 @@ at the middle of his leans and hid sets past the floor's, and found the redraw's
 lean, every set listed, an even count's middle the mean of its two middle values), it holds at none, as the table says.
 **Measured under the floor view, shown:** every other movement counts 0 and says nothing (64 videos tried); jumps true to
 gravity of 8, 10 and 12 cm at five take-off times on three squat videos, seen from the floor as filmed and at 8 pictures a
-second, are never counted; on his five raised sets, 14 of the same 150 cases count a rep nobody did from the floor (12 of 150
-from the raised phone itself: 52a-ii-b-i's open jumps), each pinned; of the 18 squat sets tried, 16 count by eye, and two do
+second, are never counted; on his five raised sets, 14 of the same 150 cases count a rep nobody did from the floor, four of
+them cases the raised phone refuses (from the raised phone itself 12 of 150, 52a-ii-b-i's open jumps), each pinned; of the 18 squat sets tried, 16 count by eye (pinned too), and two do
 not: his pair at 22 s with his own videos left out (its first squat's feet 6.7 cm moved, past his floor's 3.6, as above), and
 the barbell front squat 2 of 3 (the squat she rises from in the video's last 0.3 s decides nothing: her picture's hips and 3D
 hips 0.18 of a leg apart, past the 0.15 the picture is trusted within; the redraw keeps a hip-height phone's 3D points, where
