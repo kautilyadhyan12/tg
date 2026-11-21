@@ -212,6 +212,13 @@ describe("a finished workout is never lost, and reaches the server once", () => 
     const next = { workoutId: "22222222-2222-4222-8222-222222222222", name: "", now: now.t, timeZone: "UTC", exercises: [curl] };
     expect(app.store.start(next)).toBe("busy");
     expect(readRun(runFile.text)?.workoutId).toBe(ID);
+    // Tried again while the disk is still full (the layer's 15 s retry): still kept in its own file, never emptied on the
+    // strength of the list's memory (re-check, H3).
+    app.store.retry();
+    await settle();
+    expect(app.store.keeping()).toBe(ID);
+    expect(readRun(runFile.text)?.workoutId).toBe(ID);
+    expect(app.store.start(next)).toBe("busy");
     // Room again: handed over, its file emptied, and the next workout may start, the first one kept once.
     disk.full = false;
     app.store.retry();

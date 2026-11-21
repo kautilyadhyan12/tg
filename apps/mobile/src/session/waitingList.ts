@@ -133,7 +133,13 @@ export function createWaitingList<T, R>(setup: WaitingSetup<T, R>): WaitingList<
     // Never kept in memory alone: the file is read first, so the write that keeps this one holds every other too.
     await start();
     const id = setup.idOf(thing);
-    if (waiting.some((t) => setup.idOf(t) === id) || refused.some((r) => setup.refusedIdOf(r) === id) || sent.includes(id)) return true;
+    if (refused.some((r) => setup.refusedIdOf(r) === id) || sent.includes(id)) return true;
+    // Already waiting, perhaps in memory alone after a write that failed: written again, and answered by whether the
+    // file now holds it (re-check, H3), never "kept" on the strength of memory.
+    if (waiting.some((t) => setup.idOf(t) === id)) {
+      await keep();
+      return !flags.unsaved;
+    }
     if (waiting.length >= setup.most) return false;
     waiting = [...waiting, thing];
     changed();
