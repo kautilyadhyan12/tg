@@ -325,7 +325,7 @@ export function Summary({ finished, keeping, waiting, effort, units, onDone, onN
               {stretches.length === 0 ? null : (
                 <View style={[styles.box, styles.stretchBox]}>
                   <View style={styles.stretchTop}>
-                    <Image source={pictures.greekyoga} resizeMode="cover" style={StyleSheet.absoluteFill} accessible={false} />
+                    <Image source={pictures.greekyoga} resizeMode="cover" style={styles.stretchPicture} accessible={false} />
                     <View style={[StyleSheet.absoluteFill, styles.stretchFade]} />
                     <Txt kind="eyebrow" style={styles.stretchWords}>
                       Cool-down stretches
@@ -429,10 +429,11 @@ function XpBox({ after }: { after: WorkoutAfter }) {
         {after.streak > 0 ? (
           <View style={[styles.row, styles.streak]}>
             <Icon name="flame" size={22} colour="orange" filled />
-            <Txt kind="strong" style={styles.grow}>
-              {streakWords(after.streak)}
-            </Txt>
-            <Txt kind="small">{streakNext(after.streak)}</Txt>
+            {/* One under the other: side by side, a small phone cut the streak's own words. */}
+            <View style={styles.grow}>
+              <Txt kind="strong">{streakWords(after.streak)}</Txt>
+              <Txt kind="small">{streakNext(after.streak)}</Txt>
+            </View>
           </View>
         ) : null}
       </View>
@@ -553,7 +554,9 @@ const styles = StyleSheet.create({
   ideaPicture: { width: 64, height: 64, borderRadius: 16, backgroundColor: colours.box },
   ideaWords: { gap: 3 },
   stretchBox: { padding: 0, paddingBottom: 14, overflow: "hidden" },
-  stretchTop: { height: 110, justifyContent: "flex-end", paddingHorizontal: 16, paddingBottom: 6 },
+  // The picture is a band at the box's top, cut to it: never over the stretches' words.
+  stretchTop: { height: 110, overflow: "hidden", justifyContent: "flex-end", paddingHorizontal: 16, paddingBottom: 6 },
+  stretchPicture: { position: "absolute", top: 0, left: 0, right: 0, height: 110, width: undefined },
   stretchFade: { experimental_backgroundImage: `linear-gradient(180deg, transparent 30%, ${colours.raised} 100%)` },
   stretchWords: { color: colours.orange },
   stretchRow: { paddingHorizontal: 16 },
