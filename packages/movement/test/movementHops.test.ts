@@ -55,14 +55,16 @@ describe("the worst thing: a jump of 8 cm or more is never counted as a squat, h
 });
 
 describe("the same jumps drawn on a man's own squats, his phone on the floor and raised (52a-ii-b-i)", () => {
-  // His nine sets: side on, half turned and from the front on a shiny floor, side on on a dull one, and five from a raised
+  // His ten sets: side on, half turned and from the front on a shiny floor, two side on on a dull one (he turns round between them), and five from a raised
   // phone (round one: the test first tried three of them).
   const FLOOR = VIDEOS.filter((v) => v.entry.person === "man, his own phone, on the floor and raised" && v.entry.movement === "squat" && v.entry.reps !== null).map((v) => v.video.label);
-  /** Counted, in plain sight until a job closes them (52a-ii-b-ii-b-ii): 55 jumps of 8 to 12 cm of 810 (37 of 8 cm, 14 of 10, 4 of
-   *  12), most taking off 0.1 to 0.2 s before the rep is back up, six of them as filmed. From a phone on the floor or low the model's foot points wander by 4 to 9
-   *  cm, so a jump's feet read only a few centimetres above where his feet stand, under the 4 cm the rule is held at by
-   *  the jumps of 52a-ii-a, which are all refused. Every way of placing a foot's resting point, and every other sign tried
-   *  (the hips, the knees, a picture agreeing), refused some of his proper squats or let more jumps through. */
+  /** Counted, in plain sight until a job closes them (53, where a phone on the floor is tried in front of a live person):
+   *  9 jumps of 8 cm of 900 (55 of 810 until 52a-ii-b-ii-b-ii), all on his shiny floor, taking off 0.1 or 0.2 s before
+   *  the rep is back up, one of them as filmed. Side on there, the model settles his near foot's points 4 to 5 cm higher
+   *  on the picture after each squat he stands up from, so a reading that keeps all his squats measures an 8 cm jump at
+   *  4 cm or under; half turned, his toe point lies on the floor's reflection. The rest were mended in the engine: a foot
+   *  point not seen while he stood just before the rep, and, away from the bottom, a foot whose heel and toes disagree,
+   *  no longer hide a jump. */
   const KNOWN: readonly string[] = [
     "floor_phone_test 0-12 s, 0.08 m, -200 ms, 8 a second",
     "floor_phone_test 0-12 s, 0.08 m, -200 ms, uneven, seed 2",
@@ -73,56 +75,10 @@ describe("the same jumps drawn on a man's own squats, his phone on the floor and
     "floor_phone_test 0-12 s, 0.08 m, -100 ms, uneven, seed 3",
     "floor_phone_test 13.9-21.1 s, 0.08 m, -100 ms, 15 a second",
     "floor_phone_test 13.9-21.1 s, 0.08 m, -100 ms, uneven, seed 1",
-    "floor_phone_test 22.3-31.4 s, 0.08 m, -100 ms, 8 a second",
-    "usual_v04 9.8-23.2 s, 0.08 m, -200 ms, 8 a second",
-    "usual_v04 9.8-23.2 s, 0.1 m, -200 ms, 8 a second",
-    "usual_v11 1.3-7.4 s, 0.08 m, -200 ms, 8 a second",
-    "usual_v11 1.3-7.4 s, 0.08 m, -200 ms, uneven, seed 2",
-    "usual_v11 1.3-7.4 s, 0.08 m, -200 ms, uneven, seed 3",
-    "usual_v11 1.3-7.4 s, 0.08 m, -100 ms, as filmed",
-    "usual_v11 1.3-7.4 s, 0.08 m, -100 ms, 15 a second",
-    "usual_v11 1.3-7.4 s, 0.08 m, -100 ms, 8 a second",
-    "usual_v11 1.3-7.4 s, 0.08 m, -100 ms, uneven, seed 1",
-    "usual_v11 1.3-7.4 s, 0.08 m, -100 ms, uneven, seed 2",
-    "usual_v11 1.3-7.4 s, 0.08 m, -100 ms, uneven, seed 3",
-    "usual_v11 1.3-7.4 s, 0.1 m, -200 ms, uneven, seed 2",
-    "usual_v11 1.3-7.4 s, 0.1 m, -100 ms, as filmed",
-    "usual_v11 1.3-7.4 s, 0.1 m, -100 ms, 15 a second",
-    "usual_v11 1.3-7.4 s, 0.1 m, -100 ms, 8 a second",
-    "usual_v11 1.3-7.4 s, 0.1 m, -100 ms, uneven, seed 1",
-    "usual_v11 1.3-7.4 s, 0.1 m, -100 ms, uneven, seed 2",
-    "usual_v11 1.3-7.4 s, 0.1 m, -100 ms, uneven, seed 3",
-    "usual_v11 1.3-7.4 s, 0.12 m, -200 ms, as filmed",
-    "usual_v11 1.3-7.4 s, 0.12 m, -200 ms, 15 a second",
-    "usual_v11 1.3-7.4 s, 0.12 m, -100 ms, 15 a second",
-    "usual_v11 1.3-7.4 s, 0.12 m, -100 ms, uneven, seed 1",
-    "usual_v11 8.3-14.2 s, 0.08 m, -200 ms, as filmed",
-    "usual_v11 8.3-14.2 s, 0.08 m, -200 ms, 15 a second",
-    "usual_v11 8.3-14.2 s, 0.08 m, -200 ms, 8 a second",
-    "usual_v11 8.3-14.2 s, 0.08 m, -200 ms, uneven, seed 1",
-    "usual_v11 8.3-14.2 s, 0.08 m, -200 ms, uneven, seed 2",
-    "usual_v11 8.3-14.2 s, 0.08 m, -200 ms, uneven, seed 3",
-    "usual_v11 8.3-14.2 s, 0.1 m, -200 ms, uneven, seed 2",
-    "usual_v11 8.3-14.2 s, 0.1 m, -200 ms, uneven, seed 3",
-    "usual_v11 30-39 s, 0.08 m, -200 ms, 15 a second",
-    "usual_v11 30-39 s, 0.08 m, -200 ms, 8 a second",
-    "usual_v11 30-39 s, 0.08 m, -200 ms, uneven, seed 1",
-    "usual_v11 30-39 s, 0.08 m, -200 ms, uneven, seed 2",
-    "usual_v11 30-39 s, 0.08 m, -200 ms, uneven, seed 3",
-    "usual_v11 30-39 s, 0.08 m, -100 ms, as filmed",
-    "usual_v11 30-39 s, 0.08 m, -100 ms, 15 a second",
-    "usual_v11 30-39 s, 0.08 m, -100 ms, 8 a second",
-    "usual_v11 30-39 s, 0.08 m, -100 ms, uneven, seed 1",
-    "usual_v11 30-39 s, 0.08 m, -100 ms, uneven, seed 2",
-    "usual_v11 30-39 s, 0.08 m, -100 ms, uneven, seed 3",
-    "usual_v11 30-39 s, 0.1 m, -200 ms, 8 a second",
-    "usual_v11 30-39 s, 0.1 m, -200 ms, uneven, seed 1",
-    "usual_v11 30-39 s, 0.1 m, -200 ms, uneven, seed 2",
-    "usual_v11 30-39 s, 0.1 m, -100 ms, uneven, seed 3",
   ];
 
-  it("his nine sets, each hopped at most of its reps, so the grid proves something", () => {
-    expect(FLOOR).toHaveLength(9);
+  it("his ten sets, each hopped at most of its reps, so the grid proves something", () => {
+    expect(FLOOR).toHaveLength(10);
     for (const label of FLOOR) {
       const video = videoOf(label);
       const reps = countedTimes(SQUAT, video).length;

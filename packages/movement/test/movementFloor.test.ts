@@ -17,7 +17,7 @@ const runs = (file: string) =>
 describe("the worst thing: good squats with the phone on the floor are counted, every one", () => {
   it.each([
     ["floor_phone_test", "the phone on a shiny floor: side on, half turned, from the front", 9],
-    ["usual_v04", "the phone on a dull floor: side on", 3],
+    ["usual_v04", "the phone on a dull floor: side on, then side on the other way after turning round", 3],
     ["usual_v11", "the phone raised: five pairs, a new way of facing each", 10],
   ])("%s (%s) counts its %s squats, each set what was counted by eye", (file, _what, total) => {
     const sets = runs(file);

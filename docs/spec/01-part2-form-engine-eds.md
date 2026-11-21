@@ -2195,6 +2195,44 @@ can be made again when more floor videos exist (job 53's live tries). **Limits, 
 a phone on the floor is proven only on his real floor videos (52a-ii-b-i) and, for the other exercises, waits for job 53's
 live tries and 54's own videos.
 
+**As built, the floor mended in the engine (52a-ii-b-ii-b-ii, 2026-11-22; `rulings/2026-11-22-52a-ii-b-ii-b-ii.md`).** Measured
+first, on his sets frame by frame, what let the drawn jumps through: the lesser of the two feet, read where both are, was a
+foot the model reads poorly. Side on, the far foot, hidden behind the near one while he stands, shows during a squat where the
+model guesses it; on his raised phone one foot's toe point slides 8 cm down the picture as he stands up while its heel rises.
+**Two rules in the matcher, the squat's numbers untouched:** away from the bottom of a rep, a foot point not seen in the moment
+before the rep decides nothing about the feet leaving the floor, and a frame in which only such a point is read has its feet
+unseen (so a jump with the near foot hidden in the air is never let through); and away from the bottom, where both feet are
+read, a foot whose heel and toes rise apart by more than 3 cm (`FOOT_ENDS_AGREE`) while the other's agree is set aside and the
+other foot decides. At the bottom both feet are read together as before: set aside there too, a weight-plate goblet squat
+shaken 1 cm lost a squat, and with his videos left out "feet stay down" fell from 4 to 3 cm. **His dull-floor set is two:**
+from 16.9 to 19.0 s he turns round, through facing the phone, to side on the other way (his shoulder line in 3D from 73 to
+-75°), so his first two squats (9.8 to 17.5 s) and his third (19.2 to 23.2 s) are each a set of their own; his ten sets count
+2 and 1 there, as by eye. **Measured:** jumps of 8 to 12 cm drawn on his ten sets, 9 of 900 counted (55 without the two
+rules, 25 with the first alone; the 3 cm: 9 at 2.5 and 3, 15 at 2, 11 at 3.5, 14 at 4, 19 at 5), all 8 cm, all on his shiny
+floor, taking off 0.1 or 0.2 s before the rep is back up, one of them as filmed; of 15 and 20 cm, none of 720 on his ten sets
+and the three squat videos of 52a-ii-a; the 270 jumps on those three, and the jumps from the bottom, none, as before. Every
+squat set counts as before, as filmed and under every held replay, with every person's numbers and with each left out, and
+the squat's numbers are as they were; every other movement counts 0 as before, but a squat jack done twice as slowly now 1
+(was 2: open, 52b-i); the phone's own runs, 92 of 100 sets the same (his squats 19 of 22, as before). The floor view, judged
+against his five floor sets, still does not read as his floor at any lean and stays shown (`movementFloorView.test.ts` pins
+each lean and fold again); at the replay's lean the hips below standing now go past his floor's (0.088 of a leg redrawn, his
+floor 0.073, his raised phone 0.063); jumps drawn on his raised sets seen from the floor, 4 of 150 counted (14 before), none
+from the raised phone itself (12 before). **Tried and not kept,
+each measured:** a jump read against where the feet were just before and just after it (his squats right but one rep under
+three replays, 158 of 810 jumps), or against the higher of where they stood before the rep and where they settled after, with the rep judged
+only once the feet are down (114); the knees rising and falling with the feet (119, and a real squat lost); the hips rising
+above standing (a proper squat's hips stand up to 0.18 of a leg above the standing first taken); the hips rising and falling
+in the moment after (two of his open rows put right, yet a Smith machine split squat's step, a foot up while the hips stay,
+counted); a middle of each foot point over 0.1 s (6 more jumps of 810, and the phone's one-picture foot on his dull floor is
+read by the feet's travel too). **Open, for job 53's live tries of a floor phone, each written on its video:** side on, on
+his shiny floor, the model settles his near foot's points 4 to 5 cm higher on the picture after each squat he stands up from,
+so a reading of the foot points that keeps these squats measures an 8 cm jump at 4 cm or under (the 9 jumps above), and his
+first set under 8 pictures a second, uneven pictures, shake, the chip's gap and the reps done faster still loses squats;
+half turned, his toe point lies on the floor's reflection, up to 8 cm down the picture, and his third squat there done 1.5 or
+2 times as slowly, and on the phone as filmed, reads its feet over 4 cm; on the phone his dull floor's second squat, a foot
+put 10 cm up for one picture; and with his videos left out, "feet stay in place" set at 5 cm from the eight people filmed at
+hip height, under his first set's and his last raised pair's 5 to 6 cm.
+
 An exercise that does not pass is published as "count by hand", never with a wrong camera
 count. Kd tries one exercise of each kind of movement on the phone, about a dozen, never
 each one. After launch the server sees, for each exercise, how often members changed the
