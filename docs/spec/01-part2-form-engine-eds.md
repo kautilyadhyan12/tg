@@ -2772,8 +2772,8 @@ screen (`apps/mobile/src/screens/workout/Summary.tsx`, words `afterWords.ts`, ta
 - **Round one (2026-11-21):** the weight beside the calories is the one the save worked them out at, kept on the workout
   (`kcal_weight_grams`, migration 0246, empty where none was given; a weigh-in after the save never changes the line); a
   person who has given a weight since reads "Your weight is saved. Your next workouts use it." in place of Add your weight;
-  the XP adds the badges the save awarded (`forBadges`, a badge earned within a minute of the workout's save, "· 50 for a new
-  badge"); the streak says "Train today to keep it" where today is not yet one of its days (`streak.today`); a press of the
+  the XP adds the badges the save awarded (`forBadges`: a badge a workout can earn, never a meal's, awarded within 10 s of
+  the workout's save and before the person's next workout or run; "· 50 for a new badge"); the streak says "Train today to keep it" where today is not yet one of its days (`streak.today`); a press of the
   stars counts as waiting until the server has it, and one the full list could not keep says "These stars couldn't be saved.
   Try again later."; a refused workout's Results says "This workout wasn't saved, so it earns no XP or records."; the shared
   waiting list takes `ready`, so stars waiting for their workout keep their place and never hold up another workout's.

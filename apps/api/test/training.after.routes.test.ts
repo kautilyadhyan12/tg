@@ -194,6 +194,21 @@ d("after a workout: the summary and the effort stars (real Postgres)", () => {
       expect(got.streak).toEqual({ days: 1, today: false });
     });
 
+    it("round one L7: a meal's badge in the same moment, and a badge the next save earned, are never this workout's", async () => {
+      const a = await person();
+      const first = await save(a, workout(daysAgo(2), [set()]));
+      const second = await save(a, workout(daysAgo(1), [set()]));
+      const at = async (id: string) => (await sql<{ created_at: Date }[]>`SELECT created_at FROM workouts WHERE id = ${id}`)[0]?.created_at ?? new Date();
+      const [firstAt, secondAt] = [await at(first), await at(second)];
+      // A meal logged a moment after the first save earns its own badge; the second save earns another.
+      await sql`INSERT INTO user_achievements (user_id, code, earned_at) VALUES (${a.id}, 'first_meal', ${new Date(firstAt.getTime() + 500)})`;
+      await sql`INSERT INTO user_achievements (user_id, code, earned_at) VALUES (${a.id}, 'early_bird', ${new Date(secondAt.getTime() + 1)})`;
+      const one = await read(a, first);
+      // Only first_workout (bronze, 50) is the first save's; early_bird is the second's, first_meal a meal's.
+      expect(one.xp).toMatchObject({ forBadges: 50, earned: 100 });
+      expect((await read(a, second)).xp.forBadges).toBe(150);
+    });
+
     it("a workout done today counts today for the streak", async () => {
       const a = await person();
       const id = await save(a, workout(new Date(Date.now() - 40 * 60_000), [set()]));

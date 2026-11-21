@@ -222,3 +222,14 @@ export async function exerciseIdOf(sql: Sql, slug: string): Promise<string | nul
   const rows = await sql<{ id: string }[]>`SELECT id FROM exercises WHERE slug = ${slug}`;
   return rows[0]?.id ?? null;
 }
+
+/** When the person next saved a workout or a run after this workout's own save; null for none yet. A badge awarded after
+ *  it is that save's, never this workout's (job 64a-iii, round one L7). */
+export async function nextSaveAfter(sql: Sql, userId: string, workoutId: string, createdAt: Date): Promise<Date | null> {
+  const rows = await sql<{ at: Date | null }[]>`
+    SELECT LEAST(
+      (SELECT min(created_at) FROM workouts WHERE user_id = ${userId} AND id <> ${workoutId} AND created_at >= ${createdAt}),
+      (SELECT min(created_at) FROM runs WHERE user_id = ${userId} AND created_at >= ${createdAt})
+    ) AS at`;
+  return rows[0]?.at ?? null;
+}
