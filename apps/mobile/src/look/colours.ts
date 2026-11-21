@@ -260,6 +260,8 @@ export const shadows = {
   /** A strip lifted off the picture under it (an exercise's facts, 63a). */
   lift: "0 12px 30px rgba(0,0,0,0.45)",
   button: "0 6px 22px rgba(255,138,31,0.38), inset 0 1px 0 rgba(255,255,255,0.22)",
+  /** A main button whose page asks for little glow: a workout's last screen (Kd, 64a-iii: "orange glowing too much"). */
+  buttonSoft: "0 3px 10px rgba(255,138,31,0.18), inset 0 1px 0 rgba(255,255,255,0.22)",
   /** The raised main button (sign-in, 12e): its glow, a warm rim, the light along its top and a shade at its foot. */
   buttonRaised: "0 10px 28px rgba(255,138,31,0.45), 0 0 0 1px rgba(255,190,120,0.35), inset 0 1px 0 rgba(255,255,255,0.45), inset 0 -2px 0 rgba(150,60,0,0.25)",
   /** Google's white button and the app's name lifted off the picture. */

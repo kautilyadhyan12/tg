@@ -21,6 +21,10 @@ export interface WaitingSetup<T, R> {
   refusedIdOf: (refused: R) => string;
   /** How many may wait; past it a new one is not kept. */
   most: number;
+  /** Whether a thing may go now. One that may not stays where it is, unsent, and the next that may goes in its turn: a
+   *  workout's stars wait for their workout, never holding up another's (64a-iii, round one L6). Without it every
+   *  thing may go. */
+  ready?: (thing: T) => boolean;
   /** The phone's clock, for waiting longer between tries while the server does not answer; a test's own. */
   clock?: () => number;
 }
@@ -150,7 +154,7 @@ export function createWaitingList<T, R>(setup: WaitingSetup<T, R>): WaitingList<
   async function drain(): Promise<void> {
     if (flags.unsaved) await keep();
     for (;;) {
-      const head = waiting[0];
+      const head = setup.ready === undefined ? waiting[0] : waiting.find(setup.ready);
       if (head === undefined || stopped()) return;
       const answer = await setup.send(head);
       if (stopped()) return;

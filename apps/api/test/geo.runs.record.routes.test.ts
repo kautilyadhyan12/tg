@@ -170,6 +170,9 @@ d("record a run (real Postgres)", () => {
         // The streak reminder and the Sunday summary (19e-ii) count the person's own runs for themselves: no
         // route, no place, no gym.
         "modules/reminders/nudgesRepo.ts",
+        // A workout's summary (64a-iii) asks when the person's own next run was saved, so a badge that run earned is
+        // never told as the workout's: a time, never a route, a place or a gym.
+        "modules/training/historyRepo.ts",
         "modules/workouts/repo.ts",
       ]);
     });
