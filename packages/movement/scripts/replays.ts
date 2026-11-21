@@ -25,11 +25,11 @@
 //     passer-by instead of the person is 52d's.
 //   - on the floor (52a-ii-b-ii-a): the phone standing upright on the floor, as most members will stand it, its lens
 //     about 15 cm up and leaning back 14 degrees, the middle of a man's own six upright floor videos (12.6 to 14.5 in
-//     five, 6.3 in one), stepped back where the whole body would not be in the picture. Redrawn from the 3D points as a
-//     change added to the picture's own points, so that drawn from the phone's own place the picture comes back exactly;
-//     kept because his own squats from a raised phone, redrawn so, read as his real floor squats do (floorView.ts
-//     `faithful`). Drawn leaning back 6.5 degrees they do not, and that one is not used. Not tried on a video filmed
-//     from the floor. It sets no number: the squat's numbers stay as 52a-ii-b-i set them.
+//     five, 6.4 in one), stepped back where the whole body would not be in the picture. Redrawn from the 3D points as a
+//     change added to the picture's own points, so that drawn from the phone's own place the picture comes back exactly.
+//     Shown, not held: it would be held once his own squats from a raised phone, redrawn so, read as his real floor
+//     squats do (floorView.ts `faithful`), and at none of his six leans do they yet (52a-ii-b-ii-b). Not tried on a
+//     video filmed from the floor. It sets no number: the squat's numbers stay as 52a-ii-b-i set them.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Down, MovementFrame, SeenPerson } from "@app/shared";
@@ -375,11 +375,14 @@ export const focalOf = (aspect: number, millimetres = LENS_MM): number => (milli
 /** A phone standing upright on the floor: its lens about 15 cm up (a phone 16 to 17 cm tall on its short end, the lens
  *  near its top; not measured), and how far it leans back, degrees, measured on a man's own six upright floor videos
  *  from where his feet and his size lie on the picture while he stands tall (floorView.ts `phoneLean`): 12.6 to 14.5 in
- *  five, 6.3 in one; 14 is their middle. `FLOOR_LEANS`: the leans tried, his first video's and the middle; drawn at
- *  6.5 his raised squats do not read as his floor squats do, and that one is not used (floorView.ts `faithful`). */
+ *  five, 6.4 in one; 14 is their middle. `FLOOR_LEANS`: the leans first tried, his first video's as first measured
+ *  and the middle; `FLOOR_LEANS_MEASURED`, each of his six. At none do his raised squats, redrawn, yet read as his floor
+ *  squats do (floorView.ts `faithful`). */
 export const FLOOR_LENS = 0.15;
 export const FLOOR_LEAN = 14;
 export const FLOOR_LEANS: readonly number[] = [6.5, 14];
+/** Each of his six upright floor videos' lean, rounded to a tenth (floorView.ts `phoneLean`): the floor view is checked at each. */
+export const FLOOR_LEANS_MEASURED: readonly number[] = [6.4, 12.6, 13.7, 14.3, 14.4, 14.5];
 const FOOT_POINTS = [29, 30, 31, 32];
 
 const q01 = (values: readonly number[], k: number): number | null => {
@@ -619,6 +622,22 @@ export function onTheFloor(lens: number, degrees: number, mostBack = 3, millimet
  *  phone's sensor would give them. A frame with no 3D points or no size is left as it was: it decides nothing. Only the
  *  first person is moved: the one the model follows. */
 export function redraw(frames: Frames, camera: FloorCamera, placed: readonly (V3[] | null)[] = fromCamera(frames, focalOf(frames[0]?.aspect ?? 1)), focal = focalOf(frames[0]?.aspect ?? 1)): MovementFrame[] {
+  // How far each point lies on the picture from its 3D place drawn there (the pose model's own wobble and error) is a
+  // share of the body's size on the picture, so it grows or shrinks as the body does: by how much nearer or further the
+  // hips are from the new phone, the middle over the video, one number for the video. Kept at its old size, a foot's
+  // wobble read 1.3 to 1.5 cm more travel on a body the floor phone, further away, sees smaller. Taken point by point and
+  // frame by frame instead, it added travel of its own wherever a foot passed between held and moving.
+  const grow =
+    q01(
+      placed.flatMap((q) => {
+        const hips = q === null ? undefined : [q[23], q[24]];
+        if (hips?.[0] === undefined || hips[1] === undefined) return [];
+        const middle: V3 = [(hips[0][0] + hips[1][0]) / 2, (hips[0][1] + hips[1][1]) / 2, (hips[0][2] + hips[1][2]) / 2];
+        const seen = seenFrom(middle, camera);
+        return middle[2] > 0 && seen[2] > 0 ? [middle[2] / seen[2]] : [];
+      }),
+      0.5,
+    ) ?? 1;
   return frames.map((f, k) => {
     const q = placed[k] ?? null;
     return {
@@ -632,8 +651,8 @@ export function redraw(frames: Frames, camera: FloorCamera, placed: readonly (V3
             if (at === undefined) return [x, y, z, v, pr];
             const was = project(at, f.aspect, focal);
             const now = project(seenFrom(at, camera), f.aspect, focal);
-            const nx = x + (now[0] - was[0]);
-            const ny = y + (now[1] - was[1]);
+            const nx = x + (now[0] - was[0]) + (x - was[0]) * (grow - 1);
+            const ny = y + (now[1] - was[1]) + (y - was[1]) * (grow - 1);
             return [nx, ny, z, v, outside(nx, ny) ? 0 : pr];
           }),
           world: p.world.map((w) => turned(w, camera.lean)),
@@ -663,8 +682,8 @@ export const REPLAYS: readonly Replay[] = [
   { name: "twice as slow", words: "the same reps done twice as slowly", hold: true, edit: tempo(2), fits: false },
   {
     name: "on the floor",
-    words: "the phone standing on the floor, its lens about 15 cm up and leaning back 14 degrees, as a man's own floor phone stood",
-    hold: true,
+    words: "the phone standing on the floor, its lens about 15 cm up and leaning back 14 degrees, as a man's own floor phone stood (shown, not held: it does not yet read as his floor squats do)",
+    hold: false,
     edit: onTheFloor(FLOOR_LENS, FLOOR_LEAN),
     fits: false,
     tried: (_frames, entry) => entry.floor !== true,

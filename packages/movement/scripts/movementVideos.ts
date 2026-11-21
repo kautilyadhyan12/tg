@@ -71,7 +71,7 @@ export function labelOf(entry: MovementVideo, label: string): string {
 /** A man's own videos, filmed on 2026-11-20 with his phone on the floor and on a raised stand (52a-ii-b): one person,
  *  both rooms left out together. Kept as body points only, under labels that name nobody. */
 const FLOOR_PERSON = "man, his own phone, on the floor and raised";
-const floorOther = (label: string, view: View, seen: string): MovementVideo => ({ ...other(`movement-points/${label}`, FLOOR_PERSON, view, seen), ...(seen.startsWith("The phone on the floor") ? { floor: true } : {}) });
+const floorOther = (label: string, phone: "floor" | "raised", view: View, seen: string): MovementVideo => ({ ...other(`movement-points/${label}`, FLOOR_PERSON, view, seen), ...(phone === "floor" ? { floor: true } : {}) });
 
 export const MOVEMENT_VIDEOS: readonly MovementVideo[] = [
   // ── The squat: the eight people its numbers are set from ───────────────────────────────────────────────
@@ -148,14 +148,6 @@ export const MOVEMENT_VIDEOS: readonly MovementVideo[] = [
     sets: true,
     sha256: "f092fb73104f2b4e6dcc3dfb2e82238a2f35b6513f507ca0cc24f1e2ff9e891e",
     seen: "2026-11-19, 16 frames: the one woman, turned most of the way, in each. The video starts with her low, rising: not a rep.",
-    replayOpen: {
-      replays: ["on the floor"],
-      why:
-        "52a-ii-b-ii-b, the floor mended: seen from the floor phone, standing tall between her squats her hips read 0.13 to 0.16 of a leg " +
-        "higher on the picture than in 3D (a phone leaning back shows the legs larger than the trunk); past 0.15 the picture's height is not " +
-        "trusted, so she is not read standing before her second squat and it is never begun. A man's own floor phone reads him standing tall " +
-        "0.05 to 0.14 apart in 95 of 100 pictures: the line sits close to what a real floor phone shows.",
-    },
   },
   {
     file: "movement-points/sumo_squat_2a",
@@ -240,22 +232,15 @@ export const MOVEMENT_VIDEOS: readonly MovementVideo[] = [
   { file: "movement-points/usual_v11", cut: [15.3, 21.6], movement: "squat", person: FLOOR_PERSON, view: "front", reps: 2, sets: true, sha256: "e9f6f3f98f7b27d7b5737c32734a3ad8025a0e88af06d0ca668c485f42e36707",
     seen: "2026-11-20 (52a-ii-b-i), 16 frames of the set drawn with the model's points: the one man, followed in each. The phone raised: two squats facing it." },
   { file: "movement-points/usual_v11", cut: [22, 29.5], movement: "squat", person: FLOOR_PERSON, view: "between", reps: 2, sets: true, sha256: "e9f6f3f98f7b27d7b5737c32734a3ad8025a0e88af06d0ca668c485f42e36707",
-    seen: "2026-11-20 (52a-ii-b-i), 16 frames of the set drawn with the model's points: the one man, followed in each. The phone raised: two squats half turned the other way.",
-    replayOpen: {
-      replays: ["on the floor"],
-      why:
-        "52a-ii-b-ii-b, the floor mended: right with every person's numbers; with his own videos left out, \"feet stay in place\" is 5 cm, " +
-        "set from the eight people filmed from about hip height, and seen from the floor phone his second squat's feet read 5.8 cm moved " +
-        "(4.3 as filmed).",
-    } },
+    seen: "2026-11-20 (52a-ii-b-i), 16 frames of the set drawn with the model's points: the one man, followed in each. The phone raised: two squats half turned the other way." },
   { file: "movement-points/usual_v11", cut: [30, 39], movement: "squat", person: FLOOR_PERSON, view: "between", reps: 2, sets: true, sha256: "e9f6f3f98f7b27d7b5737c32734a3ad8025a0e88af06d0ca668c485f42e36707",
     seen: "2026-11-20 (52a-ii-b-i), 16 frames of the set drawn with the model's points: the one man, followed in each. The phone raised: two squats half turned.",
     replayOpen: {
-      replays: ["shaky", "chip's gap", "slower", "on the floor"],
+      replays: ["shaky", "chip's gap", "slower"],
       why:
-        "52a-ii-b-ii-b, the floor mended: right with every person's numbers under all four; with his own videos left out, the numbers come from " +
-        "the eight people filmed from about hip height, and a centimetre of shake, the chip's gap, the same reps done 1.5 times as slowly or " +
-        "the floor phone (his second squat's feet 6.2 cm moved, where \"feet stay in place\" is then 5) put one of these two squats over them.",
+        "52a-ii-b-ii-b, the floor mended: right with every person's numbers under all three; with his own videos left out, the numbers come from " +
+        "the eight people filmed from about hip height, and a centimetre of shake, the chip's gap or the same reps done 1.5 times as slowly " +
+        "put one of these two squats over them.",
     } },
   // ── Twins of the squat, tried and never setting a number: a count here is expected, not a fault ─────────
   {
@@ -287,16 +272,7 @@ export const MOVEMENT_VIDEOS: readonly MovementVideo[] = [
   },
   // ── Looked at while the rules were chosen after all: a twin of the squat, tried, never setting a number ──────────
   { file: "movement-points/fresh_front_squat_barbell", movement: "squat", person: "woman, barbell in front", view: "side", reps: 3, sets: false,
-    seen: "A barbell front squat, three reps; she gets up from the third in the last 0.3 s. Looked at for the feet's rule (the model slides her toe point 7 cm down the picture at the bottom; her heel comes up 3 cm as she stands tall), so no longer a test on a video nobody had looked at.",
-    replayOpen: {
-      replays: ["on the floor"],
-      why:
-        "52a-ii-b-ii-b, the floor mended: seen from the floor phone, at the bottom of her first and third squats the picture and her 3D " +
-        "points put her hips 0.22 of a leg apart (in 95 of 100 pictures below standing; 0.10 as filmed), more than the 0.15 a picture's " +
-        "height is trusted within, so those two decide nothing. The redraw keeps the 3D points a hip-height phone's model gave; on a real " +
-        "floor phone the model reads its own 3D from its own picture (a man's own floor squats: 0.06 to 0.10 apart). Whether the redraw or " +
-        "the engine is at fault is that job's first question.",
-    } },
+    seen: "A barbell front squat, three reps; she gets up from the third in the last 0.3 s. Looked at for the feet's rule (the model slides her toe point 7 cm down the picture at the bottom; her heel comes up 3 cm as she stands tall), so no longer a test on a video nobody had looked at." },
   // ── Fresh videos (2026-11-19), measured after the squat's rules and numbers were fixed and never used to choose
   //    them: the test on videos nobody had looked at. Reps counted by eye before the engine was run on them. ────────
   { file: "movement-points/fresh_back_squat_barbell", movement: "squat", person: "woman, barbell on the back", view: "side", reps: null, sets: false, seen: "Fresh: a barbell back squat, side on, three reps by eye; the camera pans and zooms with her (the rack moves on the picture by her feet's 14 cm), so it is reported, never judged." },
@@ -405,13 +381,13 @@ export const MOVEMENT_VIDEOS: readonly MovementVideo[] = [
   other("movement-points/fresh_rack_pull_barbell", "fresh: barbell rack pull, one", "between", "Fresh: a barbell rack pull."),
   other("movement-points/fresh_curl_ez_bar_1", "fresh: standing EZ-bar curl, 1", "front", "Fresh: a standing EZ-bar curl."),
   // ── A phone on the floor or raised, the usual positions of other exercises (52a-ii-b-i): no squat in any ───────────
-  floorOther("usual_v02", "front", "The phone on the floor, upright: he stands and turns round slowly."),
-  { ...floorOther("usual_v03", "front", "The phone on the floor, on its long side: he stands and turns round."), phoneOpen: { why: `52b: as he turns, one more dip on the phone, called unseen. ${UNSEEN_FIRST}`, differences: ["the phone also says 34.6 s unseen"] } },
-  floorOther("usual_v05", "front", "The phone on the floor, upright: he sits cross-legged and turns round."),
-  floorOther("usual_v06", "side", "The phone on the floor, on its long side: on all fours, he turns round."),
-  floorOther("usual_v07", "side", "The phone on the floor, on its long side: he lies on the floor, raises a leg, sits up."),
+  floorOther("usual_v02", "floor", "front", "The phone on the floor, upright: he stands and turns round slowly."),
+  { ...floorOther("usual_v03", "floor", "front", "The phone on the floor, on its long side: he stands and turns round."), phoneOpen: { why: `52b: as he turns, one more dip on the phone, called unseen. ${UNSEEN_FIRST}`, differences: ["the phone also says 34.6 s unseen"] } },
+  floorOther("usual_v05", "floor", "front", "The phone on the floor, upright: he sits cross-legged and turns round."),
+  floorOther("usual_v06", "floor", "side", "The phone on the floor, on its long side: on all fours, he turns round."),
+  floorOther("usual_v07", "floor", "side", "The phone on the floor, on its long side: he lies on the floor, raises a leg, sits up."),
   {
-    ...floorOther("usual_v08", "side", "The phone on the floor, upright; barefoot: he sits on a chair side on, gets up, sits (a chair squat's movement: 54)."),
+    ...floorOther("usual_v08", "floor", "side", "The phone on the floor, upright; barefoot: he sits on a chair side on, gets up, sits (a chair squat's movement: 54)."),
     replayOpen: {
       replays: ["passer-by at the bottom"],
       why:
@@ -420,9 +396,9 @@ export const MOVEMENT_VIDEOS: readonly MovementVideo[] = [
         "somebody walking past while he sits, the sitting is hidden and one sit-and-stand counts as a squat.",
     },
   },
-  floorOther("usual_v09", "side", "The phone on the floor, upright: he stands at a chair, one leg lifted and bent."),
-  floorOther("usual_v10", "side", "The phone on the floor, on its long side: he sits on a chair, gets up, sits (54)."),
-  { ...floorOther("usual_v12", "between", "The phone raised, upright: he sits on a chair from the front and the side, stands, puts one knee on the chair."), phoneOpen: { why: `52b: one dip called unseen on the laptop only. ${UNSEEN_FIRST}`, differences: ["the phone does not say 47.2 s unseen"] } },
-  floorOther("usual_v13", "side", "The phone raised, on its long side: he lies on a bed, raises a leg, sits up."),
-  { ...floorOther("usual_v14", "front", "The phone raised, upright: he stands and turns round."), phoneOpen: { why: `52b: as he turns, dips called unseen, for another reason or only on the phone. ${UNSEEN_FIRST}`, differences: ["the laptop says 6.7 s unseen, the phone 6.7 s unseen (feet stay down)", "the phone also says 19.3 s unseen"] } },
+  floorOther("usual_v09", "floor", "side", "The phone on the floor, upright: he stands at a chair, one leg lifted and bent."),
+  floorOther("usual_v10", "floor", "side", "The phone on the floor, on its long side: he sits on a chair, gets up, sits (54)."),
+  { ...floorOther("usual_v12", "raised", "between", "The phone raised, upright: he sits on a chair from the front and the side, stands, puts one knee on the chair."), phoneOpen: { why: `52b: one dip called unseen on the laptop only. ${UNSEEN_FIRST}`, differences: ["the phone does not say 47.2 s unseen"] } },
+  floorOther("usual_v13", "raised", "side", "The phone raised, on its long side: he lies on a bed, raises a leg, sits up."),
+  { ...floorOther("usual_v14", "raised", "front", "The phone raised, upright: he stands and turns round."), phoneOpen: { why: `52b: as he turns, dips called unseen, for another reason or only on the phone. ${UNSEEN_FIRST}`, differences: ["the laptop says 6.7 s unseen, the phone 6.7 s unseen (feet stay down)", "the phone also says 19.3 s unseen"] } },
 ];

@@ -9,7 +9,7 @@ const ROWS = rowsOf(REPLAYS, "other");
 
 describe("the worst thing: no other movement is counted as a squat however the world changes it (second half)", () => {
   it("tries every other movement under each replay, the paces too", () => {
-    expect(REPLAYS.map((r) => r.name)).toEqual(["shaky", "chip's gap", "passer-by", "passer-by at the bottom", "faster", "slower", "twice as slow", "on the floor"]);
+    expect(REPLAYS.map((r) => r.name)).toEqual(["shaky", "chip's gap", "passer-by", "passer-by at the bottom", "faster", "slower", "twice as slow"]);
     expect(ROWS.length).toBeGreaterThanOrEqual(30 * REPLAYS.length);
   });
 
@@ -38,5 +38,7 @@ describe("the worst thing: no other movement is counted as a squat however the w
       "twice as slow: squat_jack_2",
     ]);
     for (const r of open) expect(r.reps.filter((x) => x.verdict === "short").length).toBe(0);
+    // Each counts what its entry says it does, and no more: the sit-and-stand one rep, the slowed squat jack two.
+    expect(open.map((r) => r.count)).toEqual([1, 2, 2]);
   });
 });

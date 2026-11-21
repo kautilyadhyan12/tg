@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { readKept } from "./bodyCheck.js";
 import { faithful, phoneLean, positionsTable } from "./floorView.js";
 import { MOVEMENT_VIDEOS } from "./movementVideos.js";
-import { FLOOR_LEANS } from "./replays.js";
+import { FLOOR_LEANS, FLOOR_LEANS_MEASURED } from "./replays.js";
 
 const TEST = join(import.meta.dirname, "../test");
 const round = (v: number, d: number): string => (Number.isFinite(v) ? v.toFixed(d) : "-");
@@ -19,14 +19,15 @@ for (const file of upright) {
   console.log(`  ${file}: ${lean === null ? "he stands tall in fewer than 10 pictures" : `leans back ${round(lean.degrees, 1)} degrees, ${round(lean.distance, 2)} m from him, ${String(lean.frames)} pictures`}`);
 }
 
-for (const lean of FLOOR_LEANS) {
+for (const lean of [...FLOOR_LEANS, ...FLOOR_LEANS_MEASURED.filter((l) => !FLOOR_LEANS.includes(l))]) {
   const f = faithful(lean);
   console.log(`\nRedrawn leaning back ${String(lean)} degrees: ${f.passes ? "KEPT, it reads as his real floor squats do" : "NOT USED, it does not read as his real floor squats do"}`);
   console.log(`  his raised sets redrawn count ${f.redrawn.map((s) => `${String(s.count)}/${String(s.reps)}`).join(", ")}; called short ${String(f.redrawn.reduce((n, s) => n + s.short, 0))}`);
   console.log("  reading | his real floor sets: lowest, middle, highest | his raised sets as filmed | redrawn | judged: taken at least half way to the floor's, never past it");
   for (const r of f.rows) {
-    const verdict = r.judged ? (r.within ? "yes" : "NO") : "shown only: how he moved";
-    console.log(`  ${r.reading} | ${round(r.low, 3)}, ${round(r.floor, 3)}, ${round(r.high, 3)} | ${round(r.filmed, 3)} | ${round(r.redrawn, 3)} | ${verdict}`);
+    const verdict = r.judged ? (r.within ? "yes" : "NO") : "shown only, not checked";
+    const past = r.beyond.length === 0 ? "" : ` (past every floor set: ${r.beyond.join(", ")})`;
+    console.log(`  ${r.reading} | ${round(r.low, 3)}, ${round(r.floor, 3)}, ${round(r.high, 3)} | ${round(r.filmed, 3)} | ${round(r.redrawn, 3)} | ${verdict}${past}`);
   }
 }
 

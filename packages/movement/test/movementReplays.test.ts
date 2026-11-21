@@ -24,7 +24,7 @@ describe("the worst thing: a jump is not a squat under any replay that must hold
   // Five reps with no pause between them, a 10 cm jump true to gravity at three take-off times round each rep's top.
   // The phone's ways of seeing pictures are in movementHops.test.ts; here every other replay, each with three seeds.
   const base = proofOf("prisoner_squat_3");
-  const NAMES = ["nearer", "farther", "tilted left", "tilted right", "shaky", "chip's gap", "passer-by", "on the floor"];
+  const NAMES = ["nearer", "farther", "tilted left", "tilted right", "shaky", "chip's gap", "passer-by"];
 
   it.each(NAMES)("under %s: 0", (name) => {
     for (const offset of [-100, 0, 100]) {
@@ -54,7 +54,6 @@ describe("each squat video counts what a person counts by eye, however the world
       "faster",
       "slower",
       "twice as slow",
-      "on the floor",
     ]);
     // The 13 squat videos with a count by eye, and a man's own nine sets from a phone on the floor and raised (52a-ii-b-i).
     expect(new Set(ROWS.map((r) => r.label)).size).toBe(22);
@@ -71,14 +70,7 @@ describe("each squat video counts what a person counts by eye, however the world
   it("a replay that changed nothing is not counted as tried, and nearer still tries most squat videos", () => {
     const nearer = ROWS.filter((r) => r.replay.name === "nearer");
     expect(nearer.filter((r) => r.tried).length).toBeGreaterThanOrEqual(10);
-    expect(ROWS.filter((r) => r.replay.name !== "nearer" && r.replay.name !== "on the floor").every((r) => r.tried)).toBe(true);
-    // The floor phone is not tried on a video filmed from the floor: a man's own four floor sets with a count by eye.
-    expect(ROWS.filter((r) => r.replay.name === "on the floor" && !r.tried).map((r) => r.label)).toEqual([
-      "floor_phone_test 0-12 s",
-      "floor_phone_test 13.9-21.1 s",
-      "floor_phone_test 22.3-31.4 s",
-      "usual_v04 9.8-23.2 s",
-    ]);
+    expect(ROWS.filter((r) => r.replay.name !== "nearer").every((r) => r.tried)).toBe(true);
   });
 
   it("the rows open today are listed here, each with the job that closes it; each is right as filmed", () => {
@@ -95,12 +87,10 @@ describe("each squat video counts what a person counts by eye, however the world
       "usual_v11 30-39 s: slower",
       "prisoner_squat_2: twice as slow",
       "floor_phone_test 13.9-21.1 s: twice as slow",
-      "prisoner_squat_4: on the floor",
-      "usual_v11 22-29.5 s: on the floor",
-      "usual_v11 30-39 s: on the floor",
-      "fresh_front_squat_barbell: on the floor",
     ]);
     expect(ROWS.filter(openRow).every((r) => /^52(a-ii-b-ii-b|b-i), /.test(r.entry.replayOpen?.why ?? ""))).toBe(true);
+    // An open row only ever misses squats: never one more than by eye, with every person's numbers or with its own left out.
+    expect(ROWS.filter(openRow).filter((r) => r.count > r.most || (r.leftOut ?? 0) > r.most).map((r) => `${r.label}: ${r.replay.name}`)).toEqual([]);
   });
 
   it.each(["passer-by", "passer-by at the bottom"])("%s hides at most the rep it covers: that rep decides nothing and is never called short", (name) => {

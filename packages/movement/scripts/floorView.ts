@@ -4,17 +4,20 @@
 // In words Kd can read:
 //   - how a man's own floor phone stood: from the pictures in which he stands tall, where his feet lie on the picture
 //     and how big he is there say how far the phone leaned back, its lens taken as about 15 cm up (`phoneLean`);
-//   - the redraw is kept only if his own squats from a raised phone, redrawn as the floor phone would see them, read as
-//     his real floor squats do (`faithful`): every squat counted and none called short; and each reading only the phone
-//     changes, the feet's two rules ("feet stay down", "feet stay in place") and how far the picture's hips and the 3D
-//     hips stand apart (the engine trusts a picture's height only within 0.15 of a leg of the 3D one), is taken by the
-//     redraw at least half way from where his raised sets read it, as filmed, to the middle of his real floor sets, and
-//     never past the furthest of his real floor sets. His feet stay down on every squat and his hips are where they are,
-//     whichever phone films them, so those readings change only with the phone. The readings of how he moved (depth,
-//     knees bent, hips and knees together, chest up) are shown and not judged: his raised and floor squats are not the
-//     same squats (as filmed his raised squats bend the knees 9 to 19 degrees less: 62 in the middle, his floor sets
-//     43 to 53). The check first written judged those too, and both leans failed it on the knees, which no phone can
-//     change. "Stance holds" and "hips alike" are read only where the phone's place shows them and are left out;
+//   - the redraw would be held as proof only if his own squats from a raised phone, redrawn as the floor phone would see
+//     them, read as his real floor squats do (`faithful`): every squat counted and none called short; and each of four
+//     readings, the feet's two rules ("feet stay down", "feet stay in place") and how far the picture's hips and the 3D
+//     hips stand apart below standing and standing (the engine trusts a picture's height only within 0.15 of a leg of the
+//     3D one), taken by the redraw at least half way from where his raised sets read it, as filmed, to the middle of his
+//     real floor sets, and the middle of his five redrawn sets never past the furthest of his real floor sets. Only the
+//     middle of the five is held so; each set past every floor set is listed (`beyond`), never hidden by the middle. As
+//     measured it passes at none of his six leans (floor-view prints each): it is shown, not held (replays.ts). The
+//     readings of how he moved (depth, knees bent, hips and knees together, chest up) are shown and not checked. A phone
+//     does change them, the knees and the trunk being read on the picture first, but part of each gap is how he moved:
+//     his raised and floor squats are not the same squats. The check first written judged them too and failed both leans
+//     it was tried at: the redraw took "knees bent" 4 of the 10 degrees towards his floor squats, short of half way, and
+//     "chest up" away from them. "Stance holds" and "hips alike" are read only where the phone's place shows them and are
+//     left out;
 //   - what a floor phone sees of sitting, lying, all fours and a chair: his eleven other videos as filmed, how often the
 //     body is found, how often each part is used, and how often the main measures are given (`positionsTable`), for the
 //     other kinds of counting (52c) and "can a phone on the floor count it" (54).
@@ -29,10 +32,15 @@ const SQUAT = readMovement("squat");
 /** The man whose own floor and raised videos these are (movementVideos.ts). */
 const HIS = "man, his own phone, on the floor and raised";
 
+/** The middle value; of an even number, the mean of the two in the middle. */
 const middleOf = (values: readonly number[]): number | null => {
   if (values.length === 0) return null;
   const s = [...values].sort((a, b) => a - b);
-  return s[Math.floor(s.length / 2)] ?? null;
+  const half = Math.floor(s.length / 2);
+  const upper = s[half];
+  const lower = s[half - 1];
+  if (upper === undefined) return null;
+  return s.length % 2 === 1 || lower === undefined ? upper : (upper + lower) / 2;
 };
 const share = (values: readonly number[], k: number): number | null => {
   if (values.length === 0) return null;
@@ -132,6 +140,9 @@ export interface Faithful {
     readonly redrawn: number;
     readonly judged: boolean;
     readonly within: boolean;
+    /** The redrawn sets whose own middle lies past the furthest of his real floor sets, on the far side from the raised
+     *  reading: shown, never hidden by the middle of the five. */
+    readonly beyond: readonly string[];
   }[];
   /** Every redrawn set counts its squats, and none is called short. */
   readonly counts: boolean;
@@ -157,7 +168,11 @@ export function faithful(lean: number, millimetres = LENS_MM, videos: readonly P
     const r = middleOf(across(redrawn, reading)) ?? Number.NaN;
     const half = (filmed + floor) / 2;
     const within = floor >= filmed ? r >= half && r <= high : r <= half && r >= low;
-    return { reading, low, floor, high, filmed, redrawn: r, judged: JUDGED.includes(reading), within };
+    const beyond = redrawn.flatMap((s) => {
+      const m = s.middles.get(reading) ?? null;
+      return m !== null && (floor >= filmed ? m > high : m < low) ? [s.label] : [];
+    });
+    return { reading, low, floor, high, filmed, redrawn: r, judged: JUDGED.includes(reading), within, beyond };
   });
   const counts = redrawn.every((s) => s.count === s.reps && s.short === 0);
   return { lean, real, raised, redrawn, rows, counts, passes: counts && rows.every((r) => !r.judged || r.within) };
