@@ -11,6 +11,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { Sql } from "postgres";
 import {
+  WORKOUT_NOT_ENDED,
   WORKOUT_SAVE_LIMITS,
   exerciseIdSchema,
   historyDaySchema,
@@ -79,7 +80,7 @@ export function registerTrainingRoutes(
           return reply.status(422).send(refusal);
         }
         if (err instanceof RefusedSaveError) {
-          return validationError(req, reply, "endedAt: the workout has not ended yet");
+          return reply.status(400).send({ error: WORKOUT_NOT_ENDED, message: "endedAt: the workout has not ended yet", requestId: req.id });
         }
         throw err;
       }
