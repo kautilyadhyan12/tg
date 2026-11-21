@@ -64,7 +64,7 @@ function Doing({ run, units, press, onPutAway, onDiscard }: { run: WorkoutRun; u
           {name}
         </Txt>
         <Txt kind="small" colour="text" style={[styles.centre, styles.digits]}>
-          {clock(run.totalMs)}
+          {clock(run.activeMs)}
         </Txt>
       </View>
       <Pressable
@@ -386,7 +386,7 @@ function Done({ finished, waiting, onDone }: { finished: Finished; waiting: Wait
         />
         <View style={styles.body}>
           <View style={[styles.wall, styles.tiles]}>
-            <Tile label="Time" text={clock(finished.totalMs)} colour={LED_AMBER} />
+            <Tile label="Time" text={clock(finished.activeMs)} colour={LED_AMBER} />
             <Tile label="Sets" text={String(finished.sets).padStart(2, "0")} colour={LED_RED} say={String(finished.sets)} />
             <Tile label="Exercises" text={String(finished.exercises).padStart(2, "0")} colour={LED_GREEN} say={String(finished.exercises)} />
           </View>
@@ -426,10 +426,10 @@ const styles = StyleSheet.create({
   faint: { opacity: 0.35 },
   topBar: { flexDirection: "row", alignItems: "center", gap: 4, marginHorizontal: -10 },
   // Pause and End are pressed mid-set, from a step back: big enough to hit at a glance (Kd: "pause, end is too small").
-  topRound: { width: TOP, height: TOP, borderRadius: TOP / 2, alignItems: "center", justifyContent: "center", backgroundColor: colours.veil },
-  topPill: { flexDirection: "row", gap: 8, minHeight: TOP, paddingHorizontal: 16, borderRadius: TOP / 2, alignItems: "center", justifyContent: "center", backgroundColor: colours.veil },
+  topRound: { width: TOP, height: TOP, borderRadius: TOP / 2, alignItems: "center", justifyContent: "center", backgroundColor: colours.overWords, borderWidth: 1, borderColor: colours.lineStrong },
+  topPill: { flexDirection: "row", gap: 8, minHeight: TOP, paddingHorizontal: 16, borderRadius: TOP / 2, alignItems: "center", justifyContent: "center", backgroundColor: colours.overWords, borderWidth: 1, borderColor: colours.lineStrong },
   topMiddle: { flex: 1 },
-  topEnd: { minHeight: TOP, paddingHorizontal: 18, borderRadius: TOP / 2, alignItems: "center", justifyContent: "center", backgroundColor: colours.veil },
+  topEnd: { minHeight: TOP, paddingHorizontal: 18, borderRadius: TOP / 2, alignItems: "center", justifyContent: "center", backgroundColor: colours.overWords, borderWidth: 1, borderColor: colours.lineStrong },
   body: { paddingHorizontal: 16, paddingTop: 6, gap: 12 },
   wall: { paddingHorizontal: 14, paddingVertical: 4, borderRadius: 22, borderWidth: 1, borderColor: colours.timerEdge, backgroundColor: colours.timerFace },
   label: { fontFamily: fonts.bold, letterSpacing: 1.1, color: colours.timerWords },

@@ -212,7 +212,7 @@ export function WorkoutLayerProvider({ children, files = PHONE_FILES }: { childr
 function WorkoutBar({ run, below, onOpen }: { run: WorkoutRun; below: number; onOpen: () => void }) {
   const insets = useSafeAreaInsets();
   const { exercise } = setOf(run);
-  const line = `${run.name.trim() === "" ? "Workout" : run.name.trim()} · ${clock(run.totalMs)} · ${exercise.name}, set ${String(run.set + 1)} of ${String(exercise.sets.length)}`;
+  const line = `${run.name.trim() === "" ? "Workout" : run.name.trim()} · ${clock(run.activeMs)} · ${exercise.name}, set ${String(run.set + 1)} of ${String(exercise.sets.length)}`;
   return (
     <View pointerEvents="box-none" style={[styles.barWrap, { bottom: sizes.tabBar + insets.bottom + 10 + below }]}>
       <Pressable accessibilityRole="button" accessibilityLabel="Open workout" onPress={onOpen} style={({ pressed }) => [styles.bar, pressed ? styles.pressed : null]}>

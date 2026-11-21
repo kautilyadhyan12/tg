@@ -16,7 +16,8 @@ export const WRITE_EVERY_MS = 15_000;
 export interface Finished {
   workoutId: string;
   name: string;
-  totalMs: number;
+  /** Its time trained: every pause left out, as its screen showed it. */
+  activeMs: number;
   sets: number;
   exercises: number;
 }
@@ -83,7 +84,7 @@ export function createRunStore(setup: RunStoreSetup): RunStore {
 
   const finish = (done: WorkoutRun) => {
     run = null;
-    finished = { workoutId: done.workoutId, name: done.name, totalMs: done.totalMs, sets: done.done.length, exercises: new Set(done.done.map((s) => s.exercise)).size };
+    finished = { workoutId: done.workoutId, name: done.name, activeMs: done.activeMs, sets: done.done.length, exercises: new Set(done.done.map((s) => s.exercise)).size };
     keep(done);
     void handOver(done);
   };

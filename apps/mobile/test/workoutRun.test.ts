@@ -112,6 +112,14 @@ describe("away from the app", () => {
     expect(where(out)).toEqual(["rest", 0, 1]);
   });
 
+  it("paused, the time shown stops (Kd's drawing: Pause stops every clock), while the whole goes on for the save's length", () => {
+    const out = play([curl], [[30, { kind: "pause" }]]);
+    if (out === "gone") throw new Error("gone");
+    const later = shownAt(out, T0 + 600_000);
+    expect(later.activeMs).toBe(30_000);
+    expect(later.totalMs).toBe(600_000);
+  });
+
   it("the clocks the screen shows move with no press", () => {
     const run = begin([plank]);
     expect(leftOf(shownAt(run, T0 + 4000))).toEqual({ leftMs: READY_MS - 4000, ofMs: READY_MS });

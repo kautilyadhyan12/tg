@@ -180,7 +180,7 @@ export function MyWorkoutPart({ parts, units, onBrowse, file }: { parts: ReactNo
               <>
                 <Button label="Open workout" wide raised onPress={() => layer?.open()} />
                 <Txt kind="small" style={styles.centre}>
-                  {`${going.paused ? "Paused" : "In progress"} · ${clock(going.totalMs)}`}
+                  {`${going.paused ? "Paused" : "In progress"} · ${clock(going.activeMs)}`}
                 </Txt>
               </>
             )}
