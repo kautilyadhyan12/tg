@@ -17,7 +17,9 @@
 //     his raised and floor squats are not the same squats. The check first written judged them too and failed both leans
 //     it was tried at: the redraw took "knees bent" 4 of the 10 degrees towards his floor squats, short of half way, and
 //     "chest up" away from them. "Stance holds" and "hips alike" are read only where the phone's place shows them and are
-//     left out;
+//     left out. `wander` (52a-ii-b-ii-b-i) adds the pose model's own foot wander measured on his floor sets (replays.ts
+//     `floorWander`): with it the redraw reads further from his floor, from all four sets, from each alone and from
+//     each three, so the replay itself never adds it;
 //   - what a floor phone sees of sitting, lying, all fours and a chair: his eleven other videos as filmed, how often the
 //     body is found, how often each part is used, and how often the main measures are given (`positionsTable`), for the
 //     other kinds of counting (52c) and "can a phone on the floor count it" (54).
@@ -150,11 +152,16 @@ export interface Faithful {
 }
 
 /** Whether the floor replay at `lean` degrees reads his raised squats as his real floor squats read (see the top). */
-export function faithful(lean: number, millimetres = LENS_MM, videos: readonly ProofVideo[] = proofVideos(MOVEMENT_VIDEOS.filter((e) => e.person === HIS && e.movement === "squat" && e.reps !== null))): Faithful {
+export function faithful(
+  lean: number,
+  millimetres = LENS_MM,
+  videos: readonly ProofVideo[] = proofVideos(MOVEMENT_VIDEOS.filter((e) => e.person === HIS && e.movement === "squat" && e.reps !== null)),
+  wander: readonly string[] | null | false = false,
+): Faithful {
   const real = videos.filter((v) => v.entry.floor === true).map((v) => readSet(v));
   const raisedVideos = videos.filter((v) => v.entry.floor !== true);
   const raised = raisedVideos.map((v) => readSet(v));
-  const redrawn = raisedVideos.map((v) => readSet(v, onTheFloor(FLOOR_LENS, lean, 3, millimetres)(v.video.frames)));
+  const redrawn = raisedVideos.map((v) => readSet(v, onTheFloor(FLOOR_LENS, lean, 3, millimetres, wander)(v.video.frames)));
   const across = (sets: readonly SetReading[], name: string): number[] => sets.flatMap((s) => {
     const m = s.middles.get(name) ?? null;
     return m === null ? [] : [m];

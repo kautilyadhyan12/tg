@@ -3,7 +3,8 @@
 // real floor phone looks would prove that an exercise counts from the floor when it does not, and a member's proper reps
 // would go uncounted, or a jump be counted. So first: jumps seen through the redraw; then it is held as proof only if a
 // man's own squats from a raised phone, redrawn, read as his real floor squats do. As measured they do not yet, at any
-// of his six leans: the replay is shown, not held, and this file pins what each lean gives.
+// of his six leans: the replay is shown, not held, and this file pins what each lean gives. 52a-ii-b-ii-b-i added the
+// pose model's own foot wander measured on his floor sets, and pins that it reads further from his floor, not nearer.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -12,7 +13,7 @@ import { readKept } from "../scripts/bodyCheck.js";
 import { JUDGED, faithful, phoneLean, positionsTable } from "../scripts/floorView.js";
 import { countedTimes, holds, proofVideos, readMovement, replayTable, runMovement } from "../scripts/movementCheck.js";
 import { MOVEMENT_VIDEOS } from "../scripts/movementVideos.js";
-import { FLOOR_LEAN, FLOOR_LEANS_MEASURED, FLOOR_LENS, REPLAYS, everyNth, onTheFloor } from "../scripts/replays.js";
+import { FLOOR_LEAN, FLOOR_LEANS_MEASURED, FLOOR_LENS, LENS_MM, REPLAYS, everyNth, floorSquatSets, onTheFloor } from "../scripts/replays.js";
 import { hopTime } from "../src/index.js";
 import { trueHop } from "./helpers/hops.js";
 import { VIDEOS } from "./helpers/replays.js";
@@ -48,7 +49,33 @@ function jumpsCounted(video: Video): string[] {
   );
 }
 
-describe("the worst thing: a jump drawn on a squat video, seen through the floor redraw: what counts", () => {
+describe("the worst thing: the floor view held as proof while it does not read as a real floor phone reads", () => {
+  // 52a-ii-b-ii-b-i. A floor view that is proof without reading as a real floor phone reads would say an exercise counts
+  // from the floor when it does not. The pose model's own foot wander, measured on his floor sets and added to the
+  // redraw in step with his knees, is tried with each floor set left out in turn: in no fold does it read as his floor
+  // squats do, so the floor view stays shown.
+  const replay = REPLAYS.find((r) => r.name === "on the floor");
+  const floorSets = floorSquatSets().floor;
+
+  it("his four floor sets are the four the floor view is judged against", () => {
+    expect(floorSets).toEqual(["floor_phone_test 0-12 s", "floor_phone_test 13.9-21.1 s", "floor_phone_test 22.3-31.4 s", "usual_v04 9.8-23.2 s"]);
+  });
+
+  it.each([
+    ["floor_phone_test 0-12 s", 8, ["feet stay in place", "hips, picture against 3D, standing"]],
+    ["floor_phone_test 13.9-21.1 s", 6, ["feet stay in place", "hips, picture against 3D, standing"]],
+    ["floor_phone_test 22.3-31.4 s", 8, ["feet stay in place"]],
+    ["usual_v04 9.8-23.2 s", 8, ["hips, picture against 3D", "hips, picture against 3D, standing"]],
+  ] as const)("the wander measured without %s: %s of his 10 raised squats counted from the floor; short of his floor: %j; the floor view is not held", (left, counted, failing) => {
+    const f = faithful(FLOOR_LEAN, LENS_MM, undefined, floorSets.filter((s) => s !== left));
+    expect(f.redrawn.reduce((n, s) => n + s.count, 0)).toBe(counted);
+    expect(f.rows.filter((r) => r.judged && !r.within).map((r) => r.reading)).toEqual(failing);
+    expect(f.passes).toBe(false);
+    expect(replay?.hold).toBe(false);
+  });
+});
+
+describe("the worst thing, as 52a-ii-b-ii-a first wrote it: a jump drawn on a squat video, seen through the floor redraw: what counts", () => {
   // The three squat videos of 52a-ii-a's jumps: side on, in between with no pause between reps, from the front.
   it.each(["squat_reference", "prisoner_squat_3", "sumo_squat_2a"])("%s: jumps of 8, 10 and 12 cm at five take-off times, seen from the floor as filmed and at 8 a second, count only reps they never reached", (label) => {
     expect(jumpsCounted(videoOf(label))).toEqual([]);
@@ -122,6 +149,46 @@ describe("his raised squats, redrawn from the floor, do not yet read as his real
 
   it("every one of his six leans is tried", () => {
     expect(FLOOR_LEANS_MEASURED).toEqual([6.4, 12.6, 13.7, 14.3, 14.4, 14.5]);
+  });
+});
+
+describe("the pose model's own foot wander near the floor, measured on his floor sets and added, takes the floor view further from his floor, not nearer (52a-ii-b-ii-b-i)", () => {
+  // With all four floor sets' wander, at each of his six leans and the replay's: how many of his ten raised squats count,
+  // which judged readings fall short, and "feet stay in place" against his real floor sets' 0.014 to 0.036.
+  it.each([
+    [6.4, 8, ["feet stay in place", "hips, picture against 3D", "hips, picture against 3D, standing"], 0.049],
+    [12.6, 6, ["feet stay in place"], 0.049],
+    [13.7, 6, ["feet stay in place"], 0.05],
+    [FLOOR_LEAN, 6, ["feet stay in place", "hips, picture against 3D, standing"], 0.05],
+    [14.3, 6, ["feet stay in place"], 0.05],
+    [14.4, 6, ["feet stay in place"], 0.05],
+    [14.5, 6, ["feet stay in place"], 0.05],
+  ] as const)("leaning back %s degrees with the floor's wander: %s of 10 counted; short of his floor: %j; feet stay in place %s", (lean, counted, failing, travel) => {
+    const f = faithful(lean, LENS_MM, undefined, null);
+    expect(f.redrawn.reduce((n, s) => n + s.count, 0)).toBe(counted);
+    expect(f.redrawn.every((s) => s.short === 0)).toBe(true);
+    expect(f.rows.filter((r) => r.judged && !r.within).map((r) => r.reading)).toEqual(failing);
+    const place = f.rows.find((r) => r.reading === "feet stay in place");
+    const milli = (v: number | undefined): number => Math.round((v ?? 0) * 1000) / 1000;
+    expect([milli(place?.redrawn), milli(place?.high), place?.beyond.length]).toEqual([travel, 0.036, 3]);
+    expect(f.passes).toBe(false);
+  });
+
+  // Taken from one floor set alone: it depends on the set, the way he faced and the foot the phone saw. From his side-on
+  // set on the dull floor his raised side-on squats, redrawn, count 0 of 2.
+  it.each([
+    ["floor_phone_test 0-12 s", 6],
+    ["floor_phone_test 13.9-21.1 s", 6],
+    ["floor_phone_test 22.3-31.4 s", 9],
+    ["usual_v04 9.8-23.2 s", 2],
+  ] as const)("the wander from %s alone: %s of 10 counted, and the floor view still does not read as his floor", (set, counted) => {
+    const f = faithful(FLOOR_LEAN, LENS_MM, undefined, [set]);
+    expect(f.redrawn.reduce((n, s) => n + s.count, 0)).toBe(counted);
+    expect(f.passes).toBe(false);
+  });
+
+  it("without the wander, the redraw is as 52a-ii-b-ii-a left it: 10 of 10 counted at the replay's lean", () => {
+    expect(faithful(FLOOR_LEAN).redrawn.reduce((n, s) => n + s.count, 0)).toBe(10);
   });
 });
 

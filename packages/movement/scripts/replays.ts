@@ -28,14 +28,16 @@
 //     five, 6.4 in one), stepped back where the whole body would not be in the picture. Redrawn from the 3D points as a
 //     change added to the picture's own points, so that drawn from the phone's own place the picture comes back exactly.
 //     Shown, not held: it would be held once his own squats from a raised phone, redrawn so, read as his real floor
-//     squats do (floorView.ts `faithful`), and at none of his six leans do they yet (52a-ii-b-ii-b). Not tried on a
-//     video filmed from the floor. It sets no number: the squat's numbers stay as 52a-ii-b-i set them.
+//     squats do (floorView.ts `faithful`), and at none of his six leans do they yet; adding the foot wander measured on
+//     his own floor sets made it read further from them, not nearer (52a-ii-b-ii-b-i, below). Not tried on a video
+//     filmed from the floor. It sets no number: the squat's numbers stay as 52a-ii-b-i set them.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Down, MovementFrame, SeenPerson } from "@app/shared";
 import { LIMITS, MAIN_JOINTS, bodySize } from "../src/index.js";
 import { decodeBodyPoints } from "./bodyPoints.js";
-import type { MovementVideo } from "./movementVideos.js";
+import { countedTimes, proofVideos, readMovement } from "./movementCheck.js";
+import { FLOOR_PERSON, MOVEMENT_VIDEOS, labelOf, type MovementVideo } from "./movementVideos.js";
 
 type Frames = readonly MovementFrame[];
 
@@ -407,9 +409,9 @@ const FOOT_MOVING = 0.1;
 const STRAIGHT = 165;
 const BENT = 25;
 
-/** The less bent of the two knees in 3D, degrees, or null. */
-function kneesOf(world: SeenPerson["world"]): number | null {
-  if (world === null) return null;
+/** Each knee's bend in 3D, degrees: left, right; null where unseen. */
+function kneeAngles(world: SeenPerson["world"]): readonly [number | null, number | null] {
+  if (world === null) return [null, null];
   const angle = (a: number, b: number, c: number): number | null => {
     const p = world[a];
     const q = world[b];
@@ -420,7 +422,12 @@ function kneesOf(world: SeenPerson["world"]): number | null {
     const d = Math.hypot(...u) * Math.hypot(...v);
     return d > 0 ? (Math.acos(Math.max(-1, Math.min(1, dot3(u, v) / d))) * 180) / Math.PI : null;
   };
-  const both = [angle(23, 25, 27), angle(24, 26, 28)].flatMap((a) => (a === null ? [] : [a]));
+  return [angle(23, 25, 27), angle(24, 26, 28)];
+}
+
+/** The less bent of the two knees in 3D, degrees, or null. */
+function kneesOf(world: SeenPerson["world"]): number | null {
+  const both = kneeAngles(world).flatMap((a) => (a === null ? [] : [a]));
   return both.length === 0 ? null : Math.max(...both);
 }
 
@@ -603,16 +610,187 @@ export function floorCamera(frames: Frames, lens: number, lean: number, placed: 
   return null;
 }
 
+// ── The pose model's own wander near the floor, measured on a man's own floor videos (52a-ii-b-ii-b-i) ─────────────
+// Tried, never used by the replay "on the floor": with it his raised squats, redrawn, read further from his real floor
+// squats than without it, at every lean and from every choice of his floor sets (floorView.ts `faithful`, its `wander`).
+// Kept so that the trial can be made again when more floor videos come (job 53's live tries).
+/** One frame of a set's foot wander: each knee's bend in 3D (left, right; degrees, null unseen), and for each of the
+ *  four foot points (left heel, right heel, left toes, right toes) how far the model put it on the picture from where
+ *  that point lay while he stood tall in the same set, metres by his body's size then (across, down); null where the
+ *  model was not sure of it. */
+interface WanderFrame {
+  readonly knees: readonly [number | null, number | null];
+  readonly points: readonly (readonly [number, number] | null)[];
+}
+
+/** A set's wander is read from 1 s before the first squat the movement counts to 1 s after the last, so the walk back
+ *  from the phone and the turn between sets are left out. */
+const AROUND_SQUATS = 1000;
+
+/** His squat sets, by label: those filmed from the floor and those from his raised phone (movementVideos.ts). */
+export function floorSquatSets(): { readonly floor: readonly string[]; readonly raised: readonly string[] } {
+  const sets = MOVEMENT_VIDEOS.filter((e) => e.person === FLOOR_PERSON && e.movement === "squat" && e.reps !== null);
+  const label = (e: MovementVideo): string => labelOf(e, e.file.slice(e.file.lastIndexOf("/") + 1));
+  return { floor: sets.filter((e) => e.floor === true).map(label), raised: sets.filter((e) => e.floor !== true).map(label) };
+}
+
+const wanders = new Map<string, readonly WanderFrame[]>();
+/** A set's foot wander, frame by frame, over its squats (`AROUND_SQUATS`). A planted foot does not move in a properly
+ *  done squat, so every move of its points on the picture is the model's own. */
+export function wanderOf(label: string): readonly WanderFrame[] {
+  const known = wanders.get(label);
+  if (known !== undefined) return known;
+  const entry = MOVEMENT_VIDEOS.find((e) => e.person === FLOOR_PERSON && labelOf(e, e.file.slice(e.file.lastIndexOf("/") + 1)) === label);
+  if (entry === undefined) throw new Error(`no set ${label}`);
+  const video = proofVideos([entry])[0]?.video;
+  const frames = video?.frames ?? [];
+  const reps = video === undefined ? [] : countedTimes(readMovement("squat"), video);
+  const first = reps[0]?.start;
+  const last = reps[reps.length - 1]?.end;
+  const out: WanderFrame[] = [];
+  if (first !== undefined && last !== undefined) {
+    const inSet = frames.filter((f) => f.t >= first - AROUND_SQUATS && f.t <= last + AROUND_SQUATS);
+    const tall = inSet.filter((f) => (kneesOf(f.people[0]?.world ?? null) ?? 0) >= STRAIGHT);
+    const size = q01(
+      tall.flatMap((f) => {
+        const p = f.people[0];
+        const s = p === undefined ? null : bodySize(p, f.aspect, p.points.map(seenPoint));
+        return s === null ? [] : [s];
+      }),
+      0.5,
+    );
+    const stand = FOOT_POINTS.map((i) =>
+      [0, 1].map((c) =>
+        q01(
+          tall.flatMap((f) => {
+            const q = f.people[0]?.points[i];
+            return q === undefined || !seenPoint(q) ? [] : [c === 0 ? q[0] * f.aspect : q[1]];
+          }),
+          0.5,
+        ),
+      ),
+    );
+    if (size !== null)
+      for (const f of inSet) {
+        const p = f.people[0];
+        out.push({
+          knees: kneeAngles(p?.world ?? null),
+          points: FOOT_POINTS.map((i, j) => {
+            const q = p?.points[i];
+            const sx = stand[j]?.[0] ?? null;
+            const sy = stand[j]?.[1] ?? null;
+            return q === undefined || !seenPoint(q) || sx === null || sy === null ? null : [(q[0] * f.aspect - sx) / size, (q[1] - sy) / size];
+          }),
+        });
+      }
+  }
+  wanders.set(label, out);
+  return out;
+}
+
+/** The knee's bend in steps of 5 degrees, from straight: the wander is read in step with it. */
+const BEND_STEP = 5;
+/** A step needs this many frames to give a middle. */
+const BEND_FRAMES = 3;
+/** For each foot point, for each step of its own knee's bend, the middle of its wander (across, down); null where too
+ *  few frames had that bend. */
+type Profile = readonly (readonly ((readonly [number, number]) | null)[])[];
+
+const stepOf = (knee: number): number => Math.max(0, Math.floor((180 - knee) / BEND_STEP));
+
+function profileOf(frames: readonly WanderFrame[]): Profile {
+  return FOOT_POINTS.map((_, j) => {
+    const byStep: [number, number][][] = [];
+    for (const f of frames) {
+      const knee = f.knees[j % 2] ?? f.knees[1 - (j % 2)] ?? null;
+      const w = f.points[j] ?? null;
+      if (knee === null || w === null) continue;
+      const s = stepOf(knee);
+      (byStep[s] ??= []).push([w[0], w[1]]);
+    }
+    return Array.from({ length: byStep.length }, (_, s) => {
+      const here = byStep[s] ?? [];
+      if (here.length < BEND_FRAMES) return null;
+      const x = q01(here.map((w) => w[0]), 0.5);
+      const y = q01(here.map((w) => w[1]), 0.5);
+      return x === null || y === null ? null : ([x, y] as const);
+    });
+  });
+}
+
+/** A profile's wander for foot point `j` at a knee's bend: its nearest step that has one (none: no wander). */
+function profileAt(profile: Profile, j: number, knee: number): readonly [number, number] {
+  const steps = profile[j] ?? [];
+  const s = stepOf(knee);
+  for (let d = 0; d < steps.length + s; d++) {
+    const near = steps[s - d] ?? steps[s + d] ?? null;
+    if (near !== null) return near;
+  }
+  return [0, 0];
+}
+
+/** The wander a floor phone's model adds, in step with the knees: over the floor sets it is taken from, the middle of
+ *  each foot point's wander at each step of its own knee's bend, less the middle of his raised sets' at the same bend,
+ *  which the redraw already carries (carried on in time instead, as the chip's gap is, it put wander from the bottom of
+ *  a squat on his standing feet). */
+export interface FloorWander {
+  readonly from: readonly string[];
+  readonly floor: Profile;
+  readonly raised: Profile;
+}
+
+const floorWanders = new Map<string, FloorWander>();
+/** The floor's wander from the floor sets named (null: all of his). */
+export function floorWander(only: readonly string[] | null = null): FloorWander {
+  const key = only === null ? "" : only.join("|");
+  const known = floorWanders.get(key);
+  if (known !== undefined) return known;
+  const sets = floorSquatSets();
+  const from = only === null ? sets.floor : sets.floor.filter((l) => only.includes(l));
+  const made = { from, floor: profileOf(from.flatMap((l) => wanderOf(l))), raised: profileOf(sets.raised.flatMap((l) => wanderOf(l))) };
+  floorWanders.set(key, made);
+  return made;
+}
+
+/** Each foot point of the followed body moved, frame by frame, by the floor's wander at its own knee's bend, less his
+ *  raised sets', laid on the picture by this body's own size. */
+function wandered(frames: Frames, wander: FloorWander): MovementFrame[] {
+  return frames.map((f) => ({
+    ...f,
+    people: f.people.map((p, n): SeenPerson => {
+      const size = n > 0 ? null : bodySize(p, f.aspect, p.points.map(seenPoint));
+      if (size === null) return p;
+      const knees = kneeAngles(p.world);
+      return {
+        ...p,
+        points: p.points.map(([x, y, z, v, pr], i): SeenPerson["points"][number] => {
+          const j = FOOT_POINTS.indexOf(i);
+          const knee = j < 0 ? null : (knees[j % 2] ?? knees[1 - (j % 2)] ?? null);
+          if (knee === null) return [x, y, z, v, pr];
+          const a = profileAt(wander.floor, j, knee);
+          const b = profileAt(wander.raised, j, knee);
+          const nx = x + ((a[0] - b[0]) * size) / f.aspect;
+          const ny = y + (a[1] - b[1]) * size;
+          return [nx, ny, z, v, outside(nx, ny) ? 0 : pr];
+        }),
+      };
+    }),
+  }));
+}
+
 /** As a phone standing on the floor would see the same body: the phone `lens` metres above the floor, leaning back
- *  `degrees` (floorCamera), each point moved as `redraw` says. A video that gives no floor is left as it was. */
-export function onTheFloor(lens: number, degrees: number, mostBack = 3, millimetres = LENS_MM) {
+ *  `degrees` (floorCamera), each point moved as `redraw` says, and then the foot points by the floor's own wander
+ *  (`floorWander`, from the floor sets named, null all of his; `false`, none: the replay itself). A video that gives no floor is left as it was. */
+export function onTheFloor(lens: number, degrees: number, mostBack = 3, millimetres = LENS_MM, wander: readonly string[] | null | false = false) {
   return (frames: Frames): MovementFrame[] => {
     const first = frames[0];
     if (first === undefined) return [];
     const focal = focalOf(first.aspect, millimetres);
     const placed = fromCamera(frames, focal);
     const camera = floorCamera(frames, lens, (degrees * Math.PI) / 180, placed, mostBack, focal);
-    return camera === null ? [...frames] : redraw(frames, camera, placed, focal);
+    if (camera === null) return [...frames];
+    const drawn = redraw(frames, camera, placed, focal);
+    return wander === false ? drawn : wandered(drawn, floorWander(wander));
   };
 }
 

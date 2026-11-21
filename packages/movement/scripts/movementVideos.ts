@@ -70,7 +70,7 @@ export function labelOf(entry: MovementVideo, label: string): string {
 
 /** A man's own videos, filmed on 2026-11-20 with his phone on the floor and on a raised stand (52a-ii-b): one person,
  *  both rooms left out together. Kept as body points only, under labels that name nobody. */
-const FLOOR_PERSON = "man, his own phone, on the floor and raised";
+export const FLOOR_PERSON = "man, his own phone, on the floor and raised";
 const floorOther = (label: string, phone: "floor" | "raised", view: View, seen: string): MovementVideo => ({ ...other(`movement-points/${label}`, FLOOR_PERSON, view, seen), ...(phone === "floor" ? { floor: true } : {}) });
 
 export const MOVEMENT_VIDEOS: readonly MovementVideo[] = [
