@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Settings on a phone</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./kit3.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0;background:#0A0908}
+.cap{display:flex;align-items:center;gap:10px;font-weight:600;color:var(--t2)}
+.num{width:26px;height:26px;border-radius:999px;background:var(--o-fill);color:var(--o-t);box-shadow:inset 0 0 0 1px var(--o-line);display:grid;place-items:center;font-size:13px;font-weight:700;flex:none}
+.stage{background:var(--scrim);border-radius:18px;padding:32px 16px;display:flex;justify-content:center}
+.dlg{background:var(--solid);border:1px solid var(--line2);border-radius:20px;box-shadow:var(--pop);width:100%;max-width:500px;min-width:0}
+.side{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,440px);border:1px solid var(--line);border-radius:18px;overflow:hidden}
+.side > .under{padding:20px;opacity:.6;overflow:hidden;min-width:0}
+.side > .sheet{background:var(--solid);border-left:1px solid var(--line2);display:flex;flex-direction:column;min-width:0}
+.sheet-h{display:flex;align-items:center;gap:12px;padding:18px 20px;border-bottom:1px solid var(--line)}
+.sheet-b{padding:20px;display:flex;flex-direction:column;gap:18px}
+.sheet-f{margin-top:auto;display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:14px 20px;border-top:1px solid var(--line)}
+.opt{display:flex;gap:12px;align-items:flex-start;padding:14px 16px;border-radius:14px;border:1px solid var(--line2)}
+.opt-on{border-color:var(--o);background:var(--o-fill)}
+.radio{width:18px;height:18px;border-radius:999px;border:1.5px solid var(--line2);flex:none;margin-top:1px}
+.radio-on{border:5px solid var(--o)}
+.check-on{background:var(--o);border-color:var(--o);position:relative}
+.check-on::after{content:"";position:absolute;left:5px;top:1px;width:5px;height:10px;border:solid var(--on-o);border-width:0 2px 2px 0;transform:rotate(45deg)}
+.sw{width:40px;height:24px;border-radius:999px;background:var(--bar);position:relative;flex:none}
+.sw::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:999px;background:var(--t3)}
+.sw-on{background:var(--o)}.sw-on::after{left:19px;background:var(--on-o)}
+.step{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,340px);gap:20px;align-items:start}
+.menu{background:var(--solid);border:1px solid var(--line2);border-radius:16px;box-shadow:var(--pop);padding:6px;min-width:0;max-width:320px}
+.mi{display:flex;gap:12px;align-items:flex-start;padding:10px 12px;border-radius:10px}
+.ptile{display:flex;flex-direction:column;gap:4px;padding:14px;border-radius:14px;border:1px solid var(--line2);min-width:0}
+.ptile-on{border-color:var(--o);background:var(--o-fill)}
+.pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.qty{display:inline-flex;align-items:center;border:1px solid var(--line2);border-radius:999px;height:40px}
+.qty > button{width:40px;height:40px;display:grid;place-items:center;color:var(--t2)}
+.money{font-weight:600;white-space:nowrap}
+.frames{display:flex;flex-wrap:wrap;gap:40px;padding:40px;align-items:flex-start}
+.frame{width:390px;max-width:100%;border:1px solid var(--line2);border-radius:28px;overflow:hidden;background:var(--page);display:flex;flex-direction:column;position:relative}
+.bsheet{background:var(--solid);border-top:1px solid var(--line2);border-radius:22px 22px 0 0;box-shadow:var(--pop);display:flex;flex-direction:column}
+.grab{width:40px;height:5px;border-radius:999px;background:var(--line2);margin:10px auto 4px}
+.savebar{position:sticky;bottom:12px;z-index:2;display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 16px;background:var(--solid);border:1px solid var(--line2);border-radius:18px}
+.footbar{position:sticky;bottom:0;padding:12px 16px 16px;border-top:1px solid var(--line);background:var(--solid);display:flex;flex-direction:column;gap:8px}
+@media (max-width:1180px){.side{grid-template-columns:minmax(0,1fr)}.side > .under{display:none}.side > .sheet{border-left:0}}
+@media (max-width:900px){.step{grid-template-columns:minmax(0,1fr)}.frames{padding:16px;gap:24px}}
+@media (pointer:coarse){.qty,.qty > button{height:44px}.qty > button{width:44px}}
+.slay{display:grid;grid-template-columns:280px minmax(0,1fr);gap:28px;align-items:start}.snav{position:sticky;top:16px;display:flex;flex-direction:column;gap:2px;min-width:0}.sgrp{font-size:12px;line-height:16px;letter-spacing:.12em;text-transform:uppercase;font-weight:700;color:var(--t3);padding:14px 12px 6px}.sgrp:first-child{padding-top:0}.sn{display:flex;flex-direction:column;gap:2px;padding:9px 12px;border-radius:12px;color:var(--t1);min-width:0}.sn-on{background:var(--o-fill);box-shadow:inset 0 0 0 1px var(--o-line)}.sn-on > .w6{color:var(--o-t)}.sback{display:none}.sec{display:flex;flex-direction:column;min-width:0}.sec-b{padding:0 20px 20px;display:flex;flex-direction:column;gap:18px}.sec-f{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:14px 20px;border-top:1px solid var(--line)}.hint{color:var(--t3)}.err{color:var(--bad)}@media (max-width:900px){.slay{grid-template-columns:minmax(0,1fr)}.slay > .snav{display:none}.sback{display:flex}}.col > span{overflow-wrap:anywhere}.frame .snav{position:static}.frame .sn{flex-direction:row;align-items:center;gap:10px;min-height:56px;border-top:1px solid var(--line);border-radius:0;padding:8px 4px}.frame .sn > .col{flex:1 1 0;min-width:0}.term{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 0;border-top:1px solid var(--line)}@media (max-width:300px){.ph-tab-on{font-weight:500}}
+</style>
+</helmet>
+<div class="app t-dark {{look}}" style="min-height: 100%">
+<div class="frames">
+
+<div class="frame" aria-label="Settings: the list of sections">
+<header class="ph-top"><a href="#" class="hrow g10 grow" style="min-height: 44px"><span class="logo"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18zM6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2M10 6h4M10 10h4M10 14h4M10 18h4"></path></svg></span><span class="w6">Iron House</span></a><button type="button" class="ibtn" aria-label="Search"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 4a7 7 0 1 0 0 14a7 7 0 1 0 0-14M21 21l-4.3-4.3"></path></svg></button><button type="button" class="ibtn" aria-label="6 items need attention"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 0 0 3.4 0"></path></svg><span class="pip">6</span></button></header>
+<main class="ph-main">
+<div class="col g4"><span class="eyebrow">Manage</span><h1 class="h1">Settings</h1><span class="t2">Iron House</span></div>
+<nav class="snav" aria-label="Settings sections">
+<span class="sgrp" data-small>Your gym</span>
+<a href="#" class="sn"><span class="col"><span class="w6">Gym details</span><span class="t3">Austin · America/Chicago</span></span><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg></a>
+<a href="#" class="sn"><span class="col"><span class="w6">Payments</span><span class="t3">Connected to Square · Iron House</span></span><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg></a>
+<a href="#" class="sn"><span class="col"><span class="w6">When we're open</span><span class="t3">Set for every day</span></span><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg></a>
+<a href="#" class="sn"><span class="col"><span class="w6">How members reach you</span><span class="t3">(512) 555-0142 · desk@ironhouse.com</span></span><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg></a>
+<span class="sgrp" data-small>Members</span>
+<a href="#" class="sn"><span class="col"><span class="w6">Automatic messages</span><span class="t3">9 of 10 on</span></span><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg></a>
+<a href="#" class="sn"><span class="col"><span class="w6">Refer a friend</span><span class="t3">On</span></span><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg></a>
+<a href="#" class="sn"><span class="col"><span class="w6">Booking rules</span><span class="t3">Classes open 7 days before</span></span><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg></a>
+<a href="#" class="sn"><span class="col"><span class="w6">Membership agreements</span><span class="t3">In use · 214 signed</span></span><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg></a>
+<a href="#" class="sn"><span class="col"><span class="w6">Signed forms of deleted members</span><span class="t3">None kept</span></span><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg></a>
+<span class="sgrp" data-small>Front desk</span>
+<a href="#" class="sn"><span class="col"><span class="w6">Check-in devices</span><span class="t3">2 devices</span></span><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg></a>
+<a href="#" class="sn"><span class="col"><span class="w6">Who can check in</span><span class="t3">Everyone on your list</span></span><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg></a>
+<a href="#" class="sn"><span class="col"><span class="w6">Waiver</span><span class="t3">In use</span></span><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg></a>
+<span class="sgrp" data-small>Leads</span>
+<a href="#" class="sn"><span class="col"><span class="w6">Follow-up emails to leads</span><span class="t3">You send them from your own email</span></span><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg></a>
+</nav>
+</main>
+<nav class="ph-tabs" aria-label="Pages"><a href="#" class="ph-tab"><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"></path></svg></span>Overview</a><a href="#" class="ph-tab"><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 3a4 4 0 1 0 0 8a4 4 0 1 0 0-8M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"></path></svg></span>Members</a><a href="#" class="ph-tab"><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6L9 17l-5-5"></path></svg></span>Attendance</a><a href="#" class="ph-tab"><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM16 2v4M8 2v4M3 10h18"></path></svg></span>Classes</a><a href="#" class="ph-tab ph-tab-on"><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h.01M12 12h.01M19 12h.01"></path></svg></span>More</a></nav>
+</div>
+
+<div class="frame" aria-label="Settings: Gym details as a page of its own">
+<header class="ph-top"><a href="#" class="hrow g8 c-o w6 grow" style="min-height: 44px"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"></path></svg>Settings</a></header>
+<main class="ph-main">
+<div class="col g4"><h1 class="h1">Gym details</h1><span class="t2">Your gym's name, where it is, the time zone its day ends on, and the postal address your invitations show.</span></div>
+<div class="field"><span class="label">Gym name</span><div class="input"><span class="grow">Iron House</span></div></div>
+<div class="field"><span class="label hrow g8">City <span class="tag tag-plain">Optional</span></span><div class="input"><span class="grow">Austin</span></div></div>
+<div class="field"><span class="label">Country</span><div class="input"><span class="grow">United States</span><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div><span class="hint">This decides the currency your gym is billed in.</span></div>
+<div class="field"><span class="label">Time zone</span><div class="input"><span class="grow">America/Chicago</span><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div><span class="hint">Your gym's daily figures use this.</span></div>
+<div class="field"><span class="label">Postal address</span><div class="input" style="min-height: 72px; align-items: flex-start; padding-top: 11px"><span class="grow">1400 South Congress Ave, Austin, TX 78704</span></div></div>
+</main>
+<div class="footbar"><span class="t3">You have changes that aren't saved.</span><button type="button" class="btn btn-p btn-w">Save changes</button></div>
+</div>
+
+<div class="frame" aria-label="Settings: Payments, Disconnect Square from the bottom">
+<header class="ph-top"><a href="#" class="hrow g8 c-o w6 grow" style="min-height: 44px"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"></path></svg>Settings</a></header>
+<main class="ph-main" style="opacity: .55">
+<div class="col g4"><h1 class="h1">Payments</h1><span class="hrow g6 t2"><span class="dot dot-good"></span>Connected to Square · Iron House</span></div>
+<h3 class="h3">Square Terminals</h3>
+<div class="col">
+<div class="term"><span class="col grow" style="min-width: 0"><span class="w6">Square Terminal · Front desk</span><span class="t3">Added 21 Oct 2026</span></span><button type="button" class="btn btn-q btn-sm">Remove</button></div>
+<div class="term"><button type="button" class="btn btn-s"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>Pair a Terminal</button></div>
+</div>
+<button type="button" class="btn btn-d">Disconnect Square</button>
+</main>
+<div class="bsheet" role="dialog" aria-label="Disconnect Square?">
+<span class="grab"></span>
+<div class="col g12" style="padding: 8px 16px 20px">
+<h2 class="h2">Disconnect Square?</h2>
+<span class="t2">Iron House stops using Iron House's Square account. Your Square account and its money stay as they are, and you can connect it again at any time.</span>
+<button type="button" class="btn btn-d btn-w">Disconnect</button>
+<button type="button" class="btn btn-q btn-w">Keep connected</button>
+</div>
+</div>
+</div>
+
+<div class="frame" aria-label="Settings: Automatic messages as a page of its own">
+<header class="ph-top"><a href="#" class="hrow g8 c-o w6 grow" style="min-height: 44px"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"></path></svg>Settings</a></header>
+<main class="ph-main">
+<div class="col g4"><h1 class="h1">Automatic messages</h1><span class="t2">9 of 10 on</span></div>
+<div class="between" style="padding: 12px 0; border-top: 1px solid var(--line)"><span class="col g4 grow"><span class="w6">Welcome</span><span class="t3">Sent when somebody joins your gym in the app.</span></span><span class="sw sw-on" role="switch" aria-checked="true" aria-label="Send the Welcome message"></span></div>
+<div class="between" style="padding: 12px 0; border-top: 1px solid var(--line)"><span class="col g4 grow"><span class="w6">Trial check-in</span><span class="t3">On day 3 of their trial</span></span><span class="sw sw-on" role="switch" aria-checked="true" aria-label="Send the Trial check-in message"></span></div>
+<div class="between" style="padding: 12px 0; border-top: 1px solid var(--line)"><span class="col g4 grow"><span class="w6">Payment overdue</span><span class="t3">A member cannot switch this one off.</span></span><span class="sw sw-on" role="switch" aria-checked="true" aria-label="Send the Payment overdue message"></span></div>
+<div class="between" style="padding: 12px 0; border-top: 1px solid var(--line)"><span class="col g4 grow"><span class="w6">Ask for a review</span><span class="t3">Off</span></span><span class="sw" role="switch" aria-checked="false" aria-label="Send the Ask for a review message"></span></div>
+<span class="t3">Each message keeps its words, numbers and own line under it, as on a computer.</span>
+</main>
+<div class="footbar"><span class="t3">Not saved yet.</span><button type="button" class="btn btn-p btn-w">Save changes</button></div>
+</div>
+
+</div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"look":{"editor":"enum","options":["Dark","Light"],"default":"Dark"},"$preview":{"width":1800,"height":1290}}'>
+class Component extends DCLogic {
+renderVals() {
+return { look: (this.props.look ?? 'Dark') === 'Light' ? 't-light' : '' };
+}
+}
+</script>
+</body>
+</html>

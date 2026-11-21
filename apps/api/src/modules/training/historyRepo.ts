@@ -180,6 +180,36 @@ export async function liftedByWorkout(sql: Sql, userId: string, exerciseIds: rea
     GROUP BY s.workout_id, w.started_at, w.id, e.slug, s.measured_in, s.hold_ms IS NOT NULL`;
 }
 
+/** Every set of one exercise in the person's latest `most` workouts of it in which a set of it was done
+ *  (reps in a set kept in reps; a whole second in a set kept in time, as `records.ts` reads a set's unit). */
+export async function recentSets(sql: Sql, userId: string, exerciseId: string, floor: Date | null, most: number): Promise<FactRow[]> {
+  return sql<FactRow[]>`
+    WITH latest AS (
+      SELECT w.id, w.started_at
+      FROM workouts w
+      WHERE w.user_id = ${userId}
+        AND (${floor === null} OR w.started_at >= ${floor})
+        AND EXISTS (
+          SELECT 1 FROM workout_sets s
+          WHERE s.workout_id = w.id AND s.user_id = ${userId} AND s.exercise_id = ${exerciseId}
+            AND CASE COALESCE(s.measured_in, CASE WHEN s.hold_ms IS NOT NULL THEN 'time' ELSE 'reps' END)
+                  WHEN 'time' THEN COALESCE(s.hold_ms, 0) >= 1000 ELSE s.reps > 0 END)
+      ORDER BY w.started_at DESC, w.id DESC
+      LIMIT ${most})
+    SELECT s.workout_id, l.started_at, e.slug, s.set_index, s.measured_in, s.reps, s.hold_ms, s.weight_grams
+    FROM latest l
+      JOIN workout_sets s ON s.workout_id = l.id AND s.user_id = ${userId} AND s.exercise_id = ${exerciseId}
+      JOIN exercises e ON e.id = s.exercise_id`;
+}
+
+/** The day of each of the person's own workouts asked for, in the zone it was done in, or `fallbackZone`. */
+export async function workoutDaysOf(sql: Sql, userId: string, workoutIds: readonly string[], fallbackZone: string): Promise<{ id: string; day: string }[]> {
+  if (workoutIds.length === 0) return [];
+  return sql<{ id: string; day: string }[]>`
+    SELECT id, to_char((started_at AT TIME ZONE COALESCE(time_zone, ${fallbackZone}))::date, 'YYYY-MM-DD') AS day
+    FROM workouts WHERE user_id = ${userId} AND id = ANY(${[...workoutIds]}::uuid[])`;
+}
+
 /** The exercise's own id, or null for an id word the server never had. */
 export async function exerciseIdOf(sql: Sql, slug: string): Promise<string | null> {
   const rows = await sql<{ id: string }[]>`SELECT id FROM exercises WHERE slug = ${slug}`;

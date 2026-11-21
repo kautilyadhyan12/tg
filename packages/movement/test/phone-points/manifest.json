@@ -1,0 +1,388 @@
+{
+ "files": {
+  "barbell_bench_press_reference.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "2b4bc151d2dd28634b8ecc7964c3947222a3cdadd0f2c0031e86085fbda3d6a6",
+   "pictures": "18d5f6e037afc6c52316bc3acb72e95c48a2abf8ae821769e9902ac043d2b770"
+  },
+  "bicep_curl_reference.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "ce6f8351f78f82755f174841d19e5aa34b5658a54f4da66fac2008056fc2b49d",
+   "pictures": "a77806ad4819b76b11c4a2accc6454d4ad2df1729caaf70f45b39112842edaac"
+  },
+  "bicycle_crunch_reference.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "747d56ed458085f8a4d930b9b72380dd0a71bd04f948c131dfb2f543f1bafe3c",
+   "pictures": "3c55f5fe754ae3fe5bb31cca8e64cbedab152ffd53b9c61189515e66988dd36c"
+  },
+  "calf_raise_dumbbell.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "6ae8925d551043f612c2a21cb1262abe8568e41b7caa904de31d733e86510ff1",
+   "pictures": "4c6cb83137a22ff4a8be390c63fa6892ff3a0f273cc7cad63b360292715b4a0b"
+  },
+  "calf_raise.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "726f469969474560c0ff9d0d3a1fd2ae766f976eb2984aab70251cab53149fb2",
+   "pictures": "1c1a3bc9543210e7a49d5a7132816d471d2377b5d6e1b29fcb258470fee71b5c"
+  },
+  "chair_squat_reference.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "2e6d5f36279a3a47e66ace040ad85d37619873925dc88dd540b2285399fd1b6a",
+   "pictures": "37d04704c04356579ae747523591bcdbc6c4cd3efdb429c32410fec600c2df00"
+  },
+  "chair_squat_reference.pose_landmarker_full.gpu.bodypoints": {
+   "kept": "2e6d5f36279a3a47e66ace040ad85d37619873925dc88dd540b2285399fd1b6a",
+   "pictures": "37d04704c04356579ae747523591bcdbc6c4cd3efdb429c32410fec600c2df00"
+  },
+  "chair_squat_reference.pose_landmarker_lite.cpu.t4.bodypoints": {
+   "kept": "2e6d5f36279a3a47e66ace040ad85d37619873925dc88dd540b2285399fd1b6a",
+   "pictures": "37d04704c04356579ae747523591bcdbc6c4cd3efdb429c32410fec600c2df00"
+  },
+  "curl_ez_bar.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "d872a56f8498d17bbbc2e0afc6d78361d037473e043d0b6f0111fdfed450caf5",
+   "pictures": "3ecdaf36257b45adef985f7429112bacb59ea67a17d1994b89a7413888c4c6a3"
+  },
+  "deadlift_barbell.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "1efac041a1fe74fa1cb65ea4ea51a55e08bb61083b1f54900c9dcef9cde9e3bc",
+   "pictures": "f9df3711e789c976b38fa590d5c2eac3cffadbb6720171c9333925bd09a6342b"
+  },
+  "deadlift_kettlebell.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "41a70c83814f64a1c5ad04d638fc72846d0ece678dff8357632bf5a6e47549bc",
+   "pictures": "e4254f17eb744278cc71d9ff86bb10706e0989d6264c00a64a8abbc8e0c918aa"
+  },
+  "dumbbell_bench_press_reference_head_end.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "0c527a7e64f5a2ef6aafeeddf309e5270eaf6a586d05da1bebaed278c4271f89",
+   "pictures": "4c781c1bf34e79e7fe35f0534dd0bc82c0b16649f8d534707f59ff3e6f1edc92"
+  },
+  "floor_phone_test.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "023bdc68c259df01ea372e9cb1be961e3c56be8c7e3ca9fb0b8797511a0920a1",
+   "pictures": "c33cd905d4cac9186fed9f4d505c4e781063c548d4899854e5660e2cdf854153"
+  },
+  "fresh_back_squat_barbell.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "407fc6e79abd934fd1b58f72d228130480080153c2fbf57cb0fa1439e6fc3d53",
+   "pictures": "5a6fef6920082b4275501540aae42d704844a6c476d34e601a7b9dea3a6e8953"
+  },
+  "fresh_calf_raise_2.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "feec949a17dfef2c1e48aafd4fca2fa263c93e88a2904927b02a4169b6d8aeb1",
+   "pictures": "91001a697eab38bb31092e302e5ed5fc065fdaa698d35426dabbc96f57ea3a50"
+  },
+  "fresh_calf_raise_dumbbell_1.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "178f097610c780237882a65164674cc860db8c280f7a7a746b141932b0bec60a",
+   "pictures": "8b92959baf5e145ce9bc874a56a9f9dd4bcd86224927b02c37d414db14cc92fb"
+  },
+  "fresh_calf_raise_dumbbell_2.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "e618305f4515a0decb8ef92680198cbf9d955f458ca36098e87710ab544bf792",
+   "pictures": "4a3a2df761d569137da83b9c69f409433761cefac3ea7495d13c4cc654edc817"
+  },
+  "fresh_curl_barbell.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "fc7aa65c9ff74d2d454f7eea32d6eb75956f98e26688fb408f29c3578b44f234",
+   "pictures": "4ef563f4baea12e5f3abd5d0b36d3cd9ef878e735591851989066545dd3ad8e1"
+  },
+  "fresh_curl_ez_bar_1.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "4fcc8e435fe42d960a7c2f2092d9ee3caadb73daf7fb81df2f2f0cadbb2b0085",
+   "pictures": "aef812ce2a63e8945f87ce52f66abd86ff1a895cf58cec3099cd78903de339a1"
+  },
+  "fresh_deadlift_barbell_0.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "7982afa10392480bfdb851608aa60ce310fca119734429c4b25922e17502ece4",
+   "pictures": "085dadcd113585c3eebadaf82c90951ebb6bdb63c227f0e496f2b4d1aacc0114"
+  },
+  "fresh_deadlift_kettlebell_1.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "36493df4310bb39d8f8b1ce9430bf8ac6389b04103f270003b11561832495ccb",
+   "pictures": "ec2d5022d7c6dbddeeb03258c4e32db4e8f9d6c3f45e800e5dbba952994167cb"
+  },
+  "fresh_deadlift_kettlebell_2.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "d24f8cc6abbc211381bccf4b625fc73ddb079b07fce5c89c41fc8044fde0600a",
+   "pictures": "8d0ec55a054110b3943ad52dce43896fcb070637d1403610cd5e78c24ceb814e"
+  },
+  "fresh_front_squat_barbell.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "a9dfb369db94628bddc99661079aa5c23a3c871d81a1a693d90e8210104bee79",
+   "pictures": "4399b7b88a6a149d5c80df672bca3e2874bcd4f145beb820b92e6be57e063595"
+  },
+  "fresh_front_squat_kettlebell.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "d0a1dfc3d8a1508341432ab24d5f1412ec63e5c6d8d3b4f2768d9d6752829cd5",
+   "pictures": "d9e3e380a14d57ee0cb1a42e0b35fad2552f85c60c05fbc7aeaa91f80513c58e"
+  },
+  "fresh_goblet_squat_plate.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "22d4e546597d0267f816bcd43f14a9c035a55ddbab1ab830eefc6a439dfa2aa5",
+   "pictures": "24d1cc64a836c3a23b92c699cb8e3be5acd2c0d64949d6807371eb267806304f"
+  },
+  "fresh_good_morning_1.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "7d29b9ce0206ecfabd29ba0948a9e18f8a64fb8efd1710c80f9dfef690418d2d",
+   "pictures": "572759f97275f1b1b8f078f6f7f0d28a959185a606577720c3fae47581d5742d"
+  },
+  "fresh_good_morning_2.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "f0450127ae4c6c67c285919f4b2b37773f9a8eff5804c4168025cedd115d7b70",
+   "pictures": "6832a75c8803dd9de7dbb7ed353eac0c51d8830c0ade12a24a2eb02c0b1c10e9"
+  },
+  "fresh_lunge_forward_barbell_2.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "2613636862a1dcce25b42742297c0ee89cad216b4d304a83516a9fc0c1b0fd8d",
+   "pictures": "7d2f4364851c0dbc4886c743fc757073b2a260479d830447ecc78ca1e7328b74"
+  },
+  "fresh_lunge_forward_kettlebell_0.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "d3f3758c41a7d541b6501fad8eb50974a69b87b43ae2b3737ef59876936b5565",
+   "pictures": "1c1cd83db539f8eafc92a4b6a747951e242cad9020289da4d42af7427116fbd5"
+  },
+  "fresh_lunge_forward_kettlebell_2.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "289ae0ac6a8045a1b495c7b2d2e81e8fdd21f53e926af7cb4354529bf8ddbd9b",
+   "pictures": "8cd7a5dcb442239860e1f1ebb3932c640ebb20d6bfd8ec1cffc3336fb62266f3"
+  },
+  "fresh_lunge_forward_plate.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "2e162d1c8a62b94b9f7ad9cf53776ad38163ff0f29d1857b3e4a044808a46158",
+   "pictures": "9069faf558da8e4b62546bc9750b89d7ab34927b20357fd4d22243a0aa4b88e2"
+  },
+  "fresh_lunge_reverse_dumbbell_1.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "20bcb06d679d7851af810b9837d6deae4abfa613b96bb2cedd19db7a53a8eb68",
+   "pictures": "db682af30781afe4a2d7d312c1816b275ff24a0f1ef2aadf2acf52dc5d511ed4"
+  },
+  "fresh_overhead_press_barbell.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "c5c65c05c18ededd0f4bee3cc91061c7feae7c8db6a1ad8e2c15e6d73e40fd17",
+   "pictures": "7d4e43f23527f95d27669303ded18e79c4c75a73805a34d071963d8fede7c57f"
+  },
+  "fresh_overhead_press_plate.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "dd52837cc9fc55774c942bb4910a00575f36deff874f7696bab67f19fd352328",
+   "pictures": "a0ee8b06900f7a074b421e7a0d0c68c2631ba7e5cbd4dbd48aa2f92298d4a79d"
+  },
+  "fresh_push_press_kettlebell.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "58dfa32f2300eddefc1307016cd4c58d9410422c7704e019794d793151092bc3",
+   "pictures": "5178a71a3921bb11da2e521462ece6e7c22a0715956a78cfa13df40e22f4b3f7"
+  },
+  "fresh_rack_pull_barbell.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "09fadc379949d613d3af46ef82fdd57070fc8a85bf03622f3ba59c890a67316b",
+   "pictures": "09e3a7b345e4f972c38a8a75d482ccad9eea518eb6f57ecb90f4ac8b8982d84d"
+  },
+  "fresh_romanian_deadlift_barbell_0.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "347fc662b2d7b0cc8ca55acf0a7707c0f6b6173a5754d2a93821c478861d620a",
+   "pictures": "d6687718f3d90d7d8ea8eacf2d8c467c2ae2907768c0d3a2ef32e26c6496ab56"
+  },
+  "fresh_romanian_deadlift_barbell_2.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "438d115cddb6b87e71f03a5373f80025a09a7d8f8d18a2ce8d56783b3b27888b",
+   "pictures": "df2878e287320ac0fd421585641fc7ebf98bb7a020f304193cd2892ec7f59a6a"
+  },
+  "fresh_romanian_deadlift_dumbbell_0.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "960da8f300886f86a8ec00725d57f1792165cc819dbc11f0fe1e8e015f17cc8f",
+   "pictures": "0de1eff1989cc1a3acd99fc6c9a15e4984764e8b13ca62d4a28a01e966428b5b"
+  },
+  "fresh_romanian_deadlift_dumbbell_1.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "26768fba2714d8abbb435c9652649d0dc47e89c7f1e2ba50a5cd0ef138f63ef5",
+   "pictures": "5a4457298b0058b1c38be2644d81671b461b08ae14387cce67cd88af8328b47d"
+  },
+  "fresh_romanian_deadlift_dumbbell_3.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "80a94ffe057f120292adcdacaed6ab66af1859d27b0d536942457f0435947921",
+   "pictures": "38889d3f062452bf7384b960c1db4e70a1697c6d64fd14356970ad4f16563626"
+  },
+  "fresh_row_kettlebell.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "fcd4ea393923358bd344d3ec64cd55fb80e3761c4d4f9a095c36902e7537383b",
+   "pictures": "ab19123beab930519abcf84587a66dabb7f6aa06eb7f5c046edb11b415f2309e"
+  },
+  "fresh_snatch_kettlebell.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "1164f94d03cb7cae9e8a47a1a05117996c95a858523b72687966662f67c7cee0",
+   "pictures": "acb98c7a68bc8fea55d6045ae28ca146458e105a7bbd1df23f21bb2a88b1094d"
+  },
+  "fresh_split_squat_smith_0.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "00ca6b5fffc0bb03c654701734f08b907bc9bbfa5e53cd70f558655a60b422d7",
+   "pictures": "3c4f6def5cb2ac2c15d138f9bec57f9cb3c65581c1616fcf14e827e8a92033ba"
+  },
+  "fresh_split_squat_smith_2.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "c1d79f3c44d5fbadf00039557ea689196caeab8f4c28a195d228281126a81015",
+   "pictures": "f48860aa4bc85a2de4d88f689b436ab24297413c507c719c7836d68196427562"
+  },
+  "fresh_split_squat_smith_3.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "f5238d29c9484c6e11271fee77abfbe1f7b244e0b13fd488ee50c78a5999de9d",
+   "pictures": "f33ce4ad84d6007d933a99eefff09bab69d795c83107a2ad7d5c741022c412b7"
+  },
+  "fresh_squat_smith.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "9a8d0e0ec9e7cb571aba685d197708a77d6ecbd3d177321f8d0753500af812ba",
+   "pictures": "de4f576b17716bca198fcecf34dac0c24c109eb32dffb6b13740d6ccbca5d88e"
+  },
+  "fresh_step_up_dumbbell_0.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "afd27bb56de9fa00e4f9197a63079fdbb7929014f9321a047b251407824c0aae",
+   "pictures": "d7834b0d57c38c70db97ebfe68ad514780aa7e77f8accb7c96fa71c3c1800aef"
+  },
+  "fresh_step_up_dumbbell_1.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "f476299fce7a7a31ad3e247861773415c2f6b8a30060f0181302d632f817d02f",
+   "pictures": "10a4fcf96ac12b18978a18a506c78158e31349a5ea4769ef681e134d2a06168d"
+  },
+  "fresh_swing_kettlebell_1.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "e535ac7214152b56f3ab7c90da36b48abbf56f49b21e75d4f74049192f3395bc",
+   "pictures": "ca253e3da82b45fa16bdfa486fedc3365b2fab8ff01965c1c2db70c6050ddf02"
+  },
+  "fresh_swing_kettlebell_2.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "cc779e218e81536f6ac8528338a9bc1ff4510243a54bca4a372d96b45c2dcd04",
+   "pictures": "49dfafd64a52f5606157d9a071b7ac04c3d34d1404ea4e68d2819a93083c4543"
+  },
+  "fresh_swing_one_hand.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "82e7e9be5f722088e1e0f3a473fecc2e5c98c77ede329d42ae331e04297daeb9",
+   "pictures": "4cc9985f1536d46db2bed8d62ead733b10954a07e702d61a8d4e772d90e7a915"
+  },
+  "front_raise_plate.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "09320d59c1f02496cd35bd1ce66f4c26df183db2a91281f6c87a3160b86ecc14",
+   "pictures": "fe5364c55e0d10b52141bb04bd20058bbf7a812e2d85a2ab8c730a302dbfb0c7"
+  },
+  "goblet_squat_kettlebell.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "6dcef701fde680336db083b404bea6b43ce69515e4d1f5574d711a631491dc74",
+   "pictures": "1c1c33e44766b93ac3c85e14bb0339d6da7798e79104b69723803f085902c394"
+  },
+  "good_morning_barbell.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "e4533196c8f3379c57c9a21ab9b230a543e1e336bcdea9f3a2006b653ed2c320",
+   "pictures": "f3a4220ed969d53169b23aa410c6f0e208b7b2a195bb65fa7fba9237d1566d21"
+  },
+  "halo_kettlebell.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "f5fe818b6aad541d2e8ab52b770f657fe0ec73f06032d9740a19f84f09289006",
+   "pictures": "7f2e14cea0e7a36cb08661f144180034faeaa6c789254b6747cb5803ea0350f5"
+  },
+  "lunge_forward_barbell.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "c9b9b67569294fa3bc24dc0da063da898bb85f8fe39e40f3b12284a7c5a3cfbf",
+   "pictures": "1fb7110d70a255014ddc94a0df08a6658b56cc9b6cadf304c23f84db634b803d"
+  },
+  "lunge_forward_kettlebell.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "89be33a47047da134772bc83df59a430240f110f8f034767c1bef8d9d957d9a0",
+   "pictures": "4719b80a9aa5f3cc5b08034a21c07a70f4f7a5a10dc9dee588572f9b05290f83"
+  },
+  "lunge_reverse_dumbbell.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "45747edf338bc8f8793a7f4ba66d872ece941f8c741a4892096a0aa388efef22",
+   "pictures": "3ea513b9f4e6ada0346df3d366d81c161942f481c6f78b48fb1660ea947ba989"
+  },
+  "overhead_press_kettlebell.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "f79eaa0bd5af7c76f1529e52cac55dc98ea5e3176c0ea6ee03d3e4113016c2f8",
+   "pictures": "882b459a9f9a49c75837ae3b99af998e98b59c8e290c300674f19554e251c40d"
+  },
+  "prisoner_squat_1.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "c28b8a45ebb99f1acc4caedadaed84614237be010856efb7378caf257b67d9de",
+   "pictures": "0aeb6e78bd8e1cf7ce5397ae233a0767de2da05d7bc3d0f3915e3b8b1dbd0459"
+  },
+  "prisoner_squat_2.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "e14dc998fa5bbebb6db97a3c1971be8fa7cffab8131f4cfe3f8f8864925481d8",
+   "pictures": "6fae4e3f060722eb121dc69752032828bd8c185d09c35b9f31bb2082d005c91d"
+  },
+  "prisoner_squat_3.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "8806f6f9ce1cad1aaed328bee64899efdc354d61fd0dc01f9f0d06333c46c77a",
+   "pictures": "021e832b7b2e9047776d25841daf018462e3c0d9af1ff146fe2ff4b008cf08f5"
+  },
+  "prisoner_squat_4.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "f092fb73104f2b4e6dcc3dfb2e82238a2f35b6513f507ca0cc24f1e2ff9e891e",
+   "pictures": "7ee85d2667c45f6951574007495ebb4d4d0068f58c1846e9f062aee150949c9d"
+  },
+  "romanian_deadlift_barbell.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "afbd73483dcf22c611a6aee20671456038f4f89463bd2af83ae0c4dfe885d337",
+   "pictures": "5b2e2af16f8817fd9ef1eb7f48ae77591b9b3399d06c3cded64ba55fb6f1cfe9"
+  },
+  "romanian_deadlift_dumbbell.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "b2b880bfeb4cda1cddfadc823b882905ed20370fefbc6ce76d6ab87a7ebce627",
+   "pictures": "34feab57832e5852b6ec2505919830e05054cb30c9a905a6c920befc43f28d2c"
+  },
+  "row_barbell.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "b1f7f3deedb90cdbdee5f9829d46708e69880005fa33dc2d93899097efef3f55",
+   "pictures": "6b86101451a42df028ad80ba34b177b68aa670c2b86c49efefc5558c6adc9570"
+  },
+  "split_squat_smith.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "f03a38e003658e7684d725f19350aa864ed812609d0e3ade0b1b892b02210f37",
+   "pictures": "3bfd83553d60cc0955a72a81b8c0dc07df62f8543d234180060e0ef14cc50ab0"
+  },
+  "squat_jack_1.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "6a63c04163999607bde7dd21030d011cdccf09621ac0055c9eb147188fab0e1b",
+   "pictures": "5f681e37be66eda96c607f8b695506336131575e2a0d71812c7bb7f4e1426cf0"
+  },
+  "squat_jack_2.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "923371867622434ffbbda65d056d5d1e864b3d9d52ecb0f5183d1f623957ad20",
+   "pictures": "db0c5d70844d08de7c5e9699ea13c3bed8805f1b3c11ccdb5486d46612d5b6d2"
+  },
+  "squat_jump_1.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "1fca93c957e5de8ec1a930367d4115c7a273e15448477a0815d4253dc21316e9",
+   "pictures": "1d3327552557fd1d60db1abf14eb2ed1c778f8fe6c9c906d18fa2275184549bb"
+  },
+  "squat_jump_2.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "507a46a0a187350e871f152d769da8d1ae4cfab6bfa9b72811afc8a635fbde07",
+   "pictures": "3c49f5e5c25b20e11a31d41b1e75fccc5b89cb29e1557dca4b0e0f3706246719"
+  },
+  "squat_jump_3.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "046e1b6931d78e3dbf2ca316cffbaff7fa71f055245963efb5e5d740f0ee8eba",
+   "pictures": "0dceb360f5b7dad10ff7716c73bb93222e623c0f56355701a1a6c97200e460e8"
+  },
+  "squat_jump_4.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "286bcc1484ce9f77293a726f15951f12b938db5b3ddc6644f5a78a6b2b6f4d30",
+   "pictures": "b19d5d63c334e59970e94cc867ae05aa1e0500db114a959c4ee12315eef73b24"
+  },
+  "squat_normal_2.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "ce5f49dcbfcb877c92c2085088e2aeeca567c34a36430a8807d149328a629813",
+   "pictures": "84326e29cef5e59133be91593251fa4279ada228ad12086686de661ae2fd899d"
+  },
+  "squat_reference.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "64ba24b76a8d665aa8b80d773bee3c8403921bba66bfcb7f2e46a41af500f67c",
+   "pictures": "e5f04a3c82d7bf2a26413c8525384ea8f31e4b6e81ff5dec89163f6fe776ec0a"
+  },
+  "squat_reference.pose_landmarker_full.gpu.bodypoints": {
+   "kept": "64ba24b76a8d665aa8b80d773bee3c8403921bba66bfcb7f2e46a41af500f67c",
+   "pictures": "e5f04a3c82d7bf2a26413c8525384ea8f31e4b6e81ff5dec89163f6fe776ec0a"
+  },
+  "squat_reference.pose_landmarker_lite.cpu.t4.bodypoints": {
+   "kept": "64ba24b76a8d665aa8b80d773bee3c8403921bba66bfcb7f2e46a41af500f67c",
+   "pictures": "e5f04a3c82d7bf2a26413c8525384ea8f31e4b6e81ff5dec89163f6fe776ec0a"
+  },
+  "step_up_dumbbell.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "b647180ec5a625881db51e1c547fb7cc80f98ab9fa32efb25949a512ff242c5e",
+   "pictures": "762ee18beecb4a0d96864b0bb25ae577e3e720c3714124ebb00aae6d09b9531d"
+  },
+  "sumo_squat_1.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "c7409c231510b94c889770cd0e09bc41e6befe3f8e845d40e1f09481e241bbff",
+   "pictures": "fd32b15419546b65aa51d94430e1f6105d67960635df58283a6ab077e9cdf978"
+  },
+  "sumo_squat_2a.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "94452c33a124f7ea9ff1593b6ddd1e868374312f2c2dfdc67db28d23e4ca1118",
+   "pictures": "363a60d65cb0c596f778960ad30041d27ff77ee12d47c3e0a41f1d311fc8f36f"
+  },
+  "sumo_squat_2b.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "ead49a9f9c0baa64dabcd1b17cd85bafcbcbd064b176cb12914b3b2aa28bfd9a",
+   "pictures": "edea76bac3ba55f592d23cd4317692a0fdd74bd9fbc1eb8600d51c2bab090ebf"
+  },
+  "swing_kettlebell.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "022272884c1bf5d0b7aaabeb62bd536086cdc31c4a88bdb015cb1a8621a62997",
+   "pictures": "4d9a446a5b3c479188251626cebcdbf588326f7fa48b4cce50bc665fe9fefeb8"
+  },
+  "usual_v02.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "0a96518b257a0635ed223a9afc62b01a49cd6008b5ad9ac6066124ddadf83a7c",
+   "pictures": "ea23eb663484da1cf7e7c99f7802961bd72db08492ad17abb8e7b77bda0eddbf"
+  },
+  "usual_v03.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "0da6dd3d286d153e3e3102cbaa8c4e78027dbbc75afa68101307406ae234dba9",
+   "pictures": "d9cbd8f3a1eb8abcac6291c963118cbb5b90f6c2111c6cb91ae1db4b2d5da614"
+  },
+  "usual_v04.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "490c374accbcd5e80d72c67af894dfbd4045fff42c1ce8f90becc99cfa65375f",
+   "pictures": "7dfd43ace4b952993d0bec7f66d6961212db76b8f0032e50218d63eb4e2dadd5"
+  },
+  "usual_v05.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "5abb693f393c1dabab99213e95524023e614587ec9394978f9fde28c8f290821",
+   "pictures": "08330c60797db093f982bb52372b9be4d9043af41176db1c5235ef422d8c0936"
+  },
+  "usual_v06.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "9775742146d067fef6a96d746980ce854ec8b33f44c05025e2f202616587f025",
+   "pictures": "bb17fabd816078cc205f49e6d5165dacf4a843feecbd049c241ac6f591c9f810"
+  },
+  "usual_v07.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "7687aec7dc6fa1af2d6987af6e18e1a05ac490c95c06f533847ff729a7644ddb",
+   "pictures": "8a44b72ff410570b9b93720c4a95523582eebfb6258d819b9de8f7537c51baa1"
+  },
+  "usual_v08.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "e235fd83185dd49c71db45bdbdd46ff34f55441f995e41ad337421a9d849635a",
+   "pictures": "29198882c43c3da23ad7af3ad1adc0c23751a06600849af0c83b2357f9c26f78"
+  },
+  "usual_v09.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "b2f28b2c32760f9c7673fb795c73edf0ca468d79a65af6312d3ba5ceb5362f8f",
+   "pictures": "2c98b8f94cb6c13a7700456911854575c48da254ba8631f21f40247e3fb9ae6c"
+  },
+  "usual_v10.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "6e77f260510ed13c04bac8355fcd1816056a799ac820cb1cd714927707f30672",
+   "pictures": "2ab5939d68f6f3908dc6211c9177d99fa7e95e76c28049bcfdac0cd9cbfbb726"
+  },
+  "usual_v11.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "e9f6f3f98f7b27d7b5737c32734a3ad8025a0e88af06d0ca668c485f42e36707",
+   "pictures": "c73f8b4d2734ca6b95f4206fcf7e140506bf8e9277915820395d8fd0e286a03e"
+  },
+  "usual_v12.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "4335ac46dfd9fdd5bc4974fd07c2fcd7c3c112eb9229b45cfa22b28ef8cf9e88",
+   "pictures": "2da4df72240a83ab212eb72b83dd32d53acb53ab83efb711b0b97caf5886a110"
+  },
+  "usual_v13.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "21df34d3e1d5c9aa49584c1efb35e880f67d89e423837117e2bc0bb2589c4170",
+   "pictures": "6bf19fb8f9917e610cf647da8bf0ee6da6b9f40ac7f5b2f52d5d03e4fbc3c7e8"
+  },
+  "usual_v14.pose_landmarker_full.cpu.t4.bodypoints": {
+   "kept": "bba9d5397e481d21449cfcf71df38ee587c01a68cc4f9ba563b9d4ef5741e0a3",
+   "pictures": "98961855cc4fbe916388d39c20782479738941e94f23569a130afdf4dabed259"
+  }
+ }
+}

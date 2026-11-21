@@ -5,13 +5,23 @@
   "level": "beginner",
   "muscles": {
     "main": [
-      "quadriceps",
-      "glutes"
+      "rectus_femoris",
+      "vastus_lateralis",
+      "vastus_medialis",
+      "glute_max"
     ],
     "also": [
-      "hamstrings",
-      "calves",
-      "abdominals"
+      "biceps_femoris",
+      "inner_hamstrings",
+      "adductors",
+      "adductor_magnus"
+    ],
+    "steady": [
+      "glute_med",
+      "abs",
+      "transverse_abdominis",
+      "obliques",
+      "lower_back"
     ]
   },
   "equipment": [],
@@ -68,6 +78,10 @@
     {
       "name": "American Council on Exercise (ACE), Exercise Library: Bodyweight Squat",
       "url": "https://www.acefitness.org/resources/everyone/exercise-library/135/bodyweight-squat/"
+    },
+    {
+      "name": "National Academy of Sports Medicine (NASM), Exercise Library: Prisoner Squat (muscles worked)",
+      "url": "https://www.nasm.org/resource-center/exercise-library/prisoner-squat"
     }
   ],
   "clip": null,

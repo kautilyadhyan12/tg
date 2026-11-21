@@ -362,6 +362,54 @@ d("the Exercise Library on the server (real Postgres)", () => {
     });
   });
 
+  describe("a word list that changed after a copy was made (63a, round one's High)", () => {
+    /** The squat as a publish before 63a stored it: the old broad muscle words and no steadying row. */
+    const oldSquat = () => {
+      const squat = real.exerciseFiles.find((f) => f.name === "squat.json");
+      if (squat === undefined) throw new Error("the real folder has no squat.json");
+      const file = JSON.parse(squat.text) as Record<string, unknown>;
+      return { ...file, status: "live", met: 3, muscles: { main: ["quadriceps", "glutes"], also: ["hamstrings"] } };
+    };
+
+    it("a copy published under the old muscle words is still served whole, as it was made", async () => {
+      await rolledBack(async (tx) => {
+        const body = JSON.stringify({ exercises: [oldSquat()], camera: [] });
+        const version = (await tx<{ version: number }[]>`
+          INSERT INTO library_copies (channel, sha256, body)
+          VALUES ('live', ${createHash("sha256").update(body).digest("hex")}, ${body}) RETURNING version`)[0]?.version ?? 0;
+        expect(await checkedCopyText(tx, version)).toBe(body);
+      });
+    });
+
+    it("a publish carries on the stored entry of an exercise whose file is gone, in the words it was written under", async () => {
+      await rolledBack(async (tx) => {
+        await publishLibrary(tx, withExtra(real, "zz_library_old_words", "Library Old Words"));
+        const lift = await idOf(tx, "zz_library_old_words");
+        await saveSet(tx, lift, "old-words");
+        // Its stored entry as an earlier word list wrote it.
+        await tx`
+          UPDATE library_exercises
+          SET entry = jsonb_set(entry, '{muscles}', ${tx.json({ main: ["biceps"], also: ["forearms"] })})
+          WHERE exercise_id = ${lift}`;
+        expect(await publishLibrary(tx, real)).toMatchObject({ hidden: 1, removed: 0 });
+        const rows = await tx<{ body: string }[]>`SELECT body FROM library_copies WHERE channel = 'live' ORDER BY version DESC LIMIT 1`;
+        const kept = (JSON.parse(rows[0]?.body ?? "null") as { exercises: { id: string; status: string; muscles: unknown }[] }).exercises.find((e) => e.id === "zz_library_old_words");
+        expect(kept?.status).toBe("hidden");
+        expect(kept?.muscles).toEqual({ main: ["biceps"], also: ["forearms"], steady: [] });
+      });
+    });
+
+    it("a stored entry that is not an exercise at all still refuses the publish", async () => {
+      await rolledBack(async (tx) => {
+        await publishLibrary(tx, withExtra(real, "zz_library_broken", "Library Broken"));
+        const lift = await idOf(tx, "zz_library_broken");
+        await saveSet(tx, lift, "broken");
+        await tx`UPDATE library_exercises SET entry = jsonb_set(entry, '{text}', ${tx.json({})}) WHERE exercise_id = ${lift}`;
+        await expect(publishLibrary(tx, real)).rejects.toBeInstanceOf(LibraryRefused);
+      });
+    });
+  });
+
   describe("the phone's download", () => {
     it("a signed-in person gets the whole list with its fingerprint, the same as the ETag", async () => {
       const me = await makeUser("download");

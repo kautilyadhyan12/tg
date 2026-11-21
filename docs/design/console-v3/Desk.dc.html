@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>The front desk</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./kit3.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0;background:#0A0908}
+.cap{display:flex;align-items:center;gap:10px;font-weight:600;color:var(--t2)}
+.num{width:26px;height:26px;border-radius:999px;background:var(--o-fill);color:var(--o-t);box-shadow:inset 0 0 0 1px var(--o-line);display:grid;place-items:center;font-size:13px;font-weight:700;flex:none}
+.stage{background:var(--scrim);border-radius:18px;padding:32px 16px;display:flex;justify-content:center}
+.dlg{background:var(--solid);border:1px solid var(--line2);border-radius:20px;box-shadow:var(--pop);width:100%;max-width:500px;min-width:0}
+.side{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,440px);border:1px solid var(--line);border-radius:18px;overflow:hidden}
+.side > .under{padding:20px;opacity:.6;overflow:hidden;min-width:0}
+.side > .sheet{background:var(--solid);border-left:1px solid var(--line2);display:flex;flex-direction:column;min-width:0}
+.sheet-h{display:flex;align-items:center;gap:12px;padding:18px 20px;border-bottom:1px solid var(--line)}
+.sheet-b{padding:20px;display:flex;flex-direction:column;gap:18px}
+.sheet-f{margin-top:auto;display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:14px 20px;border-top:1px solid var(--line)}
+.opt{display:flex;gap:12px;align-items:flex-start;padding:14px 16px;border-radius:14px;border:1px solid var(--line2)}
+.opt-on{border-color:var(--o);background:var(--o-fill)}
+.radio{width:18px;height:18px;border-radius:999px;border:1.5px solid var(--line2);flex:none;margin-top:1px}
+.radio-on{border:5px solid var(--o)}
+.check-on{background:var(--o);border-color:var(--o);position:relative}
+.check-on::after{content:"";position:absolute;left:5px;top:1px;width:5px;height:10px;border:solid var(--on-o);border-width:0 2px 2px 0;transform:rotate(45deg)}
+.sw{width:40px;height:24px;border-radius:999px;background:var(--bar);position:relative;flex:none}
+.sw::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:999px;background:var(--t3)}
+.sw-on{background:var(--o)}.sw-on::after{left:19px;background:var(--on-o)}
+.step{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,340px);gap:20px;align-items:start}
+.menu{background:var(--solid);border:1px solid var(--line2);border-radius:16px;box-shadow:var(--pop);padding:6px;min-width:0;max-width:320px}
+.mi{display:flex;gap:12px;align-items:flex-start;padding:10px 12px;border-radius:10px}
+.ptile{display:flex;flex-direction:column;gap:4px;padding:14px;border-radius:14px;border:1px solid var(--line2);min-width:0}
+.ptile-on{border-color:var(--o);background:var(--o-fill)}
+.pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.qty{display:inline-flex;align-items:center;border:1px solid var(--line2);border-radius:999px;height:40px}
+.qty > button{width:40px;height:40px;display:grid;place-items:center;color:var(--t2)}
+.money{font-weight:600;white-space:nowrap}
+.frames{display:flex;flex-wrap:wrap;gap:40px;padding:40px;align-items:flex-start}
+.frame{width:390px;max-width:100%;border:1px solid var(--line2);border-radius:28px;overflow:hidden;background:var(--page);display:flex;flex-direction:column;position:relative}
+.bsheet{background:var(--solid);border-top:1px solid var(--line2);border-radius:22px 22px 0 0;box-shadow:var(--pop);display:flex;flex-direction:column}
+.grab{width:40px;height:5px;border-radius:999px;background:var(--line2);margin:10px auto 4px}
+.savebar{position:sticky;bottom:12px;z-index:2;display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 16px;background:var(--solid);border:1px solid var(--line2);border-radius:18px}
+.footbar{position:sticky;bottom:0;padding:12px 16px 16px;border-top:1px solid var(--line);background:var(--solid);display:flex;flex-direction:column;gap:8px}
+@media (max-width:1180px){.side{grid-template-columns:minmax(0,1fr)}.side > .under{display:none}.side > .sheet{border-left:0}}
+@media (max-width:900px){.step{grid-template-columns:minmax(0,1fr)}.frames{padding:16px;gap:24px}}
+@media (pointer:coarse){.qty,.qty > button{height:44px}.qty > button{width:44px}}
+.desk{width:760px;max-width:100%;min-height:560px;border:1px solid var(--line2);border-radius:28px;overflow:hidden;background:var(--page);display:flex;flex-direction:column}.desk-top{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:16px 20px;border-bottom:1px solid var(--line)}.desk-mid{flex:1 1 auto;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;text-align:center;padding:40px 24px}.desk-foot{padding:16px 20px 20px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:8px}.big-ic{width:96px;height:96px;border-radius:999px;display:grid;place-items:center;background:var(--box2)}.big-ic .ic{width:48px;height:48px}.say{font-size:30px;line-height:38px;font-weight:700;letter-spacing:-.02em}.who{font-size:22px;line-height:30px;font-weight:600}.good{background:var(--good-fill);color:var(--good)}.warn{background:var(--warn-fill);color:var(--warn)}.bad{background:var(--bad-fill);color:var(--bad)}.cam{width:100%;max-width:420px;aspect-ratio:4/3;border-radius:20px;background:var(--box2);border:1px solid var(--line2);display:grid;place-items:center;color:var(--t3)}.answers{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,300px),1fr));gap:16px;width:100%}.ans{display:flex;gap:14px;align-items:flex-start;padding:18px;border-radius:18px;border:1px solid var(--line2);background:var(--box)}.ans .big-ic{width:48px;height:48px;flex:none}.ans .big-ic .ic{width:24px;height:24px}
+</style>
+</helmet>
+<div class="app t-dark {{look}}" style="min-height: 100%">
+<div class="frames">
+
+<div class="col g12" style="max-width: 100%">
+<span class="cap"><span class="num">1</span>Waiting for a scan</span>
+<div class="desk" aria-label="The front desk, waiting">
+<header class="desk-top"><span class="logo"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18zM6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2M10 6h4M10 10h4M10 14h4M10 18h4"></path></svg></span><span class="col grow" style="min-width: 160px"><span class="w6">Iron House</span><span class="t3">Check-in · Front desk</span></span><button type="button" class="btn btn-s"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5L6 9H2v6h4l5 4zM15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"></path></svg>Turn sound off</button><button type="button" class="btn btn-s"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2zM12 9a4 4 0 1 0 0 8a4 4 0 1 0 0-8"></path></svg>Use the camera</button></header>
+<main class="desk-mid"><span class="big-ic"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h3v3h-3zM18 18h3v3h-3zM14 20h2M20 14v2M6 6h1M17 6h1M6 17h1"></path></svg></span><span class="say">Scan your pass or key tag</span><span class="t2">Open your pass in the app and hold it under the scanner.</span></main>
+<div class="desk-foot"><span class="label">Scanner</span><div class="input"><span class="t3 grow">Scan a pass or key tag</span></div></div>
+</div>
+</div>
+
+<div class="col g12" style="max-width: 100%">
+<span class="cap"><span class="num">2</span>Checked in</span>
+<div class="desk" aria-label="The front desk, checked in">
+<header class="desk-top"><span class="logo"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18zM6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2M10 6h4M10 10h4M10 14h4M10 18h4"></path></svg></span><span class="col grow" style="min-width: 160px"><span class="w6">Iron House</span><span class="t3">Check-in · Front desk</span></span><button type="button" class="btn btn-s"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5L6 9H2v6h4l5 4zM15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"></path></svg>Turn sound off</button><button type="button" class="btn btn-s"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2zM12 9a4 4 0 1 0 0 8a4 4 0 1 0 0-8"></path></svg>Use the camera</button></header>
+<main class="desk-mid"><span class="big-ic good"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1M22 4L12 14l-3-3"></path></svg></span><span class="say">Checked in</span><span class="who">Maya Brooks</span></main>
+<div class="desk-foot"><span class="label">Scanner</span><div class="input"><span class="t3 grow">Scan a pass or key tag</span></div></div>
+</div>
+</div>
+
+<div class="col g12" style="max-width: 100%">
+<span class="cap"><span class="num">3</span>Sent to staff</span>
+<div class="desk" aria-label="The front desk, see a member of staff">
+<header class="desk-top"><span class="logo"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18zM6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2M10 6h4M10 10h4M10 14h4M10 18h4"></path></svg></span><span class="col grow" style="min-width: 160px"><span class="w6">Iron House</span><span class="t3">Check-in · Front desk</span></span><button type="button" class="btn btn-s"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5L6 9H2v6h4l5 4zM15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"></path></svg>Turn sound on</button><button type="button" class="btn btn-s"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2zM12 9a4 4 0 1 0 0 8a4 4 0 1 0 0-8"></path></svg>Use the camera</button></header>
+<main class="desk-mid"><span class="big-ic warn"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 9v4M12 17h.01M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path></svg></span><span class="say">Please see a member of staff</span><span class="who">Sam Rivera</span><span class="tag tag-warn" style="height: auto; padding: 6px 14px; font-size: 14px">Status: Active · Payment: Overdue</span></main>
+<div class="desk-foot"><span class="label">Scanner</span><div class="input"><span class="t3 grow">Scan a pass or key tag</span></div></div>
+</div>
+</div>
+
+<div class="col g12" style="max-width: 100%">
+<span class="cap"><span class="num">4</span>Reading a pass with the device's camera</span>
+<div class="desk" aria-label="The front desk, the camera open">
+<header class="desk-top"><span class="logo"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18zM6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2M10 6h4M10 10h4M10 14h4M10 18h4"></path></svg></span><span class="col grow" style="min-width: 160px"><span class="w6">Iron House</span><span class="t3">Check-in · Front desk</span></span><button type="button" class="btn btn-s"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5L6 9H2v6h4l5 4zM15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"></path></svg>Turn sound off</button><button type="button" class="btn btn-soft"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"></path></svg>Close the camera</button></header>
+<main class="desk-mid"><div class="cam" aria-label="Camera: hold the pass up to it"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2zM12 9a4 4 0 1 0 0 8a4 4 0 1 0 0-8"></path></svg></div><span class="t2">Hold the pass up to the camera and keep it still.</span></main>
+<div class="desk-foot"><span class="label">Scanner</span><div class="input"><span class="t3 grow">Scan a pass or key tag</span></div></div>
+</div>
+</div>
+
+<section class="box pad col g16" style="width: 1560px; max-width: 100%" aria-label="Every other answer">
+<h2 class="h2">Every other answer, in the middle of the desk</h2>
+<span class="t3">Each takes the place of “Scan your pass or key tag” for a few seconds, with its sound, then the desk waits again. The name is shown when the pass is known.</span>
+<div class="answers">
+<div class="ans"><span class="big-ic"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20M12 6v6l4 2"></path></svg></span><span class="col g4"><span class="h3">Checking…</span><span class="t3">while the scan is being read</span></span></div>
+<div class="ans"><span class="big-ic good"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1M22 4L12 14l-3-3"></path></svg></span><span class="col g4"><span class="h3">Already checked in at 7:31 am</span><span class="t2">Sam Rivera</span></span></div>
+<div class="ans"><span class="big-ic bad"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20M15 9l-6 6M9 9l6 6"></path></svg></span><span class="col g4"><span class="h3">Not on the list</span><span class="t2">Jordan Lee</span></span></div>
+<div class="ans"><span class="big-ic warn"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h3v3h-3zM18 18h3v3h-3zM14 20h2M20 14v2M6 6h1M17 6h1M6 17h1"></path></svg></span><span class="col g4"><span class="h3">Show a fresh pass</span><span class="t2">Open your pass in the app again, then scan it.</span></span></div>
+<div class="ans"><span class="big-ic bad"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20M15 9l-6 6M9 9l6 6"></path></svg></span><span class="col g4"><span class="h3">Not a member of Iron House</span></span></div>
+<div class="ans"><span class="big-ic warn"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 9v4M12 17h.01M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path></svg></span><span class="col g4"><span class="h3">That isn't a pass or key tag</span><span class="t2">Scan the pass in the app, or a key tag.</span></span></div>
+<div class="ans"><span class="big-ic"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5a10 10 0 0 1 14 0M8.5 16a5 5 0 0 1 7 0M2 9a15 15 0 0 1 20 0M12 20h.01"></path></svg></span><span class="col g4"><span class="h3">Please scan again</span><span class="t2">Check the internet connection, then scan again.</span></span></div>
+<div class="ans"><span class="big-ic"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20M12 6v6l4 2"></path></svg></span><span class="col g4"><span class="h3">Please wait</span><span class="t3">when scans come faster than the desk may send them</span></span></div>
+<div class="ans"><span class="big-ic bad"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20M15 9l-6 6M9 9l6 6"></path></svg></span><span class="col g4"><span class="h3">Check-in is unavailable</span><span class="t2">Please see a member of staff.</span><span class="t3">stays on screen until check-in is on again</span></span></div>
+<div class="ans"><span class="big-ic bad"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20M15 9l-6 6M9 9l6 6"></path></svg></span><span class="col g4"><span class="h3">This device can't check people in</span><span class="t3">stays on screen: the device was switched off in Settings</span></span></div>
+</div>
+<h2 class="h2">The camera, when it can't be used</h2>
+<div class="grid3">
+<div class="strip strip-warn"><span class="grow">This browser can't open the camera. Use a scanner, or open this page in Chrome, Edge or Safari.</span></div>
+<div class="strip strip-warn"><span class="grow">We couldn't open the camera. Allow camera access for this page in the browser, or use a scanner.</span></div>
+<div class="strip strip-warn"><span class="grow">The camera can't read passes in this browser. Use a scanner, or open this page in Chrome, Edge or Safari.</span></div>
+</div>
+</section>
+
+<div class="col g12" style="max-width: 100%">
+<span class="cap"><span class="num">5</span>Opening a device's link</span>
+<div class="desk" style="min-height: 360px" aria-label="Setting up this device">
+<main class="desk-mid"><span class="big-ic"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20M12 6v6l4 2"></path></svg></span><span class="h2">Setting up this device…</span><span class="t3">Then the desk shows “Scan your pass or key tag”.</span></main>
+</div>
+<div class="desk" style="min-height: 360px" aria-label="This link can't be used">
+<main class="desk-mid"><span class="big-ic bad"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20M15 9l-6 6M9 9l6 6"></path></svg></span><span class="say">This link can't be used</span><span class="t2">This link has already been used or has run out. Ask for a new one in Settings → Check-in devices.</span><span class="t3">Or: Couldn't reach the server. Check the internet connection, then open the link again.</span></main>
+</div>
+</div>
+
+<div class="col g12" style="max-width: 100%">
+<span class="cap"><span class="num">6</span>A browser somebody is signed in to</span>
+<div class="desk" style="min-height: 420px" aria-label="Sign out to use this as a check-in desk">
+<main class="desk-mid"><span class="big-ic warn"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"></path></svg></span><span class="say">Sign out to use this as a check-in desk</span><span class="t2">This browser is signed in as dana.brooks@gmail.com. Anyone at this desk could open your console in another tab, so the desk works only in a browser nobody is signed in to. Sign out here, or open the link in another browser.</span><button type="button" class="btn btn-main btn-lg"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"></path></svg>Sign out</button></main>
+</div>
+</div>
+
+<div class="col g12" style="max-width: 100%">
+<span class="cap"><span class="num">7</span>On a phone used as the desk</span>
+<div class="frame" aria-label="The front desk on a phone">
+<header class="desk-top"><span class="logo"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18zM6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2M10 6h4M10 10h4M10 14h4M10 18h4"></path></svg></span><span class="col grow" style="min-width: 0"><span class="w6 ell">Iron House</span><span class="t3 ell">Check-in · Front desk</span></span><button type="button" class="ibtn" aria-label="Turn sound off"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5L6 9H2v6h4l5 4zM15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"></path></svg></button><button type="button" class="ibtn" aria-label="Use the camera"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2zM12 9a4 4 0 1 0 0 8a4 4 0 1 0 0-8"></path></svg></button></header>
+<main class="desk-mid" style="padding: 32px 16px"><span class="big-ic good"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1M22 4L12 14l-3-3"></path></svg></span><span class="say">Checked in</span><span class="who">Maya Brooks</span></main>
+<div class="desk-foot"><span class="label">Scanner</span><div class="input"><span class="t3 grow">Scan a pass or key tag</span></div></div>
+</div>
+</div>
+
+<section class="box pad col g10" style="width: 760px; max-width: 100%" aria-label="Notes for the builder">
+<h2 class="h2">Notes for the builder</h2>
+<span class="t3">The desk is a page of its own, with no menu: it can only check people in. Its colours follow the light or dark look the device is set to. Green for checked in, gold for “see staff”, red for refused, grey for “try again”; the words always say which, never the colour alone. The words of a refusal (“This link has already been used…”) are the server's own. It names Settings in words because this device is signed in to nobody and cannot open the console. On a phone or a narrow desk the two buttons keep their names as labels for screen readers and show as icons.</span>
+</section>
+
+</div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"look":{"editor":"enum","options":["Dark","Light"],"default":"Dark"},"$preview":{"width":1800,"height":3340}}'>
+class Component extends DCLogic {
+renderVals() {
+return { look: (this.props.look ?? 'Dark') === 'Light' ? 't-light' : '' };
+}
+}
+</script>
+</body>
+</html>

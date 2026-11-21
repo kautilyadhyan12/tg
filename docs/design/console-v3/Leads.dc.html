@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Leads</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./kit3.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0;background:#0A0908}
+.cap{display:flex;align-items:center;gap:10px;font-weight:600;color:var(--t2)}
+.num{width:26px;height:26px;border-radius:999px;background:var(--o-fill);color:var(--o-t);box-shadow:inset 0 0 0 1px var(--o-line);display:grid;place-items:center;font-size:13px;font-weight:700;flex:none}
+.stage{background:var(--scrim);border-radius:18px;padding:32px 16px;display:flex;justify-content:center}
+.dlg{background:var(--solid);border:1px solid var(--line2);border-radius:20px;box-shadow:var(--pop);width:100%;max-width:500px;min-width:0}
+.side{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,440px);border:1px solid var(--line);border-radius:18px;overflow:hidden}
+.side > .under{padding:20px;opacity:.6;overflow:hidden;min-width:0}
+.side > .sheet{background:var(--solid);border-left:1px solid var(--line2);display:flex;flex-direction:column;min-width:0}
+.sheet-h{display:flex;align-items:center;gap:12px;padding:18px 20px;border-bottom:1px solid var(--line)}
+.sheet-b{padding:20px;display:flex;flex-direction:column;gap:18px}
+.sheet-f{margin-top:auto;display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:14px 20px;border-top:1px solid var(--line)}
+.opt{display:flex;gap:12px;align-items:flex-start;padding:14px 16px;border-radius:14px;border:1px solid var(--line2)}
+.opt-on{border-color:var(--o);background:var(--o-fill)}
+.radio{width:18px;height:18px;border-radius:999px;border:1.5px solid var(--line2);flex:none;margin-top:1px}
+.radio-on{border:5px solid var(--o)}
+.check-on{background:var(--o);border-color:var(--o);position:relative}
+.check-on::after{content:"";position:absolute;left:5px;top:1px;width:5px;height:10px;border:solid var(--on-o);border-width:0 2px 2px 0;transform:rotate(45deg)}
+.sw{width:40px;height:24px;border-radius:999px;background:var(--bar);position:relative;flex:none}
+.sw::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:999px;background:var(--t3)}
+.sw-on{background:var(--o)}.sw-on::after{left:19px;background:var(--on-o)}
+.step{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,340px);gap:20px;align-items:start}
+.menu{background:var(--solid);border:1px solid var(--line2);border-radius:16px;box-shadow:var(--pop);padding:6px;min-width:0;max-width:320px}
+.mi{display:flex;gap:12px;align-items:flex-start;padding:10px 12px;border-radius:10px}
+.ptile{display:flex;flex-direction:column;gap:4px;padding:14px;border-radius:14px;border:1px solid var(--line2);min-width:0}
+.ptile-on{border-color:var(--o);background:var(--o-fill)}
+.pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.qty{display:inline-flex;align-items:center;border:1px solid var(--line2);border-radius:999px;height:40px}
+.qty > button{width:40px;height:40px;display:grid;place-items:center;color:var(--t2)}
+.money{font-weight:600;white-space:nowrap}
+.frames{display:flex;flex-wrap:wrap;gap:40px;padding:40px;align-items:flex-start}
+.frame{width:390px;max-width:100%;border:1px solid var(--line2);border-radius:28px;overflow:hidden;background:var(--page);display:flex;flex-direction:column;position:relative}
+.bsheet{background:var(--solid);border-top:1px solid var(--line2);border-radius:22px 22px 0 0;box-shadow:var(--pop);display:flex;flex-direction:column}
+.grab{width:40px;height:5px;border-radius:999px;background:var(--line2);margin:10px auto 4px}
+.savebar{position:sticky;bottom:12px;z-index:2;display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 16px;background:var(--solid);border:1px solid var(--line2);border-radius:18px}
+.footbar{position:sticky;bottom:0;padding:12px 16px 16px;border-top:1px solid var(--line);background:var(--solid);display:flex;flex-direction:column;gap:8px}
+@media (max-width:1180px){.side{grid-template-columns:minmax(0,1fr)}.side > .under{display:none}.side > .sheet{border-left:0}}
+@media (max-width:900px){.step{grid-template-columns:minmax(0,1fr)}.frames{padding:16px;gap:24px}}
+@media (pointer:coarse){.qty,.qty > button{height:44px}.qty > button{width:44px}}
+.lr{grid-template-columns:24px minmax(0,1.7fr) minmax(0,1fr) minmax(0,.7fr) minmax(0,1.3fr) 20px}.lr-on{background:var(--o-fill)}.selbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 16px;border-radius:16px;background:var(--solid);border:1px solid var(--o-line)}.sel-line{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 20px;border-top:1px solid var(--line);background:var(--box2)}.col > span{overflow-wrap:anywhere}
+</style>
+</helmet>
+<div class="app t-dark {{look}}" style="min-height: 100%">
+<div class="shell">
+
+<nav class="rail" aria-label="Menu">
+<a href="#" class="gym"><span class="logo"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18zM6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2M10 6h4M10 10h4M10 14h4M10 18h4"></path></svg></span><span class="col grow"><span class="w6 ell">Iron House</span><span class="s12 t3">Austin · Gym</span></span><svg class="ic ic-s t3" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 15l5 5 5-5M7 9l5-5 5 5"></path></svg></a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3h5a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM15 3h5a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM15 12h5a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1zM4 16h5a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1z"></path></svg>Overview<span class="n n-bad">6</span></a>
+<div class="grp">Today<svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 2h6a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1zM16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2M9 14l2 2 4-4"></path></svg>Attendance</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 7.5V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3.5M16 2v4M8 2v4M3 10h5M10 16a6 6 0 1 0 12 0a6 6 0 1 0-12 0M16 14v2.2l1.5 1.3"></path></svg>Classes</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 6.5l11 11M21 21l-1-1M3 3l1 1M18 22l4-4M2 6l4-4M3 10l7-7M14 21l7-7"></path></svg>Personal training</a>
+<div class="grp">People<svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M5 7a4 4 0 1 0 8 0a4 4 0 1 0-8 0M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"></path></svg>Members &amp; staff</a>
+<a href="#" class="ni ni-on"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 7a4 4 0 1 0 8 0a4 4 0 1 0-8 0M10.3 15H7a4 4 0 0 0-4 4v2M14 17a3 3 0 1 0 6 0a3 3 0 1 0-6 0M21 21l-1.9-1.9"></path></svg>Leads<span class="n">5</span></a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 17l-8.5-8.5-5 5L2 7M16 17h6v-6"></path></svg>At risk<span class="n n-warn">2</span></a>
+<div class="grp">Money<svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6a2 2 0 0 1 2-2h12v4M3 6v12a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2H5a2 2 0 0 1-2-2zM17 14h.01"></path></svg>Payments overview</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4zM3 6h18M16 10a4 4 0 0 1-8 0"></path></svg>Sell</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12.6 2.6A2 2 0 0 0 11.2 2H4a2 2 0 0 0-2 2v7.2a2 2 0 0 0 .6 1.4l8.7 8.7a2.4 2.4 0 0 0 3.4 0l6.6-6.6a2.4 2.4 0 0 0 0-3.4zM7 7.5h.01"></path></svg>Memberships</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2zM2 10h20"></path></svg>Failed payments<span class="n n-bad">3</span></a>
+<div class="grp">Community<svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l18-5v12L3 14zM11.6 16.8a3 3 0 1 1-5.8-1.6"></path></svg>Updates<span class="n n-warn">1</span></a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM16 2v4M8 2v4M3 10h18"></path></svg>Events</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 2h6a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1zM16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2M12 11h4M12 16h4M8 11h.01M8 16h.01"></path></svg>Fitness plans</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M8.2 10.2L5 3h14l-3.2 7.2M6 15a6 6 0 1 0 12 0a6 6 0 1 0-12 0"></path></svg>Challenges</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6M18 9h1.5a2.5 2.5 0 0 0 0-5H18M4 22h16M10 14.7V17c0 .6-.5 1-1 1.2-1.2.5-2 2-2 3.8M14 14.7V17c0 .6.5 1 1 1.2 1.2.5 2 2 2 3.8M18 2H6v7a6 6 0 0 0 12 0z"></path></svg>Leaderboard</a>
+<div class="grp">Manage<svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3v18h18M8 17V9M13 17V5M18 17v-3"></path></svg>Reports</a>
+<a href="#" class="ni"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M2 14h4M10 8h4M18 16h4"></path></svg>Settings</a>
+<a href="#" class="me"><span class="av">DB</span><span class="col grow"><span class="w6 s13 ell">Dana Brooks</span><span class="s12 t3">Owner</span></span><svg class="ic ic-s t3" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 15l5 5 5-5M7 9l5-5 5 5"></path></svg></a>
+</nav>
+
+<div class="work">
+<header class="top" style="position: relative">
+<button type="button" class="find"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11a7 7 0 1 0 14 0a7 7 0 1 0-14 0M21 21l-4.3-4.3"></path></svg><span class="grow ell">Search members, pages or actions</span><span class="kbd">Ctrl K</span></button>
+<span class="grow"></span>
+<button type="button" class="btn btn-soft"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>New</button>
+<button type="button" class="ibtn" aria-label="6 items need attention"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 0 0 3.4 0"></path></svg><span class="pip">6</span></button>
+</header>
+
+<main class="page" style="position: relative">
+<div class="between wrap">
+<div class="col g6" style="flex: 1 1 360px; min-width: 0"><span class="eyebrow">People</span><h1 class="h1">Leads</h1><span class="t2">People interested in joining Iron House</span></div>
+<div class="hrow g10 wrap"><button type="button" class="btn btn-s"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"></path></svg>Your gym page</button><button type="button" class="btn btn-s"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M12 18v-6M9 15l3-3 3 3"></path></svg>Import leads</button><button type="button" class="btn btn-main"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 3a4 4 0 1 0 0 8a4 4 0 1 0 0-8M19 8v6M22 11h-6"></path></svg>Add lead</button></div>
+</div>
+
+<div class="strip strip-warn" role="status"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 9v4M12 17h.01M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path></svg><span class="grow">Emails we send for you to people who asked on your page are paused, because some bounced or were marked as spam. Your other emails go on. Their follow-ups are in Email due, for you to send.</span></div>
+
+<div class="hrow g10 wrap">
+<div class="input" style="flex: 1 1 280px; max-width: 420px; border-radius: 999px"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 4a7 7 0 1 0 0 14a7 7 0 1 0 0-14M21 21l-4.3-4.3"></path></svg><span class="t3 grow">Search</span></div>
+</div>
+<div class="hrow g8 wrap" role="group" aria-label="Status"><span class="chip chip-on">All 1,240</span><span class="chip">New 812</span><span class="chip">Contacted 230</span><span class="chip">On trial 41</span><span class="chip">Joined 96</span><span class="chip">Lost 61</span><span class="chip"><span class="dot dot-warn"></span>Email due 18</span><span class="chip"><span class="dot dot-bad"></span>Email problems 2</span></div>
+
+<div class="selbar" role="region" aria-label="Leads selected"><span class="check check-on"></span><span class="w6">100 selected</span><span class="grow"></span><button type="button" class="btn btn-d btn-sm"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"></path></svg>Delete</button><button type="button" class="btn btn-q btn-sm">Clear</button></div>
+
+<div class="box scroll">
+<div style="min-width: 760px">
+<div class="tr th lr"><span class="check check-on" aria-label="Clear the selection"></span><span>Name</span><span>Heard of you from</span><span>Added</span><span>Status</span><span></span></div>
+<div class="sel-line"><span class="grow">The first 100 leads shown are selected.</span><button type="button" class="btn btn-soft btn-sm">Select all 1,240 leads</button></div>
+<a href="#" class="tr lr lr-on"><span class="check check-on"></span><span class="col" style="min-width: 0"><span class="w6">Kavya Rao</span><span class="t3">kavya.rao@gmail.com · (512) 555-0148</span></span><span class="t2">Website</span><span class="t2">Today</span><span class="hrow g6 wrap"><span class="t2">New</span><span class="tag tag-warn">Email due</span><span class="tag tag-plain">From your page</span></span><span class="t3"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg></span></a>
+<a href="#" class="tr lr lr-on"><span class="check check-on"></span><span class="col" style="min-width: 0"><span class="w6">Harsh Vora</span><span class="t3">harsh.vora@gmail.com</span></span><span class="t2">A friend</span><span class="t2">Today</span><span class="hrow g6 wrap"><span class="t2">New</span><span class="tag tag-warn">Email due</span></span><span class="t3"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg></span></a>
+<a href="#" class="tr lr lr-on"><span class="check check-on"></span><span class="col" style="min-width: 0"><span class="w6">Simran Kaur</span><span class="t3">simran.kaur@gmail.com</span></span><span class="t2">Social media</span><span class="t2">Yesterday</span><span class="hrow g6 wrap"><span class="t2">Contacted</span><span class="tag tag-bad">Email bounces</span></span><span class="t3"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg></span></a>
+<a href="#" class="tr lr lr-on"><span class="check check-on"></span><span class="col" style="min-width: 0"><span class="w6">Nikhil Bose</span><span class="t3">(512) 555-0192</span></span><span class="t2">Walked in</span><span class="t2">18 Nov</span><span class="hrow g6 wrap"><span class="t2">On trial</span></span><span class="t3"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg></span></a>
+<a href="#" class="tr lr lr-on"><span class="check check-on"></span><span class="col" style="min-width: 0"><span class="w6">Ellie Grant</span><span class="t3">ellie.grant@gmail.com</span></span><span class="t2">Other</span><span class="t2">16 Nov</span><span class="hrow g6 wrap"><span class="t2">Lost</span><span class="tag tag-bad">Marked as spam</span></span><span class="t3"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg></span></a>
+<a href="#" class="tr lr lr-on"><span class="check check-on"></span><span class="col" style="min-width: 0"><span class="w6">Omar Haddad</span><span class="t3">omar.haddad@gmail.com</span></span><span class="t2">Website</span><span class="t2">14 Nov</span><span class="hrow g6 wrap"><span class="t2">Joined</span></span><span class="t3"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg></span></a>
+<a href="#" class="tr lr lr-on"><span class="check check-on"></span><span class="col" style="min-width: 0"><span class="w6">Tara Singh</span><span class="t3">tara.singh@gmail.com</span></span><span class="t2">A friend</span><span class="t2">12 Nov</span><span class="hrow g6 wrap"><span class="t2">Contacted</span><span class="tag tag-plain">Can't be emailed</span></span><span class="t3"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg></span></a>
+<div class="row"><span class="t3 grow">Showing 100 of 1,240 leads</span><button type="button" class="btn btn-s btn-sm">Load more</button></div>
+</div>
+</div>
+
+<div class="grid2" style="gap: 20px">
+<section class="box col" aria-label="Delete leads">
+<div class="bh"><div class="col g4"><h2 class="h2">Delete opens in the middle</h2><span class="t3">It names who goes before anything does.</span></div></div>
+<div class="stage" style="margin: 0 20px 20px">
+<div class="dlg col">
+<div class="sheet-h"><h2 class="h2 grow">Delete 5 leads?</h2><button type="button" class="ibtn" aria-label="Close"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"></path></svg></button></div>
+<div class="sheet-b">
+<span class="t2">Their names, contact details, notes and the messages they sent you are deleted. This can't be undone. Your list of members doesn't change.</span>
+<div class="inset col g6"><span class="w6">Kavya Rao, Harsh Vora, Simran Kaur, Nikhil Bose and 1 more</span><button type="button" class="btn btn-q btn-sm" style="align-self: flex-start">View all</button></div>
+<span class="t3">1 lead you selected was already deleted.</span>
+</div>
+<div class="sheet-f"><button type="button" class="btn btn-d"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"></path></svg>Delete 5 leads</button><button type="button" class="btn btn-q">Cancel</button></div>
+</div>
+</div>
+<div class="col g10" style="padding: 0 20px 20px">
+<div class="cap"><span class="num">2</span>When it is done, in the same box</div>
+<div class="inset col g8"><span class="w6">Leads deleted</span><span>5 leads deleted.</span><span class="t3">Or: 2 leads were already deleted.</span><button type="button" class="btn btn-p btn-sm" style="align-self: flex-start">Done</button></div>
+<div class="strip strip-warn"><span class="grow">Some of these leads changed since you opened this, so nothing was deleted. Check who will be deleted now.</span></div>
+<div class="strip strip-bad" role="alert"><span class="col g4 grow"><span>We couldn't delete them. Please try again.</span><span class="t3">We couldn't work out which leads would be deleted. Please try again.</span></span></div>
+</div>
+</section>
+
+<section class="box pad col g12" aria-label="When something else happens">
+<h2 class="h2">When something else happens</h2>
+<span class="label">Before the first lead</span>
+<div class="inset col g6"><span class="w6">No leads yet.</span><span class="t2">When somebody asks about joining, add them here with how to reach them, and keep track of them until they join. Leads kept in other software or a spreadsheet can be brought in with Import leads.</span></div>
+<span class="label">Searching</span>
+<div class="inset col g6"><span>12 leads match</span><span class="t3">No leads match.</span></div>
+<span class="label">Selecting</span>
+<div class="inset col g6"><span>All 1,240 leads are selected.</span><span class="t3">With a search or a pick on: All 12 leads that match are selected. · All 7 leads shown are selected.</span></div>
+<div class="strip strip-warn"><span class="grow">You can select up to 500 leads one at a time. To select more, tick the box at the top, then Select all.</span></div>
+<div class="strip strip-bad" role="alert"><span class="grow">We couldn't select all the leads. Please try again.</span></div>
+<span class="label">After adding</span>
+<div class="strip strip-good" role="status"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1M22 4L12 14l-3-3"></path></svg><span class="grow">Kavya Rao is on your leads.</span></div>
+<span class="label">Emails and the page</span>
+<div class="strip strip-bad"><span class="grow">Your emails through KWAZO are stopped, because too many bounced or one was marked as spam. Send follow-ups yourself from each lead's panel.</span></div>
+<div class="strip"><span class="grow">Your page turned away 14 messages in the last hour because it was getting a lot of them. They were asked to try again later.</span></div>
+<span class="label">Loading and failing</span>
+<div class="inset col g6"><span>Loading your leads…</span><span class="t3">Load more reads “Loading…” while the next 100 come.</span></div>
+<div class="strip strip-bad wrap" role="alert"><span class="col g4 grow"><span>We couldn't load your leads.</span><span class="t3">We couldn't load any more.</span></span><button type="button" class="btn btn-s btn-sm">Try again</button></div>
+<div class="inset col g6"><span class="t3">Staff whose role may not see leads: the server's own sentence in place of the list, and none of the three buttons.</span></div>
+</section>
+</div>
+
+<section class="box pad col g12" aria-label="Notes for the builder">
+<h2 class="h2">Notes for the builder</h2>
+<span class="t3">The list, its tick boxes and the bar of what is selected follow Members (V3a): tick the box at the top for the page shown, then Select all for every lead that matches. Email due and Email problems show only when there are some, or while picked. A row opens the lead from the right (LeadPanel). Your gym page opens its panel from the right (GymPage); Import leads opens in the middle (LeadImport). When the gym's account is read-only, Import leads and Add lead are switched off and the page says why, in the account's own sentence. On a phone, the selected bar sits at the foot of the screen with its tick box (PhoneLeads).</span>
+</section>
+
+</main>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"look":{"editor":"enum","options":["Dark","Light"],"default":"Dark"},"$preview":{"width":1440,"height":2580}}'>
+class Component extends DCLogic {
+renderVals() {
+return { look: (this.props.look ?? 'Dark') === 'Light' ? 't-light' : '' };
+}
+}
+</script>
+</body>
+</html>

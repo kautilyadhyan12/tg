@@ -133,9 +133,50 @@ export const colours = {
    *  the salt shaker. */
   limitDeep: "#E9A417",
   jarDot: "rgba(0,0,0,0.4)",
+  /** The Library's body figures (63a, Kd's drawings): a muscle not lit, one lit as also worked, one that keeps the
+   *  body steady (outlined), one with no exercise yet, the parts never lit (head, hands, feet), and the glow round a main one. */
+  muscleIdle: "#4A443E",
+  muscleIdleDeep: "#36312D",
+  muscleAlso: "#9A5418",
+  muscleSteady: "#3A2A1D",
+  muscleOff: "#262320",
+  figureBare: "#2E2A27",
+  muscleGlow: "rgba(255,138,31,0.28)",
+  /** The stage the figures stand on: a warm pool of light on near-black. */
+  stagePool: "rgba(255,138,31,0.15)",
+  /** An exercise's records (63c, Kd's drawing of 2026-11-20): the gym's LED wall timer, its lights each in their own
+   *  colour and the unlit ones faintly there; and the loaded bar, its plates in the standard colours (red 25, blue 20,
+   *  yellow 15, green 10, white 5; the change plates the same). */
+  ledRed: "#FF4B3E",
+  ledAmber: "#FFB020",
+  ledGreen: "#36D96A",
+  ledBlue: "#3FA9FF",
+  ledOff: "rgba(255,255,255,0.055)",
+  timerFace: "#060606",
+  timerEdge: "#262320",
+  timerSplit: "#1D1B19",
+  timerWords: "rgba(255,255,255,0.62)",
+  plateRed: "#D62E3A",
+  plateBlue: "#2364DB",
+  plateYellow: "#F2C230",
+  plateGreen: "#2FA052",
+  plateWhite: "#EDEDED",
+  /** My Workout's weight plate (64a-i): cast iron, its lit rim and its groove. */
+  weightPlate: "#2A2725",
+  weightPlateRim: "rgba(255,255,255,0.22)",
+  weightPlateGroove: "rgba(0,0,0,0.55)",
+  /** The gym's 1.25 kg change plate, chrome (64a-i). */
+  plateChrome: "#A9A6A1",
+  plateSide: "rgba(0,0,0,0.38)",
+  barSteel: "#9C9A97",
+  barSleeve: "#C9C6C1",
+  barCollar: "#B4B1AC",
 } as const;
 
 export type ColourName = keyof typeof colours;
+
+/** The stage the Library's body figures stand on: a warm pool of light in its middle (63a). */
+export const stageGlow = `radial-gradient(circle at 50% 45%, ${colours.stagePool}, rgba(255,138,31,0) 70%)`;
 
 /** What is pressed: orange running to light orange. */
 export const orangeGradient = `linear-gradient(135deg, ${colours.orange}, ${colours.orangeLight})`;
@@ -216,6 +257,8 @@ export const pictureFadeLight =
 
 /** The glow of what is pressed, the ring round a box being typed in, and the lift of a box from the bottom. */
 export const shadows = {
+  /** A strip lifted off the picture under it (an exercise's facts, 63a). */
+  lift: "0 12px 30px rgba(0,0,0,0.45)",
   button: "0 6px 22px rgba(255,138,31,0.38), inset 0 1px 0 rgba(255,255,255,0.22)",
   /** The raised main button (sign-in, 12e): its glow, a warm rim, the light along its top and a shade at its foot. */
   buttonRaised: "0 10px 28px rgba(255,138,31,0.45), 0 0 0 1px rgba(255,190,120,0.35), inset 0 1px 0 rgba(255,255,255,0.45), inset 0 -2px 0 rgba(150,60,0,0.25)",

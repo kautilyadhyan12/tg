@@ -5,10 +5,16 @@
   "level": "intermediate",
   "muscles": {
     "main": [
-      "abdominals"
+      "abs",
+      "transverse_abdominis"
     ],
     "also": [
-      "lower_back"
+      "obliques",
+      "lower_back",
+      "serratus"
+    ],
+    "steady": [
+      "rotator_cuff"
     ]
   },
   "equipment": [],
@@ -62,7 +68,7 @@
         }
       ],
       "cautions": [
-        "If you feel pain in your lower back, stop at once and see a doctor."
+        "If you feel pain in your lower back, stop at once and see a qualified professional."
       ]
     }
   },
@@ -70,6 +76,10 @@
     {
       "name": "American Council on Exercise (ACE), Exercise Library: Front Plank",
       "url": "https://www.acefitness.org/resources/everyone/exercise-library/32/front-plank/"
+    },
+    {
+      "name": "National Academy of Sports Medicine (NASM), Exercise Library: Plank (muscles worked)",
+      "url": "https://www.nasm.org/resource-center/exercise-library/plank"
     }
   ],
   "clip": null,
