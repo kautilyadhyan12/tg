@@ -22,6 +22,7 @@ export * from "./library/workoutHistory.js";
 export * from "./library/plannedWorkout.js";
 export * from "./library/workoutRun.js";
 export * from "./library/kcalPerMinute.js";
+export * from "./library/workoutAfter.js";
 export * from "./workouts.js";
 export * from "./progress.js";
 export * from "./gamification.js";

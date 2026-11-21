@@ -1,7 +1,7 @@
 // Saving a workout from the phone (spec Part 2 §13.5, job 61a): the only file of this module that
 // touches the database. A workout is the person's own: it is read and written with its owner in the
 // WHERE, and a set is written only by the request that made its workout.
-import type { TransactionSql } from "postgres";
+import type { Sql, TransactionSql } from "postgres";
 
 /** The posted workout id is somebody else's. Answered 404, as an id that does not exist is. */
 export class ForeignWorkoutError extends Error {
@@ -115,4 +115,12 @@ export async function insertSets(tx: TransactionSql, workoutId: string, userId: 
     FROM jsonb_to_recordset(${tx.json(values)}::jsonb)
       AS x(exercise_id uuid, set_index smallint, reps smallint, hold_ms integer, duration_ms integer,
            counted text, measured_in text, target integer, weight_grams integer, rest_seconds integer)`;
+}
+
+/** The effort stars of the person's own workout (job 64a-iii), given after it was saved; false where the workout
+ *  is not theirs or does not exist. Sent twice it is the same. */
+export async function setEffort(sql: Sql, userId: string, workoutId: string, effort: number): Promise<boolean> {
+  const rows = await sql<{ id: string }[]>`
+    UPDATE workouts SET effort = ${effort} WHERE id = ${workoutId} AND user_id = ${userId} RETURNING id`;
+  return rows.length > 0;
 }

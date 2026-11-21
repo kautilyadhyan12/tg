@@ -70,13 +70,15 @@ export interface WorkoutRow {
   kcal_point: number | null;
   kcal_calc_version: number | null;
   platform: string;
+  /** The camera's form score for the whole workout; null for one with no camera set. */
+  avg_form_score: number | null;
 }
 
 /** The person's own workout, or null for one that is not theirs or does not exist. */
 export async function ownWorkout(sql: Sql, userId: string, workoutId: string): Promise<WorkoutRow | null> {
   const rows = await sql<WorkoutRow[]>`
     SELECT id, name, started_at, ended_at, time_zone, started_from, effort, heart_avg, heart_max,
-           duration_ms, kcal_point, kcal_calc_version, platform
+           duration_ms, kcal_point, kcal_calc_version, platform, avg_form_score
     FROM workouts WHERE id = ${workoutId} AND user_id = ${userId}`;
   return rows[0] ?? null;
 }

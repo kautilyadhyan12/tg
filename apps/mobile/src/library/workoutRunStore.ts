@@ -1,4 +1,4 @@
-import type { WorkoutRun, WorkoutSave } from "@app/shared";
+import type { RunExercise, SavedSet, WorkoutRun, WorkoutSave } from "@app/shared";
 import type { TextStore } from "../screens/food/outbox";
 import { press as pressRun, setsInAll, startRun, toSave, type Press, type Start } from "./workoutRun";
 import { readRun, type WorkoutWaiting } from "./workoutSaving";
@@ -20,6 +20,10 @@ export interface Finished {
   activeMs: number;
   sets: number;
   exercises: number;
+  /** Every set done, in order, as the save sends it: its summary shows them with no internet (64a-iii). */
+  done: readonly SavedSet[];
+  /** Its exercises as they were at Start: their names and kinds for the summary. */
+  plan: readonly RunExercise[];
 }
 
 export interface RunStore {
@@ -102,7 +106,15 @@ export function createRunStore(setup: RunStoreSetup): RunStore {
   const finish = (done: WorkoutRun) => {
     run = null;
     pending = done;
-    finished = { workoutId: done.workoutId, name: done.name, activeMs: done.activeMs, sets: done.done.length, exercises: new Set(done.done.map((s) => s.exercise)).size };
+    finished = {
+      workoutId: done.workoutId,
+      name: done.name,
+      activeMs: done.activeMs,
+      sets: done.done.length,
+      exercises: new Set(done.done.map((s) => s.exercise)).size,
+      done: done.done,
+      plan: done.exercises,
+    };
     keep(done);
     void handOver();
   };
