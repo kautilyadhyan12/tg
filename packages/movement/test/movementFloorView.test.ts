@@ -1,0 +1,161 @@
+// A phone standing on the floor, every proof video redrawn as it would see them (ROADMAP 52a-ii-b-ii-a; spec Part 2
+// §12.5 "As built, the floor view"). The worst thing this job could do to a person: a floor view that does not look as a
+// real floor phone looks would prove that an exercise counts from the floor when it does not, and a member's proper reps
+// would go uncounted, or a jump be counted. So first: jumps seen through the redraw; then it is held as proof only if a
+// man's own squats from a raised phone, redrawn, read as his real floor squats do. As measured they do not yet, at any
+// of his six leans: the replay is shown, not held, and this file pins what each lean gives.
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { describe, expect, it } from "vitest";
+import type { Video } from "../scripts/bodyCheck.js";
+import { readKept } from "../scripts/bodyCheck.js";
+import { JUDGED, faithful, phoneLean, positionsTable } from "../scripts/floorView.js";
+import { countedTimes, holds, proofVideos, readMovement, replayTable, runMovement } from "../scripts/movementCheck.js";
+import { MOVEMENT_VIDEOS } from "../scripts/movementVideos.js";
+import { FLOOR_LEAN, FLOOR_LEANS_MEASURED, FLOOR_LENS, REPLAYS, everyNth, onTheFloor } from "../scripts/replays.js";
+import { hopTime } from "../src/index.js";
+import { trueHop } from "./helpers/hops.js";
+import { VIDEOS } from "./helpers/replays.js";
+
+const SQUAT = readMovement("squat");
+const floor = (v: Video): Video => ({ ...v, frames: onTheFloor(FLOOR_LENS, FLOOR_LEAN)(v.frames) });
+const videoOf = (label: string): Video => {
+  const v = VIDEOS.find((x) => x.video.label === label);
+  if (v === undefined) throw new Error(`no video ${label}`);
+  return v.video;
+};
+/** The reps whose hop would not lie wholly inside the video: never hopped. */
+const unhopped = (video: Video, metres: number, offset: number): number => {
+  const last = video.frames[video.frames.length - 1]?.t ?? 0;
+  return countedTimes(SQUAT, video).filter((r) => r.end + offset + hopTime(metres) > last).length;
+};
+/** Every jump of 8, 10 and 12 cm at five take-off times on a video, redrawn from the floor, as filmed and at 8 a second:
+ *  the cases counting a rep nobody did, as "metres | offset | seen | how many". */
+function jumpsCounted(video: Video): string[] {
+  return [0.08, 0.1, 0.12].flatMap((metres) =>
+    [-200, -100, 0, 100, 200].flatMap((offset) => {
+      const seen = floor(trueHop(video, metres, offset));
+      const most = unhopped(video, metres, offset);
+      const ways: readonly (readonly [string, Video])[] = [
+        ["as filmed", seen],
+        ["8 a second", { ...seen, frames: everyNth(8)(seen.frames) }],
+      ];
+      return ways.flatMap(([name, v]) => {
+        const extra = runMovement(SQUAT, v).count - most;
+        return extra > 0 ? [`${String(metres)} | ${String(offset)} | ${name} | ${String(extra)}`] : [];
+      });
+    }),
+  );
+}
+
+describe("the worst thing: a jump drawn on a squat video, seen through the floor redraw: what counts", () => {
+  // The three squat videos of 52a-ii-a's jumps: side on, in between with no pause between reps, from the front.
+  it.each(["squat_reference", "prisoner_squat_3", "sumo_squat_2a"])("%s: jumps of 8, 10 and 12 cm at five take-off times, seen from the floor as filmed and at 8 a second, count only reps they never reached", (label) => {
+    expect(jumpsCounted(videoOf(label))).toEqual([]);
+  });
+
+  it("the same videos, not jumped, count their squats from the floor: the rows above prove something", () => {
+    for (const label of ["squat_reference", "prisoner_squat_3", "sumo_squat_2a"]) {
+      const reps = MOVEMENT_VIDEOS.find((e) => e.file.endsWith(`/${label}`))?.reps;
+      expect([label, runMovement(SQUAT, floor(videoOf(label))).count]).toEqual([label, reps]);
+    }
+  });
+
+  it("on his five raised sets, 14 of 150 count from the floor, four of them cases the raised phone refuses (from the raised phone itself 12 of 150, 52a-ii-b-i's open jumps), in plain sight for 52a-ii-b-ii-b", () => {
+    const raised = proofVideos(MOVEMENT_VIDEOS.filter((e) => e.file === "movement-points/usual_v11" && e.reps !== null));
+    expect(raised.map((v) => [v.video.label, jumpsCounted(v.video)])).toEqual([
+      ["usual_v11 1.3-7.4 s", ["0.08 | -200 | 8 a second | 1", "0.08 | -100 | as filmed | 1", "0.08 | -100 | 8 a second | 1", "0.1 | -100 | as filmed | 1"]],
+      ["usual_v11 8.3-14.2 s", ["0.08 | -200 | as filmed | 1", "0.08 | -200 | 8 a second | 1"]],
+      ["usual_v11 15.3-21.6 s", []],
+      ["usual_v11 22-29.5 s", ["0.08 | -200 | as filmed | 1", "0.08 | 200 | 8 a second | 1"]],
+      ["usual_v11 30-39 s", ["0.08 | -200 | as filmed | 1", "0.08 | -200 | 8 a second | 2", "0.08 | -100 | as filmed | 1", "0.08 | -100 | 8 a second | 2", "0.1 | -200 | 8 a second | 2", "0.1 | -100 | 8 a second | 1"]],
+    ]);
+  });
+});
+
+describe("how a man's own floor phone stood, measured from his videos", () => {
+  it("leaned back 6.4 degrees in one of his six upright floor videos and 12.6 to 14.5 in the five others; the replay's 14 is their middle", () => {
+    const leans = ["floor_phone_test", "usual_v02", "usual_v04", "usual_v05", "usual_v08", "usual_v09"].map((label) => {
+      const kept = readKept(new Uint8Array(readFileSync(join(import.meta.dirname, "movement-points", `${label}.bodypoints`))));
+      return Math.round((phoneLean(kept.frames)?.degrees ?? Number.NaN) * 10) / 10;
+    });
+    expect(leans).toEqual([6.4, 14.3, 14.4, 14.5, 12.6, 13.7]);
+    const sorted = [...leans].sort((a, b) => a - b);
+    expect(((sorted[2] ?? 0) + (sorted[3] ?? 0)) / 2).toBeCloseTo(FLOOR_LEAN, 1);
+  });
+});
+
+describe("his raised squats, redrawn from the floor, do not yet read as his real floor squats do: the floor view is shown, never held", () => {
+  it("is shown, not held: no squat's proof, no other movement's, and no number rests on it", () => {
+    const replay = REPLAYS.find((r) => r.name === "on the floor");
+    expect([replay?.hold, replay?.fits]).toEqual([false, false]);
+  });
+
+  // At each of his six leans (his first video's as measured, 6.4, and as first measured, 6.5), and at the replay's 14: how
+  // many of his ten raised squats count, and which of the four readings the redraw does not take far enough.
+  it.each([
+    [6.4, 9, ["feet stay down", "hips, picture against 3D", "hips, picture against 3D, standing"]],
+    [6.5, 9, ["feet stay down", "hips, picture against 3D", "hips, picture against 3D, standing"]],
+    [12.6, 10, ["feet stay down"]],
+    [13.7, 10, ["feet stay down"]],
+    [FLOOR_LEAN, 10, ["feet stay down", "hips, picture against 3D, standing"]],
+    [14.3, 9, ["feet stay in place"]],
+    [14.4, 9, ["feet stay in place"]],
+    [14.5, 9, ["feet stay in place"]],
+  ] as const)("leaning back %s degrees: %s of 10 counted; short of his floor: %j", (lean, counted, failing) => {
+    const f = faithful(lean);
+    expect(f.real.map((s) => s.label)).toEqual(["floor_phone_test 0-12 s", "floor_phone_test 13.9-21.1 s", "floor_phone_test 22.3-31.4 s", "usual_v04 9.8-23.2 s"]);
+    expect(f.redrawn.reduce((n, s) => n + s.count, 0)).toBe(counted);
+    expect(f.redrawn.every((s) => s.short === 0)).toBe(true);
+    expect(f.rows.filter((r) => r.judged && !r.within).map((r) => r.reading)).toEqual(failing);
+    expect(f.passes).toBe(false);
+  });
+
+  it("every reading it judges moves from his raised phone's towards his floor's, at the replay's lean", () => {
+    const f = faithful(FLOOR_LEAN);
+    for (const name of JUDGED) {
+      const r = f.rows.find((x) => x.reading === name);
+      if (r === undefined) throw new Error(name);
+      expect([name, Math.abs(r.redrawn - r.floor) < Math.abs(r.filmed - r.floor)]).toEqual([name, true]);
+    }
+  });
+
+  it("every one of his six leans is tried", () => {
+    expect(FLOOR_LEANS_MEASURED).toEqual([6.4, 12.6, 13.7, 14.3, 14.4, 14.5]);
+  });
+});
+
+describe("every proof video seen through the floor view, shown: the numbers the spec gives", () => {
+  const replay = REPLAYS.find((r) => r.name === "on the floor");
+  if (replay === undefined) throw new Error("no floor replay");
+
+  it("every other movement tried counts 0 and calls nothing short: 64 of its 72 videos, the 8 filmed from the floor not tried", () => {
+    const rows = replayTable(SQUAT, VIDEOS.filter((v) => v.entry.movement === null), [replay]);
+    expect([rows.length, rows.filter((r) => r.tried).length]).toEqual([72, 64]);
+    expect(rows.filter((r) => r.tried && (r.count > 0 || r.reps.some((x) => x.verdict === "short"))).map((r) => r.label)).toEqual([]);
+  });
+
+  it("of the 18 squat sets tried, 16 count by eye; the two that do not, as written in the spec", () => {
+    const rows = replayTable(SQUAT, VIDEOS.filter((v) => v.entry.movement === "squat"), [replay]).filter((r) => r.tried);
+    expect(rows).toHaveLength(18);
+    expect(rows.filter((r) => !holds(r)).map((r) => [r.label, r.count, r.leftOut])).toEqual([
+      ["usual_v11 22-29.5 s", 2, 1],
+      ["fresh_front_squat_barbell", 2, null],
+    ]);
+  });
+});
+
+describe("what a phone on the floor sees of each kind of position: his eleven other videos as filmed", () => {
+  const rows = positionsTable();
+
+  it("has the eleven, eight of them filmed from the floor", () => {
+    expect(rows.map((r) => r.label)).toEqual(["usual_v02", "usual_v03", "usual_v05", "usual_v06", "usual_v07", "usual_v08", "usual_v09", "usual_v10", "usual_v12", "usual_v13", "usual_v14"]);
+    expect(rows.filter((r) => r.floor)).toHaveLength(8);
+    expect(rows.every((r) => r.found >= 85)).toBe(true);
+  });
+
+  it("sitting cross-legged, on all fours and lying, the floor phone sees one ankle in 29, 61 and 91 of 100 found pictures", () => {
+    const ankles = (label: string): number => rows.find((r) => r.label === label)?.parts.find((p) => p.part === "ankles")?.one ?? -1;
+    expect([ankles("usual_v05"), ankles("usual_v06"), ankles("usual_v07")]).toEqual([29, 61, 91]);
+  });
+});

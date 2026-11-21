@@ -21,7 +21,8 @@
     "phone-live": "tsx scripts/phone-live.ts",
     "movement-check": "tsx scripts/movement-check.ts",
     "keep-phone-points": "tsx scripts/keep-phone-points.ts",
-    "phone-counts": "tsx scripts/phone-counts.ts"
+    "phone-counts": "tsx scripts/phone-counts.ts",
+    "floor-view": "tsx scripts/floor-view.ts"
   },
   "devDependencies": {
     "@app/config": "workspace:*",

@@ -352,7 +352,7 @@ export function replayed(movement: Movement, v: ProofVideo, replay: Replay, left
     most: eye,
     count: run.count,
     leftOut: leftOutOf === null ? null : runMovement(leftOutOf, edited).count,
-    tried: replay.tried?.(v.video.frames) ?? true,
+    tried: replay.tried?.(v.video.frames, v.entry) ?? true,
     reps: run.reps,
   };
 }
