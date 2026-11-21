@@ -123,6 +123,10 @@ export type TerminalFeePaymentRequest = z.infer<typeof terminalFeePaymentRequest
 export const terminalPaymentResponseSchema = z.object({ payment: terminalPaymentSchema }).strict();
 export type TerminalPaymentResponse = z.infer<typeof terminalPaymentResponseSchema>;
 
+/** The longest words a payment that keeps the card can show and keep: `gym_card_agreements_words_check`. Longer (long
+ *  names and many taxes), the card is not offered with that payment, before anything reaches the Terminal or Square. */
+export const TERMINAL_KEEP_WORDS_MOST = 1000;
+
 /** The Terminal's second button when a payment asks to keep the card: the payment goes ahead either way. */
 export const TERMINAL_KEEP_DISAGREE = "Pay without saving";
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { MEMBER_CARD_WORDS, myCardViewSchema, type MyCardView } from "@app/shared";
-import { cardBox, cardExpiryLine, cardReadyToSave, cardRefusalLine, cardRemovedLine, cardSavedLine, removeCardLine, removeCardTitle, removeRefusalLine } from "../src/screens/gym/cardView";
+import { MEMBER_CARD_WORDS, cardAgreementWords, myCardViewSchema, type MyCardView } from "@app/shared";
+import { askedCardStep, cardBox, cardExpiryLine, cardsNotSavedLine, cardReadyToSave, cardRefusalLine, cardRemovedLine, cardSavedLine, removeCardLine, removeCardTitle, removeRefusalLine } from "../src/screens/gym/cardView";
 
 // Card on file on My membership (20d): what the box shows for every answer the server can send. Each answer is read
 // through the server's own shape.
@@ -33,7 +33,7 @@ const view = (over: Record<string, unknown> = {}): MyCardView =>
     paidBy: null,
     canSave: true,
     gymName: "Iron House",
-    agreement: "I agree that Iron House may save this card and charge it for my membership and any fees when they are due. I can remove it at the front desk at any time.",
+    agreement: cardAgreementWords("Iron House"),
     form: FORM,
     ...over,
   });
@@ -175,5 +175,32 @@ describe("its words", () => {
     expect(cardReadyToSave(false, true, false)).toBe(false);
     expect(cardReadyToSave(true, false, false)).toBe(false);
     expect(cardReadyToSave(true, true, true)).toBe(false);
+  });
+});
+
+describe("a card request's Add card (20l): what My membership does once the card is read", () => {
+  // Every class of answer: Add card opens only where the box itself would offer it.
+  const cases: [string, Record<string, unknown>, "add" | "box" | "off"][] = [
+    ["no card, can save", {}, "add"],
+    ["no card, a card kept for the place's earlier Square account", { earlierCard: { brand: "VISA", last4: "4242" } }, "add"],
+    ["a card on file", { card: CARD }, "box"],
+    ["an expired card on file", { card: { ...CARD, expired: true } }, "box"],
+    ["somebody else pays", { paidBy: "Priya Sharma", canSave: false, form: null }, "box"],
+    ["somebody else pays, though saving is offered", { paidBy: "Priya Sharma" }, "box"],
+    ["the place takes no cards in the app", { state: "not_offered", canSave: false, form: null }, "off"],
+    ["Square not connected yet", { state: "connect", canSave: false, form: null }, "off"],
+    ["Square's location not chosen yet", { state: "choose_location", canSave: false, form: null }, "off"],
+    ["saving switched off, no card", { canSave: false }, "off"],
+    ["no form to draw, no card", { form: null }, "off"],
+    ["a shared record", { record: "shared", canSave: false, form: null }, "box"],
+    ["no record of their own", { record: "none", canSave: false, form: null }, "box"],
+  ];
+  it.each(cases)("%s", (_name, over, step) => {
+    expect(askedCardStep(view(over))).toBe(step);
+  });
+
+  it("the line where none can be added", () => {
+    expect(cardsNotSavedLine("Iron House")).toBe("Iron House can’t save cards in the app right now. Ask at the front desk.");
+    expect(cardRefusalLine("card_not_ready", "Square isn't ready", "Iron House")).toBe(cardsNotSavedLine("Iron House"));
   });
 });

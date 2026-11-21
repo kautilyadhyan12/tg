@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
 import { StyleSheet } from "react-native";
-import { myCardViewSchema, myMembershipResponseSchema } from "@app/shared";
+import { cardAgreementWords, myCardViewSchema, myMembershipResponseSchema } from "@app/shared";
 import { App } from "../../src/App";
 import { NO_ANSWER } from "../../src/screens/SignIn";
 import type { Ask } from "../../src/session/calls";
@@ -43,7 +43,7 @@ const membershipOf = (gym: string) =>
     purchasesNotShown: 0,
   });
 
-const agreementOf = (gym: string) => `I agree that ${gym} may save this card and charge it for my membership and any fees when they are due. I can remove it at the front desk at any time.`;
+const agreementOf = (gym: string) => cardAgreementWords(gym);
 const VISA = {
   brand: "VISA",
   last4: "1111",
