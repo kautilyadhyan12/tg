@@ -39,7 +39,7 @@ describe("a card's words", () => {
 
   it("the agreement is Kd's sentence, with the gym's own name", () => {
     expect(cardAgreementWords("Iron House")).toBe(
-      "I authorize Iron House to keep this card on file and charge it for my membership payments and other charges I agree to. I can remove this card in the app when it does not pay for anyone else and no payments are scheduled or outstanding, or at the front desk at any time.",
+      "I authorize Iron House to save this card and charge it for my recurring membership payments and any other charges I separately approve. I can remove this card in the app if it isn’t linked to another member’s account and there are no upcoming or unpaid payments associated with it. I can also ask the front desk to remove it at any time.",
     );
   });
 
@@ -47,14 +47,14 @@ describe("a card's words", () => {
     // Each reason Remove card is refused in the app (`removalOf`), and the words that tell the person of it. A reason added
     // to the app without the agreement naming it fails here.
     const named: Record<MyCardStays, string> = {
-      pays_for: "when it does not pay for anyone else",
-      renews: "no payments are scheduled",
-      owed: "or outstanding",
+      pays_for: "if it isn’t linked to another member’s account",
+      renews: "no upcoming",
+      owed: "or unpaid payments",
     };
     expect(Object.keys(named).sort()).toEqual([...myCardStaysSchema.options].sort());
     const words = cardAgreementWords("Iron House");
     for (const reason of myCardStaysSchema.options) expect(words).toContain(named[reason]);
-    expect(words).toContain("or at the front desk at any time.");
+    expect(words).toContain("I can also ask the front desk to remove it at any time.");
   });
 
   it("the payer and owner lines name the people and the gym", () => {
