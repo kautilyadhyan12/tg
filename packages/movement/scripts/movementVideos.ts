@@ -188,13 +188,13 @@ export const MOVEMENT_VIDEOS: readonly MovementVideo[] = [
     leftOutOpen: {
       count: 2,
       why:
-        "52a-ii-b-ii-b, the floor mended: with his own videos left out, the numbers come from the eight people filmed from about hip height, and " +
+        "52a-ii-b-ii-b-ii, the floor mended in the engine: with his own videos left out, the numbers come from the eight people filmed from about hip height, and " +
         "\"feet stay in place\" is 5 cm; side on, on the shiny floor, the slide of his foot points reads 5 to 6 cm on one of his proper squats.",
     },
     replayOpen: {
       replays: ["8 a second", "uneven", "shaky", "chip's gap", "faster"],
       why:
-        "52a-ii-b-ii-b, the floor mended: side on, on the shiny floor, the model slides his near foot's heel and toes about on the picture, so his " +
+        "52a-ii-b-ii-b-ii, the floor mended in the engine: side on, on the shiny floor, the model slides his near foot's heel and toes about on the picture, so his " +
         "proper squats read the feet 3 to 4 cm off the floor as filmed (the rule is 4 cm, held there by the jumps it must refuse); a centimetre " +
         "of shake, the chip's gap, pictures skipped or the same reps done faster put a rep over it, or leave its feet unseen.",
     } },
@@ -202,14 +202,14 @@ export const MOVEMENT_VIDEOS: readonly MovementVideo[] = [
     seen: "2026-11-20 (52a-ii-b-i), 16 frames of the set drawn with the model's points: the one man, followed in each. The phone on a shiny floor: three squats half turned to it, the floor's reflection under his toes.",
     phoneOpen: {
       why:
-        "52a-ii-b-ii-b, the floor mended: on the phone's reading his third squat's feet read about 4 cm off the floor (the laptop's 3), over the " +
+        "52a-ii-b-ii-b-ii, the floor mended in the engine: on the phone's reading his third squat's feet read about 4 cm off the floor (the laptop's 3), over the " +
         "rule held at 4 by the jumps it must refuse.",
       differences: ["the laptop counts 3, the phone 2", "the phone does not say 19.3 s counted"],
     },
     replayOpen: {
       replays: ["slower", "twice as slow"],
       why:
-        "52a-ii-b-ii-b, the floor mended: the same reps done 1.5 or 2 times as slowly read the third squat's feet over the 4 cm rule, as the " +
+        "52a-ii-b-ii-b-ii, the floor mended in the engine: the same reps done 1.5 or 2 times as slowly read the third squat's feet over the 4 cm rule, as the " +
         "phone's reading does as filmed.",
     } },
   { file: "movement-points/floor_phone_test", cut: [22.3, 31.4], floor: true, movement: "squat", person: FLOOR_PERSON, view: "front", reps: 3, sets: true, sha256: "023bdc68c259df01ea372e9cb1be961e3c56be8c7e3ca9fb0b8797511a0920a1",
@@ -220,7 +220,7 @@ export const MOVEMENT_VIDEOS: readonly MovementVideo[] = [
     seen: "2026-11-20 (52a-ii-b-i), 16 frames of the set drawn with the model's points: the one man, followed in each. The phone on a dull floor: three squats side on; sandals.",
     phoneOpen: {
       why:
-        "52a-ii-b-ii-b, the floor mended: in the first picture of his second squat the phone's model puts his near foot 10 cm up, in the next 2 cm " +
+        "52a-ii-b-ii-b-ii, the floor mended in the engine: in the first picture of his second squat the phone's model puts his near foot 10 cm up, in the next 2 cm " +
         "(the laptop's stays down), a picture no real foot can be in, read as the feet leaving the floor (9 cm) and moving (10 cm). Letting a " +
         "foot reading count only where a picture beside it agrees let 14 of 540 drawn jumps count, and was not kept.",
       differences: ["the laptop counts 3, the phone 2", "the laptop says 15.6 s counted, the phone 19.7 s counted", "the phone does not say 19.7 s counted"],
@@ -238,7 +238,7 @@ export const MOVEMENT_VIDEOS: readonly MovementVideo[] = [
     replayOpen: {
       replays: ["shaky", "chip's gap", "slower"],
       why:
-        "52a-ii-b-ii-b, the floor mended: right with every person's numbers under all three; with his own videos left out, the numbers come from " +
+        "52a-ii-b-ii-b-ii, the floor mended in the engine: right with every person's numbers under all three; with his own videos left out, the numbers come from " +
         "the eight people filmed from about hip height, and a centimetre of shake, the chip's gap or the same reps done 1.5 times as slowly " +
         "put one of these two squats over them.",
     } },

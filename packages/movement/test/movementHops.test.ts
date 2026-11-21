@@ -58,7 +58,7 @@ describe("the same jumps drawn on a man's own squats, his phone on the floor and
   // His nine sets: side on, half turned and from the front on a shiny floor, side on on a dull one, and five from a raised
   // phone (round one: the test first tried three of them).
   const FLOOR = VIDEOS.filter((v) => v.entry.person === "man, his own phone, on the floor and raised" && v.entry.movement === "squat" && v.entry.reps !== null).map((v) => v.video.label);
-  /** Counted, in plain sight until a job closes them (52a-ii-b-ii-b): 55 jumps of 8 to 12 cm of 810 (37 of 8 cm, 14 of 10, 4 of
+  /** Counted, in plain sight until a job closes them (52a-ii-b-ii-b-ii): 55 jumps of 8 to 12 cm of 810 (37 of 8 cm, 14 of 10, 4 of
    *  12), most taking off 0.1 to 0.2 s before the rep is back up, six of them as filmed. From a phone on the floor or low the model's foot points wander by 4 to 9
    *  cm, so a jump's feet read only a few centimetres above where his feet stand, under the 4 cm the rule is held at by
    *  the jumps of 52a-ii-a, which are all refused. Every way of placing a foot's resting point, and every other sign tried

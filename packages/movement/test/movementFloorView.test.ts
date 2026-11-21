@@ -88,7 +88,7 @@ describe("the worst thing, as 52a-ii-b-ii-a first wrote it: a jump drawn on a sq
     }
   });
 
-  it("on his five raised sets, 14 of 150 count from the floor, four of them cases the raised phone refuses (from the raised phone itself 12 of 150, 52a-ii-b-i's open jumps), in plain sight for 52a-ii-b-ii-b", () => {
+  it("on his five raised sets, 14 of 150 count from the floor, four of them cases the raised phone refuses (from the raised phone itself 12 of 150, 52a-ii-b-i's open jumps), in plain sight: the floor view is shown, never proof", () => {
     const raised = proofVideos(MOVEMENT_VIDEOS.filter((e) => e.file === "movement-points/usual_v11" && e.reps !== null));
     expect(raised.map((v) => [v.video.label, jumpsCounted(v.video)])).toEqual([
       ["usual_v11 1.3-7.4 s", ["0.08 | -200 | 8 a second | 1", "0.08 | -100 | as filmed | 1", "0.08 | -100 | 8 a second | 1", "0.1 | -100 | as filmed | 1"]],
