@@ -5,8 +5,8 @@
 // heel and toes disagree is set aside for the other (on a man's raised phone a toe point slides 8 cm down the picture as
 // he stands up, and the lesser of the two feet hid an 8 cm jump).
 import { describe, expect, it } from "vitest";
-import { FOOT_ENDS_AGREE } from "../src/index.js";
-import { replayed, runMovement } from "../scripts/movementCheck.js";
+import { FOOT_ENDS_AGREE, hopTime } from "../src/index.js";
+import { countedTimes, replayed, runMovement } from "../scripts/movementCheck.js";
 import { REPLAYS } from "../scripts/replays.js";
 import { trueHop } from "./helpers/hops.js";
 import { SQUAT, VIDEOS } from "./helpers/replays.js";
@@ -50,11 +50,16 @@ describe("a jump is not hidden by a foot the camera reads poorly", () => {
     expect(runMovement(SQUAT, trueHop(v.video, 0.08, -100)).count).toBe(0);
   });
 
-  it("a jump with the near foot hidden in the air and only the far foot (first seen during the rep) in view is never counted: the feet were not seen", () => {
+  it("with the far foot set aside, a jump whose near foot is hidden in the air is still never counted, for a movement whose one rule on the feet is leaving the floor", () => {
+    // For the squat "feet stay in place" also needs the feet seen and refuses this on its own, so the squat is tried
+    // without it. A frame in which only a foot point not seen before the rep is read has its feet unseen too (the
+    // matcher's `known`); no kept video reaches a case where that alone decides (scanned: every judged squat set, jumps of
+    // 8 and 10 cm at five take-off times with either foot hidden in the air), so this test checks the break, not that.
     const v = proofOf("usual_v11 1.3-7.4 s");
-    // The near (right) foot's ankle, heel and toes hidden from take-off to landing, 10 cm high.
-    const air: readonly [number, number] = [0, 290];
-    const hopped = trueHop(v.video, 0.1, 0, { 28: air, 30: air, 32: air });
-    expect(runMovement(SQUAT, hopped).count).toBe(0);
+    const liftOnly = { ...SQUAT, rules: SQUAT.rules.filter((r) => r.read.kind !== "travel") };
+    const air = hopTime(0.1);
+    expect(countedTimes(SQUAT, v.video)).toHaveLength(2);
+    expect(runMovement(liftOnly, v.video).count).toBe(2);
+    expect(runMovement(liftOnly, trueHop(v.video, 0.1, 0, { 28: [0, air], 30: [0, air], 32: [0, air] })).count).toBe(0);
   });
 });
