@@ -43,6 +43,7 @@ import { tabWord } from "./screens/placesHeading";
 import { FoodScreen } from "./screens/Food";
 import { bodyFile, mealFile, minutesFile, photoSheetFile, runFile } from "./screens/food/fileStore";
 import { RunLayerProvider } from "./screens/running/RunLayer";
+import { WorkoutLayerProvider } from "./screens/workout/WorkoutLayer";
 import { RunOutboxProvider } from "./screens/running/RunOutbox";
 import { BodyOutboxProvider } from "./screens/progress/BodyOutbox";
 import { MealOutboxProvider } from "./screens/food/MealOutbox";
@@ -170,9 +171,11 @@ function FiveTabs({ mealStore, bodyStore, runStore }: Stores) {
         <BodyOutboxProvider store={bodyStore}>
           <RunOutboxProvider store={runStore}>
             <RunLayerProvider>
-              <NotificationsProvider onTapped={openTappedTab}>
-                <TabsOfPlaces />
-              </NotificationsProvider>
+              <WorkoutLayerProvider>
+                <NotificationsProvider onTapped={openTappedTab}>
+                  <TabsOfPlaces />
+                </NotificationsProvider>
+              </WorkoutLayerProvider>
             </RunLayerProvider>
           </RunOutboxProvider>
         </BodyOutboxProvider>

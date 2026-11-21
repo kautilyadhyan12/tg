@@ -182,8 +182,12 @@ export function LoadedBar({ side, extra }: { side: readonly PlateKg[]; extra: re
 }
 
 const DIGITS: Readonly<Record<string, string>> = { 0: "abcdef", 1: "bc", 2: "abdeg", 3: "abcdg", 4: "bcfg", 5: "acdfg", 6: "acdefg", 7: "abc", 8: "abcdefg", 9: "abcdfg" };
+/** The capitals a wall timer spells ("PAUSED"). D is drawn as a capital of its own: its top and foot stop short of
+ *  the right side, which stands in from each corner (Kd, 64a-ii's drawing: "d in paused need to be capital"). */
+const LETTERS: Readonly<Record<string, string>> = { P: "abefg", A: "abcefg", U: "bcdef", S: "acdfg", E: "adefg", D: "abcdef" };
 
-/** Digits as an LED wall timer lights them, seven segments each, the unlit ones faintly there. Digits, ":" and ".". */
+/** Digits as an LED wall timer lights them, seven segments each, the unlit ones faintly there. Digits, ":", "." and the
+ *  capitals of `LETTERS`. */
 export function Led({ text, colour, height }: { text: string; colour: ColourName; height: number }) {
   const w = height * 0.52;
   const t = Math.max(3, height * 0.12);
@@ -206,19 +210,22 @@ export function Led({ text, colour, height }: { text: string; colour: ColourName
       x += t + gap * 0.5;
       continue;
     }
-    const lit = DIGITS[ch] ?? "";
+    const lit = DIGITS[ch] ?? LETTERS[ch] ?? "";
     const across = w - 2 * t + 2;
     const down = half - t * 1.5 + 1;
     const seg = (k: string, sx: number, sy: number, sw: number, sh: number) => {
       parts.push({ key: `${String(i)}${k}`, x: sx, y: sy, w: sw, h: sh, lit: lit.includes(k) });
     };
-    seg("a", x + t - 1, 0, across, t);
+    const capitalD = ch === "D";
+    const flat = capitalD ? across * 0.78 : across;
+    const inset = capitalD ? t * 1.1 : 0;
+    seg("a", x + t - 1, 0, flat, t);
     seg("g", x + t - 1, half - r, across, t);
-    seg("d", x + t - 1, height - t, across, t);
+    seg("d", x + t - 1, height - t, flat, t);
     seg("f", x, t - 0.5, t, down);
-    seg("b", x + w - t, t - 0.5, t, down);
+    seg("b", x + w - t, t - 0.5 + inset, t, down - inset);
     seg("e", x, half + r - 0.5, t, down);
-    seg("c", x + w - t, half + r - 0.5, t, down);
+    seg("c", x + w - t, half + r - 0.5, t, down - inset);
     x += w + gap;
   }
   const width = Math.max(1, x - gap);

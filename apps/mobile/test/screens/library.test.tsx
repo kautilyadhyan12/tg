@@ -123,7 +123,7 @@ const openExercise = async (name: RegExp) => {
 
 beforeEach(() => {
   // The phone's files outlive a test in the stand-in: each test starts on a phone that never opened the Library.
-  for (const one of Paths.document.list()) if (one.name.startsWith("library-") || one.name.startsWith("figure-") || one.name.startsWith("my-workout-")) one.delete();
+  for (const one of Paths.document.list()) if (one.name.startsWith("library-") || one.name.startsWith("figure-") || one.name.startsWith("my-workout-") || one.name.startsWith("workout")) one.delete();
   forgetStores();
 });
 
@@ -624,7 +624,7 @@ describe("your records, calories and My Workout on an exercise's page (63c)", ()
     expect(screen.getByText(/^1 exercise · about 4 min · about \d+ kcal at 70 kg$/)).toBeTruthy();
     expect(screen.getByRole("button", { name: "Add your weight" })).toBeTruthy();
     expect(screen.getByText("3 × 10 reps · rest 1:00")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Start workout" }).props.accessibilityState).toMatchObject({ disabled: true });
+    expect(screen.getByRole("button", { name: "Start workout" }).props.accessibilityState).toMatchObject({ disabled: false });
     await fireEvent.press(screen.getByRole("button", { name: "Remove Barbell Curl" }));
     expect(await screen.findByText("No exercises yet")).toBeTruthy();
     await fireEvent.press(screen.getByRole("button", { name: "Browse exercises" }));
@@ -876,5 +876,135 @@ describe("setting up My Workout's sets (64a-i)", () => {
     await openMine();
     await fireEvent.press(await screen.findByRole("button", { name: "Add exercises" }));
     expect(await screen.findByText("3 Exercises")).toBeTruthy();
+  });
+});
+
+describe("doing a workout (64a-ii)", () => {
+  /** My Workout as the phone keeps it. */
+  const keptWorkout = (items: unknown[]) => {
+    const file = new File(Paths.document, `my-workout-${RAVI.id}.json`);
+    if (file.exists) file.delete();
+    file.create();
+    file.write(JSON.stringify({ v: 2, name: "Legs", items }));
+  };
+  /** Squat, one set of 2 reps with no rest after it; Plank, one set of 5 s. */
+  const SQUAT = { id: "squat", plan: { measuredIn: "reps", sets: [{ target: 2, weightGrams: null, restSeconds: null }] } };
+  const PLANK = { id: "plank", plan: { measuredIn: "time", sets: [{ target: 5, weightGrams: null, restSeconds: null }] } };
+  type Save = { key: string | undefined; body: { workoutId: string; sets: { exercise: string; done: number }[] } };
+  /** The server with the save route, each workout kept once by its id, as 61a's route does. */
+  function withSaves(answer: (workoutId: string) => Reply = (workoutId) => ({ status: 201, body: { workoutId, status: "created" } })) {
+    const saves: Save[] = [];
+    const library = libraryServer();
+    const ask: Ask = async (url, init) => {
+      if (new URL(url).pathname !== "/v1/workouts" || init.method !== "POST") return library.ask(url, init);
+      const body = JSON.parse(init.body ?? "{}") as Save["body"];
+      const reply = answer(body.workoutId);
+      if (reply.status < 300) saves.push({ key: init.headers?.["idempotency-key"], body });
+      return { ok: reply.status < 300, status: reply.status, json: () => Promise.resolve(reply.body) };
+    };
+    return { ask, saves };
+  }
+  const openMine = async () => {
+    await fireEvent.press(await screen.findByRole("button", { name: /^My Workout/ }));
+  };
+
+  it("the worst thing: a workout done is saved to the account once, under its own id, and opening the app again sends nothing more", async () => {
+    keptWorkout([SQUAT]);
+    const server = withSaves();
+    await openLibrary(server.ask);
+    await openMine();
+    await fireEvent.press(await screen.findByRole("button", { name: "Start workout" }));
+    expect(await screen.findByText("Exercise 1 of 1 · Set 1 of 1")).toBeTruthy();
+    expect(screen.getByText("The last set of this workout")).toBeTruthy();
+    // + counts; at its target the set ends by itself, and with it the workout.
+    await fireEvent.press(screen.getByRole("button", { name: "One rep more" }));
+    expect(screen.getByRole("button", { name: "Set done · 1 rep" })).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "One rep more" }));
+    expect(await screen.findByText("Workout complete")).toBeTruthy();
+    expect(await screen.findByText("Saved to your account")).toBeTruthy();
+    expect(server.saves).toHaveLength(1);
+    const save = server.saves[0];
+    expect(save?.key).toBe(save?.body.workoutId);
+    expect(save?.body.sets.map((s) => [s.exercise, s.done])).toEqual([["squat", 2]]);
+    await fireEvent.press(screen.getByRole("button", { name: "Done" }));
+    expect(await screen.findByRole("button", { name: "Start workout" })).toBeTruthy();
+    await settle(50);
+    await screen.unmount();
+    forgetStores();
+    await openLibrary(server.ask);
+    await openMine();
+    await settle(100);
+    expect(server.saves).toHaveLength(1);
+  });
+
+  it("with no answer the workout is kept on the phone, and its screen says so", async () => {
+    keptWorkout([SQUAT]);
+    const server = withSaves(noInternet);
+    await openLibrary(server.ask);
+    await openMine();
+    await fireEvent.press(await screen.findByRole("button", { name: "Start workout" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Set done · 2 reps" }));
+    expect(await screen.findByText("Saved on this phone")).toBeTruthy();
+    expect(screen.getByText("It goes to your account when you're back online.")).toBeTruthy();
+    const waiting = new File(Paths.document, `workouts-${RAVI.id}.json`);
+    expect((JSON.parse(await waiting.text()) as { waiting: unknown[] }).waiting).toHaveLength(1);
+  });
+
+  it("put away mid-workout: a bar over the tabs and Open workout on My Workout open it again where it was", async () => {
+    keptWorkout([SQUAT, PLANK]);
+    await openLibrary(withSaves().ask);
+    await openMine();
+    await fireEvent.press(await screen.findByRole("button", { name: "Start workout" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "One rep more" }));
+    expect(screen.getByText("Plank · 1 × 5 s")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "Put workout away" }));
+    expect(await screen.findByText(/^In progress · \d\d:\d\d$/)).toBeTruthy();
+    expect(screen.getByText("Workout in progress")).toBeTruthy();
+    // The bar on another tab too.
+    await fireEvent.press(screen.getByRole("tab", { name: "Dashboard" }));
+    expect(await screen.findByText("Workout in progress")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "Open workout" }));
+    expect(await screen.findByRole("button", { name: "Set done · 1 rep" })).toBeTruthy();
+  });
+
+  it("a timed set after no rest gets ready first; End asks first and keeps the sets done", async () => {
+    keptWorkout([SQUAT, PLANK]);
+    const server = withSaves();
+    await openLibrary(server.ask);
+    await openMine();
+    await fireEvent.press(await screen.findByRole("button", { name: "Start workout" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Set done · 2 reps" }));
+    expect(await screen.findByText("GET READY")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Start now" })).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "End workout" }));
+    expect(await screen.findByText("1 of 2 sets done. Those sets will be saved.")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "Keep going" }));
+    expect(screen.getByRole("button", { name: "Start now" })).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "End workout" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "End and save" }));
+    expect(await screen.findByText("Saved to your account")).toBeTruthy();
+    expect(server.saves.map((s) => s.body.sets.length)).toEqual([1]);
+  });
+
+  it("End with nothing done keeps nothing; Pause stops every clock", async () => {
+    keptWorkout([SQUAT]);
+    const server = withSaves();
+    await openLibrary(server.ask);
+    await openMine();
+    await fireEvent.press(await screen.findByRole("button", { name: "Start workout" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Pause workout" }));
+    expect(await screen.findByLabelText("Paused")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Resume" })).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "Resume" }));
+    expect(screen.queryByLabelText("Paused")).toBeNull();
+    await fireEvent.press(screen.getByRole("button", { name: "End workout" }));
+    expect(await screen.findByText("No sets done yet. Nothing will be saved.")).toBeTruthy();
+    const ends = screen.getAllByRole("button", { name: "End workout" });
+    const last = ends[ends.length - 1];
+    if (last === undefined) throw new Error("no End workout in the box");
+    await fireEvent.press(last);
+    expect(await screen.findByRole("button", { name: "Start workout" })).toBeTruthy();
+    await settle(50);
+    expect(server.saves).toHaveLength(0);
   });
 });

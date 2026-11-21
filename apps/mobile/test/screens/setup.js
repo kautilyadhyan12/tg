@@ -36,6 +36,8 @@ jest.mock("expo-brightness", () => ({
   setBrightnessAsync: jest.fn(() => Promise.resolve()),
   restoreSystemBrightnessAsync: jest.fn(() => Promise.resolve()),
 }));
+// A workout's id from the phone's proper random source (64a-ii); Node's own here.
+jest.mock("expo-crypto", () => ({ randomUUID: () => require("node:crypto").randomUUID() }));
 jest.mock("expo-keep-awake", () => ({
   activateKeepAwakeAsync: jest.fn(() => Promise.resolve()),
   deactivateKeepAwake: jest.fn(() => Promise.resolve()),
