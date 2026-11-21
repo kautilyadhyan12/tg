@@ -859,7 +859,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
 64. **Build a workout, do it, and after it** (Stage 1's 6c; §13.6, §11.8's steps).
     - 64a. **By hand and by timer** (after 61 and 63). Split 2026-11-20 by its terminal in six, each a terminal of its own.
       - 64a-i. [x] **Set up your workout** — merged 2026-11-21 (PR #610).
-      - 64a-ii. [ ] **Do it**: Start workout opens one screen for the whole workout, the timer, rest, pause and stop, kept on the phone at every step, saved to the account.
+      - 64a-ii. [x] **Do it** — merged 2026-11-21 (PR #614).
       - 64a-iii. [ ] **After it**: the summary set by set, calories, XP and level, streak, records, effort stars, meal ideas, stretches.
       - 64a-iv. [ ] **Saved workouts**: save, list, load and delete (61c's routes), with a question first.
       - 64a-v. [ ] **History**: the month, a day's workouts and one workout set by set (61b's routes).
