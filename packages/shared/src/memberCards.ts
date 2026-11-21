@@ -56,7 +56,7 @@ export function cardExpiryWords(card: { expMonth: number; expYear: number }, tod
  *  authorization's standard words, naming both ways to remove it: in the app while nothing can be charged to it (20e's
  *  three reasons a card stays, `myCardStaysSchema`, each named), or at the front desk. */
 export function cardAgreementWords(gymName: string): string {
-  return `I authorize ${gymName} to keep this card on file and charge it for my membership and any fees as they become due. I can remove this card in the app when it does not pay for anyone else and no payments are scheduled or outstanding, or at the front desk at any time.`;
+  return `I authorize ${gymName} to keep this card on file and charge it for my membership payments and other charges I agree to. I can remove this card in the app when it does not pay for anyone else and no payments are scheduled or outstanding, or at the front desk at any time.`;
 }
 
 /** A full name as Square's given and family names: the last word is the family name, as gym
