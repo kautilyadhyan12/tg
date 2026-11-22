@@ -38,21 +38,28 @@ const MEMBER_NUMBER = `MBR-${randomUUID()}`;
  *  server printed it. The status sentinel here was `Frozen-${uuid}` (43) until 3a-v-b
  *  added the other two and the entries filter refused one as too long, which is what
  *  found it: a test that would have stayed green with the thing it checks broken. A
- *  uuid is unique in 36, so two letters of prefix are the whole budget. */
-const STATUS_WORD = `F-${randomUUID()}`;
+ *  uuid is unique in 36, so four characters of prefix are the whole budget.
+ *
+ *  **THREE LETTERS, NEVER A LETTER AND A DASH.** A column of cells shaped like an IBAN
+ *  is never kept (`ibanShaped`, which drops dashes), and `G-` before a uuid starting
+ *  with two digits reads as a British one whenever its check digits come out right:
+ *  295 in 200,000 uuids. The membership column was then not read, the hand-edit
+ *  refusal had nothing to refuse, and the confirm answered 200 for 409 on GitHub.
+ *  An IBAN's third and fourth characters are digits, so a third letter rules it out. */
+const STATUS_WORD = `Frz${randomUUID()}`;
 /** THE WIDER RECORD'S OWN SENTINELS (3a-v-b, §11.1): the gym's membership and payment
  *  words, a plain day, and a cell of one of the gym's OWN columns. The cell is the one
  *  worth naming on its own — it is free text a gym can put anything in, and it is the
  *  only value in this file that never existed before Part 2 of the re-plan. */
-const MEMBERSHIP_WORD = `G-${randomUUID()}`;
-const PAYMENT_WORD = `P-${randomUUID()}`;
+const MEMBERSHIP_WORD = `Gym${randomUUID()}`;
+const PAYMENT_WORD = `Pay${randomUUID()}`;
 const OWN_CELL = `Locker-${randomUUID()}`;
 /** What staff TYPE by hand (3a-iv, §11.6): a person, a changed word, and one of the
  *  gym's own cells, each sent in a request body. */
 const TYPED_NAME = `Typed ${randomUUID()}`;
 const TYPED_ADDRESS = `${randomUUID()}@typed.example`;
 const TYPED_PHONE = "+447911998877";
-const TYPED_WORD = `T-${randomUUID()}`;
+const TYPED_WORD = `Typ${randomUUID()}`;
 const TYPED_CELL = `Note-${randomUUID()}`;
 
 const csv = (rows: string[][]): Buffer => Buffer.from(rows.map((r) => r.join(",")).join("\r\n"), "utf8");
