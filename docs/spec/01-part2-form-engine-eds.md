@@ -2884,6 +2884,13 @@ screen (`apps/mobile/src/screens/workout/Summary.tsx`, words `afterWords.ts`, ta
   another load, or that one's delete; an exercise twice keeps its first place, and an exercise's first 10 sets (`fromSaved`). One
   this phone does not hold whole is read from the server; with no internet, "Couldn't load Push day. Check your internet connection
   and try again."; one gone, "Push day is no longer in your saved workouts."
+- **Saved or not (round one, H1):** judged against what My Workout last loaded or saved (`base` beside `from`, `savedState`),
+  never against the list alone. Where the account holds a newer change of it, made on another device, and nothing was changed
+  here: "Push day was changed on another device." with Load the newer one, and loading another asks nothing; where both changed,
+  the save boxes say "Push day was changed on another device. Saving replaces that change." A loaded saved workout holding an
+  exercise since removed from the Library reads as saved; a save leaves that exercise out and says so. Create workout shows on an
+  empty My Workout too. The `edited_ahead` answer carries `serverTime`, and the phone stamps the change again with it (still after
+  the change it last heard of) and sends it at once.
 - **Delete:** the bin asks first ("Delete Push day?" · "It's removed from your saved workouts." and, for the one My Workout holds, "My
   Workout keeps its exercises."), then "Push day was deleted."
 - **Kept on the phone** (`apps/mobile/src/library/savedWorkouts.ts`, table-tested): the person's list as last heard
