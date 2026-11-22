@@ -438,7 +438,7 @@ d("saved workouts (real Postgres)", () => {
       const id = randomUUID();
       const ahead = await put(a, id, body({ editedAt: new Date(NOW.getTime() + 5 * 60_000 + 1000).toISOString() }));
       expect(ahead.statusCode).toBe(400);
-      expect(ahead.json()).toMatchObject({ error: SAVED_EDITED_AHEAD });
+      expect(ahead.json()).toMatchObject({ error: SAVED_EDITED_AHEAD, serverTime: NOW.toISOString() });
       expect((await put(a, id, body({ editedAt: new Date(NOW.getTime() + 4 * 60_000).toISOString() }))).statusCode).toBe(201);
     });
 

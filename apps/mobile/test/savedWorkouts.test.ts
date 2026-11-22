@@ -12,7 +12,7 @@ import {
   type SavedChange,
 } from "@app/shared";
 import { describe, expect, it } from "vitest";
-import { EMPTY, type MyWorkout } from "../src/library/myWorkout";
+import { EMPTY, fromSaved, type MyWorkout } from "../src/library/myWorkout";
 import {
   SAVED_PATH,
   SAVE_REFUSED_WORDS,
@@ -24,6 +24,7 @@ import {
   readSaveRefusal,
   sameWorkout,
   savedPath,
+  savedState,
   shownList,
   toPlanned,
   type SavedStore,
@@ -149,6 +150,23 @@ describe("the worst thing: a workout saved with no signal never reaches the acco
 });
 
 describe("what each answer to a save means", () => {
+  it("round one L2: edited_ahead with the server's time is stamped again (still after the change held) and saved at once", async () => {
+    const serverTime = at(-20);
+    const sent: string[] = [];
+    const s = server((r) => {
+      if (r.method !== "PUT") return emptyList;
+      const stamp = (r.body as { editedAt: string }).editedAt;
+      sent.push(stamp);
+      return Date.parse(stamp) > Date.parse(serverTime) + 5 * 60_000 ? { status: 400, body: { error: SAVED_EDITED_AHEAD, message: "x", serverTime } } : kept(r);
+    });
+    const st = store(disk(), s);
+    await st.ready;
+    await st.save({ savedId: LEG, name: "Leg day", exercises: [SQUAT] });
+    await settle();
+    expect(sent).toEqual([new Date(NOW).toISOString(), serverTime]);
+    expect(st.view().list.map((e) => [e.name, e.onPhone, e.editedAt])).toEqual([["Leg day", false, serverTime]]);
+  });
+
   const no: Exclude<Answer<unknown>, { kind: "ok" }> = { kind: "no_answer" };
   const refusal = (status: number, error = "x"): Exclude<Answer<unknown>, { kind: "ok" }> => ({ kind: "refused", status, error, message: "", retryAfterSeconds: null, robotCheckKey: null, body: {} });
   it.each<[string, Exclude<Answer<unknown>, { kind: "ok" }>, string]>([
@@ -178,13 +196,17 @@ describe("what each answer to a save means", () => {
     expect(st.view().refused).toEqual([]);
   });
 
-  it("removed (deleted on another phone): nothing is kept and the phone forgets it", async () => {
-    const s = server((r) => (r.method === "PUT" ? { status: 200, body: { id: LEG, status: "removed", editedAt: null } } : emptyList));
-    const st = store(disk(), s);
+  it("removed (deleted on another phone): nothing is kept and the phone forgets it, in its copy too", async () => {
+    const d = disk();
+    d.files.set("saved-workouts-me.json", JSON.stringify({ v: 1, most: 50, entries: [entryOf(LEG, "Leg day", at(-5), [SQUAT]), entryOf(PUSH, "Push day", at(-3), [PLANK])] }));
+    const s = server((r) => (r.method === "PUT" ? { status: 200, body: { id: LEG, status: "removed", editedAt: null } } : "none"));
+    const st = store(d, s);
     await st.ready;
-    await st.save({ savedId: LEG, name: "Leg day", exercises: [SQUAT] });
+    expect(st.view().list.map((e) => e.name)).toEqual(["Push day", "Leg day"]);
+    await st.save({ savedId: LEG, name: "Leg day", exercises: [SQUAT, PLANK] });
     await settle();
-    expect(st.view().list).toEqual([]);
+    expect(st.view().list.map((e) => e.name)).toEqual(["Push day"]);
+    expect((JSON.parse(d.files.get("saved-workouts-me.json") ?? "{}") as { entries: KeptSavedEntry[] }).entries.map((e) => e.name)).toEqual(["Push day"]);
   });
 
   it("unchanged with another time (a newer change from another phone): the list is read again and the newer one shown", async () => {
@@ -286,16 +308,16 @@ describe("loading one", () => {
     const st = store(d, s);
     await st.ready;
     expect(st.view().list.map((e) => e.name)).toEqual(["Push day", "Leg day"]);
-    expect(await st.whole(LEG)).toEqual({ kind: "ok", name: "Leg day", exercises: [SQUAT] });
+    expect(await st.whole(LEG)).toEqual({ kind: "ok", name: "Leg day", editedAt: at(-5), exercises: [SQUAT] });
     expect(s.asked).toEqual([]);
     expect(await st.whole(PUSH)).toEqual({ kind: "no_answer" });
     reply = { status: 200, body: { id: PUSH, name: "Push day", editedAt: at(-3), exercises: [PLANK] } };
-    expect(await st.whole(PUSH)).toEqual({ kind: "ok", name: "Push day", exercises: [PLANK] });
+    expect(await st.whole(PUSH)).toEqual({ kind: "ok", name: "Push day", editedAt: at(-3), exercises: [PLANK] });
     expect(s.asked.map((a) => a.path)).toEqual([savedPath(PUSH), savedPath(PUSH)]);
     expect(st.view().list.find((e) => e.id === PUSH)?.whole).toEqual([PLANK]);
     // Held whole now, it loads from the phone without asking.
     reply = { status: 404, body: { error: "not_found" } };
-    expect(await st.whole(PUSH)).toEqual({ kind: "ok", name: "Push day", exercises: [PLANK] });
+    expect(await st.whole(PUSH)).toEqual({ kind: "ok", name: "Push day", editedAt: at(-3), exercises: [PLANK] });
     const gone = store(disk(), server(() => ({ status: 404, body: { error: "not_found" } })));
     await gone.ready;
     expect(await gone.whole(PUSH)).toEqual({ kind: "gone" });
@@ -354,6 +376,33 @@ describe("the rules", () => {
     ["an exercise more", "Leg day", [SQUAT, PLANK], "Leg day", [SQUAT], false],
   ])("same workout: %s", (_, an, a, bn, b, want) => {
     expect(sameWorkout(an, a, bn, b)).toBe(want);
+  });
+
+  describe("round one H1: is My Workout saved? judged against what it last loaded or saved, never the list alone", () => {
+    const entry = (over: Partial<KeptSavedEntry> = {}) => ({ ...entryOf(LEG, "Leg day", at(-5), [SQUAT]), onPhone: false, ...over });
+    const loaded = fromSaved(LEG, "Leg day", [SQUAT], at(-5));
+    const start = () => null;
+    it.each<[string, MyWorkout, ReturnType<typeof entry>[], { linked: boolean; same: boolean; newer: boolean }]>([
+      ["loaded and untouched", loaded, [entry()], { linked: true, same: true, newer: false }],
+      ["untouched here, changed on another device: never 'your changes'", loaded, [entry({ editedAt: at(-1), whole: null, name: "Leg day B" })], { linked: true, same: true, newer: true }],
+      ["changed here", { ...loaded, name: "Leg day 2" }, [entry()], { linked: true, same: false, newer: false }],
+      ["changed here and on another device", { ...loaded, items: [] }, [entry({ editedAt: at(-1), whole: null })], { linked: true, same: false, newer: true }],
+      ["its saved workout deleted elsewhere", loaded, [], { linked: false, same: false, newer: false }],
+      ["a file kept before round one: the list's copy stands in", { ...loaded, base: null }, [entry()], { linked: true, same: true, newer: false }],
+      ["a file kept before round one with no copy on the phone", { ...loaded, base: null }, [entry({ whole: null })], { linked: true, same: false, newer: false }],
+      ["held by nothing", { ...EMPTY, items: loaded.items }, [entry()], { linked: false, same: false, newer: false }],
+    ])("%s", (_, w, list, want) => {
+      const got = savedState(w, list, start);
+      expect({ linked: got.linked !== null, same: got.same, newer: got.newer }).toEqual(want);
+    });
+
+    it("a saved workout holding an exercise since removed from the Library reads as saved straight after loading", () => {
+      const w = fromSaved(LEG, "Leg day", [SQUAT, { exercise: "retired_move", measuredIn: "reps", sets: [{ target: 5, weightGrams: null, restSeconds: null }] }], at(-5));
+      const list = [{ ...entryOf(LEG, "Leg day", at(-5), [SQUAT]), onPhone: false }];
+      expect(savedState(w, list, start).same).toBe(true);
+      // What a save would hold leaves it out, and the box says so.
+      expect(toPlanned(w, (id) => (id === "squat" ? (library.find((e) => e.id === "squat") ?? null) : null)).left).toEqual(["retired_move"]);
+    });
   });
 
   it.each<[string, KeptSavedEntry[], SavedChange[], string[]]>([

@@ -8,9 +8,10 @@ import { Icon } from "../../look/Icon";
 import { pictures } from "../../look/pictures";
 import { Sheet } from "../../look/Sheet";
 import { fonts, Txt } from "../../look/Txt";
-import { fromSaved, NAME_MOST, nameOf as cleanName } from "../../library/myWorkout";
+import { fromSaved, NAME_MOST, nameOf as cleanName, plannedOf } from "../../library/myWorkout";
 import { exercisePicture } from "../../library/pictures";
-import { sameWorkout, type Planned, type ShownSaved } from "../../library/savedWorkouts";
+import { savedState, type Planned, type ShownSaved } from "../../library/savedWorkouts";
+import { planOf } from "../../library/workoutSetup";
 import type { MyWorkoutHook } from "./useLibrary";
 import { useWorkoutLayer } from "../workout/WorkoutLayer";
 
@@ -23,21 +24,6 @@ export const SAVED_SHOWN = 3;
 const SETS_MOST = PLANNED_WORKOUT_LIMITS.setsMost;
 
 const plural = (n: number, one: string): string => `${String(n)} ${n === 1 ? one : `${one}s`}`;
-
-/** Where My Workout stands against the saved workout it holds. */
-export interface SavedState {
-  /** The saved workout My Workout holds, as the list shows it; null for none. */
-  linked: ShownSaved | null;
-  /** My Workout is exactly that saved workout. */
-  same: boolean;
-}
-
-export function savedState(mine: MyWorkoutHook | null, list: readonly ShownSaved[], planned: Planned): SavedState {
-  const from = mine?.workout.from ?? null;
-  const linked = from === null ? null : (list.find((e) => e.id === from) ?? null);
-  const same = linked !== null && linked.whole !== null && sameWorkout(mine?.workout.name ?? "", planned.exercises, linked.name, linked.whole);
-  return { linked, same };
-}
 
 /** `leave`: My Workout holds what is not saved, and the person pressed a saved workout (`to`, its id) or Create workout
  *  (`to` null): save it first, or not. `new`: the name of a new workout. */
@@ -63,7 +49,8 @@ export function SavedPart({ mine, planned, entryOf }: Props) {
   const { view, store } = saved;
   const list = view.list;
   const count = mine.workout.items.length;
-  const { linked, same } = savedState(mine, list, planned);
+  const startOf = (id: string) => planOf({ id, plan: null }, entryOf(id));
+  const { linked, same, newer } = savedState(mine.workout, list, startOf);
   const unsaved = count > 0 && !same;
   const nameOf = (id: string) => list.find((e) => e.id === id)?.name ?? "This workout";
 
@@ -81,7 +68,7 @@ export function SavedPart({ mine, planned, entryOf }: Props) {
       setBoxSaid("This workout couldn't be kept on this phone. Try again in a moment.");
       return false;
     }
-    mine.link(result.savedId);
+    mine.link(result.savedId, { editedAt: result.editedAt, name: mine.workout.name.trim(), exercises: plannedOf(mine.workout, startOf) });
     setSaid(null);
     return true;
   };
@@ -100,7 +87,7 @@ export function SavedPart({ mine, planned, entryOf }: Props) {
     setBusy(false);
     close();
     if (got.kind === "ok") {
-      mine.load(fromSaved(id, got.name, got.exercises));
+      mine.load(fromSaved(id, got.name, got.exercises, got.editedAt));
       setSaid({ text: `${got.name} is in My Workout.`, bad: false });
     } else if (got.kind === "gone") setSaid({ text: `${name} is no longer in your saved workouts.`, bad: true });
     else setSaid({ text: `Couldn't load ${name}. Check your internet connection and try again.`, bad: true });
@@ -126,7 +113,7 @@ export function SavedPart({ mine, planned, entryOf }: Props) {
   const create = () => {
     const name = cleanName(newName).trim();
     if (name === "") return;
-    mine.load({ name, items: [], from: null });
+    mine.load({ name, items: [], from: null, base: null });
     close();
     setSaid({ text: `${name} is ready. Add exercises from the Library.`, bad: false });
   };
@@ -140,7 +127,7 @@ export function SavedPart({ mine, planned, entryOf }: Props) {
     if (kept === "lost") {
       setSaid({ text: `${name} couldn't be deleted on this phone. Try again in a moment.`, bad: true });
     } else {
-      if (mine.workout.from === id) mine.link(null);
+      if (mine.workout.from === id) mine.link(null, null);
       setSaid({ text: `${name} was deleted.`, bad: false });
     }
     if (inAll) setBox({ kind: "all", asking: null });
@@ -166,7 +153,24 @@ export function SavedPart({ mine, planned, entryOf }: Props) {
 
   return (
     <>
-      {count === 0 ? null : <SaveLine linked={linked} same={same} held={view.held} onSave={() => { setSaid(null); setBox({ kind: "save" }); }} onNew={pressNew} />}
+      {count === 0 ? (
+        <Button label="Create workout" kind="link" icon="plus" style={styles.self} onPress={pressNew} />
+      ) : (
+        <SaveLine
+          linked={linked}
+          same={same}
+          newer={newer}
+          held={view.held}
+          onSave={() => {
+            setSaid(null);
+            setBox({ kind: "save" });
+          }}
+          onNew={pressNew}
+          onNewer={() => {
+            if (linked !== null) void load(linked.id);
+          }}
+        />
+      )}
       {view.refused.map((r) => (
         <View key={r.id} style={styles.refused}>
           <Icon name="warn" size={18} colour="badText" />
@@ -195,6 +199,7 @@ export function SavedPart({ mine, planned, entryOf }: Props) {
             mine={mine}
             planned={planned}
             linked={linked}
+            newer={newer}
             full={list.length >= view.most && view.most > 0}
             most={view.most}
             busy={busy}
@@ -218,6 +223,7 @@ export function SavedPart({ mine, planned, entryOf }: Props) {
             mine={mine}
             planned={planned}
             linked={linked}
+            newer={newer}
             to={box.to === null ? null : nameOf(box.to)}
             full={linked === null && list.length >= view.most && view.most > 0}
             most={view.most}
@@ -285,7 +291,20 @@ export function SavedPart({ mine, planned, entryOf }: Props) {
 }
 
 /** Under Start workout: Save workout, Save changes, or that it is saved; and Create workout beside it. */
-function SaveLine({ linked, same, held, onSave, onNew }: { linked: ShownSaved | null; same: boolean; held: boolean; onSave: () => void; onNew: () => void }) {
+function SaveLine(props: { linked: ShownSaved | null; same: boolean; newer: boolean; held: boolean; onSave: () => void; onNew: () => void; onNewer: () => void }) {
+  const { linked, same, newer, held, onSave, onNew, onNewer } = props;
+  // Untouched here, and changed on another device since: nothing to save; the newer one can be loaded (round one H1).
+  if (linked !== null && same && newer) {
+    return (
+      <View style={styles.saveArea}>
+        <Txt kind="small" style={styles.centre}>{`${linked.name} was changed on another device.`}</Txt>
+        <View style={styles.saveRow}>
+          <Button label="Load the newer one" kind="link" onPress={onNewer} />
+          <Button label="Create workout" kind="link" icon="plus" onPress={onNew} />
+        </View>
+      </View>
+    );
+  }
   const isSaved = linked !== null && same;
   const onPhone = isSaved && linked.onPhone && held;
   return (
@@ -318,6 +337,7 @@ interface LeaveProps {
   mine: MyWorkoutHook;
   planned: Planned;
   linked: ShownSaved | null;
+  newer: boolean;
   /** The name of the saved workout pressed; null for Create workout. */
   to: string | null;
   full: boolean;
@@ -330,7 +350,7 @@ interface LeaveProps {
 }
 
 /** My Workout holds what is not saved and is about to give way: save it first, don't, or cancel, as any app asks. */
-function LeaveAsk({ mine, planned, linked, to, full, most, busy, said, onSave, onDontSave, onCancel }: LeaveProps) {
+function LeaveAsk({ mine, planned, linked, newer, to, full, most, busy, said, onSave, onDontSave, onCancel }: LeaveProps) {
   const name = mine.workout.name.trim();
   const what = linked !== null ? `Your changes to ${linked.name} aren't saved.` : name === "" ? "This workout isn't saved." : `${name} isn't saved.`;
   const then = to === null ? "A new workout then takes its place in My Workout." : `${to} then takes its place in My Workout.`;
@@ -340,6 +360,7 @@ function LeaveAsk({ mine, planned, linked, to, full, most, busy, said, onSave, o
     <View style={styles.boxBody}>
       <Txt kind="body">{`${what} ${then}`}</Txt>
       {linked === null && name === "" ? <Field label="Name" value={mine.workout.name} onChange={mine.rename} placeholder="Name this workout" maxLength={NAME_MOST} /> : null}
+      <Notes planned={planned} linked={linked} newer={newer} />
       {full ? <Txt kind="small">{`You have ${String(most)} saved workouts, the most you can keep. Delete one to save this one.`}</Txt> : null}
       {tooMany ? <Txt kind="small" colour="badText">{`A saved workout holds up to ${String(SETS_MOST)} sets. This one has ${String(planned.sets)}.`}</Txt> : null}
       {said === null ? null : <Txt kind="small" colour="badText">{said}</Txt>}
@@ -354,6 +375,7 @@ interface SaveBoxProps {
   mine: MyWorkoutHook;
   planned: Planned;
   linked: ShownSaved | null;
+  newer: boolean;
   full: boolean;
   most: number;
   busy: boolean;
@@ -363,7 +385,7 @@ interface SaveBoxProps {
 }
 
 /** The box Save workout opens: the name, once, and what is saved. */
-function SaveBox({ mine, planned, linked, full, most, busy, said, onSave, onSeeAll }: SaveBoxProps) {
+function SaveBox({ mine, planned, linked, newer, full, most, busy, said, onSave, onSeeAll }: SaveBoxProps) {
   const named = mine.workout.name.trim() !== "";
   const tooMany = planned.sets > SETS_MOST;
   const can = named && !tooMany && planned.exercises.length > 0 && !busy;
@@ -373,9 +395,7 @@ function SaveBox({ mine, planned, linked, full, most, busy, said, onSave, onSeeA
       <Field label="Name" value={mine.workout.name} onChange={mine.rename} placeholder="Name this workout" maxLength={NAME_MOST} />
       <Txt kind="body">{`${plural(planned.exercises.length, "exercise")} · ${plural(planned.sets, "set")}`}</Txt>
       {named ? null : <Txt kind="small">Name this workout to save it.</Txt>}
-      {planned.left.length === 0 ? null : (
-        <Txt kind="small">{`${plural(planned.left.length, "exercise")} no longer in the Library ${planned.left.length === 1 ? "isn't" : "aren't"} saved.`}</Txt>
-      )}
+      <Notes planned={planned} linked={linked} newer={newer} />
       {tooMany ? <Txt kind="small" colour="badText">{`A saved workout holds up to ${String(SETS_MOST)} sets. This one has ${String(planned.sets)}.`}</Txt> : null}
       {said === null ? null : <Txt kind="small" colour="badText">{said}</Txt>}
       {linked !== null ? (
@@ -394,6 +414,18 @@ function SaveBox({ mine, planned, linked, full, most, busy, said, onSave, onSeeA
         <Button label="Save" wide raised disabled={!can} onPress={() => { onSave(null); }} />
       )}
     </View>
+  );
+}
+
+/** What a save leaves out, and what it replaces: an exercise no longer in the Library; a change made on another device. */
+function Notes({ planned, linked, newer }: { planned: Planned; linked: ShownSaved | null; newer: boolean }) {
+  return (
+    <>
+      {planned.left.length === 0 ? null : (
+        <Txt kind="small">{`${plural(planned.left.length, "exercise")} no longer in the Library ${planned.left.length === 1 ? "isn't" : "aren't"} saved.`}</Txt>
+      )}
+      {linked !== null && newer ? <Txt kind="small" colour="badText">{`${linked.name} was changed on another device. Saving replaces that change.`}</Txt> : null}
+    </>
   );
 }
 

@@ -96,6 +96,9 @@ export type SavedWorkoutWritten = z.infer<typeof savedWorkoutWrittenSchema>;
  *  never refusing it for good (64a-iv, as `WORKOUT_NOT_ENDED` for a workout). */
 export const SAVED_EDITED_AHEAD = "edited_ahead";
 
+/** The edited_ahead answer carries the server's clock, so the phone stamps the change again at once (round one, L2). */
+export const savedEditedAheadSchema = z.object({ error: z.literal(SAVED_EDITED_AHEAD), serverTime: instantSchema });
+
 /** The answer (409) to a new saved workout past the person's limit. */
 export const savedWorkoutsFullSchema = z.object({
   error: z.literal("saved_workouts_full"),
@@ -171,6 +174,17 @@ export const keptSavedEntrySchema = z
   })
   .strict();
 export type KeptSavedEntry = z.infer<typeof keptSavedEntrySchema>;
+
+/** What My Workout last loaded from, or saved as, its saved workout (64a-iv, round one H1): "not saved" is judged
+ *  against this, never against the list, so a change made on another phone never reads as this phone's own. */
+export const savedBaseSchema = z
+  .object({
+    editedAt: instantSchema,
+    name: z.string().max(P.nameMost),
+    exercises: z.array(plannedExerciseSchema).max(P.exercisesMost),
+  })
+  .strict();
+export type SavedBase = z.infer<typeof savedBaseSchema>;
 
 /** The phone's copy of the list; its entries are read one by one, so one that cannot be read is left out. */
 export const keptSavedFrameSchema = z.object({ v: z.literal(1), most: z.number().int().min(0), entries: z.array(z.unknown()) }).strict();

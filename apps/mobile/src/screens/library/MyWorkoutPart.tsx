@@ -10,7 +10,7 @@ import { pictures } from "../../look/pictures";
 import { PictureTop } from "../../look/PictureTop";
 import { Sheet } from "../../look/Sheet";
 import { fonts, Txt } from "../../look/Txt";
-import { NAME_MOST, type Item } from "../../library/myWorkout";
+import { EMPTY, NAME_MOST, type Item } from "../../library/myWorkout";
 import { exercisePicture } from "../../library/pictures";
 import type { Units } from "../../library/records";
 import type { LibraryFile } from "../../library/store";
@@ -18,9 +18,9 @@ import { estimate, planLine, planOf, summaryLine } from "../../library/workoutSe
 import { clock } from "../workout/words";
 import { useWorkoutLayer } from "../workout/WorkoutLayer";
 import { ProgressPage } from "../progress/ProgressPage";
-import { toPlanned } from "../../library/savedWorkouts";
+import { savedState, toPlanned } from "../../library/savedWorkouts";
 import { ExercisePage } from "./ExercisePage";
-import { SavedPart, savedState } from "./SavedPart";
+import { SavedPart } from "./SavedPart";
 import { SetUpSheet } from "./SetUpSheet";
 import { useLibrary, useMyWorkout, useSetupFacts } from "./useLibrary";
 
@@ -65,8 +65,8 @@ export function MyWorkoutPart({ parts, units, onBrowse, file }: { parts: ReactNo
   });
   const setCount = toDo.reduce((n, e) => n + e.sets.length, 0);
   // As a saved workout holds it (64a-iv), and whether My Workout is one of the person's saved workouts.
-  const planned = toPlanned(mine?.workout ?? { name: "", items: [], from: null }, liveOf);
-  const fromSaved = savedState(mine, layer?.saved?.view.list ?? [], planned).linked !== null;
+  const planned = toPlanned(mine?.workout ?? EMPTY, liveOf);
+  const fromSaved = savedState(mine?.workout ?? EMPTY, layer?.saved?.view.list ?? [], (id) => planOf({ id, plan: null }, entryOf(id))).linked !== null;
 
   const top = (
     <PictureTop

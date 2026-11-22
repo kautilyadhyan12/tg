@@ -4,6 +4,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import type { OnboardingAnswers } from "@app/shared";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
+import { TextInput } from "react-native";
 import { File, Paths } from "expo-file-system";
 import { App } from "../../src/App";
 import { Gesture, State } from "react-native-gesture-handler";
@@ -1383,14 +1384,46 @@ describe("saved workouts (64a-iv)", () => {
     expect((screen.getByLabelText("Workout name").props as { value: string }).value).toBe("Pull");
     expect(screen.getByText("No exercises yet")).toBeTruthy();
     expect(screen.getByRole("button", { name: /^Load Legs/ })).toBeTruthy();
+    // Round one L1: on the empty page too, so Push, Pull and Legs can be made one after another.
+    expect(screen.getByRole("button", { name: "Create workout" })).toBeTruthy();
   });
 
-  it("the pen beside the name is a button of its own (that it opens the keyboard is seen on the phone)", async () => {
+  it("the pen beside the name opens the name for typing, as a tap on the name does", async () => {
     keptWorkout("Legs", [{ id: "squat", plan: { measuredIn: "reps", sets: SQUAT_SETS } }]);
     await openLibrary(withSaved().ask);
     await openMine();
-    await fireEvent.press(await screen.findByRole("button", { name: "Rename workout" }));
-    expect((screen.getByLabelText("Workout name").props as { value: string }).value).toBe("Legs");
+    await screen.findByLabelText("Workout name");
+    // React Native's test copy of a TextInput: its focus() is the one the pen must call.
+    const focus = jest.spyOn(TextInput.prototype as unknown as { focus: () => void }, "focus");
+    await fireEvent.press(screen.getByRole("button", { name: "Rename workout" }));
+    expect(focus).toHaveBeenCalled();
+    focus.mockRestore();
+  });
+
+  it("round one H1: Push day changed on another device reads so, never as this phone's unsaved changes, and loading over it asks nothing", async () => {
+    const PULL = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+    const loadedAt = push.editedAt;
+    const file = new File(Paths.document, `my-workout-${RAVI.id}.json`);
+    if (file.exists) file.delete();
+    file.create();
+    file.write(JSON.stringify({ v: 2, name: "Push day", items: [{ id: "barbell_curl", plan: { measuredIn: "reps", sets: push.exercises[0]?.sets } }], from: PUSH, base: { editedAt: loadedAt, name: "Push day", exercises: push.exercises } }));
+    // Since this phone loaded it, Push day was changed on another phone.
+    const server = withSaved({
+      [PUSH]: { ...push, editedAt: "2026-11-22T09:00:00.000Z", exercises: [{ exercise: "squat", measuredIn: "reps", sets: SQUAT_SETS }] },
+      [PULL]: { ...push, name: "Pull day", editedAt: "2026-11-21T09:00:00.000Z" },
+    });
+    await openLibrary(server.ask);
+    await openMine();
+    expect(await screen.findByText("Push day was changed on another device.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Save changes" })).toBeNull();
+    await fireEvent.press(screen.getByRole("button", { name: /^Load Pull day/ }));
+    expect(await screen.findByText("Pull day is in My Workout.")).toBeTruthy();
+    expect(screen.queryByText(/aren't saved/)).toBeNull();
+    expect(server.changes).toEqual([]);
+    // The newer Push day loads from its own button.
+    await fireEvent.press(screen.getByRole("button", { name: /^Load Push day/ }));
+    expect(await screen.findByText("Push day is in My Workout.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^Squat/ })).toBeTruthy();
   });
 
   it("with nothing to lose it loads with no question; one this phone never held needs the internet, and says so", async () => {

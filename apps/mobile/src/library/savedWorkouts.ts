@@ -5,6 +5,7 @@ import {
   refusedSavedChangeSchema,
   SAVED_EDITED_AHEAD,
   savedChangeSchema,
+  savedEditedAheadSchema,
   savedWorkoutListSchema,
   savedWorkoutSchema,
   savedWorkoutWrittenSchema,
@@ -18,7 +19,7 @@ import {
 import type { Answer, Request, Shape } from "../session/calls";
 import { createWaitingList, type SendAnswer } from "../session/waitingList";
 import type { TextStore } from "../screens/food/outbox";
-import type { MyWorkout } from "./myWorkout";
+import { plannedOf, type MyWorkout, type Plan } from "./myWorkout";
 import { planOf } from "./workoutSetup";
 
 // A person's saved workouts on the phone (ROADMAP Stage 5 64a-iv; spec Part 2 §13.5, job 61c's routes). Saved from My
@@ -73,6 +74,29 @@ export function sameWorkout(aName: string, a: readonly PlannedExercise[], bName:
 
 /** One saved workout as the screen shows it; `onPhone`: a change to it is still waiting for the server. */
 export type ShownSaved = KeptSavedEntry & { onPhone: boolean };
+
+/** Where My Workout stands against the saved workout it holds (round one H1). `same`: it is exactly what it last loaded
+ *  or saved, so nothing on this phone would be lost; `newer`: the account holds a later change of that saved workout,
+ *  made on another device. Judged against what My Workout last loaded or saved, never against the list alone, so a
+ *  change made elsewhere never reads as this phone's own. `startOf`: an exercise's starting numbers in the Library. */
+export interface SavedState {
+  linked: ShownSaved | null;
+  same: boolean;
+  newer: boolean;
+}
+
+export function savedState(w: MyWorkout, list: readonly ShownSaved[], startOf: (id: string) => Plan | null): SavedState {
+  const linked = w.from === null ? null : (list.find((e) => e.id === w.from) ?? null);
+  if (linked === null) return { linked: null, same: false, newer: false };
+  // A file kept before round one has no base: the list's own copy stands in, as before.
+  const base = w.base ?? (linked.whole === null ? null : { editedAt: linked.editedAt, name: linked.name, exercises: linked.whole });
+  if (base === null) return { linked, same: false, newer: false };
+  return {
+    linked,
+    same: sameWorkout(w.name, plannedOf(w, startOf), base.name, base.exercises),
+    newer: Date.parse(linked.editedAt) > Date.parse(base.editedAt),
+  };
+}
 
 /** A saved workout as a save leaves it. */
 export function entryOf(savedId: string, name: string, editedAt: string, exercises: readonly PlannedExercise[]): KeptSavedEntry {
@@ -136,7 +160,7 @@ export interface SavedView {
 }
 
 export type Kept = "kept" | "held" | "lost";
-export type WholeAnswer = { kind: "ok"; name: string; exercises: readonly PlannedExercise[] } | { kind: "gone" } | { kind: "no_answer" };
+export type WholeAnswer = { kind: "ok"; name: string; editedAt: string; exercises: readonly PlannedExercise[] } | { kind: "gone" } | { kind: "no_answer" };
 
 export interface SavedStore {
   ready: Promise<void>;
@@ -146,7 +170,7 @@ export interface SavedStore {
   refresh: () => Promise<void>;
   /** A new saved workout (`savedId` null) or a change to one. "kept": in the waiting list's file; "held": its file could
    *  not be written, so it waits in memory and is written again; "lost": it is nowhere (the list is full). */
-  save: (input: { savedId: string | null; name: string; exercises: readonly PlannedExercise[] }) => Promise<{ kept: Kept; savedId: string }>;
+  save: (input: { savedId: string | null; name: string; exercises: readonly PlannedExercise[] }) => Promise<{ kept: Kept; savedId: string; editedAt: string }>;
   remove: (savedId: string) => Promise<Kept>;
   /** The whole of one, to load: from the phone where it holds this change, else read from the server. */
   whole: (savedId: string) => Promise<WholeAnswer>;
@@ -203,8 +227,21 @@ export function createSavedStore(setup: SavedSetup): SavedStore {
       drop(c.savedId);
       return { kind: "done" };
     }
+    return sendSave(c, true);
+  }
+
+  /** `again`: a change answered edited_ahead is stamped with the server's own time (still after the change the phone
+   *  last heard of) and sent once more at once, so a phone whose clock runs fast holds nothing back (round one L2). */
+  async function sendSave(c: Extract<SavedChange, { kind: "save" }>, again: boolean): Promise<SendAnswer> {
     const answer = await setup.signedIn({ method: "PUT", path: savedPath(c.savedId), body: { name: c.name, editedAt: c.editedAt, exercises: c.exercises } }, savedWorkoutWrittenSchema);
-    if (answer.kind !== "ok") return readSaveRefusal(answer, most);
+    if (answer.kind !== "ok") {
+      const ahead = answer.kind === "refused" && answer.error === SAVED_EDITED_AHEAD ? savedEditedAheadSchema.safeParse(answer.body) : null;
+      if (again && ahead?.success === true) {
+        const held = entries.find((e) => e.id === c.savedId)?.editedAt ?? null;
+        return sendSave({ ...c, editedAt: editedAtFor(Date.parse(ahead.data.serverTime), held) }, false);
+      }
+      return readSaveRefusal(answer, most);
+    }
     const said = answer.data;
     if (said.status === "removed") drop(c.savedId);
     else if (said.status === "unchanged" && (said.editedAt === null || Date.parse(said.editedAt) !== Date.parse(c.editedAt))) {
@@ -297,7 +334,7 @@ export function createSavedStore(setup: SavedSetup): SavedStore {
   async function whole(savedId: string): Promise<WholeAnswer> {
     await ready;
     const shown = view.list.find((e) => e.id === savedId);
-    if (shown !== undefined && shown.whole !== null) return { kind: "ok", name: shown.name, exercises: shown.whole };
+    if (shown !== undefined && shown.whole !== null) return { kind: "ok", name: shown.name, editedAt: shown.editedAt, exercises: shown.whole };
     const answer = await setup.signedIn({ method: "GET", path: savedPath(savedId) }, savedWorkoutSchema);
     if (answer.kind === "ok") {
       const got = answer.data;
@@ -306,7 +343,7 @@ export function createSavedStore(setup: SavedSetup): SavedStore {
         upsert(ok.data);
         changed();
       }
-      return { kind: "ok", name: got.name, exercises: got.exercises };
+      return { kind: "ok", name: got.name, editedAt: got.editedAt, exercises: got.exercises };
     }
     if (answer.kind === "refused" && answer.status === 404) {
       if (!isStopped()) {
@@ -339,9 +376,10 @@ export function createSavedStore(setup: SavedSetup): SavedStore {
       await ready;
       const id = savedId ?? setup.newId();
       const held = view.list.find((e) => e.id === id)?.editedAt ?? null;
-      const ok = savedChangeSchema.safeParse({ id: setup.newId(), kind: "save", savedId: id, name, editedAt: editedAtFor(clock(), held), exercises });
-      if (!ok.success) return { kept: "lost", savedId: id };
-      return { kept: await add(ok.data), savedId: id };
+      const editedAt = editedAtFor(clock(), held);
+      const ok = savedChangeSchema.safeParse({ id: setup.newId(), kind: "save", savedId: id, name, editedAt, exercises });
+      if (!ok.success) return { kept: "lost", savedId: id, editedAt };
+      return { kept: await add(ok.data), savedId: id, editedAt };
     },
     remove: async (savedId) => {
       await ready;

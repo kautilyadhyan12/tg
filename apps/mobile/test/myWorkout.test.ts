@@ -54,7 +54,7 @@ describe("the worst thing: the update loses a workout, or one person's is seen o
     files.set(myWorkoutFileName(A), JSON.stringify({ v: 1, ids: ["barbell_curl", "squat", "plank"] }));
     const s = storeFor(A, fileFor(A));
     await s.ready;
-    expect(s.workout()).toEqual({ name: "", items: [{ id: "barbell_curl", plan: null }, { id: "squat", plan: null }, { id: "plank", plan: null }], from: null });
+    expect(s.workout()).toEqual({ name: "", items: [{ id: "barbell_curl", plan: null }, { id: "squat", plan: null }, { id: "plank", plan: null }], from: null, base: null });
     expect(s.list()).toEqual(["barbell_curl", "squat", "plank"]);
     // The first change writes the new shape, and the old exercises are all still in it.
     s.plan("barbell_curl", CURL);
@@ -82,14 +82,14 @@ describe("the worst thing: the update loses a workout, or one person's is seen o
     b.plan("barbell_curl", CURL);
     b.rename("Arms");
     await settle();
-    expect(a.workout()).toEqual({ name: "Legs", items: [{ id: "squat", plan: null }, { id: "plank", plan: null }], from: null });
+    expect(a.workout()).toEqual({ name: "Legs", items: [{ id: "squat", plan: null }, { id: "plank", plan: null }], from: null, base: null });
     expect([...files.keys()].sort()).toEqual([myWorkoutFileName(A), myWorkoutFileName(B)].sort());
     expect(myWorkoutFileName(A)).toContain(A);
     // A back, after the app was closed: A's workout read again from A's own file.
     forgetStores();
     const again = storeFor(A, fileFor(A));
     await again.ready;
-    expect(again.workout()).toEqual({ name: "Legs", items: [{ id: "squat", plan: null }, { id: "plank", plan: null }], from: null });
+    expect(again.workout()).toEqual({ name: "Legs", items: [{ id: "squat", plan: null }, { id: "plank", plan: null }], from: null, base: null });
   });
 
   it("an empty id never shares a file", () => {
@@ -105,11 +105,11 @@ describe("reading a kept workout leniently", () => {
     [
       "a plan that breaks the rules keeps its exercise on the starting numbers",
       JSON.stringify({ v: 2, name: "Push", items: [{ id: "squat", plan: { measuredIn: "reps", sets: [] } }, { id: "plank", plan: { measuredIn: "time", sets: [{ target: 30, weightGrams: null, restSeconds: 45 }] } }] }),
-      { name: "Push", items: [{ id: "squat", plan: null }, { id: "plank", plan: { measuredIn: "time", sets: [{ target: 30, weightGrams: null, restSeconds: 45 }] } }], from: null },
+      { name: "Push", items: [{ id: "squat", plan: null }, { id: "plank", plan: { measuredIn: "time", sets: [{ target: 30, weightGrams: null, restSeconds: 45 }] } }], from: null, base: null },
     ],
     ["reps past a save's limit", JSON.stringify({ v: 2, name: "", items: [{ id: "squat", plan: { measuredIn: "reps", sets: [{ target: 1001, weightGrams: null, restSeconds: 0 }] } }] }), of("squat")],
     ["more sets than an exercise takes", JSON.stringify({ v: 2, name: "", items: [{ id: "squat", plan: { measuredIn: "reps", sets: Array.from({ length: SETS_MOST + 1 }, () => ({ target: 5, weightGrams: null, restSeconds: 0 })) } }] }), of("squat")],
-    ["a name too long is cut, a NUL taken out", JSON.stringify({ v: 2, name: `A\u0000${"b".repeat(80)}`, items: [] }), { name: `A${"b".repeat(NAME_MOST - 1)}`, items: [], from: null }],
+    ["a name too long is cut, a NUL taken out", JSON.stringify({ v: 2, name: `A\u0000${"b".repeat(80)}`, items: [] }), { name: `A${"b".repeat(NAME_MOST - 1)}`, items: [], from: null, base: null }],
     ["a name that is not words", JSON.stringify({ v: 2, name: 7, items: [{ id: "plank" }] }), of("plank")],
   ])("%s", (_, text, want) => {
     expect(readWorkout(text)).toEqual(want);
@@ -158,7 +158,7 @@ describe("adding, removing, moving, naming and clearing", () => {
   it("naming keeps 60 characters at most; clearing takes every exercise and keeps the name", () => {
     expect(renamed(EMPTY, "x".repeat(70)).name).toHaveLength(NAME_MOST);
     const w = renamed(of("squat"), "Legs");
-    expect(cleared(w)).toEqual({ name: "Legs", items: [], from: null });
+    expect(cleared(w)).toEqual({ name: "Legs", items: [], from: null, base: null });
     expect(cleared(EMPTY)).toBe(EMPTY);
   });
 
@@ -203,7 +203,7 @@ describe("the saved workout is never written over (review L1)", () => {
     s.move("barbell_curl", -1);
     await s.ready;
     await settle();
-    expect(s.workout()).toEqual({ name: "Legs", items: [{ id: "barbell_curl", plan: null }, { id: "squat", plan: null }], from: null });
+    expect(s.workout()).toEqual({ name: "Legs", items: [{ id: "barbell_curl", plan: null }, { id: "squat", plan: null }], from: null, base: null });
     expect(readWorkout(files.get(myWorkoutFileName(A)) ?? null)).toEqual(s.workout());
   });
 
@@ -251,12 +251,23 @@ describe("the saved workout My Workout holds (64a-iv)", () => {
       { exercise: "squat", measuredIn: "reps", sets: many },
       { exercise: "plank", measuredIn: "time", sets: [{ target: 45, weightGrams: null, restSeconds: null }] },
       { exercise: "squat", measuredIn: "reps", sets: [{ target: 1, weightGrams: 100_000, restSeconds: null }] },
-    ]);
+    ], "2026-11-22T10:00:00.000Z");
     expect(w.name).toBe("Leg day");
     expect(w.from).toBe(SAVED);
     expect(w.items.map((i) => i.id)).toEqual(["squat", "plank"]);
     expect(w.items[0]?.plan?.sets).toHaveLength(SETS_MOST);
     expect(w.items[1]?.plan).toEqual({ measuredIn: "time", sets: [{ target: 45, weightGrams: null, restSeconds: null }] });
+    // What it loaded, as My Workout holds it: "not saved" is judged against this (round one H1).
+    expect(w.base?.editedAt).toBe("2026-11-22T10:00:00.000Z");
+    expect(w.base?.exercises.map((e) => [e.exercise, e.sets.length])).toEqual([["squat", SETS_MOST], ["plank", 1]]);
+  });
+
+  it.each<[string, unknown, unknown, boolean]>([
+    ["a base with its saved workout is read back", "33333333-3333-4333-8333-333333333333", { editedAt: "2026-11-22T10:00:00.000Z", name: "Legs", exercises: [] }, true],
+    ["a base with no saved workout is dropped", null, { editedAt: "2026-11-22T10:00:00.000Z", name: "Legs", exercises: [] }, false],
+    ["a broken base is dropped", "33333333-3333-4333-8333-333333333333", { editedAt: "never", name: "Legs", exercises: [] }, false],
+  ])("%s", (_, from, base, kept) => {
+    expect(readWorkout(JSON.stringify({ v: 2, name: "Legs", items: [], from, base })).base !== null).toBe(kept);
   });
 
   it("load takes the whole workout's place and is kept; Clear lets the saved workout go; link and unlink are kept", async () => {
@@ -265,18 +276,19 @@ describe("the saved workout My Workout holds (64a-iv)", () => {
     const s = storeFor(A, fileFor(A));
     await s.ready;
     s.add("barbell_curl");
-    s.load(fromSaved(SAVED, "Leg day", [{ exercise: "squat", measuredIn: "reps", sets: [{ target: 10, weightGrams: 60_000, restSeconds: 90 }] }]));
+    s.load(fromSaved(SAVED, "Leg day", [{ exercise: "squat", measuredIn: "reps", sets: [{ target: 10, weightGrams: 60_000, restSeconds: 90 }] }], "2026-11-22T10:00:00.000Z"));
     await settle();
     expect(s.list()).toEqual(["squat"]);
     expect(readWorkout(files.get(myWorkoutFileName(A)) ?? null)).toEqual(s.workout());
     expect(s.workout().from).toBe(SAVED);
     s.clear();
-    expect(s.workout()).toEqual({ name: "Leg day", items: [], from: null });
+    expect(s.workout()).toEqual({ name: "Leg day", items: [], from: null, base: null });
     s.add("plank");
-    s.link(SAVED);
+    const base = { editedAt: "2026-11-22T11:00:00.000Z", name: "Leg day", exercises: [{ exercise: "plank", measuredIn: "time" as const, sets: [{ target: 30, weightGrams: null, restSeconds: 60 }] }] };
+    s.link(SAVED, base);
     await settle();
-    expect(readWorkout(files.get(myWorkoutFileName(A)) ?? null).from).toBe(SAVED);
-    s.link(null);
-    expect(s.workout().from).toBeNull();
+    expect(readWorkout(files.get(myWorkoutFileName(A)) ?? null)).toMatchObject({ from: SAVED, base });
+    s.link(null, base);
+    expect(s.workout()).toMatchObject({ from: null, base: null });
   });
 });

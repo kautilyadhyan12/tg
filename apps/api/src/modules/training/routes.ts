@@ -207,7 +207,7 @@ export function registerTrainingRoutes(
         return reply.status(409).send(full);
       }
       if (err instanceof FutureEditError) {
-        return reply.status(400).send({ error: SAVED_EDITED_AHEAD, message: "editedAt: later than the server's clock", requestId: req.id });
+        return reply.status(400).send({ error: SAVED_EDITED_AHEAD, message: "editedAt: later than the server's clock", serverTime: now().toISOString(), requestId: req.id });
       }
       throw err;
     }
