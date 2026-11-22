@@ -4,7 +4,9 @@
 // (`workoutSaveRefusalSchema`), so nothing is dropped in silence.
 //
 // The phone measures the workout's length with its steady clock (`endedAt` is `startedAt` plus the
-// time that passed), so a clock changed during a workout never makes its sets outlast it.
+// time that passed), so a clock changed during a workout never makes its sets outlast it. It sends the
+// time trained beside it (`trainedMs`, job 64a-ii-b): the length less every pause, which is what the
+// workout counts as (Hours Trained, the minutes challenges, goals, the gym's numbers).
 import { z } from "zod";
 import { HEART_BPM_LEAST, HEART_BPM_MOST } from "../heartRate.js";
 import { instantSchema } from "../time.js";
@@ -74,6 +76,11 @@ const workoutHeartSchema = z
   .array(z.tuple([z.number().int().min(0).max(L.lengthMostMs), z.number().int().min(HEART_BPM_LEAST).max(HEART_BPM_MOST)]))
   .max(L.heartMost);
 
+/** How long a workout's sets and their rests lasted together. */
+export function setsAndRestsMs(sets: readonly Pick<SavedSet, "durationMs" | "restSeconds">[]): number {
+  return sets.reduce((sum, s) => sum + s.durationMs + (s.restSeconds ?? 0) * 1000, 0);
+}
+
 export const workoutSaveSchema = z
   .object({
     workoutId: z.uuid(),
@@ -92,6 +99,10 @@ export const workoutSaveSchema = z
     /** The app's own version, as the phone reports it. */
     appVersion: z.string().min(1).max(40).refine(noNul, NUL),
     sets: z.array(savedSetSchema).min(1).max(L.setsMost),
+    /** The time trained: the workout's length less every pause, as its screen showed it, within the length and
+     *  never shorter than its sets and rests. Absent from a workout kept on a phone before job 64a-ii-b: the
+     *  server then counts its sets and rests (`trainedMsOf`), never its pauses. */
+    trainedMs: z.number().int().min(0).max(L.lengthMostMs).optional(),
   })
   .strict()
   .superRefine((w, ctx) => {
@@ -104,15 +115,28 @@ export const workoutSaveSchema = z
     if (places.size !== w.sets.length || w.sets.some((s) => s.position >= w.sets.length)) {
       ctx.addIssue({ code: "custom", message: "each place in the workout once, from 0", path: ["sets"] });
     }
-    const usedMs = w.sets.reduce((sum, s) => sum + s.durationMs + (s.restSeconds ?? 0) * 1000, 0);
+    const usedMs = setsAndRestsMs(w.sets);
     if (usedMs > lengthMs + L.slackMsEachSet * w.sets.length) {
       ctx.addIssue({ code: "custom", message: "the sets and rests last longer than the workout", path: ["sets"] });
+    }
+    if (w.trainedMs !== undefined && w.trainedMs > lengthMs) {
+      ctx.addIssue({ code: "custom", message: "the time trained is longer than the workout", path: ["trainedMs"] });
+    }
+    if (w.trainedMs !== undefined && usedMs > w.trainedMs + L.slackMsEachSet * w.sets.length) {
+      ctx.addIssue({ code: "custom", message: "the sets and rests last longer than the time trained", path: ["trainedMs"] });
     }
     if (w.heart.some(([at]) => at > lengthMs)) {
       ctx.addIssue({ code: "custom", message: "a heart rate after the workout ended", path: ["heart"] });
     }
   });
 export type WorkoutSave = z.infer<typeof workoutSaveSchema>;
+
+/** What a saved workout counts as trained: the phone's time trained, or, for a workout kept on a phone before it
+ *  sent one, its sets and rests within its length. A pause is never counted. */
+export function trainedMsOf(w: Pick<WorkoutSave, "startedAt" | "endedAt" | "sets" | "trainedMs">): number {
+  if (w.trainedMs !== undefined) return w.trainedMs;
+  return Math.min(setsAndRestsMs(w.sets), Math.max(0, Date.parse(w.endedAt) - Date.parse(w.startedAt)));
+}
 
 /** The answer to a save: 201 created, or 200 when this workout was saved already. */
 export const workoutSavedSchema = z.object({ workoutId: z.uuid(), status: z.enum(["created", "duplicate"]) });
